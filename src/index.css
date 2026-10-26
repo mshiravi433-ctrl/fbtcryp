@@ -5429,6 +5429,73 @@ a.wallet-option,
 }
 [dir='rtl'] .disc-go svg { transform: scaleX(-1); }
 
+/* The recently-opened chip reuses the token-tag shape, but its mark is the
+   site's favicon tile rather than a coin, so it scales down to fit. */
+.disc-recent .disc-mark { width: 20px; height: 20px; border-radius: 7px; box-shadow: none; }
+.disc-recent .disc-mark img { width: 14px; height: 14px; border-radius: 4px; }
+.disc-recent .disc-mark-fallback { font-size: 10px; }
+
+/* ── the Discover preview sheet (half-popup from the bottom) ─────────────── */
+.disc-sheet .sheet-body { padding-top: 2px; }
+.disc-sheet-body { display: flex; flex-direction: column; gap: 12px; }
+
+.disc-sheet-head { display: flex; align-items: center; gap: 12px; }
+.disc-sheet-head .disc-mark { width: 48px; height: 48px; border-radius: 15px; }
+.disc-sheet-head .disc-mark img { width: 30px; height: 30px; }
+.disc-sheet-head .disc-mark-fallback { font-size: 19px; }
+.disc-sheet-title { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.disc-sheet-name { font-size: 16.5px; font-weight: 800; letter-spacing: -0.01em; }
+.disc-sheet-cat {
+  align-self: flex-start;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--disc-hue) 82%, var(--text-1));
+  background: color-mix(in srgb, var(--disc-hue) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--disc-hue) 30%, transparent);
+}
+:root[data-theme='light'] .disc-sheet-cat {
+  color: color-mix(in srgb, var(--disc-hue) 70%, #000);
+}
+
+/* The exact origin, isolated LTR on its own tinted row: this is the line the
+   sheet exists for — read the domain here, compare it with the browser's. */
+.disc-sheet-host {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 12.5px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  direction: ltr;
+  unicode-bidi: isolate;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--disc-hue) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--disc-hue) 22%, transparent);
+}
+.disc-sheet-host svg { color: color-mix(in srgb, var(--disc-hue) 75%, var(--text-3)); flex-shrink: 0; }
+
+.disc-sheet-desc {
+  margin: 0;
+  font-size: 12.8px;
+  line-height: 1.9;
+  color: var(--text-2);
+}
+
+.disc-sheet-actions { display: flex; gap: 9px; }
+.disc-sheet-open { flex: 2; }
+.disc-sheet-copy { flex: 1; }
+
+.disc-sheet-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--text-3);
+  text-align: center;
+}
+
 /* ==========================================================================
    NFT VIEWER
    ========================================================================== */

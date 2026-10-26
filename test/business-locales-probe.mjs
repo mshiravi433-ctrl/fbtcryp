@@ -42,21 +42,17 @@ const en = load('en');
 const OFFERS = ['listing', 'liquidity', 'whitelabel', 'integration'];
 const BRANDS = ['fbt', 'solana', 'ethereum', 'polygon', 'bnb', 'arbitrum'];
 const POINTS = ['listing', 'data', 'depth', 'slippage', 'brand', 'domain', 'docs', 'keys'];
-const STATUSES = ['pending', 'review', 'responded'];
 
 const FULL = [
   'biz.title', 'biz.intro', 'biz.badge', 'biz.heroKicker', 'biz.headerLive', 'biz.company', 'biz.website', 'biz.contact',
   'biz.requestPartnership', 'biz.atGlance', 'biz.selectTopic', 'biz.notice', 'biz.chooseArea',
   'biz.tabsTitle', 'biz.subtabsTitle', 'biz.servicesTitle', 'biz.whyUsTitle', 'biz.brandsTitle', 'biz.brandsSub',
-  'biz.requestsTitle', 'biz.requestsSub', 'biz.newRequest', 'biz.requestsEmptyTitle', 'biz.requestsEmptyText',
-  'biz.requests.kind', 'biz.trackingTitle', 'biz.trackingSub', 'biz.viewTracking', 'biz.progress.label', 'biz.progress.done',
-  'biz.filterLabel', 'biz.emptyFilterTitle', 'biz.emptyFilterText',
-  /* the clarity layer added for «درخواست معنی نشده» and «شرایط و روش‌ها» */
+  'biz.newRequest',
+  /* the clarity layer kept for the «درخواست» tab */
   'biz.requestsIntroLabel', 'biz.requestsIntro.title', 'biz.requestsIntro.body',
   'biz.requestsIntro.step1', 'biz.requestsIntro.step2', 'biz.requestsIntro.step3',
-  'biz.requestsIntro.note', 'biz.conditions.title',
-  'biz.conditions.eligible.title', 'biz.conditions.eligible.body',
-  'biz.conditions.method.title', 'biz.conditions.method.body',
+  'biz.conditions.title',
+  'biz.conditions.eligible.title', 'biz.conditions.eligible.body', 'biz.conditions.method.title', 'biz.conditions.method.body',
   'biz.conditions.timeline.title', 'biz.conditions.timeline.body',
   'biz.guarantee.yes', 'biz.guarantee.no',
   'biz.trust.title', 'biz.trust.nonCustodial.title', 'biz.trust.nonCustodial.body',
@@ -67,25 +63,18 @@ const FULL = [
   'biz.stats.fee.value', 'biz.stats.fee.label', 'biz.stats.fee.sub',
   'biz.stats.alwaysOpen.value', 'biz.stats.alwaysOpen.label', 'biz.stats.alwaysOpen.sub',
   'biz.heroChip.nonCustodial', 'biz.heroChip.api', 'biz.heroChip.support',
-  'biz.tabs.partnership', 'biz.tabs.followup', 'biz.tabsSub.partnership', 'biz.tabsSub.followup',
-  'biz.subtab.services', 'biz.subtab.brands', 'biz.subtab.requests', 'biz.subtab.tracking',
-  'biz.panelHint.services', 'biz.panelHint.brands', 'biz.panelHint.requests', 'biz.panelHint.tracking',
-  'biz.status.pending', 'biz.status.review', 'biz.status.responded',
-  'biz.filter.all', 'biz.filter.pending', 'biz.filter.review', 'biz.filter.responded',
-  'biz.demo.arta', 'biz.demo.noor', 'biz.demo.bitplus', 'biz.demo.hoursAgo', 'biz.demo.daysAgo',
-  'biz.tracking.totalRequests', 'biz.tracking.totalSub', 'biz.tracking.responded', 'biz.tracking.respondedSub',
-  'biz.tracking.support', 'biz.tracking.supportSub', 'biz.tracking.pathTitle',
-  'biz.tracking.progressLabel', 'biz.tracking.progressSub', 'biz.tracking.nextUp', 'biz.tracking.cta',
+  'biz.tabs.partnership', 'biz.tabs.request', 'biz.tabsSub.partnership', 'biz.tabsSub.request',
+  'biz.subtab.services', 'biz.subtab.brands',
+  'biz.panelHint.services', 'biz.panelHint.brands',
   'biz.form.description', 'biz.form.topic', 'biz.form.company', 'biz.form.companyPlaceholder', 'biz.form.name',
   'biz.form.namePlaceholder', 'biz.form.workEmail', 'biz.form.workEmailPlaceholder', 'biz.form.phoneOptional',
   'biz.form.phonePlaceholder', 'biz.form.message', 'biz.form.messagePlaceholder', 'biz.form.preparing',
   'biz.form.submit', 'biz.form.responseTime', 'biz.form.requiredError', 'biz.form.emailError', 'biz.form.ready',
-  'biz.form.emailBody', 'biz.form.cancel', 'biz.form.close', 'biz.form.mailSubject', 'biz.form.notProvided',
+  'biz.form.emailBody', 'biz.form.mailSubject', 'biz.form.notProvided',
   'biz.form.companyError', 'biz.form.nameError', 'biz.form.messageError', 'biz.form.chars', 'biz.form.privacy',
   ...OFFERS.flatMap((id) => [`biz.offer.${id}.title`, `biz.offer.${id}.body`, `biz.offerMeta.${id}`]),
   ...BRANDS.flatMap((id) => [`biz.brand.${id}`, `biz.brandTag.${id}`]),
   ...POINTS.map((id) => `biz.point.${id}`),
-  ...['conversation', 'proposal', 'launch'].flatMap((id) => [`biz.steps.${id}.title`, `biz.steps.${id}.description`]),
   ...['nonCustodial', 'integration', 'revenue'].flatMap((id) => [`biz.benefits.${id}.title`, `biz.benefits.${id}.body`])
 ];
 
@@ -96,7 +85,7 @@ for (const [name, dict] of [['fa', fa], ['en', en]]) {
 }
 
 /* Tab + sub-tab labels must exist in every shipped locale (no raw keys). */
-const TAB_KEYS = ['biz.tabs.partnership', 'biz.tabs.followup', 'biz.subtab.services', 'biz.subtab.brands', 'biz.subtab.requests', 'biz.subtab.tracking'];
+const TAB_KEYS = ['biz.tabs.partnership', 'biz.tabs.request', 'biz.tabsSub.request', 'biz.subtab.services', 'biz.subtab.brands'];
 for (const l of LOCALES) {
   const dict = load(l);
   const missing = TAB_KEYS.filter((k) => !exists(dict, k));
@@ -123,9 +112,9 @@ for (const l of LOCALES) {
 ok(`all 12 locales: ${WIREING_KEYS.length} page-copy keys resolve (wiring parity)`);
 
 /* Persian screen must be Persian; English screen must not leak Persian. */
-const FA_MUST_BE_PERSIAN = ['biz.tabs.partnership', 'biz.tabs.followup', 'biz.subtab.services', 'biz.subtab.brands',
-  'biz.subtab.requests', 'biz.subtab.tracking', 'biz.title', 'biz.intro', 'biz.requestsTitle', 'biz.trackingTitle',
-  'biz.headerLive', 'biz.filterLabel', 'biz.emptyFilterTitle', 'biz.filter.all', 'biz.filter.responded',
+const FA_MUST_BE_PERSIAN = ['biz.tabs.partnership', 'biz.tabs.request', 'biz.tabsSub.request', 'biz.subtab.services', 'biz.subtab.brands',
+  'biz.title', 'biz.intro',
+  'biz.headerLive',
   ...POINTS.map((id) => `biz.point.${id}`),
   'biz.requestsIntro.title', 'biz.requestsIntro.body', 'biz.requestsIntro.step1', 'biz.requestsIntro.step2',
   'biz.conditions.title', 'biz.conditions.eligible.body', 'biz.conditions.timeline.body',
@@ -137,24 +126,29 @@ for (const k of FULL) if (PERSIAN_RE.test(get(en, k) || '')) fail(`en ${k} conta
 ok('en: no Persian leakage in any Business string');
 
 /*
- * A progress sentence may not carry its own numbers. «۲ از ۳ قدم تکمیل شده»
- * reads fine until a fourth step appears, and then the ring and the sentence
- * disagree — which is the kind of lie a user notices on the screen they are
- * being asked to trust.
+ * THE FAKE BACKEND IS GONE. The «پیگیری» tab carried a status ring, a done/
+ * not-done timeline and three demo requests with timestamps — none of it
+ * connected to anything, because the form opens the user's mail app and the
+ * server stores nothing. These keys and the JSX that read them must stay
+ * deleted: a status that cannot change is a lie with a progress bar.
  */
-for (const [name, dict] of [['fa', fa], ['en', en]]) {
-  const sub = get(dict, 'biz.tracking.progressSub') || '';
-  if (!sub.includes('{{done}}') || !sub.includes('{{total}}')) {
-    fail(`${name} biz.tracking.progressSub hardcodes its counts: ${sub}`);
-  }
+for (const dead of ['biz.tabs.followup', 'biz.subtab.requests', 'biz.subtab.tracking',
+  'biz.trackingTitle', 'biz.tracking.progressSub', 'biz.demo.arta', 'biz.filter.all', 'biz.status.pending']) {
+  if (exists(fa, dead) || exists(en, dead)) fail(`fa/en still carry the removed tracking key ${dead}`);
 }
-ok('fa+en: the progress sentence interpolates {{done}}/{{total}}');
+ok('fa+en: the tracking/demo keys are deleted, not just hidden');
 
 /* No hardcoded display strings may creep back into the page. */
-const jsx = readFileSync(new URL('../src/pages/Business.jsx', import.meta.url), 'utf8');
+const jsxRaw = readFileSync(new URL('../src/pages/Business.jsx', import.meta.url), 'utf8');
+/* Comments are stripped before the scan: a verbatim bug-report quote inside a
+   block comment is prose, not rendered copy — the same rule wiring.mjs uses. */
+const jsx = jsxRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 if (PERSIAN_RE.test(jsx)) fail('Business.jsx contains hardcoded Persian/Arabic-script copy');
 else ok('Business.jsx: zero hardcoded Persian copy');
 if (/۲۴\/۷|biz\.tabs\.partnership'\)\s*\|\|/.test(jsx)) fail('Business.jsx re-hardcoded a localized value');
+/* The tracking panel and the demo list must not come back in any form. */
+if (/REQUESTS|STATUS_CFG|FILTERS|biz\.tracking|biz\.demo|biz-request"/.test(jsx)) fail('Business.jsx still carries the demo request list or the tracking panel');
+else ok('Business.jsx: no demo list, no status filters, no tracking panel');
 if (!jsx.includes("t(`biz.tabs.${tab.id}`)") || !jsx.includes("t(`biz.subtab.${st.id}`)")) fail('tab labels no longer read from i18n');
 else ok('Business.jsx: tab/sub-tab labels read from i18n');
 

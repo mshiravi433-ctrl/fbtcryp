@@ -317,7 +317,7 @@ describe('the feature flag: off by default, and no existing flag changed', () =>
     const perp = read('src/pages/Perp.jsx');
     // The rail reads PERP_TABS; spot is added from its own flag only.
     assert.match(perp, /const PERP_TABS = \[\.\.\.\(SPOT_TRADE_ENABLED \? \['spot'\] : \[\]\), \.\.\.FUTURES_TABS\];/);
-    assert.match(perp, /const FUTURES_TABS = SPECULATION_ENABLED\s*\?\s*\['overview', 'dydx', 'onchain', \.\.\.\(FUTURES_HISTORY_ENABLED \? \['history'\] : \[\]\)\]\s*:\s*\[\];/);
+    assert.match(perp, /const FUTURES_TABS = SPECULATION_ENABLED\s*\?\s*\['overview', 'dydx', 'onchain'\]\s*:\s*\[\];/);
     assert.match(perp, /PERP_TABS\.length > 1 && \(/);
     assert.equal(/VISIBLE_TABS/.test(perp), false);
   });

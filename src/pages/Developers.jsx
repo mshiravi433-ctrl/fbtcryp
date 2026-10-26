@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import InfoBox from '../components/InfoBox';
 import { useTelegram } from '../context/TelegramContext';
 import { useAppStore } from '../store/useAppStore';
 import { publicAppUrl } from '../lib/nativeShell';
@@ -14,34 +15,47 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconCopy,
+  IconGlobe,
   IconKey,
   IconLock,
-  IconShield
+  IconShield,
+  IconSparkle
 } from '../components/Icons';
+import '../styles/developers-modern.css';
 
 /**
- * DEVELOPERS.
+ * DEVELOPERS — the quiet redesign.
  * ---------------------------------------------------------------------------
- * ─── WHAT WAS WRONG WITH THE OLD PAGE ───────────────────────────────────────
- * It listed six endpoints out of the fifty-two this server actually exposes,
- * gave no base URL, no rate limit in numbers, no error format, and no CORS
- * statement. An integrator reading it could not have made a single successful
- * request without guessing, and every guess they got wrong would arrive as a
- * support message.
+ *   «ریدیزاین صفحه توسعه‌دهندگان: هم از شلوغی صفحه کاسته شود، هم خیلی مدرن
+ *    و بهترین UI/UX را داشته باشد»
  *
- * Worse, the one code sample said `https://your-host/api/...`. Copy it, run
- * it, get a DNS failure. A documentation page whose example cannot be pasted
- * is not documentation.
+ * ─── WHAT WAS WRONG BEFORE THIS PASS ────────────────────────────────────────
+ * The content was honest but the page was a wall: twelve equal-weight cards
+ * stacked edge to edge — pills, notices, environment rows, rules, endpoints,
+ * fair use, self-hosting, keys, SLA — so the two things an integrator
+ * actually needs first (a request they can paste and the endpoint list) were
+ * buried under eight cards of context they had not asked for yet.
  *
- * ─── THE PRINCIPLE THIS PAGE IS BUILT ON ────────────────────────────────────
- * Only document what is true today and verifiable in one request. The
- * previous version advertised `/api/ai/faq`, which had been deleted from the
- * server — so the single most damaging thing this page can do is exactly what
- * it was doing: sending a developer to an endpoint that 404s and letting them
- * open a bug against us for our own stale text.
+ * ─── THE SHAPE IT HAS NOW ───────────────────────────────────────────────────
+ * A strict order of utility, and one visual weight per tier:
  *
- * Every path below was read out of `server/app.js` at the time of writing,
- * not remembered. Every one is a real registered route.
+ *   1. HERO — one gradient card: what this is, whether service discovery is
+ *      live (read from the server, never asserted), and the two CTAs.
+ *   2. QUICKSTART — the paste-and-run request, immediately under the hero,
+ *      because it is the only paragraph on the page that must be believed
+ *      with a terminal instead of with trust.
+ *   3. THE RULES — six facts as a compact tile grid instead of a long card
+ *      of hairline-separated rows.
+ *   4. THE ENDPOINTS — the grouped accordion, unchanged in substance.
+ *   5. PROJECTS + the two real consoles.
+ *   6. EVERYTHING ELSE, FOLDED — ecosystem, environments, fair use,
+ *      self-hosting and the key policy now live in collapsed InfoBoxes at
+ *      the bottom. Same words, one tap away, zero scroll cost.
+ *
+ * ─── THE PRINCIPLE THE PAGE STILL KEEPS ─────────────────────────────────────
+ * Only document what is true today and verifiable in one request. Every path
+ * below was read out of `server/app.js` at the time of writing, not
+ * remembered. The redesign moved pixels; it did not move a single fact.
  */
 
 /**
@@ -156,15 +170,8 @@ export default function Developers() {
 
   /*
    * ─── THE STATUS IS READ, NOT ASSERTED ─────────────────────────────────────
-   * The owner asked why this section said "not configured" and to activate it.
-   * The answer is that the sentence was static: it printed on every deployment,
-   * including one where discovery answers and the catalog is live, and the two
-   * things it named — automatic execution and withdrawal — are not a
-   * configuration anyone can turn on. They are absent because this product
-   * never holds funds.
-   *
-   * So the line is now derived from GET /api/environments: `available` rows
-   * mean discovery is configured and answering. What it says when nothing is
+   * The line is derived from GET /api/environments: `available` rows mean
+   * discovery is configured and answering. What it says when nothing is
    * configured is different from what it says when the request failed, and
    * both are different from what it says while it is still in flight.
    */
@@ -198,7 +205,7 @@ export default function Developers() {
   -H "accept: application/json"`;
 
   return (
-    <PageTransition>
+    <PageTransition className="page devx-page">
       <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">
         <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
           <IconChevronLeft width={18} height={18} />
@@ -206,122 +213,71 @@ export default function Developers() {
         <h1 className="h1" style={{ fontSize: 19 }}>{t('dev.title')}</h1>
       </motion.div>
 
-      <p className="prose-sm">{t('dev.intro')}</p>
-      <section className="card" style={{ marginTop: 12 }}>
-        {/*
-          The status pill is the answer to "why is it inactive". It is read
-          from the server on every visit, so a deployment that has configured
-          discovery says so, and one that has not says THAT — instead of both
-          printing the same hard-coded sentence.
-        */}
-        <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
-          <p className="section-label" style={{ margin: 0 }}>{t('dev.ecosystem')}</p>
-          <span className={`pill ${envStatus === 'live' ? 'pill-up' : 'pill-neutral'}`} style={{ flexShrink: 0 }}>
+      {/* ------------------------------ hero ------------------------------ */}
+      <motion.section className="devx-hero" variants={riseIn} initial="hidden" animate="show">
+        <span className="devx-hero-glow a" aria-hidden="true" />
+        <span className="devx-hero-glow b" aria-hidden="true" />
+        <div className="devx-hero-top">
+          <span className="devx-hero-mark" aria-hidden="true"><IconSparkle width={17} height={17} /></span>
+          {/*
+            The status pill is the answer to "why is it inactive". It is read
+            from the server on every visit, so a deployment that has configured
+            discovery says so, and one that has not says THAT — instead of both
+            printing the same hard-coded sentence.
+          */}
+          <span className={`devx-status devx-status--${envStatus}`}>
+            <span className="devx-status-dot" aria-hidden="true" />
             {t(`dev.status.${envStatus}`)}
           </span>
         </div>
-        <p className="prose-sm">{t('dev.ecosystemBody')}</p>
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          {['agents', 'strategies', 'liquidity', 'connect', 'sdk', 'environments', 'reputation', 'revenue'].map((item) => <span className="pill pill-neutral" key={item}>{t(`dev.pill.${item}`)}</span>)}
-        </div>
-
-        {/*
-          ─── THE BOUNDARY, WITH ITS REASON ──────────────────────────────────
-          The old line read «پیکربندی نشده · اجرای خودکار در دسترس نیست ·
-          برداشت وجه: هرگز در دسترس نیست» — three facts and no cause, so it
-          looked like a broken install. The cause is that we are
-          non-custodial: there is no execution to automate and no balance to
-          withdraw, because the keys never leave the user's wallet. That is a
-          design decision and the wiring suite fails if a control appears here
-          that could ever do either.
-        */}
-        <p className="notice" style={{ marginTop: 10 }}>{t('dev.boundary')}</p>
-
-        {/*
-          ─── WHAT DOES WORK, ONE TAP AWAY ───────────────────────────────────
-          An explanation of what is missing is only half an answer. Both of
-          these are real and work on this deployment today: a sandbox draft is
-          created locally by `createSandboxProject`, and the sample request
-          below needs no key at all — which is the honest answer to "how do I
-          get an API key".
-        */}
-        <div className="btn-row" style={{ marginTop: 12 }}>
-          <button className="btn btn-primary" type="button" onClick={() => jumpTo(projectInput)}>
-            {t('dev.cta.projects')}
+        <h2 className="devx-hero-title">{t('dev.api')}</h2>
+        <p className="devx-hero-sub">{t('dev.intro')}</p>
+        <div className="devx-hero-actions">
+          <button className="devx-btn devx-btn--primary" type="button" onClick={() => jumpTo(quickstartRef)}>
+            <IconCopy width={15} height={15} />{t('dev.cta.sample')}
           </button>
-          <button className="btn btn-ghost" type="button" onClick={() => jumpTo(quickstartRef)}>
-            {t('dev.cta.sample')}
+          <button className="devx-btn devx-btn--ghost" type="button" onClick={() => jumpTo(projectInput)}>
+            <IconKey width={15} height={15} />{t('dev.cta.projects')}
           </button>
         </div>
-      </section>
-      <section className="card" style={{ marginTop: 12 }} ref={projectInput} tabIndex={-1}>
-        <p className="section-label">{t('dev.projects')}</p>
-        <p className="prose-sm">{t('dev.projectsBody')}</p>
-        <div className="row" style={{ gap: 8 }}>
-          <input className="input" value={projectName} maxLength={48} placeholder={t('dev.projectName')} onChange={(e) => { setProjectName(e.target.value); setProjectError(null); }} aria-label={t('dev.projectName')} />
-          <button className="btn btn-primary" type="button" onClick={() => { const result = createSandboxProject({ name: projectName, environment: 'sandbox', scopes: PROJECT_SCOPES }); if (!result.ok) setProjectError(result.code); else { setProjects(result.projects); setProjectName(''); setProjectError(null); } }}>{t('dev.createDraft')}</button>
-        </div>
-        {projectError && <small role="alert">{t('dev.projectUnavailable', { code: projectError })}</small>}
-        {projects.length === 0 ? <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>{t('dev.noProjects')}</small> : <div className="stack" style={{ marginTop: 10, gap: 8 }}>{projects.map((p) => <div className="row-between" key={p.id}><span><b>{p.name}</b><small style={{ display: 'block' }}>{p.environment} · {t('dev.scopes', { count: p.scopes.length })}</small></span><span className="pill pill-neutral">{p.status}</span></div>)}</div>}
-      </section>
-      <DeveloperConsole />
-      <ReviewerConsole />
+      </motion.section>
 
-      <section className="card" style={{ marginTop: 12 }}>
-        <p className="section-label">{t('dev.environments')}</p>
-        <div className="stack" style={{ gap: 8 }}>
-          {(environments || [{ name: 'sandbox', status: 'checking' }, { name: 'testnet', status: 'not_configured' }, { name: 'mainnet', status: 'not_configured' }]).map((env) => <div className="row-between" key={env.name}><b>{env.name}</b><span className="pill pill-neutral">{env.status}</span></div>)}
-        </div>
-        <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>{t('dev.environmentsNote')}</small>
-      </section>
-
-      {/* ------------------------- start here ------------------------- */}
-      <motion.section className="card card-rgb edge-mint" variants={riseIn} initial="hidden" animate="show" ref={quickstartRef}>
-        <div className="aurora" />
-        <p className="section-label" style={{ marginBottom: 9 }}>{t('dev.quickstart')}</p>
-        <p className="prose-sm" style={{ marginBottom: 10 }}>{t('dev.quickstartBody')}</p>
+      {/* --------------------------- quickstart --------------------------- */}
+      <motion.section className="devx-card devx-quick" variants={riseIn} initial="hidden" animate="show" ref={quickstartRef} tabIndex={-1}>
+        <p className="devx-label">{t('dev.quickstart')}</p>
+        <p className="devx-quick-sub">{t('dev.quickstartBody')}</p>
         <pre
-          className="mono"
-          style={{
-            fontSize: 10.5, lineHeight: 1.8, margin: 0, overflowX: 'auto',
-            background: 'rgba(0,0,0,.35)', padding: 12, borderRadius: 11,
-            border: '1px solid var(--line)', direction: 'ltr', textAlign: 'left'
-          }}
+          className="devx-code mono"
+          tabIndex={0}
         >{sample}</pre>
-        <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: 10 }} onClick={() => copy(sample)}>
-          {t('common.copy')}
+        <button className="devx-btn devx-btn--copy" type="button" onClick={() => copy(sample)}>
+          <IconCopy width={14} height={14} />{t('common.copy')}
         </button>
       </motion.section>
 
-      {/* --------------------------- the rules --------------------------- */}
-      <section>
-        <p className="section-label">{t('dev.rules')}</p>
-        <motion.div className="card stack" style={{ gap: 0, marginTop: 8 }} variants={riseIn} initial="hidden" animate="show">
-          {FACTS.map((k, i) => (
-            <div
-              key={k}
-              style={{
-                padding: '11px 0',
-                borderBottom: i === FACTS.length - 1 ? 0 : '1px solid var(--line)'
-              }}
-            >
-              <div style={{ fontWeight: 700, fontSize: 12.8, marginBottom: 3 }}>{t(`dev.fact.${k}.k`)}</div>
-              <div className="prose-sm" style={{ fontSize: 12.2 }}>{t(`dev.fact.${k}.v`, { base })}</div>
-            </div>
+      {/* --------------------------- the rules ---------------------------- */}
+      <section className="devx-block">
+        <p className="devx-label devx-label--section">{t('dev.rules')}</p>
+        <motion.div className="devx-facts" variants={stagger} initial="hidden" animate="show">
+          {FACTS.map((k) => (
+            <motion.div key={k} className="devx-fact" variants={riseIn}>
+              <div className="devx-fact-k">{t(`dev.fact.${k}.k`)}</div>
+              <div className="devx-fact-v">{t(`dev.fact.${k}.v`, { base })}</div>
+            </motion.div>
           ))}
         </motion.div>
       </section>
 
       {/* -------------------------- the endpoints -------------------------- */}
-      <section>
-        <p className="section-label">{t('dev.api')}</p>
-        <p className="prose-sm" style={{ marginTop: 6, marginBottom: 9 }}>{t('dev.apiIntro')}</p>
+      <section className="devx-block">
+        <p className="devx-label devx-label--section">{t('dev.api')}</p>
+        <p className="devx-api-intro">{t('dev.apiIntro')}</p>
 
-        <div className="stack" style={{ gap: 9 }}>
+        <div className="devx-groups">
           {GROUPS.map((g) => {
             const open = openGroup === g.id;
             return (
-              <div key={g.id} className="card card-tight">
+              <div key={g.id} className={`devx-group${open ? ' is-open' : ''}`}>
                 {/*
                   Collapsed by default except the first. Thirty endpoints
                   expanded at once is the wall of text that made the previous
@@ -329,63 +285,48 @@ export default function Developers() {
                   listing six, which is worse.
                 */}
                 <button
-                  className="row-between"
+                  className="devx-group-head"
+                  type="button"
+                  aria-expanded={open}
                   onClick={() => {
                     haptic?.('select');
                     setOpenGroup(open ? null : g.id);
                   }}
-                  style={{
-                    width: '100%', background: 'none', border: 0, padding: 0,
-                    cursor: 'pointer', textAlign: 'start', color: 'inherit'
-                  }}
                 >
-                  <span style={{ fontWeight: 700, fontSize: 13 }}>{t(`dev.group.${g.id}`)}</span>
-                  <span className="row" style={{ gap: 8 }}>
-                    <span className="pill pill-neutral" style={{ fontSize: 10 }}>{g.endpoints.length}</span>
+                  <span className="devx-group-name">{t(`dev.group.${g.id}`)}</span>
+                  <span className="devx-group-side">
+                    <span className="devx-group-count">{g.endpoints.length}</span>
                     <IconChevronRight
                       width={15}
                       height={15}
-                      style={{
-                        color: 'var(--text-3)',
-                        transform: open ? 'rotate(90deg)' : 'none',
-                        transition: 'transform .18s'
-                      }}
+                      className="devx-group-chevron"
+                      style={{ transform: open ? 'rotate(90deg)' : 'none' }}
                     />
                   </span>
                 </button>
 
                 {open && (
                   <motion.div
-                    className="stack"
-                    style={{ gap: 7, marginTop: 11 }}
+                    className="devx-eps"
                     variants={stagger}
                     initial="hidden"
                     animate="show"
                   >
                     {g.endpoints.map((e) => (
-                      <motion.div key={e.p} variants={riseIn}>
-                        <div className="row-between">
-                          <div className="row" style={{ gap: 8, minWidth: 0 }}>
-                            <span className={`pill ${e.m === 'GET' ? 'pill-up' : 'pill-rgb'}`} style={{ fontSize: 9.5 }}>
-                              {e.m}
-                            </span>
-                            <span
-                              className="mono"
-                              style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', direction: 'ltr' }}
-                            >
-                              {e.p}
-                            </span>
-                          </div>
+                      <motion.div key={e.p} className="devx-ep" variants={riseIn}>
+                        <div className="devx-ep-row">
+                          <span className={`devx-method${e.m === 'GET' ? ' devx-method--get' : ''}`}>{e.m}</span>
+                          <span className="devx-ep-path mono" dir="ltr">{e.p}</span>
                           <button
-                            className="icon-btn"
-                            style={{ width: 28, height: 28, flexShrink: 0 }}
+                            className="devx-ep-copy"
+                            type="button"
                             onClick={() => copy(`${base}${e.p}`)}
                             aria-label={t('common.copy')}
                           >
                             <IconCopy width={13} height={13} />
                           </button>
                         </div>
-                        <div className="faint" style={{ marginTop: 4, lineHeight: 1.7 }}>{t(`dev.ep.${e.d}`)}</div>
+                        <div className="devx-ep-desc">{t(`dev.ep.${e.d}`)}</div>
                       </motion.div>
                     ))}
                   </motion.div>
@@ -396,68 +337,105 @@ export default function Developers() {
         </div>
       </section>
 
-      {/* -------------------------- fair use -------------------------- */}
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-          <span style={{ color: 'var(--rgb-5)' }}><IconShield width={19} height={19} /></span>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{t('dev.fairUse')}</div>
-            <p className="prose-sm">{t('dev.fairUseBody')}</p>
-          </div>
+      {/* ---------------------------- projects ---------------------------- */}
+      <section className="devx-card devx-projects" ref={projectInput} tabIndex={-1}>
+        <p className="devx-label">{t('dev.projects')}</p>
+        <p className="devx-quick-sub">{t('dev.projectsBody')}</p>
+        <div className="devx-project-row">
+          <input
+            className="devx-input"
+            value={projectName}
+            maxLength={48}
+            placeholder={t('dev.projectName')}
+            onChange={(e) => { setProjectName(e.target.value); setProjectError(null); }}
+            aria-label={t('dev.projectName')}
+          />
+          <button
+            className="devx-btn devx-btn--primary"
+            type="button"
+            onClick={() => { const result = createSandboxProject({ name: projectName, environment: 'sandbox', scopes: PROJECT_SCOPES }); if (!result.ok) setProjectError(result.code); else { setProjects(result.projects); setProjectName(''); setProjectError(null); } }}
+          >
+            {t('dev.createDraft')}
+          </button>
         </div>
-      </motion.section>
-
-      {/* -------------------------- self-hosting -------------------------- */}
-      <section>
-        <p className="section-label">{t('dev.selfHost')}</p>
-        <motion.div className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 8 }}>
-          <p className="prose-sm">{t('dev.selfHostBody')}</p>
-          <pre
-            className="mono"
-            style={{
-              fontSize: 10.5, lineHeight: 1.8, marginTop: 10, marginBottom: 0, overflowX: 'auto',
-              background: 'rgba(0,0,0,.35)', padding: 12, borderRadius: 11,
-              border: '1px solid var(--line)', direction: 'ltr', textAlign: 'left'
-            }}
-          >{`npm ci
-cp .env.example .env
-npm run dev`}</pre>
-          <p className="prose-sm" style={{ marginTop: 10 }}>{t('dev.selfHostKeys')}</p>
-        </motion.div>
+        {projectError && <small className="devx-project-error" role="alert">{t('dev.projectUnavailable', { code: projectError })}</small>}
+        {projects.length === 0 ? (
+          <small className="devx-projects-empty">{t('dev.noProjects')}</small>
+        ) : (
+          <div className="devx-project-list">
+            {projects.map((p) => (
+              <div className="devx-project" key={p.id}>
+                <span className="devx-project-name"><b>{p.name}</b><small>{p.environment} · {t('dev.scopes', { count: p.scopes.length })}</small></span>
+                <span className="devx-project-status">{p.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
-      {/* ------------------------ source & keys ------------------------ */}
-      <motion.button
-        className="card card-rgb lift"
-        variants={riseIn} initial="hidden" animate="show"
-        whileTap={{ scale: 0.985 }}
-        onClick={() => navigate('/contact')}
-        style={{ textAlign: 'start', cursor: 'pointer', width: '100%' }}
-      >
-        <div className="aurora" />
-        <div className="row-between">
-          <div className="row" style={{ gap: 11 }}>
-            <span className="wallet-badge"><IconLock width={20} height={20} /></span>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t('dev.sourcePrivate')}</div>
-              <div className="faint">{t('dev.sourcePrivateSub')}</div>
-            </div>
-          </div>
-          <IconChevronRight width={17} height={17} style={{ color: 'var(--text-3)' }} />
-        </div>
-      </motion.button>
+      <DeveloperConsole />
+      <ReviewerConsole />
 
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-          <span style={{ color: 'var(--rgb-2)' }}><IconKey width={19} height={19} /></span>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{t('dev.keysTitle')}</div>
-            <p className="prose-sm">{t('dev.keysBody')}</p>
+      {/* --------------------- everything else, folded --------------------- */}
+      {/*
+        ─── THE FOLD IS THE DECLUTTER ──────────────────────────────────────
+        None of this was wrong; all of it was too much, too early. Ecosystem,
+        environments, fair use, self-hosting and the key policy are reference
+        material — read once, by a minority of visitors — so they keep their
+        exact wording inside collapsed boxes, and the scroll above them gets
+        shorter by roughly two screens.
+      */}
+      <div className="devx-folds">
+        <InfoBox title={t('dev.ecosystem')} tone="info" id="devx-ecosystem">
+          <p className="devx-fold-p">{t('dev.ecosystemBody')}</p>
+          <div className="devx-pills">
+            {['agents', 'strategies', 'liquidity', 'connect', 'sdk', 'environments', 'reputation', 'revenue'].map((item) => (
+              <span className="devx-pill" key={item}>{t(`dev.pill.${item}`)}</span>
+            ))}
           </div>
-        </div>
-      </motion.section>
+          <p className="devx-label devx-label--fold">{t('dev.environments')}</p>
+          <div className="devx-envs">
+            {(environments || [{ name: 'sandbox', status: 'checking' }, { name: 'testnet', status: 'not_configured' }, { name: 'mainnet', status: 'not_configured' }]).map((env) => (
+              <span className="devx-env" key={env.name}>
+                <b className="mono" dir="ltr">{env.name}</b>
+                <span className={`devx-env-status${env.status === 'available' ? ' is-live' : ''}`}>{env.status}</span>
+              </span>
+            ))}
+          </div>
+          <p className="devx-fold-note">{t('dev.environmentsNote')}</p>
+          {/*
+            ─── THE BOUNDARY, WITH ITS REASON ────────────────────────────────
+            Automatic execution and withdrawal are not a configuration anyone
+            can turn on. They are absent because this product never holds
+            funds — a design decision, not a broken install.
+          */}
+          <p className="devx-boundary"><IconShield width={13} height={13} />{t('dev.boundary')}</p>
+        </InfoBox>
 
-      <p className="notice">{t('dev.noSla')}</p>
+        <InfoBox title={t('dev.fairUse')} tone="info" id="devx-fairuse">
+          <p className="devx-fold-p">{t('dev.fairUseBody')}</p>
+        </InfoBox>
+
+        <InfoBox title={t('dev.selfHost')} tone="info" id="devx-selfhost">
+          <p className="devx-fold-p">{t('dev.selfHostBody')}</p>
+          <pre className="devx-code mono">{`npm ci\ncp .env.example .env\nnpm run dev`}</pre>
+          <p className="devx-fold-note">{t('dev.selfHostKeys')}</p>
+        </InfoBox>
+
+        <InfoBox title={t('dev.keysTitle')} tone="warn" id="devx-keys">
+          <p className="devx-fold-p">{t('dev.keysBody')}</p>
+          <button className="devx-source" type="button" onClick={() => navigate('/contact')}>
+            <span className="devx-source-ico"><IconLock width={16} height={16} /></span>
+            <span className="devx-source-text">
+              <b>{t('dev.sourcePrivate')}</b>
+              <small>{t('dev.sourcePrivateSub')}</small>
+            </span>
+            <IconChevronRight width={15} height={15} className="devx-source-arrow" />
+          </button>
+        </InfoBox>
+      </div>
+
+      <p className="devx-nosla"><IconGlobe width={13} height={13} />{t('dev.noSla')}</p>
     </PageTransition>
   );
 }

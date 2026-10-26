@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useId, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -12,7 +12,6 @@ import {
   IconGlobe,
   IconMail,
   IconCheck,
-  IconX,
   IconShield,
   IconActivity,
   IconExternal,
@@ -21,13 +20,11 @@ import {
   IconBank,
   IconCard,
   IconCoins,
-  IconPlus,
   IconRocket,
   IconTrophy,
   IconClock,
   IconLock,
-  IconSparkle,
-  IconSearch
+  IconSparkle
 } from '../components/Icons';
 import BusinessOrbMark from '../components/business/BusinessOrbMark';
 import { openUrl } from '../lib/browser';
@@ -57,42 +54,33 @@ const OFFERS = [
   { id: 'integration', Icon: IconKey, a: '#ffb300', b: '#ff5a3a', points: ['docs', 'keys'] }
 ];
 
+/*
+ * ─── TWO TABS, AND NOTHING PRETENDS TO BE A BACKEND ─────────────────────────
+ *   «تب پیگیری اطلاعات غیر واقعی هست — ببرش … چیزی در سرور ثبت نمی‌شود پس
+ *    جالب هم نیست بنویسیم پیگیری وضعیت … تغییر بده به درخواست»
+ *
+ * What this page used to carry: a «پیگیری» tab with a status ring, a
+ * three-step timeline with two steps marked done, and a filterable list of
+ * three named demo requests with timestamps. None of it was connected to
+ * anything — the form opens the user's own mail app and the server stores
+ * nothing, so no status could ever be read back, and every number on that
+ * panel was set dressing that a partner could mistake for a promise.
+ *
+ * So the second tab is now «درخواست»: the honest half of the old flow — the
+ * explanation card and the form — with the invented half deleted. Picking a
+ * service on the first tab still lands here, with that topic preselected.
+ */
 const TABS = [
   { id: 'partnership', Icon: IconBriefcase, a: '#00e5ff', b: '#7c4dff' },
-  { id: 'followup', Icon: IconActivity, a: '#ff2d95', b: '#7c4dff' }
+  { id: 'request', Icon: IconMail, a: '#ff2d95', b: '#7c4dff' }
 ];
 
 const SUBTABS = {
   partnership: [
     { id: 'services', Icon: IconTrend, a: '#00e5ff', b: '#7c4dff' },
     { id: 'brands', Icon: IconBuilding, a: '#b06bff', b: '#ff2d95' }
-  ],
-  followup: [
-    { id: 'requests', Icon: IconMail, a: '#ff2d95', b: '#ff8a3a' },
-    { id: 'tracking', Icon: IconChart, a: '#00ff9d', b: '#00e5ff' }
   ]
 };
-
-const STATUS_CFG = {
-  pending: { color: '#ffb300', progress: 0.34 },
-  review: { color: '#00c8ff', progress: 0.67 },
-  responded: { color: '#00d68f', progress: 1 }
-};
-
-/* Every status has a filter chip, so the four statuses stay one source of truth. */
-const FILTERS = [
-  { id: 'all', Icon: IconActivity },
-  { id: 'pending', Icon: IconClock },
-  { id: 'review', Icon: IconSearch },
-  { id: 'responded', Icon: IconCheck }
-];
-
-/* Demo requests — every visible string comes from i18n (biz.demo.*). */
-const REQUESTS = [
-  { id: 'r1', companyKey: 'biz.demo.arta', topic: 'listing', status: 'responded', timeKey: 'biz.demo.hoursAgo', timeCount: 2 },
-  { id: 'r2', companyKey: 'biz.demo.noor', topic: 'liquidity', status: 'review', timeKey: 'biz.demo.hoursAgo', timeCount: 14 },
-  { id: 'r3', companyKey: 'biz.demo.bitplus', topic: 'whitelabel', status: 'pending', timeKey: 'biz.demo.daysAgo', timeCount: 3 }
-];
 
 const BRANDS = [
   { id: 'fbt', name: 'FBT Swap', mono: 'F', Icon: IconBank, a: '#00e5ff', b: '#7c4dff' },
@@ -101,13 +89,6 @@ const BRANDS = [
   { id: 'polygon', name: 'Polygon', mono: 'P', Icon: IconCard, a: '#8247e5', b: '#c4a6ff' },
   { id: 'bnb', name: 'BNB Chain', mono: 'B', Icon: IconCoins, a: '#f0b90b', b: '#ffd94d' },
   { id: 'arbitrum', name: 'Arbitrum', mono: 'A', Icon: IconLock, a: '#28a0f0', b: '#7cc7ff' }
-];
-
-/** The partnership path. `done` drives the ring, the timeline and the copy. */
-const STEPS = [
-  { id: 'conversation', done: true },
-  { id: 'proposal', done: true },
-  { id: 'launch', done: false }
 ];
 
 /* The three real steps of a request, in reading order. The numbers are
@@ -119,15 +100,9 @@ const FIELD_ORDER = ['company', 'name', 'email', 'message'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const grad = (a, b) => `linear-gradient(135deg, ${a}, ${b})`;
-/* Ring geometry: r=52 → 2πr. Shared by the dash array and the dash offset. */
-const RING_R = 52;
-const RING_C = 2 * Math.PI * RING_R;
 
 function num(value, locale) {
   return new Intl.NumberFormat(locale || 'en').format(value);
-}
-function pct(value, locale) {
-  return new Intl.NumberFormat(locale || 'en', { style: 'percent', maximumFractionDigits: 0 }).format(value);
 }
 
 /**
@@ -178,8 +153,6 @@ export default function Business() {
   const [activeTab, setActiveTab] = useState('partnership');
   const [activeSubTab, setActiveSubTab] = useState('services');
   const [interest, setInterest] = useState('listing');
-  const [filter, setFilter] = useState('all');
-  const [openRequest, setOpenRequest] = useState(false);
   const [form, setForm] = useState({ company: '', name: '', email: '', phone: '', message: '' });
   const [errors, setErrors] = useState({});
   const [sending, setSending] = useState(false);
@@ -187,28 +160,16 @@ export default function Business() {
 
   const subTabs = SUBTABS[activeTab] || [];
   const activeOffer = OFFERS.find((o) => o.id === interest) || OFFERS[0];
-  const doneSteps = STEPS.filter((s) => s.done).length;
-  const progress = doneSteps / STEPS.length;
-  const respondedCount = REQUESTS.filter((r) => r.status === 'responded').length;
-
-  const visibleRequests = useMemo(
-    () => (filter === 'all' ? REQUESTS : REQUESTS.filter((r) => r.status === filter)),
-    [filter]
-  );
 
   const pickTab = useCallback((tab) => {
     setActiveTab(tab.id);
-    setActiveSubTab(SUBTABS[tab.id][0].id);
-    /* The form lives in one panel only; leaving its panel closes it so a
-       stale open form is never waiting when the user comes back. */
-    setOpenRequest(false);
+    setActiveSubTab(SUBTABS[tab.id]?.[0]?.id || null);
     setErrors({});
     haptic?.('light');
   }, [haptic]);
 
   const pickSubTab = useCallback((st) => {
     setActiveSubTab(st.id);
-    setOpenRequest(false);
     setErrors({});
     haptic?.('light');
   }, [haptic]);
@@ -219,21 +180,18 @@ export default function Business() {
     else window.open(url, '_blank', 'noopener,noreferrer');
   }, [haptic, tg]);
 
-  /* Selecting a service jumps to the request form — and actually opens it. */
+  /*
+   * Selecting a topic goes straight to the request form. There is no list to
+   * land on any more — the «درخواست» tab IS the form, so the jump only has to
+   * pick the topic, switch the tab and bring the form into view.
+   */
   const startRequest = useCallback((offerId) => {
     if (offerId) setInterest(offerId);
-    setActiveTab('followup');
-    setActiveSubTab('requests');
-    setOpenRequest(true);
+    setActiveTab('request');
+    setActiveSubTab(null);
     setErrors({});
     haptic?.('light');
     requestAnimationFrame(() => setTimeout(() => formRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' }), 240));
-  }, [haptic]);
-
-  const toggleForm = useCallback(() => {
-    setOpenRequest((v) => !v);
-    setErrors({});
-    haptic?.('light');
   }, [haptic]);
 
   const setField = (k, v) => {
@@ -280,7 +238,6 @@ export default function Business() {
     else window.location.href = mailto;
     setTimeout(() => {
       setSending(false);
-      setOpenRequest(false);
       setForm({ company: '', name: '', email: '', phone: '', message: '' });
       useAppStore.getState().notify(t('biz.form.ready'), 'success');
       haptic?.('success');
@@ -296,9 +253,7 @@ export default function Business() {
 
   const subtabCount = {
     services: OFFERS.length,
-    brands: BRANDS.length,
-    requests: REQUESTS.length,
-    tracking: STEPS.length
+    brands: BRANDS.length
   };
 
   return (
@@ -411,7 +366,8 @@ export default function Business() {
           </div>
         </motion.div>
 
-        {/* ---------------- Sub-tabs (2 per tab) ---------------- */}
+        {/* ---------------- Sub-tabs (partnership only) ---------------- */}
+        {subTabs.length > 0 && (
         <motion.div className="biz-subwrap" variants={riseIn} initial="hidden" animate="show">
           <div
             className="biz-subtabs" role="tablist" aria-label={t('biz.subtabsTitle')}
@@ -449,13 +405,14 @@ export default function Business() {
               readers that count the tabs to announce \"2 of 4\". */}
           <p className="biz-panel-hint">{t(`biz.panelHint.${activeSubTab}`)}</p>
         </motion.div>
+        )}
 
-        {/* ---------------- Panels (4 views) ---------------- */}
+        {/* ---------------- Panels (3 views) ---------------- */}
         <AnimatePresence mode="wait">
           <motion.div
             key={`${activeTab}/${activeSubTab}`}
             id={panelId} role="tabpanel"
-            aria-labelledby={`${uid}-sub-${activeSubTab}`}
+            aria-labelledby={activeSubTab ? `${uid}-sub-${activeSubTab}` : `${uid}-tab-${activeTab}`}
             className="biz-section"
             initial={{ opacity: 0, y: 14, scale: 0.995 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -587,10 +544,10 @@ export default function Business() {
               </>
             )}
 
-            {/* ===== Follow-up / Requests ===== */}
-            {activeTab === 'followup' && activeSubTab === 'requests' && (
+            {/* ===== Request — the form, and only the form ===== */}
+            {activeTab === 'request' && (
               <>
-                {/* Intro — in plain language, the missing clarity */}
+                {/* Intro — in plain language, what submitting actually does */}
                 <div className="biz-card biz-intro-card">
                   <div className="biz-intro-head">
                     <span className="biz-intro-badge"><IconShield width={13} height={13} />{t('biz.requestsIntroLabel')}</span>
@@ -612,313 +569,127 @@ export default function Business() {
                   </div>
                 </div>
 
-                <div className="biz-row-head">
-                  <div>
-                    <p className="biz-label">{t('biz.requestsTitle')}</p>
-                    <p className="biz-lead biz-lead--inline">{t('biz.requestsSub')}</p>
+                {/*
+                  The form itself, always on screen. There is no «new request»
+                  toggle any more: a tab called Request whose content is a
+                  button that reveals a form is one tap of theatre around the
+                  only thing this panel does.
+                */}
+                <motion.form
+                  ref={formRef} id={`${uid}-form`} noValidate
+                  className="biz-card biz-form-card"
+                  onSubmit={submitBusiness}
+                  aria-labelledby={`${uid}-formtitle`}
+                  variants={riseIn} initial="hidden" animate="show"
+                  style={{ '--a': activeOffer.a, '--b': activeOffer.b }}
+                >
+                  <div className="biz-form-head">
+                    <span className="biz-form-icon" style={{ background: grad(activeOffer.a, activeOffer.b) }}>
+                      <IconMail width={20} height={20} />
+                    </span>
+                    <div className="biz-form-heading">
+                      <h3 className="biz-form-title" id={`${uid}-formtitle`}>{t('biz.newRequest')}</h3>
+                      <span className="biz-form-kicker">{t(`biz.offer.${interest}.title`)}</span>
+                    </div>
                   </div>
+                  <p className="biz-form-desc">{t('biz.form.description')}</p>
+
+                  <span className="biz-field-label" id={`${uid}-topic-label`}>{t('biz.form.topic')}</span>
+                  <div className="biz-topic-pills" role="group" aria-labelledby={`${uid}-topic-label`}>
+                    {OFFERS.map((o) => (
+                      <button
+                        key={o.id} type="button" aria-pressed={interest === o.id}
+                        className={`biz-topic-pill${interest === o.id ? ' is-active' : ''}`}
+                        onClick={() => { setInterest(o.id); haptic?.('light'); }}
+                        style={{ '--a': o.a, '--b': o.b }}
+                      >
+                        <o.Icon width={15} height={15} />{t(`biz.offer.${o.id}.title`)}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="biz-field-row">
+                    <label className="biz-field" htmlFor={`${uid}-company`}>
+                      <span className="biz-field-label">{t('biz.form.company')} *</span>
+                      <input
+                        id={`${uid}-company`} className={`biz-input${errors.company ? ' is-invalid' : ''}`}
+                        value={form.company} onChange={(e) => setField('company', e.target.value)}
+                        placeholder={t('biz.form.companyPlaceholder')} autoComplete="organization"
+                        aria-invalid={Boolean(errors.company)}
+                        aria-describedby={errors.company ? `${uid}-company-err` : undefined}
+                      />
+                      {errors.company && <span className="biz-field-error" id={`${uid}-company-err`}>{errors.company}</span>}
+                    </label>
+                    <label className="biz-field" htmlFor={`${uid}-name`}>
+                      <span className="biz-field-label">{t('biz.form.name')} *</span>
+                      <input
+                        id={`${uid}-name`} className={`biz-input${errors.name ? ' is-invalid' : ''}`}
+                        value={form.name} onChange={(e) => setField('name', e.target.value)}
+                        placeholder={t('biz.form.namePlaceholder')} autoComplete="name"
+                        aria-invalid={Boolean(errors.name)}
+                        aria-describedby={errors.name ? `${uid}-name-err` : undefined}
+                      />
+                      {errors.name && <span className="biz-field-error" id={`${uid}-name-err`}>{errors.name}</span>}
+                    </label>
+                  </div>
+                  <div className="biz-field-row">
+                    <label className="biz-field" htmlFor={`${uid}-email`}>
+                      <span className="biz-field-label">{t('biz.form.workEmail')} *</span>
+                      <input
+                        id={`${uid}-email`} className={`biz-input${errors.email ? ' is-invalid' : ''}`}
+                        type="email" inputMode="email" dir="ltr" spellCheck="false"
+                        value={form.email} onChange={(e) => setField('email', e.target.value)}
+                        placeholder={t('biz.form.workEmailPlaceholder')} autoComplete="email"
+                        aria-invalid={Boolean(errors.email)}
+                        aria-describedby={errors.email ? `${uid}-email-err` : undefined}
+                      />
+                      {errors.email && <span className="biz-field-error" id={`${uid}-email-err`}>{errors.email}</span>}
+                    </label>
+                    <label className="biz-field" htmlFor={`${uid}-phone`}>
+                      <span className="biz-field-label">{t('biz.form.phoneOptional')}</span>
+                      <input
+                        id={`${uid}-phone`} className="biz-input" type="tel" inputMode="tel" dir="ltr"
+                        value={form.phone} onChange={(e) => setField('phone', e.target.value)}
+                        placeholder={t('biz.form.phonePlaceholder')} autoComplete="tel"
+                      />
+                    </label>
+                  </div>
+                  <label className="biz-field" htmlFor={`${uid}-message`}>
+                    <span className="biz-field-label">
+                      {t('biz.form.message')} *
+                      <span className="biz-counter">
+                        {t('biz.form.chars', { count: num(form.message.length, locale), max: num(MESSAGE_MAX, locale) })}
+                      </span>
+                    </span>
+                    <textarea
+                      id={`${uid}-message`} className={`biz-textarea${errors.message ? ' is-invalid' : ''}`}
+                      value={form.message} onChange={(e) => setField('message', e.target.value.slice(0, MESSAGE_MAX))}
+                      placeholder={t('biz.form.messagePlaceholder')} rows={4}
+                      aria-invalid={Boolean(errors.message)}
+                      aria-describedby={errors.message ? `${uid}-message-err` : undefined}
+                    />
+                    {errors.message && <span className="biz-field-error" id={`${uid}-message-err`}>{errors.message}</span>}
+                  </label>
+
                   <button
-                    type="button" className="biz-btn biz-btn--primary biz-btn--sm"
-                    onClick={toggleForm} aria-expanded={openRequest} aria-controls={`${uid}-form`}
+                    type="submit" className="biz-btn biz-btn--primary biz-btn--full" disabled={sending}
+                    style={{ background: grad(activeOffer.a, activeOffer.b) }}
                   >
-                    <IconPlus width={16} height={16} />{t('biz.newRequest')}
+                    <IconMail width={17} height={17} />
+                    {sending ? t('biz.form.preparing') : t('biz.form.submit', { topic: t(`biz.offer.${interest}.title`) })}
                   </button>
-                </div>
 
-                <p className="biz-hint">{t('biz.requestsIntro.note')}</p>
-
-                <div className="biz-filters" role="group" aria-label={t('biz.filterLabel')}>
-                  {FILTERS.map(({ id, Icon }) => {
-                    const count = id === 'all' ? REQUESTS.length : REQUESTS.filter((r) => r.status === id).length;
-                    const active = filter === id;
-                    return (
-                      <button
-                        key={id} type="button" aria-pressed={active}
-                        className={`biz-filter${active ? ' is-active' : ''}`}
-                        style={{ '--status': id === 'all' ? 'var(--rgb-1)' : STATUS_CFG[id].color }}
-                        onClick={() => { setFilter(id); haptic?.('light'); }}
-                      >
-                        <Icon width={13} height={13} />
-                        {t(`biz.filter.${id}`)}
-                        <span className="biz-filter-count">{num(count, locale)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="biz-request-list" aria-live="polite">
-                  {visibleRequests.length === 0 ? (
-                    <div className="biz-card biz-empty">
-                      <span className="biz-empty-icon"><IconMail width={22} height={22} /></span>
-                      <h3 className="biz-empty-title">
-                        {REQUESTS.length === 0 ? t('biz.requestsEmptyTitle') : t('biz.emptyFilterTitle')}
-                      </h3>
-                      <p className="biz-empty-text">
-                        {REQUESTS.length === 0 ? t('biz.requestsEmptyText') : t('biz.emptyFilterText')}
-                      </p>
-                      <button type="button" className="biz-btn biz-btn--primary biz-btn--sm" onClick={() => startRequest(interest)}>
-                        <IconPlus width={16} height={16} />{t('biz.newRequest')}
-                      </button>
-                    </div>
-                  ) : (
-                    <motion.div variants={stagger} initial="hidden" animate="show" className="biz-request-stack">
-                      {visibleRequests.map((r) => {
-                        const s = STATUS_CFG[r.status];
-                        const OfferIcon = (OFFERS.find((o) => o.id === r.topic) || OFFERS[0]).Icon;
-                        const company = t(r.companyKey);
-                        return (
-                          <motion.article
-                            key={r.id} className="biz-request" variants={riseIn}
-                            style={{ '--status': s.color, '--a': s.color }}
-                          >
-                            <span className="biz-request-avatar" style={{ background: grad(s.color, '#7c4dff') }}>
-                              {company.slice(0, 1)}
-                            </span>
-                            <div className="biz-request-meta">
-                              <div className="biz-request-topic">
-                                <OfferIcon width={14} height={14} className="biz-request-topic-icon" />
-                                {t(`biz.offer.${r.topic}.title`)} · {company}
-                              </div>
-                              <div className="biz-request-kind">{t('biz.requests.kind')}</div>
-                              <div
-                                className="biz-progress" role="progressbar"
-                                aria-label={t('biz.progress.label')}
-                                aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(s.progress * 100)}
-                              >
-                                <motion.span
-                                  className="biz-progress-fill"
-                                  style={{ background: grad(s.color, '#7c4dff') }}
-                                  initial={{ width: 0 }} animate={{ width: `${s.progress * 100}%` }}
-                                  transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-                                />
-                              </div>
-                            </div>
-                            <div className="biz-request-side">
-                              <span className="biz-chip-status">{t(`biz.status.${r.status}`)}</span>
-                              <span className="biz-request-time">{t(r.timeKey, { count: num(r.timeCount, locale) })}</span>
-                            </div>
-                          </motion.article>
-                        );
-                      })}
-                    </motion.div>
-                  )}
-                </div>
-
-                <button type="button" className="biz-link-row" onClick={() => pickSubTab(subTabs[1])}>
-                  <IconChart width={16} height={16} />{t('biz.viewTracking')}
-                  <IconChevronLeft width={15} height={15} className="biz-flip" />
-                </button>
-
-                <AnimatePresence initial={false}>
-                  {openRequest && (
-                    <motion.form
-                      ref={formRef} id={`${uid}-form`} noValidate
-                      className="biz-card biz-form-card"
-                      onSubmit={submitBusiness}
-                      aria-labelledby={`${uid}-formtitle`}
-                      initial={{ opacity: 0, y: 16, scale: 0.99 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 10, scale: 0.99 }}
-                      transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-                      style={{ '--a': activeOffer.a, '--b': activeOffer.b }}
-                    >
-                      <div className="biz-form-head">
-                        <span className="biz-form-icon" style={{ background: grad(activeOffer.a, activeOffer.b) }}>
-                          <IconMail width={20} height={20} />
-                        </span>
-                        <div className="biz-form-heading">
-                          <h3 className="biz-form-title" id={`${uid}-formtitle`}>{t('biz.newRequest')}</h3>
-                          <span className="biz-form-kicker">{t(`biz.offer.${interest}.title`)}</span>
-                        </div>
-                        <button type="button" className="biz-icon-btn" onClick={() => setOpenRequest(false)} aria-label={t('biz.form.close')}>
-                          <IconX width={17} height={17} />
-                        </button>
-                      </div>
-                      <p className="biz-form-desc">{t('biz.form.description')}</p>
-
-                      <span className="biz-field-label" id={`${uid}-topic-label`}>{t('biz.form.topic')}</span>
-                      <div className="biz-topic-pills" role="group" aria-labelledby={`${uid}-topic-label`}>
-                        {OFFERS.map((o) => (
-                          <button
-                            key={o.id} type="button" aria-pressed={interest === o.id}
-                            className={`biz-topic-pill${interest === o.id ? ' is-active' : ''}`}
-                            onClick={() => { setInterest(o.id); haptic?.('light'); }}
-                            style={{ '--a': o.a, '--b': o.b }}
-                          >
-                            <o.Icon width={15} height={15} />{t(`biz.offer.${o.id}.title`)}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className="biz-field-row">
-                        <label className="biz-field" htmlFor={`${uid}-company`}>
-                          <span className="biz-field-label">{t('biz.form.company')} *</span>
-                          <input
-                            id={`${uid}-company`} className={`biz-input${errors.company ? ' is-invalid' : ''}`}
-                            value={form.company} onChange={(e) => setField('company', e.target.value)}
-                            placeholder={t('biz.form.companyPlaceholder')} autoComplete="organization"
-                            aria-invalid={Boolean(errors.company)}
-                            aria-describedby={errors.company ? `${uid}-company-err` : undefined}
-                          />
-                          {errors.company && <span className="biz-field-error" id={`${uid}-company-err`}>{errors.company}</span>}
-                        </label>
-                        <label className="biz-field" htmlFor={`${uid}-name`}>
-                          <span className="biz-field-label">{t('biz.form.name')} *</span>
-                          <input
-                            id={`${uid}-name`} className={`biz-input${errors.name ? ' is-invalid' : ''}`}
-                            value={form.name} onChange={(e) => setField('name', e.target.value)}
-                            placeholder={t('biz.form.namePlaceholder')} autoComplete="name"
-                            aria-invalid={Boolean(errors.name)}
-                            aria-describedby={errors.name ? `${uid}-name-err` : undefined}
-                          />
-                          {errors.name && <span className="biz-field-error" id={`${uid}-name-err`}>{errors.name}</span>}
-                        </label>
-                      </div>
-                      <div className="biz-field-row">
-                        <label className="biz-field" htmlFor={`${uid}-email`}>
-                          <span className="biz-field-label">{t('biz.form.workEmail')} *</span>
-                          <input
-                            id={`${uid}-email`} className={`biz-input${errors.email ? ' is-invalid' : ''}`}
-                            type="email" inputMode="email" dir="ltr" spellCheck="false"
-                            value={form.email} onChange={(e) => setField('email', e.target.value)}
-                            placeholder={t('biz.form.workEmailPlaceholder')} autoComplete="email"
-                            aria-invalid={Boolean(errors.email)}
-                            aria-describedby={errors.email ? `${uid}-email-err` : undefined}
-                          />
-                          {errors.email && <span className="biz-field-error" id={`${uid}-email-err`}>{errors.email}</span>}
-                        </label>
-                        <label className="biz-field" htmlFor={`${uid}-phone`}>
-                          <span className="biz-field-label">{t('biz.form.phoneOptional')}</span>
-                          <input
-                            id={`${uid}-phone`} className="biz-input" type="tel" inputMode="tel" dir="ltr"
-                            value={form.phone} onChange={(e) => setField('phone', e.target.value)}
-                            placeholder={t('biz.form.phonePlaceholder')} autoComplete="tel"
-                          />
-                        </label>
-                      </div>
-                      <label className="biz-field" htmlFor={`${uid}-message`}>
-                        <span className="biz-field-label">
-                          {t('biz.form.message')} *
-                          <span className="biz-counter">
-                            {t('biz.form.chars', { count: num(form.message.length, locale), max: num(MESSAGE_MAX, locale) })}
-                          </span>
-                        </span>
-                        <textarea
-                          id={`${uid}-message`} className={`biz-textarea${errors.message ? ' is-invalid' : ''}`}
-                          value={form.message} onChange={(e) => setField('message', e.target.value.slice(0, MESSAGE_MAX))}
-                          placeholder={t('biz.form.messagePlaceholder')} rows={4}
-                          aria-invalid={Boolean(errors.message)}
-                          aria-describedby={errors.message ? `${uid}-message-err` : undefined}
-                        />
-                        {errors.message && <span className="biz-field-error" id={`${uid}-message-err`}>{errors.message}</span>}
-                      </label>
-
-                      <button
-                        type="submit" className="biz-btn biz-btn--primary biz-btn--full" disabled={sending}
-                        style={{ background: grad(activeOffer.a, activeOffer.b) }}
-                      >
-                        <IconMail width={17} height={17} />
-                        {sending ? t('biz.form.preparing') : t('biz.form.submit', { topic: t(`biz.offer.${interest}.title`) })}
-                      </button>
-                      <button type="button" className="biz-btn biz-btn--ghost biz-btn--full" onClick={() => setOpenRequest(false)}>
-                        {t('biz.form.cancel')}
-                      </button>
-
-                      <div className="biz-form-tags">
-                        <button type="button" className="biz-tag" onClick={() => openUrl(SUPPORT_MAILTO)}>
-                          <IconMail width={14} height={14} /><span dir="ltr">{SUPPORT_EMAIL}</span>
-                        </button>
-                        <button type="button" className="biz-tag" onClick={() => openLink(SITE_URL)}>
-                          <IconGlobe width={14} height={14} /><span dir="ltr">{SITE_URL.replace(/^https:\/\//, '')}</span>
-                        </button>
-                      </div>
-                      <p className="biz-form-note"><IconLock width={12} height={12} />{t('biz.form.privacy')}</p>
-                      <p className="biz-form-note biz-form-note--muted">{t('biz.form.responseTime')}</p>
-                    </motion.form>
-                  )}
-                </AnimatePresence>
-              </>
-            )}
-
-            {/* ===== Follow-up / Tracking ===== */}
-            {activeTab === 'followup' && activeSubTab === 'tracking' && (
-              <>
-                <p className="biz-label">{t('biz.trackingTitle')}</p>
-                <p className="biz-lead">{t('biz.trackingSub')}</p>
-
-                <div className="biz-card biz-progress-card">
-                  <div className="biz-progress-body">
-                    <div className="biz-ring-wrap">
-                      <svg className="biz-ring" viewBox="0 0 120 120" role="img" aria-label={t('biz.tracking.progressLabel')}>
-                        <circle className="biz-ring-track" cx="60" cy="60" r={RING_R} />
-                        <motion.circle
-                          className="biz-ring-fill" cx="60" cy="60" r={RING_R}
-                          strokeDasharray={RING_C}
-                          initial={{ strokeDashoffset: RING_C }}
-                          animate={{ strokeDashoffset: RING_C * (1 - progress) }}
-                          transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
-                        />
-                      </svg>
-                      <span className="biz-ring-value">{pct(progress, locale)}</span>
-                    </div>
-                    <div className="biz-progress-copy">
-                      <span className="biz-progress-title">{t('biz.tracking.progressLabel')}</span>
-                      <span className="biz-progress-sub">
-                        {t('biz.tracking.progressSub', { done: num(doneSteps, locale), total: num(STEPS.length, locale) })}
-                      </span>
-                      <span className="biz-progress-next">
-                        <IconClock width={12} height={12} />
-                        {t('biz.tracking.nextUp')} · {t(`biz.steps.${STEPS.find((s) => !s.done).id}.title`)}
-                      </span>
-                    </div>
+                  <div className="biz-form-tags">
+                    <button type="button" className="biz-tag" onClick={() => openUrl(SUPPORT_MAILTO)}>
+                      <IconMail width={14} height={14} /><span dir="ltr">{SUPPORT_EMAIL}</span>
+                    </button>
+                    <button type="button" className="biz-tag" onClick={() => openLink(SITE_URL)}>
+                      <IconGlobe width={14} height={14} /><span dir="ltr">{SITE_URL.replace(/^https:\/\//, '')}</span>
+                    </button>
                   </div>
-                </div>
-
-                <motion.div className="biz-stats biz-stats--tracking" variants={stagger} initial="hidden" animate="show">
-                  {[
-                    { Icon: IconMail, a: '#ff2d95', b: '#ff8a3a', value: num(REQUESTS.length, locale), label: t('biz.tracking.totalRequests'), sub: t('biz.tracking.totalSub') },
-                    { Icon: IconCheck, a: '#00ff9d', b: '#00b8ff', value: num(respondedCount, locale), label: t('biz.tracking.responded'), sub: t('biz.tracking.respondedSub') },
-                    { Icon: IconClock, a: '#00e5ff', b: '#7c4dff', value: t('biz.stats.alwaysOpen.value'), label: t('biz.tracking.support'), sub: t('biz.tracking.supportSub') }
-                  ].map(({ Icon, a, b, value, label, sub }) => (
-                    <motion.div key={label} className="biz-stat" variants={riseIn} style={{ '--a': a, '--b': b }}>
-                      <span className="biz-stat-icon" style={{ background: grad(a, b) }}><Icon width={17} height={17} /></span>
-                      <div className="biz-stat-value">{value}</div>
-                      <div className="biz-stat-label">{label}</div>
-                      <div className="biz-stat-sub">{sub}</div>
-                    </motion.div>
-                  ))}
-                </motion.div>
-
-                <div className="biz-card biz-timeline-card">
-                  <p className="biz-label biz-label--card">{t('biz.tracking.pathTitle')}</p>
-                  <motion.ol className="biz-timeline" variants={stagger} initial="hidden" animate="show">
-                    {STEPS.map((step, index) => {
-                      const isNext = !step.done && STEPS.slice(0, index).every((s) => s.done);
-                      return (
-                        <motion.li
-                          key={step.id}
-                          className={`biz-step${step.done ? ' is-done' : ''}${isNext ? ' is-next' : ''}`}
-                          variants={riseIn}
-                        >
-                          <span className="biz-step-marker">
-                            {step.done ? <IconCheck width={15} height={15} /> : num(index + 1, locale)}
-                          </span>
-                          <div className="biz-step-body">
-                            <h3 className="biz-step-title">{t(`biz.steps.${step.id}.title`)}</h3>
-                            <p className="biz-step-desc">{t(`biz.steps.${step.id}.description`)}</p>
-                          </div>
-                          <span className={`biz-step-state${step.done ? ' is-done' : ''}`}>
-                            {step.done ? <IconCheck width={13} height={13} /> : <IconClock width={13} height={13} />}
-                            {step.done ? t('biz.progress.done') : t('biz.status.pending')}
-                          </span>
-                        </motion.li>
-                      );
-                    })}
-                  </motion.ol>
-                  <button type="button" className="biz-btn biz-btn--primary biz-btn--full" onClick={() => startRequest(interest)}>
-                    <IconPlus width={17} height={17} />{t('biz.tracking.cta')}
-                  </button>
-                </div>
+                  <p className="biz-form-note"><IconLock width={12} height={12} />{t('biz.form.privacy')}</p>
+                  <p className="biz-form-note biz-form-note--muted">{t('biz.form.responseTime')}</p>
+                </motion.form>
               </>
             )}
           </motion.div>

@@ -1,13 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
+import Sheet from '../components/Sheet';
 import CoinLogo from '../components/CoinLogo';
 import { useTelegram } from '../context/TelegramContext';
+import { useAppStore } from '../store/useAppStore';
 import { openUrl } from '../lib/browser';
-import { IconChevronLeft, IconExternal, IconSearch } from '../components/Icons';
+import { IconChevronLeft, IconCopy, IconExternal, IconSearch, IconShield } from '../components/Icons';
 import { usePoll } from '../hooks/useMarket';
 import { getTrending } from '../lib/api';
 
@@ -161,12 +163,79 @@ const LINKS = [
 
 const CATEGORIES = ['all', ...LINKS.map((g) => g.cat)];
 
+/* Which category a site belongs to, for the preview sheet's chip. */
+const CAT_OF = Object.fromEntries(LINKS.flatMap((g) => g.items.map((it) => [it.id, g.cat])));
+/* Every curated item by id, so the sheet and the recents strip share one source. */
+const ITEM_BY_ID = Object.fromEntries(LINKS.flatMap((g) => g.items));
+
+/*
+ * ─── RECENTLY OPENED, KEPT ON THE DEVICE ────────────────────────────────────
+ * The screen used to be a flat list: everything equally far from the thumb,
+ * every visit starting from scratch. Remembering the last six sites the user
+ * actually opened — in localStorage, ids only, nothing leaves the device —
+ * turns it into a launcher. The strip only appears once there IS a recent,
+ * so a first visit sees no empty box.
+ */
+const RECENT_KEY = 'fbt.discover.recent.v1';
+const RECENT_MAX = 6;
+
+const loadRecents = () => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+    return Array.isArray(raw) ? raw.filter((id) => ITEM_BY_ID[id]).slice(0, RECENT_MAX) : [];
+  } catch { return []; }
+};
+
 export default function Discover({ embedded = false }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
   const [cat, setCat] = useState('all');
   const [q, setQ] = useState('');
+  /*
+   * ─── THE HALF-POPUP ───────────────────────────────────────────────────────
+   *   «هر باکس را روش میزنی اطلاعات اولیه به صورت نیمه پاپ‌اپ بیاد از پایین و
+   *    بعد دکمه بازکردن لینک باشه»
+   *
+   * A tap on a card no longer leaves the app immediately. It raises a bottom
+   * sheet with what the site IS — name, exact domain, category and one honest
+   * sentence — and the outbound button lives inside it. That extra half-second
+   * is the whole point: the domain is read on OUR glass, on the same screen
+   * that explained the site, before the browser takes over. Leaving the app
+   * becomes a decision instead of a reflex.
+   */
+  const [pickedId, setPickedId] = useState(null);
+  const picked = pickedId ? ITEM_BY_ID[pickedId] : null;
+  const [recents, setRecents] = useState(loadRecents);
+
+  /* Re-read after every open, so the strip and the sheet never disagree. */
+  const remember = useCallback((id) => {
+    try {
+      const next = [id, ...loadRecents().filter((x) => x !== id)].slice(0, RECENT_MAX);
+      localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+      setRecents(next);
+    } catch { /* storage blocked (private mode): the strip just stays as it was */ }
+  }, []);
+
+  const closeSheet = useCallback(() => setPickedId(null), []);
+  const pick = useCallback((item) => {
+    haptic?.('light');
+    setPickedId(item.id);
+  }, [haptic]);
+
+  const openPicked = useCallback(async () => {
+    if (!picked) return;
+    haptic?.('medium');
+    remember(picked.id);
+    await openUrl(picked.url);
+  }, [picked, haptic, remember]);
+
+  const copyPicked = useCallback(() => {
+    if (!picked) return;
+    navigator.clipboard?.writeText(picked.url);
+    haptic?.('success');
+    useAppStore.getState().notify(t('discover.sheet.copied'), 'success');
+  }, [picked, haptic, t]);
 
   /*
    * ─── LIVE TRENDING ────────────────────────────────────────────────────────
@@ -202,11 +271,6 @@ export default function Discover({ embedded = false }) {
       }))
       .filter((g) => g.items.length > 0);
   }, [cat, q, t]);
-
-  const go = async (item) => {
-    haptic?.('light');
-    await openUrl(item.url);
-  };
 
   /** Show the origin, so the user reads the domain before tapping it. */
   const host = (u) => {
@@ -260,6 +324,30 @@ export default function Discover({ embedded = false }) {
       )}
 
       {/*
+        ─── RECENTLY OPENED ────────────────────────────────────────────────
+        The six sites this device actually opened last, newest first. A tap
+        raises the SAME preview sheet — the shortcut skips the scrolling, not
+        the confirmation. Rendered only once there is a recent to show.
+      */}
+      {recents.length > 0 && (
+        <motion.section variants={riseIn} initial="hidden" animate="show">
+          <p className="section-label" style={{ marginBottom: 8 }}>{t('discover.recent')}</p>
+          <div className="tag-scroll">
+            {recents.map((id) => {
+              const item = ITEM_BY_ID[id];
+              const name = t(`discover.site.${id}`);
+              return (
+                <button key={id} className="tag tag-token disc-recent" style={{ '--disc-hue': item.hue }} onClick={() => pick(item)}>
+                  <SiteLogo item={item} name={name} />
+                  {name}
+                </button>
+              );
+            })}
+          </div>
+        </motion.section>
+      )}
+
+      {/*
         Search over the CURATED list only. It cannot navigate to a typed
         address — see the file header for why a free-typing address bar in a
         wallet app is a phishing vector.
@@ -302,7 +390,9 @@ export default function Discover({ embedded = false }) {
                   className="disc-card"
                   variants={riseIn}
                   whileTap={{ scale: 0.975 }}
-                  onClick={() => go(item)}
+                  onClick={() => pick(item)}
+                  aria-haspopup="dialog"
+                  data-testid={`disc-card-${item.id}`}
                   style={{ '--disc-hue': item.hue, background: 'rgba(255,255,255,0.06)', border: 'none', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}
                 >
                   <SiteLogo item={item} name={name} />
@@ -334,6 +424,52 @@ export default function Discover({ embedded = false }) {
       <InfoBox title={t('discover.safetyTitle')} tone="warn" id="discover-safety">
         <p>{t('discover.safety')}</p>
       </InfoBox>
+
+      {/*
+        ─── THE PREVIEW SHEET ──────────────────────────────────────────────
+        Half a screen, from the bottom, exactly as asked. What it shows:
+        the mark and the name, the EXACT origin that will be opened (mono,
+        LTR, on its own tinted row — the anti-lookalike check), the category,
+        one honest sentence about what the site does, and only then the two
+        buttons: open in the browser (primary) and copy the link. Nothing in
+        here signs, connects or installs; it reads and it leaves.
+      */}
+      <Sheet
+        open={Boolean(picked)}
+        onClose={closeSheet}
+        anchor="bottom"
+        size="md"
+        className="disc-sheet"
+        testId="disc-sheet"
+      >
+        {picked && (
+          <div className="disc-sheet-body" style={{ '--disc-hue': picked.hue }}>
+            <div className="disc-sheet-head">
+              <SiteLogo item={picked} name={t(`discover.site.${picked.id}`)} />
+              <div className="disc-sheet-title">
+                <div className="disc-sheet-name">{t(`discover.site.${picked.id}`)}</div>
+                <span className="disc-sheet-cat">{t(`discover.cat.${CAT_OF[picked.id]}`)}</span>
+              </div>
+            </div>
+            <div className="disc-sheet-host mono" dir="ltr">
+              <IconShield width={13} height={13} />
+              {host(picked.url)}
+            </div>
+            <p className="disc-sheet-desc">{t(`discover.desc.${picked.id}`)}</p>
+            <div className="disc-sheet-actions">
+              <button type="button" className="btn btn-primary disc-sheet-open" onClick={openPicked} data-testid="disc-sheet-open">
+                <IconExternal width={15} height={15} />
+                {t('discover.sheet.open')}
+              </button>
+              <button type="button" className="btn btn-ghost disc-sheet-copy" onClick={copyPicked}>
+                <IconCopy width={15} height={15} />
+                {t('discover.sheet.copy')}
+              </button>
+            </div>
+            <p className="disc-sheet-hint">{t('discover.sheet.hint')}</p>
+          </div>
+        )}
+      </Sheet>
     </PageTransition>
   );
 }

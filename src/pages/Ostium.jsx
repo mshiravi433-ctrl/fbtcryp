@@ -771,6 +771,19 @@ export default function Ostium({ embedded = false }) {
         <p>{t('ostium.rolloverNotice')}</p>
       </InfoBox></div>
 
+      {/*
+        Ostium's own trade-history box, folded at the bottom of Ostium's page.
+        The rail-wide history tab is gone («هر تاریخچه در صفحه مربوط به خودش»);
+        what is honestly true for this venue today is that no trusted history
+        source is wired to it, and that statement belongs HERE — on the screen
+        whose trades it is about — not in a shared tab.
+      */}
+      <div style={{ marginTop: 12 }}>
+        <InfoBox title={t('futures.history.title')} tone="info" id="ostium-history-box">
+          <p className="faint" style={{ fontSize: 12.5, lineHeight: 1.8, margin: 0 }}>{t('futures.history.venue.ostiumUnavailable')}</p>
+        </InfoBox>
+      </div>
+
       <button
         className="btn btn-ghost"
         onClick={() => navigate('/swap?chain=42161&to=USDC')}

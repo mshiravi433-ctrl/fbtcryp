@@ -1058,21 +1058,18 @@
     },
     "tabs": {
       "partnership": "Ortaklık",
-      "followup": "Takip"
+      "request": "Talep"
     },
     "subtab": {
       "services": "Hizmetler",
-      "brands": "Markalar",
-      "requests": "Talepler",
-      "tracking": "Takip"
+      "brands": "Markalar"
     },
     "requestsIntro": {
       "title": "How sending a request works — clearly",
       "body": "There is no in-app inbox. You write the email in your own mail app and send it to us — that email is the request. Nothing is stored on our server until you hit send.",
       "step1": "Choose a topic and fill the short form: company, name, work email and what you need.",
       "step2": "Your mail app opens with subject and body prefilled. Review it and send — the request only exists after you do.",
-      "step3": "We reply within one business day to the email you wrote. If you do not see it, check spam and the address you typed.",
-      "note": "The three cards below are examples — not your data. They show what a real inbox looks like."
+      "step3": "We reply within one business day to the email you wrote. If you do not see it, check spam and the address you typed."
     },
     "conditions": {
       "title": "Conditions & how we decide",
@@ -1113,7 +1110,10 @@
       "no": "We do not guarantee listing, volume, price or profit. Market data is information, not financial advice."
     },
     "requestsIntroLabel": "In plain language",
-    "heroTitle": "Financial infrastructure for your business"
+    "heroTitle": "Financial infrastructure for your business",
+    "tabsSub": {
+      "request": "Ortaklık talep formu"
+    }
   },
   "shop": {
     "tab": {

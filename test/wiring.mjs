@@ -2364,7 +2364,7 @@ export default function run() {
       !['en', 'fa', 'ar'].some((l) =>
         JSON.parse(read(`src/i18n/locales/${l}.json`)).dev?.notConfigured));
     t('the status comes from the environments route',
-      /fetch\('\/api\/environments'/.test(devCode)
+      /fetch\(`\$\{apiBase\(\)\}\/environments`/.test(devCode)
       && /environments\.some\(\(e\) => e\?\.status === 'available'\)/.test(devCode));
     t('...and distinguishes loading, live, off and unreachable',
       /const envStatus = environments \? \(envConfigured \? 'live' : 'none'\) : \(envFailed \? 'unreachable' : 'checking'\);/.test(devCode));
@@ -14073,9 +14073,15 @@ export default function run() {
     const enL = JSON.parse(read('src/i18n/locales/en.json'));
     const faL = JSON.parse(read('src/i18n/locales/fa.json'));
 
-    /* the history tab joins the SAME segmented control only in the web rollout */
-    t('the Futures rail has three core tabs and only adds history behind its web flag',
-      /const FUTURES_TABS = SPECULATION_ENABLED\s*\?\s*\['overview', 'dydx', 'onchain', \.\.\.\(FUTURES_HISTORY_ENABLED \? \['history'\] : \[\]\)\]\s*:\s*\[\];/.test(perp));
+    /* the rail keeps THREE venue tabs; the history tab was removed from it and
+       each venue's history now folds at the bottom of its own screen */
+    t('the Futures rail has exactly three venue tabs and no history tab',
+      /const FUTURES_TABS = SPECULATION_ENABLED\s*\?\s*\['overview', 'dydx', 'onchain'\]\s*:\s*\[\];/.test(perp)
+      && !/'history'/.test(perp.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')));
+    t('the dYdX history folds at the bottom of the dYdX screen instead',
+      /LazyFuturesHistory = FUTURES_HISTORY_ENABLED/.test(read('src/pages/Dydx.jsx'))
+      && /import\('\.\.\/components\/futures\/FuturesHistory'\)/.test(read('src/pages/Dydx.jsx'))
+      && /id="dydx-history-box"/.test(read('src/pages/Dydx.jsx')));
     t('the On-Chain tab renders through the same SegIndicator id as the others',
       (perp.match(/<SegIndicator id="perp-tab" \/>/g) || []).length === 1 && /TAB_LABEL_KEY\[k\]/.test(perp));
     t('the tab labels are i18n keys, not literals',
