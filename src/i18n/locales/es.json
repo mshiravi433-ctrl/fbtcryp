@@ -649,7 +649,8 @@
       "leader": "Líder cripto 24 h",
       "laggard": "Rezagado cripto 24 h",
       "company": "Token empresa 24 h",
-      "event": "Evento de mercado"
+      "event": "Evento de mercado",
+      "volume": "Mayor volumen en 24 h"
     },
     "marketUnavailable": "Datos de mercado en vivo no disponibles",
     "volumeLeader": "24h volume leader",
@@ -3697,7 +3698,7 @@
   },
   "stories": {
     "railTitle": "App Interactive Stories",
-    "railBadge": "1 min · Live & Audio",
+    "railBadge": "Un vistazo a los servicios FBT",
     "controls": {
       "music": "Music",
       "musicOn": "Playing",

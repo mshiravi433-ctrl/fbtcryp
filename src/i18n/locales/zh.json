@@ -649,7 +649,8 @@
       "leader": "24小时加密领先",
       "laggard": "24小时加密落后",
       "company": "24小时公司代币",
-      "event": "市场事件"
+      "event": "市场事件",
+      "volume": "24 小时成交量最高"
     },
     "marketUnavailable": "实时市场数据不可用",
     "volumeLeader": "24h volume leader",
@@ -3688,7 +3689,7 @@
   },
   "stories": {
     "railTitle": "App Interactive Stories",
-    "railBadge": "1 min · Live & Audio",
+    "railBadge": "FBT 服务速览",
     "controls": {
       "music": "Music",
       "musicOn": "Playing",

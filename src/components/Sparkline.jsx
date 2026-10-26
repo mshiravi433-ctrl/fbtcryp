@@ -4,7 +4,15 @@ import { useId, useMemo } from 'react';
  * Tiny inline SVG chart with a draw-in animation and gradient fill.
  * Deliberately dependency-free — recharts is reserved for the big charts.
  */
-export default function Sparkline({ data = [], width = 74, height = 30, up = true, strokeWidth = 1.6, fill = true }) {
+/**
+ * `glow` — the soft drop-shadow around the stroke.
+ *
+ * It is beautiful on a hero card and expensive in a list: a drop-shadow makes
+ * the browser rasterise each SVG through a blur filter, and the market list can
+ * hold sixty of them. Callers that draw many small sparks at once pass
+ * `glow={false}`; the animated draw-in stays, because it runs once.
+ */
+export default function Sparkline({ data = [], width = 74, height = 30, up = true, strokeWidth = 1.6, fill = true, glow = true }) {
   const gid = useId().replace(/:/g, '');
 
   const { d, area } = useMemo(() => {
@@ -24,7 +32,7 @@ export default function Sparkline({ data = [], width = 74, height = 30, up = tru
   const color = up ? 'var(--up)' : 'var(--down)';
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: glow ? 'visible' : 'hidden' }}>
       <defs>
         <linearGradient id={`g${gid}`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity="0.35" />
@@ -40,7 +48,9 @@ export default function Sparkline({ data = [], width = 74, height = 30, up = tru
         strokeLinecap="round"
         strokeLinejoin="round"
         style={{
-          filter: `drop-shadow(0 0 4px ${up ? 'rgba(0,255,157,.55)' : 'rgba(255,59,107,.55)'})`,
+          filter: glow
+            ? `drop-shadow(0 0 4px ${up ? 'rgba(0,255,157,.55)' : 'rgba(255,59,107,.55)'})`
+            : undefined,
           strokeDasharray: 400,
           strokeDashoffset: 0,
           animation: 'spark-draw 1.1s ease-out'

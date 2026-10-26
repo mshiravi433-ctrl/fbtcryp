@@ -13,7 +13,7 @@ import { createStoryAmbientController } from '../lib/storyAudio';
 import { getCalm } from '../lib/audio';
 import { useRadioStore } from '../store/useRadioStore';
 import { openUrl } from '../lib/browser';
-import { APARAT_CHANNEL_URL } from '../pages/AparatVideos';
+import { APARAT_CHANNEL_URL } from '../lib/aparat';
 import {
   IconChevronLeft,
   IconChevronRight,
@@ -558,21 +558,6 @@ export default function MarketStories({ coins = [], global = null }) {
     return () => ctrl?.destroy();
   }, []);
 
-  /*
-   * THE SAME CATALOGUE AS NEWS.
-   * `getCalm()` is the News screen's Calm tab fetcher and it caches for five
-   * minutes client-side, so this list and the News list are the same array —
-   * same order, same tracks, same artwork. That is what «آهنگ‌ها سینک با
-   * آهنگ‌های صفحه خبر باشد» means in code: one source, not two that agree.
-   */
-  useEffect(() => {
-    let alive = true;
-    getCalm()
-      .then((data) => { if (alive) setRadioItems(data?.items || []); })
-      .catch(() => { if (alive) setRadioFailed(true); });
-    return () => { alive = false; };
-  }, []);
-
   /* A real track taking over always wins over the synthesized score. */
   useEffect(() => {
     if (radioPlaying) { audioRef.current?.stop(); setScoreOn(false); }
@@ -583,6 +568,32 @@ export default function MarketStories({ coins = [], global = null }) {
     : storyItems.findIndex((item) => item.id === activeStoryId);
   const openIndex = activeIndex >= 0 ? activeIndex : null;
   const activeStory = openIndex == null ? null : storyItems[openIndex];
+
+  /*
+   * ─── THE RADIO CATALOGUE IS FETCHED WHEN A STORY OPENS, NOT ON MOUNT ─────
+   * Reported: «لود باکس استوری هوشمند خیلی کند شده».
+   *
+   * The rail is static artwork — it needs no network. The Calm catalogue is
+   * consumed INSIDE the full-screen story (the radio section), so fetching it
+   * on mount bought nothing and cost something real: one more request racing
+   * the market feed on first paint, on the screen where the feed matters most.
+   * It now starts on the tap that opens a story (or on mount if a story is
+   * already open, e.g. hydrated state), and only once.
+   *
+   * The catalogue is still the SAME one the News screen reads — `getCalm()`
+   * caches for five minutes client-side — so nothing about the sync changed,
+   * only WHEN it is asked for.
+   */
+  const radioRequested = useRef(false);
+  useEffect(() => {
+    if (openIndex == null || radioRequested.current) return undefined;
+    radioRequested.current = true;
+    let alive = true;
+    getCalm()
+      .then((data) => { if (alive) setRadioItems(data?.items || []); })
+      .catch(() => { if (alive) setRadioFailed(true); });
+    return () => { alive = false; };
+  }, [openIndex]);
 
   /* If a Persian Aparat story is open when the user switches languages, close
      it cleanly rather than leaving an invisible modal or showing another

@@ -43,7 +43,14 @@ const SLOTS = {
   stocks: { to: '/stocks', hues: ['#00ff9d', '#00b3ff'], inks: ['#006b78', '#5b2fe8'], icon: '↗' }
 };
 
-export default function AdBanner({ slot = 'swap', compact = false, external = null }) {
+/**
+ * `premium` — the cinematic treatment used on the Market screen's
+ * «سیگنال هوشمند» slot. It adds a sweeping scan line and a radar blip behind
+ * the artwork (both purely decorative, both `aria-hidden`), so the banner can
+ * read as an instrument panel instead of a flat promo card. Off everywhere
+ * else: a banner that shouts on nine screens is wallpaper.
+ */
+export default function AdBanner({ slot = 'swap', compact = false, external = null, premium = false }) {
   /*
    * FREEZE THE BANNER ON NATIVE AND UNDER REDUCED MOTION.
    *
@@ -79,7 +86,7 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
 
   return (
     <motion.button
-      className="ad-banner"
+      className={`ad-banner${premium ? ' ad-banner--premium' : ''}`}
       onClick={go}
       whileTap={{ scale: 0.985 }}
       initial={{ opacity: 0, y: 12 }}
@@ -105,10 +112,12 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
       }}
     >
       <span className="ad-shine" style={{ animationDelay: `${delay}s` }} />
+      {premium && <span className="ad-scan" aria-hidden="true" />}
 
       {/* Animated illustration. Inline SVG keeps it on-theme and weightless —
           a raster image would clash with the RGB palette and bloat the APK. */}
       <span className="ad-art" aria-hidden="true">
+        {premium && <span className="ad-art-blip" />}
         <motion.span
           className="ad-art-glow"
           animate={still ? { scale: 1, opacity: 0.45 } : { scale: [1, 1.25, 1], opacity: [0.35, 0.6, 0.35] }}
@@ -277,12 +286,14 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
         </motion.svg>
       </span>
 
-      <span style={{ flex: 1, minWidth: 0, textAlign: 'start' }}>
-        <span style={{ display: 'block', fontWeight: 700, fontSize: compact ? 12.5 : 13.5 }}>
+      {/* Class names exist so a premium slot can retune typography from CSS
+          without `!important`-fighting an inline style it cannot see. */}
+      <span className="ad-copy" style={{ flex: 1, minWidth: 0, textAlign: 'start' }}>
+        <span className="ad-title" style={{ display: 'block', fontWeight: 700, fontSize: compact ? 12.5 : 13.5 }}>
           {t(`ads.${slot}.title`)}
         </span>
         {!compact && (
-          <span className="set-row-sub" style={{ marginTop: 2 }}>
+          <span className="set-row-sub ad-copy-sub" style={{ marginTop: 2 }}>
             {t(`ads.${slot}.body`)}
           </span>
         )}

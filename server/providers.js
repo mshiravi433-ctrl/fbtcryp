@@ -11,6 +11,7 @@ import { hydrateCoinRows, mergeVisuals, rememberVisuals } from '../src/lib/marke
 import { attachVenueSparklines } from '../src/lib/venueSparklines.js';
 import { attachIndexLogos } from '../src/lib/coinLogoIndex.js';
 import { MARKET_CATEGORIES, sectorFromRows } from '../src/lib/marketSectors.js';
+import { getCached } from './cache.js';
 
 const CG_BASE = process.env.COINGECKO_BASE || 'https://api.coingecko.com/api/v3';
 const CG_PRO_BASE = 'https://pro-api.coingecko.com/api/v3';
@@ -151,6 +152,41 @@ function normalizeGlobalLore(g = {}) {
   };
 }
 
+/**
+ * ─── «میانگین تغییر» همیشه صفر بود ─────────────────────────────────────────
+ *
+ * CoinGecko's `/global` payload is a market CAPITALISATION aggregate: it says
+ * how much the whole market is worth and how that total moved, and it carries
+ * NO average move across assets. `normalizeGlobalCg` therefore hard-coded
+ * `avgChange: 0`, and the market page's «میانگین تغییر» tile — which reads
+ * `global.avgChange` — printed `0.00%` on every load, on every device, forever.
+ * A zero is not a neutral placeholder on a trading screen: it is a measurement,
+ * and this one was invented.
+ *
+ * The honest number already exists on the device that asked: the markets list
+ * this same server builds from CoinGecko's own `/coins/markets`. It is cached
+ * under `markets:<vs>:1:<perPage>` (see app.js), so the average can be derived
+ * from ALREADY-FETCHED rows with no extra upstream request — the two screens
+ * then quote the same average instead of one real number and one zero.
+ *
+ * Returns `null` (not 0) when no sufficiently large cached page exists yet, so
+ * the client can fall back to the rows it holds on screen. An unknown average
+ * must never be displayed as "the market moved 0%".
+ */
+function averageChangeFromCachedMarkets() {
+  for (const perPage of [500, 250, 100]) {
+    const hit = getCached(`markets:usd:1:${perPage}`);
+    const rows = Array.isArray(hit?.value) ? hit.value : null;
+    if (!rows || rows.length < 20) continue;
+    const moves = rows.map((row) => Number(row?.change24h)).filter((n) => Number.isFinite(n));
+    /* A page with a handful of priced rows is not a market average. */
+    if (moves.length < 20) continue;
+    const mean = moves.reduce((sum, n) => sum + n, 0) / moves.length;
+    return Math.round(mean * 100) / 100;
+  }
+  return null;
+}
+
 function normalizeGlobalCg(raw = {}) {
   const d = raw.data ?? {};
   return {
@@ -162,7 +198,8 @@ function normalizeGlobalCg(raw = {}) {
     ethDominance: d.market_cap_percentage?.eth ?? 0,
     mcapChange: d.market_cap_change_percentage_24h_usd ?? 0,
     volumeChange: 0,
-    avgChange: 0,
+    /* Filled by fetchGlobal() from the cached markets page — see above. */
+    avgChange: null,
     source: 'coingecko'
   };
 }
@@ -173,7 +210,11 @@ function normalizeGlobalCg(raw = {}) {
 export async function fetchGlobal() {
   try {
     const raw = await cgReq(cgUrl('/global'));
-    return normalizeGlobalCg(raw);
+    const global = normalizeGlobalCg(raw);
+    /* The average 24h move is not in this payload; take it from the markets
+       page this server has already built and cached (see the helper's note). */
+    global.avgChange = averageChangeFromCachedMarkets();
+    return global;
   } catch {
     const raw = await req(`${COINLORE_BASE}/global/`);
     return normalizeGlobalLore(Array.isArray(raw) ? raw[0] : raw);

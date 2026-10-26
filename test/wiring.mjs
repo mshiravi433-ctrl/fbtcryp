@@ -13206,7 +13206,8 @@ export default function run() {
       'insights.tokenizedLeader', 'insights.companyLeader', 'insights.countryFlow',
       'insights.companyProfit', 'insights.capitalOutflow', 'insights.eventsTitle',
       'insights.unavailable', 'insights.marketUnavailable', 'insights.disclaimer', 'insights.header.leader',
-      'insights.header.laggard', 'insights.header.company', 'insights.header.event'
+      'insights.header.laggard', 'insights.header.volume', 'insights.header.company',
+      'insights.header.event'
     ];
     const valueAt = (root, path) => path.split('.').reduce((value, key) => value?.[key], root);
     for (const lang of ['en', 'fa', 'ar', 'es', 'fr', 'hi', 'id', 'pt', 'ru', 'tr', 'ur', 'zh']) {

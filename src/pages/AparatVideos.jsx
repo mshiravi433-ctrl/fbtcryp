@@ -24,8 +24,12 @@ import {
 } from '../components/Icons';
 import '../styles/learn-hub.css';
 
-export const APARAT_CHANNEL_URL = 'https://www.aparat.com/Fbtcompany';
-export const APARAT_HANDLE = '@Fbtcompany';
+/* Moved to lib/aparat.js so a component that only needs the URL (the Market
+   stories rail) does not pull this page AND its stylesheet into its chunk.
+   Imported for use here too — a bare `export … from` re-exports without
+   creating a local binding, which made APARAT_HANDLE undefined below. */
+import { APARAT_CHANNEL_URL, APARAT_HANDLE } from '../lib/aparat.js';
+export { APARAT_CHANNEL_URL, APARAT_HANDLE };
 
 const CATEGORIES = ['all', 'beginner', 'trading', 'stocks', 'ai', 'defi'];
 

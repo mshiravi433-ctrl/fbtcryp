@@ -218,7 +218,19 @@ export function normalizeGlobal(g = {}) {
     ethDominance: Number(d.eth_d) || Number(d.market_cap_percentage?.eth) || 0,
     mcapChange: Number(d.mcap_change) || Number(d.market_cap_change_percentage_24h_usd) || 0,
     volumeChange: Number(d.volume_change) || Number(d.volume_change_percentage_24h_usd) || 0,
-    avgChange: Number(d.avg_change_percent) || 0
+    /*
+     * `null`, never 0, when the provider did not report an average move.
+     *
+     * The old `Number(...) || 0` turned "not part of this payload" into "the
+     * market averaged exactly 0.00%", and the market page printed it as a
+     * measurement. CoinGecko's /global has no such field at all; the server
+     * now derives one from its own cached markets page (server/providers.js),
+     * so a null here means "nothing to average yet", which the screen says
+     * out loud instead of inventing a zero.
+     */
+    avgChange: d.avg_change_percent == null || !Number.isFinite(Number(d.avg_change_percent))
+      ? null
+      : Number(d.avg_change_percent)
   };
 }
 
