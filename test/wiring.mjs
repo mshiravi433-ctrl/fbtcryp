@@ -6878,8 +6878,11 @@ export default function run() {
         'src/pages/Trade.jsx',
         'src/pages/Signals.jsx',
         'src/pages/Stocks.jsx',
-        'src/pages/Predict.jsx',
-        'src/pages/Discover.jsx'
+        'src/pages/Predict.jsx'
+        /* Discover used to show a CoinGecko trending-token strip. The 2026
+           redesign removed that strip (the page is now protocols only), so it
+           no longer paints a coin avatar at all. Keeping it in this list would
+           demand an unused import just to satisfy a stale call-site list. */
       ];
       const sourceForScreen = (f) => f === 'src/pages/Stocks.jsx' ? stockUiSource() : read(f);
       const raw = screens.filter((f) => {

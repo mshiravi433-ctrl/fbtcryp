@@ -5,51 +5,55 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import Sheet from '../components/Sheet';
 import InfoBox from '../components/InfoBox';
-import CoinLogo from '../components/CoinLogo';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet } from '../context/WalletContext';
 import { useAppStore } from '../store/useAppStore';
 import { openUrl } from '../lib/browser';
 import {
-  IconChevronLeft, IconCopy, IconExternal, IconSearch, IconShield, IconStar, IconRefresh, IconTrend, IconClock
+  IconChevronLeft, IconChevronRight, IconCopy, IconExternal, IconSearch, IconShield,
+  IconStar, IconTrend, IconClock, IconX, IconGlobe, IconSparkle, IconCheck, IconAlertTriangle
 } from '../components/Icons';
-import { usePoll } from '../hooks/useMarket';
-import { getTrending } from '../lib/api';
 import { exploreApi, intelErrorCode } from '../lib/intelApi';
 import { fmtCompact, fmtUsd, timeAgo } from '../lib/format';
 import {
   DISCOVERY_CATEGORIES, DISCOVERY_PROTOCOLS, NETWORK_FILTERS, CHAIN_ALIASES, faviconFor, hostOf
 } from '../lib/discoveryRegistry';
-import { parseAiQuery, filterByAiQuery, aiExplanation, AI_EXAMPLES } from '../lib/discoveryAi';
+import { parseAiQuery, aiExamplesFor } from '../lib/discoveryAi';
+import { buildSuggestions, rankProtocols, smartSummary } from '../lib/discoverySearch';
+import { descriptionFor, chainLabel } from '../lib/discoveryLocalized';
 import { validateDiscoveryUrl, chainSupportWarnings, auditNotice, isRegistryDomain } from '../lib/discoverySecurity';
 import '../styles/discovery-center.css';
 
 /**
- * DISCOVER — Web3 Discovery Center
- * Upgraded from a static curated list into a premium, interactive discovery
- * surface that satisfies the fbtswap.ir spec:
+ * DISCOVER — Explore › کشف
+ * ===========================================================================
+ * Redesigned as ONE calm surface instead of nine stacked strips.
  *
- *  · Hero with neon glassmorphism
- *  · Smart search + AI Discovery panel (on-device rule fallback)
- *  · Horizontally scrollable categories & network filters
- *  · Featured + Trending strips
- *  · Compact protocol cards with logo, networks, favorites & "Open in FBT Browser"
- *  · Personalized recommendations (wallet chain + recents/favorites)
- *  · Favorites, recents, sorting, skeletons, empty/error states
- *  · Secure internal browser: domain validation, anti-phishing warnings, chain checks
- *  · Protocol detail drawer: TVL/volume/APY, chains, docs, audits, data source, timestamp
+ *  · Every visible string goes through i18n (fa + en complete). The old screen
+ *    hardcoded English, so a Persian user met "Open in FBT Browser" and an
+ *    English hero. The button now says «باز کردن در مرورگر» — only «مرورگر»,
+ *    never a branded browser name.
+ *  · One omnibox, not two search inputs. It ranks the registry, suggests
+ *    protocols / categories / networks, understands Persian intent
+ *    («وامدهی روی آربیتروم») and remembers recent queries. Full keyboard nav.
+ *  · Favorites, recents and trending share one compact "quick access" card.
+ *    The results grid is paginated, so the first screen is not 60 cards long.
+ *  · Cards are information-dense but quiet; the detail sheet is a modern
+ *    bottom sheet with a sticky action bar and one collapsible security block.
  *
- * Data contract: TVL / volume / audit counts shown only when a real source
- * provided them (DefiLlama via exploreApi). Otherwise N/A — never fabricated.
- * All external dApps open through openUrl (Custom Tabs = internal FBT Browser).
+ * Data honesty: TVL/volume/change come only from DefiLlama via exploreApi.
+ * No source → «ناموجود» / N/A, never zero. Every dApp still opens through
+ * openUrl (system Custom Tabs), with the same anti-phishing checks.
  */
 
-// ── Storage keys ────────────────────────────────────────────────────────
+// ── Storage ─────────────────────────────────────────────────────────────
 const FAV_KEY = 'fbt.discovery.favs.v1';
 const RECENT_KEY = 'fbt.discovery.recent.v2';
+const QUERY_KEY = 'fbt.discovery.queries.v1';
 const LEGACY_RECENT = 'fbt.discover.recent.v1';
 const RECENT_MAX = 12;
 const FAV_MAX = 40;
+const PAGE_SIZE = 12;
 
 function loadArray(key, validator) {
   try {
@@ -58,127 +62,137 @@ function loadArray(key, validator) {
     return validator ? raw.filter(validator) : raw;
   } catch { return []; }
 }
-function loadFavs() { return loadArray(FAV_KEY, x => typeof x === 'string'); }
+const loadFavs = () => loadArray(FAV_KEY, (x) => typeof x === 'string');
+const loadQueries = () => loadArray(QUERY_KEY, (x) => typeof x === 'string' && x.trim().length > 0).slice(0, 5);
 function loadRecents() {
-  // Migrate legacy
   try {
     const cur = localStorage.getItem(RECENT_KEY);
     if (!cur) {
       const leg = localStorage.getItem(LEGACY_RECENT);
       if (leg) localStorage.setItem(RECENT_KEY, leg);
     }
-  } catch {}
-  const allowed = new Set(DISCOVERY_PROTOCOLS.map(p => p.id));
-  return loadArray(RECENT_KEY, x => allowed.has(x)).slice(0, RECENT_MAX);
+  } catch { /* private mode */ }
+  const allowed = new Set(DISCOVERY_PROTOCOLS.map((p) => p.id));
+  return loadArray(RECENT_KEY, (x) => allowed.has(x)).slice(0, RECENT_MAX);
+}
+function rememberQuery(raw) {
+  const q = String(raw || '').trim();
+  if (!q) return loadQueries();
+  try {
+    const next = [q, ...loadQueries().filter((x) => x.toLowerCase() !== q.toLowerCase())].slice(0, 5);
+    localStorage.setItem(QUERY_KEY, JSON.stringify(next));
+    return next;
+  } catch { return loadQueries(); }
 }
 
-// ── Logo ────────────────────────────────────────────────────────────────
-function ProtoLogo({ protocol, size = 44, fallbackHue }) {
+// ── Small primitives ────────────────────────────────────────────────────
+function ProtoLogo({ protocol, size = 42 }) {
   const [failed, setFailed] = useState(false);
-  const hue = protocol?.hue || fallbackHue || '#7c4dff';
+  const hue = protocol?.hue || '#7c4dff';
   const domain = protocol?.domain || hostOf(protocol?.url || '');
   const src = domain ? faviconFor(domain, 64) : null;
-
+  const box = {
+    '--dcx-hue': hue, width: size, height: size,
+    borderRadius: Math.round(size * 0.3), fontSize: Math.round(size * 0.3)
+  };
   if (failed || !src) {
     return (
-      <span className="dc-card-logo" style={{ '--card-hue': hue, width: size, height: size, borderRadius: size <= 28 ? 8 : 13, fontSize: Math.round(size * 0.34) }} aria-hidden="true">
-        <span className="dc-card-logo-fallback">{String(protocol?.name || '?').slice(0, 2).toUpperCase()}</span>
+      <span className="dcx-logo" style={box} aria-hidden="true">
+        <span className="dcx-logo-fallback">{String(protocol?.name || '?').slice(0, 2).toUpperCase()}</span>
       </span>
     );
   }
   return (
-    <span className="dc-card-logo" style={{ '--card-hue': hue, width: size, height: size, borderRadius: size <= 28 ? 8 : 13 }}>
-      <img src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} style={{ width: Math.round(size*0.64), height: Math.round(size*0.64) }} />
+    <span className="dcx-logo" style={box} aria-hidden="true">
+      <img src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
     </span>
   );
 }
 
-// ── Skeletons ───────────────────────────────────────────────────────────
-function CardSkeleton() {
-  return <div className="dc-skel dc-skel-card" aria-hidden="true" />;
-}
-function RowSkeletons({ count = 3 }) {
-  return <>{Array.from({ length: count }).map((_, i) => <div key={i} className="dc-skel dc-skel-row" />)}</>;
+function SectionHead({ title, right }) {
+  return (
+    <div className="dcx-section-head">
+      <h3>{title}</h3>
+      {right && <div className="dcx-section-right">{right}</div>}
+    </div>
+  );
 }
 
-// ── Protocol card ──────────────────────────────────────────────────────
-function ProtocolCard({ protocol, live, fav, onFav, onOpen, isFeatured }) {
-  const { t } = useTranslation();
-  const tvl = live?.tvl ?? null;
-  const vol = live?.volume_24h ?? null;
-  const ch = protocol.chains?.slice(0, 4) || [];
+/** Translate a security warning by its stable code, keeping English as fallback. */
+const WARN_KEYS = {
+  'not-https': 'notHttps', 'bad-url': 'badUrl', empty: 'empty', punycode: 'punycode',
+  'suspicious-tld': 'suspiciousTld', lookalike: 'lookalike', 'complex-host': 'complexHost',
+  cyrillic: 'cyrillic', 'unsupported-chain': 'unsupportedChain',
+  'no-audit-info': 'noAuditInfo', 'zero-audits': 'zeroAudits'
+};
+function warnText(w, t) {
+  const key = WARN_KEYS[w?.code];
+  if (!key) return w?.message || '';
+  if (key === 'suspiciousTld') return t('discover.ui.warn.suspiciousTld', { tld: w.tld || '', defaultValue: w.message });
+  if (key === 'unsupportedChain') return t('discover.ui.warn.unsupportedChain', { chains: w.chains || '', defaultValue: w.message });
+  return t(`discover.ui.warn.${key}`, w.message);
+}
 
+// ── Protocol card ───────────────────────────────────────────────────────
+function ProtocolCard({ protocol, live, lang, fav, onFav, onOpen, isFeatured, t, catLabel }) {
+  const chains = protocol.chains?.slice(0, 3) || [];
   return (
     <motion.article
-      className="dc-card disc-card"
+      className="dcx-card"
       variants={riseIn}
-      whileTap={{ scale: 0.985 }}
-      style={{ '--card-hue': protocol.hue, '--disc-hue': protocol.hue }}
+      whileTap={{ scale: 0.99 }}
+      style={{ '--dcx-hue': protocol.hue }}
       role="button"
       tabIndex={0}
-      onKeyDown={e => { if (e.key === 'Enter') onOpen(protocol); }}
+      onKeyDown={(e) => {
+        // Do not steal Enter/Space from the nested favorite button.
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(protocol); }
+      }}
       onClick={() => onOpen(protocol)}
-      aria-label={`${protocol.name} — ${hostOf(protocol.url)}`}
+      aria-label={`${protocol.name} — ${t('discover.ui.card.details')}`}
       data-testid={`dc-card-${protocol.id}`}
       data-legacy-id={`disc-card-${protocol.id}`}
     >
-      <div className="dc-card-head">
+      <div className="dcx-card-top">
         <ProtoLogo protocol={protocol} />
-        <div className="dc-card-titles">
-          <div className="dc-card-name">
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{protocol.name}</span>
-            {protocol.verified && <span className="dc-card-verified" title={t('discover.verified', 'Verified')}>✓</span>}
-            {isFeatured && <span className="pill pill-up" style={{ fontSize: 9 }}>★ Featured</span>}
+        <div className="dcx-card-id">
+          <div className="dcx-card-name">
+            <span dir="ltr">{protocol.name}</span>
+            {protocol.verified && <span className="dcx-verified" title={t('discover.ui.card.verified')} aria-label={t('discover.ui.card.verified')}><IconCheck width={9} height={9} /></span>}
           </div>
-          <span className="dc-card-domain">{hostOf(protocol.url)}</span>
+          <span className="dcx-card-domain" dir="ltr">{hostOf(protocol.url)}</span>
         </div>
         <button
           type="button"
-          className={`dc-fav ${fav ? 'active' : ''}`}
-          aria-label={fav ? 'Remove favorite' : 'Add favorite'}
+          className={`dcx-fav ${fav ? 'active' : ''}`}
+          aria-label={fav ? t('discover.ui.card.unfavorite') : t('discover.ui.card.favorite')}
           aria-pressed={fav}
-          onClick={e => { e.stopPropagation(); onFav(protocol.id); }}
-        >
-          <IconStar width={14} height={14} />
-        </button>
+          onClick={(e) => { e.stopPropagation(); onFav(protocol.id); }}
+        ><IconStar width={14} height={14} /></button>
       </div>
 
-      <p className="dc-card-desc">{protocol.description}</p>
+      <p className="dcx-card-desc">{descriptionFor(protocol, lang)}</p>
 
-      <div className="dc-card-meta">
-        <span className="dc-card-cat">{DISCOVERY_CATEGORIES.find(c=>c.id===protocol.category)?.label || protocol.category}</span>
-        <span className="dc-card-chains" aria-label={`Supports ${ch.join(', ')}`}>
-          {ch.map(c => (
-            <span key={c} className="dc-chain-pill" title={c}>{String(c).slice(0,3).toUpperCase()}</span>
-          ))}
-          {(protocol.chains?.length || 0) > 4 && <span className="faint" style={{ fontSize: 10 }}>+{protocol.chains.length - 4}</span>}
+      <div className="dcx-card-tags">
+        {isFeatured && <span className="dcx-tag dcx-tag-featured">✦ {t('discover.ui.card.featured')}</span>}
+        <span className="dcx-tag">{catLabel(protocol.category)}</span>
+        <span className="dcx-chains" dir="ltr">
+          {chains.map((c) => <span key={c} className="dcx-chain" title={chainLabel(c, lang)}>{String(c).slice(0, 3).toUpperCase()}</span>)}
+          {(protocol.chains?.length || 0) > 3 && <span className="dcx-chain more">+{protocol.chains.length - 3}</span>}
         </span>
       </div>
 
-      <div className="dc-card-stats">
-        <div className="dc-stat">
-          <span className="dc-stat-label">TVL</span>
-          <span className="dc-stat-value">{tvl != null ? fmtCompact(tvl) : <span className="faint">N/A</span>}</span>
-        </div>
-        <div className="dc-stat">
-          <span className="dc-stat-label">24h Vol</span>
-          <span className="dc-stat-value">{vol != null ? fmtCompact(vol) : <span className="faint">N/A</span>}</span>
-        </div>
-        <div className="dc-stat">
-          <span className="dc-stat-label">Audits</span>
-          <span className="dc-stat-value">{protocol.audits != null ? `✓ ${protocol.audits}` : <span className="faint">N/A</span>}</span>
-        </div>
-      </div>
-
-      <div className="dc-card-actions">
-        <button
-          type="button"
-          className="btn btn-primary btn-sm"
-          onClick={e => { e.stopPropagation(); onOpen(protocol); }}
-          data-testid={`dc-open-${protocol.id}`}
-        >
-          <IconExternal width={13} height={13} /> Open in FBT Browser
-        </button>
+      <div className="dcx-card-foot">
+        <span className="dcx-card-tvl">
+          <span>{t('discover.ui.card.tvl')}</span>
+          {live?.tvl != null
+            ? <strong dir="ltr">{fmtCompact(live.tvl)}</strong>
+            : <span className="dcx-faint" dir="ltr">{t('discover.ui.card.na')}</span>}
+        </span>
+        <span className="dcx-card-go" aria-hidden="true">
+          {t('discover.ui.card.details')}<IconChevronRight width={13} height={13} />
+        </span>
       </div>
     </motion.article>
   );
@@ -190,122 +204,137 @@ export default function Discover({ embedded = false }) {
   const navigate = useNavigate();
   const { haptic } = useTelegram();
   const wallet = useWallet();
+  const lang = i18n.language?.slice(0, 2) || 'en';
+  const isFa = lang === 'fa';
 
-  // ── Filters ──────────────────────────────────────────────────────────
+  // ── Filters & search ──────────────────────────────────────────────────
   const [cat, setCat] = useState('all');
   const [net, setNet] = useState('all');
+  const [sort, setSort] = useState('trending');
   const [q, setQ] = useState('');
-  const [sort, setSort] = useState('trending'); // trending | tvl | volume | name | favorites
-  const [aiInput, setAiInput] = useState('');
-  const [aiParsed, setAiParsed] = useState(null);
-  const [aiResults, setAiResults] = useState(null);
-  const [aiBusy, setAiBusy] = useState(false);
+  const [queries, setQueries] = useState(loadQueries);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [highlight, setHighlight] = useState(-1);
+  const [visible, setVisible] = useState(PAGE_SIZE);
+  const [quickTab, setQuickTab] = useState('trending');
+  const searchWrapRef = useRef(null);
+  const inputRef = useRef(null);
+  const resultsRef = useRef(null);
 
-  // ── Live data ────────────────────────────────────────────────────────
+  // ── Live data ─────────────────────────────────────────────────────────
   const [trendingData, setTrendingData] = useState(null);
   const [trendingErr, setTrendingErr] = useState(null);
   const [trendingLoading, setTrendingLoading] = useState(true);
-  const [protocolListData, setProtocolListData] = useState(null);
-  const [protocolLiveMap, setProtocolLiveMap] = useState({}); // slug -> live row
+  const [protocolLiveMap, setProtocolLiveMap] = useState({});
   const [metaInfo, setMetaInfo] = useState(null);
 
   // ── UX state ─────────────────────────────────────────────────────────
-  const [picked, setPicked] = useState(null); // protocol id for sheet
-  const pickedProto = useMemo(() => picked ? DISCOVERY_PROTOCOLS.find(p=>p.id===picked) : null, [picked]);
+  const [picked, setPicked] = useState(null);
+  const pickedProto = useMemo(() => (picked ? DISCOVERY_PROTOCOLS.find((p) => p.id === picked) : null), [picked]);
   const [favs, setFavs] = useState(loadFavs);
   const [recents, setRecents] = useState(loadRecents);
   const [detailLive, setDetailLive] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const searchRef = useRef(null);
 
-  const { data: marketTrending } = usePoll(getTrending, [], 300000);
+  // ── Localized labels ──────────────────────────────────────────────────
+  const catLabel = useCallback((id) => {
+    const fallback = DISCOVERY_CATEGORIES.find((c) => c.id === id)?.label || id;
+    return t(`discover.ui.cat.${id}`, fallback);
+  }, [t]);
+  const categoryLabels = useMemo(
+    () => Object.fromEntries(DISCOVERY_CATEGORIES.map((c) => [c.id, catLabel(c.id)])),
+    [catLabel]
+  );
+  const netLabel = useCallback((id) => {
+    if (id === 'all') return t('discover.ui.filters.allNetworks');
+    return NETWORK_FILTERS.find((n) => n.id === id)?.short || id;
+  }, [t]);
+  const sortLabel = useCallback((id) => {
+    if (id === 'security') return t('discover.ui.smart.security');
+    if (id === 'new') return t('discover.ui.smart.new');
+    if (id === 'compare') return t('discover.ui.smart.compare');
+    return t(`discover.ui.sort.${id}`, id);
+  }, [t]);
+  const ui = useCallback((path, fallback, opts) => t(`discover.ui.${path}`, { defaultValue: fallback, ...(opts || {}) }), [t]);
+  const examples = useMemo(() => aiExamplesFor(lang), [lang]);
 
-  // ── Fetch live protocol data ─────────────────────────────────────────
+  // ── Fetch live protocol data (best-effort, never blocks the UI) ────────
   useEffect(() => {
     let alive = true;
     setTrendingLoading(true);
-    exploreApi.trending().then(res => {
+    exploreApi.trending().then((res) => {
       if (!alive) return;
       setTrendingData(res?.data || null);
       setMetaInfo(res?.meta || null);
       setTrendingErr(null);
-      // Build slug -> live lookup for cards
-      const all = [...(res?.data?.trending||[]), ...(res?.data?.rising||[]), ...(res?.data?.highLiquidity||[])];
+      const all = [...(res?.data?.trending || []), ...(res?.data?.rising || []), ...(res?.data?.highLiquidity || [])];
       const map = {};
       for (const p of all) if (p.slug && !map[p.slug]) map[p.slug] = p;
-      setProtocolLiveMap(map);
-    }).catch(e => {
-      if (!alive) return;
-      setTrendingErr(intelErrorCode(e));
+      setProtocolLiveMap((prev) => ({ ...map, ...prev }));
+    }).catch((e) => {
+      if (alive) setTrendingErr(intelErrorCode(e));
     }).finally(() => { if (alive) setTrendingLoading(false); });
 
-    // Full protocol list for TVL sorting — best-effort, never blocks hero
-    exploreApi.protocols({ limit: 80, sort: 'tvl' }).then(res => {
+    exploreApi.protocols({ limit: 80, sort: 'tvl' }).then((res) => {
       if (!alive) return;
-      setProtocolListData(res?.data?.protocols || null);
-      // Merge into live map
       const rows = res?.data?.protocols || [];
-      setProtocolLiveMap(prev => {
+      setProtocolLiveMap((prev) => {
         const next = { ...prev };
-        for (const r of rows) if (r.slug && !next[r.slug]) next[r.slug] = r;
+        for (const r of rows) {
+          if (r.slug && !next[r.slug]) next[r.slug] = r;
+          if (r.name && !next[r.name.toLowerCase()]) next[r.name.toLowerCase()] = r;
+        }
         return next;
       });
-    }).catch(()=>{});
+    }).catch(() => {});
 
     return () => { alive = false; };
   }, []);
 
-  // ── Detail live fetch when sheet opens ────────────────────────────────
   useEffect(() => {
     if (!pickedProto) { setDetailLive(null); return; }
     const slug = pickedProto.slug || pickedProto.id;
     if (!slug) return;
+    let alive = true;
     setDetailLoading(true);
-    exploreApi.protocol(slug).then(res => {
+    exploreApi.protocol(slug).then((res) => {
+      if (!alive) return;
       setDetailLive(res?.data || null);
       if (res?.meta) setMetaInfo(res.meta);
-    }).catch(()=> setDetailLive(null))
-      .finally(()=> setDetailLoading(false));
+    }).catch(() => { if (alive) setDetailLive(null); })
+      .finally(() => { if (alive) setDetailLoading(false); });
+    return () => { alive = false; };
   }, [pickedProto]);
-
-  // Also merge list data live rows by name fallback
-  const liveByName = useMemo(() => {
-    const m = { ...protocolLiveMap };
-    if (protocolListData) for (const r of protocolListData) {
-      if (r.name && !m[r.slug||r.name.toLowerCase()]) m[r.name.toLowerCase()] = r;
-    }
-    return m;
-  }, [protocolLiveMap, protocolListData]);
 
   function liveFor(p) {
     if (!p) return null;
-    return liveByName[p.slug] || liveByName[p.name?.toLowerCase()] || liveByName[p.id] || null;
+    return protocolLiveMap[p.slug] || protocolLiveMap[p.name?.toLowerCase()] || protocolLiveMap[p.id] || null;
   }
 
-  // ── Favorites & recents ──────────────────────────────────────────────
+  // ── Favorites / recents ───────────────────────────────────────────────
   const toggleFav = useCallback((id) => {
     haptic?.('light');
-    setFavs(prev => {
-      const next = prev.includes(id) ? prev.filter(x=>x!==id) : [...prev, id].slice(0, FAV_MAX);
-      try { localStorage.setItem(FAV_KEY, JSON.stringify(next)); } catch {}
+    setFavs((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id].slice(0, FAV_MAX);
+      try { localStorage.setItem(FAV_KEY, JSON.stringify(next)); } catch { /* private mode */ }
       return next;
     });
   }, [haptic]);
 
   const rememberRecent = useCallback((id) => {
     try {
-      const next = [id, ...loadRecents().filter(x=>x!==id)].slice(0, RECENT_MAX);
+      const next = [id, ...loadRecents().filter((x) => x !== id)].slice(0, RECENT_MAX);
       localStorage.setItem(RECENT_KEY, JSON.stringify(next));
       setRecents(next);
-    } catch {}
+    } catch { /* private mode */ }
   }, []);
 
   // ── Pick / open ───────────────────────────────────────────────────────
   const pick = useCallback((proto) => {
     haptic?.('light');
+    setSuggestOpen(false);
     setPicked(proto.id);
   }, [haptic]);
-
   const closeSheet = useCallback(() => setPicked(null), []);
 
   const doOpen = useCallback(async () => {
@@ -314,612 +343,571 @@ export default function Discover({ embedded = false }) {
     rememberRecent(pickedProto.id);
     const check = validateDiscoveryUrl(pickedProto.url);
     if (check.blocked) {
-      useAppStore.getState().notify(check.warnings[0]?.message || 'Blocked', 'error');
+      useAppStore.getState().notify(warnText(check.warnings[0], t), 'error');
       return;
     }
     await openUrl(pickedProto.url);
-  }, [pickedProto, haptic, rememberRecent]);
+  }, [pickedProto, haptic, rememberRecent, t]);
 
   const copyLink = useCallback(() => {
     if (!pickedProto) return;
     navigator.clipboard?.writeText(pickedProto.url);
     haptic?.('success');
-    useAppStore.getState().notify(t('discover.sheet.copied', 'Link copied'), 'success');
+    useAppStore.getState().notify(t('discover.ui.sheet.copied'), 'success');
   }, [pickedProto, haptic, t]);
 
-  // ── AI Discovery ──────────────────────────────────────────────────────
-  const runAi = useCallback(async (text) => {
-    const raw = String(text||'').trim();
-    if (!raw) { setAiParsed(null); setAiResults(null); return; }
-    const parsed = parseAiQuery(raw);
-    setAiParsed(parsed);
-    setAiBusy(true);
-    try {
-      const filtered = filterByAiQuery(DISCOVERY_PROTOCOLS, parsed);
-      setAiResults(filtered.slice(0, 18));
-      // Optionally augment with live search
-      if (parsed?.keywords?.length) {
-        try {
-          const r = await exploreApi.protocols({ q: parsed.keywords[0], limit: 12 });
-          // Merge any extra slugs not in registry (e.g. fresh protocols)
-        } catch {}
-      }
-    } finally { setAiBusy(false); }
+  // ── Search / suggestions ──────────────────────────────────────────────
+  const suggestions = useMemo(() => buildSuggestions({
+    list: DISCOVERY_PROTOCOLS, query: q, lang,
+    categories: DISCOVERY_CATEGORIES, networks: NETWORK_FILTERS,
+    recentQueries: queries, categoryLabels
+  }), [q, lang, queries, categoryLabels]);
+
+  const scrollToResults = useCallback(() => {
+    requestAnimationFrame(() => resultsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
   }, []);
 
-  const handleAiSubmit = useCallback(() => {
-    if (!aiInput.trim()) return;
-    runAi(aiInput);
-  }, [aiInput, runAi]);
+  const commitQuery = useCallback((raw) => {
+    const text = String(raw || '').trim();
+    setQ(text);
+    setQueries(rememberQuery(text));
+    setSuggestOpen(false);
+    setHighlight(-1);
+    setVisible(PAGE_SIZE);
+    inputRef.current?.blur();
+    if (text) scrollToResults();
+  }, [scrollToResults]);
+
+  const applySmart = useCallback((parsed, raw) => {
+    haptic?.('success');
+    setCat(parsed?.category && parsed.category !== 'all' ? parsed.category : 'all');
+    setNet(parsed?.chain || 'all');
+    const allowed = ['trending', 'tvl', 'volume', 'name', 'favorites', 'new'];
+    setSort(allowed.includes(parsed?.sort) ? parsed.sort : 'trending');
+    setQ('');
+    setQueries(rememberQuery(raw));
+    setSuggestOpen(false);
+    setHighlight(-1);
+    setVisible(PAGE_SIZE);
+    inputRef.current?.blur();
+    scrollToResults();
+  }, [haptic, scrollToResults]);
+
+  const suggestionItems = useMemo(() => {
+    if (!suggestOpen) return [];
+    const s = suggestions;
+    const items = [];
+    if (s.empty) {
+      for (const text of s.recents) items.push({ id: `recent:${text}`, type: 'recent', label: text, onSelect: () => commitQuery(text) });
+      for (const ex of examples.slice(0, 3)) {
+        items.push({ id: `example:${ex}`, type: 'example', label: ex, onSelect: () => applySmart(parseAiQuery(ex), ex) });
+      }
+      return items;
+    }
+    if (s.smart) {
+      items.push({
+        id: 'smart', type: 'smart', label: ui('smart.apply', 'Apply filters'),
+        sub: smartSummary(s.smart, { categoryLabel: catLabel, networkLabel: netLabel, sortLabel }),
+        onSelect: () => applySmart(s.smart, s.query)
+      });
+    }
+    for (const p of s.protocols) {
+      items.push({
+        id: `proto:${p.id}`, type: 'protocol', label: p.name,
+        sub: catLabel(p.category), protocol: p,
+        onSelect: () => pick(p)
+      });
+    }
+    for (const c of s.categories) {
+      items.push({
+        id: `cat:${c.id}`, type: 'category', label: catLabel(c.id), sub: ui('search.categories', 'Categories'),
+        onSelect: () => { setCat(c.id); setQ(''); setSuggestOpen(false); setVisible(PAGE_SIZE); scrollToResults(); }
+      });
+    }
+    for (const n of s.networks) {
+      items.push({
+        id: `net:${n.id}`, type: 'network', label: n.short, sub: ui('search.networks', 'Networks'),
+        onSelect: () => { setNet(n.id); setQ(''); setSuggestOpen(false); setVisible(PAGE_SIZE); scrollToResults(); }
+      });
+    }
+    items.push({
+      id: 'all', type: 'all', label: ui('search.allResults', 'See all results', { q: s.query }),
+      onSelect: () => commitQuery(s.query)
+    });
+    return items;
+  }, [suggestOpen, suggestions, examples, catLabel, netLabel, sortLabel, ui, applySmart, commitQuery, pick, scrollToResults]);
+
+  useEffect(() => { setHighlight(-1); }, [q]);
+  useEffect(() => {
+    if (!suggestOpen) return undefined;
+    const onDown = (e) => {
+      if (!searchWrapRef.current?.contains(e.target)) setSuggestOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [suggestOpen]);
+
+  const onSearchKeyDown = useCallback((e) => {
+    if (e.key === 'Escape') { setSuggestOpen(false); inputRef.current?.blur(); return; }
+    if (!suggestOpen || !suggestionItems.length) {
+      if (e.key === 'Enter') { e.preventDefault(); commitQuery(q); }
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSuggestOpen(true);
+      setHighlight((h) => (h + 1) % suggestionItems.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlight((h) => (h <= 0 ? suggestionItems.length - 1 : h - 1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const item = highlight >= 0 ? suggestionItems[highlight] : null;
+      if (item) item.onSelect();
+      else commitQuery(q);
+    }
+  }, [suggestOpen, suggestionItems, highlight, commitQuery, q]);
+
+  const clearAll = useCallback(() => {
+    setQ(''); setCat('all'); setNet('all'); setSort('trending');
+    setVisible(PAGE_SIZE); setSuggestOpen(false);
+  }, []);
 
   // ── Filtering ─────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    let list = [...DISCOVERY_PROTOCOLS];
+    const needle = q.trim();
+    let list = rankProtocols(DISCOVERY_PROTOCOLS, needle, { lang, categoryLabels }).items;
 
-    // Text search
-    const needle = q.trim().toLowerCase();
-    if (needle) {
-      list = list.filter(p => {
-        const hay = `${p.name} ${p.domain} ${p.description||''} ${p.category} ${p.chains?.join(' ')}`.toLowerCase();
-        return hay.includes(needle) || hostOf(p.url).includes(needle);
-      });
-    }
-
-    // Category
-    if (cat !== 'all') {
-      list = list.filter(p => p.category === cat);
-    }
-
-    // Network filter
+    if (cat !== 'all') list = list.filter((p) => p.category === cat);
     if (net !== 'all') {
       const aliases = CHAIN_ALIASES[net] || [net];
-      list = list.filter(p => {
-        const hay = [...(p.chains||[]), ...(p.chainIds||[]).map(String)].join(' ').toLowerCase();
-        return aliases.some(a => hay.includes(a.toLowerCase()));
+      list = list.filter((p) => {
+        const hay = [...(p.chains || []), ...(p.chainIds || []).map(String)].join(' ').toLowerCase();
+        return aliases.some((a) => hay.includes(a.toLowerCase()));
       });
     }
 
-    // Sort
-    if (sort === 'favorites') {
-      list = [...list].sort((a,b) => (favs.includes(b.id) ? 1 : 0) - (favs.includes(a.id) ? 1 : 0) || a.name.localeCompare(b.name));
-    } else if (sort === 'tvl') {
-      list = [...list].sort((a,b) => {
-        const av = liveFor(a)?.tvl ?? -1;
-        const bv = liveFor(b)?.tvl ?? -1;
-        if (bv !== av) return bv - av;
-        return a.name.localeCompare(b.name);
-      });
-    } else if (sort === 'volume') {
-      list = [...list].sort((a,b) => {
-        const av = liveFor(a)?.volume_24h ?? -1;
-        const bv = liveFor(b)?.volume_24h ?? -1;
-        return bv - av;
-      });
-    } else if (sort === 'name') {
-      list.sort((a,b)=>a.name.localeCompare(b.name));
-    } else if (sort === 'new') {
-      // Fresh first (non-featured)
-      list.sort((a,b)=> (a.featured?1:0) - (b.featured?1:0));
-    }
-    // trending default keeps featured first then name
-    else if (sort === 'trending') {
-      list.sort((a,b)=>{
-        const af = a.featured ? 0 : 1;
-        const bf = b.featured ? 0 : 1;
-        if (af !== bf) return af - bf;
-        const av = Math.abs(liveFor(a)?.change_1d ?? 0) * Math.log10(1 + (liveFor(a)?.tvl||1));
-        const bv = Math.abs(liveFor(b)?.change_1d ?? 0) * Math.log10(1 + (liveFor(b)?.tvl||1));
-        if (bv !== av) return bv - av;
-        return a.name.localeCompare(b.name);
-      });
-    }
+    // A relevance-ranked search keeps its order until the user picks a sort.
+    if (needle && sort === 'trending') return list;
 
+    const byLive = (key) => (a, b) => {
+      const av = liveFor(a)?.[key] ?? -1;
+      const bv = liveFor(b)?.[key] ?? -1;
+      return bv - av || a.name.localeCompare(b.name);
+    };
+    if (sort === 'favorites') list = [...list].sort((a, b) => (favs.includes(b.id) ? 1 : 0) - (favs.includes(a.id) ? 1 : 0) || a.name.localeCompare(b.name));
+    else if (sort === 'tvl') list = [...list].sort(byLive('tvl'));
+    else if (sort === 'volume') list = [...list].sort(byLive('volume_24h'));
+    else if (sort === 'name') list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    else if (sort === 'new') list = [...list].sort((a, b) => (a.featured ? 1 : 0) - (b.featured ? 1 : 0));
+    else list = [...list].sort((a, b) => {
+      const rank = (p) => (p.featured ? 0 : 1);
+      if (rank(a) !== rank(b)) return rank(a) - rank(b);
+      return byLive('tvl')(a, b);
+    });
     return list;
-  }, [cat, net, q, sort, favs, liveByName]);
+  }, [cat, net, q, sort, favs, lang, categoryLabels, protocolLiveMap]);
 
-  const featured = useMemo(() => DISCOVERY_PROTOCOLS.filter(p=>p.featured).slice(0, 6), []);
+  const shown = useMemo(() => filtered.slice(0, visible), [filtered, visible]);
+  const activeFilters = cat !== 'all' || net !== 'all' || q.trim() || sort !== 'trending';
+
+  // ── Quick access ──────────────────────────────────────────────────────
+  const featured = useMemo(() => DISCOVERY_PROTOCOLS.filter((p) => p.featured).slice(0, 6), []);
   const trendingStrip = useMemo(() => {
-    if (trendingData?.trending?.length) return trendingData.trending.slice(0, 8);
-    // Fallback to registry featured
-    return featured.slice(0, 6).map(p => ({ slug: p.slug||p.id, name: p.name, category: p.category, chains: p.chains, tvl: liveFor(p)?.tvl ?? null, change_1d: liveFor(p)?.change_1d ?? null }));
-  }, [trendingData, featured]);
-
-  const favItems = useMemo(() => favs.map(id=>DISCOVERY_PROTOCOLS.find(p=>p.id===id)).filter(Boolean), [favs]);
-  const recentItems = useMemo(() => recents.map(id=>DISCOVERY_PROTOCOLS.find(p=>p.id===id)).filter(Boolean), [recents]);
-
-  // Personalized recommendations: same chain as wallet + same categories as favs/recents
-  const recommended = useMemo(() => {
-    const chainId = wallet?.chainId;
-    const favCats = new Set(favItems.map(p=>p.category));
-    const recCats = new Set(recentItems.map(p=>p.category));
-    let list = DISCOVERY_PROTOCOLS.filter(p => !favs.includes(p.id) && !recents.includes(p.id));
-    // Prefer wallet chain
-    if (chainId) {
-      list = [...list].sort((a,b)=>{
-        const ac = a.chainIds?.includes(Number(chainId)) ? 0 : 1;
-        const bc = b.chainIds?.includes(Number(chainId)) ? 0 : 1;
-        if (ac !== bc) return ac - bc;
-        const af = favCats.has(a.category) || recCats.has(a.category) ? 0 : 1;
-        const bf = favCats.has(b.category) || recCats.has(b.category) ? 0 : 1;
-        return af - bf;
-      });
-    } else if (favCats.size || recCats.size) {
-      list = [...list].sort((a,b)=>{
-        const af = favCats.has(a.category) || recCats.has(a.category) ? 0 : 1;
-        const bf = favCats.has(b.category) || recCats.has(b.category) ? 0 : 1;
-        return af - bf;
-      });
+    if (trendingData?.trending?.length) {
+      return trendingData.trending.slice(0, 8)
+        .map((p) => ({ protocol: DISCOVERY_PROTOCOLS.find((d) => d.slug === p.slug || d.id === p.slug), change: p.change_1d }))
+        .filter((x) => x.protocol);
     }
-    return list.slice(0, 6);
-  }, [wallet?.chainId, favItems, recentItems, favs, recents]);
+    return featured.slice(0, 6).map((p) => ({ protocol: p, change: null }));
+  }, [trendingData, featured]);
+  const favItems = useMemo(() => favs.map((id) => DISCOVERY_PROTOCOLS.find((p) => p.id === id)).filter(Boolean), [favs]);
+  const recentItems = useMemo(() => recents.map((id) => DISCOVERY_PROTOCOLS.find((p) => p.id === id)).filter(Boolean), [recents]);
+  const quickItems = quickTab === 'favorites' ? favItems.map((protocol) => ({ protocol }))
+    : quickTab === 'recent' ? recentItems.map((protocol) => ({ protocol }))
+      : trendingStrip;
+  const quickEmpty = quickTab === 'favorites' ? ui('quick.emptyFavorites', '')
+    : quickTab === 'recent' ? ui('quick.emptyRecent', '') : ui('quick.emptyTrending', '');
 
-  // ── Sheet derived warnings ────────────────────────────────────────────
-  const sheetValidation = useMemo(() => pickedProto ? validateDiscoveryUrl(pickedProto.url) : null, [pickedProto]);
-  const sheetChainWarns = useMemo(() => pickedProto ? chainSupportWarnings(pickedProto, wallet?.chainId) : [], [pickedProto, wallet?.chainId]);
-  const sheetAuditNote = useMemo(() => pickedProto ? auditNotice(pickedProto) : null, [pickedProto]);
-  const sheetIsRegistry = useMemo(() => pickedProto ? true : false, [pickedProto]);
+  // ── Sheet derived data ────────────────────────────────────────────────
+  const sheetValidation = useMemo(() => (pickedProto ? validateDiscoveryUrl(pickedProto.url) : null), [pickedProto]);
+  const sheetChainWarns = useMemo(() => (pickedProto ? chainSupportWarnings(pickedProto, wallet?.chainId) : []), [pickedProto, wallet?.chainId]);
+  const sheetAuditNote = useMemo(() => (pickedProto ? auditNotice(pickedProto) : null), [pickedProto]);
+  const sheetIsRegistry = useMemo(
+    () => (pickedProto ? isRegistryDomain(hostOf(pickedProto.url), DISCOVERY_PROTOCOLS.map((p) => p.domain)) : false),
+    [pickedProto]
+  );
   const detailTvl = detailLive?.tvl ?? liveFor(pickedProto)?.tvl ?? null;
   const detailVol = detailLive?.volume_24h ?? liveFor(pickedProto)?.volume_24h ?? null;
+  const detailChange7d = detailLive?.change_7d ?? liveFor(pickedProto)?.change_7d ?? null;
+  const auditLinks = detailLive?.auditLinks?.length ? detailLive.auditLinks : (pickedProto?.auditLinks || []);
 
   return (
     <PageTransition embedded={embedded}>
-      {/* Header (hidden when inside ExploreHub tabs) */}
       {!embedded && (
-        <motion.div className="row" style={{ gap: 10, marginBottom: 2 }} variants={riseIn} initial="hidden" animate="show">
-          <button className="icon-btn" onClick={()=>navigate(-1)} aria-label={t('common.back')}>
+        <div className="row" style={{ gap: 10, marginBottom: 2 }}>
+          <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
             <IconChevronLeft width={18} height={18} />
           </button>
           <h1 className="h1" style={{ fontSize: 19, margin: 0 }}>{t('discover.title', 'Discover')}</h1>
-        </motion.div>
+        </div>
       )}
 
-      {/* ── HERO ──────────────────────────────────────────────────────── */}
-      <motion.section className="dc-hero" variants={riseIn} initial="hidden" animate="show">
-        <div className="dc-hero-bg-orb a" aria-hidden="true" />
-        <div className="dc-hero-bg-orb b" aria-hidden="true" />
-        <div style={{ position: 'relative' }}>
-          <span className="dc-hero-kicker">
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#00ff9d', boxShadow: '0 0 8px #00ff9d' }} />
-            Explore Web3 · FBT Discovery Center
-          </span>
-          <h2 className="dc-hero-title">Discover trusted<br />dApps & protocols</h2>
-          <p className="dc-hero-sub">
-            A curated directory of verified DeFi, bridges, analytics and developer tools — opened safely in FBT Browser with anti-phishing checks.
-          </p>
+      {/* ── HERO + OMNIBOX ─────────────────────────────────────────────── */}
+      <motion.section className="dcx-hero" variants={riseIn} initial="hidden" animate="show">
+        {/* Decorative layers live in their own clipped box: the hero itself
+            must NOT clip, or the search suggestions popover gets cut off. */}
+        <div className="dcx-hero-decor" aria-hidden="true">
+          <div className="dcx-hero-aurora" />
+          <div className="dcx-hero-grid" />
+        </div>
+        <div className="dcx-hero-inner">
+          <div className="dcx-hero-top">
+            <span className="dcx-kicker"><IconGlobe width={12} height={12} /> {t('discover.ui.hero.kicker')}</span>
+            <span className={`dcx-live ${trendingErr ? 'offline' : ''}`}>
+              <i aria-hidden="true" /> {trendingErr ? t('discover.ui.hero.offline') : t('discover.ui.hero.live')}
+            </span>
+          </div>
 
-          {/* Hero smart search */}
-          <div className="dc-search-wrap" style={{ marginTop: 14 }}>
-            <label className="dc-search" aria-label="Search protocols">
-              <span className="dc-search-icon" aria-hidden="true">⌕</span>
+          <h2 className="dcx-hero-title">
+            {t('discover.ui.hero.title')}<span>{t('discover.ui.hero.titleAccent')}</span>
+          </h2>
+          <p className="dcx-hero-sub">{t('discover.ui.hero.subtitle')}</p>
+
+          <div className="dcx-search-wrap" ref={searchWrapRef}>
+            <div className={`dcx-search ${suggestOpen ? 'focused' : ''}`}>
+              <IconSearch className="dcx-search-icon" width={17} height={17} aria-hidden="true" />
               <input
-                ref={searchRef}
+                ref={inputRef}
                 value={q}
-                onChange={e=>setQ(e.target.value)}
-                placeholder={t('discover.searchPlaceholder', 'Search protocols, dApps, networks… (e.g. Uniswap, lending, Arbitrum)')}
-                inputMode="search"
+                onChange={(e) => { setQ(e.target.value); setSuggestOpen(true); }}
+                onFocus={() => setSuggestOpen(true)}
+                onKeyDown={onSearchKeyDown}
+                placeholder={t('discover.ui.search.placeholder')}
+                aria-label={t('discover.ui.search.label')}
+                role="combobox"
+                aria-expanded={suggestOpen && suggestionItems.length > 0}
+                aria-controls="dcx-suggestions"
+                aria-autocomplete="list"
+                aria-activedescendant={highlight >= 0 ? `dcx-sug-${highlight}` : undefined}
                 autoComplete="off"
                 spellCheck={false}
+                dir="auto"
               />
-              {q && <button type="button" className="dc-search-clear" onClick={()=>setQ('')} aria-label="Clear">✕</button>}
-            </label>
-            <div className="dc-search-meta">
-              <span className="pill pill-neutral" style={{ fontSize: 10.5 }}>{filtered.length} protocols</span>
-              {wallet?.address && wallet?.chainId && (
-                <span className="pill" style={{ fontSize: 10.5, background: 'rgba(124,77,255,0.14)', borderColor: 'rgba(124,77,255,0.24)' }}>
-                  On {NETWORK_FILTERS.find(n=>n.chainId===Number(wallet.chainId))?.short || wallet.chainId}
-                </span>
-              )}
-              {metaInfo?.updatedAt && (
-                <span className="faint" style={{ fontSize: 10.5 }}>Updated {timeAgo(metaInfo.updatedAt, i18n.language)} · {metaInfo.source || 'defillama'}</span>
+              {q && (
+                <button type="button" className="dcx-search-clear" onClick={() => { setQ(''); inputRef.current?.focus(); }} aria-label={t('discover.ui.search.clear')}>
+                  <IconX width={14} height={14} />
+                </button>
               )}
             </div>
+
+            <AnimatePresence>
+              {suggestOpen && suggestionItems.length > 0 && (
+                <motion.div
+                  id="dcx-suggestions"
+                  className="dcx-suggest"
+                  role="listbox"
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.14 }}
+                >
+                  {suggestions.empty && suggestionItems.length > 0 && (
+                    <div className="dcx-suggest-head">
+                      {suggestions.recents.length ? t('discover.ui.search.recent') : t('discover.ui.search.examples')}
+                    </div>
+                  )}
+                  {suggestionItems.map((item, i) => (
+                    <button
+                      key={item.id}
+                      id={`dcx-sug-${i}`}
+                      type="button"
+                      role="option"
+                      aria-selected={highlight === i}
+                      className={`dcx-suggest-item ${highlight === i ? 'active' : ''} ${item.type === 'smart' ? 'smart' : ''}`}
+                      onMouseEnter={() => setHighlight(i)}
+                      onClick={() => item.onSelect()}
+                    >
+                      <span className="dcx-suggest-icon" aria-hidden="true">
+                        {item.type === 'protocol' ? <ProtoLogo protocol={item.protocol} size={26} />
+                          : item.type === 'smart' ? <IconSparkle width={14} height={14} />
+                            : item.type === 'category' ? <IconGlobe width={14} height={14} />
+                              : item.type === 'network' ? <IconTrend width={14} height={14} />
+                                : item.type === 'recent' || item.type === 'example' ? <IconClock width={14} height={14} />
+                                  : <IconSearch width={14} height={14} />}
+                      </span>
+                      <span className="dcx-suggest-text">
+                        <span className="dcx-suggest-label" dir={item.type === 'protocol' ? 'ltr' : 'auto'}>{item.label}</span>
+                        {item.sub && <span className="dcx-suggest-sub">{item.sub}</span>}
+                      </span>
+                      <IconChevronRight className="dcx-suggest-arrow" width={13} height={13} aria-hidden="true" />
+                    </button>
+                  ))}
+                  <div className="dcx-suggest-foot">{t('discover.ui.search.keyboard')}</div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
-          <div className="dc-hero-stats">
-            <span className="dc-hero-stat"><strong>{DISCOVERY_PROTOCOLS.length}</strong> curated protocols</span>
-            <span className="dc-hero-stat"><strong>{NETWORK_FILTERS.length - 1}</strong> networks</span>
-            <span className="dc-hero-stat"><strong>{trendingData ? 'Live' : '—'}</strong> TVL from DefiLlama</span>
+          <div className="dcx-hero-stats">
+            <span><strong dir="ltr">{DISCOVERY_PROTOCOLS.length}</strong> {t('discover.ui.hero.statProtocols')}</span>
+            <span><strong dir="ltr">{NETWORK_FILTERS.length - 1}</strong> {t('discover.ui.hero.statNetworks')}</span>
+            <span className="dcx-stat-source">{t('discover.ui.hero.statSource')}</span>
           </div>
         </div>
       </motion.section>
 
-      {/* ── AI DISCOVERY ──────────────────────────────────────────────── */}
-      <motion.section className="dc-ai" variants={riseIn} initial="hidden" animate="show">
-        <div className="dc-ai-head">
-          <span className="dc-ai-badge" aria-hidden="true">✦</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="dc-ai-title">AI Discovery</div>
-            <div className="dc-ai-sub">Ask in plain language — results stay on-device when AI is offline</div>
-          </div>
-          <span className="pill pill-neutral" style={{ fontSize: 10 }}>on-device</span>
-        </div>
-
-        <div className="dc-ai-input">
-          <input
-            value={aiInput}
-            onChange={e=>setAiInput(e.target.value)}
-            onKeyDown={e=>{ if(e.key==='Enter') handleAiSubmit(); }}
-            placeholder="Find lending protocols on Arbitrum"
-            aria-label="AI discovery natural language search"
+      {/* ── QUICK ACCESS (trending / favorites / recents in ONE card) ───── */}
+      {(trendingStrip.length > 0 || favItems.length > 0 || recentItems.length > 0) && (
+        <motion.section className="dcx-quick" variants={riseIn} initial="hidden" animate="show">
+          <SectionHead
+            title={t('discover.ui.quick.title')}
+            right={<span className="dcx-ondevice"><IconSparkle width={11} height={11} /> {t('discover.ui.smart.onDevice')}</span>}
           />
-          <button type="button" className="btn btn-primary btn-sm" onClick={handleAiSubmit} disabled={!aiInput.trim() || aiBusy}>
-            {aiBusy ? '…' : <IconSearch width={14} height={14} />} Search
-          </button>
-        </div>
-
-        <div className="dc-ai-examples">
-          {AI_EXAMPLES.map(ex => (
-            <button key={ex} type="button" className="dc-ai-ex" onClick={()=>{ setAiInput(ex); runAi(ex); }}>
-              {ex}
-            </button>
-          ))}
-        </div>
-
-        {(aiParsed || aiResults) && (
-          <div style={{ marginTop: 12 }}>
-            {aiParsed && (
-              <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                <span className="faint" style={{ fontSize: 11 }}>Interpreted:</span>
-                {aiParsed.category && <span className="pill pill-up" style={{ fontSize: 10.5 }}>{aiParsed.category}</span>}
-                {aiParsed.chain && <span className="pill pill-neutral" style={{ fontSize: 10.5 }}>{aiParsed.chain}</span>}
-                {aiParsed.wantsSecurity && <span className="pill" style={{ fontSize: 10.5, background:'rgba(124,77,255,0.12)' }}>with security</span>}
-                {aiParsed.wantsNew && <span className="pill" style={{ fontSize: 10.5 }}>new</span>}
-                <span className="faint mono" style={{ fontSize: 10.5 }}>{aiExplanation(aiParsed)}</span>
-              </div>
-            )}
-            {aiResults && aiResults.length === 0 && (
-              <p className="faint" style={{ fontSize: 12, margin: '6px 0 0' }}>No matches for that request. Try a broader term or a different network.</p>
-            )}
-            {aiResults && aiResults.length > 0 && (
-              <div className="dc-grid">
-                {aiResults.map(p => (
-                  <ProtocolCard key={p.id} protocol={p} live={liveFor(p)} fav={favs.includes(p.id)} onFav={toggleFav} onOpen={pick} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </motion.section>
-
-      {/* ── Market trending strip (coins) — kept from before, internal links ─ */}
-      {Array.isArray(marketTrending) && marketTrending.length > 0 && (
-        <motion.section variants={riseIn} initial="hidden" animate="show">
-          <div className="dc-section-label"><h3>Trending tokens</h3><span>Live</span></div>
-          <div className="tag-scroll">
-            {marketTrending.slice(0, 10).map(c => (
-              <button key={c.id} className="tag tag-token" onClick={()=>{ haptic?.('light'); navigate(`/coin/${c.id}`); }}>
-                <CoinLogo coin={c} size="thumb" px={16} className="coin-chip coin-chip-round" />
-                {c.symbol}
+          <div className="dcx-segmented" role="tablist" aria-label={t('discover.ui.quick.title')}>
+            {[
+              { id: 'trending', label: t('discover.ui.quick.trending'), Icon: IconTrend, count: trendingStrip.length },
+              { id: 'favorites', label: t('discover.ui.quick.favorites'), Icon: IconStar, count: favItems.length },
+              { id: 'recent', label: t('discover.ui.quick.recent'), Icon: IconClock, count: recentItems.length }
+            ].map(({ id, label, Icon, count }) => (
+              <button key={id} type="button" role="tab" aria-selected={quickTab === id}
+                className={quickTab === id ? 'active' : ''}
+                onClick={() => { haptic?.('light'); setQuickTab(id); }}>
+                <Icon width={13} height={13} aria-hidden="true" /> {label}
+                {count > 0 && <span className="dcx-seg-count">{count}</span>}
               </button>
             ))}
           </div>
-        </motion.section>
-      )}
-
-      {/* ── Trending dApps strip ───────────────────────────────────────── */}
-      <motion.section variants={riseIn} initial="hidden" animate="show">
-          <div className="dc-section-label">
-            <h3 style={{ display:'flex', gap:6, alignItems:'center' }}><IconTrend width={14} height={14} /> Trending dApps</h3>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={()=>setSort('trending')}>View all</button>
-          </div>
-        {trendingLoading ? (
-          <div className="dc-featured"><RowSkeletons count={3} /></div>
-        ) : trendingStrip.length > 0 ? (
-          <div className="dc-strip">
-            {trendingStrip.map(p => {
-              const reg = DISCOVERY_PROTOCOLS.find(d=>d.slug===p.slug || d.id===p.slug);
-              if (!reg) return null;
-              return (
-                <button key={p.slug||reg.id} type="button" className="dc-strip-item" style={{ '--card-hue': reg.hue } } onClick={()=>pick(reg)}>
-                  <ProtoLogo protocol={reg} size={26} />
-                  <span style={{ fontWeight: 700, fontSize: 12.5 }}>{reg.name}</span>
-                  {p.change_1d != null && <span className="mono" style={{ fontSize: 11, color: p.change_1d>=0?'var(--up)':'var(--down)' }}>{p.change_1d>=0?'+':''}{p.change_1d.toFixed(1)}%</span>}
+          {quickItems.length > 0 ? (
+            <div className="dcx-quick-row">
+              {quickItems.map(({ protocol, change }) => (
+                <button key={`${quickTab}-${protocol.id}`} type="button" className="dcx-quick-item"
+                  style={{ '--dcx-hue': protocol.hue }} onClick={() => pick(protocol)}>
+                  <ProtoLogo protocol={protocol} size={28} />
+                  <span dir="ltr">{protocol.name}</span>
+                  {change != null && <span className="dcx-change" dir="ltr" style={{ color: change >= 0 ? 'var(--up)' : 'var(--down)' }}>
+                    {change >= 0 ? '+' : ''}{Number(change).toFixed(1)}%
+                  </span>}
                 </button>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="faint" style={{ fontSize: 12 }}>Trending temporarily unavailable — showing featured protocols.</p>
-        )}
-      </motion.section>
-
-      {/* ── Recents strip ───────────────────────────────────────────────── */}
-      {recentItems.length > 0 && (
-        <motion.section variants={riseIn} initial="hidden" animate="show">
-          <div className="dc-section-label">
-            <h3 style={{ display:'flex', gap:6, alignItems:'center' }}><IconClock width={14} height={14} /> Recently visited</h3>
-            <span className="faint">{recentItems.length}</span>
-          </div>
-          <div className="dc-strip">
-            {recentItems.map(it => (
-              <button key={it.id} type="button" className="dc-strip-item" style={{ '--card-hue': it.hue }} onClick={()=>pick(it)}>
-                <ProtoLogo protocol={it} size={26} />
-                {it.name}
-              </button>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : <p className="dcx-quick-empty">{quickEmpty}</p>}
         </motion.section>
       )}
 
-      {/* ── Favorites strip ─────────────────────────────────────────────── */}
-      {favItems.length > 0 && (
-        <motion.section variants={riseIn} initial="hidden" animate="show">
-          <div className="dc-section-label">
-            <h3 style={{ display:'flex', gap:6, alignItems:'center' }}><IconStar width={14} height={14} /> Favorites</h3>
-            <span className="faint">{favItems.length}</span>
-          </div>
-          <div className="dc-strip">
-            {favItems.map(it => (
-              <button key={it.id} type="button" className="dc-strip-item" style={{ '--card-hue': it.hue }} onClick={()=>pick(it)}>
-                <ProtoLogo protocol={it} size={26} />
-                {it.name}
-              </button>
-            ))}
-          </div>
-        </motion.section>
-      )}
-
-      {/* ── Personalized recommendations ───────────────────────────────── */}
-      {recommended.length > 0 && (favs.length > 0 || recents.length > 0 || wallet?.chainId) && (
-        <motion.section variants={riseIn} initial="hidden" animate="show">
-          <div className="dc-section-label">
-            <h3>Recommended for you</h3>
-            <span className="faint">{wallet?.chainId ? `Based on ${NETWORK_FILTERS.find(n=>n.chainId===Number(wallet.chainId))?.short || 'your network'} + favorites` : 'Based on your favorites'}</span>
-          </div>
-          <div className="dc-strip">
-            {recommended.map(p => (
-              <button key={p.id} type="button" className="dc-strip-item" style={{ '--card-hue': p.hue }} onClick={()=>pick(p)}>
-                <ProtoLogo protocol={p} size={26} />
-                {p.name}
-              </button>
-            ))}
-          </div>
-        </motion.section>
-      )}
-
-      {/* ── Category chips ──────────────────────────────────────────────── */}
-      <div className="dc-chip-row" role="tablist" aria-label="Categories">
-        {DISCOVERY_CATEGORIES.map(c => (
-          <button
-            key={c.id}
-            role="tab"
-            aria-selected={cat===c.id}
-            className={`dc-chip ${cat===c.id ? 'active' : ''}`}
-            onClick={()=>{ haptic?.('light'); setCat(c.id); }}
-          >
-            {c.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Network filter + sort ───────────────────────────────────────── */}
-      <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div className="dc-chip-row" style={{ flex: 1, minWidth: 0 }} role="tablist" aria-label="Networks">
-          {NETWORK_FILTERS.map(n => (
-            <button
-              key={n.id}
-              role="tab"
-              aria-selected={net===n.id}
-              className={`dc-net-chip ${net===n.id ? 'active' : ''}`}
-              style={{ '--net-hue': n.hue }}
-              onClick={()=>{ haptic?.('light'); setNet(n.id); }}
-            >
-              <span className="dc-net-dot" style={{ '--net-hue': n.hue }} />
-              {n.short}
+      {/* ── FILTER TOOLBAR ──────────────────────────────────────────────── */}
+      <div className="dcx-toolbar" ref={resultsRef}>
+        <div className="dcx-chips" role="tablist" aria-label={t('discover.ui.filters.category')}>
+          {DISCOVERY_CATEGORIES.map((c) => (
+            <button key={c.id} type="button" role="tab" aria-selected={cat === c.id}
+              className={`dcx-chip ${cat === c.id ? 'active' : ''}`}
+              onClick={() => { haptic?.('light'); setCat(c.id); setVisible(PAGE_SIZE); }}>
+              {catLabel(c.id)}
             </button>
           ))}
         </div>
-        <div className="dc-controls" style={{ flexShrink: 0 }}>
-          <select value={sort} onChange={e=>setSort(e.target.value)} aria-label="Sort">
-            <option value="trending">Trending</option>
-            <option value="tvl">TVL</option>
-            <option value="volume">Volume</option>
-            <option value="name">Name A-Z</option>
-            <option value="favorites">Favorites</option>
-            <option value="new">Newest</option>
-          </select>
+        <div className="dcx-toolbar-row">
+          <label className="dcx-select">
+            <IconGlobe width={14} height={14} aria-hidden="true" />
+            <select value={net} onChange={(e) => { setNet(e.target.value); setVisible(PAGE_SIZE); }} aria-label={t('discover.ui.filters.network')}>
+              {NETWORK_FILTERS.map((n) => <option key={n.id} value={n.id}>{n.id === 'all' ? t('discover.ui.filters.allNetworks') : n.short}</option>)}
+            </select>
+            <IconChevronRight width={12} height={12} aria-hidden="true" />
+          </label>
+          <label className="dcx-select">
+            <IconTrend width={14} height={14} aria-hidden="true" />
+            <select value={sort} onChange={(e) => { setSort(e.target.value); setVisible(PAGE_SIZE); }} aria-label={t('discover.ui.filters.sort')}>
+              {['trending', 'tvl', 'volume', 'name', 'favorites', 'new'].map((id) => (
+                <option key={id} value={id}>{sortLabel(id)}</option>
+              ))}
+            </select>
+            <IconChevronRight width={12} height={12} aria-hidden="true" />
+          </label>
+          {activeFilters && (
+            <button type="button" className="dcx-reset" onClick={clearAll}>
+              <IconX width={12} height={12} /> {t('discover.ui.filters.reset')}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* ── Featured carousel ───────────────────────────────────────────── */}
-      {cat==='all' && net==='all' && !q && sort==='trending' && !aiResults && (
-        <motion.section variants={stagger} initial="hidden" animate="show">
-          <div className="dc-section-label">
-            <h3>Featured protocols</h3>
-            <span className="faint">{featured.length} curated</span>
-          </div>
-          <div className="dc-featured">
-            {featured.map(p => (
-              <div key={p.id} className="dc-featured-card">
-                <ProtocolCard protocol={p} live={liveFor(p)} fav={favs.includes(p.id)} onFav={toggleFav} onOpen={pick} isFeatured />
-              </div>
-            ))}
-          </div>
-        </motion.section>
-      )}
+      {/* ── RESULTS ─────────────────────────────────────────────────────── */}
+      <SectionHead
+        title={q.trim() ? t('discover.ui.filters.resultsFor', { q: q.trim() }) : t('discover.ui.filters.results')}
+        right={<>
+          <span className="dcx-count" dir="ltr">{t('discover.ui.filters.count', { count: filtered.length })}</span>
+          {trendingErr && <span className="dcx-live-bad">{t('discover.ui.filters.liveOffShort')}</span>}
+        </>}
+      />
 
-      {/* ── Main grid ───────────────────────────────────────────────────── */}
-      <div className="dc-section-label">
-        <h3>{q ? `Results for “${q.trim()}”` : DISCOVERY_CATEGORIES.find(c=>c.id===cat)?.label || 'All protocols'} · {filtered.length}</h3>
-        {trendingErr && <span className="pill pill-neutral" style={{ fontSize: 10 }}>Live data unavailable — showing registry</span>}
-      </div>
-
-      {trendingLoading && !filtered.length && (
-        <div className="dc-grid">
-          <CardSkeleton /><CardSkeleton /><CardSkeleton /><CardSkeleton />
-        </div>
-      )}
-
-      {trendingErr && filtered.length === 0 && (
-        <div className="dc-empty">
-          <div className="dc-empty-title">No protocols match</div>
-          <p className="dc-empty-note">Try a different category, network or keyword. Live ranking is temporarily unavailable.</p>
-          <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 10 }} onClick={()=>{ setQ(''); setCat('all'); setNet('all'); setSort('trending'); }}>
-            Clear filters
-          </button>
-        </div>
+      {trendingLoading && !shown.length && (
+        <div className="dcx-grid">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="dcx-skel" />)}</div>
       )}
 
       {filtered.length > 0 ? (
-        <motion.div className="dc-grid disc-grid" variants={stagger} initial="hidden" animate="show">
-          {filtered.map(p => (
-            <ProtocolCard key={p.id} protocol={p} live={liveFor(p)} fav={favs.includes(p.id)} onFav={toggleFav} onOpen={pick} />
-          ))}
-        </motion.div>
-      ) : (
-        !trendingLoading && (
-          <motion.div className="dc-empty" variants={riseIn} initial="hidden" animate="show">
-            <div className="dc-empty-title">Nothing here matches “{q.trim() || cat}”</div>
-            <p className="dc-empty-note">Try another keyword, switch category or clear the network filter to see every protocol.</p>
-            <button type="button" className="btn btn-primary btn-sm" style={{ marginTop: 10 }} onClick={()=>{ setQ(''); setCat('all'); setNet('all'); }}>
-              Clear filters
-            </button>
+        <>
+          <motion.div className="dcx-grid" variants={stagger} initial="hidden" animate="show">
+            {shown.map((p) => (
+              <ProtocolCard key={p.id} protocol={p} live={liveFor(p)} lang={lang}
+                fav={favs.includes(p.id)} onFav={toggleFav} onOpen={pick}
+                isFeatured={Boolean(p.featured)} t={t} catLabel={catLabel} />
+            ))}
           </motion.div>
-        )
+          {visible < filtered.length && (
+            <button type="button" className="dcx-more" onClick={() => setVisible((v) => v + PAGE_SIZE)}>
+              {t('discover.ui.filters.showMore', { count: filtered.length - visible })}
+              <IconChevronRight width={14} height={14} />
+            </button>
+          )}
+          {visible >= filtered.length && filtered.length > PAGE_SIZE && (
+            <p className="dcx-all-shown">{t('discover.ui.filters.showAll')}</p>
+          )}
+        </>
+      ) : !trendingLoading && (
+        <div className="dcx-empty">
+          <span className="dcx-empty-icon"><IconSearch width={20} height={20} /></span>
+          <h3>{t('discover.ui.empty.title')}</h3>
+          <p>{t('discover.ui.empty.body', { q: q.trim() || catLabel(cat) })}</p>
+          <button type="button" className="dcx-more" onClick={clearAll}>{t('discover.ui.empty.action')}</button>
+        </div>
       )}
 
-      <InfoBox title={t('discover.safetyTitle','How we keep you safe in FBT Browser')} tone="warn" id="discover-safety-dc">
-        <p>
-          Every dApp opens in FBT Browser (Custom Tabs) — the real address bar stays visible and the browser’s TLS warnings apply.
-          We never ask you to type an address here; lookalike domains are the #1 phishing vector. If a message says “open this in your wallet”, treat it as suspicious.
-          Unverified sites are labeled clearly, and you always approve before connecting a wallet or signing.
-        </p>
-      </InfoBox>
+      <div className="dcx-safety-box" id="discover-safety-dc">
+        <InfoBox
+          title={t('discover.ui.safety.title')}
+          tone="warn"
+          id="discover-safety-dc"
+          icon={<IconShield width={14} height={14} />}
+        >
+          <p>{t('discover.ui.safety.body')}</p>
+        </InfoBox>
+      </div>
 
-      {/* ── Protocol detail sheet ───────────────────────────────────────── */}
-      <Sheet open={Boolean(pickedProto)} onClose={closeSheet} anchor="bottom" size="lg" className="disc-sheet dc-sheet" testId="disc-sheet">
+      {/* ── MODERN DETAIL SHEET ────────────────────────────────────────── */}
+      <Sheet open={Boolean(pickedProto)} onClose={closeSheet} anchor="bottom" size="lg" className="dcx-sheet disc-sheet" testId="disc-sheet">
         {pickedProto && (
-          <div className="disc-sheet-body" style={{ '--disc-hue': pickedProto.hue }}>
-            <div className="disc-sheet-head">
-              <ProtoLogo protocol={pickedProto} size={52} />
-              <div className="disc-sheet-title">
-                <div className="disc-sheet-name" style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
-                  {pickedProto.name}
-                  {pickedProto.verified && <span className="dc-card-verified" title="Verified">✓</span>}
+          <div className="dcx-sheet-body" style={{ '--dcx-hue': pickedProto.hue }}>
+            <header className="dcx-sheet-hero">
+              <div className="dcx-sheet-glow" aria-hidden="true" />
+              <button type="button" className="dcx-sheet-close" onClick={closeSheet} aria-label={t('discover.ui.sheet.close')}>
+                <IconX width={15} height={15} />
+              </button>
+              <div className="dcx-sheet-head">
+                <ProtoLogo protocol={pickedProto} size={56} />
+                <div className="dcx-sheet-id">
+                  <div className="dcx-sheet-name" dir="ltr">{pickedProto.name}</div>
+                  <div className="dcx-sheet-tags">
+                    {pickedProto.verified && <span className="dcx-sheet-pill good"><IconCheck width={10} height={10} /> {t('discover.ui.sheet.verifiedDomain')}</span>}
+                    <span className="dcx-sheet-pill">{catLabel(pickedProto.category)}</span>
+                  </div>
                 </div>
-                <span className="disc-sheet-cat">{DISCOVERY_CATEGORIES.find(c=>c.id===pickedProto.category)?.label || pickedProto.category}</span>
+                <button type="button" className={`dcx-fav ${favs.includes(pickedProto.id) ? 'active' : ''}`}
+                  aria-label={favs.includes(pickedProto.id) ? t('discover.ui.card.unfavorite') : t('discover.ui.card.favorite')}
+                  aria-pressed={favs.includes(pickedProto.id)}
+                  onClick={() => toggleFav(pickedProto.id)}>
+                  <IconStar width={15} height={15} />
+                </button>
               </div>
-              <button type="button" className={`dc-fav ${favs.includes(pickedProto.id)?'active':''}`} onClick={()=>toggleFav(pickedProto.id)} aria-label="Favorite">
-                <IconStar width={14} height={14} />
-              </button>
-            </div>
+              <div className="dcx-domain" dir="ltr">
+                <IconShield width={14} height={14} aria-hidden="true" />
+                <span className="dcx-domain-label">{t('discover.ui.sheet.officialDomain')}</span>
+                <span className="dcx-domain-host">{hostOf(pickedProto.url)}</span>
+                <span className="dcx-https">https</span>
+              </div>
+            </header>
 
-            {/* Official domain — always visible, LTR, monospace */}
-            <div className="dc-domain-row" dir="ltr">
-              <IconShield width={14} height={14} />
-              <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis' }}>{hostOf(pickedProto.url)}</span>
-              <span className="pill pill-up" style={{ fontSize: 9, flexShrink:0 }}>https</span>
-            </div>
-            {!sheetIsRegistry && (
-              <div className="dc-warn">
-                Unverified domain — not in the curated registry. Proceed only if you trust this URL.
-              </div>
-            )}
+            <div className="dcx-sheet-content">
+              <p className="dcx-sheet-desc">{descriptionFor(pickedProto, lang)}</p>
 
-            <p className="disc-sheet-desc" style={{ lineHeight: 1.7 }}>{pickedProto.description}</p>
-
-            {/* Chain support */}
-            <div className="row" style={{ gap: 6, flexWrap:'wrap' }}>
-              {(pickedProto.chains||[]).map(ch => (
-                <span key={ch} className="pill pill-neutral" style={{ fontSize: 10.5 }}>{ch}</span>
-              ))}
-            </div>
-
-            {/* Stats — live when available, N/A otherwise */}
-            <div className="dc-detail-meta">
-              <div className="dc-stat">
-                <span className="dc-stat-label">TVL</span>
-                <span className="dc-stat-value">{detailLoading ? '…' : detailTvl != null ? fmtUsd(detailTvl) : <span className="faint">N/A</span>}</span>
-              </div>
-              <div className="dc-stat">
-                <span className="dc-stat-label">24h Volume</span>
-                <span className="dc-stat-value">{detailLoading ? '…' : detailVol != null ? fmtUsd(detailVol) : <span className="faint">N/A</span>}</span>
-              </div>
-              <div className="dc-stat">
-                <span className="dc-stat-label">7d Change</span>
-                <span className="dc-stat-value" style={{ color: (detailLive?.change_7d ?? liveFor(pickedProto)?.change_7d ?? 0) >=0 ? 'var(--up)' : 'var(--down)' }}>
-                  {detailLoading ? '…' : (detailLive?.change_7d ?? liveFor(pickedProto)?.change_7d) != null ? `${(detailLive?.change_7d ?? liveFor(pickedProto)?.change_7d).toFixed(1)}%` : <span className="faint">N/A</span>}
-                </span>
-              </div>
-              <div className="dc-stat">
-                <span className="dc-stat-label">Audits</span>
-                <span className="dc-stat-value">{pickedProto.audits != null ? `✓ ${pickedProto.audits}` : <span className="faint">N/A</span>}</span>
-              </div>
-            </div>
-            {!detailLoading && detailLive?.tvl == null && !liveFor(pickedProto)?.tvl && (
-              <p className="faint" style={{ fontSize: 11, margin: '4px 0 0' }}>TVL unavailable — verified source did not return a value. Displayed as N/A, never as zero.</p>
-            )}
-
-            {/* Audit & security */}
-            {sheetAuditNote && (
-              <div className="dc-warn">
-                ⚠ {sheetAuditNote.text}
-              </div>
-            )}
-            {Array.isArray(detailLive?.auditLinks) && detailLive.auditLinks.length > 0 && (
-              <div className="stack" style={{ gap: 6 }}>
-                <span className="faint" style={{ fontSize: 11, fontWeight:700 }}>Audit reports</span>
-                {detailLive.auditLinks.slice(0,4).map(link => (
-                  <button key={link} type="button" className="intel-link" style={{ textAlign:'start', fontSize: 11.5 }} onClick={e=>{ e.stopPropagation(); openUrl(link); }}>
-                    {String(link).replace(/^https?:\/\//,'').slice(0,48)}
-                  </button>
-                ))}
-                <p className="faint" style={{ fontSize: 10, margin: 0 }}>“Audited” does not mean safe. A review covers one version of one contract on one date.</p>
-              </div>
-            )}
-            {pickedProto.auditLinks?.length > 0 && !detailLive?.auditLinks?.length && (
-              <div className="stack" style={{ gap: 4 }}>
-                <span className="faint" style={{ fontSize: 11, fontWeight:700 }}>Audit reports</span>
-                {pickedProto.auditLinks.slice(0,2).map(link => (
-                  <button key={link} type="button" className="intel-link" style={{ fontSize: 11.5 }} onClick={e=>{ e.stopPropagation(); openUrl(link); }}>
-                    {String(link).replace(/^https?:\/\//,'').slice(0,44)}
-                  </button>
+              <div className="dcx-metrics">
+                {[
+                  { label: t('discover.ui.sheet.tvl'), value: detailTvl != null ? fmtUsd(detailTvl) : null },
+                  { label: t('discover.ui.sheet.volume'), value: detailVol != null ? fmtUsd(detailVol) : null },
+                  { label: t('discover.ui.sheet.change7d'), value: detailChange7d != null ? `${detailChange7d >= 0 ? '+' : ''}${Number(detailChange7d).toFixed(1)}%` : null, color: detailChange7d != null ? (detailChange7d >= 0 ? 'var(--up)' : 'var(--down)') : undefined },
+                  { label: t('discover.ui.sheet.audits'), value: pickedProto.audits != null ? String(pickedProto.audits) : null }
+                ].map((m) => (
+                  <div className="dcx-metric" key={m.label}>
+                    <span className="dcx-metric-label">{m.label}</span>
+                    <span className="dcx-metric-value" dir="ltr" style={m.color ? { color: m.color } : undefined}>
+                      {detailLoading ? '…' : (m.value ?? <span className="dcx-faint">{t('discover.ui.sheet.na')}</span>)}
+                    </span>
+                  </div>
                 ))}
               </div>
-            )}
+              {!detailLoading && detailTvl == null && (
+                <p className="dcx-note">{t('discover.ui.sheet.tvlUnavailable')}</p>
+              )}
 
-            {/* Docs */}
-            {pickedProto.docs && (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={()=>openUrl(pickedProto.docs)} style={{ alignSelf:'flex-start' }}>
-                <IconExternal width={13} height={13} /> Docs · {hostOf(pickedProto.docs)}
-              </button>
-            )}
+              <section className="dcx-sheet-block">
+                <h4>{t('discover.ui.sheet.networks')}</h4>
+                <div className="dcx-chain-list">
+                  {(pickedProto.chains || []).map((ch) => (
+                    <span key={ch} className="dcx-chain-chip">{chainLabel(ch, lang)}</span>
+                  ))}
+                </div>
+              </section>
 
-            {/* Warnings */}
-            {sheetValidation?.warnings?.length > 0 && sheetValidation.warnings.map((w,i)=>(
-              <div key={i} className={`dc-warn ${w.level==='error'?'error':''}`} role="alert">
-                {w.message}
+              {pickedProto.docs && (
+                <button type="button" className="dcx-docs" onClick={() => openUrl(pickedProto.docs)}>
+                  <IconExternal width={13} height={13} /> {t('discover.ui.sheet.docs')}
+                  <span dir="ltr">{hostOf(pickedProto.docs)}</span>
+                </button>
+              )}
+
+              <details className="dcx-security">
+                <summary>
+                  <IconShield width={15} height={15} aria-hidden="true" />
+                  <span className="dcx-security-title">{t('discover.ui.sheet.security')}</span>
+                  <span className="dcx-security-sub">{t('discover.ui.sheet.securitySummary')}</span>
+                  <IconChevronRight className="dcx-security-chev" width={14} height={14} aria-hidden="true" />
+                </summary>
+                <div className="dcx-security-body">
+                  {!sheetIsRegistry && <p className="dcx-warn error"><IconAlertTriangle width={13} height={13} /> {t('discover.ui.warn.unverifiedDomain')}</p>}
+                  {sheetValidation?.warnings?.map((w, i) => (
+                    <p key={`v-${i}`} className={`dcx-warn ${w.level === 'error' ? 'error' : ''}`} role="alert">
+                      <IconAlertTriangle width={13} height={13} /> {warnText(w, t)}
+                    </p>
+                  ))}
+                  {sheetChainWarns.map((w, i) => (
+                    <p key={`c-${i}`} className="dcx-warn"><IconAlertTriangle width={13} height={13} /> {warnText(w, t)}</p>
+                  ))}
+                  {sheetAuditNote && <p className="dcx-warn"><IconAlertTriangle width={13} height={13} /> {warnText({ ...sheetAuditNote, message: sheetAuditNote.text }, t)}</p>}
+                  {auditLinks.length > 0 && (
+                    <div className="dcx-audits">
+                      <span className="dcx-audits-title">{t('discover.ui.sheet.auditReports')}</span>
+                      {auditLinks.slice(0, 4).map((link) => (
+                        <button key={link} type="button" className="dcx-audit-link" dir="ltr" onClick={() => openUrl(link)}>
+                          {String(link).replace(/^https?:\/\//, '').slice(0, 52)}
+                        </button>
+                      ))}
+                      <p className="dcx-note">{t('discover.ui.sheet.auditedNotSafe')}</p>
+                    </div>
+                  )}
+                  <p className="dcx-warn neutral"><IconShield width={13} height={13} /> {t('discover.ui.sheet.browserNotSafe')}</p>
+                  {!sheetValidation?.warnings?.length && !sheetChainWarns.length && !sheetAuditNote && (
+                    <p className="dcx-note">{t('discover.ui.sheet.noWarnings')}</p>
+                  )}
+                </div>
+              </details>
+
+              <div className="dcx-source">
+                <span className="dcx-source-pill">{t('discover.ui.sheet.source')}: {pickedProto.dataSource === 'defillama' ? t('discover.ui.sheet.sourceDefillama') : t('discover.ui.sheet.sourceCurated')}</span>
+                {metaInfo?.updatedAt && <span>{t('discover.ui.sheet.updated', { time: timeAgo(metaInfo.updatedAt, lang) })}</span>}
               </div>
-            ))}
-            {sheetChainWarns.map((w,i)=>(
-              <div key={`ch-${i}`} className="dc-warn">
-                {w.message}
+            </div>
+
+            <footer className="dcx-sheet-actions">
+              <div className="dcx-sheet-buttons">
+                <button type="button" className="dcx-primary" onClick={doOpen}
+                  data-testid="discovery-open" data-legacy-testid="disc-sheet-open">
+                  <IconExternal width={15} height={15} /> {t('discover.ui.sheet.open')}
+                </button>
+                <button type="button" className="dcx-icon-btn" onClick={copyLink} aria-label={t('discover.ui.sheet.copy')} title={t('discover.ui.sheet.copy')}>
+                  <IconCopy width={15} height={15} />
+                </button>
               </div>
-            ))}
-            <div className="dc-warn">
-              Opening in FBT Browser does not mean the site or its contracts are safe. Always review what a site asks to sign, connect or approve — and never share your seed phrase.
-            </div>
-
-            {/* Data source & freshness */}
-            <div className="dc-source">
-              <span className="pill pill-neutral" style={{ fontSize: 9.5 }}>Source: {pickedProto.dataSource === 'defillama' ? 'DefiLlama' : 'Curated registry'}</span>
-              {metaInfo?.updatedAt && <span className="faint">Updated {timeAgo(metaInfo.updatedAt, i18n.language)}</span>}
-              {pickedProto.verified && <span className="pill pill-up" style={{ fontSize: 9.5 }}>Verified official domain</span>}
-            </div>
-
-            <div className="disc-sheet-actions" style={{ marginTop: 4 }}>
-              <button type="button" className="btn btn-primary disc-sheet-open" onClick={doOpen} data-testid="discovery-open" data-legacy-testid="disc-sheet-open">
-                <IconExternal width={15} height={15} />
-                Open in FBT Browser
-              </button>
-              <button type="button" className="btn btn-ghost disc-sheet-copy" onClick={copyLink}>
-                <IconCopy width={15} height={15} />
-                Copy link
-              </button>
-            </div>
-            <p className="disc-sheet-hint">
-              Opens in FBT Browser (Custom Tabs) — the real address bar and its security warnings stay visible. Wallet connections, signatures and approvals require your explicit approval. Never expose your seed phrase to any site.
-            </p>
+              <p className="dcx-sheet-hint">{t('discover.ui.sheet.hint')}</p>
+            </footer>
           </div>
         )}
       </Sheet>

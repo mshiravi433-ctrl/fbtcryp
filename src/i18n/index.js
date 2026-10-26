@@ -71,6 +71,20 @@ async function loadLocale(code) {
 }
 
 function detectLang() {
+  /*
+   * `?lang=fa` wins over the stored choice. A shareable link to a Persian
+   * screen is how support reproduces «با وجود زبان فارسی انگلیسیه» without
+   * asking someone to change a device setting first; it also lets a preview
+   * of a translated page open in the language being reviewed. It is a hint
+   * for this load only — it never overwrites the stored preference.
+   */
+  try {
+    if (typeof window !== 'undefined') {
+      const urlLang = new URLSearchParams(window.location.search).get('lang');
+      if (urlLang && SUPPORTED.includes(urlLang)) return urlLang;
+    }
+  } catch { /* no location / private mode */ }
+
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved && SUPPORTED.includes(saved)) return saved;
