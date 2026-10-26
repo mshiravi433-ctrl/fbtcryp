@@ -157,7 +157,7 @@
     "feedDownHelp": "The last price request did not reach the server. Nothing is drawn from memory, so a stale price cannot sit where a live one belongs.",
     "retry": "Try again",
     "emptyFavorites": "No coins starred yet",
-    "emptyFavoritesHelp": "Tap the star beside any coin to add it here and turn on its price alert.",
+    "emptyFavoritesHelp": "Open a coin’s page and tap its star to add it here; price alerts are managed there too.",
     "showAll": "Show all coins",
     "refresh": "Refresh prices"
   },

@@ -4288,10 +4288,17 @@ export default function run() {
       t('the chips and the sort menu share one source of truth',
         /const activeView =/.test(market) && /aria-pressed=\{activeView === f\}/.test(market));
 
-      /* «فقط از صفحهٔ هر ارز می‌شد ستاره زد» */
-      t('every row can be starred from the list itself',
-        /onStar/.test(coinRow) && /IconStar/.test(coinRow)
-        && /onStar=\{star\}/.test(market) && /toggleFavorite/.test(market));
+      t('sort choices use a compact custom glass popover',
+        /market-sort-popover/.test(market) && /role=\"menu\"/.test(market) && /role=\"menuitemradio\"/.test(market)
+        && /market-sort-option/.test(market));
+      t('market sectors use distinct inline SVG glyphs',
+        /function SectorGlyph/.test(market) && /market-sector-icon/.test(market));
+
+      /* Market rows keep the sparkline/price column spacious. Favourites
+         are still starred from the coin's own detail page. */
+      t('market rows keep star controls out of the price and chart column',
+        !/onStar|starred/.test(coinRow) && !/onStar=/.test(market)
+        && !/toggleFavorite/.test(market));
 
       /*
        * A dead feed used to render «چیزی پیدا نشد» — an empty-search message
@@ -4310,11 +4317,11 @@ export default function run() {
         && /sortKey === 'volume'/.test(market) && /sortKey === 'mcap'/.test(market));
 
       /*
-       * The bar is sticky under the header and must stay cheap on the native
-       * shell, where `backdrop-filter` re-rasterises the viewport per frame.
-       */
-      t('the command bar sticks under the header and degrades on native',
-        /\.market-cmd \{[^}]*position: sticky/.test(marketCss)
+       * The bar stays in document flow: no floating search overlay. Native
+       * shells still avoid the expensive blur. */
+      t('the command bar stays anchored in flow and degrades on native',
+        /\.market-cmd \{[^}]*position: relative/.test(marketCss)
+        && !/\.market-cmd \{[^}]*position: sticky/.test(marketCss)
         && /:root\[data-native='true'\] \.market-cmd/.test(marketCss));
 
       /* Off-screen rows are skipped, not painted — 500 rows is the data budget. */

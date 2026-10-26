@@ -308,7 +308,7 @@
     "feedDownHelp": "Son fiyat isteği sunucuya ulaşmadı. Eski bir fiyat canlı fiyatın yerine geçmesin diye hiçbir sayı hafızadan gösterilmiyor.",
     "retry": "Yeniden dene",
     "emptyFavorites": "Henüz favori coin yok",
-    "emptyFavoritesHelp": "Bir coincin yanındaki yıldıza dokun; buraya eklensin ve fiyat uyarısı açılsın.",
+    "emptyFavoritesHelp": "Eklemek için coin sayfasını açıp yıldızına dokun; fiyat uyarılarını da oradan yönetebilirsin.",
     "showAll": "Tüm coinleri göster",
     "refresh": "Fiyatları yenile"
   },

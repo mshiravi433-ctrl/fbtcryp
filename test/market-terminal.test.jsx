@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * THE MARKET TERMINAL — views, stars, the sort column, breadth, failure.
+ * THE MARKET TERMINAL — views, sort menu, breadth, failure.
  * ---------------------------------------------------------------------------
  * Four complaints, and the assertion that pins each one:
  *
@@ -8,9 +8,9 @@
  *      → a view REORDERS the loaded page. More than 25 rows survive the tap,
  *        and every coin on the page is still reachable.
  *
- *   «فقط از صفحهٔ هر ارز می‌شه ستاره زد، از خود بازار نمی‌شه»
- *      → every row has a real star button; starring one fills the Favourites
- *        view, and un-starring empties it.
+ *   «ستاره با نمودار و قیمت توی ردیف تداخل دارد»
+ *      → market rows contain no star control; favourites remain available
+ *        through each token's own detail page.
  *
  *   «مرتب‌سازی بر اساس حجم می‌کنم ولی حجم رو نمی‌بینم»
  *      → the measure the list is ordered by is printed under the coin's name.
@@ -120,6 +120,10 @@ import Market from '../src/pages/Market.jsx';
 
 const rowIds = () => [...document.querySelectorAll('.coin-row')].map((el) => el.dataset.coinId);
 const count = () => screen.getByTestId('market-count').textContent;
+const chooseSort = (key) => {
+  fireEvent.click(screen.getByTestId('market-sort'));
+  fireEvent.click(screen.getByRole('menuitemradio', { name: fa.market.sort[key] }));
+};
 
 beforeEach(() => {
   feed.data = COINS;
@@ -173,7 +177,7 @@ describe('the views reorder the page instead of shrinking it', () => {
     await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));
 
     fireEvent.click(screen.getByRole('button', { name: fa.market.filter.gainers }));
-    fireEvent.change(screen.getByTestId('market-sort'), { target: { value: 'price' } });
+    chooseSort('price');
 
     await waitFor(() => expect(screen.getByRole('button', { name: fa.market.filter.gainers }).getAttribute('aria-pressed')).toBe('false'));
     expect(screen.getByRole('button', { name: fa.market.filter.all }).getAttribute('aria-pressed')).toBe('false');
@@ -185,7 +189,7 @@ describe('the ordered measure is visible', () => {
     render(<MemoryRouter><Market /></MemoryRouter>);
     await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));
 
-    fireEvent.change(screen.getByTestId('market-sort'), { target: { value: 'mcap' } });
+    chooseSort('mcap');
 
     await waitFor(() => expect(document.querySelectorAll('.coin-row-metric').length).toBeGreaterThan(0));
     /* the label is translated, never a raw key glued to a number */
@@ -208,44 +212,21 @@ describe('the ordered measure is visible', () => {
   it('says nothing extra when the order is price, which every row already shows', async () => {
     render(<MemoryRouter><Market /></MemoryRouter>);
     await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));
-    fireEvent.change(screen.getByTestId('market-sort'), { target: { value: 'price' } });
+    chooseSort('price');
     await waitFor(() => expect(document.querySelectorAll('.coin-row-metric').length).toBe(0));
   });
 });
 
-describe('starring a coin from the list', () => {
-  it('writes to favourites, fills the favourites view, and can be undone', async () => {
+describe('row density and favourites', () => {
+  it('keeps star controls out of market rows while preserving the saved favourites view', async () => {
+    useAppStore.setState({ favorites: ['coin-3'] });
     render(<MemoryRouter><Market /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByTestId('market-star-coin-3')).toBeTruthy());
+    await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));
 
-    const star = screen.getByTestId('market-star-coin-3');
-    expect(star.getAttribute('aria-pressed')).toBe('false');
-    expect(star.getAttribute('aria-label')).toBe(tFor('fa')('market.starAdd', { symbol: 'T3' }));
-
-    fireEvent.click(star);
-    await waitFor(() => expect(screen.getByTestId('market-star-coin-3').getAttribute('aria-pressed')).toBe('true'));
-    expect(useAppStore.getState().favorites).toContain('coin-3');
-
+    expect(screen.queryByTestId('market-star-coin-3')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: fa.market.filter.favorites }));
     await waitFor(() => expect(count()).toBe('1'));
     expect(rowIds()).toEqual(['coin-3']);
-
-    /* Un-starring from inside the favourites view leaves an explained empty
-       state rather than a blank screen. */
-    fireEvent.click(screen.getByTestId('market-star-coin-3'));
-    await waitFor(() => expect(screen.getByText(fa.market.emptyFavorites)).toBeTruthy());
-    expect(screen.getByText(fa.market.emptyFavoritesHelp)).toBeTruthy();
-    expect(screen.getByRole('button', { name: fa.market.showAll })).toBeTruthy();
-  });
-
-  it('cannot open the coin page by accident when the star is tapped', async () => {
-    render(<MemoryRouter><Market /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByTestId('market-star-coin-5')).toBeTruthy());
-    fireEvent.click(screen.getByTestId('market-star-coin-5'));
-    /* The star is a sibling of the navigation button, so the navigation
-       handler was never in its ancestry — asserting the store is untouched by
-       anything else is the check that matters. */
-    await waitFor(() => expect(useAppStore.getState().favorites).toEqual(['coin-5']));
   });
 });
 
@@ -304,8 +285,8 @@ describe('accessibility of the row', () => {
     const open = document.querySelector('.coin-row-open');
     expect(open.tagName).toBe('BUTTON');
     expect(open.getAttribute('aria-label')).toBe('Bitcoin (BTC)');
-    /* the star is a separate control, so neither one swallows the other */
-    expect(document.querySelector('.coin-row-star').tagName).toBe('BUTTON');
+    /* the row keeps its price/chart area clean; bookmarking lives on detail */
+    expect(document.querySelector('.coin-row-star')).toBeNull();
   });
 
   it('labels the search field and clears it with a button', async () => {
