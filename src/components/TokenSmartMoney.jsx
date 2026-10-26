@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { fetchToken, fmtUsd, shortAddr } from '../lib/smartMoneyClient';
+import { useNavigate } from 'react-router-dom';
+import { fetchToken, fmtUsd, shortAddr, timeAgo } from '../lib/smartMoneyClient';
 import { verifiedToken } from '../lib/smartMoneyEvidence';
 import { EVM_CHAINS } from '../lib/chains';
-import { FlowBar } from '../pages/SmartMoney';
+import { openUrl } from '../lib/browser';
 import { TrendChip, FlowSpark } from './smartMoneyVisuals';
 import SegIndicator from './SegIndicator';
 import '../styles/smart-money-intelligence.css';
@@ -28,6 +29,19 @@ import '../styles/smart-money-intelligence.css';
  */
 const WINDOWS = ['1h', '4h', '24h', '7d'];
 
+/*
+ * Explorer link for a receipt hash — same rule as the intelligence tab's
+ * ReceiptFeed: a known explorer base from the chain registry AND a real
+ * 32-byte hex hash, or no link at all. A malformed hash must never become a
+ * clickable «proof» that 404s — the button simply does not render.
+ * (Receipts only exist on the seven verified EVM chains today; Solana has no
+ * verified coverage yet, so no base58 signature ever reaches this helper.)
+ */
+const txUrl = (chainId, hash) => {
+  const base = EVM_CHAINS[chainId]?.explorer;
+  return base && /^0x[a-fA-F0-9]{64}$/.test(String(hash || '')) ? `${base}/tx/${hash}` : null;
+};
+
 /**
  * Token-level Smart Money card — embedded in the token detail page AND in the
  * /smart-money/token/:chain/:address route. Read-only on-chain signals:
@@ -37,6 +51,7 @@ const WINDOWS = ['1h', '4h', '24h', '7d'];
  */
 export default function TokenSmartMoney({ chainId = 1, address, embedded = true, collapsible = true }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   /* 'solana' is a first-class chain here (base58 mints are served by the
      intel route); it must survive the prop instead of being coerced to 1. */
   const chain = chainId === 'solana' ? 'solana' : Number(chainId) || 1;
@@ -98,6 +113,44 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
     consensus: data?.verified?.consensus ? [data.verified.consensus] : [] }, window: win },
   chain, address, { window: win });
   const observed = data?.verified?.observed;
+  /*
+   * ── WHY THE VERDICT READ «INSUFFICIENT» ON CHAINS WE NEVER LOOKED AT ────
+   * The token route distinguishes three very different answers in
+   * `verified.dataStatus`:
+   *   · 'not-covered' — Solana (or any chain outside the seven verified EVM
+   *     networks): the verified layer never ran for this contract at all;
+   *   · 'unavailable' — the chain IS covered but the verified read failed
+   *     this time;
+   *   · 'observed' / 'insufficient-evidence' — the layer ran (see the
+   *     client gate in smartMoneyEvidence) and the sample is what it is.
+   * The card collapsed all three into the generic «no qualified consensus»,
+   * which on Solana reads as «we measured and found nothing» — a claim we
+   * never made. Each state now gets its own sentence, and none of them is
+   * allowed to borrow the others' wording.
+   */
+  const verifiedStatus = data?.verified?.dataStatus || null;
+  /*
+   * ── THE RECEIPTS WERE ALREADY IN THE RESPONSE ───────────────────────────
+   * The token route has always attached up to five paired-swap receipts for
+   * THIS contract (`verified.receipts`, from the observed ledger) and the
+   * card rendered none of them — so the one thing a reader could actually
+   * verify on an explorer never reached the screen. They render below, in
+   * the intelligence tab's receipt language. The re-filter here is the
+   * card's standing identity rule (see the identity line above): a row that
+   * does not name this exact chain+contract is dropped, never relabelled.
+   * Mints are case-sensitive base58, so the address compare is chain-aware
+   * (exact for Solana, case-folded for EVM) — receipts are EVM-only today,
+   * and a future Solana row must fail closed, not lowercase-match.
+   */
+  const receipts = (Array.isArray(data?.verified?.receipts) ? data.verified.receipts : [])
+    .filter((r) => r && (r.side === 'BUY' || r.side === 'SELL')
+      && Number.isFinite(Number(r.valueUsd)) && typeof r.hash === 'string' && r.hash
+      && typeof r.wallet === 'string' && r.wallet
+      && String(r.chain) === String(chain)
+      && (chain === 'solana'
+        ? String(r.token || '') === String(address)
+        : String(r.token || '').toLowerCase() === String(address).toLowerCase()))
+    .slice(0, 5);
   /* «هوشمند مانی برای صفحه زیر هر توکن در بیشتر مواقع میزنه داده ناکافی».
      Verified consensus is a HIGH bar (3+ qualified independent wallets) and
      most contracts legitimately never clear it — but the card was answering
@@ -111,7 +164,11 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
     ? `${verifiedRow.netFlowUsd > 0 ? '+' : '−'}${fmtUsd(Math.abs(verifiedRow.netFlowUsd))}`
     : flow && Number.isFinite(flow.netUsd)
       ? `${flow.netUsd >= 0 ? '+' : '−'}${fmtUsd(Math.abs(flow.netUsd))}`
-      : t('sm.engine.insufficient');
+      /* Collapsed, this one word is all the reader sees — on a chain with no
+         verified coverage it must not be the generic «insufficient». */
+      : verifiedStatus === 'not-covered'
+        ? t('sm.engine.notCoveredShort')
+        : t('sm.engine.insufficient');
 
   return (
     <motion.div
@@ -221,7 +278,14 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
                 <TrendChip row={verifiedRow} />
               </span>
             )}</>
-              : <p>{t('sm.engine.tokenInsufficient')}</p>}
+              : verifiedStatus === 'not-covered'
+                /* No verified coverage on this chain — say THAT, not the
+                   generic «insufficient» (see the dataStatus note above). */
+                ? <p data-testid="sm-token-not-covered">{t('sm.engine.tokenNotCovered', { chain: chainName })}</p>
+                : verifiedStatus === 'unavailable'
+                  /* Covered chain, failed read: «unread» is not «insufficient». */
+                  ? <p data-testid="sm-token-verified-unavailable">{t('sm.engine.tokenVerifiedUnavailable')}</p>
+                  : <p>{t('sm.engine.tokenInsufficient')}</p>}
             {/*
               Three escalating answers instead of one bare «insufficient»:
                 1. observed receipts for THIS contract (promoted to the main
@@ -239,6 +303,59 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
                 wallets: data.verified.coverage.analyzedWallets,
                 swaps: data.verified.coverage.observedSwaps ?? data.verified.coverage.swapsInWindow ?? 0
               })}</small>
+            )}
+            {/*
+              The receipts themselves — the same row language as the
+              intelligence tab's ReceiptFeed (side chip · symbol + USD ·
+              chain · age · qualified flag · wallet · explorer proof). Only
+              rendered when the server actually sent rows for this contract.
+              They are OBSERVED paired swaps; when no verified consensus
+              backs them, the honest «sample · not consensus» label stays on
+              the block so a receipt can never be misread as a vote.
+            */}
+            {receipts.length > 0 && (
+              <div className="sm-token-receipts" data-testid="sm-token-receipts">
+                <div className="sm-token-receipts-head">
+                  <span>{t('sm.engine.receiptsTitle')}</span>
+                  {!verifiedRow && <span className="smi-signal idle">{t('sm.engine.notConsensus')}</span>}
+                </div>
+                <div className="smi-feed">
+                  {receipts.map((r) => {
+                    const url = txUrl(r.chain, r.hash);
+                    return (
+                      <div className="smi-feed-row" key={`${r.hash}:${r.wallet}`} data-testid="sm-token-receipt">
+                        <span className={`smi-side ${r.side === 'BUY' ? 'up' : 'down'}`}>
+                          {r.side === 'BUY' ? t('sm.engine.buyShort') : t('sm.engine.sellShort')}
+                        </span>
+                        <div className="smi-feed-main">
+                          <div className="smi-feed-title">
+                            <strong>{r.symbol || resolvedSymbol || shortAddr(r.token)}</strong>
+                            <b className={r.side === 'BUY' ? 'sm-up' : 'sm-down'}>{fmtUsd(r.valueUsd)}</b>
+                          </div>
+                          <small>
+                            {chainName} · {timeAgo(r.at)}
+                            {r.qualified ? ` · ${t('sm.engine.qualifiedShort')}` : ''}
+                            {r.realizedRoiPct != null ? ` · ROI ${r.realizedRoiPct > 0 ? '+' : ''}${r.realizedRoiPct}%` : ''}
+                          </small>
+                        </div>
+                        <button
+                          type="button"
+                          className="smi-feed-wallet"
+                          onClick={() => navigate(`/smart-money/wallet/${r.chain}/${r.wallet}`)}
+                        >
+                          {shortAddr(r.wallet)}
+                        </button>
+                        {url && (
+                          <button type="button" className="smi-proof" title={r.hash} onClick={() => openUrl(url)}>
+                            {t('sm.engine.proof')} ↗
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="smi-footnote">{t('sm.engine.receiptsNote')}</p>
+              </div>
             )}
           </div>
           {/* Legacy router/market flow is useful context, not verified trades. */}

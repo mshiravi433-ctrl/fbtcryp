@@ -2651,7 +2651,10 @@
         "consensusBadge": "Independent wallets",
         "intentBadge": "Monitoring hand-off",
         "step": "Step {{step}} of {{total}}"
-      }
+      },
+      "tokenNotCovered": "{{chain}} पर अभी सत्यापित कवरेज नहीं है; योग्य-वॉलेट सहमति केवल समर्थित EVM नेटवर्कों पर मापी जाती है। कवरेज न होने का मतलब इस चेन पर प्रवाह न होना नहीं है।",
+      "tokenVerifiedUnavailable": "इस बार सत्यापित परत पढ़ी नहीं जा सकी। यह अपर्याप्त साक्ष्य नहीं है, और इसका मतलब सहमति न होना भी नहीं है।",
+      "notCoveredShort": "कोई सत्यापित कवरेज नहीं"
     }
   },
   "iranBuy": {

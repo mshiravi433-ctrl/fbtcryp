@@ -216,6 +216,130 @@ export async function run(container) {
   check('token-detail smart-money content is open immediately', Boolean(q('#sm-token-card-body')));
   await act(async () => { root.unmount(); });
 
+  /* ── 7. receipts the server already sent finally render ───────────────── */
+  const receipt = (over) => ({
+    chain: 56, wallet: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', token: INTEL.address,
+    symbol: 'USDT', side: 'BUY', valueUsd: 12_000, amount: 12_000, executionPriceUsd: 1,
+    hash: `0x${'a'.repeat(64)}`, at: Date.now() - 5 * 60_000, qualified: true,
+    realizedRoiPct: null, ...over
+  });
+  global.fetch = async () => {
+    const body = {
+      ...INTEL,
+      verified: {
+        dataStatus: 'observed', indexedAt: Date.now(), consensus: null,
+        coverage: { analyzedWallets: 40, observedSwaps: 137 },
+        observed: { chain: 56, token: INTEL.address, swaps: 2, wallets: 2, netFlowUsd: 4_000 },
+        receipts: [
+          receipt({}),
+          receipt({ side: 'SELL', valueUsd: 8_000, wallet: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', hash: `0x${'b'.repeat(64)}`, qualified: false }),
+          /* a receipt for ANOTHER contract must never paint on this card */
+          receipt({ token: '0x9999999999999999999999999999999999999999', hash: `0x${'c'.repeat(64)}` })
+        ]
+      }
+    };
+    return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+  };
+  container.innerHTML = '';
+  root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <TokenSmartMoney chainId={56} address={INTEL.address} embedded={false} />
+      </MemoryRouter>
+    );
+  });
+  await act(async () => { await sleep(40); });
+  const receiptBlock = q('[data-testid="sm-token-receipts"]');
+  const receiptRows = all('[data-testid="sm-token-receipt"]');
+  check('the paired-swap receipts in the response render on the card',
+    Boolean(receiptBlock) && receiptRows.length === 2, `${receiptRows.length} rows`);
+  /* Wording asserts are bilingual (fa|en) like §5's — the probe must say the
+     same thing whichever language i18n resolves in the harness. */
+  check('...with direction and USD amount per receipt (the foreign one dropped)',
+    /\$12K/.test(receiptBlock?.textContent || '') && /\$8K/.test(receiptBlock?.textContent || '')
+    && /(BUY|خرید)/.test(receiptRows[0]?.textContent || '') && /(SELL|فروش)/.test(receiptRows[1]?.textContent || ''),
+    receiptBlock?.textContent);
+  check('...each with a verifiable explorer proof and the wallet that swapped',
+    all('[data-testid="sm-token-receipts"] .smi-proof').length === 2
+    && /0xaaaa/i.test(receiptBlock?.textContent || ''), receiptBlock?.textContent);
+  check('...still honestly labelled not-consensus while no verified row backs them',
+    /(not consensus|نه اجماع)/.test(receiptBlock?.textContent || ''), receiptBlock?.textContent);
+  await act(async () => { root.unmount(); });
+
+  /* ── 8. no receipts sent: no block, and the plain insufficient stays ───── */
+  global.fetch = async () => {
+    const body = { ...INTEL, verified: { dataStatus: 'observed', indexedAt: Date.now(), consensus: null, observed: null, receipts: [] } };
+    return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+  };
+  container.innerHTML = '';
+  root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <TokenSmartMoney chainId={56} address={INTEL.address} embedded={false} />
+      </MemoryRouter>
+    );
+  });
+  await act(async () => { await sleep(40); });
+  check('an empty receipts array renders no receipts block (nothing invented)',
+    !q('[data-testid="sm-token-receipts"]'));
+  check('a covered chain with a thin sample still gets the plain insufficient wording',
+    /(No qualified wallet consensus|اجماع واجد شرایط ثبت نشده)/.test(q('[data-testid="sm-verified-token"]')?.textContent || ''),
+    q('[data-testid="sm-verified-token"]')?.textContent);
+  await act(async () => { root.unmount(); });
+
+  /* ── 9. not-covered chain: its own sentence, never «insufficient» ──────── */
+  global.fetch = async () => {
+    const body = { ...INTEL, smartMoneyFlow: null, verified: { dataStatus: 'not-covered', consensus: null } };
+    return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+  };
+  container.innerHTML = '';
+  root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <TokenSmartMoney chainId="solana" address="So11111111111111111111111111111111111111112" embedded={false} />
+      </MemoryRouter>
+    );
+  });
+  await act(async () => { await sleep(40); });
+  const notCovered = q('[data-testid="sm-token-not-covered"]');
+  check('a chain without verified coverage says exactly that',
+    Boolean(notCovered) && /(has no verified coverage|پوشش تأییدشده ندارد)/.test(notCovered.textContent || '')
+    && /Solana/.test(notCovered.textContent || ''), notCovered?.textContent);
+  check('...and never borrows the generic insufficient wording',
+    !/(No qualified wallet consensus|اجماع واجد شرایط ثبت نشده)/.test(q('[data-testid="sm-verified-token"]')?.textContent || ''));
+  check('...including in the collapsed head summary',
+    ['No verified coverage', 'بدون پوشش تأییدشده'].includes((q('.sm-token-head-summary')?.textContent || '').trim()),
+    q('.sm-token-head-summary')?.textContent);
+  check('...with no receipts block on an uncovered chain',
+    !q('[data-testid="sm-token-receipts"]'));
+  await act(async () => { root.unmount(); });
+
+  /* ── 10. covered chain, failed verified read: «unread» ≠ «insufficient» ── */
+  global.fetch = async () => {
+    const body = { ...INTEL, verified: { dataStatus: 'unavailable', consensus: null } };
+    return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+  };
+  container.innerHTML = '';
+  root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <TokenSmartMoney chainId={56} address={INTEL.address} embedded={false} />
+      </MemoryRouter>
+    );
+  });
+  await act(async () => { await sleep(40); });
+  const unavailable = q('[data-testid="sm-token-verified-unavailable"]');
+  check('a failed verified read is reported as unread, in its own words',
+    Boolean(unavailable) && /(could not be read this time|در این خواندن در دسترس نبود)/.test(unavailable.textContent || ''),
+    unavailable?.textContent);
+  check('...separately from the insufficient-evidence wording',
+    !/(No qualified wallet consensus|اجماع واجد شرایط ثبت نشده)/.test(q('[data-testid="sm-verified-token"]')?.textContent || ''));
+  await act(async () => { root.unmount(); });
+
   check('no React error was logged', errors.length === 0, errors.slice(0, 2).join(' | '));
 
   global.fetch = realFetch;

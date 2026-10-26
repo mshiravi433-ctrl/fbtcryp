@@ -2651,7 +2651,10 @@
         "consensusBadge": "Independent wallets",
         "intentBadge": "Monitoring hand-off",
         "step": "Step {{step}} of {{total}}"
-      }
+      },
+      "tokenNotCovered": "{{chain}} için henüz doğrulanmış kapsama yok; nitelikli cüzdan konsensüsü yalnızca desteklenen EVM ağlarında ölçülür. Kapsama olmaması, bu zincirde akış olmadığı anlamına gelmez.",
+      "tokenVerifiedUnavailable": "Doğrulanmış katman bu sefer okunamadı. Bu, yetersiz kanıt değildir ve konsensüs olmadığı anlamına gelmez.",
+      "notCoveredShort": "Doğrulanmış kapsama yok"
     }
   },
   "iranBuy": {

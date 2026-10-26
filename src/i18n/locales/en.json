@@ -12893,7 +12893,10 @@
       "sortBy": "Sort",
       "sortNet": "Net flow",
       "sortWallets": "Independent groups",
-      "noMatch": "No token matches this search/filter. Loosen the filter."
+      "noMatch": "No token matches this search/filter. Loosen the filter.",
+      "tokenNotCovered": "{{chain}} has no verified coverage yet; qualified-wallet consensus is only measured on the supported EVM networks. No coverage does not mean no flow on this chain.",
+      "tokenVerifiedUnavailable": "The verified layer could not be read this time. That is not insufficient evidence, and it does not mean there is no consensus.",
+      "notCoveredShort": "No verified coverage"
     },
     "title": "Smart Money",
     "windowAria": "Time window",
