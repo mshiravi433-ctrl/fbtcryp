@@ -8892,7 +8892,10 @@
         "consensusBadge": "Independent wallets",
         "intentBadge": "Monitoring hand-off",
         "step": "Step {{step}} of {{total}}"
-      }
+      },
+      "tokenNotCovered": "لا توجد تغطية موثّقة بعد على شبكة {{chain}}؛ يُقاس إجماع المحافظ المؤهلة فقط على شبكات EVM المدعومة. غياب التغطية لا يعني غياب التدفق على هذه السلسلة.",
+      "tokenVerifiedUnavailable": "تعذّرت قراءة الطبقة الموثّقة هذه المرة. هذا ليس نقصًا في الأدلة، ولا يعني غياب الإجماع.",
+      "notCoveredShort": "لا تغطية موثّقة"
     },
     "tabs": {},
     "tokens": "رموز",

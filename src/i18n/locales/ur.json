@@ -2647,7 +2647,10 @@
         "consensusBadge": "Independent wallets",
         "intentBadge": "Monitoring hand-off",
         "step": "Step {{step}} of {{total}}"
-      }
+      },
+      "tokenNotCovered": "{{chain}} پر ابھی تصدیق شدہ کوریج موجود نہیں؛ اہل والٹس کا اجماع صرف تعاون یافتہ EVM نیٹ ورکس پر ناپا جاتا ہے۔ کوریج نہ ہونا اس چین پر بہاؤ نہ ہونے کے برابر نہیں۔",
+      "tokenVerifiedUnavailable": "اس بار تصدیق شدہ تہہ نہیں پڑھی جا سکی۔ یہ ناکافی شواہد نہیں ہے، اور اس کا مطلب اجماع کا نہ ہونا بھی نہیں۔",
+      "notCoveredShort": "کوئی تصدیق شدہ کوریج نہیں"
     }
   },
   "iranBuy": {

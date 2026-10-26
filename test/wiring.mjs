@@ -375,6 +375,46 @@ export default function run() {
       /const windowScoped = flow\?\.window === win/.test(smCard)
       && /!windowScoped && \(/.test(smCard)
       && /data-testid="sm-token-window-note"/.test(smCard));
+
+    /* ── 1b · token-page wiring: no page import, lazy tab, receipts, coverage
+       copy (2026-10-26). Each of these was a real defect: the card imported
+       a PAGE module for an unused FlowBar, CoinDetail statically fetched the
+       whole smart-money card for a tab most visitors never open, the server
+       already sent per-token receipts nobody rendered, and «insufficient»
+       was printed on chains the verified layer never covered. */
+    const coinDetailSrc = read('src/pages/CoinDetail.jsx');
+    const evidenceSrc = read('src/lib/smartMoneyEvidence.js');
+    t('Smart Money: the token card imports no page module (dead FlowBar import removed)',
+      !/from '\.\.\/pages\/SmartMoney'/.test(smCard) && !/\bFlowBar\b/.test(smCard));
+    t('Smart Money: CoinDetail loads the token card lazily like Compare, with a card-height fallback',
+      /lazyRetry\(\(\) => import\('\.\.\/components\/TokenSmartMoney'\)\)/.test(coinDetailSrc)
+      && !/^import TokenSmartMoney from/m.test(coinDetailSrc)
+      && /data-testid="sm-token-lazy-fallback"/.test(coinDetailSrc));
+    t('Smart Money: the token card renders the server receipts with the not-consensus label',
+      /data-testid="sm-token-receipts"/.test(smCard)
+      && /verified\?\.receipts/.test(smCard)
+      && /sm\.engine\.notConsensus/.test(smCard)
+      && /sm\.engine\.receiptsTitle/.test(smCard));
+    t('Smart Money: not-covered and unavailable are worded separately from insufficient',
+      /data-testid="sm-token-not-covered"/.test(smCard)
+      && /data-testid="sm-token-verified-unavailable"/.test(smCard)
+      && /sm\.engine\.tokenNotCovered/.test(smCard)
+      && /sm\.engine\.tokenVerifiedUnavailable/.test(smCard));
+    {
+      const coverageKeys = ['sm.engine.tokenNotCovered', 'sm.engine.tokenVerifiedUnavailable', 'sm.engine.notCoveredShort'];
+      const gaps = [];
+      for (const file of readdirSync('src/i18n/locales').filter((name) => name.endsWith('.json'))) {
+        const locale = JSON.parse(read(join('src/i18n/locales', file)));
+        for (const key of coverageKeys) if (!hasKey(locale, key)) gaps.push(`${file}:${key}`);
+      }
+      t(`Smart Money: the coverage keys exist in all 12 locales${gaps.length ? ` — missing: ${gaps.slice(0, 4).join(', ')}` : ''}`,
+        gaps.length === 0);
+    }
+    t('Smart Money: the evidence gate compares Solana as strings and EVM as numbers',
+      /isSolanaChain/.test(evidenceSrc) && /String\(r\.token\) === String\(address\)/.test(evidenceSrc)
+      && /Number\(r\.chain\) === Number\(chain\)/.test(evidenceSrc));
+    t('Smart Money: the client gate never reads the Solana promotion switch (server-owned, still off)',
+      !/SM_SOLANA_VERIFIED_PROMOTION/.test(evidenceSrc) && !/SM_SOLANA_VERIFIED_PROMOTION/.test(smCard));
     {
       const ids = [...smPage.matchAll(/const WINDOWS = \[([^\]]*)\]/g)][0][1]
         .match(/'[^']+'/g).map((x) => x.replace(/'/g, ''));

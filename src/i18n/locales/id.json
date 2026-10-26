@@ -2651,7 +2651,10 @@
         "consensusBadge": "Independent wallets",
         "intentBadge": "Monitoring hand-off",
         "step": "Step {{step}} of {{total}}"
-      }
+      },
+      "tokenNotCovered": "{{chain}} belum memiliki cakupan terverifikasi; konsensus dompet yang memenuhi syarat hanya diukur di jaringan EVM yang didukung. Tidak ada cakupan bukan berarti tidak ada arus di chain ini.",
+      "tokenVerifiedUnavailable": "Lapisan terverifikasi tidak dapat dibaca kali ini. Itu bukan bukti yang tidak mencukupi, dan bukan berarti tidak ada konsensus.",
+      "notCoveredShort": "Tidak ada cakupan terverifikasi"
     }
   },
   "iranBuy": {
