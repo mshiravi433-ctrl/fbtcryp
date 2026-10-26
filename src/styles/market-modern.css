@@ -3323,3 +3323,985 @@
   .aparat-course-thumb:hover .aparat-thumb-play,
   .aparat-step-item:hover { transform: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   12 · THE MARKET TERMINAL — command bar, breadth, row v2, footer
+   ══════════════════════════════════════════════════════════════════════════
+   WHY THIS SECTION EXISTS
+   ---------------------------------------------------------------------------
+   Everything above this line styles the market's HEAD: the global snapshot,
+   the BTC hero, the stories rail. The list itself — the part a trader actually
+   uses — was four unstyled rows of controls (a bare `<input>`, two rows of
+   `.tag`, a plain button) followed by rows that could not be sorted, starred
+   or read with a keyboard.
+
+   This section gives the list the same glass language as the cards above it,
+   and does it with the same three disciplines the file opened with:
+
+     • ONE ACCENT PER SURFACE. The command bar is neutral glass; the accent
+       (cyan → emerald) is spent ONLY on the selected view, so the eye lands on
+       "which list am I reading" first. Breadth owns emerald/rose because those
+       two colours mean up and down and nothing else on this screen.
+     • MOTION BUDGET. No new keyframes. The only transitions are `width` on the
+       breadth bar and progress fill, which run once per poll, and colour on
+       the chips; all of it is disabled under reduced motion below.
+     • LIGHT THEME IS A REDESIGN. Every surface here has an explicit light
+       counterpart with its own contrast budget, because a white chip on white
+       glass is invisible.
+
+   ═══ 12.1 · HEADER ═══════════════════════════════════════════════════════ */
+
+.market-terminal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  min-width: 0;
+}
+
+.market-terminal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.market-terminal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -0.015em;
+  color: var(--text-1);
+}
+
+.market-terminal-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.market-count {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(56, 225, 255, 0.11);
+  border: 1px solid rgba(56, 225, 255, 0.26);
+  color: var(--mk-cyan);
+  font-size: 10px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+}
+
+.market-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+/*
+ * FRESHNESS. Green dot while the feed is inside its own cadence, amber with no
+ * animation once it is not — the colour is the difference between "this is
+ * live" and "this is what we last heard", and only one of those is safe to
+ * trade on.
+ */
+.market-fresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.market-fresh i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mk-emerald);
+  box-shadow: 0 0 8px rgba(47, 230, 168, 0.8);
+  animation: mk-pulse 2.4s ease-in-out infinite;
+}
+
+.market-fresh[data-stale='true'] { color: var(--mk-amber); }
+.market-fresh[data-stale='true'] i {
+  background: var(--mk-amber);
+  box-shadow: none;
+  animation: none;
+}
+
+.market-compare {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--mk-line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-2);
+  font: 800 10.5px/1 var(--font-display);
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.market-compare:hover {
+  color: var(--text-1);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: var(--line-strong);
+}
+
+.market-compare:active { transform: scale(0.96); }
+.market-compare svg { flex-shrink: 0; }
+
+.market-refresh {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--mk-line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+
+.market-refresh:hover:not(:disabled) { color: var(--text-1); background: rgba(255, 255, 255, 0.1); }
+.market-refresh:disabled { opacity: 0.55; cursor: default; }
+.market-refresh:focus-visible { outline: 2px solid var(--mk-cyan); outline-offset: 2px; }
+.market-refresh[data-busy='true'] svg { animation: mk-spin-soft 1.1s linear infinite; }
+
+@keyframes mk-spin-soft { to { transform: rotate(360deg); } }
+
+/* ═══ 12.2 · THE COMMAND BAR (sticky) ═════════════════════════════════════
+   `top` is the header's height (7px + 30px + 7px padding on a phone, 11 + 30 +
+   10 from 431px up) plus the status-bar inset. Landing 2px UNDER the header
+   rather than 8px below it is deliberate: the header's gradient is 92% opaque
+   at its bottom edge, so an overlap is invisible, while a gap would show rows
+   scrolling through in the seam between two bars. */
+
+.market-cmd {
+  position: sticky;
+  top: calc(env(safe-area-inset-top, 0px) + 43px);
+  z-index: 22;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px;
+  border-radius: 19px;
+  border: 1px solid var(--mk-line);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.018) 58%, rgba(6, 10, 20, 0.72)),
+    rgba(9, 14, 28, 0.93);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    0 18px 40px -28px rgba(2, 6, 18, 0.95);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+}
+
+.market-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  background: rgba(4, 8, 18, 0.55);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.market-search:focus-within {
+  border-color: rgba(56, 225, 255, 0.45);
+  box-shadow: 0 0 0 3px rgba(56, 225, 255, 0.12);
+}
+
+.market-search-icon { color: var(--text-3); flex-shrink: 0; }
+
+.market-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 13px;
+}
+
+.market-search-input:focus { border: 0; box-shadow: none; }
+
+/* The browser's own clear button is a second, differently-styled way to empty
+   the field — we draw our own, in the app's icon language. */
+.market-search-input::-webkit-search-cancel-button,
+.market-search-input::-webkit-search-decoration { display: none; }
+.market-search-input::-ms-clear { display: none; }
+
+.market-search-clear {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--mk-line);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.market-search-clear:hover { color: var(--text-1); background: rgba(255, 255, 255, 0.12); }
+.market-search-clear:active { transform: scale(0.9); }
+
+.market-cmd-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+/*
+ * THE VIEWS SCROLL, THE SORT DOES NOT.
+ * Five chips do not fit beside a sort control on a 360px phone, and wrapping
+ * them would make the sticky bar two rows taller than the content it guards.
+ * So the chips are a horizontal rail that keeps its own scroll (no scrollbar,
+ * `scroll-snap` off — these are not pages) while the sort stays pinned at the
+ * end, always one tap away.
+ */
+.market-views {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-bottom: 1px;
+}
+
+.market-views::-webkit-scrollbar { display: none; }
+
+.market-view {
+  flex: 0 0 auto;
+  min-height: 32px;
+  min-width: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-2);
+  font: 800 10.5px/1 var(--font-display);
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+  white-space: nowrap;
+}
+
+.market-view:hover { color: var(--text-1); border-color: var(--line-strong); }
+
+.market-view[data-active='true'] {
+  color: #04131a;
+  background: linear-gradient(135deg, var(--mk-cyan), var(--mk-emerald));
+  border-color: transparent;
+  box-shadow: 0 7px 18px -10px rgba(56, 225, 255, 0.95);
+}
+
+.market-sort-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.market-sort-select {
+  height: 32px;
+  max-width: 96px;
+  padding: 0 6px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-2);
+  font: 800 10px/1 var(--font-display);
+  appearance: none;
+  -webkit-appearance: none;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.market-sort-select:focus-visible,
+.market-dir:focus-visible,
+.market-view:focus-visible,
+.market-sector:focus-visible,
+.market-empty-action:focus-visible,
+.market-show-more:focus-visible,
+.market-compare:focus-visible {
+  outline: 2px solid var(--mk-cyan);
+  outline-offset: 2px;
+}
+
+.market-dir {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+
+.market-dir[data-dir='asc'] { color: var(--mk-cyan); }
+.market-dir[data-dir='desc'] { color: var(--mk-emerald); }
+.market-dir:hover { background: rgba(255, 255, 255, 0.1); }
+.market-dir:active { transform: scale(0.92); }
+
+/* ═══ 12.3 · BREADTH ═════════════════════════════════════════════════════
+   A COUNT, NOT A SCORE. The bar is the share of the reporting coins that are
+   up / flat / down, and the note under it names how many coins that is, so the
+   figure can be checked against the list rather than trusted. */
+
+.market-breadth {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 11px 12px 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012));
+}
+
+.market-breadth-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.market-breadth-title {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+}
+
+.market-breadth-avg {
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.market-breadth-avg[data-tone='up'] { color: var(--up); }
+.market-breadth-avg[data-tone='down'] { color: var(--down); }
+
+.market-breadth-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.market-breadth-seg {
+  height: 100%;
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.market-breadth-seg.is-up { background: linear-gradient(90deg, rgba(47, 230, 168, 0.5), var(--mk-emerald)); }
+.market-breadth-seg.is-down { background: linear-gradient(90deg, var(--mk-rose), rgba(255, 122, 184, 0.5)); }
+.market-breadth-seg.is-flat { background: rgba(255, 255, 255, 0.22); }
+
+.market-breadth-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.market-breadth-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.market-breadth-item i {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--tone, var(--text-3));
+}
+
+.market-breadth-item[data-tone='up'] { --tone: var(--mk-emerald); }
+.market-breadth-item[data-tone='down'] { --tone: var(--mk-rose); }
+.market-breadth-item[data-tone='flat'] { --tone: rgba(255, 255, 255, 0.45); }
+.market-breadth-item[data-tone='unknown'] { --tone: var(--text-3); color: var(--text-3); }
+
+.market-breadth-note {
+  margin: 0;
+  font-size: 9.5px;
+  line-height: 1.7;
+  color: var(--text-3);
+}
+
+.market-breadth[data-empty='true'] .market-breadth-bar { opacity: 0.4; }
+
+/* ═══ 12.4 · SECTORS ═════════════════════════════════════════════════════
+   A different row, with a label, because tapping one is a different OPERATION
+   (a request for another set of coins) and not another sort of this one. Each
+   chip carries its sector's own hue, so six pills are not six identical pills. */
+
+.market-sectors {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.market-sectors-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.market-sectors-rail {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-bottom: 2px;
+}
+
+.market-sectors-rail::-webkit-scrollbar { display: none; }
+
+.market-sector {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 32px;
+  min-width: 0;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  background: rgba(255, 255, 255, 0.028);
+  color: var(--text-2);
+  font: 700 10.5px/1 var(--font-display);
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+  white-space: nowrap;
+}
+
+.market-sector i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tone, var(--text-3));
+  box-shadow: 0 0 8px -1px var(--tone, transparent);
+  flex-shrink: 0;
+}
+
+.market-sector[data-sector='gold'] { --tone: var(--mk-gold); }
+.market-sector[data-sector='meme'] { --tone: var(--mk-rose); }
+.market-sector[data-sector='rwa'] { --tone: var(--mk-cyan); }
+.market-sector[data-sector='ai'] { --tone: var(--mk-violet); }
+.market-sector[data-sector='gaming'] { --tone: var(--mk-emerald); }
+.market-sector[data-sector='solana'] { --tone: #a97bff; }
+
+.market-sector:hover { color: var(--text-1); border-color: var(--line-strong); }
+
+.market-sector[data-active='true'] {
+  color: var(--text-1);
+  border-color: color-mix(in srgb, var(--tone) 46%, transparent);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+}
+
+/* ═══ 12.5 · ROWS ════════════════════════════════════════════════════════
+   The row's own internals live in components/CoinRow.jsx; this is only what
+   the MARKET does to them — the star's spacing, the metric under the name, the
+   change pill, and the render budget for a long list. */
+
+.market-coin-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.market-coin-row > .coin-row {
+  flex: 1;
+  min-width: 0;
+  padding-inline-end: 8px;
+}
+
+.market-coin-row > .market-swap-btn { align-self: center; }
+
+/*
+ * OFF-SCREEN ROWS ARE NOT LAID OUT.
+ * At 500 loaded rows — the page's own data budget — every poll re-rendered
+ * every row's sparkline path, gradient and price. `content-visibility: auto`
+ * lets the browser skip layout and paint for rows outside the viewport while
+ * keeping them in the DOM (so find-in-page, tests and screen readers still
+ * see them). `contain-intrinsic-size` reserves their height so the scrollbar
+ * does not jump as they come into view.
+ */
+.market-coin-grid > .market-coin-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 58px;
+}
+
+.coin-row-open {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 1;
+  min-width: 0;
+  /* The row is already a 56px tap target; the global 44px button floor would
+     only inflate every row by 10px. */
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.coin-row-open:focus-visible {
+  outline: 2px solid var(--mk-cyan);
+  outline-offset: 4px;
+  border-radius: 10px;
+}
+
+.coin-row-rank {
+  flex-shrink: 0;
+  width: 16px;
+  font-size: 10px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.coin-row-spark {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.coin-price {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * THE CHANGE IS A PILL, NOT A NUMBER IN THE CORNER.
+ * Green/red text at 11px on a dark row is legible one row at a time and
+ * invisible when the reader is scanning sixty of them; a tinted pill gives the
+ * direction a shape as well as a hue, and the triangle inside it means the
+ * answer survives a colour-blind reader and a monochrome screenshot.
+ */
+.coin-change-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  margin-top: 3px;
+  padding: 1.5px 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.coin-change-pill > span { font-size: 7.5px; line-height: 1; opacity: 0.9; }
+
+.coin-change-pill.is-up {
+  color: var(--up);
+  background: color-mix(in srgb, var(--up) 13%, transparent);
+}
+
+.coin-change-pill.is-down {
+  color: var(--down);
+  background: color-mix(in srgb, var(--down) 13%, transparent);
+}
+
+.market-coin-row .coin-name {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  min-width: 0;
+}
+
+.market-coin-row .coin-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coin-row-metric {
+  flex-shrink: 0;
+  margin-inline-start: 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.coin-row-metric i { font-style: normal; opacity: 0.75; }
+
+.coin-row-star {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.coin-row-star svg { width: 15px; height: 15px; }
+.coin-row-star:hover { color: var(--mk-gold); background: rgba(247, 169, 60, 0.1); }
+.coin-row-star:active { transform: scale(0.88); }
+.coin-row-star:focus-visible { outline: 2px solid var(--mk-cyan); outline-offset: 2px; }
+
+.coin-row-star.is-on {
+  color: var(--mk-gold);
+  background: rgba(247, 169, 60, 0.14);
+  border-color: rgba(247, 169, 60, 0.3);
+}
+
+.coin-row-star.is-on svg { fill: currentColor; }
+
+/* ═══ 12.6 · FOOTER, EMPTY AND FAILED STATES ══════════════════════════════ */
+
+.market-more {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.market-more-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.market-more-track {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.market-more-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--mk-cyan), var(--mk-emerald));
+  transition: width 0.4s ease;
+}
+
+.market-show-more {
+  min-height: 42px;
+  padding: 10px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(56, 225, 255, 0.24);
+  background: linear-gradient(135deg, rgba(56, 225, 255, 0.14), rgba(139, 123, 255, 0.14));
+  color: var(--text-1);
+  font: 800 11.5px/1.2 var(--font-display);
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.market-show-more:hover { border-color: rgba(56, 225, 255, 0.42); }
+.market-show-more:active { transform: scale(0.985); }
+.market-show-more:disabled { opacity: 0.6; cursor: default; }
+
+.market-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 26px 18px;
+  text-align: center;
+  border-radius: 20px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.008));
+}
+
+.market-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  border: 1px solid rgba(56, 225, 255, 0.24);
+  background: rgba(56, 225, 255, 0.1);
+  color: var(--mk-cyan);
+}
+
+.market-empty[data-kind='error'] .market-empty-icon,
+.market-empty[data-kind='favorites'] .market-empty-icon {
+  border-color: rgba(247, 169, 60, 0.3);
+  background: rgba(247, 169, 60, 0.1);
+  color: var(--mk-gold);
+}
+
+.market-empty-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+.market-empty-help {
+  margin: 0;
+  max-width: 40ch;
+  font-size: 11px;
+  line-height: 1.9;
+  color: var(--text-2);
+}
+
+.market-empty-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 36px;
+  margin-top: 2px;
+  padding: 8px 14px;
+  border-radius: 11px;
+  border: 1px solid rgba(56, 225, 255, 0.3);
+  background: rgba(56, 225, 255, 0.12);
+  color: var(--text-1);
+  font: 800 11px/1.2 var(--font-display);
+  cursor: pointer;
+}
+
+.market-empty-action:hover { background: rgba(56, 225, 255, 0.18); }
+.market-empty-action:active { transform: scale(0.97); }
+
+.market-skel-row { height: 58px; border-radius: 14px; }
+
+.market-more-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.market-trending .section-label svg { color: var(--mk-amber); flex-shrink: 0; }
+.market-trending-chip { display: inline-flex; align-items: center; }
+
+/* ═══ 12.7 · LIGHT THEME ═════════════════════════════════════════════════ */
+
+:root[data-theme='light'] .market-terminal-title { color: #0d1a30; }
+:root[data-theme='light'] .market-count {
+  color: #00566e;
+  background: rgba(0, 128, 160, 0.1);
+  border-color: rgba(0, 128, 160, 0.28);
+}
+:root[data-theme='light'] .market-fresh { color: #64748b; }
+:root[data-theme='light'] .market-fresh[data-stale='true'] { color: #a15c00; }
+:root[data-theme='light'] .market-compare {
+  color: #3d4f70;
+  background: rgba(16, 24, 48, 0.045);
+  border-color: rgba(16, 24, 48, 0.12);
+}
+:root[data-theme='light'] .market-compare:hover { color: #0d1a30; background: rgba(16, 24, 48, 0.08); }
+:root[data-theme='light'] .market-refresh {
+  color: #3d4f70;
+  background: rgba(16, 24, 48, 0.045);
+  border-color: rgba(16, 24, 48, 0.12);
+}
+
+:root[data-theme='light'] .market-cmd {
+  border-color: rgba(16, 24, 48, 0.12);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.9)),
+    #ffffff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 18px 40px -32px rgba(16, 24, 48, 0.6);
+}
+
+:root[data-theme='light'] .market-search {
+  background: rgba(16, 24, 48, 0.045);
+  border-color: rgba(16, 24, 48, 0.1);
+}
+:root[data-theme='light'] .market-search-input { color: #0d1a30; }
+:root[data-theme='light'] .market-search-icon { color: #64748b; }
+:root[data-theme='light'] .market-search-clear {
+  color: #46587a;
+  background: #fff;
+  border-color: rgba(16, 24, 48, 0.14);
+}
+
+:root[data-theme='light'] .market-view {
+  color: #46587a;
+  background: rgba(16, 24, 48, 0.04);
+  border-color: rgba(16, 24, 48, 0.1);
+}
+:root[data-theme='light'] .market-view[data-active='true'] {
+  color: #04231b;
+  box-shadow: 0 7px 18px -12px rgba(0, 128, 160, 0.9);
+}
+:root[data-theme='light'] .market-sort-select,
+:root[data-theme='light'] .market-dir {
+  color: #3d4f70;
+  background: #fff;
+  border-color: rgba(16, 24, 48, 0.14);
+}
+:root[data-theme='light'] .market-dir[data-dir='asc'] { color: #00607c; }
+:root[data-theme='light'] .market-dir[data-dir='desc'] { color: #046b45; }
+
+:root[data-theme='light'] .market-breadth {
+  border-color: rgba(16, 24, 48, 0.09);
+  background: rgba(16, 24, 48, 0.035);
+}
+:root[data-theme='light'] .market-breadth-title { color: #46587a; }
+:root[data-theme='light'] .market-breadth-bar { background: rgba(16, 24, 48, 0.1); }
+:root[data-theme='light'] .market-breadth-seg.is-flat { background: rgba(16, 24, 48, 0.28); }
+:root[data-theme='light'] .market-breadth-item { color: #3d4f70; }
+:root[data-theme='light'] .market-breadth-item[data-tone='up'] { color: #046b45; }
+:root[data-theme='light'] .market-breadth-item[data-tone='down'] { color: #b3123a; }
+:root[data-theme='light'] .market-breadth-item[data-tone='flat'] { --tone: rgba(16, 24, 48, 0.4); }
+:root[data-theme='light'] .market-breadth-note { color: #64748b; }
+
+:root[data-theme='light'] .market-sectors-label { color: #64748b; }
+:root[data-theme='light'] .market-sector {
+  color: #46587a;
+  background: rgba(16, 24, 48, 0.04);
+  border-color: rgba(16, 24, 48, 0.1);
+}
+:root[data-theme='light'] .market-sector[data-active='true'] { color: #0d1a30; }
+
+:root[data-theme='light'] .coin-change-pill.is-up { color: #046b45; background: rgba(0, 178, 106, 0.13); }
+:root[data-theme='light'] .coin-change-pill.is-down { color: #b3123a; background: rgba(255, 77, 109, 0.13); }
+:root[data-theme='light'] .coin-row-rank,
+:root[data-theme='light'] .coin-row-metric { color: #64748b; }
+:root[data-theme='light'] .coin-row-star { color: #94a3b8; }
+:root[data-theme='light'] .coin-row-star.is-on { color: #b87700; background: rgba(247, 169, 60, 0.16); }
+
+:root[data-theme='light'] .market-more-meta { color: #64748b; }
+:root[data-theme='light'] .market-more-track { background: rgba(16, 24, 48, 0.12); }
+:root[data-theme='light'] .market-show-more {
+  color: #0d1a30;
+  border-color: rgba(0, 128, 160, 0.26);
+  background: linear-gradient(135deg, rgba(56, 200, 225, 0.18), rgba(139, 123, 255, 0.14));
+}
+:root[data-theme='light'] .market-empty {
+  border-color: rgba(16, 24, 48, 0.16);
+  background: rgba(16, 24, 48, 0.03);
+}
+:root[data-theme='light'] .market-empty-title { color: #0d1a30; }
+:root[data-theme='light'] .market-empty-help { color: #46587a; }
+:root[data-theme='light'] .market-empty-action { color: #00566e; }
+
+/* ═══ 12.8 · EXPENSIVE PATH + MOTION GUARDS ══════════════════════════════ */
+
+:root[data-native='true'] .market-cmd,
+:root[data-lite='true'] .market-cmd {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(9, 14, 28, 0.97);
+}
+
+:root[data-theme='light'][data-native='true'] .market-cmd,
+:root[data-theme='light'][data-lite='true'] .market-cmd {
+  background: #ffffff;
+}
+
+:root[data-native='true'] .market-fresh i,
+:root[data-native='true'] .market-refresh svg { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .market-breadth-seg,
+  .market-more-fill,
+  .market-compare,
+  .market-view,
+  .market-dir,
+  .market-sector,
+  .coin-row-star {
+    transition: none !important;
+  }
+  .market-fresh i,
+  .market-refresh svg { animation: none !important; }
+}
+
+/* ═══ 12.9 · SMALL SCREENS ═══════════════════════════════════════════════
+   The sticky bar's offset follows the header's own breakpoint: from 431px up
+   the bar is 51px tall (11 + 30 + 10), below it 44px (7 + 30 + 7). */
+
+@media (max-width: 430px) {
+  .market-cmd { top: calc(env(safe-area-inset-top, 0px) + 43px); }
+  .market-sort-select { max-width: 84px; }
+  .market-terminal-title { font-size: 15px; }
+  .market-head-actions { gap: 5px; }
+  .market-fresh { font-size: 9px; }
+}
+
+@media (min-width: 431px) {
+  .market-cmd { top: calc(env(safe-area-inset-top, 0px) + 50px); }
+}
+
+/*
+ * At 380px and below the row runs out of room: logo + name + sparkline + price
+ * + change + star + swap button is more than 320px will hold, and the two
+ * things that survive are the ones that carry information the user came for —
+ * the price and its change. The 58px sparkline is the decoration here, so it
+ * is the one that goes.
+ */
+@media (max-width: 380px) {
+  .market-coin-row .coin-row-spark { display: none; }
+  .market-coin-row > .coin-row { gap: 7px; padding-inline: 8px; }
+  .market-coin-row > .market-swap-btn { padding-inline: 10px; }
+  .market-head-actions .market-fresh { display: none; }
+}
+
+@media (min-width: 900px) {
+  .market-terminal { gap: 13px; }
+  .market-cmd { border-radius: 20px; }
+  .market-views { gap: 6px; }
+}

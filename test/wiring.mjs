@@ -4260,6 +4260,81 @@ export default function run() {
       t('a failed sector fetch returns empty, not the offline list',
         /fallback: \(\) => \[\]/.test(body) && !/offlineMarkets/.test(body));
     }
+
+    /* ---- the market terminal: views, stars, sort, breadth, failure ---- */
+    {
+      const list = read('src/lib/marketList.js');
+      /* Comments are prose: this file quotes the old `slice(0, 25)` and the
+         phrase "fear and greed" while explaining why NEITHER exists. The
+         checks below are about code, so comments are stripped first. */
+      const stripComments = (src) =>
+        src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+      const listCode = stripComments(list);
+      const marketCode = stripComments(market);
+      const coinRow = read('src/components/CoinRow.jsx');
+      const marketCss = read('src/styles/market-modern.css');
+
+      /*
+       * «صعودی‌ها» was `sort(...).slice(0, 25)`: a view implemented as a
+       * budget, which deleted 475 of 500 rows. The comparator must never
+       * shorten a list, and the page must not call one that does.
+       */
+      t('a market view reorders the page instead of truncating it',
+        /export function sortMarketRows/.test(listCode)
+        && !/slice\(0,\s*25\)/.test(listCode)
+        && !/slice\(0,\s*25\)/.test(marketCode)
+        && /sortMarketRows\(/.test(marketCode));
+
+      t('the chips and the sort menu share one source of truth',
+        /const activeView =/.test(market) && /aria-pressed=\{activeView === f\}/.test(market));
+
+      /* «فقط از صفحهٔ هر ارز می‌شد ستاره زد» */
+      t('every row can be starred from the list itself',
+        /onStar/.test(coinRow) && /IconStar/.test(coinRow)
+        && /onStar=\{star\}/.test(market) && /toggleFavorite/.test(market));
+
+      /*
+       * A dead feed used to render «چیزی پیدا نشد» — an empty-search message
+       * over a network failure — with no way to retry.
+       */
+      t('a failed feed has its own card and a working retry',
+        /market-feed-error/.test(market) && /market\.feedDown/.test(market)
+        && /refreshMarkets\?\.\(\)/.test(market));
+
+      t('breadth is counted, captioned and never called sentiment',
+        /marketBreadth\(/.test(marketCode) && /market\.breadthNote/.test(marketCode)
+        && !/fear|greed|sentimentScore/i.test(listCode));
+
+      t('the figure under a coin follows the sort that produced it',
+        /const rowMetric = useCallback/.test(market)
+        && /sortKey === 'volume'/.test(market) && /sortKey === 'mcap'/.test(market));
+
+      /*
+       * The bar is sticky under the header and must stay cheap on the native
+       * shell, where `backdrop-filter` re-rasterises the viewport per frame.
+       */
+      t('the command bar sticks under the header and degrades on native',
+        /\.market-cmd \{[^}]*position: sticky/.test(marketCss)
+        && /:root\[data-native='true'\] \.market-cmd/.test(marketCss));
+
+      /* Off-screen rows are skipped, not painted — 500 rows is the data budget. */
+      t('off-screen rows are excluded from layout and paint',
+        /content-visibility: auto/.test(marketCss));
+
+      const localeFiles = readdirSync('src/i18n/locales').filter((name) => name.endsWith('.json'));
+      const gaps = [];
+      for (const file of localeFiles) {
+        const locale = JSON.parse(read(join('src/i18n/locales', file)));
+        for (const key of ['market.sort.rank', 'market.sort.mcap', 'market.sort.change',
+          'market.sort.volume', 'market.sort.price', 'market.breadthTitle', 'market.breadthNote',
+          'market.feedDown', 'market.retry', 'market.starAdd', 'market.emptyFavorites',
+          'market.showing', 'market.nextPage', 'market.refresh']) {
+          if (!hasKey(locale, key)) gaps.push(`${file}:${key}`);
+        }
+      }
+      t(`the market terminal's copy exists in all 12 locales${gaps.length ? ` — missing: ${gaps.slice(0, 4).join(', ')}` : ''}`,
+        gaps.length === 0 && localeFiles.length === 12);
+    }
   }
 
   /* ---- 45. the cross-chain bridge is wired and its key stays server-side - */

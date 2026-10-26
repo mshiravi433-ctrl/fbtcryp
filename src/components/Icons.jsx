@@ -227,6 +227,21 @@ export const IconSparkle = (p) => (
   </svg>
 );
 
+/*
+ * A five-pointed star, in the same line-art language as the rest of the set.
+ *
+ * The outline is what unstarred looks like; `fill` is supplied by CSS when the
+ * coin is already in the list (`.coin-row-star.is-on svg { fill: currentColor }`).
+ * That way one icon serves both states and the toggle costs no extra markup —
+ * and because the star is drawn rather than typed, it keeps its shape on every
+ * platform instead of turning into a colour emoji on Android.
+ */
+export const IconStar = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 3.6l2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8L3.5 9.8l5.9-.9L12 3.6Z" />
+  </svg>
+);
+
 export const IconClock = (p) => (
   <svg {...base} {...p}>
     <circle cx="12" cy="12" r="9" />
