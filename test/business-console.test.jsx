@@ -11,11 +11,14 @@
  *     («با وجود زبان فارسی بعضی جملاتش انگلیسیه») — a stubbed t() that
  *     echoes its argument cannot catch that, so no stub is used here;
  *   · a panel hint living INSIDE `role="tablist"`, so assistive tech counts
- *     a stray <span> as a tab and announces "3 of 4" on a two-tab rail;
+ *     a stray span as a tab and announces "3 of 4" on a two-tab rail;
  *   · the request form accepting an empty body, so a partner could send a
  *     mail with no company, no name and no message in it;
- *   · the tracking ring and its "2 of 3 steps" copy being two independent
- *     hardcoded numbers that drift apart the moment a step changes.
+ *   · THE FAKE BACKEND: a «پیگیری» tab with a status ring, a two-of-three
+ *     timeline and three demo requests with timestamps, none of it wired to
+ *     anything («اطلاعات غیر واقعی هست — ببرش … چیزی در سرور ثبت نمی‌شود»).
+ *     The second tab is now «درخواست»: the explanation and the form, with no
+ *     invented statuses anywhere on the page.
  *
  * Rendered in Persian on purpose: Persian is where a missing key is loudest.
  */
@@ -33,10 +36,6 @@ const renderPage = () =>
       <Business />
     </MemoryRouter>
   );
-
-/** The rendered request cards. Counting text matches instead would double up
-    on ancestors, which is how a list of three reads as a list of four. */
-const requestCards = () => Array.from(document.querySelectorAll('article.biz-request'));
 
 /** Every text node currently on screen, joined — for "no raw keys" assertions. */
 const visibleText = () => document.body.textContent || '';
@@ -73,12 +72,14 @@ describe('Business console — Persian', () => {
     // hero copy — not a raw key, not an English fallback
     expect(screen.getByText('بیزینس', { selector: 'h1' })).toBeTruthy();
     expect(screen.getByText(/فانوس بازار پیشگام یک شرکت بازرگانی/)).toBeTruthy();
-    // tab labels
+    // tab labels — the second tab is the request itself, not a fake tracker
     expect(within(tabList()).getByText('همکاری')).toBeTruthy();
-    expect(within(tabList()).getByText('پیگیری')).toBeTruthy();
+    expect(within(tabList()).getByText('درخواست')).toBeTruthy();
     // ...and their hints, which used to be the keys themselves
     expect(within(tabList()).getByText('خدمات و برندها')).toBeTruthy();
-    expect(within(tabList()).getByText('درخواست‌ها و وضعیت')).toBeTruthy();
+    expect(within(tabList()).getByText('فرم درخواست همکاری')).toBeTruthy();
+    // the word «پیگیری» and its panel are gone from the rail
+    expect(within(tabList()).queryByText('پیگیری')).toBeNull();
   });
 
   it('never paints a raw i18n key anywhere on the page', () => {
@@ -128,37 +129,67 @@ describe('Business console — Persian', () => {
     expect(screen.getByText('رابط سواپ و پروتکل اصلی')).toBeTruthy();
   });
 
-  it('follows a service CTA into the open request form', async () => {
+  it('follows a service CTA straight into the request form, topic preselected', async () => {
     renderPage();
     fireEvent.click(screen.getAllByRole('button', { name: 'انتخاب این موضوع' })[1]); // liquidity
-    /* The CTA does four things at once: pick the topic, switch tab, switch
-       sub-tab and open the form. If any one of them is dropped the user lands
-       on the right screen with nothing to fill in — the reported bug. */
+    /* The CTA does three things at once now: pick the topic, switch to the
+       «درخواست» tab and bring the form into view. The tab IS the form — there
+       is no extra "new request" button to find and press. */
     await inPanel(() => {
-      expect(within(subTabList()).getByRole('tab', { name: /درخواست‌ها/ }).getAttribute('aria-selected')).toBe('true');
+      expect(within(tabList()).getByRole('tab', { name: /درخواست/ }).getAttribute('aria-selected')).toBe('true');
       expect(screen.getByRole('form')).toBeTruthy();
       // the chosen topic shows up twice: on the card heading and on the pill
       expect(within(screen.getByRole('form')).getAllByText('همکاری نقدینگی').length).toBeGreaterThan(0);
     });
   });
 
-  it('filters requests by status and narrows the list', async () => {
+  it('the request tab is the form itself — always visible, no toggle, no sub-rail', async () => {
     renderPage();
-    await clickTab('پیگیری');
-    await inPanel(() => expect(requestCards().length).toBe(3));
-    const filters = screen.getByRole('group', { name: /فیلتر بر اساس وضعیت/ });
-    fireEvent.click(within(filters).getByRole('button', { name: /پاسخ‌داده‌شده/ }));
-    await waitFor(() => {
-      expect(requestCards().length).toBe(1);
-      expect(screen.getByText(/آرتا کوین/)).toBeTruthy();
-      expect(screen.queryByText(/نور دیجیتال/)).toBeNull();
+    await clickTab('درخواست');
+    await inPanel(() => {
+      expect(screen.getByRole('form')).toBeTruthy();
+      // the request tab has no sub-tabs; the sub-rail is not rendered empty
+      expect(screen.queryByRole('tablist', { name: /زیرتب/ })).toBeNull();
+    });
+    // and there is no «درخواست جدید» button gating the form any more
+    expect(screen.queryByRole('button', { name: 'درخواست جدید' })).toBeNull();
+  });
+
+  it('carries no fake backend: no demo requests, no filters, no status ring', async () => {
+    renderPage();
+    await clickTab('درخواست');
+    await inPanel(() => expect(screen.getByRole('form')).toBeTruthy());
+    /* «اطلاعات غیر واقعی هست — ببرش»: the demo companies, the status
+       filter chips, the progress ring and the done/pending timeline were all
+       set dressing around a mailto. None of them may come back. */
+    expect(screen.queryByText(/آرتا کوین/)).toBeNull();
+    expect(screen.queryByText(/نور دیجیتال/)).toBeNull();
+    expect(screen.queryByText(/بیت‌پلاس/)).toBeNull();
+    expect(screen.queryByRole('group', { name: /فیلتر بر اساس وضعیت/ })).toBeNull();
+    expect(document.querySelectorAll('.biz-request, .biz-ring, .biz-timeline, .biz-progress').length).toBe(0);
+    expect(screen.queryByText(/پیگیری وضعیت/)).toBeNull();
+  });
+
+  it('explains what a request actually is before the form', async () => {
+    renderPage();
+    await clickTab('درخواست');
+    await inPanel(() => {
+      /* «درخواست معنی نشده» — the clarity card must be there, in Persian,
+         with the three real steps — and it must say the truth: no in-app
+         inbox, nothing stored until the user's own mail app sends it. */
+      expect(screen.getByText('ارسال درخواست چطور کار می‌کند — واضح و صادقانه')).toBeTruthy();
+      expect(screen.getByText(/هیچ صندوق داخلی/)).toBeTruthy();
+      expect(screen.getByText(/برنامهٔ ایمیل‌تان با موضوع و متن آماده باز می‌شود/)).toBeTruthy();
+      // three promises, each rendered as its own chip
+      expect(screen.getByText('بدون ذخیره سروری — فقط ایمیل')).toBeTruthy();
+      expect(screen.getByText('ما هرگز آدرس واریز نمی‌دهیم')).toBeTruthy();
+      expect(screen.getByText('پاسخ در یک روز کاری')).toBeTruthy();
     });
   });
 
   it('refuses an empty request and says so in Persian, per field', async () => {
     renderPage();
-    await clickTab('پیگیری');
-    await inPanel(() => fireEvent.click(screen.getByRole('button', { name: 'درخواست جدید' })));
+    await clickTab('درخواست');
     const form = await waitFor(() => screen.getByRole('form'));
     fireEvent.submit(form);
 
@@ -172,8 +203,7 @@ describe('Business console — Persian', () => {
 
   it('clears a field error as soon as the field is corrected', async () => {
     renderPage();
-    await clickTab('پیگیری');
-    await inPanel(() => fireEvent.click(screen.getByRole('button', { name: 'درخواست جدید' })));
+    await clickTab('درخواست');
     const form = await waitFor(() => screen.getByRole('form'));
     fireEvent.submit(form);
     /* getByLabelText, not getAllByLabelText: the label both WRAPS the input
@@ -184,20 +214,16 @@ describe('Business console — Persian', () => {
     expect(company.getAttribute('aria-invalid')).toBe('false');
   });
 
-  it('derives the tracking ring and its copy from the same step list', async () => {
+  it('counts characters in the message field and caps the input', async () => {
     renderPage();
-    await clickTab('پیگیری');
-    await clickSubTab('پیگیری وضعیت');
-    await inPanel(() => {
-      // 2 of 3 done → 67% in Persian digits, and the sentence says the same
-      expect(screen.getByText(/۶۷/)).toBeTruthy();
-      expect(screen.getByText('۲ از ۳ قدم تکمیل شده')).toBeTruthy();
-      // the next-step chip names the step that is actually next
-      expect(screen.getByText(/مرحلهٔ بعد/).textContent).toContain('اجرا');
-      // timeline states: the two finished steps say "done", the last says pending
-      expect(within(screen.getByRole('list')).getAllByText('تکمیل شده').length).toBe(2);
-      expect(within(screen.getByRole('list')).getAllByText('در انتظار بررسی').length).toBe(1);
-    });
+    await clickTab('درخواست');
+    const form = await waitFor(() => screen.getByRole('form'));
+    const message = within(form).getAllByLabelText(/پیام/)[0];
+    expect(within(form).getByText('۰/۶۰۰')).toBeTruthy();
+    fireEvent.change(message, { target: { value: 'ا'.repeat(12) } });
+    expect(within(form).getByText('۱۲/۶۰۰')).toBeTruthy();
+    fireEvent.change(message, { target: { value: 'ا'.repeat(900) } });
+    expect(message.value.length).toBe(600);
   });
 
   it('moves the tab selection with the arrow keys', () => {
@@ -206,26 +232,7 @@ describe('Business console — Persian', () => {
     tabs[0].focus();
     fireEvent.keyDown(tabList(), { key: 'ArrowRight' });
     const selected = screen.getAllByRole('tab').filter((el) => el.getAttribute('aria-selected') === 'true');
-    expect(selected[0].id).toContain('followup');
-  });
-
-  it('explains what a request actually is before showing the list', async () => {
-    renderPage();
-    await clickTab('پیگیری');
-    await inPanel(() => {
-      /* «درخواست معنی نشده» — the panel opened on three status rows with no
-         explanation. The clarity card must be there, in Persian, with the
-         three real steps — and it must say the truth: no in-app inbox. */
-      expect(screen.getByText('ارسال درخواست چطور کار می‌کند — واضح و صادقانه')).toBeTruthy();
-      expect(screen.getByText(/هیچ صندوق داخلی/)).toBeTruthy();
-      expect(screen.getByText(/برنامهٔ ایمیل‌تان با موضوع و متن آماده باز می‌شود/)).toBeTruthy();
-      // the example-not-your-data note sits above the demo rows
-      expect(screen.getByText(/سه کارت پایین فقط مثال‌اند/)).toBeTruthy();
-      // three promises, each rendered as its own chip
-      expect(screen.getByText('بدون ذخیره سروری — فقط ایمیل')).toBeTruthy();
-      expect(screen.getByText('ما هرگز آدرس واریز نمی‌دهیم')).toBeTruthy();
-      expect(screen.getByText('پاسخ در یک روز کاری')).toBeTruthy();
-    });
+    expect(selected[0].id).toContain('request');
   });
 
   it('spells out conditions and method on the services panel', () => {
@@ -243,39 +250,6 @@ describe('Business console — Persian', () => {
   it('states what is guaranteed and what is not', () => {
     renderPage();
     expect(screen.getByText(/لیست شدن، حجم، قیمت یا سود را تضمین نمی‌کنیم/)).toBeTruthy();
-  });
-
-  it('renders the emblem as decoration, never as a name', () => {
-    renderPage();
-    const marks = document.querySelectorAll('.bizmark');
-    expect(marks.length).toBe(1);
-    expect(marks[0].getAttribute('aria-hidden')).toBe('true');
-    expect(PERSIAN.test(screen.getByText('بیزینس', { selector: 'h1' }).textContent)).toBe(true);
-  });
-
-  it('closes the form when the panel is left and never leaves it stale', async () => {
-    renderPage();
-    await clickTab('پیگیری');
-    await inPanel(() => fireEvent.click(screen.getByRole('button', { name: 'درخواست جدید' })));
-    await waitFor(() => expect(screen.getByRole('form')).toBeTruthy());
-    /* The exit animation is real, so "gone" is a wait, not an instant. */
-    await clickSubTab('پیگیری وضعیت');
-    await waitFor(() => expect(screen.queryByRole('form')).toBeNull());
-    await clickSubTab('درخواست‌ها');
-    expect(screen.queryByRole('form')).toBeNull();
-  });
-
-  it('counts characters in the message field and caps the input', async () => {
-    renderPage();
-    await clickTab('پیگیری');
-    await inPanel(() => fireEvent.click(screen.getByRole('button', { name: 'درخواست جدید' })));
-    const form = await waitFor(() => screen.getByRole('form'));
-    const message = within(form).getAllByLabelText(/پیام/)[0];
-    expect(within(form).getByText('۰/۶۰۰')).toBeTruthy();
-    fireEvent.change(message, { target: { value: 'ا'.repeat(12) } });
-    expect(within(form).getByText('۱۲/۶۰۰')).toBeTruthy();
-    fireEvent.change(message, { target: { value: 'ا'.repeat(900) } });
-    expect(message.value.length).toBe(600);
   });
 
   it('never opens a new window without the noopener contract', () => {

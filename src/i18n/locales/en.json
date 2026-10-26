@@ -4756,34 +4756,8 @@
       "bnb": "Partner BNB network",
       "arbitrum": "Partner rollup network"
     },
-    "requestsTitle": "Your requests",
-    "requestsSub": "Status of your latest partnership requests",
     "newRequest": "New request",
-    "requestsEmptyTitle": "No requests yet",
-    "requestsEmptyText": "Start by submitting your first partnership request.",
-    "requests": {
-      "kind": "Partnership request"
-    },
-    "status": {
-      "pending": "Pending review",
-      "review": "Under review",
-      "responded": "Responded"
-    },
-    "trackingTitle": "Track partnership status",
-    "trackingSub": "Progress of your request from submission to launch",
-    "tracking": {
-      "totalRequests": "Total requests",
-      "totalSub": "Submitted so far",
-      "responded": "Responded",
-      "respondedSub": "By business team",
-      "support": "24/7 support",
-      "supportSub": "No closing hours, no intermediary",
-      "pathTitle": "Request execution path",
-      "progressLabel": "Overall partnership progress",
-      "progressSub": "{{done}} of {{total}} steps complete",
-      "cta": "File a new request",
-      "nextUp": "Up next"
-    },
+    "requests": {},
     "badge": "B2B",
     "heroKicker": "Business & enterprise partnerships",
     "heroChip": {
@@ -4793,23 +4767,19 @@
     },
     "tabs": {
       "partnership": "Partnership",
-      "followup": "Follow-up"
+      "request": "Request"
     },
     "tabsSub": {
       "partnership": "Services & brands",
-      "followup": "Requests & status"
+      "request": "The partnership request form"
     },
     "subtab": {
       "services": "Services",
-      "brands": "Brands",
-      "requests": "Requests",
-      "tracking": "Tracking"
+      "brands": "Brands"
     },
     "panelHint": {
       "services": "Pick an offer and start your request right there.",
-      "brands": "Networks and brands building on this infrastructure.",
-      "requests": "File a new request and see previous ones.",
-      "tracking": "From submission to launch, step by step."
+      "brands": "Networks and brands building on this infrastructure."
     },
     "offerMeta": {
       "listing": "Surfaced in market & swap",
@@ -4825,19 +4795,7 @@
       "bnb": "EVM",
       "arbitrum": "Rollup"
     },
-    "demo": {
-      "arta": "Arta Coin",
-      "noor": "Noor Digital",
-      "bitplus": "BitPlus",
-      "hoursAgo": "{{count}}h ago",
-      "daysAgo": "{{count}}d ago"
-    },
-    "progress": {
-      "label": "Request progress",
-      "done": "Completed"
-    },
     "requestsCount": "{{count}} requests",
-    "viewTracking": "View tracking",
     "startRequest": "Start request",
     "headerLive": "Replies within one business day",
     "point": {
@@ -4850,22 +4808,12 @@
       "docs": "Full documentation",
       "keys": "Dedicated API key"
     },
-    "filterLabel": "Filter by status",
-    "filter": {
-      "all": "All",
-      "pending": "Pending",
-      "review": "In review",
-      "responded": "Answered"
-    },
-    "emptyFilterTitle": "Nothing in this status",
-    "emptyFilterText": "Change the filter, or file a new request.",
     "requestsIntro": {
       "title": "How sending a request works — clearly",
       "body": "There is no in-app inbox. You write the email in your own mail app and send it to us — that email is the request. Nothing is stored on our server until you hit send.",
       "step1": "Choose a topic and fill the short form: company, name, work email and what you need.",
       "step2": "Your mail app opens with subject and body prefilled. Review it and send — the request only exists after you do.",
-      "step3": "We reply within one business day to the email you wrote. If you do not see it, check spam and the address you typed.",
-      "note": "The three cards below are examples — not your data. They show what a real inbox looks like."
+      "step3": "We reply within one business day to the email you wrote. If you do not see it, check spam and the address you typed."
     },
     "conditions": {
       "title": "Conditions & how we decide",
@@ -5676,7 +5624,38 @@
     "trending": "Trending now",
     "searchPlaceholder": "Search these sites",
     "noMatch": "Nothing here matches “{{q}}”. Try another word, or clear the search to see every site.",
-    "safetyTitle": "How lookalike-site scams work, and why we never ask you to type an address"
+    "safetyTitle": "How lookalike-site scams work, and why we never ask you to type an address",
+    "recent": "Recently opened",
+    "desc": {
+      "pancakeswap": "The main decentralised exchange on BNB Chain — swaps, liquidity pools and farms.",
+      "uniswap": "The largest decentralised exchange on Ethereum and its layer-2s, for token swaps.",
+      "kyberswap": "A multi-chain swap aggregator; it searches several exchanges for the best rate.",
+      "quickswap": "A low-fee decentralised exchange on Polygon.",
+      "coingecko": "Prices, market caps and volume for thousands of tokens — the market-data reference.",
+      "geckoterminal": "Live charts and real-time data for DeFi pools, from the CoinGecko family.",
+      "defillama": "TVL, revenue and bridge stats for DeFi protocols — open, transparent data.",
+      "dexscreener": "Live charts and a price tracker for pairs on decentralised exchanges.",
+      "bscscan": "The official BNB Chain explorer: addresses, transactions and tokens.",
+      "etherscan": "The official Ethereum explorer: addresses, transactions and contracts.",
+      "polygonscan": "The official Polygon explorer, from the Etherscan family.",
+      "arbiscan": "The official Arbitrum One explorer, from the Etherscan family.",
+      "metamask": "A browser and mobile wallet for Ethereum and EVM-compatible chains.",
+      "trustwallet": "A multi-chain mobile wallet supporting hundreds of networks.",
+      "walletconnect": "The secure wallet-to-dapp connection protocol (Reown).",
+      "opensea": "The largest NFT marketplace, across several networks.",
+      "blur": "A professional NFT marketplace focused on speed and trader data.",
+      "magiceden": "A multi-chain NFT marketplace; strongest on Solana and Bitcoin ordinals.",
+      "element": "A multi-chain NFT marketplace with EVM network support.",
+      "bnbchain": "The official BNB Chain site: docs, network and ecosystem.",
+      "ethereum": "The official Ethereum site: learn, docs and getting-started guides.",
+      "l2beat": "Transparent data and analysis of Ethereum layer-2s: TVL, risk and status."
+    },
+    "sheet": {
+      "open": "Open in browser",
+      "copy": "Copy link",
+      "copied": "Link copied",
+      "hint": "Opens in your phone’s own browser — the real address bar and its security warnings stay on."
+    }
   },
   "nft": {
     "title": "My NFTs",

@@ -20,7 +20,7 @@ import { fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { FUTURES_HISTORY_ENABLED, SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from '../lib/features';
+import { SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from '../lib/features';
 import { getFuturesFeePreview, getFuturesMarkets, prepareFutures, verifyFutures } from '../lib/futuresClient';
 import { liquidationDistance } from '../lib/futures-engine';
 import {
@@ -48,15 +48,24 @@ const LazyDydx = SPECULATION_ENABLED ? lazyRetry(() => import('./Dydx')) : null;
  * the store builds ship neither leveraged tab.
  */
 const LazyOnchain = SPECULATION_ENABLED ? lazyRetry(() => import('./FuturesOnchain')) : null;
-const LazyFuturesHistory = SPECULATION_ENABLED && FUTURES_HISTORY_ENABLED
-  ? lazyRetry(() => import('../components/futures/FuturesHistory'))
-  : null;
 /*
+ * ─── THE HISTORY TAB IS GONE FROM THIS RAIL ─────────────────────────────────
+ *   «تو فیوچرز تب تاریخچه معاملات را پاک کن چون بهم ریخته — هر تاریخچه را در
+ *    صفحه مربوط به خودش، زیر صفحه، در یک باکس باز‌شونده بگذار»
+ *
+ * A fourth rail cell that mixed one venue's fills with two venues' «not
+ * available yet» notes was the messiest tab on the page: it belonged to no
+ * screen the user was actually on. The dYdX fills now live at the bottom of
+ * the dYdX tab (pages/Dydx.jsx), the Ostium statement at the bottom of the
+ * Ostium page, and the Velocity statement at the bottom of the On-Chain tab —
+ * each history inside the screen it is about, folded until asked for. The
+ * FuturesHistory component itself is unchanged; only its address moved.
+ *
  * `spot` is the user's own-wallet spot trade (components/spot). It is listed
  * whenever SPOT_TRADE_ENABLED is on, and it is NOT gated by SPECULATION: the
  * futures tabs below are the only ones that depend on that flag.
  */
-const TAB_LABEL_KEY = { spot: 'trade.spot', overview: 'perp.tab.perpetual', dydx: 'stocks.tab.dydx', onchain: 'perp.tab.onchain', history: 'futures.history.title' };
+const TAB_LABEL_KEY = { spot: 'trade.spot', overview: 'perp.tab.perpetual', dydx: 'stocks.tab.dydx', onchain: 'perp.tab.onchain' };
 
 /**
  * One icon per venue, so the rail says what each tab IS instead of asking the
@@ -65,7 +74,7 @@ const TAB_LABEL_KEY = { spot: 'trade.spot', overview: 'perp.tab.perpetual', dydx
  *   dydx     → the activity of an external, client-signed venue
  *   onchain  → the shield, because that tab is the self-custodial one
  */
-const TAB_ICON = { spot: IconSwap, overview: IconTrend, dydx: IconActivity, onchain: IconShield, history: IconActivity };
+const TAB_ICON = { spot: IconSwap, overview: IconTrend, dydx: IconActivity, onchain: IconShield };
 
 /*
  * ─── THERE IS NO EXTERNAL VENUE ON THIS PAGE ANY MORE ─────────────────────
@@ -316,7 +325,6 @@ export default function Perp() {
       if (wanted === 'spot' && SPOT_TRADE_ENABLED) return 'spot';
       const futuresTabs = ['dydx', 'onchain'];
       if (SPECULATION_ENABLED && futuresTabs.includes(wanted)) return wanted;
-      if (SPECULATION_ENABLED && FUTURES_HISTORY_ENABLED && wanted === 'history') return 'history';
       return 'overview';
     } catch { return 'overview'; }
   })();
@@ -327,7 +335,7 @@ export default function Perp() {
    * rail, so the content does not jump when only one tab is left.
    */
   const FUTURES_TABS = SPECULATION_ENABLED
-    ? ['overview', 'dydx', 'onchain', ...(FUTURES_HISTORY_ENABLED ? ['history'] : [])]
+    ? ['overview', 'dydx', 'onchain']
     : [];
   const PERP_TABS = [...(SPOT_TRADE_ENABLED ? ['spot'] : []), ...FUTURES_TABS];
   const RAIL_TABS = PERP_TABS;
@@ -633,7 +641,6 @@ export default function Perp() {
       const want = new URLSearchParams(location.search || '').get('tab');
       const deepLinkable = ['onchain', 'dydx'];
       if (deepLinkable.includes(want) && want !== perpTab) setPerpTab(want);
-      if (FUTURES_HISTORY_ENABLED && want === 'history' && perpTab !== 'history') setPerpTab('history');
     } catch { /* a malformed query is not worth breaking the page over */ }
   }, [location.search, perpTab]);
   useEffect(() => {
@@ -1004,10 +1011,6 @@ export default function Perp() {
       ) : perpTab === 'onchain' ? (
         <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
           {LazyOnchain && <LazyOnchain embedded />}
-        </Suspense>
-      ) : perpTab === 'history' && FUTURES_HISTORY_ENABLED ? (
-        <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
-          {LazyFuturesHistory && <LazyFuturesHistory onOpenDydx={() => selectTab('dydx')} />}
         </Suspense>
       ) : (
         <div className="perp-modern">

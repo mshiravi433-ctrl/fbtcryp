@@ -3228,13 +3228,11 @@
     },
     "tabs": {
       "partnership": "الشراكة",
-      "followup": "المتابعة"
+      "request": "طلب"
     },
     "subtab": {
       "services": "الخدمات",
-      "brands": "العلامات",
-      "requests": "الطلبات",
-      "tracking": "التتبع"
+      "brands": "العلامات"
     },
     "headerLive": "الرد خلال يوم عمل واحد",
     "point": {
@@ -3246,28 +3244,6 @@
       "domain": "نطاقك الخاص",
       "docs": "توثيق كامل",
       "keys": "مفتاح API مخصص"
-    },
-    "filterLabel": "تصفية حسب الحالة",
-    "filter": {
-      "all": "الكل",
-      "pending": "قيد الانتظار",
-      "review": "قيد المراجعة",
-      "responded": "تمت الإجابة"
-    },
-    "emptyFilterTitle": "لا شيء بهذه الحالة",
-    "emptyFilterText": "غيّر التصفية أو أرسل طلباً جديداً.",
-    "tracking": {
-      "nextUp": "الخطوة التالية",
-      "progressSub": "اكتمل {{done}} من {{total}} خطوات",
-      "totalRequests": "إجمالي الطلبات",
-      "totalSub": "أُرسلت حتى الآن",
-      "responded": "تمت الإجابة عليها",
-      "respondedSub": "من فريق الأعمال",
-      "support": "دعم على مدار الساعة",
-      "supportSub": "بلا عطلات ولا وسطاء",
-      "pathTitle": "مسار تنفيذ الطلب",
-      "progressLabel": "التقدّم العام للشراكة",
-      "cta": "تقديم طلب جديد"
     },
     "tabsTitle": "اختيار مجال الشراكة",
     "subtabsTitle": "التبويبات الفرعية",
@@ -3284,21 +3260,8 @@
       "bnb": "شبكة BNB شريكة",
       "arbitrum": "شبكة رول‌آب شريكة"
     },
-    "requestsTitle": "طلباتك",
-    "requestsSub": "حالة أحدث طلبات الشراكة التي أرسلتها",
     "newRequest": "طلب جديد",
-    "requestsEmptyTitle": "لا توجد طلبات بعد",
-    "requestsEmptyText": "ابدأ بإرسال أول طلب شراكة.",
-    "requests": {
-      "kind": "طلب شراكة"
-    },
-    "status": {
-      "pending": "قيد الانتظار",
-      "review": "قيد المراجعة",
-      "responded": "تمت الإجابة"
-    },
-    "trackingTitle": "تتبّع حالة الشراكة",
-    "trackingSub": "تقدّم طلبك من الإرسال حتى التنفيذ",
+    "requests": {},
     "badge": "من شركة إلى شركة",
     "heroKicker": "شراكات أعمال ومؤسسات",
     "heroChip": {
@@ -3308,13 +3271,11 @@
     },
     "tabsSub": {
       "partnership": "الخدمات والعلامات",
-      "followup": "الطلبات والحالة"
+      "request": "نموذج طلب الشراكة"
     },
     "panelHint": {
       "services": "اختر عرضك وابدأ الطلب من هنا.",
-      "brands": "الشبكات والعلامات التي تعمل على هذه البنية.",
-      "requests": "سجّل طلباً جديداً وشاهد حالة الطلبات السابقة.",
-      "tracking": "من تقديم الطلب حتى التنفيذ، خطوة بخطوة."
+      "brands": "الشبكات والعلامات التي تعمل على هذه البنية."
     },
     "offerMeta": {
       "listing": "الظهور في السوق والسواب",
@@ -3330,27 +3291,14 @@
       "bnb": "EVM",
       "arbitrum": "رول‌آب"
     },
-    "demo": {
-      "arta": "عملة آرتا",
-      "noor": "نور الرقمية",
-      "bitplus": "بيت بلس",
-      "hoursAgo": "قبل {{count}} ساعة",
-      "daysAgo": "قبل {{count}} يوم"
-    },
-    "progress": {
-      "label": "تقدّم الطلب",
-      "done": "مكتمل"
-    },
     "requestsCount": "{{count}} طلبات",
-    "viewTracking": "عرض التتبّع",
     "startRequest": "بدء الطلب",
     "requestsIntro": {
       "title": "How sending a request works — clearly",
       "body": "There is no in-app inbox. You write the email in your own mail app and send it to us — that email is the request. Nothing is stored on our server until you hit send.",
       "step1": "Choose a topic and fill the short form: company, name, work email and what you need.",
       "step2": "Your mail app opens with subject and body prefilled. Review it and send — the request only exists after you do.",
-      "step3": "We reply within one business day to the email you wrote. If you do not see it, check spam and the address you typed.",
-      "note": "The three cards below are examples — not your data. They show what a real inbox looks like."
+      "step3": "We reply within one business day to the email you wrote. If you do not see it, check spam and the address you typed."
     },
     "conditions": {
       "title": "Conditions & how we decide",

@@ -58,13 +58,21 @@ test('only production web pipeline sources rollout; Android overrides all three'
   assert.equal(pkg.dependencies['@dydxprotocol/v4-client-js'], '3.4.0');
 });
 
-test('history is mounted in the real Perp rail only behind both web rollout and speculation flags', () => {
-  const perp = read('src/pages/Perp.jsx');
-  assert.match(perp, /import \{ FUTURES_HISTORY_ENABLED, SPECULATION_ENABLED, SPOT_TRADE_ENABLED \} from '\.\.\/lib\/features';/);
-  assert.match(perp, /SPECULATION_ENABLED && FUTURES_HISTORY_ENABLED[\s\S]*import\('\.\.\/components\/futures\/FuturesHistory'\)/);
-  assert.match(perp, /FUTURES_HISTORY_ENABLED \? \['history'\] : \[\]/);
-  assert.match(perp, /perpTab === 'history' && FUTURES_HISTORY_ENABLED/);
-  assert.match(perp, /onOpenDydx=\{\(\) => selectTab\('dydx'\)\}/);
+test('the futures history tab is gone from the rail; the dYdX history folds at the bottom of the dYdX screen', () => {
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const perp = strip(read('src/pages/Perp.jsx'));
+  const dydx = read('src/pages/Dydx.jsx');
+  /* The rail no longer carries a fourth cell that belonged to no venue. */
+  assert.doesNotMatch(perp, /'history'/);
+  assert.doesNotMatch(perp, /FuturesHistory/);
+  /* The history panel itself is unchanged and mounted behind its own flag,
+     inside a folded InfoBox at the bottom of pages/Dydx.jsx. */
+  assert.match(dydx, /import \{ DYDX_TPSL_ENABLED, FUTURES_HISTORY_ENABLED \} from '\.\.\/lib\/features';/);
+  assert.match(dydx, /FUTURES_HISTORY_ENABLED\s*\?\s*lazyRetry\(\(\) => import\('\.\.\/components\/futures\/FuturesHistory'\)\)/);
+  assert.match(dydx, /id="dydx-history-box"/);
+  /* ...and the other two venues state their own history on their own pages. */
+  assert.match(read('src/pages/Ostium.jsx'), /id="ostium-history-box"/);
+  assert.match(read('src/pages/FuturesOnchain.jsx'), /id="onchain-history-box"/);
 });
 
 /*

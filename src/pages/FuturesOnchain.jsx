@@ -987,6 +987,18 @@ export default function FuturesOnchain({ embedded = false } = {}) {
           </InfoBox>
         </div>
 
+        {/*
+          Velocity's own trade-history box, folded at the bottom of the
+          On-Chain screen. The rail-wide history tab is gone («هر تاریخچه در
+          صفحه مربوط به خودش»); for this venue the honest statement today is
+          that only live positions are read, and it belongs HERE.
+        */}
+        <div style={{ marginTop: 12 }}>
+          <InfoBox title={t('futures.history.title')} tone="info" id="onchain-history-box">
+            <p className="faint" style={{ fontSize: 12.5, lineHeight: 1.8, margin: 0 }}>{t('futures.history.venue.velocityUnavailable')}</p>
+          </InfoBox>
+        </div>
+
         <WalletConnectSheet open={walletOpen} onClose={() => setWalletOpen(false)} />
 
         {/* ── confirmation preview — every number from /prepare ─────────── */}

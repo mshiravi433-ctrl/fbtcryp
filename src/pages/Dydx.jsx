@@ -25,12 +25,28 @@ import {
 } from '../lib/dydx';
 import TrendChart from '../components/TrendChart';
 import lazyRetry from '../lib/lazyRetry';
-import { DYDX_TPSL_ENABLED } from '../lib/features';
+import { DYDX_TPSL_ENABLED, FUTURES_HISTORY_ENABLED } from '../lib/features';
 import ModernSelect from '../components/ModernSelect';
 
 /* The TP/SL card loads only when DYDX_TPSL_ENABLED is on. */
 const LazyDydxTpSlCard = DYDX_TPSL_ENABLED
   ? lazyRetry(() => import('../components/futures/DydxTpSlCard'))
+  : null;
+
+/*
+ * ─── THE dYdX HISTORY LIVES ON THE dYdX SCREEN ──────────────────────────────
+ *   «هر تاریخچه را در صفحه مربوط به خودش، زیر صفحه، در باکس باز‌شونده بگذار»
+ *
+ * This table used to be a fourth tab on the Perpetual rail, where it mixed
+ * one venue's real fills with two venues' «not available» notes — a tab that
+ * belonged to no screen the reader was on. It is dYdX data, read through the
+ * dYdX session this very page establishes, so it now sits at the BOTTOM of
+ * this page inside a folded box: closed by default (it is the least urgent
+ * thing on a trading screen), one tap to open, and nothing about the panel
+ * itself changed.
+ */
+const LazyFuturesHistory = FUTURES_HISTORY_ENABLED
+  ? lazyRetry(() => import('../components/futures/FuturesHistory'))
   : null;
 
 /**
@@ -536,6 +552,17 @@ export default function Dydx({ embedded = false } = {}) {
           {t('dydx.fundingHelp.body')}
         </p>
       </motion.section>
+
+      {/* The folded trade history — this venue's fills, on this venue's page. */}
+      {LazyFuturesHistory && (
+        <div style={{ marginTop: 18 }}>
+          <InfoBox title={t('futures.history.title')} tone="info" id="dydx-history-box">
+            <Suspense fallback={<div className="spinner" />}>
+              <LazyFuturesHistory />
+            </Suspense>
+          </InfoBox>
+        </div>
+      )}
 
       <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
       <Sheet open={reviewing} onClose={() => !busy && setReviewing(false)} title={t('dydx.confirmTitle')}>
