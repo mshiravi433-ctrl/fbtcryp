@@ -1,418 +1,430 @@
-/* ──────────────────────────────────────────────────────────────────────────
-   FULL-SCREEN CONNECTIVITY ALERT
-   A real viewport-level alert, not a toast which disappears underneath an
-   outage. The acknowledgement lives in a persistent footer, so it remains at
-   the bottom on short phones and in long, translated messages.
-   ────────────────────────────────────────────────────────────────────────── */
+/* ==========================================================================
+   CONNECTIVITY ALERT — Modern Floating Telemetry & Resilience Popup
+   ========================================================================== */
 
 .connectivity-alert-layer {
   position: fixed;
   inset: 0;
-  z-index: 10000;
-  display: grid;
-  place-items: center;
-  padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
-  isolation: isolate;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding:
+    max(16px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
 }
 
 .connectivity-alert-backdrop {
   position: absolute;
   inset: 0;
-  z-index: -1;
   background:
-    radial-gradient(ellipse at 50% 20%, rgba(255, 179, 0, 0.1), transparent 44%),
-    rgba(2, 4, 11, 0.84);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
+    radial-gradient(80% 55% at 50% 22%, rgba(15, 23, 42, 0.52), transparent 72%),
+    rgba(3, 6, 15, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
-.connectivity-alert-screen {
-  --conn-accent: #ffb547;
-  --conn-accent-strong: #ff8b45;
-  position: relative;
-  isolation: isolate;
-  display: flex;
-  flex-direction: column;
-  width: min(100%, 500px);
-  height: min(700px, calc(100dvh - 36px));
-  min-height: min(520px, calc(100dvh - 24px));
-  overflow: hidden;
-  padding: 24px 30px 24px;
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  border-radius: 32px;
+:root[data-theme='light'] .connectivity-alert-backdrop {
   background:
-    radial-gradient(ellipse at 50% 32%, rgba(255, 180, 71, 0.105), transparent 43%),
-    linear-gradient(160deg, #13151c 0%, #0b0d14 52%, #080a10 100%);
-  box-shadow: 0 32px 100px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.025) inset;
-  color: #f8f9fc;
-  text-align: center;
+    radial-gradient(80% 55% at 50% 22%, rgba(255, 255, 255, 0.35), transparent 72%),
+    rgba(15, 23, 42, 0.48);
 }
 
-.connectivity-alert-screen.is-offline {
-  --conn-accent: #ff8e62;
-  --conn-accent-strong: #ff695e;
+:root[data-native='true'] .connectivity-alert-backdrop,
+:root[data-lite='true'] .connectivity-alert-backdrop {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(3, 6, 15, 0.9);
 }
 
-.connectivity-alert-glow {
-  position: absolute;
-  z-index: -1;
-  width: 360px;
-  height: 360px;
-  inset-block-start: 22%;
-  inset-inline-start: 50%;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--conn-accent) 9%, transparent), transparent 70%);
-  pointer-events: none;
-}
+.connectivity-alert-card {
+  --conn-tone: #fb7185;
+  --conn-tone-2: #f43f5e;
 
-.connectivity-alert-header,
-.connectivity-alert-brand,
-.connectivity-alert-badge,
-.connectivity-alert-footer,
-.connectivity-alert-acknowledge {
-  display: flex;
-  align-items: center;
-}
-
-.connectivity-alert-header {
   position: relative;
   z-index: 1;
-  flex: 0 0 auto;
+  width: 100%;
+  max-width: 420px;
+  max-height: min(90dvh, 640px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 28px;
+  padding: 20px 20px 20px;
+  color: var(--text-1, #f8fafc);
+  background:
+    linear-gradient(170deg, #131c31 0%, #0b101e 56%, #070b14 100%);
+  border: 1px solid color-mix(in srgb, var(--conn-tone) 34%, rgba(148, 163, 184, 0.2));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 28px 68px -18px rgba(0, 0, 0, 0.82),
+    0 0 44px -22px color-mix(in srgb, var(--conn-tone) 60%, transparent);
+  outline: none;
+  isolation: isolate;
+}
+
+.connectivity-alert-weak {
+  --conn-tone: #fbbf24;
+  --conn-tone-2: #f59e0b;
+}
+
+:root[data-theme='light'] .connectivity-alert-card {
+  color: #0f172a;
+  background:
+    linear-gradient(170deg, #ffffff 0%, #f6f9ff 62%, #edf3fc 100%);
+  border-color: color-mix(in srgb, var(--conn-tone) 35%, rgba(15, 23, 42, 0.12));
+  box-shadow:
+    inset 0 1px 0 #ffffff,
+    0 26px 60px -18px rgba(15, 23, 42, 0.25);
+}
+
+/* ─── Ambient Aurora & Radar Grid ─────────────────────────────────────────── */
+.connectivity-alert-aurora {
+  position: absolute;
+  inset: 0;
+  height: 195px;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.connectivity-alert-bloom {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+}
+
+.connectivity-alert-bloom--a {
+  width: 240px;
+  height: 180px;
+  top: -78px;
+  inset-inline-start: -44px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--conn-tone) 26%, transparent) 0%, transparent 70%);
+}
+
+.connectivity-alert-bloom--b {
+  width: 210px;
+  height: 165px;
+  top: -64px;
+  inset-inline-end: -36px;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.14) 0%, transparent 70%);
+}
+
+.connectivity-alert-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.3;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.1) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: linear-gradient(to bottom, #000 18%, transparent 96%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 18%, transparent 96%);
+}
+
+/* ─── Top Telemetry Header ────────────────────────────────────────────────── */
+.connectivity-alert-header {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 38px;
+  margin-block-end: 18px;
 }
 
 .connectivity-alert-brand {
-  gap: 9px;
-  color: rgba(255, 255, 255, 0.72);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
   font-weight: 800;
-  letter-spacing: 0.1em;
-  white-space: nowrap;
+  letter-spacing: 0.06em;
+  color: var(--text-2, #94a3b8);
 }
 
 .connectivity-alert-brand b {
-  color: rgba(255, 255, 255, 0.4);
-  font-weight: 700;
+  color: var(--text-1, #f8fafc);
+}
+
+:root[data-theme='light'] .connectivity-alert-brand b {
+  color: #0f172a;
 }
 
 .connectivity-alert-brand-mark {
-  display: grid;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  display: inline-grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--conn-accent);
-  font-family: var(--font-display, system-ui, sans-serif);
-  font-size: 15px;
-  letter-spacing: 0;
+  font-size: 12px;
+  font-weight: 900;
+  color: #04131d;
+  background: linear-gradient(135deg, #22d3ee, #818cf8);
+  box-shadow: 0 4px 12px -4px rgba(34, 211, 238, 0.55);
+}
+
+.connectivity-alert-telemetry-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
 }
 
 .connectivity-alert-badge {
-  justify-content: center;
-  gap: 7px;
-  min-height: 30px;
-  padding: 5px 10px;
-  border: 1px solid color-mix(in srgb, var(--conn-accent) 28%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--conn-accent) 9%, transparent);
-  color: var(--conn-accent);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  line-height: 1.3;
-  white-space: nowrap;
-}
-
-.connectivity-alert-badge-dot {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 7px;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 12px currentColor;
-}
-
-.connectivity-alert-content {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
+  display: inline-flex;
   align-items: center;
+  gap: 7px;
+  padding-block: 5px;
+  padding-inline: 10px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--conn-tone);
+  background: color-mix(in srgb, var(--conn-tone) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--conn-tone) 34%, transparent);
+}
+
+:root[data-theme='light'] .connectivity-alert-badge {
+  color: color-mix(in srgb, var(--conn-tone-2) 85%, #0f172a);
+}
+
+.connectivity-alert-dot {
+  width: 6.5px;
+  height: 6.5px;
+  border-radius: 999px;
+  background: var(--conn-tone);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--conn-tone) 22%, transparent);
+}
+
+.connectivity-alert-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 14px;
+}
+
+.connectivity-alert-bars i {
+  display: block;
+  width: 3.5px;
+  border-radius: 2px;
+  background: rgba(148, 163, 184, 0.24);
+}
+
+.connectivity-alert-bars i:nth-child(1) { height: 5px; }
+.connectivity-alert-bars i:nth-child(2) { height: 8px; }
+.connectivity-alert-bars i:nth-child(3) { height: 11px; }
+.connectivity-alert-bars i:nth-child(4) { height: 14px; }
+
+.connectivity-alert-bars i.is-lit {
+  background: var(--conn-tone);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--conn-tone) 70%, transparent);
+}
+
+/* ─── Concentric Radar Stage ──────────────────────────────────────────────── */
+.connectivity-alert-hero-stage {
+  display: flex;
   justify-content: center;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 10px 0 18px;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
+  padding-block: 4px 10px;
 }
 
-.connectivity-alert-content::-webkit-scrollbar { display: none; }
-
-.connectivity-alert-visual {
+.connectivity-alert-radar {
   position: relative;
+  width: 74px;
+  height: 74px;
+  border-radius: 24px;
   display: grid;
   place-items: center;
-  width: 148px;
-  height: 148px;
-  flex: 0 0 148px;
-  margin: 8px 0 18px;
+  color: var(--conn-tone);
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.14), transparent 58%),
+    linear-gradient(145deg, color-mix(in srgb, var(--conn-tone) 22%, #111827), #0b1120);
+  border: 1px solid color-mix(in srgb, var(--conn-tone) 44%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 16px 32px -14px color-mix(in srgb, var(--conn-tone) 72%, transparent);
 }
 
-.connectivity-alert-orbit {
+:root[data-theme='light'] .connectivity-alert-radar {
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--conn-tone) 16%, #ffffff), #f8fafc);
+  color: color-mix(in srgb, var(--conn-tone-2) 85%, #0f172a);
+}
+
+.connectivity-alert-ring {
   position: absolute;
-  border: 1px solid color-mix(in srgb, var(--conn-accent) 15%, transparent);
-  border-radius: 50%;
+  pointer-events: none;
 }
 
-.connectivity-alert-orbit--outer {
-  inset: 3px;
-  border-style: dashed;
-  opacity: 0.7;
+.connectivity-alert-ring--inner {
+  inset: -5px;
+  border-radius: 28px;
+  border: 1px solid color-mix(in srgb, var(--conn-tone) 28%, transparent);
 }
 
-.connectivity-alert-orbit--inner {
-  inset: 17px;
-  border-color: color-mix(in srgb, var(--conn-accent) 19%, transparent);
-  background: radial-gradient(circle, color-mix(in srgb, var(--conn-accent) 9%, transparent), transparent 68%);
-  box-shadow: 0 0 48px color-mix(in srgb, var(--conn-accent) 10%, transparent);
+.connectivity-alert-ring--outer {
+  inset: -11px;
+  border-radius: 32px;
+  border: 1px dashed color-mix(in srgb, var(--conn-tone) 18%, transparent);
+  animation: connPulseRing 2.8s ease-in-out infinite;
 }
 
-.connectivity-alert-signal {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 92px;
-  height: 92px;
-  border: 1px solid color-mix(in srgb, var(--conn-accent) 32%, transparent);
-  border-radius: 30px;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--conn-accent) 18%, #17191f), #101219 82%);
-  color: var(--conn-accent);
-  box-shadow: 0 14px 40px color-mix(in srgb, var(--conn-accent) 14%, transparent), 0 0 0 6px rgba(255, 255, 255, 0.025);
-  transform: rotate(-4deg);
+.connectivity-alert-glyph {
+  width: 38px;
+  height: 38px;
+  display: block;
 }
 
-.connectivity-alert-signal svg {
-  overflow: visible;
-  stroke: currentColor;
-  stroke-width: 2.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+/* ─── Typography & Bento Safety Callout ───────────────────────────────────── */
+.connectivity-alert-content {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
 }
-
-.connectivity-alert-signal-cut {
-  stroke: #11131a;
-  stroke-width: 7;
-}
-
-.connectivity-alert-signal-badge {
-  fill: var(--conn-accent);
-  stroke: #17191f;
-  stroke-width: 2;
-}
-
-.connectivity-alert-signal-exclamation {
-  stroke: #17191f;
-  stroke-width: 2.4;
-}
-
-.connectivity-alert-spark {
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--conn-accent);
-  box-shadow: 0 0 16px var(--conn-accent);
-}
-
-.connectivity-alert-spark--one { inset-block-start: 24px; inset-inline-end: 29px; }
-.connectivity-alert-spark--two { inset-block-end: 28px; inset-inline-start: 25px; width: 4px; height: 4px; opacity: 0.62; }
-
-:root[dir='rtl'] .connectivity-alert-badge { letter-spacing: 0; }
 
 .connectivity-alert-title {
-  max-width: 410px;
   margin: 0;
-  color: #fff;
-  font-size: clamp(22px, 5vw, 28px);
-  font-weight: 850;
-  line-height: 1.5;
-  letter-spacing: -0.025em;
-  text-wrap: balance;
+  text-align: center;
+  font-family: var(--font-display, inherit);
+  font-size: clamp(19px, 4.8vw, 22px);
+  font-weight: 900;
+  line-height: 1.42;
+  letter-spacing: -0.015em;
+  color: var(--text-1, #f8fafc);
 }
 
-.connectivity-alert-body {
-  max-width: 405px;
-  margin: 12px 0 0;
-  color: rgba(226, 231, 242, 0.74);
-  font-size: 14px;
-  font-weight: 450;
-  line-height: 1.85;
-  text-wrap: pretty;
+:root[data-theme='light'] .connectivity-alert-title {
+  color: #0f172a;
+}
+
+.connectivity-alert-lead {
+  margin: 0;
+  text-align: center;
+  font-size: 13.5px;
+  line-height: 1.82;
+  color: var(--text-2, #cbd5e1);
+}
+
+:root[data-theme='light'] .connectivity-alert-lead {
+  color: #334155;
+}
+
+.connectivity-alert-safety {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-block-start: 4px;
+  padding: 12px 13px;
+  border-radius: 17px;
+  background:
+    linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(15, 23, 42, 0.5));
+  border: 1px solid rgba(16, 185, 129, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+:root[data-theme='light'] .connectivity-alert-safety {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), #ffffff);
+  border-color: rgba(16, 185, 129, 0.22);
+}
+
+.connectivity-alert-safe-ico {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.16);
+  border: 1px solid rgba(16, 185, 129, 0.24);
+}
+
+:root[data-theme='light'] .connectivity-alert-safe-ico {
+  color: #059669;
+}
+
+.connectivity-alert-safe-ico svg {
+  width: 18px;
+  height: 18px;
 }
 
 .connectivity-alert-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  width: min(100%, 410px);
-  margin-top: 20px;
-  padding: 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.075);
-  border-radius: 15px;
-  background: rgba(255, 255, 255, 0.045);
-  text-align: start;
-}
-
-.connectivity-alert-note-icon {
-  display: grid;
-  place-items: center;
-  flex: 0 0 22px;
-  width: 22px;
-  height: 22px;
-  margin-top: 1px;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--conn-accent) 13%, transparent);
-  color: var(--conn-accent);
-}
-
-.connectivity-alert-note p {
   margin: 0;
-  color: rgba(217, 223, 235, 0.68);
-  font-size: 11.5px;
-  line-height: 1.8;
+  flex: 1;
+  min-width: 0;
+  font-size: 12.2px;
+  line-height: 1.72;
+  color: var(--text-2, #cbd5e1);
 }
 
+:root[data-theme='light'] .connectivity-alert-note {
+  color: #334155;
+}
+
+/* ─── Footer CTA ──────────────────────────────────────────────────────────── */
 .connectivity-alert-footer {
-  position: relative;
-  z-index: 1;
-  flex: 0 0 auto;
-  padding-top: 10px;
+  margin-block-start: 16px;
+  display: flex;
 }
 
-.connectivity-alert-acknowledge {
-  justify-content: center;
-  gap: 10px;
+button.connectivity-alert-ack {
   width: 100%;
-  min-height: 54px;
-  padding: 13px 18px;
-  border: 1px solid color-mix(in srgb, var(--conn-accent) 78%, #fff 0%);
+  min-height: 48px;
+  padding-block: 12px;
+  padding-inline: 18px;
+  border: 0;
   border-radius: 16px;
-  background: linear-gradient(115deg, var(--conn-accent), var(--conn-accent-strong));
-  box-shadow: 0 10px 28px color-mix(in srgb, var(--conn-accent) 22%, transparent), 0 1px 0 rgba(255, 255, 255, 0.38) inset;
-  color: #17120b;
   font-family: inherit;
-  font-size: 15px;
-  font-weight: 850;
-  line-height: 1.35;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #04131d;
+  background: linear-gradient(125deg, #22d3ee 0%, #38bdf8 54%, #818cf8 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.48),
+    0 14px 28px -12px rgba(34, 211, 238, 0.65);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   cursor: pointer;
-  transition: transform 140ms ease, filter 140ms ease, box-shadow 140ms ease;
-  -webkit-appearance: none;
-  appearance: none;
+  transition: transform 130ms ease, filter 130ms ease;
 }
 
-.connectivity-alert-acknowledge:hover {
+button.connectivity-alert-ack svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+button.connectivity-alert-ack:hover {
   filter: brightness(1.05);
-  box-shadow: 0 12px 32px color-mix(in srgb, var(--conn-accent) 28%, transparent), 0 1px 0 rgba(255, 255, 255, 0.42) inset;
 }
 
-.connectivity-alert-acknowledge:active { transform: translateY(1px) scale(0.99); }
-.connectivity-alert-acknowledge:focus-visible { outline: 3px solid rgba(255, 255, 255, 0.9); outline-offset: 3px; }
-.connectivity-alert-arrow { flex: 0 0 auto; }
-:root[dir='rtl'] .connectivity-alert-arrow { transform: scaleX(-1); }
-
-@media (max-width: 560px) {
-  .connectivity-alert-layer { padding: 0; }
-  .connectivity-alert-screen {
-    width: 100%;
-    height: 100dvh;
-    min-height: 100dvh;
-    max-height: 100dvh;
-    padding: calc(env(safe-area-inset-top) + 18px) 22px calc(env(safe-area-inset-bottom) + 18px);
-    border: 0;
-    border-radius: 0;
-  }
-  .connectivity-alert-header { min-height: 34px; }
-  .connectivity-alert-brand { font-size: 10px; }
-  .connectivity-alert-visual {
-    width: 130px;
-    height: 130px;
-    flex-basis: 130px;
-    margin-block: 4px 14px;
-  }
-  .connectivity-alert-orbit--outer { inset: 4px; }
-  .connectivity-alert-orbit--inner { inset: 16px; }
-  .connectivity-alert-signal { width: 82px; height: 82px; border-radius: 27px; }
-  .connectivity-alert-title { font-size: clamp(22px, 6vw, 27px); }
-  .connectivity-alert-body { margin-top: 10px; font-size: 13.5px; line-height: 1.9; }
-  .connectivity-alert-note { margin-top: 16px; padding: 11px 12px; }
-  .connectivity-alert-footer { padding-top: 12px; }
+button.connectivity-alert-ack:active {
+  transform: scale(0.985);
 }
 
-@media (max-width: 360px) {
-  .connectivity-alert-screen { padding-inline: 18px; }
-  .connectivity-alert-badge { gap: 5px; padding-inline: 8px; font-size: 9px; }
-  .connectivity-alert-visual {
-    width: 112px;
-    height: 112px;
-    flex-basis: 112px;
-  }
-  .connectivity-alert-signal { width: 76px; height: 76px; border-radius: 24px; }
-  .connectivity-alert-signal svg { width: 60px; height: 60px; }
-  .connectivity-alert-content { padding-block: 6px 12px; }
+button.connectivity-alert-ack:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
 
-@media (max-height: 680px) and (min-width: 561px) {
-  .connectivity-alert-screen { padding-block: 18px; }
-  .connectivity-alert-visual {
-    width: 112px;
-    height: 112px;
-    flex-basis: 112px;
-    margin-block: 0 8px;
+@keyframes connPulseRing {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(0.98);
   }
-  .connectivity-alert-orbit--outer { inset: 4px; }
-  .connectivity-alert-orbit--inner { inset: 14px; }
-  .connectivity-alert-signal { width: 74px; height: 74px; border-radius: 24px; }
-  .connectivity-alert-signal svg { width: 58px; height: 58px; }
-  .connectivity-alert-content { padding-block: 4px 8px; }
-  .connectivity-alert-note { margin-top: 12px; }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.03);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .connectivity-alert-acknowledge { transition: none; }
+  .connectivity-alert-ring--outer,
+  button.connectivity-alert-ack {
+    animation: none !important;
+    transition: none !important;
+  }
 }
-
-/* LIGHT THEME — retain the amber warning but replace the dark glass with a
-   calm solid surface, so the page does not look like an error screen. */
-:root[data-theme='light'] .connectivity-alert-backdrop {
-  background:
-    radial-gradient(ellipse at 50% 20%, rgba(180, 104, 0, 0.11), transparent 44%),
-    rgba(14, 20, 35, 0.53);
-}
-
-:root[data-theme='light'] .connectivity-alert-screen {
-  background:
-    radial-gradient(ellipse at 50% 32%, rgba(255, 181, 71, 0.12), transparent 43%),
-    linear-gradient(160deg, #ffffff 0%, #f7f8fc 70%, #f1f3f9 100%);
-  border-color: rgba(15, 23, 42, 0.1);
-  box-shadow: 0 32px 90px rgba(10, 18, 36, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.8) inset;
-  color: #141a2a;
-}
-
-:root[data-theme='light'] .connectivity-alert-brand { color: rgba(24, 32, 50, 0.72); }
-:root[data-theme='light'] .connectivity-alert-brand b { color: rgba(24, 32, 50, 0.42); }
-:root[data-theme='light'] .connectivity-alert-brand-mark { border-color: rgba(25, 34, 55, 0.12); background: rgba(25, 34, 55, 0.045); }
-:root[data-theme='light'] .connectivity-alert-title { color: #141a2a; }
-:root[data-theme='light'] .connectivity-alert-body { color: rgba(32, 43, 65, 0.74); }
-:root[data-theme='light'] .connectivity-alert-note { border-color: rgba(23, 32, 51, 0.08); background: rgba(23, 32, 51, 0.035); }
-:root[data-theme='light'] .connectivity-alert-note p { color: rgba(32, 43, 65, 0.7); }
-:root[data-theme='light'] .connectivity-alert-signal { background: linear-gradient(145deg, color-mix(in srgb, var(--conn-accent) 15%, #fff), #f3f4f8 82%); }
-:root[data-theme='light'] .connectivity-alert-signal-cut { stroke: #f5f6fa; }
-:root[data-theme='light'] .connectivity-alert-signal-badge { stroke: #f3f4f8; }
-:root[data-theme='light'] .connectivity-alert-signal-exclamation { stroke: #352414; }

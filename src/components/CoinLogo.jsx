@@ -1,106 +1,71 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { coinHue, coinImage, tickerLogo } from '../lib/coinImage';
 import { symbolSvg } from './AssetIcon';
 
+function scopeSvg(svg, scope) {
+  if (!svg) return null;
+  const sized = /^<svg(?![^>]*\swidth=)/.test(svg)
+    ? svg.replace('<svg ', '<svg width="100%" height="100%" ')
+    : svg;
+  if (!scope || !sized.includes('id="')) return sized;
+  return sized
+    .replace(/\bid="([^"]+)"/g, `id="${scope}_$1"`)
+    .replace(/url\(#([^)]+)\)/g, `url(#${scope}_$1)`);
+}
+
 /**
- * ONE COIN AVATAR, USED EVERYWHERE.
- * ---------------------------------------------------------------------------
- * ─── WHY A COMPONENT AND NOT `{coin.image && <img …>}` ──────────────────────
- * That expression was copy-pasted into eleven places (Market twice, CoinRow,
- * CoinDetail, Trade twice, Signals twice, Stocks, Predict, Discover). Every
- * copy had a different subset of the attributes that make an image cheap, and
- * NONE of them handled an image that fails to load — so a dead URL left an
- * empty circle with no letters in it, which reads as broken rather than as
- * missing.
- *
- * Centralising it is what makes the size rewrite in lib/coinImage.js actually
- * reach the screen. A fix applied in ten of eleven places is not a fix; it is
- * a bug that now happens less often and is therefore harder to find.
- *
- * ─── THE ATTRIBUTES ARE THE FEATURE ─────────────────────────────────────────
- *   width/height  reserve the box before the bytes arrive, so the row does not
- *                 reflow when each icon lands. Two hundred and fifty reflows
- *                 is the "کنده" — the stutter — in the report.
- *   loading=lazy  a 250-row list only fetches what is near the viewport.
- *   fetchPriority a decorative avatar must never compete with the price data
- *                 the user is actually waiting for. Same connection pool.
- *   decoding      keeps image decode off the main thread so scrolling stays
- *                 smooth while icons arrive.
- *   referrerPolicy the image host does not need to learn which coins our
- *                 users browse.
- *
- * ─── THE FALLBACK IS A MONOGRAM, NOT A HIDDEN IMAGE ─────────────────────────
- * `onError` sets state instead of `display:none`. Hiding leaves a blank
- * circle; the monogram at least identifies the coin, and it is generated from
- * the symbol so it costs no request at all.
+ * Shared coin & equity avatar with instant frame-0 offline vector / colour
+ * underlay so Market, Stories, Ticker and CoinRow icons never appear blank on
+ * slow or filtered connections, plus `preferVector` full-bleed mode for square
+ * hero tiles such as the Bitcoin hero card.
  */
 export default function CoinLogo({
   coin,
   ticker,
+  name: _name,
   size = 'small',
   px,
+  preferVector = false,
   className = 'coin-logo',
   style
 }) {
-  /*
-   * A coin image when the feed supplies one; otherwise a REAL company logo
-   * derived from a US-equity ticker (the Stocks reference table). No image
-   * at all → the monogram below, and `ticker` also feeds that monogram so a
-   * failed logo still identifies the company.
-   */
-  const src = coinImage(coin?.image, size) ?? (ticker ? tickerLogo(ticker) : null);
+  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  const rawSym = coin?.symbol ?? ticker;
+  const rawSvg = useMemo(() => symbolSvg(rawSym), [rawSym]);
+  const scopedSvg = useMemo(() => scopeSvg(rawSvg, uid), [rawSvg, uid]);
+
+  const src = (preferVector && scopedSvg)
+    ? null
+    : (coinImage(coin?.image, size) ?? (ticker ? tickerLogo(ticker) : null));
+
+  const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
 
-  /*
-   * Reset when the coin changes. Without this, a row recycled by the list
-   * (React reuses the DOM node when only the key's position moves) keeps the
-   * previous coin's failure and shows letters for an image that would load
-   * perfectly well.
-   */
-  useEffect(() => setFailed(false), [src]);
+  useEffect(() => {
+    setLoaded(false);
+    setFailed(false);
+  }, [src]);
 
-  const symbol = String(coin?.symbol ?? ticker ?? '?').slice(0, 3);
-
-  /* The box is sized by CSS unless the caller pins it (Ticker, tag chips). */
+  const symbol = String(rawSym ?? '?').slice(0, 3).toUpperCase();
   const box = px ? { width: px, height: px, ...style } : style;
+  const hue = coinHue(rawSym);
 
-  /*
-   * TIER 2 — the vendored brand artwork in lib/assetIconData.js.
-   *
-   * When the feed supplies no `image` (CoinLore tickers, the offline
-   * snapshot), the monogram used to be the only answer — and the market
-   * screen filled with grey letters where the logos used to be. `symbolSvg`
-   * already holds exact brand marks (BTC, ETH, USDT, SOL, … 125 symbols) as
-   * inline SVG: no request, no CDN, no wrong-coin risk beyond what the feed's
-   * own symbol claims, same trust level as AssetIcon's curated lists. The
-   * monogram remains the last resort, never an empty box.
-   */
   if (!src || failed) {
-    const svg = symbolSvg(coin?.symbol ?? ticker);
-    if (svg) {
-      /* The vendored tiles carry only a viewBox; pin width/height so the SVG
-         fills the avatar box instead of falling back to intrinsic sizing. */
-      const filled = /^<svg(?![^>]*\swidth=)/.test(svg)
-        ? svg.replace('<svg ', '<svg width="100%" height="100%" ')
-        : svg;
+    if (scopedSvg) {
       return (
         <span
           className={className}
           style={{ ...box, display: 'block', background: 'none', padding: 0 }}
-          /* Vendored strings only — never user or API input. */
-          dangerouslySetInnerHTML={{ __html: filled }}
+          dangerouslySetInnerHTML={{ __html: scopedSvg }}
           aria-hidden="true"
         />
       );
     }
-    const hue = coinHue(coin?.symbol);
     return (
       <span
         className={className}
         style={{
           ...box,
-          /* Faint, not saturated: a placeholder must not out-shout the real
-             icons sitting next to it in the same list. */
           background: `linear-gradient(140deg, hsl(${hue} 60% 30%), hsl(${(hue + 40) % 360} 60% 22%))`,
           color: '#fff'
         }}
@@ -110,8 +75,22 @@ export default function CoinLogo({
     );
   }
 
+  const preloadStyle = !loaded && !scopedSvg
+    ? {
+        ...box,
+        background: `linear-gradient(140deg, hsl(${hue} 58% 28%), hsl(${(hue + 38) % 360} 58% 20%))`
+      }
+    : box;
+
   return (
-    <span className={className} style={box}>
+    <span className={className} style={preloadStyle}>
+      {!loaded && scopedSvg && (
+        <span
+          className="coin-logo-underlay"
+          dangerouslySetInnerHTML={{ __html: scopedSvg }}
+          aria-hidden="true"
+        />
+      )}
       <img
         src={src}
         alt=""
@@ -119,6 +98,8 @@ export default function CoinLogo({
         decoding="async"
         fetchpriority="low"
         referrerPolicy="no-referrer"
+        className={loaded ? 'coin-logo-net is-loaded' : 'coin-logo-net'}
+        onLoad={() => setLoaded(true)}
         onError={() => setFailed(true)}
       />
     </span>

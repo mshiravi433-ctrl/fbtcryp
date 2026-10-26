@@ -745,7 +745,7 @@ export default function Market() {
                 <div className="market-hero-logo-halo">
                   <span className="market-hero-orbit" aria-hidden="true" />
                   <span className="market-hero-orbit market-hero-orbit--rev" aria-hidden="true" />
-                  <CoinLogo coin={hero} />
+                  <CoinLogo coin={hero} preferVector />
                   <span className="market-hero-rank-badge mono">#{hero.rank || 1}</span>
                 </div>
                 <div className="market-hero-id-text">
@@ -850,10 +850,10 @@ export default function Market() {
           </p>
           <div className="tag-scroll market-trending-rail">
             {trending.map((c, i) => (
-              <motion.button
+              <button
                 key={c.id}
+                type="button"
                 className="tag market-trending-chip"
-                whileTap={{ scale: 0.94 }}
                 onClick={() => navigate(`/coin/${c.id}`)}
               >
                 <span className="market-trending-rank mono">{i + 1}</span>
@@ -865,7 +865,7 @@ export default function Market() {
                   <small>{c.name}</small>
                 </span>
                 <span className="market-trending-go" aria-hidden="true" />
-              </motion.button>
+              </button>
             ))}
           </div>
         </section>
@@ -1285,7 +1285,7 @@ export default function Market() {
               themselves (see CoinRow), which keeps the list honest at any
               length: what has mounted is visible.
             */}
-            <motion.div className="stack market-coin-grid">
+            <div className="stack market-coin-grid">
               {visibleList.map((c, i) => {
                 /*
                   ─── ONE TAP, TWO ANSWERS ─────────────────────────────────
@@ -1330,7 +1330,7 @@ export default function Market() {
                   </div>
                 );
               })}
-            </motion.div>
+            </div>
 
             {/*
               THE FOOTER SAYS WHERE YOU ARE.

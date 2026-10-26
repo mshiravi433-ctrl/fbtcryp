@@ -6986,3 +6986,190 @@
   height: 6px;
   box-shadow: 0 0 0 3px rgba(47, 230, 168, 0.16);
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   16 · BITCOIN HERO FULL-BLEED SQUARE LOGO & ZERO-BLACKOUT SCROLL
+   ══════════════════════════════════════════════════════════════════════════
+   1. «قسمت باکس بیت کویین لوگو در مربع نصفه دایره شده لوگو باید فضای باکس
+       لوگو را بگیره نه نصف دایره باید اندازه درست باشد»
+      `.market-hero-orbit` previously kept `border-radius: 50%` at `inset: -3px`
+      around a square `.market-hero-logo-halo`, cutting four half-circle arcs
+      through the square edges while `object-fit: contain` rendered CoinGecko's
+      round PNG inside a square box. The halo now uses concentric squircle
+      radii (`17px` / `20px`) and `preferVector` full-bleed `object-fit: cover`
+      artwork so the Bitcoin tile fills 100% of its box cleanly.
+
+   2. «و هنوز هنگام اسکرول گاهی صفحه سیاه میشود و یا لود نمیشود مثلا ایکون های
+       استوری یا ایکون های دیگر طول میکشه لود بشه»
+      Eliminates the remaining offscreen raster / tile-eviction triggers missed
+      by §15.6: blurred masked conic spinners, 8 nested `backdrop-filter`
+      chips + SVG `drop-shadow` filters on `.market-stories-rail`, `mask-image`
+      alpha buffers on horizontal rails, continuous `background-clip: text`
+      shimmers, and `contain: paint` row tile eviction on mobile Chromium.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.market-hero-logo-halo {
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border-radius: 17px;
+  animation: none !important;
+  background: #f7931a;
+  border: 1px solid rgba(255, 224, 158, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    0 12px 26px -12px rgba(247, 147, 26, 0.72);
+}
+
+:root[data-theme='light'] .market-hero-logo-halo {
+  background: #f7931a;
+  border-color: rgba(247, 147, 26, 0.65);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 12px 24px -12px rgba(247, 147, 26, 0.55);
+}
+
+.market-hero-logo-halo > .coin-logo {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border-radius: 16px;
+  border: 0;
+  overflow: hidden;
+  background: #f7931a;
+  box-shadow: none;
+}
+
+.market-hero-logo-halo > .coin-logo img,
+.market-hero-logo-halo > .coin-logo svg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Concentric squircle ring matching the box — never `border-radius: 50%`. */
+.market-hero-logo-halo > .market-hero-orbit,
+.market-hero-logo-halo > .market-hero-orbit:first-of-type {
+  inset: -4px;
+  border-radius: 21px;
+  border: 1px solid rgba(247, 169, 60, 0.38);
+  background: none;
+  animation: none !important;
+  will-change: auto;
+}
+
+.market-hero-logo-halo > .market-hero-orbit--rev {
+  display: none !important;
+  animation: none !important;
+}
+
+.market-hero-rank-badge {
+  bottom: -6px;
+  inset-inline-end: -6px;
+  z-index: 2;
+}
+
+@media (max-width: 430px) {
+  .market-hero-logo-halo {
+    width: 52px;
+    height: 52px;
+    border-radius: 15px;
+  }
+  .market-hero-logo-halo > .coin-logo {
+    border-radius: 14px;
+  }
+  .market-hero-logo-halo > .market-hero-orbit,
+  .market-hero-logo-halo > .market-hero-orbit:first-of-type {
+    inset: -3px;
+    border-radius: 18px;
+  }
+}
+
+/* Remove blurred/masked conic spinners & remaining nested backdrop blurs */
+.market-glass-conic,
+.market-signal-promo .ad-banner::before,
+.market-signal-promo .ad-banner::after,
+.market-story-ring::before {
+  display: none !important;
+  animation: none !important;
+  filter: none !important;
+  mask-image: none !important;
+  -webkit-mask-image: none !important;
+  will-change: auto !important;
+}
+
+.market-global-kicker,
+.market-trend-glass,
+.market-hero-pair-pill,
+.market-hero-range,
+.market-stories-badge,
+.market-story-chip,
+.market-count,
+.market-sort-popover {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.market-story-chip {
+  background: color-mix(in srgb, var(--story-accent, #38e1ff) 18%, #0b1222);
+}
+
+:root[data-theme='light'] .market-story-chip {
+  background: color-mix(in srgb, var(--story-accent, #0284c7) 14%, #ffffff);
+}
+
+.market-sort-popover {
+  background: #0d1424;
+}
+
+:root[data-theme='light'] .market-sort-popover {
+  background: #ffffff;
+}
+
+/* Synchronous frame-0 Story glyph paint (no SVG drop-shadow checkerboarding) */
+.market-story-glyph {
+  filter: none !important;
+}
+
+.market-story-Bubble:not(.is-seen) .market-story-ring::after {
+  animation: none !important;
+  will-change: auto !important;
+  transform: none;
+  opacity: 0.45;
+}
+
+.market-story-stock-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+/* Drop offscreen alpha-mask buffers on horizontal scroll rails */
+.market-trending-rail,
+.market-sectors-rail {
+  mask-image: none !important;
+  -webkit-mask-image: none !important;
+}
+
+/* Freeze continuous gradient text shimmers & drop-shadow raster passes */
+.market-hero-price,
+.market-global-value,
+.market-dominance-bar::after,
+.market-hero-range-marker,
+.market-breadth-mark svg {
+  animation: none !important;
+  filter: none !important;
+}
+
+/* Keep layout/style containment on rows without `paint` tile eviction */
+.market-coin-grid > .market-coin-row {
+  contain: layout style;
+}
+
+.market-trending-chip:active,
+.coin-row-open:active {
+  transform: scale(0.985);
+}
+

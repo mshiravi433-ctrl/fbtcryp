@@ -976,13 +976,12 @@ export default function MarketStories({ coins = [], global = null }) {
                                 onClick={() => handlePrimaryNavigate('/stocks')}
                               >
                                 <span className="market-story-rank mono">{i + 1}</span>
-                                <img
-                                  src={tickerLogo(stk.symbol)}
-                                  alt=""
-                                  className="market-story-stock-logo"
-                                  loading="lazy"
-                                  referrerPolicy="no-referrer"
-                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                <CoinLogo
+                                  ticker={stk.symbol}
+                                  name={stk.name}
+                                  px={30}
+                                  preferVector
+                                  className="coin-logo market-story-stock-logo"
                                 />
                                 <span className="market-story-stock-meta">
                                   <span className="market-story-stock-line">

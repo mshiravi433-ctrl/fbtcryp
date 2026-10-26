@@ -14,18 +14,11 @@ const HEALTH_CHECK_TIMEOUT = 5_000;
 const SLOW_RESPONSE_THRESHOLD = 4_000;
 
 /**
- * A global, full-screen connection warning.
+ * Global, modern telemetry popup for offline & weak-internet states.
  *
- * Browser `online` / `offline` events catch a lost network immediately. They
- * do not catch a captive portal, DNS failure, blocked route, or an API that is
- * simply unreachable while `navigator.onLine` remains true, so this also
- * checks the app's tiny /api/health endpoint. The Network Information API is
- * used as an optional hint on browsers that expose it; Safari and older
- * webviews still get the event + reachability checks.
- *
- * The acknowledgement dismisses one outage episode. It does not keep opening
- * over and over while someone is trying to use the app offline, but a healthy
- * connection resets the acknowledgement so a later outage is announced.
+ * Preserves browser online/offline listeners, Network Information API hints,
+ * edge-cached `/api/health` reachability probes, offline cold-start locale
+ * fallbacks, scroll lock, and single-episode dismissal latch.
  */
 export default function ConnectivityAlert() {
   const { t, i18n } = useTranslation();
@@ -103,27 +96,6 @@ export default function ConnectivityAlert() {
 
       try {
         const base = apiBase().replace(/\/+$/, '');
-        /*
-         * ─── A REAL ROUND TRIP, WITHOUT WAKING THE FUNCTION EVERY TIME ──────
-         * This probe used to request `/health?_fbt_probe=<timestamp>` with
-         * `cache: 'no-store'`. The unique query string is a unique cache key,
-         * so EVERY check — one per open tab every 45 s — had to reach the API
-         * function, and on a serverless host each of those is a chance to pay
-         * a full cold start. That is ~1,920 invocations a day per open client
-         * for a heartbeat.
-         *
-         * Now the URL is stable and /api/health answers with
-         * `max-age=5, s-maxage=15, stale-while-revalidate=45`, so:
-         *   · the fetch still goes out over the network (this is the whole
-         *     point of the check: DNS, captive portal, TLS, routing);
-         *   · the browser cache is fresh for at most 5 s, so any check that
-         *     matters — the 45 s heartbeat, or the 2.5 s retry after a slow
-         *     response — is a genuine request;
-         *   · the edge may answer it without invoking the function.
-         * The cost of that trade is bounded staleness: if the API breaks, the
-         * banner can be up to ~1 minute late (15 s edge TTL + 45 s SWR), which
-         * is well inside the window this alert is designed for.
-         */
         const response = await fetch(`${base}/health`, {
           method: 'GET',
           credentials: 'omit',
@@ -144,8 +116,6 @@ export default function ConnectivityAlert() {
           : latestHint === 'weak' || slowResponses >= 2
             ? 'weak'
             : 'online');
-        /* Confirm one very slow response quickly; ordinary healthy checks stay
-           at a low-frequency heartbeat to avoid unnecessary background work. */
         schedule(slowResponses === 1 ? QUICK_RETRY_DELAY : HEALTH_CHECK_INTERVAL);
       } catch {
         if (!mounted) return;
@@ -218,20 +188,20 @@ export default function ConnectivityAlert() {
       : null;
     if (focusFrame === null) acknowledgeRef.current?.focus?.({ preventScroll: true });
 
-    /* There is only one control in this alert, so keep keyboard focus on it
-       instead of letting Tab reach controls hidden behind the full-screen
-       layer. */
-    const keepFocusInDialog = (event) => {
+    const onKeyDown = (event) => {
       if (event.key === 'Tab') {
         event.preventDefault();
         acknowledgeRef.current?.focus({ preventScroll: true });
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        setAcknowledged(true);
       }
     };
-    window.addEventListener('keydown', keepFocusInDialog, true);
+    window.addEventListener('keydown', onKeyDown, true);
 
     return () => {
       if (focusFrame !== null) window.cancelAnimationFrame?.(focusFrame);
-      window.removeEventListener('keydown', keepFocusInDialog, true);
+      window.removeEventListener('keydown', onKeyDown, true);
       unlockScroll();
       if (previouslyFocused && previouslyFocused !== document.body && typeof previouslyFocused.focus === 'function') {
         previouslyFocused.focus({ preventScroll: true });
@@ -247,7 +217,7 @@ export default function ConnectivityAlert() {
   const badge = translateConnectivity(offline ? 'offlineBadge' : 'weakBadge');
   const transition = reduceMotion
     ? { duration: 0.12 }
-    : { type: 'spring', stiffness: 280, damping: 27 };
+    : { type: 'spring', stiffness: 310, damping: 28 };
 
   return createPortal(
     <AnimatePresence>
@@ -258,50 +228,76 @@ export default function ConnectivityAlert() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: reduceMotion ? 0.12 : 0.2 }}
+            transition={{ duration: reduceMotion ? 0.1 : 0.18 }}
+            onClick={() => setAcknowledged(true)}
             aria-hidden="true"
           />
+
           <motion.section
-            className={`connectivity-alert-screen${offline ? ' is-offline' : ' is-weak'}`}
+            className={`connectivity-alert-screen connectivity-alert-card${offline ? ' is-offline' : ' is-weak connectivity-alert-weak'}`}
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="connectivity-alert-title"
             aria-describedby="connectivity-alert-body connectivity-alert-note"
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 18, scale: 0.985 }}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.99 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.985 }}
             transition={transition}
           >
-            <div className="connectivity-alert-glow" aria-hidden="true" />
+            {/* Ambient Aurora Mesh & Radar Grid */}
+            <span className="connectivity-alert-aurora" aria-hidden="true">
+              <i className="connectivity-alert-bloom connectivity-alert-bloom--a" />
+              <i className="connectivity-alert-bloom connectivity-alert-bloom--b" />
+              <i className="connectivity-alert-grid" />
+            </span>
 
+            {/* Top Telemetry Header: Brand Chip + Status Pill + Signal Meter */}
             <header className="connectivity-alert-header">
-              <span className="connectivity-alert-brand">
-                <span className="connectivity-alert-brand-mark" aria-hidden="true">F</span>
-                <span>FBT <b>SWAP</b></span>
+              <span className="connectivity-alert-brand" aria-hidden="true">
+                <span className="connectivity-alert-brand-mark">F</span>
+                <span>FBT <b>NET</b></span>
               </span>
-              <span className="connectivity-alert-badge">
-                <span className="connectivity-alert-badge-dot" aria-hidden="true" />
-                {badge}
-              </span>
+
+              <div className="connectivity-alert-telemetry-meta">
+                <span className="connectivity-alert-badge">
+                  <span className="connectivity-alert-dot" aria-hidden="true" />
+                  {badge}
+                </span>
+                <div className="connectivity-alert-bars" aria-hidden="true">
+                  <i className={!offline ? 'is-lit' : ''} />
+                  <i />
+                  <i />
+                  <i />
+                </div>
+              </div>
             </header>
 
             <div className="connectivity-alert-content">
-              <div className="connectivity-alert-visual" aria-hidden="true">
-                <span className="connectivity-alert-orbit connectivity-alert-orbit--outer" />
-                <span className="connectivity-alert-orbit connectivity-alert-orbit--inner" />
-                <div className="connectivity-alert-signal">
-                  <SignalAlertIcon />
+              {/* Concentric Radar Visual */}
+              <div className="connectivity-alert-hero-stage" aria-hidden="true">
+                <div className="connectivity-alert-radar">
+                  <span className="connectivity-alert-ring connectivity-alert-ring--outer" />
+                  <span className="connectivity-alert-ring connectivity-alert-ring--inner" />
+                  <TelemetrySignalSvg offline={offline} />
                 </div>
-                <span className="connectivity-alert-spark connectivity-alert-spark--one" />
-                <span className="connectivity-alert-spark connectivity-alert-spark--two" />
               </div>
 
-              <h1 className="connectivity-alert-title" id="connectivity-alert-title">{title}</h1>
-              <p className="connectivity-alert-body" id="connectivity-alert-body">{body}</p>
+              <h1 className="connectivity-alert-title" id="connectivity-alert-title">
+                {title}
+              </h1>
 
-              <div className="connectivity-alert-note" id="connectivity-alert-note">
-                <span className="connectivity-alert-note-icon" aria-hidden="true"><InfoIcon /></span>
-                <p>{translateConnectivity('transactionNote')}</p>
+              <p className="connectivity-alert-lead" id="connectivity-alert-body">
+                {body}
+              </p>
+
+              {/* On-Chain Transaction Safety Bento Strip */}
+              <div className="connectivity-alert-safety" id="connectivity-alert-note">
+                <span className="connectivity-alert-safe-ico" aria-hidden="true">
+                  <ShieldVaultIcon />
+                </span>
+                <p className="connectivity-alert-note">
+                  {translateConnectivity('transactionNote')}
+                </p>
               </div>
             </div>
 
@@ -309,11 +305,11 @@ export default function ConnectivityAlert() {
               <button
                 ref={acknowledgeRef}
                 type="button"
-                className="connectivity-alert-acknowledge"
+                className="connectivity-alert-ack connectivity-alert-acknowledge"
                 onClick={() => setAcknowledged(true)}
               >
                 <span>{translateConnectivity('acknowledge')}</span>
-                <ArrowIcon />
+                <CheckCircleIcon />
               </button>
             </footer>
           </motion.section>
@@ -324,36 +320,106 @@ export default function ConnectivityAlert() {
   );
 }
 
-function SignalAlertIcon() {
+function TelemetrySignalSvg({ offline }) {
   return (
-    <svg width="68" height="68" viewBox="0 0 68 68" fill="none" aria-hidden="true">
-      <path d="M9.5 25.2a37.1 37.1 0 0 1 49 0" />
-      <path d="M17.7 34.1a24.6 24.6 0 0 1 32.6 0" />
-      <path d="M26.2 43a12 12 0 0 1 15.6 0" />
-      <circle cx="34" cy="52.7" r="2.8" />
-      <path className="connectivity-alert-signal-cut" d="m12 12 44 44" />
-      <circle className="connectivity-alert-signal-badge" cx="51.5" cy="18" r="11.5" />
-      <path className="connectivity-alert-signal-exclamation" d="M51.5 12.3v6.1" />
-      <circle className="connectivity-alert-signal-exclamation" cx="51.5" cy="22.1" r=".8" />
+    <svg className="connectivity-alert-glyph" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+      {offline ? (
+        <>
+          <path
+            d="M6.8 16a18.2 18.2 0 0 1 26.4 0"
+            stroke="currentColor"
+            strokeOpacity="0.28"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M11.4 20.8a11.8 11.8 0 0 1 17.2 0"
+            stroke="currentColor"
+            strokeOpacity="0.52"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M16 25.5a5.6 5.6 0 0 1 8 0"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+          <circle cx="20" cy="30.2" r="2.2" fill="currentColor" />
+          <path
+            d="M9.5 9.5 30.5 30.5"
+            stroke="currentColor"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+          />
+        </>
+      ) : (
+        <>
+          <path
+            d="M6.8 16a18.2 18.2 0 0 1 26.4 0"
+            stroke="currentColor"
+            strokeOpacity="0.22"
+            strokeWidth="2.4"
+            strokeDasharray="3.2 3.4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M11.4 20.8a11.8 11.8 0 0 1 17.2 0"
+            stroke="currentColor"
+            strokeOpacity="0.46"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M16 25.5a5.6 5.6 0 0 1 8 0"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          />
+          <circle cx="20" cy="30.2" r="2.3" fill="currentColor" />
+          <circle cx="29.8" cy="11.2" r="4.8" fill="currentColor" fillOpacity="0.2" />
+          <path
+            d="M29.8 9v2.6M29.8 13.7h.01"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        </>
+      )}
     </svg>
   );
 }
 
-function InfoIcon() {
+function ShieldVaultIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 11v5" />
-      <path d="M12 8h.01" />
+    <svg viewBox="0 0 22 22" fill="none" aria-hidden="true">
+      <path
+        d="M11 2.4 18 5.2v5.3c0 4.6-3 7.7-7 9.1-4-1.4-7-4.5-7-9.1V5.2L11 2.4Z"
+        stroke="currentColor"
+        strokeWidth="1.65"
+        strokeLinejoin="round"
+      />
+      <path
+        d="m8.2 11.2 1.9 1.9 3.8-3.9"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
-function ArrowIcon() {
+function CheckCircleIcon() {
   return (
-    <svg className="connectivity-alert-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M5 12h14" />
-      <path d="m13 6 6 6-6 6" />
+    <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+      <path
+        d="m4.2 9.4 3.1 3.1 6.5-6.6"
+        stroke="currentColor"
+        strokeWidth="2.1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
