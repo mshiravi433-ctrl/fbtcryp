@@ -276,6 +276,7 @@
     "clearSearch": "清除搜索",
     "viewsAria": "市场视图",
     "sortAria": "排序市场列表",
+    "sortTitle": "排序",
     "sort": {
       "rank": "排名",
       "mcap": "市值",

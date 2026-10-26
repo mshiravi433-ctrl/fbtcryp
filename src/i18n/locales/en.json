@@ -125,6 +125,7 @@
     "clearSearch": "Clear the search",
     "viewsAria": "Market views",
     "sortAria": "Sort the market list",
+    "sortTitle": "SORT BY",
     "sort": {
       "rank": "Rank",
       "mcap": "Market cap",

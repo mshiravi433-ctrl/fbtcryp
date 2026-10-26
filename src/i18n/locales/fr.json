@@ -276,6 +276,7 @@
     "clearSearch": "Effacer la recherche",
     "viewsAria": "Vues du marché",
     "sortAria": "Trier la liste du marché",
+    "sortTitle": "TRIER",
     "sort": {
       "rank": "Rang",
       "mcap": "Capitalisation",

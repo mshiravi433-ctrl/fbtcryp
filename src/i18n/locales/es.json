@@ -276,6 +276,7 @@
     "clearSearch": "Borrar la búsqueda",
     "viewsAria": "Vistas del mercado",
     "sortAria": "Ordenar la lista del mercado",
+    "sortTitle": "ORDENAR",
     "sort": {
       "rank": "Puesto",
       "mcap": "Capitalización",
