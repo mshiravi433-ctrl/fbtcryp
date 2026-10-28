@@ -21,7 +21,7 @@ import { withCache } from '../cache.js';
 import { dexPairsForTokens, bsTokenHolders, solanaTokenHolders } from './dataSources.js';
 import { exchangeFor } from './registry.js';
 import { detectAccumulation, detectDistribution } from './engines.js';
-import { TTL, WINDOWS } from './config.js';
+import { TTL, WINDOWS, WINDOW_KEYS } from './config.js';
 
 const EVM_ADDR = /^0x[a-fA-F0-9]{40}$/;
 const SOL_ADDR = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -42,7 +42,7 @@ function timeoutWithin(deadlineAt) {
 }
 
 function windowMs(key) {
-  return WINDOWS[key] || WINDOWS.H24;
+  return WINDOW_KEYS[key] || WINDOWS.H24;
 }
 
 function riskBand({ liquidityUsd, ageMs, topShare }) {
@@ -195,6 +195,17 @@ async function buildTokenIntel(address, chainId, deadlineAt) {
     },
     accumulation: accum,
     distribution: distrib,
+    /* These two are computed from the token's FIXED 24-hour pair statistics
+       (trade counts only), so they ignore the selected window. They are
+       named here so no consumer can mistake them for the per-trade,
+       windowed numbers in `smartMoneyFlow` (see tokenTrades.js). */
+    estimation: {
+      netFlowUsd: 'pair trade counts × 24h volume: volume_h24 × (buyRatio − 0.5) × 2',
+      accumulation: '24h pair buy/sell transaction-count ratio',
+      distribution: '24h pair buy/sell transaction-count ratio',
+      windowScoped: false,
+      note: 'Window-independent estimates. The per-trade, windowed flow is served in smartMoneyFlow.'
+    },
     risk,
     disclaimers: {
       notAdvice: 'On-chain observations only — not a buy signal, not investment advice.',

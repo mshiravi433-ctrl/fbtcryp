@@ -12911,6 +12911,24 @@
     }
   },
   "sm": {
+    "flow": {
+      "basisTrades": "Individual trades · exact",
+      "basisTradesSample": "Trade sample · covers {{pct}}% of this window",
+      "basisCounts": "Pool trade counts · direction estimated",
+      "basisVolume": "Pool volume only · no direction",
+      "basisWhale": "Labelled large transfers only",
+      "basisNone": "Not measured",
+      "evidenceTrades": "{{trades}} real trades · {{wallets}} wallets",
+      "evidenceVolume": "Window volume {{volume}}",
+      "evidenceCounts": "{{buys}} buys · {{sells}} sells",
+      "estimated": "estimated",
+      "coveragePct": "the trade page reaches back {{pct}}% of this window",
+      "windowUsed": "closest window the source reports: {{window}}",
+      "window6h": "6 hours",
+      "noData": "No trade data for this contract reached the server in this window. Nothing is shown as zero — an absent reading is not a flat market.",
+      "source": "Source",
+      "walletsTraded": "Wallets trading · not verified"
+    },
     "engine": {
       "label": "VERIFIED ON-CHAIN INTELLIGENCE",
       "title": "Intelligence engine",
@@ -13041,6 +13059,8 @@
       "buyShort": "BUY",
       "sellShort": "SELL",
       "tokenObserved": "Observed sample (not consensus): {{swaps}} paired swaps by {{wallets}} analysed wallets · net {{net}}",
+      "tokenObservedSample": "Real trades in this window, not verified consensus: {{trades}} trades by {{wallets}} wallets · buy {{buy}} · sell {{sell}} · net {{net}}",
+      "tokenObservedVolume": "Real traded volume in this window: {{volume}}. The source did not split it into buys and sells.",
       "status": {
         "SCORED": "scored",
         "INSUFFICIENT_EVIDENCE": "sampling",

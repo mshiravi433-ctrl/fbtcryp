@@ -30,6 +30,34 @@ import '../styles/smart-money-intelligence.css';
 const WINDOWS = ['1h', '4h', '24h', '7d'];
 
 /*
+ * How the numbers below were produced. The card prints this verbatim because
+ * "exact individual trades", "estimated from pool counts" and "not measured"
+ * are three very different claims — and the old card printed none of them,
+ * which is why an empty dataset looked like a quiet market.
+ */
+const BASIS_LABEL = {
+  trades: 'sm.flow.basisTrades',
+  'trades-sample': 'sm.flow.basisTradesSample',
+  counts: 'sm.flow.basisCounts',
+  volume: 'sm.flow.basisVolume',
+  'whale-stream': 'sm.flow.basisWhale',
+  none: 'sm.flow.basisNone'
+};
+
+/* Upstream names as the user would find them — never an internal codename. */
+const SOURCE_LABEL = {
+  geckoterminal: 'GeckoTerminal',
+  blockscout: 'Blockscout',
+  dexscreener: 'DexScreener',
+  'geckoterminal+blockscout': 'GeckoTerminal · Blockscout',
+  'dexscreener+blockscout': 'DexScreener · Blockscout',
+  'whale-stream': 'FBT whale scan',
+  none: null
+};
+
+const fmtInt = (n) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString('en-US') : '—');
+
+/*
  * Explorer link for a receipt hash — same rule as the intelligence tab's
  * ReceiptFeed: a known explorer base from the chain registry AND a real
  * 32-byte hex hash, or no link at all. A malformed hash must never become a
@@ -86,12 +114,30 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
   if (!address) return null;
 
   const flow = data?.smartMoneyFlow;
-  /* Window-scoped signals first (they are what `window` actually selects);
-     the pair-level numbers are the fallback, and they are labelled as such. */
-  const accum = flow?.accumulation ?? data?.accumulation;
-  const distrib = flow?.distribution ?? data?.distribution;
+  /*
+   * ── «صفر است و با تغییر زمان هم چیزی نشان نمی‌دهد» (2026-10-28) ──────────
+   *
+   * The meters used to fall back to `data.accumulation` / `data.distribution`
+   * — the token's FIXED 24-hour pair statistics — whenever the window-scoped
+   * signal was missing. That fallback is exactly what made the card look
+   * frozen: the flow tiles said $0 with a dashed reason, while the two meters
+   * kept drawing the same 24h pair number under every window tab.
+   *
+   * The server now answers `smartMoneyFlow` in one of three honest states:
+   *   · measured          → numbers (exact trades, or a flagged estimate)
+   *   · measured zero     → a real 0
+   *   · not measured      → null → «—»
+   * so the pair-level fallback is GONE. A meter with no window-scoped
+   * evidence shows «—» instead of a number that ignores the selected window.
+   */
+  const accum = flow ? flow.accumulation : data?.accumulation;
+  const distrib = flow ? flow.distribution : data?.distribution;
   const holders = data?.holders;
   const windowScoped = flow?.window === win;
+  const basis = flow?.basis || null;
+  const estimated = !!flow?.estimated;
+  const sampled = flow?.sampled || null;
+  const flowSource = flow?.coverage?.tradeSource || flow?.coverage?.source || null;
 
   /*
    * ── WHICH TOKEN THESE NUMBERS BELONG TO ─────────────────────────────────
@@ -164,11 +210,33 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
     ? `${verifiedRow.netFlowUsd > 0 ? '+' : '−'}${fmtUsd(Math.abs(verifiedRow.netFlowUsd))}`
     : flow && Number.isFinite(flow.netUsd)
       ? `${flow.netUsd >= 0 ? '+' : '−'}${fmtUsd(Math.abs(flow.netUsd))}`
-      /* Collapsed, this one word is all the reader sees — on a chain with no
-         verified coverage it must not be the generic «insufficient». */
-      : verifiedStatus === 'not-covered'
-        ? t('sm.engine.notCoveredShort')
-        : t('sm.engine.insufficient');
+      /* Measured volume with no direction is still a real answer — better
+         than «insufficient» when the tape simply could not split the sides. */
+      : flow && Number.isFinite(flow.volumeUsd)
+        ? fmtUsd(flow.volumeUsd)
+        /* Collapsed, this one word is all the reader sees — on a chain with no
+           verified coverage it must not be the generic «insufficient». */
+        : verifiedStatus === 'not-covered'
+          ? t('sm.engine.notCoveredShort')
+          : t('sm.engine.insufficient');
+
+  const flowTrades = Number.isFinite(flow?.trades) ? flow.trades : null;
+  const flowWallets = Number.isFinite(flow?.wallets) ? flow.wallets : null;
+  const flowVolume = Number.isFinite(flow?.volumeUsd) ? flow.volumeUsd : null;
+  const volumeWindow = flow?.volumeWindow || null;
+  const coveredPct = Number.isFinite(sampled?.coveredPct) ? sampled.coveredPct : null;
+  const sourceName = flowSource ? (SOURCE_LABEL[flowSource] || flowSource) : null;
+  /* No `basis` means an older server response (v1 signals) — in that case the
+     card must not claim «not measured» about numbers that are present. */
+  const basisLabel = basis ? t(BASIS_LABEL[basis] || BASIS_LABEL.none, {
+    pct: coveredPct ?? 0,
+    window: t(`sm.windows.${win}`),
+    count: flowTrades ?? 0
+  }) : null;
+  const windowLabel = (key) => (key === '6h' ? t('sm.flow.window6h')
+    : key === '24h' ? t('sm.windows.24h')
+      : key === '7d' ? t('sm.windows.7d')
+        : t(`sm.windows.${key}`));
 
   return (
     <motion.div
@@ -298,7 +366,30 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
               {t('sm.engine.tokenObserved', { swaps: observed.swaps, wallets: observed.wallets,
                 net: `${observed.netFlowUsd >= 0 ? '+' : '−'}${fmtUsd(Math.abs(observed.netFlowUsd))}` })}
             </small>}
-            {!verifiedRow && !(observed?.swaps > 0) && data?.verified?.coverage?.analyzedWallets > 0 && (
+            {/*
+              «داده‌ها صفرند» — the verdict said «no qualified consensus» and
+              then showed NOTHING, which read as «no flow». The verified layer
+              is a high bar (3+ performance-qualified wallets), so most
+              contracts never clear it; that does not mean the token is
+              quiet. The real, measured trade sample for this exact contract
+              and window now prints right here, clearly labelled as a sample
+              and not a vote.
+            */}
+            {!verifiedRow && flow && (flowTrades > 0 || flowVolume != null) && (
+              <small data-testid="sm-token-observed-trades">
+                {flowTrades > 0
+                  ? t('sm.engine.tokenObservedSample', {
+                    trades: fmtInt(flowTrades),
+                    wallets: flowWallets != null ? fmtInt(flowWallets) : '—',
+                    buy: fmtUsd(flow.buyUsd),
+                    sell: fmtUsd(flow.sellUsd),
+                    net: `${(flow.netUsd ?? 0) >= 0 ? '+' : '−'}${fmtUsd(Math.abs(flow.netUsd ?? 0))}`
+                  })
+                  : t('sm.engine.tokenObservedVolume', { volume: fmtUsd(flowVolume) })}
+              </small>
+            )}
+            {!verifiedRow && !(observed?.swaps > 0) && !(flowTrades > 0) && !(flowVolume != null)
+              && data?.verified?.coverage?.analyzedWallets > 0 && (
               <small>{t('sm.engine.teaserSample', {
                 wallets: data.verified.coverage.analyzedWallets,
                 swaps: data.verified.coverage.observedSwaps ?? data.verified.coverage.swapsInWindow ?? 0
@@ -358,10 +449,52 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
               </div>
             )}
           </div>
-          {/* Legacy router/market flow is useful context, not verified trades. */}
-          <div className="sm-coverage" data-testid="sm-token-window-note">
-            <strong>{t('sm.engine.proxyLabel')}</strong> · {t('sm.tokenWindowNote', { window: t(`sm.windows.${win}`) })}
-            <div>{t('sm.engine.proxyNote')}</div>
+          {/*
+            ── WHAT THESE NUMBERS ARE, IN WORDS ────────────────────────────
+            The block below used to print a fixed disclaimer calling every
+            figure a "router-transfer proxy". That is no longer true: the
+            flow tiles are read from individual trades of this contract
+            (buyer wallet, side, USD, timestamp), with pool aggregates for
+            the window volume. So the card now names the measurement
+            (`basis`), the sample it came from and the upstream that
+            answered — and says «نه اندازه‌گیری‌شده» when the answer is
+            simply absent instead of drawing a zero.
+          */}
+          <div className="sm-token-evidence" data-testid="sm-token-evidence">
+            <div className="sm-token-evidence-head">
+              {basisLabel && (
+                <span className={`smi-signal ${basis === 'none' ? 'idle' : estimated ? 'watch' : 'up'}`}
+                  data-testid="sm-token-basis">
+                  {basisLabel}
+                </span>
+              )}
+              {estimated && <span className="sm-token-chip ghost">{t('sm.flow.estimated')}</span>}
+              {sourceName && <span className="sm-token-chip ghost" data-testid="sm-token-source">{sourceName}</span>}
+            </div>
+            <div className="sm-token-evidence-rows">
+              {flowTrades != null && (
+                <span>{t('sm.flow.evidenceTrades', {
+                  trades: fmtInt(flowTrades),
+                  wallets: flowWallets != null ? fmtInt(flowWallets) : '—'
+                })}</span>
+              )}
+              {flowVolume != null && (
+                <span>{t('sm.flow.evidenceVolume', { volume: fmtUsd(flowVolume) })}</span>
+              )}
+              {flow?.buys != null && flow?.sells != null && (
+                <span>{t('sm.flow.evidenceCounts', { buys: fmtInt(flow.buys), sells: fmtInt(flow.sells) })}</span>
+              )}
+              {volumeWindow && volumeWindow !== win && (
+                <span className="warn">{t('sm.flow.windowUsed', { window: windowLabel(volumeWindow) })}</span>
+              )}
+              {coveredPct != null && coveredPct < 95 && flowTrades > 0 && (
+                <span className="warn">{t('sm.flow.coveragePct', { pct: coveredPct })}</span>
+              )}
+            </div>
+            {basis === 'none' && <p className="smi-footnote" data-testid="sm-token-no-flow-data">{t('sm.flow.noData')}</p>}
+            <p className="smi-footnote" data-testid="sm-token-window-note">
+              {t('sm.tokenWindowNote', { window: t(`sm.windows.${win}`) })}
+            </p>
           </div>
           <div className="sm-metrics" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
             <div className="sm-metric">
@@ -374,7 +507,7 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
             </div>
             <div className="sm-metric">
               <div className="lab">{t('sm.netFlow')}</div>
-              <div className={`val ${(flow?.netUsd || 0) >= 0 ? 'sm-up' : 'sm-down'}`} style={{ fontSize: 15 }}>
+              <div className={`val ${flow?.netUsd == null ? '' : flow.netUsd >= 0 ? 'sm-up' : 'sm-down'}`} style={{ fontSize: 15 }}>
                 {fmtUsd(flow?.netUsd)}
               </div>
             </div>
@@ -384,12 +517,12 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
           <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
             <div style={{ flex: 1 }}>
               <div className="faint" style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase' }}>{t('sm.accumulation')}</div>
-              <div className="sm-meter" style={{ marginTop: 6 }}><i style={{ width: `${accum?.confidence != null ? accum.confidence : 0}%`, background: '#2ee6a8' }} /></div>
+              <div className="sm-meter" style={{ marginTop: 6 }}><i style={{ width: `${accum?.confidence != null ? Math.max(0, Math.min(100, accum.confidence)) : 0}%`, background: '#2ee6a8' }} /></div>
               <div className="sm-up" style={{ fontSize: 12, fontWeight: 900, marginTop: 4 }}>{accum?.confidence != null ? `${accum.confidence}%` : '—'}</div>
             </div>
             <div style={{ flex: 1 }}>
               <div className="faint" style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase' }}>{t('sm.distribution')}</div>
-              <div className="sm-meter" style={{ marginTop: 6 }}><i style={{ width: `${distrib?.confidence != null ? distrib.confidence : 0}%`, background: '#ff5c7a' }} /></div>
+              <div className="sm-meter" style={{ marginTop: 6 }}><i style={{ width: `${distrib?.confidence != null ? Math.max(0, Math.min(100, distrib.confidence)) : 0}%`, background: '#ff5c7a' }} /></div>
               <div className="sm-down" style={{ fontSize: 12, fontWeight: 900, marginTop: 4 }}>{distrib?.confidence != null ? `${distrib.confidence}%` : '—'}</div>
             </div>
           </div>
@@ -418,10 +551,17 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
             </div>
           )}
 
-          {/* Smart wallets count */}
+          {/*
+            The wallet count used to be «smartWallets» from the whale buffer —
+            almost always 0. With the trade tape it is the number of DISTINCT
+            wallets that actually traded this contract in the window, and the
+            label says so instead of implying a qualification nobody made.
+          */}
           <div className="sm-row" style={{ cursor: 'default' }}>
-            <div className="mid"><div className="name">{t('sm.smartWalletsTitle')}</div></div>
-            <div className="right usd">{flow?.smartWallets ?? '—'}</div>
+            <div className="mid">
+              <div className="name">{flowWallets != null ? t('sm.flow.walletsTraded') : t('sm.smartWalletsTitle')}</div>
+            </div>
+            <div className="right usd" data-testid="sm-token-wallets">{flowWallets != null ? fmtInt(flowWallets) : '—'}</div>
           </div>
           <div className="sm-row" style={{ cursor: 'default' }}>
             <div className="mid"><div className="name">{t('sm.liquidity')}</div></div>
@@ -433,7 +573,9 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
             <>
               <div className="faint" style={{ fontSize: 11, fontWeight: 800, marginTop: 10, textTransform: 'uppercase' }}>{t('sm.topBuyers')}</div>
               {flow.topBuyers.slice(0, 5).map((b) => (
-                <div key={b.address} className="sm-row">
+                <div key={b.address} className="sm-row" role="button" tabIndex={0}
+                  onClick={() => navigate(`/smart-money/wallet/${chain}/${b.address}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/smart-money/wallet/${chain}/${b.address}`); }}>
                   <div className="mid mono"><div className="name">{b.short || shortAddr(b.address)}</div></div>
                   <div className="right usd sm-up">{fmtUsd(b.usd)}</div>
                 </div>
@@ -444,7 +586,9 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
             <>
               <div className="faint" style={{ fontSize: 11, fontWeight: 800, marginTop: 10, textTransform: 'uppercase' }}>{t('sm.topSellers')}</div>
               {flow.topSellers.slice(0, 5).map((s) => (
-                <div key={s.address} className="sm-row">
+                <div key={s.address} className="sm-row" role="button" tabIndex={0}
+                  onClick={() => navigate(`/smart-money/wallet/${chain}/${s.address}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/smart-money/wallet/${chain}/${s.address}`); }}>
                   <div className="mid mono"><div className="name">{s.short || shortAddr(s.address)}</div></div>
                   <div className="right usd sm-down">{fmtUsd(s.usd)}</div>
                 </div>
@@ -452,7 +596,14 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
             </>
           )}
 
-          {!windowScoped && (
+          {/*
+            A window mismatch is now a source fact, not a warning that the
+            meters below ignore the tab: the server already says which
+            upstream span it could measure (`volumeWindow`), and the evidence
+            block prints it. This line only survives for an older server that
+            still answers without `smartMoneyFlow.window`.
+          */}
+          {!windowScoped && !flow && (
             <div className="sm-coverage">{t('sm.tokenWindowFallback')}</div>
           )}
 

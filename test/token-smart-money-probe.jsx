@@ -340,6 +340,118 @@ export async function run(container) {
     !/(No qualified wallet consensus|اجماع واجد شرایط ثبت نشده)/.test(q('[data-testid="sm-verified-token"]')?.textContent || ''));
   await act(async () => { root.unmount(); });
 
+  /* ═══════════════════════════════════════════════════════════════════════
+   * 11–14. «داده‌ها صفرند و با تغییر زمان هم داده‌ای نشان نمی‌دهد»
+   *
+   * The flow block now carries the MEASUREMENT, not just numbers: which
+   * source answered, how many real trades and wallets the sample holds, and
+   * whether the split is exact or estimated. And when nothing was measured,
+   * the tiles must show «—», never «$0».
+   * ═══════════════════════════════════════════════════════════════════════ */
+  const flowBody = (flowOver = {}, intelOver = {}) => ({
+    ...INTEL,
+    ...intelOver,
+    verified: { dataStatus: 'observed', indexedAt: Date.now(), consensus: null, observed: null, receipts: [] },
+    smartMoneyFlow: {
+      schema: 'fbt.smart-money-tokensignals.v2',
+      window: '24h',
+      dataStatus: 'live',
+      basis: 'trades',
+      estimated: false,
+      buyUsd: 640_000,
+      sellUsd: 410_000,
+      netUsd: 230_000,
+      volumeUsd: 2_300_000,
+      trades: 1_204,
+      wallets: 381,
+      accumulation: { confidence: 68 },
+      distribution: { confidence: 27 },
+      sampled: { trades: 1_204, wallets: 381, coveredPct: 100, complete: true },
+      coverage: { tradeSource: 'geckoterminal', poolSource: 'geckoterminal', source: 'geckoterminal' },
+      topBuyers: [{ address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', short: '0xaaaa…aaaa', usd: 90_000 }],
+      topSellers: [{ address: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', short: '0xbbbb…bbbb', usd: 40_000 }],
+      ...flowOver
+    }
+  });
+  const mountCard = async (body) => {
+    global.fetch = async () => ({ ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) });
+    container.innerHTML = '';
+    root = createRoot(container);
+    await act(async () => {
+      root.render(<MemoryRouter><TokenSmartMoney chainId={56} address={INTEL.address} embedded={false} /></MemoryRouter>);
+    });
+    await act(async () => { await sleep(40); });
+  };
+
+  await mountCard(flowBody());
+  const evidence = q('[data-testid="sm-token-evidence"]');
+  check('the flow block names the measurement (exact individual trades), not a bare number',
+    Boolean(evidence) && /(Individual trades|معاملات واقعی)/.test(evidence.textContent || ''), evidence?.textContent);
+  check('...with the real sample size (trades and distinct wallets)',
+    /1,204/.test(evidence?.textContent || '') && /381/.test(evidence?.textContent || ''), evidence?.textContent);
+  check('...and the upstream that answered', /GeckoTerminal/.test(evidence?.textContent || ''), evidence?.textContent);
+  check('the wallet row counts wallets that actually traded this contract',
+    /(Wallets trading|کیف‌پول)/.test(text()) && /381/.test(q('[data-testid="sm-token-wallets"]')?.textContent || ''),
+    q('[data-testid="sm-token-wallets"]')?.textContent);
+  check('top buyers and sellers are real wallets from the tape',
+    all('.sm-row .mono').length >= 2 && /0xaaaa…aaaa/.test(text()) && /0xbbbb…bbbb/.test(text()));
+  await act(async () => { root.unmount(); });
+
+  /* estimated split (pool counts) */
+  await mountCard(flowBody({
+    basis: 'counts', estimated: true, trades: 6_900, wallets: null, sampled: null,
+    coverage: { tradeSource: null, poolSource: 'geckoterminal', source: 'geckoterminal' }
+  }));
+  check('an estimated split is flagged on screen, never presented as exact',
+    /(estimated|تخمینی)/.test(q('[data-testid="sm-token-evidence"]')?.textContent || '')
+    && /(Pool trade counts|تعداد معاملات استخر)/.test(q('[data-testid="sm-token-basis"]')?.textContent || ''),
+    q('[data-testid="sm-token-evidence"]')?.textContent);
+  await act(async () => { root.unmount(); });
+
+  /* nothing measured → «—», never $0 */
+  await mountCard(flowBody({
+    dataStatus: 'unavailable', basis: 'none', estimated: false,
+    buyUsd: null, sellUsd: null, netUsd: null, volumeUsd: null, trades: null, wallets: null,
+    accumulation: null, distribution: null, sampled: null, topBuyers: [], topSellers: [],
+    coverage: { tradeSource: null, poolSource: null, source: 'none' }
+  }));
+  const tileValues = all('.sm-metric .val').slice(0, 3).map((el) => (el.textContent || '').trim());
+  check('nothing measured → the three flow tiles read «—», never «$0»',
+    tileValues.length === 3 && tileValues.every((v) => v === '—'), tileValues.join(' | '));
+  check('...the reason is printed instead of a silent zero',
+    Boolean(q('[data-testid="sm-token-no-flow-data"]')), text().slice(0, 160));
+  check('...and the meters show no fabricated percentage',
+    /—/.test(all('.sm-up, .sm-down').map((el) => el.textContent).join(' ')));
+  await act(async () => { root.unmount(); });
+
+  /* the window actually changes what is drawn */
+  const byWindow = (win) => flowBody(win === '1h'
+    ? { window: '1h', buyUsd: 120_000, sellUsd: 65_000, netUsd: 55_000, trades: 210, wallets: 74 }
+    : {});
+  global.fetch = async (url) => {
+    const win = /window=1h/.test(String(url)) ? '1h' : '24h';
+    const body = byWindow(win);
+    return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+  };
+  container.innerHTML = '';
+  root = createRoot(container);
+  await act(async () => {
+    root.render(<MemoryRouter><TokenSmartMoney chainId={56} address={INTEL.address} embedded={false} /></MemoryRouter>);
+  });
+  await act(async () => { await sleep(40); });
+  const beforeSwitch = text();
+  await act(async () => {
+    q('[data-testid="sm-token-window-1h"]')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  });
+  await act(async () => { await sleep(60); });
+  const afterSwitch = text();
+  check('switching ۲۴ ساعت → ۱ ساعت changes the drawn flow (the frozen-window complaint)',
+    /\$230/.test(beforeSwitch) && /\$55/.test(afterSwitch) && beforeSwitch !== afterSwitch,
+    `${beforeSwitch.match(/\$\d+/g)?.slice(0, 4)} → ${afterSwitch.match(/\$\d+/g)?.slice(0, 4)}`);
+  check('...and the sample line follows the window',
+    /210/.test(afterSwitch) && /74/.test(afterSwitch), afterSwitch.slice(0, 200));
+  await act(async () => { root.unmount(); });
+
   check('no React error was logged', errors.length === 0, errors.slice(0, 2).join(' | '));
 
   global.fetch = realFetch;

@@ -59,6 +59,14 @@ async function getJson(url, { headers = {}, timeout = TIMEOUT_MS } = {}) {
 
 const DEX_BASE = 'https://api.dexscreener.com';
 
+/* EVM addresses are hex and case-insensitive; base58 mints/pools are NOT.
+   Lowercasing a Solana pool address rewrote it into a different string, so a
+   Solana pair could never be matched back to its own trades. */
+const chainAddr = (a) => {
+  const s = String(a || '');
+  return /^0x/i.test(s) ? s.toLowerCase() : s;
+};
+
 function shapePair(p) {
   if (!p || typeof p !== 'object') return null;
   const num = (v) => {
@@ -72,18 +80,18 @@ function shapePair(p) {
   const pairCreatedAt = num(p.pairCreatedAt);
   const ageMs = pairCreatedAt ? Date.now() - pairCreatedAt : null;
   return {
-    pairAddress: String(p.pairAddress || '').toLowerCase() || null,
+    pairAddress: chainAddr(p.pairAddress) || null,
     chain: String(p.chainId || '').toLowerCase() || null,
     dexId: p.dexId || null,
     url: p.url || null,
     labels: Array.isArray(p.labels) ? p.labels : [],
     baseToken: p.baseToken ? {
-      address: String(p.baseToken.address || '').toLowerCase() || null,
+      address: chainAddr(p.baseToken.address) || null,
       name: p.baseToken.name || null,
       symbol: p.baseToken.symbol || null
     } : null,
     quoteToken: p.quoteToken ? {
-      address: String(p.quoteToken.address || '').toLowerCase() || null,
+      address: chainAddr(p.quoteToken.address) || null,
       symbol: p.quoteToken.symbol || null
     } : null,
     priceUsd: num(p.priceUsd),
@@ -422,6 +430,42 @@ export async function bsTokenTransfers(chainId, address, { limit = 50, timeoutMs
       // oldest timestamp of the page = lower bound on first activity
       oldestAt: rows.length ? Math.min(...rows.map((r) => r.timestamp || Date.now())) : null
     };
+  } catch (e) {
+    return { dataStatus: e?.code === 'NO_INDEXER' ? 'unsupported-chain' : 'unavailable', rows: [] };
+  }
+}
+
+/**
+ * TOKEN-WIDE transfers (every holder, not one address).
+ *
+ * `/api/v2/tokens/{hash}/transfers` is the only keyless EVM feed that shows
+ * who traded a contract — as opposed to who holds it right now. The smart
+ * money token card uses it to rebuild a trade tape when GeckoTerminal's trade
+ * endpoint is rate-limited: a transfer into one of the token's own pools is a
+ * buy, a transfer out of one is a sell. Rows keep their raw from/to/timestamp
+ * so the caller can price them with the pool's real USD price instead of
+ * trusting a number from this layer.
+ */
+export async function bsTokenWideTransfers(chainId, tokenAddress, { timeoutMs = TIMEOUT_MS } = {}) {
+  try {
+    const j = await bsGet(chainId, `/api/v2/tokens/${tokenAddress}/transfers`, { timeout: timeoutMs });
+    const items = Array.isArray(j?.items) ? j.items : [];
+    const rows = items.map((it) => {
+      const decimalsRaw = Number(it?.total?.decimals ?? it?.token?.decimals);
+      const decimals = Number.isFinite(decimalsRaw) ? decimalsRaw : 18;
+      const raw = Number(it?.total?.value ?? it?.value);
+      const from = shapeParty(it?.from).address;
+      const to = shapeParty(it?.to).address;
+      return {
+        hash: it?.transaction_hash ? String(it.transaction_hash).toLowerCase() : null,
+        timestamp: it?.timestamp ? new Date(it.timestamp).getTime() : null,
+        from,
+        to,
+        amount: Number.isFinite(raw) ? raw / 10 ** decimals : null,
+        method: it?.method || null
+      };
+    }).filter((r) => r.from && r.to && r.amount != null && r.amount > 0 && Number.isFinite(r.timestamp));
+    return { dataStatus: 'live', rows, hasMore: !!j?.next_page_params || items.length >= 50 };
   } catch (e) {
     return { dataStatus: e?.code === 'NO_INDEXER' ? 'unsupported-chain' : 'unavailable', rows: [] };
   }

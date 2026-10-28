@@ -39,6 +39,7 @@ import {
 } from './dataSources.js';
 import { mergeEvents, readEvents, rememberTags } from './eventStore.js';
 import { detectAccumulation, detectDistribution, pctChange } from './engines.js';
+import { tokenTradeSignals } from './tokenTrades.js';
 import { FLOORS, TTL, WINDOWS, WINDOW_KEYS, EARLY_TOKEN, FRESH, DEX_SLUGS } from './config.js';
 
 const HEX20 = /^0x[a-f0-9]{40}$/;
@@ -476,7 +477,7 @@ function describeAction(e, side) {
 /* ════════════════════════ Top buyers/sellers per token ═════════════════ */
 
 export async function tokenFlow(tokenAddress, chainId, windowKey = '24h') {
-  const ms = WINDOWS[windowKey] || WINDOWS.H24;
+  const ms = WINDOW_KEYS[windowKey] || WINDOWS.H24;
   const cutoff = Date.now() - ms;
   const { events } = await labelledEvents({ minUsd: FLOORS.bigTradeUsd, since: cutoff });
   /* Solana mints are base58 and case-sensitive; lowercasing would rewrite
@@ -827,7 +828,16 @@ export async function earlyTokens({ limit = 12, timeoutMs = READ_DEADLINE_MS } =
       });
     }
     found.sort((a, b) => b.volumeH24 - a.volumeH24);
-    const finalTokens = found.length ? found.slice(0, limit) : (process.env.NODE_ENV !== 'test' ? CURATED_EARLY_TOKENS.slice(0, limit) : []);
+    /*
+     * Nothing qualifies → say so. This used to fall back to a hardcoded
+     * CURATED_EARLY_TOKENS list whose ages, liquidity, 24h volume and
+     * "smartWallets" counts were invented constants served under
+     * dataStatus:'live' (2026-10-28 honesty audit). A stale constant deck
+     * presented as a live scan is exactly the placeholder class the
+     * «اطلاعات واقعی» requirement rules out; the grid now renders its
+     * existing empty state instead.
+     */
+    const finalTokens = found.slice(0, limit);
     return {
       schema: 'fbt.smart-money-early.v1',
       dataStatus: finalTokens.length ? 'live' : 'unavailable',
@@ -839,250 +849,6 @@ export async function earlyTokens({ limit = 12, timeoutMs = READ_DEADLINE_MS } =
   return value;
 }
 
-export const CURATED_EARLY_TOKENS = Object.freeze([
-  {
-    address: '0x0b3e328455c4059eeb9e3f84b5543f74e24e7e1b',
-    symbol: 'VIRTUAL',
-    name: 'Virtual Protocol',
-    chain: 'base',
-    chainId: 8453,
-    ageHours: 14.2,
-    liquidityUsd: 485000,
-    volumeH24: 920000,
-    buysH24: 3410,
-    sellsH24: 1820,
-    pairs: 3,
-    smartWallets: 8,
-    fdv: 820000000,
-    priceUsd: 1.15,
-    priceChangeH24: 28.4,
-    risk: 'LOW',
-    dex: 'aerodrome',
-    url: 'https://dexscreener.com/base/0x0b3e328455c4059eeb9e3f84b5543f74e24e7e1b',
-    icon: 'https://assets-cdn.trustwallet.com/blockchains/base/assets/0x0b3e328455c4059eeb9e3f84b5543f74e24e7e1b/logo.png',
-    logo: 'https://assets-cdn.trustwallet.com/blockchains/base/assets/0x0b3e328455c4059eeb9e3f84b5543f74e24e7e1b/logo.png'
-  },
-  {
-    address: '0x940181a94a35a4569e4529a3cdfb74e38fd98631',
-    symbol: 'AERO',
-    name: 'Aerodrome Finance',
-    chain: 'base',
-    chainId: 8453,
-    ageHours: 28.5,
-    liquidityUsd: 620000,
-    volumeH24: 1450000,
-    buysH24: 5120,
-    sellsH24: 3100,
-    pairs: 4,
-    smartWallets: 12,
-    fdv: 490000000,
-    priceUsd: 1.22,
-    priceChangeH24: 16.5,
-    risk: 'LOW',
-    dex: 'aerodrome',
-    url: 'https://dexscreener.com/base/0x940181a94a35a4569e4529a3cdfb74e38fd98631',
-    icon: 'https://assets-cdn.trustwallet.com/blockchains/base/assets/0x940181a94a35a4569e4529a3cdfb74e38fd98631/logo.png',
-    logo: 'https://assets-cdn.trustwallet.com/blockchains/base/assets/0x940181a94a35a4569e4529a3cdfb74e38fd98631/logo.png'
-  },
-  {
-    address: '0x6982508145454ce325ddbe47a25d4ec3d2311933',
-    symbol: 'PEPE',
-    name: 'Pepe',
-    chain: 'ethereum',
-    chainId: 1,
-    ageHours: 36.0,
-    liquidityUsd: 890000,
-    volumeH24: 3200000,
-    buysH24: 7850,
-    sellsH24: 4210,
-    pairs: 5,
-    smartWallets: 15,
-    fdv: 4200000000,
-    priceUsd: 0.0000108,
-    priceChangeH24: 12.8,
-    risk: 'MEDIUM',
-    dex: 'uniswap',
-    url: 'https://dexscreener.com/ethereum/0x6982508145454ce325ddbe47a25d4ec3d2311933',
-    icon: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x6982508145454Ce325dDbE47a25d4ec3d2311933/logo.png',
-    logo: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x6982508145454Ce325dDbE47a25d4ec3d2311933/logo.png'
-  },
-  {
-    address: '0xfaba6f8e4a5e8ab82f62fe7c39859fa577269be3',
-    symbol: 'ONDO',
-    name: 'Ondo Finance',
-    chain: 'ethereum',
-    chainId: 1,
-    ageHours: 42.1,
-    liquidityUsd: 540000,
-    volumeH24: 1100000,
-    buysH24: 2980,
-    sellsH24: 1840,
-    pairs: 3,
-    smartWallets: 9,
-    fdv: 1250000000,
-    priceUsd: 0.985,
-    priceChangeH24: 8.4,
-    risk: 'LOW',
-    dex: 'uniswap',
-    url: 'https://dexscreener.com/ethereum/0xfaba6f8e4a5e8ab82f62fe7c39859fa577269be3',
-    icon: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3/logo.png',
-    logo: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3/logo.png'
-  },
-  {
-    address: '0x808507121b80c02388fad14726482e061b8da827',
-    symbol: 'PENDLE',
-    name: 'Pendle Finance',
-    chain: 'ethereum',
-    chainId: 1,
-    ageHours: 48.0,
-    liquidityUsd: 680000,
-    volumeH24: 1750000,
-    buysH24: 3820,
-    sellsH24: 2150,
-    pairs: 4,
-    smartWallets: 11,
-    fdv: 780000000,
-    priceUsd: 4.86,
-    priceChangeH24: 14.2,
-    risk: 'LOW',
-    dex: 'uniswap',
-    url: 'https://dexscreener.com/ethereum/0x808507121b80c02388fad14726482e061b8da827',
-    icon: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x808507121B80c02388fAd14726482e061B8da827/logo.png',
-    logo: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x808507121B80c02388fAd14726482e061B8da827/logo.png'
-  },
-  {
-    address: '0x532f27101965dd16442e59d40670faf5ebb142e4',
-    symbol: 'BRETT',
-    name: 'Brett on Base',
-    chain: 'base',
-    chainId: 8453,
-    ageHours: 18.5,
-    liquidityUsd: 380000,
-    volumeH24: 760000,
-    buysH24: 4120,
-    sellsH24: 2950,
-    pairs: 2,
-    smartWallets: 7,
-    fdv: 950000000,
-    priceUsd: 0.098,
-    priceChangeH24: 22.1,
-    risk: 'MEDIUM',
-    dex: 'aerodrome',
-    url: 'https://dexscreener.com/base/0x532f27101965dd16442e59d40670faf5ebb142e4',
-    icon: 'https://assets-cdn.trustwallet.com/blockchains/base/assets/0x532f27101965dd16442e59d40670faf5ebb142e4/logo.png',
-    logo: 'https://assets-cdn.trustwallet.com/blockchains/base/assets/0x532f27101965dd16442e59d40670faf5ebb142e4/logo.png'
-  },
-  {
-    address: '0x4ed4e862860bed51a9570b96d89af5e1b0efefed',
-    symbol: 'DEGEN',
-    name: 'Degen (Base)',
-    chain: 'base',
-    chainId: 8453,
-    ageHours: 22.0,
-    liquidityUsd: 290000,
-    volumeH24: 610000,
-    buysH24: 3100,
-    sellsH24: 2450,
-    pairs: 3,
-    smartWallets: 6,
-    fdv: 160000000,
-    priceUsd: 0.0078,
-    priceChangeH24: 18.5,
-    risk: 'MEDIUM',
-    dex: 'aerodrome',
-    url: 'https://dexscreener.com/base/0x4ed4e862860bed51a9570b96d89af5e1b0efefed',
-    icon: 'https://assets-cdn.trustwallet.com/blockchains/base/assets/0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed/logo.png',
-    logo: 'https://assets-cdn.trustwallet.com/blockchains/base/assets/0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed/logo.png'
-  },
-  {
-    address: '0x912ce59144191c1204e64559fe8253a0e49e6548',
-    symbol: 'ARB',
-    name: 'Arbitrum',
-    chain: 'arbitrum',
-    chainId: 42161,
-    ageHours: 52.4,
-    liquidityUsd: 940000,
-    volumeH24: 2100000,
-    buysH24: 4200,
-    sellsH24: 2800,
-    pairs: 4,
-    smartWallets: 10,
-    fdv: 5400000000,
-    priceUsd: 0.58,
-    priceChangeH24: 6.2,
-    risk: 'LOW',
-    dex: 'camelot',
-    url: 'https://dexscreener.com/arbitrum/0x912ce59144191c1204e64559fe8253a0e49e6548',
-    icon: 'https://assets-cdn.trustwallet.com/blockchains/arbitrum/info/logo.png',
-    logo: 'https://assets-cdn.trustwallet.com/blockchains/arbitrum/info/logo.png'
-  },
-  {
-    address: '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9',
-    symbol: 'AAVE',
-    name: 'Aave',
-    chain: 'ethereum',
-    chainId: 1,
-    ageHours: 56.0,
-    liquidityUsd: 1100000,
-    volumeH24: 2400000,
-    buysH24: 2800,
-    sellsH24: 1600,
-    pairs: 3,
-    smartWallets: 11,
-    fdv: 2800000000,
-    priceUsd: 184.2,
-    priceChangeH24: 7.9,
-    risk: 'LOW',
-    dex: 'uniswap',
-    url: 'https://dexscreener.com/ethereum/0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9',
-    icon: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9/logo.png',
-    logo: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9/logo.png'
-  },
-  {
-    address: '0x514910771af9ca656af840dff83e8264ecf986ca',
-    symbol: 'LINK',
-    name: 'Chainlink',
-    chain: 'ethereum',
-    chainId: 1,
-    ageHours: 64.0,
-    liquidityUsd: 1450000,
-    volumeH24: 3100000,
-    buysH24: 3900,
-    sellsH24: 2300,
-    pairs: 4,
-    smartWallets: 14,
-    fdv: 14800000000,
-    priceUsd: 14.8,
-    priceChangeH24: 9.5,
-    risk: 'LOW',
-    dex: 'uniswap',
-    url: 'https://dexscreener.com/ethereum/0x514910771af9ca656af840dff83e8264ecf986ca',
-    icon: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x514910771AF9Ca656af840dff83E8264EcF986CA/logo.png',
-    logo: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x514910771AF9Ca656af840dff83E8264EcF986CA/logo.png'
-  },
-  {
-    address: '0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82',
-    symbol: 'CAKE',
-    name: 'PancakeSwap',
-    chain: 'bsc',
-    chainId: 56,
-    ageHours: 44.0,
-    liquidityUsd: 520000,
-    volumeH24: 980000,
-    buysH24: 2450,
-    sellsH24: 1720,
-    pairs: 3,
-    smartWallets: 8,
-    fdv: 890000000,
-    priceUsd: 2.45,
-    priceChangeH24: 5.4,
-    risk: 'LOW',
-    dex: 'pancakeswap',
-    url: 'https://dexscreener.com/bsc/0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82',
-    icon: 'https://assets-cdn.trustwallet.com/blockchains/smartchain/assets/0x0E09FaBB73BD3Ade0a17ECC321fD13a19e81cE82/logo.png',
-    logo: 'https://assets-cdn.trustwallet.com/blockchains/smartchain/assets/0x0E09FaBB73BD3Ade0a17ECC321fD13a19e81cE82/logo.png'
-  }
-]);
 
 function countSmartInterest(pair) {
   // Without per-holder tagging on the pair feed we cannot fabricate a smart
@@ -1175,16 +941,25 @@ export async function freshWallets({
         interesting: c.receivedUsd >= FRESH.interestingMinUsd
       });
     }
-    const curatedFresh = buildCuratedFreshWallets(Date.now());
-    let finalWallets = checked;
-    if (checked.length === 0 && process.env.NODE_ENV !== 'test') {
-      finalWallets = curatedFresh;
-      verified = curatedFresh.length;
-    } else if (checked.length < 15 && process.env.NODE_ENV !== 'test') {
-      const existing = new Set(checked.map((w) => `${w.chainId}:${String(w.address).toLowerCase()}`));
-      finalWallets = [...checked, ...curatedFresh.filter((cw) => !existing.has(`${cw.chainId}:${String(cw.address).toLowerCase()}`))];
-      verified = Math.max(verified, finalWallets.length);
-    }
+    /*
+     * ─── THE SEED LIST IS GONE (2026-10-28) ──────────────────────────────
+     * «از همه نظر داده‌های هوشمند مانی توکن‌ها را بررسی کن تا اطلاعات واقعی
+     *  باشد» — this endpoint used to top itself up with a hardcoded list of
+     * eight invented wallets (sequential placeholder addresses, round
+     * capital figures, and confidently invented funders such as «Binance 14
+     * Hot Wallet»). Whenever the verifier found fewer than fifteen real fresh
+     * wallets — i.e. almost always — those rows were served as live, with
+     * `verified` inflated to match. They were also indistinguishable from
+     * measured rows on the page.
+     *
+     * A fabricated wallet is worse than an empty list: it cannot be opened,
+     * it teaches the reader that the feed is noise, and it contradicts the
+     * honesty rule every other Smart Money source follows. The endpoint now
+     * returns only wallets whose explorer counters were actually read; when
+     * none qualify it says `quiet`, and when nothing could be verified it
+     * says `unavailable`.
+     */
+    const finalWallets = checked;
     finalWallets.sort((a, b) => b.capitalUsd - a.capitalUsd);
     const interesting = finalWallets.filter((c) => c.interesting).length;
     const capital = finalWallets.reduce((s, c) => s + c.capitalUsd, 0);
@@ -1208,204 +983,147 @@ export async function freshWallets({
   return value;
 }
 
-export function buildCuratedFreshWallets(now = Date.now()) {
-  return [
-    {
-      address: '0x3a4b6c8d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b',
-      short: '0x3a4b…5a6b',
-      chainId: 1,
-      chainShort: 'ETH',
-      capitalUsd: 1450000,
-      receivedUsd: 1450000,
-      txCount: 3,
-      tokenTransfersCount: 2,
-      firstSeen: now - 8 * 60_000,
-      interesting: true,
-      funder: 'Binance 14 Hot Wallet'
-    },
-    {
-      address: '0x7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d',
-      short: '0x7c8d…5c6d',
-      chainId: 8453,
-      chainShort: 'BASE',
-      capitalUsd: 680000,
-      receivedUsd: 680000,
-      txCount: 2,
-      tokenTransfersCount: 1,
-      firstSeen: now - 18 * 60_000,
-      interesting: true,
-      funder: 'Coinbase 2 Hot Wallet'
-    },
-    {
-      address: '0x1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f0e',
-      short: '0x1f2e…9f0e',
-      chainId: 42161,
-      chainShort: 'ARB',
-      capitalUsd: 920000,
-      receivedUsd: 920000,
-      txCount: 4,
-      tokenTransfersCount: 2,
-      firstSeen: now - 32 * 60_000,
-      interesting: true,
-      funder: 'OKX Hot Wallet'
-    },
-    {
-      address: '0x9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b',
-      short: '0x9a8b…1a0b',
-      chainId: 1,
-      chainShort: 'ETH',
-      capitalUsd: 2150000,
-      receivedUsd: 2150000,
-      txCount: 2,
-      tokenTransfersCount: 1,
-      firstSeen: now - 45 * 60_000,
-      interesting: true,
-      funder: 'Bybit Hot Wallet'
-    },
-    {
-      address: '0x4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e',
-      short: '0x4d5e…2d3e',
-      chainId: 56,
-      chainShort: 'BSC',
-      capitalUsd: 540000,
-      receivedUsd: 540000,
-      txCount: 5,
-      tokenTransfersCount: 3,
-      firstSeen: now - 72 * 60_000,
-      interesting: true,
-      funder: 'Binance 8 Hot Wallet'
-    },
-    {
-      address: '0x6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f',
-      short: '0x6e7f…4e5f',
-      chainId: 8453,
-      chainShort: 'BASE',
-      capitalUsd: 410000,
-      receivedUsd: 410000,
-      txCount: 3,
-      tokenTransfersCount: 1,
-      firstSeen: now - 95 * 60_000,
-      interesting: true,
-      funder: 'Coinbase Hot Wallet'
-    },
-    {
-      address: '0x2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b',
-      short: '0x2a3b…0a1b',
-      chainId: 42161,
-      chainShort: 'ARB',
-      capitalUsd: 380000,
-      receivedUsd: 380000,
-      txCount: 4,
-      tokenTransfersCount: 2,
-      firstSeen: now - 130 * 60_000,
-      interesting: false,
-      funder: 'Kraken Hot Wallet'
-    },
-    {
-      address: '0x8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c',
-      short: '0x8b9c…6b7c',
-      chainId: 1,
-      chainShort: 'ETH',
-      capitalUsd: 1820000,
-      receivedUsd: 1820000,
-      txCount: 3,
-      tokenTransfersCount: 2,
-      firstSeen: now - 180 * 60_000,
-      interesting: true,
-      funder: 'Binance Cold Wallet'
-    },
-    {
-      address: '0x5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d',
-      short: '0x5c6d…3c4d',
-      chainId: 8453,
-      chainShort: 'BASE',
-      capitalUsd: 320000,
-      receivedUsd: 320000,
-      txCount: 2,
-      tokenTransfersCount: 1,
-      firstSeen: now - 240 * 60_000,
-      interesting: false,
-      funder: 'OKX Hot Wallet'
-    },
-    {
-      address: '0x0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e',
-      short: '0x0d1e…8d9e',
-      chainId: 56,
-      chainShort: 'BSC',
-      capitalUsd: 490000,
-      receivedUsd: 490000,
-      txCount: 4,
-      tokenTransfersCount: 2,
-      firstSeen: now - 310 * 60_000,
-      interesting: false,
-      funder: 'Binance 14 Hot Wallet'
-    },
-    {
-      address: '0x3f4e5d6c7b8a9f0e1d2c3b4a5f6e7d8c9b0a1f2e',
-      short: '0x3f4e…1f2e',
-      chainId: 1,
-      chainShort: 'ETH',
-      capitalUsd: 2850000,
-      receivedUsd: 2850000,
-      txCount: 2,
-      tokenTransfersCount: 1,
-      firstSeen: now - 420 * 60_000,
-      interesting: true,
-      funder: 'Coinbase 2 Hot Wallet'
-    },
-    {
-      address: '0x7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b',
-      short: '0x7a8b…5a6b',
-      chainId: 42161,
-      chainShort: 'ARB',
-      capitalUsd: 460000,
-      receivedUsd: 460000,
-      txCount: 3,
-      tokenTransfersCount: 1,
-      firstSeen: now - 510 * 60_000,
-      interesting: false,
-      funder: 'Bybit Hot Wallet'
-    }
-  ];
-}
 
-/* ════════════════════════ Per-token accumulation from flow ═════════════ */
+/* ════════════════════ Per-token accumulation from flow ═════════════════ */
 
 /**
- * Attach flow-derived signals to a token intel object: net buying from
- * observed large DEX trades, smart-money flow (wallets with a high smart
- * score), and exchange outflow. Runs inside token detail/overview.
+ * Windowed smart-money signals for ONE token.
+ *
+ * ─── WHY THIS IS NO LONGER A SUM OVER THE WHALE BUFFER (2026-10-28) ───────
+ * «داده‌ها صفرند و با تغییر زمان هم داده‌ای نشان نمی‌دهد.»
+ *
+ * The previous body summed `tokenFlow`, which filtered the whale event
+ * buffer (≥ $100k labelled transfers observed while the scanner ran) down to
+ * this contract. For nearly every token that set is empty, so buyUsd and
+ * sellUsd were `0`, `dataStatus` was 'unavailable', and — because the zero
+ * was computed after the window filter — all four window buttons produced
+ * the identical zero. The card was not frozen; it was reading a source that
+ * only ever contains seven-figure movers.
+ *
+ * Now the number comes from `tokenTrades.tokenTradeSignals`: real, per-token
+ * trades (wallet, side, USD, timestamp) read from GeckoTerminal's trade tape,
+ * with real pool volume/counts and a Blockscout fallback. The whale buffer
+ * still contributes, but only as a labelled layer on top — and when the tape
+ * is unavailable it is used on its own ONLY if it actually contains trades,
+ * never as a silent zero.
+ *
+ * Every branch below distinguishes three states the card must render
+ * differently: measured (numbers), measured-zero (a real `0`), and not
+ * measured (`null` → «—»).
  */
-export async function tokenSignals(tokenAddress, chainId, windowKey = '24h') {
-  const flow = await tokenFlow(tokenAddress, chainId, windowKey);
-  const buyUsd = flow.buyers.reduce((s, r) => s + r.usd, 0);
-  const sellUsd = flow.sellers.reduce((s, r) => s + r.usd, 0);
-  const net = buyUsd - sellUsd;
-  const scale = Math.max(buyUsd, sellUsd, 1);
+export async function tokenSignals(tokenAddress, chainId, windowKey = '24h', options = {}) {
+  const win = WINDOW_KEYS[windowKey] ? windowKey : '24h';
 
-  const accum = detectAccumulation({
-    netBuying: Math.max(0, net / scale),
-    smartMoneyBuying: flow.buyers.length ? Math.min(1, flow.buyers.length / 10) : null,
-    exchangeOutflow: null
+  /* 1 — the real per-token trade tape (cached without the window key, so the
+         four window buttons slice ONE upstream read). */
+  let signals = null;
+  try {
+    signals = await tokenTradeSignals(chainId, tokenAddress, win, options);
+  } catch {
+    signals = null;
+  }
+
+  /* A measured tape is the answer. Reading the whale buffer anyway would
+     start a seven-chain scan for a number the card no longer shows — the
+     most expensive read on this route, spent to enrich a section that is
+     already substantiated. So the whale layer is read ONLY when the tape
+     produced nothing and could actually be the fallback. */
+  if (signals && signals.dataStatus !== 'unavailable') {
+    return {
+      ...signals,
+      whaleLayer: null,
+      /* Real distinct wallets the tape observed — never «0» as a stand-in for
+         «we did not look». */
+      smartWallets: signals.wallets ?? signals.smartWallets ?? null
+    };
+  }
+
+  /* 2 — labelled large transfers for the same contract/window. Secondary by
+         design: it is a curated subset, useful for "which known wallets
+         moved", not a measure of the token's trading. */
+  const flow = await tokenFlow(tokenAddress, chainId, win).catch(() => ({ buyers: [], sellers: [], dataStatus: 'unavailable' }));
+  const whaleBuyUsd = flow.buyers.reduce((s, r) => s + (r.usd || 0), 0);
+  const whaleSellUsd = flow.sellers.reduce((s, r) => s + (r.usd || 0), 0);
+  const whaleWallets = new Set([...flow.buyers.map((b) => b.address), ...flow.sellers.map((s) => s.address)]).size;
+  const whaleLayer = whaleBuyUsd + whaleSellUsd > 0 ? {
+    buyUsd: Math.round(whaleBuyUsd),
+    sellUsd: Math.round(whaleSellUsd),
+    netUsd: Math.round(whaleBuyUsd - whaleSellUsd),
+    wallets: whaleWallets,
+    trades: flow.buyers.length + flow.sellers.length,
+    topBuyers: flow.buyers.slice(0, 5),
+    topSellers: flow.sellers.slice(0, 5)
+  } : null;
+
+  /* 3 — the trade tape could not be read. Use the labelled whale layer only
+         when it produced actual trades; otherwise report "unavailable" with
+         nulls (the card prints «—» and the reason). */
+  if (whaleLayer) {
+    const net = whaleLayer.netUsd;
+    const scale = Math.max(whaleLayer.buyUsd, whaleLayer.sellUsd, 1);
+    const accum = detectAccumulation({
+      netBuying: Math.max(0, net / scale),
+      smartMoneyBuying: flow.buyers.length ? Math.min(1, flow.buyers.length / 10) : null,
+      exchangeOutflow: null
+    });
+    const distrib = detectDistribution({
+      netSelling: Math.max(0, -net / scale),
+      smartMoneySelling: flow.sellers.length ? Math.min(1, flow.sellers.length / 10) : null,
+      exchangeInflow: null
+    });
+    return {
+      schema: 'fbt.smart-money-tokensignals.v2',
+      window: win,
+      dataStatus: 'live',
+      /* Not "estimated": these are real transfers. Not the whole market
+         either — that is what `basis` says, and the card prints it. */
+      basis: 'whale-stream',
+      estimated: false,
+      buyUsd: whaleLayer.buyUsd,
+      sellUsd: whaleLayer.sellUsd,
+      netUsd: net,
+      volumeUsd: null,
+      trades: whaleLayer.trades,
+      wallets: whaleWallets,
+      smartWallets: whaleWallets,
+      accumulation: accum,
+      distribution: distrib,
+      topBuyers: flow.buyers.slice(0, 8),
+      topSellers: flow.sellers.slice(0, 8),
+      whaleLayer,
+      sampled: null,
+      coverage: {
+        tapeStatus: signals?.coverage?.tapeStatus || 'unavailable',
+        source: 'whale-stream',
+        poolSource: null,
+        tradeSource: null,
+        pools: 0
+      },
+      note: 'large-labelled-transfers-only'
+    };
+  }
+
+  return (signals || {
+    schema: 'fbt.smart-money-tokensignals.v2',
+    window: win,
+    at: Date.now(),
+    dataStatus: 'unavailable',
+    basis: 'none',
+    estimated: false,
+    buyUsd: null,
+    sellUsd: null,
+    netUsd: null,
+    volumeUsd: null,
+    trades: null,
+    wallets: null,
+    smartWallets: null,
+    accumulation: null,
+    distribution: null,
+    topBuyers: [],
+    topSellers: [],
+    sampled: null,
+    coverage: { tapeStatus: 'unavailable', source: 'none', pools: 0 }
   });
-  const distrib = detectDistribution({
-    netSelling: Math.max(0, -net / scale),
-    smartMoneySelling: flow.sellers.length ? Math.min(1, flow.sellers.length / 10) : null,
-    exchangeInflow: null
-  });
-  return {
-    schema: 'fbt.smart-money-tokensignals.v1',
-    window: windowKey,
-    dataStatus: buyUsd + sellUsd ? 'live' : 'unavailable',
-    buyUsd: Math.round(buyUsd),
-    sellUsd: Math.round(sellUsd),
-    netUsd: Math.round(net),
-    smartWallets: new Set([...flow.buyers.map((b) => b.address), ...flow.sellers.map((s) => s.address)]).size,
-    accumulation: accum,
-    distribution: distrib,
-    topBuyers: flow.buyers,
-    topSellers: flow.sellers
-  };
 }
 
 export { pctChange, SCAN_FLOOR };
