@@ -418,7 +418,13 @@ try {
 
   const token = await call(`/api/v1/smart-money/token/1/${EARLY_TOKEN}`);
   const holders = token.body?.holders || {};
-  t('token holders carry a real supply share and the exchange flag', token.status === 200 && holders.dataStatus === 'live' && holders.top?.[0]?.share === 40 && holders.top[0].isExchange === true && holders.total === 1234);
+  /* 2026-10-28: the route ships the holder AGGREGATES (the card shows these
+     four numbers) and no wallet list. The shares are still derived from the
+     real Blockscout rows — 40% held by the tagged Binance wallet, 10% by the
+     second holder, so top-10 = 50% and exchange supply = 40%. */
+  t('token holders ship real aggregates and no wallet list',
+    token.status === 200 && holders.dataStatus === 'live' && holders.top10Share === 50
+    && holders.exchangeSupplyPct === 40 && holders.total === 1234 && !('top' in holders));
   t('address metadata service was consulted for unlabelled counterparties', metadataCalls.length >= 1);
 
   /* ── the buffer accumulates across scans (the «24h == 7d == 30d» bug) ─── */

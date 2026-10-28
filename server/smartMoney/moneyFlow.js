@@ -38,7 +38,7 @@ import {
   BLOCKSCOUT
 } from './dataSources.js';
 import { mergeEvents, readEvents, rememberTags } from './eventStore.js';
-import { detectAccumulation, detectDistribution, pctChange } from './engines.js';
+import { pctChange } from './engines.js';
 import { tokenTradeSignals } from './tokenTrades.js';
 import { FLOORS, TTL, WINDOWS, WINDOW_KEYS, EARLY_TOKEN, FRESH, DEX_SLUGS } from './config.js';
 
@@ -472,49 +472,6 @@ function describeAction(e, side) {
   const other = side === 'to' ? e.from : e.to;
   const who = other?.label ? ` ${side === 'to' ? 'from' : 'to'} ${other.label}` : '';
   return side === 'to' ? `Received ${sym}${who}` : `Sent ${sym}${who}`;
-}
-
-/* ════════════════════════ Top buyers/sellers per token ═════════════════ */
-
-export async function tokenFlow(tokenAddress, chainId, windowKey = '24h') {
-  const ms = WINDOW_KEYS[windowKey] || WINDOWS.H24;
-  const cutoff = Date.now() - ms;
-  const { events } = await labelledEvents({ minUsd: FLOORS.bigTradeUsd, since: cutoff });
-  /* Solana mints are base58 and case-sensitive; lowercasing would rewrite
-     the address and never match. EVM addresses stay normalised. */
-  const ta = chainId === 'solana'
-    ? String(tokenAddress || '').trim()
-    : String(tokenAddress || '').toLowerCase();
-  const want = chainId === 'solana' ? 'solana' : Number(chainId);
-
-  const buyers = new Map();
-  const sellers = new Map();
-  for (const e of events) {
-    if (e.chainId !== want) continue;
-    const match = e.token?.address === ta || e.token?.coingeckoId === ta;
-    if (!match && e.token?.symbol !== String(tokenAddress || '').toUpperCase()) continue;
-    if (e.timestamp && e.timestamp < cutoff) continue;
-    if (e.valueUsd == null) continue;
-    if (e.flow === 'dex_buy' && e.to?.address) {
-      const r = buyers.get(e.to.address) || { address: e.to.address, short: shortAddr(e.to.address), usd: 0, amount: 0 };
-      r.usd += e.valueUsd; r.amount += e.amount || 0;
-      buyers.set(e.to.address, r);
-    }
-    if (e.flow === 'dex_sell' && e.from?.address) {
-      const r = sellers.get(e.from.address) || { address: e.from.address, short: shortAddr(e.from.address), usd: 0, amount: 0 };
-      r.usd += e.valueUsd; r.amount += e.amount || 0;
-      sellers.set(e.from.address, r);
-    }
-  }
-  const top = (m) => [...m.values()].sort((a, b) => b.usd - a.usd).slice(0, 20)
-    .map((r) => ({ ...r, usd: Math.round(r.usd) }));
-  return {
-    schema: 'fbt.smart-money-tokenflow.v1',
-    window: windowKey,
-    dataStatus: buyers.size + sellers.size ? 'live' : 'unavailable',
-    buyers: top(buyers),
-    sellers: top(sellers)
-  };
 }
 
 /* ════════════════════════ Liquidity events ════════════════════════════ */
@@ -984,128 +941,60 @@ export async function freshWallets({
 }
 
 
-/* ════════════════════ Per-token accumulation from flow ═════════════════ */
+/* ════════════════════ Per-token smart money — 24h only ═════════════════ */
 
 /**
- * Windowed smart-money signals for ONE token.
+ * Smart-money flow for ONE token, over ONE window: the last 24 hours.
  *
- * ─── WHY THIS IS NO LONGER A SUM OVER THE WHALE BUFFER (2026-10-28) ───────
- * «داده‌ها صفرند و با تغییر زمان هم داده‌ای نشان نمی‌دهد.»
+ * ─── WHY THE WINDOWS WERE REMOVED (2026-10-28, second revision) ───────────
+ * «شلوعی سرور و cpu … دادهٔ ۲۴ ساعته کافی است؛ نمی‌خواهم دادهٔ هفتگی و ۴
+ *  ساعته برای هوشمند مانی توکن‌ها.»
  *
- * The previous body summed `tokenFlow`, which filtered the whale event
- * buffer (≥ $100k labelled transfers observed while the scanner ran) down to
- * this contract. For nearly every token that set is empty, so buyUsd and
- * sellUsd were `0`, `dataStatus` was 'unavailable', and — because the zero
- * was computed after the window filter — all four window buttons produced
- * the identical zero. The card was not frozen; it was reading a source that
- * only ever contains seven-figure movers.
+ * The previous body answered four windows from one tape, and fell back to the
+ * labelled-whale scan when the tape was empty. Both were expensive in exactly
+ * the wrong place:
  *
- * Now the number comes from `tokenTrades.tokenTradeSignals`: real, per-token
- * trades (wallet, side, USD, timestamp) read from GeckoTerminal's trade tape,
- * with real pool volume/counts and a Blockscout fallback. The whale buffer
- * still contributes, but only as a labelled layer on top — and when the tape
- * is unavailable it is used on its own ONLY if it actually contains trades,
- * never as a silent zero.
+ *   · 4h / 7d needed OHLCV candle requests that the pool attributes do not
+ *     carry — extra upstream calls per token, per cold cache;
+ *   · the whale fallback called `labelledEvents`, which scans seven chains
+ *     with the block/transfer firehose. It triggered precisely when the cheap
+ *     source was rate-limited, i.e. when the server was already under load —
+ *     the one moment a seven-chain scan must not start.
  *
- * Every branch below distinguishes three states the card must render
- * differently: measured (numbers), measured-zero (a real `0`), and not
- * measured (`null` → «—»).
+ * A 24-hour DEX flow answer is what the card actually reads, so that is all
+ * this function asks for. It does not schedule anything, does not prefetch,
+ * and never touches the whale scan: one cached summary per token, or an
+ * honest `unavailable` with nulls (the card prints «—», never a fake $0).
+ *
+ * `requestedWindow` is echoed back so a caller that still passes 4h/7d can see
+ * that the answer is the 24-hour one — nothing is silently relabelled.
  */
 export async function tokenSignals(tokenAddress, chainId, windowKey = '24h', options = {}) {
-  const win = WINDOW_KEYS[windowKey] ? windowKey : '24h';
-
-  /* 1 — the real per-token trade tape (cached without the window key, so the
-         four window buttons slice ONE upstream read). */
+  const requestedWindow = WINDOW_KEYS[windowKey] ? windowKey : '24h';
   let signals = null;
   try {
-    signals = await tokenTradeSignals(chainId, tokenAddress, win, options);
+    signals = await tokenTradeSignals(chainId, tokenAddress, options);
   } catch {
     signals = null;
   }
 
-  /* A measured tape is the answer. Reading the whale buffer anyway would
-     start a seven-chain scan for a number the card no longer shows — the
-     most expensive read on this route, spent to enrich a section that is
-     already substantiated. So the whale layer is read ONLY when the tape
-     produced nothing and could actually be the fallback. */
-  if (signals && signals.dataStatus !== 'unavailable') {
+  if (signals) {
     return {
       ...signals,
-      whaleLayer: null,
-      /* Real distinct wallets the tape observed — never «0» as a stand-in for
-         «we did not look». */
-      smartWallets: signals.wallets ?? signals.smartWallets ?? null
+      /* Always the 24-hour measurement, whatever was asked for. */
+      window: '24h',
+      singleWindow: true,
+      requestedWindow,
+      whaleLayer: null
     };
   }
 
-  /* 2 — labelled large transfers for the same contract/window. Secondary by
-         design: it is a curated subset, useful for "which known wallets
-         moved", not a measure of the token's trading. */
-  const flow = await tokenFlow(tokenAddress, chainId, win).catch(() => ({ buyers: [], sellers: [], dataStatus: 'unavailable' }));
-  const whaleBuyUsd = flow.buyers.reduce((s, r) => s + (r.usd || 0), 0);
-  const whaleSellUsd = flow.sellers.reduce((s, r) => s + (r.usd || 0), 0);
-  const whaleWallets = new Set([...flow.buyers.map((b) => b.address), ...flow.sellers.map((s) => s.address)]).size;
-  const whaleLayer = whaleBuyUsd + whaleSellUsd > 0 ? {
-    buyUsd: Math.round(whaleBuyUsd),
-    sellUsd: Math.round(whaleSellUsd),
-    netUsd: Math.round(whaleBuyUsd - whaleSellUsd),
-    wallets: whaleWallets,
-    trades: flow.buyers.length + flow.sellers.length,
-    topBuyers: flow.buyers.slice(0, 5),
-    topSellers: flow.sellers.slice(0, 5)
-  } : null;
-
-  /* 3 — the trade tape could not be read. Use the labelled whale layer only
-         when it produced actual trades; otherwise report "unavailable" with
-         nulls (the card prints «—» and the reason). */
-  if (whaleLayer) {
-    const net = whaleLayer.netUsd;
-    const scale = Math.max(whaleLayer.buyUsd, whaleLayer.sellUsd, 1);
-    const accum = detectAccumulation({
-      netBuying: Math.max(0, net / scale),
-      smartMoneyBuying: flow.buyers.length ? Math.min(1, flow.buyers.length / 10) : null,
-      exchangeOutflow: null
-    });
-    const distrib = detectDistribution({
-      netSelling: Math.max(0, -net / scale),
-      smartMoneySelling: flow.sellers.length ? Math.min(1, flow.sellers.length / 10) : null,
-      exchangeInflow: null
-    });
-    return {
-      schema: 'fbt.smart-money-tokensignals.v2',
-      window: win,
-      dataStatus: 'live',
-      /* Not "estimated": these are real transfers. Not the whole market
-         either — that is what `basis` says, and the card prints it. */
-      basis: 'whale-stream',
-      estimated: false,
-      buyUsd: whaleLayer.buyUsd,
-      sellUsd: whaleLayer.sellUsd,
-      netUsd: net,
-      volumeUsd: null,
-      trades: whaleLayer.trades,
-      wallets: whaleWallets,
-      smartWallets: whaleWallets,
-      accumulation: accum,
-      distribution: distrib,
-      topBuyers: flow.buyers.slice(0, 8),
-      topSellers: flow.sellers.slice(0, 8),
-      whaleLayer,
-      sampled: null,
-      coverage: {
-        tapeStatus: signals?.coverage?.tapeStatus || 'unavailable',
-        source: 'whale-stream',
-        poolSource: null,
-        tradeSource: null,
-        pools: 0
-      },
-      note: 'large-labelled-transfers-only'
-    };
-  }
-
-  return (signals || {
-    schema: 'fbt.smart-money-tokensignals.v2',
-    window: win,
+  return {
+    schema: 'fbt.smart-money-tokensignals.v3',
+    window: '24h',
+    windowMs: WINDOWS.H24,
+    singleWindow: true,
+    requestedWindow,
     at: Date.now(),
     dataStatus: 'unavailable',
     basis: 'none',
@@ -1116,14 +1005,13 @@ export async function tokenSignals(tokenAddress, chainId, windowKey = '24h', opt
     volumeUsd: null,
     trades: null,
     wallets: null,
-    smartWallets: null,
     accumulation: null,
     distribution: null,
-    topBuyers: [],
-    topSellers: [],
     sampled: null,
-    coverage: { tapeStatus: 'unavailable', source: 'none', pools: 0 }
-  });
+    whaleLayer: null,
+    coverage: { tapeStatus: 'unavailable', source: 'none', pools: 0 },
+    reason: 'upstream-unavailable'
+  };
 }
 
 export { pctChange, SCAN_FLOOR };

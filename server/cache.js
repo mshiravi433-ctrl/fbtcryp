@@ -1,10 +1,53 @@
-/** Tiny TTL cache with single-flight de-duplication. */
+/**
+ * Tiny TTL cache with single-flight de-duplication.
+ *
+ * ─── BOUNDED ON PURPOSE (2026-10-28) ─────────────────────────────────────
+ * «cpu ارور زده و گفته حجم داره تموم میشه.»
+ *
+ * This store used to grow forever. `getCached` deliberately keeps expired
+ * entries as a stale fallback, but nothing ever removed them, so every token,
+ * pool, candle and wallet a visitor looked at stayed in the heap for the life
+ * of the process. On the token page — where each contract produced its own
+ * key — that is a slow leak whose symptom is exactly the one reported: memory
+ * climbing until the instance is killed.
+ *
+ * The bounds below are deliberately boring: expired entries are dropped as
+ * soon as the map grows past the soft limit, and if that is not enough the
+ * entries closest to expiry are evicted until the map is back under it. Values
+ * are untouched; nothing changes for a caller.
+ */
 
 const store = new Map();
 const inflight = new Map();
 
+/** Soft ceiling on live cache entries (overridable for ops). */
+const MAX_ENTRIES = Math.max(200, Number(process.env.CACHE_MAX_ENTRIES) || 4_000);
+/** Evict down to this fraction when the ceiling is crossed. */
+const EVICT_TO = 0.8;
+
 /** Exposed so blobCache.js can use the same hot-path map. */
 export const memoryStore = store;
+
+/**
+ * Drop expired entries first (they only exist as an error fallback, so a
+ * bounded grace is enough), then — if the map is still too large — the
+ * entries that expire soonest. Called on every write, so it never becomes an
+ * expensive sweep: it only does work once the ceiling is crossed.
+ */
+function boundStore(now) {
+  if (store.size <= MAX_ENTRIES) return;
+  for (const [key, hit] of store) {
+    if (store.size <= MAX_ENTRIES * EVICT_TO) break;
+    if (hit.expires < now) store.delete(key);
+  }
+  if (store.size <= MAX_ENTRIES) return;
+  const order = [...store.entries()].sort((a, b) => a[1].expires - b[1].expires);
+  const target = Math.floor(MAX_ENTRIES * EVICT_TO);
+  for (const [key] of order) {
+    if (store.size <= target) break;
+    store.delete(key);
+  }
+}
 
 export function getCached(key) {
   const hit = store.get(key);
@@ -17,7 +60,9 @@ export function getCached(key) {
 }
 
 export function setCached(key, value, ttlMs) {
-  store.set(key, { value, expires: Date.now() + ttlMs, at: Date.now() });
+  const now = Date.now();
+  store.set(key, { value, expires: now + ttlMs, at: now });
+  boundStore(now);
   return value;
 }
 
