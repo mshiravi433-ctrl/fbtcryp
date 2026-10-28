@@ -141,6 +141,7 @@ export default function FuturesOnchain({ embedded = false } = {}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [errorDetail, setErrorDetail] = useState(null);
+  const [errorRisk, setErrorRisk] = useState(null);
   const [txState, setTxState] = useState(FUTURES_TX_STATE.IDLE);
   const [lastTx, setLastTx] = useState(null);
   const [ledgerNotice, setLedgerNotice] = useState(false);
@@ -397,6 +398,7 @@ export default function FuturesOnchain({ embedded = false } = {}) {
   const openReview = async () => {
     setError(null);
     setErrorDetail(null);
+    setErrorRisk(null);
     if (isSolanaVenue) {
       if (!solWallet.isConnected) { goConnectSolana(); return; }
     } else if (!wallet.isConnected) return setWalletOpen(true);
@@ -415,10 +417,13 @@ export default function FuturesOnchain({ embedded = false } = {}) {
       if (!res.ok) {
         const code = res.error?.code || 'PROVIDER_UNAVAILABLE';
         setMachine(code === 'RISK_BLOCKED' ? FUTURES_TX_STATE.BLOCKED : FUTURES_TX_STATE.FAILED, { code });
-        throw Object.assign(new Error(code), { code, risk: res.error?.risk });
+        throw Object.assign(new Error(code), { code, risk: res.error?.risk, detail: res.error });
       }
       setMachine(FUTURES_TX_STATE.RISK_CHECK);
-      if (res.data.risk?.blocked) { setMachine(FUTURES_TX_STATE.BLOCKED); throw Object.assign(new Error('RISK_BLOCKED'), { code: 'RISK_BLOCKED' }); }
+      if (res.data.risk?.blocked) {
+        setMachine(FUTURES_TX_STATE.BLOCKED);
+        throw Object.assign(new Error('RISK_BLOCKED'), { code: 'RISK_BLOCKED', risk: res.data.risk });
+      }
       setMachine(FUTURES_TX_STATE.READY);
       setPrepared(res.data);
       store.setExecution({ executionId: res.data.executionId, state: 'PREPARED' });
@@ -426,6 +431,7 @@ export default function FuturesOnchain({ embedded = false } = {}) {
     } catch (e) {
       setError(errCode(e));
       setErrorDetail(e?.detail || null);
+      setErrorRisk(e?.risk || null);
       haptic?.('error');
     } finally {
       setBusy(false);
@@ -438,6 +444,7 @@ export default function FuturesOnchain({ embedded = false } = {}) {
     setBusy(true);
     setError(null);
     setErrorDetail(null);
+    setErrorRisk(null);
     try {
       if (Date.now() > prepared.expiresAt) throw Object.assign(new Error('QUOTE_EXPIRED'), { code: 'QUOTE_EXPIRED' });
 
@@ -561,6 +568,7 @@ export default function FuturesOnchain({ embedded = false } = {}) {
     setBusy(true);
     setError(null);
     setErrorDetail(null);
+    setErrorRisk(null);
     try {
       /* Velocity (Solana): close (reduce-only market) and TP/SL (reduce-only
          trigger orders) are built + signed in tab with the user's wallet.
@@ -681,6 +689,8 @@ export default function FuturesOnchain({ embedded = false } = {}) {
     if (d.needUsdt != null) parts.push(`${t('futures.err.needsUsdt')}: ${Number(d.needUsdt).toFixed(2)} USDT`);
     if (d.quoteUsdt != null) parts.push(`${t('futures.err.walletUsdt')}: ${Number(d.quoteUsdt).toFixed(2)} USDT`);
     if (d.solLamports != null) parts.push(`${t('futures.err.walletSol')}: ${(Number(d.solLamports) / 1e9).toFixed(4)} SOL`);
+    if (d.balanceUsd != null) parts.push(`${t('futures.err.availableCollateral')}: ${fmtUsd(d.balanceUsd)}`);
+    if (d.collateralUsd != null) parts.push(`${t('futures.err.requestedCollateral')}: ${fmtUsd(d.collateralUsd)}`);
     return parts.length ? parts.join(' · ') : null;
   };
 
@@ -898,6 +908,15 @@ export default function FuturesOnchain({ embedded = false } = {}) {
               {insufficient && <p className="notice notice-danger" style={{ marginTop: 9 }}>{t('futures.err.INSUFFICIENT_BALANCE')}</p>}
               {error && <p className="notice notice-danger" style={{ marginTop: 9 }} data-testid="futures-error">{t(`futures.err.${errorKey(error)}`, { defaultValue: error })}</p>}
               {error && errorDetailLine(errorDetail) && <p className="faint mono" style={{ marginTop: 6 }} data-testid="futures-error-detail">{errorDetailLine(errorDetail)}</p>}
+              {errorRisk?.blockReasons?.length > 0 && (
+                <div data-testid="futures-error-risk" aria-live="polite">
+                  {errorRisk.blockReasons.map((reason) => (
+                    <p key={reason} className="notice notice-danger" style={{ margin: '6px 0 0' }}>
+                      {t(`futures.block.${reason}`, { defaultValue: reason })}
+                    </p>
+                  ))}
+                </div>
+              )}
 
               <button className={`btn ${side === 'long' ? 'btn-success' : 'btn-danger'}`} style={{ width: '100%', marginTop: 12 }} disabled={readOnly || (connected && !canReview)} onClick={openReview} data-testid="futures-review">
                 {busy ? t('common.loading') : buttonLabel}
@@ -959,7 +978,7 @@ export default function FuturesOnchain({ embedded = false } = {}) {
                         ? [['tp', t('futures.manage.tp')], ['sl', t('futures.manage.sl')], ['close', t('futures.manage.close')]]
                         : [['tp', t('futures.manage.tp')], ['sl', t('futures.manage.sl')], ['increase', t('futures.manage.increase')], ['decrease', t('futures.manage.decrease')], ['close', t('futures.manage.close')]]
                       ).map(([a, label]) => (
-                        <button key={a} className="btn btn-ghost btn-sm" onClick={() => { setManaging(p); setManageAction(a); setManageValue(a === 'close' ? '100' : a === 'decrease' ? '50' : a === 'increase' ? '10' : a === 'tp' ? String(p.takeProfit || '') : String(p.stopLoss || '')); setError(null); }}>{label}</button>
+                        <button key={a} className="btn btn-ghost btn-sm" onClick={() => { setManaging(p); setManageAction(a); setManageValue(a === 'close' ? '100' : a === 'decrease' ? '50' : a === 'increase' ? '10' : a === 'tp' ? String(p.takeProfit || '') : String(p.stopLoss || '')); setError(null); setErrorRisk(null); }}>{label}</button>
                       ))}
                     </div>
                   </div>

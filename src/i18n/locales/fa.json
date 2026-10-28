@@ -15330,6 +15330,8 @@
       "WALLET_NOT_CONNECTED": "ابتدا کیف پول را وصل یا باز کن.",
       "WRONG_NETWORK": "کیف پول را به شبکهٔ پروتکل تغییر بده.",
       "INSUFFICIENT_BALANCE": "موجودی وثیقهٔ تو کمتر از مقدار واردشده است.",
+      "availableCollateral": "موجودی وثیقهٔ خوانده‌شده",
+      "requestedCollateral": "وثیقهٔ درخواستی",
       "INSUFFICIENT_BALANCE_SOLANA": "موجودی USDT کیف پول برای این سفارش کافی نیست؛ مبلغ وثیقه به‌علاوهٔ کارمزد از USDT موجود بیشتر است.",
       "INSUFFICIENT_ALLOWANCE": "ابتدا مقدار وثیقه را تأیید (approve) کن.",
       "NO_GAS": "ETH کافی برای کارمزد شبکه در این زنجیره نداری.",

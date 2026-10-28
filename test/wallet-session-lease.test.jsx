@@ -28,12 +28,12 @@ vi.mock('../src/lib/wc', async (importOriginal) => {
     createWcSession: () => ({
       on: () => () => {},
       connect: async () => ({ ok: false, code: 'WC_STUB' }),
-      restore: async () => ({ ok: false, code: 'WC_STUB' }),
+      restore: async () => ({ ok: false, code: 'WC_NO_SESSION' }),
       cancel: async () => false,
       disconnect: async () => true,
       busy: () => false,
       session: () => null,
-      hasStoredSession: () => false
+      hasStoredSession: actual.hasStoredSession
     })
   };
 });
@@ -74,6 +74,7 @@ function Probe() {
     <div>
       <span data-testid="mode">{wallet.mode ?? 'none'}</span>
       <span data-testid="address">{wallet.address ?? 'none'}</span>
+      <span data-testid="error">{wallet.error ?? 'none'}</span>
       <button type="button" data-testid="disconnect" onClick={() => wallet.disconnect?.()}>x</button>
     </div>
   );
@@ -146,6 +147,22 @@ describe('a refresh keeps the wallet (the reported bug)', () => {
     expect(calls).not.toContain('eth_accounts');
     /* And the lapsed record is gone, so the next document starts clean. */
     expect(window.localStorage.getItem(LEASE_KEY)).toBeNull();
+  });
+
+  it('stops retrying when AppKit confirms the stored session is gone', async () => {
+    stubEthereum();
+    seedLease({ mode: 'wc' });
+    /* The storage-level probe saw a session, but AppKit's restore says it
+       vanished between the two operations — the formerly infinite-spinner
+       case. */
+    window.localStorage.setItem('wc@2:client:0.3//session', '[{"topic":"stale"}]');
+
+    render(<WalletProvider><Probe /></WalletProvider>);
+
+    await waitFor(() => expect(screen.getByTestId('error').textContent).toBe('SESSION_MISSING'));
+    expect(screen.getByTestId('address').textContent).toBe('none');
+    expect(window.localStorage.getItem(LEASE_KEY)).toBeNull();
+    expect(window.localStorage.getItem('wc@2:client:0.3//session')).toBeNull();
   });
 
   it('leaves nothing behind after an explicit disconnect', async () => {

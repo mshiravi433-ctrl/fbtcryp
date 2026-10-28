@@ -198,6 +198,9 @@ export function WalletProvider({ children }) {
    * successful attach and by a fresh Connect.
    */
   const restoreBlockedRef = useRef(null);
+  /** Most recent WalletConnect restore outcome, to distinguish a dead stored
+      session from a relay that is merely slow. */
+  const wcRestoreCodeRef = useRef(null);
   /** Last time the lease was rolled forward, so a busy tab writes rarely. */
   const leaseTouchedRef = useRef(0);
   /** Which address `nativeBalance` describes — see refreshBalance(). */
@@ -1008,6 +1011,7 @@ export function WalletProvider({ children }) {
       if (addressRef.current) return false;
       const session = getWcSession();
       const result = await session.restore();
+      wcRestoreCodeRef.current = result?.ok ? null : (result?.code || 'WC_RESTORE_FAILED');
       if (!result.ok) return false;
       /* COMMIT GUARD: restore is async, so a wallet attached while it was in
          flight (the local vault auto-attach runs synchronously on mount) must
@@ -1400,9 +1404,24 @@ export function WalletProvider({ children }) {
       if (ok) {
         /* attachExternal() already wrote the lease for the wc path; this covers
            the adopted (pre-lease) install and re-anchors the window. */
+        wcRestoreCodeRef.current = null;
         rollLease({ force: true });
         wcEvent('lease_restore_ok');
         return true;
+      }
+      /* `hasStoredSession()` is necessarily a storage-level check. A corrupt or
+         concurrently removed session can still disappear between that check
+         and AppKit init(); `restore()` then answers WC_NO_SESSION. Retrying that
+         state forever only shows “reconnecting” until the lease expires — there
+         is no relay retry that can recreate a session the wallet no longer has. */
+      if (plan.action === 'wc' && wcRestoreCodeRef.current === 'WC_NO_SESSION') {
+        const purged = purgeConnectionKeys();
+        dropLease();
+        restoreBlockedRef.current = 'missing';
+        setRestoring(false);
+        setError('SESSION_MISSING');
+        wcEvent('lease_session_missing', purged);
+        return false;
       }
       wcEvent('lease_restore_failed');
       return false;
