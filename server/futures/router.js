@@ -378,6 +378,17 @@ export function futuresRouter() {
 
     const o = await assembleOrder(req.body || {}, { wallet, requireWallet: true });
     if (!o.ok) return fail(res, o.status || 400, o.code, { requestId, detail: o.detail || null, provider: o.health || null });
+    /* Balance insufficiency is a funding problem, not an opaque policy error.
+       Risk includes this condition in blockReasons, so it must be classified
+       before the generic risk gate or the explicit check below is unreachable. */
+    if (o.account?.balanceUsd != null && o.account.balanceUsd + 1e-9 < o.collateralUsd) {
+      return fail(res, 400, 'INSUFFICIENT_BALANCE', {
+        requestId,
+        balanceUsd: o.account.balanceUsd,
+        collateralUsd: o.collateralUsd,
+        risk: o.risk
+      });
+    }
     if (o.risk.blocked) return fail(res, 422, 'RISK_BLOCKED', { requestId, risk: o.risk });
     if (!o.route.ok) return fail(res, 409, 'PROVIDER_UNAVAILABLE', { requestId, route: o.route });
     /* Velocity collateral is checked in the wallet before the first signature.

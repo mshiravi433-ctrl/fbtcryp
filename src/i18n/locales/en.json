@@ -15330,6 +15330,8 @@
       "WALLET_NOT_CONNECTED": "Connect or unlock your wallet first.",
       "WRONG_NETWORK": "Switch your wallet to the protocol’s network.",
       "INSUFFICIENT_BALANCE": "Your collateral balance is below the amount entered.",
+      "availableCollateral": "Verified collateral balance",
+      "requestedCollateral": "Requested collateral",
       "INSUFFICIENT_BALANCE_SOLANA": "Not enough USDT in your wallet for this order — the collateral plus fees exceeds your USDT balance.",
       "INSUFFICIENT_ALLOWANCE": "Approve the collateral amount first.",
       "NO_GAS": "Not enough ETH for network fees on this chain.",

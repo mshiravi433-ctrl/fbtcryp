@@ -18,6 +18,8 @@
  * Network-dependent outcomes (a live Ostium quote) are asserted only as
  * invariants: unsigned by construction, allowlisted target, fee ≤ ceiling.
  */
+import { readFileSync } from 'node:fs';
+
 const rows = [];
 const t = (name, ok) => rows.push([name, Boolean(ok)]);
 
@@ -33,10 +35,18 @@ const post = async (path, body, headers = {}) => {
 };
 
 const WALLET = '0x1111111111111111111111111111111111111111';
+const futuresRouterSource = readFileSync(new URL('../server/futures/router.js', import.meta.url), 'utf8');
+const futuresUiSource = readFileSync(new URL('../src/pages/FuturesOnchain.jsx', import.meta.url), 'utf8');
 const STATUSES = new Set(['AVAILABLE', 'DEGRADED', 'READ_ONLY', 'UNAVAILABLE', 'MAINTENANCE', 'BLOCKED']);
 const CEX = ['binance', 'bybit', 'kucoin', 'mexc', 'okx'];
 
 try {
+  const balanceGateAt = futuresRouterSource.indexOf("if (o.account?.balanceUsd != null && o.account.balanceUsd + 1e-9 < o.collateralUsd)");
+  const genericRiskGateAt = futuresRouterSource.indexOf("if (o.risk.blocked) return fail(res, 422, 'RISK_BLOCKED'");
+  t('prepare classifies a known collateral shortfall before the generic risk block', balanceGateAt >= 0 && genericRiskGateAt > balanceGateAt);
+  t('risk-blocked prepare errors preserve the server risk verdict for explanation', /setErrorRisk\(e\?\.risk \|\| null\)/.test(futuresUiSource) && /errorRisk\.blockReasons\.map/.test(futuresUiSource));
+  t('the UI renders verified available and requested collateral on a shortfall', /availableCollateral/.test(futuresUiSource) && /requestedCollateral/.test(futuresUiSource));
+
   /* ── registry / health ─────────────────────────────────────────────── */
   const health = await get('/api/v1/futures/health');
   t('GET /health answers the engine snapshot', health.status === 200 && health.json?.ok === true && health.json.data.engine === 'fbt-futures-engine');

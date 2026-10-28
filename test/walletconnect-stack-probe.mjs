@@ -1442,6 +1442,9 @@ export default async function run() {
        retry: a `wc` lease whose `wc@2:` session is gone fails fast and says so. */
     t('an impossible WalletConnect resume fails fast instead of burning the ladder',
       /plan\.action === 'wc' && !hasStoredSession\(\)/.test(ctxSrc) && /lease_session_missing/.test(ctxSrc));
+    t('a session removed between the storage probe and AppKit restore is terminal, not retried for minutes',
+      /wcRestoreCodeRef\.current === 'WC_NO_SESSION'/.test(ctxSrc)
+        && /purgeConnectionKeys\(\)[\s\S]{0,120}dropLease\(\)[\s\S]{0,160}setError\('SESSION_MISSING'\)/.test(ctxSrc));
   }
 
   /* ════════════════ 15. the signing boundary («هیج صفحه امضایی نیامد») ═════
