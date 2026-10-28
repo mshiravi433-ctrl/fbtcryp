@@ -188,6 +188,21 @@
 .sm-token-receipts .smi-side { font-size: 9px; }
 .sm-token-receipts .smi-feed-main { cursor: default; }
 .sm-token-receipts .smi-footnote { margin-top: 6px; font-size: 9.5px; }
+/* Token-card evidence strip (2026-10-28): names the measurement behind the
+ * buying/selling tiles (individual trades · pool counts · volume only · not
+ * measured), the sample size and the upstream that answered. Quiet by
+ * design — it explains the numbers, it is not a signal of its own. */
+.sm-token-evidence { display: grid; gap: 6px; border: 1px solid rgba(115, 155, 171, .24);
+  background: rgba(115, 155, 171, .06); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+.sm-token-evidence-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.sm-token-evidence-head .smi-signal { font-size: 9px; font-weight: 700; white-space: normal; text-align: start; }
+.sm-token-evidence-head .smi-signal.watch { color: #f5c551; }
+.sm-token-evidence-rows { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 10px;
+  font-variant-numeric: tabular-nums; opacity: .82; }
+.sm-token-evidence-rows .warn { color: #f5c551; opacity: .95; }
+.sm-token-evidence .smi-footnote { margin: 0; font-size: 9.5px; line-height: 1.5; opacity: .62; }
+:root[data-theme='light'] .sm-token-evidence { background: #f2f7f9; border-color: #cfdfe6; }
+:root[data-theme='light'] .sm-token-evidence-rows .warn { color: #8a5d00; }
 /* Observed layer (2026-09-28): real paired-swap receipts, the flow of every
  * analysed wallet and the wallets still under evaluation. Styled a notch
  * quieter than consensus so a sample never reads as a signal. */

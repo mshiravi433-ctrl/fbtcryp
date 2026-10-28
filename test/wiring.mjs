@@ -386,10 +386,23 @@ export default function run() {
       /data-testid="sm-window-coverage"/.test(smPage)
       && /windowCoverage < 0\.95/.test(smPage)
       && /t\('sm\.windowCoverage', \{ pct: Math\.round\(f\.coverage \* 100\) \}\)/.test(smPage));
+    /* 2026-10-28: the card now prints the MEASUREMENT (source · sample ·
+       coverage) next to the flow, because the old copy called every number a
+       "router proxy" while the numbers were actually being summed from an
+       almost-always-empty whale buffer. The window note moved into that
+       evidence block; the window itself is still what selects the numbers. */
     t('Smart Money: the token card admits which numbers follow the window',
       /const windowScoped = flow\?\.window === win/.test(smCard)
-      && /!windowScoped && \(/.test(smCard)
-      && /data-testid="sm-token-window-note"/.test(smCard));
+      && /data-testid="sm-token-window-note"/.test(smCard)
+      && /sm\.tokenWindowNote/.test(smCard));
+    t('Smart Money: the token card names the measurement behind the flow',
+      /data-testid="sm-token-evidence"/.test(smCard)
+      && /BASIS_LABEL/.test(smCard)
+      && /sm\.flow\.basisTrades/.test(smCard)
+      && /sm\.flow\.estimated/.test(smCard));
+    t('Smart Money: an unmeasured flow renders «—», never a fabricated zero',
+      /flow\?\.buyUsd/.test(smCard) && /data-testid="sm-token-no-flow-data"/.test(smCard)
+      && /flowWallets != null \? fmtInt\(flowWallets\) : '—'/.test(smCard));
 
     /* ── 1b · token-page wiring: no page import, lazy tab, receipts, coverage
        copy (2026-10-26). Each of these was a real defect: the card imported

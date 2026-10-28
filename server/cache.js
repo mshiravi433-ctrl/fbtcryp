@@ -68,3 +68,13 @@ export async function withCache(key, ttlMs, producer, opts) {
 export function cacheStats() {
   return { entries: store.size, inflight: inflight.size };
 }
+
+/**
+ * Drop every cached value (never the in-flight map — a probe that clears the
+ * cache must not orphan a promise another caller is awaiting). Tests use this
+ * between scenarios so one fixture's answer cannot leak into the next; it is
+ * also the honest escape hatch for an operator who has just changed a source.
+ */
+export function __clearCacheForTests() {
+  store.clear();
+}

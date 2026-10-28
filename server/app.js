@@ -4347,7 +4347,13 @@ app.get('/api/v1/smart-money/token/:chain/:address', async (req, res) => {
       && /^0x[a-f0-9]{40}$/.test(addr);
     const [intel, signals, verified] = await Promise.all([
       smartMoney.analyzeToken(req.params.address, chainId),
-      smartMoney.tokenSignals(req.params.address, chainId, String(req.query.window || '24h')).catch(() => null),
+      /* The flow read gets its own deadline: it fans out to the trade tape
+         (pools + up to three trade pages) and must never hold the holder
+         read hostage. The tape itself is cached per token, so all four
+         window buttons slice one upstream read — which is why switching the
+         window is now instant instead of a second cold fetch. */
+      smartMoney.tokenSignals(req.params.address, chainId, String(req.query.window || '24h'), { timeoutMs: 9_000 })
+        .catch(() => null),
       supportsVerified ? smartMoney.getVerifiedIntelligence({ window: req.query.window || '24h', chain: chainId,
         token: addr, refresh: 'background' }).catch(() => null) : null
     ]);

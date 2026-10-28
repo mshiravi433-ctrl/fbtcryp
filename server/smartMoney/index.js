@@ -16,7 +16,7 @@
  * Nothing here executes trades. It observes, scores and notifies.
  */
 import { withCache } from '../cache.js';
-import { TTL, WINDOWS, FLOORS } from './config.js';
+import { TTL, WINDOWS, WINDOW_KEYS, FLOORS } from './config.js';
 import { labelledEvents, whaleBoard, exchangeFlows, earlyTokens, freshWallets, liquidityEvents, tokenSignals, windowCoverage, isNonWallet, SCAN_FLOOR } from './moneyFlow.js';
 import { analyzeWallet } from './walletIntel.js';
 import { analyzeToken } from './tokenIntel.js';
@@ -69,7 +69,10 @@ async function buildOverview(winKey, { timeoutMs = READ_DEADLINE_MS } = {}) {
   const readBudgetMs = Math.max(250, Math.min(READ_DEADLINE_MS, Number(timeoutMs) || READ_DEADLINE_MS));
   const overviewDeadlineAt = Date.now() + readBudgetMs;
   const streamBudgetMs = Math.max(250, Math.floor(readBudgetMs / 2));
-  const winMs = WINDOWS[winKey] || WINDOWS.H24;
+  /* `WINDOWS` is keyed by M30/H1/H4/… — the string keys ('1h', '7d') live
+     in WINDOW_KEYS. Indexing WINDOWS with '1h' returned undefined and threw
+     every caller back to 24h, so a 1h request was computed over a day. */
+  const winMs = WINDOW_KEYS[winKey] || WINDOWS.H24;
   const now = Date.now();
   const cutoff = now - winMs;
   const prevCutoff = now - winMs * 2;
