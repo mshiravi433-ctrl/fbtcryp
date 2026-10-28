@@ -360,12 +360,12 @@ export default function run() {
     const smPage = read('src/pages/SmartMoney.jsx');
     const smCard = read('src/components/TokenSmartMoney.jsx');
     const smCss = strip(read('src/styles/smart-money.css'));
-    t('Smart Money: the window rail exists on the page and the token card',
-      /data-testid="sm-window-tabs"/.test(smPage) && /data-testid="sm-token-window-tabs"/.test(smCard));
+    t('Smart Money: the overview page keeps its window rail',
+      /data-testid="sm-window-tabs"/.test(smPage));
     t('Smart Money: it is a real tablist (aria-selected + localised labels)',
       /role="tablist"[\s\S]{0,120}aria-label=\{t\('sm\.windowAria'\)\}/.test(smPage)
       && /aria-selected=\{winKey === w\}/.test(smPage)
-      && /t\(`sm\.windows\.\$\{w\}`\)/.test(smPage) && /t\(`sm\.windows\.\$\{w\}`\)/.test(smCard));
+      && /t\(`sm\.windows\.\$\{w\}`\)/.test(smPage));
     t('Smart Money: choosing a window refetches, persists and mirrors the URL',
       /setInterval\(\(\) => load\(winKey\)/.test(smPage)
       && /writeStoredWindow\(win\)/.test(smPage)
@@ -386,15 +386,24 @@ export default function run() {
       /data-testid="sm-window-coverage"/.test(smPage)
       && /windowCoverage < 0\.95/.test(smPage)
       && /t\('sm\.windowCoverage', \{ pct: Math\.round\(f\.coverage \* 100\) \}\)/.test(smPage));
-    /* 2026-10-28: the card now prints the MEASUREMENT (source · sample ·
-       coverage) next to the flow, because the old copy called every number a
-       "router proxy" while the numbers were actually being summed from an
-       almost-always-empty whale buffer. The window note moved into that
-       evidence block; the window itself is still what selects the numbers. */
-    t('Smart Money: the token card admits which numbers follow the window',
-      /const windowScoped = flow\?\.window === win/.test(smCard)
-      && /data-testid="sm-token-window-note"/.test(smCard)
-      && /sm\.tokenWindowNote/.test(smCard));
+    /* 2026-10-28 (second revision): the TOKEN card serves ONE window — the
+       last 24 hours — because 1h/4h/7d cost a candle request per pool and a
+       seven-chain whale scan, which is what pushed the instance into CPU and
+       memory trouble. The card says the window out loud and never fetches
+       while collapsed. */
+    const smTokenCode = strip(smCard);
+    t('Smart Money: the token card has no 1h/4h/7d rail (24h is the only window)',
+      !/sm-token-window-tabs/.test(smTokenCode) && !/const WINDOWS = \['1h'/.test(smTokenCode)
+      && /data-testid="sm-token-window-badge"/.test(smTokenCode)
+      && /data-testid="sm-token-window-note"/.test(smTokenCode)
+      && /sm\.tokenWindow24h/.test(smTokenCode));
+    t('Smart Money: the token card asks for window=24h once, and only when open',
+      /fetchToken\(chain, address, '24h', ctrl\.signal\)/.test(smTokenCode)
+      && /if \(!address \|\| !open\) return undefined/.test(smTokenCode)
+      && /ctrl\.abort\(\)/.test(smTokenCode));
+    t('Smart Money: the token card renders no wallet list (the server read is gone too)',
+      !/sm-token-receipts/.test(smTokenCode) && !/verified\?\.receipts/.test(smTokenCode)
+      && !/topBuyers|topSellers/.test(smTokenCode) && !/sm-verified-token/.test(smTokenCode));
     t('Smart Money: the token card names the measurement behind the flow',
       /data-testid="sm-token-evidence"/.test(smCard)
       && /BASIS_LABEL/.test(smCard)
@@ -418,25 +427,34 @@ export default function run() {
       /lazyRetry\(\(\) => import\('\.\.\/components\/TokenSmartMoney'\)\)/.test(coinDetailSrc)
       && !/^import TokenSmartMoney from/m.test(coinDetailSrc)
       && /data-testid="sm-token-lazy-fallback"/.test(coinDetailSrc));
-    t('Smart Money: the token card renders the server receipts with the not-consensus label',
-      /data-testid="sm-token-receipts"/.test(smCard)
-      && /verified\?\.receipts/.test(smCard)
-      && /sm\.engine\.notConsensus/.test(smCard)
-      && /sm\.engine\.receiptsTitle/.test(smCard));
-    t('Smart Money: not-covered and unavailable are worded separately from insufficient',
-      /data-testid="sm-token-not-covered"/.test(smCard)
-      && /data-testid="sm-token-verified-unavailable"/.test(smCard)
-      && /sm\.engine\.tokenNotCovered/.test(smCard)
-      && /sm\.engine\.tokenVerifiedUnavailable/.test(smCard));
     {
-      const coverageKeys = ['sm.engine.tokenNotCovered', 'sm.engine.tokenVerifiedUnavailable', 'sm.engine.notCoveredShort'];
-      const gaps = [];
-      for (const file of readdirSync('src/i18n/locales').filter((name) => name.endsWith('.json'))) {
-        const locale = JSON.parse(read(join('src/i18n/locales', file)));
-        for (const key of coverageKeys) if (!hasKey(locale, key)) gaps.push(`${file}:${key}`);
-      }
-      t(`Smart Money: the coverage keys exist in all 12 locales${gaps.length ? ` — missing: ${gaps.slice(0, 4).join(', ')}` : ''}`,
-        gaps.length === 0);
+      /* The route must not build the wallet index for a single token page:
+         `getVerifiedIntelligence` in Background mode was the read that kept
+         running after the response and took the instance down. */
+      const appSrc = read('server/app.js');
+      const start = appSrc.indexOf("app.get('/api/v1/smart-money/token/:chain/:address'");
+      const route = start >= 0 ? appSrc.slice(start, appSrc.indexOf('app.get(', start + 10)) : '';
+      t('Smart Money: the token route serves 24h only and never rebuilds the wallet index',
+        Boolean(route) && /tokenSignals\(req\.params\.address, chainId, '24h'/.test(route)
+        && !/getVerifiedIntelligence/.test(route) && !/req\.query\.window \|\| '24h'/.test(route)
+        && /s-maxage=300/.test(route));
+      const flowSrc = read('server/smartMoney/moneyFlow.js');
+      t('Smart Money: the token flow never falls back to the seven-chain whale scan',
+        !/export async function tokenFlow\(/.test(flowSrc)
+        && !/labelledEvents\(\{ minUsd: FLOORS\.bigTradeUsd/.test(flowSrc));
+      const tradesSrc = strip(read('server/smartMoney/tokenTrades.js'));
+      t('Smart Money: the token tape makes no candle (OHLCV) request and is cached as a summary',
+        !/ohlcv/i.test(tradesSrc) && /const FLOW_TTL_MS = 5 \* 60_000/.test(tradesSrc)
+        && /MAX_POOLS = 2/.test(tradesSrc) && /GT_MAX_INFLIGHT = 2/.test(tradesSrc)
+        && /GT_COOLDOWN_MS = 60_000/.test(tradesSrc));
+      const cacheSrc = read('server/cache.js');
+      t('Smart Money: the in-memory cache is bounded (no unbounded heap growth)',
+        /function boundStore\(/.test(cacheSrc) && /MAX_ENTRIES/.test(cacheSrc));
+      const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+      const en = JSON.parse(read('src/i18n/locales/en.json'));
+      t('Smart Money: the single-window copy exists in fa and en',
+        typeof fa?.sm?.tokenWindow24h === 'string' && fa.sm.tokenWindow24h.length > 0
+        && typeof en?.sm?.tokenWindow24h === 'string' && en.sm.tokenWindow24h.length > 0);
     }
     t('Smart Money: the evidence gate compares Solana as strings and EVM as numbers',
       /isSolanaChain/.test(evidenceSrc) && /String\(r\.token\) === String\(address\)/.test(evidenceSrc)

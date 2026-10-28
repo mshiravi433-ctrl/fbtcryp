@@ -1,46 +1,41 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
-import { fetchToken, fmtUsd, shortAddr, timeAgo } from '../lib/smartMoneyClient';
-import { verifiedToken } from '../lib/smartMoneyEvidence';
+import { fetchToken, fmtUsd, shortAddr } from '../lib/smartMoneyClient';
 import { EVM_CHAINS } from '../lib/chains';
-import { openUrl } from '../lib/browser';
-import { TrendChip, FlowSpark } from './smartMoneyVisuals';
-import SegIndicator from './SegIndicator';
 import '../styles/smart-money-intelligence.css';
 
 /*
- * «تب ۱ ساعت / ۴ ساعت / روز / هفته روی این باکس کار نمی‌کند»
+ * «شلوعی سرور و cpu … فقط دادهٔ ۲۴ ساعتهٔ هوشمند مانی، بدون لیست کیف‌پول‌ها»
+ * ─────────────────────────────────────────────────────────────────────────
+ * This card used to be a four-tab (۱ ساعت · ۴ ساعت · ۲۴ ساعت · هفته) view backed
+ * by three server reads per visit, including a wallet-consensus index rebuild
+ * and a seven-chain whale scan. That is what pushed the instance into CPU and
+ * memory trouble, and it answered questions the card does not need:
  *
- * Two causes, both real:
+ *   · 4h / 7d needed a separate candle request per pool — removed;
+ *   · the wallet lists (consensus, receipts, top buyers/sellers) needed the
+ *     wallet index — removed;
+ *   · the whale scan fallback ran exactly when the cheap source was already
+ *     rate-limited — removed server-side.
  *
- *  · the buttons printed the raw API keys ('1h', '4h', …), so a tap changed
- *    the label's styling only — nothing told the user which window they were
- *    now looking at;
- *  · the accumulation / distribution meters read `data.accumulation` and
- *    `data.distribution`, which come from the token's FIXED 24-hour DEX pair
- *    statistics, not from the window-scoped `smartMoneyFlow`. Buying, selling
- *    and net flow moved with the window; the two meters never did, so half of
- *    the card looked frozen no matter what was selected.
+ * What is left is one honest answer to one question: the real DEX buying,
+ * selling and net flow of THIS contract over the last 24 hours. The card:
  *
- * The meters now take the window-scoped signal when the server answered with
- * one, and the window the card is showing is printed on the flow block.
+ *   · asks for it ONCE, with `window=24h`, and only when it is actually open
+ *     (a collapsed card in the token page costs zero requests);
+ *   · never draws a zero it did not measure — `null` renders «—»;
+ *   · names the measurement (`basis`) and the upstream that answered, so
+ *     «exact individual trades», «estimated from 24h pool counts» and «not
+ *     measured» can never be confused with each other.
  */
-const WINDOWS = ['1h', '4h', '24h', '7d'];
 
-/*
- * How the numbers below were produced. The card prints this verbatim because
- * "exact individual trades", "estimated from pool counts" and "not measured"
- * are three very different claims — and the old card printed none of them,
- * which is why an empty dataset looked like a quiet market.
- */
+/* How the numbers below were produced. */
 const BASIS_LABEL = {
   trades: 'sm.flow.basisTrades',
   'trades-sample': 'sm.flow.basisTradesSample',
   counts: 'sm.flow.basisCounts',
   volume: 'sm.flow.basisVolume',
-  'whale-stream': 'sm.flow.basisWhale',
   none: 'sm.flow.basisNone'
 };
 
@@ -51,192 +46,99 @@ const SOURCE_LABEL = {
   dexscreener: 'DexScreener',
   'geckoterminal+blockscout': 'GeckoTerminal · Blockscout',
   'dexscreener+blockscout': 'DexScreener · Blockscout',
-  'whale-stream': 'FBT whale scan',
   none: null
 };
 
 const fmtInt = (n) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString('en-US') : '—');
 
-/*
- * Explorer link for a receipt hash — same rule as the intelligence tab's
- * ReceiptFeed: a known explorer base from the chain registry AND a real
- * 32-byte hex hash, or no link at all. A malformed hash must never become a
- * clickable «proof» that 404s — the button simply does not render.
- * (Receipts only exist on the seven verified EVM chains today; Solana has no
- * verified coverage yet, so no base58 signature ever reaches this helper.)
- */
-const txUrl = (chainId, hash) => {
-  const base = EVM_CHAINS[chainId]?.explorer;
-  return base && /^0x[a-fA-F0-9]{64}$/.test(String(hash || '')) ? `${base}/tx/${hash}` : null;
-};
-
 /**
  * Token-level Smart Money card — embedded in the token detail page AND in the
  * /smart-money/token/:chain/:address route. Read-only on-chain signals:
- * buying/selling net flow, smart wallets, whale concentration, accumulation vs
- * distribution confidence, top buyers/sellers, holders, liquidity, exchange
- * flow. Never a buy recommendation.
+ * 24-hour buying/selling/net flow, accumulation vs distribution, holders,
+ * liquidity. Never a buy recommendation.
  */
 export default function TokenSmartMoney({ chainId = 1, address, embedded = true, collapsible = true }) {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   /* 'solana' is a first-class chain here (base58 mints are served by the
      intel route); it must survive the prop instead of being coerced to 1. */
   const chain = chainId === 'solana' ? 'solana' : Number(chainId) || 1;
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [win, setWin] = useState('24h');
   /*
-   * «حتماً بزار داخل باکس بازشونده تا صفحه شلوغیش کم بشه»
-   *
    * Embedded in the token page this card sits between the chart and the safety
-   * box, and it is eleven metric tiles deep — enough to push the page's own
-   * content below the fold. So the embedded card starts COLLAPSED and the
-   * standalone /smart-money/token route starts OPEN, because there the user
-   * navigated precisely to read it.
+   * box, so it starts COLLAPSED (the standalone /smart-money/token route starts
+   * OPEN, because there the user navigated precisely to read it).
    */
   const [openState, setOpenState] = useState(!embedded);
   const open = collapsible ? openState : true;
   const Head = collapsible ? 'button' : 'div';
 
+  /* A different contract must never inherit the previous one's numbers: the
+     identity line would name the OLD symbol next to the NEW address while the
+     request is in flight. Clear on identity change, not on open/close. */
   useEffect(() => {
-    if (!address) return undefined;
+    setData(null);
+    setError(null);
+  }, [chain, address]);
+
+  /*
+   * ONE request, and only while the card is visible.
+   *
+   * A collapsed card in the token page used to fetch anyway: thousands of
+   * token-page views paid for a fan-out nobody looked at. Now the read starts
+   * when the card is opened, is cancelled when it closes or the token changes,
+   * and the server caches the 24-hour summary for five minutes.
+   */
+  useEffect(() => {
+    if (!address || !open) return undefined;
+    const ctrl = new AbortController();
     let on = true;
     setLoading(true);
-    fetchToken(chain, address, win)
+    setError(null);
+    fetchToken(chain, address, '24h', ctrl.signal)
       .then((d) => { if (on) { setData(d); setError(null); } })
-      .catch((e) => { if (on) setError(e.message); })
+      .catch((e) => {
+        if (!on) return;
+        if (e?.name === 'AbortError' || e?.message === 'ABORTED') return;
+        setError(e.message);
+      })
       .finally(() => { if (on) setLoading(false); });
-    return () => { on = false; };
-  }, [chain, address, win]);
+    return () => { on = false; ctrl.abort(); };
+  }, [chain, address, open]);
 
   if (!address) return null;
 
   const flow = data?.smartMoneyFlow;
-  /*
-   * ── «صفر است و با تغییر زمان هم چیزی نشان نمی‌دهد» (2026-10-28) ──────────
-   *
-   * The meters used to fall back to `data.accumulation` / `data.distribution`
-   * — the token's FIXED 24-hour pair statistics — whenever the window-scoped
-   * signal was missing. That fallback is exactly what made the card look
-   * frozen: the flow tiles said $0 with a dashed reason, while the two meters
-   * kept drawing the same 24h pair number under every window tab.
-   *
-   * The server now answers `smartMoneyFlow` in one of three honest states:
-   *   · measured          → numbers (exact trades, or a flagged estimate)
-   *   · measured zero     → a real 0
-   *   · not measured      → null → «—»
-   * so the pair-level fallback is GONE. A meter with no window-scoped
-   * evidence shows «—» instead of a number that ignores the selected window.
-   */
-  const accum = flow ? flow.accumulation : data?.accumulation;
-  const distrib = flow ? flow.distribution : data?.distribution;
+  const accum = flow ? flow.accumulation : null;
+  const distrib = flow ? flow.distribution : null;
   const holders = data?.holders;
-  const windowScoped = flow?.window === win;
   const basis = flow?.basis || null;
   const estimated = !!flow?.estimated;
   const sampled = flow?.sampled || null;
-  const flowSource = flow?.coverage?.tradeSource || flow?.coverage?.source || null;
+  const flowSource = flow?.coverage?.tradeSource || flow?.coverage?.poolSource || flow?.coverage?.source || null;
 
   /*
-   * ── WHICH TOKEN THESE NUMBERS BELONG TO ─────────────────────────────────
-   * «ارتباط هوشمند مانی را با هر توکن بررسی کن ببین درسته» — the card asked
-   * /api/v1/smart-money/token/:chain/:address with the contract the token page
-   * resolved, and then showed eleven numbers with nothing on screen tying them
-   * back to a token. A wrong-chain address is invisible in that layout: the
-   * meters still draw, they just describe another asset.
-   *
-   * So the card now prints the identity the SERVER read back — the symbol and
-   * name DexScreener reports for that exact contract, plus the chain and the
-   * address it was asked about. If no pair was found the symbol is null and the
-   * line says so, rather than letting the reader assume the numbers are his
-   * token's.
+   * WHICH TOKEN THESE NUMBERS BELONG TO.
+   * A wrong-chain address is invisible in a tile layout: the meters still
+   * draw, they just describe another asset. So the card prints the identity
+   * the SERVER read back for this exact contract.
    */
   const chainName = chain === 'solana' ? 'Solana' : (EVM_CHAINS[chain]?.name ?? String(chain));
   const resolvedSymbol = data?.symbol || null;
-  const verifiedRow = verifiedToken({ verified: { ...data?.verified,
-    consensus: data?.verified?.consensus ? [data.verified.consensus] : [] }, window: win },
-  chain, address, { window: win });
-  const observed = data?.verified?.observed;
-  /*
-   * ── WHY THE VERDICT READ «INSUFFICIENT» ON CHAINS WE NEVER LOOKED AT ────
-   * The token route distinguishes three very different answers in
-   * `verified.dataStatus`:
-   *   · 'not-covered' — Solana (or any chain outside the seven verified EVM
-   *     networks): the verified layer never ran for this contract at all;
-   *   · 'unavailable' — the chain IS covered but the verified read failed
-   *     this time;
-   *   · 'observed' / 'insufficient-evidence' — the layer ran (see the
-   *     client gate in smartMoneyEvidence) and the sample is what it is.
-   * The card collapsed all three into the generic «no qualified consensus»,
-   * which on Solana reads as «we measured and found nothing» — a claim we
-   * never made. Each state now gets its own sentence, and none of them is
-   * allowed to borrow the others' wording.
-   */
-  const verifiedStatus = data?.verified?.dataStatus || null;
-  /*
-   * ── THE RECEIPTS WERE ALREADY IN THE RESPONSE ───────────────────────────
-   * The token route has always attached up to five paired-swap receipts for
-   * THIS contract (`verified.receipts`, from the observed ledger) and the
-   * card rendered none of them — so the one thing a reader could actually
-   * verify on an explorer never reached the screen. They render below, in
-   * the intelligence tab's receipt language. The re-filter here is the
-   * card's standing identity rule (see the identity line above): a row that
-   * does not name this exact chain+contract is dropped, never relabelled.
-   * Mints are case-sensitive base58, so the address compare is chain-aware
-   * (exact for Solana, case-folded for EVM) — receipts are EVM-only today,
-   * and a future Solana row must fail closed, not lowercase-match.
-   */
-  const receipts = (Array.isArray(data?.verified?.receipts) ? data.verified.receipts : [])
-    .filter((r) => r && (r.side === 'BUY' || r.side === 'SELL')
-      && Number.isFinite(Number(r.valueUsd)) && typeof r.hash === 'string' && r.hash
-      && typeof r.wallet === 'string' && r.wallet
-      && String(r.chain) === String(chain)
-      && (chain === 'solana'
-        ? String(r.token || '') === String(address)
-        : String(r.token || '').toLowerCase() === String(address).toLowerCase()))
-    .slice(0, 5);
-  /* «هوشمند مانی برای صفحه زیر هر توکن در بیشتر مواقع میزنه داده ناکافی».
-     Verified consensus is a HIGH bar (3+ qualified independent wallets) and
-     most contracts legitimately never clear it — but the card was answering
-     that with a bare «داده ناکافی» as the head number, even while a real,
-     measured window flow sat three tiles below. The header now shows the
-     best measured number that EXISTS for this contract — verified consensus
-     when it is earned, the window-scoped DEX flow otherwise — and only says
-     insufficient when nothing at all has been measured. The "not consensus"
-     marking stays on the body where the number is substantiated. */
-  const headSummary = loading ? null : verifiedRow
-    ? `${verifiedRow.netFlowUsd > 0 ? '+' : '−'}${fmtUsd(Math.abs(verifiedRow.netFlowUsd))}`
-    : flow && Number.isFinite(flow.netUsd)
-      ? `${flow.netUsd >= 0 ? '+' : '−'}${fmtUsd(Math.abs(flow.netUsd))}`
-      /* Measured volume with no direction is still a real answer — better
-         than «insufficient» when the tape simply could not split the sides. */
-      : flow && Number.isFinite(flow.volumeUsd)
-        ? fmtUsd(flow.volumeUsd)
-        /* Collapsed, this one word is all the reader sees — on a chain with no
-           verified coverage it must not be the generic «insufficient». */
-        : verifiedStatus === 'not-covered'
-          ? t('sm.engine.notCoveredShort')
-          : t('sm.engine.insufficient');
 
   const flowTrades = Number.isFinite(flow?.trades) ? flow.trades : null;
   const flowWallets = Number.isFinite(flow?.wallets) ? flow.wallets : null;
   const flowVolume = Number.isFinite(flow?.volumeUsd) ? flow.volumeUsd : null;
-  const volumeWindow = flow?.volumeWindow || null;
   const coveredPct = Number.isFinite(sampled?.coveredPct) ? sampled.coveredPct : null;
   const sourceName = flowSource ? (SOURCE_LABEL[flowSource] || flowSource) : null;
-  /* No `basis` means an older server response (v1 signals) — in that case the
-     card must not claim «not measured» about numbers that are present. */
-  const basisLabel = basis ? t(BASIS_LABEL[basis] || BASIS_LABEL.none, {
-    pct: coveredPct ?? 0,
-    window: t(`sm.windows.${win}`),
-    count: flowTrades ?? 0
-  }) : null;
-  const windowLabel = (key) => (key === '6h' ? t('sm.flow.window6h')
-    : key === '24h' ? t('sm.windows.24h')
-      : key === '7d' ? t('sm.windows.7d')
-        : t(`sm.windows.${key}`));
+  /* No `basis` means an older server response — do not claim «not measured»
+     about numbers that are present. */
+  const basisLabel = basis ? t(BASIS_LABEL[basis] || BASIS_LABEL.none, { pct: coveredPct ?? 0 }) : null;
+
+  const headSummary = data && Number.isFinite(flow?.netUsd)
+    ? `${flow.netUsd >= 0 ? '+' : '−'}${fmtUsd(Math.abs(flow.netUsd))}`
+    : null;
 
   return (
     <motion.div
@@ -265,6 +167,7 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
             <path d="M12 21.4V12" />
           </svg>
           {t('sm.title')}
+          <span className="sm-token-chip ghost" data-testid="sm-token-window-badge">{t('sm.windows.24h')}</span>
         </span>
         {headSummary ? <span className="sm-token-head-summary mono">{headSummary}</span> : null}
         {collapsible && <svg
@@ -290,32 +193,6 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
         </span>
       </div>
 
-      {/*
-        ── THE WINDOW RAIL, ON ITS OWN ROW ──────────────────────────────────
-        «تبش خیلی دراز شده و از باکس زده بیرون» — the rail used to live INSIDE
-        the <h3>, on the same flex line as the title. Four labels (۱ ساعت ·
-        ۴ ساعت · ۲۴ ساعت · هفته) plus a title do not fit in one phone-width row,
-        so the rail overflowed the card's padding and the last tab was clipped.
-        It is now a block-level row of its own, full width, four equal
-        segments, each with a real 40px tap target.
-      */}
-      <div className="sm-seg-window sm-token-windows" role="tablist" aria-label={t('sm.windowAria')} data-testid="sm-token-window-tabs">
-        {WINDOWS.map((w) => (
-          <button
-            key={w}
-            type="button"
-            role="tab"
-            aria-selected={win === w}
-            className={`sm-seg-window-item ${win === w ? 'active' : ''}`}
-            data-testid={`sm-token-window-${w}`}
-            onClick={() => setWin(w)}
-          >
-            {win === w && <SegIndicator id={`sm-token-window-${chain}`} />}
-            {t(`sm.windows.${w}`)}
-          </button>
-        ))}
-      </div>
-
       {open && <div className="sm-token-body" id="sm-token-card-body">
 
       {loading && (
@@ -333,132 +210,11 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
             <div className="sm-empty" style={{ padding: '8px 0' }}>{t('sm.tokenNoDex')}</div>
           )}
 
-          <div className="smi-token-verdict" data-testid="sm-verified-token">
-            <strong>{t('sm.engine.tokenVerified')}</strong>
-            {verifiedRow ? <><span className={verifiedRow.signal === 'ACCUMULATION' ? 'sm-up' : 'sm-down'}>
-              {t(`sm.engine.signal.${verifiedRow.signal}`)} · {verifiedRow.confidence}/100 · {verifiedRow.netFlowUsd > 0 ? '+' : '−'}{fmtUsd(Math.abs(verifiedRow.netFlowUsd))}
-            </span><small>{t('sm.engine.verifiedGroups', { n: verifiedRow.independentVotes, swaps: verifiedRow.swaps })}</small>
-            {/* Trend vs the previous equal window + the window's flow shape
-                (upgrade 2026-10-25) — same verified row, same receipts. */}
-            {(verifiedRow.momentum || verifiedRow.flowBuckets) && (
-              <span className="smi-row-meta" data-testid="sm-token-momentum">
-                <FlowSpark buckets={verifiedRow.flowBuckets} />
-                <TrendChip row={verifiedRow} />
-              </span>
-            )}</>
-              : verifiedStatus === 'not-covered'
-                /* No verified coverage on this chain — say THAT, not the
-                   generic «insufficient» (see the dataStatus note above). */
-                ? <p data-testid="sm-token-not-covered">{t('sm.engine.tokenNotCovered', { chain: chainName })}</p>
-                : verifiedStatus === 'unavailable'
-                  /* Covered chain, failed read: «unread» is not «insufficient». */
-                  ? <p data-testid="sm-token-verified-unavailable">{t('sm.engine.tokenVerifiedUnavailable')}</p>
-                  : <p>{t('sm.engine.tokenInsufficient')}</p>}
-            {/*
-              Three escalating answers instead of one bare «insufficient»:
-                1. observed receipts for THIS contract (promoted to the main
-                   line — it is real measured evidence, just not consensus);
-                2. the engine's own coverage, so «نکافی» is backed by the
-                   sample size it was derived from;
-                3. only then silence.
-            */}
-            {!verifiedRow && observed?.swaps > 0 && <small data-testid="sm-token-observed">
-              {t('sm.engine.tokenObserved', { swaps: observed.swaps, wallets: observed.wallets,
-                net: `${observed.netFlowUsd >= 0 ? '+' : '−'}${fmtUsd(Math.abs(observed.netFlowUsd))}` })}
-            </small>}
-            {/*
-              «داده‌ها صفرند» — the verdict said «no qualified consensus» and
-              then showed NOTHING, which read as «no flow». The verified layer
-              is a high bar (3+ performance-qualified wallets), so most
-              contracts never clear it; that does not mean the token is
-              quiet. The real, measured trade sample for this exact contract
-              and window now prints right here, clearly labelled as a sample
-              and not a vote.
-            */}
-            {!verifiedRow && flow && (flowTrades > 0 || flowVolume != null) && (
-              <small data-testid="sm-token-observed-trades">
-                {flowTrades > 0
-                  ? t('sm.engine.tokenObservedSample', {
-                    trades: fmtInt(flowTrades),
-                    wallets: flowWallets != null ? fmtInt(flowWallets) : '—',
-                    buy: fmtUsd(flow.buyUsd),
-                    sell: fmtUsd(flow.sellUsd),
-                    net: `${(flow.netUsd ?? 0) >= 0 ? '+' : '−'}${fmtUsd(Math.abs(flow.netUsd ?? 0))}`
-                  })
-                  : t('sm.engine.tokenObservedVolume', { volume: fmtUsd(flowVolume) })}
-              </small>
-            )}
-            {!verifiedRow && !(observed?.swaps > 0) && !(flowTrades > 0) && !(flowVolume != null)
-              && data?.verified?.coverage?.analyzedWallets > 0 && (
-              <small>{t('sm.engine.teaserSample', {
-                wallets: data.verified.coverage.analyzedWallets,
-                swaps: data.verified.coverage.observedSwaps ?? data.verified.coverage.swapsInWindow ?? 0
-              })}</small>
-            )}
-            {/*
-              The receipts themselves — the same row language as the
-              intelligence tab's ReceiptFeed (side chip · symbol + USD ·
-              chain · age · qualified flag · wallet · explorer proof). Only
-              rendered when the server actually sent rows for this contract.
-              They are OBSERVED paired swaps; when no verified consensus
-              backs them, the honest «sample · not consensus» label stays on
-              the block so a receipt can never be misread as a vote.
-            */}
-            {receipts.length > 0 && (
-              <div className="sm-token-receipts" data-testid="sm-token-receipts">
-                <div className="sm-token-receipts-head">
-                  <span>{t('sm.engine.receiptsTitle')}</span>
-                  {!verifiedRow && <span className="smi-signal idle">{t('sm.engine.notConsensus')}</span>}
-                </div>
-                <div className="smi-feed">
-                  {receipts.map((r) => {
-                    const url = txUrl(r.chain, r.hash);
-                    return (
-                      <div className="smi-feed-row" key={`${r.hash}:${r.wallet}`} data-testid="sm-token-receipt">
-                        <span className={`smi-side ${r.side === 'BUY' ? 'up' : 'down'}`}>
-                          {r.side === 'BUY' ? t('sm.engine.buyShort') : t('sm.engine.sellShort')}
-                        </span>
-                        <div className="smi-feed-main">
-                          <div className="smi-feed-title">
-                            <strong>{r.symbol || resolvedSymbol || shortAddr(r.token)}</strong>
-                            <b className={r.side === 'BUY' ? 'sm-up' : 'sm-down'}>{fmtUsd(r.valueUsd)}</b>
-                          </div>
-                          <small>
-                            {chainName} · {timeAgo(r.at)}
-                            {r.qualified ? ` · ${t('sm.engine.qualifiedShort')}` : ''}
-                            {r.realizedRoiPct != null ? ` · ROI ${r.realizedRoiPct > 0 ? '+' : ''}${r.realizedRoiPct}%` : ''}
-                          </small>
-                        </div>
-                        <button
-                          type="button"
-                          className="smi-feed-wallet"
-                          onClick={() => navigate(`/smart-money/wallet/${r.chain}/${r.wallet}`)}
-                        >
-                          {shortAddr(r.wallet)}
-                        </button>
-                        {url && (
-                          <button type="button" className="smi-proof" title={r.hash} onClick={() => openUrl(url)}>
-                            {t('sm.engine.proof')} ↗
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="smi-footnote">{t('sm.engine.receiptsNote')}</p>
-              </div>
-            )}
-          </div>
           {/*
             ── WHAT THESE NUMBERS ARE, IN WORDS ────────────────────────────
-            The block below used to print a fixed disclaimer calling every
-            figure a "router-transfer proxy". That is no longer true: the
-            flow tiles are read from individual trades of this contract
-            (buyer wallet, side, USD, timestamp), with pool aggregates for
-            the window volume. So the card now names the measurement
-            (`basis`), the sample it came from and the upstream that
-            answered — and says «نه اندازه‌گیری‌شده» when the answer is
-            simply absent instead of drawing a zero.
+            The card names the measurement (`basis`), the sample it came from
+            and the upstream that answered — and says «نه اندازه‌گیری‌شده»
+            when the answer is simply absent instead of drawing a zero.
           */}
           <div className="sm-token-evidence" data-testid="sm-token-evidence">
             <div className="sm-token-evidence-head">
@@ -484,18 +240,16 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
               {flow?.buys != null && flow?.sells != null && (
                 <span>{t('sm.flow.evidenceCounts', { buys: fmtInt(flow.buys), sells: fmtInt(flow.sells) })}</span>
               )}
-              {volumeWindow && volumeWindow !== win && (
-                <span className="warn">{t('sm.flow.windowUsed', { window: windowLabel(volumeWindow) })}</span>
-              )}
               {coveredPct != null && coveredPct < 95 && flowTrades > 0 && (
                 <span className="warn">{t('sm.flow.coveragePct', { pct: coveredPct })}</span>
               )}
             </div>
             {basis === 'none' && <p className="smi-footnote" data-testid="sm-token-no-flow-data">{t('sm.flow.noData')}</p>}
             <p className="smi-footnote" data-testid="sm-token-window-note">
-              {t('sm.tokenWindowNote', { window: t(`sm.windows.${win}`) })}
+              {t('sm.tokenWindow24h')}
             </p>
           </div>
+
           <div className="sm-metrics" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
             <div className="sm-metric">
               <div className="lab">{t('sm.buying')}</div>
@@ -527,7 +281,7 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
             </div>
           </div>
 
-          {/* Holder analysis */}
+          {/* Holder analysis — aggregates only; the address list is not sent */}
           {holders?.dataStatus === 'live' && (
             <div className="sm-metrics" style={{ gridTemplateColumns: 'repeat(2,1fr)', marginTop: 12 }}>
               <div className="sm-metric">
@@ -552,14 +306,13 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
           )}
 
           {/*
-            The wallet count used to be «smartWallets» from the whale buffer —
-            almost always 0. With the trade tape it is the number of DISTINCT
-            wallets that actually traded this contract in the window, and the
-            label says so instead of implying a qualification nobody made.
+            A COUNT, not a list: how many distinct wallets traded this contract
+            in the sample the numbers came from. «—» when the sample cannot
+            support a 24-hour wallet count.
           */}
           <div className="sm-row" style={{ cursor: 'default' }}>
             <div className="mid">
-              <div className="name">{flowWallets != null ? t('sm.flow.walletsTraded') : t('sm.smartWalletsTitle')}</div>
+              <div className="name">{t('sm.flow.walletsTraded')}</div>
             </div>
             <div className="right usd" data-testid="sm-token-wallets">{flowWallets != null ? fmtInt(flowWallets) : '—'}</div>
           </div>
@@ -567,45 +320,6 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
             <div className="mid"><div className="name">{t('sm.liquidity')}</div></div>
             <div className="right usd">{fmtUsd(data.liquidityUsd)}</div>
           </div>
-
-          {/* Top buyers / sellers */}
-          {flow?.topBuyers?.length > 0 && (
-            <>
-              <div className="faint" style={{ fontSize: 11, fontWeight: 800, marginTop: 10, textTransform: 'uppercase' }}>{t('sm.topBuyers')}</div>
-              {flow.topBuyers.slice(0, 5).map((b) => (
-                <div key={b.address} className="sm-row" role="button" tabIndex={0}
-                  onClick={() => navigate(`/smart-money/wallet/${chain}/${b.address}`)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/smart-money/wallet/${chain}/${b.address}`); }}>
-                  <div className="mid mono"><div className="name">{b.short || shortAddr(b.address)}</div></div>
-                  <div className="right usd sm-up">{fmtUsd(b.usd)}</div>
-                </div>
-              ))}
-            </>
-          )}
-          {flow?.topSellers?.length > 0 && (
-            <>
-              <div className="faint" style={{ fontSize: 11, fontWeight: 800, marginTop: 10, textTransform: 'uppercase' }}>{t('sm.topSellers')}</div>
-              {flow.topSellers.slice(0, 5).map((s) => (
-                <div key={s.address} className="sm-row" role="button" tabIndex={0}
-                  onClick={() => navigate(`/smart-money/wallet/${chain}/${s.address}`)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/smart-money/wallet/${chain}/${s.address}`); }}>
-                  <div className="mid mono"><div className="name">{s.short || shortAddr(s.address)}</div></div>
-                  <div className="right usd sm-down">{fmtUsd(s.usd)}</div>
-                </div>
-              ))}
-            </>
-          )}
-
-          {/*
-            A window mismatch is now a source fact, not a warning that the
-            meters below ignore the tab: the server already says which
-            upstream span it could measure (`volumeWindow`), and the evidence
-            block prints it. This line only survives for an older server that
-            still answers without `smartMoneyFlow.window`.
-          */}
-          {!windowScoped && !flow && (
-            <div className="sm-coverage">{t('sm.tokenWindowFallback')}</div>
-          )}
 
           {data.risk && (
             <div style={{ marginTop: 10 }}>

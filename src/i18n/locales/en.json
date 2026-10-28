@@ -13274,7 +13274,8 @@
     "tokenSummaryFlat": "no recorded flow",
     "marketsChip": "active pairs",
     "tokens": "tokens",
-    "volume": "Flow volume"
+    "volume": "Flow volume",
+    "tokenWindow24h": "These numbers measure the last 24 hours of this contract only; 4-hour and weekly windows are not served, to keep server load down."
   },
   "crossChain": {
     "youReceive": "You receive",

@@ -4335,38 +4335,75 @@ app.get('/api/v1/smart-money/wallet/:address', async (req, res) => {
   }
 });
 
-/* Token intelligence — liquidity, holders, accumulation/distribution, flows. */
+/*
+ * Token intelligence — liquidity, holders, accumulation/distribution and the
+ * 24-hour smart-money flow for THIS contract.
+ *
+ * ─── WHY THIS ROUTE LOST TWO READS (2026-10-28) ──────────────────────────
+ * «cpu ارور زده و گفته حجم داره تموم میشه … فقط دادهٔ ۲۴ ساعته را بده و
+ *  نیاز به لیست کیف‌پول‌ها نیست.»
+ *
+ * It used to fan out to three heavy reads per request:
+ *
+ *   1. `analyzeToken`              — DexScreener pairs + Blockscout holders
+ *   2. `tokenSignals(window)`      — pools + up to three trade pages + OHLCV
+ *                                    candles for 4h/7d, with a seven-chain
+ *                                    whale scan as the fallback
+ *   3. `getVerifiedIntelligence`   — the wallet-index consensus, refresh
+ *                                    `background`, i.e. an index rebuild that
+ *                                    kept running AFTER the response
+ *
+ * On a serverless instance that is CPU, memory and upstream quota spent to
+ * answer four questions nobody asked. The card reads one: «what did this
+ * contract's DEX trading look like over the last 24 hours?». So:
+ *
+ *   · one window (24h) — any other `?window=` value is ignored and echoed
+ *     back in `windowPolicy` so nothing is silently relabelled;
+ *   · no wallet index / consensus / receipts on this route — the wallet LIST
+ *     is gone from the card, so recomputing it here was pure cost;
+ *   · the holder list is trimmed to its four aggregate numbers (the address
+ *     rows were never rendered);
+ *   · both remaining reads are bounded to 8s and the answer is cached 5 min
+ *     server-side, 60s in the browser and 5 min at the CDN.
+ */
 app.get('/api/v1/smart-money/token/:chain/:address', async (req, res) => {
   try {
     /* 'solana' is a chain id here, not a number: the token route must serve
        Solana mints, and coercing the slug to 1 would analyze an Ethereum
        contract with a base58 address — BAD_ADDRESS for every Solana token. */
     const chainId = req.params.chain === 'solana' ? 'solana' : Number(req.params.chain) || 1;
-    const addr = String(req.params.address).toLowerCase();
-    const supportsVerified = chainId !== 'solana' && [1, 56, 137, 42161, 8453, 10, 43114].includes(chainId)
-      && /^0x[a-f0-9]{40}$/.test(addr);
-    const [intel, signals, verified] = await Promise.all([
-      smartMoney.analyzeToken(req.params.address, chainId),
-      /* The flow read gets its own deadline: it fans out to the trade tape
-         (pools + up to three trade pages) and must never hold the holder
-         read hostage. The tape itself is cached per token, so all four
-         window buttons slice one upstream read — which is why switching the
-         window is now instant instead of a second cold fetch. */
-      smartMoney.tokenSignals(req.params.address, chainId, String(req.query.window || '24h'), { timeoutMs: 9_000 })
-        .catch(() => null),
-      supportsVerified ? smartMoney.getVerifiedIntelligence({ window: req.query.window || '24h', chain: chainId,
-        token: addr, refresh: 'background' }).catch(() => null) : null
+    const requestedWindow = req.query.window == null ? null : String(req.query.window);
+    const [intel, signals] = await Promise.all([
+      smartMoney.analyzeToken(req.params.address, chainId, { timeoutMs: 8_000 }),
+      /* ONE cached 24-hour summary per token: no per-window slicing, no
+         candle requests, no whale-scan fallback. A failed read is an honest
+         `unavailable` (the card prints «—»), never a second, heavier read. */
+      smartMoney.tokenSignals(req.params.address, chainId, '24h', { timeoutMs: 8_000 })
+        .catch(() => null)
     ]);
-    res.set('cache-control', 'public, max-age=30, s-maxage=90, stale-while-revalidate=600');
-    return res.json({ ...intel, smartMoneyFlow: signals,
-      verified: verified ? { dataStatus: verified.dataStatus, indexedAt: verified.indexedAt,
-        coverage: verified.coverage, consensus: verified.consensus.find((r) => r.chain === chainId && r.token === addr) || null,
-        // Paired swaps of THIS token by analysed wallets (qualified or not):
-        // real receipts, explicitly not consensus. Lets the card show the
-        // sample instead of a bare «insufficient» when nobody qualified yet.
-        observed: verified.observed?.flow?.find((r) => r.chain === chainId && r.token === addr) || null,
-        receipts: (verified.observed?.recentSwaps || []).filter((r) => r.chain === chainId && r.token === addr).slice(0, 5) }
-        : { dataStatus: supportsVerified ? 'unavailable' : 'not-covered', consensus: null } });
+    res.set('cache-control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=900');
+    /* The holder ROWS are dropped here, not by the analysis: `analyzeToken`
+       is shared with other readers, but this response only ever displayed the
+       four aggregates — shipping twenty addresses was weight and a wallet
+       list the card does not want. */
+    const holders = intel?.holders
+      ? {
+        dataStatus: intel.holders.dataStatus,
+        total: intel.holders.total,
+        top10Share: intel.holders.top10Share,
+        whaleConcentration: intel.holders.whaleConcentration,
+        exchangeSupplyPct: intel.holders.exchangeSupplyPct
+      }
+      : intel?.holders;
+    return res.json({
+      ...intel,
+      holders,
+      smartMoneyFlow: signals,
+      window: '24h',
+      windowPolicy: requestedWindow && requestedWindow !== '24h'
+        ? { served: '24h', requested: requestedWindow, note: 'token flow is served for 24h only' }
+        : undefined
+    });
   } catch (err) {
     if (err?.code === 'BAD_ADDRESS') return res.status(400).json({ error: 'BAD_ADDRESS' });
     return res.status(502).json({ error: 'TOKEN_INTEL_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
