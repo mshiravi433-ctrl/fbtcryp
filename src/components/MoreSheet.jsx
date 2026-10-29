@@ -85,6 +85,33 @@ import {
  *   • The current screen's row is marked (accent wash + dot + aria-current):
  *     orientation at a glance, in zero extra words.
  *
+ * ─── THE PRISM-BLADE PASS (2026-10-29, third pass) ───────────────────────────
+ * The owner once more: «در ایکون‌ها، رنگ‌بندی، حالت شیشه‌ای و مدرن‌ترین با
+ * زاویه‌بندی خیلی خاص … با انیمیشن و بدون باگ و لامپ‌زدن». Three things
+ * changed, and none of them touched the information architecture:
+ *
+ *   • GEOMETRY. One signature corner, repeated down the hierarchy: the pane,
+ *     the list slab, the icon chip and the close tile are all "three soft
+ *     corners and one blade" (logical radii, so RTL mirrors without a rule).
+ *     Diamond marks on the title and the section headings are the same idea
+ *     at 6-9px. This is where the sheet stops looking like every other
+ *     rounded rectangle in the app.
+ *   • COLOUR. Each category owns a two-stop hue (see ALL_TINT/GROUPS below),
+ *     and the ACTIVE one is pushed into the pane as `--more-tint` /
+ *     `--more-tint-2`: the light rake, the glint at the cut corner, the
+ *     ambient shadow, the title's diamond, the section hairlines and the
+ *     sliding capsule all take that colour. Picking a category re-tints the
+ *     material, so the rail and the sheet agree instead of decorating each
+ *     other.
+ *   • MOTION. Exactly one new animation: a single prism sweep across the
+ *     pane on open — one element, one iteration, parked off-screen when done.
+ *     Nothing in this sheet loops; a perpetual sheen under a backdrop blur is
+ *     the fluorescent-tube flicker the CSS budget is written against.
+ *
+ * What did NOT change, on purpose: no search field, no filler copy, no
+ * per-row backdrop-filter, no parent `scale`, no SVG geometry animation, and
+ * the close-then-navigate order in `go()`.
+ *
  * The "More" drawer.
  *
  * WHY THE ANIMATION WAS JITTERY — and what changed
@@ -120,9 +147,26 @@ import {
  * a fraction of the frames. That is the better design as well as the faster
  * one — a menu that explodes into 18 separately-springing tiles is noise.
  */
+/*
+ * ─── CATEGORY TINTS (2026-10-29, prism-blade pass) ──────────────────────────
+ * Every group carries its own two-stop hue. The sheet reads the ACTIVE
+ * group's pair and re-tints its whole material with it (`--more-tint` /
+ * `--more-tint-2` on the panel, see more-menu.css): the light rake, the
+ * specular glint at the cut corner, the ambient shadow, the title's diamond
+ * and the sliding filter capsule all take their colour from the category the
+ * user just picked. That is the "رنگ‌بندی" half of the brief done with one
+ * variable instead of 25 hard-coded decorations — pick "Earn" and the sheet
+ * turns mint, pick "More" and it turns violet.
+ *
+ * The pairs move around the existing RGB spectrum tokens (never raw hex), so
+ * the app can be re-tinted globally. `all` is the spectrum at rest.
+ */
+const ALL_TINT = { tint: 'var(--rgb-1)', tint2: 'var(--rgb-2)' };
+
 const GROUPS = [
   {
     id: 'markets',
+    ...ALL_TINT,
     items: [
       { to: '/', key: 'nav.market', Icon: IconMarket, hue: 'var(--rgb-1)' },
       /*
@@ -199,6 +243,8 @@ const GROUPS = [
   },
   {
     id: 'earn',
+    tint: 'var(--rgb-4)',
+    tint2: 'var(--rgb-5)',
     items: [
       { to: '/farm', key: 'nav.farm', Icon: IconPools, hue: 'var(--rgb-4)' },
       /*
@@ -242,6 +288,8 @@ const GROUPS = [
   },
   {
     id: 'more',
+    tint: 'var(--rgb-2)',
+    tint2: 'var(--rgb-3)',
     items: [
       /*
        * «در منو smart money را مثل بقیه ایکون ها کن نه برجسته» — the tile
@@ -438,6 +486,16 @@ export default function MoreSheet({ open, onClose }) {
   };
 
   /*
+   * The colour the sheet wears right now. `all` is the spectrum at rest; a
+   * category lends the pane its own two-stop hue (see ALL_TINT / GROUPS
+   * above). One pair of custom properties drives the rake, the corner glint,
+   * the ambient shadow, the title diamond and the filter capsule, so "the
+   * menu turns the colour of what you picked" costs two style properties —
+   * not a second stylesheet.
+   */
+  const activeTint = (GROUPS.find((group) => group.id === activeGroup) || ALL_TINT);
+
+  /*
    * The row for the screen the user is already on. Exact match, plus a child
    * route counts as its parent destination (`/stocks/…` is still "Stocks");
    * the root item is exact-only, or every path would claim it.
@@ -503,6 +561,10 @@ export default function MoreSheet({ open, onClose }) {
               aria-modal="true"
               aria-labelledby="more-menu-title"
               data-testid="more-menu-dialog"
+              data-active-group={activeGroup}
+              /* The category's two hues, read by every gradient in
+                 more-menu.css. Set on the panel and inherited downwards. */
+              style={{ '--more-tint': activeTint.tint, '--more-tint-2': activeTint.tint2 }}
               tabIndex={-1}
               /* A spring on y only — the liquid settle. Still no `scale` on
                  the panel: scaling a parent re-rasterises every child on
@@ -524,6 +586,16 @@ export default function MoreSheet({ open, onClose }) {
               }}
               onClick={(event) => event.stopPropagation()}
             >
+              {/*
+                One band of light crosses the pane on open: a single
+                translated element, one iteration, parked off-screen when it
+                lands (see .more-sweep in more-menu.css). It is decorative,
+                it is never focusable, and it never repeats — a perpetual
+                sheen under a backdrop blur is the "لامپ‌زدن" this sheet is
+                written against.
+              */}
+              <span className="more-sweep" aria-hidden="true" />
+
               <div className="more-dragzone" aria-hidden="true" onPointerDown={startDrag}>
                 <span className="more-grabber" />
               </div>
@@ -548,9 +620,10 @@ export default function MoreSheet({ open, onClose }) {
                 without matching panels is an accessibility lie.
               */}
               <div className="more-filter" role="group" aria-label={t('nav.more')}>
-                {[{ id: ALL, key: 'nav.group.all' }, ...GROUPS.map((group) => ({
+                {[{ id: ALL, key: 'nav.group.all', ...ALL_TINT }, ...GROUPS.map((group) => ({
                   id: group.id,
-                  key: `nav.group.${group.id}`
+                  key: `nav.group.${group.id}`,
+                  tint: group.tint
                 }))].map((pill) => (
                   <button
                     key={pill.id}
@@ -558,6 +631,10 @@ export default function MoreSheet({ open, onClose }) {
                     className="more-pill"
                     data-active={activeGroup === pill.id}
                     aria-pressed={activeGroup === pill.id}
+                    /* Each pill carries its category's hue, so the capsule
+                       that lands on it is tinted by the destination it
+                       stands for. */
+                    style={{ '--more-tint': pill.tint }}
                     onClick={() => selectGroup(pill.id)}
                   >
                     {/* One shared glass capsule that flows along the track to
@@ -585,7 +662,12 @@ export default function MoreSheet({ open, onClose }) {
                 {sections.map((group) => (
                   <section key={group.id} className="more-group" aria-label={t(`nav.group.${group.id}`)}>
                     {activeGroup === ALL && (
-                      <h3 className="more-group-title">{t(`nav.group.${group.id}`)}</h3>
+                      <h3
+                        className="more-group-title"
+                        style={{ '--more-group-accent': group.tint }}
+                      >
+                        {t(`nav.group.${group.id}`)}
+                      </h3>
                     )}
                     <div className="more-list" data-still={still ? 'true' : 'false'}>
                       {group.items.map((item, index) => {

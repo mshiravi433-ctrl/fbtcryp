@@ -128,3 +128,113 @@ describe('More sheet — liquid glass pass', () => {
     expect(document.querySelector('[data-testid="more-menu-close"]')).not.toBeNull();
   });
 });
+
+/**
+ * THE PRISM-BLADE PASS — material pins
+ * ---------------------------------------------------------------------------
+ * The third pass on this sheet is geometry, colour and one sweep (see
+ * src/styles/more-menu.css and the header of MoreSheet.jsx). This block pins
+ * the parts that a future restyle could quietly undo while the look still
+ * "seems fine" in a screenshot:
+ *
+ *   · the category tint actually reaches the panel and CHANGES with the rail
+ *     (if it stops, the sheet silently loses its colour system and nobody
+ *     notices until it looks flat again);
+ *   · exactly one sweep element exists, it is not focusable, and the
+ *     stylesheet never asks for an infinite animation — a looping sheen under
+ *     a backdrop blur is the Android "fluorescent tube" flicker this whole
+ *     file is written against;
+ *   · the blade corner is made of radii, not clip-path: clipping the glass
+ *     pane is the one combination that both clips its own shadow and that
+ *     browsers disagree about.
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+
+const CSS = fs.readFileSync(path.resolve(__dirname, '../src/styles/more-menu.css'), 'utf8');
+
+describe('More sheet — prism-blade pass', () => {
+  it('tints the pane with the active category and re-tints it on filter change', async () => {
+    const { pills } = await mountMore();
+    const panel = document.querySelector('[data-testid="more-menu-dialog"]');
+
+    /* At rest: the spectrum ("All"), never an empty variable. */
+    expect(panel.style.getPropertyValue('--more-tint')).toBe('var(--rgb-1)');
+    expect(panel.style.getPropertyValue('--more-tint-2')).toBe('var(--rgb-2)');
+    expect(panel.dataset.activeGroup).toBe('all');
+
+    /* "Earn" is the second category — mint/amber. */
+    fireEvent.click(pills()[2]);
+    expect(panel.style.getPropertyValue('--more-tint')).toBe('var(--rgb-4)');
+    expect(panel.style.getPropertyValue('--more-tint-2')).toBe('var(--rgb-5)');
+    expect(panel.dataset.activeGroup).not.toBe('all');
+
+    /* …and back to the rest state without leaking the old colour. */
+    fireEvent.click(pills()[0]);
+    expect(panel.style.getPropertyValue('--more-tint')).toBe('var(--rgb-1)');
+  });
+
+  it('gives every pill and section heading its own tint token', async () => {
+    const { pills } = await mountMore();
+    for (const pill of pills()) {
+      expect(pill.style.getPropertyValue('--more-tint')).not.toBe('');
+    }
+    const titles = [...document.querySelectorAll('.more-group-title')];
+    expect(titles).toHaveLength(3);
+    for (const title of titles) {
+      expect(title.style.getPropertyValue('--more-group-accent')).not.toBe('');
+    }
+  });
+
+  it('sweeps light across the pane ONCE, decoratively', async () => {
+    await mountMore();
+    const sweeps = document.querySelectorAll('.more-sweep');
+    expect(sweeps).toHaveLength(1);
+    expect(sweeps[0].getAttribute('aria-hidden')).toBe('true');
+    /* It must never join the tab order or eat a tap. */
+    expect(sweeps[0].getAttribute('tabindex')).toBeNull();
+    expect(sweeps[0].tagName).toBe('SPAN');
+
+    /* One-shot by construction: no `infinite` anywhere in the stylesheet. */
+    expect(/infinite/i.test(CSS)).toBe(false);
+    const sweepRule = /\.more-panel > \.more-sweep \{[\s\S]*?\n\}/.exec(CSS)?.[0] ?? '';
+    expect(sweepRule).toContain('animation: more-sweep');
+    expect(sweepRule).toMatch(/\b1 both\b/);
+    /* …and it is a transform, not a paint, so it costs the compositor. */
+    expect(sweepRule).toContain('translate3d');
+  });
+
+  it('builds the blade corner out of radii, never clip-path', () => {
+    /* Logical radii are what mirror the cut in RTL without a duplicate rule. */
+    expect(CSS).toMatch(/\.more-panel \{[\s\S]*?border-end-end-radius: var\(--more-cut\)/);
+    expect(CSS).toContain('--more-cut:');
+    for (const selector of ['.more-list', '.more-tile-icon', '.more-close', '.more-pill-glass']) {
+      /* Anchored to the start of a line: `.more-tile:hover .more-tile-icon {`
+         also exists, and it is the base rule we are pinning. */
+      const block = new RegExp(`^\\${selector} \\{[\\s\\S]*?\\n\\}`, 'm').exec(CSS)?.[0] ?? '';
+      expect(block, `${selector} must carry the blade corner`).toContain('border-end-end-radius');
+    }
+    /* No clip-path DECLARATION: it would also clip the pane's own shadow, and
+       clipping a backdrop-filtered element is where engines disagree. The
+       comments are stripped first — this file's own prose names clip-path as
+       the thing it refused to use (the same trap test/wiring.mjs documents). */
+    const cssCode = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(cssCode.includes('clip-path')).toBe(false);
+  });
+
+  it('keeps the compositor budget: one backdrop-filter, none on rows', () => {
+    /* Line-anchored so the @supports FEATURE QUERY (which also contains the
+       words `backdrop-filter: blur`) is not counted as a declaration. Exactly
+       two live blurs are allowed — the panel and its -webkit twin. */
+    const blurDecls = CSS.match(/^\s*(?:-webkit-)?backdrop-filter:\s*blur/gm) || [];
+    expect(blurDecls).toHaveLength(2);
+    expect(CSS).toMatch(/backdrop-filter:/);
+    for (const selector of ['.more-tile', '.more-tile-icon', '.more-pill', '.more-list']) {
+      const block = new RegExp(`^\\${selector} \\{[\\s\\S]*?\\n\\}`, 'm').exec(CSS)?.[0] ?? '';
+      expect(block, `${selector} must not sample the backdrop`).not.toContain('backdrop-filter');
+    }
+    /* A filter/animation on 25 rows inside a springing pane is the bug this
+       sheet already paid for once. */
+    expect(CSS).not.toMatch(/\.more-tile \{[^}]*filter:/);
+  });
+});
