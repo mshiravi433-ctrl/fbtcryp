@@ -75,6 +75,19 @@ async function main() {
   const cron = await getJson('/api/cron/status');
   push('GET /api/cron/status reachable', cron.status === 200, `HTTP ${cron.status}`);
   const c = cron.body || {};
+
+  /* The token price/P&L watcher — the background twin of the app's price
+     alerts («بالا و پایین رفتن سود و ضرر توکن ها»). `identities: 0` here means
+     no device has synced a watchlist yet (they sync from the Market screen and
+     on push registration), NOT that the sender is broken. */
+  const pw = await getJson('/api/price-alerts/watch/status');
+  push('price/P&L watches synced (background token alerts)', pw.status === 200,
+    pw.status === 200
+      ? `identities=${pw.body?.identities ?? '?'} coins=${pw.body?.coins ?? '?'} lastTickAt=${pw.body?.lastTickAt ?? 'never'}`
+      : `HTTP ${pw.status}`);
+  if (pw.status === 200 && pw.body?.identities === 0) {
+    push('price/P&L watchlist mirror', false, 'no device has synced yet — open the Market screen once on the phone with alerts enabled');
+  }
   push('durable store (BLOB_READ_WRITE_TOKEN) — subscriptions persist', Boolean(c.durableStorage),
     'per-instance store forgets devices on cold start');
   push('CRON_SECRET present (manual daily-cycle re-runs work)', Boolean(c.cronSecretSet));
@@ -83,7 +96,7 @@ async function main() {
     push('CRON_SECRET accepted (daily cycle re-run returns 200, not 401)',
       daily.status === 200,
       daily.status === 200
-        ? `web=${JSON.stringify(daily.body?.web)} fcm=${JSON.stringify(daily.body?.fcm)} watch=${JSON.stringify(daily.body?.watch)}`
+        ? `web=${JSON.stringify(daily.body?.web)} fcm=${JSON.stringify(daily.body?.fcm)} watch=${JSON.stringify(daily.body?.watch)} priceWatch=${JSON.stringify(daily.body?.priceWatch)}`
         : `HTTP ${daily.status} ${JSON.stringify(daily.body)}`);
   } else {
     push('CRON_SECRET accepted (daily cycle re-run)', false, 'set CRON_SECRET env to test (not required for read-only checks)');

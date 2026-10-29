@@ -948,9 +948,29 @@ let nativePushListenersReady = false;
 let nativeRegistrationListener = null;
 let nativeActionListener = null;
 let nativeErrorListener = null;
+let nativeLocalActionListener = null;
 let nativeTokenWaiters = [];
 
-const NATIVE_ROUTES = new Set(['/orders', '/intent', '/swap']);
+const NATIVE_ROUTES = new Set([
+  '/orders', '/intent', '/swap',
+  /* Where the alert ABOUT a market move should land: the coin chart, the
+     market list, the farm watchlist, the home screen. Without these the tap
+     on a price-alert card opened the app and went NOWHERE — the report
+     «نوتیفیکیشن میاد ولی باز نمیشه» on the APK. */
+  '/', '/market', '/farm', '/signals', '/settings', '/news', '/orders/history'
+]);
+
+/*
+ * Dynamic routes a notification may name. Kept as an allowlist of PATTERNS,
+ * not a prefix check: a prefix like `/coin/` alone would happily accept
+ * `/coin/../../evil`-style surprises, and this function is the one gate
+ * between a server payload and `window.location`. Each pattern mirrors a real
+ * <Route> in src/App.jsx (wiring-matched in test/price-watch-push-probe.mjs).
+ */
+const NATIVE_ROUTE_PATTERNS = [
+  /^\/coin\/[a-zA-Z0-9._-]{1,64}$/,
+  /^\/smart-money\/(wallet|token)\/[a-zA-Z0-9._:-]{1,64}\/[a-zA-Z0-9._:-]{1,120}$/
+];
 
 function safeNativeRoute(value) {
   if (typeof value !== 'string') return null;
@@ -961,7 +981,7 @@ function safeNativeRoute(value) {
     // Keep the query intact: `/orders?execute=…` is an action, not decoration.
     const hashRoute = parsed.hash.startsWith('#/') ? parsed.hash.slice(1) : null;
     const path = hashRoute ? hashRoute.split('?')[0] : parsed.pathname;
-    if (!NATIVE_ROUTES.has(path)) return null;
+    if (!NATIVE_ROUTES.has(path) && !NATIVE_ROUTE_PATTERNS.some((rx) => rx.test(path))) return null;
     return hashRoute
       ? `/#${hashRoute}`
       : `/#${parsed.pathname}${parsed.search}${parsed.hash}`;
@@ -969,6 +989,8 @@ function safeNativeRoute(value) {
     return null;
   }
 }
+
+export { safeNativeRoute };
 
 async function sendNativeToken(token) {
   if (!token) return false;
@@ -980,10 +1002,23 @@ async function sendNativeToken(token) {
     });
     if (!res.ok) return false;
     setNotifySettings({ pushSubscribed: true, fcmToken: token });
+    /* One place re-syncs EVERYTHING the server watches on this device's behalf
+       after a (re-)registration — orders, smart-money tracking, and the token
+       price/P&L watches. FCM tokens ROTATE, and each mirror is keyed by the
+       push identity: a rotation that re-synced only orders left the other two
+       alerters pointing at a dead token, silently. */
     try {
       const { loadOrders, syncWatches } = await import('./orders.js');
       await syncWatches(loadOrders());
     } catch { /* token registration must not fail because watch sync is best-effort */ }
+    try {
+      const { syncTracked } = await import('./smartMoneyWatch.js');
+      await syncTracked();
+    } catch { /* best-effort, same rule */ }
+    try {
+      const { syncPriceWatch } = await import('./priceAlerts.js');
+      await syncPriceWatch();
+    } catch { /* best-effort, same rule */ }
     return true;
   } catch {
     return false;
@@ -1034,11 +1069,27 @@ export async function initNativePushListeners() {
         }
       });
     });
+    /*
+     * ─── TAPPING A LOCAL (foreground) CARD ────────────────────────────────
+     * The push plugin's `pushNotificationActionPerformed` covers FCM cards;
+     * the cards `presentNativeShade` posts through @capacitor/local-notifications
+     * have their OWN tap event, and nothing listened to it — so tapping an
+     * alert that arrived while the app was open just reopened the app at
+     * wherever it was. Same safe routing, same navigation.
+     */
+    try {
+      const { LocalNotifications } = await import('@capacitor/local-notifications');
+      nativeLocalActionListener = await LocalNotifications.addListener('localNotificationActionPerformed', ({ notification }) => {
+        const route = safeNativeRoute(notification?.extra?.url);
+        if (route) window.location.hash = route.slice(1);
+      });
+    } catch { /* plugin absent (web build) — the web path taps through the SW */ }
     nativePushListenersReady = true;
     return () => {
       nativeRegistrationListener?.remove?.();
       nativeErrorListener?.remove?.();
       nativeActionListener?.remove?.();
+      nativeLocalActionListener?.remove?.();
       nativeTokenWaiters = [];
       nativePushListenersReady = false;
     };
@@ -1169,12 +1220,22 @@ export async function refreshWebPushIfOptedIn() {
 export async function registerPushAnywhere() {
   const result = isNativeApp() ? await registerNativePush() : await registerPush();
   if (result?.ok) {
+    /* Same trio as sendNativeToken: every server-side watcher this device
+       owns must learn the (possibly new) push identity, not just orders. */
     try {
       const { loadOrders, syncWatches } = await import('./orders.js');
       await syncWatches(loadOrders());
     } catch {
       /* watches are best-effort; the token is already on the server */
     }
+    try {
+      const { syncTracked } = await import('./smartMoneyWatch.js');
+      await syncTracked();
+    } catch { /* best-effort */ }
+    try {
+      const { syncPriceWatch } = await import('./priceAlerts.js');
+      await syncPriceWatch();
+    } catch { /* best-effort */ }
   }
   return result;
 }

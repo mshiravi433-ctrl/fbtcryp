@@ -345,10 +345,28 @@ export async function fcmSendToToken(deviceToken, payload) {
             notification: spec.notification
           },
           apns: {
+            headers: {
+              /* ONE CARD PER ORDER ON iOS TOO. Android replaces a notification
+                 that carries the same `tag`; iOS replaces one that carries the
+                 same `apns-collapse-id`. Without this header the iPhone (and
+                 its notification stack / Dynamic Island summary) accumulated
+                 one row per stage — the exact opposite of «نوتیفیکیشن تا اتمام
+                 و به نتیجه رسیدن». Same value as the Android tag, so both
+                 platforms evolve ONE card. */
+              'apns-collapse-id': String(spec.data.tag || 'fbt').slice(0, 64),
+              /* 10 = immediate delivery for money news (profit/loss/ready),
+                 5 = the APNs default for a digest. A time-sensitive push is
+                 also what lets the alert break through Focus modes the user
+                 has allowed it for. */
+              'apns-priority': urgent ? '10' : '5'
+            },
             payload: {
               aps: {
                 alert: { title: spec.notification.title, body: spec.notification.body },
-                /* Money news interrupts; a digest does not. */
+                /* Money news interrupts; a digest does not. On a Dynamic-Island
+                   iPhone a `time-sensitive` alert is the strongest presentation
+                   a push can earn without a Live Activity — it banners over the
+                   lock screen instead of silently stacking. */
                 'interruption-level': urgent ? 'time-sensitive' : 'active',
                 'mutable-content': 1,
                 /*

@@ -1449,6 +1449,39 @@ export default function run() {
       /async function deliverStagePush/.test(serverCode) && /sendToEndpoint/.test(serverCode) && /fcmSendToToken/.test(serverCode));
     t('sendWatchAlert routes web-push endpoints', /sendToEndpoint\(id\.value/.test(sendFn) || /deliverStagePush/.test(sendFn));
     t('sendWatchAlert routes FCM (APK) devices', /fcmSendToToken\(id\.value/.test(sendFn) || /deliverStagePush/.test(sendFn));
+
+    /*
+     * THE TOKEN PRICE/P&L WATCHER («بالا و پایین رفتن سود و ضرر توکن ها»).
+     *
+     * The favourite-coin price alerts and top movers used to be client-only —
+     * they could not reach a locked phone no matter how FCM was configured,
+     * because nothing on the server ever evaluated them. server/priceWatch.js
+     * is that evaluator; these rows keep every link of its chain attached:
+     * the registration route, the tick wiring on ALL THREE triggers (the
+     * 5-minute GitHub tick, the public tick, and the daily cron floor), and
+     * the client mirror that hands it the watchlist under the push identity.
+     */
+    t('POST /api/price-alerts/watch registers a device price watchlist',
+      /app\.post\('\/api\/price-alerts\/watch'/.test(serverCode) && /putPriceWatch\(/.test(serverCode));
+    t('the 5-minute watch cron advances BOTH the order cycle and the price cycle',
+      /maybePriceWatchTick\(\{ send: deliverStagePush \}\)/.test(serverCode)
+      && /runWatchCycle\(sendWatchAlert\)/.test(serverCode));
+    t('the public tick advances BOTH cycles (app-open traffic keeps alerts live)',
+      (serverCode.match(/maybePriceWatchTick\(/g) || []).length >= 3);
+    t('the daily cron force-runs the price cycle as the silent-day floor',
+      /maybePriceWatchTick\(\{ send: deliverStagePush, force: true \}\)/.test(serverCode));
+
+    const notifySrc = read('src/lib/notify.js');
+    const notifyCode = notifySrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    t('a (re-)registered push identity re-syncs orders AND smart-money AND price watches',
+      /syncWatches\(loadOrders\(\)\)/.test(notifyCode)
+      && /syncTracked\(\)/.test(notifyCode)
+      && /syncPriceWatch\(\)/.test(notifyCode));
+    t('Market.jsx mirrors the price watchlist to the server for background FCM',
+      /syncPriceWatch\(\{ favorites, coins \}\)/.test(read('src/pages/Market.jsx')));
+    t('a notification tap may open the coin chart (price alerts deep-link there)',
+      /NATIVE_ROUTE_PATTERNS/.test(notifyCode) && notifyCode.includes('coin\\/')
+      && notifyCode.includes('smart-money\\/'));
   }
 
   /* ---- 13. a setting that changes nothing is a lie to the user ---------- */

@@ -32,7 +32,7 @@ import { MARKET_CATEGORIES, sectorFromRows } from '../lib/marketSectors';
 import { DEFAULT_SORT, MARKET_SORTS, freshness, marketBreadth, sortMarketRows } from '../lib/marketList';
 import { mergeVisuals } from '../lib/marketVisuals';
 import { useAppStore } from '../store/useAppStore';
-import { runPriceAlerts, runTopMoverAlerts } from '../lib/priceAlerts';
+import { runPriceAlerts, runTopMoverAlerts, syncPriceWatch } from '../lib/priceAlerts';
 import { isSwappable, swapUrlFor } from '../lib/coinToSwap';
 import { venueRoute } from '../lib/coinVenue';
 import { rememberCoinVenues } from '../lib/coinVenues';
@@ -201,6 +201,18 @@ export default function Market() {
       })
     });
   }, [coins, favorites, t]);
+
+  /*
+   * THE BACKGROUND MIRROR. The two effects above can only fire while this page
+   * is open; `syncPriceWatch` hands the same watchlist to the server (under the
+   * device's push identity) so FCM/Web Push delivers the same cards with the
+   * app closed and the screen locked — «در پشت زمینه در جریان باشد». Internally
+   * throttled by signature + 6h heartbeat, so the 30-second poll costs nothing.
+   */
+  useEffect(() => {
+    if (!coins?.length) return;
+    syncPriceWatch({ favorites, coins }).catch(() => {});
+  }, [coins, favorites]);
 
   /*
    * Sector view. `null` means the ordinary market list.

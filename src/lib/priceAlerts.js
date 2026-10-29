@@ -75,8 +75,9 @@
  * app is still worth having; pretending it works while closed is not.
  */
 
-import { getNotifySettings, showLocalNotification } from './notify';
-import { formatValue } from './notificationDesign';
+import { getNotifySettings, pushIdentity, showLocalNotification } from './notify.js';
+import { formatValue } from './notificationDesign.js';
+import { apiBase } from './apiBase.js';
 
 const STORE_KEY = 'fbt-price-alert-base-v1';
 
@@ -115,6 +116,114 @@ export const STALE_BASELINE_MS = 7 * 24 * 60 * 60 * 1000;
  */
 export const SHORT_WINDOW_MAX_PCT = 35;
 export const SHORT_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE BACKGROUND MIRROR — «باید روی گوشی قفل‌شده هم بیاد»
+   ───────────────────────────────────────────────────────────────────────────
+   The evaluators above can only run while the app is open. To make the SAME
+   cards arrive in the phone's notification bar with the app closed and the
+   screen locked, the watchlist is mirrored to the server under the device's
+   push identity — exactly like order watches (lib/orders.js syncWatches) and
+   smart-money tracking (lib/smartMoneyWatch.js). server/priceWatch.js then
+   evaluates it on the shared tick and delivers over FCM / Web Push.
+
+   What is sent: the favourite coin IDs (+ symbol/name for the card copy), the
+   threshold, and whether top-mover alerts are on. No wallet, no balance, no
+   amount. The server's copy of the text is the same three-locale deck the
+   client shows, so the shade card and the in-app bar read identically.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const SYNC_META_KEY = 'fbt-price-watch-meta-v1';
+
+/** Last successful sync signature + time, so a 30s market poll does not POST. */
+let lastSync = { sig: null, at: 0 };
+const SYNC_REFRESH_MS = 6 * 60 * 60 * 1000;
+
+function readMeta() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SYNC_META_KEY) || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Remember coin display metadata so a boot-time sync can render real copy. */
+export function rememberCoinMeta(coins) {
+  try {
+    const meta = readMeta();
+    for (const c of Array.isArray(coins) ? coins : []) {
+      if (!c?.id) continue;
+      meta[c.id] = { symbol: String(c.symbol || c.id).toUpperCase().slice(0, 12), name: String(c.name || '').slice(0, 40) };
+    }
+    /* Bounded: this is card copy, not a market database. */
+    const ids = Object.keys(meta);
+    for (const id of ids.slice(0, Math.max(0, ids.length - 120))) delete meta[id];
+    localStorage.setItem(SYNC_META_KEY, JSON.stringify(meta));
+  } catch { /* private mode — the server falls back to the coin id */ }
+}
+
+/**
+ * Mirror this device's price-alert watchlist to the server.
+ *
+ * Replace-all on the server: un-starring a coin (or switching the alerts off)
+ * removes it on the next sync. Throttled by a signature (identity + starred
+ * ids + switch) with a 6-hour heartbeat, so an ordinary market poll costs
+ * nothing and an abandoned device ages out server-side.
+ *
+ * `favorites`/`coins` are optional — without them the favourites are read
+ * from the app store and display metadata from the last market sync.
+ */
+export async function syncPriceWatch({ favorites = null, coins = null, force = false } = {}) {
+  try {
+    const identity = await pushIdentity();
+    if (!identity?.endpoint) return { ok: false, reason: 'NO_PUSH_IDENTITY' };
+
+    let favs = favorites;
+    if (!Array.isArray(favs)) {
+      try {
+        const { useAppStore } = await import('../store/useAppStore');
+        favs = useAppStore.getState().favorites || [];
+      } catch {
+        favs = [];
+      }
+    }
+    if (Array.isArray(coins) && coins.length) rememberCoinMeta(coins);
+
+    const settings = getNotifySettings();
+    const enabled = settings?.priceAlerts !== false;
+    const meta = readMeta();
+    const rows = (enabled ? favs : []).filter((id) => typeof id === 'string' && id).map((id) => ({
+      id,
+      symbol: meta[id]?.symbol || String(id).toUpperCase().slice(0, 12),
+      name: meta[id]?.name || null
+    }));
+
+    const sig = `${identity.endpoint}|${rows.map((r) => r.id).sort().join(',')}|${enabled}`;
+    if (!force && sig === lastSync.sig && Date.now() - lastSync.at < SYNC_REFRESH_MS) {
+      return { ok: true, skipped: 'FRESH' };
+    }
+
+    const res = await fetch(`${apiBase()}/price-alerts/watch`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        endpoint: identity.endpoint,
+        coins: rows,
+        topMovers: enabled,
+        thresholdPct: ALERT_THRESHOLD_PCT,
+        lang: (typeof document !== 'undefined' && document.documentElement.lang) || 'fa'
+      })
+    });
+    if (!res.ok) return { ok: false, reason: `HTTP_${res.status}` };
+    lastSync = { sig, at: Date.now() };
+    return { ok: true };
+  } catch {
+    /* Best-effort by design: a failed mirror costs the background alert, never
+       a visible error on the market screen. The in-app evaluator still works. */
+    return { ok: false, reason: 'ERROR' };
+  }
+}
 
 /**
  * The data source of a market row, normalised to 'live' | 'offline'.
