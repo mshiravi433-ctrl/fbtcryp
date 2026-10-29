@@ -42,6 +42,7 @@
     "test:smart-money-phase6": "node test/smart-money-phase6-probe.mjs",
     "test:smart-money-phase7-8": "node test/smart-money-phase7-8-probe.mjs",
     "notify:verify": "node scripts/notify-verify.mjs",
+    "test:notifications": "node test/notification-design-probe.mjs && node test/notification-sound-probe.mjs && node test/native-notify-probe.mjs && node test/watch-push-probe.mjs && vitest run test/notification-bar.test.jsx",
     "preview": "vite preview",
     "start": "node server/index.js",
     "serve": "npm run build && node server/index.js",

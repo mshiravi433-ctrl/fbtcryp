@@ -470,7 +470,9 @@
     "tradeDoneBody": "{{amount}} {{from}} ditukar dengan {{to}}.",
     "pushLocal": "Versi ini tidak punya push server. Notifikasi muncul saat Anda membuka aplikasi berikutnya — ini fitur nyata, tetapi bukan push, dan kami tidak akan berpura-pura sebaliknya.",
     "pushOn": "Push server aktif: notifikasi tiba meski aplikasi tertutup.",
-    "dailySubLocal": "Maksimal satu per hari. Di versi ini muncul saat Anda membuka aplikasi, bukan tiba sendiri di ponsel."
+    "dailySubLocal": "Maksimal satu per hari. Di versi ini muncul saat Anda membuka aplikasi, bukan tiba sendiri di ponsel.",
+    "previewTitle": "Pratinjau notifikasi",
+    "previewNote": "Ketuk warna untuk melihatnya tiba di ponsel ini, lengkap dengan suara dan desain yang sama."
   },
   "welcome": {
     "title": "Pilih bahasa Anda",

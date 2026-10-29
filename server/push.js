@@ -26,6 +26,7 @@
  */
 
 import { readSubscriptions, removeSubscription } from './store.js';
+import { webPresentation } from '../src/lib/notificationDesign.js';
 import { PROMOS } from './promos.js';
 
 const PUBLIC_KEY = process.env.VITE_VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY || '';
@@ -146,27 +147,40 @@ export async function broadcast(build, { tag = 'fbt-daily' } = {}) {
 /**
  * The presentation half of a push payload, filled in ONE place.
  *
- * The shade is a brand surface: colour mark as `icon`, the MONOCHROME mark as
- * `badge` (the OS silhouettes that slot — a colour picture there renders as a
- * white blob), brand cyan as the accent, and lang/dir so Persian text is
- * shaped and right-aligned by the OS instead of guessed per string. Callers
- * build title/body/url; everything visual comes from here so a new alert
- * type can never ship an off-brand notification. The service worker
- * (public/sw.js) applies the same defaults again, so a payload that skips
- * this helper still presents correctly.
+ * ─── IT NOW COMES FROM THE DESIGN SYSTEM, NOT FROM THIS FILE ────────────────
+ * This function used to own the icon, the badge, the colour, the vibration and
+ * the lang/dir rules. `server/fcm.js` owned a second, subtly different copy of
+ * the same decisions, and `server/orderAlerts.js` owned a third for the colour.
+ * That is how «یک بار درست شد و بعد دوباره خراب شد» happens: three sources of
+ * truth, each edited on a different day.
+ *
+ * Every presentation decision is now made by `webPresentation()` in
+ * src/lib/notificationDesign.js — the same module the in-app status bar renders
+ * from — so the shade, the banner, the lock screen and the app can no longer
+ * disagree about what a profit looks like. This wrapper exists only to add the
+ * absolute origin the DEVICE needs in order to fetch the artwork.
+ *
+ * @param {object} payload  title/body/url/stage/tone/… from the alert builder
+ * @param {string} lang     the subscriber's language, for OS-level shaping
  */
 export function withPresentation(payload, lang = 'fa') {
-  const RTL = ['fa', 'ar', 'ur', 'he', 'ckb', 'sd', 'ps'];
-  const code = String(lang || 'fa').split('-')[0];
-  return {
-    lang: code,
-    dir: RTL.includes(code) ? 'rtl' : 'ltr',
-    icon: '/notification/icon-color-192.png',
-    badge: '/notification/badge-96.png',
-    color: '#00E5FF',
-    vibrate: [40, 60, 40],
-    ...payload
-  };
+  return webPresentation(payload, lang, { origin: publicOrigin() });
+}
+
+/**
+ * The absolute origin the notification artwork is served from.
+ *
+ * `image` is fetched by the phone (or by Firebase's image loader), NOT by a
+ * page, so a relative path is useless in a native payload. Configured first so
+ * a custom domain does not depend on inference; otherwise the deployment's own
+ * host is used, and the reference instance is the last resort.
+ */
+export function publicOrigin() {
+  const configured = process.env.PUBLIC_ORIGIN || process.env.APP_ORIGIN || process.env.VITE_APP_ORIGIN;
+  if (configured) return String(configured).replace(/\/+$/, '');
+  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+  if (vercel) return `https://${String(vercel).replace(/^https?:\/\//, '').replace(/\/+$/, '')}`;
+  return 'https://fbtswap.ir';
 }
 
 /**

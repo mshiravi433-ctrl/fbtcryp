@@ -130,14 +130,36 @@ const SOUND = 'android/app/src/main/res/raw/fbt_notification.wav';
   ok('the manifest names the default channel, so FCM does not invent a silent one',
     /name="com\.google\.firebase\.messaging\.default_notification_channel_id"[\s\S]*?value="fbt_alerts_v1"/.test(manifest));
 
+  /*
+   * ─── THIS SECTION USED TO GREP FOR THE LITERALS IN server/fcm.js ──────────
+   * The channel, the tone and the accent are no longer retyped in the sender:
+   * they are produced by `androidPresentation()` in
+   * src/lib/notificationDesign.js, which is what makes the Android shade, the
+   * web shade and the in-app bar agree. Grepping the sender would now pass on a
+   * payload that had drifted back to literals, so the mapping itself is
+   * imported and asserted instead — a stronger check than the one it replaces.
+   */
   const fcm = read('server/fcm.js');
-  const alertsBlock = /notification: \{[\s\S]*?channelId: 'fbt_alerts_v1'/.exec(fcm)?.[0] ?? '';
-  ok('a targeted alert is sent on the alert channel', alertsBlock.includes("channelId: 'fbt_alerts_v1'"));
-  ok('and names our tone, not the device default', alertsBlock.includes("sound: 'fbt_notification'"));
+  const design = await import('../src/lib/notificationDesign.js');
+
+  ok('the FCM sender builds its payload from the design system, not from literals',
+    /androidPresentation\(/.test(fcm));
+  ok('a targeted alert is sent on the alert channel',
+    design.channelForTone('profit') === 'fbt_alerts_v1'
+    && design.channelForTone('loss') === 'fbt_alerts_v1'
+    && design.channelForTone('ready') === 'fbt_alerts_v1');
   ok('the daily digest is sent on the quiet channel',
-    /channelId: 'fbt_updates_v1'/.test(fcm));
-  ok('no payload still asks for the system chime',
-    !/sound: 'default'/.test(fcm));
+    design.channelForTone('info') === 'fbt_updates_v1'
+    && /channel_id: 'fbt_updates_v1'/.test(fcm));
+  ok('and names our tone, not the device default',
+    design.androidPresentation({ tone: 'profit', title: 't' }).notification.sound === 'fbt_notification');
+  /* Scoped to the ANDROID branch on purpose: iOS has no bundled .caf, so its
+     APNs payload asks for the platform chime deliberately (see the note in
+     server/fcm.js). What must never come back is an Android notification whose
+     sound is 'default'. */
+  const androidBranch = /android: \{[\s\S]*?apns:/.exec(fcm)?.[0] ?? fcm;
+  ok('no Android payload still asks for the system chime',
+    !/sound: 'default'/.test(androidBranch));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -146,7 +168,10 @@ const SOUND = 'android/app/src/main/res/raw/fbt_notification.wav';
 {
   const notify = read('src/lib/notify.js');
   const shade = /await LocalNotifications\.schedule\(\{[\s\S]*?\n    \}\);/.exec(notify)?.[0] ?? '';
-  ok('the local notification names the same channel', shade.includes("channelId: 'fbt_alerts_v1'"));
+  /* Same channel MAPPING (not a retyped literal), so an in-app alert raised by
+     the APK lands on the channel MainActivity created with our tone. */
+  ok('the local notification names the same channel',
+    /channelId: channelForTone\(tone\)/.test(shade) && /TONE_COLOR|channelForTone/.test(notify));
   ok('and the same tone, by base name with no extension', shade.includes("sound: 'fbt_notification'"));
 
   const config = JSON.parse(read('capacitor.config.json'));

@@ -6,32 +6,53 @@
  *   ready   — the target was reached; swap is ready
  *   closed  — the position was closed
  *
- * Colours, vibrate patterns and sound keys MUST differ from the daily promo
- * (`fbt-daily`, purple, [40,60,40]) so a price event is not mistaken for
- * marketing. Copy is localised here because the OS shade never runs i18next.
+ * ─── COLOUR, SOUND AND HAPTICS COME FROM src/lib/notificationDesign.js ──────
+ * This module used to own the palette, `server/push.js` owned the web payload
+ * and `server/fcm.js` owned the Android payload, so the three drifted apart:
+ * a colour changed here reached the shade only if the other two re-read it. The
+ * stage table below is now a thin ALIAS over the one design system, so there is
+ * exactly one place a tone is defined and the artwork, the icon tint, the
+ * channel and the in-app bar all agree by construction.
+ *
+ * The tone is also what makes the card's background follow the money: a
+ * take-profit or a positive P&L resolves to `profit` (mint), a stop-loss or a
+ * negative P&L resolves to `loss` (crimson).
  */
+
+import {
+  STAGE_TONE,
+  resolveTone,
+  toneSpec,
+  VIBRATE,
+  kickerFor,
+  formatValue,
+  progressFrom
+} from '../src/lib/notificationDesign.js';
 
 export const STAGES = ['pending', 'ready', 'closed'];
 
+const stageTone = (stage) => STAGE_TONE[stage] || 'ready';
+
+/** The stage → presentation table, derived — never re-typed. */
 export const STAGE_STYLE = {
   pending: {
-    color: '#FFB300',
+    color: toneSpec('pending').accent,
     sound: 'pending',
-    vibrate: [30, 40, 30],
+    vibrate: VIBRATE.pending,
     urlOrder: '/#/orders',
     urlIntent: '/#/intent'
   },
   ready: {
-    color: '#00C853',
+    color: toneSpec('ready').accent,
     sound: 'ready',
-    vibrate: [80, 50, 80, 50, 160],
+    vibrate: VIBRATE.ready,
     urlOrder: '/#/orders',
     urlIntent: '/#/swap'
   },
   closed: {
-    color: '#FF1744',
+    color: toneSpec('info').accent,
     sound: 'closed',
-    vibrate: [140, 70, 140],
+    vibrate: VIBRATE.info,
     urlOrder: '/#/orders',
     urlIntent: '/#/intent'
   }
@@ -123,7 +144,17 @@ export function buildStageAlert({
   rate = '',
   id = 'x',
   scheduled = false,
-  filled = false
+  filled = false,
+  /* Everything below is optional and only sharpens the card: a signed P&L, the
+     bracket side that fired, an explicit tone, and the progress inputs. */
+  tone = null,
+  pnlPct = null,
+  side = null,
+  progress = null,
+  rung = null,
+  ofRungs = null,
+  runsLeft = null,
+  totalRuns = null
 } = {}) {
   const st = STAGES.includes(stage) ? stage : 'ready';
   const family = kind === 'intent' ? 'intent' : 'order';
@@ -163,18 +194,68 @@ export function buildStageAlert({
     : readyOrderId !== null
       ? `/#/orders?execute=${encodeURIComponent(readyOrderId)}`
       : style.urlOrder;
+  /*
+   * ─── THE TONE: WHAT THE CARD'S COLOUR MEANS ─────────────────────────────
+   * `side` comes from the watcher (takeProfit / stopLoss) and `pnlPct` from any
+   * caller that knows the outcome. `resolveTone` applies the authority order
+   * (explicit tone → P&L → side → stage), so a bracket that hits its stop is
+   * crimson and the same bracket hitting its target is mint, from the same two
+   * lines of code.
+   */
+  const resolvedTone = resolveTone({
+    tone,
+    stage: st,
+    side,
+    pnlPct,
+    /* A keeper fill is money that actually moved, so it is `profit` news even
+       though its stage is `closed` — `scheduled` keeps a DCA run from claiming
+       a price it never checked. */
+    ...(filled && st === 'closed' && Number(pnlPct) === 0 ? { tone: 'profit' } : {})
+  });
+  const spec = toneSpec(resolvedTone);
+
+  /*
+   * ONE CARD PER ORDER, NOT ONE PER STAGE.
+   *
+   * The tag used to carry the stage (`fbt-order-ready-<id>`), so `pending`,
+   * `ready` and `closed` produced THREE separate rows in the shade — the exact
+   * opposite of «نوتیفیکیشن تا اتمام و به نتیجه رسیدن باید باشد». With the id
+   * only, Android and Chrome REPLACE the row in place, so the user watches one
+   * card move from «در انتظار» to «آماده» to «بسته شد» and, at the end, the
+   * single row that is left is the truthful final state.
+   *
+   * The tag is also the de-duplication key between the web and FCM transports,
+   * which is why it is derived from the family and the id and nothing else.
+   */
+  const tag = `fbt-${family}-${String(id == null ? 'x' : id).slice(0, 40)}`;
+
+  const pairLabel = base || quote
+    ? `${String(base || '—').slice(0, 12)} > ${String(quote || '—').slice(0, 12)}`
+    : family === 'intent' ? 'INTENT' : 'FBT SWAP';
+
   return {
     title,
     body,
     scheduled: Boolean(scheduled),
     filled: Boolean(fillLine),
     url,
-    tag: `fbt-${family}-${st}-${String(id).slice(0, 40)}`,
+    tag,
     stage: st,
     kind: family,
-    color: style.color,
+    /* The design system's decisions, in the payload the transports read. */
+    tone: resolvedTone,
+    color: spec.accent,
     sound: style.sound,
-    vibrate: style.vibrate,
-    icon: '/icon-192.png'
+    vibrate: spec.vibrate || style.vibrate,
+    icon: '/notification/icon-color-192.png',
+    /* What the artwork shows: the number, the pair, the kind of event and (when
+       the caller knows it) how far through the plan this card is. */
+    value: formatValue({ pnlPct, rate }),
+    label: pairLabel,
+    kicker: kickerFor({ tone: resolvedTone, stage: st, kind: family, scheduled }),
+    progress: progressFrom({ progress, rung, ofRungs, runsLeft, totalRuns }),
+    /* The sentence the OS reads out on a headset, and the line a lock-screen
+       shows before the artwork loads. */
+    ticker: title
   };
 }

@@ -7370,7 +7370,26 @@ async function sendWatchAlert(endpoint, lang, payload) {
        هدف رسید» for a plan whose run merely came due is a false statement
        about a price. */
     scheduled: payload.scheduled === true,
-    filled: payload.filled === true
+    filled: payload.filled === true,
+    /*
+     * ─── WHAT MAKES THE CARD'S COLOUR TELL THE TRUTH ──────────────────────
+     * `side` is 'takeProfit' or 'stopLoss' when a bracket fires, and it is the
+     * only thing the server knows about the outcome. The design system turns it
+     * into mint vs crimson, so the same bracket shows green when the target is
+     * reached and red when the stop is hit — «پس‌زمینهٔ نوتیفیکیشن هم‌گام با
+     * سود یا ضرر».
+     *
+     * `rung`/`ofRungs` (a ladder) and `runsLeft` (a DCA plan) become the
+     * progress ring and rail in the artwork: the card shows how far through the
+     * plan it is, which is what «تا اتمام و به نتیجه رسیدن» looks like on a
+     * phone that has no progress API.
+     */
+    side: payload.side ?? null,
+    pnlPct: Number.isFinite(Number(payload.pnlPct)) ? Number(payload.pnlPct) : null,
+    rung: payload.rung ?? null,
+    ofRungs: payload.ofRungs ?? null,
+    runsLeft: payload.runsLeft ?? null,
+    totalRuns: payload.totalRuns ?? null
   });
   return deliverStagePush(endpoint, message);
 }
@@ -7418,9 +7437,24 @@ async function deliverMonitorPush({ endpoint, lang, title, body }) {
   const { parseIdentity } = await import('./watch.js');
   const id = parseIdentity(endpoint);
   if (!id) return false;
-  return id.kind === 'fcm'
-    ? fcmSendToToken(id.value, { title, body, url: '/intent', tag: 'fbt-monitor', stage: 'ready' })
-    : sendToEndpoint(id.value, { title, body });
+  /*
+   * A market monitor («بازار را بپای») is a WATCH, not money news: its tone is
+   * `ready` (brand cyan) and it carries the same artwork as every other card, so
+   * a user can tell an automation's alert from a promo at a glance. The payload
+   * is built the same way on both transports — that symmetry is what stops the
+   * web and Android shades from drifting apart again.
+   */
+  const { kickerFor } = await import('../src/lib/notificationDesign.js');
+  const message = {
+    title,
+    body,
+    url: '/intent',
+    tag: 'fbt-monitor',
+    stage: 'ready',
+    tone: 'ready',
+    kicker: kickerFor({ tone: 'ready', stage: 'ready', kind: 'intent' })
+  };
+  return id.kind === 'fcm' ? fcmSendToToken(id.value, message) : sendToEndpoint(id.value, message);
 }
 
 app.get('/api/cron/monitors', async (req, res) => {
@@ -7667,6 +7701,81 @@ app.post('/api/board/publish', async (req, res) => {
  * them is to stop being served.
  */
 
+/* ---------------------- notification artwork (banner) --------------------- */
+/*
+ * THE DESIGN IN THE SHADE: GET /api/notif/banner.png
+ * ---------------------------------------------------------------------------
+ * «دیزاین باید مثل همین نوتیفیکیشن بار باشد … با لوگو، رنگ و فاصلهٔ درست.»
+ *
+ * A phone notification has exactly ONE surface a dApp can design: the big
+ * picture. Corner radius, fonts and row order belong to Android and iOS and no
+ * payload can restyle them. The big picture is ours, and this route draws it —
+ * a wide card with the tone's aurora, our mark, the big number, the pair, a
+ * progress ring and the rail. See server/notificationBanner.js for the renderer
+ * and src/lib/notificationDesign.js for the tone table both ends share.
+ *
+ * ─── WHY THE PARAMETERS ARE SO RESTRICTED ──────────────────────────────────
+ * This is the one endpoint that turns a query string into pixels, so it is also
+ * the one that would be a text-injection surface if it accepted arbitrary text.
+ * `parseBannerParams` (imported here, the same module the client builds URLs
+ * with) uppercases every value, drops every glyph outside a fixed alphabet of
+ * A-Z, 0-9 and a dozen symbols, and truncates. There is no font parser, no SVG,
+ * no HTML and no outbound fetch in the render path, so the worst a crafted
+ * request can produce is a card with the wrong number on it.
+ *
+ * ─── CACHE ─────────────────────────────────────────────────────────────────
+ * The query string IS the content, so the response is immutable: a card for
+ * «+12.4% profit, 68%» can never change. `s-maxage` therefore lets the edge keep
+ * it forever, which is what makes an image request per notification affordable
+ * — a render is ~40–150 ms of CPU and happens once per unique card per region,
+ * not once per device. An ETag lets an already-rendered card answer with a 304.
+ */
+app.get('/api/notif/banner.png', async (req, res) => {
+  try {
+    const { bannerResponse } = await import('./notificationBanner.js');
+    const out = bannerResponse(req.query);
+    res.set('content-type', 'image/png');
+    res.set('cache-control', 'public, max-age=31536000, s-maxage=31536000, immutable');
+    res.set('etag', out.etag);
+    res.set('x-fbt-tone', out.tone);
+    if (req.get('if-none-match') === out.etag) return res.status(304).end();
+    return res.end(out.png);
+  } catch (err) {
+    /*
+     * A notification whose artwork 404s still has to render, so this answers
+     * with the plain branded card rather than an error page the OS would draw
+     * as a broken image. Only reachable if the renderer itself throws.
+     */
+    try {
+      const { renderBannerCached } = await import('./notificationBanner.js');
+      res.set('content-type', 'image/png');
+      /* Same CDN directive as the success path — a plain `max-age` is a
+         BROWSER directive and makes Vercel treat the response as private, i.e.
+         a cold start per user. Short TTL because this really is the degraded
+         card and it should be replaced as soon as the renderer recovers. */
+      res.set('cache-control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+      return res.end(renderBannerCached({ tone: 'info' }));
+    } catch {
+      res.set('cache-control', 'no-store');
+      return res.status(503).json({ error: 'BANNER_UNAVAILABLE' });
+    }
+  }
+});
+
+/* A tiny, cacheable description of the design system, for the app's own
+   Settings preview and for the diagnostics page: which tone is which colour.
+   Public by nature — these are the brand colours, already in every payload. */
+app.get('/api/notif/tones', async (_req, res) => {
+  const { TONES, VIBRATE, STAGE_TONE } = await import('../src/lib/notificationDesign.js');
+  res.set('cache-control', 'public, max-age=3600, s-maxage=86400');
+  return res.json({
+    schema: 'fbt.notification-tones.v1',
+    tones: Object.values(TONES).map(({ key, accent, from, to, glyph }) => ({ key, accent, from, to, glyph })),
+    stages: STAGE_TONE,
+    vibrate: VIBRATE
+  });
+});
+
 /* -------------------------------- push ------------------------------------ */
 /*
  * These routes were MISSING. `addSubscription`, `sendDailyPromo` and
@@ -7722,7 +7831,21 @@ app.post('/api/push/event', async (req, res) => {
       base,
       quote,
       rate,
-      id
+      id,
+      /*
+       * The client may know more than the server does — the position's P&L, how
+       * far through an automation it is, or that a bracket's profitable side
+       * fired. These are presentation-only and strictly bounded: a tone must be
+       * one of the six design tones, a percentage must be a finite number, and
+       * progress is clamped 0–100 by the design system. Nothing here can change
+       * the deep link, the copy or the destination.
+       */
+      tone: typeof req.body?.tone === 'string' ? req.body.tone.slice(0, 12) : null,
+      side: typeof req.body?.side === 'string' ? req.body.side.slice(0, 16) : null,
+      pnlPct: Number.isFinite(Number(req.body?.pnlPct)) ? Number(req.body.pnlPct) : null,
+      progress: Number.isFinite(Number(req.body?.progress)) ? Number(req.body.progress) : null,
+      rung: Number.isFinite(Number(req.body?.rung)) ? Number(req.body.rung) : null,
+      ofRungs: Number.isFinite(Number(req.body?.ofRungs)) ? Number(req.body.ofRungs) : null
     });
     const ok = await deliverStagePush(endpoint, message);
     return res.json({ ok });

@@ -1258,10 +1258,23 @@ export default function run() {
       serverSrc.includes("app.post('/api/push/event'") && /buildStageAlert/.test(serverSrc));
     t('watch alerts use the staged builder rather than promo copy',
       /buildStageAlert/.test(read('server/app.js')) && existsSync('server/orderAlerts.js'));
+    /*
+     * ─── THREE DISTINCT STAGE COLOURS, NOW DEFINED ONCE ─────────────────────
+     * This used to require the three hex literals inside server/orderAlerts.js.
+     * They moved into src/lib/notificationDesign.js so that the web payload, the
+     * FCM payload, the artwork renderer and the in-app bar all read the SAME
+     * palette — the literal-in-this-file check would now pass on a tree where
+     * the shade and the app had drifted apart. So it asserts both halves: the
+     * stage table DERIVES its colours from the design system, and the three
+     * tones are still three different colours.
+     */
     t('order and intent stages have three distinct colours',
-      /#FFB300/.test(read('server/orderAlerts.js'))
-      && /#00C853/.test(read('server/orderAlerts.js'))
-      && /#FF1744/.test(read('server/orderAlerts.js')));
+      /toneSpec\('pending'\)/.test(read('server/orderAlerts.js'))
+      && /toneSpec\('ready'\)/.test(read('server/orderAlerts.js'))
+      && /toneSpec\('info'\)/.test(read('server/orderAlerts.js'))
+      && /#FFB300/.test(read('src/lib/notificationDesign.js'))
+      && /#00C853/.test(read('src/lib/notificationDesign.js'))
+      && /#FF1744/.test(read('src/lib/notificationDesign.js')));
     t('in-app stage chimes differ from success/error/alert',
       /kind === 'pending'/.test(read('src/lib/notify.js'))
       && /kind === 'ready'/.test(read('src/lib/notify.js'))

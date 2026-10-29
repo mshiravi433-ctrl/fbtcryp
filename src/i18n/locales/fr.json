@@ -470,7 +470,9 @@
     "tradeDoneBody": "{{amount}} {{from}} échangés contre {{to}}.",
     "pushLocal": "Cette version n'a pas de push serveur. Les notifications s'affichent à la prochaine ouverture de l'app : c'est une vraie fonctionnalité, mais ce n'est pas du push, et nous ne prétendrons pas le contraire.",
     "pushOn": "Push serveur actif : les notifications arrivent même app fermée.",
-    "dailySubLocal": "Une par jour maximum. Dans cette version, elle s'affiche à la prochaine ouverture de l'app, elle n'arrive pas seule sur le téléphone."
+    "dailySubLocal": "Une par jour maximum. Dans cette version, elle s'affiche à la prochaine ouverture de l'app, elle n'arrive pas seule sur le téléphone.",
+    "previewTitle": "Aperçu des notifications",
+    "previewNote": "Touchez une couleur pour la voir arriver sur ce téléphone, avec le son et le même design."
   },
   "welcome": {
     "title": "Choisissez votre langue",

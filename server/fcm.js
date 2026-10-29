@@ -37,6 +37,8 @@
 
 import crypto from 'node:crypto';
 import { readFcmTokens, removeFcmToken } from './store.js';
+import { androidPresentation, resolveTone } from '../src/lib/notificationDesign.js';
+import { publicOrigin } from './push.js';
 
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || '';
 const CLIENT_EMAIL = process.env.FIREBASE_CLIENT_EMAIL || '';
@@ -228,6 +230,33 @@ export async function fcmSelfTest() {
   }
 }
 
+
+/**
+ * Should this failed send DELETE the device's token?
+ *
+ * ─── THIS USED TO DELETE A HEALTHY TOKEN ON ANY 400 ────────────────────────
+ * The old rule was `status === 404 || status === 400 → removeFcmToken()`. But a
+ * 400 is also what FCM returns for a MALFORMED PAYLOAD — an unknown field, a
+ * wrong enum, a bad image URL. So one typo in a notification body silently
+ * unsubscribed every device that received it, and the symptom the owner kept
+ * reporting («نوتیفیکیشن نمی‌رسد») was made permanent by the error handler
+ * rather than by the sender.
+ *
+ * It was not hypothetical: the payload used to send `channelId`, which is not a
+ * field of AndroidNotification (the REST API spells it `channel_id`), so every
+ * targeted alert was rejected as INVALID_ARGUMENT and the token was pruned on
+ * the way out.
+ *
+ * The rule now: 404, or a body that names the TOKEN as the problem. Anything
+ * else is our bug and must stay retryable.
+ */
+export function shouldPruneToken(status, bodyText = '') {
+  const body = String(bodyText || '');
+  if (status === 404) return true;
+  if (status !== 400) return false;
+  return /UNREGISTERED|registration token is not valid|INVALID_ARGUMENT.*token|token.*INVALID_ARGUMENT/i.test(body);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Send                                                                        */
 /* -------------------------------------------------------------------------- */
@@ -257,6 +286,22 @@ export async function fcmSendToToken(deviceToken, payload) {
     return false;
   }
 
+  /*
+   * ─── THE ANDROID PAYLOAD IS BUILT BY THE DESIGN SYSTEM ────────────────────
+   * Everything below used to be typed here: the icon, the accent, the channel,
+   * the sound. It now comes from `androidPresentation()` in
+   * src/lib/notificationDesign.js, which also builds the WEB payload — so the
+   * shade looks the same whether the alert arrived through Firebase or through
+   * the browser, including the wide gradient card (`android.notification.image`)
+   * that carries the big number and the progress rail.
+   *
+   * Nothing about delivery changed: still HIGH priority, still our tone, still
+   * the versioned channel, still pruned on 404/400.
+   */
+  const spec = androidPresentation(payload, payload.lang || 'fa', { origin: publicOrigin() });
+  const tone = resolveTone(payload);
+  const urgent = ['profit', 'loss', 'ready', 'alert'].includes(tone);
+
   try {
     const res = await fetch(`https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`, {
       method: 'POST',
@@ -264,13 +309,17 @@ export async function fcmSendToToken(deviceToken, payload) {
       body: JSON.stringify({
         message: {
           token: deviceToken,
-          notification: { title: payload.title, body: payload.body },
-          data: {
-            url: payload.url || '/',
-            tag: payload.tag || 'fbt',
-            stage: payload.stage || '',
-            color: payload.color || '#00E5FF'
+          notification: {
+            title: spec.notification.title,
+            body: spec.notification.body,
+            /* The launcher/notification drawer foreground image. Firebase's SDK
+               loads this itself, so it must be absolute and publicly readable —
+               both are guaranteed by publicOrigin() + the banner route. */
+            image: spec.notification.image
           },
+          data: Object.fromEntries(
+            Object.entries(spec.data).map(([k, v]) => [k, String(v == null ? '' : v)])
+          ),
           android: {
             // High priority: a price alert is time-sensitive, and normal
             // priority lets Android hold it until the next maintenance window,
@@ -280,31 +329,40 @@ export async function fcmSendToToken(deviceToken, payload) {
             // is the whole point of «نوتیفیکیشن حتی وقتی اپ بسته است برسد».
             priority: 'high',
             ttl: '3600s',
-            notification: {
-              tag: payload.tag || 'fbt',
-              /* The monochrome brand mark, not the launcher artwork: Android
-                 silhouettes small icons, and a 512px neon picture becomes a
-                 white blob at 24dp. Same drawable the manifest declares as
-                 the FCM default; brand cyan tints it. */
-              icon: 'ic_stat_notification',
-              color: payload.color || '#00E5FF',
-              /*
-               * OUR tone, and the channel that carries it.
-               *
-               * `sound` names res/raw/fbt_notification.wav (no extension —
-               * Android resolves the raw resource by base name). It used to be
-               * the literal string 'default' on both branches of a ternary,
-               * i.e. the device chime, so an FBT alert sounded like everyone
-               * else's.
-               *
-               * `channelId` matters just as much: on Android 8+ the CHANNEL
-               * owns the sound, and a message-level `sound` posted to a
-               * channel that does not carry it is dropped. MainActivity
-               * creates `fbt_alerts_v1` with this exact tone on it, so the two
-               * agree by construction rather than by luck.
-               */
-              sound: 'fbt_notification',
-              channelId: 'fbt_alerts_v1'
+            // A heads-up that also shows its FULL text while the screen is
+            // locked. `visibility` is the field that decides that, and the
+            // design system sets it to PUBLIC (nothing sensitive is ever put in
+            // a notification body — no amounts, no addresses).
+            direct_boot_ok: true,
+            /*
+             * THE DESIGN, WIRE-SPELLING INCLUDED. Every key here comes from
+             * `androidPresentation()` already named the way the REST API names
+             * it (`channel_id`, `notification_priority`, `event_time`), so this
+             * function cannot silently mistranslate one — which is exactly how
+             * the channel field was wrong before, and how a rejected payload
+             * turned into a deleted subscription.
+             */
+            notification: spec.notification
+          },
+          apns: {
+            payload: {
+              aps: {
+                alert: { title: spec.notification.title, body: spec.notification.body },
+                /* Money news interrupts; a digest does not. */
+                'interruption-level': urgent ? 'time-sensitive' : 'active',
+                'mutable-content': 1,
+                /*
+                 * iOS ALONE KEEPS THE SYSTEM CHIME, and it is a fact about this
+                 * project rather than an oversight: a custom APNs tone has to be
+                 * a .caf file BUNDLED IN THE XCODE TARGET (there is no `ios/`
+                 * folder yet), and a name that is not in the bundle makes iOS
+                 * fall back to silence rather than to the default sound. So the
+                 * honest choice today is the chime the user's phone already
+                 * makes; the Android half — where we DO ship our tone — is
+                 * asserted as ours by test/notification-sound-probe.mjs.
+                 */
+                sound: 'default'
+              }
             }
           }
         }
@@ -312,8 +370,13 @@ export async function fcmSendToToken(deviceToken, payload) {
     });
 
     if (res.ok) return true;
-    // Dead token: pruning keeps future cycles from paying for it forever.
-    if (res.status === 404 || res.status === 400) await removeFcmToken(deviceToken).catch(() => {});
+    /*
+     * Only a TOKEN-level rejection prunes. A 400 from a malformed payload is
+     * OUR bug: dropping the device would turn it into the user's problem, and
+     * the next cycle would then have nothing to retry.
+     */
+    const detail = await res.text().catch(() => '');
+    if (shouldPruneToken(res.status, detail)) await removeFcmToken(deviceToken).catch(() => {});
     return false;
   } catch {
     return false;
@@ -347,6 +410,16 @@ export async function fcmBroadcast(build, { tag = 'fbt-daily' } = {}) {
     await Promise.all(
       slice.map(async (row) => {
         const msg = build(row.lang || 'en');
+        /*
+         * The DIGEST goes through the same design system, with two deliberate
+         * differences: the tone is `info` (blue — never the mint that means
+         * "you made money"), and it is pinned to `fbt_updates_v1`, the DEFAULT
+         * importance channel. A promotion that interrupts whatever the user is
+         * doing is how a notification permission gets revoked.
+         */
+        const spec = androidPresentation({ ...msg, tone: 'info', tag }, row.lang || 'en', {
+          origin: publicOrigin()
+        });
         try {
           const res = await fetch(url, {
             method: 'POST',
@@ -357,21 +430,15 @@ export async function fcmBroadcast(build, { tag = 'fbt-daily' } = {}) {
             body: JSON.stringify({
               message: {
                 token: row.token,
-                notification: { title: msg.title, body: msg.body },
-                data: { url: msg.url || '/', tag },
+                notification: { title: spec.notification.title, body: spec.notification.body, image: spec.notification.image },
+                data: Object.fromEntries(Object.entries(spec.data).map(([k, v]) => [k, String(v == null ? '' : v)])),
                 android: {
                   priority: 'normal',
                   notification: {
-                    tag,
-                    icon: 'ic_stat_notification',
-                    color: '#00E5FF',
-                    /* Same tone, quieter channel: the daily digest posts to
-                       `fbt_updates_v1` (IMPORTANCE_DEFAULT), so it lands in
-                       the shade without interrupting whatever the user is
-                       doing — one promotional interruption is how a
-                       notification permission gets revoked. */
-                    sound: 'fbt_notification',
-                    channelId: 'fbt_updates_v1'
+                    ...spec.notification,
+                    /* The digest never interrupts: DEFAULT-importance channel. */
+                    channel_id: 'fbt_updates_v1',
+                    notification_priority: 'PRIORITY_DEFAULT'
                   }
                 }
               }
@@ -390,7 +457,7 @@ export async function fcmBroadcast(build, { tag = 'fbt-daily' } = {}) {
            * every future send burns a request on an endpoint that can never
            * deliver.
            */
-          if (res.status === 404 || res.status === 400) dead.push(row.token);
+          if (shouldPruneToken(res.status, await res.text().catch(() => ''))) dead.push(row.token);
           failed += 1;
         } catch {
           failed += 1;
