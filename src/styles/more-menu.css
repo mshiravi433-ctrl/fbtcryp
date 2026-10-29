@@ -1,53 +1,71 @@
 /* ==========================================================================
-   MORE — the everything-else sheet, in liquid glass
+   MORE — the everything-else sheet. PRISM BLADE pass: cut-corner liquid glass
    --------------------------------------------------------------------------
    A directory, not a dashboard. The panel holds one title, one filter rail
    and a list of rows; everything else that used to live in here (eyebrow
    copy, a search field, per-chip counts, a footer sentence) was chrome
    competing with the content for a screen that fits eleven rows. That pass
-   removed the chrome. THIS pass (the owner's «لیکوئید گلس و خیلی خیلی مدرن»)
-   changes the material the sheet is made of — and only the material:
+   removed the chrome. The liquid-glass pass changed the material. THIS pass
+   (the owner's «ایکون‌ها، رنگ‌بندی، شیشه‌ای و زاویه‌بندیِ خیلی خاص، با انیمیشن
+   و بدون لامپ‌زدن») changes the GEOMETRY and the COLOUR SYSTEM — and keeps
+   every compositor guard the previous two passes paid for.
 
-     · the panel is ONE pane of liquid glass: a translucent gradient fill,
-       a single backdrop blur+saturate BEHIND THE WHOLE PANE, a specular
-       border ring (the ::after mask) that catches light on the top edge,
-       and a soft top sheen (the ::before). It floats — on a phone it no
-       longer glues to the screen edges, it hovers 10px above them with
-       all four corners round, the way current platform sheets do.
-     · the filter rail is a glass track and the selected pill is a white
-       glass capsule that SLIDES between categories (one shared Framer
-       layout element — the "liquid" morph, for the price of one transform).
-     · rows are glass only in LOOK: gradient tints and inset highlights,
-       never a backdrop-filter of their own. See the budget below.
-     · the row for the screen you are already on carries an accent dot and
-       `aria-current` instead of a chevron — orientation without a sentence.
-     · the sheet can be dragged down by its grabber/header to dismiss.
+   ─── 1. THE BLADE: one geometry, repeated ──────────────────────────────────
+   The sheet used to be a stack of plain rounded rectangles. Rounded
+   rectangles are the default; nobody remembers them. So the pane now carries
+   ONE signature corner — three soft corners and a single CUT corner (the
+   bottom-inline-end one, `--more-cut`), the same "blade" cut this app already
+   uses on the wallet banners (wallet-modern.css). The same cut is repeated,
+   smaller, down the hierarchy:
 
-   ─── THE COMPOSITOR BUDGET, KEPT ────────────────────────────────────────────
+       pane 10px · list slab 8px · icon chip 5px · close orb 5px
+
+   Logical radii (`border-end-end-radius:`) do the mirroring, so RTL gets the
+   identical shape on the identical side without a single duplicate rule.
+   There is no clip-path anywhere in this file, on purpose: clipping a
+   backdrop-filtered pane is the one combination browsers disagree about,
+   and it also eats the box-shadow (which is clipped with the element), so
+   the cut is made out of RADIUS geometry — deterministic, unclipped,
+   shadow-safe, and identical on every engine.
+
+   ─── 2. THE PRISM: light arrives at 45° ────────────────────────────────────
+   The shell is lit like a pane of glass with a light source off its top
+   corner: a 125° rake across the ::before, a bright specular ring that dies
+   through the sides and returns as a coloured glint exactly at the cut
+   corner, and two hue pools that are now COLOUR-CODED per category
+   (`--more-tint` / `--more-tint-2`, set by the active group in
+   MoreSheet.jsx). Switching category re-tints the whole pane — the category
+   you picked is the colour the sheet wears, so the rail and the material
+   agree instead of decorating each other.
+
+   ─── 3. THE MOTION BUDGET (unchanged rules, one new arrival) ───────────────
    Liquid glass is exactly the material that used to make this sheet flicker
-   on the Android WebView, so the budget is the design constraint, not an
+   on the Android WebView, so the budget is a design constraint, not an
    afterthought:
      · the panel animates opacity + y only (a spring on y, NO parent scale —
        scaling re-rasterises every descendant, every frame);
-     · the ONLY backdrop-filter in the sheet is the panel's own, sampling
-       the backdrop once. The rows, pills, icon chips and list slab are
-       gradient fakes with zero backdrop sampling, and the native guard in
-       index.css (`[data-native='true'] .more-tile`) stays as the seatbelt;
+     · the ONLY backdrop-filter in the sheet is the panel's own, sampling the
+       backdrop once. Rows, pills, icon chips and the list slab are gradient
+       fakes with zero backdrop sampling; the native guard in index.css
+       (`[data-native='true'] .more-tile`) stays as the seatbelt;
      · on native (Capacitor) the panel drops its blur entirely and goes
        near-opaque — the same trade `.sheet-backdrop` already makes there,
-       for the same reason (a streaming backdrop under a moving pane is
-       the fluorescent-tube flicker). The glass LOOK survives via the
-       gradients; only the live refraction is web-only;
-     · the row cascade is one CSS keyframe with per-row delay (opacity +
-       translateY, fill backwards so :active transforms win the moment it
-       ends), disabled on native and under reduced motion. No per-row
-       springs, no SVG geometry animation.
+       for the same reason (a streaming backdrop under a moving pane is the
+       fluorescent-tube flicker). The glass LOOK survives via the gradients;
+     · NEW: one prism sweep on open — a single translated element, one
+       iteration, never repeating. Perpetual light loops are the "لامپ‌زدن"
+       this file is written against, so nothing here animates forever; the
+       sweep is switched off on native and under reduced motion, and the row
+       cascade (one CSS keyframe + per-row delay) stands down with it;
+     · no `filter:`, no `backdrop-filter` and no animated gradient on any row
+       — a row that repaints on every frame of a scrolling list is the bug
+       this comment exists to prevent.
 
-   ─── THEME ──────────────────────────────────────────────────────────────────
+   ─── 4. THEME ──────────────────────────────────────────────────────────────
    No colour is hard-coded beyond white/black glass tints. Accents arrive
-   per-row as `--more-accent` (the `hue` in MoreSheet.jsx), surfaces come
-   from the tokens, and the light theme is an override block at the bottom
-   rather than a second design.
+   per-row as `--more-accent` (the `hue` in MoreSheet.jsx) and per-category
+   as `--more-tint`; surfaces come from the tokens, and the light theme is an
+   override block at the bottom rather than a second design.
    ========================================================================== */
 
 /* The More backdrop does NOT blur: the pane does that once, for the area
@@ -61,30 +79,40 @@
   -webkit-backdrop-filter: none;
 }
 
+/* ── the pane ────────────────────────────────────────────────────────────── */
 .more-panel {
-  --more-radius: 30px;
+  /* Set from the active category in MoreSheet.jsx; the defaults are the
+     "All" rail's own spectrum so the sheet never opens un-tinted. */
+  --more-tint: var(--rgb-1);
+  --more-tint-2: var(--rgb-2);
+  --more-cut: 10px;
   position: relative;
   isolation: isolate;
   display: flex;
   flex-direction: column;
   width: min(100%, 460px);
   max-height: min(86dvh, 760px);
-  padding: 12px 12px 12px;
+  padding: 12px 12px 14px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: var(--more-radius);
+  /* Three soft corners, one blade. Logical order is start-start / start-end /
+     end-start / end-end, so RTL mirrors the cut without a duplicate rule. */
+  border-start-start-radius: 30px;
+  border-start-end-radius: 30px;
+  border-end-start-radius: 30px;
+  border-end-end-radius: var(--more-cut);
   color: var(--text-1);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.06) 38%, rgba(255, 255, 255, 0.025) 70%, rgba(255, 255, 255, 0.05)),
-    radial-gradient(130% 90% at 100% 0%, color-mix(in srgb, var(--rgb-2) 20%, transparent), transparent 60%),
-    radial-gradient(100% 70% at 0% 100%, color-mix(in srgb, var(--rgb-1) 13%, transparent), transparent 65%),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.06) 34%, rgba(255, 255, 255, 0.022) 68%, rgba(255, 255, 255, 0.05)),
+    radial-gradient(120% 85% at 100% 0%, color-mix(in srgb, var(--more-tint) 21%, transparent), transparent 62%),
+    radial-gradient(110% 78% at 0% 100%, color-mix(in srgb, var(--more-tint-2) 17%, transparent), transparent 68%),
     color-mix(in srgb, var(--bg-panel-solid) 62%, transparent);
   backdrop-filter: blur(30px) saturate(185%) brightness(1.06);
   -webkit-backdrop-filter: blur(30px) saturate(185%) brightness(1.06);
   box-shadow:
     0 48px 110px -32px rgba(0, 0, 0, 0.85),
     0 18px 44px -18px rgba(0, 0, 0, 0.6),
-    0 0 90px -30px color-mix(in srgb, var(--rgb-2) 45%, transparent),
+    0 0 90px -30px color-mix(in srgb, var(--more-tint) 45%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.22),
     inset 0 -1px 0 rgba(255, 255, 255, 0.05),
     inset 0 0 0 1px rgba(255, 255, 255, 0.04);
@@ -95,9 +123,12 @@
 /* Everything real sits above the sheen and below the specular ring. */
 .more-panel > * { position: relative; z-index: 1; }
 
-/* Top sheen + refracted hue wash — the "light through the top of the pane"
-   layer. Static gradients only: a moving sheen under a backdrop blur would
-   force the blur to re-sample every frame for decoration nobody asked for. */
+/* The sheen: light raking in at 125° from the top corner, the two category
+   hues pooling at the far corners, and a faint gather of light exactly at
+   the cut corner so the blade reads as a facet rather than a rounding
+   mistake. Static gradients only — a moving sheen under a backdrop blur
+   would force the blur to re-sample every frame for decoration nobody
+   asked for. */
 .more-panel::before {
   content: '';
   position: absolute;
@@ -105,16 +136,37 @@
   z-index: 0;
   border-radius: inherit;
   background:
-    radial-gradient(90% 55% at 50% -12%, rgba(255, 255, 255, 0.16), transparent 60%),
-    radial-gradient(45% 32% at 88% 6%, color-mix(in srgb, var(--rgb-1) 12%, transparent), transparent 70%),
-    radial-gradient(50% 36% at 6% 96%, color-mix(in srgb, var(--rgb-3) 8%, transparent), transparent 70%);
+    linear-gradient(125deg,
+      rgba(255, 255, 255, 0.13) 0%,
+      rgba(255, 255, 255, 0.05) 15%,
+      transparent 31%),
+    radial-gradient(72% 46% at 50% -8%, rgba(255, 255, 255, 0.16), transparent 64%),
+    radial-gradient(46% 30% at 92% 4%, color-mix(in srgb, var(--more-tint) 17%, transparent), transparent 72%),
+    radial-gradient(52% 34% at 4% 98%, color-mix(in srgb, var(--more-tint-2) 13%, transparent), transparent 72%),
+    radial-gradient(26% 20% at 100% 100%, color-mix(in srgb, var(--more-tint) 16%, transparent), transparent 74%);
   pointer-events: none;
+}
+/* The rake is a light source, and a light source in a RTL sheet sits on the
+   other side. Mirroring the angle (not the element) keeps the mirror rule
+   off the layout. */
+[dir='rtl'] .more-panel::before {
+  background:
+    linear-gradient(235deg,
+      rgba(255, 255, 255, 0.13) 0%,
+      rgba(255, 255, 255, 0.05) 15%,
+      transparent 31%),
+    radial-gradient(72% 46% at 50% -8%, rgba(255, 255, 255, 0.16), transparent 64%),
+    radial-gradient(46% 30% at 8% 4%, color-mix(in srgb, var(--more-tint) 17%, transparent), transparent 72%),
+    radial-gradient(52% 34% at 96% 98%, color-mix(in srgb, var(--more-tint-2) 13%, transparent), transparent 72%),
+    radial-gradient(26% 20% at 0% 100%, color-mix(in srgb, var(--more-tint) 16%, transparent), transparent 74%);
 }
 
 /* Specular edge: a 1px gradient ring, bright at the top where the light
-   lands, dying through the sides, returning faintly at the bottom. Painted
-   with the padding-box mask trick so it hugs the radius exactly; the flat
-   border underneath is the fallback where mask-composite is unavailable. */
+   lands, dying through the sides, then returning as a coloured glint that
+   pools AT the cut corner — the facet catching the light. Painted with the
+   padding-box mask trick so it hugs every radius exactly (including the
+   blade); the flat border underneath is the fallback where mask-composite
+   is unavailable. */
 .more-panel::after {
   content: '';
   position: absolute;
@@ -122,17 +174,58 @@
   z-index: 3;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(155deg,
-    rgba(255, 255, 255, 0.55),
-    rgba(255, 255, 255, 0.14) 28%,
-    rgba(255, 255, 255, 0.03) 52%,
-    rgba(255, 255, 255, 0.1) 80%,
-    color-mix(in srgb, var(--rgb-1) 28%, rgba(255, 255, 255, 0.12)));
+  background:
+    radial-gradient(30% 24% at 100% 100%, color-mix(in srgb, var(--more-tint) 70%, rgba(255, 255, 255, 0.2)), transparent 72%),
+    linear-gradient(155deg,
+      rgba(255, 255, 255, 0.58),
+      rgba(255, 255, 255, 0.15) 26%,
+      rgba(255, 255, 255, 0.03) 52%,
+      rgba(255, 255, 255, 0.1) 78%,
+      color-mix(in srgb, var(--more-tint) 30%, rgba(255, 255, 255, 0.12)));
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
   pointer-events: none;
+}
+[dir='rtl'] .more-panel::after {
+  background:
+    radial-gradient(30% 24% at 0% 100%, color-mix(in srgb, var(--more-tint) 70%, rgba(255, 255, 255, 0.2)), transparent 72%),
+    linear-gradient(205deg,
+      rgba(255, 255, 255, 0.58),
+      rgba(255, 255, 255, 0.15) 26%,
+      rgba(255, 255, 255, 0.03) 52%,
+      rgba(255, 255, 255, 0.1) 78%,
+      color-mix(in srgb, var(--more-tint) 30%, rgba(255, 255, 255, 0.12)));
+}
+
+/* ── the prism sweep (one pass, on open) ─────────────────────────────────── */
+/* A single band of light crosses the pane once, then it is gone. ONE
+   transformed element, ONE iteration, `fill: both` so the band parks
+   off-screen at 100% and never animates again — no loops, no glow pulses,
+   nothing that a user with a low-end phone would see as flicker. */
+.more-panel > .more-sweep {
+  position: absolute;
+  top: -25%;
+  bottom: -25%;
+  inset-inline-start: -10%;
+  z-index: 2;
+  width: 42%;
+  pointer-events: none;
+  background: linear-gradient(100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.05) 28%,
+    rgba(255, 255, 255, 0.14) 50%,
+    rgba(255, 255, 255, 0.04) 70%,
+    transparent 100%);
+  opacity: 0;
+  transform: translate3d(-160%, 0, 0) skewX(-14deg);
+  animation: more-sweep 0.9s cubic-bezier(0.3, 0.9, 0.35, 1) 0.05s 1 both;
+}
+@keyframes more-sweep {
+  from { opacity: 0; transform: translate3d(-160%, 0, 0) skewX(-14deg); }
+  30%  { opacity: 1; }
+  to   { opacity: 0; transform: translate3d(360%, 0, 0) skewX(-14deg); }
 }
 
 /* ── drag handle (phone) ─────────────────────────────────────────────────── */
@@ -149,11 +242,15 @@
 }
 .more-dragzone:active { cursor: grabbing; }
 .more-grabber {
-  width: 44px;
-  height: 5px;
+  width: 46px;
+  height: 4px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.34);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 1px 4px rgba(0, 0, 0, 0.35);
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(255, 255, 255, 0.42) 22%,
+    rgba(255, 255, 255, 0.42) 78%,
+    transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 /* ── header: the title IS the header ─────────────────────────────────────── */
@@ -169,20 +266,40 @@
   touch-action: none;
 }
 
+/* The title wears a diamond — the angular mark the group headings and the
+   chips repeat, in the current category's own colour. A rotated square is
+   2 DOM-free pixels of "this sheet has a geometry". */
 .more-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 0;
   min-width: 0;
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 800;
   letter-spacing: -0.015em;
   line-height: 1.2;
   color: var(--text-1);
 }
+.more-title::before {
+  content: '';
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--more-tint) 90%, white),
+    color-mix(in srgb, var(--more-tint-2) 80%, transparent));
+  box-shadow:
+    0 0 12px color-mix(in srgb, var(--more-tint) 70%, transparent),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
 
-/* The close button is a liquid-glass orb: it floats over the pane instead
-   of being punched into it, and turns a quarter on hover — the one piece
-   of play in a sheet whose whole job is wayfinding. */
+/* The close button is a cut-glass tile: same blade corner as the pane, and
+   it turns a quarter on hover — the one piece of play in a sheet whose whole
+   job is wayfinding. */
 .more-close {
   display: grid;
   place-items: center;
@@ -193,7 +310,10 @@
   min-height: 38px;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 50%;
+  border-start-start-radius: 13px;
+  border-start-end-radius: 13px;
+  border-end-start-radius: 13px;
+  border-end-end-radius: 5px;
   color: var(--text-2);
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06));
   box-shadow:
@@ -244,7 +364,7 @@
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  transition: color 0.18s ease, transform 0.12s ease;
+  transition: color 0.2s ease, transform 0.12s ease;
 }
 .more-pill:hover { color: var(--text-1); }
 .more-pill:active { transform: scale(0.96); }
@@ -252,17 +372,30 @@
 
 /* The capsule the selected pill wears. Framer moves THIS element between
    pills (layoutId), so switching category reads as one droplet of glass
-   flowing along the track and re-forming — not two chips swapping paint. */
+   flowing along the track and re-forming — not two chips swapping paint.
+
+   It is now TINTED by the category it lands on (`--more-tint` on the pill,
+   set in MoreSheet.jsx): the capsule is white glass, but the category's
+   colour is mixed into its fill, its shadow and its rim, so the thing you
+   just selected is visibly the colour the whole pane turns into. */
 .more-pill-glass {
+  --more-pill-tint: var(--more-tint);
   position: absolute;
   inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(165deg, #ffffff, rgba(255, 255, 255, 0.88) 55%, rgba(255, 255, 255, 0.74));
+  /* A pill with ONE squared-off corner — the same blade the pane, the slab
+     and the chips carry, one size down the hierarchy. The capsule still
+     flows between pills; only the shape it flows as became this sheet's own. */
+  border-start-start-radius: 999px;
+  border-start-end-radius: 999px;
+  border-end-start-radius: 999px;
+  border-end-end-radius: 9px;
+  background:
+    linear-gradient(165deg, #ffffff, rgba(255, 255, 255, 0.9) 52%, color-mix(in srgb, var(--more-pill-tint) 18%, rgba(255, 255, 255, 0.78)));
   box-shadow:
-    0 8px 20px -8px rgba(0, 0, 0, 0.65),
-    0 2px 8px -2px rgba(0, 0, 0, 0.5),
+    0 8px 20px -8px color-mix(in srgb, var(--more-pill-tint) 55%, rgba(0, 0, 0, 0.6)),
+    0 2px 8px -2px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 #ffffff,
-    inset 0 -1px 0 rgba(10, 14, 24, 0.08);
+    inset 0 -1px 0 color-mix(in srgb, var(--more-pill-tint) 40%, rgba(10, 14, 24, 0.1));
 }
 .more-pill-label {
   position: relative;
@@ -306,27 +439,40 @@
 .more-group { margin: 0 0 14px; }
 .more-group:last-child { margin-bottom: 2px; }
 
+/* Section heading: a coloured diamond, the label, and a hairline that runs
+   out to the slab edge — a section reads as a section without a box or a gap
+   doing the work. The diamond is the sheet's angular mark, in the category's
+   own colour (set per section from GROUPS in MoreSheet.jsx). */
 .more-group-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   margin: 0 0 7px;
   padding-inline-start: 7px;
-  color: var(--text-3);
+  color: color-mix(in srgb, var(--more-group-accent, var(--text-3)) 55%, var(--text-2));
   font-size: 10.5px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-/* The heading carries its own hairline out to the slab edge, so a section
-   reads as a section without a box or a gap doing the work. */
+.more-group-title::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-inline-start: 1px;
+  border-radius: 1.5px;
+  transform: rotate(45deg);
+  background: var(--more-group-accent, var(--text-3));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--more-group-accent, var(--text-3)) 65%, transparent);
+}
 .more-group-title::after {
   content: '';
   flex: 1 1 auto;
   height: 1px;
   margin-inline-end: 4px;
   background: linear-gradient(90deg,
-    color-mix(in srgb, var(--text-1) 14%, transparent),
+    color-mix(in srgb, var(--more-group-accent, var(--text-1)) 26%, transparent),
     transparent);
 }
 /* Letter-spacing is a Latin-script device; Persian and Urdu labels are joined
@@ -334,7 +480,7 @@
 [dir='rtl'] .more-group-title { letter-spacing: 0; }
 [dir='rtl'] .more-group-title::after {
   background: linear-gradient(270deg,
-    color-mix(in srgb, var(--text-1) 14%, transparent),
+    color-mix(in srgb, var(--more-group-accent, var(--text-1)) 26%, transparent),
     transparent);
 }
 
@@ -342,14 +488,18 @@
  * The rows sit in ONE glass slab rather than in 25 separate cards: a list
  * reads as a list, and the eye runs down the column of labels without a
  * border interrupting every 8px. The slab's glass is faked with gradients
- * (see the budget at the top) — highlight on the top edge, depth below.
+ * (see the budget at the top) — highlight on the top edge, depth below — and
+ * it carries the same blade corner as the pane above it.
  */
 .more-list {
   display: grid;
   gap: 2px;
   padding: 5px;
   border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 22px;
+  border-start-start-radius: 21px;
+  border-start-end-radius: 21px;
+  border-end-start-radius: 21px;
+  border-end-end-radius: 8px;
   background: linear-gradient(168deg,
     rgba(255, 255, 255, 0.075),
     rgba(255, 255, 255, 0.03) 45%,
@@ -360,11 +510,12 @@
 }
 
 .more-tile {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
-  min-height: 54px;
+  min-height: 56px;
   padding: 8px 10px;
   border: 0;
   border-radius: 16px;
@@ -373,7 +524,7 @@
   font: inherit;
   text-align: start;
   cursor: pointer;
-  transition: background 0.18s ease, transform 0.12s ease, box-shadow 0.18s ease;
+  transition: background 0.2s ease, transform 0.12s ease, box-shadow 0.2s ease;
   /* The cascade. `backwards` (not `both`) so the finished animation lets
      go of transform and :active can take it over; the start state still
      applies through each row's delay. Delay is per-row-within-group, so
@@ -384,8 +535,26 @@
 .more-list[data-still='true'] .more-tile { animation: none; }
 
 @keyframes more-tile-in {
-  from { opacity: 0; transform: translateY(7px); }
+  from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: none; }
+}
+
+/* The row's own accent blade: a 3px sliver on the leading edge that only
+   when the row is hovered or is the screen you are on. Geometry, not colour
+   — it says "this one" along the same 45°-cut vocabulary as the rest. */
+.more-tile::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 4px;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  border-radius: 1px;
+  background: var(--more-accent);
+  opacity: 0;
+  transform: translateY(-50%) rotate(45deg) scale(0.6);
+  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.34, 1.4, 0.64, 1);
+  pointer-events: none;
 }
 
 @media (hover: hover) {
@@ -401,11 +570,18 @@
         color-mix(in srgb, var(--more-accent) 13%, transparent),
         rgba(255, 255, 255, 0.04));
   }
+  .more-tile:hover::before {
+    opacity: 1;
+    transform: translateY(-50%) rotate(45deg) scale(1);
+  }
+  /* The chip tilts — six degrees of blade, cheap as a transform, and the
+     clearest "this row is alive" signal a list can give without moving the
+     text under the pointer. */
   .more-tile:hover .more-tile-icon {
-    transform: translateY(-1px) scale(1.07);
+    transform: translateY(-1px) rotate(-6deg) scale(1.05);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.32),
-      inset 0 0 0 1px color-mix(in srgb, var(--more-accent) 42%, transparent),
+      inset 0 1px 0 rgba(255, 255, 255, 0.34),
+      inset 0 0 0 1px color-mix(in srgb, var(--more-accent) 46%, transparent),
       0 10px 22px -10px color-mix(in srgb, var(--more-accent) 85%, transparent);
   }
   .more-tile:hover .more-tile-chevron { color: var(--more-accent); opacity: 1; }
@@ -421,14 +597,16 @@
 .more-tile:active,
 .more-tile[data-pressed='true'] {
   background: color-mix(in srgb, var(--more-accent) 18%, transparent);
-  transform: scale(0.98);
+  transform: scale(0.985);
 }
 .more-tile[data-pressed='true'] {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--more-accent) 40%, transparent);
 }
 
-/* Where you already are: a resting accent wash and a dot instead of the
-   chevron. It answers "am I here?" at a glance, in zero words. */
+/* Where you already are: a resting accent wash, the accent blade on the
+   leading edge and a dot instead of the chevron. It answers "am I here?" at
+   a glance, in zero words — and the chip is FILLED, so the row is findable
+   even while scrolling fast. */
 .more-tile[data-current='true'] {
   background:
     linear-gradient(90deg,
@@ -443,38 +621,61 @@
       rgba(255, 255, 255, 0.03));
 }
 .more-tile[data-current='true'] .more-tile-label { font-weight: 750; }
+.more-tile[data-current='true']::before {
+  opacity: 1;
+  transform: translateY(-50%) rotate(45deg) scale(1);
+}
 .more-tile-dot {
   flex: none;
   width: 7px;
   height: 7px;
   margin-inline-end: 4px;
-  border-radius: 50%;
+  border-radius: 2px;
+  transform: rotate(45deg);
   background: var(--more-accent);
   box-shadow: 0 0 10px color-mix(in srgb, var(--more-accent) 80%, transparent);
 }
 
-/* The icon chip is a tinted glass squircle of the destination's own hue:
-   highlight on its top edge, its colour pooling at the bottom, a glow it
-   only fully spends on hover. Gradients only — never a backdrop sample. */
+/* The icon chip is a cut-glass plate of the destination's own hue: highlight
+   on its top edge, its colour pooling at the bottom, the blade corner on the
+   end-end side (mirrored by the logical radius), a glow it only fully spends
+   on hover. Gradients only — never a backdrop sample. */
 .more-tile-icon {
   display: grid;
   place-items: center;
   flex: none;
-  width: 38px;
-  height: 38px;
-  border-radius: 13px;
-  color: color-mix(in srgb, var(--more-accent) 82%, white);
+  width: 40px;
+  height: 40px;
+  border-start-start-radius: 13px;
+  border-start-end-radius: 13px;
+  border-end-start-radius: 13px;
+  border-end-end-radius: 5px;
+  color: color-mix(in srgb, var(--more-accent) 78%, white);
   background:
-    linear-gradient(150deg,
-      color-mix(in srgb, var(--more-accent) 30%, rgba(255, 255, 255, 0.1)),
-      color-mix(in srgb, var(--more-accent) 12%, transparent) 55%,
+    linear-gradient(148deg,
+      color-mix(in srgb, var(--more-accent) 32%, rgba(255, 255, 255, 0.12)),
+      color-mix(in srgb, var(--more-accent) 13%, transparent) 54%,
       color-mix(in srgb, var(--more-accent) 6%, transparent));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 0 0 1px color-mix(in srgb, var(--more-accent) 32%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--more-accent) 30%, transparent),
     0 6px 16px -8px color-mix(in srgb, var(--more-accent) 70%, transparent);
-  transition: transform 0.2s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.2s ease;
+  transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.2s ease, background 0.2s ease;
 }
+/* The chip of the screen you are on is poured full: solid accent, white
+   glyph. One row in the list earns this, and it is the fastest possible
+   answer to "where am I". */
+.more-tile[data-current='true'] .more-tile-icon {
+  color: #0a0e18;
+  background:
+    linear-gradient(150deg,
+      color-mix(in srgb, var(--more-accent) 92%, white),
+      color-mix(in srgb, var(--more-accent) 70%, #0a0e18) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 8px 18px -8px color-mix(in srgb, var(--more-accent) 90%, transparent);
+}
+.more-tile-icon svg { display: block; }
 
 .more-tile-label {
   flex: 1 1 auto;
@@ -504,29 +705,33 @@
 .more-close:focus-visible,
 .more-pill:focus-visible,
 .more-tile:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--rgb-1) 85%, white);
+  outline: 2px solid color-mix(in srgb, var(--more-tint) 85%, white);
   outline-offset: 2px;
 }
 
 /* ── phone: a FLOATING sheet ─────────────────────────────────────────────── */
 /* The pane no longer welds itself to the bottom and sides. It hovers with a
-   margin on every side and keeps all four corners — detached glass over a
-   dimmed page is the whole liquid-glass gesture, and the 10px of page
-   visible around it is what the backdrop blur refracts. */
+   margin on every side and keeps the blade corner on the end-end side, cut a
+   touch deeper; detached glass over a dimmed page is the whole liquid-glass
+   gesture, and the 10px of page visible around it is what the backdrop blur
+   refracts. */
 @media (max-width: 600px) {
   .more-layer {
     align-items: flex-end;
     padding: 12px 10px calc(10px + env(safe-area-inset-bottom));
   }
   .more-panel {
+    --more-cut: 12px;
     width: 100%;
     max-width: none;
     max-height: min(88dvh, 840px);
-    padding: 4px 12px 12px;
-    border-radius: 32px;
+    padding: 4px 12px 14px;
+    border-start-start-radius: 30px;
+    border-start-end-radius: 30px;
+    border-end-start-radius: 30px;
     box-shadow:
       0 40px 90px -28px rgba(0, 0, 0, 0.85),
-      0 0 80px -28px color-mix(in srgb, var(--rgb-2) 45%, transparent),
+      0 0 80px -28px color-mix(in srgb, var(--more-tint) 45%, transparent),
       inset 0 1px 0 rgba(255, 255, 255, 0.22),
       inset 0 -1px 0 rgba(255, 255, 255, 0.05),
       inset 0 0 0 1px rgba(255, 255, 255, 0.04);
@@ -536,10 +741,10 @@
 }
 
 @media (max-width: 370px) {
-  .more-title { font-size: 18px; }
-  .more-panel { padding-inline: 10px; border-radius: 28px; }
-  .more-tile { min-height: 52px; gap: 10px; }
-  .more-tile-icon { width: 36px; height: 36px; }
+  .more-title { font-size: 18px; gap: 8px; }
+  .more-panel { padding-inline: 10px; }
+  .more-tile { min-height: 54px; gap: 10px; }
+  .more-tile-icon { width: 37px; height: 37px; }
   .more-tile-label { font-size: 13px; }
   .more-pill { font-size: 11.5px; padding: 0 9px; }
 }
@@ -550,8 +755,8 @@
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .more-panel {
     background:
-      radial-gradient(130% 90% at 100% 0%, color-mix(in srgb, var(--rgb-2) 14%, transparent), transparent 60%),
-      radial-gradient(100% 70% at 0% 100%, color-mix(in srgb, var(--rgb-1) 9%, transparent), transparent 65%),
+      radial-gradient(120% 85% at 100% 0%, color-mix(in srgb, var(--more-tint) 14%, transparent), transparent 62%),
+      radial-gradient(110% 78% at 0% 100%, color-mix(in srgb, var(--more-tint-2) 10%, transparent), transparent 68%),
       var(--bg-panel-solid);
   }
 }
@@ -562,9 +767,9 @@
 :root[data-theme='light'] .more-panel {
   border-color: rgba(255, 255, 255, 0.65);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.64) 45%, rgba(255, 255, 255, 0.54)),
-    radial-gradient(130% 90% at 100% 0%, color-mix(in srgb, var(--rgb-2) 11%, transparent), transparent 60%),
-    radial-gradient(100% 70% at 0% 100%, color-mix(in srgb, var(--rgb-1) 10%, transparent), transparent 65%),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.66) 45%, rgba(255, 255, 255, 0.55)),
+    radial-gradient(120% 85% at 100% 0%, color-mix(in srgb, var(--more-tint) 12%, transparent), transparent 62%),
+    radial-gradient(110% 78% at 0% 100%, color-mix(in srgb, var(--more-tint-2) 10%, transparent), transparent 68%),
     rgba(255, 255, 255, 0.55);
   box-shadow:
     0 40px 90px -34px rgba(15, 23, 42, 0.45),
@@ -574,19 +779,51 @@
 }
 :root[data-theme='light'] .more-panel::before {
   background:
-    radial-gradient(90% 55% at 50% -12%, rgba(255, 255, 255, 0.55), transparent 60%),
-    radial-gradient(45% 32% at 88% 6%, color-mix(in srgb, var(--rgb-1) 9%, transparent), transparent 70%),
-    radial-gradient(50% 36% at 6% 96%, color-mix(in srgb, var(--rgb-3) 6%, transparent), transparent 70%);
+    linear-gradient(125deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.25) 20%, transparent 38%),
+    radial-gradient(72% 46% at 50% -8%, rgba(255, 255, 255, 0.62), transparent 64%),
+    radial-gradient(46% 30% at 92% 4%, color-mix(in srgb, var(--more-tint) 10%, transparent), transparent 72%),
+    radial-gradient(52% 34% at 4% 98%, color-mix(in srgb, var(--more-tint-2) 8%, transparent), transparent 72%);
+}
+[dir='rtl']:root[data-theme='light'] .more-panel::before {
+  background:
+    linear-gradient(235deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.25) 20%, transparent 38%),
+    radial-gradient(72% 46% at 50% -8%, rgba(255, 255, 255, 0.62), transparent 64%),
+    radial-gradient(46% 30% at 8% 4%, color-mix(in srgb, var(--more-tint) 10%, transparent), transparent 72%),
+    radial-gradient(52% 34% at 96% 98%, color-mix(in srgb, var(--more-tint-2) 8%, transparent), transparent 72%);
 }
 :root[data-theme='light'] .more-panel::after {
-  background: linear-gradient(155deg,
-    rgba(255, 255, 255, 0.95),
-    rgba(15, 23, 42, 0.08) 35%,
-    rgba(15, 23, 42, 0.03) 55%,
-    rgba(255, 255, 255, 0.6) 90%);
+  background:
+    radial-gradient(30% 24% at 100% 100%, color-mix(in srgb, var(--more-tint) 46%, rgba(255, 255, 255, 0.4)), transparent 72%),
+    linear-gradient(155deg,
+      rgba(255, 255, 255, 0.95),
+      rgba(15, 23, 42, 0.1) 32%,
+      rgba(15, 23, 42, 0.04) 55%,
+      rgba(255, 255, 255, 0.62) 88%);
+}
+[dir='rtl']:root[data-theme='light'] .more-panel::after {
+  background:
+    radial-gradient(30% 24% at 0% 100%, color-mix(in srgb, var(--more-tint) 46%, rgba(255, 255, 255, 0.4)), transparent 72%),
+    linear-gradient(205deg,
+      rgba(255, 255, 255, 0.95),
+      rgba(15, 23, 42, 0.1) 32%,
+      rgba(15, 23, 42, 0.04) 55%,
+      rgba(255, 255, 255, 0.62) 88%);
+}
+/* A white sweep on a white pane is a smudge, not light. */
+:root[data-theme='light'] .more-panel > .more-sweep {
+  background: linear-gradient(100deg,
+    transparent 0%,
+    color-mix(in srgb, var(--more-tint) 6%, transparent) 32%,
+    rgba(255, 255, 255, 0.55) 50%,
+    color-mix(in srgb, var(--more-tint) 6%, transparent) 68%,
+    transparent 100%);
 }
 :root[data-theme='light'] .more-grabber {
-  background: rgba(15, 23, 42, 0.26);
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(15, 23, 42, 0.3) 22%,
+    rgba(15, 23, 42, 0.3) 78%,
+    transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 :root[data-theme='light'] .more-close {
@@ -603,8 +840,8 @@
 }
 :root[data-theme='light'] .more-pill-glass {
   box-shadow:
-    0 8px 20px -8px rgba(15, 23, 42, 0.4),
-    0 2px 8px -2px rgba(15, 23, 42, 0.25),
+    0 8px 20px -8px color-mix(in srgb, var(--more-pill-tint, var(--rgb-2)) 35%, rgba(15, 23, 42, 0.35)),
+    0 2px 8px -2px rgba(15, 23, 42, 0.22),
     inset 0 1px 0 #ffffff,
     inset 0 -1px 0 rgba(15, 23, 42, 0.06);
 }
@@ -621,13 +858,29 @@
 /* The spectrum accents are calibrated for black; as icon strokes on white they
    wash out. Mixing them toward ink keeps the hue and restores the contrast. */
 :root[data-theme='light'] .more-tile-icon {
-  color: color-mix(in srgb, var(--more-accent) 72%, #0b1020);
+  color: color-mix(in srgb, var(--more-accent) 68%, #0b1020);
+}
+:root[data-theme='light'] .more-tile[data-current='true'] .more-tile-icon {
+  color: #0a0e18;
+}
+:root[data-theme='light'] .more-group-title {
+  color: color-mix(in srgb, var(--more-group-accent, #64748b) 62%, #334155);
 }
 :root[data-theme='light'] .more-group-title::after {
-  background: linear-gradient(90deg, rgba(15, 23, 42, 0.14), transparent);
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--more-group-accent, #0f172a) 22%, transparent),
+    transparent);
 }
 [dir='rtl']:root[data-theme='light'] .more-group-title::after {
-  background: linear-gradient(270deg, rgba(15, 23, 42, 0.14), transparent);
+  background: linear-gradient(270deg,
+    color-mix(in srgb, var(--more-group-accent, #0f172a) 22%, transparent),
+    transparent);
+}
+/* The light-theme title mark reads as a stain at full accent brightness. */
+:root[data-theme='light'] .more-title::before {
+  box-shadow:
+    0 0 10px color-mix(in srgb, var(--more-tint) 40%, transparent),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6);
 }
 
 /* The floating-sheet shadow above is calibrated for black; on a white page a
@@ -645,38 +898,44 @@
 /* Capacitor's WebView re-samples a backdrop blur every frame the page behind
    it moves — and behind this sheet the RGB field drifts. That pairing is the
    flicker this project's history is full of, so on native the pane keeps
-   every gradient, highlight and shadow and gives up only the live blur: the
-   fill goes near-opaque and the row cascade (25 small moving surfaces
-   inside a springing pane) stands down with it. Same trade, same reason,
-   as index.css's `[data-native='true'] .sheet-backdrop`. */
+   every gradient, highlight, blade corner and shadow and gives up only the
+   live blur: the fill goes near-opaque, the sweep never runs, and the row
+   cascade (25 small moving surfaces inside a springing pane) stands down
+   with it. Same trade, same reason, as index.css's
+   `[data-native='true'] .sheet-backdrop`. */
 :root[data-native='true'] .more-panel {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04) 40%, rgba(255, 255, 255, 0.02) 70%, rgba(255, 255, 255, 0.04)),
-    radial-gradient(130% 90% at 100% 0%, color-mix(in srgb, var(--rgb-2) 16%, transparent), transparent 60%),
-    radial-gradient(100% 70% at 0% 100%, color-mix(in srgb, var(--rgb-1) 10%, transparent), transparent 65%),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04) 40%, rgba(255, 255, 255, 0.02) 70%, rgba(255, 255, 255, 0.04)),
+    radial-gradient(120% 85% at 100% 0%, color-mix(in srgb, var(--more-tint) 17%, transparent), transparent 62%),
+    radial-gradient(110% 78% at 0% 100%, color-mix(in srgb, var(--more-tint-2) 12%, transparent), transparent 68%),
     color-mix(in srgb, var(--bg-panel-solid) 94%, transparent);
 }
 :root[data-theme='light'][data-native='true'] .more-panel {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.88)),
-    radial-gradient(130% 90% at 100% 0%, color-mix(in srgb, var(--rgb-2) 8%, transparent), transparent 60%),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.88)),
+    radial-gradient(120% 85% at 100% 0%, color-mix(in srgb, var(--more-tint) 8%, transparent), transparent 62%),
     #ffffff;
 }
+:root[data-native='true'] .more-panel > .more-sweep { display: none; }
 :root[data-native='true'] .more-tile { animation: none; }
 :root[data-native='true'] .more-scroll { animation: none; }
 
 /* ── motion preferences ──────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
+  .more-panel > .more-sweep,
   .more-scroll,
   .more-tile { animation: none; }
+  .more-sweep { opacity: 0; }
   .more-tile,
   .more-tile-icon,
+  .more-tile::before,
   .more-close,
   .more-pill,
   .more-tile-chevron,
-  .more-tile-chevron svg { transition-duration: 0.01ms; }
+  .more-tile-chevron svg,
+  .more-title::before { transition-duration: 0.01ms; }
   .more-tile:hover .more-tile-icon,
   .more-close:hover,
   .more-tile:active,
