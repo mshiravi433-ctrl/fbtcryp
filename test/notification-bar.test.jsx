@@ -30,7 +30,17 @@ import { useAppStore } from '../src/store/useAppStore';
 
 const navigate = vi.fn();
 
+/*
+ * `routerState.inRouter` lets one suite cover BOTH trees: the real app mounts
+ * the bar inside <HashRouter>, and a future refactor that forgets that must
+ * degrade to a hash navigation instead of throwing `useNavigate() may be used
+ * only in the context of a <Router>` — the exception that once blanked every
+ * route of the site with «خطای غیرمنتظره».
+ */
+const { routerState } = vi.hoisted(() => ({ routerState: { inRouter: true } }));
+
 vi.mock('react-router-dom', () => ({
+  useInRouterContext: () => routerState.inRouter,
   useNavigate: () => navigate
 }));
 
@@ -58,7 +68,9 @@ const reset = () => useAppStore.setState({ notifBar: [] });
 beforeEach(() => {
   reset();
   navigate.mockReset();
+  routerState.inRouter = true;
   document.documentElement.lang = 'fa';
+  window.history.replaceState(null, '', '#/');
 });
 
 afterEach(cleanup);
@@ -122,6 +134,32 @@ describe('notification bar', () => {
     fireEvent.click(container.querySelector('.nbar__card'));
     expect(navigate).toHaveBeenCalledWith('/orders?execute=abc');
     expect(useAppStore.getState().notifBar).toHaveLength(0);
+  });
+
+  it('survives being mounted with no Router above it, and still deep-links', () => {
+    /*
+     * THE REGRESSION THAT TOOK THE SITE DOWN. The bar shipped mounted outside
+     * <HashRouter>; `useNavigate()` threw on every route and `BootBoundary`
+     * answered with «خطای غیرمنتظره» — the app never came up. Two behaviours
+     * are asserted here: rendering without a router does not throw, and the
+     * card still opens its page (via the hash the HashRouter listens to).
+     */
+    routerState.inRouter = false;
+    useAppStore.getState().showNotifBar({ title: 'آمادهٔ سواپ', tone: 'ready', link: '/orders?execute=abc' });
+    const { container } = render(<NotificationBar />);
+    const card = container.querySelector('.nbar__card');
+    expect(card).toBeTruthy();
+    fireEvent.click(card);
+    expect(window.location.hash).toBe('#/orders?execute=abc');
+    expect(useAppStore.getState().notifBar).toHaveLength(0);
+  });
+
+  it('refuses a deep link that is not an in-app path', () => {
+    routerState.inRouter = false;
+    useAppStore.getState().showNotifBar({ title: 'x', tone: 'info', link: 'https://evil.example' });
+    const { container } = render(<NotificationBar />);
+    fireEvent.click(container.querySelector('.nbar__card'));
+    expect(window.location.hash).toBe('#/');
   });
 
   it('never stacks more than three cards over the screen', () => {
