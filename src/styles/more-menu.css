@@ -337,6 +337,16 @@
   border-color: #0d1020;
 }
 
+/* The bottom-sheet shadow above is calibrated for black; on a white page a
+   90% black smear under the sheet reads as a stain rather than elevation. */
+@media (max-width: 600px) {
+  :root[data-theme='light'] .more-panel {
+    box-shadow:
+      0 -18px 60px -30px rgba(15, 23, 42, 0.4),
+      inset 0 1px 0 #fff;
+  }
+}
+
 /* ── motion preferences ──────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .more-scroll,
