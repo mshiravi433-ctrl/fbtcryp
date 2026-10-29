@@ -221,6 +221,8 @@ export function notifyTrade({ ok = true, title, body, haptic, pnlPct = null, val
     body,
     tag: 'fbt-trade',
     tone,
+    /* The bar above already showed it; the shade is for when it did not. */
+    onlyWhenHidden: true,
     value: value || (Number.isFinite(Number(pnlPct)) ? formatValue({ pnlPct }) : ''),
     kicker: ok ? 'FILLED' : 'FAILED',
     link: null
@@ -480,6 +482,72 @@ async function presentNativeShade(title, options = {}) {
   }
 }
 
+
+/**
+ * Show a notification INSIDE the app: the drawn card and the bell's history.
+ *
+ * ─── WHY THIS IS ITS OWN EXPORT ────────────────────────────────────────────
+ * There is a case the OS cannot help with: an FCM push arriving while the app is
+ * in the FOREGROUND. Android does not draw a system notification for it (the SDK
+ * hands it to the app instead), so before this the only thing that happened was
+ * a hand-off with no visible result — a price hit while the user watched the app
+ * produced nothing at all on screen.
+ *
+ * The right answer there is NOT to post a second system card on top of the app:
+ * it is to draw OUR card, which is the design we actually control, and ring. So
+ * the foreground listener calls this, and the background path keeps the shade.
+ *
+ * @param {object} args
+ * @param {string} args.title
+ * @param {string} [args.body]
+ * @param {string} [args.tone]     one of the six design tones
+ * @param {string|null} [args.link] an in-app route
+ * @param {object} [args.options]  the raw alert fields (value/label/progress/…)
+ * @param {boolean} [args.silent]  skip the chime (a preview rings separately)
+ */
+export function showInAppNotification({ title, body = null, tone = null, link = null, options = {}, silent = false } = {}) {
+  const resolved = resolveTone({
+    tone,
+    stage: options?.stage,
+    side: options?.side,
+    pnlPct: options?.pnlPct,
+    scheduled: options?.scheduled
+  });
+  mirrorToApp({ title, body, tone: resolved, link, options });
+  if (!silent && getNotifySettings().sound) playToneSound(resolved);
+  if (!silent) vibrate(vibrateForTone(resolved));
+  return resolved;
+}
+
+/** The store writes, kept in one place so every caller mirrors identically. */
+function mirrorToApp({ title, body = null, tone = 'info', link = null, options = {} }) {
+  try {
+    import('../store/useAppStore').then(({ useAppStore }) => {
+      const state = useAppStore.getState();
+      state.pushInbox({
+        title: String(title || ''),
+        body: body ? String(body) : null,
+        kind: 'info',
+        tone,
+        link
+      });
+      state.showNotifBar({
+        title: String(title || ''),
+        body: body ? String(body) : null,
+        tone,
+        value: options?.value || '',
+        label: options?.label || '',
+        kicker: options?.kicker || '',
+        progress: options?.progress ?? null,
+        stage: options?.stage || '',
+        link,
+        /* Money news and a security prompt stay until they are dealt with. */
+        persist: options?.persist ?? ['profit', 'loss', 'alert'].includes(tone)
+      });
+    }).catch(() => {});
+  } catch { /* the mirrors are best-effort; the OS card is the source of truth */ }
+}
+
 export function showLocalNotification(title, options = {}) {
   /*
    * Mirror every notification into the in-app inbox FIRST, before any
@@ -511,31 +579,7 @@ export function showLocalNotification(title, options = {}) {
    * so nothing can reach the history without also having been shown, and no new
    * alert type has to remember to call the bar.
    */
-  try {
-    import('../store/useAppStore').then(({ useAppStore }) => {
-      const state = useAppStore.getState();
-      state.pushInbox({
-        title: String(title || ''),
-        body: options?.body ? String(options.body) : null,
-        kind: 'info',
-        tone,
-        link
-      });
-      state.showNotifBar({
-        title: String(title || ''),
-        body: options?.body ? String(options.body) : null,
-        tone,
-        value: options?.value || '',
-        label: options?.label || '',
-        kicker: options?.kicker || '',
-        progress: options?.progress ?? null,
-        stage: options?.stage || '',
-        link,
-        /* Money news and a security prompt stay until they are dealt with. */
-        persist: options?.persist ?? ['profit', 'loss', 'alert'].includes(tone)
-      });
-    }).catch(() => {});
-  } catch { /* the mirrors are best-effort; the OS card is the source of truth */ }
+  mirrorToApp({ title, body: options?.body, tone, link, options });
 
   /* The design system decides what this card looks like on every transport. */
   const language = (typeof document !== 'undefined' && document.documentElement.lang) || 'fa';
@@ -558,6 +602,20 @@ export function showLocalNotification(title, options = {}) {
     language,
     { origin: artworkOrigin() }
   );
+
+  /*
+   * `onlyWhenHidden` — the difference between "tell the phone" and "tell the
+   * app".
+   *
+   * A trade that settles while the user is LOOKING at the app gets the in-app
+   * bar (pushed to the store above) and the chime. Posting an OS notification on
+   * top of that is a duplicate the user has to dismiss twice, so the callers that
+   * already drew the card pass this flag and the shade is used only when the app
+   * is not in front of them — which is the case a notification exists for.
+   */
+  const onlyWhenHidden = options?.onlyWhenHidden === true;
+  const inForeground = typeof document !== 'undefined' && document.visibilityState === 'visible';
+  if (onlyWhenHidden && inForeground) return true;
 
   if (isNativeApp()) {
     presentNativeShade(title, { ...options, tone });
@@ -948,10 +1006,32 @@ export async function initNativePushListeners() {
       const route = safeNativeRoute(notification?.data?.url);
       if (route) window.location.hash = route.slice(1);
     });
+    /*
+     * ─── A PUSH THAT ARRIVES WHILE THE APP IS OPEN ─────────────────────────
+     * Android does NOT draw a system notification for a foreground message: the
+     * SDK hands it to the app and expects the app to display it. This used to
+     * re-raise it through LocalNotifications, which is a second OS card over a
+     * UI the user is already looking at — and on Android it cannot carry the
+     * artwork anyway (see the note in presentNativeShade).
+     *
+     * The bar is the better answer: it is our design, it deep-links, it rings,
+     * and the shade still covers every case where the app is NOT in front of the
+     * user — which is every case a notification actually exists for.
+     */
     await nativePushPlugin.addListener('pushNotificationReceived', (notification) => {
-      presentNativeShade(notification?.title || 'FBT Swap', {
+      const data = notification?.data || {};
+      const tone = data.tone || resolveTone({ stage: data.stage });
+      showInAppNotification({
+        title: notification?.title || 'FBT Swap',
         body: notification?.body || '',
-        data: notification?.data || {}
+        tone,
+        link: safeNativeRoute(data.url) || null,
+        options: {
+          stage: data.stage,
+          value: data.value,
+          progress: data.progress === '' || data.progress == null ? null : Number(data.progress),
+          kicker: data.stage ? String(data.stage).toUpperCase() : ''
+        }
       });
     });
     nativePushListenersReady = true;
