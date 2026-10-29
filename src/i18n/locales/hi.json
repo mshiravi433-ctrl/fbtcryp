@@ -26,9 +26,10 @@
     "ecosystem": "इकोसिस्टम",
     "business": "व्यवसाय",
     "group": {
+      "all": "सभी",
       "markets": "बाज़ार",
       "earn": "कमाएँ",
-      "more": "और"
+      "more": "अन्य"
     },
     "intentOS": "इंटेंट OS",
     "loan": "ऋण",

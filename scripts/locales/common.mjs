@@ -37,7 +37,16 @@ export default {
   'nav.business': { zh: '商务', hi: 'व्यवसाय', es: 'Negocios', fr: 'Entreprise', ru: 'Бизнес', tr: 'Kurumsal', ur: 'کاروبار', id: 'Bisnis', pt: 'Negócios' },
   'nav.group.markets': { zh: '市场', hi: 'बाज़ार', es: 'Mercados', fr: 'Marchés', ru: 'Рынки', tr: 'Piyasalar', ur: 'مارکیٹس', id: 'Pasar', pt: 'Mercados' },
   'nav.group.earn': { zh: '赚取', hi: 'कमाएँ', es: 'Ganar', fr: 'Gagner', ru: 'Заработок', tr: 'Kazan', ur: 'کمائیں', id: 'Dapatkan', pt: 'Ganhar' },
-  'nav.group.more': { zh: '更多', hi: 'और', es: 'Más', fr: 'Plus', ru: 'Ещё', tr: 'Daha', ur: 'مزید', id: 'Lainnya', pt: 'Mais' },
+  /*
+   * The third filter pill used to be labelled with the sheet's own name
+   * («بیشتر» / More / Plus…): a menu called More whose last category is also
+   * called More tells the user nothing. In the redesigned sheet the pills are
+   * categories, so this one is "Other" — and `all` joins them as the first
+   * pill. Both live here so the nine generated locales and the two full ones
+   * stay in step; fa/ar carry the same pair in their own files.
+   */
+  'nav.group.all': { zh: '全部', hi: 'सभी', es: 'Todo', fr: 'Tout', ru: 'Все', tr: 'Tümü', ur: 'سب', id: 'Semua', pt: 'Tudo' },
+  'nav.group.more': { zh: '其他', hi: 'अन्य', es: 'Otros', fr: 'Autres', ru: 'Другое', tr: 'Diğer', ur: 'دیگر', id: 'Lainnya', pt: 'Outros' },
 
   /* ------------------------------ common ------------------------------ */
   'common.balance': { zh: '余额', hi: 'बैलेंस', es: 'Saldo', fr: 'Solde', ru: 'Баланс', tr: 'Bakiye', ur: 'بیلنس', id: 'Saldo', pt: 'Saldo' },

@@ -26,9 +26,10 @@
     "ecosystem": "生态",
     "business": "商务",
     "group": {
+      "all": "全部",
       "markets": "市场",
       "earn": "赚取",
-      "more": "更多"
+      "more": "其他"
     },
     "intentOS": "意图系统",
     "loan": "贷款",
