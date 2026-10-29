@@ -111,7 +111,7 @@ vi.mock('../src/lib/api', () => ({
   onMarketVisualsReady: () => () => {}
 }));
 vi.mock('../src/lib/marketVisuals', () => ({ mergeVisuals: (c) => c }));
-vi.mock('../src/lib/priceAlerts', () => ({ runPriceAlerts: () => {}, runTopMoverAlerts: () => {} }));
+vi.mock('../src/lib/priceAlerts', () => ({ runPriceAlerts: () => {}, runTopMoverAlerts: () => {}, syncPriceWatch: () => Promise.resolve({ ok: true }) }));
 vi.mock('../src/components/Ticker', () => ({ default: () => null }));
 vi.mock('../src/components/AdBanner', () => ({ default: () => null }));
 vi.mock('../src/components/TrendChart', () => ({ default: () => null }));

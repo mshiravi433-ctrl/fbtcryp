@@ -227,6 +227,15 @@ import { promotionTerms, verifyPromotionPayment } from './promote.js';
 import { CHANNEL_IDS, fetchChannel } from './farcaster.js';
 import { fetchNfts, nftChains, nftConfigured, nftDiagnose } from './nft.js';
 import { clearWatches, maybeWatchTick, putWatches, readWatches, runWatchCycle, watchTickStatus } from './watch.js';
+/* The token price/P&L watcher — the background twin of src/lib/priceAlerts.js.
+   Same tick, same transport as the order watcher above; see its header for why
+   the client-only evaluator could never reach a locked phone. */
+import {
+  maybePriceWatchTick,
+  priceWatchStatus,
+  priceWatchTickStatus,
+  putPriceWatch
+} from './priceWatch.js';
 import { evaluateAllMonitors, monitorEngineStatus } from './intentMonitoring.js';
 import { runSmartMoneyCadence } from './smartMoney/cadence.js';
 import {
@@ -7325,6 +7334,48 @@ app.post('/api/orders/unwatch', async (req, res) => {
   return res.json({ ok: true, ...(await clearWatches(endpoint)) });
 });
 
+/* ---------------------- token price / P&L watches ------------------------- */
+/*
+ * The background half of the favourite-coin price alerts and top-mover alerts
+ * («بالا و پایین رفتن سود و ضرر توکن ها باید داخل گوشی بیاد»). The client's own
+ * evaluator (src/lib/priceAlerts.js) can only run while the Market page is
+ * open; this registers the same watchlist under the device's push identity so
+ * the server can send the SAME cards — same copy, same tone, same tag — over
+ * FCM/Web Push with the app closed and the screen locked.
+ *
+ * Replace-all semantics and privacy mirror /api/orders/watch exactly: coin
+ * SYMBOL ids and the push identity only — no wallet, no balance, no amount.
+ */
+app.post('/api/price-alerts/watch', async (req, res) => {
+  const { endpoint, coins, topMovers, thresholdPct, lang } = req.body ?? {};
+  try {
+    const out = await putPriceWatch(endpoint, { coins, topMovers, thresholdPct, lang });
+    /* A sync is also a heartbeat: the exact pattern of /api/orders/watch —
+       answer FIRST, then advance the throttled price cycle in the background
+       so a price that moved while the phone slept is announced now, not at
+       the next cron. */
+    res.json({ ok: true, ...out });
+    await Promise.race([
+      maybePriceWatchTick({ send: deliverStagePush }).catch(() => {}),
+      new Promise((resolve) => { setTimeout(resolve, 3000); })
+    ]);
+    return undefined;
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: String(e.message).slice(0, 80) });
+  }
+});
+
+/** How many price watches exist, for debugging a silent alert. */
+app.get('/api/price-alerts/watch/status', async (_req, res) => {
+  const counts = await priceWatchStatus().catch(() => ({ identities: 0, coins: 0, topMovers: 0 }));
+  const tick = await priceWatchTickStatus().catch(() => ({ lastTickAt: null }));
+  res.json({
+    ...counts,
+    lastTickAt: tick.lastTickAt ?? null,
+    tickMinIntervalMs: tick.minIntervalMs ?? null
+  });
+});
+
 /**
  * Deliver one order alert to the device it is addressed to, routing by that
  * device's push transport.
@@ -7398,7 +7449,12 @@ async function sendWatchAlert(endpoint, lang, payload) {
 app.get('/api/cron/watch', async (req, res) => {
   if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
   const out = await runWatchCycle(sendWatchAlert);
-  return res.json(out);
+  /* The token price/P&L cycle rides the SAME 5-minute GitHub tick as the order
+     watcher — one wire, both features, and the throttle inside
+     maybePriceWatchTick keeps it to one run per window. */
+  const price = await maybePriceWatchTick({ send: deliverStagePush })
+    .catch((e) => ({ error: String(e?.message || e).slice(0, 120) }));
+  return res.json({ ...out, price });
 });
 
 /**
@@ -7422,7 +7478,11 @@ app.get('/api/cron/watch', async (req, res) => {
  */
 app.all('/api/cron/tick', async (_req, res) => {
   const out = await maybeWatchTick({ send: sendWatchAlert }).catch(() => ({ error: 'TICK_FAILED' }));
-  return res.json({ ok: true, ...out });
+  /* Same public tick advances the token price/P&L cycle (throttled on its own
+     window, see maybePriceWatchTick) — so a phone that merely opens the app
+     keeps BOTH background alerters running even if the GitHub tick is off. */
+  const price = await maybePriceWatchTick({ send: deliverStagePush }).catch(() => ({ error: 'TICK_FAILED' }));
+  return res.json({ ok: true, ...out, price });
 });
 
 /* --------------------------- user monitor cron ---------------------------- */
@@ -7980,6 +8040,10 @@ app.get('/api/cron/status', async (_req, res) => {
     },
     cronSecretSet: Boolean(process.env.CRON_SECRET),
     durableStorage: storeDurable(),
+    /* Token price/P&L watches — the background twin of the client's price
+       alerts. Listed here so «چرا نوتیفیکیشن نمیاد؟» can tell "no device ever
+       synced a watchlist" apart from "the sender is down". */
+    priceWatch: await priceWatchStatus().catch(() => ({ identities: 0, coins: 0, topMovers: 0 })),
     learning: {
       configured: learningConfigured(),
       snapshot: (() => {
@@ -8078,10 +8142,14 @@ app.get('/api/cron/daily', async (req, res) => {
     ensureOpsHydrated().catch(() => {}),
     ensureStage3Hydrated().catch(() => {})
   ]);
-  const [web, fcm, watch, monitors, smartMoneyAlerts, certs, reputation, selfProbe, opsProbe, stage3] = await Promise.allSettled([
+  const [web, fcm, watch, priceWatch, monitors, smartMoneyAlerts, certs, reputation, selfProbe, opsProbe, stage3] = await Promise.allSettled([
     sendDailyPromo(),
     sendDailyFcm(),
     runWatchCycle(sendWatchAlert),
+    /* The daily floor for token price/P&L alerts: `force` bypasses the tick
+       throttle so a day is never silent even when both sub-daily triggers are
+       down — the same guarantee the order watcher gets from this slot. */
+    maybePriceWatchTick({ send: deliverStagePush, force: true }),
     evaluateAllMonitors({ send: deliverMonitorPush }),
     smartMoneyCadence((endpoint, lang, payload) =>
       deliverStagePush(endpoint, { title: payload.title, body: payload.body, url: payload.url, tag: payload.tag, lang })),
@@ -8096,6 +8164,7 @@ app.get('/api/cron/daily', async (req, res) => {
     web: web.status === 'fulfilled' ? web.value : { error: String(web.reason).slice(0, 120) },
     fcm: fcm.status === 'fulfilled' ? fcm.value : { error: String(fcm.reason).slice(0, 120) },
     watch: watch.status === 'fulfilled' ? watch.value : { error: String(watch.reason).slice(0, 120) },
+    priceWatch: priceWatch.status === 'fulfilled' ? priceWatch.value : { error: String(priceWatch.reason).slice(0, 120) },
     monitors: monitors.status === 'fulfilled' ? monitors.value : { error: String(monitors.reason).slice(0, 120) },
     smartMoneyAlerts: smartMoneyAlerts.status === 'fulfilled' ? smartMoneyAlerts.value : { error: String(smartMoneyAlerts.reason).slice(0, 120) },
     certifications: settled(certs, (value) => value.ok ? { expired: value.expired, active: value.active } : { skipped: value.code }),
