@@ -26,9 +26,10 @@
     "ecosystem": "Ecossistema",
     "business": "Negócios",
     "group": {
+      "all": "Tudo",
       "markets": "Mercados",
       "earn": "Ganhar",
-      "more": "Mais"
+      "more": "Outros"
     },
     "intentOS": "Sistema de intents",
     "loan": "Empréstimos",

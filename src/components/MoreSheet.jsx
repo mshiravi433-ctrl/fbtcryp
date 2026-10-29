@@ -11,6 +11,7 @@ import {
   IconActivity,
   IconBriefcase,
   IconBuilding,
+  IconChevronRight,
   IconDoc,
   IconGlobe,
   IconInfo,
@@ -32,6 +33,39 @@ import {
 } from './Icons';
 
 /**
+ * «بیشتر» — the everything-else sheet.
+ *
+ * ─── WHAT CHANGED AND WHY (2026-10-29) ───────────────────────────────────────
+ * The owner's brief: «بدون نوار جستجو و جملات اضافه» — no search bar, no filler
+ * sentences, just the best-looking, fastest way to reach every screen.
+ *
+ * The previous version answered "where is it?" with three pieces of chrome and
+ * one of copy: an uppercase eyebrow, a one-line mission statement, a search
+ * field with an ESC hint, category chips carrying item counts, and a footer
+ * counting destinations in two languages. Twenty-five rows of real content sat
+ * underneath all of it — inside a panel that only fits eleven of them.
+ *
+ * So the chrome is gone and the content moved up:
+ *
+ *   • No search. It was doing the work of a filter rail badly: on a phone the
+ *     keyboard covered half the list you were searching, and every label is
+ *     one or two words long — a filter is one tap, a search is a tap, a
+ *     keyboard, and typing.
+ *   • No eyebrow, no sentence under the title, no footer. The title says what
+ *     the sheet is; the rows say what is in it.
+ *   • Filter pills carry no counts. A count next to a category label is
+ *     decoration that changes nothing about what you tap.
+ *   • Rows instead of tiles: a 52px row fits a two-word Persian label at a
+ *     readable weight and gives a full-width tap target. A 96px tile in a
+ *     three-up grid shrank the label to 11px so two of them could sit side by
+ *     side — that is the trade the old grid made, and it lost.
+ *
+ * Motion is unchanged in kind, on purpose. The panel still fades and slides
+ * only (opacity + y, no parent `scale`), and the rows still arrive as one CSS
+ * animation rather than 25 springs: re-rasterising the whole subtree on every
+ * frame is what made this sheet stutter on Android, and the fix stays. See
+ * src/styles/more-menu.css for the compositor budget.
+ *
  * The "More" drawer.
  *
  * WHY THE ANIMATION WAS JITTERY — and what changed
@@ -254,35 +288,89 @@ const GROUPS = [
   }
 ];
 
+/*
+ * The stylesheet is a separate (6 KB) chunk, loaded on demand, because this
+ * sheet is not on the first paint of any screen — that policy stays.
+ *
+ * What changed is WHEN it is requested. It used to load on `open`, gated
+ * behind a `menuStylesReady` flag, so the first tap on «بیشتر» had to wait for
+ * a network round trip before anything was rendered — on a cold start that was
+ * the whole open animation, spent on a blank panel. It now loads when this
+ * component mounts (i.e. with the nav bar, on idle) AND on open, through one
+ * shared promise: by the time anyone taps the button the styles are in memory,
+ * and the tap renders immediately. The gate remains only as the guard for the
+ * genuinely-first-millisecond case.
+ */
+let menuStylesPromise = null;
+function loadMenuStyles() {
+  if (!menuStylesPromise) {
+    menuStylesPromise = import('../styles/more-menu.css')
+      .then(() => true)
+      /*
+       * A failed chunk must not leave a dead button behind. The rejection is
+       * swallowed (the sheet still opens, unstyled, which is ugly but usable),
+       * and the cache is cleared so the next open retries instead of
+       * re-returning the same rejection for the rest of the session.
+       */
+      .catch(() => {
+        menuStylesPromise = null;
+        return false;
+      });
+  }
+  return menuStylesPromise;
+}
+
+const ALL = 'all';
+
 export default function MoreSheet({ open, onClose }) {
-  const { t, i18n } = useTranslation();
-  const isPersian = String(i18n.resolvedLanguage || i18n.language || '').startsWith('fa');
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
   const still = useStill();
   const [pressed, setPressed] = useState(null);
-  const [query, setQuery] = useState('');
-  const [activeGroup, setActiveGroup] = useState('all');
+  const [activeGroup, setActiveGroup] = useState(ALL);
   const [menuStylesReady, setMenuStylesReady] = useState(false);
   const panelRef = useRef(null);
-  const searchRef = useRef(null);
 
-  // Load the richer menu styling only when requested. Keeping this CSS out of
-  // the global entry stylesheet protects first paint for every other screen.
+  // Idle prefetch — see the note on loadMenuStyles above.
+  useEffect(() => {
+    let alive = true;
+    let idle = null;
+    let timer = null;
+    const warm = () => {
+      loadMenuStyles().then(() => { if (alive) setMenuStylesReady(true); });
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      idle = window.requestIdleCallback(warm, { timeout: 2500 });
+    } else {
+      timer = window.setTimeout(warm, 1200);
+    }
+    return () => {
+      alive = false;
+      if (idle !== null && typeof window.cancelIdleCallback === 'function') window.cancelIdleCallback(idle);
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, []);
+
   useEffect(() => {
     if (!open || menuStylesReady) return undefined;
-    let active = true;
-    import('../styles/more-menu.css').then(() => {
-      if (active) setMenuStylesReady(true);
-    });
-    return () => { active = false; };
+    let alive = true;
+    loadMenuStyles().then(() => { if (alive) setMenuStylesReady(true); });
+    return () => { alive = false; };
   }, [open, menuStylesReady]);
 
+  /*
+   * Scroll lock, Escape, and a focus loop that cannot leak behind the panel.
+   *
+   * Focus goes to the DIALOG, not to its first control: a screen reader should
+   * announce «بیشتر» and the list, not read out the close button and leave the
+   * user to guess what they are standing in. Tab from there walks the rows.
+   */
   useEffect(() => {
     if (!open || !menuStylesReady) return undefined;
     const unlock = lockBodyScroll();
     const returnFocusTo = document.activeElement;
-    const focusTimer = window.requestAnimationFrame(() => searchRef.current?.focus());
+    const focusTimer = window.requestAnimationFrame(() => panelRef.current?.focus());
     const onKey = (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -290,11 +378,11 @@ export default function MoreSheet({ open, onClose }) {
         return;
       }
       if (e.key !== 'Tab' || !panelRef.current) return;
-      const focusable = [...panelRef.current.querySelectorAll('button:not(:disabled), input:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')];
+      const focusable = [...panelRef.current.querySelectorAll('button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')];
       if (!focusable.length) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === panelRef.current)) {
         e.preventDefault();
         last.focus();
       } else if (!e.shiftKey && document.activeElement === last) {
@@ -311,28 +399,17 @@ export default function MoreSheet({ open, onClose }) {
     };
   }, [open, menuStylesReady, onClose]);
 
-  // Reset the tap highlight when the drawer closes, or the same tile would
-  // still look pressed the next time it opens.
+  // Reset the tap highlight and the filter when the drawer closes, or both
+  // would still be set the next time it opens.
   useEffect(() => {
     if (!open) {
       setPressed(null);
-      setQuery('');
-      setActiveGroup('all');
+      setActiveGroup(ALL);
     }
   }, [open]);
 
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const visibleGroups = GROUPS
-    .filter((group) => activeGroup === 'all' || group.id === activeGroup)
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => !normalizedQuery
-        || String(t(item.key)).toLocaleLowerCase().includes(normalizedQuery)
-        || String(t(`nav.group.${group.id}`)).toLocaleLowerCase().includes(normalizedQuery))
-    }))
+  const sections = (activeGroup === ALL ? GROUPS : GROUPS.filter((group) => group.id === activeGroup))
     .filter((group) => group.items.length > 0);
-  const totalItems = GROUPS.reduce((count, group) => count + group.items.length, 0);
-  const visibleItems = visibleGroups.reduce((count, group) => count + group.items.length, 0);
 
   const go = (to) => {
     haptic?.('light');
@@ -379,76 +456,68 @@ export default function MoreSheet({ open, onClose }) {
               role="dialog"
               aria-modal="true"
               aria-labelledby="more-menu-title"
-              aria-describedby="more-menu-description"
               data-testid="more-menu-dialog"
-              initial={{ opacity: 0, y: 18 }}
+              tabIndex={-1}
+              initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 12 }}
-              transition={{ duration: still ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: still ? 0 : 0.22, ease: [0.22, 1, 0.36, 1] }}
               onClick={(event) => event.stopPropagation()}
             >
-              <header className="more-header">
-                <div className="more-heading">
-                  <span className="more-eyebrow">
-                    <span className="more-live-dot" aria-hidden="true" />
-                    {isPersian
-                      ? 'اکوسیستم FBT'
-                      : 'FBT ECOSYSTEM'}
-                  </span>
-                  <h2 id="more-menu-title">{t('nav.more')}</h2>
-                  <p id="more-menu-description">
-                    {isPersian
-                      ? 'همه ابزارها و بخش‌های FBT، یک‌جا و مرتب.'
-                      : 'Discover every FBT destination, all in one place.'}
-                  </p>
-                </div>
-                <button className="more-close" onClick={onClose} aria-label={t('common.close')} type="button" data-testid="more-menu-close">
-                  <IconX width={18} height={18} />
+              <span className="more-grabber" aria-hidden="true" />
+
+              <header className="more-head">
+                <h2 id="more-menu-title" className="more-title">{t('nav.more')}</h2>
+                <button
+                  className="more-close"
+                  onClick={onClose}
+                  aria-label={t('common.close')}
+                  type="button"
+                  data-testid="more-menu-close"
+                >
+                  <IconX width={16} height={16} />
                 </button>
               </header>
 
-              <div className="more-search-wrap">
-                <IconSearch className="more-search-icon" width={19} height={19} aria-hidden="true" />
-                <input
-                  ref={searchRef}
-                  className="more-search"
-                  type="search"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={isPersian ? 'جست‌وجوی بازار، ابزار یا بخش…' : 'Search markets, tools or destinations…'}
-                  aria-label={isPersian ? 'جست‌وجو در منو' : 'Search the menu'}
-                  autoComplete="off"
-                  spellCheck="false"
-                  data-testid="more-menu-search"
-                />
-                {query ? (
-                  <button className="more-search-clear" type="button" onClick={() => { setQuery(''); searchRef.current?.focus(); }} aria-label={isPersian ? 'پاک کردن جست‌وجو' : 'Clear search'}>
-                    <IconX width={15} height={15} />
-                  </button>
-                ) : <kbd className="more-search-hint" aria-hidden="true">ESC</kbd>}
-              </div>
-
-              <nav className="more-categories" aria-label={isPersian ? 'دسته‌بندی منو' : 'Menu categories'}>
-                <button type="button" className="more-category" data-active={activeGroup === 'all'} aria-pressed={activeGroup === 'all'} onClick={() => setActiveGroup('all')}>
-                  {isPersian ? 'همه' : 'All'}
-                  <span>{totalItems}</span>
+              {/*
+                One tap per category, no counts, no labels that repeat the
+                section headings below them. `aria-pressed` rather than
+                tab/tabpanel: these are filters over one list, and a tablist
+                without matching panels is an accessibility lie.
+              */}
+              <div className="more-filter" role="group" aria-label={t('nav.more')}>
+                <button
+                  type="button"
+                  className="more-pill"
+                  data-active={activeGroup === ALL}
+                  aria-pressed={activeGroup === ALL}
+                  onClick={() => setActiveGroup(ALL)}
+                >
+                  {t('nav.group.all')}
                 </button>
                 {GROUPS.map((group) => (
-                  <button key={group.id} type="button" className="more-category" data-active={activeGroup === group.id} aria-pressed={activeGroup === group.id} onClick={() => setActiveGroup(group.id)}>
+                  <button
+                    key={group.id}
+                    type="button"
+                    className="more-pill"
+                    data-active={activeGroup === group.id}
+                    aria-pressed={activeGroup === group.id}
+                    onClick={() => setActiveGroup(group.id)}
+                  >
                     {t(`nav.group.${group.id}`)}
-                    <span>{group.items.length}</span>
                   </button>
                 ))}
-              </nav>
+              </div>
 
-              <div className="more-content" data-testid="more-menu-content">
-                {visibleGroups.length ? visibleGroups.map((group) => (
+              {/* `key` remounts the scroll box on a filter change so the rows
+                  fade in once — the only motion in here, and it is CSS. */}
+              <div className="more-scroll" data-testid="more-menu-content" key={activeGroup}>
+                {sections.map((group) => (
                   <section key={group.id} className="more-group" aria-label={t(`nav.group.${group.id}`)}>
-                    <div className="more-group-heading">
-                      <h3>{t(`nav.group.${group.id}`)}</h3>
-                      <span>{group.items.length}</span>
-                    </div>
-                    <div className="more-grid" data-still={still ? 'true' : 'false'}>
+                    {activeGroup === ALL && (
+                      <h3 className="more-group-title">{t(`nav.group.${group.id}`)}</h3>
+                    )}
+                    <div className="more-list" data-still={still ? 'true' : 'false'}>
                       {group.items.map((item) => (
                         <button
                           key={item.to + item.key}
@@ -458,25 +527,17 @@ export default function MoreSheet({ open, onClose }) {
                           onClick={() => go(item.to)}
                           style={{ '--more-accent': item.hue }}
                         >
-                          <span className="more-tile-icon" aria-hidden="true"><item.Icon width={22} height={22} /></span>
+                          <span className="more-tile-icon" aria-hidden="true"><item.Icon width={18} height={18} /></span>
                           <span className="more-tile-label">{t(item.key)}</span>
-                          <span className="more-tile-arrow" aria-hidden="true">↗</span>
+                          <span className="more-tile-chevron" aria-hidden="true">
+                            <IconChevronRight width={15} height={15} />
+                          </span>
                         </button>
                       ))}
                     </div>
                   </section>
-                )) : (
-                  <div className="more-empty" role="status">
-                    <span className="more-empty-icon"><IconSearch width={22} height={22} /></span>
-                    <strong>{isPersian ? 'چیزی پیدا نشد' : 'No results found'}</strong>
-                    <span>{isPersian ? 'عبارت دیگری را جست‌وجو کنید.' : 'Try a different search term.'}</span>
-                  </div>
-                )}
+                ))}
               </div>
-              <footer className="more-footer" aria-live="polite">
-                <span>{isPersian ? `${visibleItems} بخش` : `${visibleItems} destinations`}</span>
-                <span>{isPersian ? 'با امنیت و کنترل کامل شما' : 'Non-custodial · You stay in control'}</span>
-              </footer>
             </motion.div>
           </div>
         </>

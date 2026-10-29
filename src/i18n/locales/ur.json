@@ -26,9 +26,10 @@
     "ecosystem": "ایکو سسٹم",
     "business": "کاروبار",
     "group": {
+      "all": "سب",
       "markets": "مارکیٹس",
       "earn": "کمائیں",
-      "more": "مزید"
+      "more": "دیگر"
     },
     "intentOS": "ارادہ نظام",
     "loan": "قرض",

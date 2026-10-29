@@ -1,348 +1,355 @@
 /* ==========================================================================
-   MORE MENU — discovery sheet refresh
-   A calmer, searchable command directory with an accessible focus loop.
+   MORE — the everything-else sheet
+   --------------------------------------------------------------------------
+   A directory, not a dashboard. The panel holds one title, one filter rail and
+   a list of rows; everything else that used to live in here (eyebrow copy, a
+   search field, per-chip counts, a footer sentence) was chrome competing with
+   the content for a screen that fits eleven rows.
+
+   ─── THE COMPOSITOR BUDGET, KEPT ────────────────────────────────────────────
+   The reason this sheet once stuttered on Android was not the amount of
+   markup, it was what was ANIMATED:
+     · a parent scaling 0.93 → 1 re-rasterises every descendant, every frame
+     · 18–25 per-tile springs doing the same thing individually
+     · SVG paths animating `pathLength` on the main thread
+   None of that returns here. The panel animates opacity + y only; the rows
+   arrive as ONE CSS animation on the list; no row has a backdrop-filter, so
+   nothing re-samples the backdrop while the panel moves. The only per-row
+   transitions are background/colour/transform, which the compositor and the
+   paint path both handle without layout.
+
+   ─── THEME ──────────────────────────────────────────────────────────────────
+   No colour is hard-coded. Accents arrive per-row as `--more-accent` (the
+   `hue` in MoreSheet.jsx), surfaces come from the tokens, and the light theme
+   is an override block at the bottom rather than a second design.
    ========================================================================== */
-.more-layer {
-  padding: max(16px, env(safe-area-inset-top)) 18px max(16px, env(safe-area-inset-bottom));
-}
+
 .more-panel {
+  --more-radius: 26px;
   display: flex;
   flex-direction: column;
-  width: min(100%, 600px);
-  max-width: 600px;
-  max-height: min(86dvh, 780px);
-  padding: 22px 22px 14px;
+  width: min(100%, 452px);
+  max-height: min(86dvh, 740px);
+  padding: 10px 12px 12px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--line-strong) 70%, var(--rgb-1));
-  border-radius: 28px;
-  clip-path: none;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--more-radius);
+  color: var(--text-1);
   background:
-    radial-gradient(ellipse at 92% 0%, color-mix(in srgb, var(--rgb-1) 12%, transparent), transparent 34%),
-    linear-gradient(155deg, color-mix(in srgb, var(--bg-panel) 96%, #101728), var(--bg-panel));
-  box-shadow: 0 36px 100px rgba(0, 0, 0, .58), 0 0 0 1px rgba(255,255,255,.035), inset 0 1px rgba(255,255,255,.06);
+    radial-gradient(120% 80% at 100% 0%, color-mix(in srgb, var(--rgb-2) 15%, transparent), transparent 62%),
+    radial-gradient(90% 60% at 0% 100%, color-mix(in srgb, var(--rgb-1) 8%, transparent), transparent 70%),
+    var(--bg-panel-solid);
+  box-shadow:
+    0 42px 90px -34px rgba(0, 0, 0, 0.9),
+    0 0 0 1px rgba(255, 255, 255, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  outline: none;
   overscroll-behavior: contain;
 }
-.more-panel::before { content: none; }
-[dir='rtl'] .more-panel { clip-path: none; }
-.more-header {
+.more-panel:focus-visible { outline: none; }
+
+/* Mobile-only affordance: this is a bottom sheet there, and every bottom sheet
+   on the platform has one. Hidden (not removed) on desktop, where it would be
+   a promise the panel cannot keep. */
+.more-grabber {
+  display: none;
+  width: 40px;
+  height: 4px;
+  margin: 2px auto 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-1) 22%, transparent);
+}
+
+/* ── header: the title IS the header ─────────────────────────────────────── */
+.more-head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  flex: none;
-  margin-bottom: 18px;
-}
-.more-heading { min-width: 0; }
-.more-eyebrow {
-  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  color: var(--text-2);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: .16em;
-  text-transform: uppercase;
+  justify-content: space-between;
+  gap: 12px;
+  flex: none;
+  padding: 4px 3px 10px;
 }
-[dir='rtl'] .more-eyebrow { letter-spacing: .03em; }
-.more-live-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--rgb-4);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--rgb-4) 75%, transparent);
-}
-.more-heading h2 {
+
+.more-title {
   margin: 0;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
   color: var(--text-1);
-  font-size: clamp(24px, 5vw, 30px);
-  font-weight: 850;
-  letter-spacing: -.04em;
-  line-height: 1.1;
 }
-[dir='rtl'] .more-heading h2 { letter-spacing: 0; }
-.more-heading p {
-  margin: 7px 0 0;
-  color: var(--text-2);
-  font-size: 12px;
-  line-height: 1.65;
-}
-.more-close, .more-search-clear {
+
+.more-close {
   display: grid;
   place-items: center;
   flex: none;
-  width: 42px;
-  height: 42px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  color: var(--text-2);
-  background: color-mix(in srgb, var(--bg-panel) 82%, #fff 5%);
-  cursor: pointer;
-  transition: color .18s ease, border-color .18s ease, background .18s ease, transform .18s ease;
-}
-.more-close:hover, .more-search-clear:hover {
-  color: var(--text-1);
-  border-color: color-mix(in srgb, var(--rgb-1) 45%, var(--line));
-  background: color-mix(in srgb, var(--rgb-1) 10%, var(--bg-panel));
-}
-.more-close:active, .more-search-clear:active { transform: scale(.94); }
-.more-search-wrap {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  flex: none;
-  min-height: 52px;
-  padding: 0 14px;
-  border: 1px solid color-mix(in srgb, var(--line-strong) 80%, transparent);
-  border-radius: 17px;
-  background: color-mix(in srgb, var(--bg-panel) 80%, #000 8%);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
-  transition: border-color .18s ease, box-shadow .18s ease;
-}
-.more-search-wrap:focus-within {
-  border-color: color-mix(in srgb, var(--rgb-1) 68%, var(--line));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rgb-1) 12%, transparent), inset 0 1px 0 rgba(255,255,255,.04);
-}
-.more-search-icon { flex: none; color: var(--text-2); }
-.more-search {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  color: var(--text-1);
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-}
-.more-search::placeholder { color: var(--text-2); opacity: .78; }
-.more-search::-webkit-search-cancel-button { display: none; }
-.more-search-hint {
-  flex: none;
-  padding: 3px 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--text-2);
-  font: 9px ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.more-search-clear { width: 29px; height: 29px; border-radius: 9px; }
-.more-categories {
-  display: flex;
-  gap: 7px;
-  flex: none;
-  margin: 13px 0 7px;
-  padding: 2px 1px 5px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.more-categories::-webkit-scrollbar { display: none; }
-.more-category {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-height: 34px;
-  padding: 0 11px;
-  white-space: nowrap;
+  width: 34px;
+  height: 34px;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: 11px;
   color: var(--text-2);
-  background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 700;
+  background: color-mix(in srgb, var(--text-1) 5%, transparent);
   cursor: pointer;
-  transition: color .16s ease, background .16s ease, border-color .16s ease;
+  transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease, transform 0.12s ease;
 }
-.more-category span, .more-group-heading > span {
-  display: grid;
-  place-items: center;
-  min-width: 19px;
-  height: 19px;
-  padding: 0 5px;
-  border-radius: 7px;
-  color: inherit;
-  background: rgba(127,127,127,.12);
-  font: 9px ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.more-category[data-active='true'] {
+.more-close:hover {
   color: var(--text-1);
-  border-color: color-mix(in srgb, var(--rgb-1) 42%, var(--line));
-  background: color-mix(in srgb, var(--rgb-1) 12%, var(--bg-panel));
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--text-1) 10%, transparent);
 }
-.more-content {
-  min-height: 0;
+.more-close:active { transform: scale(0.93); }
+
+/* ── filter rail ─────────────────────────────────────────────────────────── */
+.more-filter {
+  display: flex;
+  gap: 6px;
+  flex: none;
+  padding: 0 2px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.more-filter::-webkit-scrollbar { display: none; }
+
+.more-pill {
+  flex: none;
+  height: 32px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--text-1) 6%, transparent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease, transform 0.12s ease;
+}
+.more-pill:hover { color: var(--text-1); }
+.more-pill:active { transform: scale(0.96); }
+/* The selected pill inverts against the panel. In a dark UI an inverted chip
+   is the clearest possible "this one is on" — it needs no accent, no dot and
+   no count to compete with the accent-coloured rows below it. */
+.more-pill[data-active='true'] {
+  color: var(--bg-panel-solid);
+  background: var(--text-1);
+  border-color: color-mix(in srgb, var(--text-1) 90%, transparent);
+}
+
+/* ── content ─────────────────────────────────────────────────────────────── */
+.more-scroll {
   flex: 1 1 auto;
-  padding: 2px 2px 12px;
+  min-height: 0;
+  padding: 0 2px 2px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--text-2) 35%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--text-2) 30%, transparent) transparent;
   -webkit-overflow-scrolling: touch;
+  animation: more-fade-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-.more-content .more-group { margin: 8px 0 18px; }
-.more-group-heading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 2px 10px;
+.more-scroll::-webkit-scrollbar { width: 4px; }
+.more-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-2) 28%, transparent);
 }
-.more-group-heading h3 {
-  margin: 0;
-  color: var(--text-2);
+
+@keyframes more-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.more-group { margin: 0 0 14px; }
+.more-group:last-child { margin-bottom: 2px; }
+
+.more-group-title {
+  margin: 0 0 6px;
+  padding-inline-start: 6px;
+  color: var(--text-3);
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: .09em;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
 }
-[dir='rtl'] .more-group-heading h3 { letter-spacing: 0; }
-.more-group-heading > span { min-width: 18px; height: 18px; }
-.more-content .more-grid {
+/* Letter-spacing is a Latin-script device; Persian and Urdu labels are joined
+   script and spacing them out breaks the joins. */
+[dir='rtl'] .more-group-title { letter-spacing: 0; }
+
+/*
+ * The rows sit in ONE container rather than in 25 separate cards: a list reads
+ * as a list, the hairlines are the only separators needed, and the eye can run
+ * down the column of labels without a border interrupting every 8px.
+ */
+.more-list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 9px;
-  animation: more-grid-in .24s cubic-bezier(.22, 1, .36, 1) both;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--text-1) 3%, transparent);
+  animation: more-rows-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-.more-content .more-grid[data-still='true'] { animation: none; }
+.more-list[data-still='true'] { animation: none; }
+
+@keyframes more-rows-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
 .more-tile {
-  position: relative;
   display: flex;
-  min-width: 0;
-  min-height: 102px;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 12px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--more-accent) 17%, var(--line));
-  border-radius: 17px;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 50px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 13px;
   color: var(--text-1);
+  background: transparent;
+  font: inherit;
   text-align: start;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--more-accent) 8%, var(--bg-panel)), color-mix(in srgb, var(--bg-panel) 96%, transparent));
   cursor: pointer;
-  transition: transform .16s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+  transition: background 0.16s ease, transform 0.12s ease;
 }
-.more-tile::before {
-  position: absolute;
-  inset: 0;
-  content: '';
-  pointer-events: none;
-  opacity: 0;
-  background: radial-gradient(circle at 15% 0%, color-mix(in srgb, var(--more-accent) 14%, transparent), transparent 64%);
-  transition: opacity .2s ease;
-}
+
 .more-tile:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--more-accent) 46%, var(--line));
-  box-shadow: 0 9px 24px color-mix(in srgb, var(--more-accent) 10%, transparent);
+  background: color-mix(in srgb, var(--more-accent) 11%, transparent);
 }
-.more-tile:hover::before { opacity: 1; }
-.more-tile:focus-visible, .more-category:focus-visible, .more-close:focus-visible, .more-search-clear:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--rgb-1) 75%, white);
-  outline-offset: 2px;
+
+/*
+ * Tap feedback in CSS rather than a Framer `whileTap`: :active covers touch and
+ * mouse, and [data-pressed] holds the state for the ~90ms between the tap and
+ * the route change so the press is actually visible before the screen swaps.
+ */
+.more-tile:active,
+.more-tile[data-pressed='true'] {
+  background: color-mix(in srgb, var(--more-accent) 18%, transparent);
+  transform: scale(0.985);
 }
-.more-tile:active, .more-tile[data-pressed='true'] { transform: scale(.975); }
+.more-tile[data-pressed='true'] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--more-accent) 40%, transparent);
+}
+
 .more-tile-icon {
-  position: relative;
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
-  border: 1px solid color-mix(in srgb, var(--more-accent) 28%, transparent);
-  border-radius: 13px;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
   color: var(--more-accent);
-  background: color-mix(in srgb, var(--more-accent) 12%, var(--bg-panel));
-  box-shadow: none;
+  background: color-mix(in srgb, var(--more-accent) 13%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--more-accent) 24%, transparent);
 }
+
 .more-tile-label {
-  position: relative;
-  max-width: calc(100% - 13px);
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--text-1);
-  font-size: 11px;
-  font-weight: 750;
-  line-height: 1.45;
+  font-size: 13.5px;
+  font-weight: 650;
+  line-height: 1.35;
   text-align: start;
   overflow-wrap: anywhere;
 }
-.more-tile-arrow {
-  position: absolute;
-  inset-inline-end: 11px;
-  bottom: 11px;
-  color: var(--text-2);
-  font-size: 13px;
-  opacity: .65;
-  transition: color .18s ease, transform .18s ease;
-}
-.more-tile:hover .more-tile-arrow { color: var(--more-accent); transform: translate(2px, -2px); }
-[dir='rtl'] .more-tile:hover .more-tile-arrow { transform: translate(-2px, -2px); }
-.more-empty {
-  display: flex;
-  min-height: 200px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--text-2);
-  text-align: center;
-}
-.more-empty strong { color: var(--text-1); font-size: 14px; }
-.more-empty > span:last-child { font-size: 12px; }
-.more-empty-icon {
+
+.more-tile-chevron {
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
-  margin-bottom: 3px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  color: var(--text-2);
-  background: var(--bg-panel);
-}
-.more-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
   flex: none;
-  padding: 10px 2px 1px;
-  border-top: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
-  color: var(--text-2);
-  font-size: 9px;
+  color: var(--text-3);
+  opacity: 0.75;
+  transition: color 0.16s ease, opacity 0.16s ease, transform 0.16s ease;
 }
-:root[data-theme='light'] .more-panel {
-  border-color: rgba(15, 23, 42, .11);
-  background:
-    radial-gradient(ellipse at 92% 0%, color-mix(in srgb, var(--rgb-1) 9%, transparent), transparent 35%),
-    linear-gradient(155deg, #fff, #f8fafc);
-  box-shadow: 0 30px 90px rgba(15,23,42,.2), 0 0 0 1px rgba(15,23,42,.04), inset 0 1px #fff;
+/* The glyph itself is drawn pointing right; RTL mirrors the drawing, not the
+   element, so the transition still animates the element's own transform. */
+[dir='rtl'] .more-tile-chevron svg { transform: scaleX(-1); }
+.more-tile:hover .more-tile-chevron { color: var(--more-accent); opacity: 1; }
+.more-tile:hover .more-tile-chevron svg { transform: translateX(2px); }
+[dir='rtl'] .more-tile:hover .more-tile-chevron svg { transform: scaleX(-1) translateX(2px); }
+
+/* ── focus ───────────────────────────────────────────────────────────────── */
+.more-close:focus-visible,
+.more-pill:focus-visible,
+.more-tile:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--rgb-1) 80%, white);
+  outline-offset: 2px;
 }
-:root[data-theme='light'] .more-search-wrap { background: rgba(248,250,252,.88); }
-:root[data-theme='light'] .more-close,
-:root[data-theme='light'] .more-category { background-color: rgba(255,255,255,.85); }
+
+/* ── phone: a bottom sheet ───────────────────────────────────────────────── */
 @media (max-width: 600px) {
-  .more-layer { align-items: flex-end; padding: 0; }
+  .more-layer {
+    align-items: flex-end;
+    padding: 0;
+  }
   .more-panel {
     width: 100%;
     max-width: none;
-    max-height: min(90dvh, 840px);
-    padding: 20px 16px calc(12px + env(safe-area-inset-bottom));
+    max-height: min(88dvh, 820px);
+    padding: 8px 10px calc(10px + env(safe-area-inset-bottom));
     border-radius: 26px 26px 0 0;
     border-bottom: 0;
+    box-shadow:
+      0 -24px 70px -30px rgba(0, 0, 0, 0.9),
+      inset 0 1px 0 rgba(255, 255, 255, 0.07);
   }
-  .more-header { margin-bottom: 14px; }
-  .more-content .more-grid { gap: 8px; }
-  .more-tile { min-height: 96px; padding: 10px; }
+  .more-grabber { display: block; }
+  .more-head { padding: 2px 2px 10px; }
 }
+
 @media (max-width: 370px) {
-  .more-panel { padding-inline: 12px; }
-  .more-content .more-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .more-tile { min-height: 90px; }
-  .more-footer { font-size: 8px; }
+  .more-title { font-size: 17px; }
+  .more-panel { padding-inline: 8px; }
+  .more-tile { min-height: 48px; gap: 9px; }
+  .more-tile-label { font-size: 12.5px; }
 }
+
+/* ── light theme ─────────────────────────────────────────────────────────── */
+:root[data-theme='light'] .more-panel {
+  border-color: rgba(15, 23, 42, 0.11);
+  background:
+    radial-gradient(120% 80% at 100% 0%, color-mix(in srgb, var(--rgb-2) 9%, transparent), transparent 62%),
+    #ffffff;
+  box-shadow:
+    0 36px 80px -30px rgba(15, 23, 42, 0.32),
+    inset 0 1px 0 #fff;
+}
+:root[data-theme='light'] .more-list {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.08);
+}
+/* The spectrum accents are calibrated for black; as icon strokes on white they
+   wash out. Mixing them toward ink keeps the hue and restores the contrast. */
+:root[data-theme='light'] .more-tile-icon {
+  color: color-mix(in srgb, var(--more-accent) 72%, #0b1020);
+}
+:root[data-theme='light'] .more-close { background: #ffffff; }
+:root[data-theme='light'] .more-pill { background: rgba(16, 20, 40, 0.055); }
+:root[data-theme='light'] .more-pill[data-active='true'] {
+  color: #ffffff;
+  background: #0d1020;
+  border-color: #0d1020;
+}
+
+/* ── motion preferences ──────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  .more-panel *, .more-panel *::before, .more-panel *::after {
-    scroll-behavior: auto !important;
-    transition-duration: .01ms !important;
-  }
-  .more-tile:hover { transform: none; }
+  .more-scroll,
+  .more-list { animation: none; }
+  .more-tile,
+  .more-close,
+  .more-pill,
+  .more-tile-chevron { transition-duration: 0.01ms; }
+  .more-tile:hover,
+  .more-tile:active,
+  .more-tile[data-pressed='true'],
+  .more-close:active,
+  .more-pill:active { transform: none; }
+  .more-tile:hover .more-tile-chevron svg { transform: none; }
+  [dir='rtl'] .more-tile:hover .more-tile-chevron svg { transform: scaleX(-1); }
 }

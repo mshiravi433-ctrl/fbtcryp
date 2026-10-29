@@ -21,9 +21,10 @@
     "business": "أعمال",
     "about": "من نحن",
     "group": {
+      "all": "الكل",
       "markets": "Markets",
       "earn": "Earn",
-      "more": "More"
+      "more": "أخرى"
     },
     "p2p": "نظير لنظير",
     "leaderboard": "نقاطك",

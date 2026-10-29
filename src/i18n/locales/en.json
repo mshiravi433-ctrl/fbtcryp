@@ -22,9 +22,10 @@
     "business": "Business",
     "about": "About",
     "group": {
+      "all": "All",
       "markets": "Markets",
       "earn": "Earn",
-      "more": "More"
+      "more": "Other"
     },
     "p2p": "P2P",
     "leaderboard": "Your points",

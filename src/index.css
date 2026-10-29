@@ -2905,14 +2905,26 @@ a.wallet-option,
 .edge-orchid::before { background: conic-gradient(from var(--angle,0deg), var(--rgb-8), var(--rgb-2), var(--rgb-3), var(--rgb-8)); }
 
 /* ==========================================================================
-   More drawer
-   ========================================================================== */
+   More drawer — STRUCTURE ONLY
+   --------------------------------------------------------------------------
+   The visual design of this sheet lives in src/styles/more-menu.css, which is
+   loaded as its own chunk (see MoreSheet.jsx). Only the two declarations that
+   the sheet's layout contract depends on are kept here, in the eager sheet, so
+   the drawer is correctly positioned and click-through even in the frame
+   before its stylesheet lands:
 
-/* Flex wrapper owns the centering so Framer Motion can own `transform`.
-   Previously the panel centered with translateX(-50%) while Motion animated
-   `y` — Motion rewrites the whole transform property, so the -50% correction
-   was wiped and the panel sat with its edge at mid-screen. Direction-agnostic,
-   so it centers identically in RTL. */
+     · .more-layer is the flex wrapper that centers the panel. It owns
+       pointer-events: none so the fixed layer passes taps through to the
+       backdrop sibling, and the panel re-arms them. A tap inside the panel can
+       therefore never fire the backdrop's onClose. Pinned by test/wiring.mjs.
+     · Flex centering (not translate(-50%,-50%)) because Framer Motion writes
+       the panel's whole `transform`; a translate-based centering is erased by
+       the first animated frame and the panel sits off-centre.
+
+   Everything else here is intentionally absent: no background, no radius, no
+   clip-path, no tile grid. Those were duplicated between this file and
+   more-menu.css, and the duplicates kept winning on specificity.
+   ========================================================================== */
 .more-layer {
   position: fixed;
   inset: 0;
@@ -2926,165 +2938,7 @@ a.wallet-option,
   pointer-events: none;
 }
 
-.more-panel {
-  pointer-events: auto;
-  position: relative;
-  width: 100%;
-  max-width: 460px;
-  background: #06070c;
-  border: 1px solid var(--line-strong);
-  padding: 20px 18px 18px;
-  max-height: min(84dvh, 760px);
-  overflow-y: auto;
-  box-shadow: 0 28px 80px -24px rgba(0, 0, 0, 0.92), 0 0 0 1px rgba(255, 255, 255, 0.04);
-
-  /*
-   * NOTCHED PANEL SHAPE
-   * A plain rounded rectangle is what every framework hands you, so it reads
-   * as generic. Chamfering the top-left and bottom-right corners gives the
-   * drawer a silhouette you recognise before you read a single label — the
-   * same trick hardware brands use on a bezel.
-   *
-   * `clip-path` rather than a border-radius because the cut is a straight
-   * diagonal, not a curve, and because clip-path is GPU-composited so it costs
-   * nothing to animate the panel underneath it.
-   *
-   * The trade-off, stated plainly: clip-path clips the border too, so the
-   * 1px outline disappears along the diagonals. The ::before below redraws
-   * the two cut edges as gradient hairlines to put the definition back.
-   */
-  --cut: 26px;
-  border-radius: 24px;
-  clip-path: polygon(
-    var(--cut) 0,
-    100% 0,
-    100% calc(100% - var(--cut)),
-    calc(100% - var(--cut)) 100%,
-    0 100%,
-    0 var(--cut)
-  );
-}
-
-/* Redraws the two chamfered edges, which clip-path cuts away. */
-.more-panel::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(135deg, var(--rgb-1) 0 1.5px, transparent 1.5px) top left / 42px 42px no-repeat,
-    linear-gradient(135deg, transparent calc(100% - 1.5px), var(--rgb-3) calc(100% - 1.5px)) bottom right / 42px 42px no-repeat;
-  opacity: 0.85;
-}
-
-/* RTL mirrors the silhouette so the cut leads the reading direction. */
-[dir='rtl'] .more-panel {
-  clip-path: polygon(
-    0 0,
-    calc(100% - var(--cut)) 0,
-    100% var(--cut),
-    100% 100%,
-    var(--cut) 100%,
-    0 calc(100% - var(--cut))
-  );
-}
-
-[dir='rtl'] .more-panel::before {
-  background:
-    linear-gradient(225deg, var(--rgb-1) 0 1.5px, transparent 1.5px) top right / 42px 42px no-repeat,
-    linear-gradient(225deg, transparent calc(100% - 1.5px), var(--rgb-3) calc(100% - 1.5px)) bottom left / 42px 42px no-repeat;
-}
-
-/* the drag handle only made sense when this slid up from the bottom */
-.more-panel .sheet-handle { display: none !important; }
-
-:root[data-theme='light'] .more-panel { background: #fff; }
-
-/*
- * Tiles fade in as a GROUP, not individually.
- *
- * Eighteen independent Framer springs plus animated SVG paths, inside a
- * parent that was also scaling, is what made this drawer stutter. Three CSS
- * animations run on the compositor and cost essentially nothing.
- */
-.more-group { margin-bottom: 16px; }
-
-.more-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 9px;
-  animation: more-grid-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) backwards;
-}
-
-.more-grid[data-still='true'] { animation: none; }
-
-@keyframes more-grid-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: none; }
-}
-
-.more-tile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 6px;
-  border: 1px solid var(--line);
-  background: var(--bg-panel);
-  color: var(--text-1);
-  cursor: pointer;
-  min-height: 82px;
-  justify-content: center;
-  border-radius: 16px;
-  transition: background 0.18s, border-color 0.18s, transform 0.12s ease-out;
-}
-
-/*
- * The Smart Money tile used to be `more-tile-featured` here (glow border +
- * heavier label). Removed on request: «در منو smart money را مثل بقیه
- * ایکون ها کن نه برجسته» — every tile is now treated identically.
- */
-
-/*
- * Tap feedback in CSS rather than a Framer `whileTap`. :active covers touch
- * and mouse, and [data-pressed] holds the state for the ~90ms between the tap
- * and the route change so the press is actually visible before the screen
- * swaps.
- */
-.more-tile:active,
-.more-tile[data-pressed='true'] {
-  background: rgba(127, 127, 127, 0.13);
-  transform: scale(0.94);
-}
-
-.more-tile[data-pressed='true'] {
-  border-color: color-mix(in srgb, var(--rgb-1) 55%, transparent);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .more-grid { animation: none; }
-  .more-tile { transition: background 0.18s, border-color 0.18s; }
-  .more-tile:active,
-  .more-tile[data-pressed='true'] { transform: none; }
-}
-
-.more-tile-icon {
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--line);
-  background: rgba(127, 127, 127, 0.07);
-  border-radius: 14px;
-}
-
-.more-tile-label {
-  font-size: 9.5px;
-  font-weight: 600;
-  text-align: center;
-  line-height: 1.3;
-  color: var(--text-2);
-}
+.more-panel { pointer-events: auto; }
 
 /* Nav item that opens the drawer */
 .nav-item[data-more='true'] .nav-icon { transition: transform 0.25s cubic-bezier(.34,1.56,.64,1); }
@@ -3998,10 +3852,12 @@ a.wallet-option,
 }
 
 :root[data-theme='light'] .lang-row,
-:root[data-theme='light'] .username-input,
-:root[data-theme='light'] .more-tile {
+:root[data-theme='light'] .username-input {
   background: #ffffff;
 }
+/* .more-tile is not listed here on purpose: the More rows are a continuous
+   list with hairline gaps, not 25 white cards. Their light-theme surface is
+   owned by src/styles/more-menu.css. */
 
 /* The guide's exit overlay dimmed to black over a white page. */
 :root[data-theme='light'] .guide-leave-veil {
@@ -4009,9 +3865,9 @@ a.wallet-option,
 }
 
 /* Panel shadows calibrated for black are invisible on white; a lighter,
-   tighter shadow gives the same sense of elevation. */
-:root[data-theme='light'] .sheet,
-:root[data-theme='light'] .more-panel {
+   tighter shadow gives the same sense of elevation. (.more-panel's light
+   shadow is defined with the rest of that sheet, in more-menu.css.) */
+:root[data-theme='light'] .sheet {
   box-shadow: 0 20px 60px -20px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(15, 23, 42, 0.06);
 }
 
@@ -6756,15 +6612,17 @@ a.wallet-option,
 }
 
 /*
- * The More drawer gives every tile an inline `backdrop-filter: blur(10px)`.
- * Eighteen simultaneous backdrop blurs inside an animating panel is precisely
- * the "menu flickers like a fluorescent tube" report on the Android WebView:
- * each frame of the panel's motion re-samples eighteen backdrops.
+ * Belt-and-braces for the Android WebView.
  *
- * On native the tiles keep their gradient and their border — the blur was
- * invisible through those anyway. `!important` is required (used nowhere else
- * in this file on purpose): the blur is set INLINE on the element, and only
- * an important declaration beats an inline style.
+ * The More rows used to carry an inline `backdrop-filter: blur(10px)`; eighteen
+ * simultaneous backdrop blurs inside an animating panel is precisely the "menu
+ * flickers like a fluorescent tube" report — each frame of the panel's motion
+ * re-sampled eighteen backdrops.
+ *
+ * The rows are opaque surfaces now, so there is no blur to remove. The rule
+ * stays as a guard: `!important` is required to beat an INLINE style, and the
+ * next person to add glass to a menu row should inherit the fix rather than a
+ * regression. (Used on purpose here and nowhere else in this file.)
  */
 :root[data-native='true'] .more-tile {
   backdrop-filter: none !important;

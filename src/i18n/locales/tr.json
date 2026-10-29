@@ -26,9 +26,10 @@
     "ecosystem": "Ekosistem",
     "business": "Kurumsal",
     "group": {
+      "all": "Tümü",
       "markets": "Piyasalar",
       "earn": "Kazan",
-      "more": "Daha"
+      "more": "Diğer"
     },
     "intentOS": "Niyet sistemi",
     "loan": "Krediler",
