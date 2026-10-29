@@ -29,6 +29,7 @@ import { isIOS as _isIOS, isWebView as _isWebView, isStandalone as _isStandalone
 import { apiBase } from './apiBase.js';
 import {
   channelForTone,
+  formatValue,
   resolveTone,
   toneSpec,
   vibrateForTone,
@@ -203,19 +204,27 @@ export function vibrate(pattern = [30, 40, 60], haptic) {
  * The combined "a trade just happened" signal: chime + buzz + a notification
  * if the app is in the background.
  */
-export function notifyTrade({ ok = true, title, body, haptic } = {}) {
+export function notifyTrade({ ok = true, title, body, haptic, pnlPct = null, value = null } = {}) {
   const s = getNotifySettings();
   if (!s.tradeAlerts) return;
 
-  playSound(ok ? 'success' : 'error');
-  vibrate(ok ? [40, 60, 40, 60, 120] : [120, 80, 120], haptic);
+  /*
+   * The tone, not just a boolean: a settled trade is `profit` news (mint) and a
+   * failed one is `loss` news (crimson), so the chime, the buzz and the card all
+   * agree. A caller that knows the P&L passes it and the card says the number.
+   */
+  const tone = ok ? 'profit' : 'loss';
+  playToneSound(tone);
+  vibrate(vibrateForTone(tone), haptic);
 
-  if (document.visibilityState !== 'visible') {
-    showLocalNotification(title ?? (ok ? 'Trade complete' : 'Trade failed'), {
-      body,
-      tag: 'fbt-trade'
-    });
-  }
+  showLocalNotification(title ?? (ok ? 'Trade complete' : 'Trade failed'), {
+    body,
+    tag: 'fbt-trade',
+    tone,
+    value: value || (Number.isFinite(Number(pnlPct)) ? formatValue({ pnlPct }) : ''),
+    kicker: ok ? 'FILLED' : 'FAILED',
+    link: null
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -352,6 +361,25 @@ export async function requestNotificationPermission() {
  * Both point at the same server-rendered card the web push payload uses, which
  * is what makes the shade consistent across the APK, the PWA and the site.
  */
+
+/**
+ * The origin the NOTIFICATION ARTWORK must be fetched from.
+ *
+ * This is not `location.origin`, and the difference is a 404 on every APK: the
+ * Capacitor WebView serves the bundle from `https://localhost`, so a relative
+ * artwork path — or one built from the page origin — asks the PHONE for an image
+ * the phone does not have. `apiBase()` already answers "where is our backend"
+ * correctly (absolute, https, never loopback) for every shell, so the artwork
+ * origin is derived from it.
+ */
+function artworkOrigin() {
+  try {
+    const base = String(apiBase() || '/api');
+    if (/^https?:\/\//i.test(base)) return new URL(base).origin;
+  } catch { /* fall through */ }
+  return typeof location !== 'undefined' ? location.origin : '';
+}
+
 async function presentNativeShade(title, options = {}) {
   try {
     const { LocalNotifications } = await import('@capacitor/local-notifications');
@@ -392,7 +420,7 @@ async function presentNativeShade(title, options = {}) {
         requireInteraction: options.requireInteraction
       },
       language,
-      { origin: typeof location !== 'undefined' ? location.origin : '' }
+      { origin: artworkOrigin() }
     );
 
     await LocalNotifications.schedule({
@@ -408,10 +436,27 @@ async function presentNativeShade(title, options = {}) {
          */
         smallIcon: 'ic_stat_notification',
         iconColor: spec.accent,
-        /* THE DESIGN. Absolute, because the OS fetches it, not a page. */
-        largeIcon: present.image,
-        attachments: [{ id: 'fbt-card', url: present.image }],
-        /* Android + iOS both surface this on the lock screen. */
+        /*
+         * ─── NO `largeIcon` HERE, AND IT IS NOT AN OVERSIGHT ────────────────
+         * @capacitor/local-notifications declares `largeIcon` as a DRAWABLE
+         * RESOURCE ID (its own type docs: "the filename without an extension in
+         * res/drawable"). Handing it the URL of the rendered card sets a
+         * resource id of 0, i.e. no icon at all — the same class of silent
+         * failure as the missing `smallIcon` above.
+         *
+         * `attachments` would carry the picture, but it is iOS-ONLY in the
+         * plugin and this project has no `ios/` target yet.
+         *
+         * So the honest split is:
+         *   · IN the app      → the in-app bar (src/components/NotificationBar)
+         *                       draws the full design; this OS card is the
+         *                       notification the user can act on from outside it;
+         *   · OUT of the app  → the alert comes from the SERVER over FCM, whose
+         *                       payload DOES carry `image` (see server/fcm.js)
+         *                       and renders as the big card on the lock screen.
+         * Pretending a local notification can show remote artwork is how this
+         * feature gets reported broken for the third time.
+         */
         group: present.tag,
         /* The tone decides the channel — the same mapping the server uses, so
            an in-app alert and a pushed one land on the same channel with the
@@ -511,7 +556,7 @@ export function showLocalNotification(title, options = {}) {
       requireInteraction: options?.requireInteraction
     },
     language,
-    { origin: typeof location !== 'undefined' ? location.origin : '' }
+    { origin: artworkOrigin() }
   );
 
   if (isNativeApp()) {

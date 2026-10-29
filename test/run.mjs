@@ -46,6 +46,13 @@ import './solana-deeplink-probe.mjs';
    channel ids in server/fcm.js, and the local-notification path agreeing.
    A chain with one missing link is silent, so all of it is asserted. */
 import './notification-sound-probe.mjs';
+/* The notification DESIGN SYSTEM («دیزاین باید مثل نوار نوتیفیکیشن اندروید/آیفون
+   باشد … و با سود و ضرر رنگ عوض کند»): one palette for the OS shade, the rendered
+   artwork and the in-app bar; the tone resolved from P&L and bracket side; ONE
+   card per order instead of one per stage; the artwork decoded and measured, not
+   trusted; the banner route's validation and cache semantics; and the wiring of
+   the bar, the Settings preview and the push bridge. */
+import './notification-design-probe.mjs';
 /* The Market dashboard and Intent OS scale up only at tablet/desktop widths,
    while the established mobile shell and page gutters remain pinned. */
 import './responsive-layout-probe.mjs';

@@ -470,7 +470,9 @@
     "tradeDoneBody": "{{amount}} {{from}}, {{to}} ile takas edildi.",
     "pushLocal": "Bu sürümde sunucu push yok. Bildirimler uygulamayı bir sonraki açışınızda görünür — bu gerçek bir özellik ama push değil ve öyleymiş gibi davranmayacağız.",
     "pushOn": "Sunucu push açık: uygulama tamamen kapalıyken bile bildirimler ulaşır.",
-    "dailySubLocal": "Günde en fazla bir tane. Bu sürümde uygulamayı açtığınızda görünür, telefona kendiliğinden gelmez."
+    "dailySubLocal": "Günde en fazla bir tane. Bu sürümde uygulamayı açtığınızda görünür, telefona kendiliğinden gelmez.",
+    "previewTitle": "Bildirim önizlemesi",
+    "previewNote": "Bir renge dokunun; aynı tasarım ve sesle bu telefona gelsin."
   },
   "welcome": {
     "title": "Dilinizi seçin",

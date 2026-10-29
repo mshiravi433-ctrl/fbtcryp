@@ -470,7 +470,9 @@
     "tradeDoneBody": "Trocou {{amount}} {{from}} por {{to}}.",
     "pushLocal": "Esta versão não tem push do servidor. As notificações aparecem da próxima vez que abrir a app — é uma funcionalidade real, mas não é push, e não vamos fingir que é.",
     "pushOn": "Push do servidor ativo: as notificações chegam mesmo com a app fechada.",
-    "dailySubLocal": "No máximo uma por dia. Nesta versão aparece quando abrir a app, não chega sozinha ao telemóvel."
+    "dailySubLocal": "No máximo uma por dia. Nesta versão aparece quando abrir a app, não chega sozinha ao telemóvel.",
+    "previewTitle": "Pré-visualização de notificações",
+    "previewNote": "Toque numa cor para vê-la chegar a este telemóvel, com o som e o mesmo design."
   },
   "welcome": {
     "title": "Escolha o seu idioma",

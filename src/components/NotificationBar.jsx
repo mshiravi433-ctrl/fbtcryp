@@ -94,7 +94,7 @@ function ProgressRail({ value, color }) {
   );
 }
 
-function Card({ item, lang, onClose, onOpen }) {
+function Card({ item, lang, onClose, onOpen, preview = false }) {
   const spec = toneSpec(item.tone);
   const reduced = useReducedMotion();
   const ref = useRef(null);
@@ -107,13 +107,14 @@ function Card({ item, lang, onClose, onOpen }) {
    *   · everything else fades.
    * Hovering or touching pauses the countdown, because reading it is the point.
    */
-  const sticky = item.persist || item.tone === 'profit' || item.tone === 'loss' || item.tone === 'alert';
+  const sticky = preview || item.persist || item.tone === 'profit' || item.tone === 'loss' || item.tone === 'alert';
   useEffect(() => {
     if (sticky) return undefined;
     if (dragging) return undefined;
     const timer = setTimeout(() => onClose(item.id), LIFETIME);
+    if (preview) return undefined;
     return () => clearTimeout(timer);
-  }, [item.id, sticky, dragging, onClose]);
+  }, [item.id, sticky, dragging, onClose, preview]);
 
   const values = useMemo(
     () => ({
@@ -128,14 +129,14 @@ function Card({ item, lang, onClose, onOpen }) {
   return (
     <motion.div
       ref={ref}
-      className={`nbar__card nbar__card--${normalizeTone(item.tone)}${dragging ? ' is-dragging' : ''}`}
+      className={`nbar__card nbar__card--${normalizeTone(item.tone)}${dragging ? ' is-dragging' : ''}${preview ? ' nbar__card--preview' : ''}`}
       style={values}
       layout={!reduced}
       initial={reduced ? { opacity: 0 } : { opacity: 0, y: -28, scale: 0.96 }}
       animate={reduced ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
       exit={reduced ? { opacity: 0 } : { opacity: 0, y: -20, scale: 0.97 }}
       transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-      drag={reduced ? false : 'y'}
+      drag={reduced || preview ? false : 'y'}
       dragConstraints={{ top: -80, bottom: 0 }}
       dragElastic={0.32}
       onDragStart={() => setDragging(true)}
@@ -143,9 +144,10 @@ function Card({ item, lang, onClose, onOpen }) {
         setDragging(false);
         if (info.offset.y < -46 || info.velocity.y < -420) onClose(item.id);
       }}
-      role="status"
-      aria-live="polite"
-      onClick={() => onOpen(item)}
+      role={preview ? 'img' : 'status'}
+      aria-live={preview ? undefined : 'polite'}
+      aria-label={preview ? `${item.title} — ${item.body || ''}` : undefined}
+      onClick={preview ? undefined : () => onOpen(item)}
     >
       {/* The aurora, the grid and the vignette — all CSS, all composited. */}
       <span className="nbar__aurora" aria-hidden="true" />
@@ -159,17 +161,19 @@ function Card({ item, lang, onClose, onOpen }) {
           {item.kicker || spec.label.en}
         </span>
         <span className="nbar__time">{clockOf(item.at, lang)}</span>
-        <button
-          type="button"
-          className="nbar__close"
-          aria-label="بستن"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose(item.id);
-          }}
-        >
-          ×
-        </button>
+        {preview ? null : (
+          <button
+            type="button"
+            className="nbar__close"
+            aria-label="بستن"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose(item.id);
+            }}
+          >
+            ×
+          </button>
+        )}
       </span>
 
       <span className="nbar__body">
@@ -241,3 +245,61 @@ export default function NotificationBar() {
 /* Exposed for the Settings preview and for the design probe: the tone list the
    bar can render, straight from the design system. */
 export const BAR_TONES = Object.keys(TONES);
+
+/* -------------------------------------------------------------------------- */
+/* the Settings preview                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A NON-INTERACTIVE card, with the copy a real alert of that tone carries.
+ *
+ * «نوتیفیکیشن‌هایی که در صفحهٔ تنظیمات می‌آید باید روی گوشی هم بیاید با صدا.»
+ * The Settings screen needs to SHOW the design before the user has granted
+ * permission — that is the honest way to ask for it — and showing it with a
+ * second, hand-built markup would be the fifth source of truth this whole
+ * exercise exists to remove. So the preview is the SAME `Card`, drained of its
+ * timers, drag and close button.
+ */
+const SAMPLE = {
+  fa: {
+    profit: ['به هدف رسید — سود', 'BTC→USDT با سود بسته شد.', '+12.4%'],
+    loss: ['حد ضرر فعال شد', 'ETH→USDT با ضرر بسته شد.', '-3.75%'],
+    pending: ['سفارش خودکار در انتظار', 'BTC→USDT ثبت شد.', '65,240'],
+    ready: ['آمادهٔ سواپ', 'اتوماسیون شما به نتیجه رسید.', '68%'],
+    alert: ['هشدار امنیتی', 'یک درخواست امضا در انتظار تأیید است.', '!'],
+    info: ['خلاصهٔ روزانهٔ FBT', 'بازار امروز را ببین.', '']
+  },
+  en: {
+    profit: ['Target reached — in profit', 'BTC→USDT closed in profit.', '+12.4%'],
+    loss: ['Stop-loss triggered', 'ETH→USDT closed at a loss.', '-3.75%'],
+    pending: ['Automation pending', 'BTC→USDT is set.', '65,240'],
+    ready: ['Ready to swap', 'Your automation reached its result.', '68%'],
+    alert: ['Security alert', 'A signing request is waiting.', '!'],
+    info: ['FBT daily digest', 'See today’s market at a glance.', '']
+  }
+};
+
+export function NotificationPreview({ tone = 'ready', lang }) {
+  const key = normalizeTone(tone);
+  const language = String(lang || 'fa').split('-')[0];
+  const pack = SAMPLE[language] || SAMPLE.en;
+  const [title, body, value] = pack[key] || pack.ready;
+  const spec = toneSpec(key);
+  const item = {
+    id: `preview-${key}`,
+    title,
+    body,
+    value,
+    label: key === 'loss' ? 'ETH > USDT' : key === 'info' ? '' : 'BTC > USDT',
+    kicker: spec.label[language] || spec.label.en,
+    progress: key === 'info' ? null : key === 'pending' ? 25 : 68,
+    tone: key,
+    at: Date.now(),
+    persist: true
+  };
+  return (
+    <div className="nbar nbar--inline">
+      <Card item={item} lang={lang} preview />
+    </div>
+  );
+}

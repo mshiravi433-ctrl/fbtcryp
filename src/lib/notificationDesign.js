@@ -390,6 +390,10 @@ export function webPresentation(payload = {}, lang = 'fa', { origin = '' } = {})
     data: {
       ...(payload.data || {}),
       url: payload.url || '/',
+      /* The tag rides along in `data` as well as at the top level: the service
+         worker's `notificationclose` handler reports `data`, and Android's
+         replacement semantics read the top-level `tag`. One key, two readers. */
+      tag: payload.tag || (stage ? `fbt-${stage}` : 'fbt'),
       stage,
       tone,
       progress,
@@ -440,6 +444,18 @@ export function androidPresentation(payload = {}, lang = 'fa', { origin = '' } =
     progress
   }, origin);
 
+  /*
+   * ─── THE KEYS ARE FCM'S, SPELLED EXACTLY AS THE REST API SPELLS THEM ──────
+   * AndroidNotification is `channel_id`, not `channelId`; `notification_priority`,
+   * not `notificationPriority`. This object used to speak camelCase and the
+   * sender translated it — and that translation had the channel field wrong, so
+   * every targeted message was rejected as INVALID_ARGUMENT and the sender, which
+   * treated any 400 as "device gone", deleted the token it had failed to reach.
+   *
+   * Emitting the wire names HERE means there is no translation layer left to get
+   * wrong: `server/fcm.js` spreads this object into the request. The design
+   * probe validates every key against the documented field list.
+   */
   return {
     notification: {
       title: payload.title || 'FBT Swap',
@@ -450,30 +466,28 @@ export function androidPresentation(payload = {}, lang = 'fa', { origin = '' } =
       /* THE DESIGN: the wide gradient card under the two lines of copy. */
       image,
       /*
-       * LOCK SCREEN. `public` shows the full title, body and artwork on the
-       * lock screen; the OS setting is the user's, but a payload that asks for
+       * LOCK SCREEN. `PUBLIC` shows the full title, body and artwork on the
+       * lock screen; the OS setting is the user's, but a payload that asked for
        * `private` would hide the alert they asked for. Nothing sensitive is put
-       * in a notification body (no amounts, no addresses), so public is safe.
+       * in a notification body (no amounts, no addresses), so this is safe.
        */
       visibility: 'PUBLIC',
       /*
        * ONE CARD PER ORDER, NOT ONE PER STAGE. Android replaces a notification
        * with the same `tag`, so `pending → ready → closed` evolves a single row
-       * in the shade instead of stacking three, which is what "the notification
-       * lives until the order finishes" means on a phone.
+       * in the shade instead of stacking three.
        */
       tag: payload.tag || (stage ? `fbt-${stage}` : 'fbt'),
       /* Drop in from the top for money news; stay quiet for the digest. */
-      notificationPriority: urgent ? 'PRIORITY_MAX' : 'PRIORITY_DEFAULT',
+      notification_priority: urgent ? 'PRIORITY_MAX' : 'PRIORITY_DEFAULT',
       /* Our tone, from the channel that carries it (Android 8+ owns sound). */
       sound: 'fbt_notification',
-      channelId: channelForTone(tone),
-      /* The status line a headset/wearable and TalkBack read. */
+      channel_id: channelForTone(tone),
+      /* The status line a wearable and TalkBack read. */
       ticker: payload.ticker || payload.title || 'FBT Swap',
-      /* In-progress cards stay put until the stage resolves. */
-      sticky: urgent ? false : false,
-      /* The progress rail lives in `image`, so the OS never has to know. */
-      eventTime: new Date(Number(payload.timestamp) || Date.now()).toISOString()
+      /* The progress rail lives in `image`, so the OS never has to know about
+         it — but the time matters, so the shade sorts the card correctly. */
+      event_time: new Date(Number(payload.timestamp) || Date.now()).toISOString()
     },
     data: {
       url: payload.url || '/',

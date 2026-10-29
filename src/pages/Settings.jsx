@@ -68,8 +68,11 @@ import {
   registerPushAnywhere,
   requestNotificationPermission,
   setNotifySettings,
+  previewNotification,
   vibrate
 } from '../lib/notify';
+import { NotificationPreview } from '../components/NotificationBar';
+import { TONES, toneSpec } from '../lib/notificationDesign.js';
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/contact';
 import { EVM_CHAINS, EVM_CHAIN_ORDER } from '../lib/chains';
 import { isIOS, isWebView, isStandalone } from '../lib/platform';
@@ -644,6 +647,9 @@ export default function Settings() {
   // React mounts, so localStorage is the only shared surface both can use.
   const [notif, setNotif] = useState(() => getNotifySettings());
   const [perm, setPerm] = useState(() => notificationPermission());
+  /* Which tone the preview card shows. Starts on `ready` — the state a user
+     meets first when an automation is set up. */
+  const [previewTone, setPreviewTone] = useState('ready');
   // 'server' | 'local' | 'unsupported'. Resolved from the API, not from a
   // build flag, so we never promise push the backend cannot actually send.
   const [pmode, setPmode] = useState('local');
@@ -1096,6 +1102,49 @@ export default function Settings() {
             { value: 'news', label: t('notify.news'), sub: t('notify.newsSub'), icon: IconNews, on: Boolean(notif.news) }
           ]}
         />
+      </Field>
+
+      {/*
+        ─── THE PREVIEW: SHOW THE DESIGN BEFORE ASKING FOR PERMISSION ──────────
+        «نوتیفیکیشن‌هایی که در صفحهٔ تنظیمات می‌آید باید روی گوشی هم بیاید با صدا
+        و پس‌زمینه‌اش هم‌گام با سود و ضرر رنگ عوض کند.»
+
+        A permission request with nothing to show is a request the user refuses.
+        So this renders the REAL card — the same component, the same tone table,
+        the same artwork pipeline as the shade — and tapping a tone posts it to
+        the service worker (or the native plugin), which draws it in the actual
+        notification tray with the actual chime. What the user previews is what
+        arrives; that is the point, and it is also the only way to catch "the
+        notification is silent on this phone" HERE instead of after a trade.
+      */}
+      <Field label={t('notify.previewTitle', 'پیش‌نمایش نوتیفیکیشن')} note={t('notify.previewNote', 'هر رنگ را لمس کن تا همان لحظه روی گوشی بیاید، با صدا.')}>
+        <NotificationPreview tone={previewTone} lang={(document.documentElement.lang || 'fa').split('-')[0]} />
+        <div className="notif-tones" role="group" aria-label={t('notify.previewTitle', 'پیش‌نمایش نوتیفیکیشن')}>
+          {Object.keys(TONES).map((key) => {
+            const spec = toneSpec(key);
+            const active = previewTone === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                className={`notif-tone${active ? ' is-active' : ''}`}
+                style={{ '--chip': spec.accent }}
+                aria-pressed={active}
+                onClick={async () => {
+                  haptic?.('select');
+                  setPreviewTone(key);
+                  primeAudio();
+                  try {
+                    await previewNotification(key);
+                  } catch { /* a preview must never throw into Settings */ }
+                }}
+              >
+                <span className="notif-tone__dot" aria-hidden="true" />
+                {spec.label[(document.documentElement.lang || 'fa').split('-')[0]] || spec.label.en}
+              </button>
+            );
+          })}
+        </div>
       </Field>
 
       {/* iOS-specific guidance: Apple only allows push for pinned PWAs */}

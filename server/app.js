@@ -7749,7 +7749,11 @@ app.get('/api/notif/banner.png', async (req, res) => {
     try {
       const { renderBannerCached } = await import('./notificationBanner.js');
       res.set('content-type', 'image/png');
-      res.set('cache-control', 'public, max-age=60');
+      /* Same CDN directive as the success path — a plain `max-age` is a
+         BROWSER directive and makes Vercel treat the response as private, i.e.
+         a cold start per user. Short TTL because this really is the degraded
+         card and it should be replaced as soon as the renderer recovers. */
+      res.set('cache-control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
       return res.end(renderBannerCached({ tone: 'info' }));
     } catch {
       res.set('cache-control', 'no-store');

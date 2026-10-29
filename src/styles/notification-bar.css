@@ -40,6 +40,21 @@
   pointer-events: none;
 }
 
+/* The Settings preview renders the SAME card, inline instead of floating. */
+.nbar--inline {
+  position: static;
+  padding: 0;
+  gap: 0;
+  align-items: stretch;
+  pointer-events: auto;
+}
+
+.nbar--inline .nbar__card {
+  width: 100%;
+  max-width: none;
+  cursor: default;
+}
+
 /* On a notched iPhone the island occupies the top ~59px; the card starts below
    it. `max()` keeps it tight on an Android phone with a small status bar. */
 @supports (padding: max(0px)) {
@@ -319,4 +334,58 @@ html[data-theme='light'] .nbar__card {
   .nbar__card--loss .nbar__chip,
   .nbar__card--alert .nbar__chip { animation: none; }
   .nbar__rail-fill { transition: none; }
+}
+
+/* ─── the tone chooser under the preview (Settings) ──────────────────────── */
+.notif-tones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.notif-tone {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.notif-tone__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--chip, #5b8cff);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--chip, #5b8cff) 70%, transparent);
+}
+
+.notif-tone.is-active {
+  border-color: color-mix(in srgb, var(--chip, #5b8cff) 70%, transparent);
+  background: color-mix(in srgb, var(--chip, #5b8cff) 14%, transparent);
+}
+
+.notif-tone:active { transform: scale(0.97); }
+
+.notif-tone:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--chip, #5b8cff) 75%, transparent);
+  outline-offset: 2px;
+}
+
+html[data-theme='light'] .notif-tone {
+  border-color: rgba(2, 6, 23, 0.14);
+  background: rgba(2, 6, 23, 0.03);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notif-tone { transition: none; }
+  .notif-tone:active { transform: none; }
 }

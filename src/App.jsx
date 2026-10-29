@@ -11,7 +11,7 @@ import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import PullToRefresh from './components/PullToRefresh';
 import Toasts from './components/Toasts';
-import NotificationBar from './components/NotificationBar';
+
 import ConnectivityAlert from './components/ConnectivityAlert';
 import { useSwapDockStore } from './store/useSwapDockStore';
 import RouteBoundary, { noteRoutePainted } from './components/RouteBoundary';
@@ -40,6 +40,13 @@ const Welcome = lazyRetry(() => import('./pages/Welcome'));
 // delaying the app shell. Each use has a local null Suspense fallback so a
 // slow optional chunk can never replace the current page with the route loader.
 const ScreenshotSharePrompt = lazyRetry(() => import('./components/ScreenshotSharePrompt.jsx'));
+/*
+ * The notification bar is a non-critical overlay in exactly the same sense: most
+ * sessions see no card at all, and its stylesheet (the aurora, the grid, the
+ * rail) is the largest part of it. Lazy keeps it out of the first-paint payload,
+ * which has a hard budget — see scripts/check-first-paint.mjs.
+ */
+const NotificationBar = lazyRetry(() => import('./components/NotificationBar'));
 const InstallPrompt = lazyRetry(() => import('./components/InstallPrompt'));
 const RadioDock = lazyRetry(() => import('./components/RadioDock'));
 const FbtRadioPill = lazyRetry(() => import('./components/FbtRadioPill'));
@@ -57,7 +64,7 @@ import AppLock from './components/AppLock';
 import { initTheme, useSettingsStore } from './store/useSettingsStore';
 import { SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from './lib/features';
 import { languageIsUnset } from './i18n';
-import { initServiceWorker, initNativePushListeners, autoRegisterNativePush, refreshWebPushIfOptedIn, maybeSendDailyPromo, pickPromoKey } from './lib/notify';
+import { initServiceWorker, initNativePushListeners, autoRegisterNativePush, refreshWebPushIfOptedIn, maybeSendDailyPromo, pickPromoKey, installPushBridge } from './lib/notify';
 import { newsIsStale, getNews } from './lib/news';
 import { clearAway, watchAutoLock } from './lib/autoLock';
 import { captureReferral, referredBy } from './lib/referral';
@@ -643,6 +650,20 @@ export default function App() {
   useEffect(() => {
     initTheme();
     initServiceWorker();
+    /*
+     * THE SOUND, ON THE WEB, WHEN A PUSH ARRIVES WHILE THE APP IS OPEN.
+     *
+     * The Notification API has no `sound` option any engine still honours, so a
+     * push that lands while the site is in the foreground used to slide in
+     * SILENTLY — the one case the owner reported most often («وقتی میاد صدا
+     * بده»). The service worker posts `fbt-push-tone` to every open client for
+     * exactly this listener to answer with the app's own synthesised chime, and
+     * `fbt-push-dismissed` so a swiped card is marked read.
+     *
+     * Registered before anything else can navigate, and never awaited: it is a
+     * message listener, not a request.
+     */
+    installPushBridge();
     // Keep FCM token rotation and notification taps alive for the whole app.
     // Capacitor emits both events outside React's render lifecycle.
     initNativePushListeners();
@@ -893,7 +914,9 @@ export default function App() {
           Placed after `screen` so it stacks over whatever page is mounted, and
           inside the providers so it can deep-link with the router.
         */}
-        <NotificationBar />
+        <Suspense fallback={null}>
+          <NotificationBar />
+        </Suspense>
         {/*
           Outside `screen` on purpose: the install offer must survive route
           changes, and it must not appear over the splash, onboarding or the

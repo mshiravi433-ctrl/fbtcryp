@@ -230,6 +230,33 @@ export async function fcmSelfTest() {
   }
 }
 
+
+/**
+ * Should this failed send DELETE the device's token?
+ *
+ * ─── THIS USED TO DELETE A HEALTHY TOKEN ON ANY 400 ────────────────────────
+ * The old rule was `status === 404 || status === 400 → removeFcmToken()`. But a
+ * 400 is also what FCM returns for a MALFORMED PAYLOAD — an unknown field, a
+ * wrong enum, a bad image URL. So one typo in a notification body silently
+ * unsubscribed every device that received it, and the symptom the owner kept
+ * reporting («نوتیفیکیشن نمی‌رسد») was made permanent by the error handler
+ * rather than by the sender.
+ *
+ * It was not hypothetical: the payload used to send `channelId`, which is not a
+ * field of AndroidNotification (the REST API spells it `channel_id`), so every
+ * targeted alert was rejected as INVALID_ARGUMENT and the token was pruned on
+ * the way out.
+ *
+ * The rule now: 404, or a body that names the TOKEN as the problem. Anything
+ * else is our bug and must stay retryable.
+ */
+export function shouldPruneToken(status, bodyText = '') {
+  const body = String(bodyText || '');
+  if (status === 404) return true;
+  if (status !== 400) return false;
+  return /UNREGISTERED|registration token is not valid|INVALID_ARGUMENT.*token|token.*INVALID_ARGUMENT/i.test(body);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Send                                                                        */
 /* -------------------------------------------------------------------------- */
@@ -307,30 +334,15 @@ export async function fcmSendToToken(deviceToken, payload) {
             // design system sets it to PUBLIC (nothing sensitive is ever put in
             // a notification body — no amounts, no addresses).
             direct_boot_ok: true,
-            notification: {
-              tag: spec.notification.tag,
-              icon: spec.notification.icon,
-              color: spec.notification.color,
-              /* THE DESIGN: the wide gradient card under the two lines of copy,
-                 with our mark, the big number and the progress rail. */
-              image: spec.notification.image,
-              visibility: spec.notification.visibility,
-              notification_priority: spec.notification.notificationPriority,
-              /* Our tone, and the channel that carries it. On Android 8+ the
-                 CHANNEL owns the sound; MainActivity creates
-                 `fbt_alerts_v1` (IMPORTANCE_HIGH + our tone) and
-                 `fbt_updates_v1` (DEFAULT), so the two agree by construction. */
-              sound: spec.notification.sound,
-              channel_id: spec.notification.channelId,
-              ticker: spec.notification.ticker,
-              /* Keep the summary full instead of truncating it on a narrow
-                 lock screen: this is one sentence, and half a sentence about
-                 money is worse than none. */
-              notify_details: {
-                title: spec.notification.title,
-                body: spec.notification.body
-              }
-            }
+            /*
+             * THE DESIGN, WIRE-SPELLING INCLUDED. Every key here comes from
+             * `androidPresentation()` already named the way the REST API names
+             * it (`channel_id`, `notification_priority`, `event_time`), so this
+             * function cannot silently mistranslate one — which is exactly how
+             * the channel field was wrong before, and how a rejected payload
+             * turned into a deleted subscription.
+             */
+            notification: spec.notification
           },
           apns: {
             payload: {
@@ -358,8 +370,13 @@ export async function fcmSendToToken(deviceToken, payload) {
     });
 
     if (res.ok) return true;
-    // Dead token: pruning keeps future cycles from paying for it forever.
-    if (res.status === 404 || res.status === 400) await removeFcmToken(deviceToken).catch(() => {});
+    /*
+     * Only a TOKEN-level rejection prunes. A 400 from a malformed payload is
+     * OUR bug: dropping the device would turn it into the user's problem, and
+     * the next cycle would then have nothing to retry.
+     */
+    const detail = await res.text().catch(() => '');
+    if (shouldPruneToken(res.status, detail)) await removeFcmToken(deviceToken).catch(() => {});
     return false;
   } catch {
     return false;
@@ -418,13 +435,10 @@ export async function fcmBroadcast(build, { tag = 'fbt-daily' } = {}) {
                 android: {
                   priority: 'normal',
                   notification: {
-                    tag,
-                    icon: spec.notification.icon,
-                    color: spec.notification.color,
-                    image: spec.notification.image,
-                    visibility: spec.notification.visibility,
-                    sound: spec.notification.sound,
-                    channel_id: 'fbt_updates_v1'
+                    ...spec.notification,
+                    /* The digest never interrupts: DEFAULT-importance channel. */
+                    channel_id: 'fbt_updates_v1',
+                    notification_priority: 'PRIORITY_DEFAULT'
                   }
                 }
               }
@@ -443,7 +457,7 @@ export async function fcmBroadcast(build, { tag = 'fbt-daily' } = {}) {
            * every future send burns a request on an endpoint that can never
            * deliver.
            */
-          if (res.status === 404 || res.status === 400) dead.push(row.token);
+          if (shouldPruneToken(res.status, await res.text().catch(() => ''))) dead.push(row.token);
           failed += 1;
         } catch {
           failed += 1;
