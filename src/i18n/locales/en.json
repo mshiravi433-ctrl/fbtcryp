@@ -13090,7 +13090,18 @@
       "noMatch": "No token matches this search/filter. Loosen the filter.",
       "tokenNotCovered": "{{chain}} has no verified coverage yet; qualified-wallet consensus is only measured on the supported EVM networks. No coverage does not mean no flow on this chain.",
       "tokenVerifiedUnavailable": "The verified layer could not be read this time. That is not insufficient evidence, and it does not mean there is no consensus.",
-      "notCoveredShort": "No verified coverage"
+      "notCoveredShort": "No verified coverage",
+      "price": "Price",
+      "lastTrade": "Last observed trade",
+      "snapshot": "Sampled snapshot",
+      "observedDays": "Days observed",
+      "measuredCoverage": "Measured coverage",
+      "sampleSwaps": "Sampled swaps",
+      "lastMeasured": "Last measured",
+      "statusScored": "Scored",
+      "copyTradeNote": "Copy trade opens the swap screen with the same token and side; amount, fees and final confirmation stay yours.",
+      "liquidityShort": "Liquidity",
+      "noPrice": "Price unavailable"
     },
     "title": "Smart Money",
     "windowAria": "Time window",
@@ -13275,7 +13286,12 @@
     "marketsChip": "active pairs",
     "tokens": "tokens",
     "volume": "Flow volume",
-    "tokenWindow24h": "These numbers measure the last 24 hours of this contract only; 4-hour and weekly windows are not served, to keep server load down."
+    "tokenWindow24h": "These numbers measure the last 24 hours of this contract only; 4-hour and weekly windows are not served, to keep server load down.",
+    "copyTrade": "Copy trade",
+    "copyTradeHint": "Copies this contract and opens the swap screen with the same token",
+    "tokenTabNote": "Exactly what our scanner observed for these tokens in this window; an empty row means no observation, not zero flow.",
+    "tokenTabEmpty": "No token activity and no newly seen tokens right now. Widen the window or refresh to try again.",
+    "copyTradeShort": "Copy"
   },
   "crossChain": {
     "youReceive": "You receive",

@@ -870,7 +870,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 .smi-workspace {
-  gap: 13px;
+  gap: 11px;
   color: var(--sm-ink, var(--text-1));
 }
 
@@ -1640,3 +1640,284 @@
 .smi-teaser button svg {
   vertical-align: -1px;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   2026-10-29 · CONTROLS THAT LINE UP, AND EVIDENCE YOU CAN READ
+   ──────────────────────────────────────────────────────────────────────────
+   Reported: «اندازه روزهای انتخابی و شبکه در یک راستا هست اما اندازه روزها
+   کشیده شده که باکس تا نصفه هست» — the window rail and the network picker sat
+   on one line, but the rail was a stretched flex child whose 28px buttons
+   floated inside a 40px row: the box looked half-filled.
+
+   The rail is now exactly as tall as the picker (40px), its buttons fill it
+   (32px + 3px padding on each side + 1px border = 40px), and both controls
+   share one grid row. Under 430px they stack — each full width — because five
+   window labels plus a network trigger cannot both be legible on a 360px
+   phone. Nothing is clipped and nothing is hidden.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.smi-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
+.smi-window {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  height: 40px;
+  padding: 3px;
+  border-radius: 12px;
+  border: 1px solid var(--sm-line, rgba(148, 170, 205, 0.16));
+  background: var(--sm-surface-2, rgba(255, 255, 255, 0.045));
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.smi-window::-webkit-scrollbar { display: none; }
+
+.smi-window button {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--sm-ink-dim, #93a4c4);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.smi-window button:hover { color: var(--sm-ink, #eaf2ff); }
+.smi-window button:focus-visible { outline: 2px solid var(--sm-mint, #2ee6a8); outline-offset: -2px; }
+.smi-window button.active {
+  color: #04121d;
+  background: linear-gradient(96deg, #6ff2d2, #63d9ff 58%, #a99cff);
+  box-shadow: 0 6px 16px -12px rgba(46, 230, 168, 0.85);
+}
+
+.smi-controls .modern-select {
+  width: auto;
+  min-width: 150px;
+  max-width: none;
+  height: 40px;
+}
+
+.smi-controls .modern-select-trigger {
+  min-height: 40px;
+  height: 40px;
+  border-radius: 12px;
+  padding: 4px 9px;
+}
+
+@media (max-width: 430px) {
+  .smi-controls { grid-template-columns: minmax(0, 1fr); }
+  .smi-controls .modern-select { width: 100%; min-width: 0; max-width: none; }
+  .smi-window button { padding: 0 6px; font-size: 10px; }
+}
+
+/* ─── the evidence card's new parts ─────────────────────────────────────── */
+
+.smi-conf { display: grid; gap: 6px; margin-top: 10px; }
+.smi-conf-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10px; }
+.smi-conf-head span { font-weight: 800; color: var(--sm-ink-dim, #93a4c4); letter-spacing: 0.02em; }
+.smi-conf-head b { font-size: 11px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.smi-conf-track {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--sm-surface-3, rgba(255, 255, 255, 0.09));
+  overflow: hidden;
+}
+.smi-conf-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2ee6a8, #63d9ff);
+  transition: width 0.35s ease;
+}
+.smi-conf-track.down i { background: linear-gradient(90deg, #ff6b8b, #ffc24b); }
+.smi-conf-track.idle i { background: linear-gradient(90deg, #93a4c4, #c3b8ff); }
+
+.smi-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.smi-facts > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 8px 9px;
+  border-radius: 11px;
+  border: 1px solid var(--sm-line, rgba(148, 170, 205, 0.16));
+  background: var(--sm-surface-2, rgba(255, 255, 255, 0.045));
+}
+
+.smi-facts small {
+  font-size: 8.5px;
+  font-weight: 800;
+  color: var(--sm-ink-dim, #93a4c4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.smi-facts b {
+  font-size: 11.5px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.smi-split {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+  font-size: 9.5px;
+  font-weight: 800;
+}
+
+.smi-split > span:first-child { color: #5df2c0; }
+.smi-split > span:last-child { color: #ff9db3; }
+.smi-split-bar {
+  flex: 1;
+  min-width: 0;
+  height: 5px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 107, 139, 0.5);
+}
+.smi-split-bar i { display: block; height: 100%; background: linear-gradient(90deg, #2ee6a8, #63d9ff); }
+
+:root[data-theme='light'] .smi-facts > div { background: #f4f7fc; border-color: rgba(15, 23, 42, 0.09); }
+:root[data-theme='light'] .smi-conf-track { background: #e8eefa; }
+:root[data-theme='light'] .smi-split > span:first-child { color: #00795c; }
+:root[data-theme='light'] .smi-split > span:last-child { color: #b3183a; }
+
+/* ─── consensus rows: two more facts, one price line ─────────────────────── */
+
+.smi-votes--wide { opacity: 0.58; font-variant-numeric: tabular-nums; }
+.smi-price-line { font-size: 9px; opacity: 0.7; white-space: nowrap; }
+
+@media (max-width: 360px) {
+  .smi-votes--wide { display: none; }
+}
+
+/* ─── the detail card's action pair ──────────────────────────────────────── */
+
+.smi-detail-actions { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+.smi-detail-actions .sm-copy { flex: none; }
+
+@media (max-width: 400px) {
+  .smi-detail-actions { flex-direction: column; align-items: flex-end; gap: 5px; }
+}
+
+/* ─── realised ROI pill on a receipt ─────────────────────────────────────── */
+
+.smi-roi {
+  justify-self: start;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 8.5px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+.smi-roi.is-up { color: #5df2c0; background: rgba(46, 230, 168, 0.12); }
+.smi-roi.is-down { color: #ff9db3; background: rgba(255, 107, 139, 0.12); }
+:root[data-theme='light'] .smi-roi.is-up { color: #00764f; background: rgba(0, 169, 107, 0.1); }
+:root[data-theme='light'] .smi-roi.is-down { color: #b3183a; background: rgba(201, 42, 77, 0.08); }
+
+/* Receipt rows carry a copy CTA now: the wallet tag steps aside a little
+   earlier so nothing overlaps, and the row may wrap instead of clipping. */
+.smi-feed-row { flex-wrap: wrap; row-gap: 6px; }
+.smi-feed-row .sm-copy { flex: 0 0 auto; }
+@media (max-width: 430px) {
+  .smi-feed-wallet { display: none; }
+  .smi-feed-main { flex: 1 1 100%; }
+}
+
+/* ─── the board's measured-sample strip ─────────────────────────────────── */
+
+.smi-wcard-sample {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 10px;
+  padding: 9px 10px;
+  border-radius: 11px;
+  border: 1px dashed rgba(84, 229, 182, 0.26);
+  background: rgba(46, 230, 168, 0.045);
+  font-size: 9px;
+}
+
+.smi-wcard-sample span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  color: var(--sm-ink-dim, #93a4c4);
+  font-weight: 700;
+}
+
+.smi-wcard-sample b {
+  color: var(--sm-ink, #eaf2ff);
+  font-size: 10px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+:root[data-theme='light'] .smi-wcard-sample { background: #f4faf8; border-color: rgba(0, 150, 111, 0.24); }
+
+/* ─── the teaser's three strongest names ────────────────────────────────── */
+
+.smi-teaser-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.smi-teaser-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(46, 230, 168, 0.3);
+  background: rgba(46, 230, 168, 0.1);
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.smi-teaser-chip b { font-weight: 900; }
+.smi-teaser-chip i { font-style: normal; opacity: 0.7; font-variant-numeric: tabular-nums; }
+.smi-teaser-chip.is-down { border-color: rgba(255, 107, 139, 0.32); background: rgba(255, 107, 139, 0.1); color: #ffb3c4; }
+.smi-teaser-chip.is-up { color: #8ff7d8; }
+:root[data-theme='light'] .smi-teaser-chip.is-up { color: #04795c; border-color: rgba(0, 150, 111, 0.26); background: rgba(0, 169, 107, 0.08); }
+:root[data-theme='light'] .smi-teaser-chip.is-down { color: #b3183a; border-color: rgba(201, 42, 77, 0.24); background: rgba(201, 42, 77, 0.06); }
+
+/* ─── the intelligence hero gets one slow halo, nothing else ─────────────── */
+
+.smi-hero-glow { animation: smi-halo 13s ease-in-out infinite alternate; }
+
+@keyframes smi-halo {
+  from { transform: scale(1); opacity: 0.9; }
+  to { transform: scale(1.1); opacity: 0.55; }
+}
+
+/* Observed-swap rows on the wallet page now carry the copy CTA too. */
+.smi-observed-row { flex-wrap: wrap; row-gap: 5px; }
+.smi-observed-row .sm-copy { flex: 0 0 auto; }

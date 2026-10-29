@@ -178,3 +178,32 @@ export const SmRiskGlyph = (p) => (
     <circle cx="12" cy="17" r=".95" fill="currentColor" stroke="none" />
   </svg>
 );
+
+/* Swap — the two-way arrow pair, for «کپی تراکنش» (copy → open the swap with
+   this token already selected). Drawn on the same grid as the rest so a CTA
+   inside a receipt row does not borrow a filled icon from another family. */
+export const SmSwapGlyph = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 8.4h13.2" />
+    <path d="m14 4.9 3.5 3.5-3.5 3.5" />
+    <path d="M20 15.6H6.8" />
+    <path d="M10 12.1 6.5 15.6 10 19.1" />
+  </svg>
+);
+
+/* Copy — two stacked sheets, for the same action's "copied" state. */
+export const SmCopyGlyph = (p) => (
+  <svg {...base} {...p}>
+    <rect x="8.6" y="3.3" width="11.1" height="11.1" rx="2.6" />
+    <path d="M15.4 17.3v1a2.4 2.4 0 0 1-2.4 2.4H6.7a2.4 2.4 0 0 1-2.4-2.4v-6.3a2.4 2.4 0 0 1 2.4-2.4h1" opacity=".7" />
+  </svg>
+);
+
+/* Layers — the "snapshot" tile: what the sample covers right now. */
+export const SmLayersGlyph = (p) => (
+  <svg {...base} {...p}>
+    <path d="m12 3.4 8.4 4.2-8.4 4.2-8.4-4.2z" />
+    <path d="m3.6 12.2 8.4 4.2 8.4-4.2" opacity=".72" />
+    <path d="m3.6 16.4 8.4 4.2 8.4-4.2" opacity=".42" />
+  </svg>
+);

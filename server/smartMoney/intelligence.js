@@ -438,7 +438,15 @@ export async function getVerifiedIntelligence({ window = '24h', chain = null, to
     indexedAt: snapshot.indexedAt, window, chain, token, durable: storeDurable(), now: at });
   out.refresh = refreshState;
   out.lastCycle = snapshot.lastCycle || null;
-  if (includePrices && (out.earlyEntries.length || out.observed?.flow?.length)) {
+  /* «در هوش تأیید شده اطلاعات ناکافی است» — the consensus board answered with
+   * net flow and a confidence number but no idea what the token is WORTH, so
+   * the reader had to leave the page to judge the size of a $2M flow. The
+   * price/liquidity lookup below already runs for the early entries and the
+   * observed-flow list; including the top consensus rows costs no extra
+   * request (same batched tokenMarkets call, capped at 12 per chain) and every
+   * value stays live-or-null — an unpriced token keeps `—`, never an invented
+   * number. */
+  if (includePrices && (out.earlyEntries.length || out.observed?.flow?.length || out.consensus?.length)) {
     const byChain = new Map();
     const add = (id, tokenAddr) => {
       if (!byChain.has(id)) byChain.set(id, new Set());
@@ -446,6 +454,7 @@ export async function getVerifiedIntelligence({ window = '24h', chain = null, to
     };
     for (const row of out.earlyEntries) add(row.chain, row.token);
     for (const row of (out.observed?.flow || []).slice(0, 8)) add(row.chain, row.token);
+    for (const row of (out.consensus || []).slice(0, 8)) add(row.chain, row.token);
     const markets = new Map();
     const priceDeadlineAt = Date.now() + READ_DEADLINE_MS;
     await Promise.all([...byChain].map(async ([id, tokens]) => {
@@ -477,6 +486,16 @@ export async function getVerifiedIntelligence({ window = '24h', chain = null, to
       if (m?.priceUsd > 0) {
         row.currentPriceUsd = m.priceUsd;
         row.liquidityUsd = m.liquidityUsd ?? null;
+      }
+    }
+    /* The consensus rows the board actually shows (top 8, matching the price
+       request above) carry the same live-or-null market picture. */
+    for (const row of (out.consensus || []).slice(0, 8)) {
+      const m = markets.get(row.chain)?.get(row.token);
+      if (m?.priceUsd > 0) {
+        row.currentPriceUsd = m.priceUsd;
+        row.liquidityUsd = m.liquidityUsd ?? null;
+        row.volumeH24 = m.volumeH24 ?? null;
       }
     }
   }
