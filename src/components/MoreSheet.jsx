@@ -263,11 +263,23 @@ export default function MoreSheet({ open, onClose }) {
   const [pressed, setPressed] = useState(null);
   const [query, setQuery] = useState('');
   const [activeGroup, setActiveGroup] = useState('all');
+  const [menuStylesReady, setMenuStylesReady] = useState(false);
   const panelRef = useRef(null);
   const searchRef = useRef(null);
 
+  // Load the richer menu styling only when requested. Keeping this CSS out of
+  // the global entry stylesheet protects first paint for every other screen.
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open || menuStylesReady) return undefined;
+    let active = true;
+    import('../styles/more-menu.css').then(() => {
+      if (active) setMenuStylesReady(true);
+    });
+    return () => { active = false; };
+  }, [open, menuStylesReady]);
+
+  useEffect(() => {
+    if (!open || !menuStylesReady) return undefined;
     const unlock = lockBodyScroll();
     const returnFocusTo = document.activeElement;
     const focusTimer = window.requestAnimationFrame(() => searchRef.current?.focus());
@@ -297,7 +309,7 @@ export default function MoreSheet({ open, onClose }) {
       window.removeEventListener('keydown', onKey);
       if (returnFocusTo?.isConnected) returnFocusTo.focus?.();
     };
-  }, [open, onClose]);
+  }, [open, menuStylesReady, onClose]);
 
   // Reset the tap highlight when the drawer closes, or the same tile would
   // still look pressed the next time it opens.
@@ -347,7 +359,7 @@ export default function MoreSheet({ open, onClose }) {
 
   return createPortal(
     <AnimatePresence>
-      {open && (
+      {open && menuStylesReady && (
         <>
           <motion.div
             className="sheet-backdrop"
