@@ -1,8 +1,8 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { lockBodyScroll } from '../lib/scrollLock';
 import { useTelegram } from '../context/TelegramContext';
 import { SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from '../lib/features';
@@ -65,6 +65,25 @@ import {
  * animation rather than 25 springs: re-rasterising the whole subtree on every
  * frame is what made this sheet stutter on Android, and the fix stays. See
  * src/styles/more-menu.css for the compositor budget.
+ *
+ * ─── THE LIQUID-GLASS PASS (2026-10-29, later the same day) ──────────────────
+ * The owner again: «لیکوئید گلس و خیلی خیلی مدرن» — liquid glass, very very
+ * modern, still no search bar and no extra sentences. The material changed;
+ * the information architecture above did not. What the glass pass adds:
+ *
+ *   • ONE glass pane (more-menu.css): a single backdrop blur behind the whole
+ *     panel, a specular border ring, a floating sheet on phones. The rows,
+ *     pills and chips are gradient fakes — the per-element backdrop-filter
+ *     that once flickered on Android does NOT come back with the new look,
+ *     and on native the pane itself drops the blur (see the CSS budget).
+ *   • The selected filter pill is one shared layout element that flows along
+ *     the glass track when the category changes — the liquid morph for the
+ *     price of a single transform, not 25 springs.
+ *   • Drag-to-dismiss from the grabber/header (drag controls, so the scroll
+ *     list never fights the gesture) and a spring on the panel's y only —
+ *     still no parent `scale`, per the jitter notes below.
+ *   • The current screen's row is marked (accent wash + dot + aria-current):
+ *     orientation at a glance, in zero extra words.
  *
  * The "More" drawer.
  *
@@ -325,6 +344,8 @@ const ALL = 'all';
 export default function MoreSheet({ open, onClose }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const dragControls = useDragControls();
   const { haptic } = useTelegram();
   const still = useStill();
   const [pressed, setPressed] = useState(null);
@@ -411,6 +432,31 @@ export default function MoreSheet({ open, onClose }) {
   const sections = (activeGroup === ALL ? GROUPS : GROUPS.filter((group) => group.id === activeGroup))
     .filter((group) => group.items.length > 0);
 
+  const selectGroup = (id) => {
+    if (id !== activeGroup) haptic?.('light');
+    setActiveGroup(id);
+  };
+
+  /*
+   * The row for the screen the user is already on. Exact match, plus a child
+   * route counts as its parent destination (`/stocks/…` is still "Stocks");
+   * the root item is exact-only, or every path would claim it.
+   */
+  const isCurrent = (to) => (to === '/'
+    ? pathname === '/'
+    : pathname === to || pathname.startsWith(`${to}/`));
+
+  /*
+   * Drag-to-dismiss starts ONLY from the grabber or the header, via drag
+   * controls with the listener off: the scroll list keeps ownership of its
+   * own gesture, and a press on the close button must stay a press, not the
+   * first frame of a drag.
+   */
+  const startDrag = (event) => {
+    if (still || event.target.closest('button')) return;
+    dragControls.start(event);
+  };
+
   const go = (to) => {
     haptic?.('light');
     setPressed(to);
@@ -439,7 +485,7 @@ export default function MoreSheet({ open, onClose }) {
       {open && menuStylesReady && (
         <>
           <motion.div
-            className="sheet-backdrop"
+            className="sheet-backdrop more-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -458,15 +504,31 @@ export default function MoreSheet({ open, onClose }) {
               aria-labelledby="more-menu-title"
               data-testid="more-menu-dialog"
               tabIndex={-1}
-              initial={{ opacity: 0, y: 16 }}
+              /* A spring on y only — the liquid settle. Still no `scale` on
+                 the panel: scaling a parent re-rasterises every child on
+                 every frame, which is the jitter this sheet already paid
+                 for once (see the notes at the top of this file). */
+              initial={{ opacity: 0, y: still ? 0 : 28 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 12 }}
-              transition={{ duration: still ? 0 : 0.22, ease: [0.22, 1, 0.36, 1] }}
+              exit={{ opacity: 0, y: still ? 0 : 44 }}
+              transition={still
+                ? { duration: 0 }
+                : { type: 'spring', stiffness: 380, damping: 34, mass: 0.9 }}
+              drag={still ? false : 'y'}
+              dragListener={false}
+              dragControls={dragControls}
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={{ top: 0, bottom: 0.55 }}
+              onDragEnd={(_, info) => {
+                if (info.offset.y > 110 || info.velocity.y > 600) onClose?.();
+              }}
               onClick={(event) => event.stopPropagation()}
             >
-              <span className="more-grabber" aria-hidden="true" />
+              <div className="more-dragzone" aria-hidden="true" onPointerDown={startDrag}>
+                <span className="more-grabber" />
+              </div>
 
-              <header className="more-head">
+              <header className="more-head" onPointerDown={startDrag}>
                 <h2 id="more-menu-title" className="more-title">{t('nav.more')}</h2>
                 <button
                   className="more-close"
@@ -475,7 +537,7 @@ export default function MoreSheet({ open, onClose }) {
                   type="button"
                   data-testid="more-menu-close"
                 >
-                  <IconX width={16} height={16} />
+                  <IconX width={17} height={17} />
                 </button>
               </header>
 
@@ -486,25 +548,33 @@ export default function MoreSheet({ open, onClose }) {
                 without matching panels is an accessibility lie.
               */}
               <div className="more-filter" role="group" aria-label={t('nav.more')}>
-                <button
-                  type="button"
-                  className="more-pill"
-                  data-active={activeGroup === ALL}
-                  aria-pressed={activeGroup === ALL}
-                  onClick={() => setActiveGroup(ALL)}
-                >
-                  {t('nav.group.all')}
-                </button>
-                {GROUPS.map((group) => (
+                {[{ id: ALL, key: 'nav.group.all' }, ...GROUPS.map((group) => ({
+                  id: group.id,
+                  key: `nav.group.${group.id}`
+                }))].map((pill) => (
                   <button
-                    key={group.id}
+                    key={pill.id}
                     type="button"
                     className="more-pill"
-                    data-active={activeGroup === group.id}
-                    aria-pressed={activeGroup === group.id}
-                    onClick={() => setActiveGroup(group.id)}
+                    data-active={activeGroup === pill.id}
+                    aria-pressed={activeGroup === pill.id}
+                    onClick={() => selectGroup(pill.id)}
                   >
-                    {t(`nav.group.${group.id}`)}
+                    {/* One shared glass capsule that flows along the track to
+                        whichever pill is selected (layoutId) instead of two
+                        pills swapping paint — the "liquid" in the brief, for
+                        the cost of a single transform. */}
+                    {activeGroup === pill.id && (
+                      <motion.span
+                        layoutId="more-pill-glass"
+                        className="more-pill-glass"
+                        aria-hidden="true"
+                        transition={still
+                          ? { duration: 0 }
+                          : { type: 'spring', stiffness: 520, damping: 38, mass: 0.8 }}
+                      />
+                    )}
+                    <span className="more-pill-label">{t(pill.key)}</span>
                   </button>
                 ))}
               </div>
@@ -518,22 +588,31 @@ export default function MoreSheet({ open, onClose }) {
                       <h3 className="more-group-title">{t(`nav.group.${group.id}`)}</h3>
                     )}
                     <div className="more-list" data-still={still ? 'true' : 'false'}>
-                      {group.items.map((item) => (
-                        <button
-                          key={item.to + item.key}
-                          type="button"
-                          className="more-tile"
-                          data-pressed={pressed === item.to ? 'true' : 'false'}
-                          onClick={() => go(item.to)}
-                          style={{ '--more-accent': item.hue }}
-                        >
-                          <span className="more-tile-icon" aria-hidden="true"><item.Icon width={18} height={18} /></span>
-                          <span className="more-tile-label">{t(item.key)}</span>
-                          <span className="more-tile-chevron" aria-hidden="true">
-                            <IconChevronRight width={15} height={15} />
-                          </span>
-                        </button>
-                      ))}
+                      {group.items.map((item, index) => {
+                        const current = isCurrent(item.to);
+                        return (
+                          <button
+                            key={item.to + item.key}
+                            type="button"
+                            className="more-tile"
+                            data-pressed={pressed === item.to ? 'true' : 'false'}
+                            data-current={current ? 'true' : 'false'}
+                            aria-current={current ? 'page' : undefined}
+                            onClick={() => go(item.to)}
+                            style={{ '--more-accent': item.hue, '--more-i': index }}
+                          >
+                            <span className="more-tile-icon" aria-hidden="true"><item.Icon width={19} height={19} /></span>
+                            <span className="more-tile-label">{t(item.key)}</span>
+                            {current ? (
+                              <span className="more-tile-dot" aria-hidden="true" />
+                            ) : (
+                              <span className="more-tile-chevron" aria-hidden="true">
+                                <IconChevronRight width={15} height={15} />
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </section>
                 ))}
