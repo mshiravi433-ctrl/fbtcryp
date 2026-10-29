@@ -472,7 +472,7 @@
     "pushOn": "Push desde el servidor activo: las notificaciones llegan aunque la app esté cerrada.",
     "dailySubLocal": "Como máximo una al día. En esta versión aparece la próxima vez que abras la app, no llega sola al teléfono.",
     "previewTitle": "Vista previa de notificaciones",
-    "previewNote": "Toca un color para verlo llegar a este teléfono, con su sonido y el mismo diseño."
+    "previewNote": "Toca un color para probarlo. El aspecto y la imagen grande dependen del dispositivo y del permiso de notificaciones."
   },
   "welcome": {
     "title": "Elige tu idioma",

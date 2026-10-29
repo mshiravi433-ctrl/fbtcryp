@@ -23,7 +23,7 @@
  */
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 import { TONES } from '../src/lib/notificationDesign.js';
 import { useAppStore } from '../src/store/useAppStore';
@@ -37,7 +37,10 @@ const navigate = vi.fn();
  * only in the context of a <Router>` — the exception that once blanked every
  * route of the site with «خطای غیرمنتظره».
  */
-const { routerState } = vi.hoisted(() => ({ routerState: { inRouter: true } }));
+const { routerState, motionState } = vi.hoisted(() => ({
+  routerState: { inRouter: true },
+  motionState: { reduced: false, rail: [] }
+}));
 
 vi.mock('react-router-dom', () => ({
   useInRouterContext: () => routerState.inRouter,
@@ -52,11 +55,13 @@ vi.mock('react-router-dom', () => ({
 vi.mock('framer-motion', async () => {
   const ReactModule = await import('react');
   const strip = ReactModule.forwardRef(({ children, initial, animate, exit, transition, layout,
-    drag, dragConstraints, dragElastic, onDragStart, onDragEnd, ...rest }, ref) =>
-    ReactModule.createElement('div', { ref, ...rest }, children));
+    drag, dragConstraints, dragElastic, onDragStart, onDragEnd, ...rest }, ref) => {
+    if (rest.className === 'nbar__rail-fill') motionState.rail.push({ initial, animate, transition });
+    return ReactModule.createElement('div', { ref, ...rest }, children);
+  });
   return {
     AnimatePresence: ({ children }) => children,
-    useReducedMotion: () => false,
+    useReducedMotion: () => motionState.reduced,
     motion: new Proxy({}, { get: () => strip })
   };
 });
@@ -69,11 +74,13 @@ beforeEach(() => {
   reset();
   navigate.mockReset();
   routerState.inRouter = true;
+  motionState.reduced = false;
+  motionState.rail = [];
   document.documentElement.lang = 'fa';
   window.history.replaceState(null, '', '#/');
 });
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('notification bar', () => {
   it('paints nothing when there is no notification', () => {
@@ -169,6 +176,52 @@ describe('notification bar', () => {
     expect(useAppStore.getState().notifBar).toHaveLength(3);
     const { container } = render(<NotificationBar />);
     expect(container.querySelectorAll('.nbar__card')).toHaveLength(3);
+  });
+
+
+  it('does not invent progress when none was provided, but preserves real zero', () => {
+    useAppStore.getState().showNotifBar({ title: 'خلاصه', tone: 'info' });
+    const { rerender } = render(<NotificationBar />);
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    reset();
+    useAppStore.getState().showNotifBar({ title: 'شروع', tone: 'pending', progress: 0 });
+    rerender(<NotificationBar />);
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('0');
+    expect(screen.getByRole('progressbar').getAttribute('aria-label')).toBe('پیشرفت');
+  });
+
+  it('provides a keyboard-focusable open button and an independent close button', () => {
+    useAppStore.getState().showNotifBar({ title: 'هشدار قیمت', tone: 'ready', link: '/orders' });
+    render(<NotificationBar />);
+    const open = screen.getByRole('button', { name: 'باز کردن اعلان: هشدار قیمت' });
+    expect(open.tagName).toBe('BUTTON');
+    open.focus();
+    expect(document.activeElement).toBe(open);
+    fireEvent.click(open);
+    expect(navigate).toHaveBeenCalledWith('/orders');
+    expect(useAppStore.getState().notifBar).toHaveLength(0);
+  });
+
+  it('pauses the dismissal countdown while a keyboard user is focused', () => {
+    vi.useFakeTimers();
+    useAppStore.getState().showNotifBar({ title: 'اطلاع', tone: 'info' });
+    render(<NotificationBar />);
+    const open = screen.getByRole('button', { name: 'باز کردن اعلان: اطلاع' });
+    fireEvent.focus(open);
+    act(() => vi.advanceTimersByTime(10000));
+    expect(useAppStore.getState().notifBar).toHaveLength(1);
+    fireEvent.blur(open, { relatedTarget: document.body });
+    act(() => vi.advanceTimersByTime(6200));
+    expect(useAppStore.getState().notifBar).toHaveLength(0);
+  });
+
+  it('does not animate the progress rail when reduced motion is requested', () => {
+    motionState.reduced = true;
+    useAppStore.getState().showNotifBar({ title: 'آماده', tone: 'ready', progress: 68 });
+    render(<NotificationBar />);
+    expect(motionState.rail.at(-1)).toMatchObject({
+      initial: { scaleX: 0.68 }, animate: { scaleX: 0.68 }, transition: { duration: 0 }
+    });
   });
 
   it('keeps the bar out of the persisted state', () => {

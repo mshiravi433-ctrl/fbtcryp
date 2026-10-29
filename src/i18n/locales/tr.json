@@ -472,7 +472,7 @@
     "pushOn": "Sunucu push açık: uygulama tamamen kapalıyken bile bildirimler ulaşır.",
     "dailySubLocal": "Günde en fazla bir tane. Bu sürümde uygulamayı açtığınızda görünür, telefona kendiliğinden gelmez.",
     "previewTitle": "Bildirim önizlemesi",
-    "previewNote": "Bir renge dokunun; aynı tasarım ve sesle bu telefona gelsin."
+    "previewNote": "Denemek için bir renge dokunun. Bildirimin görünümü ve büyük resmi cihaza ve bildirim iznine bağlıdır."
   },
   "welcome": {
     "title": "Dilinizi seçin",

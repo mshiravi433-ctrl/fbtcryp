@@ -947,6 +947,7 @@ let nativePushPlugin = null;
 let nativePushListenersReady = false;
 let nativeRegistrationListener = null;
 let nativeActionListener = null;
+let nativeReceivedListener = null;
 let nativeErrorListener = null;
 let nativeLocalActionListener = null;
 let nativeTokenWaiters = [];
@@ -1053,7 +1054,7 @@ export async function initNativePushListeners() {
      * and the shade still covers every case where the app is NOT in front of the
      * user — which is every case a notification actually exists for.
      */
-    await nativePushPlugin.addListener('pushNotificationReceived', (notification) => {
+    nativeReceivedListener = await nativePushPlugin.addListener('pushNotificationReceived', (notification) => {
       const data = notification?.data || {};
       const tone = data.tone || resolveTone({ stage: data.stage });
       showInAppNotification({
@@ -1064,8 +1065,9 @@ export async function initNativePushListeners() {
         options: {
           stage: data.stage,
           value: data.value,
+          label: data.label,
           progress: data.progress === '' || data.progress == null ? null : Number(data.progress),
-          kicker: data.stage ? String(data.stage).toUpperCase() : ''
+          kicker: data.kicker || (data.stage ? String(data.stage).toUpperCase() : '')
         }
       });
     });
@@ -1089,6 +1091,7 @@ export async function initNativePushListeners() {
       nativeRegistrationListener?.remove?.();
       nativeErrorListener?.remove?.();
       nativeActionListener?.remove?.();
+      nativeReceivedListener?.remove?.();
       nativeLocalActionListener?.remove?.();
       nativeTokenWaiters = [];
       nativePushListenersReady = false;
@@ -1358,17 +1361,19 @@ export async function previewNotification(tone = 'ready', { lang } = {}) {
     /* A realistic card: a number, the pair, a progress, and the deep link the
        real alert would carry. A preview with placeholder dashes teaches the
        user nothing about what they will actually see. */
-    value: key === 'profit' ? '+12.4%' : key === 'loss' ? '-3.75%' : '65,240',
-    label: key === 'loss' ? 'ETH > USDT' : 'BTC > USDT',
+    value: key === 'profit' ? '+12.4%' : key === 'loss' ? '-3.75%' : key === 'pending' ? '65,240' : key === 'ready' ? '68%' : '',
+    label: key === 'loss' ? 'ETH > USDT' : ['info', 'alert'].includes(key) ? '' : 'BTC > USDT',
     kicker: key === 'info' ? 'FBT SWAP' : key.toUpperCase(),
-    progress: key === 'pending' ? 25 : key === 'info' ? null : 68,
+    progress: key === 'pending' ? 25 : ['info', 'alert'].includes(key) ? null : 68,
     url: '/#/orders',
     lang: language
   };
 
-  /* Native APK: the plugin posts the card itself, with the artwork. */
+  /* Native local previews have the app icon and sound, but Android's local
+     notification plugin cannot attach the remote big picture. Actual background
+     FCM pushes carry the image; the OS decides how to display it. */
   if (isNativeApp()) {
-    await presentNativeShade(copy.title, {
+    const shown = await presentNativeShade(copy.title, {
       body: copy.body,
       tone: key,
       value: payload.value,
@@ -1377,7 +1382,7 @@ export async function previewNotification(tone = 'ready', { lang } = {}) {
       progress: payload.progress,
       data: { url: payload.url }
     });
-    return { ok: true, via: 'native' };
+    return { ok: Boolean(shown), via: shown ? 'native' : 'none' };
   }
 
   /* Web/PWA: ask the service worker so the REAL handler renders it. */

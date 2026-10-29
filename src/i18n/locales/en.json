@@ -5171,7 +5171,7 @@
     "sound": "Trade sound",
     "soundSub": "Play a short chime when a trade settles.",
     "previewTitle": "Notification preview",
-    "previewNote": "Tap a colour to see it arrive on this phone, with the sound and the same design.",
+    "previewNote": "Tap a colour to try a sample. System appearance and large images depend on your device and notification permission.",
     "vibrate": "Vibration",
     "vibrateSub": "Buzz the phone on every settled or failed trade.",
     "tradeAlerts": "Trade alerts",

@@ -348,7 +348,11 @@ export const useAppStore = create(
           value: value == null ? '' : String(value),
           label: label == null ? '' : String(label),
           kicker: kicker == null ? '' : String(kicker),
-          progress: Number.isFinite(Number(progress)) ? Number(progress) : null,
+          /* null/empty means no progress; Number(null) is 0, which would draw
+             a misleading empty progress bar on an unrelated notification. */
+          progress: progress != null && progress !== '' && Number.isFinite(Number(progress))
+            ? Math.max(0, Math.min(100, Number(progress)))
+            : null,
           stage,
           kind,
           link,

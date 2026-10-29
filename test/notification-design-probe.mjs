@@ -54,6 +54,7 @@ import {
   parseBannerParams,
   bannerPath,
   bannerUrl,
+  BANNER_DESIGN_VERSION,
   webPresentation,
   androidPresentation,
   progressFrom,
@@ -174,14 +175,16 @@ const ok = (name, condition) => {
   const parsed = parseBannerParams({ t: 'profit', v: '+12.4%', l: 'BTC > USDT', k: 'ready', p: '68' });
   ok('the URL parser reads every field', parsed.tone === 'profit' && parsed.value === '+12.4%'
     && parsed.label === 'BTC > USDT' && parsed.kicker === 'READY' && parsed.progress === 68);
+  ok('a 24-character amount is retained in full', parseBannerParams({ v: '123456789012345678901234' }).value === '123456789012345678901234');
+  ok('an oversized amount is omitted, never truncated into a wrong price', parseBannerParams({ v: '1234567890123456789012345' }).value === '');
   ok('the cache key is content, not order', parseBannerParams({ v: 'A', t: 'loss' }).key
     === parseBannerParams({ t: 'loss', v: 'A' }).key);
 
   const path = bannerPath({ tone: 'loss', value: '-3.75%', label: 'ETH > USDT', progress: 100 });
   ok('the URL builder emits the tone', path.includes('t=loss'));
   ok('the URL builder encodes a percentage safely', path.includes('v=-3.75%25'));
-  ok('the absolute form prefixes the origin', bannerUrl({ tone: 'profit' }, 'https://fbtswap.ir/')
-    === 'https://fbtswap.ir/api/notif/banner.png?t=profit');
+  ok('the absolute form prefixes the origin and versions the immutable artwork', bannerUrl({ tone: 'profit' }, 'https://fbtswap.ir/')
+    === `https://fbtswap.ir/api/notif/banner.png?t=profit&d=${BANNER_DESIGN_VERSION}`);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -193,6 +196,10 @@ const ok = (name, condition) => {
   });
   ok('the web payload carries the artwork', web.image.startsWith('https://fbtswap.ir/api/notif/banner.png?'));
   ok('the artwork URL carries the tone', web.image.includes('t=profit'));
+  ok('web and Android use the versioned image URL, bypassing old immutable caches',
+    new URL(web.image).searchParams.get('d') === BANNER_DESIGN_VERSION
+    && new URL(androidPresentation({ tone: 'profit' }, 'fa', { origin: 'https://fbtswap.ir' }).notification.image)
+      .searchParams.get('d') === BANNER_DESIGN_VERSION);
   ok('the web payload is RTL for Persian', web.dir === 'rtl' && web.lang === 'fa');
   ok('the web payload tints the row with the tone', web.color === TONES.profit.accent);
   ok('money news pins itself on screen', web.requireInteraction === true);
@@ -332,6 +339,13 @@ const ok = (name, condition) => {
 
   const pImg = decode(profit);
   const lImg = decode(renderBannerPng({ tone: 'loss', value: '-3.75%', label: 'ETH > USDT' }));
+  const emptyProgress = decode(renderBannerPng({ tone: 'profit', progress: 0 }));
+  const fullProgress = decode(renderBannerPng({ tone: 'profit', progress: 100 }));
+  ok('0% has an empty rail, while 100% fills it',
+    fullProgress.rgb(300, 445)[1] - emptyProgress.rgb(300, 445)[1] > 80);
+  ok('Persian digits produce the same correct artwork as Latin digits',
+    renderBannerPng({ tone: 'profit', value: '+۱۲.۴٪' })
+      .equals(renderBannerPng({ tone: 'profit', value: '+12.4%' })));
 
   /* The bottom-left glow is the tone's PRIMARY colour: mint for a win, crimson
      for a loss. */
@@ -391,6 +405,8 @@ const ok = (name, condition) => {
   ok('the response carries a strong ETag', /^"fbt-/.test(res.etag) && res.etag.endsWith(`-${res.png.length}"`));
   ok('the ETag changes with the content',
     bannerResponse({ tone: 'loss', value: '+12.4%' }).etag !== res.etag);
+  ok('plus and minus values cannot collide in a revalidation',
+    bannerResponse({ tone: 'info', value: '+12%' }).etag !== bannerResponse({ tone: 'info', value: '-12%' }).etag);
   ok('the response reports the tone it drew', res.tone === 'profit');
 }
 
@@ -406,6 +422,7 @@ const ok = (name, condition) => {
       toneBlock.includes(`'${TONES[key].accent}'`) || toneBlock.includes(`${key}: '${TONES[key].accent}'`));
   }
   ok('the service worker draws the artwork', /image,|\bimage\b/.test(sw) && /banner\.png/.test(sw));
+  ok('the service worker fallback uses the same immutable artwork version', sw.includes(`&d=${BANNER_DESIGN_VERSION}`));
   ok('the service worker replaces a card instead of stacking stages', /renotify/.test(sw));
   ok('the service worker rings a live page (the only sound the web allows)',
     /fbt-push-tone/.test(sw) && /ringOpenClients/.test(sw));

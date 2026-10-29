@@ -64,30 +64,34 @@ function clockOf(ts, lang) {
   }
 }
 
-/** The brand mark, drawn once as inline SVG (no network, no extra asset). */
+/** The same two-arrow geometry as the Android status icon and banner. */
 function BrandMark({ color }) {
   return (
-    <svg className="nbar__mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <g fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round">
-        <path d="M17.2 9.5a5.5 5.5 0 0 1-9.6 3.4" />
-        <path d="M6.8 14.5A5.5 5.5 0 0 1 16.4 11" />
-      </g>
-      <path d="M17.9 4.6l.5 4.3-4.2-.9z" fill={color} />
-      <path d="M6.1 19.4l-.5-4.3 4.2.9z" fill={color} />
-    </svg>
+    <span className="nbar__mark-wrap" aria-hidden="true">
+      <svg className="nbar__mark" viewBox="0 0 24 24" focusable="false">
+        <g fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round">
+          <path d="M13.94 4.76 A7.5 7.5 0 0 1 13.94 19.24" />
+          <path d="M10.06 19.24 A7.5 7.5 0 0 1 10.06 4.76" />
+        </g>
+        <path d="M10.08 20.28 L14.61 21.75 L13.27 16.73 Z" fill={color} />
+        <path d="M13.92 3.72 L9.39 2.25 L10.73 7.27 Z" fill={color} />
+      </svg>
+    </span>
   );
 }
 
-function ProgressRail({ value, color }) {
+function ProgressRail({ value, color, reduced, lang }) {
   const pct = Math.max(0, Math.min(100, Number(value)));
+  const language = String(lang || 'fa').split('-')[0];
+  const label = language === 'fa' ? 'پیشرفت' : language === 'ar' ? 'التقدم' : 'Progress';
   return (
-    <div className="nbar__rail" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
+    <div className="nbar__rail" role="progressbar" aria-label={label} aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
       <motion.span
         className="nbar__rail-fill"
-        style={{ background: `linear-gradient(90deg, ${color}55, ${color})` }}
-        initial={{ scaleX: 0 }}
+        style={{ background: `linear-gradient(90deg, ${color}88, ${color})` }}
+        initial={{ scaleX: reduced ? pct / 100 : 0 }}
         animate={{ scaleX: pct / 100 }}
-        transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+        transition={reduced ? { duration: 0 } : { duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
       />
     </div>
   );
@@ -98,6 +102,10 @@ function Card({ item, lang, onClose, onOpen, preview = false }) {
   const reduced = useReducedMotion();
   const ref = useRef(null);
   const [dragging, setDragging] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const language = String(lang || 'fa').split('-')[0];
+  const closeLabel = language === 'fa' ? 'بستن' : language === 'ar' ? 'إغلاق' : 'Close';
+  const openLabel = language === 'fa' ? 'باز کردن اعلان' : language === 'ar' ? 'فتح الإشعار' : 'Open notification';
 
   /*
    * Auto-release. A card that stays forever is a card the user cannot get rid
@@ -109,11 +117,10 @@ function Card({ item, lang, onClose, onOpen, preview = false }) {
   const sticky = preview || item.persist || item.tone === 'profit' || item.tone === 'loss' || item.tone === 'alert';
   useEffect(() => {
     if (sticky) return undefined;
-    if (dragging) return undefined;
+    if (dragging || paused) return undefined;
     const timer = setTimeout(() => onClose(item.id), LIFETIME);
-    if (preview) return undefined;
     return () => clearTimeout(timer);
-  }, [item.id, sticky, dragging, onClose, preview]);
+  }, [item.id, sticky, dragging, paused, onClose]);
 
   const values = useMemo(
     () => ({
@@ -131,10 +138,10 @@ function Card({ item, lang, onClose, onOpen, preview = false }) {
       className={`nbar__card nbar__card--${normalizeTone(item.tone)}${dragging ? ' is-dragging' : ''}${preview ? ' nbar__card--preview' : ''}`}
       style={values}
       layout={!reduced}
-      initial={reduced ? { opacity: 0 } : { opacity: 0, y: -28, scale: 0.96 }}
+      initial={reduced ? false : { opacity: 0, y: -28, scale: 0.96 }}
       animate={reduced ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
       exit={reduced ? { opacity: 0 } : { opacity: 0, y: -20, scale: 0.97 }}
-      transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+      transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }}
       drag={reduced || preview ? false : 'y'}
       dragConstraints={{ top: -80, bottom: 0 }}
       dragElastic={0.32}
@@ -143,28 +150,49 @@ function Card({ item, lang, onClose, onOpen, preview = false }) {
         setDragging(false);
         if (info.offset.y < -46 || info.velocity.y < -420) onClose(item.id);
       }}
-      role={preview ? 'img' : 'status'}
-      aria-live={preview ? undefined : 'polite'}
+      role={preview ? 'img' : undefined}
       aria-label={preview ? `${item.title} — ${item.body || ''}` : undefined}
       onClick={preview ? undefined : () => onOpen(item)}
+      onPointerEnter={(event) => { if (event.pointerType === 'mouse') setPaused(true); }}
+      onPointerLeave={(event) => { if (event.pointerType === 'mouse') setPaused(false); }}
+      onPointerDown={(event) => { if (event.pointerType === 'touch') setPaused(true); }}
+      onPointerUp={(event) => { if (event.pointerType === 'touch') setPaused(false); }}
+      onPointerCancel={() => setPaused(false)}
+      onFocusCapture={() => setPaused(true)}
+      onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setPaused(false); }}
     >
-      {/* The aurora, the grid and the vignette — all CSS, all composited. */}
       <span className="nbar__aurora" aria-hidden="true" />
       <span className="nbar__grid" aria-hidden="true" />
+      <span className="nbar__orbit" aria-hidden="true" />
       <span className="nbar__sheen" aria-hidden="true" />
+      {preview ? null : (
+        <button
+          type="button"
+          className="nbar__hit-target"
+          aria-label={`${openLabel}: ${item.title}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpen(item);
+          }}
+        />
+      )}
 
       <span className="nbar__head">
         <BrandMark color={spec.accent} />
-        <span className="nbar__brand">FBT SWAP</span>
+        <span className="nbar__brand-lockup" dir="ltr">
+          <span className="nbar__brand">FBT SWAP</span>
+          <span className="nbar__brand-sub">NOTIFICATIONS</span>
+        </span>
         <span className="nbar__chip" style={{ color: spec.accent, borderColor: `${spec.accent}55` }}>
-          {item.kicker || spec.label.en}
+          <span className="nbar__chip-dot" aria-hidden="true" />
+          {item.kicker || spec.label[language] || spec.label.en}
         </span>
         <span className="nbar__time">{clockOf(item.at, lang)}</span>
         {preview ? null : (
           <button
             type="button"
             className="nbar__close"
-            aria-label="بستن"
+            aria-label={closeLabel}
             onClick={(e) => {
               e.stopPropagation();
               onClose(item.id);
@@ -179,16 +207,16 @@ function Card({ item, lang, onClose, onOpen, preview = false }) {
         <span className="nbar__text">
           <span className="nbar__title">{item.title}</span>
           {item.body ? <span className="nbar__message">{item.body}</span> : null}
-          {item.label ? <span className="nbar__label">{item.label}</span> : null}
+          {item.label ? <span className="nbar__label" dir="auto">{item.label}</span> : null}
         </span>
         {item.value ? (
-          <span className="nbar__value" style={{ color: spec.accent }}>
+          <span className="nbar__value" dir="ltr" style={{ color: spec.accent }}>
             {item.value}
           </span>
         ) : null}
       </span>
 
-      {item.progress != null ? <ProgressRail value={item.progress} color={spec.accent} /> : null}
+      {item.progress != null ? <ProgressRail value={item.progress} color={spec.accent} reduced={reduced} lang={lang} /> : null}
     </motion.div>
   );
 }
@@ -374,9 +402,9 @@ export function NotificationPreview({ tone = 'ready', lang }) {
     title,
     body,
     value,
-    label: key === 'loss' ? 'ETH > USDT' : key === 'info' ? '' : 'BTC > USDT',
+    label: key === 'loss' ? 'ETH > USDT' : ['info', 'alert'].includes(key) ? '' : 'BTC > USDT',
     kicker: spec.label[language] || spec.label.en,
-    progress: key === 'info' ? null : key === 'pending' ? 25 : 68,
+    progress: ['info', 'alert'].includes(key) ? null : key === 'pending' ? 25 : 68,
     tone: key,
     at: Date.now(),
     persist: true

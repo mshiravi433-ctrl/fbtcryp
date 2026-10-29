@@ -263,7 +263,9 @@
  * is refetched. Renaming the shell cache is what forces that refresh on the PWA
  * and on an in-place APK update alike.
  */
-const SHELL = 'fbt-shell-v30';
+/* v31: version the new rich artwork URL so immutable CDN caches do not keep
+   serving the old design to installed PWAs. */
+const SHELL = 'fbt-shell-v31';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────
@@ -428,7 +430,7 @@ function buildNotification(payload = {}) {
    * fetches it.
    */
   const image = payload.image
-    || `/api/notif/banner.png?t=${encodeURIComponent(tone)}${
+    || `/api/notif/banner.png?t=${encodeURIComponent(tone)}&d=2${
       payload.value ? `&v=${encodeURIComponent(payload.value)}` : ''
     }${payload.label ? `&l=${encodeURIComponent(payload.label)}` : ''}${
       payload.kicker ? `&k=${encodeURIComponent(payload.kicker)}` : ''
