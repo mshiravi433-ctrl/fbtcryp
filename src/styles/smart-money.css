@@ -2662,3 +2662,71 @@
 }
 
 :root[data-theme='light'] .smx-early-stat-ico { background: rgba(3, 126, 166, 0.07); }
+
+/* ─── 27 · LIGHT THEME: ICON TINTS THAT WERE STILL PASTEL ────────────────── */
+/*
+ * Pastel glyph tints are correct on a navy tile and unreadable on a white one
+ * (#8feaff on #ffffff is ~1.3:1). These three families were the only tints
+ * without a light counterpart; the rest of the icon language flips through
+ * the tokens.
+ */
+:root[data-theme='light'] .smx-pod {
+  background: #f6f9fe;
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+:root[data-theme='light'] .smx-pod-ico.is-cyan,
+:root[data-theme='light'] .smx-metric.is-cyan .smx-metric-ico,
+:root[data-theme='light'] .smx-alert-ico.is-cyan {
+  color: #036c8c;
+  border-color: rgba(3, 126, 166, 0.2);
+  background: rgba(3, 126, 166, 0.08);
+}
+
+:root[data-theme='light'] .smx-pod-ico.is-mint,
+:root[data-theme='light'] .smx-metric.is-mint .smx-metric-ico,
+:root[data-theme='light'] .smx-alert-ico.is-mint {
+  color: #04795c;
+  border-color: rgba(0, 150, 111, 0.22);
+  background: rgba(0, 169, 107, 0.08);
+}
+
+:root[data-theme='light'] .smx-pod-ico.is-violet,
+:root[data-theme='light'] .smx-alert-ico.is-violet {
+  color: #4a3fd0;
+  border-color: rgba(74, 63, 208, 0.2);
+  background: rgba(74, 63, 208, 0.07);
+}
+
+:root[data-theme='light'] .smx-metric.is-rose .smx-metric-ico {
+  color: #b3183a;
+  border-color: rgba(201, 42, 77, 0.2);
+  background: rgba(201, 42, 77, 0.07);
+}
+
+:root[data-theme='light'] .smx-metric-ico {
+  background: #f2f6fc;
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+:root[data-theme='light'] .smx-alert-ico {
+  background: #f2f6fc;
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+/* The ambient orbs were drawn for a navy panel; at full strength they tint a
+   white hero a sickly green. Same light, less of it. */
+:root[data-theme='light'] .smx-hero-orb--a {
+  background: radial-gradient(circle, rgba(14, 165, 233, 0.15), transparent 68%);
+}
+
+:root[data-theme='light'] .smx-hero-orb--b {
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.13), transparent 68%);
+}
+
+:root[data-theme='light'] .smx-hero-radar i { border-color: rgba(3, 126, 166, 0.14); }
+:root[data-theme='light'] .smx-hero-radar i:nth-child(2) { border-color: rgba(0, 150, 111, 0.16); }
+:root[data-theme='light'] .smx-hero-radar i:nth-child(3) { border-color: rgba(15, 23, 42, 0.08); }
+:root[data-theme='light'] .smx-hero-radar b {
+  background: radial-gradient(circle, rgba(0, 169, 107, 0.22), rgba(0, 169, 107, 0) 70%);
+}
