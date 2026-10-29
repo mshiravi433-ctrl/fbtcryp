@@ -329,10 +329,9 @@ export async function fcmSendToToken(deviceToken, payload) {
             // is the whole point of «نوتیفیکیشن حتی وقتی اپ بسته است برسد».
             priority: 'high',
             ttl: '3600s',
-            // A heads-up that also shows its FULL text while the screen is
-            // locked. `visibility` is the field that decides that, and the
-            // design system sets it to PUBLIC (nothing sensitive is ever put in
-            // a notification body — no amounts, no addresses).
+            // A heads-up may show full text on the lock screen. The phone's
+            // privacy settings ultimately decide what is visible; some alerts
+            // contain price or order details.
             direct_boot_ok: true,
             /*
              * THE DESIGN, WIRE-SPELLING INCLUDED. Every key here comes from

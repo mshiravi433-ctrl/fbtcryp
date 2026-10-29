@@ -1117,7 +1117,7 @@ export default function Settings() {
         arrives; that is the point, and it is also the only way to catch "the
         notification is silent on this phone" HERE instead of after a trade.
       */}
-      <Field label={t('notify.previewTitle', 'پیش‌نمایش نوتیفیکیشن')} note={t('notify.previewNote', 'هر رنگ را لمس کن تا همان لحظه روی گوشی بیاید، با صدا.')}>
+      <Field label={t('notify.previewTitle', 'پیش‌نمایش نوتیفیکیشن')} note={t('notify.previewNote', 'برای نمونه، یک رنگ را لمس کن. ظاهر اعلان سیستم به گوشی و مجوز اعلان بستگی دارد.')}>
         <NotificationPreview tone={previewTone} lang={(document.documentElement.lang || 'fa').split('-')[0]} />
         <div className="notif-tones" role="group" aria-label={t('notify.previewTitle', 'پیش‌نمایش نوتیفیکیشن')}>
           {Object.keys(TONES).map((key) => {

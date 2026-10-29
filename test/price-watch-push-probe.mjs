@@ -347,6 +347,10 @@ async function wireProbe() {
     msg.android.priority === 'high');
   ok('every data value is a string (FCM rejects non-strings)',
     Object.values(msg.data || {}).every((v) => typeof v === 'string'));
+  ok('the foreground card receives the same label and kicker as the artwork',
+    msg.data.label === payload.label && msg.data.kicker === payload.kicker);
+  ok('the FCM artwork requests the new design instead of an immutable old image',
+    new URL(an.image).searchParams.get('d') === '2');
   ok('the top-level notification block carries title/body/image',
     Boolean(msg.notification?.title && msg.notification?.body && msg.notification?.image));
 

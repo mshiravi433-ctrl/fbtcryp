@@ -22,24 +22,26 @@
  * ─── WHY IT IS HAND-DRAWN, NOT A TEMPLATE IMAGE ─────────────────────────────
  * The number is the whole point of the card and it changes per notification, so
  * a static PNG would either lie or need a text layer the platforms do not have.
- * A dependency-free rasteriser (the repo already ships one for its icons — see
- * scripts/gen-notification-icons.mjs) keeps this in the same spirit: no native
- * image library, no 40 MB dependency, no asset pipeline, deterministic bytes.
+ * A dependency-free rasteriser keeps the result deterministic without a native
+ * image library: a compact, embedded subset of the app font and an abstract
+ * ambient texture provide the detail, while validated event data stays dynamic.
  *
  * ─── WHY IT IS A ROUTE, NOT A BUILD STEP ────────────────────────────────────
  * The value is only known when the alert fires. The device fetches the artwork
  * when it renders the notification, so the render happens on demand and the edge
  * caches it forever (the URL's query string IS its content). A render costs
- * ~40 ms and a few hundred KB of buffer, and a given alert renders once per
+ * a fraction of a second and a few MB of buffer, and a given alert renders once per
  * colour/percentage combination rather than once per device.
  *
  * NOTHING USER-SUPPLIED REACHES THE DRAWING CODE UNVALIDATED: every string goes
  * through `parseBannerParams` in src/lib/notificationDesign.js, which uppercases
  * it, drops every glyph outside a fixed alphabet and truncates it. There is no
- * font parser, no SVG, no HTML and no external fetch in this file.
+ * runtime font parser, SVG, HTML or external fetch in this file.
  */
 
-import { deflateSync } from 'node:zlib';
+import { deflateSync, inflateSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
+import { CAP_HEIGHT, GLYPHS, FONT_DATA, TEXTURE_DATA } from './notificationArtworkAssets.js';
 import {
   parseBannerParams,
   toneSpec,
@@ -50,87 +52,27 @@ export const BANNER_WIDTH = 1024;
 export const BANNER_HEIGHT = 512;
 
 /* -------------------------------------------------------------------------- */
-/* a stroke font                                                               */
+/* embedded font and ambient texture                                           */
 /* -------------------------------------------------------------------------- */
 /*
- * Glyphs live in a unit box (x right, y DOWN) as polylines, drawn with round
- * caps. This is a technical/geometric face on purpose: it matches the app's
- * neon identity, it renders identically at every size, and — the reason it is
- * hand-written — it needs no font file, no shaping engine and no licence.
- *
- * Persian is not attempted here (see the note in src/lib/notificationDesign.js);
- * the OS shapes Persian in the title/body natively, and the artwork carries the
- * numbers and the Latin pair.
+ * The old hand-drawn stroke font was hard to read, especially decimal points
+ * and the percent sign. This is a pre-rasterised subset of the app's own
+ * Vazirmatn font. Its alphabet exactly matches sanitizeBannerText; nothing
+ * user-controlled is parsed as SVG/HTML or loaded from the network. The small
+ * embedded assets also work in serverless bundles without a system font or a
+ * runtime filesystem dependency. The generator and the mask are checked in.
  */
-const G = {
-  A: { w: 0.68, s: [[[0, 1], [0.34, 0], [0.68, 1]], [[0.14, 0.62], [0.54, 0.62]]] },
-  B: { w: 0.64, s: [[[0, 0], [0, 1]], [[0, 0], [0.44, 0], [0.62, 0.14], [0.62, 0.36], [0.44, 0.5], [0, 0.5]], [[0, 0.5], [0.46, 0.5], [0.64, 0.64], [0.64, 0.86], [0.46, 1], [0, 1]]] },
-  C: { w: 0.64, s: [[[0.64, 0.16], [0.48, 0], [0.18, 0], [0, 0.2], [0, 0.8], [0.18, 1], [0.48, 1], [0.64, 0.84]]] },
-  D: { w: 0.66, s: [[[0, 0], [0, 1]], [[0, 0], [0.42, 0], [0.66, 0.26], [0.66, 0.74], [0.42, 1], [0, 1]]] },
-  E: { w: 0.58, s: [[[0.58, 0], [0, 0], [0, 1], [0.58, 1]], [[0, 0.5], [0.44, 0.5]]] },
-  F: { w: 0.56, s: [[[0.56, 0], [0, 0], [0, 1]], [[0, 0.5], [0.42, 0.5]]] },
-  G: { w: 0.66, s: [[[0.64, 0.18], [0.46, 0], [0.18, 0], [0, 0.22], [0, 0.78], [0.18, 1], [0.5, 1], [0.66, 0.82], [0.66, 0.56], [0.34, 0.56]]] },
-  H: { w: 0.66, s: [[[0, 0], [0, 1]], [[0.66, 0], [0.66, 1]], [[0, 0.5], [0.66, 0.5]]] },
-  I: { w: 0.14, s: [[[0.07, 0], [0.07, 1]]] },
-  J: { w: 0.56, s: [[[0.56, 0], [0.56, 0.76], [0.4, 1], [0.16, 1], [0, 0.82]]] },
-  K: { w: 0.62, s: [[[0, 0], [0, 1]], [[0.62, 0], [0.06, 0.56]], [[0.24, 0.4], [0.66, 1]]] },
-  L: { w: 0.56, s: [[[0, 0], [0, 1], [0.56, 1]]] },
-  M: { w: 0.78, s: [[[0, 1], [0, 0], [0.39, 0.62], [0.78, 0], [0.78, 1]]] },
-  N: { w: 0.68, s: [[[0, 1], [0, 0], [0.68, 1], [0.68, 0]]] },
-  O: { w: 0.68, s: [[[0.2, 0], [0.48, 0], [0.68, 0.24], [0.68, 0.76], [0.48, 1], [0.2, 1], [0, 0.76], [0, 0.24], [0.2, 0]]] },
-  P: { w: 0.62, s: [[[0, 1], [0, 0], [0.44, 0], [0.62, 0.16], [0.62, 0.42], [0.44, 0.58], [0, 0.58]]] },
-  Q: { w: 0.68, s: [[[0.2, 0], [0.48, 0], [0.68, 0.24], [0.68, 0.76], [0.48, 1], [0.2, 1], [0, 0.76], [0, 0.24], [0.2, 0]], [[0.44, 0.7], [0.68, 1.02]]] },
-  R: { w: 0.64, s: [[[0, 1], [0, 0], [0.44, 0], [0.64, 0.16], [0.64, 0.42], [0.44, 0.58], [0, 0.58]], [[0.34, 0.58], [0.66, 1]]] },
-  S: { w: 0.62, s: [[[0.62, 0.16], [0.44, 0], [0.18, 0], [0, 0.18], [0, 0.34], [0.16, 0.48], [0.46, 0.52], [0.62, 0.66], [0.62, 0.84], [0.44, 1], [0.16, 1], [0, 0.84]]] },
-  T: { w: 0.62, s: [[[0, 0], [0.62, 0]], [[0.31, 0], [0.31, 1]]] },
-  U: { w: 0.66, s: [[[0, 0], [0, 0.78], [0.18, 1], [0.48, 1], [0.66, 0.78], [0.66, 0]]] },
-  V: { w: 0.68, s: [[[0, 0], [0.34, 1], [0.68, 0]]] },
-  W: { w: 0.9, s: [[[0, 0], [0.2, 1], [0.45, 0.36], [0.7, 1], [0.9, 0]]] },
-  X: { w: 0.64, s: [[[0, 0], [0.64, 1]], [[0.64, 0], [0, 1]]] },
-  Y: { w: 0.66, s: [[[0, 0], [0.33, 0.5], [0.66, 0]], [[0.33, 0.5], [0.33, 1]]] },
-  Z: { w: 0.62, s: [[[0, 0], [0.62, 0], [0, 1], [0.62, 1]]] },
+const FONT = inflateSync(Buffer.from(FONT_DATA, 'base64'));
+const TEXTURE = inflateSync(Buffer.from(TEXTURE_DATA, 'base64'));
+const TRACKING = 0.035;
 
-  0: { w: 0.6, s: [[[0.18, 0], [0.42, 0], [0.6, 0.24], [0.6, 0.76], [0.42, 1], [0.18, 1], [0, 0.76], [0, 0.24], [0.18, 0]]] },
-  1: { w: 0.36, s: [[[0.06, 0.2], [0.3, 0], [0.3, 1]], [[0.06, 1], [0.36, 1]]] },
-  2: { w: 0.6, s: [[[0, 0.2], [0.18, 0], [0.44, 0], [0.6, 0.2], [0.6, 0.4], [0, 1], [0.6, 1]]] },
-  3: { w: 0.6, s: [[[0, 0.1], [0.18, 0], [0.44, 0], [0.6, 0.2], [0.6, 0.36], [0.34, 0.5], [0.6, 0.62], [0.6, 0.82], [0.42, 1], [0.16, 1], [0, 0.88]]] },
-  4: { w: 0.62, s: [[[0.46, 1], [0.46, 0], [0, 0.68], [0.62, 0.68]]] },
-  5: { w: 0.6, s: [[[0.58, 0], [0.1, 0], [0.04, 0.44], [0.38, 0.42], [0.6, 0.62], [0.6, 0.82], [0.42, 1], [0.16, 1], [0, 0.86]]] },
-  6: { w: 0.6, s: [[[0.56, 0.12], [0.36, 0], [0.16, 0], [0, 0.3], [0, 0.78], [0.18, 1], [0.42, 1], [0.6, 0.8], [0.6, 0.62], [0.42, 0.46], [0.14, 0.46], [0, 0.6]]] },
-  7: { w: 0.6, s: [[[0, 0], [0.6, 0], [0.22, 1]]] },
-  8: { w: 0.6, s: [[[0.18, 0.5], [0, 0.36], [0, 0.16], [0.18, 0], [0.42, 0], [0.6, 0.16], [0.6, 0.36], [0.42, 0.5], [0.18, 0.5], [0, 0.64], [0, 0.86], [0.18, 1], [0.42, 1], [0.6, 0.86], [0.6, 0.64], [0.42, 0.5]]] },
-  9: { w: 0.6, s: [[[0.6, 0.4], [0.44, 0.54], [0.18, 0.54], [0, 0.38], [0, 0.2], [0.18, 0], [0.42, 0], [0.6, 0.22], [0.6, 0.7], [0.44, 1], [0.18, 1], [0, 0.88]]] },
-
-  /*
-   * '%' IS SPECIAL-CASED IN text(): its two loops are drawn as STROKED CIRCLES.
-   * As four-point polylines the stroke of a 150px glyph (17px) is wider than the
-   * loop itself, so the rings filled into solid blocks and «+12.4%» read as
-   * «+12.4¤». The slash stays a normal stroke; the circles live in `special`.
-   */
-  '%': { w: 0.72, s: [[[0.66, 0.02], [0.06, 0.98]]], special: 'percent' },
-  '+': { w: 0.56, s: [[[0.28, 0.14], [0.28, 0.86]], [[0, 0.5], [0.56, 0.5]]] },
-  '-': { w: 0.5, s: [[[0.02, 0.5], [0.48, 0.5]]] },
-  ':': { w: 0.16, s: [] },
-  '/': { w: 0.52, s: [[[0.52, 0], [0, 1]]] },
-  '°': { w: 0.3, s: [[[0.15, 0.02], [0.28, 0.1], [0.28, 0.24], [0.15, 0.32], [0.02, 0.24], [0.02, 0.1], [0.15, 0.02]]] },
-  '>': { w: 0.6, s: [[[0.04, 0.16], [0.34, 0.5], [0.04, 0.84]]] },
-  '$': { w: 0.6, s: [[[0.6, 0.16], [0.42, 0], [0.16, 0], [0, 0.18], [0, 0.34], [0.14, 0.48], [0.44, 0.52], [0.6, 0.66], [0.6, 0.84], [0.42, 1], [0.16, 1], [0, 0.84]], [[0.3, -0.12], [0.3, 1.12]]] },
-  ' ': { w: 0.26, s: [] }
-};
-
-/* Dots are filled, not stroked, so they stay round at every size. */
-const DOTS = { '.': 0.94, ',': 0.98 };
-
-const TRACKING = 0.1;
-
-/** Advance width of one string at `size` px, in px. */
-function textWidth(text, size) {
-  let w = 0;
-  for (const ch of text) {
-    const g = G[ch];
-    w += (g ? g.w : 0.6) * size + TRACKING * size;
-  }
-  return Math.max(0, w - TRACKING * size);
+/** Advance width of one line, in pixels. `size` is the capital height. */
+function textWidth(value, size, tracking = TRACKING) {
+  const chars = [...String(value || '')];
+  if (!chars.length) return 0;
+  const scale = size / CAP_HEIGHT;
+  return chars.reduce((sum, ch) => sum + (GLYPHS[ch]?.[5] ?? GLYPHS[' '][5]) * scale, 0)
+    + Math.max(0, chars.length - 1) * size * tracking;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -157,31 +99,6 @@ const hexToRgb = (hex) => {
   return Number.isFinite(n) ? [(n >> 16) & 255, (n >> 8) & 255, n & 255] : [255, 255, 255];
 };
 const WHITE = [255, 255, 255];
-
-/** Antialiased round-capped segment. */
-function segment(c, x1, y1, x2, y2, half, rgb, alpha) {
-  const minX = Math.max(0, Math.floor(Math.min(x1, x2) - half - 1));
-  const maxX = Math.min(c.w - 1, Math.ceil(Math.max(x1, x2) + half + 1));
-  const minY = Math.max(0, Math.floor(Math.min(y1, y2) - half - 1));
-  const maxY = Math.min(c.h - 1, Math.ceil(Math.max(y1, y2) + half + 1));
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const len2 = dx * dx + dy * dy;
-
-  for (let y = minY; y <= maxY; y += 1) {
-    for (let x = minX; x <= maxX; x += 1) {
-      const px = x + 0.5;
-      const py = y + 0.5;
-      let t = len2 === 0 ? 0 : ((px - x1) * dx + (py - y1) * dy) / len2;
-      t = t < 0 ? 0 : t > 1 ? 1 : t;
-      const cx = x1 + dx * t;
-      const cy = y1 + dy * t;
-      const d = Math.hypot(px - cx, py - cy);
-      const cov = half + 0.5 - d;
-      if (cov > 0) blend(c, x, y, rgb, Math.min(1, cov) * alpha);
-    }
-  }
-}
 
 function disc(c, cx, cy, r, rgb, alpha) {
   const minX = Math.max(0, Math.floor(cx - r - 1));
@@ -244,54 +161,41 @@ function arc(c, cx, cy, radius, half, rgb, alpha, a0 = 0, a1 = Math.PI * 2) {
   }
 }
 
-function polyline(c, points, half, rgb, alpha) {
-  for (let i = 1; i < points.length; i += 1) {
-    segment(c, points[i - 1][0], points[i - 1][1], points[i][0], points[i][1], half, rgb, alpha);
-  }
-  for (const [x, y] of points) disc(c, x, y, half, rgb, alpha);
-}
-
-/**
- * Draw one line of text. Returns the advance width so callers can centre.
- * `y` is the TOP of the glyph box.
- */
-function text(c, str, { x, y, size, thickness, rgb, alpha = 1, align = 'left' }) {
+/** Draw one line of antialiased glyphs. `y` is the top of a capital. */
+function text(c, str, { x, y, size, rgb, alpha = 1, align = 'left', tracking = TRACKING }) {
   const value = String(str || '');
-  const width = textWidth(value, size);
+  const width = textWidth(value, size, tracking);
   let cursor = align === 'right' ? x - width : align === 'center' ? x - width / 2 : x;
-  const half = Math.max(1, thickness / 2);
+  const scale = size / CAP_HEIGHT;
+
   for (const ch of value) {
-    /*
-     * A DOT HAS NO GLYPH ENTRY AND MUST STILL BE DRAWN.
-     *
-     * The missing-glyph branch below advances the cursor and skips, which is
-     * right for a character the font cannot draw — but '.' and ',' are drawn as
-     * FILLED discs, not as strokes, so they have no `G` entry at all. They were
-     * falling into that branch and vanishing: «+12.4%» rendered as «+12 4%»,
-     * i.e. a price of twelve-point-four percent read as "12 4%". Handled before
-     * the lookup, and given a real advance so the spacing closes up.
-     */
-    if (DOTS[ch] != null) {
-      const dw = 0.16 * size;
-      disc(c, cursor + dw / 2, y + DOTS[ch] * size, Math.max(1.8, thickness * 0.66), rgb, alpha);
-      cursor += dw + TRACKING * size;
-      continue;
+    const glyph = GLYPHS[ch] || GLYPHS[' '];
+    const [offset, w, h, left, top, advance] = glyph;
+    if (w && h) {
+      const gx = cursor + left * scale;
+      const gy = y + (CAP_HEIGHT + top) * scale;
+      const minX = Math.max(0, Math.floor(gx));
+      const maxX = Math.min(c.w, Math.ceil(gx + w * scale));
+      const minY = Math.max(0, Math.floor(gy));
+      const maxY = Math.min(c.h, Math.ceil(gy + h * scale));
+      /* Small lettering is sampled four times per pixel so thin strokes and
+         decimal points remain legible when the large atlas is scaled down. */
+      const samples = scale < 0.4 ? [0.25, 0.75] : [0.5];
+      for (let py = minY; py < maxY; py += 1) {
+        for (let px = minX; px < maxX; px += 1) {
+          let coverage = 0;
+          for (const sy of samples) {
+            for (const sx of samples) {
+              const ix = Math.floor((px + sx - gx) / scale);
+              const iy = Math.floor((py + sy - gy) / scale);
+              if (ix >= 0 && iy >= 0 && ix < w && iy < h) coverage += FONT[offset + iy * w + ix];
+            }
+          }
+          if (coverage) blend(c, px, py, rgb, alpha * coverage / (255 * samples.length ** 2));
+        }
+      }
     }
-    const glyph = G[ch];
-    if (!glyph) {
-      cursor += 0.6 * size + TRACKING * size;
-      continue;
-    }
-    const gw = glyph.w * size;
-    for (const strokes of glyph.s) {
-      polyline(c, strokes.map(([gx, gy]) => [cursor + gx * gw, y + gy * size]), half, rgb, alpha);
-    }
-    if (glyph.special === 'percent') {
-      const ringHalf = Math.max(1.2, Math.min(half * 0.62, size * 0.026));
-      arc(c, cursor + gw * 0.17, y + size * 0.22, size * 0.15, ringHalf, rgb, alpha);
-      arc(c, cursor + gw * 0.55, y + size * 0.78, size * 0.15, ringHalf, rgb, alpha);
-    }
-    cursor += gw + TRACKING * size;
+    cursor += advance * scale + size * tracking;
   }
   return width;
 }
@@ -374,67 +278,42 @@ function brandMark(c, cx, cy, size, rgb, alpha) {
   }
 }
 
-/** The background: near-black, the tone's two glows, a faint grid, a vignette. */
+/** Tone-tinted ambient light, with a restrained texture and readable centre. */
 function paintBackground(c, tone) {
   const spec = toneSpec(tone);
   const from = hexToRgb(spec.from);
   const to = hexToRgb(spec.to);
-  const base = [4, 5, 11];
+  const base = [5, 8, 18];
 
   for (let y = 0; y < c.h; y += 1) {
     const ny = y / c.h;
     for (let x = 0; x < c.w; x += 1) {
       const nx = x / c.w;
-      /* Glow A — top right, the tone's second colour. */
-      const ax = (nx - 0.86) * 1.0;
-      const ay = (ny - 0.02) * 1.9;
-      const da = Math.sqrt(ax * ax + ay * ay);
+      const da = Math.hypot((nx - 0.86), (ny - 0.02) * 1.9);
       const ga = da > 0.95 ? 0 : (1 - da / 0.95) ** 2.2;
-      /* Glow B — bottom left, the tone's primary colour. */
-      const bx = (nx - 0.06) * 1.1;
-      const by = (ny - 1.0) * 1.7;
-      const db = Math.sqrt(bx * bx + by * by);
+      const db = Math.hypot((nx - 0.06) * 1.1, (ny - 1) * 1.7);
       const gb = db > 0.95 ? 0 : (1 - db / 0.95) ** 2.4;
-      /* A diagonal sheen so the card reads as glass, not a flat fill. */
-      const sheen = Math.max(0, 1 - Math.abs(nx * 0.8 + ny * 1.1 - 0.72) * 2.4) * 0.1;
-      /* Vignette — keeps the OS's rounded crop from clipping bright corners. */
-      const vx = (nx - 0.5) * 1.6;
-      const vy = (ny - 0.5) * 1.6;
-      const vig = 1 - Math.min(0.5, Math.sqrt(vx * vx + vy * vy) * 0.28);
-
-      let r = base[0] + to[0] * ga * 0.52 + from[0] * gb * 0.5 + from[0] * sheen;
-      let g = base[1] + to[1] * ga * 0.52 + from[1] * gb * 0.5 + from[1] * sheen;
-      let b = base[2] + to[2] * ga * 0.52 + from[2] * gb * 0.5 + from[2] * sheen;
-
-      /* A fine 64px grid at barely-there opacity — the "terminal" texture the
-         reference cards have, without anything that could look like noise. */
-      if (x % 64 === 0 || y % 64 === 0) {
-        r += 9;
-        g += 11;
-        b += 14;
-      }
-
+      /* A monochrome light-field, tinted from the same palette as the card.
+         It is decorative, not a chart or a claim about the market. */
+      const texture = TEXTURE[(y >> 1) * 512 + (x >> 1)] / 255;
+      const vignette = 1 - Math.min(0.42, Math.hypot((nx - 0.5) * 1.4, (ny - 0.5) * 1.4) * 0.24);
       const i = (y * c.w + x) * 3;
-      c.px[i] = Math.max(0, Math.min(255, r * vig));
-      c.px[i + 1] = Math.max(0, Math.min(255, g * vig));
-      c.px[i + 2] = Math.max(0, Math.min(255, b * vig));
+      for (let k = 0; k < 3; k += 1) {
+        const light = from[k] * gb * 0.60 + to[k] * ga * 0.52
+          + (from[k] * (1 - nx) + to[k] * nx) * texture * 0.38;
+        c.px[i + k] = Math.min(255, (base[k] + light) * vignette);
+      }
     }
   }
 }
 
-/**
- * Render one card.
- *
- * Layout, in a 1024×512 frame (2:1, which is what Chrome and Android crop to):
- *
- *   ┌──────────────────────────────────────────────┐
- *   │  (mark) FBT SWAP                 READY       │  brand row + kicker
- *   │                                              │
- *   │  +12.4%                            ◕ 68%     │  big number + gauge
- *   │  BTC → USDT · TARGET HIT                     │  label
- *   │  ▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░    │  progress rail
- *   └──────────────────────────────────────────────┘
- */
+/** Fit a line to its allocated region rather than clipping a price or label. */
+function fitText(value, desiredSize, availableWidth, tracking = TRACKING) {
+  const natural = textWidth(value, desiredSize, tracking);
+  return natural > availableWidth ? desiredSize * availableWidth / natural : desiredSize;
+}
+
+/** Render one 2:1, tone-aware notification artwork. */
 export function renderBannerPng(params = {}) {
   const p = parseBannerParams(params);
   const spec = toneSpec(p.tone);
@@ -444,89 +323,77 @@ export function renderBannerPng(params = {}) {
 
   const PAD = 56;
   const right = c.w - PAD;
-
-  /* ── brand row ─────────────────────────────────────────────────────────── */
-  roundedRect(c, PAD, 42, 212, 60, 30, WHITE, 0.07);
-  brandMark(c, PAD + 36, 72, 40, accent, 1);
-  text(c, 'FBT SWAP', { x: PAD + 66, y: 60, size: 20, thickness: 4.4, rgb: WHITE, alpha: 0.92 });
-
   const kicker = p.kicker || spec.label.en;
-  text(c, kicker, { x: right, y: 62, size: 20, thickness: 4.2, rgb: accent, alpha: 0.95, align: 'right' });
 
-  /* ── the big number (or the label, when a card has no number) ───────────── */
+  /* Brand badge and wordmark: the exact mark used by the Android small icon. */
+  roundedRect(c, PAD, 39, 68, 68, 22, WHITE, 0.15);
+  roundedRect(c, PAD + 1, 40, 66, 66, 21, [6, 13, 24], 0.90);
+  brandMark(c, PAD + 34, 73, 48, accent, 1);
+  text(c, 'FBT SWAP', { x: PAD + 86, y: 49, size: 25, rgb: WHITE, alpha: 0.98, tracking: 0.06 });
+  text(c, 'NOTIFICATIONS', { x: PAD + 87, y: 83, size: 12, rgb: WHITE, alpha: 0.60, tracking: 0.08 });
+
+  /* A compact, tone-coloured status chip. */
+  const kickSize = fitText(kicker, 18, 265);
+  const kickWidth = textWidth(kicker, kickSize);
+  const chipWidth = kickWidth + 57;
+  roundedRect(c, right - chipWidth, 48, chipWidth, 50, 25, accent, 0.20);
+  roundedRect(c, right - chipWidth + 1, 49, chipWidth - 2, 48, 24, [7, 13, 24], 0.76);
+  disc(c, right - chipWidth + 22, 73, 4, accent, 1);
+  text(c, kicker, { x: right - chipWidth + 37, y: 64, size: kickSize, rgb: WHITE, alpha: 0.94 });
+
+  /* The amount is the hero. The orbit has a reserved area so a long amount
+     cannot run into it; no value is truncated to make the design look tidy. */
   const hasValue = Boolean(p.value);
   const gauge = p.progress != null;
-  const valueRight = gauge ? right - 210 : right;
-  const maxValueWidth = valueRight - PAD;
-
-  let valueSize = hasValue ? 150 : 84;
+  const maxValueWidth = 685;
   if (hasValue) {
-    /* Shrink to fit rather than clip: a clipped price is a wrong price. */
-    const natural = textWidth(p.value, valueSize);
-    if (natural > maxValueWidth) valueSize = Math.max(54, Math.floor((valueSize * maxValueWidth) / natural));
+    const size = fitText(p.value, 128, maxValueWidth);
+    text(c, p.value, { x: PAD, y: 160, size, rgb: WHITE, alpha: 1, tracking: 0.015 });
+    if (p.label) {
+      const labelSize = fitText(p.label, 27, maxValueWidth);
+      text(c, p.label, { x: PAD + 2, y: 334, size: labelSize, rgb: accent, alpha: 0.98, tracking: 0.04 });
+    }
+  } else {
+    /* The text still carries meaning if the source has no numeric value. */
+    const label = p.label || kicker;
+    const size = fitText(label, 50, maxValueWidth);
+    text(c, label, { x: PAD, y: 260, size, rgb: WHITE, alpha: 0.98 });
   }
 
-  const valueY = hasValue ? 150 : 176;
-  if (hasValue) {
-    text(c, p.value, {
-      x: PAD,
-      y: valueY,
-      size: valueSize,
-      thickness: Math.max(6, valueSize * 0.115),
-      rgb: WHITE,
-      alpha: 1
-    });
-  }
-
-  const label = p.label || (hasValue ? '' : kicker);
-  if (label) {
-    text(c, label, {
-      x: PAD,
-      y: hasValue ? valueY + valueSize + 26 : valueY + 96,
-      size: hasValue ? 30 : 42,
-      thickness: hasValue ? 6 : 8,
-      rgb: accent,
-      alpha: 0.96
-    });
-  }
-
-  /* ── gauge ─────────────────────────────────────────────────────────────── */
+  /* A real progress ring only when the event actually provided a percentage.
+     Otherwise it is a decorative brand orbit, never a made-up price chart. */
+  const cx = right - 93;
+  const cy = 254;
+  disc(c, cx, cy, 104, accent, 0.04);
+  arc(c, cx, cy, 103, 1, accent, 0.16);
+  arc(c, cx, cy, 88, 1, WHITE, 0.09);
   if (gauge) {
-    const cx = right - 96;
-    const cy = valueY + valueSize * 0.5;
-    const radius = 74;
-    arc(c, cx, cy, radius, 7, WHITE, 0.12);
+    arc(c, cx, cy, 70, 5, WHITE, 0.14);
     if (p.progress > 0) {
       const start = -Math.PI / 2;
-      arc(c, cx, cy, radius, 7, accent, 0.98, start, start + (Math.PI * 2 * p.progress) / 100);
+      arc(c, cx, cy, 70, 5, accent, 0.98, start, start + Math.PI * 2 * p.progress / 100);
     }
-    const inside = `${p.progress}%`;
-    text(c, inside, {
-      x: cx,
-      y: cy - 22,
-      size: 40,
-      thickness: 7,
-      rgb: WHITE,
-      alpha: 0.95,
-      align: 'center'
-    });
+    text(c, `${p.progress}%`, { x: cx, y: cy - 18, size: 36, rgb: WHITE, align: 'center' });
   } else {
-    /* No progress: a large, very faint mark balances the frame. */
-    brandMark(c, right - 90, valueY + valueSize * 0.5, 92, WHITE, 0.06);
+    brandMark(c, cx, cy, 99, accent, 0.84);
   }
+  disc(c, cx + 84, cy - 58, 3.5, accent, 0.8);
 
-  /* ── progress rail ─────────────────────────────────────────────────────── */
+  /* A progress bar must never suggest progress for an event without it. */
+  text(c, gauge ? 'PROGRESS' : 'FBT NOTIFICATIONS', {
+    x: PAD, y: 403, size: 13, rgb: WHITE, alpha: 0.55, tracking: 0.07
+  });
+  const railY = 441;
+  const railW = c.w - PAD * 2;
   if (gauge) {
-    const railY = c.h - 74;
-    const railW = c.w - PAD * 2;
-    roundedRect(c, PAD, railY, railW, 12, 6, WHITE, 0.13);
-    const filled = Math.max(12, (railW * p.progress) / 100);
-    roundedRect(c, PAD, railY, filled, 12, 6, accent, 0.95);
-    /* A travelling glint at the head of the fill, so a live card looks live. */
-    disc(c, PAD + filled, railY + 6, 8, WHITE, 0.5);
+    roundedRect(c, PAD, railY, railW, 9, 4.5, WHITE, 0.16);
+    if (p.progress > 0) {
+      const filled = railW * p.progress / 100;
+      roundedRect(c, PAD, railY, filled, 9, 4.5, accent, 0.95);
+      disc(c, PAD + filled, railY + 4.5, 5, WHITE, 0.72);
+    }
   } else {
-    /* A hairline in the tone instead of a rail: the same frame, quieter. */
-    roundedRect(c, PAD, c.h - 72, c.w - PAD * 2, 3, 1.5, accent, 0.5);
+    roundedRect(c, PAD, railY, railW, 3, 1.5, accent, 0.42);
   }
 
   return encodePng(c);
@@ -592,7 +459,7 @@ export function encodePng(c) {
 /* -------------------------------------------------------------------------- */
 
 /*
- * One render is ~40 ms of pure CPU, and a burst of alerts (a ladder firing four
+ * One render uses CPU, and a burst of alerts (a ladder firing four
  * rungs, or a cron delivering to many devices) asks for the same handful of
  * URLs. This small LRU keeps the second request free without unbounded memory:
  * 48 cards is at most a few MB, and the edge cache in front does the real work.
@@ -622,7 +489,7 @@ export function bannerResponse(params = {}) {
   return {
     png,
     tone: p.tone,
-    etag: `"fbt-${p.key.replace(/[^A-Za-z0-9|]/g, '-')}-${png.length}"`,
+    etag: `"fbt-${createHash('sha256').update(png).digest('hex').slice(0, 20)}-${png.length}"`,
     cacheKey: p.key
   };
 }

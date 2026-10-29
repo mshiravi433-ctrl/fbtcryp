@@ -275,25 +275,29 @@ export function parseBannerParams(input) {
     return input[k];
   };
   const tone = normalizeTone(get('tone') ?? get('t'));
+  /* Never turn a long price into a different price by chopping off digits.
+     Values that cannot fit within the bounded renderer are omitted from the
+     picture; the original title and body remain available to the OS. */
+  const candidate = sanitizeBannerText(get('value') ?? get('v'), 25);
+  const value = candidate.length > 24 ? '' : candidate;
+  const label = sanitizeBannerText(get('label') ?? get('l'), 22);
+  const kicker = sanitizeBannerText(get('kicker') ?? get('k'), 16);
+  const progress = normalizeProgress(get('progress') ?? get('p'));
   return {
     tone,
-    value: sanitizeBannerText(get('value') ?? get('v'), 14),
-    label: sanitizeBannerText(get('label') ?? get('l'), 22),
-    kicker: sanitizeBannerText(get('kicker') ?? get('k'), 16),
-    progress: normalizeProgress(get('progress') ?? get('p')),
+    value,
+    label,
+    kicker,
+    progress,
     /* A stable cache key: same inputs, same bytes, same URL. */
-    key: [
-      tone,
-      sanitizeBannerText(get('value') ?? get('v'), 14),
-      sanitizeBannerText(get('label') ?? get('l'), 22),
-      sanitizeBannerText(get('kicker') ?? get('k'), 16),
-      normalizeProgress(get('progress') ?? get('p')) ?? ''
-    ].join('|')
+    key: [tone, value, label, kicker, progress ?? ''].join('|')
   };
 }
 
 /** Where the server renders it. Absolute on Vercel; relative works in the SW. */
 export const BANNER_PATH = '/api/notif/banner.png';
+/* Bump when the artwork changes: the CDN caches each image URL for a year. */
+export const BANNER_DESIGN_VERSION = '2';
 
 /**
  * The artwork URL for one notification.
@@ -307,6 +311,7 @@ export function bannerPath({ tone, value, label, kicker, progress } = {}) {
   const params = parseBannerParams({ tone, value, label, kicker, progress });
   const qs = new URLSearchParams();
   qs.set('t', params.tone);
+  qs.set('d', BANNER_DESIGN_VERSION);
   if (params.value) qs.set('v', params.value);
   if (params.label) qs.set('l', params.label);
   if (params.kicker) qs.set('k', params.kicker);
@@ -466,10 +471,10 @@ export function androidPresentation(payload = {}, lang = 'fa', { origin = '' } =
       /* THE DESIGN: the wide gradient card under the two lines of copy. */
       image,
       /*
-       * LOCK SCREEN. `PUBLIC` shows the full title, body and artwork on the
-       * lock screen; the OS setting is the user's, but a payload that asked for
-       * `private` would hide the alert they asked for. Nothing sensitive is put
-       * in a notification body (no amounts, no addresses), so this is safe.
+       * LOCK SCREEN. `PUBLIC` requests the full title, body and artwork on the
+       * lock screen, subject to the user's device settings. Some alerts include
+       * prices or order details; users can hide notification content in their
+       * phone's lock-screen privacy settings.
        */
       visibility: 'PUBLIC',
       /*
@@ -495,7 +500,11 @@ export function androidPresentation(payload = {}, lang = 'fa', { origin = '' } =
       stage,
       tone,
       progress: progress == null ? '' : String(progress),
-      value: payload.value == null ? '' : String(payload.value),
+      value: payload.value == null ? '' : String(payload.value).slice(0, 120),
+      /* Foreground FCM bypasses the OS image and renders our animated card.
+         Carry its pair and status too, otherwise that card loses context. */
+      label: payload.label == null ? '' : String(payload.label).slice(0, 120),
+      kicker: payload.kicker == null ? '' : String(payload.kicker).slice(0, 80),
       color: spec.accent
     }
   };

@@ -472,7 +472,7 @@
     "pushOn": "Push server aktif: notifikasi tiba meski aplikasi tertutup.",
     "dailySubLocal": "Maksimal satu per hari. Di versi ini muncul saat Anda membuka aplikasi, bukan tiba sendiri di ponsel.",
     "previewTitle": "Pratinjau notifikasi",
-    "previewNote": "Ketuk warna untuk melihatnya tiba di ponsel ini, lengkap dengan suara dan desain yang sama."
+    "previewNote": "Ketuk warna untuk mencoba. Tampilan dan gambar besar bergantung pada perangkat dan izin notifikasi."
   },
   "welcome": {
     "title": "Pilih bahasa Anda",
