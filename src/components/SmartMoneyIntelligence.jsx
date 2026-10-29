@@ -7,6 +7,11 @@ import { openUrl } from '../lib/browser';
 import TokenIcon from '../lib/tokenIcon';
 import ModernSelect from './ModernSelect';
 import { pollWhileVisible } from '../lib/visibilityPoll';
+import {
+  SmSignalGlyph, SmWavesGlyph, SmCoinGlyph, SmPulseGlyph, SmSparkGlyph,
+  SmVerifiedGlyph, SmBankGlyph
+} from './smart-money/SmGlyphs';
+import { IconArrowUpRight } from './Icons';
 
 /* 1h/4h joined the rail (upgrade 2026-10-25): buildConsensus already accepts
    every WINDOW_KEYS entry, so these windows cost no new server work — the
@@ -62,14 +67,14 @@ export function IntelligenceTeaser({ verified, onOpen }) {
   const active = (verified?.consensus || []).filter((r) => r.confidence != null);
   return (
     <section className="smi-teaser" aria-label={t('sm.engine.title')}>
-      <div className="smi-teaser-mark" aria-hidden="true">◇</div>
+      <div className="smi-teaser-mark" aria-hidden="true"><SmVerifiedGlyph width={22} height={22} /></div>
       <div className="smi-teaser-copy">
         <strong>{t('sm.engine.title')}</strong>
         <span>{active.length ? t('sm.engine.activeCount', { n: active.length })
           : verified?.coverage?.analyzedWallets ? t('sm.engine.teaserSample', { wallets: verified.coverage.analyzedWallets, swaps: verified.coverage.observedSwaps ?? 0 })
             : t('sm.engine.noConsensus')}</span>
       </div>
-      <button type="button" onClick={onOpen}>{t('sm.engine.open')} <span aria-hidden="true">↗</span></button>
+      <button type="button" onClick={onOpen}>{t('sm.engine.open')} <IconArrowUpRight width={11} height={11} aria-hidden="true" /></button>
     </section>
   );
 }
@@ -244,7 +249,7 @@ export function VerifiedWallets() {
                   className="smi-btn-analyze"
                   onClick={() => navigate(`/smart-money/wallet/${w.chain}/${w.address}`)}
                 >
-                  {t('sm.analyze', { defaultValue: 'تحلیل کیف‌پول' })} ↗
+                  {t('sm.analyze', { defaultValue: 'تحلیل کیف‌پول' })} <IconArrowUpRight width={11} height={11} aria-hidden="true" />
                 </button>
                 {expUrl && (
                   <button
@@ -253,7 +258,7 @@ export function VerifiedWallets() {
                     title={t('sm.engine.source', { defaultValue: 'مشاهده در کاوشگر' })}
                     onClick={() => openUrl(expUrl)}
                   >
-                    Explorer ↗
+                    Explorer <IconArrowUpRight width={11} height={11} aria-hidden="true" />
                   </button>
                 )}
               </div>
@@ -302,7 +307,7 @@ function CandidateRows({ rows }) {
               <span>{w.swaps} {t('sm.engine.receiptsShort')}</span>
               {expUrl && (
                 <button type="button" className="smi-cand-exp" onClick={() => openUrl(expUrl)}>
-                  Proof ↗
+                  Proof <IconArrowUpRight width={11} height={11} aria-hidden="true" />
                 </button>
               )}
             </div>
@@ -359,7 +364,7 @@ function ReceiptFeed({ rows }) {
             </button>
             {url && (
               <button type="button" className="smi-proof" onClick={() => openUrl(url)}>
-                {t('sm.engine.proof')} ↗
+                {t('sm.engine.proof')} <IconArrowUpRight width={11} height={11} aria-hidden="true" />
               </button>
             )}
           </div>
@@ -447,7 +452,7 @@ function TokenGraph({ data, tokenRow }) {
             </span>
             {p.hashes?.[0] && txUrl(p.wallet?.chain, p.hashes[0]) && (
               <button type="button" className="smi-proof" onClick={() => openUrl(txUrl(p.wallet?.chain, p.hashes[0]))}>
-                {t('sm.engine.proof')} ↗
+                {t('sm.engine.proof')} <IconArrowUpRight width={11} height={11} aria-hidden="true" />
               </button>
             )}
           </div>
@@ -505,7 +510,7 @@ function FollowRule({ row, onIntent }) {
       </label>
       <div className="smi-follow-buttons">
         <button type="button" onClick={follow}>{following ? t('sm.engine.updateRule') : t('sm.engine.follow')}</button>
-        <button type="button" className="secondary" onClick={() => onIntent(row)}>{t('sm.engine.intent')} ↗</button>
+        <button type="button" className="secondary" onClick={() => onIntent(row)}>{t('sm.engine.intent')} <IconArrowUpRight width={11} height={11} aria-hidden="true" /></button>
       </div>
       <small className="smi-note">{t('sm.engine.watchNote')}</small>
     </div>
@@ -521,35 +526,35 @@ function PipelineVisualizer() {
     {
       id: 'chain',
       title: t('sm.engine.pipeline.chain'),
-      icon: '⛓️',
+      icon: SmWavesGlyph,
       badge: t('sm.engine.pipeline.chainBadge'),
       desc: t('sm.engine.pipeline.chainDesc')
     },
     {
       id: 'ledger',
       title: t('sm.engine.pipeline.ledger'),
-      icon: '📑',
+      icon: SmBankGlyph,
       badge: t('sm.engine.pipeline.ledgerBadge'),
       desc: t('sm.engine.pipeline.ledgerDesc')
     },
     {
       id: 'score',
       title: t('sm.engine.pipeline.score'),
-      icon: '🎯',
+      icon: SmPulseGlyph,
       badge: t('sm.engine.pipeline.scoreBadge'),
       desc: t('sm.engine.pipeline.scoreDesc')
     },
     {
       id: 'consensus',
       title: t('sm.engine.pipeline.consensus'),
-      icon: '🤝',
+      icon: SmVerifiedGlyph,
       badge: t('sm.engine.pipeline.consensusBadge'),
       desc: t('sm.engine.pipeline.consensusDesc')
     },
     {
       id: 'intent',
       title: t('sm.engine.pipeline.intent'),
-      icon: '⚡',
+      icon: SmSignalGlyph,
       badge: t('sm.engine.pipeline.intentBadge'),
       desc: t('sm.engine.pipeline.intentDesc')
     }
@@ -568,7 +573,7 @@ function PipelineVisualizer() {
             onClick={() => setActiveStep(st.id)}
           >
             <span className="smi-pipe-num">0{idx + 1}</span>
-            <span className="smi-pipe-icon">{st.icon}</span>
+            <span className="smi-pipe-icon" aria-hidden="true"><st.icon width={15} height={15} /></span>
             <span className="smi-pipe-label">{st.title}</span>
           </button>
         ))}
@@ -577,7 +582,7 @@ function PipelineVisualizer() {
       <div className="smi-pipe-detail">
         <div className="smi-pipe-detail-header">
           <div className="smi-pipe-detail-title">
-            <span className="smi-pipe-detail-icon">{current.icon}</span>
+            <span className="smi-pipe-detail-icon" aria-hidden="true"><current.icon width={16} height={16} /></span>
             <div>
               <strong>{current.title}</strong>
               <small>{current.badge}</small>
@@ -793,6 +798,7 @@ export default function SmartMoneyIntelligence() {
           {/* 02 / سرمایه واقعاً کجا جابه‌جا شد؟ */}
           <section className="smi-section">
             <div className="smi-head">
+              <span className="smi-head-ico" aria-hidden="true"><SmSignalGlyph width={16} height={16} /></span>
               <div>
                 <span className="smi-eyebrow">02 / {t('sm.engine.consensus')}</span>
                 <h3>{t('sm.engine.where')}</h3>
@@ -914,7 +920,7 @@ export default function SmartMoneyIntelligence() {
                   </div>
                 </div>
                 <button className="smi-link" type="button" onClick={() => navigate(`/smart-money/token/${chosen.chain}/${chosen.token}`)}>
-                  {t('sm.analyze')} ↗
+                  {t('sm.analyze')} <IconArrowUpRight width={11} height={11} aria-hidden="true" />
                 </button>
               </div>
               <div className="smi-detail-metrics">
@@ -965,6 +971,7 @@ export default function SmartMoneyIntelligence() {
           {/* 03 / لایهٔ جریان مشاهده‌شده */}
           <section className="smi-section" data-testid="sm-observed-flow">
             <div className="smi-head">
+              <span className="smi-head-ico" aria-hidden="true"><SmWavesGlyph width={16} height={16} /></span>
               <div>
                 <span className="smi-eyebrow">03 / {t('sm.engine.observedLayer')}</span>
                 <h3>{t('sm.engine.observedFlowTitle')}</h3>
@@ -1014,6 +1021,7 @@ export default function SmartMoneyIntelligence() {
           {/* 04 / معاملات جفت‌شدهٔ کیف‌پول‌های تحلیل‌شده (دفتر رسیدها) */}
           <section className="smi-section" data-testid="sm-receipts">
             <div className="smi-head">
+              <span className="smi-head-ico" aria-hidden="true"><SmCoinGlyph width={16} height={16} /></span>
               <div>
                 <span className="smi-eyebrow">04 / {t('sm.engine.ledger')}</span>
                 <h3>{t('sm.engine.receiptsTitle')}</h3>
@@ -1028,6 +1036,7 @@ export default function SmartMoneyIntelligence() {
           {candidates.length > 0 && (
             <section className="smi-section" data-testid="sm-candidates">
               <div className="smi-head">
+                <span className="smi-head-ico" aria-hidden="true"><SmPulseGlyph width={16} height={16} /></span>
                 <div>
                   <span className="smi-eyebrow">05 / {t('sm.engine.evidence')}</span>
                   <h3>{t('sm.engine.underEvaluation')}</h3>
@@ -1041,6 +1050,7 @@ export default function SmartMoneyIntelligence() {
           {/* 06 / قیمت ورود در برابر قیمت فعلی */}
           <section className="smi-section">
             <div className="smi-head">
+              <span className="smi-head-ico" aria-hidden="true"><SmSparkGlyph width={16} height={16} /></span>
               <div>
                 <span className="smi-eyebrow">06 / {t('sm.engine.discovery')}</span>
                 <h3>{t('sm.engine.early')}</h3>
@@ -1095,6 +1105,7 @@ export default function SmartMoneyIntelligence() {
           {/* 07 / از رسید تا سیگنال قابل‌پیگیری */}
           <section className="smi-section smi-method">
             <div className="smi-head">
+              <span className="smi-head-ico" aria-hidden="true"><SmSignalGlyph width={16} height={16} /></span>
               <div>
                 <span className="smi-eyebrow">07 / {t('sm.engine.method')}</span>
                 <h3>{t('sm.engine.methodTitle')}</h3>

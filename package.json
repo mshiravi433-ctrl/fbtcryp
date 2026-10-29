@@ -32,6 +32,7 @@
     "test:ai-theme": "node test/ai-light-theme-probe.mjs",
     "test:smart-money-intent": "node test/smart-money-intent-monitor-probe.mjs",
     "test:smart-money-upgrade": "node test/smart-money-upgrade-probe.mjs",
+    "test:smart-money-redesign": "node test/smart-money-redesign-probe.mjs",
     "test:smart-money-token-flow": "node test/smart-money-token-flow-probe.mjs && node test/smart-money-token-route-probe.mjs",
     "test:smart-money-phase2": "node test/smart-money-phase2-probe.mjs",
     "test:smart-money-phase3": "node test/smart-money-phase3-probe.mjs",

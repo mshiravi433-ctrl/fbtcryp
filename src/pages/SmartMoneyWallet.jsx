@@ -3,7 +3,8 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
-import { IconChevronLeft } from '../components/Icons';
+import { IconChevronLeft, IconArrowUpRight } from '../components/Icons';
+import { SmWalletGlyph } from '../components/smart-money/SmGlyphs';
 import {
   fetchWallet, fmtUsd, shortAddr, timeAgo, CHAIN_OPTIONS
 } from '../lib/smartMoneyClient';
@@ -131,28 +132,32 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
   return (
     <PageTransition>
       <div className="sm-page" style={embedded ? { padding: 0 } : undefined}>
-        <motion.div className="row" style={{ gap: 10, marginBottom: 12 }} variants={riseIn} initial="hidden" animate="show">
-          <button className="icon-btn" onClick={goBack} aria-label={t('common.back')}>
-            <IconChevronLeft width={18} height={18} />
+        {/* The wallet header is the same language as the desk: a glyph tile,
+            the address in mono, the chain as an eyebrow, and the network
+            switch as a themed control instead of an inline-styled native box
+            (which turned into a white-on-white rectangle in the light theme). */}
+        <motion.header className="smx-wallethead" variants={riseIn} initial="hidden" animate="show">
+          <button type="button" className="smx-pagehead-back" onClick={goBack} aria-label={t('common.back')}>
+            <IconChevronLeft width={17} height={17} />
           </button>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 900, fontSize: 16 }} className="mono">
-              {shortAddr(address, chainId === 'solana' ? 'solana' : 'evm')}
-            </div>
-            <div className="faint" style={{ fontSize: 11 }}>{chainMeta?.name || chainId}</div>
+          <span className="smx-wallethead-ico" aria-hidden="true"><SmWalletGlyph width={17} height={17} /></span>
+          <div className="smx-wallethead-text">
+            <span className="smx-pagehead-kicker">{chainMeta?.name || chainId}</span>
+            <b className="mono">{shortAddr(address, chainId === 'solana' ? 'solana' : 'evm')}</b>
           </div>
           {chainId !== 'solana' && (
             <select
+              className="smx-wallethead-chain"
               value={chainId}
               onChange={(e) => setChainId(e.target.value)}
-              style={{ background: 'rgba(255,255,255,0.08)', color: 'inherit', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, padding: '6px 8px', fontSize: 12 }}
+              aria-label={t('sm.engine.chain')}
             >
               {CHAIN_OPTIONS.filter((c) => c.id !== 'solana').map((c) => (
                 <option key={c.id} value={c.id}>{c.short}</option>
               ))}
             </select>
           )}
-        </motion.div>
+        </motion.header>
 
         {loading && (
           <div className="sm-section">
@@ -226,7 +231,7 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
                 )}
                 {data.identity && <div className="smi-wallet-label">
                   <span>{t('sm.engine.sourcedIdentity')}: <b>{data.identity.label} · {data.identity.kind}</b></span>
-                  {data.identity.sourceUrl && <button type="button" onClick={() => openUrl(data.identity.sourceUrl)}>{t('sm.engine.source')} ↗</button>}
+                  {data.identity.sourceUrl && <button type="button" onClick={() => openUrl(data.identity.sourceUrl)}>{t('sm.engine.source')} <IconArrowUpRight width={11} height={11} aria-hidden="true" /></button>}
                   <small>{t('sm.engine.identityNotScore')}</small>
                 </div>}
               </section>
@@ -497,7 +502,7 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
                           </div>
                           {proof && (
                             <button type="button" className="smi-observed-proof" onClick={() => openUrl(proof)}>
-                              {t('sm.engine.proof')} ↗
+                              {t('sm.engine.proof')} <IconArrowUpRight width={11} height={11} aria-hidden="true" />
                             </button>
                           )}
                         </div>

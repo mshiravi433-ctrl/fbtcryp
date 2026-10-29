@@ -3,19 +3,23 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
-import ScrollRail from '../components/ScrollRail';
 import SegIndicator from '../components/SegIndicator';
-import { IconChevronLeft, IconSearch, IconBell } from '../components/Icons';
+import {
+  IconChevronLeft, IconSearch, IconRefresh, IconX, IconArrowUpRight, IconClock
+} from '../components/Icons';
+import {
+  SmSignalGlyph, SmOverviewGlyph, SmVerifiedGlyph, SmWhaleGlyph, SmWalletGlyph,
+  SmCoinGlyph, SmFlowGlyph, SmBellGlyph, SmWavesGlyph, SmAccumulateGlyph,
+  SmDistributeGlyph, SmBankGlyph, SmDropletGlyph, SmFreshGlyph, SmSparkGlyph,
+  SmPulseGlyph, SmRiskGlyph
+} from '../components/smart-money/SmGlyphs';
 import {
   fetchOverview, fetchWhales, fetchFlows, fetchLiquidity,
   fetchEarlyTokens, fetchFreshWallets, fetchExchanges,
-  fmtUsd, fmtPct, shortAddr, timeAgo, classifyQuery, CHAIN_OPTIONS,
-  chainIdForSlug
+  fmtUsd, fmtPct, timeAgo, classifyQuery, chainIdForSlug
 } from '../lib/smartMoneyClient';
-import { trackWallet } from '../lib/smartMoneyWatch';
 import { openUrl } from '../lib/browser';
 import { useTelegram } from '../context/TelegramContext';
-import SmartMoneyWallet from './SmartMoneyWallet';
 import SmartMoneyIntelligence, { IntelligenceTeaser, VerifiedWallets } from '../components/SmartMoneyIntelligence';
 import TokenIcon from '../lib/tokenIcon';
 
@@ -24,6 +28,17 @@ import '../styles/smart-money.css';
 import '../styles/smart-money-intelligence.css';
 
 const TABS = ['overview', 'intelligence', 'whales', 'wallets', 'tokens', 'flows', 'alerts'];
+
+/* One glyph per tab, so the dock is readable before it is read. */
+const TAB_GLYPHS = {
+  overview: SmOverviewGlyph,
+  intelligence: SmVerifiedGlyph,
+  whales: SmWhaleGlyph,
+  wallets: SmWalletGlyph,
+  tokens: SmCoinGlyph,
+  flows: SmFlowGlyph,
+  alerts: SmBellGlyph
+};
 
 /*
  * THE TIME-WINDOW RAIL — «تب روز، هفته و ماه کار نمیده».
@@ -89,22 +104,311 @@ function writeLastGood(d) {
   } catch { /* storage full/blocked — cache is best-effort */ }
 }
 
-function ConfBar({ value, signal }) {
-  const color = signal === 'DISTRIBUTION' ? '#ff5c7a' : '#2ee6a8';
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE NEW SURFACE LANGUAGE
+   ───────────────────────────────────────────────────────────────────────────
+   A "signal desk": deep navy glass, one hairline, a single mint→cyan accent,
+   tabular numbers and glyph tiles. Everything below is presentational and
+   takes its content from the same fetches as before — this rebuild changes
+   how the page reads, never what it claims.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function SectionHead({ icon, title, meta, children }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div className="sm-meter"><i style={{ width: `${Math.min(100, value || 0)}%`, background: color }} /></div>
-      <span style={{ fontSize: 11, fontWeight: 900, color }}>{value}%</span>
+    <div className="smx-head">
+      {icon ? <span className="smx-head-ico" aria-hidden="true">{icon}</span> : null}
+      <h3>{title}</h3>
+      <span className="smx-head-spacer" />
+      {meta ? <span className="smx-head-meta">{meta}</span> : null}
+      {children}
+    </div>
+  );
+}
+
+/*
+ * The two window rails are deliberately separate components rather than one
+ * parameterised rail. They are mounted on different screens (the overview
+ * toolbar and the flows tab), they carry different test ids, and a Framer
+ * `layoutId` may only exist once among mounted elements — sharing one rail
+ * made that uniqueness a thing a future caller had to remember.
+ *
+ * `winKey` — never `window` — is the state name; see the note on load().
+ */
+function WindowRail({ t, winKey, onChange }) {
+  return (
+    <div className="sm-seg-window smx-windowrail" role="tablist" aria-label={t('sm.windowAria')} data-testid="sm-window-tabs">
+      {WINDOWS.map((w) => (
+        <button
+          key={w}
+          type="button"
+          role="tab"
+          aria-selected={winKey === w}
+          className={`sm-seg-window-item ${winKey === w ? 'active' : ''}`}
+          data-testid={`sm-window-${w}`}
+          onClick={() => onChange(w)}
+        >
+          {winKey === w && <SegIndicator id="sm-window-pill" />}
+          {t(`sm.windows.${w}`)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function FlowsWindowRail({ t, win, onWindow }) {
+  return (
+    <div className="sm-seg-window smx-windowrail" role="tablist" aria-label={t('sm.windowAria')} data-testid="sm-flows-window-tabs">
+      {WINDOWS.map((w) => (
+        <button
+          key={w}
+          type="button"
+          role="tab"
+          aria-selected={win === w}
+          className={`sm-seg-window-item ${win === w ? 'active' : ''}`}
+          data-testid={`sm-flows-window-${w}`}
+          onClick={() => (onWindow ? onWindow(w) : null)}
+        >
+          {win === w && <SegIndicator id="sm-flows-window-pill" />}
+          {t(`sm.windows.${w}`)}
+        </button>
+      ))}
     </div>
   );
 }
 
 function Spinner() {
-  return <div className="sm-section">{[...Array(5)].map((_, i) => <div key={i} className="sm-skel" style={{ width: `${90 - i * 9}%` }} />)}</div>;
+  return (
+    <div className="smx-skeleton" aria-hidden="true">
+      <span className="smx-skel smx-skel--lg" />
+      <span className="smx-skel" style={{ width: '88%' }} />
+      <span className="smx-skel" style={{ width: '72%' }} />
+      <span className="smx-skel" style={{ width: '80%' }} />
+    </div>
+  );
 }
 
-function Empty({ children }) {
-  return <div className="sm-section sm-empty">{children}</div>;
+function EmptyArt({ icon, title, body }) {
+  return (
+    <div className="smx-empty">
+      <span className="smx-empty-ico" aria-hidden="true">{icon || <SmSparkGlyph width={22} height={22} />}</span>
+      {title ? <strong>{title}</strong> : null}
+      {body ? <span className="smx-empty-body">{body}</span> : null}
+    </div>
+  );
+}
+
+function DeltaPill({ value, up }) {
+  if (value == null) return null;
+  return (
+    <span className={`smx-delta ${up ? 'is-up' : 'is-down'}`}>
+      <svg viewBox="0 0 10 10" width="8" height="8" aria-hidden="true">
+        <path d={up ? 'M5 1.4 9 8.3H1Z' : 'M5 8.6 1 1.7h8Z'} fill="currentColor" />
+      </svg>
+      {fmtPct(value)}
+    </span>
+  );
+}
+
+function SignalPill({ signal, t }) {
+  const neutral = signal === 'NEUTRAL' || !signal;
+  const up = signal === 'ACCUMULATION';
+  return (
+    <span className={`smx-pill ${neutral ? 'is-neutral' : up ? 'is-up' : 'is-down'}`}>
+      {neutral ? null : up
+        ? <SmAccumulateGlyph width={11} height={11} />
+        : <SmDistributeGlyph width={11} height={11} />}
+      {t(`sm.signal.${neutral ? 'NEUTRAL' : signal}`)}
+    </span>
+  );
+}
+
+function RiskPill({ band, t }) {
+  const safe = ['LOW', 'MEDIUM', 'HIGH'].includes(band) ? band : 'MEDIUM';
+  return (
+    <span className={`smx-pill smx-risk is-${safe.toLowerCase()}`}>
+      <SmRiskGlyph width={11} height={11} />
+      {t(`sm.riskBand.${safe}`)}
+    </span>
+  );
+}
+
+function ChainPill({ color, children }) {
+  return (
+    <span
+      className="smx-chain"
+      style={color ? {
+        color,
+        borderColor: `${color}55`,
+        background: `${color}1f`
+      } : undefined}
+    >
+      {children}
+    </span>
+  );
+}
+
+function MetricCard({ tone, icon, label, value, valueTone, foot }) {
+  return (
+    <article className={`smx-metric is-${tone || 'cyan'}`}>
+      <header className="smx-metric-top">
+        <span className="smx-metric-ico" aria-hidden="true">{icon}</span>
+        <span className="smx-metric-lab">{label}</span>
+      </header>
+      <div className={`smx-metric-val ${valueTone || ''}`}>{value}</div>
+      <div className="smx-metric-foot">{foot}</div>
+    </article>
+  );
+}
+
+function FlowBar({ inflow, outflow }) {
+  const total = Math.max(1, (inflow || 0) + (outflow || 0));
+  const outPct = Math.round(((outflow || 0) / total) * 100);
+  return (
+    <div
+      className="smx-flowbar"
+      role="img"
+      aria-label={`${Math.round(100 - outPct)}% / ${outPct}%`}
+    >
+      <i className="is-in" style={{ width: `${100 - outPct}%` }} />
+      <i className="is-out" style={{ width: `${outPct}%` }} />
+    </div>
+  );
+}
+
+function FreshCard({ wallet, navigate, t }) {
+  return (
+    <button
+      type="button"
+      className="smx-fresh"
+      onClick={() => navigate(`/smart-money/wallet/${wallet.chainId}/${wallet.address}`)}
+    >
+      <span className="smx-fresh-top">
+        <ChainPill color={wallet.chainColor}>{wallet.chainShort}</ChainPill>
+        <span className="smx-fresh-tag">FRESH &lt;48h</span>
+        {wallet.interesting && (
+          <span className="smx-fresh-star"><SmSparkGlyph width={11} height={11} /> Smart</span>
+        )}
+      </span>
+      <span className="smx-fresh-addr mono">{wallet.short}</span>
+      <span className="smx-fresh-meta">
+        <span>
+          <small>{t('sm.capital')}</small>
+          <b className="sm-up">{fmtUsd(wallet.capitalUsd)}</b>
+        </span>
+        <span>
+          <small>TX</small>
+          <b>{wallet.txCount}</b>
+        </span>
+        <span className="smx-fresh-go" aria-hidden="true"><IconArrowUpRight width={13} height={13} /></span>
+      </span>
+    </button>
+  );
+}
+
+function WhaleCard({ wallet, index, navigate, t }) {
+  const net = wallet.netUsd;
+  const moved = Math.abs(wallet.movedUsd || 0);
+  const netShare = net != null && moved > 0 ? Math.min(100, Math.round((Math.abs(net) / moved) * 100)) : null;
+  return (
+    <button
+      type="button"
+      className="smx-whale"
+      onClick={() => navigate(`/smart-money/wallet/${wallet.chainId}/${wallet.address}`)}
+    >
+      <span className="smx-whale-rank mono">{String(index + 1).padStart(2, '0')}</span>
+      <span className="smx-whale-body">
+        <span className="smx-whale-top">
+          <span className="smx-whale-addr mono">{wallet.short}</span>
+          <ChainPill color={wallet.chainColor}>{wallet.chainShort}</ChainPill>
+          <RiskPill band={wallet.riskBand} t={t} />
+        </span>
+        <span className="smx-whale-action">{wallet.lastAction}</span>
+        <span className="smx-whale-foot">
+          <span>
+            <small>{t('sm.volume', { defaultValue: 'حجم جابه‌جایی' })}</small>
+            <b>{fmtUsd(wallet.movedUsd)}</b>
+          </span>
+          {net != null && net !== 0 && (
+            <span className={net > 0 ? 'is-up' : 'is-down'}>
+              <small>{t(net > 0 ? 'sm.netIn' : 'sm.netOut')}</small>
+              <b>{net > 0 ? '+' : '−'}{fmtUsd(Math.abs(net))}</b>
+            </span>
+          )}
+        </span>
+        {netShare != null && (
+          <span className={`smx-whale-meter ${net > 0 ? 'is-up' : 'is-down'}`} aria-hidden="true">
+            <i style={{ width: `${netShare}%` }} />
+          </span>
+        )}
+      </span>
+    </button>
+  );
+}
+
+function EarlyGrid({ tokens, navigate, t }) {
+  if (!tokens?.length) {
+    return <EmptyArt icon={<SmCoinGlyph width={22} height={22} />} title={t('sm.noEarly')} />;
+  }
+  return (
+    <div className="smx-early-grid">
+      {tokens.map((tk) => {
+        const chainId = chainIdForSlug(tk.chain);
+        const open = () => {
+          if (chainId) navigate(`/smart-money/token/${chainId}/${tk.address}`);
+          else openUrl(`https://dexscreener.com/${tk.chain}/${tk.address}`);
+        };
+        return (
+          <article key={`${tk.chain}:${tk.address}`} className="smx-early">
+            <header className="smx-early-top">
+              <span className="smx-early-logo">
+                <TokenIcon
+                  token={{ symbol: tk.symbol, address: tk.address, tokenLogo: tk.logo || tk.icon }}
+                  chainId={chainId || 1}
+                  size={38}
+                />
+              </span>
+              <span className="smx-early-id">
+                <b>{tk.symbol}</b>
+                <span>
+                  <em>{tk.chain}</em>
+                  {tk.dex ? <i>{tk.dex}</i> : null}
+                </span>
+              </span>
+              <RiskPill band={tk.risk} t={t} />
+            </header>
+
+            <div className="smx-early-stats">
+              <div>
+                <span className="smx-early-stat-ico"><IconClock width={12} height={12} /></span>
+                <b>{tk.ageHours}h</b>
+                <small>{t('sm.age')}</small>
+              </div>
+              <div>
+                <span className="smx-early-stat-ico"><SmDropletGlyph width={12} height={12} /></span>
+                <b>{fmtUsd(tk.liquidityUsd)}</b>
+                <small>{t('sm.liquidity')}</small>
+              </div>
+              <div>
+                <span className="smx-early-stat-ico"><SmWavesGlyph width={12} height={12} /></span>
+                <b>{fmtUsd(tk.volumeH24)}</b>
+                <small>{t('sm.volume24')}</small>
+              </div>
+              <div>
+                <span className="smx-early-stat-ico"><SmCoinGlyph width={12} height={12} /></span>
+                <b>{tk.fdvUsd ? fmtUsd(tk.fdvUsd) : '—'}</b>
+                <small>FDV / Cap</small>
+              </div>
+            </div>
+
+            <button type="button" className="smx-cta" onClick={open}>
+              {t('sm.analyze')}
+              <IconArrowUpRight width={14} height={14} />
+            </button>
+          </article>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function SmartMoney() {
@@ -130,13 +434,6 @@ export default function SmartMoney() {
   const [error, setError] = useState(null);
   const [query, setQuery] = useState('');
   const abortRef = useRef(null);
-  const tabRefs = useRef({});
-
-  /* Keep the selected tab visible inside the rail. Only on `tab` change —
-     never on the 45s data refresh, or the page would yank itself back up. */
-  useEffect(() => {
-    tabRefs.current[tab]?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
-  }, [tab]);
 
   const load = useCallback(async (win) => {
     abortRef.current?.abort?.();
@@ -250,275 +547,368 @@ export default function SmartMoney() {
   const observedHours = cov?.observedSince ? Math.max(1, Math.round((Date.now() - cov.observedSince) / 3600_000)) : null;
   const usdOrDash = (n, events) => (events === 0 || n == null ? '—' : fmtUsd(n));
 
+  const verified = data?.verified;
+  const vCov = verified?.coverage;
+  const consensusActive = (verified?.consensus || []).filter((r) => r.confidence != null).length;
+  const liveLabel = t(data?.dataStatus === 'live' ? 'sm.live' : data?.dataStatus === 'unavailable' ? 'sm.offlineShort' : 'sm.checking');
+
+  const metricFoot = (metric) => {
+    if (streamDown) return null;
+    if (metric?.changePct != null) return <DeltaPill value={metric.changePct} up={metric.changePct >= 0} />;
+    if (metric?.events) return <span className="smx-note">{t('sm.labelledEvents', { n: metric.events })}</span>;
+    return null;
+  };
+
   return (
     <PageTransition>
-      <div className="sm-page">
-        {/* Hero */}
-        <motion.section className="sm-hero" variants={riseIn} initial="hidden" animate="show">
-          <div className="row-between">
-            <h1>✦ {t('sm.title')}</h1>
-            <span className={`sm-live ${data?.dataStatus === 'live' ? '' : 'is-off'}`}>
-              <span className="dot" />
-              {t(data?.dataStatus === 'live' ? 'sm.live' : data?.dataStatus === 'unavailable' ? 'sm.offlineShort' : 'sm.checking')}
+      <div className="sm-page smx-deck">
+        {/* ── HERO ───────────────────────────────────────────────────────── */}
+        <motion.section className="smx-hero" variants={riseIn} initial="hidden" animate="show">
+          <span className="smx-hero-mesh" aria-hidden="true" />
+          <span className="smx-hero-orb smx-hero-orb--a" aria-hidden="true" />
+          <span className="smx-hero-orb smx-hero-orb--b" aria-hidden="true" />
+          <span className="smx-hero-radar" aria-hidden="true"><i /><i /><i /><b /></span>
+
+          <header className="smx-hero-top">
+            <span className="smx-kicker">
+              <SmSignalGlyph width={13} height={13} />
+              <b>FBT</b>
+              <span>SMART MONEY</span>
             </span>
-          </div>
-          <p className="sm-tagline" dangerouslySetInnerHTML={{ __html: t('sm.tagline') }} />
-          <div className="sm-search">
-            <IconSearch width={18} height={18} />
+            <span className={`smx-live ${data?.dataStatus === 'live' ? 'is-live' : 'is-off'}`}>
+              <i aria-hidden="true" />
+              {liveLabel}
+            </span>
+          </header>
+
+          <h1 className="smx-hero-title">{t('sm.title')}</h1>
+          <p className="smx-hero-sub" dangerouslySetInnerHTML={{ __html: t('sm.tagline') }} />
+
+          <form
+            className="smx-search"
+            onSubmit={(e) => { e.preventDefault(); onSearch(); }}
+            role="search"
+          >
+            <span className="smx-search-ico" aria-hidden="true"><IconSearch width={17} height={17} /></span>
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && onSearch()}
               placeholder={t('sm.searchPlaceholder')}
+              aria-label={t('sm.searchPlaceholder')}
+              spellCheck="false"
+              autoComplete="off"
             />
-            <button onClick={onSearch}>{t('sm.search')}</button>
+            {query ? (
+              <button
+                type="button"
+                className="smx-search-clear"
+                onClick={() => setQuery('')}
+                aria-label={t('common.clear')}
+              >
+                <IconX width={13} height={13} />
+              </button>
+            ) : null}
+            <button type="submit" className="smx-search-go" aria-label={t('sm.search')}>
+              <IconArrowUpRight width={17} height={17} />
+            </button>
+          </form>
+
+          <div className="smx-pods">
+            <div className="smx-pod">
+              <span className="smx-pod-ico is-cyan" aria-hidden="true"><SmWavesGlyph width={15} height={15} /></span>
+              <b className="mono">{vCov?.analyzedWallets ?? '—'}</b>
+              <small>{t('sm.engine.analysed')}</small>
+            </div>
+            <div className="smx-pod">
+              <span className="smx-pod-ico is-mint" aria-hidden="true"><SmVerifiedGlyph width={15} height={15} /></span>
+              <b className="mono">{vCov?.classifiedWallets ?? '—'}</b>
+              <small>{t('sm.engine.qualified')}</small>
+            </div>
+            <div className="smx-pod">
+              <span className="smx-pod-ico is-violet" aria-hidden="true"><SmSignalGlyph width={15} height={15} /></span>
+              <b className="mono">{vCov ? consensusActive : '—'}</b>
+              <small>{t('sm.engine.consensus')}</small>
+            </div>
           </div>
         </motion.section>
 
         {/*
-          Tabs as a RAIL.
-          «تب های مختلف مثل ریل حرکت نمی‌کند که انتخاب کنیم» — six Persian
-          labels (کیف‌پول‌های هوشمند، جریان نقدینگی، …) never fit one phone
-          row, and the old plain div could not be scrolled reliably on the
-          WebView, so the tabs past the first two were unreachable. Now the
-          row uses the same ScrollRail as every other rail in the app:
-          horizontal-only, snap-aligned, edge fades signal "more this way",
-          and selecting a tab scrolls it into view.
+          THE NAVIGATION DOCK — seven tabs, seven glyphs.
+          The old rail was a single scrolling line of text pills: on a Persian
+          phone the last three tabs sat beyond the edge, and nothing on screen
+          said they existed. A 4+3 grid shows every destination at once, gives
+          each one an icon, and keeps a 44px target on the narrowest screen.
         */}
-        <ScrollRail className="sm-tabs" ariaLabel={t('sm.title')} role="tablist">
-          {TABS.map((id) => (
-            <button
-              key={id}
-              role="tab"
-              aria-selected={tab === id}
-              ref={(el) => { tabRefs.current[id] = el; }}
-              className={`sm-tab ${tab === id ? 'active' : ''}`}
-              onClick={() => selectTab(id)}
-            >
-              {t(`sm.tabs.${id}`)}
-            </button>
-          ))}
-        </ScrollRail>
+        <nav className="smx-dock" role="tablist" aria-label={t('sm.title')}>
+          {TABS.map((id) => {
+            const Glyph = TAB_GLYPHS[id];
+            const active = tab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={`smx-dock-btn ${active ? 'is-active' : ''}`}
+                onClick={() => selectTab(id)}
+              >
+                <span className="smx-dock-ico" aria-hidden="true"><Glyph width={18} height={18} /></span>
+                <span className="smx-dock-label">{t(`sm.tabs.${id}`)}</span>
+              </button>
+            );
+          })}
+        </nav>
 
         {/* OVERVIEW */}
         {tab === 'overview' && (
           <>
-            {/*
-              «تب روز، هفته و ماه» — translated, keyboard- and screen-reader-
-              reachable, and it carries the coverage of the window it selects.
-            */}
-            <div className="sm-seg-window" role="tablist" aria-label={t('sm.windowAria')} data-testid="sm-window-tabs">
-              {WINDOWS.map((w) => (
-                <button
-                  key={w}
-                  type="button"
-                  role="tab"
-                  aria-selected={winKey === w}
-                  className={`sm-seg-window-item ${winKey === w ? 'active' : ''}`}
-                  data-testid={`sm-window-${w}`}
-                  onClick={() => selectWindow(w)}
-                >
-                  {winKey === w && <SegIndicator id="sm-window" />}
-                  {t(`sm.windows.${w}`)}
-                </button>
-              ))}
+            {/* The window control + a manual refresh: the page already polls
+                every 45s, but a reader who just came back to the tab wants a
+                way to ask *now*. */}
+            <div className="smx-toolbar">
+              <span className="smx-toolbar-ico" aria-hidden="true"><IconClock width={14} height={14} /></span>
+              <span className="smx-toolbar-label">{t('sm.windowAria')}</span>
+              <span className="smx-toolbar-spacer" />
+              <WindowRail t={t} winKey={winKey} onChange={selectWindow} />
+              <button
+                type="button"
+                className={`smx-refresh ${loading ? 'is-busy' : ''}`}
+                onClick={() => load(winKey)}
+                aria-label={t('common.refresh')}
+              >
+                <IconRefresh width={15} height={15} />
+              </button>
             </div>
+
             {data?.coverage?.windowCoverage != null && data.coverage.windowCoverage < 0.95 && (
-              <div className="sm-coverage" data-testid="sm-window-coverage">
+              <div className="smx-hint" data-testid="sm-window-coverage">
+                <SmSignalGlyph width={14} height={14} />
                 {t('sm.windowPartial', { window: t(`sm.windows.${winKey}`), pct: Math.round((data.coverage.windowCoverage || 0) * 100) })}
               </div>
             )}
 
             {loading && !data && <Spinner />}
-            {error && !data && <Empty>{t('sm.errorOverview')}<br /><span className="faint">{error}</span></Empty>}
+            {error && !data && (
+              <EmptyArt
+                icon={<SmRiskGlyph width={22} height={22} />}
+                title={t('sm.errorOverview')}
+                body={error}
+              />
+            )}
 
             {/* Honest offline banner — see the `streamDown` flag above. */}
             {data && streamDown && (
-              <div className="sm-section sm-offline">
-                <span className="msg">⚠️ {t('sm.dataSourceOffline')}</span>
-                <button className="sm-btn ghost" style={{ width: 'auto', padding: '4px 10px' }} onClick={() => load(winKey)}>{t('sm.retry')}</button>
+              <div className="smx-banner is-warn sm-offline" role="status">
+                <span className="smx-banner-ico"><SmRiskGlyph width={16} height={16} /></span>
+                <span className="smx-banner-text">{t('sm.dataSourceOffline')}</span>
+                <button type="button" className="smx-banner-btn" onClick={() => load(winKey)}>
+                  {t('sm.retry')}
+                </button>
               </div>
             )}
             {data && streamStale && (
-              <div className="sm-section sm-stale" data-testid="sm-stale-notice">
-                <span className="msg">⏳ {t('sm.streamStale')}</span>
+              <div className="smx-banner is-info sm-stale" role="status" data-testid="sm-stale-notice">
+                <span className="smx-banner-ico"><SmPulseGlyph width={16} height={16} /></span>
+                <span className="smx-banner-text">{t('sm.streamStale')}</span>
               </div>
             )}
 
             {data && (
               <>
                 <IntelligenceTeaser verified={data.verified} onOpen={() => selectTab('intelligence')} />
+
                 {/*
                   Every tile states what it is based on. A window with no
                   labelled event shows «—», never «$0»: zero labelled flow
                   is the absence of an observation, not an observed zero.
                 */}
-                <div className="sm-metrics">
-                  <div className="sm-metric">
-                    <div className="lab">{t('sm.whaleActivity')}</div>
-                    <div className="val">{streamDown ? '—' : m?.whaleActivity?.value ?? '—'}</div>
-                    <div className={`chg ${(m?.whaleActivity?.changePct || 0) >= 0 ? 'sm-up' : 'sm-down'}`}>{streamDown || m?.whaleActivity?.changePct == null ? '' : fmtPct(m.whaleActivity.changePct)}</div>
-                  </div>
-                  <div className="sm-metric">
-                    <div className="lab">{t('sm.accumulation')}</div>
-                    <div className="val sm-up">{streamDown ? '—' : usdOrDash(m?.accumulation?.valueUsd, m?.accumulation?.events)}</div>
-                    <div className="chg sm-up">{streamDown || m?.accumulation?.changePct == null ? (m?.accumulation?.events ? t('sm.labelledEvents', { n: m.accumulation.events }) : '') : fmtPct(m.accumulation.changePct)}</div>
-                  </div>
-                  <div className="sm-metric">
-                    <div className="lab">{t('sm.distribution')}</div>
-                    <div className="val sm-down">{streamDown ? '—' : usdOrDash(m?.distribution?.valueUsd, m?.distribution?.events)}</div>
-                    <div className="chg sm-down">{streamDown || m?.distribution?.changePct == null ? (m?.distribution?.events ? t('sm.labelledEvents', { n: m.distribution.events }) : '') : fmtPct(m.distribution.changePct)}</div>
-                  </div>
+                <div className="smx-metrics">
+                  <MetricCard
+                    tone="cyan"
+                    icon={<SmWavesGlyph width={15} height={15} />}
+                    label={t('sm.whaleActivity')}
+                    value={streamDown ? '—' : m?.whaleActivity?.value ?? '—'}
+                    foot={metricFoot(m?.whaleActivity)}
+                  />
+                  <MetricCard
+                    tone="mint"
+                    icon={<SmAccumulateGlyph width={15} height={15} />}
+                    label={t('sm.accumulation')}
+                    value={streamDown ? '—' : usdOrDash(m?.accumulation?.valueUsd, m?.accumulation?.events)}
+                    valueTone={streamDown ? '' : 'sm-up'}
+                    foot={metricFoot(m?.accumulation)}
+                  />
+                  <MetricCard
+                    tone="rose"
+                    icon={<SmDistributeGlyph width={15} height={15} />}
+                    label={t('sm.distribution')}
+                    value={streamDown ? '—' : usdOrDash(m?.distribution?.valueUsd, m?.distribution?.events)}
+                    valueTone={streamDown ? '' : 'sm-down'}
+                    foot={metricFoot(m?.distribution)}
+                  />
                 </div>
 
-                <div className="sm-metrics">
-                  <div className="sm-metric">
-                    <div className="lab">{t('sm.exchangeInflow')}</div>
-                    <div className="val" style={{ fontSize: 16 }}>{streamDown || !m?.flowEvents ? '—' : m?.exchangeInflow?.text ? `$${m.exchangeInflow.text}` : '—'}</div>
-                  </div>
-                  <div className="sm-metric">
-                    <div className="lab">{t('sm.exchangeOutflow')}</div>
-                    <div className="val" style={{ fontSize: 16 }}>{streamDown || !m?.flowEvents ? '—' : m?.exchangeOutflow?.text ? `$${m.exchangeOutflow.text}` : '—'}</div>
-                  </div>
-                  <div className="sm-metric">
-                    <div className="lab">{t('sm.netFlow')}</div>
-                    <div className={`val ${(m?.netFlow?.value || 0) >= 0 ? 'sm-up' : 'sm-down'}`} style={{ fontSize: 16 }}>
-                      {streamDown || !m?.flowEvents ? '—' : m?.netFlow?.text ? `${(m.netFlow.value || 0) < 0 ? '-' : ''}$${m.netFlow.text.replace('-', '')}` : '—'}
-                    </div>
-                  </div>
-                </div>
+                <FlowSummary flows={data.flows} window={winKey} onMore={() => selectTab('flows')} t={t} m={m} streamDown={streamDown} />
 
                 {!streamDown && cov && (
-                  <div className="sm-coverage" data-testid="sm-coverage">
-                    {cov.observedEvents > 0 && observedHours
-                      ? t('sm.observedNote', { n: cov.observedEvents, hours: observedHours })
-                      : t('sm.observedNoteNew')}
-                    {!m?.flowEvents && cov.inWindow > 0 ? ` ${t('sm.noLabelledFlow')}` : ''}
+                  <div className="smx-stamp" data-testid="sm-coverage">
+                    <SmPulseGlyph width={13} height={13} />
+                    <span>
+                      {cov.observedEvents > 0 && observedHours
+                        ? t('sm.observedNote', { n: cov.observedEvents, hours: observedHours })
+                        : t('sm.observedNoteNew')}
+                      {!m?.flowEvents && cov.inWindow > 0 ? ` ${t('sm.noLabelledFlow')}` : ''}
+                    </span>
                   </div>
                 )}
 
                 {/* Token activity */}
-                <div className="sm-section">
-                  <h3>🐋 {t('sm.smartMoneyActivity')}</h3>
-                  {data.tokenActivity?.length === 0 && <Empty>{t('sm.noActivity')}</Empty>}
-                  {data.tokenActivity?.map((r) => (
-                    <div key={`${r.chainId}:${r.address || r.symbol}`} className="sm-row" onClick={() => r.address && navigate(`/smart-money/token/${r.chainId}/${r.address}`)}>
-                      <div className="sym sm-token-sym-wrap">
-                        <TokenIcon
-                          token={{ symbol: r.symbol, address: r.address }}
-                          chainId={r.chainId}
-                          size={32}
-                        />
-                      </div>
-                      <div className="mid">
-                        <div className="name">{r.symbol} <span className="faint" style={{ fontSize: 10 }}>· {r.chainShort}</span></div>
-                        <div className="sub">
-                          {t('sm.walletsCount', { n: r.wallets ?? r.events })}
-                          {r.labelledEvents ? ` · ${t('sm.labelledEvents', { n: r.labelledEvents })}` : ''}
-                        </div>
-                      </div>
-                      <div className="right">
-                        {/* Labelled flow → signed net; unlabelled → total moved, no sign. */}
-                        <div className={`usd ${r.signal === 'NEUTRAL' ? '' : r.netUsd >= 0 ? 'sm-up' : 'sm-down'}`}>
-                          {r.signal === 'NEUTRAL' ? fmtUsd(r.totalUsd ?? Math.abs(r.netUsd)) : fmtUsd(r.netUsd)}
-                        </div>
-                        {r.signal === 'NEUTRAL'
-                          ? <span className="faint" style={{ fontSize: 10, fontWeight: 800 }}>{t('sm.signal.NEUTRAL')}</span>
-                          : <ConfBar value={r.signal === 'ACCUMULATION' ? r.accumulation : r.distribution} signal={r.signal} />}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Money flow quick view — hidden while offline: a 0/0 bar
-                    reads as "no flow", which is exactly what we are NOT sure of. */}
-                {!streamDown && <FlowSummary flows={data.flows} window={winKey} onMore={() => selectTab('flows')} t={t} />}
+                <section className="sm-section">
+                  <SectionHead
+                    icon={<SmWavesGlyph width={16} height={16} />}
+                    title={t('sm.smartMoneyActivity')}
+                    meta={data.tokenActivity?.length ? t('sm.walletsCount', { n: data.tokenActivity.reduce((s, r) => s + (r.wallets || 0), 0) }) : null}
+                  />
+                  {data.tokenActivity?.length === 0 && (
+                    <EmptyArt icon={<SmWavesGlyph width={22} height={22} />} title={t('sm.noActivity')} />
+                  )}
+                  <div className="smx-rows">
+                    {data.tokenActivity?.map((r) => {
+                      const neutral = r.signal === 'NEUTRAL';
+                      const up = r.netUsd >= 0;
+                      const confidence = r.signal === 'ACCUMULATION' ? r.accumulation : r.distribution;
+                      return (
+                        <button
+                          type="button"
+                          key={`${r.chainId}:${r.address || r.symbol}`}
+                          className="smx-row"
+                          onClick={() => r.address && navigate(`/smart-money/token/${r.chainId}/${r.address}`)}
+                        >
+                          <span className="smx-row-ico">
+                            <TokenIcon
+                              token={{ symbol: r.symbol, address: r.address }}
+                              chainId={r.chainId}
+                              size={34}
+                            />
+                          </span>
+                          <span className="smx-row-main">
+                            <span className="smx-row-title">
+                              {r.symbol}
+                              <em>{r.chainShort}</em>
+                            </span>
+                            <span className="smx-row-sub">
+                              {t('sm.walletsCount', { n: r.wallets ?? r.events })}
+                              {r.labelledEvents ? ` · ${t('sm.labelledEvents', { n: r.labelledEvents })}` : ''}
+                            </span>
+                          </span>
+                          <span className="smx-row-end">
+                            {/* Labelled flow → signed net; unlabelled → total moved, no sign. */}
+                            <b className={neutral ? '' : up ? 'sm-up' : 'sm-down'}>
+                              {neutral ? fmtUsd(r.totalUsd ?? Math.abs(r.netUsd)) : fmtUsd(r.netUsd)}
+                            </b>
+                            {/* The signal is a WORD first and a bar second: the
+                                old row printed «78%» next to a coloured bar, so
+                                the only place the direction appeared was the
+                                colour — unreadable in grayscale and invisible to
+                                a screen reader. */}
+                            <SignalPill signal={neutral ? 'NEUTRAL' : r.signal} t={t} />
+                            {!neutral && (
+                              <span className={`smx-mini ${up ? 'is-up' : 'is-down'}`} aria-hidden="true">
+                                <span className="smx-mini-track">
+                                  <i style={{ width: `${Math.min(100, Math.max(0, confidence || 0))}%` }} />
+                                </span>
+                                <em>{confidence != null ? `${confidence}%` : '—'}</em>
+                              </span>
+                            )}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
 
                 {/* Early detection */}
-                <div className="sm-section">
-                  <h3>⚡ {t('sm.earlyDetection')}</h3>
+                <section className="sm-section">
+                  <SectionHead
+                    icon={<SmSparkGlyph width={16} height={16} />}
+                    title={t('sm.earlyDetection')}
+                    meta={data.earlyTokens?.tokens?.length ? String(data.earlyTokens.tokens.length) : null}
+                  />
                   <EarlyGrid tokens={data.earlyTokens?.tokens || []} loading={!data.earlyTokens} navigate={navigate} t={t} />
-                  <div className="sm-disclaimer">{data.earlyTokens?.note}</div>
-                </div>
+                  <p className="smx-disclaimer">{data.earlyTokens?.note}</p>
+                </section>
 
                 {/* Fresh wallets */}
                 {data.freshWallets && (data.freshWallets.dataStatus === 'live' || data.freshWallets.dataStatus === 'quiet') && (
-                  <div className="sm-section">
-                    <h3>🆕 {t('sm.freshWallets')}</h3>
+                  <section className="sm-section">
+                    <SectionHead
+                      icon={<SmFreshGlyph width={16} height={16} />}
+                      title={t('sm.freshWallets')}
+                      meta={data.freshWallets.newWallets != null ? String(data.freshWallets.newWallets) : null}
+                    />
                     {data.freshWallets.dataStatus === 'quiet' ? (
-                      <Empty>{t('sm.quietFresh')}</Empty>
+                      <EmptyArt icon={<SmFreshGlyph width={22} height={22} />} title={t('sm.quietFresh')} />
                     ) : (
                       <>
-                        <div className="sm-metrics">
-                          <div className="sm-metric"><div className="lab">{t('sm.newWallets')}</div><div className="val">{data.freshWallets.newWallets}</div></div>
-                          <div className="sm-metric"><div className="lab">{t('sm.interesting')}</div><div className="val">{data.freshWallets.interestingWallets}</div></div>
-                          <div className="sm-metric"><div className="lab">{t('sm.capital')}</div><div className="val" style={{ fontSize: 16 }}>{fmtUsd(data.freshWallets.capitalUsd)}</div></div>
+                        <div className="smx-miniMetrics">
+                          <div><small>{t('sm.newWallets')}</small><b>{data.freshWallets.newWallets}</b></div>
+                          <div><small>{t('sm.interesting')}</small><b>{data.freshWallets.interestingWallets}</b></div>
+                          <div><small>{t('sm.capital')}</small><b>{fmtUsd(data.freshWallets.capitalUsd)}</b></div>
                         </div>
-                        <div className="sm-fresh-grid">
+                        <div className="smx-fresh-grid">
                           {data.freshWallets.wallets?.slice(0, 6).map((w) => (
-                            <div
-                              key={`${w.chainId}:${w.address}`}
-                              className="sm-fresh-card"
-                              onClick={() => navigate(`/smart-money/wallet/${w.chainId}/${w.address}`)}
-                            >
-                              <div className="sm-fresh-card-top">
-                                <span
-                                  className="sm-chain-pill"
-                                  style={{
-                                    background: w.chainColor ? `${w.chainColor}22` : undefined,
-                                    color: w.chainColor || undefined
-                                  }}
-                                >
-                                  {w.chainShort}
-                                </span>
-                                <span className="sm-fresh-tag">FRESH &lt;48h</span>
-                                {w.interesting && <span className="sm-fresh-star">★ Smart</span>}
-                              </div>
-                              <div className="sm-fresh-addr mono">{w.short}</div>
-                              <div className="sm-fresh-bottom">
-                                <div className="sm-fresh-cap">
-                                  <span className="k">{t('sm.capital', { defaultValue: 'سرمایه' })}</span>
-                                  <span className="v sm-up">{fmtUsd(w.capitalUsd)}</span>
-                                </div>
-                                <div className="sm-fresh-tx">
-                                  <span className="k">TX</span>
-                                  <span className="v">{w.txCount}</span>
-                                </div>
-                              </div>
-                            </div>
+                            <FreshCard key={`${w.chainId}:${w.address}`} wallet={w} navigate={navigate} t={t} />
                           ))}
                         </div>
                       </>
                     )}
-                    <div className="sm-disclaimer">{data.freshWallets.note}</div>
-                  </div>
+                    <p className="smx-disclaimer">{data.freshWallets.note}</p>
+                  </section>
                 )}
 
                 {/* Liquidity */}
                 {data.liquidityEvents?.events?.length > 0 && (
-                  <div className="sm-section">
-                    <h3>⚠️ {t('sm.liquidityMovement')}</h3>
+                  <section className="sm-section">
+                    <SectionHead
+                      icon={<SmDropletGlyph width={16} height={16} />}
+                      title={t('sm.liquidityMovement')}
+                      meta={String(data.liquidityEvents.events.length)}
+                    />
                     {/* openUrl for the same two reasons as the tx search above:
                         the old `window` state shadowed the global here, and a
                         raw `window.open` is a no-op inside the APK — so tapping
                         a liquidity row silently did nothing. */}
-                    {data.liquidityEvents.events.slice(0, 6).map((e) => (
-                      <div key={e.id} className="sm-row" onClick={() => e.explorerTx && openUrl(e.explorerTx)}>
-                        <div className="sym">{e.kind === 'LP_ADDED' ? '+' : '−'}</div>
-                        <div className="mid">
-                          <div className="name">{e.symbols}</div>
-                          <div className="sub">{e.kind === 'LP_ADDED' ? t('sm.lpAdded') : t('sm.lpRemoved')} · {e.chainShort}{e.dex ? ` · ${e.dex}` : ''}</div>
-                        </div>
-                        <div className="right">
-                          <div className={`usd ${e.kind === 'LP_ADDED' ? 'sm-up' : 'sm-down'}`}>{fmtUsd(e.liquidityUsd)}</div>
-                          <div className={`conf sm-risk-${e.impact === 'HIGH' ? 'HIGH' : e.impact === 'MEDIUM' ? 'MEDIUM' : 'LOW'}`}>{e.impact}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                    <div className="smx-rows">
+                      {data.liquidityEvents.events.slice(0, 6).map((e) => {
+                        const added = e.kind === 'LP_ADDED';
+                        return (
+                          <button
+                            type="button"
+                            key={e.id}
+                            className="smx-row"
+                            onClick={() => e.explorerTx && openUrl(e.explorerTx)}
+                          >
+                            <span className={`smx-row-ico is-flat ${added ? 'is-up' : 'is-down'}`} aria-hidden="true">
+                              <SmDropletGlyph width={16} height={16} />
+                            </span>
+                            <span className="smx-row-main">
+                              <span className="smx-row-title">{e.symbols}</span>
+                              <span className="smx-row-sub">
+                                {added ? t('sm.lpAdded') : t('sm.lpRemoved')} · {e.chainShort}{e.dex ? ` · ${e.dex}` : ''}
+                              </span>
+                            </span>
+                            <span className="smx-row-end">
+                              <b className={added ? 'sm-up' : 'sm-down'}>{fmtUsd(e.liquidityUsd)}</b>
+                              <RiskPill band={e.impact} t={t} />
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
                 )}
 
-                <div className="sm-disclaimer">{t('sm.disclaimer')}</div>
+                <p className="smx-disclaimer smx-disclaimer--foot">{t('sm.disclaimer')}</p>
               </>
             )}
           </>
@@ -545,84 +935,50 @@ export default function SmartMoney() {
   );
 }
 
-function FlowSummary({ flows, window: win = '24h', onMore, t }) {
+/*
+ * The flow card on the overview. Inflow (into an exchange) is the red side:
+ * it is supply arriving where it can be sold. Outflow is the green side.
+ */
+function FlowSummary({ flows, window: win = '24h', onMore, t, m, streamDown }) {
   const f = flows?.windows?.[win] || flows?.windows?.['24h'];
   if (!f) return null;
   const hasFlow = (f.events || 0) > 0;
+  const total = Math.max(1, (f.inflowUsd || 0) + (f.outflowUsd || 0));
+  const outPct = Math.round(((f.outflowUsd || 0) / total) * 100);
+  /* No labelled event in this window is the absence of an observation, not an
+     observed zero — and a dead stream is not a quiet market. Both print «—». */
+  const flowUsd = (n) => (streamDown || !m?.flowEvents ? '—' : fmtUsd(n));
   return (
-    <div className="sm-section">
-      <h3>💰 {t('sm.moneyFlow')}<span className="spacer" />
-        <button className="sm-btn ghost" style={{ width: 'auto', padding: '4px 10px' }} onClick={onMore}>{t('sm.viewAll')}</button>
-      </h3>
+    <section className="sm-section smx-flowcard">
+      <SectionHead icon={<SmBankGlyph width={16} height={16} />} title={t('sm.moneyFlow')}>
+        <button type="button" className="smx-link" onClick={onMore}>
+          {t('sm.viewAll')}
+          <IconChevronLeft width={13} height={13} />
+        </button>
+      </SectionHead>
       {hasFlow ? (
         <>
+          <div className="smx-flow-nums">
+            <div className="is-in">
+              <span><SmDistributeGlyph width={12} height={12} />{t('sm.cexInflow')}</span>
+              <b>{flowUsd(f.inflowUsd)}</b>
+            </div>
+            <div className="is-out">
+              <span><SmAccumulateGlyph width={12} height={12} />{t('sm.cexOutflow')}</span>
+              <b>{flowUsd(f.outflowUsd)}</b>
+            </div>
+          </div>
           <FlowBar inflow={f.inflowUsd} outflow={f.outflowUsd} />
-          <div className="row-between" style={{ marginTop: 10, fontSize: 12 }}>
-            <span className="sm-down">↓ {t('sm.cexInflow')}: {fmtUsd(f.inflowUsd)}</span>
-            <span className="sm-up">↑ {t('sm.cexOutflow')}: {fmtUsd(f.outflowUsd)}</span>
+          <div className="smx-flow-legend">
+            <span className="is-in">{100 - outPct}%</span>
+            <span className="is-out">{outPct}%</span>
           </div>
         </>
       ) : (
         /* A 0/0 bar reads as «no flow», which is exactly what we do NOT know. */
-        <div className="sm-empty" style={{ padding: '6px 0' }}>{t('sm.noLabelledFlow')}</div>
+        <div className="smx-inline-empty">{t('sm.noLabelledFlow')}</div>
       )}
-    </div>
-  );
-}
-
-export function FlowBar({ inflow, outflow }) {
-  const total = Math.max(1, (inflow || 0) + (outflow || 0));
-  const outPct = Math.round(((outflow || 0) / total) * 100);
-  return (
-    <div style={{ display: 'flex', height: 14, borderRadius: 999, overflow: 'hidden', background: 'rgba(255,92,122,0.35)' }}>
-      <div style={{ width: `${100 - outPct}%`, background: 'rgba(255,92,122,0.55)' }} />
-      <div style={{ width: `${outPct}%`, background: 'linear-gradient(90deg,#2ee6a8,#00e5ff)' }} />
-    </div>
-  );
-}
-
-function EarlyGrid({ tokens, navigate, t }) {
-  if (!tokens?.length) return <Empty>{t('sm.noEarly')}</Empty>;
-  return (
-    <div className="sm-card-grid">
-      {tokens.map((tk) => {
-        const chainId = chainIdForSlug(tk.chain);
-        const open = () => {
-          if (chainId) navigate(`/smart-money/token/${chainId}/${tk.address}`);
-          else openUrl(`https://dexscreener.com/${tk.chain}/${tk.address}`);
-        };
-        return (
-          <div key={`${tk.chain}:${tk.address}`} className="sm-early-card">
-            <div className="sm-early-card-head">
-              <div className="sm-early-token-logo">
-                <TokenIcon
-                  token={{ symbol: tk.symbol, address: tk.address, tokenLogo: tk.logo || tk.icon }}
-                  chainId={chainId || 1}
-                  size={36}
-                />
-              </div>
-              <div className="sm-early-token-info">
-                <div className="tk">{tk.symbol}</div>
-                <div className="sub">
-                  <span className="sm-chain-tag">{tk.chain}</span>
-                  {tk.dex && <span className="sm-dex-tag">{tk.dex}</span>}
-                </div>
-              </div>
-              <div className={`sm-risk-badge sm-risk-${tk.risk}`}>{tk.risk}</div>
-            </div>
-
-            <div className="meta">
-              <div><div className="k">{t('sm.age')}</div><div className="v">{tk.ageHours}h</div></div>
-              <div><div className="k">{t('sm.liquidity')}</div><div className="v">{fmtUsd(tk.liquidityUsd)}</div></div>
-              <div><div className="k">{t('sm.volume24')}</div><div className="v">{fmtUsd(tk.volumeH24)}</div></div>
-              <div><div className="k">FDV / Cap</div><div className="v">{tk.fdvUsd ? fmtUsd(tk.fdvUsd) : '—'}</div></div>
-            </div>
-
-            <button className="sm-btn" onClick={open}>{t('sm.analyze')}</button>
-          </div>
-        );
-      })}
-    </div>
+    </section>
   );
 }
 
@@ -638,54 +994,58 @@ function WhalesTab({ navigate, t, smart }) {
     return () => { on = false; };
   }, [smart]);
 
-  if (err) return <Empty>{t('sm.errorOverview')}<br /><span className="faint">{err}</span></Empty>;
+  if (err) {
+    return (
+      <EmptyArt
+        icon={<SmRiskGlyph width={22} height={22} />}
+        title={t('sm.errorOverview')}
+        body={err}
+      />
+    );
+  }
   if (!rows) return <Spinner />;
-  if (!rows.length) return <Empty>{t('sm.noWhales')}</Empty>;
+  if (!rows.length) return <EmptyArt icon={<SmWhaleGlyph width={22} height={22} />} title={t('sm.noWhales')} />;
+
+  /*
+   * All three risk bands are counted and shown, including the ones with a zero
+   * — a rail that only lists the bands that happen to appear makes «no LOW
+   * wallet» indistinguishable from «LOW is not a band this page tracks».
+   */
+  const bands = ['LOW', 'MEDIUM', 'HIGH'];
+  const bandCount = bands.reduce((acc, b) => {
+    acc[b] = rows.filter((w) => (['LOW', 'MEDIUM', 'HIGH'].includes(w.riskBand) ? w.riskBand : 'MEDIUM') === b).length;
+    return acc;
+  }, {});
 
   return (
-    <div className="sm-section">
-      <h3>🐋 {smart ? t('sm.smartWalletsTitle') : t('sm.whaleTracking')}</h3>
-      <div className="sm-whale-grid">
-        {rows.map((w) => (
-          <div key={`${w.chainId}:${w.address}`} className="sm-whale-box" onClick={() => navigate(`/smart-money/wallet/${w.chainId}/${w.address}`)}>
-            <div className="sm-whale-box-top">
-              <span
-                className="sm-chain-pill"
-                style={{
-                  background: w.chainColor ? `${w.chainColor}22` : undefined,
-                  color: w.chainColor || undefined,
-                  borderColor: w.chainColor ? `${w.chainColor}55` : undefined
-                }}
-              >
-                {w.chainShort}
-              </span>
-              <div className="sm-whale-box-addr mono">{w.short}</div>
-              <span className={`sm-whale-risk-badge sm-risk-${['LOW', 'MEDIUM', 'HIGH'].includes(w.riskBand) ? w.riskBand : 'MEDIUM'}`}>
-                {t(`sm.riskBand.${w.riskBand}`)}
-              </span>
-            </div>
-
-            <div className="sm-whale-box-action">{w.lastAction}</div>
-
-            <div className="sm-whale-box-bottom">
-              <div>
-                <span className="k">{t('sm.volume', { defaultValue: 'حجم جابه‌جایی' })}</span>
-                <span className="v">{fmtUsd(w.movedUsd)}</span>
-              </div>
-              {w.netUsd != null && w.netUsd !== 0 && (
-                <div style={{ textAlign: 'end' }}>
-                  <span className="k">{t(w.netUsd > 0 ? 'sm.netIn' : 'sm.netOut')}</span>
-                  <span className={`v ${w.netUsd > 0 ? 'sm-up' : 'sm-down'}`} style={{ display: 'block', fontWeight: 800 }}>
-                    {w.netUsd > 0 ? '+' : '−'}{fmtUsd(Math.abs(w.netUsd))}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
+    <section className="sm-section">
+      <SectionHead
+        icon={<SmWhaleGlyph width={16} height={16} />}
+        title={smart ? t('sm.smartWalletsTitle') : t('sm.whaleTracking')}
+        meta={String(rows.length)}
+      />
+      <div className="smx-chips">
+        {bands.map((b) => (
+          <span key={b} className={`smx-chip smx-risk is-${b.toLowerCase()}`}>
+            <SmRiskGlyph width={11} height={11} />
+            {t(`sm.riskBand.${b}`)}
+            <b className="mono">{bandCount[b]}</b>
+          </span>
         ))}
       </div>
-      <div className="sm-disclaimer">{note || t('sm.whaleDisclaimer')}</div>
-    </div>
+      <div className="smx-whale-grid">
+        {rows.map((w, i) => (
+          <WhaleCard
+            key={`${w.chainId}:${w.address}`}
+            wallet={w}
+            index={i}
+            navigate={navigate}
+            t={t}
+          />
+        ))}
+      </div>
+      <p className="smx-disclaimer">{note || t('sm.whaleDisclaimer')}</p>
+    </section>
   );
 }
 
@@ -704,45 +1064,45 @@ function TokensTab({ navigate, t, query, setQuery }) {
 
   return (
     <>
-      <div className="sm-search" style={{ marginBottom: 12 }}>
-        <IconSearch width={16} height={16} />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('sm.tokenSearch')} />
-      </div>
-      <div className="sm-section">
-        <h3>⚡ {t('sm.earlyDetection')}</h3>
+      <form
+        className="smx-search smx-search--inline"
+        onSubmit={(e) => e.preventDefault()}
+        role="search"
+      >
+        <span className="smx-search-ico" aria-hidden="true"><IconSearch width={16} height={16} /></span>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t('sm.tokenSearch')}
+          aria-label={t('sm.tokenSearch')}
+          spellCheck="false"
+        />
+        {query ? (
+          <button type="button" className="smx-search-clear" onClick={() => setQuery('')} aria-label={t('common.clear')}>
+            <IconX width={13} height={13} />
+          </button>
+        ) : null}
+      </form>
+
+      <section className="sm-section">
+        <SectionHead
+          icon={<SmSparkGlyph width={16} height={16} />}
+          title={t('sm.earlyDetection')}
+          meta={early ? String(filtered.length) : null}
+        />
         {!early ? <Spinner /> : <EarlyGrid tokens={filtered} navigate={navigate} t={t} />}
-        <div className="sm-disclaimer">{t('sm.earlyNote')}</div>
-      </div>
+        <p className="smx-disclaimer">{t('sm.earlyNote')}</p>
+      </section>
+
       {fresh?.wallets?.length > 0 && (
-        <div className="sm-section">
-          <h3>🆕 {t('sm.freshWallets')}</h3>
-          <div className="sm-fresh-grid">
+        <section className="sm-section">
+          <SectionHead icon={<SmFreshGlyph width={16} height={16} />} title={t('sm.freshWallets')} meta={String(fresh.wallets.length)} />
+          <div className="smx-fresh-grid">
             {fresh.wallets.slice(0, 6).map((w) => (
-              <div
-                key={`${w.chainId}:${w.address}`}
-                className="sm-fresh-card"
-                onClick={() => navigate(`/smart-money/wallet/${w.chainId}/${w.address}`)}
-              >
-                <div className="sm-fresh-card-top">
-                  <span className="sm-chain-pill">{w.chainShort}</span>
-                  <span className="sm-fresh-tag">FRESH &lt;48h</span>
-                  {w.interesting && <span className="sm-fresh-star">★ Smart</span>}
-                </div>
-                <div className="sm-fresh-addr mono">{w.short}</div>
-                <div className="sm-fresh-bottom">
-                  <div className="sm-fresh-cap">
-                    <span className="k">{t('sm.capital')}</span>
-                    <span className="v sm-up">{fmtUsd(w.capitalUsd)}</span>
-                  </div>
-                  <div className="sm-fresh-tx">
-                    <span className="k">TX</span>
-                    <span className="v">{w.txCount}</span>
-                  </div>
-                </div>
-              </div>
+              <FreshCard key={`${w.chainId}:${w.address}`} wallet={w} navigate={navigate} t={t} />
             ))}
           </div>
-        </div>
+        </section>
       )}
     </>
   );
@@ -767,95 +1127,113 @@ function FlowsTab({ t, win = '24h', onWindow }) {
   }, []);
 
   const f = flows?.windows?.[win];
+  const hasFlow = (f?.events || 0) > 0;
+  const dash = (n) => (hasFlow ? fmtUsd(n) : '—');
+  const total = Math.max(1, (f?.inflowUsd || 0) + (f?.outflowUsd || 0));
+  const outPct = Math.round(((f?.outflowUsd || 0) / total) * 100);
+
   return (
     <>
-      <div className="sm-section">
-        <h3>
-          🏦 {t('sm.exchangeFlow')}
-          <span className="spacer" />
-          <span className="sm-seg-window" role="tablist" aria-label={t('sm.windowAria')}>
-            {WINDOWS.map((w) => (
-              <button
-                key={w}
-                type="button"
-                role="tab"
-                aria-selected={win === w}
-                className={`sm-seg-window-item ${win === w ? 'active' : ''}`}
-                data-testid={`sm-flows-window-${w}`}
-                onClick={() => (onWindow ? onWindow(w) : null)}
-              >
-                {win === w && <SegIndicator id="sm-window" />}
-                {t(`sm.windows.${w}`)}
-              </button>
-            ))}
-          </span>
-        </h3>
+      <section className="sm-section smx-flowtab">
+        <SectionHead icon={<SmBankGlyph width={16} height={16} />} title={t('sm.exchangeFlow')} />
+        <FlowsWindowRail t={t} win={win} onWindow={onWindow} />
+
         {!flows ? <Spinner /> : (
           <>
-            {(() => {
-              const hasFlow = (f?.events || 0) > 0;
-              const dash = (n) => (hasFlow ? fmtUsd(n) : '—');
-              return (
-                <>
-                  <div className="sm-metrics">
-                    <div className="sm-metric"><div className="lab">{t('sm.cexInflow')}</div><div className="val sm-down" style={{ fontSize: 16 }}>{dash(f?.inflowUsd)}</div></div>
-                    <div className="sm-metric"><div className="lab">{t('sm.cexOutflow')}</div><div className="val sm-up" style={{ fontSize: 16 }}>{dash(f?.outflowUsd)}</div></div>
-                    <div className="sm-metric"><div className="lab">{t('sm.netFlow')}</div><div className={`val ${(f?.netUsd || 0) >= 0 ? 'sm-up' : 'sm-down'}`} style={{ fontSize: 16 }}>{dash(f?.netUsd)}</div></div>
-                  </div>
-                  {hasFlow ? <FlowBar inflow={f.inflowUsd} outflow={f.outflowUsd} /> : (
-                    <div className="sm-empty" style={{ padding: '6px 0' }}>
-                      {flows.dataStatus === 'unavailable' ? t('sm.dataSourceOffline') : t('sm.noLabelledFlow')}
-                    </div>
-                  )}
-                  {f && typeof f.coverage === 'number' && f.coverage < 0.95 && (
-                    <div className="sm-coverage">{t('sm.windowCoverage', { pct: Math.round(f.coverage * 100) })}</div>
-                  )}
-                </>
-              );
-            })()}
+            <div className="smx-net">
+              <span className="smx-net-lab">{t('sm.netFlow')}</span>
+              <b className={(f?.netUsd || 0) >= 0 ? 'sm-up' : 'sm-down'}>{dash(f?.netUsd)}</b>
+              <span className="smx-net-cols">
+                <span className="is-in">↓ {t('sm.cexInflow')} · {dash(f?.inflowUsd)}</span>
+                <span className="is-out">↑ {t('sm.cexOutflow')} · {dash(f?.outflowUsd)}</span>
+              </span>
+            </div>
+
+            {hasFlow ? (
+              <>
+                <FlowBar inflow={f.inflowUsd} outflow={f.outflowUsd} />
+                <div className="smx-flow-legend">
+                  <span className="is-in">{100 - outPct}%</span>
+                  <span className="is-out">{outPct}%</span>
+                </div>
+              </>
+            ) : (
+              <div className="smx-inline-empty">
+                {flows.dataStatus === 'unavailable' ? t('sm.dataSourceOffline') : t('sm.noLabelledFlow')}
+              </div>
+            )}
+
+            {f && typeof f.coverage === 'number' && f.coverage < 0.95 && (
+              <div className="smx-hint">{t('sm.windowCoverage', { pct: Math.round(f.coverage * 100) })}</div>
+            )}
+
             {f?.byExchange?.length > 0 && (
-              <div style={{ marginTop: 12 }}>
-                {f.byExchange.map((r) => (
-                  <div key={r.exchange} className="sm-row" style={{ cursor: 'default' }}>
-                    <div className="mid">
-                      <div className="name">{r.exchange}</div>
-                      <div className="sub">↓ {fmtUsd(r.inflowUsd)} · ↑ {fmtUsd(r.outflowUsd)}</div>
+              <div className="smx-ex-grid">
+                {f.byExchange.map((r) => {
+                  const rowTotal = Math.max(1, (r.inflowUsd || 0) + (r.outflowUsd || 0));
+                  return (
+                    <div key={r.exchange} className="smx-ex">
+                      <div className="smx-ex-top">
+                        <b>{r.exchange}</b>
+                        <span className={r.netUsd >= 0 ? 'sm-up' : 'sm-down'}>{fmtUsd(r.netUsd)}</span>
+                      </div>
+                      <div className="smx-ex-bar" aria-hidden="true">
+                        <i className="is-in" style={{ width: `${Math.round(((r.inflowUsd || 0) / rowTotal) * 100)}%` }} />
+                        <i className="is-out" style={{ width: `${Math.round(((r.outflowUsd || 0) / rowTotal) * 100)}%` }} />
+                      </div>
+                      <div className="smx-ex-legend">
+                        <span className="is-in">↓ {fmtUsd(r.inflowUsd)}</span>
+                        <span className="is-out">↑ {fmtUsd(r.outflowUsd)}</span>
+                      </div>
                     </div>
-                    <div className="right"><div className={`usd ${r.netUsd >= 0 ? 'sm-up' : 'sm-down'}`}>{fmtUsd(r.netUsd)}</div></div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>
         )}
-        <div className="sm-disclaimer">{flows?.note}</div>
-      </div>
+        <p className="smx-disclaimer">{flows?.note}</p>
+      </section>
 
-      <div className="sm-section">
-        <h3>⚠️ {t('sm.liquidityMovement')}</h3>
-        {!liq ? <Spinner /> : !liq.length ? <Empty>{t('sm.noLiquidity')}</Empty> : liq.slice(0, 20).map((e) => (
-          <div key={e.id} className="sm-row" onClick={() => e.explorerTx && openUrl(e.explorerTx)}>
-            <div className="sym">{e.kind === 'LP_ADDED' ? '+' : '−'}</div>
-            <div className="mid"><div className="name">{e.symbols}</div><div className="sub">{e.chainShort}{e.dex ? ` · ${e.dex}` : ''}</div></div>
-            <div className="right">
-              <div className={`usd ${e.kind === 'LP_ADDED' ? 'sm-up' : 'sm-down'}`}>{fmtUsd(e.liquidityUsd)}</div>
-              <div className={`conf sm-risk-${e.impact === 'HIGH' ? 'HIGH' : e.impact === 'MEDIUM' ? 'MEDIUM' : 'LOW'}`}>{e.impact}</div>
-            </div>
+      <section className="sm-section">
+        <SectionHead icon={<SmDropletGlyph width={16} height={16} />} title={t('sm.liquidityMovement')} />
+        {!liq ? <Spinner /> : !liq.length ? (
+          <EmptyArt icon={<SmDropletGlyph width={22} height={22} />} title={t('sm.noLiquidity')} />
+        ) : (
+          <div className="smx-rows">
+            {liq.slice(0, 20).map((e) => {
+              const added = e.kind === 'LP_ADDED';
+              return (
+                <button type="button" key={e.id} className="smx-row" onClick={() => e.explorerTx && openUrl(e.explorerTx)}>
+                  <span className={`smx-row-ico is-flat ${added ? 'is-up' : 'is-down'}`} aria-hidden="true">
+                    <SmDropletGlyph width={16} height={16} />
+                  </span>
+                  <span className="smx-row-main">
+                    <span className="smx-row-title">{e.symbols}</span>
+                    <span className="smx-row-sub">{e.chainShort}{e.dex ? ` · ${e.dex}` : ''}</span>
+                  </span>
+                  <span className="smx-row-end">
+                    <b className={added ? 'sm-up' : 'sm-down'}>{fmtUsd(e.liquidityUsd)}</b>
+                    <RiskPill band={e.impact} t={t} />
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        ))}
-      </div>
+        )}
+      </section>
 
       {exchanges && (
-        <div className="sm-section">
-          <h3>🏛️ {t('sm.cexRegistry')}</h3>
-          <div className="sm-holdings">
-            {exchanges.exchanges?.map((ex) => <span key={ex} className="sm-chip">{ex}</span>)}
+        <section className="sm-section">
+          <SectionHead icon={<SmBankGlyph width={16} height={16} />} title={t('sm.cexRegistry')} />
+          <div className="smx-chips">
+            {exchanges.exchanges?.map((ex) => <span key={ex} className="smx-chip">{ex}</span>)}
           </div>
           {flows?.observedExchanges?.length > 0 && (
-            <div className="sm-coverage">{t('sm.observedExchanges')}: {flows.observedExchanges.join(' · ')}</div>
+            <div className="smx-hint">{t('sm.observedExchanges')}: {flows.observedExchanges.join(' · ')}</div>
           )}
-          <div className="sm-disclaimer">{exchanges.note}</div>
-        </div>
+          <p className="smx-disclaimer">{exchanges.note}</p>
+        </section>
       )}
     </>
   );
@@ -871,28 +1249,52 @@ function AlertsTab({ navigate, t }) {
   }, []);
 
   return (
-    <div className="sm-section">
-      <h3><IconBell width={16} height={16} /> {t('sm.whaleAlerts')}</h3>
+    <section className="sm-section">
+      <SectionHead
+        icon={<SmBellGlyph width={16} height={16} />}
+        title={t('sm.whaleAlerts')}
+        meta={alerts ? String(alerts.length) : null}
+      />
       {!alerts ? <Spinner /> : alerts.length === 0 ? (
-        <Empty>{t('sm.noAlerts')}<br /><span className="faint">{t('sm.noAlertsBody')}</span></Empty>
-      ) : alerts.map((a) => (
-        /* An alert names a wallet (chain + address) — it now LINKS to that
-           wallet's intelligence page instead of being a dead row. */
-        <div
-          key={a.id}
-          className="sm-alert"
-          style={a.chain && a.address ? { cursor: 'pointer' } : undefined}
-          onClick={() => a.chain && a.address && navigate(`/smart-money/${a.target === 'token' || a.evidence?.classification === 'verified-paired-swaps' || a.watchId?.endsWith(':token') ? 'token' : 'wallet'}/${a.chain}/${a.address}`)}
-        >
-          <div className="ico">{a.type === 'MOMENTUM_REVERSAL' ? '⇄' : a.type?.startsWith('CONSENSUS') ? '◈' : '🐋'}</div>
-          <div className="body">
-            <div className="t">{a.title}</div>
-            <div className="m">{a.message}</div>
-          </div>
-          <div className="ago">{timeAgo(a.at)}</div>
+        <EmptyArt
+          icon={<SmBellGlyph width={22} height={22} />}
+          title={t('sm.noAlerts')}
+          body={t('sm.noAlertsBody')}
+        />
+      ) : (
+        <div className="smx-alerts">
+          {alerts.map((a) => {
+            const consensus = a.type?.startsWith('CONSENSUS');
+            const reversal = a.type === 'MOMENTUM_REVERSAL';
+            /* An alert names a wallet (chain + address) — it now LINKS to that
+               wallet's intelligence page instead of being a dead row. */
+            const target = a.chain && a.address
+              ? `/smart-money/${a.target === 'token' || a.evidence?.classification === 'verified-paired-swaps' || a.watchId?.endsWith(':token') ? 'token' : 'wallet'}/${a.chain}/${a.address}`
+              : null;
+            return (
+              <button
+                type="button"
+                key={a.id}
+                className="smx-alert"
+                disabled={!target}
+                onClick={() => target && navigate(target)}
+              >
+                <span className={`smx-alert-ico ${consensus ? 'is-mint' : reversal ? 'is-violet' : 'is-cyan'}`} aria-hidden="true">
+                  {consensus ? <SmVerifiedGlyph width={16} height={16} />
+                    : reversal ? <SmFlowGlyph width={16} height={16} />
+                      : <SmWhaleGlyph width={16} height={16} />}
+                </span>
+                <span className="smx-alert-body">
+                  <span className="smx-alert-title">{a.title}</span>
+                  <span className="smx-alert-msg">{a.message}</span>
+                </span>
+                <span className="smx-alert-ago">{timeAgo(a.at)}</span>
+              </button>
+            );
+          })}
         </div>
-      ))}
-      <div className="sm-disclaimer">{t('sm.alertHow')}</div>
-    </div>
+      )}
+      <p className="smx-disclaimer">{t('sm.alertHow')}</p>
+    </section>
   );
 }
