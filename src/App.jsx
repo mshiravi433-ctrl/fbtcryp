@@ -11,6 +11,7 @@ import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import PullToRefresh from './components/PullToRefresh';
 import Toasts from './components/Toasts';
+import NotificationBar from './components/NotificationBar';
 import ConnectivityAlert from './components/ConnectivityAlert';
 import { useSwapDockStore } from './store/useSwapDockStore';
 import RouteBoundary, { noteRoutePainted } from './components/RouteBoundary';
@@ -878,6 +879,21 @@ export default function App() {
         <Suspense fallback={<Loader />}>{screen}</Suspense>
         <ConnectivityAlert />
         <Toasts />
+        {/*
+          THE NOTIFICATION SURFACE, drawn by us.
+
+          The OS shade is where a user's attention actually is, and every alert
+          does go there (web push / FCM). But the OS owns that layout, so the
+          design the owner asked for — mark, tone colour that follows profit and
+          loss, the big number, the progress rail — can only be drawn EXACTLY
+          once, here. This is also the surface that works when permission has
+          not been granted yet or a push silently failed, so an order that
+          reached its target is never invisible inside the app.
+
+          Placed after `screen` so it stacks over whatever page is mounted, and
+          inside the providers so it can deep-link with the router.
+        */}
+        <NotificationBar />
         {/*
           Outside `screen` on purpose: the install offer must survive route
           changes, and it must not appear over the splash, onboarding or the

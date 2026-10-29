@@ -27,6 +27,13 @@
 
 import { isIOS as _isIOS, isWebView as _isWebView, isStandalone as _isStandalone } from './platform.js';
 import { apiBase } from './apiBase.js';
+import {
+  channelForTone,
+  resolveTone,
+  toneSpec,
+  vibrateForTone,
+  webPresentation
+} from './notificationDesign.js';
 
 const SETTINGS_KEY = 'fbt-notify-v1';
 
@@ -143,6 +150,30 @@ export function playSound(kind = 'success') {
     partial(ctx, f, t + d, 0.75, 0.16);
     partial(ctx, f * 2, t + d, 0.35, 0.05);
   });
+}
+
+/**
+ * Which chime a TONE means.
+ *
+ * `playSound` was written against the three order stages; the design system
+ * speaks in six tones. Mapping them explicitly (rather than letting `profit`
+ * fall through to the default success chime by accident) is what keeps the
+ * sound and the artwork saying the same thing: a loss must never chime like a
+ * win, and a passive info card must not sound like a target being hit.
+ */
+const TONE_SOUND = {
+  profit: 'success',
+  loss: 'error',
+  pending: 'pending',
+  ready: 'ready',
+  alert: 'alert',
+  info: 'closed'
+};
+
+/** Play the chime a tone deserves, if sounds are on. */
+export function playToneSound(tone) {
+  const kind = TONE_SOUND[tone] || 'success';
+  playSound(kind);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -300,6 +331,27 @@ export async function requestNotificationPermission() {
   }
 }
 
+/**
+ * The APK's shade, built from the same design system as the web push payload.
+ *
+ * ─── WHAT CHANGED AND WHY IT MATTERS ────────────────────────────────────────
+ * This used to schedule a LocalNotification with a title, a body, a small icon
+ * and our channel. Everything that makes a notification look DESIGNED — the wide
+ * artwork, the tone's colour, the persistent card, the progress — was missing,
+ * so an alert raised while the app was open looked like a different (worse)
+ * product than the same alert arriving through FCM.
+ *
+ * `androidPresentation()` in src/lib/notificationDesign.js now builds the
+ * presentation for BOTH transports, and Capacitor's LocalNotifications exposes
+ * the two fields that carry it across to the OS:
+ *
+ *   largeIcon  the big picture on the right of the collapsed row — on Android
+ *              this is the artwork slot, and it accepts a URL the plugin loads
+ *   attachments the ExpandedImage a user sees when they pull the shade down
+ *
+ * Both point at the same server-rendered card the web push payload uses, which
+ * is what makes the shade consistent across the APK, the PWA and the site.
+ */
 async function presentNativeShade(title, options = {}) {
   try {
     const { LocalNotifications } = await import('@capacitor/local-notifications');
@@ -308,48 +360,73 @@ async function presentNativeShade(title, options = {}) {
       perm = await LocalNotifications.requestPermissions();
     }
     if (perm.display !== 'granted') return false;
+
+    /*
+     * The tone decides the colour, the channel, the vibration and the artwork.
+     * A caller may pass one (`options.tone`), otherwise it is resolved from the
+     * stage/side/P&L exactly as the server resolves it — so an in-app alert and
+     * a server-sent one for the same event are the same card.
+     */
+    const tone = resolveTone({
+      tone: options.tone,
+      stage: options.stage || options.kind,
+      side: options.side,
+      pnlPct: options.pnlPct,
+      scheduled: options.scheduled
+    });
+    const spec = toneSpec(tone);
+    const language = (typeof document !== 'undefined' && document.documentElement.lang) || 'fa';
+    const present = webPresentation(
+      {
+        title,
+        body: options.body,
+        url: options.data?.url,
+        tone,
+        stage: options.stage,
+        value: options.value,
+        label: options.label,
+        kicker: options.kicker,
+        progress: options.progress,
+        tag: options.tag,
+        vibrate: options.vibrate,
+        requireInteraction: options.requireInteraction
+      },
+      language,
+      { origin: typeof location !== 'undefined' ? location.origin : '' }
+    );
+
     await LocalNotifications.schedule({
       notifications: [{
         id: Date.now() % 2147483647,
         title: String(title || 'FBT Swap'),
         body: options?.body ? String(options.body) : '',
-        extra: options?.data || {},
         /*
-         * ─── A LAUNCHER-ICON PLACEHOLDER WAS HERE, AND IT SILENCED THE APP ──
-         * This read `ic_stat_icon_config_sample` — a name copied from the
-         * Capacitor docs that exists in NO resource folder of this project
-         * (`android/app/src/main/res/drawable/` holds exactly one status icon,
-         * `ic_stat_notification`, which capacitor.config.json and the FCM
-         * manifest defaults already point at).
-         *
-         * Android refuses to post a notification with no valid small icon:
-         * NotificationCompat builds it, then the framework rejects it and the
-         * post throws. The catch below swallows it, so the symptom is not an
-         * error — it is silence, in the ONE path used while the user is looking
-         * at the app (a foreground FCM message is re-raised through
-         * LocalNotifications, and so is every in-app trade notice).
-         *
-         * That is exactly the shape of the report: «نوتیفیکیشن … نمیرسه به
-         * گوشی.» It was never the sender, the channel or the sound — the local
-         * notification could not be posted at all on an app that was open.
+         * A LAUNCHER-ICON PLACEHOLDER WAS HERE AND IT SILENCED THE APP — see the
+         * history below. Android refuses to post a notification with no valid
+         * small icon, and the framework reports that by throwing, which the
+         * catch at the bottom of this function swallows. Silence, not an error.
          */
         smallIcon: 'ic_stat_notification',
-        iconColor: '#00e5ff',
+        iconColor: spec.accent,
+        /* THE DESIGN. Absolute, because the OS fetches it, not a page. */
+        largeIcon: present.image,
+        attachments: [{ id: 'fbt-card', url: present.image }],
+        /* Android + iOS both surface this on the lock screen. */
+        group: present.tag,
+        /* The tone decides the channel — the same mapping the server uses, so
+           an in-app alert and a pushed one land on the same channel with the
+           same importance and the same tone. */
+        channelId: channelForTone(tone),
+        sound: 'fbt_notification',
+        extra: { ...(options?.data || {}), tone, progress: present.progress, color: spec.accent },
         /*
-         * OUR tone, not the device's.
-         *
-         * On Android 8+ a notification's sound comes from its CHANNEL, and a
-         * `sound` set on a notification posted to a silent channel is ignored
-         * outright — which is why both are named here. `channelId` matches the
-         * channel MainActivity.createNotificationChannels() registers with
-         * res/raw/fbt_notification.wav on it; `sound` is the same raw
-         * resource, and is what the plugin falls back to on the pre-Oreo path
-         * and when the channel has to be created by the plugin itself.
-         *
-         * No file extension: Android resolves the resource by base name.
+         * `autoCancel` so tapping it clears the card (the deep link opens the
+         * right screen); NOT `ongoing`, so the user can always swipe it away —
+         * a notification a user cannot dismiss is a notification they revoke
+         * the permission for.
          */
-        channelId: 'fbt_alerts_v1',
-        sound: 'fbt_notification'
+        autoCancel: true,
+        ongoing: false
       }]
     });
     return true;
@@ -366,21 +443,79 @@ export function showLocalNotification(title, options = {}) {
    * place where «نوع نوتیفیکیشن، علت و لینک» is always reachable. Lazy import
    * so this lib stays usable in non-React contexts (service worker helpers).
    */
+  const tone = resolveTone({
+    tone: options?.tone,
+    stage: options?.stage || options?.kind,
+    side: options?.side,
+    pnlPct: options?.pnlPct,
+    scheduled: options?.scheduled
+  });
+  const link = typeof options?.data?.url === 'string'
+    ? (safeNativeRoute(options.data.url) || (options.data.url.startsWith('/') ? options.data.url : null))
+    : null;
+
+  /*
+   * TWO mirrors, and the difference between them matters:
+   *
+   *   inbox   the HISTORY the settings bell opens. Persisted, unread-counted,
+   *           opened deliberately.
+   *   notifBar the DRAWN notification, shown the moment the event happens and
+   *           then gone — the in-app twin of the card in the OS shade.
+   *
+   * Both are fed here, from the one function every alert already goes through,
+   * so nothing can reach the history without also having been shown, and no new
+   * alert type has to remember to call the bar.
+   */
   try {
     import('../store/useAppStore').then(({ useAppStore }) => {
-      useAppStore.getState().pushInbox({
+      const state = useAppStore.getState();
+      state.pushInbox({
         title: String(title || ''),
         body: options?.body ? String(options.body) : null,
         kind: 'info',
-        link: typeof options?.data?.url === 'string'
-          ? (safeNativeRoute(options.data.url) || (options.data.url.startsWith('/') ? options.data.url : null))
-          : null
+        tone,
+        link
+      });
+      state.showNotifBar({
+        title: String(title || ''),
+        body: options?.body ? String(options.body) : null,
+        tone,
+        value: options?.value || '',
+        label: options?.label || '',
+        kicker: options?.kicker || '',
+        progress: options?.progress ?? null,
+        stage: options?.stage || '',
+        link,
+        /* Money news and a security prompt stay until they are dealt with. */
+        persist: options?.persist ?? ['profit', 'loss', 'alert'].includes(tone)
       });
     }).catch(() => {});
-  } catch { /* inbox mirror is best-effort */ }
+  } catch { /* the mirrors are best-effort; the OS card is the source of truth */ }
+
+  /* The design system decides what this card looks like on every transport. */
+  const language = (typeof document !== 'undefined' && document.documentElement.lang) || 'fa';
+  const present = webPresentation(
+    {
+      title,
+      body: options?.body,
+      url: options?.data?.url,
+      tone,
+      stage: options?.stage,
+      value: options?.value,
+      label: options?.label,
+      kicker: options?.kicker,
+      progress: options?.progress,
+      tag: options?.tag,
+      vibrate: options?.vibrate,
+      actions: options?.actions,
+      requireInteraction: options?.requireInteraction
+    },
+    language,
+    { origin: typeof location !== 'undefined' ? location.origin : '' }
+  );
 
   if (isNativeApp()) {
-    presentNativeShade(title, options);
+    presentNativeShade(title, { ...options, tone });
     return true;
   }
   if (!notificationsSupported()) return null;
@@ -395,16 +530,43 @@ export function showLocalNotification(title, options = {}) {
    */
   if (!webNotificationApi()) return null;
   if (Notification.permission !== 'granted') return null;
+
+  /*
+   * THE CARD IS BUILT HERE, NOT BY THE CALLER.
+   *
+   * Every field the shade reads — icon, badge, image, colour, tag, vibration,
+   * lang/dir, actions — comes from `present`. Callers only say what HAPPENED;
+   * this is what makes an in-app alert, a server push and a Settings preview
+   * look identical, and it is why a new alert type cannot ship off-brand.
+   */
+  const notificationOptions = {
+    body: present.body,
+    icon: present.icon,
+    badge: present.badge,
+    image: present.image,
+    color: present.color,
+    tag: present.tag,
+    lang: present.lang,
+    dir: present.dir,
+    vibrate: present.vibrate,
+    renotify: present.renotify,
+    requireInteraction: present.requireInteraction,
+    actions: present.actions,
+    data: present.data,
+    silent: present.silent,
+    timestamp: present.timestamp
+  };
+
   try {
     // Going through the service worker when there is one means the
     // notification survives the page being frozen or closed.
     if (navigator.serviceWorker?.controller) {
       navigator.serviceWorker.ready.then((reg) =>
-        reg.showNotification(title, { icon: '/icon-192.png', badge: '/icon-192.png', ...options })
+        reg.showNotification(title, notificationOptions)
       );
       return true;
     }
-    return new Notification(title, { icon: '/icon-192.png', ...options });
+    return new Notification(title, notificationOptions);
   } catch {
     return null;
   }
@@ -912,4 +1074,146 @@ export async function pushIdentity() {
   } catch {
     return null;
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* the bridge between the service worker's shade and this page                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Listen for the two things a notification in the SHADE can tell a live page.
+ *
+ * IMPORTANT, AND IT IS THE MISSING HALF OF «با صدا بیاید» ON THE WEB:
+ * the Notification API has no `sound` option that any engine still honours, so
+ * a push that arrives while the site is open used to make NO sound at all —
+ * the card slid in silently. `public/sw.js` therefore posts `fbt-push-tone` to
+ * every open client when a push lands, and this is the listener that turns it
+ * into the same synthesised chime the app plays in-app. It is best-effort by
+ * necessity (a browser may have suspended the audio context), and it is
+ * additionally gated on the user's own sound setting.
+ *
+ * `fbt-push-dismissed` is the other direction of the same thought: a swiped-away
+ * card is one the user has SEEN, so it is marked read in the inbox and the bell
+ * stops nagging about it.
+ */
+let pushBridgeInstalled = false;
+export function installPushBridge() {
+  if (pushBridgeInstalled || typeof navigator === 'undefined' || !navigator.serviceWorker) return false;
+  pushBridgeInstalled = true;
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    const msg = event.data || {};
+    if (msg.type === 'fbt-push-tone') {
+      if (getNotifySettings().sound) playToneSound(msg.tone);
+      return;
+    }
+    if (msg.type === 'fbt-push-dismissed') {
+      try {
+        import('../store/useAppStore').then(({ useAppStore }) => {
+          const state = useAppStore.getState();
+          const hit = (state.inbox || []).find((n) => !n.read && n.title && msg.data?.url && n.link === msg.data.url);
+          if (hit) state.markInboxRead();
+        }).catch(() => {});
+      } catch { /* inbox is best-effort */ }
+    }
+  });
+  return true;
+}
+
+/* -------------------------------------------------------------------------- */
+/* the Settings preview                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * «نوتیفیکیشن‌هایی که در صفحهٔ تنظیمات می‌آید باید روی گوشی هم بیاید با صدا.»
+ *
+ * The Settings screen shows what each tone looks like. Tapping one used to play
+ * a chime and nothing else, so the copy said "this is what a target hit looks
+ * like" while the phone showed the user nothing. This posts the payload to the
+ * service worker, which renders it through the EXACT buildNotification() the
+ * push handler uses — same artwork, same colour, same tag, same actions — and
+ * plays the chime on this page so the preview is audible too.
+ *
+ * @param {'profit'|'loss'|'pending'|'ready'|'alert'|'info'} tone
+ */
+const PREVIEW_COPY = {
+  fa: {
+    profit: { title: 'به هدف رسید — سود', body: 'پوزیشن BTC→USDT با سود بسته شد.' },
+    loss: { title: 'حد ضرر فعال شد', body: 'پوزیشن ETH→USDT با ضرر بسته شد.' },
+    pending: { title: 'سفارش خودکار در انتظار', body: 'BTC→USDT ثبت شد. با رسیدن به هدف خبر می‌دهیم.' },
+    ready: { title: 'آمادهٔ سواپ', body: 'اتوماسیون شما به نتیجه رسید. برای امضا اپ را باز کن.' },
+    alert: { title: 'هشدار امنیتی', body: 'یک درخواست امضا در انتظار تأیید شماست.' },
+    info: { title: 'خلاصهٔ روزانهٔ FBT', body: 'بازار امروز را ببین؛ همه‌چیز در یک نگاه.' }
+  },
+  en: {
+    profit: { title: 'Target reached — in profit', body: 'Your BTC→USDT position closed in profit.' },
+    loss: { title: 'Stop-loss triggered', body: 'Your ETH→USDT position closed at a loss.' },
+    pending: { title: 'Automation pending', body: 'BTC→USDT is set. We will alert you when it targets.' },
+    ready: { title: 'Ready to swap', body: 'Your automation reached its result. Tap to sign.' },
+    alert: { title: 'Security alert', body: 'A signing request is waiting for your approval.' },
+    info: { title: 'FBT daily digest', body: 'See today’s market at a glance.' }
+  }
+};
+
+export async function previewNotification(tone = 'ready', { lang } = {}) {
+  const key = String(tone || 'ready').toLowerCase();
+  const language = String(lang || (typeof document !== 'undefined' && document.documentElement.lang) || 'fa').split('-')[0];
+  const pack = PREVIEW_COPY[language] || PREVIEW_COPY.en;
+  const copy = pack[key] || pack.ready;
+
+  /* Audible here and now: a preview is a user gesture, so the audio context is
+     allowed to start and the chime is the point of the exercise. */
+  playToneSound(key);
+  vibrate(vibrateForTone(key));
+
+  const payload = {
+    ...copy,
+    tone: key,
+    stage: key === 'pending' ? 'pending' : key === 'profit' || key === 'loss' ? 'closed' : 'ready',
+    /* A realistic card: a number, the pair, a progress, and the deep link the
+       real alert would carry. A preview with placeholder dashes teaches the
+       user nothing about what they will actually see. */
+    value: key === 'profit' ? '+12.4%' : key === 'loss' ? '-3.75%' : '65,240',
+    label: key === 'loss' ? 'ETH > USDT' : 'BTC > USDT',
+    kicker: key === 'info' ? 'FBT SWAP' : key.toUpperCase(),
+    progress: key === 'pending' ? 25 : key === 'info' ? null : 68,
+    url: '/#/orders',
+    lang: language
+  };
+
+  /* Native APK: the plugin posts the card itself, with the artwork. */
+  if (isNativeApp()) {
+    await presentNativeShade(copy.title, {
+      body: copy.body,
+      tone: key,
+      value: payload.value,
+      label: payload.label,
+      kicker: payload.kicker,
+      progress: payload.progress,
+      data: { url: payload.url }
+    });
+    return { ok: true, via: 'native' };
+  }
+
+  /* Web/PWA: ask the service worker so the REAL handler renders it. */
+  try {
+    const reg = await navigator.serviceWorker?.ready;
+    if (reg?.active) {
+      reg.active.postMessage({ type: 'fbt-preview-notification', payload });
+      return { ok: true, via: 'service-worker' };
+    }
+  } catch { /* fall through */ }
+
+  /* No worker (very old browser, or a dev server on plain http): a local
+     notification still shows the same design through the same builder. */
+  const shown = showLocalNotification(copy.title, {
+    body: copy.body,
+    tone: key,
+    value: payload.value,
+    label: payload.label,
+    kicker: payload.kicker,
+    progress: payload.progress,
+    data: { url: payload.url },
+    stage: payload.stage
+  });
+  return { ok: Boolean(shown), via: shown ? 'local' : 'none' };
 }

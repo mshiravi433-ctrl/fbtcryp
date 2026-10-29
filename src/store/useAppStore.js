@@ -305,10 +305,61 @@ export const useAppStore = create(
          brand logo to a bell; opening the popup marks them read and the logo
          returns. `link` is an in-app route the item can navigate to. */
       inbox: [],
-      pushInbox({ key = null, title = null, body = null, kind = 'info', link = null, values = {} } = {}) {
-        const item = { id: uid(), key, title, body, kind, link, values, at: Date.now(), read: false };
+      pushInbox({ key = null, title = null, body = null, kind = 'info', link = null, tone = null, values = {} } = {}) {
+        const item = { id: uid(), key, title, body, kind, link, tone, values, at: Date.now(), read: false };
         set((s) => ({ inbox: [item, ...(s.inbox || [])].slice(0, 20) }));
         return item.id;
+      },
+
+      /* ---------------- the in-app notification bar (NOT persisted) --------
+         This is the drawn twin of a phone notification: the same artwork, the
+         same tone colour, the same big number, the same progress — rendered
+         inside the app instead of in the OS shade.
+
+         It lives OUTSIDE the persisted state on purpose. The inbox survives a
+         reload (it is the history the bell opens); a BAR that survived a reload
+         would replay every notification the user has already dealt with, which
+         is the definition of a nagging app.
+
+         Capped at three: a stack of five cards covers the top of a phone and
+         hides the very price the alert is about. */
+      notifBar: [],
+      showNotifBar({
+        title = '',
+        body = null,
+        tone = 'info',
+        value = '',
+        label = '',
+        kicker = '',
+        progress = null,
+        stage = '',
+        kind = 'info',
+        link = null,
+        /* `persist: true` keeps the card until it is dismissed or acted on;
+           the default lets it fade, which is right for a confirmation. */
+        persist = false
+      } = {}) {
+        const id = uid();
+        const item = {
+          id,
+          title: String(title || ''),
+          body: body == null ? null : String(body),
+          tone,
+          value: value == null ? '' : String(value),
+          label: label == null ? '' : String(label),
+          kicker: kicker == null ? '' : String(kicker),
+          progress: Number.isFinite(Number(progress)) ? Number(progress) : null,
+          stage,
+          kind,
+          link,
+          persist: Boolean(persist),
+          at: Date.now()
+        };
+        set((s) => ({ notifBar: [item, ...(s.notifBar || [])].slice(0, 3) }));
+        return id;
+      },
+      dismissNotifBar(id) {
+        set((s) => ({ notifBar: (s.notifBar || []).filter((n) => n.id !== id) }));
       },
       markInboxRead() {
         set((s) => ({ inbox: (s.inbox || []).map((n) => (n.read ? n : { ...n, read: true })) }));
@@ -550,6 +601,7 @@ export const useAppStore = create(
           bets: [],
           quests: {},
           notifications: [],
+          notifBar: [],
           inbox: [],
           points: 0,
           pointsLog: []
@@ -559,8 +611,12 @@ export const useAppStore = create(
     {
       name: 'fbt-swap-v1',
       partialize: (s) => {
-        const { notifications, ...rest } = s;
+        /* Transient UI state is never persisted: `notifications` are toasts and
+           `notifBar` is the drawn notification stack. Writing either to disk
+           means a reload replays alerts the user already dismissed. */
+        const { notifications, notifBar, ...rest } = s;
         void notifications;
+        void notifBar;
         return rest;
       }
     }

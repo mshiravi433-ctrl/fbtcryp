@@ -3,7 +3,8 @@
  * Best-effort. Never throws into a money path.
  */
 import { apiBase } from './apiBase.js';
-import { playSound, pushIdentity, showLocalNotification, vibrate } from './notify.js';
+import { playToneSound, pushIdentity, showLocalNotification, vibrate } from './notify.js';
+import { formatValue, kickerFor, progressFrom, resolveTone, toneSpec, vibrateForTone } from './notificationDesign.js';
 
 const VIBRATE = {
   pending: [30, 40, 30],
@@ -20,7 +21,16 @@ export async function dispatchStageAlert({
   id = 'x',
   haptic,
   minAmountOut = null,
-  quoteOut = null
+  quoteOut = null,
+  /* Presentation the caller may know better than the server does: a signed
+     P&L, which side of a bracket fired, how far through a plan this is. All
+     optional — the design system falls back to the stage's tone. */
+  pnlPct = null,
+  side = null,
+  tone = null,
+  progress = null,
+  rung = null,
+  ofRungs = null
 } = {}) {
   const st = stage === 'pending' || stage === 'closed' ? stage : 'ready';
   /*
@@ -30,8 +40,21 @@ export async function dispatchStageAlert({
    */
   const hasQuote = Number.isFinite(Number(quoteOut)) && Number.isFinite(Number(minAmountOut));
   const quoteBody = hasQuote ? ` · ${Number(quoteOut)} ≥ ${Number(minAmountOut)}` : '';
-  playSound(st);
-  vibrate(VIBRATE[st], haptic);
+
+  /*
+   * ONE TONE, THREE SURFACES.
+   *
+   * The chime, the buzz, the card in the app and the payload sent to the server
+   * are all keyed off the same resolved tone — so a bracket that hits its
+   * take-profit sounds like money made, shows mint, and lands mint in the shade,
+   * while the same bracket hitting its stop-loss does all four in crimson. That
+   * equality is the whole point: the user learns one colour language and it
+   * holds everywhere.
+   */
+  const resolved = resolveTone({ tone, stage: st, side, pnlPct, scheduled: false });
+  const spec = toneSpec(resolved);
+  playToneSound(resolved);
+  vibrate(vibrateForTone(resolved) || VIBRATE[st], haptic);
 
   const identity = await pushIdentity().catch(() => null);
   if (identity?.endpoint) {
@@ -47,6 +70,15 @@ export async function dispatchStageAlert({
           quote,
           rate: rate == null ? '' : String(rate),
           id,
+          /* Presentation only — bounded and clamped server-side. They make the
+             shade's artwork carry the right colour, number and rail; they can
+             never change the copy, the destination or the amount. */
+          tone: resolved,
+          side: side || null,
+          pnlPct: Number.isFinite(Number(pnlPct)) ? Number(pnlPct) : null,
+          progress: progressFrom({ progress, rung, ofRungs }),
+          rung: rung == null ? null : Number(rung),
+          ofRungs: ofRungs == null ? null : Number(ofRungs),
           ...(hasQuote ? { minAmountOut: String(minAmountOut), quoteOut: String(quoteOut) } : {}),
           lang: document.documentElement.lang || 'fa'
         })
@@ -66,11 +98,22 @@ export async function dispatchStageAlert({
     : readyOrderId !== null
       ? `/#/orders?execute=${encodeURIComponent(readyOrderId)}`
       : '/#/orders';
+  /*
+   * The local card. The TAG no longer carries the stage: pending → ready →
+   * closed is ONE notification that updates, which is what «نوتیفیکیشن تا اتمام
+   * و به نتیجه رسیدن» means on a phone that will otherwise stack three rows.
+   */
   showLocalNotification(st, {
     body: `${base}→${quote}${quoteBody}`,
-    tag: `fbt-${kind}-${st}-${id}`,
+    tag: `fbt-${kind}-${String(id == null ? 'x' : id).slice(0, 40)}`,
     data: { url },
-    vibrate: VIBRATE[st]
+    vibrate: spec.vibrate,
+    tone: resolved,
+    stage: st,
+    value: formatValue({ pnlPct, rate }),
+    label: `${base} > ${quote}`,
+    kicker: kickerFor({ tone: resolved, stage: st, kind }),
+    progress: progressFrom({ progress, rung, ofRungs })
   });
   return false;
 }

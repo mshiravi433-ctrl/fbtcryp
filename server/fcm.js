@@ -37,6 +37,8 @@
 
 import crypto from 'node:crypto';
 import { readFcmTokens, removeFcmToken } from './store.js';
+import { androidPresentation, resolveTone } from '../src/lib/notificationDesign.js';
+import { publicOrigin } from './push.js';
 
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || '';
 const CLIENT_EMAIL = process.env.FIREBASE_CLIENT_EMAIL || '';
@@ -257,6 +259,22 @@ export async function fcmSendToToken(deviceToken, payload) {
     return false;
   }
 
+  /*
+   * ─── THE ANDROID PAYLOAD IS BUILT BY THE DESIGN SYSTEM ────────────────────
+   * Everything below used to be typed here: the icon, the accent, the channel,
+   * the sound. It now comes from `androidPresentation()` in
+   * src/lib/notificationDesign.js, which also builds the WEB payload — so the
+   * shade looks the same whether the alert arrived through Firebase or through
+   * the browser, including the wide gradient card (`android.notification.image`)
+   * that carries the big number and the progress rail.
+   *
+   * Nothing about delivery changed: still HIGH priority, still our tone, still
+   * the versioned channel, still pruned on 404/400.
+   */
+  const spec = androidPresentation(payload, payload.lang || 'fa', { origin: publicOrigin() });
+  const tone = resolveTone(payload);
+  const urgent = ['profit', 'loss', 'ready', 'alert'].includes(tone);
+
   try {
     const res = await fetch(`https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`, {
       method: 'POST',
@@ -264,13 +282,17 @@ export async function fcmSendToToken(deviceToken, payload) {
       body: JSON.stringify({
         message: {
           token: deviceToken,
-          notification: { title: payload.title, body: payload.body },
-          data: {
-            url: payload.url || '/',
-            tag: payload.tag || 'fbt',
-            stage: payload.stage || '',
-            color: payload.color || '#00E5FF'
+          notification: {
+            title: spec.notification.title,
+            body: spec.notification.body,
+            /* The launcher/notification drawer foreground image. Firebase's SDK
+               loads this itself, so it must be absolute and publicly readable —
+               both are guaranteed by publicOrigin() + the banner route. */
+            image: spec.notification.image
           },
+          data: Object.fromEntries(
+            Object.entries(spec.data).map(([k, v]) => [k, String(v == null ? '' : v)])
+          ),
           android: {
             // High priority: a price alert is time-sensitive, and normal
             // priority lets Android hold it until the next maintenance window,
@@ -280,31 +302,55 @@ export async function fcmSendToToken(deviceToken, payload) {
             // is the whole point of «نوتیفیکیشن حتی وقتی اپ بسته است برسد».
             priority: 'high',
             ttl: '3600s',
+            // A heads-up that also shows its FULL text while the screen is
+            // locked. `visibility` is the field that decides that, and the
+            // design system sets it to PUBLIC (nothing sensitive is ever put in
+            // a notification body — no amounts, no addresses).
+            direct_boot_ok: true,
             notification: {
-              tag: payload.tag || 'fbt',
-              /* The monochrome brand mark, not the launcher artwork: Android
-                 silhouettes small icons, and a 512px neon picture becomes a
-                 white blob at 24dp. Same drawable the manifest declares as
-                 the FCM default; brand cyan tints it. */
-              icon: 'ic_stat_notification',
-              color: payload.color || '#00E5FF',
-              /*
-               * OUR tone, and the channel that carries it.
-               *
-               * `sound` names res/raw/fbt_notification.wav (no extension —
-               * Android resolves the raw resource by base name). It used to be
-               * the literal string 'default' on both branches of a ternary,
-               * i.e. the device chime, so an FBT alert sounded like everyone
-               * else's.
-               *
-               * `channelId` matters just as much: on Android 8+ the CHANNEL
-               * owns the sound, and a message-level `sound` posted to a
-               * channel that does not carry it is dropped. MainActivity
-               * creates `fbt_alerts_v1` with this exact tone on it, so the two
-               * agree by construction rather than by luck.
-               */
-              sound: 'fbt_notification',
-              channelId: 'fbt_alerts_v1'
+              tag: spec.notification.tag,
+              icon: spec.notification.icon,
+              color: spec.notification.color,
+              /* THE DESIGN: the wide gradient card under the two lines of copy,
+                 with our mark, the big number and the progress rail. */
+              image: spec.notification.image,
+              visibility: spec.notification.visibility,
+              notification_priority: spec.notification.notificationPriority,
+              /* Our tone, and the channel that carries it. On Android 8+ the
+                 CHANNEL owns the sound; MainActivity creates
+                 `fbt_alerts_v1` (IMPORTANCE_HIGH + our tone) and
+                 `fbt_updates_v1` (DEFAULT), so the two agree by construction. */
+              sound: spec.notification.sound,
+              channel_id: spec.notification.channelId,
+              ticker: spec.notification.ticker,
+              /* Keep the summary full instead of truncating it on a narrow
+                 lock screen: this is one sentence, and half a sentence about
+                 money is worse than none. */
+              notify_details: {
+                title: spec.notification.title,
+                body: spec.notification.body
+              }
+            }
+          },
+          apns: {
+            payload: {
+              aps: {
+                alert: { title: spec.notification.title, body: spec.notification.body },
+                /* Money news interrupts; a digest does not. */
+                'interruption-level': urgent ? 'time-sensitive' : 'active',
+                'mutable-content': 1,
+                /*
+                 * iOS ALONE KEEPS THE SYSTEM CHIME, and it is a fact about this
+                 * project rather than an oversight: a custom APNs tone has to be
+                 * a .caf file BUNDLED IN THE XCODE TARGET (there is no `ios/`
+                 * folder yet), and a name that is not in the bundle makes iOS
+                 * fall back to silence rather than to the default sound. So the
+                 * honest choice today is the chime the user's phone already
+                 * makes; the Android half — where we DO ship our tone — is
+                 * asserted as ours by test/notification-sound-probe.mjs.
+                 */
+                sound: 'default'
+              }
             }
           }
         }
@@ -347,6 +393,16 @@ export async function fcmBroadcast(build, { tag = 'fbt-daily' } = {}) {
     await Promise.all(
       slice.map(async (row) => {
         const msg = build(row.lang || 'en');
+        /*
+         * The DIGEST goes through the same design system, with two deliberate
+         * differences: the tone is `info` (blue — never the mint that means
+         * "you made money"), and it is pinned to `fbt_updates_v1`, the DEFAULT
+         * importance channel. A promotion that interrupts whatever the user is
+         * doing is how a notification permission gets revoked.
+         */
+        const spec = androidPresentation({ ...msg, tone: 'info', tag }, row.lang || 'en', {
+          origin: publicOrigin()
+        });
         try {
           const res = await fetch(url, {
             method: 'POST',
@@ -357,21 +413,18 @@ export async function fcmBroadcast(build, { tag = 'fbt-daily' } = {}) {
             body: JSON.stringify({
               message: {
                 token: row.token,
-                notification: { title: msg.title, body: msg.body },
-                data: { url: msg.url || '/', tag },
+                notification: { title: spec.notification.title, body: spec.notification.body, image: spec.notification.image },
+                data: Object.fromEntries(Object.entries(spec.data).map(([k, v]) => [k, String(v == null ? '' : v)])),
                 android: {
                   priority: 'normal',
                   notification: {
                     tag,
-                    icon: 'ic_stat_notification',
-                    color: '#00E5FF',
-                    /* Same tone, quieter channel: the daily digest posts to
-                       `fbt_updates_v1` (IMPORTANCE_DEFAULT), so it lands in
-                       the shade without interrupting whatever the user is
-                       doing — one promotional interruption is how a
-                       notification permission gets revoked. */
-                    sound: 'fbt_notification',
-                    channelId: 'fbt_updates_v1'
+                    icon: spec.notification.icon,
+                    color: spec.notification.color,
+                    image: spec.notification.image,
+                    visibility: spec.notification.visibility,
+                    sound: spec.notification.sound,
+                    channel_id: 'fbt_updates_v1'
                   }
                 }
               }
