@@ -25,7 +25,10 @@ function installDom(html = '<!doctype html><html><body><div id="r"></div></body>
   const w = dom.window;
   global.window = w;
   global.document = w.document;
-  for (const k of ['HTMLElement', 'Element', 'localStorage', 'CustomEvent', 'Node', 'SVGElement', 'Event', 'MutationObserver']) {
+  for (const k of ['HTMLElement', 'Element', 'localStorage', 'CustomEvent', 'Node', 'SVGElement', 'Event', 'MutationObserver',
+    /* jsdom exposes these on the window only; a probe that dispatches a real
+       click (the Smart Money desk does) needs the constructor in scope. */
+    'MouseEvent', 'KeyboardEvent', 'PointerEvent']) {
     if (w[k]) global[k] = w[k];
   }
   for (const k of ['requestAnimationFrame', 'cancelAnimationFrame', 'getComputedStyle']) {

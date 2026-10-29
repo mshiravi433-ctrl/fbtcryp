@@ -12,6 +12,7 @@ import { isTracked, trackWallet, untrackWallet } from '../lib/smartMoneyWatch';
 import { explorerTx } from '../lib/chains';
 import { useTelegram } from '../context/TelegramContext';
 import { openUrl } from '../lib/browser';
+import CopyTradeButton from '../components/smart-money/CopyTradeButton';
 import '../styles/smart-money-intelligence.css';
 
 function ScoreRing({ value, color = '#7c7dff', label }) {
@@ -500,6 +501,14 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
                                   : t('sm.phase3.unpriced')}
                             </small>
                           </div>
+                          {/* The same token, one tap from this receipt to our
+                              swap screen — «کپی تراکنش». */}
+                          <CopyTradeButton
+                            chain={data.chainKind === 'solana' || data.chain === 'solana' ? 'solana' : Number(data.chain)}
+                            token={s.token}
+                            side={s.side}
+                            className="sm-copy--tight"
+                          />
                           {proof && (
                             <button type="button" className="smi-observed-proof" onClick={() => openUrl(proof)}>
                               {t('sm.engine.proof')} <IconArrowUpRight width={11} height={11} aria-hidden="true" />

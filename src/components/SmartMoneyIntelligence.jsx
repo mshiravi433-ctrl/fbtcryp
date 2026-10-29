@@ -6,6 +6,7 @@ import { getTracked, trackWallet } from '../lib/smartMoneyWatch';
 import { openUrl } from '../lib/browser';
 import TokenIcon from '../lib/tokenIcon';
 import ModernSelect from './ModernSelect';
+import CopyTradeButton from './smart-money/CopyTradeButton';
 import { pollWhileVisible } from '../lib/visibilityPoll';
 import {
   SmSignalGlyph, SmWavesGlyph, SmCoinGlyph, SmPulseGlyph, SmSparkGlyph,
@@ -73,6 +74,22 @@ export function IntelligenceTeaser({ verified, onOpen }) {
         <span>{active.length ? t('sm.engine.activeCount', { n: active.length })
           : verified?.coverage?.analyzedWallets ? t('sm.engine.teaserSample', { wallets: verified.coverage.analyzedWallets, swaps: verified.coverage.observedSwaps ?? 0 })
             : t('sm.engine.noConsensus')}</span>
+        {/* The three strongest names, not just a count: «۳ سیگنال» told the
+            reader nothing they could act on, while the symbols + evidence
+            strength are the actual answer this card exists to hand over. */}
+        {active.length > 0 && (
+          <span className="smi-teaser-chips">
+            {active.slice(0, 3).map((r) => (
+              <span
+                key={`${r.chain}:${r.token}`}
+                className={`smi-teaser-chip ${r.signal === 'DISTRIBUTION' ? 'is-down' : 'is-up'}`}
+              >
+                <b>{r.symbol || shortAddr(r.token)}</b>
+                <i>{r.confidence}</i>
+              </span>
+            ))}
+          </span>
+        )}
       </div>
       <button type="button" onClick={onOpen}>{t('sm.engine.open')} <IconArrowUpRight width={11} height={11} aria-hidden="true" /></button>
     </section>
@@ -243,6 +260,28 @@ export function VerifiedWallets() {
                 )}
               </div>
 
+              {/* WHAT the score was measured on. A number with no sample size
+                  behind it is the «اطلاعات ناکافی» the board was reported for;
+                  these four facts make the confidence auditable in place. */}
+              <div className="smi-wcard-sample">
+                <span>
+                  {t('sm.engine.observedDays')}
+                  <b className="mono">{w.sample?.observedDays ?? '—'}</b>
+                </span>
+                <span>
+                  {t('sm.engine.sampleSwaps')}
+                  <b className="mono">{w.sample?.swaps ?? '—'}</b>
+                </span>
+                <span>
+                  {t('sm.engine.measuredCoverage')}
+                  <b className="mono">{w.measuredCoverage != null ? `${Math.round(w.measuredCoverage * 100)}%` : '—'}</b>
+                </span>
+                <span>
+                  {t('sm.engine.lastMeasured')}
+                  <b>{w.updatedAt ? timeAgo(w.updatedAt) : '—'}</b>
+                </span>
+              </div>
+
               <div className="smi-wcard-actions">
                 <button
                   type="button"
@@ -352,8 +391,14 @@ function ReceiptFeed({ rows }) {
               <small>
                 {chainName(r.chain)} · {timeAgo(r.at)}
                 {r.qualified ? ` · ${t('sm.engine.qualifiedShort')}` : ''}
-                {r.realizedRoiPct != null ? ` · ROI ${r.realizedRoiPct > 0 ? '+' : ''}${r.realizedRoiPct}%` : ''}
               </small>
+              {/* A realised ROI is the reason this row is interesting — it gets
+                  its own pill instead of trailing a sentence. */}
+              {r.realizedRoiPct != null && (
+                <span className={`smi-roi ${r.realizedRoiPct >= 0 ? 'is-up' : 'is-down'}`}>
+                  ROI {r.realizedRoiPct > 0 ? '+' : ''}{r.realizedRoiPct}%
+                </span>
+              )}
             </button>
             <button
               type="button"
@@ -362,6 +407,9 @@ function ReceiptFeed({ rows }) {
             >
               {shortAddr(r.wallet)}
             </button>
+            {/* «کپی تراکنش»: the profitable fill the verification is based on,
+                one tap from here to the same token on the swap screen. */}
+            <CopyTradeButton chain={r.chain} token={r.token} side={r.side} className="sm-copy--tight" />
             {url && (
               <button type="button" className="smi-proof" onClick={() => openUrl(url)}>
                 {t('sm.engine.proof')} <IconArrowUpRight width={11} height={11} aria-hidden="true" />
@@ -886,6 +934,11 @@ export default function SmartMoneyIntelligence() {
                     <span className="smi-votes">
                       {r.buyers} {t('sm.engine.buy')} · {r.sellers} {t('sm.engine.sell')} · {r.independentVotes} {t('sm.engine.groups')}
                     </span>
+                    <span className="smi-votes smi-votes--wide">
+                      {r.wallets ?? (r.buyers || 0) + (r.sellers || 0)} {t('sm.engine.wallets')}
+                      {` · ${r.swaps ?? 0} ${t('sm.engine.receiptsShort')}`}
+                      {r.lastAt ? ` · ${timeAgo(r.lastAt)}` : ''}
+                    </span>
                     <span className="smi-row-meta">
                       <FlowSpark buckets={r.flowBuckets} />
                       <TrendChip row={r} />
@@ -897,6 +950,11 @@ export default function SmartMoneyIntelligence() {
                     </b>
                     <small className={`smi-signal ${badge(r.signal)}`}>
                       {r.confidence == null ? t('sm.engine.insufficient') : `${t(`sm.engine.signal.${r.signal}`)} · ${r.confidence}/100`}
+                    </small>
+                    {/* Price is live-or-null: an unpriced token says «—» rather
+                        than borrowing the flow number as if it were a quote. */}
+                    <small className="smi-price-line mono">
+                      {r.currentPriceUsd != null ? fmtPrice(r.currentPriceUsd) : t('sm.engine.noPrice')}
                     </small>
                   </span>
                 </button>
@@ -919,9 +977,21 @@ export default function SmartMoneyIntelligence() {
                     <h3>{chosen.symbol} <small>· {chainName(chosen.chain)}</small></h3>
                   </div>
                 </div>
-                <button className="smi-link" type="button" onClick={() => navigate(`/smart-money/token/${chosen.chain}/${chosen.token}`)}>
-                  {t('sm.analyze')} <IconArrowUpRight width={11} height={11} aria-hidden="true" />
-                </button>
+                <div className="smi-detail-actions">
+                  {/* «کپی تراکنش» — the same contract this consensus is about,
+                      one tap from here into the swap screen, with the side
+                      taken from the observed signal. The amount, slippage and
+                      the swap screen's own risk gate stay the user's. */}
+                  <CopyTradeButton
+                    chain={chosen.chain}
+                    token={chosen.token}
+                    side={chosen.signal === 'DISTRIBUTION' ? 'SELL' : 'BUY'}
+                    className="sm-copy--tight"
+                  />
+                  <button className="smi-link" type="button" onClick={() => navigate(`/smart-money/token/${chosen.chain}/${chosen.token}`)}>
+                    {t('sm.analyze')} <IconArrowUpRight width={11} height={11} aria-hidden="true" />
+                  </button>
+                </div>
               </div>
               <div className="smi-detail-metrics">
                 <div>
@@ -937,6 +1007,58 @@ export default function SmartMoneyIntelligence() {
                   <strong>{chosen.confidence == null ? '—' : `${chosen.confidence}/100`}</strong>
                 </div>
               </div>
+              {/* Evidence strength, as a meter — the same 0–100 the row
+                  prints, but readable at a glance and impossible to confuse
+                  with a price forecast (it is labelled as evidence). */}
+              <div className="smi-conf" data-testid="sm-confidence-meter">
+                <div className="smi-conf-head">
+                  <span>{t('sm.engine.confidence')}</span>
+                  <b className="mono">{chosen.confidence == null ? '—' : `${chosen.confidence}/100`}</b>
+                </div>
+                <span className={`smi-conf-track ${badge(chosen.signal)}`} aria-hidden="true">
+                  <i style={{ width: `${Math.max(0, Math.min(100, chosen.confidence || 0))}%` }} />
+                </span>
+              </div>
+
+              {/* The facts the board used to leave out: what the token is worth,
+                  how deep the pool is, how many wallets and receipts stand
+                  behind the signal, and when we last saw one. Every cell is
+                  live-or-«—». */}
+              <div className="smi-facts">
+                <div>
+                  <small>{t('sm.engine.price')}</small>
+                  <b className="mono">{fmtPrice(chosen.currentPriceUsd)}</b>
+                </div>
+                <div>
+                  <small>{t('sm.engine.liquidityShort')}</small>
+                  <b className="mono">{chosen.liquidityUsd ? fmtUsd(chosen.liquidityUsd) : '—'}</b>
+                </div>
+                <div>
+                  <small>{t('sm.engine.wallets')}</small>
+                  <b className="mono">{chosen.wallets ?? '—'}</b>
+                </div>
+                <div>
+                  <small>{t('sm.engine.receiptsShort')}</small>
+                  <b className="mono">{chosen.swaps ?? '—'}</b>
+                </div>
+                <div>
+                  <small>{t('sm.engine.lastTrade')}</small>
+                  <b>{chosen.lastAt ? timeAgo(chosen.lastAt) : '—'}</b>
+                </div>
+                <div>
+                  <small>{t('sm.engine.groups')}</small>
+                  <b className="mono">{chosen.independentVotes ?? '—'}</b>
+                </div>
+              </div>
+
+              <div className="smi-split">
+                <span className="is-up">{chosen.buyers ?? 0} {t('sm.engine.buy')}</span>
+                <span className="smi-split-bar" aria-hidden="true">
+                  <i style={{ width: `${chosen.buyers + chosen.sellers ? Math.round((chosen.buyers / (chosen.buyers + chosen.sellers)) * 100) : 0}%` }} />
+                </span>
+                <span className="is-down">{chosen.sellers ?? 0} {t('sm.engine.sell')}</span>
+              </div>
+
               {chosen.momentum && (
                 <div className="smi-detail-metrics smi-momentum-metrics" data-testid="sm-momentum-detail">
                   <div>
@@ -965,6 +1087,7 @@ export default function SmartMoneyIntelligence() {
               )}
               <TokenGraph data={data} tokenRow={chosen} />
               <FollowRule key={`${chosen.chain}:${chosen.token}`} row={chosen} onIntent={monitor} />
+              <p className="smi-footnote">{t('sm.engine.copyTradeNote')}</p>
             </section>
           )}
 

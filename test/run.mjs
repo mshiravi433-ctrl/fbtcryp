@@ -72,6 +72,10 @@ import './discover-redesign-probe.mjs';
    zero. Static source audit: the page mounts even when one of these is wrong,
    which is exactly why it needs its own probe. */
 import './smart-money-redesign-probe.mjs';
+/* «کپی تراکنش» + the token tab's activity rows + the control heights: the
+   deep-link contract, the four surfaces that carry the button, and the layout
+   rules that keep a 7-tab row and a 40px controls row honest. */
+import './smart-money-copy-trade-probe.mjs';
 /* The /business B2B console: every string it paints resolves in Persian and
    English, the tab and sub-tab labels resolve in all twelve locales, and the
    keys test/wiring.mjs also demands everywhere exist everywhere. It is the
@@ -394,7 +398,10 @@ function installDom(html = '<!doctype html><html><body><div id="r"></div></body>
      reports a React error that says nothing about the screen itself. Same
      approach the vitest farm suites already use. */
   if (!w.Element.prototype.scrollIntoView) w.Element.prototype.scrollIntoView = function () {};
-  for (const k of ['HTMLElement', 'Element', 'localStorage', 'CustomEvent', 'Node', 'SVGElement', 'Event', 'MutationObserver']) {
+  for (const k of ['HTMLElement', 'Element', 'localStorage', 'CustomEvent', 'Node', 'SVGElement', 'Event', 'MutationObserver',
+    /* jsdom exposes these on the window only; a probe that dispatches a real
+       click (the Smart Money desk does) needs the constructor in scope. */
+    'MouseEvent', 'KeyboardEvent', 'PointerEvent']) {
     if (w[k]) global[k] = w[k];
   }
   for (const k of ['requestAnimationFrame', 'cancelAnimationFrame', 'getComputedStyle']) {

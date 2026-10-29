@@ -21,6 +21,7 @@ import {
 import { openUrl } from '../lib/browser';
 import { useTelegram } from '../context/TelegramContext';
 import SmartMoneyIntelligence, { IntelligenceTeaser, VerifiedWallets } from '../components/SmartMoneyIntelligence';
+import CopyTradeButton from '../components/smart-money/CopyTradeButton';
 import TokenIcon from '../lib/tokenIcon';
 
 /* import styles via side-effect */
@@ -411,6 +412,84 @@ function EarlyGrid({ tokens, navigate, t }) {
   );
 }
 
+/*
+ * THE TOKEN-ACTIVITY ROW — one component, three surfaces.
+ * The overview, the token tab and (by the same markup) the intelligence tab
+ * all answer the same question, so they must not drift into three different
+ * row designs. The row is a <div> that holds TWO real buttons:
+ *
+ *   · `.smx-row-hit`  — navigate to this token's intelligence page;
+ *   · «کپی تراکنش»    — open the swap screen with this contract preselected.
+ *
+ * A nested button inside a button is invalid HTML and swallows one of the two
+ * taps on Android, which is exactly what the old single-button row would have
+ * done had the copy action been bolted onto it.
+ */
+function TokenActivityRows({ rows, navigate, t }) {
+  if (!rows?.length) return null;
+  return (
+    <div className="smx-rows">
+      {rows.map((r) => {
+        const neutral = r.signal === 'NEUTRAL';
+        const up = r.netUsd >= 0;
+        const confidence = r.signal === 'ACCUMULATION' ? r.accumulation : r.distribution;
+        return (
+          <div key={`${r.chainId}:${r.address || r.symbol}`} className="smx-row smx-row--split">
+            <button
+              type="button"
+              className="smx-row-hit"
+              onClick={() => r.address && navigate(`/smart-money/token/${r.chainId}/${r.address}`)}
+            >
+              <span className="smx-row-ico">
+                <TokenIcon
+                  token={{ symbol: r.symbol, address: r.address }}
+                  chainId={r.chainId}
+                  size={34}
+                />
+              </span>
+              <span className="smx-row-main">
+                <span className="smx-row-title">
+                  {r.symbol}
+                  <em>{r.chainShort}</em>
+                </span>
+                <span className="smx-row-sub">
+                  {t('sm.walletsCount', { n: r.wallets ?? r.events })}
+                  {r.labelledEvents ? ` · ${t('sm.labelledEvents', { n: r.labelledEvents })}` : ''}
+                </span>
+              </span>
+              <span className="smx-row-end">
+                {/* Labelled flow → signed net; unlabelled → total moved, no sign. */}
+                <b className={neutral ? '' : up ? 'sm-up' : 'sm-down'}>
+                  {neutral ? fmtUsd(r.totalUsd ?? Math.abs(r.netUsd)) : fmtUsd(r.netUsd)}
+                </b>
+                {/* The signal is a WORD first and a bar second: colour alone is
+                    unreadable in grayscale and invisible to a screen reader. */}
+                <SignalPill signal={neutral ? 'NEUTRAL' : r.signal} t={t} />
+                {!neutral && (
+                  <span className={`smx-mini ${up ? 'is-up' : 'is-down'}`} aria-hidden="true">
+                    <span className="smx-mini-track">
+                      <i style={{ width: `${Math.min(100, Math.max(0, confidence || 0))}%` }} />
+                    </span>
+                    <em>{confidence != null ? `${confidence}%` : '—'}</em>
+                  </span>
+                )}
+              </span>
+            </button>
+            <span className="smx-row-action">
+              <CopyTradeButton
+                chain={r.chainId}
+                token={r.address}
+                side={neutral ? 'BUY' : r.signal === 'DISTRIBUTION' ? 'SELL' : 'BUY'}
+                className="sm-copy--tight"
+              />
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function SmartMoney() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -564,10 +643,21 @@ export default function SmartMoney() {
       <div className="sm-page smx-deck">
         {/* ── HERO ───────────────────────────────────────────────────────── */}
         <motion.section className="smx-hero" variants={riseIn} initial="hidden" animate="show">
+          {/*
+            THE ATMOSPHERE LAYER — five decorative children, all compositor
+            only. `mesh` drifts, `orb`s float, `radar` sweeps, `scan` slides and
+            `hairline` is a static light seam. Nothing here reads layout (no
+            `left`/`width` animation), nothing here is measured by JS, and the
+            whole set stops under `prefers-reduced-motion` and inside the APK
+            (see the motion block in smart-money.css) — so "more motion" can
+            never turn into "slower page".
+          */}
           <span className="smx-hero-mesh" aria-hidden="true" />
           <span className="smx-hero-orb smx-hero-orb--a" aria-hidden="true" />
           <span className="smx-hero-orb smx-hero-orb--b" aria-hidden="true" />
           <span className="smx-hero-radar" aria-hidden="true"><i /><i /><i /><b /></span>
+          <span className="smx-hero-scan" aria-hidden="true" />
+          <span className="smx-hero-hairline" aria-hidden="true" />
 
           <header className="smx-hero-top">
             <span className="smx-kicker">
@@ -633,11 +723,17 @@ export default function SmartMoney() {
         </motion.section>
 
         {/*
-          THE NAVIGATION DOCK — seven tabs, seven glyphs.
-          The old rail was a single scrolling line of text pills: on a Persian
-          phone the last three tabs sat beyond the edge, and nothing on screen
-          said they existed. A 4+3 grid shows every destination at once, gives
-          each one an icon, and keeps a 44px target on the narrowest screen.
+          THE NAVIGATION DOCK — seven tabs, ONE line.
+          Reported: «تب‌ها به صورت افقی و در یک خط باشد». The previous 4+3 grid
+          wrapped the last three tabs onto a second row, which on a phone read
+          as two different groups of destinations and pushed the content down.
+          Now it is a single seven-column rail: every tab visible at once, one
+          glyph above one label, and a shared mint pill (`layoutId`) that slides
+          between them instead of a hard colour snap.
+
+          Labels are ellipsised by CSS, never truncated in the DOM: the full
+          translated string stays the button's text (screen readers and the
+          desk probe read it), while a 360px screen shows as much of it as fits.
         */}
         <nav className="smx-dock" role="tablist" aria-label={t('sm.title')}>
           {TABS.map((id) => {
@@ -651,14 +747,34 @@ export default function SmartMoney() {
                 aria-selected={active}
                 className={`smx-dock-btn ${active ? 'is-active' : ''}`}
                 onClick={() => selectTab(id)}
+                data-testid={`sm-tab-${id}`}
               >
-                <span className="smx-dock-ico" aria-hidden="true"><Glyph width={18} height={18} /></span>
+                {active && (
+                  <motion.span
+                    className="smx-dock-pill"
+                    layoutId="sm-dock-pill"
+                    transition={{ type: 'spring', stiffness: 460, damping: 36, mass: 0.55 }}
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="smx-dock-ico" aria-hidden="true"><Glyph width={17} height={17} /></span>
                 <span className="smx-dock-label">{t(`sm.tabs.${id}`)}</span>
               </button>
             );
           })}
         </nav>
 
+        {/* THE PANEL — a 220ms/6px entrance on tab change. `key={tab}` makes
+            Framer remount on each switch, which is what makes the transition
+            run; it animates opacity + transform only, so the list below is
+            laid out once and never re-measured mid-animation. */}
+        <motion.div
+          className="smx-panel"
+          key={tab}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: 'easeOut' }}
+        >
         {/* OVERVIEW */}
         {tab === 'overview' && (
           <>
@@ -772,59 +888,7 @@ export default function SmartMoney() {
                   {data.tokenActivity?.length === 0 && (
                     <EmptyArt icon={<SmWavesGlyph width={22} height={22} />} title={t('sm.noActivity')} />
                   )}
-                  <div className="smx-rows">
-                    {data.tokenActivity?.map((r) => {
-                      const neutral = r.signal === 'NEUTRAL';
-                      const up = r.netUsd >= 0;
-                      const confidence = r.signal === 'ACCUMULATION' ? r.accumulation : r.distribution;
-                      return (
-                        <button
-                          type="button"
-                          key={`${r.chainId}:${r.address || r.symbol}`}
-                          className="smx-row"
-                          onClick={() => r.address && navigate(`/smart-money/token/${r.chainId}/${r.address}`)}
-                        >
-                          <span className="smx-row-ico">
-                            <TokenIcon
-                              token={{ symbol: r.symbol, address: r.address }}
-                              chainId={r.chainId}
-                              size={34}
-                            />
-                          </span>
-                          <span className="smx-row-main">
-                            <span className="smx-row-title">
-                              {r.symbol}
-                              <em>{r.chainShort}</em>
-                            </span>
-                            <span className="smx-row-sub">
-                              {t('sm.walletsCount', { n: r.wallets ?? r.events })}
-                              {r.labelledEvents ? ` · ${t('sm.labelledEvents', { n: r.labelledEvents })}` : ''}
-                            </span>
-                          </span>
-                          <span className="smx-row-end">
-                            {/* Labelled flow → signed net; unlabelled → total moved, no sign. */}
-                            <b className={neutral ? '' : up ? 'sm-up' : 'sm-down'}>
-                              {neutral ? fmtUsd(r.totalUsd ?? Math.abs(r.netUsd)) : fmtUsd(r.netUsd)}
-                            </b>
-                            {/* The signal is a WORD first and a bar second: the
-                                old row printed «78%» next to a coloured bar, so
-                                the only place the direction appeared was the
-                                colour — unreadable in grayscale and invisible to
-                                a screen reader. */}
-                            <SignalPill signal={neutral ? 'NEUTRAL' : r.signal} t={t} />
-                            {!neutral && (
-                              <span className={`smx-mini ${up ? 'is-up' : 'is-down'}`} aria-hidden="true">
-                                <span className="smx-mini-track">
-                                  <i style={{ width: `${Math.min(100, Math.max(0, confidence || 0))}%` }} />
-                                </span>
-                                <em>{confidence != null ? `${confidence}%` : '—'}</em>
-                              </span>
-                            )}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <TokenActivityRows rows={data.tokenActivity} navigate={navigate} t={t} />
                 </section>
 
                 {/* Early detection */}
@@ -923,13 +987,14 @@ export default function SmartMoney() {
         {tab === 'wallets' && <><VerifiedWallets /><WhalesTab navigate={navigate} t={t} smart /></>}
 
         {/* TOKEN INTELLIGENCE */}
-        {tab === 'tokens' && <TokensTab navigate={navigate} t={t} query={query} setQuery={setQuery} />}
+        {tab === 'tokens' && <TokensTab navigate={navigate} t={t} query={query} setQuery={setQuery} winKey={winKey} activity={data?.tokenActivity} />}
 
         {/* MONEY FLOW */}
         {tab === 'flows' && <FlowsTab t={t} win={winKey} onWindow={selectWindow} />}
 
         {/* ALERTS */}
         {tab === 'alerts' && <AlertsTab navigate={navigate} t={t} />}
+        </motion.div>
       </div>
     </PageTransition>
   );
@@ -1049,24 +1114,58 @@ function WhalesTab({ navigate, t, smart }) {
   );
 }
 
-function TokensTab({ navigate, t, query, setQuery }) {
+/*
+ * THE TOKEN TAB — «اطلاعات توکن‌ها تب در هوشمند مانی اطلاعاتی را نشان نمی‌دهد»
+ * ───────────────────────────────────────────────────────────────────────────
+ * The tab used to be ONE section: «تشخیص زودهنگام». When the DexScreener
+ * early-token feed answered with an empty list (normal whenever no brand-new
+ * pair cleared the liquidity filter in the last few hours), the whole tab was
+ * a search box, an empty state and a paragraph — while the overview two taps
+ * away was showing real token accumulations. Nothing was broken in the fetch;
+ * the tab simply asked a narrower question than the page already had answers
+ * for.
+ *
+ * It now leads with the same activity rows the overview renders (passed down,
+ * not re-fetched), then the early-token grid and the fresh wallets. Search
+ * filters all three. Every empty state is the honest one, and the window the
+ * numbers belong to is printed in the header — so a quiet feed reads as
+ * "nothing observed in this window", never as a broken screen.
+ */
+function TokensTab({ navigate, t, query, setQuery, winKey, activity }) {
   const [early, setEarly] = useState(null);
   const [fresh, setFresh] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [tick, setTick] = useState(0);
+
   useEffect(() => {
     let on = true;
-    fetchEarlyTokens(30).then((d) => on && setEarly(d.tokens || [])).catch(() => on && setEarly([]));
-    fetchFreshWallets().then((d) => on && setFresh(d)).catch(() => setFresh(null));
+    setBusy(true);
+    Promise.allSettled([fetchEarlyTokens(30), fetchFreshWallets()]).then(([a, b]) => {
+      if (!on) return;
+      setEarly(a.status === 'fulfilled' ? (a.value?.tokens || []) : []);
+      setFresh(b.status === 'fulfilled' ? b.value : null);
+      setBusy(false);
+    });
     return () => { on = false; };
-  }, []);
+  }, [tick]);
 
-  const filtered = (early || []).filter((tk) =>
-    !query || tk.symbol?.toLowerCase().includes(query.toLowerCase()) || tk.address?.includes(query.toLowerCase()));
+  const q = String(query || '').trim().toLowerCase();
+  const hits = (row) => !q
+    || String(row?.symbol || '').toLowerCase().includes(q)
+    || String(row?.address || row?.token || '').toLowerCase().includes(q);
+
+  const activityRows = (activity || []).filter(hits);
+  const earlyRows = (early || []).filter(hits);
+  const freshRows = (fresh?.wallets || []).filter(hits);
+  const nothing = early !== null && !activityRows.length && !earlyRows.length && !freshRows.length;
 
   return (
     <>
+      {/* Search and a manual refresh live in ONE bar: the tab reads three feeds
+          and the reader should be able to ask all three again with one tap. */}
       <form
-        className="smx-search smx-search--inline"
-        onSubmit={(e) => e.preventDefault()}
+        className="smx-search smx-search--inline smx-toksearch"
+        onSubmit={(e) => { e.preventDefault(); setTick((n) => n + 1); }}
         role="search"
       >
         <span className="smx-search-ico" aria-hidden="true"><IconSearch width={16} height={16} /></span>
@@ -1082,28 +1181,75 @@ function TokensTab({ navigate, t, query, setQuery }) {
             <IconX width={13} height={13} />
           </button>
         ) : null}
+        <button
+          type="submit"
+          className={`smx-refresh smx-toksearch-go ${busy ? 'is-busy' : ''}`}
+          aria-label={t('common.refresh')}
+        >
+          <IconRefresh width={15} height={15} />
+        </button>
       </form>
+
+      {/* What this tab is made of, in three numbers. */}
+      <div className="smx-tokstats">
+        <div>
+          <span className="smx-tokstats-ico is-mint" aria-hidden="true"><SmAccumulateGlyph width={14} height={14} /></span>
+          <b className="mono">{activity ? activityRows.length : '—'}</b>
+          <small>{t('sm.smartMoneyActivity')}</small>
+        </div>
+        <div>
+          <span className="smx-tokstats-ico is-cyan" aria-hidden="true"><SmSparkGlyph width={14} height={14} /></span>
+          <b className="mono">{early ? earlyRows.length : '—'}</b>
+          <small>{t('sm.earlyDetection')}</small>
+        </div>
+        <div>
+          <span className="smx-tokstats-ico is-violet" aria-hidden="true"><SmFreshGlyph width={14} height={14} /></span>
+          <b className="mono">{fresh ? freshRows.length : '—'}</b>
+          <small>{t('sm.freshWallets')}</small>
+        </div>
+      </div>
+
+      {nothing && (
+        <EmptyArt
+          icon={<SmCoinGlyph width={22} height={22} />}
+          title={t('sm.noEarly')}
+          body={t('sm.tokenTabEmpty')}
+        />
+      )}
+
+      {activityRows.length > 0 && (
+        <section className="sm-section" data-testid="sm-tokens-activity">
+          <SectionHead
+            icon={<SmWavesGlyph width={16} height={16} />}
+            title={t('sm.smartMoneyActivity')}
+            meta={`${t(`sm.windows.${winKey}`)} · ${t('sm.walletsCount', { n: activityRows.reduce((s, r) => s + (r.wallets || 0), 0) })}`}
+          />
+          <TokenActivityRows rows={activityRows} navigate={navigate} t={t} />
+        </section>
+      )}
 
       <section className="sm-section">
         <SectionHead
           icon={<SmSparkGlyph width={16} height={16} />}
           title={t('sm.earlyDetection')}
-          meta={early ? String(filtered.length) : null}
+          meta={early ? String(earlyRows.length) : null}
         />
-        {!early ? <Spinner /> : <EarlyGrid tokens={filtered} navigate={navigate} t={t} />}
+        {!early ? <Spinner /> : <EarlyGrid tokens={earlyRows} navigate={navigate} t={t} />}
         <p className="smx-disclaimer">{t('sm.earlyNote')}</p>
       </section>
 
-      {fresh?.wallets?.length > 0 && (
+      {freshRows.length > 0 && (
         <section className="sm-section">
-          <SectionHead icon={<SmFreshGlyph width={16} height={16} />} title={t('sm.freshWallets')} meta={String(fresh.wallets.length)} />
+          <SectionHead icon={<SmFreshGlyph width={16} height={16} />} title={t('sm.freshWallets')} meta={String(freshRows.length)} />
           <div className="smx-fresh-grid">
-            {fresh.wallets.slice(0, 6).map((w) => (
+            {freshRows.slice(0, 6).map((w) => (
               <FreshCard key={`${w.chainId}:${w.address}`} wallet={w} navigate={navigate} t={t} />
             ))}
           </div>
         </section>
       )}
+
+      <p className="smx-disclaimer">{t('sm.tokenTabNote')}</p>
     </>
   );
 }
