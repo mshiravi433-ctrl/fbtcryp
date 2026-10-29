@@ -1275,6 +1275,35 @@ export default function run() {
       && /#FFB300/.test(read('src/lib/notificationDesign.js'))
       && /#00C853/.test(read('src/lib/notificationDesign.js'))
       && /#FF1744/.test(read('src/lib/notificationDesign.js')));
+    /*
+     * ─── THE PLACEMENT THAT TOOK THE WHOLE SITE DOWN ───────────────────────
+     * `NotificationBar` deep-links with `useNavigate()`, so it MUST render
+     * inside <HashRouter>. The merge that introduced it mounted it next to
+     * <Toasts> — outside every router — and the hook threw during render one
+     * chunk after boot. `<RouteBoundary>` could not catch that (it lives inside
+     * a route), so `BootBoundary` in main.jsx did, and EVERY page of the site
+     * showed «خطای غیرمنتظره». The app did not come up at all.
+     *
+     * A render test cannot see this: test/notification-bar.test.jsx provides a
+     * router by mocking `useNavigate` outright. The defect is in App.jsx's
+     * tree, so the assertion has to be about App.jsx's tree.
+     */
+    const appForBar = code(read('src/App.jsx'));
+    const barAt = appForBar.indexOf('<NotificationBar />');
+    t('the notification bar is mounted in App', barAt !== -1);
+    t('...exactly once (two copies means two stacking contexts)',
+      appForBar.split('<NotificationBar />').length - 1 === 1);
+    /*
+     * The LAST <HashRouter> is the main screen tree: the payment-landing branch
+     * has its own router and the lock/splash branches have none. The bar must
+     * sit inside that one, after the routes it overlays.
+     */
+    t('...INSIDE the main <HashRouter>, because useNavigate() throws outside it',
+      barAt > appForBar.lastIndexOf('<HashRouter')
+      && barAt < appForBar.lastIndexOf('</HashRouter>'));
+    t('...and cannot be reached without a router even if the tree changes',
+      /useInRouterContext/.test(code(read('src/components/NotificationBar.jsx'))));
+
     t('in-app stage chimes differ from success/error/alert',
       /kind === 'pending'/.test(read('src/lib/notify.js'))
       && /kind === 'ready'/.test(read('src/lib/notify.js'))

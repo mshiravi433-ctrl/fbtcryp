@@ -862,6 +862,36 @@ export default function App() {
         <Suspense fallback={null}>
           <FbtRadioPill />
         </Suspense>
+        {/*
+          THE NOTIFICATION SURFACE, drawn by us — INSIDE <HashRouter>.
+
+          ─── THE BUG THIS POSITION FIXES ──────────────────────────────────────
+          This used to sit BELOW, next to <Toasts> and <InstallPrompt>, i.e.
+          OUTSIDE every router. `NotificationBar` navigates with `useNavigate()`
+          (a card is a deep link), and that hook throws when there is no Router
+          above it:
+
+              useNavigate() may be used only in the context of a <Router>
+
+          The throw happened during render, one chunk after boot — so it was not
+          `<RouteBoundary>` (which lives inside a route) that caught it, but
+          `BootBoundary` in main.jsx. Result: every route of the site showed
+          «خطای غیرمنتظره» and the app never came up. Reported exactly that way:
+          «برنامه کلا نمیاد بالا».
+
+          It belongs here for the same reason <RadioDock> does: it must survive
+          route changes (a notification arrives while the user is anywhere), and
+          it must be able to navigate. It is deliberately NOT rendered in the
+          lock, splash/onboarding or payment-landing branches above — those
+          replace the whole screen, and overlaying a locked device with the
+          content of an alert would defeat the lock.
+
+          Its own <Suspense fallback={null}> so a slow chunk can never replace the
+          page with the route loader.
+        */}
+        <Suspense fallback={null}>
+          <NotificationBar />
+        </Suspense>
       </HashRouter>
     );
   }
@@ -901,22 +931,13 @@ export default function App() {
         <ConnectivityAlert />
         <Toasts />
         {/*
-          THE NOTIFICATION SURFACE, drawn by us.
-
-          The OS shade is where a user's attention actually is, and every alert
-          does go there (web push / FCM). But the OS owns that layout, so the
-          design the owner asked for — mark, tone colour that follows profit and
-          loss, the big number, the progress rail — can only be drawn EXACTLY
-          once, here. This is also the surface that works when permission has
-          not been granted yet or a push silently failed, so an order that
-          reached its target is never invisible inside the app.
-
-          Placed after `screen` so it stacks over whatever page is mounted, and
-          inside the providers so it can deep-link with the router.
+          The notification bar is NOT here any more. This slot is outside
+          <HashRouter>, and `NotificationBar` navigates with `useNavigate()` —
+          which throws without a Router above it and took the whole app down to
+          the «خطای غیرمنتظره» screen on every route. It now lives INSIDE
+          <HashRouter>, in the normal-screen branch of `screen`. Do not move it
+          back out here: the placement is the fix, not a style choice.
         */}
-        <Suspense fallback={null}>
-          <NotificationBar />
-        </Suspense>
         {/*
           Outside `screen` on purpose: the install offer must survive route
           changes, and it must not appear over the splash, onboarding or the

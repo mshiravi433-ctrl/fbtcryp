@@ -41,9 +41,9 @@
  * `prefers-reduced-motion` — see the stylesheet.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useInRouterContext, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { TONES, normalizeTone, toneSpec } from '../lib/notificationDesign.js';
 import './../styles/notification-bar.css';
@@ -193,10 +193,65 @@ function Card({ item, lang, onClose, onOpen, preview = false }) {
   );
 }
 
-export default function NotificationBar() {
+/**
+ * FALLBACK DEEP LINK, for the case this component has no Router above it.
+ *
+ * The app is a HashRouter, so assigning the hash IS a navigation and the router
+ * hears it as `hashchange`. This exists only as the degraded path: it is the
+ * SECOND time this component's router dependency has been able to hurt the app
+ * (see the note in App.jsx — a placement outside `<HashRouter>` made
+ * `useNavigate()` throw on every route and blanked the whole site), so a missing
+ * Router must degrade to "the card opens the page" instead of an exception.
+ */
+function setHashRoute(link) {
+  const path = String(link || '');
+  /* Only in-app paths. A payload can never make this navigate to a URL. */
+  if (!path.startsWith('/')) return;
+  try {
+    window.location.hash = `#${path}`;
+  } catch {
+    /* a navigation that fails leaves the user on the current page, which is
+       exactly where they were; never throw out of a dismiss */
+  }
+}
+
+/**
+ * The bar can never take the app down with it.
+ *
+ * This is an OPTIONAL overlay: it renders the notification design, it owns no
+ * data and no route. If it ever throws, the correct outcome is "no card this
+ * time", never the global «خطای غیرمنتظره» screen — which is exactly what
+ * happened when it was mounted outside the router. `BootBoundary` (main.jsx)
+ * remains the last resort; this keeps the bar from reaching it.
+ */
+class BarBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { failed: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error) {
+    /* Written to the console rather than swallowed silently, so the defect is
+       still visible to whoever is debugging on a phone. */
+    try {
+      console.error('[notif-bar]', error);
+    } catch { /* nothing to do */ }
+  }
+
+  render() {
+    if (this.state.failed) return null;
+    return this.props.children;
+  }
+}
+
+/** Shared body: the store, the language and the stacking. Presentation only. */
+function BarView({ onOpen }) {
   const items = useAppStore((s) => s.notifBar || []);
   const dismiss = useAppStore((s) => s.dismissNotifBar);
-  const navigate = useNavigate();
   const [lang, setLang] = useState(() => (typeof document !== 'undefined' ? document.documentElement.lang : 'fa'));
 
   /* The shade follows the app's language, and the app can change it live. */
@@ -212,17 +267,15 @@ export default function NotificationBar() {
 
   const close = useCallback((id) => dismiss(id), [dismiss]);
 
+  /* A card is consumed by opening it: it leaves the bar first, then the route
+     changes. Doing it in this order means a rejected navigation can never
+     leave a card the user has already acted on. */
   const open = useCallback(
     (item) => {
       dismiss(item.id);
-      if (item.link) {
-        /* `link` is an in-app route produced by the alert builders, or by the
-           inbox mirror in lib/notify.js (which already refused anything that is
-           not a same-origin app path). Never a raw URL from a payload. */
-        navigate(item.link);
-      }
+      onOpen(item);
     },
-    [dismiss, navigate]
+    [dismiss, onOpen]
   );
 
   /*
@@ -239,6 +292,38 @@ export default function NotificationBar() {
       </AnimatePresence>
     </div>
   );
+}
+
+/** The normal path: inside a Router, deep links go through React Router. */
+function RoutedBar() {
+  const navigate = useNavigate();
+  const open = useCallback(
+    (item) => {
+      /* `link` is an in-app route produced by the alert builders, or by the
+         inbox mirror in lib/notify.js (which already refused anything that is
+         not a same-origin app path). Never a raw URL from a payload. */
+      if (item.link) navigate(item.link);
+    },
+    [navigate]
+  );
+  return <BarView onOpen={open} />;
+}
+
+/** The degraded path: no Router above us — navigate by hash, never throw. */
+function HashBar() {
+  const open = useCallback((item) => setHashRoute(item.link), []);
+  return <BarView onOpen={open} />;
+}
+
+export default function NotificationBar() {
+  /*
+   * `useInRouterContext` is a plain boolean and does NOT throw, so this is the
+   * one router-aware call that is safe unconditionally. The component that
+   * actually calls `useNavigate()` is only mounted when a Router exists —
+   * hooks stay unconditional per component, which is what the rules require.
+   */
+  const inRouter = useInRouterContext();
+  return <BarBoundary>{inRouter ? <RoutedBar /> : <HashBar />}</BarBoundary>;
 }
 
 /* Exposed for the Settings preview and for the design probe: the tone list the
