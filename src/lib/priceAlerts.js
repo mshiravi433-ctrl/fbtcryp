@@ -76,6 +76,7 @@
  */
 
 import { getNotifySettings, showLocalNotification } from './notify';
+import { formatValue } from './notificationDesign';
 
 const STORE_KEY = 'fbt-price-alert-base-v1';
 
@@ -345,9 +346,19 @@ export function runPriceAlerts({ favorites, coins, format, now = Date.now() } = 
     if (!title) continue;
     showLocalNotification(title, {
       body,
+      /*
+       * THE CARD COLOURS ITSELF FROM THE MOVE. `tone` is what makes the shade
+       * green for a rise and red for a fall — the same two tones a take-profit
+       * and a stop-loss use, so a price alert is never a neutral grey card
+       * sitting next to a coloured one. `value` becomes the large hero number,
+       * which is the only part of the alert a glance can read.
+       */
+      tone: Number(a.changePct) >= 0 ? 'profit' : 'loss',
+      value: formatValue({ pnlPct: a.changePct }),
       /* Tagged per coin so a later alert for the same coin replaces the old
          one instead of stacking a second copy in the shade. */
-      tag: `fbt-price-${a.id}`
+      tag: `fbt-price-${a.id}`,
+      data: { url: `/coin/${a.id}` }
     });
   }
   return alerts.length;
@@ -477,6 +488,9 @@ export function runTopMoverAlerts({ coins, format, now = Date.now() } = {}) {
     if (!title) continue;
     showLocalNotification(title, {
       body,
+      /* A top mover is always a ±5% move, so the sign is the tone. */
+      tone: Number(a.changePct) >= 0 ? 'profit' : 'loss',
+      value: formatValue({ pnlPct: a.changePct }),
       tag: `fbt-mover-${a.id}`,
       data: { url: `/coin/${a.id}` }
     });

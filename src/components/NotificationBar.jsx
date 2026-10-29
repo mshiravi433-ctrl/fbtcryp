@@ -89,7 +89,6 @@ function ProgressRail({ value, color }) {
         animate={{ scaleX: pct / 100 }}
         transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
       />
-      <span className="nbar__rail-glint" style={{ background: color, offsetDistance: `${pct}%` }} />
     </div>
   );
 }

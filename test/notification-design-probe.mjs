@@ -563,4 +563,55 @@ const ok = (name, condition) => {
     /const message = \{[\s\S]*?tone: 'ready'/.test(app));
 }
 
+/* -------------------------------------------------------------------------- */
+/* 10. every alert the client raises carries the colour language             */
+/* -------------------------------------------------------------------------- */
+/*
+ * The order/watch path was never the whole product: the alerts a user creates
+ * THEMSELVES (a price level on a coin, a confidence threshold) are the ones they
+ * expect to look like the sample card. They used to call
+ * `showLocalNotification(title, { body })` — no tone, so they resolved to the
+ * neutral `info` blue regardless of direction, no hero value, and no tag, so
+ * two firings for the same coin stacked. Silent, and invisible to any test that
+ * only exercised the server payloads.
+ *
+ * These assertions live on the CALL SITES because that is where the regression
+ * happened: the library supported tones, the callers simply did not pass one.
+ */
+{
+  const alerts = read('src/lib/priceAlerts.js');
+  const signals = read('src/pages/Signals.jsx');
+
+  ok('a favourites price alert colours itself from the direction of the move',
+    /tone: Number\(a\.changePct\) >= 0 \? 'profit' : 'loss'/.test(alerts));
+  ok('a top-mover alert does too',
+    (alerts.match(/tone: Number\(a\.changePct\) >= 0 \? 'profit' : 'loss'/g) || []).length === 2);
+  ok('both of them put the move in the hero line',
+    (alerts.match(/value: formatValue\(\{ pnlPct: a\.changePct \}\)/g) || []).length === 2);
+  ok('both still tag per coin so two alerts do not stack',
+    /tag: `fbt-price-\$\{a\.id\}`/.test(alerts) && /tag: `fbt-mover-\$\{a\.id\}`/.test(alerts));
+  ok('a price alert deep-links to the coin it is about',
+    (alerts.match(/url: `\/coin\/\$\{a\.id\}`/g) || []).length >= 2);
+
+  ok('a fired signal alert is green when the level breaks upward',
+    /tone: a\.condition === 'above' \? 'profit' : 'loss'/.test(signals));
+  ok('a fired signal alert is tagged per alert row', /tag: `fbt-sig-\$\{a\.id\}`/.test(signals));
+  ok('a price-threshold alert shows the price as the hero value',
+    /value: a\.kind === 'price' \? formatValue\(\{ rate: a\.value \}\)/.test(signals));
+
+  /* Arming an alert was notifying even when createAlert() rejected the input. */
+  ok('the confirmation only fires when an alert was actually armed',
+    /if \(!next\) return;[^\n]*\n/.test(signals));
+  ok('the confirmation is the ready tone, not a grey info card',
+    /tone: 'ready',\n\s*tag: 'fbt-sig-armed'/.test(signals));
+  ok('repeated confirmations replace each other instead of stacking',
+    /tag: 'fbt-sig-armed'/.test(signals));
+
+  /* No alert call site may fall back to a bare title/body again. */
+  const bare = [...alerts.matchAll(/showLocalNotification\([^;]*?\);/gs)]
+    .concat([...signals.matchAll(/showLocalNotification\([^;]*?\);/gs)])
+    .filter((m) => !/tone:/.test(m[0]));
+  ok(`no alert call site omits a tone (found ${bare.length})`, bare.length === 0);
+}
+
 console.log(`\n✓ notification-design-probe: ${step} assertions passed (no device, no network)\n`);

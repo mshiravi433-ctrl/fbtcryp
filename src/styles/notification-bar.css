@@ -278,20 +278,6 @@
   transform-origin: left center;
 }
 
-.nbar__rail-glint {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 7px;
-  height: 7px;
-  margin-top: -3.5px;
-  margin-left: -3.5px;
-  border-radius: 999px;
-  transform: translateX(calc(var(--rail-pct, 0) * 1%));
-  box-shadow: 0 0 10px 2px currentColor;
-  display: none; /* the fill carries the motion; no extra paint per frame */
-}
-
 /* ── tone accents that are not just colour ──────────────────────────────── */
 .nbar__card--loss .nbar__chip,
 .nbar__card--alert .nbar__chip {

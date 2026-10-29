@@ -51,6 +51,7 @@ import {
   evaluateSignalAlerts, recordSignal, settleHistory, readHistory, ALERT_KINDS
 } from '../lib/signalStore';
 import { showLocalNotification } from '../lib/notify';
+import { formatValue } from '../lib/notificationDesign';
 import ModernSelect from '../components/ModernSelect';
 import SectionGuard from '../components/SectionGuard';
 import '../styles/docs-modern.css';
@@ -736,8 +737,22 @@ function AlertSheet({ symbol, onClose }) {
   ];
   const create = () => {
     const next = createAlert({ symbol, kind, condition, value: Number(value) || 0 });
-    if (next) setAlerts(next.filter((a) => a.symbol.toUpperCase() === symbol.toUpperCase() && a.active));
-    showLocalNotification(`FBT · ${symbol}`, { body: t('signals.intel.alert.created') });
+    if (!next) return; // duplicate rule or invalid value — nothing was armed
+    setAlerts(next.filter((a) => a.symbol.toUpperCase() === symbol.toUpperCase() && a.active));
+    /*
+     * «وای، ثبت شد» is good news, so it is the `ready` tone (cyan, brand) and
+     * not a grey info card: it has to feel like the same product as the alert
+     * it will later fire. The threshold is the hero line, and the tag is fixed
+     * so arming three alerts in a row replaces one card instead of stacking
+     * three confirmations in the shade.
+     */
+    showLocalNotification(`FBT · ${symbol}`, {
+      body: t('signals.intel.alert.created'),
+      tone: 'ready',
+      tag: 'fbt-sig-armed',
+      value: String(value || '').trim() ? `${condition === 'above' ? '≥' : '≤'} ${formatValue({ value })}` : '',
+      data: { url: '/signals' }
+    });
     setValue('');
   };
   return createPortal(
@@ -2098,7 +2113,20 @@ export default function Signals() {
       fired.forEach((a) => {
         const op = a.condition === 'above' ? t('signals.intel.alert.above') : t('signals.intel.alert.below');
         const body = t(`signals.intel.alert.cond.${a.kind === 'whale' || a.kind === 'smartMoney' ? a.kind : a.kind}`, { v: a.value, op });
-        showLocalNotification(`FBT · ${a.symbol}`, { body, data: { url: '/signals' } });
+        /*
+         * A level broken upwards is a green card, downwards a red one — the
+         * same colour language as P&L, so the shade reads at a glance without
+         * the user having to parse which way the arrow pointed. Tagged per
+         * row: two alerts on the same coin replace each other, six different
+         * coins stay six readable cards.
+         */
+        showLocalNotification(`FBT · ${a.symbol}`, {
+          body,
+          tone: a.condition === 'above' ? 'profit' : 'loss',
+          tag: `fbt-sig-${a.id}`,
+          value: a.kind === 'price' ? formatValue({ rate: a.value }) : '',
+          data: { url: '/signals' }
+        });
       });
     }
   }, [globalSignals, tab, t]);
