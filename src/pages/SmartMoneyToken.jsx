@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import { IconChevronLeft } from '../components/Icons';
+import { SmCoinGlyph, SmSignalGlyph } from '../components/smart-money/SmGlyphs';
 import TokenSmartMoney from '../components/TokenSmartMoney';
 import '../styles/smart-money.css';
 
@@ -22,12 +23,17 @@ export default function SmartMoneyToken() {
   return (
     <PageTransition>
       <div className="sm-page">
-        <motion.div className="row" style={{ gap: 10, marginBottom: 12 }} variants={riseIn} initial="hidden" animate="show">
-          <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
-            <IconChevronLeft width={18} height={18} />
+        <motion.header className="smx-pagehead" variants={riseIn} initial="hidden" animate="show">
+          <button type="button" className="smx-pagehead-back" onClick={() => navigate(-1)} aria-label={t('common.back')}>
+            <IconChevronLeft width={17} height={17} />
           </button>
-          <h1 className="h1" style={{ fontSize: 18 }}>✦ {t('sm.tokenIntel')}</h1>
-        </motion.div>
+          <span className="smx-pagehead-ico" aria-hidden="true"><SmCoinGlyph width={17} height={17} /></span>
+          <div className="smx-pagehead-text">
+            <span className="smx-pagehead-kicker">FBT · SMART MONEY</span>
+            <h1>{t('sm.tokenIntel')}</h1>
+          </div>
+          <span className="smx-pagehead-mark" aria-hidden="true"><SmSignalGlyph width={15} height={15} /></span>
+        </motion.header>
         <TokenSmartMoney chainId={chainId} address={address} embedded={false} />
       </div>
     </PageTransition>

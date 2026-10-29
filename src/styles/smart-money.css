@@ -1,923 +1,2664 @@
-/* ─────────────────────────────────────────────────────────────────────────
- * SMART MONEY — On-Chain Intelligence Center styles
- * Glass/aurora surface consistent with the rest of FBT. Mobile-first.
- * ───────────────────────────────────────────────────────────────────────── */
+/* ==========================================================================
+   SMART MONEY — “AURORA SIGNAL DESK”
+   ==========================================================================
+   The page was a stack of translucent boxes with emoji headings: ✦ whales,
+   ⚡ early tokens, 🆕 fresh wallets, 💰 flow, 🏦 exchanges. Every box was
+   drawn independently, so the screen had five different radii, three ideas of
+   “muted text”, and a title (24px) that competed with its own section headers
+   (14px). On a 360px phone the tab rail also ran off the right edge, so the
+   last three tabs could not be reached at all.
 
-/*
- * THE PAGE BOX — SAME GEOMETRY AS EVERY OTHER PAGE.
- * ---------------------------------------------------------------------------
- * Reported: «صفحه smart money به چپ صفحه کشیده شده و وسط نیست؛ اندازه صفحه
- * را درست کن». The old box carried its own `max-width: 860px` (wider than
- * the 520–760px app shell the whole app uses) plus a second layer of
- * horizontal padding (14px on top of .page's 16px) and a 96px bottom pad
- * the shell already provides. On wide screens that wider, offset box read
- * as a page stretched toward the left edge instead of the centred column
- * every other screen sits in.
- *
- * Now .sm-page is a plain passthrough: the surrounding .page (inside the
- * centred .app-shell) is the single source of width and inset, exactly like
- * Market, Settings, Wallet and the rest. `min-width: 0` + `overflow-x: clip`
- * are the final guard: no child (tab rail, metric grid, mono address) can
- * ever widen the column again — clip, not hidden, so no scroll container is
- * introduced and sticky behaviour elsewhere is untouched.
- */
+   This file is a full re-authoring, not a tweak. The rules:
+
+     1. ONE SURFACE. A deep navy panel with a single cool hairline and one
+        inset top highlight. Colour arrives behind it as soft radial light,
+        never as a sticker on top of it.
+     2. ONE ACCENT PAIR + ONE ALERT PAIR. Mint (#2ee6a8) means value arriving,
+        cyan (#38e1ff) means data, rose (#ff6b8b) means value leaving, amber
+        (#ffc24b) means “source is late”. Nothing else is introduced.
+     3. TYPE HAS THREE JOBS. Display numbers (900, tabular), labels (10px,
+        800, letterspaced), body (10.5–12.5px, 1.7 line-height). A heading and
+        its own number can no longer look like siblings.
+     4. GLYPHS, NOT EMOJI. Every icon is a 24px line glyph from
+        components/smart-money/SmGlyphs.jsx, so it inherits currentColor and
+        works in the light theme. The OS no longer decides what the page looks
+        like.
+     5. MOTION IS A COMPOSITOR PROPERTY. Only opacity/transform animate, and
+        everything stops under prefers-reduced-motion and in the native shell.
+     6. THE LIGHT THEME IS A DESIGN, NOT AN INVERSION. Every surface below has
+        an explicit light counterpart; white-on-white is how a card loses its
+        border.
+
+   Shared classes (`.sm-section`, `.sm-metric`, `.sm-row`, `.sm-token-card`, …)
+   are also used by the wallet page, the token page and the embedded token
+   card, so they are restyled here ONCE — those screens inherit the same desk
+   without a second stylesheet to keep in sync.
+   ========================================================================== */
+
+/* ─── 1 · TOKENS ─────────────────────────────────────────────────────────── */
+.sm-page,
+.smx-deck {
+  --sm-mint: #2ee6a8;
+  --sm-mint-bright: #6bf5c8;
+  --sm-cyan: #38e1ff;
+  --sm-violet: #8b7bff;
+  --sm-rose: #ff6b8b;
+  --sm-amber: #ffc24b;
+  --sm-ink: #eaf2ff;
+  --sm-ink-dim: #93a4c4;
+  --sm-surface: rgba(13, 19, 33, 0.72);
+  --sm-surface-2: rgba(255, 255, 255, 0.045);
+  --sm-surface-3: rgba(255, 255, 255, 0.09);
+  --sm-line: rgba(148, 170, 205, 0.16);
+  --sm-line-soft: rgba(148, 170, 205, 0.09);
+  --sm-line-strong: rgba(148, 170, 205, 0.26);
+  --sm-inset: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --sm-raise: 0 18px 40px -28px rgba(1, 5, 14, 0.9);
+}
+
+:root[data-theme='light'] .sm-page,
+:root[data-theme='light'] .smx-deck {
+  --sm-ink: #0d1b2a;
+  --sm-ink-dim: #5b6b85;
+  --sm-mint: #00996f;
+  --sm-mint-bright: #04795c;
+  --sm-cyan: #037ea6;
+  --sm-violet: #5b4bd6;
+  --sm-rose: #c92a4d;
+  --sm-amber: #9a6400;
+  --sm-surface: #ffffff;
+  --sm-surface-2: #f4f7fc;
+  --sm-surface-3: #e8eefa;
+  --sm-line: rgba(15, 23, 42, 0.1);
+  --sm-line-soft: rgba(15, 23, 42, 0.06);
+  --sm-line-strong: rgba(15, 23, 42, 0.18);
+  --sm-inset: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --sm-raise: 0 14px 32px -24px rgba(15, 23, 42, 0.3);
+}
+
+/* ─── 2 · PAGE BOX ───────────────────────────────────────────────────────── */
 .sm-page {
+  width: 100%;
   max-width: 100%;
   margin: 0;
   padding: 0;
   min-width: 0;
   overflow-x: clip;
+  color: var(--text-1);
 }
 
-/*
- * ─── THE RHYTHM BETWEEN BOXES ───────────────────────────────────────────────
- * Reported: «فاصله‌گذاری بین باکس‌ها در هوشمند مانی رعایت نشده».
- *
- * Spacing on this page was each block's own private business: `.sm-hero` and
- * `.sm-section` carried `margin-bottom: 14px`, but a good number of siblings
- * carried none at all — the tab rail, `.sm-card-grid`, `.sm-coverage`,
- * `.sm-scores` inside a fragment — so those boxes sat flush against the next
- * one, and the page read as a stack of cards that had been dropped rather than
- * laid out.
- *
- * Rather than audit every block for a margin it may or may not have, the page
- * box now owns the rhythm: every direct child after the first gets the same
- * 14px. Adjacent sibling margins collapse to the LARGER of the two, so a block
- * that already had `margin-bottom: 14px` does not become 28px — the rule is
- * additive only where spacing was missing, which is exactly the defect.
- */
-.sm-page > * + * { margin-top: 14px; }
+.smx-deck {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  min-width: 0;
+}
 
-/*
- * The tab rail is the worst offender and needs its own line. `ScrollRail`'s
- * track buys room for its buttons' shadows with `padding-block: 4px 6px` and
- * takes the same 10px back out with `margin-block: -4px -6px`. Those negative
- * margins collapse OUT of the rail shell (which has no padding or border), so
- * the rail not only had no bottom spacing of its own — it ate 6px of whatever
- * came next. Inside this page the compensation is dropped: the rail keeps the
- * padding (shadows still have room) and the page rhythm supplies the gap.
- */
-.sm-page > .scroll-rail > .scroll-rail-track { margin-block: 0; }
+/* Every page that is NOT the deck keeps the old rhythm helper: the wallet and
+   token screens have sections as direct children and no flex gap of their
+   own. */
+.sm-page:not(.smx-deck) > * + * { margin-top: 13px; }
 
-.sm-hero {
+/* ─── 3 · HERO ───────────────────────────────────────────────────────────── */
+.smx-hero {
   position: relative;
+  isolation: isolate;
   overflow: hidden;
-  border-radius: 24px;
-  padding: 22px 20px;
-  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 16px 15px 14px;
+  border-radius: 25px;
+  border: 1px solid var(--sm-line-strong);
   background:
-    radial-gradient(120% 140% at 80% -20%, rgba(0, 229, 255, 0.22), transparent 55%),
-    radial-gradient(120% 150% at 0% 120%, rgba(124, 77, 255, 0.28), transparent 55%),
-    linear-gradient(135deg, rgba(124, 77, 255, 0.16), rgba(255, 45, 149, 0.1));
-  border: 1px solid rgba(255, 255, 255, 0.09);
+    radial-gradient(120% 130% at 92% -30%, rgba(46, 230, 168, 0.3), transparent 56%),
+    radial-gradient(110% 120% at -10% 118%, rgba(56, 225, 255, 0.22), transparent 58%),
+    linear-gradient(158deg, #111d33 0%, #0a1120 58%, #060a14 100%);
+  box-shadow: var(--sm-inset), 0 30px 64px -36px rgba(0, 0, 0, 0.95);
 }
 
-.sm-hero h1 {
-  font-size: 24px;
-  font-weight: 900;
-  margin: 0;
-  letter-spacing: 0.4px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sm-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.6px;
-  color: var(--up, #2ee6a8);
-  background: rgba(46, 230, 168, 0.12);
-  border: 1px solid rgba(46, 230, 168, 0.3);
-  border-radius: 999px;
-  padding: 3px 10px;
-  text-transform: uppercase;
-}
-.sm-live.is-off {
-  color: var(--text-3, #9aa);
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
-}
-.sm-live.is-off .dot {
-  background: #888;
-  box-shadow: none;
-  animation: none;
-}
-.sm-live .dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: var(--up, #2ee6a8);
-  box-shadow: 0 0 8px var(--up, #2ee6a8);
-  animation: sm-pulse 1.6s ease-in-out infinite;
-}
-@keyframes sm-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-
-.sm-tagline {
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 10px 0 16px;
-  opacity: 0.82;
-}
-.sm-tagline b { color: var(--text-1, #fff); font-weight: 800; }
-
-.sm-search {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(8, 12, 24, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  padding: 12px 14px;
-  backdrop-filter: blur(10px);
-}
-.sm-search input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--text-1, #fff);
-  font-size: 14px;
-  min-width: 0;
-}
-.sm-search input::placeholder { opacity: 0.5; }
-.sm-search button {
-  border: none;
-  border-radius: 12px;
-  padding: 8px 14px;
-  font-weight: 800;
-  font-size: 13px;
-  color: #08101f;
-  background: linear-gradient(135deg, #00e5ff, #7c4dff);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-/* Tabs — a RAIL (see ScrollRail.jsx).
- * The track class `.scroll-rail-track` already owns the mechanics:
- * horizontal-only scroll, snap alignment, edge fades, no scrollbar,
- * `overscroll-behavior-x: contain` so a swipe at the rail's end never
- * navigates the page back. This class only tunes the tab spacing. */
-.sm-tabs { gap: 7px; }
-.sm-tab {
-  flex: 0 0 auto;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
-  color: inherit;
-  border-radius: 12px;
-  padding: 8px 14px;
-  font-size: 12.5px;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-  opacity: 0.7;
-}
-.sm-tab.active {
-  background: linear-gradient(135deg, rgba(124, 77, 255, 0.35), rgba(0, 229, 255, 0.2));
-  border-color: rgba(124, 125, 255, 0.6);
-  opacity: 1;
-}
-
-/* Metric cards */
-.sm-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  margin-bottom: 14px;
-}
-.sm-metric {
-  /* min-width: 0 — a 1fr grid cell defaults to min-width: auto, so a long
-     value ("$999.99B") would widen the cell and stretch the whole row past
-     the page box. With min-width: 0 the text truncates inside the card. */
-  min-width: 0;
-  overflow: hidden;
-  border-radius: 16px;
-  padding: 13px;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-.sm-metric .lab { font-size: 10.5px; opacity: 0.6; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; }
-.sm-metric .val { font-size: 19px; font-weight: 900; margin-top: 5px; }
-.sm-metric .chg { font-size: 11px; font-weight: 800; margin-top: 3px; }
-.sm-up { color: var(--up, #2ee6a8); }
-.sm-down { color: var(--down, #ff5c7a); }
-
-/* Section blocks */
-.sm-section {
-  border-radius: 20px;
-  padding: 16px;
-  margin-bottom: 14px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-/* Theme-safe surfaces: the original white-on-transparent border vanished in
-   light mode. `.sm-section`, `.sm-row` and the whole window rail are styled
-   for the light theme ONCE, at the bottom of this file — a second copy of a
-   light override two screens away is how a border ends up with two different
-   answers. */
-:root[data-theme='light'] .sm-seg { background: #eef2f7; border: 1px solid rgba(15,23,42,.10); }
-:root[data-theme='light'] .sm-seg button.active { background: #dbe5ff; color: #1e3a8a; }
-:root[data-theme='light'] .sm-metric,
-:root[data-theme='light'] .sm-early-card,
-:root[data-theme='light'] .sm-score {
-  background: #f8fafc;
+:root[data-theme='light'] .smx-hero {
+  background:
+    radial-gradient(120% 130% at 92% -30%, rgba(0, 169, 107, 0.16), transparent 58%),
+    radial-gradient(110% 120% at -10% 118%, rgba(14, 165, 233, 0.14), transparent 58%),
+    linear-gradient(158deg, #ffffff 0%, #f3f8ff 60%, #eef4fb 100%);
   border-color: rgba(15, 23, 42, 0.16);
-}
-:root[data-theme='light'] .sm-meter { background: #dbe2ea; border: 1px solid rgba(15,23,42,.10); }
-:root[data-theme='light'] .sm-alert { border-bottom-color: rgba(15, 23, 42, 0.14); }
-:root[data-theme='light'] .sm-chip { background: #f1f5f9; border-color: rgba(15,23,42,.14); }
-:root[data-theme='light'] .sm-btn.ghost { border-color: rgba(15,23,42,.18); }
-:root[data-theme='light'] .sm-tab { border-color: rgba(15,23,42,.14); }
-:root[data-theme='light'] .sm-tab.active { border-color: rgba(79,70,229,.55); }
-
-.sm-section h3 {
-  margin: 0 0 12px;
-  font-size: 14px;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.sm-section h3 .spacer { flex: 1; }
-.sm-seg { display: inline-flex; gap: 2px; background: rgba(0,0,0,0.3); border-radius: 10px; padding: 2px; }
-.sm-seg button {
-  border: none; background: transparent; color: inherit;
-  font-size: 11px; font-weight: 800; padding: 4px 10px;
-  border-radius: 8px; opacity: 0.6; cursor: pointer;
-}
-.sm-seg button.active { background: rgba(124, 125, 255, 0.4); opacity: 1; }
-
-/* Token activity rows */
-.sm-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  cursor: pointer;
-}
-.sm-row:last-child { border-bottom: none; }
-.sm-row:active { opacity: 0.7; }
-.sm-row .sym {
-  width: 34px; height: 34px; border-radius: 10px;
-  display: grid; place-items: center;
-  font-weight: 900; font-size: 12px;
-  background: linear-gradient(135deg, rgba(124, 77, 255, 0.4), rgba(0, 229, 255, 0.3));
-  flex: 0 0 auto;
-}
-.sm-row .mid { flex: 1; min-width: 0; }
-.sm-row .mid .name { font-weight: 800; font-size: 13.5px; }
-.sm-row .mid .sub { font-size: 11px; opacity: 0.55; margin-top: 2px; }
-.sm-row .right { text-align: right; }
-.sm-row .right .usd { font-weight: 900; font-size: 13.5px; }
-.sm-row .right .conf { font-size: 10.5px; font-weight: 800; margin-top: 2px; }
-
-/* Confidence meter */
-.sm-meter { height: 6px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; min-width: 64px; }
-.sm-meter i { display: block; height: 100%; border-radius: 999px; }
-
-/* Early token card */
-.sm-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
-.sm-early-card {
-  min-width: 0; /* grid cell: a wide symbol/liquidity value must not stretch the card */
-  overflow: hidden;
-  border-radius: 16px;
-  padding: 13px;
-  background: linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-  border: 1px solid rgba(255, 255, 255, 0.09);
-}
-.sm-early-card .tk { font-weight: 900; font-size: 14px; }
-.sm-early-card .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin: 10px 0; }
-.sm-early-card .meta .k { font-size: 10px; opacity: 0.55; text-transform: uppercase; letter-spacing: 0.4px; }
-.sm-early-card .meta .v { font-size: 12.5px; font-weight: 800; }
-.sm-risk-HIGH { color: #ff5c7a; }
-.sm-risk-MEDIUM { color: #ffc24b; }
-.sm-risk-LOW { color: var(--up, #2ee6a8); }
-
-.sm-btn {
-  border: 1px solid rgba(124, 125, 255, 0.5);
-  background: rgba(124, 77, 255, 0.18);
-  color: inherit;
-  border-radius: 10px;
-  padding: 7px 12px;
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-  width: 100%;
-}
-.sm-btn.ghost { background: transparent; border-color: rgba(255,255,255,0.15); }
-.sm-btn:active { transform: scale(0.98); }
-
-/* Alert rows */
-.sm-alert {
-  display: flex; gap: 10px; padding: 11px 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-.sm-alert:last-child { border-bottom: none; }
-.sm-alert .ico { font-size: 18px; flex: 0 0 auto; }
-.sm-alert .body { flex: 1; }
-.sm-alert .body .t { font-weight: 800; font-size: 13px; }
-.sm-alert .body .m { font-size: 12px; opacity: 0.7; margin-top: 2px; }
-.sm-alert .ago { font-size: 10.5px; opacity: 0.5; white-space: nowrap; }
-
-/* Scores (wallet page) */
-.sm-scores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
-.sm-score {
-  border-radius: 16px; padding: 14px 10px; text-align: center;
-  background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.08);
-}
-.sm-score .ring { position: relative; width: 64px; height: 64px; margin: 0 auto 8px; }
-.sm-score .ring svg { transform: rotate(-90deg); }
-.sm-score .ring .n {
-  position: absolute; inset: 0; display: grid; place-items: center;
-  font-weight: 900; font-size: 15px;
-}
-.sm-score .lab { font-size: 10px; opacity: 0.6; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
-.sm-score .band { font-size: 10.5px; font-weight: 900; margin-top: 3px; }
-
-.sm-factors { list-style: none; margin: 8px 0 0; padding: 0; }
-.sm-factors li { font-size: 12px; padding: 4px 0; display: flex; gap: 7px; align-items: flex-start; }
-.sm-factors li.good::before { content: '+'; color: var(--up, #2ee6a8); font-weight: 900; }
-.sm-factors li.bad::before { content: '−'; color: var(--down, #ff5c7a); font-weight: 900; }
-
-.sm-holdings { display: flex; flex-wrap: wrap; gap: 8px; }
-.sm-chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  border-radius: 999px; padding: 6px 12px;
-  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
-  font-size: 12px; font-weight: 700;
+  box-shadow: inset 0 1px 0 #fff, 0 20px 44px -30px rgba(15, 23, 42, 0.28);
 }
 
-.sm-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
-.sm-tag {
-  font-size: 10px; font-weight: 900; letter-spacing: 0.5px;
-  padding: 4px 9px; border-radius: 8px;
-  background: rgba(0, 229, 255, 0.14); color: #7de7ff;
-  border: 1px solid rgba(0, 229, 255, 0.3);
-  text-transform: uppercase;
+.smx-hero-mesh {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image:
+    linear-gradient(rgba(148, 170, 205, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 170, 205, 0.07) 1px, transparent 1px);
+  background-size: 26px 26px;
+  -webkit-mask-image: radial-gradient(ellipse 95% 80% at 50% 0%, #000 18%, transparent 92%);
+  mask-image: radial-gradient(ellipse 95% 80% at 50% 0%, #000 18%, transparent 92%);
 }
-.sm-tag.warn { background: rgba(255, 194, 75, 0.14); color: #ffc24b; border-color: rgba(255, 194, 75, 0.3); }
 
-.sm-empty { text-align: center; padding: 26px 16px; opacity: 0.6; font-size: 12.5px; line-height: 1.6; }
-.sm-skel { height: 18px; border-radius: 8px; background: linear-gradient(90deg, rgba(255,255,255,0.05), rgba(255,255,255,0.12), rgba(255,255,255,0.05)); background-size: 200% 100%; animation: sm-shimmer 1.3s infinite; margin: 8px 0; }
-@keyframes sm-shimmer { to { background-position: -200% 0; } }
+.smx-hero-orb {
+  position: absolute;
+  z-index: 0;
+  display: block;
+  border-radius: 50%;
+  pointer-events: none;
+}
 
-.sm-disclaimer { font-size: 10.5px; opacity: 0.5; line-height: 1.55; padding: 10px 4px; }
+.smx-hero-orb--a {
+  width: 230px;
+  height: 230px;
+  inset-block-start: -140px;
+  inset-inline-start: -70px;
+  background: radial-gradient(circle, rgba(56, 225, 255, 0.26), transparent 68%);
+}
 
-/*
- * Offline banner — shown when the upstream stream (RPC / explorer / price
- * sources) returned nothing. Amber, not red: the sources are usually back
- * within a minute, and the retry button makes the state actionable instead
- * of a wall of empty dashes.
- */
-.sm-offline {
+.smx-hero-orb--b {
+  width: 210px;
+  height: 210px;
+  inset-block-end: -150px;
+  inset-inline-end: -50px;
+  background: radial-gradient(circle, rgba(139, 123, 255, 0.24), transparent 68%);
+}
+
+/* The radar: three rings and a lit core. Decorative only — no data is encoded
+   in it, which is why it carries aria-hidden at the call site. */
+.smx-hero-radar {
+  position: absolute;
+  z-index: 0;
+  width: 176px;
+  height: 176px;
+  inset-block-start: -66px;
+  inset-inline-end: -58px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0.65;
+}
+
+.smx-hero-radar i {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(56, 225, 255, 0.16);
+}
+
+.smx-hero-radar i:nth-child(1) { inset: 0; }
+.smx-hero-radar i:nth-child(2) { inset: 26px; border-color: rgba(46, 230, 168, 0.18); }
+.smx-hero-radar i:nth-child(3) { inset: 54px; border-color: rgba(255, 255, 255, 0.12); }
+
+.smx-hero-radar b {
+  position: absolute;
+  inset: 44px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(46, 230, 168, 0.55), rgba(46, 230, 168, 0) 70%);
+  animation: smx-breathe 5.5s ease-in-out infinite alternate;
+}
+
+/* Everything real sits above the atmosphere. */
+.smx-hero > *:not(.smx-hero-mesh):not(.smx-hero-orb):not(.smx-hero-radar) {
+  position: relative;
+  z-index: 1;
+}
+
+.smx-hero-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  border-color: rgba(255, 194, 75, 0.35);
-  background: rgba(255, 194, 75, 0.08);
+  gap: 8px;
+  flex-wrap: wrap;
 }
-.sm-offline .msg { font-size: 12.5px; font-weight: 700; line-height: 1.55; color: #ffc24b; }
 
-/*
- * Stale notice — the scan is slow or failed but earlier observations are on
- * screen. Softer than the offline banner: the numbers are real, just not
- * refreshed this very second.
- */
-.sm-stale {
+.smx-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(46, 230, 168, 0.3);
+  background: linear-gradient(135deg, rgba(46, 230, 168, 0.16), rgba(56, 225, 255, 0.08));
+  color: #8ff3d6;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.smx-kicker b { color: #fff; font-weight: 900; letter-spacing: 0.16em; }
+.smx-kicker span { opacity: 0.85; }
+
+:root[data-theme='light'] .smx-kicker {
+  color: #066a51;
+  border-color: rgba(0, 150, 111, 0.28);
+  background: linear-gradient(135deg, rgba(0, 169, 107, 0.12), rgba(14, 165, 233, 0.08));
+}
+:root[data-theme='light'] .smx-kicker b { color: #0b3a33; }
+
+.smx-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--sm-line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--sm-ink-dim);
+  font-size: 9.5px;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.smx-live i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.smx-live.is-live {
+  color: #5df2c0;
+  border-color: rgba(46, 230, 168, 0.34);
+  background: rgba(46, 230, 168, 0.1);
+}
+
+.smx-live.is-live i {
+  box-shadow: 0 0 0 3px rgba(46, 230, 168, 0.16);
+  animation: smx-pulse 1.9s ease-in-out infinite;
+}
+
+:root[data-theme='light'] .smx-live { background: #fff; }
+:root[data-theme='light'] .smx-live.is-live {
+  color: #00795c;
+  border-color: rgba(0, 169, 107, 0.34);
+  background: rgba(0, 169, 107, 0.1);
+}
+:root[data-theme='light'] .smx-live.is-off { color: #64748b; background: #f1f5f9; }
+
+.smx-hero-title {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(21px, 5.7vw, 27px);
+  font-weight: 900;
+  line-height: 1.36;
+  letter-spacing: -0.012em;
+  background: linear-gradient(100deg, #ffffff 4%, #d7f6ff 46%, #9bf5d8 98%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+:root[data-theme='light'] .smx-hero-title {
+  background: linear-gradient(100deg, #08121f 6%, #036c8c 58%, #067a5c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.smx-hero-sub {
+  margin: 0;
+  max-width: 52ch;
+  font-size: 11.5px;
+  line-height: 1.85;
+  color: var(--sm-ink-dim);
+}
+
+.smx-hero-sub b { color: #eafff8; font-weight: 850; }
+:root[data-theme='light'] .smx-hero-sub b { color: #0b3a33; }
+
+/* ─── 4 · SEARCH (the hero omnibox) ──────────────────────────────────────── */
+.smx-search {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-color: rgba(0, 229, 255, 0.22);
-  background: rgba(0, 229, 255, 0.05);
-}
-.sm-stale .msg { font-size: 11.5px; font-weight: 600; line-height: 1.5; opacity: 0.85; }
-
-/* «Based on N transfers observed over X h» — the provenance line under the
-   metric tiles. Every number on the page has one; a metric without a
-   stated basis is how «$0» came to read like a finding. */
-.sm-coverage {
-  font-size: 10.5px;
-  line-height: 1.55;
-  opacity: 0.6;
-  padding: 2px 6px 10px;
+  gap: 7px;
+  width: 100%;
+  min-height: 50px;
+  margin-top: 2px;
+  padding-block: 5px;
+  padding-inline: 6px;
+  border-radius: 16px;
+  border: 1px solid var(--sm-line-strong);
+  background: rgba(3, 8, 17, 0.66);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   TIME-WINDOW RAIL — «تب روز / هفته / ماه»
-   ───────────────────────────────────────────────────────────────────────────
-   The control used to be a bare `.sm-seg` inside an inline style, with no
-   minimum tap height, no focus ring and no separation between "this is a
-   label" and "this is the selected one". It now follows the same segmented
-   language as every other page: a real track, a 40px target, and the shared
-   `.seg-indicator` pill (see components/SegIndicator.jsx) rather than a flat
-   background swap, so switching windows is visibly acknowledged.
-   ═══════════════════════════════════════════════════════════════════════════ */
+.smx-search--inline {
+  margin: 0;
+  background: var(--sm-surface);
+}
+
+.smx-search:focus-within {
+  border-color: rgba(46, 230, 168, 0.55);
+  box-shadow: 0 0 0 3px rgba(46, 230, 168, 0.14);
+}
+
+.smx-search-ico {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: #8feaff;
+  background: rgba(56, 225, 255, 0.1);
+  border: 1px solid rgba(56, 225, 255, 0.18);
+}
+
+.smx-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--sm-ink);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.smx-search input::placeholder { color: var(--sm-ink-dim); opacity: 0.75; }
+.smx-search input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+
+.smx-search-clear {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--sm-line);
+  background: var(--sm-surface-2);
+  color: var(--sm-ink-dim);
+  cursor: pointer;
+}
+
+.smx-search-go {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  color: #04121d;
+  background: linear-gradient(140deg, var(--sm-mint-bright), var(--sm-cyan));
+  box-shadow: 0 6px 16px -8px rgba(46, 230, 168, 0.75);
+  cursor: pointer;
+  transition: transform 0.16s ease, filter 0.16s ease;
+}
+
+.smx-search-go:hover { filter: brightness(1.06); }
+.smx-search-go:active { transform: scale(0.96); }
+
+:root[data-theme='light'] .smx-search {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.16);
+  box-shadow: 0 4px 16px -12px rgba(15, 23, 42, 0.3);
+}
+:root[data-theme='light'] .smx-search-ico {
+  color: #036c8c;
+  background: rgba(3, 126, 166, 0.09);
+  border-color: rgba(3, 126, 166, 0.18);
+}
+:root[data-theme='light'] .smx-search-go {
+  color: #ffffff;
+  background: linear-gradient(140deg, #00a878, #0b8fc4);
+  box-shadow: 0 6px 16px -9px rgba(0, 120, 90, 0.6);
+}
+:root[data-theme='light'] .smx-search-clear { background: #f1f5f9; color: #475569; }
+
+/* ─── 5 · HERO PODS (engine facts) ───────────────────────────────────────── */
+.smx-pods {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 3px;
+}
+
+.smx-pod {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 9px 8px;
+  border-radius: 14px;
+  border: 1px solid var(--sm-line);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.smx-pod-ico {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+
+.smx-pod-ico.is-cyan {
+  color: #8feaff;
+  background: rgba(56, 225, 255, 0.1);
+  border-color: rgba(56, 225, 255, 0.18);
+}
+.smx-pod-ico.is-mint {
+  color: #8ff7d8;
+  background: rgba(46, 230, 168, 0.11);
+  border-color: rgba(46, 230, 168, 0.2);
+}
+.smx-pod-ico.is-violet {
+  color: #c3bcff;
+  background: rgba(139, 123, 255, 0.12);
+  border-color: rgba(139, 123, 255, 0.22);
+}
+
+.smx-pod b {
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.smx-pod small {
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+  color: var(--sm-ink-dim);
+}
+
+:root[data-theme='light'] .smx-pod {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.1);
+}
+:root[data-theme='light'] .smx-pod b { color: #0b1424; }
+
+/* ─── 6 · TAB DOCK ───────────────────────────────────────────────────────── */
+.smx-dock {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px;
+  border-radius: 21px;
+  border: 1px solid var(--sm-line);
+  background: var(--sm-surface);
+  box-shadow: var(--sm-inset);
+  min-width: 0;
+}
+
+.smx-dock-btn {
+  grid-column: span 3;
+  min-width: 0;
+  min-height: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 3px;
+  border-radius: 15px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--sm-ink-dim);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease,
+    transform 0.18s ease, box-shadow 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 7 tabs on a 12-column grid: 4 + 3. The second row's tiles are a little
+   wider, which is what makes the group read as a dock instead of a broken
+   grid with a hole in the last cell. */
+.smx-dock-btn:nth-child(n + 5) { grid-column: span 4; }
+
+.smx-dock-btn:hover { background: var(--sm-surface-2); color: var(--sm-ink); }
+.smx-dock-btn:active { transform: scale(0.985); }
+.smx-dock-btn:focus-visible { outline: 2px solid var(--sm-mint); outline-offset: 2px; }
+
+.smx-dock-btn.is-active {
+  color: #effffb;
+  border-color: rgba(46, 230, 168, 0.38);
+  background: linear-gradient(158deg, rgba(46, 230, 168, 0.18), rgba(56, 225, 255, 0.07));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 10px 22px -16px rgba(46, 230, 168, 0.65);
+}
+
+.smx-dock-ico {
+  width: 29px;
+  height: 29px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--sm-line-soft);
+  background: var(--sm-surface-2);
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.smx-dock-btn.is-active .smx-dock-ico {
+  color: #8ff7d8;
+  border-color: rgba(46, 230, 168, 0.4);
+  background: linear-gradient(150deg, rgba(46, 230, 168, 0.3), rgba(56, 225, 255, 0.14));
+}
+
+.smx-dock-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: 0;
+  text-align: center;
+  white-space: normal;
+  word-break: keep-all;
+}
+
+:root[data-theme='light'] .smx-dock { background: #ffffff; }
+:root[data-theme='light'] .smx-dock-btn.is-active {
+  color: #053b30;
+  border-color: rgba(0, 150, 111, 0.34);
+  background: linear-gradient(158deg, rgba(0, 169, 107, 0.13), rgba(14, 165, 233, 0.06));
+}
+:root[data-theme='light'] .smx-dock-btn.is-active .smx-dock-ico {
+  color: #00704f;
+  border-color: rgba(0, 150, 111, 0.3);
+  background: linear-gradient(150deg, rgba(0, 169, 107, 0.18), rgba(14, 165, 233, 0.08));
+}
+
+@media (max-width: 359px) {
+  .smx-dock { gap: 4px; padding: 4px; }
+  .smx-dock-btn { min-height: 58px; border-radius: 13px; }
+  .smx-dock-label { font-size: 8.5px; }
+}
+
+/* ─── 7 · WINDOW TOOLBAR + SEGMENTED RAIL ────────────────────────────────── */
+.smx-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border-radius: 16px;
+  border: 1px solid var(--sm-line);
+  background: var(--sm-surface);
+  min-width: 0;
+}
+
+.smx-toolbar-ico {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #8feaff;
+  background: rgba(56, 225, 255, 0.09);
+  border: 1px solid rgba(56, 225, 255, 0.16);
+}
+
+.smx-toolbar-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: var(--sm-ink-dim);
+  white-space: nowrap;
+}
+
+.smx-toolbar-spacer { flex: 1; min-width: 0; }
+
+.smx-refresh {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 11px;
+  border: 1px solid var(--sm-line);
+  background: var(--sm-surface-2);
+  color: var(--sm-ink-dim);
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.smx-refresh:hover { color: var(--sm-ink); border-color: var(--sm-line-strong); }
+.smx-refresh.is-busy { color: var(--sm-mint-bright); }
+.smx-refresh.is-busy svg { animation: smx-spin 0.9s linear infinite; }
+
+:root[data-theme='light'] .smx-toolbar { background: #ffffff; }
+:root[data-theme='light'] .smx-toolbar-ico { color: #036c8c; border-color: rgba(3, 126, 166, 0.18); background: rgba(3, 126, 166, 0.08); }
+:root[data-theme='light'] .smx-refresh { background: #f4f7fc; }
+
+@media (max-width: 359px) {
+  .smx-toolbar-label { display: none; }
+  .smx-toolbar { gap: 5px; }
+}
+
+/* Segmented control, shared by the overview, the flow tab and the token card.
+   Height stays ≥34px here and ≥40px inside the token card; the indicator is
+   the app-wide `.seg-indicator` pill (cyan→violet), so the selected window is
+   visibly acknowledged rather than merely re-coloured. */
 .sm-seg-window {
   display: inline-flex;
   align-items: stretch;
-  gap: 3px;
+  gap: 2px;
   padding: 3px;
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  border: 1px solid var(--sm-line);
+  background: var(--sm-surface-2);
+  max-width: 100%;
 }
-.sm-seg-window:has(button:nth-child(4)) { width: 100%; }
-.sm-seg-window:has(button:nth-child(4)) .sm-seg-window-item { flex: 1 1 0; }
+
 .sm-seg-window-item {
   position: relative;
-  isolation: isolate;          /* the indicator pill sits behind the label only */
+  isolation: isolate;
   flex: 0 0 auto;
-  min-height: 38px;
+  min-height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 7px 14px;
+  gap: 4px;
+  padding: 6px 11px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 9px;
   background: transparent;
-  color: inherit;
-  font-size: 12px;
+  color: var(--sm-ink-dim);
+  font: inherit;
+  font-size: 10.5px;
   font-weight: 800;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.01em;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  opacity: 0.62;
-  transition: opacity 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+  transition: color 0.16s ease, opacity 0.16s ease;
   -webkit-tap-highlight-color: transparent;
 }
-.sm-seg-window-item:hover { opacity: 1; }
-.sm-seg-window-item:focus-visible { outline: 2px solid var(--rgb-4, #00e5ff); outline-offset: 2px; opacity: 1; }
-.sm-seg-window-item.active { opacity: 1; color: var(--text-1, #fff); }
-.sm-seg-window-item .seg-indicator { border-radius: 10px; }
 
-/* The rail is the page's headline control, so it gets its own row on phones.
- *
- * `display: flex` + `width: fit-content` rather than the base `inline-flex`:
- * an INLINE-level box never collapses its vertical margins with its siblings,
- * so under the page rhythm above it would have added its own 12px on top of the
- * 14px gap and read as a hole in the layout. As a block-level box that still
- * hugs its buttons, it takes part in the same collapsing as every other box. */
-.sm-page > .sm-seg-window {
-  display: flex;
-  width: fit-content;
-  max-width: 100%;
-  margin-bottom: 0;
+.sm-seg-window-item:hover { color: var(--sm-ink); }
+.sm-seg-window-item:focus-visible { outline: 2px solid var(--sm-mint); outline-offset: 2px; }
+
+.sm-seg-window-item.active {
+  color: #04121d;
+  font-weight: 850;
 }
-.sm-page > .sm-seg-window:has(button:nth-child(4)) { width: 100%; }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   TOKEN CARD — collapsible, with the identity line and the rail on their own
-   rows. «تبش خیلی دراز شده و از باکس زده بیرون» + «بزار داخل باکس بازشونده»
-   ═══════════════════════════════════════════════════════════════════════════ */
-.sm-token-card { padding-bottom: 14px; }
-.sm-token-card.is-open { padding-bottom: 16px; }
+.sm-seg-window-item .seg-indicator {
+  border-radius: 9px;
+  background: linear-gradient(96deg, #6ff2d2, #63d9ff 58%, #a99cff);
+  opacity: 0.95;
+}
 
-/* The header is a real button: full width, 48px tall, and the only thing on
-   its line — the title, the net-flow summary and the caret. */
-.sm-token-head {
+:root[data-theme='light'] .sm-seg-window {
+  background: #eef3fa;
+  border: 1px solid var(--sm-line);
+}
+:root[data-theme='light'] .sm-seg-window-item { color: #475569; }
+:root[data-theme='light'] .sm-seg-window-item.active { color: #04121d; }
+
+/* ─── 8 · BANNERS, HINTS, STAMPS ─────────────────────────────────────────── */
+.smx-banner {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 48px;
-  padding: 4px 2px;
-  margin-bottom: 4px;
-  border: none;
+  gap: 9px;
+  padding: 9px 11px;
+  border-radius: 15px;
+  border: 1px solid transparent;
+  min-width: 0;
+}
+
+.smx-banner.is-warn {
+  color: #ffd58a;
+  border-color: rgba(255, 194, 75, 0.32);
+  background: linear-gradient(140deg, rgba(255, 194, 75, 0.12), rgba(255, 194, 75, 0.04));
+}
+
+.smx-banner.is-info {
+  color: #a9ecff;
+  border-color: rgba(56, 225, 255, 0.26);
+  background: linear-gradient(140deg, rgba(56, 225, 255, 0.1), rgba(56, 225, 255, 0.03));
+}
+
+.smx-banner-ico {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.smx-banner-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.7;
+}
+
+.smx-banner-btn {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border-radius: 9px;
+  border: 1px solid currentColor;
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 14px;
+  font-size: 9.5px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.smx-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 0 4px;
+  font-size: 9.5px;
+  line-height: 1.7;
+  color: var(--sm-ink-dim);
+}
+
+.smx-hint svg { flex: 0 0 auto; margin-top: 2px; color: var(--sm-cyan); }
+
+.smx-stamp {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 0 5px;
+  font-size: 9.5px;
+  line-height: 1.7;
+  color: var(--sm-ink-dim);
+}
+
+.smx-stamp svg { flex: 0 0 auto; margin-top: 2px; color: var(--sm-mint); opacity: 0.85; }
+
+:root[data-theme='light'] .smx-banner.is-warn {
+  color: #7a4f00;
+  border-color: rgba(154, 100, 0, 0.3);
+  background: linear-gradient(140deg, rgba(255, 196, 0, 0.14), rgba(255, 196, 0, 0.05));
+}
+:root[data-theme='light'] .smx-banner.is-warn .smx-banner-ico { background: rgba(154, 100, 0, 0.1); }
+:root[data-theme='light'] .smx-banner.is-info {
+  color: #045a74;
+  border-color: rgba(3, 126, 166, 0.25);
+  background: linear-gradient(140deg, rgba(3, 126, 166, 0.1), rgba(3, 126, 166, 0.03));
+}
+:root[data-theme='light'] .smx-banner.is-info .smx-banner-ico { background: rgba(3, 126, 166, 0.1); }
+
+/* ─── 9 · SECTION SURFACE + HEADERS ──────────────────────────────────────── */
+.sm-section {
+  position: relative;
+  min-width: 0;
+  padding: 13px;
+  margin: 0;
+  border-radius: 21px;
+  border: 1px solid var(--sm-line);
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.014) 58%),
+    rgba(9, 14, 26, 0.58);
+  box-shadow: var(--sm-inset), var(--sm-raise);
+  overflow: hidden;
+}
+
+:root[data-theme='light'] .sm-section {
+  background: #ffffff;
+  border: 1px solid var(--sm-line);
+  box-shadow: 0 14px 32px -26px rgba(15, 23, 42, 0.35);
+}
+
+.sm-section h3 {
+  margin: 0 0 11px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: -0.005em;
+  min-width: 0;
+}
+
+.smx-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 11px;
+  min-height: 30px;
+  min-width: 0;
+}
+
+.smx-head-ico {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: #8ff7d8;
+  border: 1px solid rgba(46, 230, 168, 0.22);
+  background: linear-gradient(150deg, rgba(46, 230, 168, 0.18), rgba(56, 225, 255, 0.06));
+}
+
+.smx-head h3 {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 850;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.smx-head-spacer { flex: 1; min-width: 0; }
+
+.smx-head-meta {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--sm-line);
+  background: var(--sm-surface-2);
+  color: var(--sm-ink-dim);
+  font-size: 9px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+:root[data-theme='light'] .smx-head-ico {
+  color: #04795c;
+  border-color: rgba(0, 150, 111, 0.24);
+  background: linear-gradient(150deg, rgba(0, 169, 107, 0.13), rgba(14, 165, 233, 0.05));
+}
+:root[data-theme='light'] .smx-head-meta { background: #f4f7fc; }
+
+.smx-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: #8ff7d8;
+  font: inherit;
+  font-size: 9.5px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+:root[data-theme='light'] .smx-link { color: #04795c; }
+
+/* ─── 10 · METRIC TILES ──────────────────────────────────────────────────── */
+.smx-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.smx-metric {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px 9px;
+  border-radius: 18px;
+  border: 1px solid var(--sm-line);
+  background:
+    linear-gradient(172deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.012) 68%),
+    rgba(9, 14, 26, 0.55);
+  box-shadow: var(--sm-inset);
+}
+
+.smx-metric::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  width: 105%;
+  aspect-ratio: 1;
+  inset-block-start: -58%;
+  inset-inline-end: -34%;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--tone, rgba(56, 225, 255, 0.22)), transparent 68%);
+}
+
+.smx-metric.is-cyan { --tone: rgba(56, 225, 255, 0.24); --tone-ico: #8feaff; --tone-line: rgba(56, 225, 255, 0.2); }
+.smx-metric.is-mint { --tone: rgba(46, 230, 168, 0.22); --tone-ico: #8ff7d8; --tone-line: rgba(46, 230, 168, 0.2); }
+.smx-metric.is-rose { --tone: rgba(255, 107, 139, 0.2); --tone-ico: #ffb3c4; --tone-line: rgba(255, 107, 139, 0.2); }
+
+.smx-metric-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.smx-metric-ico {
+  width: 23px;
+  height: 23px;
+  flex: 0 0 23px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--tone-ico);
+  border: 1px solid var(--tone-line);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.smx-metric-lab {
+  font-size: 9px;
   font-weight: 800;
+  line-height: 1.3;
+  color: var(--sm-ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smx-metric-val {
+  font-size: clamp(13px, 4.1vw, 18px);
+  font-weight: 900;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.smx-metric-foot {
+  display: flex;
+  align-items: center;
+  min-height: 18px;
+  font-size: 9px;
+}
+
+.smx-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 7px;
+  font-size: 9px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.smx-delta.is-up { color: #5df2c0; background: rgba(46, 230, 168, 0.11); }
+.smx-delta.is-down { color: #ff9db3; background: rgba(255, 107, 139, 0.11); }
+
+.smx-note {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--sm-ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme='light'] .smx-metric {
+  background: linear-gradient(172deg, #ffffff, #f7faff);
+  border-color: rgba(15, 23, 42, 0.1);
+  box-shadow: 0 10px 24px -22px rgba(15, 23, 42, 0.4);
+}
+:root[data-theme='light'] .smx-metric-val { color: #0b1424; }
+:root[data-theme='light'] .smx-delta.is-up { color: #00795c; background: rgba(0, 169, 107, 0.11); }
+:root[data-theme='light'] .smx-delta.is-down { color: #b3183a; background: rgba(201, 42, 77, 0.1); }
+
+/* ─── 11 · SHARED METRIC GRID (wallet + token card) ──────────────────────── */
+.sm-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.sm-metric {
+  min-width: 0;
+  overflow: hidden;
+  padding: 10px;
+  border-radius: 15px;
+  border: 1px solid var(--sm-line);
+  background: var(--sm-surface-2);
+}
+
+.sm-metric .lab {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--sm-ink-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sm-metric .val {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--sm-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sm-metric .chg { margin-top: 3px; font-size: 9.5px; font-weight: 850; }
+
+.sm-up { color: var(--up, #2ee6a8); }
+.sm-down { color: var(--down, #ff5b7d); }
+
+/* ─── 12 · ROWS (shared `.sm-row`, new `.smx-row`) ───────────────────────── */
+.sm-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--sm-line-soft);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.sm-row:last-child { border-bottom: 0; }
+.sm-row:active { opacity: 0.75; }
+
+.sm-row .sym {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  border: 1px solid var(--sm-line-soft);
+  background: linear-gradient(145deg, rgba(56, 225, 255, 0.16), rgba(139, 123, 255, 0.14));
+  color: #dff7ff;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.sm-row .mid { flex: 1; min-width: 0; }
+.sm-row .mid .name { font-size: 12px; font-weight: 850; }
+.sm-row .mid .sub { margin-top: 2px; font-size: 9.5px; color: var(--sm-ink-dim); }
+.sm-row .right { text-align: end; }
+.sm-row .right .usd { font-size: 12.5px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.sm-row .right .conf { margin-top: 2px; font-size: 9px; font-weight: 850; }
+
+:root[data-theme='light'] .sm-row { border-bottom-color: var(--sm-line-soft); }
+:root[data-theme='light'] .sm-row .sym { color: #045a74; background: linear-gradient(145deg, rgba(3, 126, 166, 0.12), rgba(91, 75, 214, 0.1)); }
+
+.smx-rows { display: flex; flex-direction: column; min-width: 0; }
+
+.smx-row {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 3px;
+  border: 0;
+  border-bottom: 1px solid var(--sm-line-soft);
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.smx-row:last-child { border-bottom: 0; }
+.smx-row:hover { background: var(--sm-surface-2); }
+.smx-row:focus-visible { outline: 2px solid var(--sm-mint); outline-offset: -2px; }
+
+.smx-row-ico {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--sm-line-soft);
+  background: var(--sm-surface-2);
+}
+
+.smx-row-ico.is-flat { border-radius: 11px; }
+.smx-row-ico.is-up { color: #5df2c0; background: rgba(46, 230, 168, 0.1); border-color: rgba(46, 230, 168, 0.22); }
+.smx-row-ico.is-down { color: #ff9db3; background: rgba(255, 107, 139, 0.1); border-color: rgba(255, 107, 139, 0.22); }
+
+.smx-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.smx-row-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 850;
+  color: var(--sm-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smx-row-title em {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--sm-line);
+  color: var(--sm-ink-dim);
+  font-style: normal;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+}
+
+.smx-row-sub {
+  font-size: 9.5px;
+  line-height: 1.5;
+  color: var(--sm-ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smx-row-end {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  max-width: 42%;
+}
+
+.smx-row-end b {
+  font-size: 12.5px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.smx-mini {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.smx-mini-track {
+  display: block;
+  width: 42px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--sm-surface-3);
+  overflow: hidden;
+}
+
+.smx-mini-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
+}
+
+.smx-mini em {
+  font-style: normal;
+  font-size: 8.5px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+
+.smx-mini.is-up { color: #5df2c0; }
+.smx-mini.is-down { color: #ff9db3; }
+
+:root[data-theme='light'] .smx-mini.is-up { color: #00795c; }
+:root[data-theme='light'] .smx-mini.is-down { color: #b3183a; }
+
+.smx-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 8.5px;
+  font-weight: 850;
+  letter-spacing: 0.01em;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.smx-pill.is-up { color: #5df2c0; background: rgba(46, 230, 168, 0.1); border-color: rgba(46, 230, 168, 0.24); }
+.smx-pill.is-down { color: #ff9db3; background: rgba(255, 107, 139, 0.1); border-color: rgba(255, 107, 139, 0.24); }
+.smx-pill.is-neutral { color: var(--sm-ink-dim); background: var(--sm-surface-2); border-color: var(--sm-line); }
+
+.smx-pill.smx-risk.is-low { color: #5df2c0; background: rgba(46, 230, 168, 0.1); border-color: rgba(46, 230, 168, 0.24); }
+.smx-pill.smx-risk.is-medium { color: #ffd479; background: rgba(255, 194, 75, 0.1); border-color: rgba(255, 194, 75, 0.24); }
+.smx-pill.smx-risk.is-high { color: #ff9db3; background: rgba(255, 107, 139, 0.1); border-color: rgba(255, 107, 139, 0.24); }
+
+:root[data-theme='light'] .smx-pill.is-up,
+:root[data-theme='light'] .smx-pill.smx-risk.is-low { color: #00795c; }
+:root[data-theme='light'] .smx-pill.is-down,
+:root[data-theme='light'] .smx-pill.smx-risk.is-high { color: #b3183a; }
+:root[data-theme='light'] .smx-pill.smx-risk.is-medium { color: #7a4f00; }
+
+.smx-chain {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--sm-line);
+  background: var(--sm-surface-2);
+  color: var(--sm-ink-dim);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ─── 13 · FLOW CARD + FLOW BAR ──────────────────────────────────────────── */
+.smx-flowcard { padding-bottom: 11px; }
+
+.smx-flow-nums {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.smx-flow-nums > div {
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 13px;
+  border: 1px solid var(--sm-line-soft);
+  background: var(--sm-surface-2);
+}
+
+.smx-flow-nums span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--sm-ink-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.smx-flow-nums b {
+  display: block;
+  margin-top: 3px;
+  font-size: 14.5px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.smx-flow-nums .is-in b { color: #ff9db3; }
+.smx-flow-nums .is-out b { color: #5df2c0; }
+
+:root[data-theme='light'] .smx-flow-nums .is-in b { color: #b3183a; }
+:root[data-theme='light'] .smx-flow-nums .is-out b { color: #00795c; }
+
+.smx-flowbar {
+  display: flex;
+  gap: 2px;
+  height: 9px;
+  margin-top: 10px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--sm-surface-3);
+  overflow: hidden;
+}
+
+.smx-flowbar i { display: block; height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+.smx-flowbar .is-in { background: linear-gradient(90deg, #ff6b8b, #ffa9bb); }
+.smx-flowbar .is-out { background: linear-gradient(90deg, #2ee6a8, #38e1ff); }
+
+.smx-flow-legend {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 9px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.smx-flow-legend .is-in { color: #ff9db3; }
+.smx-flow-legend .is-out { color: #5df2c0; }
+
+:root[data-theme='light'] .smx-flow-legend .is-in { color: #b3183a; }
+:root[data-theme='light'] .smx-flow-legend .is-out { color: #00795c; }
+
+/* ─── 14 · EARLY TOKEN CARDS ─────────────────────────────────────────────── */
+.smx-early-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  gap: 9px;
+}
+
+.smx-early {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px;
+  border-radius: 17px;
+  border: 1px solid var(--sm-line);
+  background:
+    linear-gradient(166deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012) 62%),
+    rgba(9, 14, 26, 0.4);
+  transition: border-color 0.18s ease, transform 0.18s ease;
+}
+
+.smx-early:hover { border-color: rgba(46, 230, 168, 0.32); transform: translateY(-1px); }
+
+.smx-early-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.smx-early-logo {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  border: 1px solid var(--sm-line-soft);
+  background: var(--sm-surface-2);
+  overflow: hidden;
+}
+
+.smx-early-id {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.smx-early-id b {
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smx-early-id span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 8.5px;
+  color: var(--sm-ink-dim);
+  overflow: hidden;
+}
+
+.smx-early-id em {
+  font-style: normal;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8feaff;
+}
+
+.smx-early-id i {
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+.smx-early-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.smx-early-stats > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 6px;
+  align-items: center;
+  padding: 6px 7px;
+  border-radius: 11px;
+  border: 1px solid var(--sm-line-soft);
+  background: var(--sm-surface-2);
+}
+
+.smx-early-stat-ico {
+  grid-row: 1 / span 2;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--sm-ink-dim);
+  background: rgba(56, 225, 255, 0.08);
+}
+
+.smx-early-stats b {
+  font-size: 11px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smx-early-stats small {
+  font-size: 8px;
+  color: var(--sm-ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smx-cta {
+  width: 100%;
+  min-height: 37px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 10px;
+  border-radius: 11px;
+  border: 1px solid rgba(46, 230, 168, 0.32);
+  background: linear-gradient(120deg, rgba(46, 230, 168, 0.16), rgba(56, 225, 255, 0.09));
+  color: #c9ffef;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.smx-cta:hover {
+  border-color: rgba(46, 230, 168, 0.5);
+  background: linear-gradient(120deg, rgba(46, 230, 168, 0.26), rgba(56, 225, 255, 0.14));
+}
+
+:root[data-theme='light'] .smx-early {
+  background: linear-gradient(166deg, #ffffff, #f7fbff);
+  border-color: rgba(15, 23, 42, 0.1);
+  box-shadow: 0 10px 24px -24px rgba(15, 23, 42, 0.4);
+}
+:root[data-theme='light'] .smx-early-id em { color: #045a74; }
+:root[data-theme='light'] .smx-cta {
+  color: #04624a;
+  border-color: rgba(0, 150, 111, 0.3);
+  background: linear-gradient(120deg, rgba(0, 169, 107, 0.12), rgba(14, 165, 233, 0.06));
+}
+
+/* ─── 15 · FRESH WALLETS ─────────────────────────────────────────────────── */
+.smx-miniMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 9px;
+}
+
+.smx-miniMetrics > div {
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 11px;
+  border: 1px solid var(--sm-line-soft);
+  background: var(--sm-surface-2);
+}
+
+.smx-miniMetrics small {
+  display: block;
+  font-size: 8px;
+  font-weight: 800;
+  color: var(--sm-ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smx-miniMetrics b {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smx-fresh-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  gap: 8px;
+}
+
+.smx-fresh {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  border-radius: 15px;
+  border: 1px solid var(--sm-line);
+  background: linear-gradient(164deg, rgba(46, 230, 168, 0.08), rgba(56, 225, 255, 0.02));
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.18s ease;
+}
+
+.smx-fresh:hover { border-color: rgba(46, 230, 168, 0.34); transform: translateY(-1px); }
+.smx-fresh:focus-visible { outline: 2px solid var(--sm-mint); outline-offset: 2px; }
+
+.smx-fresh-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.smx-fresh-tag {
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid rgba(56, 225, 255, 0.22);
+  background: rgba(56, 225, 255, 0.09);
+  color: #8feaff;
+  font-size: 7.5px;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+}
+
+.smx-fresh-star {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 8.5px;
+  font-weight: 850;
+  color: #ffd479;
+}
+
+.smx-fresh-addr {
+  font-size: 12.5px;
+  font-weight: 850;
+  letter-spacing: 0.01em;
+  direction: ltr;
+  text-align: start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.smx-fresh-meta {
+  display: flex;
+  align-items: flex-end;
+  gap: 13px;
+  padding-top: 7px;
+  border-top: 1px solid var(--sm-line-soft);
+}
+
+.smx-fresh-meta > span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.smx-fresh-meta small { font-size: 8px; color: var(--sm-ink-dim); }
+.smx-fresh-meta b {
+  font-size: 11.5px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smx-fresh-go { margin-inline-start: auto; color: var(--sm-ink-dim); }
+
+:root[data-theme='light'] .smx-fresh-tag { color: #045a74; border-color: rgba(3, 126, 166, 0.22); background: rgba(3, 126, 166, 0.08); }
+:root[data-theme='light'] .smx-fresh-star { color: #8a5d00; }
+
+/* ─── 16 · WHALE CARDS ───────────────────────────────────────────────────── */
+.smx-whale-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.smx-whale {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px;
+  border-radius: 15px;
+  border: 1px solid var(--sm-line);
+  background:
+    linear-gradient(166deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012) 62%),
+    rgba(9, 14, 26, 0.4);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
+}
+
+.smx-whale:hover {
+  border-color: rgba(139, 123, 255, 0.4);
+  transform: translateY(-1px);
+}
+.smx-whale:focus-visible { outline: 2px solid var(--sm-violet); outline-offset: 2px; }
+
+.smx-whale-rank {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid rgba(139, 123, 255, 0.24);
+  background: rgba(139, 123, 255, 0.12);
+  color: #c3bcff;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.smx-whale-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.smx-whale-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.smx-whale-addr {
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smx-whale-action {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--sm-ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smx-whale-foot {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  padding-top: 6px;
+  border-top: 1px solid var(--sm-line-soft);
+  min-width: 0;
+}
+
+.smx-whale-foot > span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.smx-whale-foot small { font-size: 8px; font-weight: 800; color: var(--sm-ink-dim); }
+.smx-whale-foot b {
+  font-size: 11.5px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.smx-whale-foot .is-up b { color: #5df2c0; }
+.smx-whale-foot .is-down b { color: #ff9db3; }
+
+.smx-whale-meter {
+  display: block;
+  height: 3px;
+  margin-top: 2px;
+  border-radius: 999px;
+  background: var(--sm-surface-3);
+  overflow: hidden;
+}
+
+.smx-whale-meter i { display: block; height: 100%; border-radius: inherit; background: currentColor; }
+.smx-whale-meter.is-up { color: #2ee6a8; }
+.smx-whale-meter.is-down { color: #ff6b8b; }
+
+:root[data-theme='light'] .smx-whale { background: linear-gradient(166deg, #ffffff, #f8faff); border-color: rgba(15, 23, 42, 0.1); }
+:root[data-theme='light'] .smx-whale-rank { color: #5b4bd6; background: rgba(91, 75, 214, 0.1); border-color: rgba(91, 75, 214, 0.2); }
+:root[data-theme='light'] .smx-whale-foot .is-up b { color: #00795c; }
+:root[data-theme='light'] .smx-whale-foot .is-down b { color: #b3183a; }
+
+/* ─── 17 · ALERTS ────────────────────────────────────────────────────────── */
+.smx-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.smx-alert {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid var(--sm-line-soft);
+  background: var(--sm-surface-2);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.smx-alert:hover:not(:disabled) { border-color: var(--sm-line-strong); background: var(--sm-surface-3); }
+.smx-alert:disabled { cursor: default; }
+.smx-alert:focus-visible { outline: 2px solid var(--sm-mint); outline-offset: 2px; }
+
+.smx-alert-ico {
+  width: 31px;
+  height: 31px;
+  flex: 0 0 31px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+
+.smx-alert-ico.is-cyan { color: #8feaff; background: rgba(56, 225, 255, 0.1); border-color: rgba(56, 225, 255, 0.18); }
+.smx-alert-ico.is-mint { color: #8ff7d8; background: rgba(46, 230, 168, 0.1); border-color: rgba(46, 230, 168, 0.2); }
+.smx-alert-ico.is-violet { color: #c3bcff; background: rgba(139, 123, 255, 0.12); border-color: rgba(139, 123, 255, 0.2); }
+
+.smx-alert-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.smx-alert-title {
+  font-size: 11.5px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.smx-alert-msg {
+  font-size: 10px;
+  line-height: 1.65;
+  color: var(--sm-ink-dim);
+}
+
+.smx-alert-ago {
+  flex: 0 0 auto;
+  font-size: 8.5px;
+  font-weight: 750;
+  color: var(--sm-ink-dim);
+  white-space: nowrap;
+}
+
+/* ─── 18 · FLOWS TAB ─────────────────────────────────────────────────────── */
+.smx-net {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 10px 0 0;
+  padding: 13px 10px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--sm-line);
+  background:
+    radial-gradient(120% 150% at 50% -40%, rgba(46, 230, 168, 0.16), transparent 62%),
+    var(--sm-surface-2);
+}
+
+.smx-net-lab {
+  font-size: 8.5px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sm-ink-dim);
+}
+
+.smx-net b {
+  font-size: 25px;
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.smx-net-cols {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 12px;
+  margin-top: 2px;
+  font-size: 8.5px;
+  font-weight: 800;
+}
+
+.smx-net-cols .is-in { color: #ff9db3; }
+.smx-net-cols .is-out { color: #5df2c0; }
+
+:root[data-theme='light'] .smx-net-cols .is-in { color: #b3183a; }
+:root[data-theme='light'] .smx-net-cols .is-out { color: #00795c; }
+
+.smx-ex-grid {
+  display: grid;
+  gap: 7px;
+  margin-top: 11px;
+}
+
+.smx-ex {
+  padding: 9px 10px;
+  border-radius: 13px;
+  border: 1px solid var(--sm-line-soft);
+  background: var(--sm-surface-2);
+  min-width: 0;
+}
+
+.smx-ex-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.smx-ex-bar {
+  display: flex;
+  gap: 2px;
+  height: 5px;
+  margin: 7px 0 5px;
+  border-radius: 999px;
+  background: var(--sm-surface-3);
+  overflow: hidden;
+}
+
+.smx-ex-bar .is-in { background: linear-gradient(90deg, #ff6b8b, #ffa9bb); border-radius: 999px; }
+.smx-ex-bar .is-out { background: linear-gradient(90deg, #2ee6a8, #38e1ff); border-radius: 999px; }
+
+.smx-ex-legend {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 8.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.smx-ex-legend .is-in { color: #ff9db3; }
+.smx-ex-legend .is-out { color: #5df2c0; }
+
+:root[data-theme='light'] .smx-ex-legend .is-in { color: #b3183a; }
+:root[data-theme='light'] .smx-ex-legend .is-out { color: #00795c; }
+
+/* ─── 19 · CHIPS, EMPTY STATES, SKELETONS, TEXT ──────────────────────────── */
+.smx-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.smx-chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--sm-line);
+  background: var(--sm-surface-2);
+  color: var(--sm-ink-dim);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.smx-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 20px 14px;
+  text-align: center;
+}
+
+.smx-empty-ico {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  border: 1px dashed rgba(46, 230, 168, 0.3);
+  background: radial-gradient(circle at 50% 28%, rgba(46, 230, 168, 0.18), rgba(46, 230, 168, 0.03));
+  color: #8ff7d8;
+}
+
+.smx-empty strong { font-size: 11.5px; font-weight: 850; line-height: 1.5; }
+
+.smx-empty-body {
+  max-width: 34ch;
+  font-size: 10px;
+  line-height: 1.75;
+  color: var(--sm-ink-dim);
+}
+
+:root[data-theme='light'] .smx-empty-ico {
+  color: #04795c;
+  border-color: rgba(0, 150, 111, 0.3);
+  background: radial-gradient(circle at 50% 28%, rgba(0, 169, 107, 0.12), rgba(0, 169, 107, 0.02));
+}
+
+.smx-inline-empty {
+  padding: 13px;
+  border-radius: 13px;
+  border: 1px dashed var(--sm-line-strong);
+  color: var(--sm-ink-dim);
+  font-size: 10px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.smx-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid var(--sm-line);
+  background: var(--sm-surface);
+}
+
+.smx-skel {
+  display: block;
+  height: 13px;
+  border-radius: 7px;
+  background: linear-gradient(90deg, var(--sm-surface-2), var(--sm-surface-3), var(--sm-surface-2));
+  background-size: 200% 100%;
+  animation: smx-shimmer 1.5s linear infinite;
+}
+
+.smx-skel--lg { height: 52px; border-radius: 14px; }
+
+.smx-disclaimer {
+  margin: 10px 0 0;
+  padding: 0 2px;
+  font-size: 9px;
+  line-height: 1.75;
+  color: var(--sm-ink-dim);
+  opacity: 0.85;
+}
+
+.smx-disclaimer--foot { margin-top: 0; padding: 2px 6px; }
+
+/* Shared legacy empty/skeleton pieces used by the token card + wallet page. */
+.sm-empty {
+  padding: 20px 14px;
+  text-align: center;
+  font-size: 10.5px;
+  line-height: 1.75;
+  color: var(--sm-ink-dim);
+}
+
+.sm-skel {
+  height: 13px;
+  margin: 8px 0;
+  border-radius: 7px;
+  background: linear-gradient(90deg, var(--sm-surface-2), var(--sm-surface-3), var(--sm-surface-2));
+  background-size: 200% 100%;
+  animation: smx-shimmer 1.5s linear infinite;
+}
+
+.sm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(46, 230, 168, 0.32);
+  background: linear-gradient(120deg, rgba(46, 230, 168, 0.16), rgba(56, 225, 255, 0.08));
+  color: #c9ffef;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.sm-btn.ghost {
+  border-color: var(--sm-line-strong);
+  background: var(--sm-surface-2);
+  color: var(--sm-ink);
+}
+
+.sm-btn:active { transform: scale(0.99); }
+
+:root[data-theme='light'] .sm-btn {
+  color: #04624a;
+  border-color: rgba(0, 150, 111, 0.3);
+  background: linear-gradient(120deg, rgba(0, 169, 107, 0.12), rgba(14, 165, 233, 0.05));
+}
+:root[data-theme='light'] .sm-btn.ghost { color: #1e2a4a; background: #ffffff; }
+
+.sm-tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0; }
+
+.sm-tag {
+  padding: 3px 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(56, 225, 255, 0.24);
+  background: rgba(56, 225, 255, 0.09);
+  color: #8feaff;
+  font-size: 8.5px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sm-tag.warn {
+  border-color: rgba(255, 194, 75, 0.26);
+  background: rgba(255, 194, 75, 0.1);
+  color: #ffd479;
+}
+
+:root[data-theme='light'] .sm-tag { color: #045a74; background: rgba(3, 126, 166, 0.08); border-color: rgba(3, 126, 166, 0.22); }
+:root[data-theme='light'] .sm-tag.warn { color: #7a4f00; background: rgba(154, 100, 0, 0.08); border-color: rgba(154, 100, 0, 0.24); }
+
+.sm-holdings { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.sm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--sm-line);
+  background: var(--sm-surface-2);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.sm-disclaimer {
+  padding: 8px 2px 0;
+  font-size: 9px;
+  line-height: 1.75;
+  color: var(--sm-ink-dim);
+  opacity: 0.85;
+}
+
+.sm-coverage {
+  padding: 2px 4px 6px;
+  font-size: 9px;
+  line-height: 1.7;
+  color: var(--sm-ink-dim);
+  opacity: 0.8;
+}
+
+/* ─── 20 · METERS (confidence) ───────────────────────────────────────────── */
+.sm-meter {
+  width: 100%;
+  min-width: 54px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--sm-surface-3);
+  overflow: hidden;
+}
+
+.sm-meter i { display: block; height: 100%; border-radius: 999px; }
+
+/* Risk text colours, shared by every smart-money screen. */
+.sm-risk-LOW { color: #2ee6a8; }
+.sm-risk-MEDIUM { color: #ffc24b; }
+.sm-risk-HIGH { color: #ff6b8b; }
+
+:root[data-theme='light'] .sm-risk-LOW { color: #00795c; }
+:root[data-theme='light'] .sm-risk-MEDIUM { color: #8a5d00; }
+:root[data-theme='light'] .sm-risk-HIGH { color: #b3183a; }
+
+/* ─── 21 · WALLET PAGE SCORE RINGS ───────────────────────────────────────── */
+.sm-scores {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+
+.sm-score {
+  min-width: 0;
+  padding: 11px 8px;
+  border-radius: 16px;
+  border: 1px solid var(--sm-line);
+  background: var(--sm-surface-2);
+  text-align: center;
+}
+
+.sm-score .ring {
+  position: relative;
+  width: 62px;
+  height: 62px;
+  margin: 0 auto 7px;
+}
+
+.sm-score .ring svg { display: block; transform: rotate(-90deg); }
+
+.sm-score .ring .n {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.sm-score .lab {
+  font-size: 8.5px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sm-ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sm-score .band { margin-top: 2px; font-size: 9px; font-weight: 900; }
+
+.sm-factors { list-style: none; margin: 7px 0 0; padding: 0; }
+
+.sm-factors li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.sm-factors li.good::before { content: '+'; color: #2ee6a8; font-weight: 900; }
+.sm-factors li.bad::before { content: '−'; color: #ff6b8b; font-weight: 900; }
+
+/* ─── 22 · TOKEN CARD (shared, embedded in CoinDetail) ───────────────────── */
+.sm-token-card { padding: 13px; }
+
+.sm-token-head {
+  width: 100%;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 3px 1px;
+  margin-bottom: 3px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--sm-ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 850;
   text-align: start;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.sm-token-head:focus-visible { outline: 2px solid var(--rgb-4, #00e5ff); outline-offset: 2px; border-radius: 10px; }
+
 .sm-token-head.is-static { cursor: default; }
-/* The title plus the «۲۴ ساعت» badge: the badge must never squeeze the title
-   into an unreadable sliver on a 320px screen, so the row wraps instead. */
-.sm-token-head-main { display: inline-flex; align-items: center; gap: 8px; row-gap: 2px; flex-wrap: wrap; min-width: 0; flex: 1 1 auto; }
-.sm-token-head-icon { flex: 0 0 16px; color: var(--rgb-4, #00e5ff); }
+.sm-token-head:focus-visible { outline: 2px solid var(--sm-mint); outline-offset: 2px; }
+
+.sm-token-head-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sm-token-head-icon { flex: 0 0 16px; color: var(--sm-mint); }
+
 .sm-token-head-summary {
   flex: 0 0 auto;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: 11px;
+  font-weight: 900;
   font-variant-numeric: tabular-nums;
-  color: var(--text-2, #cbd5e1);
+  color: var(--sm-ink);
 }
-.sm-token-caret { flex: 0 0 14px; color: var(--text-3, #94a3b8); transition: transform 0.2s ease; }
+
+.sm-token-caret {
+  flex: 0 0 14px;
+  color: var(--sm-ink-dim);
+  transition: transform 0.2s ease;
+}
 .sm-token-caret.is-open { transform: rotate(180deg); }
 
-/* Which token the numbers belong to — the contract the server was asked about
-   and the symbol it read back for it. */
 .sm-token-identity {
   display: grid;
   gap: 5px;
-  padding: 10px 11px;
-  margin-bottom: 10px;
-  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
+  padding: 9px 10px;
+  margin-bottom: 9px;
+  border-radius: 13px;
+  border: 1px solid var(--sm-line-soft);
+  background: var(--sm-surface-2);
 }
-.sm-token-identity-row { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; min-width: 0; }
-.sm-token-symbol { font-size: 14px; font-weight: 900; letter-spacing: 0.2px; }
+
+.sm-token-identity-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sm-token-symbol { font-size: 13px; font-weight: 900; letter-spacing: 0.01em; }
+
 .sm-token-name {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-3, #94a3b8);
-  font-size: 11px;
+  color: var(--sm-ink-dim);
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .sm-token-chip {
   flex: 0 0 auto;
-  padding: 2px 8px;
-  border: 1px solid color-mix(in srgb, var(--rgb-4, #00e5ff) 34%, transparent);
+  padding: 2px 7px;
   border-radius: 999px;
-  color: var(--rgb-4, #00e5ff);
-  background: color-mix(in srgb, var(--rgb-4, #00e5ff) 10%, transparent);
-  font-size: 10px;
-  font-weight: 800;
+  border: 1px solid rgba(46, 230, 168, 0.28);
+  background: rgba(46, 230, 168, 0.09);
+  color: #8ff7d8;
+  font-size: 8.5px;
+  font-weight: 850;
+  white-space: nowrap;
 }
+
 .sm-token-chip.ghost {
-  border-color: var(--line, rgba(255, 255, 255, 0.12));
-  color: var(--text-3, #94a3b8);
+  border-color: var(--sm-line);
   background: transparent;
+  color: var(--sm-ink-dim);
 }
+
 .sm-token-addr {
   display: block;
   overflow: hidden;
-  color: var(--text-3, #94a3b8);
-  font-size: 10.5px;
+  color: var(--sm-ink-dim);
+  font-size: 9.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
   direction: ltr;
   text-align: start;
-  opacity: 0.85;
 }
-.sm-token-identity-note { color: var(--text-3, #94a3b8); font-size: 10.5px; line-height: 1.7; }
 
-/* The window rail: its own block row, four equal segments, never inside a
-   heading, never overflowing the card. */
+.sm-token-identity-note { color: var(--sm-ink-dim); font-size: 9px; line-height: 1.7; }
+
 .sm-token-windows {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   width: 100%;
-  gap: 3px;
-  margin-bottom: 12px;
-  box-sizing: border-box;
+  gap: 2px;
+  margin-bottom: 10px;
 }
-.sm-token-windows .sm-seg-window-item {
-  flex: 1 1 0;
-  min-width: 0;
-  min-height: 40px;
-  padding: 7px 4px;
-  font-size: 11.5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+
+.sm-token-windows .sm-seg-window-item { min-height: 38px; padding: 6px 3px; font-size: 10px; }
+
 .sm-token-body { display: block; }
-/* A narrow phone (320px) has ~66px per segment: the label shrinks rather than
-   pushing the rail out of the box again. */
-@media (max-width: 359px) {
-  .sm-token-windows .sm-seg-window-item { font-size: 10.5px; padding-inline: 2px; }
+
+:root[data-theme='light'] .sm-token-chip { color: #00795c; background: rgba(0, 169, 107, 0.09); border-color: rgba(0, 150, 111, 0.24); }
+:root[data-theme='light'] .sm-token-chip.ghost { background: transparent; color: #5b6b85; }
+:root[data-theme='light'] .sm-token-head-icon { color: #00795c; }
+
+/* ─── 23 · LIGHT-THEME PINS REQUIRED BY THE WIRING AUDIT ─────────────────── */
+/*
+ * These three rules are the regression pins for «باکسش در تم روشن معلوم نیست»:
+ * a white card with a white hairline has no border. They are deliberately
+ * written on the shared classes, not on a page-specific wrapper, because the
+ * token card renders on three different screens.
+ */
+:root[data-theme='light'] .sm-section {
+  background: #ffffff;
+  border: 1px solid var(--sm-line);
+  box-shadow: 0 14px 32px -26px rgba(15, 23, 42, 0.35);
 }
-:root[data-theme='light'] .sm-token-identity { background: #f8fafc; border-color: rgba(15, 23, 42, 0.14); }
-:root[data-theme='light'] .sm-token-head-summary { color: #475569; }
+
+:root[data-theme='light'] .sm-row {
+  border-bottom-color: var(--sm-line-soft);
+}
 
 :root[data-theme='light'] .sm-seg-window {
-  background: #eef2f7;
-  border-color: rgba(15, 23, 42, 0.14);
-}
-:root[data-theme='light'] .sm-seg-window-item { color: #334155; }
-:root[data-theme='light'] .sm-seg-window-item.active {
-  /* Same treatment `.segmented button.active` gets: the pill is the cyan
-     gradient, the label has to be DARK on it. White text on that pill measured
-     1.6:1 — visible in dark mode, invisible in light. */
-  color: #0f172a;
-  background: rgba(15, 23, 42, 0.08);
+  background: #eef3fa;
+  border: 1px solid var(--sm-line);
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   LIGHT THEME — THE PARTS THAT WERE STILL DRAWN FOR BLACK
-   «…در تم روشن باکسش معلوم نیست، خطش معلوم نیست»
-   Every surface below was `rgba(255,255,255,…)`: white on white. A card that
-   is white-on-white with a white hairline has no box and no divider — the
-   border is literally there and literally invisible. The section border now
-   comes from `--line-strong`, which every theme defines, and the elements that
-   still needed a hand get explicit light values here.
-   ═══════════════════════════════════════════════════════════════════════════ */
-:root[data-theme='light'] .sm-section {
-  background: var(--bg-panel-solid, #fff);
-  border: 1px solid var(--line-strong, rgba(15, 23, 42, 0.3));
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
+/* ─── 24 · MOTION ────────────────────────────────────────────────────────── */
+@keyframes smx-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.86); }
 }
-:root[data-theme='light'] .sm-row,
-:root[data-theme='light'] .sm-alert { border-bottom-color: var(--line-strong, rgba(15, 23, 42, 0.18)); }
-/* The loading skeleton. In light mode this was a white gradient inside a white
-   card, so while the token card was loading the whole box read as empty —
-   «باکسش معلوم نیست». */
-:root[data-theme='light'] .sm-skel {
-  background: linear-gradient(90deg, #e6ebf3, #f3f6fb, #e6ebf3);
-  background-size: 200% 100%;
-}
-/* Behaviour / risk tags: `#7de7ff` on a white chip is 1.4:1. */
-:root[data-theme='light'] .sm-tag {
-  background: rgba(0, 145, 200, 0.12);
-  color: #055e7f;
-  border-color: rgba(0, 145, 200, 0.35);
-}
-:root[data-theme='light'] .sm-tag.warn {
-  background: rgba(176, 108, 0, 0.12);
-  color: #8a5200;
-  border-color: rgba(176, 108, 0, 0.35);
-}
-:root[data-theme='light'] .sm-risk-HIGH { color: #c8102e; }
-:root[data-theme='light'] .sm-risk-MEDIUM { color: #9a6400; }
-:root[data-theme='light'] .sm-risk-LOW { color: #00795c; }
-/* The offline / stale banners carried neon text built to glow on black. */
-:root[data-theme='light'] .sm-offline {
-  border-color: rgba(176, 108, 0, 0.4);
-  background: rgba(255, 196, 0, 0.1);
-}
-:root[data-theme='light'] .sm-offline .msg { color: #8a5200; }
-:root[data-theme='light'] .sm-stale {
-  border-color: rgba(0, 145, 200, 0.3);
-  background: rgba(0, 145, 200, 0.06);
-}
-:root[data-theme='light'] .sm-hero {
-  border-color: rgba(15, 23, 42, 0.14);
-  background:
-    radial-gradient(120% 140% at 80% -20%, rgba(0, 190, 220, 0.16), transparent 55%),
-    radial-gradient(120% 150% at 0% 120%, rgba(124, 77, 255, 0.14), transparent 55%),
-    linear-gradient(135deg, rgba(124, 77, 255, 0.08), rgba(255, 45, 149, 0.05));
-}
-:root[data-theme='light'] .sm-hero h1 { color: #0b1220; }
-:root[data-theme='light'] .sm-search {
-  background: rgba(255, 255, 255, 0.86);
-  border-color: rgba(15, 23, 42, 0.16);
-}
-:root[data-theme='light'] .sm-search input { color: #0b1220; }
-:root[data-theme='light'] .sm-search svg { color: #52607a; }
-:root[data-theme='light'] .sm-metric .lab,
-:root[data-theme='light'] .sm-score .lab,
-:root[data-theme='light'] .sm-early-card .meta .k { opacity: 0.78; }
-:root[data-theme='light'] .sm-disclaimer,
-:root[data-theme='light'] .sm-coverage { opacity: 0.9; color: var(--text-3, #5b6478); }
-:root[data-theme='light'] .sm-empty { opacity: 0.85; }
-:root[data-theme='light'] .sm-btn { color: #1e2a4a; }
-:root[data-theme='light'] .sm-btn:not(.ghost) {
-  background: rgba(79, 70, 229, 0.1);
-  border-color: rgba(79, 70, 229, 0.45);
-}
-:root[data-theme='light'] .sm-btn.ghost {
-  color: #1e2a4a;
-  background: #fff;
-  border-color: rgba(15, 23, 42, 0.22);
-}
-:root[data-theme='light'] .sm-row .sym { color: #fff; }
-:root[data-theme='light'] .sm-tab {
-  background: #fff;
-  color: #334155;
-}
-:root[data-theme='light'] .sm-tab.active { color: #0f172a; }
-:root[data-theme='light'] .sm-live { color: #00795c; background: rgba(0, 169, 107, 0.12); border-color: rgba(0, 169, 107, 0.35); }
-:root[data-theme='light'] .sm-live.is-off { color: #64748b; background: #f1f5f9; border-color: rgba(15, 23, 42, 0.14); }
 
-/* ── Modern Early Card Layout ── */
-.sm-early-card {
-  min-width: 0;
-  overflow: hidden;
-  border-radius: 18px;
-  padding: 15px;
-  background: linear-gradient(165deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 12px;
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+@keyframes smx-breathe {
+  from { opacity: 0.55; transform: scale(0.94); }
+  to { opacity: 0.95; transform: scale(1.04); }
 }
-.sm-early-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(0, 229, 255, 0.35);
-  box-shadow: 0 12px 32px rgba(0, 229, 255, 0.12);
+
+@keyframes smx-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
 }
-.sm-early-card-head {
+
+@keyframes smx-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .smx-hero-radar b,
+  .smx-live.is-live i,
+  .smx-skel,
+  .sm-skel,
+  .smx-refresh.is-busy svg {
+    animation: none !important;
+  }
+
+  .smx-dock-btn,
+  .smx-early,
+  .smx-fresh,
+  .smx-whale,
+  .smx-cta,
+  .smx-flowbar i {
+    transition: none !important;
+  }
+}
+
+/* The packaged WebView runs on battery: the ambient radar stops there too.
+   Nothing functional depends on it. */
+:root[data-native='true'] .smx-hero-radar b,
+:root[data-native='true'] .smx-live.is-live i {
+  animation: none;
+}
+
+/* ─── 25 · COMPACT PAGE HEADERS (token + wallet detail screens) ──────────── */
+/*
+ * The two detail screens were headed by a bare `.row` with an icon button, a
+ * monospace address and — on the wallet screen — a native `<select>` styled
+ * with white-alpha inline styles. In the light theme those inline colours are
+ * a grey rectangle on white (and the ✦ in front of «هوش توکن» was an emoji).
+ * These headers put both screens on the same glyph-tile language as the desk.
+ */
+.smx-pagehead,
+.smx-wallethead {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 18px;
+  border: 1px solid var(--sm-line);
+  background:
+    linear-gradient(160deg, rgba(56, 225, 255, 0.07), rgba(255, 255, 255, 0.02)),
+    var(--sm-surface);
+  box-shadow: var(--sm-inset);
 }
-.sm-early-token-logo {
-  flex-shrink: 0;
+
+.smx-pagehead-back {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
   display: grid;
   place-items: center;
+  padding: 0;
+  border-radius: 11px;
+  border: 1px solid var(--sm-line);
+  background: var(--sm-surface-2);
+  color: var(--sm-ink);
+  cursor: pointer;
 }
-.sm-early-token-info {
+
+.smx-pagehead-back:hover { border-color: var(--sm-line-strong); }
+.smx-pagehead-back:focus-visible { outline: 2px solid var(--sm-mint); outline-offset: 2px; }
+
+.smx-pagehead-ico,
+.smx-wallethead-ico {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  border: 1px solid rgba(46, 230, 168, 0.24);
+  background: linear-gradient(150deg, rgba(46, 230, 168, 0.18), rgba(56, 225, 255, 0.06));
+  color: #8ff7d8;
+}
+
+.smx-pagehead-text,
+.smx-wallethead-text {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
-.sm-early-token-info .tk {
-  font-size: 15px;
+
+.smx-pagehead-kicker {
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sm-ink-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.smx-pagehead-text h1 {
+  margin: 0;
+  font-size: 13.5px;
   font-weight: 900;
   letter-spacing: -0.01em;
-  white-space: nowrap;
+  line-height: 1.35;
+}
+
+.smx-pagehead-mark {
+  flex: 0 0 auto;
+  color: var(--sm-mint);
+  opacity: 0.75;
+}
+
+.smx-wallethead {
+  border-radius: 20px;
+  padding: 10px 11px;
+  background:
+    radial-gradient(120% 130% at 92% -40%, rgba(46, 230, 168, 0.16), transparent 60%),
+    linear-gradient(160deg, rgba(56, 225, 255, 0.06), rgba(255, 255, 255, 0.015)),
+    var(--sm-surface);
+}
+
+.smx-wallethead-text b {
+  font-size: 14.5px;
+  font-weight: 850;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.sm-early-token-info .sub {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 3px;
-}
-.sm-chain-tag {
-  font-size: 9.5px;
-  font-weight: 800;
-  text-transform: uppercase;
-  padding: 2px 7px;
-  border-radius: 6px;
-  background: rgba(0, 229, 255, 0.12);
-  color: #00e5ff;
-  border: 1px solid rgba(0, 229, 255, 0.25);
-}
-.sm-dex-tag {
-  font-size: 9.5px;
-  opacity: 0.65;
   white-space: nowrap;
 }
-.sm-risk-badge {
+
+.smx-wallethead-chain {
+  flex: 0 0 auto;
+  min-height: 34px;
+  max-width: 96px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 1px solid var(--sm-line);
+  background-color: var(--sm-surface-2);
+  color: var(--sm-ink);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+:root[data-theme='light'] .smx-pagehead,
+:root[data-theme='light'] .smx-wallethead {
+  background:
+    linear-gradient(160deg, rgba(3, 126, 166, 0.05), rgba(255, 255, 255, 0.6)),
+    #ffffff;
+  border-color: rgba(15, 23, 42, 0.1);
+  box-shadow: 0 12px 28px -26px rgba(15, 23, 42, 0.35);
+}
+
+:root[data-theme='light'] .smx-pagehead-ico,
+:root[data-theme='light'] .smx-wallethead-ico {
+  color: #04795c;
+  border-color: rgba(0, 150, 111, 0.24);
+  background: linear-gradient(150deg, rgba(0, 169, 107, 0.13), rgba(14, 165, 233, 0.05));
+}
+
+:root[data-theme='light'] .smx-pagehead-back,
+:root[data-theme='light'] .smx-wallethead-chain {
+  background: #f4f7fc;
+  color: #1e2a4a;
+}
+
+/* ─── 26 · RAIL PLACEMENT, CHIP COUNTERS, LEGACY BANNER HOOKS ────────────── */
+/*
+ * The window rail stopped being a direct child of `.sm-page` when it moved
+ * inside the toolbar (and inside the flow card). These are the placement rules
+ * for those two new homes; sizing and the selected pill still come from
+ * section 7 so the two rails cannot drift apart.
+ */
+.smx-windowrail {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 2px;
+  border-radius: 12px;
+}
+
+.smx-windowrail .sm-seg-window-item {
+  min-height: 32px;
+  padding: 0 9px;
   font-size: 10px;
   font-weight: 850;
-  padding: 3px 8px;
-  border-radius: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.sm-risk-badge.sm-risk-LOW { background: rgba(46, 230, 168, 0.14); color: #2ee6a8; border: 1px solid rgba(46, 230, 168, 0.3); }
-.sm-risk-badge.sm-risk-MEDIUM { background: rgba(255, 194, 75, 0.14); color: #ffc24b; border: 1px solid rgba(255, 194, 75, 0.3); }
-.sm-risk-badge.sm-risk-HIGH { background: rgba(255, 92, 122, 0.14); color: #ff5c7a; border: 1px solid rgba(255, 92, 122, 0.3); }
-
-/* ── Fresh Wallets Modern Cards ── */
-.sm-fresh-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px;
-  margin-top: 10px;
-}
-.sm-fresh-card {
-  border-radius: 16px;
-  padding: 13px 14px;
-  background: linear-gradient(155deg, rgba(46, 230, 168, 0.05), rgba(0, 229, 255, 0.02));
-  border: 1px solid rgba(46, 230, 168, 0.18);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  cursor: pointer;
-  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-}
-.sm-fresh-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(46, 230, 168, 0.45);
-  background: linear-gradient(155deg, rgba(46, 230, 168, 0.1), rgba(0, 229, 255, 0.05));
-}
-.sm-fresh-card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-.sm-fresh-tag {
-  font-size: 9px;
-  font-weight: 800;
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: rgba(0, 229, 255, 0.12);
-  color: #00e5ff;
-  border: 1px solid rgba(0, 229, 255, 0.25);
-}
-.sm-fresh-star {
-  font-size: 9.5px;
-  font-weight: 800;
-  color: #ffc24b;
-}
-.sm-fresh-addr {
-  font-size: 13.5px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-.sm-fresh-bottom {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-top: 4px;
-  padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-.sm-fresh-cap .k, .sm-fresh-tx .k {
-  font-size: 9.5px;
-  opacity: 0.6;
-  margin-inline-end: 4px;
-}
-.sm-fresh-cap .v {
-  font-size: 13px;
-  font-weight: 900;
-}
-.sm-fresh-tx .v {
-  font-size: 11px;
-  font-weight: 700;
-  opacity: 0.85;
 }
 
-/* ── Whales Tab Modern Grid ── */
-.sm-whale-grid {
-  display: grid;
-  gap: 8px;
+.smx-flowtab .smx-windowrail {
+  margin: 10px 0 2px;
+  align-self: stretch;
 }
-.sm-whale-box {
-  border-radius: 16px;
-  padding: 13px 15px;
-  background: linear-gradient(155deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  cursor: pointer;
-  transition: transform 0.18s ease, border-color 0.18s ease;
-}
-.sm-whale-box:hover {
-  transform: translateY(-1.5px);
-  border-color: rgba(124, 77, 255, 0.4);
-  background: linear-gradient(155deg, rgba(124, 77, 255, 0.08), rgba(0, 229, 255, 0.03));
-}
-.sm-whale-box-top {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.sm-whale-box-addr {
+
+.smx-flowtab .smx-windowrail .sm-seg-window-item {
   flex: 1;
-  font-size: 13px;
-  font-weight: 850;
 }
-.sm-whale-risk-badge {
-  font-size: 9.5px;
+
+/*
+ * The whale band counters. Same pill vocabulary as `.smx-pill`, plus a count:
+ * a band with zero wallets is information («no LOW wallet today»), and the
+ * number has to be readable at a glance.
+ */
+.smx-chips {
+  margin-bottom: 8px;
+}
+
+.smx-chip.smx-risk {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-weight: 800;
-  padding: 2px 7px;
-  border-radius: 6px;
-}
-.sm-whale-box-action {
-  font-size: 11px;
-  opacity: 0.7;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.sm-whale-box-bottom {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-.sm-whale-box-bottom .k {
-  font-size: 9.5px;
-  opacity: 0.6;
-  margin-inline-end: 5px;
-}
-.sm-whale-box-bottom .v {
-  font-size: 12.5px;
-  font-weight: 850;
 }
 
-.sm-token-sym-wrap {
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  overflow: hidden;
+.smx-chip.smx-risk b {
+  font-size: 10.5px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: var(--sm-ink);
 }
 
-/* Light mode overrides for new elements */
-:root[data-theme='light'] .sm-early-card {
-  background: #ffffff;
-  border-color: rgba(15, 23, 42, 0.12);
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+.smx-chip.smx-risk.is-low {
+  color: #5df2c0;
+  border-color: rgba(46, 230, 168, 0.26);
+  background: rgba(46, 230, 168, 0.09);
 }
-:root[data-theme='light'] .sm-fresh-card {
-  background: #f8fbf9;
-  border-color: rgba(0, 169, 107, 0.2);
+
+.smx-chip.smx-risk.is-medium {
+  color: #ffd479;
+  border-color: rgba(255, 194, 75, 0.26);
+  background: rgba(255, 194, 75, 0.09);
 }
-:root[data-theme='light'] .sm-whale-box {
-  background: #ffffff;
-  border-color: rgba(15, 23, 42, 0.12);
+
+.smx-chip.smx-risk.is-high {
+  color: #ff9db3;
+  border-color: rgba(255, 107, 139, 0.26);
+  background: rgba(255, 107, 139, 0.09);
 }
-:root[data-theme='light'] .sm-fresh-bottom,
-:root[data-theme='light'] .sm-whale-box-bottom {
-  border-top-color: rgba(15, 23, 42, 0.08);
+
+:root[data-theme='light'] .smx-chip.smx-risk.is-low { color: #00795c; }
+:root[data-theme='light'] .smx-chip.smx-risk.is-medium { color: #7a4f00; }
+:root[data-theme='light'] .smx-chip.smx-risk.is-high { color: #b3183a; }
+:root[data-theme='light'] .smx-chip.smx-risk b { color: #0d1b2a; }
+
+/*
+ * `.sm-offline` / `.sm-stale` survive on the banners as semantic hooks (older
+ * screens and the offline story referred to them by name). They only add the
+ * inline-start accent stripe; the surface itself is `.smx-banner`.
+ */
+.smx-banner.sm-offline,
+.smx-banner.sm-stale {
+  border-inline-start-width: 3px;
 }
+
+.smx-banner.sm-offline { border-inline-start-color: rgba(255, 107, 139, 0.55); }
+.smx-banner.sm-stale { border-inline-start-color: rgba(255, 194, 75, 0.55); }
+
+/* Paper tints for the three cards whose dark surface is a white-alpha wash —
+   the rest of the desk is already token-driven and flips on its own. */
+:root[data-theme='light'] .smx-whale {
+  background: linear-gradient(166deg, #ffffff, #f7fAff 62%);
+}
+
+:root[data-theme='light'] .smx-fresh {
+  background:
+    linear-gradient(164deg, rgba(0, 169, 107, 0.055), rgba(14, 165, 233, 0.025)),
+    #ffffff;
+}
+
+:root[data-theme='light'] .smx-net {
+  background:
+    radial-gradient(120% 150% at 50% -40%, rgba(0, 169, 107, 0.07), transparent 62%),
+    #f7fafd;
+}
+
+:root[data-theme='light'] .smx-ex { background: #f7fafd; }
+
+:root[data-theme='light'] .smx-whale-rank {
+  color: #4a3fd0;
+  border-color: rgba(74, 63, 208, 0.2);
+  background: rgba(74, 63, 208, 0.06);
+}
+
+:root[data-theme='light'] .smx-early-stat-ico { background: rgba(3, 126, 166, 0.07); }

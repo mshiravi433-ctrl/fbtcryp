@@ -65,6 +65,13 @@ import './learn-hub-locales-probe.mjs';
    engine, and the redesigned card popup. Must sit above the Business probe for
    the same reason as the Learn hub one (see the note above). */
 import './discover-redesign-probe.mjs';
+/* Smart Money — the “Aurora Signal Desk” rebuild (2026-10-28): the glyph set,
+   the seven-tab dock, the two window rails, every painted class resolving to a
+   rule, the light-theme twin of each surface, no emoji, no backdrop-filter,
+   RTL-safe alignment, real focus rings and honest «—» instead of a fabricated
+   zero. Static source audit: the page mounts even when one of these is wrong,
+   which is exactly why it needs its own probe. */
+import './smart-money-redesign-probe.mjs';
 /* The /business B2B console: every string it paints resolves in Persian and
    English, the tab and sub-tab labels resolve in all twelve locales, and the
    keys test/wiring.mjs also demands everywhere exist everywhere. It is the
@@ -1545,6 +1552,21 @@ npx(['vite', 'build', '-c', 'test/vite.tokensmartmoney.mjs', '--logLevel', 'erro
 installDom();
 const { run: runTokenSmartMoney } = await import('./.out/tokensmartmoney/token-smart-money-probe.js');
 report('token smart-money card (collapse · rail fit · real identity)', await runTokenSmartMoney(document.getElementById('r')));
+
+/* ------------------ 4b-4. Smart Money desk, mounted --------------------------- */
+/*
+ * The overview rebuild (2026-10-28) is a surface-and-type pass, but a page can
+ * be source-perfect and still be broken in the hand: a glyph map with a missing
+ * component renders an empty tab, a rail can look right and never refetch, and
+ * a tab can mount an empty fragment. This suite mounts the real page against
+ * the real payload shapes and taps through all seven tabs, three windows and
+ * the alert rows in Persian.
+ */
+console.log('\n▸ building the Smart Money desk suite…');
+npx(['vite', 'build', '-c', 'test/vite.smartmoney.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runSmartDesk } = await import('./.out/smartmoney/smart-money-desk-probe.js');
+report('smart money desk (7 tabs · 3 windows · honest numbers)', await runSmartDesk(document.getElementById('r')));
 
 /* Exact-contract monitor draft handoff; legacy PRICE remains available. */
 console.log('\n▸ building the verified Smart Money monitor form suite…');
