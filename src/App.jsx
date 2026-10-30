@@ -50,6 +50,7 @@ const NotificationBar = lazyRetry(() => import('./components/NotificationBar'));
 const InstallPrompt = lazyRetry(() => import('./components/InstallPrompt'));
 const RadioDock = lazyRetry(() => import('./components/RadioDock'));
 const FbtRadioPill = lazyRetry(() => import('./components/FbtRadioPill'));
+const DecisionOrb = lazyRetry(() => import('./components/DecisionOrb'));
 
 // These are post-Start screens. In particular Onboarding imports the wallet
 // connection sheet and diagnostics: returning users and the first splash must
@@ -861,6 +862,16 @@ export default function App() {
         */}
         <Suspense fallback={null}>
           <FbtRadioPill />
+        </Suspense>
+        {/*
+          THE DECISION ORB — a small circle pinned to the side of the screen
+          that blooms into a minimal donut (ریسک پذیری / خرید / فروش) and
+          auto-collapses after 60s. Mounted here, inside <HashRouter>, for the
+          same reason as <RadioDock>: it must survive route changes. It renders
+          nothing until first tapped, so it costs nothing on boot.
+        */}
+        <Suspense fallback={null}>
+          <DecisionOrb />
         </Suspense>
         {/*
           THE NOTIFICATION SURFACE, drawn by us — INSIDE <HashRouter>.
