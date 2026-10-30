@@ -13,7 +13,7 @@ import {
   IconX
 } from '../components/Icons';
 import FlameIcon from '../components/FlameIcon';
-import AdBanner from '../components/AdBanner';
+import FBTAICinemaBanner from '../components/FBTAICinemaBanner';
 import Ticker from '../components/Ticker';
 import CoinRow from '../components/CoinRow';
 import CoinLogo from '../components/CoinLogo';
@@ -846,8 +846,10 @@ export default function Market() {
       {/* ---------- Instagram-style 1-minute App Stories below Bitcoin card ---------- */}
       <MarketStories coins={coins} global={global} />
 
-      {/* `premium` = the cinematic treatment for this slot only; see AdBanner. */}
-      <div className="market-signal-promo"><AdBanner slot="signals" premium /></div>
+      {/* The «سیگنال هوشمند» house ad, rebuilt as the FBT AI living-intelligence
+          showcase. A dedicated component rather than another flag on the shared
+          AdBanner — see FBTAICinemaBanner for why. */}
+      <div className="market-signal-promo"><FBTAICinemaBanner /></div>
 
       {/* ---------- trending ---------- */}
       {trending?.length > 0 && (
