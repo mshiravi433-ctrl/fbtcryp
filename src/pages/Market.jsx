@@ -15,6 +15,7 @@ import {
 import FlameIcon from '../components/FlameIcon';
 import FBTAICinemaBanner from '../components/FBTAICinemaBanner';
 import Ticker from '../components/Ticker';
+import DecisionOrb from '../components/DecisionOrb';
 import CoinRow from '../components/CoinRow';
 import CoinLogo from '../components/CoinLogo';
 import AnimatedNumber from '../components/AnimatedNumber';
@@ -547,6 +548,7 @@ export default function Market() {
     return fmtUsd(p);
   }, [currencyMark]);
 
+  const [decisionOpen, setDecisionOpen] = useState(false);
   const hero = coins?.[0];
   /*
    * The 7-day shape of the total, built from the rows already in memory —
@@ -592,6 +594,9 @@ export default function Market() {
           : 'none';
 
   return (
+    <>
+    <DecisionOrb coins={coins} updatedAt={updatedAt} unavailable={!!marketError || !!isOffline} onOpenChange={setDecisionOpen} />
+    <div className={`market-decision-content${decisionOpen ? ' is-open' : ''}`}>
     <PageTransition>
       <Ticker coins={railCoins} />
 
@@ -1525,5 +1530,7 @@ export default function Market() {
         )}
       </section>
     </PageTransition>
+    </div>
+    </>
   );
 }
