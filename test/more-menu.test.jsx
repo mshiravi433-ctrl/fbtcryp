@@ -238,3 +238,79 @@ describe('More sheet — prism-blade pass', () => {
     expect(CSS).not.toMatch(/\.more-tile \{[^}]*filter:/);
   });
 });
+
+/* ==========================================================================
+   THE MACHINE BOX — behaviour and motion-budget pins
+   --------------------------------------------------------------------------
+   The owner asked for an RGB animation in the menu's console header, «بدون
+   کاهش سرعت» and theme-aware. Those two requirements are testable, so they are
+   tested rather than described:
+
+     · the box exists, is not focusable, adds no search field and its shortcut
+       chips are real navigations;
+     · every infinite animation in its stylesheet is named in a closed list —
+       the spectrum blooms, the ring and the live dot — so a later change that
+       makes the ROWS loop forever fails here;
+     · those loops are `transform`/`opacity` (compositor) or a box-shadow on a
+       6px dot, never `filter`, `backdrop-filter`, `width` or `left`;
+     · the three guards that must switch them off are present: system
+       reduced-motion, the packaged shell (`data-native`) and the lite profile.
+   ========================================================================== */
+const MACHINE_CSS_RAW = fs.readFileSync(path.resolve(__dirname, '../src/styles/more-machine.css'), 'utf8');
+/* Comments are prose, not rules — strip them before asserting on the material. */
+const MACHINE_CSS = MACHINE_CSS_RAW.replace(/\/\*[\s\S]*?\*\//g, '');
+
+describe('More sheet — machine box', () => {
+  it('renders one decorative console header with working shortcuts', async () => {
+    await mountMore();
+    const box = document.querySelector('[data-testid="more-machine"]');
+    expect(box).toBeTruthy();
+    expect(box.getAttribute('aria-label')).toBeTruthy();
+    /* The spectrum field is decoration: hidden from assistive tech, and it
+       can never become a focus stop or eat a tap. */
+    const field = box.querySelector('.more-machine-field');
+    expect(field.getAttribute('aria-hidden')).toBe('true');
+    expect(box.querySelectorAll('.more-machine-field [tabindex]')).toHaveLength(0);
+    expect(box.querySelectorAll('.more-machine-field button, .more-machine-field a')).toHaveLength(0);
+    const chips = [...box.querySelectorAll('.more-machine-chip')];
+    expect(chips.length).toBeGreaterThanOrEqual(3);
+    for (const chip of chips) {
+      expect(chip.getAttribute('type')).toBe('button');
+      expect(chip.textContent.trim()).not.toBe('');
+      expect(chip.querySelector('svg')).not.toBeNull();
+    }
+    /* The machine box is not a second search bar. */
+    expect(document.querySelector('input[type="search"]')).toBeNull();
+  });
+
+  it('loops only the spectrum, and only on compositor properties', () => {
+    const infinite = [...MACHINE_CSS.matchAll(/animation:\s*([a-z0-9-]+)[^;]*infinite/gi)]
+      .map((m) => m[1])
+      .sort();
+    expect(infinite).toEqual(['mm-bloom-a', 'mm-bloom-b', 'mm-bloom-c', 'mm-live', 'mm-ring']);
+
+    for (const name of ['mm-bloom-a', 'mm-bloom-b', 'mm-bloom-c', 'mm-ring', 'mm-live']) {
+      const block = new RegExp(`@keyframes ${name} \\{[\\s\\S]*?\\n\\}`).exec(MACHINE_CSS)?.[0] ?? '';
+      expect(block, `${name} must exist`).not.toBe('');
+      expect(block, `${name} must not animate paint`).not.toMatch(/\b(filter|backdrop-filter|width|height|left|top|margin)\s*:/);
+    }
+
+    /* No blur, no canvas, no per-row animation. */
+    expect(MACHINE_CSS).not.toMatch(/filter:\s*blur/);
+    expect(MACHINE_CSS).not.toContain('backdrop-filter');
+  });
+
+  it('stops the loops for reduced motion, the packaged shell and the lite profile', () => {
+    const reduced = /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.more-machine-bloom[\s\S]*?animation: none !important/.test(MACHINE_CSS);
+    expect(reduced).toBe(true);
+    expect(MACHINE_CSS).toMatch(/:root\[data-native='true'\] \.more-machine-bloom/);
+    expect(MACHINE_CSS).toMatch(/:root\[data-lite='true'\] \.more-machine-bloom/);
+  });
+
+  it('carries a dark material and a light-theme override, not a second design', () => {
+    /* Near-black card with a black vignette over the colour: «هاله‌های مشکی با
+       رنگ درست». */
+    expect(MACHINE_CSS).toMatch(/\.more-machine-vignette \{[\s\S]*?rgba\(0, 0, 0, 0\.5/);
+    expect(MACHINE_CSS).toContain(":root[data-theme='light'] .more-machine {");
+  });
+});

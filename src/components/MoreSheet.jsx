@@ -371,7 +371,17 @@ const GROUPS = [
 let menuStylesPromise = null;
 function loadMenuStyles() {
   if (!menuStylesPromise) {
-    menuStylesPromise = import('../styles/more-menu.css')
+    /*
+     * TWO sheets, ONE promise. The machine box's spectrum lives in
+     * more-machine.css (see the note at the bottom of more-menu.css for why it
+     * is not in the same file), and both must be in memory before the panel
+     * renders — a panel that appears with the card unstyled and then reflows
+     * when its stylesheet lands is worse than one extra cached chunk.
+     */
+    menuStylesPromise = Promise.all([
+      import('../styles/more-menu.css'),
+      import('../styles/more-machine.css')
+    ])
       .then(() => true)
       /*
        * A failed chunk must not leave a dead button behind. The rejection is
@@ -387,7 +397,21 @@ function loadMenuStyles() {
   return menuStylesPromise;
 }
 
+/*
+ * The machine box's one-tap rail. Deliberately FOUR, and deliberately the
+ * four screens a session actually opens — not a second copy of the directory
+ * below it. Each label is an existing key, so there is nothing new to
+ * translate and nothing that can drift between the chip and the row.
+ */
+const MACHINE_SHORTCUTS = [
+  { to: '/signals', key: 'nav.signals', Icon: IconActivity },
+  { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney },
+  { to: '/swap', key: 'nav.swap', Icon: IconSwap },
+  { to: '/', key: 'nav.market', Icon: IconMarket }
+];
+
 const ALL = 'all';
+
 
 export default function MoreSheet({ open, onClose }) {
   const { t } = useTranslation();
@@ -619,6 +643,99 @@ export default function MoreSheet({ open, onClose }) {
                 tab/tabpanel: these are filters over one list, and a tablist
                 without matching panels is an accessibility lie.
               */}
+              {/*
+                ─── THE MACHINE BOX ────────────────────────────────────────
+                «صفحهٔ پاپ‌اپ منو بیشتر را درست و متنوع کن، و یک انیمیشن RGB در
+                 ماشین‌باکس بگذار — بدون کاهش سرعت، و همراه با تم؛ یعنی در تم
+                 مشکی هاله‌های مشکی با رنگ درست باشد.»
+
+                A console header for the directory, and the only place in the
+                app where the RGB spectrum moves as a MATERIAL rather than as
+                an accent. Three things it does that the old sheet did not:
+
+                  1. It gives the sheet a face. The menu opened on a title and
+                     a filter rail; nothing said what the sheet is FOR.
+                  2. It carries the four destinations that are actually used
+                     every session (signals, smart money, swap, market) as
+                     one-tap chips, so the common case no longer means
+                     scrolling a 25-row list.
+                  3. It is the modern/glass moment the brief asked for —
+                     without a single new backdrop-filter (see the CSS).
+
+                MOTION BUDGET. The spectrum is three soft blooms and one ring,
+                all animating `transform`/`opacity` only, on their own
+                compositor layers, inside a card that is clipped and never
+                re-laid-out. They run ONLY while the sheet is mounted (it is
+                unmounted on close), they are switched off wholesale under
+                `prefers-reduced-motion`, on the packaged Android shell
+                (`data-native`) and in the lite profile (`data-lite`) — the
+                same three guards the rest of this sheet already obeys. No
+                filter, no blur, no canvas, no JS tick.
+
+                THEME. `--mm-*` in more-menu.css flips the whole material: in
+                the black theme the card is near-black glass with coloured
+                halos bleeding through its edge and a BLACK vignette over the
+                top (light on black, not a grey box); in the light theme the
+                same geometry is repainted as pale mist on white. One markup,
+                two materials.
+              */}
+              <section
+                className="more-machine"
+                data-testid="more-machine"
+                aria-label={t('nav.machine.title')}
+              >
+                <span className="more-machine-field" aria-hidden="true">
+                  <i className="more-machine-bloom more-machine-bloom--a" />
+                  <i className="more-machine-bloom more-machine-bloom--b" />
+                  <i className="more-machine-bloom more-machine-bloom--c" />
+                  <i className="more-machine-ring" />
+                  <i className="more-machine-grid" />
+                  <i className="more-machine-vignette" />
+                </span>
+
+                <div className="more-machine-head">
+                  <span className="more-machine-mark" aria-hidden="true">
+                    {/* The same two-arrow cycle as the status-bar icon, the
+                        in-app notification bar and the launcher mark — one
+                        brand, everywhere. */}
+                    <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+                      <g fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                        <path d="M13.94 4.76 A7.5 7.5 0 0 1 13.94 19.24" />
+                        <path d="M10.06 19.24 A7.5 7.5 0 0 1 10.06 4.76" />
+                      </g>
+                      <path d="M10.08 20.28 L14.61 21.75 L13.27 16.73 Z" fill="currentColor" />
+                      <path d="M13.92 3.72 L9.39 2.25 L10.73 7.27 Z" fill="currentColor" />
+                    </svg>
+                  </span>
+                  <span className="more-machine-id">
+                    <span className="more-machine-kicker" aria-hidden="true">FBT · MACHINE</span>
+                    <span className="more-machine-title">{t('nav.machine.title')}</span>
+                  </span>
+                  <span className="more-machine-live">
+                    <i aria-hidden="true" />
+                    {t('nav.machine.live')}
+                  </span>
+                </div>
+
+                <p className="more-machine-sub">{t('nav.machine.sub')}</p>
+
+                <div className="more-machine-shortcuts" role="group" aria-label={t('nav.machine.title')}>
+                  {MACHINE_SHORTCUTS.map(({ to, key, Icon }) => (
+                    <button
+                      key={to}
+                      type="button"
+                      className="more-machine-chip"
+                      data-current={isCurrent(to) ? 'true' : 'false'}
+                      aria-current={isCurrent(to) ? 'page' : undefined}
+                      onClick={() => go(to)}
+                    >
+                      <Icon width={14} height={14} aria-hidden="true" />
+                      <span>{t(key)}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
               <div className="more-filter" role="group" aria-label={t('nav.more')}>
                 {[{ id: ALL, key: 'nav.group.all', ...ALL_TINT }, ...GROUPS.map((group) => ({
                   id: group.id,

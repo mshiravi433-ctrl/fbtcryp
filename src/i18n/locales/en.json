@@ -1,5 +1,10 @@
 {
   "nav": {
+    "machine": {
+      "title": "FBT Machine",
+      "sub": "Signals, smart money and execution — one live console",
+      "live": "Live"
+    },
     "market": "Market",
     "trade": "Trade",
     "invest": "Invest",
@@ -8590,6 +8595,7 @@
       "unknown": "—"
     },
     "honeypot": "This contract looks like a honeypot — you may not be able to sell.",
+    "advice": "This is a RISK score, not a green light: check the sell tax and holder concentration first, and start with a small amount.",
     "unknown": "We could not complete a security scan. That is not a clean bill of health.",
     "flag": {
       "honeypot": "Honeypot / cannot sell",
@@ -13309,7 +13315,6 @@
     "marketsChip": "active pairs",
     "tokens": "tokens",
     "volume": "Flow volume",
-    "tokenWindow24h": "These numbers measure the last 24 hours of this contract only; 4-hour and weekly windows are not served, to keep server load down.",
     "copyTrade": "Copy trade",
     "copyTradeHint": "Copies this contract and opens the swap screen with the same token",
     "tokenTabNote": "Exactly what our scanner observed for these tokens in this window; an empty row means no observation, not zero flow.",
@@ -14941,6 +14946,7 @@
     "buyCrypto": "Buy crypto",
     "directSettlement": "Settle directly to your wallet",
     "nonCustodial": "Non-custodial",
+    "verifiedLink": "Verified checkout",
     "asset": "Asset",
     "network": "Network",
     "youPay": "You pay",

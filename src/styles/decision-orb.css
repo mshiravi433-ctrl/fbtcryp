@@ -1,15 +1,112 @@
-/* A viewport edge instrument, not a modal. Physical left is intentional in RTL. */
-.market-decision-content { min-width: 0; padding-left: 0; transition: padding-left .38s cubic-bezier(.22,1,.36,1); }
-.market-decision-content.is-open { padding-left: 84px; }
-.dor { position: fixed; left: 0; top: 50%; transform: translateY(-50%); z-index: 72; color: #f3f6ff; font-family: inherit; }
-.dor-toggle { position: absolute; left: -22px; top: -22px; width: 44px; height: 44px; border: 1px solid #ffffff35; border-radius: 50%; background: radial-gradient(circle at 80% 30%, #344352, #080d13 75%); color: #a9f8df; cursor: pointer; box-shadow: 0 3px 18px #0005; transition: left .38s, top .38s; }
-.dor-toggle span { display: block; padding-left: 19px; font-size: 24px; }
-.dor.is-open .dor-toggle { left: 48px; top: -181px; }
-.dor.is-open .dor-toggle span { padding-left: 0; }
-.dor-rail { width: 76px; padding: 18px 5px 12px; border-radius: 0 30px 30px 0; background: linear-gradient(165deg,#141b24f5,#030609fa); border: 1px solid #ffffff20; border-left: 0; box-shadow: 8px 12px 28px #0003; text-align: center; }
+/* ==========================================================================
+   MARKET PULSE — the edge instrument.
+   --------------------------------------------------------------------------
+   A viewport edge instrument, not a modal: it hangs off the reading column's
+   START edge (right in Farsi/Arabic, left in every LTR language) and slides a
+   narrow rail out of it.
+
+   ─── WHY LOGICAL PROPERTIES EVERYWHERE ─────────────────────────────────────
+   The previous sheet hard-coded `left: 0`, so in Farsi the circle sat in the
+   gutter past the END of every line — the far side from the thumb, with its
+   chevron pointing at nothing. Every offset here is `inset-inline-*` and every
+   radius is a logical corner, so a single `dir="rtl"` on <html> mirrors the
+   whole instrument: side, rail curvature, border, chevron and the space the
+   page reserves for it. Nothing is duplicated per direction.
+
+   ─── WHY THE WRAPPER ANIMATES ONLY transform + opacity ─────────────────────
+   It disappears in three situations (20 s budget, tap outside, Escape) and
+   every one of them must cost zero frames: a compositor-only transition on a
+   76px element cannot drop a scroll frame even on a low-end Android WebView.
+   ========================================================================== */
+
+/* The page reserves room for the open rail on the SAME side as the rail. */
+.market-decision-content {
+  min-width: 0;
+  padding-inline-start: 0;
+  transition: padding-inline-start .38s cubic-bezier(.22, 1, .36, 1);
+}
+
+.market-decision-content.is-open { padding-inline-start: 84px; }
+
+.dor {
+  position: fixed;
+  inset-inline-start: 0;
+  top: 50%;
+  z-index: 72;
+  color: #f3f6ff;
+  font-family: inherit;
+  /* Mirrored dismiss direction: the wrapper leaves toward its own edge. */
+  --dor-exit: -22px;
+  transform: translateY(-50%);
+  transition: opacity .32s cubic-bezier(.22, 1, .36, 1), transform .32s cubic-bezier(.22, 1, .36, 1);
+}
+
+.dor[dir='rtl'] { --dor-exit: 22px; }
+
+/* Leaving = faded, nudged toward the edge, and click-through until unmount. */
+.dor.is-leaving {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) translateX(var(--dor-exit)) scale(.92);
+}
+
+/* ── the circle ─────────────────────────────────────────────────────────── */
+.dor-toggle {
+  position: absolute;
+  inset-inline-start: -22px;
+  top: -22px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid #ffffff35;
+  border-radius: 50%;
+  background: radial-gradient(circle at 78% 26%, #35465a, #080d13 76%);
+  color: #a9f8df;
+  cursor: pointer;
+  box-shadow: 0 4px 20px #0006, inset 0 1px 0 #ffffff24;
+  transition: inset-inline-start .38s cubic-bezier(.22, 1, .36, 1), top .38s cubic-bezier(.22, 1, .36, 1), color .18s ease, border-color .18s ease;
+}
+
+.dor-toggle:hover { color: #c6ffec; border-color: #ffffff5c; }
+.dor-toggle:active { transform: scale(.94); }
+.dor-toggle svg { transition: transform .3s cubic-bezier(.22, 1, .36, 1); }
+.dor.is-open .dor-toggle { inset-inline-start: 48px; top: -181px; }
+.dor.is-open .dor-toggle svg { transform: rotate(180deg); }
+/* In RTL the resting chevron points left (into the page), so the two states
+   swap rather than rotate the same way. */
+.dor[dir='rtl'] .dor-toggle svg { transform: rotate(180deg); }
+.dor[dir='rtl'].is-open .dor-toggle svg { transform: rotate(0deg); }
+
+/* ── the rail ───────────────────────────────────────────────────────────── */
+.dor-rail {
+  width: 76px;
+  padding: 18px 5px 12px;
+  border-start-end-radius: 30px;
+  border-end-end-radius: 30px;
+  border-block: 1px solid #ffffff20;
+  border-inline-end: 1px solid #ffffff20;
+  border-inline-start: 0;
+  background: linear-gradient(165deg, #141b24f5, #030609fa);
+  box-shadow: 8px 12px 28px #0003;
+  text-align: center;
+}
+
+.dor[dir='rtl'] .dor-rail { box-shadow: -8px 12px 28px #0003; }
+
 .dor-caption { display: block; font-size: 9px; color: #a7b5c7; line-height: 1.7; margin-bottom: 13px; }
 .dor-metric { display: grid; justify-items: center; gap: 4px; margin-bottom: 16px; }
-.dor-ring { display: grid; place-items: center; width: 39px; height: 39px; border-radius: 50%; background: conic-gradient(var(--ring-color) var(--ring-value),#ffffff16 0); transform: rotate(-35deg); box-shadow: 0 0 12px #0004; }
+.dor-ring {
+  display: grid;
+  place-items: center;
+  width: 39px;
+  height: 39px;
+  border-radius: 50%;
+  background: conic-gradient(var(--ring-color) var(--ring-value), #ffffff16 0);
+  transform: rotate(-35deg);
+  box-shadow: 0 0 12px #0004;
+}
 .dor-ring > span { display: grid; place-items: center; width: 32px; height: 32px; background: #0b1017; border-radius: 50%; font-size: 21px; transform: rotate(35deg); }
 .dor-metric strong { font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .dor-label { font-size: 8px; color: #bfcbda; }
@@ -17,6 +114,20 @@
 .dor-info { margin-top: 7px; font-size: 12px; }
 .dor-info summary { cursor: pointer; list-style: none; }
 .dor-info p { font-size: 9px; line-height: 1.9; margin: 6px 0 0; max-height: 90px; overflow-y: auto; }
-.dor-toggle:focus-visible,.dor-info summary:focus-visible { outline: 2px solid #67eac3; outline-offset: 3px; }
-@media(max-height: 560px) { .dor { top: 46%; } .dor-caption { display: none; } .dor-metric { margin-bottom: 7px; } .dor.is-open .dor-toggle { top: -140px; } }
-@media(prefers-reduced-motion: reduce) { .market-decision-content,.dor-toggle { transition: none; } }
+
+.dor-toggle:focus-visible,
+.dor-info summary:focus-visible { outline: 2px solid #67eac3; outline-offset: 3px; }
+
+@media (max-height: 560px) {
+  .dor { top: 46%; }
+  .dor-caption { display: none; }
+  .dor-metric { margin-bottom: 7px; }
+  .dor.is-open .dor-toggle { top: -140px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .market-decision-content,
+  .dor,
+  .dor-toggle,
+  .dor-toggle svg { transition: none; }
+}

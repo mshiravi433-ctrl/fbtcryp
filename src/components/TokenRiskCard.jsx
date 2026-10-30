@@ -3,17 +3,49 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useTelegram } from '../context/TelegramContext';
 import { fetchTokenRisk, goplusChainId } from '../lib/tokenRisk';
-import { IconChevronRight } from './Icons';
+import { IconAlertTriangle, IconChevronRight, IconDoc, IconPools, IconSparkle, IconUser } from './Icons';
 
 /**
- * Live token-security card — collapsible.
+ * LIVE TOKEN-SECURITY READOUT — «ریسک هوش مصنوعی»
+ * ---------------------------------------------------------------------------
+ * «در صفحهٔ توکن تب خرید و فروش، ریسک هوش مصنوعی — باکس بازشونده را خیلی
+ *  مدرن و کارآمد کن.»
  *
- * The header is always visible and shows the level pill (Low/Medium/High/…)
- * so the user can see the verdict at a glance without expanding. Tapping
- * opens the breakdown (liquidity, holders, contract risk, rug %, flags).
+ * ─── WHAT WAS WRONG WITH THE OLD BOX ───────────────────────────────────────
+ * It was four label/value rows and a thin progress bar: `Liquidity — Low`,
+ * `Top 10 — 10%`, `Contract — Low`, `Rug — 0%`. Every one of those values is a
+ * judgement, and none of them was shown AS a judgement — the reader had to
+ * translate "Medium" into "should I buy this" by themselves, on the one screen
+ * where getting that wrong costs money.
  *
- * A missing address or an unsupported chain renders nothing.
+ * ─── WHAT IT IS NOW ────────────────────────────────────────────────────────
+ *   1. A VERDICT, first: a 96px risk dial (conic, coloured by level) with the
+ *      score inside, the level named under it, and one sentence saying what
+ *      that means for THIS trade. The score is explicitly a RISK score —
+ *      higher is worse — and the dial's aria-valuenow is that same number.
+ *   2. Four metric TILES instead of rows: each has its own icon, its own
+ *      surface and its own tone, so "liquidity is thin but the contract is
+ *      clean" is legible at a glance instead of assembled from four lines.
+ *   3. The FLAGS as chips, not as paragraphs: a flag is a discrete finding,
+ *      and a list of chips reads as "these specific things", which is what it
+ *      is. Each keeps its own translated sentence on `title` for the detail.
+ *   4. ADVICE: one short line on what to do next. The card is a warning
+ *      system, and a warning with no next step is just anxiety.
+ *
+ * ─── THE HONESTY RULES ARE UNCHANGED ───────────────────────────────────────
+ * A missing address or an unsupported chain still renders NOTHING. A failed
+ * scan still renders «not a clean bill of health» and lifts `null` to the
+ * parent gate — unknown is never safe. A honeypot still cannot hide behind a
+ * collapsed header, and the card still auto-opens on `high`/`critical`.
+ *
+ * The collapse API is untouched (`collapsible`, `compact`, `onRisk`), the
+ * `.infobox` / `.infobox-head` / `.infobox-body` structure that the token-tab
+ * probe reads is untouched, and the score is still exposed as
+ * `role="meter"` with `aria-valuenow`.
  */
+
+const LEVEL_TONE = { low: 'safe', medium: 'warn', high: 'danger', critical: 'danger', unknown: 'info' };
+
 export default function TokenRiskCard({ chainId, address, symbol, compact = false, onRisk = null, collapsible = true }) {
   const { t } = useTranslation();
   const { haptic } = useTelegram();
@@ -62,18 +94,62 @@ export default function TokenRiskCard({ chainId, address, symbol, compact = fals
 
   if (!canScan) return null;
 
-  const level = risk?.level ?? (busy ? 'unknown' : 'unknown');
+  const level = risk?.level ?? 'unknown';
   const danger = level === 'critical' || level === 'high';
   const warn = level === 'medium';
   const tone = danger ? 'danger' : warn ? 'warn' : 'info';
   const score = risk?.score != null && Number.isFinite(Number(risk.score))
     ? Math.max(0, Math.min(100, Number(risk.score)))
     : null;
+  const empty = !risk || risk.unknown;
+
+  /**
+   * The four readings, as tiles. `band` values are already translated bands
+   * ("low"/"medium"/"high") — the tile never invents a number it was not
+   * given, and «—» is the honest answer for a missing one.
+   */
+  const tiles = [
+    {
+      key: 'liquidity',
+      label: t('risk.liquidity'),
+      value: risk ? t(`risk.band.${risk.liquidityRisk}`) : '—',
+      bad: risk?.liquidityRisk === 'high',
+      warn: risk?.liquidityRisk === 'medium',
+      Icon: IconPools
+    },
+    {
+      key: 'holders',
+      label: t('risk.holders'),
+      value: risk?.holderConcentration == null ? '—' : `${risk.holderConcentration}%`,
+      bad: Number(risk?.holderConcentration) >= 50,
+      warn: Number(risk?.holderConcentration) >= 25 && Number(risk?.holderConcentration) < 50,
+      Icon: IconUser
+    },
+    {
+      key: 'contract',
+      label: t('risk.contract'),
+      value: risk ? t(`risk.band.${risk.contractRisk}`) : '—',
+      bad: risk?.contractRisk === 'high',
+      warn: risk?.contractRisk === 'medium',
+      Icon: IconDoc
+    },
+    {
+      key: 'rug',
+      label: t('risk.rug'),
+      value: risk?.rugPull == null ? '—' : `${risk.rugPull}%`,
+      bad: Number(risk?.rugPull) >= 50,
+      warn: Number(risk?.rugPull) >= 20 && Number(risk?.rugPull) < 50,
+      Icon: IconAlertTriangle
+    }
+  ];
+
+  const flags = (!compact && Array.isArray(risk?.flags)) ? risk.flags : [];
 
   return (
     <div
       className={`infobox infobox-${tone} token-risk-card ${open ? 'is-open' : ''}`}
       data-risk-level={level}
+      data-tone={LEVEL_TONE[level] || 'info'}
       style={{ marginTop: 10 }}
     >
       <Head
@@ -82,23 +158,32 @@ export default function TokenRiskCard({ chainId, address, symbol, compact = fals
         aria-expanded={collapsible ? open : undefined}
         onClick={collapsible ? () => { haptic?.('select'); setOpenState((v) => !v); } : undefined}
       >
-        <span className="infobox-dot" aria-hidden="true" />
+        <span className="token-risk-mark" aria-hidden="true">
+          <IconSparkle width={15} height={15} />
+        </span>
         <span className="infobox-title token-risk-title">
           <span className="token-risk-title-text">
             {t('risk.badge', { symbol: symbol || 'Token' })}
           </span>
-          <span className={`pill ${level === 'low' ? 'pill-up' : danger ? 'pill-down' : warn ? '' : 'pill-neutral'}`} style={{ fontSize: 10 }}>
+          <span
+            className={`pill token-risk-pill ${level === 'low' ? 'pill-up' : danger ? 'pill-down' : warn ? '' : 'pill-neutral'}`}
+          >
             {busy ? t('common.loading') : t(`risk.level.${level}`)}
           </span>
         </span>
-        {collapsible && <motion.span
-          className="infobox-chev"
-          animate={{ rotate: open ? 90 : 0 }}
-          transition={{ duration: 0.18 }}
-          aria-hidden="true"
-        >
-          <IconChevronRight width={15} height={15} />
-        </motion.span>}
+        {score != null && !collapsible && (
+          <span className="token-risk-scorechip mono" aria-hidden="true">{score}<small>/100</small></span>
+        )}
+        {collapsible && (
+          <motion.span
+            className="infobox-chev"
+            animate={{ rotate: open ? 90 : 0 }}
+            transition={{ duration: 0.18 }}
+            aria-hidden="true"
+          >
+            <IconChevronRight width={15} height={15} />
+          </motion.span>
+        )}
       </Head>
 
       <AnimatePresence initial={false}>
@@ -110,47 +195,74 @@ export default function TokenRiskCard({ chainId, address, symbol, compact = fals
             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
             style={{ overflow: 'hidden' }}
           >
-            <div className="infobox-body">
-              {busy && !risk && (
-                <p className="faint" style={{ fontSize: 12, margin: 0 }}>…</p>
+            <div className="infobox-body token-risk-body">
+              {busy && !risk && <p className="faint token-risk-note">{t('common.loading')}</p>}
+
+              {!busy && empty && (
+                <p className="faint token-risk-note">{t('risk.unknown')}</p>
               )}
 
               {!busy && risk && !risk.unknown && (
                 <>
-                  {score != null && (
-                    <div className="token-risk-score" data-tone={tone}>
-                      <div className="token-risk-score-head">
-                        <span>{t('risk.score', { defaultValue: 'Security score' })}</span>
-                        <strong>{score}<small>/100</small></strong>
+                  {/* ── the verdict ─────────────────────────────────────── */}
+                  <div className="token-risk-verdict">
+                    <div
+                      className="token-risk-dial"
+                      data-level={level}
+                      role="meter"
+                      aria-label={t('risk.score')}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={score ?? 0}
+                      style={{ '--dial': `${score ?? 0}` }}
+                    >
+                      <span className="token-risk-dial-core">
+                        <b>{score ?? '—'}</b>
+                        <small>/100</small>
+                      </span>
+                    </div>
+                    <div className="token-risk-verdict-copy">
+                      <span className="token-risk-verdict-label">{t('risk.score')}</span>
+                      <strong className="token-risk-verdict-level">{t(`risk.level.${level}`)}</strong>
+                      <p className="token-risk-advice">{t('risk.advice')}</p>
+                    </div>
+                  </div>
+
+                  {/* ── the four readings ───────────────────────────────── */}
+                  <div className="token-risk-grid">
+                    {tiles.map(({ key, label, value, bad, warn: isWarn, Icon }) => (
+                      <div
+                        className="token-risk-tile"
+                        key={key}
+                        data-state={bad ? 'bad' : isWarn ? 'warn' : 'ok'}
+                      >
+                        <span className="token-risk-tile-top">
+                          <Icon width={13} height={13} aria-hidden="true" />
+                          <span className="token-risk-tile-label">{label}</span>
+                        </span>
+                        <span className="token-risk-tile-value mono">{value}</span>
                       </div>
-                      <div className="token-risk-score-track" role="meter" aria-label={t('risk.score', { defaultValue: 'Security score' })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={score}>
-                        <span style={{ width: `${score}%` }} />
-                      </div>
+                    ))}
+                  </div>
+
+                  {risk.honeypot && (
+                    <p className="notice notice-danger token-risk-honeypot">{t('risk.honeypot')}</p>
+                  )}
+
+                  {flags.length > 0 && (
+                    <div className="token-risk-flags">
+                      {flags.slice(0, 6).map((f) => {
+                        const text = t(`risk.flag.${f.id}`, { ...f.values, defaultValue: f.id });
+                        return (
+                          <span className="token-risk-flag" key={f.id} title={text}>
+                            <IconAlertTriangle width={11} height={11} aria-hidden="true" />
+                            <span>{text}</span>
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
-                  <div className="token-risk-metrics">
-                    <span className="faint">{t('risk.liquidity')}</span>
-                    <span className="mono" style={{ textAlign: 'end' }}>{t(`risk.band.${risk.liquidityRisk}`)}</span>
-                    <span className="faint">{t('risk.holders')}</span>
-                    <span className="mono" style={{ textAlign: 'end' }}>
-                      {risk.holderConcentration == null ? '—' : `${risk.holderConcentration}%`}
-                    </span>
-                    <span className="faint">{t('risk.contract')}</span>
-                    <span className="mono" style={{ textAlign: 'end' }}>{t(`risk.band.${risk.contractRisk}`)}</span>
-                    <span className="faint">{t('risk.rug')}</span>
-                    <span className="mono" style={{ textAlign: 'end' }}>{risk.rugPull}%</span>
-                  </div>
-                  {risk.honeypot && <p className="notice notice-danger" style={{ marginTop: 8 }}>{t('risk.honeypot')}</p>}
-                  {!compact && risk.flags?.slice(0, 3).map((f) => (
-                    <p key={f.id} className="faint" style={{ marginTop: 6, fontSize: 11.5, lineHeight: 1.6 }}>
-                      {t(`risk.flag.${f.id}`, { ...f.values, defaultValue: f.id })}
-                    </p>
-                  ))}
                 </>
-              )}
-
-              {!busy && risk?.unknown && (
-                <p className="faint" style={{ fontSize: 12, margin: 0 }}>{t('risk.unknown')}</p>
               )}
             </div>
           </motion.div>

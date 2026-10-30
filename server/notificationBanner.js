@@ -325,9 +325,18 @@ export function renderBannerPng(params = {}) {
   const right = c.w - PAD;
   const kicker = p.kicker || spec.label.en;
 
-  /* Brand badge and wordmark: the exact mark used by the Android small icon. */
-  roundedRect(c, PAD, 39, 68, 68, 22, WHITE, 0.15);
-  roundedRect(c, PAD + 1, 40, 66, 66, 21, [6, 13, 24], 0.90);
+  /*
+   * Brand badge and wordmark: the exact mark used by the Android small icon,
+   * presented as the same GLASS ORB the regenerated notification icons use
+   * (see scripts/gen-notification-icons.mjs). A flat dark square next to a
+   * glassy status-bar icon made the artwork look like it came from an older
+   * build of the app; the badge now gets the tone's bloom, a bright specular
+   * top edge and a hairline ring, so artwork and icon are one object.
+   */
+  disc(c, PAD + 34, 73, 46, accent, 0.10);
+  roundedRect(c, PAD, 39, 68, 68, 22, accent, 0.34);
+  roundedRect(c, PAD + 1, 40, 66, 66, 21, [6, 13, 24], 0.92);
+  roundedRect(c, PAD + 5, 44, 58, 26, 13, WHITE, 0.055);
   brandMark(c, PAD + 34, 73, 48, accent, 1);
   text(c, 'FBT SWAP', { x: PAD + 86, y: 49, size: 25, rgb: WHITE, alpha: 0.98, tracking: 0.06 });
   text(c, 'NOTIFICATIONS', { x: PAD + 87, y: 83, size: 12, rgb: WHITE, alpha: 0.60, tracking: 0.08 });

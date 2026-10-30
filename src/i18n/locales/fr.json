@@ -1,6 +1,11 @@
 {
   "orders.keeper.cancelFailed": "L'ordre automatique n'a pas pu être annulé ; il reste ouvert.",
   "nav": {
+    "machine": {
+      "title": "Machine FBT",
+      "sub": "Signaux, smart money et exécution — une console en direct",
+      "live": "En direct"
+    },
     "market": "Marché",
     "trade": "Trader",
     "swap": "Échanger",

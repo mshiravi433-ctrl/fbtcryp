@@ -1,6 +1,11 @@
 {
   "orders.keeper.cancelFailed": "无法取消自动订单，它仍处于开放状态。",
   "nav": {
+    "machine": {
+      "title": "FBT 引擎",
+      "sub": "信号、聪明钱与执行——同一个实时控制台",
+      "live": "实时"
+    },
     "market": "市场",
     "trade": "交易",
     "swap": "兑换",

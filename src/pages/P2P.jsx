@@ -10,6 +10,7 @@ import { useWallet, shortAddress } from '../context/WalletContext';
 import SendSheet from '../components/SendSheet';
 import TapToPay from '../components/TapToPay';
 import P2PMarket from '../components/P2PMarket';
+import '../styles/tab-rail.css';
 import P2PHeroMark from '../components/P2PHeroMark';
 import { AnimatedMarket, AnimatedSwap, AnimatedWallet, useStill } from '../components/AnimatedIcon';
 import {

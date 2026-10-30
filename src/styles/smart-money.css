@@ -3074,3 +3074,281 @@
    visible gaps so adjacent targets do not read or feel like one button. */
 .smx-dock { gap: 6px; padding: 6px; }
 .smx-dock-btn { min-height: 64px; padding-inline: 3px; }
+
+/* ==========================================================================
+   THE DOCK IS A RAIL NOW, NOT SEVEN SQUEEZED COLUMNS
+   --------------------------------------------------------------------------
+   «انتخاب تب‌ها خیلی بهم نزدیکه، فاصله درست کن و در حالت افقی و ریلی باشند»
+   — and the same note came in a second time, about the Futures rail.
+
+   The seven-equal-columns grid was chosen when these labels were one word
+   each. On a 360px phone it gives every destination 46px: the glyph sits
+   inside 26px, the Persian label is clipped to its first two letters, and —
+   the part that matters — the GAP between two targets is 6px. Six pixels is
+   below the width of a fingertip's blur, so two neighbours read as one wide
+   button and a hurried tap lands on the wrong screen.
+
+   What the ownership asked for is what touch targets have always wanted: a
+   single horizontal RAIL that scrolls, with real space around each cell.
+
+     · `flex` + `overflow-x: auto` instead of a fixed grid — every destination
+       keeps a ≥ 88px cell with a 16px icon box, whatever the language;
+     · 8px of gap PLUS 10px of inner padding per cell = ~28px of dead space
+       between two glyphs, comfortably above the mis-tap threshold;
+     · `flex: 1 0 auto` means the rail still fills the width on tablets and
+       desktops (no stranded gap at the end) while never shrinking below the
+       readable minimum on a phone;
+     · scroll-snap on each cell so the rail settles on a destination instead
+       of mid-label, and `overscroll-behavior-x: contain` so a flick at the
+       end of the rail does not trigger the browser's back gesture;
+     · the scrollbar is hidden but the rail is still keyboard- and
+       screen-reader-navigable — nothing is clipped out of the DOM. The page's
+       swipe-to-change-tab gesture ignores `.smx-dock` (see App.jsx), so the
+       two horizontal gestures never fight.
+
+   Motion: none. This is layout only — no new animation, no new blur, no new
+   layer. The rail scrolls on the compositor exactly like the app's other
+   rails.
+   ========================================================================== */
+.smx-dock {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 8px;
+  padding: 7px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 7px;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  /* An edge fade is a background, not a mask: masking a backdrop-filtered
+     strip is the one combination that flickers on the Android WebView. */
+  background-image:
+    linear-gradient(to right, var(--sm-surface), transparent 16px),
+    linear-gradient(to left, var(--sm-surface), transparent 16px);
+  background-attachment: local, local;
+}
+
+.smx-dock::-webkit-scrollbar { width: 0; height: 0; }
+
+.smx-dock-btn {
+  flex: 1 0 auto;
+  min-width: 88px;
+  min-height: 66px;
+  padding-inline: 10px;
+  scroll-snap-align: center;
+}
+
+.smx-dock-ico { width: 30px; height: 30px; }
+.smx-dock-label { font-size: 10.5px; line-height: 1.3; }
+
+/* The active pill must not sit under the fades, so it stays opaque. */
+.smx-dock-btn.is-active .smx-dock-pill { box-shadow: var(--sm-inset), 0 10px 22px -18px rgba(0, 0, 0, .8); }
+
+@media (max-width: 380px) {
+  .smx-dock { gap: 7px; }
+  .smx-dock-btn { min-width: 82px; min-height: 62px; }
+  .smx-dock-ico { width: 27px; height: 27px; }
+  .smx-dock-label { font-size: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .smx-dock { scroll-behavior: auto; }
+}
+
+/* ==========================================================================
+   TOKEN INTELLIGENCE — the premium pass (2026-10-30)
+   --------------------------------------------------------------------------
+   «در صفحهٔ توکن، تب هوشمند مانی، صفحه را مدرن‌تر و باکلاس‌تر کن.»
+
+   Three surfaces, one language — the standalone /smart-money/token screen, the
+   Smart Money card embedded in the coin page, and the page head that opens
+   both. They used to be three densities of the same grey card. Now:
+
+     · the HEAD is a hero strip: 40px mint glyph tile, a mono kicker, the
+       title at 16px, and the signal mark inside a glass disc — the same
+       construction as the Buy/Sell hero, so the app reads as one product;
+     · the CARD is black glass with a mint edge-light and a 30px gradient icon
+       tile. Its identity block now states symbol · name · chain · market
+       count in a readable row with the contract under it in mono, because
+       that block is the answer to "which token am I looking at";
+     · the METRICS are tiles, not rows: each number gets its own surface, its
+       own accent label and tabular figures, so buying / selling / net flow
+       can be compared at a glance instead of read line by line;
+     · the meters are 8px with round caps and a soft glow, and their labels
+       are uppercase mono — an instrument, not a progress bar.
+
+   Everything is still driven by the `--sm-*` tokens, so no colour is
+   hard-coded here and the light theme block at the bottom is an override.
+   ========================================================================== */
+
+/* ── the page head ────────────────────────────────────────────────────── */
+.smx-pagehead {
+  position: relative;
+  overflow: hidden;
+  padding: 12px 13px;
+  border-radius: 22px;
+  border-color: color-mix(in srgb, var(--sm-mint) 20%, var(--sm-line));
+  background:
+    radial-gradient(130% 150% at 100% -20%, rgba(46, 230, 168, 0.14), transparent 62%),
+    linear-gradient(160deg, rgba(56, 225, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    var(--sm-surface);
+  box-shadow: var(--sm-inset), 0 22px 44px -40px rgba(0, 0, 0, 0.9);
+}
+
+.smx-pagehead-back {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 13px;
+}
+
+.smx-pagehead-ico {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 10px 22px -16px rgba(46, 230, 168, 0.9);
+}
+
+.smx-pagehead-kicker { font-size: 8.5px; letter-spacing: 0.16em; }
+.smx-pagehead-text h1 { font-size: 16px; letter-spacing: -0.015em; }
+
+.smx-pagehead-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--sm-mint) 26%, transparent);
+  background: rgba(46, 230, 168, 0.1);
+  opacity: 1;
+}
+
+/* ── the token card ───────────────────────────────────────────────────── */
+.sm-token-card {
+  padding: 14px;
+  border-radius: 22px;
+  border-color: color-mix(in srgb, var(--sm-mint) 18%, var(--sm-line));
+  background:
+    radial-gradient(120% 140% at 100% 0%, rgba(46, 230, 168, 0.1), transparent 58%),
+    linear-gradient(155deg, color-mix(in srgb, var(--sm-surface) 94%, #000), var(--sm-surface));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 26px 54px -44px rgba(0, 0, 0, 0.9);
+}
+
+.sm-token-head {
+  min-height: 52px;
+  gap: 10px;
+  font-size: 13.5px;
+}
+
+.sm-token-head-icon {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border-radius: 11px;
+  color: #8ff7d8;
+  border: 1px solid rgba(46, 230, 168, 0.28);
+  background: linear-gradient(150deg, rgba(46, 230, 168, 0.22), rgba(56, 225, 255, 0.08));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.sm-token-head-summary {
+  padding: 4px 8px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--sm-mint) 24%, var(--sm-line));
+  background: rgba(46, 230, 168, 0.08);
+  font-size: 11.5px;
+}
+
+.sm-token-identity {
+  padding: 11px 12px;
+  gap: 6px;
+  border-radius: 16px;
+  border-color: color-mix(in srgb, var(--sm-mint) 14%, var(--sm-line-soft));
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.04), transparent 60%),
+    var(--sm-surface-2);
+}
+
+.sm-token-symbol { font-size: 14.5px; }
+.sm-token-name { font-size: 10.5px; }
+.sm-token-chip { padding: 3px 8px; font-size: 9px; }
+.sm-token-addr { font-size: 10px; letter-spacing: 0.01em; }
+.sm-token-identity-note { font-size: 10.5px; line-height: 1.6; }
+
+/* the metrics, as tiles */
+.sm-token-body .sm-metrics { gap: 9px; }
+.sm-token-body .sm-metric {
+  min-width: 0;
+  padding: 10px 11px;
+  border-radius: 15px;
+  border: 1px solid var(--sm-line-soft);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.045), transparent 62%),
+    var(--sm-surface-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.sm-token-body .sm-metric .lab {
+  font: 800 8.5px/1.3 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sm-ink-dim);
+}
+.sm-token-body .sm-metric .val {
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* the meters */
+.sm-token-body .sm-meter {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+.sm-token-body .sm-meter i {
+  height: 100%;
+  border-radius: 999px;
+  box-shadow: 0 0 12px -2px currentColor;
+}
+
+/* the evidence block */
+.sm-token-evidence {
+  padding: 11px 12px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--sm-line) 80%, transparent);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.035), transparent 62%);
+}
+.sm-token-evidence-head { gap: 6px; }
+.sm-token-evidence-rows { gap: 4px; margin-top: 7px; font-size: 10.5px; line-height: 1.7; }
+
+/* ── light theme ──────────────────────────────────────────────────────── */
+:root[data-theme='light'] .smx-pagehead {
+  border-color: rgba(0, 150, 111, 0.18);
+  background:
+    radial-gradient(130% 150% at 100% -20%, rgba(0, 169, 107, 0.1), transparent 64%),
+    linear-gradient(160deg, #ffffff, #f5faf8);
+  box-shadow: 0 18px 40px -36px rgba(10, 40, 30, 0.4);
+}
+:root[data-theme='light'] .sm-token-card {
+  border-color: rgba(0, 150, 111, 0.16);
+  background: linear-gradient(155deg, #ffffff, #f7fbfa);
+  box-shadow: inset 0 1px 0 #ffffff, 0 20px 44px -40px rgba(10, 40, 30, 0.4);
+}
+:root[data-theme='light'] .sm-token-identity,
+:root[data-theme='light'] .sm-token-body .sm-metric { background: #f4f8fb; border-color: rgba(16, 32, 60, 0.1); }
+:root[data-theme='light'] .sm-token-head-icon { color: #04795c; background: linear-gradient(150deg, rgba(0, 169, 107, 0.16), rgba(14, 165, 233, 0.06)); border-color: rgba(0, 150, 111, 0.24); }
+:root[data-theme='light'] .sm-token-head-summary { background: rgba(0, 169, 107, 0.1); color: #05614a; }
+:root[data-theme='light'] .smx-pagehead-mark { color: #04795c; background: rgba(0, 169, 107, 0.1); }
+
+@media (max-width: 380px) {
+  .smx-pagehead { padding: 10px 11px; }
+  .smx-pagehead-ico { width: 36px; height: 36px; flex-basis: 36px; }
+  .sm-token-card { padding: 12px; }
+  .sm-token-body .sm-metric { padding: 9px 9px; }
+}

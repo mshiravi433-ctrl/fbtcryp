@@ -1548,3 +1548,61 @@
   .perp-rail-label { font-size: 11.5px; }
 }
 :root[data-native='true'] .perp-rail { backdrop-filter: none; -webkit-backdrop-filter: none; }
+
+/* ==========================================================================
+   THE FUTURES VENUE RAIL — horizontal, scrollable, and no longer touching
+   --------------------------------------------------------------------------
+   «در فیوچرز باکس انتخاب تب‌ها خیلی بهم نزدیکه، اندازهٔ فاصلهٔ بین آیکون تب‌ها
+   را درست کن» — plus the same note about Smart Money and News.
+
+   `.perp-rail` was a grid of equal columns. On a phone with three or four
+   venues that is fine; with the dYdX / on-chain / spot siblings it puts a
+   30px icon tile inside a 46px cell with a 6px gutter, so the icons of two
+   neighbouring venues sit ~30px apart — close enough that the eye reads them
+   as one cluster and the thumb picks the wrong one.
+
+   The rail keeps its glass shell and gains room:
+     · a scrolling flex rail, each venue ≥ 104px wide with a 32px icon tile;
+     · 10px gap plus 12px of per-cell padding — the icons are now ~52px apart,
+       twice what they were, without a single venue dropping out of reach
+       (the rail scrolls, and snaps to a venue, instead of squeezing);
+     · `overscroll-behavior-x: contain` so a flick at the end of the rail is
+       not read as a browser back-gesture, and the hidden scrollbar keeps the
+       glass clean while the rail stays keyboard-navigable;
+     · the active cell is still the shared SegIndicator pill, untouched.
+
+   Layout only: no new paint work, no new blur, no new animation.
+   ========================================================================== */
+.perp-rail {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 10px;
+  padding: 7px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 7px;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.perp-rail::-webkit-scrollbar { width: 0; height: 0; }
+
+.perp-rail-tab {
+  flex: 1 0 auto;
+  min-width: 104px;
+  min-height: 52px;
+  gap: 10px;
+  padding-inline: 12px;
+  scroll-snap-align: center;
+}
+
+.perp-rail-ico { width: 32px; height: 32px; }
+.perp-rail-label { font-size: 13px; }
+
+@media (max-width: 430px) {
+  .perp-rail { gap: 8px; padding: 6px; }
+  .perp-rail-tab { min-width: 96px; min-height: 50px; gap: 8px; padding-inline: 10px; }
+  .perp-rail-label { font-size: 12px; }
+}
