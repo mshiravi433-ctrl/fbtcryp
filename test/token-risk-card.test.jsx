@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 
 const riskApi = vi.hoisted(() => ({
   fetchTokenRisk: vi.fn(async () => ({
-    level: 'low', liquidityRisk: 'low', holderConcentration: 10,
+    level: 'low', score: 18, liquidityRisk: 'low', holderConcentration: 10,
     contractRisk: 'low', rugPull: 0, flags: []
   }))
 }));
@@ -34,6 +34,7 @@ describe('token risk card disclosure modes', () => {
     expect(container.querySelector('.infobox.is-open')).toBeTruthy();
     expect(container.querySelector('.infobox-body')).toBeTruthy();
     expect(screen.getByText('risk.liquidity')).toBeTruthy();
+    expect(container.querySelector('[role="meter"]').getAttribute('aria-valuenow')).toBe('18');
   });
 
   it('preserves the ordinary collapsed disclosure outside token-detail subtabs', async () => {

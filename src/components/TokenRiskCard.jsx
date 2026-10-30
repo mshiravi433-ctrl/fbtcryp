@@ -66,10 +66,14 @@ export default function TokenRiskCard({ chainId, address, symbol, compact = fals
   const danger = level === 'critical' || level === 'high';
   const warn = level === 'medium';
   const tone = danger ? 'danger' : warn ? 'warn' : 'info';
+  const score = risk?.score != null && Number.isFinite(Number(risk.score))
+    ? Math.max(0, Math.min(100, Number(risk.score)))
+    : null;
 
   return (
     <div
-      className={`infobox infobox-${tone} ${open ? 'is-open' : ''}`}
+      className={`infobox infobox-${tone} token-risk-card ${open ? 'is-open' : ''}`}
+      data-risk-level={level}
       style={{ marginTop: 10 }}
     >
       <Head
@@ -79,8 +83,8 @@ export default function TokenRiskCard({ chainId, address, symbol, compact = fals
         onClick={collapsible ? () => { haptic?.('select'); setOpenState((v) => !v); } : undefined}
       >
         <span className="infobox-dot" aria-hidden="true" />
-        <span className="infobox-title" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 700 }}>
+        <span className="infobox-title token-risk-title">
+          <span className="token-risk-title-text">
             {t('risk.badge', { symbol: symbol || 'Token' })}
           </span>
           <span className={`pill ${level === 'low' ? 'pill-up' : danger ? 'pill-down' : warn ? '' : 'pill-neutral'}`} style={{ fontSize: 10 }}>
@@ -113,7 +117,18 @@ export default function TokenRiskCard({ chainId, address, symbol, compact = fals
 
               {!busy && risk && !risk.unknown && (
                 <>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 11.5 }}>
+                  {score != null && (
+                    <div className="token-risk-score" data-tone={tone}>
+                      <div className="token-risk-score-head">
+                        <span>{t('risk.score', { defaultValue: 'Security score' })}</span>
+                        <strong>{score}<small>/100</small></strong>
+                      </div>
+                      <div className="token-risk-score-track" role="meter" aria-label={t('risk.score', { defaultValue: 'Security score' })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={score}>
+                        <span style={{ width: `${score}%` }} />
+                      </div>
+                    </div>
+                  )}
+                  <div className="token-risk-metrics">
                     <span className="faint">{t('risk.liquidity')}</span>
                     <span className="mono" style={{ textAlign: 'end' }}>{t(`risk.band.${risk.liquidityRisk}`)}</span>
                     <span className="faint">{t('risk.holders')}</span>

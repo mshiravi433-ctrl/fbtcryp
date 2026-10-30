@@ -96,3 +96,68 @@
 @media (prefers-reduced-motion: reduce) {
   .coin-detail-tab { transition: none; }
 }
+
+/* A focused glass surface for the AI contract-security readout. The score is
+   explicitly a risk score (larger = more risk), not a safety percentage. */
+.token-risk-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  border-color: color-mix(in srgb, var(--rgb-2) 24%, var(--line));
+  background:
+    radial-gradient(85% 120% at 100% 0%, color-mix(in srgb, var(--rgb-2) 9%, transparent), transparent 67%),
+    linear-gradient(145deg, color-mix(in srgb, var(--bg-panel-solid) 94%, transparent), var(--bg-panel));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 14px 36px -28px rgba(0,0,0,.7);
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+}
+.token-risk-card::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 2px;
+  background: linear-gradient(180deg, var(--rgb-1), var(--rgb-2), var(--rgb-3));
+  opacity: .72;
+  pointer-events: none;
+}
+.token-risk-card[data-risk-level='high'],
+.token-risk-card[data-risk-level='critical'] {
+  border-color: color-mix(in srgb, var(--down) 34%, var(--line));
+  background:
+    radial-gradient(90% 120% at 100% 0%, color-mix(in srgb, var(--down) 12%, transparent), transparent 68%),
+    linear-gradient(145deg, color-mix(in srgb, var(--bg-panel-solid) 94%, transparent), var(--bg-panel));
+}
+.token-risk-title { display: inline-flex; align-items: center; gap: 9px; min-width: 0; }
+.token-risk-title-text { font-size: 12.5px; font-weight: 800; letter-spacing: -.01em; }
+.token-risk-card .infobox-head { min-height: 54px; padding-block: 10px; }
+.token-risk-card .infobox-dot { box-shadow: 0 0 12px currentColor; }
+.token-risk-score {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 13px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--bg-panel-solid) 74%, transparent);
+}
+.token-risk-score-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-2); font-size: 10.5px; font-weight: 700; }
+.token-risk-score-head strong { color: var(--text-1); font: 800 13px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.token-risk-score-head small { padding-inline-start: 3px; color: var(--text-3); font: 600 9px/1 var(--font-mono); }
+.token-risk-score-track { height: 6px; overflow: hidden; border-radius: 99px; background: color-mix(in srgb, var(--text-3) 16%, transparent); }
+.token-risk-score-track > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--rgb-1), var(--rgb-2), var(--down)); box-shadow: 0 0 12px color-mix(in srgb, var(--rgb-2) 45%, transparent); transition: width .35s ease; }
+.token-risk-metrics { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px 12px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 13px; background: color-mix(in srgb, var(--bg-panel-solid) 68%, transparent); font-size: 11.5px; }
+.token-risk-card .notice-danger { padding: 10px 12px; border-radius: 12px; }
+.token-risk-card .token-risk-metrics + p { margin-top: 9px !important; }
+:root[data-theme='light'] .token-risk-card { box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 12px 30px -24px rgba(20,35,60,.36); }
+:root[data-native='true'] .token-risk-card { backdrop-filter: none; -webkit-backdrop-filter: none; }
+@media (prefers-reduced-motion: reduce) { .token-risk-score-track > span { transition: none; } }
+
+/* Clearer separation between the token-page tabs while keeping the full rail
+   visible at phone widths. */
+.coin-detail-tabs { gap: 8px; padding: 7px; }
+.coin-detail-tab { min-height: 58px; border-radius: 14px; }
+@media (max-width: 390px) {
+  .coin-detail-tabs { gap: 5px; padding: 5px; }
+  .coin-detail-tab { min-height: 56px; }
+}

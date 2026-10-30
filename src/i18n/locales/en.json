@@ -162,7 +162,19 @@
     "emptyFavoritesHelp": "Open a coin’s page and tap its star to add it here; price alerts are managed there too.",
     "showAll": "Show all coins",
     "refresh": "Refresh prices",
-    "trendingBasis": "Most searched right now"
+    "trendingBasis": "Most searched right now",
+    "pulse": {
+      "title": "Market pulse",
+      "open": "Open market pulse",
+      "close": "Close market pulse",
+      "caption": "24-hour market pulse",
+      "metric": { "risk": "Volatility risk", "buy": "Up / buying", "sell": "Down / selling" },
+      "metricTitle": "{{label}} · {{count}} assets",
+      "stale": "Market data is stale",
+      "live": "Based on market data",
+      "method": "Calculation method",
+      "explanation": "Buying and selling show the share of {{moves}} assets with a positive or negative 24-hour price change; they are not executed trade volume. Unchanged assets are excluded. Risk is the average daily high-to-low range relative to the low across {{ranges}} assets, not a loss probability or trading advice. Data older than two minutes is hidden."
+    }
   },
   "coin": {
     "notFound": "Coin not found",
@@ -8559,6 +8571,7 @@
   },
   "risk": {
     "badge": "AI Risk · {{symbol}}",
+    "score": "Security risk score",
     "level": {
       "low": "Low risk",
       "medium": "Medium",

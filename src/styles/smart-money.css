@@ -3069,3 +3069,8 @@
   gap: 11px;
   min-width: 0;
 }
+
+/* Keep the seven destinations in one touch-friendly horizontal rail, with
+   visible gaps so adjacent targets do not read or feel like one button. */
+.smx-dock { gap: 6px; padding: 6px; }
+.smx-dock-btn { min-height: 64px; padding-inline: 3px; }
