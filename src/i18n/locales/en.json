@@ -161,7 +161,8 @@
     "emptyFavorites": "No coins starred yet",
     "emptyFavoritesHelp": "Open a coin’s page and tap its star to add it here; price alerts are managed there too.",
     "showAll": "Show all coins",
-    "refresh": "Refresh prices"
+    "refresh": "Refresh prices",
+    "trendingBasis": "Most searched right now"
   },
   "coin": {
     "notFound": "Coin not found",

@@ -312,7 +312,8 @@
     "emptyFavorites": "Aún no has marcado monedas",
     "emptyFavoritesHelp": "Abre la página de una moneda y toca su estrella para añadirla aquí; allí también puedes gestionar alertas.",
     "showAll": "Ver todas las monedas",
-    "refresh": "Actualizar precios"
+    "refresh": "Actualizar precios",
+    "trendingBasis": "Lo más buscado ahora"
   },
   "coin": {
     "notFound": "Moneda no encontrada",

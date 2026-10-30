@@ -312,7 +312,8 @@
     "emptyFavorites": "Nenhuma moeda favoritada ainda",
     "emptyFavoritesHelp": "Abra a página de uma moeda e toque na estrela para adicioná-la aqui; os alertas de preço também são gerenciados lá.",
     "showAll": "Ver todas as moedas",
-    "refresh": "Atualizar preços"
+    "refresh": "Atualizar preços",
+    "trendingBasis": "Mais procurados agora"
   },
   "coin": {
     "notFound": "Moeda não encontrada",

@@ -28,20 +28,27 @@ export default function Sparkline({
   strokeWidth = 1.6,
   fill = true,
   glow = true,
-  animate = true
+  animate = true,
+  /*
+   * `dot` puts a filled marker on the LAST observation — the price on screen.
+   * It is what turns a decorative line into a reading: the eye needs a point
+   * that says "you are here", not only a shape that says "it went up". Off by
+   * default, because in a 60-row list it would be 60 more circles to paint.
+   */
+  dot = false
 }) {
   const gid = useId().replace(/:/g, '');
 
-  const { d, area } = useMemo(() => {
+  const { d, area, last } = useMemo(() => {
     const pts = data.filter((n) => Number.isFinite(n));
-    if (pts.length < 2) return { d: '', area: '' };
+    if (pts.length < 2) return { d: '', area: '', last: null };
     const min = Math.min(...pts);
     const max = Math.max(...pts);
     const range = max - min || 1;
     const step = width / (pts.length - 1);
     const coords = pts.map((v, i) => [i * step, height - ((v - min) / range) * (height - 3) - 1.5]);
     const line = coords.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(2)},${y.toFixed(2)}`).join(' ');
-    return { d: line, area: `${line} L${width},${height} L0,${height} Z` };
+    return { d: line, area: `${line} L${width},${height} L0,${height} Z`, last: coords[coords.length - 1] };
   }, [data, width, height]);
 
   if (!d) return <div className="skel" style={{ width, height }} />;
@@ -73,6 +80,12 @@ export default function Sparkline({
             : null)
         }}
       />
+      {dot && last && (
+        <>
+          <circle cx={last[0]} cy={last[1]} r={strokeWidth + 3.4} fill={color} fillOpacity="0.16" />
+          <circle cx={last[0]} cy={last[1]} r={strokeWidth + 0.9} fill={color} />
+        </>
+      )}
     </svg>
   );
 }

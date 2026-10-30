@@ -312,7 +312,8 @@
     "emptyFavorites": "Henüz favori coin yok",
     "emptyFavoritesHelp": "Eklemek için coin sayfasını açıp yıldızına dokun; fiyat uyarılarını da oradan yönetebilirsin.",
     "showAll": "Tüm coinleri göster",
-    "refresh": "Fiyatları yenile"
+    "refresh": "Fiyatları yenile",
+    "trendingBasis": "Şu anda en çok arananlar"
   },
   "coin": {
     "notFound": "Coin bulunamadı",

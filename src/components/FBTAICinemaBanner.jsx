@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useTelegram } from '../context/TelegramContext';
@@ -8,56 +8,64 @@ import { IconChevronRight } from './Icons';
 /**
  * FBT AI — Living Intelligence.
  * ---------------------------------------------------------------------------
- * The Market screen's «سیگنال هوشمند» house ad, rebuilt as a premium
- * interactive AI showcase instead of a flat promo card.
+ * The Market screen's «سیگنال هوشمند» house ad.
  *
- * WHY A DEDICATED COMPONENT RATHER THAN ANOTHER `premium` FLAG ON `AdBanner`:
- * `AdBanner` is a nine-screen utility — one slot per destination, one compact
- * row of layout, one set of shared inks. This slot is a different species of
- * object: a two-column cinematic panel with a hand-built animated mascot,
- * particle field, data streams and a live chart. Folding it into the shared
- * component would mean a `premium` branch that half the stylesheet has to keep
- * remembering exists. It is one instance, on one screen, so it lives in its own
- * file and `Market.jsx` wires it in directly.
+ * ─── WHAT WAS ACTUALLY WRONG WITH IT ────────────────────────────────────────
+ *   «بنر سیگنال هوشمند خیلی بزرگه از عرض و طول، جملات و همه‌چیزش سمت چپ کشیده
+ *    شده و سمت راست بنر خالیه، دکمه و جملات در یک خط هست به جای افقی بودن.»
  *
- * THE MASCOT IS SVG, NOT THREE.JS.
- * A glass cybernetic fox drawn as vector geometry and animated with CSS
- * transforms/opacity. That is deliberate: the brief asks for a premium 3D
- * feel without introducing a 3D engine for a single banner. SVG keeps the
- * whole thing weightless (no asset request, no WebGL context, no GPU ramp on
- * Android), scales crisply from a 200px desktop panel to a 96px phone, and
- * still gives per-part control — ears twitch, eyes blink, the head tracks the
- * pointer, the rings spin. The "3D" comes from layered translucency, volumetric
- * gradients and parallax, not from a rasterised model.
+ * That report was not a taste complaint, it was a LAYOUT BUG, and the cause was
+ * one line of CSS: `.fbt-ai-banner > * { position: relative }` painted over the
+ * `position: absolute` of the three ambient layers (grid + two glows). They
+ * stopped being a backdrop and became FLEX ITEMS — so the flex row had five
+ * children instead of two, the two glows (62% and 58% wide, aspect-ratio 1)
+ * ate the free space on one side, and the copy column was squeezed into the
+ * ~87px that was left. Every symptom in that sentence follows from it: a 332px
+ * tall banner on a 390px phone, sentences wrapping one word per line, the CTA
+ * broken over two lines, and a large empty area where a glow was sitting.
  *
- * EVERY PERPETUAL ANIMATION IS PAUSED OFF-SCREEN AND FREEZABLE.
- * The old banner had nine `repeat: Infinity` timers running on nine screens;
- * this one runs its loops only while it is actually in view, and stops dead
- * under `prefers-reduced-motion` or the app's own reduce-motion setting.
+ * The fix is structural, not cosmetic: the ambient layers now live inside ONE
+ * absolutely-positioned `.fbt-ai-ambient` wrapper, so no child-count change and
+ * no future `> *` rule can ever turn the backdrop into layout again. The panel
+ * itself is a two-column grid — copy on the reading side, mascot on the far
+ * side — with the copy column owning all the free width.
+ *
+ * ─── THE MASCOT ─────────────────────────────────────────────────────────────
+ * The old fox was drawn from thin outlines: two ear triangles poking through a
+ * rounded skull, a face plate, a muzzle, a smile, and it read as a sketched
+ * cat rather than a product's character. The new mark is built the way modern
+ * app mascots are: one solid silhouette (a fox head with real cheek fur), a
+ * single glass visor carrying two glowing eyes, a forehead crest that is the
+ * FBT AI gem, and a dashed orbit that frames it. Fewer, bigger shapes; one
+ * light source; no outline soup. It is still SVG and still animated with CSS
+ * transforms/opacity only — no 3D engine, no asset request, no WebGL context.
+ *
+ * ─── MOTION BUDGET (unchanged, and now smaller) ─────────────────────────────
+ * Every loop pauses when the panel is off-screen and freezes entirely under the
+ * app's reduce-motion setting. The CTA's old infinite `box-shadow` pulse is
+ * gone (a shadow animation repaints the button every frame); the CTA now has a
+ * static glow and moves on hover only.
  */
 
 /*
- * Holographic dust. Fixed seed — see `AdBanner`'s shimmer note. Random values
- * regenerated on every render would re-trigger CSS transitions and make the
- * field shimmer for no reason.
+ * Holographic dust. Fixed seed — random values regenerated on every render
+ * would re-trigger CSS transitions and make the field shimmer for no reason.
  *
  * `x/y` is the resting position inside the mascot stage (%), `tx/ty` the drift
- * vector and `d` the loop period. Deliberately sparse: twelve motes read as
- * "energy" and thirteen read as "confetti".
+ * vector and `d` the loop period. Deliberately sparse: ten motes read as
+ * "energy" and twenty read as "confetti".
  */
 const PARTICLES = [
   { x: 14, y: 18, tx: 7, ty: -9, d: 5.4 },
   { x: 30, y: 8, tx: -5, ty: -7, d: 6.1 },
   { x: 46, y: 20, tx: 8, ty: 6, d: 4.8 },
-  { x: 60, y: 10, tx: -6, ty: -8, d: 6.6 },
-  { x: 74, y: 22, tx: 9, ty: -5, d: 5.2 },
-  { x: 86, y: 12, tx: -7, ty: -9, d: 6.0 },
-  { x: 22, y: 44, tx: 6, ty: 8, d: 5.8 },
-  { x: 40, y: 58, tx: -8, ty: 7, d: 6.4 },
-  { x: 58, y: 70, tx: 7, ty: -8, d: 5.0 },
-  { x: 78, y: 62, tx: -6, ty: 8, d: 6.2 },
-  { x: 88, y: 46, tx: 8, ty: 6, d: 5.6 },
-  { x: 64, y: 84, tx: -7, ty: -7, d: 6.8 }
+  { x: 62, y: 10, tx: -6, ty: -8, d: 6.6 },
+  { x: 78, y: 22, tx: 9, ty: -5, d: 5.2 },
+  { x: 88, y: 12, tx: -7, ty: -9, d: 6.0 },
+  { x: 22, y: 46, tx: 6, ty: 8, d: 5.8 },
+  { x: 42, y: 62, tx: -8, ty: 7, d: 6.4 },
+  { x: 60, y: 76, tx: 7, ty: -8, d: 5.0 },
+  { x: 80, y: 64, tx: -6, ty: 8, d: 6.2 }
 ];
 
 /**
@@ -103,6 +111,8 @@ export default function FBTAICinemaBanner() {
   const still = useStill();
   const hostRef = useRef(null);
   const inView = useInView(hostRef, { amount: 0.12, rootMargin: '140px' });
+  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  const fx = (name) => `${name}-${uid}`;
 
   /*
    * Entrance is scroll-triggered, not mount-triggered: the banner sits below
@@ -185,6 +195,18 @@ export default function FBTAICinemaBanner() {
     navigate('/signals');
   }, [haptic, navigate]);
 
+  /*
+   * The headline's last word gets the neon treatment. Splitting on the LAST
+   * SPACE (not on a fixed phrase) keeps the accessible name identical to the
+   * translated string in every one of the twelve locales — the h2 still reads
+   * as one sentence to a screen reader, and a translator can never break the
+   * layout by changing the wording.
+   */
+  const title = t('marketAiBanner.title');
+  const titleCut = title.lastIndexOf(' ');
+  const titleLead = titleCut > 0 ? title.slice(0, titleCut) : title;
+  const titleTail = titleCut > 0 ? title.slice(titleCut + 1) : '';
+
   return (
     <article
       ref={hostRef}
@@ -203,12 +225,23 @@ export default function FBTAICinemaBanner() {
         '--fbt-px': pointer.x,
         '--fbt-py': pointer.y
       }}
-      aria-label={t('marketAiBanner.title')}
+      aria-label={title}
     >
-      {/* ── ambient layers ───────────────────────────────────────────────── */}
-      <span className="fbt-ai-grid" aria-hidden="true" />
-      <span className="fbt-ai-glow fbt-ai-glow--a" aria-hidden="true" />
-      <span className="fbt-ai-glow fbt-ai-glow--b" aria-hidden="true" />
+      {/*
+        ── AMBIENT LAYERS, IN ONE WRAPPER ───────────────────────────────────
+        This wrapper is the fix. As siblings, the grid and the two glows were
+        flex/grid ITEMS (a later `> *` rule repainted them `position: relative`)
+        and they collapsed the copy column to 87px. Inside one absolutely
+        positioned span they are a backdrop again — forever, regardless of what
+        any future child-selector rule says.
+      */}
+      <span className="fbt-ai-ambient" aria-hidden="true">
+        <i className="fbt-ai-glow fbt-ai-glow--a" />
+        <i className="fbt-ai-glow fbt-ai-glow--b" />
+        <i className="fbt-ai-grid" />
+        <i className="fbt-ai-conic" />
+        <i className="fbt-ai-sheen" />
+      </span>
 
       {/* ── copy ─────────────────────────────────────────────────────────── */}
       <div className="fbt-ai-copy">
@@ -216,235 +249,213 @@ export default function FBTAICinemaBanner() {
           <span className="fbt-ai-dot" aria-hidden="true" />
           {t('marketAiBanner.eyebrow')}
         </span>
-        <h2 className="fbt-ai-title">{t('marketAiBanner.title')}</h2>
+        <h2 className="fbt-ai-title">
+          {titleLead}
+          {titleTail ? <> <span className="fbt-ai-title-accent">{titleTail}</span></> : null}
+        </h2>
         <p className="fbt-ai-desc">{t('marketAiBanner.desc')}</p>
         <button type="button" className="fbt-ai-cta" onClick={onCta}>
           <span className="fbt-ai-cta-label">{t('marketAiBanner.cta')}</span>
-          <IconChevronRight width={15} height={15} />
+          <IconChevronRight width={14} height={14} />
         </button>
       </div>
 
       {/* ── the mascot stage ──────────────────────────────────────────────── */}
       <div className="fbt-ai-stage" aria-hidden="true">
+        <span className="fbt-ai-stage-glow" />
+
         {/* Holographic financial read-out behind the fox. */}
-        <svg className="fbt-ai-chart" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice">
+        <svg className="fbt-ai-chart" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet">
           <defs>
-            <linearGradient id="fbtai-area" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#00e5ff" stopOpacity="0.30" />
-              <stop offset="100%" stopColor="#00e5ff" stopOpacity="0" />
+            <linearGradient id={fx('fbtai-area')} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#00e5ff" stopOpacity="0.34" />
+              <stop offset="60%" stopColor="#3b6cff" stopOpacity="0.10" />
+              <stop offset="100%" stopColor="#3b6cff" stopOpacity="0" />
             </linearGradient>
+            <linearGradient id={fx('fbtai-line')} x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#00e5ff" stopOpacity="0.25" />
+              <stop offset="45%" stopColor="#58f5ff" stopOpacity="0.95" />
+              <stop offset="100%" stopColor="#a98bff" stopOpacity="0.95" />
+            </linearGradient>
+            {/* Both ends of the read-out run off the edge of the stage, and a
+                filled area that stops on a hard vertical line at x=0 / x=320
+                reads as a broken box rather than as a chart that continues
+                beyond the frame. The fade makes the crop intentional. */}
+            <linearGradient id={fx('fbtai-fade')} x1="0" y1="0" x2="320" y2="0" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stopColor="#fff" stopOpacity="0" />
+              <stop offset="0.18" stopColor="#fff" stopOpacity="1" />
+              <stop offset="0.84" stopColor="#fff" stopOpacity="1" />
+              <stop offset="1" stopColor="#fff" stopOpacity="0" />
+            </linearGradient>
+            <mask id={fx('fbtai-fademask')} maskUnits="userSpaceOnUse" x="0" y="0" width="320" height="200">
+              <rect x="0" y="0" width="320" height="200" fill={`url(#${fx('fbtai-fade')})`} />
+            </mask>
           </defs>
+          <g mask={`url(#${fx('fbtai-fademask')})`}>
           <path
-            d="M0 150 L40 140 L80 146 L120 120 L160 128 L200 96 L240 104 L280 70 L320 60 L320 200 L0 200 Z"
-            fill="url(#fbtai-area)"
+            d="M0 158 C 26 150 44 166 68 148 S 108 118 132 128 S 172 92 200 100 S 244 68 268 58 S 300 48 320 40 L320 200 L0 200 Z"
+            fill={`url(#${fx('fbtai-area')})`}
           />
           <path
             className="fbt-chart-line"
-            d="M0 150 L40 140 L80 146 L120 120 L160 128 L200 96 L240 104 L280 70 L320 60"
-            stroke="#00e5ff"
-            strokeWidth="2"
+            d="M0 158 C 26 150 44 166 68 148 S 108 118 132 128 S 172 92 200 100 S 244 68 268 58 S 300 48 320 40"
+            stroke={`url(#${fx('fbtai-line')})`}
+            strokeWidth="2.4"
             fill="none"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
           <path
             className="fbt-chart-line fbt-chart-line--2"
-            d="M0 172 L40 168 L80 174 L120 160 L160 168 L200 180 L240 174 L280 184 L320 178"
+            d="M0 178 C 30 176 52 182 80 170 S 122 152 150 160 S 200 150 232 162 S 288 158 320 168"
             stroke="#7c4dff"
             strokeWidth="1.4"
             fill="none"
-            strokeOpacity="0.55"
+            strokeOpacity="0.5"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-          <circle className="fbt-chart-dot" cx="280" cy="70" r="3.4" fill="#00e5ff" />
-          <circle className="fbt-chart-ring" cx="280" cy="70" r="7" fill="none" stroke="#00e5ff" strokeWidth="1.2" />
+          </g>
+          <circle className="fbt-chart-dot" cx="316" cy="41" r="3.6" fill="#bffcff" />
+          <circle className="fbt-chart-ring" cx="316" cy="41" r="7" fill="none" stroke="#7df9ff" strokeWidth="1.2" />
         </svg>
 
         <div className="fbt-ai-mascot">
           <svg className="fox-svg" viewBox="0 0 240 240" fill="none" role="img">
             <defs>
-              <linearGradient id="fbtai-edge" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#00e5ff" />
-                <stop offset="55%" stopColor="#3b6cff" />
-                <stop offset="100%" stopColor="#7c4dff" />
+              <linearGradient id={fx('fbtai-edge')} x1="40" y1="20" x2="204" y2="216" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stopColor="#8ff9ff" />
+                <stop offset="0.42" stopColor="#3f8cff" />
+                <stop offset="1" stopColor="#b06bff" />
               </linearGradient>
-              <linearGradient id="fbtai-glass" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="rgba(255,255,255,0.36)" />
-                <stop offset="55%" stopColor="rgba(124,77,255,0.18)" />
-                <stop offset="100%" stopColor="rgba(0,229,255,0.12)" />
+              <linearGradient id={fx('fbtai-head')} x1="72" y1="48" x2="176" y2="196" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stopColor="#22356b" />
+                <stop offset="0.46" stopColor="#121c40" />
+                <stop offset="1" stopColor="#0a1129" />
               </linearGradient>
-              <linearGradient id="fbtai-glass2" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="rgba(255,255,255,0.24)" />
-                <stop offset="100%" stopColor="rgba(124,77,255,0.10)" />
+              <linearGradient id={fx('fbtai-ear')} x1="52" y1="26" x2="136" y2="122" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stopColor="#31488a" />
+                <stop offset="1" stopColor="#0d1633" />
               </linearGradient>
-              <radialGradient id="fbtai-eye" cx="50%" cy="42%" r="62%">
-                <stop offset="0%" stopColor="#eafdff" />
-                <stop offset="38%" stopColor="#00e5ff" />
-                <stop offset="100%" stopColor="#7c4dff" stopOpacity="0.35" />
+              <linearGradient id={fx('fbtai-ear-in')} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#8ff9ff" stopOpacity="0.75" />
+                <stop offset="1" stopColor="#b06bff" stopOpacity="0.12" />
+              </linearGradient>
+              <linearGradient id={fx('fbtai-visor')} x1="86" y1="110" x2="154" y2="134" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stopColor="#0a1434" />
+                <stop offset="1" stopColor="#060b1c" />
+              </linearGradient>
+              <radialGradient id={fx('fbtai-eye')} cx="50%" cy="44%" r="58%">
+                <stop offset="0" stopColor="#ffffff" />
+                <stop offset="0.28" stopColor="#cdfdff" />
+                <stop offset="0.66" stopColor="#25d9f5" />
+                <stop offset="1" stopColor="#25d9f5" stopOpacity="0" />
               </radialGradient>
-              <radialGradient id="fbtai-core" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor="#00e5ff" stopOpacity="0.55" />
-                <stop offset="55%" stopColor="#7c4dff" stopOpacity="0.22" />
-                <stop offset="100%" stopColor="#7c4dff" stopOpacity="0" />
+              <radialGradient id={fx('fbtai-halo')} cx="50%" cy="50%" r="50%">
+                <stop offset="0" stopColor="#2ee6ff" stopOpacity="0.34" />
+                <stop offset="0.58" stopColor="#6a5bff" stopOpacity="0.16" />
+                <stop offset="1" stopColor="#b06bff" stopOpacity="0" />
               </radialGradient>
-              <radialGradient id="fbtai-gem" cx="50%" cy="40%" r="65%">
-                <stop offset="0%" stopColor="#ffffff" />
-                <stop offset="40%" stopColor="#00e5ff" />
-                <stop offset="100%" stopColor="#7c4dff" />
-              </radialGradient>
+              <linearGradient id={fx('fbtai-gem')} x1="114" y1="68" x2="126" y2="94" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stopColor="#ffffff" />
+                <stop offset="0.5" stopColor="#8ff9ff" />
+                <stop offset="1" stopColor="#b06bff" />
+              </linearGradient>
+              <linearGradient id={fx('fbtai-rim')} x1="0" y1="52" x2="0" y2="128" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stopColor="#ffffff" stopOpacity="0.75" />
+                <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
+              </linearGradient>
             </defs>
 
             {/* volumetric core */}
-            <ellipse className="fox-core" cx="120" cy="120" rx="80" ry="80" fill="url(#fbtai-core)" />
+            <circle className="fox-core" cx="120" cy="124" r="98" fill={`url(#${fx('fbtai-halo')})`} />
 
-            {/* holographic rings */}
-            <g className="fox-rings" transform="translate(120 120)">
-              <circle className="fox-ring" r="96" />
-              <circle className="fox-ring fox-ring--2" r="110" />
+            {/* the orbit that frames the whole mark */}
+            <circle
+              className="fox-orbit"
+              cx="120"
+              cy="124"
+              r="92"
+              stroke={`url(#${fx('fbtai-edge')})`}
+              strokeWidth="1"
+              strokeOpacity="0.34"
+              strokeDasharray="2 9"
+            />
+
+            {/* ears — drawn before the skull so it overlaps their bases */}
+            <g className="fox-ear fox-ear--l" strokeLinejoin="round">
+              <path d="M52 30 L78 118 L116 74 Z" fill={`url(#${fx('fbtai-ear')})`} stroke={`url(#${fx('fbtai-edge')})`} strokeWidth="2.4" />
+              <path d="M65 52 L80 110 L107 78 Z" fill={`url(#${fx('fbtai-ear-in')})`} />
+            </g>
+            <g className="fox-ear fox-ear--r" strokeLinejoin="round">
+              <path d="M188 30 L162 118 L124 74 Z" fill={`url(#${fx('fbtai-ear')})`} stroke={`url(#${fx('fbtai-edge')})`} strokeWidth="2.4" />
+              <path d="M175 52 L160 110 L133 78 Z" fill={`url(#${fx('fbtai-ear-in')})`} />
             </g>
 
-            {/* ears — drawn under the head so the skull overlaps their bases */}
-            <g className="fox-ear fox-ear--l">
-              <path
-                className="fox-fill-2"
-                d="M74 102 L52 16 L112 74 Z"
-                stroke="url(#fbtai-edge)"
-                strokeWidth="2.2"
-                strokeLinejoin="round"
-              />
-              <path d="M84 94 L76 44 L106 80 Z" fill="rgba(0,229,255,0.24)" />
-            </g>
-            <g className="fox-ear fox-ear--r">
-              <path
-                className="fox-fill-2"
-                d="M166 102 L188 16 L128 74 Z"
-                stroke="url(#fbtai-edge)"
-                strokeWidth="2.2"
-                strokeLinejoin="round"
-              />
-              <path d="M156 94 L164 44 L134 80 Z" fill="rgba(0,229,255,0.24)" />
-            </g>
+            {/* cheek fur */}
+            <path d="M76 130 L54 150 L70 156 L80 142 Z" fill={`url(#${fx('fbtai-head')})`} stroke={`url(#${fx('fbtai-edge')})`} strokeWidth="1.8" strokeLinejoin="round" />
+            <path d="M164 130 L186 150 L170 156 L160 142 Z" fill={`url(#${fx('fbtai-head')})`} stroke={`url(#${fx('fbtai-edge')})`} strokeWidth="1.8" strokeLinejoin="round" />
 
             {/* skull */}
             <path
-              className="fox-fill"
-              d="M120 54 C 84 54 60 78 54 104 C 50 122 58 134 68 146 C 80 162 100 170 120 170 C 140 170 160 162 172 146 C 182 134 190 122 186 104 C 180 78 156 54 120 54 Z"
-              stroke="url(#fbtai-edge)"
-              strokeWidth="2.4"
+              d="M120 60 C 99 60 80 67 71 84 C 63 99 65 116 74 134 C 84 155 102 172 120 182 C 138 172 156 155 166 134 C 175 116 177 99 169 84 C 160 67 141 60 120 60 Z"
+              fill={`url(#${fx('fbtai-head')})`}
+              stroke={`url(#${fx('fbtai-edge')})`}
+              strokeWidth="2.6"
               strokeLinejoin="round"
             />
+            {/* specular rim light along the top edge */}
+            <path d="M120 61.6 C 99 61.6 81 68.6 72 84" stroke={`url(#${fx('fbtai-rim')})`} strokeWidth="1.3" strokeLinecap="round" />
 
-            {/* face plate */}
-            <path
-              className="fox-face"
-              d="M120 86 C 96 86 80 98 76 114 C 73 128 80 140 92 148 C 104 156 136 156 148 148 C 160 140 167 128 164 114 C 160 98 144 86 120 86 Z"
-              stroke="url(#fbtai-edge)"
-              strokeWidth="1.2"
-              strokeOpacity="0.65"
-            />
-
-            {/* muzzle */}
-            <path
-              className="fox-muzzle"
-              d="M120 128 C 106 128 96 136 96 146 C 96 155 104 162 120 162 C 136 162 144 155 144 146 C 144 136 134 128 120 128 Z"
-              stroke="url(#fbtai-edge)"
-              strokeWidth="1.2"
-              strokeOpacity="0.6"
-            />
-
-            {/* nose + mouth */}
-            <path
-              d="M113 146 L127 146 L120 154 Z"
-              fill="url(#fbtai-gem)"
-              stroke="url(#fbtai-edge)"
-              strokeWidth="1.4"
-              strokeLinejoin="round"
-            />
-            <path
-              className="fox-line"
-              d="M120 154 L120 158 M120 158 C 114 160 110 162 108 161 M120 158 C 126 160 130 162 132 161"
-              stroke="url(#fbtai-edge)"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-            />
-
-            {/* eyes — glow, pupil and a single specular hit */}
+            {/* visor + eyes */}
+            <rect x="80" y="108" width="80" height="34" rx="17" fill={`url(#${fx('fbtai-visor')})`} stroke={`url(#${fx('fbtai-edge')})`} strokeWidth="1.4" strokeOpacity="0.85" />
             <g className="fox-eye fox-eye--l">
-              <ellipse className="fox-eye-glow" cx="96" cy="112" rx="13" ry="15.5" fill="url(#fbtai-eye)" />
+              <ellipse className="fox-eye-glow" cx="101" cy="125" rx="10.6" ry="9.8" fill={`url(#${fx('fbtai-eye')})`} />
               <g className="fox-pupil">
-                <ellipse cx="98" cy="114" rx="5.6" ry="7.4" fill="#07091a" />
+                <ellipse cx="102.6" cy="124" rx="3" ry="4.2" fill="#ffffff" />
               </g>
-              <circle className="fox-eye-hit" cx="93" cy="108" r="2.6" fill="#ffffff" />
             </g>
             <g className="fox-eye fox-eye--r">
-              <ellipse className="fox-eye-glow" cx="144" cy="112" rx="13" ry="15.5" fill="url(#fbtai-eye)" />
+              <ellipse className="fox-eye-glow" cx="139" cy="125" rx="10.6" ry="9.8" fill={`url(#${fx('fbtai-eye')})`} />
               <g className="fox-pupil">
-                <ellipse cx="146" cy="114" rx="5.6" ry="7.4" fill="#07091a" />
+                <ellipse cx="140.6" cy="124" rx="3" ry="4.2" fill="#ffffff" />
               </g>
-              <circle className="fox-eye-hit" cx="141" cy="108" r="2.6" fill="#ffffff" />
             </g>
 
-            {/* cheek tech seams */}
+            {/* nose + smile */}
+            <path d="M113 152 L127 152 L120 161 Z" fill={`url(#${fx('fbtai-gem')})`} stroke={`url(#${fx('fbtai-edge')})`} strokeWidth="1.1" strokeLinejoin="round" />
             <path
               className="fox-line"
-              d="M58 122 C 72 124 80 126 84 130 M182 122 C 168 124 160 126 156 130"
-              stroke="url(#fbtai-edge)"
-              strokeWidth="1.3"
-              strokeOpacity="0.7"
+              d="M120 161 L120 165 M120 165 C 115 168 111 168 108 166 M120 165 C 125 168 129 168 132 166"
+              stroke={`url(#${fx('fbtai-edge')})`}
+              strokeWidth="1.6"
               strokeLinecap="round"
+              strokeOpacity="0.85"
             />
 
-            {/* chest + chestplate gem */}
-            <path
-              className="fox-fill fox-chest"
-              d="M86 164 C 80 190 92 210 120 212 C 148 210 160 190 154 164 C 142 172 98 172 86 164 Z"
-              stroke="url(#fbtai-edge)"
-              strokeWidth="2.2"
-              strokeLinejoin="round"
-            />
-            <g className="fox-gem">
-              <circle cx="120" cy="192" r="12" fill="url(#fbtai-gem)" stroke="url(#fbtai-edge)" strokeWidth="1.4" />
-              <path d="M120 183 L127 189 L120 195 L113 189 Z" fill="rgba(255,255,255,0.65)" />
+            {/* forehead crest — the FBT AI gem, engraved rather than floating */}
+            <g className="fox-crest">
+              <path d="M120 70 L127 79 L120 92 L113 79 Z" fill={`url(#${fx('fbtai-gem')})`} stroke="#cdfdff" strokeWidth="0.9" strokeOpacity="0.55" />
+              <path d="M120 74 L124 79 L120 87 L116 79 Z" fill="#ffffff" fillOpacity="0.55" />
             </g>
-
-            {/* data streams orbiting the head */}
-            <path
-              className="fox-stream"
-              d="M28 116 C 48 74 96 46 130 62 C 162 77 188 104 212 140"
-              stroke="url(#fbtai-edge)"
-              strokeWidth="1.6"
-              strokeOpacity="0.75"
-              fill="none"
-              strokeLinecap="round"
-            />
-            <path
-              className="fox-stream fox-stream--2"
-              d="M214 124 C 190 166 144 196 108 180 C 74 165 50 138 26 104"
-              stroke="url(#fbtai-edge)"
-              strokeWidth="1.6"
-              strokeOpacity="0.5"
-              fill="none"
-              strokeLinecap="round"
-            />
           </svg>
+        </div>
 
-          <div className="fbt-ai-particles">
-            {PARTICLES.map((p, i) => (
-              <span
-                key={i}
-                className="fbt-ai-particle"
-                style={{
-                  '--px-x': `${p.x}%`,
-                  '--px-y': `${p.y}%`,
-                  '--px-tx': `${p.tx}px`,
-                  '--px-ty': `${p.ty}px`,
-                  '--px-d': `${p.d}s`,
-                  '--px-s': `${p.s ?? 3}px`
-                }}
-              />
-            ))}
-          </div>
+        <div className="fbt-ai-particles">
+          {PARTICLES.map((p, i) => (
+            <span
+              key={i}
+              className="fbt-ai-particle"
+              style={{
+                '--px-x': `${p.x}%`,
+                '--px-y': `${p.y}%`,
+                '--px-tx': `${p.tx}px`,
+                '--px-ty': `${p.ty}px`,
+                '--px-d': `${p.d}s`,
+                '--px-s': `${p.s ?? 3}px`
+              }}
+            />
+          ))}
         </div>
       </div>
     </article>
