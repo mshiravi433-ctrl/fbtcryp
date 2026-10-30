@@ -276,3 +276,35 @@
   .news-page .news-mode-tabs.segmented { gap: 6px; }
   .news-page .news-mode-tabs.segmented > button { flex-basis: 66px; min-width: 66px; }
 }
+
+/* ==========================================================================
+   NEWS TABS — wider cells, wider gaps (same note as the other rails)
+   --------------------------------------------------------------------------
+   The rail already scrolled; what it did not have was room. 72px cells with a
+   8px gutter put the tab ICONS 80px apart in Persian, where every label is
+   two words and wraps to a second line — the icons ended up closer to their
+   neighbour's label than to their own.
+
+   Now: a 96px floor per cell, 10px of gap, a 20px icon box and a 10px label,
+   so the icon, the label and the space around them form one target. The rail
+   still snaps, still hides its scrollbar, and still ignores the page's
+   swipe-to-change-tab gesture (App.jsx lists `.news-mode-tabs`).
+   ========================================================================== */
+.news-page .news-mode-tabs.segmented { gap: 10px; padding: 7px; }
+.news-page .news-mode-tabs.segmented > button {
+  flex: 1 0 auto;
+  flex-basis: 96px;
+  min-width: 96px;
+  min-height: 62px;
+  gap: 6px;
+  padding-inline: 10px;
+  scroll-snap-align: center;
+}
+.news-tab-icon { width: 20px; height: 20px; }
+.news-tab-icon svg { width: 20px; height: 20px; }
+.news-tab-label { font-size: 10.5px; }
+
+@media (max-width: 380px) {
+  .news-page .news-mode-tabs.segmented { gap: 8px; }
+  .news-page .news-mode-tabs.segmented > button { flex-basis: 88px; min-width: 88px; }
+}

@@ -8418,3 +8418,147 @@
 .market-sector { scroll-snap-align: center; }
 :root[data-native='true'] .market-search { backdrop-filter: none; -webkit-backdrop-filter: none; }
 @media (prefers-reduced-motion: reduce) { .market-search { transition: none; } }
+
+/* ==========================================================================
+   THE «سیگنال هوشمند» SHOWCASE — prism pass
+   --------------------------------------------------------------------------
+   «بنر تبلیغاتی سیگنال هوشمند را مدرن‌تر کن.»
+
+   The banner already has its fox, its holographic chart, its aurora and its
+   parallax. What it did not have was the FINISH that makes a promotional card
+   read as part of a modern product rather than as an illustration with a
+   button under it. This pass is that finish:
+
+     · the signature blade cut (three soft corners, one 14px cut on the
+       inline-end bottom corner) — the same geometry as the More sheet and the
+       wallet banners, so the app has ONE corner language instead of three;
+     · a real capsule for the eyebrow instead of floating uppercase text, with
+       the live dot inside it;
+     · a CTA that is a control, not a red shape: a 44px gradient pill with the
+       chevron in its own little disc, one specular edge, and a shine that
+       crosses it ONLY on hover (desktop) or press (touch) — nothing loops;
+     · a spectrum hairline along the bottom edge, which is what stops the card
+       from looking like it was cropped out of a larger image.
+
+   Cost: nothing. Every rule below is colour, radius or shadow on elements that
+   already exist. The shine is a single pseudo-element moved with `transform`,
+   one iteration, and it is disabled with the rest of the banner's motion under
+   reduced motion / native / lite (`.fbt-ai-banner[data-still='true'] *`
+   already stands every animation in here down).
+   ========================================================================== */
+
+.fbt-ai-banner {
+  /* Blade corner: logical, so RTL mirrors it without a duplicate rule. */
+  border-start-start-radius: 30px;
+  border-start-end-radius: 30px;
+  border-end-start-radius: 30px;
+  border-end-end-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 70px -34px var(--fbt-a),
+    0 34px 70px -40px rgba(124, 77, 255, 0.85);
+}
+
+/* The spectrum hairline along the bottom edge. Static paint, one gradient. */
+.fbt-ai-banner::after {
+  content: '';
+  position: absolute;
+  inset-inline: 12%;
+  bottom: 0;
+  height: 1px;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--fbt-a), var(--fbt-b), transparent);
+  opacity: 0.55;
+}
+
+.fbt-ai-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  color: rgba(233, 246, 255, 0.94);
+  letter-spacing: 0.1em;
+}
+
+.fbt-ai-title { letter-spacing: -0.018em; }
+
+/* ── the control ────────────────────────────────────────────────────────── */
+.fbt-ai-cta {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding-inline: 16px 10px;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 52%),
+    linear-gradient(122deg, var(--fbt-a), var(--fbt-b));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+    0 14px 30px -16px var(--fbt-a);
+  font-weight: 800;
+  letter-spacing: -0.005em;
+}
+
+/* The chevron gets its own disc — it reads as "go" instead of as punctuation. */
+.fbt-ai-cta svg {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  padding: 5px;
+  box-sizing: content-box;
+  border-radius: 50%;
+  color: #06121c;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 10px -6px rgba(0, 0, 0, 0.77);
+}
+
+/* One shine across the pill — hover on a pointer, press on touch. Never loops. */
+.fbt-ai-cta::before {
+  content: '';
+  position: absolute;
+  inset-block: -30%;
+  inset-inline-start: -35%;
+  width: 34%;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: translateX(-160%) skewX(-12deg);
+  opacity: 0;
+}
+
+@media (hover: hover) {
+  .fbt-ai-cta:hover::before {
+    opacity: 1;
+    animation: fbt-cta-shine 0.72s cubic-bezier(0.22, 1, 0.36, 1) 1;
+  }
+}
+
+.fbt-ai-cta:active::before {
+  opacity: 1;
+  animation: fbt-cta-shine 0.72s cubic-bezier(0.22, 1, 0.36, 1) 1;
+}
+
+@keyframes fbt-cta-shine {
+  from { transform: translateX(-160%) skewX(-12deg); }
+  to { transform: translateX(420%) skewX(-12deg); }
+}
+
+@media (max-width: 400px) {
+  .fbt-ai-banner { border-start-start-radius: 22px; border-start-end-radius: 22px; border-end-start-radius: 22px; border-end-end-radius: 12px; }
+  .fbt-ai-cta { min-height: 42px; padding-inline: 14px 9px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fbt-ai-cta::before { animation: none !important; opacity: 0 !important; }
+}

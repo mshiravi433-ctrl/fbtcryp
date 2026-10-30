@@ -464,3 +464,160 @@ html[data-theme='light'] .notif-tone {
   .notif-tone { transition: none; }
   .notif-tone:active { transform: none; }
 }
+
+/* ==========================================================================
+   THE SHADE, GLASS — 2026-10-30 pass
+   --------------------------------------------------------------------------
+   «نوتیفیکیشن FCM را خیلی مدرن‌تر کن، با لوگوی مدرن و همه‌چیز مدرن‌تر؛ حالت
+    شیشه‌ای و مدرن باید داشته باشد.»
+
+   WHAT A PUSH PAYLOAD CAN AND CANNOT RESTYLE is already documented at the top
+   of src/lib/notificationDesign.js: the OS owns the layout in the shade, and
+   the big-picture `image` carries the design. The ONE surface we draw
+   pixel-for-pixel is this card — so this is where "glass" has to be real.
+
+   ─── THE MATERIAL ─────────────────────────────────────────────────────────
+   Three layers, all static paint (no extra backdrop sampling, no new layer):
+     · a diagonal glass body (.nbar__card::before) — white 9% → transparent →
+       tone 10%, so the card looks like a pane with light behind it;
+     · a brighter specular top edge and a 1px inner ring in the tone's colour;
+     · a deeper, softer ambient shadow, because glass floats.
+   The corner radius grows 24 → 26 and the padding is rebalanced so the head
+   row, the copy and the rail sit on the same 6px rhythm.
+
+   ─── THE LOGO ─────────────────────────────────────────────────────────────
+   The mark was a bare 23px glyph in a flat square. It is now an ORB: a 38px
+   glass disc with a tone-tinted gradient, a hairline ring, an inner specular
+   highlight and a soft bloom behind it. Same geometry (it must stay identical
+   to the Android status icon and the pushed artwork), modern presentation —
+   which is exactly the difference between "a logo" and "a brand".
+
+   ─── WHAT IS NOT HERE ─────────────────────────────────────────────────────
+   No looping animation is added. The card already had a one-shot sheen and a
+   two-pass orbit; a perpetual light under a moving card is the flicker this
+   surface was fixed to remove. Everything below is still compositor-safe and
+   still stands down under reduced motion.
+   ========================================================================== */
+
+.nbar__card {
+  padding: 15px 16px 16px;
+  border-radius: 26px;
+  background:
+    linear-gradient(158deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.03) 42%, rgba(255, 255, 255, 0.012) 70%),
+    #04070f;
+  box-shadow:
+    0 26px 60px -20px rgba(0, 0, 0, 0.92),
+    0 10px 26px -10px rgba(0, 0, 0, 0.72),
+    0 0 46px -26px color-mix(in srgb, var(--tone-accent, #5b8cff) 80%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    inset 0 0 0 1px color-mix(in srgb, var(--tone-accent, #5b8cff) 30%, transparent);
+}
+
+/* The glass body: one static gradient pane behind the content. */
+.nbar__card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 120% at 0% -20%, rgba(255, 255, 255, 0.14), transparent 58%),
+    radial-gradient(120% 140% at 100% 120%, color-mix(in srgb, var(--tone-accent, #5b8cff) 16%, transparent), transparent 62%);
+  opacity: 0.9;
+}
+
+/* Deeper specular edge — the difference between glass and a grey card. */
+.nbar__card::after {
+  height: 1px;
+  opacity: 0.75;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55) 42%, rgba(255, 255, 255, 0.22) 68%, transparent);
+}
+
+/* ── the orb ──────────────────────────────────────────────────────────── */
+.nbar__mark-wrap {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border-radius: 13px;
+  border: 1px solid color-mix(in srgb, var(--tone-accent, #5b8cff) 42%, rgba(255, 255, 255, 0.22));
+  background:
+    radial-gradient(120% 120% at 22% 12%, rgba(255, 255, 255, 0.30), transparent 56%),
+    linear-gradient(150deg,
+      color-mix(in srgb, var(--tone-from, #5b8cff) 34%, transparent),
+      color-mix(in srgb, var(--tone-to, #00e5ff) 20%, transparent) 62%,
+      rgba(6, 12, 22, 0.72));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    0 8px 20px -12px color-mix(in srgb, var(--tone-accent, #5b8cff) 90%, transparent);
+}
+
+/* The bloom sits OUTSIDE the disc, so the orb looks lit rather than filled. */
+.nbar__mark-wrap::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  z-index: -1;
+  border-radius: 16px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--tone-accent, #5b8cff) 34%, transparent), transparent 70%);
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.nbar__mark {
+  width: 21px;
+  height: 21px;
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--tone-accent, #5b8cff) 80%, transparent));
+}
+
+.nbar__brand { font-size: 10.5px; letter-spacing: 0.14em; }
+.nbar__brand-sub { font-size: 7px; letter-spacing: 0.14em; opacity: 0.62; }
+
+.nbar__chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02)),
+    rgba(0, 0, 0, 0.30);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  font-size: 9px;
+  letter-spacing: 0.11em;
+}
+
+.nbar__time { font-size: 10.5px; opacity: 0.7; }
+
+.nbar__close {
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.nbar__close:hover,
+.nbar__close:focus-visible { background: rgba(255, 255, 255, 0.2); }
+
+/* ── copy + rail ──────────────────────────────────────────────────────── */
+.nbar__title { font-size: 14.5px; letter-spacing: -0.015em; }
+.nbar__message { font-size: 11.5px; line-height: 1.6; }
+
+.nbar__rail {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.10);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+.nbar__rail-fill {
+  border-radius: 999px;
+  box-shadow: 0 0 14px -4px color-mix(in srgb, var(--tone-accent, #5b8cff) 90%, transparent);
+}
+
+html[data-theme='light'] .nbar__card {
+  background:
+    linear-gradient(158deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02) 46%, rgba(255, 255, 255, 0.01) 72%),
+    #05080f;
+}
+
+@media (max-width: 380px) {
+  .nbar__card { padding: 13px 14px 14px; border-radius: 23px; }
+  .nbar__mark-wrap { width: 34px; height: 34px; border-radius: 12px; }
+  .nbar__mark { width: 19px; height: 19px; }
+  .nbar__title { font-size: 13.5px; }
+}

@@ -1242,3 +1242,336 @@
   .buy-sell-surface-switch > button,
   .buy-sell-switch > button { min-height: 54px; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   AURORA DESK — the 2026-10-30 redesign pass
+   --------------------------------------------------------------------------
+   «صفحهٔ خرید و فروش را از نظر رنگ، باکس، ایکون، اندازه و فاصله، زبان و تم
+    درست کن.»
+
+   The desk already had a direction tint and a glass ticket. What it did not
+   have was a HIERARCHY: a page header the size of a page header, tabs that
+   read as destinations rather than as a filter, one spacing rhythm instead of
+   five, and a hero that tells a stranger what this screen is before asking
+   them for money.
+
+   The rules below are additive overrides on purpose — the panel's behaviour,
+   its state machine and every class name are untouched, so the buy/sell probes
+   and the wizard test keep passing while the surface is rebuilt.
+
+   ─── 1. THE HERO (buy-sell-hero) ─────────────────────────────────────────
+   A single glass band: an aurora in the desk's own mint→cyan, a 44px badge, a
+   mono kicker, the title, the intro and three trust chips. Nothing animates
+   except two blooms on `transform`/`opacity`, and those stand down on native,
+   lite and reduced motion.
+
+   ─── 2. THE RHYTHM ───────────────────────────────────────────────────────
+   One scale, used everywhere: 6 / 10 / 14 / 18. Panel gap 14, tab gap 10,
+   card padding 16, control heights 44 (chip), 52 (tab), 56 (primary action).
+
+   ─── 3. THE TABS ─────────────────────────────────────────────────────────
+   The surface switch (general ⇄ Iranian rail) is a 64px glass cell with a
+   38px gradient icon tile; the direction switch (خرید ⇄ فروش) is a 56px pill
+   whose active cell is a full gradient of the DIRECTION's colour, so the two
+   sides cannot be confused for one control with a word swapped.
+
+   ─── 4. LANGUAGE & THEME ─────────────────────────────────────────────────
+   Every offset is logical (`padding-inline`, `inset-inline`, `border-*-end`),
+   so Farsi and English get the same layout mirrored, and each new surface has
+   a light-theme block at the bottom rather than a second design. All colour
+   still flows from `--bsw-accent` / `--bsw-accent-2` / `--bsw-ink`.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1 · the hero ─────────────────────────────────────────────────────── */
+.buy-sell-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin: 2px 0 14px;
+  padding: 15px 15px 13px;
+  border: 1px solid color-mix(in srgb, var(--rgb-4) 26%, var(--line));
+  border-start-start-radius: 24px;
+  border-start-end-radius: 24px;
+  border-end-start-radius: 24px;
+  border-end-end-radius: 14px;
+  background:
+    radial-gradient(120% 150% at 100% 0%, color-mix(in srgb, var(--rgb-1) 17%, transparent), transparent 60%),
+    radial-gradient(120% 150% at 0% 110%, color-mix(in srgb, var(--rgb-4) 14%, transparent), transparent 62%),
+    linear-gradient(150deg, color-mix(in srgb, var(--bg-panel-solid) 88%, #000), var(--bg-panel));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 26px 56px -40px rgba(0, 0, 0, 0.9);
+}
+
+.buy-sell-hero-field { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+.buy-sell-hero-bloom {
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  will-change: transform, opacity;
+}
+.buy-sell-hero-bloom--a {
+  inset-block-start: -110px;
+  inset-inline-end: -60px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--rgb-1) 42%, transparent), transparent 70%);
+  animation: bsx-drift 16s ease-in-out infinite;
+}
+.buy-sell-hero-bloom--b {
+  inset-block-end: -120px;
+  inset-inline-start: -70px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--rgb-4) 34%, transparent), transparent 72%);
+  animation: bsx-drift 19s ease-in-out infinite reverse;
+}
+@keyframes bsx-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.5; }
+  50% { transform: translate3d(-16px, 14px, 0) scale(1.14); opacity: 0.72; }
+}
+.buy-sell-hero-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.2;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 24px 24px;
+  -webkit-mask: radial-gradient(115% 100% at 100% 0%, #000, transparent 70%);
+  mask: radial-gradient(115% 100% at 100% 0%, #000, transparent 70%);
+}
+.buy-sell-hero-sheen {
+  position: absolute;
+  inset-inline: 10%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  opacity: 0.55;
+}
+
+.buy-sell-hero-top { display: flex; align-items: center; gap: 10px; }
+.buy-sell-hero-back {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-1);
+}
+.buy-sell-hero-back:hover { border-color: color-mix(in srgb, var(--rgb-1) 40%, var(--line)); }
+
+.buy-sell-page-mark {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 12px 24px -14px rgba(0, 255, 157, 0.75);
+}
+
+.buy-sell-hero-text { display: grid; gap: 1px; min-width: 0; flex: 1 1 auto; }
+.buy-sell-hero-kicker {
+  font: 800 8.5px/1.2 var(--font-mono);
+  letter-spacing: 0.16em;
+  color: color-mix(in srgb, var(--rgb-4) 70%, var(--text-2));
+}
+.buy-sell-hero-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(19px, 5.2vw, 23px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.28;
+  color: var(--text-1);
+}
+
+.buy-sell-page-intro { margin: 10px 0 0; color: var(--text-2); }
+
+.buy-sell-hero-trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 11px;
+}
+.buy-sell-hero-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--rgb-4) 22%, var(--line));
+  border-radius: 999px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  color: var(--text-2);
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.buy-sell-hero-chip svg { flex: 0 0 auto; color: var(--rgb-4); }
+
+/* ── 2 · the panel rhythm ─────────────────────────────────────────────── */
+.buy-sell-panel { gap: 14px; }
+
+/* ── 3 · the surface switch (general ⇄ Iranian) ───────────────────────── */
+.buy-sell-surface-switch {
+  gap: 10px;
+  padding: 7px;
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--rgb-4) 16%, var(--line));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 52%),
+    color-mix(in srgb, var(--bg-panel-solid) 80%, transparent);
+}
+
+.buy-sell-surface-switch > button {
+  min-height: 62px;
+  padding: 9px 11px;
+  border-radius: 15px;
+  gap: 9px;
+}
+
+.bsw-tab-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  flex: 0 0 38px;
+}
+
+.bsw-tab-copy b { font-size: 13px; }
+.bsw-tab-copy small { font-size: 9.5px; letter-spacing: 0.01em; }
+
+/* ── 3b · the direction switch (خرید ⇄ فروش) ──────────────────────────── */
+.buy-sell-switch {
+  gap: 9px;
+  padding: 6px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--bsw-accent) 20%, var(--line));
+  background: color-mix(in srgb, var(--bg-panel-solid) 78%, transparent);
+}
+
+.buy-sell-switch > button {
+  min-height: 52px;
+  gap: 7px;
+  border-radius: 13px;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.bsw-side-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  flex: 0 0 26px;
+}
+
+.buy-sell-switch > button.active .bsw-side-icon {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: transparent;
+  color: var(--bsw-ink);
+}
+
+/* ── 4 · the ticket ───────────────────────────────────────────────────── */
+.buy-sell-ticket {
+  border-radius: 24px;
+  border-color: color-mix(in srgb, var(--bsw-accent) 26%, var(--line));
+  background:
+    radial-gradient(120% 140% at 100% 0%, var(--bsw-accent-soft), transparent 58%),
+    linear-gradient(155deg, color-mix(in srgb, var(--bg-panel-solid) 92%, transparent), var(--bg-panel));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 30px 60px -44px rgba(0, 0, 0, 0.9);
+}
+
+.buy-sell-ticket-head {
+  padding: 15px 16px 13px;
+  gap: 11px;
+  border-bottom: 1px solid color-mix(in srgb, var(--bsw-accent) 16%, var(--line));
+  background:
+    radial-gradient(120% 160% at 100% 0%, color-mix(in srgb, var(--bsw-accent) 16%, transparent), transparent 62%);
+}
+
+.buy-sell-side-mark {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 14px;
+}
+
+.buy-sell-wizard { padding: 0 16px 16px; }
+
+/* ── the stepper, at a readable size ──────────────────────────────────── */
+.bsw-stepper { margin-top: 14px; }
+.bsw-stepper button { gap: 6px; padding: 4px 2px; }
+.bsw-stepper button > span {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 11.5px;
+}
+.bsw-stepper button > small { font-size: 10px; font-weight: 700; }
+.bsw-stepper li.active button > span { box-shadow: 0 0 0 4px color-mix(in srgb, var(--bsw-accent) 14%, transparent); }
+
+/* ── controls ─────────────────────────────────────────────────────────── */
+.bsw-amount { border-radius: 20px; }
+.bsw-amount input { padding: 18px 17px; }
+.bsw-chips { gap: 9px; margin-top: 13px; }
+.bsw-chips button { min-height: 40px; padding: 0 16px; font-size: 12px; border-radius: 13px; }
+.bsw-assets { gap: 10px; }
+.bsw-assets button { min-height: 68px; border-radius: 18px; }
+.bsw-title { font-size: 16px; margin-bottom: 14px; }
+.bsw-subtitle { margin: 16px 0 8px; font-size: 11.5px; }
+.bsw-hint { font-size: 11.5px; }
+.bsw-actions { margin-top: 16px; }
+.bsw-nav { gap: 10px; }
+.bsw-back { min-height: 52px; border-radius: 15px; }
+.bsw-next { min-height: 52px; border-radius: 15px; font-size: 14.5px; }
+
+/* ── the safety card at the foot of the page ─────────────────────────── */
+.buy-sell-safety { border-radius: 20px; }
+.buy-sell-safety-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--rgb-5) 30%, var(--line));
+  background: color-mix(in srgb, var(--rgb-5) 12%, transparent);
+}
+
+/* ── light theme: paper, not paint ────────────────────────────────────── */
+:root[data-theme='light'] .buy-sell-hero {
+  border-color: rgba(0, 150, 111, 0.2);
+  background:
+    radial-gradient(120% 150% at 100% 0%, rgba(0, 175, 214, 0.14), transparent 62%),
+    radial-gradient(120% 150% at 0% 110%, rgba(0, 169, 107, 0.12), transparent 64%),
+    linear-gradient(150deg, #ffffff, #f4f9ff);
+  box-shadow: inset 0 1px 0 #ffffff, 0 22px 44px -38px rgba(10, 40, 60, 0.5);
+}
+:root[data-theme='light'] .buy-sell-hero-grid {
+  opacity: 0.14;
+  background-image:
+    linear-gradient(to right, rgba(16, 32, 60, 0.1) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(16, 32, 60, 0.1) 1px, transparent 1px);
+}
+:root[data-theme='light'] .buy-sell-hero-kicker { color: #0a7a5e; }
+:root[data-theme='light'] .buy-sell-hero-back { background: #ffffff; border-color: rgba(16, 32, 60, 0.12); }
+:root[data-theme='light'] .buy-sell-hero-chip { background: rgba(255, 255, 255, 0.8); border-color: rgba(0, 150, 111, 0.22); color: #2a3d55; }
+:root[data-theme='light'] .buy-sell-hero-chip svg { color: #0a9a6c; }
+:root[data-theme='light'] .buy-sell-surface-switch { background: #ffffff; border-color: rgba(16, 32, 60, 0.12); }
+:root[data-theme='light'] .buy-sell-switch { background: #ffffff; border-color: rgba(16, 32, 60, 0.12); }
+:root[data-theme='light'] .buy-sell-ticket { background: linear-gradient(155deg, #ffffff, #f7faff); border-color: rgba(16, 32, 60, 0.1); }
+:root[data-theme='light'] .buy-sell-ticket-head { background: radial-gradient(120% 160% at 100% 0%, rgba(0, 175, 214, 0.1), transparent 64%); }
+
+/* ── motion & material guards ─────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .buy-sell-hero-bloom { animation: none !important; }
+}
+:root[data-native='true'] .buy-sell-hero-bloom,
+:root[data-lite='true'] .buy-sell-hero-bloom {
+  animation: none !important;
+  will-change: auto;
+}
+
+@media (max-width: 380px) {
+  .buy-sell-hero { padding: 13px 13px 12px; }
+  .buy-sell-hero-chip { font-size: 10px; min-height: 28px; padding: 0 9px; }
+  .buy-sell-surface-switch > button { min-height: 58px; }
+  .buy-sell-switch > button { min-height: 48px; font-size: 12.5px; }
+}

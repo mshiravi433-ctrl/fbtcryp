@@ -1,0 +1,39 @@
+/* ==========================================================================
+   TAB RAILS — the shared "too close together" fix
+   --------------------------------------------------------------------------
+   Imported by the two screens that render a `.seg-lg` strip as their primary
+   navigation — TabbedPage (the Explore hub) and P2P's own main tabs. It lives
+   in its own file, not in index.css, because index.css is the FIRST-PAINT
+   stylesheet and charges every route for every byte in it; this rule set is
+   needed by two lazy screens only.
+   ========================================================================== */
+/* Reported twice: «انتخاب تب‌ها خیلی بهم نزدیکه، فاصله درست کن و ریلی باشن».
+   A page tab strip with four or five labelled destinations cannot give each
+   one a 44px target on a 360px phone at `.segmented`'s 3px gutter — the cells
+   collapse to icon-and-a-stub. Above three items the strip becomes a scrolling
+   rail with a readable minimum per cell; at three or fewer it keeps filling the
+   width exactly as before, so nothing that looked right moves.
+   ========================================================================== */
+.seg-lg { gap: 6px; }
+
+.seg-lg:has(> button:nth-child(4)) {
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.seg-lg:has(> button:nth-child(4))::-webkit-scrollbar { width: 0; height: 0; }
+
+.seg-lg:has(> button:nth-child(4)) > button {
+  flex: 1 0 auto;
+  min-width: 108px;
+  scroll-snap-align: center;
+}
+
+@media (max-width: 380px) {
+  .seg-lg:has(> button:nth-child(4)) > button { min-width: 98px; }
+}

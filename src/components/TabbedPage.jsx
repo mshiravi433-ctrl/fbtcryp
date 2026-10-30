@@ -5,6 +5,7 @@ import PageTransition from './PageTransition';
 import SegIndicator from './SegIndicator';
 import { useTelegram } from '../context/TelegramContext';
 import { IconChevronLeft } from './Icons';
+import '../styles/tab-rail.css';
 
 /**
  * A page that hosts two or three existing screens as tabs.

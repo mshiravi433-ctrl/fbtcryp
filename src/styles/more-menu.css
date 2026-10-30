@@ -949,3 +949,19 @@
   .more-tile:hover .more-tile-chevron svg { transform: none; }
   [dir='rtl'] .more-tile:hover .more-tile-chevron svg { transform: scaleX(-1); }
 }
+
+/* ─── THE MACHINE BOX LIVES IN ITS OWN FILE ────────────────────────────────
+   The console header with the RGB spectrum is styled by
+   src/styles/more-machine.css, loaded with this sheet (MoreSheet.jsx imports
+   both through one cached promise).
+
+   WHY IT IS NOT IN THIS FILE: everything in THIS file is one-shot by design —
+   a regression test fails the build if any animation in here repeats forever,
+   because a perpetual sheen under a backdrop blur is the «لامپ‌زدن» this sheet
+   was rewritten to remove. The machine box is the one
+   deliberate exception: the owner asked for a moving RGB spectrum, and it is
+   built to a budget that makes a loop affordable (three gradient blooms and
+   one ring, transform/opacity only, unmounted when the sheet closes, stopped
+   on native/lite/reduced motion). Keeping that exception in its own file
+   keeps this guard meaningful instead of deleting it.
+   ────────────────────────────────────────────────────────────────────────── */

@@ -1,6 +1,11 @@
 {
   "orders.keeper.cancelFailed": "Não foi possível cancelar a ordem automática; ela continua aberta.",
   "nav": {
+    "machine": {
+      "title": "Máquina FBT",
+      "sub": "Sinais, smart money e execução — um console ao vivo",
+      "live": "Ao vivo"
+    },
     "market": "Mercado",
     "trade": "Negociar",
     "swap": "Trocar",

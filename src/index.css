@@ -16035,3 +16035,28 @@ button.settings-quick-action {
 
 /* Ecosystem network topology polish */
 .eco-network-flow{position:relative;height:92px;margin:-4px 0 4px;background:radial-gradient(circle at 50% 50%,color-mix(in srgb,var(--rgb-1) 14%,transparent),transparent 45%)}.eco-network-flow::before,.eco-network-flow::after{content:"";position:absolute;inset:50% 10% auto;height:1px;background:linear-gradient(90deg,transparent,var(--rgb-1),var(--rgb-2),transparent);opacity:.45}.eco-network-flow::after{transform:rotate(-18deg)}.eco-network-flow span{position:absolute;width:10px;height:10px;border-radius:50%;background:var(--rgb-1);box-shadow:0 0 15px var(--rgb-1);animation:eco-node 2.4s ease-in-out infinite}.eco-network-flow span:nth-child(1){left:10%;top:46%}.eco-network-flow span:nth-child(2){left:48%;top:44%;animation-delay:-.8s}.eco-network-flow span:nth-child(3){right:10%;top:46%;animation-delay:-1.6s}.eco-network-flow i{position:absolute;width:5px;height:5px;border-radius:50%;background:var(--rgb-2);animation:eco-packet 3.5s linear infinite}.eco-network-flow i:nth-of-type(1){top:48%;left:12%}.eco-network-flow i:nth-of-type(2){top:35%;left:24%;animation-delay:-1.2s}.eco-network-flow i:nth-of-type(3){top:61%;left:35%;animation-delay:-2.4s}.eco-flow-timeline{position:relative}.eco-flow-timeline::before{content:"";position:absolute;inset-block:20px;inset-inline-start:17px;width:1px;background:linear-gradient(var(--rgb-1),var(--rgb-2),transparent)}.eco-flow-step{position:relative;border-color:color-mix(in srgb,var(--rgb-1) 14%,var(--line));transition:transform .2s,border-color .2s}.eco-flow-step:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--rgb-1) 35%,var(--line))}.eco-filter-chip--active{box-shadow:0 6px 22px -16px var(--rgb-1)}@keyframes eco-node{50%{transform:scale(1.35);opacity:.65}}@keyframes eco-packet{to{left:88%;transform:translateY(-8px)}}@media(prefers-reduced-motion:reduce){.cmt-live span,.cmt-hero-orbit span,.eco-network-flow span,.eco-network-flow i{animation:none}}
+
+/* ==========================================================================
+   SWIPE-TO-CHANGE-TAB: the gesture zone
+   --------------------------------------------------------------------------
+   The shell listens for one horizontal drag (App.jsx → SwipeTabRoutes). Two
+   declarations make that gesture safe rather than greedy:
+
+     touch-action: pan-y   the browser keeps VERTICAL scrolling synchronous —
+                           no 300ms negotiation, no dropped frames, and a
+                           long market list still scrolls at native speed;
+     overscroll-behavior   a drag that keeps going at the end of a page must
+                           not turn into the browser's back-navigation swipe,
+                           which on Android Chrome would leave the app.
+
+   No transform, no filter, no will-change: the zone adds no layer.
+   ========================================================================== */
+.app-tab-swipe-zone {
+  touch-action: pan-y;
+  overscroll-behavior-x: contain;
+}
+
+
+/* `.seg-lg`'s rail behaviour lives in src/styles/tab-rail.css — it is needed by
+   the two lazy screens that use a `.seg-lg` strip as page navigation, so it
+   must not travel in the first-paint stylesheet. See that file. */

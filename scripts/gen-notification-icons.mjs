@@ -211,13 +211,40 @@ function render(size, mono) {
         // the halo around a cyan arc is cyan — not the (possibly absent)
         // mark colour of the same pixel.
         const pc = ramp(norm360(deg(Math.atan2((y + 0.5) / k - C.y, (x + 0.5) / k - C.x)) + 90) / 360);
+        /*
+         * ─── THE ORB (2026-10-30) ────────────────────────────────────────
+         * «لوگوی مدرن» — the colour icon used to be the glyph on flat FBT
+         * black. A notification row icon in 2026 reads as modern when it is
+         * an OBJECT, so the black is now a lit sphere behind the mark:
+         *
+         *   · a specular highlight at the top-left (the light source every
+         *     glass surface in this app already assumes),
+         *   · a hairline spectrum ring just inside the icon's edge, drawn
+         *     from the SAME neon ramp as the glyph, so the ring and the mark
+         *     can never disagree,
+         *   · a soft floor shadow at the bottom, which is what makes an orb
+         *     sit in the row instead of floating on it.
+         *
+         * All of it is analytic, per-pixel maths on the same supersampled
+         * grid — no image library, no extra bytes of dependency, and the
+         * MONOCHROME badge is deliberately untouched (Android silhouettes
+         * it, so any interior detail there would be thrown away).
+         */
+        const u = (x + 0.5) / size;
+        const v = (y + 0.5) / size;
+        const specular = Math.max(0, 1 - Math.hypot((u - 0.28) * 1.15, (v - 0.2) * 1.05) / 0.62);
+        const ringR = 0.455;
+        const ringD = Math.abs(Math.hypot(u - 0.5, v - 0.5) - ringR);
+        const ringGlow = ringD < 0.012 ? (1 - ringD / 0.012) * 0.55 : 0;
+        const floor = Math.max(0, (v - 0.62) / 0.38) * 0.55;
+        const orbLight = specular ** 2.2 * 0.20;
         // background + glow, then the mark composited over it
-        const br = BG[0] + pc[0] * g * 0.9;
-        const bgc = BG[1] + pc[1] * g * 0.9;
-        const bb = BG[2] + pc[2] * g * 0.9;
-        px[i] = Math.round(br + (mr - br) * alpha);
-        px[i + 1] = Math.round(bgc + (mg - bgc) * alpha);
-        px[i + 2] = Math.round(bb + (mb - bb) * alpha);
+        const br = BG[0] + pc[0] * g * 0.9 + pc[0] * ringGlow + 255 * orbLight - 10 * floor;
+        const bgc = BG[1] + pc[1] * g * 0.9 + pc[1] * ringGlow + 255 * orbLight - 6 * floor;
+        const bb = BG[2] + pc[2] * g * 0.9 + pc[2] * ringGlow + 255 * orbLight - 2 * floor;
+        px[i] = Math.round(Math.max(0, Math.min(255, br + (mr - br) * alpha)));
+        px[i + 1] = Math.round(Math.max(0, Math.min(255, bgc + (mg - bgc) * alpha)));
+        px[i + 2] = Math.round(Math.max(0, Math.min(255, bb + (mb - bb) * alpha)));
         px[i + 3] = 255;
       }
     }
