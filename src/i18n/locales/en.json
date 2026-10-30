@@ -96,6 +96,24 @@
     "trending": "Trending",
     "allCoins": "All coins",
     "search": "Search a coin…",
+    "aiSearch": "Smart market search",
+    "aiPlaceholder": "Ask the market… e.g. top gainers",
+    "aiHint": "Ask using live market data",
+    "aiSuggestions": "Smart search suggestions",
+    "aiBasedOnLive": "Based on live market data",
+    "aiApplied": {
+      "gainers": "Top gainers · 24h change",
+      "losers": "Biggest drops · 24h change",
+      "volume": "Highest trading volume · 24h",
+      "mcap": "Largest market cap",
+      "price": "Lowest nominal price"
+    },
+    "aiSuggestion": {
+      "gainers": "Show the top gainers",
+      "volume": "Coins with the highest volume",
+      "mcap": "Largest coins by market cap",
+      "losers": "Biggest drops today"
+    },
     "noResults": "Nothing matched your search",
     "filter": {
       "all": "All",

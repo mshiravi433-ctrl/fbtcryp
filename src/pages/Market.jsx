@@ -9,6 +9,7 @@ import {
   IconGlobe,
   IconRefresh,
   IconSearch,
+  IconSparkle,
   IconStar,
   IconX
 } from '../components/Icons';
@@ -23,6 +24,7 @@ import Sparkline from '../components/Sparkline';
 import TrendChart from '../components/TrendChart';
 import MarketStories from '../components/MarketStories';
 import '../styles/market-modern.css';
+import '../styles/market-ai-search.css';
 import { marketCapSeries } from '../lib/globalTrend';
 import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct, fmtUsd } from '../lib/format';
@@ -38,6 +40,7 @@ import { isSwappable, swapUrlFor } from '../lib/coinToSwap';
 import { venueRoute } from '../lib/coinVenue';
 import { rememberCoinVenues } from '../lib/coinVenues';
 import { useCoinVenues } from '../hooks/useCoinVenues';
+import { interpretMarketQuery, MARKET_INTENT_SUGGESTIONS } from '../lib/marketIntent';
 
 const FILTERS = ['all', 'gainers', 'losers', 'favorites', 'volume'];
 
@@ -237,6 +240,8 @@ export default function Market() {
    *   own stars rather than by a number we invented.
    */
   const [query, setQuery] = useState('');
+  const [smartIntent, setSmartIntent] = useState(null);
+  const [smartFiltersOpen, setSmartFiltersOpen] = useState(false);
   const [sortKey, setSortKey] = useState(DEFAULT_SORT.key);
   const [sortDir, setSortDir] = useState(DEFAULT_SORT.dir);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
@@ -267,12 +272,29 @@ export default function Market() {
    * visible in the chip row immediately because `activeView` is derived.
    */
   const chooseSort = useCallback((key) => {
+    setSmartIntent(null);
     setSortKey(key);
     setSortDir(key === 'rank' ? 'asc' : 'desc');
   }, []);
 
+  const applySmartSearch = useCallback((value) => {
+    const intent = interpretMarketQuery(value);
+    if (!intent) {
+      setSmartIntent(null);
+      return false;
+    }
+    setSmartIntent(intent);
+    setSortKey(intent.sortKey);
+    setSortDir(intent.sortDir);
+    setOnlyFavorites(false);
+    setSector(null);
+    setSmartFiltersOpen(false);
+    return true;
+  }, []);
+
   const applyView = useCallback((view) => {
     /* A view is a market-wide ordering, so it also leaves the sector lens. */
+    setSmartIntent(null);
     setSector(null);
     if (view === 'favorites') {
       setOnlyFavorites((on) => !on);
@@ -361,12 +383,14 @@ export default function Market() {
 
   const list = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const rows = q
+    // An interpreted natural-language request is an instruction to rank the
+    // live universe, not a literal coin-name substring to filter down to zero.
+    const rows = q && !smartIntent
       ? universe.filter((c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
       : universe;
     const starred = onlyFavorites ? rows.filter((c) => favorites.includes(c.id)) : rows;
     return sortMarketRows(starred, sortKey, sortDir);
-  }, [universe, query, onlyFavorites, favorites, sortKey, sortDir]);
+  }, [universe, query, smartIntent, onlyFavorites, favorites, sortKey, sortDir]);
 
   /*
    * Breadth is measured over the UNIVERSE, not over `list`: a search box with
@@ -479,10 +503,10 @@ export default function Market() {
   // Coins the search found that aren't in the loaded page. Shown separately so
   // it's obvious they came from a wider lookup, and tappable like any other.
   const extraHits = useMemo(() => {
-    if (!query.trim() || sector) return [];
+    if (!query.trim() || sector || smartIntent) return [];
     const have = new Set((list ?? []).map((c) => c.id));
     return (remoteHits ?? []).filter((c) => !have.has(c.id));
-  }, [remoteHits, list, query, sector]);
+  }, [remoteHits, list, query, sector, smartIntent]);
 
   /*
    * ONE STABLE SLICE FOR THE RAIL.
@@ -1081,31 +1105,82 @@ export default function Market() {
             Anchored in normal document flow: this block never becomes a
             floating overlay, so it can never cover a token row. */}
         <div className="market-cmd">
-          <div className="market-search">
-            <span className="market-search-ico" aria-hidden="true">
-              <IconSearch className="market-search-icon" width={15} height={15} />
-            </span>
-            <input
-              id="market-coin-search"
-              className="market-search-input"
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t('market.search')}
-              aria-label={t('market.searchAria')}
-              autoComplete="off"
-              enterKeyHint="search"
-              spellCheck="false"
-            />
-            {query && (
+          <div className="market-search-wrap">
+            <div className={`market-search market-search--smart${smartFiltersOpen ? ' is-open' : ''}`}>
+              <span className="market-search-ico" aria-hidden="true">
+                <IconSearch className="market-search-icon" width={15} height={15} />
+              </span>
+              <input
+                id="market-coin-search"
+                className="market-search-input"
+                type="search"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setSmartIntent(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') applySmartSearch(query);
+                  if (e.key === 'Escape') setSmartFiltersOpen(false);
+                }}
+                placeholder={t('market.aiPlaceholder', { defaultValue: 'از بازار بپرس… مثلاً پرسودترین ارزها' })}
+                aria-label={t('market.searchAria')}
+                autoComplete="off"
+                enterKeyHint="search"
+                spellCheck="false"
+              />
+              {query && (
+                <button
+                  type="button"
+                  className="market-search-clear"
+                  onClick={() => { setQuery(''); setSmartIntent(null); }}
+                  aria-label={t('market.clearSearch')}
+                >
+                  <IconX width={13} height={13} aria-hidden="true" />
+                </button>
+              )}
               <button
                 type="button"
-                className="market-search-clear"
-                onClick={() => setQuery('')}
-                aria-label={t('market.clearSearch')}
+                className="market-ai-trigger"
+                onClick={() => setSmartFiltersOpen((open) => !open)}
+                aria-label={t('market.aiSearch', { defaultValue: 'جستجوی هوشمند بازار' })}
+                aria-expanded={smartFiltersOpen}
+                aria-controls="market-ai-suggestions"
+                title={t('market.aiSearch', { defaultValue: 'جستجوی هوشمند بازار' })}
               >
-                <IconX width={13} height={13} aria-hidden="true" />
+                <IconSparkle width={18} height={18} aria-hidden="true" />
               </button>
+            </div>
+            {smartFiltersOpen && (
+              <div className="market-ai-suggestions" id="market-ai-suggestions" role="group" aria-label={t('market.aiSuggestions', { defaultValue: 'پیشنهادهای جستجوی هوشمند' })}>
+                <div className="market-ai-suggestions-head">
+                  <span className="market-ai-live-dot" aria-hidden="true" />
+                  <span>{t('market.aiHint', { defaultValue: 'از داده‌های زنده بازار سؤال کن' })}</span>
+                </div>
+                <div className="market-ai-suggestion-list">
+                  {MARKET_INTENT_SUGGESTIONS.map((suggestion) => (
+                    <button
+                      type="button"
+                      key={suggestion.key}
+                      className="market-ai-suggestion"
+                      onClick={() => {
+                        setQuery(suggestion.query);
+                        applySmartSearch(suggestion.query);
+                      }}
+                    >
+                      <IconSparkle width={13} height={13} aria-hidden="true" />
+                      <span>{t(`market.aiSuggestion.${suggestion.key}`, { defaultValue: suggestion.query })}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {smartIntent && (
+              <div className="market-ai-result" role="status" aria-live="polite">
+                <IconSparkle width={13} height={13} aria-hidden="true" />
+                <span>{t(`market.aiApplied.${smartIntent.key}`, { defaultValue: `رتبه‌بندی بر اساس ${smartIntent.key}` })}</span>
+                <span className="market-ai-result-note">{t('market.aiBasedOnLive', { defaultValue: 'بر پایه تغییرات واقعی ۲۴ ساعت' })}</span>
+              </div>
             )}
           </div>
 
