@@ -1,6 +1,6 @@
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { TelegramProvider } from './context/TelegramContext';
 import { WalletProvider } from './context/WalletContext';
@@ -363,6 +363,61 @@ function prefetchLikelyRoutes() {
  * Header and BottomNav themselves stay route-agnostic and never grow a
  * `/intent` special case.
  */
+const PRIMARY_SWIPE_TABS = ['/', '/swap', '/signals', '/intent', '/wallet'];
+
+/**
+ * Let a deliberate horizontal swipe move between the app's primary tabs from
+ * any route, while leaving charts, tab rails, forms and horizontal carousels
+ * in control of their own gestures. No gesture listeners are installed on
+ * individual pages and no animation work is added to the render loop.
+ */
+function SwipeTabRoutes() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const touchStart = useRef(null);
+
+  const onTouchStart = (event) => {
+    if (event.touches?.length !== 1) { touchStart.current = null; return; }
+    const target = event.target;
+    if (target?.closest?.('input, textarea, select, button, a, [role="tab"], [data-tab-swipe-ignore], canvas, video, .perp-rail, .news-mode-tabs, .smx-dock, .segmented, .market-sectors-rail, .ticker, .chart, .candle-chart')) {
+      touchStart.current = null;
+      return;
+    }
+    const scroller = target?.closest?.('[data-horizontal-scroll], [style*="overflow-x"], .horizontal-scroll');
+    if (scroller && scroller.scrollWidth > scroller.clientWidth + 4) {
+      touchStart.current = null;
+      return;
+    }
+    const touch = event.touches[0];
+    touchStart.current = { x: touch.clientX, y: touch.clientY, at: Date.now() };
+  };
+
+  const onTouchEnd = (event) => {
+    const start = touchStart.current;
+    touchStart.current = null;
+    if (!start || !event.changedTouches?.length) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 72 || Math.abs(dy) > 54 || Date.now() - start.at > 900) return;
+
+    let index = PRIMARY_SWIPE_TABS.indexOf(location.pathname);
+    if (index < 0) index = 0;
+    // A left swipe advances; a right swipe returns. Clamp rather than wrap so
+    // an accidental gesture never teleports from the last tab to the first.
+    const next = Math.max(0, Math.min(PRIMARY_SWIPE_TABS.length - 1, index + (dx < 0 ? 1 : -1)));
+    if (next !== index || !PRIMARY_SWIPE_TABS.includes(location.pathname)) {
+      navigate(PRIMARY_SWIPE_TABS[next]);
+    }
+  };
+
+  return (
+    <div className="app-tab-swipe-zone" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onTouchCancel={() => { touchStart.current = null; }}>
+      <AnimatedRoutes />
+    </div>
+  );
+}
+
 function AppChrome() {
   const { pathname } = useLocation();
   const headerless = pathname === '/intent' || pathname.startsWith('/pay');
@@ -392,7 +447,7 @@ function AppChrome() {
     <div className={`app-shell${headerless ? ' app-shell--headerless' : ''}${wide ? ' app-shell--wide' : ''}${pathname === '/shop' ? ' app-shell--shop' : ''}${dockActive ? ' app-shell--dock-active' : ''}`}>
       {!headerless && <Header />}
       <PullToRefresh>
-        <AnimatedRoutes />
+        <SwipeTabRoutes />
       </PullToRefresh>
       {/*
         The screenshot prompt. NOT a permanent bar any more (2026-09-24: «نه

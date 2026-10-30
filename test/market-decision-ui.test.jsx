@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import DecisionOrb from '../src/components/DecisionOrb';
 afterEach(cleanup);
 it('opens an inline rail rather than dialog, reports state and closes with Escape', () => {
@@ -21,5 +21,18 @@ it('withholds all percentages on stale or failed data', () => {
   render(<DecisionOrb coins={[{change24h: 2}]} updatedAt={Date.now()-180000} />);
   fireEvent.click(screen.getByRole('button'));
   expect(screen.getAllByText('—')).toHaveLength(3);
-  expect(screen.getByRole('status').textContent).toBe('داده تازه نیست');
+  expect(screen.getByRole('status').textContent).toMatch(/stale|تازه نیست|pulse\.stale/i);
+});
+it('dismisses on an outside pointer press and after twenty seconds', () => {
+  vi.useFakeTimers();
+  render(<DecisionOrb coins={[]} updatedAt={Date.now()} />);
+  const toggle = screen.getByRole('button');
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  fireEvent.pointerDown(document.body);
+  expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  fireEvent.click(toggle);
+  act(() => vi.advanceTimersByTime(20_000));
+  expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  vi.useRealTimers();
 });

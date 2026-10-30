@@ -392,11 +392,11 @@ export default function run() {
        memory trouble. The card says the window out loud and never fetches
        while collapsed. */
     const smTokenCode = strip(smCard);
-    t('Smart Money: the token card has no 1h/4h/7d rail (24h is the only window)',
+    t('Smart Money: the token card has no 1h/4h/7d rail and no server-load explanatory note',
       !/sm-token-window-tabs/.test(smTokenCode) && !/const WINDOWS = \['1h'/.test(smTokenCode)
       && /data-testid="sm-token-window-badge"/.test(smTokenCode)
-      && /data-testid="sm-token-window-note"/.test(smTokenCode)
-      && /sm\.tokenWindow24h/.test(smTokenCode));
+      && !/data-testid="sm-token-window-note"/.test(smTokenCode)
+      && !/sm\.tokenWindow24h/.test(smTokenCode));
     t('Smart Money: the token card asks for window=24h once, and only when open',
       /fetchToken\(chain, address, '24h', ctrl\.signal\)/.test(smTokenCode)
       && /if \(!address \|\| !open\) return undefined/.test(smTokenCode)

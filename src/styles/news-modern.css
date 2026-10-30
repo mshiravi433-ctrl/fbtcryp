@@ -266,3 +266,13 @@
   .news-page .news-story:hover, .calm-track:hover { transform: none; }
   .news-refresh.is-loading svg, .calm-refresh.is-loading svg, .calm-equalizer.is-active i { animation: none; }
 }
+
+/* A wider, more legible editorial rail: separated tap targets and enough
+   horizontal breathing room for translated labels instead of a cramped row. */
+.news-page .news-mode-tabs.segmented { gap: 8px; padding: 6px; margin-top: 14px; }
+.news-page .news-mode-tabs.segmented > button { flex-basis: 72px; min-width: 72px; min-height: 60px; border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.news-page .news-mode-tabs.segmented > button.active { border-color: color-mix(in srgb, var(--news-cyan) 35%, transparent); }
+@media (max-width: 380px) {
+  .news-page .news-mode-tabs.segmented { gap: 6px; }
+  .news-page .news-mode-tabs.segmented > button { flex-basis: 66px; min-width: 66px; }
+}

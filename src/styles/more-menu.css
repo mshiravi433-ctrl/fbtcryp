@@ -212,11 +212,14 @@
   z-index: 2;
   width: 42%;
   pointer-events: none;
+  /* One RGB prism pass on open: a short compositor-friendly translate, not
+     a perpetual glow loop. The app's spectrum tokens keep it theme-aware. */
   background: linear-gradient(100deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.05) 28%,
-    rgba(255, 255, 255, 0.14) 50%,
-    rgba(255, 255, 255, 0.04) 70%,
+    color-mix(in srgb, var(--rgb-1) 10%, transparent) 25%,
+    color-mix(in srgb, var(--rgb-2) 15%, transparent) 42%,
+    color-mix(in srgb, var(--rgb-3) 12%, transparent) 58%,
+    color-mix(in srgb, var(--rgb-4) 8%, transparent) 72%,
     transparent 100%);
   opacity: 0;
   transform: translate3d(-160%, 0, 0) skewX(-14deg);
@@ -813,9 +816,10 @@
 :root[data-theme='light'] .more-panel > .more-sweep {
   background: linear-gradient(100deg,
     transparent 0%,
-    color-mix(in srgb, var(--more-tint) 6%, transparent) 32%,
-    rgba(255, 255, 255, 0.55) 50%,
-    color-mix(in srgb, var(--more-tint) 6%, transparent) 68%,
+    color-mix(in srgb, var(--rgb-1) 6%, transparent) 28%,
+    rgba(255, 255, 255, 0.5) 44%,
+    color-mix(in srgb, var(--rgb-2) 8%, transparent) 62%,
+    color-mix(in srgb, var(--rgb-3) 5%, transparent) 74%,
     transparent 100%);
 }
 :root[data-theme='light'] .more-grabber {

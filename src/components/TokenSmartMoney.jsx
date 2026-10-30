@@ -245,9 +245,6 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
               )}
             </div>
             {basis === 'none' && <p className="smi-footnote" data-testid="sm-token-no-flow-data">{t('sm.flow.noData')}</p>}
-            <p className="smi-footnote" data-testid="sm-token-window-note">
-              {t('sm.tokenWindow24h')}
-            </p>
           </div>
 
           <div className="sm-metrics" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>

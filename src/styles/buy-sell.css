@@ -1227,3 +1227,18 @@
 :root[data-theme='light'] .buy-sell-ticket {
   box-shadow: 0 20px 50px -10px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.8);
 }
+
+/* Extra separation and a larger hit area for the buy/sell surface switch. */
+.buy-sell-surface-switch {
+  gap: 9px;
+  padding: 7px;
+  border-radius: 22px;
+}
+.buy-sell-surface-switch > button,
+.buy-sell-switch > button { min-height: 60px; }
+.buy-sell-switch { gap: 8px; padding: 6px; }
+@media (max-width: 370px) {
+  .buy-sell-surface-switch { gap: 6px; padding: 5px; }
+  .buy-sell-surface-switch > button,
+  .buy-sell-switch > button { min-height: 54px; }
+}
