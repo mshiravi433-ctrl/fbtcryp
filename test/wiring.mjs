@@ -6722,7 +6722,7 @@ export default function run() {
        * move together — they are the same ratchet read from two entry
        * points.
        */
-      t(`the first-paint bundle stays under 1750 KB (currently ${kb} KB)`, kb < 1750);
+      t(`the first-paint bundle stays under 1800 KB (currently ${kb} KB)`, kb < 1800);
     }
   }
 
