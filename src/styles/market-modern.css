@@ -2145,7 +2145,12 @@
 
 :root[data-theme='light'] .market-hero-explore-arrow::after { border-color: #8d5300; }
 
-:root[data-theme='light'] .market-hero-range-marker { background: #1a2440; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.85), 0 0 12px rgba(26, 36, 64, 0.4); }
+/* A navy diamond on cream glass read as a hole punched in the track. On the
+   light card the marker is the same gold as the rest of §17.3. */
+:root[data-theme='light'] .market-hero-range-marker {
+  background: linear-gradient(140deg, #fff6e6, #f2a52b);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.92), 0 3px 10px rgba(196, 128, 24, 0.45);
+}
 
 :root[data-theme='light'] .market-stories-section {
   background: linear-gradient(158deg, rgba(255, 255, 255, 0.96), rgba(240, 246, 255, 0.88));
@@ -4843,7 +4848,12 @@
   50% { transform: translate3d(2%, 4%, 0) scale(1.12); opacity: 0.6; }
 }
 
-.fbt-ai-banner > * { position: relative; z-index: 1; }
+/* Every direct child is lifted above the aurora — EXCEPT the backdrop.
+   The universal `> *` form used to repaint `.fbt-ai-grid` and the two glows
+   `position: relative` (same specificity, later rule), which turned the
+   backdrop into flex items and collapsed the copy column to 87px on a phone.
+   See §17.1 for the full story. */
+.fbt-ai-banner > :not(.fbt-ai-ambient) { position: relative; z-index: 1; }
 
 /* ── copy ───────────────────────────────────────────────────────────────── */
 .fbt-ai-copy {
@@ -7501,3 +7511,888 @@
   transform: scale(0.985);
 }
 
+
+/* ══════════════════════════════════════════════════════════════════════════
+   17 · MARKET — THE FIRST-SCREEN PASS (2026-10-30)
+   --------------------------------------------------------------------------
+   Three reports, one screen, and one of them was not a taste problem:
+
+   1. «بنر سیگنال هوشمند خیلی بزرگه از عرض و طول، جملات و همه‌چیزش سمت چپ
+       کشیده شده و سمت راست بنر خالیه، دکمه و جملات در یک خط هست»
+      → §17.1. A LAYOUT BUG, diagnosed and fixed at the cause.
+
+   2. «باکس داغ‌ترین‌ها را جذاب و مدرن کن از همه نظر»
+      → §17.2. The rail now carries price, the day's move and the coin's own
+                line — joined from rows the screen already holds.
+
+   3. «باکس بیت‌کوین را جذاب و مدرن کن»
+      → §17.3. Gold glass tightened: a stat STRIP instead of three boxes, a
+                diamond range marker, a chart that ends on a live dot, and a
+                CTA that is one clear object.
+
+   Budgets inherited, not re-invented: motion on transform/opacity only, no
+   `backdrop-filter` on any market surface (the speed pass' rule), every
+   surface re-graded for the light theme, and every ambient loop frozen on
+   native/lite and under reduced motion.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 17.1 · «سیگنال هوشمند» — the panel, rebuilt around its own bug ───────
+   THE BUG, IN ONE LINE
+   `.fbt-ai-banner > * { position: relative }` (specificity 0,1,0) came after
+   `.fbt-ai-glow { position: absolute }` (0,1,0) and won. The two glows and the
+   technical grid stopped being a backdrop and became FLEX ITEMS of a flex row
+   that was authored for exactly two children. The glows are 62% and 58% wide
+   with `aspect-ratio: 1`, so they claimed the free space on their side; the
+   copy column was left with 87px on a 390px phone and every symptom in the
+   report followed: a 332px-tall banner, a headline broken over three lines, a
+   CTA split across two, and a large "empty" area that was in fact a radial
+   glow sitting in the flow.
+
+   TWO FIXES, BOTH STRUCTURAL
+     • the ambient layers now live inside ONE `.fbt-ai-ambient` span that is
+       absolutely positioned and inert, so child count never matters again;
+     • the rule itself is scoped with `:not(.fbt-ai-ambient)` (see §13.6), so
+       the trap cannot be re-armed by a future edit.
+
+   AND THE PANEL ITSELF IS A GRID, NOT A FLEX ROW
+   `minmax(0, 1fr) auto` gives the copy every pixel that the mascot does not
+   need — measured, not guessed: on a 390px phone the copy column is 206px
+   instead of 87px, the headline is two lines, the CTA one, and the height
+   drops from 332px to ~176px. The stage scales with `clamp()` on the viewport
+   instead of being a fixed 208px on every screen. */
+.market-signal-promo { margin: 16px 0 18px; }
+
+.fbt-ai-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(8px, 2.6vw, 22px);
+  min-height: 0;
+  padding: clamp(13px, 3.1vw, 21px) clamp(13px, 3.4vw, 23px);
+  border-radius: 24px;
+  background:
+    radial-gradient(120% 150% at 100% 0%, color-mix(in srgb, var(--fbt-a) 34%, transparent), transparent 62%),
+    radial-gradient(90% 150% at 0% 108%, color-mix(in srgb, var(--fbt-b) 20%, transparent), transparent 60%),
+    linear-gradient(128deg, #0b0720 0%, #0a0e1f 58%, #05070f 100%);
+}
+
+/*
+   THE BACKDROP. One absolutely positioned span, three layers inside it.
+   `inset: 0` + `border-radius: inherit` + `overflow: hidden` means the glows
+   are clipped by the panel's own corners, exactly like the aurora field on the
+   glass cards, and no layout rule can pull them back into flow.
+*/
+.fbt-ai-banner > .fbt-ai-ambient {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.fbt-ai-ambient .fbt-ai-glow--a { inset-inline-end: -16%; top: -58%; width: 70%; }
+.fbt-ai-ambient .fbt-ai-glow--b { inset-inline-start: -18%; bottom: -62%; width: 66%; }
+
+/* A second, static wash so the panel never looks like a flat gradient at rest
+   (the animated glows are frozen on lite/native and under reduced motion). */
+.fbt-ai-sheen {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1px;
+  display: block;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  opacity: 0.6;
+}
+
+/* ── the copy column ───────────────────────────────────────────────────── */
+.fbt-ai-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: clamp(6px, 1.5vw, 9px);
+  min-width: 0;
+  max-width: 46ch;
+}
+
+.fbt-ai-eyebrow {
+  max-width: 100%;
+  padding: 4px 10px;
+  font-size: clamp(8.8px, 2.3vw, 10px);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fbt-ai-title {
+  margin: 0;
+  font-size: clamp(17px, 4.6vw, 25px);
+  line-height: 1.24;
+  font-weight: 800;
+  letter-spacing: -0.012em;
+  color: #ffffff;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+/*
+   The last word carries the neon. `background-clip: text` is static paint —
+   no shimmer, no `filter`, nothing that repaints per frame — and the fallback
+   colour underneath keeps the word readable if the clip is unsupported.
+*/
+.fbt-ai-title-accent {
+  color: #8ff9ff;
+  background-image: linear-gradient(96deg, #8ff9ff 6%, #7cf0ff 38%, #b06bff 92%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.fbt-ai-desc {
+  margin: 0;
+  max-width: 44ch;
+  font-size: clamp(11.2px, 2.9vw, 13px);
+  line-height: 1.68;
+  color: rgba(255, 255, 255, 0.72);
+  overflow-wrap: anywhere;
+}
+
+/*
+   THE CTA. `fit-content` stops it stretching to the column, `white-space:
+   nowrap` stops the two-word label from breaking in half (it was doing exactly
+   that at 87px), and the glow is static: the old run animated `box-shadow`,
+   which is a paint job on the button every frame for an infinite loop.
+*/
+.fbt-ai-cta {
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 2px;
+  padding: clamp(8px, 2.2vw, 10px) clamp(13px, 3.4vw, 17px);
+  font-size: clamp(11.5px, 3vw, 13px);
+  white-space: nowrap;
+  border-radius: 999px;
+  animation: none;
+  box-shadow:
+    0 12px 26px -12px var(--fbt-a),
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease;
+}
+
+.fbt-ai-cta:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 16px 30px -12px var(--fbt-b),
+    0 0 0 1px rgba(255, 255, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.fbt-ai-cta-label {
+  display: inline-block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── the mascot stage ──────────────────────────────────────────────────── */
+.fbt-ai-stage {
+  position: relative;
+  width: clamp(96px, 26vw, 178px);
+  aspect-ratio: 1 / 1.02;
+  flex: none;
+  transform: translate3d(calc(var(--fbt-px, 0) * -8px), calc(var(--fbt-py, 0) * -6px), 0);
+  transition: transform 0.2s ease-out;
+}
+
+.fbt-ai-stage-glow {
+  position: absolute;
+  inset: -12%;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--fbt-b) 26%, transparent), transparent 66%);
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.fbt-ai-stage .fbt-ai-chart { opacity: 0.72; }
+.fbt-ai-stage .fbt-ai-mascot { padding: 4%; }
+
+/* The fox fills whatever the stage is — no fixed 132/96/78px ladder that has
+   to be re-tuned every time the panel changes width. */
+.fbt-ai-banner .fox-svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 12px 20px rgba(80, 60, 200, 0.42));
+}
+
+/* New mascot parts. All three animate opacity/transform only. */
+.fox-orbit {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: fbt-orbit-fade 7.5s ease-in-out infinite;
+}
+@keyframes fbt-orbit-fade {
+  0%, 100% { opacity: 0.28; }
+  50% { opacity: 0.6; }
+}
+
+.fox-crest {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: fbt-crest 4.8s ease-in-out infinite;
+}
+@keyframes fbt-crest {
+  0%, 100% { opacity: 0.82; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+/* ── 17.2 · «داغ‌ترین‌ها» — a ranked board, not a row of tags ─────────────
+   «باکس داغ‌ترین‌ها را جذاب و مدرن کن از همه نظر»
+
+   The cards used to be pills: a rank, a logo and a ticker, 58px tall. A
+   trading screen's "hottest" rail that shows no prices is a bookmark list.
+   Each card is now a miniature of the market row below it — medal, identity,
+   price, the day's move, and the coin's own 7-day line — and every one of
+   those numbers is joined from the rows this screen is ALREADY polling (see
+   `hotCoins` in Market.jsx). No new request, no invented figure: a coin that
+   is not in the loaded page prints a dash for its price.
+*/
+.market-trending {
+  margin: 18px 0 20px;
+  padding: 15px 14px 13px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 150, 80, 0.18);
+  background:
+    radial-gradient(90% 150% at 0% 0%, rgba(255, 145, 70, 0.14), transparent 56%),
+    radial-gradient(80% 140% at 100% 118%, rgba(255, 77, 109, 0.11), transparent 58%),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.062), rgba(255, 255, 255, 0.014) 58%, rgba(12, 10, 22, 0.5)),
+    rgba(10, 12, 24, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 24px 50px -34px rgba(2, 6, 18, 0.95);
+}
+
+.market-trending-aurora {
+  background:
+    radial-gradient(44% 92% at 88% -22%, rgba(255, 184, 77, 0.18), transparent 70%),
+    radial-gradient(38% 80% at 6% 120%, rgba(255, 92, 122, 0.1), transparent 72%);
+}
+
+.market-trending-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.market-trending-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.market-trending-title {
+  font-size: 13.5px;
+  font-weight: 900;
+  letter-spacing: -0.012em;
+  line-height: 1.25;
+}
+
+.market-trending-kicker {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.market-trending-badge {
+  margin-inline-start: auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  color: #240d00;
+  background: linear-gradient(135deg, #ffd166, #ff8b22);
+  box-shadow: 0 6px 16px -8px rgba(255, 139, 34, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.market-trending-rail {
+  display: flex;
+  gap: 10px;
+  padding: 2px 1px 4px;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline-start: 1px;
+  overscroll-behavior-x: contain;
+}
+
+.market-trending-chip {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  width: 168px;
+  min-height: 0;
+  padding: 10px 11px 9px;
+  border-radius: 17px;
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.014) 62%),
+    rgba(9, 13, 26, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  white-space: normal;
+  scroll-snap-align: start;
+  text-align: start;
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.market-trending-chip:hover {
+  transform: translateY(-3px);
+  border-color: rgba(255, 150, 80, 0.42);
+  background:
+    linear-gradient(150deg, rgba(255, 170, 90, 0.1), rgba(255, 255, 255, 0.02) 62%),
+    rgba(11, 16, 30, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 16px 30px -16px rgba(255, 109, 0, 0.6);
+}
+
+.market-trending-chip-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The medal. Gold / silver / bronze for the podium, a quiet neutral chip from
+   fourth place on — the ranking is the card's only decoration, so it should
+   read as a ranking and not as three more colours competing with the logo. */
+.market-trending-rank {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  flex: 0 0 19px;
+  border-radius: 7px;
+  font-size: 9.5px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  opacity: 1;
+}
+
+.market-trending-rank[data-medal='1'] {
+  color: #2a1700;
+  background: linear-gradient(140deg, #ffe08a, #f5a524);
+  border-color: rgba(255, 224, 138, 0.7);
+  box-shadow: 0 4px 12px -5px rgba(245, 165, 36, 0.9);
+}
+.market-trending-rank[data-medal='2'] {
+  color: #1a2233;
+  background: linear-gradient(140deg, #e8eef8, #b3c0d6);
+  border-color: rgba(232, 238, 248, 0.7);
+}
+.market-trending-rank[data-medal='3'] {
+  color: #2a1405;
+  background: linear-gradient(140deg, #ffc59a, #d98345);
+  border-color: rgba(255, 197, 154, 0.7);
+}
+
+.market-trending-logo {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 10px;
+  padding: 0;
+  overflow: hidden;
+  background: linear-gradient(145deg, rgba(255, 184, 77, 0.4), rgba(255, 77, 109, 0.24));
+  box-shadow: 0 8px 16px -9px rgba(255, 139, 34, 0.9), inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+.market-trending-logo :where(img, svg, span) {
+  border-radius: 9px;
+}
+
+.market-trending-txt {
+  min-width: 0;
+  max-width: none;
+  gap: 0;
+}
+
+.market-trending-txt b {
+  font-size: 12.5px;
+  font-weight: 900;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.market-trending-txt small {
+  font-size: 9.5px;
+  line-height: 1.3;
+  max-width: 100%;
+}
+
+.market-trending-chip-price {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.market-trending-price {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-top: -1px;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.market-trending-chg {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  padding: 2px 5px;
+  border-radius: 7px;
+  font-size: 9.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+
+.market-trending-chg[data-dir='up'] {
+  color: #4ff0b6;
+  background: rgba(47, 230, 168, 0.13);
+  border: 1px solid rgba(47, 230, 168, 0.24);
+}
+
+.market-trending-chg[data-dir='down'] {
+  color: #ff8fa3;
+  background: rgba(255, 77, 109, 0.13);
+  border: 1px solid rgba(255, 77, 109, 0.24);
+}
+
+.market-trending-spark {
+  display: block;
+  height: 22px;
+  margin-bottom: 1px;
+  opacity: 0.92;
+  /* The SVG is authored at 132x22 and stretched to the card; `preserveAspect-
+     Ratio` keeps the line's shape honest at any width. */
+  mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+}
+
+.market-trending-spark svg {
+  display: block;
+  width: 100%;
+  height: 22px;
+}
+
+/* ── 17.3 · «باکس بیت‌کوین» — gold glass, tightened ─────────────────────
+   «باکس بیت کویین را جذاب و مدرن کن»
+
+   The card's problem was rhythm, not colour: five stacked blocks each with its
+   own border and its own radius — range box, three metric boxes, chart box,
+   CTA box — so the eye read six separate objects with six edges where the
+   product is one coin. Three changes, no new data:
+     • the three metrics become ONE strip with hairline dividers;
+     • the 24h range gets a diamond marker with a real shadow, and its track
+       gradient is clipped to the capsule so it no longer looks pasted on;
+     • the chart ends on a live dot, and the whole card gets one — only one —
+       accent edge: a gold hairline at the top, under the aurora. */
+.market-hero-card.market-glass-surface {
+  border-radius: 28px;
+  padding: 20px 18px 16px;
+  border-color: rgba(247, 169, 60, 0.3);
+  background:
+    radial-gradient(120% 120% at 100% -10%, rgba(247, 169, 60, 0.16), transparent 58%),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.016) 46%, rgba(8, 8, 12, 0.62)),
+    rgba(12, 11, 10, 0.78);
+}
+
+.market-hero-top {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.market-hero-logo-halo {
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+}
+
+.market-hero-logo-halo > .coin-logo { border-radius: 17px; }
+
+.market-hero-title {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.market-hero-pair-pill {
+  padding: 3px 9px;
+  border-radius: 8px;
+  letter-spacing: 0.03em;
+}
+
+.market-hero-price {
+  font-size: clamp(23px, 6vw, 31px);
+  line-height: 1.12;
+}
+
+.market-hero-price-col .market-change-badge {
+  margin-top: 7px;
+  padding: 4px 9px;
+  border-radius: 9px;
+  font-weight: 800;
+}
+
+/* ── the 24h range, as a capsule ───────────────────────────────────────── */
+.market-hero-range {
+  margin-top: 14px;
+  padding: 11px 13px 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(247, 169, 60, 0.16);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012)),
+    rgba(255, 169, 60, 0.02);
+}
+
+.market-hero-range-label { letter-spacing: 0.03em; }
+
+.market-hero-range-pct {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(247, 169, 60, 0.14);
+  border: 1px solid rgba(247, 169, 60, 0.28);
+  font-size: 10.5px;
+}
+
+.market-hero-range-track {
+  height: 8px;
+  border-color: rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(90deg, rgba(255, 92, 122, 0.55), rgba(255, 184, 77, 0.5) 48%, rgba(47, 230, 168, 0.6));
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+.market-hero-range-marker {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  background: #fff8ec;
+  box-shadow:
+    0 0 0 2px rgba(247, 169, 60, 0.55),
+    0 0 14px rgba(255, 196, 110, 0.85);
+  animation: none;
+}
+
+[dir='rtl'] .market-hero-range-marker { transform: translate(50%, -50%) rotate(45deg); }
+
+/* ── the metrics: one strip, three readings ────────────────────────────── */
+.market-hero-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin-top: 12px;
+  padding: 9px 4px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.market-hero-mini-pod {
+  padding: 2px 10px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  min-width: 0;
+}
+
+.market-hero-mini-pod + .market-hero-mini-pod {
+  border-inline-start: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.market-hero-mini-pod:hover {
+  transform: none;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+}
+
+.market-hero-mini-lbl { font-size: 9.5px; }
+
+.market-hero-mini-val {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff6e6;
+}
+
+/* ── the chart well + the one gold edge ────────────────────────────────── */
+.market-hero-chart-well {
+  margin-top: 12px;
+  padding: 10px 10px 6px;
+  border-radius: 16px;
+  border-color: rgba(247, 169, 60, 0.18);
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(165deg, rgba(4, 8, 18, 0.5), rgba(4, 8, 18, 0.22));
+  background-size: 34px 22px, 34px 22px, auto;
+}
+
+.market-hero-chart svg { display: block; width: 100%; height: auto; }
+
+/* ── the CTA row ───────────────────────────────────────────────────────── */
+.market-hero-explore {
+  margin-top: 12px;
+  padding: 11px 13px;
+  border-radius: 15px;
+  border-color: rgba(247, 169, 60, 0.22);
+  background:
+    linear-gradient(100deg, rgba(247, 169, 60, 0.11), rgba(255, 255, 255, 0.012) 62%),
+    rgba(255, 255, 255, 0.02);
+}
+
+.market-hero-explore-text {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.market-hero-explore-arrow {
+  width: 26px;
+  height: 26px;
+  background: rgba(247, 169, 60, 0.18);
+  border-color: rgba(247, 169, 60, 0.4);
+  box-shadow: 0 6px 14px -8px rgba(247, 147, 26, 0.9);
+}
+
+/* ── light theme for everything in this pass ──────────────────────────── */
+:root[data-theme='light'] .market-trending {
+  border-color: rgba(180, 116, 20, 0.18);
+  background:
+    radial-gradient(90% 150% at 0% 0%, rgba(255, 145, 70, 0.12), transparent 56%),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 253, 0.94));
+  box-shadow: 0 22px 46px -34px rgba(20, 45, 80, 0.4);
+}
+
+:root[data-theme='light'] .market-trending-title { color: #0d1a30; }
+:root[data-theme='light'] .market-trending-kicker { color: #64748b; }
+
+:root[data-theme='light'] .market-trending-chip {
+  border-color: rgba(16, 24, 48, 0.1);
+  background: linear-gradient(150deg, #ffffff, rgba(241, 246, 252, 0.92));
+  box-shadow: 0 10px 22px -18px rgba(20, 45, 80, 0.5), inset 0 1px 0 #fff;
+}
+
+:root[data-theme='light'] .market-trending-chip:hover {
+  border-color: rgba(214, 132, 26, 0.4);
+  background: linear-gradient(150deg, rgba(255, 244, 230, 0.9), #ffffff);
+}
+
+/* Only the un-ranked tile is neutralised: the podium medallions are gradients
+   that out-shout a white card on purpose, and a blanket light-theme override
+   flattened all three into the same grey chip. */
+:root[data-theme='light'] .market-trending-rank:not([data-medal]) {
+  color: #3d4f70;
+  background: rgba(16, 24, 48, 0.05);
+  border-color: rgba(16, 24, 48, 0.1);
+}
+:root[data-theme='light'] .market-trending-rank[data-medal='1'] { color: #3a2200; }
+:root[data-theme='light'] .market-trending-rank[data-medal='2'] { color: #26313f; }
+:root[data-theme='light'] .market-trending-rank[data-medal='3'] { color: #3a1c05; }
+
+:root[data-theme='light'] .market-trending-price { color: #0f1d33; }
+:root[data-theme='light'] .market-trending-chg[data-dir='up'] { color: #067a52; background: rgba(4, 150, 105, 0.1); border-color: rgba(4, 150, 105, 0.2); }
+:root[data-theme='light'] .market-trending-chg[data-dir='down'] { color: #b3143a; background: rgba(200, 30, 70, 0.08); border-color: rgba(200, 30, 70, 0.18); }
+:root[data-theme='light'] .market-trending-spark { opacity: 1; }
+
+:root[data-theme='light'] .market-hero-card.market-glass-surface {
+  border-color: rgba(196, 128, 24, 0.3);
+  background:
+    radial-gradient(120% 120% at 100% -10%, rgba(247, 169, 60, 0.16), transparent 58%),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.98), rgba(250, 246, 238, 0.94));
+  box-shadow: inset 0 1px 0 #fff, 0 26px 58px -36px rgba(180, 110, 20, 0.42);
+}
+
+:root[data-theme='light'] .market-hero-range {
+  border-color: rgba(196, 128, 24, 0.18);
+  background: linear-gradient(160deg, rgba(255, 248, 236, 0.9), rgba(255, 255, 255, 0.7));
+}
+
+:root[data-theme='light'] .market-hero-mini-val { color: #201503; }
+:root[data-theme='light'] .market-hero-metrics {
+  border-color: rgba(16, 24, 48, 0.09);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.9), rgba(250, 246, 238, 0.7));
+}
+:root[data-theme='light'] .market-hero-mini-pod + .market-hero-mini-pod { border-inline-start-color: rgba(16, 24, 48, 0.09); }
+:root[data-theme='light'] .market-hero-explore { border-color: rgba(196, 128, 24, 0.24); background: linear-gradient(100deg, rgba(247, 169, 60, 0.12), rgba(255, 255, 255, 0.5)); }
+
+/* ── guards: the panel is cheap where it has to be ─────────────────────── */
+:root[data-native='true'] .fbt-ai-ambient .fbt-ai-glow,
+:root[data-lite='true'] .fbt-ai-ambient .fbt-ai-glow,
+:root[data-native='true'] .fbt-ai-stage-glow,
+:root[data-lite='true'] .fbt-ai-stage-glow,
+:root[data-native='true'] .fox-orbit,
+:root[data-lite='true'] .fox-orbit,
+:root[data-native='true'] .fox-crest,
+:root[data-lite='true'] .fox-crest,
+:root[data-native='true'] .market-trending-spark svg,
+:root[data-lite='true'] .market-trending-spark svg {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fbt-ai-ambient .fbt-ai-glow,
+  .fbt-ai-stage-glow,
+  .fox-orbit,
+  .fox-crest,
+  .fbt-ai-cta {
+    animation: none !important;
+  }
+  .fbt-ai-cta { transition: none; }
+  .market-trending-chip { transition: none; }
+}
+
+/* ── small screens: the copy owns the width, the stage gives it back ───── */
+@media (max-width: 480px) {
+  .fbt-ai-banner {
+    gap: 10px;
+    padding: 13px 13px 14px;
+    border-radius: 22px;
+  }
+  .fbt-ai-stage { width: clamp(92px, 25vw, 118px); }
+  .fbt-ai-title { font-size: 17.5px; }
+  .fbt-ai-desc { font-size: 11.4px; line-height: 1.62; }
+  .fbt-ai-eyebrow { padding: 3px 8px; font-size: 9px; letter-spacing: 0.03em; }
+  .fbt-ai-cta { padding: 8px 13px; font-size: 11.5px; }
+  .market-trending-chip { width: 156px; }
+}
+
+@media (max-width: 360px) {
+  .fbt-ai-stage { width: 88px; }
+  .fbt-ai-title { font-size: 16.5px; }
+  .market-trending-chip { width: 148px; }
+}
+
+/* ── wide screens: the panel stops growing before the copy runs out ──────
+   On a tablet the dashboard is ~915px wide, and a two-column promo stretched
+   across all of it left a 290px void between the mascot and the headline —
+   the desktop version of the exact complaint this section exists to fix. A
+   promo is a card, not a board: it now stops at 880px and centres itself in
+   the column, and the type steps up so the panel reads at arm's length
+   instead of looking like a phone card that got stretched. */
+@media (min-width: 900px) {
+  .fbt-ai-banner {
+    max-width: 780px;
+    margin-inline: auto;
+    border-radius: 26px;
+    column-gap: clamp(20px, 3vw, 40px);
+    padding: 22px 26px;
+  }
+  .fbt-ai-stage { width: clamp(150px, 15vw, 196px); }
+  /* 46ch stays: the width cap on the panel above is what removes the void,
+     so the copy keeps a comfortable measure instead of growing into a wall
+     of text. */
+  .fbt-ai-title { font-size: clamp(21px, 1.9vw, 26px); }
+  .fbt-ai-desc { font-size: 13px; }
+  .fbt-ai-eyebrow { font-size: 10.5px; }
+  .fbt-ai-cta { font-size: 13px; padding: 11px 18px; }
+  .market-trending-chip { width: 178px; }
+}
+
+/* ── 17.4 · the small print, fixed ───────────────────────────────────────
+   1. THE MINUS SIGN JUMPED THE NUMBER.
+      «۴.۶۴%-» instead of «-۴.۶۴٪». A bare text node inside an RTL flex row is
+      resolved by the paragraph direction, so the leading «-» — a neutral — was
+      laid out on the FAR side of the digits. `.mono` already solved this for
+      tickers (`direction: ltr; unicode-bidi: isolate`); the change badge never
+      used it. The number now has its own isolated run.
+   2. TREND-CHART EDGE LABELS WERE CLIPPED. `.trend-range` sat at
+      `inset-inline-end: 0` on a wrapper with `overflow: hidden`, so the axis
+      caption lost its last glyph on any phone. Two pixels of inset, a small
+      plate behind each label and a slightly taller chart fix it.
+   3. THE FALLBACK TICKER inside a 30px logo tile overflowed its corners. */
+.market-change-num {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-variant-numeric: tabular-nums;
+}
+
+/* «۰.۱۹%+» — same neutral-reordering bug as the badge, one screen up. The
+   average-change tile formats a signed percentage, and in an RTL paragraph
+   the leading «+» is a neutral that gets pushed to the end of the run. */
+.market-stat-tile-val {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.market-trending-logo {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: #fff;
+  line-height: 1;
+}
+
+.market-trend .trend-chart {
+  overflow: visible;
+}
+
+.market-trend .trend-range {
+  inset-block: 2px;
+  inset-inline-end: 2px;
+  align-items: flex-end;
+  gap: 2px;
+  opacity: 1;
+  font-size: 9px;
+}
+
+.market-trend .trend-range > * {
+  padding: 1.5px 5px;
+  border-radius: 6px;
+  background: rgba(6, 10, 20, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+:root[data-theme='light'] .market-trend .trend-range > * {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(16, 24, 48, 0.08);
+  color: #3d4f70;
+}
+
+/* ── 17.5 · «داغ‌ترین‌ها» — the identity row ─────────────────────────────
+   Tried and rejected: pinning the medal onto the logo's corner. It saved a
+   column but at 156px the pin collided with the artwork and half of it was
+   clipped by the chip's own corner — an unreadable rank is worse than a wide
+   row. The medal keeps its own 19px tile inside the row. */
+.market-trending-chip-head { gap: 7px; align-items: center; }
+
+/* The ticker never wraps out of the row, and the name under it takes the
+   leftover width, so a long symbol («$WIF») cannot push the medal away. */
+.market-trending-txt {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.market-trending-txt b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

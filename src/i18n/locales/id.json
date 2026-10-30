@@ -312,7 +312,8 @@
     "emptyFavorites": "Belum ada koin favorit",
     "emptyFavoritesHelp": "Buka halaman koin lalu ketuk bintangnya untuk menambahkannya di sini; peringatan harga juga dikelola dari sana.",
     "showAll": "Tampilkan semua koin",
-    "refresh": "Segarkan harga"
+    "refresh": "Segarkan harga",
+    "trendingBasis": "Paling banyak dicari saat ini"
   },
   "coin": {
     "notFound": "Koin tidak ditemukan",

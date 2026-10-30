@@ -493,6 +493,60 @@ export default function Market() {
    */
   const railCoins = useMemo(() => (coins ?? []).slice(0, 18), [coins]);
 
+  /*
+   * ─── «داغ‌ترین‌ها» CARRIES NUMBERS, NOT JUST NAMES ───────────────────────
+   * `/api/trending` answers id + symbol + name + image + rank — a list of
+   * names with no price, no move and no shape, which is why the old rail read
+   * as a row of tags rather than as the hottest part of a trading screen.
+   *
+   * The screen is ALREADY polling 250 coins every 30 seconds, so every one of
+   * those names usually has a live row sitting in memory. Joining the two by
+   * id costs one Map lookup and no request, and it turns each chip into a real
+   * card: rank medal, price, 24h move and the coin's own sparkline.
+   *
+   * A trending coin that is NOT in the loaded page keeps `price: null` — the
+   * card then prints a dash instead of inventing a number. That distinction
+   * matters on a screen where every other digit is live.
+   */
+  const hotCoins = useMemo(() => {
+    if (!trending?.length) return [];
+    const byId = new Map((coins ?? []).map((c) => [c.id, c]));
+    return trending.slice(0, 8).map((t, i) => {
+      const live = byId.get(t.id);
+      const change = Number(live?.change24h);
+      return {
+        id: t.id,
+        symbol: t.symbol,
+        name: t.name,
+        image: live?.image ?? t.image,
+        place: i + 1,
+        price: Number.isFinite(live?.price) && live.price > 0 ? live.price : null,
+        change24h: Number.isFinite(change) ? change : null,
+        sparkline: Array.isArray(live?.sparkline) && live.sparkline.length > 1 ? live.sparkline : null
+      };
+    });
+  }, [trending, coins]);
+
+  /*
+   * ─── MICRO-CAP PRICES, READABLE ─────────────────────────────────────────
+   * `fmtPrice` switches to scientific notation below 0.00001, which is right
+   * for a dense table cell and wrong for a card whose whole job is to be read
+   * at a glance: «$9.983e-6» is not a price anybody reads, it is a number
+   * somebody decodes. Inside the hot rail a sub-cent price is printed as a
+   * short decimal instead, and the currency mark is taken from `fmtUsd` itself
+   * so a user who selected EUR never sees a dollar sign here.
+   */
+  const currencyMark = useMemo(() => fmtUsd(1).replace(/1(?:[.,]0+)?$/, ''), [vs]);
+  const hotPrice = useCallback((p) => {
+    if (p == null) return '—';
+    if (p > 0 && p < 0.0001) {
+      const decimals = Math.min(9, Math.max(4, -Math.floor(Math.log10(p)) + 2));
+      const text = p.toFixed(decimals).replace(/0+$/, '').replace(/\.$/, '');
+      return `${currencyMark}${text}`;
+    }
+    return fmtUsd(p);
+  }, [currencyMark]);
+
   const hero = coins?.[0];
   /*
    * The 7-day shape of the total, built from the rows already in memory —
@@ -601,7 +655,9 @@ export default function Market() {
             </div>
             <span className={`pill market-change-badge ${(global?.mcapChange ?? 0) >= 0 ? 'pill-up is-up' : 'pill-down is-down'}`}>
               <span className="market-change-arrow" aria-hidden="true">{(global?.mcapChange ?? 0) >= 0 ? '▲' : '▼'}</span>
-              {fmtPct(global?.mcapChange ?? 0, 2)}
+              {/* Isolated LTR run: without it the RTL paragraph moves the
+                  leading «-» to the far side of the number («4.64%-»). */}
+              <span className="market-change-num">{fmtPct(global?.mcapChange ?? 0, 2)}</span>
             </span>
           </div>
 
@@ -776,7 +832,7 @@ export default function Market() {
                 </div>
                 <span className={`pill market-change-badge ${hero.change24h >= 0 ? 'pill-up is-up' : 'pill-down is-down'}`}>
                   <span className="market-change-arrow" aria-hidden="true">{hero.change24h >= 0 ? '▲' : '▼'}</span>
-                  {fmtPct(hero.change24h)}
+                  <span className="market-change-num">{fmtPct(hero.change24h)}</span>
                 </span>
               </div>
             </div>
@@ -829,8 +885,23 @@ export default function Market() {
               </div>
             </div>
 
+            {/*
+              The line now ends on a MARKER at the live price. Six days of
+              shape with no point that says "this is now" made the reader work
+              out which end of the curve they were looking at — the dot is the
+              reading, the curve is the context. `strokeWidth` is nudged on the
+              hero only; the 60 rows in the list keep the thin, glow-free,
+              no-dot chart they need to stay cheap.
+            */}
             <div className="market-hero-chart market-hero-chart-well">
-              <Sparkline data={hero.sparkline ?? []} up={hero.change24h >= 0} width={470} height={64} strokeWidth={2.2} />
+              <Sparkline
+                data={hero.sparkline ?? []}
+                up={hero.change24h >= 0}
+                width={470}
+                height={64}
+                strokeWidth={2.2}
+                dot
+              />
             </div>
 
             {/* A `<span>`, never a `<button>`: this card is already one big tap
@@ -852,33 +923,67 @@ export default function Market() {
       <div className="market-signal-promo"><FBTAICinemaBanner /></div>
 
       {/* ---------- trending ---------- */}
-      {trending?.length > 0 && (
-        <section className="market-trending">
+      {hotCoins.length > 0 && (
+        <section className="market-trending" aria-labelledby="market-trending-title">
           <span className="market-trending-aurora" aria-hidden="true" />
-          <p className="section-label market-trending-head">
+          <div className="market-trending-head">
             <span className="market-trending-flame" aria-hidden="true">
               <FlameIcon size={21} />
             </span>
-            <span className="market-trending-title">{t('market.trending')}</span>
+            <span className="market-trending-heading">
+              <span className="market-trending-title" id="market-trending-title">{t('market.trending')}</span>
+              <span className="market-trending-kicker" aria-hidden="true">
+                {t('market.trendingBasis', { defaultValue: 'Most searched right now' })}
+              </span>
+            </span>
             <span className="market-trending-badge mono">HOT</span>
-          </p>
+          </div>
+          {/*
+            ─── WHY EACH CHIP HAS FOUR FACTS INSTEAD OF ONE ──────────────────
+            The old chip was a rank, a logo and a ticker — a bookmark, not a
+            market instrument. A ranked card is now: medal, identity, price,
+            the day's move, and the coin's own 7-day line (thinned server-side
+            to 48 points, so it is the same array the rows already carry).
+            Everything except the medal comes from the rows this screen is
+            already holding — see `hotCoins` above. Nothing here is fetched.
+          */}
           <div className="tag-scroll market-trending-rail">
-            {trending.map((c, i) => (
+            {hotCoins.map((c) => (
               <button
                 key={c.id}
                 type="button"
                 className="tag market-trending-chip"
                 onClick={() => navigate(`/coin/${c.id}`)}
+                aria-label={`${c.name} (${c.symbol}) — ${hotPrice(c.price)}${c.change24h == null ? '' : `, ${fmtPct(c.change24h, 1)}`}`}
               >
-                <span className="market-trending-rank mono">{i + 1}</span>
-                <span className="market-trending-logo">
-                  <CoinLogo coin={c} size="thumb" px={28} />
+                <span className="market-trending-chip-head">
+                  <span className="market-trending-rank mono" data-medal={c.place <= 3 ? c.place : undefined}>
+                    {c.place}
+                  </span>
+                  <span className="market-trending-logo">
+                    <CoinLogo coin={c} size="thumb" px={30} />
+                  </span>
+                  <span className="market-trending-txt">
+                    <b>{c.symbol}</b>
+                    <small>{c.name}</small>
+                  </span>
                 </span>
-                <span className="market-trending-txt">
-                  <b>{c.symbol}</b>
-                  <small>{c.name}</small>
+                {/* The price never shrinks and the pill never wraps: at 168px
+                    both fit side by side, and a clipped price («$165.3») is
+                    worse than a smaller one — it is a wrong number. */}
+                <span className="market-trending-chip-price">
+                  <span className="market-trending-price mono">{hotPrice(c.price)}</span>
+                  {c.change24h != null && (
+                    <span className="market-trending-chg mono" data-dir={c.change24h >= 0 ? 'up' : 'down'}>
+                      {fmtPct(c.change24h, 1)}
+                    </span>
+                  )}
                 </span>
-                <span className="market-trending-go" aria-hidden="true" />
+                <span className="market-trending-spark" aria-hidden="true">
+                  {c.sparkline
+                    ? <Sparkline data={c.sparkline} width={132} height={22} up={(c.change24h ?? 0) >= 0} strokeWidth={1.7} glow={false} animate={false} />
+                    : null}
+                </span>
               </button>
             ))}
           </div>

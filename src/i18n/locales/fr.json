@@ -312,7 +312,8 @@
     "emptyFavorites": "Aucune crypto en favori",
     "emptyFavoritesHelp": "Ouvrez la page d’une crypto et touchez son étoile pour l’ajouter ici ; les alertes se gèrent aussi depuis cette page.",
     "showAll": "Afficher toutes les cryptos",
-    "refresh": "Actualiser les prix"
+    "refresh": "Actualiser les prix",
+    "trendingBasis": "Les plus recherchés maintenant"
   },
   "coin": {
     "notFound": "Crypto introuvable",
