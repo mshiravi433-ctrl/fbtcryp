@@ -4303,7 +4303,6 @@
 .market-trending-chip { min-height:37px; padding:5px 11px; border:1px solid rgba(255,255,255,.09); border-radius:13px; background:rgba(255,255,255,.04); transition:transform .18s ease,border-color .18s ease,background .18s ease; }
 .market-trending-chip:hover { transform:translateY(-2px); border-color:rgba(255,180,90,.35); background:rgba(255,255,255,.075); }
 .market-signal-promo { margin:18px 0 20px; }
-.market-signal-promo .ad-banner { min-height:88px; border-radius:23px; padding:17px 18px !important; border-color:color-mix(in srgb,var(--ad-a) 38%,rgba(255,255,255,.14)); background:radial-gradient(95% 150% at 100% 0%,color-mix(in srgb,var(--ad-a) 19%,transparent),transparent 60%),linear-gradient(120deg,color-mix(in srgb,var(--ad-a) 12%,transparent),color-mix(in srgb,var(--ad-b) 8%,transparent)),var(--bg-panel); box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 18px 38px -26px var(--ad-a); }
 .market-hero-card.market-glass-surface { position:relative; overflow:hidden; }
 .market-hero-card.market-glass-surface::after { content:''; position:absolute; inset:0; pointer-events:none; opacity:.45; background:linear-gradient(112deg,transparent 15%,rgba(255,255,255,.045) 48%,transparent 72%); transform:translateX(-110%); animation:market-btc-sheen 9s ease-in-out infinite; }
 @keyframes market-btc-sheen { 0%,68% {transform:translateX(-110%)} 100% {transform:translateX(110%)} }
@@ -4738,116 +4737,451 @@
   -webkit-backdrop-filter: blur(6px);
 }
 
-/* ── 13.6 · SMART SIGNAL PROMO — cinematic AI banner ────────────────────── */
+/* ── 13.6 · FBT AI — LIVING INTELLIGENCE (cinematic mascot banner) ─────── */
 .market-signal-promo {
   position: relative;
   margin: 20px 0 22px;
 }
 
-.market-signal-promo .ad-banner {
+/*
+   THE BANNER IS A PHYSICAL OBJECT, NOT A ROW OF TEXT.
+   Two columns — copy on the reading side, the mascot on the far side — over
+   a deep, near-black field with volumetric neon washes. Everything is
+   token-driven from the `--fbt-*` neon pair the component seeds inline, so
+   the panel stays neon-on-dark in BOTH app themes; a premium promo panel that
+   re-themed to white in light mode would throw away the entire asset.
+
+   `contain: layout paint` keeps the particle/grid/glow layers out of the
+   page's layout and paint work, and the two `backdrop-filter` calls are the
+   only blur — dropped on native/lite further down where WebView blur is
+   expensive and janky.
+*/
+.fbt-ai-banner {
   position: relative;
-  min-height: 96px;
-  border-radius: 26px !important;
-  padding: 18px 18px !important;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  min-height: 176px;
+  border-radius: 28px;
+  padding: 20px 22px;
   overflow: hidden;
   isolation: isolate;
-  border: 1px solid color-mix(in srgb, var(--ad-a) 42%, rgba(255, 255, 255, 0.14));
+  color: rgba(255, 255, 255, 0.96);
+  border: 1px solid color-mix(in srgb, var(--fbt-a) 45%, rgba(255, 255, 255, 0.12));
   background:
-    radial-gradient(92% 160% at 100% 0%, color-mix(in srgb, var(--ad-a) 22%, transparent), transparent 62%),
-    radial-gradient(70% 130% at 0% 100%, color-mix(in srgb, var(--ad-b) 16%, transparent), transparent 60%),
-    linear-gradient(125deg, rgba(18, 12, 38, 0.92), rgba(10, 14, 30, 0.88));
+    radial-gradient(95% 165% at 100% 0%, color-mix(in srgb, var(--fbt-a) 30%, transparent), transparent 60%),
+    radial-gradient(75% 150% at 0% 105%, color-mix(in srgb, var(--fbt-b) 22%, transparent), transparent 58%),
+    linear-gradient(128deg, #0b0720 0%, #0a0e1f 58%, #05070f 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 24px 52px -30px var(--ad-a),
-    0 0 0 1px rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(22px) saturate(170%);
-  -webkit-backdrop-filter: blur(22px) saturate(170%);
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 0 60px -30px var(--fbt-a),
+    0 30px 64px -34px rgba(124, 77, 255, 0.75);
+  backdrop-filter: blur(18px) saturate(165%);
+  -webkit-backdrop-filter: blur(18px) saturate(165%);
+  contain: layout paint;
 }
 
-/* Rotating conic light — the AI "radar" behind the artwork. */
-.market-signal-promo .ad-banner::before {
-  content: '';
-  position: absolute;
-  z-index: 0;
-  top: -130%;
-  bottom: -130%;
-  inset-inline-end: -18%;
-  width: 62%;
-  border-radius: 50%;
-  opacity: 0.55;
-  filter: blur(14px);
-  pointer-events: none;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    color-mix(in srgb, var(--ad-a) 55%, transparent) 70deg,
-    transparent 150deg,
-    color-mix(in srgb, var(--ad-b) 50%, transparent) 240deg,
-    transparent 330deg
-  );
-  -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 70%);
-  mask-image: radial-gradient(circle, #000 0%, transparent 70%);
-  animation: mk-spin 17s linear infinite;
+/* Entrance — held invisible until the panel intersects, then one cinematic
+   rise. CSS only: framer-motion stays out of this component so the banner's
+   own IntersectionObserver (and its test mocks) never fight a motion wrapper. */
+.fbt-ai-banner:not(.is-entered) { opacity: 0; transform: translateY(18px); }
+.fbt-ai-banner.is-entered { animation: fbt-entrance 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+@keyframes fbt-entrance {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
 }
+/* Under the app's reduce-motion setting the panel is simply there. */
+.fbt-ai-banner[data-still='true'] { animation: none; opacity: 1; transform: none; }
 
-/* Faint technical grid so the panel reads as an instrument, not an advert. */
-.market-signal-promo .ad-banner::after {
-  content: '';
+/* Faint instrument grid, masked toward the mascot corner. */
+.fbt-ai-grid {
   position: absolute;
-  z-index: 0;
   inset: 0;
+  z-index: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
-  background-size: 30px 30px;
-  -webkit-mask-image: radial-gradient(120% 130% at 100% 0%, #000 8%, transparent 66%);
-  mask-image: radial-gradient(120% 130% at 100% 0%, #000 8%, transparent 66%);
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 34px 34px;
+  -webkit-mask-image: radial-gradient(125% 135% at 100% 0%, #000 6%, transparent 62%);
+  mask-image: radial-gradient(125% 135% at 100% 0%, #000 6%, transparent 62%);
 }
 
-.market-signal-promo .ad-banner > * { position: relative; z-index: 1; }
+/*
+   THE NEON WASHES ARE GRADIENTS, NOT BLURRED ELEMENTS.
+   A `filter: blur(44px)` over a full-bleed gradient forces a GPU re-raster of
+   the blur every frame it animates. A radial gradient whose stops fade to
+   transparent is the same soft glow for free — one static paint, animated
+   only in transform/opacity, both compositor-friendly.
+*/
+.fbt-ai-glow {
+  position: absolute;
+  z-index: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.fbt-ai-glow--a {
+  inset-inline-end: -10%;
+  top: -46%;
+  width: 62%;
+  aspect-ratio: 1;
+  background: radial-gradient(circle, color-mix(in srgb, var(--fbt-a) 78%, transparent) 0%, transparent 70%);
+  animation: fbt-glow-drift 13s ease-in-out infinite;
+}
+.fbt-ai-glow--b {
+  inset-inline-start: -14%;
+  bottom: -52%;
+  width: 58%;
+  aspect-ratio: 1;
+  background: radial-gradient(circle, color-mix(in srgb, var(--fbt-b) 70%, transparent) 0%, transparent 70%);
+  animation: fbt-glow-drift 16s ease-in-out infinite reverse;
+}
+@keyframes fbt-glow-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.42; }
+  50% { transform: translate3d(2%, 4%, 0) scale(1.12); opacity: 0.6; }
+}
 
-.market-signal-promo .ad-art {
-  width: 52px;
-  height: 52px;
-  flex: 0 0 52px;
-  border-radius: 18px;
+.fbt-ai-banner > * { position: relative; z-index: 1; }
+
+/* ── copy ───────────────────────────────────────────────────────────────── */
+.fbt-ai-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.fbt-ai-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--fbt-b) 88%, #ffffff);
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fbt-b) 12%, rgba(255, 255, 255, 0.04));
+  border: 1px solid color-mix(in srgb, var(--fbt-b) 32%, transparent);
+}
+
+.fbt-ai-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #00ff9d;
+  box-shadow: 0 0 10px 1px rgba(0, 255, 157, 0.8);
+  animation: fbt-live-pulse 2.2s ease-in-out infinite;
+}
+@keyframes fbt-live-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.7); opacity: 0.6; }
+}
+
+.fbt-ai-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  overflow-wrap: anywhere;
+}
+
+.fbt-ai-desc {
+  margin: 0;
+  max-width: 46ch;
+  font-family: var(--font-display);
+  font-size: 12.8px;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.74);
+  overflow-wrap: anywhere;
+}
+
+.fbt-ai-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--fbt-a), color-mix(in srgb, var(--fbt-b) 72%, var(--fbt-a)));
+  box-shadow:
+    0 14px 30px -12px var(--fbt-a),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  animation: fbt-cta-pulse 3.4s ease-in-out infinite;
+}
+.fbt-ai-cta:hover { filter: brightness(1.1); }
+.fbt-ai-cta:active { transform: scale(0.97); }
+.fbt-ai-cta:focus-visible { outline: 2px solid var(--fbt-b); outline-offset: 3px; }
+.fbt-ai-cta svg { color: rgba(255, 255, 255, 0.95); }
+/* In RTL the chevron should point into the reading direction. */
+[dir='rtl'] .fbt-ai-cta svg { transform: scaleX(-1); }
+@keyframes fbt-cta-pulse {
+  0%, 100% { box-shadow: 0 14px 30px -12px var(--fbt-a), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
+  50% { box-shadow: 0 14px 40px -6px var(--fbt-b), inset 0 1px 0 rgba(255, 255, 255, 0.45); }
+}
+
+/* ── mascot stage ────────────────────────────────────────────────────────── */
+.fbt-ai-stage {
+  position: relative;
+  flex: 0 0 auto;
+  width: 208px;
+  height: 180px;
+  /* pointer parallax, driven by the two JS-written custom properties */
+  transform: translate3d(calc(var(--fbt-px, 0) * -10px), calc(var(--fbt-py, 0) * -8px), 0);
+  transition: transform 0.2s ease-out;
+}
+
+.fbt-ai-chart {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.6;
+}
+.fbt-chart-line {
+  stroke-dasharray: 10 12;
+  animation: fbt-dash-travel 9s linear infinite;
+}
+.fbt-chart-line--2 { animation-duration: 12s; animation-direction: reverse; }
+.fbt-chart-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: fbt-ping 2.6s ease-out infinite;
+}
+.fbt-chart-dot { animation: fbt-ping 2.6s ease-out infinite; }
+@keyframes fbt-dash-travel { to { stroke-dashoffset: -132; } }
+@keyframes fbt-ping {
+  0% { transform: scale(0.7); opacity: 1; }
+  70%, 100% { transform: scale(2.1); opacity: 0; }
+}
+
+.fbt-ai-mascot {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
-  background:
-    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.18), transparent 58%),
-    linear-gradient(145deg, color-mix(in srgb, var(--ad-a) 22%, transparent), color-mix(in srgb, var(--ad-b) 14%, transparent));
-  border: 1px solid color-mix(in srgb, var(--ad-a) 36%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 12px 26px -12px var(--ad-a);
+  animation: fbt-float 6s ease-in-out infinite;
+  will-change: transform;
+}
+@keyframes fbt-float {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(0, -8px, 0) rotate(-0.6deg); }
 }
 
-/* Radar rings around the animated glyph. */
-.market-signal-promo .ad-art::before,
-.market-signal-promo .ad-art::after {
-  content: '';
+.fox-svg {
+  width: 132px;
+  height: 132px;
+  filter: drop-shadow(0 14px 22px rgba(124, 77, 255, 0.45));
+}
+
+/* Tap reaction — a quick inhale, separate from the continuous float so the
+   two never fight over the same transform. */
+.fbt-ai-banner.is-touched .fox-svg { animation: fbt-tap 0.75s ease-out; }
+@keyframes fbt-tap {
+  0% { transform: scale(1); }
+  28% { transform: scale(1.07) rotate(-1.5deg); }
+  60% { transform: scale(0.98); }
+  100% { transform: scale(1); }
+}
+
+.fox-core {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: fbt-core-pulse 4.5s ease-in-out infinite;
+}
+@keyframes fbt-core-pulse {
+  0%, 100% { opacity: 0.68; transform: scale(0.94); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+
+.fox-rings { transform-box: fill-box; transform-origin: center; }
+.fox-ring {
+  fill: none;
+  stroke: url(#fbtai-edge);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 9;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: fbt-spin 22s linear infinite, fbt-ring-fade 5.5s ease-in-out infinite;
+}
+.fox-ring--2 {
+  opacity: 0.5;
+  animation: fbt-spin 30s linear infinite reverse, fbt-ring-fade 7s ease-in-out infinite 1.2s;
+}
+@keyframes fbt-spin { to { transform: rotate(360deg); } }
+@keyframes fbt-ring-fade {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.65; }
+}
+
+.fox-fill { fill: url(#fbtai-glass); }
+.fox-fill-2 { fill: url(#fbtai-glass2); }
+.fox-face { fill: rgba(255, 255, 255, 0.05); }
+.fox-muzzle { fill: rgba(255, 255, 255, 0.14); }
+
+/* Ears sit under the skull; a slow independent twitch gives them life. */
+.fox-ear { transform-box: fill-box; transform-origin: 50% 100%; }
+.fox-ear--l { animation: fbt-ear 7.5s ease-in-out infinite; }
+.fox-ear--r { animation: fbt-ear 8.5s ease-in-out infinite 1.4s; }
+@keyframes fbt-ear {
+  0%, 88%, 100% { transform: rotate(0deg); }
+  92% { transform: rotate(-4deg); }
+  96% { transform: rotate(3deg); }
+}
+
+/* A rare, small blink — dignified, not cartoonish. */
+.fox-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: fbt-blink 6.4s ease-in-out infinite;
+}
+.fox-eye--r { animation-delay: 0.15s; }
+@keyframes fbt-blink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  93% { transform: scaleY(0.12); }
+  96% { transform: scaleY(1); }
+}
+.fox-eye-glow { animation: fbt-eye-glow 3.6s ease-in-out infinite; }
+.fox-eye--r .fox-eye-glow { animation-delay: 0.8s; }
+.fox-eye-hit { animation: fbt-eye-glow 3.6s ease-in-out infinite; }
+@keyframes fbt-eye-glow {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+/* Pupils track the pointer; CSS vars inherited from the banner. */
+.fox-pupil {
+  transform: translate3d(calc(var(--fbt-px, 0) * 3px), calc(var(--fbt-py, 0) * 3px), 0);
+  transition: transform 0.25s ease-out;
+}
+
+.fox-gem {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: fbt-gem 4s ease-in-out infinite;
+}
+@keyframes fbt-gem {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.85; }
+  50% { transform: scale(1.08) rotate(15deg); opacity: 1; }
+}
+
+/* Data streams orbiting the head. */
+.fox-stream {
+  stroke-dasharray: 2 10;
+  animation: fbt-dash-travel 6s linear infinite;
+}
+.fox-stream--2 { animation-duration: 9s; animation-direction: reverse; }
+
+/* Holographic dust — drifting motes around the mascot. */
+.fbt-ai-particles { position: absolute; inset: 0; pointer-events: none; }
+.fbt-ai-particle {
   position: absolute;
+  left: var(--px-x);
+  top: var(--px-y);
+  width: var(--px-s);
+  height: var(--px-s);
   border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--ad-a) 45%, transparent);
-  pointer-events: none;
+  background: radial-gradient(circle, color-mix(in srgb, var(--fbt-b) 90%, transparent) 0%, transparent 72%);
+  animation: fbt-particle var(--px-d) ease-in-out infinite;
+}
+@keyframes fbt-particle {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.18; }
+  50% { transform: translate3d(var(--px-tx), var(--px-ty), 0) scale(1.5); opacity: 0.95; }
 }
 
-.market-signal-promo .ad-art::before { inset: -7px; animation: mk-spin 11s linear infinite; border-style: dashed; }
-.market-signal-promo .ad-art::after { inset: -12px; opacity: 0.5; animation: mk-spin 16s linear infinite reverse; }
-
-.market-signal-promo .ad-cta {
-  padding: 8px 14px;
-  border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 900;
-  color: #fff;
-  background: linear-gradient(135deg, var(--ad-a), var(--ad-b));
-  border: 0;
-  box-shadow: 0 10px 24px -10px var(--ad-a), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+/* Hover wakes the field up a little: the dust drifts faster, the background
+   chart brightens, the eyes pulse quicker and the mascot's glow intensifies.
+   Scoped to devices with a real hover pointer — a touch device would otherwise
+   get a stuck `:hover` after a tap, and it already has the tap pulse above. */
+@media (hover: hover) {
+  .fbt-ai-banner:hover .fbt-ai-particle { animation-duration: calc(var(--px-d) * 0.55); }
+  .fbt-ai-banner:hover .fbt-ai-chart { opacity: 0.85; }
+  .fbt-ai-banner:hover .fox-svg { filter: drop-shadow(0 18px 30px rgba(0, 229, 255, 0.55)); }
+  .fbt-ai-banner:hover .fox-eye-glow { animation-duration: 2s; }
 }
 
-.market-signal-promo .ad-shine {
-  z-index: 2;
-  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.14) 50%, transparent 62%);
+/* ── pause everything while off-screen ───────────────────────────────────── */
+[data-visible='false'] .fbt-ai-glow,
+[data-visible='false'] .fbt-ai-mascot,
+[data-visible='false'] .fbt-ai-particle,
+[data-visible='false'] .fox-ring,
+[data-visible='false'] .fox-ear,
+[data-visible='false'] .fox-eye,
+[data-visible='false'] .fox-eye-glow,
+[data-visible='false'] .fox-eye-hit,
+[data-visible='false'] .fox-gem,
+[data-visible='false'] .fox-core,
+[data-visible='false'] .fox-stream,
+[data-visible='false'] .fbt-chart-line,
+[data-visible='false'] .fbt-chart-ring,
+[data-visible='false'] .fbt-chart-dot,
+[data-visible='false'] .fbt-ai-dot,
+[data-visible='false'] .fbt-ai-cta {
+  animation-play-state: paused;
+}
+
+/* ── freeze outright: native, reduced motion, or the app's own setting ──── */
+.fbt-ai-banner[data-still='true'] *,
+.fbt-ai-banner[data-still='true'] {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fbt-ai-banner,
+  .fbt-ai-banner * {
+    animation: none !important;
+  }
+  /* a panel that never intersects must not stay invisible */
+  .fbt-ai-banner { opacity: 1 !important; transform: none !important; }
+  .fbt-ai-stage { transform: none !important; }
+  .fox-pupil { transform: none !important; }
+  /* leave the shapes fully drawn rather than half-swept */
+  .fox-ring,
+  .fox-stream,
+  .fbt-chart-line { stroke-dasharray: none; }
+}
+
+/* ── responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .fbt-ai-banner {
+    min-height: 150px;
+    padding: 16px 16px;
+    gap: 14px;
+    border-radius: 24px;
+  }
+  .fbt-ai-title { font-size: 19px; }
+  .fbt-ai-desc { font-size: 12px; }
+  .fbt-ai-cta { padding: 9px 13px; font-size: 12.5px; }
+  .fbt-ai-stage { width: 132px; height: 120px; }
+  .fox-svg { width: 96px; height: 96px; }
+}
+
+@media (max-width: 400px) {
+  .fbt-ai-banner {
+    min-height: 132px;
+    padding: 13px 13px;
+    gap: 10px;
+    border-radius: 22px;
+  }
+  .fbt-ai-title { font-size: 16.5px; }
+  .fbt-ai-desc { font-size: 11.2px; max-width: 100%; }
+  .fbt-ai-stage { width: 104px; height: 100px; }
+  .fox-svg { width: 78px; height: 78px; }
+  .fbt-ai-particles .fbt-ai-particle:nth-child(n + 9) { display: none; }
 }
 
 /* ── 13.7 · TRENDING (داغ‌ترین‌ها) — premium hot rail ───────────────────── */
@@ -5641,23 +5975,17 @@
   border-color: rgba(194, 38, 107, 0.24);
 }
 
-:root[data-theme='light'] .market-signal-promo .ad-banner {
-  background:
-    radial-gradient(92% 160% at 100% 0%, color-mix(in srgb, var(--ad-ink, var(--ad-a)) 13%, transparent), transparent 62%),
-    linear-gradient(125deg, rgba(255, 255, 255, 0.98), rgba(243, 246, 253, 0.94));
-  border-color: color-mix(in srgb, var(--ad-ink, var(--ad-a)) 30%, rgba(16, 24, 48, 0.1));
-  box-shadow: 0 22px 46px -34px rgba(20, 45, 80, 0.45);
-}
-
-:root[data-theme='light'] .market-signal-promo .ad-art {
-  background:
-    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.6), transparent 58%),
-    linear-gradient(145deg, color-mix(in srgb, var(--ad-ink, var(--ad-a)) 14%, transparent), color-mix(in srgb, var(--ad-ink-b, var(--ad-b)) 10%, transparent));
-  border-color: color-mix(in srgb, var(--ad-ink, var(--ad-a)) 26%, transparent);
-}
-
-:root[data-theme='light'] .market-signal-promo .ad-cta {
-  color: #fff;
+/* The showcase is deliberately a dark panel in BOTH themes — it is the one
+   object on a light page that is allowed to stay cinematic, and re-theming it
+   to white would throw away the neon entirely. Light mode only lifts the field
+   and strengthens the border so it reads as an ink-black object rather than a
+   hole punched in the page. */
+:root[data-theme='light'] .fbt-ai-banner {
+  border-color: color-mix(in srgb, var(--fbt-a) 55%, rgba(255, 255, 255, 0.2));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 0 70px -28px var(--fbt-a),
+    0 34px 70px -34px rgba(124, 77, 255, 0.85);
 }
 
 :root[data-theme='light'] .market-trending {
@@ -5811,8 +6139,8 @@
 :root[data-lite='true'] .market-trending,
 :root[data-native='true'] .market-sort-popover,
 :root[data-lite='true'] .market-sort-popover,
-:root[data-native='true'] .market-signal-promo .ad-banner,
-:root[data-lite='true'] .market-signal-promo .ad-banner,
+:root[data-native='true'] .market-signal-promo .fbt-ai-banner,
+:root[data-lite='true'] .market-signal-promo .fbt-ai-banner,
 :root[data-native='true'] .market-global-kicker,
 :root[data-lite='true'] .market-global-kicker,
 :root[data-native='true'] .market-hero-pair-pill,
@@ -5837,8 +6165,8 @@
 :root[data-lite='true'] .market-breadth,
 :root[data-native='true'] .market-trending,
 :root[data-lite='true'] .market-trending,
-:root[data-native='true'] .market-signal-promo .ad-banner,
-:root[data-lite='true'] .market-signal-promo .ad-banner {
+:root[data-native='true'] .market-signal-promo .fbt-ai-banner,
+:root[data-lite='true'] .market-signal-promo .fbt-ai-banner {
   background: rgba(11, 16, 30, 0.97);
 }
 

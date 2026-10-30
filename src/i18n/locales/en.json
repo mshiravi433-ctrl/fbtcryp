@@ -4889,6 +4889,12 @@
       "cta": "Share"
     }
   },
+  "marketAiBanner": {
+    "eyebrow": "FBT AI · Market intelligence live",
+    "title": "See the market smarter!",
+    "desc": "Intelligent market analysis, opportunity discovery and trading signals with FBT AI",
+    "cta": "View signals"
+  },
   "p2p": {
     "title": "P2P",
     "subtitle": "Buy and sell bitcoin for local money with real escrow, or send crypto directly, person to person.",
