@@ -29,6 +29,7 @@ import SmartMoneyBanner from '../components/market/SmartMoneyBanner';
 import HotCoins from '../components/market/HotCoins';
 import '../styles/market-modern.css';
 import '../styles/market-intelligence.css';
+import '../styles/market-glass-v3.css';
 import { marketCapSeries } from '../lib/globalTrend';
 import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct } from '../lib/format';
@@ -45,6 +46,7 @@ import { venueRoute } from '../lib/coinVenue';
 import { rememberCoinVenues } from '../lib/coinVenues';
 import { useCoinVenues } from '../hooks/useCoinVenues';
 import { interpretMarketQuery } from '../lib/marketIntent';
+import { finiteOrNull, positiveOrNull } from '../lib/marketPresentation';
 
 const FILTERS = ['all', 'gainers', 'losers', 'favorites', 'volume'];
 
@@ -514,20 +516,24 @@ export default function Market() {
     const byId = new Map((coins ?? []).map((c) => [c.id, c]));
     return trending.slice(0, 8).map((t, i) => {
       const live = byId.get(t.id);
-      const change = Number(live?.change24h);
+      /* The trending feed's own quote is USD only: it fills a gap in the live
+         row for a USD reader, and is never shown beside another currency. */
+      const quote = vs === 'usd' ? t : null;
       return {
         id: t.id,
         symbol: t.symbol,
         name: t.name,
         image: live?.image ?? t.image,
         place: i + 1,
-        price: Number.isFinite(live?.price) && live.price > 0 ? live.price : null,
-        change24h: Number.isFinite(change) ? change : null,
-        volume: Number.isFinite(live?.volume) && live.volume > 0 ? live.volume : null,
+        price: positiveOrNull(live?.price) ?? positiveOrNull(quote?.price),
+        /* finiteOrNull, not Number(): Number(null) is 0, and a missing move
+           was being printed as a measured 0.00% with an up arrow. */
+        change24h: finiteOrNull(live?.change24h) ?? finiteOrNull(quote?.change24h),
+        volume: positiveOrNull(live?.volume),
         sparkline: Array.isArray(live?.sparkline) && live.sparkline.length > 1 ? live.sparkline : null
       };
     });
-  }, [trending, coins]);
+  }, [trending, coins, vs]);
 
   const [decisionOpen, setDecisionOpen] = useState(false);
   const bitcoin = useMemo(

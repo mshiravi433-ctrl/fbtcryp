@@ -772,14 +772,21 @@ export function getTrending() {
     backend: () => fetchJson(`${apiBase()}/trending`),
     direct: async () => {
       const raw = await fetchJson(`${PUBLIC_CG}/search/trending`);
-      return (raw.coins || []).slice(0, 10).map(({ item }) => ({
-        id: item.id,
-        symbol: (item.symbol || '').toUpperCase(),
-        name: item.name,
-        image: item.small,
-        rank: item.market_cap_rank,
-        score: item.score
-      }));
+      return (raw.coins || []).slice(0, 10).map(({ item }) => {
+        const data = item.data ?? {};
+        const price = Number(data.price);
+        const change = data.price_change_percentage_24h?.usd;
+        return {
+          id: item.id,
+          symbol: (item.symbol || '').toUpperCase(),
+          name: item.name,
+          image: item.small,
+          rank: item.market_cap_rank,
+          score: item.score,
+          price: Number.isFinite(price) && price > 0 ? price : null,
+          change24h: change != null && Number.isFinite(Number(change)) ? Number(change) : null
+        };
+      });
     },
     fallback: () => offlineTrending()
   });

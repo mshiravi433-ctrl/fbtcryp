@@ -113,7 +113,9 @@ export default function MarketSearch({
     <div className="mx-search-wrap" ref={wrapRef}>
       <div className={`mx-search${open ? ' is-open' : ''}`} data-typed={query ? 'true' : undefined}>
         <span className="mx-search-glow" aria-hidden="true" />
-        <IconSearch className="mx-search-icon" width={18} height={18} aria-hidden="true" />
+        <span className="mx-search-tile" aria-hidden="true">
+          <IconSearch className="mx-search-icon" width={16} height={16} aria-hidden="true" />
+        </span>
         <input
           ref={inputRef}
           id="market-coin-search"

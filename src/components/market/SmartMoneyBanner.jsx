@@ -24,6 +24,8 @@ function SmartMoneyBanner() {
         <span className="mx-smart-mark" aria-hidden="true">
           <GlyphSmartFlow width={24} height={24} />
           <i className="mx-smart-ring" />
+          <i className="mx-smart-ring is-2" />
+          <i className="mx-smart-radar" />
         </span>
         <div className="mx-smart-copy">
           <span className="mx-smart-eyebrow">{t('marketIntel.smartEyebrow')}</span>
@@ -50,6 +52,8 @@ function SmartMoneyBanner() {
             <circle className="mx-route-node is-end" cx="382" cy="44" r="5" />
           </svg>
           <span className="mx-route-traveller" />
+          <span className="mx-route-traveller is-2" />
+          <span className="mx-route-traveller is-3" />
         </div>
         <span className="mx-route-labels">
           <span>{t('marketIntel.flowWallet')}</span>

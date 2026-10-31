@@ -18,6 +18,38 @@ import {
 import { fmtCompact, fmtNum, fmtPct } from '../../lib/format.js';
 import { finiteOrNull, marketPrice, positiveOrNull } from '../../lib/marketPresentation.js';
 
+/* ─── THE HELIX ──────────────────────────────────────────────────────────
+   Two sine strands, a half-period out of phase, drawn once as SVG geometry.
+   The SVG is two loops wide and the stylesheet moves it by one loop, which is
+   eight sine periods, so the repeat is seamless and the motion is a single
+   translate. Phase lives in the path, not in per-frame maths. */
+const HELIX_H = 70;
+const HELIX_MID = HELIX_H / 2;
+const HELIX_AMP = 22;
+const HELIX_CYCLE = 100;
+const HELIX_LOOP = 800;
+function helixPath(sign) {
+  const parts = [];
+  for (let x = 0; x <= HELIX_LOOP * 2; x += 5) {
+    const y = HELIX_MID + sign * HELIX_AMP * Math.sin((2 * Math.PI * x) / HELIX_CYCLE);
+    parts.push(`${x === 0 ? 'M' : 'L'}${x} ${y.toFixed(2)}`);
+  }
+  return parts.join(' ');
+}
+const HELIX_A = helixPath(1);
+const HELIX_B = helixPath(-1);
+
+function HelixField() {
+  return (
+    <span className="mx-helix-field" aria-hidden="true">
+      <svg className="mx-helix-scroll" viewBox={`0 0 ${HELIX_LOOP * 2} ${HELIX_H}`} preserveAspectRatio="none" focusable="false">
+        <path className="mx-helix-strand" d={HELIX_A} />
+        <path className="mx-helix-strand is-b" d={HELIX_B} />
+      </svg>
+    </span>
+  );
+}
+
 /** Independent glass readings. Values and trend geometry come from the market
  * feed; decorative light never carries a simulated financial measurement. */
 
@@ -137,6 +169,25 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
   /* Turnover is volume ÷ market cap, both read from the feed: a real ratio, not
      a simulated "activity" score. Absent when either side is absent. */
   const turnover = mcap != null && volume != null && mcap > 0 ? (volume / mcap) * 100 : null;
+  /* Tone and weight of the showcase's centre line. Derived from the same
+     7-day change the trend is labelled with, never from a made-up pulse. */
+  const trendPct = finiteOrNull(trend?.changePct);
+  const trendDir = trendPct == null || trendPct >= 0 ? 'up' : 'down';
+  const midStrength = trendPct == null ? 0.25 : Math.min(1, Math.max(0.25, Math.abs(trendPct) / 3));
+
+  /* Bitcoin's 24h move in money as well as in percent. The previous price is
+     recovered from the feed's own price and percentage (p / (1 + c)), so it is
+     a consequence of two measured numbers, not a third source. */
+  const btcVolume = positiveOrNull(bitcoin?.volume);
+  const btcMcap = positiveOrNull(bitcoin?.mcap);
+  const btcDir = btcChange == null ? undefined : btcChange >= 0 ? 'up' : 'down';
+  const btcDelta = btcPrice != null && btcChange != null && 1 + btcChange / 100 > 0
+    ? btcPrice - btcPrice / (1 + btcChange / 100)
+    : null;
+  const signedMoney = (value) => {
+    if (value == null || value === 0) return '—';
+    return `${value > 0 ? '+' : '-'}${marketPrice(Math.abs(value), vs)}`;
+  };
 
   return (
     <section className="mx-overview" aria-label={t('marketIntel.overviewAria')} data-testid="market-overview">
@@ -194,7 +245,7 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
 
           {trend && (
             <div className="mx-global-trend" data-testid="global-market-trend">
-              <div className="mx-trend-plot">
+              <div className="mx-trend-plot" data-dir={trendDir} data-testid="market-trend-plot">
                 <span className="mx-trend-halo" aria-hidden="true" />
                 <MarketSparkline
                   points={trend.points}
@@ -210,6 +261,19 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
                   className="mx-trend-chart"
                 />
                 <span className="mx-trend-scan" aria-hidden="true" />
+                {/* The centre line of the showcase. Its tone is the sign of the
+                    move and its weight is the size of it (--mx-mid-strength),
+                    so a flat day reads faint and a large move reads loud. */}
+                <span
+                  className="mx-trend-mid"
+                  data-testid="market-trend-mid"
+                  data-dir={trendDir}
+                  aria-hidden="true"
+                  style={{ '--mx-mid-strength': midStrength.toFixed(2) }}
+                />
+                {/* Two phase-shifted strands travelling the same centre line:
+                    a double helix, drawn with transform only. */}
+                <HelixField />
               </div>
               <details className="mx-trend-method">
                 <summary>
@@ -299,7 +363,7 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
 
       {/* ─── ۳ · BITCOIN — its own glass card, centred ────────────────────── */}
       {bitcoin && (
-        <div className="mx-btc-card" data-testid="market-btc-hero-card" data-dir={btcChange == null ? undefined : btcChange >= 0 ? 'up' : 'down'}>
+        <div className="mx-btc-card" data-testid="market-btc-hero-card" data-dir={btcDir}>
           {/* The amber twin of the deck rim: one colour phase painted at rest,
               a second phase cross-faded over it by opacity alone. First light
               layer, so the veil bloom and the etched orbit stay above it. */}
@@ -318,11 +382,21 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
               </span>
               <span className="mx-btc-go" aria-hidden="true"><GlyphChevron width={13} height={13} /></span>
             </button>
-            <Change value={bitcoin.change24h} />
           </header>
 
           <div className="mx-btc-price">
             <AnimatedNumber value={btcPrice ?? 0} format={() => (btcPrice == null ? '—' : marketPrice(btcPrice, vs))} flash={false} />
+          </div>
+
+          {/* The move, twice over: the percentage as a tone-coloured pill and
+              the same move in money. Green when up, red when down. */}
+          <div className="mx-btc-delta" data-testid="market-btc-delta" data-dir={btcDir}>
+            <span className="mx-btc-pct mono">
+              {btcChange != null && (btcChange >= 0 ? <GlyphTrendUp width={12} height={12} aria-hidden="true" /> : <GlyphTrendDown width={12} height={12} aria-hidden="true" />)}
+              {fmtPct(btcChange, 2)}
+            </span>
+            <span className="mx-btc-abs mono" data-testid="market-btc-abs">{signedMoney(btcDelta)}</span>
+            <span className="mx-btc-period">{t('marketIntel.btcPeriod')}</span>
           </div>
 
           {Array.isArray(bitcoin.sparkline) && bitcoin.sparkline.length > 1 && (
@@ -343,6 +417,17 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
               <span className="mx-btc-scan" aria-hidden="true" />
             </div>
           )}
+
+          <dl className="mx-btc-stats" data-testid="market-btc-stats">
+            <div>
+              <dt>{t('market.volume24h')}</dt>
+              <dd className="mono">{btcVolume == null ? '—' : fmtCompact(btcVolume)}</dd>
+            </div>
+            <div>
+              <dt>{t('marketIntel.btcMcap')}</dt>
+              <dd className="mono">{btcMcap == null ? '—' : fmtCompact(btcMcap)}</dd>
+            </div>
+          </dl>
 
           {rangePosition != null && (
             <div className="mx-btc-range" data-testid="market-hero-range">

@@ -411,6 +411,17 @@ export async function fetchMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) 
   }
 }
 
+/** USD price and 24h move from a /search/trending item, or nulls when absent. */
+export function trendingUsdQuote(item) {
+  const data = item?.data ?? {};
+  const price = Number(data.price);
+  const change = Number(data.price_change_percentage_24h?.usd);
+  return {
+    price: Number.isFinite(price) && price > 0 ? price : null,
+    change24h: data.price_change_percentage_24h?.usd != null && Number.isFinite(change) ? change : null
+  };
+}
+
 export async function fetchTrending() {
   const raw = await cgReq(cgUrl('/search/trending'));
   return (raw.coins || []).slice(0, 10).map(({ item }) => ({
@@ -419,7 +430,10 @@ export async function fetchTrending() {
     name: item.name,
     image: item.small,
     rank: item.market_cap_rank,
-    score: item.score
+    score: item.score,
+    /* The feed's own USD quote, when it carries one. Null is kept as null: a
+       missing move must never be rendered as a measured 0%. */
+    ...trendingUsdQuote(item)
   }));
 }
 
