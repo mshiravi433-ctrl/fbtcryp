@@ -13616,8 +13616,13 @@ export default function run() {
       const navAt = more.indexOf('navigate(to)', goStart);
       return goStart > 0 && closeAt > 0 && navAt > closeAt;
     })());
+    /* The contract is "reduced motion means zero", not one specific duration:
+       the noir pass (2026-10-31) shortened the scrim fade from 0.16s to 0.12s
+       on the owner's «سرعت بازشدن پاپ‌آپ منو … سرعتش را بیشتر کن», and a pin on
+       the number would have failed the speed-up while the invariant held. The
+       ceiling is asserted in test/more-menu.test.jsx instead. */
     t('MoreSheet honours reduced motion on its backdrop',
-      /duration: still \? 0 : 0\.16/.test(more));
+      /duration: still \? 0 : 0\.\d+/.test(more));
 
     const nav = read('src/components/BottomNav.jsx');
     t('the More button toggles (re-tap closes, no double mounting)',

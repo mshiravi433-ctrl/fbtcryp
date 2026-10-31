@@ -5,10 +5,40 @@
    and a list of rows; everything else that used to live in here (eyebrow
    copy, a search field, per-chip counts, a footer sentence) was chrome
    competing with the content for a screen that fits eleven rows. That pass
-   removed the chrome. The liquid-glass pass changed the material. THIS pass
-   (the owner's «ایکون‌ها، رنگ‌بندی، شیشه‌ای و زاویه‌بندیِ خیلی خاص، با انیمیشن
-   و بدون لامپ‌زدن») changes the GEOMETRY and the COLOUR SYSTEM — and keeps
-   every compositor guard the previous two passes paid for.
+   removed the chrome. The liquid-glass pass changed the material. The prism
+   blade pass (the owner's «ایکون‌ها، رنگ‌بندی، شیشه‌ای و زاویه‌بندیِ خیلی خاص،
+   با انیمیشن و بدون لامپ‌زدن») changed the GEOMETRY and the COLOUR SYSTEM.
+
+   ─── THE NOIR PASS (2026-10-31) ────────────────────────────────────────────
+   The owner, on the fourth pass: «باکس موتور fbt را پاکش کن، رنگ‌بندی را بهتر
+   کن یعنی ته‌مایه‌های سیاهی در تم مشکی باشد با بنفش در نمای کلی، و در ماچین هم
+   یک نور rgb انیمیشنی باشد در کناره حرکت می‌کند، و سرعت بازشدن پاپ‌آپ منو را
+   بیشتر کن». Four things, and the geometry above is one of them:
+
+     · THE MACHINE BOX IS GONE. The console card between the header and the
+       filter rail («ماشین FBT», a live pill, one sentence, four shortcut chips
+       repeating rows already in the list) is removed — markup, stylesheet and
+       `nav.machine.*` in all twelve locales. The pane is a title, a rail and
+       the directory again, and it fits more of the directory for it.
+     · NOIR + VIOLET. The pane is no longer white glass over a grey panel: it
+       is built from three near-black stops (`--more-noir-1…3`) with the
+       category colour arriving as LIGHT on that black, plus one permanent
+       violet pool low in the pane so the sheet reads purple-on-black at rest
+       (`--rgb-2` now leads the rest tint in MoreSheet.jsx). The blade corner,
+       the specular rim, the diamond marks and the capsule are untouched — the
+       material got darker, the geometry did not change.
+     · THE RGB RIM. The spectrum the machine box used to churn inside itself
+       now travels the pane's own EDGE as one comet of light — see
+       src/styles/more-edge.css (and the note at the bottom of this file for
+       why the sheet's one loop is not in here).
+     · FASTER OPEN. Every duration in this file that delays the sheet being
+       readable is shorter: the sweep 0.9s → 0.58s with no delay, the scroll
+       fade 0.22s → 0.16s, the row cascade 0.38s → 0.26s with a 22ms → 13ms
+       stagger. The panel's spring and the scrim live in MoreSheet.jsx and were
+       tuned in the same pass; the compositor rules below did not change, so
+       the speed is free rather than bought with frames.
+
+   Everything the previous passes paid for stays paid for.
 
    ─── 1. THE BLADE: one geometry, repeated ──────────────────────────────────
    The sheet used to be a stack of plain rounded rectangles. Rounded
@@ -102,20 +132,39 @@
   border-end-start-radius: 30px;
   border-end-end-radius: var(--more-cut);
   color: var(--text-1);
+  /* ─── THE NOIR BASE (2026-10-31) ─────────────────────────────────────────
+     «ته‌مایه‌های سیاهی در تم مشکی باشد با بنفش در نمای کلی». The pane used to
+     be white glass at 62% over `--bg-panel-solid` (#0a0c12) — on a busy screen
+     that reads as a GREY box with a cyan wash, not as black. It is now built
+     from the bottom up as a violet-black: three near-black stops (the top one
+     carrying the faintest violet, the bottom one effectively #000) and the
+     category colour arriving as light ON that black rather than as the fill
+     itself. The permanent violet pool low in the pane is what makes the sheet
+     read purple at rest even when a category lends it another hue.
+     These three tokens are the sheet's own — deliberately NOT `--bg-*`, so a
+     global surface change cannot wash the black back out of this pane. */
+  --more-noir-1: #100a1c;
+  --more-noir-2: #07050e;
+  --more-noir-3: #010103;
   background:
-    linear-gradient(158deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.06) 34%, rgba(255, 255, 255, 0.022) 68%, rgba(255, 255, 255, 0.05)),
-    radial-gradient(120% 85% at 100% 0%, color-mix(in srgb, var(--more-tint) 21%, transparent), transparent 62%),
-    radial-gradient(110% 78% at 0% 100%, color-mix(in srgb, var(--more-tint-2) 17%, transparent), transparent 68%),
-    color-mix(in srgb, var(--bg-panel-solid) 62%, transparent);
-  backdrop-filter: blur(30px) saturate(185%) brightness(1.06);
-  -webkit-backdrop-filter: blur(30px) saturate(185%) brightness(1.06);
+    linear-gradient(158deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.04) 34%, rgba(255, 255, 255, 0.014) 68%, rgba(255, 255, 255, 0.035)),
+    radial-gradient(120% 85% at 100% 0%, color-mix(in srgb, var(--more-tint) 22%, transparent), transparent 62%),
+    radial-gradient(110% 78% at 0% 100%, color-mix(in srgb, var(--more-tint-2) 18%, transparent), transparent 68%),
+    radial-gradient(120% 70% at 50% 116%, color-mix(in srgb, var(--rgb-2) 34%, transparent), transparent 72%),
+    linear-gradient(168deg,
+      color-mix(in srgb, var(--more-noir-1) 92%, transparent),
+      color-mix(in srgb, var(--more-noir-2) 94%, transparent) 52%,
+      color-mix(in srgb, var(--more-noir-3) 96%, transparent));
+  backdrop-filter: blur(30px) saturate(185%) brightness(0.92);
+  -webkit-backdrop-filter: blur(30px) saturate(185%) brightness(0.92);
   box-shadow:
-    0 48px 110px -32px rgba(0, 0, 0, 0.85),
-    0 18px 44px -18px rgba(0, 0, 0, 0.6),
+    0 48px 110px -32px rgba(0, 0, 0, 0.92),
+    0 18px 44px -18px rgba(0, 0, 0, 0.7),
     0 0 90px -30px color-mix(in srgb, var(--more-tint) 45%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    0 0 60px -34px color-mix(in srgb, var(--rgb-2) 60%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 0 0 1px rgba(124, 77, 255, 0.07);
   outline: none;
   overscroll-behavior: contain;
 }
@@ -135,15 +184,20 @@
   inset: 0;
   z-index: 0;
   border-radius: inherit;
+  /* The rake is dimmer and cooler than it was: on a violet-black pane a 13%
+     white rake reads as a grey film, so the top light is now a thin violet-
+     white edge and the ceiling glow is violet rather than white. The two
+     category pools and the glint at the cut corner stay — they are the part
+     that changes with the rail. */
   background:
     linear-gradient(125deg,
-      rgba(255, 255, 255, 0.13) 0%,
-      rgba(255, 255, 255, 0.05) 15%,
+      rgba(214, 194, 255, 0.1) 0%,
+      rgba(160, 130, 255, 0.045) 15%,
       transparent 31%),
-    radial-gradient(72% 46% at 50% -8%, rgba(255, 255, 255, 0.16), transparent 64%),
-    radial-gradient(46% 30% at 92% 4%, color-mix(in srgb, var(--more-tint) 17%, transparent), transparent 72%),
-    radial-gradient(52% 34% at 4% 98%, color-mix(in srgb, var(--more-tint-2) 13%, transparent), transparent 72%),
-    radial-gradient(26% 20% at 100% 100%, color-mix(in srgb, var(--more-tint) 16%, transparent), transparent 74%);
+    radial-gradient(72% 46% at 50% -8%, color-mix(in srgb, var(--rgb-2) 26%, transparent), transparent 64%),
+    radial-gradient(46% 30% at 92% 4%, color-mix(in srgb, var(--more-tint) 20%, transparent), transparent 72%),
+    radial-gradient(52% 34% at 4% 98%, color-mix(in srgb, var(--more-tint-2) 15%, transparent), transparent 72%),
+    radial-gradient(26% 20% at 100% 100%, color-mix(in srgb, var(--more-tint) 18%, transparent), transparent 74%);
   pointer-events: none;
 }
 /* The rake is a light source, and a light source in a RTL sheet sits on the
@@ -152,13 +206,13 @@
 [dir='rtl'] .more-panel::before {
   background:
     linear-gradient(235deg,
-      rgba(255, 255, 255, 0.13) 0%,
-      rgba(255, 255, 255, 0.05) 15%,
+      rgba(214, 194, 255, 0.1) 0%,
+      rgba(160, 130, 255, 0.045) 15%,
       transparent 31%),
-    radial-gradient(72% 46% at 50% -8%, rgba(255, 255, 255, 0.16), transparent 64%),
-    radial-gradient(46% 30% at 8% 4%, color-mix(in srgb, var(--more-tint) 17%, transparent), transparent 72%),
-    radial-gradient(52% 34% at 96% 98%, color-mix(in srgb, var(--more-tint-2) 13%, transparent), transparent 72%),
-    radial-gradient(26% 20% at 0% 100%, color-mix(in srgb, var(--more-tint) 16%, transparent), transparent 74%);
+    radial-gradient(72% 46% at 50% -8%, color-mix(in srgb, var(--rgb-2) 26%, transparent), transparent 64%),
+    radial-gradient(46% 30% at 8% 4%, color-mix(in srgb, var(--more-tint) 20%, transparent), transparent 72%),
+    radial-gradient(52% 34% at 96% 98%, color-mix(in srgb, var(--more-tint-2) 15%, transparent), transparent 72%),
+    radial-gradient(26% 20% at 0% 100%, color-mix(in srgb, var(--more-tint) 18%, transparent), transparent 74%);
 }
 
 /* Specular edge: a 1px gradient ring, bright at the top where the light
@@ -223,7 +277,9 @@
     transparent 100%);
   opacity: 0;
   transform: translate3d(-160%, 0, 0) skewX(-14deg);
-  animation: more-sweep 0.9s cubic-bezier(0.3, 0.9, 0.35, 1) 0.05s 1 both;
+  /* 0.9s → 0.58s and no 50ms delay (2026-10-31): the sweep is a hello, not a
+     title sequence. Still one iteration, still `both`, still transform-only. */
+  animation: more-sweep 0.58s cubic-bezier(0.3, 0.9, 0.35, 1) 0s 1 both;
 }
 @keyframes more-sweep {
   from { opacity: 0; transform: translate3d(-160%, 0, 0) skewX(-14deg); }
@@ -426,7 +482,7 @@
   -webkit-overflow-scrolling: touch;
   -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 14px, #000 calc(100% - 18px), transparent 100%);
   mask-image: linear-gradient(180deg, transparent 0, #000 14px, #000 calc(100% - 18px), transparent 100%);
-  animation: more-fade-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: more-fade-in 0.16s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .more-scroll::-webkit-scrollbar { width: 4px; }
 .more-scroll::-webkit-scrollbar-thumb {
@@ -498,18 +554,22 @@
   display: grid;
   gap: 2px;
   padding: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.075);
   border-start-start-radius: 21px;
   border-start-end-radius: 21px;
   border-end-start-radius: 21px;
   border-end-end-radius: 8px;
+  /* The slab sits ON the noir pane, so its glass is a violet-black wash rather
+     than white-on-grey: it separates from the pane by being a shade lighter at
+     the top and by its hairline, not by being a lighter colour overall. */
   background: linear-gradient(168deg,
-    rgba(255, 255, 255, 0.075),
-    rgba(255, 255, 255, 0.03) 45%,
-    rgba(255, 255, 255, 0.015));
+    rgba(255, 255, 255, 0.055),
+    rgba(124, 77, 255, 0.045) 45%,
+    rgba(0, 0, 0, 0.22));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.09),
-    0 14px 34px -22px rgba(0, 0, 0, 0.8);
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 1px rgba(124, 77, 255, 0.05),
+    0 14px 34px -22px rgba(0, 0, 0, 0.9);
 }
 
 .more-tile {
@@ -532,8 +592,8 @@
      go of transform and :active can take it over; the start state still
      applies through each row's delay. Delay is per-row-within-group, so
      the longest wait is ~10 rows in, never 25. */
-  animation: more-tile-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) backwards;
-  animation-delay: calc(var(--more-i, 0) * 22ms);
+  animation: more-tile-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--more-i, 0) * 13ms);
 }
 .more-list[data-still='true'] .more-tile { animation: none; }
 
@@ -758,9 +818,10 @@
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .more-panel {
     background:
-      radial-gradient(120% 85% at 100% 0%, color-mix(in srgb, var(--more-tint) 14%, transparent), transparent 62%),
-      radial-gradient(110% 78% at 0% 100%, color-mix(in srgb, var(--more-tint-2) 10%, transparent), transparent 68%),
-      var(--bg-panel-solid);
+      radial-gradient(120% 85% at 100% 0%, color-mix(in srgb, var(--more-tint) 18%, transparent), transparent 62%),
+      radial-gradient(110% 78% at 0% 100%, color-mix(in srgb, var(--more-tint-2) 13%, transparent), transparent 68%),
+      radial-gradient(120% 70% at 50% 116%, color-mix(in srgb, var(--rgb-2) 28%, transparent), transparent 72%),
+      linear-gradient(168deg, var(--more-noir-1), var(--more-noir-2) 52%, var(--more-noir-3));
   }
 }
 
@@ -910,11 +971,14 @@
 :root[data-native='true'] .more-panel {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  /* Same noir build as the web pane, only fully opaque: without a live blur
+     there is nothing to refract, so the black has to come from the fill. */
   background:
-    linear-gradient(158deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04) 40%, rgba(255, 255, 255, 0.02) 70%, rgba(255, 255, 255, 0.04)),
-    radial-gradient(120% 85% at 100% 0%, color-mix(in srgb, var(--more-tint) 17%, transparent), transparent 62%),
-    radial-gradient(110% 78% at 0% 100%, color-mix(in srgb, var(--more-tint-2) 12%, transparent), transparent 68%),
-    color-mix(in srgb, var(--bg-panel-solid) 94%, transparent);
+    linear-gradient(158deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03) 40%, rgba(255, 255, 255, 0.015) 70%, rgba(255, 255, 255, 0.03)),
+    radial-gradient(120% 85% at 100% 0%, color-mix(in srgb, var(--more-tint) 20%, transparent), transparent 62%),
+    radial-gradient(110% 78% at 0% 100%, color-mix(in srgb, var(--more-tint-2) 15%, transparent), transparent 68%),
+    radial-gradient(120% 70% at 50% 116%, color-mix(in srgb, var(--rgb-2) 30%, transparent), transparent 72%),
+    linear-gradient(168deg, var(--more-noir-1), var(--more-noir-2) 52%, var(--more-noir-3));
 }
 :root[data-theme='light'][data-native='true'] .more-panel {
   background:
@@ -950,18 +1014,21 @@
   [dir='rtl'] .more-tile:hover .more-tile-chevron svg { transform: scaleX(-1); }
 }
 
-/* ─── THE MACHINE BOX LIVES IN ITS OWN FILE ────────────────────────────────
-   The console header with the RGB spectrum is styled by
-   src/styles/more-machine.css, loaded with this sheet (MoreSheet.jsx imports
+/* ─── THE RGB EDGE LIGHT LIVES IN ITS OWN FILE ─────────────────────────────
+   The comet of spectrum that travels around the pane's rim is styled by
+   src/styles/more-edge.css, loaded with this sheet (MoreSheet.jsx imports
    both through one cached promise).
 
    WHY IT IS NOT IN THIS FILE: everything in THIS file is one-shot by design —
    a regression test fails the build if any animation in here repeats forever,
    because a perpetual sheen under a backdrop blur is the «لامپ‌زدن» this sheet
-   was rewritten to remove. The machine box is the one
-   deliberate exception: the owner asked for a moving RGB spectrum, and it is
-   built to a budget that makes a loop affordable (three gradient blooms and
-   one ring, transform/opacity only, unmounted when the sheet closes, stopped
-   on native/lite/reduced motion). Keeping that exception in its own file
-   keeps this guard meaningful instead of deleting it.
+   was rewritten to remove. The rim light is the one deliberate exception: the
+   owner asked for a moving RGB light along the edge («در ماچین هم یک نور rgb
+   انیمیشنی باشد در کناره حرکت می‌کند»), and it is built to a budget that makes
+   ONE loop affordable — a single masked ring and a single rotating conic
+   square, transform-only, unmounted when the sheet closes, frozen (not
+   hidden) on native/lite/reduced motion. It replaced the machine box's four
+   looping layers, so the sheet now runs one loop instead of four while
+   looking like more. Keeping that exception in its own file keeps this guard
+   meaningful instead of deleting it.
    ────────────────────────────────────────────────────────────────────────── */
