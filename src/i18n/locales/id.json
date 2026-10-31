@@ -318,7 +318,16 @@
     "emptyFavoritesHelp": "Buka halaman koin lalu ketuk bintangnya untuk menambahkannya di sini; peringatan harga juga dikelola dari sana.",
     "showAll": "Tampilkan semua koin",
     "refresh": "Segarkan harga",
-    "trendingBasis": "Paling banyak dicari saat ini"
+    "trendingBasis": "Paling banyak dicari saat ini",
+    "sector": {
+      "gold": "Emas",
+      "meme": "Memecoin",
+      "rwa": "Aset nyata",
+      "ai": "AI",
+      "gaming": "Gaming",
+      "solana": "Solana"
+    },
+    "showMore": "Tampilkan lagi ({{count}} tersisa)"
   },
   "coin": {
     "notFound": "Koin tidak ditemukan",
@@ -4014,5 +4023,26 @@
       "lessonsCount": "{{n}} pelajaran di level ini",
       "pathsNote": "Video dihosting di Aparat; kualitas pemutaran bergantung pada koneksi Anda."
     }
+  },
+  "marketIntel": {
+    "deckEyebrow": "Tampilan pasar langsung",
+    "allCoinsTitle": "Semua koin",
+    "sectorsTitle": "Sektor",
+    "railLabel": "Etalase pasar",
+    "railTools": "Alat pasar",
+    "flowWallet": "Dompet",
+    "flowRouter": "Rute",
+    "flowTarget": "Tujuan",
+    "smartLive": "Aliran langsung",
+    "pool": {
+      "whales": "Paus",
+      "institutions": "Institusi",
+      "newPools": "Pool baru"
+    },
+    "statCoins": "Koin",
+    "statMarkets": "Pasar",
+    "statAvg": "Perubahan rata-rata",
+    "listCollapse": "Ciutkan daftar",
+    "listExpand": "Bentangkan daftar"
   }
 }

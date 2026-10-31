@@ -318,7 +318,16 @@
     "emptyFavoritesHelp": "Ouvrez la page d’une crypto et touchez son étoile pour l’ajouter ici ; les alertes se gèrent aussi depuis cette page.",
     "showAll": "Afficher toutes les cryptos",
     "refresh": "Actualiser les prix",
-    "trendingBasis": "Les plus recherchés maintenant"
+    "trendingBasis": "Les plus recherchés maintenant",
+    "sector": {
+      "gold": "Or",
+      "meme": "Memecoins",
+      "rwa": "Actifs réels",
+      "ai": "IA",
+      "gaming": "Gaming",
+      "solana": "Solana"
+    },
+    "showMore": "Voir plus ({{count}} restants)"
   },
   "coin": {
     "notFound": "Crypto introuvable",
@@ -4016,5 +4025,26 @@
       "lessonsCount": "{{n}} leçons à ce niveau",
       "pathsNote": "Les vidéos sont hébergées sur Aparat ; la qualité dépend de votre connexion."
     }
+  },
+  "marketIntel": {
+    "deckEyebrow": "Vue du marché en direct",
+    "allCoinsTitle": "Toutes les cryptos",
+    "sectorsTitle": "Secteurs",
+    "railLabel": "Vitrine du marché",
+    "railTools": "Outils",
+    "flowWallet": "Portefeuille",
+    "flowRouter": "Routeur",
+    "flowTarget": "Destination",
+    "smartLive": "Flux en direct",
+    "pool": {
+      "whales": "Baleines",
+      "institutions": "Institutions",
+      "newPools": "Nouveaux pools"
+    },
+    "statCoins": "Cryptos",
+    "statMarkets": "Marchés",
+    "statAvg": "Variation moyenne",
+    "listCollapse": "Replier la liste",
+    "listExpand": "Déplier la liste"
   }
 }

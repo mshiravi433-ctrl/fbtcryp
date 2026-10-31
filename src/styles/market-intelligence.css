@@ -201,7 +201,6 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--mx-up) 16%, transparent);
 }
 
-.mx-deck-grid { display: grid; grid-template-columns: minmax(0, 1fr); }
 .mx-global, .mx-btc { padding: 14px 16px 16px; min-width: 0; }
 .mx-btc {
   border-top: 1px solid var(--mx-line-soft);
@@ -328,27 +327,10 @@
 .mx-trend-method summary::-webkit-details-marker { display: none; }
 .mx-trend-method p { margin: 7px 0 0; color: var(--mx-muted); font-size: 10.5px; line-height: 1.65; }
 
-.mx-global-foot {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 8px;
-  margin-top: 12px;
-  padding-top: 11px;
-  border-top: 1px solid var(--mx-line-soft);
-}
-.mx-foot-stat {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--mx-line-soft);
-  background: rgba(255, 255, 255, 0.022);
-  color: var(--mx-muted);
-  font-size: 10.5px;
-}
-.mx-foot-stat b { color: var(--mx-text); font-weight: 700; }
-.mx-foot-icon { display: inline-flex; color: var(--mx-faint); }
+/* §9.2 retired the deck's footer: the three counts it used to repeat are the
+   `.mx-trio` boxes now (coins · markets · average change), with real marks and
+   their own accents. Leaving the pill recipe here would let a future edit put
+   the footnote back beside the readings that replaced it. */
 
 /* ── the Bitcoin half ───────────────────────────────────────────────────── */
 .mx-btc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -1390,7 +1372,6 @@
 
 @media (min-width: 860px) {
   .mx-market { --mx-gap: 16px; }
-  .mx-deck-grid { grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); }
   .mx-btc { border-top: 0; border-inline-start: 1px solid var(--mx-line-soft); }
   .mx-global { padding: 16px 20px 18px; }
   .mx-btc { padding: 16px 20px 18px; }
@@ -1411,8 +1392,6 @@
   .mx-metric strong { font-size: 12px; }
   .mx-global-trend { margin-top: 10px; padding: 8px; }
   .mx-global-trend .mx-spark { height: 44px !important; }
-  .mx-global-foot { gap: 5px; }
-  .mx-foot-stat { font-size: 10px; padding: 3px 8px; }
   /* The Bitcoin half becomes a two-column block on a phone: identity and price
      on the reading side, the chart on the other, the range across the bottom. */
   .mx-btc {
@@ -1642,3 +1621,830 @@
 :root[data-native='true'] .mx-market .mx-smart-sheen,
 :root[data-lite='true'] .mx-market .mx-deck-veil i,
 :root[data-lite='true'] .mx-market .mx-smart-sheen { animation: none !important; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   9 · THE 2026-10-31 PASS — deck, trio, glass Bitcoin, sector rail, lens,
+       list hero, the flow blade and the token rows
+   --------------------------------------------------------------------------
+   «باکس نمای بازار مدرن کن و بعدش یک فاصله کوچک … سه باکس مدرن … بعدش باکس
+    بیت‌کوین را مدرن و شیشه‌ای کن … بنر پول هوشمند را خیلی مدرن کن با انیمیشن …
+    باکس همه ارزها را فاصله بده با باکس نبض بازار … زیر باکس‌هایی مثل میم‌کوین را
+    از باکس جدا کن … توکن‌ها کشیده شود جمع شده»
+
+   Seven requests, one rhythm: 12px (phone) / 14px (wide) between blocks, 24px
+   outer radius, 16px inner wells, 999px pills. Everything below inherits the
+   tokens declared on `.mx-market` above, so dark/light are two grades of one
+   design instead of two designs. No `backdrop-filter` appears in this section —
+   «شیشه‌ای» is painted here as stacked gradients, exactly like §1, because a
+   live blur on this route was measured as the reason it painted black while
+   scrolling (test/market-speed.test.mjs).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 9.1 · THE DECK ─────────────────────────────────────────────────────── */
+
+.mx-overview { display: flex; flex-direction: column; gap: var(--mx-gap); }
+
+/* The section keeps §1's shared surface recipe; what changes here is that the
+   deck is now its own box and Bitcoin is no longer a column inside it. */
+.mx-market .mx-deck {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 14px 15px 15px;
+  border: 1px solid var(--mx-line);
+  border-radius: 26px;
+  background: var(--mx-glass), var(--mx-panel);
+  box-shadow: var(--mx-hi), var(--mx-shadow);
+}
+
+.mx-deck-headings { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.mx-deck-eyebrow {
+  color: var(--mx-faint);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.mx-deck-title { font-size: 13px; font-weight: 800; letter-spacing: -0.01em; color: var(--mx-text); }
+
+.mx-deck-main { margin-top: 12px; }
+.mx-global-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 4px 10px; }
+.mx-global-head .mx-kicker { grid-column: 1 / -1; margin-bottom: 0; }
+.mx-global-head .mx-change { margin-bottom: 5px; }
+
+/* ── 9.2 · THE TRIO — three boxes, one horizontal line, at every width ────
+   «سه باکس مدرن برای ارزها، بازارها، میانگین تغییر — در یک خط و افقی»
+   `grid-template-columns: repeat(3, minmax(0, 1fr))` is the literal promise:
+   three equal columns that never wrap, never stack and never shrink past the
+   width of the smallest label. The value is the loud element; the label above
+   it is 9.5px so a Persian word and a number both fit in a 100px box. */
+
+.mx-trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+
+.mx-trio-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 10px 11px;
+  overflow: hidden;
+  border: 1px solid var(--mx-line);
+  border-radius: 17px;
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012) 52%, rgba(6, 10, 20, 0.22)),
+    var(--mx-panel-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 14px 30px -26px rgba(2, 6, 18, 0.9);
+  transition: transform 170ms cubic-bezier(0.22, 1, 0.36, 1), border-color 170ms ease, box-shadow 170ms ease;
+}
+/* one accent per box, read by the tile, the hairline and the hover border */
+.mx-trio-box[data-tone='cyan'] { --trio: var(--mx-cyan); }
+.mx-trio-box[data-tone='violet'] { --trio: var(--mx-violet); }
+.mx-trio-box[data-tone='up'] { --trio: var(--mx-up); }
+.mx-trio-box[data-tone='down'] { --trio: var(--mx-down); }
+.mx-trio-box[data-tone='flat'] { --trio: var(--mx-line-strong); }
+.mx-trio-box::after {
+  content: '';
+  position: absolute;
+  inset-block: 9px;
+  inset-inline-start: 0;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--trio) 80%, transparent), transparent);
+}
+.mx-trio-box:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--trio) 38%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 16px 30px -22px color-mix(in srgb, var(--trio) 62%, transparent);
+}
+.mx-trio-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  color: color-mix(in srgb, var(--trio) 90%, #ffffff);
+  background: color-mix(in srgb, var(--trio) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--trio) 26%, transparent);
+}
+.mx-trio-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mx-trio-label {
+  color: var(--mx-muted);
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mx-trio-value {
+  font-size: clamp(13px, 3.6vw, 16.5px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--mx-text);
+}
+.mx-trio-box[data-tone='up'] .mx-trio-value { color: var(--mx-up); }
+.mx-trio-box[data-tone='down'] .mx-trio-value { color: var(--mx-down); }
+
+/* ── 9.3 · BITCOIN — a glass card of its own, read from the centre ────────
+   «باکس بیت‌کوین را مدرن و شیشه‌ای کن» · «نمودارش وسط قرار بگیره»
+
+   Three layers of glass and one gold bloom. The chart sits in a well of its
+   own so the line never runs into the price above it, and the whole column is
+   centred — head row, price, chart, range — which is what a single hero
+   reading should do on a full-width card. */
+
+.mx-market .mx-btc-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 13px 15px 15px;
+  border: 1px solid color-mix(in srgb, var(--mx-gold) 24%, var(--mx-line));
+  border-radius: 24px;
+  background:
+    radial-gradient(120% 130% at 84% -20%, color-mix(in srgb, var(--mx-gold) 17%, transparent), transparent 62%),
+    radial-gradient(100% 120% at 4% 118%, rgba(226, 88, 14, 0.14), transparent 64%),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.016) 46%, rgba(6, 10, 20, 0.34)),
+    var(--mx-panel);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 24px 48px -34px rgba(247, 147, 26, 0.72),
+    var(--mx-shadow);
+}
+/* the bloom behind the mark — painted, never blurred live */
+.mx-btc-veil {
+  position: absolute;
+  z-index: -1;
+  inset-block-start: -58px;
+  inset-inline-start: -30px;
+  width: 170px;
+  height: 170px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--mx-gold) 24%, transparent), transparent 76%);
+  opacity: 0.9;
+  pointer-events: none;
+  animation: mx-float 34s ease-in-out infinite alternate;
+}
+.mx-btc-card[data-dir='down'] .mx-btc-veil {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--mx-down) 20%, transparent), transparent 76%);
+}
+.mx-btc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mx-btc-identity {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 3px 8px 3px 3px;
+  margin-inline-start: -3px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: start;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.mx-btc-identity:hover {
+  border-color: color-mix(in srgb, var(--mx-gold) 30%, transparent);
+  background: color-mix(in srgb, var(--mx-gold) 9%, transparent);
+}
+.mx-btc-logo {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border-radius: 13px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 32% 22%, rgba(255, 255, 255, 0.24), transparent 62%),
+    linear-gradient(150deg, rgba(247, 178, 59, 0.34), rgba(226, 58, 14, 0.18));
+  border: 1px solid rgba(247, 178, 59, 0.46);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), 0 10px 22px -14px rgba(247, 147, 26, 0.95);
+}
+.mx-btc-logo .coin-logo { width: 100%; height: 100%; padding: 0; border: 0; border-radius: 12px; background: none; }
+.mx-btc-logo .coin-logo svg { width: 100%; height: 100%; display: block; }
+
+/* «نمودارش وسط قرار بگیره» — price, chart and range are one centred column. */
+.mx-btc-price {
+  margin-top: 12px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(26px, 7.2vw, 34px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  color: #fffaf0;
+}
+.mx-market .mx-btc-card .mx-change { margin-inline-start: auto; }
+
+.mx-btc-chart {
+  margin-top: 10px;
+  padding: 6px 2px 2px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 72%);
+}
+.mx-btc-range { margin-top: 12px; }
+
+/* ── 9.4 · «دسته‌ها» — its own surface, a horizontal rail, under the views ─
+   «زیر باکس‌هایی مثل میم‌کوین … را از باکس جدا کن … در یک راستای افقی و به
+    صورت ریلی حرکت کند» */
+
+.mx-market .mx-lens {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 13px 13px 14px;
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-r-lg);
+  background: var(--mx-glass), var(--mx-panel);
+  box-shadow: var(--mx-hi), var(--mx-shadow);
+  overflow: hidden;
+}
+.mx-lens-head { padding-bottom: 2px; }
+.mx-lens-note {
+  color: var(--mx-faint);
+  font: 700 9.5px/1 var(--font-display);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--mx-line-soft);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.mx-market .mx-sectors { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+.mx-sectors-head { display: flex; align-items: center; gap: 7px; }
+.mx-sectors-mark {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  color: #dbeafe;
+  background: linear-gradient(150deg, rgba(56, 225, 255, 0.28), rgba(139, 92, 246, 0.22));
+  border: 1px solid rgba(147, 197, 253, 0.26);
+}
+.mx-sectors-reset {
+  margin-inline-start: auto;
+  padding: 3px 9px;
+  border: 1px solid var(--mx-line-soft);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--mx-muted);
+  font: 600 10px/1.3 var(--font-display);
+  cursor: pointer;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+.mx-sectors-reset:hover { color: var(--mx-text); border-color: var(--mx-line-strong); }
+
+/* The rail: full-bleed inside the card (negative inline margin) so a tile can
+   sit half-off the edge and the reader understands it scrolls. The padding
+   restores the card's own gutter as the first tile's start. Edge fades are
+   painted gradients on the rail's ::before/::after, never a mask (a mask on a
+   scrolling strip promotes the whole strip while it moves). */
+.mx-market .mx-sectors-rail {
+  position: relative;
+  display: flex;
+  gap: 7px;
+  margin-inline: -13px;
+  padding: 2px 13px 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.mx-market .mx-sectors-rail::-webkit-scrollbar { display: none; }
+
+.mx-market .mx-sector {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  height: 42px;
+  /* logical, because the tile sits on the START edge in both directions */
+  padding-block: 0;
+  padding-inline: 7px 13px;
+  scroll-snap-align: start;
+  border: 1px solid var(--mx-line);
+  border-radius: 15px;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012) 56%, rgba(6, 10, 20, 0.2));
+  color: var(--mx-muted);
+  font: 700 11.5px/1 var(--font-display);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+.mx-sector-tile {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  color: color-mix(in srgb, var(--sec) 88%, #ffffff);
+  background: color-mix(in srgb, var(--sec) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sec) 26%, transparent);
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.mx-sector-label { white-space: nowrap; }
+.mx-market .mx-sector:hover {
+  color: var(--mx-text);
+  border-color: color-mix(in srgb, var(--sec) 44%, transparent);
+  transform: translateY(-1px);
+}
+.mx-market .mx-sector:active { transform: scale(0.97); }
+.mx-market .mx-sector[data-active='true'] {
+  color: color-mix(in srgb, var(--sec) 26%, #ffffff);
+  border-color: color-mix(in srgb, var(--sec) 58%, transparent);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--sec) 24%, transparent), color-mix(in srgb, var(--sec) 8%, transparent));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 10px 22px -16px color-mix(in srgb, var(--sec) 92%, transparent);
+}
+.mx-market .mx-sector[data-active='true'] .mx-sector-tile {
+  background: color-mix(in srgb, var(--sec) 26%, transparent);
+  border-color: color-mix(in srgb, var(--sec) 52%, transparent);
+}
+
+/* ── 9.5 · نبض بازار — inside the lens, quieter than the list ───────────── */
+
+.mx-market .mx-lens .mx-breadth {
+  padding: 11px 12px;
+  border-radius: 15px;
+  border-color: var(--mx-line-soft);
+  background: linear-gradient(168deg, rgba(255, 255, 255, 0.038), rgba(255, 255, 255, 0.008) 52%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.mx-market .mx-lens .mx-breadth::after { inset-block: 10px; }
+
+/* ── 9.6 · THE LIST CARD — drawn in, not spread out ───────────────────────
+   «توکن‌ها کشیده شود جمع شده … اندازه و فاصله درست» · «باکس همه ارزها را
+    فاصله بده» */
+
+.mx-market .mx-terminal {
+  padding: 12px;
+  border-radius: var(--mx-r-lg);
+  gap: 0;
+}
+.mx-list-hero { display: flex; flex-direction: column; gap: 10px; padding-bottom: 11px; }
+.mx-list-hero-head { display: flex; align-items: center; gap: 8px; }
+.mx-list-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+.mx-table-wrap { padding-top: 4px; }
+
+/* ── 9.12 · THE FOLD — «توکن‌ها کشیده شود جمع شده» ────────────────────────
+   A chip on the list's title line, not a chevron floating in a corner: the
+   list says how many coins it holds, so the same line says how many of them
+   are showing. It is a pill because it is a choice, and it turns so the
+   direction of the next tap is legible before the tap. */
+.mx-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--mx-line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018));
+  color: var(--mx-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color .18s ease, border-color .18s ease, background-color .18s ease;
+}
+.mx-fold:hover { color: var(--mx-text); border-color: var(--mx-line-strong); }
+.mx-fold:focus-visible { outline: 2px solid var(--mx-cyan); outline-offset: 2px; }
+.mx-fold-caret {
+  transition: transform .22s ease;
+  transform: rotate(180deg);
+}
+.mx-fold-caret[data-folded='true'] { transform: rotate(0deg); }
+
+:root[data-theme='light'] .mx-fold {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.035), rgba(15, 23, 42, 0.012));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mx-fold, .mx-fold-caret { transition: none; }
+}
+:root[data-native='true'] .mx-fold,
+:root[data-lite='true'] .mx-fold { transition: none; }
+
+
+/* ── 9.7 · THE TOKEN ROWS — a measured five-column grid ───────────────────
+   Each row is one glass line: rank, logo, identity, shape, price+change. The
+   swap button keeps its own 34px column so the five columns above never move
+   when a coin is swappable and its neighbour is not — that misalignment was
+   the visible half of «توکن‌ها کشیده شود». */
+
+.mx-table.market-coin-grid { gap: 6px; }
+.mx-market .mx-coin-row {
+  gap: 8px;
+  padding-block: 0;
+  padding-inline: 8px 6px;
+  border: 1px solid var(--mx-line-soft);
+  border-radius: 15px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.008) 60%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+.mx-market .mx-coin-row:hover {
+  border-color: color-mix(in srgb, var(--mx-cyan) 26%, transparent);
+  background: linear-gradient(160deg, rgba(56, 225, 255, 0.06), rgba(255, 255, 255, 0.01) 62%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 14px 28px -22px rgba(56, 225, 255, 0.7);
+}
+.mx-market .mx-coin-row:last-child { border-bottom: 1px solid var(--mx-line-soft); }
+.mx-market .mx-coin-row .coin-row {
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.mx-market .mx-coin-row .coin-row-open {
+  grid-template-columns: 22px 32px minmax(0, 1fr) 56px minmax(84px, auto);
+  gap: 8px;
+}
+.mx-market .mx-coin-row .coin-row-spark { width: 56px; height: 24px; }
+.mx-market .mx-coin-row .coin-sym { font-size: 12px; }
+.mx-market .mx-coin-row .coin-name { font-size: 10px; }
+.mx-market .mx-coin-row .coin-price { font-size: 12px; }
+.mx-market .mx-coin-row .coin-change-pill { font-size: 10px; padding: 2px 5px; }
+
+/* THE SWAP BUTTON — «دکمه سواپ رنگ بندی درست داشته باشد».
+   A quiet glass pill at rest and cyan-tinted on hover: it is the only control
+   inside a row, so it must read as an action without competing with the price.
+   The gradient is a fixed 34px-wide column, so a row without a swap route is
+   the same height as one with it. */
+.mx-market .mx-coin-row .mx-swap-btn {
+  height: 30px;
+  min-width: 46px;
+  padding: 0 9px;
+  gap: 4px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--mx-cyan) 24%, transparent);
+  background: linear-gradient(150deg, color-mix(in srgb, var(--mx-cyan) 12%, transparent), color-mix(in srgb, var(--mx-blue) 10%, transparent));
+  color: color-mix(in srgb, var(--mx-cyan) 72%, #ffffff);
+  font: 800 10.5px/1 var(--font-display);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.mx-market .mx-coin-row .mx-swap-btn:hover {
+  border-color: color-mix(in srgb, var(--mx-cyan) 56%, transparent);
+  background: linear-gradient(150deg, color-mix(in srgb, var(--mx-cyan) 24%, transparent), color-mix(in srgb, var(--mx-blue) 18%, transparent));
+  color: #eafcff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 8px 18px -12px rgba(56, 189, 248, 0.95);
+}
+
+/* ── 9.8 · THE SMART-MONEY BLADE — «خیلی مدرن … با انیمیشن» ───────────────
+   A funnel: the mark, the sentence, the route it travels, the three
+   destinations, then the CTA. Layers back to front are two painted blooms, one
+   hairline sweep, and the content. The only loops are the sweep (9s) and the
+   route's travelling dot (5.6s), both transform/opacity only. */
+
+.mx-market .mx-smart-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 22px;
+  border-color: rgba(96, 165, 250, 0.24);
+  overflow: hidden;
+  background:
+    radial-gradient(120% 150% at 100% 0%, rgba(139, 92, 246, 0.2), transparent 58%),
+    radial-gradient(90% 120% at 0% 110%, rgba(34, 211, 238, 0.14), transparent 60%),
+    linear-gradient(126deg, rgba(13, 19, 36, 0.97), rgba(15, 22, 46, 0.95));
+}
+.mx-smart-veil {
+  position: absolute;
+  z-index: -1;
+  inset-block-start: -70px;
+  inset-inline-end: -50px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(139, 92, 246, 0.34), transparent 74%);
+  pointer-events: none;
+  animation: mx-float 30s ease-in-out infinite alternate;
+}
+.mx-smart-main { position: relative; display: flex; align-items: flex-start; gap: 11px; }
+.mx-smart-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: 14px;
+  color: #e0f2fe;
+  background:
+    radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.24), transparent 60%),
+    linear-gradient(150deg, rgba(59, 130, 246, 0.46), rgba(139, 92, 246, 0.34));
+  border: 1px solid rgba(147, 197, 253, 0.36);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), 0 14px 28px -16px rgba(59, 130, 246, 0.95);
+}
+/* One ring leaves the mark every 4.6s — the only thing that says "live" on the
+   card, and it is a 1px border on a scaled div, so it costs nothing. */
+.mx-smart-ring {
+  position: absolute;
+  inset: -1px;
+  border-radius: 15px;
+  border: 1px solid rgba(147, 197, 253, 0.55);
+  animation: mx-smart-ring 4.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  pointer-events: none;
+}
+.mx-smart-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #93c5fd;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  margin-bottom: 4px;
+}
+.mx-smart-eyebrow i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--mx-up);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mx-up) 16%, transparent);
+}
+.mx-smart-copy h2 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: -0.012em;
+}
+.mx-smart-copy p {
+  margin: 4px 0 0;
+  color: #9fb0d4;
+  font-size: 11px;
+  line-height: 1.65;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* THE ROUTE */
+.mx-smart-route {
+  position: relative;
+  padding: 2px 2px 0;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent);
+}
+.mx-smart-route svg { display: block; width: 100%; height: 34px; overflow: visible; }
+/* Static dashes. They used to drift (`stroke-dashoffset`), which is a paint
+   property on every frame of a loop — the travelling dot below already says
+   «money is moving», so the dashes only have to describe the path. */
+.mx-route-line {
+  fill: none;
+  stroke: rgba(147, 197, 253, 0.55);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-dasharray: 5 7;
+}
+.mx-route-line.is-dim { stroke: rgba(139, 92, 246, 0.3); }
+.mx-route-node { fill: #0b1220; stroke: rgba(147, 197, 253, 0.7); stroke-width: 1.6; }
+.mx-route-node.is-end { fill: var(--mx-up); stroke: none; }
+/* The travelling light. One extra stroke over the same path, lit by a gradient
+   whose stops slide the length of the rail (see <animateTransform> in the
+   component) — so the motion is a gradient transform, not a dash offset, and
+   nothing on the card is re-rasterised to run it. */
+.mx-route-flow {
+  fill: none;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  opacity: 0.95;
+}
+.mx-route-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 2px;
+  color: var(--mx-faint);
+  font-size: 9px;
+  letter-spacing: 0.02em;
+}
+
+/* THE DESTINATIONS */
+.mx-smart-pools { display: flex; flex-wrap: wrap; gap: 6px; }
+.mx-pool {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(147, 197, 253, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd9f5;
+  font-size: 10px;
+  font-weight: 600;
+  /* three chips, three entry delays — a single 240ms rise, once */
+  animation: mx-pool-in 480ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 90ms + 120ms);
+}
+.mx-pool[data-pool='whales'] { --pool: #4cc3ff; }
+.mx-pool[data-pool='institutions'] { --pool: #a78bfa; }
+.mx-pool[data-pool='newPools'] { --pool: #34d399; }
+.mx-pool-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--pool); }
+.mx-pool svg { color: var(--pool); }
+
+.mx-smart-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mx-smart-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #a7f3d0;
+  font-size: 10px;
+  font-weight: 700;
+}
+.mx-smart-live i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--mx-up);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mx-up) 15%, transparent);
+}
+.mx-smart-cta { height: 34px; padding: 0 13px; border-radius: 11px; font-size: 11.5px; }
+
+@keyframes mx-smart-ring {
+  0% { opacity: 0.75; transform: scale(1); }
+  70% { opacity: 0; transform: scale(1.16); }
+  100% { opacity: 0; transform: scale(1.16); }
+}
+@keyframes mx-pool-in {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* ── 9.9 · RESPONSIVE ──────────────────────────────────────────────────── */
+
+@media (min-width: 620px) {
+  .mx-trio { gap: 10px; }
+  .mx-trio-box { padding: 12px 12px 13px; gap: 10px; }
+  .mx-trio-mark { width: 32px; height: 32px; border-radius: 11px; }
+  .mx-trio-label { font-size: 10px; }
+  .mx-smart-copy p { -webkit-line-clamp: 2; line-clamp: 2; }
+}
+
+@media (min-width: 860px) {
+  .mx-market .mx-deck { padding: 16px 20px 18px; }
+  .mx-market .mx-btc-card { padding: 15px 20px 17px; }
+  .mx-trio-value { font-size: 18px; }
+  .mx-market .mx-coin-row .coin-row-open { grid-template-columns: 24px 34px minmax(0, 1fr) 88px minmax(96px, auto); gap: 10px; }
+  .mx-market .mx-coin-row .coin-row-spark { width: 88px; }
+}
+
+@media (max-width: 619px) {
+  .mx-market .mx-deck { padding: 12px 12px 13px; border-radius: 23px; }
+  .mx-market .mx-global-metrics { gap: 6px; }
+  .mx-market .mx-metric { padding: 7px 8px; }
+  .mx-market .mx-lens { padding: 11px 12px 12px; }
+  .mx-market .mx-sectors-rail { margin-inline: -12px; padding-inline: 12px; }
+  .mx-market .mx-terminal { padding: 10px; }
+  .mx-list-hero { padding-bottom: 9px; gap: 9px; }
+  .mx-market .mx-coin-row { padding: 0 5px 0 7px; }
+  .mx-market .mx-smart-banner { padding: 12px; gap: 10px; }
+  .mx-smart-copy h2 { font-size: 14px; }
+  .mx-smart-copy p { -webkit-line-clamp: 2; line-clamp: 2; font-size: 10.5px; }
+  .mx-smart-route svg { height: 28px; }
+}
+
+@media (max-width: 359px) {
+  .mx-trio { gap: 6px; }
+  .mx-trio-box { padding: 9px 7px 10px; gap: 6px; }
+  .mx-trio-mark { width: 24px; height: 24px; border-radius: 9px; }
+  .mx-trio-label { font-size: 9px; }
+  .mx-pool { font-size: 9px; padding: 4px 7px; }
+}
+
+/* ── 9.10 · LIGHT THEME — the same hierarchy, re-graded ─────────────────── */
+
+:root[data-theme='light'] .mx-market .mx-deck {
+  background: var(--mx-glass), var(--mx-panel);
+  border-color: rgba(16, 24, 48, 0.08);
+}
+:root[data-theme='light'] .mx-market .mx-trio-box {
+  border-color: rgba(16, 24, 48, 0.09);
+  background: linear-gradient(168deg, #ffffff, #f4f7fd 62%);
+  box-shadow: inset 0 1px 0 #ffffff, 0 12px 26px -24px rgba(20, 45, 80, 0.4);
+}
+:root[data-theme='light'] .mx-market .mx-trio-label { color: #4a5b78; }
+:root[data-theme='light'] .mx-market .mx-trio-value { color: #0f172a; }
+:root[data-theme='light'] .mx-market .mx-trio-box[data-tone='up'] .mx-trio-value { color: #046b45; }
+:root[data-theme='light'] .mx-market .mx-trio-box[data-tone='down'] .mx-trio-value { color: #b3123a; }
+:root[data-theme='light'] .mx-market .mx-trio-mark { color: color-mix(in srgb, var(--trio) 70%, #0b1220); }
+
+:root[data-theme='light'] .mx-market .mx-btc-card {
+  border-color: rgba(217, 138, 18, 0.34);
+  background:
+    radial-gradient(120% 130% at 84% -20%, rgba(247, 178, 59, 0.2), transparent 62%),
+    radial-gradient(100% 120% at 4% 118%, rgba(226, 88, 14, 0.08), transparent 64%),
+    linear-gradient(158deg, #ffffff, #fdf8ef 62%);
+  box-shadow: inset 0 1px 0 #ffffff, 0 20px 40px -32px rgba(180, 120, 20, 0.55);
+}
+:root[data-theme='light'] .mx-market .mx-btc-price { color: #1a1206; }
+:root[data-theme='light'] .mx-market .mx-btc-chart { background: linear-gradient(180deg, rgba(16, 24, 48, 0.03), transparent 72%); }
+
+:root[data-theme='light'] .mx-market .mx-lens {
+  border-color: rgba(16, 24, 48, 0.08);
+  background: linear-gradient(158deg, #ffffff, #f5f8fd);
+  box-shadow: inset 0 1px 0 #ffffff, 0 18px 38px -32px rgba(20, 45, 80, 0.5);
+}
+:root[data-theme='light'] .mx-market .mx-lens-note { color: #5a6b86; background: rgba(16, 24, 48, 0.04); border-color: rgba(16, 24, 48, 0.09); }
+:root[data-theme='light'] .mx-market .mx-sector {
+  color: #46587a;
+  border-color: rgba(16, 24, 48, 0.1);
+  background: linear-gradient(160deg, #ffffff, #f3f6fc);
+}
+:root[data-theme='light'] .mx-market .mx-sector[data-active='true'] {
+  color: color-mix(in srgb, var(--sec) 74%, #0b1220);
+  border-color: color-mix(in srgb, var(--sec) 50%, transparent);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--sec) 18%, #ffffff), color-mix(in srgb, var(--sec) 7%, #ffffff));
+}
+:root[data-theme='light'] .mx-market .mx-sector-tile { color: color-mix(in srgb, var(--sec) 72%, #0b1220); }
+
+:root[data-theme='light'] .mx-market .mx-coin-row {
+  border-color: rgba(16, 24, 48, 0.08);
+  background: linear-gradient(160deg, #ffffff, #f6f9fd 64%);
+  box-shadow: inset 0 1px 0 #ffffff;
+}
+:root[data-theme='light'] .mx-market .mx-coin-row:hover {
+  border-color: rgba(2, 132, 199, 0.28);
+  background: linear-gradient(160deg, #ffffff, #eef7fd 64%);
+}
+:root[data-theme='light'] .mx-market .mx-coin-row:last-child { border-bottom-color: rgba(16, 24, 48, 0.08); }
+:root[data-theme='light'] .mx-market .mx-swap-btn {
+  color: #0e7490;
+  border-color: rgba(8, 145, 178, 0.28);
+  background: linear-gradient(150deg, rgba(34, 211, 238, 0.14), rgba(59, 130, 246, 0.1));
+}
+:root[data-theme='light'] .mx-market .mx-swap-btn:hover { color: #0b4f60; }
+
+:root[data-theme='light'] .mx-market .mx-smart-banner {
+  border-color: rgba(37, 99, 235, 0.2);
+  background:
+    radial-gradient(120% 150% at 100% 0%, rgba(139, 92, 246, 0.12), transparent 58%),
+    radial-gradient(90% 120% at 0% 110%, rgba(34, 211, 238, 0.1), transparent 60%),
+    linear-gradient(126deg, #ffffff, #f3f7ff);
+}
+:root[data-theme='light'] .mx-market .mx-smart-copy h2 { color: #0d1a30; }
+:root[data-theme='light'] .mx-market .mx-smart-copy p { color: #4a5b78; }
+:root[data-theme='light'] .mx-market .mx-smart-eyebrow { color: #2f6fd0; }
+:root[data-theme='light'] .mx-market .mx-smart-live { color: #046b45; }
+:root[data-theme='light'] .mx-market .mx-route-line { stroke: rgba(37, 99, 235, 0.42); }
+:root[data-theme='light'] .mx-market .mx-route-line.is-dim { stroke: rgba(91, 63, 214, 0.26); }
+:root[data-theme='light'] .mx-market .mx-route-node { fill: #ffffff; stroke: rgba(37, 99, 235, 0.6); }
+:root[data-theme='light'] .mx-market .mx-route-labels { color: #6b7c99; }
+:root[data-theme='light'] .mx-market .mx-pool { color: #34456d; background: rgba(255, 255, 255, 0.72); border-color: rgba(16, 24, 48, 0.1); }
+
+/* ── 9.11 · MOTION BUDGET AND THE SHELLS THAT HAVE NONE ────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .mx-market .mx-btc-veil,
+  .mx-market .mx-smart-veil,
+  .mx-market .mx-smart-ring,
+  .mx-market .mx-pool { animation: none !important; }
+  .mx-market .mx-pool { opacity: 1; transform: none; }
+  .mx-market .mx-route-flow { display: none; }
+  .mx-market .mx-trio-box,
+  .mx-market .mx-coin-row,
+  .mx-market .mx-swap-btn,
+  .mx-market .mx-sector { transition: none !important; }
+  .mx-market .mx-trio-box:hover,
+  .mx-market .mx-sector:hover { transform: none; }
+}
+
+:root[data-native='true'] .mx-market .mx-btc-veil,
+:root[data-native='true'] .mx-market .mx-smart-veil,
+:root[data-native='true'] .mx-market .mx-smart-ring,
+:root[data-lite='true'] .mx-market .mx-btc-veil,
+:root[data-lite='true'] .mx-market .mx-smart-veil,
+:root[data-lite='true'] .mx-market .mx-smart-ring { animation: none !important; }
+/* The rail's travelling light is a SMIL animation on a gradient, which CSS
+   cannot switch off — so the native shell and lite mode hide that stroke. The
+   static path, the three nodes and the labels stay: that is the reading. */
+:root[data-native='true'] .mx-market .mx-route-flow,
+:root[data-lite='true'] .mx-market .mx-route-flow { display: none; }

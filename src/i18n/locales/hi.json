@@ -318,7 +318,16 @@
     "emptyFavoritesHelp": "किसी कॉइन का पेज खोलकर उसका सितारा दबाएँ; कीमत अलर्ट भी वहीं प्रबंधित होते हैं।",
     "showAll": "सभी कॉइन दिखाएँ",
     "refresh": "कीमतें रीफ़्रेश करें",
-    "trendingBasis": "अभी सबसे ज़्यादा खोजे गए"
+    "trendingBasis": "अभी सबसे ज़्यादा खोजे गए",
+    "sector": {
+      "gold": "सोना",
+      "meme": "मीमकॉइन",
+      "rwa": "वास्तविक संपत्ति",
+      "ai": "एआई",
+      "gaming": "गेमिंग",
+      "solana": "सोलाना"
+    },
+    "showMore": "और दिखाएँ ({{count}} शेष)"
   },
   "coin": {
     "notFound": "सिक्का नहीं मिला",
@@ -4016,5 +4025,26 @@
       "lessonsCount": "इस स्तर पर {{n}} पाठ",
       "pathsNote": "वीडियो Aparat पर होस्ट हैं; प्लेबैक गुणवत्ता आपके कनेक्शन पर निर्भर करती है।"
     }
+  },
+  "marketIntel": {
+    "deckEyebrow": "लाइव मार्केट व्यू",
+    "allCoinsTitle": "सभी कॉइन",
+    "sectorsTitle": "सेक्टर",
+    "railLabel": "मार्केट शोकेस",
+    "railTools": "मार्केट टूल्स",
+    "flowWallet": "वॉलेट",
+    "flowRouter": "राउटर",
+    "flowTarget": "गंतव्य",
+    "smartLive": "लाइव फ़्लो",
+    "pool": {
+      "whales": "व्हेल",
+      "institutions": "संस्थागत",
+      "newPools": "नए पूल"
+    },
+    "statCoins": "कॉइन",
+    "statMarkets": "मार्केट",
+    "statAvg": "औसत बदलाव",
+    "listCollapse": "सूची समेटें",
+    "listExpand": "सूची खोलें"
   }
 }

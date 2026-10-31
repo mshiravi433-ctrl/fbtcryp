@@ -5829,26 +5829,25 @@
 }
 
 /* ── 13.12 · TOKEN ROWS — glass rows, zero overlap (no star in the row) ─── */
+/*
+ * THE ROW IS ONE GLASS LINE, AND THE CARD IS `.mx-coin-row`.
+ * This block used to give EVERY `.coin-row` its own lifted card — radius,
+ * border, bloom and a `translateY(-2px)` hover — and then `.mx-coin-row`
+ * wrapped that card in a SECOND card with its own border and its own hover.
+ * Two surfaces inside one row is why the list read as «کشیده و پخش‌شده», and
+ * sixty lifted cards is a compositing cost on a phone. The card is the row now
+ * (`styles/market-intelligence.css` §9.7 owns it); the element inside it is
+ * transparent — one hairline, one radius, one lift.
+ */
 .market-coin-row .coin-row {
-  border-radius: 17px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background:
-    linear-gradient(150deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.012)),
-    rgba(9, 13, 26, 0.55);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  transition: none;
 }
 
-.market-coin-row .coin-row:hover {
-  transform: translateY(-2px);
-  border-color: rgba(56, 225, 255, 0.32);
-  background:
-    linear-gradient(150deg, rgba(56, 225, 255, 0.07), rgba(139, 123, 255, 0.035)),
-    rgba(10, 15, 29, 0.75);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 14px 30px -18px rgba(56, 225, 255, 0.6);
-}
-
-.market-coin-row .coin-row:active { transform: scale(0.992); }
+.market-coin-row .coin-row:active { transform: none; }
 
 /* Fixed-width columns guarantee the sparkline and the price can never collide,
    whatever the name length or screen width. Bookmarking lives on CoinDetail. */

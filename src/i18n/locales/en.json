@@ -191,7 +191,11 @@
       "open": "Open market pulse",
       "close": "Close market pulse",
       "caption": "24-hour market pulse",
-      "metric": { "risk": "Volatility risk", "buy": "Up / buying", "sell": "Down / selling" },
+      "metric": {
+        "risk": "Volatility risk",
+        "buy": "Up / buying",
+        "sell": "Down / selling"
+      },
       "metricTitle": "{{label}} · {{count}} assets",
       "stale": "Market data is stale",
       "live": "Based on market data",
@@ -4936,12 +4940,31 @@
     "btcChartAria": "Bitcoin price sparkline",
     "hotTitle": "Hottest Coins",
     "deckLabel": "Market view",
+    "deckEyebrow": "Live market view",
     "deckLive": "Live",
     "aiChip": "AI",
     "smartEyebrow": "FBT SMART MONEY",
     "smartTitle": "See where smart money moves",
     "smartDesc": "Track whale activity, discover institutional flows and identify emerging market opportunities with FBT AI.",
-    "smartCta": "Explore Smart Money"
+    "smartCta": "Explore Smart Money",
+    "allCoinsTitle": "All coins",
+    "sectorsTitle": "Sectors",
+    "railLabel": "Market showcase",
+    "railTools": "Market tools",
+    "flowWallet": "Wallet",
+    "flowRouter": "Router",
+    "flowTarget": "Destination",
+    "smartLive": "Live flow",
+    "pool": {
+      "whales": "Whales",
+      "institutions": "Institutions",
+      "newPools": "New pools"
+    },
+    "statCoins": "Coins",
+    "statMarkets": "Markets",
+    "statAvg": "Average change",
+    "listCollapse": "Collapse the list",
+    "listExpand": "Expand the list"
   },
   "marketAiBanner": {
     "eyebrow": "FBT AI · Market intelligence live",

@@ -28,11 +28,13 @@
  *        every keyframe in it animates transform/opacity only.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { readFileSync } from 'node:fs';
 import fa from '../src/i18n/locales/fa.json';
 import en from '../src/i18n/locales/en.json';
+
+
 
 const dict = { fa, en };
 const get = (obj, path) => path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
@@ -129,24 +131,43 @@ const open = async () => {
   render(<MemoryRouter><Market /></MemoryRouter>);
   await waitFor(() => expect(document.querySelectorAll('.coin-row').length).toBeGreaterThan(0));
 };
-
 describe('۱/۲ · one box holds the total and Bitcoin', () => {
-  it('renders both readings inside a single surface', async () => {
+  it('reads deck, then three boxes, then Bitcoin — in that order, in three boxes', async () => {
     await open();
-    const deck = screen.getByTestId('market-overview');
+    const overview = screen.getByTestId('market-overview');
     const globalCard = screen.getByTestId('market-global-card');
+    const trio = screen.getByTestId('market-trio');
     const btcCard = screen.getByTestId('market-btc-hero-card');
 
-    expect(deck.contains(globalCard)).toBe(true);
-    expect(deck.contains(btcCard)).toBe(true);
-    /* …and they are the two children of ONE grid, not two sibling cards. */
-    expect(globalCard.parentElement).toBe(btcCard.parentElement);
-    expect(globalCard.parentElement.classList.contains('mx-deck-grid')).toBe(true);
+    expect(overview.contains(globalCard)).toBe(true);
+    expect(overview.contains(btcCard)).toBe(true);
+    /* «بعدش یک فاصله کوچک … سه باکس … بعدش باکس بیت‌کوین», in the document. */
+    expect(after(globalCard, trio)).toBe(true);
+    expect(after(trio, btcCard)).toBe(true);
+    /* three siblings of the deck's own column, so the gap between them is the
+       page rhythm and not padding invented inside one of them */
+    expect(globalCard.classList.contains('mx-deck')).toBe(true);
+    expect(btcCard.classList.contains('mx-btc-card')).toBe(true);
 
-    /* The deck has its own head and its painted light field. */
-    expect(deck.querySelector('.mx-deck-head')).toBeTruthy();
-    expect(deck.querySelector('.mx-deck-veil')).toBeTruthy();
-    expect(deck.textContent).toContain(fa.marketIntel.deckLabel);
+    /* The deck has its own head, its kicker and its painted light field. */
+    expect(globalCard.querySelector('.mx-deck-head')).toBeTruthy();
+    expect(globalCard.querySelector('.mx-deck-veil')).toBeTruthy();
+    expect(globalCard.textContent).toContain(fa.marketIntel.deckLabel);
+  });
+
+  it('lines the three stat boxes up on one row of three equal columns', async () => {
+    await open();
+    const boxes = [...screen.getByTestId('market-trio').querySelectorAll('.mx-trio-box')];
+    expect(boxes).toHaveLength(3);
+    /* «ارزها · بازارها · میانگین تغییر», in that order, each with its own mark */
+    expect(boxes[0].textContent).toContain(fa.marketIntel.statCoins);
+    expect(boxes[1].textContent).toContain(fa.marketIntel.statMarkets);
+    expect(boxes[2].textContent).toContain(fa.marketIntel.statAvg);
+    expect(boxes.every((box) => box.querySelector('.mx-trio-mark svg'))).toBe(true);
+    /* the average box carries its own direction, so a green number is a reading */
+    expect(boxes[2].dataset.tone).toBe('up');
+    /* one line, three equal columns, at every width — never a wrap */
+    expect(bare).toMatch(/\.mx-trio \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
   });
 
   it('paints the glass with gradients and never with a live blur', () => {
@@ -166,34 +187,60 @@ describe('۱/۲ · one box holds the total and Bitcoin', () => {
     /* three metric pods, each with its own icon tile */
     expect(globalCard.querySelectorAll('.mx-metric')).toHaveLength(3);
     expect(globalCard.querySelectorAll('.mx-metric-icon svg')).toHaveLength(3);
-    expect(globalCard.querySelectorAll('.mx-global-foot svg')).toHaveLength(3);
+    /* the three counts left the deck's footer: they are their own boxes now,
+       each with a drawn mark, and the deck does not repeat them */
+    expect(globalCard.querySelector('.mx-global-foot')).toBeNull();
+    expect(screen.getByTestId('market-trio').querySelectorAll('.mx-trio-mark svg')).toHaveLength(3);
   });
 
-  it('gives Bitcoin a full-bleed vector logo and exactly one control', async () => {
+  it('gives Bitcoin its own glass card, a full-bleed logo and one control', async () => {
     await open();
     const btcCard = screen.getByTestId('market-btc-hero-card');
     expect(btcCard.querySelectorAll('button')).toHaveLength(1);
     expect(btcCard.querySelector('.mx-btc-logo svg')).toBeTruthy();
     expect(btcCard.querySelector('.mx-btc-range-track span')).toBeTruthy();
+    /* «شیشه‌ای» — a painted bloom over several gradient layers, no live blur */
+    expect(btcCard.querySelector('.mx-btc-veil')).toBeTruthy();
+    expect(bare).toMatch(/\.mx-market \.mx-btc-card \{[^}]*border-radius: 24px/);
+    /* «نمودارش وسط قرار بگیره» — the price column is centred, not left-aligned */
+    expect(bare).toMatch(/\.mx-btc-price \{[^}]*text-align: center/);
+    /* and it is a CARD now, not the right column of a two-column grid: the
+       deck's grid is gone, so nothing can re-nest Bitcoin inside it */
+    expect(pageSrc).not.toMatch(/mx-deck-grid/);
+    expect(bare).not.toMatch(/grid-template-columns: minmax\(0, 1\.5fr\) minmax\(300px, 1fr\)/);
   });
 });
 
-describe('۲ · the Smart Money blade is minimal', () => {
-  it('is one row — mark, copy, CTA — with no isometric scene left', async () => {
+describe('۲ · the Smart Money blade shows the route', () => {
+  it('answers its own headline with a route, three destinations and a CTA', async () => {
     await open();
     const blade = screen.getByTestId('market-smart-money-banner');
     expect(blade.querySelector('.mx-smart-mark svg')).toBeTruthy();
     expect(blade.querySelector('.mx-smart-art')).toBeNull();
-    expect(blade.querySelectorAll('svg').length).toBeLessThanOrEqual(3);
     expect(blade.textContent).toContain(fa.marketIntel.smartCta);
-    /* the eyebrow is translated now; a hardcoded English string in a Persian
-       interface was the «زبان درست باشد» half of the request */
+    /* the eyebrow is translated, never a hardcoded English string */
     expect(pageSrc).not.toContain('FBT SMART MONEY');
     expect(blade.textContent).toContain(fa.marketIntel.smartEyebrow);
+
+    /* «ببین پول هوشمند کجا می‌رود» — wallet, router, destination, drawn */
+    const route = blade.querySelector('.mx-smart-route');
+    expect(route).toBeTruthy();
+    expect(route.querySelectorAll('.mx-route-node')).toHaveLength(3);
+    expect(route.textContent).toContain(fa.marketIntel.flowWallet);
+    expect(route.textContent).toContain(fa.marketIntel.flowTarget);
+    /* three named pools, and not one invented percentage on the card */
+    expect(blade.querySelectorAll('.mx-pool')).toHaveLength(3);
+    expect(blade.textContent).toContain(fa.marketIntel.pool.whales);
+    expect(blade.textContent).not.toMatch(/\d+%/);
   });
 
-  it('keeps exactly one ambient loop, and it travels instead of blinking', () => {
+  it('keeps its ambient loops travelling instead of blinking', () => {
     expect(bare).toMatch(/\.mx-smart-sheen \{[^}]*animation: mx-blade-sweep 9s[^}]*infinite/);
+    /* the light on the route is a gradient transform (SMIL) and the ring that
+       leaves the mark is a scaled border: neither is a strobe, neither paints */
+    const bannerSrc = readFileSync('src/components/market/SmartMoneyBanner.jsx', 'utf8');
+    expect(bannerSrc).toMatch(/<animateTransform[\s\S]{0,80}gradientTransform/);
+    expect(bare).toMatch(/\.mx-smart-ring \{[^}]*animation: mx-smart-ring/);
     expect(bare).toMatch(/@keyframes mx-blade-sweep/);
     /* No opacity strobe on any dot: the green blink was already banned by
        market-speed.test.mjs, and this pass adds nothing that pulses. */
@@ -228,23 +275,32 @@ describe('۳ · «داغ‌ترین کوین‌ها» carries one accent per pla
 });
 
 describe('۵ · search above the filters, inside «همه ارزها»', () => {
-  it('lives in the list card, between the head and the chips', async () => {
+  it('lives in the list card, and the sectors moved out to the strip above', async () => {
     await open();
+    const lens = document.querySelector('.mx-lens');
     const terminal = document.querySelector('.market-terminal');
     const search = document.querySelector('.mx-search-wrap');
-    const head = document.querySelector('.mx-terminal-head');
+    const heroHead = document.querySelector('.mx-list-hero-head');
     const controls = document.querySelector('.mx-controls');
     const breadth = screen.getByTestId('market-breadth');
     const sectors = document.querySelector('.mx-sectors');
+    const firstRow = document.querySelector('.coin-row');
 
+    /* the field still sits between the list's title and its chips */
     expect(terminal.contains(search)).toBe(true);
-    expect(after(head, search)).toBe(true);
+    expect(after(heroHead, search)).toBe(true);
     expect(after(search, controls)).toBe(true);
-    /* …then نبض بازار, then طلا→سولانا, then the rows: the order the request
-       spells out, in the order it spells it. */
-    expect(after(controls, breadth)).toBe(true);
-    expect(after(breadth, sectors)).toBe(true);
-    expect(after(sectors, document.querySelector('.coin-row'))).toBe(true);
+    expect(after(controls, firstRow)).toBe(true);
+
+    /* «زیر باکس‌هایی مثل میم‌کوین را از باکس جدا کن … زیر تب» — the sector rail
+       is no longer inside the list card at all: it has a surface of its own,
+       above نبض بازار and above the list. */
+    expect(terminal.contains(sectors)).toBe(false);
+    expect(lens.contains(sectors)).toBe(true);
+    expect(lens.contains(breadth)).toBe(true);
+    /* «باکس همه ارزها را فاصله بده با باکس نبض بازار» — two boxes, a gap apart */
+    expect(lens.contains(terminal)).toBe(false);
+    expect(after(lens, terminal)).toBe(true);
   });
 
   it('is neon by gradient hairline, not by blur or by a mask', () => {
@@ -347,7 +403,12 @@ describe('۷ · motion, theme and language on the first screen', () => {
     expect(frames.length).toBeGreaterThanOrEqual(3);
     for (const [name, body] of frames) {
       const props = new Set([...body.matchAll(/[{;]\s*([a-z-]+)\s*:/g)].map((x) => x[1]));
-      const illegal = [...props].filter((prop) => !['transform', 'opacity'].includes(prop));
+      /* The whitelist is "what the compositor can carry on its own": transform
+         and opacity, plus the individual transform properties. Nothing that
+         forces a repaint per frame — a stroke dash offset and a live filter are
+         exactly what this catches. */
+      const legal = ['transform', 'opacity', 'scale', 'translate', 'rotate'];
+      const illegal = [...props].filter((prop) => !legal.includes(prop));
       expect(illegal, `${name} animates ${illegal.join(', ')}`).toEqual([]);
     }
     /* …and the sheet keeps the float keyframe the stories suite pins. */
@@ -405,5 +466,35 @@ describe('۷ · motion, theme and language on the first screen', () => {
       const src = readFileSync(file, 'utf8');
       expect(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{25B2}\u{25BC}]/u.test(src), file).toBe(false);
     }
+  });
+});
+
+describe('۷ · the list folds and opens', () => {
+  it('offers one control that collapses the rows and never lies about the count', async () => {
+    await open();
+    const fold = screen.getByTestId('market-list-fold');
+    const count = screen.getByTestId('market-count');
+    const rows = () => document.querySelectorAll('#market-list-rows .coin-row').length;
+
+    /* the list states its own length; folding must not change that number */
+    const total = count.textContent;
+    expect(fold.getAttribute('aria-expanded')).toBe('true');
+    expect(fold.textContent).toContain(fa.marketIntel.listCollapse);
+    const openRows = rows();
+    expect(openRows).toBeGreaterThan(12);
+
+    fireEvent.click(fold);
+    expect(fold.getAttribute('aria-expanded')).toBe('false');
+    expect(fold.textContent).toContain(fa.marketIntel.listExpand);
+    /* one screenful, and the header still reports the whole list */
+    expect(rows()).toBe(12);
+    expect(count.textContent).toBe(total);
+    expect(fold.getAttribute('aria-controls')).toBe('market-list-rows');
+
+    fireEvent.click(fold);
+    expect(rows()).toBe(openRows);
+
+    /* and the chip is a measured pill, not a bare chevron */
+    expect(bare).toMatch(/\.mx-fold \{[^}]*border-radius: 999px/);
   });
 });

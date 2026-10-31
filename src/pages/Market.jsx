@@ -17,6 +17,7 @@ import {
   SECTOR_GLYPHS,
   GlyphCaretDown,
   GlyphPulse,
+  GlyphSectorRail,
   GlyphSortAsc,
   GlyphSortDesc
 } from '../components/market/MarketGlyphs';
@@ -68,6 +69,8 @@ const FILTERS = ['all', 'gainers', 'losers', 'favorites', 'volume'];
  * upstream call instead of two, and a count that matches the data.
  */
 const MARKET_PAGE_SIZE = 250;
+/* Rows kept on screen while the list is folded — one comfortable screenful. */
+const FOLDED_ROWS = 12;
 
 /**
  * SECTOR TABS — gold, memecoins, RWA, AI, gaming.
@@ -316,6 +319,11 @@ export default function Market() {
    * visible slice alone.
    */
   const [visibleCount, setVisibleCount] = useState(60);
+  /* «توکن‌ها کشیده شود جمع شده» — the rows are a fold, not a wall. Collapsed
+     shows the first screenful; the chip in the list header opens it again. The
+     count in that header stays the TRUE total either way, so a folded list
+     never lies about how many coins it holds. */
+  const [listFolded, setListFolded] = useState(false);
   const [secondPage, setSecondPage] = useState({ vs, rows: [] });
   const currentVs = useRef(vs);
   currentVs.current = vs;
@@ -572,8 +580,12 @@ export default function Market() {
     && sortKey === 'rank' && sortDir === 'asc'
     && !pageDone && (coins?.length ?? 0) >= MARKET_PAGE_SIZE;
   const shownCount = Math.min(visibleCount, list.length);
-  const hasMore = list.length > visibleCount || canLoadNext;
-  const visibleList = list.slice(0, visibleCount);
+  /* While folded the list shows one screenful and a chip. `rowCap` is what the
+     rows render against; `visibleCount` is what pagination believes — so folding
+     never loses the reader's place in a long page. */
+  const rowCap = listFolded ? Math.min(FOLDED_ROWS, visibleCount) : visibleCount;
+  const hasMore = list.length > rowCap || canLoadNext;
+  const visibleList = list.slice(0, rowCap);
 
   const swapRouteFor = (coin) => {
     const curated = isSwappable(coin.id);
@@ -601,10 +613,11 @@ export default function Market() {
 
           {/* ─── THE ORDER OF THE FIRST SCREEN ──────────────────────────────
               «باکس استوری ها … بین داغ ترین ها و بنر تبلیغاتی قرار بگیره»
+              «زیر باکس‌هایی مثل میم‌کوین … را از باکس جدا کن، زیر تب و ریلی»
 
               Readings first, then discovery, then the two promotional surfaces,
-              then the list. The deck (total market + Bitcoin, one box) is the
-              only number on the first screen; «داغ‌ترین کوین‌ها» is the only
+              then the list. The deck (market view, the three boxes, Bitcoin) is
+              the only number on the first screen; «داغ‌ترین کوین‌ها» is the only
               discovery; the stories and the Smart Money blade are the only two
               things that lead somewhere else — and the blade is last of the
               three, because it is the one that asks for a tap rather than
@@ -627,11 +640,29 @@ export default function Market() {
 
           <SmartMoneyBanner />
 
-          <section className="market-terminal mx-terminal" aria-labelledby="market-list-title">
-            <div className="mx-terminal-head">
-              <h2 className="market-terminal-title mx-terminal-title" id="market-list-title">
-                <span>{sector ? t(`market.sector.${sector}`) : t('market.allCoins')}</span>
-                <span className="market-count mono" aria-live="polite" data-testid="market-count">{fmtNum(list.length)}</span>
+          {/* ─── THE LENS AND THE LIST ARE TWO SURFACES ─────────────────────
+              «باکس همه ارزها را فاصله بده با باکس نبض بازار و هر دو را خیلی
+               مدرن کن»
+
+              One card held the whole screen's furniture and a seam down its
+              middle. Now:
+
+                · `.mx-lens`  — «نبض بازار» and the six sector tabs: the two
+                                readings that describe the WHOLE market rather
+                                than a row of it. It opens with a head of its
+                                own (freshness, refresh, compare) because those
+                                are statements about the feed itself.
+                · `.mx-terminal` — the list: its title and count, the search
+                                field, the five view chips, then the tokens.
+
+              They are siblings, so the gap between them is the page's own
+              rhythm («فاصله بده») instead of padding invented inside a card,
+              and the token rows start at the top of their own surface. */}
+          <section className="mx-lens" aria-labelledby="market-lens-title">
+            <div className="mx-terminal-head mx-lens-head">
+              <h2 className="market-terminal-title mx-terminal-title" id="market-lens-title">
+                <span>{t('marketIntel.railLabel')}</span>
+                <span className="mx-lens-note">{t('marketIntel.railTools')}</span>
               </h2>
               <div className="mx-terminal-actions">
                 {fresh && (
@@ -661,23 +692,152 @@ export default function Market() {
               </div>
             </div>
 
-            {/* «زیر همه ارزها باید فیلد جستجو بیاد بالای فیلتر ها» — the field
-                that narrows THIS list now lives inside this card, directly under
-                its head and directly above the chips that re-order it. */}
-            <MarketSearch
-              query={query}
-              onQueryChange={(value) => { setQuery(value); setSmartIntent(null); }}
-              onApplyIntent={applySmartSearch}
-              onNavigate={navigate}
-              universe={universe}
-              remoteHits={remoteHits}
-              searching={searching}
-              searchError={searchError}
-              smartIntent={smartIntent}
-              vs={vs}
-            />
+            {/* ─── «دسته‌ها» — DETACHED FROM THE LIST, UNDER THE VIEWS ──────
+                «زیر باکس‌هایی مثل میم‌کوین … را از باکس جدا کن، خیلی مدرن کن،
+                 زیر تب و در یک راستای افقی و به صورت ریلی حرکت کند»
 
-            <div className="mx-controls">
+                The sector rail used to sit INSIDE the «همه ارزها» card, three
+                rows down, between «نبض بازار» and the token rows — so the six
+                tabs that choose WHAT the list contains appeared after the list
+                had already begun. It now lives outside that card, directly under
+                the view chips, on its own track: a horizontal snapping rail of
+                44px glass tiles that scrolls with the thumb and never wraps.
+                Its own box, its own edge fade, its own gap — «جدا کن». */}
+            <div className="market-sectors mx-sectors" role="group" aria-label={t('market.sectorsAria')}>
+              <span className="mx-sectors-head">
+                <span className="mx-sectors-mark" aria-hidden="true"><GlyphSectorRail width={13} height={13} /></span>
+                <span className="mx-sectors-label">{t('marketIntel.sectorsTitle')}</span>
+                {sector && (
+                  <button
+                    type="button"
+                    className="mx-sectors-reset"
+                    onClick={() => { setSectorCoins([]); setSector(null); }}
+                  >
+                    {t('market.showAll')}
+                  </button>
+                )}
+              </span>
+              <div className="mx-sectors-rail" data-testid="market-sector-rail">
+                {SECTORS.map((sec) => (
+                  <button
+                    key={sec}
+                    type="button"
+                    className="market-sector mx-sector"
+                    data-sector={sec}
+                    data-active={sector === sec ? 'true' : undefined}
+                    aria-pressed={sector === sec}
+                    onClick={() => { setSectorCoins([]); setSector(sector === sec ? null : sec); }}
+                  >
+                    <span className="mx-sector-tile" aria-hidden="true"><SectorGlyph sector={sec} /></span>
+                    <span className="mx-sector-label">{t(`market.sector.${sec}`)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {breadth.counted > 0 && (
+              <div
+                className="market-breadth mx-breadth"
+                data-testid="market-breadth"
+                data-tone={breadth.avgChange >= 0 ? 'up' : 'down'}
+              >
+                <div className="mx-breadth-head">
+                  <span className="mx-breadth-title">
+                    <span className="mx-breadth-mark" aria-hidden="true">
+                      <GlyphPulse width={13} height={13} />
+                    </span>
+                    {t('market.breadthTitle')}
+                  </span>
+                  <span className="mx-breadth-avg mono" data-tone={breadth.avgChange >= 0 ? 'up' : 'down'}>
+                    <IconActivity width={11} height={11} aria-hidden="true" />
+                    {t('market.breadthAvg', { pct: fmtPct(breadth.avgChange, 2) })}
+                  </span>
+                </div>
+                <div className="mx-breadth-bar" aria-hidden="true">
+                  <span className="is-up" style={{ width: `${breadth.upShare * 100}%` }} />
+                  <span className="is-flat" style={{ width: `${breadth.flatShare * 100}%` }} />
+                  <span className="is-down" style={{ width: `${breadth.downShare * 100}%` }} />
+                </div>
+                <div className="mx-breadth-legend">
+                  <span className="mx-breadth-item" data-tone="up" data-testid="market-breadth-up">
+                    <i aria-hidden="true" />{t('market.breadthUp', { count: fmtNum(breadth.up) })}
+                  </span>
+                  <span className="mx-breadth-item" data-tone="down" data-testid="market-breadth-down">
+                    <i aria-hidden="true" />{t('market.breadthDown', { count: fmtNum(breadth.down) })}
+                  </span>
+                  {breadth.flat > 0 && (
+                    <span className="mx-breadth-item" data-tone="flat">
+                      <i aria-hidden="true" />{t('market.breadthFlat', { count: fmtNum(breadth.flat) })}
+                    </span>
+                  )}
+                  {breadth.unknown > 0 && (
+                    <span className="mx-breadth-item" data-tone="unknown">
+                      <i aria-hidden="true" />{t('market.breadthUnknown', { count: fmtNum(breadth.unknown) })}
+                    </span>
+                  )}
+                </div>
+                <p className="market-breadth-note mx-breadth-note">{t('market.breadthNote', { count: fmtNum(breadth.counted) })}</p>
+              </div>
+            )}
+
+          </section>
+
+          <section className="market-terminal mx-terminal" aria-labelledby="market-list-title">
+            {/* ─── THE HERO OF «همه ارزها» — «توکن‌ها کشیده شود» ─────────────
+                «توکن ها کشیده شود جمع شده … اندازه و فاصله درست»
+
+                The card's own title, the field that narrows it and the chips
+                that re-order it are one block («mx-list-hero») with a hairline
+                under it: a header that reads as a header, a full-width search,
+                and a chip row that no longer shares a line with a sort menu on
+                a phone. The rows then start on a clean, aligned grid. */}
+            <div className="mx-list-hero">
+              <div className="mx-list-hero-head">
+                <h2 className="mx-list-title" id="market-list-title">
+                  <span className="market-terminal-title-text">{sector ? t(`market.sector.${sector}`) : t('marketIntel.allCoinsTitle')}</span>
+                  <span className="market-count mono" aria-live="polite" data-testid="market-count">{fmtNum(list.length)}</span>
+                </h2>
+                {/* «توکن‌ها کشیده شود جمع شده» — the fold lives on the title line,
+                    where the list's own length is stated, and it names the action
+                    instead of showing a bare chevron. */}
+                {list.length > FOLDED_ROWS && (
+                  <button
+                    type="button"
+                    className="mx-fold"
+                    onClick={() => setListFolded((folded) => !folded)}
+                    aria-expanded={!listFolded}
+                    aria-controls="market-list-rows"
+                    data-testid="market-list-fold"
+                  >
+                    <span>{listFolded ? t('marketIntel.listExpand') : t('marketIntel.listCollapse')}</span>
+                    <GlyphCaretDown
+                      className="mx-fold-caret"
+                      data-folded={listFolded ? 'true' : 'false'}
+                      width={13}
+                      height={13}
+                      aria-hidden="true"
+                    />
+                  </button>
+                )}
+              </div>
+
+              {/* «زیر همه ارزها باید فیلد جستجو بیاد بالای فیلتر ها» — the field
+                  that narrows THIS list lives inside this card, directly under
+                  its head and directly above the chips that re-order it. */}
+              <MarketSearch
+                query={query}
+                onQueryChange={(value) => { setQuery(value); setSmartIntent(null); }}
+                onApplyIntent={applySmartSearch}
+                onNavigate={navigate}
+                universe={universe}
+                remoteHits={remoteHits}
+                searching={searching}
+                searchError={searchError}
+                smartIntent={smartIntent}
+                vs={vs}
+              />
+
+              <div className="mx-controls">
               <div className="market-views mx-views" role="group" aria-label={t('market.viewsAria')}>
                 {FILTERS.map((f) => (
                   <button
@@ -764,7 +924,10 @@ export default function Market() {
                     : <GlyphSortAsc width={14} height={14} />}
                 </button>
               </div>
-            </div>
+              </div>
+              </div>
+
+            <div className="mx-table-wrap">
 
             {smartIntent && (
               <div className="mx-intent-result" role="status" aria-live="polite">
@@ -773,71 +936,6 @@ export default function Market() {
                 <button type="button" onClick={() => { setSmartIntent(null); setQuery(''); }}>{t('market.clearSearch')}</button>
               </div>
             )}
-
-            {breadth.counted > 0 && (
-              <div
-                className="market-breadth mx-breadth"
-                data-testid="market-breadth"
-                data-tone={breadth.avgChange >= 0 ? 'up' : 'down'}
-              >
-                <div className="mx-breadth-head">
-                  <span className="mx-breadth-title">
-                    <span className="mx-breadth-mark" aria-hidden="true">
-                      <GlyphPulse width={13} height={13} />
-                    </span>
-                    {t('market.breadthTitle')}
-                  </span>
-                  <span className="mx-breadth-avg mono" data-tone={breadth.avgChange >= 0 ? 'up' : 'down'}>
-                    <IconActivity width={11} height={11} aria-hidden="true" />
-                    {t('market.breadthAvg', { pct: fmtPct(breadth.avgChange, 2) })}
-                  </span>
-                </div>
-                <div className="mx-breadth-bar" aria-hidden="true">
-                  <span className="is-up" style={{ width: `${breadth.upShare * 100}%` }} />
-                  <span className="is-flat" style={{ width: `${breadth.flatShare * 100}%` }} />
-                  <span className="is-down" style={{ width: `${breadth.downShare * 100}%` }} />
-                </div>
-                <div className="mx-breadth-legend">
-                  <span className="mx-breadth-item" data-tone="up" data-testid="market-breadth-up">
-                    <i aria-hidden="true" />{t('market.breadthUp', { count: fmtNum(breadth.up) })}
-                  </span>
-                  <span className="mx-breadth-item" data-tone="down" data-testid="market-breadth-down">
-                    <i aria-hidden="true" />{t('market.breadthDown', { count: fmtNum(breadth.down) })}
-                  </span>
-                  {breadth.flat > 0 && (
-                    <span className="mx-breadth-item" data-tone="flat">
-                      <i aria-hidden="true" />{t('market.breadthFlat', { count: fmtNum(breadth.flat) })}
-                    </span>
-                  )}
-                  {breadth.unknown > 0 && (
-                    <span className="mx-breadth-item" data-tone="unknown">
-                      <i aria-hidden="true" />{t('market.breadthUnknown', { count: fmtNum(breadth.unknown) })}
-                    </span>
-                  )}
-                </div>
-                <p className="market-breadth-note mx-breadth-note">{t('market.breadthNote', { count: fmtNum(breadth.counted) })}</p>
-              </div>
-            )}
-
-            <div className="market-sectors mx-sectors" role="group" aria-label={t('market.sectorsAria')}>
-              <span className="market-sectors-label mx-sectors-label">{t('market.sectorsLabel')}</span>
-              <div className="market-sectors-rail mx-sectors-rail">
-                {SECTORS.map((sec) => (
-                  <button
-                    key={sec}
-                    type="button"
-                    className="market-sector mx-sector"
-                    data-sector={sec}
-                    data-active={sector === sec ? 'true' : undefined}
-                    aria-pressed={sector === sec}
-                    onClick={() => { setSectorCoins([]); setSector(sector === sec ? null : sec); }}
-                  >
-                    <SectorGlyph sector={sec} />
-                    {t(`market.sector.${sec}`)}
-                  </button>
-                ))}
-              </div>
-            </div>
 
             {loading && !list.length ? (
               <div className="stack market-coin-grid mx-table" aria-busy="true">
@@ -888,7 +986,7 @@ export default function Market() {
                   </div>
                 )}
 
-                <div className="stack market-coin-grid mx-table">
+                <div className="stack market-coin-grid mx-table" id="market-list-rows">
                   {visibleList.map((c, i) => {
                     const swapUrl = swapRouteFor(c);
                     return (
@@ -965,6 +1063,7 @@ export default function Market() {
                 )}
               </>
             )}
+            </div>
           </section>
         </PageTransition>
       </div>

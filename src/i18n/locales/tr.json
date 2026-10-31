@@ -318,7 +318,16 @@
     "emptyFavoritesHelp": "Eklemek için coin sayfasını açıp yıldızına dokun; fiyat uyarılarını da oradan yönetebilirsin.",
     "showAll": "Tüm coinleri göster",
     "refresh": "Fiyatları yenile",
-    "trendingBasis": "Şu anda en çok arananlar"
+    "trendingBasis": "Şu anda en çok arananlar",
+    "sector": {
+      "gold": "Altın",
+      "meme": "Memecoin",
+      "rwa": "Gerçek varlıklar",
+      "ai": "YZ",
+      "gaming": "Oyun",
+      "solana": "Solana"
+    },
+    "showMore": "Daha fazla ({{count}} kaldı)"
   },
   "coin": {
     "notFound": "Coin bulunamadı",
@@ -4014,5 +4023,26 @@
       "lessonsCount": "Bu seviyede {{n}} ders",
       "pathsNote": "Videolar Aparat’ta barındırılıyor; oynatma kalitesi bağlantınıza bağlıdır."
     }
+  },
+  "marketIntel": {
+    "deckEyebrow": "Canlı piyasa görünümü",
+    "allCoinsTitle": "Tüm coinler",
+    "sectorsTitle": "Sektörler",
+    "railLabel": "Piyasa vitrini",
+    "railTools": "Araçlar",
+    "flowWallet": "Cüzdan",
+    "flowRouter": "Yönlendirici",
+    "flowTarget": "Hedef",
+    "smartLive": "Canlı akış",
+    "pool": {
+      "whales": "Balinalar",
+      "institutions": "Kurumsal",
+      "newPools": "Yeni havuzlar"
+    },
+    "statCoins": "Coinler",
+    "statMarkets": "Piyasalar",
+    "statAvg": "Ortalama değişim",
+    "listCollapse": "Listeyi daralt",
+    "listExpand": "Listeyi genişlet"
   }
 }
