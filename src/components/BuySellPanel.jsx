@@ -200,6 +200,24 @@ const stepVariants = {
   exit: (custom) => ({ opacity: 0, x: -26 * custom, transition: { duration: 0.16 } })
 };
 
+/* Roving tab focus follows the writing direction, not a hard-coded left/right
+   order. Activation still goes through the same button click handlers. */
+function navigateTabs(event) {
+  const tabs = [...event.currentTarget.querySelectorAll('[role="tab"]:not(:disabled)')];
+  const current = tabs.indexOf(document.activeElement);
+  if (current < 0 || !tabs.length) return;
+  const rtl = (event.currentTarget.closest('[dir]') || document.documentElement).dir === 'rtl';
+  let next;
+  if (event.key === 'Home') next = 0;
+  else if (event.key === 'End') next = tabs.length - 1;
+  else if (event.key === 'ArrowRight') next = (current + (rtl ? -1 : 1) + tabs.length) % tabs.length;
+  else if (event.key === 'ArrowLeft') next = (current + (rtl ? 1 : -1) + tabs.length) % tabs.length;
+  else return;
+  event.preventDefault();
+  tabs[next].focus();
+  tabs[next].click();
+}
+
 export default function BuySellPanel({ initialOrderId = null }) {
   const { t, i18n } = useTranslation();
   const wallet = useWallet();
@@ -602,8 +620,8 @@ export default function BuySellPanel({ initialOrderId = null }) {
   return (
     <div className={`buy-sell-panel ${sell ? 'is-sell' : 'is-buy'}`}>
       {iranBuyVisible && (
-        <div className="segmented buy-sell-surface-switch" role="tablist" aria-label={t('buySell.title')}>
-          <button type="button" role="tab" aria-selected={buySurface === 'general'} className={buySurface === 'general' ? 'active' : ''} onClick={() => setBuySurface('general')} style={{ isolation: 'isolate' }}>
+        <div className="segmented buy-sell-surface-switch" role="tablist" aria-label={t('buySell.title')} onKeyDown={navigateTabs}>
+          <button type="button" role="tab" tabIndex={buySurface === 'general' ? 0 : -1} aria-selected={buySurface === 'general'} className={buySurface === 'general' ? 'active' : ''} onClick={() => setBuySurface('general')} style={{ isolation: 'isolate' }}>
             {buySurface === 'general' && <SegIndicator id="buy-sell-surface" />}
             <span className="bsw-tab-icon" aria-hidden="true"><IconSwap width={17} height={17} /></span>
             <span className="bsw-tab-copy"><b>{t('buySell.title')}</b><small>{t('buySell.generalCaption')}</small></span>
@@ -616,16 +634,16 @@ export default function BuySellPanel({ initialOrderId = null }) {
         <IranianBuyPanel capability={iranBuyCapability} />
       ) : (
         <>
-      <div className="segmented buy-sell-switch" role="tablist" aria-label={t('buySell.directionLabel')}>
-        <button type="button" role="tab" aria-selected={side === 'BUY'} className={side === 'BUY' ? 'active' : ''} onClick={() => changeSide('BUY')} style={{ isolation: 'isolate' }}>
+      <div className="segmented buy-sell-switch" role="tablist" aria-label={t('buySell.directionLabel')} onKeyDown={navigateTabs}>
+        <button type="button" role="tab" tabIndex={side === 'BUY' ? 0 : -1} aria-selected={side === 'BUY'} className={side === 'BUY' ? 'active' : ''} onClick={() => changeSide('BUY')} style={{ isolation: 'isolate' }}>
           {side === 'BUY' && <SegIndicator id="buy-sell-direction" />}
           <span className="bsw-side-icon" aria-hidden="true"><IconArrowDown width={14} height={14} /></span>
-          {t('buySell.buy')}
+          <span className="bsw-side-label">{t('buySell.buy')}</span>
         </button>
-        <button type="button" role="tab" aria-selected={side === 'SELL'} className={side === 'SELL' ? 'active' : ''} onClick={() => changeSide('SELL')} style={{ isolation: 'isolate' }}>
+        <button type="button" role="tab" tabIndex={side === 'SELL' ? 0 : -1} aria-selected={side === 'SELL'} className={side === 'SELL' ? 'active' : ''} onClick={() => changeSide('SELL')} style={{ isolation: 'isolate' }}>
           {side === 'SELL' && <SegIndicator id="buy-sell-direction" />}
           <span className="bsw-side-icon" aria-hidden="true"><IconArrowUpRight width={14} height={14} /></span>
-          {t('buySell.sell')}
+          <span className="bsw-side-label">{t('buySell.sell')}</span>
         </button>
       </div>
 

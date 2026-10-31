@@ -3,10 +3,12 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import BuySellPanel from '../components/BuySellPanel';
-import { IconChevronLeft, IconFingerprint, IconShield, IconSwap } from '../components/Icons';
+import AssetIcon from '../components/AssetIcon';
+import { IconChevronLeft, IconFingerprint, IconShield, IconSwap, IconWallet } from '../components/Icons';
 import '../styles/lab-modern.css';
 import '../styles/buy-sell.css';
 import '../styles/iran-buy.css';
+import '../styles/buy-sell-modern.css';
 
 /**
  * One hosted-checkout surface for fiat on/off-ramp activity.
@@ -19,24 +21,13 @@ import '../styles/iran-buy.css';
  * target. Returning from checkout never implies success; the panel re-reads
  * the verified order state from the server.
  *
- * ─── THE HEADER IS A HERO NOW (2026-10-30) ─────────────────────────────────
- * «صفحهٔ خرید و فروش را از نظر رنگ، باکس، ایکون، اندازه و فاصله، زبان و تم
- *  درست کن.»
- *
- * What was here: a back chevron, a 32px badge, an h1 and a grey paragraph
- * floating on the page background — the same shape as fifteen other internal
- * screens. On the one screen where a stranger is about to hand over money,
- * that reads as a settings sub-page rather than as a counter.
- *
- * It is now a single glass hero: an aurora that carries the desk's mint→cyan
- * (buy) identity, the badge at a real size, a kicker, the title, the intro and
- * three trust chips that state — in the reader's own language — what this
- * screen will and will not do. Nothing in it is new behaviour; the same
- * strings that used to sit in one grey paragraph are now scannable.
- *
- * The hero is RTL-safe by construction: every offset is logical, the back
- * chevron is mirrored by its own icon set, and the aurora is anchored to the
- * inline edges rather than to "left" and "right".
+ * ─── PRISM DESK (2026-10-31) ──────────────────────────────────────────────
+ * A compact exchange counter, not another glowing settings card. The asset
+ * constellation is decorative (and hidden from assistive technology); the
+ * title, explanation and three factual trust statements remain real text.
+ * The final, page-scoped stylesheet resolves the shared tab fallback without
+ * changing any other screen. Every offset is logical, so fa/ar mirror safely.
+ * No prices, availability claims, payment logic or wallet permissions live here.
  */
 export default function Buy() {
   const { t } = useTranslation();
@@ -44,16 +35,15 @@ export default function Buy() {
   const { orderId } = useParams();
 
   return (
-    <PageTransition>
+    <PageTransition className="page buy-sell-page">
       <motion.section
         className="buy-sell-hero"
         variants={riseIn}
         initial="hidden"
         animate="show"
+        aria-labelledby="buy-sell-page-title"
       >
         <span className="buy-sell-hero-field" aria-hidden="true">
-          <i className="buy-sell-hero-bloom buy-sell-hero-bloom--a" />
-          <i className="buy-sell-hero-bloom buy-sell-hero-bloom--b" />
           <i className="buy-sell-hero-grid" />
           <i className="buy-sell-hero-sheen" />
         </span>
@@ -66,33 +56,42 @@ export default function Buy() {
           >
             <IconChevronLeft width={18} height={18} />
           </button>
-          <span className="buy-sell-page-mark" aria-hidden="true">
-            <IconSwap width={19} height={19} />
-          </span>
+          <span className="buy-sell-hero-kicker" dir="ltr">FBT <i /> EXCHANGE</span>
+          <span className="buy-sell-hero-edition" aria-hidden="true">01 / DESK</span>
+        </div>
+
+        <div className="buy-sell-hero-main">
           <div className="buy-sell-hero-text">
-            <span className="buy-sell-hero-kicker" aria-hidden="true">FBT · ON / OFF RAMP</span>
-            <h1 className="buy-sell-hero-title">
+            <h1 className="buy-sell-hero-title" id="buy-sell-page-title">
               {orderId ? t('buySell.resultTitle') : t('buySell.title')}
             </h1>
+            <p className="buy-sell-page-intro">
+              {orderId ? t('buySell.resultIntro') : t('buySell.pageIntro')}
+            </p>
+          </div>
+          <div className="buy-sell-constellation" aria-hidden="true">
+            <span className="buy-sell-orbit buy-sell-orbit--outer" />
+            <span className="buy-sell-orbit buy-sell-orbit--inner" />
+            <span className="buy-sell-asset buy-sell-asset--btc"><AssetIcon symbol="BTC" size={38} radius={19} /></span>
+            <span className="buy-sell-asset buy-sell-asset--eth"><AssetIcon symbol="ETH" size={30} radius={15} /></span>
+            <span className="buy-sell-asset buy-sell-asset--usdt"><AssetIcon symbol="USDT" size={28} radius={14} /></span>
+            <span className="buy-sell-page-mark"><IconSwap width={27} height={27} /></span>
+            <span className="buy-sell-orbit-dot" />
           </div>
         </div>
 
-        <p className="prose-sm buy-sell-page-intro">
-          {orderId ? t('buySell.resultIntro') : t('buySell.pageIntro')}
-        </p>
-
         <div className="buy-sell-hero-trust">
           <span className="buy-sell-hero-chip">
-            <IconShield width={13} height={13} aria-hidden="true" />
-            {t('buySell.nonCustodial')}
+            <IconShield width={15} height={15} aria-hidden="true" />
+            <span>{t('buySell.nonCustodial')}</span>
           </span>
           <span className="buy-sell-hero-chip">
-            <IconFingerprint width={13} height={13} aria-hidden="true" />
-            {t('buySell.verifiedLink')}
+            <IconFingerprint width={15} height={15} aria-hidden="true" />
+            <span>{t('buySell.verifiedLink')}</span>
           </span>
           <span className="buy-sell-hero-chip">
-            <IconSwap width={13} height={13} aria-hidden="true" />
-            {t('buySell.generalCaption')}
+            <IconWallet width={15} height={15} aria-hidden="true" />
+            <span>{t('buySell.directSettlement')}</span>
           </span>
         </div>
       </motion.section>
@@ -101,7 +100,7 @@ export default function Buy() {
 
       <motion.section className="lab-card buy-sell-safety" variants={riseIn} initial="hidden" animate="show">
         <div className="row" style={{ gap: 8, marginBottom: 8 }}>
-          <span className="buy-sell-safety-mark" style={{ color: 'var(--rgb-5)', display: 'grid', placeItems: 'center' }}><IconShield width={17} height={17} /></span>
+          <span className="buy-sell-safety-mark" style={{ display: 'grid', placeItems: 'center' }}><IconShield width={17} height={17} /></span>
           <p className="section-label" style={{ margin: 0 }}>{t('buySell.safetyTitle')}</p>
         </div>
         <ul className="prose-list">
