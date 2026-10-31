@@ -175,28 +175,26 @@ afterEach(() => {
 });
 
 describe('Glassmorphic Market Cap & Bitcoin Hero Cards + 1-Minute Stories + Aparat Academy', () => {
-  it('renders the glassmorphic Total Market Cap card and Bitcoin hero card with zero-flicker tabular numerals', async () => {
+  it('renders the compact intelligence overview and Bitcoin panel with tabular numerals', async () => {
     render(
       <MemoryRouter>
         <Market />
       </MemoryRouter>
     );
 
-    const globalCard = document.querySelector('.market-global-card.market-glass-surface');
+    const globalCard = screen.getByTestId('market-global-card');
     const btcCard = screen.getByTestId('market-btc-hero-card');
     expect(globalCard).toBeTruthy();
     expect(btcCard).toBeTruthy();
-    expect(btcCard.classList.contains('market-glass-surface')).toBe(true);
     expect(btcCard.textContent).toContain('Bitcoin');
-    expect(btcCard.textContent).toContain('#1');
     expect(document.querySelector('.market-global-watermark')).toBeNull();
     expect(document.querySelector('.market-btc-watermark')).toBeNull();
     expect(document.querySelector('.market-hero-action-chip')).toBeNull();
 
-    const modernCss = readFileSync('src/styles/market-modern.css', 'utf8');
-    expect(modernCss).toMatch(/:root\[data-native='true'\]\s*\.market-glass-surface[\s\S]*?backdrop-filter:\s*none\s*!important/);
-    expect(modernCss).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
-    expect(modernCss).toMatch(/:root\[data-theme='light'\]\s*\.market-glass-surface/);
+    const intelCss = readFileSync('src/styles/market-intelligence.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(intelCss).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+    expect(intelCss).toMatch(/:root\[data-theme='light'\]\s*\.mx-market/);
+    expect(intelCss).not.toMatch(/backdrop-filter/);
   });
 
   it('renders Instagram-style story icons below the Bitcoin box and opens a 1-minute (60s) popup for Stocks with top gainers & CTA', async () => {
@@ -300,64 +298,39 @@ describe('Glassmorphic Market Cap & Bitcoin Hero Cards + 1-Minute Stories + Apar
      refactor cannot quietly put the sphere or the button back.
      ══════════════════════════════════════════════════════════════════════ */
 
-  it('replaces the spheres behind both cards with an aurora field, in CSS and in the DOM', () => {
+  it('replaces decorative aurora cards with one compact intelligence surface', () => {
     render(<MemoryRouter><Market /></MemoryRouter>);
 
-    /* Not one orb anywhere on the page — they were the "کره زشت". */
     expect(document.querySelectorAll('.market-glass-orb')).toHaveLength(0);
+    const overview = screen.getByTestId('market-overview');
+    expect(overview.querySelector('.market-glass-aurora')).toBeNull();
+    expect(overview.querySelector('.market-glass-bloom--a')).toBeNull();
 
-    /* Both cards carry the layered aurora instead: two blooms, a masked grid
-       and the 1px specular sheen along the top edge. */
-    const globalCard = document.querySelector('.market-global-card.market-glass-surface');
-    const heroCard = screen.getByTestId('market-btc-hero-card');
-    for (const card of [globalCard, heroCard]) {
-      expect(card.querySelector('.market-glass-aurora')).toBeTruthy();
-      expect(card.querySelector('.market-glass-bloom--a')).toBeTruthy();
-      expect(card.querySelector('.market-glass-bloom--b')).toBeTruthy();
-      expect(card.querySelector('.market-glass-grid')).toBeTruthy();
-      expect(card.querySelector('.market-glass-sheen')).toBeTruthy();
-    }
+    const globalCard = screen.getByTestId('market-global-card');
+    const dominance = globalCard.querySelector('.mx-dominance');
+    expect(dominance).toBeTruthy();
+    expect(dominance.querySelector('.is-btc')).toBeTruthy();
+    expect(dominance.querySelector('.is-eth')).toBeTruthy();
+    expect(globalCard.textContent).toContain(fa.market.btcDominance);
+    expect(globalCard.textContent).toContain(fa.market.ethDominance);
 
-    /* The dominance bar now names its own segments. */
-    expect(globalCard.querySelector('.market-dominance-legend')).toBeTruthy();
-    expect(globalCard.textContent).toContain('BTC');
-    expect(globalCard.textContent).toContain('ETH');
-
-    const css = readFileSync('src/styles/market-modern.css', 'utf8');
-    expect(css).not.toMatch(/\.market-glass-orb\s*\{/);
-    expect(css).not.toMatch(/\.market-btc-watermark\s*\{/);
-    expect(css).not.toMatch(/\.market-global-watermark\s*\{/);
-    expect(css).not.toMatch(/\.market-hero-action-chip\s*\{/);
-    expect(css).toMatch(/\.market-glass-bloom--a\s*\{/);
-    /* The motion budget the file's own header promises: transform/opacity only. */
-    expect(css).toMatch(/@keyframes mk-drift\s*\{[\s\S]*?transform:[\s\S]*?opacity:/);
+    const css = readFileSync('src/styles/market-intelligence.css', 'utf8');
+    expect(css).toMatch(/\.mx-overview/);
+    expect(css).toMatch(/@keyframes mx-float/);
     expect(css).not.toMatch(/animation:[^;]*filter/);
   });
 
-  it('renders the Bitcoin box as one glass surface with no watermark, no sphere and no button inside it', () => {
+  it('renders the Bitcoin panel with one identity control, an interactive chart and a 24h range', () => {
     render(<MemoryRouter><Market /></MemoryRouter>);
 
     const btcCard = screen.getByTestId('market-btc-hero-card');
-
-    /* «دکمه swap btc را ببر» — the card IS the tap target, so it holds zero
-       nested controls. Any <button> in here is a second tap target fighting
-       the first for the same gesture. */
-    expect(btcCard.querySelectorAll('button')).toHaveLength(0);
+    expect(btcCard.querySelectorAll('button')).toHaveLength(1);
     expect(btcCard.textContent).not.toMatch(/swap/i);
     expect(btcCard.querySelector('.market-btc-watermark')).toBeNull();
-    expect(btcCard.querySelector('.market-hero-action-chip')).toBeNull();
+    expect(screen.getByTestId('market-btc-chart')).toBeTruthy();
 
-    /* The coin's real logo still exists, once, at identity size — it is the
-       background mark that was removed, not the logo itself. */
-    expect(btcCard.querySelectorAll('.market-hero-logo-halo')).toHaveLength(1);
-
-    /* The one thing no other card in the app shows: where the price sits
-       between its own 24h low and high. */
     const range = screen.getByTestId('market-hero-range');
     expect(range).toBeTruthy();
-    expect(range.querySelector('.market-hero-range-marker')).toBeTruthy();
-    /* Both ends of the day are printed, so the marker is legible as a position
-       between two numbers rather than a dot on an unlabelled bar. */
     expect(range.textContent).toContain(fmtUsd(89500));
     expect(range.textContent).toContain(fmtUsd(93200));
   });

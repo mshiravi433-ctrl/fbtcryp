@@ -3979,8 +3979,9 @@ app.get('/api/coin/:id', (req, res) =>
  */
 app.get('/api/search', (req, res) => {
   const q = String(req.query.q || '').trim().slice(0, 64);
+  const vs = String(req.query.vs || 'usd').toLowerCase();
   if (q.length < 2) return res.json([]);
-  return serve(res, 120000)(() => fetchSearch(q), `search:${q.toLowerCase()}`);
+  return serve(res, 120000)(() => fetchSearch(q, { vs }), `search:${vs}:${q}`);
 });
 
 /*
