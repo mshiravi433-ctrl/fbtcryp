@@ -1,0 +1,1000 @@
+/* FBT MARKET · OBSIDIAN GLASS — the sixth material pass over «صفحه بازار».
+   ---------------------------------------------------------------------------
+   Requested (again, and this time about the whole screen): «باکس‌ها شیشه‌ای
+   مدرن‌تر، ظاهر خاص با پشت‌زمینهٔ خاص، بهترین UI/UX، چشم‌نواز و حرفه‌ای‌ترین
+   صفحه».
+
+   Five earlier sheets already taught these boxes to be glass. What they never
+   gave them was a *place*: the page behind them was still a flat two-stop
+   wash, so every surface read as a card lying on a colour rather than as a
+   pane floating over a lit room. This sheet is the last layer of the market
+   route and it changes exactly three things, in this order of importance:
+
+     1 · THE ROOM. A cinematic backdrop under the whole route — a dark vault,
+         one wide ceiling light that drifts, a fine measuring grid, and a
+         champagne horizon at the bottom. All of it painted; nothing is read
+         back from the page.
+
+     2 · THE GLASS BODY. Every box keeps the same three-plane recipe:
+           · a prismatic rim drawn with a CONIC gradient in the border box, so
+             the hue travels around the frame instead of only across a corner;
+           · a smoked interior of six painted layers — top skylight, accent
+             bloom, counter bloom, bottom light-leak, photographic grain and
+             frost striation — over a dark shell that is deliberately 3–9%
+             translucent so the room shows through;
+           · a thick bevel: bright top edge, dark bottom edge, inner bloom.
+
+     3 · THE HAND. Hover lifts only what can actually be tapped, press answers
+         back, focus is a real ring, touch targets meet 44px, and every loop
+         stops for reduced motion / native / lite — with a high-contrast and a
+         reduced-transparency variant for people who ask for one.
+
+   No number, series, label or route is invented here. Every added layer is a
+   background, an inset shadow or an aria-hidden decoration. */
+
+/* ══ 0 · TOKENS ═══════════════════════════════════════════════════════════ */
+.mx-market {
+  /* ── the room ───────────────────────────────────────────────────────── */
+  --og-void: #05070e;
+  --og-ceiling: rgba(156, 238, 255, .16);
+  --og-ceiling-warm: rgba(255, 208, 150, .07);
+  --og-grid: rgba(150, 210, 255, .05);
+  --og-grid-step: 56px;
+
+  /* ── the glass shell. 91–96% alpha: the room glows through, a price stays
+        AAA-legible on top. ────────────────────────────────────────────── */
+  --og-shell-a: rgba(12, 25, 43, .91);
+  --og-shell-b: rgba(8, 17, 33, .94);
+  --og-shell-c: rgba(6, 11, 23, .965);
+
+  /* One diagonal glaze (the specular sheet) and one drawn frost, 1px/15px.
+     The frost is what separates «شیشه» from «مستطیل رنگ‌شده». */
+  --og-glaze: linear-gradient(154deg, rgba(255, 255, 255, .10), rgba(255, 255, 255, .012) 44%, rgba(2, 8, 18, .28));
+  --og-stria: repeating-linear-gradient(124deg, rgba(255, 255, 255, .026) 0 1px, transparent 1px 15px);
+
+  /* Photographic grain. A 180px tile of white specks at ~10% alpha, drawn by
+     feTurbulence ONCE and then repeated by the painter — no filter property,
+     no runtime cost, and the single biggest reason the surface reads as a
+     physical pane instead of a gradient. */
+  --og-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.86' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 .028 .028 .028 0 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+
+  /* The prismatic rim. A conic gradient is the whole point: the hue walks
+     around the frame, so the edge reads as refracted light rather than as a
+     two-colour hairline. */
+  --og-prism: conic-gradient(from 212deg at 50% 50%,
+    rgba(148, 250, 244, .95),
+    rgba(118, 170, 255, .26) 15%,
+    rgba(198, 166, 255, .88) 33%,
+    rgba(255, 210, 155, .48) 51%,
+    rgba(118, 170, 255, .20) 68%,
+    rgba(148, 250, 244, .95));
+  --og-prism-warm: conic-gradient(from 248deg at 50% 50%,
+    rgba(255, 226, 176, .96),
+    rgba(255, 207, 131, .26) 20%,
+    rgba(148, 250, 244, .58) 46%,
+    rgba(198, 166, 255, .54) 68%,
+    rgba(255, 226, 176, .96));
+
+  /* ── elevation ──────────────────────────────────────────────────────── */
+  --og-lift:
+    0 34px 70px -48px rgba(2, 4, 10, .98),
+    0 10px 26px -22px rgba(2, 4, 10, .82);
+  --og-bevel-top: inset 0 1px 0 rgba(255, 255, 255, .18);
+  --og-bevel-bottom: inset 0 -1px 0 rgba(2, 6, 14, .62);
+
+  /* ── ink. Two steps brighter than the last pass: the new shell is darker,
+        so the same greys would have lost a step of contrast. ──────────── */
+  --mx-muted: #b2c1de;
+  --mx-faint: #93a4c4;
+
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(96% 46% at 50% 108%, rgba(146, 120, 255, .07), transparent 68%),
+    linear-gradient(180deg, var(--og-void) 0%, #070d18 44%, var(--og-void) 100%);
+}
+
+/* ══ 1 · THE ROOM ════════════════════════════════════════════════════════
+   Three coats, all behind the content, all absolutely positioned so they can
+   never become a flex item or take a track:
+
+     ::before  the measuring grid — 56px, 5% ink, a drawing of a chart floor;
+     ::after   the ceiling — one wide cold light, one warm one, drifting on a
+               32s alternate cycle (transform + opacity only);
+     the page  the vault itself, a vertical wash to near-black. */
+
+.mx-market::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 30px;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, var(--og-grid) 0 1px, transparent 1px var(--og-grid-step)),
+    repeating-linear-gradient(0deg, rgba(150, 210, 255, .038) 0 1px, transparent 1px var(--og-grid-step));
+  opacity: .85;
+}
+
+.mx-market::after {
+  content: '';
+  position: absolute;
+  /* Kept exactly inside the page box: a pseudo that bleeds past the viewport
+     edge is how a phone gets a horizontal scrollbar for no reason. */
+  inset-block-start: 0;
+  inset-inline: 0;
+  height: min(640px, 82vh);
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(58% 100% at 50% 0%, var(--og-ceiling), transparent 72%),
+    radial-gradient(44% 94% at 10% 0%, rgba(112, 255, 235, .12), transparent 74%),
+    radial-gradient(48% 96% at 92% 2%, rgba(178, 142, 255, .17), transparent 72%),
+    radial-gradient(34% 64% at 50% 34%, var(--og-ceiling-warm), transparent 76%);
+  animation: og-ceiling-drift 32s ease-in-out infinite alternate;
+}
+
+/* ══ 2 · THE GLASS BODY ══════════════════════════════════════════════════
+   One recipe, applied to every large surface on the route. Read the layer
+   list bottom-up: it is painted in the order the eye would build it.
+
+     8  prism rim        — border box, conic, travels around the frame
+     7  shell            — the smoked pane itself
+     6  glaze            — one diagonal specular sheet
+     5  frost            — 1px striation
+     4  grain            — photographic noise
+     3  light-leak       — the accent pooling on the bottom edge, as glass does
+     2  counter bloom    — the complementary light in the far corner
+     1  accent bloom     — the surface's own accent entering top-inline
+     0  skylight         — white light landing on the top edge */
+
+.mx-market .mx-lens,
+.mx-market .mx-terminal,
+.mx-market .mx-hot-card,
+.mx-market .mx-stories .market-stories-section,
+.mx-market .mx-empty,
+.mx-market .mx-skel-row {
+  --og-accent: var(--mx-cyan);
+  --og-counter: var(--mx-violet);
+  position: relative;
+  isolation: isolate;
+  border: 1px solid transparent;
+  background:
+    radial-gradient(120% 66% at 50% -34%, rgba(255, 255, 255, .10), transparent 62%) padding-box,
+    radial-gradient(96% 82% at 6% -16%, color-mix(in srgb, var(--og-accent) 26%, transparent), transparent 64%) padding-box,
+    radial-gradient(88% 78% at 102% 114%, color-mix(in srgb, var(--og-counter) 22%, transparent), transparent 66%) padding-box,
+    linear-gradient(to top, color-mix(in srgb, var(--og-accent) 13%, transparent), transparent 24%) padding-box,
+    var(--og-grain) padding-box,
+    var(--og-stria) padding-box,
+    var(--og-glaze) padding-box,
+    linear-gradient(162deg, var(--og-shell-a), var(--og-shell-b) 54%, var(--og-shell-c)) padding-box,
+    var(--og-prism) border-box;
+  box-shadow:
+    var(--og-lift),
+    0 0 46px -30px color-mix(in srgb, var(--og-accent) 90%, transparent),
+    var(--og-bevel-top),
+    var(--og-bevel-bottom),
+    inset 0 0 60px -26px color-mix(in srgb, var(--og-accent) 52%, transparent);
+  transition: border-color .3s ease, box-shadow .3s ease, background-color .3s ease;
+}
+
+/* ── 2.1 · the deck: its interior is a token, because the travelling rim
+   replicates it pixel-for-pixel and only its 1.5px frame differs. Change the
+   glass here and the rim follows — there is no second copy to forget. */
+.mx-market .mx-deck {
+  --og-accent: var(--mx-cyan);
+  --og-counter: var(--mx-violet);
+  --mx-deck-interior:
+    radial-gradient(120% 66% at 50% -34%, rgba(255, 255, 255, .12), transparent 60%) padding-box,
+    radial-gradient(96% 82% at 6% -16%, rgba(102, 229, 225, .30), transparent 62%) padding-box,
+    radial-gradient(88% 78% at 102% 114%, rgba(178, 154, 255, .26), transparent 64%) padding-box,
+    linear-gradient(to top, rgba(255, 207, 131, .11), transparent 26%) padding-box,
+    var(--og-grain) padding-box,
+    var(--og-stria) padding-box,
+    var(--og-glaze) padding-box,
+    linear-gradient(160deg, var(--og-shell-a), var(--og-shell-b) 52%, var(--og-shell-c)) padding-box;
+  border-width: 1.5px;
+  border-radius: 30px;
+  background: var(--mx-deck-interior), var(--og-prism) border-box;
+  box-shadow:
+    var(--og-lift),
+    0 0 54px -30px rgba(102, 229, 225, .8),
+    0 0 96px -46px rgba(178, 154, 255, .8),
+    inset 0 1px 0 rgba(232, 255, 252, .26),
+    inset 0 -1px 0 rgba(2, 6, 14, .6),
+    inset 0 0 72px -28px rgba(102, 229, 225, .5);
+}
+/* The hero stage from the previous pass stays, but quieter: this sheet now
+   owns the room's light, and two equal auroras would fight over the same
+   pixels. The stage is still there — it is the pool the deck sits in. */
+.mx-market .mx-overview::before { opacity: .55; }
+
+/* One inset bezel line, 10px inside the frame: the reading sits in a machined
+   well rather than on a printed edge. Outline follows the border radius, so
+   this is one cheap line, not another painted layer. */
+.mx-market .mx-deck {
+  outline: 1px solid rgba(255, 255, 255, .055);
+  outline-offset: -10px;
+}
+
+/* The top hairline keeps its three accents but now sits flush with a frame
+   that is already iridescent, so it is a brightener rather than a line. */
+.mx-market .mx-deck::before {
+  inset-inline: 8% 20%;
+  height: 1.5px;
+  opacity: .95;
+}
+
+/* ── 2.2 · the trio — three instruments, each lit by its own accent. */
+.mx-trio-box {
+  border: 1px solid transparent;
+  border-radius: 20px;
+  background:
+    radial-gradient(120% 120% at 8% -40%, color-mix(in srgb, var(--mx-accent) 42%, transparent), transparent 60%) padding-box,
+    radial-gradient(90% 100% at 102% 120%, color-mix(in srgb, var(--mx-violet) 20%, transparent), transparent 64%) padding-box,
+    linear-gradient(to top, color-mix(in srgb, var(--mx-accent) 16%, transparent), transparent 30%) padding-box,
+    var(--og-grain) padding-box,
+    var(--og-stria) padding-box,
+    var(--og-glaze) padding-box,
+    linear-gradient(158deg, var(--og-shell-a), var(--og-shell-b) 56%, var(--og-shell-c)) padding-box,
+    conic-gradient(from 200deg at 50% 50%,
+      color-mix(in srgb, var(--mx-accent) 92%, transparent),
+      rgba(255, 255, 255, .05) 22%,
+      color-mix(in srgb, var(--mx-accent) 52%, transparent) 48%,
+      rgba(255, 255, 255, .04) 74%,
+      color-mix(in srgb, var(--mx-accent) 92%, transparent)) border-box;
+  box-shadow:
+    var(--og-lift),
+    0 0 34px -24px color-mix(in srgb, var(--mx-accent) 95%, transparent),
+    var(--og-bevel-top),
+    var(--og-bevel-bottom),
+    inset 0 0 34px -18px color-mix(in srgb, var(--mx-accent) 60%, transparent);
+}
+.mx-trio-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .26),
+    0 8px 18px -12px color-mix(in srgb, var(--mx-accent) 95%, transparent);
+}
+.mx-trio-value {
+  font-size: clamp(15px, 4vw, 21px);
+  text-shadow: 0 0 24px color-mix(in srgb, var(--mx-accent) 42%, transparent);
+}
+.mx-trio-label { letter-spacing: .01em; opacity: .95; }
+
+/* ── 2.3 · the metrics inside the deck: the same glass at instrument scale. */
+.mx-market .mx-metric {
+  border: 1px solid color-mix(in srgb, var(--mx-accent) 26%, rgba(255, 255, 255, .10));
+  border-block-start-color: color-mix(in srgb, var(--mx-accent) 56%, transparent);
+  border-radius: 18px;
+  background:
+    radial-gradient(140% 130% at 10% -40%, color-mix(in srgb, var(--mx-accent) 26%, transparent), transparent 62%),
+    linear-gradient(to top, color-mix(in srgb, var(--mx-accent) 9%, transparent), transparent 42%),
+    var(--og-grain),
+    var(--og-stria),
+    linear-gradient(150deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .012) 60%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .13),
+    inset 0 -1px 0 rgba(2, 6, 14, .34),
+    0 12px 24px -22px rgba(0, 0, 0, .95);
+}
+.mx-market .mx-metric:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .18),
+    0 0 26px -14px color-mix(in srgb, var(--mx-accent) 80%, transparent),
+    0 12px 24px -22px rgba(0, 0, 0, .95);
+}
+
+/* ── 2.4 · Bitcoin — champagne glass that still answers the day's direction.
+   Same three planes, three directions, three rims. */
+.mx-market .mx-btc-card {
+  --og-accent: var(--mx-gold);
+  --og-counter: var(--mx-violet);
+  --mx-btc-interior:
+    radial-gradient(120% 66% at 50% -34%, rgba(255, 250, 236, .13), transparent 60%) padding-box,
+    radial-gradient(96% 82% at 98% -16%, rgba(255, 209, 142, .32), transparent 62%) padding-box,
+    radial-gradient(88% 78% at 0% 114%, rgba(178, 154, 255, .22), transparent 64%) padding-box,
+    linear-gradient(to top, rgba(255, 209, 142, .12), transparent 26%) padding-box,
+    var(--og-grain) padding-box,
+    var(--og-stria) padding-box,
+    var(--og-glaze) padding-box,
+    linear-gradient(160deg, rgba(16, 40, 58, .91), rgba(10, 26, 45, .94) 52%, rgba(9, 14, 30, .965)) padding-box;
+  --og-prism: var(--og-prism-warm);
+  border-radius: 28px;
+  background: var(--mx-btc-interior), var(--og-prism) border-box;
+  box-shadow:
+    var(--og-lift),
+    0 0 48px -28px rgba(255, 209, 142, .55),
+    inset 0 1px 0 rgba(255, 250, 236, .24),
+    inset 0 -1px 0 rgba(2, 6, 14, .58),
+    inset 0 0 64px -28px rgba(255, 209, 142, .45);
+}
+.mx-market .mx-btc-card[data-dir='up'] {
+  --og-accent: var(--mx-up);
+  --mx-btc-interior:
+    radial-gradient(120% 66% at 50% -34%, rgba(240, 255, 248, .13), transparent 60%) padding-box,
+    radial-gradient(96% 82% at 98% -16%, rgba(var(--gv-pos-rgb), .30), transparent 62%) padding-box,
+    radial-gradient(88% 78% at 0% 114%, rgba(102, 229, 225, .22), transparent 64%) padding-box,
+    linear-gradient(to top, rgba(var(--gv-pos-rgb), .13), transparent 26%) padding-box,
+    var(--og-grain) padding-box,
+    var(--og-stria) padding-box,
+    var(--og-glaze) padding-box,
+    linear-gradient(160deg, rgba(10, 42, 38, .91), rgba(8, 28, 45, .94) 54%, rgba(7, 14, 30, .965)) padding-box;
+  --og-prism: conic-gradient(from 248deg at 50% 50%,
+    rgba(var(--gv-pos-rgb), .92),
+    rgba(148, 250, 244, .28) 22%,
+    rgba(255, 226, 176, .40) 48%,
+    rgba(198, 166, 255, .30) 70%,
+    rgba(var(--gv-pos-rgb), .92));
+  box-shadow:
+    var(--og-lift),
+    0 0 48px -28px rgba(var(--gv-pos-rgb), .5),
+    inset 0 1px 0 rgba(224, 255, 244, .26),
+    inset 0 -1px 0 rgba(2, 6, 14, .58),
+    inset 0 0 64px -28px rgba(var(--gv-pos-rgb), .4);
+}
+.mx-market .mx-btc-card[data-dir='down'] {
+  --og-accent: var(--mx-down);
+  --mx-btc-interior:
+    radial-gradient(120% 66% at 50% -34%, rgba(255, 240, 244, .12), transparent 60%) padding-box,
+    radial-gradient(96% 82% at 98% -16%, rgba(var(--gv-neg-rgb), .28), transparent 62%) padding-box,
+    radial-gradient(88% 78% at 0% 114%, rgba(178, 154, 255, .24), transparent 64%) padding-box,
+    linear-gradient(to top, rgba(var(--gv-neg-rgb), .12), transparent 26%) padding-box,
+    var(--og-grain) padding-box,
+    var(--og-stria) padding-box,
+    var(--og-glaze) padding-box,
+    linear-gradient(160deg, rgba(44, 18, 34, .91), rgba(28, 14, 34, .94) 54%, rgba(12, 12, 30, .965)) padding-box;
+  --og-prism: conic-gradient(from 248deg at 50% 50%,
+    rgba(var(--gv-neg-rgb), .92),
+    rgba(255, 168, 128, .26) 22%,
+    rgba(198, 166, 255, .42) 50%,
+    rgba(148, 250, 244, .22) 72%,
+    rgba(var(--gv-neg-rgb), .92));
+  box-shadow:
+    var(--og-lift),
+    0 0 48px -28px rgba(var(--gv-neg-rgb), .5),
+    inset 0 1px 0 rgba(255, 228, 234, .26),
+    inset 0 -1px 0 rgba(2, 6, 14, .58),
+    inset 0 0 64px -28px rgba(var(--gv-neg-rgb), .4);
+}
+.mx-market .mx-btc-logo {
+  width: 54px;
+  height: 54px;
+  border-radius: 17px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .34),
+    0 12px 28px -12px color-mix(in srgb, var(--og-accent) 75%, transparent);
+}
+.mx-market .mx-btc-price { text-shadow: 0 0 36px color-mix(in srgb, var(--og-accent) 45%, transparent); }
+.mx-market .mx-btc-pct {
+  padding: 8px 14px;
+  border-radius: 999px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    0 0 28px -10px color-mix(in srgb, var(--og-accent) 90%, transparent);
+}
+.mx-market .mx-btc-stats > div {
+  border: 1px solid rgba(206, 226, 255, .14);
+  border-radius: 15px;
+  background:
+    radial-gradient(120% 120% at 0% 0%, color-mix(in srgb, var(--og-accent) 16%, transparent), transparent 64%),
+    linear-gradient(150deg, rgba(255, 255, 255, .075), rgba(255, 255, 255, .012));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), inset 0 -1px 0 rgba(2, 8, 18, .3);
+}
+
+/* ── 2.5 · the two feed boxes and the discovery rail. */
+.mx-market .mx-lens {
+  --og-accent: var(--mx-cyan);
+  --og-counter: var(--mx-violet);
+  border-radius: 26px;
+}
+.mx-market .mx-terminal {
+  --og-accent: var(--mx-blue);
+  --og-counter: var(--mx-violet);
+  border-radius: 26px;
+  box-shadow:
+    var(--og-lift),
+    0 0 44px -30px rgba(120, 169, 255, .8),
+    var(--og-bevel-top),
+    var(--og-bevel-bottom),
+    inset 0 0 60px -26px rgba(120, 169, 255, .4);
+}
+.mx-market .mx-terminal-title::before {
+  width: 3px;
+  height: 19px;
+  box-shadow: 0 0 14px rgba(102, 229, 225, .8);
+}
+.mx-market .mx-hot-card {
+  --og-accent: var(--hot);
+  --og-counter: var(--mx-violet);
+  /* The podium hues still drive the frame: the rim is the card's own accent,
+     walked around a conic, so place 1/2/3 read as three instruments and not as
+     three copies of the same cyan hairline. */
+  --og-prism: conic-gradient(from 224deg at 50% 50%,
+    color-mix(in srgb, var(--hot) 92%, transparent),
+    rgba(255, 255, 255, .07) 22%,
+    color-mix(in srgb, var(--hot) 46%, transparent) 50%,
+    rgba(255, 255, 255, .05) 76%,
+    color-mix(in srgb, var(--hot) 92%, transparent));
+  border-radius: 20px;
+}
+.mx-market .mx-stories .market-stories-section {
+  --og-accent: var(--mx-violet);
+  --og-counter: var(--mx-cyan);
+  border-radius: 26px;
+}
+
+/* The Smart Money blade keeps its own photograph veil and its own green art —
+   this pass only gives it the same frame and the same bevel, so it belongs to
+   the same family without repainting the whale. */
+.mx-market .mx-smart-banner {
+  border: 1px solid transparent;
+  border-radius: 28px;
+  background:
+    radial-gradient(120% 120% at 100% 0%, rgba(93, 255, 200, .14), transparent 62%) padding-box,
+    linear-gradient(125deg, rgba(9, 38, 32, .94), rgba(7, 20, 20, .96) 62%, rgba(9, 14, 28, .96)) padding-box,
+    var(--og-prism) border-box;
+  box-shadow:
+    var(--og-lift),
+    0 0 50px -26px rgba(var(--gv-smart-a-rgb, 93, 255, 200), .55),
+    var(--og-bevel-top),
+    var(--og-bevel-bottom);
+}
+/* The veil sits above the rim but below the copy; it must not paint the frame. */
+.mx-market .mx-smart-veil { border-radius: 27px; }
+
+/* ══ 3 · THE CONTROLS — search, chips, sort, sectors ═════════════════════ */
+.mx-market .mx-search {
+  --og-accent: var(--mx-cyan);
+  --og-counter: var(--mx-violet);
+  min-height: 54px;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  background:
+    radial-gradient(120% 120% at 0% -30%, rgba(102, 229, 225, .22), transparent 58%) padding-box,
+    radial-gradient(110% 120% at 100% 130%, rgba(178, 154, 255, .20), transparent 60%) padding-box,
+    var(--og-grain) padding-box,
+    var(--og-stria) padding-box,
+    linear-gradient(135deg, rgba(255, 255, 255, .09), rgba(255, 255, 255, .012) 50%) padding-box,
+    linear-gradient(160deg, rgba(13, 32, 50, .94), rgba(8, 18, 34, .96)) padding-box,
+    var(--og-prism) border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .16),
+    inset 0 -18px 30px -24px rgba(102, 229, 225, .5),
+    0 18px 36px -30px rgba(0, 0, 0, .95);
+}
+.mx-market .mx-search:focus-within {
+  box-shadow:
+    0 0 0 4px rgba(102, 229, 225, .12),
+    0 0 40px -12px rgba(102, 229, 225, .8),
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    inset 0 -18px 30px -24px rgba(102, 229, 225, .6);
+}
+.mx-market .mx-search-tile {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(102, 229, 225, .34), rgba(178, 154, 255, .18));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .3),
+    0 8px 20px -12px rgba(102, 229, 225, .95);
+}
+.mx-market .mx-search-input { font-size: 13px; }
+.mx-market .mx-search-input::placeholder { color: color-mix(in srgb, var(--mx-muted) 88%, var(--mx-cyan)); }
+
+/* Chips: glass pills. The active one is tinted by its own view colour, with a
+   drawn inner bevel so it reads pressed into the pane rather than glued on. */
+.mx-market .mx-view {
+  border: 1px solid transparent;
+  border-radius: 12px;
+  min-height: 40px;
+  transition: background .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.mx-market .mx-view:hover { border-color: rgba(255, 255, 255, .1); }
+.mx-market .mx-view[data-active='true'] {
+  border-color: color-mix(in srgb, var(--view) 34%, transparent);
+  background:
+    radial-gradient(120% 150% at 12% -40%, color-mix(in srgb, var(--view) 40%, transparent), transparent 70%),
+    linear-gradient(to top, color-mix(in srgb, var(--view) 14%, transparent), transparent 60%),
+    color-mix(in srgb, var(--view) 8%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .18),
+    inset 0 -1px 0 rgba(2, 6, 14, .35),
+    0 0 22px -12px var(--view);
+}
+.mx-market .mx-sort-trigger {
+  min-height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(206, 226, 255, .16);
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, .012)),
+    rgba(255, 255, 255, .015);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1);
+  color: var(--mx-text);
+}
+.mx-market .mx-icon-btn,
+.mx-market .mx-compare {
+  border-radius: 12px;
+  border-color: rgba(206, 226, 255, .16);
+  background: linear-gradient(150deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, .012));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .09);
+}
+.mx-market .mx-icon-btn:hover,
+.mx-market .mx-compare:hover { color: var(--mx-cyan); border-color: rgba(102, 229, 225, .38); }
+
+/* Menus are nearer than the pane under them: more opaque, wider shadow. */
+.mx-market .mx-sort-popover,
+.mx-market .mx-search-popup {
+  border-radius: 16px;
+  border: 1px solid rgba(206, 226, 255, .22);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, 0) 42%) padding-box,
+    linear-gradient(180deg, rgba(15, 36, 56, .99), rgba(9, 19, 35, .99)) padding-box;
+  box-shadow:
+    0 34px 70px -30px rgba(0, 0, 8, .98),
+    0 0 34px -22px rgba(102, 229, 225, .5),
+    inset 0 1px 0 rgba(255, 255, 255, .12);
+}
+.mx-market .mx-sector {
+  min-height: 42px;
+  border-radius: 13px;
+  transition: background .2s ease, border-color .2s ease, color .2s ease, box-shadow .2s ease;
+}
+.mx-market .mx-sector[data-active='true'] {
+  border-color: color-mix(in srgb, var(--sec) 48%, transparent);
+  background:
+    radial-gradient(120% 140% at 50% -30%, color-mix(in srgb, var(--sec) 34%, transparent), transparent 72%),
+    color-mix(in srgb, var(--sec) 12%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .16),
+    0 0 22px -12px var(--sec);
+}
+
+/* ══ 4 · THE ROWS — air in the gap, one pane per coin ════════════════════
+   No grain and no backdrop per row on purpose: 250 of them would be 250
+   rasterised tiles. The row gets the cheap half of the material — a tint, a
+   bevel and a top light — and the expensive half only on the one row under
+   the pointer. */
+.mx-market .mx-coin-row > .coin-row {
+  border: 1px solid rgba(196, 222, 255, .14);
+  border-block-start-color: rgba(226, 240, 255, .24);
+  border-radius: 18px;
+  background:
+    radial-gradient(120% 160% at 0% -70%, rgba(102, 229, 225, .11), transparent 60%),
+    linear-gradient(120deg, rgba(255, 255, 255, .055), rgba(255, 255, 255, .012) 52%, rgba(255, 255, 255, .03)) padding-box,
+    linear-gradient(150deg, rgba(11, 22, 38, .90), rgba(7, 14, 26, .94)) padding-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .08),
+    inset 0 -1px 0 rgba(2, 6, 14, .4),
+    0 12px 26px -24px rgba(0, 0, 0, .95);
+  transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+.mx-market .mx-coin-row > .coin-row:hover {
+  border-color: rgba(148, 250, 244, .42);
+  background:
+    radial-gradient(120% 160% at 0% -70%, rgba(102, 229, 225, .2), transparent 60%),
+    linear-gradient(120deg, rgba(102, 229, 225, .1), rgba(255, 255, 255, .02) 55%, rgba(178, 154, 255, .06)) padding-box,
+    linear-gradient(150deg, rgba(12, 26, 43, .92), rgba(7, 15, 28, .95)) padding-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .14),
+    inset 0 -1px 0 rgba(2, 6, 14, .4),
+    0 16px 30px -24px rgba(102, 229, 225, .9);
+}
+.mx-market .mx-swap-btn {
+  border-radius: 16px;
+  border-color: rgba(148, 250, 244, .3);
+  background:
+    radial-gradient(120% 130% at 50% -20%, rgba(102, 229, 225, .22), transparent 70%),
+    linear-gradient(150deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .012)),
+    rgba(7, 16, 30, .92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .14),
+    0 10px 22px -16px rgba(102, 229, 225, .8);
+}
+
+/* Pagination, folding and the two "no data" states are part of the material. */
+.mx-market .mx-empty { border-radius: 22px; }
+.mx-market .mx-empty .market-empty-icon {
+  border-radius: 16px;
+  border-color: rgba(148, 250, 244, .28);
+  background:
+    radial-gradient(120% 120% at 50% -20%, rgba(102, 229, 225, .3), transparent 70%),
+    rgba(255, 255, 255, .04);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 12px 26px -18px rgba(102, 229, 225, .8);
+}
+.mx-market .mx-skel-row {
+  height: 68px;
+  border-radius: 18px;
+  animation: og-skel-pulse 1.9s ease-in-out infinite;
+}
+.mx-market .mx-intent-result {
+  border-radius: 14px;
+  border-color: rgba(178, 154, 255, .28);
+  background:
+    radial-gradient(120% 140% at 0% -30%, rgba(178, 154, 255, .2), transparent 70%),
+    linear-gradient(150deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .012)) padding-box,
+    linear-gradient(150deg, rgba(10, 20, 36, .92), rgba(7, 13, 25, .95)) padding-box;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12);
+}
+.mx-market .mx-show-more,
+.mx-market .mx-empty-action {
+  border-radius: 13px;
+  border-color: rgba(148, 250, 244, .34);
+  background:
+    radial-gradient(120% 160% at 50% -40%, rgba(102, 229, 225, .24), transparent 72%),
+    linear-gradient(150deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, .012));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 14px 26px -22px rgba(102, 229, 225, .85);
+}
+.mx-market .mx-list-fold {
+  border-radius: 13px;
+  border-color: rgba(206, 226, 255, .16);
+  background: linear-gradient(150deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, .01));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+
+/* ══ 5 · THE PEARL THEME — re-graded, never inverted ═════════════════════
+   The same hierarchy in light: porcelain instead of obsidian, and the same
+   prism rim at a saturation that survives a white background. */
+:root[data-theme='light'] .mx-market {
+  --og-void: #f4f7fd;
+  --og-ceiling: rgba(120, 200, 255, .30);
+  --og-ceiling-warm: rgba(255, 196, 120, .16);
+  --og-grid: rgba(52, 88, 140, .055);
+  --og-shell-a: rgba(255, 255, 255, .93);
+  --og-shell-b: rgba(250, 252, 255, .95);
+  --og-shell-c: rgba(244, 249, 255, .96);
+  --og-glaze: linear-gradient(154deg, rgba(255, 255, 255, .97), rgba(255, 255, 255, .28) 46%, rgba(214, 228, 250, .45));
+  --og-stria: repeating-linear-gradient(124deg, rgba(52, 88, 140, .04) 0 1px, transparent 1px 15px);
+  --og-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.86' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .022 .022 .022 0 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+  --og-lift: 0 26px 52px -40px rgba(46, 67, 123, .42), 0 8px 20px -18px rgba(46, 67, 123, .18);
+  --og-bevel-top: inset 0 1px 0 #fff;
+  --og-bevel-bottom: inset 0 -1px 0 rgba(46, 67, 123, .12);
+  --og-prism: conic-gradient(from 212deg at 50% 50%,
+    rgba(8, 126, 130, .78),
+    rgba(52, 112, 190, .24) 15%,
+    rgba(118, 84, 196, .62) 33%,
+    rgba(178, 118, 34, .42) 51%,
+    rgba(52, 112, 190, .20) 68%,
+    rgba(8, 126, 130, .78));
+  --og-prism-warm: conic-gradient(from 248deg at 50% 50%,
+    rgba(178, 118, 34, .72),
+    rgba(178, 118, 34, .20) 20%,
+    rgba(8, 126, 130, .34) 46%,
+    rgba(118, 84, 196, .34) 68%,
+    rgba(178, 118, 34, .72));
+  --mx-muted: #4d5f7d;
+  --mx-faint: #6b7c99;
+  --mx-text: #0f1a2c;
+  background:
+    radial-gradient(96% 46% at 50% 108%, rgba(126, 96, 200, .07), transparent 68%),
+    linear-gradient(180deg, #eef3fb 0%, #f7faff 44%, #eef3fb 100%);
+}
+:root[data-theme='light'] .mx-market::after {
+  background:
+    radial-gradient(58% 100% at 50% 0%, rgba(120, 200, 255, .3), transparent 72%),
+    radial-gradient(44% 94% at 10% 0%, rgba(26, 156, 160, .16), transparent 74%),
+    radial-gradient(48% 96% at 92% 2%, rgba(118, 84, 196, .14), transparent 72%),
+    radial-gradient(34% 64% at 50% 34%, rgba(255, 196, 120, .18), transparent 76%);
+}
+:root[data-theme='light'] .mx-market .mx-deck {
+  --mx-deck-interior:
+    radial-gradient(120% 66% at 50% -34%, rgba(255, 255, 255, .9), transparent 62%) padding-box,
+    radial-gradient(96% 82% at 6% -16%, rgba(26, 156, 160, .17), transparent 62%) padding-box,
+    radial-gradient(88% 78% at 102% 114%, rgba(118, 84, 196, .13), transparent 64%) padding-box,
+    linear-gradient(to top, rgba(178, 118, 34, .1), transparent 26%) padding-box,
+    var(--og-grain) padding-box,
+    var(--og-stria) padding-box,
+    var(--og-glaze) padding-box,
+    linear-gradient(#fff, #fff) padding-box;
+  box-shadow:
+    var(--og-lift),
+    0 0 34px -26px rgba(8, 126, 130, .5),
+    inset 0 1px 0 #fff,
+    inset 0 -1px 0 rgba(46, 67, 123, .1),
+    inset 0 0 60px -30px rgba(8, 126, 130, .2);
+}
+:root[data-theme='light'] .mx-trio-box {
+  background:
+    radial-gradient(120% 120% at 8% -40%, color-mix(in srgb, var(--mx-accent) 22%, transparent), transparent 60%) padding-box,
+    radial-gradient(90% 100% at 102% 120%, rgba(118, 84, 196, .1), transparent 64%) padding-box,
+    linear-gradient(to top, color-mix(in srgb, var(--mx-accent) 10%, transparent), transparent 30%) padding-box,
+    var(--og-grain) padding-box,
+    var(--og-stria) padding-box,
+    var(--og-glaze) padding-box,
+    linear-gradient(#fff, #fbfdff) padding-box,
+    conic-gradient(from 200deg at 50% 50%,
+      color-mix(in srgb, var(--mx-accent) 60%, transparent),
+      rgba(52, 88, 140, .08) 22%,
+      color-mix(in srgb, var(--mx-accent) 32%, transparent) 48%,
+      rgba(52, 88, 140, .06) 74%,
+      color-mix(in srgb, var(--mx-accent) 60%, transparent)) border-box;
+  box-shadow: var(--og-lift), var(--og-bevel-top), inset 0 0 30px -20px color-mix(in srgb, var(--mx-accent) 60%, transparent);
+}
+:root[data-theme='light'] .mx-trio-value { text-shadow: none; }
+:root[data-theme='light'] .mx-market .mx-deck { outline-color: rgba(46, 67, 123, .09); }
+:root[data-theme='light'] .mx-market .mx-metric {
+  border-color: color-mix(in srgb, var(--mx-accent) 22%, rgba(52, 88, 140, .16));
+  background:
+    radial-gradient(140% 130% at 10% -40%, color-mix(in srgb, var(--mx-accent) 14%, transparent), transparent 62%),
+    linear-gradient(to top, color-mix(in srgb, var(--mx-accent) 6%, transparent), transparent 42%),
+    var(--og-stria),
+    linear-gradient(158deg, rgba(255, 255, 255, .98), rgba(246, 250, 255, .86));
+  box-shadow: inset 0 1px 0 #fff, inset 0 -1px 0 rgba(46, 67, 123, .1), 0 10px 22px -22px rgba(46, 67, 123, .4);
+}
+:root[data-theme='light'] .mx-market .mx-btc-card {
+  --og-accent: #b27622;
+  --mx-btc-interior:
+    radial-gradient(120% 66% at 50% -34%, rgba(255, 255, 255, .92), transparent 62%) padding-box,
+    radial-gradient(96% 82% at 98% -16%, rgba(178, 118, 34, .17), transparent 62%) padding-box,
+    radial-gradient(88% 78% at 0% 114%, rgba(118, 84, 196, .12), transparent 64%) padding-box,
+    linear-gradient(to top, rgba(178, 118, 34, .1), transparent 26%) padding-box,
+    var(--og-grain) padding-box,
+    var(--og-stria) padding-box,
+    var(--og-glaze) padding-box,
+    linear-gradient(#fff, #fbfdff) padding-box;
+  --og-prism: var(--og-prism-warm);
+  box-shadow: var(--og-lift), inset 0 1px 0 #fff, inset 0 -1px 0 rgba(46, 67, 123, .1);
+}
+:root[data-theme='light'] .mx-market .mx-btc-card[data-dir='up'] {
+  --og-accent: #0b8a67;
+  --og-prism: conic-gradient(from 248deg at 50% 50%,
+    rgba(var(--gv-pos-rgb), .66),
+    rgba(8, 126, 130, .26) 22%,
+    rgba(178, 118, 34, .28) 48%,
+    rgba(118, 84, 196, .22) 70%,
+    rgba(var(--gv-pos-rgb), .66));
+  --mx-btc-interior:
+    radial-gradient(120% 66% at 50% -34%, rgba(255, 255, 255, .92), transparent 62%) padding-box,
+    radial-gradient(96% 82% at 98% -16%, rgba(var(--gv-pos-rgb), .16), transparent 62%) padding-box,
+    radial-gradient(88% 78% at 0% 114%, rgba(26, 156, 160, .1), transparent 64%) padding-box,
+    linear-gradient(to top, rgba(var(--gv-pos-rgb), .1), transparent 26%) padding-box,
+    var(--og-grain) padding-box,
+    var(--og-stria) padding-box,
+    var(--og-glaze) padding-box,
+    linear-gradient(#fff, #fafffb) padding-box;
+}
+:root[data-theme='light'] .mx-market .mx-btc-card[data-dir='down'] {
+  --og-accent: #b83b5b;
+  --og-prism: conic-gradient(from 248deg at 50% 50%,
+    rgba(var(--gv-neg-rgb), .66),
+    rgba(255, 168, 128, .26) 22%,
+    rgba(118, 84, 196, .3) 50%,
+    rgba(8, 126, 130, .2) 72%,
+    rgba(var(--gv-neg-rgb), .66));
+  --mx-btc-interior:
+    radial-gradient(120% 66% at 50% -34%, rgba(255, 255, 255, .92), transparent 62%) padding-box,
+    radial-gradient(96% 82% at 98% -16%, rgba(var(--gv-neg-rgb), .15), transparent 62%) padding-box,
+    radial-gradient(88% 78% at 0% 114%, rgba(118, 84, 196, .1), transparent 64%) padding-box,
+    linear-gradient(to top, rgba(var(--gv-neg-rgb), .1), transparent 26%) padding-box,
+    var(--og-grain) padding-box,
+    var(--og-stria) padding-box,
+    var(--og-glaze) padding-box,
+    linear-gradient(#fff, #fff9fb) padding-box;
+}
+:root[data-theme='light'] .mx-market .mx-btc-price { text-shadow: none; }
+:root[data-theme='light'] .mx-market .mx-btc-stats > div {
+  border-color: rgba(52, 88, 140, .12);
+  background:
+    radial-gradient(120% 120% at 0% 0%, color-mix(in srgb, var(--og-accent) 10%, transparent), transparent 64%),
+    linear-gradient(150deg, #fff, rgba(246, 250, 255, .9));
+  box-shadow: inset 0 1px 0 #fff;
+}
+:root[data-theme='light'] .mx-market :is(.mx-lens, .mx-terminal, .mx-hot-card, .mx-empty, .mx-skel-row, .mx-stories .market-stories-section) {
+  background:
+    radial-gradient(120% 66% at 50% -34%, rgba(255, 255, 255, .96), transparent 62%) padding-box,
+    radial-gradient(96% 82% at 6% -16%, color-mix(in srgb, var(--og-accent) 15%, transparent), transparent 64%) padding-box,
+    radial-gradient(88% 78% at 102% 114%, color-mix(in srgb, var(--og-counter) 12%, transparent), transparent 66%) padding-box,
+    linear-gradient(to top, color-mix(in srgb, var(--og-accent) 8%, transparent), transparent 24%) padding-box,
+    var(--og-grain) padding-box,
+    var(--og-stria) padding-box,
+    var(--og-glaze) padding-box,
+    linear-gradient(#fdfeff, #f8fbff) padding-box,
+    var(--og-prism) border-box;
+}
+:root[data-theme='light'] .mx-market .mx-smart-banner {
+  background:
+    radial-gradient(120% 120% at 100% 0%, rgba(93, 255, 200, .2), transparent 62%) padding-box,
+    linear-gradient(125deg, #e9f8f2, #eef0ff 70%, #e9edff) padding-box,
+    var(--og-prism) border-box;
+  box-shadow: var(--og-lift), var(--og-bevel-top);
+}
+:root[data-theme='light'] .mx-market :is(.mx-lens, .mx-terminal, .mx-hot-card, .mx-empty) {
+  box-shadow:
+    var(--og-lift),
+    var(--og-bevel-top),
+    inset 0 0 44px -30px rgba(46, 67, 123, .22);
+}
+:root[data-theme='light'] .mx-market .mx-hot-card {
+  --og-prism: conic-gradient(from 224deg at 50% 50%,
+    color-mix(in srgb, var(--hot) 58%, transparent),
+    rgba(52, 88, 140, .08) 22%,
+    color-mix(in srgb, var(--hot) 30%, transparent) 50%,
+    rgba(52, 88, 140, .06) 76%,
+    color-mix(in srgb, var(--hot) 58%, transparent));
+}
+:root[data-theme='light'] .mx-market .mx-search {
+  background:
+    radial-gradient(120% 120% at 0% -30%, rgba(26, 156, 160, .12), transparent 58%) padding-box,
+    radial-gradient(110% 120% at 100% 130%, rgba(118, 84, 196, .1), transparent 60%) padding-box,
+    var(--og-grain) padding-box,
+    var(--og-stria) padding-box,
+    linear-gradient(135deg, #fbfeff, #f7f5ff) padding-box,
+    var(--og-prism) border-box;
+  box-shadow: inset 0 1px 0 #fff, 0 14px 30px -28px rgba(46, 67, 123, .5);
+}
+:root[data-theme='light'] .mx-market .mx-search:focus-within {
+  box-shadow:
+    0 0 0 4px rgba(8, 126, 130, .12),
+    0 0 26px -14px rgba(8, 126, 130, .6),
+    inset 0 1px 0 #fff;
+}
+:root[data-theme='light'] .mx-market .mx-search-tile {
+  background: linear-gradient(145deg, rgba(26, 156, 160, .22), rgba(118, 84, 196, .12));
+  box-shadow: inset 0 1px 0 #fff;
+}
+:root[data-theme='light'] .mx-market .mx-sort-trigger,
+:root[data-theme='light'] .mx-market .mx-icon-btn,
+:root[data-theme='light'] .mx-market .mx-compare {
+  border-color: rgba(52, 88, 140, .16);
+  background: linear-gradient(150deg, #fff, rgba(246, 250, 255, .9));
+  box-shadow: inset 0 1px 0 #fff, 0 8px 18px -16px rgba(46, 67, 123, .4);
+  color: var(--mx-text);
+}
+:root[data-theme='light'] .mx-market .mx-sort-popover,
+:root[data-theme='light'] .mx-market .mx-search-popup {
+  border-color: rgba(52, 88, 140, .18);
+  background: linear-gradient(180deg, #fff, #f8fbff) padding-box;
+  box-shadow: 0 26px 54px -30px rgba(46, 67, 123, .45), inset 0 1px 0 #fff;
+}
+:root[data-theme='light'] .mx-market .mx-coin-row > .coin-row {
+  border-color: rgba(52, 88, 140, .12);
+  border-block-start-color: #fff;
+  background:
+    radial-gradient(120% 160% at 0% -70%, rgba(26, 156, 160, .07), transparent 60%),
+    linear-gradient(120deg, rgba(255, 255, 255, .96), rgba(247, 251, 255, .8));
+  box-shadow: inset 0 1px 0 #fff, 0 10px 22px -20px rgba(46, 67, 123, .35);
+}
+:root[data-theme='light'] .mx-market .mx-coin-row > .coin-row:hover {
+  border-color: rgba(8, 126, 130, .34);
+  background:
+    radial-gradient(120% 160% at 0% -70%, rgba(26, 156, 160, .13), transparent 60%),
+    linear-gradient(120deg, #fff, rgba(240, 250, 252, .9));
+}
+:root[data-theme='light'] .mx-market .mx-swap-btn {
+  border-color: rgba(8, 126, 130, .26);
+  background:
+    radial-gradient(120% 130% at 50% -20%, rgba(26, 156, 160, .16), transparent 70%),
+    linear-gradient(150deg, #fff, rgba(242, 250, 250, .92));
+  box-shadow: inset 0 1px 0 #fff;
+}
+:root[data-theme='light'] .mx-market .mx-skel-row { animation: none; }
+
+/* ══ 6 · THE HAND — hover, press, focus, density ═════════════════════════
+   A lift is a promise that something can be tapped, so it is granted only to
+   things that can be: the discovery card, the coin row and the controls. The
+   three reading boxes glow but never move — they are not buttons. */
+@media (hover: hover) {
+  .mx-market .mx-hot-card:hover { transform: translateY(-3px); }
+  .mx-market .mx-coin-row > .coin-row:hover { transform: translateY(-1px); }
+  .mx-market .mx-view:hover,
+  .mx-market .mx-sector:hover,
+  .mx-market .mx-sort-trigger:hover,
+  .mx-market .mx-icon-btn:hover,
+  .mx-market .mx-compare:hover,
+  .mx-market .mx-swap-btn:hover { transform: translateY(-1px); }
+  .mx-market .mx-lens:hover,
+  .mx-market .mx-terminal:hover { box-shadow: var(--og-lift), 0 0 54px -30px color-mix(in srgb, var(--og-accent) 100%, transparent), var(--og-bevel-top), var(--og-bevel-bottom); }
+}
+/* A touch screen has no "away" state: nothing may stay lifted after a tap. */
+@media (hover: none) {
+  .mx-market :is(.mx-hot-card, .mx-view, .mx-sector, .mx-sort-trigger, .mx-icon-btn, .mx-compare, .mx-swap-btn):hover { transform: none; }
+  .mx-market .mx-coin-row > .coin-row:hover { transform: none; }
+}
+.mx-market :is(.mx-view, .mx-sector, .mx-sort-trigger, .mx-icon-btn, .mx-compare, .mx-swap-btn, .mx-show-more, .mx-list-fold, .mx-empty-action):active {
+  transform: scale(.975);
+}
+.mx-market :is(button, a, input, summary, [tabindex]):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--mx-cyan) 90%, #fff);
+  outline-offset: 3px;
+}
+.mx-market ::selection {
+  background: rgba(102, 229, 225, .3);
+  color: #f6ffff;
+}
+
+/* ══ 7 · THE RESPONSIVE SHAPE — the phone is the composition ═════════════ */
+@media (max-width: 619px) {
+  .mx-market .mx-deck { border-radius: 26px; }
+  .mx-market .mx-btc-card,
+  .mx-market .mx-smart-banner { border-radius: 24px; }
+  .mx-market .mx-lens,
+  .mx-market .mx-terminal,
+  .mx-market .mx-stories .market-stories-section { border-radius: 22px; }
+  .mx-trio-box { border-radius: 18px; }
+  .mx-market .mx-hot-card { border-radius: 18px; }
+  .mx-market .mx-search { min-height: 52px; border-radius: 15px; }
+  .mx-market .mx-view { min-height: 44px; }
+  .mx-market .mx-sector { min-height: 44px; }
+  .mx-market .mx-sort-trigger { min-height: 44px; }
+  .mx-market .mx-coin-row > .coin-row { border-radius: 16px; }
+  .mx-market .mx-search-popup { border-radius: 15px; }
+  .mx-market::after { height: min(520px, 74vh); }
+  .mx-market { --og-grid-step: 44px; }
+}
+@media (max-width: 359px) {
+  .mx-market .mx-view { min-height: 42px; }
+  .mx-market .mx-search-input { font-size: 12px; }
+}
+
+/* ══ 8 · MOTION — two keyframes, both compositor-only ════════════════════ */
+@keyframes og-ceiling-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); opacity: .88; }
+  to { transform: translate3d(0, -16px, 0) scale(1.04); opacity: 1; }
+}
+@keyframes og-skel-pulse {
+  0%, 100% { opacity: .55; }
+  50% { opacity: .82; }
+}
+
+/* ── 8.1 · stop policy. Nothing below is "hidden": the room keeps its light,
+   frozen; only transient signals (the skeleton pulse) go quiet. */
+@media (prefers-reduced-motion: reduce) {
+  .mx-market::after { animation: none !important; opacity: 1; }
+  .mx-market .mx-skel-row { animation: none !important; opacity: .7; }
+  .mx-market :is(.mx-hot-card, .mx-coin-row > .coin-row, .mx-view, .mx-sector, .mx-sort-trigger, .mx-icon-btn, .mx-compare, .mx-swap-btn, .mx-show-more, .mx-list-fold, .mx-empty-action):hover,
+  .mx-market :is(.mx-hot-card, .mx-coin-row > .coin-row, .mx-view, .mx-sector, .mx-sort-trigger, .mx-icon-btn, .mx-compare, .mx-swap-btn, .mx-show-more, .mx-list-fold, .mx-empty-action):active {
+    transform: none;
+  }
+}
+:root[data-native='true'] .mx-market::after,
+:root[data-lite='true'] .mx-market::after,
+:root[data-reduce-motion='true'] .mx-market::after { animation: none !important; opacity: 1; }
+:root[data-native='true'] .mx-market .mx-skel-row,
+:root[data-lite='true'] .mx-market .mx-skel-row,
+:root[data-reduce-motion='true'] .mx-market .mx-skel-row { animation: none !important; opacity: .7; }
+:root[data-native='true'] .mx-market .mx-hot-card:hover,
+:root[data-lite='true'] .mx-market .mx-hot-card:hover,
+:root[data-reduce-motion='true'] .mx-market .mx-hot-card:hover { transform: none; }
+/* Lite is the one place the painted extras are dropped: the room and the grain
+   go, the panes, their rim and their readings stay. */
+:root[data-lite='true'] .mx-market::before { display: none; }
+:root[data-lite='true'] .mx-market { --og-grain: none; }
+
+/* ── 8.2 · two accessibility preferences that change MATERIAL, not layout. */
+@media (prefers-reduced-transparency: reduce) {
+  .mx-market {
+    --og-shell-a: #0a1626;
+    --og-shell-b: #08111e;
+    --og-shell-c: #060c16;
+    --og-glaze: linear-gradient(154deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, 0) 60%);
+  }
+  :root[data-theme='light'] .mx-market {
+    --og-shell-a: #fff;
+    --og-shell-b: #fbfdff;
+    --og-shell-c: #f6faff;
+  }
+  .mx-market .mx-search { background-color: #08111e; }
+  :root[data-theme='light'] .mx-market .mx-search { background-color: #fff; }
+}
+@media (prefers-contrast: more) {
+  .mx-market {
+    --og-shell-a: rgba(6, 12, 22, .98);
+    --og-shell-b: rgba(5, 10, 19, .99);
+    --og-shell-c: #050a12;
+    --mx-muted: #cfdaf0;
+    --mx-faint: #b8c6e0;
+    --og-grid: rgba(160, 215, 255, .09);
+  }
+  .mx-market :is(.mx-lens, .mx-terminal, .mx-deck, .mx-btc-card, .mx-hot-card, .mx-search, .mx-coin-row > .coin-row, .mx-stories .market-stories-section) {
+    border-color: rgba(226, 240, 255, .42);
+  }
+  :root[data-theme='light'] .mx-market {
+    --og-shell-a: #fff;
+    --og-shell-b: #fff;
+    --og-shell-c: #fdfeff;
+    --mx-muted: #33445f;
+    --mx-faint: #48596f;
+  }
+}
