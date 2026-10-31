@@ -1,0 +1,184 @@
+/* ==========================================================================
+   THE RGB EDGE LIGHT — one comet of spectrum travelling the pane's rim
+   --------------------------------------------------------------------------
+   «در ماچین هم یک نور rgb انیمیشنی باشد در کناره حرکت می‌کند»
+
+   ─── WHAT IT IS ────────────────────────────────────────────────────────────
+   The machine box that used to carry the moving spectrum is gone (2026-10-31,
+   «باکس موتور fbt را پاکش کن»), and the motion the owner liked moved up a
+   level: instead of a rainbow churning inside one card, a single comet of
+   cyan → violet → magenta light now runs around the EDGE of the whole sheet —
+   the rim of the pane lit from within, sweeping the blade corner on every
+   revolution. It frames the directory instead of competing with it.
+
+   ─── HOW IT IS BUILT (and why that is the cheap way) ───────────────────────
+   Two elements, one animation, one composited layer:
+
+     · `.more-edge` is an inset-0 overlay masked down to a 2px ring, using the
+       exact padding-box/`mask-composite: exclude` trick the pane's own
+       specular border already uses in more-menu.css. The mask is STATIC, so
+       it rasterises once; its radii are the pane's radii (three soft corners
+       and the `--more-cut` blade), which is what makes the light follow the
+       signature corner instead of ignoring it.
+     · `.more-edge-beam` is a square of conic gradient — mostly transparent,
+       with one bright arc and a soft wide tail behind it — spinning around
+       the pane's centre. Only `transform: rotate()` animates, so the whole
+       thing lives on the compositor and the main thread never sees it.
+
+   That is the standard "animated gradient border" and it is standard for a
+   reason: there is no way to walk a light around a rounded rectangle with
+   `offset-path` on the WebView baseline this app supports, and animating
+   `background-position`, a conic `--angle` (@property/Houdini) or
+   `filter: blur()` all repaint every frame on the main thread — the exact
+   cost this project's flicker history is full of.
+
+   ─── THE BUDGET (the same one the machine box was held to) ─────────────────
+     · NOTHING here animates a paint property: one `rotate`, that is all. No
+       `filter`, no `backdrop-filter`, no animated gradient stops, no SVG
+       geometry, no canvas, no JS interval, no `width`/`height`/`top`/`left`.
+     · ONE looping layer in the whole sheet (the machine box ran four). The
+       square is sized to cover the pane's diagonal so the arc never runs out
+       of canvas at the corners, and it is clipped by the overlay's own
+       `overflow: hidden` + mask, so nothing outside the 2px rim is ever drawn.
+     · It exists only while the sheet is MOUNTED — MoreSheet unmounts the whole
+       panel on close, so a closed menu costs exactly nothing.
+     · The three guards that stop it are all here: `prefers-reduced-motion`,
+       the packaged Android shell (`data-native`) and the lite profile
+       (`data-lite`). They do not hide the rim — they freeze it into a static
+       spectrum ring, so the sheet keeps its identity without the motion.
+     · Where `mask-composite` is unavailable the overlay is removed outright
+       rather than risking an unmasked rainbow square over the list.
+
+   ─── WHY THIS FILE IS NOT more-menu.css ────────────────────────────────────
+   Everything in more-menu.css is ONE-SHOT by design and a regression test
+   fails the build if any animation in that file repeats forever: a perpetual
+   sheen under a backdrop blur is the «لامپ‌زدن» that sheet was rewritten to
+   remove. This rim light is the single deliberate exception the owner asked
+   for, built to a budget that makes one loop affordable. Keeping the exception
+   in its own file keeps that guard meaningful instead of deleting it.
+
+   ─── THEME ─────────────────────────────────────────────────────────────────
+   Colours come from the app's spectrum tokens (`--rgb-1…3`), never raw hex, so
+   a global re-tint moves this too. On the noir pane the rim reads as light
+   escaping a black machine; the light theme dims the same geometry rather than
+   redesigning it.
+   ========================================================================== */
+
+/* ── the rim: masked to a 2px ring that follows the pane's own radii ─────── */
+.more-panel > .more-edge {
+  /* Ring thickness. 2px is the width at which a moving light still reads as a
+     rim and not as a border the user might try to drag. */
+  --more-edge-ring: 2px;
+  /* Half the diagonal of the largest pane this sheet can be (460×760 desktop,
+     ~400×840 phone) is ~480px, so the spinning square needs ~960px of side to
+     keep the arc lit all the way into the corners. Overridden downward on
+     small screens, where the pane — and therefore the diagonal — is smaller. */
+  --more-edge-span: 1100px;
+  position: absolute;
+  inset: 0;
+  /* Above the specular ring (`.more-panel::after`, z-index 3) so the comet
+     passes over the glass rim rather than under it, and below nothing that
+     matters: the content sits at z-index 1 with 12px of panel padding, so a
+     2px rim can never touch a label or eat a tap. */
+  z-index: 4;
+  padding: var(--more-edge-ring);
+  border-start-start-radius: 30px;
+  border-start-end-radius: 30px;
+  border-end-start-radius: 30px;
+  border-end-end-radius: var(--more-cut, 10px);
+  overflow: hidden;
+  pointer-events: none;
+  /* The ring: paint the padding box, then subtract the content box. Identical
+     mechanism to the pane's specular border, which is why the two never
+     disagree about a radius — including the blade corner. */
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+/* ── the comet ───────────────────────────────────────────────────────────── */
+.more-edge-beam {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  width: var(--more-edge-span);
+  height: var(--more-edge-span);
+  /* Centred with margins, not with a translate, so the animation below owns
+     `transform` alone and the compositor never has to reconcile two of them. */
+  margin-top: calc(var(--more-edge-span) / -2);
+  margin-left: calc(var(--more-edge-span) / -2);
+  /* Two stacked conic layers on ONE element: the hot arc (a white core with
+     cyan/violet/magenta shoulders) and, behind it, a wide faint tail so the
+     light has a wake instead of stopping dead. Both are mostly transparent —
+     that transparency is what makes it a travelling comet rather than a
+     rainbow border, and the seam at 0/360deg is transparent on both sides so
+     the revolution has no visible join. */
+  background:
+    conic-gradient(from 0deg,
+      rgba(0, 0, 0, 0) 0deg 232deg,
+      color-mix(in srgb, var(--rgb-1) 62%, transparent) 258deg,
+      color-mix(in srgb, var(--rgb-2) 92%, transparent) 292deg,
+      color-mix(in srgb, var(--rgb-3) 92%, transparent) 316deg,
+      color-mix(in srgb, #ffffff 88%, var(--rgb-3)) 328deg,
+      rgba(0, 0, 0, 0) 346deg 360deg),
+    conic-gradient(from 0deg,
+      rgba(0, 0, 0, 0) 0deg 168deg,
+      color-mix(in srgb, var(--rgb-1) 16%, transparent) 232deg,
+      color-mix(in srgb, var(--rgb-2) 24%, transparent) 288deg,
+      color-mix(in srgb, var(--rgb-3) 18%, transparent) 330deg,
+      rgba(0, 0, 0, 0) 356deg 360deg);
+  /* One revolution in 6s: fast enough to read as "live", slow enough that it
+     never strobes at the corner of your eye while you are reading a label. */
+  animation: more-edge-spin 6s linear infinite;
+  will-change: transform;
+}
+
+@keyframes more-edge-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(1turn); }
+}
+
+/* ── small screens: a smaller pane needs a smaller square ─────────────────── */
+@media (max-width: 600px) {
+  .more-panel > .more-edge { --more-edge-span: 940px; }
+}
+@media (max-width: 600px) and (max-height: 740px) {
+  .more-panel > .more-edge { --more-edge-span: 820px; }
+}
+/* The pane's own rim is 1px of glass; on a phone held at arm's length a 2px
+   spectrum reads slightly heavy, so the ring thins with the panel padding. */
+@media (max-width: 370px) {
+  .more-panel > .more-edge { --more-edge-ring: 1.5px; --more-edge-span: 760px; }
+}
+
+/* ── light theme: the same geometry, dimmed ──────────────────────────────── */
+:root[data-theme='light'] .more-edge-beam { opacity: 0.6; }
+
+/* ── motion guards: system preference, packaged shell, lite profile ───────── */
+/* Frozen, not hidden: the rim becomes a static spectrum ring so the sheet
+   still wears its identity for a user who asked for no motion, an Android
+   WebView that must not re-composite a loop, or a lite profile. */
+@media (prefers-reduced-motion: reduce) {
+  .more-edge-beam {
+    animation: none !important;
+    will-change: auto;
+    background: conic-gradient(from 210deg,
+      var(--rgb-1), var(--rgb-2), var(--rgb-3), var(--rgb-2), var(--rgb-1));
+    opacity: 0.5;
+  }
+}
+:root[data-native='true'] .more-edge-beam,
+:root[data-lite='true'] .more-edge-beam {
+  animation: none !important;
+  will-change: auto;
+  background: conic-gradient(from 210deg,
+    var(--rgb-1), var(--rgb-2), var(--rgb-3), var(--rgb-2), var(--rgb-1));
+  opacity: 0.45;
+}
+
+/* ── no mask-composite: no rim, and definitely no rainbow square ──────────── */
+@supports not ((mask-composite: exclude) or (-webkit-mask-composite: xor)) {
+  .more-panel > .more-edge { display: none; }
+}

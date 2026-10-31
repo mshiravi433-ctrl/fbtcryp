@@ -1,11 +1,6 @@
 {
   "orders.keeper.cancelFailed": "Otomatik emir iptal edilemedi; hâlâ açık.",
   "nav": {
-    "machine": {
-      "title": "FBT Makinesi",
-      "sub": "Sinyaller, akıllı para ve uygulama — tek canlı konsol",
-      "live": "Canlı"
-    },
     "market": "Piyasa",
     "trade": "İşlem",
     "swap": "Takas",

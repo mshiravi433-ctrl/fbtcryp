@@ -1,11 +1,6 @@
 {
   "orders.keeper.cancelFailed": "Order otomatis tidak dapat dibatalkan; order masih terbuka.",
   "nav": {
-    "machine": {
-      "title": "Mesin FBT",
-      "sub": "Sinyal, smart money, dan eksekusi — satu konsol langsung",
-      "live": "Langsung"
-    },
     "market": "Pasar",
     "trade": "Dagang",
     "swap": "Tukar",

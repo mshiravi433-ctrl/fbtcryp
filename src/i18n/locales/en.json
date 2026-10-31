@@ -1,10 +1,5 @@
 {
   "nav": {
-    "machine": {
-      "title": "FBT Machine",
-      "sub": "Signals, smart money and execution — one live console",
-      "live": "Live"
-    },
     "market": "Market",
     "trade": "Trade",
     "invest": "Invest",

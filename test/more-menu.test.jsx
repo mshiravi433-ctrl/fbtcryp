@@ -158,9 +158,13 @@ describe('More sheet — prism-blade pass', () => {
     const { pills } = await mountMore();
     const panel = document.querySelector('[data-testid="more-menu-dialog"]');
 
-    /* At rest: the spectrum ("All"), never an empty variable. */
-    expect(panel.style.getPropertyValue('--more-tint')).toBe('var(--rgb-1)');
-    expect(panel.style.getPropertyValue('--more-tint-2')).toBe('var(--rgb-2)');
+    /* At rest: the spectrum ("All"), never an empty variable. The noir pass
+       (2026-10-31) moved the rest pair from cyan→violet to violet→magenta so
+       the sheet reads purple-on-black before a category is picked; the
+       invariant this test owns is "the pane is always tinted, and the tint
+       follows the rail". */
+    expect(panel.style.getPropertyValue('--more-tint')).toBe('var(--rgb-2)');
+    expect(panel.style.getPropertyValue('--more-tint-2')).toBe('var(--rgb-3)');
     expect(panel.dataset.activeGroup).toBe('all');
 
     /* "Earn" is the second category — mint/amber. */
@@ -171,7 +175,7 @@ describe('More sheet — prism-blade pass', () => {
 
     /* …and back to the rest state without leaking the old colour. */
     fireEvent.click(pills()[0]);
-    expect(panel.style.getPropertyValue('--more-tint')).toBe('var(--rgb-1)');
+    expect(panel.style.getPropertyValue('--more-tint')).toBe('var(--rgb-2)');
   });
 
   it('gives every pill and section heading its own tint token', async () => {
@@ -240,77 +244,222 @@ describe('More sheet — prism-blade pass', () => {
 });
 
 /* ==========================================================================
-   THE MACHINE BOX — behaviour and motion-budget pins
+   THE NOIR PASS (2026-10-31) — machine box removed, RGB rim light, faster open
    --------------------------------------------------------------------------
-   The owner asked for an RGB animation in the menu's console header, «بدون
-   کاهش سرعت» and theme-aware. Those two requirements are testable, so they are
-   tested rather than described:
+   The owner's fourth pass on this sheet: «باکس موتور fbt را پاکش کن، رنگ‌بندی
+   را بهتر کن یعنی ته‌مایه‌های سیاهی در تم مشکی باشد با بنفش در نمای کلی، و در
+   ماچین هم یک نور rgb انیمیشنی باشد در کناره حرکت می‌کند، و سرعت بازشدن
+   پاپ‌آپ منو … سرعتش را بیشتر کن».
 
-     · the box exists, is not focusable, adds no search field and its shortcut
-       chips are real navigations;
-     · every infinite animation in its stylesheet is named in a closed list —
-       the spectrum blooms, the ring and the live dot — so a later change that
-       makes the ROWS loop forever fails here;
-     · those loops are `transform`/`opacity` (compositor) or a box-shadow on a
-       6px dot, never `filter`, `backdrop-filter`, `width` or `left`;
-     · the three guards that must switch them off are present: system
-       reduced-motion, the packaged shell (`data-native`) and the lite profile.
+   Deletions creep back and "faster" silently regresses, so all four are pinned:
+
+     · the machine box is GONE — no `.more-machine*` anything in the DOM, no
+       `MACHINE_SHORTCUTS`, no `nav.machine.*` key left in any of the twelve
+       locales (a dead key in one language is how the card comes back);
+     · the rim light exists, is exactly one decorative element, can never be
+       focused or tapped, and its stylesheet runs ONE infinite animation on
+       `transform` alone — with the three guards (reduced motion, the packaged
+       shell, the lite profile) freezing rather than hiding it;
+     · the pane is noir + violet in the dark theme: near-black base stops and a
+       violet pool, and the rest tint leads with `--rgb-2`;
+     · the open is measurably quicker than the pass before it: spring stiffness,
+       travel distance, scrim duration and the CSS cascade all below the old
+       numbers, and the scrim no longer waits for the lazy stylesheet.
    ========================================================================== */
-const MACHINE_CSS_RAW = fs.readFileSync(path.resolve(__dirname, '../src/styles/more-machine.css'), 'utf8');
+const EDGE_CSS_RAW = fs.readFileSync(path.resolve(__dirname, '../src/styles/more-edge.css'), 'utf8');
 /* Comments are prose, not rules — strip them before asserting on the material. */
-const MACHINE_CSS = MACHINE_CSS_RAW.replace(/\/\*[\s\S]*?\*\//g, '');
+const EDGE_CSS = EDGE_CSS_RAW.replace(/\/\*[\s\S]*?\*\//g, '');
+const MORE_JSX = fs.readFileSync(path.resolve(__dirname, '../src/components/MoreSheet.jsx'), 'utf8');
+/* The same code-only view the wiring suite uses: prose in this file talks about
+   the removed box at length, and a comment must not read as a live symbol. */
+const MORE_CODE = MORE_JSX.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
 
-describe('More sheet — machine box', () => {
-  it('renders one decorative console header with working shortcuts', async () => {
+describe('More sheet — noir pass: the machine box is gone', () => {
+  it('renders no console card, no shortcut chips and no spectrum blooms', async () => {
     await mountMore();
-    const box = document.querySelector('[data-testid="more-machine"]');
-    expect(box).toBeTruthy();
-    expect(box.getAttribute('aria-label')).toBeTruthy();
-    /* The spectrum field is decoration: hidden from assistive tech, and it
-       can never become a focus stop or eat a tap. */
-    const field = box.querySelector('.more-machine-field');
-    expect(field.getAttribute('aria-hidden')).toBe('true');
-    expect(box.querySelectorAll('.more-machine-field [tabindex]')).toHaveLength(0);
-    expect(box.querySelectorAll('.more-machine-field button, .more-machine-field a')).toHaveLength(0);
-    const chips = [...box.querySelectorAll('.more-machine-chip')];
-    expect(chips.length).toBeGreaterThanOrEqual(3);
-    for (const chip of chips) {
-      expect(chip.getAttribute('type')).toBe('button');
-      expect(chip.textContent.trim()).not.toBe('');
-      expect(chip.querySelector('svg')).not.toBeNull();
-    }
-    /* The machine box is not a second search bar. */
-    expect(document.querySelector('input[type="search"]')).toBeNull();
+    expect(document.querySelector('[data-testid="more-machine"]')).toBeNull();
+    expect(document.querySelector('.more-machine')).toBeNull();
+    expect(document.querySelectorAll('[class*="more-machine"]').length).toBe(0);
+    /* The header, the rail and the directory are still the whole sheet. */
+    expect(document.querySelector('.more-head .more-title')).not.toBeNull();
+    expect(document.querySelectorAll('.more-pill').length).toBe(4);
+    expect(document.querySelectorAll('.more-tile').length).toBeGreaterThanOrEqual(20);
   });
 
-  it('loops only the spectrum, and only on compositor properties', () => {
-    const infinite = [...MACHINE_CSS.matchAll(/animation:\s*([a-z0-9-]+)[^;]*infinite/gi)]
-      .map((m) => m[1])
-      .sort();
-    expect(infinite).toEqual(['mm-bloom-a', 'mm-bloom-b', 'mm-bloom-c', 'mm-live', 'mm-ring']);
+  it('keeps the removed card out of the source, the styles and all 12 locales', () => {
+    /* The shortcut rail went with the card; nothing may re-add it. */
+    expect(MORE_CODE).not.toContain('MACHINE_SHORTCUTS');
+    expect(MORE_CODE).not.toMatch(/more-machine/);
+    expect(fs.existsSync(path.resolve(__dirname, '../src/styles/more-machine.css'))).toBe(false);
 
-    for (const name of ['mm-bloom-a', 'mm-bloom-b', 'mm-bloom-c', 'mm-ring', 'mm-live']) {
-      const block = new RegExp(`@keyframes ${name} \\{[\\s\\S]*?\\n\\}`).exec(MACHINE_CSS)?.[0] ?? '';
-      expect(block, `${name} must exist`).not.toBe('');
-      expect(block, `${name} must not animate paint`).not.toMatch(/\b(filter|backdrop-filter|width|height|left|top|margin)\s*:/);
+    /* A dead locale key is how a removed card returns in a later merge, and
+       `nav.machine.title` was rendered by the box that is now gone. */
+    for (const loc of fs.readdirSync(path.resolve(__dirname, '../src/i18n/locales'))) {
+      const json = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../src/i18n/locales', loc), 'utf8'));
+      expect(json?.nav?.machine, `${loc} still carries nav.machine`).toBeUndefined();
     }
+  });
+});
 
-    /* No blur, no canvas, no per-row animation. */
-    expect(MACHINE_CSS).not.toMatch(/filter:\s*blur/);
-    expect(MACHINE_CSS).not.toContain('backdrop-filter');
+describe('More sheet — noir pass: the RGB rim light', () => {
+  it('is one decorative element on the pane, never focusable, never tappable', async () => {
+    await mountMore();
+    const edges = document.querySelectorAll('.more-edge');
+    expect(edges).toHaveLength(1);
+
+    const panel = document.querySelector('[data-testid="more-menu-dialog"]');
+    /* A direct child of the pane, like the sweep: it frames the sheet, so it
+       has to be in the pane's own stacking context and clipped by its radii. */
+    expect(edges[0].parentElement).toBe(panel);
+    expect(edges[0].getAttribute('aria-hidden')).toBe('true');
+    expect(edges[0].getAttribute('tabindex')).toBeNull();
+    expect(edges[0].tagName).toBe('SPAN');
+    expect(edges[0].querySelectorAll('button, a, [tabindex]').length).toBe(0);
+    expect(edges[0].querySelector('.more-edge-beam')).not.toBeNull();
   });
 
-  it('stops the loops for reduced motion, the packaged shell and the lite profile', () => {
-    const reduced = /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.more-machine-bloom[\s\S]*?animation: none !important/.test(MACHINE_CSS);
+  it('runs exactly ONE infinite animation, on transform alone', () => {
+    const infinite = [...EDGE_CSS.matchAll(/animation:\s*([a-z0-9-]+)[^;]*infinite/gi)].map((m) => m[1]);
+    expect(infinite).toEqual(['more-edge-spin']);
+
+    const block = /@keyframes more-edge-spin \{[\s\S]*?\n\}/.exec(EDGE_CSS)?.[0] ?? '';
+    expect(block, 'the spin keyframes must exist').not.toBe('');
+    /* Rotation and nothing else: no paint property, no layout property. */
+    expect(block).toMatch(/transform:\s*rotate\(/);
+    expect(block).not.toMatch(/\b(filter|backdrop-filter|width|height|left|top|margin|opacity|background)\s*:/);
+
+    /* The whole sheet's rim light costs no blur and no backdrop sample. */
+    expect(EDGE_CSS).not.toMatch(/filter:\s*blur/);
+    expect(EDGE_CSS).not.toContain('backdrop-filter');
+    /* The ring is a mask, not a clip: a clip-path here would also cut the
+       pane's shadow and is banned in this sheet's vocabulary. */
+    expect(EDGE_CSS).not.toContain('clip-path');
+    expect(EDGE_CSS).toMatch(/mask-composite:\s*exclude/);
+    /* …and where the mask trick is unavailable the rim is removed outright
+       rather than painting an unmasked rainbow square over the list. */
+    expect(EDGE_CSS).toMatch(/@supports not \(\(mask-composite: exclude\)[\s\S]*?\.more-edge \{[\s\S]*?display: none/);
+  });
+
+  it('freezes (does not hide) the rim for reduced motion, native and lite', () => {
+    const reduced = /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.more-edge-beam \{[\s\S]*?animation: none !important/.test(EDGE_CSS);
     expect(reduced).toBe(true);
-    expect(MACHINE_CSS).toMatch(/:root\[data-native='true'\] \.more-machine-bloom/);
-    expect(MACHINE_CSS).toMatch(/:root\[data-lite='true'\] \.more-machine-bloom/);
+    expect(EDGE_CSS).toMatch(/:root\[data-native='true'\] \.more-edge-beam/);
+    expect(EDGE_CSS).toMatch(/:root\[data-lite='true'\] \.more-edge-beam/);
+    /* Frozen means a static spectrum ring still frames the sheet. The slice
+       stops at the `@supports` block on purpose: hiding the rim where masking
+       is unsupported is a different (and correct) rule, and must not be read
+       as a guard that hides it. */
+    const from = EDGE_CSS.indexOf('prefers-reduced-motion');
+    const to = EDGE_CSS.indexOf('@supports not');
+    const guards = EDGE_CSS.slice(from, to > from ? to : undefined);
+    expect(guards.match(/animation: none !important/g).length).toBeGreaterThanOrEqual(2);
+    expect(guards).toMatch(/conic-gradient/);
+    expect(guards).not.toMatch(/display:\s*none/);
+    /* A frozen rim is a dimmer rim, never an invisible one. */
+    expect(guards).toMatch(/opacity:\s*0?\.[45]/);
   });
 
-  it('carries a dark material and a light-theme override, not a second design', () => {
-    /* Near-black card with a black vignette over the colour: «هاله‌های مشکی با
-       رنگ درست». */
-    expect(MACHINE_CSS).toMatch(/\.more-machine-vignette \{[\s\S]*?rgba\(0, 0, 0, 0\.5/);
-    expect(MACHINE_CSS).toContain(":root[data-theme='light'] .more-machine {");
+  it('stays a lazy sheet of its own, out of the first-paint bundle', () => {
+    expect(MORE_JSX).toMatch(/import\('\.\.\/styles\/more-edge\.css'\)/);
+    expect(MORE_JSX).toMatch(/import\('\.\.\/styles\/more-menu\.css'\)/);
+  });
+});
+
+describe('More sheet — noir pass: black undertones, violet overall', () => {
+  it('builds the dark pane from near-black stops with a violet pool', () => {
+    const panel = /^\.more-panel \{[\s\S]*?\n\}/m.exec(CSS)?.[0] ?? '';
+    /* Three noir tokens, all of them effectively black (each channel < 0x20). */
+    const noirs = [...panel.matchAll(/--more-noir-\d:\s*#([0-9a-f]{6})/gi)].map((m) => m[1]);
+    expect(noirs).toHaveLength(3);
+    for (const hex of noirs) {
+      for (const pair of hex.match(/../g)) {
+        expect(parseInt(pair, 16), `#${hex} is not a black undertone`).toBeLessThan(0x20);
+      }
+    }
+    expect(panel).toContain('var(--more-noir-1)');
+    /* Violet is the permanent hue of the overall view, not a category accent. */
+    expect(panel).toMatch(/radial-gradient\([^)]*at 50% 116%,\s*color-mix\(in srgb, var\(--rgb-2\)/);
+    /* The pane still owns exactly one backdrop blur (counted in the budget test
+       above) and never went back to white glass over a grey panel. */
+    expect(panel).not.toContain('var(--bg-panel-solid)');
+  });
+
+  it('leads the rest tint with violet and keeps the four categories distinct', async () => {
+    const { pills } = await mountMore();
+    const panel = document.querySelector('[data-testid="more-menu-dialog"]');
+    expect(panel.style.getPropertyValue('--more-tint')).toBe('var(--rgb-2)');
+    expect(panel.style.getPropertyValue('--more-tint-2')).toBe('var(--rgb-3)');
+
+    /* Every rail position wears a different pair, or "picking a category
+       re-tints the material" is a lie on one of the four stops. */
+    const pairs = new Set();
+    for (const pill of pills()) {
+      const tint = pill.style.getPropertyValue('--more-tint');
+      expect(tint).not.toBe('');
+      pairs.add(tint);
+    }
+    expect(pairs.size).toBe(4);
+
+    /* Earn still answers in money green. */
+    fireEvent.click(pills()[2]);
+    expect(panel.style.getPropertyValue('--more-tint')).toBe('var(--rgb-4)');
+  });
+
+  it('leaves the light theme pale instead of painting it black', () => {
+    expect(CSS).toContain(":root[data-theme='light'] .more-panel {");
+    const light = /:root\[data-theme='light'\] \.more-panel \{[\s\S]*?\n\}/.exec(CSS)?.[0] ?? '';
+    expect(light).not.toContain('var(--more-noir');
+    expect(light).toMatch(/rgba\(255, 255, 255/);
+  });
+});
+
+describe('More sheet — noir pass: the open is faster', () => {
+  /* The numbers of the pass this one replaced, pinned as ceilings. "Faster" is
+     a claim about a duration, so it is asserted as one. */
+  const spring = /stiffness: (\d+), damping: (\d+), mass: ([\d.]+)/.exec(MORE_CODE)?.slice(1) ?? [];
+
+  it('springs the panel in harder and travels less', () => {
+    expect(Number(spring[0]), 'stiffness').toBeGreaterThanOrEqual(700);
+    expect(Number(spring[2]), 'mass').toBeLessThanOrEqual(0.7);
+    /* Was y: 28 — a shorter travel with a harder spring is the whole speed-up. */
+    expect(MORE_CODE).toMatch(/initial=\{\{ opacity: 0, y: still \? 0 : 14 \}\}/);
+    expect(MORE_CODE).toMatch(/exit=\{\{ opacity: 0, y: still \? 0 : 22 \}\}/);
+    /* Still no parent scale: that is the jitter this sheet already paid for. */
+    expect(MORE_CODE).not.toMatch(/animate=\{\{[^}]*scale/);
+  });
+
+  it('paints the scrim immediately and only gates the panel on the stylesheet', () => {
+    /* Was `{open && menuStylesReady && ( …everything… )}`: on a cold tap the
+       button looked dead for a network round trip. */
+    expect(MORE_CODE).toMatch(/\{open && \(/);
+    expect(MORE_CODE).toMatch(/\{menuStylesReady && \(/);
+    const scrimAt = MORE_CODE.indexOf('sheet-backdrop more-backdrop');
+    const gateAt = MORE_CODE.indexOf('{menuStylesReady && (');
+    expect(scrimAt).toBeGreaterThan(0);
+    expect(gateAt).toBeGreaterThan(scrimAt);
+    expect(MORE_CODE).toMatch(/duration: still \? 0 : 0\.12/);
+  });
+
+  it('shortens every CSS duration that delays the list being readable', () => {
+    const sweep = /animation: more-sweep ([\d.]+)s [^;]*?([\d.]+)s 1 both/.exec(CSS)?.slice(1) ?? [];
+    expect(Number(sweep[0])).toBeLessThanOrEqual(0.6);
+    expect(Number(sweep[1])).toBe(0);
+
+    const fade = /animation: more-fade-in ([\d.]+)s/.exec(CSS)?.[1];
+    expect(Number(fade)).toBeLessThanOrEqual(0.16);
+
+    const cascade = /animation: more-tile-in ([\d.]+)s/.exec(CSS)?.[1];
+    const stagger = /animation-delay: calc\(var\(--more-i, 0\) \* (\d+)ms\)/.exec(CSS)?.[1];
+    expect(Number(cascade)).toBeLessThanOrEqual(0.26);
+    expect(Number(stagger)).toBeLessThanOrEqual(13);
+
+    /* One-shot rules are unchanged: still no loop in this stylesheet. */
+    expect(/infinite/i.test(CSS)).toBe(false);
+  });
+
+  it('closes before navigating, with less dead time after the tap', () => {
+    expect(MORE_CODE).toMatch(/\}, 70\);/);
+    const goStart = MORE_CODE.indexOf('const go = ');
+    expect(MORE_CODE.indexOf('onClose?.()', goStart)).toBeLessThan(MORE_CODE.indexOf('navigate(to)', goStart));
   });
 });

@@ -112,6 +112,43 @@ import {
  * per-row backdrop-filter, no parent `scale`, no SVG geometry animation, and
  * the close-then-navigate order in `go()`.
  *
+ * ─── THE NOIR PASS (2026-10-31, fourth pass) ────────────────────────────────
+ * The owner: «باکس موتور fbt را پاکش کن، رنگ‌بندی را بهتر کن یعنی ته‌مایه‌های
+ * سیاهی در تم مشکی باشد با بنفش در نمای کلی، و در ماچین هم یک نور rgb انیمیشنی
+ * باشد در کناره حرکت می‌کند، و سرعت بازشدن پاپ‌آپ منو … سرعتش را بیشتر کن».
+ * Four changes, and again none of them touched the information architecture:
+ *
+ *   • THE MACHINE BOX IS REMOVED. The console card that sat between the header
+ *     and the filter rail («ماشین FBT» / "FBT · MACHINE", a live pill, one
+ *     sentence and four shortcut chips) is gone — markup, `more-machine.css`,
+ *     and the `nav.machine.*` keys in all twelve locales. It spent ~110px of a
+ *     panel that fits eleven rows on a title card for the sheet itself, and its
+ *     chips repeated destinations the list below and the bottom nav already
+ *     carry. `MACHINE_SHORTCUTS` went with it; no route changed.
+ *   • NOIR + VIOLET. In the dark theme the pane is no longer white glass over a
+ *     grey panel — it is three near-black stops (`--more-noir-1…3`) with a
+ *     permanent violet pool low in the glass, and the category colour arrives
+ *     as light ON that black. The rest tint leads with violet now
+ *     (`--rgb-2` → `--rgb-3`) so the sheet reads purple-on-black at rest; the
+ *     light theme is untouched pale glass.
+ *   • THE RGB RIM LIGHT. The spectrum the machine box used to churn inside
+ *     itself moved to the pane's own edge: one comet of cyan → violet →
+ *     magenta travels the 2px rim continuously (`.more-edge`, styled in
+ *     src/styles/more-edge.css). One masked ring, one rotating conic square,
+ *     `transform` only, unmounted with the sheet, and frozen into a static
+ *     spectrum ring under reduced motion / `data-native` / `data-lite`. Four
+ *     looping layers became one.
+ *   • FASTER OPEN. The scrim renders the instant `open` flips instead of
+ *     waiting for the lazy stylesheet (only the panel waits now), the panel
+ *     spring went 380/34/0.9 → 720/40/0.62 with a 14px travel (~120ms on
+ *     screen instead of ~350ms), the scrim fade 0.16s → 0.12s, the CSS
+ *     durations shortened with it, and `go()` closes 70ms after a tap instead
+ *     of 90ms.
+ *
+ * Still not changed: no search field, no filler copy, no per-row
+ * backdrop-filter, no parent `scale`, no `clip-path` on the pane, and the
+ * close-then-navigate order in `go()`.
+ *
  * The "More" drawer.
  *
  * WHY THE ANIMATION WAS JITTERY — and what changed
@@ -160,13 +197,24 @@ import {
  *
  * The pairs move around the existing RGB spectrum tokens (never raw hex), so
  * the app can be re-tinted globally. `all` is the spectrum at rest.
+ *
+ * ─── RE-TUNED FOR THE NOIR PASS (2026-10-31) ────────────────────────────────
+ * «ته‌مایه‌های سیاهی در تم مشکی باشد با بنفش در نمای کلی» — the pane's base
+ * material is now a violet-black glass (see more-menu.css), so the REST state
+ * leads with violet instead of cyan: `all` is violet → magenta, and the sheet
+ * at rest reads purple-on-black rather than cyan-on-grey. `markets` keeps the
+ * cool cyan → violet pair it always wore (it used to inherit it from `all`;
+ * it now spells it out, because the rest state moved). The four pairs stay
+ * mutually distinct — purple, cool blue, money green/gold, orchid/ice — so
+ * picking a category still visibly re-tints the material.
  */
-const ALL_TINT = { tint: 'var(--rgb-1)', tint2: 'var(--rgb-2)' };
+const ALL_TINT = { tint: 'var(--rgb-2)', tint2: 'var(--rgb-3)' };
 
 const GROUPS = [
   {
     id: 'markets',
-    ...ALL_TINT,
+    tint: 'var(--rgb-1)',
+    tint2: 'var(--rgb-2)',
     items: [
       { to: '/', key: 'nav.market', Icon: IconMarket, hue: 'var(--rgb-1)' },
       /*
@@ -288,8 +336,15 @@ const GROUPS = [
   },
   {
     id: 'more',
-    tint: 'var(--rgb-2)',
-    tint2: 'var(--rgb-3)',
+    /*
+     * Was violet → magenta, which is exactly what the rest state became in
+     * the noir pass — two rail positions that tint the pane identically would
+     * make the "picking a category re-tints the material" system lie on one of
+     * its four stops. Orchid → ice keeps this category its own colour and
+     * stays inside the spectrum tokens.
+     */
+    tint: 'var(--rgb-8)',
+    tint2: 'var(--rgb-9)',
     items: [
       /*
        * «در منو smart money را مثل بقیه ایکون ها کن نه برجسته» — the tile
@@ -372,15 +427,16 @@ let menuStylesPromise = null;
 function loadMenuStyles() {
   if (!menuStylesPromise) {
     /*
-     * TWO sheets, ONE promise. The machine box's spectrum lives in
-     * more-machine.css (see the note at the bottom of more-menu.css for why it
-     * is not in the same file), and both must be in memory before the panel
-     * renders — a panel that appears with the card unstyled and then reflows
-     * when its stylesheet lands is worse than one extra cached chunk.
+     * TWO sheets, ONE promise. The pane's travelling RGB edge light lives in
+     * more-edge.css (see the note at the bottom of more-menu.css for why the
+     * one looping animation in this sheet is not in the same file), and both
+     * must be in memory before the panel renders — a panel that appears with
+     * an unstyled edge and then repaints when its stylesheet lands is worse
+     * than one extra cached chunk.
      */
     menuStylesPromise = Promise.all([
       import('../styles/more-menu.css'),
-      import('../styles/more-machine.css')
+      import('../styles/more-edge.css')
     ])
       .then(() => true)
       /*
@@ -398,17 +454,12 @@ function loadMenuStyles() {
 }
 
 /*
- * The machine box's one-tap rail. Deliberately FOUR, and deliberately the
- * four screens a session actually opens — not a second copy of the directory
- * below it. Each label is an existing key, so there is nothing new to
- * translate and nothing that can drift between the chip and the row.
+ * The machine box's shortcut rail left with the box itself (2026-10-31):
+ * MACHINE_SHORTCUTS is gone, and so are the four chips that repeated
+ * destinations the list below already carries. Nothing else in this file
+ * referenced it — the icons it used (activity, smart money, swap, market) are
+ * all still imported for their rows in GROUPS.
  */
-const MACHINE_SHORTCUTS = [
-  { to: '/signals', key: 'nav.signals', Icon: IconActivity },
-  { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney },
-  { to: '/swap', key: 'nav.swap', Icon: IconSwap },
-  { to: '/', key: 'nav.market', Icon: IconMarket }
-];
 
 const ALL = 'all';
 
@@ -550,11 +601,16 @@ export default function MoreSheet({ open, onClose }) {
      * the same frame — visible as the menu's stutter on slower phones.
      * Closing first means exactly one panel and one backdrop exist at every
      * instant, and the outgoing page never morphs beneath the drawer.
+     *
+     * 90ms → 70ms (2026-10-31): the press wash (`.more-tile[data-pressed]`)
+     * is a 0.2s transition, so it is already visible well before this fires;
+     * the extra 20ms bought nothing and was pure latency on every navigation
+     * out of the sheet. The ORDER is the part that must not change.
      */
     setTimeout(() => {
       onClose?.();
       requestAnimationFrame(() => navigate(to));
-    }, 90);
+    }, 70);
   };
 
   // Portalled for the same reason as Sheet: a transformed ancestor becomes the
@@ -564,19 +620,30 @@ export default function MoreSheet({ open, onClose }) {
 
   return createPortal(
     <AnimatePresence>
-      {open && menuStylesReady && (
+      {open && (
         <>
+          {/*
+            ─── THE SCRIM NO LONGER WAITS FOR THE STYLESHEET (2026-10-31) ───
+            «سرعت بازشدن پاپ‌اپ منو … سرعتش را بیشتر کن». The gate used to wrap
+            the whole fragment, so on a genuinely cold tap (before the idle
+            prefetch landed) NOTHING happened for a network round trip: no dim,
+            no panel, just a button that seemed dead. The scrim is pure
+            index.css — it needs no lazy chunk — so it renders the instant
+            `open` flips, and only the panel waits for its two stylesheets.
+            The tap now answers in the same frame it is made, every time.
+          */}
           <motion.div
             className="sheet-backdrop more-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: still ? 0 : 0.16 }}
+            transition={{ duration: still ? 0 : 0.12 }}
             /* Sibling-of-panel, as in Sheet: taps inside the panel cannot
                bubble to here, so onClose fires exactly once, only for a real
                backdrop tap. */
             onClick={onClose}
           />
+          {menuStylesReady && (
           <div className="more-layer">
             <motion.div
               ref={panelRef}
@@ -593,13 +660,25 @@ export default function MoreSheet({ open, onClose }) {
               /* A spring on y only — the liquid settle. Still no `scale` on
                  the panel: scaling a parent re-rasterises every child on
                  every frame, which is the jitter this sheet already paid
-                 for once (see the notes at the top of this file). */
-              initial={{ opacity: 0, y: still ? 0 : 28 }}
+                 for once (see the notes at the top of this file).
+
+                 ─── TUNED FOR SPEED (2026-10-31) ───────────────────────────
+                 «سرعت بازشدن پاپ‌اپ منو بیشتر کنده، سرعتش را بیشتر کن». The
+                 old spring (stiffness 380, damping 34, mass 0.9) settles in
+                 roughly 350ms and travels 28px — a menu that takes a third of
+                 a second to arrive reads as laggy next to a bottom nav that
+                 answers in one frame. This one is stiffness 720, damping 40,
+                 mass 0.62: ζ ≈ 0.9 (a whisper of settle, no visible bounce),
+                 ω ≈ 34 rad/s, so it is on screen in ~120ms from a 14px
+                 travel. Exit drops to 22px for the same reason — the sheet
+                 should leave as fast as it arrived, or the next screen feels
+                 blocked by it. Still transform+opacity only. */
+              initial={{ opacity: 0, y: still ? 0 : 14 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: still ? 0 : 44 }}
+              exit={{ opacity: 0, y: still ? 0 : 22 }}
               transition={still
                 ? { duration: 0 }
-                : { type: 'spring', stiffness: 380, damping: 34, mass: 0.9 }}
+                : { type: 'spring', stiffness: 720, damping: 40, mass: 0.62 }}
               drag={still ? false : 'y'}
               dragListener={false}
               dragControls={dragControls}
@@ -619,6 +698,26 @@ export default function MoreSheet({ open, onClose }) {
                 written against.
               */}
               <span className="more-sweep" aria-hidden="true" />
+
+              {/*
+                ─── THE RGB EDGE LIGHT (2026-10-31) ──────────────────────────
+                «در ماچین هم یک نور rgb انیمیشنی باشد در کناره حرکت می‌کند» —
+                the moving spectrum the machine box used to carry now runs
+                around the PANE's own edge: one comet of cyan → violet →
+                magenta light travels the border continuously, masked to a
+                2px ring so it reads as the sheet's rim lit from within.
+
+                One element, one composited layer, one `transform: rotate()`
+                loop — no filter, no blur, no canvas, no JS tick, and it is
+                unmounted with the sheet. The full budget (and the three
+                guards that stop it: reduced motion, the packaged Android
+                shell, the lite profile) is documented in more-edge.css.
+                Decorative, so it is hidden from assistive tech and can never
+                become a focus stop or eat a tap.
+              */}
+              <span className="more-edge" aria-hidden="true" data-testid="more-edge">
+                <i className="more-edge-beam" />
+              </span>
 
               <div className="more-dragzone" aria-hidden="true" onPointerDown={startDrag}>
                 <span className="more-grabber" />
@@ -644,97 +743,25 @@ export default function MoreSheet({ open, onClose }) {
                 without matching panels is an accessibility lie.
               */}
               {/*
-                ─── THE MACHINE BOX ────────────────────────────────────────
-                «صفحهٔ پاپ‌اپ منو بیشتر را درست و متنوع کن، و یک انیمیشن RGB در
-                 ماشین‌باکس بگذار — بدون کاهش سرعت، و همراه با تم؛ یعنی در تم
-                 مشکی هاله‌های مشکی با رنگ درست باشد.»
+                ─── THE MACHINE BOX IS GONE (2026-10-31) ───────────────────
+                «باکس موتور fbt را پاکش کن» — the console card that used to sit
+                between the header and the filter rail («ماشین FBT» /
+                "FBT · MACHINE", a live pill, one sentence and four shortcut
+                chips) is removed: markup, stylesheet and the `nav.machine.*`
+                keys in all twelve locales.
 
-                A console header for the directory, and the only place in the
-                app where the RGB spectrum moves as a MATERIAL rather than as
-                an accent. Three things it does that the old sheet did not:
+                Why the removal is also the right call, not just an order
+                followed: the card spent ~110px of a panel that fits eleven
+                rows on a title card for the sheet itself, and its four chips
+                repeated destinations that already sit in the list two taps
+                below (Signals, Smart Money, Swap, Market) and in the bottom
+                nav. A directory earns its length with destinations.
 
-                  1. It gives the sheet a face. The menu opened on a title and
-                     a filter rail; nothing said what the sheet is FOR.
-                  2. It carries the four destinations that are actually used
-                     every session (signals, smart money, swap, market) as
-                     one-tap chips, so the common case no longer means
-                     scrolling a 25-row list.
-                  3. It is the modern/glass moment the brief asked for —
-                     without a single new backdrop-filter (see the CSS).
-
-                MOTION BUDGET. The spectrum is three soft blooms and one ring,
-                all animating `transform`/`opacity` only, on their own
-                compositor layers, inside a card that is clipped and never
-                re-laid-out. They run ONLY while the sheet is mounted (it is
-                unmounted on close), they are switched off wholesale under
-                `prefers-reduced-motion`, on the packaged Android shell
-                (`data-native`) and in the lite profile (`data-lite`) — the
-                same three guards the rest of this sheet already obeys. No
-                filter, no blur, no canvas, no JS tick.
-
-                THEME. `--mm-*` in more-menu.css flips the whole material: in
-                the black theme the card is near-black glass with coloured
-                halos bleeding through its edge and a BLACK vignette over the
-                top (light on black, not a grey box); in the light theme the
-                same geometry is repainted as pale mist on white. One markup,
-                two materials.
+                The RGB motion the owner asked for did NOT leave with it — it
+                moved to the pane's own edge, where one comet of light frames
+                the whole sheet instead of decorating a single box (see
+                src/styles/more-edge.css).
               */}
-              <section
-                className="more-machine"
-                data-testid="more-machine"
-                aria-label={t('nav.machine.title')}
-              >
-                <span className="more-machine-field" aria-hidden="true">
-                  <i className="more-machine-bloom more-machine-bloom--a" />
-                  <i className="more-machine-bloom more-machine-bloom--b" />
-                  <i className="more-machine-bloom more-machine-bloom--c" />
-                  <i className="more-machine-ring" />
-                  <i className="more-machine-grid" />
-                  <i className="more-machine-vignette" />
-                </span>
-
-                <div className="more-machine-head">
-                  <span className="more-machine-mark" aria-hidden="true">
-                    {/* The same two-arrow cycle as the status-bar icon, the
-                        in-app notification bar and the launcher mark — one
-                        brand, everywhere. */}
-                    <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
-                      <g fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                        <path d="M13.94 4.76 A7.5 7.5 0 0 1 13.94 19.24" />
-                        <path d="M10.06 19.24 A7.5 7.5 0 0 1 10.06 4.76" />
-                      </g>
-                      <path d="M10.08 20.28 L14.61 21.75 L13.27 16.73 Z" fill="currentColor" />
-                      <path d="M13.92 3.72 L9.39 2.25 L10.73 7.27 Z" fill="currentColor" />
-                    </svg>
-                  </span>
-                  <span className="more-machine-id">
-                    <span className="more-machine-kicker" aria-hidden="true">FBT · MACHINE</span>
-                    <span className="more-machine-title">{t('nav.machine.title')}</span>
-                  </span>
-                  <span className="more-machine-live">
-                    <i aria-hidden="true" />
-                    {t('nav.machine.live')}
-                  </span>
-                </div>
-
-                <p className="more-machine-sub">{t('nav.machine.sub')}</p>
-
-                <div className="more-machine-shortcuts" role="group" aria-label={t('nav.machine.title')}>
-                  {MACHINE_SHORTCUTS.map(({ to, key, Icon }) => (
-                    <button
-                      key={to}
-                      type="button"
-                      className="more-machine-chip"
-                      data-current={isCurrent(to) ? 'true' : 'false'}
-                      aria-current={isCurrent(to) ? 'page' : undefined}
-                      onClick={() => go(to)}
-                    >
-                      <Icon width={14} height={14} aria-hidden="true" />
-                      <span>{t(key)}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
 
               <div className="more-filter" role="group" aria-label={t('nav.more')}>
                 {[{ id: ALL, key: 'nav.group.all', ...ALL_TINT }, ...GROUPS.map((group) => ({
@@ -818,6 +845,7 @@ export default function MoreSheet({ open, onClose }) {
               </div>
             </motion.div>
           </div>
+          )}
         </>
       )}
     </AnimatePresence>,

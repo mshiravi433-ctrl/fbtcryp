@@ -46,8 +46,12 @@ const LAZY_SHEETS = [
     owners: ['src/components/MoreSheet.jsx']
   },
   {
-    sheet: 'src/styles/more-machine.css',
-    reason: 'the looping machine box, loaded with the More sheet',
+    /* The machine box that used to own this slot was removed on 2026-10-31
+       («باکس موتور fbt را پاکش کن»); the sheet's one looping animation — the
+       RGB comet that travels the pane's rim — lives here instead, and it is
+       lazy for exactly the same reason. */
+    sheet: 'src/styles/more-edge.css',
+    reason: 'the looping RGB rim light, loaded with the More sheet',
     owners: ['src/components/MoreSheet.jsx']
   }
 ];
@@ -78,7 +82,7 @@ describe('lazy stylesheets stay lazy', () => {
        chunk graph of whoever touches MoreSheet — including the entry graph if
        anything eager ever imports it. */
     expect(more).toMatch(/import\('\.\.\/styles\/more-menu\.css'\)/);
-    expect(more).toMatch(/import\('\.\.\/styles\/more-machine\.css'\)/);
+    expect(more).toMatch(/import\('\.\.\/styles\/more-edge\.css'\)/);
     expect(more).toMatch(/Promise\.all\(\[/);
     /* One cached promise, so reopening the sheet does not re-request anything. */
     expect(more).toMatch(/let menuStylesPromise|menuStylesPromise \?\?=/);
