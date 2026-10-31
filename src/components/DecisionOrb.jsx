@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { isRtl } from '../i18n/languages';
 import { marketDecision } from '../lib/marketDecision';
+import { GlyphRisk, GlyphTrendUp, GlyphTrendDown, GlyphInfo } from './market/MarketGlyphs.jsx';
 import '../styles/decision-orb.css';
 
 /**
@@ -47,7 +48,17 @@ import '../styles/decision-orb.css';
  *
  * The metrics themselves are unchanged — see lib/marketDecision for what the
  * three rings measure and why they are honest about not being a prediction.
+ *
+ * ─── 4. ITS THREE MARKS WERE TYPED GLYPHS (2026-10-31) ──────────────────────
+ * The diamond, the two diagonals and the information mark all arrived as text
+ * artwork: a different weight and a different baseline on every platform, and a
+ * colour that could not follow the ring they sit in. They are drawn now, from
+ * the same market sheet as the rest of the screen, and each one takes
+ * `currentColor` so the glyph wears its own metric's hue.
  */
+
+/** One drawn mark per ring, keyed the way lib/marketDecision keys the metrics. */
+const PULSE_MARKS = { risk: GlyphRisk, buy: GlyphTrendUp, sell: GlyphTrendDown };
 
 /** How long the instrument may stay open before it takes itself off the edge. */
 const AUTO_DISMISS_MS = 20_000;
@@ -65,7 +76,7 @@ export default function DecisionOrb({ coins = [], updatedAt = 0, unavailable = f
   const rtl = isRtl(lang);
 
   const [open, setOpen] = useState(false);
-  /* 'live' → 'leaving' (fade out) → 'gone' (unmounted). */
+  /* 'live' to 'leaving' (fade out) to 'gone' (unmounted). */
   const [phase, setPhase] = useState('live');
   const [now, setNow] = useState(() => Date.now());
   const toggleRef = useRef(null);
@@ -203,7 +214,10 @@ export default function DecisionOrb({ coins = [], updatedAt = 0, unavailable = f
                 style={{ '--ring-color': metric.color, '--ring-value': `${v === null ? 0 : Math.min(100, v)}%` }}
                 aria-hidden="true"
               >
-                <span>{metric.icon}</span>
+                {(() => {
+                  const Mark = PULSE_MARKS[metric.key] || GlyphRisk;
+                  return <Mark width={15} height={15} />;
+                })()}
               </span>
               <strong dir="ltr">{v === null ? '—' : `${v.toFixed(1)}%`}</strong>
               <span className="dor-label">{label}</span>
@@ -212,7 +226,9 @@ export default function DecisionOrb({ coins = [], updatedAt = 0, unavailable = f
         })}
         <span className="dor-status" role="status">{stale ? t('market.pulse.stale') : t('market.pulse.live')}</span>
         <details className="dor-info">
-          <summary aria-label={t('market.pulse.method')}>ⓘ</summary>
+          <summary aria-label={t('market.pulse.method')}>
+            <GlyphInfo width={13} height={13} />
+          </summary>
           <p>{t('market.pulse.explanation', { moves: metrics[1].count, ranges: metrics[0].count })}</p>
         </details>
       </div>

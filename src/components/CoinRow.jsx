@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { fmtPct, fmtUsd } from '../lib/format';
 import Sparkline from './Sparkline';
 import CoinLogo from './CoinLogo';
+import { GlyphTrendDown, GlyphTrendUp } from './market/MarketGlyphs.jsx';
 
 /** A keyboard-accessible market row with a dedicated, full-row navigation target. */
 function CoinRow({ coin, onClick, showSpark = true, rank, metric = null, animate = true }) {
@@ -43,7 +44,13 @@ function CoinRow({ coin, onClick, showSpark = true, rank, metric = null, animate
       <div className="coin-right">
         <div className="coin-price mono">{fmtUsd(coin.price)}</div>
         <div className={`coin-change-pill mono ${up ? 'is-up' : 'is-down'}`}>
-          <span aria-hidden="true">{up ? '▲' : '▼'}</span>
+          {/* «ایکون svg» — the typed triangle glyphs could not be recoloured by the accent
+              token and arrived as platform text artwork on every OS. The arrow
+              is drawn, inherits currentColor, and is 9px so it never pushes the
+              number off its line in a 5-column row. */}
+          {up
+            ? <GlyphTrendUp width={9} height={9} aria-hidden="true" />
+            : <GlyphTrendDown width={9} height={9} aria-hidden="true" />}
           {fmtPct(coin.change24h, 2)}
         </div>
       </div>

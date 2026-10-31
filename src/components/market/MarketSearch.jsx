@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { IconSearch, IconX } from '../Icons.jsx';
+import { IconSearch, IconSparkle, IconX } from '../Icons.jsx';
 import CoinLogo from '../CoinLogo.jsx';
 import { contractQuery, mergeSearchResults } from '../../lib/marketSearch.js';
 import { marketPrice } from '../../lib/marketPresentation.js';
@@ -9,6 +9,22 @@ import { marketPrice } from '../../lib/marketPresentation.js';
  * The market's single search surface: name, ticker, contract address, or an
  * executable natural-language request. Results are a proper combobox/listbox
  * with arrow-key navigation; there are no duplicate filter buttons here.
+ *
+ * ─── WHERE IT SITS, AND HOW IT LIGHTS UP ──────────────────────────────────
+ * «زیر همه ارزها باید فیلد جستجو بیاد بالای فیلتر ها با ماچین نئونی»
+ *
+ * The field moved from the top of the page into the list card, between the
+ * «همه ارزها» head and the filter chips: a search that filters the list reads
+ * better attached to the list than floating above three unrelated boxes.
+ *
+ * The neon is a gradient hairline (`border-box` over `padding-box`) that is dim
+ * at rest and lights on focus, plus ONE 0.9s sweep of the same gradient when
+ * the field takes focus. Both are compositor-only, both stop for
+ * reduced-motion/native/lite, and neither loops — a permanently pulsing input
+ * is the "چشمک زدن" this screen was explicitly asked to drop.
+ *
+ * `data-typed` exists so CSS can hide the «هوشمند» capability chip the moment
+ * there is text to read, without the chip ever competing with the clear button.
  */
 export default function MarketSearch({
   query,
@@ -95,7 +111,8 @@ export default function MarketSearch({
 
   return (
     <div className="mx-search-wrap" ref={wrapRef}>
-      <div className={`mx-search${open ? ' is-open' : ''}`}>
+      <div className={`mx-search${open ? ' is-open' : ''}`} data-typed={query ? 'true' : undefined}>
+        <span className="mx-search-glow" aria-hidden="true" />
         <IconSearch className="mx-search-icon" width={18} height={18} aria-hidden="true" />
         <input
           ref={inputRef}
@@ -126,6 +143,12 @@ export default function MarketSearch({
           >
             <IconX width={14} height={14} aria-hidden="true" />
           </button>
+        )}
+        {!query && (
+          <span className="mx-search-ai" title={t('market.aiHint')}>
+            <IconSparkle width={11} height={11} aria-hidden="true" />
+            {t('marketIntel.aiChip')}
+          </span>
         )}
       </div>
 

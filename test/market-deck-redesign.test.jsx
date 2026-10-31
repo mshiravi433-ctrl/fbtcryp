@@ -1,0 +1,409 @@
+// @vitest-environment jsdom
+/**
+ * MARKET — THE AURORA DECK PASS (2026-10-31)
+ * ---------------------------------------------------------------------------
+ * One request, seven numbered items, all of them about this one screen:
+ *
+ *   ۱/۲ «ارزش کل و بیت کویین داخل باکس واحد اما خیلی مدرن تر شود»
+ *      → ONE surface holds both readings; the seam between two separate cards
+ *        is gone, and every mark inside it is drawn SVG.
+ *
+ *   ۲  «بنر تبلیغاتی پول هوشمند بسیار نینیمال تر»
+ *      → the blade is one row: mark, copy, CTA. The 360×180 isometric scene is
+ *        gone and the only motion left is a hairline sweep.
+ *
+ *   ۳  «داغ‌ترین کوین‌ها خیلی مدرن تر و مینیمال تر … رنگ بندی خاص»
+ *      → one accent custom property per place, read by the hairline, the rank
+ *        chip and the hover border alike.
+ *
+ *   ۵  «زیر همه ارزها باید فیلد جستجو بیاد بالای فیلتر ها با ماچین نئونی»
+ *      → the field lives inside the list card, between its head and its chips.
+ *
+ *   ۶  «باکس استوری ها … بین داغ ترین ها و بنر تبلیغاتی قرار بگیره»
+ *      → document order, pinned with compareDocumentPosition rather than by
+ *        eye, because "between" is exactly the kind of claim a refactor loses.
+ *
+ *   ۷  «انیمیشن بجا بدون چشمک زدن، کاهش سرعت باشد … باکس ها شیشه ایی»
+ *      → glass is painted gradients (no live blur anywhere in the sheet), and
+ *        every keyframe in it animates transform/opacity only.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { readFileSync } from 'node:fs';
+import fa from '../src/i18n/locales/fa.json';
+import en from '../src/i18n/locales/en.json';
+
+const dict = { fa, en };
+const get = (obj, path) => path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
+const tFor = (lang) => (key, opts = {}) => {
+  let v = get(dict[lang], key);
+  if (v == null) v = get(dict.en, key);
+  if (v == null) return opts.defaultValue ?? key;
+  return String(v).replace(/\{\{(\w+)\}\}/g, (_, k) => String(opts[k] ?? ''));
+};
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: tFor('fa'), i18n: { language: 'fa', resolvedLanguage: 'fa', changeLanguage: () => {} } })
+}));
+
+const MOTION_STUBS = new Map();
+vi.mock('framer-motion', () => ({
+  motion: new Proxy({}, {
+    get: (_, tag) => {
+      const T = String(tag);
+      if (!MOTION_STUBS.has(T)) {
+        MOTION_STUBS.set(T, ({ children, ...p }) => {
+          const clean = Object.fromEntries(Object.entries(p).filter(([k]) => !['initial', 'animate', 'exit', 'transition', 'whileTap', 'whileHover', 'layout', 'layoutId', 'variants'].includes(k)));
+          return <T {...clean}>{children}</T>;
+        });
+      }
+      return MOTION_STUBS.get(T);
+    }
+  }),
+  AnimatePresence: ({ children }) => <>{children}</>,
+  useReducedMotion: () => true
+}));
+
+/* ── a feed with a face: BTC, ETH and 30 alternates, plus eight trending ─── */
+const mkCoin = (i, symbol) => ({
+  id: `coin-${i}`, symbol, name: `Coin ${i}`, image: '',
+  price: 1 + i / 100, change24h: i % 2 ? 3.2 : -1.4,
+  volume: 1_000_000 * (i + 1), mcap: 2_000_000 * (i + 1),
+  high24h: 2, low24h: 1, sparkline: [1, 2, 3, 4], rank: i + 3
+});
+const COINS = [
+  { id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin', image: '', price: 92450, change24h: 2.41, volume: 3.9e10, mcap: 1.83e12, high24h: 93200, low24h: 89500, sparkline: [89500, 90200, 91400, 92450], rank: 1 },
+  { id: 'ethereum', symbol: 'ETH', name: 'Ethereum', image: '', price: 3420, change24h: 4.12, volume: 1.9e10, mcap: 4.1e11, high24h: 3480, low24h: 3290, sparkline: [3300, 3350, 3400, 3420], rank: 2 },
+  ...Array.from({ length: 30 }, (_, i) => mkCoin(i, `T${i}`))
+];
+const TRENDING = COINS.slice(0, 8).map((c, i) => ({ id: c.id, symbol: c.symbol, name: c.name, image: '', rank: c.rank, score: 40 - i }));
+
+const feed = vi.hoisted(() => ({ data: [], loading: false, error: null, updatedAt: 0, refresh: () => {} }));
+vi.mock('../src/hooks/useMarket', () => ({
+  useMarkets: () => feed,
+  useGlobalStats: () => ({
+    data: { mcap: 3.152e12, volume: 1.42e11, btcDominance: 56.4, ethDominance: 13.8, coins: 14820, markets: 1124, avgChange: 2.35, mcapChange: 2.84 }
+  }),
+  useTrending: () => ({ data: TRENDING }),
+  useCoinSearch: () => ({ results: [], searching: false })
+}));
+vi.mock('../src/hooks/useCoinVenues', () => ({ useCoinVenues: () => ({ venues: new Map(), loading: false }) }));
+vi.mock('../src/lib/refresh', () => ({ onSoftRefresh: () => () => {} }));
+vi.mock('../src/lib/api', () => ({
+  getMarkets: async () => [],
+  getCategory: async () => [],
+  getGlobal: async () => ({}),
+  getTrending: async () => [],
+  searchCoins: async () => [],
+  onMarketVisualsReady: () => () => {}
+}));
+vi.mock('../src/lib/marketVisuals', () => ({ mergeVisuals: (c) => c }));
+vi.mock('../src/lib/priceAlerts', () => ({ runPriceAlerts: () => {}, runTopMoverAlerts: () => {}, syncPriceWatch: () => Promise.resolve({ ok: true }) }));
+vi.mock('../src/components/Ticker', () => ({ default: () => null }));
+vi.mock('../src/components/AdBanner', () => ({ default: () => null }));
+vi.mock('../src/components/TrendChart', () => ({ default: () => null }));
+/* The stories rail has its own suite (market-stories-and-aparat); here it only
+   has to EXIST, in the right place, so the artwork is stubbed out. */
+vi.mock('../src/components/MarketStories', () => ({
+  default: () => <div className="market-stories-section" data-testid="market-stories-rail" />
+}));
+
+import Market from '../src/pages/Market.jsx';
+
+const css = readFileSync('src/styles/market-intelligence.css', 'utf8');
+const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+const pageSrc = readFileSync('src/pages/Market.jsx', 'utf8');
+const after = (a, b) => Boolean(a) && Boolean(b) &&
+  (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
+beforeEach(() => {
+  feed.data = COINS;
+  feed.loading = false;
+  feed.error = null;
+  feed.updatedAt = Date.now();
+  feed.refresh = () => {};
+});
+afterEach(cleanup);
+
+const open = async () => {
+  render(<MemoryRouter><Market /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelectorAll('.coin-row').length).toBeGreaterThan(0));
+};
+
+describe('۱/۲ · one box holds the total and Bitcoin', () => {
+  it('renders both readings inside a single surface', async () => {
+    await open();
+    const deck = screen.getByTestId('market-overview');
+    const globalCard = screen.getByTestId('market-global-card');
+    const btcCard = screen.getByTestId('market-btc-hero-card');
+
+    expect(deck.contains(globalCard)).toBe(true);
+    expect(deck.contains(btcCard)).toBe(true);
+    /* …and they are the two children of ONE grid, not two sibling cards. */
+    expect(globalCard.parentElement).toBe(btcCard.parentElement);
+    expect(globalCard.parentElement.classList.contains('mx-deck-grid')).toBe(true);
+
+    /* The deck has its own head and its painted light field. */
+    expect(deck.querySelector('.mx-deck-head')).toBeTruthy();
+    expect(deck.querySelector('.mx-deck-veil')).toBeTruthy();
+    expect(deck.textContent).toContain(fa.marketIntel.deckLabel);
+  });
+
+  it('paints the glass with gradients and never with a live blur', () => {
+    expect(bare).not.toMatch(/backdrop-filter/);
+    expect(bare).not.toMatch(/will-change/);
+    /* One shared recipe for the five big surfaces — the reason the page reads
+       as one machine instead of six widgets. */
+    expect(bare).toMatch(/\.mx-market \.mx-overview,[\s\S]*?\.mx-market \.mx-breadth \{[^}]*background: var\(--mx-glass\), var\(--mx-panel\)/);
+    expect(bare).toMatch(/\.mx-overview \{[^}]*border-radius: 26px/);
+  });
+
+  it('reads dominance as a bar and a legend, with drawn marks for every metric', async () => {
+    await open();
+    const globalCard = screen.getByTestId('market-global-card');
+    expect(globalCard.querySelector('.mx-dominance .is-btc')).toBeTruthy();
+    expect(globalCard.querySelector('.mx-dominance-legend')).toBeTruthy();
+    /* three metric pods, each with its own icon tile */
+    expect(globalCard.querySelectorAll('.mx-metric')).toHaveLength(3);
+    expect(globalCard.querySelectorAll('.mx-metric-icon svg')).toHaveLength(3);
+    expect(globalCard.querySelectorAll('.mx-global-foot svg')).toHaveLength(3);
+  });
+
+  it('gives Bitcoin a full-bleed vector logo and exactly one control', async () => {
+    await open();
+    const btcCard = screen.getByTestId('market-btc-hero-card');
+    expect(btcCard.querySelectorAll('button')).toHaveLength(1);
+    expect(btcCard.querySelector('.mx-btc-logo svg')).toBeTruthy();
+    expect(btcCard.querySelector('.mx-btc-range-track span')).toBeTruthy();
+  });
+});
+
+describe('۲ · the Smart Money blade is minimal', () => {
+  it('is one row — mark, copy, CTA — with no isometric scene left', async () => {
+    await open();
+    const blade = screen.getByTestId('market-smart-money-banner');
+    expect(blade.querySelector('.mx-smart-mark svg')).toBeTruthy();
+    expect(blade.querySelector('.mx-smart-art')).toBeNull();
+    expect(blade.querySelectorAll('svg').length).toBeLessThanOrEqual(3);
+    expect(blade.textContent).toContain(fa.marketIntel.smartCta);
+    /* the eyebrow is translated now; a hardcoded English string in a Persian
+       interface was the «زبان درست باشد» half of the request */
+    expect(pageSrc).not.toContain('FBT SMART MONEY');
+    expect(blade.textContent).toContain(fa.marketIntel.smartEyebrow);
+  });
+
+  it('keeps exactly one ambient loop, and it travels instead of blinking', () => {
+    expect(bare).toMatch(/\.mx-smart-sheen \{[^}]*animation: mx-blade-sweep 9s[^}]*infinite/);
+    expect(bare).toMatch(/@keyframes mx-blade-sweep/);
+    /* No opacity strobe on any dot: the green blink was already banned by
+       market-speed.test.mjs, and this pass adds nothing that pulses. */
+    expect(bare).toMatch(/\.mx-deck-live i \{(?![^}]*animation)/);
+    expect(bare).toMatch(/\.mx-fresh i \{(?![^}]*animation)/);
+  });
+});
+
+describe('۳ · «داغ‌ترین کوین‌ها» carries one accent per place', () => {
+  it('ranks the first three cards and hands each its own hue', async () => {
+    await open();
+    const rail = screen.getByTestId('market-hot-coins');
+    const cards = rail.querySelectorAll('.mx-hot-card');
+    expect(cards.length).toBe(8);
+    expect(cards[0].dataset.place).toBe('1');
+    expect(cards[1].dataset.place).toBe('2');
+    expect(cards[2].dataset.place).toBe('3');
+    expect(cards[3].dataset.place).toBe('n');
+    expect(rail.querySelector('.mx-hot-flame svg')).toBeTruthy();
+    /* the change chip is a drawn arrow, not a typed one */
+    expect(rail.querySelector('.mx-change svg')).toBeTruthy();
+    expect(rail.textContent).not.toMatch(/[↗↘▲▼]/);
+  });
+
+  it('defines the four accents and lets one property drive the whole card', () => {
+    for (const place of ['1', '2', '3', 'n']) {
+      expect(bare).toMatch(new RegExp(`\\.mx-hot-card\\[data-place='${place}'\\] \\{ --hot:`));
+    }
+    expect(bare).toMatch(/\.mx-hot-sheen \{[^}]*var\(--hot\)/);
+    expect(bare).toMatch(/\.mx-hot-rank \{[^}]*var\(--hot\)/);
+  });
+});
+
+describe('۵ · search above the filters, inside «همه ارزها»', () => {
+  it('lives in the list card, between the head and the chips', async () => {
+    await open();
+    const terminal = document.querySelector('.market-terminal');
+    const search = document.querySelector('.mx-search-wrap');
+    const head = document.querySelector('.mx-terminal-head');
+    const controls = document.querySelector('.mx-controls');
+    const breadth = screen.getByTestId('market-breadth');
+    const sectors = document.querySelector('.mx-sectors');
+
+    expect(terminal.contains(search)).toBe(true);
+    expect(after(head, search)).toBe(true);
+    expect(after(search, controls)).toBe(true);
+    /* …then نبض بازار, then طلا→سولانا, then the rows: the order the request
+       spells out, in the order it spells it. */
+    expect(after(controls, breadth)).toBe(true);
+    expect(after(breadth, sectors)).toBe(true);
+    expect(after(sectors, document.querySelector('.coin-row'))).toBe(true);
+  });
+
+  it('is neon by gradient hairline, not by blur or by a mask', () => {
+    expect(bare).toMatch(/\.mx-search \{[^}]*padding-box[^}]*border-box/s);
+    expect(bare).not.toMatch(/mask(-image)?:/);
+    /* the sweep on focus runs ONCE — a permanently pulsing input is a strobe */
+    expect(bare).toMatch(/\.mx-search:focus-within \.mx-search-glow \{ animation: mx-neon-sweep 0\.9s[^}]*1; \}/);
+  });
+
+  it('offers the natural-language capability as a chip that steps aside when typing', async () => {
+    await open();
+    const chip = document.querySelector('.mx-search-ai');
+    expect(chip).toBeTruthy();
+    expect(chip.textContent).toContain(fa.marketIntel.aiChip);
+    expect(bare).toMatch(/\.mx-search\[data-typed='true'\] \.mx-search-ai \{ display: none; \}/);
+  });
+});
+
+describe('۵ · filters, نبض بازار and طلا→سولانا', () => {
+  it('gives every filter chip and every sector tab a distinct drawn mark', async () => {
+    await open();
+    const views = [...document.querySelectorAll('.mx-view')];
+    expect(views).toHaveLength(5);
+    /* the icon class sits on the svg itself — these are inline marks, not sprites */
+    expect(views.every((v) => v.querySelector('svg.mx-view-icon'))).toBe(true);
+
+    const sectors = [...document.querySelectorAll('.mx-sector')];
+    expect(sectors.map((s) => s.dataset.sector)).toEqual(['gold', 'meme', 'rwa', 'ai', 'gaming', 'solana']);
+    expect(sectors.every((s) => s.querySelector('svg.market-sector-icon'))).toBe(true);
+    /* six tabs, six different silhouettes */
+    const shapes = new Set(sectors.map((s) => s.querySelector('svg.market-sector-icon').innerHTML));
+    expect(shapes.size).toBe(6);
+  });
+
+  it('pins the sector rail horizontal, snapping, and un-masked', () => {
+    expect(bare).toMatch(/\.mx-sectors-rail \{[^}]*overflow-x: auto[^}]*scroll-snap-type: x/s);
+    expect(bare).toMatch(/\.mx-sector \{[^}]*scroll-snap-align: start/s);
+    expect(pageSrc).toMatch(/function SectorGlyph/);
+    for (const sector of ['gold', 'meme', 'rwa', 'ai', 'gaming', 'solana']) {
+      expect(bare).toMatch(new RegExp(`\\.mx-sector\\[data-sector='${sector}'\\] \\{ --sec: #`));
+    }
+  });
+
+  it('turns نبض بازار into an instrument with its own accent edge', async () => {
+    await open();
+    const breadth = screen.getByTestId('market-breadth');
+    expect(breadth.dataset.tone).toBe('up');
+    expect(breadth.querySelector('.mx-breadth-mark svg')).toBeTruthy();
+    expect(breadth.querySelector('.mx-breadth-avg')).toBeTruthy();
+    expect(breadth.querySelectorAll('.mx-breadth-item')).toHaveLength(2);
+    expect(breadth.textContent).toContain(fa.market.breadthTitle);
+    expect(bare).toMatch(/\.mx-market \.mx-breadth::after \{[^}]*inset-inline-start: 0/s);
+  });
+
+  it('modernises the swap button and the token row without moving a number', async () => {
+    await open();
+    const row = document.querySelector('.mx-coin-row');
+    expect(row.querySelector('.coin-change-pill svg')).toBeTruthy();
+    expect(row.textContent).not.toMatch(/[▲▼]/);
+    /* the button keeps its label and its test id — only the artwork changed */
+    const swap = screen.getByTestId('market-swap-bitcoin');
+    expect(swap.querySelector('svg')).toBeTruthy();
+    expect(swap.textContent).toContain(fa.market.swap);
+  });
+});
+
+describe('۶ · the stories box sits between the hot rail and the blade', () => {
+  it('is in that order in the document, and joins the page rhythm', async () => {
+    await open();
+    const hot = screen.getByTestId('market-hot-coins');
+    const stories = screen.getByTestId('market-stories-rail');
+    const blade = screen.getByTestId('market-smart-money-banner');
+
+    expect(after(hot, stories)).toBe(true);
+    expect(after(stories, blade)).toBe(true);
+    expect(after(blade, document.querySelector('.market-terminal'))).toBe(true);
+    /* …and the deck is still the first thing on the screen. */
+    expect(after(screen.getByTestId('market-overview'), hot)).toBe(true);
+    /* its margins come from the page gap now, not from the box itself */
+    expect(bare).toMatch(/\.mx-stories \.market-stories-section \{[^}]*margin: 0/s);
+  });
+});
+
+describe('۷ · motion, theme and language on the first screen', () => {
+  it('animates transform and opacity only, in every keyframe it ships', () => {
+    /* Brace-matched, not regex-matched: two of these keyframes are written on
+       one line and a `[^}]*` scan would have read half of each. */
+    const frames = [];
+    for (const m of bare.matchAll(/@keyframes\s+([\w-]+)\s*\{/g)) {
+      let depth = 1;
+      let i = m.index + m[0].length;
+      const start = i;
+      while (i < bare.length && depth > 0) {
+        if (bare[i] === '{') depth += 1;
+        else if (bare[i] === '}') depth -= 1;
+        i += 1;
+      }
+      frames.push([m[1], bare.slice(start, i - 1)]);
+    }
+    expect(frames.length).toBeGreaterThanOrEqual(3);
+    for (const [name, body] of frames) {
+      const props = new Set([...body.matchAll(/[{;]\s*([a-z-]+)\s*:/g)].map((x) => x[1]));
+      const illegal = [...props].filter((prop) => !['transform', 'opacity'].includes(prop));
+      expect(illegal, `${name} animates ${illegal.join(', ')}`).toEqual([]);
+    }
+    /* …and the sheet keeps the float keyframe the stories suite pins. */
+    expect(bare).toMatch(/@keyframes mx-float/);
+  });
+
+  it('stops every loop and transition for reduced motion, native and lite', () => {
+    const guard = bare.slice(bare.indexOf('@media (prefers-reduced-motion: reduce)'));
+    expect(guard).toMatch(/animation: none !important/);
+    expect(guard).toMatch(/transition: none !important/);
+    expect(guard).toMatch(/transform: none/);
+    expect(bare).toMatch(/:root\[data-native='true'\] \.mx-market \.mx-deck-veil i/);
+    expect(bare).toMatch(/:root\[data-lite='true'\] \.mx-market \.mx-smart-sheen/);
+  });
+
+  it('re-grades the same hierarchy for the light theme instead of inverting it', () => {
+    expect(bare).toMatch(/:root\[data-theme='light'\] \.mx-market \{[^}]*--mx-panel: #ffffff/s);
+    expect(bare).toMatch(/:root\[data-theme='light'\] \.mx-market \{[^}]*--mx-up:/s);
+    /* the chips the earlier pass themed in market-modern.css are re-graded here
+       at a specificity that actually wins, so light mode is the same design */
+    expect(bare).toMatch(/:root\[data-theme='light'\] \.mx-market \.mx-view\[data-active='true'\]/);
+    expect(bare).toMatch(/:root\[data-theme='light'\] \.mx-market \.mx-sector\[data-active='true'\]/);
+    expect(bare).toMatch(/:root\[data-theme='light'\] \.mx-market \.mx-breadth \{/);
+  });
+
+  it('adds its four new strings to fa and en, and to nothing else', () => {
+    for (const key of ['marketIntel.deckLabel', 'marketIntel.deckLive', 'marketIntel.aiChip', 'marketIntel.smartEyebrow']) {
+      expect(get(fa, key), `fa.${key}`).toBeTruthy();
+      expect(get(en, key), `en.${key}`).toBeTruthy();
+    }
+    /* The blade's headline is sentence case in English now: an ALL-CAPS banner
+       is the loud version of the thing the request asked to make minimal. */
+    expect(en.marketIntel.smartTitle).toBe('See where smart money moves');
+  });
+
+  it('draws the pulse rail\'s three rings instead of typing them', async () => {
+    await open();
+    /* «نبض بازار» is on this screen twice: the breadth instrument inside the
+       list, and the edge rail the owner built to dismiss itself. Both are SVG. */
+    const orb = document.querySelector('.dor');
+    expect(orb).toBeTruthy();
+    expect(orb.querySelectorAll('.dor-ring > svg')).toHaveLength(3);
+    expect(orb.querySelector('.dor-info summary svg')).toBeTruthy();
+    expect(orb.textContent).not.toMatch(/[◈ⓘ↗↘]/);
+  });
+
+  it('leaves no typed arrow, tick or emoji in the screen it redraws', async () => {
+    await open();
+    const body = document.body.textContent;
+    expect(body).not.toMatch(/[↗↘↑↓▲▼✓◈ⓘ]/);
+    for (const file of ['src/pages/Market.jsx', 'src/components/market/MarketOverview.jsx',
+      'src/components/market/HotCoins.jsx', 'src/components/market/SmartMoneyBanner.jsx',
+      'src/components/CoinRow.jsx', 'src/components/market/MarketGlyphs.jsx',
+      'src/components/DecisionOrb.jsx']) {
+      const src = readFileSync(file, 'utf8');
+      expect(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{25B2}\u{25BC}]/u.test(src), file).toBe(false);
+    }
+  });
+});

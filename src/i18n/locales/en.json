@@ -4935,7 +4935,11 @@
     "trendLabel": "{{days}}D · top {{coins}} estimate",
     "btcChartAria": "Bitcoin price sparkline",
     "hotTitle": "Hottest Coins",
-    "smartTitle": "SEE WHERE SMART MONEY MOVES",
+    "deckLabel": "Market view",
+    "deckLive": "Live",
+    "aiChip": "AI",
+    "smartEyebrow": "FBT SMART MONEY",
+    "smartTitle": "See where smart money moves",
     "smartDesc": "Track whale activity, discover institutional flows and identify emerging market opportunities with FBT AI.",
     "smartCta": "Explore Smart Money"
   },
