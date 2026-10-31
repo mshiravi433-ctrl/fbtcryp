@@ -161,6 +161,7 @@ export function IranianBuyTabButton({ active, onClick }) {
     <button
       type="button"
       role="tab"
+      tabIndex={active ? 0 : -1}
       aria-selected={active}
       className={active ? 'active' : ''}
       onClick={onClick}
@@ -790,7 +791,7 @@ export default function IranianBuyPanel({ capability }) {
       <button type="button" role="tab" aria-selected="true" className="active" style={{ isolation: 'isolate' }}>
         <SegIndicator id="iran-buy-subtab" />
         <span className="bsw-side-icon" aria-hidden="true"><IconArrowDown width={13} height={13} /></span>
-        {t('iranBuy.buy')}
+        <span className="bsw-side-label">{t('iranBuy.buy')}</span>
       </button>
     </div>
   );
