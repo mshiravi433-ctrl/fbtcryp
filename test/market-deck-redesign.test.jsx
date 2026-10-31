@@ -511,3 +511,95 @@ describe('۸ · relocated folding and honest progressive pagination', () => {
     expect(bare).toMatch(/\.mx-market \.mx-coin-row > \.coin-row \{[^}]*gradient/s);
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ۹ · THE NEON DECK
+   «باکس نمای بازار شیشه‌ای با نئون نورانی دور باکس … دامیننس بیت‌کوین،
+    اتریوم و حجم ۲۴ ساعته خیلی مدرن‌تر … انیمیشن خاص و مدرن»
+   The pins below hold the three promises that matter: the neon is painted
+   (not a live blur), the motion is compositor-only, and every bright number is
+   still the feed's number.
+   ══════════════════════════════════════════════════════════════════════════ */
+describe('۹ · the neon deck', () => {
+  it('builds the rim out of a gradient hairline, comets and one breathing glow', () => {
+    expect(bare).toMatch(/\.mx-market \.mx-deck \{[^}]*border: 1\.5px solid transparent/s);
+    expect(bare).toMatch(/\.mx-market \.mx-deck \{[^}]*border-box/s);
+    expect(bare).toMatch(/\.mx-deck-orbit\b/);
+    expect(bare).toMatch(/\.mx-deck-sheen \{[^}]*animation: mx-blade-sweep/s);
+    /* the comets travel; they never strobe */
+    expect(bare).toMatch(/\.mx-deck-orbit i \{[^}]*animation: mx-orbit-x/s);
+    expect(bare).toMatch(/@keyframes mx-orbit-x\b/);
+    expect(bare).toMatch(/@keyframes mx-orbit-y\b/);
+    expect(bare).toMatch(/@keyframes mx-rim-breathe/);
+    expect(bare).toMatch(/@keyframes mx-chart-scan/);
+    expect(bare).toMatch(/@keyframes mx-live-ping/);
+    expect(bare).not.toMatch(/animation:[^;]*filter/);
+  });
+
+  it('draws each dominance arc from the reading itself', async () => {
+    await open();
+    const arcs = [...document.querySelectorAll('.mx-deck .mx-ring-arc')];
+    expect(arcs).toHaveLength(2);
+    /* pathLength="100" means the dash array IS the percentage */
+    expect(arcs[0].getAttribute('stroke-dasharray')).toBe('56.4 43.6');
+    expect(arcs[1].getAttribute('stroke-dasharray')).toBe('13.8 86.2');
+    expect(arcs.every((arc) => arc.getAttribute('pathLength') === '100')).toBe(true);
+    expect(bare).toMatch(/\.mx-ring-arc \{[^}]*stroke: var\(--mx-accent\)/);
+    /* the ring is the metric's own accent, one token for ring, tile and text */
+    expect(bare).toMatch(/\.mx-metric\[data-tone='gold'\] \{ --mx-accent: var\(--mx-gold\)/);
+    expect(bare).toMatch(/\.mx-metric\[data-tone='violet'\] \{ --mx-accent: var\(--mx-violet\)/);
+  });
+
+  it('keeps volume a number plus a real ratio, never a decorative meter', async () => {
+    await open();
+    const metrics = [...document.querySelectorAll('.mx-deck .mx-metric')];
+    expect(metrics).toHaveLength(3);
+    const volume = metrics.find((m) => m.textContent.includes(fa.market.volume24h));
+    expect(volume.querySelector('.mx-metric-ring')).toBeNull();
+    expect(volume.textContent).toContain('$142.00B');
+    /* 1.42e11 ÷ 3.152e12 = 4.5% — computed from the same two feed values */
+    expect(volume.textContent).toContain(fa.market.turnover.replace('{{pct}}', '4.5%'));
+    /* the note never drags the reading off its line: it is the last child */
+    expect(volume.querySelector('.mx-metric-text').lastElementChild.classList.contains('mx-metric-note')).toBe(true);
+  });
+
+  it('lights the trend with a bloom path, a live dot and a one-shot reveal', async () => {
+    await open();
+    const trend = screen.getByTestId('global-market-trend');
+    expect(trend.querySelector('.mx-spark-bloom')).toBeTruthy();
+    expect(trend.querySelector('.mx-spark-live i')).toBeTruthy();
+    expect(trend.querySelector('.mx-trend-scan')).toBeTruthy();
+    expect(trend.querySelector('.mx-trend-halo')).toBeTruthy();
+    expect(bare).toMatch(/\.mx-trend-chart svg \{[^}]*animation: mx-chart-unfold/s);
+    /* the dot marks the newest sample (the chart is always LTR) */
+    const live = trend.querySelector('.mx-spark-live');
+    expect(parseFloat(live.style.left)).toBeGreaterThan(95);
+    /* the bloom is a second path, not a CSS filter on the stroke */
+    expect(bare).toMatch(/\.mx-spark-bloom \{[^}]*stroke-width/s);
+  });
+
+  it('counts every light layer as decoration', async () => {
+    await open();
+    const card = screen.getByTestId('market-global-card');
+    expect(card.querySelectorAll('.mx-deck-orbit i')).toHaveLength(6);
+    for (const selector of ['.mx-deck-veil', '.mx-deck-matrix', '.mx-deck-orbit', '.mx-deck-sheen']) {
+      expect(card.querySelector(selector).getAttribute('aria-hidden'), selector).toBe('true');
+    }
+    /* and the deck keeps the flat, honest "live" dot it had */
+    expect(bare).toMatch(/\.mx-deck-live i \{(?![^}]*animation)/);
+  });
+
+  it('stops the deck light for native, lite and reduced motion', () => {
+    expect(bare).toMatch(/:root\[data-native='true'\] \.mx-market \.mx-deck-orbit i/);
+    expect(bare).toMatch(/:root\[data-lite='true'\] \.mx-market \.mx-deck-orbit i/);
+    expect(bare).toMatch(/:root\[data-native='true'\] \.mx-market \.mx-trend-chart svg/);
+    expect(bare).toMatch(/:root\[data-lite='true'\] \.mx-market \.mx-deck::after/);
+    expect(bare).toMatch(/:root\[data-native='true'\] \.mx-market :is\(\.mx-deck-sheen/s);
+  });
+
+  it('re-grades the same rim for the pearl theme', () => {
+    expect(bare).toMatch(/:root\[data-theme='light'\] \.mx-market \.mx-deck \{[^}]*border-box/s);
+    expect(bare).toMatch(/:root\[data-theme='light'\] \.mx-market \.mx-metric \{/);
+    expect(bare).toMatch(/:root\[data-theme='light'\] \.mx-market \.mx-dominance \{/);
+  });
+});

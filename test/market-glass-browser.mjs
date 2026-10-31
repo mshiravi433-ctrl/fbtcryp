@@ -213,13 +213,17 @@ try {
   await open();
   assert.notEqual(await page.$eval('.mx-route-traveller', (el) => getComputedStyle(el).animationName), 'none');
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
-  for (const selector of ['.mx-route-traveller', '.mx-smart-ring', '.mx-smart-sheen', '.mx-deck-veil i']) {
+  /* The deck's own light is on the list too: rim comets, the sheen, the
+     chart scan and ping, and the one-shot reveal. */
+  for (const selector of ['.mx-route-traveller', '.mx-smart-ring', '.mx-smart-sheen', '.mx-deck-veil i', '.mx-deck-orbit i', '.mx-deck-sheen', '.mx-trend-scan', '.mx-dominance-shine', '.mx-spark-live i', '.mx-trend-chart svg']) {
     assert.equal(await page.$eval(selector, (el) => getComputedStyle(el).animationName), 'none');
   }
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
   for (const attribute of ['lite', 'native', 'reduce-motion']) {
     await page.evaluate((name) => document.documentElement.setAttribute(`data-${name}`, 'true'), attribute);
-    for (const selector of ['.mx-route-traveller', '.mx-smart-ring', '.mx-smart-sheen', '.mx-deck-veil i']) {
+    /* The deck's own light is on the list too: rim comets, the sheen, the
+       chart scan and ping, and the one-shot reveal. */
+    for (const selector of ['.mx-route-traveller', '.mx-smart-ring', '.mx-smart-sheen', '.mx-deck-veil i', '.mx-deck-orbit i', '.mx-deck-sheen', '.mx-trend-scan', '.mx-dominance-shine', '.mx-spark-live i', '.mx-trend-chart svg']) {
       assert.equal(await page.$eval(selector, (el) => getComputedStyle(el).animationName), 'none');
     }
     await page.evaluate((name) => document.documentElement.removeAttribute(`data-${name}`), attribute);

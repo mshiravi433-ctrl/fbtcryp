@@ -83,6 +83,8 @@
   "market": {
     "totalMcap": "Total market cap",
     "volume24h": "24h volume",
+    "turnover": "{{pct}} of market cap",
+    "turnoverTitle": "24h volume divided by total market cap — both from the same feed",
     "btcDominance": "BTC dominance",
     "ethDominance": "ETH dominance",
     "coins": "Coins",

@@ -34,13 +34,64 @@ function Change({ value }) {
   );
 }
 
-function Metric({ label, value, title, tone, children }) {
+/**
+ * «عدد و مقدار مدرن شود»
+ * The hero figure is set as three typographic weights instead of one flat
+ * string: a small currency mark, the digits at display size, the magnitude
+ * (K/M/B/T) as a superscript. Nothing is rounded differently and nothing is
+ * invented — this is the same `fmtCompact` output, only typeset.
+ */
+function CompactFigure({ text }) {
+  const parts = /^([^\d]*)([\d.,]+)([KMBT])$/.exec(text);
+  if (!parts) return text;
+  const [, mark, digits, unit] = parts;
   return (
-    <div className="mx-metric" data-tone={tone} title={title}>
+    <>
+      {mark && <span className="mx-fig-mark">{mark}</span>}
+      <span className="mx-fig-digits">{digits}</span>
+      <span className="mx-fig-unit">{unit}</span>
+    </>
+  );
+}
+
+/**
+ * The mark tile doubles as a gauge when the reading is a share of 100
+ * (dominance). The arc is drawn with `pathLength="100"`, so the dash array is
+ * the percentage itself — no normalising maths and no second source of truth.
+ * A volume reading is not a share, so it gets the plain tile: the ring is a
+ * measurement, not decoration.
+ */
+function Gauge({ ring, children }) {
+  const share = finiteOrNull(ring);
+  const pct = share == null ? null : Math.max(0, Math.min(100, share));
+  return (
+    <span className="mx-metric-gauge">
+      {pct != null && (
+        <svg className="mx-metric-ring" viewBox="0 0 44 44" aria-hidden="true" focusable="false">
+          <circle className="mx-ring-track" cx="22" cy="22" r="19" />
+          <circle
+            className="mx-ring-arc"
+            cx="22"
+            cy="22"
+            r="19"
+            pathLength="100"
+            strokeDasharray={`${pct} ${100 - pct}`}
+          />
+        </svg>
+      )}
       <span className="mx-metric-icon" aria-hidden="true">{children}</span>
+    </span>
+  );
+}
+
+function Metric({ label, value, note, tone, ring, title, children }) {
+  return (
+    <div className="mx-metric" data-tone={tone} data-ring={ring != null ? 'true' : undefined} title={title}>
+      <Gauge ring={ring}>{children}</Gauge>
       <span className="mx-metric-text">
         <span className="mx-metric-label">{label}</span>
-        <strong className="mono">{value}</strong>
+        <strong className="mx-metric-value mono">{value}</strong>
+        {note && <span className="mx-metric-note mono">{note}</span>}
       </span>
     </div>
   );
@@ -83,6 +134,9 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
   const pct = (n) => (n == null ? null : `${n.toFixed(1)}%`);
   const avg = finiteOrNull(liveAvgChange);
   const btcChange = finiteOrNull(bitcoin?.change24h);
+  /* Turnover is volume ÷ market cap, both read from the feed: a real ratio, not
+     a simulated "activity" score. Absent when either side is absent. */
+  const turnover = mcap != null && volume != null && mcap > 0 ? (volume / mcap) * 100 : null;
 
   return (
     <section className="mx-overview" aria-label={t('marketIntel.overviewAria')} data-testid="market-overview">
@@ -92,6 +146,11 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
             gradients — never a backdrop-filter, which is the one property this
             screen was measured to be paying for (see market-speed.test.mjs). */}
         <span className="mx-deck-veil" aria-hidden="true"><i /><i /></span>
+        {/* Drawn light, all of it decoration: a dot matrix, a pair of neon
+            comets running the rim, and one hairline sheen along the top. */}
+        <span className="mx-deck-matrix" aria-hidden="true" />
+        <span className="mx-deck-orbit" aria-hidden="true"><i /><i /><i /><i /><i /><i /></span>
+        <span className="mx-deck-sheen" aria-hidden="true" />
 
         <header className="mx-deck-head">
           <span className="mx-deck-mark" aria-hidden="true"><GlyphDeck width={15} height={15} /></span>
@@ -111,19 +170,71 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
             <div className="mx-global-value">
               {mcap == null && loading
                 ? <span className="mx-skel-value" aria-hidden="true" />
-                : <AnimatedNumber value={mcap ?? 0} format={() => (mcap == null ? '—' : fmtCompact(mcap))} flash={false} />}
+                : (
+                  <AnimatedNumber
+                    value={mcap ?? 0}
+                    format={() => (mcap == null ? '—' : <CompactFigure text={fmtCompact(mcap)} />)}
+                    flash={false}
+                    className="mx-global-figure"
+                  />
+                )}
             </div>
             <Change value={global?.mcapChange} />
           </div>
 
+          {trend && (
+            <div className="mx-global-trend" data-testid="global-market-trend">
+              <div className="mx-trend-plot">
+                <span className="mx-trend-halo" aria-hidden="true" />
+                <MarketSparkline
+                  points={trend.points}
+                  up={trend.changePct >= 0}
+                  height={70}
+                  interactive
+                  glow
+                  liveDot
+                  label={t('marketIntel.trendAria', { days: trend.days, coins: trend.coins })}
+                  formatValue={fmtCompact}
+                  formatTime={(x) => new Date(x).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  testId="global-market-trend-chart"
+                  className="mx-trend-chart"
+                />
+                <span className="mx-trend-scan" aria-hidden="true" />
+              </div>
+              <details className="mx-trend-method">
+                <summary>
+                  <span>{t('marketIntel.trendLabel', { days: trend.days, coins: trend.coins })}</span>
+                  <span className={`mono ${trend.changePct >= 0 ? 'mx-up' : 'mx-down'}`}>{fmtPct(trend.changePct)}</span>
+                </summary>
+                <p>{t('market.trendNote', { n: trend.coins })}</p>
+              </details>
+            </div>
+          )}
+
           <div className="mx-global-metrics">
-            <Metric label={t('market.volume24h')} value={volume == null ? '—' : fmtCompact(volume)} tone="cyan">
+            <Metric
+              label={t('market.volume24h')}
+              value={volume == null ? '—' : fmtCompact(volume)}
+              note={turnover == null ? null : t('market.turnover', { pct: `${turnover.toFixed(1)}%` })}
+              title={turnover == null ? undefined : t('market.turnoverTitle')}
+              tone="cyan"
+            >
               <GlyphVolume width={14} height={14} />
             </Metric>
-            <Metric label={t('market.btcDominance')} value={btcDom == null ? '—' : pct(btcDom)} tone="gold">
+            <Metric
+              label={t('market.btcDominance')}
+              value={btcDom == null ? '—' : pct(btcDom)}
+              ring={btcDom}
+              tone="gold"
+            >
               <GlyphBitcoin width={14} height={14} />
             </Metric>
-            <Metric label={t('market.ethDominance')} value={ethDom == null ? '—' : pct(ethDom)} tone="violet">
+            <Metric
+              label={t('market.ethDominance')}
+              value={ethDom == null ? '—' : pct(ethDom)}
+              ring={ethDom}
+              tone="violet"
+            >
               <GlyphEthereum width={14} height={14} />
             </Metric>
           </div>
@@ -134,6 +245,7 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
                 {btcDom != null && <span className="is-btc" style={{ width: `${btcDom}%` }} />}
                 {ethDom != null && <span className="is-eth" style={{ width: `${ethDom}%` }} />}
                 {otherDom != null && <span className="is-other" style={{ width: `${otherDom}%` }} />}
+                <span className="mx-dominance-shine" aria-hidden="true" />
               </div>
               <div className="mx-dominance-legend mono">
                 {btcDom != null && <span data-tone="btc"><i aria-hidden="true" />BTC<b>{pct(btcDom)}</b></span>}
@@ -142,28 +254,6 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
                   <span data-tone="other"><i aria-hidden="true" />{t('market.dominanceOthers')}<b>{pct(otherDom)}</b></span>
                 )}
               </div>
-            </div>
-          )}
-
-          {trend && (
-            <div className="mx-global-trend" data-testid="global-market-trend">
-              <MarketSparkline
-                points={trend.points}
-                up={trend.changePct >= 0}
-                height={56}
-                interactive
-                label={t('marketIntel.trendAria', { days: trend.days, coins: trend.coins })}
-                formatValue={fmtCompact}
-                formatTime={(x) => new Date(x).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                testId="global-market-trend-chart"
-              />
-              <details className="mx-trend-method">
-                <summary>
-                  <span>{t('marketIntel.trendLabel', { days: trend.days, coins: trend.coins })}</span>
-                  <span className={`mono ${trend.changePct >= 0 ? 'mx-up' : 'mx-down'}`}>{fmtPct(trend.changePct)}</span>
-                </summary>
-                <p>{t('market.trendNote', { n: trend.coins })}</p>
-              </details>
             </div>
           )}
         </div>
@@ -226,6 +316,8 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
               up={(bitcoin.change24h ?? 0) >= 0}
               height={74}
               interactive
+              glow
+              liveDot
               label={t('marketIntel.btcChartAria')}
               formatValue={(v) => marketPrice(v, vs)}
               className="mx-btc-chart"
