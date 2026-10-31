@@ -5,11 +5,21 @@ import PageTransition from '../components/PageTransition';
 import {
   IconActivity,
   IconChart,
+  IconCheck,
   IconRefresh,
   IconSearch,
   IconSparkle,
-  IconStar
+  IconStar,
+  IconSwap
 } from '../components/Icons';
+import {
+  FILTER_GLYPHS,
+  SECTOR_GLYPHS,
+  GlyphCaretDown,
+  GlyphPulse,
+  GlyphSortAsc,
+  GlyphSortDesc
+} from '../components/market/MarketGlyphs';
 import DecisionOrb from '../components/DecisionOrb';
 import CoinRow from '../components/CoinRow';
 import MarketStories from '../components/MarketStories';
@@ -74,6 +84,32 @@ const MARKET_PAGE_SIZE = 250;
  * app at all where the local currency is unstable.
  */
 const SECTORS = Object.keys(MARKET_CATEGORIES);
+
+/**
+ * THE SIX SECTOR MARKS — from طلا all the way to سولانا.
+ * ---------------------------------------------------------------------------
+ * «زیر تب طلا تا سولانا … ریلی و افقی» — the rail is horizontal and snaps, and
+ * each tab now carries its own drawn silhouette plus its own hue, so six pills
+ * of identical grey become six destinations you can find without reading them.
+ *
+ * The glyphs come from one 24×24 line-art set (components/market/MarketGlyphs),
+ * so the ingot, the mask, the building, the chip, the controller and Solana's
+ * three blades all stroke at the same weight. The hue is a CSS custom property
+ * per `data-sector`, which is what lets the active pill light its own colour
+ * without six copies of the same rule.
+ */
+function SectorGlyph({ sector }) {
+  const Glyph = SECTOR_GLYPHS[sector];
+  if (!Glyph) return null;
+  return <Glyph className="market-sector-icon mx-sector-icon" width={14} height={14} />;
+}
+
+/** The five list views, same vocabulary, same 14px optical size. */
+function FilterGlyph({ view }) {
+  const Glyph = FILTER_GLYPHS[view];
+  if (!Glyph) return null;
+  return <Glyph className="mx-view-icon" width={13} height={13} />;
+}
 
 export default function Market() {
   const { t } = useTranslation();
@@ -563,19 +599,16 @@ export default function Market() {
         <PageTransition className="page mx-market">
           {isOffline && <div className="notice mx-offline">{t('common.offlineData')}</div>}
 
-          <MarketSearch
-            query={query}
-            onQueryChange={(value) => { setQuery(value); setSmartIntent(null); }}
-            onApplyIntent={applySmartSearch}
-            onNavigate={navigate}
-            universe={universe}
-            remoteHits={remoteHits}
-            searching={searching}
-            searchError={searchError}
-            smartIntent={smartIntent}
-            vs={vs}
-          />
+          {/* ─── THE ORDER OF THE FIRST SCREEN ──────────────────────────────
+              «باکس استوری ها … بین داغ ترین ها و بنر تبلیغاتی قرار بگیره»
 
+              Readings first, then discovery, then the two promotional surfaces,
+              then the list. The deck (total market + Bitcoin, one box) is the
+              only number on the first screen; «داغ‌ترین کوین‌ها» is the only
+              discovery; the stories and the Smart Money blade are the only two
+              things that lead somewhere else — and the blade is last of the
+              three, because it is the one that asks for a tap rather than
+              offering a reading. */}
           <MarketOverview
             global={global}
             bitcoin={bitcoin}
@@ -586,9 +619,13 @@ export default function Market() {
             onOpenCoin={openCoin}
           />
 
-          <SmartMoneyBanner />
-
           <HotCoins coins={hotCoins} onOpen={openCoin} vs={vs} />
+
+          <div className="mx-stories">
+            <MarketStories coins={coins} global={global} />
+          </div>
+
+          <SmartMoneyBanner />
 
           <section className="market-terminal mx-terminal" aria-labelledby="market-list-title">
             <div className="mx-terminal-head">
@@ -624,6 +661,22 @@ export default function Market() {
               </div>
             </div>
 
+            {/* «زیر همه ارزها باید فیلد جستجو بیاد بالای فیلتر ها» — the field
+                that narrows THIS list now lives inside this card, directly under
+                its head and directly above the chips that re-order it. */}
+            <MarketSearch
+              query={query}
+              onQueryChange={(value) => { setQuery(value); setSmartIntent(null); }}
+              onApplyIntent={applySmartSearch}
+              onNavigate={navigate}
+              universe={universe}
+              remoteHits={remoteHits}
+              searching={searching}
+              searchError={searchError}
+              smartIntent={smartIntent}
+              vs={vs}
+            />
+
             <div className="mx-controls">
               <div className="market-views mx-views" role="group" aria-label={t('market.viewsAria')}>
                 {FILTERS.map((f) => (
@@ -631,10 +684,12 @@ export default function Market() {
                     key={f}
                     type="button"
                     className="market-view mx-view"
+                    data-view={f}
                     data-active={activeView === f ? 'true' : undefined}
                     aria-pressed={activeView === f}
                     onClick={() => applyView(f)}
                   >
+                    <FilterGlyph view={f} />
                     {t(`market.filter.${f}`)}
                   </button>
                 ))}
@@ -659,7 +714,7 @@ export default function Market() {
                   data-testid="market-sort"
                 >
                   <span>{t(`market.sort.${sortKey}`)}</span>
-                  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+                  <GlyphCaretDown className="mx-sort-caret" width={13} height={13} />
                 </button>
                 {sortOpen && (
                   <div
@@ -688,7 +743,7 @@ export default function Market() {
                         onClick={() => { chooseSort(key); setSortOpen(false); }}
                       >
                         <span>{t(`market.sort.${key}`)}</span>
-                        {sortKey === key && <span aria-hidden="true">✓</span>}
+                        {sortKey === key && <IconCheck className="mx-sort-check" width={13} height={13} aria-hidden="true" />}
                       </button>
                     ))}
                   </div>
@@ -702,7 +757,11 @@ export default function Market() {
                   title={sortDir === 'desc' ? t('market.dirDesc') : t('market.dirAsc')}
                   data-testid="market-sort-dir"
                 >
-                  <span aria-hidden="true">{sortDir === 'desc' ? '↓' : '↑'}</span>
+                  {/* A drawn arrow, not a typed one: the down/up text glyphs arrive as artwork
+                      whose weight and baseline differ per platform. */}
+                  {sortDir === 'desc'
+                    ? <GlyphSortDesc width={14} height={14} />
+                    : <GlyphSortAsc width={14} height={14} />}
                 </button>
               </div>
             </div>
@@ -716,13 +775,20 @@ export default function Market() {
             )}
 
             {breadth.counted > 0 && (
-              <div className="market-breadth mx-breadth" data-testid="market-breadth">
+              <div
+                className="market-breadth mx-breadth"
+                data-testid="market-breadth"
+                data-tone={breadth.avgChange >= 0 ? 'up' : 'down'}
+              >
                 <div className="mx-breadth-head">
                   <span className="mx-breadth-title">
-                    <IconActivity width={13} height={13} aria-hidden="true" />
+                    <span className="mx-breadth-mark" aria-hidden="true">
+                      <GlyphPulse width={13} height={13} />
+                    </span>
                     {t('market.breadthTitle')}
                   </span>
-                  <span className="mono" data-tone={breadth.avgChange >= 0 ? 'up' : 'down'}>
+                  <span className="mx-breadth-avg mono" data-tone={breadth.avgChange >= 0 ? 'up' : 'down'}>
+                    <IconActivity width={11} height={11} aria-hidden="true" />
                     {t('market.breadthAvg', { pct: fmtPct(breadth.avgChange, 2) })}
                   </span>
                 </div>
@@ -766,6 +832,7 @@ export default function Market() {
                     aria-pressed={sector === sec}
                     onClick={() => { setSectorCoins([]); setSector(sector === sec ? null : sec); }}
                   >
+                    <SectorGlyph sector={sec} />
                     {t(`market.sector.${sec}`)}
                   </button>
                 ))}
@@ -841,6 +908,7 @@ export default function Market() {
                             title={t('market.swapOnCorrectNetwork', { symbol: c.symbol })}
                             data-testid={`market-swap-${c.id}`}
                           >
+                            <IconSwap width={12} height={12} aria-hidden="true" />
                             {t('market.swap')}
                           </button>
                         )}
@@ -885,6 +953,7 @@ export default function Market() {
                             <CoinRow coin={c} rank={c.rank || undefined} animate={false} onClick={() => openCoin(c.id)} />
                             {swapUrl && (
                               <button type="button" className="market-swap-btn mx-swap-btn" onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}>
+                                <IconSwap width={12} height={12} aria-hidden="true" />
                                 {t('market.swap')}
                               </button>
                             )}
@@ -897,10 +966,6 @@ export default function Market() {
               </>
             )}
           </section>
-
-          <div className="mx-stories">
-            <MarketStories coins={coins} global={global} />
-          </div>
         </PageTransition>
       </div>
     </>

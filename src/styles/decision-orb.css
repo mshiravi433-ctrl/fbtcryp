@@ -33,7 +33,17 @@
   inset-inline-start: 0;
   top: 50%;
   z-index: 72;
-  color: #f3f6ff;
+  /* Re-graded onto the 2026-10-31 market sheet (see market-intelligence.css):
+     one slate ink scale and one hairline, so the edge instrument reads as part
+     of the same machine as the list beside it. */
+  --dor-panel: #0a1120;
+  --dor-panel-2: #0e1729;
+  --dor-line: rgba(139, 163, 210, .16);
+  --dor-ink: #f4f8ff;
+  --dor-cool: #8ba3ca;
+  --dor-dim: #7f92b5;
+  --dor-hi: inset 0 1px 0 rgba(255, 255, 255, .07);
+  color: var(--dor-ink);
   font-family: inherit;
   /* Mirrored dismiss direction: the wrapper leaves toward its own edge. */
   --dor-exit: -22px;
@@ -60,16 +70,18 @@
   width: 44px;
   height: 44px;
   padding: 0;
-  border: 1px solid #ffffff35;
+  border: 1px solid rgba(139, 163, 210, .3);
   border-radius: 50%;
-  background: radial-gradient(circle at 78% 26%, #35465a, #080d13 76%);
-  color: #a9f8df;
+  background:
+    radial-gradient(circle at 76% 24%, rgba(34, 211, 238, .2), transparent 62%),
+    radial-gradient(circle at 78% 26%, #1d2f4c, #070b14 76%);
+  color: #7fe3f5;
   cursor: pointer;
-  box-shadow: 0 4px 20px #0006, inset 0 1px 0 #ffffff24;
+  box-shadow: 0 14px 34px -20px rgba(2, 6, 16, .95), var(--dor-hi);
   transition: inset-inline-start .38s cubic-bezier(.22, 1, .36, 1), top .38s cubic-bezier(.22, 1, .36, 1), color .18s ease, border-color .18s ease;
 }
 
-.dor-toggle:hover { color: #c6ffec; border-color: #ffffff5c; }
+.dor-toggle:hover { color: #a8ecfa; border-color: rgba(139, 163, 210, .48); }
 .dor-toggle:active { transform: scale(.94); }
 .dor-toggle svg { transition: transform .3s cubic-bezier(.22, 1, .36, 1); }
 .dor.is-open .dor-toggle { inset-inline-start: 48px; top: -181px; }
@@ -85,17 +97,17 @@
   padding: 18px 5px 12px;
   border-start-end-radius: 30px;
   border-end-end-radius: 30px;
-  border-block: 1px solid #ffffff20;
-  border-inline-end: 1px solid #ffffff20;
+  border-block: 1px solid var(--dor-line);
+  border-inline-end: 1px solid var(--dor-line);
   border-inline-start: 0;
-  background: linear-gradient(165deg, #141b24f5, #030609fa);
-  box-shadow: 8px 12px 28px #0003;
+  background: linear-gradient(168deg, var(--dor-panel-2), var(--dor-panel) 58%, #070b14);
+  box-shadow: 12px 20px 44px -28px rgba(2, 6, 16, .95), var(--dor-hi);
   text-align: center;
 }
 
-.dor[dir='rtl'] .dor-rail { box-shadow: -8px 12px 28px #0003; }
+.dor[dir='rtl'] .dor-rail { box-shadow: -12px 20px 44px -28px rgba(2, 6, 16, .95), var(--dor-hi); }
 
-.dor-caption { display: block; font-size: 9px; color: #a7b5c7; line-height: 1.7; margin-bottom: 13px; }
+.dor-caption { display: block; font-size: 9px; letter-spacing: .04em; color: var(--dor-dim); line-height: 1.7; margin-bottom: 13px; }
 .dor-metric { display: grid; justify-items: center; gap: 4px; margin-bottom: 16px; }
 .dor-ring {
   display: grid;
@@ -103,20 +115,59 @@
   width: 39px;
   height: 39px;
   border-radius: 50%;
-  background: conic-gradient(var(--ring-color) var(--ring-value), #ffffff16 0);
+  background: conic-gradient(var(--ring-color) var(--ring-value), rgba(139, 163, 210, .16) 0);
   transform: rotate(-35deg);
-  box-shadow: 0 0 12px #0004;
+  box-shadow: 0 10px 24px -16px rgba(2, 6, 16, .9);
 }
-.dor-ring > span { display: grid; place-items: center; width: 32px; height: 32px; background: #0b1017; border-radius: 50%; font-size: 21px; transform: rotate(35deg); }
+/* The mark is drawn SVG now, so the inner disc is the glyph's own box: padded to
+   a 32px circle, counter-rotated to sit level, and tinted by --ring-color. */
+.dor-ring > svg {
+  box-sizing: border-box;
+  display: block;
+  width: 32px;
+  height: 32px;
+  padding: 8.5px;
+  background: var(--dor-panel);
+  border-radius: 50%;
+  color: var(--ring-color);
+  transform: rotate(35deg);
+}
 .dor-metric strong { font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.dor-label { font-size: 8px; color: #bfcbda; }
-.dor-status { font-size: 8px; color: #93a4b9; }
-.dor-info { margin-top: 7px; font-size: 12px; }
-.dor-info summary { cursor: pointer; list-style: none; }
-.dor-info p { font-size: 9px; line-height: 1.9; margin: 6px 0 0; max-height: 90px; overflow-y: auto; }
+.dor-label { font-size: 8px; color: var(--dor-cool); }
+.dor-status { font-size: 8px; color: var(--dor-dim); }
+.dor-info { margin-top: 7px; }
+.dor-info summary { display: grid; place-items: center; color: var(--dor-cool); cursor: pointer; list-style: none; }
+.dor-info p { font-size: 9px; line-height: 1.9; color: var(--dor-dim); margin: 6px 0 0; max-height: 90px; overflow-y: auto; }
 
 .dor-toggle:focus-visible,
-.dor-info summary:focus-visible { outline: 2px solid #67eac3; outline-offset: 3px; }
+.dor-info summary:focus-visible { outline: 2px solid #22d3ee; outline-offset: 3px; }
+
+/* ── LIGHT THEME ────────────────────────────────────────────────────────────
+   The rail is portaled onto <body>, so it cannot inherit the page's
+   `.mx-market` tokens; it carries its own four, and swapping them here keeps the
+   hierarchy (panel < ink, hairline barely there) instead of inverting it. */
+:root[data-theme='light'] .dor {
+  --dor-panel: #ffffff;
+  --dor-panel-2: #f5f8ff;
+  --dor-line: rgba(13, 42, 86, .14);
+  --dor-ink: #0b111d;
+  --dor-cool: #33507a;
+  --dor-dim: #54688a;
+  --dor-hi: inset 0 1px 0 rgba(255, 255, 255, .9);
+}
+
+:root[data-theme='light'] .dor-toggle {
+  border-color: rgba(13, 42, 86, .22);
+  background:
+    radial-gradient(circle at 76% 24%, rgba(34, 211, 238, .22), transparent 62%),
+    radial-gradient(circle at 78% 26%, #ffffff, #e2ebfa 78%);
+  color: #0d7f97;
+  box-shadow: 0 14px 30px -20px rgba(13, 42, 86, .5), var(--dor-hi);
+}
+
+:root[data-theme='light'] .dor-rail { background: linear-gradient(168deg, #ffffff, #f4f8ff 60%, #eaf1fc); }
+:root[data-theme='light'] .dor-info summary:focus-visible,
+:root[data-theme='light'] .dor-toggle:focus-visible { outline-color: #0d7f97; }
 
 @media (max-height: 560px) {
   .dor { top: 46%; }
