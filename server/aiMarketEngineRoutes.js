@@ -40,6 +40,7 @@ import {
   PRICING_MODELS
 } from '../src/lib/brain/agentMarketplace.js';
 import { fetchOhlc, fetchMarkets } from './providers.js';
+import { resolveAsset } from './intentMonitoring.js';
 
 export const aiMarketEngineRouter = express.Router();
 
@@ -51,62 +52,23 @@ aiMarketEngineRouter.get('/market-prediction', async (req, res) => {
     const symbol = String(req.query.symbol || 'BTC').toUpperCase();
     const timeframe = String(req.query.timeframe || '4h');
 
-    // Attempt real candle fetch from upstream providers or fallback to synthetic walk
-    let closes = [];
-    let highs = [];
-    let lows = [];
-    let volumes = [];
-
-    try {
-      const coinId = symbol === 'BTC' ? 'bitcoin' : symbol === 'ETH' ? 'ethereum' : symbol === 'SOL' ? 'solana' : 'bitcoin';
-      const ohlc = await fetchOhlc(coinId, 30);
-      if (Array.isArray(ohlc) && ohlc.length >= 15) {
-        ohlc.forEach((c) => {
-          // c is [time, open, high, low, close]
-          if (c && c.length >= 5) {
-            highs.push(Number(c[2]));
-            lows.push(Number(c[3]));
-            closes.push(Number(c[4]));
-            volumes.push(10000 + Math.random() * 50000);
-          }
-        });
-      }
-    } catch {
-      // Graceful fallback to deterministically anchored synthetic walk
+    const resolved = resolveAsset({ symbol });
+    if (!resolved) return res.status(400).json({ ok: false, error: 'UNSUPPORTED_SYMBOL' });
+    // A missing feed is an outage, never a synthetic market. This endpoint is
+    // technical-only until real volume/on-chain/sentiment adapters are wired.
+    const ohlc = await fetchOhlc(resolved.coinId, 30);
+    if (!Array.isArray(ohlc) || ohlc.length < 15 || ohlc.some((c) => !Array.isArray(c) || c.length < 5 || ![c[2], c[3], c[4]].every((v) => Number.isFinite(Number(v)) && Number(v) > 0))) {
+      return res.status(503).json({ ok: false, error: 'INSUFFICIENT_REAL_CANDLES', source: 'CoinGecko OHLC' });
     }
-
-    if (closes.length < 15) {
-      let base = symbol === 'BTC' ? 68500 : symbol === 'ETH' ? 3520 : symbol === 'SOL' ? 175 : 100;
-      for (let i = 0; i < 40; i++) {
-        const delta = (Math.sin(i / 3) * 0.015 + (Math.random() - 0.48) * 0.01) * base;
-        base += delta;
-        closes.push(Math.round(base * 100) / 100);
-        highs.push(Math.round((base * 1.01) * 100) / 100);
-        lows.push(Math.round((base * 0.99) * 100) / 100);
-        volumes.push(Math.round(5000 + Math.random() * 20000));
-      }
-    }
-
-    const prediction = synthesizePrediction({
-      symbol,
-      timeframe,
-      closes,
-      highs,
-      lows,
-      volumes,
-      onChain: {
-        mvrv: 1.85,
-        exchangeNetflowUsd: -12_000_000,
-        whaleAccumulationScore: 78,
-        fundingRate: 0.008
-      },
-      sentiment: {
-        fearGreedIndex: 68,
-        longShortRatio: 1.12,
-        socialSentiment: 0.35
-      }
-    });
-
+    const closes = ohlc.map((c) => Number(c[4]));
+    const highs = ohlc.map((c) => Number(c[2]));
+    const lows = ohlc.map((c) => Number(c[3]));
+    const prediction = synthesizePrediction({ symbol, timeframe, closes, highs, lows, volumes: [], onChain: {}, sentiment: {} });
+    prediction.provenance = { source: 'CoinGecko OHLC', sourceUrl: `https://www.coingecko.com/en/coins/${resolved.coinId}`, receivedAt: Date.now(), observedAt: Number(ohlc.at(-1)[0]), missing: ['volume', 'onchain', 'sentiment'] };
+    prediction.indicators.volume = { status: 'UNAVAILABLE', rvol: null, volumeSpike: null };
+    prediction.indicators.onChain = { status: 'UNAVAILABLE', onChainBias: null };
+    prediction.indicators.sentiment = { status: 'UNAVAILABLE', sentimentState: null };
+    prediction.disclaimerFa = 'این تحلیل فقط بر کندل‌های واقعی دریافت‌شده استوار است؛ حجم، آن‌چین و احساسات بازار در این مسیر خوانده نشده‌اند و قطعیت مالی ندارد.';
     res.json(prediction);
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

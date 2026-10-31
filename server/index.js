@@ -59,7 +59,13 @@ app.use((req, res) => {
 
 /* --------------------------------- boot ---------------------------------- */
 
-app.listen(PORT, HOST, () => {
+// Only the long-running Node entry starts the durable worker. api/index.js on
+// Vercel deliberately does not. Disabled mode is a no-op; enabled mode fails
+// closed if its secret or durable storage is missing.
+const { startMissionWorker } = await import('./missionControl/index.js');
+const missionControl = await startMissionWorker();
+
+const httpServer = app.listen(PORT, HOST, () => {
   console.log(`▸ API + app listening on http://${HOST}:${PORT}`);
   if (!process.env.COINGECKO_API_KEY) console.log('  (no COINGECKO_API_KEY — using the public rate limit)');
   /*
@@ -92,3 +98,15 @@ app.listen(PORT, HOST, () => {
     console.log('  (no TELEGRAM_BOT_TOKEN — bot disabled, API only)');
   }
 });
+
+// A restart leaves leases durable; the next process recovers them. Give an
+// in-flight read a bounded graceful stop before closing the SQLite handle.
+let shuttingDown = false;
+async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  httpServer.close();
+  if (missionControl.enabled) { await missionControl.runtime.stop(); missionControl.store.close(); }
+}
+process.once('SIGTERM', () => { void shutdown(); });
+process.once('SIGINT', () => { void shutdown(); });

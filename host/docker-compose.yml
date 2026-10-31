@@ -1,4 +1,43 @@
 services:
+  mission-worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile.mission-worker
+    container_name: fbt-mission-worker
+    environment:
+      NODE_ENV: production
+      MISSION_CONTROL_ENABLED: ${MISSION_CONTROL_ENABLED:-1}
+      MISSION_CONTROL_SECRET: ${MISSION_CONTROL_SECRET}
+      MISSION_CONTROL_DB: /app/data/mission-control/missions.db
+      MISSION_WORKER_TOKEN: ${MISSION_WORKER_TOKEN}
+      MISSION_OPS_TOKEN: ${MISSION_OPS_TOKEN}
+      MISSION_WORKER_PORT: 8788
+      MISSION_TICK_MS: ${MISSION_TICK_MS:-500}
+      MISSION_CONCURRENCY: ${MISSION_CONCURRENCY:-4}
+      MISSION_RETRY_BACKOFF_MS: ${MISSION_RETRY_BACKOFF_MS:-1000}
+      MISSION_LEARNING_MIN_SAMPLES: ${MISSION_LEARNING_MIN_SAMPLES:-10}
+      MISSION_SMART_MONEY_TOKENS: ${MISSION_SMART_MONEY_TOKENS:-}
+      MISSION_MODEL_PROVIDER: ${MISSION_MODEL_PROVIDER:-openrouter}
+      MISSION_MODEL_ID: ${MISSION_MODEL_ID:-}
+      MISSION_MODEL_PRICE_PER_1M_JSON: ${MISSION_MODEL_PRICE_PER_1M_JSON:-}
+      COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      AIMLAPI_API_KEY: ${AIMLAPI_API_KEY:-}
+      WORKERSAI_API_TOKEN: ${WORKERSAI_API_TOKEN:-}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
+      AI_PRIMARY_PROVIDER: ${AI_PRIMARY_PROVIDER:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
+      OLLAMA_TOKEN: ${OLLAMA_TOKEN:-}
+      SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-}
+    volumes:
+      - mission-data:/app/data/mission-control
+    restart: unless-stopped
+    expose:
+      - "8788"
+
   ollama:
     image: ollama/ollama:latest
     container_name: fbt-ollama
@@ -43,8 +82,10 @@ services:
     depends_on:
       - ollama
       - searxng
+      - mission-worker
 
 volumes:
+  mission-data:
   ollama-data:
   caddy-data:
   caddy-config:

@@ -17,8 +17,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import {
   PREDICTION_TIMEFRAMES,
-  TIMEFRAME_DETAILS,
-  synthesizePrediction
+  TIMEFRAME_DETAILS
 } from '../lib/brain/marketPredictionEngine.js';
 import {
   AGENT_IDS,
@@ -65,57 +64,22 @@ export const FbtAiMarketEngine = memo(function FbtAiMarketEngine({
   // 1. Market Prediction State
   const [selectedTf, setSelectedTf] = useState('4h');
   const [selectedSymbol, setSelectedSymbol] = useState(fromToken?.symbol || 'BTC');
-  const [predictionData, setPredictionData] = useState(() => {
-    // Initial sample prediction
-    return synthesizePrediction({
-      symbol: fromToken?.symbol || 'BTC',
-      timeframe: '4h',
-      closes: [65000, 65400, 66100, 65800, 66500, 67200, 66900, 67800, 68200, 68500, 68100, 68700, 68900, 69200, 68800, 69500, 69800, 70100],
-      highs: [65500, 65900, 66500, 66200, 67000, 67600, 67300, 68200, 68600, 68900, 68500, 69100, 69300, 69600, 69200, 69900, 70200, 70500],
-      lows: [64800, 65100, 65700, 65400, 66100, 66800, 66500, 67400, 67800, 68100, 67700, 68300, 68500, 68800, 68400, 69100, 69400, 69700],
-      volumes: [12000, 15000, 18000, 14000, 22000, 25000, 19000, 28000, 31000, 27000, 23000, 29000, 33000, 35000, 26000, 38000, 42000, 45000],
-      onChain: { mvrv: 1.82, exchangeNetflowUsd: -15000000, whaleAccumulationScore: 78, fundingRate: 0.007 },
-      sentiment: { fearGreedIndex: 68, longShortRatio: 1.15, socialSentiment: 0.42 }
-    });
-  });
+  const [predictionData, setPredictionData] = useState(null);
+  const [predictionError, setPredictionError] = useState(null);
 
   // Re-run prediction when symbol or timeframe changes
   const refreshPrediction = useCallback(async (sym, tf) => {
+    setPredictionError(null);
     try {
-      const res = await fetch(`/api/ai/market-prediction?symbol=${sym}&timeframe=${tf}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.ok) {
-          setPredictionData(json);
-          return;
-        }
-      }
-    } catch {}
-
-    // Fallback: client-side engine calculation
-    let base = sym === 'BTC' ? 68500 : sym === 'ETH' ? 3500 : sym === 'SOL' ? 175 : 100;
-    const closes = [];
-    const highs = [];
-    const lows = [];
-    const vols = [];
-    for (let i = 0; i < 25; i++) {
-      base += (Math.random() - 0.48) * (base * 0.015);
-      closes.push(Math.round(base * 100) / 100);
-      highs.push(Math.round((base * 1.01) * 100) / 100);
-      lows.push(Math.round((base * 0.99) * 100) / 100);
-      vols.push(Math.round(10000 + Math.random() * 20000));
+      const res = await fetch(`/api/ai/market-prediction?symbol=${encodeURIComponent(sym)}&timeframe=${encodeURIComponent(tf)}`);
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || 'MARKET_DATA_UNAVAILABLE');
+      setPredictionData(json);
+    } catch (err) {
+      // Never replace an unavailable feed with a random walk presented as live.
+      setPredictionData(null);
+      setPredictionError(String(err?.message || 'MARKET_DATA_UNAVAILABLE'));
     }
-    const computed = synthesizePrediction({
-      symbol: sym,
-      timeframe: tf,
-      closes,
-      highs,
-      lows,
-      volumes: vols,
-      onChain: { mvrv: 1.8, exchangeNetflowUsd: -10000000, whaleAccumulationScore: 75, fundingRate: 0.006 },
-      sentiment: { fearGreedIndex: 65, longShortRatio: 1.1, socialSentiment: 0.3 }
-    });
-    setPredictionData(computed);
   }, []);
 
   // 2. Autonomous Portfolio Manager State
@@ -367,7 +331,13 @@ export const FbtAiMarketEngine = memo(function FbtAiMarketEngine({
             {/* ══════════════════════════════════════════════════════════════════════
                 TAB 1: MARKET PREDICTION & ANALYSIS ENGINE
                ══════════════════════════════════════════════════════════════════════ */}
-            {activeTab === 'prediction' && (
+            {activeTab === 'prediction' && !predictionData && (
+              <div role="status" style={{ padding: 16, color: '#94a3b8' }}>
+                {predictionError ? (isRtl ? 'دادهٔ واقعی بازار در دسترس نیست؛ تحلیل ساختگی نمایش داده نمی‌شود.' : 'Real market data is unavailable; no synthetic analysis is shown.') : (isRtl ? 'در حال خواندن کندل‌های واقعی…' : 'Reading real candles…')}
+                {predictionError && <button type="button" onClick={() => refreshPrediction(selectedSymbol, selectedTf)} style={{ marginInlineStart: 8 }}>{isRtl ? 'تلاش دوباره' : 'Retry'}</button>}
+              </div>
+            )}
+            {activeTab === 'prediction' && predictionData && (
               <div style={{ marginTop: 10 }}>
                 {/* Timeframe & Symbol selector */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
@@ -539,10 +509,10 @@ export const FbtAiMarketEngine = memo(function FbtAiMarketEngine({
                       ساختار بازار: <strong style={{ color: '#4ade80' }}>{predictionData?.indicators?.marketStructure?.structure}</strong>
                     </div>
                     <div style={{ color: '#cbd5e1' }}>
-                      حجم (RVol): <strong style={{ color: '#38bdf8' }}>{predictionData?.indicators?.volume?.rvol}x</strong>
+                      حجم (RVol): <strong style={{ color: '#38bdf8' }}>{predictionData?.indicators?.volume?.rvol == null ? '—' : `${predictionData.indicators.volume.rvol}x`}</strong>
                     </div>
                     <div style={{ color: '#cbd5e1' }}>
-                      آن‌چین و نهنگ: <strong style={{ color: '#4ade80' }}>{predictionData?.indicators?.onChain?.onChainBias}</strong>
+                      آن‌چین و نهنگ: <strong style={{ color: '#4ade80' }}>{predictionData?.indicators?.onChain?.onChainBias || '—'}</strong>
                     </div>
                   </div>
                 </div>
