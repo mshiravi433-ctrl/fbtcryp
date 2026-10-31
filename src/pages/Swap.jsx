@@ -87,7 +87,6 @@ import {
 } from '../lib/intentReplacement';
 import { isConfidentialPrivacy } from '../lib/confidentialIntent';
 import { isNativeShell } from '../lib/nativeShell';
-import FbtAiMarketEngine from '../components/FbtAiMarketEngine';
 
 /* The depth card (and recharts) loads only when SPOT_DEPTH_ENABLED is on, so
    the default build's first-paint graph does not change. */
@@ -1647,8 +1646,11 @@ export default function Swap() {
         </motion.button>
       </motion.div>
 
-      {/* FBT INTENT OS — Central Brain, AI Market Engine & Autonomous Agents Dock */}
-      <FbtAiMarketEngine fromToken={fromToken} toToken={toToken} wallet={wallet} />
+      {/* The "FBT Smart Brain & Intent OS" dock was removed from the top of the
+          swap page on purpose (2026-11-01): it duplicated data that was often
+          unavailable and pushed the swap ticket below the fold. The swap flow
+          starts directly at the chain tabs. Do not re-add a brain/marketing
+          panel above the swap ticket. */}
 
       <div className="segmented">
         {['evm', 'solana'].map((k) => (
