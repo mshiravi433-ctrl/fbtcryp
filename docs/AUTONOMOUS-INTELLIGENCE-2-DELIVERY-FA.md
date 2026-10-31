@@ -20,7 +20,7 @@
 `src/components/{MissionControl,FbtAiMarketEngine,MoreSheet}.jsx`، `src/App.jsx`،
 `src/lib/missionControlClient.js`، `src/styles/mission-control.css`،
 `test/mission-control/*.test.mjs`، `test/mission-control-ui.test.jsx`،
-`Dockerfile.mission-worker`، `host/*`، `.env.example`، `.github/workflows/mission-control.yml`.
+`Dockerfile.mission-worker`، `host/*`، `.env.example`.
 
 ## تست‌های اجراشده
 
@@ -35,6 +35,8 @@
 | `npm run test:fios` | **دو خطای ازپیش‌موجود** Phase 211: `/trade → Trade` removed/changed؛ فایل‌های route-diff تولیدشده توسط probe بازگردانده شدند |
 
 خطاهای agent-hub و fios پیش از این تغییرها نیز در baseline وجود داشتند و مربوط به Mission Control نیستند. هیچ مسیر/API موجود حذف نشده است.
+
+توجه: فایل workflow جدید CI به‌دلیل نبود مجوز `workflows` در GitHub App این نشست push نشد و از commit حذف شد؛ خودِ تست‌ها در مخزن هستند و با `npm run mission:test` و vitest بالا اجرا می‌شوند.
 
 ## محدودیت‌های صادقانه
 
