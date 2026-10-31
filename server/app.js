@@ -7037,6 +7037,18 @@ const ensureBrainRouter = () => {
  * stop there. The existing /api/ai budget (AI_RATE_LIMIT, 10/min by default)
  * already covers these paths, since this mount sits under that middleware.
  */
+/* Mission Control is additive. The serverless entry is a control plane only;
+ * a durable Node worker (server/index.js or missionControl/worker.js) executes.
+ * No legacy route is replaced, and no signer is introduced. */
+app.use('/api/v1/missions', lazyMount('mission-control', async () => {
+  if (process.env.MISSION_CONTROL_UPSTREAM_URL) {
+    const { createMissionProxyRouter } = await import('./missionControl/router.js');
+    return createMissionProxyRouter({ env: process.env });
+  }
+  const { getMissionControl } = await import('./missionControl/index.js');
+  return getMissionControl().router;
+}));
+
 app.use('/api/ai', lazyMount('ai-command', () => import('./aiCommand.js')));
 
 /* ─── FBT EXTERNAL AGENT HUB (env-gated, default ON) ────────────────────────

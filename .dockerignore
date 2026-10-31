@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.sandbox
+.env
+.env.*
+data
+android
+coverage
+*.log
+.shots
+test/.out

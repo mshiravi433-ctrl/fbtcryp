@@ -354,6 +354,7 @@ const GROUPS = [
        * same flat treatment.
        */
       { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney, hue: 'var(--rgb-7)' },
+      { to: '/missions', key: 'nav.missions', Icon: IconActivity, hue: 'var(--rgb-3)' },
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
       /*
        * The world console left the News tabs and is its own page now, named

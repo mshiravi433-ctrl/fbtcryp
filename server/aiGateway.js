@@ -759,8 +759,11 @@ export function getFleetSummary() {
 // HTTP Request Helper
 // ---------------------------------------------------------------------------
 
-async function httpReq(url, options, timeout = TIMEOUT_MS) {
+async function httpReq(url, options, timeout = TIMEOUT_MS, signal = null) {
   const ctrl = new AbortController();
+  const abort = () => ctrl.abort();
+  if (signal?.aborted) ctrl.abort();
+  else signal?.addEventListener('abort', abort, { once: true });
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
     const res = await fetch(url, { ...options, signal: ctrl.signal });
@@ -773,7 +776,17 @@ async function httpReq(url, options, timeout = TIMEOUT_MS) {
     return await res.json();
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
   }
+}
+
+/** Additive usage contract; old callers still receive a string. Unknown is null, never zero cost. */
+export function normalizeUsage(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const inputTokens = Number(raw.prompt_tokens ?? raw.input_tokens ?? raw.promptTokenCount);
+  const outputTokens = Number(raw.completion_tokens ?? raw.output_tokens ?? raw.candidatesTokenCount);
+  if (!Number.isFinite(inputTokens) || !Number.isFinite(outputTokens) || inputTokens < 0 || outputTokens < 0) return null;
+  return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
 }
 
 // ---------------------------------------------------------------------------
@@ -781,7 +794,7 @@ async function httpReq(url, options, timeout = TIMEOUT_MS) {
 // ---------------------------------------------------------------------------
 
 /** OpenAI Compatible Chat (OpenRouter, Groq, DeepSeek, Mistral, AIMLAPI) */
-async function callOpenAICompatible({ url, apiKey, model, system, user, temperature = 0.3, maxTokens = 800, json = false, extraHeaders = {}, timeout = TIMEOUT_MS }) {
+async function callOpenAICompatible({ url, apiKey, model, system, user, temperature = 0.3, maxTokens = 800, json = false, extraHeaders = {}, timeout = TIMEOUT_MS, withUsage = false, signal = null }) {
   assertNoSecretsInPayload({ system, user });
   const sanitizedSystem = sanitizePrompt(system);
   const sanitizedUser = sanitizePrompt(user);
@@ -807,15 +820,15 @@ async function callOpenAICompatible({ url, apiKey, model, system, user, temperat
     method: 'POST',
     headers,
     body: JSON.stringify(body)
-  }, timeout);
+  }, timeout, signal);
 
   const text = raw?.choices?.[0]?.message?.content;
   if (!text) throw new Error('EMPTY_AI_RESPONSE');
-  return String(text).trim();
+  return withUsage ? { text: String(text).trim(), usage: normalizeUsage(raw?.usage || raw?.usageMetadata) } : String(text).trim();
 }
 
 /** Google Gemini Chat */
-async function callGemini({ apiKey, model, system, user, temperature = 0.3, maxTokens = 800, json = false, timeout = TIMEOUT_MS }) {
+async function callGemini({ apiKey, model, system, user, temperature = 0.3, maxTokens = 800, json = false, timeout = TIMEOUT_MS, withUsage = false, signal = null }) {
   assertNoSecretsInPayload({ system, user });
   const sanitizedSystem = sanitizePrompt(system);
   const sanitizedUser = sanitizePrompt(user);
@@ -844,7 +857,7 @@ async function callGemini({ apiKey, model, system, user, temperature = 0.3, maxT
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify(body)
-  }, timeout);
+  }, timeout, signal);
 
   const blocked = raw?.promptFeedback?.blockReason;
   if (blocked) throw new Error(`EMPTY_GEMINI_RESPONSE: blocked (${blocked})`);
@@ -854,11 +867,11 @@ async function callGemini({ apiKey, model, system, user, temperature = 0.3, maxT
   const parts = raw?.candidates?.[0]?.content?.parts ?? [];
   const text = parts.map((p) => p?.text ?? '').join('').trim();
   if (!text) throw new Error('EMPTY_GEMINI_RESPONSE');
-  return text;
+  return withUsage ? { text: text, usage: normalizeUsage(raw?.usage || raw?.usageMetadata) } : text;
 }
 
 /** Anthropic Claude Chat */
-async function callAnthropic({ apiKey, model, system, user, temperature = 0.3, maxTokens = 800, timeout = TIMEOUT_MS }) {
+async function callAnthropic({ apiKey, model, system, user, temperature = 0.3, maxTokens = 800, timeout = TIMEOUT_MS, withUsage = false, signal = null }) {
   assertNoSecretsInPayload({ system, user });
   const sanitizedSystem = sanitizePrompt(system);
   const sanitizedUser = sanitizePrompt(user);
@@ -877,7 +890,7 @@ async function callAnthropic({ apiKey, model, system, user, temperature = 0.3, m
       max_tokens: maxTokens,
       ...(withTemperature ? { temperature } : {})
     })
-  }, timeout);
+  }, timeout, signal);
 
   let raw;
   try {
@@ -899,11 +912,11 @@ async function callAnthropic({ apiKey, model, system, user, temperature = 0.3, m
 
   const text = (raw?.content ?? []).filter((b) => b?.type === 'text').map((b) => b.text || '').join('').trim();
   if (!text) throw new Error('EMPTY_ANTHROPIC_RESPONSE');
-  return text;
+  return withUsage ? { text: text, usage: normalizeUsage(raw?.usage || raw?.usageMetadata) } : text;
 }
 
 /** Cloudflare Workers AI (serverless open models via REST run endpoint) */
-async function callWorkersAI({ accountId, apiToken, model, system, user, temperature = 0.3, maxTokens = 800, timeout = TIMEOUT_MS }) {
+async function callWorkersAI({ accountId, apiToken, model, system, user, temperature = 0.3, maxTokens = 800, timeout = TIMEOUT_MS, withUsage = false, signal = null }) {
   assertNoSecretsInPayload({ system, user });
   const sanitizedSystem = sanitizePrompt(system);
   const sanitizedUser = sanitizePrompt(user);
@@ -942,11 +955,11 @@ async function callWorkersAI({ accountId, apiToken, model, system, user, tempera
       Authorization: `Bearer ${apiToken}`
     },
     body: JSON.stringify(body)
-  }, timeout);
+  }, timeout, signal);
 
   const text = raw?.result?.response;
   if (!text) throw new Error('EMPTY_WORKERSAI_RESPONSE');
-  return String(text).trim();
+  return withUsage ? { text: String(text).trim(), usage: normalizeUsage(raw?.usage || raw?.usageMetadata) } : String(text).trim();
 }
 
 /** Internal Deterministic AI Intelligence (Zero External Key Fallback) */
@@ -1032,20 +1045,20 @@ function callInternalEngine({ system = '', user = '', taskType = 'general', json
 // ---------------------------------------------------------------------------
 
 /** One attempt against ONE model of one provider. */
-async function runProviderModel(providerId, cfg, apiKey, model, { system, user, temperature, maxTokens, json, timeout }) {
+async function runProviderModel(providerId, cfg, apiKey, model, { system, user, temperature, maxTokens, json, timeout, withUsage, signal }) {
   if (providerId === 'internal') {
     return callInternalEngine({ system, user, json });
   }
   if (cfg.type === 'gemini-native') {
-    return callGemini({ apiKey, model, system, user, temperature, maxTokens, json, timeout });
+    return callGemini({ apiKey, model, system, user, temperature, maxTokens, json, timeout, withUsage, signal });
   }
   if (cfg.type === 'anthropic-native') {
-    return callAnthropic({ apiKey, model, system, user, temperature, maxTokens, timeout });
+    return callAnthropic({ apiKey, model, system, user, temperature, maxTokens, timeout, withUsage, signal });
   }
   if (cfg.type === 'workersai-native') {
     const accountId = getCloudflareAccountId();
     if (!accountId) throw new Error('NO_CLOUDFLARE_ACCOUNT_ID');
-    return callWorkersAI({ accountId, apiToken: apiKey, model, system, user, temperature, maxTokens, timeout });
+    return callWorkersAI({ accountId, apiToken: apiKey, model, system, user, temperature, maxTokens, timeout, withUsage, signal });
   }
   // OpenAI Compatible (OpenRouter, Groq, DeepSeek, Mistral, AIMLAPI)
   const extraHeaders = {};
@@ -1053,7 +1066,7 @@ async function runProviderModel(providerId, cfg, apiKey, model, { system, user, 
     extraHeaders['HTTP-Referer'] = SITE_URL;
     extraHeaders['X-Title'] = 'FBT Smart Intent OS';
   }
-  return callOpenAICompatible({ url: cfg.url, apiKey, model, system, user, temperature, maxTokens, json, extraHeaders, timeout });
+  return callOpenAICompatible({ url: cfg.url, apiKey, model, system, user, temperature, maxTokens, json, extraHeaders, timeout, withUsage, signal });
 }
 
 /**
@@ -1081,7 +1094,9 @@ export async function executeProviderChat(providerId, {
   temperature = 0.3,
   maxTokens = 800,
   json = false,
-  timeout = TIMEOUT_MS
+  timeout = TIMEOUT_MS,
+  withUsage = false,
+  signal = null
 } = {}) {
   const cfg = PROVIDER_CONFIGS[providerId];
   if (!cfg) throw new Error(`UNKNOWN_PROVIDER:${providerId}`);
@@ -1104,7 +1119,9 @@ export async function executeProviderChat(providerId, {
 
     for (const candidate of candidates) {
       try {
-        const text = await runProviderModel(providerId, cfg, apiKey, candidate, { system, user, temperature, maxTokens, json, timeout });
+        const response = await runProviderModel(providerId, cfg, apiKey, candidate, { system, user, temperature, maxTokens, json, timeout, withUsage, signal });
+        const text = typeof response === 'string' ? response : response.text;
+        const usage = typeof response === 'string' ? null : response.usage;
         const durationMs = Date.now() - startedAt;
         recordProviderCall(providerId, { ok: true, durationMs, model: candidate });
         return {
@@ -1116,7 +1133,9 @@ export async function executeProviderChat(providerId, {
           durationMs,
           attempts,
           /* Which seat the answer really came from: a model, not the rules. */
-          engine: 'external-model'
+          engine: 'external-model',
+          usage: usage ?? null,
+          usageReported: usage != null
         };
       } catch (err) {
         const cls = classifyAiError(err, providerId);
@@ -1247,7 +1266,9 @@ export async function routedChat({
   temperature = 0.3,
   maxTokens = 800,
   json = false,
-  allowInternalFallback = true
+  allowInternalFallback = true,
+  withUsage = false,
+  signal = null
 } = {}) {
   /*
    * `AI_PRIMARY_PROVIDER` is the operator lever: one environment variable pins
@@ -1281,7 +1302,9 @@ export async function routedChat({
         model: providerId === primary ? model : null,
         temperature,
         maxTokens,
-        json
+        json,
+        withUsage,
+        signal
       });
       return {
         ...res,
@@ -1310,7 +1333,8 @@ export async function routedChat({
   }
 
   // If everything failed, call internal engine as ultimate safe guarantee
-  const internalRes = await executeProviderChat('internal', { system, user, json });
+  if (signal?.aborted) throw Object.assign(new Error('ABORTED'), { reasonCode: 'ABORTED' });
+  const internalRes = await executeProviderChat('internal', { system, user, json, signal });
   return {
     ...internalRes,
     taskType,

@@ -20,6 +20,15 @@ ai.yourdomain.com {
 		reverse_proxy searxng:8080
 	}
 
+	# ── Mission Control: کارگر دائمی با دیسک پایدار ──
+	# مسیر کامل حفظ می‌شود؛ worker خودش /api/v1/missions را mount کرده است.
+	handle /api/v1/missions/* {
+		reverse_proxy mission-worker:8788
+	}
+	handle /healthz {
+		reverse_proxy mission-worker:8788
+	}
+
 	# هر چیز دیگر را رد کن
 	respond 404
 }

@@ -82,3 +82,41 @@ SEARXNG_BASE_URL=https://ai.yourdomain.com/searxng
 ```
 کد (`server/aiGateway.js` + `aiToolRegistry.js`) این آدرس‌ها را می‌خواند و
 provider `ollama` و ابزار `web_search` را فعال می‌کند.
+
+---
+
+## ۲.۲۳ — Mission Control worker (اجرای دائمی مأموریت‌ها)
+
+`serverless` نمی‌تواند مأموریت را بعد از بستن صفحه ادامه دهد. این بخش یک
+فرآیند Node 24 با SQLite روی volume پایدار می‌سازد و Vercel فقط نقش
+control-plane/proxy را دارد.
+
+```bash
+# در ریشهٔ مخزن
+export MISSION_CONTROL_SECRET="$(openssl rand -hex 32)"
+export MISSION_WORKER_TOKEN="$(openssl rand -hex 32)"
+export MISSION_OPS_TOKEN="$(openssl rand -hex 32)"
+export MISSION_CONTROL_ENABLED=1
+# اختیاری: توکن‌های اسمارت‌مانی و کلیدهای.provider موجود
+export MISSION_SMART_MONEY_TOKENS="base:0x...,solana:..."
+
+cd host
+# دامنه را در Caddyfile عوض کنید (A-record به همین VPS)
+docker compose up -d --build mission-worker caddy
+curl https://ai.yourdomain.com/healthz
+```
+
+در Vercel فقط این‌ها را ست کنید (اجرا آنجا انجام نمی‌شود):
+
+```
+MISSION_CONTROL_ENABLED=1
+MISSION_CONTROL_SECRET=<same secret>
+MISSION_WORKER_TOKEN=<same worker token>
+MISSION_CONTROL_UPSTREAM_URL=https://ai.yourdomain.com
+```
+
+نکات عملیاتی:
+- volume `mission-data` باید backup شود؛ حذف آن یعنی حذف صف/شواهد.
+- فقط یک دیسک/هاست برای این SQLite داشته باشید؛ دو کپی مستقل روی دو دیسک ممنوع.
+- `MISSION_MODEL_PRICE_PER_1M_JSON` بدون قیمت معتبر باعث می‌شود مدل صدا زده نشود (`MODEL_PRICE_UNKNOWN`).
+- توقف اضطراری سراسری از مسیر `/admin/emergency-stop` با `x-mission-ops-token` اعمال می‌شود و حتی وقتی runtime متوقف است اما HTTP کارگر بالا است کار می‌کند. اگر خود فرآیند/هاست از دسترس خارج شده، برای قطع کامل کانتینر را متوقف کنید؛ هیچ کنترل‌پلینی نمی‌تواند دیسک یک worker خاموش را از راه دور قفل کند.
