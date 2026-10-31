@@ -89,6 +89,12 @@
   background: none;
   box-shadow: none;
 }
+/* The showcase enters as one instrument in three movements: deck, trio, then
+   Bitcoin — a one-shot rise per layer, 80ms apart, transform/opacity only.
+   Every motion guard below disables it with the element at full rest. */
+.mx-market .mx-overview > * { animation: mx-rise .6s cubic-bezier(.2, .7, .3, 1) both; }
+.mx-market .mx-overview > :nth-child(2) { animation-delay: .08s; }
+.mx-market .mx-overview > :nth-child(3) { animation-delay: .16s; }
 
 /* ── THE DECK ──────────────────────────────────────────────────────────────
    «شیشه‌ای با نئون نورانی دور باکس». Three lights build the neon, and all of
@@ -99,17 +105,23 @@
    Nothing here re-rasterises on scroll, which is the bug this screen was
    measured for (see market-speed.test.mjs). */
 .mx-market .mx-deck {
-  padding: 22px 20px 18px;
-  overflow: hidden;
-  border: 1.5px solid transparent;
-  border-radius: 28px;
-  background:
+  /* The interior is ONE token, shared with the cross-fading rim layer below:
+     the rim replicates this stack pixel-for-pixel in its padding box so that
+     only its 1.5px border phase differs while it fades over the resting rim.
+     Change the glass here and the rim follows — there is no second copy. */
+  --mx-deck-interior:
     radial-gradient(ellipse at 0% 0%, rgba(58, 210, 213, .26), transparent 58%) padding-box,
     radial-gradient(ellipse at 100% 100%, rgba(122, 96, 224, .24), transparent 62%) padding-box,
     radial-gradient(ellipse at 50% 118%, rgba(255, 191, 112, .1), transparent 58%) padding-box,
     var(--mx-glass) padding-box,
-    linear-gradient(var(--mx-panel), var(--mx-panel)) padding-box,
-    linear-gradient(135deg, rgba(126, 246, 240, .95), rgba(120, 169, 255, .34) 26%, rgba(178, 154, 255, .92) 54%, rgba(255, 207, 131, .85) 78%, rgba(126, 246, 240, .95)) border-box;
+    linear-gradient(var(--mx-panel), var(--mx-panel)) padding-box;
+  --mx-deck-rim-a: linear-gradient(135deg, rgba(126, 246, 240, .95), rgba(120, 169, 255, .34) 26%, rgba(178, 154, 255, .92) 54%, rgba(255, 207, 131, .85) 78%, rgba(126, 246, 240, .95));
+  --mx-deck-rim-b: linear-gradient(315deg, rgba(255, 207, 131, .95), rgba(126, 246, 240, .88) 28%, rgba(120, 169, 255, .4) 52%, rgba(178, 154, 255, .92) 76%, rgba(255, 207, 131, .95));
+  padding: 22px 20px 18px;
+  overflow: hidden;
+  border: 1.5px solid transparent;
+  border-radius: 28px;
+  background: var(--mx-deck-interior), var(--mx-deck-rim-a) border-box;
   box-shadow:
     0 0 0 1px rgba(122, 240, 238, .08),
     0 0 30px -11px rgba(96, 236, 234, .62),
@@ -118,6 +130,36 @@
     inset 0 0 46px rgba(62, 205, 208, .06),
     0 22px 46px -32px rgba(0, 0, 12, .95);
 }
+/* «رنگ در کادر باشد و انیمیشنی حرکت کند» — the frame's colour phase travels.
+   The same rim geometry, the complementary gradient, faded in and out by
+   opacity alone: two painted hairlines, one compositor property, zero
+   re-rasterisation. At rest (reduced motion / native / lite) it freezes at
+   half fade, which reads as one prismatic ring, not a blinking one. */
+.mx-market .mx-deck-rim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1.5px solid transparent;
+  border-radius: inherit;
+  background: var(--mx-deck-interior), var(--mx-deck-rim-b) border-box;
+  opacity: .5;
+  pointer-events: none;
+  animation: mx-rim-shift 12s ease-in-out infinite;
+}
+/* The glass gloss: one specular band crossing the card every 16s. It sits
+   above the drawn light (matrix, comets, rim) and below the readings. */
+.mx-market .mx-deck-gloss,
+.mx-market .mx-btc-gloss {
+  position: absolute;
+  inset-block-start: -70%;
+  inset-inline-start: 0;
+  width: 34%;
+  height: 260%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .04) 38%, rgba(220, 255, 251, .085) 50%, rgba(255, 255, 255, .04) 62%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+.mx-market .mx-deck-gloss { z-index: 1; animation: mx-gloss-sweep 16s ease-in-out infinite; }
 .mx-deck::before, .mx-btc-card::before, .mx-lens::before {
   content: '';
   position: absolute;
@@ -532,6 +574,23 @@
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--mx-accent) 90%, transparent), transparent);
   pointer-events: none;
 }
+/* «رنگ در کادر باشد» — each box keeps its accent INSIDE its own frame: one
+   inset hairline ring plus a soft inner bloom of the same token, breathing on
+   the deck's own rhythm and offset per box so the trio never pulses in lockstep. */
+.mx-trio-box::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--mx-accent) 34%, transparent),
+    inset 0 0 22px -6px color-mix(in srgb, var(--mx-accent) 42%, transparent);
+  opacity: .6;
+  pointer-events: none;
+  animation: mx-rim-breathe 8s ease-in-out infinite;
+}
+.mx-trio-box:nth-child(2)::before { animation-delay: -2.6s; }
+.mx-trio-box:nth-child(3)::before { animation-delay: -5.2s; }
 .mx-trio-box[data-tone='violet'] { --mx-accent: var(--mx-violet); }
 .mx-trio-box[data-tone='up'] { --mx-accent: var(--mx-up); }
 .mx-trio-box[data-tone='down'] { --mx-accent: var(--mx-down); }
@@ -544,16 +603,36 @@
 
 /* 2 · Bitcoin · champagne/amber glass with an etched orbital mark. */
 .mx-market .mx-btc-card {
+  /* Same single-source trick as the deck: the interior lives in one token so
+     the cross-fading rim replicates it exactly and only its 1px frame phase
+     differs while it travels. */
+  --mx-btc-interior:
+    radial-gradient(ellipse at 95% 0, rgba(23, 219, 192, .27), transparent 57%) padding-box,
+    radial-gradient(ellipse at 0 100%, rgba(157, 112, 231, .2), transparent 55%) padding-box,
+    linear-gradient(140deg, rgba(182, 255, 242, .12), transparent 50%) padding-box,
+    linear-gradient(#08232a, #08232a) padding-box;
+  --mx-btc-rim-a: linear-gradient(135deg, rgba(111, 244, 226, .55), rgba(255, 207, 131, .16) 46%, rgba(176, 255, 243, .5));
+  --mx-btc-rim-b: linear-gradient(315deg, rgba(255, 207, 131, .6), rgba(111, 244, 226, .2) 48%, rgba(178, 154, 255, .55));
   padding: 20px;
   overflow: hidden;
   border-radius: 24px;
-  border-color: rgba(111, 244, 226, .3);
-  border-top-color: rgba(176, 255, 243, .6);
-  background: radial-gradient(ellipse at 95% 0, rgba(23, 219, 192, .27), transparent 57%),
-    radial-gradient(ellipse at 0 100%, rgba(157, 112, 231, .2), transparent 55%),
-    linear-gradient(140deg, rgba(182, 255, 242, .12), transparent 50%), #08232a;
+  border: 1px solid transparent;
+  border-top-color: transparent;
+  background: var(--mx-btc-interior), var(--mx-btc-rim-a) border-box;
   box-shadow: inset 0 1px 0 rgba(220, 255, 249, .34), inset 0 0 40px rgba(35, 227, 199, .1), 0 18px 45px -28px rgba(4, 208, 181, .42);
 }
+.mx-market .mx-btc-rim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid transparent;
+  border-radius: inherit;
+  background: var(--mx-btc-interior), var(--mx-btc-rim-b) border-box;
+  opacity: .5;
+  pointer-events: none;
+  animation: mx-rim-shift 14s ease-in-out infinite -6s;
+}
+.mx-market .mx-btc-gloss { z-index: -1; animation-duration: 19s; animation-delay: -8s; }
 .mx-btc-card::before { background: linear-gradient(90deg, transparent, rgba(174, 255, 243, .95), transparent); }
 .mx-btc-veil { position: absolute; z-index: -1; inset: 0; background: radial-gradient(ellipse at 10% 110%, rgba(255, 185, 94, .09), transparent 64%); pointer-events: none; }
 .mx-btc-orbit { position: absolute; z-index: -1; inset-inline-end: -50px; top: -42px; width: 210px; height: 210px; display: grid; place-items: center; color: var(--mx-gold); opacity: .07; pointer-events: none; transform: rotate(-15deg); }
@@ -570,12 +649,35 @@
 .mx-btc-go { color: var(--mx-gold); opacity: .65; }
 .mx-btc-identity:hover .mx-btc-go { opacity: 1; }
 .mx-btc-price { margin-top: 24px; text-align: center; direction: ltr; font: 700 clamp(29px, 6vw, 39px)/1.15 var(--font-mono); letter-spacing: -.045em; color: var(--mx-text); }
+/* «نمودارش انیمیشنی حرکت کند» — the Bitcoin chart gets the trend's lighting
+   rig: an amber bloom breathing under the plot, one slow scan across it, and
+   a single horizontal unfold when the card first paints. Same keyframes the
+   deck already ships; no new motion vocabulary. */
+.mx-btc-plot { position: relative; overflow: hidden; margin-top: 18px; border-radius: 14px; }
+.mx-btc-halo {
+  position: absolute;
+  inset: auto -12% -46% -12%;
+  height: 110px;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 100%, rgba(255, 200, 120, .2), transparent 70%);
+  animation: mx-halo-breathe 10s ease-in-out infinite;
+}
+.mx-btc-scan {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 30%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 214, 150, .08) 42%, rgba(255, 236, 205, .16) 50%, rgba(255, 214, 150, .08) 58%, transparent);
+  animation: mx-chart-scan 8.5s cubic-bezier(.45, 0, .35, 1) infinite;
+}
 .mx-btc-chart {
   --mx-up: #66f5d6;
-  margin-top: 18px;
   border-radius: 12px;
   background: repeating-linear-gradient(0deg, transparent 0 23px, var(--mx-line-soft) 23px 24px);
 }
+.mx-btc-chart svg { transform-origin: left center; animation: mx-chart-unfold 1.1s cubic-bezier(.2, .7, .3, 1) both; }
+[dir='rtl'] .mx-btc-chart svg { transform-origin: right center; }
 .mx-btc-range { margin-top: 15px; direction: ltr; }
 .mx-btc-range-track { height: 3px; position: relative; border-radius: 99px; background: linear-gradient(90deg, rgba(255, 207, 131, .12), rgba(255, 207, 131, .65)); }
 .mx-btc-range-track span { position: absolute; top: -3px; width: 9px; height: 9px; margin-inline-start: -4px; border-radius: 50%; border: 2px solid var(--mx-panel); background: var(--mx-gold); box-shadow: 0 0 0 3px rgba(255, 207, 131, .12); }
@@ -1031,14 +1133,20 @@
   --mx-shadow: 0 18px 40px -30px rgba(46, 67, 123, .22);
 }
 :root[data-theme='light'] .mx-market .mx-deck {
-  background:
+  --mx-deck-interior:
     radial-gradient(ellipse at 0% 0%, rgba(67, 204, 201, .2), transparent 60%) padding-box,
     radial-gradient(ellipse at 100% 100%, rgba(143, 114, 224, .16), transparent 62%) padding-box,
     radial-gradient(ellipse at 50% 118%, rgba(255, 191, 112, .16), transparent 58%) padding-box,
     var(--mx-glass) padding-box,
-    linear-gradient(#fff, #fff) padding-box,
-    linear-gradient(135deg, rgba(6, 118, 122, .72), rgba(53, 111, 187, .24) 30%, rgba(116, 80, 193, .6) 62%, rgba(163, 106, 25, .5) 82%, rgba(6, 118, 122, .72)) border-box;
+    linear-gradient(#fff, #fff) padding-box;
+  --mx-deck-rim-a: linear-gradient(135deg, rgba(6, 118, 122, .72), rgba(53, 111, 187, .24) 30%, rgba(116, 80, 193, .6) 62%, rgba(163, 106, 25, .5) 82%, rgba(6, 118, 122, .72));
+  --mx-deck-rim-b: linear-gradient(315deg, rgba(163, 106, 25, .55), rgba(6, 118, 122, .6) 32%, rgba(116, 80, 193, .5) 64%, rgba(53, 111, 187, .3) 84%, rgba(163, 106, 25, .55));
+  background: var(--mx-deck-interior), var(--mx-deck-rim-a) border-box;
   box-shadow: 0 0 18px -12px rgba(8, 125, 128, .7), 0 0 36px -22px rgba(116, 80, 193, .6), inset 0 1px 0 #fff, 0 18px 40px -32px rgba(46, 67, 123, .4);
+}
+:root[data-theme='light'] .mx-market .mx-deck-gloss,
+:root[data-theme='light'] .mx-market .mx-btc-gloss {
+  background: linear-gradient(90deg, transparent, rgba(8, 125, 128, .045) 38%, rgba(255, 255, 255, .7) 50%, rgba(116, 80, 193, .045) 62%, transparent);
 }
 :root[data-theme='light'] .mx-market .mx-deck::after { box-shadow: inset 0 0 30px rgba(8, 125, 128, .08); }
 :root[data-theme='light'] .mx-market .mx-deck-matrix { background-image: radial-gradient(circle at 1px 1px, rgba(53, 111, 187, .18) 1px, transparent 1.7px); }
@@ -1051,7 +1159,17 @@
 :root[data-theme='light'] .mx-market .mx-trend-plot { background: radial-gradient(ellipse at 50% 96%, rgba(8, 125, 128, .09), transparent 72%); }
 :root[data-theme='light'] .mx-market .mx-global-value { text-shadow: none; }
 :root[data-theme='light'] .mx-market .mx-deck-orbit i { box-shadow: 0 0 8px rgba(8, 125, 128, .45); }
-:root[data-theme='light'] .mx-market .mx-btc-card { border-color: rgba(191, 144, 71, .28); background: radial-gradient(ellipse at 100% 0, rgba(255, 209, 137, .25), transparent 70%), var(--mx-glass), var(--mx-panel); }
+:root[data-theme='light'] .mx-market .mx-btc-card {
+  --mx-btc-interior:
+    radial-gradient(ellipse at 100% 0, rgba(255, 209, 137, .25), transparent 70%) padding-box,
+    var(--mx-glass) padding-box,
+    linear-gradient(#fff, #fff) padding-box;
+  --mx-btc-rim-a: linear-gradient(135deg, rgba(191, 144, 71, .5), rgba(8, 125, 128, .2) 48%, rgba(191, 144, 71, .45));
+  --mx-btc-rim-b: linear-gradient(315deg, rgba(163, 106, 25, .55), rgba(116, 80, 193, .22) 50%, rgba(8, 125, 128, .4));
+  background: var(--mx-btc-interior), var(--mx-btc-rim-a) border-box;
+}
+:root[data-theme='light'] .mx-market .mx-btc-halo { background: radial-gradient(ellipse at 50% 100%, rgba(163, 106, 25, .14), transparent 70%); }
+:root[data-theme='light'] .mx-market .mx-btc-scan { background: linear-gradient(90deg, transparent, rgba(163, 106, 25, .06) 42%, rgba(191, 144, 71, .12) 50%, rgba(163, 106, 25, .06) 58%, transparent); }
 :root[data-theme='light'] .mx-btc-logo { background: linear-gradient(135deg, #fff5d9, #ffdda5); border-color: rgba(196, 132, 43, .35); }
 :root[data-theme='light'] .mx-btc-chart { --mx-up: #087e60; }
 :root[data-theme='light'] .mx-market .mx-lens { background: linear-gradient(130deg, #f5fdfc, #f6f6ff) padding-box, linear-gradient(125deg, rgba(8, 125, 128, .3), rgba(116, 80, 193, .12) 45%, rgba(116, 80, 193, .3)) border-box; }
@@ -1097,6 +1215,17 @@
 @keyframes mx-orbit-y { 0% { transform: translate3d(0, -130%, 0); opacity: 0; } 7% { opacity: 1; } 93% { opacity: 1; } 100% { transform: translate3d(0, 430%, 0); opacity: 0; } }
 @keyframes mx-orbit-y-rev { 0% { transform: translate3d(0, 430%, 0); opacity: 0; } 7% { opacity: 1; } 93% { opacity: 1; } 100% { transform: translate3d(0, -130%, 0); opacity: 0; } }
 @keyframes mx-rim-breathe { 0%, 100% { opacity: .32; } 50% { opacity: .78; } }
+/* Showcase pass: the frame's colour phase travels (rim cross-fade), one glass
+   gloss crosses each card on a long cycle, and the three layers of the
+   showcase rise once on entry. Opacity and transform, like everything here. */
+@keyframes mx-rim-shift { 0%, 100% { opacity: .08; } 50% { opacity: .95; } }
+@keyframes mx-gloss-sweep {
+  0% { transform: rotate(14deg) translate3d(-160%, 0, 0); opacity: 0; }
+  5% { opacity: .9; }
+  23% { opacity: .9; }
+  30%, 100% { transform: rotate(14deg) translate3d(340%, 0, 0); opacity: 0; }
+}
+@keyframes mx-rise { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @keyframes mx-halo-breathe { 0%, 100% { opacity: .5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.07); } }
 @keyframes mx-chart-scan { 0% { transform: translateX(-120%); opacity: 0; } 12% { opacity: .85; } 88% { opacity: .85; } 100% { transform: translateX(330%); opacity: 0; } }
 @keyframes mx-chart-unfold { from { transform: scaleX(.03); opacity: .15; } to { transform: scaleX(1); opacity: 1; } }
@@ -1104,7 +1233,8 @@
 @keyframes mx-shine-run { 0% { transform: translateX(-110%); opacity: 0; } 25% { opacity: .85; } 75% { opacity: .85; } 100% { transform: translateX(280%); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .mx-market *, .mx-market *::before, .mx-market *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  .mx-market .mx-smart-sheen, .mx-market .mx-search-glow, .mx-market .mx-route-traveller { opacity: 0; transform: none; }
+  .mx-market .mx-smart-sheen, .mx-market .mx-search-glow, .mx-market .mx-route-traveller,
+  .mx-market .mx-deck-gloss, .mx-market .mx-btc-gloss, .mx-market .mx-btc-scan { opacity: 0; transform: none; }
   .mx-market .mx-hot-card:hover, .mx-market .mx-smart-cta:hover, .mx-market .mx-swap-btn:hover { transform: none; }
 }
 :root[data-native='true'] .mx-market .mx-aurora-echo,
@@ -1127,6 +1257,22 @@
 :root[data-lite='true'] .mx-market .mx-deck::after,
 :root[data-native='true'] .mx-market .mx-trend-halo,
 :root[data-lite='true'] .mx-market .mx-trend-halo,
+:root[data-native='true'] .mx-market .mx-btc-halo,
+:root[data-lite='true'] .mx-market .mx-btc-halo,
 :root[data-native='true'] .mx-market .mx-trend-chart svg,
-:root[data-lite='true'] .mx-market .mx-trend-chart svg { animation: none !important; opacity: .5; }
+:root[data-lite='true'] .mx-market .mx-trend-chart svg,
+:root[data-native='true'] .mx-market .mx-btc-chart svg,
+:root[data-lite='true'] .mx-market .mx-btc-chart svg { animation: none !important; opacity: .5; }
+/* The showcase pass freezes — it never hides: the rims rest at their half-fade
+   (one prismatic ring), the trio frames keep a steady inset ring, the entry
+   rise is skipped with every layer at full rest, and the two gloss bands and
+   the amber scan stay parked off-screen. */
+:root[data-native='true'] .mx-market :is(.mx-deck-rim, .mx-btc-rim),
+:root[data-lite='true'] .mx-market :is(.mx-deck-rim, .mx-btc-rim) { animation: none !important; opacity: .5; }
+:root[data-native='true'] .mx-market .mx-trio-box::before,
+:root[data-lite='true'] .mx-market .mx-trio-box::before { animation: none !important; opacity: .6; }
+:root[data-native='true'] .mx-market .mx-overview > *,
+:root[data-lite='true'] .mx-market .mx-overview > * { animation: none !important; }
+:root[data-native='true'] .mx-market :is(.mx-deck-gloss, .mx-btc-gloss, .mx-btc-scan),
+:root[data-lite='true'] .mx-market :is(.mx-deck-gloss, .mx-btc-gloss, .mx-btc-scan) { animation: none !important; opacity: 0; }
 :root[data-reduce-motion='true'] .mx-market *, :root[data-reduce-motion='true'] .mx-market *::before, :root[data-reduce-motion='true'] .mx-market *::after { animation: none !important; transition: none !important; }
