@@ -65,6 +65,88 @@ function within(p, ms) {
   return Promise.race([p, gate]).finally(() => clearTimeout(timer));
 }
 
+/* ════════════ the verified section of the overview ══════════════════════════
+ * WHY THIS IS A FUNCTION AND NOT A LINE IN THE Promise.all (2026-10-31)
+ * ---------------------------------------------------------------------------
+ * Reported: «در باکس اولی هوشمند مانی کیف‌پول واجد شرایط، اجماع گروه‌های مستقل
+ * این دو همیشه صفر هستند … تا مقادیر درست را نشان دهد به جای صفر».
+ *
+ * Those two pods read `verified.coverage.classifiedWallets` and the count of
+ * `verified.consensus` rows with a confidence. Three separate faults could
+ * erase them while the rest of the overview worked, and all three are fixed
+ * here rather than in the UI, because the UI cannot tell the difference
+ * between "measured zero" and "we never asked":
+ *
+ *   1. THE READ WAS GIVEN 3 SECONDS — and a share of a budget that the whale
+ *      stream had already spent. The verified read is a durable-store read plus
+ *      a full consensus build; on a cold serverless instance that is routinely
+ *      slower than 3s. When it lost the race the whole branch became
+ *      `{ dataStatus: 'unavailable', consensus: [] }`, i.e. the pods printed a
+ *      confident **0 / 0** for data that had not been read. It now gets its own
+ *      floor (5s) independent of what the stream consumed.
+ *   2. IT WAS TOLD THE WRONG CLOCK. `getOverview` passed the `now` it captured
+ *      at the top of the request. The consensus gate requires
+ *      `profile.updatedAt <= now`, so any profile an indexing cycle wrote
+ *      between that capture and the read was silently dropped — the classic
+ *      "the index is built but the board is empty" symptom. The read is now
+ *      told to use its OWN clock (the same rule intelligence.js documents for
+ *      the on-demand refresh path).
+ *   3. A SINGLE TIMEOUT WAS ALLOWED TO BLANK THE SECTION. A short-lived
+ *      in-process cache keeps the last good summary for 15 minutes, so a
+ *      transient store hiccup shows the last real numbers (marked `stale`)
+ *      instead of zeros. Nothing is invented: the cache only ever holds a
+ *      summary the engine actually returned.
+ *
+ * The payload keeps `available` so the client can tell how it got the numbers,
+ * and `counts` so both pods read one place.
+ */
+const VERIFIED_SUMMARY_TTL = 60_000;
+const VERIFIED_SUMMARY_STALE_OK = 15 * 60_000;
+const verifiedSummaries = new Map();
+
+function summariseVerified(v) {
+  const consensus = Array.isArray(v?.consensus) ? v.consensus : [];
+  return {
+    dataStatus: v?.dataStatus || 'insufficient-evidence',
+    indexedAt: v?.indexedAt || null,
+    observedStatus: v?.observedStatus || null,
+    refresh: v?.refresh || null,
+    lastCycle: v?.lastCycle || null,
+    coverage: v?.coverage || null,
+    counts: {
+      qualified: v?.coverage?.classifiedWallets ?? null,
+      analysed: v?.coverage?.analyzedWallets ?? null,
+      consensusActive: consensus.filter((r) => r.confidence != null).length,
+      consensusRows: consensus.length,
+      swapsInWindow: v?.coverage?.swapsInWindow ?? null
+    },
+    consensus: consensus.slice(0, 5)
+  };
+}
+
+export async function verifiedSection(winKey, budgetMs = 5_000) {
+  const hit = verifiedSummaries.get(winKey);
+  const age = hit ? Date.now() - hit.at : Infinity;
+  if (hit && age <= VERIFIED_SUMMARY_TTL) return { ...hit.summary, available: true, cached: true, stale: false };
+  let out = null;
+  try {
+    /* No `now` (own clock, see fault 2), no prices (the overview never shows
+       token prices from this branch), background refresh (never block on a
+       whole indexing cycle). */
+    out = await within(
+      getVerifiedIntelligence({ window: winKey, includePrices: false, refresh: 'background' }).catch(() => null),
+      Math.max(5_000, Math.min(6_000, Number(budgetMs) || 5_000))
+    );
+  } catch { out = null; }
+  if (out) {
+    const summary = summariseVerified(out);
+    verifiedSummaries.set(winKey, { at: Date.now(), summary });
+    return { ...summary, available: true, cached: false, stale: false };
+  }
+  if (hit && age <= VERIFIED_SUMMARY_STALE_OK) return { ...hit.summary, available: true, cached: true, stale: true };
+  return { dataStatus: 'unavailable', available: false, cached: false, stale: false, consensus: [], coverage: null, counts: null };
+}
+
 async function buildOverview(winKey, { timeoutMs = READ_DEADLINE_MS } = {}) {
   const readBudgetMs = Math.max(250, Math.min(READ_DEADLINE_MS, Number(timeoutMs) || READ_DEADLINE_MS));
   const overviewDeadlineAt = Date.now() + readBudgetMs;
@@ -189,8 +271,8 @@ async function buildOverview(winKey, { timeoutMs = READ_DEADLINE_MS } = {}) {
     sectionBudgetMs >= 250
       ? within(whaleBoard({ stream, windowMs: Math.max(winMs, WINDOWS.H24) }).catch(() => null), sectionBudgetMs)
       : Promise.resolve(null),
-    within(getVerifiedIntelligence({ window: winKey, now, includePrices: false, refresh: 'background' }).catch(() => null),
-      Math.min(3_000, readBudgetMs))
+    /* See verifiedSection: own reads budget, own clock, last-good fallback. */
+    verifiedSection(winKey, readBudgetMs)
   ]);
 
   /*
@@ -242,11 +324,17 @@ async function buildOverview(winKey, { timeoutMs = READ_DEADLINE_MS } = {}) {
     flows,
     // Deliberately separate from whale/router-transfer proxies above. Only
     // this branch counts verified, performance-qualified wallet swaps.
+    /* `available: false` means the engine was not read — NOT that it measured
+       zero. The client renders «—» in that case (SmartMoney.jsx) and real
+       numbers (including a real 0) when `available` is true. */
     verified: verified ? {
       dataStatus: verified.dataStatus, indexedAt: verified.indexedAt,
       observedStatus: verified.observedStatus || null, refresh: verified.refresh || null,
-      coverage: verified.coverage, consensus: verified.consensus.slice(0, 5)
-    } : { dataStatus: 'unavailable', consensus: [] },
+      lastCycle: verified.lastCycle || null,
+      coverage: verified.coverage, counts: verified.counts,
+      available: verified.available !== false, cached: !!verified.cached, stale: !!verified.stale,
+      consensus: (verified.consensus || []).slice(0, 5)
+    } : { dataStatus: 'unavailable', available: false, counts: null, consensus: [] },
     tokenActivity,
     earlyTokens: early,
     freshWallets: fresh,

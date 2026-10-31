@@ -2702,6 +2702,10 @@
       "tokenNotCovered": "{{chain}} 尚无已验证覆盖；合格钱包共识仅在受支持的 EVM 网络上衡量。无覆盖并不意味着该链没有资金流动。",
       "tokenVerifiedUnavailable": "本次无法读取已验证层。这不是证据不足，也不意味着没有共识。",
       "notCoveredShort": "无已验证覆盖"
+    },
+    "pods": {
+      "reading": "正在读取已验证引擎",
+      "stale": "引擎上次成功读取"
     }
   },
   "iranBuy": {

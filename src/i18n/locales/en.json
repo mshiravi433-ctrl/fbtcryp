@@ -13381,7 +13381,11 @@
     "copyTradeHint": "Copies this contract and opens the swap screen with the same token",
     "tokenTabNote": "Exactly what our scanner observed for these tokens in this window; an empty row means no observation, not zero flow.",
     "tokenTabEmpty": "No token activity and no newly seen tokens right now. Widen the window or refresh to try again.",
-    "copyTradeShort": "Copy"
+    "copyTradeShort": "Copy",
+    "pods": {
+      "reading": "reading the verified engine",
+      "stale": "last successful engine read"
+    }
   },
   "crossChain": {
     "youReceive": "You receive",

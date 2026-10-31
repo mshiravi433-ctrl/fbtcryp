@@ -149,6 +149,28 @@ import {
  * backdrop-filter, no parent `scale`, no `clip-path` on the pane, and the
  * close-then-navigate order in `go()`.
  *
+ * ─── THE FIFTH PASS (2026-10-31): «خیلی کند ظاهر می‌شود و کند میاد بالا» ────
+ * The owner reported the sheet twice more. The previous four passes had tuned
+ * every duration they could see, so this pass went after the part they could
+ * not see — the REQUEST, not the animation:
+ *
+ *   • THE CHUNK IS REQUESTED AT BOOT. `requestIdleCallback` was a race: on a
+ *     busy screen (live polling, a chart) it can fire seconds late or not at
+ *     all before the first tap, and a cold tap then waited a network round trip
+ *     with nothing on screen. The stylesheet import now starts when this module
+ *     evaluates (i.e. with the bottom nav, on every route) and stays lazy —
+ *     still its own chunk, still out of the first-paint budget.
+ *   • THE SPRING IS A SETTLE, NOT A BOUNCE. 980/48/0.5 over 10px is ~80ms and
+ *     critically damped; the pane is simply there.
+ *   • THE ROW CASCADE IS 90ms END-TO-END. 26 rows at 13ms each meant the last
+ *     row of the list arrived 590ms after the tap — on a phone that reads as
+ *     the menu "coming up slowly" even though the pane landed instantly. The
+ *     per-row delay is now capped (the 12th row onward all share the 11th
+ *     slot), so the whole list is readable in one glance.
+ *   • THE PANE'S BLUR IS CHEAPER. 30px → 18px backdrop sampling is invisible
+ *     under a 92–96% opaque noir pane but is the single most expensive thing
+ *     on this sheet's first frame on a mid-range Android.
+ *
  * The "More" drawer.
  *
  * WHY THE ANIMATION WAS JITTERY — and what changed
@@ -418,11 +440,12 @@ const GROUPS = [
  * What changed is WHEN it is requested. It used to load on `open`, gated
  * behind a `menuStylesReady` flag, so the first tap on «بیشتر» had to wait for
  * a network round trip before anything was rendered — on a cold start that was
- * the whole open animation, spent on a blank panel. It now loads when this
- * component mounts (i.e. with the nav bar, on idle) AND on open, through one
- * shared promise: by the time anyone taps the button the styles are in memory,
- * and the tap renders immediately. The gate remains only as the guard for the
- * genuinely-first-millisecond case.
+ * the whole open animation, spent on a blank panel. It now starts loading the
+ * moment this module is evaluated (see the boot warm-up below; the module
+ * comes with the bottom nav on every route) and is retried on mount-idle and
+ * on open, all through one shared promise: by the time anyone taps the button
+ * the styles are in memory, and the tap renders immediately. The gate remains
+ * only as the guard for the genuinely-first-millisecond case.
  */
 let menuStylesPromise = null;
 function loadMenuStyles() {
@@ -453,6 +476,27 @@ function loadMenuStyles() {
   }
   return menuStylesPromise;
 }
+
+/*
+ * ─── THE BOOT WARM-UP (2026-10-31, fifth pass: «خیلی کند ظاهر می‌شود») ──────
+ * The idle prefetch below was still a race, not a guarantee. `requestIdleCallback`
+ * only runs when the main thread is actually idle, and on the screens people
+ * open this sheet from (Market, a token chart, a tab with live polling) the
+ * browser can stay busy past the 2.5s timeout — so the FIRST tap of a session
+ * could still land before the 6 KB stylesheet chunk had been requested at all.
+ * That tap then waited a network round trip before the pane existed: exactly
+ * the «کند ظاهر می‌شود» report.
+ *
+ * Starting the request at MODULE EVALUATION closes the race: the sheet's
+ * module is evaluated with the bottom nav on every route, long before any finger
+ * reaches «بیشتر», so the chunk is normally in memory (or in flight) by then.
+ * It stays a `import()` — the stylesheet is still its own chunk, which is the
+ * first-paint budget rule the test suite pins (first-paint-lazy-css.test.mjs);
+ * nothing joins the entry bundle. The idle warm-up and the open-time load stay
+ * as belt-and-braces for the pathological cases (module evaluated while
+ * offline, chunk evicted by a memory-constrained WebView).
+ */
+if (typeof window !== 'undefined') loadMenuStyles();
 
 /*
  * The machine box's shortcut rail left with the box itself (2026-10-31):
@@ -611,7 +655,7 @@ export default function MoreSheet({ open, onClose }) {
     setTimeout(() => {
       onClose?.();
       requestAnimationFrame(() => navigate(to));
-    }, 70);
+    }, 55);
   };
 
   // Portalled for the same reason as Sheet: a transformed ancestor becomes the
@@ -638,7 +682,7 @@ export default function MoreSheet({ open, onClose }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: still ? 0 : 0.12 }}
+            transition={{ duration: still ? 0 : 0.1 }}
             /* Sibling-of-panel, as in Sheet: taps inside the panel cannot
                bubble to here, so onClose fires exactly once, only for a real
                backdrop tap. */
@@ -663,23 +707,25 @@ export default function MoreSheet({ open, onClose }) {
                  every frame, which is the jitter this sheet already paid
                  for once (see the notes at the top of this file).
 
-                 ─── TUNED FOR SPEED (2026-10-31) ───────────────────────────
+                 ─── TUNED FOR SPEED (2026-10-31, twice) ─────────────────────
                  «سرعت بازشدن پاپ‌اپ منو بیشتر کنده، سرعتش را بیشتر کن». The
-                 old spring (stiffness 380, damping 34, mass 0.9) settles in
-                 roughly 350ms and travels 28px — a menu that takes a third of
-                 a second to arrive reads as laggy next to a bottom nav that
-                 answers in one frame. This one is stiffness 720, damping 40,
-                 mass 0.62: ζ ≈ 0.9 (a whisper of settle, no visible bounce),
-                 ω ≈ 34 rad/s, so it is on screen in ~120ms from a 14px
-                 travel. Exit drops to 22px for the same reason — the sheet
-                 should leave as fast as it arrived, or the next screen feels
-                 blocked by it. Still transform+opacity only. */
-              initial={{ opacity: 0, y: still ? 0 : 14 }}
+                 first spring (stiffness 380, damping 34, mass 0.9) took ~350ms
+                 from 28px; the noir pass cut it to 720/40/0.62 and 14px
+                 (~120ms). The fifth pass — the one that followed the second
+                 «خیلی کند میاد بالا» report — goes further: stiffness 980,
+                 damping 48, mass 0.5 is ζ ≈ 1.0 at ω ≈ 44 rad/s, i.e. a
+                 monotonic settle with no bounce at all, on screen from a 10px
+                 travel in roughly 80ms. At that distance the pane reads as
+                 "appeared", not as "slid in", which is the point: the sheet is
+                 a directory, not a reveal. Exit drops to 16px so the next
+                 screen is never blocked by a departing menu. Still
+                 transform+opacity only, still no parent `scale`. */
+              initial={{ opacity: 0, y: still ? 0 : 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: still ? 0 : 22 }}
+              exit={{ opacity: 0, y: still ? 0 : 16 }}
               transition={still
                 ? { duration: 0 }
-                : { type: 'spring', stiffness: 720, damping: 40, mass: 0.62 }}
+                : { type: 'spring', stiffness: 980, damping: 48, mass: 0.5 }}
               drag={still ? false : 'y'}
               dragListener={false}
               dragControls={dragControls}

@@ -9,6 +9,10 @@ import '../styles/lab-modern.css';
 import '../styles/buy-sell.css';
 import '../styles/iran-buy.css';
 import '../styles/buy-sell-modern.css';
+/* Loaded LAST: the Spectrum skin (2026-10-31) re-skins the Prism Desk material
+   without touching its structure. It only redefines the token pairs, so it must
+   come after every earlier layer or the navy palette would win. */
+import '../styles/buy-sell-spectrum.css';
 
 /**
  * One hosted-checkout surface for fiat on/off-ramp activity.
