@@ -579,13 +579,13 @@ export default function Market() {
   const canLoadNext = !sector && !query.trim() && !onlyFavorites
     && sortKey === 'rank' && sortDir === 'asc'
     && !pageDone && (coins?.length ?? 0) >= MARKET_PAGE_SIZE;
-  const shownCount = Math.min(visibleCount, list.length);
   /* While folded the list shows one screenful and a chip. `rowCap` is what the
      rows render against; `visibleCount` is what pagination believes — so folding
      never loses the reader's place in a long page. */
   const rowCap = listFolded ? Math.min(FOLDED_ROWS, visibleCount) : visibleCount;
   const hasMore = list.length > rowCap || canLoadNext;
   const visibleList = list.slice(0, rowCap);
+  const shownCount = visibleList.length;
 
   const swapRouteFor = (coin) => {
     const curated = isSwappable(coin.id);
@@ -884,7 +884,9 @@ export default function Market() {
               </div>
               </div>
 
-              {/* «زیر تب را» — دسته‌ها خارج از باکس نبض بازار، در یک خط افقی و به صورت ریلی حرکت می‌کنند */}
+          </section>
+
+              {/* دسته‌ها یک ریل مستقل بین ابزارهای فهرست و ردیف‌ها هستند. */}
               <div className="mx-sector-rail">
                 <div className="market-sectors mx-sectors" role="group" aria-label={t('market.sectorsAria')}>
                   <span className="mx-sectors-head">
@@ -919,7 +921,7 @@ export default function Market() {
                 </div>
               </div>
 
-            <div className="mx-table-wrap">
+            <section className="mx-table-wrap" aria-labelledby="market-list-title">
 
             {smartIntent && (
               <div className="mx-intent-result" role="status" aria-live="polite">
@@ -990,6 +992,7 @@ export default function Market() {
                           animate={false}
                           onClick={() => openCoin(c.id)}
                         />
+                        <span className="mx-swap-slot">
                         {swapUrl && (
                           <button
                             type="button"
@@ -1002,6 +1005,7 @@ export default function Market() {
                             {t('market.swap')}
                           </button>
                         )}
+                        </span>
                       </div>
                     );
                   })}
@@ -1021,9 +1025,15 @@ export default function Market() {
                       type="button"
                       className="market-show-more mx-show-more"
                       disabled={pageLoading}
-                      onClick={() => (list.length > visibleCount ? setVisibleCount((n) => n + 60) : loadNextPage())}
+                      onClick={() => {
+                        if (listFolded) setListFolded(false);
+                        else if (list.length > visibleCount) setVisibleCount((n) => n + 60);
+                        else loadNextPage();
+                      }}
                     >
-                      {pageLoading
+                      {listFolded
+                        ? t('marketIntel.listExpand')
+                        : pageLoading
                         ? t('market.loadingSector')
                         : list.length > visibleCount
                           ? t('market.showMore', { count: fmtNum(list.length - visibleCount) })
@@ -1040,13 +1050,15 @@ export default function Market() {
                         const swapUrl = swapRouteFor(c);
                         return (
                           <div key={c.id} className="market-coin-row mx-coin-row">
-                            <CoinRow coin={c} rank={c.rank || undefined} animate={false} onClick={() => openCoin(c.id)} />
+                            <CoinRow coin={c} rank={c.rank || '—'} animate={false} onClick={() => openCoin(c.id)} />
+                            <span className="mx-swap-slot">
                             {swapUrl && (
                               <button type="button" className="market-swap-btn mx-swap-btn" onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}>
                                 <IconSwap width={12} height={12} aria-hidden="true" />
                                 {t('market.swap')}
                               </button>
                             )}
+                            </span>
                           </div>
                         );
                       })}
@@ -1055,8 +1067,7 @@ export default function Market() {
                 )}
               </>
             )}
-            </div>
-          </section>
+            </section>
         </PageTransition>
       </div>
     </>

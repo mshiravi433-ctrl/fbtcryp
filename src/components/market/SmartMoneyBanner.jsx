@@ -75,9 +75,9 @@ function SmartMoneyBanner() {
                 from="-1 0" to="1 0" dur="5.6s" repeatCount="indefinite" />
             </linearGradient>
           </defs>
-          <path className="mx-route-line" d="M8 17h52c10 0 12-11 24-11h40c12 0 14 11 24 11h44" />
-          <path className="mx-route-line is-dim" d="M8 17h52c10 0 12 11 24 11h40c12 0 14-11 24-11h44" />
-          <path className="mx-route-flow" d="M8 17h52c10 0 12-11 24-11h40c12 0 14 11 24 11h44" stroke="url(#mx-route-flow)" />
+          <path className="mx-route-line" d="M8 17h52c10 0 12-11 24-11h40c12 0 14 11 24 11h88" />
+          <path className="mx-route-line is-dim" d="M8 17h52c10 0 12 11 24 11h40c12 0 14-11 24-11h88" />
+          <path className="mx-route-flow" d="M8 17h52c10 0 12-11 24-11h40c12 0 14 11 24 11h88" stroke="url(#mx-route-flow)" />
           <circle className="mx-route-node" cx="14" cy="17" r="3" />
           <circle className="mx-route-node" cx="152" cy="17" r="3" />
           <circle className="mx-route-node is-end" cx="236" cy="17" r="3" />
