@@ -18,40 +18,8 @@ import {
 import { fmtCompact, fmtNum, fmtPct } from '../../lib/format.js';
 import { finiteOrNull, marketPrice, positiveOrNull } from '../../lib/marketPresentation.js';
 
-/**
- * THE MARKET VIEW — «نمای بازار» در سه سکشن، با یک زبان طراحی.
- * ---------------------------------------------------------------------------
- *   «باکس نمای بازار مدرن کن و بعدش یک فاصله کوچک بده و سه باکس مدرن برای
- *    ارزها، بازارها، میانگین تغییر — در یک خط و افقی و مدرن. یک فاصله کوچک و
- *    بعدش باکس بیت‌کوین را مدرن و شیشه‌ای کن.»
- *
- * The request is a SEQUENCE, so the markup is a sequence:
- *
- *   ۱  `.mx-deck`      — the market view: total cap, its move, the metric pods,
- *                        dominance and the 7-day shape. One surface.
- *   ۲  `.mx-trio`      — three equal boxes, side by side on ONE line at every
- *                        width: coins, markets, average change. They used to be
- *                        three pills wrapped inside the deck's footer, which is
- *                        why they read as footnotes instead of as readings.
- *   ۳  `.mx-btc-card`  — Bitcoin, alone, as its own glass card: identity, price,
- *                        the 24h range and the chart, centred.
- *
- * WHY THE THREE BOXES ARE A SIBLING AND NOT PART OF THE DECK
- * The page's rhythm is `--mx-gap` between blocks (14px, 12px on a phone). Three
- * boxes nested inside the deck would have had to re-derive that gap from their
- * own padding; as siblings they inherit the page rhythm exactly, which is what
- * «بعدش یک فاصله کوچک بده» asks for — small, equal, and the same everywhere.
- *
- * WHY THE BITCOIN CARD IS CENTRED
- * It is now one full-width column instead of the right half of a two-column
- * grid, so a left-aligned block inside it would leave a hole on the other side.
- * The head stays a row (identity on the reading edge, change on the far edge) —
- * reading order is unchanged — and the price, the range and the chart are
- * centred, which is where a single hero number belongs.
- *
- * Every mark is drawn SVG (see MarketGlyphs.jsx): a typed arrow cannot be
- * recoloured by an accent token and renders differently on every OS.
- */
+/** Independent glass readings. Values and trend geometry come from the market
+ * feed; decorative light never carries a simulated financial measurement. */
 
 function Change({ value }) {
   const n = finiteOrNull(value);
@@ -131,9 +99,9 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
             <span className="mx-deck-eyebrow">{t('marketIntel.deckEyebrow')}</span>
             <span className="mx-deck-title">{t('marketIntel.deckLabel')}</span>
           </span>
-          <span className="mx-deck-live">
+          <span className="mx-deck-live" data-unavailable={mcap == null || global?.offline ? 'true' : undefined}>
             <i aria-hidden="true" />
-            {t('marketIntel.deckLive')}
+            {mcap != null && !global?.offline ? t('marketIntel.deckLive') : t('marketIntel.deckPending')}
           </span>
         </header>
 
@@ -233,6 +201,7 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
       {bitcoin && (
         <div className="mx-btc-card" data-testid="market-btc-hero-card" data-dir={btcChange == null ? undefined : btcChange >= 0 ? 'up' : 'down'}>
           <span className="mx-btc-veil" aria-hidden="true" />
+          <span className="mx-btc-orbit" aria-hidden="true"><i /><GlyphBitcoin width={120} height={120} /></span>
           <header className="mx-btc-head">
             <button type="button" className="mx-btc-identity" onClick={() => onOpenCoin?.(bitcoin.id)}>
               <span className="mx-btc-logo">

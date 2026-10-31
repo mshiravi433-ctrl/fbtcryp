@@ -14,10 +14,8 @@ import {
 } from '../components/Icons';
 import {
   FILTER_GLYPHS,
-  SECTOR_GLYPHS,
   GlyphCaretDown,
   GlyphPulse,
-  GlyphSectorRail,
   GlyphSortAsc,
   GlyphSortDesc
 } from '../components/market/MarketGlyphs';
@@ -25,6 +23,7 @@ import DecisionOrb from '../components/DecisionOrb';
 import CoinRow from '../components/CoinRow';
 import MarketStories from '../components/MarketStories';
 import MarketSearch from '../components/market/MarketSearch';
+import MarketSectorRail from '../components/market/MarketSectorRail';
 import MarketOverview from '../components/market/MarketOverview';
 import SmartMoneyBanner from '../components/market/SmartMoneyBanner';
 import HotCoins from '../components/market/HotCoins';
@@ -45,7 +44,7 @@ import { isSwappable, swapUrlFor } from '../lib/coinToSwap';
 import { venueRoute } from '../lib/coinVenue';
 import { rememberCoinVenues } from '../lib/coinVenues';
 import { useCoinVenues } from '../hooks/useCoinVenues';
-import { interpretMarketQuery, MARKET_INTENT_SUGGESTIONS } from '../lib/marketIntent';
+import { interpretMarketQuery } from '../lib/marketIntent';
 
 const FILTERS = ['all', 'gainers', 'losers', 'favorites', 'volume'];
 
@@ -69,7 +68,6 @@ const FILTERS = ['all', 'gainers', 'losers', 'favorites', 'volume'];
  * upstream call instead of two, and a count that matches the data.
  */
 const MARKET_PAGE_SIZE = 250;
-/* Rows kept on screen while the list is folded — one comfortable screenful. */
 const FOLDED_ROWS = 12;
 
 /**
@@ -87,25 +85,6 @@ const FOLDED_ROWS = 12;
  * app at all where the local currency is unstable.
  */
 const SECTORS = Object.keys(MARKET_CATEGORIES);
-
-/**
- * THE SIX SECTOR MARKS — from طلا all the way to سولانا.
- * ---------------------------------------------------------------------------
- * «زیر تب طلا تا سولانا … ریلی و افقی» — the rail is horizontal and snaps, and
- * each tab now carries its own drawn silhouette plus its own hue, so six pills
- * of identical grey become six destinations you can find without reading them.
- *
- * The glyphs come from one 24×24 line-art set (components/market/MarketGlyphs),
- * so the ingot, the mask, the building, the chip, the controller and Solana's
- * three blades all stroke at the same weight. The hue is a CSS custom property
- * per `data-sector`, which is what lets the active pill light its own colour
- * without six copies of the same rule.
- */
-function SectorGlyph({ sector }) {
-  const Glyph = SECTOR_GLYPHS[sector];
-  if (!Glyph) return null;
-  return <Glyph className="market-sector-icon mx-sector-icon" width={14} height={14} />;
-}
 
 /** The five list views, same vocabulary, same 14px optical size. */
 function FilterGlyph({ view }) {
@@ -244,7 +223,6 @@ export default function Market() {
    */
   const [query, setQuery] = useState('');
   const [smartIntent, setSmartIntent] = useState(null);
-  const [smartFiltersOpen, setSmartFiltersOpen] = useState(false);
   const [sortKey, setSortKey] = useState(DEFAULT_SORT.key);
   const [sortDir, setSortDir] = useState(DEFAULT_SORT.dir);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
@@ -291,7 +269,6 @@ export default function Market() {
     setSortDir(intent.sortDir);
     setOnlyFavorites(false);
     setSector(null);
-    setSmartFiltersOpen(false);
     return true;
   }, []);
 
@@ -319,10 +296,6 @@ export default function Market() {
    * visible slice alone.
    */
   const [visibleCount, setVisibleCount] = useState(60);
-  /* «توکن‌ها کشیده شود جمع شده» — the rows are a fold, not a wall. Collapsed
-     shows the first screenful; the chip in the list header opens it again. The
-     count in that header stays the TRUE total either way, so a folded list
-     never lies about how many coins it holds. */
   const [listFolded, setListFolded] = useState(false);
   const [secondPage, setSecondPage] = useState({ vs, rows: [] });
   const currentVs = useRef(vs);
@@ -349,7 +322,10 @@ export default function Market() {
   /* Re-ordering is a new reading of the same list: start it from the top
      rather than leaving the reader 400 rows down a list that no longer has
      those rows in that place. */
-  useEffect(() => setVisibleCount(60), [sector, sortKey, sortDir, onlyFavorites, query]);
+  useEffect(() => {
+    setVisibleCount(60);
+    setListFolded(false);
+  }, [sector, sortKey, sortDir, onlyFavorites, query]);
   useEffect(() => { setSecondPage({ vs, rows: [] }); setPageDone(false); }, [vs]);
 
   useEffect(() => {
@@ -500,7 +476,9 @@ export default function Market() {
    * has no button to light up, and asking about all 500 would be a request
    * whose answer is thrown away.
    */
-  const visibleCoins = useMemo(() => (list ?? []).slice(0, visibleCount), [list, visibleCount]);
+  // Folding is a reading preference, not a pagination/data-budget reset.
+  const rowCap = listFolded ? Math.min(FOLDED_ROWS, visibleCount) : visibleCount;
+  const visibleCoins = useMemo(() => (list ?? []).slice(0, rowCap), [list, rowCap]);
   const { venues } = useCoinVenues(visibleCoins.map((c) => c.id));
   useEffect(() => {
     /* Hand the answers to the per-coin cache, so opening a row is instant
@@ -579,11 +557,7 @@ export default function Market() {
   const canLoadNext = !sector && !query.trim() && !onlyFavorites
     && sortKey === 'rank' && sortDir === 'asc'
     && !pageDone && (coins?.length ?? 0) >= MARKET_PAGE_SIZE;
-  /* While folded the list shows one screenful and a chip. `rowCap` is what the
-     rows render against; `visibleCount` is what pagination believes — so folding
-     never loses the reader's place in a long page. */
-  const rowCap = listFolded ? Math.min(FOLDED_ROWS, visibleCount) : visibleCount;
-  const hasMore = list.length > rowCap || canLoadNext;
+  const hasMore = list.length > visibleCount || canLoadNext;
   const visibleList = list.slice(0, rowCap);
   const shownCount = visibleList.length;
 
@@ -640,29 +614,11 @@ export default function Market() {
 
           <SmartMoneyBanner />
 
-          {/* ─── THE LENS AND THE LIST ARE TWO SURFACES ─────────────────────
-              «باکس همه ارزها را فاصله بده با باکس نبض بازار و هر دو را خیلی
-               مدرن کن»
-
-              One card held the whole screen's furniture and a seam down its
-              middle. Now:
-
-                · `.mx-lens`  — «نبض بازار» and the six sector tabs: the two
-                                readings that describe the WHOLE market rather
-                                than a row of it. It opens with a head of its
-                                own (freshness, refresh, compare) because those
-                                are statements about the feed itself.
-                · `.mx-terminal` — the list: its title and count, the search
-                                field, the five view chips, then the tokens.
-
-              They are siblings, so the gap between them is the page's own
-              rhythm («فاصله بده») instead of padding invented inside a card,
-              and the token rows start at the top of their own surface. */}
+          {/* Feed tools and list controls are separate glass surfaces. */}
           <section className="mx-lens" aria-labelledby="market-lens-title">
             <div className="mx-terminal-head mx-lens-head">
               <h2 className="market-terminal-title mx-terminal-title" id="market-lens-title">
                 <span>{t('marketIntel.railLabel')}</span>
-                <span className="mx-lens-note">{t('marketIntel.railTools')}</span>
               </h2>
               <div className="mx-terminal-actions">
                 {fresh && (
@@ -740,42 +696,12 @@ export default function Market() {
           </section>
 
           <section className="market-terminal mx-terminal" aria-labelledby="market-list-title">
-            {/* ─── THE HERO OF «همه ارزها» — «توکن‌ها کشیده شود» ─────────────
-                «توکن ها کشیده شود جمع شده … اندازه و فاصله درست»
-
-                The card's own title, the field that narrows it and the chips
-                that re-order it are one block («mx-list-hero») with a hairline
-                under it: a header that reads as a header, a full-width search,
-                and a chip row that no longer shares a line with a sort menu on
-                a phone. The rows then start on a clean, aligned grid. */}
             <div className="mx-list-hero">
               <div className="mx-list-hero-head">
                 <h2 className="mx-list-title" id="market-list-title">
                   <span className="market-terminal-title-text">{sector ? t(`market.sector.${sector}`) : t('marketIntel.allCoinsTitle')}</span>
                   <span className="market-count mono" aria-live="polite" data-testid="market-count">{fmtNum(list.length)}</span>
                 </h2>
-                {/* «توکن‌ها کشیده شود جمع شده» — the fold lives on the title line,
-                    where the list's own length is stated, and it names the action
-                    instead of showing a bare chevron. */}
-                {list.length > FOLDED_ROWS && (
-                  <button
-                    type="button"
-                    className="mx-fold"
-                    onClick={() => setListFolded((folded) => !folded)}
-                    aria-expanded={!listFolded}
-                    aria-controls="market-list-rows"
-                    data-testid="market-list-fold"
-                  >
-                    <span>{listFolded ? t('marketIntel.listExpand') : t('marketIntel.listCollapse')}</span>
-                    <GlyphCaretDown
-                      className="mx-fold-caret"
-                      data-folded={listFolded ? 'true' : 'false'}
-                      width={13}
-                      height={13}
-                      aria-hidden="true"
-                    />
-                  </button>
-                )}
               </div>
 
               {/* «زیر همه ارزها باید فیلد جستجو بیاد بالای فیلتر ها» — the field
@@ -886,40 +812,11 @@ export default function Market() {
 
           </section>
 
-              {/* دسته‌ها یک ریل مستقل بین ابزارهای فهرست و ردیف‌ها هستند. */}
-              <div className="mx-sector-rail">
-                <div className="market-sectors mx-sectors" role="group" aria-label={t('market.sectorsAria')}>
-                  <span className="mx-sectors-head">
-                    <span className="mx-sectors-mark" aria-hidden="true"><GlyphSectorRail width={13} height={13} /></span>
-                    <span className="mx-sectors-label">{t('marketIntel.sectorsTitle')}</span>
-                    {sector && (
-                      <button
-                        type="button"
-                        className="mx-sectors-reset"
-                        onClick={() => { setSectorCoins([]); setSector(null); }}
-                      >
-                        {t('market.showAll')}
-                      </button>
-                    )}
-                  </span>
-                  <div className="mx-sectors-rail" data-testid="market-sector-rail">
-                    {SECTORS.map((sec) => (
-                      <button
-                        key={sec}
-                        type="button"
-                        className="market-sector mx-sector"
-                        data-sector={sec}
-                        data-active={sector === sec ? 'true' : undefined}
-                        aria-pressed={sector === sec}
-                        onClick={() => { setSectorCoins([]); setSector(sector === sec ? null : sec); }}
-                      >
-                        <span className="mx-sector-tile" aria-hidden="true"><SectorGlyph sector={sec} /></span>
-                        <span className="mx-sector-label">{t(`market.sector.${sec}`)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
+          <MarketSectorRail
+            sectors={SECTORS}
+            selected={sector}
+            onSelect={(next) => { setSectorCoins([]); setSector(next); }}
+          />
 
             <section className="mx-table-wrap" aria-labelledby="market-list-title">
 
@@ -992,17 +889,18 @@ export default function Market() {
                           animate={false}
                           onClick={() => openCoin(c.id)}
                         />
-                        <span className="mx-swap-slot">
+                        <span className="mx-swap-slot" data-available={swapUrl ? 'true' : undefined}>
                         {swapUrl && (
                           <button
                             type="button"
                             className="market-swap-btn mx-swap-btn"
                             onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}
+                            aria-label={t('market.swapOnCorrectNetwork', { symbol: c.symbol })}
                             title={t('market.swapOnCorrectNetwork', { symbol: c.symbol })}
                             data-testid={`market-swap-${c.id}`}
                           >
                             <IconSwap width={12} height={12} aria-hidden="true" />
-                            {t('market.swap')}
+                            <span className="mx-swap-label">{t('market.swap')}</span>
                           </button>
                         )}
                         </span>
@@ -1011,7 +909,7 @@ export default function Market() {
                   })}
                 </div>
 
-                {hasMore && (
+                {(hasMore || list.length > FOLDED_ROWS) && (
                   <div className="market-more mx-more">
                     <div className="market-more-meta">
                       <span className="mono" data-testid="market-showing">
@@ -1021,24 +919,35 @@ export default function Market() {
                         <span className="market-more-fill" style={{ width: `${list.length ? Math.min(100, (shownCount / list.length) * 100) : 0}%` }} />
                       </span>
                     </div>
-                    <button
+                    <div className="mx-list-actions">
+                    {hasMore && !listFolded && <button
                       type="button"
                       className="market-show-more mx-show-more"
                       disabled={pageLoading}
                       onClick={() => {
-                        if (listFolded) setListFolded(false);
-                        else if (list.length > visibleCount) setVisibleCount((n) => n + 60);
+                        if (list.length > visibleCount) setVisibleCount((n) => n + 60);
                         else loadNextPage();
                       }}
                     >
-                      {listFolded
-                        ? t('marketIntel.listExpand')
-                        : pageLoading
+                      {pageLoading
                         ? t('market.loadingSector')
                         : list.length > visibleCount
                           ? t('market.showMore', { count: fmtNum(list.length - visibleCount) })
                           : t('market.nextPage')}
-                    </button>
+                    </button>}
+                    {list.length > FOLDED_ROWS && <button
+                      type="button"
+                      className="mx-list-fold"
+                      data-testid="market-list-fold"
+                      data-folded={listFolded ? 'true' : 'false'}
+                      aria-expanded={!listFolded}
+                      aria-controls="market-list-rows"
+                      onClick={() => setListFolded((folded) => !folded)}
+                    >
+                      <GlyphCaretDown width={13} height={13} aria-hidden="true" />
+                      <span>{t(listFolded ? 'marketIntel.listExpand' : 'marketIntel.listCollapse')}</span>
+                    </button>}
+                    </div>
                   </div>
                 )}
 
@@ -1051,11 +960,11 @@ export default function Market() {
                         return (
                           <div key={c.id} className="market-coin-row mx-coin-row">
                             <CoinRow coin={c} rank={c.rank || '—'} animate={false} onClick={() => openCoin(c.id)} />
-                            <span className="mx-swap-slot">
+                            <span className="mx-swap-slot" data-available={swapUrl ? 'true' : undefined}>
                             {swapUrl && (
-                              <button type="button" className="market-swap-btn mx-swap-btn" onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}>
+                              <button type="button" className="market-swap-btn mx-swap-btn" aria-label={t('market.swapOnCorrectNetwork', { symbol: c.symbol })} onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}>
                                 <IconSwap width={12} height={12} aria-hidden="true" />
-                                {t('market.swap')}
+                                <span className="mx-swap-label">{t('market.swap')}</span>
                               </button>
                             )}
                             </span>

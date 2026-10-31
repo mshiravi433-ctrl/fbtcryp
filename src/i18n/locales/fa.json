@@ -4937,13 +4937,16 @@
     "deckLabel": "نمای بازار",
     "deckEyebrow": "نمای زندهٔ بازار",
     "deckLive": "زنده",
+    "deckPending": "در انتظار داده",
     "aiChip": "هوشمند",
     "smartEyebrow": "پول هوشمند FBT",
+    "smartNote": "ردیابی جریان سرمایه روی زنجیره",
     "smartTitle": "ببین پول هوشمند کجا می‌رود",
     "smartDesc": "فعالیت نهنگ‌ها را دنبال کن، جریان‌های نهادی را کشف کن و فرصت‌های نوظهور بازار را با هوش مصنوعی FBT شناسایی کن.",
     "smartCta": "کاوش پول هوشمند",
     "allCoinsTitle": "همه ارزها",
     "sectorsTitle": "دسته‌ها",
+    "allSectors": "همه دسته‌ها",
     "railLabel": "ویترین بازار",
     "railTools": "ابزارهای بازار",
     "flowWallet": "کیف پول",
@@ -4959,7 +4962,7 @@
     "statMarkets": "بازارها",
     "statAvg": "میانگین تغییر",
     "listCollapse": "جمع کردن فهرست",
-    "listExpand": "کشیدن فهرست"
+    "listExpand": "باز کردن فهرست"
   },
   "marketAiBanner": {
     "eyebrow": "FBT AI | هوش بازار فعال",
