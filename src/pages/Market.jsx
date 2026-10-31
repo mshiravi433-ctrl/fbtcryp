@@ -692,49 +692,6 @@ export default function Market() {
               </div>
             </div>
 
-            {/* ─── «دسته‌ها» — DETACHED FROM THE LIST, UNDER THE VIEWS ──────
-                «زیر باکس‌هایی مثل میم‌کوین … را از باکس جدا کن، خیلی مدرن کن،
-                 زیر تب و در یک راستای افقی و به صورت ریلی حرکت کند»
-
-                The sector rail used to sit INSIDE the «همه ارزها» card, three
-                rows down, between «نبض بازار» and the token rows — so the six
-                tabs that choose WHAT the list contains appeared after the list
-                had already begun. It now lives outside that card, directly under
-                the view chips, on its own track: a horizontal snapping rail of
-                44px glass tiles that scrolls with the thumb and never wraps.
-                Its own box, its own edge fade, its own gap — «جدا کن». */}
-            <div className="market-sectors mx-sectors" role="group" aria-label={t('market.sectorsAria')}>
-              <span className="mx-sectors-head">
-                <span className="mx-sectors-mark" aria-hidden="true"><GlyphSectorRail width={13} height={13} /></span>
-                <span className="mx-sectors-label">{t('marketIntel.sectorsTitle')}</span>
-                {sector && (
-                  <button
-                    type="button"
-                    className="mx-sectors-reset"
-                    onClick={() => { setSectorCoins([]); setSector(null); }}
-                  >
-                    {t('market.showAll')}
-                  </button>
-                )}
-              </span>
-              <div className="mx-sectors-rail" data-testid="market-sector-rail">
-                {SECTORS.map((sec) => (
-                  <button
-                    key={sec}
-                    type="button"
-                    className="market-sector mx-sector"
-                    data-sector={sec}
-                    data-active={sector === sec ? 'true' : undefined}
-                    aria-pressed={sector === sec}
-                    onClick={() => { setSectorCoins([]); setSector(sector === sec ? null : sec); }}
-                  >
-                    <span className="mx-sector-tile" aria-hidden="true"><SectorGlyph sector={sec} /></span>
-                    <span className="mx-sector-label">{t(`market.sector.${sec}`)}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {breadth.counted > 0 && (
               <div
                 className="market-breadth mx-breadth"
@@ -925,6 +882,41 @@ export default function Market() {
                 </button>
               </div>
               </div>
+              </div>
+
+              {/* «زیر تب را» — دسته‌ها خارج از باکس نبض بازار، در یک خط افقی و به صورت ریلی حرکت می‌کنند */}
+              <div className="mx-sector-rail">
+                <div className="market-sectors mx-sectors" role="group" aria-label={t('market.sectorsAria')}>
+                  <span className="mx-sectors-head">
+                    <span className="mx-sectors-mark" aria-hidden="true"><GlyphSectorRail width={13} height={13} /></span>
+                    <span className="mx-sectors-label">{t('marketIntel.sectorsTitle')}</span>
+                    {sector && (
+                      <button
+                        type="button"
+                        className="mx-sectors-reset"
+                        onClick={() => { setSectorCoins([]); setSector(null); }}
+                      >
+                        {t('market.showAll')}
+                      </button>
+                    )}
+                  </span>
+                  <div className="mx-sectors-rail" data-testid="market-sector-rail">
+                    {SECTORS.map((sec) => (
+                      <button
+                        key={sec}
+                        type="button"
+                        className="market-sector mx-sector"
+                        data-sector={sec}
+                        data-active={sector === sec ? 'true' : undefined}
+                        aria-pressed={sector === sec}
+                        onClick={() => { setSectorCoins([]); setSector(sector === sec ? null : sec); }}
+                      >
+                        <span className="mx-sector-tile" aria-hidden="true"><SectorGlyph sector={sec} /></span>
+                        <span className="mx-sector-label">{t(`market.sector.${sec}`)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
             <div className="mx-table-wrap">

@@ -2448,3 +2448,51 @@
    static path, the three nodes and the labels stay: that is the reading. */
 :root[data-native='true'] .mx-market .mx-route-flow,
 :root[data-lite='true'] .mx-market .mx-route-flow { display: none; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   9.13 · FIRST-SCREEN BOXES — separate surfaces, real gaps between them
+   «باکس نمای بازار مدرن کن و بعدش یک فاصله کوچک بده و سه باکس مدرن
+    برای ارزها، بازارها، میانگین تغییر … یک فاصله کوچک و بعدش باکس بیت‌کوین را
+    مدرن و شیشه‌ای کن»
+   The overview wrapper is only a rhythm container now: the deck, the trio and
+   the Bitcoin card are each their own glass box, so the space between them is
+   page background showing through a real gap — not padding inside one card.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.mx-market .mx-overview {
+  border: none;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+}
+
+/* The trio: one modern box holding three equal cards on one line, every width. */
+.mx-market .mx-trio {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 11px;
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-r-lg);
+  background: var(--mx-glass), var(--mx-panel-2);
+  box-shadow: var(--mx-hi);
+}
+
+/* The sector rail lives under the view tabs now. The page gap (12px, 12px on
+   phones) that already separates lens → terminal → rail → table-wrap is the
+   «فاصله کوچک» on both sides; no extra margin needed. */
+.mx-market .mx-sector-rail {
+  margin: 0;
+}
+
+:root[data-theme='light'] .mx-market .mx-overview {
+  border: none;
+  background: none;
+  box-shadow: none;
+}
+
+:root[data-theme='light'] .mx-market .mx-trio {
+  border-color: rgba(16, 24, 48, 0.09);
+  background: linear-gradient(168deg, #ffffff, #f4f7fd 62%);
+  box-shadow: inset 0 1px 0 #ffffff, 0 12px 26px -24px rgba(20, 45, 80, 0.4);
+}
