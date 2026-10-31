@@ -35,6 +35,13 @@ import {
   listTools
 } from './aiOrchestrator.js';
 import { clipDeep, containsSensitiveKeyOrPhrase } from '../src/lib/intent-ai/orchestrator/redact.js';
+import {
+  getCentralBrain,
+  getSmartMemory,
+  getPerformanceLearning,
+  getAdaptiveCouncil,
+  testLiveQdrantConnection
+} from './centralBrainRuntime.js';
 
 export const ORCHESTRATOR_ROUTES_SCHEMA = 'fbt.ai-orchestrator.routes.v1';
 
@@ -264,6 +271,292 @@ export function createOrchestratorRouter({ orchestrator = null, rag = null, ledg
   router.get('/memory/stats', wrap(async () => ({
     ok: true, schema: ORCHESTRATOR_ROUTES_SCHEMA, stats: await R().stats(), at: Date.now()
   })));
+
+  /* ── Central Brain v2 (10-capability intelligent orchestrator) ────────── */
+
+  router.get('/central-brain/status', wrap(async (req) => ({
+    ...(await getCentralBrain().status(ownerFor(req))),
+    at: Date.now()
+  })));
+
+  router.post('/central-brain/understand', wrap(async (req) => {
+    const message = String(req.body?.message || '').slice(0, MAX_MESSAGE);
+    if (!message.trim()) return { ok: false, code: 'MESSAGE_REQUIRED' };
+    return getCentralBrain().understand({ owner: ownerFor(req), message });
+  }));
+
+  router.post('/central-brain/run', wrap(async (req) => {
+    const message = String(req.body?.message || '').slice(0, MAX_MESSAGE);
+    if (!message.trim()) return { ok: false, code: 'MESSAGE_REQUIRED' };
+    return getCentralBrain().run({
+      owner: ownerFor(req),
+      sessionId: req.body?.sessionId || null,
+      message,
+      preloadedEvidence: Array.isArray(req.body?.evidence) ? req.body.evidence : null,
+      forceCouncilMembers: Array.isArray(req.body?.forceCouncilMembers) ? req.body.forceCouncilMembers : null,
+      recordTurnMemory: req.body?.recordTurnMemory !== false
+    });
+  }));
+
+  router.get('/central-brain/traces', wrap((req) => ({
+    ok: true,
+    owner: ownerFor(req),
+    traces: getCentralBrain().getTraces({ owner: ownerFor(req), limit: Math.min(50, Number(req.query.limit) || 15) }),
+    at: Date.now()
+  })));
+
+  /* ── Smart Long-Term Semantic Memory & Operational Qdrant ─────────────── */
+
+  router.post('/smart-memory/search', wrap(async (req) => {
+    const query = String(req.body?.query || req.body?.message || '').slice(0, MAX_MESSAGE);
+    if (!query.trim()) return { ok: false, code: 'QUERY_REQUIRED' };
+    return getSmartMemory().semanticSearch({
+      owner: ownerFor(req),
+      query,
+      memoryTypes: Array.isArray(req.body?.memoryTypes) ? req.body.memoryTypes : null,
+      outcome: req.body?.outcome || null,
+      limit: Math.min(20, Number(req.body?.limit) || 8)
+    });
+  }));
+
+  router.post('/smart-memory/conversation', wrap(async (req) => {
+    return getSmartMemory().rememberConversation({
+      owner: ownerFor(req),
+      userMessage: String(req.body?.userMessage || req.body?.question || '').slice(0, MAX_MESSAGE),
+      assistantReply: String(req.body?.assistantReply || req.body?.answer || '').slice(0, 2000),
+      intentType: req.body?.intentType || 'GENERAL',
+      assets: Array.isArray(req.body?.assets) ? req.body.assets : [],
+      sessionId: req.body?.sessionId || null,
+      lang: req.body?.lang || 'fa'
+    });
+  }));
+
+  router.get('/smart-memory/conversations', wrap(async (req) => {
+    return getSmartMemory().recallConversations({
+      owner: ownerFor(req),
+      query: String(req.query.q || '').slice(0, 300),
+      limit: Math.min(20, Number(req.query.limit) || 8)
+    });
+  }));
+
+  router.post('/smart-memory/profile', wrap(async (req) => {
+    const owner = ownerFor(req);
+    const mem = getSmartMemory();
+    const results = { goals: [], preferences: [] };
+    if (req.body?.goal && typeof req.body.goal === 'object') {
+      results.goals.push(await mem.setGoal({ owner, ...req.body.goal }));
+    }
+    if (req.body?.preference && typeof req.body.preference === 'object') {
+      results.preferences.push(await mem.setPreference({ owner, ...req.body.preference }));
+    }
+    const profile = await mem.getUserProfile(owner);
+    return { ok: true, updated: results, profile };
+  }));
+
+  router.get('/smart-memory/profile', wrap(async (req) => {
+    return getSmartMemory().getUserProfile(ownerFor(req));
+  }));
+
+  router.post('/smart-memory/experience', wrap(async (req) => {
+    return getSmartMemory().recordExperience({
+      owner: ownerFor(req),
+      outcome: req.body?.outcome,
+      taskType: req.body?.taskType,
+      asset: req.body?.asset,
+      strategy: req.body?.strategy,
+      summary: req.body?.summary,
+      whatWorked: req.body?.whatWorked,
+      whatFailed: req.body?.whatFailed,
+      rootCause: req.body?.rootCause,
+      errorPct: req.body?.errorPct,
+      lesson: req.body?.lesson,
+      agentsInvolved: req.body?.agentsInvolved,
+      modelsUsed: req.body?.modelsUsed
+    });
+  }));
+
+  router.get('/smart-memory/experiences', wrap(async (req) => {
+    return getSmartMemory().recallExperiences({
+      owner: ownerFor(req),
+      query: String(req.query.q || '').slice(0, 300),
+      outcome: req.query.outcome || null,
+      asset: req.query.asset || null,
+      limit: Math.min(20, Number(req.query.limit) || 8)
+    });
+  }));
+
+  router.post('/smart-memory/agent/:agentId', wrap(async (req) => {
+    return getSmartMemory().rememberAgentPrivate({
+      owner: ownerFor(req),
+      agentId: req.params.agentId,
+      note: String(req.body?.note || '').slice(0, 800),
+      topic: req.body?.topic || 'observation',
+      assets: Array.isArray(req.body?.assets) ? req.body.assets : [],
+      confidence: req.body?.confidence ?? 0.75,
+      data: req.body?.data || null
+    });
+  }));
+
+  router.get('/smart-memory/agent/:agentId', wrap(async (req) => {
+    return getSmartMemory().recallAgentPrivate({
+      owner: ownerFor(req),
+      agentId: req.params.agentId,
+      requesterAgentId: req.query.requesterAgentId || req.params.agentId,
+      query: String(req.query.q || '').slice(0, 300),
+      limit: Math.min(20, Number(req.query.limit) || 6)
+    });
+  }));
+
+  router.post('/smart-memory/shared', wrap(async (req) => {
+    return getSmartMemory().publishSharedMemory({
+      owner: ownerFor(req),
+      publisherAgentId: req.body?.publisherAgentId,
+      claim: String(req.body?.claim || '').slice(0, 800),
+      topic: req.body?.topic || 'finding',
+      assets: Array.isArray(req.body?.assets) ? req.body.assets : [],
+      confidence: req.body?.confidence ?? 0.7,
+      evidenceRefs: Array.isArray(req.body?.evidenceRefs) ? req.body.evidenceRefs : [],
+      allowedReaders: Array.isArray(req.body?.allowedReaders) ? req.body.allowedReaders : ['*'],
+      sessionId: req.body?.sessionId || null,
+      ttlMs: req.body?.ttlMs
+    });
+  }));
+
+  router.get('/smart-memory/shared', wrap(async (req) => {
+    return getSmartMemory().readSharedMemory({
+      owner: ownerFor(req),
+      readerAgentId: String(req.query.readerAgentId || 'final_arbiter'),
+      query: String(req.query.q || '').slice(0, 300),
+      sessionId: req.query.sessionId || null,
+      verifiedOnly: req.query.verifiedOnly === 'true',
+      limit: Math.min(20, Number(req.query.limit) || 8)
+    });
+  }));
+
+  router.post('/smart-memory/contextual', wrap(async (req) => {
+    return getSmartMemory().contextualRecall({
+      owner: ownerFor(req),
+      query: String(req.body?.query || req.body?.message || '').slice(0, MAX_MESSAGE),
+      intentType: req.body?.intentType || 'GENERAL',
+      entities: req.body?.entities || {},
+      activeAgents: Array.isArray(req.body?.activeAgents) ? req.body.activeAgents : [],
+      sessionId: req.body?.sessionId || null
+    });
+  }));
+
+  router.get('/smart-memory/stats', wrap(async (req) => {
+    return getSmartMemory().stats(ownerFor(req));
+  }));
+
+  router.post('/smart-memory/qdrant/test', wrap(async (req) => {
+    return testLiveQdrantConnection({
+      dim: Number(req.body?.dim) || 384
+    });
+  }));
+
+  /* ── Performance Learning (Reversible Policy + Error & Agent Eval) ────── */
+
+  router.post('/learning/predictions', wrap(async (req) => {
+    return getPerformanceLearning().recordPrediction({
+      owner: ownerFor(req),
+      ...req.body
+    });
+  }));
+
+  router.post('/learning/evaluate', wrap(async (req) => {
+    return getPerformanceLearning().evaluateOutcome({
+      predictionId: req.body?.predictionId,
+      actualPrice: req.body?.actualPrice,
+      actualMovePct: req.body?.actualMovePct,
+      actualDirection: req.body?.actualDirection,
+      notes: req.body?.notes || ''
+    });
+  }));
+
+  router.post('/learning/resolve', wrap(async (req) => {
+    return getPerformanceLearning().resolvePendingPredictions({
+      livePrices: req.body?.livePrices || {},
+      forceAll: req.body?.forceAll === true
+    });
+  }));
+
+  router.get('/learning/metrics', wrap((req) => {
+    const scopeAll = req.query.scope === 'global';
+    return getPerformanceLearning().summary({ owner: scopeAll ? null : ownerFor(req) });
+  }));
+
+  router.get('/learning/policies', wrap((req) => ({
+    ok: true,
+    activeWeights: getPerformanceLearning().getTrustWeights(),
+    history: getPerformanceLearning().getPolicyHistory({ limit: Math.min(50, Number(req.query.limit) || 20) }),
+    at: Date.now()
+  })));
+
+  router.post('/learning/rollback', wrap(async (req) => {
+    return getPerformanceLearning().rollbackPolicy(req.body?.versionId || 'baseline');
+  }));
+
+  router.post('/learning/freeze', wrap(async (req) => {
+    return getPerformanceLearning().setFrozen(req.body?.frozen !== false);
+  }));
+
+  /* ── Adaptive AI Council (8 Dynamic Specialists) ──────────────────────── */
+
+  router.get('/council/specialists', wrap(() => {
+    const council = getAdaptiveCouncil();
+    return {
+      ok: true,
+      schema: council.schema,
+      specialists: Object.values(council.roster),
+      at: Date.now()
+    };
+  }));
+
+  router.post('/council/select', wrap(async (req) => {
+    const message = String(req.body?.message || '').slice(0, MAX_MESSAGE);
+    if (!message.trim()) return { ok: false, code: 'MESSAGE_REQUIRED' };
+    const plan = await getCentralBrain().understand({ owner: ownerFor(req), message });
+    return {
+      ok: true,
+      classification: plan.classification,
+      councilSelection: plan.decomposition?.councilPlan || null,
+      at: Date.now()
+    };
+  }));
+
+  router.post('/council/convene', wrap(async (req) => {
+    const message = String(req.body?.message || req.body?.question || '').slice(0, MAX_MESSAGE);
+    if (!message.trim()) return { ok: false, code: 'MESSAGE_REQUIRED' };
+    const brainOut = await getCentralBrain().run({
+      owner: ownerFor(req),
+      sessionId: req.body?.sessionId || null,
+      message,
+      preloadedEvidence: Array.isArray(req.body?.evidence) ? req.body.evidence : null,
+      forceCouncilMembers: Array.isArray(req.body?.forceMembers) ? req.body.forceMembers : undefined
+    });
+    if (brainOut.council?.councilConvened) {
+      return {
+        ok: true,
+        ...brainOut.council,
+        runId: brainOut.runId,
+        decisionTrace: brainOut.decisionTrace,
+        executionAuthorized: false
+      };
+    }
+    // If user explicitly called /council/convene on a simple question, run minimal dynamic council
+    const forced = await getAdaptiveCouncil().convene({
+      owner: ownerFor(req),
+      question: message,
+      classification: brainOut.classification,
+      evidence: [],
+      forceMembers: ['technical_analyst', 'risk_specialist', 'final_arbiter']
+    });
+    return {
+      ...forced,
+      runId: brainOut.runId,
+      executionAuthorized: false
+    };
+  }));
 
   return router;
 }

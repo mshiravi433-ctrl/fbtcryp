@@ -23,6 +23,12 @@
  */
 import { Router } from 'express';
 import { CI_SCHEMA } from '../../src/lib/central/schema.js';
+import {
+  getCentralBrain,
+  getSmartMemory,
+  getPerformanceLearning,
+  getAdaptiveCouncil
+} from '../centralBrainRuntime.js';
 
 export const BRAIN_ROUTES_SCHEMA = 'fbt.brain-routes.v1';
 
@@ -266,6 +272,34 @@ export function createBrainRouter({ kernel, stateStore, events, log = () => {} }
     if (!wf) return { ok: false, code: 'WORKFLOW_NOT_FOUND', detail: 'Workflows are ephemeral and expire when the store rotates' };
     return { ok: true, schema: BRAIN_ROUTES_SCHEMA, brain: CI_SCHEMA, workflow: wf };
   }));
+
+  /* ── Upgraded Central Brain v2, Adaptive Council, Smart Memory & Learning ── */
+
+  router.get('/central-brain/status', wrap(async (req) => getCentralBrain().status(ownerFor(req))));
+
+  router.post('/central-brain/run', wrap(async (req) => {
+    const message = String(req.body?.message || '').slice(0, 1200);
+    if (!message.trim()) return res_status(400, { code: 'MESSAGE_REQUIRED' });
+    return getCentralBrain().run({ owner: ownerFor(req), message, sessionId: req.body?.sessionId || null });
+  }));
+
+  router.post('/adaptive-council/convene', wrap(async (req) => {
+    const message = String(req.body?.message || req.body?.question || '').slice(0, 1200);
+    if (!message.trim()) return res_status(400, { code: 'MESSAGE_REQUIRED' });
+    const out = await getCentralBrain().run({ owner: ownerFor(req), message });
+    return out.council?.councilConvened
+      ? { ok: true, ...out.council, decisionTrace: out.decisionTrace, executionAuthorized: false }
+      : getAdaptiveCouncil().convene({
+        owner: ownerFor(req),
+        question: message,
+        classification: out.classification,
+        forceMembers: ['technical_analyst', 'risk_specialist', 'final_arbiter']
+      });
+  }));
+
+  router.get('/learning/summary', wrap(async (req) => getPerformanceLearning().summary({ owner: ownerFor(req) })));
+
+  router.get('/smart-memory/profile', wrap(async (req) => getSmartMemory().getUserProfile(ownerFor(req))));
 
   function res_status(code, body) {
     return { ok: false, ...body, _status: code };

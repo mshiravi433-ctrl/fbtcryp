@@ -86,13 +86,14 @@ function lexicalScore(queryTokens, text) {
 
 export function createRagMemory({
   store = null,
+  vector: vectorOpt = null,
   maxMemoryPerOwner = MAX_MEMORY_PER_OWNER,
   now = Date.now,
   /** Optional BM25 signal; defaults to the repo's own retriever. */
   bm25 = null,
   vectorStoreOptions = {}
 } = {}) {
-  const vector = store || createVectorStore(vectorStoreOptions);
+  const vector = store || vectorOpt || createVectorStore(vectorStoreOptions);
   const bm25Fn = bm25; // resolved lazily below if not injected
   let knowledgeIndexed = false;
   let indexedAt = null;
@@ -240,16 +241,41 @@ export function createRagMemory({
     },
 
     /**
-     * Keep the newest `keep` memories for one owner. Uses the embedded state,
-     * so the remote backend reports `capSkipped` instead of guessing.
+     * Keep the newest `keep` memories for one owner. Uses `vector.scroll` across
+     * both local and remote Qdrant backends so owner memory caps are enforced
+     * operationally on real Qdrant as well.
      */
     async pruneOwner(owner, keep = maxMemoryPerOwner) {
-      if (vector.kind !== 'local' && !vector.exportState().collections?.[COLLECTIONS.memory]) {
-        return { ok: false, capSkipped: true, reason: 'REMOTE_BACKEND_NO_SCROLL' };
+      let mine = null;
+      if (typeof vector.scroll === 'function') {
+        const all = [];
+        let offset = null;
+        for (let page = 0; page < 10; page++) {
+          const scrolled = await vector.scroll(COLLECTIONS.memory, {
+            filter: { must: [{ key: 'owner', match: owner }] },
+            limit: Math.max(200, keep * 2),
+            offset,
+            withPayload: true,
+            withVector: false
+          });
+          if (!scrolled?.ok) {
+            if (scrolled?.error === 'COLLECTION_NOT_FOUND') return { ok: true, removed: 0, kept: 0 };
+            break;
+          }
+          if (Array.isArray(scrolled.points)) all.push(...scrolled.points);
+          if (!scrolled.nextOffset) { mine = all; break; }
+          offset = scrolled.nextOffset;
+          mine = all;
+        }
       }
-      const state = vector.exportState();
-      const points = state?.collections?.[COLLECTIONS.memory]?.points || [];
-      const mine = points.filter((p) => p.payload?.owner === owner);
+      if (!mine) {
+        if (vector.kind !== 'local' && !vector.exportState().collections?.[COLLECTIONS.memory]) {
+          return { ok: false, capSkipped: true, reason: 'REMOTE_BACKEND_NO_SCROLL' };
+        }
+        const state = vector.exportState();
+        const points = state?.collections?.[COLLECTIONS.memory]?.points || [];
+        mine = points.filter((p) => p.payload?.owner === owner);
+      }
       if (mine.length <= keep) return { ok: true, removed: 0, kept: mine.length };
       mine.sort((a, b) => Number(b.payload?.at || 0) - Number(a.payload?.at || 0));
       const doomed = mine.slice(keep).map((p) => p.id);
