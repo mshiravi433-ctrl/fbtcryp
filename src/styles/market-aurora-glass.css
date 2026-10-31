@@ -1,0 +1,804 @@
+/* FBT MARKET · AURORA GLASS — the material pass over «باکس‌های صفحه بازار».
+   ---------------------------------------------------------------------------
+   Requested: «باکس‌ها شیشه‌ای‌تر، مدرن‌تر، با ظاهر خاص و پس‌زمینهٔ خاص و بهترین
+   UI/UX که چشم‌نواز باشد».
+
+   This sheet is the LAST layer of the market route (imported after
+   market-modern.css, market-intelligence.css and market-glass-v3.css), so it
+   wins at equal specificity. It does not add a new design language — it gives
+   every box on this screen the same three things the old material only hinted
+   at:
+
+     1 · A REAL GLASS BODY. Four painted layers per box, in this order:
+         · a tinted bloom of the box's own accent in one corner;
+         · a complementary bloom in the opposite corner;
+         · one diagonal glaze (the specular sheet, not a flat fill);
+         · one fine frost striation, 1px on 13px, which is what makes a
+           surface read as glass instead of as a coloured rectangle.
+         No backdrop-filter, no mask, no filter: the blur was the property this
+         screen was measured to be paying for (market-speed.test.mjs), so the
+         glass is painted, never read back from the page.
+
+     2 · A THICK EDGE. A gradient hairline in the border box, an inset bevel
+         (white 1px on top, dark 1px below) and an inner bloom. That triple is
+         what the eye reads as «شیشهٔ ضخیم»; a single 1px border reads as a card.
+
+     3 · A STAGE. The overview is still a layout, never a box in a box (see
+         market-intelligence.css), but it now floats on a slow aurora field so
+         the translucent boxes have something to sit on.
+
+   Nothing here invents a number: every layer is aria-hidden decoration or a
+   background, the readings keep their own colours, and the direction of a
+   move still comes from the feed. All loops are transform/opacity only and
+   every one of them has a stop rule at the bottom of this file. */
+
+/* ══ 0 · TOKENS ═══════════════════════════════════════════════════════════ */
+.mx-market {
+  --ag-aqua-rgb: 108, 244, 235;
+  --ag-azure-rgb: 126, 178, 255;
+  --ag-violet-rgb: 186, 156, 255;
+  --ag-amber-rgb: 255, 209, 142;
+  --ag-rose-rgb: 255, 143, 168;
+  /* The three body colours of the glass. Held at 90–96% alpha on purpose: the
+     aurora stage behind them must show through, while a price still has to
+     stay AAA-legible on top of it. */
+  --ag-shell-a: rgba(11, 32, 50, .92);
+  --ag-shell-b: rgba(8, 21, 37, .94);
+  --ag-shell-c: rgba(9, 13, 30, .96);
+  /* The specular sheet: light entering the top-inline corner and leaving the
+     bottom-outline one. */
+  --ag-glaze: linear-gradient(152deg, rgba(255, 255, 255, .11), rgba(255, 255, 255, .015) 46%, rgba(2, 10, 22, .24));
+  /* Frost, drawn — 1px of light every 13px. The one texture the old boxes had
+     no version of. */
+  --ag-stria: repeating-linear-gradient(118deg, rgba(255, 255, 255, .032) 0 1px, transparent 1px 13px);
+  --ag-lift: 0 30px 58px -42px rgba(0, 0, 12, 1);
+  /* The stage behind the showcase. */
+  --ag-stage:
+    radial-gradient(46% 44% at 14% 6%, rgba(var(--ag-aqua-rgb), .20), transparent 70%),
+    radial-gradient(40% 40% at 88% 2%, rgba(var(--ag-violet-rgb), .19), transparent 72%),
+    radial-gradient(54% 34% at 52% 98%, rgba(var(--ag-amber-rgb), .11), transparent 76%);
+}
+
+/* The page itself gets an aurora floor. Static gradients: one paint, no
+   compositing, and it is the colour the translucent boxes sit on. */
+.mx-market {
+  background:
+    radial-gradient(120% 54% at 6% -6%, rgba(var(--ag-aqua-rgb), .10), transparent 62%),
+    radial-gradient(96% 48% at 102% 0%, rgba(var(--ag-violet-rgb), .10), transparent 60%),
+    radial-gradient(82% 38% at 50% 29%, rgba(var(--ag-azure-rgb), .055), transparent 72%),
+    linear-gradient(180deg, rgba(4, 11, 22, 0), rgba(4, 11, 22, .32));
+}
+
+/* ── 0.1 · THE STAGE ─────────────────────────────────────────────────────
+   Light BEHIND the boxes, not a panel AROUND them. Absolutely positioned, so
+   it is not a grid item and cannot take a track; the overview stays a bare
+   layout. It drifts on a 26s alternate cycle — transform and opacity only. */
+.mx-market .mx-overview {
+  position: relative;
+  isolation: isolate;
+}
+.mx-market .mx-overview::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  inset-block: -16px;
+  inset-inline: -2px;
+  border-radius: 38px;
+  pointer-events: none;
+  background: var(--ag-stage);
+  opacity: .85;
+  animation: ag-stage-drift 26s ease-in-out infinite alternate;
+}
+.mx-market .mx-overview > * { position: relative; z-index: 1; }
+
+/* ══ 1 · THE DECK — the market showcase ═══════════════════════════════════
+   The interior is still ONE token shared with the travelling rim layer, so
+   changing the glass here also changes the rim's replica. Only the token is
+   redefined; nothing about the rim machinery (cross-fade, orbit, gloss, entry
+   rise) is touched. */
+.mx-market .mx-deck {
+  --mx-deck-interior:
+    radial-gradient(116% 92% at 2% -14%, rgba(var(--ag-aqua-rgb), .30), transparent 62%) padding-box,
+    radial-gradient(96% 84% at 104% 106%, rgba(var(--ag-violet-rgb), .28), transparent 64%) padding-box,
+    radial-gradient(62% 46% at 58% 118%, rgba(var(--ag-amber-rgb), .15), transparent 64%) padding-box,
+    var(--ag-glaze) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(158deg, var(--ag-shell-a), var(--ag-shell-b) 48%, var(--ag-shell-c)) padding-box;
+  --mx-deck-rim-a: linear-gradient(136deg,
+    rgba(176, 255, 249, .98), rgba(var(--ag-azure-rgb), .34) 24%,
+    rgba(206, 184, 255, .95) 52%, rgba(255, 216, 156, .92) 78%,
+    rgba(176, 255, 249, .98));
+  --mx-deck-rim-b: linear-gradient(316deg,
+    rgba(255, 216, 156, .96), rgba(176, 255, 249, .92) 24%,
+    rgba(var(--ag-azure-rgb), .36) 50%, rgba(206, 184, 255, .95) 76%,
+    rgba(255, 216, 156, .96));
+  border-radius: 30px;
+  box-shadow:
+    0 0 0 1px rgba(176, 255, 249, .09),
+    0 0 34px -13px rgba(var(--ag-aqua-rgb), .78),
+    0 0 86px -32px rgba(var(--ag-violet-rgb), .8),
+    inset 0 1px 0 rgba(232, 255, 252, .3),
+    inset 0 0 58px rgba(var(--ag-aqua-rgb), .07),
+    var(--ag-lift);
+  transition: box-shadow .45s ease;
+}
+/* The top edge: one specular hairline with the deck's three accents in it. */
+.mx-market .mx-deck::before {
+  inset-inline: 6% 18%;
+  height: 1.5px;
+  background: linear-gradient(90deg,
+    transparent, rgba(176, 255, 249, .9) 22%, rgba(206, 184, 255, .85) 54%,
+    rgba(255, 216, 156, .82) 78%, transparent);
+  opacity: .9;
+}
+/* The inner rim, breathing on the deck's own beat. */
+.mx-market .mx-deck::after {
+  box-shadow:
+    inset 0 0 38px rgba(var(--ag-aqua-rgb), .12),
+    inset 0 0 2px rgba(206, 255, 252, .5);
+}
+/* The light field: two larger, softer blooms of the same accents. */
+.mx-market .mx-deck-veil i:first-child {
+  width: 92%;
+  inset-block-start: -82%;
+  inset-inline-start: -24%;
+  background: radial-gradient(closest-side, rgba(var(--ag-aqua-rgb), .21), transparent 70%);
+}
+.mx-market .mx-deck-veil i:last-child {
+  width: 88%;
+  inset-block-end: -84%;
+  inset-inline-end: -27%;
+  background: radial-gradient(closest-side, rgba(var(--ag-violet-rgb), .24), transparent 72%);
+}
+.mx-market .mx-deck-matrix { opacity: .42; background-size: 20px 20px; }
+.mx-market .mx-deck-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    0 0 20px -6px rgba(var(--ag-aqua-rgb), .9);
+}
+.mx-market .mx-deck-live {
+  padding: 6px 11px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 0 18px -9px currentColor;
+}
+.mx-market .mx-deck-eyebrow { letter-spacing: .04em; }
+.mx-market .mx-deck-title { letter-spacing: -.01em; }
+.mx-market .mx-global-value { text-shadow: 0 0 34px rgba(var(--ag-aqua-rgb), .32), 0 0 2px rgba(230, 255, 254, .4); }
+.mx-market .mx-kicker { letter-spacing: .02em; }
+
+/* The three readings inside the deck: same glass, one accent each. */
+.mx-market .mx-metric {
+  border: 1px solid color-mix(in srgb, var(--mx-accent) 24%, rgba(255, 255, 255, .09));
+  border-block-start-color: color-mix(in srgb, var(--mx-accent) 46%, transparent);
+  border-radius: 18px;
+  background:
+    radial-gradient(120% 120% at 8% -30%, color-mix(in srgb, var(--mx-accent) 26%, transparent), transparent 62%),
+    var(--ag-stria),
+    linear-gradient(158deg, rgba(255, 255, 255, .075), rgba(255, 255, 255, .01) 58%, rgba(2, 10, 22, .18));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .12),
+    inset 0 -1px 0 rgba(2, 8, 18, .34),
+    0 14px 26px -24px color-mix(in srgb, var(--mx-accent) 85%, transparent);
+  transition: border-color .3s ease, box-shadow .3s ease;
+}
+.mx-market .mx-metric:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .16),
+    0 18px 30px -24px color-mix(in srgb, var(--mx-accent) 95%, transparent);
+}
+
+/* ══ 2 · THE TRIO — «ارزها · بازارها · میانگین تغییر» ═════════════════════
+   Three instruments, never three copies: each box owns one accent, and its
+   glass is tinted by that accent only. The geometry (one row of three equal
+   columns at every width) is untouched. */
+.mx-trio { gap: 12px; }
+.mx-trio-box {
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--mx-accent) 28%, rgba(255, 255, 255, .1));
+  border-block-start-color: color-mix(in srgb, var(--mx-accent) 52%, transparent);
+  background:
+    radial-gradient(120% 116% at 6% -24%, color-mix(in srgb, var(--mx-accent) 32%, transparent), transparent 62%),
+    radial-gradient(96% 90% at 104% 116%, rgba(var(--ag-violet-rgb), .16), transparent 66%),
+    var(--ag-glaze),
+    var(--ag-stria),
+    linear-gradient(158deg, var(--ag-shell-a), var(--ag-shell-b) 54%, var(--ag-shell-c));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .16),
+    inset 0 -1px 0 rgba(2, 8, 18, .42),
+    0 18px 34px -28px color-mix(in srgb, var(--mx-accent) 90%, transparent),
+    var(--ag-lift);
+  transition: border-color .35s ease, box-shadow .35s ease;
+}
+.mx-trio-box:hover {
+  border-color: color-mix(in srgb, var(--mx-accent) 46%, rgba(255, 255, 255, .14));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .2),
+    inset 0 -1px 0 rgba(2, 8, 18, .42),
+    0 22px 40px -26px color-mix(in srgb, var(--mx-accent) 100%, transparent),
+    var(--ag-lift);
+}
+/* Two accent blooms, drifting inside their own frame — decoration, and the
+   only loop the trio owns. */
+.mx-trio-aura {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.mx-trio-aura i { position: absolute; width: 118px; aspect-ratio: 1; border-radius: 50%; }
+.mx-trio-aura i:first-child {
+  inset-block-start: -58%;
+  inset-inline-start: -24%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--mx-accent) 44%, transparent), transparent 72%);
+  animation: ag-aura-drift 18s ease-in-out infinite alternate;
+}
+.mx-trio-aura i:last-child {
+  inset-block-end: -62%;
+  inset-inline-end: -28%;
+  background: radial-gradient(closest-side, rgba(var(--ag-violet-rgb), .24), transparent 74%);
+  animation: ag-aura-drift 23s ease-in-out infinite alternate-reverse;
+}
+.mx-trio-box:nth-child(2) .mx-trio-aura i:first-child { animation-duration: 21s; }
+.mx-trio-box:nth-child(3) .mx-trio-aura i:first-child { animation-duration: 24s; }
+.mx-trio-box[data-tone='down'] .mx-trio-aura i:last-child {
+  background: radial-gradient(closest-side, rgba(var(--ag-rose-rgb), .22), transparent 74%);
+}
+/* Content above its own light. The ::before ring from the earlier pass keeps
+   painting over the edge, which is where a ring belongs. */
+.mx-trio-mark,
+.mx-trio-text { position: relative; z-index: 1; }
+.mx-trio-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--mx-accent) 30%, transparent), rgba(255, 255, 255, .03) 62%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .24),
+    0 8px 18px -12px color-mix(in srgb, var(--mx-accent) 95%, transparent);
+}
+.mx-trio-label { letter-spacing: .02em; opacity: .95; }
+.mx-trio-value {
+  letter-spacing: -.04em;
+  text-shadow: 0 0 22px color-mix(in srgb, var(--mx-accent) 34%, transparent);
+}
+.mx-trio-box:is([data-tone='up'], [data-tone='down']) .mx-trio-value {
+  text-shadow: 0 0 26px color-mix(in srgb, var(--mx-accent) 52%, transparent);
+}
+.mx-trio-note { color: color-mix(in srgb, var(--mx-muted) 88%, var(--mx-accent)); }
+/* The top hairline of each box takes its accent, and stops being centred. */
+.mx-trio-box::after {
+  inset-inline: 10% 46%;
+  height: 1.5px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--mx-accent) 95%, transparent), transparent);
+}
+
+/* ══ 3 · BITCOIN — champagne glass that follows the day's direction ══════ */
+.mx-market .mx-btc-card {
+  --mx-btc-interior:
+    radial-gradient(112% 92% at 98% -14%, rgba(var(--ag-amber-rgb), .30), transparent 62%) padding-box,
+    radial-gradient(96% 82% at 0% 108%, rgba(var(--ag-violet-rgb), .24), transparent 64%) padding-box,
+    var(--ag-glaze) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(160deg, rgba(14, 38, 56, .92), rgba(9, 24, 41, .94) 52%, rgba(11, 17, 36, .96)) padding-box;
+  --mx-btc-rim-a: linear-gradient(136deg,
+    rgba(255, 226, 176, .95), rgba(255, 209, 142, .22) 44%,
+    rgba(255, 240, 214, .9));
+  --mx-btc-rim-b: linear-gradient(316deg,
+    rgba(255, 209, 142, .92), rgba(var(--ag-aqua-rgb), .22) 48%,
+    rgba(206, 184, 255, .55));
+  border-radius: 26px;
+  box-shadow:
+    0 0 0 1px rgba(255, 226, 176, .08),
+    inset 0 1px 0 rgba(255, 250, 236, .26),
+    inset 0 0 54px rgba(var(--ag-amber-rgb), .08),
+    0 26px 54px -36px rgba(var(--ag-amber-rgb), .65),
+    var(--ag-lift);
+}
+.mx-market .mx-btc-card[data-dir='up'] {
+  --mx-btc-interior:
+    radial-gradient(112% 92% at 98% -14%, rgba(var(--gv-pos-rgb), .30), transparent 62%) padding-box,
+    radial-gradient(96% 82% at 0% 108%, rgba(var(--ag-aqua-rgb), .20), transparent 64%) padding-box,
+    var(--ag-glaze) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(160deg, rgba(8, 44, 38, .92), rgba(7, 30, 48, .94) 56%, rgba(8, 18, 34, .96)) padding-box;
+  --mx-btc-rim-a: linear-gradient(136deg,
+    rgba(var(--gv-pos-rgb), .9), rgba(var(--ag-aqua-rgb), .28) 46%,
+    rgba(var(--gv-pos-rgb), .62));
+  --mx-btc-rim-b: linear-gradient(316deg,
+    rgba(var(--gv-pos-rgb), .74), rgba(var(--ag-aqua-rgb), .24) 48%,
+    rgba(var(--ag-violet-rgb), .45));
+  box-shadow:
+    0 0 0 1px rgba(var(--gv-pos-rgb), .1),
+    inset 0 1px 0 rgba(224, 255, 244, .3),
+    inset 0 0 52px rgba(var(--gv-pos-rgb), .1),
+    0 26px 54px -34px rgba(var(--gv-pos-rgb), .7),
+    var(--ag-lift);
+}
+.mx-market .mx-btc-card[data-dir='down'] {
+  --mx-btc-interior:
+    radial-gradient(112% 92% at 98% -14%, rgba(var(--gv-neg-rgb), .28), transparent 62%) padding-box,
+    radial-gradient(96% 82% at 0% 108%, rgba(var(--ag-violet-rgb), .20), transparent 64%) padding-box,
+    var(--ag-glaze) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(160deg, rgba(46, 16, 32, .92), rgba(30, 12, 32, .94) 56%, rgba(14, 12, 32, .96)) padding-box;
+  --mx-btc-rim-a: linear-gradient(136deg,
+    rgba(var(--gv-neg-rgb), .9), rgba(255, 168, 128, .24) 46%,
+    rgba(var(--gv-neg-rgb), .62));
+  --mx-btc-rim-b: linear-gradient(316deg,
+    rgba(var(--gv-neg-rgb), .74), rgba(255, 168, 128, .22) 48%,
+    rgba(var(--ag-violet-rgb), .5));
+  box-shadow:
+    0 0 0 1px rgba(var(--gv-neg-rgb), .1),
+    inset 0 1px 0 rgba(255, 228, 234, .28),
+    inset 0 0 52px rgba(var(--gv-neg-rgb), .1),
+    0 26px 54px -34px rgba(var(--gv-neg-rgb), .7),
+    var(--ag-lift);
+}
+/* A second bloom in the top corner: the card is not lit from one side only. */
+.mx-market .mx-btc-veil::after {
+  content: '';
+  position: absolute;
+  inset-block-start: -40%;
+  inset-inline-end: -22%;
+  width: 62%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(var(--btc-tone-rgb), .22), transparent 72%);
+}
+.mx-market .mx-btc-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .32),
+    0 10px 26px -12px rgba(var(--btc-tone-rgb), .8);
+}
+.mx-market .mx-btc-price {
+  text-shadow: 0 0 34px rgba(var(--btc-tone-rgb), .3), 0 0 2px rgba(236, 255, 250, .35);
+}
+.mx-market .mx-btc-pct {
+  padding: 8px 13px;
+  border-radius: 999px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    0 0 26px -10px rgba(var(--btc-tone-rgb), .95);
+}
+/* The two figures under the chart are glass cells of their own. */
+.mx-market .mx-btc-stats > div {
+  border: 1px solid rgba(206, 226, 255, .14);
+  border-radius: 15px;
+  background:
+    radial-gradient(120% 120% at 0% 0%, rgba(var(--btc-tone-rgb), .14), transparent 64%),
+    linear-gradient(150deg, rgba(255, 255, 255, .075), rgba(255, 255, 255, .012));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), inset 0 -1px 0 rgba(2, 8, 18, .3);
+}
+.mx-market .mx-btc-stats dd { font-weight: 800; letter-spacing: -.02em; }
+.mx-market .mx-btc-range-track { height: 4px; }
+
+/* ══ 4 · THE FEED BOXES — «نبض بازار» and «همه ارزها» ════════════════════ */
+.mx-market .mx-lens {
+  border-radius: 26px;
+  border: 1px solid transparent;
+  background:
+    radial-gradient(92% 74% at 102% -6%, rgba(var(--ag-aqua-rgb), .19), transparent 62%) padding-box,
+    radial-gradient(84% 64% at -2% 104%, rgba(var(--ag-violet-rgb), .17), transparent 64%) padding-box,
+    var(--ag-glaze) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(152deg, rgba(12, 35, 52, .92), rgba(8, 21, 37, .94) 58%, rgba(11, 16, 34, .96)) padding-box,
+    linear-gradient(128deg, rgba(var(--ag-aqua-rgb), .82), rgba(164, 184, 236, .18) 40%, rgba(var(--ag-violet-rgb), .78)) border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(224, 255, 253, .18),
+    inset 0 -1px 0 rgba(2, 8, 18, .38),
+    0 0 30px -16px rgba(var(--ag-aqua-rgb), .6),
+    var(--ag-lift);
+}
+.mx-market .mx-terminal {
+  border-radius: 26px;
+  border: 1px solid transparent;
+  background:
+    radial-gradient(96% 72% at 102% -8%, rgba(var(--ag-azure-rgb), .18), transparent 62%) padding-box,
+    radial-gradient(88% 60% at -4% 106%, rgba(var(--ag-violet-rgb), .18), transparent 64%) padding-box,
+    var(--ag-glaze) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(156deg, rgba(13, 31, 50, .92), rgba(9, 19, 36, .94) 56%, rgba(12, 14, 32, .96)) padding-box,
+    linear-gradient(150deg, rgba(var(--ag-azure-rgb), .6), rgba(var(--ag-violet-rgb), .3) 50%, rgba(var(--ag-aqua-rgb), .42)) border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(226, 240, 255, .16),
+    inset 0 -1px 0 rgba(2, 8, 18, .38),
+    0 0 34px -20px rgba(var(--ag-azure-rgb), .6),
+    var(--ag-lift);
+}
+.mx-market .mx-lens::before { background: linear-gradient(90deg, transparent, rgba(186, 255, 250, .85), transparent); }
+.mx-market .mx-terminal-head { padding-bottom: 2px; }
+.mx-market .mx-terminal-title::before {
+  width: 3px;
+  height: 18px;
+  box-shadow: 0 0 12px rgba(var(--ag-aqua-rgb), .75);
+}
+.mx-market .mx-breadth-aurora { opacity: .95; }
+.mx-market .mx-breadth-bar {
+  height: 8px;
+  box-shadow: inset 0 1px 2px rgba(2, 8, 18, .45), inset 0 0 0 1px rgba(206, 226, 255, .1);
+}
+
+/* The search field, the list title and the chips belong to the same glass. */
+.mx-market .mx-search {
+  border-radius: 18px;
+  background:
+    radial-gradient(ellipse at 0% 0%, rgba(var(--ag-aqua-rgb), .18), transparent 56%) padding-box,
+    radial-gradient(ellipse at 100% 100%, rgba(var(--ag-violet-rgb), .16), transparent 60%) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(135deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .012) 46%, rgba(255, 209, 142, .03)) padding-box,
+    linear-gradient(160deg, rgba(12, 30, 46, .94), rgba(8, 19, 35, .95)) padding-box,
+    linear-gradient(124deg, rgba(176, 255, 249, .92), rgba(var(--ag-azure-rgb), .4) 34%, rgba(206, 184, 255, .92) 64%, rgba(255, 216, 156, .8)) border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .16),
+    inset 0 -16px 28px -22px rgba(var(--ag-aqua-rgb), .4),
+    0 18px 34px -28px rgba(0, 0, 12, .95);
+}
+.mx-market .mx-search:focus-within {
+  box-shadow:
+    0 0 0 4px rgba(var(--ag-aqua-rgb), .12),
+    0 0 38px -12px rgba(var(--ag-aqua-rgb), .75),
+    inset 0 1px 0 rgba(255, 255, 255, .2);
+}
+.mx-market .mx-search-tile {
+  border-radius: 13px;
+  background: linear-gradient(145deg, rgba(var(--ag-aqua-rgb), .32), rgba(var(--ag-violet-rgb), .16));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .28),
+    0 8px 20px -12px rgba(var(--ag-aqua-rgb), .95);
+}
+.mx-market .mx-search-popup {
+  border-radius: 19px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, 0) 40%) padding-box,
+    linear-gradient(180deg, rgba(14, 36, 54, .99), rgba(9, 20, 36, .99)) padding-box;
+  box-shadow: 0 30px 60px -26px rgba(0, 0, 12, .98), inset 0 1px 0 rgba(255, 255, 255, .1);
+}
+.mx-market .mx-view[data-active='true'] {
+  background:
+    radial-gradient(120% 140% at 10% -30%, color-mix(in srgb, var(--view) 34%, transparent), transparent 70%),
+    color-mix(in srgb, var(--view) 9%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 0 22px -14px var(--view);
+}
+
+/* ══ 5 · DISCOVERY, STORIES, SMART MONEY — one material, three voices ═════ */
+.mx-market .mx-hot-card {
+  border: 1px solid transparent;
+  border-radius: 20px;
+  background:
+    radial-gradient(100% 88% at 104% -10%, color-mix(in srgb, var(--hot) 28%, transparent), transparent 62%) padding-box,
+    radial-gradient(84% 72% at -6% 112%, color-mix(in srgb, var(--hot) 12%, transparent), transparent 66%) padding-box,
+    var(--ag-glaze) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(158deg, rgba(13, 34, 52, .92), rgba(8, 20, 36, .94)) padding-box,
+    linear-gradient(142deg, color-mix(in srgb, var(--hot) 52%, transparent), transparent 58%) border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .14),
+    inset 0 -1px 0 rgba(2, 8, 18, .36),
+    0 18px 32px -30px color-mix(in srgb, var(--hot) 85%, transparent);
+  transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+}
+@media (hover: hover) {
+  .mx-market .mx-hot-card:hover { transform: translateY(-3px); }
+}
+/* A touch screen has no "away" state, so the lift would stick after a tap. */
+@media (hover: none) {
+  .mx-market .mx-hot-card:hover { transform: none; }
+}
+.mx-market .mx-hot-card:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .18),
+    0 24px 40px -28px color-mix(in srgb, var(--hot) 95%, transparent);
+}
+.mx-market .mx-hot-sheen {
+  height: 1.5px;
+  inset-inline: 12px;
+  opacity: .8;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--hot) 85%, transparent);
+}
+.mx-stories .market-stories-section {
+  border: 1px solid transparent;
+  border-radius: 26px;
+  background:
+    radial-gradient(96% 80% at 4% -10%, rgba(var(--ag-violet-rgb), .2), transparent 62%) padding-box,
+    radial-gradient(86% 70% at 104% 112%, rgba(var(--ag-aqua-rgb), .16), transparent 64%) padding-box,
+    var(--ag-glaze) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(154deg, rgba(13, 32, 50, .92), rgba(9, 19, 35, .94)) padding-box,
+    linear-gradient(132deg, rgba(var(--ag-violet-rgb), .6), rgba(164, 184, 236, .16) 48%, rgba(var(--ag-aqua-rgb), .5)) border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(228, 240, 255, .14),
+    0 24px 48px -36px rgba(0, 0, 12, .95);
+}
+.mx-market .mx-smart-banner {
+  border-radius: 28px;
+  box-shadow:
+    0 0 44px -20px rgba(var(--gv-smart-a-rgb, 93, 255, 200), .55),
+    0 28px 56px -34px rgba(0, 0, 12, .98);
+}
+
+/* ══ 6 · THE ROWS — glass on the card, air in the gap ═════════════════════ */
+.mx-market .mx-coin-row > .coin-row {
+  border: 1px solid rgba(196, 222, 255, .13);
+  border-block-start-color: rgba(224, 240, 255, .22);
+  border-radius: 19px;
+  background:
+    radial-gradient(120% 150% at 0% -40%, rgba(var(--ag-aqua-rgb), .1), transparent 62%),
+    var(--ag-stria),
+    linear-gradient(120deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, .012) 48%, rgba(255, 255, 255, .028));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .08),
+    inset 0 -1px 0 rgba(2, 8, 18, .22);
+  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+.mx-market .mx-coin-row > .coin-row:hover {
+  border-color: rgba(var(--ag-aqua-rgb), .38);
+  background:
+    radial-gradient(120% 150% at 0% -40%, rgba(var(--ag-aqua-rgb), .16), transparent 62%),
+    var(--ag-stria),
+    linear-gradient(120deg, rgba(var(--ag-aqua-rgb), .1), rgba(255, 255, 255, .02) 55%, rgba(var(--ag-violet-rgb), .06));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .12),
+    0 12px 22px -20px rgba(var(--ag-aqua-rgb), .8);
+}
+
+/* ══ 7 · LIGHT — pearl glass, re-graded rather than inverted ══════════════ */
+:root[data-theme='light'] .mx-market {
+  --ag-aqua-rgb: 26, 156, 160;
+  --ag-azure-rgb: 52, 112, 190;
+  --ag-violet-rgb: 118, 84, 196;
+  --ag-amber-rgb: 178, 118, 34;
+  --ag-shell-a: rgba(255, 255, 255, .90);
+  --ag-shell-b: rgba(246, 250, 255, .92);
+  --ag-shell-c: rgba(240, 246, 255, .94);
+  --ag-glaze: linear-gradient(152deg, rgba(255, 255, 255, .95), rgba(255, 255, 255, .35) 48%, rgba(214, 228, 250, .5));
+  --ag-stria: repeating-linear-gradient(118deg, rgba(52, 88, 140, .045) 0 1px, transparent 1px 13px);
+  --ag-lift: 0 24px 44px -36px rgba(46, 67, 123, .4);
+  --ag-stage:
+    radial-gradient(46% 44% at 14% 6%, rgba(var(--ag-aqua-rgb), .16), transparent 70%),
+    radial-gradient(40% 40% at 88% 2%, rgba(var(--ag-violet-rgb), .14), transparent 72%),
+    radial-gradient(54% 34% at 52% 98%, rgba(var(--ag-amber-rgb), .1), transparent 76%);
+  background:
+    radial-gradient(120% 54% at 6% -6%, rgba(var(--ag-aqua-rgb), .09), transparent 62%),
+    radial-gradient(96% 48% at 102% 0%, rgba(var(--ag-violet-rgb), .08), transparent 60%),
+    linear-gradient(180deg, rgba(248, 251, 255, 0), rgba(238, 244, 254, .7));
+}
+:root[data-theme='light'] .mx-market .mx-deck {
+  --mx-deck-interior:
+    radial-gradient(116% 92% at 2% -14%, rgba(var(--ag-aqua-rgb), .18), transparent 62%) padding-box,
+    radial-gradient(96% 84% at 104% 106%, rgba(var(--ag-violet-rgb), .15), transparent 64%) padding-box,
+    radial-gradient(62% 46% at 58% 118%, rgba(var(--ag-amber-rgb), .14), transparent 64%) padding-box,
+    var(--ag-glaze) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(#fff, #fff) padding-box;
+  --mx-deck-rim-a: linear-gradient(136deg,
+    rgba(10, 126, 130, .8), rgba(var(--ag-azure-rgb), .3) 28%,
+    rgba(118, 84, 196, .62) 58%, rgba(178, 118, 34, .42) 82%,
+    rgba(10, 126, 130, .8));
+  --mx-deck-rim-b: linear-gradient(316deg,
+    rgba(178, 118, 34, .5), rgba(10, 126, 130, .68) 26%,
+    rgba(var(--ag-azure-rgb), .3) 52%, rgba(118, 84, 196, .55) 78%,
+    rgba(178, 118, 34, .5));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, .9),
+    0 0 26px -16px rgba(var(--ag-aqua-rgb), .8),
+    0 0 54px -30px rgba(var(--ag-violet-rgb), .7),
+    inset 0 1px 0 #fff,
+    inset 0 0 46px rgba(var(--ag-aqua-rgb), .07),
+    0 22px 44px -34px rgba(46, 67, 123, .45);
+}
+:root[data-theme='light'] .mx-market .mx-deck-veil i:first-child {
+  background: radial-gradient(closest-side, rgba(var(--ag-aqua-rgb), .14), transparent 70%);
+}
+:root[data-theme='light'] .mx-market .mx-deck-veil i:last-child {
+  background: radial-gradient(closest-side, rgba(var(--ag-violet-rgb), .13), transparent 72%);
+}
+:root[data-theme='light'] .mx-market .mx-metric {
+  border-color: color-mix(in srgb, var(--mx-accent) 22%, rgba(52, 88, 140, .16));
+  background:
+    radial-gradient(120% 120% at 8% -30%, color-mix(in srgb, var(--mx-accent) 16%, transparent), transparent 62%),
+    var(--ag-stria),
+    linear-gradient(158deg, rgba(255, 255, 255, .96), rgba(246, 250, 255, .8));
+  box-shadow: inset 0 1px 0 #fff, 0 12px 24px -22px rgba(46, 67, 123, .4);
+}
+:root[data-theme='light'] .mx-trio-box {
+  border-color: color-mix(in srgb, var(--mx-accent) 24%, rgba(52, 88, 140, .16));
+  background:
+    radial-gradient(120% 116% at 6% -24%, color-mix(in srgb, var(--mx-accent) 20%, transparent), transparent 62%),
+    radial-gradient(96% 90% at 104% 116%, rgba(var(--ag-violet-rgb), .1), transparent 66%),
+    var(--ag-glaze),
+    var(--ag-stria),
+    linear-gradient(#fff, #fbfdff);
+  box-shadow: inset 0 1px 0 #fff, 0 16px 30px -28px rgba(46, 67, 123, .45);
+}
+:root[data-theme='light'] .mx-trio-aura i:first-child {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--mx-accent) 26%, transparent), transparent 72%);
+}
+:root[data-theme='light'] .mx-trio-aura i:last-child {
+  background: radial-gradient(closest-side, rgba(var(--ag-violet-rgb), .14), transparent 74%);
+}
+:root[data-theme='light'] .mx-trio-value { text-shadow: none; }
+:root[data-theme='light'] .mx-market .mx-btc-card {
+  --mx-btc-interior:
+    radial-gradient(112% 92% at 98% -14%, rgba(var(--ag-amber-rgb), .16), transparent 64%) padding-box,
+    radial-gradient(96% 82% at 0% 108%, rgba(var(--ag-violet-rgb), .1), transparent 64%) padding-box,
+    var(--ag-glaze) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(#fff, #fbfdff) padding-box;
+  --mx-btc-rim-a: linear-gradient(136deg,
+    rgba(178, 118, 34, .45), rgba(10, 126, 130, .2) 46%,
+    rgba(178, 118, 34, .4));
+  --mx-btc-rim-b: linear-gradient(316deg,
+    rgba(178, 118, 34, .5), rgba(118, 84, 196, .22) 48%,
+    rgba(10, 126, 130, .38));
+  box-shadow: inset 0 1px 0 #fff, 0 22px 44px -34px rgba(46, 67, 123, .5);
+}
+:root[data-theme='light'] .mx-market .mx-btc-card[data-dir='up'] {
+  --mx-btc-interior:
+    radial-gradient(112% 92% at 98% -14%, rgba(var(--gv-pos-rgb), .16), transparent 64%) padding-box,
+    radial-gradient(96% 82% at 0% 108%, rgba(var(--ag-aqua-rgb), .1), transparent 64%) padding-box,
+    var(--ag-glaze) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(#fff, #fafffb) padding-box;
+  --mx-btc-rim-a: linear-gradient(136deg,
+    rgba(var(--gv-pos-rgb), .5), rgba(10, 126, 130, .2) 48%,
+    rgba(var(--gv-pos-rgb), .34));
+  --mx-btc-rim-b: linear-gradient(315deg,
+    rgba(var(--gv-pos-rgb), .44), rgba(118, 84, 196, .2) 50%,
+    rgba(10, 126, 130, .3));
+}
+:root[data-theme='light'] .mx-market .mx-btc-card[data-dir='down'] {
+  --mx-btc-interior:
+    radial-gradient(112% 92% at 98% -14%, rgba(var(--gv-neg-rgb), .14), transparent 64%) padding-box,
+    radial-gradient(96% 82% at 0% 108%, rgba(var(--ag-violet-rgb), .1), transparent 64%) padding-box,
+    var(--ag-glaze) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(#fff, #fff9fb) padding-box;
+  --mx-btc-rim-a: linear-gradient(136deg,
+    rgba(var(--gv-neg-rgb), .5), rgba(178, 118, 34, .18) 48%,
+    rgba(var(--gv-neg-rgb), .34));
+  --mx-btc-rim-b: linear-gradient(315deg,
+    rgba(var(--gv-neg-rgb), .44), rgba(118, 84, 196, .2) 50%,
+    rgba(178, 118, 34, .28));
+}
+:root[data-theme='light'] .mx-market .mx-btc-veil::after {
+  background: radial-gradient(closest-side, rgba(var(--btc-tone-rgb), .12), transparent 72%);
+}
+:root[data-theme='light'] .mx-market .mx-btc-price { text-shadow: none; }
+:root[data-theme='light'] .mx-market .mx-btc-stats > div {
+  border-color: rgba(52, 88, 140, .12);
+  background:
+    radial-gradient(120% 120% at 0% 0%, rgba(var(--btc-tone-rgb), .1), transparent 64%),
+    linear-gradient(150deg, #fff, rgba(246, 250, 255, .9));
+  box-shadow: inset 0 1px 0 #fff;
+}
+:root[data-theme='light'] .mx-market .mx-lens {
+  background:
+    radial-gradient(92% 74% at 102% -6%, rgba(var(--ag-aqua-rgb), .13), transparent 62%) padding-box,
+    radial-gradient(84% 64% at -2% 104%, rgba(var(--ag-violet-rgb), .1), transparent 64%) padding-box,
+    var(--ag-glaze) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(#fdfeff, #f7fbff) padding-box,
+    linear-gradient(128deg, rgba(10, 126, 130, .38), rgba(52, 112, 190, .14) 40%, rgba(118, 84, 196, .34)) border-box;
+  box-shadow: inset 0 1px 0 #fff, 0 18px 36px -30px rgba(46, 67, 123, .45);
+}
+:root[data-theme='light'] .mx-market .mx-terminal {
+  background:
+    radial-gradient(96% 72% at 102% -8%, rgba(var(--ag-azure-rgb), .12), transparent 62%) padding-box,
+    radial-gradient(88% 60% at -4% 106%, rgba(var(--ag-violet-rgb), .11), transparent 64%) padding-box,
+    var(--ag-glaze) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(#fdfeff, #f8fbfe) padding-box,
+    linear-gradient(150deg, rgba(52, 112, 190, .32), rgba(118, 84, 196, .16) 50%, rgba(10, 126, 130, .26)) border-box;
+  box-shadow: inset 0 1px 0 #fff, 0 18px 36px -30px rgba(46, 67, 123, .45);
+}
+:root[data-theme='light'] .mx-market .mx-search {
+  background:
+    radial-gradient(ellipse at 0% 0%, rgba(var(--ag-aqua-rgb), .12), transparent 56%) padding-box,
+    radial-gradient(ellipse at 100% 100%, rgba(var(--ag-violet-rgb), .1), transparent 60%) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(135deg, #fbfeff, #f8f6ff) padding-box,
+    linear-gradient(124deg, rgba(10, 126, 130, .5), rgba(52, 112, 190, .22) 34%, rgba(118, 84, 196, .42)) border-box;
+  box-shadow: inset 0 1px 0 #fff, 0 14px 28px -26px rgba(46, 67, 123, .5);
+}
+:root[data-theme='light'] .mx-market .mx-search-tile {
+  border-color: rgba(10, 126, 130, .3);
+  background: linear-gradient(145deg, rgba(var(--ag-aqua-rgb), .2), rgba(var(--ag-violet-rgb), .1));
+  box-shadow: inset 0 1px 0 #fff;
+}
+:root[data-theme='light'] .mx-market .mx-search-popup {
+  background: linear-gradient(180deg, #fff, #f8fbff) padding-box;
+  border-color: rgba(52, 88, 140, .18);
+  box-shadow: 0 24px 48px -26px rgba(46, 67, 123, .4);
+}
+:root[data-theme='light'] .mx-market .mx-hot-card {
+  background:
+    radial-gradient(100% 88% at 104% -10%, color-mix(in srgb, var(--hot) 16%, transparent), transparent 62%) padding-box,
+    radial-gradient(84% 72% at -6% 112%, color-mix(in srgb, var(--hot) 8%, transparent), transparent 66%) padding-box,
+    var(--ag-glaze) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(#fff, #f9fcff) padding-box,
+    linear-gradient(142deg, color-mix(in srgb, var(--hot) 40%, transparent), transparent 58%) border-box;
+  box-shadow: inset 0 1px 0 #fff, 0 16px 30px -28px rgba(46, 67, 123, .45);
+}
+:root[data-theme='light'] .mx-stories .market-stories-section {
+  background:
+    radial-gradient(96% 80% at 4% -10%, rgba(var(--ag-violet-rgb), .12), transparent 62%) padding-box,
+    radial-gradient(86% 70% at 104% 112%, rgba(var(--ag-aqua-rgb), .1), transparent 64%) padding-box,
+    var(--ag-glaze) padding-box,
+    var(--ag-stria) padding-box,
+    linear-gradient(#fff, #f9fbff) padding-box,
+    linear-gradient(132deg, rgba(118, 84, 196, .34), rgba(52, 112, 190, .16) 48%, rgba(10, 126, 130, .3)) border-box;
+  box-shadow: inset 0 1px 0 #fff, 0 20px 40px -32px rgba(46, 67, 123, .4);
+}
+:root[data-theme='light'] .mx-market .mx-coin-row > .coin-row {
+  border-color: rgba(52, 88, 140, .12);
+  border-block-start-color: rgba(255, 255, 255, .95);
+  background:
+    radial-gradient(120% 150% at 0% -40%, rgba(var(--ag-aqua-rgb), .07), transparent 62%),
+    var(--ag-stria),
+    linear-gradient(120deg, rgba(255, 255, 255, .92), rgba(247, 251, 255, .7));
+  box-shadow: inset 0 1px 0 #fff;
+}
+:root[data-theme='light'] .mx-market .mx-breadth-bar {
+  box-shadow: inset 0 1px 2px rgba(120, 150, 195, .2), inset 0 0 0 1px rgba(52, 88, 140, .08);
+}
+
+/* ══ 8 · RESPONSIVE — the phone is the composition, not a shrunk desktop ══ */
+@media (min-width: 900px) {
+  .mx-trio { gap: 14px; }
+  .mx-trio-box { border-radius: 22px; }
+}
+@media (max-width: 619px) {
+  .mx-market .mx-overview::before { inset-block: -10px; border-radius: 30px; opacity: .8; }
+  .mx-market .mx-deck { border-radius: 26px; }
+  .mx-market .mx-btc-card,
+  .mx-market .mx-lens,
+  .mx-market .mx-terminal { border-radius: 22px; }
+  .mx-trio { gap: 8px; }
+  .mx-trio-box { border-radius: 17px; padding: 12px 10px; }
+  .mx-trio-mark { width: 28px; height: 28px; border-radius: 10px; }
+  .mx-trio-aura i { width: 96px; }
+  .mx-market .mx-hot-card { border-radius: 18px; }
+  .mx-stories .market-stories-section { border-radius: 22px; }
+}
+@media (max-width: 359px) {
+  .mx-trio-box { padding: 10px 8px; }
+  .mx-trio-aura i { width: 80px; }
+}
+
+/* ══ 9 · MOTION — transform and opacity only, with one stop policy ════════ */
+@keyframes ag-stage-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); opacity: .72; }
+  to { transform: translate3d(0, -10px, 0) scale(1.02); opacity: .95; }
+}
+@keyframes ag-aura-drift {
+  from { transform: translate3d(0, 0, 0); opacity: .72; }
+  to { transform: translate3d(6px, 10px, 0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mx-market .mx-overview::before,
+  .mx-market .mx-trio-aura i { animation: none !important; }
+  /* The stage keeps its light, frozen: the aurora is the designed frame, not a
+     transition, so it is parked at its mid opacity rather than hidden. */
+  .mx-market .mx-overview::before { opacity: .85; }
+  .mx-market .mx-trio-aura i { opacity: .85; }
+  .mx-market .mx-hot-card:hover { transform: none; }
+}
+:root[data-native='true'] .mx-market .mx-overview::before,
+:root[data-lite='true'] .mx-market .mx-overview::before,
+:root[data-reduce-motion='true'] .mx-market .mx-overview::before { animation: none !important; opacity: .85; }
+:root[data-native='true'] .mx-market .mx-trio-aura i,
+:root[data-lite='true'] .mx-market .mx-trio-aura i,
+:root[data-reduce-motion='true'] .mx-market .mx-trio-aura i { animation: none !important; opacity: .85; }
+/* Lite mode is the one place the extra painted layers are dropped: the boxes
+   keep their rim, bevel and reading, and lose the frost and the aura. */
+:root[data-lite='true'] .mx-market .mx-trio-aura { display: none; }
+:root[data-lite='true'] .mx-market .mx-overview::before { display: none; }
+:root[data-lite='true'] .mx-market .mx-btc-veil::after { display: none; }

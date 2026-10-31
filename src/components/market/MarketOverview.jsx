@@ -138,6 +138,10 @@ function Metric({ label, value, note, tone, ring, title, children }) {
 function TrioBox({ tone, label, value, note, children, testId }) {
   return (
     <div className="mx-trio-box" data-tone={tone} data-testid={testId}>
+      {/* Two soft blooms of the box's own accent, drifting inside the glass.
+          Decoration only: the reading is the value and the label, and these
+          never paint a number or a trend. */}
+      <span className="mx-trio-aura" aria-hidden="true"><i /><i /></span>
       <span className="mx-trio-mark" aria-hidden="true">{children}</span>
       <span className="mx-trio-text">
         <span className="mx-trio-label">{label}</span>
