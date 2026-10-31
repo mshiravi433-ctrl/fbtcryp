@@ -81,6 +81,7 @@ import {
   monitorEngineStatus
 } from './intentMonitoring.js';
 import { storeGet, storeSet, storeDurable, EPHEMERAL_TTL_MS } from './store.js';
+import { getSmartMemory } from './centralBrainRuntime.js';
 /* Long-term semantic memory (Walrus Memory / MemWal). OFF unless the operator
    sets MEMWAL_ACCOUNT_ID + MEMWAL_PRIVATE_KEY, and every call is fail-open: a
    missing relayer degrades this turn to exactly the behaviour it had before. */
@@ -2373,6 +2374,17 @@ router.post('/chat', async (req, res) => {
     executionSuccess: null,
     durationMs: nowMs() - ctx.now,
     locale: locale || 'fa'
+  }).catch(() => {});
+
+  /* Smart Long-Term Semantic Memory — asynchronously index conversation turn &
+     extract explicit user goals/preferences without adding chat latency. */
+  getSmartMemory().rememberConversation({
+    owner: ownerFor(req),
+    userMessage: message,
+    assistantReply: reply.text,
+    intentType: reply.intent?.type || 'GENERAL',
+    assets: u4?.entities?.tokens || (u4?.entities?.token ? [u4.entities.token] : []),
+    lang: locale || 'fa'
   }).catch(() => {});
 
   /* AI Upgrade 5 — Customer Question Intelligence (§28): anonymized,

@@ -385,7 +385,8 @@
     "test:memory-activation": "node test/intent-ai/memwal-activation-probe.mjs",
     "memwal:create-account": "node scripts/memwal-create-account.mjs",
     "test:memory-account": "node test/intent-ai/memwal-account-tool-probe.mjs",
-    "test:memory-local": "node test/intent-ai/intent-longterm-local-probe.mjs"
+    "test:memory-local": "node test/intent-ai/intent-longterm-local-probe.mjs",
+    "test:central-brain-v2": "node test/intent-ai/qdrant-memory-learning-probe.mjs && node test/intent-ai/central-brain-council-probe.mjs && node test/intent-ai/central-brain-api-e2e-probe.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

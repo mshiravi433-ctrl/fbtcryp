@@ -583,6 +583,8 @@ export function createOrchestrator({ deps = {}, deadlineMs = DEFAULT_DEADLINE_MS
                 owner,
                 asset: String(state.entities.token).toUpperCase(),
                 price,
+                priceAtDecision: price,
+                verdict: j?.stance === 'bullish' ? 'FAVORABLE' : j?.stance === 'bearish' ? 'UNFAVORABLE' : 'WAIT',
                 thesis: clip(state.answer, 400),
                 confidence: j.confidence,
                 sources: (state.verdict?.evidenceBacked || []),
