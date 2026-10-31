@@ -17,6 +17,8 @@ export default function MarketSparkline({
   up = true,
   height = 64,
   interactive = false,
+  glow = false,
+  liveDot = false,
   label,
   formatValue = fmtCompact,
   formatTime,
@@ -96,18 +98,30 @@ export default function MarketSparkline({
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
         <defs>
           <linearGradient id={`mx-fill-${uid}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.2" />
+            <stop offset="0%" stopColor={color} stopOpacity="0.24" />
             <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
         </defs>
         <path d={geometry.area} fill={`url(#mx-fill-${uid})`} />
-        <path d={geometry.line} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        {/* A second, wider stroke under the line is the neon bloom. It is a
+            path — not a CSS filter — so it costs one paint and survives the
+            responsive stretch with clean edges. */}
+        {glow && <path className="mx-spark-bloom" d={geometry.line} fill="none" stroke={color} />}
+        <path className="mx-spark-line" d={geometry.line} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
         {interactive && active != null && (
           <line x1={cx} x2={cx} y1={PAD} y2={H - PAD} stroke="var(--mx-line-strong)" strokeWidth="1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
         )}
         {/* A round stroke stays circular when the chart stretches responsively. */}
-        <path d={`M${cx},${cy}h.01`} fill="none" stroke={color} strokeWidth="6" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        <path className="mx-spark-head" d={`M${cx},${cy}h.01`} fill="none" stroke={color} strokeWidth="6" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
       </svg>
+      {/* The newest observation, marked in HTML so the halo stays a circle even
+          though the SVG is stretched. Percentages come from the same geometry;
+          the pulse animates transform/opacity only. */}
+      {liveDot && (
+        <span className="mx-spark-live" aria-hidden="true" data-dir={up ? 'up' : 'down'} style={{ left: `${(cx / W) * 100}%`, top: `${(cy / H) * 100}%` }}>
+          <i />
+        </span>
+      )}
       {interactive && (
         <output className="mx-spark-readout mono" aria-live="polite">
           {readout}

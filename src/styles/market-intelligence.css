@@ -78,7 +78,7 @@
 .mx-change[data-dir='down'] { color: var(--mx-down); background: color-mix(in srgb, var(--mx-down) 9%, transparent); }
 .mx-change svg { flex: 0 0 auto; }
 
-/* 1 · Market overview: an opaline blue reading, not a stack of grey widgets. */
+/* 1 · Market overview: a neon-rimmed prism, not a stack of grey widgets. */
 .mx-market .mx-overview {
   display: grid;
   gap: 12px;
@@ -89,15 +89,34 @@
   background: none;
   box-shadow: none;
 }
+
+/* ── THE DECK ──────────────────────────────────────────────────────────────
+   «شیشه‌ای با نئون نورانی دور باکس». Three lights build the neon, and all of
+   them are painted at rest:
+     1. a gradient hairline drawn in the border box — the rim itself;
+     2. comets that travel that rim (transform + opacity only);
+     3. one breathing inner rim (opacity only).
+   Nothing here re-rasterises on scroll, which is the bug this screen was
+   measured for (see market-speed.test.mjs). */
 .mx-market .mx-deck {
-  padding: 20px;
+  padding: 22px 20px 18px;
   overflow: hidden;
-  border-radius: 26px;
-  border-inline-start-color: rgba(102, 229, 225, .3);
-  background: radial-gradient(ellipse at 0 0, rgba(58, 210, 213, .22), transparent 62%),
-    radial-gradient(ellipse at 100% 100%, rgba(111, 94, 215, .18), transparent 65%),
-    var(--mx-glass), var(--mx-panel);
-  box-shadow: inset 0 1px 0 rgba(226, 255, 255, .22), inset 0 0 32px rgba(62, 205, 208, .045), 0 20px 45px -30px rgba(0, 0, 0, .9);
+  border: 1.5px solid transparent;
+  border-radius: 28px;
+  background:
+    radial-gradient(ellipse at 0% 0%, rgba(58, 210, 213, .26), transparent 58%) padding-box,
+    radial-gradient(ellipse at 100% 100%, rgba(122, 96, 224, .24), transparent 62%) padding-box,
+    radial-gradient(ellipse at 50% 118%, rgba(255, 191, 112, .1), transparent 58%) padding-box,
+    var(--mx-glass) padding-box,
+    linear-gradient(var(--mx-panel), var(--mx-panel)) padding-box,
+    linear-gradient(135deg, rgba(126, 246, 240, .95), rgba(120, 169, 255, .34) 26%, rgba(178, 154, 255, .92) 54%, rgba(255, 207, 131, .85) 78%, rgba(126, 246, 240, .95)) border-box;
+  box-shadow:
+    0 0 0 1px rgba(122, 240, 238, .08),
+    0 0 30px -11px rgba(96, 236, 234, .62),
+    0 0 64px -24px rgba(158, 128, 255, .62),
+    inset 0 1px 0 rgba(226, 255, 255, .26),
+    inset 0 0 46px rgba(62, 205, 208, .06),
+    0 22px 46px -32px rgba(0, 0, 12, .95);
 }
 .mx-deck::before, .mx-btc-card::before, .mx-lens::before {
   content: '';
@@ -107,6 +126,18 @@
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(178, 227, 255, .8), transparent);
   pointer-events: none;
+}
+/* The breathing inner rim: one static inset glow, animated by opacity. */
+.mx-deck::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 34px rgba(102, 229, 225, .11), inset 0 0 2px rgba(198, 255, 252, .42);
+  opacity: .45;
+  pointer-events: none;
+  animation: mx-rim-breathe 7.5s ease-in-out infinite;
 }
 .mx-deck-veil { position: absolute; inset: 0; overflow: hidden; z-index: -1; pointer-events: none; }
 .mx-deck-veil i { position: absolute; width: 80%; aspect-ratio: 1; border-radius: 50%; }
@@ -122,7 +153,82 @@
   background: radial-gradient(closest-side, rgba(178, 154, 255, .19), transparent);
   animation: mx-float 28s ease-in-out infinite alternate-reverse;
 }
-.mx-deck-head { display: flex; align-items: center; gap: 10px; }
+/* A dot matrix, painted once. It is the "sheet" the readings sit on. */
+.mx-deck-matrix {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle at 1px 1px, rgba(150, 214, 255, .16) 1px, transparent 1.7px);
+  background-size: 22px 22px;
+  opacity: .55;
+}
+/* Neon comets: six hairlines, one per edge-pair, travelling the rim. */
+.mx-deck-orbit {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.mx-deck-orbit i {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  width: 24%;
+  height: 1.5px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, transparent, rgba(154, 255, 250, .35) 45%, #e5fffd);
+  box-shadow: 0 0 8px rgba(120, 250, 245, .85), 0 0 20px rgba(102, 229, 225, .45);
+  animation: mx-orbit-x 8s linear infinite;
+}
+.mx-deck-orbit i:nth-child(2) { width: 16%; animation-duration: 12s; animation-delay: -4.5s; opacity: .75; }
+.mx-deck-orbit i:nth-child(3) {
+  inset-block-start: auto;
+  inset-block-end: 0;
+  width: 20%;
+  background: linear-gradient(90deg, transparent, rgba(214, 200, 255, .4) 45%, #efe8ff);
+  box-shadow: 0 0 8px rgba(178, 154, 255, .8), 0 0 20px rgba(150, 120, 255, .4);
+  animation: mx-orbit-x-rev 11s linear infinite;
+}
+.mx-deck-orbit i:nth-child(4) {
+  inset-block-start: auto;
+  inset-block-end: 0;
+  width: 13%;
+  animation: mx-orbit-x-rev 15s linear infinite -3s;
+  opacity: .7;
+}
+.mx-deck-orbit i:nth-child(5) {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  width: 1.5px;
+  height: 22%;
+  background: linear-gradient(180deg, transparent, rgba(154, 255, 250, .35) 45%, #e5fffd);
+  animation: mx-orbit-y 9.5s linear infinite -2s;
+}
+.mx-deck-orbit i:nth-child(6) {
+  inset-block-start: auto;
+  inset-block-end: 0;
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  width: 1.5px;
+  height: 16%;
+  background: linear-gradient(180deg, transparent, rgba(255, 207, 131, .4) 45%, #ffeacb);
+  box-shadow: 0 0 8px rgba(255, 207, 131, .7), 0 0 18px rgba(255, 190, 110, .35);
+  animation: mx-orbit-y-rev 13s linear infinite -5s;
+}
+.mx-deck-sheen {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: -40%;
+  width: 40%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #d8fffb, transparent);
+  pointer-events: none;
+  animation: mx-blade-sweep 10s ease-in-out infinite;
+}
+.mx-deck-head { position: relative; z-index: 2; display: flex; align-items: center; gap: 10px; }
 .mx-deck-mark, .mx-trio-mark, .mx-metric-icon, .mx-breadth-mark {
   display: grid;
   place-items: center;
@@ -132,73 +238,299 @@
   background: linear-gradient(145deg, color-mix(in srgb, var(--mx-accent, var(--mx-cyan)) 16%, transparent), rgba(255, 255, 255, .02));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12);
 }
-.mx-deck-mark { width: 38px; height: 38px; border-radius: 13px; }
+.mx-deck-mark {
+  width: 38px; height: 38px; border-radius: 13px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 0 16px -6px color-mix(in srgb, var(--mx-cyan) 80%, transparent);
+}
 .mx-deck-mark svg { width: 21px; height: 21px; }
 .mx-deck-headings { display: flex; flex-direction: column; gap: 3px; }
-.mx-deck-eyebrow { color: var(--mx-muted); font-size: 10px; font-weight: 500; }
+.mx-deck-eyebrow { color: var(--mx-muted); font-size: 10px; font-weight: 500; letter-spacing: .01em; }
 .mx-deck-title { font-size: 15px; font-weight: 800; color: var(--mx-text); }
 .mx-deck-live {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin-inline-start: auto;
-  padding: 5px 9px;
-  border: 1px solid var(--mx-line);
+  padding: 5px 10px;
+  border: 1px solid color-mix(in srgb, var(--mx-up) 26%, transparent);
   border-radius: 999px;
-  background: rgba(255, 255, 255, .035);
+  background: linear-gradient(120deg, color-mix(in srgb, var(--mx-up) 14%, transparent), rgba(255, 255, 255, .03));
   color: var(--mx-up);
   font-size: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1);
 }
-.mx-deck-live i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.mx-deck-live[data-unavailable='true'] { color: var(--mx-muted); }
-.mx-deck-main { margin-top: 24px; }
-.mx-global-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.mx-deck-live i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; box-shadow: 0 0 7px currentColor; }
+.mx-deck-live[data-unavailable='true'] {
+  color: var(--mx-muted);
+  border-color: var(--mx-line);
+  background: rgba(255, 255, 255, .035);
+  box-shadow: none;
+}
+.mx-deck-main { position: relative; z-index: 2; margin-top: 22px; }
+
+/* ── THE HERO FIGURE ─────────────────────────────────────────────────────
+   One reading, three typographic ranks: currency mark, digits, magnitude.
+   The number is set in the mono face at display size with tabular figures, so
+   a live update never shifts the line by a pixel. */
+.mx-global-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: end; }
 .mx-kicker { display: block; grid-column: 1 / -1; color: var(--mx-muted); font-size: 11px; font-weight: 500; }
-.mx-global-value { color: var(--mx-text); font: 700 clamp(30px, 6vw, 44px)/1.15 var(--font-mono); letter-spacing: -.05em; direction: ltr; text-align: start; }
-.mx-global-head .mx-change { margin-bottom: 5px; }
+.mx-global-value {
+  color: var(--mx-text);
+  font: 700 clamp(34px, 8.4vw, 50px)/1.04 var(--font-mono);
+  letter-spacing: -.055em;
+  direction: ltr;
+  text-align: start;
+  text-shadow: 0 0 30px rgba(122, 244, 240, .3), 0 0 2px rgba(230, 255, 254, .35);
+}
+.mx-global-figure { display: inline-flex; align-items: baseline; }
+.mx-fig-mark { font-size: .5em; margin-inline-end: .06em; vertical-align: .34em; color: color-mix(in srgb, var(--mx-cyan) 72%, var(--mx-text)); text-shadow: none; }
+.mx-fig-digits { font-variant-numeric: tabular-nums; }
+.mx-fig-unit {
+  font-size: .46em;
+  margin-inline-start: .05em;
+  vertical-align: .52em;
+  letter-spacing: 0;
+  color: color-mix(in srgb, var(--mx-violet) 55%, var(--mx-text));
+  text-shadow: none;
+}
+.mx-global-head .mx-change { margin-bottom: 6px; }
 .mx-skel-value { display: block; width: 160px; height: 38px; border-radius: 12px; background: var(--mx-line); }
-.mx-global-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 21px; }
-.mx-metric { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 10px 6px; border-inline-start: 1px solid var(--mx-line); }
-.mx-metric:first-child { padding-inline-start: 0; border: 0; }
+
+/* ── THE TREND ───────────────────────────────────────────────────────────
+   The plot is the same measured series, lit like a neon trace: a bloom path
+   under the stroke, a halo behind it, one slow scan, and the newest point as a
+   pulsing HTML dot. The reveal is a single scaleX on the SVG. */
+.mx-global-trend { margin-top: 14px; }
+.mx-trend-plot {
+  position: relative;
+  overflow: hidden;
+  padding: 6px 0 2px;
+  border-radius: 16px;
+  background: radial-gradient(ellipse at 50% 96%, rgba(102, 229, 225, .11), transparent 72%);
+}
+.mx-trend-halo {
+  position: absolute;
+  inset: auto -12% -42% -12%;
+  height: 110px;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 100%, rgba(90, 240, 230, .22), transparent 70%);
+  animation: mx-halo-breathe 9s ease-in-out infinite;
+}
+.mx-trend-scan {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 32%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(150, 250, 245, .1) 42%, rgba(214, 255, 252, .2) 50%, rgba(150, 250, 245, .1) 58%, transparent);
+  animation: mx-chart-scan 7.5s cubic-bezier(.45, 0, .35, 1) infinite;
+}
+.mx-trend-chart svg { transform-origin: left center; animation: mx-chart-unfold 1.05s cubic-bezier(.2, .7, .3, 1) both; }
+[dir='rtl'] .mx-trend-chart svg { transform-origin: right center; }
+.mx-spark-bloom { stroke-width: 8; opacity: .18; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.mx-trend-chart .mx-spark-line { stroke-width: 2.2; }
+/* The newest observation: an HTML dot so the halo stays perfectly round even
+   while the chart is stretched to the container. */
+.mx-spark-live {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: var(--mx-live, var(--mx-up));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--mx-panel) 82%, transparent),
+    0 0 12px 2px color-mix(in srgb, var(--mx-live, var(--mx-up)) 70%, transparent);
+}
+.mx-spark-live[data-dir='down'] { --mx-live: var(--mx-down); }
+.mx-spark-live i {
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--mx-live, var(--mx-up)) 80%, transparent);
+  border-radius: inherit;
+  animation: mx-live-ping 2.8s cubic-bezier(0, 0, .2, 1) infinite;
+}
+.mx-trend-method { margin-top: 8px; }
+.mx-trend-method summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  color: var(--mx-muted);
+  font-size: 9px;
+  cursor: pointer;
+}
+.mx-trend-method summary::-webkit-details-marker { display: none; }
+.mx-trend-method summary > span:last-child { font-weight: 700; }
+.mx-trend-method p { margin: 8px 0 0; color: var(--mx-muted); font-size: 10px; line-height: 1.7; }
+
+/* ── THREE READINGS ──────────────────────────────────────────────────────
+   «حجم ۲۴ ساعته، دامیننس بیت‌کوین، دامیننس اتریوم مدرن‌تر شود». Each reading
+   is its own lit pod. Dominance is a share of 100, so it is drawn as an arc
+   inside the mark — the arc's dash is literally the percentage. Volume is not
+   a share, so its tile stays a tile and the real turnover ratio (volume ÷
+   market cap) is printed under the number instead of an invented meter. */
+.mx-global-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+.mx-metric {
+  --mx-accent: var(--mx-cyan);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 9px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--mx-accent) 22%, var(--mx-line));
+  border-block-start-color: color-mix(in srgb, var(--mx-accent) 42%, transparent);
+  border-radius: 16px;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--mx-accent) 14%, transparent), rgba(255, 255, 255, .015) 66%), var(--mx-well);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 10px 22px -18px color-mix(in srgb, var(--mx-accent) 75%, transparent);
+}
+.mx-metric::after {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 14% 34%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--mx-accent) 90%, transparent), transparent);
+  pointer-events: none;
+}
 .mx-metric[data-tone='cyan'] { --mx-accent: var(--mx-cyan); }
 .mx-metric[data-tone='gold'] { --mx-accent: var(--mx-gold); }
 .mx-metric[data-tone='violet'] { --mx-accent: var(--mx-violet); }
-.mx-metric-icon { width: 27px; height: 27px; border-radius: 9px; }
-.mx-metric-text { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.mx-metric-label { color: var(--mx-muted); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mx-metric strong { font-size: 12px; font-weight: 600; line-height: 1.1; direction: ltr; }
+.mx-metric-gauge { position: relative; display: grid; place-items: center; flex: 0 0 auto; width: 42px; height: 42px; }
+.mx-metric-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; transform: rotate(-90deg); }
+.mx-ring-track { fill: none; stroke: color-mix(in srgb, var(--mx-accent) 16%, transparent); stroke-width: 2.4; }
+.mx-ring-arc {
+  fill: none;
+  stroke: var(--mx-accent);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  transition: stroke-dasharray .8s cubic-bezier(.22, .61, .36, 1);
+  filter: drop-shadow(0 0 3.5px color-mix(in srgb, var(--mx-accent) 80%, transparent));
+}
+.mx-metric-icon { width: 28px; height: 28px; border-radius: 10px; }
+.mx-metric-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; width: 100%; }
+.mx-metric-label {
+  color: var(--mx-muted);
+  font-size: 9px;
+  line-height: 1.5;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.mx-metric-value {
+  color: var(--mx-text);
+  font-size: clamp(15px, 4.2vw, 19px);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -.03em;
+  direction: ltr;
+  text-align: start;
+  font-variant-numeric: tabular-nums;
+}
+.mx-metric[data-ring='true'] .mx-metric-value { color: color-mix(in srgb, var(--mx-accent) 72%, var(--mx-text)); }
+.mx-metric-note {
+  color: var(--mx-faint);
+  font-size: 8.5px;
+  line-height: 1.45;
+  letter-spacing: -.01em;
+  text-align: start;
+  max-width: 100%;
+  text-wrap: pretty;
+}
+
+/* ── THE DOMINANCE SPECTRUM ──────────────────────────────────────────────
+   A thicker, lit tape: each side glows in its own hue, one shine runs across
+   it, and the legend is pills instead of a line of grey text. */
 .mx-dominance-wrap { margin-top: 13px; }
-.mx-dominance { display: flex; direction: ltr; height: 5px; gap: 3px; overflow: hidden; border-radius: 99px; }
-.mx-dominance span { border-radius: inherit; }
-.mx-dominance .is-btc { background: linear-gradient(90deg, #e5a254, var(--mx-gold)); }
-.mx-dominance .is-eth { background: linear-gradient(90deg, #8b83e0, var(--mx-violet)); }
-.mx-dominance .is-other { background: #66799e; }
-.mx-dominance-legend { display: flex; gap: 15px; flex-wrap: wrap; margin-top: 9px; color: var(--mx-muted); font-size: 9px; }
-.mx-dominance-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.mx-dominance-legend b { color: var(--mx-text); font-weight: 600; }
-.mx-dominance-legend i { width: 5px; height: 5px; border-radius: 50%; background: #66799e; }
-.mx-dominance-legend [data-tone='btc'] i { background: var(--mx-gold); }
-.mx-dominance-legend [data-tone='eth'] i { background: var(--mx-violet); }
-.mx-global-trend { margin-top: 17px; padding-top: 10px; border-top: 1px solid var(--mx-line-soft); }
-.mx-trend-method { margin-top: 7px; }
-.mx-trend-method summary { display: flex; justify-content: space-between; gap: 8px; list-style: none; color: var(--mx-muted); font-size: 9px; cursor: pointer; }
-.mx-trend-method summary::-webkit-details-marker { display: none; }
-.mx-trend-method p { margin: 8px 0 0; color: var(--mx-muted); font-size: 10px; line-height: 1.7; }
+.mx-dominance {
+  position: relative;
+  display: flex;
+  direction: ltr;
+  height: 9px;
+  gap: 3px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--mx-well);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 6, .55), inset 0 0 0 1px var(--mx-line-soft);
+}
+.mx-dominance span { border-radius: inherit; transition: width .7s cubic-bezier(.22, .61, .36, 1); }
+.mx-dominance .is-btc {
+  background: linear-gradient(90deg, #f2a54a, #ffe4ae);
+  box-shadow: 0 0 14px -3px rgba(255, 190, 90, .9), inset 0 1px 0 rgba(255, 255, 255, .55);
+}
+.mx-dominance .is-eth {
+  background: linear-gradient(90deg, #8f7bff, #cdbcff);
+  box-shadow: 0 0 14px -3px rgba(150, 120, 255, .9), inset 0 1px 0 rgba(255, 255, 255, .45);
+}
+.mx-dominance .is-other {
+  background: linear-gradient(90deg, #3b5375, #7089b3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22);
+}
+.mx-dominance .mx-dominance-shine {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 38%;
+  border-radius: 99px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .55), transparent);
+  animation: mx-shine-run 5.5s ease-in-out infinite;
+}
+.mx-dominance-legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; font-size: 9px; }
+.mx-dominance-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--mx-line-soft);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .03);
+  color: var(--mx-muted);
+}
+.mx-dominance-legend b { color: var(--mx-text); font-weight: 700; direction: ltr; }
+.mx-dominance-legend i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dot, #66799e);
+  box-shadow: 0 0 8px -1px var(--dot, #66799e);
+}
+.mx-dominance-legend [data-tone='btc'] { --dot: var(--mx-gold); }
+.mx-dominance-legend [data-tone='eth'] { --dot: var(--mx-violet); }
+.mx-dominance-legend [data-tone='other'] { --dot: #7f93bb; }
+
 
 /* Three independent, equally weighted readings. */
 .mx-trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .mx-trio-box {
   --mx-accent: var(--mx-cyan);
+  position: relative;
   display: flex;
   align-items: center;
   gap: 9px;
   min-width: 0;
   padding: 13px 11px;
+  overflow: hidden;
   border: 1px solid var(--mx-line);
-  border-top-color: color-mix(in srgb, var(--mx-accent) 38%, transparent);
+  border-top-color: color-mix(in srgb, var(--mx-accent) 42%, transparent);
   border-radius: 17px;
   background: linear-gradient(135deg, color-mix(in srgb, var(--mx-accent) 9%, transparent), transparent 70%), var(--mx-glass), var(--mx-panel);
-  box-shadow: var(--mx-hi);
+  box-shadow: var(--mx-hi), 0 12px 26px -24px color-mix(in srgb, var(--mx-accent) 70%, transparent);
+}
+.mx-trio-box::after {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 16% 34%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--mx-accent) 90%, transparent), transparent);
+  pointer-events: none;
 }
 .mx-trio-box[data-tone='violet'] { --mx-accent: var(--mx-violet); }
 .mx-trio-box[data-tone='up'] { --mx-accent: var(--mx-up); }
@@ -559,7 +891,16 @@
 @media (min-width: 900px) {
   .mx-market { --mx-gap: 22px; }
   .mx-market .mx-overview { grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); gap: 14px; }
-  .mx-market .mx-deck { grid-column: 1; grid-row: 1; padding: 24px; }
+  .mx-market .mx-deck { grid-column: 1; grid-row: 1; padding: 26px; }
+  .mx-global-metrics { margin-top: 19px; gap: 10px; }
+  .mx-metric { flex-direction: row; align-items: flex-start; gap: 11px; padding: 12px 13px; border-radius: 18px; }
+  .mx-metric-gauge { margin-block-start: 2px; }
+  .mx-metric-gauge { width: 46px; height: 46px; }
+  .mx-metric-icon { width: 30px; height: 30px; border-radius: 11px; }
+  .mx-metric-text { gap: 4px; }
+  .mx-metric-label { font-size: 10px; }
+  .mx-metric-value { font-size: 21px; }
+  .mx-metric-note { font-size: 9px; }
   .mx-market .mx-btc-card { display: flex; flex-direction: column; grid-column: 2; grid-row: 1; padding: 24px; }
   .mx-market .mx-btc-card .mx-btc-chart { flex: 1; min-height: 110px; }
   .mx-trio { grid-column: 1 / -1; grid-row: 2; gap: 14px; }
@@ -579,14 +920,24 @@
   .mx-market .mx-compare { min-height: 36px; }
   .mx-market .mx-table { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+@media (min-width: 620px) {
+  .mx-metric { flex-direction: row; align-items: flex-start; gap: 10px; padding: 11px 12px; }
+  .mx-metric-gauge { width: 42px; height: 42px; }
+  .mx-metric-value { font-size: 17px; }
+}
 @media (max-width: 619px) {
   .mx-market { --mx-gap: 16px; }
   .mx-market .mx-deck, .mx-market .mx-btc-card { padding: 17px; }
-  .mx-deck-main { margin-top: 21px; }
-  .mx-global-metrics { gap: 5px; }
-  .mx-metric { flex-direction: column; align-items: flex-start; gap: 7px; padding: 7px 9px; }
-  .mx-metric-label { font-size: 9px; }
-  .mx-metric strong { font-size: 12px; }
+  .mx-deck-main { margin-top: 20px; }
+  .mx-global-metrics { gap: 6px; }
+  .mx-metric { gap: 7px; padding: 9px 8px; border-radius: 14px; }
+  .mx-metric-gauge { width: 36px; height: 36px; }
+  .mx-metric-icon { width: 24px; height: 24px; border-radius: 8px; }
+  .mx-metric-icon svg { width: 12px; height: 12px; }
+  .mx-metric-label { font-size: 8.5px; }
+  .mx-metric-value { font-size: 15px; }
+  .mx-metric-note { font-size: 8px; }
+  .mx-trend-plot { padding-top: 4px; }
   .mx-trio { gap: 7px; }
   .mx-trio-box { flex-direction: column; align-items: flex-start; gap: 9px; padding: 12px 10px; border-radius: 15px; }
   .mx-trio-label { font-size: 9px; }
@@ -679,7 +1030,27 @@
   --mx-hi: inset 0 1px 0 #fff;
   --mx-shadow: 0 18px 40px -30px rgba(46, 67, 123, .22);
 }
-:root[data-theme='light'] .mx-market .mx-deck { background: radial-gradient(ellipse at 0 0, rgba(67, 204, 201, .13), transparent 70%), radial-gradient(ellipse at 100% 100%, rgba(143, 114, 224, .1), transparent 70%), var(--mx-glass), var(--mx-panel); }
+:root[data-theme='light'] .mx-market .mx-deck {
+  background:
+    radial-gradient(ellipse at 0% 0%, rgba(67, 204, 201, .2), transparent 60%) padding-box,
+    radial-gradient(ellipse at 100% 100%, rgba(143, 114, 224, .16), transparent 62%) padding-box,
+    radial-gradient(ellipse at 50% 118%, rgba(255, 191, 112, .16), transparent 58%) padding-box,
+    var(--mx-glass) padding-box,
+    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(135deg, rgba(6, 118, 122, .72), rgba(53, 111, 187, .24) 30%, rgba(116, 80, 193, .6) 62%, rgba(163, 106, 25, .5) 82%, rgba(6, 118, 122, .72)) border-box;
+  box-shadow: 0 0 18px -12px rgba(8, 125, 128, .7), 0 0 36px -22px rgba(116, 80, 193, .6), inset 0 1px 0 #fff, 0 18px 40px -32px rgba(46, 67, 123, .4);
+}
+:root[data-theme='light'] .mx-market .mx-deck::after { box-shadow: inset 0 0 30px rgba(8, 125, 128, .08); }
+:root[data-theme='light'] .mx-market .mx-deck-matrix { background-image: radial-gradient(circle at 1px 1px, rgba(53, 111, 187, .18) 1px, transparent 1.7px); }
+:root[data-theme='light'] .mx-market .mx-metric {
+  background: linear-gradient(150deg, color-mix(in srgb, var(--mx-accent) 12%, transparent), rgba(255, 255, 255, .6) 66%), #fff;
+  box-shadow: inset 0 1px 0 #fff, 0 10px 22px -20px rgba(46, 67, 123, .45);
+}
+:root[data-theme='light'] .mx-market .mx-dominance { background: #e9eefb; box-shadow: inset 0 1px 3px rgba(46, 67, 123, .18), inset 0 0 0 1px rgba(65, 94, 135, .14); }
+:root[data-theme='light'] .mx-market .mx-dominance .mx-dominance-shine { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .92), transparent); }
+:root[data-theme='light'] .mx-market .mx-trend-plot { background: radial-gradient(ellipse at 50% 96%, rgba(8, 125, 128, .09), transparent 72%); }
+:root[data-theme='light'] .mx-market .mx-global-value { text-shadow: none; }
+:root[data-theme='light'] .mx-market .mx-deck-orbit i { box-shadow: 0 0 8px rgba(8, 125, 128, .45); }
 :root[data-theme='light'] .mx-market .mx-btc-card { border-color: rgba(191, 144, 71, .28); background: radial-gradient(ellipse at 100% 0, rgba(255, 209, 137, .25), transparent 70%), var(--mx-glass), var(--mx-panel); }
 :root[data-theme='light'] .mx-btc-logo { background: linear-gradient(135deg, #fff5d9, #ffdda5); border-color: rgba(196, 132, 43, .35); }
 :root[data-theme='light'] .mx-btc-chart { --mx-up: #087e60; }
@@ -719,6 +1090,18 @@
 @keyframes mx-smart-ring { 0%, 100% { transform: scale(1); opacity: .5; } 50% { transform: scale(1.05); opacity: 1; } }
 @keyframes mx-flow-travel { 0% { transform: translateX(0); opacity: 0; } 15%, 75% { opacity: 1; } 100% { transform: translateX(410%); opacity: 0; } }
 @keyframes mx-neon-sweep { 0% { transform: translateX(-100%); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateX(100%); opacity: 0; } }
+/* Neon deck. Every frame below is transform or opacity, so the whole border
+   light show runs on the compositor and costs the scroll nothing. */
+@keyframes mx-orbit-x { 0% { transform: translate3d(-130%, 0, 0); opacity: 0; } 7% { opacity: 1; } 93% { opacity: 1; } 100% { transform: translate3d(430%, 0, 0); opacity: 0; } }
+@keyframes mx-orbit-x-rev { 0% { transform: translate3d(430%, 0, 0); opacity: 0; } 7% { opacity: 1; } 93% { opacity: 1; } 100% { transform: translate3d(-130%, 0, 0); opacity: 0; } }
+@keyframes mx-orbit-y { 0% { transform: translate3d(0, -130%, 0); opacity: 0; } 7% { opacity: 1; } 93% { opacity: 1; } 100% { transform: translate3d(0, 430%, 0); opacity: 0; } }
+@keyframes mx-orbit-y-rev { 0% { transform: translate3d(0, 430%, 0); opacity: 0; } 7% { opacity: 1; } 93% { opacity: 1; } 100% { transform: translate3d(0, -130%, 0); opacity: 0; } }
+@keyframes mx-rim-breathe { 0%, 100% { opacity: .32; } 50% { opacity: .78; } }
+@keyframes mx-halo-breathe { 0%, 100% { opacity: .5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.07); } }
+@keyframes mx-chart-scan { 0% { transform: translateX(-120%); opacity: 0; } 12% { opacity: .85; } 88% { opacity: .85; } 100% { transform: translateX(330%); opacity: 0; } }
+@keyframes mx-chart-unfold { from { transform: scaleX(.03); opacity: .15; } to { transform: scaleX(1); opacity: 1; } }
+@keyframes mx-live-ping { 0% { transform: scale(1); opacity: .8; } 70%, 100% { transform: scale(3.4); opacity: 0; } }
+@keyframes mx-shine-run { 0% { transform: translateX(-110%); opacity: 0; } 25% { opacity: .85; } 75% { opacity: .85; } 100% { transform: translateX(280%); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .mx-market *, .mx-market *::before, .mx-market *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .mx-market .mx-smart-sheen, .mx-market .mx-search-glow, .mx-market .mx-route-traveller { opacity: 0; transform: none; }
@@ -736,4 +1119,14 @@
 :root[data-lite='true'] .mx-market .mx-route-traveller { animation: none !important; }
 :root[data-native='true'] .mx-market .mx-route-traveller,
 :root[data-lite='true'] .mx-market .mx-route-traveller { opacity: 0; }
+:root[data-native='true'] .mx-market .mx-deck-orbit i,
+:root[data-lite='true'] .mx-market .mx-deck-orbit i { animation: none !important; opacity: .4; }
+:root[data-native='true'] .mx-market :is(.mx-deck-sheen, .mx-trend-scan, .mx-dominance-shine, .mx-spark-live i),
+:root[data-lite='true'] .mx-market :is(.mx-deck-sheen, .mx-trend-scan, .mx-dominance-shine, .mx-spark-live i) { animation: none !important; opacity: 0; }
+:root[data-native='true'] .mx-market .mx-deck::after,
+:root[data-lite='true'] .mx-market .mx-deck::after,
+:root[data-native='true'] .mx-market .mx-trend-halo,
+:root[data-lite='true'] .mx-market .mx-trend-halo,
+:root[data-native='true'] .mx-market .mx-trend-chart svg,
+:root[data-lite='true'] .mx-market .mx-trend-chart svg { animation: none !important; opacity: .5; }
 :root[data-reduce-motion='true'] .mx-market *, :root[data-reduce-motion='true'] .mx-market *::before, :root[data-reduce-motion='true'] .mx-market *::after { animation: none !important; transition: none !important; }
