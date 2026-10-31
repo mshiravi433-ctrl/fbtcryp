@@ -34,6 +34,80 @@ export {
 export { scanOpportunities, OPPORTUNITY_SCHEMA } from './opportunityEngine.js';
 export { runGuardianSweep, evaluateEvent, GUARDIAN_SCHEMA } from './financialGuardian.js';
 
+// Market Analysis & Prediction Engine (15m, 1h, 4h, 1D, 1W, 1M with Bayesian Confluence)
+export {
+  PREDICTION_TIMEFRAMES,
+  TIMEFRAME_DETAILS,
+  calculateRSI,
+  calculateMACD,
+  calculateBollingerBands,
+  calculateMovingAverages,
+  calculateVolatility,
+  calculateVolumeAnalysis,
+  calculateMarketStructure,
+  calculateLiquidityAnalysis,
+  calculateOnChainAnalysis,
+  calculateSentimentAnalysis,
+  synthesizePrediction
+} from './marketPredictionEngine.js';
+
+// 10 Specialized Agents & Delegation Architecture
+export {
+  AGENT_IDS,
+  AGENT_SPECS,
+  createAgentMemory,
+  auditLog,
+  FbtSpecialistAgent,
+  FbtAgentOrchestrator10,
+  agentOrchestrator10
+} from './agentOrchestrator10.js';
+
+// Autonomous Portfolio Manager (Section 9)
+export {
+  PORTFOLIO_SCHEMA,
+  RISK_PROFILES,
+  USER_PERMISSION_POLICIES,
+  ASSET_CORRELATION_MATRIX,
+  ASSET_ANNUAL_VOLATILITY,
+  parseFinancialGoal,
+  scanUserAssets,
+  calculatePortfolioRisk,
+  generateRebalancePlan,
+  evaluateAutonomousPortfolio
+} from './autonomousPortfolioManager.js';
+
+// Simulation & Backtest Engine (Section 10)
+export {
+  SIMULATION_SCHEMA,
+  runBacktest,
+  runMonteCarloSimulation,
+  compareStrategies,
+  PaperTradingSession,
+  estimateExecutionImpact
+} from './simulationBacktestEngine.js';
+
+// Proactive AI & Event Bus / Autonomous Scheduler
+export {
+  PROACTIVE_SCHEMA,
+  AUTONOMY_LEVELS,
+  ALERT_CATEGORIES,
+  ProactiveEventBus,
+  eventBus,
+  ProactiveAiEngine,
+  proactiveAi
+} from './proactiveAiScheduler.js';
+
+// AI Agent Marketplace
+export {
+  MARKETPLACE_SCHEMA,
+  PRICING_MODELS,
+  PROTOCOL_SUPPORT,
+  VERIFICATION_TIERS,
+  DEFAULT_MARKETPLACE_CATALOG,
+  AgentMarketplaceManager,
+  agentMarketplace
+} from './agentMarketplace.js';
+
 // Direct imports for internal use by orchestrateBrain
 import { routeIntent as _routeIntent } from './ecosystemRouter.js';
 import { runGuardianSweep as _runGuardianSweep } from './financialGuardian.js';

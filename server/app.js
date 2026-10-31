@@ -7064,6 +7064,10 @@ app.use('/api/ai/agent-hub', lazyMount('agent-hub', async () => {
   return hub.router;
 }));
 
+/* ─── FBT INTENT OS — Market Prediction Engine, 10 Agents & Marketplace ───── */
+app.use('/api/ai', lazyMount('ai-market-engine', () => import('./aiMarketEngineRoutes.js')));
+
+
 /* ---------------------- FBT INTENT AI OS (unified V1) ---------------------- */
 /*
  * Upgrade 8 durable session routes. Mounted under the V1 AI gateway so the
