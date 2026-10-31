@@ -7519,6 +7519,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             ) : null}
           </div>
           <div className="iaos-header-status">
+            <button type="button" className="iaos-status-pill" onClick={() => navigate('/missions')}>
+              {fa ? 'ماموریت‌ها' : 'Missions'}
+            </button>
             <button
               type="button"
               className="iaos-new-season-btn"

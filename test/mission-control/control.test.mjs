@@ -53,3 +53,27 @@ test('serverless proxy pins a fixed HTTPS worker and forwards a derived owner, n
   const insecure = createMissionProxyRouter({ env: { ...env, MISSION_CONTROL_UPSTREAM_URL: 'http://worker.example' }, fetchImpl: async () => { throw new Error('must not call'); } });
   await withServer(insecure, async (base) => { const res = await fetch(`${base}/status`, { headers: { 'x-fbt-mission-request': '1', 'x-fbt-mission-device': device } }); assert.equal(res.status, 503); });
 });
+
+test('cron tick requires a configured bearer secret and forwards only to the fixed worker', async () => {
+  const cronEnv = { ...env, MISSION_CRON_SECRET: 'c'.repeat(40), MISSION_CONTROL_UPSTREAM_URL: 'https://worker.example' };
+  let calls = 0;
+  const proxy = createMissionProxyRouter({ env: cronEnv, fetchImpl: async (url, init) => {
+    calls++;
+    assert.equal(String(url), 'https://worker.example/api/v1/missions/tick');
+    assert.equal(init.headers.authorization, `Bearer ${cronEnv.MISSION_CRON_SECRET}`);
+    return new Response('{"ok":true}', { status: 200 });
+  } });
+  await withServer(proxy, async (base) => {
+    assert.equal((await fetch(`${base}/tick`, { method: 'POST' })).status, 403);
+    assert.equal((await fetch(`${base}/tick`, { method: 'POST', headers: { authorization: 'Bearer wrong' } })).status, 403);
+    assert.equal(calls, 0);
+    assert.equal((await fetch(`${base}/tick`, { method: 'POST', headers: { authorization: `Bearer ${cronEnv.MISSION_CRON_SECRET}` } })).status, 200);
+    assert.equal(calls, 1);
+  });
+  const c = createMissionControl({ env: cronEnv, path: ':memory:', adapters: fakeAdapters() });
+  await withServer(c.router, async (base) => {
+    assert.equal((await fetch(`${base}/tick`, { method: 'POST' })).status, 403);
+    assert.equal((await fetch(`${base}/tick`, { method: 'POST', headers: { authorization: `Bearer ${cronEnv.MISSION_CRON_SECRET}` } })).status, 503);
+  });
+  c.store.close();
+});
