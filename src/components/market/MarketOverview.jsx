@@ -142,6 +142,13 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
     <section className="mx-overview" aria-label={t('marketIntel.overviewAria')} data-testid="market-overview">
       {/* ─── ۱ · THE DECK ─────────────────────────────────────────────────── */}
       <div className="mx-deck" data-testid="market-global-card">
+        {/* «رنگ در کادر باشد و انیمیشنی حرکت کند» — a second rim painted in a
+            different colour phase, cross-faded over the resting rim by opacity
+            alone. Its interior replicates the deck's own background stack via
+            --mx-deck-interior, so only the 1.5px frame differs while it fades.
+            It is the FIRST light layer: veil blooms, matrix, comets and the
+            breathing glow all paint above it and are never occluded. */}
+        <span className="mx-deck-rim" aria-hidden="true" />
         {/* The light field. Two soft blooms and a hairline sheen, painted as
             gradients — never a backdrop-filter, which is the one property this
             screen was measured to be paying for (see market-speed.test.mjs). */}
@@ -151,6 +158,9 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
         <span className="mx-deck-matrix" aria-hidden="true" />
         <span className="mx-deck-orbit" aria-hidden="true"><i /><i /><i /><i /><i /><i /></span>
         <span className="mx-deck-sheen" aria-hidden="true" />
+        {/* The glass answer to «شیشه‌ای شود»: one slow specular band crossing
+            the card on a long cycle — transform + opacity, nothing else. */}
+        <span className="mx-deck-gloss" aria-hidden="true" />
 
         <header className="mx-deck-head">
           <span className="mx-deck-mark" aria-hidden="true"><GlyphDeck width={15} height={15} /></span>
@@ -290,8 +300,13 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
       {/* ─── ۳ · BITCOIN — its own glass card, centred ────────────────────── */}
       {bitcoin && (
         <div className="mx-btc-card" data-testid="market-btc-hero-card" data-dir={btcChange == null ? undefined : btcChange >= 0 ? 'up' : 'down'}>
+          {/* The amber twin of the deck rim: one colour phase painted at rest,
+              a second phase cross-faded over it by opacity alone. First light
+              layer, so the veil bloom and the etched orbit stay above it. */}
+          <span className="mx-btc-rim" aria-hidden="true" />
           <span className="mx-btc-veil" aria-hidden="true" />
           <span className="mx-btc-orbit" aria-hidden="true"><i /><GlyphBitcoin width={120} height={120} /></span>
+          <span className="mx-btc-gloss" aria-hidden="true" />
           <header className="mx-btc-head">
             <button type="button" className="mx-btc-identity" onClick={() => onOpenCoin?.(bitcoin.id)}>
               <span className="mx-btc-logo">
@@ -311,18 +326,22 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
           </div>
 
           {Array.isArray(bitcoin.sparkline) && bitcoin.sparkline.length > 1 && (
-            <MarketSparkline
-              points={bitcoin.sparkline}
-              up={(bitcoin.change24h ?? 0) >= 0}
-              height={74}
-              interactive
-              glow
-              liveDot
-              label={t('marketIntel.btcChartAria')}
-              formatValue={(v) => marketPrice(v, vs)}
-              className="mx-btc-chart"
-              testId="market-btc-chart"
-            />
+            <div className="mx-btc-plot" data-testid="market-btc-plot">
+              <span className="mx-btc-halo" aria-hidden="true" />
+              <MarketSparkline
+                points={bitcoin.sparkline}
+                up={(bitcoin.change24h ?? 0) >= 0}
+                height={74}
+                interactive
+                glow
+                liveDot
+                label={t('marketIntel.btcChartAria')}
+                formatValue={(v) => marketPrice(v, vs)}
+                className="mx-btc-chart"
+                testId="market-btc-chart"
+              />
+              <span className="mx-btc-scan" aria-hidden="true" />
+            </div>
           )}
 
           {rangePosition != null && (

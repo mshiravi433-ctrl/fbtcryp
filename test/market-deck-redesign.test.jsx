@@ -603,3 +603,90 @@ describe('۹ · the neon deck', () => {
     expect(bare).toMatch(/:root\[data-theme='light'\] \.mx-market \.mx-dominance \{/);
   });
 });
+
+describe('۱۰ · «ویترین بازار» — the frame travels, the glass crosses, the chart lights up', () => {
+  it('cross-fades a second rim phase so the frame colour moves — opacity only', async () => {
+    await open();
+    const card = screen.getByTestId('market-global-card');
+    const rim = card.querySelector('.mx-deck-rim');
+    expect(rim).toBeTruthy();
+    expect(rim.getAttribute('aria-hidden')).toBe('true');
+    /* the rim replicates the deck interior from ONE token and only its border
+       phase differs — no second hand-maintained copy of the glass stack */
+    expect(bare).toMatch(/\.mx-market \.mx-deck \{[^}]*--mx-deck-interior:/s);
+    expect(bare).toMatch(/\.mx-market \.mx-deck-rim \{[^}]*background: var\(--mx-deck-interior\), var\(--mx-deck-rim-b\) border-box/s);
+    expect(bare).toMatch(/\.mx-market \.mx-deck-rim \{[^}]*animation: mx-rim-shift/s);
+    expect(bare).toMatch(/@keyframes mx-rim-shift \{ 0%, 100% \{ opacity: \.08; \} 50% \{ opacity: \.95; \} \}/);
+    /* the Bitcoin card answers with its own amber twin, same technique */
+    const btcRim = screen.getByTestId('market-btc-hero-card').querySelector('.mx-btc-rim');
+    expect(btcRim.getAttribute('aria-hidden')).toBe('true');
+    expect(bare).toMatch(/\.mx-market \.mx-btc-rim \{[^}]*background: var\(--mx-btc-interior\), var\(--mx-btc-rim-b\) border-box/s);
+  });
+
+  it('keeps the trio accent inside its own frame, breathing out of lockstep', () => {
+    expect(bare).toMatch(/\.mx-trio-box::before \{[^}]*inset 0 0 0 1px color-mix\(in srgb, var\(--mx-accent\)/s);
+    expect(bare).toMatch(/\.mx-trio-box::before \{[^}]*animation: mx-rim-breathe/s);
+    expect(bare).toMatch(/\.mx-trio-box:nth-child\(2\)::before \{ animation-delay: -2\.6s; \}/);
+    expect(bare).toMatch(/\.mx-trio-box:nth-child\(3\)::before \{ animation-delay: -5\.2s; \}/);
+  });
+
+  it('sweeps one glass gloss per card on a long cycle, above the light and below the readings', async () => {
+    await open();
+    for (const selector of ['.mx-deck .mx-deck-gloss', '.mx-btc-card .mx-btc-gloss']) {
+      const gloss = document.querySelector(selector);
+      expect(gloss, selector).toBeTruthy();
+      expect(gloss.getAttribute('aria-hidden')).toBe('true');
+    }
+    expect(bare).toMatch(/\.mx-market \.mx-deck-gloss \{ z-index: 1; animation: mx-gloss-sweep 16s/s);
+    expect(bare).toMatch(/\.mx-market \.mx-btc-gloss \{ z-index: -1; animation-duration: 19s/s);
+    expect(bare).toMatch(/@keyframes mx-gloss-sweep/);
+    /* the sweep stays a compositor job: rotate lives in the same transform */
+    const glossFrame = /@keyframes mx-gloss-sweep \{([\s\S]*?)\n\}/.exec(bare)[1];
+    expect(glossFrame).not.toMatch(/backdrop-filter|filter:|background:/);
+  });
+
+  it('gives the Bitcoin chart the trend rig: bloom, scan and a one-shot unfold', async () => {
+    await open();
+    const plot = screen.getByTestId('market-btc-plot');
+    expect(plot.querySelector('.mx-btc-halo').getAttribute('aria-hidden')).toBe('true');
+    expect(plot.querySelector('.mx-btc-scan').getAttribute('aria-hidden')).toBe('true');
+    expect(plot.querySelector('[data-testid="market-btc-chart"] .mx-spark-live i')).toBeTruthy();
+    expect(bare).toMatch(/\.mx-btc-chart svg \{[^}]*animation: mx-chart-unfold/s);
+    expect(bare).toMatch(/\[dir='rtl'\] \.mx-btc-chart svg \{ transform-origin: right center; \}/);
+    expect(bare).toMatch(/\.mx-btc-halo \{[^}]*animation: mx-halo-breathe/s);
+    expect(bare).toMatch(/\.mx-btc-scan \{[^}]*animation: mx-chart-scan/s);
+  });
+
+  it('enters as one instrument in three movements, and never re-runs', () => {
+    expect(bare).toMatch(/\.mx-market \.mx-overview > \* \{ animation: mx-rise \.6s cubic-bezier\(\.2, \.7, \.3, 1\) both; \}/);
+    expect(bare).toMatch(/\.mx-market \.mx-overview > :nth-child\(2\) \{ animation-delay: \.08s; \}/);
+    expect(bare).toMatch(/\.mx-market \.mx-overview > :nth-child\(3\) \{ animation-delay: \.16s; \}/);
+    expect(bare).toMatch(/@keyframes mx-rise \{ from \{ transform: translateY\(16px\); opacity: 0; \} to \{ transform: translateY\(0\); opacity: 1; \} \}/);
+    /* one-shot: nothing in the new layer set loops except the rim and gloss */
+    expect(bare).toMatch(/\.mx-overview > \* \{ animation: mx-rise [^}]*both/);
+    expect(bare).not.toMatch(/mx-rise[^;]*infinite/);
+  });
+
+  it('freezes the new light for native and lite — rim at half fade, gloss parked', () => {
+    expect(bare).toMatch(/:root\[data-native='true'\] \.mx-market :is\(\.mx-deck-rim, \.mx-btc-rim\)/);
+    expect(bare).toMatch(/:root\[data-lite='true'\] \.mx-market :is\(\.mx-deck-rim, \.mx-btc-rim\) \{ animation: none !important; opacity: \.5; \}/);
+    expect(bare).toMatch(/:root\[data-native='true'\] \.mx-market \.mx-trio-box::before/);
+    expect(bare).toMatch(/:root\[data-native='true'\] \.mx-market \.mx-overview > \*/);
+    expect(bare).toMatch(/:root\[data-lite='true'\] \.mx-market :is\(\.mx-deck-gloss, \.mx-btc-gloss, \.mx-btc-scan\) \{ animation: none !important; opacity: 0; \}/);
+    expect(bare).toMatch(/:root\[data-native='true'\] \.mx-market \.mx-btc-chart svg/);
+    /* and reduced motion parks the gloss bands with the other sweeps */
+    const guard = bare.slice(bare.indexOf('@media (prefers-reduced-motion: reduce)'));
+    expect(guard).toMatch(/\.mx-market \.mx-deck-gloss, \.mx-market \.mx-btc-gloss, \.mx-market \.mx-btc-scan \{ opacity: 0; transform: none; \}/);
+  });
+
+  it('re-grades the travelling rim and the gloss for the pearl theme', () => {
+    expect(bare).toMatch(/:root\[data-theme='light'\] \.mx-market \.mx-deck \{[^}]*--mx-deck-rim-b:/s);
+    expect(bare).toMatch(/:root\[data-theme='light'\] \.mx-market \.mx-btc-card \{[^}]*--mx-btc-rim-b:/s);
+    expect(bare).toMatch(/:root\[data-theme='light'\] \.mx-market \.mx-deck-gloss,/);
+    expect(bare).toMatch(/:root\[data-theme='light'\] \.mx-market \.mx-btc-halo \{/);
+    /* the light rim replica replicates the LIGHT interior — #fff, not the navy */
+    const lightDeck = /:root\[data-theme='light'\] \.mx-market \.mx-deck \{([\s\S]*?)\n\}/.exec(bare)[1];
+    expect(lightDeck).toMatch(/linear-gradient\(#fff, #fff\) padding-box/);
+    expect(lightDeck).not.toMatch(/#08232a|--mx-panel\)/);
+  });
+});
