@@ -215,7 +215,7 @@ try {
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
   /* The deck's own light is on the list too: rim comets, the sheen, the
      chart scan and ping, and the one-shot reveal. */
-  for (const selector of ['.mx-route-traveller', '.mx-smart-ring', '.mx-smart-sheen', '.mx-deck-veil i', '.mx-deck-orbit i', '.mx-deck-sheen', '.mx-trend-scan', '.mx-dominance-shine', '.mx-spark-live i', '.mx-trend-chart svg', '.mx-deck-rim', '.mx-deck-gloss', '.mx-btc-rim', '.mx-btc-gloss', '.mx-btc-scan', '.mx-btc-chart svg', '.mx-deck']) {
+  for (const selector of ['.mx-route-traveller', '.mx-smart-ring', '.mx-smart-sheen', '.mx-deck-veil i', '.mx-deck-orbit i', '.mx-deck-sheen', '.mx-trend-scan', '.mx-dominance-shine', '.mx-spark-live i', '.mx-trend-chart svg', '.mx-deck-rim', '.mx-deck-gloss', '.mx-btc-rim', '.mx-btc-gloss', '.mx-btc-scan', '.mx-btc-chart svg', '.mx-deck', '.mx-trio-aura i']) {
     assert.equal(await page.$eval(selector, (el) => getComputedStyle(el).animationName), 'none');
   }
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
@@ -223,7 +223,7 @@ try {
     await page.evaluate((name) => document.documentElement.setAttribute(`data-${name}`, 'true'), attribute);
     /* The deck's own light is on the list too: rim comets, the sheen, the
        chart scan and ping, and the one-shot reveal. */
-    for (const selector of ['.mx-route-traveller', '.mx-smart-ring', '.mx-smart-sheen', '.mx-deck-veil i', '.mx-deck-orbit i', '.mx-deck-sheen', '.mx-trend-scan', '.mx-dominance-shine', '.mx-spark-live i', '.mx-trend-chart svg', '.mx-deck-rim', '.mx-deck-gloss', '.mx-btc-rim', '.mx-btc-gloss', '.mx-btc-scan', '.mx-btc-chart svg', '.mx-deck']) {
+    for (const selector of ['.mx-route-traveller', '.mx-smart-ring', '.mx-smart-sheen', '.mx-deck-veil i', '.mx-deck-orbit i', '.mx-deck-sheen', '.mx-trend-scan', '.mx-dominance-shine', '.mx-spark-live i', '.mx-trend-chart svg', '.mx-deck-rim', '.mx-deck-gloss', '.mx-btc-rim', '.mx-btc-gloss', '.mx-btc-scan', '.mx-btc-chart svg', '.mx-deck', '.mx-trio-aura i']) {
       assert.equal(await page.$eval(selector, (el) => getComputedStyle(el).animationName), 'none');
     }
     await page.evaluate((name) => document.documentElement.removeAttribute(`data-${name}`), attribute);
