@@ -105,7 +105,8 @@ export default function MarketSparkline({
         {interactive && active != null && (
           <line x1={cx} x2={cx} y1={PAD} y2={H - PAD} stroke="var(--mx-line-strong)" strokeWidth="1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
         )}
-        <circle cx={cx} cy={cy} r="3" fill={color} />
+        {/* A round stroke stays circular when the chart stretches responsively. */}
+        <path d={`M${cx},${cy}h.01`} fill="none" stroke={color} strokeWidth="6" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
       </svg>
       {interactive && (
         <output className="mx-spark-readout mono" aria-live="polite">

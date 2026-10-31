@@ -1,2553 +1,718 @@
-/* ==========================================================================
-   FBT MARKET · AURORA DECK  (بازطراحی ۲۰۲۶-۱۰-۳۱)
-   --------------------------------------------------------------------------
-   «باکس ها شیشه ایی و بسیار مدرن باشد» · «رنگ بندی درست ایکون svg» ·
-   «انیمیشن بجا بدون چشمک زدن، کاهش سرعت باشد»
-
-   ONE design language for the whole route, written down once:
-
-   GLASS WITHOUT A LIVE BLUR. Every surface here is a stack of gradients —
-   a top-lit sheen, one coloured bloom, an opaque panel underneath — plus a
-   1px inner highlight and a soft outer shadow. No live-blur property appears
-   anywhere in this file: it was measured as the reason this screen painted
-   black while scrolling (test/market-speed.test.mjs pins it off for every
-   market surface), and glass that is painted costs nothing while glass that
-   is blurred costs a full readback of everything behind it, every frame.
-
-   ONE ACCENT PER SURFACE, DRIVEN BY A CUSTOM PROPERTY. A hot card knows its
-   place, a sector knows its hue, a filter knows its meaning; each sets a
-   single `--mx-accent`-style variable and every part of that card (hairline,
-   chip, glow, hover border) reads the same variable, so a card can never
-   disagree with itself.
-
-   MOTION IS TRANSFORM AND OPACITY, AND IT IS RARE. Two ambient loops exist on
-   this screen (the deck's light field drifting at 26s, the Smart Money blade's
-   hairline sweep at 9s) plus one-shot transitions on hover/focus. Nothing
-   blinks: no dot pulses, no opacity strobe, no gradient shimmer on a number.
-   All of it stops for `prefers-reduced-motion`, `data-native` and `data-lite`.
-
-   TYPE AND RHYTHM. Big numbers are tabular and tight-tracked; labels are
-   10–11px muted; surfaces are 24px radius, inner wells 14–16px, pills 999px;
-   the page gap is 14px (12px under 600px) so no two boxes ever touch and no
-   two are ever far apart.
-   ========================================================================== */
+/* FBT MARKET · PRISM GLASS
+   One material, four accents, a quiet hierarchy. Replaces the accumulated
+   Aurora overrides rather than adding another competing redesign layer.
+   Glass is painted: no full-page readbacks, masks or per-row blur layers.
+   Ambient motion uses only transform/opacity and has one stop policy below. */
 
 .mx-market {
-  --mx-bg: #070b14;
-  --mx-panel: #0a1120;
-  --mx-panel-2: #0e1729;
-  --mx-well: rgba(6, 11, 22, 0.66);
-  --mx-line: rgba(148, 163, 184, 0.14);
-  --mx-line-soft: rgba(148, 163, 184, 0.075);
-  --mx-line-strong: rgba(148, 163, 184, 0.26);
-  --mx-text: #e9effb;
-  --mx-muted: #94a5c4;
-  --mx-faint: #6d7f9f;
-  --mx-cyan: #22d3ee;
-  --mx-blue: #3b82f6;
-  --mx-violet: #8b5cf6;
-  --mx-gold: #f7b23b;
-  --mx-up: #2fe6a8;
-  --mx-down: #ff6f91;
-  /* the glass recipe, as tokens, so a surface can be re-graded in one line */
-  --mx-glass: linear-gradient(158deg, rgba(255, 255, 255, 0.062), rgba(255, 255, 255, 0.016) 44%, rgba(6, 10, 20, 0.34));
-  --mx-hi: inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --mx-shadow: 0 20px 44px -30px rgba(2, 6, 18, 0.92);
+  --mx-panel: #101426;
+  --mx-panel-2: #151a30;
+  --mx-well: rgba(4, 9, 23, .42);
+  --mx-text: #f0f4ff;
+  --mx-muted: #a6b3d1;
+  --mx-faint: #8796b9;
+  --mx-line: rgba(164, 184, 236, .18);
+  --mx-line-soft: rgba(164, 184, 236, .1);
+  --mx-line-strong: rgba(185, 210, 255, .38);
+  --mx-cyan: #66e5e1;
+  --mx-blue: #78a9ff;
+  --mx-violet: #b29aff;
+  --mx-gold: #ffcf83;
+  --mx-up: #66e5b5;
+  --mx-down: #ff8fa8;
+  --mx-glass: linear-gradient(138deg, rgba(223, 234, 255, .085), rgba(255, 255, 255, .015) 44%, rgba(4, 9, 22, .24));
+  --mx-hi: inset 0 1px 0 rgba(255, 255, 255, .09), inset 0 -1px 0 rgba(4, 9, 23, .18);
+  --mx-shadow: 0 18px 44px -30px rgba(0, 0, 12, .85);
+  --mx-gap: 18px;
   --mx-r-lg: 24px;
-  --mx-r-md: 17px;
-  --mx-r-sm: 13px;
-  --mx-gap: 14px;
-  --mx-accent: var(--mx-blue);
   display: flex;
   flex-direction: column;
   gap: var(--mx-gap);
   min-width: 0;
-  overflow-x: clip;
   color: var(--mx-text);
-  padding-top: 12px;
   font-family: var(--font-display);
+  background: radial-gradient(ellipse at 0 5%, rgba(71, 137, 181, .08), transparent 45%),
+    radial-gradient(ellipse at 100% 30%, rgba(126, 89, 206, .08), transparent 45%);
 }
-
 .mx-market > * { min-width: 0; }
 .mx-market .mono { font-variant-numeric: tabular-nums; }
 .mx-offline { margin: 0; }
+.mx-up { color: var(--mx-up); }
+.mx-down { color: var(--mx-down); }
+.mx-market :is(button, a, input, summary):focus-visible {
+  outline: 2px solid var(--mx-cyan);
+  outline-offset: 4px;
+}
 
-/* One shared surface recipe. Grouped once so the five big boxes on this screen
-   are literally the same material — that is what makes the page read as one
-   machine instead of six widgets. */
-.mx-market .mx-overview,
+/* Shared glass. The overview itself is only a layout, never a box in a box. */
+.mx-market .mx-deck,
+.mx-market .mx-btc-card,
 .mx-market .mx-hot-card,
 .mx-market .mx-terminal,
 .mx-market .mx-smart-banner,
-.mx-market .mx-breadth {
+.mx-market .mx-lens {
   position: relative;
   isolation: isolate;
+  min-width: 0;
   border: 1px solid var(--mx-line);
+  border-top-color: rgba(210, 224, 255, .28);
   background: var(--mx-glass), var(--mx-panel);
   box-shadow: var(--mx-hi), var(--mx-shadow);
 }
-
-.mx-up { color: var(--mx-up); }
-.mx-down { color: var(--mx-down); }
-
-/* The direction chip. Shared by the deck (mcap change, BTC change) and the hot
-   rail, so a move reads the same in all three places. */
 .mx-change {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 4px 8px;
+  gap: 4px;
+  flex: 0 0 auto;
+  width: fit-content;
+  padding: 6px 9px;
+  border: 1px solid var(--mx-line-soft);
   border-radius: 9px;
-  border: 1px solid transparent;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
+  direction: ltr;
   white-space: nowrap;
 }
+.mx-change[data-dir='up'] { color: var(--mx-up); background: color-mix(in srgb, var(--mx-up) 9%, transparent); }
+.mx-change[data-dir='down'] { color: var(--mx-down); background: color-mix(in srgb, var(--mx-down) 9%, transparent); }
 .mx-change svg { flex: 0 0 auto; }
-.mx-change[data-dir='up'] {
-  color: var(--mx-up);
-  border-color: color-mix(in srgb, var(--mx-up) 24%, transparent);
-  background: color-mix(in srgb, var(--mx-up) 12%, transparent);
-}
-.mx-change[data-dir='down'] {
-  color: var(--mx-down);
-  border-color: color-mix(in srgb, var(--mx-down) 24%, transparent);
-  background: color-mix(in srgb, var(--mx-down) 12%, transparent);
-}
 
-/* ══════════════════════════════════════════════════════════════════════════
-   1 · THE DECK — «ارزش کل و بیت کویین داخل باکس واحد اما خیلی مدرن تر»
-   ══════════════════════════════════════════════════════════════════════════ */
-
-.mx-overview {
+/* 1 · Market overview: an opaline blue reading, not a stack of grey widgets. */
+.mx-market .mx-overview {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 26px;
+  background: none;
+  box-shadow: none;
+}
+.mx-market .mx-deck {
+  padding: 20px;
   overflow: hidden;
   border-radius: 26px;
+  border-inline-start-color: rgba(102, 229, 225, .3);
+  background: radial-gradient(ellipse at 0 0, rgba(63, 190, 199, .17), transparent 65%),
+    radial-gradient(ellipse at 100% 100%, rgba(131, 100, 224, .16), transparent 65%),
+    var(--mx-glass), var(--mx-panel);
 }
-
-/* The light field: two blooms and a hairline sheen across the top edge. It
-   drifts 4px over 26 seconds — slow enough to read as light in a room, not as
-   something moving at the reader. `transform` only, so it never repaints the
-   numbers on top of it. */
-.mx-deck-veil { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
-.mx-deck-veil i {
+.mx-deck::before, .mx-btc-card::before, .mx-lens::before {
+  content: '';
   position: absolute;
-  display: block;
-  border-radius: 50%;
+  inset-block-start: 0;
+  inset-inline: 8% 24%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(178, 227, 255, .8), transparent);
+  pointer-events: none;
 }
+.mx-deck-veil { position: absolute; inset: 0; overflow: hidden; z-index: -1; pointer-events: none; }
+.mx-deck-veil i { position: absolute; width: 80%; aspect-ratio: 1; border-radius: 50%; }
 .mx-deck-veil i:first-child {
-  width: 74%;
-  aspect-ratio: 1.6;
-  top: -58%;
-  inset-inline-start: -14%;
-  background: radial-gradient(closest-side, rgba(59, 130, 246, 0.26), rgba(34, 211, 238, 0.09) 58%, transparent 78%);
-  animation: mx-float 26s ease-in-out infinite alternate;
+  inset-block-start: -75%;
+  inset-inline-start: -20%;
+  background: radial-gradient(closest-side, rgba(102, 229, 225, .16), transparent);
+  animation: mx-float 24s ease-in-out infinite alternate;
 }
 .mx-deck-veil i:last-child {
-  width: 62%;
-  aspect-ratio: 1.5;
-  bottom: -54%;
-  inset-inline-end: -12%;
-  background: radial-gradient(closest-side, rgba(139, 92, 246, 0.24), rgba(247, 178, 59, 0.07) 60%, transparent 80%);
-  animation: mx-float 31s ease-in-out infinite alternate-reverse;
+  inset-block-end: -80%;
+  inset-inline-end: -25%;
+  background: radial-gradient(closest-side, rgba(178, 154, 255, .19), transparent);
+  animation: mx-float 28s ease-in-out infinite alternate-reverse;
 }
-@keyframes mx-float { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(0, -6px, 0); } }
-
-.mx-deck-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 12px 16px 0;
-}
-.mx-deck-mark {
+.mx-deck-head { display: flex; align-items: center; gap: 10px; }
+.mx-deck-mark, .mx-trio-mark, .mx-metric-icon, .mx-breadth-mark {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
   flex: 0 0 auto;
-  border-radius: 9px;
-  color: #dff1ff;
-  background: linear-gradient(150deg, rgba(34, 211, 238, 0.34), rgba(59, 130, 246, 0.2) 52%, rgba(139, 92, 246, 0.26));
-  border: 1px solid rgba(147, 197, 253, 0.28);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  border: 1px solid color-mix(in srgb, var(--mx-accent, var(--mx-cyan)) 28%, transparent);
+  color: var(--mx-accent, var(--mx-cyan));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--mx-accent, var(--mx-cyan)) 16%, transparent), rgba(255, 255, 255, .02));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12);
 }
-.mx-deck-title {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.01em;
-  color: var(--mx-text);
-}
-/* Static by design. The four blinking green dots this screen used to carry were
-   the complaint «بدون چراغ چشمک زن سبز»; a live feed is stated, not pulsed. */
+.mx-deck-mark { width: 38px; height: 38px; border-radius: 13px; }
+.mx-deck-mark svg { width: 21px; height: 21px; }
+.mx-deck-headings { display: flex; flex-direction: column; gap: 3px; }
+.mx-deck-eyebrow { color: var(--mx-muted); font-size: 10px; font-weight: 500; }
+.mx-deck-title { font-size: 15px; font-weight: 800; color: var(--mx-text); }
 .mx-deck-live {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin-inline-start: auto;
-  padding: 3px 9px;
+  padding: 5px 9px;
+  border: 1px solid var(--mx-line);
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--mx-up) 22%, transparent);
-  background: color-mix(in srgb, var(--mx-up) 9%, transparent);
-  color: color-mix(in srgb, var(--mx-up) 88%, var(--mx-text));
+  background: rgba(255, 255, 255, .035);
+  color: var(--mx-up);
   font-size: 10px;
-  font-weight: 700;
-  line-height: 1.4;
 }
-.mx-deck-live i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--mx-up);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mx-up) 16%, transparent);
-}
-
-.mx-global, .mx-btc { padding: 14px 16px 16px; min-width: 0; }
-.mx-btc {
-  border-top: 1px solid var(--mx-line-soft);
-  background: linear-gradient(180deg, rgba(247, 178, 59, 0.045), transparent 46%);
-}
-
-.mx-global-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.mx-global-head-text { min-width: 0; }
-.mx-kicker {
-  display: block;
-  margin-bottom: 5px;
-  color: var(--mx-muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-.mx-global-value {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: clamp(29px, 7.4vw, 42px);
-  font-weight: 700;
-  letter-spacing: -0.035em;
-  line-height: 1.04;
-  color: #f6faff;
-}
-.mx-skel-value {
-  display: block;
-  width: 176px;
-  height: 36px;
-  border-radius: 10px;
-  background: linear-gradient(100deg, rgba(148, 163, 184, 0.1), rgba(148, 163, 184, 0.18), rgba(148, 163, 184, 0.1));
-}
-
-.mx-global-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 14px;
-}
-.mx-metric {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 8px 9px;
-  border-radius: var(--mx-r-sm);
-  border: 1px solid var(--mx-line-soft);
-  background: linear-gradient(168deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.008));
-}
+.mx-deck-live i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.mx-deck-live[data-unavailable='true'] { color: var(--mx-muted); }
+.mx-deck-main { margin-top: 24px; }
+.mx-global-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.mx-kicker { display: block; grid-column: 1 / -1; color: var(--mx-muted); font-size: 11px; font-weight: 500; }
+.mx-global-value { color: var(--mx-text); font: 700 clamp(30px, 6vw, 44px)/1.15 var(--font-mono); letter-spacing: -.05em; direction: ltr; text-align: start; }
+.mx-global-head .mx-change { margin-bottom: 5px; }
+.mx-skel-value { display: block; width: 160px; height: 38px; border-radius: 12px; background: var(--mx-line); }
+.mx-global-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 21px; }
+.mx-metric { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 10px 6px; border-inline-start: 1px solid var(--mx-line); }
+.mx-metric:first-child { padding-inline-start: 0; border: 0; }
 .mx-metric[data-tone='cyan'] { --mx-accent: var(--mx-cyan); }
 .mx-metric[data-tone='gold'] { --mx-accent: var(--mx-gold); }
 .mx-metric[data-tone='violet'] { --mx-accent: var(--mx-violet); }
-.mx-metric-icon {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  flex: 0 0 auto;
-  border-radius: 9px;
-  color: color-mix(in srgb, var(--mx-accent) 92%, #ffffff);
-  background: color-mix(in srgb, var(--mx-accent) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--mx-accent) 26%, transparent);
-}
-.mx-metric-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.mx-metric-label {
-  color: var(--mx-muted);
-  font-size: 10px;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mx-metric strong { font-size: 13px; font-weight: 700; line-height: 1.1; letter-spacing: -0.01em; }
-
-/* Dominance: one bar, three segments, and a legend that prints the same three
-   numbers. The bar is never clamped to an invented minimum width — a 3% share
-   is 3% of the track, or it is not a measurement. */
-.mx-dominance-wrap { margin-top: 12px; }
-.mx-dominance {
-  display: flex;
-  height: 6px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.12);
-  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.4);
-}
-.mx-dominance span { transition: width 620ms cubic-bezier(0.22, 1, 0.36, 1); }
-.mx-dominance .is-btc { background: linear-gradient(90deg, #f0932b, var(--mx-gold)); }
-.mx-dominance .is-eth { background: linear-gradient(90deg, #627eea, var(--mx-violet)); }
-.mx-dominance .is-other { background: linear-gradient(90deg, rgba(148, 163, 184, 0.4), rgba(148, 163, 184, 0.22)); }
-.mx-dominance-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  margin-top: 7px;
-  color: var(--mx-muted);
-  font-size: 10.5px;
-}
+.mx-metric-icon { width: 27px; height: 27px; border-radius: 9px; }
+.mx-metric-text { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.mx-metric-label { color: var(--mx-muted); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mx-metric strong { font-size: 12px; font-weight: 600; line-height: 1.1; direction: ltr; }
+.mx-dominance-wrap { margin-top: 13px; }
+.mx-dominance { display: flex; direction: ltr; height: 5px; gap: 3px; overflow: hidden; border-radius: 99px; }
+.mx-dominance span { border-radius: inherit; }
+.mx-dominance .is-btc { background: linear-gradient(90deg, #e5a254, var(--mx-gold)); }
+.mx-dominance .is-eth { background: linear-gradient(90deg, #8b83e0, var(--mx-violet)); }
+.mx-dominance .is-other { background: #66799e; }
+.mx-dominance-legend { display: flex; gap: 15px; flex-wrap: wrap; margin-top: 9px; color: var(--mx-muted); font-size: 9px; }
 .mx-dominance-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.mx-dominance-legend b { color: var(--mx-text); font-weight: 700; }
-.mx-dominance-legend i { width: 7px; height: 7px; border-radius: 2.5px; }
+.mx-dominance-legend b { color: var(--mx-text); font-weight: 600; }
+.mx-dominance-legend i { width: 5px; height: 5px; border-radius: 50%; background: #66799e; }
 .mx-dominance-legend [data-tone='btc'] i { background: var(--mx-gold); }
-.mx-dominance-legend [data-tone='eth'] i { background: #7d95ee; }
-.mx-dominance-legend [data-tone='other'] i { background: rgba(148, 163, 184, 0.5); }
-
-.mx-global-trend {
-  margin-top: 12px;
-  padding: 10px 10px 8px;
-  border-radius: var(--mx-r-md);
-  border: 1px solid var(--mx-line-soft);
-  background: var(--mx-well);
-}
-.mx-trend-method { margin-top: 6px; }
-.mx-trend-method summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  cursor: pointer;
-  list-style: none;
-  color: var(--mx-faint);
-  font-size: 10.5px;
-}
+.mx-dominance-legend [data-tone='eth'] i { background: var(--mx-violet); }
+.mx-global-trend { margin-top: 17px; padding-top: 10px; border-top: 1px solid var(--mx-line-soft); }
+.mx-trend-method { margin-top: 7px; }
+.mx-trend-method summary { display: flex; justify-content: space-between; gap: 8px; list-style: none; color: var(--mx-muted); font-size: 9px; cursor: pointer; }
 .mx-trend-method summary::-webkit-details-marker { display: none; }
-.mx-trend-method p { margin: 7px 0 0; color: var(--mx-muted); font-size: 10.5px; line-height: 1.65; }
+.mx-trend-method p { margin: 8px 0 0; color: var(--mx-muted); font-size: 10px; line-height: 1.7; }
 
-/* §9.2 retired the deck's footer: the three counts it used to repeat are the
-   `.mx-trio` boxes now (coins · markets · average change), with real marks and
-   their own accents. Leaving the pill recipe here would let a future edit put
-   the footnote back beside the readings that replaced it. */
-
-/* ── the Bitcoin half ───────────────────────────────────────────────────── */
-.mx-btc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.mx-btc-identity {
+/* Three independent, equally weighted readings. */
+.mx-trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.mx-trio-box {
+  --mx-accent: var(--mx-cyan);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   min-width: 0;
-  padding: 4px 6px 4px 4px;
-  margin-inline-start: -4px;
-  border: 1px solid transparent;
-  border-radius: 14px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  text-align: start;
-  transition: background 160ms ease, border-color 160ms ease;
+  padding: 13px 11px;
+  border: 1px solid var(--mx-line);
+  border-top-color: color-mix(in srgb, var(--mx-accent) 38%, transparent);
+  border-radius: 17px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--mx-accent) 9%, transparent), transparent 70%), var(--mx-glass), var(--mx-panel);
+  box-shadow: var(--mx-hi);
 }
-.mx-btc-identity:hover {
-  border-color: color-mix(in srgb, var(--mx-gold) 26%, transparent);
-  background: color-mix(in srgb, var(--mx-gold) 8%, transparent);
-}
-/* The logo tile is gold glass and the logo fills it edge to edge — «لوگو باید
-   فضای باکس لوگو را بگیره» — with preferVector artwork, so it paints on frame 0
-   instead of waiting on a round PNG from a CDN. */
-.mx-btc-logo {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  flex: 0 0 auto;
-  padding: 0;
-  border-radius: 13px;
+.mx-trio-box[data-tone='violet'] { --mx-accent: var(--mx-violet); }
+.mx-trio-box[data-tone='up'] { --mx-accent: var(--mx-up); }
+.mx-trio-box[data-tone='down'] { --mx-accent: var(--mx-down); }
+.mx-trio-mark { width: 30px; height: 30px; border-radius: 10px; }
+.mx-trio-text { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.mx-trio-label { font-size: 10px; color: var(--mx-muted); white-space: nowrap; }
+.mx-trio-value { font-size: clamp(14px, 3.8vw, 20px); font-weight: 700; letter-spacing: -.035em; line-height: 1.1; }
+.mx-trio-box:is([data-tone='up'], [data-tone='down']) .mx-trio-value { color: var(--mx-accent); }
+.mx-trio-note { font-size: 9px; color: var(--mx-muted); }
+
+/* 2 · Bitcoin · champagne/amber glass with an etched orbital mark. */
+.mx-market .mx-btc-card {
+  padding: 20px;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 32% 22%, rgba(255, 255, 255, 0.22), transparent 62%),
-    linear-gradient(150deg, rgba(247, 178, 59, 0.32), rgba(226, 58, 14, 0.16));
-  border: 1px solid rgba(247, 178, 59, 0.44);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 10px 22px -14px rgba(247, 147, 26, 0.9);
+  border-radius: 24px;
+  border-color: rgba(255, 207, 131, .23);
+  border-top-color: rgba(255, 224, 175, .44);
+  background: radial-gradient(ellipse at 90% 0, rgba(241, 165, 71, .15), transparent 68%),
+    linear-gradient(140deg, rgba(255, 238, 205, .06), transparent 50%), var(--mx-glass), var(--mx-panel);
 }
-.mx-btc-logo .coin-logo { width: 100%; height: 100%; padding: 0; border: 0; border-radius: 12px; background: none; }
-.mx-btc-logo .coin-logo svg { width: 100%; height: 100%; display: block; }
-.mx-btc-id-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.mx-btc-id-text b { font-size: 13.5px; font-weight: 800; letter-spacing: -0.01em; }
-.mx-btc-id-text small { color: var(--mx-muted); font-size: 10px; letter-spacing: 0.02em; }
-.mx-btc-go { display: inline-flex; color: var(--mx-faint); transition: transform 160ms ease, color 160ms ease; }
-.mx-btc-identity:hover .mx-btc-go { color: var(--mx-gold); }
-[dir='rtl'] .mx-btc-go svg { transform: scaleX(-1); }
+.mx-btc-card::before { background: linear-gradient(90deg, transparent, rgba(255, 220, 163, .9), transparent); }
+.mx-btc-veil { position: absolute; z-index: -1; inset: 0; background: radial-gradient(ellipse at 10% 110%, rgba(255, 185, 94, .09), transparent 64%); pointer-events: none; }
+.mx-btc-orbit { position: absolute; z-index: -1; inset-inline-end: -50px; top: -42px; width: 210px; height: 210px; display: grid; place-items: center; color: var(--mx-gold); opacity: .07; pointer-events: none; transform: rotate(-15deg); }
+.mx-btc-orbit i { position: absolute; inset: 0; border: 1px solid currentColor; border-radius: 50%; }
+.mx-btc-orbit i::after { content: ''; position: absolute; inset: 17px; border: 1px dashed currentColor; border-radius: inherit; }
+.mx-btc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mx-btc-identity { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 0; border: 0; border-radius: 13px; background: none; color: inherit; text-align: start; cursor: pointer; }
+.mx-btc-logo { display: grid; place-items: center; width: 48px; height: 48px; flex: 0 0 auto; overflow: hidden; border: 1px solid rgba(255, 207, 131, .4); border-radius: 15px; background: linear-gradient(135deg, rgba(255, 231, 178, .24), rgba(232, 136, 37, .14)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), 0 7px 24px -12px rgba(244, 168, 60, .6); }
+.mx-btc-logo .coin-logo { width: 100%; height: 100%; padding: 0; border: 0; border-radius: 14px; background: none; }
+.mx-btc-logo .coin-logo :is(svg, img) { display: block; width: 100%; height: 100%; }
+.mx-btc-id-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mx-btc-id-text b { font-size: 14px; font-weight: 700; }
+.mx-btc-id-text small { font-size: 10px; color: var(--mx-muted); }
+.mx-btc-go { color: var(--mx-gold); opacity: .65; }
+.mx-btc-identity:hover .mx-btc-go { opacity: 1; }
+.mx-btc-price { margin-top: 24px; text-align: center; direction: ltr; font: 700 clamp(29px, 6vw, 39px)/1.15 var(--font-mono); letter-spacing: -.045em; color: var(--mx-text); }
+.mx-btc-chart {
+  --mx-up: var(--mx-gold);
+  margin-top: 18px;
+  border-radius: 12px;
+  background: repeating-linear-gradient(0deg, transparent 0 23px, var(--mx-line-soft) 23px 24px);
+}
+.mx-btc-range { margin-top: 15px; direction: ltr; }
+.mx-btc-range-track { height: 3px; position: relative; border-radius: 99px; background: linear-gradient(90deg, rgba(255, 207, 131, .12), rgba(255, 207, 131, .65)); }
+.mx-btc-range-track span { position: absolute; top: -3px; width: 9px; height: 9px; margin-inline-start: -4px; border-radius: 50%; border: 2px solid var(--mx-panel); background: var(--mx-gold); box-shadow: 0 0 0 3px rgba(255, 207, 131, .12); }
+.mx-btc-range-scale { display: flex; justify-content: space-between; gap: 6px; margin-top: 9px; font-size: 9px; color: var(--mx-muted); }
+.mx-btc-range-scale span:nth-child(2) { font-family: var(--font-display); }
 
-.mx-btc-price {
-  margin-top: 8px;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: clamp(23px, 5.6vw, 29px);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-  color: #fffaf0;
-}
-.mx-btc-chart { margin-top: 8px; }
-
-.mx-btc-range { margin-top: 11px; }
-.mx-btc-range-track {
-  position: relative;
-  height: 5px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--mx-down) 78%, transparent), rgba(148, 163, 184, 0.4), color-mix(in srgb, var(--mx-up) 78%, transparent));
-  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.35);
-}
-.mx-btc-range-track span {
-  position: absolute;
-  top: 50%;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: #fff;
-  border: 2px solid var(--mx-gold);
-  transform: translate(-50%, -50%);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  transition: inset-inline-start 620ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.mx-btc-range-scale {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 6px;
-  color: var(--mx-faint);
-  font-size: 10px;
-}
-.mx-btc-range-scale span:nth-child(2) { color: var(--mx-muted); }
-
-/* ── the sparkline, in both halves ──────────────────────────────────────── */
-.mx-spark { position: relative; width: 100%; outline: none; }
+/* The small chart is LTR even in Persian. Pointer and keyboard stay aligned. */
+.mx-spark { position: relative; width: 100%; min-width: 0; direction: ltr; outline: none; }
 .mx-spark svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .mx-spark.is-interactive { cursor: crosshair; border-radius: 10px; }
-.mx-spark.is-interactive:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--mx-blue) 55%, transparent); }
-.mx-spark-readout {
-  position: absolute;
-  inset-inline-start: 0;
-  top: -4px;
-  padding: 3px 7px;
-  border: 1px solid var(--mx-line);
-  border-radius: 8px;
-  background: var(--mx-panel-2);
-  color: var(--mx-text);
-  font-size: 10px;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-.mx-spark.is-interactive:hover .mx-spark-readout,
-.mx-spark.is-interactive:focus-visible .mx-spark-readout { opacity: 1; }
+.mx-spark.is-interactive:focus-visible { outline: 2px solid var(--mx-cyan); outline-offset: 3px; }
+.mx-spark-readout { position: absolute; top: 0; inset-inline-end: 4px; max-width: 95%; padding: 5px 7px; border: 1px solid var(--mx-line); border-radius: 7px; background: var(--mx-panel); color: var(--mx-text); font-size: 9px; pointer-events: none; opacity: 0; }
+.mx-spark:is(:hover, :focus-visible) .mx-spark-readout { opacity: 1; }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   2 · «داغ‌ترین کوین‌ها» — minimal cards, one accent per place
-   ══════════════════════════════════════════════════════════════════════════ */
-
-.mx-section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
-.mx-section-head h2 { margin: 0; font-size: 14.5px; font-weight: 800; letter-spacing: -0.01em; }
-.mx-hot-flame {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 auto;
-  border-radius: 8px;
-  color: #ffd9a8;
-  background: linear-gradient(150deg, rgba(255, 143, 90, 0.34), rgba(255, 111, 145, 0.18));
-  border: 1px solid rgba(255, 170, 110, 0.3);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
-}
-.mx-section-note {
-  margin-inline-start: auto;
-  color: var(--mx-faint);
-  font-size: 10px;
-  text-align: end;
-}
-
-.mx-hot-rail {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-  scroll-snap-type: x proximity;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-}
+/* 3 · Discovery, with rank as its only accent (no blinking hot indicators). */
+.mx-section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.mx-section-head h2 { margin: 0; font-size: 14px; font-weight: 750; }
+.mx-section-note { margin-inline-start: auto; font-size: 9px; color: var(--mx-muted); }
+.mx-hot-flame { display: grid; place-items: center; width: 28px; height: 28px; color: var(--mx-gold); }
+.mx-hot-flame svg { width: 22px; height: 22px; }
+.mx-hot-rail { display: flex; gap: 10px; overflow-x: auto; padding: 2px 1px 8px; scroll-snap-type: x proximity; scrollbar-width: none; }
 .mx-hot-rail::-webkit-scrollbar { display: none; }
-
-.mx-hot-card {
-  flex: 0 0 172px;
-  scroll-snap-align: start;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 12px;
-  border-radius: var(--mx-r-md);
-  color: inherit;
-  text-align: start;
-  cursor: pointer;
-  overflow: hidden;
-  transition: transform 170ms cubic-bezier(0.22, 1, 0.36, 1), border-color 170ms ease, box-shadow 170ms ease;
-}
+.mx-market .mx-hot-card { --hot: var(--mx-gold); flex: 0 0 190px; display: flex; flex-direction: column; gap: 12px; padding: 15px; overflow: hidden; border-radius: 19px; text-align: start; color: var(--mx-text); cursor: pointer; scroll-snap-align: start; transition: transform .2s ease, border-color .2s ease; background: radial-gradient(ellipse at 100% 0, color-mix(in srgb, var(--hot) 10%, transparent), transparent 70%), var(--mx-glass), var(--mx-panel); }
 .mx-hot-card[data-place='1'] { --hot: var(--mx-gold); }
-.mx-hot-card[data-place='2'] { --hot: #4cc3ff; }
-.mx-hot-card[data-place='3'] { --hot: #a78bfa; }
-.mx-hot-card[data-place='n'] { --hot: #7c93bd; }
-/* The card's own accent, painted as a 1px hairline across the top edge. It is
-   the only decoration the card carries: «مینیمال تر … رنگ بندی خاص». */
-.mx-hot-sheen {
-  position: absolute;
-  inset-inline: 12px;
-  top: 0;
-  height: 2px;
-  border-radius: 0 0 3px 3px;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--hot) 85%, transparent), transparent);
-  opacity: 0.75;
-}
-.mx-hot-card:hover {
-  transform: translateY(-3px);
-  border-color: color-mix(in srgb, var(--hot) 46%, transparent);
-  box-shadow: var(--mx-hi), 0 18px 34px -22px color-mix(in srgb, var(--hot) 70%, transparent);
-}
-.mx-hot-card:active { transform: scale(0.985); }
-.mx-hot-card:focus-visible { outline: 2px solid color-mix(in srgb, var(--hot) 70%, transparent); outline-offset: 2px; }
-
-.mx-hot-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.mx-hot-head .coin-logo { flex: 0 0 auto; border-radius: 10px; }
-.mx-hot-id { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
-.mx-hot-id b { font-size: 12.5px; font-weight: 800; letter-spacing: -0.01em; }
-.mx-hot-id small {
-  color: var(--mx-faint);
-  font-size: 10px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mx-hot-rank {
-  flex: 0 0 auto;
-  padding: 2px 6px;
-  border-radius: 7px;
-  border: 1px solid color-mix(in srgb, var(--hot) 30%, transparent);
-  background: color-mix(in srgb, var(--hot) 13%, transparent);
-  color: color-mix(in srgb, var(--hot) 88%, #ffffff);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1.5;
-}
-.mx-hot-price-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.mx-hot-price { font-size: 16px; font-weight: 700; letter-spacing: -0.025em; }
+.mx-hot-card[data-place='2'] { --hot: var(--mx-cyan); }
+.mx-hot-card[data-place='3'] { --hot: var(--mx-violet); }
+.mx-hot-card[data-place='n'] { --hot: var(--mx-blue); }
+.mx-hot-sheen { position: absolute; height: 1px; top: 0; inset-inline: 14px; background: linear-gradient(90deg, transparent, var(--hot), transparent); opacity: .65; }
+.mx-market .mx-hot-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--hot) 45%, transparent); }
+.mx-hot-head { display: flex; align-items: center; gap: 8px; }
+.mx-hot-head .coin-logo { flex: 0 0 auto; border-radius: 50%; }
+.mx-hot-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mx-hot-id b { font-size: 12px; font-weight: 750; }
+.mx-hot-id small { color: var(--mx-muted); font-size: 9px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mx-hot-rank { margin-inline-start: auto; color: var(--hot); font-size: 10px; font-weight: 600; opacity: .85; }
+.mx-hot-price-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.mx-hot-price { font-size: 17px; font-weight: 700; letter-spacing: -.035em; }
+.mx-hot-price-row .mx-change { font-size: 9px; padding: 4px 5px; gap: 2px; }
 .mx-hot-chart { display: block; width: 100%; height: 32px; }
-.mx-hot-chart .mx-spark { height: 32px; }
-.mx-hot-volume {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding-top: 7px;
-  border-top: 1px solid var(--mx-line-soft);
-  color: var(--mx-faint);
-  font-size: 9.5px;
-}
-.mx-hot-volume b { color: var(--mx-muted); font-weight: 700; }
+.mx-hot-volume { display: flex; justify-content: space-between; gap: 4px; color: var(--mx-muted); font-size: 9px; }
+.mx-hot-volume b { color: var(--mx-text); font-weight: 500; }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   3 · STORIES — between «داغ‌ترین‌ها» and the Smart Money blade
-   «باکس استوری ها خیلی مدرن شود و بین داغ ترین ها و بنر تبلیغاتی قرار بگیره»
-   The bubbles keep their own artwork (components/MarketStories); what changes
-   here is the box they sit in: tighter, quieter, and on the same material as
-   every other surface on the page.
-   ══════════════════════════════════════════════════════════════════════════ */
+/* Stories belong to the same material, while the story player owns its CSS. */
+.mx-stories .market-stories-section { margin: 0; padding: 15px; border-radius: 23px; border: 1px solid var(--mx-line); background: var(--mx-glass), var(--mx-panel); box-shadow: var(--mx-hi), var(--mx-shadow); }
+.mx-stories .market-stories-aurora { opacity: .16; }
+.mx-stories .market-stories-head { margin-bottom: 12px; }
+.mx-stories .market-stories-mark { width: 28px; height: 28px; border-radius: 9px; color: var(--mx-violet); background: color-mix(in srgb, var(--mx-violet) 13%, transparent); border: 1px solid var(--mx-line); }
+.mx-stories .market-stories-title { font-size: 13px; color: var(--mx-text); }
+.mx-stories .market-stories-badge { font-size: 9px; color: var(--mx-muted); border: 0; background: none; padding: 0; }
+.mx-stories .market-stories-rail { gap: 12px; padding-block: 3px; }
+.mx-stories .market-story-Bubble { width: 72px; gap: 7px; }
+.mx-stories .market-story-ring { border-radius: 23px; padding: 2px; box-shadow: none; }
+.mx-stories .market-story-avatar-inner { border-radius: 20px; border: 3px solid var(--mx-panel); }
+.mx-stories .market-story-label { color: var(--mx-muted); font-size: 10px; }
 
-.mx-stories .market-stories-section {
-  margin: 0;
-  padding: 13px 14px 11px;
-  border-radius: var(--mx-r-lg);
-  border-color: var(--mx-line);
-  background: var(--mx-glass), var(--mx-panel);
-  box-shadow: var(--mx-hi), var(--mx-shadow);
-}
-.mx-stories .market-stories-aurora {
-  background:
-    radial-gradient(64% 120% at 6% -14%, rgba(56, 225, 255, 0.11), transparent 62%),
-    radial-gradient(58% 116% at 96% 116%, rgba(139, 123, 255, 0.12), transparent 64%);
-}
-.mx-stories .market-stories-head { margin-bottom: 11px; }
-.mx-stories .market-stories-mark {
-  width: 24px;
-  height: 24px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  color: #e6f6ff;
-  background: linear-gradient(150deg, rgba(56, 225, 255, 0.3), rgba(139, 123, 255, 0.24));
-  border: 1px solid rgba(147, 197, 253, 0.26);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
-}
-.mx-stories .market-stories-title { font-size: 12.5px; font-weight: 800; color: var(--mx-text); }
-.mx-stories .market-stories-badge {
-  font-size: 9.5px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  border-color: var(--mx-line);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--mx-muted);
-}
-.mx-stories .market-stories-rail { gap: clamp(10px, 3vw, 16px); padding: 4px 2px 2px; }
-.mx-stories .market-story-Bubble { width: clamp(70px, 19vw, 82px); gap: 6px; }
-.mx-stories .market-story-ring {
-  width: clamp(56px, 15.4vw, 64px);
-  border-radius: 21px;
-  padding: 2px;
-  background: linear-gradient(150deg, var(--story-accent, var(--mx-cyan)), var(--story-accent2, var(--mx-violet)));
-  box-shadow:
-    0 10px 22px -14px color-mix(in srgb, var(--story-accent, #38e1ff) 88%, transparent),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.18);
-}
-.mx-stories .market-story-avatar-inner { border-radius: 19px; border-width: 2px; border-color: #060a14; }
-.mx-stories .market-story-chip {
-  font-size: 8px;
-  padding: 2px 7px;
-  border-radius: 999px;
-}
-.mx-stories .market-story-label { font-size: 10.5px; font-weight: 700; color: var(--mx-muted); min-height: 30px; }
-.mx-stories .market-story-Bubble:hover .market-story-label { color: var(--mx-text); }
-
-/* ══════════════════════════════════════════════════════════════════════════
-   4 · SMART MONEY — «بسیار نینیمال تر» : one blade, one mark, one CTA
-   ══════════════════════════════════════════════════════════════════════════ */
-
+/* 4 · Smart money · a luminous circuit, with one clear call to action. */
 .mx-market .mx-smart-banner {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 11px;
-  padding: 12px 14px;
-  border-radius: 20px;
-  border-color: rgba(96, 165, 250, 0.2);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
   overflow: hidden;
-  background:
-    radial-gradient(120% 180% at 100% 0%, rgba(139, 92, 246, 0.16), transparent 58%),
-    linear-gradient(120deg, rgba(11, 18, 32, 0.96), rgba(15, 22, 46, 0.96));
-}
-/* The single moving thing on the blade: a light that crosses the top hairline
-   once every nine seconds. `transform` only, 2px tall, and it is the whole
-   "machine" the banner keeps — the isometric data field is gone. */
-.mx-smart-sheen {
-  position: absolute;
-  inset-inline: 0;
-  top: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(147, 197, 253, 0.85), rgba(196, 181, 253, 0.5), transparent);
-  transform: translate3d(-100%, 0, 0);
-  animation: mx-blade-sweep 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  pointer-events: none;
-}
-@keyframes mx-blade-sweep {
-  0% { transform: translate3d(-100%, 0, 0); opacity: 0; }
-  8% { opacity: 1; }
-  42% { transform: translate3d(100%, 0, 0); opacity: 0; }
-  100% { transform: translate3d(100%, 0, 0); opacity: 0; }
-}
-.mx-smart-mark {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 auto;
-  border-radius: 13px;
-  color: #e0f2fe;
-  background:
-    radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.22), transparent 60%),
-    linear-gradient(150deg, rgba(59, 130, 246, 0.42), rgba(139, 92, 246, 0.3));
-  border: 1px solid rgba(147, 197, 253, 0.32);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 12px 26px -16px rgba(59, 130, 246, 0.9);
-}
-.mx-smart-copy { min-width: 0; }
-.mx-smart-eyebrow {
-  display: block;
-  color: #93c5fd;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  margin-bottom: 3px;
-}
-.mx-smart-copy h2 {
-  margin: 0;
-  color: #f8fafc;
-  font-size: 13.5px;
-  font-weight: 800;
-  line-height: 1.3;
-  letter-spacing: -0.01em;
-}
-.mx-smart-copy p {
-  margin: 3px 0 0;
-  color: #9fb0d4;
-  font-size: 11px;
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.mx-smart-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  height: 36px;
-  padding: 0 13px;
-  border-radius: 12px;
-  border: 1px solid rgba(147, 197, 253, 0.34);
-  background: linear-gradient(140deg, rgba(37, 99, 235, 0.9), rgba(79, 70, 229, 0.86));
-  color: #fff;
-  font-size: 11.5px;
-  font-weight: 800;
-  text-decoration: none;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24), 0 10px 24px -14px rgba(59, 130, 246, 0.95);
-  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
-}
-.mx-smart-cta svg { transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1); }
-.mx-smart-cta:hover {
-  transform: translateY(-1px);
-  border-color: rgba(191, 219, 254, 0.6);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 14px 30px -14px rgba(59, 130, 246, 1);
-}
-.mx-smart-cta:hover svg { transform: translateX(2px); }
-.mx-smart-cta:active { transform: scale(0.975); }
-[dir='rtl'] .mx-smart-cta svg { transform: scaleX(-1); }
-[dir='rtl'] .mx-smart-cta:hover svg { transform: scaleX(-1) translateX(2px); }
-
-/* ══════════════════════════════════════════════════════════════════════════
-   5 · THE LIST CARD — «همه ارزها»: search, filters, نبض بازار, دسته‌ها, rows
-   ══════════════════════════════════════════════════════════════════════════ */
-
-.mx-terminal {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin: 0;
-  padding: 14px;
-  border-radius: var(--mx-r-lg);
-  /* The search popup drops down INSIDE this card, so the card may not clip. */
-  overflow: visible;
-}
-.mx-terminal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.mx-terminal-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 800; letter-spacing: -0.015em; }
-.mx-terminal-title .market-count {
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--mx-line-soft);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--mx-muted);
-  font-size: 10.5px;
-  font-weight: 700;
-}
-.mx-terminal-actions { display: flex; align-items: center; gap: 7px; }
-.mx-fresh { display: inline-flex; align-items: center; gap: 6px; color: var(--mx-faint); font-size: 10px; }
-.mx-fresh i { width: 6px; height: 6px; border-radius: 50%; background: var(--mx-up); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mx-up) 14%, transparent); }
-.mx-fresh[data-stale='true'] { color: color-mix(in srgb, var(--mx-down) 80%, var(--mx-muted)); }
-.mx-fresh[data-stale='true'] i { background: var(--mx-down); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mx-down) 14%, transparent); }
-
-.mx-icon-btn {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  border: 1px solid var(--mx-line);
-  border-radius: 11px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.008));
-  color: var(--mx-muted);
-  cursor: pointer;
-  transition: color 150ms ease, border-color 150ms ease, background 150ms ease, transform 150ms ease;
-}
-.mx-icon-btn:hover { color: var(--mx-text); border-color: var(--mx-line-strong); transform: translateY(-1px); }
-.mx-icon-btn:active { transform: scale(0.95); }
-.mx-icon-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
-.mx-icon-btn[data-busy='true'] svg { animation: mx-spin 900ms linear infinite; }
-@keyframes mx-spin { to { transform: rotate(360deg); } }
-.mx-compare {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 11px;
-  border: 1px solid var(--mx-line);
-  border-radius: 11px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.008));
-  color: var(--mx-muted);
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 150ms ease, border-color 150ms ease, transform 150ms ease;
-}
-.mx-compare:hover { color: var(--mx-text); border-color: var(--mx-line-strong); transform: translateY(-1px); }
-
-/* ── 5.1 · the neon search field ─────────────────────────────────────────
-   A gradient hairline drawn with two backgrounds (one clipped to the padding
-   box, one to the border box). At rest it is a quiet blue-violet; on focus it
-   lights and a single sweep crosses the field, then stops. */
-.mx-search-wrap { position: relative; z-index: 20; }
-.mx-search {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  height: 50px;
-  padding: 0 11px;
+  padding: 22px;
   border: 1px solid transparent;
-  border-radius: var(--mx-r-md);
-  /* Three backgrounds, two clips: the sheen and the panel are clipped to the
-     padding box, the cyan→blue→violet hairline to the border box. That is a
-     gradient border with no mask and no extra layer, so the one field on this
-     screen that is allowed to glow does not cost a compositing pass to do it. */
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012)) padding-box,
-    linear-gradient(115deg, rgba(34, 211, 238, 0.42), rgba(59, 130, 246, 0.24) 44%, rgba(139, 92, 246, 0.44)) border-box,
-    var(--mx-panel-2) padding-box;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  transition: box-shadow 200ms ease;
-}
-.mx-search:focus-within {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 0 0 3px color-mix(in srgb, var(--mx-cyan) 14%, transparent),
-    0 14px 32px -22px rgba(56, 189, 248, 0.95);
-}
-.mx-search-glow {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  border-radius: inherit;
-  opacity: 0;
-  background: linear-gradient(100deg, transparent 24%, rgba(186, 230, 253, 0.16) 46%, rgba(196, 181, 253, 0.14) 56%, transparent 78%);
-  pointer-events: none;
-}
-.mx-search:focus-within .mx-search-glow { animation: mx-neon-sweep 0.9s cubic-bezier(0.22, 1, 0.36, 1) 1; }
-@keyframes mx-neon-sweep {
-  from { opacity: 0; transform: translate3d(-55%, 0, 0); }
-  28% { opacity: 1; }
-  to { opacity: 0; transform: translate3d(55%, 0, 0); }
-}
-.mx-search-icon { position: relative; z-index: 1; color: var(--mx-muted); flex: 0 0 auto; transition: color 200ms ease; }
-.mx-search:focus-within .mx-search-icon { color: #7dd3fc; }
-.mx-search-input {
-  position: relative;
-  z-index: 1;
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--mx-text);
-  font: 600 13.5px/1.4 var(--font-display);
-}
-.mx-search-input::placeholder { color: var(--mx-faint); opacity: 0.95; font-weight: 500; }
-.mx-search-input::-webkit-search-cancel-button { display: none; }
-.mx-search-clear {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--mx-muted);
-  cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
-}
-.mx-search-clear:hover { background: rgba(148, 163, 184, 0.14); color: var(--mx-text); }
-/* The capability chip: this field also executes a sentence («پرسودترین ارزها»),
-   which nobody would guess from a placeholder alone. It steps aside the moment
-   there is text, so it never competes with the clear button. */
-.mx-search-ai {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex: 0 0 auto;
-  height: 24px;
-  padding: 0 8px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--mx-violet) 30%, transparent);
-  background: linear-gradient(120deg, color-mix(in srgb, var(--mx-cyan) 14%, transparent), color-mix(in srgb, var(--mx-violet) 16%, transparent));
-  color: #c4b5fd;
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-.mx-search[data-typed='true'] .mx-search-ai { display: none; }
-
-.mx-search-popup {
-  position: absolute;
-  inset-inline: 0;
-  top: calc(100% + 8px);
-  z-index: 60;
-  overflow: hidden;
-  border: 1px solid var(--mx-line-strong);
-  border-radius: var(--mx-r-md);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 30%), #0b1220;
-  box-shadow: 0 24px 54px -22px rgba(0, 0, 0, 0.85);
-}
-.mx-search-results { max-height: 320px; overflow-y: auto; padding: 6px; }
-.mx-search-option {
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 11px;
-  cursor: pointer;
-  transition: background 140ms ease;
-}
-.mx-search-option[data-active='true'], .mx-search-option:hover { background: color-mix(in srgb, var(--mx-blue) 14%, transparent); }
-.mx-search-option-id { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
-.mx-search-option-id b { font-size: 12.5px; font-weight: 700; }
-.mx-search-option-id small { color: var(--mx-faint); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mx-search-option-price { color: var(--mx-muted); font-size: 11.5px; }
-.mx-search-state { padding: 16px; color: var(--mx-muted); font-size: 12.5px; text-align: center; }
-.mx-search-contract-note { padding: 8px 13px; border-top: 1px solid var(--mx-line-soft); color: var(--mx-faint); font-size: 10.5px; }
-
-/* ── 5.2 · the five views and the sort control ─────────────────────────── */
-.mx-controls { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.mx-views { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
-.mx-views::-webkit-scrollbar { display: none; }
-.mx-view {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--mx-line);
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.008));
-  color: var(--mx-muted);
-  font: 600 11.5px/1 var(--font-display);
-  cursor: pointer;
-  transition: color 160ms ease, border-color 160ms ease, background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
-}
-.mx-view-icon { display: inline-flex; opacity: 0.85; }
-.mx-view:hover { color: var(--mx-text); border-color: var(--mx-line-strong); transform: translateY(-1px); }
-.mx-view:active { transform: scale(0.97); }
-/* Each view lights in the colour of what it means: gainers green, losers red,
-   favourites gold, volume cyan, and "all" the neutral blue of the deck. */
-.mx-view[data-view='all'] { --mx-accent: var(--mx-blue); }
-.mx-view[data-view='gainers'] { --mx-accent: var(--mx-up); }
-.mx-view[data-view='losers'] { --mx-accent: var(--mx-down); }
-.mx-view[data-view='favorites'] { --mx-accent: var(--mx-gold); }
-.mx-view[data-view='volume'] { --mx-accent: var(--mx-cyan); }
-.mx-view[data-active='true'] {
-  color: color-mix(in srgb, var(--mx-accent) 34%, #ffffff);
-  border-color: color-mix(in srgb, var(--mx-accent) 52%, transparent);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--mx-accent) 24%, transparent), color-mix(in srgb, var(--mx-accent) 10%, transparent));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 8px 20px -14px color-mix(in srgb, var(--mx-accent) 90%, transparent);
-}
-.mx-view[data-active='true'] .mx-view-icon { opacity: 1; }
-
-.mx-sort-wrap { position: relative; display: flex; align-items: center; gap: 6px; }
-.mx-sort-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 34px;
-  padding: 0 11px;
-  border: 1px solid var(--mx-line);
-  border-radius: 11px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.008));
-  color: var(--mx-text);
-  font: 600 11.5px/1 var(--font-display);
-  cursor: pointer;
-  transition: border-color 150ms ease, background 150ms ease;
-}
-.mx-sort-trigger:hover { border-color: var(--mx-line-strong); }
-.mx-sort-caret { color: var(--mx-muted); transition: transform 180ms ease; }
-.mx-sort-trigger[aria-expanded='true'] { border-color: color-mix(in srgb, var(--mx-blue) 46%, transparent); }
-.mx-sort-trigger[aria-expanded='true'] .mx-sort-caret { transform: rotate(180deg); color: #93c5fd; }
-.mx-sort-popover {
-  position: absolute;
-  top: calc(100% + 7px);
-  inset-inline-end: 0;
-  z-index: 50;
-  min-width: 186px;
-  padding: 6px;
-  border: 1px solid var(--mx-line-strong);
-  border-radius: 15px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 26%), #0b1220;
-  box-shadow: 0 24px 54px -22px rgba(0, 0, 0, 0.85);
-}
-.mx-sort-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  height: 34px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--mx-muted);
-  font: 600 12px/1 var(--font-display);
-  cursor: pointer;
-  transition: background 140ms ease, color 140ms ease;
-}
-.mx-sort-option:hover { background: rgba(148, 163, 184, 0.1); color: var(--mx-text); }
-.mx-sort-option[aria-checked='true'] {
-  background: color-mix(in srgb, var(--mx-blue) 16%, transparent);
-  color: #dbeafe;
-}
-.mx-sort-check { color: #7dd3fc; }
-
-.mx-intent-result {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 11px;
-  border-radius: var(--mx-r-sm);
-  border: 1px solid color-mix(in srgb, var(--mx-violet) 28%, transparent);
-  background: linear-gradient(120deg, color-mix(in srgb, var(--mx-cyan) 10%, transparent), color-mix(in srgb, var(--mx-violet) 12%, transparent));
-  color: #c7d2fe;
-  font-size: 11.5px;
-}
-.mx-intent-result button {
-  margin-inline-start: auto;
-  border: 0;
-  background: transparent;
-  color: var(--mx-muted);
-  font-size: 10.5px;
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-/* ── 5.3 · نبض بازار — an instrument, not a progress bar ───────────────── */
-.mx-market .mx-breadth {
-  padding: 12px;
-  border-radius: var(--mx-r-md);
-  border-color: var(--mx-line-soft);
-  background:
-    linear-gradient(158deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.008) 46%, rgba(6, 10, 20, 0.24)),
-    var(--mx-well);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-.mx-breadth[data-tone='up'] { --mx-accent: var(--mx-up); }
-.mx-breadth[data-tone='down'] { --mx-accent: var(--mx-down); }
-/* The card's own reading, painted on its leading edge: green when the page is
-   net up, red when it is net down. `inset-inline` so it stays on the reading
-   edge in both Persian and English. */
-.mx-market .mx-breadth::after {
-  content: '';
-  position: absolute;
-  inset-block: 12px;
-  inset-inline-start: 0;
-  width: 2px;
-  border-radius: 0 2px 2px 0;
-  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--mx-accent) 78%, transparent), transparent);
-}
-.mx-breadth-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.mx-breadth-title { display: inline-flex; align-items: center; gap: 7px; color: var(--mx-text); font-size: 12px; font-weight: 800; }
-.mx-breadth-mark {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 8px;
-  color: color-mix(in srgb, var(--mx-accent) 92%, #ffffff);
-  background: color-mix(in srgb, var(--mx-accent) 15%, transparent);
-  border: 1px solid color-mix(in srgb, var(--mx-accent) 26%, transparent);
-}
-.mx-breadth-avg {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  border: 1px solid transparent;
-}
-.mx-breadth-avg[data-tone='up'] {
-  color: var(--mx-up);
-  border-color: color-mix(in srgb, var(--mx-up) 24%, transparent);
-  background: color-mix(in srgb, var(--mx-up) 11%, transparent);
-}
-.mx-breadth-avg[data-tone='down'] {
-  color: var(--mx-down);
-  border-color: color-mix(in srgb, var(--mx-down) 24%, transparent);
-  background: color-mix(in srgb, var(--mx-down) 11%, transparent);
-}
-.mx-breadth-bar {
-  display: flex;
-  height: 8px;
-  margin: 10px 0 9px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.12);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
-}
-.mx-breadth-bar span { transition: width 620ms cubic-bezier(0.22, 1, 0.36, 1); }
-.mx-breadth-bar .is-up { background: linear-gradient(90deg, #17b98a, var(--mx-up)); }
-.mx-breadth-bar .is-flat { background: rgba(148, 163, 184, 0.42); }
-.mx-breadth-bar .is-down { background: linear-gradient(90deg, var(--mx-down), #e2456b); }
-.mx-breadth-legend { display: flex; flex-wrap: wrap; gap: 6px; }
-.mx-breadth-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--mx-line-soft);
-  background: rgba(255, 255, 255, 0.025);
-  font-size: 10.5px;
-  color: var(--mx-muted);
-}
-.mx-breadth-item i { width: 6px; height: 6px; border-radius: 50%; }
-.mx-breadth-item[data-tone='up'] { color: color-mix(in srgb, var(--mx-up) 82%, var(--mx-text)); }
-.mx-breadth-item[data-tone='up'] i { background: var(--mx-up); }
-.mx-breadth-item[data-tone='down'] { color: color-mix(in srgb, var(--mx-down) 82%, var(--mx-text)); }
-.mx-breadth-item[data-tone='down'] i { background: var(--mx-down); }
-.mx-breadth-item[data-tone='flat'] i, .mx-breadth-item[data-tone='unknown'] i { background: rgba(148, 163, 184, 0.5); }
-.mx-breadth-note { margin: 8px 0 0; color: var(--mx-faint); font-size: 9.5px; line-height: 1.6; }
-
-/* ── 5.4 · دسته‌ها — طلا تا سولانا, one horizontal snapping rail ────────── */
-.mx-sectors { display: flex; align-items: center; gap: 9px; }
-.mx-sectors-label {
-  flex: 0 0 auto;
-  color: var(--mx-faint);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-/* Painted edge fades, not a mask: a mask on a scrolling rail promotes the whole
-   strip while it moves, which is the exact cost this screen was measured to be
-   paying (see §15.6 of market-modern.css). */
-.mx-sectors-rail {
-  position: relative;
-  display: flex;
-  gap: 6px;
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  padding: 2px;
-}
-.mx-sectors-rail::-webkit-scrollbar { display: none; }
-.mx-sector {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  height: 34px;
-  padding: 0 12px;
-  scroll-snap-align: start;
-  border: 1px solid var(--mx-line);
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.008));
-  color: var(--mx-muted);
-  font: 600 11.5px/1 var(--font-display);
-  cursor: pointer;
-  transition: color 160ms ease, border-color 160ms ease, background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
-}
-.mx-sector-icon { display: inline-flex; opacity: 0.9; }
-.mx-sector:hover { color: var(--mx-text); border-color: color-mix(in srgb, var(--sec) 42%, transparent); transform: translateY(-1px); }
-.mx-sector:active { transform: scale(0.97); }
-.mx-sector[data-sector='gold'] { --sec: #f7b23b; }
-.mx-sector[data-sector='meme'] { --sec: #ff6fa5; }
-.mx-sector[data-sector='rwa'] { --sec: #4cc3ff; }
-.mx-sector[data-sector='ai'] { --sec: #a78bfa; }
-.mx-sector[data-sector='gaming'] { --sec: #ff8f5a; }
-.mx-sector[data-sector='solana'] { --sec: #14f195; }
-.mx-sector[data-active='true'] {
-  color: color-mix(in srgb, var(--sec) 32%, #ffffff);
-  border-color: color-mix(in srgb, var(--sec) 56%, transparent);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--sec) 26%, transparent), color-mix(in srgb, var(--sec) 10%, transparent));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 8px 20px -14px color-mix(in srgb, var(--sec) 92%, transparent);
-}
-
-/* ── 5.5 · rows ─────────────────────────────────────────────────────────── */
-.mx-table.market-coin-grid { display: flex; flex-direction: column; gap: 0; margin-top: 2px; }
-.mx-coin-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0;
-  border-bottom: 1px solid var(--mx-line-soft);
-  border-radius: 10px;
-  transition: background 150ms ease;
-}
-.mx-coin-row:last-child { border-bottom: 0; }
-.mx-coin-row:hover { background: rgba(148, 163, 184, 0.05); }
-.mx-coin-row .coin-row {
-  flex: 1;
-  min-width: 0;
-  padding: 11px 4px;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-.mx-coin-row .coin-row-open {
-  display: grid;
-  grid-template-columns: 26px 34px minmax(0, 1fr) 64px minmax(92px, auto);
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-.mx-coin-row .coin-row-rank { color: var(--mx-faint); font-size: 10.5px; }
-.mx-coin-row .coin-logo { border-radius: 11px; }
-.mx-coin-row .coin-meta { min-width: 0; }
-.mx-coin-row .coin-sym { font-size: 12.5px; font-weight: 800; letter-spacing: -0.01em; }
-.mx-coin-row .coin-name {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-  color: var(--mx-faint);
-  font-size: 10.5px;
-}
-.mx-coin-row .coin-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mx-coin-row .coin-row-metric { color: var(--mx-muted); font-size: 10px; white-space: nowrap; }
-.mx-coin-row .coin-row-metric i { font-style: normal; color: var(--mx-faint); }
-.mx-coin-row .coin-row-spark { width: 64px; height: 26px; }
-.mx-coin-row .coin-row-spark svg { width: 100%; height: 100%; }
-.mx-coin-row .coin-right { text-align: end; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
-.mx-coin-row .coin-price { font-size: 12.5px; font-weight: 700; letter-spacing: -0.01em; }
-.mx-coin-row .coin-change-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2.5px 6px;
-  border-radius: 7px;
-  border: 1px solid transparent;
-  font-size: 10.5px;
-  font-weight: 700;
-  line-height: 1.25;
-}
-.mx-coin-row .coin-change-pill svg { flex: 0 0 auto; }
-.mx-coin-row .coin-change-pill.is-up {
-  color: var(--mx-up);
-  border-color: color-mix(in srgb, var(--mx-up) 22%, transparent);
-  background: color-mix(in srgb, var(--mx-up) 11%, transparent);
-}
-.mx-coin-row .coin-change-pill.is-down {
-  color: var(--mx-down);
-  border-color: color-mix(in srgb, var(--mx-down) 22%, transparent);
-  background: color-mix(in srgb, var(--mx-down) 11%, transparent);
-}
-
-.mx-swap-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex: 0 0 auto;
-  height: 32px;
-  padding: 0 12px;
-  border: 1px solid color-mix(in srgb, var(--mx-blue) 44%, transparent);
-  border-radius: 10px;
-  background: linear-gradient(140deg, color-mix(in srgb, var(--mx-blue) 22%, transparent), color-mix(in srgb, var(--mx-cyan) 14%, transparent));
-  color: #cfe6ff;
-  font: 800 11px/1 var(--font-display);
-  cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease, background 150ms ease;
-}
-.mx-swap-btn:hover {
-  border-color: color-mix(in srgb, var(--mx-cyan) 62%, transparent);
-  background: linear-gradient(140deg, color-mix(in srgb, var(--mx-blue) 32%, transparent), color-mix(in srgb, var(--mx-cyan) 22%, transparent));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 10px 22px -14px rgba(56, 189, 248, 0.95);
-  transform: translateY(-1px);
-}
-.mx-swap-btn:active { transform: scale(0.96); }
-
-.mx-skel-row {
-  height: 54px;
-  margin-bottom: 6px;
-  border-radius: 12px;
-  background: linear-gradient(100deg, rgba(148, 163, 184, 0.08), rgba(148, 163, 184, 0.16), rgba(148, 163, 184, 0.08));
-}
-
-/* ── 5.6 · empty, failed, and the footer ───────────────────────────────── */
-.mx-empty {
-  margin-top: 2px;
-  padding: 26px 20px;
-  border: 1px dashed var(--mx-line-strong);
-  border-radius: var(--mx-r-md);
-  background: rgba(255, 255, 255, 0.015);
-  text-align: center;
-}
-.market-empty-icon {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  margin: 0 auto 10px;
-  border-radius: 14px;
-  color: var(--mx-muted);
-  background: linear-gradient(150deg, rgba(148, 163, 184, 0.16), rgba(148, 163, 184, 0.05));
-  border: 1px solid var(--mx-line);
-}
-.market-empty-title { font-size: 13px; font-weight: 800; color: var(--mx-text); }
-.market-empty-help { margin: 6px auto 0; max-width: 46ch; color: var(--mx-muted); font-size: 11px; line-height: 1.7; }
-.mx-empty-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-  height: 36px;
-  padding: 0 14px;
-  border: 1px solid color-mix(in srgb, var(--mx-blue) 40%, transparent);
-  border-radius: 11px;
-  background: color-mix(in srgb, var(--mx-blue) 14%, transparent);
-  color: #dbeafe;
-  font: 700 11.5px/1 var(--font-display);
-  cursor: pointer;
-  transition: transform 150ms ease, background 150ms ease;
-}
-.mx-empty-action:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--mx-blue) 22%, transparent); }
-
-.mx-more { display: flex; flex-direction: column; gap: 9px; }
-.market-more-meta { display: flex; align-items: center; gap: 10px; color: var(--mx-faint); font-size: 10.5px; }
-.market-more-track {
-  position: relative;
-  flex: 1;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.14);
-  overflow: hidden;
-}
-.market-more-fill {
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: 0;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--mx-blue), var(--mx-cyan));
-  transition: width 520ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.mx-show-more {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  height: 42px;
-  border: 1px solid var(--mx-line);
-  border-radius: 13px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01));
-  color: var(--mx-text);
-  font: 700 12px/1 var(--font-display);
-  cursor: pointer;
-  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
-}
-.mx-show-more:hover:not(:disabled) { border-color: var(--mx-line-strong); transform: translateY(-1px); }
-.mx-show-more:disabled { opacity: 0.6; cursor: default; }
-.mx-more-results { display: flex; flex-direction: column; gap: 8px; }
-.mx-more-results .section-label { margin: 0; color: var(--mx-faint); font-size: 10.5px; }
-
-/* ══════════════════════════════════════════════════════════════════════════
-   6 · RESPONSIVE — «فاصله باکس ها، اندازه زیر تب ها»
-   ══════════════════════════════════════════════════════════════════════════ */
-
-@media (min-width: 620px) {
-  .mx-hot-card { flex-basis: 194px; }
-  .mx-smart-copy p { -webkit-line-clamp: 2; line-clamp: 2; }
-}
-
-@media (min-width: 860px) {
-  .mx-market { --mx-gap: 16px; }
-  .mx-btc { border-top: 0; border-inline-start: 1px solid var(--mx-line-soft); }
-  .mx-global { padding: 16px 20px 18px; }
-  .mx-btc { padding: 16px 20px 18px; }
-  .mx-deck-head { padding: 13px 20px 0; }
-  .mx-hot-card { flex-basis: 208px; }
-  .mx-coin-row .coin-row-open { grid-template-columns: 30px 36px minmax(0, 1fr) 96px minmax(118px, auto); }
-  .mx-coin-row .coin-row-spark { width: 96px; }
-}
-
-@media (max-width: 619px) {
-  .mx-market { --mx-gap: 12px; padding-top: 10px; }
-  .mx-global, .mx-btc { padding: 12px 13px 13px; }
-  .mx-deck-head { padding: 11px 13px 0; }
-  .mx-global-metrics { gap: 6px; margin-top: 11px; }
-  .mx-metric { padding: 7px; gap: 7px; }
-  .mx-metric-icon { width: 24px; height: 24px; border-radius: 8px; }
-  .mx-metric-label { font-size: 9.5px; }
-  .mx-metric strong { font-size: 12px; }
-  .mx-global-trend { margin-top: 10px; padding: 8px; }
-  .mx-global-trend .mx-spark { height: 44px !important; }
-  /* The Bitcoin half becomes a two-column block on a phone: identity and price
-     on the reading side, the chart on the other, the range across the bottom. */
-  .mx-btc {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 116px;
-    grid-template-areas: "head chart" "price chart" "range range";
-    column-gap: 10px;
-    align-items: center;
-  }
-  .mx-btc-head { grid-area: head; }
-  .mx-btc-price { grid-area: price; }
-  .mx-btc-chart { grid-area: chart; height: 58px !important; }
-  .mx-btc-range { grid-area: range; margin-top: 9px; }
-  .mx-terminal { padding: 12px; gap: 11px; }
-  .mx-search { height: 48px; border-radius: 15px; }
-  .mx-controls { align-items: stretch; }
-  .mx-sort-wrap { align-self: flex-end; margin-inline-start: auto; }
-  .mx-sectors-label { display: none; }
-  .mx-coin-row .coin-row-open { grid-template-columns: 20px 30px minmax(0, 1fr) 48px minmax(86px, auto); gap: 7px; }
-  .mx-coin-row .coin-row-spark { width: 48px; }
-  .mx-coin-row .coin-row-rank { font-size: 10px; }
-  .mx-swap-btn { padding: 0 9px; height: 30px; }
-  .mx-smart-banner { grid-template-columns: auto minmax(0, 1fr); gap: 10px; padding: 11px 12px; }
-  .mx-smart-cta { grid-column: 1 / -1; justify-content: center; height: 34px; }
-  .mx-hot-card { flex-basis: 162px; padding: 10px; }
-  .mx-hot-price { font-size: 14.5px; }
-  .mx-hot-chart { height: 28px; }
-  .mx-hot-chart .mx-spark { height: 28px !important; }
-}
-
-/* ══════════════════════════════════════════════════════════════════════════
-   7 · LIGHT THEME — the same hierarchy re-graded, not an inverted poster
-   ══════════════════════════════════════════════════════════════════════════ */
-
-:root[data-theme='light'] .mx-market {
-  --mx-bg: #f4f7fc;
-  --mx-panel: #ffffff;
-  --mx-panel-2: #f6f8fd;
-  --mx-well: #f2f6fc;
-  --mx-line: rgba(15, 23, 42, 0.1);
-  --mx-line-soft: rgba(15, 23, 42, 0.06);
-  --mx-line-strong: rgba(15, 23, 42, 0.2);
-  --mx-text: #0f172a;
-  --mx-muted: #4a5b78;
-  --mx-faint: #6b7c99;
-  --mx-up: #048a5f;
-  --mx-down: #cf1f4d;
-  --mx-glass: linear-gradient(158deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.6) 46%, rgba(226, 234, 246, 0.5));
-  --mx-hi: inset 0 1px 0 #ffffff;
-  --mx-shadow: 0 18px 38px -30px rgba(20, 45, 80, 0.55);
-}
-:root[data-theme='light'] .mx-market .mx-global-value { color: #0b1526; }
-:root[data-theme='light'] .mx-market .mx-btc-price { color: #1a1206; }
-:root[data-theme='light'] .mx-market .mx-deck-veil i:first-child { background: radial-gradient(closest-side, rgba(59, 130, 246, 0.14), rgba(34, 211, 238, 0.05) 58%, transparent 78%); }
-:root[data-theme='light'] .mx-market .mx-deck-veil i:last-child { background: radial-gradient(closest-side, rgba(139, 92, 246, 0.13), rgba(247, 178, 59, 0.05) 60%, transparent 80%); }
-:root[data-theme='light'] .mx-market .mx-deck-mark,
-:root[data-theme='light'] .mx-market .mx-hot-flame,
-:root[data-theme='light'] .mx-market .mx-smart-mark,
-:root[data-theme='light'] .mx-market .mx-stories .market-stories-mark { color: #10233d; }
-:root[data-theme='light'] .mx-market .mx-deck-live { color: #046b45; }
-:root[data-theme='light'] .mx-market .mx-btc { background: linear-gradient(180deg, rgba(247, 178, 59, 0.09), transparent 46%); }
-:root[data-theme='light'] .mx-market .mx-btc-range-track span { border-color: #d98a12; }
-:root[data-theme='light'] .mx-market .mx-skel-value,
-:root[data-theme='light'] .mx-market .mx-skel-row { background: linear-gradient(100deg, rgba(15, 23, 42, 0.06), rgba(15, 23, 42, 0.12), rgba(15, 23, 42, 0.06)); }
-:root[data-theme='light'] .mx-market .mx-search-popup,
-:root[data-theme='light'] .mx-market .mx-sort-popover { background: #ffffff; }
-:root[data-theme='light'] .mx-market .mx-search { background: linear-gradient(180deg, #ffffff, #f7f9fe); }
-:root[data-theme='light'] .mx-market .mx-search-ai { color: #5b3fd6; }
-:root[data-theme='light'] .mx-market .mx-swap-btn { color: #1d4ed8; }
-:root[data-theme='light'] .mx-market .mx-smart-banner {
-  border-color: rgba(37, 99, 235, 0.22);
-  background:
-    radial-gradient(120% 180% at 100% 0%, rgba(139, 92, 246, 0.1), transparent 58%),
-    linear-gradient(120deg, #ffffff, #f2f6ff);
-}
-:root[data-theme='light'] .mx-market .mx-smart-copy h2 { color: #0d1a30; }
-:root[data-theme='light'] .mx-market .mx-smart-copy p { color: #4a5b78; }
-:root[data-theme='light'] .mx-market .mx-smart-eyebrow { color: #2f6fd0; }
-:root[data-theme='light'] .mx-market .mx-hot-id small,
-:root[data-theme='light'] .mx-market .mx-hot-volume { color: #6b7c99; }
-:root[data-theme='light'] .mx-market .mx-stories .market-story-avatar-inner { border-color: #ffffff; background: radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.9), transparent 56%), linear-gradient(150deg, #f3f7ff, #e7edf9 72%); }
-:root[data-theme='light'] .mx-market .mx-stories .market-story-label { color: #33456a; }
-:root[data-theme='light'] .mx-market .mx-coin-row:hover { background: rgba(15, 23, 42, 0.035); }
-
-/* The list card kept its own light-theme rules from an earlier pass
-   (market-modern.css §12.7). They are re-graded here rather than deleted, at a
-   specificity that actually wins, so a light-mode chip is the same chip as a
-   dark-mode one — one design language, two grades of the same material. */
-:root[data-theme='light'] .mx-market .market-count {
-  color: #3d4f70;
-  background: rgba(16, 24, 48, 0.05);
-  border-color: rgba(16, 24, 48, 0.1);
-}
-:root[data-theme='light'] .mx-market .mx-icon-btn,
-:root[data-theme='light'] .mx-market .mx-compare,
-:root[data-theme='light'] .mx-market .mx-sort-trigger {
-  color: #3d4f70;
-  border-color: rgba(16, 24, 48, 0.12);
-  background: linear-gradient(180deg, #ffffff, #f4f7fc);
-}
-:root[data-theme='light'] .mx-market .mx-icon-btn:hover,
-:root[data-theme='light'] .mx-market .mx-compare:hover { color: #0d1a30; border-color: rgba(16, 24, 48, 0.24); }
-:root[data-theme='light'] .mx-market .mx-view {
-  color: #46587a;
-  border-color: rgba(16, 24, 48, 0.1);
-  background: linear-gradient(180deg, #ffffff, #f3f6fc);
-}
-:root[data-theme='light'] .mx-market .mx-view:hover { color: #0d1a30; }
-:root[data-theme='light'] .mx-market .mx-view[data-active='true'] {
-  color: color-mix(in srgb, var(--mx-accent) 72%, #0b1220);
-  border-color: color-mix(in srgb, var(--mx-accent) 46%, transparent);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--mx-accent) 18%, #ffffff), color-mix(in srgb, var(--mx-accent) 7%, #ffffff));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 8px 18px -14px color-mix(in srgb, var(--mx-accent) 85%, transparent);
-}
-:root[data-theme='light'] .mx-market .mx-sort-popover {
-  background: #ffffff;
-  border-color: rgba(16, 24, 48, 0.14);
-  box-shadow: 0 24px 54px -26px rgba(16, 24, 48, 0.45);
-}
-:root[data-theme='light'] .mx-market .mx-sort-option { color: #46587a; }
-:root[data-theme='light'] .mx-market .mx-sort-option:hover { background: rgba(16, 24, 48, 0.05); color: #0d1a30; }
-:root[data-theme='light'] .mx-market .mx-sort-option[aria-checked='true'] { background: rgba(37, 99, 235, 0.1); color: #1d4ed8; }
-:root[data-theme='light'] .mx-market .mx-sort-check { color: #1d4ed8; }
-
-:root[data-theme='light'] .mx-market .mx-breadth {
-  border-color: rgba(16, 24, 48, 0.08);
-  background: linear-gradient(158deg, #ffffff, #f3f7fd);
-  box-shadow: inset 0 1px 0 #ffffff;
-}
-:root[data-theme='light'] .mx-market .mx-breadth-title { color: #0d1a30; }
-:root[data-theme='light'] .mx-market .mx-breadth-bar { background: rgba(16, 24, 48, 0.09); box-shadow: inset 0 1px 1px rgba(16, 24, 48, 0.12); }
-:root[data-theme='light'] .mx-market .mx-breadth-bar .is-flat { background: rgba(16, 24, 48, 0.26); }
-:root[data-theme='light'] .mx-market .mx-breadth-item { color: #3d4f70; border-color: rgba(16, 24, 48, 0.08); background: rgba(16, 24, 48, 0.028); }
-:root[data-theme='light'] .mx-market .mx-breadth-item[data-tone='up'] { color: #046b45; }
-:root[data-theme='light'] .mx-market .mx-breadth-item[data-tone='down'] { color: #b3123a; }
-:root[data-theme='light'] .mx-market .mx-breadth-note { color: #6b7c99; }
-
-:root[data-theme='light'] .mx-market .mx-sector {
-  color: #46587a;
-  border-color: rgba(16, 24, 48, 0.1);
-  background: linear-gradient(180deg, #ffffff, #f3f6fc);
-}
-:root[data-theme='light'] .mx-market .mx-sector[data-active='true'] {
-  color: color-mix(in srgb, var(--sec) 78%, #0b1220);
-  border-color: color-mix(in srgb, var(--sec) 52%, transparent);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--sec) 20%, #ffffff), color-mix(in srgb, var(--sec) 8%, #ffffff));
-}
-
-:root[data-theme='light'] .mx-market .mx-swap-btn {
-  color: #1d4ed8;
-  border-color: rgba(37, 99, 235, 0.34);
-  background: linear-gradient(140deg, rgba(37, 99, 235, 0.12), rgba(6, 182, 212, 0.1));
-}
-:root[data-theme='light'] .mx-market .mx-show-more {
-  color: #0d1a30;
-  border-color: rgba(16, 24, 48, 0.12);
-  background: linear-gradient(180deg, #ffffff, #f2f6fc);
-}
-:root[data-theme='light'] .mx-market .market-more-track { background: rgba(16, 24, 48, 0.1); }
-:root[data-theme='light'] .mx-market .mx-empty { border-color: rgba(16, 24, 48, 0.16); background: rgba(16, 24, 48, 0.025); }
-:root[data-theme='light'] .mx-market .market-empty-title { color: #0d1a30; }
-:root[data-theme='light'] .mx-market .market-empty-help { color: #46587a; }
-:root[data-theme='light'] .mx-market .mx-empty-action { color: #1d4ed8; border-color: rgba(37, 99, 235, 0.3); background: rgba(37, 99, 235, 0.08); }
-:root[data-theme='light'] .mx-market .mx-intent-result { color: #4338ca; }
-:root[data-theme='light'] .mx-market .mx-hot-card { background: linear-gradient(158deg, #ffffff, #f4f7fd); }
-:root[data-theme='light'] .mx-market .mx-hot-rank { color: color-mix(in srgb, var(--hot) 82%, #0b1220); }
-:root[data-theme='light'] .mx-market .mx-search-ai { color: #5b3fd6; border-color: rgba(91, 63, 214, 0.28); }
-:root[data-theme='light'] .mx-market .mx-search-icon { color: #64748b; }
-:root[data-theme='light'] .mx-market .mx-search:focus-within .mx-search-icon { color: #0284c7; }
-:root[data-theme='light'] .mx-market .mx-search-popup {
-  background: #ffffff;
-  border-color: rgba(16, 24, 48, 0.14);
-  box-shadow: 0 24px 54px -26px rgba(16, 24, 48, 0.45);
-}
-:root[data-theme='light'] .mx-market .mx-search-option[data-active='true'],
-:root[data-theme='light'] .mx-market .mx-search-option:hover { background: rgba(37, 99, 235, 0.08); }
-:root[data-theme='light'] .mx-market .mx-stories .market-stories-section {
-  border-color: var(--mx-line);
-  background: var(--mx-glass), var(--mx-panel);
-  box-shadow: var(--mx-hi), var(--mx-shadow);
-}
-:root[data-theme='light'] .mx-market .mx-stories .market-stories-mark { color: #3730a3; }
-:root[data-theme='light'] .mx-market .mx-stories .market-stories-badge { color: #46587a; background: rgba(16, 24, 48, 0.04); border-color: rgba(16, 24, 48, 0.1); }
-:root[data-theme='light'] .mx-market .coin-row-rank,
-:root[data-theme='light'] .mx-market .coin-row-metric { color: #6b7c99; }
-:root[data-theme='light'] .mx-market .coin-change-pill.is-up { color: #046b45; background: rgba(4, 138, 95, 0.1); border-color: rgba(4, 138, 95, 0.2); }
-:root[data-theme='light'] .mx-market .coin-change-pill.is-down { color: #b3123a; background: rgba(179, 18, 58, 0.09); border-color: rgba(179, 18, 58, 0.2); }
-:root[data-theme='light'] .mx-market .coin-change-pill.is-up { color: #046b45; }
-:root[data-theme='light'] .mx-market .coin-change-pill.is-down { color: #b3123a; }
-
-/* ══════════════════════════════════════════════════════════════════════════
-   8 · MOTION BUDGET — «انیمیشن بجا، بدون چشمک زدن، بدون کاهش سرعت»
-   Two ambient loops exist on this screen and both are transform-only. They, and
-   every transition, stop for reduced motion, for the native WebView (where a
-   composited layer is a rasterisation budget) and for lite mode.
-   ══════════════════════════════════════════════════════════════════════════ */
-
-@media (prefers-reduced-motion: reduce) {
-  .mx-market .mx-deck-veil i,
-  .mx-market .mx-smart-sheen,
-  .mx-market .mx-search-glow,
-  .mx-market .mx-icon-btn[data-busy='true'] svg { animation: none !important; }
-  .mx-market .mx-smart-sheen { opacity: 0.5; transform: none; }
-  .mx-market .mx-search-glow { opacity: 0; }
-  .mx-market .mx-hot-card,
-  .mx-market .mx-view,
-  .mx-market .mx-sector,
-  .mx-market .mx-swap-btn,
-  .mx-market .mx-smart-cta,
-  .mx-market .mx-icon-btn,
-  .mx-market .mx-compare,
-  .mx-market .mx-coin-row,
-  .mx-market .mx-dominance span,
-  .mx-market .mx-breadth-bar span,
-  .mx-market .mx-btc-range-track span,
-  .mx-market .market-more-fill { transition: none !important; }
-  .mx-market .mx-hot-card:hover,
-  .mx-market .mx-view:hover,
-  .mx-market .mx-sector:hover,
-  .mx-market .mx-swap-btn:hover,
-  .mx-market .mx-smart-cta:hover,
-  .mx-market .mx-icon-btn:hover,
-  .mx-market .mx-compare:hover { transform: none; }
-}
-
-:root[data-native='true'] .mx-market .mx-deck-veil i,
-:root[data-native='true'] .mx-market .mx-smart-sheen,
-:root[data-lite='true'] .mx-market .mx-deck-veil i,
-:root[data-lite='true'] .mx-market .mx-smart-sheen { animation: none !important; }
-
-/* ══════════════════════════════════════════════════════════════════════════
-   9 · THE 2026-10-31 PASS — deck, trio, glass Bitcoin, sector rail, lens,
-       list hero, the flow blade and the token rows
-   --------------------------------------------------------------------------
-   «باکس نمای بازار مدرن کن و بعدش یک فاصله کوچک … سه باکس مدرن … بعدش باکس
-    بیت‌کوین را مدرن و شیشه‌ای کن … بنر پول هوشمند را خیلی مدرن کن با انیمیشن …
-    باکس همه ارزها را فاصله بده با باکس نبض بازار … زیر باکس‌هایی مثل میم‌کوین را
-    از باکس جدا کن … توکن‌ها کشیده شود جمع شده»
-
-   Seven requests, one rhythm: 12px (phone) / 14px (wide) between blocks, 24px
-   outer radius, 16px inner wells, 999px pills. Everything below inherits the
-   tokens declared on `.mx-market` above, so dark/light are two grades of one
-   design instead of two designs. No `backdrop-filter` appears in this section —
-   «شیشه‌ای» is painted here as stacked gradients, exactly like §1, because a
-   live blur on this route was measured as the reason it painted black while
-   scrolling (test/market-speed.test.mjs).
-   ══════════════════════════════════════════════════════════════════════════ */
-
-/* ── 9.1 · THE DECK ─────────────────────────────────────────────────────── */
-
-.mx-overview { display: flex; flex-direction: column; gap: var(--mx-gap); }
-
-/* The section keeps §1's shared surface recipe; what changes here is that the
-   deck is now its own box and Bitcoin is no longer a column inside it. */
-.mx-market .mx-deck {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  padding: 14px 15px 15px;
-  border: 1px solid var(--mx-line);
-  border-radius: 26px;
-  background: var(--mx-glass), var(--mx-panel);
-  box-shadow: var(--mx-hi), var(--mx-shadow);
-}
-
-.mx-deck-headings { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.mx-deck-eyebrow {
-  color: var(--mx-faint);
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.mx-deck-title { font-size: 13px; font-weight: 800; letter-spacing: -0.01em; color: var(--mx-text); }
-
-.mx-deck-main { margin-top: 12px; }
-.mx-global-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 4px 10px; }
-.mx-global-head .mx-kicker { grid-column: 1 / -1; margin-bottom: 0; }
-.mx-global-head .mx-change { margin-bottom: 5px; }
-
-/* ── 9.2 · THE TRIO — three boxes, one horizontal line, at every width ────
-   «سه باکس مدرن برای ارزها، بازارها، میانگین تغییر — در یک خط و افقی»
-   `grid-template-columns: repeat(3, minmax(0, 1fr))` is the literal promise:
-   three equal columns that never wrap, never stack and never shrink past the
-   width of the smallest label. The value is the loud element; the label above
-   it is 9.5px so a Persian word and a number both fit in a 100px box. */
-
-.mx-trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-
-.mx-trio-box {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 10px 10px 11px;
-  overflow: hidden;
-  border: 1px solid var(--mx-line);
-  border-radius: 17px;
-  background:
-    linear-gradient(168deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012) 52%, rgba(6, 10, 20, 0.22)),
-    var(--mx-panel-2);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 14px 30px -26px rgba(2, 6, 18, 0.9);
-  transition: transform 170ms cubic-bezier(0.22, 1, 0.36, 1), border-color 170ms ease, box-shadow 170ms ease;
-}
-/* one accent per box, read by the tile, the hairline and the hover border */
-.mx-trio-box[data-tone='cyan'] { --trio: var(--mx-cyan); }
-.mx-trio-box[data-tone='violet'] { --trio: var(--mx-violet); }
-.mx-trio-box[data-tone='up'] { --trio: var(--mx-up); }
-.mx-trio-box[data-tone='down'] { --trio: var(--mx-down); }
-.mx-trio-box[data-tone='flat'] { --trio: var(--mx-line-strong); }
-.mx-trio-box::after {
-  content: '';
-  position: absolute;
-  inset-block: 9px;
-  inset-inline-start: 0;
-  width: 2px;
-  border-radius: 0 2px 2px 0;
-  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--trio) 80%, transparent), transparent);
-}
-.mx-trio-box:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--trio) 38%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 16px 30px -22px color-mix(in srgb, var(--trio) 62%, transparent);
-}
-.mx-trio-mark {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border-radius: 10px;
-  color: color-mix(in srgb, var(--trio) 90%, #ffffff);
-  background: color-mix(in srgb, var(--trio) 15%, transparent);
-  border: 1px solid color-mix(in srgb, var(--trio) 26%, transparent);
-}
-.mx-trio-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.mx-trio-label {
-  color: var(--mx-muted);
-  font-size: 9.5px;
-  font-weight: 600;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mx-trio-value {
-  font-size: clamp(13px, 3.6vw, 16.5px);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-  color: var(--mx-text);
-}
-.mx-trio-box[data-tone='up'] .mx-trio-value { color: var(--mx-up); }
-.mx-trio-box[data-tone='down'] .mx-trio-value { color: var(--mx-down); }
-
-/* ── 9.3 · BITCOIN — a glass card of its own, read from the centre ────────
-   «باکس بیت‌کوین را مدرن و شیشه‌ای کن» · «نمودارش وسط قرار بگیره»
-
-   Three layers of glass and one gold bloom. The chart sits in a well of its
-   own so the line never runs into the price above it, and the whole column is
-   centred — head row, price, chart, range — which is what a single hero
-   reading should do on a full-width card. */
-
-.mx-market .mx-btc-card {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  padding: 13px 15px 15px;
-  border: 1px solid color-mix(in srgb, var(--mx-gold) 24%, var(--mx-line));
   border-radius: 24px;
-  background:
-    radial-gradient(120% 130% at 84% -20%, color-mix(in srgb, var(--mx-gold) 17%, transparent), transparent 62%),
-    radial-gradient(100% 120% at 4% 118%, rgba(226, 88, 14, 0.14), transparent 64%),
-    linear-gradient(158deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.016) 46%, rgba(6, 10, 20, 0.34)),
-    var(--mx-panel);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 24px 48px -34px rgba(247, 147, 26, 0.72),
-    var(--mx-shadow);
+  background: linear-gradient(125deg, #162b35, #1b203e 60%, #24213c) padding-box,
+    linear-gradient(125deg, rgba(134, 248, 222, .6), rgba(133, 168, 244, .22) 45%, rgba(191, 159, 255, .55)) border-box;
+  box-shadow: var(--mx-hi), 0 14px 40px -28px rgba(89, 208, 205, .32);
 }
-/* the bloom behind the mark — painted, never blurred live */
-.mx-btc-veil {
-  position: absolute;
-  z-index: -1;
-  inset-block-start: -58px;
-  inset-inline-start: -30px;
-  width: 170px;
-  height: 170px;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--mx-gold) 24%, transparent), transparent 76%);
-  opacity: 0.9;
-  pointer-events: none;
-  animation: mx-float 34s ease-in-out infinite alternate;
-}
-.mx-btc-card[data-dir='down'] .mx-btc-veil {
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--mx-down) 20%, transparent), transparent 76%);
-}
-.mx-btc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.mx-btc-identity {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  padding: 3px 8px 3px 3px;
-  margin-inline-start: -3px;
-  border: 1px solid transparent;
-  border-radius: 14px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  text-align: start;
-  transition: background 160ms ease, border-color 160ms ease;
-}
-.mx-btc-identity:hover {
-  border-color: color-mix(in srgb, var(--mx-gold) 30%, transparent);
-  background: color-mix(in srgb, var(--mx-gold) 9%, transparent);
-}
-.mx-btc-logo {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 auto;
-  border-radius: 13px;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at 32% 22%, rgba(255, 255, 255, 0.24), transparent 62%),
-    linear-gradient(150deg, rgba(247, 178, 59, 0.34), rgba(226, 58, 14, 0.18));
-  border: 1px solid rgba(247, 178, 59, 0.46);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), 0 10px 22px -14px rgba(247, 147, 26, 0.95);
-}
-.mx-btc-logo .coin-logo { width: 100%; height: 100%; padding: 0; border: 0; border-radius: 12px; background: none; }
-.mx-btc-logo .coin-logo svg { width: 100%; height: 100%; display: block; }
+.mx-smart-veil { position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(ellipse at 100% 0, rgba(155, 118, 243, .19), transparent 65%), radial-gradient(ellipse at 0 100%, rgba(83, 219, 193, .1), transparent 65%); }
+.mx-smart-sheen { position: absolute; top: 0; inset-inline-start: -45%; width: 42%; height: 1px; background: linear-gradient(90deg, transparent, #d4fff7, transparent); pointer-events: none; animation: mx-blade-sweep 9s ease-in-out infinite; }
+.mx-smart-main { display: flex; align-items: flex-start; gap: 13px; min-width: 0; }
+.mx-smart-mark { display: grid; place-items: center; position: relative; flex: 0 0 auto; width: 46px; height: 46px; border-radius: 15px; color: #c3fff1; border: 1px solid rgba(153, 245, 225, .33); background: linear-gradient(145deg, rgba(163, 245, 225, .18), rgba(141, 134, 243, .12)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2); }
+.mx-smart-ring { position: absolute; inset: -5px; border: 1px solid rgba(149, 225, 218, .14); border-radius: 19px; animation: mx-smart-ring 7s ease-in-out infinite; pointer-events: none; }
+.mx-smart-copy { min-width: 0; }
+.mx-smart-eyebrow { display: block; margin-bottom: 7px; color: #90d7d3; font-size: 10px; font-weight: 600; letter-spacing: .02em; }
+.mx-smart-copy h2 { margin: 0; color: #f1f9ff; font-size: clamp(17px, 3.8vw, 23px); font-weight: 800; line-height: 1.65; letter-spacing: -.025em; text-wrap: balance; }
+.mx-smart-copy p { margin: 7px 0 0; color: #b0c1d5; font-size: 11px; line-height: 1.9; max-width: 520px; }
+.mx-smart-route { min-width: 0; padding: 0 2px; }
+.mx-route-drawing { position: relative; height: 75px; direction: ltr; }
+.mx-route-drawing svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.mx-route-line { fill: none; stroke: rgba(161, 192, 231, .25); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.mx-route-flow { fill: none; stroke-width: 1.25; opacity: .65; vector-effect: non-scaling-stroke; }
+.mx-route-node { fill: #163238; stroke: var(--mx-cyan); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.mx-route-node.is-hub { fill: #252f4c; stroke: #9eb6ed; }
+.mx-route-node.is-end { fill: #302c50; stroke: var(--mx-violet); }
+.mx-route-halo { fill: rgba(165, 173, 243, .04); stroke: rgba(165, 173, 243, .14); stroke-width: 1; }
+.mx-route-hub-mark { fill: none; stroke: #d9d7ff; stroke-width: 1.5; }
+.mx-route-traveller { position: absolute; top: calc(50% - 1px); left: 4.5%; width: 18%; height: 2px; background: linear-gradient(90deg, transparent, #a5fff0); border-radius: 99px; pointer-events: none; animation: mx-flow-travel 6s cubic-bezier(.45, 0, .3, 1) infinite; }
+.mx-route-labels { display: flex; justify-content: space-between; gap: 8px; color: #a5b6d0; font-size: 9px; }
+.mx-smart-pools { display: flex; flex-wrap: wrap; gap: 10px 18px; }
+.mx-pool { display: inline-flex; align-items: center; gap: 6px; color: #bfccdf; font-size: 10px; }
+.mx-pool svg { color: var(--mx-cyan); }
+.mx-pool[data-pool='institutions'] svg { color: var(--mx-violet); }
+.mx-pool[data-pool='newPools'] svg { color: var(--mx-gold); }
+.mx-smart-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding-top: 14px; border-top: 1px solid rgba(192, 213, 255, .1); }
+.mx-smart-note { color: #a2b7ce; font-size: 9px; }
+.mx-smart-cta { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 42px; padding: 0 16px; border: 1px solid rgba(186, 255, 236, .6); border-radius: 12px; color: #102d32; background: linear-gradient(120deg, #b3f5e7, #a8d9f4); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), 0 7px 20px -13px #7affdd; text-decoration: none; font-size: 11px; font-weight: 800; transition: transform .2s ease, box-shadow .2s ease; }
+.mx-smart-cta:hover { transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), 0 9px 25px -13px #7affdd; }
+[dir='rtl'] .mx-route-drawing { transform: scaleX(-1); }
+[dir='rtl'] .mx-smart-cta svg, [dir='rtl'] .mx-btc-go svg { transform: rotate(180deg); }
 
-/* «نمودارش وسط قرار بگیره» — price, chart and range are one centred column. */
-.mx-btc-price {
-  margin-top: 12px;
-  text-align: center;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: clamp(26px, 7.2vw, 34px);
-  font-weight: 700;
-  letter-spacing: -0.035em;
-  line-height: 1.05;
-  color: #fffaf0;
-}
-.mx-market .mx-btc-card .mx-change { margin-inline-start: auto; }
-
-.mx-btc-chart {
-  margin-top: 10px;
-  padding: 6px 2px 2px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 72%);
-}
-.mx-btc-range { margin-top: 12px; }
-
-/* ── 9.4 · «دسته‌ها» — its own surface, a horizontal rail, under the views ─
-   «زیر باکس‌هایی مثل میم‌کوین … را از باکس جدا کن … در یک راستای افقی و به
-    صورت ریلی حرکت کند» */
-
+/* 5 · Market showcase · one rim-lit panel, not a dashboard of buttons. */
 .mx-market .mx-lens {
-  position: relative;
-  isolation: isolate;
   display: flex;
   flex-direction: column;
-  gap: 11px;
-  padding: 13px 13px 14px;
-  border: 1px solid var(--mx-line);
-  border-radius: var(--mx-r-lg);
-  background: var(--mx-glass), var(--mx-panel);
-  box-shadow: var(--mx-hi), var(--mx-shadow);
-  overflow: hidden;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid transparent;
+  border-radius: 24px;
+  background: linear-gradient(130deg, #172332, #171b33 65%, #1d203a) padding-box,
+    linear-gradient(125deg, rgba(102, 229, 225, .5), rgba(164, 184, 236, .12) 38%, rgba(178, 154, 255, .5)) border-box;
 }
-.mx-lens-head { padding-bottom: 2px; }
-.mx-lens-note {
-  color: var(--mx-faint);
-  font: 700 9.5px/1 var(--font-display);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--mx-line-soft);
-  background: rgba(255, 255, 255, 0.03);
-}
+.mx-terminal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.mx-terminal-title { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--mx-text); font-size: 15px; font-weight: 800; }
+.mx-terminal-title::before { content: ''; width: 3px; height: 17px; border-radius: 2px; background: linear-gradient(var(--mx-cyan), var(--mx-violet)); }
+.mx-terminal-actions { display: flex; align-items: center; gap: 7px; }
+.mx-fresh { display: inline-flex; align-items: center; gap: 5px; font-size: 9px; color: var(--mx-muted); }
+.mx-fresh i { width: 4px; height: 4px; border-radius: 50%; background: var(--mx-up); }
+.mx-fresh[data-stale='true'] i { background: var(--mx-gold); }
+.mx-fresh[data-stale='true'] { color: var(--mx-gold); }
+.mx-market .mx-icon-btn, .mx-market .mx-compare { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 0 0 auto; min-width: 36px; min-height: 36px; padding: 0 9px; border: 1px solid var(--mx-line); border-radius: 11px; background: rgba(227, 238, 255, .04); color: var(--mx-muted); cursor: pointer; font: 600 10px/1 var(--font-display); transition: background .18s ease, color .18s ease; }
+.mx-market :is(.mx-icon-btn, .mx-compare):hover { background: rgba(227, 238, 255, .09); color: var(--mx-text); }
+.mx-market .mx-icon-btn:disabled { opacity: .5; cursor: default; }
+.mx-icon-btn[data-busy='true'] svg { animation: mx-spin 1s linear infinite; }
+.mx-market .mx-breadth { position: relative; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.mx-market .mx-breadth::after { content: none; }
+.mx-breadth-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.mx-breadth-title { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; color: var(--mx-muted); }
+.mx-breadth-mark { width: 26px; height: 26px; border-radius: 9px; }
+.mx-breadth-avg { display: inline-flex; align-items: center; gap: 5px; color: var(--mx-up); font-size: 10px; }
+.mx-breadth-avg[data-tone='down'] { color: var(--mx-down); }
+.mx-breadth-bar { display: flex; height: 7px; gap: 3px; margin: 13px 0 11px; overflow: hidden; border-radius: 99px; background: var(--mx-line-soft); }
+.mx-breadth-bar span { border-radius: inherit; }
+.mx-breadth-bar .is-up { background: linear-gradient(90deg, #36b9a3, var(--mx-up)); }
+.mx-breadth-bar .is-flat { background: #7d8ba7; }
+.mx-breadth-bar .is-down { background: linear-gradient(90deg, var(--mx-down), #cc6ea1); }
+.mx-breadth-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.mx-breadth-item { display: inline-flex; align-items: center; gap: 6px; color: var(--mx-muted); font-size: 10px; }
+.mx-breadth-item i { width: 5px; height: 5px; border-radius: 50%; background: #7d8ba7; }
+.mx-breadth-item[data-tone='up'] i { background: var(--mx-up); }
+.mx-breadth-item[data-tone='down'] i { background: var(--mx-down); }
+.mx-breadth-note { margin: 10px 0 0; color: var(--mx-faint); font-size: 9px; line-height: 1.7; }
 
-.mx-market .mx-sectors { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
-.mx-sectors-head { display: flex; align-items: center; gap: 7px; }
-.mx-sectors-mark {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  flex: 0 0 auto;
-  border-radius: 8px;
-  color: #dbeafe;
-  background: linear-gradient(150deg, rgba(56, 225, 255, 0.28), rgba(139, 92, 246, 0.22));
-  border: 1px solid rgba(147, 197, 253, 0.26);
-}
-.mx-sectors-reset {
-  margin-inline-start: auto;
-  padding: 3px 9px;
-  border: 1px solid var(--mx-line-soft);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--mx-muted);
-  font: 600 10px/1.3 var(--font-display);
-  cursor: pointer;
-  transition: color 150ms ease, border-color 150ms ease;
-}
-.mx-sectors-reset:hover { color: var(--mx-text); border-color: var(--mx-line-strong); }
+/* 6 · Search + views. Everything remains in document flow, including search. */
+.mx-market .mx-terminal { display: block; padding: 18px; overflow: visible; border-radius: 24px; z-index: 3; }
+.mx-list-hero { display: flex; flex-direction: column; gap: 16px; }
+.mx-list-hero-head { display: flex; align-items: center; gap: 8px; }
+.mx-list-title { display: flex; align-items: center; gap: 9px; margin: 0; color: var(--mx-text); font-size: 16px; font-weight: 800; }
+.mx-market .market-count { display: inline-flex; align-items: center; min-height: 23px; margin: 0; padding: 2px 7px; border: 1px solid var(--mx-line); border-radius: 7px; background: rgba(255, 255, 255, .03); color: var(--mx-muted); font-size: 10px; font-weight: 500; }
+.mx-search-wrap { position: relative; min-width: 0; z-index: 5; }
+.mx-search { position: relative; display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 0 13px; overflow: hidden; border: 1px solid transparent; border-radius: 14px; background: linear-gradient(125deg, #172b37, #1c243e 68%, #25243d) padding-box, linear-gradient(120deg, rgba(102, 229, 225, .48), rgba(142, 161, 221, .18) 45%, rgba(178, 154, 255, .44)) border-box; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05); transition: box-shadow .2s ease; }
+.mx-search:focus-within { box-shadow: 0 0 0 3px rgba(102, 229, 225, .09), inset 0 1px 0 rgba(255, 255, 255, .1); }
+.mx-search-icon { flex: 0 0 auto; color: var(--mx-cyan); }
+.mx-search-input { width: 100%; min-width: 0; height: 48px; padding: 0; outline: none !important; border: 0; border-radius: 0; background: none; color: var(--mx-text); font: 500 12px/1.5 var(--font-display); box-shadow: none; }
+.mx-search-input::placeholder { color: var(--mx-muted); opacity: 1; }
+.mx-search-input::-webkit-search-cancel-button { display: none; }
+.mx-search-clear { display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; border: 1px solid var(--mx-line); border-radius: 9px; background: rgba(255, 255, 255, .04); color: var(--mx-muted); cursor: pointer; }
+.mx-search-ai { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; padding: 5px 7px; border: 1px solid rgba(178, 154, 255, .2); border-radius: 7px; background: rgba(178, 154, 255, .08); color: var(--mx-violet); font-size: 9px; }
+.mx-search[data-typed='true'] .mx-search-ai { display: none; }
+.mx-search-glow { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: linear-gradient(100deg, transparent 25%, rgba(139, 230, 239, .1) 50%, transparent 75%); transform: translateX(-100%); }
+.mx-search:focus-within .mx-search-glow { animation: mx-neon-sweep 0.9s ease-out 1; }
+.mx-search-popup { position: absolute; top: calc(100% + 8px); inset-inline: 0; overflow: hidden; border: 1px solid var(--mx-line-strong); border-radius: 15px; background: var(--mx-panel); box-shadow: 0 18px 40px rgba(0, 0, 12, .45); }
+.mx-search-results { max-height: 320px; overflow-y: auto; overscroll-behavior: contain; padding: 5px; }
+.mx-search-option { display: flex; align-items: center; gap: 10px; min-height: 55px; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+.mx-search-option:is(:hover, [data-active='true']) { background: color-mix(in srgb, var(--mx-cyan) 9%, transparent); }
+.mx-search-option-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mx-search-option-id b { font-size: 12px; }
+.mx-search-option-id small { color: var(--mx-muted); font-size: 10px; }
+.mx-search-option-price { margin-inline-start: auto; color: var(--mx-text); font-size: 11px; white-space: nowrap; }
+.mx-search-state, .mx-search-contract-note { padding: 14px; color: var(--mx-muted); font-size: 11px; }
+.mx-search-contract-note { border-top: 1px solid var(--mx-line); font-size: 10px; }
+.mx-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.mx-market .mx-views { display: flex; gap: 3px; flex: 1; min-width: 0; overflow-x: auto; padding: 0; border: 0; border-radius: 0; background: none; scrollbar-width: none; }
+.mx-views::-webkit-scrollbar { display: none; }
+.mx-market .mx-view { --view: var(--mx-cyan); display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex: 0 0 auto; min-height: 36px; padding: 0 10px; border: 1px solid transparent; border-radius: 10px; background: none; color: var(--mx-muted); font: 600 11px/1 var(--font-display); white-space: nowrap; cursor: pointer; transition: background .18s ease, color .18s ease; }
+.mx-view[data-view='gainers'] { --view: var(--mx-up); }
+.mx-view[data-view='losers'] { --view: var(--mx-down); }
+.mx-view[data-view='favorites'] { --view: var(--mx-gold); }
+.mx-view[data-view='volume'] { --view: var(--mx-violet); }
+.mx-market .mx-view:hover { color: var(--mx-text); background: rgba(255, 255, 255, .035); }
+.mx-market .mx-view[data-active='true'] { color: var(--view); border-color: color-mix(in srgb, var(--view) 23%, transparent); background: color-mix(in srgb, var(--view) 9%, transparent); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08); }
+.mx-sort-wrap { position: relative; display: flex; align-items: center; gap: 5px; flex: 0 0 auto; }
+.mx-market .mx-sort-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; padding: 0 10px; border: 1px solid var(--mx-line); border-radius: 10px; background: rgba(255, 255, 255, .025); color: var(--mx-muted); font: 500 10px/1 var(--font-display); cursor: pointer; }
+.mx-sort-caret { color: var(--mx-violet); }
+.mx-sort-popover { position: absolute; top: calc(100% + 8px); inset-inline-end: 0; z-index: 20; width: 170px; padding: 5px; border: 1px solid var(--mx-line-strong); border-radius: 13px; background: var(--mx-panel-2); box-shadow: 0 14px 40px rgba(0, 0, 12, .4); }
+.mx-sort-option { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 36px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--mx-muted); font: 500 11px/1 var(--font-display); text-align: start; cursor: pointer; }
+.mx-sort-option:is(:hover, :focus-visible, [aria-checked='true']) { color: var(--mx-cyan); background: color-mix(in srgb, var(--mx-cyan) 9%, transparent); }
+.mx-sort-check { color: var(--mx-cyan); }
 
-/* The rail: full-bleed inside the card (negative inline margin) so a tile can
-   sit half-off the edge and the reader understands it scrolls. The padding
-   restores the card's own gutter as the first tile's start. Edge fades are
-   painted gradients on the rail's ::before/::after, never a mask (a mask on a
-   scrolling strip promotes the whole strip while it moves). */
+/* 7 · Categories are a bare rail ABOVE the coins. No outer card or stray mark.
+   Touch uses native scrolling. Mouse drag, wheel and arrow keys are additive. */
+.mx-market .mx-sector-rail { min-width: 0; padding: 0; margin: -3px 0 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
 .mx-market .mx-sectors-rail {
-  position: relative;
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 7px;
-  margin-inline: -13px;
-  padding: 2px 13px 4px;
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
   scroll-snap-type: x proximity;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
+  padding: 5px 1px 7px;
+  cursor: grab;
+  user-select: none;
+  touch-action: pan-x pan-y;
 }
-.mx-market .mx-sectors-rail::-webkit-scrollbar { display: none; }
-
+.mx-sectors-rail::-webkit-scrollbar { display: none; }
+.mx-sectors-rail[data-dragging='true'] { cursor: grabbing; scroll-snap-type: none; }
+.mx-sectors-rail[data-dragging='true'] button { cursor: grabbing; }
 .mx-market .mx-sector {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  flex: 0 0 auto;
-  height: 42px;
-  /* logical, because the tile sits on the START edge in both directions */
-  padding-block: 0;
-  padding-inline: 7px 13px;
-  scroll-snap-align: start;
-  border: 1px solid var(--mx-line);
-  border-radius: 15px;
-  background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012) 56%, rgba(6, 10, 20, 0.2));
-  color: var(--mx-muted);
-  font: 700 11.5px/1 var(--font-display);
-  cursor: pointer;
-  transition: color 160ms ease, border-color 160ms ease, background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
-}
-.mx-sector-tile {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border-radius: 10px;
-  color: color-mix(in srgb, var(--sec) 88%, #ffffff);
-  background: color-mix(in srgb, var(--sec) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--sec) 26%, transparent);
-  transition: background 160ms ease, border-color 160ms ease;
-}
-.mx-sector-label { white-space: nowrap; }
-.mx-market .mx-sector:hover {
-  color: var(--mx-text);
-  border-color: color-mix(in srgb, var(--sec) 44%, transparent);
-  transform: translateY(-1px);
-}
-.mx-market .mx-sector:active { transform: scale(0.97); }
-.mx-market .mx-sector[data-active='true'] {
-  color: color-mix(in srgb, var(--sec) 26%, #ffffff);
-  border-color: color-mix(in srgb, var(--sec) 58%, transparent);
-  background: linear-gradient(160deg, color-mix(in srgb, var(--sec) 24%, transparent), color-mix(in srgb, var(--sec) 8%, transparent));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 10px 22px -16px color-mix(in srgb, var(--sec) 92%, transparent);
-}
-.mx-market .mx-sector[data-active='true'] .mx-sector-tile {
-  background: color-mix(in srgb, var(--sec) 26%, transparent);
-  border-color: color-mix(in srgb, var(--sec) 52%, transparent);
-}
-
-/* ── 9.5 · نبض بازار — inside the lens, quieter than the list ───────────── */
-
-.mx-market .mx-lens .mx-breadth {
-  padding: 11px 12px;
-  border-radius: 15px;
-  border-color: var(--mx-line-soft);
-  background: linear-gradient(168deg, rgba(255, 255, 255, 0.038), rgba(255, 255, 255, 0.008) 52%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-.mx-market .mx-lens .mx-breadth::after { inset-block: 10px; }
-
-/* ── 9.6 · THE LIST CARD — drawn in, not spread out ───────────────────────
-   «توکن‌ها کشیده شود جمع شده … اندازه و فاصله درست» · «باکس همه ارزها را
-    فاصله بده» */
-
-.mx-market .mx-terminal {
-  padding: 12px;
-  border-radius: var(--mx-r-lg);
-  gap: 0;
-}
-.mx-list-hero { display: flex; flex-direction: column; gap: 10px; padding-bottom: 11px; }
-.mx-list-hero-head { display: flex; align-items: center; gap: 8px; }
-.mx-list-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  min-width: 0;
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: -0.015em;
-}
-.mx-table-wrap { padding-top: 4px; }
-
-/* ── 9.12 · THE FOLD — «توکن‌ها کشیده شود جمع شده» ────────────────────────
-   A chip on the list's title line, not a chevron floating in a corner: the
-   list says how many coins it holds, so the same line says how many of them
-   are showing. It is a pill because it is a choice, and it turns so the
-   direction of the next tap is legible before the tap. */
-.mx-fold {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  margin-inline-start: auto;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--mx-line);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018));
-  color: var(--mx-muted);
-  font-size: 10.5px;
-  font-weight: 700;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: color .18s ease, border-color .18s ease, background-color .18s ease;
-}
-.mx-fold:hover { color: var(--mx-text); border-color: var(--mx-line-strong); }
-.mx-fold:focus-visible { outline: 2px solid var(--mx-cyan); outline-offset: 2px; }
-.mx-fold-caret {
-  transition: transform .22s ease;
-  transform: rotate(180deg);
-}
-.mx-fold-caret[data-folded='true'] { transform: rotate(0deg); }
-
-:root[data-theme='light'] .mx-fold {
-  border-color: rgba(15, 23, 42, 0.12);
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.035), rgba(15, 23, 42, 0.012));
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mx-fold, .mx-fold-caret { transition: none; }
-}
-:root[data-native='true'] .mx-fold,
-:root[data-lite='true'] .mx-fold { transition: none; }
-
-
-/* ── 9.7 · THE TOKEN ROWS — a measured five-column grid ───────────────────
-   Each row is one glass line: rank, logo, identity, shape, price+change. The
-   swap button keeps its own 34px column so the five columns above never move
-   when a coin is swappable and its neighbour is not — that misalignment was
-   the visible half of «توکن‌ها کشیده شود». */
-
-.mx-table.market-coin-grid { gap: 6px; }
-.mx-market .mx-coin-row {
-  gap: 8px;
-  padding-block: 0;
-  padding-inline: 8px 6px;
-  border: 1px solid var(--mx-line-soft);
-  border-radius: 15px;
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.008) 60%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
-}
-.mx-market .mx-coin-row:hover {
-  border-color: color-mix(in srgb, var(--mx-cyan) 26%, transparent);
-  background: linear-gradient(160deg, rgba(56, 225, 255, 0.06), rgba(255, 255, 255, 0.01) 62%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 14px 28px -22px rgba(56, 225, 255, 0.7);
-}
-.mx-market .mx-coin-row:last-child { border-bottom: 1px solid var(--mx-line-soft); }
-.mx-market .mx-coin-row .coin-row {
-  padding: 10px 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
-.mx-market .mx-coin-row .coin-row-open {
-  grid-template-columns: 22px 32px minmax(0, 1fr) 56px minmax(84px, auto);
-  gap: 8px;
-}
-.mx-market .mx-coin-row .coin-row-spark { width: 56px; height: 24px; }
-.mx-market .mx-coin-row .coin-sym { font-size: 12px; }
-.mx-market .mx-coin-row .coin-name { font-size: 10px; }
-.mx-market .mx-coin-row .coin-price { font-size: 12px; }
-.mx-market .mx-coin-row .coin-change-pill { font-size: 10px; padding: 2px 5px; }
-
-/* THE SWAP BUTTON — «دکمه سواپ رنگ بندی درست داشته باشد».
-   A quiet glass pill at rest and cyan-tinted on hover: it is the only control
-   inside a row, so it must read as an action without competing with the price.
-   The gradient is a fixed 34px-wide column, so a row without a swap route is
-   the same height as one with it. */
-.mx-market .mx-coin-row .mx-swap-btn {
-  height: 30px;
-  min-width: 46px;
-  padding: 0 9px;
-  gap: 4px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--mx-cyan) 24%, transparent);
-  background: linear-gradient(150deg, color-mix(in srgb, var(--mx-cyan) 12%, transparent), color-mix(in srgb, var(--mx-blue) 10%, transparent));
-  color: color-mix(in srgb, var(--mx-cyan) 72%, #ffffff);
-  font: 800 10.5px/1 var(--font-display);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-.mx-market .mx-coin-row .mx-swap-btn:hover {
-  border-color: color-mix(in srgb, var(--mx-cyan) 56%, transparent);
-  background: linear-gradient(150deg, color-mix(in srgb, var(--mx-cyan) 24%, transparent), color-mix(in srgb, var(--mx-blue) 18%, transparent));
-  color: #eafcff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 8px 18px -12px rgba(56, 189, 248, 0.95);
-}
-
-/* ── 9.8 · THE SMART-MONEY BLADE — «خیلی مدرن … با انیمیشن» ───────────────
-   A funnel: the mark, the sentence, the route it travels, the three
-   destinations, then the CTA. Layers back to front are two painted blooms, one
-   hairline sweep, and the content. The only loops are the sweep (9s) and the
-   route's travelling dot (5.6s), both transform/opacity only. */
-
-.mx-market .mx-smart-banner {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 22px;
-  border-color: rgba(96, 165, 250, 0.24);
-  overflow: hidden;
-  background:
-    radial-gradient(120% 150% at 100% 0%, rgba(139, 92, 246, 0.2), transparent 58%),
-    radial-gradient(90% 120% at 0% 110%, rgba(34, 211, 238, 0.14), transparent 60%),
-    linear-gradient(126deg, rgba(13, 19, 36, 0.97), rgba(15, 22, 46, 0.95));
-}
-.mx-smart-veil {
-  position: absolute;
-  z-index: -1;
-  inset-block-start: -70px;
-  inset-inline-end: -50px;
-  width: 200px;
-  height: 200px;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(139, 92, 246, 0.34), transparent 74%);
-  pointer-events: none;
-  animation: mx-float 30s ease-in-out infinite alternate;
-}
-.mx-smart-main { position: relative; display: flex; align-items: flex-start; gap: 11px; }
-.mx-smart-mark {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 auto;
-  border-radius: 14px;
-  color: #e0f2fe;
-  background:
-    radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.24), transparent 60%),
-    linear-gradient(150deg, rgba(59, 130, 246, 0.46), rgba(139, 92, 246, 0.34));
-  border: 1px solid rgba(147, 197, 253, 0.36);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), 0 14px 28px -16px rgba(59, 130, 246, 0.95);
-}
-/* One ring leaves the mark every 4.6s — the only thing that says "live" on the
-   card, and it is a 1px border on a scaled div, so it costs nothing. */
-.mx-smart-ring {
-  position: absolute;
-  inset: -1px;
-  border-radius: 15px;
-  border: 1px solid rgba(147, 197, 253, 0.55);
-  animation: mx-smart-ring 4.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-  pointer-events: none;
-}
-.mx-smart-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #93c5fd;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  margin-bottom: 4px;
-}
-.mx-smart-eyebrow i {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--mx-up);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mx-up) 16%, transparent);
-}
-.mx-smart-copy h2 {
-  margin: 0;
-  color: #f8fafc;
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 1.35;
-  letter-spacing: -0.012em;
-}
-.mx-smart-copy p {
-  margin: 4px 0 0;
-  color: #9fb0d4;
-  font-size: 11px;
-  line-height: 1.65;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-/* THE ROUTE */
-.mx-smart-route {
-  position: relative;
-  padding: 2px 2px 0;
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent);
-}
-.mx-smart-route svg { display: block; width: 100%; height: 34px; overflow: visible; }
-/* Static dashes. They used to drift (`stroke-dashoffset`), which is a paint
-   property on every frame of a loop — the travelling dot below already says
-   «money is moving», so the dashes only have to describe the path. */
-.mx-route-line {
-  fill: none;
-  stroke: rgba(147, 197, 253, 0.55);
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-dasharray: 5 7;
-}
-.mx-route-line.is-dim { stroke: rgba(139, 92, 246, 0.3); }
-.mx-route-node { fill: #0b1220; stroke: rgba(147, 197, 253, 0.7); stroke-width: 1.6; }
-.mx-route-node.is-end { fill: var(--mx-up); stroke: none; }
-/* The travelling light. One extra stroke over the same path, lit by a gradient
-   whose stops slide the length of the rail (see <animateTransform> in the
-   component) — so the motion is a gradient transform, not a dash offset, and
-   nothing on the card is re-rasterised to run it. */
-.mx-route-flow {
-  fill: none;
-  stroke-width: 2.1;
-  stroke-linecap: round;
-  opacity: 0.95;
-}
-.mx-route-labels {
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 0 2px;
-  color: var(--mx-faint);
-  font-size: 9px;
-  letter-spacing: 0.02em;
-}
-
-/* THE DESTINATIONS */
-.mx-smart-pools { display: flex; flex-wrap: wrap; gap: 6px; }
-.mx-pool {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 9px;
-  border-radius: 999px;
-  border: 1px solid rgba(147, 197, 253, 0.2);
-  background: rgba(255, 255, 255, 0.04);
-  color: #cbd9f5;
-  font-size: 10px;
-  font-weight: 600;
-  /* three chips, three entry delays — a single 240ms rise, once */
-  animation: mx-pool-in 480ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
-  animation-delay: calc(var(--i, 0) * 90ms + 120ms);
-}
-.mx-pool[data-pool='whales'] { --pool: #4cc3ff; }
-.mx-pool[data-pool='institutions'] { --pool: #a78bfa; }
-.mx-pool[data-pool='newPools'] { --pool: #34d399; }
-.mx-pool-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--pool); }
-.mx-pool svg { color: var(--pool); }
-
-.mx-smart-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.mx-smart-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: #a7f3d0;
-  font-size: 10px;
-  font-weight: 700;
-}
-.mx-smart-live i {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--mx-up);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mx-up) 15%, transparent);
-}
-.mx-smart-cta { height: 34px; padding: 0 13px; border-radius: 11px; font-size: 11.5px; }
-
-@keyframes mx-smart-ring {
-  0% { opacity: 0.75; transform: scale(1); }
-  70% { opacity: 0; transform: scale(1.16); }
-  100% { opacity: 0; transform: scale(1.16); }
-}
-@keyframes mx-pool-in {
-  from { opacity: 0; transform: translate3d(0, 6px, 0); }
-  to { opacity: 1; transform: translate3d(0, 0, 0); }
-}
-
-/* ── 9.9 · RESPONSIVE ──────────────────────────────────────────────────── */
-
-@media (min-width: 620px) {
-  .mx-trio { gap: 10px; }
-  .mx-trio-box { padding: 12px 12px 13px; gap: 10px; }
-  .mx-trio-mark { width: 32px; height: 32px; border-radius: 11px; }
-  .mx-trio-label { font-size: 10px; }
-  .mx-smart-copy p { -webkit-line-clamp: 2; line-clamp: 2; }
-}
-
-@media (min-width: 860px) {
-  .mx-market .mx-deck { padding: 16px 20px 18px; }
-  .mx-market .mx-btc-card { padding: 15px 20px 17px; }
-  .mx-trio-value { font-size: 18px; }
-  .mx-market .mx-coin-row .coin-row-open { grid-template-columns: 24px 34px minmax(0, 1fr) 88px minmax(96px, auto); gap: 10px; }
-  .mx-market .mx-coin-row .coin-row-spark { width: 88px; }
-}
-
-@media (max-width: 619px) {
-  .mx-market .mx-deck { padding: 12px 12px 13px; border-radius: 23px; }
-  .mx-market .mx-global-metrics { gap: 6px; }
-  .mx-market .mx-metric { padding: 7px 8px; }
-  .mx-market .mx-lens { padding: 11px 12px 12px; }
-  .mx-market .mx-sectors-rail { margin-inline: -12px; padding-inline: 12px; }
-  .mx-market .mx-terminal { padding: 10px; }
-  .mx-list-hero { padding-bottom: 9px; gap: 9px; }
-  .mx-market .mx-coin-row { padding: 0 5px 0 7px; }
-  .mx-market .mx-smart-banner { padding: 12px; gap: 10px; }
-  .mx-smart-copy h2 { font-size: 14px; }
-  .mx-smart-copy p { -webkit-line-clamp: 2; line-clamp: 2; font-size: 10.5px; }
-  .mx-smart-route svg { height: 28px; }
-}
-
-@media (max-width: 359px) {
-  .mx-trio { gap: 6px; }
-  .mx-trio-box { padding: 9px 7px 10px; gap: 6px; }
-  .mx-trio-mark { width: 24px; height: 24px; border-radius: 9px; }
-  .mx-trio-label { font-size: 9px; }
-  .mx-pool { font-size: 9px; padding: 4px 7px; }
-}
-
-/* ── 9.10 · LIGHT THEME — the same hierarchy, re-graded ─────────────────── */
-
-:root[data-theme='light'] .mx-market .mx-deck {
-  background: var(--mx-glass), var(--mx-panel);
-  border-color: rgba(16, 24, 48, 0.08);
-}
-:root[data-theme='light'] .mx-market .mx-trio-box {
-  border-color: rgba(16, 24, 48, 0.09);
-  background: linear-gradient(168deg, #ffffff, #f4f7fd 62%);
-  box-shadow: inset 0 1px 0 #ffffff, 0 12px 26px -24px rgba(20, 45, 80, 0.4);
-}
-:root[data-theme='light'] .mx-market .mx-trio-label { color: #4a5b78; }
-:root[data-theme='light'] .mx-market .mx-trio-value { color: #0f172a; }
-:root[data-theme='light'] .mx-market .mx-trio-box[data-tone='up'] .mx-trio-value { color: #046b45; }
-:root[data-theme='light'] .mx-market .mx-trio-box[data-tone='down'] .mx-trio-value { color: #b3123a; }
-:root[data-theme='light'] .mx-market .mx-trio-mark { color: color-mix(in srgb, var(--trio) 70%, #0b1220); }
-
-:root[data-theme='light'] .mx-market .mx-btc-card {
-  border-color: rgba(217, 138, 18, 0.34);
-  background:
-    radial-gradient(120% 130% at 84% -20%, rgba(247, 178, 59, 0.2), transparent 62%),
-    radial-gradient(100% 120% at 4% 118%, rgba(226, 88, 14, 0.08), transparent 64%),
-    linear-gradient(158deg, #ffffff, #fdf8ef 62%);
-  box-shadow: inset 0 1px 0 #ffffff, 0 20px 40px -32px rgba(180, 120, 20, 0.55);
-}
-:root[data-theme='light'] .mx-market .mx-btc-price { color: #1a1206; }
-:root[data-theme='light'] .mx-market .mx-btc-chart { background: linear-gradient(180deg, rgba(16, 24, 48, 0.03), transparent 72%); }
-
-:root[data-theme='light'] .mx-market .mx-lens {
-  border-color: rgba(16, 24, 48, 0.08);
-  background: linear-gradient(158deg, #ffffff, #f5f8fd);
-  box-shadow: inset 0 1px 0 #ffffff, 0 18px 38px -32px rgba(20, 45, 80, 0.5);
-}
-:root[data-theme='light'] .mx-market .mx-lens-note { color: #5a6b86; background: rgba(16, 24, 48, 0.04); border-color: rgba(16, 24, 48, 0.09); }
-:root[data-theme='light'] .mx-market .mx-sector {
-  color: #46587a;
-  border-color: rgba(16, 24, 48, 0.1);
-  background: linear-gradient(160deg, #ffffff, #f3f6fc);
-}
-:root[data-theme='light'] .mx-market .mx-sector[data-active='true'] {
-  color: color-mix(in srgb, var(--sec) 74%, #0b1220);
-  border-color: color-mix(in srgb, var(--sec) 50%, transparent);
-  background: linear-gradient(160deg, color-mix(in srgb, var(--sec) 18%, #ffffff), color-mix(in srgb, var(--sec) 7%, #ffffff));
-}
-:root[data-theme='light'] .mx-market .mx-sector-tile { color: color-mix(in srgb, var(--sec) 72%, #0b1220); }
-
-:root[data-theme='light'] .mx-market .mx-coin-row {
-  border-color: rgba(16, 24, 48, 0.08);
-  background: linear-gradient(160deg, #ffffff, #f6f9fd 64%);
-  box-shadow: inset 0 1px 0 #ffffff;
-}
-:root[data-theme='light'] .mx-market .mx-coin-row:hover {
-  border-color: rgba(2, 132, 199, 0.28);
-  background: linear-gradient(160deg, #ffffff, #eef7fd 64%);
-}
-:root[data-theme='light'] .mx-market .mx-coin-row:last-child { border-bottom-color: rgba(16, 24, 48, 0.08); }
-:root[data-theme='light'] .mx-market .mx-swap-btn {
-  color: #0e7490;
-  border-color: rgba(8, 145, 178, 0.28);
-  background: linear-gradient(150deg, rgba(34, 211, 238, 0.14), rgba(59, 130, 246, 0.1));
-}
-:root[data-theme='light'] .mx-market .mx-swap-btn:hover { color: #0b4f60; }
-
-:root[data-theme='light'] .mx-market .mx-smart-banner {
-  border-color: rgba(37, 99, 235, 0.2);
-  background:
-    radial-gradient(120% 150% at 100% 0%, rgba(139, 92, 246, 0.12), transparent 58%),
-    radial-gradient(90% 120% at 0% 110%, rgba(34, 211, 238, 0.1), transparent 60%),
-    linear-gradient(126deg, #ffffff, #f3f7ff);
-}
-:root[data-theme='light'] .mx-market .mx-smart-copy h2 { color: #0d1a30; }
-:root[data-theme='light'] .mx-market .mx-smart-copy p { color: #4a5b78; }
-:root[data-theme='light'] .mx-market .mx-smart-eyebrow { color: #2f6fd0; }
-:root[data-theme='light'] .mx-market .mx-smart-live { color: #046b45; }
-:root[data-theme='light'] .mx-market .mx-route-line { stroke: rgba(37, 99, 235, 0.42); }
-:root[data-theme='light'] .mx-market .mx-route-line.is-dim { stroke: rgba(91, 63, 214, 0.26); }
-:root[data-theme='light'] .mx-market .mx-route-node { fill: #ffffff; stroke: rgba(37, 99, 235, 0.6); }
-:root[data-theme='light'] .mx-market .mx-route-labels { color: #6b7c99; }
-:root[data-theme='light'] .mx-market .mx-pool { color: #34456d; background: rgba(255, 255, 255, 0.72); border-color: rgba(16, 24, 48, 0.1); }
-
-/* ── 9.11 · MOTION BUDGET AND THE SHELLS THAT HAVE NONE ────────────────── */
-
-@media (prefers-reduced-motion: reduce) {
-  .mx-market .mx-btc-veil,
-  .mx-market .mx-smart-veil,
-  .mx-market .mx-smart-ring,
-  .mx-market .mx-pool { animation: none !important; }
-  .mx-market .mx-pool { opacity: 1; transform: none; }
-  .mx-market .mx-route-flow { display: none; }
-  .mx-market .mx-trio-box,
-  .mx-market .mx-coin-row,
-  .mx-market .mx-swap-btn,
-  .mx-market .mx-sector { transition: none !important; }
-  .mx-market .mx-trio-box:hover,
-  .mx-market .mx-sector:hover { transform: none; }
-}
-
-:root[data-native='true'] .mx-market .mx-btc-veil,
-:root[data-native='true'] .mx-market .mx-smart-veil,
-:root[data-native='true'] .mx-market .mx-smart-ring,
-:root[data-lite='true'] .mx-market .mx-btc-veil,
-:root[data-lite='true'] .mx-market .mx-smart-veil,
-:root[data-lite='true'] .mx-market .mx-smart-ring { animation: none !important; }
-/* The rail's travelling light is a SMIL animation on a gradient, which CSS
-   cannot switch off — so the native shell and lite mode hide that stroke. The
-   static path, the three nodes and the labels stay: that is the reading. */
-:root[data-native='true'] .mx-market .mx-route-flow,
-:root[data-lite='true'] .mx-market .mx-route-flow { display: none; }
-
-/* ══════════════════════════════════════════════════════════════════════════
-   9.13 · FIRST-SCREEN BOXES — separate surfaces, real gaps between them
-   «باکس نمای بازار مدرن کن و بعدش یک فاصله کوچک بده و سه باکس مدرن
-    برای ارزها، بازارها، میانگین تغییر … یک فاصله کوچک و بعدش باکس بیت‌کوین را
-    مدرن و شیشه‌ای کن»
-   The overview wrapper is only a rhythm container now: the deck, the trio and
-   the Bitcoin card are each their own glass box, so the space between them is
-   page background showing through a real gap — not padding inside one card.
-   ══════════════════════════════════════════════════════════════════════════ */
-
-.mx-market .mx-overview {
-  border: none;
-  background: none;
-  box-shadow: none;
-  overflow: visible;
-}
-
-/* The trio: one modern box holding three equal cards on one line, every width. */
-.mx-market .mx-trio {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  padding: 11px;
-  border: 1px solid var(--mx-line);
-  border-radius: var(--mx-r-lg);
-  background: var(--mx-glass), var(--mx-panel-2);
-  box-shadow: var(--mx-hi);
-}
-
-/* The sector rail lives under the view tabs now. The page gap (12px, 12px on
-   phones) that already separates lens → terminal → rail → table-wrap is the
-   «فاصله کوچک» on both sides; no extra margin needed. */
-.mx-market .mx-sector-rail {
-  margin: 0;
-}
-
-:root[data-theme='light'] .mx-market .mx-overview {
-  border: none;
-  background: none;
-  box-shadow: none;
-}
-
-:root[data-theme='light'] .mx-market .mx-trio {
-  border-color: rgba(16, 24, 48, 0.09);
-  background: linear-gradient(168deg, #ffffff, #f4f7fd 62%);
-  box-shadow: inset 0 1px 0 #ffffff, 0 12px 26px -24px rgba(20, 45, 80, 0.4);
-}
-
-/* Separate the controls, category rail and rows into three readable surfaces. */
-.mx-market .mx-sector-rail {
-  min-width: 0;
-  padding: 12px 14px;
-  border: 1px solid var(--mx-line);
-  border-radius: 20px;
-  background: var(--mx-glass), var(--mx-panel);
-  box-shadow: var(--mx-hi), var(--mx-shadow);
-}
-.mx-market .mx-table-wrap { min-width: 0; padding: 0; }
-.mx-market .mx-list-hero { padding-bottom: 0; }
-.mx-market .mx-swap-slot {
-  display: flex;
-  align-items: center;
   justify-content: center;
-  flex: 0 0 62px;
-  min-width: 0;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 11px;
+  scroll-snap-align: start;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--mx-muted);
+  font: 600 11px/1 var(--font-display);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .18s ease, background .18s ease, border-color .18s ease;
 }
-.mx-market .mx-coin-row .coin-row-open {
-  grid-template-columns: 22px 32px minmax(0, 1fr) 64px minmax(84px, 1fr);
-}
-.mx-market .mx-coin-row .coin-row-spark { justify-self: center; }
-.mx-market .mx-coin-row .coin-right { min-width: 0; }
-.mx-market .mx-coin-row .mx-swap-btn:focus-visible,
-.mx-market .mx-sector:focus-visible {
-  outline: 2px solid var(--mx-cyan);
-  outline-offset: 2px;
-}
-:root[data-theme='light'] .mx-market .mx-sector-rail {
-  border-color: rgba(16, 24, 48, 0.09);
-  background: linear-gradient(158deg, #fff, #f5f8fd);
-  box-shadow: inset 0 1px 0 #fff, 0 18px 38px -32px rgba(20, 45, 80, 0.5);
+.mx-sector[data-sector='all'] { --sec: #9bb9e7; }
+.mx-sector[data-sector='gold'] { --sec: #ffcf83; }
+.mx-sector[data-sector='meme'] { --sec: #f5a1cb; }
+.mx-sector[data-sector='rwa'] { --sec: #81c5ff; }
+.mx-sector[data-sector='ai'] { --sec: #b29aff; }
+.mx-sector[data-sector='gaming'] { --sec: #ffb18f; }
+.mx-sector[data-sector='solana'] { --sec: #6fe3c0; }
+.mx-sector-tile { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 19px; height: 22px; color: var(--sec); }
+.mx-sector-icon { display: block; }
+.mx-market .mx-sector:hover { color: var(--mx-text); background: color-mix(in srgb, var(--sec) 6%, transparent); }
+.mx-market .mx-sector[data-active='true'] { border-color: color-mix(in srgb, var(--sec) 32%, transparent); background: color-mix(in srgb, var(--sec) 10%, transparent); color: var(--mx-text); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .09); }
+
+/* 8 · Token card + detached swap satellite. Only the CARD paints glass.
+   The wrapper reserves the same action column for every row, so charts and
+   prices never shift when a route is unavailable. No row entrance animation. */
+.mx-market .mx-table-wrap { padding: 0; min-width: 0; }
+.mx-market .mx-table { display: grid; grid-template-columns: minmax(0, 1fr); gap: 9px 18px; margin: 0; }
+.mx-market .mx-coin-row { display: grid; grid-template-columns: minmax(0, 1fr) 62px; align-items: center; gap: 9px; min-width: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.mx-market .mx-coin-row > .coin-row { display: block; min-width: 0; width: 100%; padding: 0; border: 1px solid var(--mx-line); border-top-color: rgba(210, 224, 255, .22); border-radius: 17px; background: linear-gradient(120deg, rgba(223, 234, 255, .06), transparent 70%), var(--mx-panel); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .045); transition: border-color .18s ease, background .18s ease; }
+.mx-market .mx-coin-row > .coin-row:hover { border-color: rgba(102, 229, 225, .35); background: linear-gradient(120deg, rgba(102, 229, 225, .07), transparent 70%), var(--mx-panel); }
+.mx-market .mx-coin-row .coin-row-open { display: grid; grid-template-columns: 21px 32px minmax(0, 1fr) 58px 92px; align-items: center; gap: 9px; min-width: 0; width: 100%; min-height: 68px; padding: 10px 12px; border: 0; border-radius: 16px; background: none; color: var(--mx-text); text-align: start; cursor: pointer; }
+.mx-market .mx-coin-row .coin-row-open:active { transform: none; }
+.mx-market .mx-coin-row .coin-row-rank { width: auto; color: var(--mx-faint); font-size: 10px; }
+.mx-market .mx-coin-row .coin-logo { width: 32px; height: 32px; border-radius: 50%; }
+.mx-market .mx-coin-row .coin-meta { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mx-market .mx-coin-row .coin-sym { color: var(--mx-text); font-size: 12px; font-weight: 750; line-height: 1.3; }
+.mx-market .mx-coin-row .coin-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 6px; min-width: 0; color: var(--mx-muted); font-size: 9px; line-height: 1.3; }
+.mx-market .mx-coin-row .coin-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-market .mx-coin-row .coin-row-metric { color: var(--mx-faint); font-size: 9px; white-space: nowrap; }
+.mx-market .mx-coin-row .coin-row-metric i { font-style: normal; }
+.mx-market .mx-coin-row .coin-row-spark { display: block; width: 58px; height: 25px; overflow: hidden; opacity: .85; direction: ltr; }
+.mx-market .mx-coin-row .coin-row-spark svg { display: block; width: 100%; height: 100%; }
+.mx-market .mx-coin-row .coin-right { display: flex; flex-direction: column; align-items: flex-end; justify-self: stretch; gap: 5px; min-width: 0; text-align: end; }
+.mx-market .mx-coin-row .coin-price { max-width: 100%; color: var(--mx-text); font-size: 12px; font-weight: 650; white-space: nowrap; direction: ltr; }
+.mx-market .mx-coin-row .coin-change-pill { display: inline-flex; align-items: center; gap: 3px; padding: 2px 5px; border: 0; border-radius: 6px; font-size: 9px; font-weight: 600; line-height: 1.4; direction: ltr; white-space: nowrap; }
+.mx-market .coin-change-pill.is-up { color: var(--mx-up); background: color-mix(in srgb, var(--mx-up) 8%, transparent); }
+.mx-market .coin-change-pill.is-down { color: var(--mx-down); background: color-mix(in srgb, var(--mx-down) 8%, transparent); }
+.mx-market .mx-swap-slot { position: relative; display: flex; align-items: center; justify-content: center; min-width: 0; width: 62px; }
+.mx-swap-slot[data-available='true']::before { content: ''; position: absolute; inset-inline-start: -9px; width: 9px; height: 1px; background: linear-gradient(90deg, transparent, rgba(102, 229, 225, .36)); pointer-events: none; }
+.mx-market .mx-swap-btn { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-width: 52px; min-height: 52px; padding: 6px; border: 1px solid rgba(128, 221, 225, .26); border-top-color: rgba(184, 243, 245, .45); border-radius: 16px; background: linear-gradient(145deg, rgba(108, 217, 210, .13), rgba(138, 134, 226, .1)), var(--mx-panel); color: var(--mx-cyan); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 6px 17px -13px rgba(102, 229, 225, .4); font: 650 9px/1 var(--font-display); cursor: pointer; transition: transform .18s ease, border-color .18s ease, background .18s ease; }
+.mx-market .mx-swap-btn svg { width: 17px; height: 17px; flex: 0 0 auto; }
+.mx-market .mx-swap-btn:hover { transform: translateY(-2px); border-color: rgba(137, 245, 225, .6); background: linear-gradient(145deg, rgba(108, 217, 210, .23), rgba(138, 134, 226, .18)), var(--mx-panel); filter: none; }
+.mx-market .mx-swap-btn:active { transform: scale(.96); }
+.mx-market .mx-swap-btn:focus-visible { outline-offset: 3px; }
+
+/* Empty, error and pagination states remain part of the same hierarchy. */
+.mx-intent-result { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; padding: 12px; margin-bottom: 12px; border: 1px solid var(--mx-line); border-radius: 13px; background: var(--mx-panel); color: var(--mx-cyan); font-size: 11px; }
+.mx-intent-result button { margin-inline-start: auto; padding: 5px 7px; border: 0; border-radius: 7px; background: rgba(255, 255, 255, .05); color: var(--mx-muted); font: inherit; cursor: pointer; }
+.mx-market .mx-empty { padding: 30px 20px; border: 1px solid var(--mx-line); border-radius: 20px; background: var(--mx-glass), var(--mx-panel); text-align: center; color: var(--mx-text); }
+.mx-empty .market-empty-icon { display: grid; place-items: center; width: 44px; height: 44px; margin: 0 auto 12px; color: var(--mx-cyan); background: color-mix(in srgb, var(--mx-cyan) 9%, transparent); border: 1px solid var(--mx-line); border-radius: 14px; }
+.mx-empty .market-empty-title { font-size: 14px; }
+.mx-empty .market-empty-help { color: var(--mx-muted); font-size: 11px; line-height: 1.8; }
+.mx-market .mx-empty-action, .mx-market .mx-show-more { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 0 15px; border: 1px solid var(--mx-line-strong); border-radius: 11px; background: rgba(166, 211, 234, .06); color: var(--mx-cyan); font: 650 11px/1.4 var(--font-display); cursor: pointer; }
+.mx-empty-action { margin-top: 12px; }
+.mx-market .mx-more { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding: 13px 0 0; border-top: 1px solid var(--mx-line); background: none; }
+.mx-more .market-more-meta { display: flex; flex-direction: column; gap: 8px; min-width: 110px; color: var(--mx-muted); font-size: 10px; }
+.mx-more .market-more-track { display: block; height: 3px; overflow: hidden; border-radius: 99px; background: var(--mx-line); }
+.mx-more .market-more-fill { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--mx-cyan), var(--mx-violet)); }
+/* List folding moved out of the search/title line and next to pagination. */
+.mx-list-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.mx-list-actions .mx-show-more { min-height: 44px; }
+.mx-list-fold { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 0 12px; border: 1px solid var(--mx-line); border-radius: 12px; background: linear-gradient(135deg, rgba(156, 185, 236, .07), rgba(156, 185, 236, .015)); color: var(--mx-muted); font: 650 11px/1.4 var(--font-display); cursor: pointer; }
+.mx-list-fold:hover { color: var(--mx-text); border-color: var(--mx-line-strong); }
+.mx-list-fold:focus-visible { outline: 2px solid var(--mx-cyan); outline-offset: 3px; }
+.mx-list-fold svg { flex: 0 0 auto; transform: rotate(180deg); }
+.mx-list-fold[data-folded='true'] svg { transform: rotate(0); }
+.mx-show-more:disabled { opacity: .5; cursor: default; }
+.mx-more-results { margin-top: 18px; }
+.mx-more-results .section-label { margin: 0 0 10px; color: var(--mx-muted); font-size: 11px; }
+.mx-market .mx-skel-row { height: 68px; border: 1px solid var(--mx-line); border-radius: 17px; background: var(--mx-glass), var(--mx-panel); }
+
+/* 9 · Responsive: the phone is the primary composition, not a scaled desktop. */
+@media (min-width: 900px) {
+  .mx-market { --mx-gap: 22px; }
+  .mx-market .mx-overview { grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); gap: 14px; }
+  .mx-market .mx-deck { grid-column: 1; grid-row: 1; padding: 24px; }
+  .mx-market .mx-btc-card { display: flex; flex-direction: column; grid-column: 2; grid-row: 1; padding: 24px; }
+  .mx-market .mx-btc-card .mx-btc-chart { flex: 1; min-height: 110px; }
+  .mx-trio { grid-column: 1 / -1; grid-row: 2; gap: 14px; }
+  .mx-trio-box { padding: 16px 20px; gap: 12px; }
+  .mx-trio-mark { width: 36px; height: 36px; border-radius: 12px; }
+  .mx-trio-text { flex-direction: row; align-items: center; flex: 1; gap: 12px; }
+  .mx-trio-value { margin-inline-start: auto; font-size: 22px; }
+  .mx-trio-label { font-size: 12px; }
+  .mx-market .mx-smart-banner { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px 35px; padding: 28px; }
+  .mx-smart-main { grid-column: 1; grid-row: 1; }
+  .mx-smart-route { grid-column: 2; grid-row: 1 / 3; align-self: center; }
+  .mx-route-drawing { height: 100px; }
+  .mx-smart-pools { grid-column: 1; padding-inline-start: 59px; }
+  .mx-smart-foot { grid-column: 1 / -1; }
+  .mx-hot-rail { padding-bottom: 4px; }
+  .mx-market .mx-hot-card { flex-basis: calc((100% - 40px) / 5); min-width: 175px; }
+  .mx-market .mx-compare { min-height: 36px; }
+  .mx-market .mx-table { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 619px) {
-  .mx-market .mx-coin-row .coin-row-open {
-    grid-template-columns: 18px 30px minmax(0, 1fr) 44px minmax(72px, auto);
-    gap: 5px;
-  }
-  .mx-market .mx-coin-row .coin-row-spark { width: 44px; }
-  .mx-market .mx-swap-slot { flex-basis: 48px; }
-  .mx-market .mx-coin-row .mx-swap-btn { min-width: 44px; padding-inline: 6px; }
+  .mx-market { --mx-gap: 16px; }
+  .mx-market .mx-deck, .mx-market .mx-btc-card { padding: 17px; }
+  .mx-deck-main { margin-top: 21px; }
+  .mx-global-metrics { gap: 5px; }
+  .mx-metric { flex-direction: column; align-items: flex-start; gap: 7px; padding: 7px 9px; }
+  .mx-metric-label { font-size: 9px; }
+  .mx-metric strong { font-size: 12px; }
+  .mx-trio { gap: 7px; }
+  .mx-trio-box { flex-direction: column; align-items: flex-start; gap: 9px; padding: 12px 10px; border-radius: 15px; }
+  .mx-trio-label { font-size: 9px; }
+  .mx-trio-value { font-size: 17px; }
+  .mx-trio-mark { width: 26px; height: 26px; border-radius: 9px; }
+  .mx-trio-text { gap: 6px; }
+  .mx-market .mx-hot-card { flex-basis: 175px; padding: 13px; }
+  .mx-market .mx-smart-banner { padding: 18px; gap: 16px; }
+  .mx-smart-copy h2 { font-size: 18px; }
+  .mx-smart-main { gap: 11px; }
+  .mx-smart-mark { width: 39px; height: 39px; border-radius: 13px; }
+  .mx-smart-mark svg { width: 21px; height: 21px; }
+  .mx-smart-ring { border-radius: 17px; }
+  .mx-smart-copy p { font-size: 10px; }
+  .mx-smart-note { display: none; }
+  .mx-smart-cta { width: 100%; justify-content: space-between; min-height: 44px; padding-inline: 14px; }
+  .mx-smart-pools { justify-content: space-between; gap: 9px; }
+  .mx-pool { font-size: 9px; gap: 4px; }
+  .mx-market .mx-lens { padding: 16px; gap: 16px; }
+  .mx-terminal-head { gap: 9px; }
+  .mx-terminal-title { font-size: 14px; }
+  .mx-terminal-actions { gap: 5px; }
+  .mx-market .mx-compare { width: 36px; padding: 0; }
+  .mx-compare span { display: none; }
+  .mx-fresh { max-width: 112px; font-size: 8px; }
+  .mx-market .mx-terminal { padding: 16px; }
+  .mx-list-hero { gap: 13px; }
+  .mx-controls { gap: 11px; }
+  .mx-market .mx-views { flex-basis: 100%; gap: 1px; }
+  .mx-market .mx-view { flex: 1 0 auto; padding-inline: 7px; font-size: 10px; }
+  .mx-sort-wrap { margin-inline-start: auto; }
+  .mx-market .mx-sort-trigger { min-height: 32px; }
+  .mx-market .mx-sort-wrap .mx-icon-btn { min-width: 32px; min-height: 32px; padding: 0; border-radius: 9px; }
+  .mx-search { gap: 8px; padding-inline: 10px; }
+  .mx-search-input { font-size: 11px; }
+  .mx-search-ai { padding-inline: 5px; font-size: 8px; }
+  .mx-market .mx-coin-row { grid-template-columns: minmax(0, 1fr) 44px; gap: 8px; }
+  .mx-market .mx-coin-row .coin-row-open { grid-template-columns: 16px 28px minmax(0, 1fr) 38px 76px; gap: 6px; min-height: 67px; padding: 10px 9px; }
+  .mx-market .mx-coin-row .coin-row-rank { font-size: 9px; }
+  .mx-market .mx-coin-row .coin-logo { width: 28px; height: 28px; }
+  .mx-market .mx-coin-row .coin-row-spark { width: 38px; height: 22px; }
+  .mx-market .mx-coin-row .coin-sym { font-size: 11px; }
+  .mx-market .mx-coin-row .coin-price { font-size: 11px; }
+  .mx-market .mx-swap-slot { width: 44px; }
+  .mx-market .mx-swap-btn { min-width: 44px; min-height: 44px; width: 44px; height: 44px; border-radius: 14px; padding: 0; }
+  .mx-swap-label { display: block; font-size: 8px; }
+  .mx-swap-slot[data-available='true']::before { inset-inline-start: -8px; width: 8px; }
 }
 @media (max-width: 359px) {
-  .mx-market .mx-trio-box { flex-direction: column; align-items: flex-start; }
-  .mx-market .mx-coin-row .coin-row-open {
-    grid-template-columns: 26px minmax(0, 1fr) 38px minmax(66px, auto);
-  }
+  .mx-market { padding-inline: 12px; }
+  .mx-market .mx-deck, .mx-market .mx-btc-card, .mx-market .mx-terminal { padding: 14px; }
+  .mx-market .mx-lens { padding: 14px; }
+  .mx-market .mx-smart-banner { padding: 15px; }
+  .mx-global-value { font-size: 30px; }
+  .mx-metric { padding-inline: 6px; }
+  .mx-trio-value { font-size: 15px; }
+  .mx-trio-label { font-size: 8px; }
+  .mx-market .mx-view { gap: 3px; padding-inline: 5px; font-size: 9px; }
+  .mx-view-icon { width: 11px; height: 11px; }
+  .mx-search-ai { display: none; }
+  .mx-market .mx-coin-row .coin-row-open { grid-template-columns: 26px minmax(0, 1fr) 32px 72px; gap: 5px; padding-inline: 8px; }
   .mx-market .mx-coin-row .coin-row-rank { display: none; }
-  .mx-market .mx-coin-row .coin-row-spark { width: 38px; }
+  .mx-market .mx-coin-row .coin-logo { width: 26px; height: 26px; }
+  .mx-market .mx-coin-row .coin-row-spark { width: 32px; }
+  .mx-market .mx-coin-row .coin-price { font-size: 10px; }
+  .mx-market .mx-more { align-items: flex-start; }
+  .mx-list-actions { width: 100%; }
+  .mx-list-fold { padding-inline: 10px; font-size: 10px; }
+  .mx-market .mx-show-more { max-width: 160px; padding-inline: 10px; font-size: 10px; }
 }
-@media (max-width: 619px) {
-  .mx-market .mx-btc-card { display: flex; flex-direction: column; }
-  .mx-market .mx-btc-chart { width: 100%; }
+
+/* 10 · Light is pearl glass, not dark glass with inverted text. */
+:root[data-theme='light'] .mx-market {
+  --mx-panel: #ffffff;
+  --mx-panel-2: #f1f5ff;
+  --mx-well: rgba(220, 230, 246, .38);
+  --mx-text: #182740;
+  --mx-muted: #52657f;
+  --mx-faint: #657590;
+  --mx-line: rgba(65, 94, 135, .17);
+  --mx-line-soft: rgba(65, 94, 135, .09);
+  --mx-line-strong: rgba(54, 102, 149, .35);
+  --mx-cyan: #087d80;
+  --mx-blue: #356fbb;
+  --mx-violet: #7450c1;
+  --mx-gold: #a36a19;
+  --mx-up: #087e60;
+  --mx-down: #c23f65;
+  --mx-glass: linear-gradient(135deg, rgba(255, 255, 255, .95), rgba(236, 243, 255, .45));
+  --mx-hi: inset 0 1px 0 #fff;
+  --mx-shadow: 0 18px 40px -30px rgba(46, 67, 123, .22);
 }
+:root[data-theme='light'] .mx-market .mx-deck { background: radial-gradient(ellipse at 0 0, rgba(67, 204, 201, .13), transparent 70%), radial-gradient(ellipse at 100% 100%, rgba(143, 114, 224, .1), transparent 70%), var(--mx-glass), var(--mx-panel); }
+:root[data-theme='light'] .mx-market .mx-btc-card { border-color: rgba(191, 144, 71, .28); background: radial-gradient(ellipse at 100% 0, rgba(255, 209, 137, .25), transparent 70%), var(--mx-glass), var(--mx-panel); }
+:root[data-theme='light'] .mx-btc-logo { background: linear-gradient(135deg, #fff5d9, #ffdda5); border-color: rgba(196, 132, 43, .35); }
+:root[data-theme='light'] .mx-market .mx-lens { background: linear-gradient(130deg, #f5fdfc, #f6f6ff) padding-box, linear-gradient(125deg, rgba(8, 125, 128, .3), rgba(116, 80, 193, .12) 45%, rgba(116, 80, 193, .3)) border-box; }
+:root[data-theme='light'] .mx-market .mx-breadth { background: none; }
+:root[data-theme='light'] .mx-market .mx-search { background: linear-gradient(125deg, #f4fcfc, #f6f4ff) padding-box, linear-gradient(120deg, rgba(8, 125, 128, .35), rgba(116, 80, 193, .12) 45%, rgba(116, 80, 193, .35)) border-box; }
+:root[data-theme='light'] .mx-market .mx-view { background: none; border-color: transparent; }
+:root[data-theme='light'] .mx-market .mx-view[data-active='true'] { color: var(--view); background: color-mix(in srgb, var(--view) 8%, transparent); }
+:root[data-theme='light'] .mx-market .mx-sector { border-color: transparent; background: none; box-shadow: none; }
+:root[data-theme='light'] .mx-market .mx-sector[data-active='true'] { color: var(--mx-text); background: color-mix(in srgb, var(--sec) 22%, transparent); border-color: color-mix(in srgb, var(--sec) 60%, transparent); }
+:root[data-theme='light'] .mx-sector-tile { color: color-mix(in srgb, var(--sec) 50%, #24314f); }
+:root[data-theme='light'] .mx-market .mx-swap-btn { color: var(--mx-cyan); background: linear-gradient(145deg, #e6f6f4, #eeecfc); border-color: rgba(8, 125, 128, .25); }
+:root[data-theme='light'] .mx-market .mx-smart-banner { background: linear-gradient(125deg, #e5f5f2, #efecff 75%, #e6e9fc) padding-box, linear-gradient(125deg, rgba(8, 125, 128, .4), rgba(116, 80, 193, .12) 50%, rgba(116, 80, 193, .4)) border-box; }
+:root[data-theme='light'] .mx-smart-mark { color: #1a7774; border-color: rgba(8, 125, 128, .25); }
+:root[data-theme='light'] .mx-smart-copy h2 { color: #1d304b; }
+:root[data-theme='light'] :is(.mx-smart-copy p, .mx-route-labels, .mx-pool, .mx-smart-note) { color: #52657f; }
+:root[data-theme='light'] .mx-smart-eyebrow { color: #267774; }
+:root[data-theme='light'] .mx-smart-foot { border-color: rgba(65, 94, 135, .12); }
+:root[data-theme='light'] .mx-smart-cta { border-color: #79c7bd; background: linear-gradient(120deg, #b4e9db, #bedbf3); color: #143b46; }
+:root[data-theme='light'] .mx-route-node { fill: #e5f5f2; }
+:root[data-theme='light'] .mx-route-node.is-hub { fill: #e3e6fa; stroke: #8e84ba; }
+:root[data-theme='light'] .mx-route-node.is-end { fill: #eee9fc; }
+:root[data-theme='light'] .mx-route-hub-mark { stroke: #7450c1; }
+:root[data-theme='light'] .mx-route-traveller { background: linear-gradient(90deg, transparent, #198f89); }
+:root[data-theme='light'] .mx-stories .market-story-avatar-inner { border-color: #fff; }
+
+/* 11 · Motion budget. No JS/SMIL animation can bypass these stops. */
+@keyframes mx-float { from { transform: translateY(0); } to { transform: translateY(10px); } }
+@keyframes mx-spin { to { transform: rotate(360deg); } }
+@keyframes mx-blade-sweep { 0%, 35% { transform: translateX(0); opacity: 0; } 45% { opacity: .9; } 75%, 100% { transform: translateX(360%); opacity: 0; } }
+@keyframes mx-smart-ring { 0%, 100% { transform: scale(1); opacity: .5; } 50% { transform: scale(1.05); opacity: 1; } }
+@keyframes mx-flow-travel { 0% { transform: translateX(0); opacity: 0; } 15%, 75% { opacity: 1; } 100% { transform: translateX(410%); opacity: 0; } }
+@keyframes mx-neon-sweep { 0% { transform: translateX(-100%); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateX(100%); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .mx-market *, .mx-market *::before, .mx-market *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .mx-market .mx-smart-sheen, .mx-market .mx-search-glow, .mx-market .mx-route-traveller { opacity: 0; transform: none; }
+  .mx-market .mx-hot-card:hover, .mx-market .mx-smart-cta:hover, .mx-market .mx-swap-btn:hover { transform: none; }
+}
+:root[data-native='true'] .mx-market .mx-deck-veil i,
+:root[data-lite='true'] .mx-market .mx-deck-veil i,
+:root[data-native='true'] .mx-market .mx-smart-sheen,
+:root[data-lite='true'] .mx-market .mx-smart-sheen,
+:root[data-native='true'] .mx-market .mx-smart-ring,
+:root[data-lite='true'] .mx-market .mx-smart-ring,
+:root[data-native='true'] .mx-market .mx-route-traveller,
+:root[data-lite='true'] .mx-market .mx-route-traveller { animation: none !important; }
+:root[data-native='true'] .mx-market .mx-route-traveller,
+:root[data-lite='true'] .mx-market .mx-route-traveller { opacity: 0; }
+:root[data-reduce-motion='true'] .mx-market *, :root[data-reduce-motion='true'] .mx-market *::before, :root[data-reduce-motion='true'] .mx-market *::after { animation: none !important; transition: none !important; }

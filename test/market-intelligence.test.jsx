@@ -32,6 +32,14 @@ describe('market intelligence surfaces', () => {
     expect(screen.getByTestId('market-global-card').textContent).toContain('—');
   });
 
+  it('does not call absent or offline global data live', () => {
+    const { rerender } = render(<MarketOverview global={{}} loading={false} />);
+    expect(document.querySelector('.mx-deck-live').textContent).toBe(fa.marketIntel.deckPending);
+    rerender(<MarketOverview global={{ mcap: 1e12, offline: true }} loading={false} />);
+    expect(document.querySelector('.mx-deck-live').getAttribute('data-unavailable')).toBe('true');
+    expect(document.querySelector('.mx-deck-live').textContent).not.toBe(fa.marketIntel.deckLive);
+  });
+
   it('links the Smart Money banner to the real intelligence route', () => {
     render(<MemoryRouter><SmartMoneyBanner /></MemoryRouter>);
     const link = screen.getByRole('link', { name: fa.marketIntel.smartCta });

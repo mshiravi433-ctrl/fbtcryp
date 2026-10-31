@@ -1,32 +1,6 @@
 // @vitest-environment jsdom
-/**
- * MARKET — THE AURORA DECK PASS (2026-10-31)
- * ---------------------------------------------------------------------------
- * One request, seven numbered items, all of them about this one screen:
- *
- *   ۱/۲ «ارزش کل و بیت کویین داخل باکس واحد اما خیلی مدرن تر شود»
- *      → ONE surface holds both readings; the seam between two separate cards
- *        is gone, and every mark inside it is drawn SVG.
- *
- *   ۲  «بنر تبلیغاتی پول هوشمند بسیار نینیمال تر»
- *      → the blade is one row: mark, copy, CTA. The 360×180 isometric scene is
- *        gone and the only motion left is a hairline sweep.
- *
- *   ۳  «داغ‌ترین کوین‌ها خیلی مدرن تر و مینیمال تر … رنگ بندی خاص»
- *      → one accent custom property per place, read by the hairline, the rank
- *        chip and the hover border alike.
- *
- *   ۵  «زیر همه ارزها باید فیلد جستجو بیاد بالای فیلتر ها با ماچین نئونی»
- *      → the field lives inside the list card, between its head and its chips.
- *
- *   ۶  «باکس استوری ها … بین داغ ترین ها و بنر تبلیغاتی قرار بگیره»
- *      → document order, pinned with compareDocumentPosition rather than by
- *        eye, because "between" is exactly the kind of claim a refactor loses.
- *
- *   ۷  «انیمیشن بجا بدون چشمک زدن، کاهش سرعت باشد … باکس ها شیشه ایی»
- *      → glass is painted gradients (no live blur anywhere in the sheet), and
- *        every keyframe in it animates transform/opacity only.
- */
+/** Prism glass regression: real values, independent surfaces, bare categories,
+ * detached swap, and composited motion that respects the user's settings. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -131,7 +105,7 @@ const open = async () => {
   render(<MemoryRouter><Market /></MemoryRouter>);
   await waitFor(() => expect(document.querySelectorAll('.coin-row').length).toBeGreaterThan(0));
 };
-describe('۱/۲ · one box holds the total and Bitcoin', () => {
+describe('۱/۲ · independent overview and Bitcoin readings', () => {
   it('reads deck, then three boxes, then Bitcoin — in that order, in three boxes', async () => {
     await open();
     const overview = screen.getByTestId('market-overview');
@@ -175,8 +149,8 @@ describe('۱/۲ · one box holds the total and Bitcoin', () => {
     expect(bare).not.toMatch(/will-change/);
     /* One shared recipe for the five big surfaces — the reason the page reads
        as one machine instead of six widgets. */
-    expect(bare).toMatch(/\.mx-market \.mx-overview,[\s\S]*?\.mx-market \.mx-breadth \{[^}]*background: var\(--mx-glass\), var\(--mx-panel\)/);
-    expect(bare).toMatch(/\.mx-overview \{[^}]*border-radius: 26px/);
+    expect(bare).toMatch(/\.mx-market \.mx-deck,[\s\S]*?\.mx-market \.mx-lens \{[^}]*background: var\(--mx-glass\), var\(--mx-panel\)/);
+    expect(bare).toMatch(/\.mx-market \.mx-overview \{[^}]*border-radius: 26px/);
   });
 
   it('reads dominance as a bar and a legend, with drawn marks for every metric', async () => {
@@ -236,10 +210,11 @@ describe('۲ · the Smart Money blade shows the route', () => {
 
   it('keeps its ambient loops travelling instead of blinking', () => {
     expect(bare).toMatch(/\.mx-smart-sheen \{[^}]*animation: mx-blade-sweep 9s[^}]*infinite/);
-    /* the light on the route is a gradient transform (SMIL) and the ring that
-       leaves the mark is a scaled border: neither is a strobe, neither paints */
+    /* CSS can stop ALL motion; SVG/SMIL animation bypassed the old guards. */
     const bannerSrc = readFileSync('src/components/market/SmartMoneyBanner.jsx', 'utf8');
-    expect(bannerSrc).toMatch(/<animateTransform[\s\S]{0,80}gradientTransform/);
+    expect(bannerSrc).not.toMatch(/<animate/);
+    expect(bannerSrc).toContain('mx-route-traveller');
+    expect(bare).toMatch(/@keyframes mx-flow-travel/);
     expect(bare).toMatch(/\.mx-smart-ring \{[^}]*animation: mx-smart-ring/);
     expect(bare).toMatch(/@keyframes mx-blade-sweep/);
     /* No opacity strobe on any dot: the green blink was already banned by
@@ -330,17 +305,18 @@ describe('۵ · filters, نبض بازار and طلا→سولانا', () => {
     expect(views.every((v) => v.querySelector('svg.mx-view-icon'))).toBe(true);
 
     const sectors = [...document.querySelectorAll('.mx-sector')];
-    expect(sectors.map((s) => s.dataset.sector)).toEqual(['gold', 'meme', 'rwa', 'ai', 'gaming', 'solana']);
-    expect(sectors.every((s) => s.querySelector('svg.market-sector-icon'))).toBe(true);
+    expect(sectors.map((s) => s.dataset.sector)).toEqual(['all', 'gold', 'meme', 'rwa', 'ai', 'gaming', 'solana']);
+    expect(sectors.every((s) => s.querySelector('svg.mx-sector-icon'))).toBe(true);
     /* six tabs, six different silhouettes */
-    const shapes = new Set(sectors.map((s) => s.querySelector('svg.market-sector-icon').innerHTML));
-    expect(shapes.size).toBe(6);
+    const shapes = new Set(sectors.map((s) => s.querySelector('svg.mx-sector-icon').innerHTML));
+    expect(shapes.size).toBe(7);
   });
 
   it('pins the sector rail horizontal, snapping, and un-masked', () => {
     expect(bare).toMatch(/\.mx-sectors-rail \{[^}]*overflow-x: auto[^}]*scroll-snap-type: x/s);
     expect(bare).toMatch(/\.mx-sector \{[^}]*scroll-snap-align: start/s);
-    expect(pageSrc).toMatch(/function SectorGlyph/);
+    expect(pageSrc).toContain('<MarketSectorRail');
+    expect(bare).toMatch(/\.mx-market \.mx-sector-rail \{[^}]*border: 0[^}]*background: none/s);
     for (const sector of ['gold', 'meme', 'rwa', 'ai', 'gaming', 'solana']) {
       expect(bare).toMatch(new RegExp(`\\.mx-sector\\[data-sector='${sector}'\\] \\{ --sec: #`));
     }
@@ -354,7 +330,8 @@ describe('۵ · filters, نبض بازار and طلا→سولانا', () => {
     expect(breadth.querySelector('.mx-breadth-avg')).toBeTruthy();
     expect(breadth.querySelectorAll('.mx-breadth-item')).toHaveLength(2);
     expect(breadth.textContent).toContain(fa.market.breadthTitle);
-    expect(bare).toMatch(/\.mx-market \.mx-breadth::after \{[^}]*inset-inline-start: 0/s);
+    expect(bare).toMatch(/\.mx-market \.mx-lens \{[^}]*padding-box[^}]*border-box/s);
+    expect(bare).toMatch(/\.mx-market \.mx-breadth \{[^}]*border: 0[^}]*background: none/s);
   });
 
   it('modernises the swap button and the token row without moving a number', async () => {
@@ -471,39 +448,50 @@ describe('۷ · motion, theme and language on the first screen', () => {
   });
 });
 
-describe('۷ · the list folds and opens', () => {
-  it('offers one control that collapses the rows and never lies about the count', async () => {
+describe('۸ · relocated folding and honest progressive pagination', () => {
+  it('keeps 60 initial rows; folds from the footer without losing total or pagination', async () => {
+    feed.data = [...COINS, ...Array.from({ length: 43 }, (_, i) => mkCoin(100 + i, `X${i}`))];
     await open();
     const fold = screen.getByTestId('market-list-fold');
-    const count = screen.getByTestId('market-count');
+    const count = screen.getByTestId('market-count').textContent;
     const rows = () => document.querySelectorAll('#market-list-rows .coin-row').length;
-
-    /* the list states its own length; folding must not change that number */
-    const total = count.textContent;
-    expect(fold.getAttribute('aria-expanded')).toBe('true');
-    expect(fold.textContent).toContain(fa.marketIntel.listCollapse);
-    const openRows = rows();
-    expect(openRows).toBeGreaterThan(12);
-
-    fireEvent.click(fold);
-    expect(fold.getAttribute('aria-expanded')).toBe('false');
-    expect(fold.textContent).toContain(fa.marketIntel.listExpand);
-    /* one screenful, and the header still reports the whole list */
-    expect(rows()).toBe(12);
-    expect(count.textContent).toBe(total);
+    expect(fold.closest('.mx-more')).not.toBeNull();
+    expect(document.querySelector('.mx-list-hero').contains(fold)).toBe(false);
     expect(fold.getAttribute('aria-controls')).toBe('market-list-rows');
-
-    expect(screen.getByTestId('market-showing').textContent).toContain('12');
-    fireEvent.click(document.querySelector('.market-show-more'));
-    expect(rows()).toBe(openRows);
     expect(fold.getAttribute('aria-expanded')).toBe('true');
-
+    expect(rows()).toBe(60);
+    fireEvent.click(fold);
+    expect(rows()).toBe(12);
+    expect(fold.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByTestId('market-count').textContent).toBe(count);
+    expect(screen.getByTestId('market-showing').textContent).toContain('12');
+    expect(document.querySelector('.market-show-more')).toBeNull();
+    fireEvent.click(fold);
+    expect(rows()).toBe(60);
+    fireEvent.click(document.querySelector('.market-show-more'));
+    expect(rows()).toBe(75);
+    expect(document.querySelector('.market-show-more')).toBeNull();
     fireEvent.click(fold);
     expect(rows()).toBe(12);
     fireEvent.click(fold);
-    expect(rows()).toBe(openRows);
+    expect(rows()).toBe(75);
+    expect(screen.getByTestId('market-count').textContent).toBe(count);
+  });
 
-    /* and the chip is a measured pill, not a bare chevron */
-    expect(bare).toMatch(/\.mx-fold \{[^}]*border-radius: 999px/);
+  it('does not offer a useless fold for a short search result', async () => {
+    feed.data = COINS.slice(0, 5);
+    await open();
+    expect(screen.queryByTestId('market-list-fold')).toBeNull();
+    expect(document.querySelectorAll('#market-list-rows .coin-row')).toHaveLength(5);
+  });
+
+  it('paints only the coin card, with an independently named swap beside it', async () => {
+    await open();
+    const swap = screen.getByTestId('market-swap-bitcoin');
+    const row = swap.closest('.mx-coin-row');
+    expect(row.querySelector('.coin-row').contains(swap)).toBe(false);
+    expect(swap.getAttribute('aria-label')).toContain('BTC');
+    expect(bare).toMatch(/\.mx-market \.mx-coin-row \{[^}]*background: none/s);
+    expect(bare).toMatch(/\.mx-market \.mx-coin-row > \.coin-row \{[^}]*gradient/s);
   });
 });
