@@ -19,7 +19,8 @@ import { finiteOrNull, marketPrice, positiveOrNull } from '../../lib/marketPrese
  *     disagree with itself;
  *   · the flame in the head is drawn SVG in the card's hue — the typed fire
  *     emoji arrived as platform artwork and could not be recoloured;
- *   · the change chip carries a drawn arrow, not a typed diagonal one.
+ *   · the change chip carries a drawn arrow, not a typed diagonal one;
+ *   · a missing move prints no chip at all, rather than a made-up 0%.
  */
 function HotCoins({ coins = [], onOpen, vs = 'usd' }) {
   const { t } = useTranslation();
@@ -36,7 +37,9 @@ function HotCoins({ coins = [], onOpen, vs = 'usd' }) {
           const change = finiteOrNull(coin.change24h);
           const volume = positiveOrNull(coin.volume);
           const place = Number(coin.place) || 0;
-          const up = (change ?? 0) >= 0;
+          /* No measured move means the sparkline keeps the neutral (up) tone and no
+             arrow or percentage is printed: an absent number is not a 0%. */
+          const up = change == null || change >= 0;
           const Arrow = up ? GlyphTrendUp : GlyphTrendDown;
           return (
             <button
@@ -50,7 +53,7 @@ function HotCoins({ coins = [], onOpen, vs = 'usd' }) {
             >
               <span className="mx-hot-sheen" aria-hidden="true" />
               <span className="mx-hot-head">
-                <CoinLogo coin={coin} px={28} />
+                <CoinLogo coin={coin} px={22} />
                 <span className="mx-hot-id">
                   <b>{coin.symbol}</b>
                   <small>{coin.name}</small>

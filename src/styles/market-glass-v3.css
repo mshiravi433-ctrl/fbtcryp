@@ -1,0 +1,612 @@
+/* FBT MARKET · GLASS V3 — the last layer of the market screen.
+   Loaded after market-modern.css and market-intelligence.css (Market.jsx), so
+   every rule here wins at equal specificity. Scope:
+     1 · Bitcoin card   — green when up, red when down, with the move in %
+                          and in money, and the 24h volume and market cap.
+     2 · Showcase       — the centre line takes the sign of the move and its
+                          weight is the size of it; a double helix travels it.
+     3 · Hot coins      — smaller, flatter cards that read the same numbers.
+     4 · Smart money    — a rotating beam on the rim, a radar on the mark,
+                          three lanes of light on the route, a new palette.
+     5 · Search         — a glass field with a painted rim and a glass tile.
+     6 · Token rows     — more transparent glass, the page shows through.
+   Material rules kept from the earlier passes: no backdrop-filter, no mask,
+   gradients and transforms only. Every loop below is transform or opacity,
+   and each one is stopped for reduced motion, native and lite. */
+
+/* ── tones ─────────────────────────────────────────────────────────────────
+   One green and one red for the whole screen. The mint and rose tokens used
+   elsewhere are kept; these are the colours a reader reads as «مثبت» and
+   «منفی», so they are more saturated and never pink. */
+.mx-market {
+  --gv-pos: #3cf3a6;
+  --gv-pos-rgb: 60, 243, 166;
+  --gv-neg: #ff5c7c;
+  --gv-neg-rgb: 255, 92, 124;
+  --gv-smart-a: #5dffc8;
+  --gv-smart-b: #5bc4ff;
+  --gv-smart-c: #ff7bd8;
+  --gv-smart-d: #ffd27a;
+}
+:root[data-theme='light'] .mx-market {
+  --gv-pos: #0c9f67;
+  --gv-pos-rgb: 12, 159, 103;
+  --gv-neg: #e0314f;
+  --gv-neg-rgb: 224, 49, 79;
+}
+
+/* ── 1 · BITCOIN ───────────────────────────────────────────────────────────
+   The card's accent is the direction of the day. Unknown direction keeps the
+   brand's amber, so a missing feed never paints a move that did not happen. */
+.mx-market .mx-btc-card {
+  --btc-tone: var(--mx-gold);
+  --btc-tone-rgb: 255, 207, 131;
+}
+.mx-market .mx-btc-card[data-dir='up'] {
+  --btc-tone: var(--gv-pos);
+  --btc-tone-rgb: var(--gv-pos-rgb);
+  --mx-btc-interior:
+    radial-gradient(ellipse at 100% 0, rgba(var(--gv-pos-rgb), .26), transparent 58%) padding-box,
+    radial-gradient(ellipse at 0 100%, rgba(102, 229, 225, .14), transparent 55%) padding-box,
+    linear-gradient(140deg, rgba(220, 255, 240, .1), transparent 50%) padding-box,
+    linear-gradient(#06231a, #06231a) padding-box;
+  --mx-btc-rim-a: linear-gradient(135deg, rgba(var(--gv-pos-rgb), .85), rgba(102, 229, 225, .25) 46%, rgba(var(--gv-pos-rgb), .55));
+  --mx-btc-rim-b: linear-gradient(315deg, rgba(var(--gv-pos-rgb), .7), rgba(102, 229, 225, .22) 48%, rgba(178, 154, 255, .4));
+  box-shadow: inset 0 1px 0 rgba(220, 255, 240, .3), inset 0 0 40px rgba(var(--gv-pos-rgb), .09), 0 18px 45px -26px rgba(var(--gv-pos-rgb), .6);
+}
+.mx-market .mx-btc-card[data-dir='down'] {
+  --btc-tone: var(--gv-neg);
+  --btc-tone-rgb: var(--gv-neg-rgb);
+  --mx-btc-interior:
+    radial-gradient(ellipse at 100% 0, rgba(var(--gv-neg-rgb), .26), transparent 58%) padding-box,
+    radial-gradient(ellipse at 0 100%, rgba(178, 154, 255, .14), transparent 55%) padding-box,
+    linear-gradient(140deg, rgba(255, 220, 228, .08), transparent 50%) padding-box,
+    linear-gradient(#260c15, #260c15) padding-box;
+  --mx-btc-rim-a: linear-gradient(135deg, rgba(var(--gv-neg-rgb), .85), rgba(255, 160, 120, .22) 46%, rgba(var(--gv-neg-rgb), .55));
+  --mx-btc-rim-b: linear-gradient(315deg, rgba(var(--gv-neg-rgb), .7), rgba(255, 160, 120, .2) 48%, rgba(178, 154, 255, .4));
+  box-shadow: inset 0 1px 0 rgba(255, 226, 232, .26), inset 0 0 40px rgba(var(--gv-neg-rgb), .09), 0 18px 45px -26px rgba(var(--gv-neg-rgb), .6);
+}
+/* The light theme keeps the card's tone too. Its own light rule for the card
+   sits at a higher specificity, so the direction rules are repeated here. */
+:root[data-theme='light'] .mx-market .mx-btc-card[data-dir='up'] {
+  --mx-btc-interior:
+    radial-gradient(ellipse at 100% 0, rgba(var(--gv-pos-rgb), .16), transparent 60%) padding-box,
+    linear-gradient(#fff, #fff) padding-box;
+  --mx-btc-rim-a: linear-gradient(135deg, rgba(var(--gv-pos-rgb), .6), rgba(8, 125, 128, .2) 48%, rgba(var(--gv-pos-rgb), .4));
+  --mx-btc-rim-b: linear-gradient(315deg, rgba(var(--gv-pos-rgb), .5), rgba(116, 80, 193, .2) 50%, rgba(8, 125, 128, .35));
+}
+:root[data-theme='light'] .mx-market .mx-btc-card[data-dir='down'] {
+  --mx-btc-interior:
+    radial-gradient(ellipse at 100% 0, rgba(var(--gv-neg-rgb), .14), transparent 60%) padding-box,
+    linear-gradient(#fff, #fff) padding-box;
+  --mx-btc-rim-a: linear-gradient(135deg, rgba(var(--gv-neg-rgb), .6), rgba(255, 140, 110, .2) 48%, rgba(var(--gv-neg-rgb), .4));
+  --mx-btc-rim-b: linear-gradient(315deg, rgba(var(--gv-neg-rgb), .5), rgba(116, 80, 193, .2) 50%, rgba(255, 140, 110, .35));
+}
+.mx-market .mx-btc-card .mx-btc-veil {
+  background: radial-gradient(ellipse at 10% 110%, rgba(var(--btc-tone-rgb), .14), transparent 64%);
+}
+.mx-market .mx-btc-card .mx-btc-halo {
+  background: radial-gradient(ellipse at 50% 100%, rgba(var(--btc-tone-rgb), .22), transparent 70%);
+}
+.mx-market .mx-btc-card .mx-btc-logo {
+  border-color: rgba(var(--btc-tone-rgb), .45);
+  background: linear-gradient(135deg, rgba(var(--btc-tone-rgb), .26), rgba(255, 255, 255, .03));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .26), 0 8px 24px -12px rgba(var(--btc-tone-rgb), .7);
+}
+.mx-market .mx-btc-card .mx-btc-go { color: var(--btc-tone); }
+.mx-market .mx-btc-card .mx-btc-range-track {
+  background: linear-gradient(90deg, rgba(var(--btc-tone-rgb), .14), rgba(var(--btc-tone-rgb), .7));
+}
+.mx-market .mx-btc-card .mx-btc-range-track span {
+  background: var(--btc-tone);
+  box-shadow: 0 0 0 3px rgba(var(--btc-tone-rgb), .16);
+}
+.mx-market .mx-btc-card .mx-btc-chart { --mx-up: var(--btc-tone); }
+.mx-market .mx-btc-card .mx-spark-line,
+.mx-market .mx-btc-card .mx-spark-head { stroke: var(--btc-tone); }
+.mx-market .mx-btc-card .mx-spark-bloom { stroke: var(--btc-tone); }
+.mx-market .mx-btc-card .mx-spark-live { --mx-live: var(--btc-tone); }
+
+/* The move: a pill in the tone, the same move in money, and the window. */
+.mx-market .mx-btc-delta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+  direction: ltr;
+}
+.mx-market .mx-btc-pct {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  color: var(--btc-tone);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  background: linear-gradient(135deg, rgba(var(--btc-tone-rgb), .26), rgba(var(--btc-tone-rgb), .08));
+  border: 1px solid rgba(var(--btc-tone-rgb), .5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 0 22px -8px rgba(var(--btc-tone-rgb), .85);
+}
+.mx-market .mx-btc-abs {
+  color: var(--btc-tone);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+.mx-market .mx-btc-period {
+  color: var(--mx-muted);
+  font-family: var(--font-display);
+  font-size: 10px;
+}
+
+/* Volume and market cap, two glass cells under the range. */
+.mx-market .mx-btc-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+}
+.mx-market .mx-btc-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(190, 215, 255, .12);
+  background: linear-gradient(135deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, .015));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+.mx-market .mx-btc-stats dt {
+  margin: 0;
+  color: var(--mx-muted);
+  font-size: 10px;
+}
+.mx-market .mx-btc-stats dd {
+  margin: 0;
+  color: var(--mx-text);
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.15;
+  direction: ltr;
+  text-align: start;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 2 · THE SHOWCASE: centre line and double helix ───────────────────────── */
+.mx-market .mx-trend-plot[data-dir] {
+  --gv-tone: var(--gv-pos);
+  --gv-tone-rgb: var(--gv-pos-rgb);
+  background: radial-gradient(ellipse at 50% 96%, rgba(var(--gv-tone-rgb), .14), transparent 72%);
+}
+.mx-market .mx-trend-plot[data-dir='down'] {
+  --gv-tone: var(--gv-neg);
+  --gv-tone-rgb: var(--gv-neg-rgb);
+}
+.mx-market .mx-trend-plot .mx-trend-halo {
+  background: radial-gradient(ellipse at 50% 100%, rgba(var(--gv-tone-rgb), .28), transparent 70%);
+}
+.mx-market .mx-trend-plot .mx-trend-scan {
+  background: linear-gradient(90deg, transparent, rgba(var(--gv-tone-rgb), .12) 42%, rgba(var(--gv-tone-rgb), .26) 50%, rgba(var(--gv-tone-rgb), .12) 58%, transparent);
+}
+.mx-market .mx-trend-plot .mx-spark-line,
+.mx-market .mx-trend-plot .mx-spark-head,
+.mx-market .mx-trend-plot .mx-spark-bloom { stroke: var(--gv-tone); }
+.mx-market .mx-trend-plot .mx-spark-live { --mx-live: var(--gv-tone); }
+
+/* The centre line. Opacity and glow follow |change|, so the line is quiet on
+   a flat day and bright on a day that moved. */
+.mx-market .mx-trend-mid {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 1px;
+  margin-top: -.5px;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--gv-tone) 14%, var(--gv-tone) 86%, transparent);
+  opacity: calc(.34 + var(--mx-mid-strength, .25) * .66);
+  box-shadow: 0 0 calc(4px + var(--mx-mid-strength, .25) * 10px) rgba(var(--gv-tone-rgb), .8);
+}
+.mx-market .mx-trend-mid::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: -3px;
+  height: 7px;
+  background: linear-gradient(90deg, transparent, rgba(var(--gv-tone-rgb), calc(.08 + var(--mx-mid-strength, .25) * .24)) 50%, transparent);
+  transform-origin: center;
+  animation: gv-mid-breathe 6s ease-in-out infinite;
+}
+
+/* The helix: one static SVG with two sine strands, two loops wide, scrolled
+   by a single translate. Phase is fixed in the geometry, so the strands cross
+   each other the same way on every cycle. */
+.mx-market .mx-helix-field {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+.mx-market .mx-helix-scroll {
+  position: absolute;
+  top: 0;
+  inset-inline-start: 0;
+  width: 200%;
+  height: 100%;
+  overflow: visible;
+  animation: gv-helix-scroll 9s linear infinite;
+}
+.mx-market .mx-helix-strand {
+  fill: none;
+  stroke: var(--gv-tone);
+  stroke-width: 1.2;
+  opacity: .42;
+  vector-effect: non-scaling-stroke;
+}
+.mx-market .mx-helix-strand.is-b { opacity: .26; }
+
+/* ── 3 · HOT COINS: smaller, flatter, the same numbers ───────────────────── */
+.mx-market .mx-hot-rail { gap: 8px; padding: 2px 1px 6px; }
+.mx-market .mx-hot-card {
+  --hot: var(--mx-gold);
+  flex: 0 0 136px;
+  width: 136px;
+  gap: 8px;
+  padding: 11px 11px 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(190, 215, 255, .12);
+  border-top-color: rgba(220, 234, 255, .2);
+  background:
+    radial-gradient(ellipse at 100% 0, color-mix(in srgb, var(--hot) 14%, transparent), transparent 66%),
+    linear-gradient(160deg, rgba(255, 255, 255, .065), rgba(255, 255, 255, .01) 62%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+  transition: transform .2s ease, border-color .2s ease;
+}
+.mx-market .mx-hot-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--hot) 45%, transparent);
+}
+.mx-market .mx-hot-head { gap: 7px; }
+.mx-market .mx-hot-head .coin-logo { width: 22px; height: 22px; }
+.mx-market .mx-hot-id b { font-size: 11px; line-height: 1.2; }
+.mx-market .mx-hot-id small { font-size: 9px; }
+.mx-market .mx-hot-rank {
+  padding: 2px 5px;
+  border-radius: 6px;
+  color: var(--hot);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
+  background: color-mix(in srgb, var(--hot) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hot) 30%, transparent);
+  opacity: 1;
+}
+.mx-market .mx-hot-price-row { gap: 4px; }
+.mx-market .mx-hot-price { font-size: 13px; font-weight: 750; }
+.mx-market .mx-hot-price-row .mx-change { font-size: 9px; padding: 3px 5px; border-radius: 7px; }
+.mx-market .mx-hot-chart { height: 24px; }
+.mx-market .mx-hot-volume { font-size: 8.5px; }
+.mx-market .mx-hot-volume b { font-variant-numeric: tabular-nums; }
+
+/* ── 4 · SMART MONEY: a beam on the rim, a radar, three lanes of light ────── */
+.mx-market .mx-smart-banner {
+  --sm-a: var(--gv-smart-a);
+  --sm-b: var(--gv-smart-b);
+  --sm-c: var(--gv-smart-c);
+  --sm-d: var(--gv-smart-d);
+  isolation: isolate;
+  overflow: hidden;
+  padding: 22px 22px 20px;
+  border: 0;
+  border-radius: 26px;
+  background: none;
+  box-shadow: 0 0 40px -18px rgba(93, 255, 200, .4), 0 24px 50px -30px rgba(0, 0, 12, .95);
+}
+/* The beam. A conic gradient twice the size of the card turns behind it; the
+   card's interior sits on top, so only the 1.5px rim shows where the beam
+   passes. Transform only. */
+.mx-market .mx-smart-banner::before {
+  content: '';
+  position: absolute;
+  z-index: -2;
+  inset: -60%;
+  pointer-events: none;
+  background: conic-gradient(from 0deg,
+    rgba(190, 220, 255, .14) 0deg 200deg,
+    var(--sm-a) 250deg,
+    var(--sm-c) 292deg,
+    var(--sm-d) 318deg,
+    rgba(190, 220, 255, .14) 360deg);
+  animation: gv-beam-spin 12s linear infinite;
+}
+/* The interior. Opaque, painted in the Smart Money palette, and carrying the
+   whale artwork that used to sit in the veil layer. */
+.mx-market .mx-smart-banner::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 1.5px;
+  border-radius: 24.5px;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 0% 0%, rgba(93, 255, 200, .2), transparent 55%),
+    radial-gradient(ellipse at 100% 100%, rgba(255, 123, 216, .15), transparent 58%),
+    radial-gradient(ellipse at 100% 0%, rgba(91, 196, 255, .12), transparent 50%),
+    linear-gradient(90deg, rgba(4, 16, 18, .4), rgba(4, 16, 18, .94) 78%),
+    url('/images/market-smart-whale.webp') left center / cover no-repeat,
+    linear-gradient(160deg, #0b1f22, #0a1222 58%, #120c25);
+}
+.mx-market .mx-smart-banner .mx-smart-veil { display: none; }
+.mx-market .mx-smart-banner .mx-smart-sheen {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--sm-a), transparent);
+}
+
+.mx-market .mx-smart-main { gap: 14px; }
+.mx-market .mx-smart-mark {
+  isolation: isolate;
+  width: 50px;
+  height: 50px;
+  border-radius: 17px;
+  color: #d8fff3;
+  border: 1px solid rgba(93, 255, 200, .45);
+  background: linear-gradient(145deg, rgba(93, 255, 200, .26), rgba(91, 196, 255, .1) 55%, rgba(255, 123, 216, .14));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .26), 0 10px 26px -12px rgba(93, 255, 200, .8);
+}
+.mx-market .mx-smart-mark svg { position: relative; z-index: 1; }
+.mx-market .mx-smart-radar {
+  position: absolute;
+  z-index: -1;
+  inset: -16px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: conic-gradient(from 0deg, transparent 0deg 300deg, rgba(93, 255, 200, .42) 352deg, transparent 360deg);
+  animation: gv-radar 3.8s linear infinite;
+}
+.mx-market .mx-smart-ring {
+  border-color: rgba(93, 255, 200, .3);
+  border-radius: 21px;
+}
+.mx-market .mx-smart-ring.is-2 {
+  inset: -11px;
+  border-style: dashed;
+  border-color: rgba(255, 123, 216, .34);
+  border-radius: 24px;
+  animation: gv-ring-counter 16s linear infinite;
+}
+.mx-market .mx-smart-copy .mx-smart-eyebrow {
+  background: linear-gradient(90deg, var(--sm-a), var(--sm-b) 60%, var(--sm-c));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 800;
+  letter-spacing: .06em;
+}
+.mx-market .mx-smart-copy h2 { color: #f6fffb; }
+.mx-market .mx-smart-copy p { color: #c0d6cf; }
+
+/* The route: nodes in the palette, three lanes of light at different speeds. */
+.mx-market .mx-route-drawing stop:first-child { stop-color: var(--sm-a); }
+.mx-market .mx-route-drawing stop:last-child { stop-color: var(--sm-c); }
+.mx-market .mx-route-line { stroke: rgba(180, 230, 220, .18); }
+.mx-market .mx-route-flow { stroke-width: 1.6; opacity: .85; }
+.mx-market .mx-route-node { fill: #072a2a; stroke: var(--sm-a); }
+.mx-market .mx-route-node.is-hub { fill: #1c1734; stroke: var(--sm-d); }
+.mx-market .mx-route-node.is-end { fill: #2c1230; stroke: var(--sm-c); }
+.mx-market .mx-route-halo {
+  fill: rgba(255, 210, 122, .05);
+  stroke: rgba(255, 210, 122, .28);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: gv-hub-pulse 2.8s ease-out infinite;
+}
+.mx-market .mx-route-hub-mark { stroke: var(--sm-d); }
+.mx-market .mx-route-traveller {
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--sm-a));
+  box-shadow: 0 0 10px var(--sm-a);
+}
+.mx-market .mx-route-traveller.is-2 {
+  background: linear-gradient(90deg, transparent, var(--sm-c));
+  box-shadow: 0 0 10px var(--sm-c);
+  animation: mx-flow-travel 4.6s cubic-bezier(.45, 0, .3, 1) infinite -1.7s;
+}
+.mx-market .mx-route-traveller.is-3 {
+  background: linear-gradient(90deg, transparent, var(--sm-d));
+  box-shadow: 0 0 10px var(--sm-d);
+  animation: mx-flow-travel 7.4s cubic-bezier(.45, 0, .3, 1) infinite -3.1s;
+}
+
+.mx-market .mx-pool {
+  padding: 6px 11px 6px 9px;
+  border-radius: 999px;
+  color: #d6e9e4;
+  font-size: 10px;
+  border: 1px solid rgba(190, 240, 225, .16);
+  background: rgba(255, 255, 255, .04);
+}
+.mx-market .mx-pool[data-pool='whales'] svg { color: var(--sm-a); }
+.mx-market .mx-pool[data-pool='institutions'] svg { color: var(--sm-c); }
+.mx-market .mx-pool[data-pool='newPools'] svg { color: var(--sm-d); }
+.mx-market .mx-smart-foot { border-top-color: rgba(190, 240, 225, .12); }
+.mx-market .mx-smart-note { color: #a9c7bf; }
+.mx-market .mx-smart-cta {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(214, 255, 242, .7);
+  color: #062420;
+  background: linear-gradient(120deg, var(--sm-a), var(--sm-b) 55%, var(--sm-c));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), 0 10px 26px -12px rgba(93, 255, 200, .9);
+}
+.mx-market .mx-smart-cta::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: -40%;
+  width: 34%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .55), transparent);
+  transform: skewX(-18deg);
+  animation: gv-cta-shine 4.8s ease-in-out infinite;
+  pointer-events: none;
+}
+.mx-market .mx-smart-cta:hover { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), 0 14px 30px -12px rgba(93, 255, 200, 1); }
+
+/* ── 5 · SEARCH: a glass field with a painted rim ─────────────────────────── */
+.mx-market .mx-search {
+  min-height: 56px;
+  gap: 12px;
+  padding: 0 14px 0 10px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background:
+    radial-gradient(ellipse at 0% 0%, rgba(102, 229, 225, .16), transparent 55%) padding-box,
+    radial-gradient(ellipse at 100% 100%, rgba(178, 154, 255, .14), transparent 60%) padding-box,
+    linear-gradient(135deg, rgba(255, 255, 255, .09), rgba(255, 255, 255, .012) 46%, rgba(255, 207, 131, .03)) padding-box,
+    linear-gradient(#0c1d2e, #0c1d2e) padding-box,
+    linear-gradient(120deg, rgba(102, 229, 225, .95), rgba(120, 169, 255, .4) 34%, rgba(178, 154, 255, .95) 62%, rgba(255, 207, 131, .8)) border-box;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), inset 0 -14px 26px -20px rgba(102, 229, 225, .3), 0 18px 36px -26px rgba(0, 0, 12, .95);
+  transition: box-shadow .25s ease;
+}
+.mx-market .mx-search:focus-within {
+  box-shadow: 0 0 0 4px rgba(102, 229, 225, .1), 0 0 34px -10px rgba(102, 229, 225, .6), inset 0 1px 0 rgba(255, 255, 255, .18);
+}
+.mx-market .mx-search-tile {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  color: #c9fffb;
+  border: 1px solid rgba(102, 229, 225, .36);
+  background: linear-gradient(145deg, rgba(102, 229, 225, .3), rgba(178, 154, 255, .14));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .24), 0 8px 18px -12px rgba(102, 229, 225, .9);
+}
+.mx-market .mx-search-icon { color: inherit; }
+.mx-market .mx-search-input { font-size: 13px; }
+.mx-market .mx-search-input::placeholder { color: #9fb2d4; }
+.mx-market .mx-search-ai {
+  padding: 6px 9px;
+  border-radius: 999px;
+  color: #efe8ff;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid rgba(178, 154, 255, .45);
+  background: linear-gradient(120deg, rgba(178, 154, 255, .3), rgba(102, 229, 225, .16));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18);
+}
+.mx-market .mx-search-clear { width: 32px; height: 32px; border-radius: 11px; }
+.mx-market .mx-search-popup {
+  top: calc(100% + 10px);
+  border: 1px solid rgba(102, 229, 225, .26);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, 0) 40%) padding-box,
+    linear-gradient(180deg, #0f2134, #0a1624) padding-box;
+  box-shadow: 0 26px 54px -24px rgba(0, 0, 12, .95), inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+.mx-market .mx-search-option:is(:hover, [data-active='true']) {
+  background: linear-gradient(120deg, rgba(102, 229, 225, .14), rgba(178, 154, 255, .06));
+}
+
+/* ── 6 · TOKEN ROWS: more glass, less panel ──────────────────────────────── */
+.mx-market .mx-coin-row > .coin-row {
+  border: 1px solid rgba(190, 215, 255, .12);
+  border-top-color: rgba(220, 234, 255, .2);
+  border-radius: 18px;
+  background: linear-gradient(118deg, rgba(255, 255, 255, .075), rgba(255, 255, 255, .012) 48%, rgba(255, 255, 255, .03));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07), inset 0 -12px 22px -20px rgba(102, 229, 225, .14);
+  transition: border-color .18s ease, background .18s ease;
+}
+.mx-market .mx-coin-row > .coin-row:hover {
+  border-color: rgba(102, 229, 225, .34);
+  background: linear-gradient(118deg, rgba(102, 229, 225, .1), rgba(255, 255, 255, .02) 55%, rgba(178, 154, 255, .05));
+}
+:root[data-theme='light'] .mx-market .mx-coin-row > .coin-row {
+  border-color: rgba(16, 24, 48, .1);
+  border-top-color: rgba(16, 24, 48, .14);
+  background: linear-gradient(118deg, rgba(255, 255, 255, .78), rgba(255, 255, 255, .42));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8);
+}
+:root[data-theme='light'] .mx-market .mx-hot-card {
+  border-color: rgba(16, 24, 48, .1);
+  background:
+    radial-gradient(ellipse at 100% 0, color-mix(in srgb, var(--hot) 12%, transparent), transparent 66%),
+    linear-gradient(160deg, rgba(255, 255, 255, .92), rgba(255, 255, 255, .6));
+}
+:root[data-theme='light'] .mx-market .mx-search {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, .96), rgba(246, 250, 255, .9)) padding-box,
+    linear-gradient(120deg, rgba(14, 165, 175, .8), rgba(120, 169, 255, .4) 40%, rgba(146, 110, 230, .8)) border-box;
+}
+
+/* ── 7 · STOP POLICY ───────────────────────────────────────────────────────
+   Every loop added in this file is parked for reduced motion, the native
+   shell and lite mode. The static frame is the designed one: the beam keeps
+   its arc, the helix keeps its strands, the centre line keeps its tone. */
+@media (prefers-reduced-motion: reduce) {
+  .mx-market .mx-trend-mid::after,
+  .mx-market .mx-helix-scroll,
+  .mx-market .mx-smart-banner::before,
+  .mx-market .mx-smart-radar,
+  .mx-market .mx-smart-ring.is-2,
+  .mx-market .mx-route-halo,
+  .mx-market .mx-route-traveller,
+  .mx-market .mx-smart-cta::after { animation: none !important; }
+  .mx-market .mx-route-traveller { display: none; }
+}
+:root[data-native='true'] .mx-market .mx-trend-mid::after,
+:root[data-native='true'] .mx-market .mx-helix-scroll,
+:root[data-native='true'] .mx-market .mx-smart-banner::before,
+:root[data-native='true'] .mx-market .mx-smart-radar,
+:root[data-native='true'] .mx-market .mx-smart-ring.is-2,
+:root[data-native='true'] .mx-market .mx-route-halo,
+:root[data-native='true'] .mx-market .mx-smart-cta::after,
+:root[data-lite='true'] .mx-market .mx-trend-mid::after,
+:root[data-lite='true'] .mx-market .mx-helix-scroll,
+:root[data-lite='true'] .mx-market .mx-smart-banner::before,
+:root[data-lite='true'] .mx-market .mx-smart-radar,
+:root[data-lite='true'] .mx-market .mx-smart-ring.is-2,
+:root[data-lite='true'] .mx-market .mx-route-halo,
+:root[data-lite='true'] .mx-market .mx-smart-cta::after { animation: none; }
+:root[data-lite='true'] .mx-market .mx-helix-field { display: none; }
+
+/* ── keyframes: transform and opacity only ───────────────────────────────── */
+@keyframes gv-helix-scroll {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+@keyframes gv-mid-breathe {
+  0%, 100% { transform: scaleX(.5); opacity: .45; }
+  50% { transform: scaleX(1); opacity: 1; }
+}
+@keyframes gv-beam-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes gv-radar {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes gv-ring-counter {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+@keyframes gv-hub-pulse {
+  0% { transform: scale(.7); opacity: .9; }
+  100% { transform: scale(2); opacity: 0; }
+}
+@keyframes gv-cta-shine {
+  0%, 55% { transform: translateX(0) skewX(-18deg); opacity: 0; }
+  60% { opacity: 1; }
+  100% { transform: translateX(420%) skewX(-18deg); opacity: 0; }
+}
