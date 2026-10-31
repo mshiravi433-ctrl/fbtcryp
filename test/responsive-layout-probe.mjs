@@ -23,10 +23,23 @@ assert.match(appCss, /\.top-bar\s*\{\s*width:\s*100%;\s*max-width:\s*min\(1280px
 assert.match(appCss, /\.top-bar\s*\{\s*width:\s*100%;\s*\}/,
   'tablet header margins do not make the bar shrink-wrap its content');
 
-assert.match(marketJsx, /className=\{`market-overview\$\{hero\s*\?/,
-  'the Market overview groups global stats and the lead coin for responsive placement');
-assert.match(appCss, /\.market-overview\.has-hero\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1\.28fr\)\s+minmax\(320px,\s*\.9fr\)/,
-  'desktop Market overview uses a bounded two-column dashboard');
+/*
+ * The Market overview no longer builds a two-column dashboard out of
+ * `market-overview has-hero`: the deck, the three stat boxes and Bitcoin are
+ * three stacked siblings (see styles/market-intelligence.css §9), so on a wide
+ * screen the readings get the full width instead of a second column. What this
+ * probe has to keep guarding is the PHONE baseline — the shell, the gutters and
+ * the two-up coin grid — which is where the drift it was written for happened.
+ */
+assert.match(marketJsx, /<MarketOverview/,
+  'the Market overview is still one composed block on this route');
+assert.match(
+  readFileSync(new URL('../src/components/market/MarketOverview.jsx', import.meta.url), 'utf8'),
+  /className="mx-overview"/,
+  'and that block owns the single container the wide-screen rules hang off'
+);
+assert.match(appCss, /\.market-coin-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/,
+  'desktop Market coin rows use two shrink-safe columns');
 assert.match(appCss, /\.market-coin-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/,
   'desktop Market coin rows use two shrink-safe columns');
 

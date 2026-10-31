@@ -191,7 +191,11 @@
       "open": "باز کردن نبض بازار",
       "close": "بستن نبض بازار",
       "caption": "نبض بازار · ۲۴ ساعت",
-      "metric": { "risk": "ریسک نوسان", "buy": "صعودی · خرید", "sell": "نزولی · فروش" },
+      "metric": {
+        "risk": "ریسک نوسان",
+        "buy": "صعودی · خرید",
+        "sell": "نزولی · فروش"
+      },
       "metricTitle": "{{label}} · {{count}} دارایی",
       "stale": "دادهٔ بازار تازه نیست",
       "live": "بر پایهٔ دادهٔ بازار",
@@ -4936,12 +4940,31 @@
     "btcChartAria": "نمودار کوچک قیمت بیت‌کوین",
     "hotTitle": "داغ‌ترین کوین‌ها",
     "deckLabel": "نمای بازار",
+    "deckEyebrow": "نمای زندهٔ بازار",
     "deckLive": "زنده",
     "aiChip": "هوشمند",
     "smartEyebrow": "پول هوشمند FBT",
     "smartTitle": "ببین پول هوشمند کجا می‌رود",
     "smartDesc": "فعالیت نهنگ‌ها را دنبال کن، جریان‌های نهادی را کشف کن و فرصت‌های نوظهور بازار را با هوش مصنوعی FBT شناسایی کن.",
-    "smartCta": "کاوش پول هوشمند"
+    "smartCta": "کاوش پول هوشمند",
+    "allCoinsTitle": "همه ارزها",
+    "sectorsTitle": "دسته‌ها",
+    "railLabel": "ویترین بازار",
+    "railTools": "ابزارهای بازار",
+    "flowWallet": "کیف پول",
+    "flowRouter": "مسیریاب",
+    "flowTarget": "مقصد",
+    "smartLive": "جریان زنده",
+    "pool": {
+      "whales": "نهنگ‌ها",
+      "institutions": "نهادی‌ها",
+      "newPools": "استخرهای تازه"
+    },
+    "statCoins": "ارزها",
+    "statMarkets": "بازارها",
+    "statAvg": "میانگین تغییر",
+    "listCollapse": "جمع کردن فهرست",
+    "listExpand": "کشیدن فهرست"
   },
   "marketAiBanner": {
     "eyebrow": "FBT AI | هوش بازار فعال",

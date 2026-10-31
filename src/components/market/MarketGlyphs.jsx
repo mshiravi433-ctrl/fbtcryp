@@ -144,6 +144,19 @@ export const GlyphFlame = (p) => (
   </svg>
 );
 
+/* ── «دسته‌ها» ──────────────────────────────────────────────────────────────
+   A rail seen edge-on: three tiles and the track they slide along. It marks
+   the sector strip's own box, so the strip reads as a surface rather than as
+   a row of tabs that fell out of the list card. */
+export const GlyphSectorRail = (p) => (
+  <svg {...base} {...p}>
+    <rect x="3.4" y="6.6" width="5.4" height="5.4" rx="1.7" />
+    <rect x="10.6" y="6.6" width="4.4" height="5.4" rx="1.6" />
+    <path d="M17.2 6.9h3.4M17.2 11.7h3.4" />
+    <path d="M3.6 17.4h16.8" />
+  </svg>
+);
+
 /* ── نبض بازار ──────────────────────────────────────────────────────────────
    A pulse inside a rounded frame: an instrument, not a progress bar. */
 export const GlyphPulse = (p) => (

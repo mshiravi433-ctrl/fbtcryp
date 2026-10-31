@@ -318,7 +318,16 @@
     "emptyFavoritesHelp": "Abre la página de una moneda y toca su estrella para añadirla aquí; allí también puedes gestionar alertas.",
     "showAll": "Ver todas las monedas",
     "refresh": "Actualizar precios",
-    "trendingBasis": "Lo más buscado ahora"
+    "trendingBasis": "Lo más buscado ahora",
+    "sector": {
+      "gold": "Oro",
+      "meme": "Memecoins",
+      "rwa": "Activos reales",
+      "ai": "IA",
+      "gaming": "Gaming",
+      "solana": "Solana"
+    },
+    "showMore": "Ver más ({{count}} restantes)"
   },
   "coin": {
     "notFound": "Moneda no encontrada",
@@ -4016,5 +4025,26 @@
       "lessonsCount": "{{n}} lecciones en este nivel",
       "pathsNote": "Los vídeos se alojan en Aparat; la calidad depende de tu conexión."
     }
+  },
+  "marketIntel": {
+    "deckEyebrow": "Vista del mercado en vivo",
+    "allCoinsTitle": "Todas las monedas",
+    "sectorsTitle": "Sectores",
+    "railLabel": "Vitrina del mercado",
+    "railTools": "Herramientas",
+    "flowWallet": "Cartera",
+    "flowRouter": "Ruta",
+    "flowTarget": "Destino",
+    "smartLive": "Flujo en vivo",
+    "pool": {
+      "whales": "Ballenas",
+      "institutions": "Instituciones",
+      "newPools": "Nuevos fondos"
+    },
+    "statCoins": "Monedas",
+    "statMarkets": "Mercados",
+    "statAvg": "Cambio medio",
+    "listCollapse": "Contraer la lista",
+    "listExpand": "Expandir la lista"
   }
 }

@@ -318,7 +318,16 @@
     "emptyFavoritesHelp": "打开代币详情页并点击星标即可添加到此处；价格提醒也可在该页面管理。",
     "showAll": "显示全部代币",
     "refresh": "刷新价格",
-    "trendingBasis": "当前热搜"
+    "trendingBasis": "当前热搜",
+    "sector": {
+      "gold": "黄金",
+      "meme": "Meme币",
+      "rwa": "真实资产",
+      "ai": "AI",
+      "gaming": "游戏",
+      "solana": "Solana"
+    },
+    "showMore": "显示更多（剩余 {{count}}）"
   },
   "coin": {
     "notFound": "找不到该币种",
@@ -4007,5 +4016,26 @@
       "lessonsCount": "本级别共 {{n}} 门课程",
       "pathsNote": "视频托管在 Aparat；播放质量取决于你的网络。"
     }
+  },
+  "marketIntel": {
+    "deckEyebrow": "实时市场概览",
+    "allCoinsTitle": "全部币种",
+    "sectorsTitle": "板块",
+    "railLabel": "市场橱窗",
+    "railTools": "市场工具",
+    "flowWallet": "钱包",
+    "flowRouter": "路由",
+    "flowTarget": "目的地",
+    "smartLive": "实时流向",
+    "pool": {
+      "whales": "巨鲸",
+      "institutions": "机构",
+      "newPools": "新矿池"
+    },
+    "statCoins": "币种",
+    "statMarkets": "市场",
+    "statAvg": "平均涨跌",
+    "listCollapse": "收起列表",
+    "listExpand": "展开列表"
   }
 }

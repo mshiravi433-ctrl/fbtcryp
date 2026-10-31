@@ -321,7 +321,16 @@
     "emptyFavoritesHelp": "کسی کوائن کا صفحہ کھول کر ستارے پر ٹیپ کریں؛ قیمت کے الرٹس بھی وہیں منظم ہوں گے۔",
     "showAll": "تمام سکے دکھائیں",
     "refresh": "قیمتیں تازہ کریں",
-    "trendingBasis": "ابھی سب سے زیادہ تلاش کیے گئے"
+    "trendingBasis": "ابھی سب سے زیادہ تلاش کیے گئے",
+    "sector": {
+      "gold": "سونا",
+      "meme": "میم کوائنز",
+      "rwa": "حقیقی اثاثے",
+      "ai": "اے آئی",
+      "gaming": "گیمنگ",
+      "solana": "سولانا"
+    },
+    "showMore": "مزید دکھائیں ({{count}} باقی)"
   },
   "coin": {
     "notFound": "سکہ نہیں ملا",
@@ -4010,5 +4019,26 @@
       "lessonsCount": "اس سطح پر {{n}} اسباق",
       "pathsNote": "ویڈیوز آپارات پر ہوسٹ ہیں؛ پلے بیک کا معیار آپ کے کنکشن پر منحصر ہے۔"
     }
+  },
+  "marketIntel": {
+    "deckEyebrow": "مارکیٹ کا براہِ راست منظر",
+    "allCoinsTitle": "تمام کوائنز",
+    "sectorsTitle": "شعبے",
+    "railLabel": "مارکیٹ شوکیس",
+    "railTools": "مارکیٹ ٹولز",
+    "flowWallet": "والٹ",
+    "flowRouter": "روٹر",
+    "flowTarget": "منزل",
+    "smartLive": "براہِ راست بہاؤ",
+    "pool": {
+      "whales": "وہیلز",
+      "institutions": "ادارے",
+      "newPools": "نئے پولز"
+    },
+    "statCoins": "کوائنز",
+    "statMarkets": "مارکیٹس",
+    "statAvg": "اوسط تبدیلی",
+    "listCollapse": "فہرست سمیٹیں",
+    "listExpand": "فہرست کھولیں"
   }
 }
