@@ -87,6 +87,7 @@ import {
 } from '../lib/intentReplacement';
 import { isConfidentialPrivacy } from '../lib/confidentialIntent';
 import { isNativeShell } from '../lib/nativeShell';
+import FbtAiMarketEngine from '../components/FbtAiMarketEngine';
 
 /* The depth card (and recharts) loads only when SPOT_DEPTH_ENABLED is on, so
    the default build's first-paint graph does not change. */
@@ -1645,6 +1646,9 @@ export default function Swap() {
           <AnimatedSettings active={settingsOpen} still={still} width={17} height={17} />
         </motion.button>
       </motion.div>
+
+      {/* FBT INTENT OS — Central Brain, AI Market Engine & Autonomous Agents Dock */}
+      <FbtAiMarketEngine fromToken={fromToken} toToken={toToken} wallet={wallet} />
 
       <div className="segmented">
         {['evm', 'solana'].map((k) => (
