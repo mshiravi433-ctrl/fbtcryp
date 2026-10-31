@@ -4925,6 +4925,20 @@
       "cta": "Share"
     }
   },
+  "marketIntel": {
+    "searchPlaceholder": "Search name, ticker, or contract address",
+    "searchResults": "Token results",
+    "searchUnavailable": "Search is unavailable right now",
+    "contractExact": "Exact contract lookup",
+    "overviewAria": "Global market and Bitcoin overview",
+    "trendAria": "Estimated market cap of the top {{coins}} coins over {{days}} days",
+    "trendLabel": "{{days}}D · top {{coins}} estimate",
+    "btcChartAria": "Bitcoin price sparkline",
+    "hotTitle": "Hottest Coins",
+    "smartTitle": "SEE WHERE SMART MONEY MOVES",
+    "smartDesc": "Track whale activity, discover institutional flows and identify emerging market opportunities with FBT AI.",
+    "smartCta": "Explore Smart Money"
+  },
   "marketAiBanner": {
     "eyebrow": "FBT AI · Market intelligence live",
     "title": "See the market smarter!",

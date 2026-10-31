@@ -120,33 +120,36 @@ export const useChart = (id, days) => usePoll(() => (id ? getChart(id, days) : P
  */
 export const useCoin = (id) => usePoll(() => (id ? getCoin(id) : Promise.resolve(null)), [id], 30000);
 
-/** Debounced universe-wide coin search (name / ticker), not just this page. */
-export function useCoinSearch(query, minLength = 2) {
+/** Debounced universe-wide coin search (name / ticker / contract), not just this page. */
+export function useCoinSearch(query, minLength = 2, vs = 'usd') {
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const q = String(query || '').trim();
     if (q.length < minLength) {
       setResults([]);
       setSearching(false);
+      setError(null);
       return undefined;
     }
     setSearching(true);
+    setError(null);
     let alive = true;
     const timer = setTimeout(() => {
-      searchCoins(q)
-        .then((r) => alive && setResults(r ?? []))
-        .catch(() => alive && setResults([]))
-        .finally(() => alive && setSearching(false));
+      searchCoins(q, vs)
+        .then((r) => { if (alive) setResults(r ?? []); })
+        .catch((e) => { if (alive) { setResults([]); setError(e); } })
+        .finally(() => { if (alive) setSearching(false); });
     }, 350);
     return () => {
       alive = false;
       clearTimeout(timer);
     };
-  }, [query, minLength]);
+  }, [query, minLength, vs]);
 
-  return { results, searching };
+  return { results, searching, error };
 }
 
 /** Map of `coinId -> price` for portfolio valuation. */

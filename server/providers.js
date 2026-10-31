@@ -11,6 +11,8 @@ import { hydrateCoinRows, mergeVisuals, rememberVisuals } from '../src/lib/marke
 import { attachVenueSparklines } from '../src/lib/venueSparklines.js';
 import { attachIndexLogos } from '../src/lib/coinLogoIndex.js';
 import { MARKET_CATEGORIES, sectorFromRows } from '../src/lib/marketSectors.js';
+import { contractQuery } from '../src/lib/marketSearch.js';
+import { getIndex } from './coinIndex.js';
 import { getCached } from './cache.js';
 
 const CG_BASE = process.env.COINGECKO_BASE || 'https://api.coingecko.com/api/v3';
@@ -635,19 +637,85 @@ export async function fetchCoinDetail(id, vs = 'usd', options = {}) {
   throw new Error('COIN_DETAIL_UNAVAILABLE: CoinGecko and CoinLore did not return this coin');
 }
 
-/** Universe-wide coin search by name or ticker. */
-export async function fetchSearch(query, { timeoutMs = TIMEOUT_MS, retry = true } = {}) {
-  const raw = await req(cgUrl('/search', { query }), {
+/** Universe-wide coin search by name, ticker, or exact contract address. */
+export async function fetchSearch(query, { timeoutMs = TIMEOUT_MS, retry = true, vs = 'usd' } = {}) {
+  const q = String(query || '').trim();
+  const contract = contractQuery(q);
+  if (contract) return fetchContractSearch(contract, vs, timeoutMs);
+  const raw = await req(cgUrl('/search', { query: q }), {
     timeout: Math.max(250, Number(timeoutMs) || TIMEOUT_MS),
     retry: retry === true
   });
-  return (raw.coins || []).slice(0, 25).map((c) => ({
+  const rows = (raw.coins || []).slice(0, 25).map((c) => ({
     id: c.id,
     symbol: (c.symbol || '').toUpperCase(),
     name: c.name,
     image: c.thumb || c.large,
     rank: c.market_cap_rank ?? 0
   }));
+  return enrichSearchRows(rows, vs, timeoutMs);
+}
+
+/** One batched quote read gives autocomplete rows a real price, never a guess. */
+async function enrichSearchRows(rows, vs, timeoutMs) {
+  const ids = rows.slice(0, 8).map((row) => row.id).filter(Boolean);
+  if (!ids.length) return rows;
+  try {
+    const markets = await req(cgUrl('/coins/markets', {
+      vs_currency: vs,
+      ids: ids.join(','),
+      per_page: String(ids.length),
+      sparkline: 'false'
+    }), { timeout: Math.max(250, Number(timeoutMs) || TIMEOUT_MS) });
+    const byId = new Map((Array.isArray(markets) ? markets : []).map((row) => [row.id, normalizeCoin(row)]));
+    return rows.map((row) => {
+      const quote = byId.get(row.id);
+      return quote ? { ...row, ...quote } : row;
+    });
+  } catch {
+    return rows;
+  }
+}
+
+/**
+ * Exact contract lookup. EVM addresses are resolved through the same six-hour
+ * id index the swap/order surfaces use, so a token is never matched by ticker.
+ * Solana mints use CoinGecko's contract endpoint directly.
+ */
+async function fetchContractSearch(contract, vs, timeoutMs) {
+  const timeout = Math.max(250, Number(timeoutMs) || TIMEOUT_MS);
+  if (contract.kind === 'solana') {
+    const raw = await req(cgUrl(`/coins/solana/contract/${encodeURIComponent(contract.address)}`), { timeout });
+    const md = raw.market_data || {};
+    return [{
+      id: raw.id,
+      symbol: (raw.symbol || '').toUpperCase(),
+      name: raw.name,
+      image: raw.image?.large ?? raw.image?.small,
+      rank: raw.market_cap_rank ?? 0,
+      price: md.current_price?.[vs] ?? null,
+      change24h: md.price_change_percentage_24h ?? null
+    }].filter((row) => row.id);
+  }
+  let index;
+  try {
+    index = await getIndex();
+  } catch {
+    return [];
+  }
+  const ids = [];
+  for (const chain of index.byChain.values()) {
+    const id = chain.get(contract.address);
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+  if (!ids.length) return [];
+  const markets = await req(cgUrl('/coins/markets', {
+    vs_currency: vs,
+    ids: ids.slice(0, 8).join(','),
+    per_page: String(Math.min(8, ids.length)),
+    sparkline: 'false'
+  }), { timeout });
+  return (Array.isArray(markets) ? markets : []).map(normalizeCoin);
 }
 
 

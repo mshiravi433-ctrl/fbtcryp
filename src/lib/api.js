@@ -30,6 +30,7 @@ import { fetchCoinLoreTickers, normalizeCoinLoreMarket, COINLORE_MAX_PAGE_SIZE }
 import { hydrateCoinRows, mergeVisuals, needsVisuals, rememberVisuals } from './marketVisuals.js';
 import { attachVenueSparklines } from './venueSparklines.js';
 import { MARKET_CATEGORIES } from './marketSectors.js';
+import { contractQuery } from './marketSearch.js';
 
 // `apiBase()` is deliberately resolved at request time. In the Capacitor
 // shell the page origin is https://localhost, so a relative `/api` would hit
@@ -693,29 +694,72 @@ export function getCoin(id, vs = 'usd') {
  * Falls back to filtering the offline snapshot so the box still does something
  * useful with no network.
  */
-export function searchCoins(query) {
+export function searchCoins(query, vs = 'usd') {
   const q = String(query || '').trim();
   if (q.length < 2) return Promise.resolve([]);
-  return resilient(`search:${q.toLowerCase()}`, {
+  const contract = contractQuery(q);
+  return resilient(`search:${vs}:${q.toLowerCase()}`, {
     ttl: 120000,
-    backend: () => fetchJson(`${apiBase()}/search?q=${encodeURIComponent(q)}`),
+    backend: () => fetchJson(`${apiBase()}/search?q=${encodeURIComponent(q)}&vs=${encodeURIComponent(vs)}`),
     direct: async () => {
+      if (contract) return searchContractDirect(contract, vs);
       const raw = await fetchJson(`${PUBLIC_CG}/search?query=${encodeURIComponent(q)}`);
-      return (raw.coins || []).slice(0, 25).map((c) => ({
+      const rows = (raw.coins || []).slice(0, 25).map((c) => ({
         id: c.id,
         symbol: (c.symbol || '').toUpperCase(),
         name: c.name,
         image: c.thumb || c.large,
         rank: c.market_cap_rank ?? 0
       }));
+      return enrichSearchRowsDirect(rows, vs);
     },
     fallback: () => {
+      if (contract) return [];
       const lower = q.toLowerCase();
       return offlineMarkets(250)
         .filter((c) => c.symbol.toLowerCase().includes(lower) || c.name.toLowerCase().includes(lower))
         .slice(0, 25);
     }
   });
+}
+
+async function enrichSearchRowsDirect(rows, vs) {
+  const ids = rows.slice(0, 8).map((row) => row.id).filter(Boolean);
+  if (!ids.length) return rows;
+  try {
+    const markets = await fetchJson(
+      `${PUBLIC_CG}/coins/markets?vs_currency=${encodeURIComponent(vs)}&ids=${encodeURIComponent(ids.join(','))}&per_page=${ids.length}&sparkline=false`
+    );
+    const byId = new Map((Array.isArray(markets) ? markets : []).map((row) => [row.id, normalizeCoin(row)]));
+    return rows.map((row) => (byId.has(row.id) ? { ...row, ...byId.get(row.id) } : row));
+  } catch {
+    return rows;
+  }
+}
+
+async function searchContractDirect(contract, vs) {
+  const platforms = contract.kind === 'solana'
+    ? ['solana']
+    : ['ethereum', 'binance-smart-chain', 'base'];
+  for (const platform of platforms) {
+    try {
+      const raw = await fetchJson(`${PUBLIC_CG}/coins/${platform}/contract/${encodeURIComponent(contract.address)}`);
+      if (!raw?.id) continue;
+      const md = raw.market_data || {};
+      return [{
+        id: raw.id,
+        symbol: (raw.symbol || '').toUpperCase(),
+        name: raw.name,
+        image: raw.image?.large ?? raw.image?.small,
+        rank: raw.market_cap_rank ?? 0,
+        price: md.current_price?.[vs] ?? null,
+        change24h: md.price_change_percentage_24h ?? null
+      }];
+    } catch {
+      /* Try the next likely platform; an unknown contract stays unknown. */
+    }
+  }
+  return [];
 }
 
 /* -------------------------------------------------------------------------- */
