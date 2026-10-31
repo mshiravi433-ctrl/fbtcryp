@@ -419,13 +419,29 @@ describe('More sheet — noir pass: the open is faster', () => {
   const spring = /stiffness: (\d+), damping: (\d+), mass: ([\d.]+)/.exec(MORE_CODE)?.slice(1) ?? [];
 
   it('springs the panel in harder and travels less', () => {
-    expect(Number(spring[0]), 'stiffness').toBeGreaterThanOrEqual(700);
-    expect(Number(spring[2]), 'mass').toBeLessThanOrEqual(0.7);
-    /* Was y: 28 — a shorter travel with a harder spring is the whole speed-up. */
-    expect(MORE_CODE).toMatch(/initial=\{\{ opacity: 0, y: still \? 0 : 14 \}\}/);
-    expect(MORE_CODE).toMatch(/exit=\{\{ opacity: 0, y: still \? 0 : 22 \}\}/);
+    /* Fifth pass (2026-10-31): 720/40/0.62 over 14px → 980/48/0.5 over 10px,
+       a critically damped settle (~80ms) with no bounce at all. */
+    expect(Number(spring[0]), 'stiffness').toBeGreaterThanOrEqual(900);
+    expect(Number(spring[2]), 'mass').toBeLessThanOrEqual(0.6);
+    /* Was y: 28, then 14 — a shorter travel with a harder spring is the whole
+       speed-up. */
+    expect(MORE_CODE).toMatch(/initial=\{\{ opacity: 0, y: still \? 0 : 10 \}\}/);
+    expect(MORE_CODE).toMatch(/exit=\{\{ opacity: 0, y: still \? 0 : 16 \}\}/);
     /* Still no parent scale: that is the jitter this sheet already paid for. */
     expect(MORE_CODE).not.toMatch(/animate=\{\{[^}]*scale/);
+  });
+
+  it('requests its stylesheet when the module is evaluated, not on an idle callback', () => {
+    /* Fifth pass: `requestIdleCallback` is a race — on a busy screen it can
+       fire seconds after the module loads, or not before the first tap, and a
+       cold tap then waited a network round trip with nothing on screen. The
+       import is kicked off at module evaluation (still a dynamic `import()`,
+       still its own chunk) so the tap renders immediately. */
+    const boot = MORE_CODE.indexOf("if (typeof window !== 'undefined') loadMenuStyles();");
+    expect(boot, 'the boot warm-up exists').toBeGreaterThan(0);
+    expect(boot).toBeLessThan(MORE_CODE.indexOf('export default function MoreSheet'));
+    /* Still lazy: the sheet's two sheets are dynamic imports, never static. */
+    expect(MORE_CODE).not.toMatch(/^import\s+['"]\.\.\/styles\/more-/m);
   });
 
   it('paints the scrim immediately and only gates the panel on the stylesheet', () => {
@@ -437,28 +453,32 @@ describe('More sheet — noir pass: the open is faster', () => {
     const gateAt = MORE_CODE.indexOf('{menuStylesReady && (');
     expect(scrimAt).toBeGreaterThan(0);
     expect(gateAt).toBeGreaterThan(scrimAt);
-    expect(MORE_CODE).toMatch(/duration: still \? 0 : 0\.12/);
+    expect(MORE_CODE).toMatch(/duration: still \? 0 : 0\.1/);
   });
 
   it('shortens every CSS duration that delays the list being readable', () => {
     const sweep = /animation: more-sweep ([\d.]+)s [^;]*?([\d.]+)s 1 both/.exec(CSS)?.slice(1) ?? [];
-    expect(Number(sweep[0])).toBeLessThanOrEqual(0.6);
+    expect(Number(sweep[0])).toBeLessThanOrEqual(0.45);
     expect(Number(sweep[1])).toBe(0);
 
     const fade = /animation: more-fade-in ([\d.]+)s/.exec(CSS)?.[1];
-    expect(Number(fade)).toBeLessThanOrEqual(0.16);
+    expect(Number(fade)).toBeLessThanOrEqual(0.12);
 
     const cascade = /animation: more-tile-in ([\d.]+)s/.exec(CSS)?.[1];
-    const stagger = /animation-delay: calc\(var\(--more-i, 0\) \* (\d+)ms\)/.exec(CSS)?.[1];
-    expect(Number(cascade)).toBeLessThanOrEqual(0.26);
-    expect(Number(stagger)).toBeLessThanOrEqual(13);
+    /* The stagger is CAPPED now — `min(var(--more-i, 0), 11) * 8ms` — so the
+       whole list is readable inside ~90ms instead of the 26th row arriving
+       590ms after the tap. Both the slot count and the step are ceilings. */
+    const stagger = /animation-delay: calc\(min\(var\(--more-i, 0\), (\d+)\) \* (\d+)ms\)/.exec(CSS)?.slice(1) ?? [];
+    expect(Number(stagger[1]), 'per-row step').toBeLessThanOrEqual(8);
+    expect(Number(stagger[0]), 'capped slot').toBeLessThanOrEqual(11);
+    expect(Number(cascade)).toBeLessThanOrEqual(0.16);
 
     /* One-shot rules are unchanged: still no loop in this stylesheet. */
     expect(/infinite/i.test(CSS)).toBe(false);
   });
 
   it('closes before navigating, with less dead time after the tap', () => {
-    expect(MORE_CODE).toMatch(/\}, 70\);/);
+    expect(MORE_CODE).toMatch(/\}, 55\);/);
     const goStart = MORE_CODE.indexOf('const go = ');
     expect(MORE_CODE.indexOf('onClose?.()', goStart)).toBeLessThan(MORE_CODE.indexOf('navigate(to)', goStart));
   });

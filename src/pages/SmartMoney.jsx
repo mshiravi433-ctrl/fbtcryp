@@ -628,7 +628,38 @@ export default function SmartMoney() {
 
   const verified = data?.verified;
   const vCov = verified?.coverage;
-  const consensusActive = (verified?.consensus || []).filter((r) => r.confidence != null).length;
+  /*
+   * ─── THE THREE HERO PODS (2026-10-31) ─────────────────────────────────────
+   * Reported: «کیف‌پول واجد شرایط» and «اجماع گروه‌های مستقل» were always zero.
+   * Two different things could produce that number, and the pods could not tell
+   * them apart:
+   *
+   *   · the engine was never read for this response (`verified.available ===
+   *     false` — the overview's verified branch lost its budget), in which case
+   *     printing `0` is a lie, or
+   *   · the engine WAS read and really has no qualified wallets / no token with
+   *     a live consensus, in which case `0` is the honest answer.
+   *
+   * The server now says which one it is (`available` + `counts`, see
+   * server/smartMoney/index.js → verifiedSection) and both pods read it from
+   * there. An unread engine renders «—» with a title explaining that it is
+   * reading, never a fabricated zero; a read engine renders its real count,
+   * including a real zero.
+   */
+  const verifiedRead = Boolean(verified)
+    && verified.available !== false
+    /* An older payload without `available` still says `unavailable` when the
+       branch was dropped — same meaning, so it gets the same treatment. */
+    && verified.dataStatus !== 'unavailable';
+  const consensusActive = verified?.counts?.consensusActive
+    ?? (verified?.consensus || []).filter((r) => r.confidence != null).length;
+  const qualifiedWallets = verified?.counts?.qualified ?? vCov?.classifiedWallets ?? null;
+  const analysedWallets = verified?.counts?.analysed ?? vCov?.analyzedWallets ?? null;
+  const verifiedNote = !verifiedRead
+    ? t('sm.pods.reading', { defaultValue: 'در حال خواندن موتور تأییدشده' })
+    : verified?.stale
+      ? t('sm.pods.stale', { defaultValue: 'آخرین خواندن موفق موتور' })
+      : undefined;
   const liveLabel = t(data?.dataStatus === 'live' ? 'sm.live' : data?.dataStatus === 'unavailable' ? 'sm.offlineShort' : 'sm.checking');
 
   const metricFoot = (metric) => {
@@ -703,20 +734,20 @@ export default function SmartMoney() {
             </button>
           </form>
 
-          <div className="smx-pods">
+          <div className="smx-pods" data-testid="sm-hero-pods">
             <div className="smx-pod">
               <span className="smx-pod-ico is-cyan" aria-hidden="true"><SmWavesGlyph width={15} height={15} /></span>
-              <b className="mono">{vCov?.analyzedWallets ?? '—'}</b>
+              <b className="mono">{analysedWallets ?? '—'}</b>
               <small>{t('sm.engine.analysed')}</small>
             </div>
-            <div className="smx-pod">
+            <div className="smx-pod" data-testid="sm-pod-qualified" title={verifiedNote}>
               <span className="smx-pod-ico is-mint" aria-hidden="true"><SmVerifiedGlyph width={15} height={15} /></span>
-              <b className="mono">{vCov?.classifiedWallets ?? '—'}</b>
+              <b className="mono">{verifiedRead ? (qualifiedWallets ?? '—') : '—'}</b>
               <small>{t('sm.engine.qualified')}</small>
             </div>
-            <div className="smx-pod">
+            <div className="smx-pod" data-testid="sm-pod-consensus" title={verifiedNote}>
               <span className="smx-pod-ico is-violet" aria-hidden="true"><SmSignalGlyph width={15} height={15} /></span>
-              <b className="mono">{vCov ? consensusActive : '—'}</b>
+              <b className="mono">{verifiedRead ? consensusActive : '—'}</b>
               <small>{t('sm.engine.consensus')}</small>
             </div>
           </div>

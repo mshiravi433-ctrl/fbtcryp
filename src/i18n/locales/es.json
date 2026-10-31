@@ -2709,6 +2709,10 @@
       "tokenNotCovered": "{{chain}} aún no tiene cobertura verificada; el consenso de billeteras calificadas solo se mide en las redes EVM compatibles. Sin cobertura no significa sin flujo en esta cadena.",
       "tokenVerifiedUnavailable": "La capa verificada no pudo leerse esta vez. Eso no es evidencia insuficiente ni significa que no haya consenso.",
       "notCoveredShort": "Sin cobertura verificada"
+    },
+    "pods": {
+      "reading": "leyendo el motor verificado",
+      "stale": "última lectura correcta del motor"
     }
   },
   "iranBuy": {

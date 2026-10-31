@@ -8907,7 +8907,11 @@
     },
     "tabs": {},
     "tokens": "رموز",
-    "volume": "حجم التداول"
+    "volume": "حجم التداول",
+    "pods": {
+      "reading": "جارٍ قراءة المحرك الموثّق",
+      "stale": "آخر قراءة ناجحة للمحرك"
+    }
   },
   "iranBuy": {
     "unavailableBody": "This Wallex Toman checkout is not live on this server yet. The tab is here so Iranian users can find it; no payment is taken until settlement is actually configured."

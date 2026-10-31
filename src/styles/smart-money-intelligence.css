@@ -1921,3 +1921,207 @@
 /* Observed-swap rows on the wallet page now carry the copy CTA too. */
 .smi-observed-row { flex-wrap: wrap; row-gap: 5px; }
 .smi-observed-row .sm-copy { flex: 0 0 auto; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RECEIPT LEDGER — ONE RECEIPT, ONE LINE  (2026-10-31)
+   ---------------------------------------------------------------------------
+   Reported: «آخرین رسیدهای معاملهٔ تأییدشده … فاصله زیاده و خیلی به‌هم‌ریخته
+   است؛ فاصله و اندازه را درست کن». The row used to be a wrapping flex of six
+   children, so on a phone it broke into two or three ragged lines with a 6px
+   gap between them: a 28px token logo on one line, the amount in the middle of
+   nowhere, the copy CTA on its own line, the proof link on the next.
+   
+   The row is a FOUR-TRACK GRID that cannot wrap:
+
+        [side] [26px token] [symbol · amount / chain · age · ROI ───] [actions]
+
+   Everything in the last track is grouped in `.smi-feed-actions`, so the three
+   secondary controls size against each other instead of each demanding a line.
+   The row is 50px tall, the vertical rhythm is a 2px gap between receipts and
+   a hairline under each — a ledger, not a stack of paragraphs. Nothing is
+   hidden except the wallet tag, which has a whole page of its own two taps
+   away (the row itself opens the token, the tag opens the wallet).
+   
+   Sizes: symbol 11.5px/850, amount 11px tabular, meta 9px, side pill 8px,
+   ROI 8px. Every number is `tabular-nums` so a polling refresh cannot make the
+   column jitter.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.smi-feed { display: grid; gap: 2px; }
+
+.smi-feed-row {
+  display: grid;
+  grid-template-columns: auto 26px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 0;
+  flex-wrap: nowrap;
+  min-width: 0;
+  min-height: 50px;
+  padding: 5px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--sm-line-soft, rgba(148, 170, 205, 0.09));
+  border-radius: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  transition: background-color 140ms ease;
+}
+.smi-feed-row:last-child { border-bottom: 0; }
+.smi-feed-row:hover { background: rgba(255, 255, 255, 0.028); }
+
+/* The side pill is a fixed 34px cube so every row's text starts at the same x. */
+.smi-feed-row .smi-side {
+  flex: none;
+  min-width: 34px;
+  padding: 3px 5px;
+  border-radius: 6px;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.smi-feed-icon {
+  width: 26px;
+  height: 26px;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  overflow: hidden;
+}
+
+.smi-feed-main {
+  flex: initial;
+  display: grid;
+  gap: 2px;
+  align-content: center;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.smi-feed-main:focus-visible { outline: 2px solid var(--sm-mint, #2ee6a8); outline-offset: 2px; }
+
+.smi-feed-title { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.smi-feed-title strong {
+  font-size: 11.5px;
+  font-weight: 850;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 46%;
+}
+.smi-feed-title b {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.smi-feed-meta { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.smi-feed-meta small {
+  min-width: 0;
+  font-size: 9px;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--sm-ink-dim, #93a4c4);
+}
+
+/* The ROI pill lives IN the meta line now: it was the third line of the row. */
+.smi-feed-row .smi-roi {
+  flex: none;
+  align-self: center;
+  justify-self: start;
+  margin: 0;
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+}
+
+.smi-feed-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  flex: none;
+  min-width: 0;
+}
+
+.smi-feed-row .smi-feed-wallet {
+  flex: none;
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--sm-line, rgba(148, 170, 205, 0.16));
+  background: var(--sm-surface-2, rgba(255, 255, 255, 0.045));
+  color: var(--sm-ink-dim, #93a4c4);
+  font: 700 8.5px/1.5 ui-monospace, SFMono-Regular, monospace;
+  cursor: pointer;
+}
+
+.smi-feed-row .sm-copy {
+  flex: none;
+  min-height: 26px;
+  padding: 0 7px;
+  gap: 4px;
+  font-size: 8.5px;
+}
+
+.smi-feed-row .smi-proof {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 1px;
+  border: 0;
+  border-bottom: 1px solid rgba(46, 230, 168, 0.5);
+  background: none;
+  color: #8ff7d8;
+  font-size: 8.5px;
+  font-weight: 850;
+  line-height: 1.6;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* Narrow phones: the wallet tag is the one thing that steps out (it has its own
+   page), and the copy CTA drops to its glyph from 380px down. Nothing wraps,
+   nothing overlaps, and the row keeps its 50px rhythm. */
+@media (max-width: 700px) {
+  .smi-feed-row .smi-feed-wallet { display: none; }
+}
+@media (max-width: 430px) {
+  .smi-feed-row { column-gap: 7px; padding-inline: 6px; }
+  .smi-feed-title strong { max-width: 52%; }
+  .smi-feed-row .sm-copy--tight { padding: 0 6px; }
+}
+@media (max-width: 359px) {
+  .smi-feed-row { grid-template-columns: auto 24px minmax(0, 1fr) auto; column-gap: 6px; }
+  .smi-feed-icon { width: 24px; height: 24px; }
+  .smi-feed-row .smi-proof { font-size: 8px; }
+}
+
+/* Light theme: the same grid on paper — hairline separators, ink dimmed one
+   step, and the proof link in the deep green the rest of the page uses. */
+:root[data-theme='light'] .smi-feed-row { border-bottom-color: rgba(15, 23, 42, 0.08); }
+:root[data-theme='light'] .smi-feed-row:hover { background: rgba(15, 23, 42, 0.03); }
+:root[data-theme='light'] .smi-feed-icon { background: rgba(15, 23, 42, 0.04); }
+:root[data-theme='light'] .smi-feed-meta small { color: #5c6b82; }
+:root[data-theme='light'] .smi-feed-row .smi-proof { color: #04795c; border-bottom-color: rgba(0, 150, 111, 0.45); }
+
+@media (prefers-reduced-motion: reduce) {
+  .smi-feed-row { transition: none; }
+}

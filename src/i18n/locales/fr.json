@@ -2709,6 +2709,10 @@
       "tokenNotCovered": "{{chain}} n'a pas encore de couverture vérifiée ; le consensus des portefeuilles qualifiés n'est mesuré que sur les réseaux EVM pris en charge. L'absence de couverture ne signifie pas l'absence de flux sur cette chaîne.",
       "tokenVerifiedUnavailable": "La couche vérifiée n'a pas pu être lue cette fois. Ce n'est pas un manque de preuves, et cela ne signifie pas l'absence de consensus.",
       "notCoveredShort": "Aucune couverture vérifiée"
+    },
+    "pods": {
+      "reading": "lecture du moteur vérifié",
+      "stale": "dernière lecture réussie du moteur"
     }
   },
   "iranBuy": {

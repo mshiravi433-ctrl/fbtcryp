@@ -2709,6 +2709,10 @@
       "tokenNotCovered": "{{chain}} ainda não tem cobertura verificada; o consenso de carteiras qualificadas só é medido nas redes EVM suportadas. Sem cobertura não significa sem fluxo nesta cadeia.",
       "tokenVerifiedUnavailable": "A camada verificada não pôde ser lida desta vez. Isso não é evidência insuficiente nem significa que não haja consenso.",
       "notCoveredShort": "Sem cobertura verificada"
+    },
+    "pods": {
+      "reading": "lendo o motor verificado",
+      "stale": "última leitura bem-sucedida do motor"
     }
   },
   "iranBuy": {

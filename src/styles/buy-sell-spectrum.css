@@ -1,0 +1,534 @@
+/* ==========================================================================
+   BUY / SELL — «اسپکتروم» / HOLOGRAPHIC LEDGER  (2026-10-31, sixth skin)
+   --------------------------------------------------------------------------
+   The owner: «رنگ‌بندی صفحه خرید و فروش را خیلی جذاب‌تر کن و رنگ‌بندی خیلی خاص
+   و چشم‌نواز باشد» — make the buy/sell page far more attractive, with a
+   colour scheme that is genuinely distinctive and eye-catching.
+
+   WHY A NEW LAYER INSTEAD OF A REPAINT. The previous two skins (Aurora Desk,
+   then Prism Desk) were deep blue with teal/mint accents. That is a good,
+   calm desk — and completely anonymous: navy + teal is what every fintech
+   dashboard on the internet looks like, so no amount of extra gradients
+   inside it reads as "special". This layer keeps the STRUCTURE and the
+   SEMANTICS of Prism Desk and replaces the MATERIAL: an obsidian-violet
+   night with four spectral inks — mint, sky, violet, magenta — used as
+   LIGHT (edges, glints, washes) rather than as fill.
+
+   The four inks are the whole system:
+
+       --bsx-mint    #2df5c0   value arriving   (buy side)
+       --bsx-sky     #4aa8ff   data / neutral    (buy secondary)
+       --bsx-rose    #ff4d8d   value leaving     (sell side)
+       --bsx-violet  #a06bff   structure / Iran rail
+
+   Nothing is hard-coded beyond these four plus the near-black surfaces, so a
+   later palette change is four lines. The buy/sell direction still drives
+   everything through Prism Desk's `--bsw-accent` / `--bsw-accent-2` pair — this
+   file only redefines WHAT those two are, which is why the whole ticket
+   (tabs, stepper, chips, summary, CTA) turns mint→sky for BUY and
+   rose→violet for SELL without a single duplicated rule.
+
+   MOTION BUDGET: unchanged. No new animation, no new backdrop-filter (the
+   page deliberately has none: a blurred card under a moving page is the
+   Android flicker this app already paid for). All the "shine" below is
+   static gradients and 1px light rings, which cost one paint, not one per
+   frame. The existing reduced-motion guards still win.
+
+   LIGHT THEME: a paper ledger with the same four inks at print weight — pale
+   mint/sky washes, an indigo-violet rule, and the same gradient title. It is
+   a pair, not an inversion.
+   ========================================================================== */
+
+.buy-sell-page {
+  /* Surfaces: violet-black, not navy. The top stop carries the faintest
+     violet so the page reads purple-black even where no accent lands. */
+  --bsd-surface: #131229;
+  --bsd-surface-deep: #0b0a18;
+  --bsd-field: #090813;
+  --bsd-line: #2b2547;
+  --bsd-muted: #a3a0c4;
+
+  --bsx-mint: #2df5c0;
+  --bsx-sky: #4aa8ff;
+  --bsx-rose: #ff4d8d;
+  --bsx-violet: #a06bff;
+  --bsx-noir: #05040c;
+}
+
+/* ── the direction pairs ──────────────────────────────────────────────────
+   The panel's two accent tokens are the only switch the whole desk reads. */
+.buy-sell-page .buy-sell-panel {
+  --bsw-accent: var(--bsx-mint);
+  --bsw-accent-2: var(--bsx-sky);
+  --bsw-ink: #04160f;
+  --bsw-accent-soft: color-mix(in srgb, var(--bsw-accent) 13%, transparent);
+  --bsw-accent-line: color-mix(in srgb, var(--bsw-accent) 38%, transparent);
+}
+.buy-sell-page .buy-sell-panel.is-sell {
+  --bsw-accent: var(--bsx-rose);
+  --bsw-accent-2: var(--bsx-violet);
+  --bsw-ink: #2a0011;
+}
+
+/* ── the counter (hero) ───────────────────────────────────────────────────
+   Four spectral washes on near-black, a 1px iridescent rim, and a title that
+   is itself made of light. The washes are radial gradients, i.e. one paint:
+   the hero is the first thing on screen and must not cost frames. */
+.buy-sell-page .buy-sell-hero {
+  border-color: color-mix(in srgb, var(--bsx-mint) 20%, var(--bsd-line));
+  border-end-end-radius: 22px;
+  background:
+    radial-gradient(90% 130% at 100% -6%, color-mix(in srgb, var(--bsx-mint) 22%, transparent), transparent 58%),
+    radial-gradient(85% 120% at -8% 108%, color-mix(in srgb, var(--bsx-violet) 26%, transparent), transparent 62%),
+    radial-gradient(70% 90% at 46% 132%, color-mix(in srgb, var(--bsx-sky) 16%, transparent), transparent 70%),
+    linear-gradient(158deg, #171436 0%, #0c0a1c 48%, var(--bsx-noir) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 0 0 1px rgba(160, 107, 255, 0.09),
+    inset 0 -30px 44px -36px color-mix(in srgb, var(--bsx-violet) 60%, transparent),
+    0 28px 60px -44px rgba(0, 0, 0, 0.95);
+}
+
+/* The rim: a 1px spectrum that runs violet → sky → mint along the top edge and
+   returns as magenta at the cut corner. Painted as a masked ring so it hugs
+   the blade radius exactly (no clip-path, no overflow surprises). */
+.buy-sell-page .buy-sell-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: linear-gradient(118deg,
+    color-mix(in srgb, var(--bsx-violet) 62%, transparent) 0%,
+    rgba(255, 255, 255, 0.34) 26%,
+    color-mix(in srgb, var(--bsx-sky) 48%, transparent) 52%,
+    color-mix(in srgb, var(--bsx-mint) 56%, transparent) 74%,
+    color-mix(in srgb, var(--bsx-rose) 46%, transparent) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  opacity: 0.72;
+}
+[dir='rtl'] .buy-sell-page .buy-sell-hero::after {
+  background: linear-gradient(242deg,
+    color-mix(in srgb, var(--bsx-violet) 62%, transparent) 0%,
+    rgba(255, 255, 255, 0.34) 26%,
+    color-mix(in srgb, var(--bsx-sky) 48%, transparent) 52%,
+    color-mix(in srgb, var(--bsx-mint) 56%, transparent) 74%,
+    color-mix(in srgb, var(--bsx-rose) 46%, transparent) 100%);
+}
+
+/* The hairline on the top edge: three inks instead of white, and it glows. */
+.buy-sell-page .buy-sell-hero-sheen {
+  inset-inline: 6%;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg,
+    transparent,
+    var(--bsx-violet),
+    var(--bsx-sky),
+    var(--bsx-mint),
+    transparent);
+  opacity: 0.85;
+  filter: blur(0.4px);
+  box-shadow: 0 0 18px -2px color-mix(in srgb, var(--bsx-sky) 65%, transparent);
+}
+
+/* The dot grid gets a spectral tint and a longer fade, so the top corner of the
+   hero looks lit rather than gridded. */
+.buy-sell-page .buy-sell-hero-grid {
+  opacity: 0.3;
+  background-image:
+    linear-gradient(rgba(160, 107, 255, 0.22) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(45, 245, 192, 0.16) 1px, transparent 1px);
+  background-size: 26px 26px;
+  -webkit-mask: radial-gradient(120% 108% at 100% 0%, #000, transparent 72%);
+  mask: radial-gradient(120% 108% at 100% 0%, #000, transparent 72%);
+}
+
+/* Kicker + edition: a small spectral chip, mono, no extra words. */
+.buy-sell-page .buy-sell-hero-kicker {
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--bsx-violet) 34%, transparent);
+  border-radius: 999px;
+  background: linear-gradient(120deg,
+    color-mix(in srgb, var(--bsx-violet) 16%, transparent),
+    color-mix(in srgb, var(--bsx-mint) 10%, transparent));
+  color: #d9f7ff;
+  font-weight: 800;
+}
+.buy-sell-page .buy-sell-hero-kicker i {
+  width: 5px;
+  height: 5px;
+  background: var(--bsx-mint);
+  box-shadow: 0 0 10px 1px color-mix(in srgb, var(--bsx-mint) 80%, transparent);
+}
+.buy-sell-hero-edition {
+  padding: 3px 8px;
+  border: 1px solid var(--bsd-line);
+  border-radius: 999px;
+  color: var(--bsd-muted);
+}
+
+/* The title is light: a mint → sky → violet gradient clipped to the glyphs,
+   with a second copy of the same gradient as a soft glow behind them. Persian
+   ascenders/diacritics clip cleanly because the gradient is on the text box,
+   not the glyph outlines. `text-shadow` is avoided (it would paint over the
+   transparent fill); the glow comes from a drop-shadow filter on the box. */
+.buy-sell-page .buy-sell-hero-title {
+  color: var(--bsx-mint);
+  background: linear-gradient(96deg, #b8ffe9 0%, var(--bsx-mint) 26%, var(--bsx-sky) 58%, #c9b6ff 88%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 6px 22px color-mix(in srgb, var(--bsx-sky) 26%, transparent));
+}
+.buy-sell-page .buy-sell-page-intro { color: #c3c0e0; }
+
+/* Trust rail: three inks, one per promise, on a violet seam. */
+.buy-sell-page .buy-sell-hero-trust {
+  border-top-color: color-mix(in srgb, var(--bsx-violet) 26%, transparent);
+  background: linear-gradient(180deg, rgba(5, 4, 12, 0.12), rgba(5, 4, 12, 0.42));
+}
+.buy-sell-page .buy-sell-hero-chip { color: #d6d3ef; }
+.buy-sell-page .buy-sell-hero-chip svg { color: var(--bsx-mint); filter: drop-shadow(0 0 6px color-mix(in srgb, var(--bsx-mint) 55%, transparent)); }
+.buy-sell-page .buy-sell-hero-chip:nth-child(2) svg { color: var(--bsx-sky); filter: drop-shadow(0 0 6px color-mix(in srgb, var(--bsx-sky) 55%, transparent)); }
+.buy-sell-page .buy-sell-hero-chip:nth-child(3) svg { color: var(--bsx-violet); filter: drop-shadow(0 0 6px color-mix(in srgb, var(--bsx-violet) 55%, transparent)); }
+.buy-sell-page .buy-sell-hero-chip:not(:last-child)::after {
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--bsx-violet) 55%, transparent), transparent);
+}
+
+/* Back tile and the central constellation mark: the same four inks. */
+.buy-sell-page .buy-sell-hero-back.icon-btn {
+  border-color: color-mix(in srgb, var(--bsx-violet) 34%, var(--bsd-line));
+  background: rgba(10, 8, 24, 0.72);
+  color: #e6e3ff;
+}
+.buy-sell-page .buy-sell-hero-back:hover {
+  border-color: var(--bsx-mint);
+  background: color-mix(in srgb, var(--bsx-mint) 12%, #0a0818);
+  color: var(--bsx-mint);
+}
+.buy-sell-page .buy-sell-orbit { border-color: color-mix(in srgb, var(--bsx-mint) 26%, transparent); }
+.buy-sell-page .buy-sell-orbit--inner { border-color: color-mix(in srgb, var(--bsx-violet) 30%, transparent); }
+.buy-sell-page .buy-sell-page-mark {
+  border-color: color-mix(in srgb, var(--bsx-mint) 44%, transparent);
+  color: #04160f;
+  background: linear-gradient(145deg, var(--bsx-mint), var(--bsx-sky) 62%, var(--bsx-violet));
+  box-shadow:
+    0 10px 26px -12px color-mix(in srgb, var(--bsx-sky) 70%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.buy-sell-page .buy-sell-asset {
+  border-color: color-mix(in srgb, var(--bsx-violet) 34%, var(--bsd-line));
+  background: #14112a;
+  box-shadow: 0 6px 16px -6px #02010a;
+}
+.buy-sell-orbit-dot {
+  background: var(--bsx-rose);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bsx-rose) 14%, transparent);
+}
+
+/* ── tabs: the same rail, now made of ink ─────────────────────────────────
+   Buy = mint→sky, Sell = rose→violet, Iran rail = violet→magenta. The
+   indicator keeps its rounded 13px shape; only its fill changes. */
+.buy-sell-page .segmented.buy-sell-surface-switch,
+.buy-sell-page .segmented.buy-sell-switch,
+.buy-sell-page .segmented.iran-buy-subtab {
+  border-color: var(--bsd-line);
+  background: linear-gradient(180deg, #0e0c1e, #08070f);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.buy-sell-page .is-buy .buy-sell-switch .seg-indicator,
+.buy-sell-page .buy-sell-surface-switch > button:first-child .seg-indicator {
+  background: linear-gradient(120deg, #0fbf95, var(--bsx-sky));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 8px 22px -12px color-mix(in srgb, var(--bsx-sky) 85%, transparent);
+}
+.buy-sell-page .is-sell .buy-sell-switch .seg-indicator {
+  background: linear-gradient(120deg, var(--bsx-rose), var(--bsx-violet));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    0 8px 22px -12px color-mix(in srgb, var(--bsx-rose) 85%, transparent);
+}
+.buy-sell-page .buy-sell-surface-switch > [data-testid='iran-buy-top-tab'] .seg-indicator,
+.buy-sell-page .iran-buy-subtab .seg-indicator {
+  background: linear-gradient(120deg, var(--bsx-violet), #ff6ee0);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 8px 22px -12px color-mix(in srgb, var(--bsx-violet) 85%, transparent);
+}
+.buy-sell-page .is-buy .buy-sell-switch .bsw-side-icon,
+.buy-sell-page .buy-sell-surface-switch > button:first-child .bsw-tab-icon { color: var(--bsx-mint); }
+.buy-sell-page .is-sell .buy-sell-switch .bsw-side-icon { color: var(--bsx-rose); }
+.buy-sell-page .buy-sell-surface-switch > [data-testid='iran-buy-top-tab'] .bsw-tab-icon { color: #c9b6ff; }
+
+/* ── the ticket ───────────────────────────────────────────────────────────
+   Same card geometry as Prism Desk; the material is now a violet-black slab
+   with a 1px direction-coloured seam along its top edge and a light pool
+   behind the head. */
+.buy-sell-page .lab-card {
+  border-color: var(--bsd-line);
+  background:
+    radial-gradient(90% 70% at 100% 0%, color-mix(in srgb, var(--bsw-accent) 9%, transparent), transparent 62%),
+    linear-gradient(155deg, var(--bsd-surface), var(--bsd-surface-deep) 62%, var(--bsx-noir));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 22px 48px -40px rgba(0, 0, 0, 0.95);
+}
+.buy-sell-page .buy-sell-ticket {
+  border-color: color-mix(in srgb, var(--bsw-accent) 26%, var(--bsd-line));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 0 0 1px color-mix(in srgb, var(--bsw-accent) 7%, transparent),
+    0 24px 54px -42px color-mix(in srgb, var(--bsw-accent) 70%, transparent);
+}
+.buy-sell-page .buy-sell-ticket-head {
+  border-bottom-color: color-mix(in srgb, var(--bsw-accent) 18%, var(--bsd-line));
+  background:
+    radial-gradient(120% 200% at 0% 0%, color-mix(in srgb, var(--bsw-accent) 16%, transparent), transparent 58%),
+    radial-gradient(110% 190% at 100% 0%, color-mix(in srgb, var(--bsw-accent-2) 13%, transparent), transparent 64%);
+}
+.buy-sell-page .buy-sell-side-mark {
+  color: var(--bsw-ink);
+  background: linear-gradient(142deg, var(--bsw-accent), var(--bsw-accent-2));
+  box-shadow:
+    0 12px 28px -14px color-mix(in srgb, var(--bsw-accent) 80%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.buy-sell-page .buy-sell-secure {
+  border-color: color-mix(in srgb, var(--bsw-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--bsw-accent) 10%, transparent);
+  color: color-mix(in srgb, var(--bsw-accent) 88%, #fff);
+}
+
+/* Stepper: the completed rail becomes a two-ink light pipe. */
+.buy-sell-page .bsw-stepper button > span {
+  border-color: var(--bsd-line);
+  background: #0b0918;
+}
+.buy-sell-page .bsw-stepper li.active button > span {
+  border-color: var(--bsw-accent);
+  background: color-mix(in srgb, var(--bsw-accent) 18%, #0b0918);
+  color: #fff;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bsw-accent) 12%, transparent), 0 0 18px -4px color-mix(in srgb, var(--bsw-accent) 70%, transparent);
+}
+.buy-sell-page .bsw-stepper li.done:not(:last-child)::after {
+  background: linear-gradient(90deg, var(--bsw-accent), var(--bsw-accent-2));
+}
+
+/* The amount field: the page's loudest single element. A violet-black well
+   with a spectral inner seam that brightens with the direction on focus. */
+.buy-sell-page .bsw-amount {
+  border-color: color-mix(in srgb, var(--bsw-accent) 22%, var(--bsd-line));
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--bsw-accent) 8%, transparent), transparent 62%),
+    #08070f;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 0 22px -12px color-mix(in srgb, var(--bsw-accent) 65%, transparent);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+.buy-sell-page .bsw-amount:focus-within {
+  border-color: color-mix(in srgb, var(--bsw-accent) 62%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 26px -10px color-mix(in srgb, var(--bsw-accent) 75%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--bsw-accent) 12%, transparent);
+}
+.buy-sell-page .bsw-amount input {
+  color: #f4f2ff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Quick amounts: glass keys; the chosen one is filled with the direction ink. */
+.buy-sell-page .bsw-chips button {
+  border-color: var(--bsd-line);
+  background: linear-gradient(180deg, #12102a, #0a0818);
+  color: #b9b6d6;
+  transition: transform 140ms ease, border-color 140ms ease, color 140ms ease, background-color 140ms ease;
+}
+.buy-sell-page .bsw-chips button:hover {
+  border-color: color-mix(in srgb, var(--bsw-accent) 46%, var(--bsd-line));
+  color: #fff;
+}
+.buy-sell-page .bsw-chips button.active {
+  border-color: color-mix(in srgb, var(--bsw-accent) 70%, transparent);
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--bsw-accent) 26%, #0a0818),
+    color-mix(in srgb, var(--bsw-accent-2) 20%, #0a0818));
+  color: #fff;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bsw-accent) 30%, transparent), 0 8px 20px -14px color-mix(in srgb, var(--bsw-accent) 80%, transparent);
+}
+
+/* Asset picker + wallet field: same slab, same seam. */
+.buy-sell-page .bsw-assets button,
+.buy-sell-page .bsw-wallet {
+  border-color: var(--bsd-line);
+  background: linear-gradient(180deg, #12102a, #0a0818);
+}
+.buy-sell-page .bsw-assets button.active {
+  border-color: color-mix(in srgb, var(--bsw-accent) 66%, transparent);
+  background: linear-gradient(140deg,
+    color-mix(in srgb, var(--bsw-accent) 20%, #0a0818),
+    color-mix(in srgb, var(--bsw-accent-2) 14%, #0a0818));
+  box-shadow: inset 0 0 20px -12px color-mix(in srgb, var(--bsw-accent) 80%, transparent);
+}
+.buy-sell-page .bsw-wallet:focus-within {
+  border-color: color-mix(in srgb, var(--bsw-accent) 56%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bsw-accent) 10%, transparent);
+}
+.buy-sell-page .bsw-wallet.valid {
+  border-color: color-mix(in srgb, var(--bsx-mint) 52%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bsx-mint) 10%, transparent);
+}
+
+/* Summary rows: a hairline that lights up on the inline-start edge. */
+.buy-sell-page .bsw-summary-row {
+  border-color: var(--bsd-line);
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.008));
+  border-inline-start: 2px solid color-mix(in srgb, var(--bsw-accent) 40%, transparent);
+  border-radius: 10px;
+}
+.buy-sell-page .bsw-summary-row > strong { color: #f2f0ff; }
+.buy-sell-page .bsw-summary-row > button:hover {
+  border-color: color-mix(in srgb, var(--bsw-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--bsw-accent) 12%, transparent);
+}
+.buy-sell-page .bsw-blocked {
+  border-color: color-mix(in srgb, #ffc24b 30%, transparent);
+  background: rgba(255, 194, 75, 0.08);
+  color: #ffd88a;
+}
+
+/* The CTA: the page's one genuinely saturated object. Buy fills with mint→sky
+   on dark ink; sell fills with rose→violet on near-black ink. */
+.buy-sell-page .bsw-nav .bsw-next {
+  color: var(--bsw-ink);
+  border: 0;
+  background:
+    linear-gradient(112deg,
+      var(--bsw-accent) 0%,
+      color-mix(in srgb, var(--bsw-accent) 70%, var(--bsw-accent-2)) 46%,
+      var(--bsw-accent-2) 100%);
+  box-shadow:
+    0 14px 30px -14px color-mix(in srgb, var(--bsw-accent) 85%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+}
+.buy-sell-page .bsw-nav .bsw-next:hover:not(:disabled) {
+  filter: brightness(1.06) saturate(1.05);
+  box-shadow:
+    0 18px 36px -14px color-mix(in srgb, var(--bsw-accent) 90%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.buy-sell-page .bsw-nav .bsw-next:disabled {
+  border: 1px solid var(--bsd-line);
+  background: #14111f;
+  color: var(--bsd-muted);
+  box-shadow: none;
+}
+.buy-sell-page .bsw-nav .bsw-back {
+  border-color: var(--bsd-line);
+  background: #0d0b1c;
+  color: #cfcced;
+}
+
+/* Safety card keeps the amber warning ink but sits on the new material. */
+.buy-sell-page .buy-sell-safety { background: linear-gradient(160deg, #131029, #08070f); }
+.buy-sell-page .buy-sell-safety-mark { color: #ffc24b !important; }
+
+/* Iran rail shares the violet ink instead of indigo. */
+.buy-sell-page .iran-buy-ticket { border-color: color-mix(in srgb, var(--bsx-violet) 34%, var(--bsd-line)); }
+.buy-sell-page .iran-buy-ticket-head {
+  background: radial-gradient(120% 190% at 0% 0%, color-mix(in srgb, var(--bsx-violet) 20%, transparent), transparent 62%);
+}
+.buy-sell-page .iran-buy-secure {
+  border-color: color-mix(in srgb, var(--bsx-violet) 34%, transparent);
+  background: color-mix(in srgb, var(--bsx-violet) 12%, transparent);
+  color: #d6c8ff;
+}
+.buy-sell-page .iran-buy-brand-mark { color: #eadfff; background: #2a1f4d; }
+.buy-sell-page .iran-buy-network-chips > button.is-active {
+  border-color: color-mix(in srgb, var(--bsx-violet) 66%, transparent);
+  color: #e4d9ff;
+  background: color-mix(in srgb, var(--bsx-violet) 18%, transparent);
+}
+.buy-sell-page .iran-buy-referral {
+  border-color: color-mix(in srgb, var(--bsx-violet) 30%, var(--bsd-line));
+  background: radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--bsx-violet) 16%, transparent), transparent 72%), var(--bsd-field);
+}
+.buy-sell-page .iran-buy-referral-btn.btn {
+  color: #14062b;
+  background: linear-gradient(120deg, var(--bsx-violet), #ff6ee0);
+  box-shadow: 0 12px 26px -14px color-mix(in srgb, var(--bsx-violet) 85%, transparent);
+}
+.buy-sell-page .iran-buy-referral-perk { color: var(--bsx-mint); }
+
+/* ── paper theme: the same four inks at print weight ────────────────────── */
+:root[data-theme='light'] .buy-sell-page {
+  --bsd-surface: #fff;
+  --bsd-surface-deep: #f7f5ff;
+  --bsd-field: #f8f7ff;
+  --bsd-line: #e2ddf2;
+  --bsd-muted: #6b6885;
+}
+:root[data-theme='light'] .buy-sell-page .buy-sell-panel { --bsw-accent: #059c7a; --bsw-accent-2: #1d74c9; --bsw-ink: #ffffff; }
+:root[data-theme='light'] .buy-sell-page .buy-sell-panel.is-sell { --bsw-accent: #d81b60; --bsw-accent-2: #7c3aed; --bsw-ink: #ffffff; }
+:root[data-theme='light'] .buy-sell-page .buy-sell-hero {
+  border-color: #ded6f5;
+  background:
+    radial-gradient(95% 130% at 100% -8%, rgba(45, 245, 192, 0.28), transparent 58%),
+    radial-gradient(85% 120% at -6% 108%, rgba(160, 107, 255, 0.2), transparent 62%),
+    linear-gradient(158deg, #ffffff, #f6f3ff 58%, #f0ecff);
+  box-shadow: 0 20px 44px -34px rgba(76, 29, 149, 0.35);
+}
+:root[data-theme='light'] .buy-sell-page .buy-sell-hero-title {
+  background: linear-gradient(96deg, #04795f 0%, #0c8f78 26%, #1d6fc4 60%, #6d28d9 92%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: none;
+}
+:root[data-theme='light'] .buy-sell-page .buy-sell-page-intro { color: #4b4868; }
+:root[data-theme='light'] .buy-sell-page .buy-sell-hero-kicker { color: #4c1d95; border-color: #d9cffa; background: linear-gradient(120deg, rgba(160, 107, 255, 0.12), rgba(45, 245, 192, 0.14)); }
+:root[data-theme='light'] .buy-sell-page .buy-sell-hero-chip { color: #4b4868; }
+:root[data-theme='light'] .buy-sell-page .buy-sell-hero-trust { background: rgba(255, 255, 255, 0.55); }
+:root[data-theme='light'] .buy-sell-page .buy-sell-hero-back.icon-btn { color: #3b2f63; background: #fff; border-color: #e2ddf2; }
+:root[data-theme='light'] .buy-sell-page .buy-sell-asset { background: #fff; border-color: #e2ddf2; }
+:root[data-theme='light'] .buy-sell-page .lab-card { background: linear-gradient(160deg, #fff, #faf8ff); box-shadow: 0 20px 44px -34px rgba(76, 29, 149, 0.28); }
+:root[data-theme='light'] .buy-sell-page .segmented.buy-sell-surface-switch,
+:root[data-theme='light'] .buy-sell-page .segmented.buy-sell-switch,
+:root[data-theme='light'] .buy-sell-page .segmented.iran-buy-subtab { background: #f4f1fd; }
+:root[data-theme='light'] .buy-sell-page .bsw-amount { background: radial-gradient(120% 140% at 100% 0%, rgba(45, 245, 192, 0.1), transparent 62%), #fff; }
+:root[data-theme='light'] .buy-sell-page .bsw-amount input { color: #171233; }
+:root[data-theme='light'] .buy-sell-page .bsw-chips button,
+:root[data-theme='light'] .buy-sell-page .bsw-assets button,
+:root[data-theme='light'] .buy-sell-page .bsw-wallet { background: #fff; color: #4b4868; }
+:root[data-theme='light'] .buy-sell-page .bsw-chips button.active { color: #171233; }
+:root[data-theme='light'] .buy-sell-page .bsw-summary-row { background: #fbfaff; }
+:root[data-theme='light'] .buy-sell-page .bsw-summary-row > strong { color: #171233; }
+:root[data-theme='light'] .buy-sell-page .bsw-nav .bsw-back { background: #fff; color: #4b4868; }
+:root[data-theme='light'] .buy-sell-page .buy-sell-safety { background: linear-gradient(160deg, #fff, #faf8ff); }
+
+/* ── budgets ──────────────────────────────────────────────────────────────
+   No new motion is introduced by this file, so the only thing to stand down
+   is the hover lift on a reduced-motion device — the same rule the previous
+   layers already carry, restated here so this sheet is self-contained. */
+@media (prefers-reduced-motion: reduce) {
+  .buy-sell-page .bsw-chips button,
+  .buy-sell-page .bsw-nav .bsw-next,
+  .buy-sell-page .bsw-amount { transition: none; }
+  .buy-sell-page .bsw-chips button:hover,
+  .buy-sell-page .bsw-nav .bsw-next:hover:not(:disabled) { transform: none; }
+}
+
+/* The iridescent rim is decoration; on the packaged Android shell the extra
+   masked layer is dropped with the rest of the glass (see buy-sell-modern.css
+   for the same guard on the pane). */
+:root[data-native='true'] .buy-sell-page .buy-sell-hero::after { opacity: 0.5; }

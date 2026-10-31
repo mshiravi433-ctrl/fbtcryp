@@ -38,6 +38,21 @@
        tuned in the same pass; the compositor rules below did not change, so
        the speed is free rather than bought with frames.
 
+   ─── THE FIFTH PASS: «خیلی کند ظاهر می‌شود» (2026-10-31, later) ─────────────
+   The owner reported the sheet slow twice more after the noir pass. Nothing
+   above was undone; three numbers moved and one budget got cheaper:
+
+     · sweep 0.58s → 0.42s, scroll fade 0.16s → 0.1s, row 0.26s → 0.15s, and
+       the stagger is now CAPPED at 11 slots × 8ms. Uncapped, the 26th row
+       landed 590ms after the tap — the pane was up and the list was still
+       arriving, which is what «کند میاد بالا» describes.
+     · the pane's backdrop sampling went 30px → 18px blur. Under a 92–96%
+       opaque noir fill the difference is invisible, and it is the most
+       expensive thing on the sheet's first frame on a mid-range Android.
+     · the stylesheet request itself now starts when MoreSheet's module is
+       evaluated (see MoreSheet.jsx) instead of waiting for an idle callback,
+       so a cold first tap does not wait for the network at all.
+
    Everything the previous passes paid for stays paid for.
 
    ─── 1. THE BLADE: one geometry, repeated ──────────────────────────────────
@@ -155,8 +170,8 @@
       color-mix(in srgb, var(--more-noir-1) 92%, transparent),
       color-mix(in srgb, var(--more-noir-2) 94%, transparent) 52%,
       color-mix(in srgb, var(--more-noir-3) 96%, transparent));
-  backdrop-filter: blur(30px) saturate(185%) brightness(0.92);
-  -webkit-backdrop-filter: blur(30px) saturate(185%) brightness(0.92);
+  backdrop-filter: blur(18px) saturate(185%) brightness(0.92);
+  -webkit-backdrop-filter: blur(18px) saturate(185%) brightness(0.92);
   box-shadow:
     0 48px 110px -32px rgba(0, 0, 0, 0.92),
     0 18px 44px -18px rgba(0, 0, 0, 0.7),
@@ -277,9 +292,11 @@
     transparent 100%);
   opacity: 0;
   transform: translate3d(-160%, 0, 0) skewX(-14deg);
-  /* 0.9s → 0.58s and no 50ms delay (2026-10-31): the sweep is a hello, not a
-     title sequence. Still one iteration, still `both`, still transform-only. */
-  animation: more-sweep 0.58s cubic-bezier(0.3, 0.9, 0.35, 1) 0s 1 both;
+  /* 0.9s → 0.58s → 0.42s (2026-10-31, twice): the sweep is a hello, not a
+     title sequence, and on a phone the second pass's 0.58s still outlived the
+     pane it decorates. Still one iteration, still `both`, still
+     transform-only. */
+  animation: more-sweep 0.42s cubic-bezier(0.3, 0.9, 0.35, 1) 0s 1 both;
 }
 @keyframes more-sweep {
   from { opacity: 0; transform: translate3d(-160%, 0, 0) skewX(-14deg); }
@@ -482,7 +499,7 @@
   -webkit-overflow-scrolling: touch;
   -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 14px, #000 calc(100% - 18px), transparent 100%);
   mask-image: linear-gradient(180deg, transparent 0, #000 14px, #000 calc(100% - 18px), transparent 100%);
-  animation: more-fade-in 0.16s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: more-fade-in 0.1s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .more-scroll::-webkit-scrollbar { width: 4px; }
 .more-scroll::-webkit-scrollbar-thumb {
@@ -592,8 +609,13 @@
      go of transform and :active can take it over; the start state still
      applies through each row's delay. Delay is per-row-within-group, so
      the longest wait is ~10 rows in, never 25. */
-  animation: more-tile-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) backwards;
-  animation-delay: calc(var(--more-i, 0) * 13ms);
+  animation: more-tile-in 0.15s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  /* CAPPED STAGGER (2026-10-31, fifth pass). Uncapped, 26 rows × 13ms put the
+     last row on screen 590ms after the tap: the pane had landed and the list
+     was still arriving, which is exactly the «کند میاد بالا» report. The delay
+     is now 8ms per row up to the 12th slot, so every row is readable inside
+     ~90ms and the deepest rows share the last slot instead of queueing. */
+  animation-delay: calc(min(var(--more-i, 0), 11) * 8ms);
 }
 .more-list[data-still='true'] .more-tile { animation: none; }
 

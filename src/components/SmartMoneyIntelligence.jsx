@@ -357,7 +357,29 @@ function CandidateRows({ rows }) {
   );
 }
 
-/** Real paired fills with tx receipts, newest first */
+/**
+ * Real paired fills with tx receipts, newest first.
+ *
+ * ─── THE ROW IS ONE LINE AGAIN (2026-10-31) ─────────────────────────────────
+ * Reported: «آخرین رسیدهای معاملهٔ تأییدشده … در هر ردیف یک رسید هست که فاصله
+ * زیاده و خیلی به‌هم‌ریخته است؛ فاصله و اندازه را درست کن». Every part of that
+ * complaint was one layout bug: the row was a wrapping flex with six children
+ * (side pill, icon, main, wallet tag, copy CTA, proof link). As soon as the copy
+ * CTA joined, the six could not fit a phone, so `flex-wrap` turned each receipt
+ * into two or three ragged lines with a 6px row-gap — an address here, a button
+ * there, and a receipt list that read as a mess of paragraphs.
+ *
+ * The row is now a four-track grid that cannot wrap:
+ *
+ *     [side] [token] [symbol · amount · age ─────────] [actions]
+ *
+ * with the actions grouped into ONE cell (`smi-feed-actions`) so they size
+ * against each other instead of each claiming a line. The amount moved up next
+ * to the symbol (it is the number the row exists for), the ROI pill moved up
+ * beside the age instead of floating as a third line, and the wallet tag is the
+ * only thing allowed to disappear on a narrow screen — nothing else hides, and
+ * the address is still one tap away through the row's own token page.
+ */
 function ReceiptFeed({ rows }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -367,54 +389,62 @@ function ReceiptFeed({ rows }) {
     <div className="smi-feed">
       {rows.map((r) => {
         const url = txUrl(r.chain, r.hash);
+        const buy = r.side === 'BUY';
         return (
           <div className="smi-feed-row" key={`${r.hash}:${r.token}:${r.wallet}`}>
-            <span className={`smi-side ${r.side === 'BUY' ? 'up' : 'down'}`}>
-              {r.side === 'BUY' ? t('sm.engine.buyShort') : t('sm.engine.sellShort')}
+            <span className={`smi-side ${buy ? 'up' : 'down'}`}>
+              {buy ? t('sm.engine.buyShort') : t('sm.engine.sellShort')}
             </span>
-            <div className="smi-feed-icon">
+            <span className="smi-feed-icon">
               <TokenIcon
                 token={{ symbol: r.symbol, address: r.token, tokenLogo: r.tokenLogo || r.icon }}
                 chainId={r.chain}
-                size={28}
+                size={26}
               />
-            </div>
+            </span>
+            {/* The whole middle cell is the tap target for the token page —
+                one button, no nested controls, no dead pixels between them. */}
             <button
               type="button"
               className="smi-feed-main"
               onClick={() => navigate(`/smart-money/token/${r.chain}/${r.token}`)}
             >
-              <div className="smi-feed-title">
+              <span className="smi-feed-title">
                 <strong>{r.symbol}</strong>
-                <b className={r.side === 'BUY' ? 'sm-up' : 'sm-down'}>{fmtUsd(r.valueUsd)}</b>
-              </div>
-              <small>
-                {chainName(r.chain)} · {timeAgo(r.at)}
-                {r.qualified ? ` · ${t('sm.engine.qualifiedShort')}` : ''}
-              </small>
-              {/* A realised ROI is the reason this row is interesting — it gets
-                  its own pill instead of trailing a sentence. */}
-              {r.realizedRoiPct != null && (
-                <span className={`smi-roi ${r.realizedRoiPct >= 0 ? 'is-up' : 'is-down'}`}>
-                  ROI {r.realizedRoiPct > 0 ? '+' : ''}{r.realizedRoiPct}%
-                </span>
-              )}
+                <b className={buy ? 'sm-up' : 'sm-down'}>{fmtUsd(r.valueUsd)}</b>
+              </span>
+              <span className="smi-feed-meta">
+                <small>
+                  {chainName(r.chain)} · {timeAgo(r.at)}
+                  {r.qualified ? ` · ${t('sm.engine.qualifiedShort')}` : ''}
+                </small>
+                {/* A realised ROI is the reason this row is interesting — it
+                    gets its own pill, inline with the age, never a third line. */}
+                {r.realizedRoiPct != null && (
+                  <span className={`smi-roi ${r.realizedRoiPct >= 0 ? 'is-up' : 'is-down'}`}>
+                    ROI {r.realizedRoiPct > 0 ? '+' : ''}{r.realizedRoiPct}%
+                  </span>
+                )}
+              </span>
             </button>
-            <button
-              type="button"
-              className="smi-feed-wallet"
-              onClick={() => navigate(`/smart-money/wallet/${r.chain}/${r.wallet}`)}
-            >
-              {shortAddr(r.wallet)}
-            </button>
-            {/* «کپی تراکنش»: the profitable fill the verification is based on,
-                one tap from here to the same token on the swap screen. */}
-            <CopyTradeButton chain={r.chain} token={r.token} side={r.side} className="sm-copy--tight" />
-            {url && (
-              <button type="button" className="smi-proof" onClick={() => openUrl(url)}>
-                {t('sm.engine.proof')} <IconArrowUpRight width={11} height={11} aria-hidden="true" />
+            <div className="smi-feed-actions">
+              <button
+                type="button"
+                className="smi-feed-wallet"
+                onClick={() => navigate(`/smart-money/wallet/${r.chain}/${r.wallet}`)}
+                title={r.wallet}
+              >
+                {shortAddr(r.wallet)}
               </button>
-            )}
+              {/* «کپی تراکنش»: the profitable fill the verification is based on,
+                  one tap from here to the same token on the swap screen. */}
+              <CopyTradeButton chain={r.chain} token={r.token} side={r.side} className="sm-copy--tight" />
+              {url && (
+                <button type="button" className="smi-proof" onClick={() => openUrl(url)}>
+                  {t('sm.engine.proof')} <IconArrowUpRight width={10} height={10} aria-hidden="true" />
+                </button>
+              )}
+            </div>
           </div>
         );
       })}
