@@ -8,6 +8,18 @@ const ownerRe = /^mc_[a-f0-9]{64}$/;
 export function createMissionRouter({ control, env = process.env }) {
   const router = Router();
   const hits = new Map();
+  // Cron is machine-to-machine and does not have a browser device identity.
+  router.post('/tick', async (req, res, next) => {
+    try {
+      const secret = String(env.MISSION_CRON_SECRET || '');
+      if (secret.length < 32 || !equal(req.get('authorization'), `Bearer ${secret}`)) throw new MissionError('CRON_AUTH_REQUIRED', 403);
+      if (!control?.enabled || !control.store.durable || !control.runtime.status().running) throw new MissionError('DURABLE_WORKER_REQUIRED', 503);
+      await control.runtime.tick();
+      const worker = control.runtime.status();
+      if (worker.lastError) throw new MissionError('TICK_FAILED', 503);
+      res.set('Cache-Control', 'no-store').json({ ok: true, worker });
+    } catch (e) { next(e); }
+  });
   router.use((req, res, next) => {
     res.set('Cache-Control', 'no-store');
     if (req.get('x-fbt-mission-request') !== '1') return next(new MissionError('MISSION_HEADER_REQUIRED', 400));
@@ -67,6 +79,18 @@ export function createMissionRouter({ control, env = process.env }) {
 /** Vercel is a control plane only. A fixed HTTPS worker owns execution/storage. */
 export function createMissionProxyRouter({ env = process.env, fetchImpl = globalThis.fetch }) {
   const router = Router();
+  router.post('/tick', async (req, res) => {
+    try {
+      const secret = String(env.MISSION_CRON_SECRET || '');
+      if (secret.length < 32 || !equal(req.get('authorization'), `Bearer ${secret}`)) throw new MissionError('CRON_AUTH_REQUIRED', 403);
+      const url = new URL(env.MISSION_CONTROL_UPSTREAM_URL || '');
+      if (url.protocol !== 'https:' || url.username || url.password) throw new MissionError('WORKER_UPSTREAM_NOT_CONFIGURED', 503);
+      const response = await fetchImpl(new URL('/api/v1/missions/tick', url.origin), {
+        method: 'POST', headers: { authorization: `Bearer ${secret}` }, signal: AbortSignal.timeout(15000)
+      });
+      res.status(response.status).set('Cache-Control', 'no-store').type('application/json').send(await response.text());
+    } catch (e) { res.status(Number(e?.status) || 503).set('Cache-Control', 'no-store').json({ ok: false, code: e?.code || 'WORKER_UNAVAILABLE' }); }
+  });
   router.use(async (req, res) => {
     try {
       if (req.get('x-fbt-mission-request') !== '1') throw new MissionError('MISSION_HEADER_REQUIRED', 400);
