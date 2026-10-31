@@ -214,10 +214,17 @@ try {
   assert.notEqual(await page.$eval('.mx-route-traveller', (el) => getComputedStyle(el).animationName), 'none');
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
   /* The deck's own light is on the list too: rim comets, the sheen, the
-     chart scan and ping, and the one-shot reveal. */
+     chart scan and ping, and the one-shot reveal. The obsidian pass adds one
+     painted backdrop loop, and it is checked as a pseudo-element below. */
   for (const selector of ['.mx-route-traveller', '.mx-smart-ring', '.mx-smart-sheen', '.mx-deck-veil i', '.mx-deck-orbit i', '.mx-deck-sheen', '.mx-trend-scan', '.mx-dominance-shine', '.mx-spark-live i', '.mx-trend-chart svg', '.mx-deck-rim', '.mx-deck-gloss', '.mx-btc-rim', '.mx-btc-gloss', '.mx-btc-scan', '.mx-btc-chart svg', '.mx-deck', '.mx-trio-aura i']) {
     assert.equal(await page.$eval(selector, (el) => getComputedStyle(el).animationName), 'none');
   }
+  /* The room's ceiling is a ::after layer, so it cannot be reached with
+     $eval — read it through getComputedStyle on the pseudo-element. */
+  assert.equal(
+    await page.evaluate(() => getComputedStyle(document.querySelector('.mx-market'), '::after').animationName),
+    'none'
+  );
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
   for (const attribute of ['lite', 'native', 'reduce-motion']) {
     await page.evaluate((name) => document.documentElement.setAttribute(`data-${name}`, 'true'), attribute);
@@ -226,6 +233,10 @@ try {
     for (const selector of ['.mx-route-traveller', '.mx-smart-ring', '.mx-smart-sheen', '.mx-deck-veil i', '.mx-deck-orbit i', '.mx-deck-sheen', '.mx-trend-scan', '.mx-dominance-shine', '.mx-spark-live i', '.mx-trend-chart svg', '.mx-deck-rim', '.mx-deck-gloss', '.mx-btc-rim', '.mx-btc-gloss', '.mx-btc-scan', '.mx-btc-chart svg', '.mx-deck', '.mx-trio-aura i']) {
       assert.equal(await page.$eval(selector, (el) => getComputedStyle(el).animationName), 'none');
     }
+    assert.equal(
+      await page.evaluate(() => getComputedStyle(document.querySelector('.mx-market'), '::after').animationName),
+      'none'
+    );
     await page.evaluate((name) => document.documentElement.removeAttribute(`data-${name}`), attribute);
   }
   assert.equal(await page.$('.mx-smart-route animateTransform'), null);

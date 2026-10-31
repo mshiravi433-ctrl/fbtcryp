@@ -50,10 +50,13 @@
 | بررسی | نتیجه |
 | --- | --- |
 | `grep -rn "FbtAiMarketEngine" src/ test/ vite.config.js index.html` | بدون هیچ نتیجه → نه ایمپورت مرده، نه رندر مرده، نه ارجاع در تست/کانفیگ بیلد |
-| `vite build` (production، Node 22، heap ۳۰۷۲MB) | سبز در ۴۲٫۵۷s؛ تنها هشدار، همان هشدار همیشگیِ چانک‌های بزرگ است |
-| `node scripts/check-first-paint.mjs` | **۱۷۴۳٫۰۶KB از بودجهٔ ۱۸۰۰KB** — PASS (حذف یک کامپوننت ۱۰۴۱ خطی با `framer-motion`/`AnimatePresence` گراف اولین رنگ‌آمیزی را کوچک‌تر کرد) |
+| `vite build` (production، Node 22، heap ۳۰۷۲MB) | سبز در ۴۴٫۲۰s؛ تنها هشدار، همان هشدار همیشگیِ چانک‌های بزرگ است |
+| `node scripts/check-first-paint.mjs` | **۱۷۴۳٫۰۰KB از بودجهٔ ۱۸۰۰KB** — PASS (حذف یک کامپوننت ۱۰۴۱ خطی با `framer-motion`/`AnimatePresence` گراف اولین رنگ‌آمیزی را کوچک‌تر کرد) |
 | سوئیت دودِ صفحه‌ها (`test/vite.screens.mjs` + `test/screens.jsx`، شامل `Swap` در هر ۱۲ زبان) | **۲۵۲/۲۵۲ PASS** — از جمله «Swap renders» و «Swap renders without a React error» |
 | `npm run test:ai-market-engine` | **۷/۷ PASS** — موتورهای `src/lib/brain/*` و روت‌های سرور سرِ جای خودشان هستند |
+
+همهٔ عدد‌های بالا **بعد از مرجِ `main`** (پسِ «شیشهٔ اُبسیدیَن» بازار) دوباره اجرا شدند،
+پس وضعیتِ درختِ مرج‌شده را می‌سنجند، نه فقط شاخهٔ کاری را.
 
 **یک شکست از قبل موجود، بی‌ربط به این تغییر:** `test/run.mjs` روی
 `test/smart-money-redesign-probe.mjs` با ۲ چک قرمز می‌ایستد (`sm-token-window-note` در

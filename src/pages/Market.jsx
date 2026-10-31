@@ -31,6 +31,7 @@ import '../styles/market-modern.css';
 import '../styles/market-intelligence.css';
 import '../styles/market-glass-v3.css';
 import '../styles/market-aurora-glass.css';
+import '../styles/market-obsidian-glass.css';
 import { marketCapSeries } from '../lib/globalTrend';
 import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct } from '../lib/format';
