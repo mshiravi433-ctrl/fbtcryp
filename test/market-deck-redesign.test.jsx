@@ -224,6 +224,22 @@ describe('۲ · the Smart Money blade shows the route', () => {
   });
 });
 
+describe('aurora market showcase', () => {
+  it('keeps the light wave decorative and breadth values tied to the feed', async () => {
+    await open();
+    const breadth = screen.getByTestId('market-breadth');
+    const aurora = breadth.querySelector('.mx-breadth-aurora');
+    expect(aurora?.getAttribute('aria-hidden')).toBe('true');
+    expect(aurora.querySelectorAll('path')).toHaveLength(3);
+    expect(breadth.querySelector('.mx-breadth-bar')).toBeTruthy();
+    expect(screen.getByTestId('market-breadth-up').textContent).toContain('17');
+    expect(screen.getByTestId('market-breadth-down').textContent).toContain('15');
+    expect(bare).toMatch(/@keyframes mx-aurora-drift/);
+    expect(bare).toMatch(/data-native='true'\] \.mx-market \.mx-aurora-echo/);
+    expect(bare).toMatch(/data-lite='true'\] \.mx-market \.mx-aurora-echo/);
+  });
+});
+
 describe('۳ · «داغ‌ترین کوین‌ها» carries one accent per place', () => {
   it('ranks the first three cards and hands each its own hue', async () => {
     await open();

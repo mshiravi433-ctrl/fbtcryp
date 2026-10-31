@@ -666,6 +666,14 @@ export default function Market() {
                     {t('market.breadthAvg', { pct: fmtPct(breadth.avgChange, 2) })}
                   </span>
                 </div>
+                {/* Atmospheric light only: the measured breadth remains in the bar below. */}
+                <div className="mx-breadth-aurora" aria-hidden="true">
+                  <svg viewBox="0 0 600 74" preserveAspectRatio="none">
+                    <path className="mx-aurora-haze" d="M0 55 C75 70 95 15 165 34 S255 68 310 30 S390 10 450 35 S535 49 600 12" />
+                    <path className="mx-aurora-line" d="M0 55 C75 70 95 15 165 34 S255 68 310 30 S390 10 450 35 S535 49 600 12" />
+                    <path className="mx-aurora-echo" d="M0 61 C75 70 105 29 165 42 S255 71 310 40 S395 19 450 43 S535 56 600 23" />
+                  </svg>
+                </div>
                 <div className="mx-breadth-bar" aria-hidden="true">
                   <span className="is-up" style={{ width: `${breadth.upShare * 100}%` }} />
                   <span className="is-flat" style={{ width: `${breadth.flatShare * 100}%` }} />

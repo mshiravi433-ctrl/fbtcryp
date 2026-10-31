@@ -5,8 +5,8 @@
    Ambient motion uses only transform/opacity and has one stop policy below. */
 
 .mx-market {
-  --mx-panel: #101426;
-  --mx-panel-2: #151a30;
+  --mx-panel: #091724;
+  --mx-panel-2: #102433;
   --mx-well: rgba(4, 9, 23, .42);
   --mx-text: #f0f4ff;
   --mx-muted: #a6b3d1;
@@ -20,7 +20,7 @@
   --mx-gold: #ffcf83;
   --mx-up: #66e5b5;
   --mx-down: #ff8fa8;
-  --mx-glass: linear-gradient(138deg, rgba(223, 234, 255, .085), rgba(255, 255, 255, .015) 44%, rgba(4, 9, 22, .24));
+  --mx-glass: linear-gradient(138deg, rgba(186, 242, 246, .13), rgba(255, 255, 255, .025) 38%, rgba(3, 14, 24, .32));
   --mx-hi: inset 0 1px 0 rgba(255, 255, 255, .09), inset 0 -1px 0 rgba(4, 9, 23, .18);
   --mx-shadow: 0 18px 44px -30px rgba(0, 0, 12, .85);
   --mx-gap: 18px;
@@ -94,9 +94,10 @@
   overflow: hidden;
   border-radius: 26px;
   border-inline-start-color: rgba(102, 229, 225, .3);
-  background: radial-gradient(ellipse at 0 0, rgba(63, 190, 199, .17), transparent 65%),
-    radial-gradient(ellipse at 100% 100%, rgba(131, 100, 224, .16), transparent 65%),
+  background: radial-gradient(ellipse at 0 0, rgba(58, 210, 213, .22), transparent 62%),
+    radial-gradient(ellipse at 100% 100%, rgba(111, 94, 215, .18), transparent 65%),
     var(--mx-glass), var(--mx-panel);
+  box-shadow: inset 0 1px 0 rgba(226, 255, 255, .22), inset 0 0 32px rgba(62, 205, 208, .045), 0 20px 45px -30px rgba(0, 0, 0, .9);
 }
 .mx-deck::before, .mx-btc-card::before, .mx-lens::before {
   content: '';
@@ -214,12 +215,14 @@
   padding: 20px;
   overflow: hidden;
   border-radius: 24px;
-  border-color: rgba(255, 207, 131, .23);
-  border-top-color: rgba(255, 224, 175, .44);
-  background: radial-gradient(ellipse at 90% 0, rgba(241, 165, 71, .15), transparent 68%),
-    linear-gradient(140deg, rgba(255, 238, 205, .06), transparent 50%), var(--mx-glass), var(--mx-panel);
+  border-color: rgba(111, 244, 226, .3);
+  border-top-color: rgba(176, 255, 243, .6);
+  background: radial-gradient(ellipse at 95% 0, rgba(23, 219, 192, .27), transparent 57%),
+    radial-gradient(ellipse at 0 100%, rgba(157, 112, 231, .2), transparent 55%),
+    linear-gradient(140deg, rgba(182, 255, 242, .12), transparent 50%), #08232a;
+  box-shadow: inset 0 1px 0 rgba(220, 255, 249, .34), inset 0 0 40px rgba(35, 227, 199, .1), 0 18px 45px -28px rgba(4, 208, 181, .42);
 }
-.mx-btc-card::before { background: linear-gradient(90deg, transparent, rgba(255, 220, 163, .9), transparent); }
+.mx-btc-card::before { background: linear-gradient(90deg, transparent, rgba(174, 255, 243, .95), transparent); }
 .mx-btc-veil { position: absolute; z-index: -1; inset: 0; background: radial-gradient(ellipse at 10% 110%, rgba(255, 185, 94, .09), transparent 64%); pointer-events: none; }
 .mx-btc-orbit { position: absolute; z-index: -1; inset-inline-end: -50px; top: -42px; width: 210px; height: 210px; display: grid; place-items: center; color: var(--mx-gold); opacity: .07; pointer-events: none; transform: rotate(-15deg); }
 .mx-btc-orbit i { position: absolute; inset: 0; border: 1px solid currentColor; border-radius: 50%; }
@@ -236,7 +239,7 @@
 .mx-btc-identity:hover .mx-btc-go { opacity: 1; }
 .mx-btc-price { margin-top: 24px; text-align: center; direction: ltr; font: 700 clamp(29px, 6vw, 39px)/1.15 var(--font-mono); letter-spacing: -.045em; color: var(--mx-text); }
 .mx-btc-chart {
-  --mx-up: var(--mx-gold);
+  --mx-up: #66f5d6;
   margin-top: 18px;
   border-radius: 12px;
   background: repeating-linear-gradient(0deg, transparent 0 23px, var(--mx-line-soft) 23px 24px);
@@ -305,18 +308,19 @@
   padding: 22px;
   border: 1px solid transparent;
   border-radius: 24px;
-  background: linear-gradient(125deg, #162b35, #1b203e 60%, #24213c) padding-box,
-    linear-gradient(125deg, rgba(134, 248, 222, .6), rgba(133, 168, 244, .22) 45%, rgba(191, 159, 255, .55)) border-box;
-  box-shadow: var(--mx-hi), 0 14px 40px -28px rgba(89, 208, 205, .32);
+  background: linear-gradient(125deg, #092620, #071613) padding-box,
+    linear-gradient(125deg, rgba(178, 255, 109, .7), rgba(80, 232, 196, .2) 48%, rgba(106, 247, 225, .6)) border-box;
+  box-shadow: inset 0 1px 0 rgba(235, 255, 218, .18), 0 18px 45px -27px rgba(85, 255, 162, .35);
 }
-.mx-smart-veil { position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(ellipse at 100% 0, rgba(155, 118, 243, .19), transparent 65%), radial-gradient(ellipse at 0 100%, rgba(83, 219, 193, .1), transparent 65%); }
+.mx-smart-veil { position: absolute; inset: 0; z-index: -1; pointer-events: none; background: linear-gradient(90deg, rgba(3, 16, 17, .34), rgba(3, 16, 17, .9) 75%), url('/images/market-smart-whale.webp') left center / cover no-repeat; }
+[dir='ltr'] .mx-smart-veil { background-image: linear-gradient(90deg, rgba(3, 16, 17, .94) 18%, rgba(3, 16, 17, .48)), url('/images/market-smart-whale.webp'); }
 .mx-smart-sheen { position: absolute; top: 0; inset-inline-start: -45%; width: 42%; height: 1px; background: linear-gradient(90deg, transparent, #d4fff7, transparent); pointer-events: none; animation: mx-blade-sweep 9s ease-in-out infinite; }
 .mx-smart-main { display: flex; align-items: flex-start; gap: 13px; min-width: 0; }
 .mx-smart-mark { display: grid; place-items: center; position: relative; flex: 0 0 auto; width: 46px; height: 46px; border-radius: 15px; color: #c3fff1; border: 1px solid rgba(153, 245, 225, .33); background: linear-gradient(145deg, rgba(163, 245, 225, .18), rgba(141, 134, 243, .12)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2); }
 .mx-smart-ring { position: absolute; inset: -5px; border: 1px solid rgba(149, 225, 218, .14); border-radius: 19px; animation: mx-smart-ring 7s ease-in-out infinite; pointer-events: none; }
 .mx-smart-copy { min-width: 0; }
 .mx-smart-eyebrow { display: block; margin-bottom: 7px; color: #90d7d3; font-size: 10px; font-weight: 600; letter-spacing: .02em; }
-.mx-smart-copy h2 { margin: 0; color: #f1f9ff; font-size: clamp(17px, 3.8vw, 23px); font-weight: 800; line-height: 1.65; letter-spacing: -.025em; text-wrap: balance; }
+.mx-smart-copy h2 { margin: 0; color: #f1f9ff; font-size: clamp(20px, 4vw, 28px); font-weight: 800; line-height: 1.65; letter-spacing: -.025em; text-wrap: balance; }
 .mx-smart-copy p { margin: 7px 0 0; color: #b0c1d5; font-size: 11px; line-height: 1.9; max-width: 520px; }
 .mx-smart-route { min-width: 0; padding: 0 2px; }
 .mx-route-drawing { position: relative; height: 75px; direction: ltr; }
@@ -337,7 +341,7 @@
 .mx-pool[data-pool='newPools'] svg { color: var(--mx-gold); }
 .mx-smart-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding-top: 14px; border-top: 1px solid rgba(192, 213, 255, .1); }
 .mx-smart-note { color: #a2b7ce; font-size: 9px; }
-.mx-smart-cta { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 42px; padding: 0 16px; border: 1px solid rgba(186, 255, 236, .6); border-radius: 12px; color: #102d32; background: linear-gradient(120deg, #b3f5e7, #a8d9f4); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), 0 7px 20px -13px #7affdd; text-decoration: none; font-size: 11px; font-weight: 800; transition: transform .2s ease, box-shadow .2s ease; }
+.mx-smart-cta { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 42px; padding: 0 16px; border: 1px solid rgba(186, 255, 236, .6); border-radius: 12px; color: #102d32; background: linear-gradient(120deg, #c6ff80, #8cf4ba); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), 0 7px 20px -13px #7affdd; text-decoration: none; font-size: 11px; font-weight: 800; transition: transform .2s ease, box-shadow .2s ease; }
 .mx-smart-cta:hover { transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), 0 9px 25px -13px #7affdd; }
 [dir='rtl'] .mx-route-drawing { transform: scaleX(-1); }
 [dir='rtl'] .mx-smart-cta svg, [dir='rtl'] .mx-btc-go svg { transform: rotate(180deg); }
@@ -350,8 +354,10 @@
   padding: 18px;
   border: 1px solid transparent;
   border-radius: 24px;
-  background: linear-gradient(130deg, #172332, #171b33 65%, #1d203a) padding-box,
-    linear-gradient(125deg, rgba(102, 229, 225, .5), rgba(164, 184, 236, .12) 38%, rgba(178, 154, 255, .5)) border-box;
+  background: radial-gradient(ellipse at 100% 0, rgba(39, 211, 198, .13), transparent 50%),
+    linear-gradient(130deg, #102732, #0d192a 65%, #1b1b35) padding-box,
+    linear-gradient(125deg, rgba(102, 242, 225, .75), rgba(164, 184, 236, .18) 38%, rgba(178, 154, 255, .7)) border-box;
+  box-shadow: inset 0 1px 0 rgba(220, 255, 255, .15), 0 0 26px -15px rgba(64, 224, 213, .55), 0 18px 40px -30px #000;
 }
 .mx-terminal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .mx-terminal-title { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--mx-text); font-size: 15px; font-weight: 800; }
@@ -372,6 +378,12 @@
 .mx-breadth-mark { width: 26px; height: 26px; border-radius: 9px; }
 .mx-breadth-avg { display: inline-flex; align-items: center; gap: 5px; color: var(--mx-up); font-size: 10px; }
 .mx-breadth-avg[data-tone='down'] { color: var(--mx-down); }
+.mx-breadth-aurora { height: 66px; margin: 8px 0 -3px; overflow: hidden; pointer-events: none; }
+.mx-breadth-aurora svg { width: 100%; height: 100%; overflow: visible; }
+.mx-breadth-aurora path { fill: none; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+.mx-aurora-haze { stroke: rgba(50, 238, 197, .12); stroke-width: 12; }
+.mx-aurora-line { stroke: #5ff5cd; stroke-width: 2; opacity: .9; }
+.mx-aurora-echo { stroke: rgba(139, 162, 255, .55); stroke-width: 1; animation: mx-aurora-drift 8s ease-in-out infinite alternate; }
 .mx-breadth-bar { display: flex; height: 7px; gap: 3px; margin: 13px 0 11px; overflow: hidden; border-radius: 99px; background: var(--mx-line-soft); }
 .mx-breadth-bar span { border-radius: inherit; }
 .mx-breadth-bar .is-up { background: linear-gradient(90deg, #36b9a3, var(--mx-up)); }
@@ -385,7 +397,7 @@
 .mx-breadth-note { margin: 10px 0 0; color: var(--mx-faint); font-size: 9px; line-height: 1.7; }
 
 /* 6 · Search + views. Everything remains in document flow, including search. */
-.mx-market .mx-terminal { display: block; padding: 18px; overflow: visible; border-radius: 24px; z-index: 3; }
+.mx-market .mx-terminal { display: block; padding: 18px; overflow: visible; border-radius: 24px; z-index: 3; border-color: rgba(106, 225, 225, .27); background: radial-gradient(ellipse at 100% 0, rgba(45, 195, 194, .13), transparent 55%), radial-gradient(ellipse at 0 100%, rgba(150, 111, 242, .12), transparent 55%), var(--mx-glass), var(--mx-panel); box-shadow: var(--mx-hi), 0 18px 40px -30px #000; }
 .mx-list-hero { display: flex; flex-direction: column; gap: 16px; }
 .mx-list-hero-head { display: flex; align-items: center; gap: 8px; }
 .mx-list-title { display: flex; align-items: center; gap: 9px; margin: 0; color: var(--mx-text); font-size: 16px; font-weight: 800; }
@@ -672,6 +684,10 @@
 :root[data-theme='light'] .mx-btc-logo { background: linear-gradient(135deg, #fff5d9, #ffdda5); border-color: rgba(196, 132, 43, .35); }
 :root[data-theme='light'] .mx-market .mx-lens { background: linear-gradient(130deg, #f5fdfc, #f6f6ff) padding-box, linear-gradient(125deg, rgba(8, 125, 128, .3), rgba(116, 80, 193, .12) 45%, rgba(116, 80, 193, .3)) border-box; }
 :root[data-theme='light'] .mx-market .mx-breadth { background: none; }
+:root[data-theme='light'] .mx-aurora-line { stroke: #078d79; }
+:root[data-theme='light'] .mx-aurora-haze { stroke: rgba(8, 141, 121, .1); }
+:root[data-theme='light'] .mx-aurora-echo { stroke: rgba(93, 80, 184, .5); }
+:root[data-theme='light'] .mx-market .mx-terminal { background: radial-gradient(ellipse at 100% 0, rgba(67, 204, 201, .12), transparent 60%), var(--mx-glass), var(--mx-panel); }
 :root[data-theme='light'] .mx-market .mx-search { background: linear-gradient(125deg, #f4fcfc, #f6f4ff) padding-box, linear-gradient(120deg, rgba(8, 125, 128, .35), rgba(116, 80, 193, .12) 45%, rgba(116, 80, 193, .35)) border-box; }
 :root[data-theme='light'] .mx-market .mx-view { background: none; border-color: transparent; }
 :root[data-theme='light'] .mx-market .mx-view[data-active='true'] { color: var(--view); background: color-mix(in srgb, var(--view) 8%, transparent); }
@@ -680,6 +696,7 @@
 :root[data-theme='light'] .mx-sector-tile { color: color-mix(in srgb, var(--sec) 50%, #24314f); }
 :root[data-theme='light'] .mx-market .mx-swap-btn { color: var(--mx-cyan); background: linear-gradient(145deg, #e6f6f4, #eeecfc); border-color: rgba(8, 125, 128, .25); }
 :root[data-theme='light'] .mx-market .mx-smart-banner { background: linear-gradient(125deg, #e5f5f2, #efecff 75%, #e6e9fc) padding-box, linear-gradient(125deg, rgba(8, 125, 128, .4), rgba(116, 80, 193, .12) 50%, rgba(116, 80, 193, .4)) border-box; }
+:root[data-theme='light'] .mx-smart-veil { background: linear-gradient(90deg, rgba(229, 245, 242, .8), rgba(244, 246, 255, .94)), url('/images/market-smart-whale.webp') left center / cover no-repeat; }
 :root[data-theme='light'] .mx-smart-mark { color: #1a7774; border-color: rgba(8, 125, 128, .25); }
 :root[data-theme='light'] .mx-smart-copy h2 { color: #1d304b; }
 :root[data-theme='light'] :is(.mx-smart-copy p, .mx-route-labels, .mx-pool, .mx-smart-note) { color: #52657f; }
@@ -697,6 +714,7 @@
 @keyframes mx-float { from { transform: translateY(0); } to { transform: translateY(10px); } }
 @keyframes mx-spin { to { transform: rotate(360deg); } }
 @keyframes mx-blade-sweep { 0%, 35% { transform: translateX(0); opacity: 0; } 45% { opacity: .9; } 75%, 100% { transform: translateX(360%); opacity: 0; } }
+@keyframes mx-aurora-drift { from { transform: translateY(0); opacity: .55; } to { transform: translateY(-5px); opacity: .9; } }
 @keyframes mx-smart-ring { 0%, 100% { transform: scale(1); opacity: .5; } 50% { transform: scale(1.05); opacity: 1; } }
 @keyframes mx-flow-travel { 0% { transform: translateX(0); opacity: 0; } 15%, 75% { opacity: 1; } 100% { transform: translateX(410%); opacity: 0; } }
 @keyframes mx-neon-sweep { 0% { transform: translateX(-100%); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateX(100%); opacity: 0; } }
@@ -705,6 +723,8 @@
   .mx-market .mx-smart-sheen, .mx-market .mx-search-glow, .mx-market .mx-route-traveller { opacity: 0; transform: none; }
   .mx-market .mx-hot-card:hover, .mx-market .mx-smart-cta:hover, .mx-market .mx-swap-btn:hover { transform: none; }
 }
+:root[data-native='true'] .mx-market .mx-aurora-echo,
+:root[data-lite='true'] .mx-market .mx-aurora-echo,
 :root[data-native='true'] .mx-market .mx-deck-veil i,
 :root[data-lite='true'] .mx-market .mx-deck-veil i,
 :root[data-native='true'] .mx-market .mx-smart-sheen,
