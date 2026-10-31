@@ -275,7 +275,7 @@ describe('۳ · «داغ‌ترین کوین‌ها» carries one accent per pla
 });
 
 describe('۵ · search above the filters, inside «همه ارزها»', () => {
-  it('lives in the list card, and the sectors moved out to the strip above', async () => {
+  it('keeps search in the list and sectors on a separate rail below the controls', async () => {
     await open();
     const lens = document.querySelector('.mx-lens');
     const terminal = document.querySelector('.market-terminal');
@@ -294,9 +294,11 @@ describe('۵ · search above the filters, inside «همه ارزها»', () => {
 
     /* «زیر باکس‌هایی مثل میم‌کوین را از باکس جدا کن … زیر تب» — the sector rail
        is no longer inside the list card at all: it has a surface of its own,
-       above نبض بازار and above the list. */
+       between the list controls and the rows. */
     expect(terminal.contains(sectors)).toBe(false);
-    expect(lens.contains(sectors)).toBe(true);
+    expect(lens.contains(sectors)).toBe(false);
+    expect(after(terminal, sectors)).toBe(true);
+    expect(after(sectors, firstRow)).toBe(true);
     expect(lens.contains(breadth)).toBe(true);
     /* «باکس همه ارزها را فاصله بده با باکس نبض بازار» — two boxes, a gap apart */
     expect(lens.contains(terminal)).toBe(false);
@@ -491,6 +493,13 @@ describe('۷ · the list folds and opens', () => {
     expect(count.textContent).toBe(total);
     expect(fold.getAttribute('aria-controls')).toBe('market-list-rows');
 
+    expect(screen.getByTestId('market-showing').textContent).toContain('12');
+    fireEvent.click(document.querySelector('.market-show-more'));
+    expect(rows()).toBe(openRows);
+    expect(fold.getAttribute('aria-expanded')).toBe('true');
+
+    fireEvent.click(fold);
+    expect(rows()).toBe(12);
     fireEvent.click(fold);
     expect(rows()).toBe(openRows);
 

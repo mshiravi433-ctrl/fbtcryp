@@ -2496,3 +2496,58 @@
   background: linear-gradient(168deg, #ffffff, #f4f7fd 62%);
   box-shadow: inset 0 1px 0 #ffffff, 0 12px 26px -24px rgba(20, 45, 80, 0.4);
 }
+
+/* Separate the controls, category rail and rows into three readable surfaces. */
+.mx-market .mx-sector-rail {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--mx-line);
+  border-radius: 20px;
+  background: var(--mx-glass), var(--mx-panel);
+  box-shadow: var(--mx-hi), var(--mx-shadow);
+}
+.mx-market .mx-table-wrap { min-width: 0; padding: 0; }
+.mx-market .mx-list-hero { padding-bottom: 0; }
+.mx-market .mx-swap-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 62px;
+  min-width: 0;
+}
+.mx-market .mx-coin-row .coin-row-open {
+  grid-template-columns: 22px 32px minmax(0, 1fr) 64px minmax(84px, 1fr);
+}
+.mx-market .mx-coin-row .coin-row-spark { justify-self: center; }
+.mx-market .mx-coin-row .coin-right { min-width: 0; }
+.mx-market .mx-coin-row .mx-swap-btn:focus-visible,
+.mx-market .mx-sector:focus-visible {
+  outline: 2px solid var(--mx-cyan);
+  outline-offset: 2px;
+}
+:root[data-theme='light'] .mx-market .mx-sector-rail {
+  border-color: rgba(16, 24, 48, 0.09);
+  background: linear-gradient(158deg, #fff, #f5f8fd);
+  box-shadow: inset 0 1px 0 #fff, 0 18px 38px -32px rgba(20, 45, 80, 0.5);
+}
+@media (max-width: 619px) {
+  .mx-market .mx-coin-row .coin-row-open {
+    grid-template-columns: 18px 30px minmax(0, 1fr) 44px minmax(72px, auto);
+    gap: 5px;
+  }
+  .mx-market .mx-coin-row .coin-row-spark { width: 44px; }
+  .mx-market .mx-swap-slot { flex-basis: 48px; }
+  .mx-market .mx-coin-row .mx-swap-btn { min-width: 44px; padding-inline: 6px; }
+}
+@media (max-width: 359px) {
+  .mx-market .mx-trio-box { flex-direction: column; align-items: flex-start; }
+  .mx-market .mx-coin-row .coin-row-open {
+    grid-template-columns: 26px minmax(0, 1fr) 38px minmax(66px, auto);
+  }
+  .mx-market .mx-coin-row .coin-row-rank { display: none; }
+  .mx-market .mx-coin-row .coin-row-spark { width: 38px; }
+}
+@media (max-width: 619px) {
+  .mx-market .mx-btc-card { display: flex; flex-direction: column; }
+  .mx-market .mx-btc-chart { width: 100%; }
+}
