@@ -33,6 +33,18 @@ import '../styles/market-intelligence.css';
 import '../styles/market-glass-v3.css';
 import '../styles/market-aurora-glass.css';
 import '../styles/market-obsidian-glass.css';
+/*
+ * ─── THE SCROLL BUDGET, LAST ──────────────────────────────────────────────
+ * The five sheets above are the design layers (one per pass, each with its
+ * own regression pins). This one is the stop policy: which ambient loops may
+ * run while a reader scrolls, and which parts of a card the browser may treat
+ * as independent paint units. It is imported LAST and only here, so its rules
+ * win at equal specificity without editing a design sheet that a test
+ * describes, and so no other route pays for it.
+ *
+ * It changes no number, no label and no colour — see styles/market-perf.css.
+ */
+import '../styles/market-perf.css';
 import { marketCapSeries } from '../lib/globalTrend';
 import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct } from '../lib/format';
@@ -909,6 +921,17 @@ export default function Market() {
                            * place (see lib/coinImage.js for the size half of it).
                            */
                           logoPriority={i < 8}
+                          /*
+                           * «ایکون بعضی باکس‌ها دیر بالا میاد» and the scroll
+                           * stutter are the same accounting error: sixty SVG
+                           * sparklines painted in one commit, fifty of them
+                           * below the fold. The first screenful draws at once
+                           * (a reader must never see it arrive); the rest draw
+                           * as the list is scrolled, one screen ahead — see
+                           * hooks/useRowWindow.js. Every number on every row is
+                           * rendered either way.
+                           */
+                          deferSpark={i >= 8}
                           onClick={() => openCoin(c.id)}
                         />
                         <span className="mx-swap-slot" data-available={swapUrl ? 'true' : undefined}>

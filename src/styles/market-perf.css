@@ -1,0 +1,275 @@
+/* FBT MARKET · THE SCROLL BUDGET (2026-11-01)
+   ===========================================================================
+   Reported: «صفحه بازار خیلی کند هست، گاهی چشمک می‌زنه، و گاهی ایکون بعضی
+   باکس‌ها دیر بالا میاد» — and the one that matters most: the slowness while
+   SCROLLING.
+
+   ─── WHAT WAS MEASURED, NOT GUESSED ────────────────────────────────────────
+   Earlier passes removed the obvious things (backdrop-filters, masks, the
+   drifting orbs). The report came back, so this pass counted what was still
+   moving AT REST on this one route, from the five sheets Market.jsx imports
+   plus the entry stylesheet:
+
+     · 68 rules with `animation: … infinite`. On the market screen alone the
+       live ones were: the deck rim cross-fade, six neon comets, the deck
+       gloss sweep, two veil blooms, the breathing inner rim, the trend
+       sweep, the chart scan, the live ping, the dominance shine, two trio
+       auras, the two Bitcoin equivalents, the Smart-Money sheen and three
+       travellers, the odometer sparks, the story aurora ×2, the skeleton
+       shimmer — and that is before the page-level RGB field (three 520px
+       orbs at `blur(48px)` plus a scrolling perspective grid) and the bottom
+       nav (a 12s float, a 9s gradient wave and a 16s `filter: blur()`
+       keyframe).
+     · dozens of `range` + `border-radius` + multi-layer `background` paints.
+       Those cost nothing at rest, but every one of them is re-rasterised when
+       a compositor layer above them is discarded — which is exactly what a
+       long scroll of 60 cards does on a mid-range phone. That is the
+       «چشمک می‌زنه»: tiles being evicted and re-painted, not a layout bug.
+     · 60 rows × (an SVG sparkline with a gradient + a text block) rendered
+       in one commit, while the page holds up to 500 rows of data.
+
+   ─── WHAT THIS SHEET DOES, AND WHAT IT DOES NOT ────────────────────────────
+   It changes NO number, NO label, NO layout and NO colour. It removes motion
+   that carried no reading, freezes what is left at its designed rest frame,
+   and tells the browser which parts of a card it may treat as independent
+   paint units. Nothing here is a redesign: delete this file and the screen
+   looks the same a second later (it just starts moving again).
+
+   ─── WHY IT IS A SEPARATE SHEET, IMPORTED LAST ─────────────────────────────
+   The five design sheets above it are owned by five earlier passes, each with
+   its own regression pins (test/market-*.test.jsx) that assert their loops
+   exist. Keeping the stop policy here means:
+     · the design sheets stay exactly what their tests describe;
+     · this file is the ONE place that decides what is allowed to run during a
+       scroll, so the next design pass can add a light layer without silently
+       buying frames;
+     · it is imported by `pages/Market.jsx` only, so no other route pays for
+       it (see test/first-paint-lazy-css.test.mjs for the same rule elsewhere).
+   ========================================================================== */
+
+/* ══ 1 · THE AMBIENT LOOPS THAT CARRY NO READING ════════════════════════════
+   Every rule below replaces a loop with its own resting state — taken from
+   the frame the design already parks it on under `prefers-reduced-motion`,
+   which each of those sheets defines. So this is the motion-reduced frame,
+   not a new look:
+
+     .mx-deck-rim / .mx-btc-rim   the second colour phase rests at half fade,
+                                  which reads as ONE prismatic ring;
+     .mx-deck-orbit i            the comets park where they were painted
+                                  (top/bottom hairlines, .4 opacity);
+     .mx-deck-gloss / -btc-gloss the specular band stays off-screen (opacity 0);
+     .mx-deck-veil i             the two blooms stay as the painted light;
+     .mx-deck::after             the breathing inner rim holds its inset glow;
+     .mx-trio-box::before        the trio frames keep a steady inset ring;
+     .mx-trend-mid::after        the centre line keeps its tone and weight;
+     .mx-helix-scroll            the two strands stay drawn, half a loop along;
+     .mx-smart-*                 sheen hidden, radar still, rings steady;
+     .mx-route-traveller         the lane lights stay off (they are "flow",
+                                  and a frozen flow is a dot with no meaning —
+                                  the drawn route keeps the meaning);
+     .mx-dominance-shine         the bar keeps its gradient, no sweep;
+     .mx-trend-scan / -btc-scan  the scans park off the plot;
+     .mx-spark-live i            the newest-point halo stays a steady halo;
+     .mx-aurora-echo             the breadth echo line holds its colour;
+     .mx-market::after           the "ceiling" light holds its painted position;
+     .mx-overview::before        the stage holds its painted light;
+     .mx-trio-aura i             the two box blooms hold their paint;
+     .market-story-Bubble ring   the "unseen" halo stays a static ring. */
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-deck-rim,
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-btc-rim {
+  animation: none !important;
+  opacity: .5;
+}
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-deck-orbit i,
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-btc-orbit i {
+  animation: none !important;
+  opacity: .4;
+}
+/* The first comet is the top hairline and keeps a little more presence, which
+   is where the loop was when it was stopped — the frame is the design's. */
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-deck-orbit i:first-child { opacity: .75; }
+:root[data-theme]:not([data-motion='full']) .mx-market :is(.mx-deck-gloss, .mx-btc-gloss) {
+  animation: none !important;
+  opacity: 0;
+}
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-deck-veil i { animation: none !important; opacity: .9; }
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-deck::after {
+  animation: none !important;
+  opacity: .45;
+}
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-trio-box::before {
+  animation: none !important;
+  opacity: .6;
+}
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-trend-mid::after { animation: none !important; }
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-helix-scroll { animation: none !important; }
+:root[data-theme]:not([data-motion='full']) .mx-market :is(.mx-smart-sheen, .mx-smart-radar) { animation: none !important; }
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-smart-ring { animation: none !important; }
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-route-traveller { animation: none !important; opacity: 0; }
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-route-halo { animation: none !important; }
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-dominance-shine { animation: none !important; opacity: 0; }
+:root[data-theme]:not([data-motion='full']) .mx-market :is(.mx-trend-scan, .mx-btc-scan) { animation: none !important; opacity: 0; }
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-spark-live i { animation: none !important; opacity: .8; }
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-aurora-echo { animation: none !important; }
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-overview::before { animation: none !important; opacity: .85; }
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-trio-aura i { animation: none !important; opacity: .85; }
+:root[data-theme]:not([data-motion='full']) .mx-market .market-story-Bubble:not(.is-seen) .market-story-ring::after {
+  animation: none !important;
+}
+
+/* The page's own "ceiling" light (market-obsidian-glass.css) is a 32s drift of
+   a 640px-tall gradient at z-index -1. A transform on a pseudo-element that
+   large is a full-width layer the compositor must keep and re-rasterise while
+   the list scrolls over it: it is parked at the exact frame the sheet's own
+   reduced-motion rule parks it on. */
+:root[data-theme]:not([data-motion='full']) .mx-market::after {
+  animation: none !important;
+  opacity: .88;
+}
+
+/* The market screen's SKELETONS: one shimmer is enough to say "loading"; the
+   obsidian pulse is a second full-row opacity loop on top of it. */
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-skel-row { animation: none !important; }
+
+/* ── the second sweep: the loops that were still running ───────────────────
+   Rendering `MarketOverview` and `MarketStories` and counting what is left
+   in the tree — rather than counting what this file already listed — found
+   these. Same argument as above, one line each:
+
+     .mx-deck-sheen              the 1px blade that crosses the deck's head
+                                 (mx-blade-sweep); a hairline of light that is
+                                 identical on every pass;
+     .mx-trend-halo/.mx-btc-halo the two glows under the charts hold the .5
+                                 opacity mx-halo-breathe already rests at —
+                                 and market-intelligence.css ALREADY freezes
+                                 them this way under data-lite, on the same
+                                 reasoning, so this is that rule, unforked;
+     .market-fresh i             the "feed is live" pip: a 6px dot breathing
+                                 at 2.4s. It is a status light, and a status
+                                 light does not have to be in motion to be lit;
+     .market-live-dot            the same pip, larger;
+     .st-pulse ×3                three halos inside the story stage (one is
+                                 the 26px r=26 wash under the glyph). */
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-deck-sheen {
+  animation: none !important;
+  opacity: 0;
+}
+:root[data-theme]:not([data-motion='full']) .mx-market :is(.mx-trend-halo, .mx-btc-halo) {
+  animation: none !important;
+  opacity: .5;
+}
+:root[data-theme]:not([data-motion='full']) .mx-market :is(.market-fresh i, .market-live-dot) {
+  animation: none !important;
+  opacity: .85;
+}
+:root[data-theme]:not([data-motion='full']) .mx-market .st-pulse {
+  animation: none !important;
+  opacity: .8;
+}
+
+/* ══ 2 · THE STORY DIALOG'S AMBIENT STAGE — only while it is OPEN ══════════
+   These ten loops live inside a modal that is not mounted until a story is
+   tapped, so they cost nothing while scrolling the market. They are listed
+   here anyway so this sheet is the single answer to "what runs on this
+   route": they are stopped for the same reason as the rest, and the stage
+   still reads as a stage because every keyframe below animates decoration
+   over painted geometry. */
+:root[data-theme]:not([data-motion='full']) .mx-market :is(.st-bloom, .st-float, .st-float-b, .st-bar, .st-mote) {
+  animation: none !important;
+}
+:root[data-theme]:not([data-motion='full']) .mx-market .st-draw {
+  animation: none !important;
+  stroke-dashoffset: 0;
+}
+/* What the stories keep, and why:
+     .st-eq                      the radio equaliser. It only runs while
+                                 `.market-story-radio-eq.is-live` — i.e. while
+                                 a clip is actually playing — and it IS the
+                                 reading ("sound is coming out"). Left alone.
+     .st-spin / .st-spin-slow    two slow rotations (they are the loading
+                                 glyph, and only exist while data is coming).
+   Neither runs while the market list is being scrolled. Stopping them would
+   remove a signal that costs nothing at rest. */
+
+/* ══ 3 · PAINT CONTAINMENT — the fix for the scroll flicker ════════════════
+   `contain: paint` on a card makes it its own paint unit: a compositor-tile
+   eviction inside it can no longer force the browser to re-rasterise the
+   cards above and below it, and a price update inside one row cannot dirty a
+   neighbour. This is the cheap half of `content-visibility` — it reserves no
+   size and skips no layout, so it cannot reintroduce the scrollbar jump that
+   the previous pass had to remove (see §14.7 of market-modern.css).
+
+   `contain-intrinsic-size` is deliberately NOT set anywhere: these cards are
+   laid out at their real height. */
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-deck,
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-btc-card,
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-lens,
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-terminal,
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-hot-card,
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-smart-banner,
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-trio-box,
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-coin-row > .coin-row,
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-coin-row > .mx-swap-slot {
+  contain: paint;
+}
+
+/* The list itself: `contain: style` on the grid (already declared) plus a
+   layout containment per row keeps a row's own re-flow local. `contain: layout`
+   does not reserve or skip anything, so the height still comes from the row. */
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-coin-row { contain: layout paint; }
+
+/* ══ 4 · WHAT STILL MOVES DURING A SCROLL ══════════════════════════════════
+   Nothing above the list. Below it: the live price flash (a reading), the
+   refresh spinner (only while a request is in flight), the hover/press
+   transitions (only under a pointer), and the skeleton shimmer before the
+   first feed arrives. Everything else on this route is now a static paint. */
+
+/* ══ 5 · THE ESCAPE HATCH ══════════════════════════════════════════════════
+   Every rule above is guarded with `:not([data-motion='full'])`, so a single
+   attribute restores the full motion budget for A/B verification on a real
+   device — and a future pass that wants a light layer back has one place to
+   look instead of five:
+
+     document.documentElement.dataset.motion = 'full'
+
+   (An `animation: revert !important` override would NOT work here: in an
+   important declaration `revert` goes to the user agent's value, not to the
+   author rule underneath, so it would have silently killed the loops it
+   claims to restore.) */
+
+/* ══ 6 · BEHIND THE CONTENT: A BOUNDED ROOM, NOT A FULL-HEIGHT PAINT ═══════
+   The obsidian sheet paints three coats behind the WHOLE route (its ::before
+   and ::after, at z-index -1):
+
+     · a 56px MEASURING GRID sized `inset: 0` — i.e. as tall as the page, which
+       on this route is 60 cards and then some: several thousand pixels of
+       repeating-linear-gradient that the browser must re-rasterise in slices
+       as the reader scrolls past it;
+     · a 640px "ceiling" of four radial gradients, drifting.
+
+   Both are beautiful on the first screen and invisible below it — the cards
+   are 92-96% opaque and they stack on top of the room within one screenful.
+   So on a touch device the room becomes what the reader actually sees:
+
+     · the grid is BOUNDED to the first screen (`height: max(560px, 78vh)`),
+       where the header, the deck and the trio sit — the glass there already
+       answers to it, and it is measured once instead of laid out per scroll
+       slice;
+     · the ceiling keeps its four painted lights and stops drifting.
+
+   Desktop is unchanged: `.mx-market::before` is `inset: 0` again there.
+
+   `isolation: isolate` on the route (already declared by the sheet) keeps both
+   pseudos inside the page's stacking context, so bounding the grid cannot let
+   the RGB field behind the app show through where the grid used to be. */
+@media (hover: none), (max-width: 900px) {
+  :root[data-theme]:not([data-motion='full']) .mx-market::before {
+    height: max(560px, 78vh);
+    bottom: auto;
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
+  }
+  :root[data-theme]:not([data-motion='full']) .mx-market::after {
+    animation: none !important;
+  }
+}

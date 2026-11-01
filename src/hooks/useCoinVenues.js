@@ -39,24 +39,55 @@ export function useCoinVenues(coinIds, { enabled = true } = {}) {
     }
 
     const id = ++runId.current;
-    setLoading(true);
     let alive = true;
 
-    getCoinVenues(ids)
-      .then((map) => {
-        if (!alive || id !== runId.current) return;
-        setVenues(map);
-      })
-      .catch(() => {
-        if (alive && id === runId.current) setVenues(new Map());
-      })
-      .finally(() => {
-        if (alive && id === runId.current) setLoading(false);
-      });
+    /*
+     * ─── THE REQUEST WAITS FOR THE LIST, NOT THE OTHER WAY ROUND ─────────────
+     *   «صفحه بازار خیلی کند هست … ایکون بعضی باکس‌ها دیر بالا میاد»
+     *
+     * This batch used to be fired INSIDE the same commit that first painted
+     * the rows. On a cold load that put it in direct competition with the two
+     * things the screen actually needs: the market feed and the coin artwork.
+     * The browser has ~6 connections per host; a 250-id venue lookup that
+     * answers with a 15s budget can hold them for the whole of the first
+     * screen, and the logos a reader is watching for arrive after it.
+     *
+     * The answer only decides whether a small «سواپ» button appears beside a
+     * row, so it can afford to be a moment late — and never early enough to
+     * delay anything else. Two idle callbacks (one for the paint that just
+     * committed, one to let the images start) put it after the numbers.
+     * `requestIdleCallback` is missing in Safari, so it falls back to a
+     * timeout: a late answer is still an answer.
+     */
+    const start = () => {
+      if (!alive) return;
+      setLoading(true);
+      getCoinVenues(ids)
+        .then((map) => {
+          if (!alive || id !== runId.current) return;
+          setVenues(map);
+        })
+        .catch(() => {
+          if (alive && id === runId.current) setVenues(new Map());
+        })
+        .finally(() => {
+          if (alive && id === runId.current) setLoading(false);
+        });
+    };
+    const idle = (fn, timeout) => (typeof requestIdleCallback === 'function'
+      ? requestIdleCallback(fn, { timeout })
+      : setTimeout(fn, 0));
+    const cancelIdle = (handle) => (typeof cancelIdleCallback === 'function'
+      ? cancelIdleCallback(handle)
+      : clearTimeout(handle));
+    let handle = idle(() => {
+      handle = idle(start, 1200);
+    }, 600);
 
     return () => {
       alive = false;
       runId.current += 1;
+      cancelIdle(handle);
     };
   }, [key, enabled]);
 
