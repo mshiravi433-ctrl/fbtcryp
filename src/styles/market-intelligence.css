@@ -925,6 +925,18 @@
 .mx-sector[data-sector='ai'] { --sec: #b29aff; }
 .mx-sector[data-sector='gaming'] { --sec: #ffb18f; }
 .mx-sector[data-sector='solana'] { --sec: #6fe3c0; }
+.mx-sector[data-sector='monitoring'] { --sec: #ffac98; }
+.mx-sector[data-sector='seed'] { --sec: #b1d786; }
+.mx-sector[data-sector='defi'] { --sec: #88dbd0; }
+.mx-sector[data-sector='storage'] { --sec: #8cbcff; }
+.mx-sector[data-sector='nft'] { --sec: #d7a7ff; }
+.mx-sector[data-sector='fanToken'] { --sec: #ffc884; }
+.mx-sector[data-sector='megadrop'] { --sec: #8dd3f4; }
+.mx-sector[data-sector='launchpool'] { --sec: #84e4dc; }
+.mx-sector[data-sector='infrastructure'] { --sec: #b9c8f4; }
+.mx-sector[data-sector='bsc'] { --sec: #f2cb62; }
+.mx-sector[data-sector='payment'] { --sec: #9bddab; }
+.mx-sector[data-sector='launchpad'] { --sec: #f6adcb; }
 .mx-sector-tile { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 19px; height: 22px; color: var(--sec); }
 .mx-sector-icon { display: block; }
 .mx-market .mx-sector:hover { color: var(--mx-text); background: color-mix(in srgb, var(--sec) 6%, transparent); }
@@ -934,6 +946,9 @@
    The wrapper reserves the same action column for every row, so charts and
    prices never shift when a route is unavailable. No row entrance animation. */
 .mx-market .mx-table-wrap { padding: 0; min-width: 0; }
+.mx-category-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 10px; padding: 7px 10px; border-inline-start: 2px solid var(--mx-cyan); border-radius: 5px; background: color-mix(in srgb, var(--mx-cyan) 5%, transparent); color: var(--mx-muted); font: 500 10px/1.7 var(--font-display); }
+.mx-category-note button { padding: 2px 6px; border: 0; border-radius: 5px; background: transparent; color: var(--mx-cyan); font: inherit; text-decoration: underline; cursor: pointer; }
+.mx-category-note button:focus-visible { outline: 2px solid var(--mx-cyan); outline-offset: 2px; }
 .mx-market .mx-table { display: grid; grid-template-columns: minmax(0, 1fr); gap: 9px 18px; margin: 0; }
 .mx-market .mx-coin-row { display: grid; grid-template-columns: minmax(0, 1fr) 62px; align-items: center; gap: 9px; min-width: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
 .mx-market .mx-coin-row > .coin-row { display: block; min-width: 0; width: 100%; padding: 0; border: 1px solid var(--mx-line); border-top-color: rgba(210, 224, 255, .22); border-radius: 17px; background: linear-gradient(120deg, rgba(223, 234, 255, .06), transparent 70%), var(--mx-panel); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .045); transition: border-color .18s ease, background .18s ease; }

@@ -31,6 +31,7 @@ import HotCoins from '../components/market/HotCoins';
 import MarketHeroBanner from '../components/market/MarketHeroBanner';
 import MarketTabStrip from '../components/market/MarketTabStrip';
 import { revealMarketTabStart, useMarketTab } from '../hooks/useMarketTab';
+import { useMarketCategory } from '../hooks/useMarketCategory';
 import '../styles/market-modern.css';
 import '../styles/market-intelligence.css';
 import '../styles/market-glass-v3.css';
@@ -63,8 +64,8 @@ import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks
 import { fmtCompact, fmtNum, fmtPct } from '../lib/format';
 import { vsOf } from '../lib/currency';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { getCategory, getMarkets, onMarketVisualsReady } from '../lib/api';
-import { MARKET_CATEGORIES, sectorFromRows } from '../lib/marketSectors';
+import { getMarkets, onMarketVisualsReady } from '../lib/api';
+import { MARKET_CATEGORIES, isBinanceRiskSector, sectorFromRows } from '../lib/marketSectors';
 import { DEFAULT_SORT, MARKET_SORTS, marketBreadth, sortMarketRows } from '../lib/marketList';
 import { mergeVisuals } from '../lib/marketVisuals';
 import { useAppStore } from '../store/useAppStore';
@@ -257,8 +258,7 @@ export default function Market() {
    * loading" for half its values and not the others.
    */
   const [sector, setSector] = useState(null);
-  const [sectorCoins, setSectorCoins] = useState([]);
-  const [sectorLoading, setSectorLoading] = useState(false);
+  const category = useMarketCategory(sector, vs, tab === 'tokens');
   /*
    * ─── THE FIVE CHIPS ARE A VIEW, NOT A BUDGET ────────────────────────────
    *   «صعودی‌ها» used to be `sort(byChange).slice(0, 25)`: picking it did not
@@ -376,23 +376,6 @@ export default function Market() {
   }, [sector, sortKey, sortDir, onlyFavorites, query]);
   useEffect(() => { setSecondPage({ vs, rows: [] }); setPageDone(false); }, [vs]);
 
-  useEffect(() => {
-    if (!sector) {
-      setSectorCoins([]);
-      return undefined;
-    }
-    let alive = true;
-    setSectorCoins([]);
-    setSectorLoading(true);
-    getCategory(sector, { vs })
-      .then((rows) => alive && setSectorCoins(rows ?? []))
-      .catch(() => alive && setSectorCoins([]))
-      .finally(() => alive && setSectorLoading(false));
-    return () => {
-      alive = false;
-    };
-  }, [sector, vs]);
-
   // Anything not in the loaded page is found by querying the full universe.
   const { results: remoteHits, searching, error: searchError } = useCoinSearch(query, 2, vs);
 
@@ -404,14 +387,21 @@ export default function Market() {
    * return nothing. Everything below (list, breadth, count) reads this one
    * value, so the three can never describe different sets of coins.
    *
-   * Sector fallback: do not blank the tab while the category endpoint is
-   * warming or down. It only uses ID-verified members with quotes from the
-   * main feed; it is not a symbol/name search or a fabricated category price.
+   * Only after a provider failure may the small, dated ID-only backup be
+   * shown, with a visible partial-list notice. Risk tags NEVER use that backup.
    */
   const universe = useMemo(() => {
-    if (sector) return sectorCoins.length ? sectorCoins : sectorFromRows(sector, coins);
+    if (sector) {
+      if (category.rows.length) return category.rows;
+      if (category.error && !isBinanceRiskSector(sector)) {
+        return sectorFromRows(sector, coins).map((row) => ({ ...row, classificationFallback: true }));
+      }
+      return [];
+    }
     return [...(coins ?? []), ...(secondPage.vs === vs ? secondPage.rows : [])];
-  }, [sector, sectorCoins, coins, secondPage, vs]);
+  }, [sector, category.rows, category.error, coins, secondPage, vs]);
+  const categoryFallback = Boolean(sector && universe.some((row) => row.classificationFallback));
+  const categoryStale = Boolean(sector && universe.some((row) => row.dataProvenance === 'stale'));
 
   const list = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -612,7 +602,8 @@ export default function Market() {
   const canLoadNext = !sector && !query.trim() && !onlyFavorites
     && sortKey === 'rank' && sortDir === 'asc'
     && !pageDone && (coins?.length ?? 0) >= MARKET_PAGE_SIZE;
-  const hasMore = list.length > visibleCount || canLoadNext;
+  const canLoadCategory = Boolean(sector && category.hasMore && !categoryFallback && !category.error);
+  const hasMore = list.length > visibleCount || canLoadNext || canLoadCategory;
   const visibleList = list.slice(0, rowCap);
   const shownCount = visibleList.length;
 
@@ -623,10 +614,12 @@ export default function Market() {
     return venue?.tradeable ? venueRoute({ ...venue })?.href ?? null : null;
   };
 
-  const emptyKind = onlyFavorites && !favorites.length
-    ? 'favorites'
-    : sector
-      ? (sectorLoading ? 'loadingSector' : 'sector')
+  const emptyKind = sector && category.error && !universe.length
+    ? 'sectorError'
+    : onlyFavorites && !favorites.length
+      ? 'favorites'
+      : sector
+        ? (category.loading ? 'loadingSector' : query.trim() ? 'search' : 'sector')
       : searching
         ? 'searching'
         : query.trim()
@@ -743,13 +736,13 @@ export default function Market() {
                   <span>{t('marketIntel.railLabel')}</span>
                 </h2>
                 <div className="mx-terminal-actions">
-                  <MarketFreshness updatedAt={updatedAt} />
+                  <MarketFreshness updatedAt={sector ? (categoryStale ? 0 : category.updatedAt) : updatedAt} />
                   <button
                     type="button"
                     className="market-refresh mx-icon-btn"
-                    onClick={() => refreshMarkets?.()}
-                    disabled={loading}
-                    data-busy={loading ? 'true' : undefined}
+                    onClick={() => { refreshMarkets?.(); if (sector) category.refresh(); }}
+                    disabled={loading || category.refreshing}
+                    data-busy={loading || category.refreshing ? 'true' : undefined}
                     aria-label={t('market.refresh')}
                     title={t('market.refresh')}
                     data-testid="market-refresh"
@@ -938,10 +931,21 @@ export default function Market() {
             <MarketSectorRail
               sectors={SECTORS}
               selected={sector}
-              onSelect={(next) => { setSectorCoins([]); setSector(next); }}
+              onSelect={setSector}
             />
 
               <section className="mx-table-wrap" aria-labelledby="market-list-title">
+
+              {sector && (
+                <div className="mx-category-note" data-testid="market-category-source" role="status">
+                  <span>{t(isBinanceRiskSector(sector) ? 'market.categoryRiskSource' : 'market.categorySource')}</span>
+                  {categoryFallback && <span>{t('market.categoryPartial')}</span>}
+                  {categoryStale && <span>{t('market.categoryStale')}</span>}
+                  {category.limitReached && <span>{t('market.categoryLimit')}</span>}
+                  {(category.error && universe.length > 0) && <span>{t('market.categoryError')} <button type="button" onClick={category.refresh}>{t('market.retry')}</button></span>}
+                  {category.pageError && <span>{t('market.categoryPageError')} <button type="button" onClick={category.loadMore}>{t('market.retry')}</button></span>}
+                </div>
+              )}
 
               {smartIntent && (
                 <div className="mx-intent-result" role="status" aria-live="polite">
@@ -951,11 +955,11 @@ export default function Market() {
                 </div>
               )}
 
-              {loading && !list.length ? (
+              {(sector ? category.loading : loading) && !list.length ? (
                 <div className="stack market-coin-grid mx-table" aria-busy="true">
                   {Array.from({ length: 8 }).map((_, i) => <div key={i} className="skel market-skel-row mx-skel-row" />)}
                 </div>
-              ) : marketError && !list.length ? (
+              ) : !sector && marketError && !list.length ? (
                 <div className="market-empty mx-empty" data-kind="error" data-testid="market-feed-error">
                   <span className="market-empty-icon" aria-hidden="true"><IconRefresh width={20} height={20} /></span>
                   <div className="market-empty-title">{t('market.feedDown')}</div>
@@ -983,11 +987,18 @@ export default function Market() {
                             ? t('market.searching')
                             : emptyKind === 'loadingSector'
                               ? t('market.loadingSector')
-                              : emptyKind === 'sector'
-                                ? t('market.sectorEmpty')
+                              : emptyKind === 'sectorError'
+                                ? t('market.categoryError')
+                                : emptyKind === 'sector'
+                                  ? t('market.categoryEmpty')
                                 : t('market.noResults')}
                       </div>
                       {emptyKind === 'favorites' && <p className="market-empty-help">{t('market.emptyFavoritesHelp')}</p>}
+                      {emptyKind === 'sectorError' && (
+                        <button type="button" className="market-empty-action mx-empty-action" onClick={category.refresh} data-testid="market-category-retry">
+                          <IconRefresh width={14} height={14} aria-hidden="true" />{t('market.retry')}
+                        </button>
+                      )}
                       {(emptyKind === 'favorites' || emptyKind === 'search' || emptyKind === 'sector') && (
                         <button
                           type="button"
@@ -1066,13 +1077,15 @@ export default function Market() {
                       {hasMore && !listFolded && <button
                         type="button"
                         className="market-show-more mx-show-more"
-                        disabled={pageLoading}
-                        onClick={() => {
+                        disabled={pageLoading || category.loadingMore || category.refreshing}
+                        onClick={async () => {
                           if (list.length > visibleCount) setVisibleCount((n) => n + 60);
-                          else loadNextPage();
+                          else if (sector) {
+                            if (await category.loadMore()) setVisibleCount((n) => n + 60);
+                          } else loadNextPage();
                         }}
                       >
-                        {pageLoading
+                        {pageLoading || category.loadingMore
                           ? t('market.loadingSector')
                           : list.length > visibleCount
                             ? t('market.showMore', { count: fmtNum(list.length - visibleCount) })

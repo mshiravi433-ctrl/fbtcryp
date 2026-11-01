@@ -10037,13 +10037,13 @@ export default async function run() {
     }
     {
       globalThis.fetch = async () => json([]);
+      const empty = await fetchCategory(MARKET_CATEGORIES.rwa, { page: 2 });
+      t('an empty live sector page ends pagination without duplicating page one', Array.isArray(empty) && empty.length === 0);
+      // An outage on a later page must not replay a small page-one backup.
+      globalThis.fetch = async () => ({ ...json({}), ok: false, status: 403 });
       let code = null;
       try { await fetchCategory(MARKET_CATEGORIES.rwa, { page: 2 }); } catch (err) { code = err?.message ?? 'threw'; }
-      /* The CoinLore backup is a ten-ID list: it can only answer page 1, and
-         answering page 2 with page-1 rows would print the same twenty-five
-         tokens twice. An honest short answer beats a silently repeated one. */
-      t('a sector page past the first is refused rather than repeated',
-        code === 'CATEGORY_DATA_UNAVAILABLE');
+      t('a failed sector page past the first is refused rather than repeated', Boolean(code));
       globalThis.fetch = realFetch;
     }
 

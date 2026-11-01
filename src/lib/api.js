@@ -29,7 +29,7 @@ import { apiBase } from './apiBase.js';
 import { fetchCoinLoreTickers, normalizeCoinLoreMarket, COINLORE_MAX_PAGE_SIZE } from './coinLore.js';
 import { hydrateCoinRows, mergeVisuals, needsVisuals, rememberVisuals } from './marketVisuals.js';
 import { attachVenueSparklines } from './venueSparklines.js';
-import { MARKET_CATEGORIES } from './marketSectors.js';
+import { MARKET_CATEGORIES, isBinanceRiskSector } from './marketSectors.js';
 import { contractQuery } from './marketSearch.js';
 
 // `apiBase()` is deliberately resolved at request time. In the Capacitor
@@ -48,7 +48,7 @@ async function fetchJson(url, { timeout = 12000, withMeta = false } = {}) {
     const res = await fetch(url, { signal: ctrl.signal, headers: { accept: 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    return withMeta ? { data, stale: res.headers.get('x-data-stale') === '1' } : data;
+    return withMeta ? { data, stale: res.headers.get('x-data-stale') === '1', fetchedAt: Number(res.headers.get('x-category-fetched-at')) || 0 } : data;
   } finally {
     clearTimeout(timer);
   }
@@ -437,31 +437,39 @@ export function getMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
  * than an error, which would render as a blank screen with no explanation.
  * The map in marketSectors.js is shared with the server allowlist.
  */
-export function getCategory(category, { perPage = 100, vs = 'usd', page = 1 } = {}) {
+export async function getCategory(category, { perPage = 100, vs = 'usd', page = 1, strict = false, force = false } = {}) {
   const slug = MARKET_CATEGORIES[category];
   if (!slug) return Promise.resolve([]);
   const pageNo = Math.min(10, Math.max(1, Number(page) || 1));
   const size = Math.min(250, Math.max(1, Number(perPage) || 100));
 
-  return resilient(`cat:${slug}:${vs}:${size}:${pageNo}`, {
-    /*
-     * Five minutes. A sector list moves far more slowly than a price ticker,
-     * and every extra request here is spent against a free public rate limit
-     * we share with the rest of the app.
-     */
-    ttl: 300_000,
+  const key = `cat:${slug}:${vs}:${size}:${pageNo}`;
+  if (force) invalidate(key);
+  const rows = await resilient(key, {
+    // Membership is cached upstream too; prices are refreshed at most once
+    // a minute while the selected sector is visible.
+    ttl: 60_000,
     backend: async () => {
-      const { data, stale } = await fetchJson(`${apiBase()}/category/${slug}?per_page=${size}&vs=${vs}&page=${pageNo}`, { withMeta: true });
-      return (Array.isArray(data) ? data : []).map((row) => ({ ...row, dataProvenance: stale ? 'stale' : 'live' }));
+      const { data, stale, fetchedAt } = await fetchJson(`${apiBase()}/category/${slug}?per_page=${size}&vs=${vs}&page=${pageNo}`, {
+        withMeta: true, timeout: isBinanceRiskSector(category) ? 35000 : 12000
+      });
+      if (!Array.isArray(data) || (stale && isBinanceRiskSector(category))) throw new Error('CATEGORY_DATA_UNAVAILABLE');
+      const rows = data.map((row) => ({ ...row, dataProvenance: stale ? 'stale' : 'live' }));
+      Object.defineProperty(rows, 'fetchedAt', { value: fetchedAt || Date.now() });
+      return rows;
     },
-    direct: async () => {
+    // The two Binance tags are not CoinGecko category slugs. Never turn a
+    // failing tag provider into an unrelated CoinGecko category.
+    direct: isBinanceRiskSector(category) ? null : async () => {
       const raw = await fetchJson(
         `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&category=${slug}` +
           `&order=market_cap_desc&per_page=${size}&page=${pageNo}&sparkline=true` +
           `&price_change_percentage=1h,24h,7d`
       );
-      if (!Array.isArray(raw) || !raw.length) throw new Error('Empty category response');
-      return raw.map((coin) => ({ ...normalizeCoin(coin), dataProvenance: 'live' }));
+      if (!Array.isArray(raw)) throw new Error('Invalid category response');
+      const rows = raw.map((coin) => ({ ...normalizeCoin(coin), dataProvenance: 'live' }));
+      Object.defineProperty(rows, 'fetchedAt', { value: Date.now() });
+      return rows;
     },
     /*
      * Empty, not the offline snapshot. That snapshot is the top coins by
@@ -470,6 +478,11 @@ export function getCategory(category, { perPage = 100, vs = 'usd', page = 1 } = 
      */
     fallback: () => []
   });
+  // Existing callers deliberately receive [] on an outage. The market page
+  // opts into a distinct error so it can show a retry instead of claiming the
+  // category is empty (especially important for risk tags).
+  if (strict && lastFetchFailed(key)) throw new Error('CATEGORY_DATA_UNAVAILABLE');
+  return rows;
 }
 
 /**

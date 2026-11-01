@@ -10,7 +10,8 @@ import { fetchCoinLoreTickers, COINLORE_BASE, COINLORE_MAX_PAGE_SIZE } from '../
 import { hydrateCoinRows, mergeVisuals, rememberVisuals } from '../src/lib/marketVisuals.js';
 import { attachVenueSparklines } from '../src/lib/venueSparklines.js';
 import { attachIndexLogos } from '../src/lib/coinLogoIndex.js';
-import { MARKET_CATEGORIES, sectorFromRows } from '../src/lib/marketSectors.js';
+import { MARKET_CATEGORIES, isBinanceRiskSector, sectorFromRows } from '../src/lib/marketSectors.js';
+import { createBinanceRiskSource } from './binanceRiskCategories.js';
 import { contractQuery } from '../src/lib/marketSearch.js';
 import { getIndex } from './coinIndex.js';
 import { getCached } from './cache.js';
@@ -776,12 +777,33 @@ async function backupSectorRows(page = 1) {
   return entry.promise;
 }
 
+// The exchange's product feed carries explicit Seed/Monitoring tags. The
+// CoinGecko venue ticker confirms the exact Binance pair -> coin ID before a
+// quote is admitted. Neither the tag nor a price is inferred from a ticker.
+const binanceRiskSource = createBinanceRiskSource({
+  fetchProducts: () => req('https://www.binance.com/bapi/asset/v2/public/asset-service/product/get-products?includeEtf=true', { timeout: 10000 }),
+  fetchCatalog: () => req(cgUrl('/coins/list', { status: 'active' }), { timeout: 15000 }),
+  fetchTickers: (ids, page) => req(cgUrl('/exchanges/binance/tickers', {
+    coin_ids: ids.join(','), order: 'volume_desc', page
+  }), { timeout: 10000 }),
+  fetchMarkets: (ids, vs) => cgReq(cgUrl('/coins/markets', {
+    vs_currency: vs, ids: ids.join(','), order: 'market_cap_desc',
+    per_page: Math.min(250, ids.length), page: 1, sparkline: true,
+    price_change_percentage: '1h,24h,7d'
+  })),
+  normalizeCoin
+});
+
 /** A blocked CoinGecko category must not turn an entire sector into a blank tab.
  * Backup rows are real USD quotes, selected by an explicit CoinGecko ID list.
  * CoinLore has no EUR quotes or 24h extrema, so never synthesize either. */
 export async function fetchCategory(slug, { perPage = 50, vs = 'usd', page = 1 } = {}) {
   const sector = Object.keys(MARKET_CATEGORIES).find((key) => MARKET_CATEGORIES[key] === slug);
   if (!sector) throw new Error('BAD_CATEGORY');
+  if (isBinanceRiskSector(sector)) {
+    // Never replace an unavailable risk feed with a fixed/stale membership.
+    return binanceRiskSource(sector, { perPage, vs, page });
+  }
   /*
    * ─── PAGE, NOT JUST PER-PAGE (added 2026-10-12) ──────────────────────────
    * The sector view used to be pinned to `page: 1` with per_page clamped at
@@ -804,13 +826,12 @@ export async function fetchCategory(slug, { perPage = 50, vs = 'usd', page = 1 }
         price_change_percentage: '1h,24h,7d'
       })
     );
-    if (Array.isArray(raw) && raw.length) {
+    if (Array.isArray(raw)) {
       const rows = raw.map(normalizeCoin);
       rememberVisuals(rows);
-      return rows;
+      return rows; // an empty later page is a valid end of the category
     }
-    // An empty category can also mean a changed upstream slug. Try the
-    // independent ID-curated ticker feed before declaring the sector empty.
+    throw new Error('CATEGORY_DATA_UNAVAILABLE');
   } catch (err) {
     if (String(vs).toLowerCase() !== 'usd') throw err;
     if (pageNo > 1) throw err;
@@ -829,5 +850,6 @@ export async function fetchCategory(slug, { perPage = 50, vs = 'usd', page = 1 }
   }
   if (!matches.length) throw new Error('CATEGORY_DATA_UNAVAILABLE');
   // Visuals are best-effort; never block quotes for the full 6s market budget.
-  return fillFallbackVisuals(matches, 'usd', { deadlineMs: 2500 });
+  const rows = await fillFallbackVisuals(matches, 'usd', { deadlineMs: 2500 });
+  return rows.map((row) => ({ ...row, classificationFallback: true }));
 }

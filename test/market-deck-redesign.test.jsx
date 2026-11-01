@@ -359,11 +359,14 @@ describe('۵ · filters, نبض بازار and طلا→سولانا', () => {
     expect(views.every((v) => v.querySelector('svg.mx-view-icon'))).toBe(true);
 
     const sectors = [...document.querySelectorAll('.mx-sector')];
-    expect(sectors.map((s) => s.dataset.sector)).toEqual(['all', 'gold', 'meme', 'rwa', 'ai', 'gaming', 'solana']);
+    expect(sectors.map((s) => s.dataset.sector)).toEqual([
+      'all', 'gold', 'meme', 'rwa', 'ai', 'gaming', 'solana', 'monitoring', 'seed', 'defi', 'storage', 'nft',
+      'fanToken', 'megadrop', 'launchpool', 'infrastructure', 'bsc', 'payment', 'launchpad'
+    ]);
     expect(sectors.every((s) => s.querySelector('svg.mx-sector-icon'))).toBe(true);
-    /* six tabs, six different silhouettes */
+    /* Each of the eighteen categories plus All has its own silhouette. */
     const shapes = new Set(sectors.map((s) => s.querySelector('svg.mx-sector-icon').innerHTML));
-    expect(shapes.size).toBe(7);
+    expect(shapes.size).toBe(19);
   });
 
   it('pins the sector rail horizontal, snapping, and un-masked', () => {
@@ -371,7 +374,7 @@ describe('۵ · filters, نبض بازار and طلا→سولانا', () => {
     expect(bare).toMatch(/\.mx-sector \{[^}]*scroll-snap-align: start/s);
     expect(pageSrc).toContain('<MarketSectorRail');
     expect(bare).toMatch(/\.mx-market \.mx-sector-rail \{[^}]*border: 0[^}]*background: none/s);
-    for (const sector of ['gold', 'meme', 'rwa', 'ai', 'gaming', 'solana']) {
+    for (const sector of ['gold', 'meme', 'rwa', 'ai', 'gaming', 'solana', 'monitoring', 'seed', 'defi', 'storage', 'nft', 'fanToken', 'megadrop', 'launchpool', 'infrastructure', 'bsc', 'payment', 'launchpad']) {
       expect(bare).toMatch(new RegExp(`\\.mx-sector\\[data-sector='${sector}'\\] \\{ --sec: #`));
     }
   });
