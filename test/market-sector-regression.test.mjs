@@ -18,6 +18,17 @@ const samples = [
 
 const response = (data, status = 200) => new Response(JSON.stringify(data), { status });
 
+test('requested market categories are ordered, network-backed, and use deliberate slugs', () => {
+  assert.deepEqual(Object.keys(MARKET_CATEGORIES).slice(0, 12), [
+    'monitoring', 'seed', 'defi', 'storage', 'nft', 'fanToken', 'megadrop',
+    'launchpool', 'infrastructure', 'bsc', 'payment', 'launchpad'
+  ]);
+  assert.equal(MARKET_CATEGORIES.defi, 'decentralized-finance-defi');
+  assert.equal(MARKET_CATEGORIES.nft, 'non-fungible-tokens-nft');
+  assert.equal(MARKET_CATEGORIES.bsc, 'bnb-chain-ecosystem');
+  assert.equal(new Set(Object.values(MARKET_CATEGORIES)).size, Object.keys(MARKET_CATEGORIES).length);
+});
+
 test('a CoinGecko category outage returns real CoinLore USD sector quotes, not invented extrema', async () => {
   const original = globalThis.fetch;
   const calls = [];

@@ -417,7 +417,7 @@ export function getMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
 }
 
 /**
- * SECTOR CATEGORIES — gold, memecoins, RWA, AI…
+ * MARKET CATEGORIES — curated sectors and network-backed category feeds.
  *
  * ─── WHY THIS IS A SEPARATE FUNCTION AND NOT A FILTER ───────────────────────
  * The Market screen's existing filters (gainers, losers, volume) all re-sort

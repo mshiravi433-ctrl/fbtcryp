@@ -4,6 +4,20 @@
  * Never classify by ticker alone: tickers are not unique identifiers.
  */
 export const MARKET_CATEGORIES = Object.freeze({
+  /* Network-backed category slugs. The server allow-lists these exact IDs
+   * before proxying CoinGecko's /coins/markets category feed. */
+  monitoring: 'monitoring',
+  seed: 'seed',
+  defi: 'decentralized-finance-defi',
+  storage: 'storage',
+  nft: 'non-fungible-tokens-nft',
+  fanToken: 'fan-token',
+  megadrop: 'megadrop',
+  launchpool: 'launchpool',
+  infrastructure: 'infrastructure',
+  bsc: 'bnb-chain-ecosystem',
+  payment: 'payments',
+  launchpad: 'launchpad',
   gold: 'tokenized-gold',
   meme: 'meme-token',
   rwa: 'real-world-assets-rwa',

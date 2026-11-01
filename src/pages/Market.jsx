@@ -101,7 +101,9 @@ const MARKET_PAGE_SIZE = 250;
 const FOLDED_ROWS = 12;
 
 /**
- * SECTOR TABS — gold, memecoins, RWA, AI, gaming.
+ * MARKET CATEGORY TABS — the requested network categories plus the existing
+ * curated sectors. These are not local ticker guesses: selecting one requests
+ * the upstream category feed, so the coins shown belong to that category.
  *
  * ─── WHY THESE ARE NOT JUST MORE FILTERS ────────────────────────────────────
  * Every existing filter re-sorts the same 250 rows already in memory. A sector
@@ -384,7 +386,7 @@ export default function Market() {
     let alive = true;
     setSectorCoins([]);
     setSectorLoading(true);
-    getCategory(sector, { vs })
+    getCategory(sector, { vs, perPage: MARKET_PAGE_SIZE })
       .then((rows) => alive && setSectorCoins(rows ?? []))
       .catch(() => alive && setSectorCoins([]))
       .finally(() => alive && setSectorLoading(false));

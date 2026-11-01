@@ -91,7 +91,9 @@ export default function MarketSectorRail({ sectors, selected, onSelect }) {
         onDragStart={(event) => event.preventDefault()}
       >
         {[null, ...sectors].map((sector) => {
-          const Glyph = sector ? SECTOR_GLYPHS[sector] : GlyphGrid;
+          // New network categories reuse the neutral grid mark until they have
+          // a dedicated illustration; an undefined glyph must never break the rail.
+          const Glyph = sector ? (SECTOR_GLYPHS[sector] || GlyphGrid) : GlyphGrid;
           const active = selected === sector;
           return (
             <button
