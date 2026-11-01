@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import ProChart from './ProChart';
 import CoinLogo from '../CoinLogo';
 import { useVolumeSeries } from '../../hooks/useMarket';
+import { getSimplePrices } from '../../lib/api';
 import {
   alignVolumeToCandles,
   candleSignature,
@@ -62,7 +63,23 @@ import '../../styles/pro-chart.css';
 const PREFS_KEY = 'fbt-prochart-prefs:v1';
 const LEVELS_PREFIX = 'fbt-prochart-levels:v1:';
 
+/**
+ * The three main-series types the engine can build. Also the allow-list used
+ * when a preference comes back out of localStorage.
+ *
+ * This constant is what the user report was about. `loadPrefs` validated the
+ * STORED chart type against it, but the constant itself was never declared —
+ * `useState(loadPrefs)` threw `ReferenceError: CHART_TYPES is not defined`
+ * during the first render for every reader who had ever opened the terminal,
+ * and `/coin/:id` fell straight through to RouteBoundary's
+ * «این صفحه به مشکل خورد» card. A brand-new visitor had no stored prefs, so
+ * the default branch never reached that line and the page looked fine — which
+ * is why it read as "sometimes, on the token page".
+ */
+const CHART_TYPES = ['candles', 'line', 'area'];
+
 const DEFAULT_PREFS = {
+  chartType: 'candles',
   overlays: { ma: { 7: true, 25: true, 99: false }, ema: { 21: false, 55: false }, bb: false, fib: false },
   panes: { volume: true, rsi: false, macd: false },
   settings: { log: false, grid: true }
@@ -88,19 +105,57 @@ const storage = {
   }
 };
 
+/**
+ * Read the persisted preferences, DEFENSIVELY.
+ *
+ * `localStorage` is user-writable and survives every deploy, so whatever is in
+ * there has to be treated as untrusted input: a half-written blob, an old
+ * shape from a previous build, a JSON string that parses to `null`, or panes
+ * stored as strings. Each field is validated on its own and anything that does
+ * not make sense falls back to the default — the terminal then just opens in
+ * its default state, which is infinitely better than the whole coin page
+ * turning into an error card because a preference was odd.
+ */
 function loadPrefs() {
   const stored = storage.get(PREFS_KEY, null);
-  if (!stored || typeof stored !== 'object') return DEFAULT_PREFS;
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return DEFAULT_PREFS;
+
+  const bool = (value, fallback) => (typeof value === 'boolean' ? value : fallback);
+  const ma = stored.overlays?.ma;
+  const ema = stored.overlays?.ema;
+  const panes = stored.panes;
+  const settings = stored.settings;
+  const obj = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
+
+  const maPrefs = obj(ma);
+  const emaPrefs = obj(ema);
+  const panePrefs = obj(panes);
+  const settingPrefs = obj(settings);
+
   return {
     chartType: CHART_TYPES.includes(stored.chartType) ? stored.chartType : DEFAULT_PREFS.chartType,
     overlays: {
-      ma: { ...DEFAULT_PREFS.overlays.ma, ...(stored.overlays?.ma ?? {}) },
-      ema: { ...DEFAULT_PREFS.overlays.ema, ...(stored.overlays?.ema ?? {}) },
-      bb: Boolean(stored.overlays?.bb),
-      fib: Boolean(stored.overlays?.fib)
+      ma: {
+        7: bool(maPrefs[7], DEFAULT_PREFS.overlays.ma[7]),
+        25: bool(maPrefs[25], DEFAULT_PREFS.overlays.ma[25]),
+        99: bool(maPrefs[99], DEFAULT_PREFS.overlays.ma[99])
+      },
+      ema: {
+        21: bool(emaPrefs[21], DEFAULT_PREFS.overlays.ema[21]),
+        55: bool(emaPrefs[55], DEFAULT_PREFS.overlays.ema[55])
+      },
+      bb: bool(stored.overlays?.bb, DEFAULT_PREFS.overlays.bb),
+      fib: bool(stored.overlays?.fib, DEFAULT_PREFS.overlays.fib)
     },
-    panes: { ...DEFAULT_PREFS.panes, ...(stored.panes ?? {}) },
-    settings: { ...DEFAULT_PREFS.settings, ...(stored.settings ?? {}) }
+    panes: {
+      volume: bool(panePrefs.volume, DEFAULT_PREFS.panes.volume),
+      rsi: bool(panePrefs.rsi, DEFAULT_PREFS.panes.rsi),
+      macd: bool(panePrefs.macd, DEFAULT_PREFS.panes.macd)
+    },
+    settings: {
+      log: bool(settingPrefs.log, DEFAULT_PREFS.settings.log),
+      grid: bool(settingPrefs.grid, DEFAULT_PREFS.settings.grid)
+    }
   };
 }
 
@@ -206,7 +261,6 @@ export default function TokenChart({
   const [hover, setHover] = useState(null);
   const [stats, setStats] = useState(null);
   const [snapshotNote, setSnapshotNote] = useState('');
-  const [orientationNote, setOrientationNote] = useState('');
   /* Live spot tick for the forming candle (polled below). `liveAt` drives
      the LIVE badge: a tick older than ~45s is history, not "live". */
   const [livePrice, setLivePrice] = useState(null);
@@ -356,7 +410,6 @@ export default function TokenChart({
     setExpanded(false);
     setTool('none');
     setMeasure({ a: null, b: null });
-    setOrientationNote('');
     unlockScreen();
     /* Focus goes back to the button that opened the dialog, not to <body>. */
     setTimeout(() => expandBtnRef.current?.focus?.({ preventScroll: true }), 0);
@@ -371,6 +424,44 @@ export default function TokenChart({
   useEffect(() => () => {
     if (expandedRef.current) unlockScreen();
   }, [unlockScreen]);
+
+  /*
+   * Orientation, as a piece of live state rather than a one-off guess.
+   *
+   * The "hold the phone sideways" note used to be decided ONCE, inside the tap
+   * handler, from window.innerWidth/innerHeight — so it was already stale in
+   * the two cases that matter: the reader turns the phone after the note
+   * appears (it stays), and the reader who opens the terminal in landscape on
+   * a device that then refuses a rotation gets no note at all. Tracking the
+   * media query also means the note clears itself the moment the phone is
+   * actually turned, instead of needing a second tap.
+   */
+  const [portrait, setPortrait] = useState(
+    () => typeof window !== 'undefined' && Boolean(window.innerHeight > window.innerWidth)
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    const query = window.matchMedia('(orientation: portrait)');
+    const read = () => setPortrait(Boolean(query.matches));
+    read();
+    /* Safari <14 has no addEventListener on a MediaQueryList. */
+    if (query.addEventListener) {
+      query.addEventListener('change', read);
+      return () => query.removeEventListener('change', read);
+    }
+    query.addListener?.(read);
+    return () => query.removeListener?.(read);
+  }, []);
+
+  /*
+   * The note is DERIVED: it exists exactly while the terminal is open, on a
+   * phone that is being held upright. Storing it in state meant every path
+   * that opened the terminal in portrait had to remember to set it, and the
+   * one that closed it had to remember to clear it — the fullscreenchange
+   * listener wrote `tapRotate` and closing never removed it, so the next open
+   * could show last session's sentence.
+   */
+  const rotationHint = expanded && portrait ? t('coin.pro.rotateHint') : '';
 
   async function openExpanded() {
     setExpanded(true);
@@ -387,22 +478,11 @@ export default function TokenChart({
         await root.requestFullscreen({ navigationUI: 'hide' });
       }
     } catch { /* unsupported / not allowed */ }
-    let locked = false;
     try {
       if (typeof screen !== 'undefined' && screen.orientation?.lock) {
         await screen.orientation.lock('landscape');
-        locked = true;
       }
-    } catch { /* unsupported / not allowed */ }
-    /*
-     * Say what the browser would not do. On a phone held upright with no
-     * orientation lock (iOS, and every embedded frame), the terminal still
-     * opens full screen — it just stays portrait, and "turn the phone" is the
-     * one instruction that makes the next tap better than this one.
-     */
-    if (!locked && typeof window !== 'undefined' && window.innerWidth < window.innerHeight) {
-      setOrientationNote(t('coin.pro.rotateHint'));
-    }
+    } catch { /* unsupported / not allowed — `rotationHint` already says so */ }
   }
 
   async function requestLandscape() {
@@ -415,12 +495,8 @@ export default function TokenChart({
     try {
       if (typeof screen !== 'undefined' && screen.orientation?.lock) {
         await screen.orientation.lock('landscape');
-        setOrientationNote('');
-        return;
       }
     } catch { /* noop */ }
-    /* Honest fallback: say rotation is manual instead of pretending. */
-    setOrientationNote(t('coin.pro.rotateHint'));
   }
 
   useEffect(() => {
@@ -453,22 +529,20 @@ export default function TokenChart({
       }
     };
 
-    const onFullscreenChange = () => {
-      /* Leaving native fullscreen by the system gesture (Android back) must
-         also leave the overlay — otherwise the chart sits full screen with
-         no visible way out on some devices. */
-      if (!document.fullscreenElement) setOrientationNote(t('coin.pro.tapRotate'));
-    };
-
     window.addEventListener('keydown', onKeyDown, true);
-    document.addEventListener('fullscreenchange', onFullscreenChange);
     return () => {
       clearTimeout(focusTimer);
       document.body.style.overflow = previousOverflow;
       document.documentElement.classList.remove('pc-no-scroll');
       window.removeEventListener('keydown', onKeyDown, true);
-      document.removeEventListener('fullscreenchange', onFullscreenChange);
     };
+    /*
+     * `t` is a dependency on purpose: a reader who switches language while the
+     * terminal is open must get the new strings. `rotationHint` is derived
+     * from `t`, and this effect is where the accessibility labels, the focus
+     * trap and the scroll lock live, so re-running it on a language change is
+     * harmless and keeps everything in the current language.
+     */
   }, [expanded, closeExpanded, t]);
 
   /* ---------------- tools ---------------- */
@@ -560,6 +634,22 @@ export default function TokenChart({
   const sessionChange = activeStats?.changePct ?? 0;
   const up = sessionChange >= 0;
   const legendId = `pc-legend-${uid}`;
+
+  /**
+   * Timeframe labels, translated.
+   *
+   * The rail used to print the raw `1D / 7D / 30D / 90D / 1Y` keys, which are
+   * an English abbreviation shown to a Persian reader on a Persian page — the
+   * "language is not right" half of the report. Each known key now has a
+   * `coin.pro.range*` string (``۱روز`` in Persian, `1T` in Turkish, `1天` in
+   * Chinese); anything unrecognised still falls back to the key itself, so a
+   * future range cannot render an empty button.
+   */
+  const rangeLabel = (key) => {
+    const translated = t(`coin.pro.range${key}`);
+    /* i18next returns the key path itself when it has no string for it. */
+    return translated && translated !== `coin.pro.range${key}` ? translated : key;
+  };
 
   const legend = (
     <div className="pc-legend" dir="ltr" id={legendId} aria-live="polite">
@@ -689,7 +779,7 @@ export default function TokenChart({
             aria-pressed={range?.key === r.key}
             onClick={() => onRangeChange?.(r)}
           >
-            {r.key}
+            {rangeLabel(r.key)}
           </button>
         ))}
         <span className="pc-fs-interval">{interval} · {t('coin.pro.interval')}</span>
@@ -744,7 +834,7 @@ export default function TokenChart({
       </div>
 
       {hint ? <div className="pc-fs-hint">{hint}</div> : null}
-      {orientationNote ? <div className="pc-fs-hint pc-fs-hint--soft">{orientationNote}</div> : null}
+      {rotationHint ? <div className="pc-fs-hint pc-fs-hint--soft">{rotationHint}</div> : null}
       {snapshotNote ? <div className="pc-fs-toast" role="status">{snapshotNote}</div> : null}
 
       {toolbar}

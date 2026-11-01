@@ -26,6 +26,7 @@ import spot from './locales/spot.mjs';
 import spotDepth from './locales/spot-depth.mjs';
 import tpslHistory from './locales/tpsl-history.mjs';
 import tap from './locales/tap.mjs';
+import tokenChart from './locales/token-chart.mjs';
 
 const LANGS = ['zh', 'hi', 'es', 'fr', 'ru', 'tr', 'ur', 'id', 'pt'];
 // Hand-maintained. English is the source, so it is 100% by definition and is
@@ -35,7 +36,31 @@ const FULL = ['fa', 'ar'];
 const localePath = (code) => new URL(`../src/i18n/locales/${code}.json`, import.meta.url);
 const coveragePath = new URL('../src/i18n/coverage.json', import.meta.url);
 
-const SOURCES = { ...common, ...product, ...wallet, ...settings, ...about, ...spot, ...spotDepth, ...tpslHistory, ...tap };
+/*
+ * The other modules are keyed by DOTTED KEY and then by language:
+ *   { 'nav.market': { en: 'Market', es: 'Mercado' } }
+ * `token-chart.mjs` is keyed the other way round — by language, then by key —
+ * because a translator reads one language at a time. Inverted here, once, so
+ * the rest of this script stays unchanged.
+ */
+const byKey = (translations) => {
+  const out = {};
+  for (const [lang, strings] of Object.entries(translations)) {
+    for (const [key, value] of Object.entries(strings)) {
+      (out[key] ??= {})[lang] = value;
+    }
+  }
+  return out;
+};
+
+const SOURCES = {
+  ...common, ...product, ...wallet, ...settings, ...about,
+  ...spot, ...spotDepth, ...tpslHistory, ...tap,
+  /* The token-page candlestick terminal. Added 2026-11-01 because the block
+     existed only in en/fa and every other language silently fell back to
+     English inside an otherwise translated coin page. */
+  ...byKey(tokenChart)
+};
 
 function setPath(obj, dotted, value) {
   const parts = dotted.split('.');

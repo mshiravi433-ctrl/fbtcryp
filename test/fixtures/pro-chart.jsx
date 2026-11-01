@@ -18,15 +18,41 @@ import { useState } from 'react';
 import i18n from '../../src/i18n/index.js';
 import fa from '../../src/i18n/locales/fa.json';
 import en from '../../src/i18n/locales/en.json';
+import es from '../../src/i18n/locales/es.json';
+import ru from '../../src/i18n/locales/ru.json';
+import zh from '../../src/i18n/locales/zh.json';
 import TokenChart from '../../src/components/ProChart/TokenChart.jsx';
 import '../../src/index.css';
 
 const params = new URLSearchParams(location.search);
 i18n.addResourceBundle('fa', 'translation', fa);
 i18n.addResourceBundle('en', 'translation', en);
-await i18n.changeLanguage(params.get('lang') === 'en' ? 'en' : 'fa');
+i18n.addResourceBundle('es', 'translation', es);
+i18n.addResourceBundle('ru', 'translation', ru);
+i18n.addResourceBundle('zh', 'translation', zh);
+
+/*
+ * THE LANGUAGE CYCLE, and why it carries the partial locales.
+ *
+ * The previous pass could only switch fa ⇄ en, which is exactly the pair that
+ * was already complete — so the one thing the preview could not show was the
+ * bug this pass fixes: every other language falling back to English inside
+ * the terminal. `es`, `ru` and `zh` are the locales that were missing the
+ * whole `coin.pro.*` block, so cycling through them is the check.
+ */
+const LANGS = ['fa', 'en', 'es', 'ru', 'zh'];
+const RTL = new Set(['fa', 'ar', 'ur']);
+const pickLang = (value) => (LANGS.includes(value) ? value : 'fa');
+
+function applyLang(lang) {
+  i18n.changeLanguage(lang);
+  document.documentElement.lang = lang;
+  document.documentElement.dir = RTL.has(lang) ? 'rtl' : 'ltr';
+}
+
+await i18n.changeLanguage(pickLang(params.get('lang')));
 document.documentElement.lang = i18n.language;
-document.documentElement.dir = i18n.language === 'fa' ? 'rtl' : 'ltr';
+document.documentElement.dir = RTL.has(i18n.language) ? 'rtl' : 'ltr';
 document.documentElement.dataset.theme = params.get('theme') === 'light' ? 'light' : 'dark';
 
 const DAY = 86_400_000;
@@ -108,11 +134,7 @@ function Demo() {
       setCandles(makeCandles(range.days, SYMBOLS[key].price));
     },
     theme: (value) => { document.documentElement.dataset.theme = value; },
-    lang: (value) => {
-      i18n.changeLanguage(value);
-      document.documentElement.lang = value;
-      document.documentElement.dir = value === 'fa' ? 'rtl' : 'ltr';
-    }
+    lang: applyLang
   };
 
   return (
@@ -142,10 +164,14 @@ document.getElementById('pv-theme')?.addEventListener('click', (event) => {
   document.documentElement.dataset.theme = themeLight ? 'light' : 'dark';
   event.currentTarget.setAttribute('aria-pressed', String(themeLight));
 });
-let langFa = i18n.language !== 'en';
-document.getElementById('pv-lang')?.addEventListener('click', () => {
-  langFa = !langFa;
-  window.__pv.lang(langFa ? 'fa' : 'en');
+let langIndex = Math.max(0, LANGS.indexOf(i18n.language));
+const langBtn = document.getElementById('pv-lang');
+const paintLangBtn = () => { if (langBtn) langBtn.textContent = `زبان: ${LANGS[langIndex]}`; };
+paintLangBtn();
+langBtn?.addEventListener('click', () => {
+  langIndex = (langIndex + 1) % LANGS.length;
+  applyLang(LANGS[langIndex]);
+  paintLangBtn();
 });
 document.getElementById('pv-symbol')?.addEventListener('click', (event) => {
   const next = event.currentTarget.getAttribute('data-sym') === 'pepe' ? 'eth' : 'pepe';

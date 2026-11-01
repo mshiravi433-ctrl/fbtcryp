@@ -562,7 +562,13 @@ export default function CoinDetail() {
               {range.key === r.key && (
                 <SegIndicator id="range-ind" />
               )}
-              {r.key}
+              {/*
+                The rail used to print the raw 1D/7D/30D keys, so a Persian
+                page showed an English abbreviation — `۱روز` now comes from
+                `coin.pro.range1D`. Unknown keys still print themselves rather
+                than an empty button.
+              */}
+              {t(`coin.pro.range${r.key}`) === `coin.pro.range${r.key}` ? r.key : t(`coin.pro.range${r.key}`)}
             </button>
           ))}
         </div>
