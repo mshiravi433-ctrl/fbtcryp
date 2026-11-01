@@ -4043,5 +4043,63 @@
     "statAvg": "Perubahan rata-rata",
     "listCollapse": "Ciutkan daftar",
     "listExpand": "Bentangkan daftar"
+  },
+  "marketHero": {
+    "ariaLabel": "Etalase Pasar FBT",
+    "roleDesc": "etalase pasar interaktif",
+    "scenesAria": "Adegan etalase pasar",
+    "kicker": "Dek Komando FBT",
+    "liveBadge": "Inti Aktif",
+    "scenes": {
+      "pulse": {
+        "pill": "AI Pasar",
+        "tag": "Denyut Neural & Radar Langsung",
+        "titleLead": "Baca denyut pasar sebelum",
+        "titleAccent": "gelombang berikutnya",
+        "desc": "Pemindaian langsung 250+ aset, deteksi tren AI, dan sinyal presisi dalam satu bingkai kaca obsidian.",
+        "chip1": "Sinyal AI",
+        "chip2": "250+ Koin Aktif",
+        "chip3": "Luas Pasar",
+        "ctaPrimary": "Buka Sinyal AI",
+        "ctaSecondary": "Jelajahi Token",
+        "stageBadge": "AI · Radar Aktif"
+      },
+      "swap": {
+        "pill": "Swap Instan",
+        "tag": "Perutean Atomik Non-Kustodian",
+        "titleLead": "Tukar di likuiditas dalam",
+        "titleAccent": "dalam satu ketukan",
+        "desc": "Eksekusi terbaik lintas 10+ jaringan EVM dan Solana, langsung dari dompet pribadi Anda di rantai.",
+        "chip1": "10+ Jaringan",
+        "chip2": "Kustodi Mandiri",
+        "chip3": "Meja Solana",
+        "ctaPrimary": "Mulai Swap Instan",
+        "ctaSecondary": "Meja Solana",
+        "stageBadge": "DEX · Multi-Rantai"
+      },
+      "wealth": {
+        "pill": "Paus & RWA",
+        "tag": "Uang Cerdas & Aset Global",
+        "titleLead": "Pantau paus cerdas, emas digital",
+        "titleAccent": "dan saham global",
+        "desc": "Ikuti arus dompet utama on-chain sambil mengakses emas tertokenisasi dan saham unggulan dunia.",
+        "chip1": "Arus Paus",
+        "chip2": "Emas Tokenisasi",
+        "chip3": "Saham Global",
+        "ctaPrimary": "Radar Smart Money",
+        "ctaSecondary": "Saham & Emas",
+        "stageBadge": "RWA · Arus Cerdas"
+      }
+    },
+    "telemetry": {
+      "aria": "Telemetri pasar langsung",
+      "mcap": "Kap. Pasar",
+      "mcapAria": "Ke ringkasan pasar",
+      "breadth": "Porsi Naik",
+      "breadthAria": "Ke daftar token",
+      "topMover": "Pemimpin 24j",
+      "topMoverAria": "Buka pemimpin 24j {{symbol}}",
+      "awaiting": "Menyinkronkan"
+    }
   }
 }

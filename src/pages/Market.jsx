@@ -28,6 +28,7 @@ import MarketOverview from '../components/market/MarketOverview';
 import MarketFreshness from '../components/market/MarketFreshness';
 import SmartMoneyBanner from '../components/market/SmartMoneyBanner';
 import HotCoins from '../components/market/HotCoins';
+import MarketHeroBanner from '../components/market/MarketHeroBanner';
 import MarketTabStrip from '../components/market/MarketTabStrip';
 import { revealMarketTabStart, useMarketTab } from '../hooks/useMarketTab';
 import '../styles/market-modern.css';
@@ -44,6 +45,7 @@ import '../styles/market-obsidian-glass.css';
  * park anything this sheet animates.
  */
 import '../styles/market-tabs.css';
+import '../styles/market-hero-banner.css';
 /*
  * ─── THE SCROLL BUDGET, LAST ──────────────────────────────────────────────
  * The five sheets above are the design layers (one per pass, each with its
@@ -637,6 +639,16 @@ export default function Market() {
       <div className={`market-decision-content${decisionOpen ? ' is-open' : ''}`}>
         <PageTransition className="page mx-market">
           {isOffline && <div className="notice mx-offline">{t('common.offlineData')}</div>}
+
+          <MarketHeroBanner
+            global={global}
+            breadth={breadth}
+            coins={universe}
+            trend={trend}
+            vs={vs}
+            onSelectTab={changeTab}
+            onOpenCoin={openCoin}
+          />
 
           {/* ─── THE TWO TABS, AND WHAT EACH ONE HOLDS ──────────────────────
               «در صفحه بازار دو تب کن — تب اول مرور: باکس ارزش کل، باکس

@@ -4043,5 +4043,63 @@
     "statAvg": "Ortalama değişim",
     "listCollapse": "Listeyi daralt",
     "listExpand": "Listeyi genişlet"
+  },
+  "marketHero": {
+    "ariaLabel": "FBT Piyasa Vitrini",
+    "roleDesc": "etkileşimli piyasa vitrini",
+    "scenesAria": "Piyasa vitrin sahneleri",
+    "kicker": "FBT Komuta Güvertesi",
+    "liveBadge": "Canlı Çekirdek",
+    "scenes": {
+      "pulse": {
+        "pill": "Piyasa AI",
+        "tag": "Sinirsel Nabız ve Canlı Radar",
+        "titleLead": "Yeni dalgadan önce piyasa",
+        "titleAccent": "nabzını yakalayın",
+        "desc": "250+ varlıkta canlı tarama, yapay zeka trend analizi ve hassas sinyaller tek obsidyen cam çerçevede.",
+        "chip1": "AI Sinyaller",
+        "chip2": "250+ Canlı Coin",
+        "chip3": "Canlı Genişlik",
+        "ctaPrimary": "AI Sinyalleri Aç",
+        "ctaSecondary": "Tokenları Keşfet",
+        "stageBadge": "AI · Canlı Radar"
+      },
+      "swap": {
+        "pill": "Anında Swap",
+        "tag": "Gözetimsiz Atomik Yönlendirme",
+        "titleLead": "Derin likidite ağlarında tek dokunuşla",
+        "titleAccent": "anında takas",
+        "desc": "10+ EVM ağı ve Solana üzerinde cüzdanınızdan doğrudan imzalı en iyi zincir üstü fiyatlama.",
+        "chip1": "10+ Ağ",
+        "chip2": "Öz Gözetim",
+        "chip3": "Solana Masası",
+        "ctaPrimary": "Swap Başlat",
+        "ctaSecondary": "Solana Masası",
+        "stageBadge": "DEX · Çoklu Ağ"
+      },
+      "wealth": {
+        "pill": "Balinalar ve RWA",
+        "tag": "Akıllı Para ve Küresel Varlıklar",
+        "titleLead": "Akıllı balinaları, dijital altını ve",
+        "titleAccent": "küresel hisseleri izleyin",
+        "desc": "Zincir üstü büyük cüzdan akışlarını takip edin, tokenize altın ve küresel hisselere erişin.",
+        "chip1": "Balina Akışı",
+        "chip2": "Tokenize Altın",
+        "chip3": "Küresel Hisseler",
+        "ctaPrimary": "Akıllı Para Radarı",
+        "ctaSecondary": "Hisse ve Altın",
+        "stageBadge": "RWA · Akıllı Akış"
+      }
+    },
+    "telemetry": {
+      "aria": "Canlı piyasa göstergeleri",
+      "mcap": "Piyasa Değeri",
+      "mcapAria": "Piyasa özetine git",
+      "breadth": "Yükseliş Payı",
+      "breadthAria": "Token listesine git",
+      "topMover": "24s Lider",
+      "topMoverAria": "24s lideri {{symbol}} aç",
+      "awaiting": "Eşitleniyor"
+    }
   }
 }

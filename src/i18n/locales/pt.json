@@ -4043,5 +4043,63 @@
     "statAvg": "Variação média",
     "listCollapse": "Recolher a lista",
     "listExpand": "Expandir a lista"
+  },
+  "marketHero": {
+    "ariaLabel": "Vitrine de Mercado FBT",
+    "roleDesc": "vitrine interativa do mercado",
+    "scenesAria": "Cenas da vitrine",
+    "kicker": "Deck de Comando FBT",
+    "liveBadge": "Núcleo Vivo",
+    "scenes": {
+      "pulse": {
+        "pill": "IA de Mercado",
+        "tag": "Pulso Neural e Radar ao Vivo",
+        "titleLead": "Leia o pulso do mercado antes",
+        "titleAccent": "da próxima onda",
+        "desc": "Varredura em tempo real de 250+ ativos, detecção de tendência por IA e sinais precisos em vidro obsidiana.",
+        "chip1": "Sinais IA",
+        "chip2": "250+ Moedas",
+        "chip3": "Amplitude Viva",
+        "ctaPrimary": "Abrir Sinais IA",
+        "ctaSecondary": "Explorar Tokens",
+        "stageBadge": "IA · Radar Vivo"
+      },
+      "swap": {
+        "pill": "Swap Instantâneo",
+        "tag": "Roteamento Atômico Sem Custódia",
+        "titleLead": "Troque em liquidez profunda",
+        "titleAccent": "em um toque",
+        "desc": "Melhor execução em 10+ redes EVM e Solana, assinada direto na sua carteira com liquidação on-chain.",
+        "chip1": "10+ Redes",
+        "chip2": "Autocustódia",
+        "chip3": "Mesa Solana",
+        "ctaPrimary": "Iniciar Swap",
+        "ctaSecondary": "Mesa Solana",
+        "stageBadge": "DEX · Multichain"
+      },
+      "wealth": {
+        "pill": "Baleias e RWA",
+        "tag": "Smart Money e Ativos Globais",
+        "titleLead": "Siga baleias, ouro tokenizado",
+        "titleAccent": "e ações globais",
+        "desc": "Acompanhe fluxos de grandes carteiras on-chain com acesso a ouro tokenizado e ações globais.",
+        "chip1": "Fluxo Baleias",
+        "chip2": "Ouro Tokenizado",
+        "chip3": "Ações Globais",
+        "ctaPrimary": "Radar Smart Money",
+        "ctaSecondary": "Ações e Ouro",
+        "stageBadge": "RWA · Fluxo Vivo"
+      }
+    },
+    "telemetry": {
+      "aria": "Telemetria ao vivo do mercado",
+      "mcap": "Cap. Mercado",
+      "mcapAria": "Ver visão geral",
+      "breadth": "Força Compradora",
+      "breadthAria": "Ver lista de tokens",
+      "topMover": "Líder 24h",
+      "topMoverAria": "Abrir líder 24h {{symbol}}",
+      "awaiting": "Sincronizando"
+    }
   }
 }
