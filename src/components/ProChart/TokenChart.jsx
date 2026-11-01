@@ -92,6 +92,7 @@ function loadPrefs() {
   const stored = storage.get(PREFS_KEY, null);
   if (!stored || typeof stored !== 'object') return DEFAULT_PREFS;
   return {
+    chartType: CHART_TYPES.includes(stored.chartType) ? stored.chartType : DEFAULT_PREFS.chartType,
     overlays: {
       ma: { ...DEFAULT_PREFS.overlays.ma, ...(stored.overlays?.ma ?? {}) },
       ema: { ...DEFAULT_PREFS.overlays.ema, ...(stored.overlays?.ema ?? {}) },
@@ -206,8 +207,12 @@ export default function TokenChart({
   const [stats, setStats] = useState(null);
   const [snapshotNote, setSnapshotNote] = useState('');
   const [orientationNote, setOrientationNote] = useState('');
+  /* Live spot tick for the forming candle (polled below). `liveAt` drives
+     the LIVE badge: a tick older than ~45s is history, not "live". */
+  const [livePrice, setLivePrice] = useState(null);
+  const [liveAt, setLiveAt] = useState(0);
 
-  const { overlays, panes, settings } = prefs;
+  const { chartType, overlays, panes, settings } = prefs;
 
   /*
    * Candles are memoised by SIGNATURE, not by array identity: the OHLC poll
@@ -245,10 +250,57 @@ export default function TokenChart({
   const shownBar = hover ?? lastBar;
   const activeStats = stats ?? windowStats(candles);
 
+  /* Keyed on the two NUMBERS, not the stats object: a fresh stats object
+     lands on every pan frame, and a fib array with a new identity on every
+     frame made the overlay effect tear down and recreate every price line
+     while the reader was dragging. */
+  const statsHigh = activeStats?.high;
+  const statsLow = activeStats?.low;
   const fib = useMemo(() => {
-    if (!overlays.fib || !activeStats) return [];
-    return makeFibLevels(activeStats.high, activeStats.low);
-  }, [overlays.fib, activeStats]);
+    if (!overlays.fib || !Number.isFinite(statsHigh) || !Number.isFinite(statsLow)) return [];
+    return makeFibLevels(statsHigh, statsLow);
+  }, [overlays.fib, statsHigh, statsLow]);
+
+  /*
+   * ─── LIVE TICK ────────────────────────────────────────────────────────────
+   * OHLC polls once a minute (server cache is 60s), which reads as a frozen
+   * chart. The spot endpoint (/api/prices) is cached for 20s on both sides,
+   * so polling it every 15s moves the forming candle with real feed prices
+   * between candle polls — that is the «نمودار به صورت لایو حرکت کند» ask,
+   * without inventing a single tick. A tick implausibly far from the last
+   * close (>30%: wrong id, wrong currency, stale fixture data) is dropped:
+   * drawing it would spike the candle with a price this market never saw.
+   */
+  const lastCloseRef = useRef(0);
+  lastCloseRef.current = lastBar?.close ?? lastCloseRef.current;
+  useEffect(() => {
+    if (!coinId) return undefined;
+    let stop = false;
+    const tick = async () => {
+      try {
+        const rows = await getSimplePrices([coinId]);
+        const spot = Number(rows?.[coinId]?.usd);
+        if (stop || !Number.isFinite(spot) || spot <= 0) return;
+        const lastClose = lastCloseRef.current;
+        if (lastClose > 0 && Math.abs(spot / lastClose - 1) > 0.3) return;
+        setLivePrice(spot);
+        setLiveAt(Date.now());
+      } catch { /* a missed tick is not an error state; the next one lands in 15s */ }
+    };
+    tick();
+    const timer = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') tick();
+    }, 15000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      stop = true;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [coinId]);
 
   const toggleOverlay = useCallback((group, key) => {
     setPrefs((prev) => ({
@@ -268,6 +320,10 @@ export default function TokenChart({
 
   const toggleSetting = useCallback((key) => {
     setPrefs((prev) => ({ ...prev, settings: { ...prev.settings, [key]: !prev.settings[key] } }));
+  }, []);
+
+  const setChartType = useCallback((type) => {
+    setPrefs((prev) => (prev.chartType === type ? prev : { ...prev, chartType: type }));
   }, []);
 
   /*
@@ -304,6 +360,16 @@ export default function TokenChart({
     unlockScreen();
     /* Focus goes back to the button that opened the dialog, not to <body>. */
     setTimeout(() => expandBtnRef.current?.focus?.({ preventScroll: true }), 0);
+  }, [unlockScreen]);
+
+  /* If the component unmounts while expanded (e.g. CoinDetail swaps this
+     terminal out when the candle feed for a new range comes back empty),
+     do not leave the browser locked in native fullscreen + landscape with
+     no chart left to close it. */
+  const expandedRef = useRef(false);
+  expandedRef.current = expanded;
+  useEffect(() => () => {
+    if (expandedRef.current) unlockScreen();
   }, [unlockScreen]);
 
   async function openExpanded() {
@@ -445,17 +511,34 @@ export default function TokenChart({
       setTimeout(() => setSnapshotNote(''), 2600);
       return;
     }
-    try {
-      const url = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      const stamp = new Date().toISOString().slice(0, 10);
-      link.href = url;
-      link.download = `${(symbol || 'chart').toUpperCase()}-${range?.key ?? ''}-${stamp}.png`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setSnapshotNote(t('coin.pro.snapshotSaved'));
+    const stamp = new Date().toISOString().slice(0, 10);
+    const filename = `${(symbol || 'chart').toUpperCase()}-${range?.key ?? ''}-${stamp}.png`;
+    const save = (url, revoke) => {
+      try {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setSnapshotNote(t('coin.pro.snapshotSaved'));
+      } catch {
+        setSnapshotNote(t('coin.pro.snapshotFailed'));
+      }
+      if (revoke) setTimeout(() => URL.revokeObjectURL(url), 4000);
       setTimeout(() => setSnapshotNote(''), 2600);
+    };
+    try {
+      /* toBlob + object URL: a multi-megapixel data: URL is exactly what
+         mobile browsers choke on (or silently drop) as an <a download>. */
+      if (typeof canvas.toBlob === 'function') {
+        canvas.toBlob((blob) => {
+          if (blob) save(URL.createObjectURL(blob), true);
+          else save(canvas.toDataURL('image/png'), false);
+        }, 'image/png');
+      } else {
+        save(canvas.toDataURL('image/png'), false);
+      }
     } catch {
       setSnapshotNote(t('coin.pro.snapshotFailed'));
       setTimeout(() => setSnapshotNote(''), 2600);
@@ -465,7 +548,15 @@ export default function TokenChart({
   /* ---------------- rendering ---------------- */
 
   const hasCandles = candles.length >= 2;
-  const price = shownBar?.close ?? lastBar?.close ?? 0;
+  /* Header price: the bar under the crosshair when there is one, otherwise
+     the freshest number we honestly have — live spot first, last close next. */
+  const price = hover?.close ?? livePrice ?? lastBar?.close ?? 0;
+  const isLive = livePrice != null && Date.now() - liveAt < 45000;
+  const liveBadge = isLive ? (
+    <span className="pc-live" title={t('coin.pro.live')}>
+      <i aria-hidden="true" />{t('coin.pro.live')}
+    </span>
+  ) : null;
   const sessionChange = activeStats?.changePct ?? 0;
   const up = sessionChange >= 0;
   const legendId = `pc-legend-${uid}`;
@@ -495,6 +586,11 @@ export default function TokenChart({
 
   const toolbar = (
     <div className="pc-toolbar" role="toolbar" aria-label={t('coin.pro.tools')}>
+      <div className="pc-toolgroup" role="group" aria-label={t('coin.pro.chartType')}>
+        <Chip active={chartType === 'candles'} onClick={() => setChartType('candles')}>{t('coin.chartCandle')}</Chip>
+        <Chip active={chartType === 'line'} onClick={() => setChartType('line')}>{t('coin.chartLine')}</Chip>
+        <Chip active={chartType === 'area'} onClick={() => setChartType('area')}>{t('coin.pro.area')}</Chip>
+      </div>
       <div className="pc-toolgroup">
         {[7, 25, 99].map((period) => (
           <Chip key={`ma${period}`} active={overlays.ma[period]} onClick={() => toggleOverlay('ma', period)} title={`MA ${period}`}>
@@ -608,9 +704,12 @@ export default function TokenChart({
               <div className="pc-watermark" aria-hidden="true">{symbol}</div>
               <ProChart
                 ref={fsChartRef}
-                dataKey={`${range?.key ?? ''}:${signature}`}
+                dataKey={`${coinId}:${range?.key ?? ''}`}
                 candles={candles}
                 volume={volume}
+                chartType={chartType}
+                livePrice={livePrice}
+                doubleTapZoom={tool === 'none'}
                 rsiOn={panes.rsi}
                 macdOn={panes.macd}
                 overlays={overlays}
@@ -662,6 +761,7 @@ export default function TokenChart({
       <div className="pc-inline-head">
         {legend}
         <div className="pc-inline-actions">
+          {liveBadge}
           <span className="pc-inline-updated" aria-hidden="true">{interval}</span>
           <button
             type="button"
@@ -686,9 +786,11 @@ export default function TokenChart({
             <div className="pc-watermark" aria-hidden="true">{symbol}</div>
             <ProChart
               ref={inlineChartRef}
-              dataKey={`${range?.key ?? ''}:${signature}`}
+              dataKey={`${coinId}:${range?.key ?? ''}`}
               candles={candles}
               volume={[]}
+              chartType={chartType}
+              livePrice={livePrice}
               rsiOn={false}
               macdOn={false}
               overlays={overlays}

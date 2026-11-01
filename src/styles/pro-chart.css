@@ -97,6 +97,34 @@
   .pc-expand { width: 40px; height: 40px; border-radius: 12px; }
 }
 
+/* ── live badge ─────────────────────────────────────────────────────────── */
+
+.pc-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--up) 38%, transparent);
+  background: color-mix(in srgb, var(--up) 12%, transparent);
+  color: var(--up);
+  font: 800 9.5px/1 var(--font-display);
+  letter-spacing: .05em;
+  white-space: nowrap;
+}
+.pc-live i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--up);
+  animation: pc-live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes pc-live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .35; }
+}
+
 /* ── legend ─────────────────────────────────────────────────────────────── */
 
 .pc-legend {
@@ -184,8 +212,20 @@
   position: absolute;
   inset: 0;
   z-index: 1;
+  /* Inline: vertical drags still scroll the PAGE (the chart pans on
+     horizontal drags); the browser must not steal horizontal moves. */
+  touch-action: pan-y;
 }
 .pc-canvas canvas { cursor: crosshair !important; }
+
+/* Full-screen: every gesture belongs to the chart — pinch zoom and the
+   double-tap detector need raw touch events with no browser takeover. */
+.pc-fs .pc-canvas { touch-action: none; }
+
+/* The SVG fallback paints above the (hidden) engine host, which stays
+   mounted underneath so a later rebuild can retry the real engine. */
+.pc-canvas--fallback { z-index: 2; touch-action: pan-y; }
+.pc-fs .pc-canvas--fallback { touch-action: none; }
 
 .pc-watermark {
   position: absolute;
@@ -326,6 +366,7 @@ html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
   align-items: center;
   gap: 5px;
   overflow-x: auto;
+  touch-action: pan-x;
   scrollbar-width: none;
   padding-bottom: 1px;
 }
@@ -405,6 +446,7 @@ html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
   display: flex;
   gap: 12px;
   overflow-x: auto;
+  touch-action: pan-x;
   scrollbar-width: none;
   font-size: 10px;
   color: #b9c1d6;
@@ -466,6 +508,7 @@ html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
   align-items: center;
   gap: 6px;
   overflow-x: auto;
+  touch-action: pan-x;
   scrollbar-width: none;
   padding: 2px 1px;
   -webkit-overflow-scrolling: touch;
