@@ -286,3 +286,23 @@ describe('material and motion rules', () => {
     }
   });
 });
+
+describe('Bitcoin feed honesty regressions', () => {
+  it('does not colour a measured zero as profit', () => {
+    overview({ ...BTC, change24h: 0 });
+    expect(screen.getByTestId('market-btc-hero-card').dataset.dir).toBe('neutral');
+    expect(screen.getByTestId('market-btc-abs').textContent).toBe('USD 0.00');
+  });
+  it('does not present an offline snapshot as a positive live move', () => {
+    overview({ ...BTC, offline: true });
+    expect(screen.getByTestId('market-btc-hero-card').dataset.dir).toBeUndefined();
+    expect(screen.getByTestId('market-btc-abs').textContent).toBe('—');
+    expect(screen.getByText(fa.marketGlobalAd.unavailable)).toBeTruthy();
+  });
+  it('updates both sign and amount when the next poll turns negative', () => {
+    const view = overview(BTC);
+    view.rerender(<MemoryRouter><MarketOverview bitcoin={{ ...BTC, change24h: -3.2 }} vs="usd" /></MemoryRouter>);
+    expect(screen.getByTestId('market-btc-hero-card').dataset.dir).toBe('down');
+    expect(screen.getByTestId('market-btc-abs').textContent.startsWith('-')).toBe(true);
+  });
+});

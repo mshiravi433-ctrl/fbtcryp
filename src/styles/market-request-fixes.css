@@ -1,0 +1,12 @@
+.mx-market .mx-global-banner { position: relative; overflow: hidden; }
+.mx-global-art { display: grid; place-items: center; position: relative; width: 176px; height: 146px; margin: 0 auto; isolation: isolate; }
+.mx-global-art img { width: 146px; height: 146px; object-fit: contain; animation: mx-global-float 9s ease-in-out infinite; }
+.mx-global-orbit { position: absolute; inset: 18px 0; border: 1px solid var(--mx-cyan); border-radius: 50%; transform: rotate(-24deg); opacity: .45; }
+.mx-global-orbit::after { content: ''; position: absolute; top: 17px; left: 18px; width: 7px; height: 7px; border-radius: 50%; background: var(--mx-cyan); box-shadow: 0 0 12px var(--mx-cyan); }
+@keyframes mx-global-float { 50% { transform: translateY(-6px) rotate(3deg); } }
+.mx-market .mx-btc-card[data-dir='neutral'] { --btc-tone: var(--mx-muted); --btc-tone-rgb: 155, 165, 185; }
+.mx-market .mx-btc-data-state { margin-top: 12px; font-size: 11px; color: var(--mx-muted); }
+.mx-market .mx-btc-delta { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; min-height: 38px; margin-top: 12px; }
+.mx-market .mx-btc-pct, .mx-market .mx-btc-abs { direction: ltr; unicode-bidi: isolate; }
+@media (prefers-reduced-motion: reduce) { .mx-global-art img { animation: none; } }
+:root:not([data-motion='full']) .mx-global-art img { animation: none; }

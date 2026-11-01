@@ -5012,6 +5012,29 @@
       "cta": "Share"
     }
   },
+  "ordersExecution": {
+    "automatic": "Automatic execution",
+    "automaticHint": "On-chain keeper",
+    "watch": "Price watch",
+    "watchHint": "Alerts · your confirmation"
+  },
+  "marketGlobalAd": {
+    "eyebrow": "FBT · GLOBAL INTELLIGENCE",
+    "title": "A connected world. A clearer perspective.",
+    "desc": "Explore a global view, intelligent analysis and AI assistants in the FBT Global Intelligence workspace.",
+    "note": "Insights for awareness, not guaranteed returns",
+    "cta": "Explore Global Intelligence",
+    "input": "Data",
+    "brain": "Global AI",
+    "insight": "Insights",
+    "features": {
+      "analysis": "Intelligent analysis",
+      "world": "Global view",
+      "agents": "AI assistants"
+    },
+    "unavailable": "Bitcoin data unavailable",
+    "stale": "Last saved quote"
+  },
   "marketIntel": {
     "searchPlaceholder": "Search name, ticker, or contract address",
     "searchResults": "Token results",

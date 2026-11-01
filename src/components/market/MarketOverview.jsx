@@ -169,7 +169,8 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
     : null;
   const pct = (n) => (n == null ? null : `${n.toFixed(1)}%`);
   const avg = finiteOrNull(liveAvgChange);
-  const btcChange = finiteOrNull(bitcoin?.change24h);
+  const btcUnavailable = bitcoin?.offline || bitcoin?.dataProvenance === 'offline';
+  const btcChange = btcUnavailable ? null : finiteOrNull(bitcoin?.change24h);
   /* Turnover is volume ÷ market cap, both read from the feed: a real ratio, not
      a simulated "activity" score. Absent when either side is absent. */
   const turnover = mcap != null && volume != null && mcap > 0 ? (volume / mcap) * 100 : null;
@@ -184,12 +185,13 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
      a consequence of two measured numbers, not a third source. */
   const btcVolume = positiveOrNull(bitcoin?.volume);
   const btcMcap = positiveOrNull(bitcoin?.mcap);
-  const btcDir = btcChange == null ? undefined : btcChange >= 0 ? 'up' : 'down';
+  const btcDir = btcChange == null ? undefined : btcChange === 0 ? 'neutral' : btcChange > 0 ? 'up' : 'down';
   const btcDelta = btcPrice != null && btcChange != null && 1 + btcChange / 100 > 0
     ? btcPrice - btcPrice / (1 + btcChange / 100)
     : null;
   const signedMoney = (value) => {
-    if (value == null || value === 0) return '—';
+    if (value == null) return '—';
+    if (value === 0) return `${vs.toUpperCase()} 0.00`;
     return `${value > 0 ? '+' : '-'}${marketPrice(Math.abs(value), vs)}`;
   };
 
@@ -388,6 +390,7 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
             </button>
           </header>
 
+          {(btcUnavailable || btcChange == null || bitcoin.dataProvenance === 'stale') && <p className="mx-btc-data-state" role="status">{t(btcUnavailable || btcChange == null ? 'marketGlobalAd.unavailable' : 'marketGlobalAd.stale')}</p>}
           <div className="mx-btc-price">
             <AnimatedNumber value={btcPrice ?? 0} format={() => (btcPrice == null ? '—' : marketPrice(btcPrice, vs))} flash={false} />
           </div>
@@ -396,7 +399,7 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
               the same move in money. Green when up, red when down. */}
           <div className="mx-btc-delta" data-testid="market-btc-delta" data-dir={btcDir}>
             <span className="mx-btc-pct mono">
-              {btcChange != null && (btcChange >= 0 ? <GlyphTrendUp width={12} height={12} aria-hidden="true" /> : <GlyphTrendDown width={12} height={12} aria-hidden="true" />)}
+              {btcChange != null && btcChange !== 0 && (btcChange > 0 ? <GlyphTrendUp width={12} height={12} aria-hidden="true" /> : <GlyphTrendDown width={12} height={12} aria-hidden="true" />)}
               {fmtPct(btcChange, 2)}
             </span>
             <span className="mx-btc-abs mono" data-testid="market-btc-abs">{signedMoney(btcDelta)}</span>
@@ -408,11 +411,11 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
               <span className="mx-btc-halo" aria-hidden="true" />
               <MarketSparkline
                 points={bitcoin.sparkline}
-                up={(bitcoin.change24h ?? 0) >= 0}
+                up={btcDir === 'up'}
                 height={74}
                 interactive
                 glow
-                liveDot
+                liveDot={!btcUnavailable && bitcoin.dataProvenance !== 'stale'}
                 label={t('marketIntel.btcChartAria')}
                 formatValue={(v) => marketPrice(v, vs)}
                 className="mx-btc-chart"

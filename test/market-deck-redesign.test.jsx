@@ -228,21 +228,22 @@ describe('۲ · the Smart Money blade shows the route', () => {
     await open();
     const blade = screen.getByTestId('market-smart-money-banner');
     expect(blade.querySelector('.mx-smart-mark svg')).toBeTruthy();
-    expect(blade.querySelector('.mx-smart-art')).toBeNull();
-    expect(blade.textContent).toContain(fa.marketIntel.smartCta);
+    expect(blade.querySelector('.mx-global-art img').getAttribute('src')).toBe('/images/market-banner/globe.webp');
+    expect(blade.querySelector('a').getAttribute('href')).toBe('/global');
+    expect(blade.textContent).toContain(fa.marketGlobalAd.cta);
     /* the eyebrow is translated, never a hardcoded English string */
     expect(pageSrc).not.toContain('FBT SMART MONEY');
-    expect(blade.textContent).toContain(fa.marketIntel.smartEyebrow);
+    expect(blade.textContent).toContain(fa.marketGlobalAd.eyebrow);
 
     /* «ببین پول هوشمند کجا می‌رود» — wallet, router, destination, drawn */
     const route = blade.querySelector('.mx-smart-route');
     expect(route).toBeTruthy();
     expect(route.querySelectorAll('.mx-route-node')).toHaveLength(3);
-    expect(route.textContent).toContain(fa.marketIntel.flowWallet);
-    expect(route.textContent).toContain(fa.marketIntel.flowTarget);
+    expect(route.textContent).toContain(fa.marketGlobalAd.input);
+    expect(route.textContent).toContain(fa.marketGlobalAd.insight);
     /* three named pools, and not one invented percentage on the card */
     expect(blade.querySelectorAll('.mx-pool')).toHaveLength(3);
-    expect(blade.textContent).toContain(fa.marketIntel.pool.whales);
+    expect(blade.textContent).toContain(fa.marketGlobalAd.features.analysis);
     expect(blade.textContent).not.toMatch(/\d+%/);
   });
 
@@ -360,13 +361,13 @@ describe('۵ · filters, نبض بازار and طلا→سولانا', () => {
 
     const sectors = [...document.querySelectorAll('.mx-sector')];
     expect(sectors.map((s) => s.dataset.sector)).toEqual([
-      'all', 'gold', 'meme', 'rwa', 'ai', 'gaming', 'solana', 'monitoring', 'seed', 'defi', 'storage', 'nft',
-      'fanToken', 'megadrop', 'launchpool', 'infrastructure', 'bsc', 'payment', 'launchpad'
+      'all', 'gold', 'meme', 'rwa', 'ai', 'gaming', 'solana', 'defi', 'storage', 'nft',
+      'fanToken', 'megadrop', 'launchpool', 'infrastructure', 'bsc', 'payment'
     ]);
     expect(sectors.every((s) => s.querySelector('svg.mx-sector-icon'))).toBe(true);
     /* Each of the eighteen categories plus All has its own silhouette. */
     const shapes = new Set(sectors.map((s) => s.querySelector('svg.mx-sector-icon').innerHTML));
-    expect(shapes.size).toBe(19);
+    expect(shapes.size).toBe(16);
   });
 
   it('pins the sector rail horizontal, snapping, and un-masked', () => {
@@ -374,7 +375,7 @@ describe('۵ · filters, نبض بازار and طلا→سولانا', () => {
     expect(bare).toMatch(/\.mx-sector \{[^}]*scroll-snap-align: start/s);
     expect(pageSrc).toContain('<MarketSectorRail');
     expect(bare).toMatch(/\.mx-market \.mx-sector-rail \{[^}]*border: 0[^}]*background: none/s);
-    for (const sector of ['gold', 'meme', 'rwa', 'ai', 'gaming', 'solana', 'monitoring', 'seed', 'defi', 'storage', 'nft', 'fanToken', 'megadrop', 'launchpool', 'infrastructure', 'bsc', 'payment', 'launchpad']) {
+    for (const sector of ['gold', 'meme', 'rwa', 'ai', 'gaming', 'solana', 'defi', 'storage', 'nft', 'fanToken', 'megadrop', 'launchpool', 'infrastructure', 'bsc', 'payment']) {
       expect(bare).toMatch(new RegExp(`\\.mx-sector\\[data-sector='${sector}'\\] \\{ --sec: #`));
     }
   });

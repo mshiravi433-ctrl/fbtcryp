@@ -34,18 +34,12 @@ const select = (name) => fireEvent.click(document.querySelector(`.mx-sector[data
 beforeEach(() => { api.getCategory.mockReset(); api.getMarkets.mockReset(); });
 afterEach(cleanup);
 
-it('shows a truthful risk outage, does not substitute market rows, and retries', async () => {
-  api.getCategory.mockRejectedValueOnce(Error('offline')).mockResolvedValueOnce([{ ...row(1), id: 'verified', name: 'Verified Seed Token' }]);
+it('removes the three unsupported categories without issuing category requests', () => {
   mount();
-  select('seed');
-  const retry = await screen.findByTestId('market-category-retry');
-  expect(screen.getByTestId('market-category-source').textContent).toContain(fa.market.categoryRiskSource);
-  expect(screen.queryByTestId('row-bitcoin')).toBeNull();
-  expect(screen.getByText(fa.market.categoryError)).toBeTruthy();
-  fireEvent.click(retry);
-  expect(await screen.findByTestId('row-verified')).toBeTruthy();
-  expect(screen.queryByTestId('market-category-retry')).toBeNull();
-  expect(api.getCategory).toHaveBeenLastCalledWith('seed', expect.objectContaining({ strict: true, force: true }));
+  for (const name of ['seed', 'monitoring', 'launchpad']) {
+    expect(document.querySelector(`.mx-sector[data-sector="${name}"]`)).toBeNull();
+  }
+  expect(api.getCategory).not.toHaveBeenCalled();
 });
 
 it('prefetches the next page without waiting for the reader to reveal 250 rows', async () => {

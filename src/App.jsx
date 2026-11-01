@@ -1,3 +1,4 @@
+import PageTabSwipe from './components/PageTabSwipe.jsx';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
@@ -365,98 +366,10 @@ function prefetchLikelyRoutes() {
  * Header and BottomNav themselves stay route-agnostic and never grow a
  * `/intent` special case.
  */
-const PRIMARY_SWIPE_TABS = ['/', '/swap', '/signals', '/intent', '/wallet'];
-
-/**
- * Drag the page sideways to move between the app's primary tabs.
- * ---------------------------------------------------------------------------
- * «با کشیدن لمسی صفحه به چپ و راست به تب‌های دیگر برو؛ چپ = تب قبلی، راست =
- *  تب بعدی»
- *
- * ─── THE DIRECTION USED TO BE THE OTHER WAY ROUND ──────────────────────────
- * The old handler advanced on a LEFT swipe (`dx < 0 ? 1 : -1`). That is the
- * LTR pagination convention, and in this app it fought the reader: in Farsi the
- * tab before yours sits to one side and the tab after it to the other, and the
- * gesture that moved you forward was the one that felt like going back.
- *
- * The mapping now follows the READING DIRECTION, which is what makes it feel
- * physical rather than arbitrary — the new tab arrives from the side it lives
- * on:
- *
- *   RTL (fa/ar/ur):  drag RIGHT → next tab,  drag LEFT → previous tab
- *   LTR (all rest):  drag LEFT  → next tab,  drag RIGHT → previous tab
- *
- * That is also exactly what the owner asked for in Farsi, and it is consistent
- * for the eleven other languages instead of inverting them.
- *
- * ─── WHAT OWNS ITS OWN GESTURE ─────────────────────────────────────────────
- * Charts, horizontal rails, tab strips, carousels and form fields keep their
- * own drags: the gesture is only claimed when it starts outside them and the
- * container is not horizontally scrollable. A swipe is also rejected when it is
- * more vertical than horizontal — a thumb scrolling a long market list drifts
- * sideways on every flick, and turning that drift into navigation is the
- * classic way a swipe-to-switch becomes infuriating.
- *
- * Still no touchmove listener and no transform on the tree: the decision is
- * taken ONCE, on touchend, which is a single cheap branch per gesture and can
- * never compete with a scroll frame. `touch-action: pan-y` on the zone lets the
- * browser own vertical scrolling synchronously.
- */
+/** Horizontal gestures belong to the current page, never the bottom navigation. */
 function SwipeTabRoutes() {
   const location = useLocation();
-  const navigate = useNavigate();
-  const touchStart = useRef(null);
-
-  const onTouchStart = (event) => {
-    if (event.touches?.length !== 1) { touchStart.current = null; return; }
-    const target = event.target;
-    if (target?.closest?.('input, textarea, select, button, a, [role="tab"], [data-tab-swipe-ignore], canvas, video, .perp-rail, .news-mode-tabs, .smx-dock, .smx-tabs, .segmented, .market-sectors-rail, .ticker, .chart, .candle-chart')) {
-      touchStart.current = null;
-      return;
-    }
-    const scroller = target?.closest?.('[data-horizontal-scroll], [style*="overflow-x"], .horizontal-scroll, .dcx-chips, .more-filter');
-    if (scroller && scroller.scrollWidth > scroller.clientWidth + 4) {
-      touchStart.current = null;
-      return;
-    }
-    const touch = event.touches[0];
-    touchStart.current = { x: touch.clientX, y: touch.clientY, at: Date.now() };
-  };
-
-  const onTouchEnd = (event) => {
-    const start = touchStart.current;
-    touchStart.current = null;
-    if (!start || !event.changedTouches?.length) return;
-    const touch = event.changedTouches[0];
-    const dx = touch.clientX - start.x;
-    const dy = touch.clientY - start.y;
-    /*
-     * 56px, not 72. A thumb swipe on a 390px screen covers 40-60% of the width;
-     * the old threshold demanded a third of the screen before it would move,
-     * so the gesture read as broken rather than deliberate. The horizontal /
-     * vertical ratio test is what keeps it from firing during a scroll.
-     */
-    if (Math.abs(dx) < 56 || Math.abs(dy) > Math.abs(dx) * 0.8 || Date.now() - start.at > 900) return;
-
-    const rtl = (typeof document !== 'undefined' && document.documentElement.dir === 'rtl');
-    /* Physical drag → logical step: +1 is "the tab that comes next". */
-    const forward = rtl ? dx > 0 : dx < 0;
-
-    let index = PRIMARY_SWIPE_TABS.indexOf(location.pathname);
-    if (index < 0) index = 0;
-    /* Clamp rather than wrap: an accidental gesture must never teleport from
-       the last tab to the first. */
-    const next = Math.max(0, Math.min(PRIMARY_SWIPE_TABS.length - 1, index + (forward ? 1 : -1)));
-    if (next !== index || !PRIMARY_SWIPE_TABS.includes(location.pathname)) {
-      navigate(PRIMARY_SWIPE_TABS[next]);
-    }
-  };
-
-  return (
-    <div className="app-tab-swipe-zone" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onTouchCancel={() => { touchStart.current = null; }}>
-      <AnimatedRoutes />
-    </div>
-  );
+  return <PageTabSwipe routeKey={location.pathname}><AnimatedRoutes /></PageTabSwipe>;
 }
 
 function AppChrome() {

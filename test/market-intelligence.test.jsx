@@ -40,11 +40,11 @@ describe('market intelligence surfaces', () => {
     expect(document.querySelector('.mx-deck-live').textContent).not.toBe(fa.marketIntel.deckLive);
   });
 
-  it('links the Smart Money banner to the real intelligence route', () => {
+  it('links the Global Intelligence banner to its real route', () => {
     render(<MemoryRouter><SmartMoneyBanner /></MemoryRouter>);
-    const link = screen.getByRole('link', { name: fa.marketIntel.smartCta });
-    expect(link.getAttribute('href')).toBe('/smart-money');
-    expect(screen.getByText(fa.marketIntel.smartTitle)).toBeTruthy();
+    const link = screen.getByRole('link', { name: fa.marketGlobalAd.cta });
+    expect(link.getAttribute('href')).toBe('/global');
+    expect(screen.getByText(fa.marketGlobalAd.title)).toBeTruthy();
   });
 
   it('renders hot coins with real joined volume and opens the coin', () => {

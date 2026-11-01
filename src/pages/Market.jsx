@@ -59,12 +59,13 @@ import '../styles/market-hero-banner.css';
  * It changes no number, no label and no colour — see styles/market-perf.css.
  */
 import '../styles/market-perf.css';
+import '../styles/market-request-fixes.css';
 import { marketCapSeries } from '../lib/globalTrend';
 import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct } from '../lib/format';
 import { vsOf } from '../lib/currency';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { getMarkets, onMarketVisualsReady } from '../lib/api';
+import { getCoin, getMarkets, onMarketVisualsReady } from '../lib/api';
 import { MARKET_CATEGORIES, isBinanceRiskSector, sectorFromRows } from '../lib/marketSectors';
 import { DEFAULT_SORT, MARKET_SORTS, marketBreadth, sortMarketRows } from '../lib/marketList';
 import { mergeVisuals } from '../lib/marketVisuals';
@@ -115,7 +116,7 @@ const FOLDED_ROWS = 12;
  * one a non-crypto person recognises, and the reason they might open a crypto
  * app at all where the local currency is unstable.
  */
-const SECTORS = Object.keys(MARKET_CATEGORIES);
+const SECTORS = Object.keys(MARKET_CATEGORIES).filter((key) => !['seed', 'monitoring', 'launchpad'].includes(key));
 
 /** The five list views, same vocabulary, same 14px optical size. */
 function FilterGlyph({ view }) {
@@ -591,10 +592,31 @@ export default function Market() {
   }, [trending, coins, vs]);
 
   const [decisionOpen, setDecisionOpen] = useState(false);
-  const bitcoin = useMemo(
+  const listedBitcoin = useMemo(
     () => (coins ?? []).find((coin) => coin.id === 'bitcoin') ?? (coins ?? []).find((coin) => coin.symbol === 'BTC'),
     [coins]
   );
+  // Repair an incomplete BTC row with the existing single-coin provider. Never
+  // infer a 24h move from the seven-day sparkline, or mix display currencies.
+  const [btcRepair, setBtcRepair] = useState(null);
+  const needsBtcRepair = !loading && vs === 'usd' && (!listedBitcoin || listedBitcoin.offline || listedBitcoin.dataProvenance === 'stale' || finiteOrNull(listedBitcoin.change24h) == null);
+  useEffect(() => {
+    if (!needsBtcRepair) { setBtcRepair(null); return undefined; }
+    let alive = true;
+    const repair = async () => {
+      if (document.visibilityState === 'hidden') return;
+      try {
+        const quote = await getCoin('bitcoin', 'usd');
+        if (alive && quote?.id === 'bitcoin' && !quote.offline && positiveOrNull(quote.price) != null && finiteOrNull(quote.change24h) != null) setBtcRepair(quote);
+        else if (alive) setBtcRepair((previous) => previous ? { ...previous, dataProvenance: 'stale' } : null);
+      } catch { if (alive) setBtcRepair((previous) => previous ? { ...previous, dataProvenance: 'stale' } : null); }
+    };
+    repair();
+    const timer = setInterval(repair, 30000);
+    document.addEventListener('visibilitychange', repair);
+    return () => { alive = false; clearInterval(timer); document.removeEventListener('visibilitychange', repair); };
+  }, [needsBtcRepair]);
+  const bitcoin = needsBtcRepair && btcRepair ? btcRepair : listedBitcoin;
   const openCoin = useCallback((id) => navigate(`/coin/${id}`), [navigate]);
   /*
    * The 7-day shape of the total, built from the rows already in memory —
