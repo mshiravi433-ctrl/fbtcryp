@@ -4045,5 +4045,63 @@
     "statAvg": "Cambio medio",
     "listCollapse": "Contraer la lista",
     "listExpand": "Expandir la lista"
+  },
+  "marketHero": {
+    "ariaLabel": "Escaparate de Mercado FBT",
+    "roleDesc": "escaparate interactivo del mercado",
+    "scenesAria": "Escenas del escaparate",
+    "kicker": "Cabina de Mando FBT",
+    "liveBadge": "Núcleo Vivo",
+    "scenes": {
+      "pulse": {
+        "pill": "IA de Mercado",
+        "tag": "Pulso Neural y Radar en Vivo",
+        "titleLead": "Lee el pulso del mercado antes de",
+        "titleAccent": "la próxima ola",
+        "desc": "Escaneo en tiempo real de 250+ activos, detección de régimen con IA y señales precisas en un marco de obsidiana.",
+        "chip1": "Señales IA",
+        "chip2": "250+ Monedas",
+        "chip3": "Amplitud Viva",
+        "ctaPrimary": "Señales de IA",
+        "ctaSecondary": "Explorar Tokens",
+        "stageBadge": "IA · Radar Vivo"
+      },
+      "swap": {
+        "pill": "Swap Instantáneo",
+        "tag": "Enrutamiento Atómico Sin Custodia",
+        "titleLead": "Intercambia con liquidez profunda",
+        "titleAccent": "en un toque",
+        "desc": "Mejor ejecución en vivo en 10+ redes EVM y Solana, firmada desde tu propia billetera en cadena.",
+        "chip1": "10+ Redes",
+        "chip2": "Autocustodia",
+        "chip3": "Mesa Solana",
+        "ctaPrimary": "Iniciar Swap",
+        "ctaSecondary": "Mesa Solana",
+        "stageBadge": "DEX · Multired"
+      },
+      "wealth": {
+        "pill": "Ballenas y RWA",
+        "tag": "Dinero Inteligente y Activos Globales",
+        "titleLead": "Sigue ballenas, oro tokenizado",
+        "titleAccent": "y acciones globales",
+        "desc": "Rastrea flujos de carteras clave en cadena mientras accedes a oro tokenizado y acciones globales.",
+        "chip1": "Flujo Ballenas",
+        "chip2": "Oro Tokenizado",
+        "chip3": "Acciones Globales",
+        "ctaPrimary": "Radar Smart Money",
+        "ctaSecondary": "Acciones y Oro",
+        "stageBadge": "RWA · Flujo Vivo"
+      }
+    },
+    "telemetry": {
+      "aria": "Telemetría de mercado en vivo",
+      "mcap": "Cap. Mercado",
+      "mcapAria": "Ir al resumen global",
+      "breadth": "Cuota Alcista",
+      "breadthAria": "Ir a amplitud y tokens",
+      "topMover": "Líder 24h",
+      "topMoverAria": "Abrir líder 24h {{symbol}}",
+      "awaiting": "Sincronizando"
+    }
   }
 }

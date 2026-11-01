@@ -1,5 +1,9 @@
 {
-  "quickAccess": { "title": "Quick access", "open": "Open quick access", "close": "Close quick access" },
+  "quickAccess": {
+    "title": "Quick access",
+    "open": "Open quick access",
+    "close": "Close quick access"
+  },
   "nav": {
     "missions": "Mission Control",
     "market": "Market",
@@ -17363,6 +17367,64 @@
         "source": "Open the ready file"
       },
       "localNote": "This evidence comes from a full local rehearsal in this repository, not from CI yet. Add the workflow once to make the run automatic."
+    }
+  },
+  "marketHero": {
+    "ariaLabel": "FBT Market Showcase",
+    "roleDesc": "interactive market showcase",
+    "scenesAria": "Market showcase scenes",
+    "kicker": "FBT Command Deck",
+    "liveBadge": "Live Core",
+    "scenes": {
+      "pulse": {
+        "pill": "Market AI",
+        "tag": "Neural Pulse & Live Radar",
+        "titleLead": "Read the market pulse before",
+        "titleAccent": "the next wave",
+        "desc": "Real-time scanning across 250+ assets, AI regime detection, and precision signal intelligence in one obsidian frame.",
+        "chip1": "AI Signals",
+        "chip2": "250+ Live Coins",
+        "chip3": "Live Breadth",
+        "ctaPrimary": "Open AI Signals",
+        "ctaSecondary": "Explore Tokens",
+        "stageBadge": "AI · Live Radar"
+      },
+      "swap": {
+        "pill": "Instant Swap",
+        "tag": "Non-Custodial Atomic Routing",
+        "titleLead": "Swap across deep liquidity",
+        "titleAccent": "in one tap",
+        "desc": "Best live execution across 10+ EVM networks and Solana, signed directly in your own wallet with on-chain settlement.",
+        "chip1": "10+ Networks",
+        "chip2": "Self-Custody",
+        "chip3": "Solana Desk",
+        "ctaPrimary": "Launch Instant Swap",
+        "ctaSecondary": "Solana Desk",
+        "stageBadge": "DEX · Multi-Chain"
+      },
+      "wealth": {
+        "pill": "Whales & RWA",
+        "tag": "Smart Money & Global Assets",
+        "titleLead": "Track smart whales, digital gold",
+        "titleAccent": "and global stocks",
+        "desc": "Follow high-conviction wallet flows on-chain while accessing tokenized gold and flagship global equities.",
+        "chip1": "Whale Flows",
+        "chip2": "Tokenized Gold",
+        "chip3": "Global Equities",
+        "ctaPrimary": "Smart Money Radar",
+        "ctaSecondary": "Stocks & Gold",
+        "stageBadge": "RWA · Smart Flow"
+      }
+    },
+    "telemetry": {
+      "aria": "Live market telemetry",
+      "mcap": "Market Cap",
+      "mcapAria": "Jump to global market overview",
+      "breadth": "Bullish Share",
+      "breadthAria": "Jump to market breadth and token list",
+      "topMover": "24h Leader",
+      "topMoverAria": "Open 24h leader {{symbol}}",
+      "awaiting": "Syncing"
     }
   }
 }

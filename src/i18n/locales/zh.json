@@ -4036,5 +4036,63 @@
     "statAvg": "平均涨跌",
     "listCollapse": "收起列表",
     "listExpand": "展开列表"
+  },
+  "marketHero": {
+    "ariaLabel": "FBT 市场旗舰展台",
+    "roleDesc": "交互式市场展台",
+    "scenesAria": "展台场景切换",
+    "kicker": "FBT 智能指挥舱",
+    "liveBadge": "实时核心",
+    "scenes": {
+      "pulse": {
+        "pill": "市场 AI",
+        "tag": "神经脉搏与实时雷达",
+        "titleLead": "在下一波行情启动前洞察",
+        "titleAccent": "市场脉搏",
+        "desc": "实时扫描 250+ 加密资产，融合 AI 趋势识别与高精信号，尽在一块黑曜石玻璃视窗。",
+        "chip1": "AI 信号",
+        "chip2": "250+ 实时币种",
+        "chip3": "市场广度",
+        "ctaPrimary": "打开 AI 信号",
+        "ctaSecondary": "探索代币",
+        "stageBadge": "AI · 实时雷达"
+      },
+      "swap": {
+        "pill": "极速闪兑",
+        "tag": "非托管原子路由",
+        "titleLead": "聚合深层流动性网络实现",
+        "titleAccent": "一键闪兑",
+        "desc": "覆盖 10+ EVM 链与 Solana 最优报价，由您的个人钱包直接签名并链上结算。",
+        "chip1": "10+ 网络",
+        "chip2": "自托管安全",
+        "chip3": "Solana 专区",
+        "ctaPrimary": "立即闪兑",
+        "ctaSecondary": "Solana 闪兑",
+        "stageBadge": "DEX · 多链聚合"
+      },
+      "wealth": {
+        "pill": "巨鲸与 RWA",
+        "tag": "聪明钱与全球资产",
+        "titleLead": "追踪聪明钱巨鲸、代币化黄金与",
+        "titleAccent": "全球股票",
+        "desc": "链上洞察主力钱包资金流向，同时畅享代币化黄金与全球核心股票资产。",
+        "chip1": "巨鲸流向",
+        "chip2": "代币化黄金",
+        "chip3": "全球股票",
+        "ctaPrimary": "聪明钱雷达",
+        "ctaSecondary": "股票与黄金",
+        "stageBadge": "RWA · 资金雷达"
+      }
+    },
+    "telemetry": {
+      "aria": "实时市场指标",
+      "mcap": "总市值",
+      "mcapAria": "查看市场总览",
+      "breadth": "上涨占比",
+      "breadthAria": "查看市场广度与代币列表",
+      "topMover": "24h 领涨",
+      "topMoverAria": "查看 24h 领涨资产 {{symbol}}",
+      "awaiting": "同步中"
+    }
   }
 }

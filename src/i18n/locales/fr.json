@@ -4045,5 +4045,63 @@
     "statAvg": "Variation moyenne",
     "listCollapse": "Replier la liste",
     "listExpand": "Déplier la liste"
+  },
+  "marketHero": {
+    "ariaLabel": "Vitrine Marché FBT",
+    "roleDesc": "vitrine interactive du marché",
+    "scenesAria": "Scènes de la vitrine",
+    "kicker": "Pont de Commande FBT",
+    "liveBadge": "Cœur Actif",
+    "scenes": {
+      "pulse": {
+        "pill": "IA Marché",
+        "tag": "Impulsion Neurale et Radar Direct",
+        "titleLead": "Captez le pouls du marché avant",
+        "titleAccent": "la prochaine vague",
+        "desc": "Analyse en direct de 250+ actifs, détection de tendance par IA et signaux de précision sous verre obsidienne.",
+        "chip1": "Signaux IA",
+        "chip2": "250+ Actifs",
+        "chip3": "Souffle Direct",
+        "ctaPrimary": "Signaux IA",
+        "ctaSecondary": "Explorer Tokens",
+        "stageBadge": "IA · Radar Direct"
+      },
+      "swap": {
+        "pill": "Swap Instantané",
+        "tag": "Routage Atomique Non-Custodial",
+        "titleLead": "Échangez sur une liquidité profonde",
+        "titleAccent": "en un geste",
+        "desc": "Meilleure exécution sur 10+ réseaux EVM et Solana, signée depuis votre portefeuille avec règlement on-chain.",
+        "chip1": "10+ Réseaux",
+        "chip2": "Auto-Garde",
+        "chip3": "Bureau Solana",
+        "ctaPrimary": "Lancer le Swap",
+        "ctaSecondary": "Bureau Solana",
+        "stageBadge": "DEX · Multi-Chaîne"
+      },
+      "wealth": {
+        "pill": "Baleines et RWA",
+        "tag": "Smart Money et Actifs Mondiaux",
+        "titleLead": "Suivez les baleines, l’or tokenisé",
+        "titleAccent": "et les actions mondiales",
+        "desc": "Observez les flux des grands portefeuilles on-chain et accédez à l’or tokenisé ainsi qu’aux actions mondiales.",
+        "chip1": "Flux Baleines",
+        "chip2": "Or Tokenisé",
+        "chip3": "Actions Globales",
+        "ctaPrimary": "Radar Smart Money",
+        "ctaSecondary": "Actions et Or",
+        "stageBadge": "RWA · Flux Intelligent"
+      }
+    },
+    "telemetry": {
+      "aria": "Télémétrie du marché en direct",
+      "mcap": "Cap. Marché",
+      "mcapAria": "Voir l’aperçu global",
+      "breadth": "Part Haussière",
+      "breadthAria": "Voir les tokens",
+      "topMover": "Leader 24h",
+      "topMoverAria": "Ouvrir le leader 24h {{symbol}}",
+      "awaiting": "Synchronisation"
+    }
   }
 }
