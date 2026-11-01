@@ -84,6 +84,27 @@ vi.mock('../src/components/MarketStories', () => ({
   default: () => <div className="market-stories-section" data-testid="market-stories-rail" />
 }));
 
+/*
+ * ─── EVERY ONE OF THESE MOUNTS NOW OPENS ON «مرور» ─────────────────────────
+ * The screen has two tabs (see lib/marketTabs.js). These files were written
+ * against a one-page market, so the rows they are about live one tab away.
+ *
+ * `openTokensTab()` is the tab switch, driven through the real control — the
+ * tab is found by ROLE and NAME, exactly as a reader would find it — and it
+ * does not shortcut the URL: a test that set `?tab=` directly would prove the
+ * URL works while leaving the button itself unproven.
+ */
+const openTokensTab = () => {
+  const tab = screen
+    .queryAllByRole('tab')
+    .find((node) => node.textContent.includes(fa.market.tabs.tokens));
+  if (tab) fireEvent.click(tab);
+};
+
+const tabNamed = (key) => screen
+  .queryAllByRole('tab')
+  .find((node) => node.textContent.includes(fa.market.tabs[key]));
+
 import Market from '../src/pages/Market.jsx';
 
 const css = readFileSync('src/styles/market-intelligence.css', 'utf8');
@@ -101,8 +122,25 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+/*
+ * ─── TWO TABS, SO TWO DOORS ────────────────────────────────────────────────
+ * The screen is split («مرور» / «توکن», see lib/marketTabs.js). The boxes this
+ * file is mostly about — the deck, the trio, Bitcoin, the stories, the blade —
+ * are on the first tab, which is where the screen opens; the list, its search
+ * field and its controls are on the second.
+ *
+ * `open()` therefore only waits for the screen, and the tests that then read a
+ * row call `openList()` — which switches tab through the REAL control, found
+ * by role and name exactly as a reader finds it, rather than by setting a URL
+ * the button itself never touches.
+ */
 const open = async () => {
   render(<MemoryRouter><Market /></MemoryRouter>);
+  await waitFor(() => expect(screen.getByTestId('market-tabs-strip')).toBeTruthy());
+};
+const openList = async () => {
+  await open();
+  openTokensTab();
   await waitFor(() => expect(document.querySelectorAll('.coin-row').length).toBeGreaterThan(0));
 };
 describe('۱/۲ · independent overview and Bitcoin readings', () => {
@@ -226,7 +264,7 @@ describe('۲ · the Smart Money blade shows the route', () => {
 
 describe('aurora market showcase', () => {
   it('keeps the light wave decorative and breadth values tied to the feed', async () => {
-    await open();
+    await openList();
     const breadth = screen.getByTestId('market-breadth');
     const aurora = breadth.querySelector('.mx-breadth-aurora');
     expect(aurora?.getAttribute('aria-hidden')).toBe('true');
@@ -242,7 +280,7 @@ describe('aurora market showcase', () => {
 
 describe('۳ · «داغ‌ترین کوین‌ها» carries one accent per place', () => {
   it('ranks the first three cards and hands each its own hue', async () => {
-    await open();
+    await openList();
     const rail = screen.getByTestId('market-hot-coins');
     const cards = rail.querySelectorAll('.mx-hot-card');
     expect(cards.length).toBe(8);
@@ -267,7 +305,7 @@ describe('۳ · «داغ‌ترین کوین‌ها» carries one accent per pla
 
 describe('۵ · search above the filters, inside «همه ارزها»', () => {
   it('keeps search in the list and sectors on a separate rail below the controls', async () => {
-    await open();
+    await openList();
     const lens = document.querySelector('.mx-lens');
     const terminal = document.querySelector('.market-terminal');
     const search = document.querySelector('.mx-search-wrap');
@@ -304,7 +342,7 @@ describe('۵ · search above the filters, inside «همه ارزها»', () => {
   });
 
   it('offers the natural-language capability as a chip that steps aside when typing', async () => {
-    await open();
+    await openList();
     const chip = document.querySelector('.mx-search-ai');
     expect(chip).toBeTruthy();
     expect(chip.textContent).toContain(fa.marketIntel.aiChip);
@@ -314,7 +352,7 @@ describe('۵ · search above the filters, inside «همه ارزها»', () => {
 
 describe('۵ · filters, نبض بازار and طلا→سولانا', () => {
   it('gives every filter chip and every sector tab a distinct drawn mark', async () => {
-    await open();
+    await openList();
     const views = [...document.querySelectorAll('.mx-view')];
     expect(views).toHaveLength(5);
     /* the icon class sits on the svg itself — these are inline marks, not sprites */
@@ -339,7 +377,7 @@ describe('۵ · filters, نبض بازار and طلا→سولانا', () => {
   });
 
   it('turns نبض بازار into an instrument with its own accent edge', async () => {
-    await open();
+    await openList();
     const breadth = screen.getByTestId('market-breadth');
     expect(breadth.dataset.tone).toBe('up');
     expect(breadth.querySelector('.mx-breadth-mark svg')).toBeTruthy();
@@ -351,7 +389,7 @@ describe('۵ · filters, نبض بازار and طلا→سولانا', () => {
   });
 
   it('modernises the swap button and the token row without moving a number', async () => {
-    await open();
+    await openList();
     const row = document.querySelector('.mx-coin-row');
     expect(row.querySelector('.coin-change-pill svg')).toBeTruthy();
     expect(row.textContent).not.toMatch(/[▲▼]/);
@@ -364,16 +402,27 @@ describe('۵ · filters, نبض بازار and طلا→سولانا', () => {
 
 describe('۶ · the stories box sits between the hot rail and the blade', () => {
   it('is in that order in the document, and joins the page rhythm', async () => {
+    /*
+     * ─── THE SAME THREE BOXES, NOW ONE TAB APART ───────────────────────────
+     * «در صفحه بازار دو تب کن» split this column: the stories and the blade
+     * are on «مرور» (with the readings), the hot rail and the list are on
+     * «توکن». So the order is asserted as the reader meets it — «مرور» holds
+     * the deck, then the stories, then the blade; «توکن» holds the hot rail
+     * above the list — and the one thing that must not be reordered inside a
+     * panel is each panel's own reading order.
+     */
     await open();
-    const hot = screen.getByTestId('market-hot-coins');
+    const overview = screen.getByTestId('market-overview');
     const stories = screen.getByTestId('market-stories-rail');
     const blade = screen.getByTestId('market-smart-money-banner');
-
-    expect(after(hot, stories)).toBe(true);
+    expect(after(overview, stories)).toBe(true);
     expect(after(stories, blade)).toBe(true);
-    expect(after(blade, document.querySelector('.market-terminal'))).toBe(true);
-    /* …and the deck is still the first thing on the screen. */
-    expect(after(screen.getByTestId('market-overview'), hot)).toBe(true);
+
+    fireEvent.click(tabNamed('tokens'));
+    await waitFor(() => expect(screen.queryByTestId('market-hot-coins')).toBeTruthy());
+    const hot = screen.getByTestId('market-hot-coins');
+    expect(after(hot, document.querySelector('.market-terminal'))).toBe(true);
+    expect(after(hot, screen.getByTestId('market-lens'))).toBe(true);
     /* its margins come from the page gap now, not from the box itself */
     expect(bare).toMatch(/\.mx-stories \.market-stories-section \{[^}]*margin: 0/s);
   });
@@ -440,7 +489,7 @@ describe('۷ · motion, theme and language on the first screen', () => {
   });
 
   it('draws the pulse rail\'s three rings instead of typing them', async () => {
-    await open();
+    await openList();
     /* «نبض بازار» is on this screen twice: the breadth instrument inside the
        list, and the edge rail the owner built to dismiss itself. Both are SVG. */
     const orb = document.querySelector('.dor');
@@ -451,7 +500,11 @@ describe('۷ · motion, theme and language on the first screen', () => {
   });
 
   it('leaves no typed arrow, tick or emoji in the screen it redraws', async () => {
-    await open();
+    /* Both tabs, because the rule is about the whole screen: nothing may
+       arrive as platform artwork with its own weight and baseline. */
+    await openList();
+    fireEvent.click(tabNamed('overview'));
+    await waitFor(() => expect(screen.queryByTestId('market-overview')).toBeTruthy());
     const body = document.body.textContent;
     expect(body).not.toMatch(/[↗↘↑↓▲▼✓◈ⓘ]/);
     for (const file of ['src/pages/Market.jsx', 'src/components/market/MarketOverview.jsx',
@@ -467,7 +520,7 @@ describe('۷ · motion, theme and language on the first screen', () => {
 describe('۸ · relocated folding and honest progressive pagination', () => {
   it('keeps 60 initial rows; folds from the footer without losing total or pagination', async () => {
     feed.data = [...COINS, ...Array.from({ length: 43 }, (_, i) => mkCoin(100 + i, `X${i}`))];
-    await open();
+    await openList();
     const fold = screen.getByTestId('market-list-fold');
     const count = screen.getByTestId('market-count').textContent;
     const rows = () => document.querySelectorAll('#market-list-rows .coin-row').length;
@@ -496,13 +549,13 @@ describe('۸ · relocated folding and honest progressive pagination', () => {
 
   it('does not offer a useless fold for a short search result', async () => {
     feed.data = COINS.slice(0, 5);
-    await open();
+    await openList();
     expect(screen.queryByTestId('market-list-fold')).toBeNull();
     expect(document.querySelectorAll('#market-list-rows .coin-row')).toHaveLength(5);
   });
 
   it('paints only the coin card, with an independently named swap beside it', async () => {
-    await open();
+    await openList();
     const swap = screen.getByTestId('market-swap-bitcoin');
     const row = swap.closest('.mx-coin-row');
     expect(row.querySelector('.coin-row').contains(swap)).toBe(false);

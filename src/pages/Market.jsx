@@ -28,11 +28,22 @@ import MarketOverview from '../components/market/MarketOverview';
 import MarketFreshness from '../components/market/MarketFreshness';
 import SmartMoneyBanner from '../components/market/SmartMoneyBanner';
 import HotCoins from '../components/market/HotCoins';
+import MarketTabStrip from '../components/market/MarketTabStrip';
+import { revealMarketTabStart, useMarketTab } from '../hooks/useMarketTab';
 import '../styles/market-modern.css';
 import '../styles/market-intelligence.css';
 import '../styles/market-glass-v3.css';
 import '../styles/market-aurora-glass.css';
 import '../styles/market-obsidian-glass.css';
+/*
+ * ─── THE TAB STRIP — «مرور / توکن» ────────────────────────────────────────
+ * The sheet that draws the two tabs, in the material the five layers above
+ * already define (it declares no new colour, no new light and no blur). It
+ * sits AFTER the design layers because it is the one control whose whole job
+ * is to match them — and BEFORE the scroll budget, which must be able to
+ * park anything this sheet animates.
+ */
+import '../styles/market-tabs.css';
 /*
  * ─── THE SCROLL BUDGET, LAST ──────────────────────────────────────────────
  * The five sheets above are the design layers (one per pass, each with its
@@ -115,6 +126,24 @@ export default function Market() {
   const navigate = useNavigate();
   const favorites = useAppStore((s) => s.favorites);
   const vs = vsOf(useSettingsStore((s) => s.currency));
+
+  /*
+   * ─── THE TWO TABS ───────────────────────────────────────────────────────
+   * «در صفحه بازار دو تب کن» — see lib/marketTabs.js for what belongs to each
+   * one and why the model is a separate module.
+   *
+   * The state lives in the URL (`?tab=tokens`), so it survives a reload, a
+   * return from another screen and a shared link, and it costs no request:
+   * BOTH panels read the feed this component was already polling, and the
+   * closed one is not mounted at all.
+   */
+  const [tab, setTab] = useMarketTab();
+  const changeTab = useCallback((next) => {
+    setTab(next);
+    /* A tab of a different height must not open halfway down the previous
+       one — see revealMarketTabStart(). */
+    revealMarketTabStart();
+  }, [setTab]);
 
   const { data: global } = useGlobalStats();
   /*
@@ -609,419 +638,479 @@ export default function Market() {
         <PageTransition className="page mx-market">
           {isOffline && <div className="notice mx-offline">{t('common.offlineData')}</div>}
 
-          {/* ─── THE ORDER OF THE FIRST SCREEN ──────────────────────────────
-              «باکس استوری ها … بین داغ ترین ها و بنر تبلیغاتی قرار بگیره»
-              «زیر باکس‌هایی مثل میم‌کوین … را از باکس جدا کن، زیر تب و ریلی»
+          {/* ─── THE TWO TABS, AND WHAT EACH ONE HOLDS ──────────────────────
+              «در صفحه بازار دو تب کن — تب اول مرور: باکس ارزش کل، باکس
+              بیت‌کوین، همراه با پول هوشمند بنر و باکس استوری‌ها. تب دوم بنام
+              توکن: باکس داغ‌ترین‌ها، باکس جستجو و توکن‌ها.»
 
-              Readings first, then discovery, then the two promotional surfaces,
-              then the list. The deck (market view, the three boxes, Bitcoin) is
-              the only number on the first screen; «داغ‌ترین کوین‌ها» is the only
-              discovery; the stories and the Smart Money blade are the only two
-              things that lead somewhere else — and the blade is last of the
-              three, because it is the one that asks for a tap rather than
-              offering a reading. */}
-          <MarketOverview
-            global={global}
-            bitcoin={bitcoin}
-            trend={trend}
-            liveAvgChange={liveAvgChange}
-            loading={loading}
-            vs={vs}
-            onOpenCoin={openCoin}
+              TWO PANELS, ONE FEED. Neither panel fetches anything of its own:
+              the deck, Bitcoin, the hot rail and every row all read the same
+              poll this screen has always run, so opening a tab costs no
+              request and a number can never disagree between the two.
+
+              THE CLOSED TAB IS NOT MOUNTED. Not «hidden with CSS» — absent.
+              The stories reel and the Smart Money blade are a dozen hand-drawn
+              SVG scenes between them, and the list is sixty rows each with a
+              sparkline. Rendering both panels and hiding one would pay the
+              whole price of the screen twice for a control that only ever
+              shows half of it, on the one page that was measured to be slow.
+
+              THE READER'S WORK SURVIVES THE SWITCH. Search text, sort, the
+              starred-only view, the chosen sector and the collapsed list all
+              live in THIS component's state, above the panels, so a trip to
+              «مرور» and back returns to the same list in the same order with
+              the same words in the box.
+
+              The order inside each panel is the order those boxes already had
+              of each other («باکس استوری‌ها … بین داغ‌ترین‌ها و بنر تبلیغاتی
+              قرار بگیرد» still holds inside «مرور»): readings, then the two
+              surfaces that lead somewhere else, the blade last because it is
+              the one that asks for a tap rather than offering a reading. */}
+          <MarketTabStrip
+            active={tab}
+            onChange={changeTab}
+            overviewId="market-panel-overview"
+            tokensId="market-panel-tokens"
           />
 
-          <HotCoins coins={hotCoins} onOpen={openCoin} vs={vs} />
-
-          <div className="mx-stories">
-            <MarketStories coins={coins} global={global} />
-          </div>
-
-          <SmartMoneyBanner />
-
-          {/* Feed tools and list controls are separate glass surfaces. */}
-          <section className="mx-lens" aria-labelledby="market-lens-title">
-            <div className="mx-terminal-head mx-lens-head">
-              <h2 className="market-terminal-title mx-terminal-title" id="market-lens-title">
-                <span>{t('marketIntel.railLabel')}</span>
-              </h2>
-              <div className="mx-terminal-actions">
-                <MarketFreshness updatedAt={updatedAt} />
-                <button
-                  type="button"
-                  className="market-refresh mx-icon-btn"
-                  onClick={() => refreshMarkets?.()}
-                  disabled={loading}
-                  data-busy={loading ? 'true' : undefined}
-                  aria-label={t('market.refresh')}
-                  title={t('market.refresh')}
-                  data-testid="market-refresh"
-                >
-                  <IconRefresh width={15} height={15} aria-hidden="true" />
-                </button>
-                <button type="button" className="market-compare mx-compare" onClick={() => navigate('/compare')} aria-label={t('market.compare')}>
-                  <IconChart width={14} height={14} aria-hidden="true" />
-                  <span>{t('market.compare')}</span>
-                </button>
-              </div>
-            </div>
-
-            {breadth.counted > 0 && (
-              <div
-                className="market-breadth mx-breadth"
-                data-testid="market-breadth"
-                data-tone={breadth.avgChange >= 0 ? 'up' : 'down'}
-              >
-                <div className="mx-breadth-head">
-                  <span className="mx-breadth-title">
-                    <span className="mx-breadth-mark" aria-hidden="true">
-                      <GlyphPulse width={13} height={13} />
-                    </span>
-                    {t('market.breadthTitle')}
-                  </span>
-                  <span className="mx-breadth-avg mono" data-tone={breadth.avgChange >= 0 ? 'up' : 'down'}>
-                    <IconActivity width={11} height={11} aria-hidden="true" />
-                    {t('market.breadthAvg', { pct: fmtPct(breadth.avgChange, 2) })}
-                  </span>
-                </div>
-                {/* Atmospheric light only: the measured breadth remains in the bar below. */}
-                <div className="mx-breadth-aurora" aria-hidden="true">
-                  <svg viewBox="0 0 600 74" preserveAspectRatio="none">
-                    <path className="mx-aurora-haze" d="M0 55 C75 70 95 15 165 34 S255 68 310 30 S390 10 450 35 S535 49 600 12" />
-                    <path className="mx-aurora-line" d="M0 55 C75 70 95 15 165 34 S255 68 310 30 S390 10 450 35 S535 49 600 12" />
-                    <path className="mx-aurora-echo" d="M0 61 C75 70 105 29 165 42 S255 71 310 40 S395 19 450 43 S535 56 600 23" />
-                  </svg>
-                </div>
-                <div className="mx-breadth-bar" aria-hidden="true">
-                  <span className="is-up" style={{ width: `${breadth.upShare * 100}%` }} />
-                  <span className="is-flat" style={{ width: `${breadth.flatShare * 100}%` }} />
-                  <span className="is-down" style={{ width: `${breadth.downShare * 100}%` }} />
-                </div>
-                <div className="mx-breadth-legend">
-                  <span className="mx-breadth-item" data-tone="up" data-testid="market-breadth-up">
-                    <i aria-hidden="true" />{t('market.breadthUp', { count: fmtNum(breadth.up) })}
-                  </span>
-                  <span className="mx-breadth-item" data-tone="down" data-testid="market-breadth-down">
-                    <i aria-hidden="true" />{t('market.breadthDown', { count: fmtNum(breadth.down) })}
-                  </span>
-                  {breadth.flat > 0 && (
-                    <span className="mx-breadth-item" data-tone="flat">
-                      <i aria-hidden="true" />{t('market.breadthFlat', { count: fmtNum(breadth.flat) })}
-                    </span>
-                  )}
-                  {breadth.unknown > 0 && (
-                    <span className="mx-breadth-item" data-tone="unknown">
-                      <i aria-hidden="true" />{t('market.breadthUnknown', { count: fmtNum(breadth.unknown) })}
-                    </span>
-                  )}
-                </div>
-                <p className="market-breadth-note mx-breadth-note">{t('market.breadthNote', { count: fmtNum(breadth.counted) })}</p>
-              </div>
-            )}
-
-          </section>
-
-          <section className="market-terminal mx-terminal" aria-labelledby="market-list-title">
-            <div className="mx-list-hero">
-              <div className="mx-list-hero-head">
-                <h2 className="mx-list-title" id="market-list-title">
-                  <span className="market-terminal-title-text">{sector ? t(`market.sector.${sector}`) : t('marketIntel.allCoinsTitle')}</span>
-                  <span className="market-count mono" aria-live="polite" data-testid="market-count">{fmtNum(list.length)}</span>
-                </h2>
-              </div>
-
-              {/* «زیر همه ارزها باید فیلد جستجو بیاد بالای فیلتر ها» — the field
-                  that narrows THIS list lives inside this card, directly under
-                  its head and directly above the chips that re-order it. */}
-              <MarketSearch
-                query={query}
-                onQueryChange={(value) => { setQuery(value); setSmartIntent(null); }}
-                onApplyIntent={applySmartSearch}
-                onNavigate={navigate}
-                universe={universe}
-                remoteHits={remoteHits}
-                searching={searching}
-                searchError={searchError}
-                smartIntent={smartIntent}
+          <div
+            className="mx-tab-panel"
+            id="market-panel-overview"
+            role="tabpanel"
+            aria-labelledby="market-tab-overview"
+            /* `hidden` wins over the panel's own `display: flex` — the rule is
+               in market-tabs.css §3, with the reason. */
+            hidden={tab !== 'overview'}
+            data-testid="market-panel-overview-box"
+          >
+            {/* The BODY only exists while its tab is open. The panel element
+                itself stays (the strip's `aria-controls` must always resolve,
+                and `hidden` is what keeps it out of the accessibility tree),
+                but a closed tab carries no stories reel, no banner and no
+                readings — see the note on the strip above. */}
+            {tab === 'overview' && (
+              <>
+              <MarketOverview
+                global={global}
+                bitcoin={bitcoin}
+                trend={trend}
+                liveAvgChange={liveAvgChange}
+                loading={loading}
                 vs={vs}
+                onOpenCoin={openCoin}
               />
 
-              <div className="mx-controls">
-              <div className="market-views mx-views" role="group" aria-label={t('market.viewsAria')}>
-                {FILTERS.map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    className="market-view mx-view"
-                    data-view={f}
-                    data-active={activeView === f ? 'true' : undefined}
-                    aria-pressed={activeView === f}
-                    onClick={() => applyView(f)}
-                  >
-                    <FilterGlyph view={f} />
-                    {t(`market.filter.${f}`)}
-                  </button>
-                ))}
+              <div className="mx-stories">
+                <MarketStories coins={coins} global={global} />
               </div>
 
-              <div className="market-sort-wrap mx-sort-wrap" ref={sortWrapRef}>
-                <button
-                  type="button"
-                  className="market-sort-trigger mx-sort-trigger"
-                  aria-label={t('market.sortAria')}
-                  aria-haspopup="menu"
-                  aria-expanded={sortOpen}
-                  aria-controls="market-sort-options"
-                  onClick={() => setSortOpen((open) => !open)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-                      event.preventDefault();
-                      setSortOpen(true);
-                      requestAnimationFrame(() => sortWrapRef.current?.querySelector('.market-sort-option')?.focus());
-                    }
-                  }}
-                  data-testid="market-sort"
-                >
-                  <span>{t(`market.sort.${sortKey}`)}</span>
-                  <GlyphCaretDown className="mx-sort-caret" width={13} height={13} />
-                </button>
-                {sortOpen && (
-                  <div
-                    className="market-sort-popover mx-sort-popover"
-                    id="market-sort-options"
-                    role="menu"
-                    aria-label={t('market.sortAria')}
-                    onKeyDown={(event) => {
-                      const options = [...event.currentTarget.querySelectorAll('.market-sort-option')];
-                      const index = options.indexOf(document.activeElement);
-                      let next = null;
-                      if (event.key === 'ArrowDown') next = (index + 1) % options.length;
-                      else if (event.key === 'ArrowUp') next = (index - 1 + options.length) % options.length;
-                      else if (event.key === 'Home') next = 0;
-                      else if (event.key === 'End') next = options.length - 1;
-                      if (next != null) { event.preventDefault(); options[next]?.focus(); }
-                    }}
-                  >
-                    {MARKET_SORTS.map((key) => (
-                      <button
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={sortKey === key}
-                        className="market-sort-option mx-sort-option"
-                        key={key}
-                        onClick={() => { chooseSort(key); setSortOpen(false); }}
-                      >
-                        <span>{t(`market.sort.${key}`)}</span>
-                        {sortKey === key && <IconCheck className="mx-sort-check" width={13} height={13} aria-hidden="true" />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  className="market-dir mx-icon-btn"
-                  data-dir={sortDir}
-                  onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
-                  aria-label={sortDir === 'desc' ? t('market.dirDesc') : t('market.dirAsc')}
-                  title={sortDir === 'desc' ? t('market.dirDesc') : t('market.dirAsc')}
-                  data-testid="market-sort-dir"
-                >
-                  {/* A drawn arrow, not a typed one: the down/up text glyphs arrive as artwork
-                      whose weight and baseline differ per platform. */}
-                  {sortDir === 'desc'
-                    ? <GlyphSortDesc width={14} height={14} />
-                    : <GlyphSortAsc width={14} height={14} />}
-                </button>
-              </div>
-              </div>
-              </div>
-
-          </section>
-
-          <MarketSectorRail
-            sectors={SECTORS}
-            selected={sector}
-            onSelect={(next) => { setSectorCoins([]); setSector(next); }}
-          />
-
-            <section className="mx-table-wrap" aria-labelledby="market-list-title">
-
-            {smartIntent && (
-              <div className="mx-intent-result" role="status" aria-live="polite">
-                <IconSparkle width={13} height={13} aria-hidden="true" />
-                <span>{t(`market.aiApplied.${smartIntent.key}`)}</span>
-                <button type="button" onClick={() => { setSmartIntent(null); setQuery(''); }}>{t('market.clearSearch')}</button>
-              </div>
-            )}
-
-            {loading && !list.length ? (
-              <div className="stack market-coin-grid mx-table" aria-busy="true">
-                {Array.from({ length: 8 }).map((_, i) => <div key={i} className="skel market-skel-row mx-skel-row" />)}
-              </div>
-            ) : marketError && !list.length ? (
-              <div className="market-empty mx-empty" data-kind="error" data-testid="market-feed-error">
-                <span className="market-empty-icon" aria-hidden="true"><IconRefresh width={20} height={20} /></span>
-                <div className="market-empty-title">{t('market.feedDown')}</div>
-                <p className="market-empty-help">{t('market.feedDownHelp')}</p>
-                <button type="button" className="market-empty-action mx-empty-action" onClick={() => refreshMarkets?.()} data-testid="market-retry">
-                  <IconRefresh width={14} height={14} aria-hidden="true" />
-                  {t('market.retry')}
-                </button>
-              </div>
-            ) : (
-              <>
-                {emptyKind !== 'none' && !list.length && !extraHits.length && (
-                  <div className="market-empty mx-empty" data-kind={emptyKind}>
-                    <span className="market-empty-icon" aria-hidden="true">
-                      {emptyKind === 'favorites'
-                        ? <IconStar width={20} height={20} />
-                        : emptyKind === 'searching' || emptyKind === 'loadingSector'
-                          ? <IconRefresh width={20} height={20} />
-                          : <IconSearch width={20} height={20} />}
-                    </span>
-                    <div className="market-empty-title">
-                      {emptyKind === 'favorites'
-                        ? t('market.emptyFavorites')
-                        : emptyKind === 'searching'
-                          ? t('market.searching')
-                          : emptyKind === 'loadingSector'
-                            ? t('market.loadingSector')
-                            : emptyKind === 'sector'
-                              ? t('market.sectorEmpty')
-                              : t('market.noResults')}
-                    </div>
-                    {emptyKind === 'favorites' && <p className="market-empty-help">{t('market.emptyFavoritesHelp')}</p>}
-                    {(emptyKind === 'favorites' || emptyKind === 'search' || emptyKind === 'sector') && (
-                      <button
-                        type="button"
-                        className="market-empty-action mx-empty-action"
-                        onClick={() => { setQuery(''); setSector(null); setOnlyFavorites(false); setSortKey('rank'); setSortDir('asc'); }}
-                      >
-                        {t('market.showAll')}
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                <div className="stack market-coin-grid mx-table" id="market-list-rows">
-                  {visibleList.map((c, i) => {
-                    const swapUrl = swapRouteFor(c);
-                    return (
-                      <div key={c.id} className="market-coin-row mx-coin-row">
-                        <CoinRow
-                          coin={c}
-                          rank={c.rank || i + 1}
-                          metric={rowMetric(c)}
-                          animate={false}
-                          /*
-                           * «لوگو ها دیر بالا میاد» — the first rows are the ones a
-                           * reader meets before the list has finished arriving, so
-                           * their artwork is asked for at high priority. Row 9
-                           * onward stays lazy/low: 60 eager requests to one CDN host
-                           * is the queue that caused the complaint in the first
-                           * place (see lib/coinImage.js for the size half of it).
-                           */
-                          logoPriority={i < 8}
-                          /*
-                           * «ایکون بعضی باکس‌ها دیر بالا میاد» and the scroll
-                           * stutter are the same accounting error: sixty SVG
-                           * sparklines painted in one commit, fifty of them
-                           * below the fold. The first screenful draws at once
-                           * (a reader must never see it arrive); the rest draw
-                           * as the list is scrolled, one screen ahead — see
-                           * hooks/useRowWindow.js. Every number on every row is
-                           * rendered either way.
-                           */
-                          deferSpark={i >= 8}
-                          onClick={() => openCoin(c.id)}
-                        />
-                        <span className="mx-swap-slot" data-available={swapUrl ? 'true' : undefined}>
-                        {swapUrl && (
-                          <button
-                            type="button"
-                            className="market-swap-btn mx-swap-btn"
-                            onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}
-                            aria-label={t('market.swapOnCorrectNetwork', { symbol: c.symbol })}
-                            title={t('market.swapOnCorrectNetwork', { symbol: c.symbol })}
-                            data-testid={`market-swap-${c.id}`}
-                          >
-                            <IconSwap width={12} height={12} aria-hidden="true" />
-                            <span className="mx-swap-label">{t('market.swap')}</span>
-                          </button>
-                        )}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {(hasMore || list.length > FOLDED_ROWS) && (
-                  <div className="market-more mx-more">
-                    <div className="market-more-meta">
-                      <span className="mono" data-testid="market-showing">
-                        {t('market.showing', { shown: fmtNum(shownCount), total: fmtNum(list.length || shownCount) })}
-                      </span>
-                      <span className="market-more-track" aria-hidden="true">
-                        <span className="market-more-fill" style={{ width: `${list.length ? Math.min(100, (shownCount / list.length) * 100) : 0}%` }} />
-                      </span>
-                    </div>
-                    <div className="mx-list-actions">
-                    {hasMore && !listFolded && <button
-                      type="button"
-                      className="market-show-more mx-show-more"
-                      disabled={pageLoading}
-                      onClick={() => {
-                        if (list.length > visibleCount) setVisibleCount((n) => n + 60);
-                        else loadNextPage();
-                      }}
-                    >
-                      {pageLoading
-                        ? t('market.loadingSector')
-                        : list.length > visibleCount
-                          ? t('market.showMore', { count: fmtNum(list.length - visibleCount) })
-                          : t('market.nextPage')}
-                    </button>}
-                    {list.length > FOLDED_ROWS && <button
-                      type="button"
-                      className="mx-list-fold"
-                      data-testid="market-list-fold"
-                      data-folded={listFolded ? 'true' : 'false'}
-                      aria-expanded={!listFolded}
-                      aria-controls="market-list-rows"
-                      onClick={() => setListFolded((folded) => !folded)}
-                    >
-                      <GlyphCaretDown width={13} height={13} aria-hidden="true" />
-                      <span>{t(listFolded ? 'marketIntel.listExpand' : 'marketIntel.listCollapse')}</span>
-                    </button>}
-                    </div>
-                  </div>
-                )}
-
-                {extraHits.length > 0 && (
-                  <section className="market-more-results mx-more-results">
-                    <p className="section-label">{t('market.moreResults')}</p>
-                    <div className="stack market-coin-grid mx-table">
-                      {extraHits.map((c) => {
-                        const swapUrl = swapRouteFor(c);
-                        return (
-                          <div key={c.id} className="market-coin-row mx-coin-row">
-                            <CoinRow coin={c} rank={c.rank || '—'} animate={false} onClick={() => openCoin(c.id)} />
-                            <span className="mx-swap-slot" data-available={swapUrl ? 'true' : undefined}>
-                            {swapUrl && (
-                              <button type="button" className="market-swap-btn mx-swap-btn" aria-label={t('market.swapOnCorrectNetwork', { symbol: c.symbol })} onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}>
-                                <IconSwap width={12} height={12} aria-hidden="true" />
-                                <span className="mx-swap-label">{t('market.swap')}</span>
-                              </button>
-                            )}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </section>
-                )}
+              <SmartMoneyBanner />
               </>
             )}
+          </div>
+
+          <div
+            className="mx-tab-panel"
+            id="market-panel-tokens"
+            role="tabpanel"
+            aria-labelledby="market-tab-tokens"
+            hidden={tab !== 'tokens'}
+            data-testid="market-panel-tokens-box"
+          >
+            {tab === 'tokens' && (
+              <>
+            {/* «داغ‌ترین‌ها» leads THIS tab: it is the discovery surface, and
+                the list below it is the answer to «what else is there». Its
+                own render is cheap (eight cards) so it is always painted. */}
+            <HotCoins coins={hotCoins} onOpen={openCoin} vs={vs} />
+
+            {/* Feed tools and list controls are separate glass surfaces. */}
+            <section className="mx-lens" id="market-lens" data-testid="market-lens" aria-labelledby="market-lens-title">
+              <div className="mx-terminal-head mx-lens-head">
+                <h2 className="market-terminal-title mx-terminal-title" id="market-lens-title">
+                  <span>{t('marketIntel.railLabel')}</span>
+                </h2>
+                <div className="mx-terminal-actions">
+                  <MarketFreshness updatedAt={updatedAt} />
+                  <button
+                    type="button"
+                    className="market-refresh mx-icon-btn"
+                    onClick={() => refreshMarkets?.()}
+                    disabled={loading}
+                    data-busy={loading ? 'true' : undefined}
+                    aria-label={t('market.refresh')}
+                    title={t('market.refresh')}
+                    data-testid="market-refresh"
+                  >
+                    <IconRefresh width={15} height={15} aria-hidden="true" />
+                  </button>
+                  <button type="button" className="market-compare mx-compare" onClick={() => navigate('/compare')} aria-label={t('market.compare')}>
+                    <IconChart width={14} height={14} aria-hidden="true" />
+                    <span>{t('market.compare')}</span>
+                  </button>
+                </div>
+              </div>
+
+              {breadth.counted > 0 && (
+                <div
+                  className="market-breadth mx-breadth"
+                  data-testid="market-breadth"
+                  data-tone={breadth.avgChange >= 0 ? 'up' : 'down'}
+                >
+                  <div className="mx-breadth-head">
+                    <span className="mx-breadth-title">
+                      <span className="mx-breadth-mark" aria-hidden="true">
+                        <GlyphPulse width={13} height={13} />
+                      </span>
+                      {t('market.breadthTitle')}
+                    </span>
+                    <span className="mx-breadth-avg mono" data-tone={breadth.avgChange >= 0 ? 'up' : 'down'}>
+                      <IconActivity width={11} height={11} aria-hidden="true" />
+                      {t('market.breadthAvg', { pct: fmtPct(breadth.avgChange, 2) })}
+                    </span>
+                  </div>
+                  {/* Atmospheric light only: the measured breadth remains in the bar below. */}
+                  <div className="mx-breadth-aurora" aria-hidden="true">
+                    <svg viewBox="0 0 600 74" preserveAspectRatio="none">
+                      <path className="mx-aurora-haze" d="M0 55 C75 70 95 15 165 34 S255 68 310 30 S390 10 450 35 S535 49 600 12" />
+                      <path className="mx-aurora-line" d="M0 55 C75 70 95 15 165 34 S255 68 310 30 S390 10 450 35 S535 49 600 12" />
+                      <path className="mx-aurora-echo" d="M0 61 C75 70 105 29 165 42 S255 71 310 40 S395 19 450 43 S535 56 600 23" />
+                    </svg>
+                  </div>
+                  <div className="mx-breadth-bar" aria-hidden="true">
+                    <span className="is-up" style={{ width: `${breadth.upShare * 100}%` }} />
+                    <span className="is-flat" style={{ width: `${breadth.flatShare * 100}%` }} />
+                    <span className="is-down" style={{ width: `${breadth.downShare * 100}%` }} />
+                  </div>
+                  <div className="mx-breadth-legend">
+                    <span className="mx-breadth-item" data-tone="up" data-testid="market-breadth-up">
+                      <i aria-hidden="true" />{t('market.breadthUp', { count: fmtNum(breadth.up) })}
+                    </span>
+                    <span className="mx-breadth-item" data-tone="down" data-testid="market-breadth-down">
+                      <i aria-hidden="true" />{t('market.breadthDown', { count: fmtNum(breadth.down) })}
+                    </span>
+                    {breadth.flat > 0 && (
+                      <span className="mx-breadth-item" data-tone="flat">
+                        <i aria-hidden="true" />{t('market.breadthFlat', { count: fmtNum(breadth.flat) })}
+                      </span>
+                    )}
+                    {breadth.unknown > 0 && (
+                      <span className="mx-breadth-item" data-tone="unknown">
+                        <i aria-hidden="true" />{t('market.breadthUnknown', { count: fmtNum(breadth.unknown) })}
+                      </span>
+                    )}
+                  </div>
+                  <p className="market-breadth-note mx-breadth-note">{t('market.breadthNote', { count: fmtNum(breadth.counted) })}</p>
+                </div>
+              )}
+
             </section>
+
+            <section className="market-terminal mx-terminal" aria-labelledby="market-list-title">
+              <div className="mx-list-hero">
+                <div className="mx-list-hero-head">
+                  <h2 className="mx-list-title" id="market-list-title">
+                    <span className="market-terminal-title-text">{sector ? t(`market.sector.${sector}`) : t('marketIntel.allCoinsTitle')}</span>
+                    <span className="market-count mono" aria-live="polite" data-testid="market-count">{fmtNum(list.length)}</span>
+                  </h2>
+                </div>
+
+                {/* «زیر همه ارزها باید فیلد جستجو بیاد بالای فیلتر ها» — the field
+                    that narrows THIS list lives inside this card, directly under
+                    its head and directly above the chips that re-order it. */}
+                <MarketSearch
+                  query={query}
+                  onQueryChange={(value) => { setQuery(value); setSmartIntent(null); }}
+                  onApplyIntent={applySmartSearch}
+                  onNavigate={navigate}
+                  universe={universe}
+                  remoteHits={remoteHits}
+                  searching={searching}
+                  searchError={searchError}
+                  smartIntent={smartIntent}
+                  vs={vs}
+                />
+
+                <div className="mx-controls">
+                <div className="market-views mx-views" role="group" aria-label={t('market.viewsAria')}>
+                  {FILTERS.map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      className="market-view mx-view"
+                      data-view={f}
+                      data-active={activeView === f ? 'true' : undefined}
+                      aria-pressed={activeView === f}
+                      onClick={() => applyView(f)}
+                    >
+                      <FilterGlyph view={f} />
+                      {t(`market.filter.${f}`)}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="market-sort-wrap mx-sort-wrap" ref={sortWrapRef}>
+                  <button
+                    type="button"
+                    className="market-sort-trigger mx-sort-trigger"
+                    aria-label={t('market.sortAria')}
+                    aria-haspopup="menu"
+                    aria-expanded={sortOpen}
+                    aria-controls="market-sort-options"
+                    onClick={() => setSortOpen((open) => !open)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                        event.preventDefault();
+                        setSortOpen(true);
+                        requestAnimationFrame(() => sortWrapRef.current?.querySelector('.market-sort-option')?.focus());
+                      }
+                    }}
+                    data-testid="market-sort"
+                  >
+                    <span>{t(`market.sort.${sortKey}`)}</span>
+                    <GlyphCaretDown className="mx-sort-caret" width={13} height={13} />
+                  </button>
+                  {sortOpen && (
+                    <div
+                      className="market-sort-popover mx-sort-popover"
+                      id="market-sort-options"
+                      role="menu"
+                      aria-label={t('market.sortAria')}
+                      onKeyDown={(event) => {
+                        const options = [...event.currentTarget.querySelectorAll('.market-sort-option')];
+                        const index = options.indexOf(document.activeElement);
+                        let next = null;
+                        if (event.key === 'ArrowDown') next = (index + 1) % options.length;
+                        else if (event.key === 'ArrowUp') next = (index - 1 + options.length) % options.length;
+                        else if (event.key === 'Home') next = 0;
+                        else if (event.key === 'End') next = options.length - 1;
+                        if (next != null) { event.preventDefault(); options[next]?.focus(); }
+                      }}
+                    >
+                      {MARKET_SORTS.map((key) => (
+                        <button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={sortKey === key}
+                          className="market-sort-option mx-sort-option"
+                          key={key}
+                          onClick={() => { chooseSort(key); setSortOpen(false); }}
+                        >
+                          <span>{t(`market.sort.${key}`)}</span>
+                          {sortKey === key && <IconCheck className="mx-sort-check" width={13} height={13} aria-hidden="true" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    className="market-dir mx-icon-btn"
+                    data-dir={sortDir}
+                    onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                    aria-label={sortDir === 'desc' ? t('market.dirDesc') : t('market.dirAsc')}
+                    title={sortDir === 'desc' ? t('market.dirDesc') : t('market.dirAsc')}
+                    data-testid="market-sort-dir"
+                  >
+                    {/* A drawn arrow, not a typed one: the down/up text glyphs arrive as artwork
+                        whose weight and baseline differ per platform. */}
+                    {sortDir === 'desc'
+                      ? <GlyphSortDesc width={14} height={14} />
+                      : <GlyphSortAsc width={14} height={14} />}
+                  </button>
+                </div>
+                </div>
+                </div>
+
+            </section>
+
+            <MarketSectorRail
+              sectors={SECTORS}
+              selected={sector}
+              onSelect={(next) => { setSectorCoins([]); setSector(next); }}
+            />
+
+              <section className="mx-table-wrap" aria-labelledby="market-list-title">
+
+              {smartIntent && (
+                <div className="mx-intent-result" role="status" aria-live="polite">
+                  <IconSparkle width={13} height={13} aria-hidden="true" />
+                  <span>{t(`market.aiApplied.${smartIntent.key}`)}</span>
+                  <button type="button" onClick={() => { setSmartIntent(null); setQuery(''); }}>{t('market.clearSearch')}</button>
+                </div>
+              )}
+
+              {loading && !list.length ? (
+                <div className="stack market-coin-grid mx-table" aria-busy="true">
+                  {Array.from({ length: 8 }).map((_, i) => <div key={i} className="skel market-skel-row mx-skel-row" />)}
+                </div>
+              ) : marketError && !list.length ? (
+                <div className="market-empty mx-empty" data-kind="error" data-testid="market-feed-error">
+                  <span className="market-empty-icon" aria-hidden="true"><IconRefresh width={20} height={20} /></span>
+                  <div className="market-empty-title">{t('market.feedDown')}</div>
+                  <p className="market-empty-help">{t('market.feedDownHelp')}</p>
+                  <button type="button" className="market-empty-action mx-empty-action" onClick={() => refreshMarkets?.()} data-testid="market-retry">
+                    <IconRefresh width={14} height={14} aria-hidden="true" />
+                    {t('market.retry')}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {emptyKind !== 'none' && !list.length && !extraHits.length && (
+                    <div className="market-empty mx-empty" data-kind={emptyKind}>
+                      <span className="market-empty-icon" aria-hidden="true">
+                        {emptyKind === 'favorites'
+                          ? <IconStar width={20} height={20} />
+                          : emptyKind === 'searching' || emptyKind === 'loadingSector'
+                            ? <IconRefresh width={20} height={20} />
+                            : <IconSearch width={20} height={20} />}
+                      </span>
+                      <div className="market-empty-title">
+                        {emptyKind === 'favorites'
+                          ? t('market.emptyFavorites')
+                          : emptyKind === 'searching'
+                            ? t('market.searching')
+                            : emptyKind === 'loadingSector'
+                              ? t('market.loadingSector')
+                              : emptyKind === 'sector'
+                                ? t('market.sectorEmpty')
+                                : t('market.noResults')}
+                      </div>
+                      {emptyKind === 'favorites' && <p className="market-empty-help">{t('market.emptyFavoritesHelp')}</p>}
+                      {(emptyKind === 'favorites' || emptyKind === 'search' || emptyKind === 'sector') && (
+                        <button
+                          type="button"
+                          className="market-empty-action mx-empty-action"
+                          onClick={() => { setQuery(''); setSector(null); setOnlyFavorites(false); setSortKey('rank'); setSortDir('asc'); }}
+                        >
+                          {t('market.showAll')}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="stack market-coin-grid mx-table" id="market-list-rows">
+                    {visibleList.map((c, i) => {
+                      const swapUrl = swapRouteFor(c);
+                      return (
+                        <div key={c.id} className="market-coin-row mx-coin-row">
+                          <CoinRow
+                            coin={c}
+                            rank={c.rank || i + 1}
+                            metric={rowMetric(c)}
+                            animate={false}
+                            /*
+                             * «لوگو ها دیر بالا میاد» — the first rows are the ones a
+                             * reader meets before the list has finished arriving, so
+                             * their artwork is asked for at high priority. Row 9
+                             * onward stays lazy/low: 60 eager requests to one CDN host
+                             * is the queue that caused the complaint in the first
+                             * place (see lib/coinImage.js for the size half of it).
+                             */
+                            logoPriority={i < 8}
+                            /*
+                             * «ایکون بعضی باکس‌ها دیر بالا میاد» and the scroll
+                             * stutter are the same accounting error: sixty SVG
+                             * sparklines painted in one commit, fifty of them
+                             * below the fold. The first screenful draws at once
+                             * (a reader must never see it arrive); the rest draw
+                             * as the list is scrolled, one screen ahead — see
+                             * hooks/useRowWindow.js. Every number on every row is
+                             * rendered either way.
+                             */
+                            deferSpark={i >= 8}
+                            onClick={() => openCoin(c.id)}
+                          />
+                          <span className="mx-swap-slot" data-available={swapUrl ? 'true' : undefined}>
+                          {swapUrl && (
+                            <button
+                              type="button"
+                              className="market-swap-btn mx-swap-btn"
+                              onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}
+                              aria-label={t('market.swapOnCorrectNetwork', { symbol: c.symbol })}
+                              title={t('market.swapOnCorrectNetwork', { symbol: c.symbol })}
+                              data-testid={`market-swap-${c.id}`}
+                            >
+                              <IconSwap width={12} height={12} aria-hidden="true" />
+                              <span className="mx-swap-label">{t('market.swap')}</span>
+                            </button>
+                          )}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {(hasMore || list.length > FOLDED_ROWS) && (
+                    <div className="market-more mx-more">
+                      <div className="market-more-meta">
+                        <span className="mono" data-testid="market-showing">
+                          {t('market.showing', { shown: fmtNum(shownCount), total: fmtNum(list.length || shownCount) })}
+                        </span>
+                        <span className="market-more-track" aria-hidden="true">
+                          <span className="market-more-fill" style={{ width: `${list.length ? Math.min(100, (shownCount / list.length) * 100) : 0}%` }} />
+                        </span>
+                      </div>
+                      <div className="mx-list-actions">
+                      {hasMore && !listFolded && <button
+                        type="button"
+                        className="market-show-more mx-show-more"
+                        disabled={pageLoading}
+                        onClick={() => {
+                          if (list.length > visibleCount) setVisibleCount((n) => n + 60);
+                          else loadNextPage();
+                        }}
+                      >
+                        {pageLoading
+                          ? t('market.loadingSector')
+                          : list.length > visibleCount
+                            ? t('market.showMore', { count: fmtNum(list.length - visibleCount) })
+                            : t('market.nextPage')}
+                      </button>}
+                      {list.length > FOLDED_ROWS && <button
+                        type="button"
+                        className="mx-list-fold"
+                        data-testid="market-list-fold"
+                        data-folded={listFolded ? 'true' : 'false'}
+                        aria-expanded={!listFolded}
+                        aria-controls="market-list-rows"
+                        onClick={() => setListFolded((folded) => !folded)}
+                      >
+                        <GlyphCaretDown width={13} height={13} aria-hidden="true" />
+                        <span>{t(listFolded ? 'marketIntel.listExpand' : 'marketIntel.listCollapse')}</span>
+                      </button>}
+                      </div>
+                    </div>
+                  )}
+
+                  {extraHits.length > 0 && (
+                    <section className="market-more-results mx-more-results">
+                      <p className="section-label">{t('market.moreResults')}</p>
+                      <div className="stack market-coin-grid mx-table">
+                        {extraHits.map((c) => {
+                          const swapUrl = swapRouteFor(c);
+                          return (
+                            <div key={c.id} className="market-coin-row mx-coin-row">
+                              <CoinRow coin={c} rank={c.rank || '—'} animate={false} onClick={() => openCoin(c.id)} />
+                              <span className="mx-swap-slot" data-available={swapUrl ? 'true' : undefined}>
+                              {swapUrl && (
+                                <button type="button" className="market-swap-btn mx-swap-btn" aria-label={t('market.swapOnCorrectNetwork', { symbol: c.symbol })} onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}>
+                                  <IconSwap width={12} height={12} aria-hidden="true" />
+                                  <span className="mx-swap-label">{t('market.swap')}</span>
+                                </button>
+                              )}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  )}
+                </>
+              )}
+              </section>
+              </>
+            )}
+          </div>
         </PageTransition>
       </div>
     </>

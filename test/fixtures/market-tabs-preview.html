@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="fa" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FBT Market · دو تب «مرور / توکن» — پیش‌نمایش متریال</title>
+<link rel="stylesheet" href="/src/index.css">
+<link rel="stylesheet" href="/src/styles/market-modern.css">
+<link rel="stylesheet" href="/src/styles/market-intelligence.css">
+<link rel="stylesheet" href="/src/styles/market-glass-v3.css">
+<link rel="stylesheet" href="/src/styles/market-aurora-glass.css">
+<link rel="stylesheet" href="/src/styles/market-obsidian-glass.css">
+<link rel="stylesheet" href="/src/styles/market-tabs.css">
+<style>
+  /* Preview chrome only — none of this ships with the route. */
+  body { margin: 0; background: var(--bg, #050b14); }
+  .pv-bar {
+    position: sticky; inset-block-start: 0; z-index: 50; display: flex; align-items: center;
+    gap: 12px; flex-wrap: wrap; padding: 12px 20px; direction: rtl;
+    font: 600 12px/1 var(--font-display); color: var(--mx-muted, #a6b3d1);
+    background: rgba(5, 11, 20, .78); border-block-end: 1px solid rgba(164, 184, 236, .14);
+  }
+  .pv-bar b { color: var(--mx-text, #f0f4ff); font-size: 13px; }
+  .pv-bar button {
+    font: 700 11px/1 var(--font-display); padding: 8px 12px; border-radius: 10px; cursor: pointer;
+    color: var(--mx-cyan, #66e5e1); background: rgba(102, 229, 225, .1);
+    border: 1px solid rgba(102, 229, 225, .35);
+  }
+  .pv-wrap { max-width: 1120px; margin: 0 auto; padding: 22px 18px 60px; }
+  .pv-note { margin: 0 0 14px; color: var(--mx-muted, #a6b3d1); font: 500 11px/1.9 var(--font-display); }
+  .pv-box {
+    display: grid; place-items: center; min-height: 120px; padding: 18px;
+    border: 1px dashed rgba(164, 184, 236, .22); border-radius: 20px;
+    color: var(--mx-muted, #a6b3d1); font: 600 12px/1.8 var(--font-display); text-align: center;
+    background: rgba(9, 23, 36, .35);
+  }
+</style>
+</head>
+<body>
+<div class="pv-bar">
+  <b>FBT Market · دو تب «مرور / توکن»</b>
+  <button type="button" id="theme">تغییر تم روشن / تیره</button>
+  <button type="button" id="lang">فارسی / English</button>
+  <span>پیش‌نمایش متریال — بدون فید زنده</span>
+</div>
+
+<div class="pv-wrap">
+  <p class="pv-note">
+    همان شیت‌های واقعی مسیر بازار به‌همراه لایهٔ تازهٔ <code>market-tabs.css</code>. نوار تب‌ها،
+    پلیتِ متحرک، دو پنل و حالت‌های تم روشن / lite / RTL اینجا دیده می‌شوند — داده‌ای وجود ندارد.
+  </p>
+
+  <div class="page mx-market" id="stage">
+    <div class="mx-tabs-wrap" data-testid="market-tabs-strip">
+      <div class="mx-tabs" id="market-tabs" role="tablist" aria-label="تب‌های صفحه بازار" data-active="overview">
+        <span class="mx-tabs-thumb" aria-hidden="true"></span>
+        <button type="button" role="tab" class="mx-tab" data-tab="overview" data-active="true" aria-selected="true">
+          <span class="mx-tab-glyph" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="15" height="15">
+              <rect x="3.2" y="4.6" width="17.6" height="14.8" rx="3.6"></rect>
+              <path d="M6.4 15.6h3.1l1.6-3.9 2 5.2 1.7-3.6h2.8"></path>
+              <path d="M6.6 8.2h3.2M6.6 11h1.8"></path>
+            </svg>
+          </span>
+          <span class="mx-tab-label" data-label="overview">مرور</span>
+        </button>
+        <button type="button" role="tab" class="mx-tab" data-tab="tokens" aria-selected="false">
+          <span class="mx-tab-glyph" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="15" height="15">
+              <ellipse cx="12" cy="7.2" rx="6.4" ry="2.8"></ellipse>
+              <path d="M5.6 7.2v4.4c0 1.55 2.86 2.8 6.4 2.8s6.4-1.25 6.4-2.8V7.2"></path>
+              <path d="M5.6 11.6v4.4c0 1.55 2.86 2.8 6.4 2.8"></path>
+              <path d="m16.6 15.2.7 1.9 1.9.7-1.9.7-.7 1.9"></path>
+            </svg>
+          </span>
+          <span class="mx-tab-label" data-label="tokens">توکن</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="mx-tab-panel" id="market-panel-overview" role="tabpanel">
+      <div class="pv-box">باکس ارزش کل بازار / باکس بیت‌کوین<br><small>MarketOverview</small></div>
+      <div class="mx-stories"><div class="pv-box" style="min-height:96px">باکس استوری‌ها</div></div>
+      <div class="pv-box" style="min-height:96px">بنر پول هوشمند</div>
+    </div>
+
+    <div class="mx-tab-panel" id="market-panel-tokens" role="tabpanel" hidden>
+      <div class="pv-box" style="min-height:96px">باکس داغ‌ترین‌ها</div>
+      <div class="pv-box" style="min-height:96px">باکس جستجو + توکن‌ها</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const strip = document.getElementById('market-tabs');
+  const panels = {
+    overview: document.getElementById('market-panel-overview'),
+    tokens: document.getElementById('market-panel-tokens')
+  };
+  const select = (tab) => {
+    strip.dataset.active = tab;
+    for (const button of strip.querySelectorAll('.mx-tab')) {
+      const on = button.dataset.tab === tab;
+      button.dataset.active = on ? 'true' : undefined;
+      button.setAttribute('aria-selected', on ? 'true' : 'false');
+    }
+    for (const [id, panel] of Object.entries(panels)) panel.hidden = id !== tab;
+  };
+  for (const button of strip.querySelectorAll('.mx-tab')) {
+    button.addEventListener('click', () => select(button.dataset.tab));
+  }
+  document.getElementById('theme').addEventListener('click', () => {
+    const root = document.documentElement;
+    root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light';
+  });
+  document.getElementById('lang').addEventListener('click', () => {
+    const root = document.documentElement;
+    const english = root.dir !== 'ltr';
+    root.dir = english ? 'ltr' : 'rtl';
+    root.lang = english ? 'en' : 'fa';
+    document.querySelector('[data-label="overview"]').textContent = english ? 'Overview' : 'مرور';
+    document.querySelector('[data-label="tokens"]').textContent = english ? 'Tokens' : 'توکن';
+  });
+</script>
+</body>
+</html>

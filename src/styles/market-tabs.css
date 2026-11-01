@@ -1,0 +1,288 @@
+/* FBT MARKET · «مرور / توکن» — the tab strip that splits this screen in two.
+   ---------------------------------------------------------------------------
+   Requested: «در صفحه بازار دو تب کن … تب‌ها از تم اصلی و ظاهر پیروی کند».
+
+   ─── THE RULE THIS SHEET OBEYS ────────────────────────────────────────────
+   It introduces NO new material, NO new colour and NO new light. Every value
+   below is either a token the market sheets already define (--mx-cyan,
+   --mx-violet, --mx-line, --mx-panel, --mx-gold, --og-prism, --og-grain,
+   --og-stria) or a gradient built from them. The strip is drawn out of the
+   same glass recipe as the boxes it switches between — most importantly the
+   SAME PRISM RIM (`--og-prism` in the border box, body in the padding box) —
+   so a reader cannot tell which pass drew it.
+
+   ─── WHAT IT MUST NOT COST ────────────────────────────────────────────────
+   It was written directly after a speed pass that removed every
+   `backdrop-filter` from this route (see market-speed.test.mjs), so:
+
+     · no backdrop-filter, no mask, no filter, no will-change;
+     · the moving plate animates `transform` only, and the two tab glyphs
+       animate `opacity`/`transform` only — both compositor properties;
+     · the strip is `position: sticky` but has NO backdrop, so it never
+       re-samples the list scrolling under it;
+     · every loop stops under reduced-motion, native, lite and the explicit
+       `data-reduce-motion` switch, with the same guard the other sheets use.
+
+   ─── DIRECTION ────────────────────────────────────────────────────────────
+   Farsi is RTL and this is the primary market, so nothing here names a side.
+   The plate is positioned with `inset-inline-start` and translated with a
+   logical sign, so a single `dir="rtl"` mirrors the whole control — including
+   the direction the plate travels, which is the one thing a naive
+   `translateX(100%)` gets wrong in RTL. */
+
+/* ══ 0 · THE WRAPPER — sticky, and transparent on purpose ═════════════════ */
+.mx-tabs-wrap {
+  position: sticky;
+  /* Below the app's own top bar (z-index 30) and above every box on this page
+     (the tallest is the list card at 3), so the strip is never covered by a
+     card and never covers the header. */
+  top: calc(env(safe-area-inset-top, 0px) + 6px);
+  z-index: 12;
+  padding: 0;
+  /* No background and no blur: the only painted thing is the pill itself. */
+  background: none;
+  pointer-events: none;
+}
+
+.mx-tabs {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  max-width: 420px;
+  margin-inline: auto;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 17px;
+  pointer-events: auto;
+  /* The glass, out of the route's own tokens: the same prism rim in the border
+     box and the same smoked body in the padding box that market-obsidian-glass
+     gives every large surface here — one step lighter, because this is a
+     control and not a reading. */
+  background:
+    radial-gradient(120% 140% at 50% -40%, rgba(255, 255, 255, .10), transparent 62%) padding-box,
+    var(--og-stria, none) padding-box,
+    linear-gradient(162deg, var(--og-shell-a, #0c192b), var(--og-shell-b, #081121) 58%, var(--og-shell-c, #060b17)) padding-box,
+    var(--og-prism) border-box;
+  box-shadow:
+    var(--og-lift, 0 22px 44px -34px rgba(0, 0, 12, .9)),
+    inset 0 1px 0 rgba(255, 255, 255, .08),
+    inset 0 -1px 0 rgba(3, 8, 18, .28);
+}
+
+/* ══ 1 · THE MOVING PLATE ═════════════════════════════════════════════════ */
+.mx-tabs-thumb {
+  position: absolute;
+  z-index: 0;
+  inset-block: 5px;
+  inset-inline-start: 5px;
+  width: calc((100% - 10px - 4px) / 2);
+  border-radius: 13px;
+  pointer-events: none;
+  /* One accent per tab, chosen to match the work each does: aqua for the
+     readings (the deck's own accent), gold for discovery (the hot rail's). */
+  --tm-accent: var(--mx-cyan);
+  background:
+    radial-gradient(120% 160% at 50% -30%, color-mix(in srgb, var(--tm-accent) 42%, transparent), transparent 70%) padding-box,
+    linear-gradient(150deg, rgba(255, 255, 255, .10), rgba(255, 255, 255, .02) 52%, rgba(3, 10, 22, .22)) padding-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    inset 0 -1px 0 color-mix(in srgb, var(--tm-accent) 26%, transparent),
+    0 10px 22px -16px color-mix(in srgb, var(--tm-accent) 90%, transparent);
+  transition: transform .34s cubic-bezier(.22, 1, .36, 1), box-shadow .34s ease;
+}
+
+/* RTL: the same transform, mirrored — `-1` makes the plate travel toward the
+   inline end in both directions without a second rule for each side. */
+.mx-tabs[data-active='tokens'] .mx-tabs-thumb {
+  --tm-accent: var(--mx-gold);
+  transform: translateX(calc((100% + 4px) * var(--mx-dir, 1)));
+}
+:root[dir='rtl'] .mx-tabs { --mx-dir: -1; }
+[dir='rtl'] .mx-tabs { --mx-dir: -1; }
+
+/* ══ 2 · THE TWO TABS ═════════════════════════════════════════════════════ */
+.mx-tab {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  /* 44px on a phone, per the same touch-target rule the rest of the route
+     follows (market-obsidian-glass.css §4). */
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 13px;
+  background: none;
+  color: var(--mx-muted);
+  font: 700 12.5px/1.2 var(--font-display);
+  letter-spacing: -.01em;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color .22s ease;
+}
+
+.mx-tab-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  opacity: .78;
+  transition: opacity .22s ease, transform .28s cubic-bezier(.22, 1, .36, 1);
+}
+
+.mx-tab-label { white-space: nowrap; }
+
+.mx-tab[data-active='true'] { color: var(--mx-text); }
+.mx-tab[data-active='true'] .mx-tab-glyph {
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+@media (hover: hover) {
+  .mx-tab:not([data-active='true']):hover { color: var(--mx-text); }
+  .mx-tab:not([data-active='true']):hover .mx-tab-glyph { opacity: 1; }
+}
+
+/* A press answers back, on the one property that cannot drop a frame. */
+.mx-tab:active { transform: scale(.975); }
+
+/* A real focus ring, so the strip is usable from a keyboard and visible. */
+.mx-tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--mx-cyan) 90%, #fff);
+  outline-offset: 2px;
+}
+
+/* ══ 3 · THE PANEL ════════════════════════════════════════════════════════
+   One wrapper per tab, holding that tab's boxes with the page's own rhythm.
+   It is a plain block — the boxes inside keep their own margins and their own
+   surfaces, so a panel looks exactly like the stack it was cut out of. */
+.mx-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mx-gap, 18px);
+  min-width: 0;
+}
+
+/*
+ * `hidden` must WIN over the panel's own display.
+ *
+ * The panels are hidden with the `hidden` attribute, which is what makes a
+ * closed tab really absent: it leaves the accessibility tree, it cannot be
+ * focused, and no screen reader reads a column of prices nobody selected. The
+ * attribute is only honoured while the element is not given a display value
+ * by a stylesheet, and `.mx-tab-panel { display: flex }` above would otherwise
+ * override the user agent's `[hidden] { display: none }` — a closed tab
+ * painted behind an open one, which is the classic way this pattern ships
+ * broken. Declared once, here, for both panels.
+ */
+.mx-tab-panel[hidden] { display: none !important; }
+
+/* The strip is sticky, so a programmatic jump to the top of a tab would put
+   the panel's first box UNDER it. `scroll-margin` is the offset that fixes it,
+   measured from the strip's own height plus the app bar above it. */
+.mx-tab-panel { scroll-margin-block-start: 12px; }
+
+/* ══ 4 · THE PEARL THEME ══════════════════════════════════════════════════
+   The light theme is re-graded here rather than inverted: a white body, a dark
+   ink for the labels, and a plate of the tab's own accent at low alpha. */
+:root[data-theme='light'] .mx-tabs {
+  background:
+    radial-gradient(120% 140% at 50% -40%, rgba(255, 255, 255, .95), transparent 62%) padding-box,
+    linear-gradient(#fff, #fff) padding-box,
+    var(--og-prism) border-box;
+  box-shadow:
+    0 18px 36px -32px rgba(46, 67, 123, .5),
+    inset 0 1px 0 #fff,
+    inset 0 -1px 0 rgba(46, 67, 123, .10);
+}
+:root[data-theme='light'] .mx-tabs-thumb {
+  background:
+    radial-gradient(120% 160% at 50% -30%, color-mix(in srgb, var(--tm-accent) 26%, transparent), transparent 70%) padding-box,
+    linear-gradient(150deg, #fff, rgba(247, 251, 255, .92)) padding-box;
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 -1px 0 color-mix(in srgb, var(--tm-accent) 30%, transparent),
+    0 10px 20px -18px rgba(46, 67, 123, .6);
+}
+:root[data-theme='light'] .mx-tabs-thumb { --tm-accent: #0b8f92; }
+:root[data-theme='light'] .mx-tabs[data-active='tokens'] .mx-tabs-thumb { --tm-accent: #a8701d; }
+:root[data-theme='light'] .mx-tab { color: #4d5f7d; }
+:root[data-theme='light'] .mx-tab[data-active='true'] { color: #0f1a2c; }
+:root[data-theme='light'] .mx-tab:focus-visible { outline-color: #0b8f92; }
+
+/* ══ 5 · THE STOP POLICY ══════════════════════════════════════════════════
+   The plate and the glyph lift are decoration; when the platform (or the
+   reader) asks for less motion, they hold their painted position. `lite` also
+   drops the frost striation, the only texture on the strip. */
+@media (prefers-reduced-motion: reduce) {
+  .mx-tabs-thumb,
+  .mx-tab,
+  .mx-tab-glyph { transition: none; }
+}
+:root[data-native='true'] .mx-tabs-thumb,
+:root[data-lite='true'] .mx-tabs-thumb,
+:root[data-reduce-motion='true'] .mx-tabs-thumb,
+:root[data-native='true'] .mx-tab,
+:root[data-lite='true'] .mx-tab,
+:root[data-reduce-motion='true'] .mx-tab,
+:root[data-native='true'] .mx-tab-glyph,
+:root[data-lite='true'] .mx-tab-glyph,
+:root[data-reduce-motion='true'] .mx-tab-glyph {
+  transition: none;
+}
+:root[data-lite='true'] .mx-tabs {
+  background:
+    linear-gradient(162deg, var(--og-shell-a, #0c192b), var(--og-shell-b, #081121) 58%, var(--og-shell-c, #060b17)) padding-box,
+    var(--og-prism) border-box;
+}
+:root[data-lite='true'] .mx-tabs[data-active='tokens'] .mx-tabs-thumb { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18); }
+
+/* ══ 6 · DENSITY AND PERSONAL PREFERENCES ═════════════════════════════════ */
+/* Compact mode (a real setting on this app) tightens the strip, not the
+   labels — the words must stay readable at every density. */
+:root[data-compact='true'] .mx-tabs { padding: 4px; border-radius: 15px; }
+:root[data-compact='true'] .mx-tab { min-height: 38px; padding: 6px 9px; font-size: 12px; }
+
+/* A reader who asks for more contrast gets an opaque pill and a stronger rim;
+   nothing moves, and no reading changes. */
+@media (prefers-contrast: more) {
+  .mx-tabs {
+    background:
+      linear-gradient(#060d18, #060d18) padding-box,
+      linear-gradient(120deg, var(--mx-cyan), var(--mx-violet)) border-box;
+    border-width: 2px;
+  }
+  .mx-tab { color: #cfdaf0; }
+  .mx-tab[data-active='true'] { color: #fff; }
+}
+
+/* Solid, unblurred fallback for a device that cannot paint the layering. */
+@media (prefers-reduced-transparency: reduce) {
+  .mx-tabs {
+    background:
+      linear-gradient(#0a1524, #0a1524) padding-box,
+      var(--og-prism) border-box;
+  }
+  :root[data-theme='light'] .mx-tabs {
+    background:
+      linear-gradient(#fff, #fff) padding-box,
+      var(--og-prism) border-box;
+  }
+}
+
+/* ══ 7 · PHONE WIDTHS ═════════════════════════════════════════════════════ */
+@media (max-width: 619px) {
+  /* Full width on a phone: two tabs side by side read better than a 300px
+     pill floating in the middle of a 360px screen. */
+  .mx-tabs { max-width: none; }
+  .mx-tab { min-height: 44px; font-size: 12.5px; }
+}
+@media (max-width: 359px) {
+  .mx-tab { gap: 5px; padding: 8px 6px; font-size: 11.5px; }
+  .mx-tab-glyph { display: none; }
+}

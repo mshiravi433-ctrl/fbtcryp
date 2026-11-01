@@ -150,6 +150,15 @@ vi.mock('../src/components/Ticker', () => ({ default: () => null }));
 vi.mock('../src/components/AdBanner', () => ({ default: () => null }));
 vi.mock('../src/components/TrendChart', () => ({ default: () => <div data-testid="global-market-trend-chart" /> }));
 
+
+/*
+ * ─── THIS FILE READS «مرور» ────────────────────────────────────────────────
+ * The screen is split into two tabs («مرور» / «توکن», see lib/marketTabs.js).
+ * The stories reel, the Bitcoin card and the readings are on the FIRST tab,
+ * which is where the screen opens — so these tests mount the page and assert
+ * against it unchanged. The token list and its search field live on the other
+ * tab and are pinned by market-tabs.test.jsx and market-terminal.test.jsx.
+ */
 import Market from '../src/pages/Market.jsx';
 import AparatVideos, { APARAT_CHANNEL_URL } from '../src/pages/AparatVideos.jsx';
 import { MARKET_STORY_ITEMS, STORY_DURATION_MS } from '../src/components/MarketStories.jsx';

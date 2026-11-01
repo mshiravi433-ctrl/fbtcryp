@@ -110,7 +110,7 @@ export default function MarketSearch({
   };
 
   return (
-    <div className="mx-search-wrap" ref={wrapRef}>
+    <div className="mx-search-wrap" id="market-search" data-testid="market-search-wrap" ref={wrapRef}>
       <div className={`mx-search${open ? ' is-open' : ''}`} data-typed={query ? 'true' : undefined}>
         <span className="mx-search-glow" aria-hidden="true" />
         <span className="mx-search-tile" aria-hidden="true">

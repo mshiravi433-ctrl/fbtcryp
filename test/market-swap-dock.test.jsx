@@ -108,6 +108,17 @@ beforeEach(() => {
   });
 });
 
+
+/*
+ * ─── THESE MOUNTS NOW ENTER ON «توکن» ──────────────────────────────────────
+ * The screen has two tabs («مرور» / «توکن», see lib/marketTabs.js) and every
+ * assertion in this file is about the list, its search field, its sort or its
+ * rows — all of which live on the second tab. `?tab=tokens` is a supported,
+ * documented entry point (a shared link to the list opens exactly there), so
+ * these tests start where a reader with that link would start, instead of
+ * re-proving the tab switch in eleven places. The switch itself, the state it
+ * keeps and the panel it mounts are pinned once, in market-tabs.test.jsx.
+ */
 import Market from '../src/pages/Market.jsx';
 import { getCoinVenues, rememberCoinVenues, cachedCoinVenue, _clearVenueBatchCache } from '../src/lib/coinVenues.js';
 
@@ -121,7 +132,7 @@ afterEach(() => {
 
 describe('the market list', () => {
   it('loads a full page of tokens, not a short list', async () => {
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(screen.getAllByText(/^T\d+$/).length).toBeGreaterThan(40));
     const rows = document.querySelectorAll('.coin-row');
     expect(rows.length).toBeGreaterThanOrEqual(60);
@@ -131,7 +142,7 @@ describe('the market list', () => {
     /* The literal complaint: "23.80Bmarket.low24h: —market.high24h:". The
        number was fine; the sentence around it was raw keys glued together,
        repeated under every row of a 250-row list. */
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(document.querySelectorAll('.coin-row').length).toBeGreaterThan(0));
     expect(document.querySelector('.market-row-stats')).toBeNull();
     const body = document.body.textContent;
@@ -150,7 +161,7 @@ describe('the market list', () => {
         'coin-8': { chains: {}, solana: 'So11111111111111111111111111111111111111112', tradeable: true }
       }
     };
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
 
     await waitFor(() => expect(screen.getByTestId('market-swap-coin-7')).toBeTruthy());
     expect(screen.getByTestId('market-swap-coin-8')).toBeTruthy();
@@ -174,7 +185,7 @@ describe('the market list', () => {
     /* A network blip must never turn a working swap button into a dead one —
        the curated answer is synchronous and does not depend on this call. */
     globalThis.fetch = vi.fn(async () => ({ ok: false, status: 502, json: async () => ({}) }));
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(screen.getByTestId('market-swap-bitcoin')).toBeTruthy());
     expect(screen.queryByTestId('market-swap-coin-7')).toBeNull();
   });
