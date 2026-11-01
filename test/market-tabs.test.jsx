@@ -87,6 +87,7 @@ const BTC = {
 const COINS = [BTC, ...Array.from({ length: 30 }, (_, i) => mkCoin(i, `T${i}`))];
 const TRENDING = COINS.slice(0, 8).map((c) => ({ id: c.id, symbol: c.symbol, name: c.name, image: '', rank: c.rank }));
 
+const repairApi = vi.hoisted(() => ({ getCoin: vi.fn(async () => null) }));
 const feed = vi.hoisted(() => ({ data: [], loading: false, error: null, updatedAt: 0, refresh: () => {} }));
 vi.mock('../src/hooks/useMarket', () => ({
   useMarkets: () => feed,
@@ -99,6 +100,7 @@ vi.mock('../src/hooks/useMarket', () => ({
 vi.mock('../src/hooks/useCoinVenues', () => ({ useCoinVenues: () => ({ venues: new Map(), loading: false }) }));
 vi.mock('../src/lib/refresh', () => ({ onSoftRefresh: () => () => {} }));
 vi.mock('../src/lib/api', () => ({
+  getCoin: repairApi.getCoin,
   getMarkets: async () => [],
   getCategory: async () => [],
   getGlobal: async () => ({}),
@@ -435,5 +437,18 @@ describe('۶ · جای شیت در مسیر', () => {
     expect(pageSrc.match(/role="tabpanel"/g)).toHaveLength(2);
     /* the strip is above both panels in the document */
     expect(pageSrc.indexOf('<MarketTabStrip')).toBeLessThan(pageSrc.indexOf('id="market-panel-overview"'));
+  });
+});
+
+
+describe('Bitcoin incomplete quote recovery', () => {
+  it('repairs a missing daily move with a real single-coin quote', async () => {
+    const original = COINS[0];
+    feed.data = [{ ...original, id: 'bitcoin', symbol: 'BTC', change24h: null }];
+    repairApi.getCoin.mockResolvedValueOnce({ ...original, id: 'bitcoin', symbol: 'BTC', price: 70000, change24h: -2 });
+    await mount();
+    await waitFor(() => expect(screen.getByTestId('market-btc-hero-card').dataset.dir).toBe('down'));
+    expect(repairApi.getCoin).toHaveBeenCalledWith('bitcoin', 'usd');
+    expect(screen.getByTestId('market-btc-abs').textContent.startsWith('-')).toBe(true);
   });
 });

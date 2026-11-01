@@ -1878,28 +1878,32 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, pric
 
         {kind === 'limit' && (
           <div className="ord-mode" role="group" aria-label={kc.mode1Title}>
-            <div className="segmented">
+            <div className="segmented ord-execution-tabs" data-page-tabs>
               <button
                 type="button"
                 className={mode === 'keeper' ? 'active' : ''}
                 disabled={!keeperAvailable}
+                aria-label={kc.mode1Title}
                 aria-pressed={mode === 'keeper'}
                 onClick={() => setExecMode('keeper')}
                 style={{ isolation: 'isolate', minHeight: 44 }}
               >
                 {mode === 'keeper' && <SegIndicator id="ord-mode-keeper" />}
-                {kc.mode1Title}
+                <span className="ord-exec-icon" aria-hidden="true">⚡</span>
+                <span className="ord-exec-copy"><b>{t('ordersExecution.automatic')}</b><small>{t('ordersExecution.automaticHint')}</small></span>
               </button>
               <button
                 type="button"
                 className={mode === 'watch' ? 'active' : ''}
                 disabled={isSolanaNet}
+                aria-label={kc.mode2Title}
                 aria-pressed={mode === 'watch'}
                 onClick={() => setExecMode('watch')}
                 style={{ isolation: 'isolate', minHeight: 44 }}
               >
                 {mode === 'watch' && <SegIndicator id="ord-mode-watch" />}
-                {kc.mode2Title}
+                <span className="ord-exec-icon" aria-hidden="true">◎</span>
+                <span className="ord-exec-copy"><b>{t('ordersExecution.watch')}</b><small>{t('ordersExecution.watchHint')}</small></span>
               </button>
             </div>
             <p className="faint" style={{ lineHeight: 1.7 }}>
