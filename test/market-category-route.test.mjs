@@ -71,3 +71,42 @@ test('category route refuses expired risk membership; thematic stale data is exp
     memoryStore.clear();
   }
 });
+
+test('partial category backups are not edge cached and recover promptly', async () => {
+  const realFetch = globalThis.fetch;
+  const realNow = Date.now;
+  const oldVercel = process.env.VERCEL;
+  process.env.VERCEL = '1';
+  let now = 1_800_000_000_000;
+  let healthy = false;
+  Date.now = () => now;
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.hostname === 'api.coingecko.com') return healthy
+      ? json([{ id: 'pax-gold', symbol: 'paxg', name: 'PAX Gold', current_price: 10 }, { id: 'another-gold', symbol: 'gold', name: 'Gold', current_price: 11 }])
+      : json({}, 403);
+    if (url.hostname === 'api.coinlore.net') return json({ data: [{ id: '1', nameid: 'pax-gold', symbol: 'PAXG', name: 'PAX Gold', price_usd: '10', rank: 1 }] });
+    return json({}, 503);
+  };
+  let server;
+  try {
+    const app = (await import('../server/app.js')).default;
+    server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
+    const path = '/api/category/tokenized-gold?per_page=250&vs=usd';
+    const first = await request(server.address().port, path);
+    assert.equal(first.status, 200);
+    assert.equal(first.body[0].classificationFallback, true);
+    assert.equal(first.headers['cache-control'], 'no-store');
+    now += 10_001;
+    healthy = true;
+    const recovered = await request(server.address().port, path);
+    assert.equal(recovered.body.length, 2);
+    assert.equal(recovered.body[0].classificationFallback, undefined);
+  } finally {
+    if (server) await new Promise((resolve) => server.close(resolve));
+    globalThis.fetch = realFetch;
+    Date.now = realNow;
+    if (oldVercel == null) delete process.env.VERCEL; else process.env.VERCEL = oldVercel;
+    memoryStore.clear();
+  }
+});

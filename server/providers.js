@@ -819,12 +819,12 @@ export async function fetchCategory(slug, { perPage = 50, vs = 'usd', page = 1 }
      must agree on one number, or a page-sized answer becomes a lesser one. */
   const size = Math.min(250, Math.max(1, Number(perPage) || 50));
   try {
-    const raw = await cgReq(
+    const raw = await req(
       cgUrl('/coins/markets', {
         vs_currency: vs, category: slug, order: 'market_cap_desc',
         per_page: size, page: pageNo, sparkline: true,
         price_change_percentage: '1h,24h,7d'
-      })
+      }), { timeout: 5000 }
     );
     if (Array.isArray(raw)) {
       const rows = raw.map(normalizeCoin);
@@ -849,7 +849,7 @@ export async function fetchCategory(slug, { perPage = 50, vs = 'usd', page = 1 }
     matches = sectorFromRows(sector, await backupSectorRows(2)).slice(0, size);
   }
   if (!matches.length) throw new Error('CATEGORY_DATA_UNAVAILABLE');
-  // Visuals are best-effort; never block quotes for the full 6s market budget.
-  const rows = await fillFallbackVisuals(matches, 'usd', { deadlineMs: 2500 });
-  return rows.map((row) => ({ ...row, classificationFallback: true }));
+  // Do not delay a partial result for decorative visuals; the client can
+  // hydrate those separately while it attempts the full category feed.
+  return matches.map((row) => ({ ...row, classificationFallback: true }));
 }

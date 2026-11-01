@@ -109,7 +109,7 @@ async function resilient(key, { backend, direct, fallback, ttl = 30000 }) {
      * legitimately empty successful response, and treating a real empty list
      * as a failure would re-request it forever.
      */
-    const maxAge = cached.empty ? Math.min(EMPTY_TTL_MS, ttl) : cached.stale ? Math.min(15000, ttl) : ttl;
+    const maxAge = cached.empty ? Math.min(EMPTY_TTL_MS, ttl) : cached.stale || cached.partial ? Math.min(15000, ttl) : ttl;
     if (Date.now() - cached.at < maxAge) return cached.data;
   }
 
@@ -119,7 +119,7 @@ async function resilient(key, { backend, direct, fallback, ttl = 30000 }) {
     try {
       const data = await attempt();
       if (data) {
-        memo.set(key, { at: Date.now(), data });
+        memo.set(key, { at: Date.now(), data, partial: Array.isArray(data) && data.some((row) => row?.classificationFallback) });
         return data;
       }
     } catch (err) {
@@ -444,6 +444,18 @@ export async function getCategory(category, { perPage = 100, vs = 'usd', page = 
   const size = Math.min(250, Math.max(1, Number(perPage) || 100));
 
   const key = `cat:${slug}:${vs}:${size}:${pageNo}`;
+  const risk = isBinanceRiskSector(category);
+  const directCategory = async () => {
+    const raw = await fetchJson(
+      `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&category=${slug}` +
+        `&order=market_cap_desc&per_page=${size}&page=${pageNo}&sparkline=true` +
+        `&price_change_percentage=1h,24h,7d`, { timeout: 5000 }
+    );
+    if (!Array.isArray(raw)) throw new Error('Invalid category response');
+    const rows = raw.map((coin) => ({ ...normalizeCoin(coin), dataProvenance: 'live' }));
+    Object.defineProperty(rows, 'fetchedAt', { value: Date.now() });
+    return rows;
+  };
   if (force) invalidate(key);
   const rows = await resilient(key, {
     // Membership is cached upstream too; prices are refreshed at most once
@@ -456,21 +468,17 @@ export async function getCategory(category, { perPage = 100, vs = 'usd', page = 
       if (!Array.isArray(data) || (stale && isBinanceRiskSector(category))) throw new Error('CATEGORY_DATA_UNAVAILABLE');
       const rows = data.map((row) => ({ ...row, dataProvenance: stale ? 'stale' : 'live' }));
       Object.defineProperty(rows, 'fetchedAt', { value: fetchedAt || Date.now() });
+      // A server-side ID-list fallback is explicitly incomplete. Try the
+      // browser's independent route before accepting it, but keep the honest
+      // partial answer if the public provider is also unavailable.
+      if (!risk && rows.some((row) => row.classificationFallback)) {
+        try { return await directCategory(); } catch { /* retain partial rows */ }
+      }
       return rows;
     },
     // The two Binance tags are not CoinGecko category slugs. Never turn a
     // failing tag provider into an unrelated CoinGecko category.
-    direct: isBinanceRiskSector(category) ? null : async () => {
-      const raw = await fetchJson(
-        `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&category=${slug}` +
-          `&order=market_cap_desc&per_page=${size}&page=${pageNo}&sparkline=true` +
-          `&price_change_percentage=1h,24h,7d`
-      );
-      if (!Array.isArray(raw)) throw new Error('Invalid category response');
-      const rows = raw.map((coin) => ({ ...normalizeCoin(coin), dataProvenance: 'live' }));
-      Object.defineProperty(rows, 'fetchedAt', { value: Date.now() });
-      return rows;
-    },
+    direct: risk ? null : directCategory,
     /*
      * Empty, not the offline snapshot. That snapshot is the top coins by
      * market cap — showing Bitcoin under a "Gold" tab because the network was

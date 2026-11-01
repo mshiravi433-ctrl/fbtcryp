@@ -319,6 +319,7 @@
     "categoryPartial": "Lista de reserva limitada; pode estar incompleta ou desatualizada.",
     "categoryStale": "Os dados em cache podem estar desatualizados.",
     "categoryLimit": "É possível carregar até 2.500 tokens.",
+    "sortLoadedOnly": "A pesquisa e a ordenação incluem apenas os tokens carregados; carregue a página seguinte para mais resultados.",
     "categoryPageError": "Não foi possível carregar a próxima página.",
     "categoryError": "Não foi possível carregar esta categoria. Tente novamente.",
     "categoryEmpty": "Nenhum token encontrado nesta categoria.",

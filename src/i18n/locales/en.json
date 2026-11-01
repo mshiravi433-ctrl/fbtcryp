@@ -132,6 +132,7 @@
     "categoryPartial": "Limited backup list; it may be incomplete or out of date.",
     "categoryStale": "Cached data may be out of date.",
     "categoryLimit": "At most 2,500 tokens can be loaded.",
+    "sortLoadedOnly": "List search and sorting apply only to loaded tokens; load the next page for broader results.",
     "categoryPageError": "Could not load the next page.",
     "categoryError": "Could not load this category. Please try again.",
     "categoryEmpty": "No tokens were found in this category.",

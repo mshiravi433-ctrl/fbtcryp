@@ -40,6 +40,21 @@ describe('category data transport', () => {
     await expect(getCategory('storage', { perPage: 250, page: 2, strict: true })).resolves.toEqual([]);
   });
 
+  it('upgrades a partial backend fallback through the complete browser feed, or retains it if unavailable', async () => {
+    const partial = [{ id: 'filecoin', symbol: 'FIL', name: 'Filecoin', classificationFallback: true }];
+    const fetch = vi.fn(async (input) => String(input).startsWith('/api/')
+      ? json(partial)
+      : json([{ id: 'filecoin', symbol: 'fil', name: 'Filecoin' }, { id: 'arweave', symbol: 'ar', name: 'Arweave' }]));
+    vi.stubGlobal('fetch', fetch);
+    const complete = await getCategory('storage', { strict: true });
+    expect(complete.map((row) => row.id)).toEqual(['filecoin', 'arweave']);
+    expect(complete.some((row) => row.classificationFallback)).toBe(false);
+    fetch.mockImplementation(async (input) => String(input).startsWith('/api/') ? json(partial) : json({}, 503));
+    const backup = await getCategory('storage', { strict: true, force: true });
+    expect(backup).toHaveLength(1);
+    expect(backup[0].classificationFallback).toBe(true);
+  });
+
   it('distinguishes malformed backend data from a legitimately empty category', async () => {
     const fetch = vi.fn().mockResolvedValue(json({ error: 'not an array' }));
     vi.stubGlobal('fetch', fetch);

@@ -20,5 +20,5 @@ function RouteProbe() {
   return <output hidden data-testid="route-probe">{route.pathname}{route.search}</output>;
 }
 createRoot(document.getElementById('root')).render(
-  <MemoryRouter><RgbBackground /><div className="app-shell"><RouteProbe /><div className="app-tab-swipe-zone"><Market /></div></div></MemoryRouter>
+  <MemoryRouter initialEntries={[params.get('tab') === 'tokens' ? '/?tab=tokens' : '/']}><RgbBackground /><div className="app-shell"><RouteProbe /><div className="app-tab-swipe-zone"><Market /></div></div></MemoryRouter>
 );

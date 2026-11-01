@@ -11,7 +11,7 @@ import express from 'express';
 import { readFileSync } from 'node:fs';
 const { Router: ExpressRouter } = express;
 import cors from 'cors';
-import { withCache, getCached, cacheStats, memoryStore } from './cache.js';
+import { withCache, getCached, setCached, cacheStats, memoryStore } from './cache.js';
 import { blobConfigured, blobSet, upstashIncrementWindow, withPersistentCache } from './blobCache.js';
 import {
   compactMarketRows,
@@ -5015,6 +5015,10 @@ app.get('/api/category/:slug', async (req, res) => {
   try {
     const { value, cached, stale } = await withCache(key, 60_000, producer);
     const risk = isBinanceRiskSector(sector);
+    const partial = value.some((row) => row.classificationFallback);
+    // A partial ID-list backup must not suppress recovery for a full minute,
+    // nor be stored at the edge as if it were a complete category.
+    if (partial && !cached) setCached(key, value, 10_000);
     // Seed/Monitoring can be removed at any time; don't serve an old tag as
     // current on an upstream failure, either from memory or an edge cache.
     if (risk && stale) return res.status(503).json({ error: 'CATEGORY_DATA_UNAVAILABLE' });
@@ -5023,7 +5027,7 @@ app.get('/api/category/:slug', async (req, res) => {
     res.set('access-control-expose-headers', 'x-category-fetched-at, x-data-stale');
     // The timestamp remains attached to edge hits. Do not silently serve
     // stale-while-revalidate as fresh, and never edge-cache a risk tag.
-    res.set('cache-control', risk || stale ? 'no-store' : 'public, max-age=0, s-maxage=60');
+    res.set('cache-control', risk || stale || partial ? 'no-store' : 'public, max-age=0, s-maxage=60');
     if (stale) res.set('x-data-stale', '1');
     if (cached) res.set('x-cache', 'HIT');
     return res.json(value);

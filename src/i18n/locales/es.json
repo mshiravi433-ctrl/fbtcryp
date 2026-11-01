@@ -319,6 +319,7 @@
     "categoryPartial": "Lista de respaldo limitada; puede estar incompleta o desactualizada.",
     "categoryStale": "Los datos guardados pueden estar desactualizados.",
     "categoryLimit": "Se pueden cargar hasta 2500 tokens.",
+    "sortLoadedOnly": "La búsqueda y el orden solo incluyen los tokens cargados; carga la siguiente página para ampliar los resultados.",
     "categoryPageError": "No se pudo cargar la página siguiente.",
     "categoryError": "No se pudo cargar esta categoría. Inténtalo de nuevo.",
     "categoryEmpty": "No se encontraron tokens en esta categoría.",
