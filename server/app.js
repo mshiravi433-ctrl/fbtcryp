@@ -25,6 +25,7 @@ import {
   fetchSearch,
   fetchSimplePrices,
   fetchTrending,
+  fetchVolumeSeries,
 } from './providers.js';
 import { MARKET_CATEGORIES } from '../src/lib/marketSectors.js';
 import { telegramAuth, verifyInitData, normalizeBotToken, extractInitData } from './telegramAuth.js';
@@ -3959,6 +3960,21 @@ app.get('/api/ohlc/:id', (req, res) => {
   const days = Number(req.query.days) || 30;
   const vs = String(req.query.vs || 'usd').slice(0, 8);
   return serve(res, 60000)(() => fetchOhlc(req.params.id, days, vs), `ohlc:${req.params.id}:${days}:${vs}`);
+});
+
+/**
+ * 24-HOUR VOLUME for the chart's volume pane.
+ *
+ * Deliberately its own route: the candle endpoint does not carry volume, and
+ * the volume feed is a different shape (a rolling 24h figure per timestamp,
+ * not a per-bar number). Keeping it separate means the coin page can open
+ * with candles alone and fetch this only when the reader actually expands the
+ * chart — a request nobody needed should not be paid for by everybody.
+ */
+app.get('/api/volume/:id', (req, res) => {
+  const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
+  const vs = String(req.query.vs || 'usd').toLowerCase().slice(0, 8);
+  return serve(res, 120000)(() => fetchVolumeSeries(req.params.id, days, vs), `volume:${req.params.id}:${days}:${vs}`);
 });
 
 app.get('/api/coin/:id', (req, res) =>

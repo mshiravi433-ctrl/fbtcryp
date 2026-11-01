@@ -1,0 +1,690 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRO CHART — the token page's candlestick terminal
+   ───────────────────────────────────────────────────────────────────────────
+   Two surfaces, one sheet:
+
+     .pc-*        the inline card on /coin/:id
+     .pc-fs*      the full-screen (landscape where allowed) terminal
+
+   Rules this sheet keeps, matching the rest of the app:
+
+   • No `backdrop-filter` on any large surface. The terminal is opened on
+     phones, over a running chart canvas; blurring everything behind it is
+     the single most expensive frame in that scene and the app already
+     decided against it on the market sheet and the more-menu.
+   • Only `transform` / `opacity` / colour animate. No animated gradients,
+     no animated blur, nothing that forces a re-raster of the canvas.
+   • Every interactive target is 44px on a touch device, 32–36px with a
+     mouse — a toolbar of 11.5px chips that are 24px tall is unusable with a
+     thumb, and this toolbar is *only* usable with a thumb on mobile.
+   • Light theme is re-graded, not inverted: the panel gets a real light
+     surface and the chips get dark ink, so contrast stays readable.
+   • RTL: logical properties (`inset-inline`, `margin-inline`) throughout; the
+     chart itself stays LTR because time runs left→right on every exchange.
+   • `prefers-reduced-motion`, `prefers-contrast: more`, `data-native` and
+     `data-lite` are respected — the terminal is a tool, not a show.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.pc {
+  --pc-up: var(--up);
+  --pc-down: var(--down);
+  --pc-line: var(--line);
+  --pc-glass: color-mix(in srgb, var(--bg-raised) 82%, transparent);
+  --pc-chip: color-mix(in srgb, var(--text-1) 6%, transparent);
+  --pc-chip-on: color-mix(in srgb, var(--rgb-1) 18%, var(--bg-panel-solid));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* ── inline: header, legend, expand ─────────────────────────────────────── */
+
+.pc-inline-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
+
+.pc-inline-head .pc-legend { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+
+.pc-inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.pc-inline-updated {
+  font: 700 9.5px/1 var(--font-mono);
+  letter-spacing: .04em;
+  color: var(--text-3);
+  padding: 3px 6px;
+  border: 1px solid var(--pc-line);
+  border-radius: 999px;
+}
+
+/*
+ * The requested "small button". 32px with a mouse, 40px on a finger: large
+ * enough to hit without aiming, small enough to read as a corner affordance
+ * rather than a second Buy button.
+ */
+.pc-expand {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 32%, var(--pc-line));
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--rgb-1) 14%, transparent), color-mix(in srgb, var(--rgb-2) 12%, transparent));
+  color: var(--text-1);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .14s ease, border-color .14s ease, box-shadow .14s ease;
+}
+
+.pc-expand:hover {
+  border-color: color-mix(in srgb, var(--rgb-1) 65%, var(--pc-line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--rgb-1) 22%, transparent), 0 6px 18px -12px var(--rgb-1);
+}
+.pc-expand:active { transform: scale(.94); }
+.pc-expand:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
+
+@media (pointer: coarse) {
+  .pc-expand { width: 40px; height: 40px; border-radius: 12px; }
+}
+
+/* ── legend ─────────────────────────────────────────────────────────────── */
+
+.pc-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 22px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.pc-sym {
+  font-weight: 800;
+  font-size: 11.5px;
+  letter-spacing: .05em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+  color: #fff;
+  white-space: nowrap;
+}
+
+.pc-interval {
+  font: 700 9.5px/1 var(--font-mono);
+  letter-spacing: .05em;
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--pc-line);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.pc-ohlc {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.pc-ohlc em {
+  font-style: normal;
+  color: var(--text-3);
+  font-size: 9px;
+  margin-inline-end: 3px;
+  letter-spacing: .04em;
+}
+.pc-ohlc .up, .pc-ohlc .down { font-weight: 800; }
+.pc-ohlc .up { color: var(--up); }
+.pc-ohlc .down { color: var(--down); }
+.pc-ohlc .pc-vol em { margin-inline-end: 4px; }
+
+/* The whole-window change, kept visually separate from the candle's own. */
+.pc-range-pos {
+  font: 700 10.5px/1 var(--font-mono);
+  padding: 3px 7px;
+  border-radius: 7px;
+  border: 1px solid var(--pc-line);
+}
+.pc-range-pos.up { color: var(--up); border-color: color-mix(in srgb, var(--up) 34%, transparent); }
+.pc-range-pos.down { color: var(--down); border-color: color-mix(in srgb, var(--down) 34%, transparent); }
+
+.pc-legend-empty { color: var(--text-3); }
+
+/* ── chart stage ────────────────────────────────────────────────────────── */
+
+.pc-stage {
+  position: relative;
+  min-height: 120px;
+  min-width: 0;
+  border-radius: 14px;
+  border: 1px solid var(--pc-line);
+  background:
+    radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--rgb-1) 5%, transparent), transparent 70%),
+    color-mix(in srgb, var(--bg-abyss) 55%, transparent);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.pc-stage--inline { min-height: 160px; }
+.pc-stage.is-tool { cursor: crosshair; }
+
+.pc-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.pc-canvas canvas { cursor: crosshair !important; }
+
+.pc-watermark {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  place-items: center;
+  font: 900 clamp(36px, 14vw, 84px)/1 var(--font-display);
+  letter-spacing: .06em;
+  color: var(--text-1);
+  opacity: .045;
+  pointer-events: none;
+  user-select: none;
+  overflow: hidden;
+}
+
+.pc-skel { border-radius: 14px; }
+.pc-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 18px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--text-3);
+}
+
+/* ── full screen terminal ───────────────────────────────────────────────── */
+
+html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
+
+.pc-fs {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding:
+    max(8px, env(safe-area-inset-top, 0px))
+    max(10px, env(safe-area-inset-right, 0px))
+    max(8px, env(safe-area-inset-bottom, 0px))
+    max(10px, env(safe-area-inset-left, 0px));
+  background:
+    radial-gradient(120% 80% at 8% -10%, rgba(0, 229, 255, .10), transparent 55%),
+    radial-gradient(110% 80% at 100% 0%, rgba(124, 77, 255, .12), transparent 58%),
+    linear-gradient(180deg, #05060b 0%, #04050a 55%, #000 100%);
+  color: var(--text-1);
+  overflow: hidden;
+  overscroll-behavior: contain;
+  animation: pc-fs-in .18s ease-out both;
+}
+
+@keyframes pc-fs-in {
+  from { opacity: 0; transform: scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+
+.pc-fs-aurora {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(46% 40% at 12% 8%, rgba(0, 229, 255, .10), transparent 70%),
+    radial-gradient(46% 42% at 92% 84%, rgba(124, 77, 255, .12), transparent 70%);
+}
+
+.pc-fs > * { position: relative; z-index: 1; }
+
+.pc-fs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+}
+
+.pc-fs-ident {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pc-fs-names {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.15;
+}
+.pc-fs-sym { font-weight: 800; font-size: 13px; letter-spacing: .04em; }
+.pc-fs-name {
+  font-size: 10px;
+  color: var(--text-3);
+  max-width: 26vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-fs-price {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+}
+
+.pc-fs-head-actions { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; }
+
+.pc-fs-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  background: rgba(255, 255, 255, .06);
+  color: #e9edf9;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .14s ease, background-color .14s ease, border-color .14s ease;
+}
+.pc-fs-icon:hover { background: rgba(255, 255, 255, .12); border-color: rgba(255, 255, 255, .24); }
+.pc-fs-icon:active { transform: scale(.94); }
+.pc-fs-icon:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
+.pc-fs-close { border-color: color-mix(in srgb, var(--down) 42%, transparent); color: #ffd9e2; }
+.pc-fs-close:hover { background: color-mix(in srgb, var(--down) 22%, transparent); }
+
+@media (pointer: coarse) {
+  .pc-fs-icon { width: 42px; height: 42px; }
+}
+
+/* ── ranges ─────────────────────────────────────────────────────────────── */
+
+.pc-fs-ranges {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 1px;
+}
+.pc-fs-ranges::-webkit-scrollbar { display: none; }
+
+.pc-range {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 28px;
+  padding: 4px 9px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  background: rgba(255, 255, 255, .045);
+  color: #a9b2ca;
+  font: 700 11px/1 var(--font-mono);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color .14s ease, background-color .14s ease, border-color .14s ease;
+}
+.pc-range:hover { color: #fff; border-color: rgba(255, 255, 255, .24); }
+.pc-range.is-on {
+  color: #04121a;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--rgb-1), color-mix(in srgb, var(--rgb-1) 55%, var(--rgb-2)));
+  box-shadow: 0 4px 16px -10px var(--rgb-1);
+}
+.pc-range:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
+
+@media (pointer: coarse) {
+  .pc-range { min-height: 36px; min-width: 46px; }
+}
+
+.pc-fs-interval {
+  margin-inline-start: auto;
+  padding-inline-start: 8px;
+  font: 700 9.5px/1 var(--font-mono);
+  letter-spacing: .05em;
+  color: #6d7794;
+  white-space: nowrap;
+}
+
+/* ── main chart area ────────────────────────────────────────────────────── */
+
+.pc-fs-main {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.pc-fs-main > .pc-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  border-color: rgba(255, 255, 255, .09);
+  background: rgba(255, 255, 255, .015);
+}
+
+.pc-fs-legend {
+  position: absolute;
+  z-index: 3;
+  inset-inline: 8px;
+  inset-block-start: 6px;
+  pointer-events: none;
+  padding: 4px 7px;
+  border-radius: 9px;
+  background: color-mix(in srgb, #05060b 72%, transparent);
+  border: 1px solid rgba(255, 255, 255, .07);
+  max-width: calc(100% - 16px);
+}
+.pc-fs-legend .pc-legend { gap: 7px; flex-wrap: nowrap; overflow: hidden; }
+.pc-fs-legend .pc-ohlc { font-size: 10px; gap: 7px; }
+.pc-fs-legend .pc-range-pos { display: none; }
+
+/* Window statistics read off the visible candles, not the whole range. */
+.pc-stats {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  font-size: 10px;
+  color: #b9c1d6;
+  padding: 1px 3px 2px;
+}
+.pc-stats::-webkit-scrollbar { display: none; }
+.pc-stats em {
+  font-style: normal;
+  color: #6d7794;
+  font-size: 9px;
+  margin-inline-end: 4px;
+  letter-spacing: .04em;
+}
+.pc-stats b { font-weight: 800; }
+.pc-stats .up { color: var(--up); }
+.pc-stats .down { color: var(--down); }
+.pc-stats span { white-space: nowrap; }
+
+.pc-fs-empty {
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.9;
+  color: #98a2bd;
+}
+
+/* ── measure tool ───────────────────────────────────────────────────────── */
+
+.pc-measure {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transform: translate(10px, 0);
+  padding: 5px 9px;
+  border-radius: 9px;
+  font: 600 10.5px/1 var(--font-mono);
+  white-space: nowrap;
+  pointer-events: none;
+  background: rgba(5, 6, 11, .92);
+  border: 1px solid rgba(255, 255, 255, .14);
+  color: #dbe2f4;
+  box-shadow: 0 10px 24px -18px #000;
+}
+.pc-measure b { font-size: 12px; }
+.pc-measure.up { border-color: color-mix(in srgb, var(--up) 50%, transparent); }
+.pc-measure.down { border-color: color-mix(in srgb, var(--down) 55%, transparent); }
+.pc-measure.up b { color: var(--up); }
+.pc-measure.down b { color: var(--down); }
+
+/* ── toolbar ────────────────────────────────────────────────────────────── */
+
+.pc-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px 1px;
+  -webkit-overflow-scrolling: touch;
+}
+.pc-toolbar::-webkit-scrollbar { display: none; }
+
+.pc-toolgroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding-inline-end: 6px;
+  border-inline-end: 1px solid rgba(255, 255, 255, .07);
+}
+.pc-toolgroup:last-child { border-inline-end: 0; padding-inline-end: 0; }
+.pc-toolgroup--actions { margin-inline-start: auto; }
+
+.pc-chip {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 5px 9px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, .11);
+  background: rgba(255, 255, 255, .045);
+  color: #b7c0d6;
+  font: 700 10.5px/1 var(--font-display);
+  letter-spacing: .02em;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  transition: color .14s ease, background-color .14s ease, border-color .14s ease, transform .12s ease;
+}
+.pc-chip:hover { color: #fff; border-color: rgba(255, 255, 255, .24); background: rgba(255, 255, 255, .08); }
+.pc-chip:active { transform: scale(.96); }
+.pc-chip.is-on {
+  color: #04121a;
+  border-color: transparent;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--rgb-1) 92%, #fff), color-mix(in srgb, var(--rgb-2) 55%, var(--rgb-1)));
+  box-shadow: 0 4px 14px -10px var(--rgb-1);
+}
+.pc-chip:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
+
+@media (pointer: coarse) {
+  .pc-chip { min-height: 38px; padding: 7px 11px; font-size: 11.5px; }
+}
+
+.pc-fs-hint {
+  font-size: 10.5px;
+  color: #85d7ff;
+  text-align: center;
+  padding: 1px 4px;
+  line-height: 1.5;
+}
+.pc-fs-hint--soft { color: #8892ab; }
+
+.pc-fs-toast {
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: 74px;
+  margin-inline: auto;
+  width: max-content;
+  max-width: 80vw;
+  padding: 8px 14px;
+  border-radius: 11px;
+  background: rgba(8, 10, 18, .96);
+  border: 1px solid rgba(255, 255, 255, .16);
+  color: #e6ebf8;
+  font-size: 11.5px;
+  z-index: 8;
+  animation: pc-toast-in .18s ease-out both;
+}
+@keyframes pc-toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.pc-fs-note {
+  font-size: 10.5px;
+  color: #98a2bd;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ── landscape phones: the case this screen exists for ──────────────────── */
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .pc-fs { gap: 4px; padding: 6px 10px; }
+  .pc-fs-head { min-height: 38px; }
+  .pc-fs-name { display: none; }
+  .pc-fs-price { font-size: 13.5px; }
+  .pc-fs-ranges { gap: 4px; }
+  .pc-range { min-height: 26px; font-size: 10px; }
+  .pc-chip { min-height: 30px; padding: 4px 9px; font-size: 10px; }
+  .pc-stats { font-size: 9.5px; }
+  .pc-fs-legend { padding: 3px 6px; inset-block-start: 4px; }
+  .pc-fs-icon { width: 34px; height: 34px; }
+  .pc-fs-toast { inset-block-end: 56px; }
+}
+
+/* Short but portrait (an old phone): keep the chart, drop the frills. */
+@media (max-height: 560px) and (orientation: portrait) {
+  .pc-fs-name, .pc-stats-bars { display: none; }
+}
+
+/* ── light theme ────────────────────────────────────────────────────────── */
+
+:root[data-theme='light'] .pc {
+  --pc-line: rgba(16, 20, 40, .12);
+  --pc-glass: #fff;
+  --pc-chip: rgba(16, 20, 40, .05);
+}
+
+:root[data-theme='light'] .pc-stage {
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(0, 150, 190, .06), transparent 70%),
+    #fff;
+  border-color: rgba(16, 20, 40, .1);
+}
+:root[data-theme='light'] .pc-watermark { color: #0f1a2c; opacity: .06; }
+:root[data-theme='light'] .pc-inline-updated { color: #667090; }
+
+:root[data-theme='light'] .pc-fs {
+  background:
+    radial-gradient(120% 80% at 8% -10%, rgba(0, 160, 200, .10), transparent 55%),
+    radial-gradient(110% 80% at 100% 0%, rgba(110, 70, 230, .10), transparent 58%),
+    #f4f6fc;
+  color: #0f1a2c;
+}
+:root[data-theme='light'] .pc-fs-aurora { opacity: .55; }
+:root[data-theme='light'] .pc-fs-name { color: #667090; }
+:root[data-theme='light'] .pc-fs-icon {
+  background: #fff;
+  border-color: rgba(16, 20, 40, .14);
+  color: #22304b;
+  box-shadow: 0 1px 2px rgba(16, 20, 40, .06);
+}
+:root[data-theme='light'] .pc-fs-icon:hover { background: #eef2fb; }
+:root[data-theme='light'] .pc-fs-close { color: #b3133c; border-color: rgba(179, 19, 60, .3); }
+:root[data-theme='light'] .pc-range {
+  background: #fff;
+  border-color: rgba(16, 20, 40, .12);
+  color: #46516c;
+}
+:root[data-theme='light'] .pc-range.is-on { color: #fff; }
+:root[data-theme='light'] .pc-fs-interval { color: #6b7591; }
+:root[data-theme='light'] .pc-fs-main > .pc-stage {
+  background: #fff;
+  border-color: rgba(16, 20, 40, .1);
+}
+:root[data-theme='light'] .pc-fs-legend {
+  background: rgba(255, 255, 255, .92);
+  border-color: rgba(16, 20, 40, .08);
+}
+:root[data-theme='light'] .pc-stats { color: #46516c; }
+:root[data-theme='light'] .pc-stats em { color: #7b85a1; }
+:root[data-theme='light'] .pc-chip {
+  background: #fff;
+  border-color: rgba(16, 20, 40, .12);
+  color: #46516c;
+}
+:root[data-theme='light'] .pc-chip.is-on { color: #fff; }
+:root[data-theme='light'] .pc-toolgroup { border-color: rgba(16, 20, 40, .08); }
+:root[data-theme='light'] .pc-fs-hint { color: #0b6d92; }
+:root[data-theme='light'] .pc-fs-hint--soft, :root[data-theme='light'] .pc-fs-note { color: #6b7591; }
+:root[data-theme='light'] .pc-fs-toast {
+  background: #fff;
+  border-color: rgba(16, 20, 40, .14);
+  color: #0f1a2c;
+  box-shadow: 0 12px 30px -20px rgba(16, 20, 40, .5);
+}
+:root[data-theme='light'] .pc-empty, :root[data-theme='light'] .pc-fs-empty { color: #6b7591; }
+:root[data-theme='light'] .pc-measure {
+  background: #fff;
+  border-color: rgba(16, 20, 40, .16);
+  color: #0f1a2c;
+  box-shadow: 0 12px 26px -20px rgba(16, 20, 40, .55);
+}
+
+/* ── narrow phones: keep the legend, drop the frills ────────────────────── */
+
+@media (max-width: 420px) {
+  .pc-inline-head .pc-ohlc { font-size: 9.5px; gap: 6px; }
+  .pc-inline-head .pc-ohlc em { font-size: 8px; margin-inline-end: 2px; }
+  .pc-inline-head .pc-sym { font-size: 10.5px; padding: 2px 7px; }
+  .pc-inline-updated { display: none; }
+  .pc-fs-legend .pc-ohlc .pc-vol { display: none; }
+}
+
+/* ── platform + accessibility flags ─────────────────────────────────────── */
+
+[data-native] .pc-expand,
+[data-lite] .pc-expand,
+[data-native] .pc-chip,
+[data-lite] .pc-chip,
+[data-native] .pc-range,
+[data-lite] .pc-range {
+  transition: none;
+}
+
+[data-native] .pc-fs,
+[data-lite] .pc-fs {
+  animation: none;
+}
+
+[data-native] .pc-fs-aurora,
+[data-lite] .pc-fs-aurora {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-fs, .pc-fs-toast { animation: none; }
+  .pc-expand, .pc-chip, .pc-range, .pc-fs-icon { transition: none; }
+  .pc-chip:active, .pc-fs-icon:active, .pc-expand:active { transform: none; }
+}
+
+@media (prefers-contrast: more) {
+  .pc-chip { border-color: rgba(255, 255, 255, .34); color: #eef2fb; }
+  .pc-chip.is-on { background: var(--rgb-1); color: #000; }
+  .pc-range.is-on { background: var(--rgb-1); color: #000; }
+  .pc-fs { background: #000; }
+  :root[data-theme='light'] .pc-fs { background: #fff; }
+}
