@@ -319,6 +319,7 @@
     "categoryPartial": "Liste de secours limitée, potentiellement incomplète ou périmée.",
     "categoryStale": "Les données en cache peuvent être périmées.",
     "categoryLimit": "Chargement limité à 2 500 tokens.",
+    "sortLoadedOnly": "La recherche et le tri portent uniquement sur les jetons chargés ; chargez la page suivante pour élargir les résultats.",
     "categoryPageError": "Impossible de charger la page suivante.",
     "categoryError": "Impossible de charger cette catégorie. Réessayez.",
     "categoryEmpty": "Aucun token trouvé dans cette catégorie.",

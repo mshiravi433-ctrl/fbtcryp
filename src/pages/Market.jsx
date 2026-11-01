@@ -403,6 +403,22 @@ export default function Market() {
   const categoryFallback = Boolean(sector && universe.some((row) => row.classificationFallback));
   const categoryStale = Boolean(sector && universe.some((row) => row.dataProvenance === 'stale'));
 
+  // Once a complete first page is on screen, fetch one more in the
+  // background. Rendering remains capped, but counts and sorting cover more
+  // than the first 250 without forcing the reader through four reveal taps.
+  // Never speculate on a partial fallback or on time-sensitive risk tags.
+  const prefetchedCategory = useRef(null);
+  useEffect(() => {
+    if (!sector) { prefetchedCategory.current = null; return; }
+    const prefetchKey = `${sector}:${vs}`;
+    if (tab !== 'tokens' || isBinanceRiskSector(sector) || categoryFallback || categoryStale ||
+        category.error || category.loading || category.refreshing || category.loadingMore ||
+        !category.hasMore || prefetchedCategory.current === prefetchKey) return;
+    prefetchedCategory.current = prefetchKey;
+    category.loadMore();
+  }, [sector, vs, tab, categoryFallback, categoryStale, category.error, category.loading,
+      category.refreshing, category.loadingMore, category.hasMore, category.loadMore]);
+
   const list = useMemo(() => {
     const q = query.trim().toLowerCase();
     // An interpreted natural-language request is an instruction to rank the
@@ -599,9 +615,7 @@ export default function Market() {
    * market list (a sorted or filtered view of the loaded rows would have its
    * order rewritten under the reader by an arriving page).
    */
-  const canLoadNext = !sector && !query.trim() && !onlyFavorites
-    && sortKey === 'rank' && sortDir === 'asc'
-    && !pageDone && (coins?.length ?? 0) >= MARKET_PAGE_SIZE;
+  const canLoadNext = !sector && !pageDone && (coins?.length ?? 0) >= MARKET_PAGE_SIZE;
   const canLoadCategory = Boolean(sector && category.hasMore && !categoryFallback && !category.error);
   const hasMore = list.length > visibleCount || canLoadNext || canLoadCategory;
   const visibleList = list.slice(0, rowCap);
@@ -945,6 +959,10 @@ export default function Market() {
                   {(category.error && universe.length > 0) && <span>{t('market.categoryError')} <button type="button" onClick={category.refresh}>{t('market.retry')}</button></span>}
                   {category.pageError && <span>{t('market.categoryPageError')} <button type="button" onClick={category.loadMore}>{t('market.retry')}</button></span>}
                 </div>
+              )}
+
+              {(canLoadNext || canLoadCategory || category.limitReached) && (
+                <p className="mx-category-note" data-testid="market-loaded-scope">{t('market.sortLoadedOnly')}</p>
               )}
 
               {smartIntent && (

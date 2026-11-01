@@ -319,6 +319,7 @@
     "categoryPartial": "Daftar cadangan terbatas; mungkin tidak lengkap atau kedaluwarsa.",
     "categoryStale": "Data tersimpan mungkin kedaluwarsa.",
     "categoryLimit": "Maksimal 2.500 token dapat dimuat.",
+    "sortLoadedOnly": "Pencarian dan pengurutan hanya mencakup token yang dimuat; muat halaman berikutnya untuk hasil lebih luas.",
     "categoryPageError": "Halaman berikutnya tidak dapat dimuat.",
     "categoryError": "Kategori ini tidak dapat dimuat. Coba lagi.",
     "categoryEmpty": "Tidak ada token dalam kategori ini.",

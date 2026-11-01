@@ -182,6 +182,19 @@ describe('the views reorder the page instead of shrinking it', () => {
     expect(screen.getByRole('button', { name: fa.market.filter.losers }).getAttribute('aria-pressed')).toBe('true');
   });
 
+  it('reverses the actual rows for rank and price in both directions', async () => {
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
+    await waitFor(() => expect(rowIds()[0]).toBe('bitcoin'));
+    fireEvent.click(screen.getByTestId('market-sort-dir'));
+    expect(rowIds()[0]).toBe('coin-119');
+    fireEvent.click(screen.getByTestId('market-sort-dir'));
+    expect(rowIds()[0]).toBe('bitcoin');
+    chooseSort('price');
+    expect(rowIds()[0]).toBe('bitcoin');
+    fireEvent.click(screen.getByTestId('market-sort-dir'));
+    expect(rowIds()[0]).toBe('coin-0');
+  });
+
   it('a sort chosen from the menu un-highlights the preset chips', async () => {
     render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));

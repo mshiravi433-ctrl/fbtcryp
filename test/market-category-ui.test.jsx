@@ -48,7 +48,7 @@ it('shows a truthful risk outage, does not substitute market rows, and retries',
   expect(api.getCategory).toHaveBeenLastCalledWith('seed', expect.objectContaining({ strict: true, force: true }));
 });
 
-it('lets a reader reveal the first 250 tokens and request the next page', async () => {
+it('prefetches the next page without waiting for the reader to reveal 250 rows', async () => {
   api.getCategory.mockImplementation(async (_sector, opts) => opts.page === 1
     ? Array.from({ length: 250 }, (_, i) => row(i))
     : [{ ...row(250), name: 'Token on next page' }]);
@@ -56,11 +56,11 @@ it('lets a reader reveal the first 250 tokens and request the next page', async 
   select('storage');
   await screen.findByTestId('row-id-0');
   expect(screen.getByTestId('market-category-source').textContent).toContain('CoinGecko');
+  await waitFor(() => expect(api.getCategory).toHaveBeenCalledWith('storage', expect.objectContaining({ page: 2 })));
+  await waitFor(() => expect(screen.getByTestId('market-count').textContent).toMatch(/۲۵۱|251/));
   for (let i = 0; i < 4; i += 1) {
     fireEvent.click(document.querySelector('.market-show-more'));
   }
-  expect(screen.getByText(fa.market.nextPage)).toBeTruthy();
-  fireEvent.click(screen.getByText(fa.market.nextPage));
-  await waitFor(() => expect(screen.getByText('Token on next page')).toBeTruthy());
+  expect(await screen.findByText('Token on next page')).toBeTruthy();
   expect(api.getCategory).toHaveBeenLastCalledWith('storage', expect.objectContaining({ perPage: 250, page: 2 }));
 });
