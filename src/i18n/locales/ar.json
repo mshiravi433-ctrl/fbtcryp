@@ -9704,7 +9704,8 @@
     "statMarkets": "الأسواق",
     "statAvg": "متوسط التغيّر",
     "listCollapse": "طيّ القائمة",
-    "listExpand": "توسيع القائمة"
+    "listExpand": "توسيع القائمة",
+    "btcLive": "قُرئ الآن"
   },
   "marketHero": {
     "ariaLabel": "منصة عرض سوق FBT",

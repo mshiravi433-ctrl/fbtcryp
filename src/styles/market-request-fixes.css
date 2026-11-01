@@ -9,4 +9,361 @@
 .mx-market .mx-btc-delta { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; min-height: 38px; margin-top: 12px; }
 .mx-market .mx-btc-pct, .mx-market .mx-btc-abs { direction: ltr; unicode-bidi: isolate; }
 @media (prefers-reduced-motion: reduce) { .mx-global-art img { animation: none; } }
-:root:not([data-motion='full']) .mx-global-art img { animation: none; }
+/* Matches market-perf.css exactly: without a `data-theme` on <html> the
+   attribute is not written, so an unthemed document must NOT be frozen. */
+:root[data-theme]:not([data-motion='full']) .mx-global-art img { animation: none; }
+
+/* ─── THE BITCOIN BOX: A NEUTRAL DAY IS GREY, NOT GREEN ─────────────────────
+   «باکس بیت‌کوین همیشه سبزه و عدد سودشون دیده نمی‌شه.»
+   The card's tone is now chosen from the value it PRINTS (see pctTone in
+   lib/format.js), so a move that rounds to zero lands on `neutral`: the
+   neutral token, no arrow, «0.00%», and the same money move without a sign.
+   The rules below are the only place the neutral tone is declared, so the
+   card, its rim, its chart and its pill all take it from one property. */
+.mx-market .mx-btc-card[data-dir='neutral'] {
+  --btc-tone: var(--mx-muted);
+  --btc-tone-rgb: 155, 165, 185;
+  --mx-btc-interior:
+    radial-gradient(ellipse at 100% 0, rgba(155, 165, 185, .16), transparent 58%) padding-box,
+    linear-gradient(160deg, rgba(16, 22, 34, .94), rgba(11, 15, 26, .96)) padding-box;
+  --mx-btc-rim-a: linear-gradient(135deg, rgba(155, 165, 185, .42), rgba(120, 132, 152, .18) 50%, rgba(155, 165, 185, .3));
+  --mx-btc-rim-b: linear-gradient(315deg, rgba(155, 165, 185, .34), rgba(120, 132, 152, .16) 52%, rgba(140, 150, 170, .28));
+  box-shadow: inset 0 1px 0 rgba(232, 238, 248, .16), inset 0 0 40px rgba(155, 165, 185, .06);
+}
+:root[data-theme='light'] .mx-market .mx-btc-card[data-dir='neutral'] {
+  --mx-btc-interior:
+    radial-gradient(ellipse at 100% 0, rgba(120, 132, 152, .12), transparent 60%) padding-box,
+    linear-gradient(#fff, #fff) padding-box;
+  --mx-btc-rim-a: linear-gradient(135deg, rgba(120, 132, 152, .4), rgba(160, 170, 188, .18) 50%, rgba(120, 132, 152, .3));
+  --mx-btc-rim-b: linear-gradient(315deg, rgba(120, 132, 152, .34), rgba(160, 170, 188, .16) 52%, rgba(120, 132, 152, .26));
+}
+/* `0.00%` is not a gain: the pill keeps the neutral ink and drops the glow. */
+.mx-market .mx-btc-pct[data-dir='none'],
+.mx-market .mx-btc-pct[data-dir='flat'] {
+  color: var(--mx-muted);
+  border-color: rgba(155, 165, 185, .34);
+  background: rgba(155, 165, 185, .1);
+  box-shadow: none;
+}
+.mx-market .mx-btc-delta[data-tone='none'] .mx-btc-abs { color: var(--mx-muted); }
+
+/* ─── WHEN THE NUMBER WAS READ ─────────────────────────────────────────────
+   «عدد سودشون دیده نمی‌شه … داده زنده نیست»: the reading now carries its own
+   timestamp. One hairline row under the identity, never a badge — the age is
+   context for the price, not a second headline. */
+.mx-market .mx-btc-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .04);
+  color: var(--mx-muted);
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.mx-market .mx-btc-live i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--btc-tone);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--btc-tone) 22%, transparent);
+  animation: mx-btc-live 2.4s ease-in-out infinite;
+}
+.mx-market .mx-btc-live[data-state='stale'] i {
+  background: var(--mx-muted);
+  box-shadow: none;
+  animation: none;
+}
+.mx-market .mx-btc-age {
+  padding-inline-start: 7px;
+  border-inline-start: 1px solid rgba(255, 255, 255, .12);
+  font-size: 9.5px;
+  opacity: .8;
+}
+:root[data-theme='light'] .mx-market .mx-btc-live {
+  border-color: #e2e8f2;
+  background: #f4f7fb;
+  color: #64748b;
+}
+:root[data-theme='light'] .mx-market .mx-btc-age { border-inline-start-color: #dfe6f0; }
+@keyframes mx-btc-live { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) {
+  .mx-market .mx-btc-live i { animation: none; }
+}
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-btc-live i { animation: none; }
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE MARKET SCREEN'S ADVERTISEMENT — «هوش جهانی»
+   ---------------------------------------------------------------------------
+   «باکس تبلیغاتی «ببین پول هوشمند کجا می‌رود» را به تبلیغات در مورد هوش جهانی
+   تبدیل کن با انیمیشن و عکس و ایکون و جمله درست، بدون اینکه باگ بخوره.»
+
+   This sheet is the layout + motion for the redrawn banner. It adds NO colour
+   token: the palette is the market screen's own (--mx-cyan, --mx-violet,
+   --mx-gold, --mx-muted, the glass shell tokens), so the advertisement looks
+   like it was always part of this screen rather than dropped on top of it.
+
+   Three layers, in this order, and every one of them can be frozen:
+     1. the frame   — a travelling conic rim, one sheen, one bloom;
+     2. the world   — a local .webp, two orbit rings, three satellites;
+     3. the route   — data → world model → insight, with three travellers.
+   The copy and the CTA are painted above all three and never move.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.mx-market .mx-global-banner {
+  --gx-a: var(--mx-cyan);
+  --gx-b: var(--mx-violet);
+  --gx-c: var(--mx-gold);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  padding: 22px 20px 18px;
+  isolation: isolate;
+}
+
+/* ── 1 · THE COPY ─────────────────────────────────────────────────────────── */
+.mx-market .mx-global-banner .mx-smart-main {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 13px;
+}
+.mx-market .mx-global-banner .mx-smart-copy h2 {
+  font-size: clamp(15px, 4.2vw, 19px);
+  line-height: 1.45;
+  letter-spacing: -.01em;
+  margin: 6px 0 7px;
+  text-wrap: balance;
+}
+.mx-market .mx-global-banner .mx-smart-copy p {
+  font-size: 11.5px;
+  line-height: 1.8;
+  margin: 0;
+  max-width: 46ch;
+}
+.mx-market .mx-global-banner .mx-smart-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+/* ── 2 · THE WORLD ────────────────────────────────────────────────────────── */
+.mx-market .mx-global-banner .mx-global-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 172px;
+  margin: 2px 0 0;
+  isolation: isolate;
+}
+.mx-market .mx-global-banner .mx-global-art::before {
+  /* The atmosphere: a soft bloom under the planet. Painted, never blurred. */
+  content: '';
+  position: absolute;
+  inset: 16% 12%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 60%,
+    color-mix(in srgb, var(--gx-a) 26%, transparent),
+    transparent 68%);
+  opacity: .9;
+  pointer-events: none;
+}
+.mx-market .mx-global-banner .mx-global-art img {
+  position: relative;
+  z-index: 2;
+  width: 138px;
+  height: 138px;
+  object-fit: contain;
+  filter: none;
+  animation: mx-global-float 9s ease-in-out infinite;
+}
+.mx-market .mx-global-banner .mx-global-orbit {
+  position: absolute;
+  z-index: 1;
+  inset: 22% 6%;
+  border: 1px solid color-mix(in srgb, var(--gx-a) 55%, transparent);
+  border-radius: 50%;
+  transform: rotate(-18deg);
+  opacity: .5;
+  animation: mx-global-tilt 14s ease-in-out infinite;
+}
+.mx-market .mx-global-banner .mx-global-orbit.is-2 {
+  inset: 28% 12%;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--gx-b) 50%, transparent);
+  transform: rotate(26deg);
+  animation-duration: 19s;
+  animation-direction: reverse;
+}
+/* Three satellites riding the outer ring: one element, one transform each. */
+.mx-market .mx-global-banner .mx-global-sat {
+  position: absolute;
+  z-index: 3;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gx-c);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--gx-c) 80%, transparent);
+  transform-box: fill-box;
+  animation: mx-global-sat 11s linear infinite;
+}
+.mx-market .mx-global-banner .mx-global-sat.is-1 { top: 26%; inset-inline-start: 16%; animation-delay: 0s; }
+.mx-market .mx-global-banner .mx-global-sat.is-2 { top: 66%; inset-inline-end: 14%; background: var(--gx-a); box-shadow: 0 0 10px color-mix(in srgb, var(--gx-a) 80%, transparent); animation-delay: -3.6s; }
+.mx-market .mx-global-banner .mx-global-sat.is-3 { top: 14%; inset-inline-end: 30%; width: 5px; height: 5px; background: var(--gx-b); box-shadow: 0 0 9px color-mix(in srgb, var(--gx-b) 80%, transparent); animation-delay: -7.2s; }
+
+/* ── 3 · THE ROUTE ────────────────────────────────────────────────────────── */
+.mx-market .mx-global-banner .mx-smart-route { margin-top: 2px; }
+.mx-market .mx-global-banner .mx-route-drawing { height: 62px; }
+.mx-market .mx-global-banner .mx-route-labels { font-size: 9px; gap: 0; }
+.mx-market .mx-global-banner .mx-route-labels span:first-child { text-align: start; }
+.mx-market .mx-global-banner .mx-route-labels span:last-child { text-align: end; }
+
+/* ── 4 · THE CHIPS AND THE FOOT ───────────────────────────────────────────── */
+.mx-market .mx-global-banner .mx-smart-pools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+.mx-market .mx-global-banner .mx-pool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1;
+  border: 1px solid color-mix(in srgb, var(--gx-a) 22%, transparent);
+  background: color-mix(in srgb, var(--gx-a) 8%, transparent);
+  color: color-mix(in srgb, var(--mx-text) 88%, transparent);
+  transition: border-color .2s ease, background .2s ease;
+}
+.mx-market .mx-global-banner .mx-pool[data-pool='world'] {
+  border-color: color-mix(in srgb, var(--gx-b) 24%, transparent);
+  background: color-mix(in srgb, var(--gx-b) 9%, transparent);
+}
+.mx-market .mx-global-banner .mx-pool[data-pool='agents'] {
+  border-color: color-mix(in srgb, var(--gx-c) 26%, transparent);
+  background: color-mix(in srgb, var(--gx-c) 9%, transparent);
+}
+.mx-market .mx-global-banner .mx-pool svg { flex: 0 0 auto; }
+.mx-market .mx-global-banner .mx-pool[data-pool='analysis'] svg { color: var(--gx-a); }
+.mx-market .mx-global-banner .mx-pool[data-pool='world'] svg { color: var(--gx-b); }
+.mx-market .mx-global-banner .mx-pool[data-pool='agents'] svg { color: var(--gx-c); }
+
+.mx-market .mx-global-banner .mx-smart-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 13px;
+}
+.mx-market .mx-global-banner .mx-smart-note { font-size: 9.5px; line-height: 1.5; }
+.mx-market .mx-global-banner .mx-smart-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 15px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.mx-market .mx-global-banner .mx-smart-cta:focus-visible {
+  outline: 2px solid var(--gx-a);
+  outline-offset: 3px;
+}
+
+/* ── 5 · KEYFRAMES — transform and opacity only ───────────────────────────── */
+@keyframes mx-global-float {
+  50% { transform: translateY(-6px) rotate(2deg); }
+}
+@keyframes mx-global-tilt {
+  50% { transform: rotate(-11deg) scale(1.02); }
+}
+@keyframes mx-global-sat {
+  0%, 100% { opacity: .35; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-5px); }
+}
+
+/* ── 6 · LIGHT THEME — re-graded, not inverted ────────────────────────────── */
+:root[data-theme='light'] .mx-market .mx-global-banner .mx-smart-copy p { color: #4a5a70; }
+:root[data-theme='light'] .mx-market .mx-global-banner .mx-pool {
+  color: #33455e;
+  border-color: color-mix(in srgb, var(--gx-a) 30%, #dbe4f0);
+  background: color-mix(in srgb, var(--gx-a) 10%, #fff);
+}
+:root[data-theme='light'] .mx-market .mx-global-banner .mx-global-art::before {
+  background: radial-gradient(circle at 50% 60%,
+    color-mix(in srgb, var(--gx-a) 16%, transparent),
+    transparent 68%);
+}
+
+/* ── 7 · WIDER SCREENS — the world beside the copy, not above it ──────────── */
+@media (min-width: 560px) {
+  .mx-market .mx-global-banner {
+    grid-template-columns: minmax(0, 1.25fr) minmax(180px, .75fr);
+    grid-template-areas:
+      'copy  art'
+      'route route'
+      'pools pools'
+      'foot  foot';
+    column-gap: 22px;
+    row-gap: 16px;
+    padding: 24px 24px 18px;
+  }
+  .mx-market .mx-global-banner .mx-smart-main { grid-area: copy; }
+  .mx-market .mx-global-banner .mx-global-art { grid-area: art; height: 100%; min-height: 168px; margin: 0; }
+  .mx-market .mx-global-banner .mx-smart-route { grid-area: route; }
+  .mx-market .mx-global-banner .mx-smart-pools { grid-area: pools; }
+  .mx-market .mx-global-banner .mx-smart-foot { grid-area: foot; }
+  .mx-market .mx-global-banner .mx-global-art img { width: 160px; height: 160px; }
+}
+
+/* ── 8 · SMALL PHONES — one scale, nothing clipped ────────────────────────── */
+@media (max-width: 360px) {
+  .mx-market .mx-global-banner { padding: 18px 15px 15px; gap: 14px; }
+  .mx-market .mx-global-banner .mx-global-art { height: 148px; }
+  .mx-market .mx-global-banner .mx-global-art img { width: 118px; height: 118px; }
+  .mx-market .mx-global-banner .mx-smart-copy p { font-size: 11px; }
+  .mx-market .mx-global-banner .mx-smart-cta { min-height: 42px; width: 100%; justify-content: center; }
+}
+
+/* ── 9 · EVERY GUARD — a frozen banner is a complete banner ───────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .mx-market .mx-global-banner .mx-global-art img,
+  .mx-market .mx-global-banner .mx-global-orbit,
+  .mx-market .mx-global-banner .mx-global-sat { animation: none; }
+  .mx-market .mx-global-banner .mx-global-sat { opacity: .85; }
+}
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-global-banner :is(.mx-global-art img, .mx-global-orbit, .mx-global-sat) {
+  animation: none;
+}
+:root[data-native='true'] .mx-market .mx-global-banner .mx-global-art img,
+:root[data-lite='true'] .mx-market .mx-global-banner .mx-global-sat {
+  animation: none;
+}
+
+/* ─── A FLAT ROW IS NOT A GAIN ─────────────────────────────────────────────
+   The token list's pill follows the same rule as the Bitcoin card: a move that
+   rounds to 0.00% is neutral (muted ink, no arrow), never green. Declared here
+   so both market themes and the row's own sheet leave one property to read. */
+.mx-market .coin-change-pill.is-flat,
+.coin-row .coin-change-pill.is-flat {
+  color: var(--mx-muted, #93a1b5);
+  background: rgba(147, 161, 181, .12);
+}
+:root[data-theme='light'] .coin-row .coin-change-pill.is-flat {
+  color: #64748b;
+  background: rgba(100, 116, 139, .12);
+}

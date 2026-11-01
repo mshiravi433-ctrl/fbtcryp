@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { motion } from 'framer-motion';
-import { fmtPct, fmtUsd } from '../lib/format';
+import { fmtPct, fmtUsd, pctTone } from '../lib/format';
 import Sparkline from './Sparkline';
 import CoinLogo from './CoinLogo';
 import { useNearViewport } from '../hooks/useRowWindow';
@@ -38,7 +38,15 @@ function CoinRow({
   logoPriority = false,
   deferSpark = false
 }) {
-  const up = coin.change24h >= 0;
+  /*
+   * «همیشه سبز»: the same rule the Bitcoin box follows (lib/format.js
+   * `pctTone`) — the ARROW and the COLOUR come from the value the row PRINTS,
+   * so a +0.004% tick is a flat, grey, arrow-less «+0.00%» rather than a green
+   * arrow pointing at a zero. A missing move gets no tone at all.
+   */
+  const tone = pctTone(coin.change24h, 2);
+  const up = tone === 'down' ? false : tone === 'up';
+  const flat = tone == null || tone === 'flat';
   const [rowRef, near] = useNearViewport({ eager: !deferSpark, rootMargin: '400px' });
 
   const content = (
@@ -75,14 +83,15 @@ function CoinRow({
 
       <div className="coin-right">
         <div className="coin-price mono">{fmtUsd(coin.price)}</div>
-        <div className={`coin-change-pill mono ${up ? 'is-up' : 'is-down'}`}>
+        <div className={`coin-change-pill mono ${flat ? 'is-flat' : up ? 'is-up' : 'is-down'}`}>
           {/* «ایکون svg» — the typed triangle glyphs could not be recoloured by the accent
               token and arrived as platform text artwork on every OS. The arrow
               is drawn, inherits currentColor, and is 9px so it never pushes the
-              number off its line in a 5-column row. */}
-          {up
+              number off its line in a 5-column row. A flat row draws no arrow:
+              there is no direction to point at. */}
+          {!flat && (up
             ? <GlyphTrendUp width={9} height={9} aria-hidden="true" />
-            : <GlyphTrendDown width={9} height={9} aria-hidden="true" />}
+            : <GlyphTrendDown width={9} height={9} aria-hidden="true" />)}
           {fmtPct(coin.change24h, 2)}
         </div>
       </div>

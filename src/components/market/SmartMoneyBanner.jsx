@@ -3,8 +3,47 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { GlyphChevron, GlyphGlobe, GlyphWave, GlyphGrid } from './MarketGlyphs.jsx';
 
-/** A decorative global intelligence diagram, not a fabricated live-data feed.
- * Motion is CSS-only so reduced-motion, native and lite mode can stop it.
+/**
+ * «هوش جهانی» — THE MARKET SCREEN'S ONE ADVERTISEMENT.
+ * ---------------------------------------------------------------------------
+ * Requested (2026-11-01):
+ *
+ *   «در بازار تب مرور، باکس تبلیغاتی «ببین پول هوشمند کجا می‌رود» را به
+ *    تبلیغات در مورد هوش جهانی تبدیل کن با انیمیشن و عکس و ایکون و جمله درست،
+ *    بدون اینکه باگ بخوره.»
+ *
+ * ─── WHAT IT IS NOW ────────────────────────────────────────────────────────
+ * An advertisement for FBT Global Intelligence (`/global`): an animated world
+ * on the left, a sentence that is true about that page on the right, three
+ * drawn capability chips, and one way in. The Smart Money headline is gone from
+ * this surface — Smart Money still has its own page, its own route and its own
+ * entry in the menu; it simply is not what this box is selling any more.
+ *
+ * ─── THE FOUR RULES IT KEEPS, BECAUSE THEY ARE WHY IT CANNOT BUG ───────────
+ *
+ * 1. IT INVENTS NO NUMBER. The banner is decoration plus copy. There is no
+ *    percentage, no count and no price on it, so it cannot disagree with the
+ *    feed behind it and it cannot go stale.
+ *
+ * 2. IT ANIMATES ONLY `transform` AND `opacity`, IN CSS, WITHOUT
+ *    `backdrop-filter`. The screenshot this screen was measured on is what
+ *    pays for a blur that moves; every loop here is compositor work on an
+ *    already-rasterised layer, and every one of them stops for
+ *    `prefers-reduced-motion`, `data-motion`, `data-native` and `data-lite`.
+ *
+ * 3. IT USES ARTWORK THAT ALREADY SHIPS. `/images/market-banner/globe.webp` is
+ *    the same local asset the hero banner uses — no new network request, no
+ *    third-party host, and `loading="lazy"`/`decoding="async"` so it never
+ *    competes with the market feed for bandwidth.
+ *
+ * 4. IT IS A LINK, NOT A BUTTON. One destination (`/global`), a real `href`,
+ *    and the whole card is not clickable — the footer has the CTA and the
+ *    artwork is `aria-hidden`, so a screen reader reads one sentence and one
+ *    way in.
+ *
+ * The copy comes from `marketGlobalAd.*` in the locale files (fa / en / ar are
+ * complete; any missing key falls back to English through i18next), never from
+ * a literal in this file.
  */
 function SmartMoneyBanner() {
   const { t } = useTranslation();
@@ -16,7 +55,13 @@ function SmartMoneyBanner() {
   ];
 
   return (
-    <section className="mx-smart-banner mx-global-banner" aria-labelledby="mx-smart-title" data-testid="market-smart-money-banner">
+    <section
+      className="mx-smart-banner mx-global-banner"
+      aria-labelledby="mx-smart-title"
+      data-testid="market-smart-money-banner"
+    >
+      {/* Ambient light only. Two blooms, one sheen and the travelling rim are
+          painted, not blurred, and none of them carries a reading. */}
       <span className="mx-smart-veil" aria-hidden="true" />
       <span className="mx-smart-sheen" aria-hidden="true" />
 
@@ -34,7 +79,27 @@ function SmartMoneyBanner() {
         </div>
       </div>
 
-      <div className="mx-global-art" aria-hidden="true"><img src="/images/market-banner/globe.webp" alt="" width="240" height="240" loading="lazy" decoding="async" /><span className="mx-global-orbit" /></div>
+      {/* The world. One local drawing, one slow float, two orbit rings and
+          three satellites — all transform/opacity, all inside aria-hidden. */}
+      <div className="mx-global-art" aria-hidden="true">
+        <img
+          src="/images/market-banner/globe.webp"
+          alt=""
+          width={240}
+          height={240}
+          loading="lazy"
+          decoding="async"
+        />
+        <span className="mx-global-orbit" />
+        <span className="mx-global-orbit is-2" />
+        <span className="mx-global-sat is-1" />
+        <span className="mx-global-sat is-2" />
+        <span className="mx-global-sat is-3" />
+      </div>
+
+      {/* A route through the intelligence: data in, the world model thinking,
+          insight out. Same geometry the screen's own trend chart speaks, so it
+          reads as part of this app rather than as clip art. */}
       <div className="mx-smart-route" aria-hidden="true">
         <div className="mx-route-drawing">
           <svg viewBox="0 0 400 88" preserveAspectRatio="none">

@@ -264,8 +264,17 @@
  * and on an in-place APK update alike.
  */
 /* v31: version the new rich artwork URL so immutable CDN caches do not keep
-   serving the old design to installed PWAs. */
-const SHELL = 'fbt-shell-v31';
+   serving the old design to installed PWAs.
+ *
+ * v31 -> v32 (2026-11-01): the gesture, the Bitcoin box, the market rail and
+ * the limit-order tabs all live in the SHELL BUNDLE. A horizontal drag used to
+ * be answered by the previous bundle with a PAGE change, and a device pinned
+ * to the v31 shell keeps doing exactly that no matter what the new one says —
+ * this is the same stale-shell mechanism every entry above describes. Renaming
+ * the cache evicts it on the site and on an in-place APK update alike, which
+ * matters here more than usual: the old behaviour is a gesture the user has
+ * already complained about twice. */
+const SHELL = 'fbt-shell-v32';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

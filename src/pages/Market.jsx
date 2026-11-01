@@ -66,7 +66,7 @@ import { fmtCompact, fmtNum, fmtPct } from '../lib/format';
 import { vsOf } from '../lib/currency';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { getCoin, getMarkets, onMarketVisualsReady } from '../lib/api';
-import { MARKET_CATEGORIES, isBinanceRiskSector, sectorFromRows } from '../lib/marketSectors';
+import { VISIBLE_SECTORS, isBinanceRiskSector, sectorFromRows } from '../lib/marketSectors';
 import { DEFAULT_SORT, MARKET_SORTS, marketBreadth, sortMarketRows } from '../lib/marketList';
 import { mergeVisuals } from '../lib/marketVisuals';
 import { useAppStore } from '../store/useAppStore';
@@ -116,7 +116,13 @@ const FOLDED_ROWS = 12;
  * one a non-crypto person recognises, and the reason they might open a crypto
  * app at all where the local currency is unstable.
  */
-const SECTORS = Object.keys(MARKET_CATEGORIES).filter((key) => !['seed', 'monitoring', 'launchpad'].includes(key));
+/*
+ * The categories this screen offers. «دسته‌بندی سید، تحت نظر، لانچ‌پد داده و
+ * توکن ندارد — حذفش کن»: those three are in HIDDEN_SECTORS, with the reason,
+ * so the rail and any future surface read the SAME list instead of each
+ * filtering its own copy (which is how one of them survives a removal).
+ */
+const SECTORS = VISIBLE_SECTORS;
 
 /** The five list views, same vocabulary, same 14px optical size. */
 function FilterGlyph({ view }) {
@@ -739,6 +745,10 @@ export default function Market() {
                 loading={loading}
                 vs={vs}
                 onOpenCoin={openCoin}
+                /* The moment the last SUCCESSFUL poll landed, so the Bitcoin
+                   box can print how old its own number is instead of calling
+                   every reading live. */
+                updatedAt={updatedAt}
               />
 
               <div className="mx-stories">

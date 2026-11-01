@@ -5075,7 +5075,8 @@
     "btcMcap": "Market cap",
     "btcPeriod": "24h change",
     "listCollapse": "Collapse the list",
-    "listExpand": "Expand the list"
+    "listExpand": "Expand the list",
+    "btcLive": "Read just now"
   },
   "marketAiBanner": {
     "eyebrow": "FBT AI · Market intelligence live",
