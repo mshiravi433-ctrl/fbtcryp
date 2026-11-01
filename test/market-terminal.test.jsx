@@ -116,6 +116,16 @@ vi.mock('../src/components/Ticker', () => ({ default: () => null }));
 vi.mock('../src/components/AdBanner', () => ({ default: () => null }));
 vi.mock('../src/components/TrendChart', () => ({ default: () => null }));
 
+/*
+ * ─── THESE MOUNTS NOW ENTER ON «توکن» ──────────────────────────────────────
+ * The screen has two tabs («مرور» / «توکن», see lib/marketTabs.js) and every
+ * assertion in this file is about the list, its search field, its sort or its
+ * rows — all of which live on the second tab. `?tab=tokens` is a supported,
+ * documented entry point (a shared link to the list opens exactly there), so
+ * these tests start where a reader with that link would start, instead of
+ * re-proving the tab switch in eleven places. The switch itself, the state it
+ * keeps and the panel it mounts are pinned once, in market-tabs.test.jsx.
+ */
 import Market from '../src/pages/Market.jsx';
 
 const rowIds = () => [...document.querySelectorAll('.coin-row')].map((el) => el.dataset.coinId);
@@ -141,7 +151,7 @@ afterEach(() => {
 
 describe('the views reorder the page instead of shrinking it', () => {
   it('keeps more than 25 rows after tapping «صعودی‌ها»', async () => {
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(rowIds().length).toBeGreaterThan(40));
 
     fireEvent.click(screen.getByRole('button', { name: fa.market.filter.gainers }));
@@ -162,7 +172,7 @@ describe('the views reorder the page instead of shrinking it', () => {
   });
 
   it('losers put the worst change first, and the chip is derived from the sort', async () => {
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));
 
     fireEvent.click(screen.getByRole('button', { name: fa.market.filter.losers }));
@@ -173,7 +183,7 @@ describe('the views reorder the page instead of shrinking it', () => {
   });
 
   it('a sort chosen from the menu un-highlights the preset chips', async () => {
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));
 
     fireEvent.click(screen.getByRole('button', { name: fa.market.filter.gainers }));
@@ -186,7 +196,7 @@ describe('the views reorder the page instead of shrinking it', () => {
 
 describe('the ordered measure is visible', () => {
   it('prints market caps under the name when the list is sorted by market cap', async () => {
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));
 
     chooseSort('mcap');
@@ -200,7 +210,7 @@ describe('the ordered measure is visible', () => {
   });
 
   it('prints volume instead, once the sort is volume', async () => {
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));
 
     fireEvent.click(screen.getByRole('button', { name: fa.market.filter.volume }));
@@ -210,7 +220,7 @@ describe('the ordered measure is visible', () => {
   });
 
   it('says nothing extra when the order is price, which every row already shows', async () => {
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));
     chooseSort('price');
     await waitFor(() => expect(document.querySelectorAll('.coin-row-metric').length).toBe(0));
@@ -220,7 +230,7 @@ describe('the ordered measure is visible', () => {
 describe('row density and favourites', () => {
   it('keeps star controls out of market rows while preserving the saved favourites view', async () => {
     useAppStore.setState({ favorites: ['coin-3'] });
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));
 
     expect(screen.queryByTestId('market-star-coin-3')).toBeNull();
@@ -232,7 +242,7 @@ describe('row density and favourites', () => {
 
 describe('breadth', () => {
   it('counts the page it is looking at, and says how many that is', async () => {
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(screen.getByTestId('market-breadth-up')).toBeTruthy());
 
     /* BTC +1 and sixty odd coins at +3.2 are up; sixty even coins are down;
@@ -244,7 +254,7 @@ describe('breadth', () => {
   });
 
   it('does not move when the search box narrows the list', async () => {
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));
     const before = screen.getByTestId('market-breadth-up').textContent;
 
@@ -257,7 +267,7 @@ describe('breadth', () => {
 
 describe('a dead feed', () => {
   it('offers a manual refresh that runs the same poll the timer does', async () => {
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));
     fireEvent.click(screen.getByTestId('market-refresh'));
     expect(feed.refresh).toHaveBeenCalledTimes(1);
@@ -267,7 +277,7 @@ describe('a dead feed', () => {
     feed.data = [];
     feed.error = new Error('offline');
 
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(screen.getByTestId('market-feed-error')).toBeTruthy());
     expect(screen.getByText(fa.market.feedDown)).toBeTruthy();
     expect(screen.queryByText(fa.market.noResults)).toBeNull();
@@ -279,7 +289,7 @@ describe('a dead feed', () => {
 
 describe('accessibility of the row', () => {
   it('is a real button, not a div with a click handler', async () => {
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));
 
     const open = document.querySelector('.coin-row-open');
@@ -290,7 +300,7 @@ describe('accessibility of the row', () => {
   });
 
   it('labels the search field and clears it with a button', async () => {
-    render(<MemoryRouter><Market /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));
 
     const input = screen.getByLabelText(fa.market.searchAria);

@@ -200,6 +200,11 @@
       "live": "Based on market data",
       "method": "Calculation method",
       "explanation": "Buying and selling show the share of {{moves}} assets with a positive or negative 24-hour price change; they are not executed trade volume. Unchanged assets are excluded. Risk is the average daily high-to-low range relative to the low across {{ranges}} assets, not a loss probability or trading advice. Data older than two minutes is hidden."
+    },
+    "tabs": {
+      "aria": "Market screen tabs",
+      "overview": "Overview",
+      "tokens": "Tokens"
     }
   },
   "coin": {

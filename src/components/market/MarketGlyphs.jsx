@@ -177,6 +177,52 @@ export const GlyphSmartFlow = (p) => (
   </svg>
 );
 
+/* ── «مرور» / «توکن» — THE TWO TABS ─────────────────────────────────────────
+   Requested: «در صفحه بازار دو تب کن». A tab is a POINT OF VIEW, so the two
+   marks are one instrument seen two ways rather than a chart and a coin:
+
+     · overview — a horizon seen from above: a wide frame with a gauge readout
+       inside, which is what this tab is (the total, the three boxes, Bitcoin);
+     · tokens   — two stacked stones with a spark on the top one, which is what
+       THIS tab is (a ranked list of individual assets), not a second chart.
+
+   Same 24×24 box and the same 1.7 stroke as everything above, so the strip
+   sits on the same optical line as the boxes it switches between. */
+export const GlyphOverview = (p) => (
+  <svg {...base} {...p}>
+    <rect x="3.2" y="4.6" width="17.6" height="14.8" rx="3.6" />
+    <path d="M6.4 15.6h3.1l1.6-3.9 2 5.2 1.7-3.6h2.8" />
+    <path d="M6.6 8.2h3.2M6.6 11h1.8" />
+  </svg>
+);
+
+export const GlyphToken = (p) => (
+  <svg {...base} {...p}>
+    <ellipse cx="12" cy="7.2" rx="6.4" ry="2.8" />
+    <path d="M5.6 7.2v4.4c0 1.55 2.86 2.8 6.4 2.8s6.4-1.25 6.4-2.8V7.2" />
+    <path d="M5.6 11.6v4.4c0 1.55 2.86 2.8 6.4 2.8" />
+    <path d="m16.6 15.2.7 1.9 1.9.7-1.9.7-.7 1.9" />
+  </svg>
+);
+
+/** The `name` to `mark` mapping lib/marketTabs.js refers to by string. */
+export const MARKET_PANE_GLYPHS = {
+  overview: GlyphOverview,
+  tokens: GlyphToken
+};
+
+/**
+ * A tab glyph by name, with a visible fallback.
+ *
+ * `undefined` in a JSX position renders as an EMPTY SPOT — silently, with no
+ * warning — which is how an icon disappears without anybody noticing. A name
+ * that is not in the map therefore draws the neutral frame instead.
+ */
+export function MarketPaneGlyph({ name, ...rest }) {
+  const Glyph = MARKET_PANE_GLYPHS[name] || GlyphDeck;
+  return <Glyph {...rest} />;
+}
+
 /* ── THE FIVE VIEWS ─────────────────────────────────────────────────────────
    One glyph per filter chip, each drawn from the same 24×24 box so the five
    chips sit on one optical line. */
