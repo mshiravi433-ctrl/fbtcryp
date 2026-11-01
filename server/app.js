@@ -11,7 +11,7 @@ import express from 'express';
 import { readFileSync } from 'node:fs';
 const { Router: ExpressRouter } = express;
 import cors from 'cors';
-import { withCache, cacheStats, memoryStore } from './cache.js';
+import { withCache, getCached, cacheStats, memoryStore } from './cache.js';
 import { blobConfigured, blobSet, upstashIncrementWindow, withPersistentCache } from './blobCache.js';
 import {
   compactMarketRows,
@@ -27,7 +27,7 @@ import {
   fetchTrending,
   fetchVolumeSeries,
 } from './providers.js';
-import { MARKET_CATEGORIES } from '../src/lib/marketSectors.js';
+import { MARKET_CATEGORIES, isBinanceRiskSector } from '../src/lib/marketSectors.js';
 import { telegramAuth, verifyInitData, normalizeBotToken, extractInitData } from './telegramAuth.js';
 import { telegramBotIdentity, tokenDiagnostics } from './telegramIdentity.js';
 import { fetchAudio } from './audio.js';
@@ -4995,7 +4995,7 @@ app.get('/api/signals/solana/radar', async (req, res) => {
  * against the client's own map rather than passed through: an open proxy to
  * an upstream API is a way to get our IP rate-limited by a stranger.
  */
-app.get('/api/category/:slug', (req, res) => {
+app.get('/api/category/:slug', async (req, res) => {
   const slug = String(req.params.slug || '').slice(0, 60);
   if (!Object.values(MARKET_CATEGORIES).includes(slug)) return res.status(400).json({ error: 'BAD_CATEGORY' });
   /*
@@ -5004,15 +5004,32 @@ app.get('/api/category/:slug', (req, res) => {
    * labels the list with its row count — is not silently capped at the first
    * hundred rows the way it was until 2026-10-12 («اعداد را خیلی بیشتر کن»).
    * Ten pages is the walk limit: beyond 2,500 rows a category is no longer a
-   * sector, and every page is a separate 5-minute server-side cache entry.
+   * sector, and every page is a separate 60-second server-side cache entry.
    */
   const perPage = Math.min(250, Math.max(1, Number(req.query.per_page) || 50));
   const page = Math.min(10, Math.max(1, Number(req.query.page) || 1));
   const vs = /^[a-z]{2,5}$/.test(String(req.query.vs || '')) ? String(req.query.vs) : 'usd';
-  return serve(res, 300_000)(
-    () => fetchCategory(slug, { perPage, vs, page }),
-    `cat:${slug}:${vs}:${perPage}:${page}`
-  );
+  const sector = Object.keys(MARKET_CATEGORIES).find((key) => MARKET_CATEGORIES[key] === slug);
+  const key = `cat:${slug}:${vs}:${perPage}:${page}`;
+  const producer = async () => compactMarketRows(await fetchCategory(slug, { perPage, vs, page }));
+  try {
+    const { value, cached, stale } = await withCache(key, 60_000, producer);
+    const risk = isBinanceRiskSector(sector);
+    // Seed/Monitoring can be removed at any time; don't serve an old tag as
+    // current on an upstream failure, either from memory or an edge cache.
+    if (risk && stale) return res.status(503).json({ error: 'CATEGORY_DATA_UNAVAILABLE' });
+    res.set('x-category-fetched-at', String(getCached(key)?.at || Date.now()));
+    // Native clients call the API cross-origin and need these honesty markers.
+    res.set('access-control-expose-headers', 'x-category-fetched-at, x-data-stale');
+    // The timestamp remains attached to edge hits. Do not silently serve
+    // stale-while-revalidate as fresh, and never edge-cache a risk tag.
+    res.set('cache-control', risk || stale ? 'no-store' : 'public, max-age=0, s-maxage=60');
+    if (stale) res.set('x-data-stale', '1');
+    if (cached) res.set('x-cache', 'HIT');
+    return res.json(value);
+  } catch {
+    return res.status(503).json({ error: 'CATEGORY_DATA_UNAVAILABLE' });
+  }
 });
 
 /* ------------------------------ cross-chain ------------------------------- */
