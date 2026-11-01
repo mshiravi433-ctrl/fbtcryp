@@ -39,6 +39,7 @@ const Welcome = lazyRetry(() => import('./pages/Welcome'));
 // Keeping them out of the eager graph lowers the first-paint payload without
 // delaying the app shell. Each use has a local null Suspense fallback so a
 // slow optional chunk can never replace the current page with the route loader.
+const QuickAccess = lazyRetry(() => import('./components/QuickAccess.jsx'));
 const ScreenshotSharePrompt = lazyRetry(() => import('./components/ScreenshotSharePrompt.jsx'));
 /*
  * The notification bar is a non-critical overlay in exactly the same sense: most
@@ -500,6 +501,7 @@ function AppChrome() {
       <Suspense fallback={null}>
         <ScreenshotSharePrompt placement={pathname === '/intent' ? 'top' : headerless ? 'bare' : 'nav'} />
       </Suspense>
+      {!headerless && <Suspense fallback={null}><QuickAccess /></Suspense>}
       {!headerless && <BottomNav />}
     </div>
   );
