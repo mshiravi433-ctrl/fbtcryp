@@ -166,12 +166,26 @@
     radial-gradient(120% 85% at 100% 0%, color-mix(in srgb, var(--more-tint) 22%, transparent), transparent 62%),
     radial-gradient(110% 78% at 0% 100%, color-mix(in srgb, var(--more-tint-2) 18%, transparent), transparent 68%),
     radial-gradient(120% 70% at 50% 116%, color-mix(in srgb, var(--rgb-2) 34%, transparent), transparent 72%),
-    linear-gradient(168deg,
-      color-mix(in srgb, var(--more-noir-1) 92%, transparent),
-      color-mix(in srgb, var(--more-noir-2) 94%, transparent) 52%,
-      color-mix(in srgb, var(--more-noir-3) 96%, transparent));
-  backdrop-filter: blur(18px) saturate(185%) brightness(0.92);
-  -webkit-backdrop-filter: blur(18px) saturate(185%) brightness(0.92);
+    /*
+     * ─── THE PANE IS OPAQUE, SO IT DOES NOT SAMPLE WHAT IS BEHIND IT ────────
+     *   «سرعت پام اپ صفحه منو بیشتر هم هنوز پایینه، سرعتش بالاتر بره»
+     *
+     * The base used to be these same three stops at 92–96% alpha under a
+     * `backdrop-filter: blur(18px) saturate(185%) brightness(0.92)`. Four to
+     * eight percent of a BLURRED page is what that bought — invisible against
+     * a violet-black pane — and what it cost was the single most expensive
+     * frame of this sheet's life: a pane-sized sample of everything behind it,
+     * re-taken on every frame of the 80ms entrance and on every frame the list
+     * scrolls, on the one GPU budget a mid-range Android does not have to spare.
+     *
+     * So the stops are opaque and the blur is gone. The pane reads the same
+     * (the white rake, the two category tints and the violet pool are all
+     * layers ABOVE this one, and none of them changed); the compositor now
+     * paints it once. This is the same trade §15.6 of market-modern.css made
+     * for the market's cards: "an opaque plate looks the same and costs
+     * nothing".
+     */
+    linear-gradient(168deg, var(--more-noir-1), var(--more-noir-2) 52%, var(--more-noir-3));
   box-shadow:
     0 48px 110px -32px rgba(0, 0, 0, 0.92),
     0 18px 44px -18px rgba(0, 0, 0, 0.7),
@@ -501,6 +515,25 @@
   mask-image: linear-gradient(180deg, transparent 0, #000 14px, #000 calc(100% - 18px), transparent 100%);
   animation: more-fade-in 0.1s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+/*
+ * A MASK ON A SCROLLING BOX IS AN OFFSCREEN BUFFER PER FRAME.
+ *
+ * The fade above is pretty and it is not free: masking the scroller means the
+ * browser renders the 26 rows into a texture, then composites that texture
+ * through the gradient — every frame of the fling. On a phone that is the same
+ * class of cost as the pane's blur, in the one gesture the sheet is judged by.
+ *
+ * So the fade stays where scrolling is a mouse wheel (a few frames, a pointer
+ * that is fine) and goes where it is a thumb: on a coarse pointer the rows
+ * simply end at the edge of the slab, which is what almost every list on a
+ * phone does anyway. Nothing else about the scroller changes.
+ */
+@media (pointer: coarse) {
+  .more-scroll {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
 .more-scroll::-webkit-scrollbar { width: 4px; }
 .more-scroll::-webkit-scrollbar-thumb {
   border-radius: 999px;
@@ -609,13 +642,13 @@
      go of transform and :active can take it over; the start state still
      applies through each row's delay. Delay is per-row-within-group, so
      the longest wait is ~10 rows in, never 25. */
-  animation: more-tile-in 0.15s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation: more-tile-in 0.13s cubic-bezier(0.22, 1, 0.36, 1) backwards;
   /* CAPPED STAGGER (2026-10-31, fifth pass). Uncapped, 26 rows × 13ms put the
      last row on screen 590ms after the tap: the pane had landed and the list
      was still arriving, which is exactly the «کند میاد بالا» report. The delay
      is now 8ms per row up to the 12th slot, so every row is readable inside
      ~90ms and the deepest rows share the last slot instead of queueing. */
-  animation-delay: calc(min(var(--more-i, 0), 11) * 8ms);
+  animation-delay: calc(min(var(--more-i, 0), 9) * 6ms);
 }
 .more-list[data-still='true'] .more-tile { animation: none; }
 
@@ -834,18 +867,13 @@
   .more-pill { font-size: 11.5px; padding: 0 9px; }
 }
 
-/* ── no backdrop-filter, no glass trick ──────────────────────────────────── */
-/* Where the blur itself is unavailable the translucency must go with it, or
-   25 rows of text would sit on a 62%-see-through pane over live prices. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .more-panel {
-    background:
-      radial-gradient(120% 85% at 100% 0%, color-mix(in srgb, var(--more-tint) 18%, transparent), transparent 62%),
-      radial-gradient(110% 78% at 0% 100%, color-mix(in srgb, var(--more-tint-2) 13%, transparent), transparent 68%),
-      radial-gradient(120% 70% at 50% 116%, color-mix(in srgb, var(--rgb-2) 28%, transparent), transparent 72%),
-      linear-gradient(168deg, var(--more-noir-1), var(--more-noir-2) 52%, var(--more-noir-3));
-  }
-}
+/* ── no backdrop-filter, so no feature query ─────────────────────────────── */
+/* This block used to be the fallback for engines without `backdrop-filter`:
+   an opaque noir pane for the browsers that could not frost one. The pane is
+   now opaque EVERYWHERE (see the note on `.more-panel` above), which makes the
+   fallback the only behaviour — and a branch that always takes the same path
+   is a branch worth deleting. Nothing was lost: these are the same four
+   layers the pane paints, minus the white rake that sits above them. */
 
 /* ── light theme ─────────────────────────────────────────────────────────── */
 /* The scrim keeps the same dim in both themes — the pane carries the theme,
@@ -853,10 +881,12 @@
 :root[data-theme='light'] .more-panel {
   border-color: rgba(255, 255, 255, 0.65);
   background:
-    linear-gradient(158deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.66) 45%, rgba(255, 255, 255, 0.55)),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.88) 45%, rgba(255, 255, 255, 0.84)),
     radial-gradient(120% 85% at 100% 0%, color-mix(in srgb, var(--more-tint) 12%, transparent), transparent 62%),
     radial-gradient(110% 78% at 0% 100%, color-mix(in srgb, var(--more-tint-2) 10%, transparent), transparent 68%),
-    rgba(255, 255, 255, 0.55);
+    /* Opaque, for the same reason the dark pane is: no blur means a
+       translucent white sheet would show 25 rows of live prices through it. */
+    rgba(255, 255, 255, 0.99);
   box-shadow:
     0 40px 90px -34px rgba(15, 23, 42, 0.45),
     0 18px 44px -20px rgba(15, 23, 42, 0.3),

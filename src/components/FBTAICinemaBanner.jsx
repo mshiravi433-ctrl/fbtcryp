@@ -4,6 +4,17 @@ import { useNavigate } from 'react-router-dom';
 import { useTelegram } from '../context/TelegramContext';
 import { useStill } from './AnimatedIcon';
 import { IconChevronRight } from './Icons';
+/*
+ * ITS OWN STYLESHEET (2026-11-01).
+ *
+ * These rules used to live in market-modern.css, which Market.jsx imports — so
+ * 28 KB of banner CSS (and fifteen looping animations' worth of selectors)
+ * shipped on the app's HOME route for a banner no screen currently renders.
+ * Every other self-contained surface here owns its sheet (DecisionOrb →
+ * decision-orb.css, MoreSheet → more-menu.css); this one now does too, and it
+ * travels in whatever chunk eventually mounts it.
+ */
+import '../styles/fbt-ai-cinema.css';
 
 /**
  * FBT AI — Living Intelligence.

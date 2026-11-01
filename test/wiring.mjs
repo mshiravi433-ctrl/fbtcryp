@@ -1288,7 +1288,27 @@ export default function run() {
      * router by mocking `useNavigate` outright. The defect is in App.jsx's
      * tree, so the assertion has to be about App.jsx's tree.
      */
-    const appForBar = code(read('src/App.jsx'));
+    /*
+     * ─── A ReferenceError THAT SWITCHED THE WHOLE AUDIT OFF ──────────────────
+     * This line called `code(...)`, a helper that exists only as a block-local
+     * `const` in half a dozen OTHER scopes of this file — never here. The suite
+     * therefore threw at this line, `report('wiring', runWiring())` in run.mjs
+     * is not wrapped in a try/catch, and every pin below it — several hundred
+     * assertions about routes, keys, dead files and API wiring — silently never
+     * ran. A crash in the middle of an audit looks exactly like a passing audit
+     * to anyone who only reads the exit line of a long log.
+     *
+     * What the author wanted is visible from the assertions that follow: the
+     * source with its comments removed, so a COMMENTED-OUT `<NotificationBar />`
+     * cannot satisfy "the bar is mounted in App". That helper is restored here,
+     * in scope, with the same two passes the neighbouring scopes use (block
+     * comments, then JSX comment expressions).
+     */
+    const stripComments = (src) =>
+      String(src)
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    const appForBar = stripComments(read('src/App.jsx'));
     const barAt = appForBar.indexOf('<NotificationBar />');
     t('the notification bar is mounted in App', barAt !== -1);
     t('...exactly once (two copies means two stacking contexts)',
@@ -1302,7 +1322,7 @@ export default function run() {
       barAt > appForBar.lastIndexOf('<HashRouter')
       && barAt < appForBar.lastIndexOf('</HashRouter>'));
     t('...and cannot be reached without a router even if the tree changes',
-      /useInRouterContext/.test(code(read('src/components/NotificationBar.jsx'))));
+      /useInRouterContext/.test(stripComments(read('src/components/NotificationBar.jsx'))));
 
     t('in-app stage chimes differ from success/error/alert',
       /kind === 'pending'/.test(read('src/lib/notify.js'))
@@ -6956,11 +6976,32 @@ export default function run() {
          bug; `thumb` at 25px would be visibly soft on a 3x screen. */
       t("...and the list default is 'small'", /size = 'small'/.test(logo));
 
-      /* The attributes that stop 250 rows from reflowing 250 times. */
-      t('the avatar reserves its box before the bytes arrive',
-        /loading="lazy"/.test(logo));
-      t('...and never competes with the price data for connections',
-        /fetchpriority="low"/.test(logo));
+      /*
+       * The attributes that stop 250 rows from reflowing 250 times.
+       *
+       * ─── 2026-11-01: THESE BECAME TERNARIES, AND THE PIN MOVED WITH THEM ──
+       *   «انیمیشن ها و لوگو ها دیر بالا میاد»
+       *
+       * `loading="lazy"` + `fetchpriority="low"` is right for row 400 of a list
+       * and wrong for the eight cards above the fold: a low-priority request is
+       * queued BEHIND the route's own stylesheet and script, so the first
+       * screen's logos arrive last — after the CSS that keeps them invisible
+       * until they do. CoinLogo therefore takes a `priority` prop and flips
+       * exactly those two attributes for the handful of artworks that are on
+       * screen at first paint.
+       *
+       * The pins below assert the DEFAULT branch, which is the part that must
+       * never regress, instead of a literal attribute value that no longer
+       * exists anywhere in the file. Asserting the old literal would have been
+       * satisfied by making every logo eager — the exact opposite of the
+       * guarantee these two lines are here to keep.
+       */
+      t('the avatar reserves its box before the bytes arrive (lazy unless the caller prioritises it)',
+        /loading=\{priority \? 'eager' : 'lazy'\}/.test(logo) && /priority = false/.test(logo));
+      t('...and never competes with the price data for connections (low unless prioritised)',
+        /fetchpriority=\{priority \? 'high' : 'low'\}/.test(logo));
+      t('...and no logo is eager or high-priority unconditionally',
+        !/loading="eager"/.test(logo) && !/fetchpriority="high"/.test(logo) && /decoding="async"/.test(logo));
       t('...and leaks no browsing history to the image host',
         /referrerPolicy="no-referrer"/.test(logo));
 

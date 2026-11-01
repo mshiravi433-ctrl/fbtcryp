@@ -1,0 +1,427 @@
+/**
+ * SOLANA TRACKING — the Smart Wallet's read-only Solana panel.
+ * ===========================================================================
+ * Styled in its own sheet, imported by the component that renders it
+ * (components/smart-wallet/SolTrackPanel.jsx), so it travels in the Smart
+ * Wallet's chunk and never in the first-paint bundle — the same rule
+ * test/first-paint-lazy-css.test.mjs keeps the More sheet to.
+ *
+ * ─── THE COMPOSITOR BUDGET ──────────────────────────────────────────────────
+ *   · NO `backdrop-filter`. The panel sits on `wallet-pie-card`, which already
+ *     paints an opaque plate; a second blurred sample behind it would be the
+ *     most expensive frame on this screen and would add nothing you can see.
+ *   · ONE looping animation, and only while a read is in flight: the refresh
+ *     icon. It parks under `prefers-reduced-motion`, the app's own reduce-motion
+ *     switch, the packaged shell and the lite profile. Everything else is a
+ *     transition on `background`/`color`. A tracking panel is read, not watched,
+ *     and a perpetual sheen under a list of numbers is exactly what the More
+ *     sheet's notes call «لامپ‌زدن».
+ *   · `transform` + `opacity` only where anything moves.
+ *
+ * ─── THE COLOURS ────────────────────────────────────────────────────────────
+ * Solana's own two: the mint green (#14f195) and the violet (#9945ff). They are
+ * declared as THIS panel's tokens rather than borrowed from `--rgb-*`, because
+ * they mean something here — green is the chain, violet is the panel's own
+ * structure — and a global accent change should not silently repaint a chain
+ * badge. The app's up/down tokens (`--up`, `--down`) still own every number that
+ * can be positive or negative, so a gain reads the same colour here as it does
+ * on the market screen.
+ *
+ * Light theme is an override block at the bottom, as it is in more-menu.css:
+ * the same structure, re-inked for paper.
+ */
+
+.sol-track {
+  --sol-mint: #14f195;
+  --sol-violet: #9945ff;
+  --sol-line: color-mix(in srgb, var(--sol-violet) 22%, transparent);
+  --sol-wash: color-mix(in srgb, var(--sol-violet) 9%, transparent);
+  position: relative;
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  /* One hairline of the chain's violet at the top edge: the panel reads as a
+     Solana surface before a word of it is read. Static, painted once. */
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--sol-violet) 7%, transparent), transparent 42%),
+    var(--bg-panel-solid, #0b0f1a);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--sol-mint) 16%, transparent);
+}
+
+/* ── head ─────────────────────────────────────────────────────────────────── */
+.sol-track-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.sol-track-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid var(--sol-line);
+  border-radius: 11px;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--sol-mint) 16%, transparent), color-mix(in srgb, var(--sol-violet) 20%, transparent));
+  color: var(--sol-mint);
+}
+.sol-track-heading { flex: 1 1 auto; min-width: 0; }
+.sol-track-heading h3 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+.sol-track-heading p {
+  margin: 3px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+.sol-track-refresh {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border: 1px solid var(--sol-line);
+  border-radius: 10px;
+  background: var(--sol-wash);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease;
+}
+.sol-track-refresh:hover { color: var(--sol-mint); border-color: color-mix(in srgb, var(--sol-mint) 40%, transparent); }
+.sol-track-refresh[data-busy='true'] { opacity: 0.6; }
+.sol-track-refresh[data-busy='true'] svg { animation: sol-track-spin 1s linear infinite; }
+@keyframes sol-track-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ── the address ──────────────────────────────────────────────────────────── */
+.sol-track-address { margin-top: 12px; }
+.sol-track-address .field-label { margin: 0 0 5px; font-size: 10.5px; font-weight: 700; color: var(--text-3); }
+.sol-track-inputrow { display: flex; gap: 8px; align-items: stretch; }
+.sol-track-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--sol-line);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--sol-violet) 6%, transparent);
+  color: var(--text-1);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+}
+.sol-track-input:focus-visible { outline: none; border-color: color-mix(in srgb, var(--sol-mint) 55%, transparent); }
+.sol-track-go { flex: 0 0 auto; border-radius: 11px; min-height: 38px; padding-inline: 14px; }
+.sol-track-addressmeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 7px;
+  font-size: 10.5px;
+}
+.sol-track-link {
+  color: var(--sol-mint);
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+}
+.sol-track-link:hover { text-decoration: underline; }
+.sol-track-updated { color: var(--text-3); margin-inline-start: auto; }
+
+/* ── segments ─────────────────────────────────────────────────────────────── */
+.sol-track-segs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 12px;
+  padding: 4px;
+  border: 1px solid var(--sol-line);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--sol-violet) 5%, transparent);
+}
+.sol-track-seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--text-3);
+  font: 700 11.5px/1 var(--font-display, inherit);
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+.sol-track-seg b {
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sol-mint) 14%, transparent);
+  color: var(--sol-mint);
+  font-size: 9.5px;
+  font-weight: 800;
+}
+.sol-track-seg[data-active='true'] {
+  background: linear-gradient(140deg, color-mix(in srgb, var(--sol-mint) 20%, transparent), color-mix(in srgb, var(--sol-violet) 26%, transparent));
+  color: var(--text-1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+/* ── body ─────────────────────────────────────────────────────────────────── */
+.sol-track-body { margin-top: 12px; }
+.sol-track-state {
+  margin: 8px 0 0;
+  padding: 9px 11px;
+  border: 1px solid var(--sol-line);
+  border-radius: 11px;
+  background: var(--sol-wash);
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+.sol-track-state[data-tone='danger'] {
+  border-color: color-mix(in srgb, var(--down, #ff5c7a) 34%, transparent);
+  background: color-mix(in srgb, var(--down, #ff5c7a) 9%, transparent);
+  color: var(--text-1);
+}
+.sol-track-state[data-tone='warn'] {
+  border-color: color-mix(in srgb, #f7a93c 32%, transparent);
+  background: color-mix(in srgb, #f7a93c 8%, transparent);
+}
+.sol-track-state[data-tone='busy'] { opacity: 0.85; }
+
+/* ── the wallet hero ──────────────────────────────────────────────────────── */
+.sol-track-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 1px solid var(--sol-line);
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 130% at 100% 0%, color-mix(in srgb, var(--sol-mint) 12%, transparent), transparent 62%),
+    linear-gradient(160deg, color-mix(in srgb, var(--sol-violet) 14%, transparent), transparent 70%);
+}
+.sol-track-balance { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sol-track-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--text-1);
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.sol-track-figure b { color: var(--sol-mint); font-size: 11px; font-weight: 800; }
+.sol-track-value { color: var(--text-2); font-size: 12px; font-weight: 700; }
+.sol-track-price { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: end; }
+.sol-track-kicker { color: var(--text-3); font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; }
+.sol-track-price .mono { color: var(--text-1); font-size: 12.5px; font-weight: 700; }
+.sol-track-chg { font-size: 10.5px; font-weight: 800; }
+.sol-track-chg[data-tone='up'] { color: var(--up, #3ae8b0); }
+.sol-track-chg[data-tone='down'] { color: var(--down, #ff5c7a); }
+
+/* ── tokens ───────────────────────────────────────────────────────────────── */
+.sol-track-sub { margin-top: 12px; }
+.sol-track-sub h4 { margin: 0 0 7px; font-size: 11px; font-weight: 800; color: var(--text-2); }
+.sol-track-tokens {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.sol-track-tokens li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 11px;
+  border: 1px solid var(--sol-line);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--sol-violet) 5%, transparent);
+}
+.sol-track-token-amount { color: var(--text-1); font-size: 12px; font-weight: 750; }
+.sol-track-token-mint { color: var(--text-3); font-size: 10.5px; text-decoration: none; }
+a.sol-track-token-mint:hover { color: var(--sol-mint); }
+.sol-track-more { display: block; margin-top: 6px; color: var(--text-3); font-size: 10.5px; text-align: center; }
+
+/* ── activity + transactions ──────────────────────────────────────────────── */
+.sol-track-activity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-bottom: 9px;
+  padding: 9px 11px;
+  border: 1px solid var(--sol-line);
+  border-radius: 12px;
+  background: var(--sol-wash);
+  color: var(--text-2);
+  font-size: 11px;
+}
+.sol-track-activity b { color: var(--text-1); font-size: 12.5px; }
+.sol-track-activity span[data-tone='down'] b { color: var(--down, #ff5c7a); }
+.sol-track-window { margin-inline-start: auto; color: var(--text-3); font-size: 10px; }
+
+.sol-track-txlist,
+.sol-track-whales {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.sol-track-tx {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--sol-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--sol-violet) 5%, transparent);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.18s ease;
+}
+.sol-track-tx:hover { border-color: color-mix(in srgb, var(--sol-mint) 40%, transparent); }
+.sol-track-tx-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--sol-mint);
+}
+li[data-failed='true'] .sol-track-tx-dot { background: var(--down, #ff5c7a); }
+.sol-track-tx-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sol-track-tx-sig { color: var(--text-1); font-size: 11.5px; font-weight: 700; }
+.sol-track-tx-meta { color: var(--text-3); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sol-track-tx-memo { font-style: normal; color: var(--text-2); }
+.sol-track-tx-state { flex: 0 0 auto; color: var(--sol-mint); font-size: 10px; font-weight: 800; }
+li[data-failed='true'] .sol-track-tx-state { color: var(--down, #ff5c7a); }
+
+/* ── whales ───────────────────────────────────────────────────────────────── */
+.sol-track-coverage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 9px;
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1.6;
+}
+.sol-track-whales li {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 2px 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--sol-line);
+  border-radius: 12px;
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--sol-mint) 7%, transparent), transparent 60%),
+    color-mix(in srgb, var(--sol-violet) 5%, transparent);
+}
+.sol-track-whale-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  grid-row: span 2;
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 800;
+}
+.sol-track-whale-amount b { color: var(--sol-mint); font-size: 9.5px; }
+.sol-track-whale-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 700;
+}
+.sol-track-whale-path i { font-style: normal; color: var(--sol-mint); }
+.sol-track-whale-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-3);
+  font-size: 10px;
+}
+.sol-track-whale-link { color: var(--sol-mint); text-decoration: none; font-weight: 700; }
+.sol-track-whale-link:hover { text-decoration: underline; }
+.sol-track-note {
+  margin: 9px 0 0;
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+/* ── the read-only promise ────────────────────────────────────────────────── */
+.sol-track-readonly {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--sol-line);
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+/* ── small screens: the figure owns the width ─────────────────────────────── */
+@media (max-width: 380px) {
+  .sol-track-hero { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .sol-track-price { align-items: flex-start; text-align: start; }
+  .sol-track-window { margin-inline-start: 0; }
+}
+
+/* ── light theme: the same structure, re-inked for paper ──────────────────── */
+:root[data-theme='light'] .sol-track {
+  --sol-line: color-mix(in srgb, #7c3aed 20%, transparent);
+  --sol-wash: color-mix(in srgb, #7c3aed 5%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #7c3aed 5%, transparent), transparent 42%),
+    #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+:root[data-theme='light'] .sol-track-mark { color: #0f9d6c; }
+:root[data-theme='light'] .sol-track-hero {
+  background:
+    radial-gradient(120% 130% at 100% 0%, color-mix(in srgb, #14f195 16%, transparent), transparent 62%),
+    linear-gradient(160deg, color-mix(in srgb, #9945ff 8%, transparent), transparent 70%);
+}
+:root[data-theme='light'] .sol-track-figure b,
+:root[data-theme='light'] .sol-track-link,
+:root[data-theme='light'] .sol-track-tx-state,
+:root[data-theme='light'] .sol-track-whale-amount b,
+:root[data-theme='light'] .sol-track-whale-path i,
+:root[data-theme='light'] .sol-track-whale-link { color: #0f9d6c; }
+:root[data-theme='light'] .sol-track-tokens li,
+:root[data-theme='light'] .sol-track-tx,
+:root[data-theme='light'] .sol-track-whales li,
+:root[data-theme='light'] .sol-track-input {
+  background: color-mix(in srgb, #7c3aed 4%, #ffffff);
+}
+
+/* ── reduced motion / the packaged shell: the one spinner parks ───────────── */
+@media (prefers-reduced-motion: reduce) {
+  .sol-track-refresh[data-busy='true'] svg { animation: none; }
+  .sol-track-seg, .sol-track-tx, .sol-track-refresh { transition: none; }
+}
+:root[data-reduce-motion='true'] .sol-track-refresh[data-busy='true'] svg,
+:root[data-native='true'] .sol-track-refresh[data-busy='true'] svg,
+:root[data-lite='true'] .sol-track-refresh[data-busy='true'] svg {
+  animation: none;
+}
