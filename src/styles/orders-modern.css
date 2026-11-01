@@ -555,15 +555,196 @@
 .ord-stats-insights{display:grid;gap:8px;padding:11px 12px;border-inline-start:2px solid var(--rgb-1);border-radius:4px 13px 13px 4px;background:color-mix(in srgb,var(--rgb-1) 5%,transparent);font-size:11px;color:var(--text-2)}.ord-stats-insights div:first-child{display:flex;justify-content:space-between;gap:8px}.ord-stats-insights strong{color:var(--text-1);font-family:var(--font-mono)}.ord-stats-types{display:flex;gap:6px;overflow:auto;scrollbar-width:none}.ord-stats-types span{display:grid;grid-template-columns:1fr auto;gap:2px 10px;min-width:135px;padding:9px 10px;border:1px solid var(--line);border-radius:12px}.ord-stats-types b{font-size:10px;white-space:nowrap}.ord-stats-types i{font:700 11px var(--font-mono);font-style:normal;color:#34d399}.ord-stats-types small{grid-column:1/-1;color:var(--text-3);font-size:9px}.ord-stats-note{margin:0;color:var(--text-3);font-size:9.5px;line-height:1.6}
 @media(max-width:350px){.ord-stats-head{align-items:stretch;flex-direction:column}.ord-stats-windows{align-self:flex-start}.ord-stat{grid-template-columns:32px 1fr;padding:9px}.ord-stat em{grid-column:2}.ord-stat-icon{width:32px;height:32px}}
 
-/* Limit execution modes: two equal touch targets, not overflowing long pills. */
-.ord-mode { margin-block: 18px; padding: 14px; border: 1px solid var(--border, #ffffff20); border-radius: 20px; background: color-mix(in srgb, var(--card, #14212e) 88%, transparent); }
-.ord-mode .ord-execution-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 5px; border-radius: 16px; }
-.ord-mode .ord-execution-tabs button { display: flex; align-items: flex-start; justify-content: flex-start; gap: 10px; min-width: 0; padding: 14px 10px; border-radius: 12px; text-align: start; white-space: normal; line-height: 1.65; }
-.ord-exec-icon { flex: 0 0 28px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; background: #7f9fff20; }
-.ord-exec-copy { position: relative; z-index: 1; display: grid; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
-.ord-exec-copy b { font-size: 12px; font-weight: 700; }
-.ord-exec-copy small { font-size: 10px; opacity: .72; line-height: 1.5; }
-.ord-mode > p { margin: 12px 4px 0; font-size: 12px; }
-.ord-mode .ord-execution-tabs button:focus-visible { outline: 2px solid var(--accent, #7bdcda); outline-offset: 3px; }
-.ord-mode .ord-execution-tabs button:disabled { opacity: .45; cursor: not-allowed; }
-@media (max-width: 370px) { .ord-mode { padding: 8px; } .ord-mode .ord-execution-tabs button { flex-direction: column; padding: 10px 8px; } }
+/* --------------------------------------------------------------------------
+   LIMIT ORDERS · «اجرای خودکار» / «رصد قیمت»
+   --------------------------------------------------------------------------
+   «سفارش محدود دو تب اجرای خودکار و رصد قیمت — هر دو تب را مدرن با اندازه و
+   فاصله درست انجام بده.»
+
+   Two equal plates, one shared moving thumb, one spacing scale. Everything is
+   expressed in a local `--ord-exec-*` scale so a smaller phone shrinks the
+   whole control in one place instead of six, and so the plate can never be
+   taller than its neighbour (the old layout let a two-line label push one
+   column taller than the other).
+
+   NO backdrop-filter and no filter: this control sits inside the order form,
+   which the market screens measured as the one property this app pays for.
+   The glass here is a gradient + an inset hairline, the same recipe the sheet
+   already uses.
+   -------------------------------------------------------------------------- */
+.ord-mode {
+  --ord-exec-pad: 6px;
+  --ord-exec-gap: 6px;
+  --ord-exec-radius: 18px;
+  position: relative;
+  margin-block: 18px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 18%, var(--border, #ffffff20));
+  border-radius: 22px;
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--rgb-1) 10%, transparent), transparent 62%),
+    color-mix(in srgb, var(--card, #14212e) 90%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+
+/* The strip. `position: relative` is the thumb's coordinate system. */
+.ord-mode .ord-execution-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ord-exec-gap);
+  padding: var(--ord-exec-pad);
+  border-radius: var(--ord-exec-radius);
+  border: 1px solid rgba(255, 255, 255, .07);
+  background: rgba(2, 8, 18, .34);
+  isolation: isolate;
+}
+
+/* ONE plate for both tabs: it translates instead of two elements fading. */
+.ord-exec-thumb {
+  position: absolute;
+  z-index: 0;
+  top: var(--ord-exec-pad);
+  bottom: var(--ord-exec-pad);
+  inset-inline-start: var(--ord-exec-pad);
+  width: calc((100% - (var(--ord-exec-pad) * 2) - var(--ord-exec-gap)) / 2);
+  border-radius: calc(var(--ord-exec-radius) - var(--ord-exec-pad));
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 46%, transparent);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--rgb-1) 26%, transparent), color-mix(in srgb, var(--rgb-2) 14%, transparent)),
+    color-mix(in srgb, var(--bg-raised, #16212e) 86%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .18),
+    0 10px 26px -18px var(--rgb-1);
+  transition: transform .28s cubic-bezier(.22, 1, .36, 1);
+  pointer-events: none;
+}
+.ord-mode[data-mode='watch'] .ord-exec-thumb {
+  transform: translateX(calc(100% + var(--ord-exec-gap)));
+}
+/* A mirrored rail moves the other way: the second plate sits to the LEFT. */
+[dir='rtl'] .ord-mode[data-mode='watch'] .ord-exec-thumb,
+.ord-mode[dir='rtl'][data-mode='watch'] .ord-exec-thumb {
+  transform: translateX(calc(-100% - var(--ord-exec-gap)));
+}
+
+/* The plates themselves: equal height, vertical rhythm, 44px minimum. */
+.ord-mode .ord-exec-option {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto auto;
+  justify-items: start;
+  align-content: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 84px;
+  padding: 13px 12px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--ord-exec-radius) - var(--ord-exec-pad));
+  background: transparent;
+  color: var(--text-2, #c7d3e3);
+  text-align: start;
+  white-space: normal;
+  cursor: pointer;
+  transition: color .2s ease, background .2s ease, border-color .2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.ord-mode .ord-exec-option:hover:not(:disabled) {
+  color: var(--text-1, #fff);
+  background: rgba(255, 255, 255, .03);
+}
+.ord-mode .ord-exec-option.active { color: var(--text-1, #fff); }
+.ord-mode .ord-exec-option:active:not(:disabled) { transform: scale(.985); }
+
+.ord-mode .ord-exec-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  color: var(--rgb-1);
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 26%, transparent);
+  background: color-mix(in srgb, var(--rgb-1) 12%, transparent);
+  transition: color .2s ease, border-color .2s ease, background .2s ease;
+}
+.ord-mode .ord-exec-option.active .ord-exec-icon {
+  color: #fff;
+  border-color: color-mix(in srgb, var(--rgb-1) 70%, transparent);
+  background: color-mix(in srgb, var(--rgb-1) 34%, transparent);
+  box-shadow: 0 6px 18px -12px var(--rgb-1);
+}
+.ord-mode .ord-exec-icon svg { width: 16px; height: 16px; display: block; }
+
+.ord-mode .ord-exec-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.ord-mode .ord-exec-copy b {
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.ord-mode .ord-exec-copy small {
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text-3, #8fa0b6);
+  overflow-wrap: anywhere;
+}
+.ord-mode .ord-exec-option.active .ord-exec-copy small { color: color-mix(in srgb, var(--text-1, #fff) 78%, transparent); }
+
+/* The explanation under the switch reads as a caption, not as body copy. */
+.ord-mode .ord-mode-note {
+  margin: 12px 2px 0;
+  font-size: 11.5px;
+  line-height: 1.75;
+  color: var(--text-3, #8fa0b6);
+}
+.ord-mode .ord-mode-note.is-quiet { opacity: .8; margin-top: 8px; font-size: 11px; }
+.ord-mode .ord-warn { margin: 10px 2px 0; }
+
+.ord-mode .ord-exec-option:focus-visible {
+  outline: 2px solid var(--rgb-1, #7bdcda);
+  outline-offset: 2px;
+}
+.ord-mode .ord-exec-option:disabled { opacity: .42; cursor: not-allowed; }
+
+/* Light theme: the plates are white, not a brightened dark plate. */
+:root[data-theme='light'] .ord-mode {
+  border-color: color-mix(in srgb, var(--rgb-1) 24%, #dbe3ef);
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--rgb-1) 9%, transparent), transparent 62%),
+    #fff;
+}
+:root[data-theme='light'] .ord-mode .ord-execution-tabs {
+  border-color: #e3e9f3;
+  background: #f5f7fb;
+}
+:root[data-theme='light'] .ord-mode .ord-exec-option { color: #43536b; }
+:root[data-theme='light'] .ord-mode .ord-exec-option.active { color: #0d1725; }
+:root[data-theme='light'] .ord-mode .ord-exec-copy small { color: #6c7c93; }
+:root[data-theme='light'] .ord-mode .ord-mode-note { color: #6c7c93; }
+
+/* Smaller phones: one scale change, still two equal plates, never a stack
+   that pushes the second option below the fold of the card. */
+@media (max-width: 380px) {
+  .ord-mode { --ord-exec-pad: 5px; --ord-exec-gap: 5px; padding: 10px; border-radius: 18px; }
+  .ord-mode .ord-exec-option { padding: 11px 9px; min-height: 78px; gap: 7px; }
+  .ord-mode .ord-exec-copy b { font-size: 11.5px; }
+  .ord-mode .ord-exec-copy small { font-size: 9.5px; }
+  .ord-mode .ord-mode-note { font-size: 11px; }
+}
+@media (max-width: 320px) {
+  .ord-mode .ord-exec-option { min-height: 74px; padding: 10px 8px; }
+}
+
+/* Stopped motion is a complete stop, not a shorter animation. */
+@media (prefers-reduced-motion: reduce) {
+  .ord-exec-thumb { transition: none; }
+  .ord-mode .ord-exec-option { transition: none; }
+  .ord-mode .ord-exec-option:active:not(:disabled) { transform: none; }
+}
+:root[data-motion='reduced'] .ord-exec-thumb,
+:root[data-reduce-motion='true'] .ord-exec-thumb { transition: none; }

@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import AnimatedNumber from '../AnimatedNumber.jsx';
 import CoinLogo from '../CoinLogo.jsx';
@@ -15,7 +15,7 @@ import {
   GlyphVolume,
   GlyphWave
 } from './MarketGlyphs.jsx';
-import { fmtCompact, fmtNum, fmtPct } from '../../lib/format.js';
+import { fmtCompact, fmtNum, fmtPct, pctTone } from '../../lib/format.js';
 import { finiteOrNull, marketPrice, positiveOrNull } from '../../lib/marketPresentation.js';
 
 /* ─── THE HELIX ──────────────────────────────────────────────────────────
@@ -152,7 +152,30 @@ function TrioBox({ tone, label, value, note, children, testId }) {
   );
 }
 
-function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = 'usd', onOpenCoin }) {
+/**
+ * «به‌روزرسانی در …» — the age of the reading, inside a memoised leaf.
+ *
+ * The card sits on the market screen's OVERVIEW tab, which polls every 30s.
+ * The clock ticks here rather than in the page for the same reason
+ * MarketFreshness exists (see that file): a page-level interval re-renders the
+ * deck, the stories reel and the trio boxes to move one string. It re-reads on
+ * `visibilitychange` so a backgrounded tab cannot come back claiming the age
+ * it had when it was hidden.
+ */
+function BtClock({ updatedAt }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 15000);
+    const onVisible = () => { if (document.visibilityState === 'visible') setNow(Date.now()); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible); };
+  }, []);
+  const seconds = Math.max(0, Math.round((now - updatedAt) / 1000));
+  const label = seconds < 60 ? `${seconds}s` : `${Math.round(seconds / 60)}m`;
+  return <span className="mx-btc-age mono" aria-hidden="true">{label}</span>;
+}
+
+function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = 'usd', onOpenCoin, updatedAt = 0 }) {
   const { t } = useTranslation();
   const mcap = positiveOrNull(global?.mcap);
   const volume = positiveOrNull(global?.volume);
@@ -185,14 +208,35 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
      a consequence of two measured numbers, not a third source. */
   const btcVolume = positiveOrNull(bitcoin?.volume);
   const btcMcap = positiveOrNull(bitcoin?.mcap);
-  const btcDir = btcChange == null ? undefined : btcChange === 0 ? 'neutral' : btcChange > 0 ? 'up' : 'down';
+  /*
+   * ─── THE COLOUR OF THE CARD IS THE COLOUR OF ITS OWN DIGITS ────────────────
+   * «باکس بیت‌کوین همیشه سبزه و عدد سودشون دیده نمی‌شه.»
+   *
+   * The old rule read the sign of the RAW 24h move. Bitcoin moves a few
+   * hundredths of a percent most days, so a tick of +0.004 printed «+0.00%»
+   * beside a fully green card, a green rim, a green chart and an up arrow — a
+   * gain the screen could not show a number for. `pctTone` reads the value at
+   * the SAME 2-decimal precision the box prints, so a move that rounds to zero
+   * is neutral (grey, no arrow, «0.00%») and only a move with a visible digit
+   * gets a direction.
+   */
+  const btcTone = btcChange == null ? null : pctTone(btcChange, 2);
+  const btcDir = btcTone == null ? undefined : btcTone === 'up' ? 'up' : btcTone === 'down' ? 'down' : 'neutral';
+  /* The money move, in the same rounded sign as the percentage: a delta that
+     prints as zero must not be prefixed with a `+`. */
   const btcDelta = btcPrice != null && btcChange != null && 1 + btcChange / 100 > 0
     ? btcPrice - btcPrice / (1 + btcChange / 100)
     : null;
-  const signedMoney = (value) => {
+  const btcDeltaTone = btcDelta == null ? null : pctTone(btcDelta, 2);
+  const signedMoney = (value, tone) => {
     if (value == null) return '—';
-    if (value === 0) return `${vs.toUpperCase()} 0.00`;
-    return `${value > 0 ? '+' : '-'}${marketPrice(Math.abs(value), vs)}`;
+    /* A move that rounds to nothing is printed as nothing: `${VS} 0.00`, with
+       no sign, rather than a signed zero or a dash that reads as «no data». */
+    if (tone == null || tone === 'flat') {
+      if (Math.abs(value) < 0.005) return `${vs.toUpperCase()} 0.00`;
+      return marketPrice(Math.abs(value), vs);
+    }
+    return `${tone === 'up' ? '+' : '-'}${marketPrice(Math.abs(value), vs)}`;
   };
 
   return (
@@ -390,19 +434,32 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
             </button>
           </header>
 
-          {(btcUnavailable || btcChange == null || bitcoin.dataProvenance === 'stale') && <p className="mx-btc-data-state" role="status">{t(btcUnavailable || btcChange == null ? 'marketGlobalAd.unavailable' : 'marketGlobalAd.stale')}</p>}
+          {/* «داده درست و زنده نیست» — the card now says WHEN its number was
+              read, and says out loud when it is not live. A missing move and a
+              saved reading are two different sentences, so they get two
+              different labels; an offline row is never labelled live. */}
+          <div className="mx-btc-live" data-testid="market-btc-live" data-state={btcUnavailable || bitcoin.dataProvenance === 'stale' ? 'stale' : 'live'}>
+            <i aria-hidden="true" />
+            <span>{btcUnavailable || btcChange == null
+              ? t('marketGlobalAd.unavailable')
+              : bitcoin.dataProvenance === 'stale'
+                ? t('marketGlobalAd.stale')
+                : t('marketIntel.btcLive')}</span>
+            {!btcUnavailable && updatedAt > 0 && <BtClock updatedAt={updatedAt} />}
+          </div>
           <div className="mx-btc-price">
             <AnimatedNumber value={btcPrice ?? 0} format={() => (btcPrice == null ? '—' : marketPrice(btcPrice, vs))} flash={false} />
           </div>
 
           {/* The move, twice over: the percentage as a tone-coloured pill and
               the same move in money. Green when up, red when down. */}
-          <div className="mx-btc-delta" data-testid="market-btc-delta" data-dir={btcDir}>
-            <span className="mx-btc-pct mono">
-              {btcChange != null && btcChange !== 0 && (btcChange > 0 ? <GlyphTrendUp width={12} height={12} aria-hidden="true" /> : <GlyphTrendDown width={12} height={12} aria-hidden="true" />)}
+          <div className="mx-btc-delta" data-testid="market-btc-delta" data-dir={btcDir ?? 'none'} data-tone={btcTone ?? 'none'}>
+            <span className="mx-btc-pct mono" data-dir={btcTone ?? 'none'}>
+              {btcTone === 'up' && <GlyphTrendUp width={12} height={12} aria-hidden="true" />}
+              {btcTone === 'down' && <GlyphTrendDown width={12} height={12} aria-hidden="true" />}
               {fmtPct(btcChange, 2)}
             </span>
-            <span className="mx-btc-abs mono" data-testid="market-btc-abs">{signedMoney(btcDelta)}</span>
+            <span className="mx-btc-abs mono" data-testid="market-btc-abs">{signedMoney(btcDelta, btcDeltaTone)}</span>
             <span className="mx-btc-period">{t('marketIntel.btcPeriod')}</span>
           </div>
 

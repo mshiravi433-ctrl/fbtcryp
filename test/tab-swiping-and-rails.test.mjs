@@ -36,32 +36,67 @@ function lastRule(css, selector) {
   return all.length ? all[all.length - 1][0] : '';
 }
 
-describe('swipe between primary tabs', () => {
+describe('the horizontal drag belongs to the page\'s own tab strip', () => {
+  /*
+   * ─── REVISED 2026-11-01 ───────────────────────────────────────────────────
+   * The earlier pins here described a drag that walked the PRIMARY ROUTES
+   * («چپ = تب قبلی، راست = تب بعدی» read as app tabs). The owner has since
+   * said exactly what was wrong with that:
+   *
+   *   «با لمسی که سمت چپی یا راست می‌کشیم می‌ره صفحه بعد یا قبل — این اشتباهه
+   *    … اگر تب نداشته باشه با لمس چپ یا راست نره صفحه بعد یا قبل.»
+   *
+   * So the contract is no longer «a drag navigates»; it is the opposite:
+   *   · the drag selects the neighbouring tab of THIS screen;
+   *   · a screen with no tab strip does nothing at all;
+   *   · NOTHING in the gesture path may navigate.
+   * The behaviour itself is pinned in test/page-tab-swipe.test.jsx (18 DOM
+   * tests plus the pure arithmetic); these are the source-level guarantees
+   * that are easier to state about the files than about a mounted app.
+   */
+  const GESTURE = read('src/lib/tabGesture.js');
+  const SWIPE = read('src/components/PageTabSwipe.jsx');
+
   it('maps a drag to the reading direction, not to a fixed screen side', () => {
     /* RTL (fa/ar/ur): drag right → next, drag left → previous.
        LTR: drag left → next, drag right → previous. */
-    expect(APP).toMatch(/const\s+forward\s*=\s*rtl\s*\?\s*dx\s*>\s*0\s*:\s*dx\s*<\s*0/);
-    expect(APP).toMatch(/document\.documentElement\.dir\s*===\s*'rtl'/);
-    /* …and the step is applied to the ordered tab list, clamped at the ends. */
-    expect(APP).toMatch(/index\s*\+\s*\(forward\s*\?\s*1\s*:\s*-1\)/);
-    expect(APP).toMatch(/Math\.max\(0,\s*Math\.min\(PRIMARY_SWIPE_TABS\.length\s*-\s*1/);
+    expect(GESTURE).toMatch(/const forward = rtl \? dx > 0 : dx < 0/);
+    expect(GESTURE).toContain("documentElement?.dir === 'rtl'");
+    /* …and the step is applied to the strip's own tab list, clamped at the ends. */
+    expect(GESTURE).toMatch(/tabs\[index \+ \(forward \? 1 : -1\)\]/);
+    expect(GESTURE).toMatch(/if \(!next\) return null;/);
+  });
+
+  it('cannot navigate: no router call exists on the gesture path', () => {
+    for (const [name, src] of [['tabGesture.js', GESTURE], ['PageTabSwipe.jsx', SWIPE]]) {
+      expect(src, `${name} must not navigate`).not.toMatch(/useNavigate|navigate\(|history\.(push|back|go)|location\.hash\s*=/);
+    }
+    /* The only thing a gesture does is click a tab the strip already owns. */
+    expect(GESTURE).toContain('tab.click?.()');
   });
 
   it('is deliberate to trigger and impossible to trigger while scrolling', () => {
-    const threshold = Number((APP.match(/Math\.abs\(dx\)\s*<\s*(\d+)/) || [])[1]);
+    const threshold = Number((GESTURE.match(/SWIPE_MIN_X = (\d+)/) || [])[1]);
     expect(threshold).toBeGreaterThanOrEqual(44);
     expect(threshold).toBeLessThanOrEqual(64);
-    /* A mostly-vertical drag is a scroll, never navigation. */
-    expect(APP).toMatch(/Math\.abs\(dy\)\s*>\s*Math\.abs\(dx\)\s*\*/);
-    /* Decide once, on touchend — no touchmove listener, no work per frame. */
-    expect(APP).toContain('onTouchStart');
-    expect(APP).toContain('onTouchEnd');
-    expect(APP).not.toContain('onTouchMove');
+    expect(GESTURE).toMatch(/Math\.abs\(dy\) > Math\.abs\(dx\) \* SWIPE_FLATNESS/);
+    /* Decide once, on touchend — no move handler, no work per frame. */
+    expect(SWIPE).toContain("'touchstart'");
+    expect(SWIPE).toContain("'touchend'");
+    expect(SWIPE).not.toContain("'touchmove'");
+    expect(APP).toContain('<PageTabSwipe');
+  });
+
+  it('does nothing at all on a screen without a tab strip', () => {
+    /* `findTabStrip` is the single gate: no strip, no destination, no action. */
+    expect(GESTURE).toMatch(/export function findTabStrip[\s\S]*?if \(!lists\.length\) return null;/);
+    expect(GESTURE).toMatch(/const tabs = tabsOf\(list\);/);
+    expect(GESTURE).toMatch(/if \(!next\) return null;/);
   });
 
   it('yields to charts, rails, forms and horizontally scrollable containers', () => {
-    for (const selector of ['.perp-rail', '.news-mode-tabs', '.smx-dock', '.segmented', '.market-sectors-rail', 'canvas', '[role="tab"]']) {
-      expect(APP, `${selector} must own its own drag`).toContain(selector);
+    for (const selector of ['.perp-rail', '.news-mode-tabs', '.smx-dock', '.segmented', '.market-sectors-rail', '.mx-sector-rail', 'canvas', '[role="tab"]']) {
+      expect(GESTURE, `${selector} must own its own drag`).toContain(selector);
     }
     /* The zone keeps vertical scrolling native. */
     const zone = lastRule(INDEX, '.app-tab-swipe-zone');

@@ -144,10 +144,48 @@ export function fmtNum(v, digits = 0) {
   return nf({ maximumFractionDigits: digits }).format(n);
 }
 
+/*
+ * ─── THE SIGN OF A MOVE IS THE SIGN OF THE DIGITS WE PRINT ──────────────────
+ * «در صفحه بازار باکس بیت‌کوین همیشه سبزه و عدد سودشون دیده نمی‌شه.»
+ *
+ * A move of +0.0041% used to print `+0.00%`: the sign came from the unrounded
+ * number, so a tiny positive tick produced a green pill, a green card, an up
+ * arrow and a percentage that read zero. That is not a formatting detail — it
+ * is the screen stating a direction it refuses to show evidence for, and on a
+ * phone where the 24h move is often a hundredth of a percent it is what makes
+ * the Bitcoin box look permanently green while its number looks missing.
+ *
+ * The rule is now: round FIRST, then take the sign from what is actually on
+ * screen. A move that rounds to zero is «0.00%» with no sign at all, and
+ * `pctTone()` below reads the same rounded value, so the arrow, the tone and
+ * the digits can never disagree.
+ */
 export function fmtPct(v, digits = 2) {
   const n = toNum(v);
   if (n == null) return '—';
-  return `${n >= 0 ? '+' : ''}${n.toFixed(digits)}%`;
+  const rounded = Number(n.toFixed(digits));
+  const shown = Math.abs(rounded) < 0.5 * Math.pow(10, -digits) ? 0 : rounded;
+  return `${shown > 0 ? '+' : ''}${shown.toFixed(digits)}%`;
+}
+
+/**
+ * The TONE of a measured move: 'up' | 'down' | 'flat' | null.
+ *
+ * `flat` is a real answer, not a missing one: a tick that rounds to 0.00% has a
+ * direction — neutral — and gets the neutral colour, a plain dash-free label
+ * and no arrow. `null` means the feed gave us nothing, which is a different
+ * sentence and must never be painted as a gain.
+ *
+ * `digits` must be the digits the caller prints. Both readers (the percentage
+ * and the money amount) therefore agree by construction.
+ */
+export function pctTone(v, digits = 2) {
+  const n = toNum(v);
+  if (n == null) return null;
+  const threshold = 0.5 * Math.pow(10, -Math.max(0, digits));
+  if (n >= threshold) return 'up';
+  if (n <= -threshold) return 'down';
+  return 'flat';
 }
 
 export function fmtQty(v) {

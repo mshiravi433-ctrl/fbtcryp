@@ -51,6 +51,41 @@ const MEMBERS = Object.freeze({
 
 export const isBinanceRiskSector = (sector) => sector === 'monitoring' || sector === 'seed';
 
+/**
+ * CATEGORIES THAT ARE NOT OFFERED — «این دسته‌بندی را حذف کن»
+ * ---------------------------------------------------------------------------
+ * Requested (2026-11-01):
+ *
+ *   «صفحه بازار تب توکن، دسته‌بندی سید، تحت نظر، لانچ‌پد، داده و توکن ندارد —
+ *    حذفش کن، این دسته‌بندی را حذف کن.»
+ *
+ * A category chip that never has a row to put under it is not a filter, it is
+ * a dead end: the reader taps it, the list empties, and the only honest thing
+ * the screen can say is «چیزی نیست». Three of them were exactly that —
+ *
+ *   · `seed`       Binance's «Seed» tag: a private listing pipeline with no
+ *                  public token set, so the category answers with nothing;
+ *   · `monitoring` Binance's «Monitoring» risk tag: same problem, and it is a
+ *                  warning label rather than a way to browse;
+ *   · `launchpad`  Binance Launchpad's HISTORICAL projects — nearly all of
+ *                  them are not tradable markets any more, so the feed that
+ *                  prices a row cannot price it.
+ *
+ * The API and the server routes STAY for compatibility: this list decides what
+ * the SCREEN offers, not what the provider can answer. Removing them here is
+ * therefore reversible by deleting one entry, and nothing on the server had to
+ * be deleted to make the marketing rail honest.
+ */
+export const HIDDEN_SECTORS = Object.freeze(['seed', 'monitoring', 'launchpad']);
+
+/** The sectors the market screen puts in its rail, in the model's order. */
+export const VISIBLE_SECTORS = Object.freeze(
+  Object.keys(MARKET_CATEGORIES).filter((key) => !HIDDEN_SECTORS.includes(key))
+);
+
+/** True for a category the rail must never offer. */
+export const isHiddenSector = (sector) => HIDDEN_SECTORS.includes(sector);
+
 export function sectorFromRows(sector, rows = []) {
   const allowed = new Set(MEMBERS[sector] || []);
   return (Array.isArray(rows) ? rows : []).filter((row) => allowed.has(row?.id));

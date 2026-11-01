@@ -1877,39 +1877,102 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, pric
         </label>
 
         {kind === 'limit' && (
-          <div className="ord-mode" role="group" aria-label={kc.mode1Title}>
-            <div className="segmented ord-execution-tabs" data-page-tabs>
+          /*
+           * ─── TWO WAYS TO RUN A LIMIT ORDER, ONE CONTROL ────────────────────
+           * «سفارش محدود دو تب اجرای خودکار و رصد قیمت — هر دو تب را مدرن با
+           * اندازه و فاصله درست انجام بده.»
+           *
+           * A real tablist, not two loose buttons: the switch decides WHICH
+           * FORM follows it, so it is the same pattern as the market strip —
+           * `role="tab"`, `aria-selected`, a roving tabindex and the arrow keys
+           * mirrored for Farsi. What changed is the drawing: equal-height
+           * plates that stack the glyph over a two-line label, one shared
+           * moving plate, and a spacing scale that stays readable at 320px.
+           *
+           * The marks are DRAWN, not typed: «⚡» and «◎» arrived as platform
+           * artwork with their own weight and baseline and could not inherit
+           * the accent of the chosen plate (the same rule the market screen
+           * follows — see MarketGlyphs.jsx).
+           */
+          <div className="ord-mode" role="group" aria-label={kc.mode1Title} data-mode={mode}>
+            <div
+              className="ord-execution-tabs"
+              role="tablist"
+              aria-label={kc.mode1Title}
+              data-page-tabs
+              onKeyDown={(event) => {
+                if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                const options = [
+                  { id: 'keeper', disabled: !keeperAvailable },
+                  { id: 'watch', disabled: isSolanaNet }
+                ].filter((option) => !option.disabled);
+                if (!options.length) return;
+                const here = options.findIndex((option) => option.id === mode);
+                const rtl = getComputedStyle(event.currentTarget).direction === 'rtl';
+                const step = event.key === 'ArrowRight' ? (rtl ? -1 : 1) : event.key === 'ArrowLeft' ? (rtl ? 1 : -1) : 0;
+                const pick = event.key === 'Home'
+                  ? options[0]
+                  : event.key === 'End'
+                    ? options[options.length - 1]
+                    : options[Math.max(0, Math.min(options.length - 1, (here < 0 ? 0 : here) + step))];
+                if (!pick) return;
+                (pick.id === 'keeper' ? setExecMode('keeper') : setExecMode('watch'));
+                requestAnimationFrame(() => {
+                  event.currentTarget.querySelector(`[data-exec="${pick.id}"]`)?.focus();
+                });
+              }}
+            >
+              <span className="ord-exec-thumb" aria-hidden="true" />
               <button
                 type="button"
-                className={mode === 'keeper' ? 'active' : ''}
+                role="tab"
+                data-exec="keeper"
+                className={'ord-exec-option' + (mode === 'keeper' ? ' active' : '')}
                 disabled={!keeperAvailable}
+                tabIndex={mode === 'keeper' ? 0 : -1}
                 aria-label={kc.mode1Title}
-                aria-pressed={mode === 'keeper'}
+                aria-selected={mode === 'keeper'}
                 onClick={() => setExecMode('keeper')}
-                style={{ isolation: 'isolate', minHeight: 44 }}
               >
-                {mode === 'keeper' && <SegIndicator id="ord-mode-keeper" />}
-                <span className="ord-exec-icon" aria-hidden="true">⚡</span>
-                <span className="ord-exec-copy"><b>{t('ordersExecution.automatic')}</b><small>{t('ordersExecution.automaticHint')}</small></span>
+                <span className="ord-exec-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M13 2 4.5 13.2H11l-1 8.8 8.5-11.2H12z" />
+                  </svg>
+                </span>
+                <span className="ord-exec-copy">
+                  <b>{t('ordersExecution.automatic')}</b>
+                  <small>{t('ordersExecution.automaticHint')}</small>
+                </span>
               </button>
               <button
                 type="button"
-                className={mode === 'watch' ? 'active' : ''}
+                role="tab"
+                data-exec="watch"
+                className={'ord-exec-option' + (mode === 'watch' ? ' active' : '')}
                 disabled={isSolanaNet}
+                tabIndex={mode === 'watch' ? 0 : -1}
                 aria-label={kc.mode2Title}
-                aria-pressed={mode === 'watch'}
+                aria-selected={mode === 'watch'}
                 onClick={() => setExecMode('watch')}
-                style={{ isolation: 'isolate', minHeight: 44 }}
               >
-                {mode === 'watch' && <SegIndicator id="ord-mode-watch" />}
-                <span className="ord-exec-icon" aria-hidden="true">◎</span>
-                <span className="ord-exec-copy"><b>{t('ordersExecution.watch')}</b><small>{t('ordersExecution.watchHint')}</small></span>
+                <span className="ord-exec-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <circle cx="12" cy="12" r="7.2" strokeDasharray="2.4 3" />
+                    <path d="M12 2.2v2.1M12 19.7v2.1M2.2 12h2.1M19.7 12h2.1" />
+                  </svg>
+                </span>
+                <span className="ord-exec-copy">
+                  <b>{t('ordersExecution.watch')}</b>
+                  <small>{t('ordersExecution.watchHint')}</small>
+                </span>
               </button>
             </div>
-            <p className="faint" style={{ lineHeight: 1.7 }}>
+            <p className="ord-mode-note">
               {mode === 'keeper' ? (isSolanaNet ? kc.solanaNote : kc.mode1Body) : kc.mode2Body}
             </p>
-            {mode === 'keeper' && !isSolanaNet && <p className="faint" style={{ lineHeight: 1.7 }}>{kc.mode1Note}</p>}
+            {mode === 'keeper' && !isSolanaNet && <p className="ord-mode-note is-quiet">{kc.mode1Note}</p>}
             {mode === 'keeper' && !keeperAvailable && <p className="ord-warn">{kc.modeUnavailable}</p>}
           </div>
         )}
