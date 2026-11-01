@@ -1,0 +1,88 @@
+/* The companion to Market Pulse sits on the opposite, logical end edge. */
+.quick-access {
+  position: fixed;
+  inset-inline-end: 0;
+  top: 50%;
+  z-index: 72;
+  transform: translateY(-50%);
+  color: #f4f8ff;
+  font-family: inherit;
+}
+.quick-access__toggle {
+  position: absolute;
+  inset-inline-end: -22px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid rgba(139, 163, 210, .35);
+  border-radius: 50%;
+  color: #81e7f6;
+  background: radial-gradient(circle at 30% 25%, #243d5a, #070b14 76%);
+  box-shadow: 0 14px 34px -20px #020610, inset 0 1px rgba(255,255,255,.1);
+  cursor: pointer;
+  transition: inset-inline-end .38s cubic-bezier(.22,1,.36,1), color .2s, border-color .2s;
+}
+.quick-access.is-open .quick-access__toggle { inset-inline-end: 66px; }
+.quick-access__toggle:hover { color: #fff; border-color: #71d9ea; }
+.quick-access__toggle svg { margin-inline-end: 12px; transition: transform .3s; }
+.quick-access.is-open .quick-access__toggle svg { margin: 0; transform: rotate(45deg); }
+.quick-access__rail {
+  width: 92px;
+  max-height: min(78vh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 15px 6px;
+  border: 1px solid rgba(139, 163, 210, .2);
+  border-inline-end: 0;
+  border-start-start-radius: 30px;
+  border-end-start-radius: 30px;
+  background: linear-gradient(160deg, #122238, #0a1120 57%, #070b14);
+  box-shadow: 0 20px 44px -24px rgba(2,6,16,.95), inset 0 1px rgba(255,255,255,.08);
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(100%);
+  transition: transform .38s cubic-bezier(.22,1,.36,1), opacity .3s, visibility .38s;
+}
+.quick-access[dir='rtl'] .quick-access__rail { transform: translateX(-100%); }
+.quick-access.is-open .quick-access__rail { transform: translateX(0); opacity: 1; visibility: visible; }
+.quick-access__caption { display: block; color: #91a8c6; font-size: 10px; line-height: 1.4; margin: 0 0 8px; }
+.quick-access__rail nav { display: grid; gap: 2px; }
+.quick-access__item {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 5px 2px;
+  border-radius: 14px;
+  color: #c6d5e9;
+  font-size: 10px;
+  line-height: 1.35;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.quick-access__icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  color: #80dfed;
+  border: 1px solid rgba(112, 216, 233, .16);
+  background: linear-gradient(145deg, rgba(76, 202, 222, .15), rgba(68, 93, 150, .08));
+}
+.quick-access__item:hover, .quick-access__item:focus-visible { color: #fff; background: rgba(114, 213, 234, .1); }
+.quick-access__item:focus-visible, .quick-access__toggle:focus-visible { outline: 2px solid #22d3ee; outline-offset: 2px; }
+:root[data-theme='light'] .quick-access { color: #10223b; }
+:root[data-theme='light'] .quick-access__rail { background: linear-gradient(160deg, #fff, #edf5fc); border-color: rgba(13,42,86,.16); }
+:root[data-theme='light'] .quick-access__toggle { color: #087f95; background: radial-gradient(circle at 30% 25%, #fff, #dcecf8); border-color: rgba(13,42,86,.2); }
+:root[data-theme='light'] .quick-access__caption { color: #546b84; }
+:root[data-theme='light'] .quick-access__item { color: #25435e; }
+:root[data-theme='light'] .quick-access__icon { color: #087f95; border-color: rgba(8,127,149,.18); }
+:root[data-theme='light'] .quick-access__item:hover { color: #0b5970; }
+@media (prefers-reduced-motion: reduce) {
+  .quick-access__rail, .quick-access__toggle, .quick-access__toggle svg { transition: none; }
+}
