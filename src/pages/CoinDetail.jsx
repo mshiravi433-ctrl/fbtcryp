@@ -12,7 +12,7 @@ import { swapTargetFor, swapUrlFor } from '../lib/coinToSwap';
 import { getCoinVenue, venueRoute } from '../lib/coinVenue';
 import { cachedCoinVenue, rememberCoinVenues } from '../lib/coinVenues';
 import SwapDock from '../components/SwapDock';
-import TradingChart from '../components/TradingChart';
+import TokenChart from '../components/ProChart/TokenChart';
 import CoinLogo from '../components/CoinLogo';
 import { useOhlc } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct, fmtPrice, fmtUsd, fmtTime } from '../lib/format';
@@ -150,8 +150,19 @@ export default function CoinDetail() {
    * no symbol fallback: dozens of tokens share a ticker and a symbol match
    * here would put someone one tap from buying an impostor.
    */
-  /* Line by default: easier to read, and most visitors are not traders. */
-  const [chartMode, setChartMode] = useState('line');
+  /*
+   * ─── CANDLES ARE THE DEFAULT NOW (2026-11-01) ────────────────────────────
+   * The line used to be the default because it is easier to read at a glance.
+   * The request («نمودار شمعی خیلی حرفه‌ای کن») is about making this page a
+   * chart page, and a line cannot show the high and the low at all — a day
+   * that opened at 100, spiked to 130 and closed at 101 is a flat line. So
+   * the candle terminal opens first and the line is one tap away, not the
+   * other way round.
+   *
+   * If the candle feed has nothing for a coin, the page still shows the line
+   * (plus the reason) instead of an empty box — see the chart block below.
+   */
+  const [chartMode, setChartMode] = useState('candle');
   const { data: ohlc, loading: ohlcLoading } = useOhlc(detailTab === 'trade' && chartMode === 'candle' ? id : null, range.days);
 
   const coinGeckoId = id;
@@ -288,6 +299,43 @@ export default function CoinDetail() {
   const rangeChange = first ? ((last - first) / first) * 100 : 0;
   const up = rangeChange >= 0;
   const color = up ? '#00ff9d' : '#ff3b6b';
+
+  /*
+   * The close-only line, kept as a component-local node so the candle branch
+   * can reuse it as the fallback when OHLC is unavailable. Two copies of this
+   * markup is how a fallback silently drifts from the chart it replaces.
+   */
+  const lineChart = (
+    <div className="chart-wrap" style={{ height: 190 }}>
+      {loading ? (
+        <div className="skel" style={{ height: '100%' }} />
+      ) : (
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={chartData} margin={{ top: 8, right: 0, bottom: 0, left: 0 }}>
+            <defs>
+              <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity={0.45} />
+                <stop offset="100%" stopColor={color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <XAxis dataKey="t" hide />
+            <YAxis domain={['dataMin', 'dataMax']} hide />
+            <Tooltip content={<ChartTip />} cursor={{ stroke: 'rgba(255,255,255,.2)' }} />
+            <Area
+              type="monotone"
+              dataKey="p"
+              stroke={color}
+              strokeWidth={2}
+              fill="url(#areaFill)"
+              isAnimationActive
+              animationDuration={900}
+              dot={false}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  );
 
   if (!coin && !loading && !coinLoading) {
     /*
@@ -436,8 +484,9 @@ export default function CoinDetail() {
           range is most of what a trader reads a chart for, so candles are not
           decoration here — they carry information the line discards.
 
-          Line stays the default because it is easier to read at a glance and
-          most visitors are not traders.
+          Candles are the default as of the professional-terminal pass; the
+          line stays one tap away for anyone who prefers it, and it is also
+          the automatic fallback when the candle feed has nothing.
         */}
         <div className="segmented" style={{ marginBottom: 10 }}>
           {['line', 'candle'].map((m) => (
@@ -455,60 +504,48 @@ export default function CoinDetail() {
         </div>
 
         {chartMode === 'candle' ? (
-          ohlcLoading ? (
-            <div className="skel" style={{ height: 280 }} />
-          ) : ohlc?.length ? (
+          ohlc?.length >= 2 ? (
             <>
               {/*
-                The TradingView-powered chart (pinch-zoom, pan, crosshair OHLC,
-                MA overlays) — the same library PancakeSwap uses. Remounted per
-                range so the series is always exactly the requested window.
+                The professional candle terminal (src/components/ProChart).
+                Inline it is candles + MA(7)/MA(25) + a live crosshair legend
+                with the small expand button; expanded it is the full analysis
+                desk. `key` is deliberately NOT tied to the range here — the
+                chart restores its own zoom across a rebuild, and remounting
+                per range would fight the range buttons inside the terminal.
               */}
-              <TradingChart
-                key={`${id}-${range.days}`}
+              <TokenChart
                 data={ohlc}
                 symbol={coin?.symbol ?? ''}
-                height={280}
+                coin={coin}
+                coinId={id}
+                range={range}
+                ranges={RANGES}
+                onRangeChange={(r) => {
+                  haptic?.('select');
+                  setRange(r);
+                }}
+                height={300}
+                loading={ohlcLoading}
               />
               <p className="faint" style={{ fontSize: 11, marginTop: 6, lineHeight: 1.7 }}>
                 {t('coin.candleNote')}
               </p>
             </>
+          ) : ohlcLoading ? (
+            <div className="skel" style={{ height: 300 }} />
           ) : (
-            /* No OHLC for this coin. Say so rather than silently showing the
-               line under a tab labelled "Candles". */
-            <p className="notice">{t('coin.noCandles')}</p>
+            /*
+              No OHLC for this coin. Say so AND draw the close line — an honest
+              notice above a readable chart beats a notice instead of one.
+            */
+            <>
+              <p className="notice">{t('coin.noCandles')}</p>
+              {lineChart}
+            </>
           )
         ) : (
-        <div className="chart-wrap" style={{ height: 190 }}>
-          {loading ? (
-            <div className="skel" style={{ height: '100%' }} />
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 8, right: 0, bottom: 0, left: 0 }}>
-                <defs>
-                  <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={color} stopOpacity={0.45} />
-                    <stop offset="100%" stopColor={color} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="t" hide />
-                <YAxis domain={['dataMin', 'dataMax']} hide />
-                <Tooltip content={<ChartTip />} cursor={{ stroke: 'rgba(255,255,255,.2)' }} />
-                <Area
-                  type="monotone"
-                  dataKey="p"
-                  stroke={color}
-                  strokeWidth={2}
-                  fill="url(#areaFill)"
-                  isAnimationActive
-                  animationDuration={900}
-                  dot={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          )}
-        </div>
+          lineChart
         )}
 
         <div className="segmented" style={{ marginTop: 10 }}>

@@ -443,6 +443,36 @@ export async function fetchChart(id, days = 1, vs = 'usd') {
 }
 
 /**
+ * VOLUME, for the chart's volume pane — WITHOUT inventing per-candle volume.
+ *
+ * ─── THE TRAP THIS AVOIDS ───────────────────────────────────────────────────
+ * `/coins/{id}/ohlc` (the candle feed) has NO volume column. The obvious fix
+ * is to fetch `/market_chart`'s `total_volumes` and sum each sample into its
+ * candle — and it would be wrong twice: `total_volumes` is a ROLLING 24-hour
+ * figure at each timestamp, so summing multiplies the real number by the
+ * number of samples in the bucket, and dividing it by them would invent a
+ * per-candle volume nobody measured.
+ *
+ * So the series is returned as what it is: the 24-hour volume reading at that
+ * moment. The client plots it against the candle timestamps and labels the
+ * pane "24h volume". Anyone reading it gets the number the provider actually
+ * published; nobody gets a bar height that was manufactured to fill the pane.
+ *
+ * Returns `[{ t, v }]` in USD. An empty array is a real answer (the feed had
+ * nothing) and the client hides the pane rather than drawing zeros.
+ */
+export async function fetchVolumeSeries(id, days = 30, vs = 'usd') {
+  const raw = await cgReq(cgUrl(`/coins/${encodeURIComponent(id)}/market_chart`, { vs_currency: vs, days: String(days) }));
+  const rows = Array.isArray(raw?.total_volumes) ? raw.total_volumes : [];
+  return rows
+    .map(([t, v]) => ({ t: Number(t), v: Number(v) }))
+    .filter((d) => Number.isFinite(d.t) && Number.isFinite(d.v) && d.v >= 0)
+    /* A year of five-minute samples is 100k points; the chart cannot use more
+       than a few hundred and the payload should not be that size either. */
+    .slice(-2000);
+}
+
+/**
  * Convert a provider's real price observations into one close per UTC day.
  * This is deliberately a close series, not synthetic OHLC: `market_chart`
  * does not report a daily high or low. Backtests and indicators that consume

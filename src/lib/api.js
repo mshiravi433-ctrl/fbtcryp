@@ -815,6 +815,32 @@ export function getOhlc(id, days = 30, vs = 'usd') {
   });
 }
 
+/**
+ * 24-hour volume for the chart's volume pane.
+ *
+ * Same honesty rule as getOhlc: no offline fallback. The bundled snapshot has
+ * no volume at all, so the only values this can return are values CoinGecko
+ * measured. An empty array means "the feed had nothing", and the chart hides
+ * the pane instead of drawing a flat zero the reader would read as a fact.
+ *
+ * It is a ROLLING 24-hour figure per timestamp, not per-candle volume — see
+ * fetchVolumeSeries in server/providers.js for why that distinction matters.
+ */
+export function getVolumeSeries(id, days = 30, vs = 'usd') {
+  return resilient(`volume:${id}:${days}:${vs}`, {
+    ttl: 120000,
+    backend: () => fetchJson(`${apiBase()}/volume/${id}?days=${days}&vs=${vs}`),
+    direct: async () => {
+      const raw = await fetchJson(`${PUBLIC_CG}/coins/${id}/market_chart?vs_currency=${vs}&days=${days}`);
+      return (Array.isArray(raw?.total_volumes) ? raw.total_volumes : [])
+        .map(([t, v]) => ({ t: Number(t), v: Number(v) }))
+        .filter((d) => Number.isFinite(d.t) && Number.isFinite(d.v) && d.v >= 0)
+        .slice(-2000);
+    },
+    fallback: () => []
+  });
+}
+
 export function getChart(id, days = 1, vs = 'usd') {
   return resilient(`chart:${id}:${days}`, {
     ttl: 60000,

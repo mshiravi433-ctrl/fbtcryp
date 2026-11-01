@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getChart,
-  getOhlc, getCoin, getGlobal, getMarkets, getTrending, searchCoins } from '../lib/api';
+  getOhlc, getVolumeSeries, getCoin, getGlobal, getMarkets, getTrending, searchCoins } from '../lib/api';
 import { onSoftRefresh } from '../lib/refresh';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { vsOf } from '../lib/currency';
@@ -112,6 +112,13 @@ export const useTrending = () => usePoll(() => getTrending(), [], 120000);
 export const useOhlc = (id, days) =>
   usePoll(() => (id ? getOhlc(id, days) : Promise.resolve([])), [id, days], 60000);
 export const useChart = (id, days) => usePoll(() => (id ? getChart(id, days) : Promise.resolve([])), [id, days], 60000);
+/**
+ * 24h volume for the expanded chart. `id` is null until the reader actually
+ * opens the terminal with the volume pane on, so the coin page pays nothing
+ * for a pane most visits never show.
+ */
+export const useVolumeSeries = (id, days) =>
+  usePoll(() => (id ? getVolumeSeries(id, days) : Promise.resolve([])), [id, days], 120000);
 
 /**
  * One coin by id, fetched directly instead of being looked up inside the

@@ -5747,9 +5747,30 @@ export default function run() {
     /* ---- candles ---- */
     t('the candle component exists', existsSync('src/components/CandleChart.jsx'));
     t('the coin page can switch to candles', /chartMode === 'candle'/.test(coinCode));
-    t('...and renders the component', /<TradingChart/.test(coin));
+    t('...and renders the terminal', /<TokenChart/.test(coin));
     t('the OHLC route exists', /\/api\/ohlc\/:id/.test(read('server/app.js')));
     t('...and calls the fetcher', /fetchOhlc\s*\(/.test(read('server/app.js')));
+
+    /* ---- the professional candle terminal (2026-11-01) ---- */
+    /*
+     * The request was a professional candle chart plus a SMALL button that
+     * opens it full screen with analysis tools. The pins below lock the two
+     * halves separately: the coin page must mount the terminal, and the
+     * terminal must actually contain the full-screen surface and the volume
+     * feed behind it — a chart that renders beautifully but whose expand
+     * button opens nothing is the failure mode worth pinning.
+     */
+    const terminal = read('src/components/ProChart/TokenChart.jsx');
+    t('the terminal component exists', existsSync('src/components/ProChart/TokenChart.jsx'));
+    t('...opens a real modal dialog', /role="dialog"/.test(terminal) && /aria-modal="true"/.test(terminal));
+    t('...with the expand button wired to it', /className="pc-expand"/.test(terminal) && /onClick=\{openExpanded\}/.test(terminal));
+    t('...and the analysis toolbar inside it', /className="pc-toolbar"/.test(terminal) && /role="toolbar"/.test(terminal));
+    t('...that survives Escape and restores focus', /event\.key === 'Escape'/.test(terminal) && /expandBtnRef\.current\?\.focus/.test(terminal));
+    t('the volume feed has its own route', /\/api\/volume\/:id/.test(read('server/app.js')));
+    t('...and its own fetch (rolling 24h, not invented per-candle volume)',
+      /fetchVolumeSeries\s*\(/.test(read('server/app.js')) && /export async function fetchVolumeSeries/.test(read('server/providers.js')));
+    t('...read on demand, only when the terminal is open',
+      /useVolumeSeries\(needVolume/.test(terminal));
     /*
      * NO offline fallback for candles. The bundled snapshot holds closes only,
      * so a fabricated candle would have to invent its high and low — the two
