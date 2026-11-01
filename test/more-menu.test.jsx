@@ -226,12 +226,32 @@ describe('More sheet — prism-blade pass', () => {
     expect(cssCode.includes('clip-path')).toBe(false);
   });
 
-  it('keeps the compositor budget: one backdrop-filter, none on rows', () => {
-    /* Line-anchored so the @supports FEATURE QUERY (which also contains the
-       words `backdrop-filter: blur`) is not counted as a declaration. Exactly
-       two live blurs are allowed — the panel and its -webkit twin. */
+  it('keeps the compositor budget: ZERO backdrop-filter, none on rows', () => {
+    /*
+     * ─── THE 2026-11-01 CHANGE, AND WHY THE ALLOWANCE IS NOW ZERO ────────────
+     *   «سرعت صفحه منو در pwa هنوز کمه»
+     *
+     * This used to allow exactly two live blurs — the pane and its -webkit twin.
+     * A full-screen `blur(18px)` is the single most expensive thing this sheet
+     * asks of a phone: the compositor keeps a downsampled copy of everything
+     * painted BEHIND the pane and resamples it on every frame of the spring, on
+     * every scroll, and on every tile's staggered arrival. On the low-end
+     * Android hardware this app ships to, that is the difference between a sheet
+     * that opens in 60 ms and one that opens in 300.
+     *
+     * It is also the blur nobody was seeing. Its own `@supports not` fallback
+     * proved the pane already reads as a solid plate — a fully opaque gradient —
+     * whenever the GPU refuses the effect. So the pane now paints that plate
+     * unconditionally: same colour, same edges, same light-theme ink, one whole
+     * offscreen buffer per frame cheaper. `backdrop-filter: none` stays on the
+     * surfaces that opt out of an inherited blur, which is why the next line
+     * still matches.
+     *
+     * Line-anchored so a future @supports FEATURE QUERY (which also contains the
+     * words `backdrop-filter: blur`) is not counted as a declaration.
+     */
     const blurDecls = CSS.match(/^\s*(?:-webkit-)?backdrop-filter:\s*blur/gm) || [];
-    expect(blurDecls).toHaveLength(2);
+    expect(blurDecls).toHaveLength(0);
     expect(CSS).toMatch(/backdrop-filter:/);
     for (const selector of ['.more-tile', '.more-tile-icon', '.more-pill', '.more-list']) {
       const block = new RegExp(`^\\${selector} \\{[\\s\\S]*?\\n\\}`, 'm').exec(CSS)?.[0] ?? '';

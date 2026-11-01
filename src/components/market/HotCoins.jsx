@@ -33,7 +33,7 @@ function HotCoins({ coins = [], onOpen, vs = 'usd' }) {
         <span className="mx-section-note">{t('market.trendingBasis')}</span>
       </div>
       <div className="mx-hot-rail">
-        {coins.map((coin) => {
+        {coins.map((coin, index) => {
           const change = finiteOrNull(coin.change24h);
           const volume = positiveOrNull(coin.volume);
           const place = Number(coin.place) || 0;
@@ -53,7 +53,10 @@ function HotCoins({ coins = [], onOpen, vs = 'usd' }) {
             >
               <span className="mx-hot-sheen" aria-hidden="true" />
               <span className="mx-hot-head">
-                <CoinLogo coin={coin} px={22} />
+                {/* The rail sits under the deck: its first cards are on screen
+                    at first paint, so they ask for their artwork at high
+                    priority instead of queueing behind the route's own CSS. */}
+                <CoinLogo coin={coin} px={22} priority={index < 4} />
                 <span className="mx-hot-id">
                   <b>{coin.symbol}</b>
                   <small>{coin.name}</small>

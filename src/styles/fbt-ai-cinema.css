@@ -1,0 +1,729 @@
+/**
+ * FBT AI CINEMA BANNER — the component's own sheet.
+ * ===========================================================================
+ * These rules used to live in market-modern.css, which Market.jsx imports.
+ * The banner is a self-contained surface (a hand-drawn fox mascot, a cinema
+ * glow, a chart line) that NO screen currently renders, so every byte of it was
+ * shipping on the app's home route: 28 KB of CSS whose selectors were matched
+ * against every element the market screen creates, and fifteen looping
+ * animations the compositor kept bookkeeping for.
+ *
+ * A component owns its stylesheet in this repo (DecisionOrb → decision-orb.css,
+ * MoreSheet → more-menu.css). This file is imported by the component, so it
+ * travels in whatever chunk eventually renders it — and in no chunk at all while
+ * nothing does. Nothing here was rewritten: the rules are byte-identical, only
+ * their address changed.
+ */
+
+/*
+   THE BANNER IS A PHYSICAL OBJECT, NOT A ROW OF TEXT.
+   Two columns — copy on the reading side, the mascot on the far side — over
+   a deep, near-black field with volumetric neon washes. Everything is
+   token-driven from the `--fbt-*` neon pair the component seeds inline, so
+   the panel stays neon-on-dark in BOTH app themes; a premium promo panel that
+   re-themed to white in light mode would throw away the entire asset.
+
+   `contain: layout paint` keeps the particle/grid/glow layers out of the
+   page's layout and paint work, and the two `backdrop-filter` calls are the
+   only blur — dropped on native/lite further down where WebView blur is
+   expensive and janky.
+*/
+.fbt-ai-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  min-height: 176px;
+  border-radius: 28px;
+  padding: 20px 22px;
+  overflow: hidden;
+  isolation: isolate;
+  color: rgba(255, 255, 255, 0.96);
+  border: 1px solid color-mix(in srgb, var(--fbt-a) 45%, rgba(255, 255, 255, 0.12));
+  background:
+    radial-gradient(95% 165% at 100% 0%, color-mix(in srgb, var(--fbt-a) 30%, transparent), transparent 60%),
+    radial-gradient(75% 150% at 0% 105%, color-mix(in srgb, var(--fbt-b) 22%, transparent), transparent 58%),
+    linear-gradient(128deg, #0b0720 0%, #0a0e1f 58%, #05070f 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 0 60px -30px var(--fbt-a),
+    0 30px 64px -34px rgba(124, 77, 255, 0.75);
+  backdrop-filter: blur(18px) saturate(165%);
+  -webkit-backdrop-filter: blur(18px) saturate(165%);
+  contain: layout paint;
+}
+/* Entrance — held invisible until the panel intersects, then one cinematic
+   rise. CSS only: framer-motion stays out of this component so the banner's
+   own IntersectionObserver (and its test mocks) never fight a motion wrapper. */
+.fbt-ai-banner:not(.is-entered) { opacity: 0; transform: translateY(18px); }
+.fbt-ai-banner.is-entered { animation: fbt-entrance 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+@keyframes fbt-entrance {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* Under the app's reduce-motion setting the panel is simply there. */
+.fbt-ai-banner[data-still='true'] { animation: none; opacity: 1; transform: none; }
+/* Faint instrument grid, masked toward the mascot corner. */
+.fbt-ai-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 34px 34px;
+  -webkit-mask-image: radial-gradient(125% 135% at 100% 0%, #000 6%, transparent 62%);
+  mask-image: radial-gradient(125% 135% at 100% 0%, #000 6%, transparent 62%);
+}
+/*
+   THE NEON WASHES ARE GRADIENTS, NOT BLURRED ELEMENTS.
+   A `filter: blur(44px)` over a full-bleed gradient forces a GPU re-raster of
+   the blur every frame it animates. A radial gradient whose stops fade to
+   transparent is the same soft glow for free — one static paint, animated
+   only in transform/opacity, both compositor-friendly.
+*/
+.fbt-ai-glow {
+  position: absolute;
+  z-index: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.fbt-ai-glow--a {
+  inset-inline-end: -10%;
+  top: -46%;
+  width: 62%;
+  aspect-ratio: 1;
+  background: radial-gradient(circle, color-mix(in srgb, var(--fbt-a) 78%, transparent) 0%, transparent 70%);
+  animation: fbt-glow-drift 13s ease-in-out infinite;
+}
+.fbt-ai-glow--b {
+  inset-inline-start: -14%;
+  bottom: -52%;
+  width: 58%;
+  aspect-ratio: 1;
+  background: radial-gradient(circle, color-mix(in srgb, var(--fbt-b) 70%, transparent) 0%, transparent 70%);
+  animation: fbt-glow-drift 16s ease-in-out infinite reverse;
+}
+@keyframes fbt-glow-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.42; }
+  50% { transform: translate3d(2%, 4%, 0) scale(1.12); opacity: 0.6; }
+}
+/* Every direct child is lifted above the aurora — EXCEPT the backdrop.
+   The universal `> *` form used to repaint `.fbt-ai-grid` and the two glows
+   `position: relative` (same specificity, later rule), which turned the
+   backdrop into flex items and collapsed the copy column to 87px on a phone.
+   See §17.1 for the full story. */
+.fbt-ai-banner > :not(.fbt-ai-ambient) { position: relative; z-index: 1; }
+/* ── copy ───────────────────────────────────────────────────────────────── */
+.fbt-ai-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+}
+.fbt-ai-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--fbt-b) 88%, #ffffff);
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fbt-b) 12%, rgba(255, 255, 255, 0.04));
+  border: 1px solid color-mix(in srgb, var(--fbt-b) 32%, transparent);
+}
+.fbt-ai-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #00ff9d;
+  box-shadow: 0 0 10px 1px rgba(0, 255, 157, 0.8);
+  animation: fbt-live-pulse 2.2s ease-in-out infinite;
+}
+@keyframes fbt-live-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.7); opacity: 0.6; }
+}
+.fbt-ai-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  overflow-wrap: anywhere;
+}
+.fbt-ai-desc {
+  margin: 0;
+  max-width: 46ch;
+  font-family: var(--font-display);
+  font-size: 12.8px;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.74);
+  overflow-wrap: anywhere;
+}
+.fbt-ai-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--fbt-a), color-mix(in srgb, var(--fbt-b) 72%, var(--fbt-a)));
+  box-shadow:
+    0 14px 30px -12px var(--fbt-a),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  animation: fbt-cta-pulse 3.4s ease-in-out infinite;
+}
+.fbt-ai-cta:hover { filter: brightness(1.1); }
+.fbt-ai-cta:active { transform: scale(0.97); }
+.fbt-ai-cta:focus-visible { outline: 2px solid var(--fbt-b); outline-offset: 3px; }
+.fbt-ai-cta svg { color: rgba(255, 255, 255, 0.95); }
+/* In RTL the chevron should point into the reading direction. */
+[dir='rtl'] .fbt-ai-cta svg { transform: scaleX(-1); }
+@keyframes fbt-cta-pulse {
+  0%, 100% { box-shadow: 0 14px 30px -12px var(--fbt-a), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
+  50% { box-shadow: 0 14px 40px -6px var(--fbt-b), inset 0 1px 0 rgba(255, 255, 255, 0.45); }
+}
+/* ── mascot stage ────────────────────────────────────────────────────────── */
+.fbt-ai-stage {
+  position: relative;
+  flex: 0 0 auto;
+  width: 208px;
+  height: 180px;
+  /* pointer parallax, driven by the two JS-written custom properties */
+  transform: translate3d(calc(var(--fbt-px, 0) * -10px), calc(var(--fbt-py, 0) * -8px), 0);
+  transition: transform 0.2s ease-out;
+}
+.fbt-ai-chart {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.6;
+}
+.fbt-chart-line {
+  stroke-dasharray: 10 12;
+  animation: fbt-dash-travel 9s linear infinite;
+}
+.fbt-chart-line--2 { animation-duration: 12s; animation-direction: reverse; }
+.fbt-chart-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: fbt-ping 2.6s ease-out infinite;
+}
+.fbt-chart-dot { animation: fbt-ping 2.6s ease-out infinite; }
+@keyframes fbt-dash-travel {
+  to { stroke-dashoffset: -132; }
+}
+@keyframes fbt-ping {
+  0% { transform: scale(0.7); opacity: 1; }
+  70%, 100% { transform: scale(2.1); opacity: 0; }
+}
+.fbt-ai-mascot {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  animation: fbt-float 6s ease-in-out infinite;
+  will-change: transform;
+}
+@keyframes fbt-float {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(0, -8px, 0) rotate(-0.6deg); }
+}
+.fox-svg {
+  width: 132px;
+  height: 132px;
+  filter: drop-shadow(0 14px 22px rgba(124, 77, 255, 0.45));
+}
+/* Tap reaction — a quick inhale, separate from the continuous float so the
+   two never fight over the same transform. */
+.fbt-ai-banner.is-touched .fox-svg { animation: fbt-tap 0.75s ease-out; }
+@keyframes fbt-tap {
+  0% { transform: scale(1); }
+  28% { transform: scale(1.07) rotate(-1.5deg); }
+  60% { transform: scale(0.98); }
+  100% { transform: scale(1); }
+}
+@keyframes fbt-core-pulse {
+  0%, 100% { opacity: 0.68; transform: scale(0.94); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+@keyframes fbt-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes fbt-ring-fade {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.65; }
+}
+@keyframes fbt-ear {
+  0%, 88%, 100% { transform: rotate(0deg); }
+  92% { transform: rotate(-4deg); }
+  96% { transform: rotate(3deg); }
+}
+@keyframes fbt-blink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  93% { transform: scaleY(0.12); }
+  96% { transform: scaleY(1); }
+}
+@keyframes fbt-eye-glow {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+@keyframes fbt-gem {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.85; }
+  50% { transform: scale(1.08) rotate(15deg); opacity: 1; }
+}
+/* Holographic dust — drifting motes around the mascot. */
+.fbt-ai-particles { position: absolute; inset: 0; pointer-events: none; }
+.fbt-ai-particle {
+  position: absolute;
+  left: var(--px-x);
+  top: var(--px-y);
+  width: var(--px-s);
+  height: var(--px-s);
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--fbt-b) 90%, transparent) 0%, transparent 72%);
+  animation: fbt-particle var(--px-d) ease-in-out infinite;
+}
+@keyframes fbt-particle {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.18; }
+  50% { transform: translate3d(var(--px-tx), var(--px-ty), 0) scale(1.5); opacity: 0.95; }
+}
+/* Hover wakes the field up a little: the dust drifts faster, the background
+   chart brightens, the eyes pulse quicker and the mascot's glow intensifies.
+   Scoped to devices with a real hover pointer — a touch device would otherwise
+   get a stuck `:hover` after a tap, and it already has the tap pulse above. */
+@media (hover: hover) {
+  .fbt-ai-banner:hover .fbt-ai-particle { animation-duration: calc(var(--px-d) * 0.55); }
+  .fbt-ai-banner:hover .fbt-ai-chart { opacity: 0.85; }
+  .fbt-ai-banner:hover .fox-svg { filter: drop-shadow(0 18px 30px rgba(0, 229, 255, 0.55)); }
+}
+/* ── pause everything while off-screen ───────────────────────────────────── */
+[data-visible='false'] .fbt-ai-glow,
+[data-visible='false'] .fbt-ai-mascot,
+[data-visible='false'] .fbt-ai-particle,
+[data-visible='false'] .fbt-chart-line,
+[data-visible='false'] .fbt-chart-ring,
+[data-visible='false'] .fbt-chart-dot,
+[data-visible='false'] .fbt-ai-dot,
+[data-visible='false'] .fbt-ai-cta {
+  animation-play-state: paused;
+}
+/* ── freeze outright: native, reduced motion, or the app's own setting ──── */
+.fbt-ai-banner[data-still='true'] *,
+.fbt-ai-banner[data-still='true'] {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fbt-ai-banner,
+.fbt-ai-banner * {
+    animation: none !important;
+  }
+/* a panel that never intersects must not stay invisible */
+      .fbt-ai-banner { opacity: 1 !important; transform: none !important; }
+  .fbt-ai-stage { transform: none !important; }
+/* leave the shapes fully drawn rather than half-swept */
+      .fbt-chart-line { stroke-dasharray: none; }
+}
+/* ── responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .fbt-ai-banner {
+    min-height: 150px;
+    padding: 16px 16px;
+    gap: 14px;
+    border-radius: 24px;
+  }
+  .fbt-ai-title { font-size: 19px; }
+  .fbt-ai-desc { font-size: 12px; }
+  .fbt-ai-cta { padding: 9px 13px; font-size: 12.5px; }
+  .fbt-ai-stage { width: 132px; height: 120px; }
+  .fox-svg { width: 96px; height: 96px; }
+}
+@media (max-width: 400px) {
+  .fbt-ai-banner {
+    min-height: 132px;
+    padding: 13px 13px;
+    gap: 10px;
+    border-radius: 22px;
+  }
+  .fbt-ai-title { font-size: 16.5px; }
+  .fbt-ai-desc { font-size: 11.2px; max-width: 100%; }
+  .fbt-ai-stage { width: 104px; height: 100px; }
+  .fox-svg { width: 78px; height: 78px; }
+  .fbt-ai-particles .fbt-ai-particle:nth-child(n + 9) { display: none; }
+}
+/* The showcase is deliberately a dark panel in BOTH themes — it is the one
+   object on a light page that is allowed to stay cinematic, and re-theming it
+   to white would throw away the neon entirely. Light mode only lifts the field
+   and strengthens the border so it reads as an ink-black object rather than a
+   hole punched in the page. */
+:root[data-theme='light'] .fbt-ai-banner {
+  border-color: color-mix(in srgb, var(--fbt-a) 55%, rgba(255, 255, 255, 0.2));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 0 70px -28px var(--fbt-a),
+    0 34px 70px -34px rgba(124, 77, 255, 0.85);
+}
+.fbt-ai-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(8px, 2.6vw, 22px);
+  min-height: 0;
+  padding: clamp(13px, 3.1vw, 21px) clamp(13px, 3.4vw, 23px);
+  border-radius: 24px;
+  background:
+    radial-gradient(120% 150% at 100% 0%, color-mix(in srgb, var(--fbt-a) 34%, transparent), transparent 62%),
+    radial-gradient(90% 150% at 0% 108%, color-mix(in srgb, var(--fbt-b) 20%, transparent), transparent 60%),
+    linear-gradient(128deg, #0b0720 0%, #0a0e1f 58%, #05070f 100%);
+}
+/*
+   THE BACKDROP. One absolutely positioned span, three layers inside it.
+   `inset: 0` + `border-radius: inherit` + `overflow: hidden` means the glows
+   are clipped by the panel's own corners, exactly like the aurora field on the
+   glass cards, and no layout rule can pull them back into flow.
+*/
+.fbt-ai-banner > .fbt-ai-ambient {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.fbt-ai-ambient .fbt-ai-glow--a { inset-inline-end: -16%; top: -58%; width: 70%; }
+.fbt-ai-ambient .fbt-ai-glow--b { inset-inline-start: -18%; bottom: -62%; width: 66%; }
+/* A second, static wash so the panel never looks like a flat gradient at rest
+   (the animated glows are frozen on lite/native and under reduced motion). */
+.fbt-ai-sheen {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1px;
+  display: block;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  opacity: 0.6;
+}
+/* ── the copy column ───────────────────────────────────────────────────── */
+.fbt-ai-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: clamp(6px, 1.5vw, 9px);
+  min-width: 0;
+  max-width: 46ch;
+}
+.fbt-ai-eyebrow {
+  max-width: 100%;
+  padding: 4px 10px;
+  font-size: clamp(8.8px, 2.3vw, 10px);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fbt-ai-title {
+  margin: 0;
+  font-size: clamp(17px, 4.6vw, 25px);
+  line-height: 1.24;
+  font-weight: 800;
+  letter-spacing: -0.012em;
+  color: #ffffff;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+/*
+   The last word carries the neon. `background-clip: text` is static paint —
+   no shimmer, no `filter`, nothing that repaints per frame — and the fallback
+   colour underneath keeps the word readable if the clip is unsupported.
+*/
+.fbt-ai-title-accent {
+  color: #8ff9ff;
+  background-image: linear-gradient(96deg, #8ff9ff 6%, #7cf0ff 38%, #b06bff 92%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.fbt-ai-desc {
+  margin: 0;
+  max-width: 44ch;
+  font-size: clamp(11.2px, 2.9vw, 13px);
+  line-height: 1.68;
+  color: rgba(255, 255, 255, 0.72);
+  overflow-wrap: anywhere;
+}
+/*
+   THE CTA. `fit-content` stops it stretching to the column, `white-space:
+   nowrap` stops the two-word label from breaking in half (it was doing exactly
+   that at 87px), and the glow is static: the old run animated `box-shadow`,
+   which is a paint job on the button every frame for an infinite loop.
+*/
+.fbt-ai-cta {
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 2px;
+  padding: clamp(8px, 2.2vw, 10px) clamp(13px, 3.4vw, 17px);
+  font-size: clamp(11.5px, 3vw, 13px);
+  white-space: nowrap;
+  border-radius: 999px;
+  animation: none;
+  box-shadow:
+    0 12px 26px -12px var(--fbt-a),
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease;
+}
+.fbt-ai-cta:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 16px 30px -12px var(--fbt-b),
+    0 0 0 1px rgba(255, 255, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.fbt-ai-cta-label {
+  display: inline-block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* ── the mascot stage ──────────────────────────────────────────────────── */
+.fbt-ai-stage {
+  position: relative;
+  width: clamp(96px, 26vw, 178px);
+  aspect-ratio: 1 / 1.02;
+  flex: none;
+  transform: translate3d(calc(var(--fbt-px, 0) * -8px), calc(var(--fbt-py, 0) * -6px), 0);
+  transition: transform 0.2s ease-out;
+}
+.fbt-ai-stage-glow {
+  position: absolute;
+  inset: -12%;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--fbt-b) 26%, transparent), transparent 66%);
+  opacity: 0.75;
+  pointer-events: none;
+}
+.fbt-ai-stage .fbt-ai-chart { opacity: 0.72; }
+.fbt-ai-stage .fbt-ai-mascot { padding: 4%; }
+/* The fox fills whatever the stage is — no fixed 132/96/78px ladder that has
+   to be re-tuned every time the panel changes width. */
+.fbt-ai-banner .fox-svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 12px 20px rgba(80, 60, 200, 0.42));
+}
+@keyframes fbt-orbit-fade {
+  0%, 100% { opacity: 0.28; }
+  50% { opacity: 0.6; }
+}
+@keyframes fbt-crest {
+  0%, 100% { opacity: 0.82; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+/* ── guards: the panel is cheap where it has to be ─────────────────────── */
+:root[data-native='true'] .fbt-ai-ambient .fbt-ai-glow,
+:root[data-lite='true'] .fbt-ai-ambient .fbt-ai-glow,
+:root[data-native='true'] .fbt-ai-stage-glow,
+:root[data-lite='true'] .fbt-ai-stage-glow {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fbt-ai-ambient .fbt-ai-glow,
+.fbt-ai-stage-glow,
+.fbt-ai-cta {
+    animation: none !important;
+  }
+  .fbt-ai-cta { transition: none; }
+}
+/* ── small screens: the copy owns the width, the stage gives it back ───── */
+@media (max-width: 480px) {
+  .fbt-ai-banner {
+    gap: 10px;
+    padding: 13px 13px 14px;
+    border-radius: 22px;
+  }
+  .fbt-ai-stage { width: clamp(92px, 25vw, 118px); }
+  .fbt-ai-title { font-size: 17.5px; }
+  .fbt-ai-desc { font-size: 11.4px; line-height: 1.62; }
+  .fbt-ai-eyebrow { padding: 3px 8px; font-size: 9px; letter-spacing: 0.03em; }
+  .fbt-ai-cta { padding: 8px 13px; font-size: 11.5px; }
+}
+@media (max-width: 360px) {
+  .fbt-ai-stage { width: 88px; }
+  .fbt-ai-title { font-size: 16.5px; }
+}
+/* ── wide screens: the panel stops growing before the copy runs out ──────
+   On a tablet the dashboard is ~915px wide, and a two-column promo stretched
+   across all of it left a 290px void between the mascot and the headline —
+   the desktop version of the exact complaint this section exists to fix. A
+   promo is a card, not a board: it now stops at 880px and centres itself in
+   the column, and the type steps up so the panel reads at arm's length
+   instead of looking like a phone card that got stretched. */
+@media (min-width: 900px) {
+  .fbt-ai-banner {
+    max-width: 780px;
+    margin-inline: auto;
+    border-radius: 26px;
+    column-gap: clamp(20px, 3vw, 40px);
+    padding: 22px 26px;
+  }
+  .fbt-ai-stage { width: clamp(150px, 15vw, 196px); }
+/* 46ch stays: the width cap on the panel above is what removes the void,
+     so the copy keeps a comfortable measure instead of growing into a wall
+     of text. */
+      .fbt-ai-title { font-size: clamp(21px, 1.9vw, 26px); }
+  .fbt-ai-desc { font-size: 13px; }
+  .fbt-ai-eyebrow { font-size: 10.5px; }
+  .fbt-ai-cta { font-size: 13px; padding: 11px 18px; }
+}
+/* ==========================================================================
+   THE «سیگنال هوشمند» SHOWCASE — prism pass
+   --------------------------------------------------------------------------
+   «بنر تبلیغاتی سیگنال هوشمند را مدرن‌تر کن.»
+
+   The banner already has its fox, its holographic chart, its aurora and its
+   parallax. What it did not have was the FINISH that makes a promotional card
+   read as part of a modern product rather than as an illustration with a
+   button under it. This pass is that finish:
+
+     · the signature blade cut (three soft corners, one 14px cut on the
+       inline-end bottom corner) — the same geometry as the More sheet and the
+       wallet banners, so the app has ONE corner language instead of three;
+     · a real capsule for the eyebrow instead of floating uppercase text, with
+       the live dot inside it;
+     · a CTA that is a control, not a red shape: a 44px gradient pill with the
+       chevron in its own little disc, one specular edge, and a shine that
+       crosses it ONLY on hover (desktop) or press (touch) — nothing loops;
+     · a spectrum hairline along the bottom edge, which is what stops the card
+       from looking like it was cropped out of a larger image.
+
+   Cost: nothing. Every rule below is colour, radius or shadow on elements that
+   already exist. The shine is a single pseudo-element moved with `transform`,
+   one iteration, and it is disabled with the rest of the banner's motion under
+   reduced motion / native / lite (`.fbt-ai-banner[data-still='true'] *`
+   already stands every animation in here down).
+   ========================================================================== */
+
+.fbt-ai-banner {
+  /* Blade corner: logical, so RTL mirrors it without a duplicate rule. */
+  border-start-start-radius: 30px;
+  border-start-end-radius: 30px;
+  border-end-start-radius: 30px;
+  border-end-end-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 70px -34px var(--fbt-a),
+    0 34px 70px -40px rgba(124, 77, 255, 0.85);
+}
+/* The spectrum hairline along the bottom edge. Static paint, one gradient. */
+.fbt-ai-banner::after {
+  content: '';
+  position: absolute;
+  inset-inline: 12%;
+  bottom: 0;
+  height: 1px;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--fbt-a), var(--fbt-b), transparent);
+  opacity: 0.55;
+}
+.fbt-ai-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  color: rgba(233, 246, 255, 0.94);
+  letter-spacing: 0.1em;
+}
+.fbt-ai-title { letter-spacing: -0.018em; }
+/* ── the control ────────────────────────────────────────────────────────── */
+.fbt-ai-cta {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding-inline: 16px 10px;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 52%),
+    linear-gradient(122deg, var(--fbt-a), var(--fbt-b));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+    0 14px 30px -16px var(--fbt-a);
+  font-weight: 800;
+  letter-spacing: -0.005em;
+}
+/* The chevron gets its own disc — it reads as "go" instead of as punctuation. */
+.fbt-ai-cta svg {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  padding: 5px;
+  box-sizing: content-box;
+  border-radius: 50%;
+  color: #06121c;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 10px -6px rgba(0, 0, 0, 0.77);
+}
+/* One shine across the pill — hover on a pointer, press on touch. Never loops. */
+.fbt-ai-cta::before {
+  content: '';
+  position: absolute;
+  inset-block: -30%;
+  inset-inline-start: -35%;
+  width: 34%;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: translateX(-160%) skewX(-12deg);
+  opacity: 0;
+}
+@media (hover: hover) {
+  .fbt-ai-cta:hover::before {
+    opacity: 1;
+    animation: fbt-cta-shine 0.72s cubic-bezier(0.22, 1, 0.36, 1) 1;
+  }
+}
+.fbt-ai-cta:active::before {
+  opacity: 1;
+  animation: fbt-cta-shine 0.72s cubic-bezier(0.22, 1, 0.36, 1) 1;
+}
+@keyframes fbt-cta-shine {
+  from { transform: translateX(-160%) skewX(-12deg); }
+  to { transform: translateX(420%) skewX(-12deg); }
+}
+@media (max-width: 400px) {
+  .fbt-ai-banner { border-start-start-radius: 22px; border-start-end-radius: 22px; border-end-start-radius: 22px; border-end-end-radius: 12px; }
+  .fbt-ai-cta { min-height: 42px; padding-inline: 14px 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fbt-ai-cta::before { animation: none !important; opacity: 0 !important; }
+}

@@ -1311,6 +1311,16 @@ html[lang='fa'] .iaos-title-sub {
   animation: fadeIn 0.3s ease-out;
 }
 
+/*
+ * `fadeIn` was only ever defined inside ThinkingOrb.jsx's own <style> tag, so
+ * this banner's entrance ran only on a screen where that orb happened to be
+ * mounted. It is defined here, next to the rule that uses it.
+ */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .iaos-session-full-header {
   display: flex;
   flex-direction: column;

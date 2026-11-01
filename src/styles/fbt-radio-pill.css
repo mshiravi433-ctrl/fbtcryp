@@ -46,6 +46,14 @@
   transform-origin: bottom;
 }
 
+/* Defined nowhere until now: `fbr-pill-eqbars` was referenced and missing, so
+   the live radio pill's equaliser bars sat at their resting scaleY(0.3). The
+   rule above runs `alternate`, so two stops are the whole animation. */
+@keyframes fbr-pill-eqbars {
+  from { transform: scaleY(0.3); }
+  to { transform: scaleY(1); }
+}
+
 .fbr-pill.is-live .fbr-pill-eq i { animation: fbr-pill-eqbars 0.85s ease-in-out infinite alternate; }
 
 .fbr-pill-dot {

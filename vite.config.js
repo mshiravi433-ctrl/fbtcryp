@@ -334,6 +334,31 @@ export default defineConfig({
   build: {
     target: 'es2020',
     chunkSizeWarningLimit: 900,
+    /**
+     * Do not gzip every chunk just to print a size table.
+     *
+     * ─── THE 2026-11-01 BUILD THAT DIED AT THE FINISH LINE ──────────────────
+     * This app emits ~410 chunks behind a 1.2 MB entry bundle. Vite's default is
+     * to gzip ALL of them at the end of `writeBundle` purely to print the
+     * «gzip: 26.90 kB» column, and that pass holds the compressed buffers of
+     * every chunk alive at once. With `--max-old-space-size=2400` — the largest
+     * heap this project can be given on a 4 GB machine before the OS starts
+     * killing the process — the assets were all written to disk and the build
+     * then aborted in that reporting pass:
+     *
+     *     FATAL ERROR: Ineffective mark-compacts near heap limit
+     *     Allocation failed - JavaScript heap out of memory
+     *
+     * So a build that had actually FINISHED reported failure, which is the worst
+     * possible outcome for a deploy: the artifacts are correct, the exit code is
+     * not, and the next person raises the heap until the machine swaps.
+     *
+     * Turning the report off removes the peak, not a feature we use: the budget
+     * that matters is enforced by `scripts/check-first-paint.mjs`, which measures
+     * the files it finds on disk (and gzips only the five first-paint assets), so
+     * the 1800 KB gate is unaffected and still runs in CI.
+     */
+    reportCompressedSize: false,
     rollupOptions: {
       output: {
         manualChunks: {

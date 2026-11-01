@@ -6,7 +6,7 @@ import CoinLogo from './CoinLogo';
 import { GlyphTrendDown, GlyphTrendUp } from './market/MarketGlyphs.jsx';
 
 /** A keyboard-accessible market row with a dedicated, full-row navigation target. */
-function CoinRow({ coin, onClick, showSpark = true, rank, metric = null, animate = true }) {
+function CoinRow({ coin, onClick, showSpark = true, rank, metric = null, animate = true, logoPriority = false }) {
   const up = coin.change24h >= 0;
 
   const content = (
@@ -17,7 +17,7 @@ function CoinRow({ coin, onClick, showSpark = true, rank, metric = null, animate
       aria-label={`${coin.name} (${coin.symbol})`}
     >
       {rank != null && <span className="coin-row-rank mono">{rank}</span>}
-      <CoinLogo coin={coin} />
+      <CoinLogo coin={coin} priority={logoPriority} />
 
       <div className="coin-meta">
         <div className="coin-sym">{coin.symbol}</div>
@@ -105,6 +105,7 @@ export default memo(CoinRow, (prev, next) => (
   && prev.rank === next.rank
   && prev.metric === next.metric
   && prev.animate === next.animate
+  && prev.logoPriority === next.logoPriority
   && prev.coin?.id === next.coin?.id
   && prev.coin?.price === next.coin?.price
   && prev.coin?.change24h === next.coin?.change24h

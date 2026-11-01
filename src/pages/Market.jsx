@@ -25,6 +25,7 @@ import MarketStories from '../components/MarketStories';
 import MarketSearch from '../components/market/MarketSearch';
 import MarketSectorRail from '../components/market/MarketSectorRail';
 import MarketOverview from '../components/market/MarketOverview';
+import MarketFreshness from '../components/market/MarketFreshness';
 import SmartMoneyBanner from '../components/market/SmartMoneyBanner';
 import HotCoins from '../components/market/HotCoins';
 import '../styles/market-modern.css';
@@ -39,7 +40,7 @@ import { vsOf } from '../lib/currency';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { getCategory, getMarkets, onMarketVisualsReady } from '../lib/api';
 import { MARKET_CATEGORIES, sectorFromRows } from '../lib/marketSectors';
-import { DEFAULT_SORT, MARKET_SORTS, freshness, marketBreadth, sortMarketRows } from '../lib/marketList';
+import { DEFAULT_SORT, MARKET_SORTS, marketBreadth, sortMarketRows } from '../lib/marketList';
 import { mergeVisuals } from '../lib/marketVisuals';
 import { useAppStore } from '../store/useAppStore';
 import { runPriceAlerts, runTopMoverAlerts, syncPriceWatch } from '../lib/priceAlerts';
@@ -416,12 +417,15 @@ export default function Market() {
    * ticker exists because a static "live" label would keep saying live after
    * the feed had stopped, which is the one thing a price screen must never do.
    */
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 10000);
-    return () => clearInterval(id);
-  }, []);
-  const fresh = freshness(updatedAt, now);
+  /*
+   * The clock moved OUT of this component (2026-11-01). It used to tick here,
+   * which re-rendered the whole screen — stories reel, search results, sector
+   * rail and 60 memoised rows — six times a minute to move ONE number in the
+   * lens head. `<MarketFreshness>` owns the interval now and re-renders a
+   * `<span>`. The rounding (5s steps) and the 90s staleness rule live in
+   * lib/marketList.js `freshness()` and are unchanged: a feed that stopped
+   * answering must stop calling itself live.
+   */
 
   // Sorting menu is an in-flow popover; it never changes the page's layout position.
   const [sortOpen, setSortOpen] = useState(false);
@@ -629,14 +633,7 @@ export default function Market() {
                 <span>{t('marketIntel.railLabel')}</span>
               </h2>
               <div className="mx-terminal-actions">
-                {fresh && (
-                  <span className="market-fresh mx-fresh mono" data-stale={fresh.stale ? 'true' : 'false'} title={t('market.freshTitle')}>
-                    <i aria-hidden="true" />
-                    {fresh.stale
-                      ? t('market.updatedStale', { minutes: Math.max(1, fresh.minutes) })
-                      : t('market.updatedAgo', { seconds: fresh.seconds })}
-                  </span>
-                )}
+                <MarketFreshness updatedAt={updatedAt} />
                 <button
                   type="button"
                   className="market-refresh mx-icon-btn"
@@ -903,6 +900,15 @@ export default function Market() {
                           rank={c.rank || i + 1}
                           metric={rowMetric(c)}
                           animate={false}
+                          /*
+                           * «لوگو ها دیر بالا میاد» — the first rows are the ones a
+                           * reader meets before the list has finished arriving, so
+                           * their artwork is asked for at high priority. Row 9
+                           * onward stays lazy/low: 60 eager requests to one CDN host
+                           * is the queue that caused the complaint in the first
+                           * place (see lib/coinImage.js for the size half of it).
+                           */
+                          logoPriority={i < 8}
                           onClick={() => openCoin(c.id)}
                         />
                         <span className="mx-swap-slot" data-available={swapUrl ? 'true' : undefined}>

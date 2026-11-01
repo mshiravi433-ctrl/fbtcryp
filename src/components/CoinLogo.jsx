@@ -26,6 +26,23 @@ export default function CoinLogo({
   size = 'small',
   px,
   preferVector = false,
+  /*
+   * ─── `priority` — WHY SOME LOGOS ASK THE NETWORK NICER (2026-11-01) ───────
+   *   «لوگو ها دیر بالا میاد»
+   *
+   * Every artwork on this screen was asked for with `loading="lazy"` AND
+   * `fetchpriority="low"`. Both are right for row 400 of a list and both are
+   * wrong for the eight cards above it: a low-priority request is queued
+   * BEHIND the route's own stylesheet and script, so on a phone the first
+   * screen's logos arrive last — after the CSS that hides them until they do.
+   *
+   * `priority` flips exactly two attributes for the handful of artworks that
+   * are on screen at first paint: eager (do not wait for an intersection) and
+   * high (compete with, rather than yield to, the page's own assets). It is a
+   * per-instance decision made by the caller, because only the caller knows
+   * what is above the fold — a component cannot.
+   */
+  priority = false,
   className = 'coin-logo',
   style
 }) {
@@ -94,9 +111,9 @@ export default function CoinLogo({
       <img
         src={src}
         alt=""
-        loading="lazy"
+        loading={priority ? 'eager' : 'lazy'}
         decoding="async"
-        fetchpriority="low"
+        fetchpriority={priority ? 'high' : 'low'}
         referrerPolicy="no-referrer"
         className={loaded ? 'coin-logo-net is-loaded' : 'coin-logo-net'}
         onLoad={() => setLoaded(true)}

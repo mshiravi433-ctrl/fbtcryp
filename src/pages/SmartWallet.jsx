@@ -3,7 +3,21 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
+import { useSettingsStore } from '../store/useSettingsStore';
+import { currencyOf, vsOf } from '../lib/currency';
 import DisclosureCard from '../components/DisclosureCard.jsx';
+/*
+ * The Solana tracking panel — wallet, transactions, whales.
+ *
+ * «در کیف پول هوشمند ردیابی sol کیف پول و تراکنش و نهنگ های سولانا را اضافه کن»
+ *
+ * It belongs on THIS screen because a ceiling nobody can see the wallet of is a
+ * number typed into a form: the panel is the read side of every limit above it.
+ * It ships no signer — the connected Solana address it may prefill is read
+ * through a lazy import inside the panel, so nothing that can sign is pulled
+ * into a surface that only reads.
+ */
+import SolTrackPanel from '../components/smart-wallet/SolTrackPanel';
 import InfoBox from '../components/InfoBox';
 import Switch from '../components/Switch';
 import { IconChevronLeft, IconShield } from '../components/Icons';
@@ -51,6 +65,16 @@ const fmtClock = (ms) => {
  */
 export default function SmartWallet({ embedded = false, onBack }) {
   const { t } = useTranslation();
+  /*
+   * The Solana tracking panel prices a balance and a whale movement in the
+   * reader's own display currency, so this screen resolves it the way every
+   * other screen does: through `currencyOf` (which falls back to USD for the
+   * legacy codes still sitting in old installs) and `vsOf` for the value sent
+   * upstream. The app is USD-only by owner decision — see lib/currency.js — and
+   * reading the store rather than hard-coding `$` is what keeps that true if the
+   * picker ever comes back.
+   */
+  const displayCurrency = currencyOf(useSettingsStore((state) => state.currency));
   const navigate = useNavigate();
   const { haptic } = useTelegram();
   const [tick, setTick] = useState(0);
@@ -369,6 +393,11 @@ export default function SmartWallet({ embedded = false, onBack }) {
           </p>
         )}
       </motion.section>
+
+      {/* ── SOLANA TRACKING · read-only ───────────────────────── */}
+      <motion.div variants={riseIn} initial="hidden" animate="show">
+        <SolTrackPanel vs={vsOf(displayCurrency.code)} currencySymbol={displayCurrency.symbol} />
+      </motion.div>
 
       {/* ── GUARDIANS ───────────────────────────────────────── */}
       <motion.section

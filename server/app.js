@@ -114,6 +114,7 @@ import { dlnCreateTx, dlnQuote, dlnStatus } from './dln.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { readSolanaBalances, readSolanaTokenInfo } from './solanaChainReads.js';
+import { isSolanaAddress, solanaWhaleWatch, trackSolanaWallet } from './solanaTrack.js';
 import { searchSolanaTokens, searchSolanaTokensByMints, solanaSentimentDetail, solanaTokenUniverse } from './solanaTokenMeta.js';
 import { relaySolanaRpc, relayStatus } from './solanaRpcRelay.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
@@ -5735,6 +5736,62 @@ app.get('/api/solana/whales', async (_req, res) => {
     return res.json(out);
   } catch (err) {
     return res.status(502).json({ error: 'SOLSCAN_UPSTREAM_FAILED', detail: String(err.message).slice(0, 160) });
+  }
+});
+
+/*
+ * ─── SOLANA TRACKING — THE SMART WALLET'S READ SIDE ──────────────────────────
+ *   «در کیف پول هوشمند ردیابی sol کیف پول و تراکنش و نهنگ های سولانا را اضافه کن»
+ *
+ * Two GET routes over server/solanaTrack.js: one wallet (balance, tokens, its
+ * last 25 signatures, and the arithmetic that turns those into a value in the
+ * reader's own currency) and the whale feed around it (Solscan's indexed
+ * transfers when a key exists, plus a keyless sample of one recent block per
+ * refresh, accumulated into a rolling ledger).
+ *
+ * Both are reads. Neither signs, broadcasts, or touches a policy ceiling — the
+ * Smart Wallet's limits stay exactly where they were, and nothing here can move
+ * a wallet. Cache headers match the module's own TTLs (60s a wallet, 5min the
+ * whales) so a screen that polls cannot spend an upstream budget twice.
+ *
+ * Failure shapes are the module's own vocabulary, translated to a status:
+ *   400 BAD_ADDRESS      — not a base-58 public key (never a 502)
+ *   502 RPC_UNAVAILABLE / BLOCK_UNAVAILABLE — no node answered
+ *   200 available:false  — every node answered and there was nothing to show,
+ *                          which is a real answer and not an error
+ */
+app.get('/api/solana/track/wallet', async (req, res) => {
+  const address = String(req.query.address || '').trim();
+  if (!isSolanaAddress(address)) {
+    res.set('cache-control', 'no-store');
+    return res.status(400).json({ error: 'BAD_ADDRESS', schema: 'fbt.solana-track.v1' });
+  }
+  const vs = String(req.query.vs || 'usd').toLowerCase();
+  try {
+    const out = await trackSolanaWallet(address, { vs });
+    res.set('cache-control', 'public, max-age=20, s-maxage=60, stale-while-revalidate=120');
+    return res.json(out);
+  } catch (err) {
+    res.set('cache-control', 'no-store');
+    return res.status(502).json({
+      error: err?.code === 'RPC_UNAVAILABLE' ? 'RPC_UNAVAILABLE' : 'SOLANA_TRACK_FAILED',
+      detail: String(err?.detail || err?.message || '').slice(0, 160)
+    });
+  }
+});
+
+app.get('/api/solana/track/whales', async (req, res) => {
+  const vs = String(req.query.vs || 'usd').toLowerCase();
+  try {
+    const out = await solanaWhaleWatch({ vs });
+    res.set('cache-control', 'public, max-age=120, s-maxage=300, stale-while-revalidate=900');
+    return res.json(out);
+  } catch (err) {
+    res.set('cache-control', 'no-store');
+    return res.status(502).json({
+      error: 'SOLANA_WHALE_FEED_FAILED',
+      detail: String(err?.detail || err?.message || '').slice(0, 160)
+    });
   }
 });
 

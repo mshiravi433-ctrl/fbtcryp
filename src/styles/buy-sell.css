@@ -674,6 +674,14 @@
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--bsw-accent) 12%, transparent);
   animation: bswNodePulse 1.8s ease-in-out infinite;
 }
+/* `bswNodePulse` was referenced and never defined: the active step in the
+   buy/sell timeline has been a still ring. Transform-only (no animating
+   box-shadow, which repaints a 21px circle plus its 4px halo every frame). */
+@keyframes bswNodePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.09); }
+}
+
 .buy-sell-timeline li.done { color: var(--bsw-accent); }
 .buy-sell-timeline li.done > span {
   border-color: transparent;
