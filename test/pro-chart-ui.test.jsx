@@ -44,6 +44,20 @@ vi.mock('recharts', () => ({
   ReferenceLine: () => null
 }));
 
+/* The token-page terminal must degrade gracefully when the chart engine
+   cannot build (no canvas / lightweight-charts throws). Force that path in
+   this file so every test exercises the fallback UI, and the dedicated
+   fallback assertion below has a deterministic trigger. */
+vi.mock('lightweight-charts', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    createChart: () => {
+      throw new Error('canvas unsupported in this environment');
+    }
+  };
+});
+
 import TokenChart from '../src/components/ProChart/TokenChart.jsx';
 
 const DAY = 86_400_000;
@@ -160,10 +174,17 @@ describe('token chart', () => {
   });
 
   it('degrades to the fallback candle chart when the engine cannot mount', () => {
-    /* jsdom has no matchMedia / ResizeObserver: ProChart must not throw, and
-       the reader must still get candles from the SVG fallback. */
+    /* lightweight-charts throws when it cannot build a canvas surface (no
+       2d context / stripped WebView). ProChart must not throw: it logs a
+       warning, renders the SVG fallback, and keeps the host mounted so a
+       later rebuild can retry the real engine. */
     const { container } = mount();
-    expect(container.querySelector('[data-testid="pro-chart-canvas"]')).toBeNull();
+    /* The engine host stays mounted (visibility: hidden) so a later rebuild
+       can retry the real engine; the SVG fallback paints on top of it. */
+    const host = container.querySelector('[data-testid="pro-chart-canvas"]');
+    expect(host).toBeTruthy();
+    expect(host.style.visibility).toBe('hidden');
+    expect(container.querySelector('[data-testid="pro-chart-fallback"]')).toBeTruthy();
     expect(screen.getByTestId('token-chart')).toBeTruthy();
   });
 });

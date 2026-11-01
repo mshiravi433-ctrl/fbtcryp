@@ -46,7 +46,7 @@
     "test:price-watch": "node test/price-watch-push-probe.mjs",
     "test:notifications": "node test/notification-design-probe.mjs && node test/notification-sound-probe.mjs && node test/native-notify-probe.mjs && node test/watch-push-probe.mjs && node test/price-watch-push-probe.mjs && vitest run test/notification-bar.test.jsx test/notification-foreground.test.jsx",
     "test:boot": "vitest run test/app-boot.test.jsx",
-    "test:pro-chart": "vitest run test/pro-chart-math.test.js test/pro-chart-ui.test.jsx",
+    "test:pro-chart": "vitest run test/pro-chart-math.test.js test/pro-chart-ui.test.jsx test/pro-chart-engine.test.jsx",
     "preview": "vite preview",
     "start": "node server/index.js",
     "serve": "npm run build && node server/index.js",
