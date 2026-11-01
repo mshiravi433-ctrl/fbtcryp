@@ -3,11 +3,43 @@ import { motion } from 'framer-motion';
 import { fmtPct, fmtUsd } from '../lib/format';
 import Sparkline from './Sparkline';
 import CoinLogo from './CoinLogo';
+import { useNearViewport } from '../hooks/useRowWindow';
 import { GlyphTrendDown, GlyphTrendUp } from './market/MarketGlyphs.jsx';
 
-/** A keyboard-accessible market row with a dedicated, full-row navigation target. */
-function CoinRow({ coin, onClick, showSpark = true, rank, metric = null, animate = true, logoPriority = false }) {
+/**
+ * A keyboard-accessible market row with a dedicated, full-row navigation target.
+ *
+ * ─── `deferSpark` — THE SPARK LINE IS DRAWN WHEN THE ROW IS SEEN ────────────
+ *   «صفحه بازار خیلی کند هست … گاهی چشمک میزنه»
+ *
+ * The number a reader acts on (price, 24h move, name, rank) is text and costs
+ * nothing. The SHAPE beside it is an SVG with a gradient def per row, and a
+ * sixty-row list therefore paints sixty of them in the same commit — which is
+ * invisible for the rows on screen and pure waste for the fifty below it,
+ * where they are also the tiles most likely to be evicted and re-painted while
+ * the reader scrolls.
+ *
+ * `deferSpark` withholds ONLY that decoration until the row has been near the
+ * viewport (see hooks/useRowWindow.js). The row itself, every digit in it and
+ * its tap target are always rendered and always in the DOM, so this changes
+ * nothing about the reading or about find-in-page — the 52px column simply
+ * stays empty for another screen's worth of scroll.
+ *
+ * Callers that draw one row (a hero, a search hit) leave it off; the market
+ * list turns it on.
+ */
+function CoinRow({
+  coin,
+  onClick,
+  showSpark = true,
+  rank,
+  metric = null,
+  animate = true,
+  logoPriority = false,
+  deferSpark = false
+}) {
   const up = coin.change24h >= 0;
+  const [rowRef, near] = useNearViewport({ eager: !deferSpark, rootMargin: '400px' });
 
   const content = (
     <button
@@ -28,8 +60,8 @@ function CoinRow({ coin, onClick, showSpark = true, rank, metric = null, animate
       </div>
 
       {showSpark && (
-        <span className="coin-row-spark" aria-hidden="true">
-          <Sparkline
+        <span className="coin-row-spark" aria-hidden="true" data-spark={near ? 'on' : 'off'}>
+          {near && <Sparkline
             data={coin.sparkline?.slice(-40) ?? []}
             up={up}
             width={52}
@@ -37,7 +69,7 @@ function CoinRow({ coin, onClick, showSpark = true, rank, metric = null, animate
             strokeWidth={1.5}
             glow={false}
             animate={animate}
-          />
+          />}
         </span>
       )}
 
@@ -59,7 +91,7 @@ function CoinRow({ coin, onClick, showSpark = true, rank, metric = null, animate
 
   if (!animate) {
     return (
-      <div className="coin-row" data-coin-id={coin.id}>
+      <div className="coin-row" data-coin-id={coin.id} ref={rowRef}>
         {content}
       </div>
     );
@@ -73,6 +105,7 @@ function CoinRow({ coin, onClick, showSpark = true, rank, metric = null, animate
       transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
       whileTap={{ scale: 0.985 }}
       data-coin-id={coin.id}
+      ref={rowRef}
     >
       {content}
     </motion.div>
@@ -106,6 +139,7 @@ export default memo(CoinRow, (prev, next) => (
   && prev.metric === next.metric
   && prev.animate === next.animate
   && prev.logoPriority === next.logoPriority
+  && prev.deferSpark === next.deferSpark
   && prev.coin?.id === next.coin?.id
   && prev.coin?.price === next.coin?.price
   && prev.coin?.change24h === next.coin?.change24h

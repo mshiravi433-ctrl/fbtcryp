@@ -4445,6 +4445,29 @@ export default function run() {
       /*
        * The bar stays in document flow: no floating search overlay. Native
        * shells still avoid the expensive blur. */
+
+    /*
+     * ─── THE SCROLL BUDGET (2026-11-01) ────────────────────────────────────
+     * «صفحه بازار خیلی کند هست … علت سرعت کم هنگام اسکرول چیه»
+     *
+     * The three surfaces below were the per-frame cost of this screen, and all
+     * three live in the entry stylesheet because they are on screen on every
+     * route: the light field pinned as GPU textures, the nav's `filter` and
+     * `background-position` loops, and the two permanent frosted bars that
+     * re-sample everything scrolling under them. The stop policy itself is
+     * pinned in test/market-scroll-budget.test.mjs and market-perf.css; this
+     * keeps the shell half from drifting back.
+     */
+    const shellCss = read('src/index.css');
+    t('the light field stops being three pinned GPU textures on a touch screen',
+      /@media \(hover: none\), \(max-width: 900px\) \{[\s\S]{0,400}?\.rgb-orb \{[^}]*animation: none !important[^}]*will-change: auto/.test(shellCss));
+    t('...and the nav stops writing paint properties (filter / background-position) every frame',
+      /\.bottom-nav::before \{ animation: none; \}/.test(shellCss)
+      && /\.bottom-nav::after \{[^}]*animation: none/.test(shellCss));
+    t('...and the two permanent frosted bars stop re-sampling the scroll under them',
+      /\.top-bar \{\s*backdrop-filter: none;/.test(shellCss)
+      && /\.bottom-nav \{\s*backdrop-filter: none;/.test(shellCss));
+
       t('the command bar stays anchored in flow and degrades on native',
         /\.market-cmd \{[^}]*position: relative/.test(marketCss)
         && !/\.market-cmd \{[^}]*position: sticky/.test(marketCss)
