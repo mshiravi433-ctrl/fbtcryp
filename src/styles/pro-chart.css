@@ -613,6 +613,84 @@ html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
   .pc-fs-name, .pc-stats-bars { display: none; }
 }
 
+/*
+ * ─── PORTRAIT PHONE: THE VERTICAL TERMINAL ─────────────────────────────────
+ * The terminal is the same screen held upright — which is how most phones
+ * will actually get it, because `orientation.lock` is refused on iOS and in
+ * every embedded frame. Two things were wrong in that case:
+ *
+ *   1. The toolbar was a horizontal SCROLLER. In landscape that is right (the
+ *      height is the scarce axis), but held upright the height is plentiful
+ *      and the width is not — so half the tools (fib / level / measure / zoom /
+ *      PNG / reset) sat off-screen behind a swipe nobody knew to make, and
+ *      `margin-inline-start: auto` on the actions group pushed them further
+ *      out. In portrait the toolbar wraps into rows instead.
+ *
+ *   2. The stage had no height of its own; it was purely `flex: 1 1 auto`. On
+ *      a short viewport — a phone in portrait with the browser toolbar up, or
+ *      a split-screen window — the remaining space after the header, the
+ *      ranges, the legend, the wrapped toolbar and the stats strip collapsed
+ *      the chart to a strip. It now has a floor, expressed in `svh` so the
+ *      mobile browser's collapsing chrome is accounted for.
+ *
+ * Nothing can be clipped: `.pc-fs` becomes vertically scrollable in portrait,
+ * so on a genuinely tiny screen the reader scrolls the chrome instead of
+ * losing the reset button. The chart itself keeps `touch-action: none`, so
+ * scrolling still works by dragging the toolbar or the header.
+ */
+@media (orientation: portrait) {
+  .pc-fs {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-block-end: max(10px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .pc-fs-main > .pc-stage {
+    flex: 1 1 auto;
+    min-height: min(56svh, 460px);
+  }
+
+  .pc-toolbar {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    row-gap: 5px;
+    justify-content: flex-start;
+  }
+
+  .pc-toolgroup--actions { margin-inline-start: 0; }
+
+  /* Two rows of chips is already a lot of chrome on a phone; the group
+     separators stop earning their keep once the toolbar wraps. */
+  .pc-toolgroup { border-inline-end: 0; padding-inline-end: 0; }
+
+  .pc-range { flex: 1 1 auto; justify-content: center; }
+
+  .pc-fs-ranges { gap: 4px; }
+}
+
+/* Very short portrait: keep the chart, hide the sentence-like chrome. */
+@media (orientation: portrait) and (max-height: 640px) {
+  .pc-fs-legend .pc-ohlc .pc-vol { display: none; }
+  .pc-fs-main > .pc-stage { min-height: 46svh; }
+  .pc-fs-hint { font-size: 10px; }
+}
+
+/*
+ * THE FALLBACK FILLS THE STAGE.
+ *
+ * `CandleChart` is an SVG that takes a `height` PROP, and the token page hands
+ * it `fallbackHeight`. For the inline card that number is right (300). In the
+ * full-screen terminal it was `Math.round(window.innerHeight * 0.55)` —
+ * measured BEFORE the overlay existed, so on a phone the picture came up
+ * shorter than the stage it sat in, with a band of empty panel underneath it,
+ * and looked like a broken chart rather than a fallback. The wrapper is
+ * absolutely positioned to fill the stage either way, so the honest fix is to
+ * let the SVG fill it too.
+ */
+.pc-canvas--fallback { display: flex; }
+.pc-canvas--fallback > * { flex: 1 1 auto; width: 100%; min-height: 0; height: 100%; }
+.pc-canvas--fallback .chart-wrap { height: 100% !important; }
+
 /* ── light theme ────────────────────────────────────────────────────────── */
 
 :root[data-theme='light'] .pc {
@@ -652,7 +730,28 @@ html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
   border-color: rgba(16, 20, 40, .12);
   color: #46516c;
 }
-:root[data-theme='light'] .pc-range.is-on { color: #fff; }
+/*
+ * Pressed states in LIGHT theme: ink accents, not raw neon.
+ *
+ * `.pc-range.is-on` / `.pc-chip.is-on` paint a white label on `--rgb-1`,
+ * which is #00e5ff — measured at 1.54:1, i.e. white text that is essentially
+ * invisible. The app already solved this for text/icon use with the `--ink-*`
+ * tokens (#008392 = 4.50:1 on white, #6a3ae0 = 6.37:1), so the light theme
+ * uses those for any surface that carries a label.
+ */
+:root[data-theme='light'] .pc-range.is-on,
+:root[data-theme='light'] .pc-chip.is-on {
+  color: #fff;
+  background: linear-gradient(135deg, var(--ink-cyan), var(--ink-violet));
+}
+:root[data-theme='light'] .pc-live {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 45%, transparent);
+  background: color-mix(in srgb, var(--up) 10%, #fff);
+}
+:root[data-theme='light'] .pc-sym { color: #fff; background: linear-gradient(135deg, var(--ink-cyan), var(--ink-violet)); }
+:root[data-theme='light'] .pc-fs-close { color: var(--down); }
+:root[data-theme='light'] .pc-pill, :root[data-theme='light'] .pill { border-color: color-mix(in srgb, currentColor 28%, transparent); }
 :root[data-theme='light'] .pc-fs-interval { color: #6b7591; }
 :root[data-theme='light'] .pc-fs-main > .pc-stage {
   background: #fff;

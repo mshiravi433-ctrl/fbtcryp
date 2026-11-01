@@ -83,12 +83,64 @@ import {
  * can bring the real engine back.
  */
 
-const UP = '#26a69a';
-const DOWN = '#ef5350';
-const MA_COLORS = { 7: '#00e5ff', 25: '#ff9800', 99: '#ab47bc' };
-const EMA_COLORS = { 21: '#4fc3f7', 55: '#ffd54f' };
-const BB_COLOR = 'rgba(124, 77, 255, 0.85)';
+/*
+ * ─── SERIES COLOURS, PER THEME ──────────────────────────────────────────────
+ * The neon set below is what a chart wants against black. Against the light
+ * theme's white stage the SAME hex values are close to invisible: #ffd54f
+ * (EMA 55) measures about 1.3:1 on #fff and #00e5ff (MA 7) about 1.6:1, so the
+ * moving averages were, literally, not there for a light-theme reader — the
+ * study was drawn and could not be seen. The light set is the same hue family
+ * pushed to a lightness that reads on white (4.5:1 or better for the lines
+ * that carry meaning), which is exactly the rule the app already applies to
+ * its `--ink-*` accent tokens.
+ *
+ * Candles keep their conventional green/red in both themes — every exchange
+ * prints those on a white chart — but the light variants are the darker,
+ * desaturated pair that reads on white instead of the neon pair.
+ */
+const CANDLE_UP = '#26a69a';
+const CANDLE_DOWN = '#ef5350';
 const LINE_COLOR = '#00b8d9';
+
+const THEME_COLORS = {
+  dark: {
+    up: CANDLE_UP,
+    down: CANDLE_DOWN,
+    line: LINE_COLOR,
+    ma: { 7: '#00e5ff', 25: '#ff9800', 99: '#ab47bc' },
+    ema: { 21: '#4fc3f7', 55: '#ffd54f' },
+    bb: 'rgba(124, 77, 255, 0.85)',
+    bbMid: 'rgba(124, 77, 255, 0.45)',
+    rsi: '#7c4dff',
+    macdLine: '#00bcd4',
+    macdSignal: '#ff9800',
+    guide: 'rgba(139, 143, 163, 0.5)',
+    fib: 'rgba(255, 179, 0, 0.55)',
+    level: 'rgba(0, 229, 255, 0.8)'
+  },
+  light: {
+    /* #0f8f7f / #d23a4e: 3.9:1 and 4.2:1 on #fff, and still read as "up" and
+       "down" rather than as green ink and red ink. */
+    up: '#0f8f7f',
+    down: '#d23a4e',
+    line: '#0075a8',
+    ma: { 7: '#007b8f', 25: '#b8650a', 99: '#7b3fbf' },
+    ema: { 21: '#1a6fb5', 55: '#9a6c00' },
+    bb: 'rgba(94, 53, 177, 0.75)',
+    bbMid: 'rgba(94, 53, 177, 0.4)',
+    rsi: '#6a3ae0',
+    macdLine: '#00707e',
+    macdSignal: '#b8650a',
+    guide: 'rgba(60, 72, 100, 0.4)',
+    fib: 'rgba(157, 110, 0, 0.6)',
+    level: 'rgba(0, 115, 145, 0.85)'
+  }
+};
+
+/** The colour set for the current theme. Read at effect time, not module load. */
+function seriesColors(light) {
+  return light ? THEME_COLORS.light : THEME_COLORS.dark;
+}
 
 /** Live light/dark flag, following the app's own `data-theme` attribute. */
 function useLightTheme() {
@@ -157,6 +209,9 @@ function mainData(chartType, candles) {
 function applyOverlays(api, opts) {
   if (!api) return;
   const { overlays = {}, settings = {}, levels = [], fib = [] } = opts;
+  /* The theme's line colours, so a Fibonacci or reader-drawn level is drawn
+     in a colour that is visible on the surface it lands on. */
+  const series = api.series ?? THEME_COLORS.dark;
 
   const setVisible = (series, on) => {
     try {
@@ -187,7 +242,7 @@ function applyOverlays(api, opts) {
       try {
         api.fibLines.push(api.main.createPriceLine({
           price: level.price,
-          color: 'rgba(255, 179, 0, 0.55)',
+          color: series.fib,
           lineWidth: 1,
           lineStyle: api.LineStyle.Dashed,
           axisLabelVisible: true,
@@ -208,7 +263,7 @@ function applyOverlays(api, opts) {
     try {
       api.userLines.push(api.main.createPriceLine({
         price: level.price,
-        color: 'rgba(0, 229, 255, 0.8)',
+        color: series.level,
         lineWidth: 1,
         lineStyle: api.LineStyle.Solid,
         axisLabelVisible: true,
@@ -341,11 +396,24 @@ const ProChart = forwardRef(function ProChart(
   const candlesRef = useRef(candles);
   const volumeRef = useRef(volume);
   const buildKeyRef = useRef(null);
+  /*
+   * Overlay state as refs, read by the theme effect. A theme flip happens far
+   * from the React tree (a MutationObserver on <html>), so the effect that
+   * repaints must be able to read the CURRENT overlays/levels/Fibonacci
+   * without re-subscribing to them — adding them to the deps would rebuild and
+   * re-apply on every crosshair-adjacent render.
+   */
+  const prefsRef = useRef(null);
+  const levelsRef = useRef(levels);
+  const fibRef = useRef(fib);
   const [failed, setFailed] = useState(false);
   const light = useLightTheme();
 
   candlesRef.current = candles;
   volumeRef.current = volume;
+  prefsRef.current = { overlays, settings };
+  levelsRef.current = levels;
+  fibRef.current = fib;
   propsRef.current = { onCrosshair, onChartClick, onWindowStats, onReady, onUnavailable, showPriceLine, doubleTapZoom, lights: light };
 
   /* Double-click / double-tap: dive toward the tapped point, or back out to
@@ -489,7 +557,9 @@ const ProChart = forwardRef(function ProChart(
           ColorType
         } = lib;
 
-        const colors = palette(propsRef.current?.lights);
+        const lightNow = Boolean(propsRef.current?.lights);
+        const colors = palette(lightNow);
+        const series = seriesColors(lightNow);
         const precision = pricePrecision(current[current.length - 1].close);
         const host = hostRef.current;
         hostEl = host;
@@ -550,7 +620,7 @@ const ProChart = forwardRef(function ProChart(
         let main;
         if (chartType === 'line') {
           main = chart.addSeries(LineSeries, {
-            color: LINE_COLOR,
+            color: series.line,
             lineWidth: 2,
             priceFormat,
             priceLineVisible: propsRef.current?.showPriceLine !== false,
@@ -560,7 +630,7 @@ const ProChart = forwardRef(function ProChart(
           });
         } else if (chartType === 'area') {
           main = chart.addSeries(AreaSeries, {
-            lineColor: LINE_COLOR,
+            lineColor: series.line,
             lineWidth: 2,
             topColor: 'rgba(0, 184, 217, 0.32)',
             bottomColor: 'rgba(0, 184, 217, 0.02)',
@@ -572,10 +642,10 @@ const ProChart = forwardRef(function ProChart(
           });
         } else {
           main = chart.addSeries(CandlestickSeries, {
-            upColor: UP,
-            downColor: DOWN,
-            wickUpColor: UP,
-            wickDownColor: DOWN,
+            upColor: series.up,
+            downColor: series.down,
+            wickUpColor: series.up,
+            wickDownColor: series.down,
             borderVisible: false,
             priceFormat,
             priceLineVisible: propsRef.current?.showPriceLine !== false,
@@ -601,17 +671,17 @@ const ProChart = forwardRef(function ProChart(
 
         const ma = {};
         for (const period of [7, 25, 99]) {
-          ma[period] = zone(simpleMovingAverage(current, period), MA_COLORS[period], 1);
+          ma[period] = zone(simpleMovingAverage(current, period), series.ma[period], 1);
         }
         const ema = {};
         for (const period of [21, 55]) {
-          ema[period] = zone(exponentialMovingAverage(current, period), EMA_COLORS[period], 1, LineStyle.Dashed);
+          ema[period] = zone(exponentialMovingAverage(current, period), series.ema[period], 1, LineStyle.Dashed);
         }
         const bands = bollingerBands(current, 20, 2);
         const bb = {
-          upper: zone(bands.upper, BB_COLOR, 1, LineStyle.Solid),
-          middle: zone(bands.middle, 'rgba(124, 77, 255, 0.45)', 1, LineStyle.Dotted),
-          lower: zone(bands.lower, BB_COLOR, 1, LineStyle.Solid)
+          upper: zone(bands.upper, series.bb, 1, LineStyle.Solid),
+          middle: zone(bands.middle, series.bbMid, 1, LineStyle.Dotted),
+          lower: zone(bands.lower, series.bb, 1, LineStyle.Solid)
         };
 
         /* ---- panes (structural: their existence is why we rebuild) ---- */
@@ -633,7 +703,7 @@ const ProChart = forwardRef(function ProChart(
         let rsi = null;
         if (rsiOn) {
           rsi = chart.addSeries(LineSeries, {
-            color: '#7c4dff',
+            color: series.rsi,
             lineWidth: 1.5,
             priceLineVisible: false,
             lastValueVisible: true
@@ -644,7 +714,7 @@ const ProChart = forwardRef(function ProChart(
             try {
               rsi.createPriceLine({
                 price: level,
-                color: 'rgba(139, 143, 163, 0.5)',
+                color: series.guide,
                 lineWidth: 1,
                 lineStyle: LineStyle.Dashed,
                 axisLabelVisible: true,
@@ -665,14 +735,14 @@ const ProChart = forwardRef(function ProChart(
           }, paneIndex);
           hist.setData(components.histogram);
           const line = chart.addSeries(LineSeries, {
-            color: '#00bcd4',
+            color: series.macdLine,
             lineWidth: 1.5,
             priceLineVisible: false,
             lastValueVisible: false
           }, paneIndex);
           line.setData(components.macd);
           const signal = chart.addSeries(LineSeries, {
-            color: '#ff9800',
+            color: series.macdSignal,
             lineWidth: 1.5,
             priceLineVisible: false,
             lastValueVisible: false
@@ -696,6 +766,7 @@ const ProChart = forwardRef(function ProChart(
           macd,
           volumeSeries,
           colors,
+          series,
           candles: current,
           byTime: new Map(current.map((c) => [c.time, c])),
           liveBar: null,
@@ -909,12 +980,29 @@ const ProChart = forwardRef(function ProChart(
     } catch { /* noop */ }
   }, [volume]);
 
-  /* Theme switch without a rebuild — colours are pure options. */
+  /*
+   * Theme switch without a rebuild — colours are pure options.
+   *
+   * This used to repaint ONLY the text, the grid and the crosshair, which left
+   * every STUDY in the dark-theme neon: on the light theme's white stage the
+   * candles, the moving averages, the bands, the RSI and the MACD lines, the
+   * Fibonacci rows and the reader's price levels all stayed the colours they
+   * were built with — several of them at ~1.5:1 against white, i.e. drawn and
+   * invisible. A reader who flipped to light while the terminal was open got a
+   * half-converted chart. Every series is now re-coloured in place (options
+   * only, no rebuild, so the zoom survives), and the Fibonacci / level price
+   * lines are recreated because a price line's colour cannot be re-pointed.
+   */
   useEffect(() => {
     const api = apiRef.current;
     if (!api) return;
     const colors = palette(light);
+    const series = seriesColors(light);
     api.colors = colors;
+    api.series = series;
+    const paint = (handle, options) => {
+      try { handle?.applyOptions(options); } catch { /* disposed */ }
+    };
     try {
       api.chart.applyOptions({
         layout: { textColor: colors.text },
@@ -928,6 +1016,39 @@ const ProChart = forwardRef(function ProChart(
         }
       });
     } catch { /* noop */ }
+
+    if (api.chartType === 'candles') {
+      paint(api.main, {
+        upColor: series.up,
+        downColor: series.down,
+        wickUpColor: series.up,
+        wickDownColor: series.down
+      });
+    } else if (api.chartType === 'line') {
+      paint(api.main, { color: series.line });
+    } else if (api.chartType === 'area') {
+      paint(api.main, { lineColor: series.line });
+    }
+    for (const period of [7, 25, 99]) paint(api.ma?.[period], { color: series.ma[period] });
+    for (const period of [21, 55]) paint(api.ema?.[period], { color: series.ema[period] });
+    paint(api.bb?.upper, { color: series.bb });
+    paint(api.bb?.middle, { color: series.bbMid });
+    paint(api.bb?.lower, { color: series.bb });
+    paint(api.rsi, { color: series.rsi });
+    paint(api.macd?.line, { color: series.macdLine });
+    paint(api.macd?.signal, { color: series.macdSignal });
+    if (api.volumeSeries) {
+      try { api.volumeSeries.setData(volumeRows(volumeRef.current ?? [], api.candles)); } catch { /* noop */ }
+    }
+    /* Fibonacci and user levels are price LINES: recreate them in the new
+       colours. `applyOverlays` owns that lifecycle, so it is the one place
+       that has to run. */
+    applyOverlays(api, {
+      overlays: prefsRef.current?.overlays ?? {},
+      settings: prefsRef.current?.settings ?? {},
+      levels: levelsRef.current ?? [],
+      fib: fibRef.current ?? []
+    });
   }, [light]);
 
   /*

@@ -295,12 +295,16 @@
       "reset": "Reset",
       "rotate": "Landscape / full screen",
       "rotateHint": "The browser would not rotate the screen — turn the phone sideways",
-      "tapRotate": "Tap the rotate button to go back to full-screen landscape",
       "snapshotSaved": "Chart image saved",
       "snapshotFailed": "Could not build the image in this browser",
       "live": "Live",
       "area": "Area",
-      "chartType": "Chart type"
+      "chartType": "Chart type",
+      "range1D": "1D",
+      "range7D": "7D",
+      "range30D": "30D",
+      "range90D": "90D",
+      "range1Y": "1Y"
     },
     "candleNote": "Each candle is one period: the body is open→close, the thin line is the low and high. Green means it closed higher than it opened. The line chart cannot show the high and low — that range is most of what a candle is for.",
     "noCandles": "Candles are not available for this coin right now. We do not draw them from closing prices — the high and the low would be invented, and those are the two numbers a candle exists to show.",

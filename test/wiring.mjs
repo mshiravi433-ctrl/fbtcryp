@@ -5779,6 +5779,42 @@ export default function run() {
     t('candles never fall back to invented data',
       /fallback: \(\) => \[\]/.test(read('src/lib/api.js')));
 
+    /*
+     * ---- the terminal's stored prefs, and the bug that shipped ------------
+     * «وقتی وارد صفحه توکن میشه میزنه مشکلی پیش آمده و دوباره تلاش کنید»
+     *
+     * `loadPrefs()` validated the stored chart type against `CHART_TYPES` — a
+     * constant that was never declared. Any reader who had ever opened the
+     * terminal had a localStorage blob, so the FIRST render of /coin/:id threw
+     * `ReferenceError: CHART_TYPES is not defined` and RouteBoundary turned
+     * the page into its full-screen retry card. A first-time visitor had no
+     * blob, which is why it read as "sometimes".
+     *
+     * The same commit also called `getSimplePrices` from the live-tick effect
+     * without importing it — the next crash waiting behind the first.
+     *
+     * Both are pinned by NAME, against code (comments stripped): a constant
+     * every reader in the file may reference must exist, and every free
+     * identifier that looks like a function has to be imported. That is the
+     * general lesson, but the pins are specific because specific pins are the
+     * ones that read clearly when they fail.
+     */
+    const terminalCode = code(terminal);
+    t('the preference allow-list the terminal validates against exists',
+      /const CHART_TYPES\s*=\s*\[/.test(terminalCode));
+    t('...and the default it falls back to has the keys the loader reads',
+      /chartType:\s*'candles'/.test(terminalCode) && /settings:\s*\{/.test(terminalCode));
+    t('the live spot tick imports the function it calls',
+      /import\s*\{[^}]*\bgetSimplePrices\b[^}]*\}\s*from/.test(terminalCode));
+    /*
+     * Stored preferences are user-writable and outlive every deploy, so the
+     * loader must not index into a value it has not type-checked. The specific
+     * hazard is spreading `stored.overlays.ma` straight into state: a string
+     * or `null` there used to reach the toolbar and blow up on `.ma[7]`.
+     */
+    t('stored preferences are validated before use, not trusted',
+      /function loadPrefs\(\)[\s\S]{0,1400}?typeof value === 'boolean'/.test(terminalCode));
+
     /* ---- wallet: two tabs, real and practice ---- */
     t('the wallet has exactly two tabs', /\['real', 'solana'\]/.test(wallet));
     t('...named real and practice in both languages',
