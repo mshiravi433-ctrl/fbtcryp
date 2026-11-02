@@ -4007,7 +4007,7 @@ app.get('/api/volume/:id', (req, res) => {
  */
 const forecastHits = new Map();
 app.use('/api/forecast', (req, res, next) => {
-  if (req.method === 'GET' && req.path === '/status') return next();
+  if (req.method === 'GET' && (req.path === '/status' || req.path === '/api/forecast/status')) return next();
   const key = req.tgUser?.id ?? req.ip;
   const now = Date.now();
   const rec = forecastHits.get(key);
