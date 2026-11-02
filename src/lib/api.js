@@ -862,6 +862,42 @@ export function getVolumeSeries(id, days = 30, vs = 'usd') {
   });
 }
 
+/**
+ * KRONOS FORECAST — the projected next candles for the token terminal.
+ *
+ * Same honesty rule as getOhlc: NO offline fallback and no direct-upstream
+ * twin. A projection is a model's opinion about the future; there is no
+ * public endpoint that can substitute for it, and a fabricated one would be
+ * worse than none. Failure THROWS — the chart shows «پیش‌بینی در دسترس
+ * نیست» and draws nothing.
+ *
+ * The browser posts the candles it is already drawing, so the projection is
+ * anchored to exactly the bars on screen. The response carries `provider`
+ * (`kronos` | `baseline`) and the model name; the UI must display whichever
+ * one came back, because the baseline is NOT the model and says so.
+ *
+ * Long timeout on purpose: the worker runs an autoregressive model on CPU
+ * (seconds per forecast, cached server-side per new bar).
+ */
+export async function postTokenForecast(candles, { predLen, timeout = 60000 } = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeout);
+  try {
+    const res = await fetch(`${apiBase()}/forecast`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: ctrl.signal,
+      body: JSON.stringify({ candles, predLen })
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP_${res.status}`);
+    if (!Array.isArray(data.candles) || !data.candles.length) throw new Error('EMPTY_FORECAST');
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function getChart(id, days = 1, vs = 'usd') {
   return resilient(`chart:${id}:${days}`, {
     ttl: 60000,

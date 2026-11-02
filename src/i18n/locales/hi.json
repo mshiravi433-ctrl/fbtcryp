@@ -409,7 +409,14 @@
       "range7D": "7दि",
       "range30D": "30दि",
       "range90D": "90दि",
-      "range1Y": "1सा"
+      "range1Y": "1सा",
+      "forecast": "AI पूर्वानुमान",
+      "forecastHint": "Kronos मॉडल से अगली कैंडल का अनुमान लगाएँ",
+      "forecastLoading": "पूर्वानुमान की गणना हो रही है…",
+      "forecastUnavailable": "पूर्वानुमान अभी उपलब्ध नहीं है",
+      "forecastKronos": "Kronos",
+      "forecastBaseline": "बेसलाइन मॉडल",
+      "forecastDisclaimer": "पिछली कैंडलों से मॉडल का अनुमान — वित्तीय सलाह नहीं, गारंटी नहीं।"
     },
     "chartCandle": "कैंडल",
     "chartLine": "लाइन",

@@ -409,7 +409,14 @@
       "range7D": "7Д",
       "range30D": "30Д",
       "range90D": "90Д",
-      "range1Y": "1Г"
+      "range1Y": "1Г",
+      "forecast": "AI-прогноз",
+      "forecastHint": "Спроецировать следующие свечи моделью Kronos",
+      "forecastLoading": "Вычисление прогноза…",
+      "forecastUnavailable": "Прогноз сейчас недоступен",
+      "forecastKronos": "Kronos",
+      "forecastBaseline": "Базовая модель",
+      "forecastDisclaimer": "Прогноз модели на основе прошлых свечей — не финансовая рекомендация и не гарантия."
     },
     "chartCandle": "Свечи",
     "chartLine": "Линия",

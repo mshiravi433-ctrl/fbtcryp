@@ -409,7 +409,14 @@
       "range7D": "7G",
       "range30D": "30G",
       "range90D": "90G",
-      "range1Y": "1Y"
+      "range1Y": "1Y",
+      "forecast": "Yapay zekâ tahmini",
+      "forecastHint": "Sonraki mumları Kronos modeliyle projekte et",
+      "forecastLoading": "Tahmin hesaplanıyor…",
+      "forecastUnavailable": "Tahmin şu anda kullanılamıyor",
+      "forecastKronos": "Kronos",
+      "forecastBaseline": "Temel model",
+      "forecastDisclaimer": "Geçmiş mumlardan model projeksiyonu — yatırım tavsiyesi değildir, garanti değildir."
     },
     "chartCandle": "Mumlar",
     "chartLine": "Çizgi",

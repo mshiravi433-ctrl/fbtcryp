@@ -412,7 +412,14 @@
       "range7D": "۷ دن",
       "range30D": "۳۰ دن",
       "range90D": "۹۰ دن",
-      "range1Y": "۱ سال"
+      "range1Y": "۱ سال",
+      "forecast": "AI پیش گوئی",
+      "forecastHint": "Kronos ماڈل کے ساتھ اگلی کینڈلز کا اندازہ لگائیں",
+      "forecastLoading": "پیش گوئی کا حساب ہو رہا ہے…",
+      "forecastUnavailable": "پیش گوئی اس وقت دستیاب نہیں",
+      "forecastKronos": "Kronos",
+      "forecastBaseline": "بنیادی ماڈل",
+      "forecastDisclaimer": "گذشتہ کینڈلز سے ماڈل کا اندازہ — نہ مالی مشورہ، نہ ضمانت۔"
     },
     "chartCandle": "کینڈل",
     "chartLine": "لائن",

@@ -830,3 +830,77 @@ html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
   .pc-fs { background: #000; }
   :root[data-theme='light'] .pc-fs { background: #fff; }
 }
+
+/* ── AI FORECAST — the projected next candles (Kronos) ──────────────────────
+   A second, violet series on the main pane plus a provenance badge. The
+   colour contract is the point: violet says "model output", never the
+   green/red of a bar that actually printed, and the BASELINE tag wears
+   amber because a reader must see at a glance that this projection is the
+   statistical fallback, not the model. The disclaimer stays on screen the
+   whole time the layer is on — a projection without its caveat is a promise
+   nobody made. No animation, no glow on the big surface: a tool, not a show. */
+.pc-chip--fc:not(.is-on) {
+  border-color: rgba(141, 123, 255, .42);
+  color: #b9aeff;
+}
+.pc-chip--fc.is-on {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, #6f5cff, #a06bff);
+  box-shadow: 0 4px 14px -10px #8d7bff;
+}
+
+.pc-fc {
+  position: absolute;
+  z-index: 3;
+  inset-inline-start: 8px;
+  inset-block-start: 42px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: min(340px, calc(100% - 16px));
+  padding: 5px 8px;
+  border-radius: 9px;
+  background: color-mix(in srgb, #05060b 76%, transparent);
+  border: 1px solid rgba(141, 123, 255, .35);
+  pointer-events: none;
+}
+.pc-fc-tag {
+  font: 800 9.5px/1.25 var(--font-display);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #ffcc80; /* baseline — amber: NOT the model */
+}
+.pc-fc-tag.is-model { color: #a99bff; } /* Kronos itself */
+.pc-fc-model {
+  font-size: 9.5px;
+  color: #8b8fa3;
+}
+.pc-fc-disc {
+  font-size: 9.5px;
+  line-height: 1.45;
+  color: #9aa3bd;
+}
+
+:root[data-theme='light'] .pc-chip--fc:not(.is-on) {
+  border-color: rgba(91, 63, 214, .4);
+  color: #5b3fd6;
+}
+:root[data-theme='light'] .pc-chip--fc.is-on {
+  color: #fff;
+  background: linear-gradient(135deg, #5b3fd6, #7b4fd6);
+}
+:root[data-theme='light'] .pc-fc {
+  background: rgba(255, 255, 255, .9);
+  border-color: rgba(91, 63, 214, .35);
+}
+:root[data-theme='light'] .pc-fc-tag { color: #9a6c00; }
+:root[data-theme='light'] .pc-fc-tag.is-model { color: #5b3fd6; }
+:root[data-theme='light'] .pc-fc-model,
+:root[data-theme='light'] .pc-fc-disc { color: #5b6478; }
+
+@media (prefers-contrast: more) {
+  .pc-chip--fc:not(.is-on) { border-color: rgba(185, 174, 255, .8); color: #eef2fb; }
+  :root[data-theme='light'] .pc-chip--fc:not(.is-on) { border-color: rgba(91, 63, 214, .8); color: #2c1f8f; }
+  .pc-fc { border-color: rgba(185, 174, 255, .8); }
+}

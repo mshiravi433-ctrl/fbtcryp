@@ -20,6 +20,13 @@ ai.yourdomain.com {
 		reverse_proxy searxng:8080
 	}
 
+	# ── Kronos: پیش‌بینی کندل‌های آینده (کارگر مدل، forecast/worker.py) ──
+	# پیشوند /kronos حذف می‌شود: /kronos/forecast  ──►  kronos-worker:8765/forecast
+	# توکن مشترک (KRONOS_WORKER_TOKEN) داخل خود کارگر بررسی می‌شود.
+	handle_path /kronos/* {
+		reverse_proxy kronos-worker:8765
+	}
+
 	# ── Mission Control: کارگر دائمی با دیسک پایدار ──
 	# مسیر کامل حفظ می‌شود؛ worker خودش /api/v1/missions را mount کرده است.
 	handle /api/v1/missions/* {

@@ -116,7 +116,13 @@ const THEME_COLORS = {
     macdSignal: '#ff9800',
     guide: 'rgba(139, 143, 163, 0.5)',
     fib: 'rgba(255, 179, 0, 0.55)',
-    level: 'rgba(0, 229, 255, 0.8)'
+    level: 'rgba(0, 229, 255, 0.8)',
+    /* AI projection: violet family, deliberately NOT the green/red of real
+       bars — a forecast must never be mistakable for a candle that printed. */
+    fcUp: '#8d7bff',
+    fcDown: '#b388ff',
+    fcBodyUp: 'rgba(141, 123, 255, 0.4)',
+    fcBodyDown: 'rgba(179, 136, 255, 0.4)'
   },
   light: {
     /* #0f8f7f / #d23a4e: 3.9:1 and 4.2:1 on #fff, and still read as "up" and
@@ -133,7 +139,13 @@ const THEME_COLORS = {
     macdSignal: '#b8650a',
     guide: 'rgba(60, 72, 100, 0.4)',
     fib: 'rgba(157, 110, 0, 0.6)',
-    level: 'rgba(0, 115, 145, 0.85)'
+    level: 'rgba(0, 115, 145, 0.85)',
+    /* Violet reads as "projection" on white at 4.5:1+, dark enough not to
+       dissolve into the paper the way the neon set would. */
+    fcUp: '#5b3fd6',
+    fcDown: '#7b4fd6',
+    fcBodyUp: 'rgba(91, 63, 214, 0.26)',
+    fcBodyDown: 'rgba(123, 79, 214, 0.26)'
   }
 };
 
@@ -364,6 +376,50 @@ function syncCandles(api, candles, volume, rangeRef) {
   if (firstDiff !== -1 || fullReset) syncDerived(api, candles, volume);
 }
 
+/*
+ * ─── THE AI PROJECTION LAYER ────────────────────────────────────────────────
+ * A second CandlestickSeries holding the NEXT bars a forecast claims — violet,
+ * bordered, semi-transparent, so it can never be confused with a bar that
+ * actually printed. It is NOT structural (it rides the main pane), so showing
+ * or hiding it is an options+setData affair: no rebuild, no lost zoom, exactly
+ * like the moving averages.
+ *
+ * Staleness is clipped here, not by the caller: once a real bar prints inside
+ * the projection's range, that bar is history now — the projection keeps only
+ * the times the market has not spoken for yet, and vanishes when they are all
+ * consumed. TokenChart refetches on the next poll and a fresh projection
+ * takes over.
+ */
+function applyForecast(api, forecast) {
+  if (!api?.forecastSeries) return;
+  const rows = Array.isArray(forecast?.candles) ? forecast.candles : [];
+  try {
+    if (!rows.length) {
+      api.forecastSeries.setData([]);
+      api.forecastSeries.applyOptions({ visible: false });
+      return;
+    }
+    const lastReal = api.candles?.length ? api.candles[api.candles.length - 1].time : 0;
+    const bars = rows
+      .filter((c) => Number.isFinite(c?.t) && Math.floor(c.t / 1000) > lastReal
+        && Number.isFinite(c.o) && Number.isFinite(c.h) && Number.isFinite(c.l) && Number.isFinite(c.c))
+      .map((c) => ({
+        time: Math.floor(c.t / 1000),
+        open: c.o,
+        high: c.h,
+        low: c.l,
+        close: c.c
+      }));
+    if (!bars.length) {
+      api.forecastSeries.setData([]);
+      api.forecastSeries.applyOptions({ visible: false });
+      return;
+    }
+    api.forecastSeries.setData(bars);
+    api.forecastSeries.applyOptions({ visible: true });
+  } catch { /* a disposed series is a no-op, not a crash */ }
+}
+
 const ProChart = forwardRef(function ProChart(
   {
     candles,
@@ -377,6 +433,7 @@ const ProChart = forwardRef(function ProChart(
     settings = {},
     levels = [],
     fib = [],
+    forecast = null,
     locale,
     showPriceLine = true,
     onCrosshair,
@@ -395,6 +452,7 @@ const ProChart = forwardRef(function ProChart(
   const rangeRef = useRef(null);
   const candlesRef = useRef(candles);
   const volumeRef = useRef(volume);
+  const forecastRef = useRef(forecast);
   const buildKeyRef = useRef(null);
   /*
    * Overlay state as refs, read by the theme effect. A theme flip happens far
@@ -411,6 +469,7 @@ const ProChart = forwardRef(function ProChart(
 
   candlesRef.current = candles;
   volumeRef.current = volume;
+  forecastRef.current = forecast;
   prefsRef.current = { overlays, settings };
   levelsRef.current = levels;
   fibRef.current = fib;
@@ -656,6 +715,24 @@ const ProChart = forwardRef(function ProChart(
         main.setData(mainData(chartType, current));
         main.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.08 } });
 
+        /* ---- AI projection series: same pane, violet, hidden until data
+           arrives. Created unconditionally so toggling the forecast never
+           needs a structural rebuild. ---- */
+        const forecastSeries = chart.addSeries(CandlestickSeries, {
+          upColor: series.fcBodyUp,
+          downColor: series.fcBodyDown,
+          wickUpColor: series.fcUp,
+          wickDownColor: series.fcDown,
+          borderVisible: true,
+          borderUpColor: series.fcUp,
+          borderDownColor: series.fcDown,
+          priceFormat,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+          visible: false
+        });
+
         const zone = (values, color, w = 1, style = LineStyle.Solid) => {
           const series = chart.addSeries(LineSeries, {
             color,
@@ -765,6 +842,7 @@ const ProChart = forwardRef(function ProChart(
           rsi,
           macd,
           volumeSeries,
+          forecastSeries,
           colors,
           series,
           candles: current,
@@ -779,6 +857,7 @@ const ProChart = forwardRef(function ProChart(
         apiRef.current = api;
 
         applyOverlays(api, { overlays, settings, levels, fib });
+        applyForecast(api, forecastRef.current);
 
         /*
          * Crosshair read-out is throttled to one React update per frame.
@@ -933,9 +1012,18 @@ const ProChart = forwardRef(function ProChart(
     const api = apiRef.current;
     if (!api) return;
     syncCandles(api, candles, volumeRef.current, rangeRef);
+    /* A fresh bar may have landed INSIDE the projection's range — re-clip so
+       a bar the market already printed is never drawn twice. */
+    applyForecast(api, forecastRef.current);
     emitStats(api);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles]);
+
+  /* The projection itself: data + visibility ride the live series, no
+     rebuild (same contract as every other overlay). */
+  useEffect(() => {
+    applyForecast(apiRef.current, forecast);
+  }, [forecast]);
 
   /* Spot-price tick: move the FORMING candle between OHLC polls. High/low
      only ever widen (a tick is a real traded price inside this bar), and the
@@ -1034,6 +1122,14 @@ const ProChart = forwardRef(function ProChart(
     paint(api.bb?.upper, { color: series.bb });
     paint(api.bb?.middle, { color: series.bbMid });
     paint(api.bb?.lower, { color: series.bb });
+    paint(api.forecastSeries, {
+      upColor: series.fcBodyUp,
+      downColor: series.fcBodyDown,
+      wickUpColor: series.fcUp,
+      wickDownColor: series.fcDown,
+      borderUpColor: series.fcUp,
+      borderDownColor: series.fcDown
+    });
     paint(api.rsi, { color: series.rsi });
     paint(api.macd?.line, { color: series.macdLine });
     paint(api.macd?.signal, { color: series.macdSignal });

@@ -1,0 +1,37 @@
+# KRONOS FORECAST WORKER (Python 3.11 + CPU torch). NOT for serverless.
+# Mirrors Dockerfile.mission-worker's shape: a durable container that holds
+# what an ephemeral Vercel function cannot — in this case the Kronos K-line
+# foundation model (forecast/worker.py) and its Hugging Face weight cache.
+#
+# Build:  docker build -f Dockerfile.kronos-worker -t fbt-kronos-worker .
+# Run:    docker run -p 8765:8765 -v kronos-cache:/root/.cache/huggingface fbt-kronos-worker
+#
+# Torch note: the default PyPI wheel on Linux pulls the CUDA stack (~3.5GB).
+# This image installs the CPU wheel first (download.pytorch.org) so the image
+# stays ~1GB and CPU inference for Kronos-small remains the supported target;
+# set KRONOS_DEVICE=cuda at RUN time if the host has a GPU and a CUDA base.
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    KRONOS_BACKEND=kronos \
+    KRONOS_WORKER_PORT=8765 \
+    HF_HOME=/root/.cache/huggingface
+
+WORKDIR /app
+
+COPY forecast/requirements.txt ./forecast/requirements.txt
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch \
+    && pip install --no-cache-dir -r forecast/requirements.txt
+
+# Vendored model code (forecast/kronos_model, MIT, provenance in that folder)
+# plus the worker and its contract tests.
+COPY forecast ./forecast
+
+EXPOSE 8765
+
+# Weights download lazily on first boot (warm-up thread); start-period covers
+# that download so the healthcheck does not kill a cold start mid-pull.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=180s --retries=3 \
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8765/healthz', timeout=4).status == 200 else 1)"
+
+CMD ["python", "-u", "forecast/worker.py"]
