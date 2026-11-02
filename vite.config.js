@@ -331,6 +331,19 @@ export default defineConfig({
       }
     }
   },
+  /*
+   * ─── TOP-LEVEL, NOT UNDER `build` ──────────────────────────────────────────
+   * `worker` is a root config key. Under `build` it is silently ignored, Vite
+   * falls back to `format: 'iife'`, and the first time the forecast worker is
+   * actually bundled the build dies with "UMD and IIFE output formats are not
+   * supported for code-splitting builds" — a failure that only appears once a
+   * module worker exists, i.e. exactly when this feature is enabled.
+   *
+   * The on-device forecast runs in a MODULE worker (`import()` to pick the
+   * WebGPU or the WASM ONNX Runtime engine), so its output has to be ES.
+   * Nothing else in the app spawns a worker, so no other chunk changes shape.
+   */
+  worker: { format: 'es' },
   build: {
     target: 'es2020',
     chunkSizeWarningLimit: 900,
@@ -359,15 +372,5 @@ export default defineConfig({
      * the 1800 KB gate is unaffected and still runs in CI.
      */
     reportCompressedSize: false,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          react: ['react', 'react-dom', 'react-router-dom'],
-          motion: ['framer-motion'],
-          charts: ['recharts'],
-          i18n: ['i18next', 'react-i18next']
-        }
-      }
-    }
   }
 });
