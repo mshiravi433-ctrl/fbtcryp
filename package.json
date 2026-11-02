@@ -47,7 +47,7 @@
     "test:notifications": "node test/notification-design-probe.mjs && node test/notification-sound-probe.mjs && node test/native-notify-probe.mjs && node test/watch-push-probe.mjs && node test/price-watch-push-probe.mjs && vitest run test/notification-bar.test.jsx test/notification-foreground.test.jsx",
     "test:boot": "vitest run test/app-boot.test.jsx",
     "test:pro-chart": "vitest run test/pro-chart-math.test.js test/pro-chart-ui.test.jsx test/pro-chart-engine.test.jsx test/pro-chart-theme.test.jsx test/pro-chart-prefs.test.jsx test/pro-chart-forecast.test.jsx",
-    "test:forecast": "node --test --test-force-exit test/kronos-forecast.test.mjs && vitest run test/pro-chart-forecast.test.jsx && python3 -m unittest forecast.test_worker",
+    "test:forecast": "node --test --test-force-exit test/kronos-forecast.test.mjs && vitest run test/pro-chart-forecast.test.jsx && python3 -m unittest forecast.test_worker && node --test test/kronos-local-math.test.mjs test/kronos-local-storage.test.mjs && node --test --test-force-exit test/kronos-local-model.test.mjs",
     "preview": "vite preview",
     "start": "node server/index.js",
     "serve": "npm run build && node server/index.js",
@@ -394,7 +394,10 @@
     "test:memory-account": "node test/intent-ai/memwal-account-tool-probe.mjs",
     "test:memory-local": "node test/intent-ai/intent-longterm-local-probe.mjs",
     "test:central-brain-v2": "node test/intent-ai/qdrant-memory-learning-probe.mjs && node test/intent-ai/central-brain-council-probe.mjs && node test/intent-ai/central-brain-api-e2e-probe.mjs",
-    "test:buy-sell-spectrum": "node test/buy-sell-spectrum-probe.mjs"
+    "test:buy-sell-spectrum": "node test/buy-sell-spectrum-probe.mjs",
+    "kronos:export": "python3 scripts/kronos-export-onnx.py",
+    "kronos:fixture": "python3 scripts/kronos-make-fixture.py",
+    "test:kronos-local": "node --test test/kronos-local-math.test.mjs test/kronos-local-storage.test.mjs && node --test --test-force-exit test/kronos-local-model.test.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",
@@ -428,6 +431,7 @@
     "i18next": "^23.14.0",
     "jsqr": "^1.4.0",
     "lightweight-charts": "^5.2.1",
+    "onnxruntime-web": "1.23.0",
     "puppeteer": "^25.9.0",
     "qrcode-generator": "^2.0.4",
     "react": "^18.3.1",

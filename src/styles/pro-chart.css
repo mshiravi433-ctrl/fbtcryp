@@ -947,6 +947,56 @@ html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
   border-radius: 8px; padding: 3px 6px;
   background: var(--bg-raised, #10131d); color: inherit; font: inherit;
 }
+/*
+ * ─── on-device forecast card ────────────────────────────────────────────────
+ * The download prompt, the byte counter, the progress bar and the "this ran
+ * here" badge all live in this card. It has to be readable at 360px in the
+ * inline chart (where the disclaimer is dropped) and comfortable in the
+ * full-screen terminal, in both themes, in RTL.
+ */
+.pc-fc--setup { gap: 7px; }
+.pc-fc-tag.is-local { color: #7fe3c4; }
+:root[data-theme='light'] .pc-fc-tag.is-local { color: #0f7f65; }
+.pc-fc-bytes { font-size: 10px; color: #8f9ab3; }
+.pc-fc-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pc-fc-actions .pc-fc-refresh { margin-inline-start: 0; }
+.pc-fc-go {
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid rgba(127,227,196,.55);
+  border-radius: 9px;
+  background: rgba(127,227,196,.14);
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pc-fc-go:hover { background: rgba(127,227,196,.24); }
+.pc-fc-go:disabled { opacity: .5; cursor: not-allowed; }
+.pc-fc-go:focus-visible { outline: 2px solid #7fe3c4; outline-offset: 2px; }
+.pc-fc-bar {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(141,123,255,.18);
+}
+.pc-fc-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7fe3c4, #a99bff);
+  transition: width .18s linear;
+}
+.pc-fc-note { font-size: 11px; line-height: 1.7; color: var(--text-2, #b7c0d6); }
+.pc-fc-note.is-error { color: #ffcc80; }
+:root[data-theme='light'] .pc-fc-note.is-error { color: #805400; }
+.pc-fc-meta { font-size: 10px; color: #8f9ab3; }
+:root[data-theme='light'] .pc-fc-meta,
+:root[data-theme='light'] .pc-fc-bytes { color: #4d5871; }
+@media (prefers-reduced-motion: reduce) {
+  .pc-fc-bar > span { transition: none; }
+}
 .pc-fs-note { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 8px; flex: 0 0 auto; }
 .pc-fs-note--error, .pc-inline-note { color: #ffcc80; }
 .pc-inline-note { font-size: 11px; line-height: 1.7; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

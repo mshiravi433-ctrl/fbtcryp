@@ -67,3 +67,11 @@ parts/*.mp3
 # Python (forecast worker) — bytecode never ships.
 __pycache__/
 *.py[cod]
+
+# Kronos ONNX model artifacts — build output of scripts/kronos-export-onnx.py.
+# ~33 MB of weights: produced in CI / by the operator, never committed.
+public/kronos-local/
+public/kronos-onnx/
+
+# Local scratch space (probes, one-off scripts) — never shipped.
+.scratch/

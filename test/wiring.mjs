@@ -5797,13 +5797,54 @@ export default function run() {
       /provider: 'baseline'/.test(forecastClient) && /drift-volatility baseline/.test(forecastClient));
     t('...and opens a breaker instead of hanging every chart open',
       /breakerOpen/.test(forecastClient) && /openUntil/.test(forecastClient));
-    t('the terminal wires the forecast toggle to the API',
-      /postTokenForecast/.test(terminal)
-      && /import\s*\{[^}]*\bpostTokenForecast\b[^}]*\}\s*from/.test(code(terminal)));
+    /*
+     * ---- the projection MOVED ONTO THE DEVICE (2026-11-02) ----------------
+     * The terminal used to POST its candles to /api/forecast. It must not any
+     * more: the reader's browser runs the model itself. These pins hold the
+     * new contract, including the two things that are easy to reintroduce by
+     * accident — an import of the server client, and a dependency on the
+     * Kronos worker's environment.
+     */
+    const localClient = read('src/lib/kronosLocal/client.js');
+    const localWorker = read('src/lib/kronosLocal/kronos.worker.js');
+    const localEngine = read('src/lib/kronosLocal/infer.js');
+    t('the terminal runs the forecast on the device, not on the server',
+      /runForecast/.test(terminal) && /from '..\/..\/lib\/kronosLocal\/client.js'/.test(terminal)
+      && !/postTokenForecast/.test(terminal));
+    t('...and no on-device module can reach the API client',
+      !/postTokenForecast|apiBase\(|\/api\/forecast/.test(localClient)
+      && !/postTokenForecast|apiBase\(/.test(localEngine)
+      && !/postTokenForecast|apiBase\(/.test(localWorker));
+    t('...and the browser path needs neither worker env var',
+      !/KRONOS_WORKER_URL|KRONOS_WORKER_TOKEN/.test(localClient)
+      && !/KRONOS_WORKER_URL|KRONOS_WORKER_TOKEN/.test(localEngine)
+      && !/KRONOS_WORKER_URL|KRONOS_WORKER_TOKEN/.test(localWorker)
+      && !/KRONOS_WORKER_URL|KRONOS_WORKER_TOKEN/.test(terminal));
+    t('the model runs in a module worker so the UI thread stays free',
+      /new Worker\(WORKER_URL, \{ type: 'module'/.test(localClient)
+      && /self\.onmessage/.test(localWorker));
+    t('WebGPU is preferred and WASM is the fallback, chosen by a real session',
+      /onnxruntime-web\/webgpu/.test(localWorker) && /onnxruntime-web\/wasm/.test(localWorker)
+      && /buildSessions\(manifest, options\('wasm'\)\)/.test(localWorker));
+    t('nothing is downloaded until the reader asks for it',
+      /prepareModel/.test(localClient) && /downloadModel\(manifest/.test(localClient)
+      && /needs-download/.test(terminal));
+    t('a downloaded model can be deleted again',
+      /forgetModel/.test(localClient) && /forecastDelete/.test(terminal));
+    t('the browser verifies every model file against the manifest',
+      /sha256Hex/.test(read('src/lib/kronosLocal/storage.js'))
+      && /MODEL_FILE_CORRUPT/.test(read('src/lib/kronosLocal/storage.js')));
+    t('the on-device result is labelled as on-device',
+      /forecastLocalTag/.test(terminal) && /kronos-local/.test(localEngine));
+    t('the ONNX exporter is the only place the graphs are produced',
+      existsSync('scripts/kronos-export-onnx.py')
+      && /fbt\.kronos\.browser\.v1/.test(read('scripts/kronos-export-onnx.py')));
+    t('model artifacts and the ORT wasm engines stay out of git',
+      /public\/kronos-local\//.test(read('.gitignore')) && /public\/ort\//.test(read('.gitignore')));
     t('the projection is drawn as its own series, never as a real bar',
       /forecastSeries/.test(read('src/components/ProChart/ProChart.jsx')));
-    t('the badge names the model that answered',
-      /forecastKronos/.test(terminal) && /forecastBaseline/.test(terminal));
+    t('the badge names the model that answered, and where it ran',
+      /forecastKronos/.test(terminal) && /forecastLocalTag/.test(terminal));
     t('the disclaimer rides with the projection',
       /forecastDisclaimer/.test(terminal));
     t('the Kronos worker ships with its own contract tests',
@@ -13625,8 +13666,34 @@ export default function run() {
   {
     const pkg = JSON.parse(read('package.json'));
     const allDeps = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies });
-    const heavy = allDeps.filter((d) => /tfjs|tensorflow|onnx|mediapipe|torch|keras/i.test(d));
-    t(`no heavy ML dependency was added (${heavy.join(', ') || 'clean'})`, heavy.length === 0);
+    /*
+     * ─── THE RULE CHANGED ON PURPOSE (2026-11-02) ─────────────────────────
+     * The old pin was "no ML dependency at all, ever". The forecast now runs
+     * the real Kronos model in the browser, and there is exactly one way to do
+     * that: ONNX Runtime Web. So the invariant is not "nobody added a runtime"
+     * any more — it is "nobody made the reader pay for it":
+     *
+     *   • onnxruntime-web is the ONLY permitted ML dependency (tfjs /
+     *     tensorflow / mediapipe / torch / keras stay banned — nothing needs
+     *     them, and each is a megabyte-scale entry-chunk hazard);
+     *   • no module that is part of the app shell may import it statically: it
+     *     appears only inside the forecast worker, behind a dynamic import, so
+     *     it lands in its own chunk and is fetched when a forecast starts.
+     * `scripts/check-first-paint.mjs` then proves the entry bundle did not
+     * grow — that is the gate that actually protects the first paint.
+     */
+    const heavy = allDeps.filter((d) => /tfjs|tensorflow|onnx|mediapipe|torch|keras/i.test(d)
+      && d !== 'onnxruntime-web');
+    t(`no ML runtime beyond the on-device forecast engine (${heavy.join(', ') || 'clean'})`, heavy.length === 0);
+
+    const onnxImporters = readdirSync('src', { recursive: true })
+      .filter((f) => String(f).endsWith('.js') || String(f).endsWith('.jsx'))
+      .map((f) => String(f).replaceAll('\\', '/'))
+      .filter((f) => /(?:import|require)\s*\(?\s*['"]onnxruntime-web/.test(read(join('src', f))));
+    t('the forecast engine is only reached through a lazy worker import',
+      onnxImporters.length === 1
+      && onnxImporters[0] === 'lib/kronosLocal/kronos.worker.js'
+      && /import\('onnxruntime-web\/webgpu'\)/.test(read('src/lib/kronosLocal/kronos.worker.js')));
 
     const hook = read('src/hooks/telemetry.js');
     const signals = read('src/pages/Signals.jsx');

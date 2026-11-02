@@ -4,7 +4,17 @@ import { useTranslation } from 'react-i18next';
 import ProChart from './ProChart';
 import CoinLogo from '../CoinLogo';
 import { useVolumeSeries } from '../../hooks/useMarket';
-import { getSimplePrices, postTokenForecast } from '../../lib/api';
+import { getSimplePrices } from '../../lib/api';
+import {
+  abortForecast,
+  deviceSupport,
+  downloadEstimate,
+  forgetModel,
+  modelState,
+  prepareModel,
+  runForecast
+} from '../../lib/kronosLocal/client.js';
+import { MIN_CANDLES } from '../../lib/kronosLocal/infer.js';
 import {
   alignVolumeToCandles,
   candleSignature,
@@ -103,6 +113,47 @@ const storage = {
       /* private mode, quota — a preference that cannot be saved is not fatal */
     }
   }
+};
+
+/** Human byte size for the download prompt ("33.4 MB", "۱٬۲۰۰ KB" is not a
+ *  thing anyone reads on a phone plan). */
+function fmtBytes(bytes) {
+  const n = Number(bytes) || 0;
+  if (n >= 1024 * 1024 * 1024) return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+  return `${n} B`;
+}
+
+/**
+ * Error code → i18n key. The engine returns machine codes (EngineError /
+ * KronosStorageError) and the UI is the only place that knows how to say them
+ * in a reader's language. An unknown code falls back to a generic sentence —
+ * never to the raw code.
+ */
+const FORECAST_ERROR_MESSAGES = {
+  DEVICE_UNSUPPORTED: 'coin.pro.forecastUnsupported',
+  SESSION_FAILED: 'coin.pro.forecastBackendFailed',
+  CACHE_UNAVAILABLE: 'coin.pro.forecastNoStorage',
+  MODEL_NOT_HOSTED: 'coin.pro.forecastHostMissing',
+  MANIFEST_UNREACHABLE: 'coin.pro.forecastDownloadFailed',
+  MANIFEST_INVALID: 'coin.pro.forecastDownloadFailed',
+  MODEL_FILE_UNREACHABLE: 'coin.pro.forecastDownloadFailed',
+  MODEL_FILE_CORRUPT: 'coin.pro.forecastCorrupt',
+  MODEL_FILE_TRUNCATED: 'coin.pro.forecastCorrupt',
+  MODEL_NOT_DOWNLOADED: 'coin.pro.forecastDownloadFailed',
+  OUT_OF_MEMORY: 'coin.pro.forecastOOM',
+  WORKER_CRASHED: 'coin.pro.forecastOOM',
+  WORKER_TIMEOUT: 'coin.pro.forecastUnavailable',
+  MODEL_NOT_READY: 'coin.pro.forecastUnavailable',
+  BUSY: 'coin.pro.forecastBusy',
+  CANCELLED: 'coin.pro.forecastCancelled',
+  WORKER_CANCELLED: 'coin.pro.forecastCancelled',
+  INSUFFICIENT_CANDLES: 'coin.pro.forecastShortHistory',
+  CONTEXT_TOO_LARGE: 'coin.pro.forecastShortHistory',
+  INVALID_PROJECTION: 'coin.pro.forecastInvalidOutput',
+  INVALID_TIME_AXIS: 'coin.pro.forecastInvalidOutput',
+  FORECAST_FAILED: 'coin.pro.forecastUnavailable'
 };
 
 /**
@@ -269,13 +320,28 @@ export default function TokenChart({
      the LIVE badge: a tick older than ~45s is history, not "live". */
   const [livePrice, setLivePrice] = useState(null);
   const [liveAt, setLiveAt] = useState(0);
-  // Forecast state is tagged with its request key. A late response can never
-  // paint BTC's projection on ETH, or a 7D projection on a 30D chart.
+  /*
+   * ─── FORECAST: ON THIS DEVICE, NOT ON A SERVER ─────────────────────────
+   * The projection is computed by the Kronos model running INSIDE the
+   * browser (Web Worker + ONNX Runtime Web). Nothing is posted anywhere; the
+   * only network work this feature ever does is downloading the model files,
+   * once, after the reader presses a button that names the size.
+   *
+   * Every state below is keyed by `forecastKey` (coin + range + last bar +
+   * horizon) so a late answer for another coin can never paint this chart.
+   */
   const [forecastOn, setForecastOn] = useState(false);
+  const [forecastPhase, setForecastPhase] = useState('idle');
   const [forecastResult, setForecastResult] = useState(null);
   const [forecastHorizon, setForecastHorizon] = useState('auto');
   const [forecastRefresh, setForecastRefresh] = useState({ key: '', nonce: 0 });
   const [forecastEngineFailed, setForecastEngineFailed] = useState(false);
+  const [forecastEstimate, setForecastEstimate] = useState(null);
+  const [forecastProgress, setForecastProgress] = useState(null);
+  const [forecastError, setForecastError] = useState('');
+  const [forecastMeta, setForecastMeta] = useState(null);
+  const [forecastSupport, setForecastSupport] = useState(null);
+  const forecastAbortRef = useRef(null);
 
   const { chartType, overlays, panes, settings } = prefs;
 
@@ -297,8 +363,11 @@ export default function TokenChart({
     : Number(forecastHorizon);
   const forecastKey = `${coinId}:${range?.days ?? range?.key ?? ''}:${forecastAnchor}:${predLen}`;
   const forecast = forecastOn && forecastResult?.key === forecastKey ? forecastResult.data : null;
-  const forecastState = !forecastOn ? 'idle' : forecastResult?.key === forecastKey ? forecastResult.status : 'loading';
-  const forecastError = forecastResult?.key === forecastKey ? forecastResult.error : '';
+  const forecastBusy = forecastOn && ['checking', 'downloading', 'preparing', 'running'].includes(forecastPhase);
+  // eslint-disable-next-line no-unused-vars
+  const forecastState = !forecastOn
+    ? 'idle'
+    : forecast ? 'ready' : forecastBusy ? 'loading' : forecastPhase;
 
 
   const needVolume = expanded && panes.volume;
@@ -378,38 +447,160 @@ export default function TokenChart({
     };
   }, [coinId]);
 
-  /* One abortable request per visible series + horizon. Polls that only revise
-     the forming candle do not spend another model call; a newly printed bar
-     does. Refresh is explicit and bypasses a cached statistical fallback. */
-  useEffect(() => {
-    if (!forecastOn) return undefined;
+  /*
+   * ─── THE LOCAL FORECAST PIPELINE ───────────────────────────────────────
+   * Checking is free and silent; DOWNLOADING never happens on its own. The
+   * reader is shown the size, presses a button, and can stop at any point.
+   * A coin/range/horizon change aborts the previous run (the worker is
+   * terminated, so no compute is left running behind a stale key).
+   */
+  const stopForecastWork = useCallback(() => {
+    try { abortForecast(); } catch { /* worker already gone */ }
+    const controller = forecastAbortRef.current;
+    forecastAbortRef.current = null;
+    if (controller) controller.abort();
+  }, []);
+
+  const failForecast = useCallback((error) => {
+    if (error?.name === 'AbortError' || error?.code === 'WORKER_CANCELLED') {
+      setForecastPhase('cancelled');
+      return;
+    }
+    const code = error?.code || String(error?.message || 'FORECAST_FAILED');
+    setForecastError(code);
+    setForecastPhase(code === 'INSUFFICIENT_CANDLES' ? 'needs-history' : 'error');
+  }, []);
+
+  const computeForecast = useCallback(async (controller, key, { prepared = false } = {}) => {
     const bars = candlesRef.current;
-    if (bars.length < 40) {
-      setForecastResult({ key: forecastKey, status: 'error', error: 'INSUFFICIENT_CANDLES', data: null });
+    if (bars.length < MIN_CANDLES) {
+      setForecastError('INSUFFICIENT_CANDLES');
+      setForecastPhase('needs-history');
+      return;
+    }
+    setForecastPhase('preparing');
+    try {
+      if (!prepared) await prepareModel({
+        signal: controller.signal,
+        onPhase: (phase) => { if (!controller.signal.aborted && phase !== 'engine') setForecastPhase(phase === 'download' ? 'downloading' : 'preparing'); },
+        onProgress: (progress) => { if (!controller.signal.aborted) setForecastProgress(progress); }
+      });
+      if (controller.signal.aborted) return;
+      setForecastProgress(null);
+      setForecastPhase('running');
+      const payload = bars.slice(-520).map((c) => ({
+        t: c.time * 1000, o: c.open, h: c.high, l: c.low, c: c.close, v: Number.isFinite(c.volume) ? c.volume : 0
+      }));
+      const result = await runForecast(payload, {
+        horizon: predLen,
+        signal: controller.signal
+      });
+      if (controller.signal.aborted) return;
+      setForecastMeta({
+        backend: result.backend,
+        ms: result.timing?.totalMs ?? 0,
+        repaired: result.repaired ?? 0,
+        cached: Boolean(result.cached),
+        window: result.options?.window ?? payload.length
+      });
+      setForecastResult({ key, data: result });
+      setForecastPhase('ready');
+      setForecastError('');
+    } catch (error) {
+      if (!controller.signal.aborted) failForecast(error);
+    }
+  }, [failForecast, predLen]);
+
+  useEffect(() => {
+    if (!forecastOn) {
+      stopForecastWork();
+      setForecastPhase('idle');
+      setForecastError('');
       return undefined;
     }
+    let alive = true;
     const controller = new AbortController();
-    setForecastResult({ key: forecastKey, status: 'loading', data: null });
-    const payload = bars.slice(-512).map((c) => ({
-      t: c.time * 1000, o: c.open, h: c.high, l: c.low, c: c.close
-    }));
-    postTokenForecast(payload, { predLen, signal: controller.signal, refresh: forecastRefresh.key === forecastKey })
-      .then((data) => {
-        if (!controller.signal.aborted) setForecastResult({ key: forecastKey, status: 'ready', data });
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) setForecastResult({
-          key: forecastKey, status: 'error', data: null,
-          error: String(error?.message || 'FORECAST_FAILED')
-        });
+    forecastAbortRef.current = controller;
+    (async () => {
+      const support = deviceSupport();
+      setForecastSupport(support);
+      if (!support.ok) {
+        setForecastPhase('unsupported');
+        return;
+      }
+      setForecastPhase('checking');
+      const state = await modelState();
+      if (!alive) return;
+      if (state.state !== 'ready') {
+        const estimate = await downloadEstimate();
+        if (!alive) return;
+        setForecastEstimate(estimate);
+        setForecastPhase('needs-download');
+        return;
+      }
+      await computeForecast(controller, forecastKey);
+    })().catch((error) => { if (alive) failForecast(error); });
+    return () => {
+      alive = false;
+      controller.abort();
+      stopForecastWork();
+    };
+    // `forecastKey` covers coin + range + last bar + horizon: changing any of
+    // them re-checks (and re-runs) rather than showing another series' bars.
+  }, [forecastOn, forecastKey, forecastRefresh, computeForecast, failForecast, stopForecastWork]);
+
+  const downloadForecastModel = useCallback(async () => {
+    stopForecastWork();
+    const controller = new AbortController();
+    forecastAbortRef.current = controller;
+    const total = forecastEstimate?.modelBytes || 0;
+    setForecastProgress({ loaded: 0, total, percent: 0, file: '' });
+    setForecastPhase('downloading');
+    try {
+      await prepareModel({
+        signal: controller.signal,
+        onPhase: (phase) => { if (!controller.signal.aborted) setForecastPhase(phase === 'engine' ? 'preparing' : 'downloading'); },
+        onProgress: (progress) => { if (!controller.signal.aborted) setForecastProgress(progress); }
       });
-    return () => controller.abort();
-  }, [forecastOn, forecastKey, predLen, forecastRefresh]);
+      if (controller.signal.aborted) return;
+      setForecastProgress(null);
+      await computeForecast(controller, forecastKey, { prepared: true });
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setForecastProgress(null);
+        failForecast(error);
+      }
+    }
+  }, [computeForecast, failForecast, forecastEstimate, forecastKey, stopForecastWork]);
+
+  const cancelForecast = useCallback(() => {
+    stopForecastWork();
+    setForecastProgress(null);
+    setForecastPhase((phase) => (phase === 'downloading' || phase === 'preparing' || phase === 'running' ? 'cancelled' : phase));
+  }, [stopForecastWork]);
+
+  const deleteForecastModel = useCallback(async () => {
+    stopForecastWork();
+    setForecastResult(null);
+    setForecastPhase('checking');
+    try {
+      await forgetModel();
+      const estimate = await downloadEstimate();
+      setForecastEstimate(estimate);
+      setForecastPhase('needs-download');
+    } catch (error) {
+      failForecast(error);
+    }
+  }, [failForecast, stopForecastWork]);
 
   const toggleForecast = useCallback(() => {
-    if (forecastOn) setForecastResult(null);
+    if (forecastOn) {
+      stopForecastWork();
+      setForecastResult(null);
+      setForecastPhase('idle');
+    }
     setForecastOn(!forecastOn);
-  }, [forecastOn]);
+  }, [forecastOn, stopForecastWork]);
   const retryForecast = useCallback(() => setForecastRefresh((value) => ({ key: forecastKey, nonce: value.nonce + 1 })), [forecastKey]);
 
   const toggleOverlay = useCallback((group, key) => {
@@ -731,37 +922,179 @@ export default function TokenChart({
     </div>
   ) : null;
 
-  const forecastErrorMessage = forecastError === 'INSUFFICIENT_CANDLES' ? t('coin.pro.forecastShortHistory', { count: 40 })
-    : forecastError === 'FORECAST_TIMEOUT' ? t('coin.pro.forecastTimeout')
-      : /429|RATE_LIMITED/.test(forecastError) ? t('coin.pro.forecastRateLimited')
-        : t('coin.pro.forecastUnavailable');
+  /*
+   * The forecast card. Every state the local engine can be in is spelled out
+   * — nothing here is a spinner that never resolves, and nothing is drawn
+   * until a real inference has produced validated bars.
+   */
+  const forecastErrorKey = FORECAST_ERROR_MESSAGES[forecastError] || 'coin.pro.forecastUnavailable';
   const forecastLast = forecast?.candles?.[forecast.candles.length - 1];
   const forecastChange = forecastLast && lastBar?.close > 0 ? (forecastLast.c / lastBar.close - 1) * 100 : null;
-  const forecastPanel = forecast ? (
-    <div className="pc-fc" dir="auto" data-testid="forecast-badge">
-      <div className="pc-fc-head">
-        <span className={`pc-fc-tag${forecast.provider === 'kronos' ? ' is-model' : ''}`}>
-          {forecast.provider === 'kronos' ? t('coin.pro.forecastKronos') : t('coin.pro.forecastBaseline')}
-        </span>
-        <span className="pc-fc-model mono" dir="ltr">{String(forecast.model || '').replace(/^.*\//, '')}</span>
-        <button type="button" className="pc-fc-refresh" onClick={retryForecast} aria-label={t('coin.pro.forecastRetry')}>
-          ↻ {t('coin.pro.forecastRetry')}
-        </button>
-      </div>
-      <div className="pc-fc-summary">
-        <span>{t('coin.pro.forecastTarget')} <b className="mono" dir="ltr">{fmtPrice(forecastLast?.c)}</b></span>
-        {forecastChange != null ? <span className={forecastChange >= 0 ? 'up' : 'down'} dir="ltr">{forecastChange >= 0 ? '+' : ''}{forecastChange.toFixed(2)}%</span> : null}
-        <span>{t('coin.pro.forecastHorizonCount', { count: forecast.candles.length })}</span>
-      </div>
-      {forecast.provider !== 'kronos' ? <div className="pc-fc-warning">{t('coin.pro.forecastFallback')}</div> : null}
-      <div className="pc-fc-disc">{t('coin.pro.forecastDisclaimer')}</div>
-    </div>
+  const estimateTotal = forecastEstimate?.totalBytes ?? 0;
+  const progressPercent = forecastProgress?.percent ?? 0;
+  const telegramHint = forecastSupport?.telegram ? (
+    <div className="pc-fc-warning" data-testid="forecast-telegram">{t('coin.pro.forecastTelegram')}</div>
   ) : null;
-  const forecastNotice = forecastOn && forecastState === 'error'
-    ? forecastErrorMessage
-    : forecastOn && forecastState === 'loading'
-      ? t('coin.pro.forecastLoading')
-      : forecast && forecastEngineFailed ? t('coin.pro.forecastCanvasUnavailable') : '';
+  const lowMemoryHint = forecastSupport && forecastSupport.memory > 0 && forecastSupport.memory <= 2 ? (
+    <div className="pc-fc-warning">{t('coin.pro.forecastLowMemory')}</div>
+  ) : null;
+  const cancelButton = (
+    <button type="button" className="pc-fc-refresh" onClick={cancelForecast} data-testid="forecast-cancel">
+      {t('coin.pro.forecastCancel')}
+    </button>
+  );
+
+  let forecastPanel = null;
+  if (forecastOn && forecastPhase === 'needs-download') {
+    forecastPanel = (
+      <div className="pc-fc pc-fc--setup" dir="auto" data-testid="forecast-download">
+        <div className="pc-fc-head">
+          <span className="pc-fc-tag is-local">{t('coin.pro.forecastLocalTag')}</span>
+          <span className="pc-fc-model mono" dir="ltr">
+            {forecastEstimate?.webgpu ? 'Kronos-mini · WebGPU' : 'Kronos-mini · WASM'}
+          </span>
+        </div>
+        <div className="pc-fc-summary">
+          <span data-testid="forecast-download-size">
+            {estimateTotal
+              ? t('coin.pro.forecastDownloadSize', { size: fmtBytes(estimateTotal) })
+              : t('coin.pro.forecastHostMissing')}
+          </span>
+          {forecastEstimate?.modelBytes ? (
+            <span className="pc-fc-bytes mono" dir="ltr">
+              {fmtBytes(forecastEstimate.modelBytes)} + {fmtBytes(forecastEstimate.runtimeBytes)}
+            </span>
+          ) : null}
+        </div>
+        {estimateTotal ? <div className="pc-fc-warning">{t('coin.pro.forecastDownloadWhy')}</div> : null}
+        <div className="pc-fc-actions">
+          <button
+            type="button"
+            className="pc-fc-go"
+            onClick={downloadForecastModel}
+            disabled={!estimateTotal}
+            data-testid="forecast-download-start"
+          >
+            {t('coin.pro.forecastDownloadStart')}
+          </button>
+          <button type="button" className="pc-fc-refresh" onClick={toggleForecast}>
+            {t('coin.pro.forecastCancel')}
+          </button>
+        </div>
+        {telegramHint}
+        {lowMemoryHint}
+        <div className="pc-fc-disc">{t('coin.pro.forecastDisclaimer')}</div>
+      </div>
+    );
+  } else if (forecastOn && forecastPhase === 'downloading') {
+    forecastPanel = (
+      <div className="pc-fc pc-fc--setup" dir="auto" data-testid="forecast-progress">
+        <div className="pc-fc-head">
+          <span className="pc-fc-tag is-local">{t('coin.pro.forecastLocalTag')}</span>
+          <span className="pc-fc-model mono" dir="ltr">{forecastProgress?.file || 'model'}</span>
+        </div>
+        <div className="pc-fc-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent}>
+          <span style={{ width: `${Math.max(2, progressPercent)}%` }} />
+        </div>
+        <div className="pc-fc-summary">
+          <span>
+            {t('coin.pro.forecastDownloadProgress', {
+              percent: progressPercent,
+              loaded: fmtBytes(forecastProgress?.loaded || 0),
+              total: fmtBytes(forecastProgress?.total || estimateTotal)
+            })}
+          </span>
+        </div>
+        <div className="pc-fc-actions">{cancelButton}</div>
+      </div>
+    );
+  } else if (forecastOn && (forecastPhase === 'preparing' || forecastPhase === 'checking')) {
+    forecastPanel = (
+      <div className="pc-fc pc-fc--setup" dir="auto" role="status" aria-live="polite" data-testid="forecast-preparing">
+        <div className="pc-fc-head">
+          <span className="pc-fc-tag is-local">{t('coin.pro.forecastLocalTag')}</span>
+          <span className="pc-spinner" aria-hidden="true" />
+        </div>
+        <div className="pc-fc-summary"><span>{t('coin.pro.forecastPreparing')}</span></div>
+        <div className="pc-fc-disc">{t('coin.pro.forecastLocalNote')}</div>
+      </div>
+    );
+  } else if (forecastOn && forecastPhase === 'running') {
+    forecastPanel = (
+      <div className="pc-fc pc-fc--setup" dir="auto" role="status" aria-live="polite" data-testid="forecast-running">
+        <div className="pc-fc-head">
+          <span className="pc-fc-tag is-local">{t('coin.pro.forecastLocalTag')}</span>
+          <span className="pc-spinner" aria-hidden="true" />
+        </div>
+        <div className="pc-fc-summary"><span>{t('coin.pro.forecastRunning')}</span></div>
+        <div className="pc-fc-actions">{cancelButton}</div>
+      </div>
+    );
+  } else if (forecastOn && (forecastPhase === 'unsupported' || forecastPhase === 'needs-history'
+    || forecastPhase === 'error' || forecastPhase === 'cancelled')) {
+    forecastPanel = (
+      <div className="pc-fc pc-fc--setup" dir="auto" role="status" data-testid="forecast-error">
+        <div className="pc-fc-head">
+          <span className="pc-fc-tag is-local">{t('coin.pro.forecastLocalTag')}</span>
+        </div>
+        <div className={`pc-fc-note${forecastPhase === 'cancelled' ? '' : ' is-error'}`}>
+          {forecastPhase === 'cancelled'
+            ? t('coin.pro.forecastCancelled')
+            : forecastPhase === 'unsupported'
+              ? t('coin.pro.forecastUnsupported')
+              : forecastPhase === 'needs-history'
+                ? t('coin.pro.forecastShortHistory', { count: MIN_CANDLES })
+                : t(forecastErrorKey)}
+        </div>
+        {telegramHint}
+        {forecastPhase === 'unsupported' ? <div className="pc-fc-warning">{t('coin.pro.forecastLocalNote')}</div> : null}
+        <div className="pc-fc-actions">
+          {forecastPhase !== 'unsupported' && forecastPhase !== 'needs-history' ? (
+            <button type="button" className="pc-fc-refresh" onClick={retryForecast} data-testid="forecast-retry">
+              ↻ {t('coin.pro.forecastRetry')}
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  } else if (forecast) {
+    forecastPanel = (
+      <div className="pc-fc" dir="auto" data-testid="forecast-badge">
+        <div className="pc-fc-head">
+          <span className="pc-fc-tag is-model is-local">
+            {t('coin.pro.forecastKronos')} · {t('coin.pro.forecastLocalTag')}
+          </span>
+          <span className="pc-fc-model mono" dir="ltr">{String(forecast.model || '').replace(/^.*\//, '')}</span>
+          <button type="button" className="pc-fc-refresh" onClick={retryForecast} aria-label={t('coin.pro.forecastRetry')} data-testid="forecast-refresh">
+            ↻ {t('coin.pro.forecastRetry')}
+          </button>
+        </div>
+        <div className="pc-fc-summary">
+          <span>{t('coin.pro.forecastTarget')} <b className="mono" dir="ltr">{fmtPrice(forecastLast?.c)}</b></span>
+          {forecastChange != null ? <span className={forecastChange >= 0 ? 'up' : 'down'} dir="ltr">{forecastChange >= 0 ? '+' : ''}{forecastChange.toFixed(2)}%</span> : null}
+          <span>{t('coin.pro.forecastHorizonCount', { count: forecast.candles.length })}</span>
+        </div>
+        {forecastMeta ? (
+          <div className="pc-fc-meta mono" dir="ltr" data-testid="forecast-meta">
+            {String(forecastMeta.backend || '').toUpperCase()} · {forecastMeta.ms} ms · {t('coin.pro.forecastWindowBars', { count: forecastMeta.window })}
+            {forecastMeta.cached ? ' · cache' : ''}
+          </div>
+        ) : null}
+        {forecastMeta?.repaired ? (
+          <div className="pc-fc-warning">{t('coin.pro.forecastRepaired', { count: forecastMeta.repaired })}</div>
+        ) : null}
+        <div className="pc-fc-warning">{t('coin.pro.forecastOnDeviceNote')}</div>
+        <div className="pc-fc-actions">
+          <button type="button" className="pc-fc-refresh" onClick={deleteForecastModel} data-testid="forecast-delete">
+            {t('coin.pro.forecastDelete')}
+          </button>
+        </div>
+        <div className="pc-fc-disc">{t('coin.pro.forecastDisclaimer')}</div>
+      </div>
+    );
+  }
+
+  const forecastNotice = forecastOn && forecastEngineFailed ? t('coin.pro.forecastCanvasUnavailable') : '';
 
   const toolbar = (
     <div className="pc-toolbar" role="toolbar" aria-label={t('coin.pro.tools')}>
@@ -809,11 +1142,11 @@ export default function TokenChart({
           onClick={toggleForecast}
           title={t('coin.pro.forecastHint')}
           disabled={!hasCandles}
-          busy={forecastState === 'loading'}
+          busy={forecastBusy}
           data-testid="forecast-toggle"
           tone="fc"
         >
-          {forecastState === 'loading' ? <span className="pc-spinner" aria-hidden="true" /> : null}
+          {forecastBusy ? <span className="pc-spinner" aria-hidden="true" /> : null}
           {t('coin.pro.forecast')}
         </Chip>
         {forecastOn ? <label className="pc-fc-horizon">
@@ -956,9 +1289,8 @@ export default function TokenChart({
       {needVolume && !volumeReady && !volumeLoading ? (
         <div className="pc-fs-note">{t('coin.pro.volumeUnavailable')}</div>
       ) : null}
-      {forecastNotice ? <div className={`pc-fs-note${forecastState === 'error' ? ' pc-fs-note--error' : ''}`} role="status" aria-live="polite">
+      {forecastNotice ? <div className="pc-fs-note" role="status" aria-live="polite">
         {forecastNotice}
-        {forecastState === 'error' && forecastError !== 'INSUFFICIENT_CANDLES' ? <button type="button" className="pc-fc-refresh" onClick={retryForecast}>{t('coin.pro.forecastRetry')}</button> : null}
       </div> : null}
     </div>,
     document.body
@@ -970,7 +1302,7 @@ export default function TokenChart({
         {legend}
         <div className="pc-inline-actions">
           {!expanded ? <Chip active={forecastOn} onClick={toggleForecast} tone="fc" disabled={!hasCandles}
-            busy={forecastState === 'loading'} title={t('coin.pro.forecastHint')} data-testid="forecast-toggle">
+            busy={forecastBusy} title={t('coin.pro.forecastHint')} data-testid="forecast-toggle">
             {t('coin.pro.forecast')}
           </Chip> : null}
           {liveBadge}
@@ -1030,7 +1362,6 @@ export default function TokenChart({
       {!expanded && forecastPanel}
       {!expanded && forecastNotice ? <div className="pc-inline-note" role="status" aria-live="polite">
         {forecastNotice}
-        {forecastState === 'error' && forecastError !== 'INSUFFICIENT_CANDLES' ? <button type="button" className="pc-fc-refresh" onClick={retryForecast}>{t('coin.pro.forecastRetry')}</button> : null}
       </div> : null}
       {overlay}
     </div>
