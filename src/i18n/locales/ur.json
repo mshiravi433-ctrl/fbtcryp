@@ -419,7 +419,17 @@
       "forecastUnavailable": "پیش گوئی اس وقت دستیاب نہیں",
       "forecastKronos": "Kronos",
       "forecastBaseline": "بنیادی ماڈل",
-      "forecastDisclaimer": "گذشتہ کینڈلز سے ماڈل کا اندازہ — نہ مالی مشورہ، نہ ضمانت۔"
+      "forecastDisclaimer": "گذشتہ کینڈلز سے ماڈل کا اندازہ — نہ مالی مشورہ، نہ ضمانت۔",
+      "forecastRetry": "دوبارہ کوشش",
+      "forecastHorizon": "پیش گوئی کینڈلز",
+      "forecastAuto": "خودکار",
+      "forecastHorizonCount": "آنے والی {{count}} کینڈلز",
+      "forecastTarget": "منظرنامے کی آخری قیمت",
+      "forecastFallback": "Kronos دستیاب نہیں۔ یہ شماریاتی تخمینہ ہے، AI پیش گوئی نہیں۔",
+      "forecastShortHistory": "کم از کم {{count}} حقیقی کینڈلز چاہیے۔ طویل مدت منتخب کریں۔",
+      "forecastTimeout": "ماڈل کو بہت وقت لگا۔ دوبارہ کوشش کریں یا مختصر مدت چنیں۔",
+      "forecastRateLimited": "بہت زیادہ درخواستیں۔ ایک منٹ بعد دوبارہ کوشش کریں۔",
+      "forecastCanvasUnavailable": "انٹرایکٹو چارٹ دستیاب نہیں؛ منظرنامہ سادہ چارٹ پر دکھایا گیا ہے۔"
     },
     "chartCandle": "کینڈل",
     "chartLine": "لائن",

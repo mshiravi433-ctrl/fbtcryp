@@ -416,7 +416,17 @@
       "forecastUnavailable": "Prakiraan tidak tersedia saat ini",
       "forecastKronos": "Kronos",
       "forecastBaseline": "Model dasar",
-      "forecastDisclaimer": "Proyeksi model dari candle lalu — bukan nasihat keuangan, bukan jaminan."
+      "forecastDisclaimer": "Proyeksi model dari candle lalu — bukan nasihat keuangan, bukan jaminan.",
+      "forecastRetry": "Coba lagi",
+      "forecastHorizon": "Candle prakiraan",
+      "forecastAuto": "Otomatis",
+      "forecastHorizonCount": "{{count}} candle mendatang",
+      "forecastTarget": "Harga akhir skenario",
+      "forecastFallback": "Kronos tidak tersedia. Ini estimasi statistik, bukan prediksi AI.",
+      "forecastShortHistory": "Perlu setidaknya {{count}} candle nyata. Pilih rentang lebih panjang.",
+      "forecastTimeout": "Model terlalu lama. Coba lagi atau pilih horizon lebih pendek.",
+      "forecastRateLimited": "Terlalu banyak permintaan. Tunggu satu menit lalu coba lagi.",
+      "forecastCanvasUnavailable": "Grafik interaktif tidak tersedia; skenario ditampilkan pada grafik sederhana."
     },
     "chartCandle": "Candle",
     "chartLine": "Garis",

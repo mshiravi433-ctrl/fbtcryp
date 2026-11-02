@@ -416,7 +416,17 @@
       "forecastUnavailable": "पूर्वानुमान अभी उपलब्ध नहीं है",
       "forecastKronos": "Kronos",
       "forecastBaseline": "बेसलाइन मॉडल",
-      "forecastDisclaimer": "पिछली कैंडलों से मॉडल का अनुमान — वित्तीय सलाह नहीं, गारंटी नहीं।"
+      "forecastDisclaimer": "पिछली कैंडलों से मॉडल का अनुमान — वित्तीय सलाह नहीं, गारंटी नहीं।",
+      "forecastRetry": "फिर प्रयास करें",
+      "forecastHorizon": "पूर्वानुमान कैंडल",
+      "forecastAuto": "स्वचालित",
+      "forecastHorizonCount": "आने वाली {{count}} कैंडल",
+      "forecastTarget": "परिदृश्य का अंतिम मूल्य",
+      "forecastFallback": "Kronos उपलब्ध नहीं है। यह सांख्यिकीय अनुमान है, AI पूर्वानुमान नहीं।",
+      "forecastShortHistory": "कम से कम {{count}} वास्तविक कैंडल चाहिए। लंबी अवधि चुनें।",
+      "forecastTimeout": "मॉडल को बहुत समय लगा। फिर प्रयास करें या छोटी अवधि चुनें।",
+      "forecastRateLimited": "बहुत अधिक अनुरोध। एक मिनट बाद प्रयास करें।",
+      "forecastCanvasUnavailable": "इंटरैक्टिव चार्ट उपलब्ध नहीं है; परिदृश्य सरल चार्ट पर दिखता है।"
     },
     "chartCandle": "कैंडल",
     "chartLine": "लाइन",

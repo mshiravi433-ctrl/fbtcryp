@@ -51,7 +51,9 @@ Run
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+import math
 import os
 import re
 import threading
@@ -85,6 +87,7 @@ _state: dict[str, Any] = {
     "model": MODEL_ID if BACKEND == "kronos" else "mock-continuation",
     "startedAt": time.time(),
     "forecasts": 0,
+    "nextRetryAt": 0.0,
 }
 _load_lock = threading.Lock()       # one loader
 _infer_lock = threading.Lock()      # one inference (CPU budget is one core)
@@ -144,8 +147,8 @@ def validate_payload(body: Any) -> tuple[list[dict], int, dict]:
         c = _num(row.get("c"), f"CANDLE_{i}_C")
         if min(o, h, l, c) <= 0:
             raise BadRequest(f"CANDLE_{i}_NON_POSITIVE")
-        if h < l:
-            raise BadRequest(f"CANDLE_{i}_HIGH_BELOW_LOW")
+        if h < l or h < max(o, c) or l > min(o, c):
+            raise BadRequest(f"CANDLE_{i}_INCONSISTENT_OHLC")
         v = row.get("v", 0)
         v = 0.0 if v is None else _num(v, f"CANDLE_{i}_V")
         if v < 0:
@@ -203,42 +206,47 @@ def future_times(candles: list[dict], pred_len: int) -> list[int]:
 
 # ── backends ─────────────────────────────────────────────────────────────────
 
-def _ensure_model() -> Any:
-    """Load tokenizer+model exactly once, on the first caller's thread."""
-    global _predictor, _load_lock
+def _ensure_model(loader=None) -> Any:
+    """Load once; a transient download/OOM failure may heal after a cooldown.
+
+    The injectable loader is a test seam. Production uses the vendored Kronos
+    code and official weights. Exception prose never reaches health/API clients
+    because download exceptions can contain signed URLs or credentials.
+    """
+    global _predictor
+    if BACKEND != "kronos":
+        raise RuntimeError("BACKEND_DISABLED")
     if _predictor is not None:
         return _predictor
     with _load_lock:
         if _predictor is not None:
             return _predictor
-        if _state["error"] and not _state["loading"]:
-            raise RuntimeError(str(_state["error"]))
+        if _state["loading"] or time.monotonic() < _state["nextRetryAt"]:
+            raise RuntimeError("MODEL_LOADING")
+        _state.update(loading=True, error=None)
         try:
-            import torch  # noqa: PLC0415 — heavy, load only when the backend is real
-            try:
-                from .kronos_model import Kronos, KronosPredictor, KronosTokenizer  # noqa: PLC0415
-            except ImportError:  # script mode: python3 forecast/worker.py
-                from kronos_model import Kronos, KronosPredictor, KronosTokenizer  # noqa: PLC0415
-
-            device = DEVICE
-            if device is None:
-                device = "cuda:0" if torch.cuda.is_available() else "cpu"
-            tokenizer = KronosTokenizer.from_pretrained(TOKENIZER_ID)
-            model = Kronos.from_pretrained(MODEL_ID)
-            tokenizer.eval()
-            model.eval()
-            predictor = KronosPredictor(model, tokenizer, device=device, max_context=MAX_CONTEXT)
-            _predictor = predictor
-            _state["loaded"] = True
-            _state["loading"] = False
-            _state["error"] = None
-            _state["model"] = MODEL_ID
-            return predictor
-        except Exception as exc:  # noqa: BLE001 — any load failure is the same answer
-            _state["loading"] = False
-            _state["loaded"] = False
-            _state["error"] = f"MODEL_LOAD_FAILED:{type(exc).__name__}:{str(exc)[:180]}"
-            raise RuntimeError(_state["error"]) from exc
+            if loader is None:
+                import torch  # noqa: PLC0415 — heavy, load only for real inference
+                torch.set_num_threads(max(1, min(8, int(os.environ.get("KRONOS_CPU_THREADS", "4")))))
+                try:
+                    from .kronos_model import Kronos, KronosPredictor, KronosTokenizer  # noqa: PLC0415
+                except ImportError:
+                    from kronos_model import Kronos, KronosPredictor, KronosTokenizer  # noqa: PLC0415
+                device = DEVICE or ("cuda:0" if torch.cuda.is_available() else "cpu")
+                tokenizer = KronosTokenizer.from_pretrained(TOKENIZER_ID)
+                model = Kronos.from_pretrained(MODEL_ID)
+                tokenizer.eval()
+                model.eval()
+                loader = lambda: KronosPredictor(model, tokenizer, device=device, max_context=MAX_CONTEXT)
+            _predictor = loader()
+            _state.update(loaded=True, loading=False, error=None, nextRetryAt=0.0, model=MODEL_ID)
+            return _predictor
+        except Exception as exc:  # noqa: BLE001
+            _state.update(loaded=False, loading=False, error="MODEL_LOAD_FAILED",
+                          nextRetryAt=time.monotonic() + 60.0)
+            # Log only the class, never a potentially secret-bearing message.
+            print(f"[kronos-worker] model load failed: {type(exc).__name__}", flush=True)
+            raise RuntimeError("MODEL_LOAD_FAILED") from None
 
 
 def run_kronos(candles: list[dict], pred_len: int, opts: dict) -> list[dict]:
@@ -278,10 +286,11 @@ def run_kronos(candles: list[dict], pred_len: int, opts: dict) -> list[dict]:
         lo, hi = min(o, c), max(o, c)
         h = max(h, hi)
         l = min(l, lo)
-        import math  # noqa: PLC0415
         if not all(math.isfinite(v) for v in (o, h, l, c)) or min(o, h, l, c) <= 0:
-            o = h = l = c = candles[-1]["c"]
-        out.append({"t": t, "o": o, "h": h, "l": l, "c": c, "v": max(0.0, float(row.get("volume", 0) or 0))})
+            raise ValueError("MODEL_INVALID_PROJECTION")
+        raw_volume = float(row.get("volume", 0) or 0)
+        volume = raw_volume if math.isfinite(raw_volume) and raw_volume >= 0 else 0.0
+        out.append({"t": t, "o": o, "h": h, "l": l, "c": c, "v": volume})
     return out
 
 
@@ -322,7 +331,7 @@ def run_mock(candles: list[dict], pred_len: int, opts: dict) -> list[dict]:
 
 def run_forecast(candles: list[dict], pred_len: int, opts: dict) -> tuple[list[dict], str, str]:
     """Dispatch to the configured backend under the single-flight lock."""
-    if not _infer_lock.acquire(timeout=120):
+    if not _infer_lock.acquire(timeout=2):
         raise TimeoutError("BUSY")
     try:
         if BACKEND == "mock":
@@ -360,15 +369,16 @@ class Handler(BaseHTTPRequestHandler):
         if not got:
             auth = self.headers.get("Authorization", "")
             got = auth[7:] if auth.startswith("Bearer ") else ""
-        return got == AUTH_TOKEN
+        return hmac.compare_digest(got, AUTH_TOKEN)
 
     def do_GET(self) -> None:  # noqa: N802 — http.server naming
         path = self.path.split("?", 1)[0]
         if path in ("/healthz", "/forecast/healthz"):
+            ready = BACKEND == "mock" or bool(_state["loaded"])
             self._send(
-                200,
+                200 if ready else 503,
                 {
-                    "ok": True,
+                    "ok": ready,
                     "backend": BACKEND,
                     "loaded": bool(_state["loaded"]),
                     "loading": bool(_state["loading"]),
@@ -376,6 +386,7 @@ class Handler(BaseHTTPRequestHandler):
                     "maxContext": MAX_CONTEXT,
                     "forecasts": int(_state["forecasts"]),
                     "error": _state["error"],
+                    "retryInSeconds": max(0, round(_state["nextRetryAt"] - time.monotonic())),
                     "uptimeS": round(time.time() - _state["startedAt"], 1),
                 },
             )
@@ -414,7 +425,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if BACKEND == "kronos" and not _state["loaded"]:
             # First boot: warm-up may still be running — give it a bounded wait.
-            deadline = time.time() + (90 if _state["loading"] else 0)
+            deadline = time.time() + (5 if _state["loading"] else 0)
             while not _state["loaded"] and _state["loading"] and time.time() < deadline:
                 time.sleep(0.5)
             if not _state["loaded"]:
@@ -427,13 +438,15 @@ class Handler(BaseHTTPRequestHandler):
             self._send(503, {"ok": False, "error": "BUSY"})
             return
         except RuntimeError as exc:
-            self._send(503, {"ok": False, "error": str(exc)[:240]})
+            code = str(exc) if str(exc) in {"MODEL_LOADING", "MODEL_LOAD_FAILED", "BUSY"} else "FORECAST_FAILED"
+            self._send(503, {"ok": False, "error": code})
             return
         except BadRequest as exc:
             self._send(400, {"ok": False, "error": str(exc)})
             return
         except Exception as exc:  # noqa: BLE001 — a model blow-up is a 503, not a crash
-            self._send(503, {"ok": False, "error": f"FORECAST_FAILED:{type(exc).__name__}:{str(exc)[:160]}"})
+            print(f"[kronos-worker] forecast failed: {type(exc).__name__}", flush=True)
+            self._send(503, {"ok": False, "error": "FORECAST_FAILED"})
             return
 
         _state["forecasts"] = int(_state["forecasts"]) + 1

@@ -5810,6 +5810,20 @@ export default function run() {
       existsSync('forecast/worker.py') && existsSync('forecast/test_worker.py'));
     t('...and the real model is the default backend, not the test double',
       /get\("KRONOS_BACKEND", "kronos"\)/.test(forecastWorker));
+    t('the forecast minimum matches the worker and the default 7D feed',
+      /FORECAST_MIN_CANDLES = 40/.test(forecastClient) && /MIN_CANDLES = 40/.test(forecastWorker));
+    t('the forecast cache fingerprints the whole OHLCV window',
+      /createHash\('sha256'\)/.test(forecastClient) && /c\.t},\$\{c\.o},\$\{c\.h},\$\{c\.l},\$\{c\.c},\$\{c\.v}/.test(forecastClient));
+    t('the browser can cancel a forecast and validates the returned times',
+      /AbortController/.test(read('src/lib/api.js')) && /INVALID_FORECAST_TIME/.test(read('src/lib/api.js')));
+    t('the SVG fallback draws projected candles too',
+      /forecast/.test(read('src/components/CandleChart.jsx')) && /projected: true/.test(read('src/components/CandleChart.jsx')));
+    t('the engine reveals the future once and restores the reader view on disable',
+      /forecastRestoreRange/.test(read('src/components/ProChart/ProChart.jsx')) && /setVisibleLogicalRange/.test(read('src/components/ProChart/ProChart.jsx')));
+    t('a mock worker cannot be promoted to the real model',
+      /body\.provider !== 'kronos'/.test(forecastClient));
+    t('the public status route reports configuration without leaking the worker URL',
+      /app\.get\('\/api\/forecast\/status'/.test(read('server/app.js')) && /configured: Boolean\(cfg\.workerUrl\(\)\)/.test(forecastClient));
 
     /*
      * ---- the terminal's stored prefs, and the bug that shipped ------------

@@ -36,12 +36,12 @@ import { fmtPrice } from '../lib/format';
 
 function CandleTip({ active, payload, t }) {
   if (!active || !payload?.length) return null;
-  const d = payload[0]?.payload;
+  const d = payload.find((entry) => entry?.payload?.projected)?.payload ?? payload[0]?.payload;
   if (!d) return null;
   const up = d.c >= d.o;
   return (
     <div className="chart-tip">
-      <div className="faint" style={{ fontSize: 10.5, marginBottom: 4 }}>{d.label}</div>
+      <div className="faint" style={{ fontSize: 10.5, marginBottom: 4 }}>{d.projected ? t('coin.pro.forecast') : null} {d.label}</div>
       <div className="mono" style={{ fontSize: 11.5, display: 'grid', gap: 2 }}>
         <span>{t('coin.open')} ${fmtPrice(d.o)}</span>
         <span>{t('coin.high24h')} ${fmtPrice(d.h)}</span>
@@ -54,28 +54,25 @@ function CandleTip({ active, payload, t }) {
   );
 }
 
-export default function CandleChart({ data, height = 190 }) {
+export default function CandleChart({ data, height = 190, forecast = null }) {
   const { t } = useTranslation();
 
   const rows = useMemo(() => {
     const src = Array.isArray(data) ? data : [];
-    return src
-      .filter((d) => [d?.o, d?.h, d?.l, d?.c].every(Number.isFinite))
-      .map((d) => ({
-        ...d,
-        /* Ranges, not heights — recharts draws [from,to] bars directly. */
-        wick: [d.l, d.h],
-        /*
-         * A doji (open === close) would produce a zero-height body and
-         * disappear entirely, leaving a floating wick that looks like a
-         * rendering fault. Giving it a hair of height keeps the bar visible
-         * and correctly signals "opened and closed at the same price".
-         */
-        body: d.c === d.o ? [d.o, d.o * 1.0005] : [Math.min(d.o, d.c), Math.max(d.o, d.c)],
-        up: d.c >= d.o,
-        label: new Date(d.t).toLocaleDateString()
-      }));
-  }, [data]);
+    const valid = (d) => d && [d.t, d.o, d.h, d.l, d.c].every(Number.isFinite)
+      && Math.min(d.o, d.h, d.l, d.c) > 0 && d.h >= Math.max(d.o, d.c) && d.l <= Math.min(d.o, d.c);
+    const real = src.filter(valid).sort((a, b) => a.t - b.t);
+    const last = real[real.length - 1]?.t ?? -Infinity;
+    const future = (Array.isArray(forecast?.candles) ? forecast.candles : [])
+      .filter((d) => valid(d) && d.t > last).sort((a, b) => a.t - b.t);
+    return [...real, ...future.map((d) => ({ ...d, projected: true }))].map((d) => ({
+      ...d,
+      wick: [d.l, d.h],
+      body: d.c === d.o ? [d.o, d.o * 1.0005] : [Math.min(d.o, d.c), Math.max(d.o, d.c)],
+      up: d.c >= d.o,
+      label: new Date(d.t).toLocaleDateString()
+    }));
+  }, [data, forecast]);
 
   const domain = useMemo(() => {
     if (!rows.length) return ['auto', 'auto'];
@@ -88,7 +85,7 @@ export default function CandleChart({ data, height = 190 }) {
   if (!rows.length) return null;
 
   return (
-    <div className="chart-wrap" style={{ height }}>
+    <div className="chart-wrap" style={{ height }} data-forecast-bars={rows.filter((row) => row.projected).length}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={rows} margin={{ top: 8, right: 0, bottom: 0, left: 0 }}>
           <XAxis dataKey="t" hide />
@@ -101,12 +98,12 @@ export default function CandleChart({ data, height = 190 }) {
           */}
           <Bar dataKey="wick" barSize={1.5} isAnimationActive={false}>
             {rows.map((r, i) => (
-              <Cell key={`w${i}`} fill={r.up ? 'var(--up)' : 'var(--down)'} />
+              <Cell key={`w${i}`} fill={r.projected ? '#8d7bff' : r.up ? 'var(--up)' : 'var(--down)'} />
             ))}
           </Bar>
           <Bar dataKey="body" barSize={6} radius={1} isAnimationActive={false}>
             {rows.map((r, i) => (
-              <Cell key={`b${i}`} fill={r.up ? 'var(--up)' : 'var(--down)'} />
+              <Cell key={`b${i}`} fill={r.projected ? '#8d7bff' : r.up ? 'var(--up)' : 'var(--down)'} fillOpacity={r.projected ? 0.5 : 1} stroke={r.projected ? '#8d7bff' : undefined} />
             ))}
           </Bar>
         </ComposedChart>

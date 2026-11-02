@@ -20,6 +20,7 @@
  * Run: node --test --test-force-exit test/kronos-forecast.test.mjs
  */
 import { test, before, after, beforeEach } from 'node:test';
+process.env.FORECAST_RATE_LIMIT = '200';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 
@@ -164,7 +165,7 @@ test('normalizeCandles rejects inverted bars, non-positive prices, junk', () => 
   assert.equal(normalizeCandles([]).ok, false);
   assert.equal(normalizeCandles([{ t: 'x' }]).ok, false);
   const inverted = rows.map((r, i) => (i === 3 ? { ...r, h: r.l - 1 } : r));
-  assert.match(normalizeCandles(inverted).error, /HIGH_BELOW_LOW/);
+  assert.match(normalizeCandles(inverted).error, /INCONSISTENT_OHLC/);
   const zero = rows.map((r, i) => (i === 3 ? { ...r, c: 0 } : r));
   assert.match(normalizeCandles(zero).error, /BAD_PRICE/);
 });
@@ -200,10 +201,11 @@ test('POST /api/forecast returns the worker projection verbatim (provider=kronos
   assert.equal(r.body.candles.length, 18);
   assert.equal(r.body.predLen, 18);
   assert.equal(r.body.lookback, 120);
-  assert.equal(r.body.schema, 'fbt.forecast.v1');
+  assert.equal(r.body.schema, 'fbt.forecast.v2');
   assert.ok(Number.isFinite(r.body.intervalMs) && r.body.intervalMs > 0);
   assert.equal(r.body.worker.ok, true);
-  assert.match(r.headers.get('cache-control'), /max-age=60/);
+  assert.match(r.headers.get('cache-control'), /no-store/);
+  assert.equal(r.headers.get('x-forecast-provider'), 'kronos');
   /* The projection continues AFTER the last real bar, at the same rhythm. */
   const lastReal = candles[candles.length - 1].t;
   assert.equal(r.body.candles[0].t - lastReal, 300_000);
@@ -231,7 +233,7 @@ test('a dead worker degrades to the LABELLED baseline — 200, error preserved',
   assert.equal(r.body.model, 'drift-volatility baseline');
   assert.equal(r.body.candles.length, 16);
   assert.equal(r.body.worker.ok, false);
-  assert.match(r.body.worker.error, /ECONNREFUSED/);
+  assert.equal(r.body.worker.error, 'WORKER_UNAVAILABLE');
   /* The baseline must never be mistaken for the model: provider says so. */
   assert.notEqual(r.body.provider, 'kronos');
 });
@@ -241,7 +243,7 @@ test('a503 from the worker (model unavailable) is also a labelled baseline', asy
   const r = await post('/api/forecast', { candles: makeCandles(120, { start: 1_770_000_000_000 }), predLen: 16 });
   assert.equal(r.status, 200);
   assert.equal(r.body.provider, 'baseline');
-  assert.match(r.body.worker.error, /MODEL_UNAVAILABLE/);
+  assert.equal(r.body.worker.error, 'WORKER_NOT_READY');
 });
 
 test('the breaker opens after 3 failures and then stops calling the worker', async () => {
@@ -280,7 +282,7 @@ test('an inverted bar is a 400 with the row index, not a 500', async () => {
   candles[7] = { ...candles[7], h: candles[7].l - 5 };
   const r = await post('/api/forecast', { candles });
   assert.equal(r.status, 400);
-  assert.match(r.body.error, /CANDLE_7_HIGH_BELOW_LOW/);
+  assert.match(r.body.error, /CANDLE_7_INCONSISTENT_OHLC/);
 });
 
 test('a non-array body is a 400', async () => {
@@ -308,4 +310,65 @@ test('GET with an empty feed answers 400, not a fabricated projection', async ()
   const r = await get('/api/forecast/bitcoin?days=7');
   assert.equal(r.status, 400);
   assert.match(r.body.error, /CANDLES_TOO_FEW/);
+});
+
+
+test('the production default windows (42 and 48 bars) are accepted', async () => {
+  for (const n of [42, 48]) {
+    const r = await post('/api/forecast', { candles: makeCandles(n, { start: 1_751_000_000_000 + n }), predLen: 12 });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.lookback, n);
+    assert.equal(r.body.candles.length, 12);
+  }
+});
+
+test('cache fingerprint includes the whole window, not just the last close', async () => {
+  const a = makeCandles(80, { start: 1_752_000_000_000 });
+  const b = a.map((row, i) => i === 10 ? { ...row, c: row.c * 1.01, h: row.h * 1.02 } : row);
+  assert.equal(a.at(-1).c, b.at(-1).c);
+  await post('/api/forecast', { candles: a, predLen: 12 });
+  await post('/api/forecast', { candles: b, predLen: 12 });
+  assert.equal(workerCalls, 2);
+});
+
+test('refresh retries a fallback but never duplicates a cached Kronos call', async () => {
+  workerMode = 'down';
+  const candles = makeCandles(80, { start: 1_753_000_000_000 });
+  const first = await post('/api/forecast', { candles, predLen: 12, refresh: true });
+  assert.equal(first.body.provider, 'baseline');
+  workerMode = 'ok';
+  const second = await post('/api/forecast', { candles, predLen: 12, refresh: true });
+  assert.equal(second.body.provider, 'kronos');
+  assert.equal(workerCalls, 2);
+  const third = await post('/api/forecast', { candles, predLen: 12, refresh: true });
+  assert.equal(third.body.cached, true);
+  assert.equal(workerCalls, 2);
+});
+
+test('a mock worker is never promoted to Kronos', async () => {
+  const old = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes('127.0.0.1:8765/forecast')) {
+      const body = JSON.parse(init.body);
+      return json({ ok: true, provider: 'mock', model: 'mock', generatedAt: Date.now(), candles: futureBars(body.candles, body.predLen) });
+    }
+    return old(url, init);
+  };
+  try {
+    const r = await post('/api/forecast', { candles: makeCandles(80, { start: 1_754_000_000_000 }), predLen: 12 });
+    assert.equal(r.body.provider, 'baseline');
+    assert.equal(r.body.worker.code, 'WORKER_INVALID_RESPONSE');
+  } finally { globalThis.fetch = old; }
+});
+
+test('status exposes configuration and limits, never a URL or token', async () => {
+  const r = await get('/api/forecast/status');
+  assert.equal(r.status, 200);
+  assert.equal(r.body.schema, 'fbt.forecast.v2');
+  assert.equal(r.body.minCandles, 40);
+  assert.equal(r.body.maxHorizon, 120);
+  assert.equal(typeof r.body.configured, 'boolean');
+  assert.equal(typeof r.body.verified, 'boolean');
+  assert.equal(r.body.workerUrl, undefined);
+  assert.equal(r.body.workerToken, undefined);
 });

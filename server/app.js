@@ -32,7 +32,8 @@ import {
   forecastService,
   normalizeCandles,
   inferPredLen,
-  FORECAST_MIN_CANDLES
+  FORECAST_MIN_CANDLES,
+  FORECAST_PREDLEN_MAX
 } from './kronosForecast.js';
 import { telegramAuth, verifyInitData, normalizeBotToken, extractInitData } from './telegramAuth.js';
 import { telegramBotIdentity, tokenDiagnostics } from './telegramIdentity.js';
@@ -4004,6 +4005,27 @@ app.get('/api/volume/:id', (req, res) => {
  * prints that label next to the projection — the reader always sees which of
  * the two they are looking at. 400 only for structurally invalid candles.
  */
+const forecastHits = new Map();
+app.use('/api/forecast', (req, res, next) => {
+  if (req.method === 'GET' && req.path === '/status') return next();
+  const key = req.tgUser?.id ?? req.ip;
+  const now = Date.now();
+  const rec = forecastHits.get(key);
+  if (!rec || now > rec.reset) {
+    forecastHits.set(key, { count: 1, reset: now + WINDOW_MS });
+    return next();
+  }
+  rec.count += 1;
+  if (rec.count > Math.max(1, Number(process.env.FORECAST_RATE_LIMIT) || 20)) {
+    res.set('retry-after', String(Math.ceil((rec.reset - now) / 1000)));
+    return res.status(429).json({ ok: false, error: 'FORECAST_RATE_LIMITED' });
+  }
+  return next();
+});
+setInterval(() => {
+  for (const [key, value] of forecastHits) if (value.reset < Date.now()) forecastHits.delete(key);
+}, WINDOW_MS).unref?.();
+
 app.post('/api/forecast', async (req, res) => {
   try {
     const body = req.body && typeof req.body === 'object' ? req.body : {};
@@ -4013,17 +4035,23 @@ app.post('/api/forecast', async (req, res) => {
       return res.status(400).json({ ok: false, error: `CANDLES_TOO_FEW:${norm.candles.length}<${FORECAST_MIN_CANDLES}` });
     }
     const predLen = inferPredLen(norm.candles, body.predLen);
-    const out = await forecastService.forecast({ candles: norm.candles, predLen });
-    res.set('cache-control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+    const out = await forecastService.forecast({ candles: norm.candles, predLen, refresh: body.refresh === true });
+    res.set('cache-control', 'no-store');
+    res.set('x-forecast-provider', out.provider);
     return res.json(out);
   } catch (err) {
-    return res.status(500).json({ ok: false, error: 'FORECAST_FAILED', detail: String(err?.message || err).slice(0, 200) });
+    return res.status(500).json({ ok: false, error: 'FORECAST_FAILED' });
   }
+});
+
+app.get('/api/forecast/status', (_req, res) => {
+  res.set('cache-control', 'no-store');
+  return res.json({ ok: true, ...forecastService.status() });
 });
 
 app.get('/api/forecast/:id', async (req, res) => {
   try {
-    const days = [1, 7, 30].includes(Number(req.query.days)) ? Number(req.query.days) : 7;
+    const days = [1, 7, 30, 90, 365].includes(Number(req.query.days)) ? Number(req.query.days) : 7;
     const vs = String(req.query.vs || 'usd').toLowerCase().slice(0, 8);
     const ohlc = await fetchOhlc(req.params.id, days, vs);
     const rows = Array.isArray(ohlc) ? ohlc : [];
@@ -4036,11 +4064,12 @@ app.get('/api/forecast/:id', async (req, res) => {
     const norm = normalizeCandles(rows.map((d) => ({ t: d.t, o: d.o, h: d.h, l: d.l, c: d.c, v: 0 })));
     if (!norm.ok) return res.status(502).json({ ok: false, error: norm.error });
     const predLen = inferPredLen(norm.candles, Number(req.query.predLen) || undefined);
-    const out = await forecastService.forecast({ candles: norm.candles, predLen });
-    res.set('cache-control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+    const out = await forecastService.forecast({ candles: norm.candles, predLen, refresh: req.query.refresh === 'true' });
+    res.set('cache-control', 'no-store');
+    res.set('x-forecast-provider', out.provider);
     return res.json({ ...out, source: `coingecko-ohlc:${days}d` });
   } catch (err) {
-    return res.status(502).json({ ok: false, error: 'UPSTREAM_FAILED', detail: String(err?.message || err).slice(0, 200) });
+    return res.status(502).json({ ok: false, error: 'UPSTREAM_FAILED' });
   }
 });
 
