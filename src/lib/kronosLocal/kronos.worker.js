@@ -72,6 +72,9 @@ async function init(id, manifest) {
   const gpu = await gpuInfo();
   const loaded = gpu.ok ? await loadOrt('webgpu') : await loadOrt('wasm');
   ort = loaded.ort;
+  // MUST precede every InferenceSession.create: ORT requests its engine glue by
+  // name relative to this folder (public/kronos-ort/). Unset, it asks /assets/
+  // for a file the build never emits → SESSION_FAILED. See config.js.
   if (ORT_ASSET_PATH) ort.env.wasm.wasmPaths = ORT_ASSET_PATH;
   // Threads need SharedArrayBuffer, which needs cross-origin isolation. Most
   // deployments do not have it (and iOS Safari never does), so default to a

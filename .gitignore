@@ -77,10 +77,12 @@ __pycache__/
 public/kronos-local/
 public/kronos-onnx/
 
-# ONNX Runtime Web engines. The worker imports ORT as a module, so Vite copies
-# the .wasm engine into /assets with a content hash and rewrites the URL. These
-# two folders are what you get if someone hand-copies them instead — a second
-# 12–25 MB copy of the same binary, with no cache-busting. Never tracked.
+# ONNX Runtime Web engine files (ort-wasm-simd-threaded[.asyncify].{mjs,wasm},
+# ~37 MB). Vendored from node_modules into public/kronos-ort/ on every build by
+# scripts/vendor-kronos-ort.mjs (also run by vite.config.js), because Vite does
+# not emit the .mjs glue ORT requests by name. Build output — never tracked.
+public/kronos-ort/
+# Hand-copied variants of the same thing; the folder above is the only one used.
 public/ort/
 public/onnxruntime/
 

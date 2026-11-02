@@ -4,10 +4,19 @@
  *
  * This is not a mock: it loads the four exported ONNX graphs (produced by
  * `scripts/kronos-export-onnx.py` from the official NeoQuasar/Kronos-mini +
- * Kronos-Tokenizer-2k weights) into onnxruntime-web — the exact runtime the
- * browser worker uses — and compares a full forecast against the reference
- * implementation (`KronosPredictor.predict(..., top_k=1)`, which is
+ * Kronos-Tokenizer-2k weights) into onnxruntime-web — the same package and
+ * engine version as the browser worker, but its NODE entry point (see below) —
+ * and compares a full forecast against the reference implementation (`KronosPredictor.predict(..., top_k=1)`, which is
  * deterministic) stored in test/fixtures/kronos-reference.json.
+ *
+ * ─── WHAT THIS TEST CANNOT TELL YOU ────────────────────────────────────────
+ * `import('onnxruntime-web')` in NODE resolves to `ort.node.min.mjs`, which opens
+ * its engine from node_modules with `fs`. It is NOT the bundle the browser runs
+ * and it never looks at dist/. This file proves the model numerics; it does not
+ * prove the browser can start the engine (that was a production outage: the
+ * glue module 404ed while this test stayed green). The browser bundle is
+ * covered, as far as Node can, by test/kronos-ort-dist.test.mjs — and fully
+ * only by opening the chart in a real browser. See docs/kronos-local-browser.md.
  *
  * Skipped when the graphs are not present (they are build artifacts, ~33 MB,
  * deliberately not committed). CI produces them, then runs this file.
