@@ -96,8 +96,16 @@ const volumeRows = rawCandles.map((c, i) => ({ t: c.t, v: 1_000_000 + i * 1000 }
 
 /* Stub the spot-price poll so the terminal's live-tick effect resolves
    cleanly in jsdom instead of hanging on a real network fetch. */
+const postTokenForecast = vi.fn(async (_candles, { predLen = 12 } = {}) => ({
+  ok: true, provider: 'kronos', model: 'NeoQuasar/Kronos-small', predLen,
+  intervalMs: DAY, anchorTime: rawCandles.at(-1).t,
+  candles: Array.from({ length: predLen }, (_, i) => ({
+    t: rawCandles.at(-1).t + DAY * (i + 1), o: 150, h: 153, l: 148, c: 151, v: 0
+  }))
+}));
 vi.mock('../src/lib/api', () => ({
-  getSimplePrices: async () => ({ ethereum: { usd: 142 } })
+  getSimplePrices: async () => ({ ethereum: { usd: 142 } }),
+  postTokenForecast: (...args) => postTokenForecast(...args)
 }));
 
 vi.mock('../src/hooks/useMarket', () => ({
@@ -292,5 +300,50 @@ describe('pro chart engine (real lightweight-charts)', () => {
     );
     const tail = api.main.dataByIndex(polled.length - 1);
     expect(tail?.close).toBe(tickPrice);
+  });
+});
+
+
+describe('forecast viewport regression (real engine)', () => {
+  it('reveals future candles once, preserves zoom on refresh, restores on disable', async () => {
+    const candles = toCandles(rawCandles);
+    const ref = React.createRef();
+    let api = null;
+    const { rerender } = render(
+      <div style={{ position: 'relative', width: 800, height: 400 }}>
+        <ProChart ref={ref} dataKey="ethereum:7D" candles={candles} onReady={(a) => { api = a; }} />
+      </div>
+    );
+    await waitFor(() => expect(api).toBeTruthy(), { timeout: 4000 });
+    api.chart.timeScale().setVisibleLogicalRange({ from: 80, to: 110 });
+    await waitFor(() => expect(api.chart.timeScale().getVisibleLogicalRange().to).toBeLessThan(115));
+    const before = api.chart.timeScale().getVisibleLogicalRange();
+    const future = Array.from({ length: 12 }, (_, i) => ({
+      t: rawCandles.at(-1).t + DAY * (i + 1), o: 150, h: 153, l: 148, c: 151
+    }));
+    const projection = { provider: 'kronos', candles: future, anchorTime: rawCandles.at(-1).t, intervalMs: DAY };
+    rerender(<div style={{ position: 'relative', width: 800, height: 400 }}><ProChart ref={ref} dataKey="ethereum:7D" candles={candles} forecast={projection} onReady={(a) => { api = a; }} /></div>);
+    await waitFor(() => {
+      const range = api.chart.timeScale().getVisibleLogicalRange();
+      expect(range.to).toBeGreaterThanOrEqual(candles.length + 10);
+    }, { timeout: 3000 });
+    const revealed = api.chart.timeScale().getVisibleLogicalRange();
+    expect(revealed.to - revealed.from).toBeGreaterThan(before.to - before.from);
+    // A refreshed projection with the same horizon must not steal pan/zoom.
+    ref.current.zoom(0.5);
+    await waitFor(() => expect(api.chart.timeScale().getVisibleLogicalRange().to).toBeLessThan(revealed.to));
+    const zoomed = api.chart.timeScale().getVisibleLogicalRange();
+    rerender(<div style={{ position: 'relative', width: 800, height: 400 }}><ProChart ref={ref} dataKey="ethereum:7D" candles={candles} forecast={{ ...projection, generatedAt: 2 }} onReady={(a) => { api = a; }} /></div>);
+    await waitFor(() => {
+      const range = api.chart.timeScale().getVisibleLogicalRange();
+      expect(Math.abs(range.from - zoomed.from)).toBeLessThan(0.01);
+      expect(Math.abs(range.to - zoomed.to)).toBeLessThan(0.01);
+    });
+    rerender(<div style={{ position: 'relative', width: 800, height: 400 }}><ProChart ref={ref} dataKey="ethereum:7D" candles={candles} forecast={null} onReady={(a) => { api = a; }} /></div>);
+    await waitFor(() => {
+      const range = api.chart.timeScale().getVisibleLogicalRange();
+      expect(Math.abs(range.from - before.from)).toBeLessThan(0.01);
+      expect(Math.abs(range.to - before.to)).toBeLessThan(0.01);
+    });
   });
 });

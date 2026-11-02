@@ -390,19 +390,28 @@ function syncCandles(api, candles, volume, rangeRef) {
  * consumed. TokenChart refetches on the next poll and a fresh projection
  * takes over.
  */
-function applyForecast(api, forecast) {
+function clearForecast(api) {
+  api.forecastSeries.setData([]);
+  api.forecastSeries.applyOptions({ visible: false });
+  api.forecastBars = [];
+  api.forecastByTime = new Map();
+  api.forecastHorizon = 0;
+  if (api.forecastRestoreRange) {
+    try { api.chart.timeScale().setVisibleLogicalRange(api.forecastRestoreRange); } catch { /* noop */ }
+    api.forecastRestoreRange = null;
+  }
+}
+
+function applyForecast(api, forecast, reveal = false) {
   if (!api?.forecastSeries) return;
   const rows = Array.isArray(forecast?.candles) ? forecast.candles : [];
   try {
-    if (!rows.length) {
-      api.forecastSeries.setData([]);
-      api.forecastSeries.applyOptions({ visible: false });
-      return;
-    }
+    if (!rows.length) { clearForecast(api); return; }
     const lastReal = api.candles?.length ? api.candles[api.candles.length - 1].time : 0;
     const bars = rows
       .filter((c) => Number.isFinite(c?.t) && Math.floor(c.t / 1000) > lastReal
-        && Number.isFinite(c.o) && Number.isFinite(c.h) && Number.isFinite(c.l) && Number.isFinite(c.c))
+        && [c.o, c.h, c.l, c.c].every((n) => Number.isFinite(n) && n > 0)
+        && c.h >= Math.max(c.o, c.c) && c.l <= Math.min(c.o, c.c))
       .map((c) => ({
         time: Math.floor(c.t / 1000),
         open: c.o,
@@ -410,13 +419,25 @@ function applyForecast(api, forecast) {
         low: c.l,
         close: c.c
       }));
-    if (!bars.length) {
-      api.forecastSeries.setData([]);
-      api.forecastSeries.applyOptions({ visible: false });
-      return;
-    }
+    if (!bars.length) { clearForecast(api); return; }
+    const wasVisible = Boolean(api.forecastBars?.length);
+    const horizonChanged = api.forecastHorizon !== bars.length;
+    if (!wasVisible) api.forecastRestoreRange = api.chart.timeScale().getVisibleLogicalRange();
     api.forecastSeries.setData(bars);
     api.forecastSeries.applyOptions({ visible: true });
+    api.forecastBars = bars;
+    api.forecastHorizon = bars.length;
+    api.forecastByTime = new Map(bars.map((bar) => [bar.time, { ...bar, projected: true }]));
+    // Adding data to the right does not reliably reveal it. On the first
+    // projection (or a horizon change) show the boundary AND the future;
+    // subsequent polls clip in place without stealing the reader's pan/zoom.
+    if (reveal && (!wasVisible || horizonChanged)) {
+      const realCount = api.candles?.length ?? 0;
+      const context = Math.max(24, bars.length * 2);
+      api.chart.timeScale().setVisibleLogicalRange({
+        from: Math.max(-2, realCount - context), to: realCount + bars.length + 2
+      });
+    }
   } catch { /* a disposed series is a no-op, not a crash */ }
 }
 
@@ -843,6 +864,10 @@ const ProChart = forwardRef(function ProChart(
           macd,
           volumeSeries,
           forecastSeries,
+          forecastBars: [],
+          forecastByTime: new Map(),
+          forecastRestoreRange: null,
+          forecastHorizon: 0,
           colors,
           series,
           candles: current,
@@ -884,7 +909,7 @@ const ProChart = forwardRef(function ProChart(
           /* Read OHLC from our own candle map, not from seriesData: in
              line/area mode the series only knows closes, and the legend
              must still show the bar's real open/high/low. */
-          const bar = param?.time != null ? api.byTime.get(param.time) : null;
+          const bar = param?.time != null ? (api.byTime.get(param.time) ?? api.forecastByTime?.get(param.time)) : null;
           if (!param?.point || !bar) {
             scheduleCrosshair(null);
             return;
@@ -895,7 +920,8 @@ const ProChart = forwardRef(function ProChart(
             high: bar.high,
             low: bar.low,
             close: bar.close,
-            volume: api.volumeSeries ? param.seriesData.get(api.volumeSeries)?.value ?? null : null,
+            volume: !bar.projected && api.volumeSeries ? param.seriesData.get(api.volumeSeries)?.value ?? null : null,
+            projected: Boolean(bar.projected),
             x: param.point.x,
             y: param.point.y
           });
@@ -1022,7 +1048,7 @@ const ProChart = forwardRef(function ProChart(
   /* The projection itself: data + visibility ride the live series, no
      rebuild (same contract as every other overlay). */
   useEffect(() => {
-    applyForecast(apiRef.current, forecast);
+    applyForecast(apiRef.current, forecast, true);
   }, [forecast]);
 
   /* Spot-price tick: move the FORMING candle between OHLC polls. High/low
@@ -1165,6 +1191,7 @@ const ProChart = forwardRef(function ProChart(
       {failed ? (
         <div className="pc-canvas pc-canvas--fallback" data-testid="pro-chart-fallback">
           <CandleChart
+            forecast={forecast}
             data={candles.map((c) => ({ t: c.time * 1000, o: c.open, h: c.high, l: c.low, c: c.close }))}
             height={fallbackHeight}
           />

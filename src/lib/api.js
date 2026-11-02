@@ -879,22 +879,49 @@ export function getVolumeSeries(id, days = 30, vs = 'usd') {
  * Long timeout on purpose: the worker runs an autoregressive model on CPU
  * (seconds per forecast, cached server-side per new bar).
  */
-export async function postTokenForecast(candles, { predLen, timeout = 60000 } = {}) {
+export async function postTokenForecast(candles, { predLen, timeout = 35000, signal, refresh = false } = {}) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeout);
+  let timedOut = false;
+  const cancel = () => ctrl.abort();
+  if (signal?.aborted) ctrl.abort();
+  else signal?.addEventListener('abort', cancel, { once: true });
+  const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, timeout);
   try {
     const res = await fetch(`${apiBase()}/forecast`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
       signal: ctrl.signal,
-      body: JSON.stringify({ candles, predLen })
+      body: JSON.stringify({ candles, predLen, refresh })
     });
     const data = await res.json().catch(() => null);
-    if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP_${res.status}`);
-    if (!Array.isArray(data.candles) || !data.candles.length) throw new Error('EMPTY_FORECAST');
-    return data;
+    if (!res.ok || !data?.ok) {
+      const error = new Error(data?.error || `HTTP_${res.status}`);
+      error.status = res.status;
+      throw error;
+    }
+    if (!['kronos', 'baseline'].includes(data.provider)) throw new Error('INVALID_FORECAST_PROVIDER');
+    if (!Array.isArray(data.candles) || !data.candles.length || data.candles.length > 120) throw new Error('INVALID_FORECAST');
+    const anchor = candles[candles.length - 1]?.t;
+    let previous = anchor;
+    const rows = data.candles.map((row) => {
+      const { t, o, h, l, c } = row || {};
+      if (![t, o, h, l, c].every(Number.isFinite) || t <= previous || Math.min(o, h, l, c) <= 0 || h < Math.max(o, c) || l > Math.min(o, c)) {
+        throw new Error('INVALID_FORECAST_CANDLE');
+      }
+      previous = t;
+      return { t, o, h, l, c, v: Number.isFinite(row.v) && row.v >= 0 ? row.v : 0 };
+    });
+    if (!Number.isFinite(anchor) || !Number.isFinite(data.intervalMs) || data.intervalMs <= 0 || rows.some((row, i) => row.t !== anchor + data.intervalMs * (i + 1))) {
+      throw new Error('INVALID_FORECAST_TIME');
+    }
+    return { ...data, candles: rows, anchorTime: anchor, predLen: rows.length };
+  } catch (error) {
+    if (timedOut) throw new Error('FORECAST_TIMEOUT');
+    if (signal?.aborted) throw new Error('FORECAST_ABORTED');
+    throw error;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', cancel);
   }
 }
 

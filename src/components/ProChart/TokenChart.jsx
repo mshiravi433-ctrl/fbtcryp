@@ -193,12 +193,15 @@ function RotateIcon() {
 }
 
 /** One toggle chip. Buttons, not checkboxes: this is a toolbar. */
-function Chip({ active, onClick, children, title, tone }) {
+function Chip({ active, onClick, children, title, tone, disabled = false, busy = false, ...rest }) {
   return (
     <button
       type="button"
       className={`pc-chip${active ? ' is-on' : ''}${tone ? ` pc-chip--${tone}` : ''}`}
       onClick={onClick}
+      disabled={disabled}
+      aria-busy={busy || undefined}
+      {...rest}
       aria-pressed={Boolean(active)}
       title={title || undefined}
     >
@@ -207,7 +210,7 @@ function Chip({ active, onClick, children, title, tone }) {
   );
 }
 
-function OHLC({ bar, t, volumeLabel }) {
+function OHLC({ bar, t, volumeLabel, projected = false }) {
   if (!bar) return <span className="pc-legend-empty">—</span>;
   const up = bar.close >= bar.open;
   const chg = bar.open > 0 ? ((bar.close - bar.open) / bar.open) * 100 : 0;
@@ -215,6 +218,7 @@ function OHLC({ bar, t, volumeLabel }) {
   const show = (v) => (Number.isFinite(v) ? v.toFixed(digits) : '—');
   return (
     <span className="pc-ohlc mono">
+      {projected ? <span className="pc-ohlc-projected">{t('coin.pro.forecast')}</span> : null}
       <span><em>{t('coin.pro.o')}</em>{show(bar.open)}</span>
       <span><em>{t('coin.pro.h')}</em>{show(bar.high)}</span>
       <span><em>{t('coin.pro.l')}</em>{show(bar.low)}</span>
@@ -265,19 +269,13 @@ export default function TokenChart({
      the LIVE badge: a tick older than ~45s is history, not "live". */
   const [livePrice, setLivePrice] = useState(null);
   const [liveAt, setLiveAt] = useState(0);
-  /*
-   * AI FORECAST — projected next candles (Kronos via POST /api/forecast).
-   * Session-only state, never persisted: a projection is a live model call,
-   * not a preference, and reopening the terminal must not replay yesterday's
-   * answer as today's. `forecastState` is what the badge and the note read —
-   * idle (off), loading, ready, error — and `forecastAnchor` exists so a
-   * coin/range change drops the OLD series instantly instead of drawing one
-   * token's projection under another token's chart while the new call flies.
-   */
+  // Forecast state is tagged with its request key. A late response can never
+  // paint BTC's projection on ETH, or a 7D projection on a 30D chart.
   const [forecastOn, setForecastOn] = useState(false);
-  const [forecast, setForecast] = useState(null);
-  const [forecastState, setForecastState] = useState('idle');
-  const forecastAnchorRef = useRef('');
+  const [forecastResult, setForecastResult] = useState(null);
+  const [forecastHorizon, setForecastHorizon] = useState('auto');
+  const [forecastRefresh, setForecastRefresh] = useState({ key: '', nonce: 0 });
+  const [forecastEngineFailed, setForecastEngineFailed] = useState(false);
 
   const { chartType, overlays, panes, settings } = prefs;
 
@@ -291,6 +289,17 @@ export default function TokenChart({
   const candles = useMemo(() => toCandles(data), [signature]);
   const spacing = useMemo(() => candleSpacingMs(candles), [candles]);
   const interval = intervalLabel(spacing);
+  const candlesRef = useRef(candles);
+  candlesRef.current = candles;
+  const forecastAnchor = candles[candles.length - 1]?.time ?? 0;
+  const predLen = forecastHorizon === 'auto'
+    ? Math.max(12, Math.min(48, Math.round(candles.length / 8)))
+    : Number(forecastHorizon);
+  const forecastKey = `${coinId}:${range?.days ?? range?.key ?? ''}:${forecastAnchor}:${predLen}`;
+  const forecast = forecastOn && forecastResult?.key === forecastKey ? forecastResult.data : null;
+  const forecastState = !forecastOn ? 'idle' : forecastResult?.key === forecastKey ? forecastResult.status : 'loading';
+  const forecastError = forecastResult?.key === forecastKey ? forecastResult.error : '';
+
 
   const needVolume = expanded && panes.volume;
   const { data: volumeRaw, loading: volumeLoading } = useVolumeSeries(needVolume && coinId ? coinId : null, range?.days ?? 30);
@@ -369,70 +378,39 @@ export default function TokenChart({
     };
   }, [coinId]);
 
-  /*
-   * ─── THE FORECAST FETCH ───────────────────────────────────────────────────
-   * Only while the TERMINAL is open and the toggle is on: the inline card has
-   * no room for the projection, and a projection nobody is looking at is
-   * compute nobody asked for. Keyed on `candles` (identity moves with the
-   * series signature), so a newly printed bar re-projects — the server caches
-   * per bar, so ten readers of BTC still cost one worker call.
-   *
-   * The candles posted are the ones on screen, converted back to the feed's
-   * millisecond stamps: projection and chart can never disagree about which
-   * bars they describe. Failures land in `error` and draw NOTHING — the note
-   * says it is unavailable, exactly like an empty candle feed.
-   */
+  /* One abortable request per visible series + horizon. Polls that only revise
+     the forming candle do not spend another model call; a newly printed bar
+     does. Refresh is explicit and bypasses a cached statistical fallback. */
   useEffect(() => {
-    const anchor = `${coinId}:${range?.key ?? ''}`;
-    if (!forecastOn || !expanded || candles.length < 60) {
-      setForecast(null);
-      setForecastState('idle');
-      forecastAnchorRef.current = '';
+    if (!forecastOn) return undefined;
+    const bars = candlesRef.current;
+    if (bars.length < 40) {
+      setForecastResult({ key: forecastKey, status: 'error', error: 'INSUFFICIENT_CANDLES', data: null });
       return undefined;
     }
-    if (forecastAnchorRef.current !== anchor) {
-      /* Different series: drop the old projection before asking for a new
-         one — overlapping timestamps would draw token A's future under
-         token B's chart for the length of the request. */
-      forecastAnchorRef.current = anchor;
-      setForecast(null);
-      setForecastState('loading');
-    }
-    let dead = false;
-    setForecastState((s) => (s === 'ready' ? s : 'loading'));
-    const predLen = Math.max(12, Math.min(48, Math.round(candles.length / 8)));
-    const payload = candles.map((c) => ({
-      t: c.time * 1000,
-      o: c.open,
-      h: c.high,
-      l: c.low,
-      c: c.close
+    const controller = new AbortController();
+    setForecastResult({ key: forecastKey, status: 'loading', data: null });
+    const payload = bars.slice(-512).map((c) => ({
+      t: c.time * 1000, o: c.open, h: c.high, l: c.low, c: c.close
     }));
-    postTokenForecast(payload, { predLen })
+    postTokenForecast(payload, { predLen, signal: controller.signal, refresh: forecastRefresh.key === forecastKey })
       .then((data) => {
-        if (dead) return;
-        setForecast(data);
-        setForecastState('ready');
+        if (!controller.signal.aborted) setForecastResult({ key: forecastKey, status: 'ready', data });
       })
-      .catch(() => {
-        if (dead) return;
-        setForecast(null);
-        setForecastState('error');
+      .catch((error) => {
+        if (!controller.signal.aborted) setForecastResult({
+          key: forecastKey, status: 'error', data: null,
+          error: String(error?.message || 'FORECAST_FAILED')
+        });
       });
-    return () => {
-      dead = true;
-    };
-  }, [forecastOn, expanded, candles, coinId, range?.key]);
+    return () => controller.abort();
+  }, [forecastOn, forecastKey, predLen, forecastRefresh]);
 
   const toggleForecast = useCallback(() => {
-    setForecastOn((v) => {
-      if (v) {
-        setForecast(null);
-        setForecastState('idle');
-      }
-      return !v;
-    });
-  }, []);
+    if (forecastOn) setForecastResult(null);
+    setForecastOn(!forecastOn);
+  }, [forecastOn]);
+  const retryForecast = useCallback(() => setForecastRefresh((value) => ({ key: forecastKey, nonce: value.nonce + 1 })), [forecastKey]);
 
   const toggleOverlay = useCallback((group, key) => {
     setPrefs((prev) => ({
@@ -467,6 +445,7 @@ export default function TokenChart({
   function resetAll() {
     setPrefs(DEFAULT_PREFS);
     setTool('none');
+    setForecastOn(false);
     setMeasure({ a: null, b: null });
     chartRef.current?.fit();
   }
@@ -733,7 +712,7 @@ export default function TokenChart({
     <div className="pc-legend" dir="ltr" id={legendId} aria-live="polite">
       <span className="pc-sym">{symbol}</span>
       <span className="pc-interval" title={t('coin.pro.intervalHint')}>{interval}</span>
-      <OHLC bar={shownBar} t={t} volumeLabel={t('coin.pro.vol24')} />
+      <OHLC bar={shownBar} projected={Boolean(shownBar?.projected)} t={t} volumeLabel={t('coin.pro.vol24')} />
       <span className={`pc-range-pos${up ? ' up' : ' down'}`}>
         {Number.isFinite(sessionChange) ? `${sessionChange >= 0 ? '+' : ''}${sessionChange.toFixed(2)}%` : '—'}
       </span>
@@ -751,6 +730,38 @@ export default function TokenChart({
       <span className="pc-stats-bars"><em>{t('coin.pro.bars')}</em>{activeStats.bars}</span>
     </div>
   ) : null;
+
+  const forecastErrorMessage = forecastError === 'INSUFFICIENT_CANDLES' ? t('coin.pro.forecastShortHistory', { count: 40 })
+    : forecastError === 'FORECAST_TIMEOUT' ? t('coin.pro.forecastTimeout')
+      : /429|RATE_LIMITED/.test(forecastError) ? t('coin.pro.forecastRateLimited')
+        : t('coin.pro.forecastUnavailable');
+  const forecastLast = forecast?.candles?.[forecast.candles.length - 1];
+  const forecastChange = forecastLast && lastBar?.close > 0 ? (forecastLast.c / lastBar.close - 1) * 100 : null;
+  const forecastPanel = forecast ? (
+    <div className="pc-fc" dir="auto" data-testid="forecast-badge">
+      <div className="pc-fc-head">
+        <span className={`pc-fc-tag${forecast.provider === 'kronos' ? ' is-model' : ''}`}>
+          {forecast.provider === 'kronos' ? t('coin.pro.forecastKronos') : t('coin.pro.forecastBaseline')}
+        </span>
+        <span className="pc-fc-model mono" dir="ltr">{String(forecast.model || '').replace(/^.*\//, '')}</span>
+        <button type="button" className="pc-fc-refresh" onClick={retryForecast} aria-label={t('coin.pro.forecastRetry')}>
+          ↻ {t('coin.pro.forecastRetry')}
+        </button>
+      </div>
+      <div className="pc-fc-summary">
+        <span>{t('coin.pro.forecastTarget')} <b className="mono" dir="ltr">{fmtPrice(forecastLast?.c)}</b></span>
+        {forecastChange != null ? <span className={forecastChange >= 0 ? 'up' : 'down'} dir="ltr">{forecastChange >= 0 ? '+' : ''}{forecastChange.toFixed(2)}%</span> : null}
+        <span>{t('coin.pro.forecastHorizonCount', { count: forecast.candles.length })}</span>
+      </div>
+      {forecast.provider !== 'kronos' ? <div className="pc-fc-warning">{t('coin.pro.forecastFallback')}</div> : null}
+      <div className="pc-fc-disc">{t('coin.pro.forecastDisclaimer')}</div>
+    </div>
+  ) : null;
+  const forecastNotice = forecastOn && forecastState === 'error'
+    ? forecastErrorMessage
+    : forecastOn && forecastState === 'loading'
+      ? t('coin.pro.forecastLoading')
+      : forecast && forecastEngineFailed ? t('coin.pro.forecastCanvasUnavailable') : '';
 
   const toolbar = (
     <div className="pc-toolbar" role="toolbar" aria-label={t('coin.pro.tools')}>
@@ -797,10 +808,21 @@ export default function TokenChart({
           active={forecastOn}
           onClick={toggleForecast}
           title={t('coin.pro.forecastHint')}
+          disabled={!hasCandles}
+          busy={forecastState === 'loading'}
+          data-testid="forecast-toggle"
           tone="fc"
         >
+          {forecastState === 'loading' ? <span className="pc-spinner" aria-hidden="true" /> : null}
           {t('coin.pro.forecast')}
         </Chip>
+        {forecastOn ? <label className="pc-fc-horizon">
+          <span>{t('coin.pro.forecastHorizon')}</span>
+          <select value={forecastHorizon} onChange={(event) => setForecastHorizon(event.target.value)} aria-label={t('coin.pro.forecastHorizon')}>
+            <option value="auto">{t('coin.pro.forecastAuto')}</option>
+            <option value="12">12</option><option value="24">24</option><option value="48">48</option>
+          </select>
+        </label> : null}
       </div>
       <div className="pc-toolgroup pc-toolgroup--actions">
         <Chip onClick={() => chartRef.current?.zoom(0.62)} title={t('coin.pro.zoomIn')}><span aria-hidden="true">＋</span></Chip>
@@ -894,7 +916,9 @@ export default function TokenChart({
                 settings={settings}
                 levels={levels}
                 fib={fib}
-                forecast={forecastOn ? forecast : null}
+                forecast={forecast}
+                onReady={() => setForecastEngineFailed(false)}
+                onUnavailable={() => setForecastEngineFailed(true)}
                 locale={i18n.language === 'fa' ? 'fa-IR' : 'en-US'}
                 fallbackHeight={expandedFallbackHeight()}
                 onCrosshair={setHover}
@@ -902,15 +926,6 @@ export default function TokenChart({
                 onWindowStats={setStats}
               />
               <div className="pc-fs-legend">{legend}</div>
-              {forecastOn && forecast ? (
-                <div className="pc-fc" dir="ltr" data-testid="forecast-badge">
-                  <span className={`pc-fc-tag${forecast.provider === 'kronos' ? ' is-model' : ''}`}>
-                    {forecast.provider === 'kronos' ? t('coin.pro.forecastKronos') : t('coin.pro.forecastBaseline')}
-                  </span>
-                  <span className="pc-fc-model mono">{String(forecast.model || '').replace(/^.*\//, '')}</span>
-                  <span className="pc-fc-disc">{t('coin.pro.forecastDisclaimer')}</span>
-                </div>
-              ) : null}
               {measureInfo && measure.a && measure.b ? (
                 <div
                   className={`pc-measure${measureInfo.up ? ' up' : ' down'}`}
@@ -926,6 +941,7 @@ export default function TokenChart({
                 </div>
               ) : null}
             </div>
+            {forecastPanel}
             {statsStrip}
           </>
         )}
@@ -940,12 +956,10 @@ export default function TokenChart({
       {needVolume && !volumeReady && !volumeLoading ? (
         <div className="pc-fs-note">{t('coin.pro.volumeUnavailable')}</div>
       ) : null}
-      {forecastOn && forecastState === 'loading' && !forecast ? (
-        <div className="pc-fs-note">{t('coin.pro.forecastLoading')}</div>
-      ) : null}
-      {forecastOn && forecastState === 'error' ? (
-        <div className="pc-fs-note">{t('coin.pro.forecastUnavailable')}</div>
-      ) : null}
+      {forecastNotice ? <div className={`pc-fs-note${forecastState === 'error' ? ' pc-fs-note--error' : ''}`} role="status" aria-live="polite">
+        {forecastNotice}
+        {forecastState === 'error' && forecastError !== 'INSUFFICIENT_CANDLES' ? <button type="button" className="pc-fc-refresh" onClick={retryForecast}>{t('coin.pro.forecastRetry')}</button> : null}
+      </div> : null}
     </div>,
     document.body
   ) : null;
@@ -955,6 +969,10 @@ export default function TokenChart({
       <div className="pc-inline-head">
         {legend}
         <div className="pc-inline-actions">
+          {!expanded ? <Chip active={forecastOn} onClick={toggleForecast} tone="fc" disabled={!hasCandles}
+            busy={forecastState === 'loading'} title={t('coin.pro.forecastHint')} data-testid="forecast-toggle">
+            {t('coin.pro.forecast')}
+          </Chip> : null}
           {liveBadge}
           <span className="pc-inline-updated" aria-hidden="true">{interval}</span>
           <button
@@ -991,6 +1009,9 @@ export default function TokenChart({
               settings={settings}
               levels={levels}
               fib={fib}
+              forecast={forecast}
+              onReady={() => setForecastEngineFailed(false)}
+              onUnavailable={() => setForecastEngineFailed(true)}
               locale={i18n.language === 'fa' ? 'fa-IR' : 'en-US'}
               fallbackHeight={height}
               onCrosshair={setHover}
@@ -1006,6 +1027,11 @@ export default function TokenChart({
         )}
       </div>
 
+      {!expanded && forecastPanel}
+      {!expanded && forecastNotice ? <div className="pc-inline-note" role="status" aria-live="polite">
+        {forecastNotice}
+        {forecastState === 'error' && forecastError !== 'INSUFFICIENT_CANDLES' ? <button type="button" className="pc-fc-refresh" onClick={retryForecast}>{t('coin.pro.forecastRetry')}</button> : null}
+      </div> : null}
       {overlay}
     </div>
   );

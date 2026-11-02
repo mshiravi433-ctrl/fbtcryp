@@ -416,7 +416,17 @@
       "forecastUnavailable": "Прогноз сейчас недоступен",
       "forecastKronos": "Kronos",
       "forecastBaseline": "Базовая модель",
-      "forecastDisclaimer": "Прогноз модели на основе прошлых свечей — не финансовая рекомендация и не гарантия."
+      "forecastDisclaimer": "Прогноз модели на основе прошлых свечей — не финансовая рекомендация и не гарантия.",
+      "forecastRetry": "Повторить",
+      "forecastHorizon": "Свечи прогноза",
+      "forecastAuto": "Авто",
+      "forecastHorizonCount": "Будущих свечей: {{count}}",
+      "forecastTarget": "Конечная цена сценария",
+      "forecastFallback": "Kronos недоступен. Это статистическая оценка, а не прогноз ИИ.",
+      "forecastShortHistory": "Нужно не менее {{count}} реальных свечей. Выберите более длинный период.",
+      "forecastTimeout": "Модель отвечала слишком долго. Повторите или сократите горизонт.",
+      "forecastRateLimited": "Слишком много запросов. Подождите минуту и повторите.",
+      "forecastCanvasUnavailable": "Интерактивный график недоступен; сценарий показан на упрощённом графике."
     },
     "chartCandle": "Свечи",
     "chartLine": "Линия",

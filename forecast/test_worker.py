@@ -77,7 +77,7 @@ class ValidateTests(unittest.TestCase):
         rows[10]["h"] = rows[10]["l"] - 1
         with self.assertRaises(BadRequest) as ctx:
             validate_payload({"candles": rows})
-        self.assertIn("HIGH_BELOW_LOW", str(ctx.exception))
+        self.assertIn("INCONSISTENT_OHLC", str(ctx.exception))
 
     def test_rejects_non_positive_price(self):
         rows = make_candles(60)
@@ -222,6 +222,63 @@ class HttpContractTests(unittest.TestCase):
         status, data = self._post("/forecast", {"candles": make_candles(5)})
         self.assertEqual(status, 400)
         self.assertIn("CANDLES_TOO_FEW", data["error"])
+
+    def test_real_backend_health_is_503_until_loaded(self):
+        # Start a second worker with the REAL backend selected but no torch in
+        # the test environment. Its socket may be open; health must still be 503.
+        env = dict(os.environ, KRONOS_BACKEND="kronos", KRONOS_WORKER_PORT="0")
+        # Port 0 is not useful over HTTP; use a free port chosen by the OS.
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        env["KRONOS_WORKER_PORT"] = str(port)
+        proc = subprocess.Popen([sys.executable, str(REPO / "forecast" / "worker.py")],
+                                env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            deadline = time.time() + 5
+            while time.time() < deadline:
+                try:
+                    with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=1) as r:
+                        self.assertEqual(r.status, 200)
+                    break
+                except urllib.error.HTTPError as exc:
+                    self.assertEqual(exc.code, 503)
+                    data = json.loads(exc.read())
+                    self.assertFalse(data["ok"])
+                    self.assertFalse(data["loaded"])
+                    return
+                except OSError:
+                    time.sleep(0.05)
+            self.fail("real worker did not start")
+        finally:
+            proc.terminate()
+            proc.wait(timeout=5)
+
+    def test_transient_model_load_failure_can_heal(self):
+        import worker
+        old = (worker.BACKEND, worker._predictor, dict(worker._state))
+        calls = []
+        try:
+            worker.BACKEND = "kronos"
+            worker._predictor = None
+            worker._state.update(loaded=False, loading=False, error=None, nextRetryAt=0.0)
+            def flaky():
+                calls.append(1)
+                if len(calls) == 1:
+                    raise OSError("temporary download failure")
+                return object()
+            with self.assertRaisesRegex(RuntimeError, "MODEL_LOAD_FAILED"):
+                worker._ensure_model(loader=flaky)
+            self.assertFalse(worker._state["loaded"])
+            self.assertGreater(worker._state["nextRetryAt"], 0)
+            worker._state["nextRetryAt"] = 0.0
+            self.assertIsNotNone(worker._ensure_model(loader=flaky))
+            self.assertTrue(worker._state["loaded"])
+            self.assertEqual(len(calls), 2)
+        finally:
+            worker.BACKEND, worker._predictor, state = old
+            worker._state.clear()
+            worker._state.update(state)
 
     def test_unknown_path_404(self):
         status, data = self._post("/nope", {})

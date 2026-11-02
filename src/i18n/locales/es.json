@@ -416,7 +416,17 @@
       "forecastUnavailable": "Pronóstico no disponible ahora mismo",
       "forecastKronos": "Kronos",
       "forecastBaseline": "Modelo base",
-      "forecastDisclaimer": "Proyección del modelo a partir de velas pasadas — no es asesoría financiera ni una garantía."
+      "forecastDisclaimer": "Proyección del modelo a partir de velas pasadas — no es asesoría financiera ni una garantía.",
+      "forecastRetry": "Reintentar",
+      "forecastHorizon": "Velas previstas",
+      "forecastAuto": "Auto",
+      "forecastHorizonCount": "{{count}} velas futuras",
+      "forecastTarget": "Precio final del escenario",
+      "forecastFallback": "Kronos no está disponible. Esto es una estimación estadística, no una predicción de IA.",
+      "forecastShortHistory": "Se necesitan al menos {{count}} velas reales. Elija un período más largo.",
+      "forecastTimeout": "El modelo tardó demasiado. Reintente o elija un horizonte menor.",
+      "forecastRateLimited": "Demasiadas solicitudes. Espere un minuto y reintente.",
+      "forecastCanvasUnavailable": "El gráfico interactivo no está disponible; el escenario se muestra en el gráfico simple."
     },
     "chartCandle": "Velas",
     "chartLine": "Línea",

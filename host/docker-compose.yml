@@ -82,6 +82,7 @@ services:
       KRONOS_MAX_CONTEXT: ${KRONOS_MAX_CONTEXT:-512}
       KRONOS_WORKER_PORT: 8765
       KRONOS_WORKER_TOKEN: ${KRONOS_WORKER_TOKEN:-}
+      KRONOS_CPU_THREADS: ${KRONOS_CPU_THREADS:-4}
     volumes:
       - kronos-cache:/root/.cache/huggingface
     restart: unless-stopped
@@ -105,6 +106,7 @@ services:
       - ollama
       - searxng
       - mission-worker
+      - kronos-worker
 
 volumes:
   mission-data:

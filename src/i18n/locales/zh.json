@@ -416,7 +416,17 @@
       "forecastUnavailable": "预测暂时不可用",
       "forecastKronos": "Kronos",
       "forecastBaseline": "基线模型",
-      "forecastDisclaimer": "基于历史 K 线的模型推演——非投资建议，非收益保证。"
+      "forecastDisclaimer": "基于历史 K 线的模型推演——非投资建议，非收益保证。",
+      "forecastRetry": "重试",
+      "forecastHorizon": "预测蜡烛数",
+      "forecastAuto": "自动",
+      "forecastHorizonCount": "未来 {{count}} 根蜡烛",
+      "forecastTarget": "情景终点价格",
+      "forecastFallback": "Kronos 不可用。这是统计估计，不是 AI 预测。",
+      "forecastShortHistory": "至少需要 {{count}} 根真实蜡烛。请选择更长时间范围。",
+      "forecastTimeout": "模型响应超时。请重试或选择更短期限。",
+      "forecastRateLimited": "请求过多。请等待一分钟后重试。",
+      "forecastCanvasUnavailable": "交互图表不可用；情景显示在简化图表上。"
     },
     "chartCandle": "K线",
     "chartLine": "折线",

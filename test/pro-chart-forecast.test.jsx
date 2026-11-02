@@ -3,7 +3,7 @@
  * AI FORECAST in the token terminal — the toggle, the request, the badge.
  * -----------------------------------------------------------------------
  * What arithmetic cannot pin: that the projection is REQUESTED only from the
- * open terminal with the toggle on, that the candles posted are the ones on
+ * inline card OR open terminal with the toggle on, that the candles posted are the ones on
  * screen (feed milliseconds, not the chart's seconds), that the badge names
  * WHICH model answered — Kronos or the labelled baseline — and that a failure
  * says «در دسترس نیست» and draws NOTHING rather than inventing a future.
@@ -135,7 +135,6 @@ describe('ai forecast', () => {
     let answer;
     postTokenForecast.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
     mount();
-    openTerminal();
     fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
 
     await waitFor(() => expect(postTokenForecast).toHaveBeenCalledTimes(1));
@@ -160,7 +159,6 @@ describe('ai forecast', () => {
       candles: projection(12)
     });
     mount();
-    openTerminal();
     fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
 
     const badge = await screen.findByTestId('forecast-badge');
@@ -181,19 +179,18 @@ describe('ai forecast', () => {
       worker: { ok: false, error: 'ECONNREFUSED' }
     });
     mount();
-    openTerminal();
     fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
 
     const badge = await screen.findByTestId('forecast-badge');
     expect(badge.textContent).toContain('coin.pro.forecastBaseline');
     expect(badge.querySelector('.pc-fc-tag').className).not.toContain('is-model');
     expect(badge.textContent).toContain('coin.pro.forecastDisclaimer');
+    expect(badge.textContent).toContain('coin.pro.forecastFallback');
   });
 
   it('a failed request says unavailable and draws NOTHING', async () => {
     postTokenForecast.mockRejectedValue(new Error('HTTP_500'));
     mount();
-    openTerminal();
     fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
 
     await screen.findByText('coin.pro.forecastUnavailable');
@@ -217,5 +214,49 @@ describe('ai forecast', () => {
     fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
     await waitFor(() => expect(screen.queryByTestId('forecast-badge')).toBeNull());
     expect(screen.getByRole('button', { name: 'coin.pro.forecast' }).getAttribute('aria-pressed')).toBe('false');
+  });
+});
+
+
+describe('forecast regressions', () => {
+  it('draws the projection on the SVG fallback too', async () => {
+    postTokenForecast.mockResolvedValue({ ok: true, provider: 'baseline', model: 'drift-volatility baseline', predLen: 12, candles: projection(12) });
+    const { container } = mount();
+    fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
+    await screen.findByTestId('forecast-badge');
+    await waitFor(() => expect(container.querySelector('[data-forecast-bars="12"]')).toBeTruthy());
+  });
+
+  it('aborts an in-flight request when the asset changes and never paints the old answer', async () => {
+    let resolveOld;
+    postTokenForecast.mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }));
+    const { rerender } = mount();
+    fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
+    await waitFor(() => expect(postTokenForecast).toHaveBeenCalledTimes(1));
+    const oldSignal = postTokenForecast.mock.calls[0][1].signal;
+    postTokenForecast.mockResolvedValueOnce({ ok: true, provider: 'kronos', model: 'Kronos-small', predLen: 12, candles: projection(12) });
+    rerender(<TokenChart data={candles} symbol="BTC" coin={{ id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin' }} coinId="bitcoin" range={RANGES[1]} ranges={RANGES} height={300} />);
+    await waitFor(() => expect(oldSignal.aborted).toBe(true));
+    resolveOld({ ok: true, provider: 'kronos', model: 'old', predLen: 12, candles: projection(12) });
+    await screen.findByTestId('forecast-badge');
+    expect(screen.getByTestId('forecast-badge').textContent).not.toContain('old');
+  });
+
+  it('retry is explicit and sends refresh only for the retried series', async () => {
+    postTokenForecast.mockRejectedValueOnce(new Error('HTTP_503'));
+    postTokenForecast.mockResolvedValue({ ok: true, provider: 'baseline', model: 'drift-volatility baseline', predLen: 12, candles: projection(12) });
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
+    await screen.findByText('coin.pro.forecastUnavailable');
+    fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecastRetry' }));
+    await screen.findByTestId('forecast-badge');
+    expect(postTokenForecast.mock.calls.at(-1)[1].refresh).toBe(true);
+  });
+
+  it('short history explains the minimum instead of posting a doomed request', async () => {
+    mount({ data: candles.slice(0, 20) });
+    fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
+    await screen.findByText('coin.pro.forecastShortHistory');
+    expect(postTokenForecast).not.toHaveBeenCalled();
   });
 });

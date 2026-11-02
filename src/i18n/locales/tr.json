@@ -416,7 +416,17 @@
       "forecastUnavailable": "Tahmin şu anda kullanılamıyor",
       "forecastKronos": "Kronos",
       "forecastBaseline": "Temel model",
-      "forecastDisclaimer": "Geçmiş mumlardan model projeksiyonu — yatırım tavsiyesi değildir, garanti değildir."
+      "forecastDisclaimer": "Geçmiş mumlardan model projeksiyonu — yatırım tavsiyesi değildir, garanti değildir.",
+      "forecastRetry": "Yeniden dene",
+      "forecastHorizon": "Tahmin mumları",
+      "forecastAuto": "Otomatik",
+      "forecastHorizonCount": "Gelecek {{count}} mum",
+      "forecastTarget": "Senaryo son fiyatı",
+      "forecastFallback": "Kronos kullanılamıyor. Bu bir istatistiksel tahmindir, yapay zekâ tahmini değildir.",
+      "forecastShortHistory": "En az {{count}} gerçek mum gerekli. Daha uzun aralık seçin.",
+      "forecastTimeout": "Model çok uzun sürdü. Yeniden deneyin veya daha kısa ufuk seçin.",
+      "forecastRateLimited": "Çok fazla istek. Bir dakika bekleyip yeniden deneyin.",
+      "forecastCanvasUnavailable": "Etkileşimli grafik kullanılamıyor; senaryo basit grafikte gösterilir."
     },
     "chartCandle": "Mumlar",
     "chartLine": "Çizgi",
