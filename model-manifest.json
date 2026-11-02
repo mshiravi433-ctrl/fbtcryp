@@ -1,6 +1,6 @@
 {
   "schema": "fbt.kronos.browser.v1",
-  "createdAt": "2026-11-02T19:53:29Z",
+  "createdAt": "2026-11-02T21:40:10Z",
   "model": {
     "id": "NeoQuasar/Kronos-mini",
     "params": 4108192,
@@ -29,7 +29,17 @@
   "opset": 17,
   "provenance": {
     "source": "local",
-    "path": "/tmp/kronos-weights"
+    "weightsDir": "kronos-weights",
+    "upstream": {
+      "model": "NeoQuasar/Kronos-mini",
+      "tokenizer": "NeoQuasar/Kronos-Tokenizer-2k",
+      "license": "MIT",
+      "project": "https://github.com/shiyu-coder/Kronos"
+    },
+    "weightsSha256": {
+      "Kronos-mini/model.safetensors": "a7d5f37e2e9fbd9891f7d7d4f72574512dd1f704fee14223e0a8cd0fbf54197c",
+      "Kronos-Tokenizer-2k/model.safetensors": "b97ec46b3b72160509e289183eaf7bdf5f0dac5bb9b49522f6d46638a99a8717"
+    }
   },
   "files": [
     {
@@ -53,5 +63,14 @@
       "sha256": "da26b3d51a6b931ae0093a1aa9fd012cad5f970eac30ab61e96c000670ddd803"
     }
   ],
-  "totalBytes": 33423642
+  "totalBytes": 33423642,
+  "selfCheck": {
+    "reference": "KronosPredictor.predict (vendored, forecast/kronos_model)",
+    "tolerance": 0.001,
+    "tokenizerEncodeMismatches": 0,
+    "tokenizerDecodeMaxAbsDiff": 2.1457672119140625e-06,
+    "transformerLogitsMaxAbsDiff": 9.5367431640625e-06,
+    "incrementalStepMaxAbsDiff": 5.7220458984375e-06,
+    "s2HeadMaxAbsDiff": 5.7220458984375e-06
+  }
 }
