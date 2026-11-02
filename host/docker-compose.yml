@@ -66,6 +66,28 @@ services:
       - SEARXNG_BASE_URL=https://ai.yourdomain.com/searxng/
     restart: unless-stopped
 
+  # کارگر پیش‌بینی کندل — مدل Kronos (forecast/worker.py). وزن‌ها در اولین
+  # بالا آمدن از HuggingFace دانلود و روی kronos-cache نگه داشته می‌شوند؛
+  # Caddy مسیر /kronos/* را به همین سرویس می‌برد و Vercel با
+  # KRONOS_WORKER_URL=https://ai.yourdomain.com/kronos صدایش می‌زند.
+  kronos-worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile.kronos-worker
+    container_name: fbt-kronos-worker
+    environment:
+      KRONOS_BACKEND: ${KRONOS_BACKEND:-kronos}
+      KRONOS_MODEL: ${KRONOS_MODEL:-NeoQuasar/Kronos-small}
+      KRONOS_TOKENIZER: ${KRONOS_TOKENIZER:-NeoQuasar/Kronos-Tokenizer-base}
+      KRONOS_MAX_CONTEXT: ${KRONOS_MAX_CONTEXT:-512}
+      KRONOS_WORKER_PORT: 8765
+      KRONOS_WORKER_TOKEN: ${KRONOS_WORKER_TOKEN:-}
+    volumes:
+      - kronos-cache:/root/.cache/huggingface
+    restart: unless-stopped
+    expose:
+      - "8765"
+
   caddy:
     image: caddy:latest
     container_name: fbt-caddy
@@ -87,5 +109,6 @@ services:
 volumes:
   mission-data:
   ollama-data:
+  kronos-cache:
   caddy-data:
   caddy-config:

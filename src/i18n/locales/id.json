@@ -409,7 +409,14 @@
       "range7D": "7H",
       "range30D": "30H",
       "range90D": "90H",
-      "range1Y": "1T"
+      "range1Y": "1T",
+      "forecast": "Prakiraan AI",
+      "forecastHint": "Proyeksikan candle berikutnya dengan model Kronos",
+      "forecastLoading": "Menghitung prakiraan…",
+      "forecastUnavailable": "Prakiraan tidak tersedia saat ini",
+      "forecastKronos": "Kronos",
+      "forecastBaseline": "Model dasar",
+      "forecastDisclaimer": "Proyeksi model dari candle lalu — bukan nasihat keuangan, bukan jaminan."
     },
     "chartCandle": "Candle",
     "chartLine": "Garis",

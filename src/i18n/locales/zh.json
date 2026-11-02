@@ -409,7 +409,14 @@
       "range7D": "7天",
       "range30D": "30天",
       "range90D": "90天",
-      "range1Y": "1年"
+      "range1Y": "1年",
+      "forecast": "AI 预测",
+      "forecastHint": "用 Kronos 模型预测下一批 K 线",
+      "forecastLoading": "正在计算预测…",
+      "forecastUnavailable": "预测暂时不可用",
+      "forecastKronos": "Kronos",
+      "forecastBaseline": "基线模型",
+      "forecastDisclaimer": "基于历史 K 线的模型推演——非投资建议，非收益保证。"
     },
     "chartCandle": "K线",
     "chartLine": "折线",

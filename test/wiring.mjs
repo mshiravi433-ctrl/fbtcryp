@@ -5779,6 +5779,38 @@ export default function run() {
     t('candles never fall back to invented data',
       /fallback: \(\) => \[\]/.test(read('src/lib/api.js')));
 
+    /* ---- the AI projection over those candles (2026-11-02) ---- */
+    /*
+     * Kronos (the K-line foundation model) runs in a durable Python worker —
+     * a Vercel function cannot hold a 25M-param autoregressive model or its
+     * weight download. What these pins guard is the honest part: the route
+     * exists, the worker is optional, and a projection from the statistical
+     * BASELINE must carry that label all the way to the badge, because the
+     * reader decides what to believe from that word.
+     */
+    const forecastClient = read('server/kronosForecast.js');
+    const forecastWorker = read('forecast/worker.py');
+    t('the forecast route exists', /app\.post\('\/api\/forecast'/.test(read('server/app.js')));
+    t('...and the server-side variant over the OHLC feed',
+      /app\.get\('\/api\/forecast\/:id'/.test(read('server/app.js')));
+    t('the worker client labels a baseline fallback',
+      /provider: 'baseline'/.test(forecastClient) && /drift-volatility baseline/.test(forecastClient));
+    t('...and opens a breaker instead of hanging every chart open',
+      /breakerOpen/.test(forecastClient) && /openUntil/.test(forecastClient));
+    t('the terminal wires the forecast toggle to the API',
+      /postTokenForecast/.test(terminal)
+      && /import\s*\{[^}]*\bpostTokenForecast\b[^}]*\}\s*from/.test(code(terminal)));
+    t('the projection is drawn as its own series, never as a real bar',
+      /forecastSeries/.test(read('src/components/ProChart/ProChart.jsx')));
+    t('the badge names the model that answered',
+      /forecastKronos/.test(terminal) && /forecastBaseline/.test(terminal));
+    t('the disclaimer rides with the projection',
+      /forecastDisclaimer/.test(terminal));
+    t('the Kronos worker ships with its own contract tests',
+      existsSync('forecast/worker.py') && existsSync('forecast/test_worker.py'));
+    t('...and the real model is the default backend, not the test double',
+      /get\("KRONOS_BACKEND", "kronos"\)/.test(forecastWorker));
+
     /*
      * ---- the terminal's stored prefs, and the bug that shipped ------------
      * «وقتی وارد صفحه توکن میشه میزنه مشکلی پیش آمده و دوباره تلاش کنید»

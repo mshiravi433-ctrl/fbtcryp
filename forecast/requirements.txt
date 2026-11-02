@@ -1,0 +1,15 @@
+# Kronos forecast worker — runtime dependencies (kronos backend only).
+# The mock backend (KRONOS_BACKEND=mock) runs on the Python standard library
+# alone, which is what the CI contract tests use.
+#
+# Torch note: `pip install torch` from PyPI pulls the CUDA build on Linux
+# (~3.5GB). The Docker image installs the CPU wheel instead:
+#   pip install --index-url https://download.pytorch.org/whl/cpu torch
+# CPU inference for Kronos-small (24.7M params, 512-bar window) is the
+# supported target for this deployment; a GPU is optional (KRONOS_DEVICE).
+numpy>=1.26
+pandas>=2.2
+torch>=2.0
+einops==0.8.1
+huggingface_hub>=0.33.1,<1.0
+safetensors>=0.4

@@ -87,7 +87,14 @@ const tokenChart = {
     'coin.chartLine': 'Línea',
     'coin.noCandles':
       'Ahora mismo no hay datos de velas para esta moneda. La línea de abajo es el precio de cierre, así que la tendencia sigue siendo legible.',
-    'coin.candleNote': 'Cada vela es la apertura, el máximo, el mínimo y el cierre de un intervalo. Pellizca para ampliar.'
+    'coin.candleNote': 'Cada vela es la apertura, el máximo, el mínimo y el cierre de un intervalo. Pellizca para ampliar.',
+    'coin.pro.forecast': 'Pronóstico IA',
+    'coin.pro.forecastHint': 'Proyectar las próximas velas con el modelo Kronos',
+    'coin.pro.forecastLoading': 'Calculando el pronóstico…',
+    'coin.pro.forecastUnavailable': 'Pronóstico no disponible ahora mismo',
+    'coin.pro.forecastKronos': 'Kronos',
+    'coin.pro.forecastBaseline': 'Modelo base',
+    'coin.pro.forecastDisclaimer': 'Proyección del modelo a partir de velas pasadas — no es asesoría financiera ni una garantía.',
   },
 
   fr: {
@@ -148,7 +155,14 @@ const tokenChart = {
     'coin.chartLine': 'Ligne',
     'coin.noCandles':
       'Aucune donnée de bougies pour cette crypto pour le moment. La ligne ci-dessous est le prix de clôture : la tendance reste lisible.',
-    'coin.candleNote': "Chaque bougie donne l'ouverture, le plus haut, le plus bas et la clôture d'un intervalle. Pincez pour zoomer."
+    'coin.candleNote': "Chaque bougie donne l'ouverture, le plus haut, le plus bas et la clôture d'un intervalle. Pincez pour zoomer.",
+    'coin.pro.forecast': 'Prévision IA',
+    'coin.pro.forecastHint': 'Projeter les prochaines bougies avec le modèle Kronos',
+    'coin.pro.forecastLoading': 'Calcul de la prévision…',
+    'coin.pro.forecastUnavailable': 'Prévision indisponible pour le moment',
+    'coin.pro.forecastKronos': 'Kronos',
+    'coin.pro.forecastBaseline': 'Modèle de base',
+    'coin.pro.forecastDisclaimer': 'Projection du modèle à partir des bougies passées — ni conseil financier, ni garantie.',
   },
 
   hi: {
@@ -209,7 +223,14 @@ const tokenChart = {
     'coin.chartLine': 'लाइन',
     'coin.noCandles':
       'इस कॉइन के लिए अभी कैंडल डेटा नहीं है। नीचे की लाइन क्लोज़िंग प्राइस है, इसलिए ट्रेंड फिर भी दिखता है।',
-    'coin.candleNote': 'हर कैंडल एक इंटरवल का ओपन, हाई, लो और क्लोज़ दिखाती है। ज़ूम के लिए पिंच करें।'
+    'coin.candleNote': 'हर कैंडल एक इंटरवल का ओपन, हाई, लो और क्लोज़ दिखाती है। ज़ूम के लिए पिंच करें।',
+    'coin.pro.forecast': 'AI पूर्वानुमान',
+    'coin.pro.forecastHint': 'Kronos मॉडल से अगली कैंडल का अनुमान लगाएँ',
+    'coin.pro.forecastLoading': 'पूर्वानुमान की गणना हो रही है…',
+    'coin.pro.forecastUnavailable': 'पूर्वानुमान अभी उपलब्ध नहीं है',
+    'coin.pro.forecastKronos': 'Kronos',
+    'coin.pro.forecastBaseline': 'बेसलाइन मॉडल',
+    'coin.pro.forecastDisclaimer': 'पिछली कैंडलों से मॉडल का अनुमान — वित्तीय सलाह नहीं, गारंटी नहीं।',
   },
 
   id: {
@@ -270,7 +291,14 @@ const tokenChart = {
     'coin.chartLine': 'Garis',
     'coin.noCandles':
       'Belum ada data candle untuk koin ini saat ini. Garis di bawah adalah harga penutupan, jadi trennya tetap terbaca.',
-    'coin.candleNote': 'Setiap candle adalah open, high, low dan close satu interval. Cubit untuk memperbesar.'
+    'coin.candleNote': 'Setiap candle adalah open, high, low dan close satu interval. Cubit untuk memperbesar.',
+    'coin.pro.forecast': 'Prakiraan AI',
+    'coin.pro.forecastHint': 'Proyeksikan candle berikutnya dengan model Kronos',
+    'coin.pro.forecastLoading': 'Menghitung prakiraan…',
+    'coin.pro.forecastUnavailable': 'Prakiraan tidak tersedia saat ini',
+    'coin.pro.forecastKronos': 'Kronos',
+    'coin.pro.forecastBaseline': 'Model dasar',
+    'coin.pro.forecastDisclaimer': 'Proyeksi model dari candle lalu — bukan nasihat keuangan, bukan jaminan.',
   },
 
   pt: {
@@ -331,7 +359,14 @@ const tokenChart = {
     'coin.chartLine': 'Linha',
     'coin.noCandles':
       'Agora não há dados de candles para esta moeda. A linha abaixo é o preço de fecho, por isso a tendência continua legível.',
-    'coin.candleNote': 'Cada candle é a abertura, a máxima, a mínima e o fecho de um intervalo. Faça pinça para ampliar.'
+    'coin.candleNote': 'Cada candle é a abertura, a máxima, a mínima e o fecho de um intervalo. Faça pinça para ampliar.',
+    'coin.pro.forecast': 'Previsão de IA',
+    'coin.pro.forecastHint': 'Projetar as próximas velas com o modelo Kronos',
+    'coin.pro.forecastLoading': 'Calculando a previsão…',
+    'coin.pro.forecastUnavailable': 'Previsão indisponível agora',
+    'coin.pro.forecastKronos': 'Kronos',
+    'coin.pro.forecastBaseline': 'Modelo base',
+    'coin.pro.forecastDisclaimer': 'Projeção do modelo a partir de velas passadas — não é aconselhamento financeiro nem garantia.',
   },
 
   ru: {
@@ -392,7 +427,14 @@ const tokenChart = {
     'coin.chartLine': 'Линия',
     'coin.noCandles':
       'Сейчас для этой монеты нет данных свечей. Линия ниже — цена закрытия, так что тренд всё равно видно.',
-    'coin.candleNote': 'Каждая свеча — это открытие, максимум, минимум и закрытие одного интервала. Сведите пальцы, чтобы приблизить.'
+    'coin.candleNote': 'Каждая свеча — это открытие, максимум, минимум и закрытие одного интервала. Сведите пальцы, чтобы приблизить.',
+    'coin.pro.forecast': 'AI-прогноз',
+    'coin.pro.forecastHint': 'Спроецировать следующие свечи моделью Kronos',
+    'coin.pro.forecastLoading': 'Вычисление прогноза…',
+    'coin.pro.forecastUnavailable': 'Прогноз сейчас недоступен',
+    'coin.pro.forecastKronos': 'Kronos',
+    'coin.pro.forecastBaseline': 'Базовая модель',
+    'coin.pro.forecastDisclaimer': 'Прогноз модели на основе прошлых свечей — не финансовая рекомендация и не гарантия.',
   },
 
   tr: {
@@ -453,7 +495,14 @@ const tokenChart = {
     'coin.chartLine': 'Çizgi',
     'coin.noCandles':
       'Bu coin için şu anda mum verisi yok. Aşağıdaki çizgi kapanış fiyatı; eğilim yine de okunur.',
-    'coin.candleNote': 'Her mum bir aralığın açılış, en yüksek, en düşük ve kapanışıdır. Yakınlaştırmak için iki parmakla sıkıştırın.'
+    'coin.candleNote': 'Her mum bir aralığın açılış, en yüksek, en düşük ve kapanışıdır. Yakınlaştırmak için iki parmakla sıkıştırın.',
+    'coin.pro.forecast': 'Yapay zekâ tahmini',
+    'coin.pro.forecastHint': 'Sonraki mumları Kronos modeliyle projekte et',
+    'coin.pro.forecastLoading': 'Tahmin hesaplanıyor…',
+    'coin.pro.forecastUnavailable': 'Tahmin şu anda kullanılamıyor',
+    'coin.pro.forecastKronos': 'Kronos',
+    'coin.pro.forecastBaseline': 'Temel model',
+    'coin.pro.forecastDisclaimer': 'Geçmiş mumlardan model projeksiyonu — yatırım tavsiyesi değildir, garanti değildir.',
   },
 
   ur: {
@@ -514,7 +563,14 @@ const tokenChart = {
     'coin.chartLine': 'لائن',
     'coin.noCandles':
       'اس کوائن کے لیے ابھی کینڈل ڈیٹا نہیں ہے۔ نیچے کی لائن کلوزنگ قیمت ہے، اس لیے رجحان پھر بھی پڑھا جا سکتا ہے۔',
-    'coin.candleNote': 'ہر کینڈل ایک وقفے کا اوپن، ہائی، لو اور کلوز ہے۔ زوم کے لیے پنچ کریں۔'
+    'coin.candleNote': 'ہر کینڈل ایک وقفے کا اوپن، ہائی، لو اور کلوز ہے۔ زوم کے لیے پنچ کریں۔',
+    'coin.pro.forecast': 'AI پیش گوئی',
+    'coin.pro.forecastHint': 'Kronos ماڈل کے ساتھ اگلی کینڈلز کا اندازہ لگائیں',
+    'coin.pro.forecastLoading': 'پیش گوئی کا حساب ہو رہا ہے…',
+    'coin.pro.forecastUnavailable': 'پیش گوئی اس وقت دستیاب نہیں',
+    'coin.pro.forecastKronos': 'Kronos',
+    'coin.pro.forecastBaseline': 'بنیادی ماڈل',
+    'coin.pro.forecastDisclaimer': 'گذشتہ کینڈلز سے ماڈل کا اندازہ — نہ مالی مشورہ، نہ ضمانت۔',
   },
 
   zh: {
@@ -573,7 +629,14 @@ const tokenChart = {
     'coin.chartCandle': 'K线',
     'coin.chartLine': '折线',
     'coin.noCandles': '该币种目前没有K线数据。下方折线是收盘价，趋势仍然可读。',
-    'coin.candleNote': '每根K线是一个周期的开盘、最高、最低和收盘。双指捏合可缩放。'
+    'coin.candleNote': '每根K线是一个周期的开盘、最高、最低和收盘。双指捏合可缩放。',
+    'coin.pro.forecast': 'AI 预测',
+    'coin.pro.forecastHint': '用 Kronos 模型预测下一批 K 线',
+    'coin.pro.forecastLoading': '正在计算预测…',
+    'coin.pro.forecastUnavailable': '预测暂时不可用',
+    'coin.pro.forecastKronos': 'Kronos',
+    'coin.pro.forecastBaseline': '基线模型',
+    'coin.pro.forecastDisclaimer': '基于历史 K 线的模型推演——非投资建议，非收益保证。',
   },
 
   ar: {
@@ -634,7 +697,14 @@ const tokenChart = {
     'coin.chartLine': 'خط',
     'coin.noCandles':
       'لا توجد بيانات شموع لهذه العملة الآن. الخط أدناه هو سعر الإغلاق، فيبقى الاتجاه مقروءًا.',
-    'coin.candleNote': 'كل شمعة هي افتتاح وإغلاق وأعلى وأدنى سعر لفترة واحدة. اضغط بإصبعين للتكبير.'
+    'coin.candleNote': 'كل شمعة هي افتتاح وإغلاق وأعلى وأدنى سعر لفترة واحدة. اضغط بإصبعين للتكبير.',
+    'coin.pro.forecast': 'توقعات الذكاء الاصطناعي',
+    'coin.pro.forecastHint': 'مشروع الشموع التالية بنموذج Kronos',
+    'coin.pro.forecastLoading': 'جارٍ حساب التوقع…',
+    'coin.pro.forecastUnavailable': 'التوقع غير متاح الآن',
+    'coin.pro.forecastKronos': 'Kronos',
+    'coin.pro.forecastBaseline': 'النموذج الأساسي',
+    'coin.pro.forecastDisclaimer': 'تقدير النموذج من الشموع السابقة — ليس نصيحة مالية ولا ضمانًا.',
   }
 };
 

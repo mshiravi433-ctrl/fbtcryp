@@ -409,7 +409,14 @@
       "range7D": "7D",
       "range30D": "30D",
       "range90D": "90D",
-      "range1Y": "1A"
+      "range1Y": "1A",
+      "forecast": "Previsão de IA",
+      "forecastHint": "Projetar as próximas velas com o modelo Kronos",
+      "forecastLoading": "Calculando a previsão…",
+      "forecastUnavailable": "Previsão indisponível agora",
+      "forecastKronos": "Kronos",
+      "forecastBaseline": "Modelo base",
+      "forecastDisclaimer": "Projeção do modelo a partir de velas passadas — não é aconselhamento financeiro nem garantia."
     },
     "chartCandle": "Candles",
     "chartLine": "Linha",

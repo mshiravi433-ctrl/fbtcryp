@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import ProChart from './ProChart';
 import CoinLogo from '../CoinLogo';
 import { useVolumeSeries } from '../../hooks/useMarket';
-import { getSimplePrices } from '../../lib/api';
+import { getSimplePrices, postTokenForecast } from '../../lib/api';
 import {
   alignVolumeToCandles,
   candleSignature,
@@ -265,6 +265,19 @@ export default function TokenChart({
      the LIVE badge: a tick older than ~45s is history, not "live". */
   const [livePrice, setLivePrice] = useState(null);
   const [liveAt, setLiveAt] = useState(0);
+  /*
+   * AI FORECAST — projected next candles (Kronos via POST /api/forecast).
+   * Session-only state, never persisted: a projection is a live model call,
+   * not a preference, and reopening the terminal must not replay yesterday's
+   * answer as today's. `forecastState` is what the badge and the note read —
+   * idle (off), loading, ready, error — and `forecastAnchor` exists so a
+   * coin/range change drops the OLD series instantly instead of drawing one
+   * token's projection under another token's chart while the new call flies.
+   */
+  const [forecastOn, setForecastOn] = useState(false);
+  const [forecast, setForecast] = useState(null);
+  const [forecastState, setForecastState] = useState('idle');
+  const forecastAnchorRef = useRef('');
 
   const { chartType, overlays, panes, settings } = prefs;
 
@@ -355,6 +368,71 @@ export default function TokenChart({
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [coinId]);
+
+  /*
+   * ─── THE FORECAST FETCH ───────────────────────────────────────────────────
+   * Only while the TERMINAL is open and the toggle is on: the inline card has
+   * no room for the projection, and a projection nobody is looking at is
+   * compute nobody asked for. Keyed on `candles` (identity moves with the
+   * series signature), so a newly printed bar re-projects — the server caches
+   * per bar, so ten readers of BTC still cost one worker call.
+   *
+   * The candles posted are the ones on screen, converted back to the feed's
+   * millisecond stamps: projection and chart can never disagree about which
+   * bars they describe. Failures land in `error` and draw NOTHING — the note
+   * says it is unavailable, exactly like an empty candle feed.
+   */
+  useEffect(() => {
+    const anchor = `${coinId}:${range?.key ?? ''}`;
+    if (!forecastOn || !expanded || candles.length < 60) {
+      setForecast(null);
+      setForecastState('idle');
+      forecastAnchorRef.current = '';
+      return undefined;
+    }
+    if (forecastAnchorRef.current !== anchor) {
+      /* Different series: drop the old projection before asking for a new
+         one — overlapping timestamps would draw token A's future under
+         token B's chart for the length of the request. */
+      forecastAnchorRef.current = anchor;
+      setForecast(null);
+      setForecastState('loading');
+    }
+    let dead = false;
+    setForecastState((s) => (s === 'ready' ? s : 'loading'));
+    const predLen = Math.max(12, Math.min(48, Math.round(candles.length / 8)));
+    const payload = candles.map((c) => ({
+      t: c.time * 1000,
+      o: c.open,
+      h: c.high,
+      l: c.low,
+      c: c.close
+    }));
+    postTokenForecast(payload, { predLen })
+      .then((data) => {
+        if (dead) return;
+        setForecast(data);
+        setForecastState('ready');
+      })
+      .catch(() => {
+        if (dead) return;
+        setForecast(null);
+        setForecastState('error');
+      });
+    return () => {
+      dead = true;
+    };
+  }, [forecastOn, expanded, candles, coinId, range?.key]);
+
+  const toggleForecast = useCallback(() => {
+    setForecastOn((v) => {
+      if (v) {
+        setForecast(null);
+        setForecastState('idle');
+      }
+      return !v;
+    });
+  }, []);
 
   const toggleOverlay = useCallback((group, key) => {
     setPrefs((prev) => ({
@@ -714,6 +792,16 @@ export default function TokenChart({
         <Chip active={settings.log} onClick={() => toggleSetting('log')} title={t('coin.pro.logHint')}>{settings.log ? t('coin.pro.log') : t('coin.pro.linear')}</Chip>
         <Chip active={settings.grid} onClick={() => toggleSetting('grid')}>{t('coin.pro.grid')}</Chip>
       </div>
+      <div className="pc-toolgroup">
+        <Chip
+          active={forecastOn}
+          onClick={toggleForecast}
+          title={t('coin.pro.forecastHint')}
+          tone="fc"
+        >
+          {t('coin.pro.forecast')}
+        </Chip>
+      </div>
       <div className="pc-toolgroup pc-toolgroup--actions">
         <Chip onClick={() => chartRef.current?.zoom(0.62)} title={t('coin.pro.zoomIn')}><span aria-hidden="true">＋</span></Chip>
         <Chip onClick={() => chartRef.current?.zoom(1.6)} title={t('coin.pro.zoomOut')}><span aria-hidden="true">－</span></Chip>
@@ -806,6 +894,7 @@ export default function TokenChart({
                 settings={settings}
                 levels={levels}
                 fib={fib}
+                forecast={forecastOn ? forecast : null}
                 locale={i18n.language === 'fa' ? 'fa-IR' : 'en-US'}
                 fallbackHeight={expandedFallbackHeight()}
                 onCrosshair={setHover}
@@ -813,6 +902,15 @@ export default function TokenChart({
                 onWindowStats={setStats}
               />
               <div className="pc-fs-legend">{legend}</div>
+              {forecastOn && forecast ? (
+                <div className="pc-fc" dir="ltr" data-testid="forecast-badge">
+                  <span className={`pc-fc-tag${forecast.provider === 'kronos' ? ' is-model' : ''}`}>
+                    {forecast.provider === 'kronos' ? t('coin.pro.forecastKronos') : t('coin.pro.forecastBaseline')}
+                  </span>
+                  <span className="pc-fc-model mono">{String(forecast.model || '').replace(/^.*\//, '')}</span>
+                  <span className="pc-fc-disc">{t('coin.pro.forecastDisclaimer')}</span>
+                </div>
+              ) : null}
               {measureInfo && measure.a && measure.b ? (
                 <div
                   className={`pc-measure${measureInfo.up ? ' up' : ' down'}`}
@@ -841,6 +939,12 @@ export default function TokenChart({
 
       {needVolume && !volumeReady && !volumeLoading ? (
         <div className="pc-fs-note">{t('coin.pro.volumeUnavailable')}</div>
+      ) : null}
+      {forecastOn && forecastState === 'loading' && !forecast ? (
+        <div className="pc-fs-note">{t('coin.pro.forecastLoading')}</div>
+      ) : null}
+      {forecastOn && forecastState === 'error' ? (
+        <div className="pc-fs-note">{t('coin.pro.forecastUnavailable')}</div>
       ) : null}
     </div>,
     document.body

@@ -63,3 +63,7 @@ data/
 FBT_Radio_*.mp3
 fbt_radio_part*.mp3
 parts/*.mp3
+
+# Python (forecast worker) — bytecode never ships.
+__pycache__/
+*.py[cod]

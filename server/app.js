@@ -28,6 +28,12 @@ import {
   fetchVolumeSeries,
 } from './providers.js';
 import { MARKET_CATEGORIES, isBinanceRiskSector } from '../src/lib/marketSectors.js';
+import {
+  forecastService,
+  normalizeCandles,
+  inferPredLen,
+  FORECAST_MIN_CANDLES
+} from './kronosForecast.js';
 import { telegramAuth, verifyInitData, normalizeBotToken, extractInitData } from './telegramAuth.js';
 import { telegramBotIdentity, tokenDiagnostics } from './telegramIdentity.js';
 import { fetchAudio } from './audio.js';
@@ -3975,6 +3981,67 @@ app.get('/api/volume/:id', (req, res) => {
   const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
   const vs = String(req.query.vs || 'usd').toLowerCase().slice(0, 8);
   return serve(res, 120000)(() => fetchVolumeSeries(req.params.id, days, vs), `volume:${req.params.id}:${days}:${vs}`);
+});
+
+/*
+ * KRONOS AI FORECAST — projected next candles for the token terminal.
+ * -------------------------------------------------------------------
+ * The chart draws what happened; this answers "what might come next" from the
+ * same window of real bars, through the Kronos K-line foundation model that
+ * runs in a durable worker (forecast/worker.py — Vercel's functions are too
+ * ephemeral for a 25M-param autoregressive model and its weight download).
+ *
+ * Two routes, one service (server/kronosForecast.js):
+ *   POST /api/forecast           — the browser posts the candles it is already
+ *                                  drawing, so projection and chart can never
+ *                                  disagree about which bars they describe.
+ *   GET  /api/forecast/:id?days  — the same pipeline server-side from the
+ *                                  CoinGecko OHLC feed, for API consumers.
+ *
+ * The worker is OPTIONAL at runtime: if it is down, slow or still loading its
+ * weights, the service answers with a clearly-labelled statistical baseline
+ * (`provider: "baseline"`, the worker's error in `worker.error`). The client
+ * prints that label next to the projection — the reader always sees which of
+ * the two they are looking at. 400 only for structurally invalid candles.
+ */
+app.post('/api/forecast', async (req, res) => {
+  try {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const norm = normalizeCandles(body.candles);
+    if (!norm.ok) return res.status(400).json({ ok: false, error: norm.error });
+    if (norm.candles.length < FORECAST_MIN_CANDLES) {
+      return res.status(400).json({ ok: false, error: `CANDLES_TOO_FEW:${norm.candles.length}<${FORECAST_MIN_CANDLES}` });
+    }
+    const predLen = inferPredLen(norm.candles, body.predLen);
+    const out = await forecastService.forecast({ candles: norm.candles, predLen });
+    res.set('cache-control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+    return res.json(out);
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: 'FORECAST_FAILED', detail: String(err?.message || err).slice(0, 200) });
+  }
+});
+
+app.get('/api/forecast/:id', async (req, res) => {
+  try {
+    const days = [1, 7, 30].includes(Number(req.query.days)) ? Number(req.query.days) : 7;
+    const vs = String(req.query.vs || 'usd').toLowerCase().slice(0, 8);
+    const ohlc = await fetchOhlc(req.params.id, days, vs);
+    const rows = Array.isArray(ohlc) ? ohlc : [];
+    /* An empty or short feed is a 400 BEFORE normalisation: "no candles" is
+       an honest answer; "CANDLES_EMPTY" as a 502 would blame the upstream for
+       a coin that simply has no history yet. */
+    if (rows.length < FORECAST_MIN_CANDLES) {
+      return res.status(400).json({ ok: false, error: `CANDLES_TOO_FEW:${rows.length}<${FORECAST_MIN_CANDLES}` });
+    }
+    const norm = normalizeCandles(rows.map((d) => ({ t: d.t, o: d.o, h: d.h, l: d.l, c: d.c, v: 0 })));
+    if (!norm.ok) return res.status(502).json({ ok: false, error: norm.error });
+    const predLen = inferPredLen(norm.candles, Number(req.query.predLen) || undefined);
+    const out = await forecastService.forecast({ candles: norm.candles, predLen });
+    res.set('cache-control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+    return res.json({ ...out, source: `coingecko-ohlc:${days}d` });
+  } catch (err) {
+    return res.status(502).json({ ok: false, error: 'UPSTREAM_FAILED', detail: String(err?.message || err).slice(0, 200) });
+  }
 });
 
 app.get('/api/coin/:id', (req, res) =>
