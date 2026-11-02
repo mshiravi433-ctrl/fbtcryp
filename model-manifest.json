@@ -1,0 +1,57 @@
+{
+  "schema": "fbt.kronos.browser.v1",
+  "createdAt": "2026-11-02T19:53:29Z",
+  "model": {
+    "id": "NeoQuasar/Kronos-mini",
+    "params": 4108192,
+    "nLayers": 4,
+    "dModel": 256,
+    "nHeads": 4,
+    "headDim": 64,
+    "s1Bits": 10,
+    "s2Bits": 10,
+    "contextLimit": 2048,
+    "license": "MIT"
+  },
+  "tokenizer": {
+    "id": "NeoQuasar/Kronos-Tokenizer-2k",
+    "params": 3958259,
+    "s1Bits": 10,
+    "s2Bits": 10,
+    "dModel": 256,
+    "nHeads": 4,
+    "headDim": 64,
+    "encode": "tokenizer-encode.onnx",
+    "decode": "tokenizer-decode.onnx"
+  },
+  "browserMaxContext": 512,
+  "precision": "fp32",
+  "opset": 17,
+  "provenance": {
+    "source": "local",
+    "path": "/tmp/kronos-weights"
+  },
+  "files": [
+    {
+      "name": "tokenizer-encode.onnx",
+      "bytes": 7944623,
+      "sha256": "d175079e19671d07c523ce026a77396bb1b1564c3b7e66061d0458f2132e0fd4"
+    },
+    {
+      "name": "tokenizer-decode.onnx",
+      "bytes": 7943763,
+      "sha256": "be60b11f8464736b4185bff8bd0675ba4f0257b6b8cc84b2c39b37b65b793154"
+    },
+    {
+      "name": "kronos-decode.onnx",
+      "bytes": 14375406,
+      "sha256": "6117bc816c037fb9fce253b946d4cad5e5291b7fc6de1931ae372b71df934c7c"
+    },
+    {
+      "name": "kronos-s2head.onnx",
+      "bytes": 3159850,
+      "sha256": "da26b3d51a6b931ae0093a1aa9fd012cad5f970eac30ab61e96c000670ddd803"
+    }
+  ],
+  "totalBytes": 33423642
+}
