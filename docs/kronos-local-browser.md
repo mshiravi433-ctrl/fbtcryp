@@ -201,6 +201,25 @@ new production deployment is built. The APK needs it too — `ci/WORKFLOW-FIXED.
 maps it for exactly that reason, because a website that finds the weights and an
 APK that reports «فایل‌های مدل منتشر نشده‌اند» is the worst possible pair.
 
+`scripts/fetch-kronos-model.mjs` runs in `prebuild` and at the head of the
+Vercel `buildCommand`, so the weights are vendored into `dist/` on every build
+and served from the app's **own origin**. That is why the production default
+needs no configuration, and why a build with no network still ships — the
+script reports that it skipped and the UI tells the truth.
+
+Two consequences worth stating plainly:
+
+- **The APK grows by ~33 MB.** `ci/build-apk.sh` runs the same `npm run build`,
+  so `cap sync` copies the graphs into the app's assets and the model runs from
+  `https://localhost/kronos-local/` with no download at all. That is the best
+  outcome for the on-device promise (it works offline, on a plane, on a
+  metered connection) and a real cost in install size. If the size matters more
+  than offline inference for a given release, set `VITE_KRONOS_MODEL_BASE_URL`
+  for that build: nothing is vendored, and the webview fetches from the host.
+- **The website pays 33 MB of static payload** per deployment, once, not per
+  visitor: the files are immutable and a device caches them after the first
+  opt-in download.
+
 Delivery details that matter and are easy to lose:
 
 - **CORS.** The weights are cross-origin from `fbtswap.ir`, so every response
