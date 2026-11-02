@@ -1,10 +1,17 @@
 # Kronos, running on the reader's own device
 
-**Status: implemented, exported from the official MIT weights, and verified
-against the reference model on 2026-11-03 (worst relative deviation 1.54e-07
-over a 220-bar window and a 12-bar horizon). The ~33 MB of ONNX files live on
-the `kronos-model` branch and are served from GitHub Pages; see
-[Publishing the model](#publishing-the-model).**
+**Status: implemented and exported from the official MIT weights. The model
+numerics are verified against the reference in Node (worst relative deviation
+1.54e-07 over a 220-bar window and a 12-bar horizon). The browser path has
+NOT been observed running in a real browser — see
+[section 2](#2-what-was-actually-verified-here-and-what-was-not). The ~33 MB of
+ONNX files live on the `kronos-model` branch and are served from GitHub Pages;
+see [Publishing the model](#publishing-the-model).**
+
+> **2026-11-02 incident.** The first release of this feature failed for every
+> user with «موتور محلی روی این دستگاه بالا نیامد» (`SESSION_FAILED`) *after*
+> the full 33 MB download, with all tests green. Cause and fix:
+> [section 2a](#2a-the-engine-files-incident-2026-11-02).
 
 The token chart's «پیش‌بینی AI» used to POST the candles it had on screen to
 `/api/forecast`, which forwarded them to a Python worker holding the Kronos
@@ -50,44 +57,82 @@ nothing of ours runs it.
 
 ## 2. What was actually verified here (and what was not)
 
-**Verified on 2026-11-03, in this environment** (no GPU, no browser, no Hugging
-Face access — the weights came from a byte-identical public mirror whose SHA-256
-matches the upstream LFS object ids):
+**Verified, and by what** (no GPU, no browser, no Hugging Face access in this
+environment — the weights came from a byte-identical public mirror whose
+SHA-256 matches the upstream LFS object ids):
 
-- `scripts/kronos-export-onnx.py` exported four graphs from the real weights and
-  **self-checked every graph against the vendored reference code**:
-  `tokenizerEncodeMismatches: 0`, `tokenizerDecodeMaxAbsDiff: 2.1e-6`,
-  `transformerLogitsMaxAbsDiff: 9.5e-6`, `incrementalStepMaxAbsDiff: 5.7e-6`,
-  `s2HeadMaxAbsDiff: 5.7e-6`. These numbers are recorded in
-  `model-manifest.json` under `selfCheck`, next to the weight digests.
-- `test/kronos-local-model.test.mjs` loaded those graphs into
-  **`onnxruntime-web` — the same runtime and the same WASM engine the browser
-  worker uses** — ran a full forecast through `src/lib/kronosLocal/infer.js`,
-  and compared it bar-for-bar with `KronosPredictor.predict(..., top_k=1)` in
-  `test/fixtures/kronos-reference.json`: worst relative deviation **1.54e-07**,
-  353 ms, 220-bar window, horizon 12.
-- The reference fixture was re-earned from the real predictor for this run (it
-  carries `provenance`: weight digests, torch version, window, sampler), and it
-  is reproducible: two independent runs produced byte-identical bars, and the
-  graphs matched them to the digit.
+| Claim | Evidence | Runs… |
+| --- | --- | --- |
+| The four ONNX graphs reproduce the PyTorch model | `scripts/kronos-export-onnx.py` self-check: `tokenizerEncodeMismatches: 0`, `tokenizerDecodeMaxAbsDiff: 2.1e-6`, `transformerLogitsMaxAbsDiff: 9.5e-6`, `incrementalStepMaxAbsDiff: 5.7e-6`, `s2HeadMaxAbsDiff: 5.7e-6` (recorded in `model-manifest.json` → `selfCheck`) | Python / torch |
+| A full forecast matches `KronosPredictor.predict(..., top_k=1)` | `test/kronos-local-model.test.mjs`, worst relative deviation 1.54e-07, 353 ms | **Node** (`ort.node.min.mjs`) |
+| The browser ORT bundle that `vite build` ships can find its engine and build a session from the shipped model files | `test/kronos-ort-dist.test.mjs` (`npm run test:kronos-dist`) — imports `dist/assets/ort.wasm.min-*.js`, sets `wasmPaths` onto `dist/kronos-ort/` | **Node**, against the **built output** |
 
-**Not verified here — and this is the part that matters:**
+**Not verified — and this is the part that matters:**
 
-- ❌ **No real browser tab.** There is no Chromium in this sandbox (browser
-  binaries are blocked, no package manager) and the GitHub integration cannot
-  push a workflow file or enable Pages, so browser automation was impossible.
+- ❌ **A real browser tab has never run this.** No Chromium in the sandbox
+  (browser binaries are blocked), and the GitHub integration cannot push a
+  workflow file or enable Pages, so browser automation was impossible. Nothing
+  here has ever executed `new Worker(...)`, `import()` of the glue over HTTP,
+  Cache Storage reads, or an inference inside a browser.
 - ❌ **No iPhone, no Android phone, no Telegram in-app browser.** Not tested.
+- ❌ **WebGPU never ran.** There is no GPU. The WebGPU engine files are only
+  checked to be present, byte-identical and loadable as a module.
+- ❌ **Cross-origin isolation / multi-threading** (`SharedArrayBuffer`) is untested;
+  the worker defaults to one thread when the page is not isolated.
 - ❌ **The production host was not observed serving the files from here.** This
   sandbox can reach `github.com` only; `*.github.io` and `fbtswap.ir` are both
-  blocked at the TLS layer, so `check-kronos-model-host.mjs` could not be run
-  against the live URL. Run it from a normal network before trusting the
-  production default.
+  blocked at the TLS layer. Run `scripts/check-kronos-model-host.mjs`, and open
+  DevTools → Network on the live site, from a normal network.
 
-What the browser-side claim therefore rests on is: **the identical engine,
-the identical graphs, the identical runtime, executed in Node.** That is strong
-evidence about the model and about the numerics. It is not evidence about a
-phone's memory, its WebGPU driver or its Cache Storage quota, and no document
-should say otherwise until someone opens the chart on a real device.
+### Why «it passed in Node» does NOT mean «it works in the browser»
+
+This sentence was written in an earlier revision of this file — *"the identical
+engine, the identical graphs, the identical runtime, executed in Node. That is
+strong evidence"* — and it was wrong in the one way that mattered. **Do not
+repeat it.** `onnxruntime-web` is not one runtime; it is several, and a package
+`exports` map picks between them by environment:
+
+| Importer | Resolves to | Where the engine comes from |
+| --- | --- | --- |
+| Node (`import('onnxruntime-web')` in `test/kronos-local-model.test.mjs`) | `dist/ort.node.min.mjs` | opened with `fs` straight out of `node_modules` |
+| Browser worker, bundled by Vite | `dist/ort.wasm.min.mjs` / `ort.webgpu.min.mjs` | **`import()` of a glue module by name** (`ort-wasm-simd-threaded.mjs`) + a `fetch` of the `.wasm`, both relative to `env.wasm.wasmPaths` |
+
+Different entry file, different loader, different failure modes. The Node test
+exercises the model numerics and `infer.js`; it cannot see how the **bundle in
+`dist/`** locates its engine, because it never loads that bundle and never looks
+at `dist/` at all. A passing `npm run test:kronos-local` is therefore evidence
+about the math only — never about «the button works».
+
+### 2a. The engine-files incident (2026-11-02)
+
+- **Symptom:** after the 33 MB download, the page shows «موتور محلی روی این
+  دستگاه بالا نیامد». Code `SESSION_FAILED`, thrown by the worker's WASM branch.
+- **Cause:** the deployed ORT bundle (`dist/assets/ort.wasm.bundle.min-*.js`)
+  `import()`s `ort-wasm-simd-threaded.mjs` relative to itself. Vite emitted the
+  `.wasm` (hashed name) but never that `.mjs` — nothing imports it statically.
+  `dist/assets/*.mjs` was 0 files; DevTools showed a 404 for
+  `/assets/ort-wasm-simd-threaded.mjs`.
+- **Reproduction against the old build** (Node, against `dist/`):
+  `no available backend found. ERR: [wasm] ERR_MODULE_NOT_FOUND: Cannot find module '…/assets/ort-wasm-simd-threaded.mjs'`.
+- **Fix:**
+  1. `scripts/vendor-kronos-ort.mjs` copies the four engine files
+     (`ort-wasm-simd-threaded.{mjs,wasm}` for WASM, `….asyncify.{mjs,wasm}` for
+     WebGPU) from `node_modules/onnxruntime-web/dist/` into
+     `public/kronos-ort/` **under their original names**. SHA-256-verified,
+     no-op when already present, exit 1 if a source file is missing. Run by
+     `prebuild` *and* by a plugin in `vite.config.js`, so a bare `vite build`
+     gets them too. The folder is gitignored (≈37 MB stays out of history).
+  2. `ORT_ASSET_PATH` (`src/lib/kronosLocal/config.js`) is now the same-origin URL
+     of that folder, built from `import.meta.env.BASE_URL`. The worker assigns it
+     to `env.wasm.wasmPaths` **before** `InferenceSession.create`, in `init()` and
+     in the WebGPU→WASM fallback.
+  3. `resolve.conditions: ['onnxruntime-web-use-extern-wasm']` in `vite.config.js`
+     selects the extern entry points, so Vite no longer copies a second,
+     hashed 12 MB / 25 MB `.wasm` into `/assets`.
+- **The guard:** `test/kronos-ort-dist.test.mjs` runs the **built** bundle. Before
+  the fix it failed 5 of 7 cases (`ERR_MODULE_NOT_FOUND`, engine file missing in
+  `dist/`, hashed `.wasm` in `/assets`); after the fix it passes 7 of 7.
+  It still needs a real browser to close the loop (see the ❌ list above).
 
 ## 3. How the graphs are shaped, and why
 
@@ -249,7 +294,8 @@ reader's data plan — is paid only by people who ask for a forecast.
 
 ```bash
 npm run test:forecast        # server contract + UI + python worker + local suite
-npm run test:kronos-local    # local math/storage + the REAL model vs the reference
+npm run test:kronos-local    # local math/storage + the REAL model vs the reference (Node build of ORT!)
+NODE_OPTIONS='--max-old-space-size=2700 --max-semi-space-size=16' npx vite build && npm run test:kronos-dist   # the BUILT browser bundle (needs dist/)
 npm run test:pro-chart       # chart terminal, including the forecast card
 npm run test:wiring          # the static wiring audit, against an accepted ceiling
 node scripts/kronos-export-onnx.py --out public/kronos-local   # export + self-check
@@ -269,7 +315,16 @@ this branch brought it down from 68 by fixing four Kronos assertions).
   truncation, cancel, delete, manifest validation.
 - `test/pro-chart-forecast.test.jsx` — every UI state, cancellation, coin/range
   changes, and the assertion that the server API is never called.
-- `test/kronos-local-model.test.mjs` — the real model, skipped when the graphs
+- `test/kronos-ort-dist.test.mjs` — **the only test that touches the shipped
+  bundle.** Requires `dist/` (`npm run test:kronos-dist` fails rather than skips
+  without it). Checks that every engine file the browser ORT chunks request by
+  name exists in `dist/kronos-ort/` and is byte-identical to `onnxruntime-web`,
+  that no hashed `.wasm` duplicate sits in `/assets`, that no `KRONOS_WORKER_*`
+  string is in the bundle, and that the built WASM bundle builds a session from
+  `dist/kronos-local/`. It is Node, not a browser: it proves the files are
+  where the bundle looks, not that a tab can run them.
+- `test/kronos-local-model.test.mjs` — the real model **in Node, via ORT's Node
+  build — it does not execute the browser bundle** (see section 2). Skipped when the graphs
   are not on disk (they are not in git). Even when skipped, one case runs: the
   committed reference must trace to the official weight digests, so the forecast
   cannot quietly become a different model.

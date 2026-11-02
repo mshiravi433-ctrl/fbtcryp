@@ -28,24 +28,47 @@ export const MANIFEST_FILE = 'model-manifest.json';
  *  because loading the 23.7 MB GPU engine on a phone without WebGPU would be
  *  pure waste. Numbers are measured from onnxruntime-web 1.23.0. */
 export const RUNTIME_BYTES = {
-  /* Emitted by the bundler into /assets with a content hash; measured from the
-   * production build, not from node_modules (the shipped file is not the same
-   * size as the one in the package). */
+  /* The .wasm files served from `public/kronos-ort/` (see ORT_ASSET_PATH),
+   * byte-identical to node_modules/onnxruntime-web/dist — the vendoring script
+   * verifies that. Sizes are the plain, uncompressed file sizes. */
   wasm: 11_815_498,
   webgpu: 25_372_571
 };
 
 /**
- * Leave ONNX Runtime to resolve its own engine file.
+ * Folder holding ONNX Runtime's engine files, under their ORIGINAL names.
  *
- * The worker is bundled (`new Worker(new URL(...), {type:'module'})`), so Vite
- * sees ORT's `new URL('ort-wasm-simd-threaded…wasm', import.meta.url)`, copies
- * the engine into /assets under a content hash and rewrites the URL. Forcing
- * `wasmPaths` to a hand-copied folder would (a) ship a SECOND copy of a 12–25
- * MB binary in every deployment and (b) mean the engine is the one file in the
- * app without cache-busting. `null` = keep the bundler's URL.
+ * ─── WHY THIS IS NOT `null` ANY MORE ────────────────────────────────────────
+ * ORT's browser bundle does not contain its engine: it `import()`s a glue
+ * module (`ort-wasm-simd-threaded.mjs`, or `….asyncify.mjs` for WebGPU) and
+ * fetches the matching `.wasm`, both by NAME, relative to `wasmPaths` — or, if
+ * that is unset, relative to the bundle's own URL (`/assets/`). Vite never
+ * emits those glue modules, so with `null` here the production app asked for
+ * `/assets/ort-wasm-simd-threaded.mjs`, got a 404, and every user who finished
+ * the 33 MB download saw «موتور محلی روی این دستگاه بالا نیامد» (SESSION_FAILED).
+ * It built green and `test:kronos-local` passed because that test runs ORT's
+ * NODE build from node_modules, which never touches this path.
+ *
+ * So the engine files are vendored verbatim into `public/kronos-ort/` at build
+ * time (scripts/vendor-kronos-ort.mjs, also run by the Vite config) and this
+ * points at them. Same origin: no CORS, no third party, no secret.
+ *
+ * Evaluated inside the worker, where there is no `window` — hence `globalThis`.
+ * Never empty: an empty value would silently restore the bug.
  */
-export const ORT_ASSET_PATH = null;
+export function ortAssetPath() {
+  const base = ((typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) || '/')
+    .replace(/\/$/, '');
+  const path = `${base}/${ORT_ASSET_DIR}/`;
+  const origin = globalThis.location && globalThis.location.origin;
+  if (!origin || origin === 'null') return path;
+  return new URL(path, origin).toString();
+}
+
+/** Folder name under `public/` — shared with scripts/vendor-kronos-ort.mjs and the dist test. */
+export const ORT_ASSET_DIR = 'kronos-ort';
+
+export const ORT_ASSET_PATH = ortAssetPath();
 
 /** The app's own copy, next to index.html. Always a valid answer. */
 export function sameOriginBaseUrl() {

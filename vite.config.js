@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { assertFarmRollout } from './scripts/farm-rollout-policy.mjs';
+import { vendorKronosOrt } from './scripts/vendor-kronos-ort.mjs';
 
 /*
  * Evaluate the money-in rollout policy while Vite loads its config. This is
@@ -179,8 +180,33 @@ export const SPECULATIVE_VOCABULARY_PRESENT = false;
  * enclave can read `window.message`. No file, no env var, no code.
  */
 
+/**
+ * Make sure ONNX Runtime's engine files sit in `public/kronos-ort/` before Vite
+ * copies `public/` into the output.
+ *
+ * `npm run build` already runs scripts/vendor-kronos-ort.mjs via `prebuild`, but
+ * a bare `vite build` (CI gates, Vercel's own command, local one-offs) does not
+ * go through npm lifecycle hooks — and a build without these four files is the
+ * on-device-forecast outage this plugin exists to prevent (the glue module
+ * 404s, SESSION_FAILED, «موتور محلی روی این دستگاه بالا نیامد»). Running it
+ * here makes the files part of EVERY build, whichever way it was started. It is
+ * a no-op when they are already present and byte-identical.
+ */
+function vendorKronosOrtEngine() {
+  return {
+    name: 'fbt-vendor-kronos-ort',
+    buildStart() {
+      const result = vendorKronosOrt({ log: (msg) => console.log(`[kronos-ort] ${msg}`) });
+      if (!result.ok) {
+        this.error(`[kronos-ort] ONNX Runtime engine files are not available:\n  ${result.problems.join('\n  ')}`);
+      }
+      console.log(`[kronos-ort] engine ready in public/kronos-ort/ (${result.copied.length} written, ${result.unchanged.length} already verified)`);
+    }
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), stripDisabledLocaleCopy(), stripSpeculativeVocabulary()],
+  plugins: [react(), stripDisabledLocaleCopy(), stripSpeculativeVocabulary(), vendorKronosOrtEngine()],
 
   /*
    * `@dydxprotocol/v4-client-js` imports `https-proxy-agent` even though the
@@ -191,7 +217,21 @@ export default defineConfig({
   resolve: {
     alias: {
       'https-proxy-agent': fileURLToPath(new URL('./src/shims/https-proxy-agent.js', import.meta.url))
-    }
+    },
+    /*
+     * Pick onnxruntime-web's EXTERN-engine entry points (`ort.wasm.min.mjs`,
+     * `ort.webgpu.min.mjs`) instead of the `*.bundle.min.mjs` ones.
+     *
+     * The bundle variants carry `new URL('ort-wasm-simd-threaded.wasm',
+     * import.meta.url)`, which makes Vite copy a 12 MB / 25 MB binary into
+     * /assets under a hashed name — a SECOND copy next to the one the engine
+     * actually loads from `public/kronos-ort/` via `env.wasm.wasmPaths`
+     * (src/lib/kronosLocal/config.js `ORT_ASSET_PATH`). The extern entries
+     * contain no such reference: the engine files exist once, under the names
+     * the runtime asks for. Vite 5 APPENDS these to its default conditions.
+     * Only `import`-condition entry points of this one package look at it.
+     */
+    conditions: ['onnxruntime-web-use-extern-wasm']
   },
 
   /**
