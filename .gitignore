@@ -70,8 +70,19 @@ __pycache__/
 
 # Kronos ONNX model artifacts — build output of scripts/kronos-export-onnx.py.
 # ~33 MB of weights: produced in CI / by the operator, never committed.
+# They are published instead: the `kronos-model` orphan branch holds exactly
+# these four graphs + the manifest, and GitHub Pages serves that branch at
+# <Pages origin>/fbtcryp/ (VITE_KRONOS_MODEL_BASE_URL). The app history stays
+# at ~1 MB; a clone never pays for weights it may not need.
 public/kronos-local/
 public/kronos-onnx/
+
+# ONNX Runtime Web engines. The worker imports ORT as a module, so Vite copies
+# the .wasm engine into /assets with a content hash and rewrites the URL. These
+# two folders are what you get if someone hand-copies them instead — a second
+# 12–25 MB copy of the same binary, with no cache-busting. Never tracked.
+public/ort/
+public/onnxruntime/
 
 # Local scratch space (probes, one-off scripts) — never shipped.
 .scratch/

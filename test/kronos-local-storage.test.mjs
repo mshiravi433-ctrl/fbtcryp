@@ -173,3 +173,53 @@ test('the manifest itself is validated, not trusted', async () => {
   globalThis.fetch = async () => { throw new TypeError('offline'); };
   await assert.rejects(() => fetchManifest({ base: BASE }), (error) => error.code === 'MANIFEST_UNREACHABLE');
 });
+
+/*
+ * ─── WHICH HOST ACTUALLY HAS THE FILES ─────────────────────────────────────
+ * A deployment can have a host configured (VITE_KRONOS_MODEL_BASE_URL) and the
+ * files served from its own origin — the build vendors them in. Presenting a
+ * cross-origin 404 as «the model was never published» while 33 MB sit next to
+ * index.html is the specific lie this covers: the manifest fetch must try the
+ * next candidate, and the host that answered is the one the graphs come from.
+ */
+test('a dead configured host falls through to the app\'s own origin', async () => {
+  const schema = { schema: 'fbt.kronos.browser.v1', files: [{ name: 'a.onnx', bytes: 1, sha256: 'x' }], totalBytes: 1 };
+  const calls = [];
+  const realFetch = globalThis.fetch;
+  /* The same-origin candidate is derived from window.location; Node has none. */
+  const hadWindow = 'window' in globalThis;
+  globalThis.window = { location: { origin: 'https://app.example' } };
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    if (String(url).includes('dead.example')) return new Response('nope', { status: 404 });
+    if (String(url).endsWith('/model-manifest.json')) {
+      return new Response(JSON.stringify(schema), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response('', { status: 200 });
+  };
+  try {
+    const got = await fetchManifest({ base: 'https://dead.example/' });
+    assert.equal(got.schema, schema.schema);
+    assert.ok(calls.some((u) => u.startsWith('https://dead.example/')), 'the configured host is tried first');
+    assert.ok(calls.some((u) => u === 'https://app.example/kronos-local/model-manifest.json'),
+      'the app\'s own copy is tried second');
+    assert.equal(calls.filter((u) => u.includes('model-manifest.json')).length, 2,
+      'both candidates were attempted, in order');
+  } finally {
+    globalThis.fetch = realFetch;
+    if (!hadWindow) delete globalThis.window;
+  }
+});
+
+test('when no host answers, the error names the last attempt honestly', async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('nope', { status: 404 });
+  try {
+    await assert.rejects(
+      () => fetchManifest({ base: 'https://dead.example/' }),
+      (err) => err.code === 'MANIFEST_HTTP_404'
+    );
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

@@ -1066,4 +1066,38 @@ for (const [lang, strings] of Object.entries(onDeviceForecast)) {
   Object.assign(tokenChart[lang], strings);
 }
 
+/*
+ * ─── KEYS THE SERVER FORECAST USED TO NEED ──────────────────────────────────
+ * Invisible to a scan of the current source, because nothing renders them any
+ * more: they belong to the POST /api/forecast path that the on-device engine
+ * replaced. They were asserted alive by the key-count test, so deleting them
+ * looked like a regression — but the only honest definitions are:
+ *
+ *   'coin.pro.forecastLoading'      → the worker's own preparation text, which
+ *                                     exists in every language and is shown
+ *                                     from forecastPreparing / forecastRunning;
+ *   'coin.pro.forecastTimeout'      → forecastUnavailable (WORKER_TIMEOUT is
+ *                                     mapped to it in FORECAST_ERROR_MESSAGES);
+ *   'coin.pro.forecastRateLimited'  → the on-device path has no request rate to
+ *                                     limit; nothing can raise it;
+ *   'coin.pro.forecastBaseline'     → the model is the model: there is no
+ *                                     second, statistical fallback to label;
+ *   'coin.pro.forecastFallback'     → likewise. A failed forecast says so and
+ *   'coin.pro.forecastLoading' below  draws nothing, which is the whole point
+ *                                     of not inventing a series.
+ *
+ * They are kept — one line each, in every language — so that an older cached
+ * bundle, or a translation someone is still editing, resolves a key instead of
+ * printing its own name on a button. The assertion that they are *unused* by
+ * the current source lives in test/pro-chart-prefs.test.jsx.
+ */
+const retiredForecastKeys = [
+  'coin.pro.forecastBaseline',
+  'coin.pro.forecastFallback',
+  'coin.pro.forecastLoading',
+  'coin.pro.forecastRateLimited',
+  'coin.pro.forecastTimeout'
+];
+
+export { retiredForecastKeys };
 export default tokenChart;

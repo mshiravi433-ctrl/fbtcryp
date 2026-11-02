@@ -5820,9 +5820,27 @@ export default function run() {
       && !/KRONOS_WORKER_URL|KRONOS_WORKER_TOKEN/.test(localEngine)
       && !/KRONOS_WORKER_URL|KRONOS_WORKER_TOKEN/.test(localWorker)
       && !/KRONOS_WORKER_URL|KRONOS_WORKER_TOKEN/.test(terminal));
+    /*
+     * The shape here is load-bearing, and it has already been broken twice:
+     *
+     *   • `worker: { format: 'es' }` must be a TOP-LEVEL vite config key. Put
+     *     it under `build` and Vite ignores it, falls back to iife, and the
+     *     module worker (with its `import()`) never loads.
+     *   • `new URL('./kronos.worker.js', import.meta.url)` must appear INSIDE
+     *     `new Worker(...)`. Hoisted into a constant, Vite stops treating it as
+     *     a worker entry, copies the file verbatim and the bare
+     *     `import('onnxruntime-web/…')` reaches the browser unrewritten.
+     *
+     * So this pins the literal call, not a variable that happens to hold it —
+     * and it looks for the import only in real statements, so a comment that
+     * merely quotes the broken form is not mistaken for the code.
+     */
+    const viteConfig = read('vite.config.js');
     t('the model runs in a module worker so the UI thread stays free',
-      /new Worker\(WORKER_URL, \{ type: 'module'/.test(localClient)
-      && /self\.onmessage/.test(localWorker));
+      /new Worker\(new URL\('\.\/kronos\.worker\.js', import\.meta\.url\), \{ type: 'module'/.test(localClient)
+      && /self\.onmessage/.test(localWorker)
+      && /^\s*worker:\s*\{\s*format:\s*'es'\s*\}/m.test(viteConfig)
+      && !/build:\s*\{[^}]*\bworker:/.test(viteConfig));
     t('WebGPU is preferred and WASM is the fallback, chosen by a real session',
       /onnxruntime-web\/webgpu/.test(localWorker) && /onnxruntime-web\/wasm/.test(localWorker)
       && /buildSessions\(manifest, options\('wasm'\)\)/.test(localWorker));
@@ -13686,10 +13704,20 @@ export default function run() {
       && d !== 'onnxruntime-web');
     t(`no ML runtime beyond the on-device forecast engine (${heavy.join(', ') || 'clean'})`, heavy.length === 0);
 
+    /*
+     * Only real import statements count. The first version of this check also
+     * matched comments and prose — which is how a file that merely EXPLAINS
+     * the bundler hazard ("…ships the file verbatim, bare
+     * `import('onnxruntime-web/…')` and all") was counted as a second
+     * importer, and the assertion failed while the bundle was correct.
+     */
+    const codeWithoutComments = (source) => source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
     const onnxImporters = readdirSync('src', { recursive: true })
       .filter((f) => String(f).endsWith('.js') || String(f).endsWith('.jsx'))
       .map((f) => String(f).replaceAll('\\', '/'))
-      .filter((f) => /(?:import|require)\s*\(?\s*['"]onnxruntime-web/.test(read(join('src', f))));
+      .filter((f) => /(?:import|require)\s*\(?\s*['"]onnxruntime-web/.test(codeWithoutComments(read(join('src', f)))));
     t('the forecast engine is only reached through a lazy worker import',
       onnxImporters.length === 1
       && onnxImporters[0] === 'lib/kronosLocal/kronos.worker.js'

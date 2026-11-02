@@ -98,7 +98,7 @@ def load_weights(weights_dir: Optional[str]):
         tcfg = json.load(open(os.path.join(tdir, "config.json")))
         msd = load_file(os.path.join(mdir, "model.safetensors"))
         tsd = load_file(os.path.join(tdir, "model.safetensors"))
-        provenance = {"source": "local", "path": os.path.abspath(weights_dir)}
+        provenance = {"source": "local", "weightsDir": os.path.basename(os.path.abspath(weights_dir).rstrip("/"))}
     else:
         from huggingface_hub import hf_hub_download
 
@@ -110,6 +110,22 @@ def load_weights(weights_dir: Optional[str]):
         mcfg, msd = snap(MODEL_ID)
         tcfg, tsd = snap(TOKENIZER_ID)
         provenance = {"source": "huggingface", "model": MODEL_ID, "tokenizer": TOKENIZER_ID}
+    # Who made these weights, and exactly which bytes were used. The digests are
+    # the Hugging Face LFS object ids, so an operator can prove the export came
+    # from the published MIT checkpoint and not from a fine-tune. Recorded in
+    # model-manifest.json, which the browser reads before it downloads anything.
+    provenance.update({
+        "upstream": {
+            "model": MODEL_ID,
+            "tokenizer": TOKENIZER_ID,
+            "license": "MIT",
+            "project": "https://github.com/shiyu-coder/Kronos",
+        },
+        "weightsSha256": {
+            "Kronos-mini/model.safetensors": _sha256(os.path.join(mdir, "model.safetensors")),
+            "Kronos-Tokenizer-2k/model.safetensors": _sha256(os.path.join(tdir, "model.safetensors")),
+        } if weights_dir else {},
+    })
     return mcfg, tcfg, msd, tsd, provenance
 
 
@@ -494,9 +510,20 @@ def main() -> None:
     model, tok = build(mcfg, tcfg, msd, tsd)
     print(f"weights loaded in {time.time()-t0:.1f}s "
           f"({sum(p.numel() for p in model.state_dict().values())/1e6:.2f}M model params)")
-    export_all(model, tok, args.out, provenance)
+    manifest = export_all(model, tok, args.out, provenance)
     if not args.skip_check:
-        self_check(model, tok, args.out)
+        report = self_check(model, tok, args.out)
+        # The manifest is the artefact the browser trusts, so it is also where
+        # the "these graphs equal the reference predictor" evidence belongs.
+        manifest["selfCheck"] = {
+            "reference": "KronosPredictor.predict (vendored, forecast/kronos_model)",
+            "tolerance": 1e-3,
+            **report,
+        }
+        path = os.path.join(args.out, "model-manifest.json")
+        with open(path, "w") as fh:
+            json.dump(manifest, fh, indent=2)
+            fh.write("\n")
     print(f"done in {time.time()-t0:.1f}s")
 
 

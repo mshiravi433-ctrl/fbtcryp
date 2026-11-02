@@ -236,7 +236,8 @@ function ensureWorker(nextManifest, signal) {
    * shape is what the bundler rewrites into a real worker chunk. Hoisting it
    * into a constant first makes Vite treat the worker as a static asset — it
    * then ships the file verbatim, bare `import('onnxruntime-web/...')` and all,
-   * which builds green and fails in the browser.
+   * which builds green and fails in the browser. `test/wiring.mjs` pins the
+   * exact shape, which is why the options object is not hoisted either.
    */
   worker = new Worker(new URL('./kronos.worker.js', import.meta.url), { type: 'module', name: 'kronos-local' });
   attachWorkerEvents(worker);

@@ -235,6 +235,32 @@ describe('language: the terminal is translated, not just the page around it', ()
     /* `rangeLabel` builds its key by concatenation; add those explicitly. */
     for (const key of ['1D', '7D', '30D', '90D', '1Y']) used.add(`coin.pro.range${key}`);
 
+    /*
+     * The on-device forecast does not call t('coin.pro.forecast…') at the point
+     * of use: it maps an engine error CODE to a key through
+     * FORECAST_ERROR_MESSAGES and renders t(failKey). Those keys are therefore
+     * real and reachable, but invisible to a scan for `t('…')`. Read the map
+     * itself so a new error code cannot ship without its eleven translations.
+     */
+    for (const match of source.matchAll(/'coin\.pro\.forecast[A-Za-z]+'/g)) {
+      used.add(match[0].slice(1, -1));
+    }
+
+    /*
+     * …and subtract the keys the module itself declares as retired, so the
+     * comparison below stays exact in BOTH directions: no language may be
+     * missing a string the terminal asks for, and no language may carry a
+     * string for a screen that no longer exists. A retired key still has to be
+     * translated (it is in `tokenChart[lang]`), but it must not be counted as
+     * "used", and it must not silently become live again: that would mean a
+     * deleted message was re-wired without anyone deciding to.
+     */
+    const { retiredForecastKeys } = await import('../scripts/locales/token-chart.mjs');
+    expect(Array.isArray(retiredForecastKeys), 'retired keys are declared, not implied').toBe(true);
+    for (const key of retiredForecastKeys) {
+      expect(used.has(key), `${key} is declared retired but the source asks for it`).toBe(false);
+    }
+
     const langs = Object.keys(tokenChart);
     expect(langs.sort()).toEqual(['ar', 'es', 'fr', 'hi', 'id', 'pt', 'ru', 'tr', 'ur', 'zh']);
 
@@ -243,10 +269,16 @@ describe('language: the terminal is translated, not just the page around it', ()
       expect(missing, `${lang} is missing terminal strings`).toEqual([]);
     }
 
-    /* Same key set in every language, and every one of them exists in en. */
+    /*
+     * Same key set in every language, and every one of them exists in en.
+     * The count is "every key the terminal asks for, plus the retired ones
+     * kept for old bundles" — not merely `used.size`, which would have made
+     * the dead keys invisible rather than accounted for.
+     */
     const dict = flatten(en);
+    const expectedCount = used.size + retiredForecastKeys.length;
     for (const lang of langs) {
-      expect(Object.keys(tokenChart[lang]).length, `${lang} key count`).toBe(used.size);
+      expect(Object.keys(tokenChart[lang]).length, `${lang} key count`).toBe(expectedCount);
       const orphans = Object.keys(tokenChart[lang]).filter((key) => dict[key] === undefined);
       expect(orphans, `${lang} translates keys English does not have`).toEqual([]);
     }

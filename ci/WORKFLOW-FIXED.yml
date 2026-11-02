@@ -81,6 +81,22 @@ jobs:
           VITE_SOLANA_RPC_URL: ${{ vars.VITE_SOLANA_RPC_URL }}
           VITE_VELOCITY_REFERRER: ${{ vars.VITE_VELOCITY_REFERRER }}
           VITE_DRIFT_REFERRER: ${{ vars.VITE_DRIFT_REFERRER }}
+          # ── Public media + the on-device model host ────────────────────────
+          # These are addresses, not secrets: a promo video URL, a hero poster,
+          # the radio stream and the static host the Kronos ONNX graphs are
+          # downloaded from. They are mapped for the same build-time reason as
+          # everything above — and one more: the model host MUST be identical on
+          # the website and in the APK. If it is set only in Vercel, the web app
+          # finds the weights and the APK reports «فایل‌های مدل منتشر نشده‌اند»
+          # for a feature that is working, which reads as a broken app.
+          #
+          # Empty is a valid value for all four: the components fall back to
+          # their bundled defaults, and the on-device forecast then resolves to
+          # <origin>/kronos-local/ and says so honestly.
+          VITE_KRONOS_MODEL_BASE_URL: ${{ vars.VITE_KRONOS_MODEL_BASE_URL }}
+          VITE_STORY_PROMO_VIDEO: ${{ vars.VITE_STORY_PROMO_VIDEO }}
+          VITE_SIGNALS_HERO_POSTER: ${{ vars.VITE_SIGNALS_HERO_POSTER }}
+          VITE_FBT_RADIO_URL: ${{ vars.VITE_FBT_RADIO_URL }}
           APP_VERSION_CODE: ${{ vars.APP_VERSION_CODE }}
           APP_VERSION_NAME: ${{ vars.APP_VERSION_NAME }}
           # ci/release-notes.mjs stamps the `latest` release page with the version
