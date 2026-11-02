@@ -1,8 +1,10 @@
 # Kronos, running on the reader's own device
 
-**Status: implemented and verified against the reference model. One operational
-step (publishing the ~33 MB of ONNX files on a static host) is still owner-side;
-see [Publishing the model](#publishing-the-model).**
+**Status: implemented, exported from the official MIT weights, and verified
+against the reference model on 2026-11-03 (worst relative deviation 1.54e-07
+over a 220-bar window and a 12-bar horizon). The ~33 MB of ONNX files live on
+the `kronos-model` branch and are served from GitHub Pages; see
+[Publishing the model](#publishing-the-model).**
 
 The token chart's «پیش‌بینی AI» used to POST the candles it had on screen to
 `/api/forecast`, which forwarded them to a Python worker holding the Kronos
@@ -31,8 +33,8 @@ static GETs, both after an explicit button press.
 | ONNX size (fp32) | 33.42 MB total — 14.38 + 7.94 + 7.94 + 3.16 MB |
 | Runtime engine size | 11.8 MB (WASM engine) or 25.4 MB (WebGPU engine) |
 | First-run download | **45.2 MB** on a WASM device, **58.8 MB** on a WebGPU device |
-| Inference (220-bar window, 12 bars, 2-core sandbox CPU, WASM) | **321 ms wall**, 80 ms in the autoregressive loop |
-| Numeric agreement with `KronosPredictor.predict` | worst relative deviation **2.6 × 10⁻⁷** |
+| Inference (220-bar window, 12 bars, 2-core sandbox CPU, WASM) | **327 ms wall**, 87 ms in the autoregressive loop |
+| Numeric agreement with `KronosPredictor.predict` | worst relative deviation **1.54 × 10⁻⁷** |
 | iPhone Safari / Firefox / Telegram WebView | WASM engine (no WebGPU). Works, slower. |
 | Chrome desktop / Android with an adapter | WebGPU engine, preferred automatically |
 
@@ -48,27 +50,44 @@ nothing of ours runs it.
 
 ## 2. What was actually verified here (and what was not)
 
-Verified in this environment (no GPU, no browser, no Hugging Face access):
+**Verified on 2026-11-03, in this environment** (no GPU, no browser, no Hugging
+Face access — the weights came from a byte-identical public mirror whose SHA-256
+matches the upstream LFS object ids):
 
-- `scripts/kronos-export-onnx.py` exports four graphs from the real weights and
-  **self-checks every graph against the vendored reference code**:
-  `tokenizerEncodeMismatches: 0`, `tokenizerDecodeMaxAbsDiff: 1.4e-6`,
-  `transformerLogitsMaxAbsDiff: 4.8e-6`, `incrementalStepMaxAbsDiff: 2.9e-6`,
-  `s2HeadMaxAbsDiff: 7.6e-6`.
-- `test/kronos-local-model.test.mjs` loads those graphs into
+- `scripts/kronos-export-onnx.py` exported four graphs from the real weights and
+  **self-checked every graph against the vendored reference code**:
+  `tokenizerEncodeMismatches: 0`, `tokenizerDecodeMaxAbsDiff: 2.1e-6`,
+  `transformerLogitsMaxAbsDiff: 9.5e-6`, `incrementalStepMaxAbsDiff: 5.7e-6`,
+  `s2HeadMaxAbsDiff: 5.7e-6`. These numbers are recorded in
+  `model-manifest.json` under `selfCheck`, next to the weight digests.
+- `test/kronos-local-model.test.mjs` loaded those graphs into
   **`onnxruntime-web` — the same runtime and the same WASM engine the browser
-  worker uses** — runs a full forecast through `src/lib/kronosLocal/infer.js`,
-  and compares it bar-for-bar with `KronosPredictor.predict(..., top_k=1)`
-  stored in `test/fixtures/kronos-reference.json`. Worst relative deviation
-  2.6e-7, 321 ms.
+  worker uses** — ran a full forecast through `src/lib/kronosLocal/infer.js`,
+  and compared it bar-for-bar with `KronosPredictor.predict(..., top_k=1)` in
+  `test/fixtures/kronos-reference.json`: worst relative deviation **1.54e-07**,
+  353 ms, 220-bar window, horizon 12.
+- The reference fixture was re-earned from the real predictor for this run (it
+  carries `provenance`: weight digests, torch version, window, sampler), and it
+  is reproducible: two independent runs produced byte-identical bars, and the
+  graphs matched them to the digit.
 
-**Not verified here:** a real browser tab, a real iPhone, a real Android phone.
-This sandbox has no Chromium (binary downloads are blocked and there is no
-package manager) and cannot push GitHub Actions workflow files (the app lacks
-the `workflows` permission), so no browser automation could run. Do not read
-this document as a claim that a phone was tested — it is the list of what to
-check, and `scripts/check-kronos-model-host.mjs` plus a manual run on a real
-device is how to close it.
+**Not verified here — and this is the part that matters:**
+
+- ❌ **No real browser tab.** There is no Chromium in this sandbox (browser
+  binaries are blocked, no package manager) and the GitHub integration cannot
+  push a workflow file or enable Pages, so browser automation was impossible.
+- ❌ **No iPhone, no Android phone, no Telegram in-app browser.** Not tested.
+- ❌ **The production host was not observed serving the files from here.** This
+  sandbox can reach `github.com` only; `*.github.io` and `fbtswap.ir` are both
+  blocked at the TLS layer, so `check-kronos-model-host.mjs` could not be run
+  against the live URL. Run it from a normal network before trusting the
+  production default.
+
+What the browser-side claim therefore rests on is: **the identical engine,
+the identical graphs, the identical runtime, executed in Node.** That is strong
+evidence about the model and about the numerics. It is not evidence about a
+phone's memory, its WebGPU driver or its Cache Storage quota, and no document
+should say otherwise until someone opens the chart on a real device.
 
 ## 3. How the graphs are shaped, and why
 
@@ -135,35 +154,96 @@ Design decisions that matter:
 
 ## 6. Publishing the model
 
-The repository does **not** carry the weights (33 MB is build output, and
-`public/kronos-local/` is gitignored). Choose a host and point the build at it:
+The application repository does **not** carry the weights, and must not: 33 MB in
+`main`'s history would be paid for by every clone and is not part of the app.
+`public/kronos-local/` is gitignored. The files are published instead on an
+**orphan branch of this same repository**, `kronos-model`, whose tree *is* the
+served directory. GitHub Pages serves that branch, free, on the public repo.
+
+```
+kronos-model (orphan, no parent commit)
+  tokenizer-encode.onnx   7,944,623
+  tokenizer-decode.onnx   7,943,763
+  kronos-decode.onnx     14,375,406
+  kronos-s2head.onnx      3,159,850
+  model-manifest.json         1,387
+  README.md · LICENSE (MIT) · vercel.json (CORS + immutable cache)
+```
+
+Published at **https://mshiravi433-ctrl.github.io/fbtcryp/** — Pages source:
+branch `kronos-model`, folder `/`. Free plan limits are 1 GB per site and 100 MB
+per file; this is 33 MB in five files.
 
 ```bash
-# 1. produce the artifacts (needs Hugging Face access once)
+# 1. produce the artifacts (needs Hugging Face access once, or a weights mirror)
 python3 scripts/kronos-export-onnx.py --out public/kronos-local
-#    or from weights already on disk:
-#    KRONOS_WEIGHTS_DIR=./weights python3 scripts/kronos-export-onnx.py
+#    or from weights already on disk (Kronos-mini/ + Kronos-Tokenizer-2k/):
+KRONOS_WEIGHTS_DIR=./weights python3 scripts/kronos-export-onnx.py
 
-# 2. prove the host can serve them (reachability + CORS + SHA-256 + sizes)
-node scripts/check-kronos-model-host.mjs https://your-host.example/kronos/
+# 2. publish them: a fresh orphan branch, no parent, nothing else in it
+git init -b kronos-model /tmp/kronos-model && cd /tmp/kronos-model
+cp public/kronos-local/{*.onnx,model-manifest.json} .   # + README, LICENSE, vercel.json
+git add -A && git commit -m "Kronos ONNX graphs (MIT)"
+git remote add origin https://github.com/<owner>/<repo>.git
+git push origin kronos-model
 
-# 3. tell the build where they live (empty = same origin, /kronos-local/)
-VITE_KRONOS_MODEL_BASE_URL=https://your-host.example/kronos/
+# 3. prove the host can serve them BEFORE pointing production at it:
+#    reachability + open CORS + size + SHA-256 of all four files
+KRONOS_CHECK_ORIGIN=https://fbtswap.ir \
+  node scripts/check-kronos-model-host.mjs https://mshiravi433-ctrl.github.io/fbtcryp/
+
+# 4. tell the build where they live (empty = same origin, /kronos-local/)
+VITE_KRONOS_MODEL_BASE_URL=https://mshiravi433-ctrl.github.io/fbtcryp/
 ```
+
+Step 4 is a **build-time** variable: setting it in Vercel changes nothing until a
+new production deployment is built. The APK needs it too — `ci/WORKFLOW-FIXED.yml`
+maps it for exactly that reason, because a website that finds the weights and an
+APK that reports «فایل‌های مدل منتشر نشده‌اند» is the worst possible pair.
+
+`scripts/fetch-kronos-model.mjs` runs in `prebuild` and at the head of the
+Vercel `buildCommand`, so the weights are vendored into `dist/` on every build
+and served from the app's **own origin**. That is why the production default
+needs no configuration, and why a build with no network still ships — the
+script reports that it skipped and the UI tells the truth.
+
+Two consequences worth stating plainly:
+
+- **The APK grows by ~33 MB.** `ci/build-apk.sh` runs the same `npm run build`,
+  so `cap sync` copies the graphs into the app's assets and the model runs from
+  `https://localhost/kronos-local/` with no download at all. That is the best
+  outcome for the on-device promise (it works offline, on a plane, on a
+  metered connection) and a real cost in install size. If the size matters more
+  than offline inference for a given release, set `VITE_KRONOS_MODEL_BASE_URL`
+  for that build: nothing is vendored, and the webview fetches from the host.
+- **The website pays 33 MB of static payload** per deployment, once, not per
+  visitor: the files are immutable and a device caches them after the first
+  opt-in download.
+
+Delivery details that matter and are easy to lose:
+
+- **CORS.** The weights are cross-origin from `fbtswap.ir`, so every response
+  must carry `Access-Control-Allow-Origin`. GitHub Pages sends `*`, which is
+  correct here: these are public, immutable bytes and nothing is authenticated.
+- **Caching.** Pages sends a short `max-age`; the browser keeps the graphs in
+  Cache Storage anyway (`fbt-kronos-<schema>-<model>`), keyed by manifest and
+  verified by SHA-256, with a «حذف مدل از این دستگاه» control next to it.
+- **No auto-download.** Nothing is fetched until the reader presses the button,
+  and the button states the byte cost first (model + the engine it will run on).
 
 Hosting options, honestly compared:
 
 | Host | Free tier | CORS | Verdict |
 |---|---|---|---|
-| Same origin (`public/kronos-local/` in the deploy) | included in the existing Vercel/static budget | n/a (same origin) | simplest; costs 33 MB of the deployment's static payload and its bandwidth |
-| GitHub Release assets | free, 2 GB per file | must be verified (`check-kronos-model-host.mjs` does) | good if CORS is open; assets are immutable, which suits a versioned model |
-| Cloudflare R2 / Backblaze B2 | free egress tiers exist but are **capped**; not unlimited | yes, configurable | best for traffic spikes; still a quota to watch |
-| jsDelivr / unpkg (npm) | free, but requires publishing an npm package | yes | workable if the artifacts are published as a package |
-| Hugging Face Hub (original safetensors) | free | yes | the *weights* live there, but they are not ONNX; the browser would have to convert, which it cannot |
+| **GitHub Pages, orphan branch (chosen)** | free for public repos; 1 GB site, 100 MB file | `*` | no cost, no quota to watch at this size, immutable branch |
+| Same origin (`public/kronos-local/` in the deploy) | included in the existing static budget | n/a | simplest, but 33 MB in every deployment and its history |
+| GitHub Release assets | free, 2 GB per file | must be verified | fine, but asset uploads need a token with write scope |
+| Cloudflare R2 / Backblaze B2 | capped free egress | configurable | overkill for four files |
+| Hugging Face Hub (original safetensors) | free | yes | the *weights* live there, but they are not ONNX; the browser cannot convert |
 
-Nothing here is "free and unlimited": 33 MB per new device, ×N devices, is real
-egress. The download is opt-in per device precisely so that the bill (and the
-user's data plan) is paid only by readers who ask for a forecast.
+Nothing here is "free and unlimited": 33 MB per new device × N devices is real
+egress. The download is opt-in per device precisely so that the cost — and the
+reader's data plan — is paid only by people who ask for a forecast.
 
 ## 7. Tests
 
@@ -171,8 +251,16 @@ user's data plan) is paid only by readers who ask for a forecast.
 npm run test:forecast        # server contract + UI + python worker + local suite
 npm run test:kronos-local    # local math/storage + the REAL model vs the reference
 npm run test:pro-chart       # chart terminal, including the forecast card
-node scripts/kronos-export-onnx.py --self-check   # graph vs reference, needs torch
+npm run test:wiring          # the static wiring audit, against an accepted ceiling
+node scripts/kronos-export-onnx.py --out public/kronos-local   # export + self-check
 ```
+
+`npm run test:wiring` exists because `test/run.mjs` cannot reach the audit: an
+earlier probe in that runner calls `process.exit()` at import time (a
+pre-existing quirk, documented in `test/run.mjs`), so the wiring suite has never
+actually executed under `npm test`. `scripts/run-wiring-audit.mjs` runs it
+directly and fails if the number of known failures goes **up** (currently 64;
+this branch brought it down from 68 by fixing four Kronos assertions).
 
 - `test/kronos-local-math.test.mjs` — sampling (top-p/top-k semantics copied
   from the reference, including its shift), bit packing, normalisation, OHLC
@@ -182,7 +270,9 @@ node scripts/kronos-export-onnx.py --self-check   # graph vs reference, needs to
 - `test/pro-chart-forecast.test.jsx` — every UI state, cancellation, coin/range
   changes, and the assertion that the server API is never called.
 - `test/kronos-local-model.test.mjs` — the real model, skipped when the graphs
-  are not on disk (they are not in git).
+  are not on disk (they are not in git). Even when skipped, one case runs: the
+  committed reference must trace to the official weight digests, so the forecast
+  cannot quietly become a different model.
 
 ## 8. What the old server path is now
 

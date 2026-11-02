@@ -16,7 +16,7 @@
  * downloaded" — never as "close enough".
  */
 
-import { MANIFEST_FILE, cacheName, modelBaseUrl } from './config.js';
+import { MANIFEST_FILE, cacheName, modelBaseCandidates, modelBaseUrl } from './config.js';
 
 const MANIFEST_STORE = 'fbt.kronos.manifest.v1';
 
@@ -49,9 +49,37 @@ function writeStoredManifest(manifest) {
   } catch { /* private mode: the cache still works, only the fast path is lost */ }
 }
 
-/** Download the manifest (a ~1 KB JSON) and remember it locally. */
-export async function fetchManifest({ base = modelBaseUrl(), signal } = {}) {
-  if (!base) throw new KronosStorageError('MODEL_NOT_HOSTED');
+/**
+ * Download the manifest (a ~1 KB JSON) and remember it locally.
+ *
+ * Tries every candidate host in order (the configured one, then the app's own
+ * origin). The error that surfaces is the LAST one only if every candidate
+ * failed — and it remembers which base answered, so the four 8 MB graphs do not
+ * each have to rediscover the host.
+ */
+export async function fetchManifest({ base = '', signal } = {}) {
+  /* An explicit `base` is a first preference, not the only option: the caller
+     that names a host still wants the app's own copy tried if that host is
+     dead. (Passing '' asks for the default order.) */
+  const preferred = base ? withTrailingSlash(base) : '';
+  const candidates = modelBaseCandidates().filter((url) => url !== preferred);
+  if (preferred) candidates.unshift(preferred);
+  if (!candidates.length) throw new KronosStorageError('MODEL_NOT_HOSTED');
+  let lastError = null;
+  for (const candidate of candidates) {
+    try {
+      const manifest = await fetchManifestFrom(candidate, signal);
+      rememberHost(candidate);
+      return manifest;
+    } catch (error) {
+      if (error?.name === 'AbortError') throw error;
+      lastError = error;
+    }
+  }
+  throw lastError || new KronosStorageError('MODEL_NOT_HOSTED');
+}
+
+async function fetchManifestFrom(base, signal) {
   const url = `${base}${MANIFEST_FILE}`;
   let res;
   try {
@@ -67,6 +95,20 @@ export async function fetchManifest({ base = modelBaseUrl(), signal } = {}) {
   }
   writeStoredManifest(manifest);
   return manifest;
+}
+
+/**
+ * Which base actually answered. Persisted for the session only: a host that
+ * works from one network may not work from another, and a stale choice would
+ * make the next visit look broken for no reason.
+ */
+let resolvedHost = '';
+function rememberHost(base) { resolvedHost = base; }
+function withTrailingSlash(url) { return url.endsWith('/') ? url : `${url}/`; }
+
+/** The base to download files from (the one that served the manifest). */
+export function modelHost() {
+  return resolvedHost || withTrailingSlash(modelBaseUrl());
 }
 
 export function rememberedManifest() {
@@ -101,7 +143,7 @@ export async function cachedModelState(manifest) {
  * @param {AbortSignal} [opts.signal]
  * @returns {Promise<{bytes: number, verified: boolean}>}
  */
-export async function downloadModel(manifest, { onProgress = () => {}, signal, base = modelBaseUrl() } = {}) {
+export async function downloadModel(manifest, { onProgress = () => {}, signal, base = modelHost() } = {}) {
   const api = cachesApi();
   if (!api) throw new KronosStorageError('CACHE_UNAVAILABLE');
   const total = manifest.files.reduce((sum, f) => sum + f.bytes, 0);

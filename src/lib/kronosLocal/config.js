@@ -47,6 +47,27 @@ export const RUNTIME_BYTES = {
  */
 export const ORT_ASSET_PATH = null;
 
+/** The app's own copy, next to index.html. Always a valid answer. */
+export function sameOriginBaseUrl() {
+  if (typeof window === 'undefined' || !window.location) return '';
+  const base = (import.meta.env && import.meta.env.BASE_URL) || '/';
+  return withSlash(new URL(`${base.replace(/\/$/, '')}/kronos-local/`, window.location.origin).toString());
+}
+
+/**
+ * Where the model files are.
+ *
+ * Order: an operator override injected at runtime, then the build-time host,
+ * then the app's own origin. That last one is not a theoretical default any
+ * more — the build vendors the published bytes into `public/kronos-local/`
+ * (scripts/fetch-kronos-model.mjs), so the same-origin copy is real on any
+ * deployment that was built with network access.
+ *
+ * Which is why a failed download retries the OTHER base before giving up: a
+ * deployment can legitimately have one host configured and the files served
+ * from the other, and a single cross-origin 404 would otherwise present as
+ * «مدل منتشر نشده» while 33 MB sit next to index.html.
+ */
 export function modelBaseUrl() {
   const injected = typeof window !== 'undefined' ? window.__FBT_KRONOS_MODEL_BASE__ : '';
   if (typeof injected === 'string' && injected.trim()) return withSlash(injected.trim());
@@ -54,11 +75,14 @@ export function modelBaseUrl() {
     ? import.meta.env.VITE_KRONOS_MODEL_BASE_URL
     : '';
   if (typeof fromEnv === 'string' && fromEnv.trim()) return withSlash(fromEnv.trim());
-  if (typeof window !== 'undefined' && window.location) {
-    const base = (import.meta.env && import.meta.env.BASE_URL) || '/';
-    return withSlash(new URL(`${base.replace(/\/$/, '')}/kronos-local/`, window.location.origin).toString());
-  }
-  return '';
+  return sameOriginBaseUrl();
+}
+
+/** Every place worth trying, in order, without duplicates. */
+export function modelBaseCandidates() {
+  const primary = modelBaseUrl();
+  const own = sameOriginBaseUrl();
+  return [primary, own].filter((url, i, all) => Boolean(url) && all.indexOf(url) === i);
 }
 
 function withSlash(url) {

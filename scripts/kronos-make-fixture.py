@@ -6,7 +6,7 @@ with top_k=1, which makes the sampler deterministic (a single surviving token),
 so the browser engine can be compared bar-for-bar. Everything here is offline
 and reproducible: no network, fixed seeds.
 """
-import json, os, sys
+import hashlib, json, os, sys
 import numpy as np
 import pandas as pd
 import torch
@@ -42,6 +42,14 @@ def candles(n=220, seed=7, start=60_000.0):
     return out
 
 
+def _sha256(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     rows = candles()
@@ -69,9 +77,27 @@ def main():
            for ts, r in pred.iterrows()]
 
     json.dump({"step": STEP_MS, "candles": rows}, open(os.path.join(OUT, "kronos-candles.json"), "w"))
+    # Provenance is part of the artefact. Without it a later reader cannot tell
+    # "the model changed" from "the fixture was regenerated on a different torch
+    # build" — and those two mean opposite things for a failing test.
+    provenance = {
+        "generatedBy": "scripts/kronos-make-fixture.py",
+        "model": "NeoQuasar/Kronos-mini",
+        "tokenizer": "NeoQuasar/Kronos-Tokenizer-2k",
+        "weightsSha256": {
+            "Kronos-mini/model.safetensors": _sha256(os.path.join(W, "Kronos-mini", "model.safetensors")),
+            "Kronos-Tokenizer-2k/model.safetensors": _sha256(os.path.join(W, "Kronos-Tokenizer-2k", "model.safetensors")),
+        },
+        "torch": torch.__version__,
+        "numpy": np.__version__,
+        "device": "cpu",
+        "windowBars": len(rows),
+        "sampler": "top_k=1 (single surviving token → deterministic)",
+    }
     json.dump({"model": "NeoQuasar/Kronos-mini", "tokenizer": "NeoQuasar/Kronos-Tokenizer-2k",
                "horizon": horizon, "topK": 1, "temperature": 1.0, "topP": 1.0,
                "note": "KronosPredictor.predict(..., top_k=1) — deterministic sampler",
+               "provenance": provenance,
                "candles": ref}, open(os.path.join(OUT, "kronos-reference.json"), "w"), indent=1)
     print("wrote fixture + reference:", len(rows), "candles →", horizon, "reference bars")
     print("reference closes:", [round(c["c"], 3) for c in ref[:5]], "…")

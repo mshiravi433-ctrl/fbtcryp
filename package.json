@@ -12,7 +12,7 @@
     "vendor:kamino": "node scripts/vendor-kamino.mjs",
     "check:kamino": "node scripts/check-kamino-bundle.mjs",
     "check:kamino-browser": "node scripts/check-kamino-browser.mjs",
-    "prebuild": "node scripts/vendor-velocity.mjs && node scripts/vendor-kamino.mjs && node scripts/assetlinks.mjs --ensure",
+    "prebuild": "node scripts/vendor-velocity.mjs && node scripts/vendor-kamino.mjs && node scripts/assetlinks.mjs --ensure && node scripts/fetch-kronos-model.mjs",
     "velocity:referrer-setup": "node scripts/velocity-referrer-setup.mjs",
     "velocity:referral-sweep": "node scripts/velocity-referral-sweep.mjs",
     "assetlinks": "node scripts/assetlinks.mjs",
@@ -397,7 +397,10 @@
     "test:buy-sell-spectrum": "node test/buy-sell-spectrum-probe.mjs",
     "kronos:export": "python3 scripts/kronos-export-onnx.py",
     "kronos:fixture": "python3 scripts/kronos-make-fixture.py",
-    "test:kronos-local": "node --test test/kronos-local-math.test.mjs test/kronos-local-storage.test.mjs && node --test --test-force-exit test/kronos-local-model.test.mjs"
+    "test:kronos-local": "node --test test/kronos-local-math.test.mjs test/kronos-local-storage.test.mjs && node --test --test-force-exit test/kronos-local-model.test.mjs",
+    "test:wiring": "node scripts/run-wiring-audit.mjs",
+    "kronos:fetch": "node scripts/fetch-kronos-model.mjs",
+    "kronos:check": "node scripts/check-kronos-model-host.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

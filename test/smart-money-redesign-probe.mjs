@@ -129,9 +129,19 @@ t('the rail is one tablist with translated labels and a live selection',
 }
 
 /* ── 5 · the probe-visible hooks are still there ────────────────────────── */
+/*
+ * `sm-token-window-note` is deliberately NOT in this list. It existed while the
+ * token card offered a 1h/4h/7d rail and had to explain the server load behind
+ * it; the 2026-10-28 revision removed the rail and the note together (one
+ * window, the last 24 hours, fetched only while open). test/wiring.mjs asserts
+ * the note's ABSENCE for exactly that reason — keeping it here made the two
+ * suites contradict each other, and because this probe runs inside
+ * test/run.mjs before the wiring audit, the contradiction stopped the whole run
+ * from ever reaching the audit at all.
+ */
 const HOOKS = [
   'sm-window-tabs', 'sm-window-coverage', 'sm-coverage', 'sm-stale-notice',
-  'sm-flows-window-tabs', 'sm-token-window-badge', 'sm-token-window-note',
+  'sm-flows-window-tabs', 'sm-token-window-badge',
   'sm-token-evidence', 'sm-token-identity', 'sm-token-wallets', 'sm-solana-promotion',
   'sm-momentum-detail'
 ];
