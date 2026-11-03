@@ -178,31 +178,37 @@ describe('۳ · داغ‌ترین‌ها داده‌ی درست نشان می‌
   });
 });
 
-/* ── 4 · SMART MONEY: the beam, the radar and three lanes ─────────────────── */
-describe('۴ · بنر پول هوشمند', () => {
-  it('keeps its existing contract and adds the new layers', () => {
+/* ── 4 · GLOBAL INTELLIGENCE: the compact final override ────────────────── */
+describe('۴ · بنر فشرده هوش جهانی', () => {
+  const fixes = readFileSync('src/styles/market-request-fixes.css', 'utf8');
+
+  it('has one orbital mark and no photograph, route diagram or feature chips', () => {
     render(<MemoryRouter><SmartMoneyBanner /></MemoryRouter>);
     const blade = screen.getByTestId('market-smart-money-banner');
-    expect(blade.querySelectorAll('.mx-route-node')).toHaveLength(3);
-    expect(blade.querySelectorAll('.mx-pool')).toHaveLength(3);
-    expect(blade.querySelectorAll('.mx-route-traveller')).toHaveLength(3);
+    expect(blade.querySelector('img')).toBeNull();
+    expect(blade.querySelectorAll('.mx-route-node')).toHaveLength(0);
+    expect(blade.querySelectorAll('.mx-pool')).toHaveLength(0);
     expect(blade.querySelector('.mx-smart-radar')).toBeTruthy();
-    expect(blade.querySelectorAll('.mx-smart-ring')).toHaveLength(2);
+    expect(blade.querySelectorAll('.mx-smart-ring')).toHaveLength(1);
+    expect(blade.querySelector('.mx-global-pulse')).toBeTruthy();
     expect(blade.textContent).not.toMatch(/\d+%/);
   });
 
-  it('runs a rotating beam on the rim and paints the four-colour palette', () => {
-    expect(bare).toMatch(/\.mx-market \.mx-smart-banner::before \{[^}]*animation: gv-beam-spin 12s/s);
-    expect(bare).toMatch(/\.mx-market \.mx-smart-banner::after \{[^}]*inset: 1\.5px/s);
-    expect(bare).toMatch(/--gv-smart-a: #5dffc8/);
-    expect(bare).toMatch(/--gv-smart-c: #ff7bd8/);
+  it('is a slim flex row and loads no artwork in the winning stylesheet', () => {
+    const block = fixes.slice(fixes.indexOf("THE MARKET SCREEN'S ADVERTISEMENT"));
+    expect(block).toMatch(/\.mx-global-banner \{[\s\S]*?display: flex/);
+    expect(block).toMatch(/min-height: 62px/);
+    expect(block).toMatch(/@media \(max-width: 420px\)[\s\S]*?min-height: 58px/);
+    expect(block).not.toMatch(/url\(/);
   });
 
-  it('gives each lane its own speed so the three never move in step', () => {
-    const durations = [...bare.matchAll(/\.mx-route-traveller(?:\.is-\d)?\s*\{[^}]*?animation:[^;]*?(\d+\.?\d*)s/gs)].map((m) => m[1]);
-    expect(new Set(durations).size).toBeGreaterThanOrEqual(2);
-    expect(bare).toMatch(/\.mx-route-traveller\.is-2 \{[^}]*mx-flow-travel 4\.6s/s);
-    expect(bare).toMatch(/\.mx-route-traveller\.is-3 \{[^}]*mx-flow-travel 7\.4s/s);
+  it('animates only the scan, orbit, radar and pulse, with stop guards', () => {
+    for (const name of ['mx-global-scan', 'mx-global-orbit', 'mx-global-radar', 'mx-global-pulse']) {
+      expect(fixes).toContain(`@keyframes ${name}`);
+    }
+    expect(fixes).toMatch(/prefers-reduced-motion: reduce[\s\S]*animation: none/);
+    expect(fixes).toMatch(/data-native='true'[\s\S]*animation: none/);
+    expect(fixes).toMatch(/data-lite='true'[\s\S]*animation: none/);
   });
 });
 

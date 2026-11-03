@@ -301,9 +301,8 @@ function DownloadIcon() {
 }
 
 /**
- * One compact, icon-first action for EVERY forecast state. The visible label
- * is dropped by CSS in the short-landscape HUD; `aria-label` and `title` keep
- * the button named for screen readers and for a mouse hovering the icon.
+ * One compact, icon-first action for EVERY forecast state. `aria-label` and
+ * `title` keep the button named for screen readers and mouse users alike.
  */
 function FcAction({ label, icon = 'retry', tone = 'ghost', testId, onClick, ...rest }) {
   const glyph = icon === 'trash' ? <TrashIcon />
@@ -414,6 +413,13 @@ export default function TokenChart({
   const closeBtnRef = useRef(null);
   const dialogRef = useRef(null);
   const [expanded, setExpanded] = useState(false);
+  /* A short landscape terminal has no safe place for the forecast controls or
+     their result card. Track the actual viewport so rotation can switch the
+     feature off instead of letting an absolutely-positioned card cover tools. */
+  const [shortLandscape, setShortLandscape] = useState(() => (
+    typeof window !== 'undefined' && window.innerWidth > window.innerHeight && window.innerHeight <= 640
+  ));
+  const forecastLandscapeDisabled = expanded && shortLandscape;
   /* Whichever chart is on screen owns the imperative handle. */
   const chartRef = expanded ? fsChartRef : inlineChartRef;
   const [prefs, setPrefs] = useState(loadPrefs);
@@ -479,10 +485,10 @@ export default function TokenChart({
    * "no forecast yet", whatever produced it.
    */
   const forecastData = forecastResult?.key === forecastKey ? forecastResult.data : null;
-  const forecast = forecastOn && Array.isArray(forecastData?.candles) && forecastData.candles.length
+  const forecast = !forecastLandscapeDisabled && forecastOn && Array.isArray(forecastData?.candles) && forecastData.candles.length
     ? forecastData
     : null;
-  const forecastBusy = forecastOn && ['checking', 'downloading', 'preparing', 'running'].includes(forecastPhase);
+  const forecastBusy = !forecastLandscapeDisabled && forecastOn && ['checking', 'downloading', 'preparing', 'running'].includes(forecastPhase);
   // eslint-disable-next-line no-unused-vars
   const forecastState = !forecastOn
     ? 'idle'
@@ -834,6 +840,19 @@ export default function TokenChart({
     return () => query.removeListener?.(read);
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    const query = window.matchMedia('(orientation: landscape) and (max-height: 640px)');
+    const read = () => setShortLandscape(Boolean(query.matches));
+    read();
+    if (query.addEventListener) {
+      query.addEventListener('change', read);
+      return () => query.removeEventListener('change', read);
+    }
+    query.addListener?.(read);
+    return () => query.removeListener?.(read);
+  }, []);
+
   /*
    * The note is DERIVED: it exists exactly while the terminal is open, on a
    * phone that is being held upright. Storing it in state meant every path
@@ -843,6 +862,20 @@ export default function TokenChart({
    * could show last session's sentence.
    */
   const rotationHint = expanded && portrait ? t('coin.pro.rotateHint') : '';
+
+  /* Rotation is a real feature boundary, not merely a CSS hiding rule. Stop
+     any download/inference, remove projected candles and leave the feature
+     OFF when the reader returns to portrait. The downloaded model remains in
+     Cache Storage, so explicitly enabling it again does not repeat a download. */
+  useEffect(() => {
+    if (!forecastLandscapeDisabled || !forecastOn) return;
+    stopForecastWork();
+    setForecastOn(false);
+    setForecastResult(null);
+    setForecastProgress(null);
+    setForecastPhase('idle');
+    setForecastError('');
+  }, [forecastLandscapeDisabled, forecastOn, stopForecastWork]);
 
   async function openExpanded() {
     setExpanded(true);
@@ -1185,13 +1218,9 @@ export default function TokenChart({
       </div>
     );
   } else if (forecast) {
-    /*
-     * `pc-fc--ambient` is the READY state's only behavioural class. In a short
-     * landscape terminal the stylesheet lifts this card out of the flow,
-     * fades it, and lets chart gestures pass through it — so the result never
-     * competes with the toolbar chips. Prompts, errors and progress are NOT
-     * ambient: they need a decision from the reader and stay fully opaque.
-     */
+    /* The READY state shares the same compact anatomy as setup/error states.
+       Short landscape never reaches this card: forecastLandscapeDisabled has
+       already removed the whole feature from that terminal. */
     forecastPanel = (
       <div className="pc-fc pc-fc--ambient" dir="auto" data-testid="forecast-badge">
         <FcHead
@@ -1236,7 +1265,10 @@ export default function TokenChart({
     );
   }
 
-  const forecastNotice = forecastOn && forecastEngineFailed ? t('coin.pro.forecastCanvasUnavailable') : '';
+  /* Do not leave even one frame of the old HUD mounted while the rotation
+     effect above is turning the feature off. */
+  if (forecastLandscapeDisabled) forecastPanel = null;
+  const forecastNotice = !forecastLandscapeDisabled && forecastOn && forecastEngineFailed ? t('coin.pro.forecastCanvasUnavailable') : '';
 
   const toolbar = (
     <div className="pc-toolbar" role="toolbar" aria-label={t('coin.pro.tools')}>
@@ -1278,7 +1310,7 @@ export default function TokenChart({
         <Chip active={settings.log} onClick={() => toggleSetting('log')} title={t('coin.pro.logHint')}>{settings.log ? t('coin.pro.log') : t('coin.pro.linear')}</Chip>
         <Chip active={settings.grid} onClick={() => toggleSetting('grid')}>{t('coin.pro.grid')}</Chip>
       </div>
-      <div className="pc-toolgroup">
+      {!forecastLandscapeDisabled ? <div className="pc-toolgroup pc-toolgroup--forecast">
         <Chip
           active={forecastOn}
           onClick={toggleForecast}
@@ -1298,7 +1330,7 @@ export default function TokenChart({
             <option value="12">12</option><option value="24">24</option><option value="48">48</option>
           </select>
         </label> : null}
-      </div>
+      </div> : null}
       <div className="pc-toolgroup pc-toolgroup--actions">
         <Chip onClick={() => chartRef.current?.zoom(0.62)} title={t('coin.pro.zoomIn')}><span aria-hidden="true">＋</span></Chip>
         <Chip onClick={() => chartRef.current?.zoom(1.6)} title={t('coin.pro.zoomOut')}><span aria-hidden="true">－</span></Chip>

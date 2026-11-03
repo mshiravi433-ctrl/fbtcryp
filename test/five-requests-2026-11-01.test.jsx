@@ -159,34 +159,37 @@ describe('۳ · دسته‌بندی‌های سید، تحت نظر و لانچ�
 });
 
 /* ── ۴ · تبلیغ هوش جهانی ──────────────────────────────────────────────────── */
-describe('۴ · بنر «هوش جهانی»: عکس، آیکون، جمله و انیمیشن', () => {
+describe('۴ · بنر «هوش جهانی»: یک ردیف کوچک، بدون عکس و با انیمیشن مرتبط', () => {
   const mount = () => render(<MemoryRouter><SmartMoneyBanner /></MemoryRouter>);
 
   it('sells Global Intelligence and links to /global', () => {
     mount();
     const banner = screen.getByTestId('market-smart-money-banner');
-    expect(banner.textContent).toContain(fa.marketGlobalAd.eyebrow);
     expect(banner.textContent).toContain(fa.marketGlobalAd.title);
     expect(banner.textContent).toContain(fa.marketGlobalAd.desc);
     expect(banner.textContent).toContain(fa.marketGlobalAd.cta);
     expect(banner.querySelector('a').getAttribute('href')).toBe('/global');
-    /* the old Smart Money headline is no longer what this box advertises */
+    expect(banner.querySelector('a').getAttribute('aria-label')).toBe(fa.marketGlobalAd.cta);
     expect(banner.textContent).not.toContain(fa.marketIntel.smartTitle);
   });
 
-  it('carries the local artwork, three drawn capability chips and the route', () => {
+  it('is one compact row with an orbital icon and no artwork or extra sections', () => {
     mount();
     const banner = screen.getByTestId('market-smart-money-banner');
-    const img = banner.querySelector('.mx-global-art img');
-    expect(img.getAttribute('src')).toBe('/images/market-banner/globe.webp');
-    expect(img.getAttribute('loading')).toBe('lazy');
-    expect(img.getAttribute('decoding')).toBe('async');
+    expect(banner.querySelector('img')).toBeNull();
+    expect(banner.querySelector('.mx-global-art')).toBeNull();
+    expect(banner.querySelector('.mx-smart-route')).toBeNull();
+    expect(banner.querySelector('.mx-smart-pools')).toBeNull();
+    expect(banner.querySelector('.mx-smart-foot')).toBeNull();
+    expect(banner.querySelector('.mx-smart-main')).toBeTruthy();
     expect(banner.querySelector('.mx-smart-mark svg')).toBeTruthy();
-    expect([...banner.querySelectorAll('.mx-pool svg')]).toHaveLength(3);
-    expect(banner.querySelector('.mx-smart-route').querySelectorAll('.mx-route-node')).toHaveLength(3);
-    /* two orbit rings and three satellites: motion with something to move */
-    expect(banner.querySelectorAll('.mx-global-orbit')).toHaveLength(2);
-    expect(banner.querySelectorAll('.mx-global-sat')).toHaveLength(3);
+    expect(banner.querySelector('.mx-smart-ring')).toBeTruthy();
+    expect(banner.querySelector('.mx-global-pulse')).toBeTruthy();
+    expect(banner.querySelectorAll('a')).toHaveLength(1);
+    const block = bannerCss.slice(bannerCss.indexOf('THE MARKET SCREEN'));
+    expect(block).not.toMatch(/url\(/);
+    expect(block).toMatch(/\.mx-global-banner \{[\s\S]*?display: flex/);
+    expect(block).toMatch(/min-height: 62px/);
   });
 
   it('invents no number, so it cannot disagree with the feed', () => {
@@ -197,7 +200,7 @@ describe('۴ · بنر «هوش جهانی»: عکس، آیکون، جمله و 
   it('animates transform and opacity only, and every loop can be frozen', () => {
     const block = bannerCss.slice(bannerCss.indexOf('THE MARKET SCREEN'));
     expect(block).not.toMatch(/backdrop-filter/);
-    for (const name of ['mx-global-float', 'mx-global-tilt', 'mx-global-sat']) {
+    for (const name of ['mx-global-scan', 'mx-global-orbit', 'mx-global-radar', 'mx-global-pulse']) {
       const frames = new RegExp(`@keyframes ${name} \\{([\\s\\S]*?)\\n\\}`, 'g');
       const found = [...block.matchAll(frames)].map((m) => m[1]).join('\n');
       expect(found, name).toBeTruthy();
@@ -206,12 +209,8 @@ describe('۴ · بنر «هوش جهانی»: عکس، آیکون، جمله و 
     expect(block).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*animation: none/);
     expect(block).toMatch(/:root\[data-native='true'\][\s\S]*animation: none/);
     expect(block).toMatch(/:root\[data-lite='true'\][\s\S]*animation: none/);
-    /* The lite guard must key on `data-theme`, exactly like market-perf.css:
-       without a theme the attribute is never written, and a bare
-       `:root:not([data-motion='full'])` would freeze the banner for everyone. */
     expect(block).toMatch(/:root\[data-theme\]:not\(\[data-motion='full'\]\) \.mx-market \.mx-global-banner/);
     expect(block).not.toMatch(/^:root:not\(\[data-motion/m);
-    /* no SMIL: CSS is the only thing that can be stopped */
     expect(read('src/components/market/SmartMoneyBanner.jsx')).not.toMatch(/<animate/);
   });
 });
