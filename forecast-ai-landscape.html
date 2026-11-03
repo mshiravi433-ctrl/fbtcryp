@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="fa" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>پیش‌بینی AI · حالت افقی ترمینال شمعی</title>
+<link rel="stylesheet" href="src/styles/pro-chart.css" />
+<style>
+  /* فقط متغیرهای اپ و قاب پیش‌نمایش — هیچکدام وارد بیلد نمی‌شود. */
+  :root {
+    --bg-abyss:#03040a; --bg-raised:#10131d; --bg-panel:#0a0d16; --bg-panel-solid:#0a0d16;
+    --text-1:#eef2fb; --text-2:#b7c0d6; --text-3:#8f9ab3;
+    --line:rgba(255,255,255,.09); --line-strong:rgba(255,255,255,.16);
+    --up:#2ee6a8; --down:#ff6b8b; --rgb-1:#00e5ff; --rgb-2:#7c4dff;
+    --ink-cyan:#008392; --ink-violet:#5a3fd0;
+    --font-display:'Vazirmatn',system-ui,Tahoma,'Segoe UI',Arial,sans-serif;
+    --font-mono:ui-monospace,'JetBrains Mono',Menlo,Consolas,monospace;
+  }
+  :root[data-theme='light'] {
+    --bg-abyss:#f4f6fc; --bg-raised:#fff; --bg-panel:#fff; --bg-panel-solid:#fff;
+    --text-1:#0f1a2c; --text-2:#46516c; --text-3:#6b7591;
+    --line:rgba(16,20,40,.12); --line-strong:rgba(16,20,40,.2);
+    --up:#008854; --down:#c43a56;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; overflow:hidden; background:var(--bg-abyss); color:var(--text-1); font-family:var(--font-display); }
+  .mono { font-family:var(--font-mono); }
+  .pill { padding:3px 8px; border-radius:999px; border:1px solid currentColor; font-size:10px; font-weight:800; }
+  .pill-up { color:var(--up); } .pill-down { color:var(--down); }
+  .pv-candles { position:absolute; inset:0; z-index:1; width:100%; height:100%; }
+  .pv-grid { position:absolute; inset:0; z-index:0; opacity:.5;
+    background-image:linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px);
+    background-size:100% 25%,6.25% 100%; }
+  :root[data-theme='light'] .pv-grid { background-image:linear-gradient(rgba(16,20,40,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(16,20,40,.06) 1px,transparent 1px); }
+  .pv-coin { display:grid; place-items:center; width:26px; height:26px; border-radius:9px;
+    font:800 10px/1 var(--font-mono); color:#fff; background:linear-gradient(135deg,#627eea,#8a63d2); }
+  .pv-legend { display:flex; align-items:center; gap:8px; font-size:10px; color:var(--text-2); white-space:nowrap; }
+  .pv-legend b { color:var(--text-1); }
+  .pv-legend .up { color:var(--up); } .pv-legend .down { color:var(--down); }
+  .pc-fs-head-actions .pv-tag { font:700 9px/1 var(--font-mono); color:var(--text-3); margin-inline-end:4px; }
+</style>
+</head>
+<body>
+<div class="pc-fs" role="dialog" aria-label="ترمینال تمام‌صفحه نمودار شمعی">
+  <div class="pc-fs-aurora" aria-hidden="true"></div>
+
+  <header class="pc-fs-head">
+    <div class="pc-fs-ident">
+      <span class="pv-coin">ETH</span>
+      <div class="pc-fs-names"><span class="pc-fs-sym">ETH</span><span class="pc-fs-name">Ethereum</span></div>
+      <span class="pc-fs-price mono" dir="ltr">3,412.55</span>
+      <span class="pill pill-up" dir="ltr">+2.14%</span>
+    </div>
+    <div class="pc-fs-head-actions">
+      <span class="pv-tag">LANDSCAPE · HUD</span>
+      <button type="button" class="pc-fs-icon" title="چرخش" aria-label="چرخش">↻</button>
+      <button type="button" class="pc-fs-icon pc-fs-close" title="بستن" aria-label="بستن">✕</button>
+    </div>
+  </header>
+
+  <div class="pc-fs-ranges" role="group" aria-label="بازه زمانی">
+    <button type="button" class="pc-range">۱روز</button>
+    <button type="button" class="pc-range is-on">۷روز</button>
+    <button type="button" class="pc-range">۳۰روز</button>
+    <button type="button" class="pc-range">۹۰روز</button>
+    <button type="button" class="pc-range">۱سال</button>
+    <span class="pc-fs-interval">1D · بازه</span>
+  </div>
+
+  <div class="pc-fs-main">
+    <div class="pc-stage">
+      <div class="pc-watermark" aria-hidden="true">ETH</div>
+      <div class="pv-grid" aria-hidden="true"></div>
+      <svg class="pv-candles" viewBox="0 0 800 240" preserveAspectRatio="none" aria-hidden="true"><g id="pv-bars"></g></svg>
+      <div class="pc-fs-legend">
+        <div class="pv-legend" dir="ltr">
+          <b>ETH</b><span>1D</span><span>O <b>3,401.2</b></span><span>H <b>3,510.0</b></span>
+          <span>L <b>3,295.4</b></span><span>C <b>3,412.55</b></span><span class="up">+0.33%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- همان کارت واقعی؛ JS زیر فقط حالتش را عوض می‌کند. -->
+    <!-- کارت دقیقاً فرزند مستقیم pc-fs-main است، مثل {forecastPanel} در TokenChart.jsx -->
+    <div id="pv-anchor" hidden></div>
+
+    <div class="pc-stats mono" dir="ltr">
+      <span><em>بالا</em>3510.00</span><span><em>پایین</em>3295.40</span>
+      <span><em>تغییر</em><b class="up">+2.14%</b></span><span><em>بازه</em>6.5%</span>
+      <span><em>ATR</em>1.82%</span><span><em>موقعیت</em>62%</span>
+    </div>
+  </div>
+
+  <div class="pc-toolbar" role="toolbar" aria-label="ابزارهای تحلیل">
+    <div class="pc-toolgroup"><button class="pc-chip is-on">شمعی</button><button class="pc-chip">خطی</button><button class="pc-chip">مساحت</button></div>
+    <div class="pc-toolgroup"><button class="pc-chip is-on">MA7</button><button class="pc-chip is-on">MA25</button><button class="pc-chip">MA99</button></div>
+    <div class="pc-toolgroup"><button class="pc-chip">EMA21</button><button class="pc-chip">EMA55</button><button class="pc-chip">BB</button></div>
+    <div class="pc-toolgroup"><button class="pc-chip">حجم</button><button class="pc-chip">RSI</button><button class="pc-chip">MACD</button></div>
+    <div class="pc-toolgroup"><button class="pc-chip">فیبوناچی</button><button class="pc-chip">سطح</button><button class="pc-chip">اندازه</button></div>
+    <div class="pc-toolgroup"><button class="pc-chip">خطی</button><button class="pc-chip is-on">شبکه</button></div>
+    <div class="pc-toolgroup">
+      <button class="pc-chip pc-chip--fc is-on">پیش‌بینی AI</button>
+      <label class="pc-fc-horizon"><span>تعداد</span><select><option>خودکار</option><option>12</option><option>24</option><option>48</option></select></label>
+    </div>
+    <div class="pc-toolgroup pc-toolgroup--actions">
+      <button class="pc-chip">＋</button><button class="pc-chip">－</button>
+      <button class="pc-chip">-fit-</button><button class="pc-chip">PNG</button><button class="pc-chip">ریست</button>
+    </div>
+  </div>
+</div>
+
+<script src="forecast-ai-card-preview.js"></script>
+<script>
+/* کندل‌های مصنوعی فقط برای زمینهٔ بصری — هیچ فیدی لود نمی‌شود. */
+(function () {
+  const g = document.getElementById('pv-bars');
+  const NS = 'http://www.w3.org/2000/svg';
+  let seed = 7;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
+  const green = getComputedStyle(document.documentElement).getPropertyValue('--up').trim() || '#2ee6a8';
+  const red = getComputedStyle(document.documentElement).getPropertyValue('--down').trim() || '#ff6b8b';
+  let price = 120;
+  for (let i = 0; i < 44; i++) {
+    const open = price;
+    const close = Math.max(40, Math.min(210, open + (rnd() - .45) * 22));
+    const x = 14 + i * 14;
+    const top = 240 - Math.max(open, close) - rnd() * 10;
+    const bottom = 240 - Math.min(open, close) + rnd() * 10;
+    const c = close >= open ? green : red;
+    const wick = document.createElementNS(NS, 'line');
+    wick.setAttribute('x1', x + 4); wick.setAttribute('x2', x + 4);
+    wick.setAttribute('y1', top); wick.setAttribute('y2', bottom);
+    wick.setAttribute('stroke', c); wick.setAttribute('stroke-width', '1.2');
+    g.appendChild(wick);
+    const body = document.createElementNS(NS, 'rect');
+    body.setAttribute('x', x); body.setAttribute('width', 8);
+    body.setAttribute('y', 240 - Math.max(open, close));
+    body.setAttribute('height', Math.max(3, Math.abs(close - open)));
+    body.setAttribute('fill', c); body.setAttribute('opacity', '.78');
+    g.appendChild(body);
+    price = close;
+  }
+  /* کندل‌های بنفش = خروجی مدل، مثل همان سری دوم ProChart */
+  const violet = '#a99bff';
+  for (let i = 0; i < 12; i++) {
+    const x = 14 + 44 * 14 + i * 14;
+    const y = 240 - price - (i * 2.4) + (rnd() - .5) * 12;
+    const body = document.createElementNS(NS, 'rect');
+    body.setAttribute('x', x); body.setAttribute('width', 8);
+    body.setAttribute('y', y); body.setAttribute('height', 9 + rnd() * 9);
+    body.setAttribute('fill', violet); body.setAttribute('opacity', '.55');
+    g.appendChild(body);
+    const wick = document.createElementNS(NS, 'line');
+    wick.setAttribute('x1', x + 4); wick.setAttribute('x2', x + 4);
+    wick.setAttribute('y1', y - 7); wick.setAttribute('y2', y + 20);
+    wick.setAttribute('stroke', violet); wick.setAttribute('stroke-width', '1');
+    wick.setAttribute('stroke-dasharray', '3 2'); wick.setAttribute('opacity', '.7');
+    g.appendChild(wick);
+  }
+})();
+
+/* همان className کامپوننت، چهار حالت: ?state=ready|error|download|progress */
+const { STATES } = window.FcPreview;
+const params = new URLSearchParams(location.search);
+const state = STATES[params.get('state')] ? params.get('state') : 'ready';
+const anchor = document.getElementById('pv-anchor');
+anchor.insertAdjacentHTML('beforebegin', STATES[state]);
+/* نشان دادن گروه دکمههای AI و اکشنها در همان اسکرولر افقی */
+const tb = document.querySelector('.pc-toolbar');
+if (tb) tb.scrollLeft = document.documentElement.dir === 'rtl' ? -tb.scrollWidth : tb.scrollWidth;
+if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
+if (params.get('dir') === 'ltr') document.documentElement.dir = 'ltr';
+</script>
+</body>
+</html>

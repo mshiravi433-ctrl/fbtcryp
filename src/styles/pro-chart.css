@@ -831,14 +831,23 @@ html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
   :root[data-theme='light'] .pc-fs { background: #fff; }
 }
 
-/* ── AI FORECAST — the projected next candles (Kronos) ──────────────────────
-   A second, violet series on the main pane plus a provenance badge. The
-   colour contract is the point: violet says "model output", never the
-   green/red of a bar that actually printed, and the BASELINE tag wears
-   amber because a reader must see at a glance that this projection is the
-   statistical fallback, not the model. The disclaimer stays on screen the
-   whole time the layer is on — a projection without its caveat is a promise
-   nobody made. No animation, no glow on the big surface: a tool, not a show. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   AI FORECAST — projected next candles (Kronos) + the announcement card
+   ───────────────────────────────────────────────────────────────────────────
+   Colour contract: violet = model output, amber = the statistical baseline,
+   never the green/red of a bar that actually printed. The disclaimer stays in
+   the DOM for as long as the layer is on — a projection without its caveat is
+   a promise nobody made.
+
+   The card is a small HUD, not a second page: one gradient hairline, one
+   glass surface, an icon-first identity row and pill actions. NO
+   backdrop-filter (this sheet forbids blur over a live canvas), NO animated
+   gradients, and only opacity/transform/colour transitions. In short
+   landscape terminals the card leaves the flow and becomes a faded corner
+   overlay, so it cannot squeeze the candles or land on the toolbar chips;
+   hover/focus brings it back to full contrast.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 .pc-chip--fc:not(.is-on) {
   border-color: rgba(141, 123, 255, .42);
   color: #b9aeff;
@@ -850,53 +859,7 @@ html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
   box-shadow: 0 4px 14px -10px #8d7bff;
 }
 
-.pc-fc {
-  display: flex;
-  flex-direction: column;
-  border-radius: 9px;
-  border: 1px solid rgba(141, 123, 255, .35);
-}
-.pc-fc-tag {
-  font: 800 9.5px/1.25 var(--font-display);
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: #ffcc80; /* baseline — amber: NOT the model */
-}
-.pc-fc-tag.is-model { color: #a99bff; } /* Kronos itself */
-.pc-fc-model {
-  font-size: 9.5px;
-  color: #8b8fa3;
-}
-.pc-fc-disc {
-  font-size: 9.5px;
-  line-height: 1.45;
-  color: #9aa3bd;
-}
-
-:root[data-theme='light'] .pc-chip--fc:not(.is-on) {
-  border-color: rgba(91, 63, 214, .4);
-  color: #5b3fd6;
-}
-:root[data-theme='light'] .pc-chip--fc.is-on {
-  color: #fff;
-  background: linear-gradient(135deg, #5b3fd6, #7b4fd6);
-}
-:root[data-theme='light'] .pc-fc {
-  background: rgba(255, 255, 255, .9);
-  border-color: rgba(91, 63, 214, .35);
-}
-:root[data-theme='light'] .pc-fc-tag { color: #9a6c00; }
-:root[data-theme='light'] .pc-fc-tag.is-model { color: #5b3fd6; }
-:root[data-theme='light'] .pc-fc-model,
-:root[data-theme='light'] .pc-fc-disc { color: #5b6478; }
-
-@media (prefers-contrast: more) {
-  .pc-chip--fc:not(.is-on) { border-color: rgba(185, 174, 255, .8); color: #eef2fb; }
-  :root[data-theme='light'] .pc-chip--fc:not(.is-on) { border-color: rgba(91, 63, 214, .8); color: #2c1f8f; }
-  .pc-fc { border-color: rgba(185, 174, 255, .8); }
-}
-
-/* ── forecast: visible controls, explicit provenance, no covered candles ── */
+/* ── toolbar plumbing that the forecast toggle shares ───────────────────── */
 .pc-chip:disabled { opacity: .45; cursor: not-allowed; }
 .pc-chip[aria-busy='true'] { cursor: progress; }
 .pc-inline-actions .pc-chip { min-height: 32px; font-size: 10px; }
@@ -911,75 +874,119 @@ html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
   animation: pc-spin .8s linear infinite;
 }
 @keyframes pc-spin { to { transform: rotate(360deg); } }
+.pc-fs-note { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 8px; flex: 0 0 auto; }
+.pc-fs-note--error, .pc-inline-note { color: #ffcc80; }
+.pc-inline-note { font-size: 11px; line-height: 1.7; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pc-ohlc-projected { color: #b9aeff; font-weight: 800; }
+
+/* ── the card shell ─────────────────────────────────────────────────────── */
 .pc-fc {
-  position: static;
-  max-width: none;
+  --fc-violet: #8d7bff;
+  --fc-cyan: #4fd8ff;
+  --fc-ink: var(--text-1, #eef2fb);
+  position: relative;
+  display: flex;
+  flex-direction: column;
   flex: 0 0 auto;
-  gap: 5px;
-  padding: 8px 10px;
+  gap: 7px;
+  max-width: 100%;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--fc-violet) 34%, transparent);
+  border-radius: 16px;
+  background:
+    radial-gradient(130% 180% at 100% 0%, color-mix(in srgb, var(--fc-violet) 15%, transparent), transparent 60%),
+    linear-gradient(155deg,
+      color-mix(in srgb, var(--bg-raised, #10131d) 94%, transparent),
+      color-mix(in srgb, var(--bg-raised, #10131d) 85%, transparent));
+  color: var(--fc-ink);
+  box-shadow: 0 14px 34px -26px #000, inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent);
+  isolation: isolate;
+  overflow: hidden;
   pointer-events: auto;
-  background: color-mix(in srgb, var(--bg-raised, #10131d) 96%, transparent);
 }
-.pc-fc-head, .pc-fc-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
-.pc-fc-tag { font-size: 11px; }
-.pc-fc-model { font-size: 10px; }
-.pc-fc-summary { font-size: 11px; color: var(--text-2, #b7c0d6); }
-.pc-fc-summary b { color: var(--text-1, #eef2fb); }
-.pc-fc-warning { color: #ffcc80; font-size: 11px; line-height: 1.6; }
-.pc-fc-disc { font-size: 10px; line-height: 1.6; }
-.pc-fc-refresh {
-  min-height: 30px;
-  padding: 4px 9px;
-  margin-inline-start: auto;
-  border: 1px solid rgba(141,123,255,.4);
-  border-radius: 8px;
-  background: rgba(141,123,255,.1);
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
+/* A single static hairline, not a moving gradient: the "modern" cue without
+   a single re-raster of the canvas underneath. */
+.pc-fc::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 14px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--fc-violet), var(--fc-cyan), transparent);
+  opacity: .85;
+  pointer-events: none;
 }
-.pc-fc-refresh:hover { background: rgba(141,123,255,.2); }
-.pc-fc-refresh:focus-visible, .pc-fc-horizon select:focus-visible { outline: 2px solid #a99bff; outline-offset: 2px; }
-.pc-fc-horizon { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #b7c0d6; }
-.pc-fc-horizon select {
-  min-height: 32px; max-width: 90px;
-  border: 1px solid rgba(141,123,255,.4);
-  border-radius: 8px; padding: 3px 6px;
-  background: var(--bg-raised, #10131d); color: inherit; font: inherit;
+.pc-fc--setup { gap: 8px; }
+
+/* ── identity row: spark mark + provenance + model + actions ────────────── */
+.pc-fc-head { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: nowrap; }
+.pc-fc-mark {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px; height: 28px;
+  border-radius: 10px;
+  color: #fff;
+  background: linear-gradient(140deg, #6f5cff, #a06bff 55%, #4fd8ff 135%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--fc-violet) 45%, transparent),
+    0 6px 18px -12px var(--fc-violet);
 }
-/*
- * ─── on-device forecast card ────────────────────────────────────────────────
- * The download prompt, the byte counter, the progress bar and the "this ran
- * here" badge all live in this card. It has to be readable at 360px in the
- * inline chart (where the disclaimer is dropped) and comfortable in the
- * full-screen terminal, in both themes, in RTL.
- */
-.pc-fc--setup { gap: 7px; }
+.pc-fc-mark svg { width: 15px; height: 15px; display: block; }
+.pc-fc-mark.is-busy { opacity: .82; }
+.pc-fc-title { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pc-fc-tag {
+  font: 800 9.5px/1.25 var(--font-display);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #ffcc80; /* baseline — amber: NOT the model */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .pc-fc-tag.is-local { color: #7fe3c4; }
-:root[data-theme='light'] .pc-fc-tag.is-local { color: #0f7f65; }
-.pc-fc-bytes { font-size: 10px; color: #8f9ab3; }
-.pc-fc-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.pc-fc-actions .pc-fc-refresh { margin-inline-start: 0; }
-.pc-fc-go {
-  min-height: 34px;
-  padding: 6px 12px;
-  border: 1px solid rgba(127,227,196,.55);
-  border-radius: 9px;
-  background: rgba(127,227,196,.14);
-  color: inherit;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
+.pc-fc-tag.is-model { color: #b9aeff; } /* Kronos itself wins over is-local */
+.pc-fc-model, .pc-fc-meta, .pc-fc-bytes {
+  font: 600 9px/1.35 var(--font-mono);
+  letter-spacing: .02em;
+  color: #8f9ab3;
 }
-.pc-fc-go:hover { background: rgba(127,227,196,.24); }
-.pc-fc-go:disabled { opacity: .5; cursor: not-allowed; }
-.pc-fc-go:focus-visible { outline: 2px solid #7fe3c4; outline-offset: 2px; }
+.pc-fc-meta { opacity: .82; }
+.pc-fc-tools { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; margin-inline-start: auto; }
+.pc-fc-tools .pc-spinner { margin-inline-end: 0; vertical-align: 0; }
+
+/* ── the numbers, the caveat and the progress bar ───────────────────────── */
+.pc-fc-summary {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;
+  font-size: 10.5px; color: var(--text-2, #b7c0d6);
+}
+.pc-fc-summary > span { display: inline-flex; align-items: center; gap: 4px; }
+.pc-fc-summary b {
+  font: 800 12px/1 var(--font-mono);
+  color: var(--text-1, #eef2fb);
+  padding: 3px 7px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--fc-violet) 12%, transparent);
+}
+.pc-fc-summary .up, .pc-fc-summary .down {
+  font: 800 10.5px/1 var(--font-mono);
+  padding: 3px 7px;
+  border-radius: 999px;
+}
+.pc-fc-summary .up { color: var(--up); background: color-mix(in srgb, var(--up) 12%, transparent); }
+.pc-fc-summary .down { color: var(--down); background: color-mix(in srgb, var(--down) 12%, transparent); }
+.pc-fc-warning { font-size: 10px; line-height: 1.55; color: #ffcc80; }
+.pc-fc-note { font-size: 10.5px; line-height: 1.6; color: var(--text-2, #b7c0d6); }
+.pc-fc-note.is-error { color: #ffcc80; }
+.pc-fc-disc { font-size: 9.5px; line-height: 1.55; color: #9aa3bd; }
+.pc-fc-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 10px; }
+.pc-fc-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
 .pc-fc-bar {
   position: relative;
-  height: 6px;
+  height: 5px;
   border-radius: 999px;
   overflow: hidden;
-  background: rgba(141,123,255,.18);
+  background: color-mix(in srgb, var(--fc-violet) 18%, transparent);
 }
 .pc-fc-bar > span {
   display: block;
@@ -988,36 +995,241 @@ html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
   background: linear-gradient(90deg, #7fe3c4, #a99bff);
   transition: width .18s linear;
 }
-.pc-fc-note { font-size: 11px; line-height: 1.7; color: var(--text-2, #b7c0d6); }
-.pc-fc-note.is-error { color: #ffcc80; }
-:root[data-theme='light'] .pc-fc-note.is-error { color: #805400; }
-.pc-fc-meta { font-size: 10px; color: #8f9ab3; }
-:root[data-theme='light'] .pc-fc-meta,
-:root[data-theme='light'] .pc-fc-bytes { color: #4d5871; }
-@media (prefers-reduced-motion: reduce) {
-  .pc-fc-bar > span { transition: none; }
+
+/* ── icon-first pill actions: retry / delete / stop / download ────────────
+   Visually small (28px), physically generous on touch: the ::after ring
+   extends the HIT area without making the button look heavy. That is how the
+   "smaller buttons" ask and the sheet's 44px-touch rule coexist. */
+.pc-fc-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--fc-violet) 40%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fc-violet) 10%, transparent);
+  color: var(--fc-ink);
+  font: 700 10px/1 var(--font-display);
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .14s ease, background-color .14s ease, border-color .14s ease, color .14s ease;
 }
-.pc-fs-note { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 8px; flex: 0 0 auto; }
-.pc-fs-note--error, .pc-inline-note { color: #ffcc80; }
-.pc-inline-note { font-size: 11px; line-height: 1.7; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.pc-ohlc-projected { color: #b9aeff; font-weight: 800; }
+.pc-fc-btn:hover {
+  background: color-mix(in srgb, var(--fc-violet) 22%, transparent);
+  border-color: color-mix(in srgb, var(--fc-violet) 70%, transparent);
+}
+.pc-fc-btn:active { transform: scale(.95); }
+.pc-fc-btn:focus-visible { outline: 2px solid var(--fc-violet); outline-offset: 2px; }
+.pc-fc-btn:disabled { opacity: .45; cursor: not-allowed; }
+.pc-fc-btn-ico { display: inline-grid; place-items: center; width: 13px; height: 13px; flex: 0 0 auto; }
+.pc-fc-btn-ico svg { width: 13px; height: 13px; display: block; }
+.pc-fc-btn--primary {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, #6f5cff, #a06bff);
+  box-shadow: 0 8px 20px -14px #8d7bff;
+}
+.pc-fc-btn--primary:hover { background: linear-gradient(135deg, #7d6bff, #b17cff); border-color: transparent; }
+.pc-fc-btn--danger {
+  color: #ffb9ca;
+  border-color: color-mix(in srgb, var(--down) 42%, transparent);
+  background: color-mix(in srgb, var(--down) 9%, transparent);
+}
+.pc-fc-btn--danger:hover {
+  background: color-mix(in srgb, var(--down) 18%, transparent);
+  border-color: color-mix(in srgb, var(--down) 65%, transparent);
+}
+
+/* ── horizon select in the toolbar ─────────────────────────────────────── */
+.pc-fc-horizon { display: flex; align-items: center; gap: 5px; margin-inline: 2px 6px; font-size: 10px; color: #b7c0d6; }
+.pc-fc-horizon select {
+  min-height: 28px; max-width: 84px;
+  border: 1px solid color-mix(in srgb, var(--fc-violet) 40%, transparent);
+  border-radius: 999px; padding: 3px 8px;
+  background: var(--bg-raised, #10131d); color: inherit; font: inherit;
+}
+.pc-fc-btn:focus-visible, .pc-fc-horizon select:focus-visible { outline: 2px solid #a99bff; outline-offset: 2px; }
+
+/* ── light theme: re-graded, never inverted ────────────────────────────── */
+:root[data-theme='light'] .pc-chip--fc:not(.is-on) {
+  border-color: rgba(91, 63, 214, .4);
+  color: #5b3fd6;
+}
+:root[data-theme='light'] .pc-chip--fc.is-on {
+  color: #fff;
+  background: linear-gradient(135deg, #5b3fd6, #7b4fd6);
+}
+:root[data-theme='light'] .pc-fc {
+  --fc-violet: #5b3fd6;
+  --fc-cyan: #008392;
+  --fc-ink: #1b2436;
+  background: linear-gradient(155deg, #fff, #f4f1ff);
+  border-color: rgba(91, 63, 214, .3);
+  box-shadow: 0 14px 30px -24px rgba(16, 20, 40, .75), inset 0 1px 0 #fff;
+}
+:root[data-theme='light'] .pc-fc-tag { color: #9a6c00; }
+:root[data-theme='light'] .pc-fc-tag.is-local { color: #0f7f65; }
+:root[data-theme='light'] .pc-fc-tag.is-model { color: #5b3fd6; }
+:root[data-theme='light'] .pc-fc-model,
+:root[data-theme='light'] .pc-fc-meta,
+:root[data-theme='light'] .pc-fc-bytes,
+:root[data-theme='light'] .pc-fc-disc { color: #5b6478; }
 :root[data-theme='light'] .pc-fc-warning,
+:root[data-theme='light'] .pc-fc-note.is-error,
 :root[data-theme='light'] .pc-fs-note--error,
 :root[data-theme='light'] .pc-inline-note { color: #805400; }
 :root[data-theme='light'] .pc-fc-horizon,
-:root[data-theme='light'] .pc-fc-summary { color: #46516c; }
-:root[data-theme='light'] .pc-fc-summary b { color: #1b2436; }
+:root[data-theme='light'] .pc-fc-summary,
+:root[data-theme='light'] .pc-fc-note { color: #46516c; }
+:root[data-theme='light'] .pc-fc-summary b { color: #1b2436; background: rgba(91, 63, 214, .1); }
 :root[data-theme='light'] .pc-ohlc-projected { color: #5b3fd6; }
-@media (pointer: coarse) {
-  .pc-inline-actions .pc-chip, .pc-fc-refresh, .pc-fc-horizon select { min-height: 44px; }
+:root[data-theme='light'] .pc-fc-btn { color: #2c1f8f; border-color: rgba(91, 63, 214, .35); background: rgba(91, 63, 214, .08); }
+:root[data-theme='light'] .pc-fc-btn:hover { background: rgba(91, 63, 214, .16); border-color: rgba(91, 63, 214, .6); }
+:root[data-theme='light'] .pc-fc-btn--primary { color: #fff; background: linear-gradient(135deg, #5b3fd6, #7b4fd6); }
+:root[data-theme='light'] .pc-fc-btn--danger { color: var(--down); border-color: color-mix(in srgb, var(--down) 40%, transparent); background: color-mix(in srgb, var(--down) 8%, transparent); }
+:root[data-theme='light'] .pc-fc-horizon select { background: #fff; color: #1b2436; border-color: rgba(91, 63, 214, .35); }
+:root[data-theme='light'] .pc-fc-mark { box-shadow: 0 0 0 1px rgba(91, 63, 214, .35), 0 6px 16px -12px rgba(91, 63, 214, .8); }
+
+@media (prefers-contrast: more) {
+  .pc-chip--fc:not(.is-on) { border-color: rgba(185, 174, 255, .8); color: #eef2fb; }
+  :root[data-theme='light'] .pc-chip--fc:not(.is-on) { border-color: rgba(91, 63, 214, .8); color: #2c1f8f; }
+  .pc-fc { border-color: rgba(185, 174, 255, .8); }
+  .pc-fc-btn { border-color: rgba(185, 174, 255, .8); }
+  :root[data-theme='light'] .pc-fc { border-color: #2c1f8f; }
 }
+
+/* ── touch: bigger HIT area, same small pill ───────────────────────────── */
+@media (pointer: coarse) {
+  .pc-inline-actions .pc-chip, .pc-fc-horizon select { min-height: 44px; }
+  .pc-fc-btn { min-height: 34px; padding: 6px 12px; }
+  .pc-fc-btn::after {
+    content: '';
+    position: absolute;
+    inset-block: -6px;
+    inset-inline: -5px;
+  }
+}
+
 @media (max-width: 420px) {
   .pc-inline-head .pc-legend { display: none; }
   .pc-inline-actions { justify-content: space-between; width: 100%; }
+  .pc-fc-disc { font-size: 9px; }
 }
+
+/* Short landscape chrome (header, chips, legend). The forecast card's own
+   landscape treatment lives in the dedicated block below. */
 @media (max-height: 520px) and (orientation: landscape) {
-  .pc-fc { padding: 4px 8px; gap: 2px; }
+  .pc > .pc-fc { padding: 6px 10px; gap: 4px; }
   .pc-fc-disc { display: none; }
   .pc-fc-summary, .pc-fc-warning { font-size: 10px; }
 }
-@media (prefers-reduced-motion: reduce) { .pc-spinner { animation: none; } }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SHORT LANDSCAPE TERMINAL — the forecast card becomes a faded HUD
+   ───────────────────────────────────────────────────────────────────────────
+   In the full-screen landscape terminal the VERTICAL axis is the scarce one.
+   A six-row card in the flow squeezed the candles and landed right on top of
+   the toolbar chips (zoom / PNG / reset) — the «فاصله با دکمه‌های دیگر»
+   report. The card is taken OUT of the flow and pinned to the chart's lower
+   LEFT corner (the price scale is physically on the right in RTL too), with a
+   guaranteed 26px of air above the stats strip and the toolbar below it.
+
+   Only the READY result fades: prompts, progress and errors need a decision
+   and stay fully opaque. The faded card also lets chart gestures pass through
+   it; its small buttons remain hit targets, and hover/focus restores 100%
+   contrast. Nothing here animates a gradient or blurs the canvas.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (orientation: landscape) and (max-height: 640px) {
+  .pc-fs .pc-fs-main { position: relative; }
+
+  .pc-fs .pc-fs-main > .pc-fc {
+    position: absolute;
+    inset-block-end: 26px;        /* above the stats strip — never on the toolbar */
+    /*
+     * PHYSICAL left on purpose. The card itself is `dir="auto"` (the model
+     * name can flip it to LTR even on a Persian page), so logical inline
+     * insets would resolve against the CARD's direction and jump to the right
+     * price axis. The chart is always LTR — time runs left→right — so its
+     * price scale is on the physical right in every language.
+     */
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: auto;
+    z-index: 6;
+    width: max-content;
+    max-width: min(46vw, 400px);
+    max-height: min(38vh, 168px);
+    padding: 8px 10px;
+    gap: 4px;
+    border-radius: 14px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: color-mix(in srgb, var(--bg-raised, #10131d) 92%, transparent);
+    box-shadow:
+      0 16px 36px -22px #000,
+      0 0 0 1px color-mix(in srgb, var(--fc-violet) 22%, transparent);
+    transition: opacity .18s ease, box-shadow .18s ease;
+  }
+  :root[data-theme='light'] .pc-fs .pc-fs-main > .pc-fc {
+    background: rgba(255, 255, 255, .94);
+  }
+
+  .pc-fs .pc-fs-main > .pc-fc:hover,
+  .pc-fs .pc-fs-main > .pc-fc:focus-within { opacity: 1; }
+  .pc-fs .pc-fs-main > .pc-fc--ambient {
+    opacity: .55;
+    pointer-events: none;         /* panning/zooming the chart still works */
+  }
+  .pc-fs .pc-fs-main > .pc-fc--ambient .pc-fc-btn { pointer-events: auto; }
+  .pc-fs .pc-fs-main > .pc-fc--ambient:hover,
+  .pc-fs .pc-fs-main > .pc-fc--ambient:focus-within { opacity: 1; }
+
+  /* Compact anatomy: one identity row, one numbers row, one action row. */
+  .pc-fs .pc-fc-mark { width: 24px; height: 24px; border-radius: 8px; }
+  .pc-fs .pc-fc-mark svg { width: 13px; height: 13px; }
+  .pc-fs .pc-fc-disc,
+  .pc-fs .pc-fc-warning,
+  .pc-fs .pc-fc-bytes { display: none; }
+  .pc-fs .pc-fc-summary { font-size: 9.5px; gap: 4px 8px; }
+  .pc-fs .pc-fc-summary b { font-size: 10.5px; padding: 2px 6px; }
+  .pc-fs .pc-fc-meta { font-size: 8.5px; }
+  .pc-fs .pc-fc-note { font-size: 9.5px; }
+  .pc-fs .pc-fc-foot { gap: 4px; }
+
+  /* Retry and delete become labelled ICON buttons — small, modern, named. */
+  .pc-fs .pc-fc-btn { min-height: 26px; width: 26px; padding: 0; border-radius: 9px; }
+  .pc-fs .pc-fc-btn-label { display: none; }
+  .pc-fs .pc-fc-btn-ico, .pc-fs .pc-fc-btn-ico svg { width: 13px; height: 13px; }
+  .pc-fs .pc-fc-btn--primary { width: auto; padding: 0 10px; }
+  .pc-fs .pc-fc-btn--primary .pc-fc-btn-label { display: inline; } /* the CTA must stay readable */
+
+  /* Explicit air between the AI controls and the other chart buttons. */
+  .pc-fs .pc-toolbar { gap: 8px; }
+  .pc-fs .pc-toolgroup { gap: 5px; padding-inline-end: 8px; }
+  .pc-fs .pc-fc-horizon { margin-inline: 0 4px; }
+  .pc-fs .pc-fc-horizon select { min-height: 26px; max-width: 72px; font-size: 9px; }
+  .pc-fs .pc-toolgroup--actions {
+    margin-inline-start: 12px;
+    padding-inline-start: 8px;
+    border-inline-start: 1px solid rgba(255, 255, 255, .09);
+  }
+  :root[data-theme='light'] .pc-fs .pc-toolgroup--actions { border-inline-start-color: rgba(16, 20, 40, .12); }
+}
+
+@media (hover: none) and (orientation: landscape) and (max-height: 640px) {
+  /* No hover to reveal it on a phone: keep more of the text readable. */
+  .pc-fs .pc-fs-main > .pc-fc--ambient { opacity: .74; }
+}
+
+@media (prefers-contrast: more) and (orientation: landscape) and (max-height: 640px) {
+  .pc-fs .pc-fs-main > .pc-fc--ambient { opacity: 1; pointer-events: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-spinner, .pc-fc-bar > span { animation: none; transition: none; }
+  .pc-fs .pc-fs-main > .pc-fc { transition: none; }
+  .pc-fc-btn:active { transform: none; }
+}

@@ -252,6 +252,104 @@ function RotateIcon() {
   );
 }
 
+/*
+ * Small, current-colour glyphs for the forecast HUD. Icons rather than emoji:
+ * emoji change width and baseline between iOS, Android and desktop, which is
+ * the last thing a compact toolbar needs.
+ */
+function AiSparkIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3.2l1.5 4.3 4.3 1.5-4.3 1.5L12 14.8l-1.5-4.3-4.3-1.5 4.3-1.5L12 3.2Z" />
+      <path d="M18.5 15.5l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2Z" />
+      <path d="M5.5 16.5l.5 1.4 1.4.5-1.4.5-.5 1.4-.5-1.4-1.4-.5 1.4-.5.5-1.4Z" />
+    </svg>
+  );
+}
+
+function RetryIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 11a8 8 0 1 0-2.3 6" />
+      <path d="M20 5v6h-6" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13M10 11v6M14 11v6" />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="7" y="7" width="10" height="10" rx="1.5" />
+    </svg>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3v11m0 0 4-4m-4 4-4-4M4 18v2h16v-2" />
+    </svg>
+  );
+}
+
+/**
+ * One compact, icon-first action for EVERY forecast state. The visible label
+ * is dropped by CSS in the short-landscape HUD; `aria-label` and `title` keep
+ * the button named for screen readers and for a mouse hovering the icon.
+ */
+function FcAction({ label, icon = 'retry', tone = 'ghost', testId, onClick, ...rest }) {
+  const glyph = icon === 'trash' ? <TrashIcon />
+    : icon === 'stop' ? <StopIcon />
+      : icon === 'download' ? <DownloadIcon />
+        : <RetryIcon />;
+  return (
+    <button
+      type="button"
+      className={`pc-fc-btn pc-fc-btn--${tone}`}
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      data-testid={testId}
+      {...rest}
+    >
+      <span className="pc-fc-btn-ico" aria-hidden="true">{glyph}</span>
+      <span className="pc-fc-btn-label">{label}</span>
+    </button>
+  );
+}
+
+/**
+ * The card's identity row: a violet spark mark, the provenance tag, the model
+ * id, and (optionally) a spinner or the compact action buttons. Sharing this
+ * row is what keeps the download prompt, the progress state, the error state
+ * and the result badge looking like ONE component rather than four boxes.
+ */
+function FcHead({ tag, tagTone = 'is-local', model = '', busy = false, children }) {
+  return (
+    <div className="pc-fc-head">
+      <span className={`pc-fc-mark${busy ? ' is-busy' : ''}`} aria-hidden="true"><AiSparkIcon /></span>
+      <div className="pc-fc-title">
+        <span className={`pc-fc-tag ${tagTone}`}>{tag}</span>
+        {model ? <span className="pc-fc-model mono" dir="ltr">{model}</span> : null}
+      </div>
+      {children || busy ? (
+        <div className="pc-fc-tools">
+          {busy ? <span className="pc-spinner" aria-hidden="true" /> : null}
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** One toggle chip. Buttons, not checkboxes: this is a toolbar. */
 function Chip({ active, onClick, children, title, tone, disabled = false, busy = false, ...rest }) {
   return (
@@ -979,21 +1077,22 @@ export default function TokenChart({
     <div className="pc-fc-warning">{t('coin.pro.forecastLowMemory')}</div>
   ) : null;
   const cancelButton = (
-    <button type="button" className="pc-fc-refresh" onClick={cancelForecast} data-testid="forecast-cancel">
-      {t('coin.pro.forecastCancel')}
-    </button>
+    <FcAction
+      icon="stop"
+      label={t('coin.pro.forecastCancel')}
+      onClick={cancelForecast}
+      testId="forecast-cancel"
+    />
   );
 
   let forecastPanel = null;
   if (forecastOn && forecastPhase === 'needs-download') {
     forecastPanel = (
       <div className="pc-fc pc-fc--setup" dir="auto" data-testid="forecast-download">
-        <div className="pc-fc-head">
-          <span className="pc-fc-tag is-local">{t('coin.pro.forecastLocalTag')}</span>
-          <span className="pc-fc-model mono" dir="ltr">
-            {forecastEstimate?.webgpu ? 'Kronos-mini · WebGPU' : 'Kronos-mini · WASM'}
-          </span>
-        </div>
+        <FcHead
+          tag={t('coin.pro.forecastLocalTag')}
+          model={forecastEstimate?.webgpu ? 'Kronos-mini · WebGPU' : 'Kronos-mini · WASM'}
+        />
         <div className="pc-fc-summary">
           <span data-testid="forecast-download-size">
             {estimateTotal
@@ -1008,18 +1107,15 @@ export default function TokenChart({
         </div>
         {estimateTotal ? <div className="pc-fc-warning">{t('coin.pro.forecastDownloadWhy')}</div> : null}
         <div className="pc-fc-actions">
-          <button
-            type="button"
-            className="pc-fc-go"
+          <FcAction
+            icon="download"
+            tone="primary"
+            label={t('coin.pro.forecastDownloadStart')}
             onClick={downloadForecastModel}
             disabled={!estimateTotal}
-            data-testid="forecast-download-start"
-          >
-            {t('coin.pro.forecastDownloadStart')}
-          </button>
-          <button type="button" className="pc-fc-refresh" onClick={toggleForecast}>
-            {t('coin.pro.forecastCancel')}
-          </button>
+            testId="forecast-download-start"
+          />
+          <FcAction icon="stop" label={t('coin.pro.forecastCancel')} onClick={toggleForecast} />
         </div>
         {telegramHint}
         {lowMemoryHint}
@@ -1029,10 +1125,7 @@ export default function TokenChart({
   } else if (forecastOn && forecastPhase === 'downloading') {
     forecastPanel = (
       <div className="pc-fc pc-fc--setup" dir="auto" data-testid="forecast-progress">
-        <div className="pc-fc-head">
-          <span className="pc-fc-tag is-local">{t('coin.pro.forecastLocalTag')}</span>
-          <span className="pc-fc-model mono" dir="ltr">{forecastProgress?.file || 'model'}</span>
-        </div>
+        <FcHead tag={t('coin.pro.forecastLocalTag')} model={forecastProgress?.file || 'model'} busy />
         <div className="pc-fc-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent}>
           <span style={{ width: `${Math.max(2, progressPercent)}%` }} />
         </div>
@@ -1051,10 +1144,7 @@ export default function TokenChart({
   } else if (forecastOn && (forecastPhase === 'preparing' || forecastPhase === 'checking')) {
     forecastPanel = (
       <div className="pc-fc pc-fc--setup" dir="auto" role="status" aria-live="polite" data-testid="forecast-preparing">
-        <div className="pc-fc-head">
-          <span className="pc-fc-tag is-local">{t('coin.pro.forecastLocalTag')}</span>
-          <span className="pc-spinner" aria-hidden="true" />
-        </div>
+        <FcHead tag={t('coin.pro.forecastLocalTag')} busy />
         <div className="pc-fc-summary"><span>{t('coin.pro.forecastPreparing')}</span></div>
         <div className="pc-fc-disc">{t('coin.pro.forecastLocalNote')}</div>
       </div>
@@ -1062,10 +1152,7 @@ export default function TokenChart({
   } else if (forecastOn && forecastPhase === 'running') {
     forecastPanel = (
       <div className="pc-fc pc-fc--setup" dir="auto" role="status" aria-live="polite" data-testid="forecast-running">
-        <div className="pc-fc-head">
-          <span className="pc-fc-tag is-local">{t('coin.pro.forecastLocalTag')}</span>
-          <span className="pc-spinner" aria-hidden="true" />
-        </div>
+        <FcHead tag={t('coin.pro.forecastLocalTag')} busy />
         <div className="pc-fc-summary"><span>{t('coin.pro.forecastRunning')}</span></div>
         <div className="pc-fc-actions">{cancelButton}</div>
       </div>
@@ -1074,9 +1161,7 @@ export default function TokenChart({
     || forecastPhase === 'error' || forecastPhase === 'cancelled')) {
     forecastPanel = (
       <div className="pc-fc pc-fc--setup" dir="auto" role="status" data-testid="forecast-error">
-        <div className="pc-fc-head">
-          <span className="pc-fc-tag is-local">{t('coin.pro.forecastLocalTag')}</span>
-        </div>
+        <FcHead tag={t('coin.pro.forecastLocalTag')} />
         <div className={`pc-fc-note${forecastPhase === 'cancelled' ? '' : ' is-error'}`}>
           {forecastPhase === 'cancelled'
             ? t('coin.pro.forecastCancelled')
@@ -1090,25 +1175,36 @@ export default function TokenChart({
         {forecastPhase === 'unsupported' ? <div className="pc-fc-warning">{t('coin.pro.forecastLocalNote')}</div> : null}
         <div className="pc-fc-actions">
           {forecastPhase !== 'unsupported' && forecastPhase !== 'needs-history' ? (
-            <button type="button" className="pc-fc-refresh" onClick={retryForecast} data-testid="forecast-retry">
-              ↻ {t('coin.pro.forecastRetry')}
-            </button>
+            <FcAction
+              label={t('coin.pro.forecastRetry')}
+              onClick={retryForecast}
+              testId="forecast-retry"
+            />
           ) : null}
         </div>
       </div>
     );
   } else if (forecast) {
+    /*
+     * `pc-fc--ambient` is the READY state's only behavioural class. In a short
+     * landscape terminal the stylesheet lifts this card out of the flow,
+     * fades it, and lets chart gestures pass through it — so the result never
+     * competes with the toolbar chips. Prompts, errors and progress are NOT
+     * ambient: they need a decision from the reader and stay fully opaque.
+     */
     forecastPanel = (
-      <div className="pc-fc" dir="auto" data-testid="forecast-badge">
-        <div className="pc-fc-head">
-          <span className="pc-fc-tag is-model is-local">
-            {t('coin.pro.forecastKronos')} · {t('coin.pro.forecastLocalTag')}
-          </span>
-          <span className="pc-fc-model mono" dir="ltr">{String(forecast.model || '').replace(/^.*\//, '')}</span>
-          <button type="button" className="pc-fc-refresh" onClick={retryForecast} aria-label={t('coin.pro.forecastRetry')} data-testid="forecast-refresh">
-            ↻ {t('coin.pro.forecastRetry')}
-          </button>
-        </div>
+      <div className="pc-fc pc-fc--ambient" dir="auto" data-testid="forecast-badge">
+        <FcHead
+          tag={`${t('coin.pro.forecastLocalTag')} · ${t('coin.pro.forecastKronos')}`}
+          tagTone="is-model is-local"
+          model={String(forecast.model || '').replace(/^.*\//, '')}
+        >
+          <FcAction
+            label={t('coin.pro.forecastRetry')}
+            onClick={retryForecast}
+            testId="forecast-refresh"
+          />
+        </FcHead>
         <div className="pc-fc-summary">
           <span>{t('coin.pro.forecastTarget')} <b className="mono" dir="ltr">{fmtPrice(forecastLast?.c)}</b></span>
           {forecastChange != null ? <span className={forecastChange >= 0 ? 'up' : 'down'} dir="ltr">{forecastChange >= 0 ? '+' : ''}{forecastChange.toFixed(2)}%</span> : null}
@@ -1124,12 +1220,18 @@ export default function TokenChart({
           <div className="pc-fc-warning">{t('coin.pro.forecastRepaired', { count: forecastMeta.repaired })}</div>
         ) : null}
         <div className="pc-fc-warning">{t('coin.pro.forecastOnDeviceNote')}</div>
-        <div className="pc-fc-actions">
-          <button type="button" className="pc-fc-refresh" onClick={deleteForecastModel} data-testid="forecast-delete">
-            {t('coin.pro.forecastDelete')}
-          </button>
+        <div className="pc-fc-foot">
+          <div className="pc-fc-actions">
+            <FcAction
+              icon="trash"
+              tone="danger"
+              label={t('coin.pro.forecastDelete')}
+              onClick={deleteForecastModel}
+              testId="forecast-delete"
+            />
+          </div>
+          <div className="pc-fc-disc">{t('coin.pro.forecastDisclaimer')}</div>
         </div>
-        <div className="pc-fc-disc">{t('coin.pro.forecastDisclaimer')}</div>
       </div>
     );
   }

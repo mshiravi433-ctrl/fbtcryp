@@ -23,6 +23,8 @@
  * is exercised in test/kronos-local-model.test.mjs.
  */
 import React from 'react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
@@ -378,5 +380,110 @@ describe('on-device forecast', () => {
     fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
     await screen.findByTestId('forecast-download');
     expect(screen.getByTestId('forecast-telegram').textContent).toContain('coin.pro.forecastTelegram');
+  });
+
+  /*
+   * The card's modern anatomy is a contract, not just decoration: the ready
+   * badge is the ONLY ambient (fadable) state, and the small retry/delete
+   * actions keep a NAME when CSS drops their visible label in landscape.
+   */
+  it('the ready card is ambient and its retry/delete actions are small, named pills', async () => {
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
+    const badge = await screen.findByTestId('forecast-badge');
+
+    expect(badge.classList.contains('pc-fc--ambient')).toBe(true);
+    expect(badge.querySelector('.pc-fc-mark svg')).toBeTruthy();
+
+    const refresh = screen.getByTestId('forecast-refresh');
+    const remove = screen.getByTestId('forecast-delete');
+    for (const button of [refresh, remove]) {
+      expect(button.classList.contains('pc-fc-btn')).toBe(true);
+      expect(button.getAttribute('aria-label')).toBeTruthy();
+      expect(button.getAttribute('title')).toBe(button.getAttribute('aria-label'));
+      expect(button.querySelector('.pc-fc-btn-ico svg')).toBeTruthy();
+      expect(button.querySelector('.pc-fc-btn-label')?.textContent).toBeTruthy();
+    }
+    expect(remove.getAttribute('aria-label')).toBe('coin.pro.forecastDelete');
+    expect(remove.classList.contains('pc-fc-btn--danger')).toBe(true);
+    expect(refresh.getAttribute('aria-label')).toBe('coin.pro.forecastRetry');
+    /* The header mark is shared by the setup states too. */
+    expect(badge.querySelector('.pc-fc-head .pc-fc-title')).toBeTruthy();
+  });
+
+  it('the download prompt stays fully opaque — only a RESULT fades', async () => {
+    client.modelState.mockResolvedValue({ state: 'absent' });
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
+    const prompt = await screen.findByTestId('forecast-download');
+    expect(prompt.classList.contains('pc-fc--ambient')).toBe(false);
+    expect(prompt.querySelector('.pc-fc-btn--primary')).toBeTruthy();
+    expect(prompt.querySelector('.pc-fc-mark svg')).toBeTruthy();
+  });
+
+  it('an error stays fully opaque and its retry keeps its accessible name', async () => {
+    client.runForecast.mockRejectedValue(Object.assign(new Error('BUSY'), { code: 'BUSY' }));
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
+    const error = await screen.findByTestId('forecast-error');
+    expect(error.classList.contains('pc-fc--ambient')).toBe(false);
+    expect(screen.getByTestId('forecast-retry').getAttribute('aria-label')).toBe('coin.pro.forecastRetry');
+  });
+});
+
+/*
+ * The landscape HUD is CSS, so these are stylesheet pins: the card leaves the
+ * flow, keeps a measured gap above the toolbar, fades ONLY when it is a
+ * result, and lets chart gestures pass through. A future "cleanup" that moves
+ * the card back into the flow reintroduces exactly the overlap the report was
+ * about, and jsdom would never notice — these do.
+ */
+describe('forecast card — landscape HUD contract', () => {
+  const css = readFileSync(join(process.cwd(), 'src/styles/pro-chart.css'), 'utf8');
+  const cssWithoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  const landBlock = (() => {
+    const at = css.indexOf('@media (orientation: landscape) and (max-height: 640px)');
+    return at === -1 ? '' : css.slice(at, css.indexOf('\n}\n', at) + 3);
+  })();
+
+  it('has a short-landscape HUD block', () => {
+    expect(landBlock.length).toBeGreaterThan(400);
+  });
+
+  it('takes the card out of the flow with an explicit gap above the toolbar', () => {
+    expect(/\.pc-fs \.pc-fs-main > \.pc-fc \{[\s\S]*?position: absolute/.test(landBlock)).toBe(true);
+    expect(/inset-block-end: 26px/.test(landBlock)).toBe(true);
+    expect(/max-width: min\(46vw, 400px\)/.test(landBlock)).toBe(true);
+  });
+
+  it('fades only the ambient result and keeps it click-through', () => {
+    expect(/\.pc-fc--ambient \{\s*opacity: \.55;\s*pointer-events: none/.test(landBlock)).toBe(true);
+    expect(/\.pc-fc--ambient \.pc-fc-btn \{ pointer-events: auto/.test(landBlock)).toBe(true);
+    expect(/:focus-within \{ opacity: 1/.test(landBlock)).toBe(true);
+  });
+
+  it('shrinks retry/delete to icon buttons and pins the HUD to a physical corner', () => {
+    expect(/width: 26px/.test(landBlock)).toBe(true);
+    expect(/\.pc-fs \.pc-fc-btn-label \{ display: none/.test(landBlock)).toBe(true);
+    /* dir="auto" on the card would flip logical inline insets: physical left
+       keeps the card away from the price axis in RTL AND LTR. */
+    expect(/left: max\(12px, env\(safe-area-inset-left/.test(landBlock)).toBe(true);
+    expect(/dir="auto"/.test(landBlock)).toBe(true);
+  });
+
+  it('adds real air between the AI controls and the other chart buttons', () => {
+    expect(/\.pc-fs \.pc-toolgroup--actions \{[\s\S]*?margin-inline-start: 12px/.test(landBlock)).toBe(true);
+  });
+
+  it('never blurs the live canvas and honours contrast + reduced motion', () => {
+    expect(/backdrop-filter/.test(cssWithoutComments)).toBe(false);
+    expect(/@media \(prefers-contrast: more\) and \(orientation: landscape\)/.test(css)).toBe(true);
+    expect(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.pc-fs \.pc-fs-main > \.pc-fc \{ transition: none/.test(css)).toBe(true);
+  });
+
+  it('keeps the small pill small while still enlarging the touch hit area', () => {
+    expect(/\.pc-fc-btn \{[\s\S]*?min-height: 28px/.test(css)).toBe(true);
+    expect(/@media \(pointer: coarse\)[\s\S]*?\.pc-fc-btn::after/.test(css)).toBe(true);
   });
 });

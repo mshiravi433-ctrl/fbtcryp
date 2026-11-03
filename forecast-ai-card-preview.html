@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="fa" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>پیشنمایش · باکس پیشبینی AI نمودار شمعی</title>
+<link rel="stylesheet" href="src/styles/pro-chart.css" />
+<style>
+  /* فقط متغیرهای اپ و کروم پیشنمایش — وارد بیلد نمی‌شود. */
+  :root {
+    --bg-abyss:#03040a; --bg-raised:#10131d; --bg-panel:#0a0d16; --bg-panel-solid:#0a0d16;
+    --text-1:#eef2fb; --text-2:#b7c0d6; --text-3:#8f9ab3;
+    --line:rgba(255,255,255,.09); --line-strong:rgba(255,255,255,.16);
+    --up:#2ee6a8; --down:#ff6b8b; --rgb-1:#00e5ff; --rgb-2:#7c4dff;
+    --ink-cyan:#008392; --ink-violet:#5a3fd0;
+    --font-display:'Vazirmatn',system-ui,Tahoma,'Segoe UI',Arial,sans-serif;
+    --font-mono:ui-monospace,'JetBrains Mono',Menlo,Consolas,monospace;
+  }
+  :root[data-theme='light'] {
+    --bg-abyss:#f4f6fc; --bg-raised:#fff; --bg-panel:#fff; --bg-panel-solid:#fff;
+    --text-1:#0f1a2c; --text-2:#46516c; --text-3:#6b7591;
+    --line:rgba(16,20,40,.12); --line-strong:rgba(16,20,40,.2);
+    --up:#008854; --down:#c43a56;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; min-height:100%; background:var(--bg-abyss); color:var(--text-1); font-family:var(--font-display); }
+  body {
+    background-image:
+      radial-gradient(760px 420px at 90% -8%, rgba(124,77,255,.16), transparent 60%),
+      radial-gradient(620px 380px at 0% 4%, rgba(0,229,255,.10), transparent 58%);
+    background-attachment:fixed;
+  }
+  .mono { font-family:var(--font-mono); }
+  .up { color:var(--up); } .down { color:var(--down); }
+  .pv-wrap { max-width:1080px; margin:0 auto; padding:30px 18px 80px; }
+  .pv-title { font-size:20px; font-weight:900; letter-spacing:-.01em; margin:0 0 6px; }
+  .pv-sub { margin:0 0 20px; font-size:12px; line-height:1.95; color:var(--text-2); }
+  .pv-sub code { font-family:var(--font-mono); font-size:11px; color:#b9aeff; }
+  .pv-bar {
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    padding:10px 12px; margin:0 0 22px; border-radius:14px;
+    border:1px solid var(--line); background:var(--bg-panel);
+    position:sticky; inset-block-start:10px; z-index:20;
+    box-shadow:0 12px 30px -24px #000;
+  }
+  .pv-bar b { font-size:12px; margin-inline-end:auto; }
+  .pv-bar button {
+    font:700 10.5px/1 var(--font-display); padding:8px 11px; border-radius:999px; cursor:pointer;
+    color:var(--text-1); background:transparent; border:1px solid var(--line-strong);
+  }
+  .pv-bar button[aria-pressed='true'] { color:#fff; background:linear-gradient(135deg,#6f5cff,#a06bff); border-color:transparent; }
+  .pv-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:22px; align-items:start; }
+  .pv-col { min-width:0; }
+  .pv-h { font-size:12px; font-weight:800; margin:0 0 4px; }
+  .pv-p { font-size:10.5px; line-height:1.8; color:var(--text-3); margin:0 0 12px; }
+  .pv-card {
+    padding:14px; border-radius:20px; border:1px solid var(--line);
+    background:var(--bg-panel); display:flex; flex-direction:column; gap:10px;
+  }
+  .pv-stage {
+    position:relative; height:130px; border-radius:14px; overflow:hidden;
+    border:1px solid var(--line);
+    background:radial-gradient(120% 90% at 50% 0%, rgba(124,77,255,.08), transparent 70%), rgba(255,255,255,.012);
+  }
+  .pv-stage::after {
+    content:''; position:absolute; inset:0;
+    background-image:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);
+    background-size:100% 25%,10% 100%;
+  }
+  :root[data-theme='light'] .pv-stage::after { background-image:linear-gradient(rgba(16,20,40,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(16,20,40,.06) 1px,transparent 1px); }
+  .pv-label { position:absolute; z-index:2; inset-block-start:8px; inset-inline-start:10px; font:700 9px/1 var(--font-mono); color:var(--text-3); }
+  .pv-land {
+    margin-top:34px; padding:16px; border-radius:20px; border:1px solid var(--line); background:var(--bg-panel);
+  }
+  .pv-land-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .pv-land-head .pv-h { margin-inline-end:auto; }
+  .pv-frame {
+    width:100%; max-width:844px; height:390px; display:block; margin:0 auto;
+    border:1px solid var(--line-strong); border-radius:18px; overflow:hidden;
+    box-shadow:0 24px 60px -34px #000; background:#05060b;
+  }
+  .pv-foot { font-size:10px; line-height:1.9; color:var(--text-3); margin-top:12px; }
+</style>
+</head>
+<body>
+<div class="pv-wrap">
+  <h1 class="pv-title">پیشبینی هوش مصنوعی · باکس اعلام مدرن + حالت افقی</h1>
+  <p class="pv-sub">
+    شیت واقعی <code>src/styles/pro-chart.css</code> و همان نام کلاسهای <code>TokenChart.jsx</code> اینجا سوار شدهاند؛
+    بدون فید بازار، بدون دانلود مدل ۳۳ مگابایتی. باکس شیشهای بنفش، دکمههای کوچک آیکوندار
+    (تلاش دوباره / حذف مدل از دستگاه)، و در ترمینال افقی یک HUD محو که دیگر روی دکمههای نمودار نمیافتد.
+  </p>
+
+  <div class="pv-bar" role="group" aria-label="تنظیمات پیشنمایش">
+    <b>پیشنمایش متریال</b>
+    <button type="button" id="pv-theme" aria-pressed="false">تم روشن</button>
+    <button type="button" id="pv-dir" aria-pressed="false">چیدمان LTR</button>
+    <span style="font:700 9px/1 var(--font-mono);color:var(--text-3)">STATE</span>
+    <button type="button" data-state="ready" aria-pressed="true">نتیجه</button>
+    <button type="button" data-state="error" aria-pressed="false">خطا</button>
+    <button type="button" data-state="download" aria-pressed="false">دانلود</button>
+    <button type="button" data-state="progress" aria-pressed="false">پیشرفت</button>
+  </div>
+
+  <div class="pv-grid">
+    <div class="pv-col">
+      <h2 class="pv-h">۱ · باکس اعلام — نتیجه</h2>
+      <p class="pv-p">نشان بنفش، خط موی گرادیانی، عدد هدف درون pill، و دو اکشن کوچک و نامدار.</p>
+      <div class="pv-card">
+        <div class="pv-stage"><span class="pv-label">ETH · 7D</span></div>
+        <div class="pc" id="pv-slot-ready"></div>
+      </div>
+    </div>
+    <div class="pv-col">
+      <h2 class="pv-h">۲ · خطا / دانلود / پیشرفت</h2>
+      <p class="pv-p">این حالتها عمداً محو نمیشوند: نیاز به تصمیم کاربر دارند و باید کاملاً خوانا بمانند.</p>
+      <div class="pv-card">
+        <div class="pc" id="pv-slot-error"></div>
+        <div class="pc" id="pv-slot-download"></div>
+        <div class="pc" id="pv-slot-progress"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pv-land">
+    <div class="pv-land-head">
+      <h2 class="pv-h">۳ · حالت افقی (ترمینال تمامصفحه ۸۴۴×۳۹۰)</h2>
+      <span style="font:700 9px/1 var(--font-mono);color:var(--text-3)">FADE · HUD · NO OVERLAP</span>
+    </div>
+    <iframe class="pv-frame" id="pv-land-frame" title="پیشنمایش حالت افقی" src="forecast-ai-landscape.html?state=ready"></iframe>
+    <p class="pv-foot">
+      کارت نتیجه از جریان layout خارج شده، ۵۵٪ محو است و اجازه میدهد پَن/زوم چارت از زیرش رد شود؛
+      فقط دکمههایش هدف لمساند. ۲۶ پیکسل فاصله تا نوار آمار و ۱۲ پیکسل فاصله صریح تا گروه دکمههای زوم/PNG/ریست دارد.
+      با هاور یا فocus، کارت به کنتراست کامل برمیگردد. دکمهها در افقی آیکون خالصاند ولی <code>aria-label</code> خود را حفظ میکنند.
+    </p>
+  </div>
+</div>
+
+<script src="forecast-ai-card-preview.js"></script>
+<script>
+(function () {
+  const { STATES } = window.FcPreview;
+  for (const key of Object.keys(STATES)) {
+    const slot = document.getElementById(`pv-slot-${key}`);
+    if (slot) slot.innerHTML = STATES[key];
+  }
+  const frame = document.getElementById('pv-land-frame');
+  let state = 'ready', theme = 'dark', dir = 'rtl';
+  const sync = () => {
+    frame.src = `forecast-ai-landscape.html?state=${state}&theme=${theme}&dir=${dir}`;
+  };
+  const themeBtn = document.getElementById('pv-theme');
+  themeBtn.addEventListener('click', () => {
+    theme = theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = theme;
+    themeBtn.setAttribute('aria-pressed', String(theme === 'light'));
+    themeBtn.textContent = theme === 'light' ? 'تم تاریک' : 'تم روشن';
+    sync();
+  });
+  const dirBtn = document.getElementById('pv-dir');
+  dirBtn.addEventListener('click', () => {
+    dir = dir === 'rtl' ? 'ltr' : 'rtl';
+    document.documentElement.dir = dir;
+    dirBtn.setAttribute('aria-pressed', String(dir === 'ltr'));
+    dirBtn.textContent = dir === 'ltr' ? 'چیدمان RTL' : 'چیدمان LTR';
+    sync();
+  });
+  document.querySelectorAll('.pv-bar button[data-state]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state = button.dataset.state;
+      document.querySelectorAll('.pv-bar button[data-state]').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+      sync();
+    });
+  });
+})();
+</script>
+</body>
+</html>
