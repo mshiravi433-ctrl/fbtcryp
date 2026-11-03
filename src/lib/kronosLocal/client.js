@@ -170,6 +170,35 @@ export async function prepareModel({ onProgress = () => {}, onPhase = () => {}, 
   return { manifest, backend, adapter, bytes: manifest.totalBytes };
 }
 
+/**
+ * The one shape gate between the worker and the chart.
+ *
+ * A forecast result is the flat object `LocalKronos.forecast` returns —
+ * `{candles: […], backend, timing, …}` with at least one candle. Anything
+ * else is NOT a forecast, no matter how truthy it looks.
+ *
+ * This gate exists because of the crash this feature shipped with: the worker
+ * posts its answer inside an envelope (`{type:'result', id, result}`), and
+ * the message handler used to resolve the ENVELOPE. The chart then held a
+ * truthy "forecast" whose `candles` was `undefined`, and died rendering
+ * `forecast.candles.length` — «این صفحه به مشکل خورد» right after the 33 MB
+ * download finished, on every device, every time. Worse, the envelope was
+ * written into the result cache, so leaving to the market and coming back
+ * replayed the same poisoned shape instantly.
+ *
+ * So: envelopes are unwrapped here (which also RESCUES those persisted cache
+ * entries — the real forecast is inside them), and a value without candles
+ * becomes `null`, which callers turn into a named, retryable error instead
+ * of a render crash.
+ */
+export function normalizeForecastResult(raw) {
+  let value = raw;
+  while (value && !Array.isArray(value.candles) && value.result && typeof value.result === 'object') {
+    value = value.result;
+  }
+  return value && Array.isArray(value.candles) && value.candles.length ? value : null;
+}
+
 /** Run one forecast on the device. Never falls back to a server model. */
 export async function runForecast(candles, opts = {}) {
   const {
@@ -196,7 +225,7 @@ export async function runForecast(candles, opts = {}) {
   signal?.addEventListener('abort', onAbort, { once: true });
 
   try {
-    const result = await callWorker({
+    const raw = await callWorker({
       type: 'predict',
       id,
       candles,
@@ -210,6 +239,11 @@ export async function runForecast(candles, opts = {}) {
       signal: controller.signal,
       onProgress: (msg) => onPhase(msg.phase, msg)
     });
+    /* The chart renders `result.candles` — a reply without candles is a
+       failed projection with a name and a Retry button, never an object the
+       UI has to guess about. See normalizeForecastResult. */
+    const result = normalizeForecastResult(raw);
+    if (!result) throw new KronosStorageError('INVALID_PROJECTION');
     if (useCache) cacheSet(key, result);
     return result;
   } finally {
@@ -341,7 +375,13 @@ function attachWorkerEvents(target) {
     if (!pending) return;
     if (msg.type === 'error') {
       pending.reject(Object.assign(new KronosStorageError(msg.code || 'WORKER_ERROR'), { detail: msg.detail }));
-    } else if (msg.type === 'ready' || msg.type === 'probe' || msg.type === 'result') {
+    } else if (msg.type === 'result') {
+      /* `ready`/`probe` carry their fields flat on the message; `result`
+         does NOT — the forecast is `msg.result`. Resolving the whole
+         envelope here is the exact slip that crashed the token page after
+         every completed download (see normalizeForecastResult). */
+      pending.resolve(msg.result ?? msg);
+    } else if (msg.type === 'ready' || msg.type === 'probe') {
       pending.resolve(msg);
     } else if (msg.type === 'cancelled' || msg.type === 'disposed') {
       pending.resolve(msg);
@@ -358,23 +398,34 @@ function attachWorkerEvents(target) {
 
 function cacheGet(key) {
   const hit = resultCache.get(key);
-  if (hit && Date.now() - hit.at < RESULT_CACHE_TTL_MS) return hit.value;
+  if (hit && Date.now() - hit.at < RESULT_CACHE_TTL_MS) {
+    /* Normalised on the way out, every time: an entry written by a build
+       that persisted the worker envelope is rescued (the forecast is inside
+       it) or evicted — never replayed into the chart as-is. */
+    const clean = normalizeForecastResult(hit.value);
+    if (clean) return clean;
+  }
   if (hit) resultCache.delete(key);
   try {
     const raw = globalThis.localStorage?.getItem(`${RESULT_CACHE_PREFIX}${key}`);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (!parsed || Date.now() - parsed.at > RESULT_CACHE_TTL_MS) {
+    const clean = parsed && Date.now() - parsed.at <= RESULT_CACHE_TTL_MS
+      ? normalizeForecastResult(parsed.value)
+      : null;
+    if (!clean) {
       globalThis.localStorage?.removeItem(`${RESULT_CACHE_PREFIX}${key}`);
       return null;
     }
-    resultCache.set(key, parsed);
-    return parsed.value;
+    resultCache.set(key, { at: parsed.at, value: clean });
+    return clean;
   } catch { return null; }
 }
 
 function cacheSet(key, value) {
-  const entry = { at: Date.now(), value };
+  const clean = normalizeForecastResult(value);
+  if (!clean) return;
+  const entry = { at: Date.now(), value: clean };
   resultCache.set(key, entry);
   try {
     globalThis.localStorage?.setItem(`${RESULT_CACHE_PREFIX}${key}`, JSON.stringify(entry));

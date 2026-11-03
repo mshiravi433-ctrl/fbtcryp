@@ -371,7 +371,19 @@ export default function TokenChart({
     ? Math.max(12, Math.min(48, Math.round(candles.length / 8)))
     : Number(forecastHorizon);
   const forecastKey = `${coinId}:${range?.days ?? range?.key ?? ''}:${forecastAnchor}:${predLen}`;
-  const forecast = forecastOn && forecastResult?.key === forecastKey ? forecastResult.data : null;
+  /*
+   * The shape is PROVEN here, before render can touch it. The badge below
+   * reads `forecast.candles.length`; when the worker client once handed back
+   * its `{type:'result', result}` envelope instead of the forecast inside it,
+   * `forecast` was truthy with `candles === undefined` and the whole token
+   * page died on that read — «این صفحه به مشکل خورد» the moment the model
+   * download finished. A value without a non-empty candles array is simply
+   * "no forecast yet", whatever produced it.
+   */
+  const forecastData = forecastResult?.key === forecastKey ? forecastResult.data : null;
+  const forecast = forecastOn && Array.isArray(forecastData?.candles) && forecastData.candles.length
+    ? forecastData
+    : null;
   const forecastBusy = forecastOn && ['checking', 'downloading', 'preparing', 'running'].includes(forecastPhase);
   // eslint-disable-next-line no-unused-vars
   const forecastState = !forecastOn
@@ -505,14 +517,28 @@ export default function TokenChart({
         signal: controller.signal
       });
       if (controller.signal.aborted) return;
+      /*
+       * Nothing unrenderable enters state. The client already guarantees the
+       * flat shape (`normalizeForecastResult` in kronosLocal/client.js); this
+       * is the second lock on the same door, because the first time this seam
+       * drifted — the worker envelope leaking through as the "result" — the
+       * failure mode was a full-page crash, not a wrong number. An enveloped
+       * or candle-less reply becomes the named INVALID_PROJECTION panel with
+       * a Retry button, and the chart underneath stays alive.
+       */
+      const data = Array.isArray(result?.candles) ? result : result?.result;
+      if (!Array.isArray(data?.candles) || !data.candles.length) {
+        failForecast({ code: 'INVALID_PROJECTION' });
+        return;
+      }
       setForecastMeta({
-        backend: result.backend,
-        ms: result.timing?.totalMs ?? 0,
-        repaired: result.repaired ?? 0,
-        cached: Boolean(result.cached),
-        window: result.options?.window ?? payload.length
+        backend: data.backend,
+        ms: data.timing?.totalMs ?? 0,
+        repaired: data.repaired ?? 0,
+        cached: Boolean(data.cached),
+        window: data.options?.window ?? payload.length
       });
-      setForecastResult({ key, data: result });
+      setForecastResult({ key, data });
       setForecastPhase('ready');
       setForecastError('');
     } catch (error) {
@@ -937,7 +963,12 @@ export default function TokenChart({
    * until a real inference has produced validated bars.
    */
   const forecastErrorKey = forecastErrorMessageKey(forecastError);
-  const forecastLast = forecast?.candles?.[forecast.candles.length - 1];
+  /* Render-local proof, independent of the derivation above: `forecast` is
+     already shape-checked, but these reads stay un-throwable even if a future
+     producer finds a new way to be wrong. A forecast bug must cost a panel,
+     never the page. */
+  const forecastCandles = Array.isArray(forecast?.candles) ? forecast.candles : [];
+  const forecastLast = forecastCandles[forecastCandles.length - 1];
   const forecastChange = forecastLast && lastBar?.close > 0 ? (forecastLast.c / lastBar.close - 1) * 100 : null;
   const estimateTotal = forecastEstimate?.totalBytes ?? 0;
   const progressPercent = forecastProgress?.percent ?? 0;
@@ -1081,7 +1112,7 @@ export default function TokenChart({
         <div className="pc-fc-summary">
           <span>{t('coin.pro.forecastTarget')} <b className="mono" dir="ltr">{fmtPrice(forecastLast?.c)}</b></span>
           {forecastChange != null ? <span className={forecastChange >= 0 ? 'up' : 'down'} dir="ltr">{forecastChange >= 0 ? '+' : ''}{forecastChange.toFixed(2)}%</span> : null}
-          <span>{t('coin.pro.forecastHorizonCount', { count: forecast.candles.length })}</span>
+          <span>{t('coin.pro.forecastHorizonCount', { count: forecastCandles.length })}</span>
         </div>
         {forecastMeta ? (
           <div className="pc-fc-meta mono" dir="ltr" data-testid="forecast-meta">
