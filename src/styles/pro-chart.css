@@ -842,10 +842,9 @@ html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
    The card is a small HUD, not a second page: one gradient hairline, one
    glass surface, an icon-first identity row and pill actions. NO
    backdrop-filter (this sheet forbids blur over a live canvas), NO animated
-   gradients, and only opacity/transform/colour transitions. In short
-   landscape terminals the card leaves the flow and becomes a faded corner
-   overlay, so it cannot squeeze the candles or land on the toolbar chips;
-   hover/focus brings it back to full contrast.
+   gradients, and only opacity/transform/colour transitions. Short landscape
+   terminals disable the complete forecast feature in TokenChart, so no card
+   can squeeze the candles or land on toolbar chips.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .pc-chip--fc:not(.is-on) {
@@ -1129,103 +1128,26 @@ html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   SHORT LANDSCAPE TERMINAL — the forecast card becomes a faded HUD
+   SHORT LANDSCAPE TERMINAL — forecast is genuinely unavailable here
    ───────────────────────────────────────────────────────────────────────────
-   In the full-screen landscape terminal the VERTICAL axis is the scarce one.
-   A six-row card in the flow squeezed the candles and landed right on top of
-   the toolbar chips (zoom / PNG / reset) — the «فاصله با دکمه‌های دیگر»
-   report. The card is taken OUT of the flow and pinned to the chart's lower
-   LEFT corner (the price scale is physically on the right in RTL too), with a
-   guaranteed 26px of air above the stats strip and the toolbar below it.
-
-   Only the READY result fades: prompts, progress and errors need a decision
-   and stay fully opaque. The faded card also lets chart gestures pass through
-   it; its small buttons remain hit targets, and hover/focus restores 100%
-   contrast. Nothing here animates a gradient or blurs the canvas.
+   TokenChart watches this exact media query. While the full-screen terminal
+   is in short landscape it removes the AI toggle/horizon and the result card,
+   aborts active work and stops passing projected candles to ProChart. There is
+   deliberately no absolute/faded HUD fallback: an overlay cannot overlap
+   controls that it never shares the viewport with. Portrait restores the AI
+   control, switched off, ready for an explicit opt-in.
    ═══════════════════════════════════════════════════════════════════════════ */
 @media (orientation: landscape) and (max-height: 640px) {
-  .pc-fs .pc-fs-main { position: relative; }
-
-  .pc-fs .pc-fs-main > .pc-fc {
-    position: absolute;
-    inset-block-end: 26px;        /* above the stats strip — never on the toolbar */
-    /*
-     * PHYSICAL left on purpose. The card itself is `dir="auto"` (the model
-     * name can flip it to LTR even on a Persian page), so logical inline
-     * insets would resolve against the CARD's direction and jump to the right
-     * price axis. The chart is always LTR — time runs left→right — so its
-     * price scale is on the physical right in every language.
-     */
-    left: max(12px, env(safe-area-inset-left, 0px));
-    right: auto;
-    z-index: 6;
-    width: max-content;
-    max-width: min(46vw, 400px);
-    max-height: min(38vh, 168px);
-    padding: 8px 10px;
-    gap: 4px;
-    border-radius: 14px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    background: color-mix(in srgb, var(--bg-raised, #10131d) 92%, transparent);
-    box-shadow:
-      0 16px 36px -22px #000,
-      0 0 0 1px color-mix(in srgb, var(--fc-violet) 22%, transparent);
-    transition: opacity .18s ease, box-shadow .18s ease;
-  }
-  :root[data-theme='light'] .pc-fs .pc-fs-main > .pc-fc {
-    background: rgba(255, 255, 255, .94);
-  }
-
-  .pc-fs .pc-fs-main > .pc-fc:hover,
-  .pc-fs .pc-fs-main > .pc-fc:focus-within { opacity: 1; }
-  .pc-fs .pc-fs-main > .pc-fc--ambient {
-    opacity: .55;
-    pointer-events: none;         /* panning/zooming the chart still works */
-  }
-  .pc-fs .pc-fs-main > .pc-fc--ambient .pc-fc-btn { pointer-events: auto; }
-  .pc-fs .pc-fs-main > .pc-fc--ambient:hover,
-  .pc-fs .pc-fs-main > .pc-fc--ambient:focus-within { opacity: 1; }
-
-  /* Compact anatomy: one identity row, one numbers row, one action row. */
-  .pc-fs .pc-fc-mark { width: 24px; height: 24px; border-radius: 8px; }
-  .pc-fs .pc-fc-mark svg { width: 13px; height: 13px; }
-  .pc-fs .pc-fc-disc,
-  .pc-fs .pc-fc-warning,
-  .pc-fs .pc-fc-bytes { display: none; }
-  .pc-fs .pc-fc-summary { font-size: 9.5px; gap: 4px 8px; }
-  .pc-fs .pc-fc-summary b { font-size: 10.5px; padding: 2px 6px; }
-  .pc-fs .pc-fc-meta { font-size: 8.5px; }
-  .pc-fs .pc-fc-note { font-size: 9.5px; }
-  .pc-fs .pc-fc-foot { gap: 4px; }
-
-  /* Retry and delete become labelled ICON buttons — small, modern, named. */
-  .pc-fs .pc-fc-btn { min-height: 26px; width: 26px; padding: 0; border-radius: 9px; }
-  .pc-fs .pc-fc-btn-label { display: none; }
-  .pc-fs .pc-fc-btn-ico, .pc-fs .pc-fc-btn-ico svg { width: 13px; height: 13px; }
-  .pc-fs .pc-fc-btn--primary { width: auto; padding: 0 10px; }
-  .pc-fs .pc-fc-btn--primary .pc-fc-btn-label { display: inline; } /* the CTA must stay readable */
-
-  /* Explicit air between the AI controls and the other chart buttons. */
   .pc-fs .pc-toolbar { gap: 8px; }
   .pc-fs .pc-toolgroup { gap: 5px; padding-inline-end: 8px; }
-  .pc-fs .pc-fc-horizon { margin-inline: 0 4px; }
-  .pc-fs .pc-fc-horizon select { min-height: 26px; max-width: 72px; font-size: 9px; }
+  .pc-fs .pc-toolgroup--forecast,
+  .pc-fs .pc-fs-main > .pc-fc { display: none; }
   .pc-fs .pc-toolgroup--actions {
     margin-inline-start: 12px;
     padding-inline-start: 8px;
     border-inline-start: 1px solid rgba(255, 255, 255, .09);
   }
   :root[data-theme='light'] .pc-fs .pc-toolgroup--actions { border-inline-start-color: rgba(16, 20, 40, .12); }
-}
-
-@media (hover: none) and (orientation: landscape) and (max-height: 640px) {
-  /* No hover to reveal it on a phone: keep more of the text readable. */
-  .pc-fs .pc-fs-main > .pc-fc--ambient { opacity: .74; }
-}
-
-@media (prefers-contrast: more) and (orientation: landscape) and (max-height: 640px) {
-  .pc-fs .pc-fs-main > .pc-fc--ambient { opacity: 1; pointer-events: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {

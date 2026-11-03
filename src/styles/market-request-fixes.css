@@ -84,490 +84,221 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    THE MARKET SCREEN'S ADVERTISEMENT — «هوش جهانی»
    ---------------------------------------------------------------------------
-   «بنر تبلیغاتی پایین صفحه بازار زشت بود: باکس بزرگ با عکس پشت‌زمینهٔ
-   ناهماهنگ و انیمیشن سبز؛ حالا یک کارت فشرده و مدرنه.»
-   Redesigned 2026-11-01 as ONE compact card. This sheet loads last, so every
-   rule below wins the whole cascade — including the whale photograph and the
-   green Smart-Money palette the earlier sheets still paint on this element.
-
-   Layers, back to front:
-     1. ::before — a slow conic prism rim (cyan → violet → gold) turning behind
-        the card; only the 1.5px border shows it. transform only;
-     2. ::after  — the interior: a deep-night gradient with the PRISM artwork
-        bleeding in from the art side. The background image is now the one
-        that belongs to this ad — no whale, no third-party host;
-     3. the mark + copy, the world (globe, two orbit rings, three satellites),
-        the route and the chips — painted above all of it, never moving.
-
-   Palette: the market screen's own --mx-cyan / --mx-violet / --mx-gold, so the
-   ad reads as part of the screen. Motion: transform + opacity only, every
-   layer is painted (no live blur), and every loop stops for prefers-reduced-motion,
-   data-motion, data-native and data-lite (guards in §11 below).
+   One slim promotional row, not a second dashboard. No photograph or artwork
+   URL is loaded here. The globe, its orbit and the moving hairline explain the
+   destination with transform/opacity-only motion; all motion has a stop guard.
    ═══════════════════════════════════════════════════════════════════════════ */
-
 .mx-market .mx-global-banner {
   --gx-a: var(--mx-cyan);
   --gx-b: var(--mx-violet);
-  --gx-c: var(--mx-gold);
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 92px;
-  grid-template-areas:
-    'main  art'
-    'route route'
-    'pools pools'
-    'foot  foot';
-  gap: 11px 14px;
-  padding: 15px 16px 12px;
-  border: 1px solid transparent;
-  border-radius: 22px;
-  background:
-    linear-gradient(150deg, rgba(11, 25, 44, .96), rgba(8, 15, 30, .97)) padding-box,
-    linear-gradient(120deg,
-      color-mix(in srgb, var(--gx-a) 80%, transparent),
-      color-mix(in srgb, var(--gx-b) 65%, transparent) 52%,
-      color-mix(in srgb, var(--gx-c) 60%, transparent)) border-box;
-  box-shadow:
-    inset 0 1px 0 rgba(230, 240, 255, .1),
-    0 16px 36px -26px rgba(0, 0, 0, .95),
-    0 0 34px -20px color-mix(in srgb, var(--gx-a) 60%, transparent);
-}
-
-/* ── 1 · THE RIM — one slow conic beam behind the card ────────────────────── */
-.mx-market .mx-global-banner::before {
-  content: '';
-  position: absolute;
-  z-index: -2;
-  inset: -60%;
-  pointer-events: none;
-  background: conic-gradient(from 0deg,
-    transparent 0deg 185deg,
-    color-mix(in srgb, var(--gx-a) 90%, transparent) 232deg,
-    color-mix(in srgb, var(--gx-b) 90%, transparent) 284deg,
-    color-mix(in srgb, var(--gx-c) 80%, transparent) 322deg,
-    transparent 360deg);
-  animation: gv-beam-spin 16s linear infinite;
-}
-
-/* ── 2 · THE INTERIOR — painted night + the prism as the background image ── */
-.mx-market .mx-global-banner::after {
-  --gx-bg-pos: 0% 50%;
-  content: '';
-  position: absolute;
-  z-index: -1;
-  inset: 1.5px;
-  border-radius: 20.5px;
-  pointer-events: none;
-  background:
-    linear-gradient(90deg, rgba(7, 14, 26, .97) 40%, rgba(7, 14, 26, .72) 72%, rgba(7, 14, 26, .42)),
-    radial-gradient(90% 120% at 100% 50%, color-mix(in srgb, var(--gx-b) 14%, transparent), transparent 60%),
-    url('/images/market-banner/prism.webp') var(--gx-bg-pos) / 190px no-repeat,
-    linear-gradient(150deg, #0b1a2e, #081120 58%, #120e26);
-}
-[dir='ltr'] .mx-market .mx-global-banner::after {
-  --gx-bg-pos: 100% 50%;
-  background-image:
-    linear-gradient(270deg, rgba(7, 14, 26, .97) 40%, rgba(7, 14, 26, .72) 72%, rgba(7, 14, 26, .42)),
-    radial-gradient(90% 120% at 0% 50%, color-mix(in srgb, var(--gx-b) 14%, transparent), transparent 60%),
-    url('/images/market-banner/prism.webp'),
-    linear-gradient(150deg, #0b1a2e, #081120 58%, #120e26);
-}
-
-/* The old whale veil stays buried, whatever the earlier sheets paint on it. */
-.mx-market .mx-global-banner .mx-smart-veil { display: none; }
-.mx-market .mx-global-banner .mx-smart-sheen {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--gx-a), transparent);
-}
-
-/* ── 3 · THE MARK AND THE COPY — one compact row ──────────────────────────── */
-.mx-market .mx-global-banner .mx-smart-main {
-  grid-area: main;
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 62px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--gx-a) 20%, var(--mx-line));
+  border-radius: 16px;
+  background:
+    radial-gradient(70% 180% at 0% 50%, color-mix(in srgb, var(--gx-a) 9%, transparent), transparent 68%),
+    linear-gradient(115deg, rgba(12, 26, 43, .96), rgba(13, 17, 34, .96));
+  box-shadow: inset 0 1px 0 rgba(230, 240, 255, .07), 0 12px 28px -26px #000;
+}
+.mx-market .mx-global-banner::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  width: 34%;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--gx-a), var(--gx-b), transparent);
+  animation: mx-global-scan 8s ease-in-out infinite;
+}
+.mx-market .mx-global-banner::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(55% 160% at 100% 50%, color-mix(in srgb, var(--gx-b) 8%, transparent), transparent 70%);
+}
+.mx-market .mx-global-banner .mx-smart-veil { display: none; }
+.mx-market .mx-global-banner .mx-smart-sheen { display: none; }
+
+.mx-market .mx-global-banner .mx-smart-main {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: 11px;
   min-width: 0;
 }
 .mx-market .mx-global-banner .mx-smart-mark {
-  flex: 0 0 auto;
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
-  color: #eafffb;
-  border: 1px solid color-mix(in srgb, var(--gx-a) 55%, transparent);
-  background: linear-gradient(145deg,
-    color-mix(in srgb, var(--gx-a) 32%, transparent),
-    color-mix(in srgb, var(--gx-b) 32%, transparent));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .28),
-    0 8px 20px -10px color-mix(in srgb, var(--gx-a) 80%, transparent);
-}
-.mx-market .mx-global-banner .mx-smart-radar {
-  background: conic-gradient(from 0deg, transparent 0deg 300deg,
-    color-mix(in srgb, var(--gx-a) 55%, transparent) 352deg, transparent 360deg);
-}
-.mx-market .mx-global-banner .mx-smart-ring {
-  border-color: color-mix(in srgb, var(--gx-a) 35%, transparent);
-  border-radius: 18px;
-}
-.mx-market .mx-global-banner .mx-smart-ring.is-2 {
-  border-color: color-mix(in srgb, var(--gx-b) 40%, transparent);
-  border-radius: 21px;
-}
-.mx-market .mx-global-banner .mx-smart-copy { min-width: 0; }
-.mx-market .mx-global-banner .mx-smart-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 0 4px;
-  font-size: 8.5px;
-  font-weight: 800;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  background: linear-gradient(90deg, var(--gx-a), var(--gx-b) 60%, var(--gx-c));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.mx-market .mx-global-banner .mx-smart-copy h2 {
-  margin: 0;
-  color: var(--mx-text);
-  font-size: clamp(14px, 3.8vw, 17px);
-  font-weight: 800;
-  line-height: 1.5;
-  letter-spacing: -.01em;
-  text-wrap: balance;
-}
-.mx-market .mx-global-banner .mx-smart-copy p {
-  margin: 4px 0 0;
-  color: var(--mx-muted);
-  font-size: 10.5px;
-  line-height: 1.75;
-  max-width: 52ch;
-}
-
-/* ── 4 · THE WORLD — a small globe, two orbit rings, three satellites ─────── */
-.mx-market .mx-global-banner .mx-global-art {
-  grid-area: art;
   position: relative;
   display: grid;
   place-items: center;
-  align-self: center;
-  width: 92px;
-  height: 92px;
-  isolation: isolate;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: 1px solid color-mix(in srgb, var(--gx-a) 34%, transparent);
+  border-radius: 12px;
+  color: var(--gx-a);
+  background: linear-gradient(145deg,
+    color-mix(in srgb, var(--gx-a) 12%, transparent),
+    color-mix(in srgb, var(--gx-b) 10%, transparent));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1);
 }
-.mx-market .mx-global-banner .mx-global-art::before {
-  /* The atmosphere: a soft bloom under the planet. Painted, never blurred. */
-  content: '';
+.mx-market .mx-global-banner .mx-smart-mark > svg { position: relative; z-index: 2; }
+.mx-market .mx-global-banner .mx-smart-ring {
   position: absolute;
-  inset: 8%;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 58%,
-    color-mix(in srgb, var(--gx-a) 30%, transparent),
-    transparent 68%);
-  opacity: .9;
+  inset: -4px;
+  border: 1px solid color-mix(in srgb, var(--gx-a) 20%, transparent);
+  border-block-start-color: color-mix(in srgb, var(--gx-b) 72%, transparent);
+  border-radius: 15px;
   pointer-events: none;
+  animation: mx-global-orbit 9s linear infinite;
 }
-.mx-market .mx-global-banner .mx-global-art img {
-  position: relative;
-  z-index: 2;
-  width: 70px;
-  height: 70px;
-  object-fit: contain;
-  animation: mx-global-float 9s ease-in-out infinite;
-}
-.mx-market .mx-global-banner .mx-global-orbit {
+.mx-market .mx-global-banner .mx-smart-radar {
   position: absolute;
-  z-index: 1;
-  inset: 12% 0;
-  border: 1px solid color-mix(in srgb, var(--gx-a) 55%, transparent);
+  inset: 3px;
   border-radius: 50%;
-  transform: rotate(-18deg);
-  opacity: .55;
-  animation: mx-global-tilt 14s ease-in-out infinite;
+  background: conic-gradient(from 0deg, transparent 0 78%, color-mix(in srgb, var(--gx-a) 22%, transparent) 96%, transparent);
+  pointer-events: none;
+  animation: mx-global-radar 12s linear infinite;
 }
-.mx-market .mx-global-banner .mx-global-orbit.is-2 {
-  inset: 20% 10%;
-  border-style: dashed;
-  border-color: color-mix(in srgb, var(--gx-b) 55%, transparent);
-  transform: rotate(26deg);
-  animation-duration: 19s;
-  animation-direction: reverse;
-}
-/* Three satellites riding the rings: one element, one transform each. */
-.mx-market .mx-global-banner .mx-global-sat {
+.mx-market .mx-global-banner .mx-global-pulse {
   position: absolute;
   z-index: 3;
-  width: 6px;
-  height: 6px;
+  inset-block-start: -3px;
+  inset-inline-end: -3px;
+  width: 7px;
+  height: 7px;
+  border: 2px solid #0c1627;
   border-radius: 50%;
-  background: var(--gx-c);
-  box-shadow: 0 0 9px color-mix(in srgb, var(--gx-c) 85%, transparent);
-  animation: mx-global-sat 11s linear infinite;
-}
-.mx-market .mx-global-banner .mx-global-sat.is-1 { top: 18%; inset-inline-start: 12%; animation-delay: 0s; }
-.mx-market .mx-global-banner .mx-global-sat.is-2 {
-  top: 70%;
-  inset-inline-end: 8%;
   background: var(--gx-a);
-  box-shadow: 0 0 9px color-mix(in srgb, var(--gx-a) 85%, transparent);
-  animation-delay: -3.6s;
+  animation: mx-global-pulse 2.8s ease-in-out infinite;
 }
-.mx-market .mx-global-banner .mx-global-sat.is-3 {
-  top: 8%;
-  inset-inline-end: 32%;
-  width: 4px;
-  height: 4px;
-  background: var(--gx-b);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--gx-b) 85%, transparent);
-  animation-delay: -7.2s;
-}
-
-/* ── 5 · THE ROUTE — data → world model → insight, drawn thin ─────────────── */
-.mx-market .mx-global-banner .mx-smart-route { grid-area: route; min-width: 0; margin-top: 0; }
-.mx-market .mx-global-banner .mx-route-drawing { height: 46px; }
-.mx-market .mx-global-banner .mx-route-drawing stop:first-child { stop-color: var(--gx-a); }
-.mx-market .mx-global-banner .mx-route-drawing stop:last-child { stop-color: var(--gx-b); }
-.mx-market .mx-global-banner .mx-route-line { stroke: color-mix(in srgb, var(--mx-text) 14%, transparent); }
-.mx-market .mx-global-banner .mx-route-flow { stroke-width: 1.4; opacity: .8; }
-.mx-market .mx-global-banner .mx-route-node { fill: #0d2030; stroke: var(--gx-a); }
-.mx-market .mx-global-banner .mx-route-node.is-hub { fill: #1d1638; stroke: var(--gx-b); }
-.mx-market .mx-global-banner .mx-route-node.is-end { fill: #2b1f10; stroke: var(--gx-c); }
-.mx-market .mx-global-banner .mx-route-halo {
-  fill: color-mix(in srgb, var(--gx-b) 6%, transparent);
-  stroke: color-mix(in srgb, var(--gx-b) 30%, transparent);
-}
-.mx-market .mx-global-banner .mx-route-hub-mark { stroke: var(--gx-c); }
-.mx-market .mx-global-banner .mx-route-traveller {
-  background: linear-gradient(90deg, transparent, var(--gx-a));
-  box-shadow: 0 0 9px color-mix(in srgb, var(--gx-a) 70%, transparent);
-}
-.mx-market .mx-global-banner .mx-route-traveller.is-2 {
-  background: linear-gradient(90deg, transparent, var(--gx-b));
-  box-shadow: 0 0 9px color-mix(in srgb, var(--gx-b) 70%, transparent);
-}
-.mx-market .mx-global-banner .mx-route-traveller.is-3 {
-  background: linear-gradient(90deg, transparent, var(--gx-c));
-  box-shadow: 0 0 9px color-mix(in srgb, var(--gx-c) 70%, transparent);
-}
-.mx-market .mx-global-banner .mx-route-labels {
+.mx-market .mx-global-banner .mx-smart-copy {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  align-items: baseline;
+  flex: 1 1 auto;
+  gap: 10px;
+  min-width: 0;
+}
+.mx-market .mx-global-banner .mx-smart-copy h2 {
+  flex: 0 1 auto;
+  margin: 0;
+  color: var(--mx-text);
+  font-size: 12.5px;
+  font-weight: 800;
+  line-height: 1.55;
+  letter-spacing: -.01em;
+  white-space: nowrap;
+}
+.mx-market .mx-global-banner .mx-smart-copy p {
+  flex: 1 1 auto;
+  min-width: 80px;
+  margin: 0;
+  overflow: hidden;
   color: var(--mx-muted);
-  font-size: 8.5px;
-}
-.mx-market .mx-global-banner .mx-route-labels span:first-child { text-align: start; }
-.mx-market .mx-global-banner .mx-route-labels span:last-child { text-align: end; }
-
-/* ── 6 · THE CHIPS AND THE FOOT — compact pills, one gradient CTA ─────────── */
-.mx-market .mx-global-banner .mx-smart-pools {
-  grid-area: pools;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 0;
-}
-.mx-market .mx-global-banner .mx-pool {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 26px;
-  padding: 4px 9px;
-  border-radius: 999px;
-  font-size: 9.5px;
-  line-height: 1;
-  color: color-mix(in srgb, var(--mx-text) 86%, transparent);
-  border: 1px solid color-mix(in srgb, var(--gx-a) 26%, transparent);
-  background: color-mix(in srgb, var(--gx-a) 9%, transparent);
-}
-.mx-market .mx-global-banner .mx-pool[data-pool='world'] {
-  border-color: color-mix(in srgb, var(--gx-b) 28%, transparent);
-  background: color-mix(in srgb, var(--gx-b) 10%, transparent);
-}
-.mx-market .mx-global-banner .mx-pool[data-pool='agents'] {
-  border-color: color-mix(in srgb, var(--gx-c) 32%, transparent);
-  background: color-mix(in srgb, var(--gx-c) 10%, transparent);
-}
-.mx-market .mx-global-banner .mx-pool svg { flex: 0 0 auto; }
-.mx-market .mx-global-banner .mx-pool[data-pool='analysis'] svg { color: var(--gx-a); }
-.mx-market .mx-global-banner .mx-pool[data-pool='world'] svg { color: var(--gx-b); }
-.mx-market .mx-global-banner .mx-pool[data-pool='agents'] svg { color: var(--gx-c); }
-
-.mx-market .mx-global-banner .mx-smart-foot {
-  grid-area: foot;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px 10px;
-  padding-top: 10px;
-  border-top: 1px solid color-mix(in srgb, var(--mx-text) 10%, transparent);
-}
-.mx-market .mx-global-banner .mx-smart-note {
-  color: var(--mx-muted);
-  font-size: 8.5px;
-  line-height: 1.5;
+  font-size: 10px;
+  line-height: 1.6;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .mx-market .mx-global-banner .mx-smart-cta {
   position: relative;
-  overflow: hidden;
+  z-index: 3;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
   gap: 6px;
-  min-height: 34px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 999px;
-  background: linear-gradient(120deg, var(--gx-a), var(--gx-b));
-  color: #071018;
-  font-size: 11px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--gx-a) 30%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--gx-a) 9%, transparent);
+  color: var(--mx-text);
+  font-size: 10px;
   font-weight: 800;
+  line-height: 1;
   text-decoration: none;
   white-space: nowrap;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .45),
-    0 8px 20px -12px color-mix(in srgb, var(--gx-a) 90%, transparent);
-  transition: transform .2s ease, box-shadow .2s ease;
+  transition: transform .18s ease, border-color .18s ease, background-color .18s ease;
 }
 .mx-market .mx-global-banner .mx-smart-cta:hover {
   transform: translateY(-1px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .55),
-    0 11px 24px -12px color-mix(in srgb, var(--gx-b) 90%, transparent);
+  border-color: color-mix(in srgb, var(--gx-a) 58%, transparent);
+  background: color-mix(in srgb, var(--gx-a) 15%, transparent);
 }
 .mx-market .mx-global-banner .mx-smart-cta:focus-visible {
   outline: 2px solid var(--gx-a);
   outline-offset: 3px;
 }
 
-/* ── 7 · KEYFRAMES — transform and opacity only ───────────────────────────── */
-@keyframes mx-global-float {
-  50% { transform: translateY(-5px) rotate(2deg); }
+@keyframes mx-global-scan {
+  0%, 12% { opacity: 0; transform: translateX(-110%); }
+  35%, 65% { opacity: .85; }
+  88%, 100% { opacity: 0; transform: translateX(295%); }
 }
-@keyframes mx-global-tilt {
-  50% { transform: rotate(-10deg) scale(1.03); }
+@keyframes mx-global-orbit {
+  to { transform: rotate(360deg); }
 }
-@keyframes mx-global-sat {
-  0%, 100% { opacity: .35; transform: translateY(0); }
-  50% { opacity: 1; transform: translateY(-4px); }
+@keyframes mx-global-radar {
+  to { transform: rotate(-360deg); }
+}
+@keyframes mx-global-pulse {
+  50% { opacity: .45; transform: scale(.78); }
 }
 
-/* ── 8 · LIGHT THEME — pearl card, same prism, re-graded ink ───────────────── */
 :root[data-theme='light'] .mx-market .mx-global-banner {
+  border-color: color-mix(in srgb, var(--gx-a) 25%, #dce5f2);
   background:
-    linear-gradient(150deg, rgba(255, 255, 255, .96), rgba(244, 248, 255, .97)) padding-box,
-    linear-gradient(120deg,
-      color-mix(in srgb, var(--gx-a) 70%, transparent),
-      color-mix(in srgb, var(--gx-b) 55%, transparent) 52%,
-      color-mix(in srgb, var(--gx-c) 50%, transparent)) border-box;
-  box-shadow:
-    inset 0 1px 0 #fff,
-    0 16px 32px -26px rgba(46, 67, 123, .5),
-    0 0 30px -20px color-mix(in srgb, var(--gx-a) 55%, transparent);
+    radial-gradient(70% 180% at 0% 50%, color-mix(in srgb, var(--gx-a) 8%, transparent), transparent 68%),
+    linear-gradient(115deg, #fff, #f5f7fd);
+  box-shadow: inset 0 1px 0 #fff, 0 12px 26px -24px rgba(46, 67, 123, .45);
 }
-:root[data-theme='light'] .mx-market .mx-global-banner::after {
-  background-image:
-    linear-gradient(90deg, rgba(250, 252, 255, .97) 40%, rgba(250, 252, 255, .8) 72%, rgba(250, 252, 255, .55)),
-    radial-gradient(90% 120% at 100% 50%, color-mix(in srgb, var(--gx-b) 12%, transparent), transparent 60%),
-    url('/images/market-banner/prism.webp'),
-    linear-gradient(150deg, #ffffff, #f2f6fd 58%, #efeaff);
+:root[data-theme='light'] .mx-market .mx-global-banner .mx-smart-mark { color: #087d80; }
+:root[data-theme='light'] .mx-market .mx-global-banner .mx-global-pulse { border-color: #fff; }
+:root[data-theme='light'] .mx-market .mx-global-banner .mx-smart-cta { color: #263754; }
+
+/* Keep the sentence and CTA compact on phones instead of growing a second row. */
+@media (max-width: 620px) {
+  .mx-market .mx-global-banner .mx-smart-copy { display: block; }
+  .mx-market .mx-global-banner .mx-smart-copy h2,
+  .mx-market .mx-global-banner .mx-smart-copy p {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mx-market .mx-global-banner .mx-smart-copy h2 { font-size: 12px; }
+  .mx-market .mx-global-banner .mx-smart-copy p { margin-block-start: 2px; font-size: 9.5px; }
 }
-:root[data-theme='light'][dir='ltr'] .mx-market .mx-global-banner::after {
-  --gx-bg-pos: 100% 50%;
-  background-image:
-    linear-gradient(270deg, rgba(250, 252, 255, .97) 40%, rgba(250, 252, 255, .8) 72%, rgba(250, 252, 255, .55)),
-    radial-gradient(90% 120% at 0% 50%, color-mix(in srgb, var(--gx-b) 12%, transparent), transparent 60%),
-    url('/images/market-banner/prism.webp'),
-    linear-gradient(150deg, #ffffff, #f2f6fd 58%, #efeaff);
-}
-:root[data-theme='light'] .mx-market .mx-global-banner .mx-smart-mark {
-  color: #065f63;
-  box-shadow: inset 0 1px 0 #fff, 0 8px 20px -12px rgba(8, 125, 128, .55);
-}
-:root[data-theme='light'] .mx-market .mx-global-banner .mx-route-line { stroke: rgba(50, 70, 100, .18); }
-:root[data-theme='light'] .mx-market .mx-global-banner .mx-route-node { fill: #fff; }
-:root[data-theme='light'] .mx-market .mx-global-banner .mx-route-node.is-hub { fill: #f4f0ff; }
-:root[data-theme='light'] .mx-market .mx-global-banner .mx-route-node.is-end { fill: #fff8ec; }
-:root[data-theme='light'] .mx-market .mx-global-banner .mx-pool {
-  color: #33455e;
-  border-color: color-mix(in srgb, var(--gx-a) 34%, #d7e2f2);
-  background: color-mix(in srgb, var(--gx-a) 12%, #fff);
-}
-:root[data-theme='light'] .mx-market .mx-global-banner .mx-pool[data-pool='world'] {
-  border-color: color-mix(in srgb, var(--gx-b) 36%, #e2ddf5);
-  background: color-mix(in srgb, var(--gx-b) 12%, #fff);
-}
-:root[data-theme='light'] .mx-market .mx-global-banner .mx-pool[data-pool='agents'] {
-  border-color: color-mix(in srgb, var(--gx-c) 40%, #f5e8d2);
-  background: color-mix(in srgb, var(--gx-c) 12%, #fff);
-}
-:root[data-theme='light'] .mx-market .mx-global-banner .mx-smart-cta { color: #fff; }
-:root[data-theme='light'] .mx-market .mx-global-banner .mx-global-art::before {
-  background: radial-gradient(circle at 50% 58%,
-    color-mix(in srgb, var(--gx-a) 18%, transparent),
-    transparent 68%);
+@media (max-width: 420px) {
+  .mx-market .mx-global-banner { min-height: 58px; padding: 9px 10px; gap: 9px; }
+  .mx-market .mx-global-banner .mx-smart-main { gap: 9px; }
+  .mx-market .mx-global-banner .mx-smart-mark { width: 34px; height: 34px; }
+  .mx-market .mx-global-banner .mx-smart-cta { width: 32px; min-height: 32px; padding: 0; }
+  .mx-market .mx-global-banner .mx-smart-cta > span { display: none; }
 }
 
-/* ── 9 · WIDER SCREENS — a touch more air, still one card ─────────────────── */
-@media (min-width: 560px) {
-  .mx-market .mx-global-banner {
-    grid-template-columns: minmax(0, 1fr) 128px;
-    gap: 13px 20px;
-    padding: 20px 22px 15px;
-    border-radius: 24px;
-  }
-  .mx-market .mx-global-banner::after {
-    border-radius: 22.5px;
-    background-size: auto, auto, 240px, auto;
-  }
-  .mx-market .mx-global-banner .mx-global-art { width: 128px; height: 128px; }
-  .mx-market .mx-global-banner .mx-global-art img { width: 102px; height: 102px; }
-  .mx-market .mx-global-banner .mx-smart-copy h2 { font-size: clamp(16px, 2.6vw, 19px); }
-  .mx-market .mx-global-banner .mx-smart-copy p { font-size: 11.5px; }
-  .mx-market .mx-global-banner .mx-route-drawing { height: 54px; }
-}
-
-/* ── 10 · SMALL PHONES — one scale, nothing clipped ───────────────────────── */
-@media (max-width: 360px) {
-  .mx-market .mx-global-banner {
-    grid-template-columns: minmax(0, 1fr) 74px;
-    gap: 9px 10px;
-    padding: 13px 13px 11px;
-  }
-  .mx-market .mx-global-banner .mx-global-art { width: 74px; height: 74px; }
-  .mx-market .mx-global-banner .mx-global-art img { width: 56px; height: 56px; }
-  .mx-market .mx-global-banner .mx-smart-mark { width: 38px; height: 38px; border-radius: 12px; }
-  .mx-market .mx-global-banner .mx-smart-copy p { font-size: 10px; }
-  .mx-market .mx-global-banner .mx-smart-foot { flex-direction: column; align-items: stretch; }
-  .mx-market .mx-global-banner .mx-smart-note { text-align: center; }
-  .mx-market .mx-global-banner .mx-smart-cta { min-height: 36px; width: 100%; }
-}
-
-/* ── 11 · EVERY GUARD — a frozen banner is a complete banner ──────────────── */
 @media (prefers-reduced-motion: reduce) {
   .mx-market .mx-global-banner::before,
-  .mx-market .mx-global-banner .mx-smart-sheen,
-  .mx-market .mx-global-banner .mx-smart-radar,
-  .mx-market .mx-global-banner .mx-smart-ring,
-  .mx-market .mx-global-banner .mx-global-art img,
-  .mx-market .mx-global-banner .mx-global-orbit,
-  .mx-market .mx-global-banner .mx-global-sat,
-  .mx-market .mx-global-banner .mx-route-traveller,
-  .mx-market .mx-global-banner .mx-route-halo,
-  .mx-market .mx-global-banner .mx-smart-cta::after { animation: none; }
-  .mx-market .mx-global-banner .mx-global-sat { opacity: .85; }
+  .mx-market .mx-global-banner :is(.mx-smart-ring, .mx-smart-radar, .mx-global-pulse) { animation: none; }
 }
 :root[data-theme]:not([data-motion='full']) .mx-market .mx-global-banner::before,
-:root[data-theme]:not([data-motion='full']) .mx-market .mx-global-banner :is(.mx-smart-sheen, .mx-smart-radar, .mx-smart-ring, .mx-global-art img, .mx-global-orbit, .mx-global-sat, .mx-route-traveller, .mx-route-halo, .mx-smart-cta::after) {
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-global-banner :is(.mx-smart-ring, .mx-smart-radar, .mx-global-pulse) {
   animation: none;
 }
-:root[data-native='true'] .mx-market .mx-global-banner :is(.mx-global-art img, .mx-global-orbit, .mx-global-sat),
-:root[data-lite='true'] .mx-market .mx-global-banner :is(.mx-global-art img, .mx-global-orbit, .mx-global-sat, .mx-smart-sheen, .mx-route-traveller) {
+:root[data-native='true'] .mx-market .mx-global-banner::before,
+:root[data-native='true'] .mx-market .mx-global-banner :is(.mx-smart-ring, .mx-smart-radar, .mx-global-pulse),
+:root[data-lite='true'] .mx-market .mx-global-banner::before,
+:root[data-lite='true'] .mx-market .mx-global-banner :is(.mx-smart-ring, .mx-smart-radar, .mx-global-pulse) {
   animation: none;
 }
 /* ─── A FLAT ROW IS NOT A GAIN ─────────────────────────────────────────────

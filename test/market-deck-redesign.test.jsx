@@ -223,41 +223,31 @@ describe('۱/۲ · independent overview and Bitcoin readings', () => {
   });
 });
 
-describe('۲ · the Smart Money blade shows the route', () => {
-  it('answers its own headline with a route, three destinations and a CTA', async () => {
+describe('۲ · the compact Global Intelligence promotion', () => {
+  it('shows one sentence and a CTA without artwork or a feature grid', async () => {
     await open();
     const blade = screen.getByTestId('market-smart-money-banner');
     expect(blade.querySelector('.mx-smart-mark svg')).toBeTruthy();
-    expect(blade.querySelector('.mx-global-art img').getAttribute('src')).toBe('/images/market-banner/globe.webp');
+    expect(blade.querySelector('img')).toBeNull();
+    expect(blade.querySelector('.mx-smart-route')).toBeNull();
+    expect(blade.querySelector('.mx-smart-pools')).toBeNull();
     expect(blade.querySelector('a').getAttribute('href')).toBe('/global');
+    expect(blade.textContent).toContain(fa.marketGlobalAd.title);
+    expect(blade.textContent).toContain(fa.marketGlobalAd.desc);
     expect(blade.textContent).toContain(fa.marketGlobalAd.cta);
-    /* the eyebrow is translated, never a hardcoded English string */
-    expect(pageSrc).not.toContain('FBT SMART MONEY');
-    expect(blade.textContent).toContain(fa.marketGlobalAd.eyebrow);
-
-    /* «ببین پول هوشمند کجا می‌رود» — wallet, router, destination, drawn */
-    const route = blade.querySelector('.mx-smart-route');
-    expect(route).toBeTruthy();
-    expect(route.querySelectorAll('.mx-route-node')).toHaveLength(3);
-    expect(route.textContent).toContain(fa.marketGlobalAd.input);
-    expect(route.textContent).toContain(fa.marketGlobalAd.insight);
-    /* three named pools, and not one invented percentage on the card */
-    expect(blade.querySelectorAll('.mx-pool')).toHaveLength(3);
-    expect(blade.textContent).toContain(fa.marketGlobalAd.features.analysis);
     expect(blade.textContent).not.toMatch(/\d+%/);
   });
 
-  it('keeps its ambient loops travelling instead of blinking', () => {
-    expect(bare).toMatch(/\.mx-smart-sheen \{[^}]*animation: mx-blade-sweep 9s[^}]*infinite/);
-    /* CSS can stop ALL motion; SVG/SMIL animation bypassed the old guards. */
+  it('uses relevant composited loops with global motion guards', () => {
+    const fixes = readFileSync('src/styles/market-request-fixes.css', 'utf8');
     const bannerSrc = readFileSync('src/components/market/SmartMoneyBanner.jsx', 'utf8');
     expect(bannerSrc).not.toMatch(/<animate/);
-    expect(bannerSrc).toContain('mx-route-traveller');
-    expect(bare).toMatch(/@keyframes mx-flow-travel/);
-    expect(bare).toMatch(/\.mx-smart-ring \{[^}]*animation: mx-smart-ring/);
-    expect(bare).toMatch(/@keyframes mx-blade-sweep/);
-    /* No opacity strobe on any dot: the green blink was already banned by
-       market-speed.test.mjs, and this pass adds nothing that pulses. */
+    expect(fixes).toMatch(/@keyframes mx-global-scan/);
+    expect(fixes).toMatch(/@keyframes mx-global-orbit/);
+    expect(fixes).toMatch(/@keyframes mx-global-radar/);
+    expect(fixes).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*animation: none/);
+    expect(fixes).toMatch(/data-native='true'[\s\S]*animation: none/);
+    expect(fixes).toMatch(/data-lite='true'[\s\S]*animation: none/);
     expect(bare).toMatch(/\.mx-deck-live i \{(?![^}]*animation)/);
     expect(bare).toMatch(/\.mx-fresh i \{(?![^}]*animation)/);
   });

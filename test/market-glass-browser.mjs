@@ -87,11 +87,14 @@ try {
           const marker = document.querySelector('.mx-btc-range-track span').getBoundingClientRect();
           return ((marker.x + marker.width / 2) - track.x) / track.width;
         })(),
-        routeLabelsAligned: (() => {
-          const center = (el) => { const r = el.getBoundingClientRect(); return r.x + r.width / 2; };
-          const nodes = document.querySelectorAll('.mx-route-node');
-          const labels = document.querySelectorAll('.mx-route-labels > span');
-          return (center(nodes[0]) - center(nodes[2])) * (center(labels[0]) - center(labels[2])) > 0;
+        globalBanner: (() => {
+          const banner = document.querySelector('.mx-global-banner');
+          return {
+            height: bounds(banner).height,
+            images: banner.querySelectorAll('img').length,
+            links: banner.querySelectorAll('a').length,
+            extraSections: banner.querySelectorAll('.mx-smart-route, .mx-smart-pools, .mx-global-art').length
+          };
         })()
       };
     });
@@ -114,7 +117,10 @@ try {
     for (let i = 1; i < physical.length; i += 1) assert(physical[i - 1].right <= physical[i].x + 1, `overlapping coin columns: ${width}`);
     assert.equal(reading.count, 60);
     assert(Math.abs(reading.rangePosition - .035 / .06) < .025, `BTC range direction is wrong: ${lang}`);
-    assert.equal(reading.routeLabelsAligned, true, `flow labels run backwards: ${lang}`);
+    assert(reading.globalBanner.height <= 80, `Global Intelligence banner is not compact: ${reading.globalBanner.height}`);
+    assert.equal(reading.globalBanner.images, 0, 'compact banner must not load artwork');
+    assert.equal(reading.globalBanner.links, 1);
+    assert.equal(reading.globalBanner.extraSections, 0);
     if (shots && [320, 390, 1280].includes(width)) {
       await page.screenshot({ path: `${shots}/${width}-${theme}-${lang}-overview.png`, fullPage: false });
       await page.$eval('.mx-smart-banner', (el) => el.scrollIntoView({ block: 'start' }));
@@ -206,17 +212,17 @@ try {
   await page.click('[data-testid="market-swap-bitcoin"]');
   assert.match(await page.$eval('[data-testid="route-probe"]', (el) => el.textContent), /^\/swap\?/);
   await page.click('.mx-smart-cta');
-  assert.equal(await page.$eval('[data-testid="route-probe"]', (el) => el.textContent), '/smart-money');
-  console.log('Autocomplete, detached swap and Smart Money navigation PASS');
+  assert.equal(await page.$eval('[data-testid="route-probe"]', (el) => el.textContent), '/global');
+  console.log('Autocomplete, detached swap and Global Intelligence navigation PASS');
 
   // Every animation stop must work without remounting the component.
   await open();
-  assert.notEqual(await page.$eval('.mx-route-traveller', (el) => getComputedStyle(el).animationName), 'none');
+  assert.notEqual(await page.$eval('.mx-global-pulse', (el) => getComputedStyle(el).animationName), 'none');
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
   /* The deck's own light is on the list too: rim comets, the sheen, the
      chart scan and ping, and the one-shot reveal. The obsidian pass adds one
      painted backdrop loop, and it is checked as a pseudo-element below. */
-  for (const selector of ['.mx-route-traveller', '.mx-smart-ring', '.mx-smart-sheen', '.mx-deck-veil i', '.mx-deck-orbit i', '.mx-deck-sheen', '.mx-trend-scan', '.mx-dominance-shine', '.mx-spark-live i', '.mx-trend-chart svg', '.mx-deck-rim', '.mx-deck-gloss', '.mx-btc-rim', '.mx-btc-gloss', '.mx-btc-scan', '.mx-btc-chart svg', '.mx-deck', '.mx-trio-aura i']) {
+  for (const selector of ['.mx-global-pulse', '.mx-smart-ring', '.mx-smart-radar', '.mx-deck-veil i', '.mx-deck-orbit i', '.mx-deck-sheen', '.mx-trend-scan', '.mx-dominance-shine', '.mx-spark-live i', '.mx-trend-chart svg', '.mx-deck-rim', '.mx-deck-gloss', '.mx-btc-rim', '.mx-btc-gloss', '.mx-btc-scan', '.mx-btc-chart svg', '.mx-deck', '.mx-trio-aura i']) {
     assert.equal(await page.$eval(selector, (el) => getComputedStyle(el).animationName), 'none');
   }
   /* The room's ceiling is a ::after layer, so it cannot be reached with
@@ -230,7 +236,7 @@ try {
     await page.evaluate((name) => document.documentElement.setAttribute(`data-${name}`, 'true'), attribute);
     /* The deck's own light is on the list too: rim comets, the sheen, the
        chart scan and ping, and the one-shot reveal. */
-    for (const selector of ['.mx-route-traveller', '.mx-smart-ring', '.mx-smart-sheen', '.mx-deck-veil i', '.mx-deck-orbit i', '.mx-deck-sheen', '.mx-trend-scan', '.mx-dominance-shine', '.mx-spark-live i', '.mx-trend-chart svg', '.mx-deck-rim', '.mx-deck-gloss', '.mx-btc-rim', '.mx-btc-gloss', '.mx-btc-scan', '.mx-btc-chart svg', '.mx-deck', '.mx-trio-aura i']) {
+    for (const selector of ['.mx-global-pulse', '.mx-smart-ring', '.mx-smart-radar', '.mx-deck-veil i', '.mx-deck-orbit i', '.mx-deck-sheen', '.mx-trend-scan', '.mx-dominance-shine', '.mx-spark-live i', '.mx-trend-chart svg', '.mx-deck-rim', '.mx-deck-gloss', '.mx-btc-rim', '.mx-btc-gloss', '.mx-btc-scan', '.mx-btc-chart svg', '.mx-deck', '.mx-trio-aura i']) {
       assert.equal(await page.$eval(selector, (el) => getComputedStyle(el).animationName), 'none');
     }
     assert.equal(
@@ -239,7 +245,7 @@ try {
     );
     await page.evaluate((name) => document.documentElement.removeAttribute(`data-${name}`), attribute);
   }
-  assert.equal(await page.$('.mx-smart-route animateTransform'), null);
+  assert.equal(await page.$('.mx-global-banner animateTransform'), null);
   console.log('OS, app preference, native and lite motion stops PASS');
   // Also exercise the real app shell's swipe-to-change-tab and pull-to-refresh
   // ancestors, not only the isolated fixture. No wallet identity is seeded.

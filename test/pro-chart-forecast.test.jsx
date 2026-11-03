@@ -26,7 +26,7 @@ import React from 'react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key) => key, i18n: { language: 'en', resolvedLanguage: 'en' } })
@@ -382,12 +382,9 @@ describe('on-device forecast', () => {
     expect(screen.getByTestId('forecast-telegram').textContent).toContain('coin.pro.forecastTelegram');
   });
 
-  /*
-   * The card's modern anatomy is a contract, not just decoration: the ready
-   * badge is the ONLY ambient (fadable) state, and the small retry/delete
-   * actions keep a NAME when CSS drops their visible label in landscape.
-   */
-  it('the ready card is ambient and its retry/delete actions are small, named pills', async () => {
+  /* The card's modern anatomy is a contract, not just decoration: compact
+     retry/delete actions keep accessible names in every layout. */
+  it('the ready card has small, named retry/delete pills', async () => {
     mount();
     fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
     const badge = await screen.findByTestId('forecast-badge');
@@ -429,61 +426,89 @@ describe('on-device forecast', () => {
     expect(error.classList.contains('pc-fc--ambient')).toBe(false);
     expect(screen.getByTestId('forecast-retry').getAttribute('aria-label')).toBe('coin.pro.forecastRetry');
   });
+
+  it('rotation to short landscape really turns forecast off and removes every AI control', async () => {
+    const originalMatchMedia = window.matchMedia;
+    const landscapeListeners = new Set();
+    let landscape = false;
+    window.matchMedia = vi.fn((query) => ({
+      media: query,
+      get matches() { return query.includes('landscape') ? landscape : true; },
+      addEventListener: (_type, listener) => { if (query.includes('landscape')) landscapeListeners.add(listener); },
+      removeEventListener: (_type, listener) => { if (query.includes('landscape')) landscapeListeners.delete(listener); }
+    }));
+    try {
+      mount();
+      openTerminal();
+      fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
+      await screen.findByTestId('forecast-badge');
+      client.abortForecast.mockClear();
+
+      await act(async () => {
+        landscape = true;
+        landscapeListeners.forEach((listener) => listener({ matches: true }));
+      });
+
+      await waitFor(() => expect(screen.queryByTestId('forecast-badge')).toBeNull());
+      expect(screen.queryByTestId('forecast-toggle')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'coin.pro.forecast' })).toBeNull();
+      expect(screen.queryByLabelText('coin.pro.forecastHorizon')).toBeNull();
+      expect(client.abortForecast).toHaveBeenCalled();
+
+      await act(async () => {
+        landscape = false;
+        landscapeListeners.forEach((listener) => listener({ matches: false }));
+      });
+      const restored = await screen.findByRole('button', { name: 'coin.pro.forecast' });
+      expect(restored.getAttribute('aria-pressed')).toBe('false');
+      expect(screen.queryByTestId('forecast-badge')).toBeNull();
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
 });
 
 /*
- * The landscape HUD is CSS, so these are stylesheet pins: the card leaves the
- * flow, keeps a measured gap above the toolbar, fades ONLY when it is a
- * result, and lets chart gestures pass through. A future "cleanup" that moves
- * the card back into the flow reintroduces exactly the overlap the report was
- * about, and jsdom would never notice — these do.
+ * Short landscape is both a React and a CSS contract. The behavioural test
+ * above proves that rotation aborts the feature; these pins prevent a future
+ * stylesheet from reintroducing an absolute/faded card over the toolbar.
  */
-describe('forecast card — landscape HUD contract', () => {
+describe('forecast — short-landscape disabled contract', () => {
   const css = readFileSync(join(process.cwd(), 'src/styles/pro-chart.css'), 'utf8');
+  const source = readFileSync(join(process.cwd(), 'src/components/ProChart/TokenChart.jsx'), 'utf8');
   const cssWithoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
-
   const landBlock = (() => {
     const at = css.indexOf('@media (orientation: landscape) and (max-height: 640px)');
     return at === -1 ? '' : css.slice(at, css.indexOf('\n}\n', at) + 3);
   })();
 
-  it('has a short-landscape HUD block', () => {
-    expect(landBlock.length).toBeGreaterThan(400);
+  it('uses the same media query in React and CSS', () => {
+    expect(landBlock.length).toBeGreaterThan(200);
+    expect(source).toContain("window.matchMedia('(orientation: landscape) and (max-height: 640px)')");
+    expect(source).toContain('const forecastLandscapeDisabled = expanded && shortLandscape;');
   });
 
-  it('takes the card out of the flow with an explicit gap above the toolbar', () => {
-    expect(/\.pc-fs \.pc-fs-main > \.pc-fc \{[\s\S]*?position: absolute/.test(landBlock)).toBe(true);
-    expect(/inset-block-end: 26px/.test(landBlock)).toBe(true);
-    expect(/max-width: min\(46vw, 400px\)/.test(landBlock)).toBe(true);
+  it('never positions a forecast HUD over the chart controls', () => {
+    expect(landBlock).not.toMatch(/position:\s*absolute/);
+    expect(landBlock).not.toMatch(/inset-block-end/);
+    expect(landBlock).toMatch(/\.pc-toolgroup--forecast,[\s\S]*?\.pc-fs-main > \.pc-fc \{ display: none/);
   });
 
-  it('fades only the ambient result and keeps it click-through', () => {
-    expect(/\.pc-fc--ambient \{\s*opacity: \.55;\s*pointer-events: none/.test(landBlock)).toBe(true);
-    expect(/\.pc-fc--ambient \.pc-fc-btn \{ pointer-events: auto/.test(landBlock)).toBe(true);
-    expect(/:focus-within \{ opacity: 1/.test(landBlock)).toBe(true);
+  it('removes projected candles and active work rather than merely hiding the card', () => {
+    expect(source).toContain('if (forecastLandscapeDisabled) forecastPanel = null;');
+    expect(source).toMatch(/if \(!forecastLandscapeDisabled \|\| !forecastOn\) return;[\s\S]*?stopForecastWork\(\);[\s\S]*?setForecastOn\(false\);[\s\S]*?setForecastResult\(null\);/);
+    expect(source).toMatch(/const forecast = !forecastLandscapeDisabled && forecastOn/);
   });
 
-  it('shrinks retry/delete to icon buttons and pins the HUD to a physical corner', () => {
-    expect(/width: 26px/.test(landBlock)).toBe(true);
-    expect(/\.pc-fs \.pc-fc-btn-label \{ display: none/.test(landBlock)).toBe(true);
-    /* dir="auto" on the card would flip logical inline insets: physical left
-       keeps the card away from the price axis in RTL AND LTR. */
-    expect(/left: max\(12px, env\(safe-area-inset-left/.test(landBlock)).toBe(true);
-    expect(/dir="auto"/.test(landBlock)).toBe(true);
+  it('restores the control in portrait, switched off for an explicit opt-in', () => {
+    expect(source).toContain('{!forecastLandscapeDisabled ? <div className="pc-toolgroup pc-toolgroup--forecast">');
+    expect(source).not.toContain('setForecastOn(true);\n    setForecastResult(null);');
   });
 
-  it('adds real air between the AI controls and the other chart buttons', () => {
-    expect(/\.pc-fs \.pc-toolgroup--actions \{[\s\S]*?margin-inline-start: 12px/.test(landBlock)).toBe(true);
-  });
-
-  it('never blurs the live canvas and honours contrast + reduced motion', () => {
+  it('keeps the live canvas blur-free and the small actions touch-friendly elsewhere', () => {
     expect(/backdrop-filter/.test(cssWithoutComments)).toBe(false);
-    expect(/@media \(prefers-contrast: more\) and \(orientation: landscape\)/.test(css)).toBe(true);
-    expect(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.pc-fs \.pc-fs-main > \.pc-fc \{ transition: none/.test(css)).toBe(true);
-  });
-
-  it('keeps the small pill small while still enlarging the touch hit area', () => {
     expect(/\.pc-fc-btn \{[\s\S]*?min-height: 28px/.test(css)).toBe(true);
     expect(/@media \(pointer: coarse\)[\s\S]*?\.pc-fc-btn::after/.test(css)).toBe(true);
+    expect(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.pc-fs \.pc-fs-main > \.pc-fc \{ transition: none/.test(css)).toBe(true);
   });
 });
