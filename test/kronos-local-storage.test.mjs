@@ -29,7 +29,7 @@ const fakeCaches = {
 
 globalThis.caches = fakeCaches;
 
-const { downloadModel, cachedModelState, readModelFile, deleteModel, fetchManifest, sha256Hex, KronosStorageError }
+const { downloadModel, cachedModelState, readModelFile, deleteModel, fetchManifest, sha256Hex, KronosStorageError, modelCacheKey }
   = await import('../src/lib/kronosLocal/storage.js');
 const { cacheName } = await import('../src/lib/kronosLocal/config.js');
 
@@ -237,4 +237,113 @@ test('when no host answers, the error names the last attempt honestly', async ()
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+/*
+ * Cache Storage keys are URLs. A relative name resolves against the caller's
+ * base — the page for the downloader, the worker script for the engine — so
+ * the two sides would never see the same entry. The stable key must not.
+ */
+test('a relative cache name differs for the page and the worker; modelCacheKey does not', () => {
+  const relative = 'tokenizer-encode.onnx';
+  const page = new URL(relative, 'https://fbtswap.ir/markets');
+  const worker = new URL(relative, 'https://fbtswap.ir/assets/kronos.worker.js');
+  assert.notEqual(page.href, worker.href, 'a relative name resolves differently for the page and the worker');
+  assert.equal(page.origin, worker.origin);
+  assert.equal(modelCacheKey(relative, page.origin), modelCacheKey(relative, worker.origin));
+  assert.equal(modelCacheKey(relative, page.origin), 'https://fbtswap.ir/__fbt_kronos__/tokenizer-encode.onnx');
+});
+
+test('a file stored under the page URL is copied onto the stable key', async () => {
+  const manifest = await manifestFor({ 'a.onnx': 'one' });
+  memory.clear();
+  const pageUrl = 'https://fbtswap.ir/coin/btc';
+  const legacy = new URL('a.onnx', pageUrl).href;
+  const { bytes } = body('one');
+  memory.set(legacy, new Response(bytes));
+  const buffer = await readModelFile(manifest, 'a.onnx', { pageUrl });
+  assert.equal(new TextDecoder().decode(buffer), 'one');
+  const stable = modelCacheKey('a.onnx');
+  assert.notEqual(stable, legacy);
+  assert.ok(memory.has(stable), 'the legacy hit is copied so the worker can read it');
+});
+
+test('a dead file host falls through before the graphs are given up', async () => {
+  const files = { 'kronos-decode.onnx': 'graph-one' };
+  const manifest = await manifestFor(files);
+  const calls = [];
+  const hadWindow = 'window' in globalThis;
+  globalThis.window = { location: { origin: 'https://app.example' } };
+  globalThis.fetch = async (url) => {
+    const href = String(url);
+    calls.push(href);
+    if (href.startsWith('https://dead.example/')) throw new TypeError('failed to fetch');
+    if (href.startsWith('https://app.example/kronos-local/')) return body('graph-one').response();
+    return new Response('nope', { status: 404 });
+  };
+  memory.clear();
+  try {
+    const result = await downloadModel(manifest, { base: 'https://dead.example/kronos/' });
+    assert.equal(result.verified, true);
+    assert.ok(calls.some((u) => u.startsWith('https://dead.example/')));
+    assert.ok(calls.some((u) => u.startsWith('https://app.example/kronos-local/kronos-decode.onnx')));
+    const buffer = await readModelFile(manifest, 'kronos-decode.onnx');
+    assert.equal(new TextDecoder().decode(buffer), 'graph-one');
+  } finally {
+    if (!hadWindow) delete globalThis.window;
+  }
+});
+
+test('bytes above 1 MB are assembled from 206 ranges', async () => {
+  const size = 1024 * 1024 + 7;
+  const bytes = new Uint8Array(size);
+  for (let i = 0; i < size; i += 1) bytes[i] = i % 251;
+  const sha = await sha256Hex(bytes.buffer);
+  const manifest = {
+    schema: 'fbt.kronos.browser.v1',
+    model: { id: 'NeoQuasar/Kronos-mini' },
+    files: [{ name: 'big.onnx', bytes: size, sha256: sha }],
+    totalBytes: size
+  };
+  const ranges = [];
+  globalThis.fetch = async (_url, init) => {
+    const range = init?.headers?.Range || '';
+    ranges.push(range);
+    const match = /bytes=(\d+)-(\d+)/.exec(range);
+    if (!match) return new Response(bytes, { status: 200 });
+    const start = Number(match[1]);
+    const end = Number(match[2]);
+    return new Response(bytes.subarray(start, end + 1), {
+      status: 206,
+      headers: { 'content-range': `bytes ${start}-${end}/${size}` }
+    });
+  };
+  memory.clear();
+  const result = await downloadModel(manifest, { base: 'https://range.example/' });
+  assert.equal(result.verified, true);
+  assert.ok(ranges.every((range) => range.startsWith('bytes=')), 'large files ask for ranges');
+  assert.ok(ranges.length >= 2, 'the body is stitched from more than one range');
+  const back = new Uint8Array(await readModelFile(manifest, 'big.onnx'));
+  assert.equal(back.byteLength, size);
+  assert.equal(back[0], bytes[0]);
+  assert.equal(back[size - 1], bytes[size - 1]);
+  assert.equal(back[1024 * 1024], bytes[1024 * 1024]);
+});
+
+test('an HTML 200 is not a model file, so the next host is tried', async () => {
+  const files = { 'kronos-decode.onnx': 'graph-one' };
+  const manifest = await manifestFor(files);
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('spa.example')) {
+      return new Response('<!doctype html><html><body>missing</body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' }
+      });
+    }
+    return body('graph-one').response();
+  };
+  memory.clear();
+  const result = await downloadModel(manifest, { base: 'https://spa.example/' });
+  assert.equal(result.verified, true);
+  assert.equal(new TextDecoder().decode(await readModelFile(manifest, 'kronos-decode.onnx')), 'graph-one');
 });

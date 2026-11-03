@@ -273,8 +273,16 @@
  * this is the same stale-shell mechanism every entry above describes. Renaming
  * the cache evicts it on the site and on an in-place APK update alike, which
  * matters here more than usual: the old behaviour is a gesture the user has
- * already complained about twice. */
-const SHELL = 'fbt-shell-v32';
+ * already complained about twice.
+ *
+ * v32 -> v33 (2026-11-03): the on-device forecast download. The shell bundle
+ * is what fetches the Kronos graphs and what reports «دانلود کامل نشد» when
+ * that fetch dies. A device pinned to the v32 shell keeps the broken host
+ * fallback and the relative cache keys. Renaming evicts that shell. The model
+ * buckets themselves (`fbt-kronos-*`) are NOT part of the shell and must
+ * survive this eviction — wiping a 33 MB verified download on every shell
+ * bump would make the next forecast look like a failed download. */
+const SHELL = 'fbt-shell-v33';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────
@@ -311,7 +319,9 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== SHELL).map((k) => caches.delete(k))))
+    caches.keys().then((keys) => Promise.all(
+      keys.filter((k) => k !== SHELL && !String(k).startsWith('fbt-kronos-')).map((k) => caches.delete(k))
+    ))
   );
   self.clients.claim();
 });
@@ -323,6 +333,10 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   // Never serve market data or AI answers from cache.
   if (url.pathname.startsWith('/api/')) return;
+  /* Model bytes are not the app shell. A navigation-only handler already
+     ignores these, and this guard keeps a future fetch interceptor from
+     answering /kronos-local/ or the stable cache-key path with index.html. */
+  if (url.pathname.includes('/kronos-local/') || url.pathname.includes('/__fbt_kronos__/')) return;
   if (request.mode !== 'navigate') return;
 
   /*

@@ -156,6 +156,15 @@ const FORECAST_ERROR_MESSAGES = {
   FORECAST_FAILED: 'coin.pro.forecastUnavailable'
 };
 
+/** HTTP failures from a dead host use the existing download sentence — no new key. */
+function forecastErrorMessageKey(code) {
+  if (FORECAST_ERROR_MESSAGES[code]) return FORECAST_ERROR_MESSAGES[code];
+  if (typeof code === 'string' && (code.startsWith('MODEL_FILE_HTTP_') || code.startsWith('MANIFEST_HTTP_'))) {
+    return FORECAST_ERROR_MESSAGES.MODEL_FILE_UNREACHABLE;
+  }
+  return 'coin.pro.forecastUnavailable';
+}
+
 /**
  * Read the persisted preferences, DEFENSIVELY.
  *
@@ -927,7 +936,7 @@ export default function TokenChart({
    * — nothing here is a spinner that never resolves, and nothing is drawn
    * until a real inference has produced validated bars.
    */
-  const forecastErrorKey = FORECAST_ERROR_MESSAGES[forecastError] || 'coin.pro.forecastUnavailable';
+  const forecastErrorKey = forecastErrorMessageKey(forecastError);
   const forecastLast = forecast?.candles?.[forecast.candles.length - 1];
   const forecastChange = forecastLast && lastBar?.close > 0 ? (forecastLast.c / lastBar.close - 1) * 100 : null;
   const estimateTotal = forecastEstimate?.totalBytes ?? 0;

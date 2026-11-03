@@ -9,7 +9,7 @@
  *
  * Protocol (all messages are postMessage objects):
  *   → {type:'probe', id}
- *   → {type:'init', id, manifest}
+ *   → {type:'init', id, manifest, pageUrl}
  *   → {type:'predict', id, candles, horizon, temperature, topP, topK, seed}
  *   → {type:'cancel', id}
  *   → {type:'dispose', id}
@@ -33,12 +33,14 @@ let backend = 'none';
 let adapterInfo = null;
 let currentJob = null;
 let cancelled = false;
+/** Page URL the downloader resolved relative cache keys against. */
+let pageUrl = '';
 
 self.onmessage = (event) => {
   const msg = event.data || {};
   const { id, type } = msg;
   if (type === 'probe') probe(id).catch((err) => fail(id, err));
-  else if (type === 'init') init(id, msg.manifest).catch((err) => fail(id, err));
+  else if (type === 'init') init(id, msg).catch((err) => fail(id, err));
   else if (type === 'predict') predict(id, msg).catch((err) => fail(id, err));
   else if (type === 'cancel') cancel(id);
   else if (type === 'dispose') dispose(id);
@@ -64,7 +66,9 @@ async function gpuInfo() {
 }
 
 /** Load the ONNX runtime + build sessions from the device cache. */
-async function init(id, manifest) {
+async function init(id, msg) {
+  const manifest = msg?.manifest || msg;
+  if (msg?.pageUrl) pageUrl = String(msg.pageUrl);
   if (engine && backend !== 'none') {
     post({ type: 'ready', id, backend, adapter: adapterInfo, runtimeBytes: 0 });
     return;
@@ -136,7 +140,7 @@ async function loadOrt(ep) {
 }
 
 async function buildSessions(manifest, options) {
-  const bytes = async (name) => new Uint8Array(await readModelFile(manifest, name));
+  const bytes = async (name) => new Uint8Array(await readModelFile(manifest, name, { pageUrl }));
   const [encode, decode, transformer, s2head] = await Promise.all([
     bytes(manifest.tokenizer.encode),
     bytes(manifest.tokenizer.decode),
