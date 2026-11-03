@@ -117,7 +117,15 @@ function withSlash(url) {
 export function cacheName(manifest) {
   const id = manifest?.model?.id || 'unknown';
   const schema = manifest?.schema || 'v0';
-  return `fbt-kronos-${schema}-${id.split('/').pop()}`;
+  /* Keep immutable model revisions in separate buckets. The schema/model name
+     alone is not a version: a refreshed export can have the same two values,
+     and a previous (or partially corrupt) cache must not satisfy its new
+     manifest. The manifest's published SHA-256 values are the cache identity;
+     readModelFile still verifies the full digest before inference. */
+  const revision = Array.isArray(manifest?.files)
+    ? manifest.files.map((file) => String(file?.sha256 || 'missing').slice(0, 12)).join('-')
+    : 'unversioned';
+  return `fbt-kronos-${schema}-${id.split('/').pop()}-${revision}`;
 }
 
 /** Result cache bucket (IndexedDB via the app's storage helper). */

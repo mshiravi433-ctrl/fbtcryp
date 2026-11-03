@@ -70,47 +70,60 @@ async function init(id, manifest) {
     return;
   }
   const gpu = await gpuInfo();
-  const loaded = gpu.ok ? await loadOrt('webgpu') : await loadOrt('wasm');
-  ort = loaded.ort;
-  // MUST precede every InferenceSession.create: ORT requests its engine glue by
-  // name relative to this folder (public/kronos-ort/). Unset, it asks /assets/
-  // for a file the build never emits → SESSION_FAILED. See config.js.
-  if (ORT_ASSET_PATH) ort.env.wasm.wasmPaths = ORT_ASSET_PATH;
-  // Threads need SharedArrayBuffer, which needs cross-origin isolation. Most
-  // deployments do not have it (and iOS Safari never does), so default to a
-  // single thread rather than failing at session creation.
-  ort.env.wasm.numThreads = isIsolated() ? Math.min(4, Math.max(1, (self.navigator?.hardwareConcurrency || 4) - 1)) : 1;
-  ort.env.wasm.simd = true;
-  ort.env.wasm.proxy = false;
-  ort.env.logLevel = 'error';
-
   const options = (ep) => ({ executionProviders: [ep], graphOptimizationLevel: 'all' });
-
+  let used = gpu.ok ? 'webgpu' : 'wasm';
   let sessions;
-  let used = loaded.ep;
+  let primaryError = null;
+
   try {
+    /* Include the dynamic import in the fallback boundary. A device can expose
+       an adapter and still fail to load the WebGPU runtime chunk (policy, CSP,
+       stale deployment cache); that must fall back to WASM just like a failed
+       WebGPU session, not abort initialization before the fallback is tried. */
+    ort = (await loadOrt(used)).ort;
+    configureOrt(ort);
     sessions = await buildSessions(manifest, options(used));
     backend = used;
   } catch (error) {
+    if (isModelStorageError(error)) throw error;
     if (used !== 'wasm') {
-      // A WebGPU adapter that cannot build these graphs is a real device
-      // limitation, not a crash: retry on the CPU engine before giving up.
-      const fallback = await loadOrt('wasm');
-      ort = fallback.ort;
-      if (ORT_ASSET_PATH) ort.env.wasm.wasmPaths = ORT_ASSET_PATH;
-      ort.env.wasm.numThreads = isIsolated() ? Math.min(4, Math.max(1, (self.navigator?.hardwareConcurrency || 4) - 1)) : 1;
-      ort.env.wasm.proxy = false;
-      sessions = await buildSessions(manifest, options('wasm'));
-      backend = 'wasm';
-      used = 'wasm';
+      primaryError = error;
+      try {
+        used = 'wasm';
+        ort = (await loadOrt('wasm')).ort;
+        configureOrt(ort);
+        sessions = await buildSessions(manifest, options('wasm'));
+        backend = 'wasm';
+      } catch (fallbackError) {
+        if (isModelStorageError(fallbackError)) throw fallbackError;
+        throw new EngineError('SESSION_FAILED', [primaryError, fallbackError]
+          .map((cause) => String(cause?.message || cause || ''))
+          .filter(Boolean).join(' | ').slice(0, 200));
+      }
     } else {
       throw new EngineError('SESSION_FAILED', String(error?.message || ''));
     }
   }
   sessions.backend = backend;
   engine = new LocalKronos(ort, sessions, manifest);
-  adapterInfo = gpu.ok ? gpu.adapter : null;
+  adapterInfo = backend === 'webgpu' ? gpu.adapter : null;
   post({ type: 'ready', id, backend, adapter: adapterInfo, runtimeBytes: RUNTIME_BYTES[backend] || 0 });
+}
+
+function configureOrt(runtime) {
+  /* MUST precede every InferenceSession.create: ORT requests its engine glue by
+     name relative to this folder (public/kronos-ort/). If unset, it asks
+     /assets/ for a file the build never emits. */
+  if (ORT_ASSET_PATH) runtime.env.wasm.wasmPaths = ORT_ASSET_PATH;
+  /* Threads need SharedArrayBuffer, which needs cross-origin isolation. Most
+     deployments do not have it (and iOS Safari never does), so default to a
+     single thread rather than failing at session creation. */
+  runtime.env.wasm.numThreads = isIsolated()
+    ? Math.min(4, Math.max(1, (self.navigator?.hardwareConcurrency || 4) - 1))
+    : 1;
+  runtime.env.wasm.simd = true;
+  runtime.env.wasm.proxy = false;
+  runtime.env.logLevel = 'error';
 }
 
 async function loadOrt(ep) {
@@ -203,6 +216,11 @@ function fail(id, error) {
     code: error?.code || 'WORKER_ERROR',
     detail: String(error?.message || error || '').slice(0, 200)
   });
+}
+
+function isModelStorageError(error) {
+  return ['MODEL_FILE_CORRUPT', 'MODEL_FILE_TRUNCATED', 'MODEL_NOT_DOWNLOADED', 'CACHE_UNAVAILABLE']
+    .includes(error?.code);
 }
 
 function isIsolated() {

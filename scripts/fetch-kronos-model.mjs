@@ -53,8 +53,13 @@ const argOf = (name, fallback) => {
 const REPO = argOf('--repo', process.env.KRONOS_MODEL_REPO || 'mshiravi433-ctrl/fbtcryp');
 const REF = argOf('--ref', process.env.KRONOS_MODEL_REF || 'kronos-model');
 const checkOnly = process.argv.includes('--check');
+const required = process.argv.includes('--required') || process.env.KRONOS_MODEL_REQUIRED === '1';
 
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
+const failOrSkip = (message) => {
+  say(message);
+  process.exit(required ? 1 : 0);
+};
 const say = (msg) => console.log(`[kronos-model] ${msg}`);
 
 /** Read the manifest from the published branch. Returns null if unreachable. */
@@ -104,15 +109,13 @@ function localState(manifest) {
 
 const manifest = readPublishedManifest();
 if (!manifest) {
-  say(checkOnly
+  failOrSkip(checkOnly
     ? 'check: cannot confirm the published model — leaving whatever is on disk untouched.'
     : 'skipping: the published model is unreachable, so nothing is vendored. ' +
       'Set VITE_KRONOS_MODEL_BASE_URL to a host that serves it, or run this with network access.');
-  process.exit(0);
 }
 if (manifest.schema !== 'fbt.kronos.browser.v1' || !Array.isArray(manifest.files)) {
-  say(`refusing: schema ${manifest.schema} is not one this app can run`);
-  process.exit(0);
+  failOrSkip(`refusing: schema ${manifest.schema} is not one this app can run`);
 }
 
 const state = localState(manifest);
@@ -131,20 +134,17 @@ const written = [];
 for (const file of manifest.files) {
   const buf = readPublishedFile(file.name);
   if (!buf) {
-    say('aborting: a file could not be read. Nothing is left half-written.');
     for (const w of written) rmSync(join(OUT, w), { force: true });
-    process.exit(0);
+    failOrSkip('aborting: a file could not be read. Nothing is left half-written.');
   }
   if (buf.byteLength !== file.bytes) {
-    say(`aborting: ${file.name} is ${buf.byteLength} bytes, the manifest says ${file.bytes}`);
     for (const w of written) rmSync(join(OUT, w), { force: true });
-    process.exit(0);
+    failOrSkip(`aborting: ${file.name} is ${buf.byteLength} bytes, the manifest says ${file.bytes}`);
   }
   const digest = sha256(buf);
   if (digest !== file.sha256) {
-    say(`aborting: ${file.name} hashes to ${digest.slice(0, 12)}…, the manifest says ${String(file.sha256).slice(0, 12)}…`);
     for (const w of written) rmSync(join(OUT, w), { force: true });
-    process.exit(0);
+    failOrSkip(`aborting: ${file.name} hashes to ${digest.slice(0, 12)}…, the manifest says ${String(file.sha256).slice(0, 12)}…`);
   }
   writeFileSync(join(OUT, file.name), buf);
   written.push(file.name);

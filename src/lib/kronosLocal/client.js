@@ -130,7 +130,29 @@ export async function prepareModel({ onProgress = () => {}, onPhase = () => {}, 
     });
   }
   onPhase('engine');
-  const ready = await ensureWorker(manifest, signal);
+  let ready;
+  try {
+    ready = await ensureWorker(manifest, signal);
+  } catch (error) {
+    /* A complete-looking Cache Storage bucket can still contain a truncated
+       entry after browser eviction or interrupted writes. The worker verifies
+       every SHA before session creation; if it catches a bad/missing model
+       entry, repair that cache once instead of giving the user a Retry button
+       that can only repeat the same failure forever. Runtime/session errors
+       are deliberately not treated as model corruption: re-downloading 33 MB
+       cannot fix a missing ORT engine or a device backend limitation. */
+    if (!['MODEL_FILE_CORRUPT', 'MODEL_FILE_TRUNCATED', 'MODEL_NOT_DOWNLOADED'].includes(error?.code)) throw error;
+    terminateWorker();
+    await deleteModel(manifest);
+    onPhase('download');
+    await downloadModel(manifest, {
+      signal,
+      onProgress: (p) => onProgress({ ...p, percent: p.total ? Math.round((p.loaded / p.total) * 100) : 0 })
+    });
+    if (signal?.aborted) throw new KronosStorageError('WORKER_CANCELLED');
+    onPhase('engine');
+    ready = await ensureWorker(manifest, signal);
+  }
   backend = ready.backend;
   adapter = ready.adapter || null;
   return { manifest, backend, adapter, bytes: manifest.totalBytes };
