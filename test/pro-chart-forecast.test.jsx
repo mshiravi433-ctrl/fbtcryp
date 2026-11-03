@@ -338,6 +338,37 @@ describe('on-device forecast', () => {
     expect(client.abortForecast).toHaveBeenCalled();
   });
 
+  it('an enveloped worker reply still paints the badge instead of crashing the page', async () => {
+    /* THE reported crash («این صفحه به مشکل خورد» right after the download
+       finished, then again on every re-entry): the worker posts
+       `{type:'result', id, result}` and the client used to resolve the whole
+       envelope, so `forecast.candles` was undefined and rendering the badge
+       threw on `forecast.candles.length`. The client unwraps now; the chart
+       must ALSO survive the envelope on its own. */
+    client.runForecast.mockResolvedValue({ type: 'result', id: 'job-1', result: forecastResult(12) });
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
+
+    const badge = await screen.findByTestId('forecast-badge');
+    expect(badge.textContent).toContain('Kronos-mini');
+    expect(screen.getByTestId('forecast-meta').textContent).toContain('WEBGPU');
+    /* The page around the panel is alive: the toggle still works. */
+    expect(screen.getByRole('button', { name: 'coin.pro.forecast' })).toBeTruthy();
+  });
+
+  it('a reply with no candles anywhere becomes an error panel, never a crash', async () => {
+    client.runForecast.mockResolvedValue({ type: 'result', id: 'job-1', result: { provider: 'kronos-local' } });
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
+
+    const box = await screen.findByTestId('forecast-error');
+    expect(box.textContent).toContain('coin.pro.forecastInvalidOutput');
+    expect(screen.getByTestId('forecast-retry')).toBeTruthy();
+    expect(screen.queryByTestId('forecast-badge')).toBeNull();
+    /* The chart itself never went down with the forecast. */
+    expect(screen.getByRole('button', { name: 'coin.pro.forecast' })).toBeTruthy();
+  });
+
   it('warns a Telegram in-app browser that it is limited', async () => {
     client.deviceSupport.mockReturnValue({
       ok: true, reasons: [], telegram: true, ios: true, memory: 4, webgpuLikely: false
