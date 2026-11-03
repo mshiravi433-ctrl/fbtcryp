@@ -31,6 +31,7 @@ globalThis.caches = fakeCaches;
 
 const { downloadModel, cachedModelState, readModelFile, deleteModel, fetchManifest, sha256Hex, KronosStorageError }
   = await import('../src/lib/kronosLocal/storage.js');
+const { cacheName } = await import('../src/lib/kronosLocal/config.js');
 
 const BASE = 'https://models.example/';
 
@@ -53,6 +54,20 @@ async function manifestFor(files) {
     totalBytes: out.reduce((sum, f) => sum + f.bytes, 0)
   };
 }
+
+test('model cache identity changes when any published file digest changes', () => {
+  const base = {
+    schema: 'fbt.kronos.browser.v1',
+    model: { id: 'NeoQuasar/Kronos-mini' },
+    files: [{ name: 'graph.onnx', bytes: 3, sha256: 'a'.repeat(64) }]
+  };
+  const nextRevision = {
+    ...base,
+    files: [{ ...base.files[0], sha256: 'b'.repeat(64) }]
+  };
+  assert.notEqual(cacheName(base), cacheName(nextRevision));
+  assert.equal(cacheName(base), cacheName({ ...base }));
+});
 
 function serve(map) {
   globalThis.fetch = async (url) => {
