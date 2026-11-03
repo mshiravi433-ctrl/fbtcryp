@@ -101,11 +101,25 @@ export function modelBaseUrl() {
   return sameOriginBaseUrl();
 }
 
+/**
+ * Published graphs on the orphan branch, as a last resort when the configured
+ * host is dead and this deployment did not vendor `public/kronos-local/`.
+ * GitHub Pages at `mshiravi433-ctrl.github.io/fbtcryp` is not a site, so a
+ * build that baked that URL cannot be the only place we look.
+ * raw.githubusercontent.com sends CORS `*`. jsDelivr is the same bytes.
+ */
+export const RAW_MODEL_BASE = 'https://raw.githubusercontent.com/mshiravi433-ctrl/fbtcryp/kronos-model/';
+export const CDN_MODEL_BASE = 'https://cdn.jsdelivr.net/gh/mshiravi433-ctrl/fbtcryp@kronos-model/';
+
 /** Every place worth trying, in order, without duplicates. */
 export function modelBaseCandidates() {
   const primary = modelBaseUrl();
   const own = sameOriginBaseUrl();
-  return [primary, own].filter((url, i, all) => Boolean(url) && all.indexOf(url) === i);
+  const out = [];
+  for (const url of [primary, own, RAW_MODEL_BASE, CDN_MODEL_BASE]) {
+    if (url && !out.includes(url)) out.push(url);
+  }
+  return out;
 }
 
 function withSlash(url) {

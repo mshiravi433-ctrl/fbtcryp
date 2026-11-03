@@ -31,7 +31,7 @@ import {
 } from './config.js';
 import {
   KronosStorageError, cachedModelState, deleteModel, downloadModel,
-  fetchManifest, rememberedManifest, storageEstimate
+  fetchManifest, hasResolvedModelHost, rememberedManifest, storageEstimate
 } from './storage.js';
 
 let worker = null;
@@ -123,6 +123,18 @@ export async function prepareModel({ onProgress = () => {}, onPhase = () => {}, 
 
   const before = await cachedModelState(manifest);
   if (!before.downloaded) {
+    /* A remembered manifest skips the network, and `resolvedHost` does not
+       survive a reload. Probe the 1 KB manifest — not the 33 MB graphs —
+       before pulling files from a host that may have been dead since the
+       last visit (GitHub Pages 404, a CORS-blocked CDN). */
+    if (!hasResolvedModelHost()) {
+      try {
+        const live = await fetchManifest({ signal });
+        if (live?.schema === 'fbt.kronos.browser.v1') manifest = live;
+      } catch (error) {
+        if (error?.name === 'AbortError') throw error;
+      }
+    }
     onPhase('download');
     await downloadModel(manifest, {
       signal,
@@ -263,7 +275,10 @@ function ensureWorker(nextManifest, signal) {
    */
   worker = new Worker(new URL('./kronos.worker.js', import.meta.url), { type: 'module', name: 'kronos-local' });
   attachWorkerEvents(worker);
-  workerReady = callWorker({ type: 'init', manifest: nextManifest }, 120000, { signal })
+  const pageUrl = (() => {
+    try { return globalThis.location?.href || globalThis.window?.location?.href || ''; } catch { return ''; }
+  })();
+  workerReady = callWorker({ type: 'init', manifest: nextManifest, pageUrl }, 120000, { signal })
     .then((msg) => ({ backend: msg.backend, adapter: msg.adapter || null }))
     .catch((error) => {
       terminateWorker();

@@ -5,8 +5,11 @@ numerics are verified against the reference in Node (worst relative deviation
 1.54e-07 over a 220-bar window and a 12-bar horizon). The browser path has
 NOT been observed running in a real browser — see
 [section 2](#2-what-was-actually-verified-here-and-what-was-not). The ~33 MB of
-ONNX files live on the `kronos-model` branch and are served from GitHub Pages;
-see [Publishing the model](#publishing-the-model).**
+ONNX files live on the `kronos-model` branch. The browser downloads them from
+the deployment's own `/kronos-local/` first (vendored at build time). GitHub
+Pages at `mshiravi433-ctrl.github.io/fbtcryp` is not a published site; a build
+that still points `VITE_KRONOS_MODEL_BASE_URL` there falls through. See
+[Publishing the model](#publishing-the-model).**
 
 > **2026-11-02 incident.** The first release of this feature failed for every
 > user with «موتور محلی روی این دستگاه بالا نیامد» (`SESSION_FAILED`) *after*
@@ -203,7 +206,11 @@ The application repository does **not** carry the weights, and must not: 33 MB i
 `main`'s history would be paid for by every clone and is not part of the app.
 `public/kronos-local/` is gitignored. The files are published instead on an
 **orphan branch of this same repository**, `kronos-model`, whose tree *is* the
-served directory. GitHub Pages serves that branch, free, on the public repo.
+served directory. The build copies that branch into `public/kronos-local/`
+(`scripts/fetch-kronos-model.mjs`) so the live site serves the graphs
+same-origin. GitHub Pages was the documented CDN and is not currently a site
+(`404 Site not found`); the browser therefore tries the configured host, then
+`/kronos-local/`, then `raw.githubusercontent.com` for the same branch.
 
 ```
 kronos-model (orphan, no parent commit)
