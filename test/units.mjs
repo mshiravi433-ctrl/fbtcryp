@@ -542,6 +542,8 @@ import {
 import { Interface, Wallet, hexlify, randomBytes } from 'ethers';
 import runKeeperOrders from './keeper-orders-units.mjs';
 import runPerpAutoOrders from './perp-auto-orders-units.mjs';
+import runHyperliquidReadonly from './hyperliquid-readonly-units.mjs';
+import runHyperliquidCaps from './hyperliquid-caps-units.mjs';
 
 export default async function run() {
   const rows = [];
@@ -10146,6 +10148,8 @@ export default async function run() {
 
   rows.push(...(await runKeeperOrders()));
   rows.push(...(await runPerpAutoOrders()));
+  rows.push(...(await runHyperliquidReadonly()));
+  rows.push(...(await runHyperliquidCaps()));
 
   return rows;
 }

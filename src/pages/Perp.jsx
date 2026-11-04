@@ -48,6 +48,7 @@ const LazyDydx = SPECULATION_ENABLED ? lazyRetry(() => import('./Dydx')) : null;
  * the store builds ship neither leveraged tab.
  */
 const LazyOnchain = SPECULATION_ENABLED ? lazyRetry(() => import('./FuturesOnchain')) : null;
+const LazyAiTrade = SPECULATION_ENABLED ? lazyRetry(() => import('../components/orders/AiTrade')) : null;
 /*
  * ─── THE HISTORY TAB IS GONE FROM THIS RAIL ─────────────────────────────────
  *   «تو فیوچرز تب تاریخچه معاملات را پاک کن چون بهم ریخته — هر تاریخچه را در
@@ -65,7 +66,7 @@ const LazyOnchain = SPECULATION_ENABLED ? lazyRetry(() => import('./FuturesOncha
  * whenever SPOT_TRADE_ENABLED is on, and it is NOT gated by SPECULATION: the
  * futures tabs below are the only ones that depend on that flag.
  */
-const TAB_LABEL_KEY = { spot: 'trade.spot', overview: 'perp.tab.perpetual', dydx: 'stocks.tab.dydx', onchain: 'perp.tab.onchain' };
+const TAB_LABEL_KEY = { spot: 'trade.spot', overview: 'perp.tab.perpetual', dydx: 'stocks.tab.dydx', onchain: 'perp.tab.onchain', aitrade: 'perp.tab.aitrade' };
 
 /**
  * One icon per venue, so the rail says what each tab IS instead of asking the
@@ -74,7 +75,7 @@ const TAB_LABEL_KEY = { spot: 'trade.spot', overview: 'perp.tab.perpetual', dydx
  *   dydx     → the activity of an external, client-signed venue
  *   onchain  → the shield, because that tab is the self-custodial one
  */
-const TAB_ICON = { spot: IconSwap, overview: IconTrend, dydx: IconActivity, onchain: IconShield };
+const TAB_ICON = { spot: IconSwap, overview: IconTrend, dydx: IconActivity, onchain: IconShield, aitrade: IconSparkle };
 
 /*
  * ─── THERE IS NO EXTERNAL VENUE ON THIS PAGE ANY MORE ─────────────────────
@@ -335,7 +336,7 @@ export default function Perp() {
    * rail, so the content does not jump when only one tab is left.
    */
   const FUTURES_TABS = SPECULATION_ENABLED
-    ? ['overview', 'dydx', 'onchain']
+    ? ['overview', 'dydx', 'onchain', 'aitrade']
     : [];
   const PERP_TABS = [...(SPOT_TRADE_ENABLED ? ['spot'] : []), ...FUTURES_TABS];
   const RAIL_TABS = PERP_TABS;
@@ -1011,6 +1012,10 @@ export default function Perp() {
       ) : perpTab === 'onchain' ? (
         <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
           {LazyOnchain && <LazyOnchain embedded />}
+        </Suspense>
+      ) : perpTab === 'aitrade' ? (
+        <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
+          {LazyAiTrade && <LazyAiTrade />}
         </Suspense>
       ) : (
         <div className="perp-modern">
