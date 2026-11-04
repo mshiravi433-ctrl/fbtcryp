@@ -76,6 +76,28 @@ export const AI_TRADE_COPY = Object.freeze({
       HL_BAD_TYPE: 'درخواست نامعتبر بود.'
     })
   },
+  markets: Object.freeze({
+    title: 'بازارهای مجاز',
+    hint: 'فقط بازارهایی نشان داده می‌شوند که حجم ۲۴ ساعته‌شان حداقل ۵ میلیون دلار است. هر سفارش هم نباید بیشتر از ۱٪ حجم ۲۴ ساعتهٔ همان بازار باشد. هر بازار سقف اهرم خودش را دارد.',
+    search: 'جست‌وجوی نماد',
+    top10: '۱۰ بازار پرحجم',
+    btcEth: 'فقط BTC و ETH',
+    clear: 'پاک کردن',
+    selected: 'انتخاب‌شده',
+    load: 'بارگذاری بازارها',
+    loading: 'در حال بارگذاری…',
+    empty: 'بازار نقدشونده‌ای با این جست‌وجو پیدا نشد.',
+    noneAllowed: 'هیچ‌کدام از بازارهای انتخابی حجم کافی ندارند.',
+    volume: 'حجم ۲۴ ساعته',
+    maxLev: 'اهرم تا',
+    errors: Object.freeze({
+      HL_NETWORK: 'بارگذاری بازارها ناموفق بود.',
+      HL_TIMEOUT: 'فهرست بازارها دیر رسید.',
+      HL_RATE_LIMITED: 'تعداد درخواست‌ها زیاد است. کمی صبر کن.',
+      HL_HTTP_ERROR: 'Hyperliquid خطا برگرداند.',
+      HL_BAD_RESPONSE: 'فهرست بازارها قابل‌خواندن نبود.'
+    })
+  }),
   limits: {
     title: 'سقف‌ها',
     total: 'سقف کل باز بودن (دلار)',
@@ -95,7 +117,8 @@ export const AI_TRADE_COPY = Object.freeze({
       HL_SETTINGS_EXPOSURE_BELOW_ORDER: 'سقف کل نمی‌تواند از سقف هر سفارش کمتر باشد.',
       HL_SETTINGS_LEVERAGE_OVER_SYSTEM_LIMIT: 'اهرم از سقف مجاز محصول بیشتر است.',
       HL_SETTINGS_LEVERAGE_NOT_INTEGER: 'اهرم باید عدد صحیح باشد.',
-      HL_SETTINGS_COIN_OUTSIDE_UNIVERSE: 'این بازار در نسخهٔ فعلی مجاز نیست.'
+      HL_SETTINGS_COIN_INVALID: 'نماد بازار معتبر نیست.',
+      HL_SETTINGS_TOO_MANY_COINS: 'بیشتر از ۴۰ بازار نمی‌شود انتخاب کرد.'
     })
   },
   ai: {
@@ -140,7 +163,7 @@ export const AI_TRADE_COPY = Object.freeze({
     expired: 'مهلت تمام شد؛ این پیشنهاد دیگر قابل تأیید نیست.',
     side: Object.freeze({ long: 'خرید (long)', short: 'فروش (short)' }),
     labels: Object.freeze({
-      notional: 'حجم', margin: 'وثیقه', leverage: 'اهرم', stop: 'حد ضرر تقریبی',
+      notional: 'حجم', margin: 'وثیقه', leverage: 'اهرم', marketMax: 'سقف اهرم بازار', stop: 'حد ضرر تقریبی',
       worst: 'بدترین زیان', rationale: 'دلیل تحلیلگر'
     }),
     blockedBy: 'این پیشنهاد الان قابل تأیید نیست:',
@@ -166,7 +189,11 @@ export const AI_TRADE_COPY = Object.freeze({
       HL_CAP_STOP_LOSS_MISSING: 'حد ضرر ندارد.',
       HL_CAP_STOP_LOSS_TOO_WIDE: 'حد ضرر از ۵٪ بیشتر است.',
       HL_CAP_STOP_LOSS_OVER_BUDGET: 'اگر حد ضرر بخورد، از سقف زیان امروز رد می‌شوی.',
-      HL_CAP_BAD_INPUT: 'اطلاعات حساب کامل نیست؛ اول حساب را به‌روز کن.'
+      HL_CAP_BAD_INPUT: 'اطلاعات حساب کامل نیست؛ اول حساب را به‌روز کن.',
+      ENG_NO_MARKET: 'این بازار در Hyperliquid پیدا نشد یا اهرمش مشخص نیست.',
+      ENG_NO_VOLUME_DATA: 'حجم این بازار مشخص نیست؛ بدون آن معامله نمی‌شود.',
+      ENG_THIN_MARKET: 'حجم این بازار برای این سفارش کم است. حجم را کم کن یا بازار دیگری انتخاب کن.',
+      ENG_LEVERAGE_OVER_MARKET: 'اهرم بیشتر از سقف همین بازار است.'
     })
   },
   exec: Object.freeze({
@@ -176,6 +203,9 @@ export const AI_TRADE_COPY = Object.freeze({
     HL_EXEC_TOO_SMALL: 'حجم از حداقل سفارش Hyperliquid کمتر است.',
     HL_EXEC_LEVERAGE_FAILED: 'تنظیم اهرم انجام نشد. هیچ سفارشی ثبت نشد.',
     HL_EXEC_NOT_FILLED: 'سفارش پر نشد و چیزی باز نشد.',
+    HL_EXEC_LEVERAGE_OVER_MARKET: 'اهرم بیشتر از سقف همین بازار است. چیزی ارسال نشد.',
+    HL_EXEC_THIN_MARKET: 'حجم بازار برای این سفارش کافی نیست. چیزی ارسال نشد.',
+    HL_EXEC_BAD_PRICE: 'قیمت معتبر نبود. چیزی ارسال نشد.',
     HL_EXEC_STOP_FAILED_CLOSED: 'حد ضرر ثبت نشد، پس پوزیشن همان لحظه بسته شد.',
     HL_EXEC_STOP_FAILED_OPEN: 'هشدار: حد ضرر ثبت نشد و بستن پوزیشن هم انجام نشد. همین الان در Hyperliquid بررسی کن.',
     HL_EXEC_NETWORK: 'اتصال قطع شد؛ وضعیت را در Hyperliquid بررسی کن.',

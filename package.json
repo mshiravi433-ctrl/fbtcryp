@@ -73,7 +73,7 @@
     "android:sync": "VITE_ENABLE_SPECULATION=false VITE_ENABLE_DYDX_TPSL=false VITE_ENABLE_FUTURES_HISTORY=false VITE_ENABLE_SPOT_DEPTH=false npm run build && npx cap sync android",
     "android:apk": "node ci/lock-platform-guard.mjs && npm run android:sync && cd android && ./gradlew assembleDebug",
     "android:open": "npx cap open android",
-    "test": "node test/futures-onchain-run.mjs && node test/run.mjs",
+    "test": "node test/futures-onchain-run.mjs && node test/run.mjs && npm run test:ai-trade",
     "test:tpsl-depth-history": "node --test test/tpsl-depth-history.test.mjs test/season-activation.test.mjs && node --test --test-force-exit test/tpsl-depth-history-server.test.mjs && vitest run test/tpsl-depth-history-ui.test.jsx",
     "test:spot": "node --test test/spot-trade-math.test.mjs test/spot-trade-flow.test.mjs test/spot-trade-static.test.mjs && vitest run test/spot-trade-ui.test.jsx",
     "test:ai-trade": "node test/hyperliquid-trade-units.mjs && node test/hyperliquid-aitrade-units.mjs && node test/hyperliquid-readonly-units.mjs && vitest run test/ai-trade-ui.test.jsx",

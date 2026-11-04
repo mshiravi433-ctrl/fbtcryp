@@ -60,7 +60,13 @@ check('fractional leverage refused',
 check('leverage above system limit refused',
   validateCapsSettings({ ...base, maxLeverage: HL_SYSTEM_LIMITS.maxLeverage + 1 }).errors.includes(HL_SETTINGS_CODES.LEVERAGE_OVER_SYSTEM_LIMIT));
 check('coin outside universe refused',
-  validateCapsSettings({ ...base, allowedCoins: ['DOGE'] }).errors.includes(HL_SETTINGS_CODES.COIN_OUTSIDE_UNIVERSE));
+  validateCapsSettings({ ...base, allowedCoins: ['BTC/USD'] }).errors.includes(HL_SETTINGS_CODES.COIN_INVALID));
+check('any valid market name is accepted (live check happens elsewhere)',
+  validateCapsSettings({ ...base, allowedCoins: ['DOGE', 'kPEPE', 'SOL'] }).ok === true);
+check('more than 40 markets refused',
+  validateCapsSettings({ ...base, allowedCoins: Array.from({ length: 41 }, (_, i) => `M${i}`) }).errors.includes(HL_SETTINGS_CODES.TOO_MANY_COINS));
+check('duplicate markets are collapsed, not refused',
+  validateCapsSettings({ ...base, allowedCoins: ['BTC', 'BTC', 'ETH'] }).value.allowedCoins.length === 2);
 check('refused settings return no value', validateCapsSettings({ ...base, maxOrderUsd: 0 }).value === null);
 check('kill switch is strictly boolean true', validateCapsSettings({ ...base, killSwitch: 'yes' }).value.killSwitch === false);
 

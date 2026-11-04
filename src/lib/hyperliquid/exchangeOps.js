@@ -19,11 +19,12 @@
 
 import { signL1Action } from './signing.js';
 import { checkOrderAgainstCaps } from './caps.js';
+import { MIN_MARKET_VOLUME_USD, MAX_ORDER_SHARE_OF_VOLUME } from './engine.js';
 import { HL_ERRORS } from './readonly.js';
 
 export const HL_EXCHANGE_URL = 'https://api.hyperliquid.xyz/exchange';
 export const HL_MIN_ORDER_USD = 10;
-export const HL_DEFAULT_SLIPPAGE = 0.003;
+export const HL_DEFAULT_SLIPPAGE = 0.005;
 
 export const HL_EXEC_CODES = Object.freeze({
   CAPS_REFUSED: 'HL_EXEC_CAPS_REFUSED',
@@ -32,6 +33,9 @@ export const HL_EXEC_CODES = Object.freeze({
   TOO_SMALL: 'HL_EXEC_TOO_SMALL',
   LEVERAGE_FAILED: 'HL_EXEC_LEVERAGE_FAILED',
   NOT_FILLED: 'HL_EXEC_NOT_FILLED',
+  LEVERAGE_OVER_MARKET: 'HL_EXEC_LEVERAGE_OVER_MARKET',
+  THIN_MARKET: 'HL_EXEC_THIN_MARKET',
+  BAD_PRICE: 'HL_EXEC_BAD_PRICE',
   STOP_FAILED_CLOSED: 'HL_EXEC_STOP_FAILED_CLOSED',
   STOP_FAILED_OPEN: 'HL_EXEC_STOP_FAILED_OPEN',
   NETWORK: 'HL_EXEC_NETWORK',
@@ -87,8 +91,9 @@ export function stopAction({ asset, isBuy, triggerPx, sz }) {
   };
 }
 
-export function leverageAction({ asset, leverage }) {
-  return { type: 'updateLeverage', asset, isCross: true, leverage };
+/** Isolated-only markets must be set to isolated margin; every other market uses cross. */
+export function leverageAction({ asset, leverage, isCross = true }) {
+  return { type: 'updateLeverage', asset, isCross, leverage };
 }
 
 /** Monotonic nonces: milliseconds, never repeated or going backwards. */
@@ -181,19 +186,29 @@ export async function executeIntent({
   if (!market || !Number.isInteger(market.asset) || !Number.isInteger(market.szDecimals)) {
     return { ...report, code: HL_EXEC_CODES.UNKNOWN_MARKET };
   }
+  // Each market has its own leverage ceiling; a request above it would be rejected by the exchange anyway.
+  if (!Number.isInteger(market.maxLeverage) || market.maxLeverage < 1) return { ...report, code: HL_EXEC_CODES.UNKNOWN_MARKET };
+  if (intent.leverage > market.maxLeverage) return { ...report, code: HL_EXEC_CODES.LEVERAGE_OVER_MARKET };
+  // Liquidity guard, repeated here so the executor is safe even if a caller skips the preview.
+  if (!Number.isFinite(market.dayNtlVlm) || market.dayNtlVlm < MIN_MARKET_VOLUME_USD
+      || intent.notionalUsd > market.dayNtlVlm * MAX_ORDER_SHARE_OF_VOLUME) {
+    return { ...report, code: HL_EXEC_CODES.THIN_MARKET };
+  }
   if (!(mid > 0)) return { ...report, code: HL_EXEC_CODES.NO_PRICE };
 
   const isBuy = intent.side === 'long';
   const sz = roundSize(intent.notionalUsd / mid, market.szDecimals);
   if (!(sz > 0) || sz * mid < HL_MIN_ORDER_USD) return { ...report, code: HL_EXEC_CODES.TOO_SMALL };
+  // Checked before anything is sent: a price that rounds to zero must not reach the exchange.
+  const entryPx = roundPrice(intent.side === 'long' ? mid * (1 + slippage) : mid * (1 - slippage), market.szDecimals);
+  if (!(entryPx > 0)) return { ...report, code: HL_EXEC_CODES.BAD_PRICE };
 
-  // 1. leverage
-  const lev = await postL1Action(privateKey, leverageAction({ asset: market.asset, leverage: intent.leverage }), nextNonce(), net);
+  // 1. leverage (isolated for isolated-only markets)
+  const lev = await postL1Action(privateKey, leverageAction({ asset: market.asset, leverage: intent.leverage, isCross: !market.onlyIsolated }), nextNonce(), net);
   report.steps.push({ step: 'leverage', ok: lev.ok && lev.data?.status === 'ok' });
   if (!lev.ok || lev.data?.status !== 'ok') return { ...report, code: HL_EXEC_CODES.LEVERAGE_FAILED };
 
   // 2. entry: IOC limit at mid ± slippage
-  const entryPx = roundPrice(isBuy ? mid * (1 + slippage) : mid * (1 - slippage), market.szDecimals);
   const entry = await postL1Action(privateKey, orderAction({ asset: market.asset, isBuy, px: entryPx, sz, tif: 'Ioc' }), nextNonce(), net);
   if (!entry.ok) return { ...report, code: entry.code, steps: [...report.steps, { step: 'entry', ok: false }] };
   const entryStatus = parseOrderStatuses(entry.data)[0];
@@ -206,7 +221,10 @@ export async function executeIntent({
   // 3. stop-loss on the real filled size and price
   const filledSz = roundSize(entryStatus.totalSz, market.szDecimals);
   const stopPx = roundPrice(isBuy ? entryStatus.avgPx * (1 - intent.stopLossPct) : entryStatus.avgPx * (1 + intent.stopLossPct), market.szDecimals);
-  const stop = await postL1Action(privateKey, stopAction({ asset: market.asset, isBuy: !isBuy, triggerPx: stopPx, sz: filledSz }), nextNonce(), net);
+  // A zero trigger would be meaningless; treat it as a failed stop so the position is closed instead.
+  const stop = stopPx > 0
+    ? await postL1Action(privateKey, stopAction({ asset: market.asset, isBuy: !isBuy, triggerPx: stopPx, sz: filledSz }), nextNonce(), net)
+    : { ok: false, code: HL_EXEC_CODES.BAD_PRICE };
   const stopStatus = stop.ok ? parseOrderStatuses(stop.data)[0] : { kind: 'error', error: stop.code };
   const stopPlaced = stopStatus.kind === 'resting' || stopStatus.kind === 'filled';
   report.steps.push({ step: 'stop', ok: stopPlaced });

@@ -7,7 +7,10 @@
 
 import { HL_INFO_URL, HL_ERRORS } from './readonly.js';
 
-export const HL_MARKET_TYPES = Object.freeze(['meta', 'allMids', 'candleSnapshot', 'userFillsByTime']);
+export const HL_MARKET_TYPES = Object.freeze(['meta', 'metaAndAssetCtxs', 'allMids', 'candleSnapshot', 'userFillsByTime']);
+
+/** Market names as Hyperliquid spells them (e.g. BTC, ETH, kPEPE). HIP-3 'dex:NAME' markets are excluded. */
+export const HL_COIN_NAME = /^[A-Za-z0-9]{1,16}$/;
 
 async function postInfo(body, { fetchImpl = globalThis.fetch, timeoutMs = 8000, url = HL_INFO_URL } = {}) {
   if (!HL_MARKET_TYPES.includes(body?.type)) return { ok: false, code: HL_ERRORS.BAD_TYPE };
@@ -38,23 +41,48 @@ const num = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 
-/** coin name → { asset, szDecimals }. The asset id is the index in the universe. */
-export function parseMeta(raw) {
-  const universe = raw?.universe;
+/**
+ * Every perp market in one map: coin → { asset, szDecimals, maxLeverage, onlyIsolated,
+ * markPx, midPx, dayNtlVlm, openInterest }. `universe[i]` and `ctxs[i]` describe the
+ * same market (same index), so they are joined by position, as the API defines.
+ * A market with no usable name or size decimals is skipped, never guessed.
+ */
+export function parseMarkets(metaRaw, ctxsRaw) {
+  const universe = metaRaw?.universe;
   if (!Array.isArray(universe)) return { ok: false, code: HL_ERRORS.BAD_RESPONSE };
-  const map = {};
+  const ctxs = Array.isArray(ctxsRaw) ? ctxsRaw : [];
+  const markets = {};
   universe.forEach((row, asset) => {
-    if (row && typeof row.name === 'string' && Number.isInteger(row.szDecimals)) {
-      map[row.name] = { asset, szDecimals: row.szDecimals, maxLeverage: num(row.maxLeverage) };
-    }
+    if (!row || typeof row.name !== 'string' || !HL_COIN_NAME.test(row.name)) return;
+    if (!Number.isInteger(row.szDecimals) || row.szDecimals < 0 || row.isDelisted === true) return;
+    const ctx = ctxs[asset] || {};
+    markets[row.name] = {
+      coin: row.name,
+      asset,
+      szDecimals: row.szDecimals,
+      maxLeverage: Number.isInteger(row.maxLeverage) && row.maxLeverage > 0 ? row.maxLeverage : null,
+      onlyIsolated: row.onlyIsolated === true,
+      markPx: num(ctx.markPx),
+      midPx: num(ctx.midPx),
+      dayNtlVlm: num(ctx.dayNtlVlm),
+      openInterest: num(ctx.openInterest)
+    };
   });
-  return { ok: true, markets: map };
+  return { ok: true, markets };
 }
 
-export async function fetchMeta(options) {
-  const res = await postInfo({ type: 'meta' }, options);
+/** Markets with a live price and at least `minVolumeUsd` traded in 24 hours, busiest first. */
+export function eligibleMarkets(markets, { minVolumeUsd }) {
+  return Object.values(markets || {})
+    .filter((m) => Number.isFinite(m.dayNtlVlm) && m.dayNtlVlm >= minVolumeUsd && (m.midPx > 0 || m.markPx > 0))
+    .sort((a, b) => b.dayNtlVlm - a.dayNtlVlm);
+}
+
+export async function fetchMarkets(options) {
+  const res = await postInfo({ type: 'metaAndAssetCtxs' }, options);
   if (!res.ok) return res;
-  return parseMeta(res.data);
+  if (!Array.isArray(res.data) || res.data.length < 2) return { ok: false, code: HL_ERRORS.BAD_RESPONSE };
+  return parseMarkets(res.data[0], res.data[1]);
 }
 
 export async function fetchMid(coin, options) {

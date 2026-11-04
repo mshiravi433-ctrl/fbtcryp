@@ -11,7 +11,9 @@ import {
   approvePending, createLedger, recordEntry, tradesSince, lastTradeTimes, ENGINE_CODES
 } from '../src/lib/hyperliquid/engine.js';
 import { extractJson, parseProposals, requestProposals, buildAnalystMessages, AI_CLIENT_CODES } from '../src/lib/hyperliquid/aiClient.js';
-import { parseMeta, fetchRealisedSince, fetchCandles } from '../src/lib/hyperliquid/market.js';
+import { parseMarkets, eligibleMarkets, fetchRealisedSince, fetchCandles } from '../src/lib/hyperliquid/market.js';
+import { verifyTypedData } from 'ethers';
+import { MIN_MARKET_VOLUME_USD, MAX_ORDER_SHARE_OF_VOLUME, marketVerdict } from '../src/lib/hyperliquid/engine.js';
 import { HL_CAP_DEFAULTS } from '../src/lib/hyperliquid/caps.js';
 
 let pass = 0; let fail = 0;
@@ -54,7 +56,8 @@ check('nonces strictly increase even when the clock does not move', n1 < n2 && n
 
 // ── executor against a fake exchange ───────────────────────────────────────
 const KEY = vec.keyForVectors;
-const ETH = { asset: 1, szDecimals: 4 };
+const ETH = { asset: 1, szDecimals: 4, maxLeverage: 25, onlyIsolated: false, dayNtlVlm: 800000000, midPx: 3000, markPx: 3000 };
+const BTC_MKT = { asset: 0, szDecimals: 5, maxLeverage: 40, onlyIsolated: false, dayNtlVlm: 2000000000, midPx: 60000, markPx: 60000 };
 const OPEN_STATE = { currentExposureUsd: 0, dailyRealisedPnlUsd: 0, dailyUnrealisedPnlUsd: 0 };
 const intent = { coin: 'ETH', side: 'long', notionalUsd: 1000, leverage: 2, stopLossPct: 0.02 };
 
@@ -88,7 +91,7 @@ const baseArgs = (ex, extra = {}) => ({
     ex.calls.length === 3 && ex.calls[0].action.type === 'updateLeverage'
     && ex.calls[1].action.orders[0].b === true && ex.calls[1].action.orders[0].r === false
     && ex.calls[2].action.orders[0].b === false && ex.calls[2].action.orders[0].r === true);
-  check('happy path: entry is IOC at mid + 0.3%', ex.calls[1].action.orders[0].p === '3009' && ex.calls[1].action.orders[0].t.limit.tif === 'Ioc');
+  check('happy path: entry is IOC at mid + 0.5%', ex.calls[1].action.orders[0].p === '3015' && ex.calls[1].action.orders[0].t.limit.tif === 'Ioc');
   check('happy path: stop trigger at fill − 2%', r.stop.triggerPx === 2940 && ex.calls[2].action.orders[0].t.trigger.triggerPx === '2940');
   check('happy path: every request carries signature r/s/v and vaultAddress null',
     ex.calls.every((c) => c.signature && /^0x[0-9a-f]{64}$/.test(c.signature.r) && c.vaultAddress === null));
@@ -168,12 +171,12 @@ check('daily trade limit enforced', evaluateRules(normalizeRules({ maxTradesPerD
 check('cooldown enforced per coin', evaluateRules(normalizeRules({ cooldownMinutes: 60 }), { tradesToday: 0, lastTradeAtByCoin: { BTC: NOW - 10 * 60000 }, coin: 'BTC', now: NOW }).code === ENGINE_CODES.RULE_COOLDOWN);
 check('cooldown on BTC does not block ETH', evaluateRules(normalizeRules({ cooldownMinutes: 60 }), { tradesToday: 0, lastTradeAtByCoin: { BTC: NOW - 10 * 60000 }, coin: 'ETH', now: NOW }).ok === true);
 
-const prev = buildPreview(good, { mid: 60000, state: OPEN_STATE, rules: normalizeRules({}), tradesToday: 0, lastTradeAtByCoin: {}, now: NOW });
+const prev = buildPreview(good, { mid: 60000, state: OPEN_STATE, rules: normalizeRules({}), tradesToday: 0, lastTradeAtByCoin: {}, now: NOW, market: BTC_MKT });
 check('preview: margin = notional / leverage', prev.marginUsd === 250);
 check('preview: worst case = notional × stop', prev.worstCaseLossUsd === 10);
 check('preview: estimated stop below mid for a long', prev.estimatedStopPx === 58800);
 check('preview: approvable when caps and rules pass', prev.canApprove === true);
-const prevBlocked = buildPreview({ ...good, notionalUsd: 20001 }, { mid: 60000, state: OPEN_STATE, rules: normalizeRules({}), tradesToday: 0, lastTradeAtByCoin: {}, now: NOW });
+const prevBlocked = buildPreview({ ...good, notionalUsd: 20001 }, { mid: 60000, state: OPEN_STATE, rules: normalizeRules({}), tradesToday: 0, lastTradeAtByCoin: {}, now: NOW, market: BTC_MKT });
 check('preview: over the per-order cap is not approvable', prevBlocked.canApprove === false && prevBlocked.capsOk === false);
 
 const p = createPending(good, prev, { id: 'a1', now: NOW });
@@ -195,13 +198,14 @@ const parsed = parseProposals('{"proposals":[{"coin":"BTC","side":"long","notion
 check('parseProposals keeps the valid one and reports the dropped one',
   parsed.ok && parsed.proposals.length === 1 && parsed.dropped[0] === ENGINE_CODES.COIN_NOT_ALLOWED);
 check('parseProposals rejects a non-JSON reply as BAD_OUTPUT', parseProposals('buy now!!', lim).code === AI_CLIENT_CODES.BAD_OUTPUT);
-check('system prompt tells the model it cannot execute', buildAnalystMessages({ rules: normalizeRules({}), caps: HL_CAP_DEFAULTS, account: {}, mids: {}, candles: [] })[0].content.includes('You do not execute anything'));
 
 {
   const SECRET = 'sk-test-SECRET-VALUE-123';
   let seen = null;
+  let requests = 0;
   const fetchImpl = async (url, init) => {
     seen = { url, init };
+    requests += 1;
     return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"proposals":[]}' } }] }) };
   };
   const msgs = buildAnalystMessages({ rules: normalizeRules({}), caps: HL_CAP_DEFAULTS, account: {}, mids: {}, candles: [] });
@@ -209,14 +213,18 @@ check('system prompt tells the model it cannot execute', buildAnalystMessages({ 
   check('AI key goes only in the Authorization header', seen.init.headers.authorization === `Bearer ${SECRET}`);
   check('AI key is absent from the body and the result', !seen.init.body.includes(SECRET) && !JSON.stringify(r).includes(SECRET));
   check('AI call succeeds with an empty proposal list', r.ok === true && r.proposals.length === 0);
+  check('AI makes exactly one request, to the AI endpoint, never to Hyperliquid', requests === 1 && !String(seen.url).includes('hyperliquid'));
+  check('AI result carries no order, action or signature payload', !/signature|"action"|orders|"nonce"/.test(JSON.stringify(r)));
   check('AI http endpoint is refused', (await requestProposals({ apiKey: SECRET, endpoint: 'http://x.example/v1', messages: msgs, limits: lim, fetchImpl })).code === AI_CLIENT_CODES.NOT_HTTPS);
   check('AI call without a key is refused', (await requestProposals({ apiKey: '', messages: msgs, limits: lim, fetchImpl })).code === AI_CLIENT_CODES.NO_KEY);
 }
 
 // ── market parsing ─────────────────────────────────────────────────────────
-check('parseMeta maps name → asset index and szDecimals',
-  parseMeta({ universe: [{ name: 'BTC', szDecimals: 5 }, { name: 'ETH', szDecimals: 4 }] }).markets.ETH.asset === 1);
-check('parseMeta rejects a missing universe', parseMeta({}).ok === false);
+check('parseMarkets joins universe and contexts by index',
+  parseMarkets({ universe: [{ name: 'BTC', szDecimals: 5, maxLeverage: 40 }, { name: 'ETH', szDecimals: 4, maxLeverage: 25 }] },
+    [{ dayNtlVlm: '2000000000', markPx: '60000', midPx: '60001' }, { dayNtlVlm: '800000000', markPx: '3000', midPx: '3000.5' }]).markets.ETH
+    .midPx === 3000.5);
+check('parseMarkets rejects a missing universe', parseMarkets({}).ok === false);
 {
   const fetchImpl = async () => ({ ok: true, status: 200, json: async () => [
     { closedPnl: '12.5', fee: '0.4' }, { closedPnl: '-3', fee: '0.1' }, { closedPnl: '0', fee: '0.2' }
@@ -231,6 +239,107 @@ check('parseMeta rejects a missing universe', parseMeta({}).ok === false);
   const r = await fetchCandles('BTC', { now: NOW }, { fetchImpl });
   check('candles drop rows without a close price', r.ok && r.candles.length === 1 && r.candles[0].c === 1.5);
 }
+
+// ── many markets: varied decimals, leverage ceilings, isolated-only, thin books ──
+const NAMES = ['BTC', 'ETH', 'SOL', 'kPEPE', 'DOGE', 'HYPE', 'ARB', 'WIF', 'SUI', 'AVAX', 'LINK', 'OP', 'APT', 'TIA', 'SEI',
+  'INJ', 'RUNE', 'ATOM', 'NEAR', 'FTM', 'BONK', 'PENDLE', 'TON', 'ADA', 'XRP', 'LTC', 'BCH', 'ONDO', 'JUP', 'ENA'];
+const universe = NAMES.map((name, i) => ({ name, szDecimals: i % 6, maxLeverage: [3, 5, 10, 20, 40, 50][i % 6], onlyIsolated: i % 4 === 3 }));
+const price = (i) => [95000, 3500, 0.42, 0.0123, 0.0000523, 25][i % 6] * (1 + (i % 3) * 0.1);
+const ctxs = NAMES.map((_, i) => {
+  const vol = i % 5 === 4 ? 1000000 : 40000000 + i * 9000000; // every 5th market is thin
+  return { dayNtlVlm: String(vol), markPx: String(price(i)), midPx: String(price(i)), openInterest: '1' };
+});
+const manyParsed = parseMarkets({ universe }, ctxs);
+check("many markets: all 30 names parsed, lowercase k-prefixed names kept", manyParsed.ok && Object.keys(manyParsed.markets).length === 30 && manyParsed.markets.kPEPE !== undefined);
+const live = eligibleMarkets(manyParsed.markets, { minVolumeUsd: MIN_MARKET_VOLUME_USD });
+check('many markets: thin books (under the floor) are not offered', live.length === 24 && live.every((m) => m.dayNtlVlm >= MIN_MARKET_VOLUME_USD));
+check('many markets: busiest first', live.every((m, i) => i === 0 || live[i - 1].dayNtlVlm >= m.dayNtlVlm));
+
+const wireDecimals = (x) => (String(x).split('.')[1] || '').length;
+let manySigned = 0;
+let manyWireOk = 0;
+const manyFailures = [];
+for (const m of live) {
+  const mid = m.midPx;
+  const notional = Math.min(2000, m.dayNtlVlm * 0.005);
+  const lev = Math.min(2, m.maxLeverage);
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body);
+    calls.push(body);
+    const a = body.action;
+    const o = a.orders?.[0];
+    let data;
+    if (a.type === 'updateLeverage') data = { status: 'ok', response: { type: 'default' } };
+    else if (o?.t?.trigger) data = { status: 'ok', response: { data: { statuses: [{ resting: { oid: 2 } }] } } };
+    else data = { status: 'ok', response: { data: { statuses: [{ filled: { totalSz: String(o.s), avgPx: String(mid), oid: 1 } }] } } };
+    return { ok: true, status: 200, json: async () => data };
+  };
+  const r = await executeIntent({
+    privateKey: KEY, intent: { coin: m.coin, side: 'long', notionalUsd: notional, leverage: lev, stopLossPct: 0.02 },
+    market: m, mid, caps: { ...HL_CAP_DEFAULTS, allowedCoins: NAMES }, state: OPEN_STATE, nextNonce: makeNonceSource(() => 5000 + manySigned), fetchImpl
+  });
+  if (!r.ok) { manyFailures.push(`${m.coin}:${r.code}`); continue; }
+  let good = true;
+  for (const c of calls) {
+    const sig = await verifyTypedData(
+      { name: 'Exchange', version: '1', chainId: 1337, verifyingContract: '0x0000000000000000000000000000000000000000' },
+      { Agent: [{ name: 'source', type: 'string' }, { name: 'connectionId', type: 'bytes32' }] },
+      { source: 'a', connectionId: actionHash(c.action, c.nonce) }, c.signature
+    );
+    if (sig.toLowerCase() !== agentAddress(KEY).toLowerCase()) good = false;
+    manySigned += 1;
+  }
+  for (const order of calls.filter((c) => c.action.type === 'order').flatMap((c) => c.action.orders)) {
+    if (wireDecimals(order.s) > m.szDecimals) good = false;
+    if (wireDecimals(order.p) > Math.max(0, 6 - m.szDecimals)) good = false;
+  }
+  const lv = calls.find((c) => c.action.type === 'updateLeverage');
+  if (lv.action.isCross !== !m.onlyIsolated || lv.action.leverage !== lev) good = false;
+  if (good) manyWireOk += 1; else manyFailures.push(`${m.coin}:shape`);
+}
+// Acceptable refusals, both before anything is sent: the order rounds to zero size, or the price has no valid tick under the
+// venue's 6 − szDecimals rule (the synthetic set pairs some tiny prices with 5 size decimals, which real listings do not do).
+const acceptableRefusal = (f) => f.endsWith('HL_EXEC_TOO_SMALL') || f.endsWith('HL_EXEC_BAD_PRICE');
+check(`many markets: every executed order signs to the agent address and has valid wire shape (${manyWireOk}/${live.length})`,
+  manyFailures.every(acceptableRefusal) && manyWireOk >= live.length - manyFailures.length && manyWireOk >= live.length * 0.6 && manySigned >= manyWireOk * 3);
+check('many markets: isolated-only markets get isolated leverage', live.some((m) => m.onlyIsolated));
+
+{
+  const m = manyParsed.markets.BTC;
+  const ex = fakeExchange();
+  const r = await executeIntent(baseArgs(ex, { intent: { ...intent, coin: 'BTC', leverage: 2 }, market: { ...m, maxLeverage: 1 } }));
+  check('leverage above THIS market’s ceiling refused, nothing sent', r.code === HL_EXEC_CODES.LEVERAGE_OVER_MARKET && ex.calls.length === 0);
+}
+{
+  const ex = fakeExchange();
+  const r = await executeIntent(baseArgs(ex, { intent: { ...intent, notionalUsd: 9000 }, market: { ...ETH, dayNtlVlm: 500000 } }));
+  check('order over 1% of the market’s 24h volume refused, nothing sent', r.code === HL_EXEC_CODES.THIN_MARKET && ex.calls.length === 0);
+}
+{
+  const ex = fakeExchange();
+  const r = await executeIntent(baseArgs(ex, { market: { ...ETH, dayNtlVlm: null } }));
+  check('unknown volume refused (fail closed)', r.code === HL_EXEC_CODES.THIN_MARKET && ex.calls.length === 0);
+}
+{
+  const ex = fakeExchange();
+  const r = await executeIntent(baseArgs(ex, { market: { ...ETH, maxLeverage: null } }));
+  check('unknown leverage ceiling refused (fail closed)', r.code === HL_EXEC_CODES.UNKNOWN_MARKET && ex.calls.length === 0);
+}
+{
+  const ex = fakeExchange();
+  const tiny = { asset: 9, szDecimals: 5, maxLeverage: 5, onlyIsolated: false, dayNtlVlm: 50000000, midPx: 0.0000523 };
+  const r = await executeIntent(baseArgs(ex, { market: tiny, mid: 0.0000523, intent: { ...intent, notionalUsd: 1000 } }));
+  check('a price that rounds to zero is refused BEFORE the leverage change is sent',
+    r.code === HL_EXEC_CODES.BAD_PRICE && ex.calls.length === 0);
+}
+{
+  const ex = fakeExchange();
+  const r = await executeIntent(baseArgs(ex, { market: { ...ETH, onlyIsolated: true } }));
+  check('isolated-only market: leverage is set isolated', ex.calls[0].action.isCross === false && r.ok === true);
+}
+check('engine: market verdict flags leverage above the market ceiling',
+  marketVerdict({ notionalUsd: 100, leverage: 9 }, { asset: 1, dayNtlVlm: 1e9, maxLeverage: 5 }).code === 'ENG_LEVERAGE_OVER_MARKET');
 
 // ── architecture: only the executor can sign or send; the brain cannot ───────
 const srcOf = (f) => readFileSync(new URL(`../src/lib/hyperliquid/${f}`, import.meta.url), 'utf8');

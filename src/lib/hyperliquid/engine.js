@@ -11,6 +11,11 @@
 
 import { checkOrderAgainstCaps, HL_CAP_DEFAULTS } from './caps.js';
 
+/** A market must trade at least this much in 24 hours to be used at all. */
+export const MIN_MARKET_VOLUME_USD = 5000000;
+/** One order may not exceed this share of the market's 24-hour volume (slippage guard). */
+export const MAX_ORDER_SHARE_OF_VOLUME = 0.01;
+
 export const ENGINE_CODES = Object.freeze({
   BAD_PROPOSAL: 'ENG_BAD_PROPOSAL',
   COIN_NOT_ALLOWED: 'ENG_COIN_NOT_ALLOWED',
@@ -21,7 +26,11 @@ export const ENGINE_CODES = Object.freeze({
   RULE_DAILY_LIMIT: 'ENG_RULE_DAILY_LIMIT',
   RULE_COOLDOWN: 'ENG_RULE_COOLDOWN',
   EXPIRED: 'ENG_EXPIRED',
-  NOT_PENDING: 'ENG_NOT_PENDING'
+  NOT_PENDING: 'ENG_NOT_PENDING',
+  NO_MARKET: 'ENG_NO_MARKET',
+  NO_VOLUME_DATA: 'ENG_NO_VOLUME_DATA',
+  THIN_MARKET: 'ENG_THIN_MARKET',
+  LEVERAGE_OVER_MARKET: 'ENG_LEVERAGE_OVER_MARKET'
 });
 
 export const APPROVAL_TTL_MS = 60000;
@@ -82,12 +91,24 @@ export function evaluateRules(rules, { tradesToday, lastTradeAtByCoin = {}, coin
  * Preview the user reads before approving. The stop price is an estimate from
  * the current mid; the real one is set from the actual fill.
  */
-export function buildPreview(intent, { mid, caps = HL_CAP_DEFAULTS, state, rules, tradesToday, lastTradeAtByCoin, now }) {
+export function marketVerdict(intent, market) {
+  if (!market || market.asset === undefined) return { ok: false, code: ENGINE_CODES.NO_MARKET };
+  if (!Number.isFinite(market.dayNtlVlm)) return { ok: false, code: ENGINE_CODES.NO_VOLUME_DATA };
+  if (market.dayNtlVlm < MIN_MARKET_VOLUME_USD || intent.notionalUsd > market.dayNtlVlm * MAX_ORDER_SHARE_OF_VOLUME) {
+    return { ok: false, code: ENGINE_CODES.THIN_MARKET };
+  }
+  if (!Number.isInteger(market.maxLeverage) || market.maxLeverage < 1) return { ok: false, code: ENGINE_CODES.NO_MARKET };
+  if (intent.leverage > market.maxLeverage) return { ok: false, code: ENGINE_CODES.LEVERAGE_OVER_MARKET };
+  return { ok: true, code: null };
+}
+
+export function buildPreview(intent, { mid, caps = HL_CAP_DEFAULTS, state, rules, tradesToday, lastTradeAtByCoin, now, market }) {
   const verdict = checkOrderAgainstCaps(
     { coin: intent.coin, notionalUsd: intent.notionalUsd, leverage: intent.leverage, stopLossPct: intent.stopLossPct },
     state, caps
   );
   const ruleVerdict = evaluateRules(rules, { tradesToday, lastTradeAtByCoin, coin: intent.coin, now });
+  const mktVerdict = marketVerdict(intent, market);
   const isLong = intent.side === 'long';
   return {
     coin: intent.coin,
@@ -103,7 +124,11 @@ export function buildPreview(intent, { mid, caps = HL_CAP_DEFAULTS, state, rules
     capsCode: verdict.code,
     rulesOk: ruleVerdict.ok,
     rulesCode: ruleVerdict.code,
-    canApprove: verdict.ok && ruleVerdict.ok && mid > 0
+    marketOk: mktVerdict.ok,
+    marketCode: mktVerdict.code,
+    marketMaxLeverage: market?.maxLeverage ?? null,
+    dayVolumeUsd: market?.dayNtlVlm ?? null,
+    canApprove: verdict.ok && ruleVerdict.ok && mktVerdict.ok && mid > 0
   };
 }
 

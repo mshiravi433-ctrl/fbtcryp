@@ -17,8 +17,10 @@ export const HL_SYSTEM_LIMITS = Object.freeze({
   maxLeverage: 10,
   /** Widest stop-loss distance the product will ever allow (fraction of notional). */
   maxStopLossPct: 0.10,
-  /** Markets the first release can offer at all. */
-  allowedCoinUniverse: Object.freeze(['BTC', 'ETH'])
+  /** Most markets a user can allow at once. Real availability is checked live against Hyperliquid. */
+  maxAllowedMarkets: 40,
+  /** A market name as Hyperliquid writes it (BTC, ETH, kPEPE). */
+  coinNamePattern: /^[A-Za-z0-9]{1,16}$/
 });
 
 export const HL_SETTINGS_CODES = Object.freeze({
@@ -29,7 +31,8 @@ export const HL_SETTINGS_CODES = Object.freeze({
   LEVERAGE_OVER_SYSTEM_LIMIT: 'HL_SETTINGS_LEVERAGE_OVER_SYSTEM_LIMIT',
   LEVERAGE_NOT_INTEGER: 'HL_SETTINGS_LEVERAGE_NOT_INTEGER',
   STOP_LOSS_OVER_SYSTEM_LIMIT: 'HL_SETTINGS_STOP_LOSS_OVER_SYSTEM_LIMIT',
-  COIN_OUTSIDE_UNIVERSE: 'HL_SETTINGS_COIN_OUTSIDE_UNIVERSE'
+  COIN_INVALID: 'HL_SETTINGS_COIN_INVALID',
+  TOO_MANY_COINS: 'HL_SETTINGS_TOO_MANY_COINS'
 });
 
 export function defaultCapsSettings() {
@@ -86,9 +89,10 @@ export function validateCapsSettings(input = {}) {
   }
 
   const coins = Array.isArray(input.allowedCoins) ? input.allowedCoins : [];
-  if (coins.some((c) => !HL_SYSTEM_LIMITS.allowedCoinUniverse.includes(c))) {
-    errors.push(HL_SETTINGS_CODES.COIN_OUTSIDE_UNIVERSE);
+  if (coins.some((c) => typeof c !== 'string' || !HL_SYSTEM_LIMITS.coinNamePattern.test(c))) {
+    errors.push(HL_SETTINGS_CODES.COIN_INVALID);
   }
+  if (new Set(coins).size > HL_SYSTEM_LIMITS.maxAllowedMarkets) errors.push(HL_SETTINGS_CODES.TOO_MANY_COINS);
 
   if (errors.length) return { ok: false, errors: [...new Set(errors)], value: null };
   return {
@@ -100,7 +104,7 @@ export function validateCapsSettings(input = {}) {
       dailyLossUsd,
       maxLeverage,
       maxStopLossPct,
-      allowedCoins: [...coins],
+      allowedCoins: [...new Set(coins)],
       killSwitch: input.killSwitch === true
     }
   };

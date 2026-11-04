@@ -14,13 +14,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconLock, IconSparkle, IconCheck, IconShield } from '../Icons';
 import { validateAgentKeyFormat } from '../../lib/hyperliquid/agentKey';
 import { agentAddress } from '../../lib/hyperliquid/signing';
-import { isValidHlAddress, readAccountSummary, fetchHyperliquidInfo } from '../../lib/hyperliquid/readonly';
+import { isValidHlAddress, readAccountSummary } from '../../lib/hyperliquid/readonly';
 import { defaultCapsSettings, validateCapsSettings } from '../../lib/hyperliquid/capsSettings';
-import { fetchMeta, fetchCandles, fetchRealisedSince } from '../../lib/hyperliquid/market';
+import { fetchMarkets, eligibleMarkets, fetchCandles, fetchRealisedSince } from '../../lib/hyperliquid/market';
 import { executeIntent, makeNonceSource } from '../../lib/hyperliquid/exchangeOps';
 import {
   normalizeRules, buildPreview, createPending, approvePending, createLedger, recordEntry,
-  tradesSince, lastTradeTimes, startOfLocalDay, evaluateRules, STRATEGIES, RULE_DEFAULTS
+  tradesSince, lastTradeTimes, startOfLocalDay, STRATEGIES, RULE_DEFAULTS, MIN_MARKET_VOLUME_USD
 } from '../../lib/hyperliquid/engine';
 import { requestProposals, buildAnalystMessages, AI_DEFAULT_ENDPOINT } from '../../lib/hyperliquid/aiClient';
 import { AI_TRADE_COPY as C, AI_TRADE_TAB_LABEL } from '../../lib/hyperliquid/aiTradeCopy';
@@ -32,7 +32,11 @@ const IDLE_LOCK_MS = 10 * 60000;
 const HIDDEN_LOCK_MS = 2 * 60000;
 const HOLD_MS = 500;
 const LEVERAGE_CHOICES = [1, 2, 3, 5, 10];
-const COINS = ['BTC', 'ETH'];
+const TOP_ANALYSIS_COINS = 6;
+const MAX_PICK = 40;
+
+const volText = (v) => (!Number.isFinite(v) ? '–'
+  : v >= 1e9 ? `${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : `${(v / 1e3).toFixed(0)}K`);
 
 const EMPTY_SESSION = Object.freeze({ address: '', agentKey: '', aiKey: '', aiEndpoint: AI_DEFAULT_ENDPOINT, aiModel: '', connected: false });
 
@@ -261,13 +265,19 @@ function Gate({ onGo }) {
   );
 }
 
-/* ── step 3: limits ───────────────────────────────────────────────────── */
-function LimitsStep({ form, setForm, result }) {
+/* ── step 3: limits and markets ───────────────────────────────────────── */
+function LimitsStep({ form, setForm, result, markets, marketsError, marketsLoading, onLoadMarkets }) {
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
-  const toggleCoin = (coin) => setForm((f) => ({
-    ...f,
-    allowedCoins: f.allowedCoins.includes(coin) ? f.allowedCoins.filter((c) => c !== coin) : [...f.allowedCoins, coin]
-  }));
+  const [query, setQuery] = useState('');
+  const eligible = useMemo(() => (markets ? eligibleMarkets(markets, { minVolumeUsd: MIN_MARKET_VOLUME_USD }) : []), [markets]);
+  const selected = form.allowedCoins;
+  const setCoins = (coins) => setForm((f) => ({ ...f, allowedCoins: coins }));
+  const toggle = (coin) => {
+    if (selected.includes(coin)) setCoins(selected.filter((c) => c !== coin));
+    else if (selected.length < MAX_PICK) setCoins([...selected, coin]);
+  };
+  const q = query.trim().toUpperCase();
+  const shown = eligible.filter((m) => !q || m.coin.toUpperCase().includes(q)).slice(0, 80);
   const current = Number(form.maxLeverage);
   return (
     <div className="ai-trade-bento">
@@ -289,17 +299,47 @@ function LimitsStep({ form, setForm, result }) {
             </div>
           </div>
         </div>
-        <div className="ai-trade-field">
-          <span>{C.limits.coins}</span>
-          <div className="ai-trade-chips" role="group" aria-label={C.limits.coins}>
-            {COINS.map((c) => (
-              <button key={c} type="button" aria-pressed={form.allowedCoins.includes(c)} className="ai-trade-chip" onClick={() => toggleCoin(c)}>{c}</button>
-            ))}
-          </div>
-        </div>
         <p className="ai-trade-small ai-trade-muted">{C.limits.stopRule}</p>
         {!result.ok && result.errors.map((code) => <p key={code} className="ai-trade-error" role="alert">{C.limits.errors[code]}</p>)}
         {result.ok && <p className="ai-trade-ok">{C.limits.saved}</p>}
+      </Card>
+
+      <Card title={C.markets.title} span="ai-trade-span-3"
+        action={<span className="ai-trade-pill">{C.markets.selected}: {selected.length} / {MAX_PICK}</span>}>
+        <p className="ai-trade-small ai-trade-muted">{C.markets.hint}</p>
+        {!markets && (
+          <div className="ai-trade-actions">
+            <button type="button" className="ai-trade-btn ai-trade-btn-primary" onClick={onLoadMarkets} disabled={marketsLoading}>
+              {marketsLoading ? C.markets.loading : C.markets.load}
+            </button>
+          </div>
+        )}
+        {marketsError && <p className="ai-trade-error" role="alert">{C.markets.errors[marketsError] || C.markets.errors.HL_NETWORK}</p>}
+        {markets && (
+          <>
+            <div className="ai-trade-actions">
+              <button type="button" className="ai-trade-btn ai-trade-btn-ghost" disabled={eligible.length === 0}
+                onClick={() => setCoins(eligible.slice(0, 10).map((m) => m.coin))}>{C.markets.top10}</button>
+              <button type="button" className="ai-trade-btn ai-trade-btn-ghost"
+                onClick={() => setCoins(['BTC', 'ETH'].filter((c) => eligible.some((m) => m.coin === c)))}>{C.markets.btcEth}</button>
+              <button type="button" className="ai-trade-btn ai-trade-btn-ghost" onClick={() => setCoins([])}>{C.markets.clear}</button>
+            </div>
+            <label className="ai-trade-field"><span>{C.markets.search}</span>
+              <input type="search" dir="ltr" autoComplete="off" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="BTC" /></label>
+            {shown.length === 0
+              ? <p className="ai-trade-muted">{C.markets.empty}</p>
+              : (
+                <div className="ai-trade-chips" role="group" aria-label={C.markets.title}>
+                  {shown.map((m) => (
+                    <button key={m.coin} type="button" className="ai-trade-chip" aria-pressed={selected.includes(m.coin)} onClick={() => toggle(m.coin)}
+                      title={`${C.markets.volume}: ${volText(m.dayNtlVlm)} · ${C.markets.maxLev} ${m.maxLeverage ?? '–'}x${m.onlyIsolated ? ' · isolated' : ''}`}>
+                      <b>{m.coin}</b> <small>{volText(m.dayNtlVlm)}</small> <small>{m.maxLeverage ?? '–'}x</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+          </>
+        )}
       </Card>
 
       <Card title={C.limits.killSwitch} span="ai-trade-span-3">
@@ -384,6 +424,7 @@ function PendingCard({ item, onApprove, onReject, now }) {
       <dl className="ai-trade-facts">
         <div><dt>{C.approve.labels.notional}</dt><dd>{num(intent.notionalUsd)}$</dd></div>
         <div><dt>{C.approve.labels.leverage}</dt><dd>{intent.leverage}x</dd></div>
+        <div><dt>{C.approve.labels.marketMax}</dt><dd>{preview.marketMaxLeverage ? `${preview.marketMaxLeverage}x` : C.account.unknown}</dd></div>
         <div><dt>{C.approve.labels.margin}</dt><dd>{num(preview.marginUsd)}$</dd></div>
         <div><dt>{C.approve.labels.stop}</dt><dd>{preview.estimatedStopPx ? `${num(preview.estimatedStopPx)} (${(intent.stopLossPct * 100).toFixed(1)}%)` : C.account.unknown}</dd></div>
         <div><dt>{C.approve.labels.worst}</dt><dd>{num(preview.worstCaseLossUsd)}$</dd></div>
@@ -474,6 +515,25 @@ export default function AiTradePanel() {
   const [analyzing, setAnalyzing] = useState(false);
   const [lastRun, setLastRun] = useState(null);
   const nextNonce = useRef(makeNonceSource());
+  const [markets, setMarkets] = useState(null);
+  const [marketsError, setMarketsError] = useState(null);
+  const [marketsLoading, setMarketsLoading] = useState(false);
+  const analysisRound = useRef(0);
+
+  const loadMarkets = async () => {
+    setMarketsLoading(true);
+    setMarketsError(null);
+    const res = await fetchMarkets();
+    setMarketsLoading(false);
+    if (!res.ok) { setMarketsError(res.code); return { ok: false, code: res.code }; }
+    setMarkets(res.markets);
+    return { ok: true, markets: res.markets };
+  };
+  useEffect(() => {
+    if (step === 'limits' && !markets && !marketsLoading) loadMarkets();
+    // loads once when the limits step opens; the button retries after an error
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   const hasSecrets = !!(session.agentKey || session.aiKey);
   const lock = (notice = '') => {
@@ -535,6 +595,7 @@ export default function AiTradePanel() {
     if (!fresh.ok) { setConnectError(fresh.code); return; }
     setSession((s) => ({ ...s, connected: true }));
     setAccount(fresh);
+    loadMarkets();
     setStep('account');
   };
 
@@ -546,25 +607,30 @@ export default function AiTradePanel() {
     if (!item || !gate.ok) { setPendingItem(id, { status: 'expired' }); return; }
     setPendingItem(id, { status: 'executing', resultText: null });
     const now = Date.now();
-    const fresh = await readFresh(session.address.trim(), now);
     const coin = item.intent.coin;
     const fail = (message, code) => {
       setPendingItem(id, { status: 'failed', failed: true, resultText: message });
       setLedger((l) => recordEntry(l, { id, at: now, coin, side: item.intent.side, notionalUsd: item.intent.notionalUsd, status: 'failed', message, code }));
     };
+    // Everything the decision needs is read again right now, not taken from the analysis time.
+    const fresh = await readFresh(session.address.trim(), now);
     if (!fresh.ok) { fail(C.account.errors[fresh.code] || C.exec.HL_EXEC_NETWORK, fresh.code); return; }
     setAccount(fresh);
-    const rule = evaluateRules(rules, {
-      tradesToday: tradesSince(ledger, startOfLocalDay(now)),
-      lastTradeAtByCoin: lastTradeTimes(ledger), coin, now
+    const mk = await loadMarkets();
+    if (!mk.ok) { fail(C.markets.errors[mk.code] || C.exec.HL_EXEC_NETWORK, mk.code); return; }
+    const market = mk.markets[coin];
+    const mid = market ? (market.midPx ?? market.markPx ?? 0) : 0;
+    const preview = buildPreview(item.intent, {
+      mid, caps: capsResult.value, state: fresh.state, rules,
+      tradesToday: tradesSince(ledger, startOfLocalDay(now)), lastTradeAtByCoin: lastTradeTimes(ledger), now, market
     });
-    if (!rule.ok) { fail(C.approve.errors[rule.code] || rule.code, rule.code); return; }
-    const meta = await fetchMeta();
-    const market = meta.ok ? meta.markets[coin] : null;
-    const midRes = await fetchHyperliquidInfo('allMids', null);
-    const mid = Number(midRes.ok ? midRes.data?.[coin] : NaN);
+    if (!preview.canApprove) {
+      const code = !preview.capsOk ? preview.capsCode : !preview.rulesOk ? preview.rulesCode : !preview.marketOk ? preview.marketCode : 'NO_PRICE';
+      fail(C.approve.errors[code] || C.exec.HL_EXEC_NO_PRICE, code);
+      return;
+    }
     const report = await executeIntent({
-      privateKey: session.agentKey.trim(), intent: item.intent, market, mid: Number.isFinite(mid) ? mid : 0,
+      privateKey: session.agentKey.trim(), intent: item.intent, market, mid,
       caps: capsResult.value, state: fresh.state, nextNonce: nextNonce.current
     });
     const filled = !!report.entry;
@@ -595,19 +661,28 @@ export default function AiTradePanel() {
     const fresh = await readFresh(session.address.trim(), now);
     if (!fresh.ok) { setAnalyzing(false); setLastRun({ tone: 'error', text: C.account.errors[fresh.code] || C.account.errors.HL_NETWORK }); return; }
     setAccount(fresh);
-    const mids = await fetchHyperliquidInfo('allMids', null);
-    const candleSets = await Promise.all(COINS.map((c) => fetchCandles(c, { interval: '1h', count: 48, now })));
-    const candles = Object.fromEntries(COINS.map((c, i) => [c, candleSets[i].ok ? candleSets[i].candles : []]));
+    const mk = await loadMarkets();
+    if (!mk.ok) { setAnalyzing(false); setLastRun({ tone: 'error', text: C.markets.errors[mk.code] || C.markets.errors.HL_NETWORK }); return; }
     const caps = capsResult.value;
+    // Allowed AND liquid, busiest first. Each run takes the next batch, so repeated runs cover more pairs.
+    const pool = eligibleMarkets(mk.markets, { minVolumeUsd: MIN_MARKET_VOLUME_USD })
+      .map((m) => m.coin).filter((c) => caps.allowedCoins.includes(c));
+    if (pool.length === 0) { setAnalyzing(false); setLastRun({ tone: 'error', text: C.markets.noneAllowed }); return; }
+    const offset = (analysisRound.current * TOP_ANALYSIS_COINS) % pool.length;
+    analysisRound.current += 1;
+    const batch = [...pool.slice(offset), ...pool.slice(0, offset)].slice(0, TOP_ANALYSIS_COINS);
+    const candleSets = await Promise.all(batch.map((c) => fetchCandles(c, { interval: '1h', count: 48, now })));
+    const candles = Object.fromEntries(batch.map((c, i) => [c, candleSets[i].ok ? candleSets[i].candles : []]));
+    const mids = Object.fromEntries(batch.map((c) => [c, mk.markets[c].midPx ?? mk.markets[c].markPx ?? null]));
+    const aiCaps = { ...caps, allowedCoins: batch };
     const messages = buildAnalystMessages({
-      rules, caps,
+      rules, caps: aiCaps,
       account: { accountValueUsd: fresh.summary.accountValueUsd, exposureUsd: fresh.state.currentExposureUsd, dailyRealisedPnlUsd: fresh.state.dailyRealisedPnlUsd, dailyUnrealisedPnlUsd: fresh.state.dailyUnrealisedPnlUsd, positions: fresh.summary.positions.map((p) => ({ coin: p.coin, size: p.size, entryPx: p.entryPx, unrealizedPnl: p.unrealizedPnl })) },
-      mids: mids.ok ? Object.fromEntries(COINS.map((c) => [c, mids.data?.[c] ?? null])) : {},
-      candles
+      mids, candles
     });
     const res = await requestProposals({
       apiKey: session.aiKey.trim(), endpoint: session.aiEndpoint.trim(), model: session.aiModel.trim(), messages,
-      limits: { allowedCoins: caps.allowedCoins, maxLeverage: caps.maxLeverage, maxStopLossPct: caps.maxStopLossPct }
+      limits: { allowedCoins: batch, maxLeverage: caps.maxLeverage, maxStopLossPct: caps.maxStopLossPct }
     });
     setAnalyzing(false);
     if (!res.ok) { setLastRun({ tone: 'error', text: C.ai.errors[res.code] || C.ai.errors.AI_NETWORK }); return; }
@@ -615,8 +690,11 @@ export default function AiTradePanel() {
     const tradesToday = tradesSince(ledger, startOfLocalDay(now));
     const lastAt = lastTradeTimes(ledger);
     const items = res.proposals.map((intent, i) => {
-      const mid = Number(mids.ok ? mids.data?.[intent.coin] : NaN);
-      const preview = buildPreview(intent, { mid, caps, state: fresh.state, rules, tradesToday, lastTradeAtByCoin: lastAt, now });
+      const market = mk.markets[intent.coin];
+      const preview = buildPreview(intent, {
+        mid: market ? (market.midPx ?? market.markPx ?? 0) : 0, caps, state: fresh.state, rules,
+        tradesToday, lastTradeAtByCoin: lastAt, now, market
+      });
       return createPending(intent, preview, { id: `${now}-${i}`, now });
     });
     setPending((list) => [...items, ...list].slice(0, 20));
@@ -669,7 +747,10 @@ export default function AiTradePanel() {
         {step === 'account' && (
           <AccountStep session={session} account={account} onRefresh={refresh} refreshing={refreshing} dailyLoss={dailyLoss} onGo={() => setStep('connect')} />
         )}
-        {step === 'limits' && <LimitsStep form={capsForm} setForm={setCapsForm} result={capsResult} />}
+        {step === 'limits' && (
+          <LimitsStep form={capsForm} setForm={setCapsForm} result={capsResult} markets={markets}
+            marketsError={marketsError} marketsLoading={marketsLoading} onLoadMarkets={loadMarkets} />
+        )}
         {step === 'ai' && (
           <AiStep session={session} setSession={setSession} rules={rules} setRules={setRules}
             onAnalyze={analyze} analyzing={analyzing} gate={analyzeGate} lastRun={lastRun} />
