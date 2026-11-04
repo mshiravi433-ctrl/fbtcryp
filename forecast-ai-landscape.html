@@ -52,7 +52,7 @@
       <span class="pill pill-up" dir="ltr">+2.14%</span>
     </div>
     <div class="pc-fs-head-actions">
-      <span class="pv-tag">LANDSCAPE · HUD</span>
+      <span class="pv-tag">IN FLOW · PEEK</span>
       <button type="button" class="pc-fs-icon" title="چرخش" aria-label="چرخش">↻</button>
       <button type="button" class="pc-fs-icon pc-fs-close" title="بستن" aria-label="بستن">✕</button>
     </div>
@@ -80,9 +80,11 @@
       </div>
     </div>
 
-    <!-- همان کارت واقعی؛ JS زیر فقط حالتش را عوض می‌کند. -->
-    <!-- کارت دقیقاً فرزند مستقیم pc-fs-main است، مثل {forecastPanel} در TokenChart.jsx -->
-    <div id="pv-anchor" hidden></div>
+    <!-- کارت داخل جریانِ چیدمان است (نه position:absolute)، دقیقاً مثل
+         <div class="pc-fs-hud">{forecastPanel}</div> در TokenChart.jsx:
+         پس نه روی کندل‌ها می‌افتد و نه روی نوار دکمه‌ها. در ارتفاع کم
+         «پیک» می‌شود (دو خط + chevron) و جا برای نمودار باقی می‌ماند. -->
+    <div class="pc-fs-hud" id="pv-hud"></div>
 
     <div class="pc-stats mono" dir="ltr">
       <span><em>بالا</em>3510.00</span><span><em>پایین</em>3295.40</span>
@@ -163,8 +165,14 @@
 const { STATES } = window.FcPreview;
 const params = new URLSearchParams(location.search);
 const state = STATES[params.get('state')] ? params.get('state') : 'ready';
-const anchor = document.getElementById('pv-anchor');
-anchor.insertAdjacentHTML('beforebegin', STATES[state]);
+const hud = document.getElementById('pv-hud');
+hud.innerHTML = STATES[state];
+/* در ارتفاع کم، کارت به‌صورت «پیک» (دو خط + عدد) باز می‌شود؛ chevron بازش می‌کند.
+   همین قرارداد در TokenChart با `forecastCollapsed` اجرا می‌شود. */
+if (window.innerHeight <= 640) {
+  const card = hud.querySelector('.pc-fc');
+  if (card) card.classList.add('pc-fc--peek');
+}
 /* نشان دادن گروه دکمههای AI و اکشنها در همان اسکرولر افقی */
 const tb = document.querySelector('.pc-toolbar');
 if (tb) tb.scrollLeft = document.documentElement.dir === 'rtl' ? -tb.scrollWidth : tb.scrollWidth;

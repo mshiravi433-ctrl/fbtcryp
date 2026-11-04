@@ -451,7 +451,9 @@
       "forecastLocalNote": "Calculé dans votre navigateur — les bougies ne sont téléversées nulle part.",
       "forecastOnDeviceNote": "Calculé sur votre appareil, pas sur notre serveur.",
       "forecastWindowBars": "{{count}} bougies d'historique",
-      "forecastRepaired": "{{count}} bougie(s) corrigée(s) en OHLC valide."
+      "forecastRepaired": "{{count}} bougie(s) corrigée(s) en OHLC valide.",
+      "forecastExpand": "Afficher la carte complète",
+      "forecastPeek": "Réduire la carte"
     },
     "chartCandle": "Bougies",
     "chartLine": "Ligne",

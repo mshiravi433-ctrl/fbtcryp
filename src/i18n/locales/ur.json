@@ -454,7 +454,9 @@
       "forecastLocalNote": "آپ کے براؤزر میں حساب — کندلیں کہیں اپ لوڈ نہیں ہوتیں۔",
       "forecastOnDeviceNote": "آپ کے ڈیوائس پر حساب، ہمارے سرور پر نہیں۔",
       "forecastWindowBars": "{{count}} کندلوں کی تاریخ",
-      "forecastRepaired": "{{count}} کندل کو درست OHLC میں ٹھیک کیا گیا۔"
+      "forecastRepaired": "{{count}} کندل کو درست OHLC میں ٹھیک کیا گیا۔",
+      "forecastExpand": "پورا کارڈ دکھائیں",
+      "forecastPeek": "کارڈ سمیٹیں"
     },
     "chartCandle": "کینڈل",
     "chartLine": "لائن",

@@ -451,7 +451,9 @@
       "forecastLocalNote": "Calculado no seu navegador — os candles não são enviados a lugar nenhum.",
       "forecastOnDeviceNote": "Calculado no seu dispositivo, não no nosso servidor.",
       "forecastWindowBars": "{{count}} candles de histórico",
-      "forecastRepaired": "{{count}} candle(s) corrigido(s) para um OHLC válido."
+      "forecastRepaired": "{{count}} candle(s) corrigido(s) para um OHLC válido.",
+      "forecastExpand": "Mostrar o cartão completo",
+      "forecastPeek": "Recolher o cartão"
     },
     "chartCandle": "Candles",
     "chartLine": "Linha",

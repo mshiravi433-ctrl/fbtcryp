@@ -916,6 +916,10 @@ html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
   pointer-events: none;
 }
 .pc-fc--setup { gap: 8px; }
+/* The card is capped by its own column (`pc-fs-hud` below); a card a reader
+   can never see the top of is worse than no card. */
+.pc-fc--ambient, .pc-fc--setup { max-height: 100%; overflow-y: auto; overscroll-behavior: contain; }
+.pc-fc--peek { gap: 5px; }
 
 /* ── identity row: spark mark + provenance + model + actions ────────────── */
 .pc-fc-head { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: nowrap; }
@@ -951,7 +955,12 @@ html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
   color: #8f9ab3;
 }
 .pc-fc-meta { opacity: .82; }
-.pc-fc-tools { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; margin-inline-start: auto; }
+.pc-fc-tools { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; margin-inline-start: auto; flex-wrap: wrap; justify-content: flex-end; }
+/* The chevron that expands/collapses the card: a 24px round icon, and the
+   only control that always removes the card from over the candles. */
+.pc-fc-btn--icon { min-width: 24px; min-height: 24px; padding: 3px; justify-content: center; }
+.pc-fc-btn--icon .pc-fc-btn-ico { width: 14px; height: 14px; }
+.pc-fc-btn--icon .pc-fc-btn-ico svg { width: 14px; height: 14px; }
 .pc-fc-tools .pc-spinner { margin-inline-end: 0; vertical-align: 0; }
 
 /* ── the numbers, the caveat and the progress bar ───────────────────────── */
@@ -1120,34 +1129,107 @@ html.pc-no-scroll, html.pc-no-scroll body { overflow: hidden !important; }
 }
 
 /* Short landscape chrome (header, chips, legend). The forecast card's own
-   landscape treatment lives in the dedicated block below. */
+   short-viewport treatment lives in the dedicated block below. */
 @media (max-height: 520px) and (orientation: landscape) {
   .pc > .pc-fc { padding: 6px 10px; gap: 4px; }
   .pc-fc-disc { display: none; }
   .pc-fc-summary, .pc-fc-warning { font-size: 10px; }
+  .pc-inline-actions .pc-chip { min-height: 30px; padding: 4px 9px; font-size: 10px; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   SHORT LANDSCAPE TERMINAL — forecast is genuinely unavailable here
+   THE AI CARD — in the flow, small when the room is small
    ───────────────────────────────────────────────────────────────────────────
-   TokenChart watches this exact media query. While the full-screen terminal
-   is in short landscape it removes the AI toggle/horizon and the result card,
-   aborts active work and stops passing projected candles to ProChart. There is
-   deliberately no absolute/faded HUD fallback: an overlay cannot overlap
-   controls that it never shares the viewport with. Portrait restores the AI
-   control, switched off, ready for an explicit opt-in.
+   What was wrong, in the reader's words: «صفحه با نمودارها تداخل می‌کند و
+   روی هم می‌افتد … دکمه AI را محو کردی، برگردون».
+
+   History, because it explains the shape of the fix. The card once sat in the
+   terminal's vertical column as a six-row flex child: on a phone that column
+   squeezed the candles to a strip. A later pass floated it to give the
+   candles their height back — and it then covered the toolbar and the last
+   candles instead, which is the screenshot the report is about. The same pass
+   concluded the feature needed deleting in short landscape, which is where
+   the missing AI button came from.
+
+   The rule that satisfies both halves: the card NEVER leaves the flow (so it
+   cannot overlap a chart, a button or a stat), and the room it takes is
+   decided by the viewport:
+
+     • SHORT terminal (a phone in landscape, a squashed window) — the card is
+       a two-line peek: identity row + the one number it exists for + the
+       chevron that opens it. ~56px, against six rows before.
+     • TALL terminal or portrait — the whole card, under the chart, in the
+       flow. Nothing is hidden that the screen can afford to show.
+     • A reader who expands the peek in a short terminal gets a cap
+       (40svh) and an internally scrolling body, so even then nothing is
+       pushed off the screen.
+
+   Nothing here fades the card to `pointer-events: none` either: a projection
+   you can see but cannot press is the same broken promise as one that is
+   greyed out, and a HUD floating over its own off-switch is a trap.
    ═══════════════════════════════════════════════════════════════════════════ */
+
+.pc-fs-hud {
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 0;
+  justify-content: stretch;
+}
+.pc-fs-hud > .pc-fc {
+  flex: 1 1 auto;
+  width: 100%;
+  /* A card taller than its own column is a card whose buttons are off-screen;
+     cap it and let the body scroll instead. */
+  max-height: min(40svh, 260px);
+}
+
+/* ── short viewports: the terminal cannot spare six rows ─────────────────── */
+@media (max-height: 640px) {
+  .pc-fs-hud > .pc-fc { padding: 6px 10px; gap: 4px; }
+  .pc-fs-hud > .pc-fc .pc-fc-head { gap: 6px; }
+  .pc-fs-hud > .pc-fc .pc-fc-mark { width: 24px; height: 24px; }
+}
+
+/* ── the peek: two lines, one number, and a way back ──────────────────────
+   What a peek keeps is what a reader needs to decide: WHERE the number came
+   from, the number itself, and the press that changes something. The error
+   sentence is kept too (clamped to two lines) — a collapsed ERROR panel that
+   hides the error is a panel nobody can act on. */
+.pc-fc--peek .pc-fc-summary > span:not(:first-child),
+.pc-fc--peek .pc-fc-meta,
+.pc-fc--peek .pc-fc-warning,
+.pc-fc--peek .pc-fc-disc,
+.pc-fc--peek .pc-fc-foot,
+.pc-fc--peek .pc-fc-bytes,
+.pc-fc--peek .pc-fc-head .pc-fc-model {
+  display: none;
+}
+.pc-fc--peek .pc-fc-note {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.pc-fc--peek .pc-fc-summary { font-size: 10px; gap: 4px 8px; }
+.pc-fc--peek .pc-fc-head { gap: 6px; }
+.pc-fc--peek .pc-fc-mark { width: 24px; height: 24px; }
+/* A press is a decision, not detail: the download prompt keeps its button. */
+.pc-fc--peek.pc-fc--setup .pc-fc-actions { display: flex; flex-wrap: wrap; }
+.pc-fc--peek.pc-fc--setup .pc-fc-actions .pc-fc-btn { min-height: 26px; font-size: 9.5px; }
+.pc-fc--peek .pc-fc-actions { gap: 5px; }
+
+/* Short landscape still needs the toolbar to breathe around the groups. */
 @media (orientation: landscape) and (max-height: 640px) {
   .pc-fs .pc-toolbar { gap: 8px; }
   .pc-fs .pc-toolgroup { gap: 5px; padding-inline-end: 8px; }
-  .pc-fs .pc-toolgroup--forecast,
-  .pc-fs .pc-fs-main > .pc-fc { display: none; }
   .pc-fs .pc-toolgroup--actions {
     margin-inline-start: 12px;
     padding-inline-start: 8px;
     border-inline-start: 1px solid rgba(255, 255, 255, .09);
   }
   :root[data-theme='light'] .pc-fs .pc-toolgroup--actions { border-inline-start-color: rgba(16, 20, 40, .12); }
+  .pc-fs-hud > .pc-fc { padding: 5px 9px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
