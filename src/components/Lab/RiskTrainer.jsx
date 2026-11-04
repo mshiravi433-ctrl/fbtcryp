@@ -11,7 +11,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
-import { AICoach, LAB_EASE, LabBack, LabSlider, Notice, Panel, Row } from './Shared';
+import { AICoach, LAB_EASE, LabBack, LabPercentField, LabSlider, Notice, Panel, Row } from './Shared';
 import { calcPositionSize } from '../../lib/lab/engine';
 import { useLabStore } from '../../store/useLabStore';
 import { useStill } from '../AnimatedIcon';
@@ -76,7 +76,16 @@ export default function RiskTrainer({ onBack }) {
             accent="cyan"
             display={<span className="lab2-num">${entry.toLocaleString()}</span>}
           />
-          <LabSlider
+          {/* THESE THREE ARE PERCENT FIELDS, NOT SLIDERS.
+              A risk trainer exists to make a specific risk-per-trade feel like
+              a specific number — 1%, not "about a third of the way along the
+              bar". On a 320px track these ranges give 0.19pp per pixel, so
+              "1.0%" was whatever the thumb landed on, and a reader who wanted
+              to test 2.5% could not. The field edits the same value, clamped
+              and on the same 0.1 grid, so nothing downstream changed.
+              Capital and entry price stay sliders: they are order-of-magnitude
+              controls where dragging is genuinely faster than typing. */}
+          <LabPercentField
             label={t('lab2.risk.riskPerTrade')}
             value={riskPct}
             onChange={setRiskPct}
@@ -84,9 +93,9 @@ export default function RiskTrainer({ onBack }) {
             max={10}
             step={0.1}
             accent={riskPct > 2 ? 'rose' : 'violet'}
-            display={<span className="lab2-num">{riskPct.toFixed(1)}%</span>}
+            testId="risk-pct"
           />
-          <LabSlider
+          <LabPercentField
             label={t('lab2.risk.stopLoss')}
             value={stopLossPct}
             onChange={setStopLossPct}
@@ -94,9 +103,9 @@ export default function RiskTrainer({ onBack }) {
             max={20}
             step={0.5}
             accent="rose"
-            display={<span className="lab2-num">{stopLossPct.toFixed(1)}%</span>}
+            testId="risk-stop"
           />
-          <LabSlider
+          <LabPercentField
             label={t('lab2.risk.takeProfit')}
             value={takeProfitPct}
             onChange={setTakeProfitPct}
@@ -104,7 +113,7 @@ export default function RiskTrainer({ onBack }) {
             max={50}
             step={0.5}
             accent="mint"
-            display={<span className="lab2-num">{takeProfitPct.toFixed(1)}%</span>}
+            testId="risk-target"
           />
         </div>
       </Panel>

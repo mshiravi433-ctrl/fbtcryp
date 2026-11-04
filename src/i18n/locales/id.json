@@ -2808,7 +2808,319 @@
             "def": "Everything you hold, and the share of each asset."
           }
         }
+      },
+      "chartGuide": {
+        "title": "Panduan grafik",
+        "sub": "Pelajari cara membaca candlestick di halaman token: jendela, sumbu, harga, dan setiap tombol di bilah alat."
       }
+    },
+    "chartGuide": {
+      "sampleData": "Data di bawah adalah seri latihan, bukan harga langsung. Untuk belajar, bukan untuk pasar.",
+      "chaptersLabel": "Bab",
+      "noteTitle": "Ingat",
+      "note": "Panduan ini hanya mengajarkan cara membaca: tidak ada saran perdagangan, target harga, atau “titik masuk yang bagus”.",
+      "backToLab": "Kembali ke Lab",
+      "tabs": {
+        "basics": "Dasar",
+        "studies": "Indikator",
+        "levels": "Level",
+        "extras": "Lainnya"
+      },
+      "demo": {
+        "title": "Coba sendiri",
+        "legendHint": "Sentuh atau arahkan kursor ke grafik untuk melihat nilai persisnya",
+        "type": "Jenis grafik",
+        "types": {
+          "candles": "Candle",
+          "line": "Garis",
+          "area": "Area"
+        },
+        "toggles": "Lapisan",
+        "togglesMap": {
+          "ma7": "MA7",
+          "ma25": "MA25",
+          "ema21": "EMA21",
+          "bb": "Bollinger",
+          "volume": "Volume",
+          "rsi": "RSI",
+          "fib": "Fibonacci"
+        },
+        "view": "Tampilan",
+        "zoomIn": "Perbesar",
+        "fit": "Paskan",
+        "log": "Skala log",
+        "loadingNote": "Mesin grafik sedang dimuat; jika tidak tersedia, grafik sederhana ditampilkan."
+      },
+      "chapters": {
+        "read": {
+          "title": "Membaca satu candle",
+          "steps": {
+            "open": {
+              "title": "Buka grafik",
+              "body": "Di halaman token, kartu di bawah harga adalah grafiknya. Tombol perluas (⇱) membuka terminal layar penuh, tempat bilah alat paling lengkap.",
+              "where": "Halaman token → kartu harga → ikon perluas"
+            },
+            "bar": {
+              "title": "Badan dan ekor",
+              "body": "Badan candle membentang dari pembukaan ke penutupan; ekor atas adalah harga tertinggi dalam periode dan ekor bawah terendah. Badan naik biasanya hijau, turun merah.",
+              "where": "Candle itu sendiri di tengah grafik"
+            },
+            "colors": {
+              "title": "Warna dan arah",
+              "body": "Hijau berarti penutupan di atas pembukaan pada periode itu; merah sebaliknya. Warna adalah perbandingan, bukan penilaian — merah juga bisa sekadar koreksi.",
+              "where": "Warna candle (mengikuti tema aplikasi)"
+            },
+            "legend": {
+              "title": "Pembacaan crosshair",
+              "body": "Saat jari atau kursor di atas grafik, bilah atas menampilkan o/h/l/c dan volume. Itu bilah yang sama dengan area latihan di halaman ini.",
+              "where": "Bilah pembacaan di bagian atas grafik"
+            }
+          }
+        },
+        "range": {
+          "title": "Jendela waktu",
+          "steps": {
+            "ranges": {
+              "title": "Lima tombol rentang",
+              "body": "1D · 7D · 30D · 90D · 1Y. Setiap tombol menentukan berapa lama grafik mencakup; dari situ durasi satu candle ditentukan.",
+              "where": "Baris tombol di atas grafik"
+            },
+            "whatChanges": {
+              "title": "Apa yang berubah",
+              "body": "Mengubah jendela mengubah jumlah candle dan durasi masing-masing. Harga tertinggi yang sama terlihat berbeda di jendela berbeda — bandingkan dalam jendela yang sama.",
+              "where": "Ubah jenis/rentang di area latihan dan lihat"
+            },
+            "reset": {
+              "title": "Atur ulang zoom",
+              "body": "Tombol rentang juga mengatur ulang geser dan zoom, jadi grafik menampilkan seluruh jendela. Ini penyebab paling umum dari “saya tidak melihat semuanya”.",
+              "where": "Baris rentang yang sama"
+            }
+          }
+        },
+        "move": {
+          "title": "Geser dan zoom",
+          "steps": {
+            "drag": {
+              "title": "Seret untuk menggeser",
+              "body": "Menyeret horizontal di dalam grafik menggeser grafik. Seret vertikal tetap menggulir halaman, jadi halaman tidak macet.",
+              "where": "Di mana saja di dalam grafik"
+            },
+            "pinch": {
+              "title": "Cubit untuk zoom",
+              "body": "Di terminal layar penuh, renggangkan dua jari untuk memperbesar dan rapatkan untuk memperkecil. Bilah alat seluler juga punya + / − saat browser menangkap gesturnya.",
+              "where": "Grafik di terminal layar penuh"
+            },
+            "doubleTap": {
+              "title": "Ketuk dua kali",
+              "body": "Ketuk dua kali memperbesar ke titik yang Anda sentuh; jika sudah diperbesar, kembali ke tampilan penuh.",
+              "where": "Titik mana saja di grafik"
+            },
+            "fit": {
+              "title": "Kembali ke tampilan penuh",
+              "body": "Tombol “Paskan” (atau atur ulang zoom) selalu mengembalikan seluruh jendela ke layar — gunakan bila tersesat.",
+              "where": "Tombol tampilan latihan di halaman ini / bilah terminal"
+            }
+          }
+        },
+        "type": {
+          "title": "Jenis grafik",
+          "steps": {
+            "candles": {
+              "title": "Candle (bawaan)",
+              "body": "Candle memberi empat nilai sekaligus — pembukaan, penutupan, tertinggi, terendah — sehingga gejolak di dalam periode tetap terlihat.",
+              "where": "Bilah alat: tombol jenis grafik"
+            },
+            "line": {
+              "title": "Garis",
+              "body": "Garis hanya menggambar penutupan: lebih bersih, tetapi gejolak dalam periode tersembunyi. Untuk arah utama, bukan menilai satu candle.",
+              "where": "Jenis grafik → Garis"
+            },
+            "area": {
+              "title": "Area",
+              "body": "Area adalah garis berisi: rentang periode terlihat sekali pandang, dan gerakan internal tetap tersembunyi.",
+              "where": "Jenis grafik → Area"
+            },
+            "which": {
+              "title": "Mana yang dipakai",
+              "body": "Untuk tahu apa yang terjadi dalam satu periode, pakai candle; untuk bentuk seluruh jendela, garis atau area.",
+              "where": "Tiga tombol jenis di bilah alat"
+            }
+          }
+        },
+        "avg": {
+          "title": "Rata-rata bergerak",
+          "steps": {
+            "why": {
+              "title": "Apa fungsinya",
+              "body": "Rata-rata bergerak menghaluskan N penutupan terakhir menjadi satu garis dan membuang derau satu candle. Ia menjelaskan masa lalu, bukan memprediksi.",
+              "where": "Bilah alat: MA7 · MA25 · MA99"
+            },
+            "sma": {
+              "title": "Pendek dan panjang",
+              "body": "Makin pendek (MA7), makin menempel pada harga; makin panjang (MA99), makin stabil tetapi makin tertinggal. Jarak keduanya mengukur perbedaan mereka.",
+              "where": "Area latihan: aktifkan MA7 dan MA25 lalu amati"
+            },
+            "ema": {
+              "title": "EMA vs MA",
+              "body": "EMA memberi bobot lebih pada harga terbaru, jadi berbalik lebih awal dan lebih sensitif. Pada periode sama biasanya lebih dekat ke harga daripada MA.",
+              "where": "Bilah alat: EMA21 · EMA55"
+            },
+            "cross": {
+              "title": "Persilangan bukan sinyal",
+              "body": "Garis pendek memotong garis panjang disebut “persilangan”, dan itu sering sekali terjadi di pasar menyamping. Ia menjelaskan harga terbaru relatif lebih kuat — bukan jaminan.",
+              "where": "Buka MA7 dan MA99 bersamaan di area latihan"
+            },
+            "labels": {
+              "title": "Label-label itu",
+              "body": "MA7 / MA25 / MA99 / EMA21 / EMA55 adalah singkatan standar dan sengaja tidak diterjemahkan: sama di setiap terminal perdagangan.",
+              "where": "Label chip indikator"
+            }
+          }
+        },
+        "bands": {
+          "title": "Pita Bollinger",
+          "steps": {
+            "what": {
+              "title": "Apa yang digambar",
+              "body": "Tiga garis: rata-rata 20 periode dan satu pita di atas serta di bawah, digeser sesuai volatilitas. Harga sebagian besar waktu berada di dalam.",
+              "where": "Bilah alat: tombol BB"
+            },
+            "squeeze": {
+              "title": "Arti pita menyempit",
+              "body": "Pita menyempit berarti volatilitas terbaru rendah. Ia tidak memberi tahu kapan akan ada penembusan, hanya bahwa gejolaknya lebih kecil dari sebelumnya.",
+              "where": "Latihan: aktifkan BB dan amati lebarnya"
+            },
+            "caution": {
+              "title": "Keluar pita bukan pembalikan",
+              "body": "Menutup di luar pita hanya berarti periode ini bergerak besar; dalam tren kuat harga tetap di luar. Jangan anggap ini sinyal beli/jual.",
+              "where": "Grafik mana pun dengan BB aktif"
+            }
+          }
+        },
+        "panes": {
+          "title": "Panel bawah",
+          "steps": {
+            "volume": {
+              "title": "Volume",
+              "body": "Batang volume menunjukkan berapa banyak yang ditransaksikan dalam periode itu. Kenaikan dengan volume biasanya berarti lebih banyak partisipasi daripada tanpa — tetapi itu bukan aturan.",
+              "where": "Bilah alat: tombol Volume"
+            },
+            "rsi": {
+              "title": "RSI",
+              "body": "RSI memadatkan naik-turun terbaru menjadi angka 0–100. Dekat 70 hanya berarti “baru naik banyak”; dekat 30, “baru turun banyak”. Bukan tanda pembalikan.",
+              "where": "Bilah alat: tombol RSI (muncul di panel bawah)"
+            },
+            "macd": {
+              "title": "MACD",
+              "body": "MACD menggambar selisih dua rata-rata dan garis sinyalnya; histogram adalah jaraknya. Ia mengukur kecepatan perubahan momentum, dan juga tertinggal.",
+              "where": "Bilah alat: tombol MACD"
+            }
+          }
+        },
+        "levels": {
+          "title": "Alat level",
+          "steps": {
+            "priceLine": {
+              "title": "Garis harga",
+              "body": "Garis harga adalah garis horizontal yang Anda gambar untuk mengingat level. Ia tidak memicu apa pun, hanya menandai.",
+              "where": "Bilah alat: chip garis harga"
+            },
+            "measure": {
+              "title": "Ukur",
+              "body": "Alat ukur memungkinkan Anda menyeret dari satu titik ke titik lain dan membaca selisih harga serta waktu di antaranya. Untuk mengukur besarnya sebuah pergerakan.",
+              "where": "Bilah alat: chip ukur"
+            },
+            "fib": {
+              "title": "Fibonacci",
+              "body": "Fibonacci menggambar beberapa garis retracement antara tertinggi dan terendah jendela saat ini. Ini hanya skala acuan, bukan support atau resistance itu sendiri.",
+              "where": "Bilah alat: chip Fib"
+            },
+            "fibRead": {
+              "title": "Cara membacanya",
+              "body": "Garis bergerak bersama jendela: pindah ke 90D dan garis digambar ulang. Ia menandai proporsi, bukan janji — melewati garis tidak membuktikan pembalikan.",
+              "where": "Latihan: aktifkan Fibonacci dan ubah rentang untuk melihatnya digambar ulang"
+            }
+          }
+        },
+        "scale": {
+          "title": "Skala",
+          "steps": {
+            "log": {
+              "title": "Skala logaritmik",
+              "body": "Pada skala linear, jarak 10→100 tidak tampak seperti 100→1000; pada skala log keduanya sama — artinya perubahan persen yang sama terlihat sama.",
+              "where": "Bilah alat: chip log / tombol tampilan halaman ini"
+            },
+            "when": {
+              "title": "Kapan memakainya",
+              "body": "Aset yang naik dari puluhan ke ribuan, seperti BTC, menghapus bagian awalnya pada skala linear; skala log mengembalikannya.",
+              "where": "Grafik jendela panjang (90D / 1Y)"
+            },
+            "grid": {
+              "title": "Kisi",
+              "body": "Kisi hanya membantu membaca nilai; mematikannya tidak mengubah data, hanya menyisakan grafik lebih bersih untuk melihat tren.",
+              "where": "Bilah alat: chip kisi"
+            }
+          }
+        },
+        "capture": {
+          "title": "Tangkapan layar",
+          "steps": {
+            "png": {
+              "title": "Tombol PNG",
+              "body": "Menyimpan grafik apa adanya sebagai PNG, termasuk indikator yang terbuka. Gambar tidak memuat data dompet atau akun.",
+              "where": "Bilah alat: chip PNG (di terminal yang diperluas)"
+            },
+            "fit": {
+              "title": "Atur ulang sebelum menangkap",
+              "body": "“Paskan” (atau atur ulang zoom) mengembalikan seluruh jendela lebih dulu, agar PNG tidak berupa potongan yang sangat diperbesar.",
+              "where": "Bilah alat: Paskan / atur ulang lalu PNG"
+            }
+          }
+        },
+        "forecast": {
+          "title": "Tombol prakiraan AI",
+          "steps": {
+            "what": {
+              "title": "Apa fungsinya",
+              "body": "Ia mengirim candle yang sudah ada di layar ke model, lalu model menggambar beberapa candle “mungkin” berikutnya dengan garis putus-putus. Ia tidak mengambil data masa depan.",
+              "where": "Chip “prakiraan AI” di bilah grafik"
+            },
+            "horizon": {
+              "title": "Horizon",
+              "body": "Pemilih di sebelahnya menentukan berapa candle yang digambar. Makin banyak, makin cepat ketidakpastian menumpuk — yang ketiga puluh jauh lebih lemah daripada yang ketiga.",
+              "where": "Pemilih horizon di samping chip AI"
+            },
+            "limits": {
+              "title": "Kapan bukan model",
+              "body": "Jika server tidak bisa menjalankan model, ia memakai metode “baseline” dan menulis nama model di kartu. Melihat baseline berarti ini bukan keluaran model.",
+              "where": "Nama model di atas kartu prakiraan"
+            },
+            "notAdvice": {
+              "title": "Ini bukan saran",
+              "body": "Prakiraan adalah jalur yang mungkin, bukan janji. Ia dihasilkan dari candle masa lalu, dan masa lalu tidak menjamin masa depan.",
+              "where": "Di seluruh aplikasi: panduan ini tidak memberi saran perdagangan"
+            }
+          }
+        }
+      }
+    },
+    "cards": {
+      "chartGuide": {
+        "title": "Panduan candlestick",
+        "sub": "Candle demi candle: jendela, indikator, level, dan tombol prakiraan.",
+        "hint": "Latihan interaktif, bukan tangkapan layar"
+      }
+    },
+    "advancedGuide": {
+      "kicker": "Belajar sebelum melihat",
+      "title": "Sudah bisa membaca grafik yang dipakai di sini?",
+      "body": "Backtest, what-if, dan skenario semuanya berdiri di atas grafik candlestick. Panduan praktik sepuluh menit ini menjelaskan setiap bagian di grafik nyata, bukan tangkapan layar.",
+      "cta": "Buka panduan grafik"
+    },
+    "percent": {
+      "clamped": "Dibatasi ke {{min}}–{{max}}",
+      "increase": "Naikkan",
+      "decrease": "Turunkan"
     }
   },
   "sm": {

@@ -2808,7 +2808,319 @@
             "def": "Everything you hold, and the share of each asset."
           }
         }
+      },
+      "chartGuide": {
+        "title": "Guía del gráfico",
+        "sub": "Aprende a leer las velas de la página del token: ventana, ejes, precio y cada botón de la barra."
       }
+    },
+    "chartGuide": {
+      "sampleData": "Los datos de abajo son una serie de práctica, no el precio en vivo. Para aprender, no es el mercado.",
+      "chaptersLabel": "Capítulos",
+      "noteTitle": "Ten en cuenta",
+      "note": "Esta guía solo enseña a leer: no da sugerencias de operación, objetivos de precio ni un «buen punto de entrada».",
+      "backToLab": "Volver al Lab",
+      "tabs": {
+        "basics": "Básico",
+        "studies": "Indicadores",
+        "levels": "Niveles",
+        "extras": "Más"
+      },
+      "demo": {
+        "title": "Pruébalo tú",
+        "legendHint": "Toca o pasa el cursor por el gráfico para ver los valores exactos",
+        "type": "Tipo de gráfico",
+        "types": {
+          "candles": "Velas",
+          "line": "Línea",
+          "area": "Área"
+        },
+        "toggles": "Superposiciones",
+        "togglesMap": {
+          "ma7": "MA7",
+          "ma25": "MA25",
+          "ema21": "EMA21",
+          "bb": "Bollinger",
+          "volume": "Volumen",
+          "rsi": "RSI",
+          "fib": "Fibonacci"
+        },
+        "view": "Vista",
+        "zoomIn": "Acercar",
+        "fit": "Ajustar",
+        "log": "Escala log",
+        "loadingNote": "El motor del gráfico está cargando; si no está disponible, se muestra el gráfico simple."
+      },
+      "chapters": {
+        "read": {
+          "title": "Leer una vela",
+          "steps": {
+            "open": {
+              "title": "Abre el gráfico",
+              "body": "En la página del token, la tarjeta bajo el precio es el gráfico. El botón de expandir (⇱) abre el terminal a pantalla completa, donde la barra está completa.",
+              "where": "Página del token → tarjeta de precio → icono de expandir"
+            },
+            "bar": {
+              "title": "Cuerpo y mecha",
+              "body": "El cuerpo de cada vela va de apertura a cierre; la mecha superior es el máximo del intervalo y la inferior el mínimo. Un cuerpo que sube suele ser verde y uno que baja, rojo.",
+              "where": "Los propios candados en el centro del gráfico"
+            },
+            "colors": {
+              "title": "Color y dirección",
+              "body": "Verde significa que el cierre quedó por encima de la apertura en ese intervalo; rojo, lo contrario. El color es comparación, no juicio: rojo también puede ser solo un retroceso.",
+              "where": "Color de las velas (sigue el tema de la app)"
+            },
+            "legend": {
+              "title": "Lectura del cursor",
+              "body": "Con el dedo o el cursor sobre el gráfico, la franja superior muestra o/h/l/c y el volumen. Es la misma franja que se ve en la zona de práctica de esta página.",
+              "where": "La franja de lectura en la esquina superior del gráfico"
+            }
+          }
+        },
+        "range": {
+          "title": "Ventana de tiempo",
+          "steps": {
+            "ranges": {
+              "title": "Los cinco botones de rango",
+              "body": "1D · 7D · 30D · 90D · 1Y. Cada botón fija cuánto tiempo cubre el gráfico; de ahí sale cuánto dura cada vela.",
+              "where": "La fila de botones sobre el gráfico"
+            },
+            "whatChanges": {
+              "title": "Qué cambia al cambiar",
+              "body": "Al cambiar la ventana cambian el número de velas y la duración de cada una. El mismo máximo se ve distinto en ventanas distintas: compara siempre con la misma ventana.",
+              "where": "Cambia tipo/rango en la zona de práctica y míralo"
+            },
+            "reset": {
+              "title": "Restablecer el zoom",
+              "body": "Los botones de rango también reinician el desplazamiento y el zoom, así que el gráfico vuelve a mostrar la ventana completa. Es la causa más habitual de “no veo todo”.",
+              "where": "La misma fila de rango"
+            }
+          }
+        },
+        "move": {
+          "title": "Desplazar y hacer zoom",
+          "steps": {
+            "drag": {
+              "title": "Arrastra para desplazar",
+              "body": "Arrastrar en horizontal dentro del gráfico lo desplaza. Arrastrar en vertical sigue desplazando la página, así que no se queda atascada.",
+              "where": "En cualquier parte dentro del gráfico"
+            },
+            "pinch": {
+              "title": "Pellizcar para acercar",
+              "body": "En el terminal a pantalla completa, abre los dedos para acercar y júntalos para alejar. La barra móvil también tiene + / −, para cuando el navegador intercepta el gesto.",
+              "where": "El gráfico dentro del terminal a pantalla completa"
+            },
+            "doubleTap": {
+              "title": "Doble toque",
+              "body": "El doble toque acerca hacia el punto que tocas; si ya estás cerca, vuelve a la vista completa.",
+              "where": "Cualquier punto del gráfico"
+            },
+            "fit": {
+              "title": "Volver a la vista completa",
+              "body": "El botón «Ajustar» (o restablecer zoom) siempre devuelve la ventana entera a la pantalla: úsalo si te pierdes.",
+              "where": "Botones de vista de la práctica en esta página / barra del terminal"
+            }
+          }
+        },
+        "type": {
+          "title": "Tipo de gráfico",
+          "steps": {
+            "candles": {
+              "title": "Velas (por defecto)",
+              "body": "La vela da cuatro valores a la vez —apertura, cierre, máximo y mínimo— así que también se ve qué pasó dentro del período.",
+              "where": "Barra: botón de tipo de gráfico"
+            },
+            "line": {
+              "title": "Línea",
+              "body": "La línea solo dibuja el cierre: más limpia, pero oculta el vaivén del período. Sirve para la dirección de fondo, no para juzgar una vela.",
+              "where": "Tipo de gráfico → Línea"
+            },
+            "area": {
+              "title": "Área",
+              "body": "El área es una línea rellena: el vaivén del intervalo se ve de un vistazo, y el movimiento interno sigue oculto igual.",
+              "where": "Tipo de gráfico → Área"
+            },
+            "which": {
+              "title": "Cuál usar",
+              "body": "Para saber qué pasó dentro de un período, velas; para la forma de toda la ventana, línea o área.",
+              "where": "Los tres botones de tipo en la barra"
+            }
+          }
+        },
+        "avg": {
+          "title": "Medias móviles",
+          "steps": {
+            "why": {
+              "title": "Qué responden",
+              "body": "Una media móvil suaviza los últimos N cierres en una línea y quita el ruido de una sola vela. Describe el pasado, no predice.",
+              "where": "Barra: MA7 · MA25 · MA99"
+            },
+            "sma": {
+              "title": "Corto y largo",
+              "body": "Cuanto más corta (MA7), más se pega al precio; cuanto más larga (MA99), más estable pero con más retraso. La separación entre ambas mide su desacuerdo.",
+              "where": "Zona de práctica: activa MA7 y MA25 y observa"
+            },
+            "ema": {
+              "title": "EMA frente a MA",
+              "body": "La EMA pondera más los precios recientes, así que gira antes y es más sensible. Con el mismo período suele quedar más cerca del precio que la MA.",
+              "where": "Barra: EMA21 · EMA55"
+            },
+            "cross": {
+              "title": "Un cruce no es una señal",
+              "body": "Que la corta cruce a la larga se llama “cruce”, y ocurre muchísimo en mercados laterales. Describe que el precio reciente está relativamente más fuerte; no es una garantía.",
+              "where": "Abre MA7 y MA99 juntas en la práctica y compara"
+            },
+            "labels": {
+              "title": "Esas etiquetas",
+              "body": "MA7 / MA25 / MA99 / EMA21 / EMA55 son abreviaturas estándar y no se traducen a propósito: son las mismas en cualquier terminal de trading.",
+              "where": "Etiquetas de chips de indicador en la barra"
+            }
+          }
+        },
+        "bands": {
+          "title": "Bandas de Bollinger",
+          "steps": {
+            "what": {
+              "title": "¿Qué dibuja?",
+              "body": "Tres líneas: una media de 20 períodos y una banda a cada lado desplazada según la volatilidad. El precio pasa la mayor parte del tiempo dentro.",
+              "where": "Barra: botón BB"
+            },
+            "squeeze": {
+              "title": "Qué significa que se estrechen",
+              "body": "Que las bandas se estrechen dice que la volatilidad reciente es baja. No dice cuándo habrá una ruptura, solo que el vaivén es menor que antes.",
+              "where": "Práctica: activa BB y mira el ancho"
+            },
+            "caution": {
+              "title": "Fuera de la banda no es un giro",
+              "body": "Cerrar fuera de la banda solo dice que este período se movió mucho; en una tendencia fuerte se queda fuera. No lo tomes como aviso de compra o venta.",
+              "where": "Cualquier gráfico con BB activo"
+            }
+          }
+        },
+        "panes": {
+          "title": "Paneles inferiores",
+          "steps": {
+            "volume": {
+              "title": "Volumen",
+              "body": "Las barras de volumen dicen cuánto se negoció en el período. Subida con volumen suele indicar más participación que subida sin él, pero no es una regla.",
+              "where": "Barra: botón Volumen"
+            },
+            "rsi": {
+              "title": "RSI",
+              "body": "El RSI comprime las subidas y bajadas recientes en un número de 0 a 100. Cerca de 70 solo significa “subió mucho últimamente”; cerca de 30, “bajó mucho”. No anuncia un giro.",
+              "where": "Barra: botón RSI (aparece en el panel inferior)"
+            },
+            "macd": {
+              "title": "MACD",
+              "body": "El MACD dibuja la diferencia entre dos medias y su línea de señal; el histograma es la separación. Mide la velocidad del cambio de impulso, y también va con retraso.",
+              "where": "Barra: botón MACD"
+            }
+          }
+        },
+        "levels": {
+          "title": "Herramientas de nivel",
+          "steps": {
+            "priceLine": {
+              "title": "Línea de precio",
+              "body": "La línea de precio es una horizontal que dibujas en el gráfico para recordar un nivel. No dispara nada: solo marca.",
+              "where": "Barra: chip de línea de precio"
+            },
+            "measure": {
+              "title": "Medir",
+              "body": "La herramienta de medición te deja arrastrar de un punto a otro y lee la diferencia de precio y el tiempo entre ambos. Sirve para cuantificar un tramo.",
+              "where": "Barra: chip de medir"
+            },
+            "fib": {
+              "title": "Fibonacci",
+              "body": "Fibonacci dibuja varias líneas de retroceso entre el máximo y el mínimo de la ventana actual. Es una escala de referencia, no un soporte ni una resistencia por sí mismo.",
+              "where": "Barra: chip Fib"
+            },
+            "fibRead": {
+              "title": "Cómo leerlas",
+              "body": "Las líneas se mueven con la ventana: al pasar a 90D se redibujan. Marcan proporciones, no promesas: cruzar una no prueba que ahí deba girar.",
+              "where": "Práctica: activa Fibonacci y cambia el rango para verlo redibujarse"
+            }
+          }
+        },
+        "scale": {
+          "title": "Escala",
+          "steps": {
+            "log": {
+              "title": "Escala logarítmica",
+              "body": "En escala lineal el hueco de 10 a 100 no se parece al de 100 a 1000; en escala logarítmica ambos son iguales, es decir, un mismo cambio porcentual se ve igual.",
+              "where": "Barra: chip log / botones de vista de esta página"
+            },
+            "when": {
+              "title": "Cuándo usarla",
+              "body": "Un activo que pasó de decenas a miles, como BTC, desaparece en el tramo inicial con escala lineal; la logarítmica los devuelve a la vista.",
+              "where": "Gráficos de ventanas largas (90D / 1Y)"
+            },
+            "grid": {
+              "title": "Rejilla",
+              "body": "La rejilla solo ayuda a leer valores; apagarla no cambia los datos, solo deja un gráfico más limpio para ver la tendencia.",
+              "where": "Barra: chip de rejilla"
+            }
+          }
+        },
+        "capture": {
+          "title": "Captura y guardado",
+          "steps": {
+            "png": {
+              "title": "Botón PNG",
+              "body": "Guarda el gráfico tal como se ve en un PNG, con los indicadores abiertos. La imagen no lleva datos de cartera ni de cuenta.",
+              "where": "Barra: chip PNG (en el terminal expandido)"
+            },
+            "fit": {
+              "title": "Restablece antes de capturar",
+              "body": "«Ajustar» (o restablecer zoom) devuelve la ventana completa antes de capturar, para que el PNG no sea un fragmento muy ampliado.",
+              "where": "Barra: Ajustar / restablecer zoom y luego PNG"
+            }
+          }
+        },
+        "forecast": {
+          "title": "Botón de pronóstico IA",
+          "steps": {
+            "what": {
+              "title": "Qué hace",
+              "body": "Envía al modelo las velas que ya están en pantalla y este dibuja unas pocas velas “posibles” a continuación, con línea discontinua. No obtiene datos del futuro.",
+              "where": "Chip «pronóstico IA» en la barra del gráfico"
+            },
+            "horizon": {
+              "title": "Horizonte",
+              "body": "El selector de al lado decide cuántas velas se dibujan. Cuantas más, más rápido se acumula la incertidumbre: la trigésima es mucho más débil que la tercera.",
+              "where": "Selector de pasos junto al chip IA"
+            },
+            "limits": {
+              "title": "Cuándo no es el modelo",
+              "body": "Si el servidor no puede ejecutar el modelo, usa un método “baseline” y escribe el nombre del modelo en la tarjeta. Si lees baseline, no es salida del modelo.",
+              "where": "El nombre del modelo en la tarjeta de pronóstico"
+            },
+            "notAdvice": {
+              "title": "No es un consejo",
+              "body": "Una previsión es un camino posible, no una promesa. Se genera con velas pasadas, y el pasado no garantiza el futuro.",
+              "where": "En toda la app: esta guía no da consejo de operación"
+            }
+          }
+        }
+      }
+    },
+    "cards": {
+      "chartGuide": {
+        "title": "Guía de velas",
+        "sub": "De vela en vela: ventanas, indicadores, niveles y el botón de pronóstico.",
+        "hint": "Práctica interactiva, no capturas"
+      }
+    },
+    "advancedGuide": {
+      "kicker": "Aprende antes de mirar",
+      "title": "¿Sabes leer el gráfico que se usa aquí?",
+      "body": "Los backtests, el what-if y los escenarios se apoyan en el gráfico de velas. Esta guía práctica de diez minutos explica cada parte con el gráfico real, no con capturas.",
+      "cta": "Abrir la guía del gráfico"
+    },
+    "percent": {
+      "clamped": "Limitado a {{min}}–{{max}}",
+      "increase": "Aumentar",
+      "decrease": "Disminuir"
     }
   },
   "sm": {

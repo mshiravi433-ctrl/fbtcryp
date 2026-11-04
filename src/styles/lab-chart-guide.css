@@ -1,0 +1,347 @@
+/**
+ * CHART GUIDE — «راهنمای نمودار»
+ * ═══════════════════════════════════════════════════════════════════════════
+ * A LAZY SHEET, ON PURPOSE.
+ *
+ * `test/first-paint-lazy-css.test.mjs` pins the rule that a sheet belonging to
+ * one screen is imported FROM that screen, never from `index.css`. The guide is
+ * reached from one place (the Lab's Advanced tab) and nobody loads it on the
+ * first paint, so every byte here is a byte a first-time visitor does not pay
+ * for. `lab-v2.css` is already in the Lab's chunk, which is where the tokens
+ * below come from; this file only adds what is unique to the guide.
+ *
+ * Everything is expressed against the Lab's own tokens (`--acc`, `--acc-2`,
+ * `--lab-line`, `--text-1/2/3`) so a theme flip or a per-chapter accent change
+ * costs a class name, not a rule.
+ */
+
+/* ─── the sample-data banner ─────────────────────────────────────────────── */
+/* Deliberately NOT red and not a warning triangle: this is not an error, it is
+   the sentence that makes every number below it honest. Amber + flask, quiet
+   enough to read once and not to nag. */
+.lab2-cg-sample {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--rgb-5, #ffb020) 42%, var(--lab-line));
+  background: color-mix(in srgb, var(--rgb-5, #ffb020) 7%, transparent);
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.lab2-cg-sample svg { color: var(--rgb-5, #ffb020); flex: 0 0 auto; }
+
+/* ─── chapter rail ───────────────────────────────────────────────────────── */
+/* A second level of tabs, not a carousel: four chapter buttons per tab, each
+   labelled with its own name. Horizontal scroll rather than wrapping because a
+   wrapped rail changes the height of the screen every time you switch tab,
+   which makes the demo below jump — the one thing a chart must not do. */
+.lab2-cg-chapters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  padding: 2px 2px 4px;
+  margin-inline: -2px;
+}
+
+.lab2-cg-chapters::-webkit-scrollbar { display: none; }
+
+.lab2-cg-chapter {
+  position: relative;
+  isolation: isolate;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--lab-line);
+  background: color-mix(in srgb, var(--bg-panel, #0d1020) 70%, transparent);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.lab2-cg-chapter:hover { color: var(--text-1); border-color: var(--lab-line-2); }
+
+.lab2-cg-chapter.on {
+  color: var(--text-1);
+  border-color: color-mix(in srgb, var(--acc) 55%, transparent);
+}
+
+/* The pill is a sibling painted UNDER the label, so the text keeps its
+   contrast when the accent is a light colour (mint, amber). */
+.lab2-cg-chapter-pill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 11px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--acc) 22%, transparent), color-mix(in srgb, var(--acc-2) 12%, transparent));
+}
+
+.lab2-cg-chapter-icon { display: grid; place-items: center; color: var(--acc-ink, var(--acc)); }
+.lab2-cg-chapter.on .lab2-cg-chapter-icon { color: var(--acc-ink, var(--acc)); }
+
+.lab2-cg-chapter:focus-visible {
+  outline: 2px solid var(--acc-ink, var(--acc));
+  outline-offset: 2px;
+}
+
+/* ─── the demo ───────────────────────────────────────────────────────────── */
+.lab2-cg-demo-badge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  color: var(--acc-ink, var(--acc));
+  background: color-mix(in srgb, var(--acc) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--acc) 30%, transparent);
+  white-space: nowrap;
+}
+
+/* The OHLC strip keeps a fixed height whether or not a bar is hovered, so the
+   chart does not shift 22px the moment a finger touches it. */
+.lab2-cg-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 20px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  flex-wrap: wrap;
+}
+
+.lab2-cg-legend em {
+  font-style: normal;
+  font-weight: 800;
+  color: var(--text-3);
+  margin-inline-end: 4px;
+}
+
+.lab2-cg-legend-hint { color: var(--text-3); font-size: 10.5px; }
+
+/* The stage. `ProChart` paints into an absolutely-positioned child, so the
+   wrapper must own the height or the chart collapses to zero on mount. */
+.lab2-cg-chart {
+  position: relative;
+  height: 240px;
+  min-height: 240px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--lab-line);
+  background:
+    radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--rgb-1) 5%, transparent), transparent 70%),
+    color-mix(in srgb, var(--bg-abyss, #05060d) 55%, transparent);
+}
+
+@media (min-width: 640px) {
+  .lab2-cg-chart { height: 300px; min-height: 300px; }
+}
+
+.lab2-cg-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.lab2-cg-control-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lab2-cg-control-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.lab2-cg-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* 36px minimum height, matching the Lab's other chips — a 28px chip looks
+   tidy in a mock and is a miss on a phone. */
+.lab2-cg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  padding: 6px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--lab-line);
+  background: color-mix(in srgb, var(--bg-panel, #0d1020) 62%, transparent);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.lab2-cg-chip:hover:not(:disabled) { color: var(--text-1); border-color: var(--lab-line-2); }
+
+.lab2-cg-chip.on {
+  color: var(--acc-ink, var(--acc));
+  border-color: color-mix(in srgb, var(--acc) 52%, transparent);
+  background: color-mix(in srgb, var(--acc) 13%, transparent);
+}
+
+.lab2-cg-chip:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.lab2-cg-chip:focus-visible {
+  outline: 2px solid var(--acc-ink, var(--acc));
+  outline-offset: 2px;
+}
+
+.lab2-cg-note {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+/* ─── the steps ──────────────────────────────────────────────────────────── */
+.lab2-cg-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lab2-cg-step {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 11px;
+  padding: 13px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--lab-line);
+  background: color-mix(in srgb, var(--bg-panel, #0d1020) 55%, transparent);
+}
+
+/* The number is a caption, not a decorative bubble: 26px, tabular, and it
+   carries `aria-hidden` in JSX because the list is already an <ol>. */
+.lab2-cg-step-num {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--acc-ink, var(--acc));
+  background: color-mix(in srgb, var(--acc) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--acc) 28%, transparent);
+}
+
+.lab2-cg-step-body { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+
+.lab2-cg-step-title {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.4;
+  color: var(--text-1);
+}
+
+.lab2-cg-step-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.85;
+  color: var(--text-2);
+}
+
+/* "Where it is" — the only row that tells the reader which chip to press in
+   which room. Rendered as a quiet inset strip so it reads as a pointer rather
+   than as more prose. */
+.lab2-cg-step-where {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 2px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--acc) 7%, transparent);
+  border-inline-start: 2px solid color-mix(in srgb, var(--acc) 55%, transparent);
+  font-size: 10.5px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+
+.lab2-cg-step-where svg { margin-top: 2px; flex: 0 0 auto; color: var(--acc-ink, var(--acc)); }
+
+.lab2-cg-exit { display: flex; }
+
+/* ─── light theme ────────────────────────────────────────────────────────── */
+/* The Lab's light palette flips surfaces and ink; the guide's own rules only
+   need to stop reaching for the dark panel colour. */
+:root[data-theme='light'] .lab2-cg-chapter,
+:root[data-theme='light'] .lab2-cg-chip {
+  background: #ffffff;
+  border-color: rgba(24, 42, 74, 0.14);
+  color: var(--text-2);
+}
+
+:root[data-theme='light'] .lab2-cg-chip.on {
+  background: color-mix(in srgb, var(--acc) 12%, #ffffff);
+  border-color: color-mix(in srgb, var(--acc) 45%, rgba(24, 42, 74, 0.2));
+  color: var(--acc-ink);
+}
+
+:root[data-theme='light'] .lab2-cg-chapter.on {
+  border-color: color-mix(in srgb, var(--acc) 45%, rgba(24, 42, 74, 0.2));
+}
+
+/* The pill is a translucent accent wash on black and would wash the label out
+   on white; it becomes a solid tint of the same hue instead. */
+:root[data-theme='light'] .lab2-cg-chapter-pill {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--acc) 16%, #ffffff), color-mix(in srgb, var(--acc-2) 9%, #ffffff));
+}
+
+:root[data-theme='light'] .lab2-cg-chart {
+  background: #f7fafd;
+  border-color: rgba(24, 42, 74, 0.14);
+}
+
+:root[data-theme='light'] .lab2-cg-step {
+  background: #ffffff;
+  border-color: rgba(24, 42, 74, 0.12);
+}
+
+:root[data-theme='light'] .lab2-cg-sample {
+  background: color-mix(in srgb, var(--rgb-5, #b07a00) 8%, #ffffff);
+  color: var(--text-2);
+}
+
+:root[data-theme='light'] .lab2-cg-step-where {
+  background: color-mix(in srgb, var(--acc) 8%, #ffffff);
+}
+
+/* ─── small screens ──────────────────────────────────────────────────────── */
+@media (max-width: 420px) {
+  .lab2-cg-chart { height: 208px; min-height: 208px; }
+  .lab2-cg-step { padding: 11px 12px; gap: 9px; }
+  .lab2-cg-step-text { font-size: 11.5px; line-height: 1.8; }
+  .lab2-cg-chip { font-size: 10.5px; padding: 6px 9px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab2-cg-chapter, .lab2-cg-chip { transition: none; }
+}
