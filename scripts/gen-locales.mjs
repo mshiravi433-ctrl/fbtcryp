@@ -27,6 +27,7 @@ import spotDepth from './locales/spot-depth.mjs';
 import tpslHistory from './locales/tpsl-history.mjs';
 import tap from './locales/tap.mjs';
 import tokenChart from './locales/token-chart.mjs';
+import { CHART_GUIDE } from './locales/chart-guide.mjs';
 
 const LANGS = ['zh', 'hi', 'es', 'fr', 'ru', 'tr', 'ur', 'id', 'pt'];
 // Hand-maintained. English is the source, so it is 100% by definition and is
@@ -59,7 +60,11 @@ const SOURCES = {
   /* The token-page candlestick terminal. Added 2026-11-01 because the block
      existed only in en/fa and every other language silently fell back to
      English inside an otherwise translated coin page. */
-  ...byKey(tokenChart)
+  ...byKey(tokenChart),
+  /* The Lab's chart tutorial, its Advanced doorway and the percent-field
+     strings. Own module rather than `common.mjs` because none of it renders
+     outside the Lab's own chunk. */
+  ...CHART_GUIDE
 };
 
 function setPath(obj, dotted, value) {

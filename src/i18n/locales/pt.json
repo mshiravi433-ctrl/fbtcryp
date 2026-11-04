@@ -2808,7 +2808,319 @@
             "def": "Everything you hold, and the share of each asset."
           }
         }
+      },
+      "chartGuide": {
+        "title": "Guia do gráfico",
+        "sub": "Aprenda a ler os candles na página do token: janela, eixos, preço e cada botão da barra."
       }
+    },
+    "chartGuide": {
+      "sampleData": "Os dados abaixo são uma série de prática, não o preço ao vivo. Para aprender, não é o mercado.",
+      "chaptersLabel": "Capítulos",
+      "noteTitle": "Lembre-se",
+      "note": "Este guia ensina apenas a ler: não dá dicas de operação, alvos de preço nem um “bom ponto de entrada”.",
+      "backToLab": "Voltar ao Lab",
+      "tabs": {
+        "basics": "Básico",
+        "studies": "Indicadores",
+        "levels": "Níveis",
+        "extras": "Mais"
+      },
+      "demo": {
+        "title": "Experimente",
+        "legendHint": "Toque ou passe o cursor no gráfico para ver os valores exatos",
+        "type": "Tipo de gráfico",
+        "types": {
+          "candles": "Candles",
+          "line": "Linha",
+          "area": "Área"
+        },
+        "toggles": "Sobreposições",
+        "togglesMap": {
+          "ma7": "MA7",
+          "ma25": "MA25",
+          "ema21": "EMA21",
+          "bb": "Bollinger",
+          "volume": "Volume",
+          "rsi": "RSI",
+          "fib": "Fibonacci"
+        },
+        "view": "Visualização",
+        "zoomIn": "Aproximar",
+        "fit": "Ajustar",
+        "log": "Escala log",
+        "loadingNote": "O motor do gráfico está carregando; se não estiver disponível, o gráfico simples é exibido."
+      },
+      "chapters": {
+        "read": {
+          "title": "Ler um candle",
+          "steps": {
+            "open": {
+              "title": "Abra o gráfico",
+              "body": "Na página do token, o cartão abaixo do preço é o gráfico. O botão de expandir (⇱) abre o terminal em tela cheia, onde a barra é completa.",
+              "where": "Página do token → cartão de preço → ícone de expandir"
+            },
+            "bar": {
+              "title": "Corpo e pavio",
+              "body": "O corpo do candle vai da abertura ao fechamento; o pavio superior é a máxima do intervalo e o inferior, a mínima. Corpo em alta costuma ser verde, em queda, vermelho.",
+              "where": "Os próprios candles no centro do gráfico"
+            },
+            "colors": {
+              "title": "Cor e direção",
+              "body": "Verde significa fechamento acima da abertura no intervalo; vermelho, o contrário. Cor é comparação, não julgamento: vermelho também pode ser só um recuo.",
+              "where": "Cor dos candles (segue o tema do app)"
+            },
+            "legend": {
+              "title": "Leitura do cursor",
+              "body": "Com o dedo ou o cursor sobre o gráfico, a faixa superior mostra o/h/l/c e o volume. É a mesma faixa que aparece na área de prática desta página.",
+              "where": "A faixa de leitura no topo do gráfico"
+            }
+          }
+        },
+        "range": {
+          "title": "Janela de tempo",
+          "steps": {
+            "ranges": {
+              "title": "Os cinco botões de intervalo",
+              "body": "1D · 7D · 30D · 90D · 1Y. Cada botão define quanto tempo o gráfico cobre; daí vem a duração de cada candle.",
+              "where": "A linha de botões acima do gráfico"
+            },
+            "whatChanges": {
+              "title": "O que muda",
+              "body": "Mudar a janela muda o número de candles e a duração de cada um. A mesma máxima parece diferente em janelas diferentes: compare na mesma janela.",
+              "where": "Troque tipo/intervalo na área de prática e veja"
+            },
+            "reset": {
+              "title": "Redefinir o zoom",
+              "body": "Os botões de intervalo também redefinem o deslocamento e o zoom, então o gráfico volta à janela inteira. É a causa mais comum do “não estou vendo tudo”.",
+              "where": "A mesma linha de intervalo"
+            }
+          }
+        },
+        "move": {
+          "title": "Mover e ampliar",
+          "steps": {
+            "drag": {
+              "title": "Arraste para mover",
+              "body": "Arrastar na horizontal dentro do gráfico o desloca. Arrastar na vertical continua rolando a página, então ela não trava.",
+              "where": "Em qualquer lugar dentro do gráfico"
+            },
+            "pinch": {
+              "title": "Pinçar para ampliar",
+              "body": "No terminal em tela cheia, afaste dois dedos para aproximar e junte para afastar. A barra móvel também tem + / −, para quando o navegador captura o gesto.",
+              "where": "O gráfico no terminal em tela cheia"
+            },
+            "doubleTap": {
+              "title": "Toque duplo",
+              "body": "O toque duplo aproxima do ponto tocado; se já estiver ampliado, volta à visão completa.",
+              "where": "Qualquer ponto do gráfico"
+            },
+            "fit": {
+              "title": "Voltar à visão completa",
+              "body": "O botão “Ajustar” (ou redefinir zoom) sempre traz a janela inteira de volta: use se se perder.",
+              "where": "Botões de visualização da prática nesta página / barra do terminal"
+            }
+          }
+        },
+        "type": {
+          "title": "Tipo de gráfico",
+          "steps": {
+            "candles": {
+              "title": "Candles (padrão)",
+              "body": "O candle dá quatro valores ao mesmo tempo — abertura, fechamento, máxima e mínima — então a agitação dentro do período também aparece.",
+              "where": "Barra: botão de tipo de gráfico"
+            },
+            "line": {
+              "title": "Linha",
+              "body": "A linha desenha só o fechamento: mais limpa, mas esconde o vaivém do período. Para a direção de fundo, não para julgar um candle.",
+              "where": "Tipo de gráfico → Linha"
+            },
+            "area": {
+              "title": "Área",
+              "body": "A área é uma linha preenchida: a amplitude do intervalo salta aos olhos, e o movimento interno continua oculto.",
+              "where": "Tipo de gráfico → Área"
+            },
+            "which": {
+              "title": "Qual usar",
+              "body": "Para saber o que aconteceu num período, candles; para a forma da janela inteira, linha ou área.",
+              "where": "Os três botões de tipo na barra"
+            }
+          }
+        },
+        "avg": {
+          "title": "Médias móveis",
+          "steps": {
+            "why": {
+              "title": "Para que servem",
+              "body": "Uma média móvel suaviza os últimos N fechamentos em uma linha e remove o ruído de um candle. Ela descreve o passado, não prevê.",
+              "where": "Barra: MA7 · MA25 · MA99"
+            },
+            "sma": {
+              "title": "Curta e longa",
+              "body": "Quanto mais curta (MA7), mais colada ao preço; quanto mais longa (MA99), mais estável mas mais atrasada. A separação entre as duas mede a discordância.",
+              "where": "Área de prática: ative MA7 e MA25 e observe"
+            },
+            "ema": {
+              "title": "EMA e MA",
+              "body": "A EMA pondera mais os preços recentes, então vira antes e é mais sensível. No mesmo período costuma ficar mais perto do preço que a MA.",
+              "where": "Barra: EMA21 · EMA55"
+            },
+            "cross": {
+              "title": "Cruzamento não é sinal",
+              "body": "A curta cruzando acima da longa é chamada de “cruzamento”, e acontece muito em mercado lateral. Descreve que o preço recente está relativamente mais forte — não é garantia.",
+              "where": "Abra MA7 e MA99 juntas na prática"
+            },
+            "labels": {
+              "title": "Esses rótulos",
+              "body": "MA7 / MA25 / MA99 / EMA21 / EMA55 são abreviações padrão e de propósito não são traduzidas: são iguais em qualquer terminal de negociação.",
+              "where": "Rótulos dos chips de indicador"
+            }
+          }
+        },
+        "bands": {
+          "title": "Bandas de Bollinger",
+          "steps": {
+            "what": {
+              "title": "O que desenha",
+              "body": "Três linhas: uma média de 20 períodos e uma banda de cada lado, deslocada conforme a volatilidade. O preço fica a maior parte do tempo dentro.",
+              "where": "Barra: botão BB"
+            },
+            "squeeze": {
+              "title": "O que significa estreitar",
+              "body": "Bandas estreitas dizem que a volatilidade recente é baixa. Não dizem quando haverá rompimento, só que o vaivém é menor que antes.",
+              "where": "Prática: ative BB e veja a largura"
+            },
+            "caution": {
+              "title": "Fora da banda não é reversão",
+              "body": "Fechar fora da banda só diz que o período se moveu muito; em tendência forte o preço fica fora. Não tome isso como sinal de compra ou venda.",
+              "where": "Qualquer gráfico com BB ligado"
+            }
+          }
+        },
+        "panes": {
+          "title": "Painéis inferiores",
+          "steps": {
+            "volume": {
+              "title": "Volume",
+              "body": "As barras de volume dizem quanto foi negociado no período. Alta com volume costuma indicar mais participação do que sem ele, mas não é regra.",
+              "where": "Barra: botão Volume"
+            },
+            "rsi": {
+              "title": "RSI",
+              "body": "O RSI comprime as altas e baixas recentes num número de 0 a 100. Perto de 70 só significa “subiu muito ultimamente”; perto de 30, “caiu muito”. Não anuncia um giro.",
+              "where": "Barra: botão RSI (aparece no painel inferior)"
+            },
+            "macd": {
+              "title": "MACD",
+              "body": "O MACD desenha a diferença entre duas médias e sua linha de sinal; o histograma é a separação. Ele mede a velocidade da mudança do impulso, e também fica atrasado.",
+              "where": "Barra: botão MACD"
+            }
+          }
+        },
+        "levels": {
+          "title": "Ferramentas de nível",
+          "steps": {
+            "priceLine": {
+              "title": "Linha de preço",
+              "body": "A linha de preço é uma horizontal que você desenha para lembrar um nível. Ela não dispara nada: apenas marca.",
+              "where": "Barra: chip de linha de preço"
+            },
+            "measure": {
+              "title": "Medir",
+              "body": "A ferramenta de medição permite arrastar de um ponto a outro e lê a diferença de preço e o tempo entre eles. Para quantificar um trecho.",
+              "where": "Barra: chip de medir"
+            },
+            "fib": {
+              "title": "Fibonacci",
+              "body": "O Fibonacci desenha várias linhas de retração entre a máxima e a mínima da janela atual. É uma escala de referência, não um suporte nem uma resistência por si só.",
+              "where": "Barra: chip Fib"
+            },
+            "fibRead": {
+              "title": "Como lê-las",
+              "body": "As linhas acompanham a janela: ao mudar para 90D, elas são redesenhadas. Marcam proporções, não promessas: cruzar uma linha não prova reversão.",
+              "where": "Prática: ative o Fibonacci e mude o intervalo para vê-lo redesenhar"
+            }
+          }
+        },
+        "scale": {
+          "title": "Escala",
+          "steps": {
+            "log": {
+              "title": "Escala logarítmica",
+              "body": "Na escala linear, o intervalo 10→100 não parece o de 100→1000; na escala log, os dois são iguais — ou seja, a mesma variação percentual aparece do mesmo jeito.",
+              "where": "Barra: chip log / botões de visualização desta página"
+            },
+            "when": {
+              "title": "Quando usar",
+              "body": "Um ativo que foi de dezenas a milhares, como o BTC, some no trecho inicial na escala linear; a log traz isso de volta.",
+              "where": "Gráficos de janelas longas (90D / 1Y)"
+            },
+            "grid": {
+              "title": "Grade",
+              "body": "A grade só ajuda a ler valores; desligá-la não muda os dados, só deixa um gráfico mais limpo para ver a tendência.",
+              "where": "Barra: chip de grade"
+            }
+          }
+        },
+        "capture": {
+          "title": "Captura e salvamento",
+          "steps": {
+            "png": {
+              "title": "Botão PNG",
+              "body": "Salva o gráfico como está em PNG, incluindo os indicadores abertos. A imagem não leva dados de carteira nem de conta.",
+              "where": "Barra: chip PNG (no terminal expandido)"
+            },
+            "fit": {
+              "title": "Redefina antes de capturar",
+              "body": "“Ajustar” (ou redefinir zoom) traz a janela inteira de volta antes da captura, para o PNG não ser um trecho muito ampliado.",
+              "where": "Barra: Ajustar / redefinir e depois PNG"
+            }
+          }
+        },
+        "forecast": {
+          "title": "Botão de previsão IA",
+          "steps": {
+            "what": {
+              "title": "O que ele faz",
+              "body": "Envia ao modelo os candles que já estão na tela, e o modelo desenha alguns candles “possíveis” em seguida, com linha tracejada. Ele não busca dados do futuro.",
+              "where": "Chip “previsão IA” na barra do gráfico"
+            },
+            "horizon": {
+              "title": "Horizonte",
+              "body": "O seletor ao lado decide quantos candles são desenhados. Quanto mais, mais rápido a incerteza se acumula: o trigésimo é bem mais fraco que o terceiro.",
+              "where": "Seletor de horizonte ao lado do chip IA"
+            },
+            "limits": {
+              "title": "Quando não é o modelo",
+              "body": "Se o servidor não conseguir rodar o modelo, usa um método “baseline” e escreve o nome do modelo no cartão. Se ler baseline, não é saída do modelo.",
+              "where": "O nome do modelo no topo do cartão de previsão"
+            },
+            "notAdvice": {
+              "title": "Não é um conselho",
+              "body": "Uma previsão é um caminho possível, não uma promessa. Ela é gerada a partir de candles passados, e o passado não garante o futuro.",
+              "where": "Em todo o app: este guia não dá conselho de operação"
+            }
+          }
+        }
+      }
+    },
+    "cards": {
+      "chartGuide": {
+        "title": "Guia de candles",
+        "sub": "Candle a candle: janelas, indicadores, níveis e o botão de previsão.",
+        "hint": "Prática interativa, não capturas"
+      }
+    },
+    "advancedGuide": {
+      "kicker": "Aprenda antes de olhar",
+      "title": "Você sabe ler o gráfico usado aqui?",
+      "body": "Backtests, what-if e cenários se apoiam no gráfico de candles. Este guia prático de dez minutos explica cada parte no gráfico real, não em capturas.",
+      "cta": "Abrir o guia do gráfico"
+    },
+    "percent": {
+      "clamped": "Limitado a {{min}}–{{max}}",
+      "increase": "Aumentar",
+      "decrease": "Diminuir"
     }
   },
   "sm": {

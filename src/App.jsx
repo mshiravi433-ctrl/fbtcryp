@@ -201,6 +201,9 @@ const InsuranceSettings = lazyRetry(() => import('./pages/insurance/InsuranceSet
  * through the More menu.
  */
 const Lab = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/Lab')) : () => null;
+/* The Lab's chart tutorial. Gated with the Lab itself: it teaches the chart
+   controls, and every one of those lives behind the same flag. */
+const LabChartGuide = SPECULATION_ENABLED ? lazyRetry(() => import('./components/Lab/ChartGuide')) : () => null;
 const ExploreHub = lazyRetry(() => import('./pages/ExploreHub'));
 const Learn = lazyRetry(() => import('./pages/Learn'));
 const AparatVideos = lazyRetry(() => import('./pages/AparatVideos'));
@@ -493,6 +496,9 @@ function AnimatedRoutes() {
             {/* Merged hubs. The individual routes below still exist so old
                 links do not break. */}
             {SPECULATION_ENABLED && <Route path="/lab" element={<Lab />} />}
+            {SPECULATION_ENABLED && (
+              <Route path="/lab/chart-guide" element={<LabChartGuide />} />
+            )}
             <Route path="/explore-hub" element={<ExploreHub />} />
             <Route path="/learn" element={<Learn />} />
             <Route path="/aparat" element={<AparatVideos />} />

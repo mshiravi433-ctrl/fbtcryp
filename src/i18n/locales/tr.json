@@ -2808,7 +2808,319 @@
             "def": "Everything you hold, and the share of each asset."
           }
         }
+      },
+      "chartGuide": {
+        "title": "Grafik rehberi",
+        "sub": "Token sayfasındaki mum grafiğini okumayı öğrenin: pencere, eksenler, fiyat ve araç çubuğundaki her düğme."
       }
+    },
+    "chartGuide": {
+      "sampleData": "Aşağıdaki veriler bir alıştırma serisidir, canlı fiyat değildir. Öğrenmek için, piyasa için değil.",
+      "chaptersLabel": "Bölümler",
+      "noteTitle": "Unutmayın",
+      "note": "Bu rehber yalnızca okumayı öğretir: işlem önerisi, fiyat hedefi veya “iyi giriş” vermez.",
+      "backToLab": "Lab’a dön",
+      "tabs": {
+        "basics": "Temel",
+        "studies": "Göstergeler",
+        "levels": "Seviyeler",
+        "extras": "Daha fazla"
+      },
+      "demo": {
+        "title": "Kendiniz deneyin",
+        "legendHint": "Kesin değerler için grafiğe dokunun veya imleci getirin",
+        "type": "Grafik türü",
+        "types": {
+          "candles": "Mum",
+          "line": "Çizgi",
+          "area": "Alan"
+        },
+        "toggles": "Katmanlar",
+        "togglesMap": {
+          "ma7": "MA7",
+          "ma25": "MA25",
+          "ema21": "EMA21",
+          "bb": "Bollinger",
+          "volume": "Hacim",
+          "rsi": "RSI",
+          "fib": "Fibonacci"
+        },
+        "view": "Görünüm",
+        "zoomIn": "Yakınlaştır",
+        "fit": "Sığdır",
+        "log": "Log ölçek",
+        "loadingNote": "Grafik motoru yükleniyor; kullanılamıyorsa basit grafik gösterilir."
+      },
+      "chapters": {
+        "read": {
+          "title": "Bir mumu okumak",
+          "steps": {
+            "open": {
+              "title": "Grafiği aç",
+              "body": "Token sayfasında fiyatın altındaki kart grafiktir. Genişlet düğmesi (⇱) tam ekran terminali açar; araç çubuğu orada tamdır.",
+              "where": "Token sayfası → fiyat kartı → genişlet simgesi"
+            },
+            "bar": {
+              "title": "Gövde ve fitil",
+              "body": "Mumun gövdesi açılıştan kapanışa uzanır; üst fitil aralığın en yükseği, alt fitil en düşüğüdür. Yükselen gövde genelde yeşil, düşen kırmızıdır.",
+              "where": "Grafiğin ortasındaki mumların kendisi"
+            },
+            "colors": {
+              "title": "Renk ve yön",
+              "body": "Yeşil, o aralıkta kapanışın açılışın üstünde olduğunu gösterir; kırmızı tersini. Renk karşılaştırmadır, yargı değil: kırmızı yalnızca geri çekilme de olabilir.",
+              "where": "Mum rengi (uygulama temasına göre)"
+            },
+            "legend": {
+              "title": "Artı imleç okuması",
+              "body": "Parmak veya imleç grafikteyken üst şerit o/h/l/c ve hacmi gösterir. Bu sayfadaki alıştırma alanında gördüğünüz şeridin aynısıdır.",
+              "where": "Grafiğin üstündeki okuma şeridi"
+            }
+          }
+        },
+        "range": {
+          "title": "Zaman penceresi",
+          "steps": {
+            "ranges": {
+              "title": "Beş aralık düğmesi",
+              "body": "1D · 7D · 30D · 90D · 1Y. Her düğme grafiğin kapsadığı süreyi belirler; bir mumun süresi buna bağlıdır.",
+              "where": "Grafiğin üstündeki düğme sırası"
+            },
+            "whatChanges": {
+              "title": "Ne değişir",
+              "body": "Pencere değişince mum sayısı ve her mumun süresi değişir. Aynı zirve farklı pencerelerde farklı görünür — aynı pencereyle karşılaştırın.",
+              "where": "Alıştırma alanında tür/aralık değiştirip görün"
+            },
+            "reset": {
+              "title": "Yakınlaştırmayı sıfırla",
+              "body": "Aralık düğmeleri kaydırmayı ve yakınlaştırmayı da sıfırlar; grafik pencerenin tamamını gösterir. “Her şeyi göremiyorum”un en sık nedeni budur.",
+              "where": "Aynı aralık satırı"
+            }
+          }
+        },
+        "move": {
+          "title": "Kaydırma ve yakınlaştırma",
+          "steps": {
+            "drag": {
+              "title": "Sürükleyerek kaydır",
+              "body": "Grafikte yatay sürükleme onu kaydırır. Dikey sürükleme sayfayı kaydırmaya devam eder; sayfa kilitlenmez.",
+              "where": "Grafiğin herhangi bir yeri"
+            },
+            "pinch": {
+              "title": "İki parmakla yakınlaştır",
+              "body": "Tam ekran terminalde iki parmağı açarak yakınlaştırın, birleştirerek uzaklaştırın. Mobil araç çubuğunda + / − de var; tarayıcı jesti kaptığında onları kullanın.",
+              "where": "Tam ekran terminaldeki grafik"
+            },
+            "doubleTap": {
+              "title": "Çift dokunma",
+              "body": "Çift dokunma dokunduğunuz noktaya yakınlaşır; zaten yakınsa tam görünüme döner.",
+              "where": "Grafikte herhangi bir nokta"
+            },
+            "fit": {
+              "title": "Tam görünüme dön",
+              "body": "“Sığdır” düğmesi (veya yakınlaştırma sıfırlama) her zaman tüm pencereyi geri getirir — kaybolursanız onu kullanın.",
+              "where": "Bu sayfadaki alıştırma görünüm düğmeleri / terminal araç çubuğu"
+            }
+          }
+        },
+        "type": {
+          "title": "Grafik türü",
+          "steps": {
+            "candles": {
+              "title": "Mum (varsayılan)",
+              "body": "Mum aynı anda dört değer verir — açılış, kapanış, yüksek, düşük — böylece dönem içindeki hareket de görünür.",
+              "where": "Araç çubuğu: grafik türü düğmesi"
+            },
+            "line": {
+              "title": "Çizgi",
+              "body": "Çizgi yalnızca kapanışı çizer: daha temiz, ama dönem içi dalgalanmayı saklar. Ana yön için, tek mumu yargılamak için değil.",
+              "where": "Grafik türü → Çizgi"
+            },
+            "area": {
+              "title": "Alan",
+              "body": "Alan, doldurulmuş çizgi grafiğidir: aralığın genliği bir bakışta görünür, iç hareket yine gizlidir.",
+              "where": "Grafik türü → Alan"
+            },
+            "which": {
+              "title": "Hangisi",
+              "body": "Bir dönemde ne olduğunu anlamak için mum; pencerenin genel şekli için çizgi veya alan.",
+              "where": "Araç çubuğundaki üç tür düğmesi"
+            }
+          }
+        },
+        "avg": {
+          "title": "Hareketli ortalamalar",
+          "steps": {
+            "why": {
+              "title": "Ne işe yarar",
+              "body": "Hareketli ortalama son N kapanışı tek çizgiye yumuşatır ve tek mumun gürültüsünü atar. Geçmişi anlatır, tahmin etmez.",
+              "where": "Araç çubuğu: MA7 · MA25 · MA99"
+            },
+            "sma": {
+              "title": "Kısa ve uzun",
+              "body": "Kısa periyot (MA7) fiyata yakın durur; uzun periyot (MA99) daha kararlı ama gecikmeli. İkisi arasındaki açıklık, anlaşmazlıklarının ölçüsüdür.",
+              "where": "Alıştırma alanı: MA7 ve MA25’i açıp izleyin"
+            },
+            "ema": {
+              "title": "EMA ve MA",
+              "body": "EMA son fiyatlara daha çok ağırlık verir; bu yüzden daha erken döner ve daha duyarlıdır. Aynı periyotta genelde MA’ya göre fiyata daha yakındır.",
+              "where": "Araç çubuğu: EMA21 · EMA55"
+            },
+            "cross": {
+              "title": "Kesişim sinyal değildir",
+              "body": "Kısa çizginin uzunu yukarı kesmesine “kesişim” denir ve yatay piyasada çok sık olur. Son fiyatın görece daha güçlü olduğunu söyler — bir garanti değil.",
+              "where": "Alıştırmada MA7 ve MA99’u birlikte açın"
+            },
+            "labels": {
+              "title": "O etiketler",
+              "body": "MA7 / MA25 / MA99 / EMA21 / EMA55 standart kısaltmalardır ve bilerek çevrilmez: her işlem terminalinde aynıdır.",
+              "where": "Gösterge çipi etiketleri"
+            }
+          }
+        },
+        "bands": {
+          "title": "Bollinger bantları",
+          "steps": {
+            "what": {
+              "title": "Ne çizer",
+              "body": "Üç çizgi: 20 periyotluk ortalama ve oynaklığa göre kaydırılmış iki bant. Fiyat çoğu zaman bantların içinde kalır.",
+              "where": "Araç çubuğu: BB düğmesi"
+            },
+            "squeeze": {
+              "title": "Daralma ne demek",
+              "body": "Bantların daralması son dönemdeki oynaklığın düşük olduğunu söyler. Kırılmanın ne zaman olacağını değil, yalnızca salınımın eskisinden az olduğunu.",
+              "where": "Alıştırma: BB’yi açıp genişliği izleyin"
+            },
+            "caution": {
+              "title": "Bant dışı dönüş demek değil",
+              "body": "Bandın dışında kapanış yalnızca bu dönemde büyük hareket olduğunu söyler; güçlü trendde fiyat dışarıda kalır. Bunu al/sat sinyali saymayın.",
+              "where": "BB açık her grafik"
+            }
+          }
+        },
+        "panes": {
+          "title": "Alt paneller",
+          "steps": {
+            "volume": {
+              "title": "Hacim",
+              "body": "Hacim çubukları o dönemde ne kadar işlem geçtiğini gösterir. Hacimle yükseliş, hacimsiz yükselişten genelde daha fazla katılım demektir — kural değil.",
+              "where": "Araç çubuğu: Hacim düğmesi"
+            },
+            "rsi": {
+              "title": "RSI",
+              "body": "RSI son yükseliş ve düşüşleri 0–100 arası bir sayıya sıkıştırır. 70’e yakın olmak “son dönemde çok yükseldi”, 30’a yakın olmak “çok düştü” demektir — dönüş işareti değil.",
+              "where": "Araç çubuğu: RSI düğmesi (alt panelde görünür)"
+            },
+            "macd": {
+              "title": "MACD",
+              "body": "MACD iki ortalamanın farkını ve sinyal çizgisini çizer; histogram ikisinin aralığıdır. Momentumun değişim hızını ölçer ve o da gecikmelidir.",
+              "where": "Araç çubuğu: MACD düğmesi"
+            }
+          }
+        },
+        "levels": {
+          "title": "Seviye araçları",
+          "steps": {
+            "priceLine": {
+              "title": "Fiyat çizgisi",
+              "body": "Fiyat çizgisi bir seviyeyi hatırlamak için çizdiğiniz yatay çizgidir. Hiçbir şeyi tetiklemez, yalnızca işaretler.",
+              "where": "Araç çubuğu: fiyat çizgisi çipi"
+            },
+            "measure": {
+              "title": "Ölç",
+              "body": "Ölçüm aracı bir noktadan diğerine sürüklemenizi sağlar; iki nokta arasındaki fiyat farkını ve süreyi okur. Bir hareketin büyüklüğünü ölçmek için.",
+              "where": "Araç çubuğu: ölç çipi"
+            },
+            "fib": {
+              "title": "Fibonacci",
+              "body": "Fibonacci geçerli pencerenin en yükseği ile en düşüğü arasında birkaç geri çekilme çizgisi çizer. Yalnızca bir referans ölçektir; kendisi destek veya direnç değildir.",
+              "where": "Araç çubuğu: Fib çipi"
+            },
+            "fibRead": {
+              "title": "Nasıl okunur",
+              "body": "Çizgiler pencereyle birlikte hareket eder: 90D’ye geçince yeniden çizilir. Oranları işaretlerler, vaat değil — bir çizgiyi geçmek orada dönüş olacağını kanıtlamaz.",
+              "where": "Alıştırma: Fibonacci’yi açın, aralığı değiştirin ve yeniden çizilmesini görün"
+            }
+          }
+        },
+        "scale": {
+          "title": "Ölçek",
+          "steps": {
+            "log": {
+              "title": "Logaritmik ölçek",
+              "body": "Doğrusal ölçekte 10→100 arası, 100→1000 arasına benzemez; log ölçekte ikisi eşittir — aynı yüzde değişim aynı görünür.",
+              "where": "Araç çubuğu: log çipi / bu sayfanın görünüm düğmeleri"
+            },
+            "when": {
+              "title": "Ne zaman kullanılır",
+              "body": "BTC gibi onlardan binlere çıkan bir varlık doğrusal ölçekte başlangıcını yutar; log ölçek geri getirir.",
+              "where": "Uzun pencereler (90D / 1Y)"
+            },
+            "grid": {
+              "title": "Izgara",
+              "body": "Izgara yalnızca değer okumaya yardım eder; kapatmak veriyi değiştirmez, yalnızca trendi görmek için daha temiz bir grafik bırakır.",
+              "where": "Araç çubuğu: ızgara çipi"
+            }
+          }
+        },
+        "capture": {
+          "title": "Ekran görüntüsü",
+          "steps": {
+            "png": {
+              "title": "PNG düğmesi",
+              "body": "Grafiği açık göstergelerle birlikte olduğu gibi PNG olarak kaydeder. Görselde cüzdan veya hesap bilgisi yoktur.",
+              "where": "Araç çubuğu: PNG çipi (genişletilmiş terminalde)"
+            },
+            "fit": {
+              "title": "Çekmeden önce sıfırlayın",
+              "body": "“Sığdır” (veya yakınlaştırma sıfırlama) önce tüm pencereyi geri getirir; böylece PNG çok yakınlaştırılmış bir parça olmaz.",
+              "where": "Araç çubuğu: Sığdır / sıfırla, sonra PNG"
+            }
+          }
+        },
+        "forecast": {
+          "title": "AI tahmin düğmesi",
+          "steps": {
+            "what": {
+              "title": "Ne yapar",
+              "body": "Ekrandaki mumları modele gönderir; model sonraki birkaç “olası” mumu kesik çizgiyle çizer. Gelecekten veri çekmez.",
+              "where": "Grafik araç çubuğundaki “AI tahmin” çipi"
+            },
+            "horizon": {
+              "title": "Ufuk",
+              "body": "Yandaki seçici kaç mum çizileceğini belirler. Sayı arttıkça belirsizlik daha hızlı birikir: otuzuncu, üçüncüden çok daha zayıftır.",
+              "where": "AI çipinin yanındaki ufuk seçici"
+            },
+            "limits": {
+              "title": "Ne zaman model değil",
+              "body": "Sunucu modeli çalıştıramazsa bir “baseline” yöntemi kullanır ve kartta model adını yazar. baseline görüyorsanız bu model çıktısı değildir.",
+              "where": "Tahmin kartının başındaki model adı"
+            },
+            "notAdvice": {
+              "title": "Bu bir tavsiye değil",
+              "body": "Tahmin olası bir yoldur, vaat değil. Geçmiş mumlardan üretilir; geçmiş geleceği garanti etmez.",
+              "where": "Uygulamanın tamamında: bu rehber işlem tavsiyesi vermez"
+            }
+          }
+        }
+      }
+    },
+    "cards": {
+      "chartGuide": {
+        "title": "Mum grafiği rehberi",
+        "sub": "Mum mum: pencereler, göstergeler, seviyeler ve tahmin düğmesi.",
+        "hint": "Etkileşimli alıştırma, ekran görüntüsü değil"
+      }
+    },
+    "advancedGuide": {
+      "kicker": "Bakmadan önce öğrenin",
+      "title": "Burada kullanılan grafiği okuyabiliyor musunuz?",
+      "body": "Geri testler, what-if ve senaryolar mum grafiğine dayanır. Bu on dakikalık uygulamalı rehber her parçayı ekran görüntüsüyle değil, gerçek grafikle anlatır.",
+      "cta": "Grafik rehberini aç"
+    },
+    "percent": {
+      "clamped": "{{min}}–{{max}} aralığına çekildi",
+      "increase": "Artır",
+      "decrease": "Azalt"
     }
   },
   "sm": {

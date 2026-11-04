@@ -1687,8 +1687,12 @@
   height: 8px;
   border-radius: 999px;
   outline: none;
+  /* `--fill-side` is set by LabSlider/ LabPercentField from the DOCUMENT
+     direction. In RTL the native track puts `min` on the right, so painting
+     from the left would light the wrong end of the same slider — the control
+     would still be correct and would simply look inverted. */
   background:
-    linear-gradient(90deg, var(--acc), var(--acc-2)) no-repeat,
+    linear-gradient(90deg, var(--acc), var(--acc-2)) no-repeat var(--fill-side, left) center,
     rgba(255, 255, 255, 0.09);
   background-size: var(--fill, 50%) 100%;
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
@@ -1887,6 +1891,47 @@
 }
 
 .lab2-alloc .lab2-slider { width: 104px; flex-shrink: 0; }
+
+/* The percentage in an allocation row is an input, but it must look exactly
+   like the read-only figure it replaced: same weight, same tabular digits, no
+   box, no border. The 40px minimum keeps the tap target honest and stops the
+   row from reflowing when 100 becomes 5. */
+.lab2-alloc-input {
+  width: 2.9ch;
+  min-width: 26px;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.lab2-alloc-input::-webkit-outer-spin-button,
+.lab2-alloc-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+.lab2-alloc-input:focus-visible {
+  background: color-mix(in srgb, var(--acc) 16%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--acc) 55%, transparent);
+}
+
+.lab2-alloc-pct { display: inline-flex; align-items: baseline; gap: 1px; }
+
+/* The slider and the editable figure share one line on a phone only up to
+   ~420px; below that the two 104px controls plus a label leave the asset name
+   with no room, so the track drops to its own row. */
+@media (max-width: 380px) {
+  .lab2-alloc { flex-wrap: wrap; }
+  .lab2-alloc-name { flex-basis: calc(100% - 100px); }
+  .lab2-alloc .lab2-slider { flex: 1 1 100%; width: auto; order: 4; }
+  .lab2-alloc-pct { order: 3; }
+}
 
 /* Shock chips (what-if events, scenario impacts). */
 .lab2-shock {
@@ -3196,3 +3241,281 @@
 @media (prefers-reduced-motion: reduce) {
   .lab2-guide-card:hover, .lab2-guide-open:hover { transform: none; }
 }
+
+/* ─── 27 · PERCENT FIELD ──────────────────────────────────────────────────
+   A slider and a number box that edit the same value. The number is the
+   satellite of the label row, sized to hold four digits at the Lab's body
+   scale, and it is deliberately the same height as `.lab2-input` (44px) so a
+   stack of these and a stack of inputs do not disagree on rhythm.
+
+   The track itself keeps the 8px look but its touch target is 44px: the
+   padding is on the input, the visual bar is drawn by the background, so the
+   control is comfortable to grab without looking heavier. */
+
+.lab2-percent { gap: 9px; }
+
+.lab2-percent-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-inline: 10px 8px;
+  height: 36px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--acc) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--acc) 26%, transparent);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.lab2-percent-value:focus-within {
+  border-color: color-mix(in srgb, var(--acc) 70%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--acc) 16%, transparent);
+}
+
+/* `type="text"` + `inputMode="decimal"`, not `type="number"`: a number input
+   silently drops the characters it does not like (a Persian «۴», a stray «٫»)
+   and its `value` comes back as '' for half-typed text, which is the bug this
+   whole component exists to avoid. */
+.lab2-percent-input {
+  width: 4.2ch;
+  min-width: 40px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 800;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.lab2-percent-input::-webkit-outer-spin-button,
+.lab2-percent-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+.lab2-percent-input[aria-invalid='true'] { color: var(--ink-amber, var(--rgb-5)); }
+.lab2-percent-value:has(.lab2-percent-input[aria-invalid='true']) {
+  border-color: color-mix(in srgb, var(--rgb-5) 60%, transparent);
+}
+
+.lab2-percent-suffix {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+/* −/+ inside the pill. 22px square so the three parts (minus, number, plus)
+   fit a 360px phone next to the label; `tabIndex={-1}` keeps them out of the
+   tab order — the slider and the box are the two keyboard paths, and adding a
+   third stop for the same value makes Tab feel broken. */
+.lab2-percent-step {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--acc) 14%, transparent);
+  color: var(--acc-ink);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.lab2-percent-step:hover:not(:disabled) { background: color-mix(in srgb, var(--acc) 26%, transparent); }
+.lab2-percent-step:active:not(:disabled) { transform: scale(0.9); }
+.lab2-percent-step:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.lab2-percent-step:focus-visible {
+  outline: 2px solid var(--acc-ink);
+  outline-offset: 2px;
+}
+
+:root[data-theme='light'] .lab2-percent-step {
+  background: color-mix(in srgb, var(--acc) 12%, #ffffff);
+  color: var(--acc-ink);
+}
+
+@media (max-width: 380px) {
+  /* The label, a four-digit number and two steppers do not fit on one line on
+     a narrow phone; drop the min/max caption (the slider's own aria-valuetext
+     still announces it) rather than let the pill overflow. */
+  .lab2-percent-foot .lab2-percent-range { display: none; }
+}
+
+.lab2-percent-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 16px;
+}
+
+.lab2-percent-range {
+  font-size: 10.5px;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+}
+
+.lab2-percent-note {
+  font-size: 10.5px;
+  line-height: 1.5;
+  text-align: end;
+  color: var(--text-2);
+  min-width: 0;
+}
+
+.lab2-percent-input[aria-invalid='true'] ~ .lab2-percent-suffix { color: var(--rgb-5); }
+
+/* Screen-reader-only live region — no visual footprint anywhere. */
+.lab2-sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Pointer/touch: a horizontal drag must not scroll the page out from under
+   the thumb. `pan-y` keeps vertical scrolling alive (the screen still scrolls
+   when the finger moves up or down) while horizontal movement belongs to the
+   slider. */
+.lab2-percent .lab2-slider,
+.lab2-field .lab2-slider { touch-action: pan-y; }
+
+.lab2-slider:disabled { opacity: 0.45; cursor: not-allowed; }
+
+:root[data-theme='light'] .lab2-percent-value {
+  background: #fff;
+  border-color: rgba(24, 42, 74, 0.16);
+}
+
+:root[data-theme='light'] .lab2-percent-value:focus-within {
+  border-color: var(--acc-ink);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--acc-ink) 14%, transparent);
+}
+
+:root[data-theme='light'] .lab2-percent-value:has(.lab2-percent-input[aria-invalid='true']) {
+  border-color: var(--ink-amber, #a97300);
+}
+
+/* ─── 28 · THE DOORWAY BOX ────────────────────────────────────────────────
+   One short intro, one button. Grid on the inside so the icon column never
+   squeezes the copy on a 360px phone: below 420px the icon moves above the
+   text instead of stealing a third of the row. */
+
+.lab2-door {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  padding: 16px;
+  border-radius: var(--lab-r-lg);
+  border: 1px solid color-mix(in srgb, var(--acc) 34%, var(--lab-line));
+  background:
+    linear-gradient(128deg, color-mix(in srgb, var(--acc) 14%, transparent), color-mix(in srgb, var(--acc-2) 7%, transparent) 58%, rgba(255, 255, 255, 0.02)),
+    var(--lab-surface);
+  box-shadow: var(--lab-shadow), var(--lab-inset);
+}
+
+.lab2-door-glow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(64% 120% at 6% 0%, color-mix(in srgb, var(--acc) 26%, transparent), transparent 62%);
+  opacity: 0.7;
+}
+
+.lab2-door-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 17px;
+  display: grid;
+  place-items: center;
+  color: #14051a;
+  background: linear-gradient(140deg, var(--acc), var(--acc-2));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 12px 26px -16px color-mix(in srgb, var(--acc) 95%, transparent);
+}
+
+.lab2-door-art { width: 56px; height: 56px; border-radius: 17px; overflow: hidden; }
+.lab2-door-art svg { width: 100%; height: 100%; display: block; }
+
+.lab2-door-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.lab2-door-kicker {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: var(--acc-ink);
+}
+
+.lab2-door-title {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+  color: var(--text-1);
+  letter-spacing: -0.01em;
+}
+
+.lab2-door-body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--text-2);
+}
+
+/* The button is its own target: full width on a phone, intrinsic on a tablet,
+   and never taller than the 46px the rest of the Lab's buttons use. */
+.lab2-door-cta {
+  align-self: flex-start;
+  margin-top: 4px;
+  width: 100%;
+  min-height: 46px;
+}
+
+.lab2-door-cta:focus-visible {
+  outline: 2px solid var(--acc-ink);
+  outline-offset: 3px;
+}
+
+@media (min-width: 520px) {
+  .lab2-door-cta { width: auto; }
+}
+
+@media (max-width: 420px) {
+  .lab2-door {
+    grid-template-columns: 1fr;
+    gap: 11px;
+    padding: 14px;
+  }
+  .lab2-door-icon, .lab2-door-art { width: 46px; height: 46px; border-radius: 14px; }
+  .lab2-door-title { font-size: 14px; }
+  .lab2-door-body { font-size: 11.5px; }
+}
+
+:root[data-theme='light'] .lab2-door {
+  background: linear-gradient(128deg, color-mix(in srgb, var(--acc) 10%, #ffffff), #ffffff 64%);
+  border-color: color-mix(in srgb, var(--acc) 30%, rgba(16, 24, 48, 0.12));
+}
+
+:root[data-theme='light'] .lab2-door-glow { opacity: 0.42; }

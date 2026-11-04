@@ -107,6 +107,19 @@ export default function run() {
     const s = read(f);
     for (const m of s.matchAll(/to:\s*'(\/[a-z0-9/-]*)'/g)) targets.add(m[1]);
     for (const m of s.matchAll(/navigate\('(\/[a-z0-9/-]*)'/g)) targets.add(m[1]);
+    /*
+     * JSX attribute form — `<Link to="/lab/chart-guide">`. The two patterns
+     * above only see the OBJECT (`to: '/x'`) and CALL (`navigate('/x')`)
+     * shapes, so a page reached exclusively through a `<Link>` attribute was
+     * reported as an orphan even though a tap on screen opens it. That made
+     * the check lie in the direction that matters: it says "nobody can reach
+     * this page" about a page a user is one tap away from.
+     *
+     * The pattern is deliberately narrow (lowercase path segments, no
+     * interpolation) so a computed `<Link to={…}>` cannot inject a fake
+     * target that would silence the orphan check for a route nothing links to.
+     */
+    for (const m of s.matchAll(/\bto="(\/[a-z0-9/-]*)"/g)) targets.add(m[1]);
   }
 
   const resolves = (link) =>

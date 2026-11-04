@@ -2808,7 +2808,319 @@
             "def": "Everything you hold, and the share of each asset."
           }
         }
+      },
+      "chartGuide": {
+        "title": "Guide du graphique",
+        "sub": "Apprenez à lire les chandeliers de la page du jeton : fenêtre, axes, prix et chaque bouton de la barre."
       }
+    },
+    "chartGuide": {
+      "sampleData": "Les données ci-dessous sont une série d’entraînement, pas le prix en direct. Pour apprendre, pas pour le marché.",
+      "chaptersLabel": "Chapitres",
+      "noteTitle": "À retenir",
+      "note": "Ce guide apprend seulement à lire : aucun conseil de trade, aucun objectif de prix, aucun « bon point d’entrée ».",
+      "backToLab": "Retour au Lab",
+      "tabs": {
+        "basics": "Bases",
+        "studies": "Indicateurs",
+        "levels": "Niveaux",
+        "extras": "Plus"
+      },
+      "demo": {
+        "title": "Essayez vous-même",
+        "legendHint": "Touchez ou survolez le graphique pour lire les valeurs exactes",
+        "type": "Type de graphique",
+        "types": {
+          "candles": "Chandeliers",
+          "line": "Ligne",
+          "area": "Aire"
+        },
+        "toggles": "Superpositions",
+        "togglesMap": {
+          "ma7": "MA7",
+          "ma25": "MA25",
+          "ema21": "EMA21",
+          "bb": "Bollinger",
+          "volume": "Volume",
+          "rsi": "RSI",
+          "fib": "Fibonacci"
+        },
+        "view": "Vue",
+        "zoomIn": "Zoomer",
+        "fit": "Ajuster",
+        "log": "Échelle log",
+        "loadingNote": "Le moteur du graphique se charge ; s’il est indisponible, un graphique simplifié s’affiche."
+      },
+      "chapters": {
+        "read": {
+          "title": "Lire un chandelier",
+          "steps": {
+            "open": {
+              "title": "Ouvrir le graphique",
+              "body": "Sur la page du jeton, la carte sous le prix est le graphique. Le bouton d’agrandissement (⇱) ouvre le terminal plein écran, où la barre est complète.",
+              "where": "Page du jeton → carte du prix → icône d’agrandissement"
+            },
+            "bar": {
+              "title": "Corps et mèche",
+              "body": "Le corps d’un chandelier va de l’ouverture à la clôture ; la mèche haute est le plus haut de l’intervalle et la basse le plus bas. Un corps qui monte est généralement vert, un corps qui descend, rouge.",
+              "where": "Les chandeliers eux-mêmes, au centre du graphique"
+            },
+            "colors": {
+              "title": "Couleur et direction",
+              "body": "Vert signifie que la clôture dépasse l’ouverture sur l’intervalle ; rouge, l’inverse. La couleur compare, elle ne juge pas : du rouge peut n’être qu’un repli.",
+              "where": "Couleur des chandeliers (suit le thème de l’app)"
+            },
+            "legend": {
+              "title": "Lecture du curseur",
+              "body": "Avec le doigt ou le curseur sur le graphique, la bande du haut affiche o/h/l/c et le volume. C’est la même bande que dans la zone d’essai de cette page.",
+              "where": "La bande de lecture en haut du graphique"
+            }
+          }
+        },
+        "range": {
+          "title": "Fenêtre de temps",
+          "steps": {
+            "ranges": {
+              "title": "Les cinq boutons de plage",
+              "body": "1D · 7D · 30D · 90D · 1Y. Chaque bouton définit la durée couverte ; la durée d’un chandelier en découle.",
+              "where": "La rangée de boutons au-dessus du graphique"
+            },
+            "whatChanges": {
+              "title": "Ce qui change",
+              "body": "Changer de fenêtre change le nombre de chandeliers et leur durée. Un même plus haut ne se lit pas pareil dans deux fenêtres : comparez à fenêtre égale.",
+              "where": "Changez de type/plage dans la zone d’essai pour le voir"
+            },
+            "reset": {
+              "title": "Réinitialiser le zoom",
+              "body": "Les boutons de plage réinitialisent aussi le déplacement et le zoom : le graphique revient à la fenêtre entière. C’est la cause la plus fréquente du « je ne vois pas tout ».",
+              "where": "La même rangée de plage"
+            }
+          }
+        },
+        "move": {
+          "title": "Déplacer et zoomer",
+          "steps": {
+            "drag": {
+              "title": "Faites glisser pour déplacer",
+              "body": "Un glissement horizontal dans le graphique le déplace. Un glissement vertical fait défiler la page : elle ne reste pas bloquée.",
+              "where": "N’importe où dans le graphique"
+            },
+            "pinch": {
+              "title": "Pincer pour zoomer",
+              "body": "Dans le terminal plein écran, écartez deux doigts pour zoomer, rapprochez-les pour dézoomer. La barre mobile propose aussi + / −, quand le navigateur intercepte le geste.",
+              "where": "Le graphique du terminal plein écran"
+            },
+            "doubleTap": {
+              "title": "Double tap",
+              "body": "Un double tap zoome vers le point touché ; si vous êtes déjà zoomé, il revient à la vue entière.",
+              "where": "N’importe quel point du graphique"
+            },
+            "fit": {
+              "title": "Revenir à la vue entière",
+              "body": "Le bouton « Ajuster » (ou la réinitialisation du zoom) ramène toujours la fenêtre entière : servez-vous-en si vous vous perdez.",
+              "where": "Boutons de vue de l’essai sur cette page / barre du terminal"
+            }
+          }
+        },
+        "type": {
+          "title": "Type de graphique",
+          "steps": {
+            "candles": {
+              "title": "Chandeliers (par défaut)",
+              "body": "Le chandelier donne quatre valeurs à la fois — ouverture, clôture, plus haut, plus bas — donc l’agitation à l’intérieur de la période reste visible.",
+              "where": "Barre : bouton de type"
+            },
+            "line": {
+              "title": "Ligne",
+              "body": "La ligne ne trace que la clôture : plus propre, mais elle masque l’agitation de la période. Pour la direction de fond, pas pour juger un chandelier.",
+              "where": "Type de graphique → Ligne"
+            },
+            "area": {
+              "title": "Aire",
+              "body": "L’aire est une ligne remplie : l’amplitude de l’intervalle saute aux yeux, et le mouvement interne reste tout aussi caché.",
+              "where": "Type de graphique → Aire"
+            },
+            "which": {
+              "title": "Lequel choisir",
+              "body": "Pour savoir ce qui s’est passé dans une période, les chandeliers ; pour la forme de toute la fenêtre, la ligne ou l’aire.",
+              "where": "Les trois boutons de type de la barre"
+            }
+          }
+        },
+        "avg": {
+          "title": "Moyennes mobiles",
+          "steps": {
+            "why": {
+              "title": "À quoi elles servent",
+              "body": "Une moyenne mobile lisse les N dernières clôtures en une ligne et gomme le bruit d’un seul chandelier. Elle décrit le passé, elle ne prédit pas.",
+              "where": "Barre : MA7 · MA25 · MA99"
+            },
+            "sma": {
+              "title": "Court et long",
+              "body": "Plus la période est courte (MA7), plus la ligne colle au prix ; plus elle est longue (MA99), plus elle est stable mais en retard. L’écart entre les deux mesure leur désaccord.",
+              "where": "Zone d’essai : activez MA7 et MA25 et observez"
+            },
+            "ema": {
+              "title": "EMA contre MA",
+              "body": "L’EMA donne plus de poids aux prix récents : elle tourne plus tôt et réagit davantage. À période égale, elle reste souvent plus proche du prix que la MA.",
+              "where": "Barre : EMA21 · EMA55"
+            },
+            "cross": {
+              "title": "Un croisement n’est pas un signal",
+              "body": "Le croisement de la courte au-dessus de la longue s’appelle un « cross », et il est très fréquent en marché latéral. Il dit que le prix récent est relativement plus fort — pas une garantie.",
+              "where": "Ouvrez MA7 et MA99 ensemble dans l’essai"
+            },
+            "labels": {
+              "title": "Ces libellés",
+              "body": "MA7 / MA25 / MA99 / EMA21 / EMA55 sont des abréviations standard et ne sont volontairement pas traduites : elles sont identiques dans tous les terminaux de trading.",
+              "where": "Libellés des puces d’indicateur"
+            }
+          }
+        },
+        "bands": {
+          "title": "Bandes de Bollinger",
+          "steps": {
+            "what": {
+              "title": "Ce qu’elle dessine",
+              "body": "Trois lignes : une moyenne sur 20 périodes et une bande de chaque côté, décalée selon la volatilité. Le prix reste la plupart du temps dedans.",
+              "where": "Barre : bouton BB"
+            },
+            "squeeze": {
+              "title": "Ce que signifie un rétrécissement",
+              "body": "Des bandes étroites disent que la volatilité récente est faible. Elles ne disent pas quand surviendra une cassure, seulement que l’agitation est moindre qu’avant.",
+              "where": "Essai : activez BB et regardez la largeur"
+            },
+            "caution": {
+              "title": "Sortir de la bande n’est pas un retournement",
+              "body": "Clôturer hors de la bande dit seulement que la période a beaucoup bougé ; dans une forte tendance, le prix y reste. Ne le prenez pas pour un signal d’achat ou de vente.",
+              "where": "N’importe quel graphique avec BB"
+            }
+          }
+        },
+        "panes": {
+          "title": "Panneaux du bas",
+          "steps": {
+            "volume": {
+              "title": "Volume",
+              "body": "Les barres de volume indiquent ce qui a été échangé sur la période. Une hausse avec volume traduit souvent plus de participation qu’une hausse sans, sans être une règle.",
+              "where": "Barre : bouton Volume"
+            },
+            "rsi": {
+              "title": "RSI",
+              "body": "Le RSI comprime les hausses et baisses récentes en un nombre de 0 à 100. Près de 70 veut dire « a beaucoup monté récemment » ; près de 30, « a beaucoup baissé ». Ce n’est pas un retournement annoncé.",
+              "where": "Barre : bouton RSI (apparaît dans le panneau du bas)"
+            },
+            "macd": {
+              "title": "MACD",
+              "body": "Le MACD trace la différence entre deux moyennes et sa ligne de signal ; l’histogramme en est l’écart. Il mesure la vitesse du changement d’élan, et reste en retard.",
+              "where": "Barre : bouton MACD"
+            }
+          }
+        },
+        "levels": {
+          "title": "Outils de niveaux",
+          "steps": {
+            "priceLine": {
+              "title": "Ligne de prix",
+              "body": "La ligne de prix est une horizontale que vous tracez pour retenir un niveau. Elle ne déclenche rien : elle marque.",
+              "where": "Barre : puce ligne de prix"
+            },
+            "measure": {
+              "title": "Mesurer",
+              "body": "L’outil de mesure permet de glisser d’un point à un autre et lit l’écart de prix et le temps entre eux. Pour quantifier un mouvement.",
+              "where": "Barre : puce mesurer"
+            },
+            "fib": {
+              "title": "Fibonacci",
+              "body": "Fibonacci trace plusieurs lignes de retracement entre le plus haut et le plus bas de la fenêtre. C’est une échelle de référence, pas un support ni une résistance en soi.",
+              "where": "Barre : puce Fib"
+            },
+            "fibRead": {
+              "title": "Comment les lire",
+              "body": "Les lignes suivent la fenêtre : en passant à 90D, elles sont redessinées. Elles marquent des proportions, pas des promesses : traverser une ligne ne prouve pas un retournement.",
+              "where": "Essai : activez Fibonacci et changez la plage pour le voir redessiner"
+            }
+          }
+        },
+        "scale": {
+          "title": "Échelle",
+          "steps": {
+            "log": {
+              "title": "Échelle logarithmique",
+              "body": "En échelle linéaire, l’écart 10→100 ne ressemble pas à 100→1000 ; en échelle log, les deux sont égaux — une même variation en pourcentage se voit pareil.",
+              "where": "Barre : puce log / boutons de vue de cette page"
+            },
+            "when": {
+              "title": "Quand l’utiliser",
+              "body": "Un actif passé de quelques dizaines à des milliers, comme BTC, écrase ses débuts en échelle linéaire ; l’échelle log les fait réapparaître.",
+              "where": "Graphiques de fenêtres longues (90D / 1Y)"
+            },
+            "grid": {
+              "title": "Grille",
+              "body": "La grille aide seulement à lire les valeurs ; la couper ne change pas les données, elle laisse juste un graphique plus net pour voir la tendance.",
+              "where": "Barre : puce grille"
+            }
+          }
+        },
+        "capture": {
+          "title": "Capture et sauvegarde",
+          "steps": {
+            "png": {
+              "title": "Bouton PNG",
+              "body": "Enregistre le graphique tel qu’il apparaît en PNG, indicateurs ouverts compris. L’image ne contient aucune donnée de portefeuille ou de compte.",
+              "where": "Barre : puce PNG (terminal agrandi)"
+            },
+            "fit": {
+              "title": "Réinitialisez avant de capturer",
+              "body": "« Ajuster » (ou réinitialiser le zoom) ramène la fenêtre entière avant la capture, pour que le PNG ne soit pas un fragment très zoomé.",
+              "where": "Barre : Ajuster / réinitialiser puis PNG"
+            }
+          }
+        },
+        "forecast": {
+          "title": "Bouton de prévision IA",
+          "steps": {
+            "what": {
+              "title": "Ce qu’il fait",
+              "body": "Il envoie au modèle les chandeliers déjà à l’écran, qui dessine quelques chandeliers « possibles » en pointillés. Il ne va rien chercher dans le futur.",
+              "where": "Puce « prévision IA » de la barre du graphique"
+            },
+            "horizon": {
+              "title": "Horizon",
+              "body": "Le sélecteur voisin décide combien de chandeliers sont dessinés. Plus il y en a, plus l’incertitude s’accumule : le trentième est bien plus faible que le troisième.",
+              "where": "Sélecteur d’horizon à côté de la puce IA"
+            },
+            "limits": {
+              "title": "Quand ce n’est pas le modèle",
+              "body": "Si le serveur ne peut pas exécuter le modèle, il emploie une méthode « baseline » et écrit le nom du modèle sur la carte. Si vous lisez baseline, ce n’est pas la sortie du modèle.",
+              "where": "Le nom du modèle en haut de la carte de prévision"
+            },
+            "notAdvice": {
+              "title": "Ce n’est pas un conseil",
+              "body": "Une prévision est un chemin possible, pas une promesse. Elle est produite à partir de chandeliers passés, et le passé ne garantit pas l’avenir.",
+              "where": "Dans toute l’app : ce guide ne donne aucun conseil de trade"
+            }
+          }
+        }
+      }
+    },
+    "cards": {
+      "chartGuide": {
+        "title": "Guide des chandeliers",
+        "sub": "Chandelier par chandelier : fenêtres, indicateurs, niveaux et bouton de prévision.",
+        "hint": "Essai interactif, pas des captures"
+      }
+    },
+    "advancedGuide": {
+      "kicker": "Apprenez avant de regarder",
+      "title": "Savez-vous lire le graphique utilisé ici ?",
+      "body": "Les backtests, le what-if et les scénarios reposent sur le graphique en chandeliers. Ce guide pratique de dix minutes explique chaque partie sur le vrai graphique, pas sur des captures.",
+      "cta": "Ouvrir le guide du graphique"
+    },
+    "percent": {
+      "clamped": "Limité à {{min}}–{{max}}",
+      "increase": "Augmenter",
+      "decrease": "Diminuer"
     }
   },
   "sm": {
