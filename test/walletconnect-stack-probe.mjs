@@ -83,7 +83,13 @@ import {
   VERIFY_SERVER_V3,
   warmVerifyEnclave
 } from '../src/lib/wc/index.js';
-import { createWcSession, wakeWcTransport } from '../src/lib/wc/session.js';
+import {
+  createWcSession,
+  repairWcMetadata,
+  snapshotWcMetadata,
+  wcSessionIdentityMatches,
+  wakeWcTransport
+} from '../src/lib/wc/session.js';
 import { measureRelay, probeRelay, relayOrderFromHosts, relayVerdict } from '../src/lib/wc/relay.js';
 import {
   TRACE_STORAGE_KEY,
@@ -532,6 +538,8 @@ export default async function run() {
       classifyConnectError({ message: 'Connection request reset. Please try again.' }) === 'USER_REJECTED');
     t('an origin refusal is named as one',
       classifyConnectError({ message: 'origin not allowed' }) === 'WC_ORIGIN_BLOCKED');
+    t('an unrepairable wallet identity is not mislabeled as a relay failure',
+      classifyConnectError({ message: 'WC_METADATA_REPAIR_FAILED' }) === 'WC_IDENTITY_REPAIR_FAILED');
     t('an expired pairing is named before the relay branch',
       classifyConnectError({ message: 'proposal expired' }) === 'WC_EXPIRED');
     t('a stalled socket is the relay',
@@ -898,7 +906,16 @@ export default async function run() {
 
   /* ══════════════════ 10. the session object's contract ═══════════════════ */
   {
+    const expectedMetadata = {
+      name: 'FBT Swap',
+      description: 'Non-custodial decentralized exchange',
+      url: 'https://fbtswap.ir',
+      icons: ['https://fbtswap.ir/icon-512.png'],
+      verifyUrl: 'https://fbtswap.ir',
+      redirect: { native: 'ir.fbtswap.app://' }
+    };
     const session = createWcSession({
+      metadata: expectedMetadata,
       chains: [56],
       optionalChains: [1, 8453],
       supportsChain: (id) => [1, 56, 8453].includes(id),
@@ -918,7 +935,18 @@ export default async function run() {
        false), because a real connect() would need the SDK and the network. */
 
     const withModal = session._initConfig(true);
+    t('provider init receives a defensive metadata copy',
+      withModal.metadata !== expectedMetadata && withModal.metadata.icons !== expectedMetadata.icons
+        && withModal.metadata.redirect !== expectedMetadata.redirect);
+    /* This is the exact mutation in @walletconnect/sign-client 2.25.0's
+       populateAppMetadata(): it writes window.location.origin into the input
+       metadata object before returning the SignClient metadata. */
+    withModal.metadata.url = 'https://localhost';
     const withoutModal = session._initConfig(false);
+    t('one SDK init cannot poison the next init or our input identity',
+      withoutModal.metadata.url === expectedMetadata.url
+        && withoutModal.metadata.icons[0] === expectedMetadata.icons[0]
+        && expectedMetadata.url === 'https://fbtswap.ir');
     t('the required chain is the first network', withModal.chains[0] === 56);
     t('every other supported chain is optional', withModal.optionalChains.includes(8453));
     t('the modal is the surface by default', withModal.showQrModal === true);
@@ -931,7 +959,7 @@ export default async function run() {
       Array.isArray(withModal.qrModalOptions.mobileWallets) && withModal.qrModalOptions.mobileWallets.length === 5);
 
     /* The metadata that reaches the wallet must never be the APK's origin. */
-    const meta = withModal.metadata ?? session._initConfig(true).metadata;
+    const meta = withoutModal.metadata;
     t('the wallet-facing identity is the canonical public URL',
       String(meta?.url || '').startsWith('https://'));
     t('the wallet-facing identity is never a localhost origin',
@@ -949,6 +977,33 @@ export default async function run() {
     })());
     t('redirect.native is only ever set inside the packaged app',
       meta?.redirect?.native === undefined || meta.redirect.native === 'ir.fbtswap.app://');
+
+    const sdkInput = snapshotWcMetadata(expectedMetadata);
+    sdkInput.url = 'https://localhost';
+    const signClientMetadata = snapshotWcMetadata(sdkInput);
+    const sdkInstance = {
+      signer: { client: { metadata: signClientMetadata } },
+      rpc: { metadata: sdkInput }
+    };
+    t('post-init repair corrects the SDK-mutated metadata and verifies it',
+      repairWcMetadata(sdkInstance, expectedMetadata)
+        && signClientMetadata.url === expectedMetadata.url
+        && signClientMetadata.verifyUrl === expectedMetadata.verifyUrl
+        && signClientMetadata.icons[0] === expectedMetadata.icons[0]
+        && sdkInput.url === expectedMetadata.url);
+    t('metadata repair fails closed when the live SignClient shape is unknown',
+      repairWcMetadata({}, expectedMetadata) === false);
+    t('a fresh persisted session has the expected dApp identity',
+      wcSessionIdentityMatches({ self: { metadata: { url: 'https://fbtswap.ir' } } }, expectedMetadata));
+    t('an old localhost session is not accepted after an identity fix',
+      !wcSessionIdentityMatches({ self: { metadata: { url: 'https://localhost' } } }, expectedMetadata));
+    t('a session with no recorded dApp identity is not silently restored',
+      !wcSessionIdentityMatches({ self: { metadata: {} } }, expectedMetadata));
+    const sessionSource = readFileSync('src/lib/wc/session.js', 'utf8');
+    t('pairing fails closed if runtime metadata cannot be verified',
+      /if\s*\(!metadataRepaired\)\s*throw new Error\('WC_METADATA_REPAIR_FAILED'\)/.test(sessionSource));
+    t('restore rejects stale session identity instead of rewriting its history',
+      /wcSessionIdentityMatches\(instance\.session,\s*expectedMetadata\)/.test(sessionSource));
 
     let transportOpens = 0;
     const resumable = {
@@ -1856,10 +1911,17 @@ export default async function run() {
     /* Every way the lease can end is explained where it ends. An unexplained
        return to «not connected» is the exact report this feature answers. */
     const locale = JSON.parse(readFileSync('src/i18n/locales/en.json', 'utf8'));
-    t('a lapsed or missing session is explained on the sheet',
-      /wallet\.sessionLapsed/.test(sheet) && /wallet\.sessionGone/.test(sheet));
-    t('both sentences exist in English, the fallback every locale reads',
-      Boolean(locale.wallet.sessionLapsed) && Boolean(locale.wallet.sessionGone));
+    t('a lapsed, missing or stale-identity session is explained on the sheet',
+      /wallet\.sessionLapsed/.test(sheet) && /wallet\.sessionGone/.test(sheet)
+        && /wallet\.sessionIdentityChanged/.test(sheet)
+        && /wallet\.wcIdentityRepairFailed/.test(sheet));
+    const faLocale = JSON.parse(readFileSync('src/i18n/locales/fa.json', 'utf8'));
+    t('identity-repair and stale-session messages exist in English and Persian',
+      Boolean(locale.wallet.sessionIdentityChanged) && Boolean(locale.wallet.wcIdentityRepairFailed)
+        && Boolean(faLocale.wallet.sessionIdentityChanged) && Boolean(faLocale.wallet.wcIdentityRepairFailed));
+    t('a stale-identity restore is terminal until the user explicitly reconnects',
+      /WC_IDENTITY_REFRESH_REQUIRED/.test(ctx) && /restoreBlockedRef\.current = 'identity'/.test(ctx)
+        && /SESSION_IDENTITY_CHANGED/.test(ctx));
 
     /* The transports that are left, and the one attach path they share. */
     t('the sheet offers WalletConnect, the injected wallets and the vault',

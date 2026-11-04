@@ -598,6 +598,8 @@
     "leaseUntilDisconnect": "Connected until you disconnect",
     "sessionLapsed": "The connection window you chose has ended. Connect once more to start a new one.",
     "sessionGone": "The wallet connection is no longer on this device — connect once more to start a fresh one.",
+    "sessionIdentityChanged": "The saved WalletConnect session used an old app identity, so it was disconnected for safety. Nothing was signed or sent. Connect again only after Trust Wallet shows FBT Swap and fbtswap.ir.",
+    "wcIdentityRepairFailed": "This build could not verify the WalletConnect app identity, so it stopped before pairing. Nothing was signed or sent. Update the app, then reconnect only if Trust Wallet shows FBT Swap and fbtswap.ir.",
     "connectSectionExternal": "Your own wallet",
     "connectExternalNote": "QR or deep link",
     "connectSectionLocal": "In-app wallet",

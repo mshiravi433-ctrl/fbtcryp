@@ -67,6 +67,7 @@ export function isModalError(error) {
  */
 export function classifyConnectError(error) {
   const msg = String(error?.message ?? '');
+  if (msg === 'WC_METADATA_REPAIR_FAILED') return 'WC_IDENTITY_REPAIR_FAILED';
   if (
     /user rejected/i.test(msg) ||
     error?.code === 4001 ||
