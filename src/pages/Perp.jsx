@@ -20,7 +20,8 @@ import { fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from '../lib/features';
+import { AI_TRADE_ENABLED, SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from '../lib/features';
+import { AI_TRADE_TAB_LABEL } from '../lib/hyperliquid/aiTradeCopy';
 import { getFuturesFeePreview, getFuturesMarkets, prepareFutures, verifyFutures } from '../lib/futuresClient';
 import { liquidationDistance } from '../lib/futures-engine';
 import {
@@ -48,7 +49,8 @@ const LazyDydx = SPECULATION_ENABLED ? lazyRetry(() => import('./Dydx')) : null;
  * the store builds ship neither leveraged tab.
  */
 const LazyOnchain = SPECULATION_ENABLED ? lazyRetry(() => import('./FuturesOnchain')) : null;
-const LazyAiTrade = SPECULATION_ENABLED ? lazyRetry(() => import('../components/orders/AiTrade')) : null;
+/* «AI ترید»: its own chunk, and absent from the bundle unless the flag is on. */
+const LazyAiTrade = AI_TRADE_ENABLED ? lazyRetry(() => import('../components/AiTrade/AiTradePanel.jsx')) : null;
 /*
  * ─── THE HISTORY TAB IS GONE FROM THIS RAIL ─────────────────────────────────
  *   «تو فیوچرز تب تاریخچه معاملات را پاک کن چون بهم ریخته — هر تاریخچه را در
@@ -324,7 +326,7 @@ export default function Perp() {
       const raw = String(window.location.hash || '').split('?')[1] || '';
       const wanted = new URLSearchParams(raw).get('tab');
       if (wanted === 'spot' && SPOT_TRADE_ENABLED) return 'spot';
-      const futuresTabs = ['dydx', 'onchain'];
+      const futuresTabs = ['dydx', 'onchain', ...(AI_TRADE_ENABLED ? ['aitrade'] : [])];
       if (SPECULATION_ENABLED && futuresTabs.includes(wanted)) return wanted;
       return 'overview';
     } catch { return 'overview'; }
@@ -336,7 +338,7 @@ export default function Perp() {
    * rail, so the content does not jump when only one tab is left.
    */
   const FUTURES_TABS = SPECULATION_ENABLED
-    ? ['overview', 'dydx', 'onchain', 'aitrade']
+    ? ['overview', 'dydx', 'onchain', ...(AI_TRADE_ENABLED ? ['aitrade'] : [])]
     : [];
   const PERP_TABS = [...(SPOT_TRADE_ENABLED ? ['spot'] : []), ...FUTURES_TABS];
   const RAIL_TABS = PERP_TABS;
@@ -640,7 +642,7 @@ export default function Perp() {
     if (!SPECULATION_ENABLED) return;
     try {
       const want = new URLSearchParams(location.search || '').get('tab');
-      const deepLinkable = ['onchain', 'dydx'];
+      const deepLinkable = ['onchain', 'dydx', ...(AI_TRADE_ENABLED ? ['aitrade'] : [])];
       if (deepLinkable.includes(want) && want !== perpTab) setPerpTab(want);
     } catch { /* a malformed query is not worth breaking the page over */ }
   }, [location.search, perpTab]);
@@ -996,7 +998,7 @@ export default function Perp() {
                 <span className="perp-rail-ico" aria-hidden="true">
                   <Icon width={16} height={16} />
                 </span>
-                <span className="perp-rail-label">{t(TAB_LABEL_KEY[k])}</span>
+                <span className="perp-rail-label">{k === 'aitrade' ? AI_TRADE_TAB_LABEL : t(TAB_LABEL_KEY[k])}</span>
               </button>
             );
           })}
@@ -1009,13 +1011,13 @@ export default function Perp() {
         <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
           {LazyDydx && <LazyDydx embedded />}
         </Suspense>
+      ) : perpTab === 'aitrade' && LazyAiTrade ? (
+        <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
+          <LazyAiTrade />
+        </Suspense>
       ) : perpTab === 'onchain' ? (
         <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
           {LazyOnchain && <LazyOnchain embedded />}
-        </Suspense>
-      ) : perpTab === 'aitrade' ? (
-        <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
-          {LazyAiTrade && <LazyAiTrade />}
         </Suspense>
       ) : (
         <div className="perp-modern">

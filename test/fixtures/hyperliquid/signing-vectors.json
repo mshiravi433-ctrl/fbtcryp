@@ -1,0 +1,77 @@
+{
+  "address": "0x2c7536E3605D9C16a7a3D7b1898e529396a65c23",
+  "keyForVectors": "0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318",
+  "cases": {
+    "order_ioc_mainnet": {
+      "action": {
+        "type": "order",
+        "orders": [
+          {
+            "a": 0,
+            "b": true,
+            "p": "30000",
+            "s": "0.01",
+            "r": false,
+            "t": {
+              "limit": {
+                "tif": "Ioc"
+              }
+            }
+          }
+        ],
+        "grouping": "na"
+      },
+      "nonce": 1700000000000,
+      "hash": "0x07df3415903f52efa6233d13bb85d426aa0facffb085c4c6b10f56071c0d5f78",
+      "signature": {
+        "r": "0xaf14d3767f3151ba0ec6a9a9ec073bf8b105c3e9271a98665bc504b16b2240d8",
+        "s": "0x4e033ee6b025c172fff75db632398308920b07f12b50daf310260187c871a678",
+        "v": 28
+      }
+    },
+    "stop_trigger_reduce_only": {
+      "action": {
+        "type": "order",
+        "orders": [
+          {
+            "a": 1,
+            "b": false,
+            "p": "2850",
+            "s": "0.5",
+            "r": true,
+            "t": {
+              "trigger": {
+                "isMarket": true,
+                "triggerPx": "2850",
+                "tpsl": "sl"
+              }
+            }
+          }
+        ],
+        "grouping": "na"
+      },
+      "nonce": 1700000000123,
+      "hash": "0x4404dd3f6bd95c9c49e5966f57a3d51e25146f6753928d10d41c0e4b485592f2",
+      "signature": {
+        "r": "0x68f111a3fe11e6a3f91331aee8a96fc14825e4fd5df439a8e3b91266f86996e3",
+        "s": "0x150ce16bbd8fe5a92a22dbd3b51b17ab8ee5a3c8e37dc3b6915357e2a15bb259",
+        "v": 28
+      }
+    },
+    "update_leverage": {
+      "action": {
+        "type": "updateLeverage",
+        "asset": 1,
+        "isCross": true,
+        "leverage": 2
+      },
+      "nonce": 1700000000999,
+      "hash": "0x7c773d7cb2e4758c41a15d2a828ab44e8088c927833f82c3ed711d167c81aa20",
+      "signature": {
+        "r": "0xa668bb6c6fb34ddd7684c1d782285a094f542ee43aac20d709b26413227d3917",
+        "s": "0x4ed7b6ed0315eb4d2c490f20244a8f1c7ebe20b8622e4241dce6a5431bcbdaa5",
+        "v": 27
+      }
+    }
+  }
+}

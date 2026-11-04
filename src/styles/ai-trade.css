@@ -1,0 +1,342 @@
+/* «AI ترید» — Aurora Glass, built only on the site's tokens so both themes work.
+ * Layout: one step on screen at a time (no pile-up), bento cards inside a step,
+ * pill controls, hold-to-confirm for every money-moving action. */
+
+.ai-trade {
+  --ai-glow-a: color-mix(in srgb, var(--rgb-1) 22%, transparent);
+  --ai-glow-b: color-mix(in srgb, var(--rgb-2) 20%, transparent);
+  --ai-card: linear-gradient(160deg, color-mix(in srgb, var(--text-1) 6%, transparent), color-mix(in srgb, var(--text-1) 2%, transparent));
+  --ai-ring: color-mix(in srgb, var(--text-1) 10%, transparent);
+  display: grid;
+  gap: var(--sp-5, 20px);
+  margin-top: var(--sp-4, 16px);
+  padding-bottom: 40px;
+  color: var(--text-1);
+  font-family: var(--font-display);
+}
+
+/* ── hero ─────────────────────────────────────────────────────────────── */
+.ai-trade-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4, 16px);
+  padding: var(--sp-5, 20px);
+  border-radius: 28px;
+  border: 1px solid var(--line);
+  background: var(--ai-card), radial-gradient(120% 140% at 0% 0%, var(--ai-glow-a), transparent 60%), radial-gradient(120% 140% at 100% 100%, var(--ai-glow-b), transparent 60%);
+  box-shadow: var(--glass-shadow), inset 0 1px 0 var(--ai-ring);
+  overflow: hidden;
+}
+.ai-trade-hero-ico {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  border-radius: 18px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+  box-shadow: 0 10px 30px -10px color-mix(in srgb, var(--rgb-2) 70%, transparent);
+}
+.ai-trade-hero-text { min-width: 0; flex: 1; }
+.ai-trade-title { margin: 0; font-size: var(--fs-xl, 24px); font-weight: 800; letter-spacing: -0.01em; }
+.ai-trade-sub { margin: 4px 0 0; color: var(--text-2); font-size: var(--fs-sm, 14px); line-height: 1.7; }
+.ai-trade-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: var(--fs-xs, 12px);
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  color: var(--text-2);
+}
+.ai-trade-pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.ai-trade-pill[data-tone='ready'] { color: var(--up); border-color: color-mix(in srgb, var(--up) 35%, transparent); }
+.ai-trade-pill[data-tone='connected'] { color: var(--rgb-1); border-color: color-mix(in srgb, var(--rgb-1) 35%, transparent); }
+.ai-trade-pill[data-tone='stopped'] { color: var(--down); border-color: color-mix(in srgb, var(--down) 40%, transparent); }
+
+/* ── step rail ────────────────────────────────────────────────────────── */
+.ai-trade-steps {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ai-trade-steps::-webkit-scrollbar { display: none; }
+.ai-trade-step {
+  flex: 1 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-sm, 14px);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.25s ease, color 0.25s ease, transform 0.25s ease;
+}
+.ai-trade-step:hover { color: var(--text-1); }
+.ai-trade-step:active { transform: scale(0.97); }
+.ai-trade-step[aria-selected='true'] {
+  color: #fff;
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+  box-shadow: 0 8px 22px -10px color-mix(in srgb, var(--rgb-2) 80%, transparent);
+}
+.ai-trade-step-n {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 11px;
+  background: var(--bg-raised);
+}
+.ai-trade-step[aria-selected='true'] .ai-trade-step-n { background: rgba(255, 255, 255, 0.22); }
+.ai-trade-step[data-done='true'] .ai-trade-step-n { color: var(--up); }
+
+/* ── bento and cards ──────────────────────────────────────────────────── */
+.ai-trade-stage { display: grid; gap: var(--sp-4, 16px); animation: ai-enter 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes ai-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.ai-trade-bento { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ai-trade-bento > .ai-trade-wide { grid-column: 1 / -1; }
+
+.ai-trade-card {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 24px;
+  border: 1px solid var(--line);
+  background: var(--ai-card);
+  box-shadow: var(--glass-shadow), inset 0 1px 0 var(--ai-ring);
+  -webkit-backdrop-filter: blur(var(--glass-blur, 16px));
+  backdrop-filter: blur(var(--glass-blur, 16px));
+  min-width: 0;
+}
+.ai-trade-card h2, .ai-trade-card h3 { margin: 0; font-size: var(--fs-md, 16px); font-weight: 700; }
+.ai-trade-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ai-trade-muted { color: var(--text-2); font-size: var(--fs-sm, 14px); line-height: 1.7; margin: 0; }
+.ai-trade-small { font-size: var(--fs-xs, 12px); }
+.ai-trade-kpi { display: grid; gap: 4px; padding: 14px; border-radius: 18px; background: var(--bg-raised); border: 1px solid var(--line); }
+.ai-trade-kpi-label { color: var(--text-2); font-size: var(--fs-xs, 12px); }
+.ai-trade-kpi-value { font-family: var(--font-mono); font-size: var(--fs-lg, 20px); font-weight: 700; direction: ltr; text-align: start; font-variant-numeric: tabular-nums; }
+.ai-trade-kpi-value[data-tone='up'] { color: var(--up); }
+.ai-trade-kpi-value[data-tone='down'] { color: var(--down); }
+
+.ai-trade-meter { height: 8px; border-radius: 999px; background: var(--bg-raised); overflow: hidden; }
+.ai-trade-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-2));
+  transition: width 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ai-trade-meter[data-warn='true'] > span { background: linear-gradient(90deg, #ffb300, var(--down)); }
+
+/* ── forms ────────────────────────────────────────────────────────────── */
+.ai-trade-form { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ai-trade-field { display: grid; gap: 6px; min-width: 0; }
+.ai-trade-field > span { color: var(--text-2); font-size: var(--fs-xs, 12px); }
+.ai-trade-field input, .ai-trade-field textarea, .ai-trade-field select {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-panel-solid);
+  color: var(--text-1);
+  font: inherit;
+  font-family: var(--font-mono);
+  direction: ltr;
+  text-align: start;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.ai-trade-field textarea { font-family: var(--font-display); min-height: 84px; resize: vertical; direction: rtl; }
+.ai-trade-field input:focus, .ai-trade-field textarea:focus, .ai-trade-field select:focus {
+  outline: none;
+  border-color: var(--rgb-1);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--rgb-1) 18%, transparent);
+}
+.ai-trade-field-wide { grid-column: 1 / -1; }
+.ai-trade-error { margin: 0; color: var(--down); font-size: var(--fs-sm, 14px); line-height: 1.6; }
+.ai-trade-ok { margin: 0; color: var(--up); font-size: var(--fs-sm, 14px); }
+
+/* chips and segmented controls */
+.ai-trade-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.ai-trade-chip {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease, color 0.2s ease;
+}
+.ai-trade-chip:active { transform: scale(0.96); }
+.ai-trade-chip[aria-pressed='true'], .ai-trade-chip[aria-checked='true'] {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+}
+.ai-trade-seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; padding: 5px; border-radius: 18px; background: var(--bg-raised); border: 1px solid var(--line); }
+.ai-trade-seg button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-sm, 14px);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.ai-trade-seg button[aria-checked='true'] { color: #fff; background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2)); }
+
+/* kill switch */
+.ai-trade-kill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 64px;
+  padding: 12px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.ai-trade-kill[aria-checked='true'] { border-color: color-mix(in srgb, var(--down) 55%, transparent); background: color-mix(in srgb, var(--down) 12%, transparent); }
+.ai-trade-switch { position: relative; width: 52px; height: 30px; border-radius: 999px; background: var(--bg-raised); border: 1px solid var(--line-strong); flex: 0 0 auto; transition: background 0.25s ease; }
+.ai-trade-switch::after { content: ''; position: absolute; top: 3px; inset-inline-start: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--text-1); transition: inset-inline-start 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.ai-trade-kill[aria-checked='true'] .ai-trade-switch { background: var(--down); }
+.ai-trade-kill[aria-checked='true'] .ai-trade-switch::after { inset-inline-start: 25px; }
+
+/* ── buttons ──────────────────────────────────────────────────────────── */
+.ai-trade-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+.ai-trade-btn:active:not(:disabled) { transform: scale(0.97); }
+.ai-trade-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.ai-trade-btn-primary { color: #fff; border-color: transparent; background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2)); box-shadow: 0 10px 26px -12px color-mix(in srgb, var(--rgb-2) 85%, transparent); }
+.ai-trade-btn-ghost { background: transparent; }
+.ai-trade-btn-danger { color: var(--down); border-color: color-mix(in srgb, var(--down) 45%, transparent); background: color-mix(in srgb, var(--down) 10%, transparent); }
+.ai-trade-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+/* hold to confirm: a fill that grows for 500 ms while pressed */
+.ai-trade-hold {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-width: 200px;
+  color: #fff;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--up) 85%, #000);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.ai-trade-hold::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 0;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1));
+}
+.ai-trade-hold.is-holding::before { width: 100%; transition: width 500ms linear; }
+.ai-trade-hold[data-kind='reject'] { background: var(--bg-raised); color: var(--text-1); border-color: var(--line-strong); }
+.ai-trade-hold[data-kind='reject'].is-holding::before { background: color-mix(in srgb, var(--down) 25%, transparent); }
+
+/* ── proposals (approval cards) ───────────────────────────────────────── */
+.ai-trade-proposal { border-color: color-mix(in srgb, var(--rgb-1) 30%, var(--line)); }
+.ai-trade-proposal[data-state='executed'] { border-color: color-mix(in srgb, var(--up) 40%, transparent); }
+.ai-trade-proposal[data-state='failed'], .ai-trade-proposal[data-state='expired'], .ai-trade-proposal[data-state='rejected'] { opacity: 0.7; }
+.ai-trade-side { display: inline-flex; align-items: center; min-height: 30px; padding: 0 12px; border-radius: 999px; font-weight: 800; font-size: var(--fs-sm, 14px); }
+.ai-trade-side[data-side='long'] { color: var(--up); background: color-mix(in srgb, var(--up) 14%, transparent); }
+.ai-trade-side[data-side='short'] { color: var(--down); background: color-mix(in srgb, var(--down) 14%, transparent); }
+.ai-trade-facts { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+.ai-trade-facts div { display: grid; gap: 2px; padding: 10px 12px; border-radius: 14px; background: var(--bg-raised); }
+.ai-trade-facts dt { color: var(--text-2); font-size: var(--fs-xs, 12px); }
+.ai-trade-facts dd { margin: 0; font-family: var(--font-mono); font-weight: 700; direction: ltr; text-align: start; }
+.ai-trade-timer { font-family: var(--font-mono); font-size: var(--fs-sm, 14px); color: var(--rgb-1); direction: ltr; }
+.ai-trade-blocked { padding: 10px 12px; border-radius: 14px; background: color-mix(in srgb, var(--down) 10%, transparent); color: var(--down); font-size: var(--fs-sm, 14px); line-height: 1.6; }
+
+/* ── lists ────────────────────────────────────────────────────────────── */
+.ai-trade-rows { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ai-trade-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 16px; background: var(--bg-raised); font-size: var(--fs-sm, 14px); flex-wrap: wrap; }
+.ai-trade-row b { font-family: var(--font-mono); direction: ltr; }
+.ai-trade-row[data-tone='up'] b { color: var(--up); }
+.ai-trade-row[data-tone='down'] b { color: var(--down); }
+
+.ai-trade-note { padding: 12px 14px; border-radius: 16px; border: 1px dashed var(--line-strong); color: var(--text-2); font-size: var(--fs-sm, 14px); line-height: 1.7; }
+.ai-trade-warn { border-style: solid; border-color: color-mix(in srgb, #ffb300 45%, transparent); color: var(--text-1); background: color-mix(in srgb, #ffb300 10%, transparent); }
+.ai-trade-gate { text-align: center; padding: 28px 18px; }
+.ai-trade-gate .ai-trade-btn { margin-top: 6px; }
+
+.ai-trade-steps-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: ai; }
+.ai-trade-steps-list li { display: flex; gap: 10px; align-items: flex-start; color: var(--text-2); font-size: var(--fs-sm, 14px); line-height: 1.7; }
+.ai-trade-steps-list li::before { counter-increment: ai; content: counter(ai); flex: 0 0 auto; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; font-size: 12px; font-weight: 800; color: #fff; background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2)); }
+
+details.ai-trade-adv summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-sm, 14px); min-height: 40px; display: flex; align-items: center; }
+
+/* ── responsive ───────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .ai-trade-bento, .ai-trade-form, .ai-trade-facts { grid-template-columns: 1fr; }
+  .ai-trade-hero { padding: 16px; }
+  .ai-trade-hero-ico { width: 44px; height: 44px; border-radius: 15px; }
+  .ai-trade-hold { min-width: 0; width: 100%; }
+  .ai-trade-actions .ai-trade-btn { flex: 1 1 auto; }
+}
+@media (min-width: 900px) {
+  .ai-trade { max-width: 980px; }
+  .ai-trade-bento { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .ai-trade-bento > .ai-trade-span-2 { grid-column: span 2; }
+  .ai-trade-bento > .ai-trade-span-3 { grid-column: span 3; }
+  .ai-trade-bento > .ai-trade-span-4 { grid-column: 1 / -1; }
+}
+
+/* ── reduced motion ───────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .ai-trade-stage, .ai-trade-step, .ai-trade-btn, .ai-trade-chip, .ai-trade-switch, .ai-trade-switch::after, .ai-trade-meter > span {
+    animation: none !important;
+    transition: none !important;
+  }
+  .ai-trade-hold.is-holding::before { transition: none; }
+}
