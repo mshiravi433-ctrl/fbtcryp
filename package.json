@@ -402,7 +402,8 @@
     "test:wiring": "node scripts/run-wiring-audit.mjs",
     "test:kronos-dist": "node --test test/kronos-deploy-gate.test.mjs && KRONOS_DIST_REQUIRED=1 node --test --test-force-exit test/kronos-ort-dist.test.mjs",
     "kronos:fetch": "node scripts/fetch-kronos-model.mjs",
-    "kronos:check": "node scripts/check-kronos-model-host.mjs"
+    "kronos:check": "node scripts/check-kronos-model-host.mjs",
+    "test:hyperliquid": "node test/hyperliquid-readonly-units.mjs && node test/hyperliquid-caps-units.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

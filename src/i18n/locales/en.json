@@ -1978,7 +1978,8 @@
     "tab": {
       "overview": "Overview",
       "perpetual": "Perpetual",
-      "onchain": "On-Chain"
+      "onchain": "On-Chain",
+      "aitrade": "AI Trade"
     },
     "title": "Perpetuals",
     "subtitle": "Leveraged futures on live index prices.",
