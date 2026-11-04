@@ -32,7 +32,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 const LANG = vi.hoisted(() => ({ current: 'fa' }));
@@ -601,5 +601,30 @@ describe('percent field · on the Risk Trainer', () => {
     await new Promise((r) => setTimeout(r, 30));
     expect(container.querySelector('[data-testid="risk-pct-input"]').value).toBe('3');
     unmount();
+  });
+});
+
+describe('chart guide · interactive teacher', () => {
+  beforeEach(() => cleanup());
+  it('explains a selected control and switches between RSI and MACD', () => {
+    render(<MemoryRouter><ChartGuide /></MemoryRouter>);
+    fireEvent.click(screen.getByTestId('chart-guide-toggle-rsi'));
+    expect(screen.getByTestId('chart-guide-toggle-rsi').getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelector('.cgc-sub-rsi')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('chart-guide-toggle-macd'));
+    expect(screen.getByTestId('chart-guide-toggle-rsi').getAttribute('aria-pressed')).toBe('false');
+    expect(document.querySelector('.cgc-sub-macd')).toBeTruthy();
+    expect(document.querySelector('.lab2-cg-insight').textContent).toContain('MACD');
+  });
+
+  it('sends chart context to the teacher and labels rule-based answers', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ answer: 'Test answer', degraded: true }) });
+    render(<MemoryRouter><ChartGuide /></MemoryRouter>);
+    fireEvent.change(screen.getByRole('textbox', { name: /RSI/ }), { target: { value: 'RSI?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'بپرس' }));
+    expect(await screen.findByText('Test answer')).toBeTruthy();
+    expect(screen.getByText(/موتور قاعده/)).toBeTruthy();
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).context.join(' ')).toContain('Practice chart');
+    fetchMock.mockRestore();
   });
 });

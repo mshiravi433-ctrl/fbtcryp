@@ -554,3 +554,24 @@
 }
 
 :root[data-reduce-motion='true'] .cgc-focus rect[stroke-dasharray] { animation: none; }
+
+/* A quieter, single-workspace teaching layout. */
+.lab2-cg-chapters { padding: 4px; gap: 4px; border-radius: 16px; background: color-mix(in srgb, var(--bg-panel, #0d1020) 70%, transparent); }
+.lab2-cg-chapter { border-color: transparent; background: transparent; border-radius: 12px; }
+.lab2-cg-chapter.on { background: color-mix(in srgb, var(--acc) 12%, var(--bg-panel, #0d1020)); }
+.lab2-cg-stage { border-radius: 22px; }
+.lab2-cg-insight, .lab2-cg-teacher { border: 1px solid color-mix(in srgb, var(--acc, #00cfd4) 25%, var(--lab-line)); border-radius: 16px; background: color-mix(in srgb, var(--acc, #00cfd4) 6%, var(--bg-panel, #0d1020)); padding: 14px 16px; }
+.lab2-cg-insight-label { color: var(--acc); font-size: 10px; font-weight: 800; letter-spacing: .04em; }
+.lab2-cg-insight p, .lab2-cg-answer p { margin: 7px 0 0; color: var(--text-1); font-size: 12px; line-height: 1.9; }
+.lab2-cg-teacher { display: grid; gap: 14px; }
+.lab2-cg-teacher-head { display: flex; align-items: center; gap: 11px; }
+.lab2-cg-teacher-head strong { color: var(--text-1); font-size: 14px; }
+.lab2-cg-teacher-head p { margin: 3px 0 0; color: var(--text-2); font-size: 11px; }
+.lab2-cg-teacher-icon { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 12px; background: color-mix(in srgb, var(--acc) 16%, transparent); color: var(--acc); font-size: 22px; }
+.lab2-cg-teacher-form { display: flex; gap: 8px; }
+.lab2-cg-teacher-form input { min-width: 0; flex: 1; border: 1px solid var(--lab-line); border-radius: 11px; background: var(--bg-panel, #0d1020); color: var(--text-1); padding: 11px; font: inherit; font-size: 12px; }
+.lab2-cg-teacher-form button { border: 0; border-radius: 11px; padding: 10px 16px; background: var(--acc); color: #06151a; font: inherit; font-weight: 800; cursor: pointer; }
+.lab2-cg-teacher-form button:disabled { opacity: .5; cursor: default; }
+.lab2-cg-answer { border-top: 1px solid var(--lab-line); padding-top: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.lab2-cg-answer small { color: var(--text-2); }
+.lab2-cg-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

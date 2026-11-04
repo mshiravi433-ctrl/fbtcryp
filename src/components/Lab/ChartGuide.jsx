@@ -62,19 +62,21 @@ import { useStill } from '../AnimatedIcon';
 import GuideChart, { aggregate, makeWalk } from './GuideChart';
 import { CHAPTERS, CHAPTER_BY_ID, DEMO_DEFAULT, TAB_GROUPS, demoFor } from './chartGuideData';
 import { fibLevels, simpleMovingAverage } from '../../lib/proChartMath';
+import { apiBase } from '../../lib/apiBase';
+import { teachingCopy } from './chartGuideTeaching';
 import '../../styles/lab-chart-guide.css';
 
 /* ── the practice series ────────────────────────────────────────────────────
  * Generated ONCE, from a fixed seed and a fixed epoch: two chapters must never
  * draw two different "histories" of the same practice asset, and the numbers in
  * a step's prose must match the pixels above it. */
-const WALK = makeWalk();
+const WALK = makeWalk({ bars: 17520 });
 const CANDLES = WALK.map((c) => c);
 
 /* The candle duration of each window, kept next to the chips so the two cannot
    drift. `GuideChart` owns the same table; this copy exists so the facts strip
    below can aggregate exactly the series the chart is drawing. */
-export const RANGE_HOURS = { '1D': 1, '7D': 4, '30D': 12, '90D': 24, '1Y': 24 };
+export const RANGE_HOURS = { '1D': 1, '7D': 4, '30D': 12, '90D': 36, '1Y': 146 };
 
 /* ── the controls ───────────────────────────────────────────────────────────
  * ONE list, rendered once. `key` is where the value sits in the demo state;
@@ -161,7 +163,7 @@ function buildHighlights() {
   for (const p of ma7) {
     const slow = byTime.get(p.time);
     if (slow == null) continue;
-    const i = CANDLES.findIndex((c) => c.time === p.time);
+    const i = Math.round((p.time - CANDLES[0].time) / (60 * 60));
     if (i < from) continue;
     const d = Math.abs(p.value - slow);
     if (d < gap) {
@@ -175,10 +177,10 @@ function buildHighlights() {
 const HIGHLIGHTS = buildHighlights();
 
 /** Bars per window — the same aggregation `GuideChart` draws. */
-const RANGE_BARS = { '1D': 60, '7D': 60, '30D': 60, '90D': 60, '1Y': 60 };
+const RANGE_BARS = { '1D': 24, '7D': 42, '30D': 60, '90D': 60, '1Y': 60 };
 
 export default function ChartGuide({ onBack }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const still = useStill();
   const rtl = useIsRtl();
@@ -199,11 +201,38 @@ export default function ChartGuide({ onBack }) {
   const [demo, setDemo] = useState(() => demoFor(CHAPTERS[0]));
   const [touched, setTouched] = useState(false);
   const [hover, setHover] = useState(null);
+  const [lesson, setLesson] = useState('candles');
+  const [question, setQuestion] = useState('');
+  const [answer, setAnswer] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const copy = teachingCopy[(i18n.language || '').startsWith('fa') ? 'fa' : 'en'];
+  const explain = copy.lessons[lesson] || copy.lessons.candles;
+  const askTeacher = async (event) => {
+    event.preventDefault();
+    const q = question.trim();
+    if (!q || busy) return;
+    setBusy(true);
+    setAnswer(null);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25000);
+    try {
+      const response = await fetch(`${apiBase()}/ai/ask`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, signal: controller.signal,
+        body: JSON.stringify({ question: q, lang: i18n.language, context: [copy.context, `Topic: ${lesson}. ${explain}`, `Practice chart: ${demo.range}, ${demo.chartType}. Latest close: ${facts.price.toFixed(2)}. Range change: ${facts.change.toFixed(2)}%.`] })
+      });
+      if (!response.ok) throw new Error('unavailable');
+      const data = await response.json();
+      if (!data.answer) throw new Error('empty');
+      setAnswer({ text: data.answer, degraded: Boolean(data.degraded) || data.source === 'internal-rules' || data.engine === 'internal-rules' });
+    } catch { setAnswer({ text: copy.error, error: true }); }
+    finally { clearTimeout(timer); setBusy(false); }
+  };
 
   useEffect(() => {
     setDemo(demoFor(chapter));
     setTouched(false);
     setHover(null);
+    setLesson(({ read: 'candles', range: 'range', move: 'zoom', type: 'line', avg: 'ma7', bands: 'bb', panes: 'rsi', levels: 'fib', scale: 'log', capture: 'fit', forecast: 'range' })[chapter.id] || 'candles');
   }, [chapter]);
 
   const tabs = useMemo(
@@ -273,7 +302,7 @@ export default function ChartGuide({ onBack }) {
     };
   }, [demo.range]);
 
-  const reversed = useMemo(() => (rtl ? [...chapter.steps].reverse() : chapter.steps), [chapter, rtl]);
+  const reversed = chapter.steps;
 
   return (
     <div className={`lab2-screen lab2-cg acc-${chapter.accent}`}>
@@ -336,7 +365,7 @@ export default function ChartGuide({ onBack }) {
           is the top of the screen, it is large, and the steps sit under it —
           you read a line, look up, and the thing it described is already
           drawn and annotated. */}
-      <section className="lab2-cg-stage" key={chapter.id} aria-label={t('lab2.chartGuide.demo.title')}>
+      <section className="lab2-cg-stage" aria-label={t('lab2.chartGuide.demo.title')}>
         <div className="lab2-cg-stage-head">
           <div className="lab2-cg-stage-title">
             <LabIcon name={chapter.icon} width={15} height={15} />
@@ -379,6 +408,11 @@ export default function ChartGuide({ onBack }) {
           </div>
         )}
 
+        <div className="lab2-cg-insight" aria-live="polite">
+          <span className="lab2-cg-insight-label">{copy.insight} · {lesson.toUpperCase()}</span>
+          <p>{explain}</p>
+        </div>
+
         {/* ─── CHART TYPE ─────────────────────────────────────────────────── */}
         <div className="lab2-cg-control-row">
           <span className="lab2-cg-control-label">{t('lab2.chartGuide.demo.type')}</span>
@@ -389,7 +423,7 @@ export default function ChartGuide({ onBack }) {
                 type="button"
                 className={`lab2-cg-chip ${demo.chartType === id ? 'on' : ''}`}
                 aria-pressed={demo.chartType === id}
-                onClick={() => apply((d) => ({ ...d, chartType: id }))}
+                onClick={() => { setLesson(id); apply((d) => ({ ...d, chartType: id })); }}
                 data-testid={`chart-guide-type-${id}`}
               >
                 {t(`lab2.chartGuide.demo.types.${id}`)}
@@ -408,7 +442,7 @@ export default function ChartGuide({ onBack }) {
                 type="button"
                 className={`lab2-cg-chip lab2-cg-chip--num ${demo.range === id ? 'on' : ''}`}
                 aria-pressed={demo.range === id}
-                onClick={() => apply((d) => ({ ...d, range: id, zoom: 0 }))}
+                onClick={() => { setLesson('range'); apply((d) => ({ ...d, range: id, zoom: 0 })); }}
                 data-testid={`chart-guide-range-${id}`}
               >
                 {id}
@@ -432,7 +466,7 @@ export default function ChartGuide({ onBack }) {
                       type="button"
                       className={`lab2-cg-chip ${on ? 'on' : ''}`}
                       aria-pressed={on}
-                      onClick={() => apply((d) => setPath(d, item.toggle, !readPath(d, item.toggle)))}
+                      onClick={() => { setLesson(item.id); apply((d) => { const next = setPath(d, item.toggle, !readPath(d, item.toggle)); if ((item.id === 'rsi' || item.id === 'macd') && !readPath(d, item.toggle)) next.panes[item.id === 'rsi' ? 'macd' : 'rsi'] = false; return next; }); }}
                       data-testid={`chart-guide-toggle-${item.id}`}
                       style={on ? { '--chip-acc': item.acc } : undefined}
                     >
@@ -453,12 +487,12 @@ export default function ChartGuide({ onBack }) {
             <button
               type="button"
               className="lab2-cg-chip"
-              onClick={() => apply((d) => ({
+              onClick={() => { setLesson('zoom'); apply((d) => ({
                 ...d,
                 /* Stop zooming in when about 12 candles are left; past that a
                    candle is wider than the slot it is drawn in. */
                 zoom: Math.min((d.zoom ?? 0) + 12, Math.max(0, (RANGE_BARS[d.range] ?? 60) - 12))
-              }))}
+              })); }}
               data-testid="chart-guide-zoom"
             >
               <LabIcon name="plus" width={12} height={12} />
@@ -467,7 +501,7 @@ export default function ChartGuide({ onBack }) {
             <button
               type="button"
               className="lab2-cg-chip"
-              onClick={() => apply((d) => ({ ...d, zoom: 0 }))}
+              onClick={() => { setLesson('fit'); apply((d) => ({ ...d, zoom: 0 })); }}
               data-testid="chart-guide-fit"
             >
               <LabIcon name="refresh" width={12} height={12} />
@@ -476,7 +510,7 @@ export default function ChartGuide({ onBack }) {
             <button
               type="button"
               className="lab2-cg-chip"
-              onClick={() => apply(() => demoFor(CHAPTERS[0]))}
+              onClick={() => { setLesson('reset'); apply(() => demoFor(CHAPTERS[0])); }}
               data-testid="chart-guide-reset"
             >
               <LabIcon name="back" width={12} height={12} />
@@ -498,6 +532,16 @@ export default function ChartGuide({ onBack }) {
             {t('lab2.chartGuide.demo.reapply', { defaultValue: 'Restore this chapter’s demo' })}
           </button>
         )}
+      </section>
+
+      <section className="lab2-cg-teacher" aria-label={copy.teacher}>
+        <div className="lab2-cg-teacher-head"><span className="lab2-cg-teacher-icon">✦</span><div><strong>{copy.teacher}</strong><p>{copy.teacherSub}</p></div></div>
+        <form onSubmit={askTeacher} className="lab2-cg-teacher-form">
+          <label className="lab2-cg-sr-only" htmlFor="chart-teacher-question">{copy.placeholder}</label>
+          <input id="chart-teacher-question" value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={copy.placeholder} maxLength={500} />
+          <button type="submit" disabled={busy || !question.trim()}>{busy ? copy.wait : copy.send}</button>
+        </form>
+        {answer && <div className="lab2-cg-answer" role="status"><small>{answer.error ? copy.unavailable : answer.degraded ? copy.rules : copy.ai}</small><p>{answer.text}</p></div>}
       </section>
 
       {/* ═══ THE NUMBERS ════════════════════════════════════════════════════

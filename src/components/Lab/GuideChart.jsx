@@ -211,7 +211,7 @@ export function makeWalk({ seed = 7, bars = 1440, start = 100 } = {}) {
 }
 
 /** One series for the whole session — two chapters must never disagree. */
-const WALK = makeWalk();
+const WALK = makeWalk({ bars: 17520 });
 const CANDLES = WALK.map((c) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close }));
 const VOLUME = Object.fromEntries(WALK.map((c) => [c.time, c.volume]));
 
@@ -227,8 +227,8 @@ const VOLUME = Object.fromEntries(WALK.map((c) => [c.time, c.volume]));
  * it into candles of the matching duration. 1D is 60 hourly bars; 1Y is 60
  * weekly candles off the same sixty days of history.
  */
-const RANGE_BARS = { '1D': 60, '7D': 60, '30D': 60, '90D': 60, '1Y': 60 };
-const RANGE_HOURS = { '1D': 1, '7D': 4, '30D': 12, '90D': 24, '1Y': 24 };
+const RANGE_BARS = { '1D': 24, '7D': 42, '30D': 60, '90D': 60, '1Y': 60 };
+const RANGE_HOURS = { '1D': 1, '7D': 4, '30D': 12, '90D': 36, '1Y': 146 };
 
 /**
  * Collapse the hourly walk into candles of `hours` each.
