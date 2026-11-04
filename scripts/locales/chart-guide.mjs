@@ -31,16 +31,18 @@ export const CHART_GUIDE = {
     ru: 'Гайд по графику', tr: 'Grafik rehberi', ur: 'چارٹ گائیڈ', id: 'Panduan grafik',
     pt: 'Guia do gráfico'
   },
+  /* v3: the screen is a single chart plus a tool rail and an on-device teacher,
+     so the subtitle no longer promises "each toolbar button". */
   'lab2.screens.chartGuide.sub': {
-    zh: '读懂代币页面上的K线：窗口、轴、价格和工具栏上的每个按钮。',
-    hi: 'टोकन पेज के कैंडल चार्ट को पढ़ना सीखें: विंडो, अक्ष, मूल्य और टूलबार का हर बटन।',
-    es: 'Aprende a leer las velas de la página del token: ventana, ejes, precio y cada botón de la barra.',
-    fr: 'Apprenez à lire les chandeliers de la page du jeton : fenêtre, axes, prix et chaque bouton de la barre.',
-    ru: 'Научитесь читать свечи на странице токена: окно, оси, цену и каждую кнопку панели.',
-    tr: 'Token sayfasındaki mum grafiğini okumayı öğrenin: pencere, eksenler, fiyat ve araç çubuğundaki her düğme.',
-    ur: 'ٹوکن صفحے کے کینڈل چارٹ کو پڑھنا سیکھیں: ونڈو، محور، قیمت اور ٹول بار کا ہر بٹن۔',
-    id: 'Pelajari cara membaca candlestick di halaman token: jendela, sumbu, harga, dan setiap tombol di bilah alat.',
-    pt: 'Aprenda a ler os candles na página do token: janela, eixos, preço e cada botão da barra.'
+    zh: '在一张图上读懂K线：点任意工具，立即画出来并在下方解释，还有设备端AI老师。',
+    hi: 'एक ही चार्ट पर कैंडल पढ़ें: कोई भी टूल दबाएँ, वह तुरंत बनता है और नीचे समझाया जाता है — डिवाइस पर AI शिक्षक।',
+    es: 'Lee las velas en un solo gráfico: pulsa una herramienta, se dibuja al instante y se explica debajo, con un profesor de IA en el dispositivo.',
+    fr: 'Lisez les chandeliers sur un seul graphique : touchez un outil, il se dessine aussitôt et s’explique en dessous, avec un professeur IA sur l’appareil.',
+    ru: 'Читайте свечи на одном графике: нажмите инструмент — он сразу рисуется и объясняется ниже, с ИИ-учителем на устройстве.',
+    tr: 'Mumları tek grafikte okuyun: bir araca dokunun, anında çizilir ve altında açıklanır — cihaz üzerinde çalışan yapay zekâ öğretmeniyle.',
+    ur: 'ایک ہی چارٹ پر کینڈل پڑھیں: کوئی ٹول دبائیں، وہ فوراً بنتا ہے اور نیچے سمجھایا جاتا ہے — ڈیوائس پر AI استاد۔',
+    id: 'Baca candle di satu grafik: tekan alat, langsung tergambar dan dijelaskan di bawahnya — dengan guru AI di perangkat.',
+    pt: 'Leia os candles em um único gráfico: toque numa ferramenta, ela é desenhada na hora e explicada abaixo, com um professor de IA no dispositivo.'
   },
   'lab2.chartGuide.sampleData': {
     zh: '下方数据是练习序列，不是实时价格。用于学习，不是行情。',

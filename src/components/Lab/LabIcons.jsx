@@ -441,6 +441,56 @@ export const IconLayers = (p) => (
   </svg>
 );
 
+/* ─── the chart-guide rail ────────────────────────────────────────────────
+ * Five glyphs added for «راهنمای نمودار» v3. They are pictorial versions of
+ * the thing each tool draws, so the rail can be read without the labels: two
+ * candles, a wave, two envelope bands, three volume bars and a ruler. Drawn in
+ * the same 24-unit box and 1.7 stroke as the rest of the set. */
+
+/** Two candles — the price itself. */
+export const IconCandles = (p) => (
+  <svg {...base} {...p}>
+    <path d="M7.6 3.4v3.1M7.6 15.1v5.5" />
+    <rect x="5.1" y="6.5" width="5" height="8.6" rx="1.2" />
+    <path d="M16.4 6.4v2.3M16.4 15.6v4.2" />
+    <rect x="13.9" y="8.7" width="5" height="6.9" rx="1.2" />
+  </svg>
+);
+
+/** A smoothed wave — EMA / price action, not a jagged line. */
+export const IconWave = (p) => (
+  <svg {...base} {...p}>
+    <path d="M2.6 15.4c2 0 2.6-6.8 4.9-6.8s2.7 8.6 5 8.6 2.5-9.9 4.6-9.9c1.5 0 2.1 2.7 3.3 3.6" />
+  </svg>
+);
+
+/** Two bands around a dashed mean — Bollinger. */
+export const IconBands = (p) => (
+  <svg {...base} {...p}>
+    <path d="M3.4 7.2c2.6-2.4 5.4 2.2 8.1 0s5.5-2.4 8.1 0" />
+    <path d="M3.4 16.8c2.6-2.4 5.4 2.2 8.1 0s5.5-2.4 8.1 0" />
+    <path d="M3.4 12h17.2" strokeDasharray="2.4 2.4" />
+  </svg>
+);
+
+/** Three volume bars. */
+export const IconBars = (p) => (
+  <svg {...base} {...p}>
+    <path d="M3.2 20.4h17.6" />
+    <rect x="4.9" y="10.6" width="3.4" height="7.4" rx="1" />
+    <rect x="10.3" y="6.4" width="3.4" height="11.6" rx="1" />
+    <rect x="15.7" y="13" width="3.4" height="5" rx="1" />
+  </svg>
+);
+
+/** A ruler — the scale axis, and the measure tool. */
+export const IconRuler = (p) => (
+  <svg {...base} {...p}>
+    <rect x="2.8" y="8.2" width="18.4" height="7.6" rx="2" transform="rotate(-12 12 12)" />
+    <path d="M7.2 9.6v2.2M11 8.9v3M14.8 8.1v2.2M18.6 7.4v3" />
+  </svg>
+);
+
 export const IconCoins = (p) => (
   <svg {...base} {...p}>
     <ellipse cx="9" cy="7" rx="5.6" ry="2.8" />
@@ -529,6 +579,12 @@ export const LAB_ICONS = {
   layers: IconLayers,
   coins: IconCoins,
   hourglass: IconHourglass,
+  /* The chart-guide rail (v3). */
+  candles: IconCandles,
+  wave: IconWave,
+  bands: IconBands,
+  bars: IconBars,
+  ruler: IconRuler,
   /* The Persian video academy — see the note on IconFilm above. */
   film: IconFilm,
   video: IconFilm

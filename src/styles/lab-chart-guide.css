@@ -1,389 +1,250 @@
 /**
- * CHART GUIDE — «راهنمای نمودار»
+ * «راهنمای نمودار» v3 — THE SHEET
  * ═══════════════════════════════════════════════════════════════════════════
- * A LAZY SHEET, ON PURPOSE.
+ * ─── WHY THIS FILE IS SELF-CONTAINED ──────────────────────────────────────
+ * v2's stylesheet leaned on the Lab's tokens (`--acc`, `--lab-line`,
+ * `--lab-surface`) — which live on `.lab2`, a wrapper the standalone
+ * `/lab/chart-guide` route never had. Every `var(--lab-line)` on the page
+ * therefore resolved to nothing: borders vanished, the accent colour on the
+ * chapter pills disappeared, and the "very ugly" report was, in large part, a
+ * CSS scope bug rather than a taste judgement. v3 defines its own complete
+ * token block on `.lab2-cgx` and never assumes an ancestor. The `.lab2` class
+ * is still on the root for the shared header (`LabBack`), but no rule below
+ * depends on it.
  *
- * `test/first-paint-lazy-css.test.mjs` pins the rule that a sheet belonging to
- * one screen is imported FROM that screen, never from `index.css`. The guide is
- * reached from one place (the Lab's Advanced tab) and nobody loads it on the
- * first paint, so every byte here is a byte a first-time visitor does not pay
- * for. `lab-v2.css` is already in the Lab's chunk, which is where the tokens
- * below come from; this file only adds what is unique to the guide.
+ * ─── THE VISUAL IDEA ──────────────────────────────────────────────────────
+ * An instrument, not a poster. Near-black glass with a violet cast, one
+ * luminous accent that follows the OPEN TOOL (each tool owns a colour that its
+ * chart annotation uses too), hairline borders, tabular numerals, and exactly
+ * one loud element per viewport: the chart. Everything else is quiet so the
+ * thing being taught is the thing that glows.
  *
- * Everything is expressed against the Lab's own tokens (`--acc`, `--acc-2`,
- * `--lab-line`, `--text-1/2/3`) so a theme flip or a per-chapter accent change
- * costs a class name, not a rule.
+ * ─── MOTION ───────────────────────────────────────────────────────────────
+ * Two animations only — the live dot's pulse and the teacher orb's slow turn —
+ * plus framer-motion transitions already gated by `useStill()`. Both are
+ * disabled under `prefers-reduced-motion` and the app's own
+ * `data-reduce-motion` switch, because a tutorial is often opened by someone
+ * who has already told the OS they do not want movement.
  */
 
-/* ─── the sample-data banner ─────────────────────────────────────────────── */
-/* Deliberately NOT red and not a warning triangle: this is not an error, it is
-   the sentence that makes every number below it honest. Amber + flask, quiet
-   enough to read once and not to nag. */
-.lab2-cg-sample {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 12px;
-  border-radius: 12px;
-  border: 1px dashed color-mix(in srgb, var(--rgb-5, #ffb020) 42%, var(--lab-line));
-  background: color-mix(in srgb, var(--rgb-5, #ffb020) 7%, transparent);
-  color: var(--text-2);
-  font-size: 11px;
-  line-height: 1.65;
+/* ─── 0 · TOKENS ─────────────────────────────────────────────────────────── */
+
+.lab2-cgx {
+  --cgx-accent: #22d3ee;
+  --cgx-accent-soft: color-mix(in srgb, var(--cgx-accent) 16%, transparent);
+  --cgx-accent-line: color-mix(in srgb, var(--cgx-accent) 44%, transparent);
+  --cgx-up: #2ee6a8;
+  --cgx-down: #ff5d7a;
+  --cgx-ink: #eef3ff;
+  --cgx-dim: #93a3bd;
+  --cgx-faint: #66748c;
+  --cgx-line: rgba(148, 163, 184, 0.16);
+  --cgx-line-strong: rgba(148, 163, 184, 0.3);
+  --cgx-surface: linear-gradient(158deg, rgba(28, 35, 56, 0.92) 0%, rgba(13, 17, 30, 0.94) 52%, rgba(17, 22, 38, 0.96) 100%);
+  --cgx-surface-2: rgba(18, 23, 39, 0.72);
+  --cgx-plate: rgba(255, 255, 255, 0.035);
+  --cgx-shadow: 0 24px 54px -32px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+  gap: 13px;
+  padding-bottom: 28px;
+  min-width: 0;
 }
 
-.lab2-cg-sample svg { color: var(--rgb-5, #ffb020); flex: 0 0 auto; }
-
-/* ─── chapter rail ───────────────────────────────────────────────────────── */
-/* A second level of tabs, not a carousel: four chapter buttons per tab, each
-   labelled with its own name. Horizontal scroll rather than wrapping because a
-   wrapped rail changes the height of the screen every time you switch tab,
-   which makes the demo below jump — the one thing a chart must not do. */
-.lab2-cg-chapters {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  padding: 2px 2px 4px;
-  margin-inline: -2px;
+:root[data-theme='light'] .lab2-cgx {
+  --cgx-ink: #16203a;
+  --cgx-dim: #5d6b83;
+  --cgx-faint: #7b8799;
+  --cgx-line: rgba(24, 42, 74, 0.13);
+  --cgx-line-strong: rgba(24, 42, 74, 0.24);
+  --cgx-surface: linear-gradient(158deg, #ffffff 0%, #f4f7fd 56%, #eef3fb 100%);
+  --cgx-surface-2: rgba(255, 255, 255, 0.78);
+  --cgx-plate: rgba(24, 42, 74, 0.035);
+  --cgx-shadow: 0 20px 44px -34px rgba(24, 42, 74, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
-.lab2-cg-chapters::-webkit-scrollbar { display: none; }
+.lab2-cgx *,
+.lab2-cgx *::before,
+.lab2-cgx *::after { box-sizing: border-box; }
 
-.lab2-cg-chapter {
+/* ─── 1 · THE CHART CARD ─────────────────────────────────────────────────── */
+
+.cgx-hero {
   position: relative;
   isolation: isolate;
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 38px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--lab-line);
-  background: color-mix(in srgb, var(--bg-panel, #0d1020) 70%, transparent);
-  color: var(--text-2);
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
-}
-
-.lab2-cg-chapter:hover { color: var(--text-1); border-color: var(--lab-line-2); }
-
-.lab2-cg-chapter.on {
-  color: var(--text-1);
-  border-color: color-mix(in srgb, var(--acc) 55%, transparent);
-}
-
-/* The pill is a sibling painted UNDER the label, so the text keeps its
-   contrast when the accent is a light colour (mint, amber). */
-.lab2-cg-chapter-pill {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: 11px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--acc) 22%, transparent), color-mix(in srgb, var(--acc-2) 12%, transparent));
-}
-
-.lab2-cg-chapter-icon { display: grid; place-items: center; color: var(--acc-ink, var(--acc)); }
-.lab2-cg-chapter.on .lab2-cg-chapter-icon { color: var(--acc-ink, var(--acc)); }
-
-.lab2-cg-chapter:focus-visible {
-  outline: 2px solid var(--acc-ink, var(--acc));
-  outline-offset: 2px;
-}@media (min-width: 640px) {}
-
-/* ─── THE STAGE ───────────────────────────────────────────────────────────
-   Chart first, controls under it. The whole block is one card so the reader's
-   eye never has to decide where the lesson ends and the next thing begins. */
-.lab2-cg-stage {
-  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 11px;
+  gap: 10px;
   padding: 13px;
-  border-radius: 18px;
-  border: 1px solid color-mix(in srgb, var(--acc) 26%, var(--lab-line));
-  background:
-    linear-gradient(150deg, color-mix(in srgb, var(--acc) 7%, transparent), transparent 58%),
-    var(--lab-surface, color-mix(in srgb, var(--bg-panel, #0d1020) 72%, transparent));
-  box-shadow: var(--lab-shadow, 0 12px 30px -22px rgba(0, 0, 0, 0.5));
+  border-radius: 22px;
+  border: 1px solid var(--cgx-line);
+  background: var(--cgx-surface);
+  box-shadow: var(--cgx-shadow);
+  overflow: hidden;
 }
 
-.lab2-cg-stage-head {
+/* The accent bloom behind the chart. `--cgx-accent` follows the open tool, so
+   the whole card changes temperature as the reader moves along the rail —
+   without a single layout shift. */
+.cgx-hero::before {
+  content: '';
+  position: absolute;
+  inset: -30% -10% auto;
+  height: 220px;
+  z-index: -1;
+  background:
+    radial-gradient(60% 100% at 50% 0%, color-mix(in srgb, var(--cgx-accent) 22%, transparent), transparent 72%),
+    radial-gradient(40% 80% at 88% 10%, color-mix(in srgb, #7c4dff 16%, transparent), transparent 76%);
+  filter: blur(2px);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+/* A gradient hairline along the top edge — the "machined" detail that stops a
+   dark card from reading as a plain rectangle. */
+.cgx-hero::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--cgx-accent) 70%, transparent), transparent);
+  pointer-events: none;
+}
+
+.cgx-hero-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 
-.lab2-cg-stage-title {
+.cgx-hero-title {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 13.5px;
+  font-size: 12px;
   font-weight: 800;
-  letter-spacing: -0.01em;
-  color: var(--text-1);
+  letter-spacing: 0.01em;
+  color: var(--cgx-ink);
 }
 
-.lab2-cg-stage-title svg { color: var(--acc-ink, var(--acc)); }
-
-/* A chip, not a heading: it says "this is the interactive part" without
-   competing with the chapter name beside it. */
-.lab2-cg-stage-badge {
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.7px;
-  text-transform: uppercase;
-  padding: 4px 9px;
-  border-radius: 999px;
-  white-space: nowrap;
-  color: var(--acc-ink, var(--acc));
-  background: color-mix(in srgb, var(--acc) 13%, transparent);
-  border: 1px solid color-mix(in srgb, var(--acc) 30%, transparent);
+.cgx-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cgx-up);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--cgx-up) 60%, transparent);
+  animation: cgx-live 2.2s ease-out infinite;
 }
 
-/* The sentence that points at the ringed candle on the chart above it. */
-.lab2-cg-callout {
-  display: flex;
-  align-items: center;
+@keyframes cgx-live {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--cgx-up) 55%, transparent); }
+  70% { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.cgx-hero-price {
+  display: inline-flex;
+  align-items: baseline;
   gap: 7px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--text-2);
-  background: color-mix(in srgb, var(--acc) 8%, transparent);
-  border-inline-start: 2px solid color-mix(in srgb, var(--acc) 60%, transparent);
+  font-variant-numeric: tabular-nums;
 }
 
-.lab2-cg-callout svg { flex: 0 0 auto; color: var(--acc-ink, var(--acc)); }
-
-.lab2-cg-control-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.lab2-cg-control-label {
-  font-size: 9.5px;
+.cgx-hero-price b {
+  font-size: 17px;
   font-weight: 800;
-  letter-spacing: 0.7px;
-  text-transform: uppercase;
-  color: var(--text-3);
+  letter-spacing: -0.02em;
+  color: var(--cgx-ink);
 }
 
-.lab2-cg-chips {
+.cgx-hero-price em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--cgx-plate);
+  border: 1px solid var(--cgx-line);
+}
+
+.cgx-hero-price em.up { color: var(--cgx-up); border-color: color-mix(in srgb, var(--cgx-up) 40%, transparent); }
+.cgx-hero-price em.down { color: var(--cgx-down); border-color: color-mix(in srgb, var(--cgx-down) 40%, transparent); }
+
+/* ─── badges ─────────────────────────────────────────────────────────────── */
+
+.cgx-badges {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-/* 36px minimum height, matching the Lab's other chips — a 28px chip looks
-   tidy in a mock and is a miss on a phone. */
-.lab2-cg-chip {
+.cgx-badge {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 36px;
-  padding: 6px 11px;
-  border-radius: 10px;
-  border: 1px solid var(--lab-line);
-  background: color-mix(in srgb, var(--bg-panel, #0d1020) 62%, transparent);
-  color: var(--text-2);
-  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--cgx-line);
+  background: var(--cgx-plate);
+  color: var(--cgx-dim);
+  font-size: 9.5px;
   font-weight: 700;
-  font-family: inherit;
-  cursor: pointer;
-  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+  white-space: nowrap;
 }
 
-.lab2-cg-chip:hover:not(:disabled) { color: var(--text-1); border-color: var(--lab-line-2); }
+.cgx-badge svg { color: var(--cgx-accent); flex: 0 0 auto; }
 
-.lab2-cg-chip.on {
-  color: var(--acc-ink, var(--acc));
-  border-color: color-mix(in srgb, var(--acc) 52%, transparent);
-  background: color-mix(in srgb, var(--acc) 13%, transparent);
+.cgx-badge.is-practice {
+  color: color-mix(in srgb, #ffb020 82%, var(--cgx-ink));
+  border-color: color-mix(in srgb, #ffb020 34%, transparent);
+  background: color-mix(in srgb, #ffb020 10%, transparent);
 }
 
-.lab2-cg-chip:disabled { opacity: 0.45; cursor: not-allowed; }
+.cgx-badge.is-practice svg { color: #ffb020; }
 
-.lab2-cg-chip:focus-visible {
-  outline: 2px solid var(--acc-ink, var(--acc));
-  outline-offset: 2px;
-}/* ─── the steps ──────────────────────────────────────────────────────────── */
-.lab2-cg-steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.cgx-badge.is-ai {
+  color: color-mix(in srgb, var(--cgx-accent) 70%, var(--cgx-ink));
+  border-color: var(--cgx-accent-line);
 }
 
-.lab2-cg-step {
-  display: grid;
-  grid-template-columns: 26px minmax(0, 1fr);
-  gap: 11px;
-  padding: 13px 14px;
-  border-radius: 14px;
-  border: 1px solid var(--lab-line);
-  background: color-mix(in srgb, var(--bg-panel, #0d1020) 55%, transparent);
-}
-
-/* The number is a caption, not a decorative bubble: 26px, tabular, and it
-   carries `aria-hidden` in JSX because the list is already an <ol>. */
-.lab2-cg-step-num {
-  width: 26px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  border-radius: 9px;
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--acc-ink, var(--acc));
-  background: color-mix(in srgb, var(--acc) 15%, transparent);
-  border: 1px solid color-mix(in srgb, var(--acc) 28%, transparent);
-}
-
-.lab2-cg-step-body { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
-
-.lab2-cg-step-title {
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 1.4;
-  color: var(--text-1);
-}
-
-.lab2-cg-step-text {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.85;
-  color: var(--text-2);
-}
-
-/* "Where it is" — the only row that tells the reader which chip to press in
-   which room. Rendered as a quiet inset strip so it reads as a pointer rather
-   than as more prose. */
-.lab2-cg-step-where {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin-top: 2px;
-  padding: 7px 9px;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--acc) 7%, transparent);
-  border-inline-start: 2px solid color-mix(in srgb, var(--acc) 55%, transparent);
-  font-size: 10.5px;
-  line-height: 1.65;
-  color: var(--text-2);
-}
-
-.lab2-cg-step-where svg { margin-top: 2px; flex: 0 0 auto; color: var(--acc-ink, var(--acc)); }
-
-.lab2-cg-exit { display: flex; }
-
-/* ─── light theme ────────────────────────────────────────────────────────── */
-/* The Lab's light palette flips surfaces and ink; the guide's own rules only
-   need to stop reaching for the dark panel colour. */
-:root[data-theme='light'] .lab2-cg-chapter,
-:root[data-theme='light'] .lab2-cg-chip {
-  background: #ffffff;
-  border-color: rgba(24, 42, 74, 0.14);
-  color: var(--text-2);
-}
-
-:root[data-theme='light'] .lab2-cg-chip.on {
-  background: color-mix(in srgb, var(--acc) 12%, #ffffff);
-  border-color: color-mix(in srgb, var(--acc) 45%, rgba(24, 42, 74, 0.2));
-  color: var(--acc-ink);
-}
-
-:root[data-theme='light'] .lab2-cg-chapter.on {
-  border-color: color-mix(in srgb, var(--acc) 45%, rgba(24, 42, 74, 0.2));
-}
-
-/* The pill is a translucent accent wash on black and would wash the label out
-   on white; it becomes a solid tint of the same hue instead. */
-:root[data-theme='light'] .lab2-cg-chapter-pill {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--acc) 16%, #ffffff), color-mix(in srgb, var(--acc-2) 9%, #ffffff));
-}:root[data-theme='light'] .lab2-cg-step {
-  background: #ffffff;
-  border-color: rgba(24, 42, 74, 0.12);
-}
-
-:root[data-theme='light'] .lab2-cg-sample {
-  background: color-mix(in srgb, var(--rgb-5, #b07a00) 8%, #ffffff);
-  color: var(--text-2);
-}
-
-:root[data-theme='light'] .lab2-cg-step-where {
-  background: color-mix(in srgb, var(--acc) 8%, #ffffff);
-}
-
-/* ─── small screens ──────────────────────────────────────────────────────── */
-@media (max-width: 420px) {.lab2-cg-step { padding: 11px 12px; gap: 9px; }
-  .lab2-cg-step-text { font-size: 11.5px; line-height: 1.8; }
-  .lab2-cg-chip { font-size: 10.5px; padding: 6px 9px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .lab2-cg-chapter, .lab2-cg-chip { transition: none; }
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   29 · THE TEACHING CHART (GuideChart)
-   ───────────────────────────────────────────────────────────────────────────
-   The chart is an SVG with a fixed viewBox and `preserveAspectRatio="none"`, so
-   it fills its box at any width without a ResizeObserver and without a layout
-   pass. That is the whole reason this screen works on a device where the
-   terminal engine does not: there is nothing asynchronous between the tap and
-   the pixels.
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ─── 2 · THE CHART ITSELF ───────────────────────────────────────────────── */
 
 .cgc {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: 100%;
+  gap: 6px;
+  min-width: 0;
 }
 
 .cgc-svg {
   display: block;
-  /* The SVG's viewBox is 360×260 and one unit is one CSS pixel, so the box is
-     sized from an aspect ratio rather than a fixed height: it grows with the
-     column and the labels keep their true size instead of being squashed by a
-     non-uniform scale. A max-height stops it from turning into a wall on a
-     tablet. */
   width: 100%;
   height: auto;
-  aspect-ratio: 360 / 260;
-  max-height: var(--cgc-h, 300px);
-  border-radius: 14px;
-  border: 1px solid var(--lab-line);
-  /* The stage holds its own dark canvas in BOTH themes when the terminal does;
-     here the surface follows the theme so the guide never looks like a
-     different product from the screen it teaches. */
+  aspect-ratio: 360 / 300;
+  /* No max-height: combined with `aspect-ratio` it letterboxes the drawing on
+     a wide phone and leaves the axis labels floating inside a border that is
+     wider than the plot. The shell caps at 520px, so the natural height is
+     already sane at every width this app runs at. */
+  border-radius: 16px;
+  border: 1px solid var(--cgx-line);
   background:
-    radial-gradient(130% 90% at 50% 0%, color-mix(in srgb, var(--rgb-1) 5%, transparent), transparent 72%),
-    color-mix(in srgb, var(--bg-abyss, #05060d) 62%, transparent);
+    radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--cgx-accent) 7%, transparent), transparent 70%),
+    #080b15;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   touch-action: pan-y;
   cursor: crosshair;
-  overflow: visible;
+  user-select: none;
 }
 
 :root[data-theme='light'] .cgc-svg {
-  background: #f8fbfe;
-  border-color: rgba(24, 42, 74, 0.14);
+  background:
+    radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--cgx-accent) 8%, transparent), transparent 70%),
+    #f8fafd;
+  border-color: rgba(24, 42, 74, 0.12);
+  box-shadow: inset 0 1px 0 #ffffff;
 }
 
-/* SVG text does not inherit font-family from the page reliably in every
-   WebView, and a chart whose axis is in a serif fallback looks broken. */
 .cgc-svg text { font-family: inherit; }
 
 .cgc-axis {
@@ -392,165 +253,727 @@
   user-select: none;
 }
 
-.cgc-candles rect,
-.cgc-volume rect { shape-rendering: crispEdges; }
-
 .cgc-line,
-.cgc-ma,
-.cgc-ema { vector-effect: non-scaling-stroke; }
+.cgc-svg path { vector-effect: non-scaling-stroke; }
 
-/* The read-out strip: same height whether or not a bar is under the finger, so
-   the chart does not jump 20px the moment the reader touches it. */
+.cgc-candle rect { shape-rendering: crispEdges; }
+
+.cgc-ring { animation: cgc-ring 2.6s ease-in-out infinite; }
+
+@keyframes cgc-ring {
+  0%, 100% { opacity: 0.95; }
+  50% { opacity: 0.4; }
+}
+
 .cgc-readout {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 11px;
   flex-wrap: wrap;
-  min-height: 22px;
-  font-size: 11px;
+  min-height: 20px;
+  padding-inline: 2px;
+  font-size: 10.5px;
   font-variant-numeric: tabular-nums;
-  color: var(--text-2);
+  color: var(--cgx-dim);
 }
 
-.cgc-ro-item { display: inline-flex; align-items: baseline; gap: 4px; }
+.cgc-ro-item { display: inline-flex; align-items: baseline; gap: 3px; }
+
 .cgc-ro-item em {
   font-style: normal;
   font-weight: 800;
-  font-size: 9.5px;
-  color: var(--text-3);
-  letter-spacing: 0.04em;
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  color: var(--cgx-faint);
 }
 
 .cgc-ro-chg { font-weight: 800; }
-.cgc-ro-chg.up { color: var(--up); }
-.cgc-ro-chg.down { color: var(--down); }
+.cgc-ro-chg.up { color: var(--cgx-up); }
+.cgc-ro-chg.down { color: var(--cgx-down); }
 
-.cgc-ro-hint { color: var(--text-3); font-size: 10.5px; }
+.cgc-ro-hint { color: var(--cgx-faint); }
 
-/* Below 420px the read-out drops its least useful pair rather than wrapping to
-   two lines and pushing the chart off the fold. */
-@media (max-width: 420px) {
-  .cgc-readout { gap: 8px; font-size: 10.5px; }
-  .cgc { --cgc-h: 260px; }
-}
-
-/* ─── the facts strip ────────────────────────────────────────────────────── */
-/* Six live numbers from the same series the chart is drawing. Auto-fit grid so
-   a 360px phone gets three and a tablet gets six without a media query. */
-.lab2-cg-facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
-  gap: 7px;
-}
-
-.lab2-cg-fact {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 8px 9px;
-  border-radius: 11px;
-  border: 1px solid var(--lab-line);
-  background: color-mix(in srgb, var(--bg-panel, #0d1020) 50%, transparent);
-}
-
-.lab2-cg-fact-k {
+.cgc-ro-pin {
   font-size: 8.5px;
   font-weight: 800;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-  color: var(--text-3);
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--cgx-accent);
+  border: 1px solid var(--cgx-accent-line);
+  background: var(--cgx-accent-soft);
 }
 
-.lab2-cg-fact-v {
+/* ─── 3 · CONTROLS UNDER THE CHART ───────────────────────────────────────── */
+
+.cgx-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cgx-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  border: 1px solid var(--cgx-line);
+  background: var(--cgx-plate);
+}
+
+.cgx-seg-btn {
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--cgx-dim);
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.cgx-seg-btn:hover { color: var(--cgx-ink); }
+
+.cgx-seg-btn.on {
+  color: #04121a;
+  background: linear-gradient(140deg, var(--cgx-accent), color-mix(in srgb, var(--cgx-accent) 55%, #7c4dff));
+  box-shadow: 0 6px 16px -10px var(--cgx-accent);
+}
+
+:root[data-theme='light'] .cgx-seg-btn.on { color: #ffffff; }
+
+.cgx-viewbtns { display: inline-flex; gap: 4px; }
+
+.cgx-ico-btn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--cgx-line);
+  background: var(--cgx-plate);
+  color: var(--cgx-dim);
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.cgx-ico-btn:hover { color: var(--cgx-ink); border-color: var(--cgx-line-strong); }
+
+.cgx-ico-btn.on {
+  color: var(--cgx-accent);
+  border-color: var(--cgx-accent-line);
+  background: var(--cgx-accent-soft);
+}
+
+.cgx-seg-btn:focus-visible,
+.cgx-ico-btn:focus-visible,
+.cgx-tool:focus-visible,
+.cgx-quick-btn:focus-visible,
+.cgx-ask-input:focus-visible,
+.cgx-ask-send:focus-visible,
+.cgx-msg-action:focus-visible,
+.cgx-exit-link:focus-visible {
+  outline: 2px solid var(--cgx-accent);
+  outline-offset: 2px;
+}
+
+/* ─── 4 · THE TOOL RAIL ──────────────────────────────────────────────────── */
+
+.cgx-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 1px;
+}
+
+.cgx-rail-head { display: flex; flex-direction: column; gap: 2px; padding-inline: 3px; }
+
+.cgx-rail-head h2 {
+  margin: 0;
   font-size: 12.5px;
   font-weight: 800;
-  color: var(--text-1);
-  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--cgx-ink);
 }
 
-.lab2-cg-fact-v.up { color: var(--up); }
-.lab2-cg-fact-v.down { color: var(--down); }
-
-/* ─── chip with a per-control accent ─────────────────────────────────────── */
-/* Each overlay owns a colour in the chart; its chip takes the same one, so a
-   reader maps the button to the line without reading the label twice. */
-.lab2-cg-chip.on { --chip-acc: var(--acc); }
-.lab2-cg-chip.on svg { color: var(--chip-acc); }
-.lab2-cg-chip.on {
-  border-color: color-mix(in srgb, var(--chip-acc) 55%, transparent);
-  background: color-mix(in srgb, var(--chip-acc) 13%, transparent);
+.cgx-rail-head p {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--cgx-faint);
 }
 
-.lab2-cg-chip--num {
-  min-width: 46px;
-  justify-content: center;
-  font-variant-numeric: tabular-nums;
+.cgx-rail-track {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  padding: 3px 2px 6px;
+  margin-inline: -2px;
 }
 
-/* "restore this chapter's demo" — appears only after the reader has changed
-   something, so the preset is never lost by accident. */
-.lab2-cg-reapply {
+.cgx-rail-track::-webkit-scrollbar { display: none; }
+
+.cgx-tool {
+  position: relative;
+  isolation: isolate;
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 7px 12px;
+  border-radius: 13px;
+  border: 1px solid var(--cgx-line);
+  background: var(--cgx-surface-2);
+  color: var(--cgx-dim);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.cgx-tool:hover { color: var(--cgx-ink); border-color: var(--cgx-line-strong); }
+.cgx-tool:active { transform: scale(0.97); }
+
+.cgx-tool-glyph { display: grid; place-items: center; color: var(--tool-acc, var(--cgx-accent)); }
+
+/* The active pill is painted UNDER the label so a light accent (amber, mint)
+   never washes the text out. */
+.cgx-tool-pill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 12px;
+  background:
+    linear-gradient(140deg, color-mix(in srgb, var(--tool-acc) 26%, transparent), color-mix(in srgb, var(--tool-acc) 8%, transparent));
+  border: 1px solid color-mix(in srgb, var(--tool-acc) 52%, transparent);
+  box-shadow: 0 10px 24px -18px var(--tool-acc), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.cgx-tool.on { color: var(--cgx-ink); }
+
+:root[data-theme='light'] .cgx-tool-pill {
+  background: linear-gradient(140deg, color-mix(in srgb, var(--tool-acc) 18%, #ffffff), color-mix(in srgb, var(--tool-acc) 7%, #ffffff));
+}
+
+/* ─── 5 · THE EXPLANATION CARD ───────────────────────────────────────────── */
+
+.cgx-lesson {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--cgx-accent) 24%, var(--cgx-line));
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--cgx-accent) 8%, transparent), transparent 58%),
+    var(--cgx-surface);
+  box-shadow: var(--cgx-shadow);
+  overflow: hidden;
+}
+
+.cgx-lesson::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block: 12px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--cgx-accent), color-mix(in srgb, var(--cgx-accent) 20%, transparent));
+}
+
+[dir='rtl'] .cgx-lesson::before { border-radius: 3px 0 0 3px; }
+
+.cgx-lesson-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cgx-lesson-glyph {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: #04121a;
+  background: linear-gradient(140deg, var(--cgx-accent), color-mix(in srgb, var(--cgx-accent) 45%, #7c4dff));
+  box-shadow: 0 10px 22px -14px var(--cgx-accent), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+:root[data-theme='light'] .cgx-lesson-glyph { color: #ffffff; }
+
+.cgx-lesson-title { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+
+.cgx-lesson-title h2 {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--cgx-ink);
+}
+
+.cgx-lesson-shown {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--cgx-up) 70%, var(--cgx-ink));
+}
+
+.cgx-lesson-shown svg { color: var(--cgx-up); }
+
+.cgx-lesson-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.cgx-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 11px;
+  border-radius: 13px;
+  border: 1px solid var(--cgx-line);
+  background: color-mix(in srgb, var(--cgx-plate) 70%, transparent);
+}
+
+.cgx-card.is-what { grid-column: 1 / -1; }
+.cgx-card.is-time { grid-column: 1 / -1; }
+
+.cgx-card::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block: 9px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--tone, var(--cgx-dim));
+  opacity: 0.8;
+}
+
+.cgx-card.is-what { --tone: var(--cgx-accent); }
+.cgx-card.is-profit { --tone: var(--cgx-up); border-color: color-mix(in srgb, var(--cgx-up) 28%, var(--cgx-line)); background: color-mix(in srgb, var(--cgx-up) 7%, transparent); }
+.cgx-card.is-loss { --tone: var(--cgx-down); border-color: color-mix(in srgb, var(--cgx-down) 28%, var(--cgx-line)); background: color-mix(in srgb, var(--cgx-down) 7%, transparent); }
+.cgx-card.is-time { --tone: #7c9dff; border-color: color-mix(in srgb, #7c9dff 26%, var(--cgx-line)); background: color-mix(in srgb, #7c9dff 6%, transparent); }
+
+.cgx-card-k {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tone, var(--cgx-dim));
+}
+
+.cgx-card-k svg { flex: 0 0 auto; }
+
+.cgx-card-v {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.8;
+  color: var(--cgx-dim);
+}
+
+.cgx-card.is-what .cgx-card-v { color: var(--cgx-ink); }
+
+/* ─── the past → now → future strip ─────────────────────────────────────── */
+
+.cgx-time {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 2px;
+}
+
+.cgx-time-bar {
+  position: relative;
+  display: flex;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--cgx-line);
+}
+
+.cgx-time-past { flex: 1 1 62%; background: linear-gradient(90deg, color-mix(in srgb, var(--cgx-accent) 22%, transparent), color-mix(in srgb, var(--cgx-accent) 46%, transparent)); }
+.cgx-time-now { flex: 0 0 2px; background: var(--cgx-accent); box-shadow: 0 0 8px var(--cgx-accent); }
+.cgx-time-future {
+  flex: 1 1 38%;
+  background: repeating-linear-gradient(115deg, color-mix(in srgb, #ffb020 26%, transparent) 0 4px, transparent 4px 8px);
+}
+
+.cgx-time-legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--cgx-faint);
+}
+
+.cgx-time-legend .is-now { color: var(--cgx-accent); }
+.cgx-time-legend .is-future { color: color-mix(in srgb, #ffb020 80%, var(--cgx-dim)); }
+
+.cgx-where {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 11px;
+  border: 1px solid var(--cgx-line);
+  background: var(--cgx-plate);
+  font-size: 10.5px;
+  line-height: 1.7;
+  color: var(--cgx-dim);
+}
+
+.cgx-where svg { flex: 0 0 auto; margin-top: 2px; color: var(--cgx-accent); }
+
+/* ─── 6 · THE TEACHER ────────────────────────────────────────────────────── */
+
+.cgx-teacher {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--cgx-accent) 26%, var(--cgx-line));
+  background:
+    radial-gradient(90% 70% at 100% 0%, color-mix(in srgb, var(--cgx-accent) 10%, transparent), transparent 70%),
+    var(--cgx-surface);
+  box-shadow: var(--cgx-shadow);
+  overflow: hidden;
+}
+
+.cgx-teacher-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The orb: a conic ring around a brain glyph. It turns slowly, which is the
+   only "thinking" signal this panel needs — the answers are instant. */
+.cgx-orb {
+  position: relative;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--cgx-accent);
+  background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--cgx-accent) 16%, transparent), transparent 70%);
+}
+
+.cgx-orb::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 62%, var(--cgx-accent) 78%, #7c4dff 90%, transparent 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  animation: cgx-orb 7s linear infinite;
+}
+
+@keyframes cgx-orb {
+  to { transform: rotate(360deg); }
+}
+
+.cgx-teacher-who { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+
+.cgx-teacher-who h2 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--cgx-ink);
+}
+
+.cgx-teacher-who span { font-size: 10px; color: var(--cgx-faint); }
+
+.cgx-log {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 268px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding-inline-end: 2px;
+}
+
+.cgx-msg {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+}
+
+.cgx-msg.is-reader { justify-content: flex-end; }
+
+.cgx-msg-avatar {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--cgx-accent);
+  border: 1px solid var(--cgx-accent-line);
+  background: var(--cgx-accent-soft);
+}
+
+.cgx-msg-body {
+  min-width: 0;
+  max-width: 88%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cgx-msg.is-reader .cgx-msg-body {
+  align-items: flex-end;
+}
+
+.cgx-msg-text {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 13px;
+  border-end-start-radius: 4px;
+  border: 1px solid var(--cgx-line);
+  background: var(--cgx-plate);
+  font-size: 11.5px;
+  line-height: 1.85;
+  color: var(--cgx-ink);
+}
+
+.cgx-msg.is-reader .cgx-msg-text {
+  background: var(--cgx-accent-soft);
+  border-color: var(--cgx-accent-line);
+  border-end-start-radius: 13px;
+  border-end-end-radius: 4px;
+  color: var(--cgx-ink);
+}
+
+.cgx-caret {
+  display: inline-block;
+  width: 2px;
+  height: 12px;
+  margin-inline-start: 2px;
+  vertical-align: -2px;
+  background: var(--cgx-accent);
+  animation: cgx-caret 0.9s steps(2) infinite;
+}
+
+@keyframes cgx-caret {
+  50% { opacity: 0; }
+}
+
+.cgx-msg-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.cgx-msg-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--cgx-line);
+  background: color-mix(in srgb, #000 12%, transparent);
+  font-size: 9.5px;
+  color: var(--cgx-faint);
+}
+
+:root[data-theme='light'] .cgx-msg-chip { background: rgba(24, 42, 74, 0.04); }
+
+.cgx-msg-chip b { font-size: 10px; color: var(--cgx-ink); }
+.cgx-msg-chip.is-up b { color: var(--cgx-up); }
+.cgx-msg-chip.is-down b { color: var(--cgx-down); }
+
+.cgx-msg-action {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  min-height: 32px;
+  gap: 5px;
+  min-height: 30px;
+  padding: 5px 10px;
   border-radius: 9px;
-  border: 1px dashed color-mix(in srgb, var(--acc) 45%, var(--lab-line));
-  background: transparent;
-  color: var(--acc-ink, var(--acc));
-  font-size: 10.5px;
-  font-weight: 700;
+  border: 1px dashed var(--cgx-accent-line);
+  background: var(--cgx-accent-soft);
+  color: var(--cgx-accent);
   font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 800;
   cursor: pointer;
 }
 
-.lab2-cg-reapply:hover { background: color-mix(in srgb, var(--acc) 8%, transparent); }
+.cgx-msg-action:hover { border-style: solid; }
 
-:root[data-theme='light'] .lab2-cg-stage {
-  background: linear-gradient(150deg, color-mix(in srgb, var(--acc) 6%, #ffffff), #ffffff 60%);
-  border-color: color-mix(in srgb, var(--acc) 26%, rgba(24, 42, 74, 0.14));
+.cgx-quick {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
 }
 
-:root[data-theme='light'] .lab2-cg-fact { background: #ffffff; }
+.cgx-quick::-webkit-scrollbar { display: none; }
 
-:root[data-theme='light'] .lab2-cg-fact-v { color: var(--text-1); }
+.cgx-quick-btn {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--cgx-line);
+  background: var(--cgx-plate);
+  color: var(--cgx-dim);
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.cgx-quick-btn:hover {
+  color: var(--cgx-ink);
+  border-color: var(--cgx-accent-line);
+  background: var(--cgx-accent-soft);
+}
+
+.cgx-ask {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+
+.cgx-ask-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  padding: 9px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--cgx-line);
+  background: color-mix(in srgb, #000 18%, transparent);
+  color: var(--cgx-ink);
+  font-family: inherit;
+  font-size: 11.5px;
+}
+
+:root[data-theme='light'] .cgx-ask-input { background: #ffffff; }
+
+.cgx-ask-input::placeholder { color: var(--cgx-faint); }
+
+.cgx-ask-send {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 12px;
+  color: #04121a;
+  background: linear-gradient(140deg, var(--cgx-accent), color-mix(in srgb, var(--cgx-accent) 50%, #7c4dff));
+  box-shadow: 0 10px 22px -14px var(--cgx-accent);
+  cursor: pointer;
+}
+
+:root[data-theme='light'] .cgx-ask-send { color: #ffffff; }
+
+.cgx-ask-send:active { transform: scale(0.96); }
+
+.cgx-teacher-note {
+  margin: 0;
+  font-size: 9.5px;
+  line-height: 1.7;
+  color: var(--cgx-faint);
+}
+
+/* ─── 7 · FOOT ───────────────────────────────────────────────────────────── */
+
+.cgx-exit { display: flex; padding-bottom: 4px; }
+
+.cgx-exit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 9px 15px;
+  border-radius: 12px;
+  border: 1px solid var(--cgx-line);
+  background: var(--cgx-plate);
+  color: var(--cgx-dim);
+  font-size: 11.5px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.cgx-exit-link:hover { color: var(--cgx-ink); border-color: var(--cgx-line-strong); }
+
+/* ─── 8 · SMALL SCREENS ──────────────────────────────────────────────────── */
 
 @media (max-width: 420px) {
-  .lab2-cg-stage { padding: 11px; gap: 9px; border-radius: 15px; }
-  .lab2-cg-stage-title { font-size: 12.5px; }
-  .lab2-cg-facts { grid-template-columns: repeat(3, 1fr); }
-  .lab2-cg-fact { padding: 7px 8px; }
-  .lab2-cg-fact-v { font-size: 11.5px; }
+  .lab2-cgx { gap: 11px; }
+  .cgx-hero, .cgx-lesson, .cgx-teacher { padding: 11px; border-radius: 18px; }
+  .cgx-hero-price b { font-size: 15.5px; }
+  .cgx-tool { min-height: 38px; padding: 6px 10px; font-size: 11px; }
+  .cgx-card-v { font-size: 11px; line-height: 1.75; }
+  .cgx-log { max-height: 230px; }
+  .cgc-svg { border-radius: 14px; }
 }
 
-/* ─── chart layers that are drawn, not positioned ─────────────────────────
-   These groups are pure SVG: their geometry comes from the viewBox, so the
-   only style they need is a rule that keeps them from being treated as
-   decoration by print or high-contrast modes, and a soft fade for the
-   spotlight so it reads as light on the canvas rather than a grey rectangle. */
-.cgc-spot rect { mix-blend-mode: soft-light; }
-.cgc-focus rect:first-child { shape-rendering: geometricPrecision; }
-.cgc-legend text { paint-order: stroke; }
-.cgc-tag text,
-.cgc-legend text,
-.cgc-axis { pointer-events: none; }
-
-/* The dashed annotation ring should feel drawn on, not pasted on. */
-.cgc-focus rect[stroke-dasharray] {
-  animation: cgc-ring 2.4s ease-in-out infinite;
+@media (max-width: 350px) {
+  .cgx-lesson-grid { grid-template-columns: 1fr; }
+  .cgx-card.is-profit, .cgx-card.is-loss { grid-column: 1 / -1; }
 }
 
-@keyframes cgc-ring {
-  0%, 100% { opacity: 0.9; }
-  50% { opacity: 0.45; }
+/* The read-out drops its least useful pair before it wraps to a second line. */
+@media (max-width: 380px) {
+  .cgc-readout { gap: 7px; font-size: 10px; }
 }
 
-/* Respect the app-wide reduce-motion preference: the ring stays a ring, it
-   just stops breathing. */
+/* ─── 9 · PREFERENCES ────────────────────────────────────────────────────── */
+
 @media (prefers-reduced-motion: reduce) {
-  .cgc-focus rect[stroke-dasharray] { animation: none; opacity: 0.9; }
+  .cgx-live-dot, .cgx-orb::before, .cgc-ring, .cgx-caret { animation: none; }
+  .cgx-seg-btn, .cgx-ico-btn, .cgx-tool { transition: none; }
 }
 
-:root[data-reduce-motion='true'] .cgc-focus rect[stroke-dasharray] { animation: none; }
+:root[data-reduce-motion='true'] .cgx-live-dot,
+:root[data-reduce-motion='true'] .cgx-orb::before,
+:root[data-reduce-motion='true'] .cgc-ring,
+:root[data-reduce-motion='true'] .cgx-caret { animation: none; }
+
+.lab2-cgx.is-still .cgx-live-dot,
+.lab2-cgx.is-still .cgx-orb::before,
+.lab2-cgx.is-still .cgc-ring { animation: none; }
+
+/* ─── 10 · PRINT ─────────────────────────────────────────────────────────── */
+/* A guide is the one screen people actually print. The chart canvas is dark in
+   both themes, so printing needs no inversion — only the chrome removed. */
+@media print {
+  .cgx-teacher, .cgx-quick, .cgx-ask, .cgx-exit { display: none; }
+  .cgx-hero, .cgx-lesson { break-inside: avoid; box-shadow: none; }
+}
