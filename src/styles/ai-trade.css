@@ -1,0 +1,210 @@
+/* «AI ترید» — uses the site's tokens only (accent, up/down, glass shadow). */
+
+.ai-trade {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding-bottom: 32px;
+}
+
+.ai-trade-hero {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.ai-trade-hero-ico {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: var(--glass-shadow);
+}
+
+.ai-trade-title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 4px;
+  font-size: 1.25rem;
+}
+
+.ai-trade-phase {
+  display: grid;
+  gap: 12px;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.ai-trade-phase:hover {
+  box-shadow: var(--glass-shadow);
+}
+
+.ai-trade-phase.is-soon {
+  opacity: 0.72;
+}
+
+.ai-trade-phase.is-stopped {
+  box-shadow: inset 0 0 0 1px var(--down);
+}
+
+.ai-trade-phase-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.ai-trade-index {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.ai-trade-phase-title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.ai-trade-field {
+  display: grid;
+  gap: 6px;
+}
+
+.ai-trade-field input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.ai-trade-field input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ai-trade-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.ai-trade-stat {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, currentColor 5%, transparent);
+}
+
+.ai-trade-position {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 4px 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, currentColor 4%, transparent);
+}
+
+.ai-trade-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ai-trade-warning {
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: var(--down);
+  background: color-mix(in srgb, var(--down) 10%, transparent);
+  font-size: 0.9rem;
+}
+
+.ai-trade-risk {
+  padding: 10px 14px;
+  border-radius: 14px;
+  color: var(--down);
+  background: color-mix(in srgb, var(--down) 8%, transparent);
+  margin: 0;
+}
+
+.ai-trade-ok {
+  color: var(--up);
+  margin: 0;
+}
+
+.ai-trade-error {
+  color: var(--down);
+  margin: 0;
+}
+
+.ai-trade-up {
+  color: var(--up);
+}
+
+.ai-trade-down {
+  color: var(--down);
+}
+
+.ai-trade-small {
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.ai-trade-coins {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.ai-trade-coins legend {
+  margin-bottom: 6px;
+}
+
+.ai-trade-chip {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  cursor: pointer;
+}
+
+.ai-trade-chip-danger {
+  color: var(--down);
+}
+
+.ai-trade-kill {
+  display: grid;
+  gap: 4px;
+}
+
+.ai-trade-tag {
+  justify-self: start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-trade-phase {
+    transition: none;
+  }
+}

@@ -92,6 +92,15 @@ export const SPECULATION_ENABLED =
     ? __SPECULATION_ENABLED__
     : import.meta.env?.VITE_ENABLE_SPECULATION !== 'false';
 
+/*
+ * «AI ترید» tab on /perp. OFF BY DEFAULT in every build: it must be turned on
+ * explicitly with VITE_ENABLE_AI_TRADE=true, and it also requires the
+ * speculation build. Its current slice reads accounts and validates settings;
+ * it cannot sign or send an order.
+ */
+export const AI_TRADE_ENABLED =
+  SPECULATION_ENABLED && import.meta.env?.VITE_ENABLE_AI_TRADE === 'true';
+
 /* -------------------------------------------------------------------------- */
 /* AAVE V3 · BASE · USDC SUPPLY — OFF BY DEFAULT, IN EVERY BUILD               */
 /* -------------------------------------------------------------------------- */
