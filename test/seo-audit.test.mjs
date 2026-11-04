@@ -568,6 +568,16 @@ test('the history pages scope their no-forecast claim and link the forecast guid
   assert.ok(hrefsOf(fa).includes('fa/ai-candle-forecast-on-device'), 'FA history page links the forecast guide');
 });
 
+test('full English–Persian parity: every English sitemap URL declares a Persian alternate', () => {
+  const xml = read(join(OUT, 'sitemap-en.xml'));
+  const blocks = [...xml.matchAll(/<url>([\s\S]*?)<\/url>/g)].map((m) => m[1]);
+  assert.ok(blocks.length > 150, 'the English sitemap should list well over a hundred URLs');
+  const withoutFa = blocks
+    .filter((b) => !b.includes('hreflang="fa"'))
+    .map((b) => (b.match(/<loc>([^<]+)<\/loc>/) || [])[1] || '?');
+  assert.deepEqual(withoutFa, [], `English URLs missing a Persian alternate: ${withoutFa.join(', ')}`);
+});
+
 test('the 404 page is bilingual, noindexed and not canonicalised', () => {
   const raw = read(join(OUT, '404.html'));
   assert.match(raw, /این صفحه اینجا نیست/, 'Persian reader gets a Persian 404 first');

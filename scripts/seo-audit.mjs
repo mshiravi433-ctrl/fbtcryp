@@ -396,7 +396,17 @@ for (const entry of docs.values()) {
   linkGraph.set(url, outbound);
   for (const t of outbound) if (inboundLinks.has(t)) inboundLinks.set(t, inboundLinks.get(t) + 1);
 
-  if (outbound.size > 250) warn('link-volume', `${outbound.size} internal links on one page dilutes every one of them`, where);
+  /*
+   * The two site directories (/library and /fa) are complete indexes by
+   * design: their entire job is linking every published page once, and
+   * crawl discovery is the point, not dilution. They are exempt from the
+   * volume warning by name; every other page — especially articles and
+   * hubs — still warns, because there a link farm is a real defect. (The
+   * directories crossed 250 links when the 2026-11-04 parity batch took
+   * the indexable corpus to 315 pages.)
+   */
+  const DIRECTORY_PAGES = new Set(['/library', '/fa']);
+  if (outbound.size > 250 && !DIRECTORY_PAGES.has(where)) warn('link-volume', `${outbound.size} internal links on one page dilutes every one of them`, where);
 
   /* -- hreflang -- */
   const alts = [...doc.querySelectorAll('link[rel="alternate"][hreflang]')];

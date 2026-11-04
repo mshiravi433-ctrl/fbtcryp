@@ -284,8 +284,8 @@ const PAGES = [
    * sitemap. Its hreflang pairing with 'non-custodial-crypto-swap' was
    * dropped rather than kept stale: the new page is not a translation of
    * that guide, it self-declares en + fa + x-default for its own two
-   * languages, and the English guide stands alone — a missing pair is
-   * honest, a wrong one is not.
+   * languages. (The English guide no longer stands alone: it got a real
+   * Persian translation, fa/non-custodial-crypto-swap, on 2026-11-04.)
    *
    * The other Persian guide pages stay exactly where they were.
    */
@@ -295,6 +295,48 @@ const PAGES = [
    * token-pair templates: each answers a distinct question a real visitor has
    * and points to the screen that performs the described task.
    */
+  {
+    slug: 'fa/non-custodial-crypto-swap',
+    icon: 'key',
+    topic: 'swap',
+    lang: 'fa',
+    dir: 'rtl',
+    route: '/#/swap',
+    dateModified: '2026-11-04',
+    title: 'سواپ ارز دیجیتال غیرحضانتی — کلیدت مال خودت است | اف‌بی‌تی سواپ',
+    description:
+      'روی ۱۷ شبکهٔ پشتیبانی‌شده بدون دادن کلید خصوصی‌ات توکن سواپ کن. نه حساب، نه ایمیل، نه احراز هویت. هر معامله را خودت از کیف پول خودت امضا می‌کنی.',
+    h1: 'سواپ ارز دیجیتال، بدون این‌که کلیدت را بدهی',
+    body: [
+      'اف‌بی‌تی سواپ رابط یک صرافی غیرحضانتی است. کیف پولی را که از قبل داری وصل می‌کنی، سواپ می‌کنی و دارایی‌ات هیچ‌وقت کنترل تو را ترک نمی‌کند. نیازی به ساخت حساب، دادن ایمیل یا رد شدن از احراز هویت نیست.',
+      'این سرویس دفتر سفارش ندارد و نقدینگی خودش را نگه نمی‌دارد. از تجمیع‌کننده‌های عمومی بهترین مسیر را میان صرافی‌های غیرمتمرکز شبکه‌ای که انتخاب کرده‌ای می‌پرسد، نرخ و تأثیر قیمتی و کارمزد را نشانت می‌دهد و بعد تراکنش را به کیف پول تو می‌دهد. تو هستی که امضایش می‌کنی و سواپ روی زنجیره، مستقیم میان کیف پول تو و پروتکل، تسویه می‌شود.',
+      'چون این‌جا هیچ‌کس کلیدت را نگه نمی‌دارد، این یعنی همان چیزی که انتظارش می‌رود: ما نمی‌توانیم تراکنشی را برگردانیم، دارایی را مسدود کنیم یا عبارت بازیابی گم‌شده را برگردانیم. هیچ‌کس نمی‌تواند.'
+    ],
+    facts: [
+      ['شبکه‌ها', 'بی‌ان‌بی چین، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم، آوالانچ، لینیا، سونیک، براچین، یونی‌چین، موناد، منتل، اسکرول، زدکی‌سینک ارا، رابین‌هود چین و سولانا'],
+      ['کارمزد پلتفرم', '۰٫۷۰ درصد از مبلغ ورودی، روی همهٔ شبکه‌های پشتیبانی‌شده و پیش از امضا روی صفحه نشان داده می‌شود'],
+      ['امانت‌داری', 'هیچ. کلیدت در کیف پولت می‌ماند'],
+      ['ثبت‌نام', 'لازم نیست']
+    ],
+    faqs: [
+      {
+        q: 'برای سواپ حساب یا احراز هویت لازم دارم؟',
+        a: 'برای رابط سواپ روی زنجیره هیچ حساب اف‌بی‌تی سواپی لازم نیست. کیف پولی را وصل می‌کنی که کنترلش با توست و تراکنش را همان‌جا امضا می‌کنی. کیف پول یا پروتکل شخص ثالث می‌تواند بررسی‌های امنیتی خودش را نشان بدهد.'
+      },
+      {
+        q: 'اف‌بی‌تی سواپ دارایی یا عبارت بازیابی من را نگه می‌دارد؟',
+        a: 'نه. اف‌بی‌تی سواپ سپرده نمی‌گیرد، عبارت بازیابی نگه نمی‌دارد و به‌جای کاربر امضا نمی‌کند. دارایی در کیف پولِ وصل‌شده می‌ماند و هر تراکنش تأیید دارندهٔ همان کیف پول را می‌خواهد.'
+      },
+      {
+        q: 'روی کدام شبکه‌ها می‌توانم کار کنم؟',
+        a: 'شبکه‌های پشتیبانی‌شده بی‌ان‌بی چین، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم، آوالانچ، لینیا، سونیک، براچین، یونی‌چین، موناد، منتل، اسکرول، زدکی‌سینک ارا، رابین‌هود چین و سولانا هستند. پیش از فرستادن یا امضا، شبکهٔ انتخابی را با دقت بررسی کن.'
+      }
+    ],
+    ctaLabel: 'شروع سواپ با کیف پول خودت',
+    glanceLabel: 'یک نگاه کلی',
+    riskText:
+      'سواپ روی زنجیره برگشت‌ناپذیر است و این صفحه پیشنهاد خرید یا فروش نیست. ارزهای دیجیتال پرنوسان‌اند و ممکن است همهٔ پولت را از دست بدهی؛ هرگز بیشتر از توانِ از دست دادنت معامله نکن.'
+  },
   {
     slug: 'fa/crypto-price-alerts-and-dca',
     icon: 'bell',
@@ -1927,8 +1969,11 @@ const ALTERNATES = [
    * super-landing (scripts/landing-v2/) that is NOT a translation of the
    * non-custodial guide. It declares its own en/fa/x-default hreflang
    * instead. Pairing the guide with it would be the incorrect-annotation
-   * case the comment above warns about.
+   * case the comment above warns about. The guide now pairs with its real
+   * Persian translation, fa/non-custodial-crypto-swap (added 2026-11-04 as
+   * the last step of full English–Persian parity).
    */
+  ['non-custodial-crypto-swap', 'fa/non-custodial-crypto-swap'],
   ['crypto-price-alerts-and-dca', 'fa/crypto-price-alerts-and-dca'],
   ['crypto-market-history-analysis', 'fa/crypto-market-history-analysis'],
   /*

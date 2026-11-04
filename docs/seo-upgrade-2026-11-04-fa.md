@@ -76,9 +76,19 @@
 `scripts/seo-audit.mjs`، `index.html`، `vercel.json`، `test/seo-audit.test.mjs` + همین دو سند و CHANGELOG.
 هیچ فایل `src/`، مسیر اپ یا API در این مرحله تغییر نکرده است.
 
+## الحاقیهٔ تکمیل (همان روز): برابری کامل فارسی
+
+با دستور «کامل کن و لایو کن» شکاف ۴۴تایی هم بسته شد: ۴۳ مقالهٔ خوشه‌ایِ باقی‌مانده
+(سولانا ۶، دیفای ۶، هوش مصنوعی ۵، بازار ۵، شبکه ۵، کیف پول ۴، امنیت ۴، کارمزد ۴، سواپ ۴)
+فارسی شدند و صفحهٔ دستی `non-custodial-crypto-swap` جفت فارسی
+`fa/non-custodial-crypto-swap` گرفت. خروجی: **۳۱۴ لندینگ، نقشه ۱۵۷ انگلیسی + ۱۵۸ فارسی،
+۳۳۰ سند / ۳۱۵ قابل ایندکس، ممیزی سخت‌گیرانه ۰/۰،** ‏`test:seo` **۳۰/۳۰** (تست تازهٔ برابری:
+هر URL انگلیسی در نقشه باید جایگزین فارسی داشته باشد)، ‏`test:landing` ‏۱۲۷/۱۲۷.
+جزئیات در الحاقیهٔ `docs/SEO-AUDIT-2026-11-04-FA.md`.
+
 ## بعد از انتشار (فقط مالک، در Search Console)
 
-۱. وضعیت نقشهٔ فارسی باید روی **۱۱۴** URL بنشیند؛ نقشهٔ انگلیسی **۱۵۷**.
+۱. وضعیت نقشهٔ فارسی باید روی **۱۵۸** URL بنشیند؛ نقشهٔ انگلیسی **۱۵۷**.
 ۲. ‏URL Inspection + درخواست ایندکس برای: `/fa/guides/tokenized-assets`،
    `/fa/ai-candle-forecast-on-device`، `/ai-candle-forecast-on-device`،
    `/fa/external-ai-agents-agent-hub`، `/fa/smart-money-tracking-explained`.
