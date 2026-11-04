@@ -111,21 +111,21 @@ check('empty allowlist refuses all',
 check('leverage above cap refused',
   checkOrderAgainstCaps({ ...good, leverage: 5 }, st).code === HL_CAP_CODES.LEVERAGE_TOO_HIGH);
 check('single order above per-order cap refused',
-  checkOrderAgainstCaps({ ...good, notionalUsd: 26 }, st).code === HL_CAP_CODES.ORDER_TOO_LARGE);
+  checkOrderAgainstCaps({ ...good, notionalUsd: 20001 }, st).code === HL_CAP_CODES.ORDER_TOO_LARGE);
 check('exposure over total refused',
-  checkOrderAgainstCaps({ ...good, notionalUsd: 20 }, { currentExposureUsd: 990, dailyRealisedPnlUsd: 0 }).code
+  checkOrderAgainstCaps({ ...good, notionalUsd: 20 }, { currentExposureUsd: 19990, dailyRealisedPnlUsd: 0 }).code
     === HL_CAP_CODES.EXPOSURE_EXCEEDED);
 check('daily loss reached refuses new orders',
-  checkOrderAgainstCaps(good, { currentExposureUsd: 0, dailyRealisedPnlUsd: -50 }).code
+  checkOrderAgainstCaps(good, { currentExposureUsd: 0, dailyRealisedPnlUsd: -1000 }).code
     === HL_CAP_CODES.DAILY_LOSS_REACHED);
 check('small daily loss still allowed',
-  checkOrderAgainstCaps(good, { currentExposureUsd: 0, dailyRealisedPnlUsd: -49 }).ok === true);
+  checkOrderAgainstCaps(good, { currentExposureUsd: 0, dailyRealisedPnlUsd: -999 }).ok === true);
 check('NaN notional refused as BAD_INPUT',
   checkOrderAgainstCaps({ ...good, notionalUsd: NaN }, st).code === HL_CAP_CODES.BAD_INPUT);
 check('zero notional refused as BAD_INPUT',
   checkOrderAgainstCaps({ ...good, notionalUsd: 0 }, st).code === HL_CAP_CODES.BAD_INPUT);
-check('defaults keep per-order below total',
-  HL_CAP_DEFAULTS.maxOrderUsd < HL_CAP_DEFAULTS.totalExposureUsd);
+check('defaults: per-order not above total',
+  HL_CAP_DEFAULTS.maxOrderUsd <= HL_CAP_DEFAULTS.totalExposureUsd);
 
 // fail-closed: unknown inputs must never pass as zero
 check('missing daily PnL refused (fail closed)',

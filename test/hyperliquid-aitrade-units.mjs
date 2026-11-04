@@ -36,7 +36,7 @@ check('mask hides the middle', maskAgentKey(GOOD).includes('…') && !maskAgentK
 check('mask of short value is empty', maskAgentKey('0x12') === '');
 
 // ── caps settings ──────────────────────────────────────────────────────────
-const base = { totalExposureUsd: 1000, maxOrderUsd: 25, dailyLossUsd: 50, maxLeverage: 3, allowedCoins: ['BTC', 'ETH'], killSwitch: false };
+const base = { totalExposureUsd: 20000, maxOrderUsd: 20000, dailyLossUsd: 1000, maxLeverage: 3, allowedCoins: ['BTC', 'ETH'], killSwitch: false };
 const okRes = validateCapsSettings(base);
 check('default-like settings accepted', okRes.ok === true && okRes.errors.length === 0);
 check('defaults from caps.js are themselves valid', validateCapsSettings(defaultCapsSettings()).ok === true);

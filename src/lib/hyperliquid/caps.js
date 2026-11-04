@@ -5,19 +5,19 @@
  * does not place orders, so nothing calls this yet; it exists so the first
  * order cannot be written without a cap check in front of it.
  *
- * Defaults are deliberately smaller than the total budget. The total exposure
- * cap is the ceiling for the whole account; the per-order and daily loss caps
- * decide how much one bad run can cost. All values are overridable, and the
- * owner should confirm them before any live phase.
+ * Defaults are the owner's chosen values: a 20,000 USD per-order cap, the same
+ * 20,000 USD as the total exposure ceiling, and a 1,000 USD daily loss stop.
+ * Every value is overridable through capsSettings.js, which refuses incoherent
+ * combinations (for example, total exposure below the per-order cap).
  */
 
 export const HL_CAP_DEFAULTS = Object.freeze({
   /** Hard ceiling on total notional open at once across the account. */
-  totalExposureUsd: 1000,
-  /** Largest single order notional. Kept well under the total ceiling. */
-  maxOrderUsd: 25,
+  totalExposureUsd: 20000,
+  /** Largest single order notional. Equal to the total ceiling by owner choice. */
+  maxOrderUsd: 20000,
   /** Stop placing new orders for the rest of the day once realised loss hits this. */
-  dailyLossUsd: 50,
+  dailyLossUsd: 1000,
   /** Leverage ceiling for any order. */
   maxLeverage: 3,
   /** Only these markets may be traded. Empty list means nothing is allowed. */
