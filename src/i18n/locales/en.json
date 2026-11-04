@@ -14302,7 +14302,7 @@
       },
       "chartGuide": {
         "title": "Chart guide",
-        "sub": "Learn to read the candle chart on the token page: the window, the axes, the price and every button on the toolbar."
+        "sub": "Reading the candlestick chart on a single canvas: press a tool, it is drawn instantly and explained below — with an AI teacher."
       }
     },
     "levelNames": {
@@ -15533,6 +15533,219 @@
       "clamped": "Clamped to {{min}}–{{max}}",
       "increase": "Increase",
       "decrease": "Decrease"
+    },
+    "cgx": {
+      "heroTitle": "Practice chart — one chart, every lesson",
+      "badge": {
+        "practice": "Practice data, not a real price",
+        "oneChart": "One chart only",
+        "teacher": "AI teacher"
+      },
+      "range": {
+        "1D": "1D",
+        "7D": "7D",
+        "30D": "30D",
+        "90D": "90D",
+        "1Y": "1Y"
+      },
+      "types": {
+        "candles": "Candles",
+        "line": "Line",
+        "area": "Area"
+      },
+      "toolbar": {
+        "range": "Timeframe",
+        "grid": "Gridlines",
+        "zoomIn": "Zoom in",
+        "fit": "Fit"
+      },
+      "rail": {
+        "title": "Press a tool",
+        "hint": "Tapping a button draws it on this same chart and opens its explanation below. No button here is decorative."
+      },
+      "lesson": {
+        "what": "What it is",
+        "profit": "Where it argues for profit",
+        "loss": "Where the risk of loss sits",
+        "time": "Past or future?",
+        "shown": "Drawn on the chart"
+      },
+      "facts": {
+        "price": "Price",
+        "change": "Change",
+        "range": "Swing",
+        "gap": "Gap",
+        "bandLow": "Lower band",
+        "bandHigh": "Upper band",
+        "width": "Width",
+        "volume": "Volume",
+        "volumeMax": "Peak volume",
+        "low": "Low",
+        "high": "High",
+        "fib": "0.618 level",
+        "entry": "Entry",
+        "stop": "Stop",
+        "rr": "Reward/risk",
+        "atr": "Avg. range",
+        "window": "Window"
+      },
+      "chart": {
+        "label": "Practice candlestick chart. Drag across it to read each candle.",
+        "hint": "Move your finger or pointer over the chart to read that candle’s O/H/L/C",
+        "pinned": "Bar selected",
+        "now": "Now",
+        "past": "Past",
+        "future": "Future",
+        "futureNote": "not a forecast",
+        "body": "Body",
+        "wickTop": "Upper wick",
+        "wickBottom": "Lower wick",
+        "goldenCross": "Golden cross",
+        "deathCross": "Death cross",
+        "emaCross": "Crossed EMA",
+        "squeeze": "Band squeeze",
+        "volumeSpike": "Volume spike",
+        "overbought": "Overbought",
+        "oversold": "Oversold",
+        "fibZone": "0.382–0.618 zone",
+        "entry": "Entry",
+        "stop": "Stop",
+        "target": "Target",
+        "logNote": "On a log scale every step is the same percentage"
+      },
+      "tools": {
+        "candle": {
+          "label": "Candle & wick",
+          "what": "Each candle is one slice of time: the body runs from open to close, the upper wick is the highest price of that slice and the lower wick the lowest. A green body means it closed above where it opened.",
+          "profit": "A tall green body with short wicks means buyers held the price up to the end of the bar; a run of them is what trend strength looks like.",
+          "loss": "A long upper wick over a small body means price was pushed up and rejected. Repeated near a high, it warns of weakness.",
+          "time": "A candle records the past only. Every bar is a piece of history, never a prediction.",
+          "where": "Token page → price card → open the terminal (⇱)",
+          "how": "Drag across the chart to read the open, high, low and close of that bar."
+        },
+        "trend": {
+          "label": "Moving average",
+          "what": "A moving average is the mean close of the last N candles. MA7 turns faster, MA25 slower, and because both are built from the past they always lag the price.",
+          "profit": "When MA7 crosses above MA25 (a golden cross) and price holds above both, the short-term average has become stronger than the long-term one — the condition trends are confirmed by.",
+          "loss": "A death cross (MA7 under MA25) with price below both shows a weakening trend. Price stretched far from its average is also more likely to snap back.",
+          "time": "Averages are made of the past. They confirm what has happened; they do not say what comes next.",
+          "where": "Chart terminal → top toolbar → MA7 / MA25 / MA99",
+          "how": "Turn both averages on: the crossing and the gap are the message, not either line alone."
+        },
+        "ema": {
+          "label": "Exponential average",
+          "what": "An EMA is a moving average that weights recent candles more. It reacts sooner, so it hugs price more tightly than a simple average without being as noisy as the raw candles.",
+          "profit": "Price holding above EMA21 while EMA21 sits above EMA55 is short-term momentum aligned with the trend.",
+          "loss": "Price dropping back under EMA21 while EMA21 flattens toward EMA55 means the momentum is spent. In a range, EMAs produce a lot of false signals.",
+          "time": "Weighting the present more heavily is not forecasting; an EMA is still made of past closes.",
+          "where": "Terminal → top toolbar → EMA21 / EMA55",
+          "how": "Compare an EMA with a simple average of the same period to see the difference in reaction speed."
+        },
+        "band": {
+          "label": "Bollinger bands",
+          "what": "Three lines: a 20-candle average and two bands two standard deviations away. They measure volatility — wide bands mean a restless market, narrow bands a quiet one.",
+          "profit": "A squeeze usually comes before a large move; a break of the upper band with volume confirms the up-move has started.",
+          "loss": "Repeated taps on the upper band while price stops rising show exhaustion; a break of the lower band raises downside risk.",
+          "time": "Bands summarise past volatility. They do not give direction and do not predict the break.",
+          "where": "Terminal → top toolbar → BB",
+          "how": "Compare band width over two periods: narrowing warns of a move, not of its direction."
+        },
+        "rsi": {
+          "label": "RSI",
+          "what": "RSI is a number from 0 to 100 comparing buyer and seller strength over the last 14 candles. Above 70 is read as overbought, below 30 as oversold.",
+          "profit": "Climbing back above 30 after an oversold run can mark the start of a recovery — stronger when a green candle and volume come with it.",
+          "loss": "RSI above 70 means price has moved fast, so buying there carries reversal risk. Divergence (a higher price high with a lower RSI high) warns of weakness.",
+          "time": "RSI measures the recent past. “Overbought” means “expensive”, not “about to fall”.",
+          "where": "Terminal → top toolbar → RSI",
+          "how": "Read RSI next to price, never alone: 80 can persist for weeks in a strong trend."
+        },
+        "volume": {
+          "label": "Volume",
+          "what": "Volume is how many trades each candle contains. It tells you how much backing a price move has: a move on high volume is more believable.",
+          "profit": "Rising price with rising volume means real buyers are behind it; a level broken on high volume is a more credible break.",
+          "loss": "Rising price on shrinking volume (divergence) is weakness. A huge volume spike at a high can be buyers being filled or money leaving.",
+          "time": "Volume is always past tense. It records what happened, not what will.",
+          "where": "Terminal → top toolbar → Volume",
+          "how": "Compare volume with the candle at the same moment: indifferent volume invalidates a breakout."
+        },
+        "fib": {
+          "label": "Fibonacci",
+          "what": "Fibonacci levels are the proportional subdivisions of a large move (0.382, 0.5, 0.618…). Traders use them as possible pullback zones.",
+          "profit": "In an uptrend, a pullback into 0.382–0.618 that finds support is a lower-risk area to look for continuation.",
+          "loss": "If price breaks 0.618 on volume, the pullback scenario is void. Insisting on a level is what turns a level into a loss; it is not a magic defence line.",
+          "time": "The levels are drawn from a past move. They mark possible areas, not the direction of the future.",
+          "where": "Terminal → top toolbar → Fib",
+          "how": "Draw the level from the low to the high of the exact move whose pullback you want to measure."
+        },
+        "pnl": {
+          "label": "Profit & loss",
+          "what": "This tool builds a stop and a target from the current price and the average range (ATR), then shades the profit and loss zones on the chart.",
+          "profit": "The green zone is where the trade pays if price reaches the target; the reward-to-risk ratio says whether that reward is worth the risk.",
+          "loss": "The red zone is where the stop fires. If the stop sits closer to entry than normal volatility, ordinary noise will take it out.",
+          "time": "Stop and target are estimates about the future, built from past volatility. They are not guarantees.",
+          "where": "On this page to see the risk geometry; in the real app the stop and target are set on the order screen.",
+          "how": "Put the stop where your analysis is invalidated, not where it feels comfortable."
+        },
+        "log": {
+          "label": "Log scale",
+          "what": "On a linear scale 100→110 and 1000→1100 look different; on a log scale both are the same 10% move and take the same vertical distance.",
+          "profit": "On an asset that has multiplied, log shows patterns more honestly; channels and breaks are more trustworthy on this scale.",
+          "loss": "If a pattern disappears when you change the scale, it was a product of the linear axis. Trading a pattern that only exists on the wrong scale is how losses happen.",
+          "time": "A scale is a way of drawing the past. It says nothing about the future.",
+          "where": "Terminal → bottom toolbar → Log",
+          "how": "Turn log on for large moves (more than 50%)."
+        },
+        "future": {
+          "label": "Future & forecast",
+          "what": "The hatched area on the right is the future: the place where there is no data. The cone is a range of uncertainty built from volatility, not a path for price.",
+          "profit": "The cone tells you how big a move could be; that goes into a realistic target and position size, not into a direction.",
+          "loss": "Any line or number claiming to know tomorrow is a risk. The further the horizon, the wider the cone — that width IS the uncertainty.",
+          "time": "This is the only tool that points at the future, which is exactly why it is the only one drawn hatched and labelled “not a forecast”.",
+          "where": "Chart terminal → the AI forecast button (it prints its provider’s name)",
+          "how": "Read a model’s forecast as a probability, pair it with a stop, and never use it alone."
+        }
+      },
+      "teacher": {
+        "name": "AI teacher",
+        "role": "Thinks on your device and reads this chart",
+        "onDevice": "On-device",
+        "onDeviceHint": "Nothing leaves your phone",
+        "placeholder": "Ask about this chart…",
+        "send": "Send",
+        "showOnChart": "Show me on the chart",
+        "disclaimer": "Answers come from an on-device teaching engine built from this page. They are not trading advice.",
+        "live": {
+          "generic": "Price is {{price}} and it has moved {{change}}% over this window.",
+          "candle": "The last candle closed from {{open}} to {{close}}; over {{window}} price is {{change}}% and has swung between {{low}} and {{high}}.",
+          "trend": "MA7 sits at {{ma7}} and MA25 at {{ma25}}; the gap between them is {{gap}}% and price is {{price}}.",
+          "ema": "EMA21 is at {{ema21}} and EMA55 at {{ema55}}; price is {{price}}.",
+          "band": "The lower band is {{bandLow}} and the upper band {{bandHigh}}; total width is {{range}}% of price.",
+          "rsi": "RSI is at {{rsi}}; price is {{price}} and this window is {{change}}%.",
+          "volume": "The last candle traded {{volume}} and peak volume over {{window}} was {{volumeMax}}.",
+          "fib": "The 0.618 level is at {{fib}}; the visible window runs from {{low}} to {{high}}.",
+          "pnl": "Entry {{entry}}, stop {{stop}}, target {{target}} — reward to risk {{rr}}×.",
+          "log": "The window runs from {{low}} to {{high}}; on this scale every vertical step is a fixed percentage.",
+          "future": "Price is {{price}} and the average range is {{atr}}; the future cone is approximate and uncertain."
+        },
+        "reply": {
+          "what": "{{name}} — {{body}}",
+          "profit": "On the profit side: {{body}}",
+          "loss": "On the loss side: {{body}}",
+          "time": "About time: {{body}}",
+          "how": "How to use it: {{body}}",
+          "signal": "I do not give buy or sell calls, and this page is not a place for trading advice. What I can do is switch on the Profit & loss tool so you can see where a stop and a target would sit and what the reward-to-risk ratio is."
+        },
+        "quick": {
+          "what": "What is this?",
+          "profit": "When does it profit?",
+          "loss": "Where is the risk?",
+          "time": "Does it show the future?",
+          "how": "How do I use it?"
+        }
+      },
+      "noteTitle": "The one rule",
+      "note": "None of these tools knows the future. They tidy up the past so you can see probabilities more clearly; the decision and the stop are yours. This page is teaching, not trading advice.",
+      "backToLab": "Back to the Lab"
     }
   },
   "buySell": {

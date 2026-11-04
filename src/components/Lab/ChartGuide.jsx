@@ -1,181 +1,141 @@
 /**
- * ChartGuide — «راهنمای نمودار»: how to read the candlestick chart.
- *
- * ─── WHY THIS SCREEN EXISTS ────────────────────────────────────────────────
- * The Lab teaches the *ideas* — risk, allocation, what a drawdown feels like —
- * with smoothed charts of its own making. The chart a reader actually meets on
- * a token page is a different object: candles, wicks, a crosshair read-out,
- * moving averages, bands, panes and a dozen toolbar groups. Nothing explained
- * that object, so a reader who did not already know what a wick means was left
- * to infer it from the price moving.
- *
+ * CHART GUIDE v3 — «راهنمای نمودار»
  * ═══════════════════════════════════════════════════════════════════════════
- * THE SECOND VERSION — WHAT THE FIRST ONE GOT WRONG
- * ═══════════════════════════════════════════════════════════════════════════
- * The first version mounted `ProChart`, the real terminal engine, on the
- * theory that a tutorial should use the thing it teaches. That theory is right
- * and the execution was not, and the report was exactly what the reader saw:
- * «دکمه‌ها کار نمیده».
+ * ─── THE REPORT THIS VERSION ANSWERS ─────────────────────────────────────
+ * «صفحه آموزش نمودار خیلی زشته، دکمه‌ها کار نمیده، زیر تب‌ها خیلی زشته،
+ *  چندتا نمودار داره … صفحه رو شلوغ نکنی، یک نمودار باشه … و معلم هوش مصنوعی
+ *  هم باشد.»
  *
- *   · `ProChart` loads `lightweight-charts` through a dynamic import and needs
- *     `matchMedia` + `ResizeObserver`. Until that settles — and permanently on
- *     an embedded WebView, a blocked chunk, or a printed page — there is no
- *     chart, only a recharts fallback that accepts no props. Every toolbar chip
- *     on this screen was therefore a button wired to nothing.
- *   · Most chapters teach a CONTROL, and the control lived inside the engine.
- *     Pressing MA7 in the guide toggled engine state the guide could not show,
- *     because the engine's own toolbar was not on the page.
- *   · A tutorial must be able to point at things. An opaque canvas has nothing
- *     to annotate.
+ * That is five requirements, and they are all structural rather than cosmetic:
  *
- * So the guide draws its own chart (`GuideChart`, SVG) and its own controls.
- * Nothing here is asynchronous: the tap and the pixels are in the same frame,
- * which is the property the report was really about. The indicator arithmetic
- * is NOT reimplemented — `proChartMath` computes the MA/EMA/BB/RSI/MACD/fib
- * series for both this screen and the live terminal, so the guide cannot teach
- * a different RSI from the one on the token page.
+ *   1. ONE CHART.          The page renders exactly one chart frame. No second
+ *                          canvas, no stacked panes, no sparklines competing
+ *                          with it. Volume is translucent bars inside the price
+ *                          pane and RSI is a strip along its bottom edge, so
+ *                          "which chart am I looking at?" never has an answer
+ *                          other than "the only one".
+ *   2. BUTTONS THAT WORK.  Every control on the screen changes the chart in the
+ *                          same frame it is pressed — see `GuideChart`, which
+ *                          is pure React + arithmetic and waits for nothing.
+ *   3. IT SHOWS AND TELLS. Pressing a tool draws the tool on the candles AND
+ *                          opens its explanation card. Neither happens alone.
+ *   4. PROFIT / LOSS / TIME. Every tool's card answers the same four questions
+ *                          in the same order: what it is · when it argues for
+ *                          profit · when it warns of loss · whether it speaks
+ *                          about the past (fact) or the future (guess).
+ *   5. AN AI TEACHER.      A teacher that runs on the device (see
+ *                          `chartGuideTeacher.js`), reads the same numbers as
+ *                          the chart, answers questions about the open tool,
+ *                          and — this is the part that makes it a teacher and
+ *                          not a chat box — can put its answer on the chart by
+ *                          switching the tool for you.
  *
- * ─── THE TEACHING MODEL ────────────────────────────────────────────────────
- * Every chapter has three parts, always in the same order:
+ * ─── WHAT WAS DELETED, AND WHY ────────────────────────────────────────────
+ * The tab rail, the chapter rail, the six-cell facts grid and the numbered step
+ * list are gone. Each of them was individually reasonable; together they made
+ * the reader choose a tab, choose a chapter, scroll a chart, scroll a facts
+ * strip and then read four paragraphs before anything was explained. The unit
+ * of this screen is now a TOOL, and a tool is one button with one card.
  *
- *   1. THE STEP LIST  — what a thing is and why it matters.
- *   2. THE LIVE CHART — the chapter's own preset, with the concept drawn ON
- *                       the chart: the focused candle is ringed, the band is
- *                       shaded, the two averages are labelled where they cross.
- *   3. THE CONTROLS   — the same chips the real toolbar has, each one wired to
- *                       something visible. There is no control on this screen
- *                       that does nothing.
- *
- * ─── HONESTY NOTES THAT ARE PART OF THE UI, NOT THE FOOTER ─────────────────
- *   · The series is labelled «نمونهٔ آموزشی» / "practice data" BEFORE the chart.
- *   · The forecast chapter does not fake a projection; it explains the real
- *     button and where its provider name is printed.
- *   · The guide never suggests a trade, a target or a "good entry".
+ * ─── THE HONESTY RULES, IN THE UI ─────────────────────────────────────────
+ *   · The practice-data banner sits ABOVE the chart, before any pixels.
+ *   · The AI panel says «روی دستگاه» — nothing is uploaded.
+ *   · No copy anywhere suggests a trade, an entry, or a target price. The P&L
+ *     tool draws risk geometry, not a recommendation, and says so.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LAB_EASE, LabBack, LabChips, Notice, useIsRtl } from './Shared';
+import PageTransition from '../PageTransition';
+import { LAB_EASE, LabBack, Notice, useIsRtl } from './Shared';
 import { LabIcon } from './LabIcons';
 import { useStill } from '../AnimatedIcon';
-import GuideChart, { aggregate, makeWalk } from './GuideChart';
-import { CHAPTERS, CHAPTER_BY_ID, DEMO_DEFAULT, TAB_GROUPS, demoFor } from './chartGuideData';
-import { fibLevels, simpleMovingAverage } from '../../lib/proChartMath';
+import GuideChart, { guideSnapshot } from './GuideChart';
+import {
+  CHART_TYPES,
+  DEFAULT_STATE,
+  RANGES,
+  TOOL_BY_ID,
+  TOOLS,
+  applyTool,
+  stateFor
+} from './chartGuideData';
+import { QUICK_PROMPTS, ask, briefing, quickPromptText } from './chartGuideTeacher';
 import '../../styles/lab-chart-guide.css';
 
-/* ── the practice series ────────────────────────────────────────────────────
- * Generated ONCE, from a fixed seed and a fixed epoch: two chapters must never
- * draw two different "histories" of the same practice asset, and the numbers in
- * a step's prose must match the pixels above it. */
-const WALK = makeWalk();
-const CANDLES = WALK.map((c) => c);
-
-/* The candle duration of each window, kept next to the chips so the two cannot
-   drift. `GuideChart` owns the same table; this copy exists so the facts strip
-   below can aggregate exactly the series the chart is drawing. */
-export const RANGE_HOURS = { '1D': 1, '7D': 4, '30D': 12, '90D': 24, '1Y': 24 };
-
-/* ── the controls ───────────────────────────────────────────────────────────
- * ONE list, rendered once. `key` is where the value sits in the demo state;
- * `group` decides which row it lands in. Adding a control is one entry here
- * plus one label in the locale — and because the list is also what the test
- * walks, a chip can never ship without a handler. */
-const CONTROLS = [
-  { id: 'ma7', group: 'overlay', label: 'MA7', icon: 'activity', toggle: ['overlays', 'ma', 7], acc: '#00e5ff' },
-  { id: 'ma25', group: 'overlay', label: 'MA25', icon: 'activity', toggle: ['overlays', 'ma', 25], acc: '#ff9800' },
-  { id: 'ma99', group: 'overlay', label: 'MA99', icon: 'activity', toggle: ['overlays', 'ma', 99], acc: '#ab47bc' },
-  { id: 'ema21', group: 'overlay', label: 'EMA21', icon: 'activity', toggle: ['overlays', 'ema', 21], acc: '#4fc3f7' },
-  { id: 'ema55', group: 'overlay', label: 'EMA55', icon: 'activity', toggle: ['overlays', 'ema', 55], acc: '#ffd54f' },
-  { id: 'bb', group: 'overlay', label: 'BB', icon: 'gauge', toggle: ['overlays', 'bb'], acc: '#7c4dff' },
-  { id: 'fib', group: 'overlay', label: 'Fib', icon: 'target', toggle: ['overlays', 'fib'], acc: '#ffb300' },
-  { id: 'volume', group: 'pane', label: 'Volume', icon: 'layers', toggle: ['panes', 'volume'], acc: '#00bcd4' },
-  { id: 'rsi', group: 'pane', label: 'RSI', icon: 'gauge', toggle: ['panes', 'rsi'], acc: '#7c4dff' },
-  { id: 'macd', group: 'pane', label: 'MACD', icon: 'gauge', toggle: ['panes', 'macd'], acc: '#00bcd4' },
-  { id: 'log', group: 'scale', label: 'Log', icon: 'scale', toggle: ['settings', 'log'], acc: '#00e5ff' },
-  { id: 'grid', group: 'scale', label: 'Grid', icon: 'grid', toggle: ['settings', 'grid'], acc: '#94a3b8' },
-  { id: 'priceLine', group: 'scale', label: 'Level', icon: 'target', toggle: ['showPriceLine'], acc: '#00e5ff' }
-];
-
-const TYPE_OPTIONS = ['candles', 'line', 'area'];
-const RANGE_OPTIONS = ['1D', '7D', '30D', '90D', '1Y'];
-
-/** Read a nested path. */
-function readPath(obj, path) {
-  return path.reduce((acc, k) => (acc == null ? acc : acc[k]), obj);
-}
-
-/** Immutable set-in at a nested path. */
-function setPath(obj, path, value) {
-  const [head, ...rest] = path;
-  if (!rest.length) return { ...obj, [head]: value };
-  return { ...obj, [head]: setPath(obj?.[head] ?? {}, rest, value) };
-}
-
-/** Immutable toggle at a nested path. */
-function togglePath(obj, path) {
-  const [head, ...rest] = path;
-  if (!rest.length) return { ...obj, [head]: !obj?.[head] };
-  return { ...obj, [head]: togglePath(obj?.[head] ?? {}, rest) };
-}
-
-/* ── per-chapter teaching annotations ───────────────────────────────────────
- * `focus` names a bar ON THIS SERIES to ring and describe, chosen so the thing
- * the chapter talks about is actually happening there. Computed once, from the
- * real walk, rather than typed by hand — a hard-coded index would drift the
- * moment the generator changes. */
-function buildHighlights() {
-  /* THE SEARCH IS BOUNDED ON PURPOSE. The walk is 60 days of hourly bars but a
-     window is only the last 60 candles of it, so a bar found anywhere in the
-     history would fall outside the chart and the ring would never render —
-     which is precisely how the previous attempt shipped a chapter that pointed
-     at nothing. Searching the last 50 hours keeps the annotated candle inside
-     every window, including the coarsest (1Y draws 24h buckets, where those
-     hours collapse into the final three candles). */
-  const TAIL = 50;
-  const from = Math.max(6, CANDLES.length - TAIL);
-  const find = (fn) => {
-    for (let i = from; i < CANDLES.length; i++) if (fn(CANDLES[i], i)) return i;
-    return CANDLES.length - 1;
-  };
-
-  /* The candle with the widest high-to-low reach: the clearest example of a
-     wick for the "body and wick" chapter to point at. The threshold is relative
-     to this walk's own volatility — an absolute one would quietly stop matching
-     the day the generator changed, and the chapter would lose its ring with no
-     test failing. */
-  const reach = CANDLES.map((d) => d.high - d.low);
-  const reachCut = reach.reduce((a, b) => a + b, 0) / reach.length;
-  const tallBody = find((d) => d.high - d.low > reachCut * 1.15);
-
-  const ma7 = simpleMovingAverage(CANDLES, 7);
-  const ma25 = simpleMovingAverage(CANDLES, 25);
-  const byTime = new Map(ma25.map((p) => [p.time, p.value]));
-  /* The bar where the two averages are CLOSEST — the crossing this walk
-     actually produces. (A "golden cross" test is not reliable on a random
-     walk: this seed may never cross, and a chapter that rings nothing is worse
-     than one that rings the near-touch.) Restricted to the same tail, so the
-     annotated bar is on screen. */
-  let cross = null;
-  let gap = Infinity;
-  for (const p of ma7) {
-    const slow = byTime.get(p.time);
-    if (slow == null) continue;
-    const i = CANDLES.findIndex((c) => c.time === p.time);
-    if (i < from) continue;
-    const d = Math.abs(p.value - slow);
-    if (d < gap) {
-      gap = d;
-      cross = i;
+/** A tiny typing effect for the teacher's latest line (instant when still). */
+function useTyped(text, enabled = true) {
+  const still = useStill();
+  const [shown, setShown] = useState(() => (still || !enabled ? text : ''));
+  useEffect(() => {
+    if (!enabled || still) {
+      setShown(text);
+      return undefined;
     }
-  }
-  return { tallBody, cross };
+    let i = 0;
+    let raf = 0;
+    setShown('');
+    const step = () => {
+      i = Math.min(text.length, i + 3);
+      setShown(text.slice(0, i));
+      if (i < text.length) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [text, still, enabled]);
+  return enabled ? shown : text;
 }
 
-const HIGHLIGHTS = buildHighlights();
-
-/** Bars per window — the same aggregation `GuideChart` draws. */
-const RANGE_BARS = { '1D': 60, '7D': 60, '30D': 60, '90D': 60, '1Y': 60 };
+/** One teacher bubble. Only the newest teacher line types out. */
+function TeacherBubble({ message, typing, t }) {
+  const still = useStill();
+  const text = useTyped(message.text, typing && message.role === 'teacher');
+  const isReader = message.role === 'reader';
+  return (
+    <motion.div
+      className={`cgx-msg ${isReader ? 'is-reader' : 'is-teacher'}`}
+      initial={still ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.26, ease: LAB_EASE }}
+    >
+      {!isReader && (
+        <span className="cgx-msg-avatar" aria-hidden="true">
+          <LabIcon name="robot" width={13} height={13} />
+        </span>
+      )}
+      <div className="cgx-msg-body">
+        <p className="cgx-msg-text">
+          {text}
+          {typing && message.role === 'teacher' && text.length < message.text.length && (
+            <span className="cgx-caret" aria-hidden="true" />
+          )}
+        </p>
+        {Array.isArray(message.chips) && message.chips.length > 0 && (
+          <div className="cgx-msg-chips">
+            {message.chips.map((chip, i) => (
+              <span key={`${chip.label}-${i}`} className={`cgx-msg-chip ${chip.tone ? `is-${chip.tone}` : ''}`}>
+                <span>{chip.label}</span>
+                <b className="lab2-num">{chip.value}</b>
+              </span>
+            ))}
+          </div>
+        )}
+        {message.action && (
+          <button
+            type="button"
+            className="cgx-msg-action"
+            data-testid={`cgx-teacher-action-${message.action.tool}`}
+            onClick={() => message.onAction?.(message.action.tool)}
+          >
+            <LabIcon name="target" width={12} height={12} />
+            {message.action.label}
+          </button>
+        )}
+      </div>
+    </motion.div>
+  );
+}
 
 export default function ChartGuide({ onBack }) {
   const { t } = useTranslation();
@@ -183,100 +143,69 @@ export default function ChartGuide({ onBack }) {
   const still = useStill();
   const rtl = useIsRtl();
 
-  /* `/lab/chart-guide` is its own route, so "back" is a NAVIGATION, not a state
-     reset: `Lab` lives at `/lab` and this page is never mounted inside it. A
-     caller that passes `onBack` (a test, or a future embedded host) wins. */
+  /* `/lab/chart-guide` is its own route: "back" is a navigation, not a state
+     reset. A caller that passes `onBack` (a test or an embedded host) wins. */
   const goBack = onBack ?? (() => navigate('/lab?tab=advanced'));
 
-  const [tabId, setTabId] = useState(TAB_GROUPS[0].id);
-  const [chapterId, setChapterId] = useState(TAB_GROUPS[0].chapters[0]);
-  const chapter = CHAPTER_BY_ID[chapterId] ?? CHAPTERS[0];
+  const [state, setState] = useState(DEFAULT_STATE);
+  const [messages, setMessages] = useState([]);
+  const [draft, setDraft] = useState('');
+  const scroller = useRef(null);
+  const tool = TOOL_BY_ID[state.tool] ?? TOOLS[0];
 
-  /* The demo mirrors the open chapter; the reader's own presses are applied on
-     top. Switching chapters re-applies that chapter's preset, which is what
-     makes each chapter a demonstration rather than a blank chart — but a press
-     afterwards still wins, so nothing feels stuck. */
-  const [demo, setDemo] = useState(() => demoFor(CHAPTERS[0]));
-  const [touched, setTouched] = useState(false);
-  const [hover, setHover] = useState(null);
+  /* The numbers on screen and the numbers the teacher quotes are one object. */
+  const live = useMemo(() => guideSnapshot(state.range), [state.range]);
+
+  const setTool = (id) => setState((s) => stateFor(id, s));
+  const setRange = (range) => setState((s) => ({ ...s, range, zoom: 0, rangePinned: true }));
+
+  /* ── the teacher is told what the reader just opened ───────────────────── */
+  useEffect(() => {
+    const next = briefing(tool.id, live, t);
+    setMessages((prev) => [...prev, next].slice(-8));
+    /* Deliberately keyed on the tool only: re-briefing on every range change
+       would spam the log with five near-identical sentences. The live number a
+       reader checks is on the chart header. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool.id]);
 
   useEffect(() => {
-    setDemo(demoFor(chapter));
-    setTouched(false);
-    setHover(null);
-  }, [chapter]);
+    const el = scroller.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages]);
 
-  const tabs = useMemo(
-    () => TAB_GROUPS.map((g) => ({ id: g.id, label: t(`lab2.chartGuide.tabs.${g.id}`) })),
-    [t]
-  );
-  const chaptersInTab = TAB_GROUPS.find((g) => g.id === tabId)?.chapters ?? [];
-
-  const pickTab = (id) => {
-    if (id === tabId) return;
-    const first = TAB_GROUPS.find((g) => g.id === id)?.chapters[0];
-    setTabId(id);
-    if (first) setChapterId(first);
+  const send = (question) => {
+    const q = String(question ?? '').trim();
+    if (!q) return;
+    const reply = ask(q, { toolId: tool.id, live }, t);
+    /* The teacher's jump button only changes the tool. The tool effect above
+       posts the new briefing, so appending one here as well would double it —
+       the same sentence twice reads as a chat that is not listening. */
+    reply.onAction = (id) => setState((s) => applyTool(id, s));
+    setMessages((prev) => [...prev, { role: 'reader', text: q }, reply].slice(-8));
+    setDraft('');
   };
 
-  const apply = (next) => {
-    setTouched(true);
-    setDemo((d) => (typeof next === 'function' ? next(d) : next));
-  };
+  /* The last teacher bubble types; every earlier one is settled text. */
+  const lastTeacherIdx = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === 'teacher') return i;
+    return -1;
+  }, [messages]);
 
-  /* ── annotation for the open chapter ─────────────────────────────────── */
-  const highlight = useMemo(() => {
-    if (chapterId !== 'read' && chapterId !== 'avg') return null;
-    const idx = chapterId === 'avg' && HIGHLIGHTS.cross != null ? HIGHLIGHTS.cross : HIGHLIGHTS.tallBody;
-    if (idx == null || !CANDLES[idx]) return null;
-    /* Anchored by timestamp so it survives a range or zoom change — see the
-       note in `GuideChart`. No `dimOthers`: the chart marks the bar with a
-       spotlight band and a ring, and leaves every other candle at full
-       strength so the plot never looks broken while a chapter is open. */
-    return { focusTime: CANDLES[idx].time, focusIndex: idx };
-  }, [chapterId]);
-
-  /* The bar the call-out sentence describes. Read off the FULL series rather
-     than the visible slice, because on a 1D window the annotated bar is not on
-     screen at all — and a sentence that vanishes when the reader picks 1D reads
-     as a broken control, not as an honest one. */
-  const focusCandle = highlight?.focusIndex == null ? null : CANDLES[highlight.focusIndex];
-
-  /* ── the facts shown beside the steps ────────────────────────────────────
-   * Live values from the SAME series, so a step that says "the average sits
-   * below the price" can be checked against the numbers on screen instead of
-   * being taken on faith. */
-  const facts = useMemo(() => {
-    /* Read off the SAME aggregation the chart is drawing, so "the close is
-       104.20" above and "MA7 sits at 103.90" below are statements about one
-       series. A facts strip computed from a different slice is worse than no
-       strip: it turns a checkable claim into a coincidence. */
-    const series = aggregate(CANDLES, RANGE_HOURS[demo.range] ?? 1);
-    const bars = RANGE_BARS[demo.range] ?? 60;
-    const win = series.slice(-bars);
-    const last = win[win.length - 1];
-    const first = win[0];
-    const high = Math.max(...win.map((d) => d.high));
-    const low = Math.min(...win.map((d) => d.low));
-    const ma7 = simpleMovingAverage(series, 7);
-    const ma25 = simpleMovingAverage(series, 25);
-    const fib = fibLevels(high, low);
-    return {
-      bars: win.length,
-      change: first ? ((last.close - first.close) / first.close) * 100 : 0,
-      price: last.close,
-      high,
-      low,
-      ma7: ma7[ma7.length - 1]?.value ?? null,
-      ma25: ma25[ma25.length - 1]?.value ?? null,
-      fib
-    };
-  }, [demo.range]);
-
-  const reversed = useMemo(() => (rtl ? [...chapter.steps].reverse() : chapter.steps), [chapter, rtl]);
+  const lessonKeys = ['what', 'profit', 'loss', 'time'];
+  const lessonTone = { what: 'info', profit: 'profit', loss: 'loss', time: 'time' };
 
   return (
-    <div className={`lab2-screen lab2-cg acc-${chapter.accent}`}>
+    /* `PageTransition` supplies the shell padding (`.page`) and the route's
+       enter motion. This screen has its own URL, so unlike the Lab's child
+       simulators it is not already inside that wrapper — without it the cards
+       sit flush against the edge of the phone. */
+    <PageTransition>
+    <div
+      className={`lab2 lab2-cgx ${still ? 'is-still' : ''}`}
+      style={{ '--cgx-accent': tool.accent }}
+      dir={rtl ? 'rtl' : 'ltr'}
+    >
       <LabBack
         onBack={goBack}
         icon="activity"
@@ -285,296 +214,291 @@ export default function ChartGuide({ onBack }) {
         sub={t('lab2.screens.chartGuide.sub')}
       />
 
-      {/* ─── THE HONESTY BANNER, BEFORE ANY PIXELS OF CHART ──────────────── */}
-      <div className="lab2-cg-sample" data-testid="chart-guide-sample">
-        <LabIcon name="flask" width={14} height={14} />
-        <span>{t('lab2.chartGuide.sampleData')}</span>
-      </div>
-
-      {/* ─── TAB RAIL ────────────────────────────────────────────────────── */}
-      <LabChips
-        items={tabs}
-        value={tabId}
-        onChange={pickTab}
-        layoutId="cg-tab"
-        accent={chapter.accent}
-        testId="chart-guide-tab"
-      />
-
-      {/* ─── CHAPTER RAIL ────────────────────────────────────────────────── */}
-      <div className="lab2-cg-chapters" role="group" aria-label={t('lab2.chartGuide.chaptersLabel')}>
-        {chaptersInTab.map((id) => {
-          const c = CHAPTER_BY_ID[id];
-          const on = id === chapterId;
-          return (
-            <button
-              key={id}
-              type="button"
-              className={`lab2-cg-chapter acc-${c.accent} ${on ? 'on' : ''}`}
-              aria-pressed={on}
-              onClick={() => setChapterId(id)}
-              data-testid={`chart-guide-chapter-${id}`}
-            >
-              <span className="lab2-cg-chapter-icon" aria-hidden="true">
-                <LabIcon name={c.icon} width={15} height={15} />
-              </span>
-              <span className="lab2-cg-chapter-title">{t(`lab2.chartGuide.chapters.${id}.title`)}</span>
-              {on && !still && (
-                <motion.span
-                  layoutId="cg-chapter-pill"
-                  className="lab2-cg-chapter-pill"
-                  transition={{ type: 'spring', stiffness: 420, damping: 36 }}
-                />
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ═══ THE CHART COMES FIRST ══════════════════════════════════════════
-          The reader asked for the lesson to happen ON the chart. So the chart
-          is the top of the screen, it is large, and the steps sit under it —
-          you read a line, look up, and the thing it described is already
-          drawn and annotated. */}
-      <section className="lab2-cg-stage" key={chapter.id} aria-label={t('lab2.chartGuide.demo.title')}>
-        <div className="lab2-cg-stage-head">
-          <div className="lab2-cg-stage-title">
-            <LabIcon name={chapter.icon} width={15} height={15} />
-            <span>{t(`lab2.chartGuide.chapters.${chapter.id}.title`)}</span>
+      {/* ═══ THE SINGLE CHART ═══════════════════════════════════════════════
+          One frame, one plot, one place the reader ever has to look. The
+          practice-data badge is inside this card, above the pixels. */}
+      <section className="cgx-hero" aria-label={t('lab2.cgx.heroTitle')}>
+        <header className="cgx-hero-head">
+          <div className="cgx-hero-title">
+            <span className="cgx-live-dot" aria-hidden="true" />
+            <span>{t('lab2.cgx.heroTitle')}</span>
           </div>
-          <span className="lab2-cg-stage-badge" aria-hidden="true">
-            {t('lab2.chartGuide.demo.title')}
+          <div className="cgx-hero-price" dir="ltr">
+            <b className="lab2-num">{live.price.toFixed(2)}</b>
+            <em className={`lab2-num ${live.change >= 0 ? 'up' : 'down'}`}>
+              {live.change >= 0 ? '+' : ''}{live.change.toFixed(2)}%
+            </em>
+          </div>
+        </header>
+
+        <div className="cgx-badges">
+          <span className="cgx-badge is-practice" data-testid="chart-guide-sample">
+            <LabIcon name="flask" width={12} height={12} />
+            {t('lab2.cgx.badge.practice')}
+          </span>
+          <span className="cgx-badge">
+            <LabIcon name="layers" width={12} height={12} />
+            {t('lab2.cgx.badge.oneChart')}
+          </span>
+          <span className="cgx-badge is-ai">
+            <LabIcon name="robot" width={12} height={12} />
+            {t('lab2.cgx.badge.teacher')}
           </span>
         </div>
 
         <GuideChart
-          range={demo.range}
-          chartType={demo.chartType}
-          overlays={demo.overlays}
-          panes={demo.panes}
-          settings={demo.settings}
-          showPriceLine={demo.showPriceLine}
-          showFib={Boolean(demo.overlays.fib)}
-          zoomStart={demo.zoom ?? 0}
-          height={340}
-          highlight={highlight}
-          onHover={setHover}
+          tool={tool.id}
+          range={state.range}
+          chartType={state.chartType}
+          grid={state.grid}
+          zoom={state.zoom}
+          height={360}
         />
 
-        {/* The live read-out of the annotated bar — the number the step is
-            talking about, sitting right under the chart. */}
-        {focusCandle && (
-          <div className="lab2-cg-callout" dir={rtl ? 'rtl' : 'ltr'}>
-            <LabIcon name="target" width={12} height={12} />
-            <span>
-              {t('lab2.chartGuide.callout.candle', {
-                n: highlight.focusIndex + 1,
-                o: focusCandle.open.toFixed(2),
-                c: focusCandle.close.toFixed(2),
-                h: focusCandle.high.toFixed(2),
-                l: focusCandle.low.toFixed(2),
-                defaultValue: 'The ringed candle: open {{o}} → close {{c}}'
-              })}
-            </span>
-          </div>
-        )}
-
-        {/* ─── CHART TYPE ─────────────────────────────────────────────────── */}
-        <div className="lab2-cg-control-row">
-          <span className="lab2-cg-control-label">{t('lab2.chartGuide.demo.type')}</span>
-          <div className="lab2-cg-chips">
-            {TYPE_OPTIONS.map((id) => (
+        {/* The controls sit UNDER the chart they move, not above it: the eye
+            lands on the candles first and finds the dials underneath. */}
+        <div className="cgx-controls">
+          <div className="cgx-seg" role="group" aria-label={t('lab2.cgx.toolbar.range')}>
+            {RANGES.map((r) => (
               <button
-                key={id}
+                key={r}
                 type="button"
-                className={`lab2-cg-chip ${demo.chartType === id ? 'on' : ''}`}
-                aria-pressed={demo.chartType === id}
-                onClick={() => apply((d) => ({ ...d, chartType: id }))}
-                data-testid={`chart-guide-type-${id}`}
+                className={`cgx-seg-btn ${state.range === r ? 'on' : ''}`}
+                aria-pressed={state.range === r}
+                onClick={() => setRange(r)}
+                data-testid={`cgx-range-${r}`}
               >
-                {t(`lab2.chartGuide.demo.types.${id}`)}
+                {t(`lab2.cgx.range.${r}`, { defaultValue: r })}
               </button>
             ))}
           </div>
-        </div>
 
-        {/* ─── RANGE (now real: it changes how many bars are drawn) ───────── */}
-        <div className="lab2-cg-control-row">
-          <span className="lab2-cg-control-label">{t('lab2.chartGuide.demo.range')}</span>
-          <div className="lab2-cg-chips">
-            {RANGE_OPTIONS.map((id) => (
+          <div className="cgx-viewbtns">
+            {CHART_TYPES.map((ty) => (
               <button
-                key={id}
+                key={ty}
                 type="button"
-                className={`lab2-cg-chip lab2-cg-chip--num ${demo.range === id ? 'on' : ''}`}
-                aria-pressed={demo.range === id}
-                onClick={() => apply((d) => ({ ...d, range: id, zoom: 0 }))}
-                data-testid={`chart-guide-range-${id}`}
+                className={`cgx-ico-btn ${state.chartType === ty ? 'on' : ''}`}
+                aria-pressed={state.chartType === ty}
+                aria-label={t(`lab2.cgx.types.${ty}`)}
+                title={t(`lab2.cgx.types.${ty}`)}
+                onClick={() => setState((s) => ({ ...s, chartType: ty, chartTypePinned: true }))}
+                data-testid={`cgx-type-${ty}`}
               >
-                {id}
+                <LabIcon name={ty === 'candles' ? 'candles' : ty === 'line' ? 'wave' : 'bands'} width={14} height={14} />
               </button>
             ))}
-          </div>
-        </div>
-
-        {/* ─── OVERLAYS + PANES + SCALE, one row each ────────────────────── */}
-        {['overlay', 'pane', 'scale'].map((group) => {
-          const items = CONTROLS.filter((c) => c.group === group);
-          return (
-            <div className="lab2-cg-control-row" key={group}>
-              <span className="lab2-cg-control-label">{t(`lab2.chartGuide.demo.groups.${group}`)}</span>
-              <div className="lab2-cg-chips">
-                {items.map((item) => {
-                  const on = Boolean(readPath(demo, item.toggle));
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`lab2-cg-chip ${on ? 'on' : ''}`}
-                      aria-pressed={on}
-                      onClick={() => apply((d) => setPath(d, item.toggle, !readPath(d, item.toggle)))}
-                      data-testid={`chart-guide-toggle-${item.id}`}
-                      style={on ? { '--chip-acc': item.acc } : undefined}
-                    >
-                      <LabIcon name={item.icon} width={12} height={12} />
-                      {t(`lab2.chartGuide.demo.togglesMap.${item.id}`, { defaultValue: item.label })}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* ─── ZOOM / FIT ────────────────────────────────────────────────── */}
-        <div className="lab2-cg-control-row">
-          <span className="lab2-cg-control-label">{t('lab2.chartGuide.demo.view')}</span>
-          <div className="lab2-cg-chips">
             <button
               type="button"
-              className="lab2-cg-chip"
-              onClick={() => apply((d) => ({
-                ...d,
-                /* Stop zooming in when about 12 candles are left; past that a
-                   candle is wider than the slot it is drawn in. */
-                zoom: Math.min((d.zoom ?? 0) + 12, Math.max(0, (RANGE_BARS[d.range] ?? 60) - 12))
-              }))}
-              data-testid="chart-guide-zoom"
+              className={`cgx-ico-btn ${state.grid ? 'on' : ''}`}
+              aria-pressed={state.grid}
+              aria-label={t('lab2.cgx.toolbar.grid')}
+              title={t('lab2.cgx.toolbar.grid')}
+              onClick={() => setState((s) => ({ ...s, grid: !s.grid }))}
+              data-testid="cgx-grid"
             >
-              <LabIcon name="plus" width={12} height={12} />
-              {t('lab2.chartGuide.demo.zoomIn')}
+              <LabIcon name="ruler" width={14} height={14} />
             </button>
             <button
               type="button"
-              className="lab2-cg-chip"
-              onClick={() => apply((d) => ({ ...d, zoom: 0 }))}
-              data-testid="chart-guide-fit"
+              className="cgx-ico-btn"
+              aria-label={t('lab2.cgx.toolbar.zoomIn')}
+              title={t('lab2.cgx.toolbar.zoomIn')}
+              onClick={() => setState((s) => ({ ...s, zoom: s.zoom + 12 }))}
+              data-testid="cgx-zoom"
             >
-              <LabIcon name="refresh" width={12} height={12} />
-              {t('lab2.chartGuide.demo.fit')}
+              <LabIcon name="plus" width={14} height={14} />
             </button>
             <button
               type="button"
-              className="lab2-cg-chip"
-              onClick={() => apply(() => demoFor(CHAPTERS[0]))}
-              data-testid="chart-guide-reset"
+              className="cgx-ico-btn"
+              aria-label={t('lab2.cgx.toolbar.fit')}
+              title={t('lab2.cgx.toolbar.fit')}
+              onClick={() => setState((s) => ({ ...s, zoom: 0 }))}
+              data-testid="cgx-fit"
             >
-              <LabIcon name="back" width={12} height={12} />
-              {t('lab2.chartGuide.demo.reset')}
+              <LabIcon name="refresh" width={14} height={14} />
             </button>
           </div>
         </div>
-
-        {touched && (
-          <button
-            type="button"
-            className="lab2-cg-reapply"
-            onClick={() => {
-              setDemo(demoFor(chapter));
-              setTouched(false);
-            }}
-          >
-            <LabIcon name="refresh" width={12} height={12} />
-            {t('lab2.chartGuide.demo.reapply', { defaultValue: 'Restore this chapter’s demo' })}
-          </button>
-        )}
       </section>
 
-      {/* ═══ THE NUMBERS ════════════════════════════════════════════════════
-          Live values from the same series, so a step's claim can be checked
-          against a figure instead of taken on faith. */}
-      <div className="lab2-cg-facts" dir={rtl ? 'rtl' : 'ltr'}>
-        <div className="lab2-cg-fact">
-          <span className="lab2-cg-fact-k">{t('lab2.chartGuide.facts.price')}</span>
-          <span className="lab2-cg-fact-v lab2-num">{facts.price.toFixed(2)}</span>
+      {/* ═══ THE TOOL RAIL ═════════════════════════════════════════════════
+          The only navigation on the page. One row, one control per lesson, no
+          second level. Horizontal scroll keeps the row from wrapping and
+          changing the chart's position under the reader's thumb. */}
+      <section className="cgx-rail" aria-label={t('lab2.cgx.rail.title')}>
+        <div className="cgx-rail-head">
+          <h2>{t('lab2.cgx.rail.title')}</h2>
+          <p>{t('lab2.cgx.rail.hint')}</p>
         </div>
-        <div className="lab2-cg-fact">
-          <span className="lab2-cg-fact-k">{t('lab2.chartGuide.facts.change')}</span>
-          <span className={`lab2-cg-fact-v lab2-num ${facts.change >= 0 ? 'up' : 'down'}`}>
-            {facts.change >= 0 ? '+' : ''}{facts.change.toFixed(2)}%
-          </span>
+        <div className="cgx-rail-track" role="tablist" aria-label={t('lab2.cgx.rail.title')}>
+          {TOOLS.map((item) => {
+            const on = item.id === tool.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                className={`cgx-tool ${on ? 'on' : ''}`}
+                style={{ '--tool-acc': item.accent }}
+                onClick={() => setTool(item.id)}
+                data-testid={`cgx-tool-${item.id}`}
+              >
+                <span className="cgx-tool-glyph" aria-hidden="true">
+                  <LabIcon name={item.icon} width={16} height={16} />
+                </span>
+                <span className="cgx-tool-label">{t(`lab2.cgx.tools.${item.id}.label`)}</span>
+                {on && !still && (
+                  <motion.span
+                    layoutId="cgx-tool-pill"
+                    className="cgx-tool-pill"
+                    transition={{ type: 'spring', stiffness: 460, damping: 38 }}
+                  />
+                )}
+              </button>
+            );
+          })}
         </div>
-        <div className="lab2-cg-fact">
-          <span className="lab2-cg-fact-k">{t('lab2.chartGuide.facts.range')}</span>
-          <span className="lab2-cg-fact-v lab2-num">{facts.low.toFixed(1)}–{facts.high.toFixed(1)}</span>
-        </div>
-        <div className="lab2-cg-fact">
-          <span className="lab2-cg-fact-k">{t('lab2.chartGuide.facts.bars')}</span>
-          <span className="lab2-cg-fact-v lab2-num">{facts.bars}</span>
-        </div>
-        <div className="lab2-cg-fact">
-          <span className="lab2-cg-fact-k">MA7</span>
-          <span className="lab2-cg-fact-v lab2-num">{facts.ma7 == null ? '—' : facts.ma7.toFixed(2)}</span>
-        </div>
-        <div className="lab2-cg-fact">
-          <span className="lab2-cg-fact-k">MA25</span>
-          <span className="lab2-cg-fact-v lab2-num">{facts.ma25 == null ? '—' : facts.ma25.toFixed(2)}</span>
-        </div>
-      </div>
+      </section>
 
-      {/* ═══ THE STEPS ══════════════════════════════════════════════════════ */}
-      <motion.ol
-        className="lab2-cg-steps"
-        key={chapter.id}
-        initial={still ? false : { opacity: 0, y: 10 }}
+      {/* ═══ THE EXPLANATION CARD ══════════════════════════════════════════
+          Opens with the tool and answers four questions in a fixed order. The
+          "shown on the chart" line is not decoration: it is the promise of the
+          button being kept, stated. */}
+      <motion.section
+        className="cgx-lesson"
+        key={tool.id}
+        initial={still ? false : { opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.32, ease: LAB_EASE }}
+        transition={{ duration: 0.3, ease: LAB_EASE }}
+        aria-live="polite"
+        data-testid="cgx-lesson"
       >
-        {reversed.map((stepId, i) => (
-          <motion.li
-            key={stepId}
-            className="lab2-cg-step"
-            initial={still ? false : { opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ease: LAB_EASE, delay: still ? 0 : Math.min(i * 0.05, 0.3) }}
-          >
-            <span className="lab2-cg-step-num lab2-num" aria-hidden="true">{i + 1}</span>
-            <div className="lab2-cg-step-body">
-              <div className="lab2-cg-step-title">
-                {t(`lab2.chartGuide.chapters.${chapter.id}.steps.${stepId}.title`)}
-              </div>
-              <p className="lab2-cg-step-text">
-                {t(`lab2.chartGuide.chapters.${chapter.id}.steps.${stepId}.body`)}
-              </p>
-              <div className="lab2-cg-step-where">
-                <LabIcon name="target" width={12} height={12} />
-                <span>{t(`lab2.chartGuide.chapters.${chapter.id}.steps.${stepId}.where`)}</span>
-              </div>
-            </div>
-          </motion.li>
-        ))}
-      </motion.ol>
+        <header className="cgx-lesson-head">
+          <span className="cgx-lesson-glyph" aria-hidden="true">
+            <LabIcon name={tool.icon} width={16} height={16} />
+          </span>
+          <div className="cgx-lesson-title">
+            <h2>{t(`lab2.cgx.tools.${tool.id}.label`)}</h2>
+            <span className="cgx-lesson-shown">
+              <LabIcon name="check" width={11} height={11} />
+              {t('lab2.cgx.lesson.shown')}
+            </span>
+          </div>
+        </header>
 
-      <Notice variant="tip" icon="bulb" title={t('lab2.chartGuide.noteTitle')}>
-        {t('lab2.chartGuide.note')}
+        <div className="cgx-lesson-grid">
+          {lessonKeys.map((key) => (
+            <div key={key} className={`cgx-card is-${lessonTone[key]}`} data-testid={`cgx-lesson-${key}`}>
+              <div className="cgx-card-k">
+                <LabIcon
+                  name={key === 'what' ? 'info' : key === 'profit' ? 'up' : key === 'loss' ? 'down' : 'clock'}
+                  width={12}
+                  height={12}
+                />
+                {t(`lab2.cgx.lesson.${key}`)}
+              </div>
+              <p className="cgx-card-v">{t(`lab2.cgx.tools.${tool.id}.${key}`)}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="cgx-time">
+          <div className="cgx-time-bar" aria-hidden="true">
+            <span className="cgx-time-past" />
+            <span className="cgx-time-now" />
+            <span className="cgx-time-future" />
+          </div>
+          <div className="cgx-time-legend">
+            <span>{t('lab2.cgx.chart.past')}</span>
+            <span className="is-now">{t('lab2.cgx.chart.now')}</span>
+            <span className="is-future">{t('lab2.cgx.chart.future')}</span>
+          </div>
+        </div>
+
+        <div className="cgx-where">
+          <LabIcon name="target" width={12} height={12} />
+          <span>{t(`lab2.cgx.tools.${tool.id}.where`)}</span>
+        </div>
+      </motion.section>
+
+      {/* ═══ THE AI TEACHER ════════════════════════════════════════════════
+          On-device, deterministic, and honest about both. It answers from the
+          same five fields the card uses plus the live numbers, and its answers
+          can move the chart — which is the difference between a chat bubble and
+          a teacher. */}
+      <section className="cgx-teacher" aria-label={t('lab2.cgx.teacher.name')} data-testid="cgx-teacher">
+        <header className="cgx-teacher-head">
+          <span className="cgx-orb" aria-hidden="true">
+            <LabIcon name="brain" width={17} height={17} />
+          </span>
+          <div className="cgx-teacher-who">
+            <h2>{t('lab2.cgx.teacher.name')}</h2>
+            <span>{t('lab2.cgx.teacher.role')}</span>
+          </div>
+          <span className="cgx-badge is-ai" title={t('lab2.cgx.teacher.onDeviceHint')}>
+            <LabIcon name="shield" width={11} height={11} />
+            {t('lab2.cgx.teacher.onDevice')}
+          </span>
+        </header>
+
+        <div className="cgx-log" ref={scroller} role="log" aria-live="polite" data-testid="cgx-teacher-log">
+          {messages.map((m, i) => (
+            <TeacherBubble key={`${i}-${m.role}`} message={m} typing={i === lastTeacherIdx} t={t} />
+          ))}
+        </div>
+
+        <div className="cgx-quick">
+          {QUICK_PROMPTS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              className="cgx-quick-btn"
+              onClick={() => send(quickPromptText(id, tool.id, t))}
+              data-testid={`cgx-quick-${id}`}
+            >
+              {quickPromptText(id, tool.id, t)}
+            </button>
+          ))}
+        </div>
+
+        <form
+          className="cgx-ask"
+          onSubmit={(e) => {
+            e.preventDefault();
+            send(draft);
+          }}
+        >
+          <input
+            type="text"
+            className="cgx-ask-input"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={t('lab2.cgx.teacher.placeholder')}
+            aria-label={t('lab2.cgx.teacher.placeholder')}
+            data-testid="cgx-teacher-input"
+          />
+          <button type="submit" className="cgx-ask-send" aria-label={t('lab2.cgx.teacher.send')} data-testid="cgx-teacher-send">
+            <LabIcon name="next" width={16} height={16} />
+          </button>
+        </form>
+
+        <p className="cgx-teacher-note">{t('lab2.cgx.teacher.disclaimer')}</p>
+      </section>
+
+      <Notice variant="tip" icon="bulb" title={t('lab2.cgx.noteTitle')}>
+        {t('lab2.cgx.note')}
       </Notice>
 
-      <div className="lab2-cg-exit">
-        <Link className="lab2-btn primary full" to="/lab?tab=practice">
-          <LabIcon name="next" width={15} height={15} />
-          <span>{t('lab2.chartGuide.backToLab')}</span>
+      <div className="cgx-exit">
+        <Link className="cgx-exit-link" to="/lab?tab=advanced">
+          <LabIcon name="back" width={14} height={14} />
+          {t('lab2.cgx.backToLab')}
         </Link>
       </div>
     </div>
+    </PageTransition>
   );
 }
