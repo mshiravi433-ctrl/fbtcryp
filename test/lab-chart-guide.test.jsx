@@ -291,14 +291,99 @@ describe('chart guide · the screen', () => {
     unmount();
   });
 
-  it('mounts the real chart engine wrapper (or its documented fallback)', async () => {
+  it('draws its own chart synchronously, with no engine to wait for', async () => {
     const { container, unmount } = await mount();
-    /* `ProChart` keeps its host mounted and paints the SVG fallback on top
-       when the engine cannot start — which is what jsdom looks like. Either
-       outcome proves the demo is wired to the real component. */
-    const host = container.querySelector('[data-testid="pro-chart-canvas"]');
-    const fallback = container.querySelector('[data-testid="pro-chart-fallback"]');
-    expect(Boolean(host || fallback), 'neither the chart nor its fallback mounted').toBe(true);
+    /* The guide taught itself on `ProChart` and the reader reported the result
+       as «دکمه‌ها کار نمیده»: the engine is a dynamic import behind
+       `matchMedia`/`ResizeObserver`, and its fallback accepts no props, so on
+       every device where it had not settled the chips toggled state nothing
+       was drawing. The teaching canvas is now an SVG rendered in the same
+       commit as the chips — so it is there the instant the screen is, in
+       jsdom included, and that is precisely what this asserts. */
+    const chart = container.querySelector('[data-testid="guide-chart"]');
+    expect(chart, 'the teaching chart must mount synchronously').toBeTruthy();
+    expect(chart.querySelector('svg'), 'the chart must have drawn an SVG').toBeTruthy();
+    /* It draws REAL geometry, not an empty frame: candles and an axis. */
+    expect(chart.querySelectorAll('.cgc-candles rect').length, 'candles').toBeGreaterThan(10);
+    expect(chart.querySelectorAll('.cgc-axis').length, 'axis labels').toBeGreaterThan(1);
+    unmount();
+  });
+
+  it('gives every control a visible effect — the dead-chip regression', async () => {
+    /* THE GUARANTEE THE LAST ROUND DID NOT HAVE. A chip that flips React state
+       nobody renders is indistinguishable from a chip wired to nothing, which
+       is exactly what the reader saw. So: press every toggle, and require the
+       rendered SVG to change. `outerHTML` is the honest fingerprint here —
+       it catches a class swap, a colour, a pane appearing, anything the reader
+       would actually see. */
+    const { container, unmount } = await mount();
+    const chart = () => container.querySelector('[data-testid="guide-chart"]');
+    const before = chart().querySelector('svg').outerHTML;
+
+    const chips = [...container.querySelectorAll('[data-testid^="chart-guide-toggle-"]')];
+    expect(chips.length, 'the demo must expose its toggles').toBeGreaterThanOrEqual(8);
+
+    for (const chip of chips) {
+      const id = chip.getAttribute('data-testid');
+      const snapshot = chart().querySelector('svg').outerHTML;
+      fireEvent.click(chip);
+      await new Promise((r) => setTimeout(r, 0));
+      expect(chart().querySelector('svg').outerHTML, `${id} changed nothing on the chart`).not.toBe(snapshot);
+      /* put it back, so each chip is measured against the same baseline */
+      fireEvent.click(chip);
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    expect(chart().querySelector('svg').outerHTML).toBe(before);
+    unmount();
+  });
+
+  it('repaints the chart when the window and the chart type change', async () => {
+    const { container, unmount } = await mount();
+    const svg = () => container.querySelector('[data-testid="guide-chart"] svg').outerHTML;
+
+    /* The range chips must change how MANY bars are drawn, not just a label. */
+    const wide = svg();
+    const day = container.querySelector('[data-testid="chart-guide-range-1D"]');
+    expect(day, 'the 1D chip must exist').toBeTruthy();
+    fireEvent.click(day);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(svg(), 'the 1D window must draw a different chart').not.toBe(wide);
+    expect(container.querySelectorAll('[data-testid="guide-chart"] .cgc-candles rect').length,
+      'a 1D window must draw a bar per hour, not one per day').toBeLessThanOrEqual(60);
+
+    /* And the type chips must actually switch the mark. */
+    expect(container.querySelector('[data-testid="guide-chart"] .cgc-candles')).toBeTruthy();
+    fireEvent.click(container.querySelector('[data-testid="chart-guide-type-line"]'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container.querySelector('[data-testid="guide-chart"] .cgc-candles'),
+      'the line type must remove the candles').toBeFalsy();
+    unmount();
+  });
+
+  it('annotates the chart for the chapters that are about what a mark means', async () => {
+    /* "Teach ON the chart" — the candle chapter rings a specific candle and
+       prints its four numbers under the plot; the average chapter rings the
+       bar where the fast average crosses the slow one. */
+    const { container, unmount } = await mount();
+    expect(container.querySelector('[data-testid="guide-chart"] .cgc-focus'),
+      'the open chapter must annotate a bar').toBeTruthy();
+    expect(container.querySelector('.lab2-cg-callout').textContent).toMatch(/\d/);
+
+    /* `avg` sits in another tab, so reaching it also proves the tab rail
+       swaps the chapter list rather than only repainting a label. */
+    const tab = [...container.querySelectorAll('[role="tab"], button')]
+      .find((b) => (b.getAttribute('data-testid') ?? '') === 'chart-guide-tab-studies');
+    expect(tab, 'the studies tab must be reachable').toBeTruthy();
+    fireEvent.click(tab);
+    await new Promise((r) => setTimeout(r, 30));
+
+    const avg = container.querySelector('[data-testid="chart-guide-chapter-avg"]');
+    expect(avg, 'the average chapter must be listed under studies').toBeTruthy();
+    fireEvent.click(avg);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(container.querySelector('[data-testid="guide-chart"] .cgc-focus'),
+      'the averages chapter must ring the bar where the two lines meet').toBeTruthy();
     unmount();
   });
 

@@ -2843,13 +2843,28 @@
           "bb": "Bollinger",
           "volume": "Volume",
           "rsi": "RSI",
-          "fib": "Fibonacci"
+          "fib": "Fibonacci",
+          "ma99": "MA99",
+          "ema55": "EMA55",
+          "macd": "MACD",
+          "log": "Escala log",
+          "grid": "Grade",
+          "priceLine": "Linha de nível"
         },
         "view": "Visualização",
         "zoomIn": "Aproximar",
         "fit": "Ajustar",
         "log": "Escala log",
-        "loadingNote": "O motor do gráfico está carregando; se não estiver disponível, o gráfico simples é exibido."
+        "loadingNote": "O motor do gráfico está carregando; se não estiver disponível, o gráfico simples é exibido.",
+        "groups": {
+          "overlay": "Sobreposições",
+          "pane": "Painéis",
+          "scale": "Escala e níveis"
+        },
+        "range": "Janela",
+        "reset": "Redefinir",
+        "reapply": "Restaurar a demo deste capítulo",
+        "chartLabel": "Gráfico de candles de prática. Deslize o dedo para ler um candle de cada vez."
       },
       "chapters": {
         "read": {
@@ -3102,6 +3117,21 @@
             }
           }
         }
+      },
+      "facts": {
+        "price": "Fechamento",
+        "change": "Variação",
+        "range": "Faixa da janela",
+        "bars": "Candles",
+        "widen": "Mude a janela ou uma sobreposição e estes números acompanham."
+      },
+      "callout": {
+        "candle": "O candle circulado: abertura {{o}} → fechamento {{c}}, e o pavio alcança {{h}} e {{l}}."
+      },
+      "paneLabels": {
+        "volume": "Volume",
+        "rsi": "RSI",
+        "macd": "MACD"
       }
     },
     "cards": {

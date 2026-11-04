@@ -15232,13 +15232,28 @@
           "bb": "Bollinger",
           "volume": "Volume",
           "rsi": "RSI",
-          "fib": "Fibonacci"
+          "fib": "Fibonacci",
+          "ma99": "MA99",
+          "ema55": "EMA55",
+          "macd": "MACD",
+          "log": "Log",
+          "grid": "Grid",
+          "priceLine": "Level"
         },
         "view": "View",
         "zoomIn": "Zoom in",
         "fit": "Fit",
         "log": "Log scale",
-        "loadingNote": "The chart engine is loading; if it is unavailable, a simplified chart is shown instead."
+        "loadingNote": "The chart engine is loading; if it is unavailable, a simplified chart is shown instead.",
+        "groups": {
+          "overlay": "Overlays",
+          "pane": "Panes",
+          "scale": "Scale & levels"
+        },
+        "range": "Window",
+        "reset": "Reset",
+        "reapply": "Restore this chapter’s demo",
+        "chartLabel": "Practice candlestick chart. Move your finger across it to read one candle at a time."
       },
       "chapters": {
         "read": {
@@ -15491,6 +15506,21 @@
             }
           }
         }
+      },
+      "facts": {
+        "price": "Close",
+        "change": "Change",
+        "range": "Window range",
+        "bars": "Bars",
+        "widen": "Change the window or an overlay and these numbers move with it."
+      },
+      "callout": {
+        "candle": "The ringed candle: open {{o}} → close {{c}}, and its wick reaches {{h}} and {{l}}."
+      },
+      "paneLabels": {
+        "volume": "Volume",
+        "rsi": "RSI",
+        "macd": "MACD"
       }
     },
     "advancedGuide": {

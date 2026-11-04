@@ -2843,13 +2843,28 @@
           "bb": "Bollinger",
           "volume": "Hacim",
           "rsi": "RSI",
-          "fib": "Fibonacci"
+          "fib": "Fibonacci",
+          "ma99": "MA99",
+          "ema55": "EMA55",
+          "macd": "MACD",
+          "log": "Log",
+          "grid": "Izgara",
+          "priceLine": "Seviye çizgisi"
         },
         "view": "Görünüm",
         "zoomIn": "Yakınlaştır",
         "fit": "Sığdır",
         "log": "Log ölçek",
-        "loadingNote": "Grafik motoru yükleniyor; kullanılamıyorsa basit grafik gösterilir."
+        "loadingNote": "Grafik motoru yükleniyor; kullanılamıyorsa basit grafik gösterilir.",
+        "groups": {
+          "overlay": "Katmanlar",
+          "pane": "Paneller",
+          "scale": "Ölçek ve seviyeler"
+        },
+        "range": "Pencere",
+        "reset": "Sıfırla",
+        "reapply": "Bu bölümün demosunu geri getir",
+        "chartLabel": "Alıştırma mum grafiği. Her seferinde bir mum okumak için parmağınızı kaydırın."
       },
       "chapters": {
         "read": {
@@ -3102,6 +3117,21 @@
             }
           }
         }
+      },
+      "facts": {
+        "price": "Kapanış",
+        "change": "Değişim",
+        "range": "Pencere aralığı",
+        "bars": "Mumlar",
+        "widen": "Pencereyi veya katmanı değiştirin; bu sayılar da onunla değişir."
+      },
+      "callout": {
+        "candle": "Çerçeveli mum: açılış {{o}} → kapanış {{c}}, fitili {{h}} ve {{l}} seviyesine ulaşır."
+      },
+      "paneLabels": {
+        "volume": "Hacim",
+        "rsi": "RSI",
+        "macd": "MACD"
       }
     },
     "cards": {

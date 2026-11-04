@@ -94,67 +94,74 @@
 .lab2-cg-chapter:focus-visible {
   outline: 2px solid var(--acc-ink, var(--acc));
   outline-offset: 2px;
-}
+}@media (min-width: 640px) {}
 
-/* ─── the demo ───────────────────────────────────────────────────────────── */
-.lab2-cg-demo-badge {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.4px;
-  padding: 4px 9px;
-  border-radius: 999px;
-  color: var(--acc-ink, var(--acc));
-  background: color-mix(in srgb, var(--acc) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--acc) 30%, transparent);
-  white-space: nowrap;
-}
-
-/* The OHLC strip keeps a fixed height whether or not a bar is hovered, so the
-   chart does not shift 22px the moment a finger touches it. */
-.lab2-cg-legend {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 20px;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-2);
-  flex-wrap: wrap;
-}
-
-.lab2-cg-legend em {
-  font-style: normal;
-  font-weight: 800;
-  color: var(--text-3);
-  margin-inline-end: 4px;
-}
-
-.lab2-cg-legend-hint { color: var(--text-3); font-size: 10.5px; }
-
-/* The stage. `ProChart` paints into an absolutely-positioned child, so the
-   wrapper must own the height or the chart collapses to zero on mount. */
-.lab2-cg-chart {
+/* ─── THE STAGE ───────────────────────────────────────────────────────────
+   Chart first, controls under it. The whole block is one card so the reader's
+   eye never has to decide where the lesson ends and the next thing begins. */
+.lab2-cg-stage {
   position: relative;
-  height: 240px;
-  min-height: 240px;
-  border-radius: 14px;
-  overflow: hidden;
-  border: 1px solid var(--lab-line);
-  background:
-    radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--rgb-1) 5%, transparent), transparent 70%),
-    color-mix(in srgb, var(--bg-abyss, #05060d) 55%, transparent);
-}
-
-@media (min-width: 640px) {
-  .lab2-cg-chart { height: 300px; min-height: 300px; }
-}
-
-.lab2-cg-controls {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 4px;
+  gap: 11px;
+  padding: 13px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--acc) 26%, var(--lab-line));
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--acc) 7%, transparent), transparent 58%),
+    var(--lab-surface, color-mix(in srgb, var(--bg-panel, #0d1020) 72%, transparent));
+  box-shadow: var(--lab-shadow, 0 12px 30px -22px rgba(0, 0, 0, 0.5));
 }
+
+.lab2-cg-stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.lab2-cg-stage-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+}
+
+.lab2-cg-stage-title svg { color: var(--acc-ink, var(--acc)); }
+
+/* A chip, not a heading: it says "this is the interactive part" without
+   competing with the chapter name beside it. */
+.lab2-cg-stage-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  color: var(--acc-ink, var(--acc));
+  background: color-mix(in srgb, var(--acc) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--acc) 30%, transparent);
+}
+
+/* The sentence that points at the ringed candle on the chart above it. */
+.lab2-cg-callout {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--acc) 8%, transparent);
+  border-inline-start: 2px solid color-mix(in srgb, var(--acc) 60%, transparent);
+}
+
+.lab2-cg-callout svg { flex: 0 0 auto; color: var(--acc-ink, var(--acc)); }
 
 .lab2-cg-control-row {
   display: flex;
@@ -208,16 +215,7 @@
 .lab2-cg-chip:focus-visible {
   outline: 2px solid var(--acc-ink, var(--acc));
   outline-offset: 2px;
-}
-
-.lab2-cg-note {
-  margin: 0;
-  font-size: 10.5px;
-  line-height: 1.6;
-  color: var(--text-3);
-}
-
-/* ─── the steps ──────────────────────────────────────────────────────────── */
+}/* ─── the steps ──────────────────────────────────────────────────────────── */
 .lab2-cg-steps {
   list-style: none;
   margin: 0;
@@ -313,14 +311,7 @@
    on white; it becomes a solid tint of the same hue instead. */
 :root[data-theme='light'] .lab2-cg-chapter-pill {
   background: linear-gradient(135deg, color-mix(in srgb, var(--acc) 16%, #ffffff), color-mix(in srgb, var(--acc-2) 9%, #ffffff));
-}
-
-:root[data-theme='light'] .lab2-cg-chart {
-  background: #f7fafd;
-  border-color: rgba(24, 42, 74, 0.14);
-}
-
-:root[data-theme='light'] .lab2-cg-step {
+}:root[data-theme='light'] .lab2-cg-step {
   background: #ffffff;
   border-color: rgba(24, 42, 74, 0.12);
 }
@@ -335,9 +326,7 @@
 }
 
 /* ─── small screens ──────────────────────────────────────────────────────── */
-@media (max-width: 420px) {
-  .lab2-cg-chart { height: 208px; min-height: 208px; }
-  .lab2-cg-step { padding: 11px 12px; gap: 9px; }
+@media (max-width: 420px) {.lab2-cg-step { padding: 11px 12px; gap: 9px; }
   .lab2-cg-step-text { font-size: 11.5px; line-height: 1.8; }
   .lab2-cg-chip { font-size: 10.5px; padding: 6px 9px; }
 }
@@ -345,3 +334,223 @@
 @media (prefers-reduced-motion: reduce) {
   .lab2-cg-chapter, .lab2-cg-chip { transition: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   29 · THE TEACHING CHART (GuideChart)
+   ───────────────────────────────────────────────────────────────────────────
+   The chart is an SVG with a fixed viewBox and `preserveAspectRatio="none"`, so
+   it fills its box at any width without a ResizeObserver and without a layout
+   pass. That is the whole reason this screen works on a device where the
+   terminal engine does not: there is nothing asynchronous between the tap and
+   the pixels.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.cgc {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.cgc-svg {
+  display: block;
+  /* The SVG's viewBox is 360×260 and one unit is one CSS pixel, so the box is
+     sized from an aspect ratio rather than a fixed height: it grows with the
+     column and the labels keep their true size instead of being squashed by a
+     non-uniform scale. A max-height stops it from turning into a wall on a
+     tablet. */
+  width: 100%;
+  height: auto;
+  aspect-ratio: 360 / 260;
+  max-height: var(--cgc-h, 300px);
+  border-radius: 14px;
+  border: 1px solid var(--lab-line);
+  /* The stage holds its own dark canvas in BOTH themes when the terminal does;
+     here the surface follows the theme so the guide never looks like a
+     different product from the screen it teaches. */
+  background:
+    radial-gradient(130% 90% at 50% 0%, color-mix(in srgb, var(--rgb-1) 5%, transparent), transparent 72%),
+    color-mix(in srgb, var(--bg-abyss, #05060d) 62%, transparent);
+  touch-action: pan-y;
+  cursor: crosshair;
+  overflow: visible;
+}
+
+:root[data-theme='light'] .cgc-svg {
+  background: #f8fbfe;
+  border-color: rgba(24, 42, 74, 0.14);
+}
+
+/* SVG text does not inherit font-family from the page reliably in every
+   WebView, and a chart whose axis is in a serif fallback looks broken. */
+.cgc-svg text { font-family: inherit; }
+
+.cgc-axis {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  user-select: none;
+}
+
+.cgc-candles rect,
+.cgc-volume rect { shape-rendering: crispEdges; }
+
+.cgc-line,
+.cgc-ma,
+.cgc-ema { vector-effect: non-scaling-stroke; }
+
+/* The read-out strip: same height whether or not a bar is under the finger, so
+   the chart does not jump 20px the moment the reader touches it. */
+.cgc-readout {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-height: 22px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+
+.cgc-ro-item { display: inline-flex; align-items: baseline; gap: 4px; }
+.cgc-ro-item em {
+  font-style: normal;
+  font-weight: 800;
+  font-size: 9.5px;
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+}
+
+.cgc-ro-chg { font-weight: 800; }
+.cgc-ro-chg.up { color: var(--up); }
+.cgc-ro-chg.down { color: var(--down); }
+
+.cgc-ro-hint { color: var(--text-3); font-size: 10.5px; }
+
+/* Below 420px the read-out drops its least useful pair rather than wrapping to
+   two lines and pushing the chart off the fold. */
+@media (max-width: 420px) {
+  .cgc-readout { gap: 8px; font-size: 10.5px; }
+  .cgc { --cgc-h: 260px; }
+}
+
+/* ─── the facts strip ────────────────────────────────────────────────────── */
+/* Six live numbers from the same series the chart is drawing. Auto-fit grid so
+   a 360px phone gets three and a tablet gets six without a media query. */
+.lab2-cg-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 7px;
+}
+
+.lab2-cg-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 9px;
+  border-radius: 11px;
+  border: 1px solid var(--lab-line);
+  background: color-mix(in srgb, var(--bg-panel, #0d1020) 50%, transparent);
+}
+
+.lab2-cg-fact-k {
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.lab2-cg-fact-v {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.lab2-cg-fact-v.up { color: var(--up); }
+.lab2-cg-fact-v.down { color: var(--down); }
+
+/* ─── chip with a per-control accent ─────────────────────────────────────── */
+/* Each overlay owns a colour in the chart; its chip takes the same one, so a
+   reader maps the button to the line without reading the label twice. */
+.lab2-cg-chip.on { --chip-acc: var(--acc); }
+.lab2-cg-chip.on svg { color: var(--chip-acc); }
+.lab2-cg-chip.on {
+  border-color: color-mix(in srgb, var(--chip-acc) 55%, transparent);
+  background: color-mix(in srgb, var(--chip-acc) 13%, transparent);
+}
+
+.lab2-cg-chip--num {
+  min-width: 46px;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* "restore this chapter's demo" — appears only after the reader has changed
+   something, so the preset is never lost by accident. */
+.lab2-cg-reapply {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  min-height: 32px;
+  border-radius: 9px;
+  border: 1px dashed color-mix(in srgb, var(--acc) 45%, var(--lab-line));
+  background: transparent;
+  color: var(--acc-ink, var(--acc));
+  font-size: 10.5px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.lab2-cg-reapply:hover { background: color-mix(in srgb, var(--acc) 8%, transparent); }
+
+:root[data-theme='light'] .lab2-cg-stage {
+  background: linear-gradient(150deg, color-mix(in srgb, var(--acc) 6%, #ffffff), #ffffff 60%);
+  border-color: color-mix(in srgb, var(--acc) 26%, rgba(24, 42, 74, 0.14));
+}
+
+:root[data-theme='light'] .lab2-cg-fact { background: #ffffff; }
+
+:root[data-theme='light'] .lab2-cg-fact-v { color: var(--text-1); }
+
+@media (max-width: 420px) {
+  .lab2-cg-stage { padding: 11px; gap: 9px; border-radius: 15px; }
+  .lab2-cg-stage-title { font-size: 12.5px; }
+  .lab2-cg-facts { grid-template-columns: repeat(3, 1fr); }
+  .lab2-cg-fact { padding: 7px 8px; }
+  .lab2-cg-fact-v { font-size: 11.5px; }
+}
+
+/* ─── chart layers that are drawn, not positioned ─────────────────────────
+   These groups are pure SVG: their geometry comes from the viewBox, so the
+   only style they need is a rule that keeps them from being treated as
+   decoration by print or high-contrast modes, and a soft fade for the
+   spotlight so it reads as light on the canvas rather than a grey rectangle. */
+.cgc-spot rect { mix-blend-mode: soft-light; }
+.cgc-focus rect:first-child { shape-rendering: geometricPrecision; }
+.cgc-legend text { paint-order: stroke; }
+.cgc-tag text,
+.cgc-legend text,
+.cgc-axis { pointer-events: none; }
+
+/* The dashed annotation ring should feel drawn on, not pasted on. */
+.cgc-focus rect[stroke-dasharray] {
+  animation: cgc-ring 2.4s ease-in-out infinite;
+}
+
+@keyframes cgc-ring {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 0.45; }
+}
+
+/* Respect the app-wide reduce-motion preference: the ring stays a ring, it
+   just stops breathing. */
+@media (prefers-reduced-motion: reduce) {
+  .cgc-focus rect[stroke-dasharray] { animation: none; opacity: 0.9; }
+}
+
+:root[data-reduce-motion='true'] .cgc-focus rect[stroke-dasharray] { animation: none; }

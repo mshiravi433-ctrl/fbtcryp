@@ -2843,13 +2843,28 @@
           "bb": "Bollinger",
           "volume": "Volumen",
           "rsi": "RSI",
-          "fib": "Fibonacci"
+          "fib": "Fibonacci",
+          "ma99": "MA99",
+          "ema55": "EMA55",
+          "macd": "MACD",
+          "log": "Escala log",
+          "grid": "Cuadrícula",
+          "priceLine": "Línea de nivel"
         },
         "view": "Vista",
         "zoomIn": "Acercar",
         "fit": "Ajustar",
         "log": "Escala log",
-        "loadingNote": "El motor del gráfico está cargando; si no está disponible, se muestra el gráfico simple."
+        "loadingNote": "El motor del gráfico está cargando; si no está disponible, se muestra el gráfico simple.",
+        "groups": {
+          "overlay": "Superposiciones",
+          "pane": "Paneles",
+          "scale": "Escala y niveles"
+        },
+        "range": "Ventana",
+        "reset": "Reiniciar",
+        "reapply": "Restaurar la demo de este capítulo",
+        "chartLabel": "Gráfico de velas de práctica. Desliza el dedo para leer una vela cada vez."
       },
       "chapters": {
         "read": {
@@ -3102,6 +3117,21 @@
             }
           }
         }
+      },
+      "facts": {
+        "price": "Cierre",
+        "change": "Cambio",
+        "range": "Rango de la ventana",
+        "bars": "Velas",
+        "widen": "Cambia la ventana o una superposición y estos números se mueven con ella."
+      },
+      "callout": {
+        "candle": "La vela marcada: apertura {{o}} → cierre {{c}}, y su mecha llega a {{h}} y {{l}}."
+      },
+      "paneLabels": {
+        "volume": "Volumen",
+        "rsi": "RSI",
+        "macd": "MACD"
       }
     },
     "cards": {

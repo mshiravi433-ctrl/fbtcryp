@@ -796,7 +796,7 @@ export function LabToggle({ checked, onChange, label, onLabel, offLabel }) {
  * The sliding pill is framer's `layoutId`; every strip on a screen needs its
  * own id or two unrelated chips will fight over one element.
  */
-export function LabChips({ items = [], value, onChange, layoutId, accent = 'cyan', size }) {
+export function LabChips({ items = [], value, onChange, layoutId, accent = 'cyan', size, testId }) {
   const still = useStill();
   return (
     <div className={`lab2-chips acc-${accent}`} role="group">
@@ -809,6 +809,9 @@ export function LabChips({ items = [], value, onChange, layoutId, accent = 'cyan
             className={`lab2-chip ${active ? 'active' : ''} ${size === 'sm' ? 'sm' : ''}`}
             onClick={() => onChange?.(it.id, it)}
             aria-pressed={active}
+            /* Optional, so screens that are walked by a test can name their
+               chips without every other rail growing ids it does not need. */
+            data-testid={testId ? `${testId}-${it.id}` : undefined}
           >
             {active && !still && layoutId && (
               <motion.span

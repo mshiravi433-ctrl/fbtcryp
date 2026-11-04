@@ -2843,13 +2843,28 @@
           "bb": "Bollinger",
           "volume": "Volume",
           "rsi": "RSI",
-          "fib": "Fibonacci"
+          "fib": "Fibonacci",
+          "ma99": "MA99",
+          "ema55": "EMA55",
+          "macd": "MACD",
+          "log": "Skala log",
+          "grid": "Kisi",
+          "priceLine": "Garis level"
         },
         "view": "Tampilan",
         "zoomIn": "Perbesar",
         "fit": "Paskan",
         "log": "Skala log",
-        "loadingNote": "Mesin grafik sedang dimuat; jika tidak tersedia, grafik sederhana ditampilkan."
+        "loadingNote": "Mesin grafik sedang dimuat; jika tidak tersedia, grafik sederhana ditampilkan.",
+        "groups": {
+          "overlay": "Lapisan",
+          "pane": "Panel",
+          "scale": "Skala dan level"
+        },
+        "range": "Jendela",
+        "reset": "Atur ulang",
+        "reapply": "Pulihkan demo bab ini",
+        "chartLabel": "Grafik candle latihan. Geser jari untuk membaca satu candle setiap kali."
       },
       "chapters": {
         "read": {
@@ -3102,6 +3117,21 @@
             }
           }
         }
+      },
+      "facts": {
+        "price": "Penutupan",
+        "change": "Perubahan",
+        "range": "Rentang jendela",
+        "bars": "Candle",
+        "widen": "Ubah jendela atau lapisan dan angka-angka ini ikut berubah."
+      },
+      "callout": {
+        "candle": "Candle yang dilingkari: buka {{o}} → tutup {{c}}, dan sumbunya mencapai {{h}} dan {{l}}."
+      },
+      "paneLabels": {
+        "volume": "Volume",
+        "rsi": "RSI",
+        "macd": "MACD"
       }
     },
     "cards": {
