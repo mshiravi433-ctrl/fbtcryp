@@ -45,14 +45,14 @@ export function checkOrderAgainstCaps(order, state, caps = {}) {
   const c = { ...HL_CAP_DEFAULTS, ...caps };
   if (c.killSwitch) return { ok: false, code: HL_CAP_CODES.KILL_SWITCH };
 
-  const notional = Number(order?.notionalUsd);
-  const leverage = Number(order?.leverage ?? 1);
-  const exposure = Number(state?.currentExposureUsd ?? 0);
-  const dailyPnl = Number(state?.dailyRealisedPnlUsd ?? 0);
-  if (!order?.coin || !Number.isFinite(notional) || notional <= 0
-      || !Number.isFinite(leverage) || leverage <= 0
-      || !Number.isFinite(exposure) || exposure < 0
-      || !Number.isFinite(dailyPnl)) {
+  // Fail closed: a missing exposure or daily PnL is UNKNOWN, not zero. Treating
+  // unknown as zero would let an order through exactly when the data is missing.
+  const isNum = (v) => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v));
+  const notional = isNum(order?.notionalUsd) ? Number(order.notionalUsd) : NaN;
+  const leverage = isNum(order?.leverage) ? Number(order.leverage) : NaN;
+  const exposure = isNum(state?.currentExposureUsd) ? Number(state.currentExposureUsd) : NaN;
+  const dailyPnl = isNum(state?.dailyRealisedPnlUsd) ? Number(state.dailyRealisedPnlUsd) : NaN;
+  if (!order?.coin || !(notional > 0) || !(leverage > 0) || !(exposure >= 0) || !Number.isFinite(dailyPnl)) {
     return { ok: false, code: HL_CAP_CODES.BAD_INPUT };
   }
 

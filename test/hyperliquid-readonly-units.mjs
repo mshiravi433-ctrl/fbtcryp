@@ -127,5 +127,13 @@ check('zero notional refused as BAD_INPUT',
 check('defaults keep per-order below total',
   HL_CAP_DEFAULTS.maxOrderUsd < HL_CAP_DEFAULTS.totalExposureUsd);
 
+// fail-closed: unknown inputs must never pass as zero
+check('missing daily PnL refused (fail closed)',
+  checkOrderAgainstCaps(good, { currentExposureUsd: 0 }).code === HL_CAP_CODES.BAD_INPUT);
+check('missing exposure refused (fail closed)',
+  checkOrderAgainstCaps(good, { dailyRealisedPnlUsd: 0 }).code === HL_CAP_CODES.BAD_INPUT);
+check('null leverage refused, not treated as 1',
+  checkOrderAgainstCaps({ ...good, leverage: null }, st).code === HL_CAP_CODES.BAD_INPUT);
+
 console.log(`hyperliquid-readonly-units: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
