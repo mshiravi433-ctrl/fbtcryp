@@ -51,6 +51,65 @@ const HANDOFF_EVENT = Object.freeze({
 });
 
 /**
+ * WalletConnect's populateAppMetadata() mutates the metadata object supplied
+ * to SignClient.init() when the SDK's window origin differs from metadata.url.
+ * Give the SDK a defensive copy so it cannot rewrite the identity snapshot we
+ * need to restore after provider initialization.
+ */
+export function snapshotWcMetadata(metadata) {
+  const source = metadata && typeof metadata === 'object' ? metadata : {};
+  const copy = { ...source };
+  if (Array.isArray(source.icons)) copy.icons = [...source.icons];
+  if (source.redirect && typeof source.redirect === 'object' && !Array.isArray(source.redirect)) {
+    copy.redirect = { ...source.redirect };
+  }
+  return copy;
+}
+
+/**
+ * Restore configured app identity on every exposed SDK metadata object.
+ * Returns false if the live SignClient metadata cannot be verified; callers
+ * must not pair, restore, or sign with an identity they cannot confirm.
+ */
+export function repairWcMetadata(instance, expectedMetadata) {
+  const expected = snapshotWcMetadata(expectedMetadata);
+  try {
+    const signClient = instance?.signer?.client ?? instance?.signer;
+    const targets = [...new Set([
+      signClient?.metadata,
+      instance?.signer?.metadata,
+      instance?.rpc?.metadata
+    ].filter((target) => target && typeof target === 'object'))];
+    if (!targets.length || typeof expected.url !== 'string' || !expected.url) return false;
+
+    for (const target of targets) Object.assign(target, snapshotWcMetadata(expected));
+
+    const actual = signClient?.metadata;
+    const expectedIcons = Array.isArray(expected.icons) ? expected.icons : [];
+    const actualIcons = Array.isArray(actual?.icons) ? actual.icons : [];
+    return Boolean(actual)
+      && actual.url === expected.url
+      && actual.verifyUrl === expected.verifyUrl
+      && actualIcons.length === expectedIcons.length
+      && actualIcons.every((icon, index) => icon === expectedIcons[index]);
+  } catch {
+    return false;
+  }
+}
+
+/** A persisted session may retain an old peer identity after the SDK is fixed. */
+export function wcSessionIdentityMatches(session, expectedMetadata) {
+  const expectedUrl = expectedMetadata?.url;
+  const actualUrl = session?.self?.metadata?.url ?? session?.controller?.metadata?.url;
+  if (typeof expectedUrl !== 'string' || typeof actualUrl !== 'string') return false;
+  try {
+    return new URL(actualUrl).origin === new URL(expectedUrl).origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Stop the connect clock while this document is not on screen.
  *
  * A phone switches apps to show the wallet: the tab goes hidden, and while it
@@ -179,6 +238,10 @@ export function createWcSession({
   supportsChain = () => true,
   defaultChain = chains[0]
 } = {}) {
+  /* Keep one immutable-by-convention copy across init(), modal repair and
+     session restore. The WalletConnect SDK is allowed to mutate the object it
+     receives; it must never be the source of truth for our expected identity. */
+  const expectedMetadata = snapshotWcMetadata(metadata);
   const listeners = new Map();
 
   /** The live EthereumProvider, or null. */
@@ -235,7 +298,9 @@ export function createWcSession({
         explorerRecommendedWalletIds: 'NONE',
         mobileWallets: legacyModalWallets()
       },
-      metadata
+      /* SignClient.populateAppMetadata mutates metadata.url in place on native
+         WebViews, so every EthereumProvider init gets its own disposable copy. */
+      metadata: snapshotWcMetadata(expectedMetadata)
     };
   }
 
@@ -281,21 +346,6 @@ export function createWcSession({
   }
 
   /**
-   * Point the live sign client back at the public origin.
-   *
-   * The SDK runs our metadata through `populateAppMetadata()`, which OVERWRITES
-   * `metadata.url` with `window.location.origin` whenever the two hosts differ.
-   * Inside the APK that origin is `https://localhost`; a wallet — a separate
-   * app — cannot fetch it, so MetaMask rejects with "Invalid URL" and Trust
-   * fails the pairing and shows its red "domain flagged unsafe" screen.
-   *
-   * The object the engine serialises the proposal from is
-   * `wc.signer.client.metadata` (UniversalProvider.createClient does
-   * `this.client = SignClient.init(…)`); the extra branches are defensive, so an
-   * SDK upgrade that moves the metadata cannot silently resurrect a dApp that
-   * introduces itself to every wallet as https://localhost.
-   */
-  /**
    * Give the attestation a second, longer chance — evidence-gated.
    *
    * The SDK's register() has a flat 5s budget and fails silently past it;
@@ -320,28 +370,21 @@ export function createWcSession({
     return Boolean(result.installed);
   }
 
+  /**
+   * Repair and verify the metadata the SignClient will put in a proposal.
+   *
+   * In @walletconnect/sign-client 2.25.0, populateAppMetadata(opts.metadata)
+   * assigns the SDK's window URL back onto opts.metadata itself when the hosts
+   * differ. On a packaged app that window is https://localhost. Previously the
+   * same object was also our `metadata` closure, so the post-init repair read
+   * the already-mutated localhost URL and mistakenly treated it as canonical.
+   *
+   * `expectedMetadata` is now isolated from the SDK input, each init gets a
+   * defensive copy, and repair runs before any pairing or transaction request.
+   * Failure to verify the live SignClient identity is fail-closed.
+   */
   function repairMetadata(instance) {
-    const { url, icons, verifyUrl } = metadata;
-    try {
-      const signClient = instance?.signer?.client ?? instance?.signer;
-      const targets = [signClient?.metadata, instance?.signer?.metadata, instance?.rpc?.metadata].filter(
-        Boolean
-      );
-      for (const target of targets) {
-        target.url = url;
-        target.icons = [...icons];
-        /* The verify URL must travel WITH the metadata: a page running on
-           https://www.fbtswap.ir sends `verifyUrl = https://fbtswap.ir`, and a
-           wallet reading the cached metadata after our repair sees the bare
-           origin the dashboard registered. Without this line the SDK leaves
-           the cached value behind and the prompt the wallet renders names a
-           host the dashboard does not know about. */
-        if (verifyUrl) target.verifyUrl = verifyUrl;
-      }
-      return Boolean(targets.length) && signClient?.metadata?.url === url;
-    } catch {
-      return false;
-    }
+    return repairWcMetadata(instance, expectedMetadata);
   }
 
   /**
@@ -436,6 +479,10 @@ export function createWcSession({
         /* a dead relay must never stall the next attempt */
       }
     }
+    /* disconnect() can finish asynchronous SDK storage writes after the first
+       purge. Clear again only after the instance has settled, so an old
+       localhost session cannot reappear on the next cold start. */
+    if (purge) purgeConnectionKeys();
   }
 
   /**
@@ -543,10 +590,16 @@ export function createWcSession({
 
       provider = instance;
       emit('modal', { active: Boolean(instance?.modal) });
-      wcEvent(repairMetadata(instance) ? 'metadata_repaired' : 'metadata_repair_failed');
+      const metadataRepaired = repairMetadata(instance);
+      wcEvent(metadataRepaired ? 'metadata_repaired' : 'metadata_repair_failed');
+      if (!metadataRepaired) throw new Error('WC_METADATA_REPAIR_FAILED');
       try { extendVerifyBudget(instance); } catch { /* the wrap is advisory */ }
       if (instance?.modal) {
-        const applied = await applyWalletSurface({ modal: instance.modal, projectId, metadata });
+        const applied = await applyWalletSurface({
+          modal: instance.modal,
+          projectId,
+          metadata: snapshotWcMetadata(expectedMetadata)
+        });
         wcEvent(applied ? 'appkit_links_applied' : 'appkit_links_failed');
       }
       detach = attach(instance);
@@ -671,7 +724,7 @@ export function createWcSession({
       /* Never leave a half-connected instance behind: on OUR timeout the SDK's
          socket is still retrying in the background, and that zombie is what
          made a later Connect look broken for reasons nobody could see. */
-      await release({ purge: false });
+      await release({ purge: code === 'WC_IDENTITY_REPAIR_FAILED' });
       await resetPairingState();
       return { ok: false, code };
     } finally {
@@ -739,13 +792,26 @@ export function createWcSession({
          on a surface that is never opened. */
       instance = await initProvider({ modal: false, relayOrder: null });
       provider = instance;
-      wcEvent(repairMetadata(instance) ? 'metadata_repaired' : 'metadata_repair_failed');
+      const metadataRepaired = repairMetadata(instance);
+      wcEvent(metadataRepaired ? 'metadata_repaired' : 'metadata_repair_failed');
+      if (!metadataRepaired) throw new Error('WC_METADATA_REPAIR_FAILED');
       try { extendVerifyBudget(instance); } catch { /* the wrap is advisory */ }
 
       if (!instance.session) {
         wcEvent('restore_none');
         await release({ purge: false });
         return { ok: false, code: 'WC_NO_SESSION' };
+      }
+
+      /* The provider can restore a session created by an older build. Repairing
+         SignClient.metadata does not rewrite the identity already stored in
+         that session (or in the wallet), so disconnect and require a fresh
+         pairing instead of silently signing under a stale localhost identity. */
+      if (!wcSessionIdentityMatches(instance.session, expectedMetadata)) {
+        wcEvent('restore_identity_mismatch');
+        await release({ purge: true });
+        await resetPairingState();
+        return { ok: false, code: 'WC_IDENTITY_REFRESH_REQUIRED' };
       }
 
       detach = attach(instance);
@@ -759,9 +825,10 @@ export function createWcSession({
          abandoned instance must not linger: a provider never published, plus a
          zombie socket left alive underneath, is exactly the state that made a
          LATER explicit Connect look broken. */
-      await release({ purge: false });
+      const code = classifyConnectError(error);
+      await release({ purge: code === 'WC_IDENTITY_REPAIR_FAILED' });
       wcEvent('restore_failed');
-      return { ok: false, code: classifyConnectError(error) };
+      return { ok: false, code };
     } finally {
       busy = false;
     }
