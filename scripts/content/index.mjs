@@ -43,6 +43,7 @@ import faDefi from './fa/defi.mjs';
 import faMarkets from './fa/markets.mjs';
 import faSolana from './fa/solana.mjs';
 import faAi from './fa/ai.mjs';
+import faTokenized from './fa/tokenized.mjs';
 
 /*
  * The network spokes are generated from src/lib/chains.js rather than authored
@@ -66,7 +67,7 @@ export const ARTICLES = [
   ...enSwap, ...enFees, ...enWallets, ...enSecurity, ...enNetworks,
   ...enDefi, ...enMarkets, ...enSolana, ...enAi, ...enTokenized,
   ...faSwap, ...faFees, ...faWallets, ...faSecurity, ...faNetworks,
-  ...faDefi, ...faMarkets, ...faSolana, ...faAi,
+  ...faDefi, ...faMarkets, ...faSolana, ...faAi, ...faTokenized,
   ...NETWORK_PAGES,
   ...TRUST_PAGES,
   ...SEARCH_INTENT_PAGES

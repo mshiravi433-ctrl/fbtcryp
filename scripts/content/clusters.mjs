@@ -15,8 +15,11 @@
  *
  * THE RULE THAT KEEPS IT HONEST: a cluster may only exist if the app really
  * does the thing. There is no "crypto tax" cluster because the app has no tax
- * feature, and no "price prediction" cluster because the app refuses to
- * predict. Covering a subject you do not serve is how a site earns a
+ * feature. (There is still no standalone "price prediction" cluster: since
+ * 2026-11 the token chart carries one on-device candle model, and it is
+ * covered inside the AI cluster as a labelled model estimate with its limits
+ * stated — a subject the app now genuinely serves, described as narrowly as
+ * it behaves.) Covering a subject you do not serve is how a site earns a
  * helpful-content demotion instead of authority.
  */
 

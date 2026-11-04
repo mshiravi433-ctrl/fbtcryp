@@ -63,6 +63,7 @@ export const ANSWER_ENGINES = [
   ['CCBot', 'Common Crawl — the corpus most open models are built on'],
   ['Amazonbot', 'Amazon — Alexa answers'],
   ['meta-externalagent', 'Meta — Meta AI'],
+  ['meta-externalfetcher', 'Meta — fetches a single link at a user’s request (Meta states user-initiated fetches may bypass robots.txt; the group documents the same policy regardless)'],
   ['DuckAssistBot', 'DuckDuckGo — DuckAssist'],
   ['cohere-ai', 'Cohere'],
   ['YouBot', 'You.com'],
@@ -125,10 +126,17 @@ function urlEntry({ site, slugPath, page, languages = [] }) {
   const d = editorialDate(page);
   const lastmod = d ? `\n    <lastmod>${xmlEscape(d)}</lastmod>` : '';
   const translated = languages.map(({ lang, url }) => `\n    <xhtml:link rel="alternate" hreflang="${xmlEscape(lang)}" href="${xmlEscape(url)}"/>`).join('');
+  /* Google image sitemap extension. `socialImage` is stamped by the caller
+     from the same resolver that fills the page's og:image, so the image a
+     crawler is told about here is the image the page itself declares — never
+     a second, drifting list. Pages without a stamp simply carry no image. */
+  const image = page.socialImage
+    ? `\n    <image:image>\n      <image:loc>${xmlEscape(`${site}${page.socialImage}`)}</image:loc>\n    </image:image>`
+    : '';
   const changefreq = page.changefreq || 'monthly';
   const priority = page.priority != null ? page.priority : '0.8';
   return `  <url>
-    <loc>${xmlEscape(loc)}</loc>${lastmod}${translated}
+    <loc>${xmlEscape(loc)}</loc>${lastmod}${translated}${image}
     <changefreq>${changefreq}</changefreq>
     <priority>${priority}</priority>
   </url>`;
@@ -147,7 +155,7 @@ function urlset(body) {
   the build time. A page with no editorial date is listed without a <lastmod>
   rather than with a manufactured one.
 -->
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
 ${body}
 </urlset>
 `;
@@ -239,7 +247,7 @@ export function emitFeed({ out, site, slugPath, pages, limit = 60 }) {
     <link>${site}/library</link>
     <atom:link href="${site}/feed.xml" rel="self" type="application/rss+xml" />
     <description>Guides to swapping, fees, wallets, security and on-chain market data from FBT Swap, a non-custodial multi-chain swap interface.</description>
-    <language>en</language>
+    <language>en</language>${dated.length ? `\n    <lastBuildDate>${new Date(`${editorialDate(dated[0])}T00:00:00Z`).toUTCString()}</lastBuildDate>` : ''}
 ${items}
   </channel>
 </rss>
@@ -527,7 +535,6 @@ export function emit404({ out, site }) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Page not found — FBT Swap</title>
 <meta name="robots" content="noindex, follow">
-<link rel="canonical" href="${site}/404.html">
 <style>
   :root { color-scheme: dark; }
   body { margin:0; min-height:100vh; display:grid; place-items:center;
@@ -543,13 +550,22 @@ export function emit404({ out, site }) {
 </head>
 <body>
 <main>
-  <h1>That page is not here</h1>
-  <p>The link may be old, or the address may have a typo. Everything below still works.</p>
-  <div class="row">
-    <a href="${site}/">Open the app</a>
-    <a href="${site}/library">Guide library</a>
-    <a href="${site}/fa/">فارسی</a>
-  </div>
+  <section lang="fa" dir="rtl">
+    <h1>این صفحه اینجا نیست</h1>
+    <p>شاید پیوند قدیمی است یا در نشانی اشتباه تایپی هست. همهٔ مسیرهای پایین هنوز کار می‌کنند.</p>
+    <div class="row">
+      <a href="${site}/">باز کردن برنامه</a>
+      <a href="${site}/fa/">کتابخانهٔ راهنماهای فارسی</a>
+    </div>
+  </section>
+  <section lang="en" dir="ltr" style="margin-top:2.2rem">
+    <h2 style="font-size:clamp(1.2rem,4vw,1.6rem);margin:0 0 .6rem">That page is not here</h2>
+    <p>The link may be old, or the address may have a typo. Everything below still works.</p>
+    <div class="row">
+      <a href="${site}/">Open the app</a>
+      <a href="${site}/library">Guide library</a>
+    </div>
+  </section>
 </main>
 </body>
 </html>
