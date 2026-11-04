@@ -11,7 +11,7 @@
  * are wiped on lock, after 10 minutes idle, or 2 minutes hidden.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { IconLock, IconSparkle, IconCheck, IconShield } from '../Icons';
+import { IconLock, IconSparkle, IconCheck, IconShield, IconKey, IconWallet, IconChart, IconDoc } from '../Icons';
 import { validateAgentKeyFormat } from '../../lib/hyperliquid/agentKey';
 import { agentAddress } from '../../lib/hyperliquid/signing';
 import { isValidHlAddress, readAccountSummary } from '../../lib/hyperliquid/readonly';
@@ -132,12 +132,17 @@ export function HoldButton({ onConfirm, disabled, kind = 'approve', children, la
   );
 }
 
-function Card({ title, action, children, className = '', span = '' }) {
+function Card({ title, action, icon, children, className = '', span = '' }) {
   return (
     <section className={`ai-trade-card ${span} ${className}`.trim()}>
       {(title || action) && (
         <header className="ai-trade-card-head">
-          {title && <h2>{title}</h2>}
+          {title && (
+            <div className="ai-trade-card-title">
+              {icon && <span className="ai-trade-card-ico" aria-hidden="true">{icon}</span>}
+              <h2>{title}</h2>
+            </div>
+          )}
           {action}
         </header>
       )}
@@ -167,7 +172,7 @@ function ConnectStep({ session, setSession, onConnect, busy, error }) {
 
   return (
     <div className="ai-trade-bento">
-      <Card title={C.connect.title} span="ai-trade-span-2">
+      <Card title={C.connect.title} icon={<IconKey width={18} height={18} />} span="ai-trade-span-2">
         <p className="ai-trade-muted">{C.connect.help}</p>
         <div className="ai-trade-form">
           <label className="ai-trade-field ai-trade-field-wide"><span>{C.connect.addressLabel}</span>
@@ -194,7 +199,7 @@ function ConnectStep({ session, setSession, onConnect, busy, error }) {
         </div>
       </Card>
 
-      <Card title="راهنمای سریع" span="ai-trade-span-2">
+      <Card title="راهنمای سریع" icon={<IconSparkle width={18} height={18} />} span="ai-trade-span-2">
         <ol className="ai-trade-steps-list">{C.connect.steps.map((t) => <li key={t}>{t}</li>)}</ol>
         <div className="ai-trade-note ai-trade-warn" role="note">{C.connect.mainKeyWarning}</div>
       </Card>
@@ -207,7 +212,7 @@ function AccountStep({ session, account, onRefresh, refreshing, dailyLoss, onGo 
   if (!session.connected) return <Gate onGo={onGo} />;
   if (!account || !account.ok) {
     return (
-      <Card title={C.account.title}>
+      <Card title={C.account.title} icon={<IconWallet width={18} height={18} />}>
         <p className="ai-trade-error" role="alert">{C.account.errors[account?.code] || C.account.errors.HL_NETWORK}</p>
         <div className="ai-trade-actions"><button type="button" className="ai-trade-btn" onClick={onRefresh} disabled={refreshing}>{C.account.refresh}</button></div>
       </Card>
@@ -223,7 +228,7 @@ function AccountStep({ session, account, onRefresh, refreshing, dailyLoss, onGo 
       <Kpi label={C.account.unrealised} value={signed(state.dailyUnrealisedPnlUsd)} toneName={tone(state.dailyUnrealisedPnlUsd)} />
       <Kpi label={C.account.realisedToday} value={signed(fills.realisedPnlUsd)} toneName={tone(fills.realisedPnlUsd)} hint={`${fills.fillCount} پرشدن امروز`} />
 
-      <Card title={C.account.dailyUsed} span="ai-trade-span-2">
+      <Card title={C.account.dailyUsed} icon={<IconChart width={18} height={18} />} span="ai-trade-span-2">
         <div className="ai-trade-meter" data-warn={used && used.pct >= 70 ? 'true' : 'false'} role="progressbar" aria-valuenow={Math.round(used?.pct ?? 0)} aria-valuemin={0} aria-valuemax={100}>
           <span style={{ width: `${used ? used.pct : 0}%` }} />
         </div>
@@ -232,7 +237,7 @@ function AccountStep({ session, account, onRefresh, refreshing, dailyLoss, onGo 
         </p>
       </Card>
 
-      <Card title={C.account.positions} span="ai-trade-span-2"
+      <Card title={C.account.positions} icon={<IconWallet width={18} height={18} />} span="ai-trade-span-2"
         action={<button type="button" className="ai-trade-btn ai-trade-btn-ghost" onClick={onRefresh} disabled={refreshing}>{refreshing ? C.ai.analyzing : C.account.refresh}</button>}>
         {summary.positions.length === 0
           ? <p className="ai-trade-muted">{C.account.noPositions}</p>
@@ -256,7 +261,7 @@ function AccountStep({ session, account, onRefresh, refreshing, dailyLoss, onGo 
 function Gate({ onGo }) {
   return (
     <Card className="ai-trade-gate">
-      <IconLock width={28} height={28} aria-hidden="true" />
+      <span className="ai-trade-gate-ico" aria-hidden="true"><IconLock width={28} height={28} /></span>
       <p className="ai-trade-muted">{C.needConnect}</p>
       <div className="ai-trade-actions" style={{ justifyContent: 'center' }}>
         <button type="button" className="ai-trade-btn ai-trade-btn-primary" onClick={onGo}>{C.steps.connect}</button>
@@ -281,7 +286,7 @@ function LimitsStep({ form, setForm, result, markets, marketsError, marketsLoadi
   const current = Number(form.maxLeverage);
   return (
     <div className="ai-trade-bento">
-      <Card title={C.limits.title} span="ai-trade-span-3">
+      <Card title={C.limits.title} icon={<IconShield width={18} height={18} />} span="ai-trade-span-2">
         <div className="ai-trade-form">
           <label className="ai-trade-field"><span>{C.limits.total}</span>
             <input type="number" inputMode="decimal" dir="ltr" value={form.totalExposureUsd} onChange={set('totalExposureUsd')} /></label>
@@ -291,7 +296,7 @@ function LimitsStep({ form, setForm, result, markets, marketsError, marketsLoadi
             <input type="number" inputMode="decimal" dir="ltr" value={form.dailyLossUsd} onChange={set('dailyLossUsd')} /></label>
           <div className="ai-trade-field">
             <span>{C.limits.leverage}</span>
-            <div className="ai-trade-chips" role="radiogroup" aria-label={C.limits.leverage}>
+            <div className="ai-trade-chips ai-trade-chips-even" role="radiogroup" aria-label={C.limits.leverage}>
               {LEVERAGE_CHOICES.map((n) => (
                 <button key={n} type="button" role="radio" aria-checked={current === n} className="ai-trade-chip"
                   onClick={() => setForm((f) => ({ ...f, maxLeverage: String(n) }))}>{n}x</button>
@@ -304,7 +309,18 @@ function LimitsStep({ form, setForm, result, markets, marketsError, marketsLoadi
         {result.ok && <p className="ai-trade-ok">{C.limits.saved}</p>}
       </Card>
 
-      <Card title={C.markets.title} span="ai-trade-span-3"
+      <Card title={C.limits.killSwitch} icon={<IconShield width={18} height={18} />} span="ai-trade-span-2">
+        <button type="button" role="switch" aria-checked={form.killSwitch} className="ai-trade-kill"
+          onClick={() => setForm((f) => ({ ...f, killSwitch: !f.killSwitch }))}>
+          <span>
+            <strong>{form.killSwitch ? C.statusLabel.stopped : C.statusLabel.ready}</strong>
+            <span className="ai-trade-small ai-trade-muted" style={{ display: 'block' }}>{C.limits.killSwitchHelp}</span>
+          </span>
+          <span className="ai-trade-switch" aria-hidden="true" />
+        </button>
+      </Card>
+
+      <Card title={C.markets.title} icon={<IconChart width={18} height={18} />} span="ai-trade-span-4"
         action={<span className="ai-trade-pill">{C.markets.selected}: {selected.length} / {MAX_PICK}</span>}>
         <p className="ai-trade-small ai-trade-muted">{C.markets.hint}</p>
         {!markets && (
@@ -341,17 +357,6 @@ function LimitsStep({ form, setForm, result, markets, marketsError, marketsLoadi
           </>
         )}
       </Card>
-
-      <Card title={C.limits.killSwitch} span="ai-trade-span-3">
-        <button type="button" role="switch" aria-checked={form.killSwitch} className="ai-trade-kill"
-          onClick={() => setForm((f) => ({ ...f, killSwitch: !f.killSwitch }))}>
-          <span>
-            <strong>{form.killSwitch ? C.statusLabel.stopped : C.statusLabel.ready}</strong>
-            <span className="ai-trade-small ai-trade-muted" style={{ display: 'block' }}>{C.limits.killSwitchHelp}</span>
-          </span>
-          <span className="ai-trade-switch" aria-hidden="true" />
-        </button>
-      </Card>
     </div>
   );
 }
@@ -362,7 +367,7 @@ function AiStep({ session, setSession, rules, setRules, onAnalyze, analyzing, ga
   const setR = (key) => (e) => setRules((r) => normalizeRules({ ...r, [key]: e.target.value }));
   return (
     <div className="ai-trade-bento">
-      <Card title={C.ai.title} span="ai-trade-span-2">
+      <Card title={C.ai.title} icon={<IconSparkle width={18} height={18} />} span="ai-trade-span-2">
         <div className="ai-trade-form">
           <label className="ai-trade-field ai-trade-field-wide"><span>{C.ai.keyLabel}</span>
             <input type="password" dir="ltr" autoComplete="off" spellCheck={false} data-lpignore="true" value={session.aiKey} onChange={setS('aiKey')} placeholder="sk-…" /></label>
@@ -384,7 +389,7 @@ function AiStep({ session, setSession, rules, setRules, onAnalyze, analyzing, ga
         {lastRun && <p className={lastRun.tone === 'error' ? 'ai-trade-error' : 'ai-trade-ok'} role="status">{lastRun.text}</p>}
       </Card>
 
-      <Card title={C.ai.strategyTitle} span="ai-trade-span-2">
+      <Card title={C.ai.strategyTitle} icon={<IconChart width={18} height={18} />} span="ai-trade-span-2">
         <div className="ai-trade-seg" role="radiogroup" aria-label={C.ai.strategyTitle}>
           {STRATEGIES.map((s) => (
             <button key={s} type="button" role="radio" aria-checked={rules.strategy === s}
@@ -416,7 +421,7 @@ function PendingCard({ item, onApprove, onReject, now }) {
   if (!preview.rulesOk && preview.rulesCode) blockers.push(C.approve.errors[preview.rulesCode] || preview.rulesCode);
   const canHold = status === 'pending' && preview.canApprove && !expired;
   return (
-    <section className="ai-trade-card ai-trade-proposal" data-state={status}>
+    <section className="ai-trade-card ai-trade-proposal" data-state={status} data-side={intent.side}>
       <div className="ai-trade-card-head">
         <span className="ai-trade-side" data-side={intent.side}>{intent.coin} · {C.approve.side[intent.side]}</span>
         <span className="ai-trade-pill" data-tone={status === 'executed' ? 'ready' : status === 'failed' ? 'stopped' : undefined}>{C.approve.statusLabels[status]}</span>
@@ -430,6 +435,7 @@ function PendingCard({ item, onApprove, onReject, now }) {
         <div><dt>{C.approve.labels.worst}</dt><dd>{num(preview.worstCaseLossUsd)}$</dd></div>
         <div><dt>مهلت</dt><dd className="ai-trade-timer">{expired ? '—' : `${secs}s`}</dd></div>
       </dl>
+      {status === 'pending' && <div className="ai-trade-ttl" aria-hidden="true"><span style={{ '--p': Math.max(0, Math.min(1, (item.expiresAt - now) / 60000)) }} /></div>}
       {intent.rationale && <p className="ai-trade-muted ai-trade-small"><strong>{C.approve.labels.rationale}: </strong>{intent.rationale}</p>}
       {blockers.length > 0 && <div className="ai-trade-blocked" role="alert">{C.approve.blockedBy}<br />{blockers.join(' · ')}</div>}
       {status === 'pending' && (
@@ -476,7 +482,7 @@ function ReportStep({ ledger, account, onRefresh, refreshing }) {
       <Kpi label={C.report.realised} value={signed(fills?.realisedPnlUsd)} toneName={tone(fills?.realisedPnlUsd)} />
       <Kpi label={C.report.fees} value={num(fills?.feesUsd)} />
       <Kpi label={C.report.fills} value={String(fills?.fillCount ?? C.account.unknown)} />
-      <Card title={C.report.title} span="ai-trade-span-4"
+      <Card title={C.report.title} icon={<IconDoc width={18} height={18} />} span="ai-trade-span-4"
         action={<button type="button" className="ai-trade-btn ai-trade-btn-ghost" onClick={onRefresh} disabled={refreshing}>{C.report.refresh}</button>}>
         {ledger.entries.length === 0
           ? <p className="ai-trade-muted">{C.report.empty}</p>
@@ -719,6 +725,7 @@ export default function AiTradePanel() {
   return (
     <section className="ai-trade" aria-label={AI_TRADE_TAB_LABEL}>
       <header className="ai-trade-hero">
+        <span className="ai-trade-aurora" aria-hidden="true" />
         <div className="ai-trade-hero-ico"><IconShield width={24} height={24} aria-hidden="true" /></div>
         <div className="ai-trade-hero-text">
           <h1 className="ai-trade-title">{C.title}</h1>
@@ -728,7 +735,7 @@ export default function AiTradePanel() {
       </header>
 
       {lockNotice && <div className="ai-trade-note ai-trade-warn" role="status">{lockNotice}</div>}
-      <p className="ai-trade-small ai-trade-muted" style={{ margin: 0 }}>{C.riskNotice}</p>
+      <p className="ai-trade-risk">{C.riskNotice}</p>
 
       <nav className="ai-trade-steps" role="tablist" aria-label={AI_TRADE_TAB_LABEL}>
         {STEPS.map((id, i) => (
@@ -739,6 +746,8 @@ export default function AiTradePanel() {
           </button>
         ))}
       </nav>
+
+      <div className="ai-trade-progress" aria-hidden="true"><span style={{ '--p': STEPS.indexOf(step) / (STEPS.length - 1) }} /></div>
 
       <div className="ai-trade-stage" role="tabpanel" id={`ai-panel-${step}`} aria-labelledby={`ai-tab-${step}`}>
         {step === 'connect' && (
@@ -762,7 +771,7 @@ export default function AiTradePanel() {
       </div>
 
       {session.connected && (
-        <div className="ai-trade-actions" style={{ justifyContent: 'flex-end' }}>
+        <div className="ai-trade-actions ai-trade-actions-end">
           <button type="button" className="ai-trade-btn ai-trade-btn-ghost" onClick={() => lock(C.lockNotice)}>
             <IconLock width={16} height={16} aria-hidden="true" /> {C.lockNow}
           </button>
