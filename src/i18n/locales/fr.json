@@ -2843,13 +2843,28 @@
           "bb": "Bollinger",
           "volume": "Volume",
           "rsi": "RSI",
-          "fib": "Fibonacci"
+          "fib": "Fibonacci",
+          "ma99": "MA99",
+          "ema55": "EMA55",
+          "macd": "MACD",
+          "log": "Échelle log",
+          "grid": "Grille",
+          "priceLine": "Ligne de niveau"
         },
         "view": "Vue",
         "zoomIn": "Zoomer",
         "fit": "Ajuster",
         "log": "Échelle log",
-        "loadingNote": "Le moteur du graphique se charge ; s’il est indisponible, un graphique simplifié s’affiche."
+        "loadingNote": "Le moteur du graphique se charge ; s’il est indisponible, un graphique simplifié s’affiche.",
+        "groups": {
+          "overlay": "Superpositions",
+          "pane": "Panneaux",
+          "scale": "Échelle et niveaux"
+        },
+        "range": "Fenêtre",
+        "reset": "Réinitialiser",
+        "reapply": "Rétablir la démo de ce chapitre",
+        "chartLabel": "Graphique en chandeliers d’entraînement. Faites glisser le doigt pour lire une bougie à la fois."
       },
       "chapters": {
         "read": {
@@ -3102,6 +3117,21 @@
             }
           }
         }
+      },
+      "facts": {
+        "price": "Clôture",
+        "change": "Variation",
+        "range": "Plage de la fenêtre",
+        "bars": "Chandeliers",
+        "widen": "Changez la fenêtre ou une superposition et ces nombres suivent."
+      },
+      "callout": {
+        "candle": "Le chandelier entouré : ouverture {{o}} → clôture {{c}}, et sa mèche atteint {{h}} et {{l}}."
+      },
+      "paneLabels": {
+        "volume": "Volume",
+        "rsi": "RSI",
+        "macd": "MACD"
       }
     },
     "cards": {

@@ -171,6 +171,118 @@ export const CHART_GUIDE = {
     zh: '对数轴', hi: 'लॉग स्केल', es: 'Escala log', fr: 'Échelle log', ru: 'Лог. шкала',
     tr: 'Log ölçek', ur: 'لاگ اسکیل', id: 'Skala log', pt: 'Escala log'
   },
+  'lab2.chartGuide.demo.chartLabel': {
+    zh: '练习K线图。移动手指即可逐根读取K线。',
+    hi: 'अभ्यास कैंडल चार्ट। एक-एक कैंडल पढ़ने के लिए उँगली चलाएँ।',
+    es: 'Gráfico de velas de práctica. Desliza el dedo para leer una vela cada vez.',
+    fr: 'Graphique en chandeliers d’entraînement. Faites glisser le doigt pour lire une bougie à la fois.',
+    ru: 'Тренировочный свечной график. Проведите пальцем, чтобы читать свечи по одной.',
+    tr: 'Alıştırma mum grafiği. Her seferinde bir mum okumak için parmağınızı kaydırın.',
+    ur: 'مشقی کینڈل چارٹ۔ ایک وقت میں ایک کینڈل پڑھنے کے لیے انگلی چلائیں۔',
+    id: 'Grafik candle latihan. Geser jari untuk membaca satu candle setiap kali.',
+    pt: 'Gráfico de candles de prática. Deslize o dedo para ler um candle de cada vez.'
+  },
+  'lab2.chartGuide.paneLabels.volume': {
+    zh: '成交量', hi: 'वॉल्यूम', es: 'Volumen', fr: 'Volume', ru: 'Объём',
+    tr: 'Hacim', ur: 'حجم', id: 'Volume', pt: 'Volume'
+  },
+  'lab2.chartGuide.paneLabels.rsi': {
+    zh: 'RSI', hi: 'RSI', es: 'RSI', fr: 'RSI', ru: 'RSI', tr: 'RSI', ur: 'RSI', id: 'RSI', pt: 'RSI'
+  },
+  'lab2.chartGuide.paneLabels.macd': {
+    zh: 'MACD', hi: 'MACD', es: 'MACD', fr: 'MACD', ru: 'MACD', tr: 'MACD', ur: 'MACD', id: 'MACD', pt: 'MACD'
+  },
+  'lab2.chartGuide.demo.groups.overlay': {
+    zh: '叠加层', hi: 'ओवरले', es: 'Superposiciones', fr: 'Superpositions',
+    ru: 'Наложения', tr: 'Katmanlar', ur: 'اوورلے', id: 'Lapisan', pt: 'Sobreposições'
+  },
+  'lab2.chartGuide.demo.groups.pane': {
+    zh: '子图', hi: 'पैन', es: 'Paneles', fr: 'Panneaux', ru: 'Панели',
+    tr: 'Paneller', ur: 'پینل', id: 'Panel', pt: 'Painéis'
+  },
+  'lab2.chartGuide.demo.groups.scale': {
+    zh: '刻度与水平', hi: 'स्केल और स्तर', es: 'Escala y niveles', fr: 'Échelle et niveaux',
+    ru: 'Шкала и уровни', tr: 'Ölçek ve seviyeler', ur: 'اسکیل اور سطحیں',
+    id: 'Skala dan level', pt: 'Escala e níveis'
+  },
+  'lab2.chartGuide.demo.range': {
+    zh: '窗口', hi: 'विंडो', es: 'Ventana', fr: 'Fenêtre', ru: 'Окно',
+    tr: 'Pencere', ur: 'ونڈو', id: 'Jendela', pt: 'Janela'
+  },
+  'lab2.chartGuide.demo.reset': {
+    zh: '重置', hi: 'रीसेट', es: 'Reiniciar', fr: 'Réinitialiser', ru: 'Сброс',
+    tr: 'Sıfırla', ur: 'ری سیٹ', id: 'Atur ulang', pt: 'Redefinir'
+  },
+  'lab2.chartGuide.demo.reapply': {
+    zh: '恢复本章的演示', hi: 'इस अध्याय का डेमो बहाल करें', es: 'Restaurar la demo de este capítulo',
+    fr: 'Rétablir la démo de ce chapitre', ru: 'Вернуть демонстрацию главы',
+    tr: 'Bu bölümün demosunu geri getir', ur: 'اس باب کا ڈیمو بحال کریں',
+    id: 'Pulihkan demo bab ini', pt: 'Restaurar a demo deste capítulo'
+  },
+  'lab2.chartGuide.demo.togglesMap.ma99': {
+    zh: 'MA99', hi: 'MA99', es: 'MA99', fr: 'MA99', ru: 'MA99', tr: 'MA99',
+    ur: 'MA99', id: 'MA99', pt: 'MA99'
+  },
+  'lab2.chartGuide.demo.togglesMap.ema55': {
+    zh: 'EMA55', hi: 'EMA55', es: 'EMA55', fr: 'EMA55', ru: 'EMA55', tr: 'EMA55',
+    ur: 'EMA55', id: 'EMA55', pt: 'EMA55'
+  },
+  'lab2.chartGuide.demo.togglesMap.macd': {
+    zh: 'MACD', hi: 'MACD', es: 'MACD', fr: 'MACD', ru: 'MACD', tr: 'MACD',
+    ur: 'MACD', id: 'MACD', pt: 'MACD'
+  },
+  'lab2.chartGuide.demo.togglesMap.log': {
+    zh: '对数轴', hi: 'लॉग', es: 'Escala log', fr: 'Échelle log', ru: 'Логарифм',
+    tr: 'Log', ur: 'لاگ', id: 'Skala log', pt: 'Escala log'
+  },
+  'lab2.chartGuide.demo.togglesMap.grid': {
+    zh: '网格', hi: 'ग्रिड', es: 'Cuadrícula', fr: 'Grille', ru: 'Сетка',
+    tr: 'Izgara', ur: 'گرڈ', id: 'Kisi', pt: 'Grade'
+  },
+  'lab2.chartGuide.demo.togglesMap.priceLine': {
+    zh: '价格线', hi: 'स्तर रेखा', es: 'Línea de nivel', fr: 'Ligne de niveau',
+    ru: 'Линия уровня', tr: 'Seviye çizgisi', ur: 'سطح لکیر',
+    id: 'Garis level', pt: 'Linha de nível'
+  },
+  'lab2.chartGuide.facts.price': {
+    zh: '收盘', hi: 'क्लोज़', es: 'Cierre', fr: 'Clôture', ru: 'Закрытие',
+    tr: 'Kapanış', ur: 'اختتام', id: 'Penutupan', pt: 'Fechamento'
+  },
+  'lab2.chartGuide.facts.change': {
+    zh: '涨跌', hi: 'बदलाव', es: 'Cambio', fr: 'Variation', ru: 'Изменение',
+    tr: 'Değişim', ur: 'تبدیلی', id: 'Perubahan', pt: 'Variação'
+  },
+  'lab2.chartGuide.facts.range': {
+    zh: '窗口范围', hi: 'विंडो सीमा', es: 'Rango de la ventana', fr: 'Plage de la fenêtre',
+    ru: 'Диапазон окна', tr: 'Pencere aralığı', ur: 'ونڈو کی حد',
+    id: 'Rentang jendela', pt: 'Faixa da janela'
+  },
+  'lab2.chartGuide.facts.bars': {
+    zh: 'K线数', hi: 'कैंडल', es: 'Velas', fr: 'Chandeliers', ru: 'Свечи',
+    tr: 'Mumlar', ur: 'کینڈل', id: 'Candle', pt: 'Candles'
+  },
+  'lab2.chartGuide.facts.widen': {
+    zh: '换窗口或叠加层，这些数字会随之变动。',
+    hi: 'विंडो या ओवरले बदलें और ये संख्याएँ उसी के साथ बदलती हैं।',
+    es: 'Cambia la ventana o una superposición y estos números se mueven con ella.',
+    fr: 'Changez la fenêtre ou une superposition et ces nombres suivent.',
+    ru: 'Смените окно или наложение — эти числа изменятся вместе с ним.',
+    tr: 'Pencereyi veya katmanı değiştirin; bu sayılar da onunla değişir.',
+    ur: 'ونڈو یا اوورلے بدلیں، یہ اعداد اسی کے ساتھ بدلیں گے۔',
+    id: 'Ubah jendela atau lapisan dan angka-angka ini ikut berubah.',
+    pt: 'Mude a janela ou uma sobreposição e estes números acompanham.'
+  },
+  'lab2.chartGuide.callout.candle': {
+    zh: '被圈出的K线：开盘 {{o}} → 收盘 {{c}}，影线触及 {{h}} 与 {{l}}。',
+    hi: 'घेरा हुआ कैंडल: खुला {{o}} → बंद {{c}}, और साया {{h}} तथा {{l}} तक पहुँचता है।',
+    es: 'La vela marcada: apertura {{o}} → cierre {{c}}, y su mecha llega a {{h}} y {{l}}.',
+    fr: 'Le chandelier entouré : ouverture {{o}} → clôture {{c}}, et sa mèche atteint {{h}} et {{l}}.',
+    ru: 'Обведённая свеча: открытие {{o}} → закрытие {{c}}, а тень доходит до {{h}} и {{l}}.',
+    tr: 'Çerçeveli mum: açılış {{o}} → kapanış {{c}}, fitili {{h}} ve {{l}} seviyesine ulaşır.',
+    ur: 'گھیرا ہوا کینڈل: افتتاح {{o}} → اختتام {{c}}، اور سایہ {{h}} اور {{l}} تک پہنچتا ہے۔',
+    id: 'Candle yang dilingkari: buka {{o}} → tutup {{c}}, dan sumbunya mencapai {{h}} dan {{l}}.',
+    pt: 'O candle circulado: abertura {{o}} → fechamento {{c}}, e o pavio alcança {{h}} e {{l}}.'
+  },
   'lab2.chartGuide.demo.loadingNote': {
     zh: '图表引擎正在加载；如果不可用，会显示简报图。',
     hi: 'चार्ट इंजन लोड हो रहा है; उपलब्ध न हो तो सरल चार्ट दिखेगा।',

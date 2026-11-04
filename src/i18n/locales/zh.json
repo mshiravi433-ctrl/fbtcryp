@@ -2836,13 +2836,28 @@
           "bb": "布林带",
           "volume": "成交量",
           "rsi": "RSI",
-          "fib": "斐波那契"
+          "fib": "斐波那契",
+          "ma99": "MA99",
+          "ema55": "EMA55",
+          "macd": "MACD",
+          "log": "对数轴",
+          "grid": "网格",
+          "priceLine": "价格线"
         },
         "view": "视图",
         "zoomIn": "放大",
         "fit": "适合",
         "log": "对数轴",
-        "loadingNote": "图表引擎正在加载；如果不可用，会显示简报图。"
+        "loadingNote": "图表引擎正在加载；如果不可用，会显示简报图。",
+        "groups": {
+          "overlay": "叠加层",
+          "pane": "子图",
+          "scale": "刻度与水平"
+        },
+        "range": "窗口",
+        "reset": "重置",
+        "reapply": "恢复本章的演示",
+        "chartLabel": "练习K线图。移动手指即可逐根读取K线。"
       },
       "chapters": {
         "read": {
@@ -3095,6 +3110,21 @@
             }
           }
         }
+      },
+      "facts": {
+        "price": "收盘",
+        "change": "涨跌",
+        "range": "窗口范围",
+        "bars": "K线数",
+        "widen": "换窗口或叠加层，这些数字会随之变动。"
+      },
+      "callout": {
+        "candle": "被圈出的K线：开盘 {{o}} → 收盘 {{c}}，影线触及 {{h}} 与 {{l}}。"
+      },
+      "paneLabels": {
+        "volume": "成交量",
+        "rsi": "RSI",
+        "macd": "MACD"
       }
     },
     "cards": {
