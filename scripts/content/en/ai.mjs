@@ -224,6 +224,8 @@ export default [
     slug: 'smart-money-tracking-explained',
     cluster: 'ai',
     icon: 'network',
+    route: '/#/smart-money',
+    updated: '2026-11-04',
     title: 'Smart Money Tracking: Labels Built on Inference',
     description:
       'Following profitable wallets sounds rigorous. The labels are heuristics, the delay is structural, and survivorship bias does the rest.',
@@ -349,5 +351,99 @@ export default [
       { q: 'Does it eliminate MEV?', a: 'It bounds what can be extracted, because you signed a floor. It does not eliminate extraction — solvers capture surplus by design, and that surplus is value that could have been yours.' },
       { q: 'What if no solver fills my intent?', a: 'It expires unfilled and nothing happens. You keep your funds; you did not get the trade. That is the normal outcome when the outcome you specified is better than the market can supply.' }
     ]
+  }),
+
+  article({
+    slug: 'ai-candle-forecast-on-device',
+    cluster: 'ai',
+    icon: 'pulse',
+    date: '2026-11-04',
+    route: '/#/coin/bitcoin',
+    title: 'AI Candle Forecast on Your Phone: How Kronos Works',
+    description:
+      'The token chart can project the next candles with an open model that runs on your own device. What it computes, what it downloads, and what it cannot know.',
+    h1: 'A candle model that runs on your device — and says so',
+    intro: [
+      'The token chart in FBT Swap has an AI forecast button. It runs Kronos, an open foundation model built for financial candles, entirely on your own device: the candles already on your screen go into the model, and a short run of projected candles comes out.',
+      'That sentence needs its limits attached to it immediately. A projection is a statistical extrapolation of candle patterns, not knowledge of the future, and this page exists to state exactly what the feature does, what it downloads and where it stops.'
+    ],
+    sections: [
+      ['What actually runs, and where', [
+        'The model is Kronos-mini with its candle tokenizer, exported to ONNX — about 33 MB of files. Nothing downloads until you press the forecast button and confirm; then the files are fetched once, stored on the device, and reused. A delete button on the same card removes them again.',
+        'Inference runs in a Web Worker through ONNX Runtime (WebGPU where available, otherwise WASM). For this path your candles are not sent to a forecast server: the only network requests are the one-time static downloads of the model files themselves. The same candle series you are looking at is the input, so the chart and the projection can never disagree about the data.'
+      ]],
+      ['What the projection is', [
+        'The model needs at least 40 candles of history on screen. It then generates the next candles one at a time — 12 by default, up to 48 — each conditioned on the ones before it. The result is drawn as a separate violet, translucent candle series after the last real candle, deliberately not in the green and red of printed candles, and the card next to it names the model and the projected end value.',
+        'One projected path is shown. It is not a probability, not a confidence band and not a target anyone stands behind. The line the app prints beside every result is the honest summary: a model estimate from past candles — not financial advice, not a guarantee. A result is cached for a few hours per series so reopening the chart does not recompute the same answer.'
+      ]],
+      ['What it cannot know', [
+        'The model sees open, high, low, close and volume — the shape of the recent past. It cannot see the news that has not happened, the liquidation cascade building off-screen, the listing announcement, the exploit, or the large holder about to sell. Most of what moves a price violently is information that does not exist in the candles yet.',
+        'It also cannot know that the regime changed. A pattern model extrapolates the behaviour it was fed; when the market switches from trend to panic, the projection is still describing the old world for a while. Fluency is the trap: the projected candles look exactly as tidy when they are wrong as when they happen to land near the print.'
+      ]],
+      ['Failure is a stated state, not an invented number', [
+        'Plenty can go wrong: a device without enough memory, a browser without the required features, model files that fail to download or arrive corrupted, a chart with too little history. Each of those is a named, visible state on the card — unsupported, download failed, not enough candles — with a retry where retrying makes sense. Nothing is drawn in place of a result the model did not produce.',
+        'That is the same rule the rest of this product follows. The assistant features elsewhere in FBT Swap summarise and monitor; they do not forecast prices and do not recommend trades. This chart model is the one place a projection exists, and it is labelled as a model estimate on the same screen that shows it.'
+      ]]
+    ],
+    facts: [
+      ['Model', 'Kronos-mini + candle tokenizer (open weights, MIT), exported to ONNX'],
+      ['Runs', 'On your device, in a Web Worker — WebGPU or WASM'],
+      ['Download', 'About 33 MB, once, only after you tap and confirm; deletable any time'],
+      ['Input', 'The candles already on your chart (40 minimum); 12 projected by default, up to 48'],
+      ['Your data', 'Candles stay on the device for this path; only the model files are fetched'],
+      ['Status of the output', 'A model estimate from past candles — not advice, not a guarantee']
+    ],
+    faqs: [
+      { q: 'Can it predict the price?', a: 'No. It extrapolates statistical candle patterns from the recent past. It has no access to future information, which is where most large moves come from, and its output should be read as one plausible continuation, not a forecast anyone guarantees.' },
+      { q: 'Why does it need a 33 MB download?', a: 'Because the model runs locally instead of on a server. The files are fetched once, only after you explicitly start the download, and the same card offers a button to delete them from the device.' },
+      { q: 'What happens on a weak phone or a short chart history?', a: 'The card says so instead of drawing something: unsupported device, out of memory, download failed or fewer than 40 candles are all named states with no projection shown.' }
+    ],
+    relatedSlugs: ['ai-in-crypto-trading-reality-check', 'reading-candlestick-charts']
+  }),
+
+  article({
+    slug: 'external-ai-agents-agent-hub',
+    cluster: 'ai',
+    icon: 'chat',
+    date: '2026-11-04',
+    title: 'External AI Agents in FBT Swap: Bring Your Own Agent',
+    description:
+      'Use a third-party or your own A2A agent from inside the app. FBT Swap routes the task and shows exact consent; the intelligence and your keys stay outside it.',
+    h1: 'Your agent, your keys — FBT Swap only carries the task',
+    intro: [
+      'Inside the intent screen there is an Agents tab. It connects you to AI agents that FBT Swap does not operate: reviewed third-party providers, and an A2A-compatible agent of your own that you add by its agent card.',
+      'The design is deliberately unglamorous. FBT Swap is the interface and the task broker; the intelligence stays with the provider, and your wallet keys never enter the arrangement at all.'
+    ],
+    sections: [
+      ['A broker, not a brain', [
+        'Providers appear in the hub only from a reviewed registry: a record has to be approved, carry a decision note and state its jurisdiction before it can be shown, and business models where FBT would prepay or resell access under a master account are rejected by name. Alongside the registry you can add your own agent — bring-your-own-agent means the card you supply is validated and the tasks go where you pointed them.',
+        'Communication uses the A2A pattern — agent card, send message, read task, cancel task. If a provider reports a state the hub does not recognise, the task is shown as reconciling, never quietly promoted to completed. Kill switches exist globally and per provider, and a failed or unavailable agent is displayed as exactly that.'
+      ]],
+      ['Consent you can read before anything is sent', [
+        'Before a task is created you see a preview of exactly what will be shared, composed by the same code path the browser and the server share, so the preview and the payload cannot drift apart. What a task contains then passes through the broker to the provider you chose — that is what sending it means, and the preview exists so you can judge it before it happens.',
+        'Provider connections use OAuth with PKCE where the provider supports it. Credentials are stored sealed with AES-256-GCM, connections can be revoked, and results come back rendered as text with the provider named — never as injected HTML from a third party.'
+      ]],
+      ['The hard limits', [
+        'An external agent cannot sign for you, cannot move funds and receives no spending allowance over your wallet. Anything on-chain still goes through the normal app flows, where the quote and the 0.70% platform fee are shown and your own wallet signs — an agent can prepare and explain, it cannot execute in your place.',
+        'FBT Swap takes no commission from the hub and does not resell agent access. Paid tasks through the hub are not enabled; if you hold an account or a paid plan with a provider, that relationship is between you and that provider, under their terms and their jurisdiction — which is why the registry states it before you connect.'
+      ]],
+      ['How to judge an agent before you trust it', [
+        'Read what the consent preview actually sends, and prefer the smallest task that answers your question. Check who the provider is, where they operate and what their own terms say about the data in a task. Treat confident output the way this site treats all model output: plausible text is not evidence, and anything address-shaped or number-shaped gets verified at the primary source.',
+        'The hub can make a good agent convenient to reach. It cannot make an agent correct, and it does not convert an agent’s answer into a trade recommendation.'
+      ]]
+    ],
+    facts: [
+      ['FBT Swap’s role', 'Interface and task broker — not the agent, not the model'],
+      ['Who can appear', 'Reviewed registry providers, or your own A2A agent added by card'],
+      ['Before sending', 'A consent preview of the exact payload; credentials sealed with AES-256-GCM'],
+      ['Keys and funds', 'Never shared with the agent; every signature still happens in your wallet'],
+      ['Money', 'No hub commission, no resale; provider accounts and plans are yours with them']
+    ],
+    faqs: [
+      { q: 'Can an external agent trade with my wallet?', a: 'No. The hub gives an agent no key, no signature and no spending allowance. Any swap still goes through the normal flow where you review the quote and sign in your own wallet.' },
+      { q: 'What does FBT Swap see of my task?', a: 'The task you approve in the consent preview is routed by the broker to the provider you selected, so its content necessarily passes through that path. The preview shows the exact payload first; connections can be revoked and credentials are stored encrypted.' },
+      { q: 'Can I add my own agent?', a: 'Yes. An A2A-compatible agent can be added by its agent card; it is validated before use, and tasks then go to the endpoint you supplied under the same consent and history rules as registry providers.' }
+    ],
+    relatedSlugs: ['intent-based-trading-explained', 'automation-risks-in-defi']
   })
 ];

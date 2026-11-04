@@ -461,3 +461,117 @@ test('the market dashboard hydrates safely from the public API and fails closed'
   assert.ok(failedDoc.querySelector('.market-retry'));
   failedDom.window.close();
 });
+
+/*
+ * ─── 2026-11-04 UPGRADE GUARDS ──────────────────────────────────────────────
+ * The November upgrade closed three gaps the previous corpus had: the
+ * tokenized-assets cluster existed only in English (so no Persian hub was
+ * emitted at all), two shipped features (on-device candle forecast, external
+ * agent hub) had no page in either language, and every page shared one
+ * og:image. These tests pin the new state so a later content edit cannot
+ * silently reopen any of the three. They assert build output only; nothing
+ * here claims indexing or ranking.
+ */
+const hrefsOf = (doc) =>
+  [...doc.querySelectorAll('a[href]')].map((a) =>
+    a.getAttribute('href').replace(SITE, '').replace(/^\//, '').replace(/\/$/, '')
+  );
+const alternatesOf = (doc) =>
+  [...doc.querySelectorAll('link[rel="alternate"][hreflang]')].map((l) => ({
+    lang: l.getAttribute('hreflang'),
+    href: l.getAttribute('href')
+  }));
+
+test('the tokenized-assets cluster is complete and paired in Persian', () => {
+  const spokes = [
+    'tokenized-stocks-explained',
+    'real-world-assets-on-chain',
+    'stablecoin-types-compared',
+    'commodity-tokens-explained',
+    'tokenized-treasury-bills',
+    'nft-vs-fungible-tokens'
+  ];
+  for (const slug of spokes) {
+    const faFile = join(OUT, 'fa', slug, 'index.html');
+    assert.ok(existsSync(faFile), `Persian spoke generated: fa/${slug}`);
+    const fa = html(faFile);
+    assert.equal(fa.documentElement.lang, 'fa', `fa/${slug} declares Persian`);
+    const alts = alternatesOf(fa);
+    assert.ok(
+      alts.some((a) => a.lang === 'en' && a.href === `${SITE}/${slug}`),
+      `fa/${slug} declares its English mate`
+    );
+    assert.ok(
+      alts.some((a) => a.href === `${SITE}/fa/${slug}`),
+      `fa/${slug} references itself`
+    );
+  }
+  const hubFile = join(OUT, 'fa', 'guides', 'tokenized-assets', 'index.html');
+  assert.ok(existsSync(hubFile), 'the Persian tokenized-assets hub is emitted');
+  const hubHrefs = hrefsOf(html(hubFile));
+  for (const slug of spokes) {
+    assert.ok(hubHrefs.includes(`fa/${slug}`), `Persian hub links to fa/${slug}`);
+  }
+});
+
+test('shipped-feature guides exist as reciprocal pairs (forecast, agents, smart money)', () => {
+  const pairs = [
+    ['ai-candle-forecast-on-device', 'fa/ai-candle-forecast-on-device'],
+    ['external-ai-agents-agent-hub', 'fa/external-ai-agents-agent-hub'],
+    ['smart-money-tracking-explained', 'fa/smart-money-tracking-explained']
+  ];
+  for (const [en, fa] of pairs) {
+    for (const [self, mate] of [[en, fa], [fa, en]]) {
+      const file = join(OUT, ...self.split('/'), 'index.html');
+      assert.ok(existsSync(file), `generated: ${self}`);
+      const alts = alternatesOf(html(file));
+      assert.ok(
+        alts.some((a) => a.href === `${SITE}/${mate}`),
+        `${self} reciprocates hreflang with ${mate}`
+      );
+    }
+  }
+});
+
+test('social imagery is per-cluster and the sitemap advertises the same image', () => {
+  const ogImageOf = (slugPath) =>
+    html(join(OUT, ...slugPath.split('/'), 'index.html')).querySelector('meta[property="og:image"]').content;
+  const samples = {
+    'how-dex-aggregator-routing-works': 'slide-swap.jpg',
+    'fa/tokenized-stocks-explained': 'slide-stocks.jpg',
+    'ai-candle-forecast-on-device': 'slide-ai.jpg',
+    'fa/guides/tokenized-assets': 'slide-stocks.jpg'
+  };
+  const seen = new Set();
+  for (const [slug, file] of Object.entries(samples)) {
+    const og = ogImageOf(slug);
+    assert.ok(og.endsWith(file), `${slug} shares with its cluster art (${file}), got ${og}`);
+    seen.add(og);
+  }
+  assert.ok(seen.size >= 3, 'at least three distinct social images across clusters');
+  assert.ok(
+    html(join(OUT, 'index.html')).querySelector('meta[property="og:image"]').content.endsWith('social-card.png'),
+    'the homepage keeps the brand card'
+  );
+  const faMap = read(join(OUT, 'sitemap-fa.xml'));
+  const imageEntries = faMap.match(/<image:loc>/g) || [];
+  assert.ok(imageEntries.length >= 100, `sitemap-fa advertises images (${imageEntries.length} entries)`);
+  assert.match(faMap, /slide-stocks\.jpg/, 'sitemap image matches the tokenized pages og:image');
+});
+
+test('the history pages scope their no-forecast claim and link the forecast guide', () => {
+  const en = html(join(OUT, 'crypto-market-history-analysis', 'index.html'));
+  assert.match(en.body.textContent, /Forecasts on this screen/i);
+  assert.ok(hrefsOf(en).includes('ai-candle-forecast-on-device'), 'EN history page links the forecast guide');
+  const fa = html(join(OUT, 'fa', 'crypto-market-history-analysis', 'index.html'));
+  assert.match(fa.body.textContent, /پیش‌بینی در این صفحه/);
+  assert.ok(hrefsOf(fa).includes('fa/ai-candle-forecast-on-device'), 'FA history page links the forecast guide');
+});
+
+test('the 404 page is bilingual, noindexed and not canonicalised', () => {
+  const raw = read(join(OUT, '404.html'));
+  assert.match(raw, /این صفحه اینجا نیست/, 'Persian reader gets a Persian 404 first');
+  assert.match(raw, /That page is not here/, 'English reader is still served');
+  assert.match(raw, /noindex/, 'the 404 stays out of the index');
+  assert.doesNotMatch(raw, /rel="canonical"/, 'a 404 must not declare a canonical');
+});

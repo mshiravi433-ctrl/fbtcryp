@@ -206,7 +206,7 @@ if (!existsSync(robotsFile)) {
     'GPTBot', 'OAI-SearchBot', 'ChatGPT-User', 'ClaudeBot', 'Claude-User', 'anthropic-ai',
     'PerplexityBot', 'Perplexity-User', 'Google-Extended', 'Applebot-Extended',
     'CCBot', 'Amazonbot', 'meta-externalagent', 'DuckAssistBot', 'cohere-ai',
-    'YouBot', 'Bytespider', 'Diffbot', 'Timpibot', 'MistralAI-User'
+    'YouBot', 'Bytespider', 'Diffbot', 'Timpibot', 'MistralAI-User', 'meta-externalfetcher'
   ];
   const declared = new Set(groups.flatMap((g) => g.agents.map((a) => a.toLowerCase())));
   const missing = AI_AGENTS.filter((a) => !declared.has(a.toLowerCase()));

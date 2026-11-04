@@ -235,7 +235,8 @@ const PAGES = [
   },
   {
     slug: 'crypto-market-history-analysis',
-    dateModified: '2026-10-13',
+    dateModified: '2026-11-04',
+    relatedSlugs: ['ai-candle-forecast-on-device'],
     icon: 'history',
     topic: 'market',
     lang: 'en',
@@ -247,7 +248,7 @@ const PAGES = [
     body: [
       'Most chart tools give you a snapshot: an RSI reading, a moving average, one support line. None of that answers the question people actually ask before setting a target price — has the market been here before, and what happened?',
       'This app measures repeated behaviour across the whole series. It finds the levels price keeps returning to and counts the touches, reports how often each one held versus broke, shows the worst peak-to-trough fall in the window, and compares today’s volume to this coin’s own median rather than to some absolute number.',
-      'Nothing here forecasts anything, and that is the point. "This level was tested four times and held three" is a fact about data that already exists. "This level will hold" is a guess. A level that held four times can break on the fifth, and the app says so on the same screen.',
+      'Nothing on this screen forecasts anything, and that is the point. "This level was tested four times and held three" is a fact about data that already exists. "This level will hold" is a guess. A level that held four times can break on the fifth, and the app says so on the same screen. The token chart separately offers an on-device AI candle projection; that is a different tool, it is labelled a model estimate where it appears, and it does not turn these historical measurements into a prediction.',
       'The readings are only comparable when the window is comparable, which is why each one names its own. A fourteen-day RSI and a daily RSI over three months are not two opinions about the same question; they are answers to different questions. Volume follows the same rule: measured against the median for that same coin over the selected window rather than against a fixed threshold that means nothing for a thinly traded asset.',
       'Used that way, history does one job well. It tells you what conditions this asset has actually traded in, so the level you are about to trust is one you have watched being tested rather than one you drew yourself.'
     ],
@@ -255,7 +256,7 @@ const PAGES = [
       ['Levels', 'Counted touches, with a held-versus-broke record'],
       ['Drawdown', 'Worst peak-to-trough fall in the window'],
       ['Volume', 'Compared to this coin’s own median, not an absolute figure'],
-      ['Forecasts', 'None. Every figure describes data that already happened']
+      ['Forecasts on this screen', 'None — every figure describes data that already happened; the separate on-device AI candle projection is a labelled model estimate']
     ],
     faqs: [
       {
@@ -338,7 +339,8 @@ const PAGES = [
   },
   {
     slug: 'fa/crypto-market-history-analysis',
-    dateModified: '2026-10-13',
+    dateModified: '2026-11-04',
+    relatedSlugs: ['fa/ai-candle-forecast-on-device'],
     icon: 'history',
     topic: 'market',
     lang: 'fa',
@@ -351,7 +353,7 @@ const PAGES = [
     body: [
       'تحلیل تکنیکال وقتی مفید است که بدانی چه می‌گوید و چه نمی‌گوید. در اف‌بی‌تی سواپ، RSI، MACD، باند بولینگر، میانگین‌های متحرک، نوسان و سطح‌های حمایت و مقاومت از تاریخچهٔ واقعی قیمت محاسبه می‌شوند تا بتوانی وضعیت فعلی نمودار را در کنار هم ببینی.',
       'به‌جای اینکه یک عدد را «سیگنال قطعی» بدانی، می‌توانی ببینی اندیکاتورها چقدر با هم هم‌نظرند، قیمت چند بار به یک سطح برگشته و آن سطح چند بار نگه داشته یا شکسته شده است. حجم هم با میانهٔ همان دارایی مقایسه می‌شود، نه با یک عدد دل‌بخواهی برای همهٔ کوین‌ها.',
-      'هیچ‌کدام از این اندازه‌گیری‌ها آینده را تضمین نمی‌کنند. سطح حمایتی که چند بار دوام آورده ممکن است دفعهٔ بعد بشکند و بازارِ پرنوسان می‌تواند در چند دقیقه نتیجه را عوض کند. این صفحه برای تحقیق و فهم بهتر داده است، نه توصیهٔ مالی یا فرمان خرید و فروش.',
+      'هیچ‌کدام از این اندازه‌گیری‌ها آینده را تضمین نمی‌کنند. سطح حمایتی که چند بار دوام آورده ممکن است دفعهٔ بعد بشکند و بازارِ پرنوسان می‌تواند در چند دقیقه نتیجه را عوض کند. این صفحه برای تحقیق و فهم بهتر داده است، نه توصیهٔ مالی یا فرمان خرید و فروش. نمودار توکن جداگانه یک برون‌یابی کندلی با مدل روی خود دستگاه هم دارد؛ آن ابزار دیگری است، همان‌جا «برآورد مدل» نامیده می‌شود و این اندازه‌گیری‌های تاریخی را به پیش‌بینی تبدیل نمی‌کند.',
       'این خوانش‌ها فقط وقتی قابل مقایسه‌اند که بازهٔ آن‌ها هم یکی باشد، و به همین دلیل هر عدد بازهٔ خودش را همراه دارد. RSI چهارده‌روزه و RSI روزانه در سه ماه دو نظر دربارهٔ یک پرسش نیستند؛ پاسخ به دو پرسش متفاوت‌اند. حجم هم همین‌طور است؛ با میانهٔ خودِ همان دارایی در بازهٔ انتخابی سنجیده می‌شود، نه با یک آستانهٔ ثابت که برای دارایی کم‌معامله معنایی ندارد.',
       'با همین نگاه، تاریخچه یک کار را خوب انجام می‌دهد؛ می‌گوید این دارایی واقعاً در چه شرایطی معامله شده، تا سطحی که می‌خواهی به آن اعتماد کنی سطحی باشد که آزموده‌شدنش را دیده‌ای، نه خطی که خودت کشیده‌ای.'
     ],
@@ -359,7 +361,7 @@ const PAGES = [
       ['اندیکاتورها', 'RSI، MACD، باند بولینگر و میانگین‌های متحرک'],
       ['سطح‌ها', 'تعداد برخوردها و سابقهٔ نگه‌داشتن یا شکستن قیمت'],
       ['ریسک', 'بدترین افت از سقف تا کف در بازهٔ انتخاب‌شده'],
-      ['پیش‌بینی', 'ندارد؛ همهٔ عددها دربارهٔ داده‌ای هستند که قبلاً رخ داده است']
+      ['پیش‌بینی در این صفحه', 'ندارد؛ همهٔ عددها دادهٔ گذشته‌اند. برون‌یابی کندلی مدل روی دستگاه ابزار جداگانه‌ای است و همان‌جا برآورد مدل نامیده می‌شود']
     ],
     faqs: [
       {
@@ -1968,6 +1970,73 @@ const ALTERNATES = [
 const SOCIAL_CARD = `${SITE}/social-card.png`;
 const SOCIAL_CARD_ALT = 'FBT Swap — Non-custodial crypto swap';
 
+/*
+ * ─── PER-CLUSTER SOCIAL IMAGERY (2026-11-04) ────────────────────────────────
+ * Until now every one of the 259 indexable pages shared a single og:image —
+ * the brand card. The brand card is correct for the homepage and the flagship
+ * landing, but a share of a Solana guide or a fee explainer looked identical
+ * to a share of everything else, and image-aware surfaces (Google Images,
+ * Discover, chat previews) had one picture for the whole corpus.
+ *
+ * The art below already ships in public/landing/ for the flagship page, so
+ * this costs no new assets and no build step. Width/height are the files'
+ * real pixel sizes (measured, not assumed); if an art file is ever replaced
+ * at a different size, update its row here — og:image:width that lies about
+ * the file is worse than omitting it. Pages choose by cluster first, then by
+ * library topic; directories (library, blog hubs) and anything unmapped keep
+ * the brand card. `main()` also stamps the chosen path onto each page object
+ * so emitSitemaps() can advertise the same image in the image sitemap —
+ * one choice, three surfaces (meta tags, JSON-LD, sitemap), no drift.
+ */
+const SOCIAL_ART = {
+  swapArt: { path: '/landing/slide-swap.jpg', width: 1280, height: 720, type: 'image/jpeg' },
+  custodyArt: { path: '/landing/art-custody.jpg', width: 900, height: 675, type: 'image/jpeg' },
+  networksArt: { path: '/landing/art-networks.jpg', width: 900, height: 675, type: 'image/jpeg' },
+  signalsArt: { path: '/landing/art-signals.jpg', width: 1000, height: 750, type: 'image/jpeg' },
+  horizonArt: { path: '/landing/art-horizon.jpg', width: 1600, height: 680, type: 'image/jpeg' },
+  aiArt: { path: '/landing/slide-ai.jpg', width: 1280, height: 720, type: 'image/jpeg' },
+  futuresArt: { path: '/landing/slide-futures.jpg', width: 1280, height: 720, type: 'image/jpeg' },
+  stocksArt: { path: '/landing/slide-stocks.jpg', width: 1280, height: 720, type: 'image/jpeg' }
+};
+const SOCIAL_BY_CLUSTER = {
+  swap: SOCIAL_ART.swapArt,
+  fees: SOCIAL_ART.swapArt,
+  wallets: SOCIAL_ART.custodyArt,
+  security: SOCIAL_ART.custodyArt,
+  trust: SOCIAL_ART.custodyArt,
+  networks: SOCIAL_ART.networksArt,
+  chains: SOCIAL_ART.networksArt,
+  defi: SOCIAL_ART.futuresArt,
+  markets: SOCIAL_ART.signalsArt,
+  solana: SOCIAL_ART.horizonArt,
+  ai: SOCIAL_ART.aiArt,
+  tokenized: SOCIAL_ART.stocksArt
+};
+const SOCIAL_BY_TOPIC = {
+  swap: SOCIAL_ART.swapArt,
+  market: SOCIAL_ART.signalsArt,
+  invest: SOCIAL_ART.stocksArt,
+  learn: SOCIAL_ART.horizonArt
+};
+/** The social image for a page: { url, path, width, height, type, alt }. */
+function socialImageFor(page) {
+  const art =
+    page.kind === 'library' || page.kind === 'hub'
+      ? null
+      : SOCIAL_BY_CLUSTER[page.cluster] || SOCIAL_BY_TOPIC[page.topic] || null;
+  if (!art) {
+    return { url: SOCIAL_CARD, path: '/social-card.png', width: 1024, height: 500, type: 'image/png', alt: SOCIAL_CARD_ALT };
+  }
+  return {
+    url: `${SITE}${art.path}`,
+    path: art.path,
+    width: art.width,
+    height: art.height,
+    type: art.type,
+    alt: `${page.lang === 'fa' ? 'اف‌بی‌تی سواپ' : 'FBT Swap'} — ${page.h1}`
+  };
+}
+
 /** Escape anything that goes into HTML text or an attribute. */
 const esc = (s) =>
   String(s)
@@ -2075,6 +2144,8 @@ const CLUSTER_LABEL_BY_HUB = (() => {
  * hidden keyword block would be spam, not documentation.
  */
 function landingStructuredData(page, url) {
+  const social = socialImageFor(page);
+  const socialImageObject = { '@type': 'ImageObject', url: social.url, width: social.width, height: social.height, caption: social.alt };
   const ui = copyFor(page.lang);
   const pageId = `${url}#webpage`;
   const faqId = `${url}#faq`;
@@ -2149,13 +2220,7 @@ function landingStructuredData(page, url) {
       inLanguage: page.lang === 'fa' ? 'fa-IR' : 'en',
       isPartOf: { '@id': websiteId },
       publisher: { '@id': organizationId },
-      primaryImageOfPage: {
-        '@type': 'ImageObject',
-        url: SOCIAL_CARD,
-        width: 1024,
-        height: 500,
-        caption: SOCIAL_CARD_ALT
-      },
+      primaryImageOfPage: socialImageObject,
       ...(page.faqs?.length ? { mainEntity: { '@id': faqId } } : {})
     },
     {
@@ -2226,7 +2291,7 @@ function landingStructuredData(page, url) {
       isPartOf: { '@id': `${SITE}/${slugPath(hubSlug)}#blog` },
       mainEntityOfPage: { '@id': pageId },
       articleSection: 'Guides',
-      image: { '@type': 'ImageObject', url: SOCIAL_CARD, width: 1024, height: 500 }
+      image: socialImageObject
     });
   }
 
@@ -2255,7 +2320,7 @@ function landingStructuredData(page, url) {
             articleSection: clusterLink.label
           }
         : {}),
-      image: { '@type': 'ImageObject', url: SOCIAL_CARD, width: 1024, height: 500 }
+      image: socialImageObject
     });
   }
 
@@ -2836,6 +2901,7 @@ function render(page) {
     : '';
 
   const structuredData = landingStructuredData(page, url);
+  const social = socialImageFor(page);
 
   /*
    * The redirect is a <link rel="canonical"> plus a normal link, NOT a
@@ -2866,7 +2932,8 @@ function render(page) {
 ${hreflang}
 <meta name="robots" content="${INDEXABLE_ROBOTS}">
 <meta name="theme-color" content="#05060d">
-<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
 <meta property="og:type" content="${isPost ? 'article' : 'website'}">
@@ -2878,18 +2945,18 @@ ${isPost ? `<meta property="article:published_time" content="${esc(page.datePubl
 <meta property="og:title" content="${esc(page.title)}">
 <meta property="og:description" content="${esc(page.description)}">
 <meta property="og:url" content="${esc(url)}">
-<meta property="og:image" content="${esc(SOCIAL_CARD)}">
-<meta property="og:image:secure_url" content="${esc(SOCIAL_CARD)}">
-<meta property="og:image:type" content="image/png">
-<meta property="og:image:width" content="1024">
-<meta property="og:image:height" content="500">
-<meta property="og:image:alt" content="${esc(SOCIAL_CARD_ALT)}">
+<meta property="og:image" content="${esc(social.url)}">
+<meta property="og:image:secure_url" content="${esc(social.url)}">
+<meta property="og:image:type" content="${esc(social.type)}">
+<meta property="og:image:width" content="${social.width}">
+<meta property="og:image:height" content="${social.height}">
+<meta property="og:image:alt" content="${esc(social.alt)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@CompanyFbt">
 <meta name="twitter:title" content="${esc(page.title)}">
 <meta name="twitter:description" content="${esc(page.description)}">
-<meta name="twitter:image" content="${esc(SOCIAL_CARD)}">
-<meta name="twitter:image:alt" content="${esc(SOCIAL_CARD_ALT)}">
+<meta name="twitter:image" content="${esc(social.url)}">
+<meta name="twitter:image:alt" content="${esc(social.alt)}">
 <script type="application/ld+json">${structuredData}</script>
 
 ${
@@ -3973,7 +4040,7 @@ function main() {
    * listed with no <lastmod>, which is the honest answer.
    */
   const sitemapExtra = [
-    { slug: '', title: 'FBT Swap', description: '', changefreq: 'daily', priority: '1.0', lang: 'fa', dateModified: HOME_CONTENT_UPDATED, languageAlternates: [{ lang: 'fa-IR', url: `${SITE}/` }, { lang: 'x-default', url: `${SITE}/` }] },
+    { slug: '', title: 'FBT Swap', description: '', changefreq: 'daily', priority: '1.0', lang: 'fa', dateModified: HOME_CONTENT_UPDATED, socialImage: '/social-card.png', languageAlternates: [{ lang: 'fa-IR', url: `${SITE}/` }, { lang: 'x-default', url: `${SITE}/` }] },
     {
       slug: V2_PAGE.slug,
       title: V2_PAGE.title,
@@ -3981,10 +4048,18 @@ function main() {
       changefreq: V2_PAGE.changefreq,
       priority: V2_PAGE.priority,
       dateModified: V2_PAGE.dateModified,
+      socialImage: '/social-card.png',
       languageAlternates: ['en', 'fa', 'x-default'].map((lang) => ({ lang, url: `${SITE}/${V2_PAGE.slug}` })),
       lang: 'en'
     }
   ];
+
+  /* One social-image choice, advertised in the sitemap as well as in the
+     page head. Stamped here because render() and landingStructuredData()
+     resolve it through socialImageFor() directly, while emitSitemaps() only
+     receives page objects — the stamp is the same function's answer, so the
+     sitemap can never advertise a different image than the page declares. */
+  for (const page of PAGES) page.socialImage = socialImageFor(page).path;
 
   const counts = emitSitemaps({ out: OUT, site: SITE, slugPath, pages: PAGES, extra: sitemapExtra, alternates: ALTERNATES });
   emitRobots({ out: OUT, site: SITE });

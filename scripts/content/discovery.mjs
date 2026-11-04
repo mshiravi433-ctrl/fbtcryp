@@ -9,7 +9,10 @@ export const BRAND_ALIASES = [
 ];
 export const INDEXABLE_ROBOTS = 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1';
 // An editorial date: change only when the homepage/product prose changes.
-export const HOME_CONTENT_UPDATED = '2026-10-13';
+// 2026-11-04: the home hub gained twelve real pages (Persian tokenized-assets
+// cluster, on-device forecast pair, external-agents pair, Persian smart-money
+// guide), so the homepage's published map genuinely changed.
+export const HOME_CONTENT_UPDATED = '2026-11-04';
 
 export const DISCOVERY_COPY = {
   en: {
