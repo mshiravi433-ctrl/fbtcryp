@@ -331,7 +331,7 @@ function FcAction({ label, icon = 'retry', tone = 'ghost', testId, onClick, ...r
  * row is what keeps the download prompt, the progress state, the error state
  * and the result badge looking like ONE component rather than four boxes.
  */
-function FcHead({ tag, tagTone = 'is-local', model = '', busy = false, children }) {
+function FcHead({ tag, tagTone = 'is-local', model = '', busy = false, onCollapse, collapseLabel, children }) {
   return (
     <div className="pc-fc-head">
       <span className={`pc-fc-mark${busy ? ' is-busy' : ''}`} aria-hidden="true"><AiSparkIcon /></span>
@@ -339,12 +339,32 @@ function FcHead({ tag, tagTone = 'is-local', model = '', busy = false, children 
         <span className={`pc-fc-tag ${tagTone}`}>{tag}</span>
         {model ? <span className="pc-fc-model mono" dir="ltr">{model}</span> : null}
       </div>
-      {children || busy ? (
-        <div className="pc-fc-tools">
-          {busy ? <span className="pc-spinner" aria-hidden="true" /> : null}
-          {children}
-        </div>
-      ) : null}
+      <div className="pc-fc-tools">
+        {busy ? <span className="pc-spinner" aria-hidden="true" /> : null}
+        {children}
+        {/*
+         * The way back out of the peek. Without it the ONLY control that
+         * removes the card is the toolbar chip — which the card may be
+         * sitting on top of, on the very screens where the peek exists.
+         * A panel that covers its own off-switch is a trap, not a HUD.
+         */}
+        {onCollapse ? (
+          <button
+            type="button"
+            className="pc-fc-btn pc-fc-btn--icon"
+            onClick={onCollapse}
+            aria-label={collapseLabel}
+            title={collapseLabel}
+            data-testid="forecast-collapse"
+          >
+            <span className="pc-fc-btn-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </span>
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -413,13 +433,48 @@ export default function TokenChart({
   const closeBtnRef = useRef(null);
   const dialogRef = useRef(null);
   const [expanded, setExpanded] = useState(false);
-  /* A short landscape terminal has no safe place for the forecast controls or
-     their result card. Track the actual viewport so rotation can switch the
-     feature off instead of letting an absolutely-positioned card cover tools. */
-  const [shortLandscape, setShortLandscape] = useState(() => (
-    typeof window !== 'undefined' && window.innerWidth > window.innerHeight && window.innerHeight <= 640
+  /*
+   * ─── THE AI BUTTON EXISTS IN TWO ROOMS. NOT IN ONE, NOT IN THREE ────────
+   * «دکمه AI باید باشد حتما، اما وقتی دکمه بک می‌زنی و صفحه شمعی در حالت
+   *  عمودی هست نباید باشد».
+   *
+   *   1. the INLINE card on the token page — while the terminal is CLOSED;
+   *   2. the full-screen terminal — always, whether the browser agreed to
+   *      rotate it (landscape) or refused (portrait, `orientation.lock`
+   *      rejected, Esc out of native fullscreen).
+   *
+   * …and nowhere else. Exactly one live toggle on screen at a time, and the
+   * terminal never has zero. The previous rule treated a short landscape
+   * terminal as a place where the forecast could not exist at all: opening
+   * the chart on a phone made the AI chip — and any projection already on
+   * the candles — vanish, and rotating back brought it up switched OFF. The
+   * reader read that as «دکمه‌اش را محو کردی، برگردون», correctly. The chip is
+   * one row tall and never needed the room the rule was reserving; the height
+   * problem was the RESULT CARD, and that is now solved by the card alone
+   * (`forecastCollapsed` + the `pc-fs-hud` block in pro-chart.css).
+   */
+  /*
+   * A collapsed card is a PEEK: two lines and the number it exists for. Only
+   * a SHORT viewport starts that way — there the terminal genuinely cannot
+   * spare six rows — and the reader's own chevron then wins until the screen
+   * actually changes shape (see the `viewKey` effect below). On a tall screen
+   * the full card is shown, because hiding detail it can afford is not a fix.
+   * The CARD changes size; the FEATURE never changes availability.
+   */
+  const [peekChoice, setPeekChoice] = useState(null);
+  const [shortViewport, setShortViewport] = useState(() => (
+    typeof window !== 'undefined' && Number.isFinite(window.innerHeight) ? window.innerHeight <= 640 : false
   ));
-  const forecastLandscapeDisabled = expanded && shortLandscape;
+  const [viewKey, setViewKey] = useState(() => (
+    typeof window !== 'undefined'
+      ? `${window.innerWidth}x${window.innerHeight}${window.innerHeight > window.innerWidth ? 'p' : 'l'}`
+      : ''
+  ));
+  const forecastCollapsed = typeof peekChoice === 'boolean' ? peekChoice : shortViewport;
+  /* Room 1 is a page that scrolls: the full card costs a scroll there, not a
+     candle. It is whole unless the reader collapses it themselves, on the
+     device they are holding. */
+  const inlinePeekClass = peekChoice === true ? ' pc-fc--peek' : '';
   /* Whichever chart is on screen owns the imperative handle. */
   const chartRef = expanded ? fsChartRef : inlineChartRef;
   const [prefs, setPrefs] = useState(loadPrefs);
@@ -485,10 +540,10 @@ export default function TokenChart({
    * "no forecast yet", whatever produced it.
    */
   const forecastData = forecastResult?.key === forecastKey ? forecastResult.data : null;
-  const forecast = !forecastLandscapeDisabled && forecastOn && Array.isArray(forecastData?.candles) && forecastData.candles.length
+  const forecast = forecastOn && Array.isArray(forecastData?.candles) && forecastData.candles.length
     ? forecastData
     : null;
-  const forecastBusy = !forecastLandscapeDisabled && forecastOn && ['checking', 'downloading', 'preparing', 'running'].includes(forecastPhase);
+  const forecastBusy = forecastOn && ['checking', 'downloading', 'preparing', 'running'].includes(forecastPhase);
   // eslint-disable-next-line no-unused-vars
   const forecastState = !forecastOn
     ? 'idle'
@@ -840,17 +895,55 @@ export default function TokenChart({
     return () => query.removeListener?.(read);
   }, []);
 
+  /*
+   * One listener for the two facts the layout needs: is the viewport SHORT
+   * (no room for a six-row card) and did it actually change (a rotation, a
+   * resize, leaving native fullscreen, a split-screen drag). Both are read
+   * from the real viewport rather than guessed inside the tap handler, so a
+   * browser that refuses `orientation.lock` — iOS, every embedded frame —
+   * still gets the same layout decision as one that accepts it.
+   *
+   * `viewKey` also re-arms the card's open/collapsed choice: a choice made
+   * on a portrait phone must not force a collapsed card onto a wide desktop,
+   * and a preference saved on one coin must not leak onto another.
+   */
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
-    const query = window.matchMedia('(orientation: landscape) and (max-height: 640px)');
-    const read = () => setShortLandscape(Boolean(query.matches));
+    if (typeof window === 'undefined') return undefined;
+    const read = () => {
+      const height = Number.isFinite(window.innerHeight) ? window.innerHeight : 0;
+      const width = Number.isFinite(window.innerWidth) ? window.innerWidth : 0;
+      setShortViewport(height > 0 && height <= 640);
+      setViewKey(`${width}x${height}${height > width ? 'p' : 'l'}`);
+    };
     read();
-    if (query.addEventListener) {
-      query.addEventListener('change', read);
-      return () => query.removeEventListener('change', read);
-    }
-    query.addListener?.(read);
-    return () => query.removeListener?.(read);
+    window.addEventListener('resize', read);
+    window.addEventListener('orientationchange', read);
+    window.addEventListener('fullscreenchange', read);
+    return () => {
+      window.removeEventListener('resize', read);
+      window.removeEventListener('orientationchange', read);
+      window.removeEventListener('fullscreenchange', read);
+    };
+  }, []);
+
+  /* A new screen may contradict a choice made for the previous one — the
+     explicit choice loses, the layout rule wins, and the next press is
+     remembered again. So an OPEN card never leaves a reader stuck with a
+     two-line sliver after a rotation, and a collapsed one never stays
+     collapsed on a desktop that can show the whole thing. */
+  useEffect(() => {
+    setPeekChoice(null);
+  }, [viewKey]);
+
+  /*
+   * A press pins the card until the viewport changes. Deliberately NOT
+   * persisted: a preference saved while testing on a laptop must not decide
+   * the height of the card on a phone, and «همیشه بسته باشد» is not a state
+   * this card can be allowed to reach — it would hide the projection the
+   * reader just paid a 33 MB download for.
+   */
+  const setForecastPeek = useCallback((collapsed) => {
+    setPeekChoice(collapsed);
   }, []);
 
   /*
@@ -863,19 +956,19 @@ export default function TokenChart({
    */
   const rotationHint = expanded && portrait ? t('coin.pro.rotateHint') : '';
 
-  /* Rotation is a real feature boundary, not merely a CSS hiding rule. Stop
-     any download/inference, remove projected candles and leave the feature
-     OFF when the reader returns to portrait. The downloaded model remains in
-     Cache Storage, so explicitly enabling it again does not repeat a download. */
-  useEffect(() => {
-    if (!forecastLandscapeDisabled || !forecastOn) return;
-    stopForecastWork();
-    setForecastOn(false);
-    setForecastResult(null);
-    setForecastProgress(null);
-    setForecastPhase('idle');
-    setForecastError('');
-  }, [forecastLandscapeDisabled, forecastOn, stopForecastWork]);
+  /*
+   * NOTHING HERE TURNS THE FORECAST OFF ANY MORE.
+   *
+   * There used to be an effect that, on rotation into short landscape,
+   * aborted the run, dropped the projection and set the toggle to OFF —
+   * "rotation is a real feature boundary". It was the other half of the
+   * report: a projection the reader asked for disappeared the moment the
+   * screen changed shape, and came back switched off. The feature is
+   * available in every orientation now; what changes is only how much of the
+   * RESULT CARD is drawn (`forecastCollapsed`), never whether the model runs.
+   * Work already in flight is aborted for a real reason — coin, range or
+   * horizon changed — in the pipeline effect above.
+   */
 
   async function openExpanded() {
     setExpanded(true);
@@ -1118,157 +1211,181 @@ export default function TokenChart({
     />
   );
 
-  let forecastPanel = null;
-  if (forecastOn && forecastPhase === 'needs-download') {
-    forecastPanel = (
-      <div className="pc-fc pc-fc--setup" dir="auto" data-testid="forecast-download">
-        <FcHead
-          tag={t('coin.pro.forecastLocalTag')}
-          model={forecastEstimate?.webgpu ? 'Kronos-mini · WebGPU' : 'Kronos-mini · WASM'}
-        />
-        <div className="pc-fc-summary">
-          <span data-testid="forecast-download-size">
-            {estimateTotal
-              ? t('coin.pro.forecastDownloadSize', { size: fmtBytes(estimateTotal) })
-              : t('coin.pro.forecastHostMissing')}
-          </span>
-          {forecastEstimate?.modelBytes ? (
-            <span className="pc-fc-bytes mono" dir="ltr">
-              {fmtBytes(forecastEstimate.modelBytes)} + {fmtBytes(forecastEstimate.runtimeBytes)}
-            </span>
-          ) : null}
-        </div>
-        {estimateTotal ? <div className="pc-fc-warning">{t('coin.pro.forecastDownloadWhy')}</div> : null}
-        <div className="pc-fc-actions">
-          <FcAction
-            icon="download"
-            tone="primary"
-            label={t('coin.pro.forecastDownloadStart')}
-            onClick={downloadForecastModel}
-            disabled={!estimateTotal}
-            testId="forecast-download-start"
+  /*
+   * The peek contract, in one place: a collapsed card keeps its identity row
+   * and its PRIMARY number (and its primary action — the download button is
+   * a decision, not detail), drops the prose, and grows a chevron that puts
+   * the rest back. `pc-fc--peek` is the CSS half of that contract.
+   */
+  const peekToggle = (collapsed) => ({
+    onCollapse: () => setForecastPeek(!collapsed),
+    collapseLabel: t(collapsed ? 'coin.pro.forecastExpand' : 'coin.pro.forecastPeek')
+  });
+
+  /* `buildForecastPanel(peekClass)` — one card, two placements. The terminal
+     passes its own peek class (which follows the viewport) and the token page
+     passes the reader's own choice; nothing else differs between the two. */
+  const buildForecastPanel = (peekClass) => {
+    const isPeek = Boolean(peekClass && peekClass.includes('pc-fc--peek'));
+    let forecastPanel = null;
+    if (forecastOn && forecastPhase === 'needs-download') {
+      forecastPanel = (
+        <div className={`pc-fc pc-fc--setup${peekClass}`} dir="auto" data-testid="forecast-download">
+          <FcHead
+            tag={t('coin.pro.forecastLocalTag')}
+            model={forecastEstimate?.webgpu ? 'Kronos-mini · WebGPU' : 'Kronos-mini · WASM'}
+            {...peekToggle(isPeek)}
           />
-          <FcAction icon="stop" label={t('coin.pro.forecastCancel')} onClick={toggleForecast} />
+          <div className="pc-fc-summary">
+            <span data-testid="forecast-download-size">
+              {estimateTotal
+                ? t('coin.pro.forecastDownloadSize', { size: fmtBytes(estimateTotal) })
+                : t('coin.pro.forecastHostMissing')}
+            </span>
+            {forecastEstimate?.modelBytes ? (
+              <span className="pc-fc-bytes mono" dir="ltr">
+                {fmtBytes(forecastEstimate.modelBytes)} + {fmtBytes(forecastEstimate.runtimeBytes)}
+              </span>
+            ) : null}
+          </div>
+          {estimateTotal ? <div className="pc-fc-warning">{t('coin.pro.forecastDownloadWhy')}</div> : null}
+          <div className="pc-fc-actions">
+            <FcAction
+              icon="download"
+              tone="primary"
+              label={t('coin.pro.forecastDownloadStart')}
+              onClick={downloadForecastModel}
+              disabled={!estimateTotal}
+              testId="forecast-download-start"
+            />
+            <FcAction icon="stop" label={t('coin.pro.forecastCancel')} onClick={toggleForecast} />
+          </div>
+          {telegramHint}
+          {lowMemoryHint}
+          <div className="pc-fc-disc">{t('coin.pro.forecastDisclaimer')}</div>
         </div>
-        {telegramHint}
-        {lowMemoryHint}
-        <div className="pc-fc-disc">{t('coin.pro.forecastDisclaimer')}</div>
-      </div>
-    );
-  } else if (forecastOn && forecastPhase === 'downloading') {
-    forecastPanel = (
-      <div className="pc-fc pc-fc--setup" dir="auto" data-testid="forecast-progress">
-        <FcHead tag={t('coin.pro.forecastLocalTag')} model={forecastProgress?.file || 'model'} busy />
-        <div className="pc-fc-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent}>
-          <span style={{ width: `${Math.max(2, progressPercent)}%` }} />
+      );
+    } else if (forecastOn && forecastPhase === 'downloading') {
+      forecastPanel = (
+        <div className={`pc-fc pc-fc--setup${peekClass}`} dir="auto" data-testid="forecast-progress">
+          <FcHead
+            tag={t('coin.pro.forecastLocalTag')}
+            model={forecastProgress?.file || 'model'}
+            busy
+            {...peekToggle(isPeek)}
+          />
+          <div className="pc-fc-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent}>
+            <span style={{ width: `${Math.max(2, progressPercent)}%` }} />
+          </div>
+          <div className="pc-fc-summary">
+            <span>
+              {t('coin.pro.forecastDownloadProgress', {
+                percent: progressPercent,
+                loaded: fmtBytes(forecastProgress?.loaded || 0),
+                total: fmtBytes(forecastProgress?.total || estimateTotal)
+              })}
+            </span>
+          </div>
+          <div className="pc-fc-actions">{cancelButton}</div>
         </div>
-        <div className="pc-fc-summary">
-          <span>
-            {t('coin.pro.forecastDownloadProgress', {
-              percent: progressPercent,
-              loaded: fmtBytes(forecastProgress?.loaded || 0),
-              total: fmtBytes(forecastProgress?.total || estimateTotal)
-            })}
-          </span>
+      );
+    } else if (forecastOn && (forecastPhase === 'preparing' || forecastPhase === 'checking')) {
+      forecastPanel = (
+        <div className={`pc-fc pc-fc--setup${peekClass}`} dir="auto" role="status" aria-live="polite" data-testid="forecast-preparing">
+          <FcHead tag={t('coin.pro.forecastLocalTag')} busy {...peekToggle(isPeek)} />
+          <div className="pc-fc-summary"><span>{t('coin.pro.forecastPreparing')}</span></div>
+          <div className="pc-fc-disc">{t('coin.pro.forecastLocalNote')}</div>
         </div>
-        <div className="pc-fc-actions">{cancelButton}</div>
-      </div>
-    );
-  } else if (forecastOn && (forecastPhase === 'preparing' || forecastPhase === 'checking')) {
-    forecastPanel = (
-      <div className="pc-fc pc-fc--setup" dir="auto" role="status" aria-live="polite" data-testid="forecast-preparing">
-        <FcHead tag={t('coin.pro.forecastLocalTag')} busy />
-        <div className="pc-fc-summary"><span>{t('coin.pro.forecastPreparing')}</span></div>
-        <div className="pc-fc-disc">{t('coin.pro.forecastLocalNote')}</div>
-      </div>
-    );
-  } else if (forecastOn && forecastPhase === 'running') {
-    forecastPanel = (
-      <div className="pc-fc pc-fc--setup" dir="auto" role="status" aria-live="polite" data-testid="forecast-running">
-        <FcHead tag={t('coin.pro.forecastLocalTag')} busy />
-        <div className="pc-fc-summary"><span>{t('coin.pro.forecastRunning')}</span></div>
-        <div className="pc-fc-actions">{cancelButton}</div>
-      </div>
-    );
-  } else if (forecastOn && (forecastPhase === 'unsupported' || forecastPhase === 'needs-history'
-    || forecastPhase === 'error' || forecastPhase === 'cancelled')) {
-    forecastPanel = (
-      <div className="pc-fc pc-fc--setup" dir="auto" role="status" data-testid="forecast-error">
-        <FcHead tag={t('coin.pro.forecastLocalTag')} />
-        <div className={`pc-fc-note${forecastPhase === 'cancelled' ? '' : ' is-error'}`}>
-          {forecastPhase === 'cancelled'
-            ? t('coin.pro.forecastCancelled')
-            : forecastPhase === 'unsupported'
-              ? t('coin.pro.forecastUnsupported')
-              : forecastPhase === 'needs-history'
-                ? t('coin.pro.forecastShortHistory', { count: MIN_CANDLES })
-                : t(forecastErrorKey)}
+      );
+    } else if (forecastOn && forecastPhase === 'running') {
+      forecastPanel = (
+        <div className={`pc-fc pc-fc--setup${peekClass}`} dir="auto" role="status" aria-live="polite" data-testid="forecast-running">
+          <FcHead tag={t('coin.pro.forecastLocalTag')} busy {...peekToggle(isPeek)} />
+          <div className="pc-fc-summary"><span>{t('coin.pro.forecastRunning')}</span></div>
+          <div className="pc-fc-actions">{cancelButton}</div>
         </div>
-        {telegramHint}
-        {forecastPhase === 'unsupported' ? <div className="pc-fc-warning">{t('coin.pro.forecastLocalNote')}</div> : null}
-        <div className="pc-fc-actions">
-          {forecastPhase !== 'unsupported' && forecastPhase !== 'needs-history' ? (
+      );
+    } else if (forecastOn && (forecastPhase === 'unsupported' || forecastPhase === 'needs-history'
+      || forecastPhase === 'error' || forecastPhase === 'cancelled')) {
+      forecastPanel = (
+        <div className={`pc-fc pc-fc--setup${peekClass}`} dir="auto" role="status" data-testid="forecast-error">
+          <FcHead tag={t('coin.pro.forecastLocalTag')} {...peekToggle(isPeek)} />
+          <div className={`pc-fc-note${forecastPhase === 'cancelled' ? '' : ' is-error'}`}>
+            {forecastPhase === 'cancelled'
+              ? t('coin.pro.forecastCancelled')
+              : forecastPhase === 'unsupported'
+                ? t('coin.pro.forecastUnsupported')
+                : forecastPhase === 'needs-history'
+                  ? t('coin.pro.forecastShortHistory', { count: MIN_CANDLES })
+                  : t(forecastErrorKey)}
+          </div>
+          {telegramHint}
+          {forecastPhase === 'unsupported' ? <div className="pc-fc-warning">{t('coin.pro.forecastLocalNote')}</div> : null}
+          <div className="pc-fc-actions">
+            {forecastPhase !== 'unsupported' && forecastPhase !== 'needs-history' ? (
+              <FcAction
+                label={t('coin.pro.forecastRetry')}
+                onClick={retryForecast}
+                testId="forecast-retry"
+              />
+            ) : null}
+          </div>
+        </div>
+      );
+    } else if (forecast) {
+      /* The READY state shares the same compact anatomy as setup/error states —
+         and it is reachable in EVERY terminal now, portrait included. When the
+         viewport cannot spare six rows it collapses to its identity row plus
+         the one number it exists for, with a chevron for the rest. */
+      forecastPanel = (
+        <div className={`pc-fc pc-fc--ambient${peekClass}`} dir="auto" data-testid="forecast-badge">
+          <FcHead
+            tag={`${t('coin.pro.forecastLocalTag')} · ${t('coin.pro.forecastKronos')}`}
+            tagTone="is-model is-local"
+            model={String(forecast.model || '').replace(/^.*\//, '')}
+            {...peekToggle(isPeek)}
+          >
             <FcAction
               label={t('coin.pro.forecastRetry')}
               onClick={retryForecast}
-              testId="forecast-retry"
+              testId="forecast-refresh"
             />
+          </FcHead>
+          <div className="pc-fc-summary">
+            <span>{t('coin.pro.forecastTarget')} <b className="mono" dir="ltr">{fmtPrice(forecastLast?.c)}</b></span>
+            {forecastChange != null ? <span className={forecastChange >= 0 ? 'up' : 'down'} dir="ltr">{forecastChange >= 0 ? '+' : ''}{forecastChange.toFixed(2)}%</span> : null}
+            <span>{t('coin.pro.forecastHorizonCount', { count: forecastCandles.length })}</span>
+          </div>
+          {forecastMeta ? (
+            <div className="pc-fc-meta mono" dir="ltr" data-testid="forecast-meta">
+              {String(forecastMeta.backend || '').toUpperCase()} · {forecastMeta.ms} ms · {t('coin.pro.forecastWindowBars', { count: forecastMeta.window })}
+              {forecastMeta.cached ? ' · cache' : ''}
+            </div>
           ) : null}
-        </div>
-      </div>
-    );
-  } else if (forecast) {
-    /* The READY state shares the same compact anatomy as setup/error states.
-       Short landscape never reaches this card: forecastLandscapeDisabled has
-       already removed the whole feature from that terminal. */
-    forecastPanel = (
-      <div className="pc-fc pc-fc--ambient" dir="auto" data-testid="forecast-badge">
-        <FcHead
-          tag={`${t('coin.pro.forecastLocalTag')} · ${t('coin.pro.forecastKronos')}`}
-          tagTone="is-model is-local"
-          model={String(forecast.model || '').replace(/^.*\//, '')}
-        >
-          <FcAction
-            label={t('coin.pro.forecastRetry')}
-            onClick={retryForecast}
-            testId="forecast-refresh"
-          />
-        </FcHead>
-        <div className="pc-fc-summary">
-          <span>{t('coin.pro.forecastTarget')} <b className="mono" dir="ltr">{fmtPrice(forecastLast?.c)}</b></span>
-          {forecastChange != null ? <span className={forecastChange >= 0 ? 'up' : 'down'} dir="ltr">{forecastChange >= 0 ? '+' : ''}{forecastChange.toFixed(2)}%</span> : null}
-          <span>{t('coin.pro.forecastHorizonCount', { count: forecastCandles.length })}</span>
-        </div>
-        {forecastMeta ? (
-          <div className="pc-fc-meta mono" dir="ltr" data-testid="forecast-meta">
-            {String(forecastMeta.backend || '').toUpperCase()} · {forecastMeta.ms} ms · {t('coin.pro.forecastWindowBars', { count: forecastMeta.window })}
-            {forecastMeta.cached ? ' · cache' : ''}
+          {forecastMeta?.repaired ? (
+            <div className="pc-fc-warning">{t('coin.pro.forecastRepaired', { count: forecastMeta.repaired })}</div>
+          ) : null}
+          <div className="pc-fc-warning">{t('coin.pro.forecastOnDeviceNote')}</div>
+          <div className="pc-fc-foot">
+            <div className="pc-fc-actions">
+              <FcAction
+                icon="trash"
+                tone="danger"
+                label={t('coin.pro.forecastDelete')}
+                onClick={deleteForecastModel}
+                testId="forecast-delete"
+              />
+            </div>
+            <div className="pc-fc-disc">{t('coin.pro.forecastDisclaimer')}</div>
           </div>
-        ) : null}
-        {forecastMeta?.repaired ? (
-          <div className="pc-fc-warning">{t('coin.pro.forecastRepaired', { count: forecastMeta.repaired })}</div>
-        ) : null}
-        <div className="pc-fc-warning">{t('coin.pro.forecastOnDeviceNote')}</div>
-        <div className="pc-fc-foot">
-          <div className="pc-fc-actions">
-            <FcAction
-              icon="trash"
-              tone="danger"
-              label={t('coin.pro.forecastDelete')}
-              onClick={deleteForecastModel}
-              testId="forecast-delete"
-            />
-          </div>
-          <div className="pc-fc-disc">{t('coin.pro.forecastDisclaimer')}</div>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  /* Do not leave even one frame of the old HUD mounted while the rotation
-     effect above is turning the feature off. */
-  if (forecastLandscapeDisabled) forecastPanel = null;
-  const forecastNotice = !forecastLandscapeDisabled && forecastOn && forecastEngineFailed ? t('coin.pro.forecastCanvasUnavailable') : '';
+    return forecastPanel;
+  };
+  const forecastPanel = buildForecastPanel(forecastCollapsed ? ' pc-fc--peek' : '');
+  const forecastNotice = forecastOn && forecastEngineFailed ? t('coin.pro.forecastCanvasUnavailable') : '';
 
   const toolbar = (
     <div className="pc-toolbar" role="toolbar" aria-label={t('coin.pro.tools')}>
@@ -1310,7 +1427,7 @@ export default function TokenChart({
         <Chip active={settings.log} onClick={() => toggleSetting('log')} title={t('coin.pro.logHint')}>{settings.log ? t('coin.pro.log') : t('coin.pro.linear')}</Chip>
         <Chip active={settings.grid} onClick={() => toggleSetting('grid')}>{t('coin.pro.grid')}</Chip>
       </div>
-      {!forecastLandscapeDisabled ? <div className="pc-toolgroup pc-toolgroup--forecast">
+      <div className="pc-toolgroup pc-toolgroup--forecast">
         <Chip
           active={forecastOn}
           onClick={toggleForecast}
@@ -1330,7 +1447,7 @@ export default function TokenChart({
             <option value="12">12</option><option value="24">24</option><option value="48">48</option>
           </select>
         </label> : null}
-      </div> : null}
+      </div>
       <div className="pc-toolgroup pc-toolgroup--actions">
         <Chip onClick={() => chartRef.current?.zoom(0.62)} title={t('coin.pro.zoomIn')}><span aria-hidden="true">＋</span></Chip>
         <Chip onClick={() => chartRef.current?.zoom(1.6)} title={t('coin.pro.zoomOut')}><span aria-hidden="true">－</span></Chip>
@@ -1448,11 +1565,25 @@ export default function TokenChart({
                 </div>
               ) : null}
             </div>
-            {forecastPanel}
             {statsStrip}
           </>
         )}
       </div>
+
+      {/*
+       * THE AI CARD, IN THE FLOW — NEVER OVER THE CHART OR THE TOOLBAR.
+       *
+       * The two reports it has to satisfy at once: «وقتی صفحه با نمودارها
+       * تداخل می‌کند و روی هم می‌افتد» and «دکمه AI باید باشد، برش گردون».
+       * A floating HUD cannot satisfy the first one — that is exactly how it
+       * ended up over the toolbar before — so the card stays a normal flow
+       * row and the ROOM is found by making it small:
+       * a two-line peek while the viewport is short (and capped + internally
+       * scrollable when the reader expands it), the whole card when there is
+       * height to spare. It keeps its own `pc-fs-hud` wrapper so the cap can
+       * be expressed in CSS without touching the card's own anatomy.
+       */}
+      {forecastPanel ? <div className="pc-fs-hud">{forecastPanel}</div> : null}
 
       {hint ? <div className="pc-fs-hint">{hint}</div> : null}
       {rotationHint ? <div className="pc-fs-hint pc-fs-hint--soft">{rotationHint}</div> : null}
@@ -1475,8 +1606,16 @@ export default function TokenChart({
       <div className="pc-inline-head">
         {legend}
         <div className="pc-inline-actions">
+          {/*
+            * ROOM 1 of 2 — the token page. One chip, never two: while the
+            * terminal is open this card is behind its overlay, so the chip
+            * you can press is the one in the toolbar (room 2). Rendering both
+            * would mean two elements owning the same `forecast-toggle` and a
+            * duplicate result card in the DOM.
+            */}
           {!expanded ? <Chip active={forecastOn} onClick={toggleForecast} tone="fc" disabled={!hasCandles}
             busy={forecastBusy} title={t('coin.pro.forecastHint')} data-testid="forecast-toggle">
+            {forecastBusy ? <span className="pc-spinner" aria-hidden="true" /> : null}
             {t('coin.pro.forecast')}
           </Chip> : null}
           {liveBadge}
@@ -1533,7 +1672,12 @@ export default function TokenChart({
         )}
       </div>
 
-      {!expanded && forecastPanel}
+      {/* Room 1's result card. While the terminal is open the same card is
+          drawn as its HUD instead — one card on screen, never two. It is built
+          from the same state, but with the INLINE peek rule (`inlinePeekClass`)
+          rather than the terminal's, because a page that scrolls can afford a
+          six-row card and a 390px-tall terminal cannot. */}
+      {!expanded ? buildForecastPanel(inlinePeekClass) : null}
       {!expanded && forecastNotice ? <div className="pc-inline-note" role="status" aria-live="polite">
         {forecastNotice}
       </div> : null}

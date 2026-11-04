@@ -307,6 +307,8 @@
       "range1Y": "1Y",
       "forecast": "AI forecast",
       "forecastHint": "Show a model scenario for upcoming candles. The model runs on this device — candles never leave it, and nothing is shown unless the model actually ran.",
+      "forecastExpand": "Show the whole forecast card",
+      "forecastPeek": "Collapse the forecast card",
       "forecastLoading": "Computing the projection… You can turn the button off to cancel.",
       "forecastUnavailable": "The forecast could not be loaded. Check your connection and try again.",
       "forecastKronos": "Kronos",

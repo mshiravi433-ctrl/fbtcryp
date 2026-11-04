@@ -451,7 +451,9 @@
       "forecastLocalNote": "Tarayıcınızda hesaplandı — mumlar hiçbir yere yüklenmez.",
       "forecastOnDeviceNote": "Sunucumuzda değil, cihazınızda hesaplandı.",
       "forecastWindowBars": "{{count}} mum geçmiş",
-      "forecastRepaired": "{{count}} mum geçerli OHLC'ye düzeltildi."
+      "forecastRepaired": "{{count}} mum geçerli OHLC'ye düzeltildi.",
+      "forecastExpand": "Kartın tamamını göster",
+      "forecastPeek": "Kartı daralt"
     },
     "chartCandle": "Mumlar",
     "chartLine": "Çizgi",

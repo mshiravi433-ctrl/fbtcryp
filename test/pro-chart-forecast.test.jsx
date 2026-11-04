@@ -427,86 +427,160 @@ describe('on-device forecast', () => {
     expect(screen.getByTestId('forecast-retry').getAttribute('aria-label')).toBe('coin.pro.forecastRetry');
   });
 
-  it('rotation to short landscape really turns forecast off and removes every AI control', async () => {
+  /*
+   * THE REGRESSION THIS TEST EXISTS FOR
+   * -----------------------------------
+   * Opening the terminal on a phone (short landscape) used to DELETE the
+   * feature: the toolbar chip, the horizon select, the result card, the
+   * projected candles, and the run itself. Rotating back restored the chip
+   * SWITCHED OFF. The reader's report was one sentence — «دکمش را محو کردی،
+   * برگردون» — and the honest fix is not "look harder for it": it is that the
+   * control never leaves, in either orientation, and only the CARD adapts.
+   */
+  it('the AI control exists in the token page AND the terminal, and orientation never deletes it', async () => {
     const originalMatchMedia = window.matchMedia;
-    const landscapeListeners = new Set();
+    const listeners = new Set();
     let landscape = false;
     window.matchMedia = vi.fn((query) => ({
       media: query,
       get matches() { return query.includes('landscape') ? landscape : true; },
-      addEventListener: (_type, listener) => { if (query.includes('landscape')) landscapeListeners.add(listener); },
-      removeEventListener: (_type, listener) => { if (query.includes('landscape')) landscapeListeners.delete(listener); }
+      addEventListener: (_type, listener) => { if (query.includes('landscape')) listeners.add(listener); },
+      removeEventListener: (_type, listener) => { if (query.includes('landscape')) listeners.delete(listener); }
     }));
+    const viewport = (width, height) => {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: height });
+    };
     try {
+      /* Room 1: the token page, before the terminal is opened. */
+      viewport(390, 844);
       mount();
+      expect(screen.getByTestId('forecast-toggle')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'coin.pro.forecast' })).toBeTruthy();
+
+      /* Room 1 leaves the DOM when room 2 arrives — exactly one live toggle,
+         and the token page's copy of the card does not linger behind the
+         terminal (no second `forecast-badge`). */
       openTerminal();
-      fireEvent.click(screen.getByRole('button', { name: 'coin.pro.forecast' }));
+      expect(screen.getAllByTestId('forecast-toggle')).toHaveLength(1);
+
+      fireEvent.click(screen.getByTestId('forecast-toggle'));
       await screen.findByTestId('forecast-badge');
+      /* The mount-time "nothing is on" effect aborts once; from here on, an
+         abort can only come from a rotation deleting the run — the bug. */
       client.abortForecast.mockClear();
 
+      /* Rotate into the short landscape the old code treated as "no forecast
+         here". Everything stays: the chip, the horizon control, the card and
+         the projection the reader paid for. */
       await act(async () => {
+        viewport(844, 390);
         landscape = true;
-        landscapeListeners.forEach((listener) => listener({ matches: true }));
+        listeners.forEach((listener) => listener({ matches: true }));
+        window.dispatchEvent(new Event('resize'));
       });
+      expect(screen.getByTestId('forecast-toggle').getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByLabelText('coin.pro.forecastHorizon')).toBeTruthy();
+      expect(screen.getByTestId('forecast-badge')).toBeTruthy();
+      expect(client.abortForecast).not.toHaveBeenCalled();
 
-      await waitFor(() => expect(screen.queryByTestId('forecast-badge')).toBeNull());
-      expect(screen.queryByTestId('forecast-toggle')).toBeNull();
-      expect(screen.queryByRole('button', { name: 'coin.pro.forecast' })).toBeNull();
-      expect(screen.queryByLabelText('coin.pro.forecastHorizon')).toBeNull();
-      expect(client.abortForecast).toHaveBeenCalled();
+      /* Short viewports start the CARD collapsed: two lines, one chevron. */
+      const badge = screen.getByTestId('forecast-badge');
+      expect(badge.classList.contains('pc-fc--peek')).toBe(true);
+      expect(screen.getByTestId('forecast-collapse').getAttribute('aria-label')).toBe('coin.pro.forecastExpand');
 
+      /* The chevron opens the whole card… */
+      fireEvent.click(screen.getByTestId('forecast-collapse'));
+      expect(screen.getByTestId('forecast-badge').classList.contains('pc-fc--peek')).toBe(false);
+      expect(screen.getByTestId('forecast-collapse').getAttribute('aria-label')).toBe('coin.pro.forecastPeek');
+      /* …and it can put it away again — the HUD never covers its own switch. */
+      fireEvent.click(screen.getByTestId('forecast-collapse'));
+      expect(screen.getByTestId('forecast-badge').classList.contains('pc-fc--peek')).toBe(true);
+
+      /* Back to portrait: the control is still there and still ON. */
       await act(async () => {
+        viewport(390, 844);
         landscape = false;
-        landscapeListeners.forEach((listener) => listener({ matches: false }));
+        listeners.forEach((listener) => listener({ matches: false }));
+        window.dispatchEvent(new Event('resize'));
       });
-      const restored = await screen.findByRole('button', { name: 'coin.pro.forecast' });
-      expect(restored.getAttribute('aria-pressed')).toBe('false');
-      expect(screen.queryByTestId('forecast-badge')).toBeNull();
+      expect(screen.getByTestId('forecast-toggle').getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByTestId('forecast-badge')).toBeTruthy();
+      expect(screen.getByTestId('forecast-badge').classList.contains('pc-fc--peek')).toBe(false);
+      expect(client.abortForecast).not.toHaveBeenCalled();
     } finally {
       window.matchMedia = originalMatchMedia;
+      viewport(1024, 768);
     }
   });
 });
 
 /*
- * Short landscape is both a React and a CSS contract. The behavioural test
- * above proves that rotation aborts the feature; these pins prevent a future
- * stylesheet from reintroducing an absolute/faded card over the toolbar.
+ * The two-room rule is both a React and a CSS contract. The behavioural test
+ * above proves the control survives rotation; these pins prevent a future
+ * stylesheet or effect from deleting it again, and keep the card out of the
+ * terminal's vertical column (the "it overlaps the buttons" half of the
+ * report was the card being a flex sibling of the chart).
  */
-describe('forecast — short-landscape disabled contract', () => {
+describe('forecast — two-room, never-hidden contract', () => {
   const css = readFileSync(join(process.cwd(), 'src/styles/pro-chart.css'), 'utf8');
   const source = readFileSync(join(process.cwd(), 'src/components/ProChart/TokenChart.jsx'), 'utf8');
   const cssWithoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
-  const landBlock = (() => {
+  const shortLandscapeBlock = (() => {
     const at = css.indexOf('@media (orientation: landscape) and (max-height: 640px)');
     return at === -1 ? '' : css.slice(at, css.indexOf('\n}\n', at) + 3);
   })();
 
-  it('uses the same media query in React and CSS', () => {
-    expect(landBlock.length).toBeGreaterThan(200);
-    expect(source).toContain("window.matchMedia('(orientation: landscape) and (max-height: 640px)')");
-    expect(source).toContain('const forecastLandscapeDisabled = expanded && shortLandscape;');
+  it('never hides the AI group or the card in any orientation', () => {
+    expect(shortLandscapeBlock.length).toBeGreaterThan(100);
+    /* The old rule was literally `display: none` on the chip and the card. */
+    expect(cssWithoutComments).not.toMatch(/\.pc-toolgroup--forecast[^{]*\{[^}]*display:\s*none/);
+    expect(cssWithoutComments).not.toMatch(/\.pc-fs-main\s*>\s*\.pc-fc[^{]*\{[^}]*display:\s*none/);
   });
 
-  it('never positions a forecast HUD over the chart controls', () => {
-    expect(landBlock).not.toMatch(/position:\s*absolute/);
-    expect(landBlock).not.toMatch(/inset-block-end/);
-    expect(landBlock).toMatch(/\.pc-toolgroup--forecast,[\s\S]*?\.pc-fs-main > \.pc-fc \{ display: none/);
+  it('keeps the card in the flow, capped and peeked — never floating over the chart', () => {
+    /* The overlap report was an absolutely-positioned card. The card is a
+       flow row now; the room is found by shrinking it, not by floating it. */
+    expect(source).toContain('{forecastPanel ? <div className="pc-fs-hud">{forecastPanel}</div> : null}');
+    expect(/\.pc-fs-hud \{[\s\S]*?display:\s*flex;\s*\n\s*flex:\s*0 0 auto;/.test(css)).toBe(true);
+    expect(css).not.toMatch(/\.pc-fs-hud \{[^}]*position:\s*(absolute|fixed)/);
+    /* A card taller than its own column is a card whose buttons are off-screen. */
+    expect(/\.pc-fs-hud > \.pc-fc \{[\s\S]*?max-height:\s*min\(40svh/.test(css)).toBe(true);
+    /* Short viewports collapse to the two-line peek — that is where the six
+       rows went, instead of a `display: none` on the feature. */
+    expect(/\.pc-fc--peek \.pc-fc-summary > span:not\(:first-child\)/.test(css)).toBe(true);
+    expect(/\.pc-fc--peek \.pc-fc-disc,/.test(css)).toBe(true);
+    /* Nothing is ever faded to "unpressable". */
+    expect(cssWithoutComments).not.toMatch(/\.pc-fc--ambient[^{]*\{[^}]*pointer-events:\s*none/);
+    expect(/backdrop-filter/.test(cssWithoutComments)).toBe(false);
   });
 
-  it('removes projected candles and active work rather than merely hiding the card', () => {
-    expect(source).toContain('if (forecastLandscapeDisabled) forecastPanel = null;');
-    expect(source).toMatch(/if \(!forecastLandscapeDisabled \|\| !forecastOn\) return;[\s\S]*?stopForecastWork\(\);[\s\S]*?setForecastOn\(false\);[\s\S]*?setForecastResult\(null\);/);
-    expect(source).toMatch(/const forecast = !forecastLandscapeDisabled && forecastOn/);
+  it('lets the reader open the peek and put it away again', () => {
+    expect(source).toContain("data-testid=\"forecast-collapse\"");
+    expect(source).toMatch(/collapseLabel: t\(collapsed \? 'coin\.pro\.forecastExpand' : 'coin\.pro\.forecastPeek'\)/);
+    /* Both strings exist in every shipped language (gen-locales.mjs writes the
+       nine partial files from the same module). */
+    for (const lang of ['en', 'fa']) {
+      const dict = JSON.parse(readFileSync(join(process.cwd(), `src/i18n/locales/${lang}.json`), 'utf8'));
+      expect(dict.coin.pro.forecastExpand, `${lang} forecastExpand`).toBeTruthy();
+      expect(dict.coin.pro.forecastPeek, `${lang} forecastPeek`).toBeTruthy();
+    }
   });
 
-  it('restores the control in portrait, switched off for an explicit opt-in', () => {
-    expect(source).toContain('{!forecastLandscapeDisabled ? <div className="pc-toolgroup pc-toolgroup--forecast">');
-    expect(source).not.toContain('setForecastOn(true);\n    setForecastResult(null);');
+  it('never turns the forecast off because the screen changed shape', () => {
+    expect(source).not.toContain('forecastLandscapeDisabled');
+    expect(source).not.toMatch(/setForecastOn\(false\)[\s\S]{0,200}setShortViewport/);
+    /* The projection is gated on the reader's choice alone. */
+    expect(source).toMatch(/const forecast = forecastOn && Array\.isArray\(forecastData\?\.candles\)/);
+  });
+
+  it('keeps exactly one toggle and one card on screen at a time', () => {
+    expect(source).toMatch(/\{!expanded \? <Chip active=\{forecastOn\}/);
+    expect(source).toMatch(/\{!expanded \? buildForecastPanel\(inlinePeekClass\) : null\}/);
+    expect(source).toMatch(/<div className="pc-toolgroup pc-toolgroup--forecast">/);
   });
 
   it('keeps the live canvas blur-free and the small actions touch-friendly elsewhere', () => {
-    expect(/backdrop-filter/.test(cssWithoutComments)).toBe(false);
     expect(/\.pc-fc-btn \{[\s\S]*?min-height: 28px/.test(css)).toBe(true);
     expect(/@media \(pointer: coarse\)[\s\S]*?\.pc-fc-btn::after/.test(css)).toBe(true);
     expect(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.pc-fs \.pc-fs-main > \.pc-fc \{ transition: none/.test(css)).toBe(true);

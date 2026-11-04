@@ -451,7 +451,9 @@
       "forecastLocalNote": "आपके ब्राउज़र में गणना — कैंडल कहीं अपलोड नहीं होतीं।",
       "forecastOnDeviceNote": "आपके डिवाइस पर गणना, हमारे सर्वर पर नहीं।",
       "forecastWindowBars": "{{count}} कैंडल का इतिहास",
-      "forecastRepaired": "{{count}} कैंडल को मान्य OHLC में सुधारा गया।"
+      "forecastRepaired": "{{count}} कैंडल को मान्य OHLC में सुधारा गया।",
+      "forecastExpand": "पूरा कार्ड दिखाएँ",
+      "forecastPeek": "कार्ड छोटा करें"
     },
     "chartCandle": "कैंडल",
     "chartLine": "लाइन",

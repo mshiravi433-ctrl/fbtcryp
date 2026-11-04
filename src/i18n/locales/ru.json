@@ -451,7 +451,9 @@
       "forecastLocalNote": "Вычислено в вашем браузере — свечи никуда не загружаются.",
       "forecastOnDeviceNote": "Вычислено на вашем устройстве, а не на нашем сервере.",
       "forecastWindowBars": "{{count}} свечей истории",
-      "forecastRepaired": "{{count}} свеча(ей) исправлено до корректного OHLC."
+      "forecastRepaired": "{{count}} свеча(ей) исправлено до корректного OHLC.",
+      "forecastExpand": "Показать карточку полностью",
+      "forecastPeek": "Свернуть карточку"
     },
     "chartCandle": "Свечи",
     "chartLine": "Линия",

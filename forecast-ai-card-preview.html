@@ -125,13 +125,14 @@
   <div class="pv-land">
     <div class="pv-land-head">
       <h2 class="pv-h">۳ · حالت افقی (ترمینال تمامصفحه ۸۴۴×۳۹۰)</h2>
-      <span style="font:700 9px/1 var(--font-mono);color:var(--text-3)">FADE · HUD · NO OVERLAP</span>
+      <span style="font:700 9px/1 var(--font-mono);color:var(--text-3)">IN FLOW · PEEK · NO OVERLAP</span>
     </div>
     <iframe class="pv-frame" id="pv-land-frame" title="پیشنمایش حالت افقی" src="forecast-ai-landscape.html?state=ready"></iframe>
     <p class="pv-foot">
-      کارت نتیجه از جریان layout خارج شده، ۵۵٪ محو است و اجازه میدهد پَن/زوم چارت از زیرش رد شود؛
-      فقط دکمههایش هدف لمساند. ۲۶ پیکسل فاصله تا نوار آمار و ۱۲ پیکسل فاصله صریح تا گروه دکمههای زوم/PNG/ریست دارد.
-      با هاور یا فocus، کارت به کنتراست کامل برمیگردد. دکمهها در افقی آیکون خالصاند ولی <code>aria-label</code> خود را حفظ میکنند.
+      کارت <b>داخل جریانِ چیدمان</b> می‌ماند (نه absolute)، پس نه روی نمودار می‌افتد و نه روی نوار دکمه‌ها.
+      در ارتفاع کم به «پیک» دو خطی تبدیل می‌شود — ردیف هویت + عدد هدف + chevron بازکردن — و اگر بازش کنید
+      حداکثر ۴۰٪ ارتفاع صفحه را می‌گیرد و بدنه‌اش خودش اسکرول می‌شود.
+      دکمه <b>پیش‌بینی AI</b> در همه جهت‌ها در تولبار می‌ماند؛ دیگر در هیچ حالتی حذف یا محو نمی‌شود.
     </p>
   </div>
 </div>

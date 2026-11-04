@@ -451,7 +451,9 @@
       "forecastLocalNote": "在你的浏览器中计算 — K 线不会上传到任何地方。",
       "forecastOnDeviceNote": "在你的设备上计算，而不是在我们的服务器上。",
       "forecastWindowBars": "{{count}} 根历史 K 线",
-      "forecastRepaired": "{{count}} 根 K 线已修正为有效 OHLC。"
+      "forecastRepaired": "{{count}} 根 K 线已修正为有效 OHLC。",
+      "forecastExpand": "显示完整卡片",
+      "forecastPeek": "收起卡片"
     },
     "chartCandle": "K线",
     "chartLine": "折线",

@@ -451,7 +451,9 @@
       "forecastLocalNote": "Calculado en tu navegador: las velas no se suben a ningún sitio.",
       "forecastOnDeviceNote": "Calculado en tu dispositivo, no en nuestro servidor.",
       "forecastWindowBars": "{{count}} velas de historial",
-      "forecastRepaired": "{{count}} vela(s) corregida(s) a un OHLC válido."
+      "forecastRepaired": "{{count}} vela(s) corregida(s) a un OHLC válido.",
+      "forecastExpand": "Mostrar la tarjeta completa",
+      "forecastPeek": "Contraer la tarjeta"
     },
     "chartCandle": "Velas",
     "chartLine": "Línea",

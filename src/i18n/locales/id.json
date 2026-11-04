@@ -451,7 +451,9 @@
       "forecastLocalNote": "Dihitung di browser Anda — candle tidak diunggah ke mana pun.",
       "forecastOnDeviceNote": "Dihitung di perangkat Anda, bukan di server kami.",
       "forecastWindowBars": "{{count}} candle riwayat",
-      "forecastRepaired": "{{count}} candle dikoreksi ke OHLC yang valid."
+      "forecastRepaired": "{{count}} candle dikoreksi ke OHLC yang valid.",
+      "forecastExpand": "Tampilkan kartu lengkap",
+      "forecastPeek": "Ringkas kartu"
     },
     "chartCandle": "Candle",
     "chartLine": "Garis",
