@@ -155,7 +155,7 @@ function Kpi({ label, value, toneName, hint }) {
   return (
     <div className="ai-trade-kpi">
       <span className="ai-trade-kpi-label">{label}</span>
-      <span className="ai-trade-kpi-value" data-tone={toneName}>{value}</span>
+      <span className="ai-trade-kpi-value" data-tone={toneName} data-unknown={value === C.account.unknown ? 'true' : undefined}>{value}</span>
       {hint && <span className="ai-trade-small ai-trade-muted">{hint}</span>}
     </div>
   );
