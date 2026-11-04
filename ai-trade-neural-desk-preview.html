@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="fa" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>پیش‌نمایش · AI ترید — Neural Desk</title>
+<!--
+  A static preview of the «AI ترید» tab. It is NOT part of the bundle: it
+  links the same sheet the component imports (src/styles/ai-trade.css), copies
+  the tokens from src/index.css, and repeats the component's markup for the
+  states a screenshot needs (locked, connected + account, limits, analysis,
+  a decision ticket, the ledger).
+
+  It exists because the real panel needs a Hyperliquid account and an AI key
+  before most of its surfaces have anything to show. The preview must stay a
+  MIRROR of AiTradePanel.jsx: if a class changes there, change it here too.
+-->
+<link rel="stylesheet" href="src/styles/ai-trade.css" />
+<style>
+  /* ── app tokens, copied from src/index.css (dark) and its light override ── */
+  @font-face { font-family: 'Vazirmatn'; src: url('public/fonts/Vazirmatn-var.woff2') format('woff2'); font-display: swap; }
+  @font-face { font-family: 'JetBrains Mono'; src: url('public/fonts/JetBrainsMono-var.woff2') format('woff2'); font-display: swap; }
+  :root {
+    --bg-void:#000000; --bg-abyss:#05060a; --bg-panel:rgba(255,255,255,.055); --bg-panel-solid:#0a0c12;
+    --bg-raised:rgba(255,255,255,.06); --line:rgba(255,255,255,.09); --line-strong:rgba(255,255,255,.16);
+    --rgb-1:#00e5ff; --rgb-2:#7c4dff; --rgb-3:#ff2d95; --rgb-4:#00ff9d; --rgb-5:#ffb300;
+    --up:#00ff9d; --down:#ff3b6b;
+    --text-1:#ffffff; --text-2:#9aa4bf; --text-3:#5b647f;
+    --font-display:'Vazirmatn',system-ui,Tahoma,'Segoe UI',Arial,sans-serif;
+    --font-mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+    --fs-xs:12px; --fs-sm:14px; --fs-md:16px;
+    --glass-shadow:0 4px 24px rgba(0,0,0,.3); --glass-blur:16px; --min-tap:44px;
+    --ink-cyan:#00e5ff; --ink-violet:#7c4dff; --ink-magenta:#ff2d95; --ink-mint:#00ff9d;
+    --ink-amber:#ffb300; --ink-orange:#ff6d00; --ink-dim:#9aa3b2;
+  }
+  :root[data-theme='light'] {
+    --bg-void:#f4f5fa; --bg-abyss:#eceef6; --bg-panel:rgba(255,255,255,.9); --bg-panel-solid:#ffffff;
+    --bg-raised:rgba(255,255,255,.95); --line:rgba(16,20,40,.1); --line-strong:rgba(16,20,40,.2);
+    --up:#00a86b; --down:#e0244f; --text-1:#0d1020; --text-2:#4d5570; --text-3:#838aa5;
+    --glass-shadow:0 4px 24px rgba(0,0,0,.08);
+    --ink-cyan:#008392; --ink-violet:#6a3ae0; --ink-magenta:#e70073; --ink-mint:#008854;
+    --ink-amber:#9d6e00; --ink-orange:#c55400; --ink-dim:#667085;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; min-height:100%; }
+  body {
+    background:var(--bg-void); color:var(--text-1);
+    font-family:var(--font-display);
+    background-image:
+      radial-gradient(820px 460px at 88% -10%, color-mix(in srgb, var(--rgb-2) 16%, transparent), transparent 62%),
+      radial-gradient(680px 400px at -6% 2%, color-mix(in srgb, var(--rgb-1) 11%, transparent), transparent 58%);
+    background-attachment:fixed;
+  }
+  button { min-height:var(--min-tap); }
+  .pv-wrap { max-width:1180px; margin:0 auto; padding:26px 14px 90px; }
+  .pv-note { margin:0 0 14px; font-size:11.5px; line-height:1.9; color:var(--text-2); }
+  .pv-note b { color:var(--text-1); }
+  .pv-bar {
+    position:sticky; inset-block-start:8px; z-index:30;
+    display:flex; align-items:center; gap:7px; flex-wrap:wrap;
+    padding:9px 11px; margin:0 0 20px; border-radius:16px;
+    border:1px solid var(--line-strong);
+    background:color-mix(in srgb, var(--bg-panel-solid) 86%, transparent);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+  }
+  .pv-bar > b { font-size:11.5px; margin-inline-end:auto; letter-spacing:.02em; }
+  .pv-bar button {
+    font:700 10.5px/1 var(--font-display); padding:8px 11px; border-radius:999px; cursor:pointer;
+    color:var(--text-1); background:transparent; border:1px solid var(--line-strong);
+  }
+  .pv-bar button[aria-pressed='true'] { color:#fff; background:linear-gradient(135deg,var(--rgb-1),var(--rgb-2)); border-color:transparent; }
+  .pv-sec { margin:34px 0 10px; display:flex; align-items:center; gap:10px; }
+  .pv-sec h2 { margin:0; font-size:13px; font-weight:800; letter-spacing:-.01em; }
+  .pv-sec span { flex:1; height:1px; background:linear-gradient(90deg, var(--line-strong), transparent); }
+  .pv-sec code { font-family:var(--font-mono); font-size:10px; color:var(--text-3); }
+  .pv-phone { max-width:430px; margin:0 auto; }
+  .pv-hide { display:none !important; }
+</style>
+</head>
+<body>
+<div class="pv-wrap">
+  <p class="pv-note">
+    <b>پیش‌نمایش AI ترید — Neural Desk.</b> همین شیت واقعی (<code>src/styles/ai-trade.css</code>) و همان مارک‌آپ کامپوننت،
+    با داده‌های نمونه تا حالت‌هایی که بدون حساب Hyperliquid دیده نمی‌شوند هم قابل بازبینی باشند.
+  </p>
+
+  <div class="pv-bar">
+    <b>حالت نمایش</b>
+    <button type="button" data-theme-btn="dark" aria-pressed="true">تیره</button>
+    <button type="button" data-theme-btn="light" aria-pressed="false">روشن</button>
+    <button type="button" data-set="locked" aria-pressed="true">قفل</button>
+    <button type="button" data-set="account" aria-pressed="false">حساب</button>
+    <button type="button" data-set="limits" aria-pressed="false">سقف‌ها</button>
+    <button type="button" data-set="ticket" aria-pressed="false">تأیید</button>
+    <button type="button" data-set="report" aria-pressed="false">گزارش</button>
+    <button type="button" data-lite="1" aria-pressed="false">کم‌مصرف</button>
+    <button type="button" data-mobile="1" aria-pressed="false">موبایل</button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- the panel: one section, six stages swapped by the bar above -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div id="mount">
+    <section class="ai-trade" aria-label="AI ترید" data-status="connected">
+      <div class="ai-trade-room" aria-hidden="true">
+        <span class="ai-trade-room-aurora"></span>
+        <span class="ai-trade-room-mesh"></span>
+        <span class="ai-trade-room-sweep"></span>
+        <span class="ai-trade-room-grain"></span>
+      </div>
+
+      <header class="ai-trade-hero">
+        <div class="ai-trade-core" data-tone="connected" aria-hidden="true">
+          <span class="ai-trade-core-halo"></span>
+          <span class="ai-trade-core-orbit"></span>
+          <span class="ai-trade-core-orbit ai-trade-core-orbit-2"></span>
+          <span class="ai-trade-core-orb">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z"/></svg>
+          </span>
+        </div>
+        <div class="ai-trade-hero-text">
+          <span class="ai-trade-eyebrow"><span class="ai-trade-eyebrow-line"></span>FBT · NEURAL DESK</span>
+          <h1 class="ai-trade-title">AI ترید</h1>
+          <p class="ai-trade-sub">تحلیل را AI می‌سازد، تصمیم را تو می‌گیری. هیچ سفارشی بدون تأیید تو ارسال نمی‌شود.</p>
+        </div>
+        <div class="ai-trade-hero-side">
+          <span class="ai-trade-pill" data-tone="connected">متصل</span>
+          <span class="ai-trade-hero-risk">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18.5-8-13.9a2 2 0 0 0-3.46 0l-8 13.9A2 2 0 0 0 4 21.5h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+            معامله با اهرم می‌تواند تمام سرمایه‌ات را از دست بدهد. تصمیم و امضا با خودت است.
+          </span>
+        </div>
+        <ul class="ai-trade-vitals">
+          <li><span class="ai-trade-vitals-k">مرحله</span><span class="ai-trade-vitals-v">2/6</span></li>
+          <li><span class="ai-trade-vitals-k">ارزش حساب</span><span class="ai-trade-vitals-v">12,500.5$</span></li>
+          <li><span class="ai-trade-vitals-k">پوزیشن باز</span><span class="ai-trade-vitals-v">4,200$</span></li>
+          <li><span class="ai-trade-vitals-k">در صف تأیید</span><span class="ai-trade-vitals-v">2</span></li>
+        </ul>
+      </header>
+
+      <nav class="ai-trade-rail" role="tablist" aria-label="AI ترید">
+        <button class="ai-trade-step" role="tab" aria-selected="false" data-done="true" data-pos="past">
+          <span class="ai-trade-step-node"><span class="ai-trade-step-n">1</span><span class="ai-trade-step-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></span>
+          <span class="ai-trade-step-label">اتصال</span>
+        </button>
+        <button class="ai-trade-step" role="tab" aria-selected="true" data-done="false" data-pos="past">
+          <span class="ai-trade-step-node"><span class="ai-trade-step-n">2</span><span class="ai-trade-step-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h13a2 2 0 0 1 2 2v1M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/><path d="M3 7V6a2 2 0 0 1 2-2h9"/><path d="M16 13h4"/></svg></span></span>
+          <span class="ai-trade-step-label">حساب</span>
+        </button>
+        <button class="ai-trade-step" role="tab" aria-selected="false" data-done="true" data-pos="ahead">
+          <span class="ai-trade-step-node"><span class="ai-trade-step-n">3</span><span class="ai-trade-step-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3Z"/></svg></span></span>
+          <span class="ai-trade-step-label">سقف‌ها</span>
+        </button>
+        <button class="ai-trade-step" role="tab" aria-selected="false" data-done="false" data-pos="ahead">
+          <span class="ai-trade-step-node"><span class="ai-trade-step-n">4</span><span class="ai-trade-step-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z"/></svg></span></span>
+          <span class="ai-trade-step-label">تحلیل و قوانین</span>
+        </button>
+        <button class="ai-trade-step" role="tab" aria-selected="false" data-done="false" data-pos="ahead">
+          <span class="ai-trade-step-node"><span class="ai-trade-step-n">5</span><span class="ai-trade-step-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></span>
+          <span class="ai-trade-step-label">تأیید</span>
+          <span class="ai-trade-step-badge">2</span>
+        </button>
+        <button class="ai-trade-step" role="tab" aria-selected="false" data-done="false" data-pos="ahead">
+          <span class="ai-trade-step-node"><span class="ai-trade-step-n">6</span><span class="ai-trade-step-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z"/><path d="M14 3v6h6"/></svg></span></span>
+          <span class="ai-trade-step-label">گزارش</span>
+        </button>
+      </nav>
+
+      <!-- ══ STAGE: account ══ -->
+      <div class="ai-trade-stage" data-stage="account">
+        <div class="ai-trade-bento">
+          <div class="ai-trade-kpi">
+            <span class="ai-trade-kpi-top"><span class="ai-trade-kpi-label">ارزش حساب</span><span class="ai-trade-kpi-ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h13a2 2 0 0 1 2 2v1M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/><path d="M3 7V6a2 2 0 0 1 2-2h9"/><path d="M16 13h4"/></svg></span></span>
+            <span class="ai-trade-kpi-line"><span class="ai-trade-kpi-value">12,500.5</span><span class="ai-trade-kpi-suffix">$</span></span>
+          </div>
+          <div class="ai-trade-kpi">
+            <span class="ai-trade-kpi-top"><span class="ai-trade-kpi-label">پوزیشن باز</span><span class="ai-trade-kpi-ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17.5 9 11l4 4 7.5-8"/></svg></span></span>
+            <span class="ai-trade-kpi-line"><span class="ai-trade-kpi-value">4,200</span><span class="ai-trade-kpi-suffix">$</span></span>
+            <span class="ai-trade-kpi-level"><span style="--p:.42"></span></span>
+            <span class="ai-trade-small ai-trade-muted">قابل برداشت: 3,000</span>
+          </div>
+          <div class="ai-trade-kpi" data-tone="down">
+            <span class="ai-trade-kpi-top"><span class="ai-trade-kpi-label">سود و زیان باز</span></span>
+            <span class="ai-trade-kpi-line"><span class="ai-trade-kpi-value">-12.1</span><span class="ai-trade-kpi-suffix">$</span></span>
+          </div>
+          <div class="ai-trade-kpi" data-tone="up">
+            <span class="ai-trade-kpi-top"><span class="ai-trade-kpi-label">تحقق‌یافته امروز</span></span>
+            <span class="ai-trade-kpi-line"><span class="ai-trade-kpi-value">+88.4</span><span class="ai-trade-kpi-suffix">$</span></span>
+            <span class="ai-trade-small ai-trade-muted">4 پرشدن امروز</span>
+          </div>
+
+          <section class="ai-trade-card ai-trade-span-2" data-accent="mint">
+            <header class="ai-trade-card-head">
+              <div class="ai-trade-card-title">
+                <span class="ai-trade-card-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3Z"/></svg></span>
+                <span class="ai-trade-card-heading"><span class="ai-trade-kicker">RISK BUDGET</span><h2>زیان امروز از سقف</h2></span>
+              </div>
+            </header>
+            <div class="ai-trade-budget">
+              <div class="ai-trade-dial" data-tone="up" data-warn="false">
+                <div class="ai-trade-dial-face" style="--p:.34">
+                  <span class="ai-trade-dial-ring"></span>
+                  <span class="ai-trade-dial-core"><b>34%</b><small>340$</small></span>
+                </div>
+                <p class="ai-trade-small ai-trade-muted">340 از 1,000 دلار</p>
+              </div>
+              <div class="ai-trade-budget-body">
+                <div class="ai-trade-meter" data-warn="false"><span style="width:34%"></span></div>
+                <p class="ai-trade-small ai-trade-muted">340 از 1,000 دلار</p>
+                <span class="ai-trade-tag" data-tone="up">در محدودهٔ امن</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="ai-trade-card ai-trade-span-2" data-accent="cyan">
+            <header class="ai-trade-card-head">
+              <div class="ai-trade-card-title">
+                <span class="ai-trade-card-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h13a2 2 0 0 1 2 2v1M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/><path d="M3 7V6a2 2 0 0 1 2-2h9"/><path d="M16 13h4"/></svg></span>
+                <span class="ai-trade-card-heading"><span class="ai-trade-kicker">OPEN BOOK</span><h2>پوزیشن‌ها</h2></span>
+              </div>
+              <button type="button" class="ai-trade-btn ai-trade-btn-ghost ai-trade-btn-sm">به‌روزرسانی</button>
+            </header>
+            <ul class="ai-trade-rows">
+              <li class="ai-trade-row" data-tone="up">
+                <span class="ai-trade-row-lead"><strong>BTC</strong><span class="ai-trade-tag" data-tone="up">long</span></span>
+                <span class="ai-trade-small">0.05</span>
+                <span class="ai-trade-small">ورود <b>60,123.4</b></span>
+                <span class="ai-trade-small">uPnL <b>+42.5</b></span>
+              </li>
+              <li class="ai-trade-row" data-tone="down">
+                <span class="ai-trade-row-lead"><strong>ETH</strong><span class="ai-trade-tag" data-tone="down">short</span></span>
+                <span class="ai-trade-small">1.2</span>
+                <span class="ai-trade-small">ورود <b>3,410.2</b></span>
+                <span class="ai-trade-small">uPnL <b>-12.1</b></span>
+              </li>
+            </ul>
+            <p class="ai-trade-small ai-trade-muted ai-trade-stamp"><span class="ai-trade-live-dot"></span>آخرین خواندن: 21:04</p>
+          </section>
+        </div>
+      </div>
+
+      <!-- ══ STAGE: limits ══ -->
+      <div class="ai-trade-stage pv-hide" data-stage="limits">
+        <div class="ai-trade-bento">
+          <section class="ai-trade-card ai-trade-span-2" data-accent="cyan">
+            <header class="ai-trade-card-head">
+              <div class="ai-trade-card-title">
+                <span class="ai-trade-card-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3Z"/></svg></span>
+                <span class="ai-trade-card-heading"><span class="ai-trade-kicker">GUARDRAILS</span><h2>سقف‌ها</h2></span>
+              </div>
+            </header>
+            <div class="ai-trade-form">
+              <label class="ai-trade-field"><span class="ai-trade-field-label">سقف کل (دلار)</span><span class="ai-trade-input-shell"><input value="2,000" dir="ltr" readonly /></span></label>
+              <label class="ai-trade-field"><span class="ai-trade-field-label">سقف هر سفارش</span><span class="ai-trade-input-shell"><input value="250" dir="ltr" readonly /></span></label>
+              <label class="ai-trade-field"><span class="ai-trade-field-label">سقف زیان روزانه</span><span class="ai-trade-input-shell"><input value="1,000" dir="ltr" readonly /></span></label>
+              <div class="ai-trade-field">
+                <span class="ai-trade-field-label">حداکثر اهرم</span>
+                <div class="ai-trade-chips ai-trade-chips-even" role="radiogroup">
+                  <button class="ai-trade-chip" role="radio" aria-checked="false">1x</button>
+                  <button class="ai-trade-chip" role="radio" aria-checked="true">2x</button>
+                  <button class="ai-trade-chip" role="radio" aria-checked="false">3x</button>
+                  <button class="ai-trade-chip" role="radio" aria-checked="false">5x</button>
+                  <button class="ai-trade-chip" role="radio" aria-checked="false">10x</button>
+                </div>
+              </div>
+            </div>
+            <p class="ai-trade-ok"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg> سقف‌ها معتبرند.</p>
+          </section>
+
+          <section class="ai-trade-card ai-trade-span-2" data-accent="mint">
+            <header class="ai-trade-card-head">
+              <div class="ai-trade-card-title">
+                <span class="ai-trade-card-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3Z"/></svg></span>
+                <span class="ai-trade-card-heading"><span class="ai-trade-kicker">CIRCUIT BREAKER</span><h2>توقف اضطراری</h2></span>
+              </div>
+            </header>
+            <button type="button" class="ai-trade-kill" role="switch" aria-checked="false">
+              <span class="ai-trade-kill-text">
+                <span class="ai-trade-kill-state"><span class="ai-trade-pulse"></span><strong>آماده</strong></span>
+                <span class="ai-trade-small ai-trade-muted">روشن کردن این کلید همهٔ ارسال‌ها را متوقف می‌کند.</span>
+              </span>
+              <span class="ai-trade-switch"></span>
+            </button>
+          </section>
+
+          <section class="ai-trade-card ai-trade-span-4" data-accent="violet">
+            <header class="ai-trade-card-head">
+              <div class="ai-trade-card-title">
+                <span class="ai-trade-card-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 17.5 9 11l4 4 7.5-8"/></svg></span>
+                <span class="ai-trade-card-heading"><span class="ai-trade-kicker">UNIVERSE</span><h2>بازارهای مجاز</h2></span>
+              </div>
+              <span class="ai-trade-pill ai-trade-pill-flat">انتخاب‌شده: 4 / 40</span>
+            </header>
+            <p class="ai-trade-small ai-trade-muted">فقط بازارهایی که حجم کافی دارند.</p>
+            <div class="ai-trade-actions">
+              <button class="ai-trade-btn ai-trade-btn-ghost ai-trade-btn-sm">۱۰ بازار اول</button>
+              <button class="ai-trade-btn ai-trade-btn-ghost ai-trade-btn-sm">BTC و ETH</button>
+              <button class="ai-trade-btn ai-trade-btn-ghost ai-trade-btn-sm">پاک کردن</button>
+            </div>
+            <label class="ai-trade-field">
+              <span class="ai-trade-field-label">جست‌وجوی بازار</span>
+              <span class="ai-trade-input-shell"><input type="search" placeholder="BTC" dir="ltr" readonly /></span>
+            </label>
+            <div class="ai-trade-market-grid" role="group">
+              <button class="ai-trade-market" aria-pressed="true"><span class="ai-trade-market-coin"><b>BTC</b><span class="ai-trade-market-check">✓</span></span><span class="ai-trade-market-meta"><small>2.0B</small><small>50x</small></span></button>
+              <button class="ai-trade-market" aria-pressed="true"><span class="ai-trade-market-coin"><b>ETH</b><span class="ai-trade-market-check">✓</span></span><span class="ai-trade-market-meta"><small>900M</small><small>25x</small></span></button>
+              <button class="ai-trade-market" aria-pressed="false"><span class="ai-trade-market-coin"><b>SOL</b><span class="ai-trade-market-check"></span></span><span class="ai-trade-market-meta"><small>410M</small><small>20x</small></span></button>
+              <button class="ai-trade-market" aria-pressed="true"><span class="ai-trade-market-coin"><b>ARB</b><span class="ai-trade-market-check">✓</span></span><span class="ai-trade-market-meta"><small>88M</small><small>10x</small></span></button>
+              <button class="ai-trade-market" aria-pressed="false"><span class="ai-trade-market-coin"><b>DOGE</b><span class="ai-trade-market-check"></span></span><span class="ai-trade-market-meta"><small>240M</small><small>10x</small></span></button>
+              <button class="ai-trade-market" aria-pressed="true"><span class="ai-trade-market-coin"><b>kPEPE</b><span class="ai-trade-market-check">✓</span></span><span class="ai-trade-market-meta"><small>64M</small><small>10x</small></span></button>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- ══ STAGE: analysis ══ -->
+      <div class="ai-trade-stage pv-hide" data-stage="ai">
+        <div class="ai-trade-bento">
+          <section class="ai-trade-card ai-trade-span-2" data-accent="violet">
+            <header class="ai-trade-card-head">
+              <div class="ai-trade-card-title">
+                <span class="ai-trade-card-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z"/></svg></span>
+                <span class="ai-trade-card-heading"><span class="ai-trade-kicker">ANALYST · BYOK</span><h2>تحلیل و قوانین</h2></span>
+              </div>
+            </header>
+            <div class="ai-trade-form">
+              <label class="ai-trade-field ai-trade-field-wide"><span class="ai-trade-field-label">کلید AI (BYOK)</span>
+                <span class="ai-trade-input-shell"><span class="ai-trade-input-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M15 7a4 4 0 1 1-4 4H7l-2 2 1 1-2 2 1 2h4l2-2v-3"/></svg></span><input type="password" value="sk-···········" dir="ltr" readonly /></span></label>
+              <label class="ai-trade-field"><span class="ai-trade-field-label">نام مدل</span><span class="ai-trade-input-shell"><input value="gpt-5-mini" dir="ltr" readonly /></span></label>
+            </div>
+            <div class="ai-trade-actions">
+              <button class="ai-trade-btn ai-trade-btn-primary"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z"/></svg> تحلیل بازار</button>
+            </div>
+            <p class="ai-trade-ok">پیشنهادها آمادهٔ تأیید هستند.</p>
+          </section>
+
+          <section class="ai-trade-card ai-trade-span-2" data-accent="cyan">
+            <header class="ai-trade-card-head">
+              <div class="ai-trade-card-title">
+                <span class="ai-trade-card-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 17.5 9 11l4 4 7.5-8"/></svg></span>
+                <span class="ai-trade-card-heading"><span class="ai-trade-kicker">PLAYBOOK</span><h2>سبک تحلیل</h2></span>
+              </div>
+            </header>
+            <div class="ai-trade-seg" role="radiogroup">
+              <button role="radio" aria-checked="true">دنبال روند</button>
+              <button role="radio" aria-checked="false">برگشت به میانگین</button>
+              <button role="radio" aria-checked="false">فقط وقتی خودم بگویم</button>
+            </div>
+            <div class="ai-trade-form">
+              <label class="ai-trade-field"><span class="ai-trade-field-label">حداکثر معامله در روز</span><span class="ai-trade-input-shell"><input value="3" dir="ltr" readonly /></span></label>
+              <label class="ai-trade-field"><span class="ai-trade-field-label">فاصلهٔ بین دو معامله (دقیقه)</span><span class="ai-trade-input-shell"><input value="45" dir="ltr" readonly /></span></label>
+              <label class="ai-trade-field ai-trade-field-wide"><span class="ai-trade-field-label">یادداشت برای تحلیل‌گر</span><span class="ai-trade-input-shell"><textarea readonly>فقط ساعات آمریکا؛ از خبرهای بزرگ دوری کن.</textarea></span></label>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- ══ STAGE: approve (two tickets) ══ -->
+      <div class="ai-trade-stage pv-hide" data-stage="ticket">
+        <div class="ai-trade-bento">
+          <div class="ai-trade-span-2">
+            <section class="ai-trade-card ai-trade-ticket" data-state="pending" data-side="long" data-accent="up">
+              <span class="ai-trade-ticket-ribbon"></span>
+              <div class="ai-trade-card-head">
+                <div class="ai-trade-ticket-head">
+                  <span class="ai-trade-side" data-side="long">BTC · خرید (long)</span>
+                  <span class="ai-trade-pill">منتظر تأیید</span>
+                </div>
+                <span class="ai-trade-ttl-ring" style="--p:.62"><span class="ai-trade-ttl-ring-face"><b>37</b><small>s</small></span></span>
+              </div>
+              <div class="ai-trade-ticket-body">
+                <div class="ai-trade-ticket-hero">
+                  <span class="ai-trade-ticket-notional"><b>250</b><small>$</small></span>
+                  <span class="ai-trade-ticket-lev">2x</span>
+                </div>
+                <dl class="ai-trade-facts">
+                  <div><dt>سقف اهرم بازار</dt><dd>50x</dd></div>
+                  <div><dt>وثیقه</dt><dd>125$</dd></div>
+                  <div><dt>حد ضرر تقریبی</dt><dd>59,655 (3.2%)</dd></div>
+                  <div><dt>بدترین زیان</dt><dd class="ai-trade-ticket-worst">8.1$</dd></div>
+                </dl>
+                <div class="ai-trade-ticket-risk">
+                  <div class="ai-trade-dial" data-tone="up" data-warn="false">
+                    <div class="ai-trade-dial-face" style="--p:.032">
+                      <span class="ai-trade-dial-ring"></span>
+                      <span class="ai-trade-dial-core"><b>3%</b><small>ریسک</small></span>
+                    </div>
+                  </div>
+                  <div class="ai-trade-ticket-risk-body">
+                    <blockquote class="ai-trade-quote"><span class="ai-trade-quote-k">دلیل تحلیل‌گر</span>شکست مقاومت ۶۰٫۵k با حجم بالاتر از میانگین ۲۴ ساعته؛ ساختار بالاتر-بالاتر در تایم‌فریم ۱ ساعته.</blockquote>
+                  </div>
+                </div>
+              </div>
+              <div class="ai-trade-actions ai-trade-ticket-actions">
+                <button class="ai-trade-btn ai-trade-hold">
+                  <span class="ai-trade-hold-dial"><svg viewBox="0 0 44 44"><circle class="ai-trade-hold-track" cx="22" cy="22" r="19"/><circle class="ai-trade-hold-fill" cx="22" cy="22" r="19"/></svg></span>
+                  <span class="ai-trade-hold-label">نگه دار برای تأیید</span>
+                </button>
+                <button class="ai-trade-btn ai-trade-hold" data-kind="reject"><span class="ai-trade-hold-label">رد</span></button>
+              </div>
+              <p class="ai-trade-small ai-trade-muted">نیم ثانیه نگه دار. رها کردن زودهنگام لغو می‌کند.</p>
+            </section>
+          </div>
+
+          <div class="ai-trade-span-2">
+            <section class="ai-trade-card ai-trade-ticket" data-state="pending" data-side="short" data-accent="down">
+              <span class="ai-trade-ticket-ribbon"></span>
+              <div class="ai-trade-card-head">
+                <div class="ai-trade-ticket-head">
+                  <span class="ai-trade-side" data-side="short">ETH · فروش (short)</span>
+                  <span class="ai-trade-pill">منتظر تأیید</span>
+                </div>
+                <span class="ai-trade-ttl-ring" style="--p:.3"><span class="ai-trade-ttl-ring-face"><b>18</b><small>s</small></span></span>
+              </div>
+              <div class="ai-trade-ticket-body">
+                <div class="ai-trade-ticket-hero">
+                  <span class="ai-trade-ticket-notional"><b>180</b><small>$</small></span>
+                  <span class="ai-trade-ticket-lev">2x</span>
+                </div>
+                <dl class="ai-trade-facts">
+                  <div><dt>سقف اهرم بازار</dt><dd>25x</dd></div>
+                  <div><dt>وثیقه</dt><dd>90$</dd></div>
+                  <div><dt>حد ضرر تقریبی</dt><dd>3,468 (2.0%)</dd></div>
+                  <div><dt>بدترین زیان</dt><dd class="ai-trade-ticket-worst">3.6$</dd></div>
+                </dl>
+                <div class="ai-trade-ticket-risk">
+                  <div class="ai-trade-dial" data-tone="up" data-warn="false">
+                    <div class="ai-trade-dial-face" style="--p:.02">
+                      <span class="ai-trade-dial-ring"></span>
+                      <span class="ai-trade-dial-core"><b>2%</b><small>ریسک</small></span>
+                    </div>
+                  </div>
+                  <div class="ai-trade-ticket-risk-body">
+                    <blockquote class="ai-trade-quote"><span class="ai-trade-quote-k">دلیل تحلیل‌گر</span>ربایش نقدینگی بالای ۳٫۵۰۰ و برگشت با کندل پوششی نزولی.</blockquote>
+                    <div class="ai-trade-blocked">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="m21.73 18.5-8-13.9a2 2 0 0 0-3.46 0l-8 13.9A2 2 0 0 0 4 21.5h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/></svg>
+                      <span>این پیشنهاد الان قابل تأیید نیست:<br/>هنوز زمان فاصلهٔ این بازار نرسیده است.</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="ai-trade-actions ai-trade-ticket-actions">
+                <button class="ai-trade-btn ai-trade-hold" disabled>
+                  <span class="ai-trade-hold-dial"><svg viewBox="0 0 44 44"><circle class="ai-trade-hold-track" cx="22" cy="22" r="19"/><circle class="ai-trade-hold-fill" cx="22" cy="22" r="19"/></svg></span>
+                  <span class="ai-trade-hold-label">نگه دار برای تأیید</span>
+                </button>
+                <button class="ai-trade-btn ai-trade-hold" data-kind="reject"><span class="ai-trade-hold-label">رد</span></button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ STAGE: connect (locked) ══ -->
+      <div class="ai-trade-stage pv-hide" data-stage="locked">
+        <div class="ai-trade-bento">
+          <section class="ai-trade-card ai-trade-span-2" data-accent="cyan">
+            <header class="ai-trade-card-head">
+              <div class="ai-trade-card-title">
+                <span class="ai-trade-card-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M15 7a4 4 0 1 1-4 4H7l-2 2 1 1-2 2 1 2h4l2-2v-3"/></svg></span>
+                <span class="ai-trade-card-heading"><span class="ai-trade-kicker">STATION 01</span><h2>اتصال حساب</h2></span>
+              </div>
+            </header>
+            <p class="ai-trade-muted">در Hyperliquid یک «API wallet» (کلید agent) بساز. این کلید فقط می‌تواند معامله کند و برداشت ندارد.</p>
+            <div class="ai-trade-form">
+              <label class="ai-trade-field ai-trade-field-wide"><span class="ai-trade-field-label">آدرس عمومی حساب (0x…)</span>
+                <span class="ai-trade-input-shell" data-ok="true"><span class="ai-trade-input-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 7h13a2 2 0 0 1 2 2v1M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/></svg></span><input value="0x7a3b…91f0" dir="ltr" readonly /><span class="ai-trade-input-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg></span></span></label>
+              <label class="ai-trade-field ai-trade-field-wide"><span class="ai-trade-field-label">کلید agent (0x…)</span>
+                <span class="ai-trade-input-shell"><span class="ai-trade-input-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span><input type="password" value="" placeholder="0x…" dir="ltr" readonly /></span></label>
+            </div>
+            <div class="ai-trade-actions">
+              <button class="ai-trade-btn ai-trade-btn-primary" disabled>اتصال و خواندن حساب</button>
+              <span class="ai-trade-small ai-trade-muted">کلیدها فقط در حافظهٔ این صفحه می‌مانند و ذخیره نمی‌شوند.</span>
+            </div>
+          </section>
+          <section class="ai-trade-card ai-trade-span-2" data-accent="violet">
+            <header class="ai-trade-card-head">
+              <div class="ai-trade-card-title">
+                <span class="ai-trade-card-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z"/></svg></span>
+                <span class="ai-trade-card-heading"><span class="ai-trade-kicker">CHECKLIST</span><h2>راهنمای سریع</h2></span>
+              </div>
+            </header>
+            <ol class="ai-trade-steps-list">
+              <li>در Hyperliquid به بخش API برو و یک API wallet بساز.</li>
+              <li>آدرس عمومی حساب اصلی‌ات را بگذار.</li>
+              <li>کلید agent را بگذار؛ همین و بس.</li>
+            </ol>
+            <div class="ai-trade-note ai-trade-warn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="m21.73 18.5-8-13.9a2 2 0 0 0-3.46 0l-8 13.9A2 2 0 0 0 4 21.5h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/></svg><span>کلید اصلی کیف پول خودت را اینجا وارد نکن. اگر آن را وارد کردی، پاکش کن و کلیدهایت را عوض کن.</span></div>
+          </section>
+        </div>
+      </div>
+
+      <!-- ══ STAGE: report ══ -->
+      <div class="ai-trade-stage pv-hide" data-stage="report">
+        <div class="ai-trade-bento">
+          <div class="ai-trade-kpi"><span class="ai-trade-kpi-top"><span class="ai-trade-kpi-label">اجراشده امروز</span></span><span class="ai-trade-kpi-line"><span class="ai-trade-kpi-value">3</span></span></div>
+          <div class="ai-trade-kpi" data-tone="up"><span class="ai-trade-kpi-top"><span class="ai-trade-kpi-label">سود و زیان تحقق‌یافتهٔ امروز</span></span><span class="ai-trade-kpi-line"><span class="ai-trade-kpi-value">+88.4</span><span class="ai-trade-kpi-suffix">$</span></span></div>
+          <div class="ai-trade-kpi"><span class="ai-trade-kpi-top"><span class="ai-trade-kpi-label">کارمزد امروز</span></span><span class="ai-trade-kpi-line"><span class="ai-trade-kpi-value">3.2</span><span class="ai-trade-kpi-suffix">$</span></span></div>
+          <div class="ai-trade-kpi"><span class="ai-trade-kpi-top"><span class="ai-trade-kpi-label">تعداد پرشدن‌ها</span></span><span class="ai-trade-kpi-line"><span class="ai-trade-kpi-value">4</span></span></div>
+          <section class="ai-trade-card ai-trade-span-4" data-accent="cyan">
+            <header class="ai-trade-card-head">
+              <div class="ai-trade-card-title">
+                <span class="ai-trade-card-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z"/><path d="M14 3v6h6"/></svg></span>
+                <span class="ai-trade-card-heading"><span class="ai-trade-kicker">SESSION LEDGER</span><h2>گزارش</h2></span>
+              </div>
+              <button class="ai-trade-btn ai-trade-btn-ghost ai-trade-btn-sm">به‌روزرسانی گزارش</button>
+            </header>
+            <div class="ai-trade-ledger-sum">
+              <span class="ai-trade-tag" data-tone="up">اجرا شد: 3</span>
+              <span class="ai-trade-tag" data-tone="down">رد شد: 1</span>
+              <span class="ai-trade-tag" data-tone="down">اجرا نشد: 1</span>
+            </div>
+            <ul class="ai-trade-timeline">
+              <li class="ai-trade-tl" data-tone="up">
+                <span class="ai-trade-tl-node"></span>
+                <div class="ai-trade-tl-body">
+                  <span class="ai-trade-tl-head"><strong>BTC</strong><span class="ai-trade-tag" data-tone="up">اجرا شد</span><span class="ai-trade-tl-time">21:02</span></span>
+                  <span class="ai-trade-small ai-trade-muted">خرید (long) · 250$ · ورود: 60,140 · حد ضرر: 59,655</span>
+                </div>
+              </li>
+              <li class="ai-trade-tl" data-tone="down">
+                <span class="ai-trade-tl-node"></span>
+                <div class="ai-trade-tl-body">
+                  <span class="ai-trade-tl-head"><strong>ETH</strong><span class="ai-trade-tag" data-tone="down">اجرا نشد</span><span class="ai-trade-tl-time">20:41</span></span>
+                  <span class="ai-trade-small ai-trade-muted">فروش (short) · 180$</span>
+                  <span class="ai-trade-small ai-trade-error">Hyperliquid درخواست را رد کرد.</span>
+                </div>
+              </li>
+              <li class="ai-trade-tl">
+                <span class="ai-trade-tl-node"></span>
+                <div class="ai-trade-tl-body">
+                  <span class="ai-trade-tl-head"><strong>SOL</strong><span class="ai-trade-tag">رد شد</span><span class="ai-trade-tl-time">20:12</span></span>
+                  <span class="ai-trade-small ai-trade-muted">خرید (long) · 120$</span>
+                </div>
+              </li>
+            </ul>
+            <p class="ai-trade-small ai-trade-muted">این گزارش فقط سوابق این نشست را نشان می‌دهد. سود یا زیان در گذشته تضمینی برای آینده نیست.</p>
+          </section>
+        </div>
+      </div>
+
+      <footer class="ai-trade-console">
+        <span class="ai-trade-console-state" data-tone="connected"><span class="ai-trade-pulse"></span><span class="ai-trade-small">حساب</span></span>
+        <span class="ai-trade-console-bar"><span style="--p:.2"></span></span>
+        <button class="ai-trade-btn ai-trade-btn-ghost ai-trade-btn-sm">قفل کردن و پاک کردن کلیدها</button>
+      </footer>
+    </section>
+  </div>
+</div>
+
+<script>
+  const root = document.documentElement;
+  const mount = document.getElementById('mount');
+  const bar = document.querySelector('.pv-bar');
+  const stages = [...document.querySelectorAll('.ai-trade-stage')];
+  const steps = [...document.querySelectorAll('.ai-trade-step')];
+
+  const show = (name) => {
+    stages.forEach((s) => s.classList.toggle('pv-hide', s.dataset.stage !== name));
+    // the rail follows the stage so the preview never shows a rail that
+    // disagrees with the stage under it
+    const index = { locked: 0, account: 1, limits: 2, ai: 3, ticket: 4, report: 5 }[name] ?? 1;
+    steps.forEach((s, i) => {
+      s.setAttribute('aria-selected', String(i === index));
+      s.dataset.pos = i <= index ? 'past' : 'ahead';
+    });
+    const status = name === 'locked' ? 'locked' : 'connected';
+    document.querySelector('.ai-trade').dataset.status = status;
+    document.querySelector('.ai-trade-core').dataset.tone = status;
+    document.querySelector('.ai-trade-vitals-v').textContent = `${index + 1}/6`;
+  };
+
+  bar.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.themeBtn) {
+      root.dataset.theme = b.dataset.themeBtn;
+      bar.querySelectorAll('[data-theme-btn]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      return;
+    }
+    if (b.dataset.set) {
+      bar.querySelectorAll('[data-set]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      show(b.dataset.set);
+      return;
+    }
+    if (b.dataset.lite) {
+      const on = root.dataset.lite !== 'true';
+      root.dataset.lite = String(on);
+      b.setAttribute('aria-pressed', String(on));
+      return;
+    }
+    if (b.dataset.mobile) {
+      const on = mount.classList.toggle('pv-phone');
+      b.setAttribute('aria-pressed', String(on));
+    }
+  });
+
+  show('account');
+</script>
+</body>
+</html>

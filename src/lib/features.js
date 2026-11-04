@@ -93,13 +93,32 @@ export const SPECULATION_ENABLED =
     : import.meta.env?.VITE_ENABLE_SPECULATION !== 'false';
 
 /*
- * «AI ترید» tab on /perp. OFF BY DEFAULT in every build: it must be turned on
- * explicitly with VITE_ENABLE_AI_TRADE=true, and it also requires the
- * speculation build. Its current slice reads accounts and validates settings;
- * it cannot sign or send an order.
+ * «AI ترید» tab on /perp.
+ *
+ * ─── 2026-11-04 · THE TAB SHIPS WITH THE SPECULATION BUILD ──────────────────
+ * The owner asked, twice and plainly, to see this tab in the product:
+ *   «در صفحه فیوچرز، تب AI ترید … بیار رو برنچ اصلی لایو بشه»
+ *
+ * Until today the tab needed TWO switches: the speculation build AND an
+ * explicit VITE_ENABLE_AI_TRADE=true. Nothing in this repository ever set the
+ * second one, and no deploys this repo cannot see (Vercel dashboard) are
+ * assumed to have it — so `AI_TRADE_ENABLED` was false in every build that
+ * shipped, the chunk was never emitted, and the tab did not exist on the live
+ * site at all. That is the whole explanation of "it is not there".
+ *
+ * It is now ON whenever the speculation build is on (the default), which is
+ * the same gate as the rest of the futures page. It stays OFF for the store
+ * build, because SPECULATION_ENABLED is off there.
+ *
+ * VITE_ENABLE_AI_TRADE is still honoured, but only as an explicit KILL switch
+ * ('false'): a named way to remove the tab again without a code change.
+ *
+ * What the tab can and cannot do is unchanged by this flag: the AI only
+ * PROPOSES, every order needs a 500 ms hold on the ticket, the caps are
+ * fail-closed, and the keys live in component memory only.
  */
 export const AI_TRADE_ENABLED =
-  SPECULATION_ENABLED && import.meta.env?.VITE_ENABLE_AI_TRADE === 'true';
+  SPECULATION_ENABLED && import.meta.env?.VITE_ENABLE_AI_TRADE !== 'false';
 
 /* -------------------------------------------------------------------------- */
 /* AAVE V3 · BASE · USDC SUPPLY — OFF BY DEFAULT, IN EVERY BUILD               */

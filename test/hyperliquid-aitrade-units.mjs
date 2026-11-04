@@ -12,7 +12,7 @@ import {
   validateCapsSettings
 } from '../src/lib/hyperliquid/capsSettings.js';
 import { AI_TRADE_COPY, AI_TRADE_TAB_LABEL } from '../src/lib/hyperliquid/aiTradeCopy.js';
-import { AI_TRADE_ENABLED } from '../src/lib/features.js';
+import { AI_TRADE_ENABLED, SPECULATION_ENABLED } from '../src/lib/features.js';
 import { readFileSync } from 'node:fs';
 
 let pass = 0;
@@ -70,8 +70,15 @@ check('duplicate markets are collapsed, not refused',
 check('refused settings return no value', validateCapsSettings({ ...base, maxOrderUsd: 0 }).value === null);
 check('kill switch is strictly boolean true', validateCapsSettings({ ...base, killSwitch: 'yes' }).value.killSwitch === false);
 
-// ── feature flag: off by default ───────────────────────────────────────────
-check('AI trade tab is OFF without the explicit env flag', AI_TRADE_ENABLED === false);
+// ── feature flag: rides the futures build, has a kill switch ───────────────
+/* 2026-11-04: the tab used to need its own VITE_ENABLE_AI_TRADE=true on top of
+   the speculation build. Nothing ever set it, so the tab never shipped. The
+   flag now follows the futures page, and VITE_ENABLE_AI_TRADE is honoured only
+   as an explicit 'false'. These two claims are that contract. */
+check('AI trade tab follows the speculation build', AI_TRADE_ENABLED === SPECULATION_ENABLED);
+check('the AI trade flag has not been turned off in this build',
+  !(SPECULATION_ENABLED && AI_TRADE_ENABLED === false),
+  'VITE_ENABLE_AI_TRADE=false would hide the tab from the live build');
 
 // ── copy rules ─────────────────────────────────────────────────────────────
 const allCopy = JSON.stringify({ AI_TRADE_COPY, AI_TRADE_TAB_LABEL });
