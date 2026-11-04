@@ -13,7 +13,6 @@ export const AI_TRADE_COPY = Object.freeze({
   title: 'AI ترید',
   subtitle: 'حساب خودت را ببین، سقف‌هایت را تنظیم کن. هیچ سفارشی بدون تأیید تو ارسال نمی‌شود.',
   riskNotice: 'معامله با اهرم می‌تواند تمام سرمایه‌ات را از دست بدهد. تصمیم و امضا با خودت است.',
-  geoNotice: 'اگر در کشوری هستی که این صرافی یا خدمات آن در آن‌جا محدود است، استفاده از این بخش برای تو ممنوع یا پرخطر است. مسئولیت رعایت قوانین با خودت است.',
   phases: Object.freeze({
     connect: 'اتصال',
     account: 'حساب',
@@ -53,12 +52,14 @@ export const AI_TRADE_COPY = Object.freeze({
     dailyLoss: 'سقف زیان روزانه (دلار)',
     leverage: 'بیشترین اهرم',
     coins: 'بازارهای مجاز',
+    stopRule: 'هر سفارش باید حد ضرر داشته باشد. فاصله‌ی حد ضرر حداکثر ۵٪ است و ضرر احتمالی هر سفارش باید در سقف زیان روزانه جا شود. ضرر باز هم در سقف زیان حساب می‌شود.',
     killSwitch: 'توقف اضطراری',
     killSwitchHelp: 'با روشن شدن، هیچ سفارشی پذیرفته نمی‌شود.',
     saved: 'تنظیمات معتبرند. فعلاً فقط روی این صفحه اعمال شده‌اند.',
     errors: Object.freeze({
       HL_SETTINGS_NOT_A_NUMBER: 'این مقدار عدد نیست.',
       HL_SETTINGS_NOT_POSITIVE: 'این مقدار باید بزرگ‌تر از صفر باشد.',
+      HL_SETTINGS_STOP_LOSS_OVER_SYSTEM_LIMIT: 'حد ضرر هر پوزیشن از ۱۰٪ بیشتر است.',
       HL_SETTINGS_ORDER_OVER_SYSTEM_LIMIT: 'سقف هر سفارش از ۲۰٬۰۰۰ دلار بیشتر است.',
       HL_SETTINGS_EXPOSURE_BELOW_ORDER: 'سقف کل نمی‌تواند از سقف هر سفارش کمتر باشد.',
       HL_SETTINGS_LEVERAGE_OVER_SYSTEM_LIMIT: 'اهرم از سقف مجاز محصول بیشتر است.',

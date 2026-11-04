@@ -15,6 +15,8 @@ export const HL_SYSTEM_LIMITS = Object.freeze({
   maxOrderUsd: 20000,
   /** Highest leverage the product will ever allow. */
   maxLeverage: 10,
+  /** Widest stop-loss distance the product will ever allow (fraction of notional). */
+  maxStopLossPct: 0.10,
   /** Markets the first release can offer at all. */
   allowedCoinUniverse: Object.freeze(['BTC', 'ETH'])
 });
@@ -26,6 +28,7 @@ export const HL_SETTINGS_CODES = Object.freeze({
   EXPOSURE_BELOW_ORDER: 'HL_SETTINGS_EXPOSURE_BELOW_ORDER',
   LEVERAGE_OVER_SYSTEM_LIMIT: 'HL_SETTINGS_LEVERAGE_OVER_SYSTEM_LIMIT',
   LEVERAGE_NOT_INTEGER: 'HL_SETTINGS_LEVERAGE_NOT_INTEGER',
+  STOP_LOSS_OVER_SYSTEM_LIMIT: 'HL_SETTINGS_STOP_LOSS_OVER_SYSTEM_LIMIT',
   COIN_OUTSIDE_UNIVERSE: 'HL_SETTINGS_COIN_OUTSIDE_UNIVERSE'
 });
 
@@ -73,6 +76,15 @@ export function validateCapsSettings(input = {}) {
     else if (maxLeverage > HL_SYSTEM_LIMITS.maxLeverage) errors.push(HL_SETTINGS_CODES.LEVERAGE_OVER_SYSTEM_LIMIT);
   }
 
+  // Stop-loss ceiling: optional in the input, defaults to caps.js when absent.
+  let maxStopLossPct = HL_CAP_DEFAULTS.maxStopLossPct;
+  if (input.maxStopLossPct !== undefined && input.maxStopLossPct !== null && input.maxStopLossPct !== '') {
+    const n = Number(input.maxStopLossPct);
+    if (!Number.isFinite(n) || n <= 0) errors.push(HL_SETTINGS_CODES.NOT_POSITIVE);
+    else if (n > HL_SYSTEM_LIMITS.maxStopLossPct) errors.push(HL_SETTINGS_CODES.STOP_LOSS_OVER_SYSTEM_LIMIT);
+    else maxStopLossPct = n;
+  }
+
   const coins = Array.isArray(input.allowedCoins) ? input.allowedCoins : [];
   if (coins.some((c) => !HL_SYSTEM_LIMITS.allowedCoinUniverse.includes(c))) {
     errors.push(HL_SETTINGS_CODES.COIN_OUTSIDE_UNIVERSE);
@@ -87,6 +99,7 @@ export function validateCapsSettings(input = {}) {
       maxOrderUsd,
       dailyLossUsd,
       maxLeverage,
+      maxStopLossPct,
       allowedCoins: [...coins],
       killSwitch: input.killSwitch === true
     }

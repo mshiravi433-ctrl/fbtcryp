@@ -171,6 +171,8 @@ function LimitsPhase() {
           <input type="number" inputMode="numeric" value={form.maxLeverage} onChange={set('maxLeverage')} dir="ltr" /></label>
       </div>
 
+      <p className="muted ai-trade-small">{C.limits.stopRule}</p>
+
       <fieldset className="ai-trade-coins">
         <legend>{C.limits.coins}</legend>
         {['BTC', 'ETH'].map((coin) => (
@@ -223,7 +225,6 @@ export default function AiTradePanel() {
       </header>
 
       <p className="ai-trade-risk" role="note">{C.riskNotice}</p>
-      <p className="muted ai-trade-small">{C.geoNotice}</p>
 
       <ConnectPhase />
       <AccountPhase />

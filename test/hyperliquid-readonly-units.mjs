@@ -99,41 +99,58 @@ const rNoFetch = await fetchHyperliquidInfo('allMids', null, { fetchImpl: null }
 check('no fetch available -> NETWORK, no throw', rNoFetch.code === HL_ERRORS.NETWORK);
 
 // ── caps ───────────────────────────────────────────────────────────────────
-const good = { coin: 'BTC', notionalUsd: 20, leverage: 2 };
-const st = { currentExposureUsd: 100, dailyRealisedPnlUsd: 0 };
-check('in-cap order passes', checkOrderAgainstCaps(good, st).ok === true);
-check('kill switch refuses everything',
-  checkOrderAgainstCaps(good, st, { killSwitch: true }).code === HL_CAP_CODES.KILL_SWITCH);
-check('coin outside allowlist refused',
-  checkOrderAgainstCaps({ ...good, coin: 'DOGE' }, st).code === HL_CAP_CODES.COIN_NOT_ALLOWED);
-check('empty allowlist refuses all',
-  checkOrderAgainstCaps(good, st, { allowedCoins: [] }).code === HL_CAP_CODES.COIN_NOT_ALLOWED);
-check('leverage above cap refused',
-  checkOrderAgainstCaps({ ...good, leverage: 5 }, st).code === HL_CAP_CODES.LEVERAGE_TOO_HIGH);
-check('single order above per-order cap refused',
-  checkOrderAgainstCaps({ ...good, notionalUsd: 20001 }, st).code === HL_CAP_CODES.ORDER_TOO_LARGE);
-check('exposure over total refused',
-  checkOrderAgainstCaps({ ...good, notionalUsd: 20 }, { currentExposureUsd: 19990, dailyRealisedPnlUsd: 0 }).code
-    === HL_CAP_CODES.EXPOSURE_EXCEEDED);
-check('daily loss reached refuses new orders',
-  checkOrderAgainstCaps(good, { currentExposureUsd: 0, dailyRealisedPnlUsd: -1000 }).code
-    === HL_CAP_CODES.DAILY_LOSS_REACHED);
-check('small daily loss still allowed',
-  checkOrderAgainstCaps(good, { currentExposureUsd: 0, dailyRealisedPnlUsd: -999 }).ok === true);
-check('NaN notional refused as BAD_INPUT',
-  checkOrderAgainstCaps({ ...good, notionalUsd: NaN }, st).code === HL_CAP_CODES.BAD_INPUT);
-check('zero notional refused as BAD_INPUT',
-  checkOrderAgainstCaps({ ...good, notionalUsd: 0 }, st).code === HL_CAP_CODES.BAD_INPUT);
+const good = { coin: 'BTC', notionalUsd: 20, leverage: 2, stopLossPct: 0.05 };
+const st = { currentExposureUsd: 100, dailyRealisedPnlUsd: 0, dailyUnrealisedPnlUsd: 0 };
+const code = (order, state, caps) => checkOrderAgainstCaps(order, state, caps).code;
+
+check('defaults: 20000 order, 20000 total, 1000 daily loss, 2x, 5% stop',
+  HL_CAP_DEFAULTS.maxOrderUsd === 20000 && HL_CAP_DEFAULTS.totalExposureUsd === 20000
+  && HL_CAP_DEFAULTS.dailyLossUsd === 1000 && HL_CAP_DEFAULTS.maxLeverage === 2
+  && HL_CAP_DEFAULTS.maxStopLossPct === 0.05);
 check('defaults: per-order not above total',
   HL_CAP_DEFAULTS.maxOrderUsd <= HL_CAP_DEFAULTS.totalExposureUsd);
+check('in-cap order passes', checkOrderAgainstCaps(good, st).ok === true);
+check('kill switch refuses everything',
+  code(good, st, { killSwitch: true }) === HL_CAP_CODES.KILL_SWITCH);
+check('coin outside allowlist refused', code({ ...good, coin: 'DOGE' }, st) === HL_CAP_CODES.COIN_NOT_ALLOWED);
+check('empty allowlist refuses all', code(good, st, { allowedCoins: [] }) === HL_CAP_CODES.COIN_NOT_ALLOWED);
+check('leverage above cap refused', code({ ...good, leverage: 3 }, st) === HL_CAP_CODES.LEVERAGE_TOO_HIGH);
+check('order above per-order cap refused', code({ ...good, notionalUsd: 20001, stopLossPct: 0.001 }, st) === HL_CAP_CODES.ORDER_TOO_LARGE);
+check('exposure over total refused',
+  code({ ...good, notionalUsd: 20 }, { currentExposureUsd: 19990, dailyRealisedPnlUsd: 0, dailyUnrealisedPnlUsd: 0 }) === HL_CAP_CODES.EXPOSURE_EXCEEDED);
+check('exposure at exactly the total is allowed',
+  checkOrderAgainstCaps({ ...good, notionalUsd: 10 }, { currentExposureUsd: 19990, dailyRealisedPnlUsd: 0, dailyUnrealisedPnlUsd: 0 }).ok === true);
+
+// stop-loss: every order needs one, and it must be narrow enough
+check('order without stop refused', code({ ...good, stopLossPct: undefined }, st) === HL_CAP_CODES.STOP_LOSS_MISSING);
+check('zero stop refused as missing', code({ ...good, stopLossPct: 0 }, st) === HL_CAP_CODES.STOP_LOSS_MISSING);
+check('negative stop refused as missing', code({ ...good, stopLossPct: -0.02 }, st) === HL_CAP_CODES.STOP_LOSS_MISSING);
+check('stop wider than 5% refused', code({ ...good, stopLossPct: 0.06 }, st) === HL_CAP_CODES.STOP_LOSS_TOO_WIDE);
+
+// daily loss: realised + open unrealised losses; gains never offset
+check('daily loss reached refuses new orders',
+  code(good, { currentExposureUsd: 0, dailyRealisedPnlUsd: -1000, dailyUnrealisedPnlUsd: 0 }) === HL_CAP_CODES.DAILY_LOSS_REACHED);
+check('open unrealised loss counts toward the daily loss',
+  code(good, { currentExposureUsd: 0, dailyRealisedPnlUsd: 0, dailyUnrealisedPnlUsd: -1000 }) === HL_CAP_CODES.DAILY_LOSS_REACHED);
+check('open unrealised GAIN does not offset realised loss',
+  code({ ...good, notionalUsd: 20000 }, { currentExposureUsd: 0, dailyRealisedPnlUsd: -500, dailyUnrealisedPnlUsd: 400 }) === HL_CAP_CODES.STOP_LOSS_OVER_BUDGET);
+check('stop worst case that would pass the daily limit is refused',
+  code({ ...good, notionalUsd: 20000 }, { currentExposureUsd: 0, dailyRealisedPnlUsd: -1, dailyUnrealisedPnlUsd: 0 }) === HL_CAP_CODES.STOP_LOSS_OVER_BUDGET);
+check('full-size order with a 5% stop fits an empty day exactly',
+  checkOrderAgainstCaps({ ...good, notionalUsd: 20000 }, { currentExposureUsd: 0, dailyRealisedPnlUsd: 0, dailyUnrealisedPnlUsd: 0 }).ok === true);
+check('small loss so far still allows a small order',
+  checkOrderAgainstCaps(good, { currentExposureUsd: 0, dailyRealisedPnlUsd: -900, dailyUnrealisedPnlUsd: 0 }).ok === true);
+check('NaN notional refused as BAD_INPUT', code({ ...good, notionalUsd: NaN }, st) === HL_CAP_CODES.BAD_INPUT);
+check('zero notional refused as BAD_INPUT', code({ ...good, notionalUsd: 0 }, st) === HL_CAP_CODES.BAD_INPUT);
 
 // fail-closed: unknown inputs must never pass as zero
-check('missing daily PnL refused (fail closed)',
-  checkOrderAgainstCaps(good, { currentExposureUsd: 0 }).code === HL_CAP_CODES.BAD_INPUT);
+check('missing daily realised PnL refused (fail closed)',
+  code(good, { currentExposureUsd: 0, dailyUnrealisedPnlUsd: 0 }) === HL_CAP_CODES.BAD_INPUT);
+check('missing unrealised PnL refused (fail closed)',
+  code(good, { currentExposureUsd: 0, dailyRealisedPnlUsd: 0 }) === HL_CAP_CODES.BAD_INPUT);
 check('missing exposure refused (fail closed)',
-  checkOrderAgainstCaps(good, { dailyRealisedPnlUsd: 0 }).code === HL_CAP_CODES.BAD_INPUT);
-check('null leverage refused, not treated as 1',
-  checkOrderAgainstCaps({ ...good, leverage: null }, st).code === HL_CAP_CODES.BAD_INPUT);
+  code(good, { dailyRealisedPnlUsd: 0, dailyUnrealisedPnlUsd: 0 }) === HL_CAP_CODES.BAD_INPUT);
+check('null leverage refused, not treated as 1', code({ ...good, leverage: null }, st) === HL_CAP_CODES.BAD_INPUT);
 
 console.log(`hyperliquid-readonly-units: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

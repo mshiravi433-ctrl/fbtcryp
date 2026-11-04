@@ -36,7 +36,7 @@ check('mask hides the middle', maskAgentKey(GOOD).includes('…') && !maskAgentK
 check('mask of short value is empty', maskAgentKey('0x12') === '');
 
 // ── caps settings ──────────────────────────────────────────────────────────
-const base = { totalExposureUsd: 20000, maxOrderUsd: 20000, dailyLossUsd: 1000, maxLeverage: 3, allowedCoins: ['BTC', 'ETH'], killSwitch: false };
+const base = { totalExposureUsd: 20000, maxOrderUsd: 20000, dailyLossUsd: 1000, maxLeverage: 2, allowedCoins: ['BTC', 'ETH'], killSwitch: false };
 const okRes = validateCapsSettings(base);
 check('default-like settings accepted', okRes.ok === true && okRes.errors.length === 0);
 check('defaults from caps.js are themselves valid', validateCapsSettings(defaultCapsSettings()).ok === true);
@@ -85,6 +85,19 @@ const slice = ['agentKey.js', 'capsSettings.js', 'aiTradeCopy.js']
   .map((f) => readFileSync(new URL(`../src/lib/hyperliquid/${f}`, import.meta.url), 'utf8')).join('\n');
 check('no signing code in slice', !/signTypedData|new Wallet\(|privateKey\s*=/.test(slice));
 check('no /exchange call in slice', !slice.includes('/exchange'));
+
+// stop-loss ceiling in settings
+check('settings: stop ceiling 5% accepted', validateCapsSettings({ ...base, maxStopLossPct: 0.05 }).ok === true);
+check('settings: stop ceiling above system 10% refused',
+  validateCapsSettings({ ...base, maxStopLossPct: 0.2 }).errors.includes(HL_SETTINGS_CODES.STOP_LOSS_OVER_SYSTEM_LIMIT));
+check('settings: stop ceiling zero refused', validateCapsSettings({ ...base, maxStopLossPct: 0 }).ok === false);
+check('settings: missing stop ceiling falls back to caps.js default',
+  validateCapsSettings(base).value.maxStopLossPct === 0.05);
+check('settings: default leverage is 2', defaultCapsSettings().maxLeverage === 2);
+
+// geo: the owner asked for no geographic warning
+check('no geographic notice in the copy', !('geoNotice' in AI_TRADE_COPY));
+check('stop-loss rule is in the copy', typeof AI_TRADE_COPY.limits.stopRule === 'string' && AI_TRADE_COPY.limits.stopRule.length > 0);
 
 console.log(`hyperliquid-aitrade-units: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
