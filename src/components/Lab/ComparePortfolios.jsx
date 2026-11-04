@@ -20,7 +20,9 @@ import {
   Legend,
   Notice,
   Panel,
-  Sparkline
+  Sparkline,
+  AllocRow,
+  useIsRtl
 } from './Shared';
 import { IconCrown, LabIcon } from './LabIcons';
 import { comparePortfolios } from '../../lib/lab/engine';
@@ -205,6 +207,7 @@ function Side({ label, data, winner, drawdownFinal }) {
 /** Allocation editor: presets, donut, sliders, total. */
 function PortfolioEditor({ title, accent, side, alloc, onAlloc }) {
   const { t } = useTranslation();
+  const rtl = useIsRtl();
   const total = Object.values(alloc).reduce((s, v) => s + v, 0);
 
   const update = (key, val) => {
@@ -232,31 +235,18 @@ function PortfolioEditor({ title, accent, side, alloc, onAlloc }) {
         <Legend items={slices.map((s) => ({ label: s.label, value: `${s.value}%`, color: s.color }))} />
       </div>
 
-      {ALL_ASSETS.map((coin) => {
-        const pct = alloc[coin] || 0;
-        return (
-          <div key={coin} className="lab2-alloc" style={{ '--acc': ASSET_COLOR[coin], '--acc-2': ASSET_COLOR[coin] }}>
-            <div
-              className="lab2-alloc-icon"
-              style={{ background: `linear-gradient(140deg, ${ASSET_COLOR[coin]}, ${ASSET_COLOR[coin]}bb)`, color: '#06121a' }}
-            >
-              {coin.slice(0, 2)}
-            </div>
-            <div className="lab2-alloc-name">{t(`lab2.assets.${coin}`)}</div>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={pct}
-              onChange={(e) => update(coin, e.target.value)}
-              className="lab2-slider"
-              style={{ '--fill': `${pct}%` }}
-              aria-label={t(`lab2.assets.${coin}`)}
-            />
-            <div className="lab2-alloc-pct lab2-num">{pct.toFixed(0)}%</div>
-          </div>
-        );
-      })}
+      {ALL_ASSETS.map((coin) => (
+        <AllocRow
+          key={coin}
+          accent={ASSET_COLOR[coin]}
+          label={t(`lab2.assets.${coin}`)}
+          badge={coin.slice(0, 2)}
+          value={alloc[coin] || 0}
+          onChange={(v) => update(coin, v)}
+          rtl={rtl}
+          testId={`compare-${side}-${coin}`}
+        />
+      ))}
 
       <div className="lab2-row">
         <span>{t('lab2.compare.total')}</span>

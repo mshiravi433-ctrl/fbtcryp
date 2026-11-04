@@ -79,7 +79,7 @@
     "test:ai-trade": "node test/hyperliquid-trade-units.mjs && node test/hyperliquid-aitrade-units.mjs && node test/hyperliquid-readonly-units.mjs && vitest run test/ai-trade-ui.test.jsx",
     "test:farm": "vitest run test/farm-defi.test.js test/farm-defillama-api.test.js test/farm-defillama-client.test.js test/farm-defillama-ui.test.jsx test/compound-defi.test.js test/farm-aave-panel.test.jsx test/farm-aave-arb-panel.test.jsx test/farm-compound-panel.test.jsx test/farm-lido-panel.test.jsx test/defi-execution-guards.test.js test/morpho-defi.test.js test/lido-defi.test.js test/farm-rollout-gate.test.js test/farm-position-hub.test.jsx test/farm-public-mode.test.js test/farm-pool-execution.test.jsx test/farm-venue-rail.test.jsx test/farm-venue-pins.test.js test/farm-greenhouse-hero.test.jsx",
     "test:farm:live": "node scripts/farm-defillama-smoke.mjs",
-    "test:lab": "vitest run test/lab-screens.test.jsx test/lab-market-data.test.js",
+    "test:lab": "vitest run test/lab-screens.test.jsx test/lab-market-data.test.js test/lab-percent-field.test.js test/lab-chart-guide.test.jsx",
     "test:more-menu": "vitest run test/more-menu.test.jsx",
     "test:rewards": "vitest run test/rewards-v2.test.jsx test/rewards-v2-ui.test.jsx",
     "test:market:browser": "node test/market-glass-browser.mjs",
@@ -403,7 +403,8 @@
     "test:wiring": "node scripts/run-wiring-audit.mjs",
     "test:kronos-dist": "node --test test/kronos-deploy-gate.test.mjs && KRONOS_DIST_REQUIRED=1 node --test --test-force-exit test/kronos-ort-dist.test.mjs",
     "kronos:fetch": "node scripts/fetch-kronos-model.mjs",
-    "kronos:check": "node scripts/check-kronos-model-host.mjs"
+    "kronos:check": "node scripts/check-kronos-model-host.mjs",
+    "test:hyperliquid": "node test/hyperliquid-readonly-units.mjs && node test/hyperliquid-caps-units.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

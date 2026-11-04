@@ -598,6 +598,8 @@
     "leaseUntilDisconnect": "Connected until you disconnect",
     "sessionLapsed": "The connection window you chose has ended. Connect once more to start a new one.",
     "sessionGone": "The wallet connection is no longer on this device — connect once more to start a fresh one.",
+    "sessionIdentityChanged": "The saved WalletConnect session used an old app identity, so it was disconnected for safety. Nothing was signed or sent. Connect again only after Trust Wallet shows FBT Swap and fbtswap.ir.",
+    "wcIdentityRepairFailed": "This build could not verify the WalletConnect app identity, so it stopped before pairing. Nothing was signed or sent. Update the app, then reconnect only if Trust Wallet shows FBT Swap and fbtswap.ir.",
     "connectSectionExternal": "Your own wallet",
     "connectExternalNote": "QR or deep link",
     "connectSectionLocal": "In-app wallet",
@@ -1976,7 +1978,8 @@
     "tab": {
       "overview": "Overview",
       "perpetual": "Perpetual",
-      "onchain": "On-Chain"
+      "onchain": "On-Chain",
+      "aitrade": "AI Trade"
     },
     "title": "Perpetuals",
     "subtitle": "Leveraged futures on live index prices.",
@@ -14004,6 +14007,11 @@
         "kicker": "FBT Video Academy",
         "title": "Educational videos",
         "sub": "Visual walkthroughs of Swap, tokenized stocks and wallet security on Aparat"
+      },
+      "chartGuide": {
+        "title": "Candlestick guide",
+        "sub": "Candle by candle: windows, indicators, levels and the forecast button.",
+        "hint": "Interactive practice, not screenshots"
       }
     },
     "screens": {
@@ -14291,6 +14299,10 @@
       "guide": {
         "title": "App guide",
         "sub": "Swap, Bridge, Loan, Guard, Stocks and Futures — each one start to finish"
+      },
+      "chartGuide": {
+        "title": "Chart guide",
+        "sub": "Learn to read the candle chart on the token page: the window, the axes, the price and every button on the toolbar."
       }
     },
     "levelNames": {
@@ -15190,6 +15202,307 @@
           }
         }
       }
+    },
+    "chartGuide": {
+      "sampleData": "The data below is a practice series, not the live price. For learning, not the market.",
+      "chaptersLabel": "Chapters",
+      "noteTitle": "Keep in mind",
+      "note": "This guide only teaches reading — it gives no trade suggestions, price targets or a “good entry”.",
+      "backToLab": "Back to the Lab",
+      "tabs": {
+        "basics": "Basics",
+        "studies": "Indicators",
+        "levels": "Levels",
+        "extras": "More"
+      },
+      "demo": {
+        "title": "Try it yourself",
+        "legendHint": "Touch or hover the chart to read the exact values",
+        "type": "Chart type",
+        "types": {
+          "candles": "Candles",
+          "line": "Line",
+          "area": "Area"
+        },
+        "toggles": "Overlays",
+        "togglesMap": {
+          "ma7": "MA7",
+          "ma25": "MA25",
+          "ema21": "EMA21",
+          "bb": "Bollinger",
+          "volume": "Volume",
+          "rsi": "RSI",
+          "fib": "Fibonacci"
+        },
+        "view": "View",
+        "zoomIn": "Zoom in",
+        "fit": "Fit",
+        "log": "Log scale",
+        "loadingNote": "The chart engine is loading; if it is unavailable, a simplified chart is shown instead."
+      },
+      "chapters": {
+        "read": {
+          "title": "Read one candle",
+          "steps": {
+            "open": {
+              "title": "Open the chart",
+              "body": "On the token page the card under the price is the chart. The expand button opens the full-screen terminal, where the toolbar is complete.",
+              "where": "Token page → price card → expand icon"
+            },
+            "bar": {
+              "title": "Body and wick",
+              "body": "Each candle's body runs from open to close; the upper wick is the highest price in the interval and the lower wick the lowest. A body that rises is usually green and one that falls, red.",
+              "where": "The candles themselves in the middle of the chart"
+            },
+            "colors": {
+              "title": "Colour and direction",
+              "body": "Green means the close was above the open in that interval; red is the opposite. Colour is a comparison, not a verdict — red can be a small pullback inside a rise.",
+              "where": "The candle colours (they follow the app theme)"
+            },
+            "legend": {
+              "title": "The crosshair read-out",
+              "body": "While a finger or the cursor is over the chart, the strip at the top shows o/h/l/c and the volume. It is the same strip as the practice area on this page.",
+              "where": "The read-out strip at the top of the chart"
+            }
+          }
+        },
+        "range": {
+          "title": "The time window",
+          "steps": {
+            "ranges": {
+              "title": "The five range buttons",
+              "body": "1D · 7D · 30D · 90D · 1Y. Each button sets how much time the chart covers; how long one candle lasts follows from that.",
+              "where": "The row of buttons above the chart"
+            },
+            "whatChanges": {
+              "title": "What changes when you switch",
+              "body": "Changing the window changes the number of candles and the duration of each. The same high looks different in two windows — compare within the same window.",
+              "where": "Switch type/range in the practice area below and watch"
+            },
+            "reset": {
+              "title": "Resetting the zoom",
+              "body": "The range buttons also reset the pan and zoom, so the chart shows the whole window again. That is the most common cause of “I can't see everything”.",
+              "where": "The same range button row"
+            }
+          }
+        },
+        "move": {
+          "title": "Pan and zoom",
+          "steps": {
+            "drag": {
+              "title": "Drag to pan",
+              "body": "Dragging horizontally inside the chart pans it. Dragging vertically still scrolls the page, so the page never gets stuck.",
+              "where": "Anywhere inside the chart"
+            },
+            "pinch": {
+              "title": "Pinch to zoom",
+              "body": "In the full-screen terminal, spread two fingers to zoom in and pinch them together to zoom out. The mobile toolbar also has + / − for when the browser captures the gesture.",
+              "where": "The chart inside the full-screen terminal"
+            },
+            "doubleTap": {
+              "title": "Double-tap to zoom",
+              "body": "A double tap zooms toward the point you touched; if you are already zoomed in, it returns to the full view.",
+              "where": "Any point on the chart"
+            },
+            "fit": {
+              "title": "Back to the full view",
+              "body": "The “Fit” button (or resetting the zoom) always brings the whole window back on screen — use it when you lose your place.",
+              "where": "The view buttons in the practice area / the terminal toolbar"
+            }
+          }
+        },
+        "type": {
+          "title": "Chart type",
+          "steps": {
+            "candles": {
+              "title": "Candles (the default)",
+              "body": "A candle gives four values at once — open, close, high, low — so the movement inside a period is visible too.",
+              "where": "Toolbar: chart type button"
+            },
+            "line": {
+              "title": "Line",
+              "body": "The line draws only the close: cleaner, but it hides the movement inside the period. For the overall direction, not for judging one candle.",
+              "where": "Chart type → Line"
+            },
+            "area": {
+              "title": "Area",
+              "body": "Area is a filled line: the amplitude of the interval stands out, and the movement inside it stays just as hidden.",
+              "where": "Chart type → Area"
+            },
+            "which": {
+              "title": "Which to use",
+              "body": "To know what happened inside one period, candles; for the shape of the whole window, line or area.",
+              "where": "The three chart-type buttons on the toolbar"
+            }
+          }
+        },
+        "avg": {
+          "title": "Moving averages",
+          "steps": {
+            "why": {
+              "title": "What they answer",
+              "body": "A moving average smooths the last N closes into one line and removes the noise of a single candle. It describes the past; it does not predict.",
+              "where": "Toolbar: MA7 · MA25 · MA99"
+            },
+            "sma": {
+              "title": "Short and long",
+              "body": "The shorter the period (MA7), the closer the line sits to price; the longer (MA99), the steadier but the more lagged. The gap between the two measures their disagreement.",
+              "where": "Practice area: turn on MA7 and MA25 and watch"
+            },
+            "ema": {
+              "title": "EMA versus MA",
+              "body": "The EMA weights recent prices more, so it turns earlier and reacts more. On the same period it usually sits closer to price than the MA.",
+              "where": "Toolbar: EMA21 · EMA55"
+            },
+            "cross": {
+              "title": "A cross is not a signal",
+              "body": "The short line crossing above the long one is called a “cross”, and in a sideways market it happens constantly. It says recent price is relatively stronger — it is not a guarantee.",
+              "where": "Open MA7 and MA99 together in the practice area"
+            },
+            "labels": {
+              "title": "Those English labels",
+              "body": "MA7 / MA25 / MA99 / EMA21 / EMA55 are standard abbreviations and are deliberately not translated: they are identical in every trading terminal.",
+              "where": "The indicator chip labels on the toolbar"
+            }
+          }
+        },
+        "bands": {
+          "title": "Bollinger bands",
+          "steps": {
+            "what": {
+              "title": "What it draws",
+              "body": "Three lines: a 20-period average and a band on each side, offset by volatility. The price spends most of its time inside them.",
+              "where": "Toolbar: the BB button"
+            },
+            "squeeze": {
+              "title": "What a squeeze means",
+              "body": "Narrow bands say recent volatility is low. They do not say when a break will come, only that the swings are smaller than before.",
+              "where": "Practice: turn on BB and watch the width"
+            },
+            "caution": {
+              "title": "Outside the band is not a reversal",
+              "body": "Closing outside the band only says this period moved a lot; in a strong trend the price stays outside. Do not read it as a buy or sell prompt.",
+              "where": "Any chart with BB on"
+            }
+          }
+        },
+        "panes": {
+          "title": "The lower panes",
+          "steps": {
+            "volume": {
+              "title": "Volume",
+              "body": "Volume bars show how much traded in the period. A rise with volume usually means more participation than a rise without — but that is not a rule.",
+              "where": "Toolbar: the Volume button"
+            },
+            "rsi": {
+              "title": "RSI",
+              "body": "RSI compresses recent rises and falls into a number from 0 to 100. Near 70 means “it rose a lot recently”; near 30, “it fell a lot”. Neither announces a turn.",
+              "where": "Toolbar: the RSI button (it appears in the lower pane)"
+            },
+            "macd": {
+              "title": "MACD",
+              "body": "MACD plots the difference between two averages and its signal line; the histogram is the gap. It measures how fast momentum changes, and it too lags.",
+              "where": "Toolbar: the MACD button"
+            }
+          }
+        },
+        "levels": {
+          "title": "Level tools",
+          "steps": {
+            "priceLine": {
+              "title": "Price line",
+              "body": "A price line is a horizontal line you draw on the chart to remember a level. It triggers nothing; it only marks.",
+              "where": "Toolbar: the price-line chip"
+            },
+            "measure": {
+              "title": "Measure",
+              "body": "The measure tool lets you drag from one point to another and reads the price difference and the time between them. For quantifying how far a move went.",
+              "where": "Toolbar: the measure chip"
+            },
+            "fib": {
+              "title": "Fibonacci",
+              "body": "Fibonacci draws several retracement lines between the highest and lowest of the current window. It is a reference scale, not a support or resistance by itself.",
+              "where": "Toolbar: the Fib chip"
+            },
+            "fibRead": {
+              "title": "How to read them",
+              "body": "The lines follow the window: switch to 90D and they are redrawn. They mark proportions, not promises — crossing one does not prove a reversal there.",
+              "where": "Practice: turn on Fibonacci and change the range to watch it redraw"
+            }
+          }
+        },
+        "scale": {
+          "title": "The scale",
+          "steps": {
+            "log": {
+              "title": "Log scale",
+              "body": "On a linear scale the 10→100 gap does not look like 100→1000; on a log scale the two are equal — the same percentage change looks the same.",
+              "where": "Toolbar: the log chip / the view buttons on this page"
+            },
+            "when": {
+              "title": "When to use it",
+              "body": "An asset that went from tens to thousands, like BTC, swallows its early moves on a linear chart; the log scale brings them back.",
+              "where": "Charts on long windows (90D / 1Y)"
+            },
+            "grid": {
+              "title": "Grid",
+              "body": "The grid only helps read values; turning it off does not change the data, it just leaves a cleaner chart for seeing the trend.",
+              "where": "Toolbar: the grid chip"
+            }
+          }
+        },
+        "capture": {
+          "title": "Screenshot and save",
+          "steps": {
+            "png": {
+              "title": "The PNG button",
+              "body": "Saves the chart as it looks right now as a PNG, including the indicators you have open. The image carries no wallet or account information.",
+              "where": "Toolbar: the PNG chip (in the expanded terminal)"
+            },
+            "fit": {
+              "title": "Reset the view before capturing",
+              "body": "“Fit” (or reset zoom) brings the whole window back first, so the PNG is not a heavily zoomed fragment.",
+              "where": "Toolbar: Fit / reset zoom, then PNG"
+            }
+          }
+        },
+        "forecast": {
+          "title": "The AI forecast button",
+          "steps": {
+            "what": {
+              "title": "What it does",
+              "body": "It sends the candles already on screen to the model, which draws the next few “possible” candles as a dashed line. It does not fetch data from the future.",
+              "where": "The “AI forecast” chip on the chart toolbar"
+            },
+            "horizon": {
+              "title": "The horizon",
+              "body": "The selector beside it decides how many candles are drawn. The more there are, the faster uncertainty accumulates — the thirtieth is far weaker than the third.",
+              "where": "The horizon selector next to the AI chip"
+            },
+            "limits": {
+              "title": "When it is not the model",
+              "body": "If the server cannot run the model it uses a “baseline” method and writes the model name on the card. If you read baseline, this is not the model's output.",
+              "where": "The model name at the top of the forecast card"
+            },
+            "notAdvice": {
+              "title": "It is not advice",
+              "body": "A forecast is one possible path, not a promise. It is generated from past candles, and the past does not guarantee the future.",
+              "where": "Throughout the app: this guide gives no trade advice"
+            }
+          }
+        }
+      }
+    },
+    "advancedGuide": {
+      "kicker": "Learn first, look after",
+      "title": "Can you actually read the chart used here?",
+      "body": "The backtests, what-if and scenarios all stand on the candle chart. This ten-minute hands-on guide explains every part on the real chart, not on screenshots.",
+      "cta": "Open the chart guide"
+    },
+    "percent": {
+      "clamped": "Clamped to {{min}}–{{max}}",
+      "increase": "Increase",
+      "decrease": "Decrease"
     }
   },
   "buySell": {

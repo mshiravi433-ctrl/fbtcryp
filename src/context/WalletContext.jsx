@@ -1423,6 +1423,17 @@ export function WalletProvider({ children }) {
         wcEvent('lease_session_missing', purged);
         return false;
       }
+      if (plan.action === 'wc'
+        && ['WC_IDENTITY_REFRESH_REQUIRED', 'WC_IDENTITY_REPAIR_FAILED'].includes(wcRestoreCodeRef.current)) {
+        dropLease();
+        restoreBlockedRef.current = 'identity';
+        setRestoring(false);
+        setError(wcRestoreCodeRef.current === 'WC_IDENTITY_REFRESH_REQUIRED'
+          ? 'SESSION_IDENTITY_CHANGED'
+          : 'WC_IDENTITY_REPAIR_FAILED');
+        wcEvent('lease_identity_refresh_required');
+        return false;
+      }
       wcEvent('lease_restore_failed');
       return false;
     } finally {

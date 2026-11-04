@@ -68,7 +68,7 @@ const LazyAiTrade = AI_TRADE_ENABLED ? lazyRetry(() => import('../components/AiT
  * whenever SPOT_TRADE_ENABLED is on, and it is NOT gated by SPECULATION: the
  * futures tabs below are the only ones that depend on that flag.
  */
-const TAB_LABEL_KEY = { spot: 'trade.spot', overview: 'perp.tab.perpetual', dydx: 'stocks.tab.dydx', onchain: 'perp.tab.onchain' };
+const TAB_LABEL_KEY = { spot: 'trade.spot', overview: 'perp.tab.perpetual', dydx: 'stocks.tab.dydx', onchain: 'perp.tab.onchain', aitrade: 'perp.tab.aitrade' };
 
 /**
  * One icon per venue, so the rail says what each tab IS instead of asking the

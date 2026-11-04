@@ -20,7 +20,9 @@ import {
   Panel,
   ResultCard,
   Row,
-  Sparkline
+  Sparkline,
+  AllocRow,
+  useIsRtl
 } from './Shared';
 import { LabIcon } from './LabIcons';
 import { comparePortfolios } from '../../lib/lab/engine';
@@ -61,6 +63,7 @@ export default function InvestmentSim({ onBack }) {
   });
   const [result, setResult] = useState(null);
   const [name, setName] = useState('My Portfolio');
+  const rtl = useIsRtl();
 
   const total = Object.values(allocations).reduce((s, v) => s + v, 0);
 
@@ -151,27 +154,16 @@ export default function InvestmentSim({ onBack }) {
         {ASSETS.map((a) => {
           const pct = allocations[a.key] || 0;
           return (
-            <div key={a.key} className="lab2-alloc" style={{ '--acc': a.color, '--acc-2': a.color }}>
-              <div
-                className="lab2-alloc-icon"
-                style={{ background: `linear-gradient(140deg, ${a.color}, ${a.color}bb)`, color: '#06121a' }}
-              >
-                {a.key.slice(0, 2)}
-              </div>
-              <div className="lab2-alloc-name">{t(`lab2.assets.${a.key}`)}</div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                value={pct}
-                onChange={(e) => updateAlloc(a.key, e.target.value)}
-                className="lab2-slider"
-                style={{ '--fill': `${pct}%` }}
-                aria-label={t(`lab2.assets.${a.key}`)}
-              />
-              <div className="lab2-alloc-pct lab2-num">{pct.toFixed(0)}%</div>
-            </div>
+            <AllocRow
+              key={a.key}
+              accent={a.color}
+              label={t(`lab2.assets.${a.key}`)}
+              badge={a.key.slice(0, 2)}
+              value={pct}
+              onChange={(v) => updateAlloc(a.key, v)}
+              rtl={rtl}
+              testId={`sim-alloc-${a.key}`}
+            />
           );
         })}
 

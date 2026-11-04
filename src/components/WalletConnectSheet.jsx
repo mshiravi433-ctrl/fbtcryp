@@ -683,6 +683,16 @@ export default function WalletConnectSheet({ open, onClose }) {
           {wallet.error === 'SESSION_MISSING' && (
             <p className="notice" style={{ marginTop: 12 }}>{t('wallet.sessionGone')}</p>
           )}
+          {wallet.error === 'SESSION_IDENTITY_CHANGED' && (
+            <p className="notice notice-danger" style={{ marginTop: 12 }}>
+              {t('wallet.sessionIdentityChanged')}
+            </p>
+          )}
+          {wallet.error === 'WC_IDENTITY_REPAIR_FAILED' && (
+            <p className="notice notice-danger" style={{ marginTop: 12 }}>
+              {t('wallet.wcIdentityRepairFailed')}
+            </p>
+          )}
 
           {/* Health hidden on request — «قسمت سلامت اتصال را مخفی کن» */}
           {null && <WalletHealthPanel projectId={wallet.wcProjectId} />}

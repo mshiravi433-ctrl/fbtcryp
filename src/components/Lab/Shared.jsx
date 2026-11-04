@@ -20,7 +20,7 @@
  *     `Donut`, `Meter`, `AnimatedNumber`, `StatChip`, `PriceBlock`, `LivePill`.
  */
 
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   motion,
   useMotionValue,
@@ -28,8 +28,17 @@ import {
   useTransform
 } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { useLabStore } from '../../store/useLabStore';
 import { useStill } from '../AnimatedIcon';
+import {
+  applyPercentInput,
+  clampToRange,
+  formatPercent,
+  parsePercentText,
+  sliderPaintPercent,
+  stepDirection
+} from '../../lib/lab/percent';
 import {
   IconArrowDown,
   IconArrowRight,
@@ -65,6 +74,32 @@ export const labFade = {
 };
 
 const clampPct = (n) => Math.max(0, Math.min(100, Number.isFinite(n) ? n : 0));
+
+/**
+ * IS THE DOCUMENT RIGHT-TO-LEFT, LIVE?
+ *
+ * `document.documentElement.dir` is the single source of truth for direction in
+ * this app (see i18n/index.js `applyDirection`) and it is set OUTSIDE React, so
+ * a component cannot read it during render and expect to be re-rendered when
+ * the reader switches language. A slider that painted its filled track from the
+ * wrong edge after a language switch is exactly that failure: correct on mount,
+ * wrong until the next navigation.
+ *
+ * So: read it on mount, then observe the attribute. The observer is per
+ * component and cheap — direction changes a handful of times per session.
+ */
+export function useIsRtl() {
+  const read = () =>
+    typeof document !== 'undefined' && document.documentElement.getAttribute('dir') === 'rtl';
+  const [rtl, setRtl] = useState(read);
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof MutationObserver !== 'function') return undefined;
+    const obs = new MutationObserver(() => setRtl(read()));
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['dir'] });
+    return () => obs.disconnect();
+  }, []);
+  return rtl;
+}
 
 /**
  * Level name with a real fallback.
@@ -587,6 +622,81 @@ export function Empty({ children, icon = 'layers' }) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   THE DOORWAY BOX
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * A short intro card with one way out: a real button that opens a guide.
+ *
+ * ─── WHY A COMPONENT AND NOT INLINE MARKUP ──────────────────────────────────
+ * The Advanced tab's chart-lesson box and any future one ("read the fee page
+ * first") must look identical: same glass, same accent wash, same 46px button
+ * as every other Lab call to action. Inline markup is how the second copy ends
+ * up 2px taller with a 15px title.
+ *
+ * ─── WHY A `<Link>` AND NOT A `navigate()` HANDLER ──────────────────────────
+ * A button with an onClick is a fake link: it cannot be opened in a new tab,
+ * it has no URL on hover, and a screen reader announces "button" for something
+ * that navigates. `<Link>` renders a real `<a href>` — middle-click, long-press
+ * → open in new tab, and the browser's own focus ring all work — while the
+ * click handler still tells the router to do a client-side transition and the
+ * Telegram haptic fires once.
+ *
+ * The hit area is the whole card (`::after` spreads the link over it) but the
+ * LABEL is the button, so the accessible name stays specific: "Open the chart
+ * guide", not "box".
+ */
+export function GuideDoor({
+  to,
+  kicker,
+  title,
+  body,
+  cta,
+  icon = 'cap',
+  accent = 'magenta',
+  art = null,
+  onClick,
+  testId
+}) {
+  const still = useStill();
+  return (
+    <motion.aside
+      className={`lab2-door acc-${accent}`}
+      initial={still ? false : { opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.42, ease: LAB_EASE }}
+      data-testid={testId}
+    >
+      <span className="lab2-door-glow" aria-hidden="true" />
+      {art ? (
+        <span className="lab2-door-art" aria-hidden="true">{art}</span>
+      ) : (
+        <span className="lab2-door-icon" aria-hidden="true">
+          <LabIcon name={icon} width={22} height={22} />
+        </span>
+      )}
+      <div className="lab2-door-copy">
+        {kicker && <span className="lab2-door-kicker">{kicker}</span>}
+        <span className="lab2-door-title">{title}</span>
+        {body && <p className="lab2-door-body">{body}</p>}
+        <Link
+          to={to}
+          className="lab2-btn primary lab2-door-cta"
+          onClick={onClick}
+          data-testid={testId ? `${testId}-cta` : undefined}
+        >
+          <LabIcon name="cap" width={15} height={15} />
+          <span>{cta}</span>
+          <span className="lab2-arrow" aria-hidden="true">
+            <IconArrowRight width={13} height={13} />
+          </span>
+        </Link>
+      </div>
+    </motion.aside>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    THE CARD
    ══════════════════════════════════════════════════════════════════════════ */
 
@@ -738,16 +848,47 @@ export function LabChips({ items = [], value, onChange, layoutId, accent = 'cyan
  * background sized to it. The label row above shows the live value in a pill,
  * which is what makes a slider usable on a phone: you see the number move
  * while your thumb is still covering the handle.
+ *
+ * ─── THE THREE THINGS A RANGE INPUT DOES NOT GIVE YOU ──────────────────────
+ *   1. `onChange` is the INPUT event in React, so it fires on every pixel of a
+ *      drag — that part is fine. What is not fine is `onChange` on a slider
+ *      whose `value` is not clamped: the browser clamps for us, our state does
+ *      not, and a value handed in from a text field (say 140) leaves the thumb
+ *      parked at the end while the state says 140. Everything is snapped and
+ *      clamped on the way in here.
+ *   2. RTL. In an RTL document the track is mirrored — `min` sits on the right
+ *      — but a `background-position: left` fill does not mirror with it, so the
+ *      lit portion was drawn against the wrong end. `--fill-side` lets the CSS
+ *      anchor the paint to the correct edge; the control itself keeps its
+ *      native mapping, so ArrowRight still walks toward `max` exactly as the
+ *      thumb visibly does (see `lib/lab/percent.js`).
+ *   3. Touch. `touch-action: none` on the track stops the page from scrolling
+ *      out from under a horizontal drag, and the 8px track is padded to a 44px
+ *      hit area by the CSS — WCAG's minimum touch target.
  */
-export function LabSlider({ label, value, min = 0, max = 100, step = 1, onChange, display, accent }) {
-  const v = Number(value) || 0;
-  const pct = max > min ? ((v - min) / (max - min)) * 100 : 0;
+export function LabSlider({
+  label,
+  value,
+  min = 0,
+  max = 100,
+  step = 1,
+  onChange,
+  display,
+  accent,
+  disabled = false,
+  ariaLabel,
+  testId
+}) {
+  const range = { min, max, step };
+  const v = clampToRange(value, range);
+  const pct = sliderPaintPercent(v, min, max);
+  const rtl = useIsRtl();
   return (
     <div className={`lab2-field ${accent ? `acc-${accent}` : ''}`}>
       {label && (
         <div className="lab2-field-head">
           <span className="lab2-field-label">{label}</span>
-          <span className="lab2-field-value">{display ?? v}</span>
+          <span className="lab2-field-value" dir="ltr">{display ?? formatPercent(v, step)}</span>
         </div>
       )}
       <input
@@ -757,10 +898,227 @@ export function LabSlider({ label, value, min = 0, max = 100, step = 1, onChange
         max={max}
         step={step}
         value={v}
-        style={{ '--fill': `${clampPct(pct)}%` }}
-        onChange={(e) => onChange?.(Number(e.target.value))}
-        aria-label={typeof label === 'string' ? label : undefined}
+        disabled={disabled || undefined}
+        style={{ '--fill': `${pct}%`, '--fill-side': rtl ? 'right' : 'left' }}
+        onChange={(e) => onChange?.(clampToRange(e.target.value, range))}
+        aria-label={ariaLabel || (typeof label === 'string' ? label : undefined)}
+        aria-valuetext={formatPercent(v, step)}
+        data-testid={testId}
       />
+    </div>
+  );
+}
+
+/**
+ * PERCENT FIELD — a slider and a number box that cannot disagree.
+ *
+ * ─── WHY ONE COMPONENT INSTEAD OF TWO WIRED PERCENTAGES ────────────────────
+ * Two sliders previously let their percent be edited through a number box lived
+ * on different screens with different, subtly wrong rules. This one owns the
+ * whole contract, and every rule in it comes from a way the old shape broke:
+ *
+ *   · While you type, the BOX is the thing being edited, so its text is kept
+ *     verbatim and only a parseable number is committed to the slider. Typing
+ *     "40" over "15" passes through "", "4", "40" — none of which may yank the
+ *     thumb to 0 or to 100.
+ *   · On blur (or Enter) the box is rewritten to the exact value the control
+ *     holds, clamped and snapped. That is the moment "140" becomes "100" — the
+ *     box never keeps a number the slider is not holding.
+ *   · Persian digits are accepted, because a Persian keyboard produces them;
+ *     the pill still renders Latin digits like the rest of the Lab's numbers.
+ *   · Arrow keys work on BOTH controls: the box steps, the slider steps, and
+ *     neither lets the value leave the range.
+ *
+ * `onChange` receives the normalised number — never a string, never NaN.
+ */
+export function LabPercentField({
+  label,
+  value,
+  min = 0,
+  max = 100,
+  step = 1,
+  onChange,
+  accent = 'cyan',
+  hint,
+  disabled = false,
+  testId,
+  sliderTestId,
+  inputTestId
+}) {
+  const { t } = useTranslation();
+  const range = { min, max, step };
+  /* `testId` names the FIELD; the two controls inside it get predictable
+     children so a test (and a future `document.querySelector` in a bug report)
+     does not have to guess. Explicit overrides win, because a caller may
+     already have a naming scheme. */
+  const inputId = inputTestId ?? (testId ? `${testId}-input` : undefined);
+  const sliderId = sliderTestId ?? (testId ? `${testId}-slider` : undefined);
+  const committed = clampToRange(value, range);
+  /* `draft === null` means "not being edited": show the committed value. Any
+     string means the reader has typed something we must not overwrite. */
+  const [draft, setDraft] = useState(null);
+  const [clamped, setClamped] = useState(false);
+  const rtl = useIsRtl();
+
+  /* An external change (a preset, a reset, another control) must be reflected.
+     `draft` is cleared only when the number really changed, so a commit that
+     came from this very field does not wipe the caret. */
+  const lastCommitted = useRef(committed);
+  useEffect(() => {
+    if (lastCommitted.current !== committed) {
+      lastCommitted.current = committed;
+      setDraft(null);
+      setClamped(false);
+    }
+  }, [committed]);
+
+  const commit = (n, { fromText = false } = {}) => {
+    const next = clampToRange(n, range);
+    setClamped(fromText && next !== Number(n));
+    lastCommitted.current = next;
+    onChange?.(next);
+    return next;
+  };
+
+  const onText = (event) => {
+    const typed = event.target.value;
+    const next = applyPercentInput(typed, committed, range);
+    setDraft(next.draft);
+    setClamped(next.clamped);
+    if (next.committed) {
+      lastCommitted.current = next.value;
+      onChange?.(next.value);
+    }
+  };
+
+  const onTextKey = (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commit(parsePercentText(draft ?? committed) ?? committed, { fromText: true });
+      setDraft(null);
+      event.currentTarget.blur();
+      return;
+    }
+    const dir = stepDirection(event.key, rtl);
+    if (!dir) return;
+    event.preventDefault();
+    /* Shift = one step, in both directions, on both controls: the amount is
+       the step the caller declared, never an invented "+10". */
+    const base = parsePercentText(draft ?? committed) ?? committed;
+    const next = commit(base + dir * step, { fromText: true });
+    setDraft(String(next));
+    lastCommitted.current = next;
+  };
+
+  const onSlider = (next) => {
+    setDraft(null);
+    setClamped(false);
+    lastCommitted.current = next;
+    onChange?.(next);
+  };
+
+  const shown = draft ?? String(committed);
+  const shownValue = clamped ? committed : draft != null ? draft : committed;
+
+  return (
+    <div className={`lab2-field lab2-percent ${accent ? `acc-${accent}` : ''}`} data-testid={testId}>
+      <div className="lab2-field-head">
+        <label className="lab2-field-label" htmlFor={inputId}>
+          {label}
+        </label>
+        <div className="lab2-percent-value" dir="ltr">
+          {/* −/+ exist for the same reason the slider does: on a phone the
+              thumb covers the value it is dragging. Both walk the SAME step
+              grid as the slider and the arrow keys, so no control can produce
+              a number another control cannot represent. */}
+          <button
+            type="button"
+            className="lab2-percent-step"
+            onClick={() => {
+              const next = commit(committed - step, { fromText: true });
+              setDraft(null);
+              lastCommitted.current = next;
+            }}
+            disabled={disabled || committed <= Math.min(min, max)}
+            aria-label={t('lab2.percent.decrease', { defaultValue: 'Decrease' })}
+            tabIndex={-1}
+          >
+            <span aria-hidden="true">−</span>
+          </button>
+          <input
+            id={inputId}
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            className="lab2-percent-input lab2-num"
+            value={shown}
+            disabled={disabled || undefined}
+            onChange={onText}
+            onKeyDown={onTextKey}
+            onBlur={() => {
+              const next = commit(parsePercentText(draft ?? committed) ?? committed, { fromText: true });
+              lastCommitted.current = next;
+              setDraft(null);
+            }}
+            aria-label={label}
+            aria-valuemin={min}
+            aria-valuemax={max}
+            aria-valuenow={committed}
+            aria-invalid={clamped || undefined}
+            data-testid={inputId}
+          />
+          <span className="lab2-percent-suffix" aria-hidden="true">%</span>
+          <button
+            type="button"
+            className="lab2-percent-step"
+            onClick={() => {
+              const next = commit(committed + step, { fromText: true });
+              setDraft(null);
+              lastCommitted.current = next;
+            }}
+            disabled={disabled || committed >= Math.max(min, max)}
+            aria-label={t('lab2.percent.increase', { defaultValue: 'Increase' })}
+            tabIndex={-1}
+          >
+            <span aria-hidden="true">+</span>
+          </button>
+        </div>
+      </div>
+      <input
+        type="range"
+        className="lab2-slider"
+        min={min}
+        max={max}
+        step={step}
+        value={committed}
+        disabled={disabled || undefined}
+        style={{ '--fill': `${sliderPaintPercent(committed, min, max)}%`, '--fill-side': rtl ? 'right' : 'left' }}
+        onChange={(e) => onSlider(clampToRange(e.target.value, range))}
+        aria-label={label}
+        aria-valuetext={formatPercent(committed, step)}
+        data-testid={sliderId}
+      />
+      <div className="lab2-percent-foot">
+        <span className="lab2-percent-range lab2-num" dir="ltr">
+          {formatPercent(clampToRange(min, range), step)} – {formatPercent(clampToRange(max, range), step)}
+        </span>
+        {clamped ? (
+          <span className="lab2-percent-note" role="status">
+            {t('lab2.percent.clamped', {
+              min: formatPercent(clampToRange(min, range), step),
+              max: formatPercent(clampToRange(max, range), step),
+              defaultValue: 'Clamped to {{min}}–{{max}}'
+            })}
+          </span>
+        ) : hint ? (
+          <span className="lab2-percent-note">{hint}</span>
+        ) : null}
+      </div>
+      {/* Keep the committed value reachable for assistive tech even while the
+          box holds half-typed text. */}
+      <span className="lab2-sr-only" aria-live="polite">
+        {`${label || ''} ${formatPercent(shownValue, step)}`}
+      </span>
     </div>
   );
 }
@@ -995,6 +1353,116 @@ export function SearchInput({ value, onChange, placeholder }) {
         onChange={(e) => onChange(e.target.value)}
         type="search"
       />
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ALLOCATION ROW
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * One line of a portfolio mix: colour tile, asset name, slider, percent.
+ *
+ * The percent used to be a read-only `<div>` — the only way to set a precise
+ * mix was to park a 22px thumb on a 320px track and hope. On a 360px phone that
+ * is 3.2 percentage points per pixel, so "30%" was a guess. Here the number is
+ * the second control: the same value, editable, clamped, and always showing
+ * exactly what the slider holds.
+ *
+ * The row keeps `--acc` from the asset colour, so the fill, the thumb ring and
+ * the focus glow all take the slice's own hue — the same rule the rest of the
+ * allocation panels follow.
+ */
+export function AllocRow({
+  label,
+  badge,
+  value,
+  onChange,
+  accent = 'var(--acc)',
+  max = 100,
+  step = 1,
+  rtl = false,
+  testId,
+  min = 0
+}) {
+  const range = { min, max, step };
+  const v = clampToRange(value, range);
+  const [draft, setDraft] = useState(null);
+
+  const commit = (raw) => {
+    const parsed = typeof raw === 'string' ? parsePercentText(raw) : Number(raw);
+    const next = parsed == null ? v : clampToRange(parsed, range);
+    onChange?.(next);
+    return next;
+  };
+
+  return (
+    <div
+      className="lab2-alloc"
+      style={{ '--acc': accent, '--acc-2': accent }}
+      data-testid={testId}
+    >
+      <div
+        className="lab2-alloc-icon"
+        style={{ background: `linear-gradient(140deg, ${accent}, ${accent}bb)`, color: '#06121a' }}
+        aria-hidden="true"
+      >
+        {badge}
+      </div>
+      <div className="lab2-alloc-name">{label}</div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={v}
+        onChange={(e) => {
+          setDraft(null);
+          onChange?.(clampToRange(e.target.value, range));
+        }}
+        className="lab2-slider"
+        style={{ '--fill': `${sliderPaintPercent(v, min, max)}%`, '--fill-side': rtl ? 'right' : 'left' }}
+        aria-label={label}
+        aria-valuetext={formatPercent(v, step)}
+        data-testid={testId ? `${testId}-slider` : undefined}
+      />
+      <div className="lab2-alloc-pct lab2-num">
+        <input
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          className="lab2-alloc-input"
+          value={draft ?? String(v)}
+          aria-label={label}
+          onChange={(e) => {
+            /* Typing commits only what already parses; the field keeps the
+               raw keystrokes until blur, so clearing it to retype never sends
+               0 through the donut. */
+            const typed = e.target.value;
+            setDraft(typed);
+            const parsed = parsePercentText(typed);
+            if (parsed != null) onChange?.(clampToRange(parsed, range));
+          }}
+          onBlur={() => {
+            const next = commit(draft ?? String(v));
+            setDraft(null);
+            /* Re-render with the clamped number, so a "140" that became 100
+               reads as 100 the moment focus leaves. */
+            if (next !== v) onChange?.(next);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              commit(draft ?? String(v));
+              setDraft(null);
+              e.currentTarget.blur();
+            }
+          }}
+          data-testid={testId ? `${testId}-input` : undefined}
+        />
+        <span aria-hidden="true">%</span>
+      </div>
     </div>
   );
 }

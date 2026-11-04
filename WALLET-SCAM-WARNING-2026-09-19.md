@@ -3,6 +3,14 @@
 Reported: signing an EVM or Solana transaction in Trust Wallet / Phantom shows the
 wallet's scam warning — «this dApp appears to be a scam», exit or continue anyway.
 
+> **Follow-up, 2026-11-04:** the earlier metadata fix did not account for
+> `@walletconnect/sign-client@2.25.0` mutating the metadata object passed to it.
+> A native WebView could therefore still persist `https://localhost` in a
+> WalletConnect session. The reproduced cause, defensive-copy/fail-closed fix,
+> stale-session handling, and the separate limits of the transaction warning
+> diagnosis are recorded in
+> [docs/TRUST-WALLET-WARNINGS-2026-11-04-FA.md](docs/TRUST-WALLET-WARNINGS-2026-11-04-FA.md).
+
 Persian playbook with the ready-to-send emails: **[docs/WALLET-SCAM-WARNING-FA.md](docs/WALLET-SCAM-WARNING-FA.md)**
 
 ---
