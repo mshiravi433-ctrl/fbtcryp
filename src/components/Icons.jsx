@@ -429,6 +429,17 @@ export const IconNews = (p) => (
   </svg>
 );
 
+/* Conversation, for the social screen: a speech bubble with a second one
+   behind it. Distinct from IconNews (a newspaper) and IconMail (an envelope),
+   which are the two glyphs a reader would otherwise confuse it with. */
+export const IconChat = (p) => (
+  <svg {...base} {...p}>
+    <path d="M19.5 12.4a6.6 6.6 0 0 1-7.1 6.6 7.8 7.8 0 0 1-3.1-.7L5 19.6l1.1-3.9a6.6 6.6 0 0 1-1-3.3 6.6 6.6 0 0 1 6.6-6.6h.4a6.6 6.6 0 0 1 7.4 6.6z" />
+    <path d="M9 8.2a4.6 4.6 0 0 1 6.4-.5" />
+    <path d="M10.2 11a4.6 4.6 0 0 1 4.9-.3" />
+  </svg>
+);
+
 export const IconBell = (p) => (
   <svg {...base} {...p}>
     <path d="M18 8a6 6 0 1 0-12 0c0 4.5-1.5 6-1.5 6h15S18 12.5 18 8z" />

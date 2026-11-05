@@ -234,6 +234,17 @@ const servingSnapshot = () => (learningSync?.servingSnapshot ? learningSync.serv
 import { activateListing, myListing, putListing, readBoard, removeListing, tierForAmount, txAlreadyUsed } from './board.js';
 import { promotionTerms, verifyPromotionPayment } from './promote.js';
 import { CHANNEL_IDS, fetchChannel } from './farcaster.js';
+import {
+  TOPIC_IDS,
+  SOCIAL_CONFIG,
+  composeIntent,
+  fetchAuthorFeed,
+  fetchThread,
+  fetchTopic,
+  searchAccounts,
+  searchPosts as searchSocialPosts,
+  fetchTrending as fetchSocialTrending
+} from './social.js';
 import { fetchNfts, nftChains, nftConfigured, nftDiagnose } from './nft.js';
 import { clearWatches, maybeWatchTick, putWatches, readWatches, runWatchCycle, watchTickStatus } from './watch.js';
 /* The token price/P&L watcher — the background twin of src/lib/priceAlerts.js.
@@ -7857,6 +7868,119 @@ app.get('/api/community', async (req, res) => {
     const code = msg === 'UNKNOWN_CHANNEL' ? 400 : 502;
     res.status(code).json({ error: msg.slice(0, 60), channels: CHANNEL_IDS });
   }
+});
+
+/* ------------------------------- social ---------------------------------- */
+/*
+ * A READ-ONLY window onto Bluesky, rendered inside the app.
+ *
+ * This started as a question — "can we have something like harpy?" — and the
+ * answer is in docs/SOCIAL-HARPY-STYLE-REVIEW-FA.md: not on X (its developer
+ * agreement still forbids "a substitute or similar service", and reads are
+ * metered at $0.005 each), but yes on Bluesky, where public reads need no key,
+ * no approval and no payment.
+ *
+ * ─── THE THREE RULES THAT KEEP THIS OFF OUR SERVER BUDGET ─────────────────
+ *   1. `s-maxage` on every response. The CDN answers for five minutes, so the
+ *      function runs at most once per topic per window rather than once per
+ *      visitor. The in-process cache in server/social.js is the second layer,
+ *      for the same window across parallel instances.
+ *   2. An ALLOW-LIST of topics. `?topic=` is matched against a fixed map, so
+ *      this cannot become an open proxy: no caller-supplied upstream URL, and
+ *      no way to make us fetch content we have not agreed to host in the UI.
+ *   3. NO media proxying. Avatars and post images are not fetched at all,
+ *      which is where a feed like this would otherwise spend its bandwidth
+ *      (twenty avatars are ~20x the bytes of the text). The normalizer reports
+ *      only a `media` count.
+ *
+ * ─── WHY NOTHING HERE WRITES ──────────────────────────────────────────────
+ * Liking or posting on a user's behalf needs their session token. This
+ * project has refused to hold that class of credential everywhere else, and
+ * one screen is not a reason to start. `/api/social/compose` returns a
+ * Bluesky composer intent URL instead: the user writes and publishes inside
+ * Bluesky, and we never see a key.
+ */
+const SOCIAL_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=900';
+
+function socialFail(res, e) {
+  const msg = String(e?.message || e);
+  const known = { UNKNOWN_TOPIC: 400, BAD_ACTOR: 400, BAD_URI: 400 };
+  res.status(known[msg] || 502).json({ error: msg.slice(0, 60) });
+}
+
+app.get('/api/social', async (req, res) => {
+  const topic = String(req.query.topic || 'forYou');
+  const limit = Number(req.query.limit) || 25;
+  try {
+    const rows = await fetchTopic(topic, limit);
+    res.set('cache-control', SOCIAL_CACHE);
+    res.json({ rows, topic, topics: TOPIC_IDS });
+  } catch (e) {
+    socialFail(res, e);
+  }
+});
+
+app.get('/api/social/search', async (req, res) => {
+  const q = String(req.query.q || '').slice(0, 80);
+  try {
+    const [posts, accounts] = await Promise.all([
+      searchSocialPosts(q, Number(req.query.limit) || 25),
+      searchAccounts(q, 8)
+    ]);
+    res.set('cache-control', SOCIAL_CACHE);
+    res.json({ q, posts, accounts });
+  } catch (e) {
+    socialFail(res, e);
+  }
+});
+
+app.get('/api/social/profile/:actor', async (req, res) => {
+  try {
+    const rows = await fetchAuthorFeed(req.params.actor, Number(req.query.limit) || 20);
+    res.set('cache-control', SOCIAL_CACHE);
+    res.json({ actor: req.params.actor, rows });
+  } catch (e) {
+    socialFail(res, e);
+  }
+});
+
+app.get('/api/social/thread', async (req, res) => {
+  try {
+    const data = await fetchThread(String(req.query.uri || ''));
+    res.set('cache-control', SOCIAL_CACHE);
+    res.json(data);
+  } catch (e) {
+    socialFail(res, e);
+  }
+});
+
+app.get('/api/social/trending', async (req, res) => {
+  try {
+    const topics = await fetchSocialTrending(Number(req.query.limit) || 8);
+    res.set('cache-control', 'public, max-age=300, s-maxage=900, stale-while-revalidate=1800');
+    res.json({ topics });
+  } catch (e) {
+    socialFail(res, e);
+  }
+});
+
+/* A redirect target, never a post: see the note above. */
+app.get('/api/social/compose', (req, res) => {
+  res.set('cache-control', 'no-store');
+  res.json({ url: composeIntent(String(req.query.text || '')) });
+});
+
+/* Readiness probe: reports configuration, not content, so it is cheap enough
+   to call from a monitor without touching the upstream. */
+app.get('/api/social/status', (_req, res) => {
+  res.json({
+    ok: true,
+    upstream: SOCIAL_CONFIG.APPVIEW,
+    topics: SOCIAL_CONFIG.topics,
+    ttlSeconds: SOCIAL_CONFIG.TTL / 1000,
+    writes: false,
+    media: false
+  });
 });
 
 /* ------------------------------ P2P board --------------------------------- */

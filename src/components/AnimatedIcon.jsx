@@ -340,6 +340,40 @@ export function AnimatedBell({ active, still, ...p }) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Social — the two speech bubbles trade places                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Header mark for the social screen (replaces the cog there — settings is
+ * reachable from More and from the screen itself).
+ *
+ * Two bubbles, the small one drifting outward and back on activation. It reads
+ * as conversation rather than as a broadcast tower, which is the distinction
+ * between "a feed we show you" and "a network we run"; we run neither, but the
+ * first is what the screen actually is.
+ *
+ * Motion is a tiny y/x offset, not a scale or a rotation: this button sits
+ * beside a live price chip, and anything larger competes with the number the
+ * eye is supposed to follow. Disabled entirely under reduced motion.
+ */
+export function AnimatedSocial({ active, still, ...p }) {
+  const on = active && !still;
+  return (
+    <svg {...svgBase} {...p}>
+      <path d="M20 12.5a7 7 0 0 1-7.6 7 8.3 8.3 0 0 1-3.3-.7L4.5 20l1.2-4.2a7 7 0 0 1-1-3.5A7 7 0 0 1 12 5.5h.4A7 7 0 0 1 20 12.5z" />
+      <motion.g
+        initial={false}
+        animate={on ? { x: [0, 1.6, 0], y: [0, -1.4, 0] } : { x: 0, y: 0 }}
+        transition={{ duration: 0.55, ease: 'easeOut' }}
+      >
+        <path d="M8.4 8.6a4 4 0 0 1 5.6-.4" />
+        <path d="M9.6 11.4a4 4 0 0 1 4.3-.2" />
+      </motion.g>
+    </svg>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Settings — the cog turns                                                    */
 /* -------------------------------------------------------------------------- */
 

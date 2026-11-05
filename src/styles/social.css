@@ -1,0 +1,376 @@
+/*
+ * SOCIAL — the Bluesky feed screen.
+ *
+ * ─── THE TRAFFIC RULE, IN CSS ──────────────────────────────────────────────
+ * Nothing here paints a remote pixel. No avatars from cdn.bsky.app, no post
+ * images, no video posters. The "avatar" is a gradient with an initial and the
+ * media marker is a glyph. That is a design decision with a server budget
+ * behind it: twenty remote avatars are roughly twenty times the bytes of the
+ * text they sit next to, and this screen has to cost the deployment nothing.
+ *
+ * Every colour comes from the theme variables (--rgb-*, --bg-panel-solid,
+ * --text-*, --line) so the screen inherits both themes without a second
+ * stylesheet or a `[data-theme]` block of its own.
+ */
+
+.soc-page {
+  --soc-accent: var(--rgb-1);
+  --soc-accent-2: var(--rgb-2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 18px;
+}
+
+/* ── header ─────────────────────────────────────────────────────────────── */
+.soc-title-row { display: flex; align-items: flex-start; gap: 10px; }
+.soc-title-copy { min-width: 0; flex: 1; }
+.soc-title-line { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.soc-title-line h1 { margin: 0; font-size: 19px; line-height: 1.4; }
+.soc-sub { margin: 3px 0 0; font-size: 10.5px; line-height: 1.65; color: var(--text-3); }
+
+.soc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--soc-accent) 26%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--soc-accent) 8%, transparent);
+  color: var(--soc-accent);
+  font: 800 8.5px/1.4 var(--font-mono);
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.soc-badge i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.soc-badge.is-off { color: var(--text-3); border-color: var(--line); background: transparent; }
+
+.soc-refresh {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel-solid);
+  color: var(--text-2);
+}
+.soc-refresh:disabled { opacity: .5; }
+.soc-spin { animation: soc-rotate .9s linear infinite; }
+@keyframes soc-rotate { to { transform: rotate(360deg); } }
+
+/* ── search ─────────────────────────────────────────────────────────────── */
+.soc-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 42px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-panel-solid) 88%, transparent);
+  color: var(--text-3);
+}
+.soc-search:focus-within { border-color: color-mix(in srgb, var(--soc-accent) 42%, var(--line)); }
+.soc-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 12.5px;
+  outline: none;
+}
+.soc-search input::-webkit-search-cancel-button { display: none; }
+.soc-clear {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 0;
+  background: color-mix(in srgb, var(--text-3) 18%, transparent);
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* ── topic tabs ─────────────────────────────────────────────────────────── */
+.soc-tabs {
+  display: flex;
+  gap: 5px;
+  padding: 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-panel-solid) 84%, transparent);
+}
+.soc-tabs::-webkit-scrollbar { display: none; }
+.soc-tab {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 6px 12px;
+  scroll-snap-align: center;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+  transition: color .16s ease, background .16s ease, border-color .16s ease;
+}
+.soc-tab.is-on {
+  color: var(--soc-accent);
+  border-color: color-mix(in srgb, var(--soc-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--soc-accent) 10%, transparent);
+}
+
+/* ── trending ───────────────────────────────────────────────────────────── */
+.soc-trends { display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.soc-trends::-webkit-scrollbar { display: none; }
+.soc-trends-label { flex: 0 0 auto; font-size: 9px; font-weight: 800; letter-spacing: .06em; color: var(--text-3); text-transform: uppercase; }
+.soc-trend {
+  flex: 0 0 auto;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-panel-solid) 70%, transparent);
+  color: var(--text-2);
+  font-size: 10.5px;
+}
+
+/* ── feed ───────────────────────────────────────────────────────────────── */
+.soc-feed { display: flex; flex-direction: column; gap: 8px; }
+.soc-card {
+  padding: 12px 13px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-panel-solid) 92%, transparent);
+}
+.soc-head { display: flex; align-items: flex-start; gap: 8px; }
+.soc-author {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: start;
+  color: inherit;
+}
+.soc-avatar {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 850;
+}
+.soc-author-copy { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.soc-author-copy strong {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.soc-handle {
+  font-size: 10px;
+  color: var(--text-3);
+  direction: ltr;
+  text-align: start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.soc-time { flex: 0 0 auto; font-size: 10px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+.soc-body { display: block; width: 100%; padding: 8px 0 0; border: 0; background: transparent; text-align: start; color: inherit; }
+.soc-text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--text-1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.soc-more { margin-top: 4px; padding: 0; border: 0; background: transparent; color: var(--soc-accent); font-size: 11px; font-weight: 750; }
+
+.soc-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 9px; padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.soc-counts { display: flex; align-items: center; gap: 11px; }
+.soc-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.soc-media { font-size: 11px; color: var(--text-3); }
+.soc-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--soc-accent) 26%, var(--line));
+  background: color-mix(in srgb, var(--soc-accent) 7%, transparent);
+  color: var(--soc-accent);
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+/* ── accounts / sub-views ───────────────────────────────────────────────── */
+.soc-accounts { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+.soc-account {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-panel-solid) 88%, transparent);
+  text-align: start;
+  color: inherit;
+}
+.soc-sub { display: flex; flex-direction: column; gap: 8px; }
+.soc-sub-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.soc-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel-solid);
+  color: var(--text-1);
+  font-size: 11.5px;
+  font-weight: 750;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.soc-sub-open { border: 0; background: transparent; color: var(--soc-accent); font-size: 10.5px; font-weight: 750; }
+.soc-sub-label { margin: 2px 0; font-size: 9.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+.soc-replydepth { margin-inline-start: 14px; }
+.soc-empty-copy { margin: 4px 0; font-size: 11px; color: var(--text-3); text-align: center; }
+
+/* ── states ─────────────────────────────────────────────────────────────── */
+.soc-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 13px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-panel-solid) 80%, transparent);
+}
+.soc-skel span {
+  height: 9px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--text-3) 12%, transparent), color-mix(in srgb, var(--text-3) 22%, transparent), color-mix(in srgb, var(--text-3) 12%, transparent));
+  background-size: 220% 100%;
+  animation: soc-shimmer 1.4s linear infinite;
+}
+.soc-skel span:nth-child(1) { width: 34%; }
+.soc-skel span:nth-child(2) { width: 92%; }
+.soc-skel span:nth-child(3) { width: 68%; }
+@keyframes soc-shimmer { to { background-position: -220% 0; } }
+
+.soc-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 26px 16px;
+  border-radius: 16px;
+  border: 1px dashed var(--line);
+  text-align: center;
+}
+.soc-empty span { font-size: 24px; }
+.soc-empty p { margin: 0; font-size: 11.5px; line-height: 1.7; color: var(--text-3); }
+.soc-loadmore { align-self: center; }
+.soc-updated { margin: 2px 0 0; text-align: center; font-size: 9.5px; color: var(--text-3); }
+
+/* ── compose ────────────────────────────────────────────────────────────── */
+.soc-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--soc-accent) 26%, var(--line));
+  background: color-mix(in srgb, var(--soc-accent) 6%, var(--bg-panel-solid));
+}
+.soc-compose-note { margin: 0; font-size: 10px; line-height: 1.65; color: var(--text-3); }
+.soc-compose textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 66px;
+  padding: 9px 11px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel-solid);
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.7;
+  outline: none;
+}
+.soc-compose textarea:focus { border-color: color-mix(in srgb, var(--soc-accent) 42%, var(--line)); }
+.soc-compose-actions { display: flex; align-items: center; gap: 8px; }
+.soc-charline { margin-inline-end: auto; font-size: 10px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.soc-compose-go { background: var(--soc-accent); color: #04121a; font-weight: 800; }
+.soc-compose-go:disabled { opacity: .45; }
+
+/* ── actions + notice ───────────────────────────────────────────────────── */
+.soc-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.soc-write {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-inline: 14px;
+  background: linear-gradient(135deg, var(--soc-accent), var(--soc-accent-2));
+  color: #04121a;
+  font-weight: 800;
+  border: 0;
+}
+.soc-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 4px 0 0;
+  font-size: 9.5px;
+  line-height: 1.75;
+  color: var(--text-3);
+}
+.soc-notice svg { flex: 0 0 auto; margin-top: 1px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .soc-spin, .soc-skel span { animation: none; }
+}
+
+/* Wide screens (tablet/APK landscape): keep the reading column readable. */
+@media (min-width: 720px) {
+  .soc-page { max-width: 720px; margin-inline: auto; }
+}

@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { AnimatedSettings, useStill } from './AnimatedIcon';
+import { AnimatedSocial, useStill } from './AnimatedIcon';
 import { IconBuilding, IconClock, IconTrend } from './Icons';
 import { coinImage } from '../lib/coinImage';
 import BrandMark from './BrandMark.jsx';
@@ -59,7 +59,8 @@ export default function Header() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const still = useStill();
-  const [cogSpin, setCogSpin] = useState(false);
+  /* Renamed from cogSpin when the header mark became the social button. */
+  const [socialPulse, setSocialPulse] = useState(false);
   const [news, setNews] = useState(() => cachedHeadlines());
   const [showSpotlight, setShowSpotlight] = useState(false);
   const [spotlightIndex, setSpotlightIndex] = useState(0);
@@ -186,21 +187,29 @@ export default function Header() {
           <span aria-hidden="true">{tier.icon}</span>
         </motion.button>
 
+        {/*
+          ─── THIS BUTTON USED TO BE THE COG ─────────────────────────────────
+          Requested: «در هیدر بجای ایکون تنظیمات یک ایکون دیگر باشد که وقتی
+          میزنی روش صفحه اجتماعی باز شود». Settings is not lost — it is in
+          the More sheet, in Quick Access, and on the social screen's own
+          action row — so replacing the header mark costs no route.
+        */}
         <motion.button
           className="icon-btn"
           onClick={() => {
-            setCogSpin(true);
-            navigate('/settings');
+            setSocialPulse(true);
+            navigate('/social');
           }}
-          onHoverStart={() => setCogSpin(true)}
-          onHoverEnd={() => setCogSpin(false)}
+          onHoverStart={() => setSocialPulse(true)}
+          onHoverEnd={() => setSocialPulse(false)}
           whileTap={{ scale: 0.9 }}
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.14 }}
-          aria-label={t('nav.settings')}
+          aria-label={t('nav.social')}
+          title={t('nav.social')}
         >
-          <AnimatedSettings active={cogSpin} still={still} width={16} height={16} />
+          <AnimatedSocial active={socialPulse} still={still} width={16} height={16} />
         </motion.button>
       </div>
     </header>
