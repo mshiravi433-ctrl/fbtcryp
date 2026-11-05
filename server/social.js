@@ -39,8 +39,26 @@
 
 import { withCache } from './cache.js';
 
-/** Upstream. NOT `public.api.bsky.app` — search is closed there (403 HTML). */
-const APPVIEW = 'https://api.bsky.app/xrpc';
+/**
+ * Upstream. NOT `public.api.bsky.app` — search is closed there (403 HTML).
+ *
+ * Overridable so a staging box, a CI runner with no egress, or a local mock
+ * can stand in. It is an ORIGIN, not a caller parameter: nothing from a request
+ * can reach this constant, so the override cannot become an open proxy. Only
+ * https is accepted, plus http on loopback for a local fixture server.
+ */
+const DEFAULT_APPVIEW = 'https://api.bsky.app/xrpc';
+
+function appviewBase() {
+  const raw = String(process.env.SOCIAL_APPVIEW_BASE || '').trim().replace(/\/+$/, '');
+  if (!raw) return DEFAULT_APPVIEW;
+  if (/^https:\/\/[^/]+\/xrpc$/i.test(raw)) return raw;
+  if (/^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\/xrpc$/i.test(raw)) return raw;
+  /* A bad override must not silently send user data somewhere odd. */
+  return DEFAULT_APPVIEW;
+}
+
+const APPVIEW = appviewBase();
 
 /** Canonical web client, used for "open on Bluesky" links. */
 export const BSKY_WEB = 'https://bsky.app';
