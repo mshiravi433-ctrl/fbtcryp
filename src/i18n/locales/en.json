@@ -55,7 +55,8 @@
     "protection": "Protection",
     "launch": "Launch",
     "aparat": "Video Tutorials",
-    "collective": "Collective"
+    "collective": "Collective",
+    "social": "Social"
   },
   "common": {
     "balance": "Balance",
@@ -18125,5 +18126,49 @@
       "topMoverAria": "Open 24h leader {{symbol}}",
       "awaiting": "Syncing"
     }
+  },
+  "social": {
+    "title": "Social",
+    "subtitle": "Crypto posts from Bluesky — readable, no account, no key",
+    "live": "BLUESKY · LIVE",
+    "offlineBadge": "BLUESKY · OFFLINE",
+    "searchPlaceholder": "Search posts or people…",
+    "clearSearch": "Clear search",
+    "refresh": "Refresh",
+    "topic": {
+      "forYou": "For you",
+      "bitcoin": "Bitcoin",
+      "ethereum": "Ethereum",
+      "defi": "DeFi",
+      "solana": "Solana",
+      "fa": "Persian"
+    },
+    "trending": "Trending",
+    "accounts": "People",
+    "likes": "Likes",
+    "reposts": "Reposts",
+    "replies": "Replies",
+    "hasMedia": "Has media (not shown)",
+    "openOnBsky": "Open",
+    "more": "Read more",
+    "less": "Less",
+    "loadMore": "More posts",
+    "updated": "Updated",
+    "thread": "Thread",
+    "replyCount": "{{n}} replies",
+    "noReplies": "No replies yet.",
+    "emptyProfile": "This account has no recent posts.",
+    "empty": "Nothing in this tab yet.",
+    "offline": "The feed could not be reached. Nothing else in the app is affected.",
+    "noResults": "Nothing found for “{{q}}”.",
+    "retry": "Try again",
+    "write": "Write",
+    "composePlaceholder": "What do you want to say?",
+    "composeNote": "This opens in the Bluesky app and is only published there, with your own account. We hold no key or password of yours and never post on your behalf.",
+    "composeGo": "Continue in Bluesky",
+    "cancel": "Cancel",
+    "openBluesky": "Open Bluesky",
+    "settings": "Settings",
+    "notice": "These posts are written by strangers on a public network. We do not host them, do not endorse them and do not review them; showing a post is not a recommendation. Never send anyone money or a recovery phrase because of something you read here."
   }
 }

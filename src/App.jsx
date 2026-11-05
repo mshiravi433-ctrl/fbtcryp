@@ -111,6 +111,14 @@ const Stocks = lazyRetry(() => import('./pages/Stocks'));
 const Ostium = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/Ostium')) : () => null;
 const Dydx = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/Dydx')) : () => null;
 const DerivativesDashboard = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/DerivativesDashboard')) : () => null;
+/*
+ * SOCIAL — the Bluesky feed, on its own route so the header icon can open it.
+ *
+ * Lazy, like every other screen: its stylesheet and the feed components stay
+ * out of the first-paint payload that scripts/check-first-paint.mjs budgets.
+ * Read-only by design (server/social.js explains why there is no write path).
+ */
+const Social = lazyRetry(() => import('./pages/Social'));
 const Shop = lazyRetry(() => import('./pages/Shop'));
 const Help = lazyRetry(() => import('./pages/Help'));
 const Docs = lazyRetry(() => import('./pages/Docs'));
@@ -487,6 +495,7 @@ function AnimatedRoutes() {
             <Route path="/pay/:code" element={<PayLanding />} />
             <Route path="/leaderboard" element={<Leaderboard />} />
             <Route path="/news" element={<News />} />
+            <Route path="/social" element={<Social />} />
             <Route path="/explore" element={<Explore />} />
             <Route path="/discover" element={<Discover />} />
             <Route path="/nft" element={<Nft />} />

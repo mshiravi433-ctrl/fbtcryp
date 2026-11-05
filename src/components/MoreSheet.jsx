@@ -18,6 +18,7 @@ import {
   IconKey,
   IconMarket,
   IconRocket,
+  IconChat,
   IconNews,
   IconPools,
   IconSettings,
@@ -377,6 +378,11 @@ const GROUPS = [
        */
       { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney, hue: 'var(--rgb-7)' },
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
+      /* The social feed's second doorway. The header mark is the primary one;
+         this tile is here because the header also carries a rotating price
+         spotlight, and a destination that exists on exactly one control is a
+         destination half the users never find. */
+      { to: '/social', key: 'nav.social', Icon: IconChat, hue: 'var(--rgb-3)' },
       /*
        * The world console left the News tabs and is its own page now, named
        * «جهانی» in this menu. It sits right under News because that is where
