@@ -244,10 +244,13 @@ export function applyDirection(lang, persist = true) {
  * only AFTER the strings are in place: flipping to RTL while the old
  * language's text is still on screen produces a visible scramble.
  */
+let languageRequest = 0;
+
 export async function setLanguage(lang) {
   if (!SUPPORTED.includes(lang)) return false;
+  const request = ++languageRequest;
   const ok = await loadLocale(lang);
-  if (!ok && lang !== 'en') return false;
+  if (request !== languageRequest || (!ok && lang !== 'en')) return false;
   await i18n.changeLanguage(lang);
   applyDirection(lang, true);
   return true;
@@ -262,7 +265,7 @@ export async function setLanguage(lang) {
 applyDirection(initialLang, false);
 if (initialLang !== 'en') {
   loadLocale(initialLang).then((ok) => {
-    if (ok) i18n.changeLanguage(initialLang);
+    if (ok && languageRequest === 0) i18n.changeLanguage(initialLang);
   });
 }
 i18n.on('languageChanged', (lng) => applyDirection(lng, true));

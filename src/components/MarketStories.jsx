@@ -524,7 +524,7 @@ export default function MarketStories({ coins = [], global = null }) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const still = useStill();
-  const lang = (i18n.resolvedLanguage || i18n.language || 'en').split('-')[0].toLowerCase();
+  const lang = (i18n.language || i18n.resolvedLanguage || 'en').split('-')[0].toLowerCase();
   const isRtl = lang === 'fa' || lang === 'ar' || lang === 'ur';
   const isPersian = lang === 'fa';
   const storyItems = useMemo(
@@ -827,7 +827,7 @@ export default function MarketStories({ coins = [], global = null }) {
         createPortal(
           <AnimatePresence>
             {activeStory && (
-              <div className="market-story-overlay" data-testid="market-story-popup">
+              <div className="market-story-overlay" lang={lang} dir={isRtl ? 'rtl' : 'ltr'} data-testid="market-story-popup">
                 <motion.div
                   className="market-story-backdrop"
                   initial={{ opacity: 0 }}

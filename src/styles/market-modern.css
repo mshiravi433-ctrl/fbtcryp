@@ -4105,3 +4105,22 @@
 @media (prefers-reduced-motion: reduce) {
   .market-search { transition: none; }
 }
+
+/* Story reader: clearer type and surfaces without adding animation on mobile. */
+.market-story-dialog.market-glass-surface {
+  background:
+    radial-gradient(95% 48% at 50% 0%, color-mix(in srgb, var(--story-accent) 18%, transparent), transparent 75%),
+    radial-gradient(85% 50% at 100% 100%, color-mix(in srgb, var(--story-accent2) 13%, transparent), transparent 70%),
+    linear-gradient(165deg, #10192c, #080d19 60%, #070b14);
+}
+.market-story-dialog .market-story-head-title { line-height: 1.35; text-wrap: balance; }
+.market-story-dialog .market-story-lead { line-height: 1.75; }
+.market-story-dialog .market-story-panel {
+  border-color: color-mix(in srgb, var(--story-accent) 22%, transparent);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--story-accent) 8%, transparent), rgba(255,255,255,.025));
+}
+.market-story-dialog .market-story-fact { line-height: 1.5; }
+.market-story-dialog .market-story-body { -webkit-overflow-scrolling: touch; }
+:root[data-theme='light'] .market-story-dialog.market-glass-surface {
+  background: radial-gradient(90% 45% at 50% 0%, color-mix(in srgb, var(--story-accent) 15%, transparent), transparent 75%), linear-gradient(165deg, #f8fbff, #eaf0fa);
+}

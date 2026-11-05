@@ -245,6 +245,22 @@ describe('Glassmorphic Market Cap & Bitcoin Hero Cards + 1-Minute Stories + Apar
     await waitFor(() => expect(currentPath).toBe('/stocks'));
   });
 
+  it('updates every open story and its portal direction when switching from Persian to English', async () => {
+    const { rerender } = render(<MemoryRouter><Market /></MemoryRouter>);
+    fireEvent.click(screen.getByTestId('market-story-item-stocks'));
+    expect(screen.getByTestId('market-story-popup').getAttribute('dir')).toBe('rtl');
+    LANG = 'en';
+    rerender(<MemoryRouter><Market /></MemoryRouter>);
+    const popup = screen.getByTestId('market-story-popup');
+    expect(popup.getAttribute('dir')).toBe('ltr');
+    expect(popup.getAttribute('lang')).toBe('en');
+    for (const item of MARKET_STORY_ITEMS.filter((story) => story.id !== 'aparat')) {
+      fireEvent.click(screen.getByRole('button', { name: en.stories.items[item.id].short }));
+      expect(popup.querySelector('.market-story-head-title').textContent).toBe(en.stories.items[item.id].title);
+      expect(popup.textContent).not.toMatch(/[\u0600-\u06ff]/);
+    }
+  });
+
   it('shows the Aparat story only in Persian and keeps the non-Persian progress rail aligned', async () => {
     LANG = 'en';
     render(<MemoryRouter><Market /></MemoryRouter>);

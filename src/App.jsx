@@ -64,7 +64,7 @@ import { pingWatchTick } from './lib/watchTick';
 import GalaxyBackdrop from './components/GalaxyBackdrop';
 import AppLock from './components/AppLock';
 import { initTheme, useSettingsStore } from './store/useSettingsStore';
-import { SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from './lib/features';
+import { AI_TRADE_ENABLED, SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from './lib/features';
 import { languageIsUnset } from './i18n';
 import { initServiceWorker, initNativePushListeners, autoRegisterNativePush, refreshWebPushIfOptedIn, maybeSendDailyPromo, pickPromoKey, installPushBridge } from './lib/notify';
 import { newsIsStale, getNews } from './lib/news';
@@ -144,7 +144,7 @@ const Portfolio = lazyRetry(() => import('./pages/Portfolio'));
 const IntentOS = lazyRetry(() => import('./pages/IntentOS'));
 const FlashLiquidity = lazyRetry(() => import('./pages/FlashLiquidity'));
 const IntentAIUnified = lazyRetry(() => import('./components/IntentAIUnified'));
-const MissionControl = lazyRetry(() => import('./components/MissionControl'));
+const AiTradePanel = AI_TRADE_ENABLED ? lazyRetry(() => import('./components/AiTrade/AiTradePanel.jsx')) : null;
 const AiControlCenter = lazyRetry(() => import('./components/ai/AiControlCenter'));
 /* Phase 211 — Global Intelligence («هوش جهانی»). ADDITIVE route: the nine
    global intelligence domains, the cross-asset regime and the proactive
@@ -516,7 +516,8 @@ function AnimatedRoutes() {
                 as a redirect so saved links and the old deep links keep
                 working, but there is only one brain, mounted at /intent. */}
             <Route path="/intent" element={<IntentAIUnified />} />
-            <Route path="/missions" element={<MissionControl />} />
+            <Route path="/missions" element={<Navigate to="/intent" replace />} />
+            <Route path="/ai-trade" element={AiTradePanel ? <AiTradePanel /> : <Navigate to="/intent" replace />} />
             <Route path="/intent-ai" element={<Navigate to="/intent" replace />} />
             <Route path="/ai-control" element={<AiControlCenter />} />
             <Route path="/global" element={<GlobalWorld />} />
