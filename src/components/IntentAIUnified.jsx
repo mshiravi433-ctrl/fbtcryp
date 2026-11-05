@@ -1,3 +1,4 @@
+import { AI_TRADE_ENABLED } from '../lib/features';
 /**
  * FBT INTENT OS — Universal AI Operating Agent — Unified Chat Surface V6
  * ---------------------------------------------------------------------------
@@ -7519,9 +7520,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             ) : null}
           </div>
           <div className="iaos-header-status">
-            <button type="button" className="iaos-status-pill" onClick={() => navigate('/missions')}>
-              {fa ? 'ماموریت‌ها' : 'Missions'}
-            </button>
+            {AI_TRADE_ENABLED && (
+              <button type="button" className="iaos-status-pill" onClick={() => navigate('/ai-trade')}>
+                {fa ? 'AI ترید' : 'AI Trade'}
+              </button>
+            )}
             <button
               type="button"
               className="iaos-new-season-btn"

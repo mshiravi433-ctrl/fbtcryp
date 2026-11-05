@@ -314,3 +314,31 @@
   color: #64748b;
   background: rgba(100, 116, 139, .12);
 }
+
+/* A readable, touch-friendly card on narrow phones (including iPhone Safari).
+   Keep the full copy and CTA rather than squeezing them into a single row. */
+@media (max-width: 620px) {
+  .mx-market .mx-global-banner {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    padding: 18px;
+    border-radius: 20px;
+  }
+  .mx-market .mx-global-banner .mx-smart-main { align-items: flex-start; gap: 14px; }
+  .mx-market .mx-global-banner .mx-smart-mark { width: 42px; height: 42px; }
+  .mx-market .mx-global-banner .mx-smart-copy { flex: 1 1 0; min-width: 0; }
+  .mx-market .mx-global-banner .mx-smart-copy h2 {
+    font-size: 16px; line-height: 1.5; white-space: normal; overflow: visible;
+  }
+  .mx-market .mx-global-banner .mx-smart-copy p {
+    margin-top: 5px; font-size: 13px; line-height: 1.65;
+    white-space: normal; overflow: visible; overflow-wrap: anywhere;
+  }
+  .mx-market .mx-global-banner .mx-smart-cta {
+    width: 100%; min-height: 44px; padding: 0 14px;
+    justify-content: space-between; font-size: 13px;
+  }
+  .mx-market .mx-global-banner .mx-smart-cta > span { display: inline; }
+}
