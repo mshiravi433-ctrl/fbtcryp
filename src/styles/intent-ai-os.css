@@ -5511,3 +5511,248 @@ body:has(.iaos-page-v6) {
   .iaos-quote-grid { grid-template-columns: minmax(0, 1fr); }
   .iaos-quote-refresh { padding-inline: 8px; }
 }
+
+/* ------------------------------------------------------------------ */
+/* AI BENCHMARK & PROVIDER LAB (Multi-Model Intelligence dashboard)   */
+/* ------------------------------------------------------------------ */
+/*
+ * The table is the product here, so it is allowed to scroll horizontally
+ * inside its own container rather than forcing the whole panel wider than a
+ * phone. Every state also has a text label — colour is never the only signal.
+ */
+.iab {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 6px 0 18px;
+}
+
+.iab-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.iab-head h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: #f8fafc;
+}
+
+.iab-head p {
+  margin: 0;
+  max-width: 60ch;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+
+.iab-counters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.iab-counter {
+  background: rgba(30, 41, 59, .55);
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.iab-counter strong {
+  font-size: 18px;
+  line-height: 1.2;
+  color: #f8fafc;
+}
+
+.iab-counter span {
+  font-size: 10px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.iab-section h4 {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  color: #e2e8f0;
+}
+
+.iab-section h4 small {
+  font-size: 10.5px;
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+.iab-table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 10px;
+}
+
+.iab-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.iab-table th,
+.iab-table td {
+  padding: 8px 10px;
+  text-align: start;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+  white-space: nowrap;
+  color: #cbd5e1;
+}
+
+.iab-table th {
+  background: rgba(15, 23, 42, .55);
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+
+.iab-table tr:last-child td { border-bottom: 0; }
+
+.iab-table td strong { display: block; color: #f1f5f9; font-size: 11.5px; }
+.iab-table td small { display: block; color: #64748b; font-size: 9.5px; }
+.iab-table code { font-size: 10px; color: #93c5fd; }
+
+.iab-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+.iab-good { background: rgba(52, 211, 153, .14); color: #6ee7b7; }
+.iab-ok   { background: rgba(56, 189, 248, .14); color: #7dd3fc; }
+.iab-warn { background: rgba(251, 191, 36, .14); color: #fcd34d; }
+.iab-bad  { background: rgba(251, 113, 133, .14); color: #fda4af; }
+.iab-none { background: rgba(148, 163, 184, .14); color: #cbd5e1; }
+
+.iab-reason { color: #fda4af !important; font-size: 9px; }
+
+.iab-score { font-weight: 700; font-size: 14px; }
+.iab-score.iab-good { color: #6ee7b7; background: none; }
+.iab-score.iab-ok   { color: #7dd3fc; background: none; }
+.iab-score.iab-warn { color: #fcd34d; background: none; }
+.iab-score.iab-bad  { color: #fda4af; background: none; }
+.iab-score.iab-none { color: #94a3b8; background: none; }
+
+.iab-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.iab-select {
+  background: rgba(15, 23, 42, .7);
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 11px;
+}
+
+.iab-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.iab-chips-label { font-size: 10px; color: #94a3b8; }
+
+.iab-chip {
+  background: rgba(30, 41, 59, .6);
+  border: 1px solid rgba(255, 255, 255, .12);
+  color: #cbd5e1;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.iab-chip.is-on {
+  background: rgba(56, 189, 248, .16);
+  border-color: rgba(56, 189, 248, .5);
+  color: #e0f2fe;
+}
+
+.iab-lab {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.iab-lab-row {
+  display: grid;
+  grid-template-columns: 74px minmax(120px, 1.2fr) 108px minmax(120px, 2fr);
+  gap: 8px;
+  align-items: center;
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+  font-size: 10.5px;
+}
+
+.iab-lab-row:last-child { border-bottom: 0; }
+.iab-lab-row strong { color: #e2e8f0; font-size: 11px; font-weight: 600; }
+.iab-lab-row small { color: #64748b; font-size: 9px; }
+.iab-lab-evidence { color: #94a3b8; overflow: hidden; text-overflow: ellipsis; }
+
+.iab-note {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.55;
+  color: #94a3b8;
+}
+
+.iab-note-warn { color: #fcd34d; }
+.iab-note-dim { color: #64748b; }
+.iab-empty { color: #94a3b8; text-align: center; padding: 16px; font-size: 11px; }
+
+@media (max-width: 639px) {
+  .iab-lab-row {
+    grid-template-columns: 64px minmax(90px, 1fr) 72px;
+  }
+  .iab-lab-evidence {
+    grid-column: 1 / -1;
+    padding-inline-start: 72px;
+  }
+}
+
+:root[data-theme='light'] .iab-counter,
+:root[data-theme='light'] .iab-chip {
+  background: rgba(248, 250, 252, .9);
+  border-color: rgba(15, 23, 42, .1);
+}
+
+:root[data-theme='light'] .iab-head h3,
+:root[data-theme='light'] .iab-counter strong,
+:root[data-theme='light'] .iab-table td strong,
+:root[data-theme='light'] .iab-section h4,
+:root[data-theme='light'] .iab-lab-row strong { color: #0f172a; }
+
+:root[data-theme='light'] .iab-table th { background: #f1f5f9; color: #475569; }
+:root[data-theme='light'] .iab-table td { color: #334155; }
+:root[data-theme='light'] .iab-good { background: rgba(5, 150, 105, .12); color: #047857; }
+:root[data-theme='light'] .iab-ok { background: rgba(2, 132, 199, .12); color: #0369a1; }
+:root[data-theme='light'] .iab-warn { background: rgba(217, 119, 6, .14); color: #b45309; }
+:root[data-theme='light'] .iab-bad { background: rgba(225, 29, 72, .12); color: #be123c; }
+:root[data-theme='light'] .iab-none { background: rgba(100, 116, 139, .12); color: #334155; }
+:root[data-theme='light'] .iab-select { background: #fff; color: #0f172a; }

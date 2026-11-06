@@ -72,13 +72,13 @@ export const aiProvider = () => {
 };
 
 /** Environment variable names that LOOK like AI keys but are not read by this
- *  build, so an operator who set them gets told instead of wondering. Grok
- *  (xAI), OpenAI and Perplexity were de-registered from the fleet; their duties
- *  are carried by OpenRouter / Anthropic / DeepSeek / AIMLAPI. */
+ *  build, so an operator who set them gets told instead of wondering.
+ *
+ *  OpenAI (OPENAI_API_KEY) and xAI (XAI_API_KEY / GROK_API_KEY) are READ now —
+ *  they are registered providers again, and the benchmark proves the direct
+ *  connection separately from OpenRouter. Perplexity remains out: no key exists
+ *  and its sourced-search job is carried by OpenRouter's online models. */
 export const IGNORED_AI_ENV_VARS = Object.freeze([
-  'GROK_API_KEY',
-  'XAI_API_KEY',
-  'OPENAI_API_KEY',
   'PERPLEXITY_API_KEY',
   'VITE_GROQ_API_KEY',
   'VITE_OPENROUTER_API_KEY',

@@ -88,3 +88,6 @@ public/onnxruntime/
 
 # Local scratch space (probes, one-off scripts) — never shipped.
 .scratch/
+
+# AI benchmark reports are generated artifacts, not source.
+/reports/ai-benchmark/

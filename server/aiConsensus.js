@@ -180,7 +180,9 @@ export async function runMultiAiDebate({
    */
   let debateProviders = orderByHealth(preferredProviders.filter(isProviderConfigured));
   if (!debateProviders.length) {
-    const priority = ['groq', 'openrouter', 'gemini', 'deepseek', 'anthropic', 'aimlapi', 'mistral', 'workersai'];
+    /* Direct OpenAI/Grok seats are back in the registry; when they carry a key
+       they take a debate seat ahead of the free-tier providers. */
+    const priority = ['openai', 'xai', 'groq', 'openrouter', 'gemini', 'deepseek', 'anthropic', 'aimlapi', 'mistral', 'workersai'];
     debateProviders = orderByHealth(priority.filter((p) => active.includes(p))).slice(0, 3);
   }
 

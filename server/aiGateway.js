@@ -5,27 +5,36 @@
  *
  * Connects and orchestrates multiple AI providers:
  *   1. OpenRouter           — Multi-model router (Claude, GPT-4o, DeepSeek, Llama-3)
- *   2. Groq                 — Ultra-low latency open-weight inference
- *   3. Google Gemini        — Multi-modal analysis, fast structured generation
- *   4. Anthropic            — Claude 3.5 Sonnet, Claude 3 Haiku safety & analysis
- *   5. DeepSeek             — DeepSeek-V3, DeepSeek-R1 reasoning & math
- *   6. Mistral              — Mistral Large, Mistral Small
- *   7. Cloudflare Workers AI — Free serverless open models (Llama/Mistral/DeepSeek)
- *   8. AIMLAPI              — Unified multi-model gateway behind one key
- *   9. Internal AI Engine   — Zero-dependency deterministic offline-ready fallback
+ *   2. OpenAI               — GPT direct (reasoning, finance logic)
+ *   3. Anthropic            — Claude direct (risk, policy, long documents)
+ *   4. Google Gemini        — Multi-modal analysis, fast structured generation
+ *   5. xAI Grok             — Real-time news and social-signal analysis
+ *   6. DeepSeek             — DeepSeek-V3/R1 reasoning & math
+ *   7. Groq                 — Ultra-low latency open-weight inference
+ *   8. Mistral              — Mistral Large, Mistral Small
+ *   9. Cloudflare Workers AI — Free serverless open models (Llama/Mistral/DeepSeek)
+ *  10. AIMLAPI              — Unified multi-model gateway behind one key
+ *  11. Internal AI Engine   — Zero-dependency deterministic offline-ready fallback
  *
- * ─── REMOVED PROVIDERS (no API key on this deployment) ─────────────────────
- * Grok (xAI), OpenAI and Perplexity were registered here but never had a key
- * configured, so every call routed to them failed over anyway. They are gone
- * from the registry, and the jobs they were listed for are now carried by the
- * providers that do have keys:
+ * ─── DIRECT vs GATEWAY, AND WHY BOTH ARE TESTED SEPARATELY ─────────────────
+ * OpenRouter is a GATEWAY, not a model: one OpenRouter key can answer with a
+ * GPT, a Claude, a Gemini or a DeepSeek model. That is useful and it is NOT
+ * proof that xAI or OpenAI is reachable — which is exactly the confusion the
+ * benchmark suite has to avoid.
  *
- *   · Grok (market intelligence / macro synthesis)  → OpenRouter (it routes to
- *     market-grade models incl. online variants), then Gemini, Groq, DeepSeek.
- *   · Perplexity (live web search & sourced notes)  → OpenRouter `:online`
- *     capable models, then Gemini; the research task has its own route.
- *   · OpenAI (high-precision finance logic)         → Anthropic, DeepSeek and
- *     AIMLAPI (which serves the same GPT class behind its own key).
+ * So OpenAI (GPT) and xAI (Grok) are registered DIRECTLY again, deliberately.
+ * They were removed on 2026-09-25 because no key was present on that
+ * deployment and every route to them burned a failover hop; the panel now has
+ * a `NEEDS_KEY` state that names the env var, so a registered-but-unconfigured
+ * provider is honest instead of invisible. `routedChat` filters on
+ * `isProviderConfigured`, so an absent key costs nothing at request time.
+ * `providerLab` tests the direct endpoint AND the OpenRouter gateway route
+ * separately, so "OpenRouter works" can never be reported as "Grok is
+ * connected".
+ *
+ * Perplexity stays out: its sourced-web-search job is carried by OpenRouter's
+ * online-capable models plus the app's own research path, and no Perplexity
+ * key exists anywhere in this deployment.
  *
  * Security Absolutes:
  *   - NEVER leaks private keys, mnemonics, seed phrases or API secrets to external models.
@@ -100,6 +109,38 @@ export const PROVIDER_CONFIGS = Object.freeze({
     specialty: 'Multi-Model Routing, Market Intelligence & Live Search-Grounded Synthesis',
     costTier: 'medium',
     latencyTier: 'medium'
+  },
+  openai: {
+    name: 'OpenAI GPT',
+    url: 'https://api.openai.com/v1/chat/completions',
+    envKey: 'OPENAI_API_KEY',
+    envKeys: ['OPENAI_API_KEY', 'OPENAI_KEY'],
+    modelEnv: 'OPENAI_MODEL',
+    /* gpt-4o-mini is the cheap, currently-listed default. The reasoning seats
+       sit behind it so a richer account gets them without a code change. */
+    defaultModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    fallbackModels: ['gpt-4o', 'gpt-4.1-mini', 'gpt-4.1'],
+    retiredModels: ['gpt-4-turbo', 'gpt-4-32k', 'gpt-3.5-turbo'],
+    type: 'openai-compatible',
+    specialty: 'High-precision reasoning, financial logic & decision support',
+    costTier: 'medium',
+    latencyTier: 'fast'
+  },
+  xai: {
+    name: 'xAI Grok',
+    url: 'https://api.x.ai/v1/chat/completions',
+    envKey: 'XAI_API_KEY',
+    /* GROK_API_KEY is accepted because that is the name most operators reach
+       for first; the diagnostics report WHICH name supplied the key. */
+    envKeys: ['XAI_API_KEY', 'GROK_API_KEY', 'XAI_KEY'],
+    modelEnv: 'XAI_MODEL',
+    defaultModel: process.env.XAI_MODEL || 'grok-4-fast',
+    fallbackModels: ['grok-4', 'grok-3-mini'],
+    retiredModels: ['grok-beta', 'grok-2-1212', 'grok-2-vision-1212'],
+    type: 'openai-compatible',
+    specialty: 'Real-time news, social signal & market-narrative analysis',
+    costTier: 'medium',
+    latencyTier: 'fast'
   },
   groq: {
     name: 'Groq',
@@ -429,16 +470,29 @@ const CIRCUIT_OPEN_MS = {
 function healthEntry(providerId) {
   let st = healthState.get(providerId);
   if (!st) {
-    st = { calls: [], lastSuccess: null, lastError: null, consecutiveFailures: 0, openUntil: 0, openReason: null };
+    st = {
+      calls: [], lastSuccess: null, lastError: null, consecutiveFailures: 0, openUntil: 0, openReason: null,
+      /* Token telemetry. Adding this here (rather than in a parallel store)
+         means the dashboard and the benchmark read the SAME counters the
+         gateway already maintains — there is no second, drifting truth. */
+      tokensIn: 0, tokensOut: 0, usageCalls: 0
+    };
     healthState.set(providerId, st);
   }
   return st;
 }
 
-export function recordProviderCall(providerId, { ok = true, durationMs = 0, model = null, error = null, reasonCode = null, fix = null, qualityScore = null } = {}) {
+export function recordProviderCall(providerId, { ok = true, durationMs = 0, model = null, error = null, reasonCode = null, fix = null, qualityScore = null, usage = null } = {}) {
   if (!providerId || providerId === 'internal') return;
   const st = healthEntry(providerId);
-  st.calls.push({ ok: Boolean(ok), durationMs: Number(durationMs) || 0, qualityScore: qualityScore == null ? null : Number(qualityScore), at: Date.now() });
+  const tIn = Number(usage?.promptTokens ?? usage?.inputTokens ?? 0) || 0;
+  const tOut = Number(usage?.completionTokens ?? usage?.outputTokens ?? 0) || 0;
+  if (ok && (tIn || tOut)) {
+    st.tokensIn += tIn;
+    st.tokensOut += tOut;
+    st.usageCalls += 1;
+  }
+  st.calls.push({ ok: Boolean(ok), durationMs: Number(durationMs) || 0, qualityScore: qualityScore == null ? null : Number(qualityScore), tokensIn: tIn, tokensOut: tOut, at: Date.now() });
   if (st.calls.length > HEALTH_WINDOW) st.calls.shift();
   if (ok) {
     st.consecutiveFailures = 0;
@@ -512,6 +566,12 @@ export function getProviderHealth() {
       retryAfterMs: circuitOpen ? Math.max(0, st.openUntil - Date.now()) : 0,
       lastSuccess: st.lastSuccess,
       lastError: st.lastError,
+      /* Reported by the provider when it reports usage; zero is honest and
+         means "this provider did not say", not "this call was free". */
+      tokensIn: st.tokensIn || 0,
+      tokensOut: st.tokensOut || 0,
+      totalTokens: (st.tokensIn || 0) + (st.tokensOut || 0),
+      usageCalls: st.usageCalls || 0,
       availability: (circuitOpen || failed) ? 'DEGRADED' : (st.lastSuccess ? 'AVAILABLE' : (total ? 'AVAILABLE' : 'UNKNOWN'))
     };
   }
@@ -694,8 +754,8 @@ export function getAvailableProviders() {
       latencyTier: cfg.latencyTier,
       type: cfg.type,
       health: id === 'internal'
-        ? { availability: 'AVAILABLE', calls: 0, circuitOpen: false, lastError: null, lastSuccess: null }
-        : (h || { availability: configured ? 'UNKNOWN' : 'NEEDS_KEY', calls: 0, circuitOpen: false, lastError: null, lastSuccess: null }),
+        ? { availability: 'AVAILABLE', calls: 0, circuitOpen: false, lastError: null, lastSuccess: null, tokensIn: 0, tokensOut: 0, totalTokens: 0 }
+        : (h || { availability: configured ? 'UNKNOWN' : 'NEEDS_KEY', calls: 0, circuitOpen: false, lastError: null, lastSuccess: null, tokensIn: 0, tokensOut: 0, totalTokens: 0 }),
       /*
        * One-line, operator-facing verdict so no panel has to re-derive it.
        * ERROR covers BOTH failure states — an open circuit and a provider whose
@@ -1119,11 +1179,15 @@ export async function executeProviderChat(providerId, {
 
     for (const candidate of candidates) {
       try {
-        const response = await runProviderModel(providerId, cfg, apiKey, candidate, { system, user, temperature, maxTokens, json, timeout, withUsage, signal });
+        /* Usage is requested on EVERY call, not only when a caller asked for
+           it. The provider already returns it in the same response body, so
+           the only cost is a few bytes — and without it the dashboard's token
+           counter would be structurally blind. */
+        const response = await runProviderModel(providerId, cfg, apiKey, candidate, { system, user, temperature, maxTokens, json, timeout, withUsage: true, signal });
         const text = typeof response === 'string' ? response : response.text;
         const usage = typeof response === 'string' ? null : response.usage;
         const durationMs = Date.now() - startedAt;
-        recordProviderCall(providerId, { ok: true, durationMs, model: candidate });
+        recordProviderCall(providerId, { ok: true, durationMs, model: candidate, usage });
         return {
           ok: true,
           provider: providerId,
@@ -1210,29 +1274,30 @@ export function getPreferredProvidersForTask(taskType = 'general', { configuredO
     case 'market':
     case 'market_intelligence':
     case 'crypto_trend':
-      // Grok's market/macro seat and Perplexity's search-grounded market notes
-      // both moved to OpenRouter, with Gemini and Groq behind it.
-      candidateOrder = ['openrouter', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
+      // OpenRouter leads (its online-capable models are the general route),
+      // then the DIRECT Grok seat for real-time narrative, then Gemini/Groq.
+      candidateOrder = ['openrouter', 'xai', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
       break;
     case 'research':
     case 'news':
     case 'web_research':
     case 'crypto-analysis':
       // Perplexity's old job: sourced, web-grounded answers. OpenRouter's
-      // online-capable models lead; Gemini backs it up.
-      candidateOrder = ['openrouter', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
+      // online-capable models lead; Grok's direct real-time seat and Gemini
+      // back it up.
+      candidateOrder = ['openrouter', 'xai', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
       break;
     case 'reasoning':
     case 'complex_plan':
     case 'portfolio_optimization':
-      // OpenAI's high-precision logic seat is covered by Anthropic, DeepSeek
-      // and AIMLAPI; Grok's slot drops out.
-      candidateOrder = ['openrouter', 'anthropic', 'deepseek', 'gemini', 'aimlapi', 'workersai', 'internal'];
+      // High-precision logic: OpenRouter's multi-model route first, then the
+      // DIRECT GPT and Claude seats, then DeepSeek.
+      candidateOrder = ['openrouter', 'openai', 'anthropic', 'deepseek', 'gemini', 'aimlapi', 'workersai', 'internal'];
       break;
     case 'risk':
     case 'guardian':
     case 'verification':
-      candidateOrder = ['anthropic', 'deepseek', 'openrouter', 'aimlapi', 'gemini', 'groq', 'workersai', 'internal'];
+      candidateOrder = ['anthropic', 'openai', 'deepseek', 'openrouter', 'aimlapi', 'gemini', 'groq', 'workersai', 'internal'];
       break;
     case 'intent':
     case 'fast':
@@ -1240,7 +1305,7 @@ export function getPreferredProvidersForTask(taskType = 'general', { configuredO
       candidateOrder = ['workersai', 'groq', 'gemini', 'mistral', 'aimlapi', 'openrouter', 'internal'];
       break;
     default:
-      candidateOrder = ['openrouter', 'groq', 'gemini', 'workersai', 'aimlapi', 'deepseek', 'anthropic', 'mistral', 'internal'];
+      candidateOrder = ['openrouter', 'openai', 'groq', 'gemini', 'xai', 'workersai', 'aimlapi', 'deepseek', 'anthropic', 'mistral', 'internal'];
       break;
   }
 
@@ -1268,7 +1333,12 @@ export async function routedChat({
   json = false,
   allowInternalFallback = true,
   withUsage = false,
-  signal = null
+  signal = null,
+  /* Operator kill-switch / drill lever: a provider named here is skipped for
+     THIS request only. The benchmark lab uses it to exercise the real failover
+     loop with a seat genuinely removed, instead of pretending a healthy
+     provider was down. */
+  excludeProviders = []
 } = {}) {
   /*
    * `AI_PRIMARY_PROVIDER` is the operator lever: one environment variable pins
@@ -1290,7 +1360,8 @@ export async function routedChat({
    * a parked provider is never deleted, because billing gets topped up and
    * rate-limit windows reset).
    */
-  const candidates = orderByHealth(ordered);
+  const excluded = new Set((Array.isArray(excludeProviders) ? excludeProviders : []).map(String));
+  const candidates = orderByHealth(ordered).filter((id) => !excluded.has(id));
 
   const errors = [];
 

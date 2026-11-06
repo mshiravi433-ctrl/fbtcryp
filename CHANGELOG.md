@@ -1,3 +1,14 @@
+# ۲۰۲۶-۱۱-۰۶ — بنچمارک ۱۰۰ سؤالی، آزمایشگاه ۱۵ تستی و داشبورد چندمدلی FBT AI
+
+جزئیات، Gap Analysis و محدودیت‌های صریح: [2026-11-06-ai-benchmark-multi-model-fa.md](2026-11-06-ai-benchmark-multi-model-fa.md).
+
+- **درخواست:** «۱۰۰ سؤال واقعی + ۱۵ تست اتصال + داشبورد Multi-Model Intelligence؛ نه ادعای اتصال، بلکه شاهد واقعی هر Provider.»
+- **تشخیص:** اپ از قبل دروازهٔ چندارائه‌دهنده‌ای، ارکستراتور شواهد، اجماع، همکاری چندعاملی و حافظه داشت؛ چیزی که نبود **سنجش قابل حسابرسی** بود: هیچ‌جا ۱۰۰ سؤال اجرا نمی‌شد، امتیاز ۰–۱۰۰ نداشت، تست قطع/auth/429/timeout گزارش واحد نداشت، و توکن/خطا/زمان سلامت در یک نمای واحد نبود.
+- **تازه:** `server/aiBenchmarkSuite.js` (۱۰۰ سؤال، ۱۰ فصل، facet و فلگ رفتاری)، `server/aiBenchmark.js` (روبریک قطعی ۰–۱۰۰: شاهد ۳۰ · کیفیت ۲۵ · صداقت ۲۰ · امنیت ۱۵ · انتساب ۱۰؛ تجمیع per-provider/category؛ هزینهٔ تخمینی)، `server/aiProviderLab.js` (۱۵ تست با روش صریح `LIVE`/`CONTROLLED_CUT`/`CLASSIFICATION`)، مسیرهای additive زیر `/api/v1/ai/{benchmark,lab,intelligence}`، `scripts/ai-benchmark.mjs` و تب «آزمون و آزمایشگاه» در پنل هوش مصنوعی.
+- **صداقت:** «متصل» فقط با پاسخ موفق واقعی؛ skip هرگز pass نیست؛ OpenRouter از مدل جدا تست می‌شود؛ پاسخ قاعده‌محور با لباس مدل کسر دارد؛ اجرا بدون مجوز = `EXECUTED_WITHOUT_APPROVAL` و شکست بحرانی؛ دلار = جدول تخمین نسخه‌دار، نه صورت‌حساب.
+- **دروازه:** OpenAI و xAI دوباره **مستقیم** ثبت شدند (بدون کلید `NEEDS_KEY` و بدون هزینه در مسیر درخواست)، `excludeProviders` به `routedChat` اضافه شد (شیر واقعی drill/kill-switch)، شمارندهٔ توکن در `recordProviderCall` نشست و usage در همهٔ تماس‌ها درخواست می‌شود.
+- **اعتبارسنجی:** `test:ai-benchmark` **۲۱/۲۱**، `phase3-multi-ai-gateway` **۲۵/۲۵**، `ai-provider-wiring` **۲۴/۲۴**، `ai-fleet-rotation` **۵/۵**، `ops-center` **۵۱/۵۱**؛ JSX پنل با esbuild کامپایل شد. `test/ai-benchmark-panel` **۵/۵**، `app-boot` **۱/۱**، `ops-center` **۵۱/۵۱**؛ سرور واقعی بالا آمد و هر چهار مسیر تازه با curl تأیید شدند (بدون کلید: 409 صادقانه، lab با `connected=0` و `ok:false`، collective با دروازهٔ `LIVE_DATA_REQUIRED`). **هیچ تماس زنده‌ای با ارائه‌دهنده انجام نشد** (در این محیط nenhم هیچ کلیدی نبود) و `vite build` کامل اجرا نشد — صادقانه در سند ثبت شده است.
+
 # ۲۰۲۶-۱۱-۰۴ — تب «AI ترید» صفحهٔ فیوچرز: بازطراحی Neural Desk + روشن‌شدن تب در بیلد لایو
 
 جزئیات، تصمیم‌ها و اعداد اعتبارسنجی: [2026-11-04-aitrade-neural-desk-fa.md](2026-11-04-aitrade-neural-desk-fa.md).
