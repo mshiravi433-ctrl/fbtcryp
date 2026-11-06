@@ -154,6 +154,12 @@ const FlashLiquidity = lazyRetry(() => import('./pages/FlashLiquidity'));
 const IntentAIUnified = lazyRetry(() => import('./components/IntentAIUnified'));
 const AiTradePanel = AI_TRADE_ENABLED ? lazyRetry(() => import('./components/AiTrade/AiTradePanel.jsx')) : null;
 const AiControlCenter = lazyRetry(() => import('./components/ai/AiControlCenter'));
+/* FBT AI INTELLIGENCE («هوش بازار») — the market-analysis centre: overview,
+   screener, per-token file, portfolio risk, opportunity scanner, comparison
+   and the daily report. ADDITIVE route; it reads the SAME feeds as Market and
+   Wallet and replaces nothing. Lazy, with its own CSS chunk, so /market never
+   pays for it. */
+const AiAnalysis = lazyRetry(() => import('./pages/AiAnalysis'));
 /* Phase 211 — Global Intelligence («هوش جهانی»). ADDITIVE route: the nine
    global intelligence domains, the cross-asset regime and the proactive
    briefing, on the FI's own /api/ai/global/* endpoints. It is its OWN PAGE now
@@ -538,6 +544,7 @@ function AnimatedRoutes() {
             <Route path="/ai-trade" element={AiTradePanel ? <AiTradePanel /> : <Navigate to="/intent" replace />} />
             <Route path="/intent-ai" element={<Navigate to="/intent" replace />} />
             <Route path="/ai-control" element={<AiControlCenter />} />
+            <Route path="/ai-analysis" element={<AiAnalysis />} />
             <Route path="/global" element={<GlobalWorld />} />
             <Route path="/ai-global" element={<Navigate to="/global" replace />} />
             <Route path="/flash-liquidity" element={<FlashLiquidity />} />
