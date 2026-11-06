@@ -819,10 +819,16 @@
 /* The menu mark is the app coin, not a generic globe. Sized here so the
    header's 30px tile does not shrink the drawer identity. */
 .hsp-drawer-head .hsp-appmark {
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
   flex: 0 0 auto;
+}
+/* The drawer logo fills its tile instead of sitting tiny inside it — sized
+   so the mark stays proportional to the box it lives in. */
+.hsp-drawer-head .hsp-appmark svg {
+  width: 30px !important;
+  height: 30px !important;
 }
 .hsp-drawer-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .hsp-drawer-head strong { font-size: 14px; }

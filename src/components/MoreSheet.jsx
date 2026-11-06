@@ -6,8 +6,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { lockBodyScroll } from '../lib/scrollLock';
 import { useTelegram } from '../context/TelegramContext';
 import { SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from '../lib/features';
-import { useStill } from './AnimatedIcon';
-import BrandMark from './BrandMark.jsx';
+import { useStill, AnimatedSocial } from './AnimatedIcon';
 import {
   IconActivity,
   IconBriefcase,
@@ -231,11 +230,6 @@ import {
  * mutually distinct — purple, cool blue, money green/gold, orchid/ice — so
  * picking a category still visibly re-tints the material.
  */
-/** App coin for the social row. BrandMark ignores width/height; the tile
- *  passes those to every other icon, so this wrapper absorbs them. */
-function SocialMenuMark() {
-  return <BrandMark size={18} gradientId="moreSocialBrand" className="brand-mark more-social-mark" />;
-}
 
 const ALL_TINT = { tint: 'var(--rgb-2)', tint2: 'var(--rgb-3)' };
 
@@ -384,10 +378,9 @@ const GROUPS = [
        */
       { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney, hue: 'var(--rgb-7)' },
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
-      /* The social feed's second doorway. The icon is the app coin — the same
-         mark as the header — not a generic chat bubble. Asked for directly:
-         the menu item beside «شبکهٔ اجتماعی» should be our logo. */
-      { to: '/social', key: 'nav.social', Icon: SocialMenuMark, hue: 'var(--rgb-3)' },
+      /* The social feed's second doorway. Its icon is the same conversation
+         mark as the header, drawn like every other tile in this menu. */
+      { to: '/social', key: 'nav.social', Icon: AnimatedSocial, hue: 'var(--rgb-3)' },
       /*
        * The world console left the News tabs and is its own page now, named
        * «جهانی» in this menu. It sits right under News because that is where

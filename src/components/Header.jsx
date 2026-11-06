@@ -61,6 +61,22 @@ export default function Header() {
   const still = useStill();
   /* Renamed from cogSpin when the header mark became the social button. */
   const [socialPulse, setSocialPulse] = useState(false);
+  /* When the page is at the very top the header disappears INTO the page
+     background (fully transparent). Once the user scrolls down it becomes
+     the themed glass plate — black in the dark theme, white in light —
+     exactly like the surface it had before. */
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    }
+    return () => {
+      if (typeof window !== 'undefined') window.removeEventListener('scroll', onScroll);
+    };
+  }, []);
   const [news, setNews] = useState(() => cachedHeadlines());
   const [showSpotlight, setShowSpotlight] = useState(false);
   const [spotlightIndex, setSpotlightIndex] = useState(0);
@@ -132,7 +148,7 @@ export default function Header() {
   const spotlightTitle = spotlight?.item?.title || spotlight?.item?.name || '';
 
   return (
-    <header className="top-bar">
+    <header className={`top-bar${scrolled ? ' is-scrolled' : ''}`}>
       <motion.div
         className="header-brand-stage"
         initial={{ opacity: 0, x: -14 }}
