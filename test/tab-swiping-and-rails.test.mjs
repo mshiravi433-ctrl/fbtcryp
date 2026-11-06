@@ -140,4 +140,21 @@ describe('tab rails have room', () => {
     expect(PERP).toContain('scroll-snap-type');
     expect(SMART).toContain('scroll-snap-type');
   });
+
+  it('keeps the news rail compact and inline, not four stacked tiles', () => {
+    /* Reported: «تب های موجود در صفحه اخبار خیلی بزرگ هست کوجک تر و مدرن ترش
+       کن». The cell was a 72×50 column (icon above label); it is now a 36px
+       inline row, and the icon box dropped with it. */
+    const cell = lastRule(NEWS, '.news-page .news-mode-tabs.segmented > button');
+    expect(cell).toContain('display: inline-flex');
+    expect(cell).toMatch(/min-height: 36px/);
+    expect(cell).not.toContain('flex-direction: column');
+    const icon = lastRule(NEWS, '.news-tab-icon');
+    expect(icon).toMatch(/width: 14px/);
+    expect(icon).toMatch(/height: 14px/);
+    /* The active state is the shared pill alone — no second tint/border. */
+    const active = /\.news-page \.news-mode-tabs\.segmented > button\.active,[\s\S]*?\{([\s\S]*?)\n\}/.exec(NEWS);
+    expect(active?.[1]).toContain('background: transparent');
+    expect(NEWS).toContain('.news-page .news-mode-tabs .seg-indicator');
+  });
 });

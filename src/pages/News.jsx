@@ -174,6 +174,31 @@ function NewsPage() {
   const [ring, setRing] = useState(0);
   const still = useStill();
 
+  /*
+   * THE RAIL KEEPS THE ACTIVE TAB IN VIEW.
+   *
+   * The rail is a real horizontal scroller (it has to be: four translated
+   * labels do not always fit a 320px phone). A tab can therefore become
+   * selected while it is partly or wholly off-screen — the swipe gesture
+   * moves the selection without moving the rail, and a deep link can open on
+   * «آرامش» at the far end. The pill would then be correct but invisible,
+   * which reads as «حالت ریلی درست نیست».
+   *
+   * Centring is computed from rects rather than `scrollIntoView`, so the page
+   * itself never jumps vertically and the scroll stays inside the rail.
+   */
+  const railRef = useRef(null);
+  useEffect(() => {
+    const rail = railRef.current;
+    const active = rail?.querySelector('[aria-selected="true"]');
+    if (!rail || !active) return;
+    const railRect = rail.getBoundingClientRect();
+    const activeRect = active.getBoundingClientRect();
+    const delta = (activeRect.left + activeRect.width / 2) - (railRect.left + railRect.width / 2);
+    if (Math.abs(delta) < 1) return;
+    rail.scrollTo({ left: rail.scrollLeft + delta, behavior: still ? 'auto' : 'smooth' });
+  }, [tab, still]);
+
   const load = useCallback(
     async (force = false) => {
       setLoading(true);
@@ -276,7 +301,7 @@ function NewsPage() {
         </button>
       </motion.div>
 
-      <div className="segmented news-mode-tabs" role="tablist" aria-label={t('news.title')}>
+      <div ref={railRef} className="segmented news-mode-tabs" role="tablist" aria-label={t('news.title')}>
         {/* Calm stays last because it is about the reader rather than the
             market. (Global Intelligence is its own page. Conversation left
             for Social — see NEWS_TABS.) */}

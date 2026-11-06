@@ -33,10 +33,13 @@
 /* ══ 0 · THE WRAPPER — sticky, and transparent on purpose ═════════════════ */
 .mx-tabs-wrap {
   position: sticky;
-  /* Below the app's own top bar (z-index 30) and above every box on this page
-     (the tallest is the list card at 3), so the strip is never covered by a
-     card and never covers the header. */
-  top: calc(env(safe-area-inset-top, 0px) + 6px);
+  /* The offset is measured from the REAL app bar by MarketTabStrip and
+     published as `--market-tabs-top` (the bar is ~59px, plus the safe-area
+     inset on a notched phone). The fallback keeps the first paint and a
+     layout-less test DOM in the right place: just below the bar, not behind
+     it. Sticking at 6px put the whole pill under the sticky `.top-bar`
+     (z-index 30), so the strip appeared to scroll away with the page. */
+  top: var(--market-tabs-top, 63px);
   z-index: 12;
   padding: 0;
   /* No background and no blur: the only painted thing is the pill itself. */

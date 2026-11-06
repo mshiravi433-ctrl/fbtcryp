@@ -173,6 +173,22 @@ describe('the Harpy room — palette and shape', () => {
     expect(css).toMatch(/\.hsp-fab,\s*\n?\.hsp-topbtn\s*\{[^}]*position:\s*absolute[^}]*right:/s);
     expect(css).toMatch(/\.hsp\s*\{[^}]*position:\s*fixed/s);
   });
+
+  it('fills the menu tile with the coin instead of shrinking it', () => {
+    /* Reported: «در منو لوگو بسیار سایزس بده و خیلی کوچکه سایزش متناسب باکس
+       داخل باشه». The mark is the app coin, whose drawing spans 77% of its
+       SVG box; at 30px inside a 46px tile the coin was ~23px — half the box.
+       42px inside 48px puts the coin at ~32px (73% of the tile) and keeps the
+       gradient rim readable. The inner disc follows the tile radius too. */
+    const tile = /\.hsp-drawer-head \.hsp-appmark \{([\s\S]*?)\n\}/.exec(css)[1];
+    expect(tile).toMatch(/width:\s*48px/);
+    expect(tile).toMatch(/height:\s*48px/);
+    const disc = /\.hsp-drawer-head \.hsp-appmark::after \{([\s\S]*?)\n\}/.exec(css)[1];
+    expect(disc).toMatch(/border-radius:\s*15px/);
+    const svg = /\.hsp-drawer-head \.hsp-appmark svg \{([\s\S]*?)\n\}/.exec(css)[1];
+    expect(svg).toMatch(/width:\s*42px/);
+    expect(svg).toMatch(/height:\s*42px/);
+  });
 });
 
 describe('the Harpy room — the write button travels with the scroll', () => {

@@ -25,40 +25,53 @@
 .news-notify { color: var(--text-3); transition: color .18s ease, border-color .18s ease, background .18s ease; }
 .news-notify.is-on { color: var(--news-cyan) !important; border-color: color-mix(in srgb, var(--news-cyan) 30%, var(--line)); background: color-mix(in srgb, var(--news-cyan) 8%, transparent); }
 
-/* Primary navigation: readable icons and labels, horizontal snap instead of
-   squeezing five tiny truncated words into a 320px screen. */
+/* Primary navigation: a compact, modern rail.
+   ---------------------------------------------------------------------------
+   Reported: «تب های موجود در صفحه اخبار خیلی بزرگ هست کوجک تر و مدرن ترش کن و
+   فاصله را درست کن حالت ریلی درست».
+
+   The old cell was a 72×50 stacked tile (icon on top, label below) with a
+   6px gutter and a 5px rail padding — 62px of height for four words, and the
+   label was set at 9.5px to fit. It read as four small cards, not as a
+   segmented control.
+
+   Now: one 36px row, icon and label side by side, four equal cells that fill
+   the rail, a 6px gutter and a 4px inset. The rail still scrolls (and snaps)
+   when a translation needs more room than the phone has, and the shared
+   SegIndicator pill is the only active surface — no second tint, no second
+   border, no checkmark. */
 .news-page .news-mode-tabs.segmented {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   margin-top: 12px;
   padding: 4px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
   scrollbar-width: none;
-  border-radius: 17px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
   background: color-mix(in srgb, var(--bg-panel-solid) 84%, transparent);
 }
 .news-page .news-mode-tabs.segmented::-webkit-scrollbar { display: none; }
 .news-page .news-mode-tabs.segmented > button {
   position: relative;
-  flex: 1 0 64px;
-  display: flex;
-  flex-direction: column;
+  flex: 1 1 0;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-width: 64px;
-  min-height: 56px;
-  padding: 7px 5px;
+  gap: 5px;
+  min-width: 62px;
+  min-height: 36px;
+  padding: 0 8px;
   overflow: visible;
   scroll-snap-align: center;
-  border-radius: 13px;
-  color: var(--text-3);
-  font-size: 10px;
+  border: 0;
+  border-radius: 9px;
+  color: var(--text-2);
+  font-size: 10.5px;
   font-weight: 750;
-  line-height: 1.2;
-  text-overflow: clip;
+  line-height: 1;
   white-space: nowrap;
   transition: color .18s ease, background .18s ease, transform .18s ease;
 }
@@ -66,9 +79,18 @@
 :root[data-theme='light'] .news-page .news-mode-tabs.segmented > button.active { color: #06151a; background: transparent; }
 .news-page .news-mode-tabs.segmented > button:active { transform: scale(.97); }
 .news-tab-icon, .news-tab-label { position: relative; z-index: 2; }
-.news-tab-icon { display: grid; place-items: center; width: 18px; height: 18px; }
-.news-tab-icon svg { width: 18px; height: 18px; }
+.news-tab-icon { display: grid; place-items: center; flex: 0 0 auto; width: 14px; height: 14px; }
+.news-tab-icon svg { width: 14px; height: 14px; }
 .news-tab-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+/* The pill is the active state: a soft cyan→violet wash that sits inside the
+   cell's own radius. It replaces the old full-bleed gradient, which at 50px
+   tall made the selected tab the loudest thing on the screen. */
+.news-page .news-mode-tabs .seg-indicator {
+  inset: 0;
+  border-radius: 9px;
+  background: linear-gradient(100deg, var(--rgb-1), color-mix(in srgb, var(--rgb-2) 72%, var(--rgb-1)));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28);
+}
 
 /* Headline desk */
 .news-desk {
@@ -249,7 +271,7 @@
 
 @media (max-width: 380px) {
   .news-subtitle { max-width: 250px; }
-  .news-page .news-mode-tabs.segmented > button { flex-basis: 60px; min-width: 60px; font-size: 9px; }
+  .news-page .news-mode-tabs.segmented > button { min-width: 58px; font-size: 9.5px; }
   .news-refresh span { display: none; }
   .news-refresh { width: 32px; padding: 0; }
   .news-story-title { font-size: 13px; }
@@ -267,52 +289,11 @@
   .news-refresh.is-loading svg, .calm-refresh.is-loading svg, .calm-equalizer.is-active i { animation: none; }
 }
 
-/* A wider, more legible editorial rail: separated tap targets and enough
-   horizontal breathing room for translated labels instead of a cramped row. */
-.news-page .news-mode-tabs.segmented { gap: 8px; padding: 6px; margin-top: 14px; }
-.news-page .news-mode-tabs.segmented > button { flex-basis: 72px; min-width: 72px; min-height: 60px; border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
-.news-page .news-mode-tabs.segmented > button.active { border-color: color-mix(in srgb, var(--news-cyan) 35%, transparent); }
+/* Narrow phones: the same compact rail, a step tighter so four cells and
+   their labels still fit without truncating «هوشمندی». The rail keeps its
+   horizontal scroll as the escape hatch for longer translations. */
 @media (max-width: 380px) {
   .news-page .news-mode-tabs.segmented { gap: 6px; }
-  .news-page .news-mode-tabs.segmented > button { flex-basis: 66px; min-width: 66px; }
-}
-
-/* ==========================================================================
-   NEWS TABS — wider cells, wider gaps (same note as the other rails)
-   --------------------------------------------------------------------------
-   The rail already scrolled; what it did not have was room. 72px cells with a
-   8px gutter put the tab ICONS 80px apart in Persian, where every label is
-   two words and wraps to a second line — the icons ended up closer to their
-   neighbour's label than to their own.
-
-   Now: a 96px floor per cell, 10px of gap, a 20px icon box and a 10px label,
-   so the icon, the label and the space around them form one target. The rail
-   still snaps, still hides its scrollbar, and still ignores the page's
-   swipe-to-change-tab gesture (App.jsx lists `.news-mode-tabs`).
-   ========================================================================== */
-.news-page .news-mode-tabs.segmented { gap: 6px; padding: 5px; border-radius: 13px; }
-.news-page .news-mode-tabs.segmented > button {
-  flex: 0 0 auto;
-  flex-basis: 72px;
-  min-width: 72px;
-  min-height: 50px;
-  gap: 5px;
-  padding-inline: 8px;
-  border-radius: 11px;
-  scroll-snap-align: center;
-}
-.news-tab-icon { width: 16px; height: 16px; }
-.news-tab-icon svg { width: 16px; height: 16px; }
-.news-tab-label { font-size: 9.5px; }
-
-.news-page .news-mode-tabs.segmented > button.active {
-  color: #06151a;
-  background: color-mix(in srgb, var(--news-cyan) 14%, transparent);
-  border-color: color-mix(in srgb, var(--news-cyan) 30%, transparent);
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--news-cyan) 16%, transparent);
-}
-
-@media (max-width: 380px) {
-  .news-page .news-mode-tabs.segmented { gap: 5px; }
-  .news-page .news-mode-tabs.segmented > button { flex-basis: 66px; min-width: 66px; min-height: 48px; }
+  .news-page .news-mode-tabs.segmented > button { min-width: 58px; padding: 0 6px; gap: 4px; font-size: 9.5px; }
+  .news-tab-icon, .news-tab-icon svg { width: 13px; height: 13px; }
 }

@@ -121,6 +121,7 @@ import Market from '../src/pages/Market.jsx';
 const pageSrc = readFileSync('src/pages/Market.jsx', 'utf8');
 const css = readFileSync('src/styles/market-tabs.css', 'utf8');
 const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+const stripSrc = readFileSync('src/components/market/MarketTabStrip.jsx', 'utf8');
 const model = readFileSync('src/lib/marketTabs.js', 'utf8');
 
 const strip = () => screen.getByTestId('market-tabs-strip');
@@ -412,6 +413,26 @@ describe('۵ · ظاهر، از تمِ خودِ صفحه', () => {
     expect(phone).toMatch(/\.mx-tab \{ min-height: 44px;/);
     expect(bare).toMatch(/\.mx-tab:focus-visible \{[\s\S]*?outline: 2px solid/);
     expect(bare).toMatch(/\.mx-tab:active \{ transform: scale\(\.975\); \}/);
+  });
+});
+
+/* ── 5b · THE STRIP STAYS WHERE THE READER LEFT IT ─────────────────────── */
+describe('۵ب · نوارِ تب سرِ جایش می‌ماند', () => {
+  it('sticks below the measured app bar instead of sliding under it', () => {
+    const wrap = /\.mx-tabs-wrap \{([\s\S]*?)\n\}/.exec(bare)[1];
+    expect(wrap).toMatch(/position: sticky/);
+    /* The offset is the measured header height, not a hardcoded 6px: at 6px
+       the whole pill stuck BEHIND the sticky `.top-bar` (z-index 30) and read
+       as «the tabs scroll away with the page». */
+    expect(wrap).toMatch(/top: var\(--market-tabs-top, \d+px\)/);
+    expect(wrap).not.toMatch(/top: calc\(env\(safe-area-inset-top[^)]*\) \+ 6px\)/);
+
+    /* …and the component really measures the bar, including its safe-area
+       inset, and keeps the value current through rotation / font scaling. */
+    expect(stripSrc).toMatch(/querySelector\('\.top-bar'\)/);
+    expect(stripSrc).toMatch(/setProperty\('--market-tabs-top'/);
+    expect(stripSrc).toMatch(/new ResizeObserver/);
+    expect(stripSrc).toMatch(/ref=\{wrapRef\}/);
   });
 });
 

@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MARKET_TABS, nextMarketTab } from '../../lib/marketTabs.js';
 import { MarketPaneGlyph } from './MarketGlyphs.jsx';
@@ -32,6 +32,43 @@ import { MarketPaneGlyph } from './MarketGlyphs.jsx';
 export default function MarketTabStrip({ active, onChange, overviewId, tokensId }) {
   const { t, i18n } = useTranslation();
   const listRef = useRef(null);
+  const wrapRef = useRef(null);
+
+  /*
+   * ─── STICK BELOW THE APP BAR, NOT UNDER IT ────────────────────────────────
+   * The strip is `position: sticky`, but the app's `.top-bar` is sticky too
+   * (z-index 30) and ~59px tall. With a fixed `top: 6px` the strip stuck
+   * *behind* the header: it slid up with the page and vanished under the bar,
+   * which is exactly the «با حرکت به پایین میچسبه و میاد» report — the box
+   * never appeared to stay anywhere.
+   *
+   * The header's height is not a constant we can safely hardcode: it carries
+   * `env(safe-area-inset-top)` (47px on a notched iPhone), and its content row
+   * is 38px on a phone but reflows at the tablet breakpoint. So measure the
+   * real bar and publish the offset as a custom property on the wrapper. The
+   * CSS keeps a sane fallback for the first paint and for a test DOM with no
+   * layout, and a ResizeObserver keeps it correct through rotation, font
+   * scaling and the light/dark reflow.
+   */
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    const header = document.querySelector('.top-bar');
+    if (!wrap || !header) return undefined;
+
+    const apply = () => {
+      const height = Math.round(header.getBoundingClientRect().height);
+      if (height > 0) wrap.style.setProperty('--market-tabs-top', `${height + 4}px`);
+    };
+
+    apply();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(apply);
+    observer?.observe(header);
+    window.addEventListener('resize', apply);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', apply);
+    };
+  }, []);
 
   /*
    * The direction of the document, from the router's own answer first (i18n
@@ -58,7 +95,7 @@ export default function MarketTabStrip({ active, onChange, overviewId, tokensId 
   }, [active, onChange, rtl]);
 
   return (
-    <div className="mx-tabs-wrap" data-testid="market-tabs-strip">
+    <div className="mx-tabs-wrap" ref={wrapRef} data-testid="market-tabs-strip">
       <div
         className="mx-tabs"
         id="market-tabs"

@@ -819,16 +819,30 @@
 /* The menu mark is the app coin, not a generic globe. Sized here so the
    header's 30px tile does not shrink the drawer identity. */
 .hsp-drawer-head .hsp-appmark {
-  width: 46px;
-  height: 46px;
-  border-radius: 16px;
+  width: 48px;
+  height: 48px;
+  border-radius: 17px;
   flex: 0 0 auto;
 }
+/* The inner disc follows the tile's radius. `.brand-mark::after` is drawn for
+   the header's 30px tile (9px radius, 2px inset → 7px); at 48px the inherited
+   7px left the gradient rim visibly thicker at the corners than on the sides,
+   which is what made the mark read as a small coin in a big box. */
+.hsp-drawer-head .hsp-appmark::after {
+  inset: 2px;
+  border-radius: 15px;
+}
 /* The drawer logo fills its tile instead of sitting tiny inside it — sized
-   so the mark stays proportional to the box it lives in. */
+   so the mark stays proportional to the box it lives in.
+
+   The coin drawing inside BrandMark's 24×24 viewBox only spans 18.4 units
+   (r 9.2 + 2.1 stroke), i.e. 77% of the SVG box. At the old 30px SVG that put
+   a 23px coin inside a 42px disc — barely half the tile, which is exactly the
+   «خیلی کوچیکه» report. 42px puts a 32px coin in the 44px disc (73%) and
+   leaves the 2px gradient rim readable all the way round. */
 .hsp-drawer-head .hsp-appmark svg {
-  width: 30px !important;
-  height: 30px !important;
+  width: 42px !important;
+  height: 42px !important;
 }
 .hsp-drawer-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .hsp-drawer-head strong { font-size: 14px; }
