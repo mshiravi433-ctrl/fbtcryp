@@ -67,6 +67,10 @@ export const MARKET_TAB_CONTENT = {
   overview: [
     'market-overview',            // باکس ارزش کل + سه باکس + باکس بیت‌کوین
     'market-stories-rail',        // باکس استوری‌ها
+    'market-heatmap',             // نقشه حرارتی بازار (Crypto Heatmap)
+    'market-capital-pulse',       // نبض جریان سرمایه و تحرکات بازار
+    'market-defi-intel',          // ۷ · DeFi & Network Intelligence
+    'market-fbt-networks',        // ۸ · وضعیت شبکه‌های پشتیبانی‌شده FBT Swap
     'market-smart-money-banner'   // بنر پول هوشمند
   ],
   /* Discovery: what is hot, then every token with its own search field. */

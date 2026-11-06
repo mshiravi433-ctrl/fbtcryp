@@ -207,6 +207,7 @@
 :root[data-theme]:not([data-motion='full']) .mx-market .mx-hot-card,
 :root[data-theme]:not([data-motion='full']) .mx-market .mx-smart-banner,
 :root[data-theme]:not([data-motion='full']) .mx-market .mx-trio-box,
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-p2-card,
 :root[data-theme]:not([data-motion='full']) .mx-market .mx-coin-row > .coin-row,
 :root[data-theme]:not([data-motion='full']) .mx-market .mx-coin-row > .mx-swap-slot {
   contain: paint;
