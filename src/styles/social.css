@@ -1,376 +1,938 @@
 /*
- * SOCIAL — the Bluesky feed screen.
+ * SOCIAL — the Harpy room.
+ * ===========================================================================
+ * Everything in this file is scoped under `.hsp` and uses NO app theme token
+ * on purpose. The rest of the product is a light column on the shared RGB
+ * canvas; this screen is a different place, and it has to look like one.
  *
- * ─── THE TRAFFIC RULE, IN CSS ──────────────────────────────────────────────
- * Nothing here paints a remote pixel. No avatars from cdn.bsky.app, no post
- * images, no video posters. The "avatar" is a gradient with an initial and the
- * media marker is a glyph. That is a design decision with a server budget
- * behind it: twenty remote avatars are roughly twenty times the bytes of the
- * text they sit next to, and this screen has to cost the deployment nothing.
+ * ─── THE PALETTE IS HARPY'S OWN ───────────────────────────────────────────
+ * Lifted verbatim from lib/core/harpy_theme/predefined_themes.dart (`_crow`,
+ * Harpy's default dark theme) instead of invented:
  *
- * Every colour comes from the theme variables (--rgb-*, --bg-panel-solid,
- * --text-*, --line) so the screen inherits both themes without a second
- * stylesheet or a `[data-theme]` block of its own.
+ *     background   #00030F → #12254A     (a night sky, not black)
+ *     primary      #F3AA2F               (the amber pill on the tab bar)
+ *     secondary    #4689FF               (links, reply ink)
+ *     card         0x16·#1C85DF          (blue, 90% dissolved into the sky)
+ *
+ * Harpy derives its card colours by lerping #1C85DF 85–90% of the way to the
+ * background; these are those derived values written out, so a card here is
+ * the same blue-grey it is in the Flutter app.
+ *
+ * ─── WHY THE ROOM STAYS DARK IN THE LIGHT THEME ───────────────────────────
+ * A "night sky" that turns white is not the design, and this screen is reached
+ * from one icon — the reader can leave it in one tap. The light theme is not
+ * broken by it: nothing inside is dimmed for contrast, every text colour below
+ * is measured against THIS background, not the app's.
+ *
+ * ─── THE SHAPE ────────────────────────────────────────────────────────────
+ * Harpy's signature is the top bar: no app bar at all, just floating rounded
+ * chips over the sky, with the active tab growing into an amber pill that
+ * carries its label. That is the whole navigation model here, and the app's
+ * own bottom nav is not rendered on this route (App.jsx marks `/social`
+ * headerless), so there are never two bars competing.
  */
 
-.soc-page {
-  --soc-accent: var(--rgb-1);
-  --soc-accent-2: var(--rgb-2);
+.hsp {
+  /* local palette — never leaks outside .hsp */
+  --hsp-bg: #00030f;
+  --hsp-bg-2: #12254a;
+  --hsp-sky-1: #050b1e;
+  --hsp-primary: #f3aa2f;
+  --hsp-primary-hi: #ffc55c;
+  --hsp-primary-ink: #08111f;
+  --hsp-secondary: #4689ff;
+  --hsp-card: rgba(28, 133, 223, 0.1);
+  --hsp-card-2: rgba(28, 133, 223, 0.14);
+  --hsp-line: rgba(120, 160, 255, 0.14);
+  --hsp-line-strong: rgba(120, 160, 255, 0.24);
+  --hsp-ink: #f2f6ff;
+  --hsp-ink-2: rgba(226, 236, 255, 0.66);
+  --hsp-ink-3: rgba(186, 204, 245, 0.45);
+  --hsp-like: #ff5d8f;
+  --hsp-repeat: #66d68b;
+  --hsp-reply: #6f9dff;
+
+  position: fixed;
+  inset: 0;
+  z-index: 6;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-bottom: 18px;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--hsp-bg);
+  color: var(--hsp-ink);
+  font-family: var(--font-display);
+  /*
+   * The page is a fixed room, so its own scroll container is the feed — the
+   * document behind it never scrolls, which is what makes a fixed bar and a
+   * fixed compose button honest on a phone.
+   */
 }
 
-/* ── header ─────────────────────────────────────────────────────────────── */
-.soc-title-row { display: flex; align-items: flex-start; gap: 10px; }
-.soc-title-copy { min-width: 0; flex: 1; }
-.soc-title-line { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
-.soc-title-line h1 { margin: 0; font-size: 19px; line-height: 1.4; }
-.soc-sub { margin: 3px 0 0; font-size: 10.5px; line-height: 1.65; color: var(--text-3); }
+/* ── the sky ────────────────────────────────────────────────────────────── */
+.hsp-sky {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.hsp-sky::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 62% at 50% -14%, rgba(40, 92, 176, 0.85) 0%, rgba(20, 44, 96, 0.55) 34%, rgba(3, 9, 26, 0) 72%),
+    radial-gradient(70% 46% at 88% 2%, rgba(126, 62, 196, 0.4), transparent 62%),
+    radial-gradient(62% 40% at 6% 6%, rgba(24, 116, 196, 0.38), transparent 64%),
+    linear-gradient(180deg, var(--hsp-sky-1) 0%, var(--hsp-bg) 44%, #040a1a 100%);
+}
+.hsp-stars {
+  position: absolute;
+  inset: -10% -10% 0;
+  background-repeat: repeat;
+  will-change: transform;
+}
+.hsp-stars--a {
+  background-image:
+    radial-gradient(1.4px 1.4px at 18% 12%, rgba(255, 255, 255, 0.9), transparent 60%),
+    radial-gradient(1px 1px at 62% 6%, rgba(255, 255, 255, 0.7), transparent 60%),
+    radial-gradient(1.6px 1.6px at 84% 22%, rgba(210, 232, 255, 0.9), transparent 60%),
+    radial-gradient(1px 1px at 34% 28%, rgba(255, 255, 255, 0.55), transparent 60%),
+    radial-gradient(1.2px 1.2px at 8% 40%, rgba(255, 255, 255, 0.6), transparent 60%),
+    radial-gradient(1px 1px at 72% 44%, rgba(190, 220, 255, 0.6), transparent 60%),
+    radial-gradient(1.5px 1.5px at 46% 16%, rgba(255, 255, 255, 0.8), transparent 60%),
+    radial-gradient(1px 1px at 94% 36%, rgba(255, 255, 255, 0.5), transparent 60%);
+  background-size: 260px 260px;
+  opacity: 0.75;
+  animation: hsp-drift 160s linear infinite;
+}
+.hsp-stars--b {
+  background-image:
+    radial-gradient(1px 1px at 22% 18%, rgba(255, 255, 255, 0.6), transparent 60%),
+    radial-gradient(0.9px 0.9px at 58% 32%, rgba(220, 236, 255, 0.45), transparent 60%),
+    radial-gradient(1.2px 1.2px at 78% 9%, rgba(255, 255, 255, 0.5), transparent 60%),
+    radial-gradient(0.9px 0.9px at 12% 62%, rgba(255, 255, 255, 0.4), transparent 60%),
+    radial-gradient(1px 1px at 66% 74%, rgba(210, 230, 255, 0.45), transparent 60%);
+  background-size: 180px 180px;
+  opacity: 0.5;
+  animation: hsp-drift 240s linear infinite reverse;
+}
+.hsp-horizon {
+  position: absolute;
+  inset: auto 0 -12% 0;
+  height: 46%;
+  background: radial-gradient(60% 62% at 50% 108%, rgba(70, 137, 255, 0.3), transparent 72%);
+}
+@keyframes hsp-drift {
+  to { transform: translate3d(-260px, 260px, 0); }
+}
 
-.soc-badge {
+/* ── frame ──────────────────────────────────────────────────────────────── */
+.hsp-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  height: 100%;
+  min-height: 0;
+}
+
+/*
+ * ── THE BAR ──────────────────────────────────────────────────────────────
+ * Harpy's: transparent bar, a square menu chip, then the tab chips. The
+ * selected tab is the amber pill and it is the only one carrying a label —
+ * exactly the trade Harpy makes, and it is what keeps five tabs on one row of
+ * a 390px phone without a horizontal scroller.
+ */
+.hsp-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: calc(env(safe-area-inset-top, 0px) + 9px) 11px 9px;
+  transition: background 0.22s ease, box-shadow 0.22s ease, backdrop-filter 0.22s ease;
+}
+.hsp-bar.is-lifted {
+  background: linear-gradient(180deg, rgba(3, 8, 22, 0.92), rgba(3, 8, 22, 0.68));
+  box-shadow: 0 12px 26px -22px #000;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.hsp-iconbtn {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  border: 1px solid var(--hsp-line);
+  border-radius: 13px;
+  background: var(--hsp-card);
+  color: var(--hsp-ink-2);
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+.hsp-iconbtn:hover { color: var(--hsp-ink); border-color: var(--hsp-line-strong); }
+.hsp-iconbtn:disabled { opacity: 0.5; }
+
+/* Harpy's menu chip is the widest control in the bar. */
+.hsp-menubtn {
+  width: 48px;
+  height: 44px;
+  border-radius: 14px;
+  color: var(--hsp-ink);
+}
+.hsp-menubtn.is-on {
+  background: color-mix(in srgb, var(--hsp-primary) 18%, var(--hsp-card));
+  border-color: color-mix(in srgb, var(--hsp-primary) 40%, var(--hsp-line));
+  color: var(--hsp-primary);
+}
+
+.hsp-tabs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hsp-tabs::-webkit-scrollbar { display: none; }
+
+.hsp-tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0 11px;
+  border: 1px solid var(--hsp-line);
+  border-radius: 14px;
+  background: var(--hsp-card);
+  color: var(--hsp-ink-2);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+.hsp-tab:hover { color: var(--hsp-ink); border-color: var(--hsp-line-strong); }
+
+/* the amber pill — Harpy's signature */
+.hsp-tab.is-on {
+  background: linear-gradient(160deg, var(--hsp-primary-hi), var(--hsp-primary));
+  border-color: color-mix(in srgb, var(--hsp-primary) 70%, #ffffff);
+  color: var(--hsp-primary-ink);
+  padding-inline: 15px;
+  box-shadow: 0 10px 22px -14px rgba(243, 170, 47, 0.8);
+}
+.hsp-tab-label {
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.1px;
+}
+
+/* ── scroll surface ─────────────────────────────────────────────────────── */
+.hsp-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+}
+.hsp-body { padding: 2px 11px 0; }
+.hsp-page-body {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+.hsp-page-body--browser { gap: 9px; }
+
+/*
+ * ─── NO SECOND HEADLINE ──────────────────────────────────────────────────
+ * Harpy names the page ONCE, in the amber pill. An <h1> under a bar that
+ * already reads «ترندها» says the same word twice and pushes the first row
+ * down; these two rules are the one-line lead that replaces it.
+ */
+.hsp-lead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hsp-lead p {
+  flex: 1;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--hsp-ink-3);
+}
+.hsp-leadline {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--hsp-ink-3);
+}
+
+.hsp-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10.5px;
+  color: var(--hsp-ink-3);
+}
+.hsp-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 800 9px/1.4 var(--font-mono);
+  letter-spacing: 0.06em;
+  color: var(--hsp-ink-3);
+}
+.hsp-live i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.hsp-live.is-on { color: var(--hsp-repeat); }
+.hsp-live.is-on i { box-shadow: 0 0 0 4px rgba(102, 214, 139, 0.13); }
+.hsp-updated { font-size: 10px; white-space: nowrap; }
+
+/* ── chips (topic filters) ──────────────────────────────────────────────── */
+.hsp-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 1px;
+}
+.hsp-chips::-webkit-scrollbar { display: none; }
+.hsp-chips--static { overflow: visible; flex-wrap: wrap; }
+.hsp-chip {
+  flex: 0 0 auto;
+  padding: 7px 13px;
+  border: 1px solid var(--hsp-line);
+  border-radius: 999px;
+  background: var(--hsp-card);
+  color: var(--hsp-ink-2);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+.hsp-chip.is-on {
+  color: var(--hsp-primary);
+  border-color: color-mix(in srgb, var(--hsp-primary) 42%, transparent);
+  background: color-mix(in srgb, var(--hsp-primary) 12%, var(--hsp-card));
+}
+
+/* ── posts ──────────────────────────────────────────────────────────────── */
+.hsp-feed { display: flex; flex-direction: column; gap: 9px; }
+
+.hsp-post {
+  position: relative;
+  padding: 13px 13px 9px;
+  border: 1px solid var(--hsp-line);
+  border-radius: 18px;
+  background:
+    linear-gradient(160deg, rgba(86, 150, 255, 0.07), rgba(28, 133, 223, 0.02)),
+    var(--hsp-card);
+  box-shadow: inset 0 1px rgba(180, 210, 255, 0.06);
+}
+
+.hsp-post-head { display: flex; align-items: flex-start; gap: 9px; }
+.hsp-author {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: start;
+}
+.hsp-avatar {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+.hsp-author-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.hsp-author-copy strong {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--hsp-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hsp-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--hsp-ink-3);
+  white-space: nowrap;
+}
+.hsp-handle {
+  direction: ltr;
+  unicode-bidi: isolate;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hsp-post-more {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--hsp-ink-3);
+  transition: background 0.16s ease, color 0.16s ease;
+}
+.hsp-post-more:hover { background: var(--hsp-card-2); color: var(--hsp-ink); }
+
+.hsp-post-body {
+  display: block;
+  width: 100%;
+  padding: 9px 0 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: start;
+}
+.hsp-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.66;
+  color: var(--hsp-ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.hsp-readmore {
+  margin-top: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--hsp-primary);
+  font-size: 11.5px;
+  font-weight: 750;
+}
+
+.hsp-post-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(120, 160, 255, 0.09);
+}
+.hsp-acts { display: flex; align-items: center; gap: 13px; }
+.hsp-act {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 8px;
-  border: 1px solid color-mix(in srgb, var(--soc-accent) 26%, transparent);
+  font-size: 11.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--hsp-ink-3);
+}
+.hsp-act--reply { color: var(--hsp-reply); }
+.hsp-act--repeat { color: var(--hsp-repeat); }
+.hsp-act--like { color: var(--hsp-like); }
+.hsp-act-num { color: var(--hsp-ink-2); }
+.hsp-media { display: inline-flex; color: var(--hsp-ink-3); }
+
+.hsp-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid color-mix(in srgb, var(--hsp-secondary) 34%, transparent);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--soc-accent) 8%, transparent);
-  color: var(--soc-accent);
-  font: 800 8.5px/1.4 var(--font-mono);
-  letter-spacing: .04em;
+  background: color-mix(in srgb, var(--hsp-secondary) 10%, transparent);
+  color: var(--hsp-secondary);
+  font-size: 10.5px;
+  font-weight: 750;
   white-space: nowrap;
 }
-.soc-badge i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.soc-badge.is-off { color: var(--text-3); border-color: var(--line); background: transparent; }
 
-.soc-refresh {
+/* ── skeletons + empty states ───────────────────────────────────────────── */
+.hsp-skel {
+  display: flex;
+  gap: 10px;
+  padding: 14px 13px;
+  border: 1px solid var(--hsp-line);
+  border-radius: 18px;
+  background: var(--hsp-card);
+}
+.hsp-skel-avatar {
   flex: 0 0 38px;
   width: 38px;
   height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--bg-panel-solid);
-  color: var(--text-2);
+  border-radius: 50%;
+  background: rgba(150, 180, 240, 0.12);
 }
-.soc-refresh:disabled { opacity: .5; }
-.soc-spin { animation: soc-rotate .9s linear infinite; }
-@keyframes soc-rotate { to { transform: rotate(360deg); } }
+.hsp-skel > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 3px;
+}
+.hsp-skel > div span {
+  display: block;
+  height: 9px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgba(150, 180, 240, 0.1), rgba(150, 180, 240, 0.2), rgba(150, 180, 240, 0.1));
+  background-size: 220% 100%;
+  animation: hsp-shimmer 1.5s linear infinite;
+}
+.hsp-skel > div span:nth-child(1) { width: 42%; }
+.hsp-skel > div span:nth-child(2) { width: 88%; }
+@keyframes hsp-shimmer { to { background-position: -220% 0; } }
 
-/* ── search ─────────────────────────────────────────────────────────────── */
-.soc-search {
-  position: relative;
+.hsp-empty,
+.hsp-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  padding: 30px 18px;
+  border: 1px dashed var(--hsp-line);
+  border-radius: 18px;
+  text-align: center;
+}
+.hsp-empty span,
+.hsp-hint span { font-size: 24px; color: var(--hsp-ink-2); }
+.hsp-empty p,
+.hsp-hint p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--hsp-ink-3);
+}
+.hsp-empty-copy {
+  margin: 6px 0;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--hsp-ink-3);
+}
+
+.hsp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--hsp-line);
+  border-radius: 12px;
+  background: var(--hsp-card-2);
+  color: var(--hsp-ink);
+  font-size: 12.5px;
+  font-weight: 750;
+}
+.hsp-btn--wide { width: 100%; }
+.hsp-btn--primary {
+  border: 0;
+  background: linear-gradient(160deg, var(--hsp-primary-hi), var(--hsp-primary));
+  color: var(--hsp-primary-ink);
+  font-weight: 800;
+}
+.hsp-btn--primary:disabled { opacity: 0.45; }
+.hsp-footnote {
+  margin: 4px 0 0;
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--hsp-ink-3);
+  text-align: center;
+}
+.hsp-label {
+  margin: 4px 0 0;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--hsp-ink-3);
+}
+
+/* ── trends ─────────────────────────────────────────────────────────────── */
+.hsp-trendlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.hsp-trend {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  height: 42px;
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg-panel-solid) 88%, transparent);
-  color: var(--text-3);
+  gap: 11px;
+  width: 100%;
+  padding: 12px 13px;
+  border: 1px solid var(--hsp-line);
+  border-radius: 16px;
+  background: var(--hsp-card);
+  color: var(--hsp-ink-2);
+  text-align: start;
 }
-.soc-search:focus-within { border-color: color-mix(in srgb, var(--soc-accent) 42%, var(--line)); }
-.soc-search input {
+.hsp-rank {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--hsp-secondary) 16%, transparent);
+  color: var(--hsp-secondary);
+  font: 800 11.5px/1 var(--font-mono);
+}
+.hsp-trend-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.hsp-trend-copy strong {
+  font-size: 13px;
+  color: var(--hsp-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hsp-trend-copy span {
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--hsp-ink-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── search ─────────────────────────────────────────────────────────────── */
+.hsp-searchfield {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 46px;
+  padding: 0 13px;
+  border: 1px solid var(--hsp-line);
+  border-radius: 15px;
+  background: var(--hsp-card);
+  color: var(--hsp-ink-3);
+}
+.hsp-searchfield:focus-within {
+  border-color: color-mix(in srgb, var(--hsp-primary) 44%, var(--hsp-line));
+  background: var(--hsp-card-2);
+}
+.hsp-searchfield input {
   flex: 1;
   min-width: 0;
   height: 100%;
   border: 0;
   background: transparent;
-  color: var(--text-1);
-  font-size: 12.5px;
+  color: var(--hsp-ink);
+  font-family: inherit;
+  font-size: 13px;
   outline: none;
 }
-.soc-search input::-webkit-search-cancel-button { display: none; }
-.soc-clear {
+.hsp-searchfield input::placeholder { color: var(--hsp-ink-3); }
+.hsp-searchfield input::-webkit-search-cancel-button { display: none; }
+.hsp-clear {
   flex: 0 0 22px;
   width: 22px;
   height: 22px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
   border: 0;
-  background: color-mix(in srgb, var(--text-3) 18%, transparent);
-  color: var(--text-2);
-  font-size: 14px;
-  line-height: 1;
+  border-radius: 50%;
+  background: rgba(150, 180, 240, 0.16);
+  color: var(--hsp-ink-2);
 }
 
-/* ── topic tabs ─────────────────────────────────────────────────────────── */
-.soc-tabs {
-  display: flex;
-  gap: 5px;
-  padding: 4px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-snap-type: x proximity;
-  scrollbar-width: none;
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg-panel-solid) 84%, transparent);
-}
-.soc-tabs::-webkit-scrollbar { display: none; }
-.soc-tab {
-  flex: 0 0 auto;
-  min-height: 32px;
-  padding: 6px 12px;
-  scroll-snap-align: center;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  background: transparent;
-  color: var(--text-3);
-  font-size: 11px;
-  font-weight: 750;
-  white-space: nowrap;
-  transition: color .16s ease, background .16s ease, border-color .16s ease;
-}
-.soc-tab.is-on {
-  color: var(--soc-accent);
-  border-color: color-mix(in srgb, var(--soc-accent) 30%, transparent);
-  background: color-mix(in srgb, var(--soc-accent) 10%, transparent);
-}
-
-/* ── trending ───────────────────────────────────────────────────────────── */
-.soc-trends { display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; }
-.soc-trends::-webkit-scrollbar { display: none; }
-.soc-trends-label { flex: 0 0 auto; font-size: 9px; font-weight: 800; letter-spacing: .06em; color: var(--text-3); text-transform: uppercase; }
-.soc-trend {
-  flex: 0 0 auto;
-  max-width: 190px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 5px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg-panel-solid) 70%, transparent);
-  color: var(--text-2);
-  font-size: 10.5px;
-}
-
-/* ── feed ───────────────────────────────────────────────────────────────── */
-.soc-feed { display: flex; flex-direction: column; gap: 8px; }
-.soc-card {
-  padding: 12px 13px 10px;
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg-panel-solid) 92%, transparent);
-}
-.soc-head { display: flex; align-items: flex-start; gap: 8px; }
-.soc-author {
+.hsp-accounts { display: flex; flex-direction: column; gap: 7px; }
+.hsp-account {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
-  flex: 1;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  text-align: start;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--hsp-line);
+  border-radius: 15px;
+  background: var(--hsp-card);
   color: inherit;
+  text-align: start;
 }
-.soc-avatar {
-  flex: 0 0 32px;
-  width: 32px;
-  height: 32px;
+
+/* ── rows (drawer + settings), Harpy's drawer anatomy ───────────────────── */
+.hsp-rows { display: flex; flex-direction: column; gap: 7px; }
+.hsp-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 13px;
+  border: 1px solid var(--hsp-line);
+  border-radius: 15px;
+  background: var(--hsp-card);
+  color: var(--hsp-ink);
+  font-size: 13.5px;
+  font-weight: 650;
+  text-align: start;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+.hsp-row:hover { background: var(--hsp-card-2); border-color: var(--hsp-line-strong); }
+.hsp-row.is-on {
+  border-color: color-mix(in srgb, var(--hsp-primary) 40%, var(--hsp-line));
+  background: color-mix(in srgb, var(--hsp-primary) 10%, var(--hsp-card));
+  color: var(--hsp-primary);
+}
+.hsp-row-icon {
+  flex: 0 0 auto;
   display: grid;
   place-items: center;
-  border-radius: 11px;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 850;
-}
-.soc-author-copy { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
-.soc-author-copy strong {
-  font-size: 12px;
-  line-height: 1.35;
-  color: var(--text-1);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.soc-handle {
-  font-size: 10px;
-  color: var(--text-3);
-  direction: ltr;
-  text-align: start;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.soc-time { flex: 0 0 auto; font-size: 10px; color: var(--text-3); font-variant-numeric: tabular-nums; }
-
-.soc-body { display: block; width: 100%; padding: 8px 0 0; border: 0; background: transparent; text-align: start; color: inherit; }
-.soc-text {
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.75;
-  color: var(--text-1);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.soc-more { margin-top: 4px; padding: 0; border: 0; background: transparent; color: var(--soc-accent); font-size: 11px; font-weight: 750; }
-
-.soc-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 9px; padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
-.soc-counts { display: flex; align-items: center; gap: 11px; }
-.soc-count {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10.5px;
-  color: var(--text-3);
-  font-variant-numeric: tabular-nums;
-}
-.soc-media { font-size: 11px; color: var(--text-3); }
-.soc-open {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 9px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--soc-accent) 26%, var(--line));
-  background: color-mix(in srgb, var(--soc-accent) 7%, transparent);
-  color: var(--soc-accent);
-  font-size: 10px;
-  font-weight: 750;
-  white-space: nowrap;
-}
-
-/* ── accounts / sub-views ───────────────────────────────────────────────── */
-.soc-accounts { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
-.soc-account {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 11px;
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg-panel-solid) 88%, transparent);
-  text-align: start;
+  width: 26px;
+  height: 26px;
   color: inherit;
+  opacity: 0.92;
 }
-.soc-sub { display: flex; flex-direction: column; gap: 8px; }
-.soc-sub-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.soc-back {
-  display: inline-flex;
+
+/* ── drawer ─────────────────────────────────────────────────────────────── */
+.hsp-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: rgba(2, 6, 18, 0.66);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+.hsp-drawer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  inset-inline-start: 0;
+  z-index: 31;
+  width: min(330px, 86%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top, 0px) + 16px) 14px 18px;
+  overflow-y: auto;
+  background:
+    radial-gradient(100% 40% at 20% 0%, rgba(40, 92, 176, 0.32), transparent 62%),
+    linear-gradient(180deg, #071026, #040a18 62%, #030713);
+  border-inline-end: 1px solid var(--hsp-line);
+  box-shadow: 0 0 60px -10px #000;
+}
+.hsp-drawer-head {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 11px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--bg-panel-solid);
-  color: var(--text-1);
-  font-size: 11.5px;
-  font-weight: 750;
-  max-width: 70%;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(120, 160, 255, 0.1);
+}
+.hsp-brandmark {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: linear-gradient(160deg, var(--hsp-primary-hi), var(--hsp-primary));
+  color: var(--hsp-primary-ink);
+  box-shadow: 0 12px 26px -16px rgba(243, 170, 47, 0.9);
+}
+.hsp-drawer-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.hsp-drawer-head strong { font-size: 14px; }
+.hsp-drawer-head span:last-child {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--hsp-ink-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.soc-sub-open { border: 0; background: transparent; color: var(--soc-accent); font-size: 10.5px; font-weight: 750; }
-.soc-sub-label { margin: 2px 0; font-size: 9.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
-.soc-replydepth { margin-inline-start: 14px; }
-.soc-empty-copy { margin: 4px 0; font-size: 11px; color: var(--text-3); text-align: center; }
-
-/* ── states ─────────────────────────────────────────────────────────────── */
-.soc-skel {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 13px;
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg-panel-solid) 80%, transparent);
-}
-.soc-skel span {
-  height: 9px;
-  border-radius: 6px;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--text-3) 12%, transparent), color-mix(in srgb, var(--text-3) 22%, transparent), color-mix(in srgb, var(--text-3) 12%, transparent));
-  background-size: 220% 100%;
-  animation: soc-shimmer 1.4s linear infinite;
-}
-.soc-skel span:nth-child(1) { width: 34%; }
-.soc-skel span:nth-child(2) { width: 92%; }
-.soc-skel span:nth-child(3) { width: 68%; }
-@keyframes soc-shimmer { to { background-position: -220% 0; } }
-
-.soc-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 26px 16px;
-  border-radius: 16px;
-  border: 1px dashed var(--line);
-  text-align: center;
-}
-.soc-empty span { font-size: 24px; }
-.soc-empty p { margin: 0; font-size: 11.5px; line-height: 1.7; color: var(--text-3); }
-.soc-loadmore { align-self: center; }
-.soc-updated { margin: 2px 0 0; text-align: center; font-size: 9.5px; color: var(--text-3); }
+.hsp-drawer-close { width: 32px; height: 32px; border-radius: 10px; }
 
 /* ── compose ────────────────────────────────────────────────────────────── */
-.soc-compose {
+.hsp-compose {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 31;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--soc-accent) 26%, var(--line));
-  background: color-mix(in srgb, var(--soc-accent) 6%, var(--bg-panel-solid));
+  gap: 10px;
+  padding: 12px 14px calc(16px + env(safe-area-inset-bottom, 0px));
+  border-radius: 22px 22px 0 0;
+  background:
+    radial-gradient(90% 40% at 80% 0%, rgba(40, 92, 176, 0.28), transparent 60%),
+    linear-gradient(180deg, #081124, #050b1a);
+  border-top: 1px solid var(--hsp-line);
+  box-shadow: 0 -20px 50px -20px #000;
 }
-.soc-compose-note { margin: 0; font-size: 10px; line-height: 1.65; color: var(--text-3); }
-.soc-compose textarea {
+.hsp-compose-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+}
+.hsp-compose-head strong { flex: 1; }
+.hsp-counter {
+  font: 750 11.5px/1 var(--font-mono);
+  color: var(--hsp-ink-3);
+}
+.hsp-compose textarea {
   width: 100%;
+  min-height: 92px;
+  padding: 11px 12px;
   resize: vertical;
-  min-height: 66px;
-  padding: 9px 11px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--bg-panel-solid);
-  color: var(--text-1);
+  border: 1px solid var(--hsp-line);
+  border-radius: 14px;
+  background: rgba(8, 18, 40, 0.72);
+  color: var(--hsp-ink);
   font-family: inherit;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.7;
   outline: none;
 }
-.soc-compose textarea:focus { border-color: color-mix(in srgb, var(--soc-accent) 42%, var(--line)); }
-.soc-compose-actions { display: flex; align-items: center; gap: 8px; }
-.soc-charline { margin-inline-end: auto; font-size: 10px; color: var(--text-3); font-variant-numeric: tabular-nums; }
-.soc-compose-go { background: var(--soc-accent); color: #04121a; font-weight: 800; }
-.soc-compose-go:disabled { opacity: .45; }
+.hsp-compose textarea:focus { border-color: color-mix(in srgb, var(--hsp-primary) 40%, var(--hsp-line)); }
+.hsp-compose-note {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--hsp-ink-3);
+}
 
-/* ── actions + notice ───────────────────────────────────────────────────── */
-.soc-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
-.soc-write {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding-inline: 14px;
-  background: linear-gradient(135deg, var(--soc-accent), var(--soc-accent-2));
-  color: #04121a;
-  font-weight: 800;
+/* ── floating write button + back to top ────────────────────────────────── */
+/*
+ * Harpy floats its compose button in the bottom(end) corner and hides it while
+ * the reader is scrolling down. The brief asked for the corner *and* for it to
+ * travel with the scroll, so it is physical-right here in both directions —
+ * the reader's own words: «نوشتن گوشهٔ راست ... همراه صفحه بیاد».
+ */
+.hsp-fab,
+.hsp-topbtn {
+  position: absolute;
+  z-index: 20;
+  right: calc(14px + env(safe-area-inset-right, 0px));
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
   border: 0;
+  border-radius: 50%;
 }
-.soc-notice {
+.hsp-fab {
+  background: linear-gradient(160deg, var(--hsp-primary-hi), var(--hsp-primary));
+  color: var(--hsp-primary-ink);
+  box-shadow: 0 16px 34px -16px rgba(243, 170, 47, 0.85), inset 0 1px rgba(255, 255, 255, 0.4);
+}
+.hsp-topbtn {
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--hsp-line-strong);
+  background: rgba(10, 20, 42, 0.92);
+  color: var(--hsp-ink);
+  box-shadow: 0 14px 30px -18px #000;
+}
+
+/* ── pushed page: profile / thread ──────────────────────────────────────── */
+.hsp-subpage {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
   display: flex;
-  align-items: flex-start;
-  gap: 7px;
-  margin: 4px 0 0;
-  font-size: 9.5px;
-  line-height: 1.75;
-  color: var(--text-3);
+  flex-direction: column;
+  background: linear-gradient(180deg, #04091a, #00030f 40%, #04091a);
 }
-.soc-notice svg { flex: 0 0 auto; margin-top: 1px; }
+.hsp-subbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(env(safe-area-inset-top, 0px) + 9px) 11px 9px;
+  border-bottom: 1px solid rgba(120, 160, 255, 0.1);
+}
+.hsp-subbar strong {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: ltr;
+  text-align: start;
+}
+.hsp-subscroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 11px 0 calc(24px + env(safe-area-inset-bottom, 0px));
+}
+.hsp-subscroll .hsp-page-body { padding: 0 11px; }
+.hsp-reply { margin-inline-start: 14px; }
+
+/* ── embedded browser tab ───────────────────────────────────────────────── */
+/*
+ * Discover is a page of its own with its own hero and sheet. Embedded here it
+ * only needs its surfaces darkened to sit in this room instead of on the app
+ * canvas — nothing structural is overridden.
+ */
+.hsp-browser .dcx {
+  --dcx-surface: rgba(9, 19, 40, 0.94);
+  --dcx-surface-2: rgba(12, 24, 48, 0.96);
+  --dcx-elevated: rgba(15, 30, 58, 0.96);
+  --dcx-popover-bg: #071229;
+  --dcx-border: rgba(120, 160, 255, 0.14);
+  --dcx-border-strong: rgba(120, 160, 255, 0.26);
+  --dcx-accent: var(--hsp-primary);
+  --dcx-accent-2: var(--hsp-secondary);
+  color: var(--hsp-ink);
+}
+.hsp-browser .dcx .dcx-hero-orb { opacity: 0.5; }
+
+/* ── motion ─────────────────────────────────────────────────────────────── */
+.hsp-spin { display: inline-flex; animation: hsp-rotate 0.9s linear infinite; }
+@keyframes hsp-rotate { to { transform: rotate(360deg); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .soc-spin, .soc-skel span { animation: none; }
+  .hsp-stars,
+  .hsp-skel > div span,
+  .hsp-spin { animation: none !important; }
 }
 
-/* Wide screens (tablet/APK landscape): keep the reading column readable. */
+/* Hover/active states are a bonus, not the affordance. */
+.hsp-fab:active { transform: scale(0.96); }
+.hsp-btn:active,
+.hsp-row:active,
+.hsp-trend:active { transform: scale(0.995); }
+
+/* Tablet/desktop: the room keeps a phone-shaped reading column, like Harpy. */
 @media (min-width: 720px) {
-  .soc-page { max-width: 720px; margin-inline: auto; }
+  .hsp-frame {
+    border-inline: 1px solid rgba(120, 160, 255, 0.08);
+    box-shadow: 0 0 90px -30px #0a1c3d;
+  }
+  .hsp-body { padding: 4px 16px 0; }
+  .hsp-subscroll .hsp-page-body { padding: 0 16px; }
+  .hsp-bar { padding-inline: 16px; }
 }

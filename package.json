@@ -402,6 +402,7 @@
     "test:kronos-local": "node --test test/kronos-local-math.test.mjs test/kronos-local-storage.test.mjs test/kronos-local-client.test.mjs && node --test --test-force-exit test/kronos-local-model.test.mjs",
     "test:wiring": "node scripts/run-wiring-audit.mjs",
     "test:social": "node --test test/social-feed.test.mjs",
+    "test:social-room": "vitest run test/social-harpy-room.test.jsx",
     "test:kronos-dist": "node --test test/kronos-deploy-gate.test.mjs && KRONOS_DIST_REQUIRED=1 node --test --test-force-exit test/kronos-ort-dist.test.mjs",
     "kronos:fetch": "node scripts/fetch-kronos-model.mjs",
     "kronos:check": "node scripts/check-kronos-model-host.mjs",

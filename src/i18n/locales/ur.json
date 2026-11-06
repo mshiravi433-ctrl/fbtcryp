@@ -4561,5 +4561,32 @@
       "topMoverAria": "سرفہرست کوائن {{symbol}} کھولیں",
       "awaiting": "ہم آہنگی جاری"
     }
+  },
+  "social": {
+    "tab": {
+      "timeline": "ٹائم لائن",
+      "trends": "ٹرینڈز",
+      "browser": "براؤزر",
+      "search": "تلاش",
+      "settings": "ترتیبات"
+    },
+    "openMenu": "مینو کھولیں",
+    "closeMenu": "مینو بند کریں",
+    "drawerTitle": "سوشل مینو",
+    "feedFilter": "فیڈ فلٹر",
+    "feedNote": "یہ پوسٹیں Bluesky سے آتی ہیں۔ لائک یا جواب کے لیے Bluesky میں کھولیں۔",
+    "readOnly": "صرف پڑھنے کے لیے",
+    "scrollTop": "اوپر جائیں",
+    "rank": "درجہ {{n}}",
+    "about": "تعارف اور انتباہ",
+    "backToApp": "ایپ پر واپس",
+    "settingsSub": "یہ اسکرین جو کچھ کرتی ہے، ایک فہرست میں۔",
+    "trendsTitle": "ٹرینڈز",
+    "trendsSub": "Bluesky پر ابھی کیا چل رہا ہے۔",
+    "trendsEmpty": "ابھی کوئی ٹرینڈ نہیں۔",
+    "trendsNote": "یہ فہرست Bluesky بناتا ہے، ہم نہیں؛ یہ صرف کرپٹو نہیں ہے۔",
+    "browserTitle": "براؤزر",
+    "browserSub": "قابلِ اعتماد web3 سائٹس، ہر ایک آپ کے براؤزر میں۔",
+    "searchSub": "نام یا پوسٹ کے کچھ الفاظ لکھیں — ہم دونوں میں تلاش کرتے ہیں۔"
   }
 }

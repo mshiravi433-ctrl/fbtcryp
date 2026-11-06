@@ -4567,5 +4567,32 @@
       "topMoverAria": "24घं लीडर {{symbol}} खोलें",
       "awaiting": "सिंक हो रहा है"
     }
+  },
+  "social": {
+    "tab": {
+      "timeline": "टाइमलाइन",
+      "trends": "ट्रेंड",
+      "browser": "ब्राउज़र",
+      "search": "खोज",
+      "settings": "सेटिंग्स"
+    },
+    "openMenu": "मेन्यू खोलें",
+    "closeMenu": "मेन्यू बंद करें",
+    "drawerTitle": "सोशल मेन्यू",
+    "feedFilter": "फ़ीड फ़िल्टर",
+    "feedNote": "ये पोस्ट Bluesky से आती हैं। लाइक या जवाब देने के लिए Bluesky में खोलें।",
+    "readOnly": "केवल पढ़ने के लिए",
+    "scrollTop": "ऊपर जाएँ",
+    "rank": "रैंक {{n}}",
+    "about": "परिचय और चेतावनी",
+    "backToApp": "ऐप पर वापस",
+    "settingsSub": "यह स्क्रीन जो कुछ करती है, एक सूची में।",
+    "trendsTitle": "ट्रेंड",
+    "trendsSub": "Bluesky पर अभी क्या चल रहा है।",
+    "trendsEmpty": "अभी कोई ट्रेंड नहीं।",
+    "trendsNote": "यह सूची Bluesky बनाता है, हम नहीं; यह सिर्फ़ क्रिप्टो नहीं है।",
+    "browserTitle": "ब्राउज़र",
+    "browserSub": "भरोसेमंद web3 साइटें, हर एक आपके ब्राउज़र में।",
+    "searchSub": "नाम या पोस्ट के कुछ शब्द लिखें — हम दोनों खोजते हैं।"
   }
 }

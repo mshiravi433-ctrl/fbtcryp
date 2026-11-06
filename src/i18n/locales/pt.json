@@ -4565,5 +4565,32 @@
       "topMoverAria": "Abrir líder 24h {{symbol}}",
       "awaiting": "Sincronizando"
     }
+  },
+  "social": {
+    "tab": {
+      "timeline": "Linha do tempo",
+      "trends": "Tendências",
+      "browser": "Navegador",
+      "search": "Buscar",
+      "settings": "Ajustes"
+    },
+    "openMenu": "Abrir menu",
+    "closeMenu": "Fechar menu",
+    "drawerTitle": "Menu social",
+    "feedFilter": "Filtro do feed",
+    "feedNote": "Estas postagens vêm do Bluesky. Abra no Bluesky para curtir ou responder.",
+    "readOnly": "Somente leitura",
+    "scrollTop": "Voltar ao topo",
+    "rank": "Posição {{n}}",
+    "about": "Sobre e aviso",
+    "backToApp": "Voltar ao app",
+    "settingsSub": "Tudo o que esta tela faz, em uma lista.",
+    "trendsTitle": "Tendências",
+    "trendsSub": "Do que o Bluesky fala agora.",
+    "trendsEmpty": "Sem tendências agora.",
+    "trendsNote": "Esta lista é feita pelo Bluesky, não por nós; não é só cripto.",
+    "browserTitle": "Navegador",
+    "browserSub": "Sites web3 confiáveis, cada um no seu navegador.",
+    "searchSub": "Digite um nome ou palavras de uma postagem — buscamos os dois."
   }
 }

@@ -18169,6 +18169,31 @@
     "cancel": "Cancel",
     "openBluesky": "Open Bluesky",
     "settings": "Settings",
-    "notice": "These posts are written by strangers on a public network. We do not host them, do not endorse them and do not review them; showing a post is not a recommendation. Never send anyone money or a recovery phrase because of something you read here."
+    "notice": "These posts are written by strangers on a public network. We do not host them, do not endorse them and do not review them; showing a post is not a recommendation. Never send anyone money or a recovery phrase because of something you read here.",
+    "tab": {
+      "timeline": "Timeline",
+      "trends": "Trends",
+      "browser": "Browser",
+      "search": "Search",
+      "settings": "Settings"
+    },
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "drawerTitle": "Social menu",
+    "feedFilter": "Feed filter",
+    "feedNote": "These posts come from Bluesky. Open a post on Bluesky to like, repost or reply.",
+    "readOnly": "Read-only",
+    "scrollTop": "Back to top",
+    "rank": "Rank {{n}}",
+    "about": "About & warning",
+    "backToApp": "Back to the app",
+    "settingsSub": "Everything this screen can do, in one list.",
+    "trendsTitle": "Trends",
+    "trendsSub": "What Bluesky is talking about right now.",
+    "trendsEmpty": "No trends available right now.",
+    "trendsNote": "Bluesky builds this list, not us; it is not crypto-only and you may disagree with what is on it.",
+    "browserTitle": "Browser",
+    "browserSub": "Trusted web3 sites, each opening in your own phone browser.",
+    "searchSub": "Type a name or a few words from a post — we search both at once."
   }
 }
