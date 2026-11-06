@@ -30,13 +30,19 @@ import SmartMoneyBanner from '../components/market/SmartMoneyBanner';
 import HotCoins from '../components/market/HotCoins';
 import MarketHeroBanner from '../components/market/MarketHeroBanner';
 import MarketTabStrip from '../components/market/MarketTabStrip';
+import MarketHeatmap from '../components/market/MarketHeatmap';
+import MarketCapitalPulse from '../components/market/MarketCapitalPulse';
+import MarketDefiIntel from '../components/market/MarketDefiIntel';
+import MarketFbtNetworks from '../components/market/MarketFbtNetworks';
 import { revealMarketTabStart, useMarketTab } from '../hooks/useMarketTab';
 import { useMarketCategory } from '../hooks/useMarketCategory';
+import { useMarketOverviewIntel } from '../hooks/useMarketOverviewIntel';
 import '../styles/market-modern.css';
 import '../styles/market-intelligence.css';
 import '../styles/market-glass-v3.css';
 import '../styles/market-aurora-glass.css';
 import '../styles/market-obsidian-glass.css';
+import '../styles/market-overview-phase2.css';
 /*
  * ─── THE TAB STRIP — «مرور / توکن» ────────────────────────────────────────
  * The sheet that draws the two tabs, in the material the five layers above
@@ -266,6 +272,7 @@ export default function Market() {
    */
   const [sector, setSector] = useState(null);
   const category = useMarketCategory(sector, vs, tab === 'tokens');
+  const overviewIntel = useMarketOverviewIntel({ enabled: tab === 'overview' });
   /*
    * ─── THE FIVE CHIPS ARE A VIEW, NOT A BUDGET ────────────────────────────
    *   «صعودی‌ها» used to be `sort(byChange).slice(0, 25)`: picking it did not
@@ -754,6 +761,20 @@ export default function Market() {
               <div className="mx-stories">
                 <MarketStories coins={coins} global={global} />
               </div>
+
+              <MarketHeatmap coins={coins} vs={vs} />
+
+              <MarketCapitalPulse coins={coins} global={global} vs={vs} />
+
+              <MarketDefiIntel
+                defi={overviewIntel.defi}
+                global={global}
+                loading={overviewIntel.loading}
+                offline={overviewIntel.offline}
+                onRefresh={overviewIntel.refresh}
+              />
+
+              <MarketFbtNetworks swapNetworks={overviewIntel.swapNetworks} />
 
               <SmartMoneyBanner />
               </>

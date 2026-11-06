@@ -27,6 +27,7 @@ import {
   fetchTrending,
   fetchVolumeSeries,
 } from './providers.js';
+import { fetchMarketOverviewIntel } from './marketOverviewIntel.js';
 import { MARKET_CATEGORIES, isBinanceRiskSector } from '../src/lib/marketSectors.js';
 import {
   forecastService,
@@ -3938,6 +3939,10 @@ app.get('/api/me', (req, res) =>
 );
 
 app.get('/api/global', (_req, res) => serve(res, 45000)(fetchGlobal, 'global'));
+
+app.get('/api/market/overview-intel', (_req, res) =>
+  serve(res, 60000)(fetchMarketOverviewIntel, 'market:overview-intel')
+);
 
 app.get('/api/markets', (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
