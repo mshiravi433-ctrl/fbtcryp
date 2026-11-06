@@ -20,3 +20,7 @@
 - `npm run test:market:overview-browser` → Chromium واقعی در ۳۲۰/۳۹۰/۴۳۰/۷۶۸/۱۲۸۰، روشن/تاریک، fa/en،
   بدون overflow افقی؛ popover کیبورد/RTL/فوکوس پاس.
 - build کامل اپ در این سندباکس به سقف حافظه خورد؛ build هدفمند فیکسچر overview با Vite پاس شد.
+
+## انتشار
+- PR #706 در `main` مرج شد: `ba3f8dadd9c3a226b504d8d9faef0da6a405725f`.
+- دیپلوی production خودکار Vercel از `main` ساخته شد: `dpl_FX4HfKpaE49tAV2g7qDAYvLUXtMX`.
