@@ -131,12 +131,13 @@ export async function run(container) {
   });
   await act(async () => { await sleep(60); });
   const railButtons = all('.news-mode-tabs button', container);
-  check('news: the tab rail has five tabs — read, community, listen, insights, calm — and no Global',
-    railButtons.length === 5 && !railButtons.some((b) => /هوش جهانی|جهانی|Global/.test(b.textContent || '')),
+  check('news: the tab rail has four tabs — read, listen, insights, calm — and no Global or conversation',
+    railButtons.length === 4 && !railButtons.some((b) => /هوش جهانی|جهانی|Global|گفتگو|Community/.test(b.textContent || '')),
     railButtons.map((b) => (b.textContent || '').trim()).join(' | '));
-  check('news: the tab list in source no longer carries «global»',
-    /const NEWS_TABS = \['read', 'community', 'listen', 'insights', 'calm'\];/.test(newsSource)
-    && !/<AiGlobalIntelligence/.test(newsSource));
+  check('news: the tab list in source no longer carries «global» or «community»',
+    /const NEWS_TABS = \['read', 'listen', 'insights', 'calm'\];/.test(newsSource)
+    && !/<AiGlobalIntelligence/.test(newsSource)
+    && !/CommunityPanel/.test(newsSource));
   await act(async () => { root.unmount(); });
   container.innerHTML = '';
 

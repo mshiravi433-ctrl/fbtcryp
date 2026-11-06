@@ -214,8 +214,9 @@ export async function run(container) {
   await mount('BoardPanel', <BoardPanel />);
 
   /*
-   * The community feed, mounted directly: it lives behind a News tab click,
-   * so no other mount reaches it. This renders with fetch failing, which is
+   * The community feed, mounted directly: it is no longer a News tab (the
+   * channels are social timeline filters), so no other mount reaches this
+   * panel. This renders with fetch failing, which is
    * the case that matters — a dead feed must show the offline state, not
    * throw and take the page with it.
    */

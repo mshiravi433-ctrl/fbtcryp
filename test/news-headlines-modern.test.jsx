@@ -58,8 +58,8 @@ describe('modern News headline desk', () => {
     render(<MemoryRouter initialEntries={['/news']}><News /></MemoryRouter>);
     expect(await screen.findByText(feed.items[0].title)).toBeTruthy();
     expect(screen.getByText(en.news.topStory)).toBeTruthy();
-    expect(screen.getAllByRole('tab')).toHaveLength(5);
-    expect(document.querySelectorAll('.news-tab-icon svg')).toHaveLength(5);
+    expect(screen.getAllByRole('tab')).toHaveLength(4);
+    expect(document.querySelectorAll('.news-tab-icon svg')).toHaveLength(4);
 
     const search = screen.getByRole('searchbox', { name: en.news.search });
     fireEvent.change(search, { target: { value: 'not-present' } });

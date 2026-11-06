@@ -7,6 +7,7 @@ import { lockBodyScroll } from '../lib/scrollLock';
 import { useTelegram } from '../context/TelegramContext';
 import { SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from '../lib/features';
 import { useStill } from './AnimatedIcon';
+import BrandMark from './BrandMark.jsx';
 import {
   IconActivity,
   IconBriefcase,
@@ -18,7 +19,6 @@ import {
   IconKey,
   IconMarket,
   IconRocket,
-  IconChat,
   IconNews,
   IconPools,
   IconSettings,
@@ -231,6 +231,12 @@ import {
  * mutually distinct — purple, cool blue, money green/gold, orchid/ice — so
  * picking a category still visibly re-tints the material.
  */
+/** App coin for the social row. BrandMark ignores width/height; the tile
+ *  passes those to every other icon, so this wrapper absorbs them. */
+function SocialMenuMark() {
+  return <BrandMark size={18} gradientId="moreSocialBrand" className="brand-mark more-social-mark" />;
+}
+
 const ALL_TINT = { tint: 'var(--rgb-2)', tint2: 'var(--rgb-3)' };
 
 const GROUPS = [
@@ -378,11 +384,10 @@ const GROUPS = [
        */
       { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney, hue: 'var(--rgb-7)' },
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
-      /* The social feed's second doorway. The header mark is the primary one;
-         this tile is here because the header also carries a rotating price
-         spotlight, and a destination that exists on exactly one control is a
-         destination half the users never find. */
-      { to: '/social', key: 'nav.social', Icon: IconChat, hue: 'var(--rgb-3)' },
+      /* The social feed's second doorway. The icon is the app coin — the same
+         mark as the header — not a generic chat bubble. Asked for directly:
+         the menu item beside «شبکهٔ اجتماعی» should be our logo. */
+      { to: '/social', key: 'nav.social', Icon: SocialMenuMark, hue: 'var(--rgb-3)' },
       /*
        * The world console left the News tabs and is its own page now, named
        * «جهانی» in this menu. It sits right under News because that is where

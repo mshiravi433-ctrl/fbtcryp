@@ -794,6 +794,12 @@
     0 8px 18px -8px color-mix(in srgb, var(--more-accent) 90%, transparent);
 }
 .more-tile-icon svg { display: block; }
+.more-tile-icon .more-social-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  box-shadow: none;
+}
 
 .more-tile-label {
   flex: 1 1 auto;
