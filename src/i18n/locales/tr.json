@@ -4565,5 +4565,32 @@
       "topMoverAria": "24s lideri {{symbol}} aç",
       "awaiting": "Eşitleniyor"
     }
+  },
+  "social": {
+    "tab": {
+      "timeline": "Zaman tüneli",
+      "trends": "Trendler",
+      "browser": "Tarayıcı",
+      "search": "Ara",
+      "settings": "Ayarlar"
+    },
+    "openMenu": "Menüyü aç",
+    "closeMenu": "Menüyü kapat",
+    "drawerTitle": "Sosyal menü",
+    "feedFilter": "Akış filtresi",
+    "feedNote": "Bu gönderiler Bluesky’den gelir. Beğenmek için Bluesky’de açın.",
+    "readOnly": "Salt okunur",
+    "scrollTop": "Başa dön",
+    "rank": "Sıra {{n}}",
+    "about": "Hakkında ve uyarı",
+    "backToApp": "Uygulamaya dön",
+    "settingsSub": "Bu ekranın yapabildikleri tek listede.",
+    "trendsTitle": "Trendler",
+    "trendsSub": "Bluesky şu anda neler konuşuyor.",
+    "trendsEmpty": "Şu anda trend yok.",
+    "trendsNote": "Bu listeyi biz değil Bluesky yapar; yalnızca kripto değildir.",
+    "browserTitle": "Tarayıcı",
+    "browserSub": "Güvenilir web3 siteleri, her biri kendi tarayıcınızda.",
+    "searchSub": "Bir ad ya da gönderiden birkaç kelime yazın — ikisinde de ararız."
   }
 }

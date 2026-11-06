@@ -4567,5 +4567,32 @@
       "topMoverAria": "Ouvrir le leader 24h {{symbol}}",
       "awaiting": "Synchronisation"
     }
+  },
+  "social": {
+    "tab": {
+      "timeline": "Fil",
+      "trends": "Tendances",
+      "browser": "Navigateur",
+      "search": "Recherche",
+      "settings": "Réglages"
+    },
+    "openMenu": "Ouvrir le menu",
+    "closeMenu": "Fermer le menu",
+    "drawerTitle": "Menu social",
+    "feedFilter": "Filtre du fil",
+    "feedNote": "Ces publications viennent de Bluesky. Ouvrez-les dans Bluesky pour aimer ou répondre.",
+    "readOnly": "Lecture seule",
+    "scrollTop": "Haut de page",
+    "rank": "Rang {{n}}",
+    "about": "À propos et avertissement",
+    "backToApp": "Retour à l'app",
+    "settingsSub": "Tout ce que cet écran sait faire, en une liste.",
+    "trendsTitle": "Tendances",
+    "trendsSub": "Ce dont Bluesky parle en ce moment.",
+    "trendsEmpty": "Aucune tendance pour le moment.",
+    "trendsNote": "Cette liste est faite par Bluesky, pas par nous ; elle n’est pas réservée à la crypto.",
+    "browserTitle": "Navigateur",
+    "browserSub": "Des sites web3 de confiance, chacun dans votre navigateur.",
+    "searchSub": "Tapez un nom ou des mots d’une publication — nous cherchons les deux."
   }
 }

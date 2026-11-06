@@ -4558,5 +4558,32 @@
       "topMoverAria": "查看 24h 领涨资产 {{symbol}}",
       "awaiting": "同步中"
     }
+  },
+  "social": {
+    "tab": {
+      "timeline": "时间线",
+      "trends": "趋势",
+      "browser": "浏览器",
+      "search": "搜索",
+      "settings": "设置"
+    },
+    "openMenu": "打开菜单",
+    "closeMenu": "关闭菜单",
+    "drawerTitle": "社交菜单",
+    "feedFilter": "信息流筛选",
+    "feedNote": "这些帖子来自 Bluesky。点赞或回复请在 Bluesky 中打开。",
+    "readOnly": "只读",
+    "scrollTop": "回到顶部",
+    "rank": "第 {{n}} 名",
+    "about": "关于与提醒",
+    "backToApp": "返回应用",
+    "settingsSub": "此页面的全部功能，一览。",
+    "trendsTitle": "趋势",
+    "trendsSub": "Bluesky 正在讨论的话题。",
+    "trendsEmpty": "暂时没有趋势。",
+    "trendsNote": "这份榜单由 Bluesky 生成，不是我们；它不只关于加密。",
+    "browserTitle": "浏览器",
+    "browserSub": "可信的 web3 网站，都会在你的浏览器中打开。",
+    "searchSub": "输入名字或帖子里的几个词——我们会同时搜索。"
   }
 }

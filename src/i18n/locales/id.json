@@ -4565,5 +4565,32 @@
       "topMoverAria": "Buka pemimpin 24j {{symbol}}",
       "awaiting": "Menyinkronkan"
     }
+  },
+  "social": {
+    "tab": {
+      "timeline": "Lini masa",
+      "trends": "Tren",
+      "browser": "Peramban",
+      "search": "Cari",
+      "settings": "Pengaturan"
+    },
+    "openMenu": "Buka menu",
+    "closeMenu": "Tutup menu",
+    "drawerTitle": "Menu sosial",
+    "feedFilter": "Filter feed",
+    "feedNote": "Posting ini berasal dari Bluesky. Buka di Bluesky untuk menyukai atau membalas.",
+    "readOnly": "Hanya baca",
+    "scrollTop": "Kembali ke atas",
+    "rank": "Peringkat {{n}}",
+    "about": "Tentang & peringatan",
+    "backToApp": "Kembali ke aplikasi",
+    "settingsSub": "Semua yang bisa dilakukan layar ini, dalam satu daftar.",
+    "trendsTitle": "Tren",
+    "trendsSub": "Apa yang sedang dibicarakan Bluesky.",
+    "trendsEmpty": "Belum ada tren.",
+    "trendsNote": "Daftar ini dibuat Bluesky, bukan kami; bukan hanya kripto.",
+    "browserTitle": "Peramban",
+    "browserSub": "Situs web3 tepercaya, masing-masing di peramban Anda.",
+    "searchSub": "Ketik nama atau kata dari postingan — kami mencari keduanya."
   }
 }

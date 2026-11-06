@@ -385,7 +385,16 @@ function SwipeTabRoutes() {
 
 function AppChrome() {
   const { pathname } = useLocation();
-  const headerless = pathname === '/intent' || pathname.startsWith('/pay');
+  /*
+   * `/social` is the third headerless room, and the instruction was explicit
+   * («اصلاً یک صفحهٔ مجزا باشد ... منو به جای پایین بالا باشد»): the social
+   * screen carries its OWN navigation at the TOP, Harpy-style, so the app's
+   * Header above it and BottomNav below it would be two bars competing with
+   * one. It ships its own menu, its own tabs and its own exit — the drawer's
+   * «back to the app» row and the settings tab — so nothing is lost by
+   * dropping the shell's chrome, exactly as /intent already does.
+   */
+  const headerless = pathname === '/intent' || pathname.startsWith('/pay') || pathname.startsWith('/social');
   /* «نه جمع شده» — the world console is a dashboard, not a phone column, so it
      gets the widest shell. All routes keep their phone layout on mobile and
      gain a wider, centred shell from tablet/desktop breakpoints. */

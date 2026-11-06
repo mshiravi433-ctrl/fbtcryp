@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>اتاق هارپی — پیش‌نمایش ثابت /social</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<style>
+  /*
+   * STATIC PREVIEW of the shipped /social screen.
+   * -----------------------------------------------------------------------
+   * Not a mock of a future design: every colour, radius, size and layout rule
+   * below is copied from src/styles/social.css, and the markup is the markup
+   * Social.jsx renders. It exists so the shape can be looked at without a
+   * build (the production bundle needs ~2 GB and full network access), and it
+   * renders the REAL component from the dev server when one is running —
+   * see the small script at the end of the page.
+   */
+  @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap');
+
+  :root {
+    --hsp-bg: #00030f;
+    --hsp-bg-2: #12254a;
+    --hsp-sky-1: #050b1e;
+    --hsp-primary: #f3aa2f;
+    --hsp-primary-hi: #ffc55c;
+    --hsp-primary-ink: #08111f;
+    --hsp-secondary: #4689ff;
+    --hsp-card: rgba(28, 133, 223, 0.1);
+    --hsp-card-2: rgba(28, 133, 223, 0.14);
+    --hsp-line: rgba(120, 160, 255, 0.14);
+    --hsp-line-strong: rgba(120, 160, 255, 0.24);
+    --hsp-ink: #f2f6ff;
+    --hsp-ink-2: rgba(226, 236, 255, 0.66);
+    --hsp-ink-3: rgba(186, 204, 245, 0.45);
+    --hsp-like: #ff5d8f;
+    --hsp-repeat: #66d68b;
+    --hsp-reply: #6f9dff;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: #03060f;
+    color: var(--hsp-ink);
+    font-family: 'Vazirmatn', system-ui, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100dvh;
+  }
+
+  /* a phone-shaped stage so the room is seen at the width it ships for */
+  .stage {
+    position: relative;
+    width: min(412px, 100vw);
+    height: min(892px, 100dvh);
+    overflow: hidden;
+    border: 1px solid rgba(120, 160, 255, 0.12);
+    border-radius: 26px;
+    box-shadow: 0 40px 120px -40px #0a1c3d, 0 0 0 10px #060a14;
+  }
+  @media (max-width: 460px), (max-height: 940px) {
+    .stage { width: 100vw; height: 100dvh; border: 0; border-radius: 0; box-shadow: none; }
+  }
+
+  /* ── .hsp ───────────────────────────────────────────────────────────── */
+  .hsp {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+    background: var(--hsp-bg);
+  }
+  .hsp-sky { position: absolute; inset: 0; pointer-events: none; }
+  .hsp-sky::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(120% 62% at 50% -14%, rgba(40, 92, 176, 0.85) 0%, rgba(20, 44, 96, 0.55) 34%, rgba(3, 9, 26, 0) 72%),
+      radial-gradient(70% 46% at 88% 2%, rgba(126, 62, 196, 0.4), transparent 62%),
+      radial-gradient(62% 40% at 6% 6%, rgba(24, 116, 196, 0.38), transparent 64%),
+      linear-gradient(180deg, var(--hsp-sky-1) 0%, var(--hsp-bg) 44%, #040a1a 100%);
+  }
+  .hsp-stars { position: absolute; inset: -10% -10% 0; background-repeat: repeat; }
+  .hsp-stars--a {
+    background-image:
+      radial-gradient(1.4px 1.4px at 18% 12%, rgba(255,255,255,.9), transparent 60%),
+      radial-gradient(1px 1px at 62% 6%, rgba(255,255,255,.7), transparent 60%),
+      radial-gradient(1.6px 1.6px at 84% 22%, rgba(210,232,255,.9), transparent 60%),
+      radial-gradient(1px 1px at 34% 28%, rgba(255,255,255,.55), transparent 60%),
+      radial-gradient(1.2px 1.2px at 8% 40%, rgba(255,255,255,.6), transparent 60%),
+      radial-gradient(1px 1px at 72% 44%, rgba(190,220,255,.6), transparent 60%),
+      radial-gradient(1.5px 1.5px at 46% 16%, rgba(255,255,255,.8), transparent 60%),
+      radial-gradient(1px 1px at 94% 36%, rgba(255,255,255,.5), transparent 60%);
+    background-size: 260px 260px;
+    opacity: .75;
+    animation: drift 160s linear infinite;
+  }
+  .hsp-stars--b {
+    background-image:
+      radial-gradient(1px 1px at 22% 18%, rgba(255,255,255,.6), transparent 60%),
+      radial-gradient(.9px .9px at 58% 32%, rgba(220,236,255,.45), transparent 60%),
+      radial-gradient(1.2px 1.2px at 78% 9%, rgba(255,255,255,.5), transparent 60%),
+      radial-gradient(.9px .9px at 12% 62%, rgba(255,255,255,.4), transparent 60%),
+      radial-gradient(1px 1px at 66% 74%, rgba(210,230,255,.45), transparent 60%);
+    background-size: 180px 180px;
+    opacity: .5;
+    animation: drift 240s linear infinite reverse;
+  }
+  .hsp-horizon { position: absolute; inset: auto 0 -12% 0; height: 46%;
+    background: radial-gradient(60% 62% at 50% 108%, rgba(70,137,255,.3), transparent 72%); }
+  @keyframes drift { to { transform: translate3d(-260px, 260px, 0); } }
+
+  /* ── frame + bar ────────────────────────────────────────────────────── */
+  .hsp-frame { position: relative; display: flex; flex-direction: column; width: 100%; max-width: 560px; height: 100%; min-height: 0; }
+  .hsp-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 7px; padding: 12px 11px 9px; }
+  .hsp-iconbtn {
+    display: inline-grid; place-items: center; width: 40px; height: 40px; flex: 0 0 auto;
+    border: 1px solid var(--hsp-line); border-radius: 13px; background: var(--hsp-card); color: var(--hsp-ink-2);
+  }
+  .hsp-menubtn { width: 48px; height: 44px; border-radius: 14px; color: var(--hsp-ink); }
+  .hsp-tabs { display: flex; align-items: center; gap: 7px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .hsp-tabs::-webkit-scrollbar { display: none; }
+  .hsp-tab {
+    flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 44px; min-width: 44px; padding: 0 11px;
+    border: 1px solid var(--hsp-line); border-radius: 14px; background: var(--hsp-card);
+    color: var(--hsp-ink-2); font: 700 12.5px/1 inherit; white-space: nowrap;
+  }
+  .hsp-tab.is-on {
+    background: linear-gradient(160deg, var(--hsp-primary-hi), var(--hsp-primary));
+    border-color: #ffd591; color: var(--hsp-primary-ink); padding-inline: 15px;
+    box-shadow: 0 10px 22px -14px rgba(243,170,47,.8); font-weight: 800;
+  }
+  .hsp-tab svg { display: block; }
+
+  /* ── scroll + page ──────────────────────────────────────────────────── */
+  .hsp-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 96px; scrollbar-width: none; }
+  .hsp-scroll::-webkit-scrollbar { display: none; }
+  .hsp-body { padding: 2px 11px 0; }
+  .hsp-page-body { display: flex; flex-direction: column; gap: 11px; }
+  .hsp-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 10.5px; color: var(--hsp-ink-3); }
+  .hsp-live { display: inline-flex; align-items: center; gap: 6px; font: 800 9px/1.4 var(--font-mono); letter-spacing: .06em; color: var(--hsp-repeat); }
+  .hsp-live i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 4px rgba(102,214,139,.13); }
+  .hsp-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .hsp-chips::-webkit-scrollbar { display: none; }
+  .hsp-chip {
+    flex: 0 0 auto; padding: 7px 13px; border: 1px solid var(--hsp-line); border-radius: 999px;
+    background: var(--hsp-card); color: var(--hsp-ink-2); font-size: 11.5px; font-weight: 700; white-space: nowrap;
+  }
+  .hsp-chip.is-on { color: var(--hsp-primary); border-color: rgba(243,170,47,.42); background: rgba(243,170,47,.12); }
+  .hsp-feed { display: flex; flex-direction: column; gap: 9px; }
+  .hsp-post {
+    padding: 13px 13px 9px; border: 1px solid var(--hsp-line); border-radius: 18px;
+    background: linear-gradient(160deg, rgba(86,150,255,.07), rgba(28,133,223,.02)), var(--hsp-card);
+    box-shadow: inset 0 1px rgba(180,210,255,.06);
+  }
+  .hsp-post-head { display: flex; align-items: flex-start; gap: 9px; }
+  .hsp-author { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; }
+  .hsp-avatar {
+    flex: 0 0 auto; display: grid; place-items: center; width: 40px; height: 40px;
+    border-radius: 50%; color: #fff; font-size: 14px; font-weight: 800;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.18);
+  }
+  .hsp-author-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .hsp-author-copy strong { font-size: 13px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hsp-meta { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--hsp-ink-3); white-space: nowrap; }
+  .hsp-handle { direction: ltr; unicode-bidi: isolate; }
+  .hsp-post-more { flex: 0 0 auto; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 9px; background: transparent; color: var(--hsp-ink-3); }
+  .hsp-text { margin: 9px 0 0; font-size: 13.5px; line-height: 1.66; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .hsp-post-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 9px; padding-top: 8px; border-top: 1px solid rgba(120,160,255,.09); }
+  .hsp-acts { display: flex; align-items: center; gap: 13px; }
+  .hsp-act { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 650; }
+  .hsp-act--reply { color: var(--hsp-reply); }
+  .hsp-act--repeat { color: var(--hsp-repeat); }
+  .hsp-act--like { color: var(--hsp-like); }
+  .hsp-act-num { color: var(--hsp-ink-2); }
+  .hsp-open { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border: 1px solid rgba(70,137,255,.34); border-radius: 999px; background: rgba(70,137,255,.1); color: var(--hsp-secondary); font-size: 10.5px; font-weight: 750; }
+  .hsp-footnote { margin: 4px 0 0; font-size: 10px; line-height: 1.7; color: var(--hsp-ink-3); text-align: center; }
+  .hsp-label { margin: 4px 0 0; font-size: 9.5px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--hsp-ink-3); }
+  .hsp-lead { display: flex; align-items: center; gap: 10px; }
+  .hsp-lead p { flex: 1; margin: 0; font-size: 11.5px; line-height: 1.65; color: var(--hsp-ink-3); }
+  .hsp-trendlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .hsp-trend { display: flex; align-items: center; gap: 11px; padding: 12px 13px; border: 1px solid var(--hsp-line); border-radius: 16px; background: var(--hsp-card); }
+  .hsp-rank { flex: 0 0 26px; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 9px; background: rgba(70,137,255,.16); color: var(--hsp-secondary); font: 800 11.5px/1 var(--font-mono); }
+  .hsp-trend-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .hsp-trend-copy strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hsp-trend-copy span { font-size: 11px; line-height: 1.6; color: var(--hsp-ink-3); }
+  .hsp-rows { display: flex; flex-direction: column; gap: 7px; }
+  .hsp-row {
+    display: flex; align-items: center; gap: 11px; width: 100%; min-height: 48px; padding: 11px 13px;
+    border: 1px solid var(--hsp-line); border-radius: 15px; background: var(--hsp-card);
+    color: var(--hsp-ink); font-size: 13.5px; font-weight: 650; text-align: start;
+  }
+  .hsp-row.is-on { border-color: rgba(243,170,47,.4); background: rgba(243,170,47,.1); color: var(--hsp-primary); }
+  .hsp-row-icon { flex: 0 0 auto; display: grid; place-items: center; width: 26px; height: 26px; }
+  .hsp-searchfield { display: flex; align-items: center; gap: 9px; height: 46px; padding: 0 13px; border: 1px solid var(--hsp-line); border-radius: 15px; background: var(--hsp-card); color: var(--hsp-ink-3); font-size: 13px; }
+  .hsp-hint { display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 30px 18px; border: 1px dashed var(--hsp-line); border-radius: 18px; text-align: center; }
+  .hsp-hint span { font-size: 24px; color: var(--hsp-ink-2); }
+  .hsp-hint p { margin: 0; font-size: 12px; line-height: 1.75; color: var(--hsp-ink-3); }
+
+  /* ── the travelling write button ────────────────────────────────────── */
+  .hsp-fab {
+    position: absolute; z-index: 20; right: 14px; bottom: 18px;
+    display: grid; place-items: center; width: 54px; height: 54px; border: 0; border-radius: 50%;
+    background: linear-gradient(160deg, var(--hsp-primary-hi), var(--hsp-primary));
+    color: var(--hsp-primary-ink); cursor: pointer;
+    box-shadow: 0 16px 34px -16px rgba(243,170,47,.85), inset 0 1px rgba(255,255,255,.4);
+    transition: opacity .2s ease, transform .2s ease;
+  }
+  .hsp-fab.is-away { opacity: 0; transform: scale(.8) translateY(8px); pointer-events: none; }
+  .hsp-fab:active { transform: scale(.96); }
+
+  /* ── drawer ─────────────────────────────────────────────────────────── */
+  .hsp-backdrop { position: absolute; inset: 0; z-index: 30; background: rgba(2,6,18,.66); backdrop-filter: blur(3px); opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+  .hsp-backdrop.is-on { opacity: 1; pointer-events: auto; }
+  .hsp-drawer {
+    position: absolute; top: 0; bottom: 0; inset-inline-start: 0; z-index: 31;
+    width: min(330px, 86%); display: flex; flex-direction: column; gap: 12px; padding: 16px 14px 18px; overflow-y: auto;
+    background: radial-gradient(100% 40% at 20% 0%, rgba(40,92,176,.32), transparent 62%), linear-gradient(180deg, #071026, #040a18 62%, #030713);
+    border-inline-end: 1px solid var(--hsp-line); box-shadow: 0 0 60px -10px #000;
+    transform: translateX(-100%); transition: transform .26s cubic-bezier(.22,.61,.36,1);
+  }
+  html[dir='rtl'] .hsp-drawer { transform: translateX(100%); }
+  .hsp-drawer.is-on { transform: none; }
+  .hsp-drawer-head { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid rgba(120,160,255,.1); }
+  .hsp-brandmark {
+    flex: 0 0 auto; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px;
+    background: linear-gradient(160deg, var(--hsp-primary-hi), var(--hsp-primary)); color: var(--hsp-primary-ink);
+    box-shadow: 0 12px 26px -16px rgba(243,170,47,.9);
+  }
+  .hsp-drawer-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .hsp-drawer-head strong { font-size: 14px; }
+  .hsp-drawer-head small { font-size: 10.5px; line-height: 1.5; color: var(--hsp-ink-3); }
+  .hsp-chip--static { pointer-events: none; }
+
+  /* ── compose sheet ──────────────────────────────────────────────────── */
+  .hsp-compose {
+    position: absolute; inset-inline: 0; bottom: 0; z-index: 31;
+    display: flex; flex-direction: column; gap: 10px; padding: 12px 14px 18px;
+    border-radius: 22px 22px 0 0;
+    background: radial-gradient(90% 40% at 80% 0%, rgba(40,92,176,.28), transparent 60%), linear-gradient(180deg, #081124, #050b1a);
+    border-top: 1px solid var(--hsp-line); box-shadow: 0 -20px 50px -20px #000;
+    transform: translateY(102%); transition: transform .28s cubic-bezier(.22,.61,.36,1);
+  }
+  .hsp-compose.is-on { transform: none; }
+  .hsp-compose-head { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+  .hsp-compose-head strong { flex: 1; }
+  .hsp-counter { font: 750 11.5px/1 var(--font-mono); color: var(--hsp-ink-3); }
+  .hsp-compose textarea {
+    width: 100%; min-height: 92px; padding: 11px 12px; resize: vertical;
+    border: 1px solid var(--hsp-line); border-radius: 14px; background: rgba(8,18,40,.72);
+    color: var(--hsp-ink); font: inherit; font-size: 13px; line-height: 1.7; outline: none;
+  }
+  .hsp-compose-note { margin: 0; font-size: 10px; line-height: 1.7; color: var(--hsp-ink-3); }
+  .hsp-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 0 16px;
+    border: 1px solid var(--hsp-line); border-radius: 12px; background: var(--hsp-card-2); color: var(--hsp-ink);
+    font: 750 12.5px/1 inherit;
+  }
+  .hsp-btn--primary { border: 0; background: linear-gradient(160deg, var(--hsp-primary-hi), var(--hsp-primary)); color: var(--hsp-primary-ink); font-weight: 800; }
+
+  /* ── the page switcher in the preview itself (not part of the design) ── */
+  .stage-nav {
+    position: absolute; z-index: 40; left: 50%; bottom: 8px; transform: translateX(-50%);
+    display: flex; gap: 4px; padding: 4px; border-radius: 999px;
+    background: rgba(6,12,26,.86); border: 1px solid rgba(120,160,255,.16); backdrop-filter: blur(8px);
+  }
+  .stage-nav button {
+    border: 0; border-radius: 999px; padding: 5px 10px; background: transparent; color: var(--hsp-ink-3);
+    font: 700 10px/1 'Vazirmatn', sans-serif; cursor: pointer;
+  }
+  .stage-nav button.is-on { background: rgba(243,170,47,.16); color: var(--hsp-primary); }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="hsp">
+    <div class="hsp-sky" aria-hidden="true">
+      <span class="hsp-stars hsp-stars--a"></span>
+      <span class="hsp-stars hsp-stars--b"></span>
+      <span class="hsp-horizon"></span>
+    </div>
+
+    <div class="hsp-frame">
+      <!-- ── the bar: menu + tab pills, active tab is the amber pill ── -->
+      <header class="hsp-bar">
+        <button class="hsp-iconbtn hsp-menubtn" id="menuBtn" aria-label="باز کردن منو" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M4 7h9M4 12h16M4 17h12"/></svg>
+        </button>
+        <div class="hsp-tabs" role="tablist" id="hspTabs"></div>
+      </header>
+
+      <div class="hsp-scroll" id="hspScroll">
+        <div class="hsp-body" id="hspBody"></div>
+      </div>
+
+      <button class="hsp-fab" id="hspFab" aria-label="نوشتن" title="نوشتن">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button>
+
+      <!-- drawer -->
+      <div class="hsp-backdrop" id="backdrop"></div>
+      <aside class="hsp-drawer" id="drawer" aria-label="منوی شبکهٔ اجتماعی">
+        <div class="hsp-drawer-head">
+          <span class="hsp-brandmark">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.85"><circle cx="12" cy="12" r="9.2"/><path d="M2.8 12h18.4M12 2.8a15.3 15.3 0 0 1 4 9.2 15.3 15.3 0 0 1-4 9.2 15.3 15.3 0 0 1-4-9.2 15.3 15.3 0 0 1 4-9.2Z"/></svg>
+          </span>
+          <div><strong>شبکهٔ اجتماعی</strong><small>پست‌های کریپتوی Bluesky — خواندنی، بدون حساب، بدون کلید</small></div>
+        </div>
+        <div class="hsp-chips" style="flex-wrap:wrap;overflow:visible">
+          <span class="hsp-chip is-on">BLUESKY · زنده</span>
+          <span class="hsp-chip">فقط خواندن</span>
+        </div>
+        <div class="hsp-rows" id="drawerRows"></div>
+        <div class="hsp-rows">
+          <button class="hsp-row" data-action="compose"><span class="hsp-row-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>نوشتن</button>
+          <button class="hsp-row"><span class="hsp-row-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></span>بازگشت به اپ</button>
+        </div>
+        <p class="hsp-footnote">این پست‌ها را غریبه‌ها در یک شبکهٔ عمومی می‌نویسند. ما نه میزبانشان هستیم، نه تأییدشان می‌کنیم.</p>
+      </aside>
+
+      <!-- compose sheet -->
+      <section class="hsp-compose" id="compose" aria-label="نوشتن">
+        <header class="hsp-compose-head">
+          <button class="hsp-iconbtn" id="composeClose" aria-label="انصراف" style="width:32px;height:32px;border-radius:10px">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+          <strong>نوشتن</strong><span class="hsp-counter">۲۸۰</span>
+        </header>
+        <textarea placeholder="چه چیزی می‌خواهی بگویی؟"></textarea>
+        <p class="hsp-compose-note">این متن در اپ Bluesky باز می‌شود و فقط آنجا با حساب خودت منتشر می‌شود. ما هیچ کلید و رمزی از تو نگه نمی‌داریم.</p>
+        <button class="hsp-btn hsp-btn--primary">ادامه در Bluesky
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></svg>
+        </button>
+      </section>
+
+      <div class="stage-nav" aria-hidden="true">
+        <button data-stage="timeline" class="is-on">تایم‌لاین</button>
+        <button data-stage="trends">ترندها</button>
+        <button data-stage="browser">مرورگر</button>
+        <button data-stage="search">جست‌وجو</button>
+        <button data-stage="settings">تنظیمات</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── the same five pages, the same order as TABS in Social.jsx ───────────── */
+const TABS = [
+  ['timeline', 'تایم‌لاین', 'M3 10l9-7 9 7v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2Z'],
+  ['trends', 'ترندها', 'M12 22c4.4 0 7-2.9 7-6.6 0-4.4-4.3-6.5-3.2-11.4-2.6.6-4.3 2.4-4.6 5-.8-.6-1.3-1.5-1.5-2.6C7.6 8.2 5 10.7 5 15.4 5 19.1 7.6 22 12 22Z'],
+  ['browser', 'مرورگر', null],
+  ['search', 'جست‌وجو', 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14ZM20 20l-3.6-3.6'],
+  ['settings', 'تنظیمات', null]
+];
+const icon = (name, size = 19) => {
+  if (name === 'browser') return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><circle cx="12" cy="12" r="9.2"/><path d="M2.8 12h18.4M12 2.8a15.3 15.3 0 0 1 4 9.2 15.3 15.3 0 0 1-4 9.2 15.3 15.3 0 0 1-4-9.2 15.3 15.3 0 0 1 4-9.2Z"/></svg>`;
+  if (name === 'settings') return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.4"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>`;
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="${TABS.find((t) => t[0] === name)?.[2] || ''}"/></svg>`;
+};
+
+const tabsEl = document.getElementById('hspTabs');
+const bodyEl = document.getElementById('hspBody');
+const drawerRows = document.getElementById('drawerRows');
+let active = 'timeline';
+
+function renderTabs() {
+  tabsEl.innerHTML = TABS.map(([id, label]) => `
+    <button role="tab" class="hsp-tab${id === active ? ' is-on' : ''}" data-tab="${id}" aria-selected="${id === active}" aria-label="${label}" title="${label}">
+      ${icon(id)}${id === active ? `<span>${label}</span>` : ''}
+    </button>`).join('');
+  document.querySelectorAll('[data-stage]').forEach((b) => b.classList.toggle('is-on', b.dataset.stage === active));
+  drawerRows.innerHTML = TABS.map(([id, label]) => `
+    <button class="hsp-row${id === active ? ' is-on' : ''}" data-tab="${id}"><span class="hsp-row-icon">${icon(id, 18)}</span>${label}</button>`).join('');
+}
+
+/* ── posts: same content the fixture feed returns ───────────────────────── */
+const POSTS = [
+  { name: 'Satoshi Nakamoto', handle: 'satoshi.bsky.social', hue: 28, age: '۱۲ دقیقه پیش', text: 'بیت کوین امروز از ۱۰۸ هزار دلار عبور کرد و حجم معاملات هم به بالاترین سطح سه ماه گذشته رسید. کسی هنوز باور نمی‌کند؟', likes: '12.4k', reposts: '3.2k', replies: '480', media: true },
+  { name: 'DeFi Degen', handle: 'defi.degen.bsky.social', hue: 196, age: '۲ ساعت پیش', text: 'Uniswap v4 hooks are finally clicking for me. The fee routing alone is worth rebuilding your router for, and the tests are green.', likes: '842', reposts: '190', replies: '61' },
+  { name: 'Vitalik', handle: 'vitalik.bsky.social', hue: 268, age: '۴ ساعت پیش', text: 'Ethereum’s blob space usage keeps climbing — L2 fees are staying low even as activity grows. That is the whole point of the roadmap.', likes: '9.1k', reposts: '2.1k', replies: '320', media: true },
+  { name: 'Sol Whale', handle: 'sol.whale.bsky.social', hue: 140, age: '۶ ساعت پیش', text: 'Solana slot times are steady again after the upgrade. Watched a full day of validator metrics and saw no missed slots at all.', likes: '510', reposts: '74', replies: '22' }
+];
+
+const avatar = (p) => `<span class="hsp-avatar" style="background:linear-gradient(135deg,hsl(${p.hue} 78% 58%),hsl(${(p.hue + 46) % 360} 74% 44%))">${p.name.slice(0, 1).toUpperCase()}</span>`;
+
+const post = (p) => `
+  <article class="hsp-post">
+    <header class="hsp-post-head">
+      <span class="hsp-author">${avatar(p)}
+        <span class="hsp-author-copy"><strong>${p.name}</strong>
+          <span class="hsp-meta"><span class="hsp-handle">@${p.handle}</span><span>·</span><span>${p.age}</span></span>
+        </span>
+      </span>
+      <button class="hsp-post-more" aria-label="باز کردن"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></svg></button>
+    </header>
+    <p class="hsp-text">${p.text}</p>
+    ${p.media ? `<div style="margin-top:9px;height:96px;border-radius:13px;border:1px dashed rgba(120,160,255,.2);display:grid;place-items:center;color:rgba(186,204,245,.45);font-size:10.5px">تصویر پست نمایش داده نمی‌شود — فقط خواندنی و بدون بارگذاری از سرور غریبه</div>` : ''}
+    <div class="hsp-post-foot">
+      <div class="hsp-acts">
+        <span class="hsp-act hsp-act--reply"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8Z"/></svg><span class="hsp-act-num">${p.replies}</span></span>
+        <span class="hsp-act hsp-act--repeat"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg><span class="hsp-act-num">${p.reposts}</span></span>
+        <span class="hsp-act hsp-act--like"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.7 4.3 13a4.8 4.8 0 0 1 6.8-6.8l.9.9.9-.9a4.8 4.8 0 0 1 6.8 6.8Z"/></svg><span class="hsp-act-num">${p.likes}</span></span>
+      </div>
+      <span class="hsp-open">باز کردن<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></svg></span>
+    </div>
+  </article>`;
+
+const PAGES = {
+  timeline: () => `
+    <div class="hsp-page-body">
+      <div class="hsp-status">
+        <span class="hsp-live"><i></i>BLUESKY · زنده</span>
+        <span>به‌روزرسانی همین حالا</span>
+      </div>
+      <div class="hsp-chips">
+        <span class="hsp-chip is-on">برای تو</span><span class="hsp-chip">بیت‌کوین</span><span class="hsp-chip">اتریوم</span>
+        <span class="hsp-chip">دیفای</span><span class="hsp-chip">سولانا</span><span class="hsp-chip">فارسی</span>
+      </div>
+      <div class="hsp-feed">${POSTS.map(post).join('')}</div>
+      <p class="hsp-footnote">این پست‌ها از Bluesky می‌آیند. برای لایک، بازنشر یا پاسخ، پست را در Bluesky باز کن.</p>
+    </div>`,
+
+  trends: () => {
+    const rows = [
+      ['Crypto', 'Digital assets, protocols and market talk'],
+      ['Bitcoin', 'The original chain, and what it is doing today'],
+      ['Ethereum', 'L2s, EIPs and the roadmap'],
+      ['DeFi', 'Lending, DEXs and yield'],
+      ['Solana', 'Validators, slots and the ecosystem'],
+      ['Airdrops', 'Claims, seasons and snapshots'],
+      ['Layer 2', 'Rollups and scaling'],
+      ['Stablecoins', 'Pegs, issuers and reserves']
+    ];
+    return `
+    <div class="hsp-page-body">
+      <div class="hsp-lead">
+        <p>آنچه همین حالا در Bluesky داغ است.</p>
+        <button class="hsp-iconbtn" aria-label="تازه‌سازی"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg></button>
+      </div>
+      <ol class="hsp-trendlist">
+        ${rows.map(([label, desc], i) => `
+          <li><div class="hsp-trend"><span class="hsp-rank">${i + 1}</span>
+            <span class="hsp-trend-copy"><strong>${label}</strong><span>${desc}</span></span>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="rgba(186,204,245,.45)" stroke-width="1.85" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></svg>
+          </div></li>`).join('')}
+      </ol>
+      <p class="hsp-footnote">این فهرست را Bluesky می‌سازد، نه ما؛ ترند رمزارزی نیست و ممکن است محتوایش دلخواه تو نباشد.</p>
+    </div>`;
+  },
+
+  browser: () => `
+    <div class="hsp-page-body">
+      <p style="margin:0;font-size:11px;color:var(--hsp-ink-3)">سایت‌های معتبر وب۳، هرکدام در مرورگر خودِ گوشی باز می‌شوند.</p>
+      <div style="border:1px solid var(--hsp-line);border-radius:20px;padding:16px;background:radial-gradient(120% 80% at 80% 0%,rgba(243,170,47,.14),transparent 60%),var(--hsp-card)">
+        <div style="font:800 9px/1.4 var(--font-mono);letter-spacing:.12em;color:var(--hsp-primary)">کشف · LIVE</div>
+        <div style="margin-top:8px;font-size:17px;font-weight:800;line-height:1.5">دنیای وب۳ را <span style="color:var(--hsp-primary)">کاوش کن</span></div>
+        <p style="margin:6px 0 12px;font-size:11px;line-height:1.7;color:var(--hsp-ink-3)">سایت‌های معتبر ارز دیجیتال، در مرورگر خودت باز می‌شوند.</p>
+        <div class="hsp-searchfield" style="height:42px;border-radius:13px;font-size:12px">⌕ جستجو بین این سایت‌ها</div>
+        <div style="display:flex;gap:6px;margin-top:10px;overflow:hidden">
+          <span class="hsp-chip is-on">همه</span><span class="hsp-chip">صرافی‌ها</span><span class="hsp-chip">نمودار</span><span class="hsp-chip">کاوشگر</span>
+        </div>
+      </div>
+      ${[['PancakeSwap', 'صرافی غیرمتمرکز · BNB'], ['Uniswap', 'صرافی غیرمتمرکز · Ethereum'], ['DefiLlama', 'دادهٔ TVL · چند شبکه']].map(([name, sub]) => `
+        <div class="hsp-row" style="min-height:60px">
+          <span style="flex:0 0 34px;width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:rgba(243,170,47,.14);color:var(--hsp-primary);font-weight:800">${name.slice(0, 1)}</span>
+          <span style="flex:1;min-width:0"><strong style="display:block;font-size:13px">${name}</strong><span style="font-size:10.5px;color:var(--hsp-ink-3)">${sub}</span></span>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="rgba(186,204,245,.45)" stroke-width="1.85" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></svg>
+        </div>`).join('')}
+      <p class="hsp-footnote">اینها در مرورگر خود گوشی باز می‌شوند، پس نوار آدرس واقعی دیده می‌شود.</p>
+    </div>`,
+
+  search: () => `
+    <div class="hsp-page-body">
+      <label class="hsp-searchfield">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
+        جستجوی پست یا کاربر…
+      </label>
+      <div class="hsp-hint"><span>⌕</span><p>نام کاربر یا چند کلمه از متن پست را بنویس؛ هر دو را با هم می‌گردیم.</p></div>
+    </div>`,
+
+  settings: () => `
+    <div class="hsp-page-body">
+      <p style="margin:0;font-size:11px;color:var(--hsp-ink-3)">همهٔ کارهای این صفحه در یک فهرست.</p>
+      <div class="hsp-rows">
+        <button class="hsp-row" data-action="compose"><span class="hsp-row-icon">${icon('timeline', 18)}</span>نوشتن</button>
+        <button class="hsp-row"><span class="hsp-row-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></svg></span>باز کردن Bluesky</button>
+        <button class="hsp-row"><span class="hsp-row-icon">${icon('settings', 18)}</span>تنظیمات</button>
+        <button class="hsp-row"><span class="hsp-row-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></span>درباره و هشدار</button>
+        <button class="hsp-row"><span class="hsp-row-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></span>بازگشت به اپ</button>
+      </div>
+      <p class="hsp-footnote">فقط خواندن · Bluesky</p>
+    </div>`
+};
+
+function render() {
+  renderTabs();
+  bodyEl.innerHTML = PAGES[active]();
+  document.getElementById('hspScroll').scrollTop = 0;
+}
+
+document.addEventListener('click', (e) => {
+  const tabBtn = e.target.closest('[data-tab]');
+  if (tabBtn) { active = tabBtn.dataset.tab; render(); closeDrawer(); return; }
+  const stage = e.target.closest('[data-stage]');
+  if (stage) { active = stage.dataset.stage; render(); return; }
+  if (e.target.closest('[data-action="compose"]')) { closeDrawer(); openCompose(); }
+});
+
+/* ── drawer ─────────────────────────────────────────────────────────────── */
+const drawer = document.getElementById('drawer');
+const backdrop = document.getElementById('backdrop');
+const menuBtn = document.getElementById('menuBtn');
+const closeDrawer = () => { drawer.classList.remove('is-on'); backdrop.classList.remove('is-on'); menuBtn.setAttribute('aria-expanded', 'false'); };
+menuBtn.addEventListener('click', () => {
+  const on = drawer.classList.toggle('is-on');
+  backdrop.classList.toggle('is-on', on);
+  menuBtn.setAttribute('aria-expanded', String(on));
+});
+backdrop.addEventListener('click', closeDrawer);
+
+/* ── compose ────────────────────────────────────────────────────────────── */
+const compose = document.getElementById('compose');
+function openCompose() { compose.classList.add('is-on'); backdrop.classList.add('is-on'); backdrop.onclick = closeCompose; }
+function closeCompose() { compose.classList.remove('is-on'); backdrop.classList.remove('is-on'); backdrop.onclick = closeDrawer; }
+document.getElementById('hspFab').addEventListener('click', openCompose);
+document.getElementById('composeClose').addEventListener('click', closeCompose);
+
+/* ── the travelling write button: hides going down, returns coming back ─── */
+const fab = document.getElementById('hspFab');
+const scroller = document.getElementById('hspScroll');
+let last = 0, ticking = false;
+scroller.addEventListener('scroll', () => {
+  if (ticking) return;
+  ticking = true;
+  requestAnimationFrame(() => {
+    const y = scroller.scrollTop;
+    const dy = y - last;
+    if (Math.abs(dy) > 6) {
+      if (y < 24) fab.classList.remove('is-away');
+      else if (dy > 0) fab.classList.add('is-away');
+      else fab.classList.remove('is-away');
+      last = y;
+    }
+    document.querySelector('.hsp-bar').classList.toggle('is-lifted', y > 10);
+    ticking = false;
+  });
+}, { passive: true });
+
+render();
+</script>
+</body>
+</html>
