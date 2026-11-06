@@ -5,6 +5,7 @@
     "close": "Close quick access"
   },
   "nav": {
+    "aiAnalysis": "Market AI",
     "missions": "Mission Control",
     "market": "Market",
     "trade": "Trade",

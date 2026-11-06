@@ -39,6 +39,8 @@ const groups = [
   ],
   [
     { to: '/signals', key: 'nav.signals', Icon: IconActivity },
+    /* The analysis centre, one tap from anywhere the rail is open. */
+    { to: '/ai-analysis', key: 'nav.aiAnalysis', Icon: IconActivity },
     { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney },
     { to: '/news', key: 'nav.news', Icon: IconNews },
     { to: '/global', key: 'nav.global', Icon: IconWorld },

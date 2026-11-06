@@ -30,6 +30,7 @@
     "seo:audit": "node scripts/seo-audit.mjs",
     "seo:audit:strict": "node scripts/seo-audit.mjs --strict",
     "test:ai-theme": "node test/ai-light-theme-probe.mjs",
+  "test:ai-analysis": "node --test test/ai-analysis-intel.test.mjs && vitest run test/ai-analysis-page.test.jsx",
   "test:ai-benchmark": "node --test test/intent-ai/ai-benchmark-suite.test.mjs && vitest run test/ai-benchmark-panel.test.jsx",
   "benchmark:ai": "node scripts/ai-benchmark.mjs --all --mode single",
   "benchmark:ai:lab": "node scripts/ai-benchmark.mjs --lab",

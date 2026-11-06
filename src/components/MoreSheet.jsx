@@ -376,6 +376,12 @@ const GROUPS = [
        * tile now: same size, same stroke icon (IconSmartMoney in Icons.jsx),
        * same flat treatment.
        */
+      /*
+       * «هوش بازار» — the analysis centre. It sits beside Smart Money because
+       * both answer "what is the market doing", and it is the doorway to the
+       * full screener, the token file, portfolio risk and the daily report.
+       */
+      { to: '/ai-analysis', key: 'nav.aiAnalysis', Icon: IconActivity, hue: 'var(--rgb-2)' },
       { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney, hue: 'var(--rgb-7)' },
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
       /* The social feed's second doorway. Its icon is the same conversation
