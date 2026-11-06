@@ -16161,3 +16161,45 @@ button.settings-quick-action {
 /* `.seg-lg`'s rail behaviour lives in src/styles/tab-rail.css — it is needed by
    the two lazy screens that use a `.seg-lg` strip as page navigation, so it
    must not travel in the first-paint stylesheet. See that file. */
+
+/* ==========================================================================
+   HEADER — transparent until the first scroll, glass only after it
+   «هنگامی هنوز اسکرول نکرده‌ای، هیدر باید کاملا شبیه پس‌زمینه صفحه باشد
+    (شفاف); بعد از اسکرول، مشکی یا سفید متناسب تم با حالت نیم شیشه‌ای»
+   --------------------------------------------------------------------------
+   `.top-bar` loses its background entirely at the top of the page so the
+   page's own background shows through it. Once the user scrolls down
+   (`is-scrolled`, toggled in Header.jsx) it becomes the themed glass plate:
+   black in the dark theme, white in the light theme, with the same
+   half-blurred edge it had before.
+   ========================================================================== */
+
+.top-bar:not(.is-scrolled) {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border-bottom: none !important;
+}
+
+.top-bar.is-scrolled {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.92) 55%, transparent) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+:root[data-theme='light'] .top-bar.is-scrolled {
+  background: linear-gradient(180deg, rgba(244, 245, 250, 0.94) 55%, transparent) !important;
+}
+
+:root[data-lite='true'] .top-bar.is-scrolled {
+  background: linear-gradient(180deg, rgba(3, 5, 12, 0.97) 62%, rgba(3, 5, 12, 0.86)) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+:root[data-lite='true'][data-theme='light'] .top-bar.is-scrolled {
+  background: linear-gradient(180deg, rgba(244, 245, 250, 0.99) 62%, rgba(244, 245, 250, 0.94)) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}

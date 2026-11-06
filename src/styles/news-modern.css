@@ -290,21 +290,29 @@
    still snaps, still hides its scrollbar, and still ignores the page's
    swipe-to-change-tab gesture (App.jsx lists `.news-mode-tabs`).
    ========================================================================== */
-.news-page .news-mode-tabs.segmented { gap: 10px; padding: 7px; }
+.news-page .news-mode-tabs.segmented { gap: 6px; padding: 5px; border-radius: 13px; }
 .news-page .news-mode-tabs.segmented > button {
-  flex: 1 0 auto;
-  flex-basis: 96px;
-  min-width: 96px;
-  min-height: 62px;
-  gap: 6px;
-  padding-inline: 10px;
+  flex: 0 0 auto;
+  flex-basis: 72px;
+  min-width: 72px;
+  min-height: 50px;
+  gap: 5px;
+  padding-inline: 8px;
+  border-radius: 11px;
   scroll-snap-align: center;
 }
-.news-tab-icon { width: 20px; height: 20px; }
-.news-tab-icon svg { width: 20px; height: 20px; }
-.news-tab-label { font-size: 10.5px; }
+.news-tab-icon { width: 16px; height: 16px; }
+.news-tab-icon svg { width: 16px; height: 16px; }
+.news-tab-label { font-size: 9.5px; }
+
+.news-page .news-mode-tabs.segmented > button.active {
+  color: #06151a;
+  background: color-mix(in srgb, var(--news-cyan) 14%, transparent);
+  border-color: color-mix(in srgb, var(--news-cyan) 30%, transparent);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--news-cyan) 16%, transparent);
+}
 
 @media (max-width: 380px) {
-  .news-page .news-mode-tabs.segmented { gap: 8px; }
-  .news-page .news-mode-tabs.segmented > button { flex-basis: 88px; min-width: 88px; }
+  .news-page .news-mode-tabs.segmented { gap: 5px; }
+  .news-page .news-mode-tabs.segmented > button { flex-basis: 66px; min-width: 66px; min-height: 48px; }
 }

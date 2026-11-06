@@ -966,7 +966,7 @@ export default function Social() {
         transition={{ type: 'tween', duration: still ? 0 : 0.24, ease: [0.22, 0.61, 0.36, 1] }}
       >
         <div className="hsp-drawer-head">
-          <BrandMark size={22} gradientId="hspDrawerBrand" className="brand-mark hsp-appmark" />
+          <BrandMark size={30} gradientId="hspDrawerBrand" className="brand-mark hsp-appmark" />
           <div>
             <strong>{t('social.title')}</strong>
             <span>{t('social.subtitle')}</span>
