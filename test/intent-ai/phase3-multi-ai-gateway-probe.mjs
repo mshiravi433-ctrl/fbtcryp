@@ -58,15 +58,22 @@ assert(providers.length >= 8, 'Gateway must support at least 8 providers');
 pass('Gateway registers the 9 keyed-capable providers: OpenRouter, Groq, Gemini, Anthropic, DeepSeek, Mistral, Workers AI, AIMLAPI, Internal');
 
 /*
- * Grok (xAI), OpenAI and Perplexity were de-registered: they never carried an
- * API key, so a route that named them always failed over. The registry is the
- * contract this panel and the task router both read, so the probe pins their
- * absence — a future re-add must be deliberate, not an accident of a merge.
+ * OpenAI (GPT) and xAI (Grok) are registered DIRECTLY again — deliberately, as
+ * part of the multi-model benchmark. The point of registration is not "it is
+ * connected": an unconfigured provider reports NEEDS_KEY and costs nothing at
+ * request time. It is that the fleet can HONESTLY SHOW the model a user asked
+ * for, and the provider lab can prove the direct endpoint separately from an
+ * OpenRouter route that happens to answer with a GPT-class model.
+ *
+ * Perplexity stays out: no key exists on this deployment and its sourced-search
+ * job is carried by OpenRouter's online-capable models.
  */
-for (const removed of ['grok', 'openai', 'perplexity']) {
-  assert(!PROVIDER_CONFIGS[removed], `Provider "${removed}" must not be registered (no API key — job reassigned)`);
+for (const registered of ['openai', 'xai']) {
+  assert(Boolean(PROVIDER_CONFIGS[registered]), `Provider "${registered}" must be registered for the multi-model lab`);
+  assert(PROVIDER_CONFIGS[registered].type === 'openai-compatible', `${registered} must use the OpenAI-compatible adapter`);
 }
-pass('Grok, OpenAI and Perplexity are no longer registered (no key — duties reassigned)');
+assert(!PROVIDER_CONFIGS.perplexity, 'Perplexity must stay out (no key — search duty carried by OpenRouter)');
+pass('OpenAI (GPT) and xAI (Grok) are registered direct; Perplexity stays out (no key)');
 
 const openRouterConfig = PROVIDER_CONFIGS.openrouter;
 assert(openRouterConfig && openRouterConfig.url === 'https://openrouter.ai/api/v1/chat/completions', 'OpenRouter endpoint verified');

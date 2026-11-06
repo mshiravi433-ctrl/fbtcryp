@@ -14,6 +14,9 @@ import { CATEGORIES, OPERATIONS } from '../lib/intent-ai/os/opsCatalog.js';
 import { localizeOpsCard, localizeOpsCategory } from '../lib/intent-ai/os/opsCatalogI18n.js';
 /* Line-art icons replacing the catalog's emoji — see OpsIcons.jsx for why. */
 import { OpsCardIcon, OpsCategoryIcon } from './OpsIcons.jsx';
+/* The benchmark/lab dashboard reads its own additive endpoints and only mounts
+   when its tab is opened, so the default «models» view makes no extra call. */
+import AiBenchmarkPanel from './ai/AiBenchmarkPanel.jsx';
 /*
  * Panel chrome in fa/en/ar. Replaces forty inline `locale === 'en' ? …` pairs
  * that were a two-way switch in a three-language app AND compared against a
@@ -826,6 +829,9 @@ export function IntelligencePanel({
           <button type="button" role="tab" aria-selected={tab === 'models'} data-testid="intel-tab-models" className={`iaos-history-tab${tab === 'models' ? ' is-on' : ''}`} onClick={() => setTab('models')}>
             {fleetLabel}
           </button>
+          <button type="button" role="tab" aria-selected={tab === 'benchmark'} data-testid="intel-tab-benchmark" className={`iaos-history-tab${tab === 'benchmark' ? ' is-on' : ''}`} onClick={() => setTab('benchmark')}>
+            {isEn ? 'Benchmark & Lab' : 'آزمون و آزمایشگاه'}
+          </button>
           <button type="button" role="tab" aria-selected={tab === 'agents'} data-testid="intel-tab-agents" className={`iaos-history-tab${tab === 'agents' ? ' is-on' : ''}`} onClick={() => setTab('agents')}>
             {isEn ? 'Agent Fleet' : 'ناوگان ایجنت‌ها'}
           </button>
@@ -998,6 +1004,10 @@ export function IntelligencePanel({
                 </p>
               ) : null}
             </div>
+          ) : null}
+
+          {tab === 'benchmark' ? (
+            <AiBenchmarkPanel locale={locale} />
           ) : null}
 
           {tab === 'agents' ? (

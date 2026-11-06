@@ -243,15 +243,16 @@ async function runAll() {
   });
 
   await atest('variables that look like AI keys but are not read are reported instead of silently ignored', () => {
-    /* Grok/OpenAI/Perplexity were de-registered from the fleet, so setting
-       GROK_API_KEY or OPENAI_API_KEY does nothing. An operator who set one
-       deserves to be told rather than left debugging a dashboard that shows it
-       as saved. */
-    assert.ok(ai.IGNORED_AI_ENV_VARS.includes('OPENAI_API_KEY'));
-    assert.ok(ai.IGNORED_AI_ENV_VARS.includes('XAI_API_KEY'));
-    process.env.OPENAI_API_KEY = 'sk-ignored';
-    assert.deepEqual(ai.ignoredAiEnvVarsPresent(), ['OPENAI_API_KEY']);
-    delete process.env.OPENAI_API_KEY;
+    /* OpenAI and xAI are READ again, so their keys must NOT be on the ignored
+       list. Perplexity is the one that stays out — an operator who sets
+       PERPLEXITY_API_KEY deserves to be told it does nothing rather than left
+       debugging a dashboard that shows it as saved. */
+    assert.ok(!ai.IGNORED_AI_ENV_VARS.includes('OPENAI_API_KEY'));
+    assert.ok(!ai.IGNORED_AI_ENV_VARS.includes('XAI_API_KEY'));
+    assert.ok(ai.IGNORED_AI_ENV_VARS.includes('PERPLEXITY_API_KEY'));
+    process.env.PERPLEXITY_API_KEY = 'pplx-ignored';
+    assert.deepEqual(ai.ignoredAiEnvVarsPresent(), ['PERPLEXITY_API_KEY']);
+    delete process.env.PERPLEXITY_API_KEY;
     assert.deepEqual(ai.ignoredAiEnvVarsPresent(), []);
   });
 
@@ -398,9 +399,13 @@ async function runAll() {
     assert.equal(report.ok, true);
     assert.equal(report.degraded, false);
     assert.notEqual(report.provider, 'internal');
-    /* All eight keyed providers are reported, not three. The old report named
-       only Groq/Gemini/OpenRouter, so a working Anthropic key looked missing. */
-    assert.equal(report.providers.length, 8);
+    /* Every REGISTERED external provider is reported, not three. The registry
+       now has ten: the eight keyed ones plus OpenAI and xAI, which are
+       registered but unconfigured in this fixture and must appear as
+       NEEDS_KEY rather than vanish. */
+    assert.equal(report.providers.length, 10);
+    assert.ok(report.providers.some((p) => p.id === 'openai' && p.keyPresent === false));
+    assert.ok(report.providers.some((p) => p.id === 'xai' && p.keyPresent === false));
     assert.ok(report.providers.every((p) => 'keyPresent' in p && 'verdict' in p && 'model' in p));
   });
 

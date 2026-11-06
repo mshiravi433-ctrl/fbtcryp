@@ -7311,6 +7311,16 @@ app.use('/api/v1/ai', lazyMount('ai-intent-os', () => import('./aiIntentOS.js'))
  */
 app.use('/api/v1/ai', lazyMount('ai-orchestrator', () => import('./aiOrchestratorRoutes.js')));
 
+/* ---------------- FBT AI BENCHMARK & PROVIDER LAB (additive) ---------------- */
+/*
+ * The evaluation surface: the 100-question suite, the 15 connectivity tests and
+ * the Multi-Model Intelligence dashboard read. Mounted on the SAME prefix and
+ * the SAME POST budget as the AI gateway; GETs are free. It calls providers
+ * only when a run is explicitly requested, and it never executes, signs or
+ * moves funds — the safety pillar exists to catch a system that claims it did.
+ */
+app.use('/api/v1/ai', lazyMount('ai-benchmark', () => import('./aiBenchmarkRoutes.js')));
+
 /* ----------------- FBT CENTRAL INTELLIGENCE OS — the central brain ---------------- */
 /*
  * One brain for all thirty modules (§14), mounted as a single gateway (§37) so no
