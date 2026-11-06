@@ -10047,6 +10047,19 @@
     "netSwapNow": "Swap",
     "netBridgeNow": "Bridge",
     "netShowAll": "عرض جميع الشبكات (19)",
-    "netShowLess": "عرض الشبكات الرئيسية"
+    "netShowLess": "عرض الشبكات الرئيسية",
+    "controlsClose": "إغلاق",
+    "controlsTimeRange": "النطاق الزمني",
+    "controlsFilters": "المرشحات",
+    "controlsNoData": "لا توجد بيانات لهذه الفترة",
+    "controlsUniverse": "أفضل الرموز",
+    "controlsTileSize": "حجم المربع",
+    "controlsReset": "إعادة تعيين",
+    "controlsDone": "تم",
+    "controlsLeaderboard": "لوحة الترتيب",
+    "controlsView": "العرض",
+    "controlsNetworkType": "نوع الشبكة",
+    "controlsShowMore": "عرض الكل ({{count}})",
+    "controlsShowLess": "عرض أقل"
   }
 }

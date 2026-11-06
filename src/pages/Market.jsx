@@ -43,6 +43,7 @@ import '../styles/market-glass-v3.css';
 import '../styles/market-aurora-glass.css';
 import '../styles/market-obsidian-glass.css';
 import '../styles/market-overview-phase2.css';
+import '../styles/market-overview-compact.css';
 /*
  * ─── THE TAB STRIP — «مرور / توکن» ────────────────────────────────────────
  * The sheet that draws the two tabs, in the material the five layers above

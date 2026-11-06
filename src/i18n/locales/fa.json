@@ -18308,6 +18308,19 @@
     "netSwapNow": "سواپ",
     "netBridgeNow": "بریج",
     "netShowAll": "نمایش همه ۱۹ شبکه",
-    "netShowLess": "نمایش شبکه‌های اصلی"
+    "netShowLess": "نمایش شبکه‌های اصلی",
+    "controlsClose": "بستن",
+    "controlsTimeRange": "بازه زمانی",
+    "controlsFilters": "فیلترها",
+    "controlsNoData": "داده‌ای برای این بازه نیست",
+    "controlsUniverse": "توکن‌های برتر",
+    "controlsTileSize": "اندازه بلوک",
+    "controlsReset": "بازنشانی",
+    "controlsDone": "اعمال",
+    "controlsLeaderboard": "جدول رتبه‌بندی",
+    "controlsView": "نما",
+    "controlsNetworkType": "نوع شبکه",
+    "controlsShowMore": "نمایش هر {{count}}",
+    "controlsShowLess": "نمایش کمتر"
   }
 }

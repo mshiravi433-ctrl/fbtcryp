@@ -18308,6 +18308,19 @@
     "netSwapNow": "Swap",
     "netBridgeNow": "Bridge",
     "netShowAll": "Show all 19 networks",
-    "netShowLess": "Show flagship networks"
+    "netShowLess": "Show flagship networks",
+    "controlsClose": "Close",
+    "controlsTimeRange": "Time range",
+    "controlsFilters": "Filters",
+    "controlsNoData": "No data for this window",
+    "controlsUniverse": "Top tokens",
+    "controlsTileSize": "Tile size",
+    "controlsReset": "Reset",
+    "controlsDone": "Done",
+    "controlsLeaderboard": "Leaderboard",
+    "controlsView": "View",
+    "controlsNetworkType": "Network type",
+    "controlsShowMore": "Show all {{count}}",
+    "controlsShowLess": "Show less"
   }
 }

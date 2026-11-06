@@ -4687,6 +4687,19 @@
     "netSwapNow": "Swap",
     "netBridgeNow": "Bridge",
     "netShowAll": "Show all 19 networks",
-    "netShowLess": "Show flagship networks"
+    "netShowLess": "Show flagship networks",
+    "controlsClose": "Tutup",
+    "controlsTimeRange": "Rentang waktu",
+    "controlsFilters": "Filter",
+    "controlsNoData": "Tidak ada data untuk periode ini",
+    "controlsUniverse": "Token teratas",
+    "controlsTileSize": "Ukuran blok",
+    "controlsReset": "Atur ulang",
+    "controlsDone": "Selesai",
+    "controlsLeaderboard": "Papan peringkat",
+    "controlsView": "Tampilan",
+    "controlsNetworkType": "Jenis jaringan",
+    "controlsShowMore": "Tampilkan semua {{count}}",
+    "controlsShowLess": "Tampilkan lebih sedikit"
   }
 }

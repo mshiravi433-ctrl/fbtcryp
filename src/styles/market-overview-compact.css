@@ -1,0 +1,556 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   MARKET OVERVIEW · COMPACT INTELLIGENCE LAYER
+   Keeps the Phase-2 glass shells and their order. Tightens the instruments:
+   one KPI rail instead of four nested boxes, dropdown controls instead of
+   wrapping chip bars, progressive lists, and artwork on every identity.
+   No blur, mask, filter, will-change or layout-reserving visibility tricks.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.mx-market .mx-p2-card {
+  gap: 10px;
+  padding: clamp(12px, 2vw, 16px);
+  border-radius: 22px;
+}
+
+.mx-market .mx-p2-head {
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.mx-market .mx-p2-title-wrap {
+  align-items: center;
+  gap: 9px;
+  flex: 1 1 220px;
+}
+
+.mx-market .mx-p2-mark {
+  flex-basis: 32px;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+.mx-market .mx-p2-eyebrow {
+  font-size: 9px;
+  letter-spacing: 0.085em;
+}
+
+.mx-market .mx-p2-title {
+  font-size: clamp(14px, 2.4vw, 16px);
+  line-height: 1.35;
+}
+
+.mx-market .mx-p2-sub {
+  margin-top: 1px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.mx-p2-controls {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.mx-market .mx-hm-toolbar {
+  flex: 0 1 auto;
+  gap: 6px;
+}
+
+.mx-control-trigger {
+  --mx-control-bg: #101a2b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid rgba(164, 184, 236, 0.18);
+  border-radius: 11px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.055), transparent 65%), var(--mx-control-bg);
+  color: var(--text, #e8eefb);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.mx-control-trigger:hover,
+.mx-control-trigger[aria-expanded='true'] {
+  border-color: rgba(102, 229, 225, 0.48);
+}
+
+.mx-control-trigger.is-active {
+  color: #a7f3ed;
+  border-color: rgba(102, 229, 225, 0.34);
+}
+
+.mx-control-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mx-control-icon,
+.mx-control-caret {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--muted, #9aacc8);
+}
+
+.mx-control-caret { transition: transform 0.16s ease; }
+.mx-control-caret.is-open { transform: rotate(180deg); }
+
+.mx-control-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding-inline: 4px;
+  border-radius: 6px;
+  background: rgba(102, 229, 225, 0.16);
+  color: #a7f3ed;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mx-p2-window-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 6px 9px;
+  border-radius: 11px;
+  border: 1px solid rgba(164, 184, 236, 0.12);
+  color: var(--muted, #9aacc8);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Portalled above the paint-contained cards and the sticky navigation. */
+.mx-control-panel {
+  position: fixed;
+  z-index: 1200;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px;
+  border: 1px solid rgba(164, 184, 236, 0.24);
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 80% at 10% 0%, rgba(102, 229, 225, 0.09), transparent 60%),
+    linear-gradient(160deg, #142033, #0c1423 65%, #0a111e);
+  color: var(--text, #eef3fc);
+  box-shadow: 0 22px 54px -18px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  scrollbar-width: thin;
+}
+
+.mx-control-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 4px 9px;
+  margin-block-end: 6px;
+  border-block-end: 1px solid rgba(164, 184, 236, 0.12);
+  font-size: 12px;
+}
+
+.mx-control-close {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(164, 184, 236, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--muted, #9aacc8);
+  cursor: pointer;
+}
+
+.mx-control-options { display: grid; gap: 3px; }
+
+.mx-control-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 9px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: start;
+  cursor: pointer;
+}
+
+.mx-control-option:hover:not(:disabled),
+.mx-control-option.is-selected {
+  background: rgba(102, 229, 225, 0.09);
+  border-color: rgba(102, 229, 225, 0.18);
+}
+
+.mx-control-option:disabled { opacity: 0.42; cursor: not-allowed; }
+.mx-control-option-icon { display: inline-flex; flex: 0 0 auto; }
+.mx-control-option-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.mx-control-option-copy small { font-size: 10.5px; font-weight: 500; color: var(--muted, #9aacc8); }
+.mx-control-check { display: inline-flex; width: 16px; flex: 0 0 16px; color: #66e5e1; }
+
+.mx-control-filter-body { display: grid; gap: 12px; padding: 4px; }
+.mx-control-field { display: grid; gap: 6px; }
+.mx-control-label { font-size: 11px; font-weight: 700; color: var(--muted, #9aacc8); }
+.mx-control-seg { display: flex; width: 100%; }
+.mx-control-seg .mx-p2-seg-btn { flex: 1; min-height: 34px; }
+
+.mx-control-panel .mx-hm-filter {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  min-height: 40px;
+  box-sizing: border-box;
+}
+
+.mx-control-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: start;
+  cursor: pointer;
+}
+
+.mx-control-switch-track {
+  display: inline-flex;
+  align-items: center;
+  width: 34px;
+  height: 20px;
+  flex: 0 0 34px;
+  padding: 3px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.28);
+}
+
+.mx-control-switch-track > span {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  transition: transform 0.16s ease;
+}
+
+.mx-control-switch.is-on .mx-control-switch-track { background: #0d9488; }
+.mx-control-switch.is-on .mx-control-switch-track > span { transform: translateX(14px); }
+.mx-control-panel[dir='rtl'] .mx-control-switch.is-on .mx-control-switch-track > span { transform: translateX(-14px); }
+
+.mx-control-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-block-start: 9px;
+  border-block-start: 1px solid rgba(164, 184, 236, 0.12);
+}
+
+.mx-control-reset {
+  min-height: 34px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted, #9aacc8);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* One divided instrument rail, not four miniature cards. */
+.mx-market .mx-pulse-kpis,
+.mx-market .mx-defi-kpis,
+.mx-market .mx-net-kpis {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(164, 184, 236, 0.12);
+  border-radius: 13px;
+  background: rgba(5, 10, 19, 0.38);
+}
+
+.mx-market .mx-pulse-kpi,
+.mx-market .mx-defi-kpi,
+.mx-market .mx-net-kpi {
+  gap: 3px;
+  padding: 8px 11px;
+  border: 0;
+  border-inline-end: 1px solid rgba(164, 184, 236, 0.1);
+  border-radius: 0;
+  background: transparent;
+}
+
+.mx-market .mx-pulse-kpi:last-child,
+.mx-market .mx-defi-kpi:last-child,
+.mx-market .mx-net-kpi:last-child { border-inline-end: 0; }
+
+.mx-market .mx-pulse-kpi-val,
+.mx-market .mx-defi-kpi-val,
+.mx-market .mx-net-kpi-val { font-size: clamp(14px, 2vw, 17px); }
+
+.mx-market .mx-pulse-kpi-lbl,
+.mx-market .mx-defi-kpi-lbl,
+.mx-market .mx-net-kpi-lbl { font-size: 10.5px; }
+
+.mx-market .mx-pulse-kpi-note,
+.mx-market .mx-defi-kpi-sub,
+.mx-market .mx-net-kpi-sub { font-size: 10px; gap: 4px; }
+
+.mx-market .mx-pulse-list { gap: 4px; }
+.mx-market .mx-pulse-row {
+  min-height: 44px;
+  padding: 6px 10px;
+  border-radius: 11px;
+  gap: 9px;
+}
+.mx-market .mx-pulse-name { font-size: 12.5px; }
+.mx-market .mx-pulse-coin { align-items: center; }
+.mx-market .mx-pulse-sym { flex: 0 0 auto; }
+
+.mx-market .mx-hm-stage {
+  aspect-ratio: 16 / 8.2;
+  min-height: 220px;
+  border-radius: 14px;
+}
+.mx-market .mx-hm-stage[data-compact='true'] {
+  aspect-ratio: 1 / 0.925;
+  min-height: 250px;
+}
+.mx-market .mx-hm-tile { container-type: size; border-radius: 6px; }
+.mx-market .mx-hm-logo { margin: 0; line-height: 0; }
+.mx-market .mx-hm-coin-logo { border: 0; border-radius: 50%; background: transparent; }
+.mx-market .mx-hm-tile-inner { gap: 3px; }
+.mx-market .mx-hm-tile[data-tier='md'] .mx-hm-tile-inner,
+.mx-market .mx-hm-tile[data-tier='sm'] .mx-hm-tile-inner { flex-direction: row; flex-wrap: wrap; gap: 3px 5px; }
+.mx-market .mx-hm-tile[data-tier='xs'] .mx-hm-chg { display: none; }
+
+@container (max-height: 42px) {
+  .mx-hm-tile-inner { flex-direction: row; flex-wrap: nowrap; gap: 4px; }
+  .mx-hm-chg, .mx-hm-prc, .mx-hm-shr { display: none; }
+}
+@container (max-width: 46px) {
+  .mx-hm-sym { display: none; }
+}
+
+.mx-market .mx-hm-scale { gap: 6px; font-size: 10px; }
+.mx-market .mx-hm-scale-stops { gap: 3px; }
+.mx-market .mx-hm-scale-stops span { padding: 2px 6px; font-size: 9.5px; }
+.mx-market .mx-hm-inspector { padding: 8px 10px; border-radius: 12px; gap: 8px; }
+.mx-market .mx-hm-ins-top { font-size: 12.5px; }
+.mx-market .mx-hm-ins-meta { gap: 8px; font-size: 11px; }
+
+.mx-market .mx-defi-chart-box { padding: 8px 10px; border-radius: 12px; gap: 4px; }
+.mx-market .mx-defi-chart-title { font-size: 11px; }
+.mx-market .mx-defi-chart-deltas { font-size: 10.5px; }
+.mx-market .mx-defi-panel { gap: 8px; }
+.mx-market .mx-defi-grid { gap: 6px; }
+.mx-market .mx-defi-item { gap: 5px; padding: 8px 10px; border-radius: 11px; }
+.mx-market .mx-defi-chain-id { gap: 7px; font-size: 12px; }
+.mx-market .mx-defi-chain-id > span:not(.mx-defi-logo) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mx-market .mx-defi-logo { display: inline-flex; flex: 0 0 auto; }
+.mx-market .mx-defi-num { font-size: 12px; }
+.mx-market .mx-defi-share, .mx-market .mx-defi-meta { font-size: 10.5px; }
+.mx-market .mx-defi-proto-list { gap: 4px; }
+.mx-market .mx-defi-proto-row {
+  grid-template-columns: 18px 26px minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 11px;
+}
+.mx-market .mx-defi-proto-main { gap: 2px; }
+.mx-market .mx-defi-proto-top { gap: 5px; font-size: 12px; }
+.mx-market .mx-defi-proto-sub { gap: 5px; font-size: 10px; }
+.mx-market .mx-defi-flow-col { padding: 8px 10px; border-radius: 11px; }
+
+.mx-market .mx-net-grid { gap: 7px; }
+.mx-market .mx-net-item { gap: 7px; padding: 9px 11px; border-radius: 13px; }
+.mx-market .mx-net-orb { width: 30px; height: 30px; flex-basis: 30px; border-radius: 10px; border-color: rgba(164, 184, 236, 0.14); background: transparent; overflow: hidden; }
+.mx-market .mx-net-orb-core { width: 26px; height: 26px; border-radius: 8px; }
+.mx-market .mx-net-names strong { font-size: 12.5px; }
+.mx-market .mx-net-telemetry { padding: 5px 8px; border-radius: 9px; }
+.mx-market .mx-net-tel-cell { flex-direction: row; align-items: baseline; flex-wrap: wrap; gap: 3px; }
+.mx-market .mx-net-tel-cell small { font-size: 9px; }
+.mx-market .mx-net-tel-cell b { font-size: 10.5px; }
+.mx-market .mx-net-item-foot { gap: 6px; }
+.mx-market .mx-net-router-pill, .mx-market .mx-net-red-badge, .mx-market .mx-net-tvl-pill { font-size: 9.5px; padding: 2px 6px; }
+
+.mx-p2-more {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 5px 14px;
+  border: 1px solid rgba(164, 184, 236, 0.14);
+  border-radius: 9px;
+  background: rgba(164, 184, 236, 0.045);
+  color: var(--muted, #9aacc8);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mx-p2-more:hover { color: var(--text, #eef3fc); border-color: rgba(102, 229, 225, 0.35); }
+
+.mx-control-trigger:focus-visible,
+.mx-control-option:focus-visible,
+.mx-control-close:focus-visible,
+.mx-control-reset:focus-visible,
+.mx-control-switch:focus-visible,
+.mx-p2-more:focus-visible {
+  outline: 2px solid #66e5e1;
+  outline-offset: 2px;
+}
+
+/* Light theme is graded, not an inverted dark sheet. */
+:root[data-theme='light'] .mx-market .mx-p2-title,
+:root[data-theme='light'] .mx-market .mx-pulse-kpi-val,
+:root[data-theme='light'] .mx-market .mx-defi-kpi-val,
+:root[data-theme='light'] .mx-market .mx-net-kpi-val,
+:root[data-theme='light'] .mx-market .mx-defi-num,
+:root[data-theme='light'] .mx-market .mx-net-names strong,
+:root[data-theme='light'] .mx-market .mx-net-tel-cell b,
+:root[data-theme='light'] .mx-market .mx-pulse-price { color: #0f172a; }
+:root[data-theme='light'] .mx-market .mx-p2-sub,
+:root[data-theme='light'] .mx-market .mx-pulse-kpi-lbl,
+:root[data-theme='light'] .mx-market .mx-defi-kpi-lbl,
+:root[data-theme='light'] .mx-market .mx-net-kpi-lbl,
+:root[data-theme='light'] .mx-market .mx-pulse-kpi-note,
+:root[data-theme='light'] .mx-market .mx-defi-kpi-sub,
+:root[data-theme='light'] .mx-market .mx-net-kpi-sub,
+:root[data-theme='light'] .mx-market .mx-pulse-sym,
+:root[data-theme='light'] .mx-market .mx-pulse-rank,
+:root[data-theme='light'] .mx-market .mx-defi-share,
+:root[data-theme='light'] .mx-market .mx-defi-meta,
+:root[data-theme='light'] .mx-market .mx-defi-proto-sub,
+:root[data-theme='light'] .mx-market .mx-defi-chart-title,
+:root[data-theme='light'] .mx-market .mx-net-names span,
+:root[data-theme='light'] .mx-market .mx-net-tel-cell small,
+:root[data-theme='light'] .mx-market .mx-hm-ins-meta { color: #475569; }
+:root[data-theme='light'] .mx-market .mx-pulse-row,
+:root[data-theme='light'] .mx-market .mx-defi-item,
+:root[data-theme='light'] .mx-market .mx-defi-proto-row,
+:root[data-theme='light'] .mx-market .mx-net-item { color: #0f172a; }
+:root[data-theme='light'] .mx-control-trigger {
+  --mx-control-bg: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.14);
+  background: linear-gradient(160deg, #ffffff, #f1f5f9);
+  color: #1e293b;
+  box-shadow: inset 0 1px 0 #fff;
+}
+:root[data-theme='light'] .mx-control-trigger.is-active { color: #0f766e; border-color: rgba(13, 148, 136, 0.35); }
+:root[data-theme='light'] .mx-control-badge { background: rgba(13, 148, 136, 0.12); color: #0f766e; }
+:root[data-theme='light'] .mx-p2-window-pill { border-color: rgba(15, 23, 42, 0.12); color: #475569; }
+:root[data-theme='light'] .mx-control-panel {
+  border-color: rgba(15, 23, 42, 0.16);
+  background: radial-gradient(120% 80% at 10% 0%, rgba(13, 148, 136, 0.06), transparent 60%), linear-gradient(160deg, #ffffff, #f5f8fc);
+  color: #0f172a;
+  box-shadow: 0 22px 54px -20px rgba(15, 23, 42, 0.3), inset 0 1px 0 #fff;
+}
+:root[data-theme='light'] .mx-control-panel-head,
+:root[data-theme='light'] .mx-control-footer { border-color: rgba(15, 23, 42, 0.1); }
+:root[data-theme='light'] .mx-control-close { border-color: rgba(15, 23, 42, 0.12); background: #f8fafc; color: #475569; }
+:root[data-theme='light'] .mx-control-option:hover:not(:disabled),
+:root[data-theme='light'] .mx-control-option.is-selected { background: rgba(13, 148, 136, 0.08); border-color: rgba(13, 148, 136, 0.2); }
+:root[data-theme='light'] .mx-control-check { color: #0f766e; }
+:root[data-theme='light'] .mx-control-option-copy small,
+:root[data-theme='light'] .mx-control-label,
+:root[data-theme='light'] .mx-control-reset { color: #475569; }
+:root[data-theme='light'] .mx-market .mx-pulse-kpis,
+:root[data-theme='light'] .mx-market .mx-defi-kpis,
+:root[data-theme='light'] .mx-market .mx-net-kpis { border-color: rgba(15, 23, 42, 0.1); background: rgba(241, 245, 249, 0.72); }
+:root[data-theme='light'] .mx-market .mx-pulse-kpi,
+:root[data-theme='light'] .mx-market .mx-defi-kpi,
+:root[data-theme='light'] .mx-market .mx-net-kpi { border-color: rgba(15, 23, 42, 0.08); background: transparent; }
+:root[data-theme='light'] .mx-p2-more { border-color: rgba(15, 23, 42, 0.12); background: rgba(241, 245, 249, 0.8); color: #475569; }
+
+@media (max-width: 780px) {
+  .mx-market .mx-pulse-kpi:nth-child(2),
+  .mx-market .mx-defi-kpi:nth-child(2),
+  .mx-market .mx-net-kpi:nth-child(2) { border-inline-end: 0; }
+  .mx-market .mx-pulse-kpi:nth-child(-n+2),
+  .mx-market .mx-defi-kpi:nth-child(-n+2),
+  .mx-market .mx-net-kpi:nth-child(-n+2) { border-block-end: 1px solid rgba(164, 184, 236, 0.1); }
+  :root[data-theme='light'] .mx-market .mx-pulse-kpi:nth-child(-n+2),
+  :root[data-theme='light'] .mx-market .mx-defi-kpi:nth-child(-n+2),
+  :root[data-theme='light'] .mx-market .mx-net-kpi:nth-child(-n+2) { border-block-end-color: rgba(15, 23, 42, 0.08); }
+}
+
+@media (max-width: 620px) {
+  .mx-market .mx-p2-head { align-items: flex-start; }
+  .mx-market .mx-p2-title-wrap { flex-basis: 100%; }
+  .mx-market .mx-p2-controls { width: 100%; justify-content: flex-start; }
+  .mx-control-trigger, .mx-p2-window-pill { min-height: 44px; }
+  .mx-control-option { min-height: 44px; }
+  .mx-control-close { width: 36px; height: 36px; }
+  .mx-control-seg .mx-p2-seg-btn, .mx-control-reset, .mx-control-footer .mx-p2-action-btn { min-height: 44px; }
+  .mx-p2-more, .mx-market .mx-net-more-btn { min-height: 44px; }
+  .mx-market .mx-net-swap-btn, .mx-market .mx-net-ext-link, .mx-market .mx-p2-action-btn, .mx-market .mx-p2-icon-btn { min-height: 44px; }
+  .mx-market .mx-net-ext-link, .mx-market .mx-p2-icon-btn { min-width: 44px; }
+  .mx-market .mx-defi-tag-btn { min-height: 36px; }
+  .mx-market .mx-hm-ins-actions { width: 100%; }
+  .mx-market .mx-hm-ins-actions .mx-p2-action-btn { flex: 1; justify-content: center; }
+}
+
+@media (max-width: 520px) {
+  .mx-market .mx-p2-sub { font-size: 10.5px; }
+  .mx-market .mx-pulse-row { grid-template-columns: 16px 26px minmax(0, 1fr) auto; gap: 7px; }
+  .mx-market .mx-pulse-coin { flex-direction: column; align-items: flex-start; gap: 0; }
+  .mx-market .mx-pulse-sym { font-size: 9.5px; }
+  .mx-market .mx-defi-proto-row { grid-template-columns: 16px 26px minmax(0, 1fr) auto; gap: 6px; padding-inline: 8px; }
+  .mx-market .mx-defi-cat-pill { display: none; }
+  .mx-market .mx-defi-item-top { align-items: flex-start; }
+  .mx-market .mx-defi-chain-id { flex-wrap: wrap; }
+  .mx-market .mx-net-tel-cell { flex-direction: column; gap: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mx-control-trigger, .mx-control-caret, .mx-control-switch-track > span { transition: none; }
+}
+:root[data-native='true'] .mx-control-trigger,
+:root[data-lite='true'] .mx-control-trigger,
+:root[data-reduce-motion='true'] .mx-control-trigger,
+:root[data-native='true'] .mx-control-caret,
+:root[data-lite='true'] .mx-control-caret,
+:root[data-reduce-motion='true'] .mx-control-caret,
+:root[data-native='true'] .mx-control-switch-track > span,
+:root[data-lite='true'] .mx-control-switch-track > span,
+:root[data-reduce-motion='true'] .mx-control-switch-track > span { transition: none; }
+
+@media (prefers-contrast: more) {
+  .mx-control-trigger, .mx-control-panel { border-color: currentColor; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .mx-control-panel { background: #0c1423; }
+  :root[data-theme='light'] .mx-control-panel { background: #ffffff; }
+}

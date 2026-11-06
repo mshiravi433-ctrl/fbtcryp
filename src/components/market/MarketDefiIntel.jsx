@@ -2,6 +2,10 @@ import { memo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import MarketSparkline from './MarketSparkline.jsx';
+import CoinLogo from '../CoinLogo.jsx';
+import AssetIcon from '../AssetIcon.jsx';
+import { MarketSelect } from './MarketControlMenu.jsx';
+import { FBT_SWAP_NETWORKS } from '../../lib/fbtSwapNetworks.js';
 import { GlyphChevron } from './MarketGlyphs.jsx';
 import { fmtCompact, fmtPct } from '../../lib/format.js';
 
@@ -71,6 +75,8 @@ function MarketDefiIntel({
       ? i18n.dir() === 'rtl'
       : /^(fa|ar|ur|he)\b/i.test(String(i18n?.language || 'fa'));
   const [lens, setLens] = useState('chains');
+  const [expanded, setExpanded] = useState(false);
+  const changeLens = (value) => { setLens(value); setExpanded(false); };
 
   const hasData = Boolean(
     defi &&
@@ -90,6 +96,19 @@ function MarketDefiIntel({
   const categories = defi?.categories || [];
   const topProtocols = defi?.topProtocols || [];
   const topStables = defi?.topStablecoins || [];
+  const lenses = [
+    { value: 'chains', label: t('marketPhase2.defiTabChains') },
+    { value: 'categories', label: t('marketPhase2.defiTabCategories') },
+    { value: 'protocols', label: t('marketPhase2.defiTabProtocols') },
+    { value: 'stables', label: t('marketPhase2.defiTabStables') }
+  ];
+  const activeRows = lens === 'chains' ? topChains : lens === 'categories' ? categories : lens === 'protocols' ? topProtocols : topStables;
+  const limitRows = (rows) => expanded ? rows : rows.slice(0, 4);
+  const chainIcon = (chain) => {
+    const key = String(chain.name || '').toLowerCase();
+    const net = FBT_SWAP_NETWORKS.find((n) => n.name.toLowerCase() === key || n.llamaAliases.includes(key));
+    return net ? <AssetIcon chain={net.chainId} size={24} /> : <AssetIcon symbol={chain.symbol || chain.name} size={24} />;
+  };
 
   return (
     <section
@@ -111,7 +130,8 @@ function MarketDefiIntel({
           </div>
         </div>
 
-        <div className="mx-p2-head-right">
+        <div className="mx-p2-head-right mx-p2-controls">
+          <MarketSelect label={t('marketPhase2.controlsView')} value={lens} options={lenses} onChange={changeLens} testId="market-defi-lens" />
           <span
             className="mx-p2-live-pill"
             data-unavailable={offline || !hasData ? 'true' : undefined}
@@ -234,7 +254,7 @@ function MarketDefiIntel({
           <MarketSparkline
             points={defi.tvlHistory90d}
             up={(defi.tvlChange90dPct ?? 0) >= 0}
-            height={58}
+            height={46}
             interactive
             glow
             liveDot
@@ -243,25 +263,6 @@ function MarketDefiIntel({
           />
         </div>
       )}
-
-      <div className="mx-p2-seg mx-defi-tabs" role="group" aria-label={t('marketPhase2.defiTitle')}>
-        {[
-          ['chains', t('marketPhase2.defiTabChains')],
-          ['categories', t('marketPhase2.defiTabCategories')],
-          ['protocols', t('marketPhase2.defiTabProtocols')],
-          ['stables', t('marketPhase2.defiTabStables')]
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            aria-pressed={lens === id}
-            className={`mx-p2-seg-btn${lens === id ? ' is-active' : ''}`}
-            onClick={() => setLens(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
 
       {!hasData && !loading ? (
         <div className="mx-defi-unavailable" role="status">
@@ -283,17 +284,13 @@ function MarketDefiIntel({
             </div>
           )}
           <div className="mx-defi-grid">
-            {topChains.map((c, idx) => {
+            {limitRows(topChains).map((c, idx) => {
               const swatch = c.color || CHAIN_COLORS[idx % CHAIN_COLORS.length];
               return (
                 <div key={c.name} className="mx-defi-item">
                   <div className="mx-defi-item-top">
                     <span className="mx-defi-chain-id">
-                      <span
-                        className="mx-defi-dot"
-                        style={{ backgroundColor: swatch }}
-                        aria-hidden="true"
-                      />
+                      <span className="mx-defi-logo" style={{ '--chain-color': swatch }}>{chainIcon(c)}</span>
                       <strong>{c.name}</strong>
                       {c.symbol && <small dir="ltr">{c.symbol}</small>}
                     </span>
@@ -324,7 +321,7 @@ function MarketDefiIntel({
       ) : lens === 'categories' ? (
         <div className="mx-defi-panel">
           <div className="mx-defi-grid">
-            {categories.map((cat) => (
+            {limitRows(categories).map((cat) => (
               <div key={cat.id} className="mx-defi-item">
                 <div className="mx-defi-item-top">
                   <strong>{t(`marketPhase2.defiCat_${cat.id}`)}</strong>
@@ -361,9 +358,10 @@ function MarketDefiIntel({
       ) : lens === 'protocols' ? (
         <div className="mx-defi-panel">
           <div className="mx-defi-proto-list">
-            {topProtocols.map((p, idx) => (
+            {limitRows(topProtocols).map((p, idx) => (
               <div key={p.slug} className="mx-defi-proto-row">
                 <span className="mx-pulse-rank" dir="ltr">{idx + 1}</span>
+                <CoinLogo coin={{ image: p.logo, symbol: p.symbol || p.name, name: p.name }} size="small" px={26} />
                 <div className="mx-defi-proto-main">
                   <div className="mx-defi-proto-top">
                     <strong>{p.name}</strong>
@@ -401,10 +399,11 @@ function MarketDefiIntel({
       ) : (
         <div className="mx-defi-panel">
           <div className="mx-defi-grid">
-            {topStables.map((s) => (
+            {limitRows(topStables).map((s) => (
               <div key={s.symbol} className="mx-defi-item">
                 <div className="mx-defi-item-top">
                   <span className="mx-defi-chain-id">
+                    <AssetIcon symbol={s.symbol} size={24} />
                     <strong dir="ltr">{s.symbol}</strong>
                     <small>{s.name}</small>
                   </span>
@@ -452,6 +451,11 @@ function MarketDefiIntel({
             </div>
           )}
         </div>
+      )}
+      {activeRows.length > 4 && (
+        <button type="button" className="mx-p2-more" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
+          <span>{expanded ? t('marketPhase2.controlsShowLess') : t('marketPhase2.controlsShowMore', { count: activeRows.length })}</span>
+        </button>
       )}
     </section>
   );
