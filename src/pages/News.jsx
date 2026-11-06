@@ -8,7 +8,6 @@ import RadioPanel from '../components/RadioPanel';
 import FbtRadioBox from '../components/FbtRadioBox';
 import { play as playFbtRadio } from '../lib/fbtRadioEngine';
 import CalmPanel from '../components/CalmPanel';
-import CommunityPanel from '../components/CommunityPanel';
 import MarketInsightsPanel from '../components/MarketInsightsPanel';
 import WhaleTrackingPanel from '../components/WhaleTrackingPanel';
 import SegIndicator from '../components/SegIndicator';
@@ -57,19 +56,19 @@ const TOPIC_CATEGORIES = ['bitcoin', 'ethereum', 'defi'];
 const CATEGORIES = [...DESK_CATEGORIES, ...TOPIC_CATEGORIES];
 
 /*
- * The five top-level tabs, in render order. Shared between the button row and
+ * The top-level tabs, in render order. Shared between the button row and
  * the ?tab= deep link so a URL like #/news?tab=calm cannot open a tab that
  * does not exist, and the row and the URL cannot drift apart.
  *
  * «هوش جهانی» is NOT one of them any more: it is its own page (More → «جهانی»,
- * route /global). A link that still says #/news?tab=global is forwarded there
- * by the wrapper below — see `News`.
+ * route /global). «گفتگو» left too — the Farcaster channels now sit as filters
+ * on the social timeline. A link that still says #/news?tab=global or
+ * #/news?tab=community is forwarded by the wrapper below — see `News`.
  */
-const NEWS_TABS = ['read', 'community', 'listen', 'insights', 'calm'];
+const NEWS_TABS = ['read', 'listen', 'insights', 'calm'];
 
 const NEWS_TAB_PATHS = {
   read: <><path d="M5 4.5h14v15H5z" /><path d="M8 8h8M8 12h8M8 16h5" /></>,
-  community: <><path d="M4 5.5h16v10H9l-5 4z" /><path d="M8 9h8M8 12h5" /></>,
   listen: <><path d="M9 17V6l10-2v11" /><circle cx="6" cy="17" r="3" /><circle cx="16" cy="15" r="3" /></>,
   insights: <><path d="M4 18V6M4 18h16" /><path d="m7 14 4-4 3 2 5-6" /></>,
   calm: <><path d="M20 15.5A8 8 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z" /><path d="M16 4v4M14 6h4" /></>
@@ -92,12 +91,16 @@ const CATEGORY_TERMS = {
 /**
  * The route component. It only decides whether this page should render at all:
  * an old link, a bookmark or a refreshed WebView that still says
- * #/news?tab=global belongs to the Global page now. Deciding here — before any
- * of the page's hooks run — means the redirect costs no news or market request.
+ * #/news?tab=global belongs to the Global page now, and #/news?tab=community
+ * belongs on Social (the Farcaster channels are timeline filters there).
+ * Deciding here — before any of the page's hooks run — means the redirect
+ * costs no news or market request.
  */
 export default function News() {
   const [params] = useSearchParams();
-  if (params.get('tab') === 'global') return <Navigate to="/global" replace />;
+  const tab = params.get('tab');
+  if (tab === 'global') return <Navigate to="/global" replace />;
+  if (tab === 'community') return <Navigate to="/social?topic=fcCrypto" replace />;
   return <NewsPage />;
 }
 
@@ -275,18 +278,8 @@ function NewsPage() {
 
       <div className="segmented news-mode-tabs" role="tablist" aria-label={t('news.title')}>
         {/* Calm stays last because it is about the reader rather than the
-            market. (Global Intelligence used to sit before it; it is its own
-            page now — see NEWS_TABS.) */}
-        {/*
-          ─── THE COMMUNITY FEED MOVED HERE FROM P2P ───────────────────────
-          Asked for directly: «گفتگو نباید در p2p باشد باید در صفحه اخبار باشد».
-          It belongs here. P2P is a place where money moves — an untrusted
-          feed of strangers' posts sitting one tab away from a send form is
-          exactly the adjacency a scammer wants ("I posted my address in the
-          community tab, just send it"). On the news screen the same feed is
-          simply what people are saying about the headlines above it, which
-          is what it actually is.
-        */}
+            market. (Global Intelligence is its own page. Conversation left
+            for Social — see NEWS_TABS.) */}
         {NEWS_TABS.map((k) => (
           <button
             key={k}
@@ -305,13 +298,7 @@ function NewsPage() {
         ))}
       </div>
 
-      {tab === 'community' ? (
-        /*
-          Read-only Farcaster feed, hosted by the protocol rather than by us:
-          no storage cost, no moderation duty — see components/CommunityPanel.jsx.
-        */
-        <CommunityPanel />
-      ) : tab === 'calm' ? (
+      {tab === 'calm' ? (
         <CalmPanel />
       ) : tab === 'listen' ? (
         <>

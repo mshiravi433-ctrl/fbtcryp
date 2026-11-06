@@ -18129,9 +18129,11 @@
   },
   "social": {
     "title": "Social",
-    "subtitle": "Crypto posts from Bluesky — readable, no account, no key",
+    "subtitle": "Crypto posts from other social networks — readable, no account, no key",
     "live": "BLUESKY · LIVE",
     "offlineBadge": "BLUESKY · OFFLINE",
+    "liveFc": "FARCASTER · LIVE",
+    "offlineFc": "FARCASTER · OFFLINE",
     "searchPlaceholder": "Search posts or people…",
     "clearSearch": "Clear search",
     "refresh": "Refresh",
@@ -18141,7 +18143,10 @@
       "ethereum": "Ethereum",
       "defi": "DeFi",
       "solana": "Solana",
-      "fa": "Persian"
+      "fa": "Persian",
+      "fcCrypto": "Crypto",
+      "fcBase": "Base",
+      "fcDev": "Developers"
     },
     "trending": "Trending",
     "accounts": "People",
@@ -18168,8 +18173,9 @@
     "composeGo": "Continue in Bluesky",
     "cancel": "Cancel",
     "openBluesky": "Open Bluesky",
+    "openFarcaster": "Open Farcaster",
     "settings": "Settings",
-    "notice": "These posts are written by strangers on a public network. We do not host them, do not endorse them and do not review them; showing a post is not a recommendation. Never send anyone money or a recovery phrase because of something you read here.",
+    "notice": "These posts come from Bluesky and Farcaster and are written by strangers on a public network. We do not host them, do not endorse them and do not review them; showing a post is not a recommendation. Never send anyone money, a token or a recovery phrase because of something you read here.",
     "tab": {
       "timeline": "Timeline",
       "trends": "Trends",
@@ -18181,7 +18187,9 @@
     "closeMenu": "Close menu",
     "drawerTitle": "Social menu",
     "feedFilter": "Feed filter",
+    "fcGroup": "Conversation",
     "feedNote": "These posts come from Bluesky. Open a post on Bluesky to like, repost or reply.",
+    "feedNoteFc": "These posts come from Farcaster — the conversation feed. Open a post on Farcaster to reply. Likes and reposts are not counted for this network here.",
     "readOnly": "Read-only",
     "scrollTop": "Back to top",
     "rank": "Rank {{n}}",
@@ -18194,6 +18202,16 @@
     "trendsNote": "Bluesky builds this list, not us; it is not crypto-only and you may disagree with what is on it.",
     "browserTitle": "Browser",
     "browserSub": "Trusted web3 sites, each opening in your own phone browser.",
-    "searchSub": "Type a name or a few words from a post — we search both at once."
+    "searchSub": "Type a name or a few words from a post — we search both at once.",
+    "aboutWhatTitle": "What this room is",
+    "aboutWhat": "fbtswap Social is a read-only window onto public crypto conversation, not a network of its own. We do not write the posts, we do not store them on our servers, and we do not run a community. We only read other open networks and show them here so you can feel the market without creating an account. This page is not a place to swap, deposit, get support, or treat a project as verified.",
+    "aboutSourcesTitle": "Where the posts come from",
+    "aboutSources": "The timeline has two sources, not one. For you, Bitcoin, Ethereum, DeFi, Solana and Persian come from Bluesky. Crypto, Base and Developers are the three Farcaster conversation channels that used to sit under News; they are timeline filters now. Trends are built by Bluesky itself and are not crypto-only — you may dislike what is on that list. Search on this page looks through Bluesky posts and names, not Farcaster.",
+    "aboutKeysTitle": "No account, no key",
+    "aboutKeys": "Reading needs no account. We never ask for a private key, a recovery phrase, a password or a social session, and we store none of them. Likes, reposts and replies do not happen inside fbtswap; Open takes you to the network the post came from, where you can act with your own account if you have one. Write only hands a draft to the Bluesky app, and nothing is published until you post it there yourself. Posting on Farcaster happens only on Farcaster; storage rent is paid to the protocol, not to us. We deliberately cannot post for you, because that would mean holding your signing key.",
+    "aboutPrivacyTitle": "What we deliberately do not show",
+    "aboutPrivacy": "Profile photos and images inside posts are not loaded from a stranger's server. You see an initial and a stable colour instead, and a post that has media shows a marker, not the file. Two reasons: your IP should not be handed to the image host, and a stranger should not get a slot to display anything they like inside our app. Farcaster attachments are counted, not rendered. A link in the text does not open until you choose to open it.",
+    "aboutWarnTitle": "Warning",
+    "aboutWarn": "Strangers write these posts on a public network. We do not host them, endorse them, check whether they are true or legal, or take responsibility for any claim, address or link inside them. Seeing a post, a wallet address, a contract, an airdrop or an “opportunity” in this feed is never a recommendation, an approval or investment advice. Never send anyone money, a token, a recovery phrase, a private key or a confirmation code because of something you read here, and never copy an address out of this feed. Treat a promise of guaranteed profit, a fake support account, fake urgency, “connect your wallet” or “deposit now” as a scam and ignore it. If this feed goes down, swap, wallet and the rest of the app stay where they are."
   }
 }

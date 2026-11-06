@@ -133,6 +133,24 @@ describe('the Harpy room — pages', () => {
     const drawer = await screen.findByRole('complementary', { name: 'منوی شبکهٔ اجتماعی' });
     expect(drawer.textContent).toContain('بازگشت به اپ');
     expect(drawer.textContent).toContain('نوشتن');
+    /* The mark beside «شبکهٔ اجتماعی» is the app coin, not a generic globe. */
+    expect(drawer.querySelector('.hsp-appmark svg')).toBeTruthy();
+    expect(drawer.textContent).toContain('پست‌های کریپتو در دیگر شبکه‌های اجتماعی');
+    expect(drawer.textContent).not.toContain('پست‌های کریپتوی Bluesky');
+  });
+
+  it('puts the Farcaster conversation channels on the timeline and signs the settings page fbtswap', async () => {
+    mount();
+    await screen.findAllByRole('tab');
+    for (const label of ['ارز دیجیتال', 'بیس', 'توسعه‌دهندگان']) {
+      expect(screen.getByRole('tab', { name: label })).toBeTruthy();
+    }
+    const settings = [...document.querySelectorAll('.hsp-tabs [role="tab"]')].find((tab) => tab.getAttribute('aria-label') === 'تنظیمات');
+    fireEvent.click(settings);
+    fireEvent.click(await screen.findByRole('button', { name: 'درباره و هشدار' }));
+    expect(screen.getByText('هشدار')).toBeTruthy();
+    expect(document.body.textContent).toContain('عبارت بازیابی');
+    expect(document.querySelector('.hsp-brandline')?.textContent).toBe('fbtswap');
   });
 });
 

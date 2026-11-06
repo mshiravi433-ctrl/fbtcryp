@@ -1,8 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import BrandMark from '../components/BrandMark.jsx';
 import { openUrl } from '../lib/browser';
+import { FARCASTER_HOME, fetchCommunity } from '../lib/community';
 import { isRtl as isRtlLang } from '../i18n/languages.js';
 import {
   BSKY_HOME,
@@ -42,7 +44,8 @@ import '../styles/social.css';
  * token, so the rest of the app keeps its own colours while this page is open.
  *
  * ─── THE PAGES ARE THE FOUR THE BRIEF NAMED ────────────────────────────────
- *   · timeline — the feed (topic chips, posts, load-more)
+ *   · timeline — the feed. Bluesky topics, plus the three Farcaster channels
+ *                that used to be the News «گفتگو» sub-tabs (crypto, base, dev)
  *   · trends   — Bluesky's own trending list, ranked like Harpy's
  *   · browser  — our existing Discover directory, embedded, so "browser" is a
  *                page here rather than a link that throws the reader out
@@ -74,9 +77,53 @@ import '../styles/social.css';
 
 const PAGE = 25;
 const MAX = 60;
+/* The hub clamps a channel read at 30. Asking for more would look like a
+   broken «load more» — the button would stay and the list would not grow. */
+const FC_MAX = 30;
 
-const TOPICS = ['forYou', 'bitcoin', 'ethereum', 'defi', 'solana', 'fa'];
+/* Bluesky topics stay. The three ids on the right are the Farcaster channels
+   that used to live under News → گفتگو (ارز دیجیتال، بیس، توسعه‌دهندگان).
+   They are filters of this timeline now, not a second page. */
+const BSKY_TOPICS = ['forYou', 'bitcoin', 'ethereum', 'defi', 'solana', 'fa'];
+const FC_CHANNELS = {
+  fcCrypto: 'crypto',
+  fcBase: 'base',
+  fcDev: 'dev'
+};
+const FC_TOPICS = Object.keys(FC_CHANNELS);
+const TOPICS = [...BSKY_TOPICS, ...FC_TOPICS];
 const TABS = ['timeline', 'trends', 'browser', 'search', 'settings'];
+
+const ABOUT_SECTIONS = [
+  ['aboutWhatTitle', 'aboutWhat', ''],
+  ['aboutSourcesTitle', 'aboutSources', ''],
+  ['aboutKeysTitle', 'aboutKeys', ''],
+  ['aboutPrivacyTitle', 'aboutPrivacy', ''],
+  ['aboutWarnTitle', 'aboutWarn', ' is-warn']
+];
+
+function farcasterChannel(topic) {
+  return FC_CHANNELS[topic] || null;
+}
+
+/** A Farcaster cast, shaped like a timeline card. Counts stay absent: the hub
+ *  payload we render does not include them, and a fake 0 would read as «nobody
+ *  liked this». */
+function castToRow(row) {
+  const handle = String(row?.author || '').trim() || 'farcaster';
+  return {
+    id: String(row?.hash || row?.url || handle),
+    source: 'farcaster',
+    author: { name: handle, handle },
+    at: row?.at,
+    text: row?.text || '',
+    url: row?.url,
+    media: Number(row?.embeds) > 0,
+    replies: null,
+    reposts: null,
+    likes: null
+  };
+}
 
 /* The browser tab is the Discover directory. Imported lazily so opening the
    social room does not pull the directory's own chunk (and its stylesheet)
@@ -293,18 +340,40 @@ function PostCard({ row, locale, t, onOpenThread, onOpenProfile }) {
   const [open, setOpen] = useState(false);
   const long = (row.text?.length ?? 0) > 280;
   const shown = long && !open ? `${row.text.slice(0, 280)}…` : row.text;
+  const farcaster = row.source === 'farcaster';
+  const handle = row.author?.handle || '';
+
+  const openAuthor = () => {
+    if (!farcaster) {
+      onOpenProfile(handle);
+      return;
+    }
+    /* fid:123 is our fallback when the hub has no username. That is not a
+       profile path — the cast itself is the honest link. */
+    if (handle && !handle.startsWith('fid:')) {
+      openUrl(`${FARCASTER_HOME}/${encodeURIComponent(handle)}`);
+      return;
+    }
+    openUrl(row.url);
+  };
 
   return (
     <motion.article className="hsp-post" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
       <header className="hsp-post-head">
-        <button type="button" className="hsp-author" onClick={() => onOpenProfile(row.author.handle)}>
+        <button type="button" className="hsp-author" onClick={openAuthor}>
           <Avatar author={row.author} />
           <span className="hsp-author-copy">
             <strong>{row.author.name}</strong>
             <span className="hsp-meta">
-              <span className="hsp-handle">@{row.author.handle}</span>
+              <span className="hsp-handle">@{handle}</span>
               <span aria-hidden="true">·</span>
               <span>{ageLabel(row.at, locale)}</span>
+              {farcaster && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="hsp-net">Farcaster</span>
+                </>
+              )}
             </span>
           </span>
         </button>
@@ -319,8 +388,10 @@ function PostCard({ row, locale, t, onOpenThread, onOpenProfile }) {
         </button>
       </header>
 
-      {/* Body opens the thread INSIDE this room; only the small button leaves. */}
-      <button type="button" className="hsp-post-body" onClick={() => onOpenThread(row)}>
+      {/* Bluesky opens the thread inside this room. Farcaster has no thread
+          call here — the cast opens on Farcaster, where a reply can actually
+          be written. */}
+      <button type="button" className="hsp-post-body" onClick={() => (farcaster ? openUrl(row.url) : onOpenThread(row))}>
         <p className="hsp-text">{shown}</p>
       </button>
 
@@ -332,9 +403,13 @@ function PostCard({ row, locale, t, onOpenThread, onOpenProfile }) {
 
       <div className="hsp-post-foot">
         <div className="hsp-acts">
-          <Count icon={<IconReply />} value={row.replies} label={t('social.replies')} tone="reply" />
-          <Count icon={<IconRepeat />} value={row.reposts} label={t('social.reposts')} tone="repeat" />
-          <Count icon={<IconHeart />} value={row.likes} label={t('social.likes')} tone="like" />
+          {farcaster ? null : (
+            <>
+              <Count icon={<IconReply />} value={row.replies} label={t('social.replies')} tone="reply" />
+              <Count icon={<IconRepeat />} value={row.reposts} label={t('social.reposts')} tone="repeat" />
+              <Count icon={<IconHeart />} value={row.likes} label={t('social.likes')} tone="like" />
+            </>
+          )}
           {row.media ? (
             <span className="hsp-media" title={t('social.hasMedia')} aria-label={t('social.hasMedia')}>
               <IconImage />
@@ -365,6 +440,7 @@ function PostSkeleton() {
 export default function Social() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const still = useReducedMotion();
   const locale = i18n.language || 'en';
   /* Direction comes from the language registry, not from the router: every
@@ -386,7 +462,12 @@ export default function Social() {
   const scrollMeta = useRef({ last: 0, raf: 0 });
 
   /* ── feed ─────────────────────────────────────────────────────────────── */
-  const [topic, setTopic] = useState('forYou');
+  /* An old News link (#/news?tab=community) lands here with ?topic=fcCrypto
+     so the reader arrives on the conversation they just left, not on «for you». */
+  const [topic, setTopic] = useState(() => {
+    const fromUrl = searchParams.get('topic');
+    return TOPICS.includes(fromUrl) ? fromUrl : 'forYou';
+  });
   const [limit, setLimit] = useState(PAGE);
   const [feed, setFeed] = useState({ rows: [], live: true });
   const [loading, setLoading] = useState(true);
@@ -425,7 +506,13 @@ export default function Social() {
       setRefreshing(false);
       return;
     }
-    const data = await fetchTopic(which, size);
+    const channel = farcasterChannel(which);
+    const data = channel
+      ? await fetchCommunity(channel, Math.min(size, FC_MAX)).then((res) => ({
+          rows: Array.isArray(res?.rows) ? res.rows.map(castToRow) : [],
+          live: Boolean(res?.live)
+        }))
+      : await fetchTopic(which, size);
     if (reqRef.current !== id) return;
     setFeed(data);
     setReachable(true);
@@ -569,15 +656,18 @@ export default function Social() {
     );
   }, []);
 
+  const onFarcaster = Boolean(farcasterChannel(topic));
+  const pageMax = onFarcaster ? FC_MAX : MAX;
+
   const loadMore = () => {
-    const next = Math.min(MAX, limit + PAGE);
+    const next = Math.min(pageMax, limit + PAGE);
     setLimit(next);
     load(topic, next, { quiet: true });
   };
 
   const rows = results ? results.posts : feed.rows;
   const live = reachable && (results ? results.live : feed.live);
-  const canLoadMore = !results && !loading && feed.live && feed.rows.length >= limit && limit < MAX;
+  const canLoadMore = !results && !loading && feed.live && feed.rows.length >= limit && limit < pageMax;
 
   const tabName = useCallback((id) => t(`social.tab.${id}`), [t]);
 
@@ -587,7 +677,9 @@ export default function Social() {
     <div className="hsp-status">
       <span className={`hsp-live${live ? ' is-on' : ''}`}>
         <i aria-hidden="true" />
-        {live ? t('social.live') : t('social.offlineBadge')}
+        {live
+          ? t(onFarcaster ? 'social.liveFc' : 'social.live')
+          : t(onFarcaster ? 'social.offlineFc' : 'social.offlineBadge')}
       </span>
       <span className="hsp-updated">
         {updatedAt ? `${t('social.updated')} ${ageLabel(updatedAt, locale)}` : t('social.subtitle')}
@@ -595,24 +687,30 @@ export default function Social() {
     </div>
   );
 
+  const topicChip = (id) => (
+    <button
+      key={id}
+      type="button"
+      role="tab"
+      aria-selected={topic === id}
+      className={`hsp-chip${topic === id ? ' is-on' : ''}${farcasterChannel(id) ? ' hsp-chip--fc' : ''}`}
+      title={farcasterChannel(id) ? 'Farcaster' : 'Bluesky'}
+      onClick={() => setTopic(id)}
+    >
+      {t(`social.topic.${id}`)}
+    </button>
+  );
+
   const timelinePage = (
     <div className="hsp-page-body" role="tabpanel" aria-label={tabName('timeline')}>
       {statusStrip}
 
-      {/* Topic tabs, Harpy's home filter chips. Hidden while searching. */}
+      {/* Topic tabs. Bluesky first, then the three Farcaster channels that
+          left News. Hidden while searching — search is its own page. */}
       <div className="hsp-chips" role="tablist" aria-label={t('social.feedFilter')}>
-        {TOPICS.map((id) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={topic === id}
-            className={`hsp-chip${topic === id ? ' is-on' : ''}`}
-            onClick={() => setTopic(id)}
-          >
-            {t(`social.topic.${id}`)}
-          </button>
-        ))}
+        {BSKY_TOPICS.map(topicChip)}
+        <span className="hsp-chip-src">{t('social.fcGroup')}</span>
+        {FC_TOPICS.map(topicChip)}
       </div>
 
       {loading ? (
@@ -645,7 +743,7 @@ export default function Social() {
         </button>
       )}
 
-      <p className="hsp-footnote">{t('social.feedNote')}</p>
+      <p className="hsp-footnote">{t(onFarcaster ? 'social.feedNoteFc' : 'social.feedNote')}</p>
     </div>
   );
 
@@ -799,6 +897,10 @@ export default function Social() {
           <span className="hsp-row-icon"><IconExternal size={18} /></span>
           {t('social.openBluesky')}
         </button>
+        <button type="button" className="hsp-row" onClick={() => openUrl(FARCASTER_HOME)}>
+          <span className="hsp-row-icon"><IconExternal size={18} /></span>
+          {t('social.openFarcaster')}
+        </button>
         <button type="button" className="hsp-row" onClick={() => navigate('/settings')}>
           <span className="hsp-row-icon"><IconSettings /></span>
           {t('social.settings')}
@@ -820,19 +922,26 @@ export default function Social() {
 
       <AnimatePresence initial={false}>
         {aboutOpen && (
-          <motion.p
-            className="hsp-notice"
+          <motion.div
+            className="hsp-about"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
           >
-            <IconShield size={16} />
-            <span>{t('social.notice')}</span>
-          </motion.p>
+            {ABOUT_SECTIONS.map(([title, body, tone]) => (
+              <section key={title} className={`hsp-about-card${tone}`}>
+                <h3>
+                  {title === 'aboutWarnTitle' ? <IconShield size={14} /> : <IconInfo size={14} />}
+                  {t(`social.${title}`)}
+                </h3>
+                <p>{t(`social.${body}`)}</p>
+              </section>
+            ))}
+          </motion.div>
         )}
       </AnimatePresence>
 
-      <p className="hsp-footnote">{t('social.readOnly')} · Bluesky</p>
+      <p className="hsp-footnote hsp-brandline">fbtswap</p>
     </div>
   );
 
@@ -857,9 +966,7 @@ export default function Social() {
         transition={{ type: 'tween', duration: still ? 0 : 0.24, ease: [0.22, 0.61, 0.36, 1] }}
       >
         <div className="hsp-drawer-head">
-          <span className="hsp-brandmark" aria-hidden="true">
-            <IconBrowser size={20} />
-          </span>
+          <BrandMark size={22} gradientId="hspDrawerBrand" className="brand-mark hsp-appmark" />
           <div>
             <strong>{t('social.title')}</strong>
             <span>{t('social.subtitle')}</span>
@@ -870,7 +977,11 @@ export default function Social() {
         </div>
 
         <div className="hsp-chips hsp-chips--static">
-          <span className={`hsp-chip${live ? ' is-on' : ''}`}>{live ? t('social.live') : t('social.offlineBadge')}</span>
+          <span className={`hsp-chip${live ? ' is-on' : ''}`}>
+            {live
+              ? t(onFarcaster ? 'social.liveFc' : 'social.live')
+              : t(onFarcaster ? 'social.offlineFc' : 'social.offlineBadge')}
+          </span>
           <span className="hsp-chip">{t('social.readOnly')}</span>
         </div>
 

@@ -12034,18 +12034,24 @@ export default function run() {
     }
 
     /*
-     * ─── THE FEED LIVES ON NEWS, NOT ON P2P ─────────────────────────────────
-     * Moved on request. Asserted in BOTH directions, because a half-done move
-     * would leave the panel mounted twice and the P2P tab strip rendering a
-     * raw i18n key.
+     * ─── THE FEED LIVES ON SOCIAL, NOT ON NEWS OR P2P ───────────────────────
+     * It left P2P for News, then left News for the social timeline. The three
+     * Farcaster channels are filters there. Asserted in both directions: a
+     * half-done move would leave the panel on News and the chips missing.
      */
     const p2p = code(read('src/pages/P2P.jsx'));
     const news = code(read('src/pages/News.jsx'));
-    t('the feed is reachable as a News tab',
-      /'read', 'whales', 'community', 'listen', 'insights', 'calm'/.test(news) ||
-      /'read', 'community', 'listen', 'insights'(, 'global')?, 'calm'/.test(news));
-    t('...and News actually renders the panel',
-      /import CommunityPanel/.test(news) && /<CommunityPanel \/>/.test(news));
+    const socialPage = code(read('src/pages/Social.jsx'));
+    t('the Farcaster channels are social timeline filters',
+      /fcCrypto: 'crypto'/.test(socialPage) &&
+      /fcBase: 'base'/.test(socialPage) &&
+      /fcDev: 'dev'/.test(socialPage) &&
+      /fetchCommunity/.test(socialPage));
+    t('News no longer mounts the community panel',
+      !/CommunityPanel/.test(news) &&
+      /NEWS_TABS = \['read', 'listen', 'insights', 'calm'\]/.test(news));
+    t('an old news community link is sent to Social',
+      /tab === 'community'/.test(news) && /to="\/social\?topic=fcCrypto"/.test(news));
     t('...and P2P no longer mounts it',
       !/CommunityPanel/.test(read('src/pages/P2P.jsx')));
     /* Market-first strip since the market replaced the directory (sec. 74). */
@@ -13444,7 +13450,8 @@ export default function run() {
        and before Calm. `global` was inserted between them, which is why the
        accepted orders below are written with it optional. */
     t('News places market intelligence immediately after Radio and before Calm',
-      (/\['read', 'whales', 'community', 'listen', 'insights', 'calm'\]/.test(newsPage) ||
+      (/['read', 'listen', 'insights', 'calm']/.test(newsPage) ||
+      /\['read', 'whales', 'community', 'listen', 'insights', 'calm'\]/.test(newsPage) ||
        /\['read', 'community', 'listen', 'insights'(, 'global')?, 'calm'\]/.test(newsPage)) &&
       /tab === 'insights'[\s\S]*?<MarketInsightsPanel/.test(newsPage));
     t('News keeps one feed request while the global header only reuses its cache',

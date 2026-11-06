@@ -11,11 +11,13 @@ import '../styles/community-modern.css';
 /**
  * THE COMMUNITY FEED — modern redesign.
  * ===========================================================================
- * Requested: «در اخبار، تب فید گفتگو را خیلی مدرن‌تر و کارایی‌اش را بهتر کن».
+ * The product surface moved again: News no longer hosts this feed. The three
+ * channels (crypto, base, dev) are filters on the social timeline. This panel
+ * stays the dedicated renderer for the direct mount test and for any caller
+ * that still wants the standalone feed.
  *
  * Still read-only and still hosted by Farcaster (see lib/community.js for
- * why we never hold a signing key) — what changed is everything around the
- * reading experience:
+ * why we never hold a signing key):
  *
  *   · A live hero with an animated orbit, a REAL live/offline badge, and the
  *     two facts a reader wants first: how many posts, updated when.
