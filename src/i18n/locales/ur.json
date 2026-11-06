@@ -4683,6 +4683,19 @@
     "netSwapNow": "Swap",
     "netBridgeNow": "Bridge",
     "netShowAll": "Show all 19 networks",
-    "netShowLess": "Show flagship networks"
+    "netShowLess": "Show flagship networks",
+    "controlsClose": "بند کریں",
+    "controlsTimeRange": "وقت کی حد",
+    "controlsFilters": "فلٹرز",
+    "controlsNoData": "اس مدت کا ڈیٹا نہیں ہے",
+    "controlsUniverse": "ٹاپ ٹوکنز",
+    "controlsTileSize": "بلاک کا سائز",
+    "controlsReset": "ری سیٹ",
+    "controlsDone": "لاگو کریں",
+    "controlsLeaderboard": "درجہ بندی",
+    "controlsView": "منظر",
+    "controlsNetworkType": "نیٹ ورک کی قسم",
+    "controlsShowMore": "سبھی {{count}} دکھائیں",
+    "controlsShowLess": "کم دکھائیں"
   }
 }

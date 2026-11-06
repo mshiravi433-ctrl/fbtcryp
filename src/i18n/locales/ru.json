@@ -4691,6 +4691,19 @@
     "netSwapNow": "Swap",
     "netBridgeNow": "Bridge",
     "netShowAll": "Show all 19 networks",
-    "netShowLess": "Show flagship networks"
+    "netShowLess": "Show flagship networks",
+    "controlsClose": "Закрыть",
+    "controlsTimeRange": "Период",
+    "controlsFilters": "Фильтры",
+    "controlsNoData": "Нет данных за этот период",
+    "controlsUniverse": "Топ токенов",
+    "controlsTileSize": "Размер блока",
+    "controlsReset": "Сбросить",
+    "controlsDone": "Готово",
+    "controlsLeaderboard": "Рейтинг",
+    "controlsView": "Вид",
+    "controlsNetworkType": "Тип сети",
+    "controlsShowMore": "Показать все {{count}}",
+    "controlsShowLess": "Показать меньше"
   }
 }

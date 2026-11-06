@@ -4689,6 +4689,19 @@
     "netSwapNow": "Swap",
     "netBridgeNow": "Bridge",
     "netShowAll": "Show all 19 networks",
-    "netShowLess": "Show flagship networks"
+    "netShowLess": "Show flagship networks",
+    "controlsClose": "बंद करें",
+    "controlsTimeRange": "समय सीमा",
+    "controlsFilters": "फ़िल्टर",
+    "controlsNoData": "इस अवधि का डेटा नहीं है",
+    "controlsUniverse": "शीर्ष टोकन",
+    "controlsTileSize": "ब्लॉक आकार",
+    "controlsReset": "रीसेट",
+    "controlsDone": "लागू करें",
+    "controlsLeaderboard": "लीडरबोर्ड",
+    "controlsView": "दृश्य",
+    "controlsNetworkType": "नेटवर्क प्रकार",
+    "controlsShowMore": "सभी {{count}} दिखाएं",
+    "controlsShowLess": "कम दिखाएं"
   }
 }

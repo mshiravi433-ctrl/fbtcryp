@@ -4689,6 +4689,19 @@
     "netSwapNow": "Swap",
     "netBridgeNow": "Bridge",
     "netShowAll": "Show all 19 networks",
-    "netShowLess": "Show flagship networks"
+    "netShowLess": "Show flagship networks",
+    "controlsClose": "Cerrar",
+    "controlsTimeRange": "Intervalo",
+    "controlsFilters": "Filtros",
+    "controlsNoData": "Sin datos para este intervalo",
+    "controlsUniverse": "Tokens principales",
+    "controlsTileSize": "Tamaño del bloque",
+    "controlsReset": "Restablecer",
+    "controlsDone": "Listo",
+    "controlsLeaderboard": "Clasificación",
+    "controlsView": "Vista",
+    "controlsNetworkType": "Tipo de red",
+    "controlsShowMore": "Ver los {{count}}",
+    "controlsShowLess": "Ver menos"
   }
 }

@@ -2,6 +2,7 @@ import { memo, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import CoinLogo from '../CoinLogo.jsx';
+import { MarketSelect, GlyphClock } from './MarketControlMenu.jsx';
 import { fmtCompact, fmtPct } from '../../lib/format.js';
 import { marketPrice } from '../../lib/marketPresentation.js';
 import { computeCapitalPulse } from '../../lib/marketHeatmap.js';
@@ -31,6 +32,7 @@ function MarketCapitalPulse({ coins = [], global = null, vs = 'usd' }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [board, setBoard] = useState('gainers');
+  const [expanded, setExpanded] = useState(false);
 
   const pulse = useMemo(() => computeCapitalPulse(coins, global), [coins, global]);
 
@@ -40,6 +42,8 @@ function MarketCapitalPulse({ coins = [], global = null, vs = 'usd' }) {
       : board === 'volume'
         ? pulse.volumeLeaders
         : pulse.gainers;
+
+  const visibleRows = expanded ? rows : rows.slice(0, 3);
 
   const breadthUp = pulse.breadthUpPct != null ? Math.round(pulse.breadthUpPct) : 50;
 
@@ -62,31 +66,19 @@ function MarketCapitalPulse({ coins = [], global = null, vs = 'usd' }) {
           </div>
         </div>
 
-        <div className="mx-p2-seg" role="group" aria-label={t('marketPhase2.pulseTitle')}>
-          <button
-            type="button"
-            aria-pressed={board === 'gainers'}
-            className={`mx-p2-seg-btn${board === 'gainers' ? ' is-active' : ''}`}
-            onClick={() => setBoard('gainers')}
-          >
-            {t('marketPhase2.pulseTabGainers')}
-          </button>
-          <button
-            type="button"
-            aria-pressed={board === 'losers'}
-            className={`mx-p2-seg-btn${board === 'losers' ? ' is-active' : ''}`}
-            onClick={() => setBoard('losers')}
-          >
-            {t('marketPhase2.pulseTabLosers')}
-          </button>
-          <button
-            type="button"
-            aria-pressed={board === 'volume'}
-            className={`mx-p2-seg-btn${board === 'volume' ? ' is-active' : ''}`}
-            onClick={() => setBoard('volume')}
-          >
-            {t('marketPhase2.pulseTabVolume')}
-          </button>
+        <div className="mx-p2-controls">
+          <span className="mx-p2-window-pill"><GlyphClock /><span dir="ltr">{t('marketPhase2.heatmapWin24h')}</span></span>
+          <MarketSelect
+            label={t('marketPhase2.controlsLeaderboard')}
+            value={board}
+            testId="market-pulse-board"
+            onChange={(value) => { setBoard(value); setExpanded(false); }}
+            options={[
+              { value: 'gainers', label: t('marketPhase2.pulseTabGainers') },
+              { value: 'losers', label: t('marketPhase2.pulseTabLosers') },
+              { value: 'volume', label: t('marketPhase2.pulseTabVolume') }
+            ]}
+          />
         </div>
       </header>
 
@@ -167,7 +159,7 @@ function MarketCapitalPulse({ coins = [], global = null, vs = 'usd' }) {
 
       {rows.length > 0 && (
         <div className="mx-pulse-list" role="list">
-          {rows.map((entry, i) => {
+          {visibleRows.map((entry, i) => {
             const { coin, barPct } = entry;
             const chg = Number(coin.change24h);
             const tone = !Number.isFinite(chg) ? 'flat' : chg >= 0 ? 'up' : 'down';
@@ -180,7 +172,7 @@ function MarketCapitalPulse({ coins = [], global = null, vs = 'usd' }) {
                 onClick={() => navigate(`/coin/${encodeURIComponent(coin.id)}`)}
               >
                 <span className="mx-pulse-rank" dir="ltr">{i + 1}</span>
-                <CoinLogo src={coin.image} symbol={coin.symbol} name={coin.name} size={26} />
+                <CoinLogo coin={coin} size="small" px={26} />
                 <span className="mx-pulse-coin">
                   <span className="mx-pulse-name">{coin.name}</span>
                   <span className="mx-pulse-sym" dir="ltr">{coin.symbol}</span>
@@ -205,6 +197,11 @@ function MarketCapitalPulse({ coins = [], global = null, vs = 'usd' }) {
             );
           })}
         </div>
+      )}
+      {rows.length > 3 && (
+        <button type="button" className="mx-p2-more" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
+          <span>{expanded ? t('marketPhase2.controlsShowLess') : t('marketPhase2.controlsShowMore', { count: rows.length })}</span>
+        </button>
       )}
     </section>
   );

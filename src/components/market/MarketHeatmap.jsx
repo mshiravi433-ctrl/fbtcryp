@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import CoinLogo from '../CoinLogo.jsx';
 import { GlyphChevron } from './MarketGlyphs.jsx';
+import { MarketPopover, MarketSelect, GlyphClock, GlyphFilters } from './MarketControlMenu.jsx';
 import { fmtCompact, fmtPct } from '../../lib/format.js';
 import { marketPrice } from '../../lib/marketPresentation.js';
 import { isSwappable, swapUrlFor } from '../../lib/coinToSwap.js';
@@ -101,7 +102,7 @@ function MarketHeatmap({ coins = [], vs = 'usd' }) {
         window: win,
         excludeStables,
         query,
-        aspect: compactViewport ? 0.96 : 1.65
+        aspect: compactViewport ? 1.08 : 1.95
       }),
     [coins, limit, metric, win, excludeStables, query, compactViewport]
   );
@@ -122,6 +123,7 @@ function MarketHeatmap({ coins = [], vs = 'usd' }) {
   };
 
   const hasCoins = Array.isArray(coins) && coins.length > 0;
+  const filterCount = Number(limit !== 24) + Number(metric !== 'mcap') + Number(!excludeStables) + Number(Boolean(query.trim()));
 
   return (
     <section
@@ -143,78 +145,87 @@ function MarketHeatmap({ coins = [], vs = 'usd' }) {
           </div>
         </div>
 
-        <div className="mx-hm-toolbar" role="toolbar" aria-label={t('marketPhase2.heatmapTitle')}>
-          <div className="mx-p2-seg">
-            {HEATMAP_LIMITS.map((n) => {
-              const disabled = n === 100 && coins.length > 0 && coins.length < 55;
-              return (
-                <button
-                  key={n}
-                  type="button"
-                  className={`mx-p2-seg-btn${limit === n ? ' is-active' : ''}`}
-                  disabled={disabled}
-                  onClick={() => setLimit(n)}
-                >
-                  {t('marketPhase2.heatmapTop')} {n}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mx-p2-seg">
-            <button
-              type="button"
-              className={`mx-p2-seg-btn${metric === 'mcap' ? ' is-active' : ''}`}
-              onClick={() => setMetric('mcap')}
-            >
-              {t('marketPhase2.heatmapSizeMcap')}
-            </button>
-            <button
-              type="button"
-              className={`mx-p2-seg-btn${metric === 'volume' ? ' is-active' : ''}`}
-              onClick={() => setMetric('volume')}
-            >
-              {t('marketPhase2.heatmapSizeVol')}
-            </button>
-          </div>
-
-          <div className="mx-p2-seg">
-            {['1h', '24h', '7d'].map((w) => {
-              const supported = w === '24h' || layout.availableWindows[w];
-              return (
-                <button
-                  key={w}
-                  type="button"
-                  className={`mx-p2-seg-btn${layout.activeWindow === w ? ' is-active' : ''}`}
-                  disabled={!supported}
-                  onClick={() => setWin(w)}
-                >
-                  {windowLabels[w]}
-                </button>
-              );
-            })}
-          </div>
-
-          <button
-            type="button"
-            className={`mx-p2-chip-toggle${excludeStables ? ' is-on' : ''}`}
-            aria-pressed={excludeStables}
-            onClick={() => setExcludeStables((v) => !v)}
+        <div className="mx-hm-toolbar mx-p2-controls" role="toolbar" aria-label={t('marketPhase2.heatmapTitle')}>
+          <MarketSelect
+            label={t('marketPhase2.controlsTimeRange')}
+            value={layout.activeWindow}
+            icon={<GlyphClock />}
+            testId="market-heatmap-window"
+            onChange={setWin}
+            options={['1h', '24h', '7d'].map((w) => ({
+              value: w,
+              label: windowLabels[w],
+              disabled: w !== '24h' && !layout.availableWindows[w],
+              note: w !== '24h' && !layout.availableWindows[w] ? t('marketPhase2.controlsNoData') : undefined
+            }))}
+          />
+          <MarketPopover
+            label={t('marketPhase2.controlsFilters')}
+            icon={<GlyphFilters />}
+            badge={filterCount || undefined}
+            active={filterCount > 0}
+            testId="market-heatmap-filters"
           >
-            <span className="mx-p2-chip-dot" aria-hidden="true" />
-            {t('marketPhase2.heatmapNoStables')}
-          </button>
-
-          <label className="mx-hm-filter">
-            <GlyphSearchSmall />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t('marketPhase2.heatmapFilterPlaceholder')}
-              aria-label={t('marketPhase2.heatmapFilterPlaceholder')}
-            />
-          </label>
+            {({ close }) => (
+              <div className="mx-control-filter-body">
+                <label className="mx-hm-filter">
+                  <GlyphSearchSmall />
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder={t('marketPhase2.heatmapFilterPlaceholder')}
+                    aria-label={t('marketPhase2.heatmapFilterPlaceholder')}
+                  />
+                </label>
+                <div className="mx-control-field">
+                  <span className="mx-control-label">{t('marketPhase2.controlsUniverse')}</span>
+                  <div className="mx-p2-seg mx-control-seg">
+                    {HEATMAP_LIMITS.map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        className={`mx-p2-seg-btn${limit === n ? ' is-active' : ''}`}
+                        aria-pressed={limit === n}
+                        disabled={n === 100 && coins.length > 0 && coins.length < 55}
+                        onClick={() => setLimit(n)}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="mx-control-field">
+                  <span className="mx-control-label">{t('marketPhase2.controlsTileSize')}</span>
+                  <div className="mx-p2-seg mx-control-seg">
+                    {[['mcap', t('marketPhase2.heatmapSizeMcap')], ['volume', t('marketPhase2.heatmapSizeVol')]].map(([id, label]) => (
+                      <button key={id} type="button" className={`mx-p2-seg-btn${metric === id ? ' is-active' : ''}`} aria-pressed={metric === id} onClick={() => setMetric(id)}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={`mx-control-switch${excludeStables ? ' is-on' : ''}`}
+                  role="switch"
+                  aria-checked={excludeStables}
+                  onClick={() => setExcludeStables((v) => !v)}
+                >
+                  <span>{t('marketPhase2.heatmapNoStables')}</span>
+                  <span className="mx-control-switch-track" aria-hidden="true"><span /></span>
+                </button>
+                <div className="mx-control-footer">
+                  <button type="button" className="mx-control-reset" onClick={() => { setLimit(24); setMetric('mcap'); setExcludeStables(true); setQuery(''); }}>
+                    {t('marketPhase2.controlsReset')}
+                  </button>
+                  <button type="button" className="mx-p2-action-btn mx-p2-action-btn--primary" onClick={() => close()}>
+                    {t('marketPhase2.controlsDone')}
+                  </button>
+                </div>
+              </div>
+            )}
+          </MarketPopover>
         </div>
       </header>
 
@@ -255,16 +266,14 @@ function MarketHeatmap({ coins = [], vs = 'usd' }) {
                 title={`${coin.name} (${coin.symbol}) · ${priceStr} · ${changeStr}`}
               >
                 <span className="mx-hm-tile-inner">
-                  {(tier === 'xl' || tier === 'lg') && (
-                    <span className="mx-hm-logo">
-                      <CoinLogo
-                        src={coin.image}
-                        symbol={coin.symbol}
-                        name={coin.name}
-                        size={tier === 'xl' ? 24 : 18}
-                      />
-                    </span>
-                  )}
+                  <span className="mx-hm-logo">
+                    <CoinLogo
+                      coin={coin}
+                      size={tier === 'xl' || tier === 'lg' ? 'small' : 'thumb'}
+                      px={tier === 'xl' ? 26 : tier === 'lg' ? 20 : tier === 'md' ? 16 : 12}
+                      className="coin-logo mx-hm-coin-logo"
+                    />
+                  </span>
                   <span className="mx-hm-sym">{coin.symbol}</span>
                   {tier !== 'xs' && (
                     <span className="mx-hm-chg">{changeStr}</span>
@@ -297,12 +306,7 @@ function MarketHeatmap({ coins = [], vs = 'usd' }) {
       {inspectedTile && (
         <footer className="mx-hm-inspector" data-testid="market-heatmap-inspector">
           <div className="mx-hm-ins-id">
-            <CoinLogo
-              src={inspectedTile.coin.image}
-              symbol={inspectedTile.coin.symbol}
-              name={inspectedTile.coin.name}
-              size={30}
-            />
+            <CoinLogo coin={inspectedTile.coin} size="small" px={30} />
             <div className="mx-hm-ins-names">
               <div className="mx-hm-ins-top">
                 <strong>{inspectedTile.coin.name}</strong>

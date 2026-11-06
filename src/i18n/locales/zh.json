@@ -4680,6 +4680,19 @@
     "netSwapNow": "Swap",
     "netBridgeNow": "Bridge",
     "netShowAll": "Show all 19 networks",
-    "netShowLess": "Show flagship networks"
+    "netShowLess": "Show flagship networks",
+    "controlsClose": "关闭",
+    "controlsTimeRange": "时间范围",
+    "controlsFilters": "筛选",
+    "controlsNoData": "此时间段无数据",
+    "controlsUniverse": "热门代币",
+    "controlsTileSize": "区块大小",
+    "controlsReset": "重置",
+    "controlsDone": "完成",
+    "controlsLeaderboard": "排行榜",
+    "controlsView": "视图",
+    "controlsNetworkType": "网络类型",
+    "controlsShowMore": "显示全部 {{count}}",
+    "controlsShowLess": "收起"
   }
 }

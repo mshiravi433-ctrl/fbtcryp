@@ -53,6 +53,14 @@ function LocationProbe() {
   return <output data-testid="loc-probe">{`${loc.pathname}${loc.search}`}</output>;
 }
 
+function openMenu(testId) {
+  fireEvent.click(screen.getByTestId(testId));
+}
+function pickMenuOption(testId, value) {
+  openMenu(testId);
+  fireEvent.click(document.querySelector(`[role="menuitemradio"][data-value="${value}"]`));
+}
+
 function renderWithRouter(ui, initialEntry = '/') {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
@@ -322,10 +330,16 @@ describe('Market Overview Phase 2 · Interactive UI components & navigation', ()
     fireEvent.pointerEnter(solTile);
     expect(screen.getByTestId('market-heatmap-inspector').textContent).toContain('Solana');
 
-    // Search filter narrows tiles
-    const input = card.querySelector('.mx-hm-filter input');
+    // Every tile carries the shared logo component, including the small tiers.
+    expect(card.querySelectorAll('.mx-hm-tile .mx-hm-coin-logo')).toHaveLength(6);
+
+    // Search lives inside the compact filter popover and narrows tiles live.
+    expect(card.querySelector('.mx-hm-filter input')).toBeNull();
+    openMenu('market-heatmap-filters');
+    const input = document.querySelector('.mx-hm-filter input');
     fireEvent.change(input, { target: { value: 'aave' } });
     expect(card.querySelectorAll('.mx-hm-tile')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('marketPhase2.controlsDone') }));
 
     // Clicking tile navigates to /coin/aave
     fireEvent.click(card.querySelector('.mx-hm-tile'));
@@ -344,9 +358,14 @@ describe('Market Overview Phase 2 · Interactive UI components & navigation', ()
     const card = screen.getByTestId('market-capital-pulse');
     expect(card.textContent).toContain('30.0%');
 
-    // Switch to Top Losers and verify ARB leads
-    const btns = card.querySelectorAll('.mx-p2-seg-btn');
-    fireEvent.click(btns[1]);
+    // Dense default: three leaders, expandable to five; logos on every row.
+    expect(card.querySelectorAll('.mx-pulse-row')).toHaveLength(3);
+    expect(card.querySelectorAll('.mx-pulse-row .coin-logo')).toHaveLength(3);
+    fireEvent.click(card.querySelector('.mx-p2-more'));
+    expect(card.querySelectorAll('.mx-pulse-row')).toHaveLength(4);
+
+    // Switch to Top Losers through the dropdown and verify ARB leads.
+    pickMenuOption('market-pulse-board', 'losers');
     const firstRow = card.querySelector('.mx-pulse-row');
     expect(firstRow.textContent).toContain('Arbitrum');
     fireEvent.click(firstRow);
@@ -399,17 +418,16 @@ describe('Market Overview Phase 2 · Interactive UI components & navigation', ()
     expect(card.textContent).toContain('56.2%');
     expect(card.textContent).toContain('14.5%'); // DEX / Global Vol ratio
 
-    const lensBtns = card.querySelectorAll('.mx-defi-tabs .mx-p2-seg-btn');
-    // Categories lens
-    fireEvent.click(lensBtns[1]);
+    // Categories lens through the compact view selector.
+    pickMenuOption('market-defi-lens', 'categories');
     expect(card.textContent).toContain('Lido');
     // Protocols lens
-    fireEvent.click(lensBtns[2]);
+    pickMenuOption('market-defi-lens', 'protocols');
     fireEvent.click(card.querySelector('.mx-defi-tag-btn'));
     expect(screen.getByTestId('loc-probe').textContent).toBe('/farm');
 
     // Stables lens
-    fireEvent.click(lensBtns[3]);
+    pickMenuOption('market-defi-lens', 'stables');
     expect(card.textContent).toContain('USDT');
     expect(card.textContent).toContain('Ethereum');
   });
@@ -429,14 +447,14 @@ describe('Market Overview Phase 2 · Interactive UI components & navigation', ()
     expect(card.textContent).toContain('2 / 19');
     expect(card.textContent).toContain('94 ms');
 
-    // Shows 8 flagship networks initially, expands to all 19
-    expect(card.querySelectorAll('.mx-net-item')).toHaveLength(8);
+    // Dense default: four flagship networks, each with a real chain mark.
+    expect(card.querySelectorAll('.mx-net-item')).toHaveLength(4);
+    expect(card.querySelectorAll('.mx-net-orb-core svg')).toHaveLength(4);
     fireEvent.click(card.querySelector('.mx-net-more-btn'));
     expect(card.querySelectorAll('.mx-net-item')).toHaveLength(19);
 
-    // Filter to Non-EVM (Solana, Bitcoin, Tron = 3)
-    const filterBtns = card.querySelectorAll('.mx-p2-seg-btn');
-    fireEvent.click(filterBtns[3]);
+    // Filter to Non-EVM (Solana, Bitcoin, Tron = 3) through the dropdown.
+    pickMenuOption('market-network-family', 'non-evm');
     expect(card.querySelectorAll('.mx-net-item')).toHaveLength(3);
 
     // Tap Solana Swap button -> /swap?chain=solana
@@ -445,11 +463,42 @@ describe('Market Overview Phase 2 · Interactive UI components & navigation', ()
     expect(screen.getByTestId('loc-probe').textContent).toBe('/swap?chain=solana');
   });
 
+  it('keeps heatmap window and filter prefs across remount, supports keyboard dismissal, and never focuses search on open', () => {
+    const { unmount } = renderWithRouter(<MarketHeatmap coins={SAMPLE_COINS} vs="usd" />);
+    pickMenuOption('market-heatmap-window', '7d');
+    expect(screen.getByTestId('market-heatmap-window').textContent).toContain(i18n.t('marketPhase2.heatmapWin7d'));
+
+    openMenu('market-heatmap-filters');
+    expect(document.activeElement.tagName).not.toBe('INPUT');
+    fireEvent.click(screen.getByRole('switch'));
+    expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('false');
+    fireEvent.keyDown(document.activeElement, { key: 'Escape' });
+    expect(document.querySelector('.mx-control-panel')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByTestId('market-heatmap-filters'));
+    expect(screen.getByTestId('market-heatmap').querySelectorAll('.mx-hm-tile')).toHaveLength(8);
+
+    unmount();
+    renderWithRouter(<MarketHeatmap coins={SAMPLE_COINS} vs="usd" />);
+    expect(screen.getByTestId('market-heatmap-window').textContent).toContain(i18n.t('marketPhase2.heatmapWin7d'));
+    expect(screen.getByTestId('market-heatmap').querySelectorAll('.mx-hm-tile')).toHaveLength(8);
+  });
+
+  it('disables unsupported heatmap windows instead of inventing a return', () => {
+    const dayOnly = SAMPLE_COINS.map(({ change1h, change7d, ...coin }) => coin);
+    renderWithRouter(<MarketHeatmap coins={dayOnly} vs="usd" />);
+    openMenu('market-heatmap-window');
+    expect(document.querySelector('[role="menuitemradio"][data-value="1h"]').disabled).toBe(true);
+    expect(document.querySelector('[role="menuitemradio"][data-value="7d"]').disabled).toBe(true);
+    expect(document.querySelector('[role="menuitemradio"][data-value="24h"]').getAttribute('aria-checked')).toBe('true');
+  });
+
   it('enforces scroll-budget CSS discipline and 12-locale completeness with zero emojis', () => {
-    const css = readFileSync(join(process.cwd(), 'src/styles/market-overview-phase2.css'), 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(css).not.toMatch(/backdrop-filter|will-change|content-visibility|contain-intrinsic-size|url\(/);
-    expect(css).not.toMatch(/(?:^|[;\s{])(?:filter|mask|mask-image|-webkit-mask-image)\s*:/);
+    for (const sheet of ['market-overview-phase2.css', 'market-overview-compact.css']) {
+      const css = readFileSync(join(process.cwd(), 'src/styles', sheet), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '');
+      expect(css).not.toMatch(/backdrop-filter|will-change|content-visibility|contain-intrinsic-size|url\(/);
+      expect(css).not.toMatch(/(?:^|[;\s{])(?:filter|mask|mask-image|-webkit-mask-image)\s*:/);
+    }
 
     const localeDir = join(process.cwd(), 'src/i18n/locales');
     const files = readdirSync(localeDir).filter((f) => f.endsWith('.json'));

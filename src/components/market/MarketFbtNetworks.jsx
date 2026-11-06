@@ -2,6 +2,8 @@ import { memo, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { GlyphChevron } from './MarketGlyphs.jsx';
+import AssetIcon from '../AssetIcon.jsx';
+import { MarketSelect } from './MarketControlMenu.jsx';
 import { fmtCompact, fmtNum } from '../../lib/format.js';
 import { mergeNetworkTelemetry } from '../../lib/fbtSwapNetworks.js';
 
@@ -36,7 +38,7 @@ function GlyphExternal() {
   );
 }
 
-const INITIAL_VISIBLE = 8;
+const INITIAL_VISIBLE = 4;
 
 function MarketFbtNetworks({ swapNetworks = null }) {
   const { t, i18n } = useTranslation();
@@ -93,23 +95,19 @@ function MarketFbtNetworks({ swapNetworks = null }) {
           </div>
         </div>
 
-        <div className="mx-p2-seg" role="group" aria-label={t('marketPhase2.netTitle')}>
-          {[
-            ['all', `${t('marketPhase2.netFilterAll')} (${model.totalCount})`],
-            ['l1', t('marketPhase2.netFilterL1')],
-            ['l2', t('marketPhase2.netFilterL2')],
-            ['non-evm', t('marketPhase2.netFilterNonEvm')]
-          ].map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={family === id}
-              className={`mx-p2-seg-btn${family === id ? ' is-active' : ''}`}
-              onClick={() => setFamily(id)}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="mx-p2-controls">
+          <MarketSelect
+            label={t('marketPhase2.controlsNetworkType')}
+            value={family}
+            testId="market-network-family"
+            onChange={(value) => { setFamily(value); setExpanded(false); }}
+            options={[
+              { value: 'all', label: t('marketPhase2.netFilterAll'), note: `${model.totalCount}` },
+              { value: 'l1', label: t('marketPhase2.netFilterL1') },
+              { value: 'l2', label: t('marketPhase2.netFilterL2') },
+              { value: 'non-evm', label: t('marketPhase2.netFilterNonEvm') }
+            ]}
+          />
         </div>
       </header>
 
@@ -166,7 +164,7 @@ function MarketFbtNetworks({ swapNetworks = null }) {
                     style={{ '--net-color': net.color }}
                     aria-hidden="true"
                   >
-                    <span className="mx-net-orb-core" />
+                    <AssetIcon chain={net.chainId} size={26} className="mx-net-orb-core" />
                   </span>
                   <div className="mx-net-names">
                     <strong>{net.name}</strong>
