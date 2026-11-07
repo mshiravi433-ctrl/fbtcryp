@@ -94,34 +94,42 @@ export default function OverviewTab({ pulse, analysis, locale, onOpenToken }) {
         title={t(locale, 'kpi.regime')}
         hint={`${t(locale, 'page.confidence')}: ${regime.confidence}/100 · ${t(locale, 'kpi.trendStrength')}: ${regime.trendStrength ?? '—'}/100`}
         actions={(
-          <ProvenanceDot
-            provenance={pulse.provenance}
-            label={t(locale, `page.${pulse.provenance === 'live' ? 'live' : pulse.provenance === 'stale' ? 'stale' : 'offline'}`)}
-          />
+          <>
+            <Pill tone={regimeTone === 'up' ? 'up' : regimeTone === 'down' ? 'down' : regimeTone === 'warn' ? 'warn' : 'calm'} dot>
+              {t(locale, `regime.${regime.label}`)}
+            </Pill>
+            <ProvenanceDot
+              provenance={pulse.provenance}
+              label={t(locale, `page.${pulse.provenance === 'live' ? 'live' : pulse.provenance === 'stale' ? 'stale' : 'offline'}`)}
+            />
+          </>
         )}
       >
-        <div className="aix-regime">
-          <div className={`aix-regime-badge aix-regime-${regime.label}`}>
-            <span>{t(locale, `regime.${regime.label}`)}</span>
-            <strong>{regime.score > 0 ? '+' : ''}{regime.score ?? '—'}</strong>
-            <Pill tone={regimeTone === 'up' ? 'up' : regimeTone === 'down' ? 'down' : regimeTone === 'warn' ? 'warn' : 'calm'} dot>
-              {t(locale, 'kpi.regime')}
-            </Pill>
-          </div>
-          <div className="aix-regime-body">
-            <RegimeGauge score={regime.score} />
-            <div className="aix-regime-stats">
-              <span>{t(locale, 'kpi.volatility')}: <b>{t(locale, `vol.${volatility.label}`)}</b>
-                {volatility.medianSwingPct != null ? ` · ${volatility.medianSwingPct.toFixed(2)}%` : ''}</span>
-              <span>{t(locale, 'kpi.liquidity')}: <b>{t(locale, `liq.${liquidity.label}`)}</b></span>
-              <span>{t(locale, 'kpi.coverage')}: <b>{breadth.counted}/{breadth.total}</b></span>
+        <div className="aix-regime-layout">
+          <div className="aix-regime">
+            <div className={`aix-regime-badge aix-regime-${regime.label}`}>
+              <span>{t(locale, `regime.${regime.label}`)}</span>
+              <strong>{regime.score > 0 ? '+' : ''}{regime.score ?? '—'}</strong>
+              <small>{isFa ? 'امتیاز رژیم' : 'Regime score'}</small>
+            </div>
+            <div className="aix-regime-body">
+              <RegimeGauge score={regime.score} />
+              <div className="aix-regime-stats">
+                <span>{t(locale, 'kpi.volatility')}<b>{t(locale, `vol.${volatility.label}`)}</b>
+                  {volatility.medianSwingPct != null ? <small>{volatility.medianSwingPct.toFixed(2)}%</small> : null}</span>
+                <span>{t(locale, 'kpi.liquidity')}<b>{t(locale, `liq.${liquidity.label}`)}</b></span>
+                <span>{t(locale, 'kpi.coverage')}<b>{breadth.counted}/{breadth.total}</b></span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <ul className="aix-sentences">
-          {nav.lines.map((line, i) => <li key={i}>{line}</li>)}
-        </ul>
+          <div className="aix-regime-narrative">
+            <span className="aix-section-kicker">{isFa ? 'خلاصه هوشمند بازار' : 'Market intelligence brief'}</span>
+            <ul className="aix-sentences">
+              {nav.lines.map((line, i) => <li key={i}>{line}</li>)}
+            </ul>
+          </div>
+        </div>
 
         <button
           type="button"
@@ -210,7 +218,7 @@ export default function OverviewTab({ pulse, analysis, locale, onOpenToken }) {
           <span className="aix-flat">{fmtNumber(breadth.flat)}</span>
           <span className="aix-down">{fmtNumber(breadth.decliners)} {fmtPct(decPct, { signed: false, digits: 0 })}</span>
         </div>
-        <div className="aix-review-stats" style={{ marginTop: 10 }}>
+        <div className="aix-review-stats aix-breadth-stats">
           <div className="aix-review-stat">
             <small>{t(locale, 'kpi.rangePosition')}</small>
             <strong>
@@ -241,22 +249,26 @@ export default function OverviewTab({ pulse, analysis, locale, onOpenToken }) {
           title={t(locale, 'movers.gainers')}
           hint={`${movers.gainers.length} ${isFa ? 'توکن برتر' : 'top tokens'}`}
         >
-          {movers.gainers.length
-            ? movers.gainers.map((c, i) => (
-              <MoverRow key={c.id} coin={c} locale={locale} onOpen={onOpenToken} rank={i + 1} />
-            ))
-            : <p className="aix-card-hint">{t(locale, 'movers.empty')}</p>}
+          {movers.gainers.length ? (
+            <div className="aix-mover-list">
+              {movers.gainers.map((c, i) => (
+                <MoverRow key={c.id} coin={c} locale={locale} onOpen={onOpenToken} rank={i + 1} />
+              ))}
+            </div>
+          ) : <p className="aix-card-hint">{t(locale, 'movers.empty')}</p>}
         </SectionCard>
         <SectionCard
           mark="▼"
           title={t(locale, 'movers.losers')}
           hint={`${movers.losers.length} ${isFa ? 'توکن ضعیف' : 'weak tokens'}`}
         >
-          {movers.losers.length
-            ? movers.losers.map((c, i) => (
-              <MoverRow key={c.id} coin={c} locale={locale} onOpen={onOpenToken} rank={i + 1} />
-            ))
-            : <p className="aix-card-hint">{t(locale, 'movers.empty')}</p>}
+          {movers.losers.length ? (
+            <div className="aix-mover-list">
+              {movers.losers.map((c, i) => (
+                <MoverRow key={c.id} coin={c} locale={locale} onOpen={onOpenToken} rank={i + 1} />
+              ))}
+            </div>
+          ) : <p className="aix-card-hint">{t(locale, 'movers.empty')}</p>}
         </SectionCard>
       </div>
 

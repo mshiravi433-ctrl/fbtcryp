@@ -41,6 +41,7 @@ export default function ReportTab({ pulse, scan, locale, markets, sourceLabel })
   return (
     <div className="aix-tab-body">
       <SectionCard
+        className="aix-report-card"
         title={report.title}
         hint={report.sourceLine}
         actions={(

@@ -3,6 +3,7 @@
    plainer copy of it. Imported here (not in the page) so the chat pays for it
    only when a room is actually rendered. */
 @import '../../../styles/ai-analysis-modern.css';
+@import '../../../styles/ai-analysis-refined.css';
 
 /* ==========================================================================
    INTELLIGENCE ROOMS INSIDE THE CHAT
@@ -132,25 +133,28 @@
 }
 
 .aix-embed .aix-statusbar { margin-top: 0; font-size: 10px; padding: 6px 9px; }
-.aix-embed .aix-tab-body { gap: 9px; }
-.aix-embed .aix-card { padding: 10px 11px; border-radius: 13px; }
-.aix-embed .aix-card-title { font-size: 12.5px; }
+.aix-embed .aix-tab-body { gap: 14px; }
+.aix-embed .aix-card { padding: 15px; border-radius: 17px; }
+.aix-embed .aix-card-title { font-size: 13.5px; }
 .aix-embed .aix-card-hint { font-size: 10.5px; }
-.aix-embed .aix-tiles { grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 6px; }
-.aix-embed .aix-tile { min-height: 62px; padding: 8px 9px; border-radius: 11px; }
-.aix-embed .aix-tile-value { font-size: 14.5px; }
+.aix-embed .aix-tiles { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.aix-embed .aix-tile { min-height: 94px; padding: 12px; border-radius: 15px; }
+.aix-embed .aix-tile-value { font-size: 18px; }
 .aix-embed .aix-tile-label,
-.aix-embed .aix-tile-sub { font-size: 9.5px; }
+.aix-embed .aix-tile-sub { font-size: 10px; }
 .aix-embed .aix-two-up { grid-template-columns: 1fr; }
-.aix-embed .aix-regime { flex-direction: column; gap: 8px; }
-.aix-embed .aix-regime-badge { flex: 0 0 auto; flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
-.aix-embed .aix-mover { grid-template-columns: 52px 54px 1fr auto; }
+.aix-embed .aix-regime { grid-template-columns: 110px minmax(0, 1fr); gap: 12px; }
+.aix-embed .aix-regime-badge { min-height: 112px; padding: 12px 9px; }
+.aix-embed .aix-mover { grid-template-columns: minmax(82px, 1fr) 58px minmax(70px, auto) 70px; }
 .aix-embed .aix-loading { padding: 18px 4px; font-size: 12px; }
-.aix-embed .aix-tabs { margin: 8px 0; gap: 5px; }
-.aix-embed .aix-tab { padding: 6px 10px; font-size: 11.5px; border-radius: 10px; }
+.aix-embed .aix-tabs { margin: 12px 0 16px; gap: 6px; }
+.aix-embed .aix-tab { padding: 7px 10px; font-size: 11px; border-radius: 12px; }
+.aix-embed .aix-col-h1,
+.aix-embed .aix-col-ath { display: none; }
 .aix-embed .aix-thead,
 .aix-embed .aix-trow {
-  grid-template-columns: minmax(74px, 1.3fr) 1fr .7fr .8fr .8fr 46px;
+  grid-template-columns: minmax(105px, 1.3fr) minmax(76px, .9fr) 64px 64px 74px 48px;
+  gap: 9px;
   font-size: 11px;
 }
 .aix-embed .aix-token-title { font-size: 15px; }
@@ -165,7 +169,14 @@
 
 @media (max-width: 560px) {
   .iaos-msg.iaos-has-intel .iaos-bubble { max-width: 100%; }
-  .aix-embed .aix-tiles { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
+  .aix-embed .aix-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .aix-embed .aix-col-d7,
+  .aix-embed .aix-col-vol,
+  .aix-embed .aix-col-spark { display: none; }
+  .aix-embed .aix-thead,
+  .aix-embed .aix-trow { grid-template-columns: minmax(100px, 1.3fr) minmax(72px, .9fr) 64px; }
+  .aix-embed .aix-mover { grid-template-columns: minmax(82px, 1fr) minmax(70px, auto) 68px; }
+  .aix-embed .aix-mover .aix-spark { display: none; }
 }
 
 /* Light theme: the panel tint must not stay night-blue on a white page. */
