@@ -22,6 +22,7 @@ import { createHardwareGovernor } from './hardwareGovernor.js';
 import { coupleIntentGenome, runStructuralPlasticity } from './plasticity.js';
 import {
   createEngramMemory,
+  saveLocalCortexBundle,
   wipeLocalCortexBundle
 } from './engramMemory.js';
 import { blendGlobalSwarmWeights, runLocalSwarmEvolution } from './swarmClient.js';
@@ -108,6 +109,8 @@ let storeState = {
   engramRecall: null,
   structuralLast: null,
   evolutionLast: null,
+  consolidationLast: null,
+  brainEnabled: true,
   swarmStatus: null,
   swarmOptIn: initialPrefs.swarmOptIn,
   paused: initialPrefs.paused,
@@ -201,7 +204,8 @@ async function runInlineFallback(msg) {
       governor: gov,
       generation: snap.generation,
       reservoirNeurons: snap.reservoirSize,
-      engramCount: inlineEngrams.size()
+      engramCount: inlineEngrams.size(),
+      brainEnabled: inlineCortex.isBrainEnabled()
     };
   }
   if (type === 'tick') {
@@ -297,8 +301,33 @@ async function runInlineFallback(msg) {
   }
   if (type === 'configure') {
     inlineGovernor.configure({ paused: msg.paused, swarmOptIn: msg.swarmOptIn });
+    if (typeof msg.brainEnabled === 'boolean') inlineCortex.setBrainEnabled(msg.brainEnabled);
     if (msg.intentGenome) coupleIntentGenome(inlineCortex, msg.intentGenome);
-    return { ok: true, governor: await inlineGovernor.evaluate() };
+    return {
+      ok: true,
+      governor: await inlineGovernor.evaluate(),
+      brainEnabled: inlineCortex.isBrainEnabled()
+    };
+  }
+  if (type === 'consolidate') {
+    const iterations = Math.max(1, Math.min(30, Math.round(Number(msg.iterations) || 6)));
+    const consolidation = inlineCortex.consolidate({
+      episodes: inlineEngrams.exportEpisodes(),
+      iterations
+    });
+    if (consolidation.ok) {
+      await saveLocalCortexBundle({
+        cortexSnapshot: inlineCortex.exportSnapshot(),
+        episodes: inlineEngrams.exportEpisodes()
+      });
+    }
+    return {
+      ok: Boolean(consolidation.ok),
+      consolidation,
+      readout: inlineCortex._internals().getLastReadout(),
+      engramCount: inlineEngrams.size(),
+      governor: await inlineGovernor.evaluate()
+    };
   }
   if (type === 'reset') {
     inlineCortex.reset();
@@ -329,6 +358,7 @@ export async function initNeuromorphicRuntime({ intentGenome = null } = {}) {
             localGeneration: res.generation ?? 0,
             reservoirNeurons: res.reservoirNeurons ?? 96,
             engramCount: res.engramCount ?? 0,
+            brainEnabled: res.brainEnabled !== false,
             lastError: null
           });
         }
@@ -553,8 +583,56 @@ export async function resetLocalNeuromorphicCortex() {
   return res;
 }
 
+/* ── Phase 6: brain-inspired consolidation & A/B switches ─────────────────── */
+
+/**
+ * Run sharp-wave-ripple consolidation over this device's real episodic engrams.
+ * The numbers in the result are measured by the worker, not promised here.
+ */
+export async function consolidateLocalBrain({ iterations = 6 } = {}) {
+  await initNeuromorphicRuntime();
+  const res = await sendWorkerMessage({ type: 'consolidate', iterations });
+  if (res.ok && res.consolidation) {
+    emit({
+      consolidationLast: res.consolidation,
+      readout: res.readout || storeState.readout,
+      engramCount: res.engramCount ?? storeState.engramCount,
+      lastUpdatedAt: Date.now(),
+      lastError: null
+    });
+  }
+  return res;
+}
+
+/** Turn the brain-inspired circuits on/off for A/B comparison (device-local). */
+export async function setBrainCircuitsEnabled(enabled) {
+  const on = enabled !== false;
+  const res = await sendWorkerMessage({ type: 'configure', brainEnabled: on });
+  if (res.ok) emit({ brainEnabled: on });
+  return res;
+}
+
+/** Explicit governor/preference configuration (pause, swarm opt-in, genome). */
+export async function configureGovernor({ paused, swarmOptIn, intentGenome } = {}) {
+  return setNeuromorphicPreferences({ paused, swarmOptIn, intentGenome });
+}
+
+export async function resetNeuromorphicRuntime() {
+  return resetLocalNeuromorphicCortex();
+}
+
 /* ── React Hook ───────────────────────────────────────────────────────────── */
 
+/**
+ * Subscribe to the shared on-device cortex store.
+ *
+ * Returns a SINGLE OBJECT (`nm.readout`, `nm.backend`, `nm.paused`, …) exactly
+ * the way every consumer uses it. It used to return `[state, actions]`, so
+ * `nm.readout` was `undefined` in the panel, the chat strip and the Intent OS
+ * header — the console rendered "—" forever even after the cortex had run.
+ * The action names below are the ones the components call; aliases are kept for
+ * the older call sites so nothing silently breaks.
+ */
 export function useNeuromorphicCortex({ autoSync = true } = {}) {
   const [state, setState] = useState(() => ({ ...storeState }));
 
@@ -570,15 +648,35 @@ export function useNeuromorphicCortex({ autoSync = true } = {}) {
     };
   }, [autoSync]);
 
-  const actions = {
+  return {
+    ...state,
+
+    /* lifecycle */
     init: (args = {}) => initNeuromorphicRuntime(args),
     sync: () => syncWithGlobalSwarm(),
+
+    /* feeding observations */
+    tickWithCandles: (candles, args = {}) => tickNeuromorphicWithCandles(candles, args),
+    tickWithMarketPulse: (args = {}) => tickNeuromorphicWithMarketPulse(args),
     tickCandles: (candles, args = {}) => tickNeuromorphicWithCandles(candles, args),
     tickPulse: (markets, pulse = null) => tickNeuromorphicWithMarketPulse({ markets, pulse }),
+
+    /* self-evolution */
+    evolveOnLiveCandles: (args = {}) => evolveNeuromorphicOnLiveCandles(args),
     evolve: (args = {}) => evolveNeuromorphicOnLiveCandles(args),
+
+    /* Phase 6 — brain-inspired circuits */
+    consolidateBrain: (args = {}) => consolidateLocalBrain(args),
+    setBrainEnabled: (enabled) => setBrainCircuitsEnabled(enabled),
+
+    /* preferences & governance */
+    toggleSwarmOptIn: () => setNeuromorphicPreferences({ swarmOptIn: !storeState.swarmOptIn }),
+    togglePaused: () => setNeuromorphicPreferences({ paused: !storeState.paused }),
     configure: (args = {}) => configureGovernor(args),
+    configureGovernor: (args = {}) => configureGovernor(args),
+
+    /* destructive */
+    resetLocalCortex: () => resetLocalNeuromorphicCortex(),
     reset: () => resetNeuromorphicRuntime()
   };
-
-  return [state, actions];
 }

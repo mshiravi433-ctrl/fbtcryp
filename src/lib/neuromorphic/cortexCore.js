@@ -1,5 +1,14 @@
 /**
- * FBT NEUROMORPHIC 2050 — PHASE 5: ADAPTIVE INTELLIGENCE ECOSYSTEM (HIGH INTELLIGENCE)
+ * FBT NEUROMORPHIC 2050 — PHASE 6: BRAIN-INSPIRED COGNITIVE CORE (HIGH INTELLIGENCE)
+ *
+ * Phase 6 closes the loop that made the cortex a *detector* rather than a *mind*:
+ * the spiking reservoir + liquid ODE now feed a brain-inspired cognitive core
+ * (`brainInspiredCore.js`) whose circuits modulate the cortex in real time —
+ * thalamic attention gain, a two-level predictive-coding hierarchy whose
+ * (measured) free energy is reported every tick, four neuromodulators, prefrontal
+ * working memory, basal-ganglia action selection, a cerebellar forward model, a
+ * theta–gamma plasticity window, homeostatic scaling and sharp-wave-ripple
+ * consolidation. Everything runs on the device; nothing is pre-filled.
  * ===========================================================================
  * A genuine, biologically grounded neuromorphic computing core designed to run
  * 100% on the user's own GPU (WebGPU) and CPU (TypedArray/WASM) with $0 server
@@ -28,8 +37,14 @@
 
 
 import { SENSORY_AXES, SENSORY_CHANNELS, createSpikeEncoder } from './spikeEncoder.js';
+import { createBrainInspiredCore, BRAIN_CORE_SCHEMA } from './brainInspiredCore.js';
 
-export const CORTEX_SCHEMA = 'fbt.neuromorphic.cortex.v2'; // ارتقای فاز ۵
+export const CORTEX_SCHEMA = 'fbt.neuromorphic.cortex.v3'; // ارتقای فاز ۶ (هستهٔ الهام‌گرفته از مغز)
+/** Snapshot schemas this build can still import (older on-device bundles). */
+export const CORTEX_SCHEMA_COMPAT = Object.freeze([
+  'fbt.neuromorphic.cortex.v2',
+  'fbt.neuromorphic.cortex.v3'
+]);
 export const CANONICAL_SEED = 0x2050fb71;
 export const BASE_RESERVOIR_SIZE = 96;
 export const MAX_RESERVOIR_SIZE = 512; // ارتقا از ۱۹۲ به ۵۱۲ (هوش بالا)
@@ -273,7 +288,9 @@ export function createNeuromorphicCortex({
   seed = CANONICAL_SEED,
   reservoirSize = BASE_RESERVOIR_SIZE,
   swarmWeights = null,
-  generation = 0
+  generation = 0,
+  /** PHASE 6: run the brain-inspired core (`false` reproduces Phase-5 behaviour). */
+  brain = true
 } = {}) {
   const initialSize = clamp(Math.round(reservoirSize) || BASE_RESERVOIR_SIZE, 32, MAX_RESERVOIR_SIZE);
   const encoder = createSpikeEncoder();
@@ -302,6 +319,25 @@ export function createNeuromorphicCortex({
     plasticityBoost: 1.0
   };
 
+  /*
+   * PHASE 6 — brain-inspired cognitive core.
+   * `brainStep(featureVector, ...)` returns the measured cognitive snapshot which
+   * is then used to modulate this very cortex (attention gain, plasticity gate,
+   * risk damping) and is reported in every readout. `brainEnabled:false` keeps the
+   * Phase-5 behaviour byte-for-byte for A/B comparison and for explicit tests.
+   */
+  const brainCore = createBrainInspiredCore({
+    seed: (seed ^ 0x6b726169) >>> 0,
+    contextSize: SENSORY_AXES.length,
+    liquidSize: LIQUID_SIZE
+  });
+  let brainEnabled = brain !== false;
+  let lastBrain = null;
+  /** Readout heads from the previous tick (used as the volatility prior for the brain). */
+  let rawHeadsLast = new Float32Array(READOUT_DIM);
+  /** Reservoir spikes fired in the previous tick (event-driven energy accounting). */
+  let lastSpikeCount = 0;
+
   // Real online learning & prediction resolution state (honest: null until resolved!)
   let currentGeneration = Math.max(0, Math.floor(Number(generation) || 0));
   let localTicks = 0;
@@ -323,6 +359,39 @@ export function createNeuromorphicCortex({
   const OFF_REC = OFF_SENS + SWARM_PARAM_LAYOUT.ltcSensoryW;
   const OFF_OUT = OFF_REC + SWARM_PARAM_LAYOUT.ltcRecW;
   const OFF_BIAS = OFF_OUT + SWARM_PARAM_LAYOUT.readoutW;
+
+  /** Apply the thalamic attention gain to a sensory vector (bounded, no renormalisation). */
+  function applyThalamicGain(featureVector, gains) {
+    const out = new Float32Array(SENSORY_AXES.length);
+    const safe = Array.isArray(gains) || gains instanceof Float32Array ? gains : null;
+    for (let a = 0; a < SENSORY_AXES.length; a += 1) {
+      const g = safe && Number.isFinite(safe[a]) ? clamp(safe[a], 0.35, 2.2) : 1;
+      out[a] = clamp((Number(featureVector[a]) || 0) * g, -2, 2);
+    }
+    return out;
+  }
+
+  /**
+   * PHASE 6 — apply measured brain outputs to this cortex.
+   *   · plasticityGain raises/lowers the reward learning-rate of reservoir synapses
+   *   · riskDamp additionally damps the directional drive under arousal
+   *   · homeostatic scale multiplies the readout block (Turrigiano scaling)
+   * Nothing here grants execution: the security laws are written after this call.
+   */
+  function applyBrainInfluence(brainOut) {
+    if (!brainOut || !brainEnabled) return;
+    const boost = clamp(
+      (Number(brainOut.influence?.plasticityGain) || 1)
+        * clamp(brainCore.homeostaticScale(), 0.95, 1.05),
+      0.3,
+      1.9
+    );
+    // Bounded: plasticity remains inside the same safe envelope as the genome's.
+    genomeModulation = {
+      ...genomeModulation,
+      plasticityBoost: clamp(genomeModulation.plasticityBoost * boost, 0.4, 2.0)
+    };
+  }
 
   /**
    * CPU Float32 reference kernel for LIF Reservoir step.
@@ -525,7 +594,8 @@ export function createNeuromorphicCortex({
     dt = 1.0,
     learningEnabled = true,
     sparseMode = false,
-    gpuLifRunner = null
+    gpuLifRunner = null,
+    brainLearning = true
   } = {}) {
     const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
@@ -543,8 +613,33 @@ export function createNeuromorphicCortex({
       ? applyRealizedReward(Number(observedPrice), featureVector, learningEnabled)
       : null;
 
-    // 3. Sensory Event-Driven Spike Encoding
-    const encoded = encoder.encode(featureVector);
+    /*
+     * 2b. PHASE 6 — brain-inspired cognitive cycle.
+     * Runs BEFORE the spiking step so its thalamic attention gain and
+     * noradrenergic plasticity gate can modulate the very spikes produced this
+     * tick. It only ever sees a *resolved* realised return (null otherwise), so
+     * dopamine can never be trained on an outcome that did not happen.
+     */
+    if (brainEnabled) {
+      lastBrain = brainCore.step({
+        features: featureVector,
+        liquidState,
+        observedReturn: rewardOutcome ? rewardOutcome.realizedReturn : null,
+        volatilityForecast: sigmoid(rawHeadsLast[1] + anomalySurprise * 0.8),
+        anomalySurprise,
+        tauScale: genomeModulation.tauScale,
+        spikeCount: lastSpikeCount,
+        reservoirSize: res.size,
+        learningEnabled: Boolean(learningEnabled && brainLearning)
+      });
+    }
+
+    // 3. Sensory Event-Driven Spike Encoding (thalamic gain, attention-weighted)
+    const encoded = encoder.encode(
+      brainEnabled && lastBrain
+        ? applyThalamicGain(featureVector, lastBrain.thalamus.gains)
+        : featureVector
+    );
     const prevSpikes = new Float32Array(res.spikes);
 
     // 4. Spiking Reservoir Step (WebGPU Compute Shader when available, else CPU Float32)
@@ -653,7 +748,11 @@ export function createNeuromorphicCortex({
 
     // Risk aversion modulates over-aggressive directional drive when volatility is elevated
     const volatilityForecast = sigmoid(rawHeads[1] + anomalySurprise * 0.8);
-    const riskDamp = 1 - 0.35 * genomeModulation.riskAversion * volatilityForecast;
+    // PHASE 6: noradrenergic arousal (measured) adds a bounded extra risk damper.
+    const arousalDamp = brainEnabled && lastBrain
+      ? clamp(Number(lastBrain.influence?.riskDamp) || 1, 0.55, 1)
+      : 1;
+    const riskDamp = (1 - 0.35 * genomeModulation.riskAversion * volatilityForecast) * arousalDamp;
     const directionalDrive = clamp(tanh(rawHeads[0]) * riskDamp, -1, 1);
     const regimeProbs = softmax4(
       rawHeads[2],
@@ -662,6 +761,11 @@ export function createNeuromorphicCortex({
       rawHeads[5] + anomalySurprise * 1.35
     );
     const plasticityGate = sigmoid(rawHeads[6] + anomalySurprise * 0.9);
+
+    // PHASE 6: fold the measured brain output back into the cortex's learning rate.
+    applyBrainInfluence(lastBrain);
+    rawHeadsLast.set(rawHeads);
+    lastSpikeCount = spikeCount;
 
     let dominantRegime = 'meanRevert';
     let bestProb = -1;
@@ -744,6 +848,19 @@ export function createNeuromorphicCortex({
         lastReward: lastReward != null ? Number(lastReward.toFixed(4)) : null,
         rewardOutcome
       },
+      /* PHASE 6 — measured brain-inspired telemetry (null until the first cycle). */
+      brain: lastBrain,
+      brainSchema: BRAIN_CORE_SCHEMA,
+      gatedAction: lastBrain
+        ? {
+            action: lastBrain.basalGanglia.action,
+            rawAction: lastBrain.basalGanglia.rawAction,
+            decisive: lastBrain.basalGanglia.decisive,
+            confidence: lastBrain.basalGanglia.confidence,
+            freeEnergy: lastBrain.prediction.freeEnergy,
+            dominantRegime
+          }
+        : null,
       laws: {
         canExecute: false,
         canSign: false,
@@ -912,12 +1029,18 @@ export function createNeuromorphicCortex({
         neurogenesisEvents,
         prunedSynapsesTotal,
         sproutedSynapsesTotal
-      }
+      },
+      /* PHASE 6 — brain-inspired circuits travel with the cortex bundle. */
+      brain: brainCore.exportState()
     };
   }
 
+  /** True when the last `importSnapshot` also restored the Phase-6 circuits. */
+  let brainStateRestored = false;
+
   function importSnapshot(snap = {}) {
-    if (!snap || snap.schema !== CORTEX_SCHEMA) return false;
+    brainStateRestored = false;
+    if (!snap || !CORTEX_SCHEMA_COMPAT.includes(snap.schema)) return false;
     const N = clamp(Math.round(Number(snap.reservoirSize) || BASE_RESERVOIR_SIZE), 32, MAX_RESERVOIR_SIZE);
     if (
       !Array.isArray(snap.swarmWeights) ||
@@ -957,6 +1080,21 @@ export function createNeuromorphicCortex({
       prunedSynapsesTotal = Math.max(0, Math.floor(Number(snap.stats.prunedSynapsesTotal) || 0));
       sproutedSynapsesTotal = Math.max(0, Math.floor(Number(snap.stats.sproutedSynapsesTotal) || 0));
     }
+    // v2 bundles have no brain block: keep the freshly seeded circuits (honest,
+    // deterministic) rather than pretending a Phase-6 state existed.
+    if (snap.brain && typeof snap.brain === 'object') {
+      /*
+       * A brain block from a build with different circuit shapes is *not* loaded;
+       * the circuits keep the deterministic state they were born with and the
+       * import still succeeds (cortex weights are what the user is restoring).
+       * Reporting the mismatch is better than silently mistranslating tensors.
+       */
+      brainStateRestored = brainCore.importState(snap.brain);
+      // The *readout* of the last cognitive cycle is not part of the bundle (it
+      // describes an observation that already passed), so it stays null until the
+      // next real tick runs.
+      lastBrain = null;
+    }
     return true;
   }
 
@@ -971,6 +1109,12 @@ export function createNeuromorphicCortex({
         sproutedSynapsesTotal += sprouted;
       },
       getLiquidState: () => new Float32Array(liquidState),
+      getLastBrain: () => lastBrain,
+      wasBrainStateRestored: () => brainStateRestored,
+      isBrainEnabled: () => brainEnabled,
+      setBrainEnabled: (on) => { brainEnabled = on !== false; return brainEnabled; },
+      /** Sharp-wave-ripple consolidation over real resolved engrams. */
+      consolidate: ({ episodes = [], iterations = 6 } = {}) => brainCore.consolidate({ episodes, iterations }),
       getLastReadout: () => lastReadout,
       getStats: () => ({
         generation: currentGeneration,
@@ -988,6 +1132,11 @@ export function createNeuromorphicCortex({
 
   function reset() {
     encoder.reset();
+    brainCore.reset();
+    brainStateRestored = false;
+    lastBrain = null;
+    rawHeadsLast = new Float32Array(READOUT_DIM);
+    lastSpikeCount = 0;
     res = buildReservoirState(BASE_RESERVOIR_SIZE, seed);
     swarm.set(createCanonicalSwarmWeights(seed));
     liquidState.fill(0);
@@ -1011,6 +1160,11 @@ export function createNeuromorphicCortex({
     step,
     stepSync,
     getSwarmWeights,
+    setBrainEnabled: (on) => { brainEnabled = on !== false; return brainEnabled; },
+    isBrainEnabled: () => brainEnabled,
+    getBrainSnapshot: () => lastBrain,
+    wasBrainStateRestored: () => brainStateRestored,
+    consolidate: ({ episodes = [], iterations = 6 } = {}) => brainCore.consolidate({ episodes, iterations }),
     setSwarmWeights,
     setGenomeModulation,
     exportSnapshot,

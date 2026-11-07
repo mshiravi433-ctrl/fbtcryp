@@ -11,6 +11,7 @@
  *   → { id, type: 'evolve', candles, symbol? }
  *   → { id, type: 'syncGenome', weights, generation, fresh? }
  *   → { id, type: 'configure', paused?, swarmOptIn?, intentGenome? }
+ *   → { id, type: 'consolidate', iterations? }   (Phase 6 sharp-wave replay)
  *   → { id, type: 'reset' }
  *   → { id, type: 'dispose' }
  */
@@ -97,6 +98,7 @@ async function handleInit(id, msg) {
     generation: snap.generation,
     reservoirNeurons: snap.reservoirSize,
     engramCount: engrams.size(),
+    brainEnabled: cortex.isBrainEnabled(),
     stats: snap.stats
   });
 }
@@ -290,12 +292,47 @@ async function handleConfigure(id, msg) {
     paused: typeof msg.paused === 'boolean' ? msg.paused : undefined,
     swarmOptIn: typeof msg.swarmOptIn === 'boolean' ? msg.swarmOptIn : undefined
   });
+  if (typeof msg.brainEnabled === 'boolean') {
+    cortex.setBrainEnabled(msg.brainEnabled);
+  }
   let genomeResult = null;
   if (msg.intentGenome) {
     genomeResult = coupleIntentGenome(cortex, msg.intentGenome);
   }
   const gov = await governor.evaluate();
-  reply(id, { ok: true, governor: gov, genomeResult });
+  reply(id, {
+    ok: true,
+    governor: gov,
+    genomeResult,
+    brainEnabled: cortex.isBrainEnabled()
+  });
+}
+
+/**
+ * PHASE 6 — sharp-wave-ripple consolidation.
+ * Replays this device's real episodic engrams through the brain-inspired core and
+ * returns the *measured* free energy / basal-ganglia agreement / forward error
+ * before and after. No episode is invented: an empty bank reports NO_EPISODES.
+ */
+async function handleConsolidate(id, msg) {
+  await ensureReady(msg);
+  const episodes = engrams.exportEpisodes();
+  const iterations = Math.max(1, Math.min(30, Math.round(Number(msg.iterations) || 6)));
+  const consolidation = cortex.consolidate({ episodes, iterations });
+  if (consolidation.ok) {
+    await saveLocalCortexBundle({
+      cortexSnapshot: cortex.exportSnapshot(),
+      episodes: engrams.exportEpisodes()
+    });
+  }
+  reply(id, {
+    ok: Boolean(consolidation.ok),
+    type: 'consolidateResult',
+    consolidation,
+    readout: cortex._internals().getLastReadout(),
+    engramCount: engrams.size(),
+    governor: await governor.evaluate()
+  });
 }
 
 async function handleReset(id) {
@@ -321,6 +358,7 @@ self.onmessage = (event) => {
   else if (type === 'evolve') handleEvolve(id, msg).catch((e) => fail(id, e));
   else if (type === 'syncGenome') handleSyncGenome(id, msg).catch((e) => fail(id, e));
   else if (type === 'configure') handleConfigure(id, msg).catch((e) => fail(id, e));
+  else if (type === 'consolidate') handleConsolidate(id, msg).catch((e) => fail(id, e));
   else if (type === 'reset') handleReset(id).catch((e) => fail(id, e));
   else if (type === 'dispose') {
     gpuKernel?.dispose?.();

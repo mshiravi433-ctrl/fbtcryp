@@ -419,3 +419,62 @@
   background: #0284c7;
   box-shadow: none;
 }
+
+/* ── Phase 6 — Brain-Inspired Core blocks ────────────────────────────────── */
+
+.nmc-brain-card {
+  margin-top: 12px;
+  border-color: rgba(192, 132, 252, 0.28);
+}
+
+:root[data-theme='light'] .nmc-brain-card {
+  border-color: rgba(109, 40, 217, 0.24);
+}
+
+.nmc-section-head-tight {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--nmc-border-soft);
+}
+
+.nmc-neuromod-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.nmc-neuromod {
+  background: var(--nmc-card-2);
+  border: 1px solid var(--nmc-border-soft);
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nmc-dim {
+  color: var(--nmc-dim);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.nmc-note-strong {
+  color: var(--nmc-text);
+  background: var(--nmc-card-2);
+  border: 1px solid var(--nmc-border-soft);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nmc-orb[data-active='true'] {
+    animation: none;
+  }
+  .nmc-liquid-fill,
+  .nmc-neuron-cell,
+  .nmc-btn {
+    transition: none;
+  }
+}
