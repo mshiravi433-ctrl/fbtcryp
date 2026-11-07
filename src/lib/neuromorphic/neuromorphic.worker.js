@@ -12,6 +12,7 @@
  *   → { id, type: 'syncGenome', weights, generation, fresh? }
  *   → { id, type: 'configure', paused?, swarmOptIn?, intentGenome? }
  *   → { id, type: 'consolidate', iterations? }   (Phase 6 sharp-wave replay)
+ *   → { id, type: 'science', action, packet? }   (Phase 7 universal scientific memory)
  *   → { id, type: 'reset' }
  *   → { id, type: 'dispose' }
  */
@@ -31,13 +32,25 @@ import {
   wipeLocalCortexBundle
 } from './engramMemory.js';
 import { blendGlobalSwarmWeights, runLocalSwarmEvolution } from './swarmClient.js';
+import { createScientificMemory } from './scientificMemory.js';
 
 let cortex = null;
 let gpuKernel = null;
 let governor = null;
 let engrams = null;
+let science = null;
 let initialized = false;
 let ticksSinceSave = 0;
+
+/** One place that writes the whole sovereign bundle (cortex + engrams + science). */
+async function persistBundle() {
+  const res = await saveLocalCortexBundle({
+    cortexSnapshot: cortex.exportSnapshot(),
+    episodes: engrams.exportEpisodes(),
+    science: science ? science.toJSON() : null
+  });
+  return res;
+}
 
 function reply(id, payload) {
   self.postMessage({ id, ...payload });
@@ -55,6 +68,7 @@ async function ensureReady(msg = {}) {
   if (initialized && cortex) return;
   cortex = createNeuromorphicCortex();
   engrams = createEngramMemory();
+  science = createScientificMemory();
   governor = createHardwareGovernor({
     paused: Boolean(msg.paused),
     swarmOptIn: msg.swarmOptIn !== false
@@ -72,6 +86,12 @@ async function ensureReady(msg = {}) {
     restoredFromDisk = cortex.importSnapshot(saved.bundle.cortex);
     if (Array.isArray(saved.bundle.episodes)) {
       engrams = createEngramMemory(saved.bundle.episodes);
+    }
+    // Phase 7: restore the scientific memory when the bundle carries it. An old
+    // bundle without the block keeps its fresh, pre-specified family — nothing is
+    // guessed and no belief is invented.
+    if (saved.bundle.science && science) {
+      science.loadJSON(saved.bundle.science);
     }
   }
 
@@ -161,13 +181,19 @@ async function handleTick(id, msg) {
 
   const recall = engrams.recall(cortex._internals().getLiquidState(), { topK: 3 });
 
+  // Phase 7 — every resolved episode is scored against the PRE-SPECIFIED family.
+  // Provenance dedupe means re-ingesting the same engrams cannot inflate evidence.
+  const scienceIngest = science.ingestEngrams(engrams.exportEpisodes());
+  const scienceReport = science.report();
+  const sciencePrior = science.priorForCortex({
+    regime: readout.dominantRegime,
+    symbol: msg.symbol || feat.meta?.anchorSymbol || null
+  });
+
   ticksSinceSave += 1;
   if (ticksSinceSave >= 5) {
     ticksSinceSave = 0;
-    await saveLocalCortexBundle({
-      cortexSnapshot: cortex.exportSnapshot(),
-      episodes: engrams.exportEpisodes()
-    });
+    await persistBundle();
   }
 
   reply(id, {
@@ -176,6 +202,9 @@ async function handleTick(id, msg) {
     readout,
     structural,
     engramRecall: recall,
+    science: scienceReport,
+    scienceIngest,
+    sciencePrior,
     governor: gov,
     observationMeta: feat.meta
   });
@@ -240,16 +269,16 @@ async function handleEvolve(id, msg) {
     cortex.setSwarmWeights(evo.nextWeights, snapBefore.generation);
   }
 
-  await saveLocalCortexBundle({
-    cortexSnapshot: cortex.exportSnapshot(),
-    episodes: engrams.exportEpisodes()
-  });
+  const scienceIngest = science.ingestEngrams(engrams.exportEpisodes());
+  await persistBundle();
 
   const recall = engrams.recall(cortex._internals().getLiquidState(), { topK: 3 });
 
   reply(id, {
     ok: true,
     type: 'evolveResult',
+    science: science.report(),
+    scienceIngest,
     readout: lastReadout,
     structural: structuralSummary,
     evolution: {
@@ -279,10 +308,7 @@ async function handleSyncGenome(id, msg) {
     ? blendGlobalSwarmWeights(cortex.getSwarmWeights(), arr, { globalShare: 0.68 })
     : arr;
   cortex.setSwarmWeights(blended, gen);
-  await saveLocalCortexBundle({
-    cortexSnapshot: cortex.exportSnapshot(),
-    episodes: engrams.exportEpisodes()
-  });
+  await persistBundle();
   reply(id, { ok: true, generation: gen });
 }
 
@@ -319,26 +345,69 @@ async function handleConsolidate(id, msg) {
   const episodes = engrams.exportEpisodes();
   const iterations = Math.max(1, Math.min(30, Math.round(Number(msg.iterations) || 6)));
   const consolidation = cortex.consolidate({ episodes, iterations });
+  const scienceIngest = science.ingestEngrams(engrams.exportEpisodes());
   if (consolidation.ok) {
-    await saveLocalCortexBundle({
-      cortexSnapshot: cortex.exportSnapshot(),
-      episodes: engrams.exportEpisodes()
-    });
+    await persistBundle();
   }
   reply(id, {
     ok: Boolean(consolidation.ok),
     type: 'consolidateResult',
     consolidation,
+    science: science.report(),
+    scienceIngest,
     readout: cortex._internals().getLastReadout(),
     engramCount: engrams.size(),
     governor: await governor.evaluate()
   });
 }
 
+/**
+ * PHASE 7 — universal scientific memory actions.
+ *   report      → current beliefs (no new evidence)
+ *   ingest      → score this device's real engrams against the pre-specified family
+ *   exportPrior → portable packet (log BFs + counts, never raw data)
+ *   mergePrior  → accept another device's packet, deduplicated by packet hash
+ *   retire      → retire hypotheses whose declared expiry has passed
+ */
+async function handleScience(id, msg) {
+  await ensureReady(msg);
+  const action = String(msg.action || 'report');
+  if (action === 'ingest') {
+    const ingest = science.ingestEngrams(engrams.exportEpisodes());
+    await persistBundle();
+    reply(id, {
+      ok: true,
+      type: 'scienceResult',
+      action,
+      ingest,
+      science: science.report(),
+      engramCount: engrams.size()
+    });
+    return;
+  }
+  if (action === 'exportPrior') {
+    reply(id, { ok: true, type: 'scienceResult', action, packet: science.exportPrior() });
+    return;
+  }
+  if (action === 'mergePrior') {
+    const merged = science.mergePrior(msg.packet || null);
+    if (merged.ok) await persistBundle();
+    reply(id, { ok: merged.ok, type: 'scienceResult', action, merged, science: science.report() });
+    return;
+  }
+  if (action === 'retire') {
+    const retired = science.retireExpired();
+    reply(id, { ok: true, type: 'scienceResult', action, retired, science: science.report() });
+    return;
+  }
+  reply(id, { ok: true, type: 'scienceResult', action: 'report', science: science.report() });
+}
+
 async function handleReset(id) {
   await ensureReady({});
   cortex.reset();
   engrams.clear();
+  science.wipe();
   await wipeLocalCortexBundle();
   const gov = await governor.evaluate();
   reply(id, {
@@ -359,6 +428,7 @@ self.onmessage = (event) => {
   else if (type === 'syncGenome') handleSyncGenome(id, msg).catch((e) => fail(id, e));
   else if (type === 'configure') handleConfigure(id, msg).catch((e) => fail(id, e));
   else if (type === 'consolidate') handleConsolidate(id, msg).catch((e) => fail(id, e));
+  else if (type === 'science') handleScience(id, msg).catch((e) => fail(id, e));
   else if (type === 'reset') handleReset(id).catch((e) => fail(id, e));
   else if (type === 'dispose') {
     gpuKernel?.dispose?.();

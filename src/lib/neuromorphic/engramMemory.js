@@ -9,7 +9,19 @@
  *   · Cosine-similarity associative recall ("What happened the last time my
  *     liquid cortex fired in this exact pattern?")
  *   · True one-click sovereign wipe (`wipeLocalCortex`)
+ *
+ * PHASE 6/7 addition: the same checksummed envelope also carries the cortex
+ * snapshot (`cortex.v3`) and, when present, the Universal Scientific Memory
+ * state (`fbt.neuromorphic.science.v1`). The science block is OPTIONAL: an old
+ * bundle without it still loads, and a bundle whose science block would push
+ * the record past the local budget simply drops that block instead of silently
+ * exceeding the 256 KB cap.
  */
+
+/** Hard local budget for one cortex bundle (engrams + snapshot + science). */
+export const MAX_BUNDLE_CHARS = 240_000;
+/** Science records are capped separately so they can never starve the engrams. */
+export const MAX_SCIENCE_CHARS = 120_000;
 
 import { LIQUID_SIZE } from './cortexCore.js';
 import { containsSensitiveKeyOrPhrase } from '../intent-ai/orchestrator/redact.js';
@@ -156,7 +168,12 @@ function openIdb() {
   });
 }
 
-export async function saveLocalCortexBundle({ cortexSnapshot, episodes = [], savedAt = Date.now() } = {}) {
+export async function saveLocalCortexBundle({
+  cortexSnapshot,
+  episodes = [],
+  science = null,
+  savedAt = Date.now()
+} = {}) {
   if (!cortexSnapshot || typeof cortexSnapshot !== 'object') {
     return { ok: false, code: 'EMPTY_SNAPSHOT' };
   }
@@ -166,9 +183,26 @@ export async function saveLocalCortexBundle({ cortexSnapshot, episodes = [], sav
     cortex: cortexSnapshot,
     episodes: Array.isArray(episodes) ? episodes.slice(-MAX_EPISODES) : []
   };
-  const bodyJson = JSON.stringify(payloadObj);
+  let scienceDropped = false;
+  if (science && typeof science === 'object') {
+    const scienceJson = JSON.stringify(science);
+    if (scienceJson.length <= MAX_SCIENCE_CHARS) {
+      payloadObj.science = science;
+    } else {
+      scienceDropped = true;
+    }
+  }
+  let bodyJson = JSON.stringify(payloadObj);
+  if (bodyJson.length > MAX_BUNDLE_CHARS && payloadObj.science) {
+    delete payloadObj.science;
+    scienceDropped = true;
+    bodyJson = JSON.stringify(payloadObj);
+  }
   if (containsSensitiveKeyOrPhrase(bodyJson)) {
     return { ok: false, code: 'SECRET_INPUT_REJECTED' };
+  }
+  if (bodyJson.length > MAX_BUNDLE_CHARS) {
+    return { ok: false, code: 'BUNDLE_TOO_LARGE', bytes: bodyJson.length };
   }
   const checksum = fnv1aHex(bodyJson);
   const envelope = JSON.stringify({ checksum, payload: payloadObj });
@@ -182,12 +216,12 @@ export async function saveLocalCortexBundle({ cortexSnapshot, episodes = [], sav
       tx.onerror = () => reject(tx.error);
     });
     db.close();
-    return { ok: true, backend: 'indexeddb', bytes: envelope.length, checksum };
+    return { ok: true, backend: 'indexeddb', bytes: envelope.length, checksum, scienceDropped };
   } catch {
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(STORAGE_KEY, envelope);
-        return { ok: true, backend: 'localstorage', bytes: envelope.length, checksum };
+        return { ok: true, backend: 'localstorage', bytes: envelope.length, checksum, scienceDropped };
       }
     } catch { /* quota or SSR */ }
   }

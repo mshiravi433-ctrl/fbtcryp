@@ -478,3 +478,22 @@
     transition: none;
   }
 }
+
+/* ── Phase 7 — Universal Scientific Memory ──────────────────────────────── */
+
+.nmc-science-card {
+  margin-top: 12px;
+  border-color: rgba(56, 189, 248, 0.28);
+}
+
+:root[data-theme='light'] .nmc-science-card {
+  border-color: rgba(2, 132, 199, 0.22);
+}
+
+.nmc-science-card .nmc-regime-row + .nmc-regime-row {
+  margin-top: 6px;
+}
+
+.nmc-science-card .nmc-stat strong[data-testid='nmc-science-bf'] {
+  font-variant-numeric: tabular-nums;
+}
