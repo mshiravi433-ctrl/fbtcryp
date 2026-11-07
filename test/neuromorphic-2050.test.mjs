@@ -30,6 +30,7 @@ import {
   fnv1aHex,
   saveLocalCortexBundle
 } from '../src/lib/neuromorphic/engramMemory.js';
+import { LIQUID_SIZE } from '../src/lib/neuromorphic/cortexCore.js';
 import {
   MAX_DELTA_INF,
   MAX_DELTA_L2,
@@ -133,7 +134,9 @@ describe('Phase 1 — Event-Driven Spike Encoder, LIF+Liquid Cortex, WebGPU & Go
       emaTickMs: 1.4
     });
     assert.equal(turbo.mode, GOVERNOR_MODES.TURBO_SWARM);
-    assert.equal(turbo.swarmCloneBudget, 4);
+    // Phase 5/6 contract (hardwareGovernor.js header + policy): TURBO = K=8 clones,
+    // BALANCED = K=4. The assertion was stale at 4 and left the suite red on main.
+    assert.equal(turbo.swarmCloneBudget, 8);
 
     const lowBat = evaluateGovernorPolicy({
       webgpuAvailable: true,
@@ -200,13 +203,16 @@ describe('Phase 2 — Structural Neurogenesis, Synaptic Pruning, Genome Coupling
 
   it('imprints and associatively recalls episodic liquid engrams and blocks secrets in storage', async () => {
     const bank = createEngramMemory();
-    const stateBull = new Float32Array(24).fill(0.42);
-    const stateBear = new Float32Array(24).fill(-0.48);
+    // Engrams are indexed by the liquid state, whose width is LIQUID_SIZE (32).
+    // The literal 24 was a leftover from the 24-D Phase-1 liquid and made
+    // imprint() reject every vector (INVALID_VECTOR), so this test could never pass.
+    const stateBull = new Float32Array(LIQUID_SIZE).fill(0.42);
+    const stateBear = new Float32Array(LIQUID_SIZE).fill(-0.48);
 
     assert.equal(bank.imprint({ liquidState: stateBull, realizedReturn: 0.034, regime: 'trendUp', symbol: 'BTC' }).ok, true);
     assert.equal(bank.imprint({ liquidState: stateBear, realizedReturn: -0.029, regime: 'trendDown', symbol: 'BTC' }).ok, true);
 
-    const probe = new Float32Array(24).fill(0.40);
+    const probe = new Float32Array(LIQUID_SIZE).fill(0.40);
     const recall = bank.recall(probe, { topK: 2, minSimilarity: 0.8 });
     assert.equal(recall.matches.length, 1);
     assert.ok(recall.expectedReturn > 0.03);

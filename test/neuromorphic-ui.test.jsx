@@ -5,7 +5,9 @@ import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import NeuromorphicCortexPanel from '../src/components/ai/NeuromorphicCortexPanel.jsx';
 import NeuromorphicRoomStrip from '../src/components/ai/NeuromorphicRoomStrip.jsx';
 import {
+  consolidateLocalBrain,
   resetLocalNeuromorphicCortex,
+  setBrainCircuitsEnabled,
   tickNeuromorphicWithCandles
 } from '../src/lib/neuromorphic/useNeuromorphicCortex.js';
 
@@ -89,6 +91,57 @@ describe('Phase 4 — Neuromorphic 2050 UI Console & Chat Room Strip', () => {
     });
     expect(screen.getByTestId('nmc-directional-drive').textContent).not.toBe('—');
     expect(screen.getByTestId('nmc-hit-rate').textContent).toMatch(/%/);
+    expect(container.textContent).not.toMatch(/NaN|undefined|Infinity/);
+  });
+
+  it('renders the Phase-6 brain-inspired block from measured device telemetry only', async () => {
+    const candles = sampleCandles(26);
+    for (let end = 6; end <= 20; end += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await tickNeuromorphicWithCandles(candles.slice(0, end), { symbol: 'BTC' });
+    }
+
+    const { container } = render(<NeuromorphicCortexPanel locale="fa" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('nmc-brain-action')).toBeTruthy();
+    });
+
+    // Every Phase-6 surface is populated by the real cognitive cycle.
+    expect(screen.getByTestId('nmc-brain-action').textContent).not.toBe('—');
+    expect(screen.getByTestId('nmc-free-energy').textContent).toMatch(/انرژی آزاد|Free energy/);
+    expect(screen.getByTestId('nmc-wm-load').textContent).toMatch(/%/);
+    expect(screen.getByTestId('nmc-forward-error').textContent).not.toBe('—');
+    expect(screen.getByTestId('nmc-plasticity-window').textContent).not.toBe('—');
+    expect(screen.getByTestId('nmc-energy').textContent).not.toBe('—');
+    for (const key of ['dopamine', 'acetylcholine', 'norepinephrine', 'serotonin']) {
+      expect(screen.getByTestId(`nmc-neuromod-${key}`).textContent).toMatch(/%/);
+    }
+    expect(screen.getByTestId('nmc-pc-sensory')).toBeTruthy();
+    expect(screen.getByTestId('nmc-pc-associative')).toBeTruthy();
+    expect(screen.getByTestId('nmc-brain-toggle')).toBeTruthy();
+    expect(screen.getByTestId('nmc-consolidate-btn')).toBeTruthy();
+    expect(container.textContent).not.toMatch(/NaN|undefined|Infinity/);
+  });
+
+  it('reports NO_EPISODES honestly for consolidation and survives the brain on/off switch', async () => {
+    await resetLocalNeuromorphicCortex();
+
+    const empty = await consolidateLocalBrain({ iterations: 4 });
+    expect(empty.ok).toBe(false);
+    expect(empty.consolidation.code).toBe('NO_EPISODES');
+
+    const off = await setBrainCircuitsEnabled(false);
+    expect(off.ok).toBe(true);
+    const on = await setBrainCircuitsEnabled(true);
+    expect(on.ok).toBe(true);
+
+    const { container } = render(<NeuromorphicCortexPanel locale="en" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('neuromorphic-cortex-panel')).toBeTruthy();
+    });
+    // With the circuits on but no observation yet, the brain block must show
+    // em-dashes, never invented numbers.
+    expect(screen.getByTestId('nmc-brain-action').textContent).toBe('—');
     expect(container.textContent).not.toMatch(/NaN|undefined|Infinity/);
   });
 });

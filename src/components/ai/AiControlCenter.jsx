@@ -76,7 +76,7 @@ const STYLES = `
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: '🧠' },
-  { id: 'cortex2050', label: 'Cortex 2050', icon: '⚡' },
+  { id: 'cortex2050', label: 'Cortex 2050 + Brain', icon: '⚡' },
   { id: 'guardian', label: 'Guardian', icon: '🛡️' },
   { id: 'opportunities', label: 'Opportunities', icon: '💡' },
   { id: 'predictions', label: 'Predictions', icon: '📈' },
@@ -178,7 +178,7 @@ function AiControlCenterInner() {
 }
 
 const TAB_LABELS_FA = {
-  overview: 'نمای کلی', cortex2050: 'کورتکس ۲۰۵۰', guardian: 'محافظ', opportunities: 'فرصت‌ها',
+  overview: 'نمای کلی', cortex2050: 'کورتکس ۲۰۵۰ + مغزمحور', guardian: 'محافظ', opportunities: 'فرصت‌ها',
   predictions: 'پیش‌بینی', modules: 'ماژول‌ها'
 };
 

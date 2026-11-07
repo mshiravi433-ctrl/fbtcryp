@@ -1,5 +1,5 @@
 /**
- * FBT NEUROMORPHIC CORTEX 2050 — INTERACTIVE CONSOLE & MODAL
+ * FBT NEUROMORPHIC CORTEX 2050 — PHASE 6: INTERACTIVE CONSOLE & MODAL
  * ===========================================================================
  * Displays ONLY real, measured neuromorphic telemetry from the user's own
  * WebGPU / CPU worker and the Byzantine-resilient Swarm Coordinator:
@@ -7,12 +7,21 @@
  *   · Live Spike Raster reflects actual excitatory/inhibitory neuron indices
  *   · Liquid ODE bars reflect actual 32-D continuous-time state amplitudes
  *   · Interactive Walk-Forward Evolution runs on real live market candles
- *   · High Intelligence Expansion (Phase 5): 512-neuron reservoir, 32-D liquid, 12-dim readout
+ *   · Phase 6 brain-inspired telemetry: measured variational free energy and its
+ *     trend, the four neuromodulators, basal-ganglia action selection,
+ *     prefrontal working-memory load, cerebellar forward error, theta plasticity
+ *     window and an event-driven energy estimate — all from the running circuits.
+ *
+ * This file previously contained literal `\n` escape sequences inside its JSX
+ * (an editor artefact), which made the whole module unparsable: any page that
+ * imported it — AiControlCenter, IntentOpsPanels, the `/intent` header chip —
+ * failed to build. It is rewritten here from the same design, with the same
+ * `data-testid` contract, plus the Phase-6 block.
  */
 
 import { memo } from 'react';
 import { useNeuromorphicCortex } from '../../lib/neuromorphic/useNeuromorphicCortex.js';
-import { BASE_RESERVOIR_SIZE, MAX_RESERVOIR_SIZE, LIQUID_SIZE } from '../../lib/neuromorphic/cortexCore.js';
+import { BASE_RESERVOIR_SIZE, LIQUID_SIZE } from '../../lib/neuromorphic/cortexCore.js';
 import './neuromorphic-cortex.css';
 
 const REGIME_LABELS = Object.freeze({
@@ -29,6 +38,19 @@ const MODE_LABELS = Object.freeze({
   PAUSED: { fa: 'متوقف توسط کاربر', en: 'PAUSED' }
 });
 
+const ACTION_LABELS = Object.freeze({
+  LONG: { fa: 'خرید / LONG', en: 'LONG' },
+  FLAT: { fa: 'بی‌طرف / FLAT', en: 'FLAT' },
+  SHORT: { fa: 'فروش / SHORT', en: 'SHORT' }
+});
+
+const NEUROMODULATORS = Object.freeze([
+  { key: 'dopamine', fa: 'دوپامین (پاداش)', en: 'Dopamine (reward)' },
+  { key: 'acetylcholine', fa: 'استیل‌کولین (دقت)', en: 'Acetylcholine (precision)' },
+  { key: 'norepinephrine', fa: 'نوراپی‌نفرین (هشیاری)', en: 'Norepinephrine (arousal)' },
+  { key: 'serotonin', fa: 'سروتونین (افق)', en: 'Serotonin (horizon)' }
+]);
+
 function fmtPct(val, digits = 1) {
   if (val === null || val === undefined || !Number.isFinite(Number(val))) return '—';
   return `${(Number(val) * 100).toFixed(digits)}%`;
@@ -40,26 +62,28 @@ function fmtSigned(val, digits = 3) {
   return `${n >= 0 ? '+' : ''}${n.toFixed(digits)}`;
 }
 
+function fmtNum(val, digits = 4) {
+  if (val === null || val === undefined || !Number.isFinite(Number(val))) return '—';
+  return Number(val).toFixed(digits);
+}
+
 const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale = 'fa' }) {
   const isFa = !String(locale || 'fa').toLowerCase().startsWith('en');
   const nm = useNeuromorphicCortex({ autoSync: true });
 
   const readout = nm.readout;
+  const brain = readout?.brain || null;
   const gov = nm.governor;
   const swarm = nm.swarmStatus;
   const neuronsTotal = readout?.topology?.reservoirNeurons ?? nm.reservoirNeurons ?? BASE_RESERVOIR_SIZE;
   const grownCount = Math.max(0, neuronsTotal - BASE_RESERVOIR_SIZE);
 
-  // Phase 5: 512-neuron raster visualization (High Intelligence Expansion)
-  // We show up to 96 cells in the grid, but the underlying reservoir can be 512
-  // For the 512-neuron visualization, we slice the raster indices dynamically
   const excSet = new Set(readout?.spikes?.excitatoryIndices || []);
   const inhSet = new Set(readout?.spikes?.inhibitoryIndices || []);
-  
-  // Phase 5: 32-D Liquid ODE bars (High Intelligence Expansion)
+
   const liquidPreview = Array.isArray(readout?.liquidPreview) && readout.liquidPreview.length
     ? readout.liquidPreview
-    : new Array(LIQUID_SIZE).fill(0);
+    : new Array(Math.min(12, LIQUID_SIZE)).fill(0);
 
   const backendLabel = nm.backend === 'webgpu'
     ? `WebGPU WGSL${nm.adapterLabel ? ` · ${nm.adapterLabel}` : ''}`
@@ -73,6 +97,9 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
 
   const globalGen = nm.globalGeneration ?? swarm?.globalGeneration ?? null;
   const callerXp = swarm?.callerNode?.neuralXp ?? 0;
+  const brainOn = nm.brainEnabled !== false;
+
+  const consolidation = nm.consolidationLast;
 
   return (
     <section
@@ -83,23 +110,19 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
       {/* Hero Header */}
       <div className="nmc-hero">
         <div className="nmc-hero-title">
-          <div
-            className="nmc-orb"
-            data-active={Boolean(readout && !nm.paused)}
-            aria-hidden="true"
-          >
+          <div className="nmc-orb" data-active={Boolean(readout && !nm.paused)} aria-hidden="true">
             ⚡
           </div>
           <div className="nmc-hero-copy">
             <h3>
               {isFa
-                ? 'کورتکس نورومورفیک FBT · معماری ۲۰۵۰ (هوش بالا)'
-                : 'FBT Neuromorphic Cortex · 2050 Architecture (High Intelligence)'}
+                ? 'کورتکس نورومورفیک FBT · معماری ۲۰۵۰ + هستهٔ الهام‌گرفته از مغز'
+                : 'FBT Neuromorphic Cortex · 2050 + Brain-Inspired Core'}
             </h3>
             <p>
               {isFa
-                ? 'شبکهٔ عصبی پالس‌محور (LIF) با ۵۱۲ نورون + معادلات مایع ۳۲ بعدی (LTC) روی GPU/CPU دستگاه شما · هزینهٔ سرور GPU: صفر'
-                : 'Spiking LIF (512 neurons) + Liquid Time-Constant ODE (32-D) running on your device GPU/CPU · $0 Server GPU'}
+                ? 'شبکهٔ پالس‌محور LIF + مایعات ۳۲ بعدی + کدگذاری پیش‌بین + دوپامین/استیل‌کولین/نوراپی‌نفرین/سروتونین + عقده‌های قاعده‌ای + حافظهٔ کاری پیش‌پیشانی، روی GPU/CPU دستگاه شما · هزینهٔ سرور GPU: صفر'
+                : 'Spiking LIF + 32-D liquid ODE + predictive coding + dopamine/acetylcholine/norepinephrine/serotonin + basal ganglia + prefrontal working memory, on your own GPU/CPU · $0 server GPU'}
             </p>
           </div>
         </div>
@@ -116,10 +139,18 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
           <span className="nmc-pill nmc-pill-mint" data-testid="nmc-xp-pill">
             {isFa ? `امتیاز محاسباتی: ${callerXp} XP` : `Compute XP: ${callerXp}`}
           </span>
+          <span
+            className={`nmc-pill ${brainOn ? 'nmc-pill-amber' : ''}`}
+            data-testid="nmc-brain-pill"
+          >
+            {brainOn
+              ? (isFa ? 'هستهٔ مغزمحور: روشن' : 'Brain core: ON')
+              : (isFa ? 'هستهٔ مغزمحور: خاموش (فاز ۵)' : 'Brain core: OFF (Phase 5)')}
+          </span>
         </div>
       </div>
 
-      {/* Live Cortical Spike Raster & 32-D Liquid State */}
+      {/* Live Cortical Spike Raster & Liquid State */}
       <div className="nmc-raster-card">
         <div className="nmc-section-head">
           <strong>
@@ -138,7 +169,6 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
 
         <div className="nmc-neuron-grid" aria-label={isFa ? 'شبکه نورون‌ها' : 'Neuron grid'}>
           {Array.from({ length: Math.min(96, neuronsTotal) }, (_, idx) => {
-            // Show newest grown neurons in the last slots when neurogenesis occurred
             const neuronIndex = grownCount > 0 && idx >= 72
               ? BASE_RESERVOIR_SIZE + ((idx - 72) % grownCount)
               : idx;
@@ -172,7 +202,7 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
         </div>
       </div>
 
-      {/* 3-Speed Self-Evolution & Hardware Telemetry */}
+      {/* Telemetry */}
       <div className="nmc-grid-4">
         <div className="nmc-stat">
           <span>{isFa ? 'فرماندار سخت‌افزار کاربر' : 'Hardware Governor'}</span>
@@ -187,7 +217,7 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
         </div>
 
         <div className="nmc-stat">
-          <span>{isFa ? 'خودارتقایی ساختاری (فاز ۲)' : 'Structural Topology'}</span>
+          <span>{isFa ? 'خودارتقایی ساختاری' : 'Structural Topology'}</span>
           <strong data-testid="nmc-topology-neurons">
             {isFa ? `${neuronsTotal} نورون` : `${neuronsTotal} Neurons`}
             {grownCount > 0 ? ` (+${grownCount})` : ''}
@@ -216,7 +246,7 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
         </div>
 
         <div className="nmc-stat">
-          <span>{isFa ? 'کلونی ضدتقلب (فاز ۳)' : 'Byzantine Swarm'}</span>
+          <span>{isFa ? 'کلونی ضدتقلب' : 'Byzantine Swarm'}</span>
           <strong data-testid="nmc-swarm-nodes">
             {swarm
               ? (isFa ? `${swarm.activeNodes24h} گره فعال` : `${swarm.activeNodes24h} Active Nodes`)
@@ -232,11 +262,166 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
         </div>
       </div>
 
-      {/* Cognitive Readout when market observations have been fed */}
+      {/* ── Phase 6 — Brain-Inspired Core ─────────────────────────────────── */}
+      <div className="nmc-raster-card nmc-brain-card">
+        <div className="nmc-section-head">
+          <strong>
+            {isFa
+              ? 'هستهٔ شناختی الهام‌گرفته از مغز (Brain-Inspired)'
+              : 'Brain-Inspired Cognitive Core'}
+          </strong>
+          <small data-testid="nmc-free-energy">
+            {brain
+              ? (isFa
+                  ? `انرژی آزاد: ${fmtNum(brain.prediction.freeEnergy)} · روند: ${fmtSigned(brain.prediction.trend, 4)}`
+                  : `Free energy: ${fmtNum(brain.prediction.freeEnergy)} · trend: ${fmtSigned(brain.prediction.trend, 4)}`)
+              : (isFa ? 'در انتظار تکمیل اولین چرخهٔ شناختی…' : 'Waiting for the first cognitive cycle…')}
+          </small>
+        </div>
+
+        <div className="nmc-grid-4">
+          <div className="nmc-stat">
+            <span>{isFa ? 'تصمیم عقده‌های قاعده‌ای' : 'Basal-ganglia decision'}</span>
+            <strong data-testid="nmc-brain-action">
+              {brain
+                ? (isFa ? ACTION_LABELS[brain.basalGanglia.action]?.fa : ACTION_LABELS[brain.basalGanglia.action]?.en)
+                : '—'}
+            </strong>
+            <small>
+              {brain
+                ? (isFa
+                    ? `اطمینان ${fmtPct(brain.basalGanglia.confidence, 1)} · تفاوت Go/NoGo ${fmtNum(brain.basalGanglia.margin, 3)}`
+                    : `Confidence ${fmtPct(brain.basalGanglia.confidence, 1)} · Go/NoGo margin ${fmtNum(brain.basalGanglia.margin, 3)}`)
+                : (isFa ? 'انتخاب عمل فقط پس از دادهٔ واقعی' : 'Action only from real observations')}
+            </small>
+          </div>
+
+          <div className="nmc-stat">
+            <span>{isFa ? 'حافظهٔ کاری پیش‌پیشانی' : 'Prefrontal working memory'}</span>
+            <strong data-testid="nmc-wm-load">{brain ? fmtPct(brain.workingMemory.load, 0) : '—'}</strong>
+            <small>
+              {brain
+                ? (isFa
+                    ? `${brain.workingMemory.filled} از ${brain.workingMemory.slots} اسلات · شباهت بازخوانی ${fmtNum(brain.workingMemory.recallSimilarity, 3)}`
+                    : `${brain.workingMemory.filled} of ${brain.workingMemory.slots} slots · recall similarity ${fmtNum(brain.workingMemory.recallSimilarity, 3)}`)
+                : (isFa ? 'نوشتن با هشیاری، خواندن با شباهت' : 'Gated write, similarity read')}
+            </small>
+          </div>
+
+          <div className="nmc-stat">
+            <span>{isFa ? 'مدل پیش‌روی مخچه' : 'Cerebellar forward model'}</span>
+            <strong data-testid="nmc-forward-error">
+              {brain ? fmtNum(brain.cerebellum.forwardErrorEma, 4) : '—'}
+            </strong>
+            <small>
+              {brain
+                ? (isFa
+                    ? `اصلاح Smith ${fmtNum(brain.cerebellum.correctionGain, 3)} · ${brain.cerebellum.updates} به‌روزرسانی`
+                    : `Smith correction ${fmtNum(brain.cerebellum.correctionGain, 3)} · ${brain.cerebellum.updates} updates`)
+                : (isFa ? 'خطای پیش‌بینی حالت بعدی' : 'Next-state prediction error')}
+            </small>
+          </div>
+
+          <div className="nmc-stat">
+            <span>{isFa ? 'پنجرهٔ پلاستیسیتی تتا-گاما' : 'Theta–gamma plasticity'}</span>
+            <strong data-testid="nmc-plasticity-window">
+              {brain
+                ? (brain.oscillation.plasticityWindowOpen
+                    ? (isFa ? 'باز' : 'OPEN')
+                    : (isFa ? 'بسته' : 'CLOSED'))
+                : '—'}
+            </strong>
+            <small>
+              {brain
+                ? (isFa
+                    ? `فاز ${brain.oscillation.thetaPhase} · ${brain.oscillation.gammaBursts} انفجار گاما · بهره ${fmtNum(brain.influence.plasticityGain, 3)}`
+                    : `Phase ${brain.oscillation.thetaPhase} · ${brain.oscillation.gammaBursts} gamma bursts · gain ${fmtNum(brain.influence.plasticityGain, 3)}`)
+                : (isFa ? 'قفل زمانی یادگیری سیناپس' : 'Synaptic learning time-lock')}
+            </small>
+          </div>
+        </div>
+
+        {/* Neuromodulators */}
+        <div className="nmc-neuromod-grid" aria-label={isFa ? 'نورومدولاتورها' : 'Neuromodulators'}>
+          {NEUROMODULATORS.map(({ key, fa, en }) => {
+            const val = brain?.neuromodulators?.[key];
+            const pct = val != null && Number.isFinite(Number(val))
+              ? Math.round(Number(val) * 100)
+              : 0;
+            return (
+              <div key={key} className="nmc-neuromod" data-testid={`nmc-neuromod-${key}`}>
+                <div className="nmc-regime-top">
+                  <span>{isFa ? fa : en}</span>
+                  <strong>{brain ? fmtPct(val, 0) : '—'}</strong>
+                </div>
+                <div className="nmc-bar-track">
+                  <div className="nmc-bar-fill" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="nmc-section-head nmc-section-head-tight">
+          <strong>{isFa ? 'پیش‌بینی سلسله‌مراتبی (Predictive Coding)' : 'Hierarchical prediction'}</strong>
+          <small>
+            {brain
+              ? (isFa
+                  ? `پیچیدگی ${fmtNum(brain.prediction.complexity, 4)} · ارزیابی ${fmtNum(brain.prediction.freeEnergyEma)} · رانش از چرخهٔ اول ${fmtSigned(
+                      brain.prediction.freeEnergyTick1 != null && brain.prediction.freeEnergy
+                        ? brain.prediction.freeEnergy - brain.prediction.freeEnergyTick1
+                        : null,
+                      4
+                    )}`
+                  : `Complexity ${fmtNum(brain.prediction.complexity, 4)} · EMA ${fmtNum(brain.prediction.freeEnergyEma)} · drift from first cycle ${fmtSigned(
+                      brain.prediction.freeEnergyTick1 != null && brain.prediction.freeEnergy
+                        ? brain.prediction.freeEnergy - brain.prediction.freeEnergyTick1
+                        : null,
+                      4
+                    )}`)
+              : (isFa ? 'دو سطح خطای پیش‌بینی با دقت یادگیرنده' : 'Two error levels with learned precision')}
+          </small>
+        </div>
+
+        <div className="nmc-neuromod-grid">
+          {(brain?.prediction?.levels || []).map((level) => (
+            <div key={level.name} className="nmc-neuromod" data-testid={`nmc-pc-${level.name}`}>
+              <div className="nmc-regime-top">
+                <span>
+                  {level.name === 'sensory'
+                    ? (isFa ? 'سطح حسی (ε₁)' : 'Sensory (ε₁)')
+                    : (isFa ? 'سطح انجمنی (ε₂)' : 'Associative (ε₂)')}
+                </span>
+                <strong>{fmtNum(level.error, 4)}</strong>
+              </div>
+              <div className="nmc-bar-track">
+                <div
+                  className="nmc-bar-fill"
+                  style={{ width: `${Math.min(100, Math.round(Number(level.error) * 100))}%` }}
+                />
+              </div>
+              <small className="nmc-dim">
+                {isFa
+                  ? `دقت π=${fmtNum(level.precision, 2)} · انرژی ${fmtNum(level.energy, 5)}`
+                  : `precision π=${fmtNum(level.precision, 2)} · energy ${fmtNum(level.energy, 5)}`}
+              </small>
+            </div>
+          ))}
+          {!brain ? (
+            <p className="nmc-note">
+              {isFa
+                ? 'هیچ عددی از پیش نوشته نشده؛ این بخش با اولین مشاهدهٔ واقعی بازار پر می‌شود.'
+                : 'Nothing is pre-filled — this block fills on the first real market observation.'}
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Cognitive Readout & Market Regime */}
       <div className="nmc-raster-card">
         <div className="nmc-section-head">
           <strong>
-            {isFa ? 'خوانش شناختی و رژیم لحظه‌ای بازار (۱۲ سر خوانش: پول هوشمند، نهنگ‌ها، کلان، سهام، فارکس، کالا، RWA، میان‌سرمایه، نیت، دروازه تطبیقی)' : 'Cognitive Readout & Liquid Market Regime (12 Heads: Smart Money, Whales, Macro, Stocks, Forex, Commodities, RWA, Cross-Asset, Intent, Adaptive Gate)'}
+            {isFa ? 'خوانش شناختی و رژیم لحظه‌ای بازار (۱۲ سر خوانش)' : 'Cognitive Readout & Live Market Regime (12 Heads)'}
           </strong>
           <small>
             {readout
@@ -257,7 +442,7 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
           </div>
           <div className="nmc-stat">
             <span>{isFa ? 'پیش‌بینی تلاطم (نوسان)' : 'Volatility Forecast'}</span>
-            <strong>{readout ? fmtPct(readout.volatilityForecast, 1) : '—'}</strong>
+            <strong data-testid="nmc-volatility">{readout ? fmtPct(readout.volatilityForecast, 1) : '—'}</strong>
             <small>{isFa ? 'تعدیل خودکار ریسک ژنوم' : 'Modulated by Intent Genome'}</small>
           </div>
           <div className="nmc-stat">
@@ -269,6 +454,19 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
                     ? `بازده مشابه گذشته: ${fmtSigned(nm.engramRecall.expectedReturn * 100, 2)}%`
                     : `Past analog return: ${fmtSigned(nm.engramRecall.expectedReturn * 100, 2)}%`)
                 : (isFa ? 'ذخیرهٔ الگوهای واقعی در دستگاه' : 'Stored locally in IndexedDB')}
+            </small>
+          </div>
+          <div className="nmc-stat">
+            <span>{isFa ? 'مصرف محاسباتی اندازه‌گیری‌شده' : 'Measured compute'}</span>
+            <strong data-testid="nmc-energy">
+              {brain ? `${brain.energy.synapticOps.toLocaleString()}` : '—'}
+            </strong>
+            <small>
+              {brain
+                ? (isFa
+                    ? `رویداد سیناپسی · ≈${brain.energy.estimatedFemtoJoules} fJ (تخمین)`
+                    : `synaptic events · ≈${brain.energy.estimatedFemtoJoules} fJ (estimate)`)
+                : (isFa ? 'شمارش واقعی رویدادها، نه تخمین مدل' : 'Counted events, not a model guess')}
             </small>
           </div>
         </div>
@@ -285,10 +483,38 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
                   <div className="nmc-bar-fill" style={{ width: `${Math.round((prob || 0) * 100)}%` }} />
                 </div>
               </div>
-            ))}\n          </div>
-        ) : null}\n      </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
 
-      {/* Evolution Feedback Banner */}\n      {nm.evolutionLast ? (\n        <p className="nmc-note" data-testid="nmc-evolution-summary">\n          {isFa\n            ? `✦ آخرین چرخهٔ خودتکاملی (${nm.evolutionLast.symbol}): ${nm.evolutionLast.resolvedSteps} کندل واقعی سنجیده شد · نرخ اصابت برنده: ${fmtPct(nm.evolutionLast.winnerHitRate, 1)} · ${\n                nm.evolutionLast.swarmUpload?.crystallized\n                  ? `نسل جهانی جدید #${nm.evolutionLast.swarmUpload.globalGeneration} متبلور شد!`\n                  : nm.evolutionLast.improved\n                    ? 'وزن‌های کورتکس دستگاه شما ارتقا یافت.'\n                    : 'نسخهٔ فعلی از جهش‌های جدید دقیق‌تر بود و حفظ شد.'\n              }`\n            : `✦ Last self-evolution pulse (${nm.evolutionLast.symbol}): ${nm.evolutionLast.resolvedSteps} real candles scored · Winner hit rate: ${fmtPct(nm.evolutionLast.winnerHitRate, 1)} · ${\n                nm.evolutionLast.swarmUpload?.crystallized\n                  ? `Global Generation #${nm.evolutionLast.swarmUpload.globalGeneration} crystallized!`\n                  : nm.evolutionLast.improved\n                    ? 'Local cortex synapses upgraded.'\n                    : 'Current cortex outperformed mutations and was retained.'\n              }`}
+      {/* Consolidation banner (measured) */}
+      {consolidation ? (
+        <p className="nmc-note nmc-note-strong" data-testid="nmc-consolidation-summary">
+          {isFa
+            ? `☾ تثبیت موج‌تیز-ریپل: ${consolidation.replayed} خاطره بازپخش شد · انرژی آزاد ${consolidation.freeEnergyBefore} → ${consolidation.freeEnergyAfter} (${consolidation.freeEnergyDropPct}%) · خطای مخچه ${consolidation.forwardErrorBefore ?? '—'} → ${consolidation.forwardErrorAfter ?? '—'} · توافق تصمیم ${fmtPct(consolidation.bgAgreementBefore, 0)} → ${fmtPct(consolidation.bgAgreementAfter, 0)}`
+            : `☾ Sharp-wave-ripple consolidation: ${consolidation.replayed} engrams replayed · free energy ${consolidation.freeEnergyBefore} → ${consolidation.freeEnergyAfter} (${consolidation.freeEnergyDropPct}%) · cerebellar error ${consolidation.forwardErrorBefore ?? '—'} → ${consolidation.forwardErrorAfter ?? '—'} · decision agreement ${fmtPct(consolidation.bgAgreementBefore, 0)} → ${fmtPct(consolidation.bgAgreementAfter, 0)}`}
+        </p>
+      ) : null}
+
+      {/* Evolution Feedback Banner */}
+      {nm.evolutionLast ? (
+        <p className="nmc-note" data-testid="nmc-evolution-summary">
+          {isFa
+            ? `✦ آخرین چرخهٔ خودتکاملی (${nm.evolutionLast.symbol}): ${nm.evolutionLast.resolvedSteps} کندل واقعی سنجیده شد · نرخ اصابت برنده: ${fmtPct(nm.evolutionLast.winnerHitRate, 1)} · ${
+                nm.evolutionLast.swarmUpload?.crystallized
+                  ? `نسل جهانی جدید #${nm.evolutionLast.swarmUpload.globalGeneration} متبلور شد!`
+                  : nm.evolutionLast.improved
+                    ? 'وزن‌های کورتکس دستگاه شما ارتقا یافت.'
+                    : 'نسخهٔ فعلی از جهش‌های جدید دقیق‌تر بود و حفظ شد.'
+              }`
+            : `✦ Last self-evolution pulse (${nm.evolutionLast.symbol}): ${nm.evolutionLast.resolvedSteps} real candles scored · Winner hit rate: ${fmtPct(nm.evolutionLast.winnerHitRate, 1)} · ${
+                nm.evolutionLast.swarmUpload?.crystallized
+                  ? `Global Generation #${nm.evolutionLast.swarmUpload.globalGeneration} crystallized!`
+                  : nm.evolutionLast.improved
+                    ? 'Local cortex synapses upgraded.'
+                    : 'Current cortex outperformed mutations and was retained.'
+              }`}
         </p>
       ) : null}
 
@@ -310,6 +536,32 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
           {nm.evolving
             ? (isFa ? '⚡ در حال تکامل روی GPU/CPU شما…' : '⚡ Evolving on your GPU/CPU…')
             : (isFa ? '⚡ اجرای تکامل زنده روی کندل‌های واقعی بازار' : '⚡ Evolve Now on Live Market Candles')}
+        </button>
+
+        <button
+          type="button"
+          className="nmc-btn"
+          data-testid="nmc-consolidate-btn"
+          disabled={Boolean(nm.paused) || Number(nm.engramCount) <= 0}
+          onClick={() => { void nm.consolidateBrain({ iterations: 6 }); }}
+          title={
+            isFa
+              ? 'بازپخش خاطره‌های واقعی دستگاه و تثبیت آن‌ها (خواب موج‌تیز-ریپل)'
+              : 'Replay this device’s real engrams (sharp-wave-ripple sleep)'
+          }
+        >
+          {isFa ? '☾ تثبیت حافظه (خواب)' : '☾ Consolidate memory (sleep)'}
+        </button>
+
+        <button
+          type="button"
+          className="nmc-btn"
+          data-testid="nmc-brain-toggle"
+          onClick={() => { void nm.setBrainEnabled(!brainOn); }}
+        >
+          {brainOn
+            ? (isFa ? '✓ هستهٔ مغزمحور: روشن' : '✓ Brain core: ON')
+            : (isFa ? '○ هستهٔ مغزمحور: خاموش (فاز ۵)' : '○ Brain core: OFF (Phase 5)')}
         </button>
 
         <button
@@ -346,7 +598,7 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
 
       <p className="nmc-note">
         {isFa
-          ? 'مرز امنیتی سخت: کورتکس نورومورفیک هیچ دسترسی به کلید خصوصی ندارد، هیچ تراکنشی را امضا یا اجرا نمی‌کند (canExecute: false)، و صرفاً تحلیل و تکامل هوش را روی سخت‌افزار خود شما انجام می‌دهد.'
+          ? 'مرز امنیتی سخت: کورتکس نورومورفیک هیچ دسترسی به کلید خصوصی ندارد، هیچ تراکنشی را امضا یا اجرا نمی‌کند (canExecute: false)، و صرفاً تحلیل و تکامل هوش را روی سخت‌افزار خود شما انجام می‌دهد. خروجی این پنل تحلیل اطلاعاتی است، نه توصیهٔ مالی.'
           : 'Hard security boundary: the neuromorphic cortex never accesses private keys and never signs or executes transactions (canExecute: false). Informational intelligence only, not financial advice.'}
       </p>
     </section>
@@ -366,11 +618,11 @@ export function NeuromorphicModal({ open, onClose, locale = 'fa' }) {
       <div className="iaos-panel" data-testid="intent-ai-neuromorphic-modal">
         <div className="iaos-panel-head">
           <div>
-            <h2>{isFa ? 'کورتکس نورومورفیک FBT · ۲۰۵۰ (هوش بالا)' : 'FBT Neuromorphic Cortex · 2050 (High Intelligence)'}</h2>
+            <h2>{isFa ? 'کورتکس نورومورفیک FBT · ۲۰۵۰ + مغزمحور' : 'FBT Neuromorphic Cortex · 2050 + Brain-Inspired'}</h2>
             <small>
               {isFa
-                ? 'پردازش و خودتکاملی زنده روی GPU و CPU دستگاه شما (۵۱۲ نورون، ۳۲ بعدی) بدون سرور GPU'
-                : 'Self-evolving Spiking (512 neurons) + Liquid (32-D) Intelligence on your device GPU & CPU'}
+                ? 'پردازش و خودتکاملی زنده روی GPU و CPU دستگاه شما با کدگذاری پیش‌بین و نورومدولاتورها — بدون سرور GPU'
+                : 'Self-evolving spiking + liquid + predictive-coding intelligence on your device GPU & CPU'}
             </small>
           </div>
           <button type="button" className="iaos-close" onClick={onClose} aria-label="Close">✕</button>
@@ -381,6 +633,6 @@ export function NeuromorphicModal({ open, onClose, locale = 'fa' }) {
       </div>
     </div>
   );
-});
+}
 
 export default NeuromorphicCortexPanel;

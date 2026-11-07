@@ -8,6 +8,7 @@
  *   GET  /neuromorphic/genome   Latest 1,159-parameter global genome (bandwidth-aware)
  *   POST /neuromorphic/delta    Submit verified on-device walk-forward synaptic delta
  *   POST /neuromorphic/infer    Deterministic readout using current global genome
+ *   GET  /neuromorphic/brain    Phase 6 brain-inspired evidence probe (measured)
  *
  * Owner derivation matches `server/aiOrchestratorRoutes.js` (`x-fbt-device`
  * salted SHA-256 → `dev:...`) so zero raw device IDs or IPs are stored in the
@@ -20,6 +21,7 @@ import {
   NEUROMORPHIC_SWARM_SCHEMA,
   getNeuromorphicSwarm
 } from './aiNeuromorphic.js';
+import { getBrainInspiredReport } from './aiNeuromorphicBrain.js';
 
 export const NEUROMORPHIC_ROUTES_SCHEMA = 'fbt.neuromorphic.routes.v1';
 
@@ -75,6 +77,16 @@ export function createNeuromorphicRouter({ swarm = null, log = () => {} } = {}) 
       res.status(400);
     }
     return out;
+  }));
+
+  /**
+   * Phase 6 — measured brain-inspired evidence.
+   * Deterministic, cached for 60s, zero server GPU, no execution path.
+   */
+  router.get('/neuromorphic/brain', wrap(async (req) => {
+    const ticksRaw = Number(req.query?.ticks);
+    const ticks = Number.isFinite(ticksRaw) && ticksRaw > 0 ? Math.min(240, Math.max(8, ticksRaw)) : 60;
+    return getBrainInspiredReport({ ticks });
   }));
 
   router.post('/neuromorphic/infer', wrap(async (req, res) => {

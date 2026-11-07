@@ -3,7 +3,9 @@
  * ===========================================================================
  * Feeds the live candles or market pulse ALREADY fetched by `ChatMarketRoom` /
  * `ChatTokenRoom` into the user's on-device WebGPU/CPU Neuromorphic Cortex —
- * zero extra HTTP market requests — and renders a live 2050 synaptic strip.
+ * zero extra HTTP market requests — and renders a live 2050 synaptic strip,
+ * including the Phase-6 brain-inspired decision (action + measured free energy)
+ * when the circuits have produced one.
  */
 
 import { memo, useEffect, useRef } from 'react';
@@ -56,6 +58,10 @@ const NeuromorphicRoomStrip = memo(function NeuromorphicRoomStrip({
   const backendTag = nm.backend === 'webgpu' ? 'WebGPU' : 'CPU';
   const gen = nm.globalGeneration ?? nm.localGeneration ?? 0;
   const driveStr = `${r.directionalDrive >= 0 ? '+' : ''}${r.directionalDrive.toFixed(2)}`;
+  const brain = r.brain || null;
+  const feStr = brain && Number.isFinite(brain.prediction?.freeEnergy)
+    ? brain.prediction.freeEnergy.toFixed(3)
+    : null;
 
   return (
     <div className="nmc-strip" data-testid="neuromorphic-room-strip" dir={isFa ? 'rtl' : 'ltr'}>
@@ -76,6 +82,12 @@ const NeuromorphicRoomStrip = memo(function NeuromorphicRoomStrip({
         <span className="nmc-strip-kv">
           {isFa ? 'نورون:' : 'Neurons:'} <b>{r.topology.reservoirNeurons}</b>
         </span>
+        {brain ? (
+          <span className="nmc-strip-kv" data-testid="nmc-strip-brain">
+            {isFa ? 'تصمیم مغزمحور:' : 'Brain action:'} <b>{brain.basalGanglia.action}</b>
+            {feStr ? <small> · F={feStr}</small> : null}
+          </span>
+        ) : null}
       </div>
       <small>{r.latencyMs} ms</small>
     </div>
