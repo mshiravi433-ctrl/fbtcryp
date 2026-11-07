@@ -5,13 +5,14 @@
  * WebGPU / CPU worker and the Byzantine-resilient Swarm Coordinator:
  *   · Unmeasured values render `—` (never pre-filled fake percentages)
  *   · Live Spike Raster reflects actual excitatory/inhibitory neuron indices
- *   · Liquid ODE bars reflect actual 24-D continuous-time state amplitudes
+ *   · Liquid ODE bars reflect actual 32-D continuous-time state amplitudes
  *   · Interactive Walk-Forward Evolution runs on real live market candles
+ *   · High Intelligence Expansion (Phase 5): 512-neuron reservoir, 32-D liquid, 12-dim readout
  */
 
 import { memo } from 'react';
 import { useNeuromorphicCortex } from '../../lib/neuromorphic/useNeuromorphicCortex.js';
-import { BASE_RESERVOIR_SIZE } from '../../lib/neuromorphic/cortexCore.js';
+import { BASE_RESERVOIR_SIZE, MAX_RESERVOIR_SIZE, LIQUID_SIZE } from '../../lib/neuromorphic/cortexCore.js';
 import './neuromorphic-cortex.css';
 
 const REGIME_LABELS = Object.freeze({
@@ -49,11 +50,16 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
   const neuronsTotal = readout?.topology?.reservoirNeurons ?? nm.reservoirNeurons ?? BASE_RESERVOIR_SIZE;
   const grownCount = Math.max(0, neuronsTotal - BASE_RESERVOIR_SIZE);
 
+  // Phase 5: 512-neuron raster visualization (High Intelligence Expansion)
+  // We show up to 96 cells in the grid, but the underlying reservoir can be 512
+  // For the 512-neuron visualization, we slice the raster indices dynamically
   const excSet = new Set(readout?.spikes?.excitatoryIndices || []);
   const inhSet = new Set(readout?.spikes?.inhibitoryIndices || []);
+  
+  // Phase 5: 32-D Liquid ODE bars (High Intelligence Expansion)
   const liquidPreview = Array.isArray(readout?.liquidPreview) && readout.liquidPreview.length
     ? readout.liquidPreview
-    : new Array(12).fill(0);
+    : new Array(LIQUID_SIZE).fill(0);
 
   const backendLabel = nm.backend === 'webgpu'
     ? `WebGPU WGSL${nm.adapterLabel ? ` · ${nm.adapterLabel}` : ''}`
@@ -87,13 +93,13 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
           <div className="nmc-hero-copy">
             <h3>
               {isFa
-                ? 'کورتکس نورومورفیک FBT · معماری ۲۰۵۰'
-                : 'FBT Neuromorphic Cortex · 2050 Architecture'}
+                ? 'کورتکس نورومورفیک FBT · معماری ۲۰۵۰ (هوش بالا)'
+                : 'FBT Neuromorphic Cortex · 2050 Architecture (High Intelligence)'}
             </h3>
             <p>
               {isFa
-                ? 'شبکهٔ عصبی پالس‌محور (LIF) + معادلات مایع (LTC) روی GPU/CPU دستگاه شما · هزینهٔ سرور GPU: صفر'
-                : 'Spiking LIF + Liquid Time-Constant ODE running on your device GPU/CPU · $0 Server GPU'}
+                ? 'شبکهٔ عصبی پالس‌محور (LIF) با ۵۱۲ نورون + معادلات مایع ۳۲ بعدی (LTC) روی GPU/CPU دستگاه شما · هزینهٔ سرور GPU: صفر'
+                : 'Spiking LIF (512 neurons) + Liquid Time-Constant ODE (32-D) running on your device GPU/CPU · $0 Server GPU'}
             </p>
           </div>
         </div>
@@ -113,13 +119,13 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
         </div>
       </div>
 
-      {/* Live Cortical Spike Raster & 24-D Liquid State */}
+      {/* Live Cortical Spike Raster & 32-D Liquid State */}
       <div className="nmc-raster-card">
         <div className="nmc-section-head">
           <strong>
             {isFa
-              ? `ماتریس زندهٔ پالس‌های سیناپسی (${neuronsTotal} نورون LIF + ۲۴ نورون مایع)`
-              : `Live Synaptic Spike Raster (${neuronsTotal} LIF + 24 Liquid ODE Neurons)`}
+              ? `ماتریس زندهٔ پالس‌های سیناپسی (${neuronsTotal} نورون LIF + ۳۲ نورون مایع)`
+              : `Live Synaptic Spike Raster (${neuronsTotal} LIF + 32 Liquid ODE Neurons)`}
           </strong>
           <small data-testid="nmc-firing-rate">
             {readout
@@ -230,7 +236,7 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
       <div className="nmc-raster-card">
         <div className="nmc-section-head">
           <strong>
-            {isFa ? 'خوانش شناختی و رژیم لحظه‌ای بازار' : 'Cognitive Readout & Liquid Market Regime'}
+            {isFa ? 'خوانش شناختی و رژیم لحظه‌ای بازار (۱۲ سر خوانش: پول هوشمند، نهنگ‌ها، کلان، سهام، فارکس، کالا، RWA، میان‌سرمایه، نیت، دروازه تطبیقی)' : 'Cognitive Readout & Liquid Market Regime (12 Heads: Smart Money, Whales, Macro, Stocks, Forex, Commodities, RWA, Cross-Asset, Intent, Adaptive Gate)'}
           </strong>
           <small>
             {readout
@@ -279,29 +285,10 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
                   <div className="nmc-bar-fill" style={{ width: `${Math.round((prob || 0) * 100)}%` }} />
                 </div>
               </div>
-            ))}
-          </div>
-        ) : null}
-      </div>
+            ))}\n          </div>
+        ) : null}\n      </div>
 
-      {/* Evolution Feedback Banner */}
-      {nm.evolutionLast ? (
-        <p className="nmc-note" data-testid="nmc-evolution-summary">
-          {isFa
-            ? `✦ آخرین چرخهٔ خودتکاملی (${nm.evolutionLast.symbol}): ${nm.evolutionLast.resolvedSteps} کندل واقعی سنجیده شد · نرخ اصابت برنده: ${fmtPct(nm.evolutionLast.winnerHitRate, 1)} · ${
-                nm.evolutionLast.swarmUpload?.crystallized
-                  ? `نسل جهانی جدید #${nm.evolutionLast.swarmUpload.globalGeneration} متبلور شد!`
-                  : nm.evolutionLast.improved
-                    ? 'وزن‌های کورتکس دستگاه شما ارتقا یافت.'
-                    : 'نسخهٔ فعلی از جهش‌های جدید دقیق‌تر بود و حفظ شد.'
-              }`
-            : `✦ Last self-evolution pulse (${nm.evolutionLast.symbol}): ${nm.evolutionLast.resolvedSteps} real candles scored · Winner hit rate: ${fmtPct(nm.evolutionLast.winnerHitRate, 1)} · ${
-                nm.evolutionLast.swarmUpload?.crystallized
-                  ? `Global Generation #${nm.evolutionLast.swarmUpload.globalGeneration} crystallized!`
-                  : nm.evolutionLast.improved
-                    ? 'Local cortex synapses upgraded.'
-                    : 'Current cortex outperformed mutations and was retained.'
-              }`}
+      {/* Evolution Feedback Banner */}\n      {nm.evolutionLast ? (\n        <p className="nmc-note" data-testid="nmc-evolution-summary">\n          {isFa\n            ? `✦ آخرین چرخهٔ خودتکاملی (${nm.evolutionLast.symbol}): ${nm.evolutionLast.resolvedSteps} کندل واقعی سنجیده شد · نرخ اصابت برنده: ${fmtPct(nm.evolutionLast.winnerHitRate, 1)} · ${\n                nm.evolutionLast.swarmUpload?.crystallized\n                  ? `نسل جهانی جدید #${nm.evolutionLast.swarmUpload.globalGeneration} متبلور شد!`\n                  : nm.evolutionLast.improved\n                    ? 'وزن‌های کورتکس دستگاه شما ارتقا یافت.'\n                    : 'نسخهٔ فعلی از جهش‌های جدید دقیق‌تر بود و حفظ شد.'\n              }`\n            : `✦ Last self-evolution pulse (${nm.evolutionLast.symbol}): ${nm.evolutionLast.resolvedSteps} real candles scored · Winner hit rate: ${fmtPct(nm.evolutionLast.winnerHitRate, 1)} · ${\n                nm.evolutionLast.swarmUpload?.crystallized\n                  ? `Global Generation #${nm.evolutionLast.swarmUpload.globalGeneration} crystallized!`\n                  : nm.evolutionLast.improved\n                    ? 'Local cortex synapses upgraded.'\n                    : 'Current cortex outperformed mutations and was retained.'\n              }`}
         </p>
       ) : null}
 
@@ -379,11 +366,11 @@ export function NeuromorphicModal({ open, onClose, locale = 'fa' }) {
       <div className="iaos-panel" data-testid="intent-ai-neuromorphic-modal">
         <div className="iaos-panel-head">
           <div>
-            <h2>{isFa ? 'کورتکس نورومورفیک FBT · ۲۰۵۰' : 'FBT Neuromorphic Cortex · 2050'}</h2>
+            <h2>{isFa ? 'کورتکس نورومورفیک FBT · ۲۰۵۰ (هوش بالا)' : 'FBT Neuromorphic Cortex · 2050 (High Intelligence)'}</h2>
             <small>
               {isFa
-                ? 'پردازش و خودتکاملی زنده روی GPU و CPU دستگاه شما بدون سرور GPU'
-                : 'Self-evolving Spiking + Liquid Intelligence on your device GPU & CPU'}
+                ? 'پردازش و خودتکاملی زنده روی GPU و CPU دستگاه شما (۵۱۲ نورون، ۳۲ بعدی) بدون سرور GPU'
+                : 'Self-evolving Spiking (512 neurons) + Liquid (32-D) Intelligence on your device GPU & CPU'}
             </small>
           </div>
           <button type="button" className="iaos-close" onClick={onClose} aria-label="Close">✕</button>
@@ -394,6 +381,6 @@ export function NeuromorphicModal({ open, onClose, locale = 'fa' }) {
       </div>
     </div>
   );
-}
+});
 
 export default NeuromorphicCortexPanel;
