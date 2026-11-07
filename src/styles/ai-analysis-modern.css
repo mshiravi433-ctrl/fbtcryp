@@ -1,0 +1,1017 @@
+/* ==========================================================================
+   FBT AI INTELLIGENCE — THE MODERN LAYER
+   --------------------------------------------------------------------------
+   «در هوش بازار … دکمه‌ها و باکس‌ها و اطلاعات که نشان می‌دهد باید خیلی مدرن‌تر
+    و خاص‌تر باشد»
+
+   The base sheet (ai-analysis.css) built a correct, quiet, flat screen: a
+   1px border, a solid fill, a 17px number. Correct, and it read like a
+   settings page. This sheet is the layer that makes it an INSTRUMENT, and it
+   does so without touching one measurement:
+
+     · every surface is layered — a base fill, a soft top light, an inset
+       hairline and a tone-mapped accent — instead of a single flat rectangle;
+     · every number is set as a figure (tabular, tight, with a magnitude
+       suffix) rather than a word in a box;
+     · every control has a deliberate rest and press state, with a real hit
+       area of at least 34px;
+     · every tone (up / down / warn / neutral) maps to a consistent accent,
+       so a red rail always means the same thing.
+
+   ─── THE THREE RULES THIS FILE OBEYS ──────────────────────────────────────
+   1. NO NEW PALETTE. Every colour is `color-mix()` over an existing token
+      (--rgb-*, --up, --down, --line, --bg-*). The light theme therefore works
+      with no second sheet, which is the one thing a "modern" pass usually
+      breaks.
+   2. MOTION IS OPT-IN AND CHEAP. Only opacity and transform animate; no
+      filter or blur keyframes (the blur is baked into the surface). A
+      `prefers-reduced-motion` block at the bottom turns all of it off.
+   3. IT DEGRADES. Anything that needs `color-mix()` (all current Chromium,
+      WebKit and Firefox supports it) still reads correctly if it fails: the
+      fallback is declared first in every pair.
+
+   Loaded AFTER ai-analysis.css so equal-specificity rules here win.
+   ========================================================================== */
+
+/* ── the page surface ──────────────────────────────────────────────────── */
+
+.aix-page {
+  --aix-elev-1: 0 1px 0 color-mix(in oklab, #fff 6%, transparent) inset,
+                 0 10px 26px -18px color-mix(in oklab, #000 70%, transparent);
+  --aix-elev-2: 0 1px 0 color-mix(in oklab, #fff 8%, transparent) inset,
+                 0 18px 46px -26px color-mix(in oklab, #000 82%, transparent);
+  --aix-hair: color-mix(in oklab, var(--aix-line-strong) 62%, transparent);
+  --aix-radius-lg: 20px;
+  background:
+    radial-gradient(120% 58% at 88% -12%, color-mix(in oklab, var(--aix-violet) 20%, transparent) 0%, transparent 60%),
+    radial-gradient(90% 46% at -4% -4%, color-mix(in oklab, var(--aix-cyan) 13%, transparent) 0%, transparent 56%),
+    radial-gradient(70% 40% at 50% 104%, color-mix(in oklab, var(--aix-magenta) 8%, transparent) 0%, transparent 62%);
+}
+
+/* ── the title block ───────────────────────────────────────────────────── */
+
+.aix-title {
+  font-size: 20px;
+  letter-spacing: -0.015em;
+}
+
+.aix-title svg {
+  padding: 5px;
+  box-sizing: content-box;
+  border-radius: 11px;
+  background: color-mix(in oklab, var(--aix-cyan) 16%, transparent);
+  border: 1px solid color-mix(in oklab, var(--aix-cyan) 30%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--aix-cyan) 7%, transparent);
+}
+
+/* ── buttons ───────────────────────────────────────────────────────────── */
+
+.aix-cta {
+  position: relative;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  border: 1px solid color-mix(in oklab, var(--aix-cyan) 34%, var(--aix-line-strong));
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, #fff 10%, transparent) 0%,
+      transparent 46%),
+    color-mix(in oklab, var(--aix-cyan) 14%, var(--aix-surface));
+  box-shadow:
+    0 1px 0 color-mix(in oklab, #fff 10%, transparent) inset,
+    0 8px 20px -14px color-mix(in oklab, var(--aix-cyan) 70%, transparent);
+  transition: transform .16s cubic-bezier(.2,.7,.2,1), box-shadow .16s ease, border-color .16s ease, background-color .16s ease;
+}
+
+.aix-cta:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--aix-cyan) 62%, transparent);
+  box-shadow:
+    0 1px 0 color-mix(in oklab, #fff 14%, transparent) inset,
+    0 12px 26px -14px color-mix(in oklab, var(--aix-cyan) 76%, transparent);
+}
+
+.aix-cta:active { transform: translateY(0) scale(.978); }
+
+.aix-cta-ghost {
+  background: color-mix(in oklab, var(--aix-ink) 5%, transparent);
+  border-color: var(--aix-hair);
+  box-shadow: none;
+}
+
+.aix-cta-ghost:hover {
+  background: color-mix(in oklab, var(--aix-cyan) 12%, transparent);
+  border-color: color-mix(in oklab, var(--aix-cyan) 40%, transparent);
+}
+
+.aix-cta:focus-visible,
+.aix-tab:focus-visible,
+.aix-chip:focus-visible,
+.aix-share.is-action:focus-visible {
+  outline: 2px solid var(--aix-cyan);
+  outline-offset: 2px;
+}
+
+/* ── status strip: a live telemetry bar, not a paragraph ───────────────── */
+
+.aix-statusbar {
+  margin-top: 14px;
+  padding: 9px 12px;
+  gap: 8px;
+  border-radius: 14px;
+  border: 1px solid var(--aix-hair);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, #fff 7%, transparent), transparent 60%),
+    color-mix(in oklab, var(--aix-cyan) 7%, var(--aix-surface));
+  box-shadow: var(--aix-elev-1);
+  font-size: 10.5px;
+  letter-spacing: .01em;
+}
+
+.aix-status-dot {
+  width: 7px;
+  height: 7px;
+  position: relative;
+}
+
+.aix-status-live .aix-status-dot::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in oklab, var(--aix-mint) 60%, transparent);
+  animation: aix-ping 2.4s cubic-bezier(.2,.7,.2,1) infinite;
+}
+
+@keyframes aix-ping {
+  0% { transform: scale(.6); opacity: .9; }
+  70% { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* ── tabs: a segmented rail with a travelling active pill ──────────────── */
+
+.aix-tabs {
+  gap: 4px;
+  margin: 16px 0 14px;
+  padding: 4px;
+  border-radius: 15px;
+  border: 1px solid var(--aix-hair);
+  background: color-mix(in oklab, var(--bg-void, #05070d) 30%, var(--aix-surface));
+  box-shadow: var(--aix-elev-1);
+}
+
+.aix-tab {
+  padding: 8px 14px;
+  border-radius: 11px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 620;
+  letter-spacing: -0.005em;
+  transition: color .16s ease, background-color .16s ease, border-color .16s ease, transform .16s ease;
+}
+
+.aix-tab:hover {
+  color: var(--aix-ink);
+  background: color-mix(in oklab, var(--aix-ink) 6%, transparent);
+  transform: none;
+}
+
+.aix-tab.is-active {
+  color: var(--aix-ink);
+  border-color: color-mix(in oklab, var(--aix-cyan) 40%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, #fff 12%, transparent), transparent 56%),
+    color-mix(in oklab, var(--aix-cyan) 18%, var(--aix-surface));
+  box-shadow:
+    0 1px 0 color-mix(in oklab, #fff 12%, transparent) inset,
+    0 10px 22px -16px color-mix(in oklab, var(--aix-cyan) 90%, transparent);
+}
+
+/* ── readings: the tile ────────────────────────────────────────────────── */
+
+.aix-tiles {
+  gap: 9px;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+}
+
+.aix-tile {
+  position: relative;
+  overflow: hidden;
+  min-height: 86px;
+  padding: 11px 13px 12px;
+  gap: 5px;
+  border-radius: 16px;
+  border: 1px solid var(--aix-hair);
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, #fff 7%, transparent) 0%,
+      transparent 52%),
+    color-mix(in oklab, var(--aix-surface) 92%, var(--aix-cyan));
+  box-shadow: var(--aix-elev-1);
+  transition: transform .18s cubic-bezier(.2,.7,.2,1), border-color .18s ease, box-shadow .18s ease;
+}
+
+/* The accent rail. `inset-inline-start` keeps it on the correct edge in RTL. */
+.aix-tile::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 2.5px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--aix-ink-3) 45%, transparent);
+  opacity: .75;
+}
+
+.aix-tile-glow {
+  position: absolute;
+  inset-block-start: -46%;
+  inset-inline-end: -22%;
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in oklab, var(--aix-cyan) 26%, transparent) 0%, transparent 68%);
+  pointer-events: none;
+  opacity: .6;
+}
+
+.aix-tile:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklab, var(--aix-cyan) 34%, var(--aix-hair));
+  box-shadow: var(--aix-elev-2);
+}
+
+.aix-tile-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.aix-tile-icon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  color: var(--aix-cyan);
+  background: color-mix(in oklab, var(--aix-cyan) 14%, transparent);
+}
+
+.aix-tile-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .015em;
+  color: var(--aix-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aix-tile-figure {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.aix-tile-value {
+  font-size: 19px;
+  font-weight: 720;
+  letter-spacing: -0.025em;
+  line-height: 1.12;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, var(--aix-ink), color-mix(in oklab, var(--aix-ink) 78%, transparent));
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.aix-tile-sub {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--aix-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.aix-tile-trend { font-size: 10px; color: var(--aix-ink-3); }
+
+/* The gauge is a SHARE of something (dominance, breadth, weight). Nothing that
+   is not a percentage ever receives one — see StatTile's `gauge` prop. */
+.aix-tile-gauge {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  transform: rotate(0deg);
+}
+
+.aix-tile-gauge-track {
+  fill: none;
+  stroke: color-mix(in oklab, var(--aix-ink-3) 22%, transparent);
+  stroke-width: 3;
+}
+
+.aix-tile-gauge-arc {
+  fill: none;
+  stroke: var(--aix-cyan);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dasharray .6s cubic-bezier(.2,.7,.2,1);
+}
+
+/* ── tones ─────────────────────────────────────────────────────────────── */
+
+.aix-tone-up::before { background: var(--up); opacity: 1; }
+.aix-tone-up .aix-tile-glow { background: radial-gradient(circle, color-mix(in oklab, var(--up) 26%, transparent) 0%, transparent 68%); }
+.aix-tone-up .aix-tile-gauge-arc { stroke: var(--up); }
+.aix-tone-up .aix-tile-value { color: var(--up); -webkit-text-fill-color: currentColor; }
+
+.aix-tone-down::before { background: var(--down); opacity: 1; }
+.aix-tone-down .aix-tile-glow { background: radial-gradient(circle, color-mix(in oklab, var(--down) 26%, transparent) 0%, transparent 68%); }
+.aix-tone-down .aix-tile-gauge-arc { stroke: var(--down); }
+.aix-tone-down .aix-tile-value { color: var(--down); -webkit-text-fill-color: currentColor; }
+
+.aix-tone-warn { border-color: color-mix(in oklab, var(--aix-amber) 34%, var(--aix-hair)); }
+.aix-tone-warn::before { background: var(--aix-amber); opacity: 1; }
+.aix-tone-warn .aix-tile-glow { background: radial-gradient(circle, color-mix(in oklab, var(--aix-amber) 26%, transparent) 0%, transparent 68%); }
+.aix-tone-warn .aix-tile-gauge-arc { stroke: var(--aix-amber); }
+
+.aix-tone-up { border-color: color-mix(in oklab, var(--up) 30%, var(--aix-hair)); }
+.aix-tone-down { border-color: color-mix(in oklab, var(--down) 30%, var(--aix-hair)); }
+
+/* ── cards ─────────────────────────────────────────────────────────────── */
+
+.aix-card {
+  position: relative;
+  overflow: hidden;
+  padding: 15px;
+  border-radius: var(--aix-radius-lg, 20px);
+  border: 1px solid var(--aix-hair, var(--line-strong));
+  background:
+    linear-gradient(180deg, color-mix(in oklab, #fff 6%, transparent) 0%, transparent 30%),
+    var(--aix-surface);
+  box-shadow: var(--aix-elev-1, 0 10px 26px -18px rgba(0,0,0,.7));
+}
+
+/* A hairline of light along the top edge — what separates a "panel" from a
+   "div with a border", and it costs one gradient. */
+.aix-card-sheen {
+  position: absolute;
+  inset-inline: 14%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    color-mix(in oklab, var(--aix-cyan) 55%, transparent) 50%,
+    transparent);
+  opacity: .8;
+  pointer-events: none;
+}
+
+.aix-card-head {
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+
+.aix-card-heading { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
+
+.aix-card-mark {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  font-size: 12px;
+  color: var(--aix-cyan);
+  border: 1px solid color-mix(in oklab, var(--aix-cyan) 28%, transparent);
+  background: color-mix(in oklab, var(--aix-cyan) 12%, transparent);
+}
+
+.aix-card-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+}
+
+.aix-card-hint { font-size: 10.5px; line-height: 1.6; color: var(--aix-ink-3); }
+
+/* ── pills & badges ────────────────────────────────────────────────────── */
+
+.aix-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .01em;
+  line-height: 1.6;
+  white-space: nowrap;
+  color: var(--aix-ink-2);
+  border: 1px solid var(--aix-hair);
+  background: color-mix(in oklab, var(--aix-ink) 6%, transparent);
+}
+
+.aix-pill i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.aix-pill-up { color: var(--up); border-color: color-mix(in oklab, var(--up) 34%, transparent); background: color-mix(in oklab, var(--up) 12%, transparent); }
+.aix-pill-down { color: var(--down); border-color: color-mix(in oklab, var(--down) 34%, transparent); background: color-mix(in oklab, var(--down) 12%, transparent); }
+.aix-pill-warn { color: var(--aix-amber); border-color: color-mix(in oklab, var(--aix-amber) 36%, transparent); background: color-mix(in oklab, var(--aix-amber) 12%, transparent); }
+.aix-pill-info { color: var(--aix-cyan); border-color: color-mix(in oklab, var(--aix-cyan) 34%, transparent); background: color-mix(in oklab, var(--aix-cyan) 12%, transparent); }
+.aix-pill-violet { color: var(--aix-violet); border-color: color-mix(in oklab, var(--aix-violet) 34%, transparent); background: color-mix(in oklab, var(--aix-violet) 12%, transparent); }
+.aix-pill-calm { color: var(--aix-ink-2); }
+
+/* ── share bars ────────────────────────────────────────────────────────── */
+
+.aix-shares { display: grid; gap: 10px; }
+
+.aix-share {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--aix-hair);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, #fff 5%, transparent), transparent 60%),
+    color-mix(in oklab, var(--aix-surface) 60%, transparent);
+  color: inherit;
+  text-align: start;
+  font: inherit;
+}
+
+.aix-share.is-action { cursor: pointer; transition: border-color .16s ease, transform .16s ease, background-color .16s ease; }
+.aix-share.is-action:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--aix-cyan) 38%, transparent);
+}
+
+.aix-share-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+
+.aix-share-badge {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--aix-ink-2);
+  background: color-mix(in oklab, var(--aix-ink) 9%, transparent);
+}
+
+.aix-share-name {
+  font-size: 12px;
+  font-weight: 640;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aix-share-value {
+  margin-inline-start: auto;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.aix-share-track {
+  display: block;
+  height: 6px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--aix-ink-3) 20%, transparent);
+}
+
+.aix-share-track i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  transition: width .5s cubic-bezier(.2,.7,.2,1);
+}
+
+.aix-share-track .aix-bar-violet { background: linear-gradient(90deg, var(--aix-violet), var(--aix-cyan)); }
+.aix-share-track .aix-bar-cyan { background: linear-gradient(90deg, color-mix(in oklab, var(--aix-cyan) 60%, var(--aix-violet)), var(--aix-cyan)); }
+.aix-share-track .aix-bar-mint { background: linear-gradient(90deg, color-mix(in oklab, var(--aix-mint) 55%, var(--aix-cyan)), var(--aix-mint)); }
+.aix-share-track .aix-bar-amber { background: linear-gradient(90deg, color-mix(in oklab, var(--aix-amber) 55%, var(--aix-violet)), var(--aix-amber)); }
+.aix-share-track .aix-bar-rose { background: linear-gradient(90deg, color-mix(in oklab, var(--aix-rose) 55%, var(--aix-violet)), var(--aix-rose)); }
+
+.aix-share-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--aix-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.aix-share-detail { color: var(--aix-ink-2); }
+
+/* ── meters ────────────────────────────────────────────────────────────── */
+
+.aix-meter-wrap { display: grid; gap: 6px; }
+
+.aix-meter {
+  position: relative;
+  height: 10px;
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, color-mix(in oklab, #000 22%, transparent), transparent 70%),
+    color-mix(in oklab, var(--aix-ink-3) 22%, transparent);
+  overflow: hidden;
+}
+
+.aix-meter-fill { box-shadow: 0 0 12px -2px currentColor; }
+.aix-meter-fill.aix-bar-rose { color: var(--aix-rose); }
+.aix-meter-fill.aix-bar-amber { color: var(--aix-amber); }
+.aix-meter-fill.aix-bar-mint { color: var(--aix-mint); }
+.aix-meter-fill.aix-bar-cyan { color: var(--aix-cyan); }
+.aix-meter-fill.aix-bar-violet { color: var(--aix-violet); }
+.aix-meter-caption { font-size: 10px; color: var(--aix-ink-3); font-variant-numeric: tabular-nums; }
+
+/* ── score ring ────────────────────────────────────────────────────────── */
+
+.aix-ring { position: relative; }
+
+.aix-ring-halo {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in oklab, var(--aix-cyan) 16%, transparent) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.aix-ring-mint .aix-ring-halo { background: radial-gradient(circle, color-mix(in oklab, var(--aix-mint) 18%, transparent) 0%, transparent 70%); }
+.aix-ring-rose .aix-ring-halo { background: radial-gradient(circle, color-mix(in oklab, var(--aix-rose) 18%, transparent) 0%, transparent 70%); }
+.aix-ring-amber .aix-ring-halo { background: radial-gradient(circle, color-mix(in oklab, var(--aix-amber) 18%, transparent) 0%, transparent 70%); }
+.aix-ring-violet .aix-ring-halo { background: radial-gradient(circle, color-mix(in oklab, var(--aix-violet) 20%, transparent) 0%, transparent 70%); }
+
+.aix-ring-track { stroke: color-mix(in oklab, var(--aix-ink-3) 18%, transparent); }
+.aix-ring-fill { filter: drop-shadow(0 0 5px currentColor); }
+
+.aix-ring-center strong { font-size: 27px; font-weight: 740; letter-spacing: -0.03em; }
+
+/* ── sparkline ─────────────────────────────────────────────────────────── */
+
+.aix-spark { color: var(--up); overflow: visible; }
+.aix-spark.is-down { color: var(--down); }
+.aix-spark polyline { stroke: currentColor; }
+.aix-spark-dot { fill: currentColor; }
+.aix-spark.is-up .aix-spark-dot { filter: drop-shadow(0 0 3px color-mix(in oklab, var(--up) 80%, transparent)); }
+.aix-spark.is-down .aix-spark-dot { filter: drop-shadow(0 0 3px color-mix(in oklab, var(--down) 80%, transparent)); }
+
+/* ── change chips ──────────────────────────────────────────────────────── */
+
+.aix-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 680;
+  font-size: 12.5px;
+  letter-spacing: -0.01em;
+}
+
+.aix-change-arrow { font-size: 8.5px; line-height: 1; opacity: .9; }
+
+.aix-change.aix-up { color: var(--up); }
+.aix-change.aix-down { color: var(--down); }
+
+/* ── rows & lists ──────────────────────────────────────────────────────── */
+
+.aix-mover,
+.aix-surge {
+  border-radius: 12px;
+  border-bottom: 0;
+  padding: 8px 9px;
+  transition: background-color .15s ease, transform .15s ease;
+}
+
+.aix-mover:hover,
+.aix-surge:hover {
+  transform: translateX(1px);
+  background: color-mix(in oklab, var(--aix-cyan) 9%, transparent);
+  border-color: color-mix(in oklab, var(--aix-cyan) 34%, transparent);
+}
+
+.aix-surge {
+  border: 1px solid var(--aix-hair);
+  background: color-mix(in oklab, var(--aix-surface) 55%, transparent);
+}
+
+/* ── unavailable feeds: still named, but as a quiet, deliberate shelf ──── */
+
+.aix-unavailable { gap: 7px; }
+
+.aix-unavailable-item {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border-style: dashed;
+  font-size: 10.5px;
+  background: color-mix(in oklab, var(--aix-ink) 3%, transparent);
+}
+
+/* ── the review block ──────────────────────────────────────────────────── */
+
+.aix-review { display: grid; gap: 12px; }
+
+.aix-review-hero {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--aix-hair);
+  background:
+    radial-gradient(80% 120% at 100% 0%, color-mix(in oklab, var(--aix-violet) 18%, transparent) 0%, transparent 62%),
+    color-mix(in oklab, var(--aix-surface) 70%, transparent);
+}
+
+.aix-review-hero.is-gain { border-color: color-mix(in oklab, var(--up) 34%, var(--aix-hair)); }
+.aix-review-hero.is-loss { border-color: color-mix(in oklab, var(--down) 34%, var(--aix-hair)); }
+.aix-review-hero.is-fragile { border-color: color-mix(in oklab, var(--aix-amber) 34%, var(--aix-hair)); }
+
+.aix-review-verdict {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+}
+
+.aix-review-sub {
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--aix-ink-3);
+  line-height: 1.7;
+}
+
+.aix-review-stats {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+}
+
+.aix-review-stat {
+  padding: 10px 11px;
+  border-radius: 13px;
+  border: 1px solid var(--aix-hair);
+  background: color-mix(in oklab, var(--aix-surface) 55%, transparent);
+}
+
+.aix-review-stat small {
+  display: block;
+  font-size: 9.5px;
+  color: var(--aix-ink-3);
+  margin-bottom: 4px;
+  letter-spacing: .01em;
+}
+
+.aix-review-stat strong {
+  font-size: 15px;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.aix-review-list { display: grid; gap: 8px; }
+
+.aix-review-row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 11px;
+  border-radius: 13px;
+  border: 1px solid var(--aix-hair);
+  background: color-mix(in oklab, var(--aix-surface) 50%, transparent);
+}
+
+.aix-review-rank {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  font-weight: 730;
+  color: var(--aix-ink-2);
+  background: color-mix(in oklab, var(--aix-ink) 9%, transparent);
+}
+
+.aix-review-copy { min-width: 0; display: grid; gap: 3px; }
+.aix-review-copy strong { font-size: 12px; font-weight: 620; line-height: 1.6; }
+.aix-review-copy small { font-size: 10px; color: var(--aix-ink-3); line-height: 1.6; }
+
+.aix-review-side { display: grid; gap: 4px; justify-items: end; }
+
+.aix-review-row.is-critical { border-color: color-mix(in oklab, var(--down) 40%, transparent); background: color-mix(in oklab, var(--down) 8%, transparent); }
+.aix-review-row.is-high { border-color: color-mix(in oklab, var(--aix-rose) 30%, transparent); }
+.aix-review-row.is-medium { border-color: color-mix(in oklab, var(--aix-amber) 28%, transparent); }
+
+.aix-review-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  font-size: 10px;
+  color: var(--aix-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── empty states ──────────────────────────────────────────────────────── */
+
+.aix-empty { padding: 30px 14px; }
+
+.aix-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 4px;
+  border-radius: 14px;
+  font-size: 17px;
+  color: var(--aix-cyan);
+  border: 1px solid color-mix(in oklab, var(--aix-cyan) 26%, transparent);
+  background: color-mix(in oklab, var(--aix-cyan) 10%, transparent);
+}
+
+/* ── the sources drawer ────────────────────────────────────────────────── */
+
+.aix-sources {
+  border-radius: 22px 22px 0 0;
+  background:
+    linear-gradient(180deg, color-mix(in oklab, #fff 6%, transparent), transparent 24%),
+    var(--bg-panel-solid);
+  box-shadow: 0 -20px 60px -30px color-mix(in oklab, #000 90%, transparent);
+}
+
+/* ── responsive ────────────────────────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  .aix-review-hero { grid-template-columns: 1fr; }
+  .aix-tile-value { font-size: 17.5px; }
+}
+
+@media (max-width: 480px) {
+  .aix-tile { min-height: 78px; padding: 10px 11px; border-radius: 14px; }
+  .aix-tile-value { font-size: 16px; }
+  .aix-tab { padding: 7px 11px; font-size: 11.5px; }
+  .aix-card { padding: 13px; border-radius: 17px; }
+  .aix-review-stat strong { font-size: 13.5px; }
+}
+
+/* ── the chats' embedded rooms get the same material, one step tighter ── */
+
+.aix-embed .aix-tile { min-height: 72px; border-radius: 13px; }
+.aix-embed .aix-tile-value { font-size: 14.5px; }
+.aix-embed .aix-tab { padding: 6px 10px; border-radius: 9px; font-size: 11px; }
+.aix-embed .aix-tabs { padding: 3px; border-radius: 12px; }
+.aix-embed .aix-card { border-radius: 15px; padding: 11px; }
+.aix-embed .aix-card-mark { width: 22px; height: 22px; border-radius: 8px; }
+.aix-embed .aix-card-title { font-size: 12.5px; }
+.aix-embed .aix-review-hero { padding: 11px; border-radius: 14px; }
+.aix-embed .aix-review-verdict { font-size: 12.5px; }
+
+/* ── respect the reader's settings ─────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .aix-status-live .aix-status-dot::after { animation: none; }
+  .aix-tile,
+  .aix-tile:hover,
+  .aix-cta,
+  .aix-cta:hover,
+  .aix-mover:hover,
+  .aix-surge:hover,
+  .aix-share.is-action:hover { transition: none; transform: none; }
+  .aix-share-track i,
+  .aix-tile-gauge-arc,
+  .aix-ring-fill,
+  .aix-meter-fill { transition: none; }
+}
+
+@media (prefers-contrast: more) {
+  .aix-tile,
+  .aix-card,
+  .aix-share,
+  .aix-pill,
+  .aix-review-row,
+  .aix-review-stat { border-color: var(--line-strong); }
+  .aix-tile-label,
+  .aix-card-hint,
+  .aix-share-foot { color: var(--text-2); }
+  .aix-tile-glow,
+  .aix-ring-halo { display: none; }
+}
+
+/* ── light theme ───────────────────────────────────────────────────────────
+   The dark layer leans on white-at-7% for its top light, which does nothing on
+   a pale surface. The light theme swaps that highlight for a shadow-based
+   separation instead of a glow, so the cards keep their depth without the
+   screen turning milky. */
+
+:root[data-theme='light'] .aix-tile,
+:root[data-theme='light'] .aix-card,
+:root[data-theme='light'] .aix-share,
+:root[data-theme='light'] .aix-review-stat,
+:root[data-theme='light'] .aix-review-row {
+  background: var(--bg-panel);
+  box-shadow: 0 1px 2px color-mix(in oklab, #0b1220 8%, transparent),
+              0 10px 24px -20px color-mix(in oklab, #0b1220 40%, transparent);
+}
+
+:root[data-theme='light'] .aix-tile-glow,
+:root[data-theme='light'] .aix-ring-halo { opacity: .35; }
+
+:root[data-theme='light'] .aix-statusbar,
+:root[data-theme='light'] .aix-tabs {
+  background: color-mix(in oklab, var(--bg-panel) 90%, var(--rgb-1));
+}
+
+/* ==========================================================================
+   COVERAGE FOR THE REWRITTEN TABS
+   --------------------------------------------------------------------------
+   Every class the rewritten Overview and Portfolio tabs emit has a rule here
+   or in the base sheet. This block is the residue: the pieces the modern layer
+   introduced (facts, chips, ranked rails) plus the handful of structural hooks
+   the new markup added to old containers (.aix-prow-hold, .aix-span-two).
+
+   The gauge block is layout only — the needle behaviour already lives in
+   ai-analysis.css and is not restated, so a future change to the needle math
+   has exactly one home.
+   ========================================================================== */
+
+/* ── ranked rails: the shortlist and the volume surges ──────────────────── */
+.aix-share-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.aix-mover-rank {
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  margin-inline-end: 6px;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--aix-ink-3, #94a3b8) 16%, transparent);
+  color: var(--aix-ink-2, #cbd5e1);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  vertical-align: 1px;
+}
+.aix-mover:hover .aix-mover-rank {
+  background: color-mix(in oklab, var(--aix-cyan, #22d3ee) 24%, transparent);
+  color: var(--aix-ink-1, #f1f5f9);
+}
+
+/* ── the gauge: structure only ──────────────────────────────────────────── */
+.aix-gauge {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  width: 100%;
+}
+
+/* ── facts: three measured numbers with their definitions underneath ─────── */
+.aix-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px;
+}
+
+.aix-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid color-mix(in oklab, var(--aix-line, rgba(148, 163, 184, .18)) 100%, transparent);
+  border-radius: 13px;
+  background:
+    linear-gradient(180deg, color-mix(in oklab, #fff 5%, transparent), transparent 55%),
+    color-mix(in oklab, var(--aix-surface-2, #0d1524) 70%, transparent);
+}
+
+.aix-fact > span {
+  color: var(--aix-ink-3, #94a3b8);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.aix-fact > strong {
+  color: var(--aix-ink-1, #f1f5f9);
+  font-size: 17px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+  line-height: 1.15;
+}
+
+.aix-fact > small {
+  color: color-mix(in oklab, var(--aix-ink-3, #94a3b8) 82%, transparent);
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+
+/* ── chips: divergence, and any clickable token cluster ─────────────────── */
+.aix-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.aix-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid color-mix(in oklab, var(--aix-ink-3, #94a3b8) 22%, transparent);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--aix-ink-3, #94a3b8) 8%, transparent);
+  color: var(--aix-ink-2, #cbd5e1);
+  font: inherit;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+.aix-chip-btn b { color: var(--aix-ink-1, #f1f5f9); font-weight: 800; }
+.aix-chip-btn:hover {
+  border-color: color-mix(in oklab, var(--aix-cyan, #22d3ee) 40%, transparent);
+  background: color-mix(in oklab, var(--aix-cyan, #22d3ee) 12%, transparent);
+  transform: translateY(-1px);
+}
+.aix-chip-btn:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--aix-cyan, #22d3ee) 66%, transparent);
+  outline-offset: 2px;
+}
+
+/* ── two-up layout used by the breadth/movers and review/side bands ─────── */
+.aix-two-up {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: var(--aix-gap, 10px);
+}
+
+/* On the wide grid a card can claim both columns — the review hero does this
+   so its verdict and its score ring are not squeezed into a 230px cell. */
+.aix-span-two { grid-column: 1 / -1; }
+
+@media (max-width: 720px) {
+  .aix-span-two { grid-column: auto; }
+  .aix-fact { padding: 9px 10px; }
+  .aix-fact > strong { font-size: 15px; }
+}
+
+/* ── the hero band ──────────────────────────────────────────────────────── */
+.aix-card-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+/* ── holders row: the compact holdings table in the portfolio review ────── */
+.aix-prow-hold {
+  grid-template-columns: 1.3fr .8fr .9fr .9fr;
+}
+
+@media (max-width: 480px) {
+  .aix-prow-hold { grid-template-columns: 1.2fr .8fr .9fr; }
+  /* The P&L column is the one that goes first: it is the only cell that can
+     read `—`, and dropping it keeps the row from wrapping mid-number. */
+  .aix-prow-hold > :last-child { display: none; }
+}
+
+/* Performance and P&L sit beside each other and are never merged into one
+   number. On a narrow screen they stack, but the P&L card keeps its own frame
+   and its own label so the two can never be read as one figure. */
+.aix-review-beside { margin-bottom: var(--aix-gap, 10px); }
+.aix-review-beside > .aix-card { margin-bottom: 0; }

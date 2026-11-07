@@ -93,7 +93,7 @@ function RoomFrame({ open, onToggle, mark, title, hint, chip, testId, footer, lo
 
 function MarketRoomBody({ room, setRoom, locale, onOpenRoute }) {
   const {
-    markets, pulse, scan, updatedAt, loading, error
+    markets, pulse, scan, analysis, updatedAt, loading, error
   } = useMarketRoom();
   const sourceLabel = markets[0]?.marketProvider === 'coingecko' ? 'CoinGecko' : 'FBT market API';
 
@@ -146,7 +146,7 @@ function MarketRoomBody({ room, setRoom, locale, onOpenRoute }) {
       ) : room === 'report' ? (
         <ReportTab pulse={pulse} scan={scan} locale={locale} markets={markets} sourceLabel={sourceLabel} />
       ) : (
-        <OverviewTab pulse={pulse} locale={locale} onOpenToken={openToken} />
+        <OverviewTab pulse={pulse} analysis={analysis} locale={locale} onOpenToken={openToken} />
       )}
     </>
   );
@@ -238,17 +238,24 @@ export function ChatTokenRoom({
 
 function PortfolioRoomBody({ locale, onOpenRoute }) {
   const {
-    connected, intel, analysis, coverage, loading
+    connected, intel, analysis, review, performance, coverage, loading, markets
   } = usePortfolioRoom();
   return (
     <PortfolioTab
       connected={connected}
       intel={intel}
       analysis={analysis}
+      review={review}
+      performance={performance}
       locale={locale}
       onConnect={(path) => onOpenRoute?.(path)}
       loading={loading}
       coverage={coverage}
+      onOpenToken={(symbol) => {
+        if (!symbol) return;
+        const hit = (markets || []).find((m) => String(m.symbol).toUpperCase() === String(symbol).toUpperCase());
+        if (hit) onOpenRoute?.(`/coin/${hit.id}`);
+      }}
     />
   );
 }
@@ -265,8 +272,8 @@ export function ChatPortfolioRoom({
       mark="◈"
       title={isFa ? 'اتاق پرتفوی هوش بازار' : 'Portfolio intelligence room'}
       hint={isFa
-        ? 'تخصیص، تمرکز، همبستگی بازده و ریسک با علت‌های اندازه‌گیری‌شده'
-        : 'Allocation, concentration, return correlation and risk with measured causes'}
+        ? 'سود/زیان، بهترین و ضعیف‌ترین عملکرد، یافته‌ها و پیشنهادهای عملی'
+        : 'Profit and loss, strongest and weakest holding, findings and actions'}
       testId="intent-ai-portfolio-room"
       locale={locale}
       footer={ct(locale, 'page.notAdvice')}

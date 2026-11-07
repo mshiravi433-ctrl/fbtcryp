@@ -1,3 +1,9 @@
+/* The rooms inherit the analysis centre's MODERN layer as well as its base
+   sheet — a room inside the bubble must look like the same product, not a
+   plainer copy of it. Imported here (not in the page) so the chat pays for it
+   only when a room is actually rendered. */
+@import '../../../styles/ai-analysis-modern.css';
+
 /* ==========================================================================
    INTELLIGENCE ROOMS INSIDE THE CHAT
    --------------------------------------------------------------------------
@@ -15,13 +21,27 @@
 
 .aix-room {
   margin-top: 10px;
-  border-radius: 14px;
-  border: 1px solid var(--line, rgba(148, 163, 184, .2));
-  background: color-mix(in oklab, var(--bg-raised, #0d1524) 82%, transparent);
+  border-radius: 16px;
+  border: 1px solid color-mix(in oklab, var(--rgb-1, #22d3ee) 22%, var(--line, rgba(148, 163, 184, .2)));
+  background:
+    linear-gradient(180deg, color-mix(in oklab, #fff 6%, transparent), transparent 30%),
+    color-mix(in oklab, var(--bg-raised, #0d1524) 88%, transparent);
+  box-shadow:
+    0 1px 0 color-mix(in oklab, #fff 7%, transparent) inset,
+    0 14px 34px -26px color-mix(in oklab, #000 80%, transparent);
   overflow: hidden;
   /* The bubble sets `white-space: pre-wrap` for message text; a panel must
      not inherit it or every flex gap renders as a blank line. */
   white-space: normal;
+}
+
+/* An open room gets a visible accent edge on the leading side — the same
+   «this is live» cue the page's cards carry. */
+.aix-room.is-open {
+  border-color: color-mix(in oklab, var(--rgb-1, #22d3ee) 38%, transparent);
+  box-shadow:
+    0 1px 0 color-mix(in oklab, #fff 9%, transparent) inset,
+    0 18px 44px -28px color-mix(in oklab, var(--rgb-1, #22d3ee) 60%, transparent);
 }
 
 .aix-room-head {
@@ -44,13 +64,16 @@
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 9px;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
   font-size: 13px;
   color: var(--rgb-1, #22d3ee);
   border: 1px solid color-mix(in oklab, var(--rgb-1, #22d3ee) 35%, transparent);
-  background: color-mix(in oklab, var(--rgb-1, #22d3ee) 14%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, #fff 10%, transparent), transparent 60%),
+    color-mix(in oklab, var(--rgb-1, #22d3ee) 16%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--rgb-1, #22d3ee) 7%, transparent);
 }
 
 .aix-room-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -59,8 +82,8 @@
 
 .aix-room-chip {
   flex: 0 0 auto;
-  padding: 3px 8px;
-  border-radius: 8px;
+  padding: 3px 9px;
+  border-radius: 999px;
   font-size: 10.5px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;

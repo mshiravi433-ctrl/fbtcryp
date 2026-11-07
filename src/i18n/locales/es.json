@@ -3774,7 +3774,13 @@
         "noCostBasis": "No hay historial de compras ni costo base conectado.",
         "riskUnavailable": "Requiere una lectura completa y actual con al menos una posición valorada.",
         "notComputed": "Métricas de cartera",
-        "riskBasis": "Heurística: concentración de tokens valorados, proporción de stablecoins y número de posiciones y redes; un valor mayor implica más exposición."
+        "riskBasis": "Heurística: concentración de tokens valorados, proporción de stablecoins y número de posiciones y redes; un valor mayor implica más exposición.",
+        "performance24h": "Rentabilidad 24h",
+        "performance7d": "Rentabilidad 7d",
+        "currentWeights": "pesos actuales",
+        "movedUsd": "Movimiento en USD",
+        "last24h": "últimas 24h",
+        "riskBasisShort": "activos y redes"
       },
       "note": {
         "pricedSubtotal": "Este valor solo incluye activos con un precio válido.",

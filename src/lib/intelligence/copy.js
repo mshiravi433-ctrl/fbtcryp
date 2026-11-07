@@ -167,6 +167,7 @@ export const COPY = {
     'port.connect': 'برای تحلیل پرتفوی، کیف پول را وصل کنید',
     'port.connectHint': 'سود و ضرر فقط با تاریخچه خرید و فروش واقعی محاسبه می‌شود؛ تا آن زمان «نامشخص» می‌ماند.',
     'port.value': 'ارزش کل',
+    'port.pnl': 'سود و زیان',
     'port.cost': 'بهای تمام‌شده ثبت‌شده',
     'port.realised': 'سود/ضرر تحقق‌یافته',
     'port.unrealised': 'سود/ضرر تحقق‌نیافته',
@@ -191,11 +192,64 @@ export const COPY = {
     'port.horizon.medium': 'میان‌مدت',
     'port.horizon.long': 'بلندمدت',
 
+    /* ── review: what the portfolio did, and what to do about it ───────────
+       These strings are the review's whole vocabulary. Every one of them is
+       attached to a measured value in portfolioReview.js — none is a generic
+       tip that would appear on any wallet. */
+    'review.title': 'بررسی پرتفوی',
+    'review.subtitle': 'سود و زیان، بهترین و ضعیف‌ترین عملکرد، و کارهایی که ارزش بررسی دارند',
+    'review.headline': 'نتیجه بررسی',
+    'review.performance': 'عملکرد قیمتی پرتفوی',
+    'review.performance1d': 'بازده ۲۴ ساعته (وزن فعلی)',
+    'review.performance7d': 'بازده ۷ روزه (وزن فعلی)',
+    'review.moveUsd': 'معادل دلاری حرکت',
+    'review.basis': 'این عدد «بازده قیمتی ترکیب فعلی» است، نه سود تحقق‌یافته؛ قیمت خرید شما در آن لحاظ نشده است.',
+    'review.best': 'بهترین عملکرد',
+    'review.worst': 'ضعیف‌ترین عملکرد',
+    'review.losses': 'دارایی‌های زیان‌ده (۲۴ ساعت)',
+    'review.noLosses': 'در این بازه هیچ دارایی قیمت‌گذاری‌شده‌ای زیان نداشته است',
+    'review.missing': 'بدون داده تغییر قیمت',
+    'review.findings': 'یافته‌های بررسی',
+    'review.actions': 'پیشنهادهای عملی',
+    'review.noActions': 'با داده فعلی، اقدام مشخصی لازم نیست',
+    'review.confidence': 'اطمینان بررسی',
+    'review.coverage': 'پوشش وزن اندازه‌گیری‌شده',
+    'review.breadth': 'تعداد صعودی / نزولی',
+    'review.dispersion': 'پراکندگی بازده',
+    'review.severity.critical': 'بحرانی',
+    'review.severity.high': 'بالا',
+    'review.severity.medium': 'متوسط',
+    'review.severity.low': 'کم',
+    'review.severity.none': 'سالم',
+    'review.verdict.gain': 'سودده',
+    'review.verdict.loss': 'زیان‌ده',
+    'review.verdict.fragile': 'شکننده',
+    'review.verdict.flat': 'کم‌حرکت',
+    'review.status.complete': 'اندازه‌گیری کامل',
+    'review.status.partial': 'اندازه‌گیری ناقص',
+    'review.status.unavailable': 'قابل اندازه‌گیری نیست',
+    'review.note.pnl': 'سود/زیان تحقق‌یافته فقط با دفتر خرید و فروش واقعی محاسبه می‌شود؛ این بخش جای آن را نمی‌گیرد.',
+
+    'review.finding.concentration': '{symbol} با {topShare}٪ ارزش پرتفوی، بزرگ‌ترین تمرکز است (تعداد مؤثر دارایی: {effectiveHoldings}).',
+    'review.finding.largest-loss': '{symbol} با {change}٪ بیشترین افت ۲۴ ساعته را دارد و {moveUsd} از ارزش پرتفوی را جابه‌جا کرده است.',
+    'review.finding.no-cash-buffer': 'سهم استیبل‌کوین {stablePct}٪ است؛ ذخیره نقدی عملاً وجود ندارد.',
+    'review.finding.correlated-book': 'میانگین همبستگی بازده روزانه {avg} است؛ این فهرست کمتر از آنچه به‌نظر می‌رسد تنوع دارد.',
+    'review.finding.network-concentration': '{weight}٪ سرمایه روی یک شبکه (#{chainId}) است.',
+    'review.finding.unpriced-holdings': '{count} دارایی مقدار دارد اما قیمت معتبر ندارد و در ارزش کل حساب نشده است.',
+    'review.finding.missing-cost-basis': 'برای {count} دارایی قیمت خرید ثبت نشده؛ سود/زیان واقعی تا آن زمان نامشخص می‌ماند.',
+    'review.finding.negative-pnl': 'سود/زیان تحقق‌نیافته دفتری منفی است: {unrealised}.',
+    'review.finding.negative-performance': 'بازده قیمتی ترکیب فعلی در ۲۴ ساعت {d1}٪ است ({absUsd}).',
+    'review.finding.positive-performance': 'بازده قیمتی ترکیب فعلی در ۲۴ ساعت {d1}٪ است ({absUsd}).',
+    'review.finding.winner-underweight': '{symbol} با {change}٪ بهترین عملکرد را دارد اما فقط {weight}٪ پرتفوی است.',
+    'review.finding.unmeasured-performance': 'برای بخشی از دارایی‌ها داده تغییر قیمت نرسیده؛ بازده ترکیبی محاسبه نشد.',
+
     'sugg.reduce-concentration': '{symbol} بیش از {topShare}٪ پرتفوی است؛ کاهش تمرکز روی یک دارایی',
     'sugg.improve-diversification': 'میانگین همبستگی {avgCorrelation} است؛ تنوع‌بخشی واقعی کم است',
     'sugg.spread-network-risk': '{weight}٪ سرمایه روی یک شبکه است؛ تقسیم ریسک شبکه',
     'sugg.review-cash-buffer': 'سهم استیبل‌کوین {stablePct}٪ است؛ بازبینی ذخیره نقدی',
     'sugg.record-cost-basis': '{rowsWithoutCost} دارایی قیمت خرید ثبت‌شده ندارد؛ ثبت آن برای سود/ضرر واقعی',
+    'sugg.review-losing-position': 'بازده وزن‌دار پرتفوی {d1}٪ منفی است ({moveUsd})؛ {symbol} با {change}٪ افت، بیشترین اثر را داشته — موقعیت زیان‌ده را بازبینی کنید',
+    'sugg.review-take-profit': 'بازده وزن‌دار پرتفوی {d1}٪ مثبت است؛ {symbol} با {change}٪ بهترین عملکرد را داشته — مدیریت سود و حد ضرر را بررسی کنید',
 
     'opp.title': 'اسکنر فرصت',
     'opp.subtitle': 'روی {scanned} توکن؛ هر کارت دلیل عددی خودش را دارد',
@@ -250,6 +304,28 @@ export const COPY = {
     'market.sentence.missing': 'برای {missing} داده‌ای در دسترس نیست، پس عددی برایش ساخته نشده است.',
     'market.why': 'چرا این برچسب؟',
     'market.drivers': 'اجزای محاسبه',
+
+    'depth.ranking.title': 'رتبه‌بندی قدرت نسبی',
+    'depth.ranking.hint': '{n} دارایی از {total} دارایی خوانده‌شده، رتبه‌بندى شدند.',
+    'depth.ranking.thin': 'فقط {n} دارایی داده کافی داشت؛ رتبه‌بندی معنادار نیست و نمایش داده نمی‌شود.',
+    'depth.ranking.empty': 'هیچ دارایی‌ای هم‌زمان قیمت و تغییر ۲۴ ساعته نداشت؛ رتبه‌ای ساخته نشد.',
+    'depth.ranking.caveat': 'این رتبه یک سیگنال نیست: امتیاز از رتبه تغییر ۲۴ساعته و ۷روزه نسبت به کل بازار و نسبت گردش به میانه بازار ساخته می‌شود.',
+    'depth.vsTape': 'نسبت به بازار',
+    'depth.dispersion.title': 'پراکندگی حرکت',
+    'depth.dispersion.hint': 'هم‌خوانی بازار با خودش',
+    'depth.dispersion.value': 'انحراف معیار تغییر ۲۴ساعته',
+    'depth.dispersion.note': 'عدد بالاتر یعنی بازار یکدست نیست و حرکت شاخص، نمایندهٔ همهٔ دارایی‌ها نیست.',
+    'depth.capTop10': 'سهم ۱۰ دارایی بزرگ',
+    'depth.capTop10Note': 'تمرکز ارزش بازار؛ عدد بالاتر یعنی حرکت شاخص بیشتر تحت تأثیر چند دارایی است.',
+    'depth.turnover': 'میانه گردش',
+    'depth.turnoverNote': 'حجم ۲۴ساعته تقسیم بر ارزش بازار؛ معیار مشارکت واقعی در معامله.',
+    'depth.trigger.breadth-up': 'اگر تعداد دارایی‌های مثبت به {n} از {total} برسد، خوانش رژیم یک پله صعودی می‌شود.',
+    'depth.trigger.breadth-down': 'اگر تعداد دارایی‌های مثبت به {n} از {total} برسد، خوانش رژیم یک پله نزولی می‌شود.',
+    'depth.trigger.median-change': 'میانهٔ تغییر ۲۴ساعتهٔ بازار اکنون {value}٪ است؛ آستانهٔ تغییر برچسب، عبور از صفر در همین میانه است.',
+    'depth.divergence.title': 'واگرایی',
+    'depth.divergence.hint': 'چیزهایی که با بقیهٔ بازار نمی‌خوانند',
+    'depth.divergence.againstTape': 'خلاف جهت بازار',
+    'depth.divergence.quietVolume': 'حجم بی‌سروصدا — گردش بالا بدون حرکت قیمت',
 
     'time.now': 'همین حالا',
     'time.minutes': '{n} دقیقه پیش',
@@ -411,6 +487,7 @@ export const COPY = {
     'port.connect': 'Connect a wallet to analyse the portfolio',
     'port.connectHint': 'P&L needs a real buy/sell history; until then it stays "unknown".',
     'port.value': 'Total value',
+    'port.pnl': 'Profit and loss',
     'port.cost': 'Recorded cost basis',
     'port.realised': 'Realised P&L',
     'port.unrealised': 'Unrealised P&L',
@@ -435,11 +512,60 @@ export const COPY = {
     'port.horizon.medium': 'Medium',
     'port.horizon.long': 'Long',
 
+    'review.title': 'Portfolio review',
+    'review.subtitle': 'Profit and loss, the strongest and weakest holding, and the changes worth considering',
+    'review.headline': 'Review result',
+    'review.performance': 'Price performance of the portfolio',
+    'review.performance1d': '24h return (current weights)',
+    'review.performance7d': '7d return (current weights)',
+    'review.moveUsd': 'Move in dollars',
+    'review.basis': 'This is the PRICE return of the mix you hold now — not realised profit. Your entry prices are not part of it.',
+    'review.best': 'Strongest holding',
+    'review.worst': 'Weakest holding',
+    'review.losses': 'Holdings that lost (24h)',
+    'review.noLosses': 'No priced holding lost value in this window',
+    'review.missing': 'No price-change data',
+    'review.findings': 'What the review found',
+    'review.actions': 'What is worth doing',
+    'review.noActions': 'Nothing specific needs doing on the current data',
+    'review.confidence': 'Review confidence',
+    'review.coverage': 'Measured weight coverage',
+    'review.breadth': 'Up / down holdings',
+    'review.dispersion': 'Return dispersion',
+    'review.severity.critical': 'Critical',
+    'review.severity.high': 'High',
+    'review.severity.medium': 'Medium',
+    'review.severity.low': 'Low',
+    'review.severity.none': 'Healthy',
+    'review.verdict.gain': 'Gaining',
+    'review.verdict.loss': 'Losing',
+    'review.verdict.fragile': 'Fragile',
+    'review.verdict.flat': 'Flat',
+    'review.status.complete': 'Fully measured',
+    'review.status.partial': 'Partly measured',
+    'review.status.unavailable': 'Cannot be measured',
+    'review.note.pnl': 'Realised P&L comes only from a real buy/sell ledger; this section does not stand in for it.',
+
+    'review.finding.concentration': '{symbol} is {topShare}% of the portfolio value — the largest concentration (effective holdings: {effectiveHoldings}).',
+    'review.finding.largest-loss': '{symbol} has the biggest 24h drop at {change}% and moved {moveUsd} of portfolio value.',
+    'review.finding.no-cash-buffer': 'Stablecoins are {stablePct}% — there is effectively no cash buffer.',
+    'review.finding.correlated-book': 'Average daily return correlation is {avg}; the list is less diversified than it looks.',
+    'review.finding.network-concentration': '{weight}% of the capital sits on a single network (#{chainId}).',
+    'review.finding.unpriced-holdings': '{count} holdings have an amount but no valid price and are excluded from the total.',
+    'review.finding.missing-cost-basis': '{count} holdings have no recorded buy price; real P&L stays unknown until they do.',
+    'review.finding.negative-pnl': 'The ledger’s unrealised P&L is negative: {unrealised}.',
+    'review.finding.negative-performance': 'The price return of the current mix over 24h is {d1}% ({absUsd}).',
+    'review.finding.positive-performance': 'The price return of the current mix over 24h is {d1}% ({absUsd}).',
+    'review.finding.winner-underweight': '{symbol} is the best performer at {change}% but is only {weight}% of the portfolio.',
+    'review.finding.unmeasured-performance': 'Price-change data is missing for part of the book, so the combined return was not computed.',
+
     'sugg.reduce-concentration': '{symbol} is {topShare}% of the portfolio; reduce single-asset concentration',
     'sugg.improve-diversification': 'Average correlation is {avgCorrelation}; the diversification is thinner than the list suggests',
     'sugg.spread-network-risk': '{weight}% of the capital sits on one network; spread the network risk',
     'sugg.review-cash-buffer': 'Stablecoin share is {stablePct}%; review the cash buffer',
     'sugg.record-cost-basis': '{rowsWithoutCost} holdings have no recorded buy price; add it for real P&L',
+    'sugg.review-losing-position': 'The weighted portfolio return is −{d1}% ({moveUsd}); {symbol} fell {change}% and carried most of it — review the losing position',
+    'sugg.review-take-profit': 'The weighted portfolio return is +{d1}%; {symbol} led at {change}% — review profit management and a stop level',
 
     'opp.title': 'Opportunity scanner',
     'opp.subtitle': 'Across {scanned} tokens; every card shows its own arithmetic',
@@ -497,6 +623,28 @@ export const COPY = {
 
     'time.now': 'just now',
     'time.minutes': '{n} min ago',
+    'depth.ranking.title': 'Relative strength ranking',
+    'depth.ranking.hint': '{n} of {total} scanned assets ranked.',
+    'depth.ranking.thin': 'Only {n} assets carried the inputs; a ranking would be coincidence, so none is shown.',
+    'depth.ranking.empty': 'No asset carried both a price and a 24h change; nothing was ranked.',
+    'depth.ranking.caveat': 'Not a signal: the score is the percentile of the 24h and 7d move against the whole feed plus turnover relative to the feed median.',
+    'depth.vsTape': 'vs market',
+    'depth.dispersion.title': 'Dispersion of the move',
+    'depth.dispersion.hint': 'how much the tape agrees with itself',
+    'depth.dispersion.value': 'Std-dev of the 24h change',
+    'depth.dispersion.note': 'Higher means the market is not moving as one; the index print does not represent every asset.',
+    'depth.capTop10': 'Top-10 share of cap',
+    'depth.capTop10Note': 'Cap concentration — higher means the index print is driven by fewer names.',
+    'depth.turnover': 'Median turnover',
+    'depth.turnoverNote': '24h volume over market cap — a measure of real participation.',
+    'depth.trigger.breadth-up': 'If advancing assets reach {n} of {total}, the regime read moves one notch up.',
+    'depth.trigger.breadth-down': 'If advancing assets fall to {n} of {total}, the regime read moves one notch down.',
+    'depth.trigger.median-change': 'The market median 24h change is {value}%; the label flips when that median crosses zero.',
+    'depth.divergence.title': 'Divergence',
+    'depth.divergence.hint': 'the parts that disagree with the rest',
+    'depth.divergence.againstTape': 'Moving against the tape',
+    'depth.divergence.quietVolume': 'Quiet volume — heavy turnover, no price move',
+
     'time.hours': '{n} h ago'
   }
 };
@@ -540,15 +688,29 @@ export function fmtPct(value, { digits = 2, signed = true, locale = 'fa' } = {})
   return `${sign}${v.toFixed(digits)}%`;
 }
 
+/**
+ * Money, with the sign OUTSIDE the currency symbol.
+ *
+ * `$${v}` produced «$-8.33» — the minus wedged between the dollar sign and the
+ * digits, which reads like a malformed number in both LTR and RTL. A loss now
+ * prints «−$8.33» and a gain «+$15.68», which is what every other surface in
+ * this app does. Zero is a measurement and prints «$0», not an em dash.
+ */
 export function fmtMoney(value, locale = 'fa') {
   if (value == null || !Number.isFinite(Number(value))) return '—';
   const v = Number(value);
   const tag = NUM_LOCALE[locale] || 'en-US';
-  if (Math.abs(v) >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
-  if (Math.abs(v) >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
-  if (Math.abs(v) >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
-  if (Math.abs(v) >= 1e3) return `$${(v / 1e3).toFixed(1)}K`;
-  return new Intl.NumberFormat(tag, { maximumFractionDigits: 4 }).format(v).replace(/^/, '$');
+  const sign = v < 0 ? '−' : '';
+  const abs = Math.abs(v);
+  const body = (() => {
+    if (abs >= 1e12) return `$${(abs / 1e12).toFixed(2)}T`;
+    if (abs >= 1e9) return `$${(abs / 1e9).toFixed(2)}B`;
+    if (abs >= 1e6) return `$${(abs / 1e6).toFixed(2)}M`;
+    if (abs >= 1e3) return `$${(abs / 1e3).toFixed(1)}K`;
+    const digits = new Intl.NumberFormat(tag, { maximumFractionDigits: 4 }).format(abs);
+    return `$${digits}`;
+  })();
+  return `${sign}${body}`;
 }
 
 export function fmtPrice(value) {

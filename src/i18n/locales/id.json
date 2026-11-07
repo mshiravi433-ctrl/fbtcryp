@@ -3772,7 +3772,13 @@
         "noCostBasis": "Basis biaya dan riwayat pembelian belum terhubung.",
         "riskUnavailable": "Memerlukan pembacaan lengkap dan terkini dengan setidaknya satu aset yang memiliki harga.",
         "notComputed": "Metrik portofolio",
-        "riskBasis": "Heuristik: konsentrasi token berharga, porsi stablecoin, serta jumlah posisi dan jaringan; skor lebih tinggi berarti eksposur lebih besar."
+        "riskBasis": "Heuristik: konsentrasi token berharga, porsi stablecoin, serta jumlah posisi dan jaringan; skor lebih tinggi berarti eksposur lebih besar.",
+        "performance24h": "Imbal hasil 24 jam",
+        "performance7d": "Imbal hasil 7 hari",
+        "currentWeights": "bobot saat ini",
+        "movedUsd": "Perubahan dalam USD",
+        "last24h": "24 jam terakhir",
+        "riskBasisShort": "aset dan jaringan"
       },
       "note": {
         "pricedSubtotal": "Nilai ini hanya mencakup aset dengan harga valid.",

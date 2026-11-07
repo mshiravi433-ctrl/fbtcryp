@@ -136,7 +136,7 @@ const clampSym = (v, lo = 0, hi = 100) => clamp(v, lo, hi);
  * other numbers read "higher is better", and the risk badge is the one that
  * must not).
  */
-export function assessRisk({ intel = null, allocation = [], correlation = null, rows = [] } = {}) {
+export function assessRisk({ intel = null, allocation = [], correlation = null, rows = [], performance = null } = {}) {
   const reasons = [];
   let score = isNum(intel?.riskScore) ? intel.riskScore : 20;
   if (isNum(intel?.riskScore)) {
@@ -167,6 +167,17 @@ export function assessRisk({ intel = null, allocation = [], correlation = null, 
     reasons.push({ key: 'unpriced-holdings', params: { count: unpriced } });
   }
 
+  /* Realised drawdown in progress. A book that lost 6% of its dollar value in
+     a day is riskier TODAY than the same book was yesterday, whatever its
+     composition says — so the measured move adjusts the band, with the number
+     that caused it kept in `reasons`. */
+  const dayReturn = isNum(performance?.returns?.d1) ? performance.returns.d1 : null;
+  if (dayReturn != null && dayReturn <= -2) {
+    const add = Math.round(Math.min(10, Math.abs(dayReturn) * 1.2));
+    score += add;
+    reasons.push({ key: 'measured-daily-drawdown', params: { d1: Math.round(dayReturn * 100) / 100, add } });
+  }
+
   score = Math.round(clampSym(score, 5, 95));
   return {
     score,
@@ -182,7 +193,9 @@ export function assessRisk({ intel = null, allocation = [], correlation = null, 
  * Advisory suggestions. Each one is (action, reason with numbers, horizon,
  * confidence, and 'not-advice'), never a bare "buy X".
  */
-export function buildSuggestions({ intel = null, allocation = [], correlation = null, chainAllocation = [] } = {}) {
+export function buildSuggestions({
+  intel = null, allocation = [], correlation = null, chainAllocation = [], performance = null
+} = {}) {
   const out = [];
   if (!intel || !intel.total) return out;
 
@@ -245,6 +258,44 @@ export function buildSuggestions({ intel = null, allocation = [], correlation = 
     });
   }
 
+  /* ── measured price performance ─────────────────────────────────────────
+     A losing day is the one moment a review earns its keep. These two fire on
+     the WEIGHTED return of the mix (not on one asset's bad hour), and both
+     name the holding that carried the move so the suggestion is checkable. */
+  const d1 = isNum(performance?.returns?.d1) ? performance.returns.d1 : null;
+  const worst = performance?.worst?.d1 ?? null;
+  if (d1 != null && d1 <= -2 && !out.some((s) => s.action === 'reduce-concentration')) {
+    out.push({
+      action: 'review-losing-position',
+      params: {
+        symbol: worst?.symbol ?? intel.rows?.[0]?.symbol ?? null,
+        change: isNum(worst?.change1d) ? Math.abs(worst.change1d) : null,
+        d1: Math.abs(d1),
+        moveUsd: performance?.returns?.absUsd1d != null ? Math.abs(performance.returns.absUsd1d) : null
+      },
+      horizon: 'short',
+      risk: d1 <= -5 ? 'high' : 'medium',
+      confidence: clampSym(55 + Math.abs(d1) * 4, 55, 92),
+      evidence: ['weighted-24h-return', 'worst-holding-change']
+    });
+  }
+  if (d1 != null && d1 >= 2) {
+    out.push({
+      action: 'review-take-profit',
+      params: {
+        symbol: performance?.best?.d1?.symbol ?? intel.rows?.[0]?.symbol ?? null,
+        d1: Math.abs(d1),
+        change: isNum(performance?.best?.d1?.change1d) ? Math.abs(performance.best.d1.change1d) : null
+      },
+      horizon: 'short',
+      risk: 'low',
+      /* A gain is measured; what to DO with it is the reader's call — hence a
+         moderate confidence and an explicit horizon rather than an order. */
+      confidence: clampSym(48 + Math.abs(d1) * 3, 48, 78),
+      evidence: ['weighted-24h-return', 'best-holding-change']
+    });
+  }
+
   return out.sort((a, b) => b.confidence - a.confidence);
 }
 
@@ -253,9 +304,16 @@ export function buildSuggestions({ intel = null, allocation = [], correlation = 
  * @param {object} input.intel          buildIntelligence() output
  * @param {object} input.correlation    correlationMatrix() output (optional)
  * @param {Array}  input.seriesUsed     symbols whose candle history was read
+ * @param {object} input.performance    buildPerformance() output (optional)
  * @param {number} input.now
  */
-export function buildPortfolioAnalysis({ intel = null, correlation = null, seriesUsed = [], now = Date.now() } = {}) {
+export function buildPortfolioAnalysis({
+  intel = null,
+  correlation = null,
+  seriesUsed = [],
+  performance = null,
+  now = Date.now()
+} = {}) {
   if (!intel) {
     return {
       version: PORTFOLIO_ANALYSIS_VERSION,
@@ -267,7 +325,7 @@ export function buildPortfolioAnalysis({ intel = null, correlation = null, serie
   const rows = intel.rows || [];
   const allocation = buildAllocation(rows, intel.total);
   const chainAllocation = intel.chainAllocation || [];
-  const risk = assessRisk({ intel, allocation, correlation, rows });
+  const risk = assessRisk({ intel, allocation, correlation, rows, performance });
 
   const withCost = rows.filter((r) => isNum(r?.cost) && r.cost > 0);
   const pnlStatus = rows.length === 0
@@ -320,7 +378,10 @@ export function buildPortfolioAnalysis({ intel = null, correlation = null, serie
       change30d: intel.change30d
     },
     risk,
-    suggestions: buildSuggestions({ intel, allocation, correlation, chainAllocation }),
+    performance: performance || null,
+    suggestions: buildSuggestions({
+      intel, allocation, correlation, chainAllocation, performance
+    }),
     caveats: [
       'not-advice',
       ...(pnlStatus === 'unknown' ? ['cost-basis-unknown'] : []),

@@ -207,4 +207,78 @@ await test('returns no numerical risk score when all holdings are unpriced', asy
   assert.equal(risk.dataStatus, 'unavailable');
 });
 
+/* ── the measured review the grey panel never produced ─────────────────────
+   «در زیر هر درخواست بررسی پرتفوی طوسی است که یعنی در نظر نگرفته»
+   The card used to answer a review request with two "not available" tiles.
+   With quotes on the portfolio it must now carry the weighted 24h/7d return,
+   the dollars moved, the strongest and weakest holding, and every loss —
+   while P&L stays a separate, still-unknown field. */
+await test('measures the mix return from quotes instead of answering "not available"', () => {
+  const card = portfolioReply({
+    wallet: { connected: true },
+    portfolio: {
+      dataStatus: 'live',
+      priceDataStatus: 'live',
+      partial: false,
+      holdings: [
+        { symbol: 'BTC', chainId: 1, amount: 0.01, valueUsd: 600 },
+        { symbol: 'ETH', chainId: 1, amount: 0.1, valueUsd: 300 },
+        { symbol: 'SOL', chainId: 501, amount: 2, valueUsd: 100 }
+      ],
+      chains: [],
+      marketRows: [
+        { id: 'bitcoin', symbol: 'BTC', price: 60000, change24h: 2, change7d: 5 },
+        { id: 'ethereum', symbol: 'ETH', price: 3000, change24h: -3, change7d: -6 },
+        { id: 'solana', symbol: 'SOL', price: 50, change24h: 6, change7d: 12 }
+      ]
+    }
+  }).card;
+
+  /* .6(2) + .3(−3) + .1(6) = 1.2 − 0.9 + 0.6 = 0.9 */
+  assert.equal(card.performance24h, 0.9);
+  assert.equal(card.performanceStatus, 'complete');
+  assert.ok(Number.isFinite(card.movedUsd24h), 'the dollar move must be a measured number');
+  assert.equal(card.topPerformers[0].symbol, 'SOL');
+  assert.equal(card.weakestPerformer.symbol, 'ETH');
+  assert.ok(card.movers.length >= 2);
+  assert.ok(card.losses.some((l) => l.symbol === 'ETH'), 'the losing holding must be listed');
+  /* P&L is still its own field and still unknown without cost basis. */
+  assert.equal(card.pnlStatus, 'unknown');
+  assert.equal(card.unrealisedPnl, null);
+});
+
+await test('leaves the measured return null when no quotes arrived, never zero', () => {
+  const card = portfolioReply().card;
+  assert.equal(card.performance24h, null);
+  assert.equal(card.performanceStatus, 'unavailable');
+  assert.equal(card.movedUsd24h, null);
+  assert.deepEqual(card.topPerformers, []);
+  assert.equal(card.weakestPerformer, null);
+  assert.equal(card.unrealisedPnl, null);
+});
+
+await test('excludes an unpriced holding from the return and names it', () => {
+  const card = portfolioReply({
+    wallet: { connected: true },
+    portfolio: {
+      dataStatus: 'live',
+      priceDataStatus: 'live',
+      partial: false,
+      holdings: [
+        { symbol: 'BTC', chainId: 1, amount: 0.01, valueUsd: 900 },
+        { symbol: 'MYSTERY', chainId: 137, amount: 5, valueUsd: 100 }
+      ],
+      chains: [],
+      marketRows: [
+        { id: 'bitcoin', symbol: 'BTC', price: 60000, change24h: 2, change7d: 5 }
+      ]
+    }
+  }).card;
+  /* The measured return is BTC's alone; MYSTERY is not absorbed as a 0%. */
+  assert.equal(card.performance24h, 2);
+  assert.equal(card.performanceStatus, 'partial');
+  assert.ok(card.performanceMissing.map(String).includes('MYSTERY'));
+  assert.ok(card.performanceCoveragePct > 0 && card.performanceCoveragePct < 100);
+});
+
 console.log('\nAll portfolio chat card checks passed.');
