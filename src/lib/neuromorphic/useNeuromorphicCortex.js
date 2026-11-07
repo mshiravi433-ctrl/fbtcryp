@@ -11,6 +11,9 @@
  *   · In environments without `Worker` (jsdom/SSR tests), seamlessly executes
  *     the exact same pure-math cortex inline rather than faking results.
  *   · Adaptive Intelligence Ecosystem: Self-Evolution on device CPU/GPU.
+ *   · PHASE 7: the Universal Scientific Memory is fed by this device's real
+ *     resolved engrams and its report is exported here. Nothing is pre-computed
+ *     in this module — the worker (or the inline mirror) owns the statistics.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -26,6 +29,7 @@ import {
   wipeLocalCortexBundle
 } from './engramMemory.js';
 import { blendGlobalSwarmWeights, runLocalSwarmEvolution } from './swarmClient.js';
+import { createScientificMemory } from './scientificMemory.js';
 
 const PREFS_KEY = 'fbt.neuromorphic.prefs.v1';
 const DEVICE_KEY = 'fbt.ai.device.v1';
@@ -107,6 +111,12 @@ let storeState = {
   engramCount: 0,
   readout: null,             // null until a real market/candle tick runs!
   engramRecall: null,
+  science: null,             // Phase 7 report (hypotheses, FDR, meta-analysis)
+  scienceIngest: null,
+  sciencePrior: null,
+  scienceWorld: null,        // world registry summary (consensus across devices)
+  scienceAction: null,       // last explicit science action result
+  scienceError: null,
   structuralLast: null,
   evolutionLast: null,
   consolidationLast: null,
@@ -139,11 +149,13 @@ const pendingWorkerCalls = new Map();
 let inlineCortex = null;
 let inlineEngrams = null;
 let inlineGovernor = null;
+let inlineScience = null;
 
 function ensureInlineRuntime() {
   if (!inlineCortex) {
     inlineCortex = createNeuromorphicCortex();
     inlineEngrams = createEngramMemory();
+    inlineScience = createScientificMemory();
     inlineGovernor = createHardwareGovernor({
       paused: storeState.paused,
       swarmOptIn: storeState.swarmOptIn
@@ -205,7 +217,8 @@ async function runInlineFallback(msg) {
       generation: snap.generation,
       reservoirNeurons: snap.reservoirSize,
       engramCount: inlineEngrams.size(),
-      brainEnabled: inlineCortex.isBrainEnabled()
+      brainEnabled: inlineCortex.isBrainEnabled(),
+      science: inlineScience.report()
     };
   }
   if (type === 'tick') {
@@ -235,11 +248,18 @@ async function runInlineFallback(msg) {
         maxReservoirNeurons: gov.maxReservoirNeurons
       });
     }
+    const scienceIngest = inlineScience.ingestEngrams(inlineEngrams.exportEpisodes());
     return {
       ok: true,
       readout,
       structural,
       engramRecall: inlineEngrams.recall(inlineCortex._internals().getLiquidState()),
+      science: inlineScience.report(),
+      scienceIngest,
+      sciencePrior: inlineScience.priorForCortex({
+        regime: readout.dominantRegime,
+        symbol: msg.symbol || feat.meta?.anchorSymbol || null
+      }),
       governor: gov
     };
   }
@@ -280,6 +300,8 @@ async function runInlineFallback(msg) {
       ok: true,
       readout: lastReadout,
       structural,
+      scienceIngest: inlineScience.ingestEngrams(inlineEngrams.exportEpisodes()),
+      science: inlineScience.report(),
       evolution: {
         improved: Boolean(evo.improved),
         baselineFitness: evo.baselineFitness ?? null,
@@ -315,23 +337,47 @@ async function runInlineFallback(msg) {
       episodes: inlineEngrams.exportEpisodes(),
       iterations
     });
+    const scienceIngest = inlineScience.ingestEngrams(inlineEngrams.exportEpisodes());
     if (consolidation.ok) {
       await saveLocalCortexBundle({
         cortexSnapshot: inlineCortex.exportSnapshot(),
-        episodes: inlineEngrams.exportEpisodes()
+        episodes: inlineEngrams.exportEpisodes(),
+        science: inlineScience.toJSON()
       });
     }
     return {
       ok: Boolean(consolidation.ok),
       consolidation,
+      science: inlineScience.report(),
+      scienceIngest,
       readout: inlineCortex._internals().getLastReadout(),
       engramCount: inlineEngrams.size(),
       governor: await inlineGovernor.evaluate()
     };
   }
+  if (type === 'science') {
+    const action = String(msg.action || 'report');
+    if (action === 'ingest') {
+      const ingest = inlineScience.ingestEngrams(inlineEngrams.exportEpisodes());
+      return { ok: true, action, ingest, science: inlineScience.report(), engramCount: inlineEngrams.size() };
+    }
+    if (action === 'exportPrior') {
+      return { ok: true, action, packet: inlineScience.exportPrior() };
+    }
+    if (action === 'mergePrior') {
+      const merged = inlineScience.mergePrior(msg.packet || null);
+      return { ok: merged.ok, action, merged, science: inlineScience.report() };
+    }
+    if (action === 'retire') {
+      const retired = inlineScience.retireExpired();
+      return { ok: true, action, retired, science: inlineScience.report() };
+    }
+    return { ok: true, action: 'report', science: inlineScience.report() };
+  }
   if (type === 'reset') {
     inlineCortex.reset();
     inlineEngrams.clear();
+    inlineScience.wipe();
     await wipeLocalCortexBundle();
     return { ok: true, generation: 0, reservoirNeurons: 96, engramCount: 0, governor: await inlineGovernor.evaluate() };
   }
@@ -415,6 +461,9 @@ export async function tickNeuromorphicWithCandles(candles, { symbol = null, brea
       governor: res.governor || storeState.governor,
       reservoirNeurons: res.readout.topology?.reservoirNeurons ?? storeState.reservoirNeurons,
       engramCount: res.engramRecall?.totalEngrams ?? storeState.engramCount,
+      science: res.science || storeState.science,
+      scienceIngest: res.scienceIngest || storeState.scienceIngest,
+      sciencePrior: res.sciencePrior || storeState.sciencePrior,
       lastSymbol: symbol || storeState.lastSymbol,
       lastUpdatedAt: Date.now(),
       lastError: null
@@ -434,6 +483,9 @@ export async function tickNeuromorphicWithMarketPulse({ markets = [], pulse = nu
       governor: res.governor || storeState.governor,
       reservoirNeurons: res.readout.topology?.reservoirNeurons ?? storeState.reservoirNeurons,
       engramCount: res.engramRecall?.totalEngrams ?? storeState.engramCount,
+      science: res.science || storeState.science,
+      scienceIngest: res.scienceIngest || storeState.scienceIngest,
+      sciencePrior: res.sciencePrior || storeState.sciencePrior,
       lastSymbol: 'MARKET',
       lastUpdatedAt: Date.now(),
       lastError: null
@@ -595,6 +647,8 @@ export async function consolidateLocalBrain({ iterations = 6 } = {}) {
   if (res.ok && res.consolidation) {
     emit({
       consolidationLast: res.consolidation,
+      science: res.science || storeState.science,
+      scienceIngest: res.scienceIngest || storeState.scienceIngest,
       readout: res.readout || storeState.readout,
       engramCount: res.engramCount ?? storeState.engramCount,
       lastUpdatedAt: Date.now(),
@@ -621,6 +675,111 @@ export async function resetNeuromorphicRuntime() {
   return resetLocalNeuromorphicCortex();
 }
 
+/* ── Phase 7: Universal Scientific Memory ─────────────────────────────────── */
+
+/**
+ * Score this device's resolved engrams against the pre-specified hypothesis
+ * family and return the measured report. Nothing is fabricated: an empty bank
+ * yields an honest "open" family with zero evidence.
+ */
+export async function ingestScientificMemory() {
+  await initNeuromorphicRuntime();
+  const res = await sendWorkerMessage({ type: 'science', action: 'ingest' });
+  if (res.ok && res.science) {
+    emit({
+      science: res.science,
+      scienceIngest: res.ingest || storeState.scienceIngest,
+      scienceAction: { action: 'ingest', at: Date.now(), ingest: res.ingest || null },
+      scienceError: null
+    });
+  } else {
+    emit({ scienceError: res.error || res.reason || 'SCIENCE_INGEST_FAILED' });
+  }
+  return res;
+}
+
+/** Read the current beliefs without adding evidence. */
+export async function refreshScientificMemory() {
+  await initNeuromorphicRuntime();
+  const res = await sendWorkerMessage({ type: 'science', action: 'report' });
+  if (res.ok && res.science) emit({ science: res.science });
+  return res;
+}
+
+/** Retire hypotheses whose declared expiry has passed (keeps beliefs finite). */
+export async function retireScientificMemory() {
+  await initNeuromorphicRuntime();
+  const res = await sendWorkerMessage({ type: 'science', action: 'retire' });
+  if (res.ok && res.science) {
+    emit({
+      science: res.science,
+      scienceAction: { action: 'retire', at: Date.now(), retired: res.retired?.retired ?? 0 }
+    });
+  }
+  return res;
+}
+
+/**
+ * Publish only the portable prior (log Bayes factors + effective counts of
+ * pre-specified families) to the world registry, then read the aggregate back.
+ * Raw prices, vectors, engrams and device identifiers are never uploaded.
+ */
+export async function shareScientificPrior() {
+  if (!storeState.swarmOptIn) {
+    return { ok: false, reason: 'SWARM_OPT_OUT' };
+  }
+  await initNeuromorphicRuntime();
+  const exported = await sendWorkerMessage({ type: 'science', action: 'exportPrior' });
+  if (!exported.ok || !exported.packet) {
+    emit({ scienceError: exported.error || 'NO_PRIOR_PACKET' });
+    return { ok: false, reason: 'NO_PRIOR_PACKET' };
+  }
+  if (!Array.isArray(exported.packet.records) || exported.packet.records.length === 0) {
+    return { ok: false, reason: 'NO_EVIDENCE_TO_SHARE', packet: exported.packet };
+  }
+  const upload = await swarmFetch('/v1/ai/neuromorphic/science/prior', {
+    method: 'POST',
+    body: { packet: exported.packet }
+  });
+  const world = await syncScienceWorld();
+  emit({
+    scienceAction: {
+      action: 'share',
+      at: Date.now(),
+      records: exported.packet.records.length,
+      accepted: Boolean(upload.ok),
+      code: upload.code || (upload.ok ? 'ACCEPTED' : 'UPLOAD_FAILED')
+    },
+    scienceError: upload.ok ? null : (upload.code || upload.error || 'SHARE_FAILED')
+  });
+  return { ...upload, packet: exported.packet, world };
+}
+
+/** Pull the world registry (consensus across devices) — read-only. */
+export async function syncScienceWorld() {
+  const res = await swarmFetch('/v1/ai/neuromorphic/science');
+  if (res.ok && res.world) {
+    emit({ scienceWorld: res.world });
+  }
+  return res.world || null;
+}
+
+/** Accept another device's prior packet (deduplicated by packet hash). */
+export async function mergeScientificPrior(packet) {
+  await initNeuromorphicRuntime();
+  const res = await sendWorkerMessage({ type: 'science', action: 'mergePrior', packet });
+  if (res.ok && res.science) {
+    emit({
+      science: res.science,
+      scienceAction: { action: 'mergePrior', at: Date.now(), merged: res.merged?.merged ?? 0 },
+      scienceError: null
+    });
+  } else {
+    emit({ scienceError: res.code || res.merged?.code || res.error || 'MERGE_REJECTED' });
+  }
+  return res;
+}
+
 /* ── React Hook ───────────────────────────────────────────────────────────── */
 
 /**
@@ -642,6 +801,7 @@ export function useNeuromorphicCortex({ autoSync = true } = {}) {
     void initNeuromorphicRuntime();
     if (autoSync) {
       void syncWithGlobalSwarm();
+      void syncScienceWorld();
     }
     return () => {
       listeners.delete(onUpdate);
@@ -668,6 +828,14 @@ export function useNeuromorphicCortex({ autoSync = true } = {}) {
     /* Phase 6 — brain-inspired circuits */
     consolidateBrain: (args = {}) => consolidateLocalBrain(args),
     setBrainEnabled: (enabled) => setBrainCircuitsEnabled(enabled),
+
+    /* Phase 7 — universal scientific memory */
+    ingestScience: () => ingestScientificMemory(),
+    refreshScience: () => refreshScientificMemory(),
+    retireScience: () => retireScientificMemory(),
+    shareSciencePrior: () => shareScientificPrior(),
+    syncScienceWorld: () => syncScienceWorld(),
+    mergeSciencePrior: (packet) => mergeScientificPrior(packet),
 
     /* preferences & governance */
     toggleSwarmOptIn: () => setNeuromorphicPreferences({ swarmOptIn: !storeState.swarmOptIn }),

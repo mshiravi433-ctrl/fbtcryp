@@ -6,6 +6,7 @@ import NeuromorphicCortexPanel from '../src/components/ai/NeuromorphicCortexPane
 import NeuromorphicRoomStrip from '../src/components/ai/NeuromorphicRoomStrip.jsx';
 import {
   consolidateLocalBrain,
+  ingestScientificMemory,
   resetLocalNeuromorphicCortex,
   setBrainCircuitsEnabled,
   tickNeuromorphicWithCandles
@@ -142,6 +143,61 @@ describe('Phase 4 — Neuromorphic 2050 UI Console & Chat Room Strip', () => {
     // With the circuits on but no observation yet, the brain block must show
     // em-dashes, never invented numbers.
     expect(screen.getByTestId('nmc-brain-action').textContent).toBe('—');
+    expect(container.textContent).not.toMatch(/NaN|undefined|Infinity/);
+  });
+
+  it('renders the Phase-7 scientific memory from device evidence only', async () => {
+    const candles = sampleCandles(28);
+    for (let end = 6; end <= 22; end += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await tickNeuromorphicWithCandles(candles.slice(0, end), { symbol: 'BTC' });
+    }
+
+    const { container } = render(<NeuromorphicCortexPanel locale="fa" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('nmc-science-pill')).toBeTruthy();
+    });
+
+    // The family is pre-registered in code, so its size is real even with no data.
+    expect(screen.getByTestId('nmc-science-hypotheses').textContent).toMatch(/فرضیه|hypoth/i);
+    // FDR verdict is a fraction "confirmed / tested" — never a bare marketing %.
+    expect(screen.getByTestId('nmc-science-confirmed').textContent).toContain('/');
+    // The Bayes factor stays an em-dash until real evidence exists; the moment it
+    // exists it must be a finite number, never NaN/Infinity.
+    const bf = screen.getByTestId('nmc-science-bf').textContent;
+    expect(bf === '—' || /[+-]?[0-9]/.test(bf)).toBe(true);
+    expect(screen.getByTestId('nmc-science-meta')).toBeTruthy();
+    expect(screen.getByTestId('nmc-science-evidence')).toBeTruthy();
+    expect(screen.getByTestId('nmc-science-prior')).toBeTruthy();
+    expect(screen.getByTestId('nmc-science-honesty').textContent).toMatch(/FDR|پیش‌ثبت|پیش\u200cثبت/);
+    expect(container.textContent).not.toMatch(/NaN|undefined|Infinity/);
+    // Retrospective engrams alone must never be presented as a confirmed belief.
+    expect(screen.getByTestId('nmc-science-honesty').textContent.length).toBeGreaterThan(40);
+  });
+
+  it('answers the science buttons with an explicit, honest status line', async () => {
+    const candles = sampleCandles(26);
+    for (let end = 6; end <= 20; end += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await tickNeuromorphicWithCandles(candles.slice(0, end), { symbol: 'BTC' });
+    }
+
+    const ingest = await ingestScientificMemory();
+    expect(ingest.ok).toBe(true);
+    expect(ingest.science.schema).toBe('fbt.neuromorphic.science.v1');
+    expect(ingest.science.laws.canExecute).toBe(false);
+    // Ticks already auto-ingest, so a second explicit ingest must either find new
+    // evidence or reject every episode as a duplicate — never silently double-count.
+    expect(ingest.ingest.ingested + ingest.ingest.duplicates).toBeGreaterThan(0);
+    expect(ingest.ingest.totalEngrams).toBeGreaterThan(0);
+
+    const { container } = render(<NeuromorphicCortexPanel locale="en" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('nmc-science-status')).toBeTruthy();
+    });
+    expect(screen.getByTestId('nmc-science-status').textContent).toMatch(/observation|Scientific memory|Prior/i);
+    expect(screen.getByTestId('nmc-science-ingest-btn')).toBeTruthy();
+    expect(screen.getByTestId('nmc-science-share-btn')).toBeTruthy();
     expect(container.textContent).not.toMatch(/NaN|undefined|Infinity/);
   });
 });

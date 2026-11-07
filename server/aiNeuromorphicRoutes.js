@@ -9,6 +9,8 @@
  *   POST /neuromorphic/delta    Submit verified on-device walk-forward synaptic delta
  *   POST /neuromorphic/infer    Deterministic readout using current global genome
  *   GET  /neuromorphic/brain    Phase 6 brain-inspired evidence probe (measured)
+ *   GET  /neuromorphic/science         Phase 7 universal scientific memory: measured statistics + world registry
+ *   POST /neuromorphic/science/prior   Upload a portable prior packet (no raw data, pre-specified families only)
  *
  * Owner derivation matches `server/aiOrchestratorRoutes.js` (`x-fbt-device`
  * salted SHA-256 → `dev:...`) so zero raw device IDs or IPs are stored in the
@@ -22,6 +24,7 @@ import {
   getNeuromorphicSwarm
 } from './aiNeuromorphic.js';
 import { getBrainInspiredReport } from './aiNeuromorphicBrain.js';
+import { getScienceProbeReport, getScienceRegistry } from './aiNeuromorphicScience.js';
 
 export const NEUROMORPHIC_ROUTES_SCHEMA = 'fbt.neuromorphic.routes.v1';
 
@@ -87,6 +90,38 @@ export function createNeuromorphicRouter({ swarm = null, log = () => {} } = {}) 
     const ticksRaw = Number(req.query?.ticks);
     const ticks = Number.isFinite(ticksRaw) && ticksRaw > 0 ? Math.min(240, Math.max(8, ticksRaw)) : 60;
     return getBrainInspiredReport({ ticks });
+  }));
+
+  /**
+   * Phase 7 — Universal Scientific Memory.
+   * The probe is measured (seeded simulations of the statistics engine) and the
+   * world registry reports only pre-specified families, with contributor counts.
+   */
+  router.get('/neuromorphic/science', wrap(async (req) => {
+    const nullTestsRaw = Number(req.query?.nullTests);
+    const altTestsRaw = Number(req.query?.altTests);
+    const nullTests = Number.isFinite(nullTestsRaw)
+      ? Math.min(480, Math.max(24, Math.round(nullTestsRaw)))
+      : 240;
+    const altTests = Number.isFinite(altTestsRaw)
+      ? Math.min(120, Math.max(8, Math.round(altTestsRaw)))
+      : 40;
+    const probe = getScienceProbeReport({ nullTests, altTests });
+    const world = await getScienceRegistry().getWorld({ limit: 12 });
+    return { ...probe, world };
+  }));
+
+  /**
+   * Phase 7 — publish this device's portable prior.
+   * Refuses invented hypothesis families, raw data and oversized packets; the
+   * response always carries the hard no-execution laws and the storage mode.
+   */
+  router.post('/neuromorphic/science/prior', wrap(async (req, res) => {
+    const owner = ownerFor(req);
+    const packet = req.body?.packet && typeof req.body.packet === 'object' ? req.body.packet : req.body;
+    const out = await getScienceRegistry().submitPrior({ owner, packet });
+    if (!out.ok) res.status(400);
+    return out;
   }));
 
   router.post('/neuromorphic/infer', wrap(async (req, res) => {

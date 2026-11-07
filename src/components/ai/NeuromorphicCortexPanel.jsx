@@ -11,6 +11,10 @@
  *     trend, the four neuromodulators, basal-ganglia action selection,
  *     prefrontal working-memory load, cerebellar forward error, theta plasticity
  *     window and an event-driven energy estimate — all from the running circuits.
+ *   · Phase 7 universal scientific memory: pre-registered hypotheses, the BH-FDR
+ *     discovery budget, the best posterior with its credible interval, the
+ *     memory's own prequential calibration, the random-effects meta-analysis and
+ *     the world-registry consensus. Every value comes from the device report.
  *
  * This file previously contained literal `\n` escape sequences inside its JSX
  * (an editor artefact), which made the whole module unparsable: any page that
@@ -101,6 +105,23 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
 
   const consolidation = nm.consolidationLast;
 
+  /* ── Phase 7 — Universal Scientific Memory ─────────────────────────────── */
+  const science = nm.science || null;
+  const sciTotals = science?.totals || null;
+  const sciFdr = science?.fdr || null;
+  const sciBest = science?.best || null;
+  const sciConfirmed = science?.bestConfirmed || null;
+  const sciCal = science?.calibration || null;
+  const sciMeta = science?.meta || null;
+  const sciWorld = nm.scienceWorld || null;
+  const sciPrior = nm.sciencePrior || null;
+  const sciSensitivity = science?.sensitivity || null;
+  const sciStatusLabel = science
+    ? (sciFdr?.confirmed > 0
+        ? (isFa ? `${sciFdr.confirmed} باور تأییدشده` : `${sciFdr.confirmed} confirmed belief(s)`)
+        : (isFa ? 'پیش‌ثبت فعال · بدون تأیید' : 'Pre-registration active · none confirmed'))
+    : (isFa ? 'در انتظار اولین شاهد' : 'Awaiting first evidence');
+
   return (
     <section
       className="nmc-root"
@@ -138,6 +159,9 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
           </span>
           <span className="nmc-pill nmc-pill-mint" data-testid="nmc-xp-pill">
             {isFa ? `امتیاز محاسباتی: ${callerXp} XP` : `Compute XP: ${callerXp}`}
+          </span>
+          <span className="nmc-pill nmc-pill-violet" data-testid="nmc-science-pill">
+            {isFa ? 'حافظهٔ علمی جهانی' : 'Scientific Memory'}: {sciStatusLabel}
           </span>
           <span
             className={`nmc-pill ${brainOn ? 'nmc-pill-amber' : ''}`}
@@ -417,6 +441,189 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
         </div>
       </div>
 
+
+      {/* ── Phase 7 — Universal Scientific Memory ─────────────────────────── */}
+      <div className="nmc-raster-card nmc-science-card">
+        <div className="nmc-section-head">
+          <strong>
+            {isFa
+              ? 'حافظهٔ علمی جهانی — مکمل حافظهٔ محلی کورتکس (Universal Scientific Memory)'
+              : 'Universal Scientific Memory — the epistemic complement to local engrams'}
+          </strong>
+          <small data-testid="nmc-science-hypotheses">
+            {science
+              ? (isFa
+                  ? `${sciTotals.hypotheses} فرضیهٔ پیش‌ثبت‌شده · ${sciTotals.observations} شاهد · ${sciTotals.prospective} آینده‌نگر (پس از ثبت) / ${sciTotals.retrospective} پس‌نگر`
+                  : `${sciTotals.hypotheses} pre-registered hypotheses · ${sciTotals.observations} observations · ${sciTotals.prospective} post-registration / ${sciTotals.retrospective} retrospective`)
+              : (isFa ? 'بدون شاهد ساختگی — با اولین خاطرهٔ واقعی پر می‌شود' : 'No invented evidence — fills from real resolved engrams')}
+          </small>
+        </div>
+
+        <div className="nmc-grid-4">
+          <div className="nmc-stat">
+            <span>{isFa ? 'تأییدشده پس از FDR' : 'Confirmed after FDR'}</span>
+            <strong data-testid="nmc-science-confirmed">
+              {science ? `${sciFdr.confirmed} / ${sciFdr.m}` : '—'}
+            </strong>
+            <small>
+              {science
+                ? (isFa
+                    ? `${sciFdr.supported} باور با فاکتور بیز قاطع · ${sciFdr.supportedButCorrected} با تأیید چندگانه رد شد · q=${sciFdr.q}`
+                    : `${sciFdr.supported} decisive-BF beliefs · ${sciFdr.supportedButCorrected} rejected by correction · q=${sciFdr.q}`)
+                : (isFa ? 'کنترل کشف کاذب بنجامینی-هوخبرگ' : 'Benjamini–Hochberg FDR control')}
+            </small>
+          </div>
+
+          <div className="nmc-stat">
+            <span>{isFa ? 'بهترین باور (میانگین پسین)' : 'Best belief (posterior)'}</span>
+            <strong data-testid="nmc-science-best">
+              {sciBest ? fmtPct(sciBest.posteriorMean, 1) : '—'}
+            </strong>
+            <small>
+              {sciBest
+                ? (isFa
+                    ? `فاصلهٔ باورمند ۹۵٪: ${fmtPct(sciBest.credibleInterval.low, 0)} – ${fmtPct(sciBest.credibleInterval.high, 0)} · ${sciBest.symbol || 'همهٔ بازارها'} · ${REGIME_LABELS[sciBest.regime]?.[isFa ? 'fa' : 'en'] || sciBest.regime}`
+                    : `95% credible: ${fmtPct(sciBest.credibleInterval.low, 0)} – ${fmtPct(sciBest.credibleInterval.high, 0)} · ${sciBest.symbol || 'all markets'} · ${sciBest.regime}`)
+                : (isFa ? 'اگر شاهدی نباشد «—» می‌ماند' : 'Stays — until evidence exists')}
+            </small>
+          </div>
+
+          <div className="nmc-stat">
+            <span>{isFa ? 'فاکتور بیز (log₁₀)' : 'Bayes factor (log₁₀)'}</span>
+            <strong data-testid="nmc-science-bf">
+              {sciBest ? fmtSigned(sciBest.log10BayesFactor, 2) : '—'}
+            </strong>
+            <small data-testid="nmc-science-sensitivity">
+              {sciBest
+                ? (isFa
+                    ? `دسته: ${sciBest.band}${sciSensitivity ? ` · ${sciSensitivity.flipsAtAdditionalMisses} شکست اضافه آن را برمی‌گرداند` : ''}`
+                    : `band: ${sciBest.band}${sciSensitivity ? ` · ${sciSensitivity.flipsAtAdditionalMisses} extra misses would erase it` : ''}`)
+                : (isFa ? 'شاهدِ قطعی: log₁₀ ≥ ۱ و بقا در FDR' : 'Decisive: log₁₀ ≥ 1 and surviving FDR')}
+            </small>
+          </div>
+
+          <div className="nmc-stat">
+            <span>{isFa ? 'کالیبراسیون پیش‌رو خودِ حافظه' : 'Prequential self-calibration'}</span>
+            <strong data-testid="nmc-science-calibration">
+              {sciCal?.brier != null ? fmtNum(sciCal.brier, 3) : '—'}
+            </strong>
+            <small>
+              {sciCal?.brier != null
+                ? (isFa
+                    ? `Brier روی ${sciCal.samples} پیش‌بینی · ECE ${fmtNum(sciCal.ece, 3)} · هر شاهد با باورِ پیش از خودش سنجیده شد`
+                    : `Brier over ${sciCal.samples} predictions · ECE ${fmtNum(sciCal.ece, 3)} · scored against the belief held before it`)
+                : (isFa ? `${sciCal?.samples ?? 0} شاهد؛ برای کالیبراسیون دست‌کم ۱۲ لازم است` : `${sciCal?.samples ?? 0} scored; 12 needed before reporting`)}
+            </small>
+          </div>
+        </div>
+
+        <div className="nmc-section-head nmc-section-head-tight">
+          <strong>{isFa ? 'هم‌ارزی جهانی: متاآنالیز اثرات تصادفی' : 'Universality: random-effects meta-analysis'}</strong>
+          <small data-testid="nmc-science-meta">
+            {sciMeta && sciMeta.k > 0
+              ? (isFa
+                  ? `${sciMeta.k} بازار · ${sciMeta.totalN} شاهد · نرخ هم‌ارزی‌شده ${fmtPct(sciMeta.pooled, 1)} · τ²=${fmtNum(sciMeta.tau2, 4)} · ناهمگونی I²=${fmtPct(sciMeta.i2, 0)}`
+                  : `${sciMeta.k} markets · ${sciMeta.totalN} observations · pooled ${fmtPct(sciMeta.pooled, 1)} · τ²=${fmtNum(sciMeta.tau2, 4)} · heterogeneity I²=${fmtPct(sciMeta.i2, 0)}`)
+              : (isFa ? 'بدون دادهٔ چندبازاری پس از ثبت' : 'No post-registration multi-market evidence yet')}
+          </small>
+        </div>
+
+        <div className="nmc-neuromod-grid">
+          <div className="nmc-neuromod" data-testid="nmc-science-evidence">
+            <div className="nmc-regime-top">
+              <span>{isFa ? 'شواهد پس از ثبت' : 'Post-registration'}</span>
+              <strong>{science ? sciTotals.prospective : '—'}</strong>
+            </div>
+            <div className="nmc-bar-track">
+              <div
+                className="nmc-bar-fill"
+                style={{
+                  width: `${science && sciTotals.observations > 0
+                    ? Math.round((sciTotals.prospective / sciTotals.observations) * 100)
+                    : 0}%`
+                }}
+              />
+            </div>
+            <small className="nmc-dim">
+              {isFa
+                ? 'تنها این بخش می‌تواند فرضیه را تأیید کند؛ شواهد پیش از ثبت با ضریب ۰٫۳۵ تخفیف می‌خورد.'
+                : 'Only this class can confirm; pre-registration evidence is discounted 0.35×.'}
+            </small>
+          </div>
+
+          <div className="nmc-neuromod" data-testid="nmc-science-prior">
+            <div className="nmc-regime-top">
+              <span>{isFa ? 'پیشین مشورتی کورتکس' : 'Advisory cortex prior'}</span>
+              <strong>{sciPrior?.validated ? fmtSigned(sciPrior.bias, 3) : (isFa ? 'خنثی' : 'neutral')}</strong>
+            </div>
+            <div className="nmc-bar-track">
+              <div
+                className="nmc-bar-fill"
+                style={{ width: `${sciPrior?.validated ? Math.round(Math.abs(sciPrior.confidence) * 100) : 0}%` }}
+              />
+            </div>
+            <small className="nmc-dim">
+              {sciPrior?.validated
+                ? (isFa
+                    ? `باور ${fmtPct(sciPrior.posteriorMean, 0)} · اطمینان ${fmtPct(sciPrior.confidence, 0)} · میرایی ${fmtNum(sciPrior.damping, 2)} (فقط مشورتی، هرگز به خوانش تزریق نمی‌شود)`
+                    : `belief ${fmtPct(sciPrior.posteriorMean, 0)} · confidence ${fmtPct(sciPrior.confidence, 0)} · damping ${fmtNum(sciPrior.damping, 2)} (advisory only, never injected into the readout)`)
+                : (isFa ? 'بی‌اثر تا وقتی فرضیه‌ای تأیید نشود' : 'Inert until a hypothesis is confirmed')}
+            </small>
+          </div>
+
+          <div className="nmc-neuromod" data-testid="nmc-science-world">
+            <div className="nmc-regime-top">
+              <span>{isFa ? 'اجماع جهانی دستگاه‌ها' : 'World consensus'}</span>
+              <strong>{sciWorld ? `${sciWorld.totals?.consensusKeys ?? 0}/${sciWorld.totals?.keys ?? 0}` : '—'}</strong>
+            </div>
+            <div className="nmc-bar-track">
+              <div
+                className="nmc-bar-fill"
+                style={{ width: `${sciWorld ? Math.round((sciWorld.consensusShare || 0) * 100) : 0}%` }}
+              />
+            </div>
+            <small className="nmc-dim">
+              {sciWorld
+                ? (isFa
+                    ? `${sciWorld.totals.packets} بستهٔ پیشین · ${sciWorld.totals.owners} مشارکت‌کننده · ذخیره‌سازی ${sciWorld.storageMode === 'blob' ? 'پایدار' : 'موقت (per-instance)'} · اجماع فقط با ≥۲ مشارکت‌کننده`
+                    : `${sciWorld.totals.packets} prior packets · ${sciWorld.totals.owners} contributors · storage ${sciWorld.storageMode} · consensus needs ≥2 contributors`)
+                : (isFa ? 'فقط پیشین قابل‌حمل، بدون دادهٔ خام' : 'Portable priors only — no raw data')}
+            </small>
+          </div>
+        </div>
+
+        {Array.isArray(science?.recent) && science.recent.length > 0 ? (
+          <div className="nmc-regimes">
+            {science.recent.slice(0, 4).map((row) => (
+              <div key={row.key} className="nmc-regime-row">
+                <div className="nmc-regime-top">
+                  <span>
+                    {`${REGIME_LABELS[row.regime]?.[isFa ? 'fa' : 'en'] || row.regime} · ${row.symbol || (isFa ? 'همهٔ بازارها' : 'all markets')}`}
+                  </span>
+                  <strong>
+                    {`${fmtPct(row.posteriorMean, 0)} · ${row.status}`}
+                  </strong>
+                </div>
+                <div className="nmc-bar-track">
+                  <div className="nmc-bar-fill" style={{ width: `${Math.round((row.posteriorMean || 0) * 100)}%` }} />
+                </div>
+                <small className="nmc-dim">
+                  {isFa
+                    ? `log₁₀BF ${fmtSigned(row.log10BayesFactor, 2)} · شاهد مؤثر ${fmtNum(row.nEff, 1)} · بازه ${fmtPct(row.credibleInterval?.low, 0)}–${fmtPct(row.credibleInterval?.high, 0)}`
+                    : `log₁₀BF ${fmtSigned(row.log10BayesFactor, 2)} · effective n ${fmtNum(row.nEff, 1)} · CI ${fmtPct(row.credibleInterval?.low, 0)}–${fmtPct(row.credibleInterval?.high, 0)}`}
+                </small>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <p className="nmc-note" data-testid="nmc-science-honesty">
+          {isFa
+            ? `قاعدهٔ صداقت: فرضیه‌ها پیش از دیدن داده در کد ثبت شده‌اند (${sciTotals?.prespecifiedFamilies ?? 1} خانواده)، هر شاهد تکراری با اثرانگشت منبع رد می‌شود، «تأیید» فقط با فاکتور بیز قاطع + بقا در FDR، و دانش کهنه با نیمه‌عمر ${science ? Math.round(science.halfLifeMs / 86400000) : 45} روز فرسوده می‌شود. هیچ دادهٔ خامی از دستگاه خارج نمی‌شود.`
+            : `Honesty rule: hypotheses were fixed in code (${sciTotals?.prespecifiedFamilies ?? 1} family) before any data was seen, duplicate observations are rejected by provenance hash, "confirmed" needs a decisive Bayes factor AND FDR survival, and evidence decays with a ${science ? Math.round(science.halfLifeMs / 86400000) : 45}-day half-life. No raw data leaves the device.`}
+        </p>
+      </div>
+
       {/* Cognitive Readout & Market Regime */}
       <div className="nmc-raster-card">
         <div className="nmc-section-head">
@@ -518,6 +725,30 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
         </p>
       ) : null}
 
+      {nm.scienceAction || nm.scienceError ? (
+        <p className="nmc-note" data-testid="nmc-science-status">
+          {nm.scienceError
+            ? (isFa ? `حافظهٔ علمی: ${nm.scienceError}` : `Scientific memory: ${nm.scienceError}`)
+            : nm.scienceAction.action === 'ingest'
+              ? (isFa
+                  ? `🔬 ${nm.scienceAction.ingest?.ingested ?? 0} شاهد تازه (${nm.scienceAction.ingest?.duplicates ?? 0} تکراری رد شد)`
+                  : `🔬 ${nm.scienceAction.ingest?.ingested ?? 0} new observations (${nm.scienceAction.ingest?.duplicates ?? 0} duplicates rejected)`)
+              : nm.scienceAction.action === 'share'
+                ? (nm.scienceAction.accepted
+                    ? (isFa
+                        ? `🌐 ${nm.scienceAction.records} رکورد پیشین منتشر شد (${nm.scienceAction.code})`
+                        : `🌐 ${nm.scienceAction.records} prior records published (${nm.scienceAction.code})`)
+                    : (isFa
+                        ? `🌐 انتشار انجام نشد: ${nm.scienceAction.code}`
+                        : `🌐 Publish refused: ${nm.scienceAction.code}`))
+                : nm.scienceAction.action === 'retire'
+                  ? (isFa
+                      ? `☑ ${nm.scienceAction.retired} فرضیهٔ منقضی بازنشسته شد`
+                      : `☑ ${nm.scienceAction.retired} expired hypotheses retired`)
+                  : (isFa ? 'همگام‌سازی پیشین' : 'Prior merge')}
+        </p>
+      ) : null}
+
       {nm.lastError ? (
         <p className="nmc-note" role="alert" data-testid="nmc-error">
           {isFa ? `وضعیت: ${nm.lastError}` : `Status: ${nm.lastError}`}
@@ -551,6 +782,36 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
           }
         >
           {isFa ? '☾ تثبیت حافظه (خواب)' : '☾ Consolidate memory (sleep)'}
+        </button>
+
+        <button
+          type="button"
+          className="nmc-btn"
+          data-testid="nmc-science-ingest-btn"
+          disabled={Boolean(nm.paused) || Number(nm.engramCount) <= 0}
+          onClick={() => { void nm.ingestScience(); }}
+          title={
+            isFa
+              ? 'استخراج شواهد از خاطرات واقعی دستگاه و سنجش آن‌ها با خانوادهٔ فرضیهٔ پیش‌ثبت‌شده'
+              : 'Score this device’s real engrams against the pre-registered family'
+          }
+        >
+          {isFa ? '🔬 استخراج شواهد علمی' : '🔬 Extract scientific evidence'}
+        </button>
+
+        <button
+          type="button"
+          className="nmc-btn"
+          data-testid="nmc-science-share-btn"
+          disabled={Boolean(nm.paused) || !nm.swarmOptIn}
+          onClick={() => { void nm.shareSciencePrior(); }}
+          title={
+            isFa
+              ? 'ارسال فقط فاکتور بیز و شمارش مؤثر — بدون قیمت، بردار یا شناسهٔ دستگاه'
+              : 'Upload only log Bayes factors and effective counts — no prices, vectors or device ids'
+          }
+        >
+          {isFa ? '🌐 انتشار پیشین علمی (بدون دادهٔ خام)' : '🌐 Publish prior (no raw data)'}
         </button>
 
         <button
