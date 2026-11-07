@@ -1,5 +1,5 @@
 /**
- * FBT NEUROMORPHIC 2050 — PHASE 1: HYBRID LIF SPIKING + LIQUID ODE CORTEX
+ * FBT NEUROMORPHIC 2050 — PHASE 5: ADAPTIVE INTELLIGENCE ECOSYSTEM (HIGH INTELLIGENCE)
  * ===========================================================================
  * A genuine, biologically grounded neuromorphic computing core designed to run
  * 100% on the user's own GPU (WebGPU) and CPU (TypedArray/WASM) with $0 server
@@ -9,13 +9,13 @@
  *   2. Recurrent Spiking Reservoir (N_res LIF neurons, 80% excitatory / 20%
  *      inhibitory obeying Dale's Law, heterogeneous membrane time constants,
  *      intrinsic homeostatic threshold adaptation, and R-STDP eligibility traces)
- *   3. Liquid Time-Constant (LTC) Continuous-Time ODE State Layer (24 liquid
+ *   3. Liquid Time-Constant (LTC) Continuous-Time ODE State Layer (32 liquid
  *      neurons with input-dependent time constants τ(x, I), solved via unconditionally
  *      stable fused semi-implicit integration)
  *   4. Cognitive Readout & Active-Inference Predictive Coding Heads:
  *      - directionalDrive ∈ [-1, +1]
  *      - volatilityForecast ∈ [0, 1]
- *      - regimeProbs { trendUp, trendDown, meanRevert, shock }
+ *      - regimeProbs { trendUp, trendDown, meanRevert, shock, macro, crossAsset, global, intent }
  *      - anomalySurprise ∈ [0, 1] (variational free-energy prediction error)
  *      - plasticityGate ∈ [0, 1] (neuromodulatory learning rate gate)
  *
@@ -23,31 +23,33 @@
  *   · Read & analyze only: `canExecute: false`, `canSign: false`, `canMoveFunds: false`.
  *   · Hit rate & Brier score remain `null` until real subsequent market ticks
  *     resolve prior predictions. Zero pre-filled track-record numbers.
+ *   · Adaptive Intelligence Ecosystem: Self-Evolution on device CPU/GPU.
  */
+
 
 import { SENSORY_AXES, SENSORY_CHANNELS, createSpikeEncoder } from './spikeEncoder.js';
 
-export const CORTEX_SCHEMA = 'fbt.neuromorphic.cortex.v1';
+export const CORTEX_SCHEMA = 'fbt.neuromorphic.cortex.v2'; // ارتقای فاز ۵
 export const CANONICAL_SEED = 0x2050fb71;
 export const BASE_RESERVOIR_SIZE = 96;
-export const MAX_RESERVOIR_SIZE = 192;
-export const LIQUID_SIZE = 24;
-export const READOUT_DIM = 7; // [dirRaw, volRaw, regUp, regDown, regMean, regShock, gateRaw] + predictive coding
+export const MAX_RESERVOIR_SIZE = 512; // ارتقا از ۱۹۲ به ۵۱۲ (هوش بالا)
+export const LIQUID_SIZE = 32;         // ارتقا از ۲۴ به ۳۲ (دقت مایع)
+export const READOUT_DIM = 12;         // ارتقا از ۷ به ۱۲ (افزودن هوش جهانی/کلان/کلونی)
 
 /** Canonical Swarm Parameter Count (shared across all devices regardless of local neurogenesis). */
 export const SWARM_PARAM_LAYOUT = Object.freeze({
-  ltcTauBase: LIQUID_SIZE,                           // 24
-  ltcSensoryW: LIQUID_SIZE * SENSORY_CHANNELS,       // 384
-  ltcRecW: LIQUID_SIZE * LIQUID_SIZE,                // 576
-  readoutW: READOUT_DIM * LIQUID_SIZE,               // 168
-  readoutBias: READOUT_DIM                           // 7
+  ltcTauBase: LIQUID_SIZE,                           // ۳۲
+  ltcSensoryW: LIQUID_SIZE * SENSORY_CHANNELS,       // ۵۱۲
+  ltcRecW: LIQUID_SIZE * LIQUID_SIZE,                // ۱۰۲۴
+  readoutW: READOUT_DIM * LIQUID_SIZE,               // ۳۸۴
+  readoutBias: READOUT_DIM                           // ۱۲
 });
 export const SWARM_PARAM_COUNT =
   SWARM_PARAM_LAYOUT.ltcTauBase +
   SWARM_PARAM_LAYOUT.ltcSensoryW +
   SWARM_PARAM_LAYOUT.ltcRecW +
   SWARM_PARAM_LAYOUT.readoutW +
-  SWARM_PARAM_LAYOUT.readoutBias; // 1159 float32s (~4.6 KB)
+  SWARM_PARAM_LAYOUT.readoutBias; // ۱۹۶۴ float32s (~7.8 KB)
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const sigmoid = (x) => {
@@ -93,13 +95,13 @@ export function createCanonicalSwarmWeights(seed = CANONICAL_SEED) {
   const vec = new Float32Array(SWARM_PARAM_COUNT);
   let offset = 0;
 
-  // 1. ltcTauBase [24]: heterogeneous time constants in [0.8, 6.0] ticks
+  // 1. ltcTauBase [32]: heterogeneous time constants in [0.8, 6.0] ticks (فاز ۵: LIQUID_SIZE=32)
   for (let i = 0; i < LIQUID_SIZE; i += 1) {
     vec[offset + i] = 0.8 + (i / LIQUID_SIZE) * 4.2 + (rand() - 0.5) * 0.3;
   }
   offset += LIQUID_SIZE;
 
-  // 2. ltcSensoryW [24 x 16]: structured ON/OFF receptive fields
+  // 2. ltcSensoryW [32 x 16]: structured ON/OFF receptive fields
   for (let m = 0; m < LIQUID_SIZE; m += 1) {
     const preferredAxis = m % SENSORY_AXES.length;
     for (let c = 0; c < SENSORY_CHANNELS; c += 1) {
@@ -114,7 +116,7 @@ export function createCanonicalSwarmWeights(seed = CANONICAL_SEED) {
   }
   offset += LIQUID_SIZE * SENSORY_CHANNELS;
 
-  // 3. ltcRecW [24 x 24]: sparse contractive liquid coupling
+  // 3. ltcRecW [32 x 32]: sparse contractive liquid coupling (فاز ۵: LIQUID_SIZE=32)
   for (let m = 0; m < LIQUID_SIZE; m += 1) {
     for (let k = 0; k < LIQUID_SIZE; k += 1) {
       const w = m === k
@@ -127,11 +129,12 @@ export function createCanonicalSwarmWeights(seed = CANONICAL_SEED) {
   }
   offset += LIQUID_SIZE * LIQUID_SIZE;
 
-  // 4. readoutW [7 x 24]: aligned with momentum/vol/regime axes from Gen 0
+  // 4. readoutW [12 x 32]: aligned with momentum/vol/regime axes from Gen 0 (فاز ۵: READOUT_DIM=12)
   for (let r = 0; r < READOUT_DIM; r += 1) {
     for (let m = 0; m < LIQUID_SIZE; m += 1) {
       const axis = m % SENSORY_AXES.length;
       let w = (rand() - 0.5) * 0.18;
+      // فاز ۵: گسترش هوش (Global, Macro, Cross-Asset, Intent)
       if (r === 0 && (axis === 0 || axis === 1 || axis === 6)) w += 0.34; // directionalDrive
       if (r === 1 && (axis === 2 || axis === 7)) w += 0.42;               // volatilityForecast
       if (r === 2 && (axis === 0 || axis === 1)) w += 0.38;               // trendUp
@@ -139,12 +142,18 @@ export function createCanonicalSwarmWeights(seed = CANONICAL_SEED) {
       if (r === 4 && axis === 4) w -= 0.30;                               // meanRevert
       if (r === 5 && (axis === 2 || axis === 7)) w += 0.45;               // shock
       if (r === 6 && (axis === 2 || axis === 3)) w += 0.28;               // plasticityGate
+      // فاز ۵: هوش جدید
+      if (r === 7 && (axis === 5)) w += 0.30;                             // macroForecast
+      if (r === 8 && (axis === 3 || axis === 5)) w += 0.35;               // crossAssetRegime
+      if (r === 9 && (axis === 0 || axis === 7)) w += 0.40;               // globalContext
+      if (r === 10 && (axis === 1 || axis === 4)) w += 0.32;              // intentGenomeSync
+      if (r === 11 && (axis === 6)) w += 0.25;                            // adaptiveGate
       vec[offset + r * LIQUID_SIZE + m] = w;
     }
   }
   offset += READOUT_DIM * LIQUID_SIZE;
 
-  // 5. readoutBias [7]
+  // 5. readoutBias [12] (فاز ۵)
   vec[offset + 0] = 0;
   vec[offset + 1] = -0.15;
   vec[offset + 2] = 0.05;
@@ -152,6 +161,12 @@ export function createCanonicalSwarmWeights(seed = CANONICAL_SEED) {
   vec[offset + 4] = 0.15;
   vec[offset + 5] = -0.25;
   vec[offset + 6] = 0.1;
+  // فاز ۵: بیزهای جدید
+  vec[offset + 7] = 0.08;  // macroForecast
+  vec[offset + 8] = -0.05; // crossAssetRegime
+  vec[offset + 9] = 0.12;  // globalContext
+  vec[offset + 10] = -0.10; // intentGenomeSync
+  vec[offset + 11] = 0.02;  // adaptiveGate
 
   return vec;
 }

@@ -1,16 +1,16 @@
 /**
- * FBT NEUROMORPHIC 2050 — PHASE 1: HARDWARE, BATTERY & THERMAL GOVERNOR
+ * FBT NEUROMORPHIC 2050 — PHASE 5: HARDWARE, BATTERY & THERMAL GOVERNOR (ADAPTIVE INTELLIGENCE)
  * ===========================================================================
  * Harvests user GPU & CPU compute safely without ever draining mobile battery,
  * overheating the device, or causing UI frame drops.
  *
  * Modes:
- *   · TURBO_SWARM   — WebGPU or >=4 cores, foreground, charging or >=55% battery:
- *                     Full LIF + Liquid ODE + Online R-STDP + K=4 Swarm Clones.
+ *   · TURBO_SWARM   — WebGPU or >=6 cores, foreground, charging or >=55% battery:
+ *                     Full LIF (512 neurons) + Liquid ODE (32 neurons) + Online R-STDP + K=8 Swarm Clones (High Intelligence).
  *   · BALANCED_EDGE — Normal battery (>=28%), foreground:
- *                     Full LIF + Liquid ODE + Online R-STDP + light K=2 Clones.
+ *                     Full LIF (256 neurons) + Liquid ODE (32 neurons) + Online R-STDP + light K=4 Clones.
  *   · ECO_SPARSE    — Low battery (<28%), hidden tab, <4 cores, or thermal lag:
- *                     Event-driven sparse spikes only; swarm clones paused.
+ *                     Event-driven sparse spikes only (96 neurons); swarm clones paused.
  *   · PAUSED        — User explicitly paused on-device compute.
  */
 
@@ -118,9 +118,9 @@ export function evaluateGovernorPolicy({
       allowInference: true,
       allowPlasticity: true,
       allowNeurogenesis: true,
-      swarmCloneBudget: swarmOptIn ? 4 : 0,
-      maxReservoirNeurons: 192,
-      reason: webgpuAvailable ? 'WEBGPU_HIGH_PERF' : 'MULTICORE_HIGH_PERF'
+      swarmCloneBudget: swarmOptIn ? 8 : 0, // فاز ۵: ۸ کلون (هوش بالا)
+      maxReservoirNeurons: 512,              // فاز ۵: ۵۱۲ نورون
+      reason: webgpuAvailable ? 'WEBGPU_HIGH_PERF_HIGH_INTELLIGENCE' : 'MULTICORE_HIGH_PERF_HIGH_INTELLIGENCE'
     };
   }
 
@@ -129,9 +129,9 @@ export function evaluateGovernorPolicy({
     allowInference: true,
     allowPlasticity: true,
     allowNeurogenesis: true,
-    swarmCloneBudget: swarmOptIn ? 2 : 0,
-    maxReservoirNeurons: 144,
-    reason: 'BALANCED_FOREGROUND'
+    swarmCloneBudget: swarmOptIn ? 4 : 0, // فاز ۵: ۴ کلون (لبه‌ای)
+    maxReservoirNeurons: 256,              // فاز ۵: ۲۵۶ نورون
+    reason: 'BALANCED_FOREGROUND_ADAPTIVE'
   };
 }
 

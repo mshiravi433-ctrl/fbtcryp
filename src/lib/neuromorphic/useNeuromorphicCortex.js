@@ -1,5 +1,5 @@
 /**
- * FBT NEUROMORPHIC 2050 — PHASE 4: SHARED CLIENT RUNTIME & REACT HOOK
+ * FBT NEUROMORPHIC 2050 — PHASE 5: SHARED CLIENT RUNTIME & REACT HOOK (ADAPTIVE INTELLIGENCE)
  * ===========================================================================
  * Single shared bridge between any React surface (`/intent`, Chat Rooms,
  * `AiControlCenter`, `IntentOpsPanels`) and the off-main-thread WebGPU/CPU
@@ -10,6 +10,7 @@
  *     `null` until real market data is processed (`—` in UI, never pre-filled).
  *   · In environments without `Worker` (jsdom/SSR tests), seamlessly executes
  *     the exact same pure-math cortex inline rather than faking results.
+ *   · Adaptive Intelligence Ecosystem: Self-Evolution on device CPU/GPU.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -555,7 +556,7 @@ export async function resetLocalNeuromorphicCortex() {
 /* ── React Hook ───────────────────────────────────────────────────────────── */
 
 export function useNeuromorphicCortex({ autoSync = true } = {}) {
-  const [state, setState] = useState(storeState);
+  const [state, setState] = useState(() => ({ ...storeState }));
 
   useEffect(() => {
     const onUpdate = (next) => setState(next);
@@ -569,22 +570,15 @@ export function useNeuromorphicCortex({ autoSync = true } = {}) {
     };
   }, [autoSync]);
 
-  const toggleSwarmOptIn = useCallback(() => {
-    void setNeuromorphicPreferences({ swarmOptIn: !storeState.swarmOptIn });
-  }, []);
-
-  const togglePaused = useCallback(() => {
-    void setNeuromorphicPreferences({ paused: !storeState.paused });
-  }, []);
-
-  return {
-    ...state,
-    tickWithCandles: tickNeuromorphicWithCandles,
-    tickWithMarketPulse: tickNeuromorphicWithMarketPulse,
-    evolveOnLiveCandles: evolveNeuromorphicOnLiveCandles,
-    syncSwarm: syncWithGlobalSwarm,
-    toggleSwarmOptIn,
-    togglePaused,
-    resetLocalCortex: resetLocalNeuromorphicCortex
+  const actions = {
+    init: (args = {}) => initNeuromorphicRuntime(args),
+    sync: () => syncWithGlobalSwarm(),
+    tickCandles: (candles, args = {}) => tickNeuromorphicWithCandles(candles, args),
+    tickPulse: (markets, pulse = null) => tickNeuromorphicWithMarketPulse({ markets, pulse }),
+    evolve: (args = {}) => evolveNeuromorphicOnLiveCandles(args),
+    configure: (args = {}) => configureGovernor(args),
+    reset: () => resetNeuromorphicRuntime()
   };
+
+  return [state, actions];
 }
