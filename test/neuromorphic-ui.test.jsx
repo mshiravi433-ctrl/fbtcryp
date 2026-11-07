@@ -6,6 +6,7 @@ import NeuromorphicCortexPanel from '../src/components/ai/NeuromorphicCortexPane
 import NeuromorphicRoomStrip from '../src/components/ai/NeuromorphicRoomStrip.jsx';
 import {
   resetLocalNeuromorphicCortex,
+  setNeuromorphicPreferences,
   tickNeuromorphicWithCandles
 } from '../src/lib/neuromorphic/useNeuromorphicCortex.js';
 
@@ -47,6 +48,7 @@ describe('Phase 4 — Neuromorphic 2050 UI Console & Chat Room Strip', () => {
       return { ok: true, status: 200, text: async () => '{}' };
     }));
     await resetLocalNeuromorphicCortex();
+    await setNeuromorphicPreferences({ paused: false, computeMode: 'auto' });
   });
 
   afterEach(() => {

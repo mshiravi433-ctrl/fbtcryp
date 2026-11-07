@@ -419,3 +419,6 @@
   background: #0284c7;
   box-shadow: none;
 }
+
+.nmc-compute-select { display: inline-flex; align-items: center; gap: 8px; color: var(--nmc-muted); font-size: 12px; }
+.nmc-compute-select select { color: var(--nmc-text); background: var(--nmc-card); border: 1px solid var(--nmc-border); border-radius: 8px; padding: 8px; }

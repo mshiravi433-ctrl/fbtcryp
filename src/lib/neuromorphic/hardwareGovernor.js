@@ -1,8 +1,9 @@
 /**
  * FBT NEUROMORPHIC 2050 — PHASE 1: HARDWARE, BATTERY & THERMAL GOVERNOR
  * ===========================================================================
- * Harvests user GPU & CPU compute safely without ever draining mobile battery,
- * overheating the device, or causing UI frame drops.
+ * Budget local compute using available battery, visibility and latency signals.
+ * Battery and temperature telemetry are not universally available; these guards
+ * cannot guarantee that a device will not heat up or lose battery.
  *
  * Modes:
  *   · TURBO_SWARM   — WebGPU or >=4 cores, foreground, charging or >=55% battery:
@@ -71,7 +72,8 @@ export function evaluateGovernorPolicy({
   batteryCharging = null,
   batteryLevel = null,
   tabVisible = true,
-  emaTickMs = 0
+  emaTickMs = 0,
+  computeMode = 'auto'
 } = {}) {
   if (paused) {
     return {
@@ -90,10 +92,10 @@ export function evaluateGovernorPolicy({
   const lowBattery = batteryCharging === false && batteryLevel !== null && batteryLevel < 0.28;
   const lowHardware = (cpuCores !== null && cpuCores <= 2 && !webgpuAvailable) || (memoryGb !== null && memoryGb < 2);
 
-  if (!tabVisible || lowBattery || lowHardware || thermalThrottle) {
+  if (!tabVisible || lowBattery || lowHardware || thermalThrottle || computeMode === 'eco') {
     return {
       mode: GOVERNOR_MODES.ECO_SPARSE,
-      allowInference: true,
+      allowInference: tabVisible,
       allowPlasticity: false,
       allowNeurogenesis: false,
       swarmCloneBudget: 0,
@@ -104,15 +106,15 @@ export function evaluateGovernorPolicy({
           ? 'LOW_BATTERY_GUARD'
           : thermalThrottle
             ? 'THERMAL_LATENCY_GUARD'
-            : 'LOW_POWER_CPU'
+            : lowHardware ? 'LOW_POWER_CPU' : 'USER_ECO'
     };
   }
 
   const highPower =
     (webgpuAvailable || (cpuCores !== null && cpuCores >= 6)) &&
-    (batteryCharging !== false || batteryLevel === null || batteryLevel >= 0.55);
+    (batteryCharging === true || (batteryLevel !== null && batteryLevel >= 0.55));
 
-  if (highPower) {
+  if (highPower && computeMode !== 'balanced') {
     return {
       mode: GOVERNOR_MODES.TURBO_SWARM,
       allowInference: true,
@@ -135,13 +137,15 @@ export function evaluateGovernorPolicy({
   };
 }
 
-export function createHardwareGovernor({ paused = false, swarmOptIn = true } = {}) {
+export function createHardwareGovernor({ paused = false, swarmOptIn = true, computeMode = 'auto' } = {}) {
   let state = {
     paused: Boolean(paused),
     swarmOptIn: Boolean(swarmOptIn),
     webgpuAvailable: false,
     adapterLabel: null,
-    emaTickMs: 0
+    emaTickMs: 0,
+    computeMode,
+    environment: null
   };
 
   function recordTickDuration(ms) {
@@ -154,6 +158,8 @@ export function createHardwareGovernor({ paused = false, swarmOptIn = true } = {
     if (typeof patch.swarmOptIn === 'boolean') state.swarmOptIn = patch.swarmOptIn;
     if (typeof patch.webgpuAvailable === 'boolean') state.webgpuAvailable = patch.webgpuAvailable;
     if (patch.adapterLabel !== undefined) state.adapterLabel = patch.adapterLabel;
+    if (['auto', 'eco', 'balanced'].includes(patch.computeMode)) state.computeMode = patch.computeMode;
+    if (patch.environment && typeof patch.environment === 'object') state.environment = patch.environment;
   }
 
   async function evaluate() {
@@ -161,7 +167,10 @@ export function createHardwareGovernor({ paused = false, swarmOptIn = true } = {
       webgpuAvailable: state.webgpuAvailable,
       adapterLabel: state.adapterLabel
     });
-    const battery = await readBatteryTelemetry();
+    const localBattery = await readBatteryTelemetry();
+    const environment = state.environment || {};
+    const battery = environment.battery || localBattery;
+    if (typeof environment.tabVisible === 'boolean') caps.tabVisible = environment.tabVisible;
     const policy = evaluateGovernorPolicy({
       paused: state.paused,
       swarmOptIn: state.swarmOptIn,
@@ -171,7 +180,8 @@ export function createHardwareGovernor({ paused = false, swarmOptIn = true } = {
       batteryCharging: battery.charging,
       batteryLevel: battery.level,
       tabVisible: caps.tabVisible,
-      emaTickMs: state.emaTickMs
+      emaTickMs: state.emaTickMs,
+      computeMode: state.computeMode
     });
 
     return {

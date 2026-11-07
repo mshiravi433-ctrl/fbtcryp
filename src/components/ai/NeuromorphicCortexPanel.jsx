@@ -41,11 +41,19 @@ function fmtSigned(val, digits = 3) {
 
 const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale = 'fa' }) {
   const isFa = !String(locale || 'fa').toLowerCase().startsWith('en');
-  const nm = useNeuromorphicCortex({ autoSync: true });
+  const nm = useNeuromorphicCortex();
 
+  const errorText = {
+    INSUFFICIENT_LOCAL_CANDLES: isFa ? 'ابتدا نموداری با حداقل ۱۶ کندل در اتاق تحلیل باز کنید.' : 'First open an analysis chart with at least 16 candles.',
+    USER_ECO: isFa ? 'آزمایش در حالت کم‌مصرف غیرفعال است؛ حالت متعادل یا خودکار را انتخاب کنید.' : 'Research is disabled in Eco mode; choose Balanced or Automatic.',
+    LOW_BATTERY_GUARD: isFa ? 'برای حفاظت از باتری، آزمایش فعلاً متوقف است.' : 'Research is paused to conserve battery.',
+    LOW_POWER_CPU: isFa ? 'توان دستگاه برای این آزمایش کافی نیست.' : 'This device is not powerful enough for this experiment.',
+    THERMAL_LATENCY_GUARD: isFa ? 'به دلیل تأخیر زیاد، آزمایش موقتاً متوقف شد.' : 'Research is paused due to high compute latency.',
+    TAB_BACKGROUND: isFa ? 'برای اجرا به این صفحه بازگردید.' : 'Return to this tab to run the experiment.',
+    USER_PAUSED: isFa ? 'پردازش محلی متوقف است.' : 'Local processing is paused.'
+  };
   const readout = nm.readout;
   const gov = nm.governor;
-  const swarm = nm.swarmStatus;
   const neuronsTotal = readout?.topology?.reservoirNeurons ?? nm.reservoirNeurons ?? BASE_RESERVOIR_SIZE;
   const grownCount = Math.max(0, neuronsTotal - BASE_RESERVOIR_SIZE);
 
@@ -58,15 +66,13 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
   const backendLabel = nm.backend === 'webgpu'
     ? `WebGPU WGSL${nm.adapterLabel ? ` · ${nm.adapterLabel}` : ''}`
     : nm.backend === 'cpu-float32'
-      ? (isFa ? 'CPU Float32 (Web Worker)' : 'CPU Float32 (Web Worker)')
+      ? 'CPU Float32'
       : '—';
 
   const govLabel = gov?.mode
     ? (isFa ? MODE_LABELS[gov.mode]?.fa : MODE_LABELS[gov.mode]?.en) || gov.mode
     : '—';
 
-  const globalGen = nm.globalGeneration ?? swarm?.globalGeneration ?? null;
-  const callerXp = swarm?.callerNode?.neuralXp ?? 0;
 
   return (
     <section
@@ -87,13 +93,13 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
           <div className="nmc-hero-copy">
             <h3>
               {isFa
-                ? 'کورتکس نورومورفیک FBT · معماری ۲۰۵۰'
-                : 'FBT Neuromorphic Cortex · 2050 Architecture'}
+                ? 'اکوسیستم هوش تطبیقی · کورتکس FBT'
+                : 'Adaptive Intelligence · FBT Neuromorphic Cortex'}
             </h3>
             <p>
               {isFa
-                ? 'شبکهٔ عصبی پالس‌محور (LIF) + معادلات مایع (LTC) روی GPU/CPU دستگاه شما · هزینهٔ سرور GPU: صفر'
-                : 'Spiking LIF + Liquid Time-Constant ODE running on your device GPU/CPU · $0 Server GPU'}
+                ? 'پردازش و حافظه روی دستگاه شما · بدون همگام‌سازی یا ارسال محاسبات به سرور'
+                : 'On-device compute and memory · no sync or compute uploads to the server'}
             </p>
           </div>
         </div>
@@ -102,13 +108,11 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
           <span className="nmc-pill nmc-pill-cyan" data-testid="nmc-backend-pill">
             {backendLabel}
           </span>
-          <span className="nmc-pill nmc-pill-violet" data-testid="nmc-gen-pill">
-            {isFa
-              ? `نسل جهانی: ${globalGen !== null ? `#${globalGen}` : `#${nm.localGeneration}`}`
-              : `Global Gen: ${globalGen !== null ? `#${globalGen}` : `#${nm.localGeneration}`}`}
+          <span className="nmc-pill nmc-pill-violet" data-testid="nmc-local-mode">
+            {isFa ? 'فقط دستگاه شما' : 'On-device only'}
           </span>
-          <span className="nmc-pill nmc-pill-mint" data-testid="nmc-xp-pill">
-            {isFa ? `امتیاز محاسباتی: ${callerXp} XP` : `Compute XP: ${callerXp}`}
+          <span className="nmc-pill nmc-pill-mint">
+            {isFa ? `کندل موجود: ${nm.availableCandles}` : `Available candles: ${nm.availableCandles}`}
           </span>
         </div>
       </div>
@@ -176,7 +180,7 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
               ? (isFa
                   ? `${gov.hardware.cpuCores} هسته پردازشی${gov.hardware.batteryPct != null ? ` · باتری ${gov.hardware.batteryPct}%` : ''}`
                   : `${gov.hardware.cpuCores} CPU cores${gov.hardware.batteryPct != null ? ` · Battery ${gov.hardware.batteryPct}%` : ''}`)
-              : (isFa ? 'محافظ خودکار باتری و دما' : 'Auto thermal & battery guard')}
+              : (isFa ? 'محدودیت بر اساس باتری و تأخیر در صورت دسترسی' : 'Battery and latency guards when available')}
           </small>
         </div>
 
@@ -210,19 +214,9 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
         </div>
 
         <div className="nmc-stat">
-          <span>{isFa ? 'کلونی ضدتقلب (فاز ۳)' : 'Byzantine Swarm'}</span>
-          <strong data-testid="nmc-swarm-nodes">
-            {swarm
-              ? (isFa ? `${swarm.activeNodes24h} گره فعال` : `${swarm.activeNodes24h} Active Nodes`)
-              : '—'}
-          </strong>
-          <small>
-            {swarm
-              ? (isFa
-                  ? `${swarm.totalAcceptedDeltas} دلتای تأییدشده · حدنصاب: ${swarm.effectiveQuorum}`
-                  : `${swarm.totalAcceptedDeltas} verified deltas · Quorum: ${swarm.effectiveQuorum}`)
-              : (isFa ? 'تجمیع Trimmed-Mean بدون سرور GPU' : 'Trimmed-Mean zero-GPU sync')}
-          </small>
+          <span>{isFa ? 'پژوهش محلی' : 'Local research'}</span>
+          <strong>{isFa ? 'بدون ارسال' : 'No uploads'}</strong>
+          <small>{isFa ? 'نسخه‌های آزمایشی خودکار جایگزین نمی‌شوند' : 'Experimental candidates are not automatically promoted'}</small>
         </div>
       </div>
 
@@ -237,7 +231,7 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
               ? (isFa
                   ? `جهش شگفتی (Free Energy): ${fmtPct(readout.anomalySurprise, 0)} · ثابت زمانی مایع τ: ${readout.meanLiquidTau}`
                   : `Surprise: ${fmtPct(readout.anomalySurprise, 0)} · Liquid τ: ${readout.meanLiquidTau}`)
-              : (isFa ? 'دکمهٔ تکامل زنده را بزنید تا کورتکس روی کندل‌های واقعی اجرا شود' : 'Run a live pulse below to feed real market candles')}
+              : (isFa ? 'پردازش محلی را فعال و یک نمودار دارای داده باز کنید' : 'Enable local processing and open a chart with data')}
           </small>
         </div>
 
@@ -247,7 +241,7 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
             <strong data-testid="nmc-directional-drive">
               {readout ? fmtSigned(readout.directionalDrive, 3) : '—'}
             </strong>
-            <small>{isFa ? 'بازه ۱- (فروش) تا ۱+ (خرید)' : 'Range -1 (bear) to +1 (bull)'}</small>
+            <small>{isFa ? 'شاخص مدل، نه دستور خرید یا فروش' : 'Model signal, not a buy or sell instruction'}</small>
           </div>
           <div className="nmc-stat">
             <span>{isFa ? 'پیش‌بینی تلاطم (نوسان)' : 'Volatility Forecast'}</span>
@@ -288,26 +282,14 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
       {nm.evolutionLast ? (
         <p className="nmc-note" data-testid="nmc-evolution-summary">
           {isFa
-            ? `✦ آخرین چرخهٔ خودتکاملی (${nm.evolutionLast.symbol}): ${nm.evolutionLast.resolvedSteps} کندل واقعی سنجیده شد · نرخ اصابت برنده: ${fmtPct(nm.evolutionLast.winnerHitRate, 1)} · ${
-                nm.evolutionLast.swarmUpload?.crystallized
-                  ? `نسل جهانی جدید #${nm.evolutionLast.swarmUpload.globalGeneration} متبلور شد!`
-                  : nm.evolutionLast.improved
-                    ? 'وزن‌های کورتکس دستگاه شما ارتقا یافت.'
-                    : 'نسخهٔ فعلی از جهش‌های جدید دقیق‌تر بود و حفظ شد.'
-              }`
-            : `✦ Last self-evolution pulse (${nm.evolutionLast.symbol}): ${nm.evolutionLast.resolvedSteps} real candles scored · Winner hit rate: ${fmtPct(nm.evolutionLast.winnerHitRate, 1)} · ${
-                nm.evolutionLast.swarmUpload?.crystallized
-                  ? `Global Generation #${nm.evolutionLast.swarmUpload.globalGeneration} crystallized!`
-                  : nm.evolutionLast.improved
-                    ? 'Local cortex synapses upgraded.'
-                    : 'Current cortex outperformed mutations and was retained.'
-              }`}
+            ? `آزمایش محلی ${nm.evolutionLast.symbol}: ${nm.evolutionLast.resolvedSteps} نتیجه ارزیابی شد؛ نرخ نمونه: ${fmtPct(nm.evolutionLast.winnerHitRate, 1)}. این امتیاز آزمون مستقل نیست و نسخهٔ آزمایشی جایگزین نشده است.`
+            : `Local experiment ${nm.evolutionLast.symbol}: ${nm.evolutionLast.resolvedSteps} outcomes scored; sample hit rate: ${fmtPct(nm.evolutionLast.winnerHitRate, 1)}. This is not an independent test; the candidate was not promoted.`}
         </p>
       ) : null}
 
       {nm.lastError ? (
         <p className="nmc-note" role="alert" data-testid="nmc-error">
-          {isFa ? `وضعیت: ${nm.lastError}` : `Status: ${nm.lastError}`}
+          {errorText[nm.lastError] || (isFa ? `وضعیت: ${nm.lastError}` : `Status: ${nm.lastError}`)}
         </p>
       ) : null}
 
@@ -318,28 +300,27 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
           className="nmc-btn nmc-btn-primary"
           data-testid="nmc-evolve-btn"
           disabled={nm.evolving || nm.paused}
-          onClick={() => { void nm.evolveOnLiveCandles({ symbol: 'BTC' }); }}
+          onClick={() => { void nm.evolveOnLiveCandles(); }}
         >
           {nm.evolving
-            ? (isFa ? '⚡ در حال تکامل روی GPU/CPU شما…' : '⚡ Evolving on your GPU/CPU…')
-            : (isFa ? '⚡ اجرای تکامل زنده روی کندل‌های واقعی بازار' : '⚡ Evolve Now on Live Market Candles')}
+            ? (isFa ? 'در حال پژوهش روی دستگاه…' : 'Running on this device…')
+            : (isFa ? 'آزمایش محلی با کندل‌های موجود' : 'Run local experiment on available candles')}
         </button>
 
-        <button
-          type="button"
-          className="nmc-btn"
-          data-testid="nmc-swarm-toggle"
-          onClick={nm.toggleSwarmOptIn}
-        >
-          {nm.swarmOptIn
-            ? (isFa ? '✓ مشارکت کلونی: روشن' : '✓ Swarm Sync: ON')
-            : (isFa ? '○ مشارکت کلونی: خاموش (فقط محلی)' : '○ Swarm Sync: OFF (Local Only)')}
-        </button>
+        <label className="nmc-compute-select">
+          {isFa ? 'حالت پردازش' : 'Compute mode'}
+          <select data-testid="nmc-compute-mode" value={nm.computeMode} onChange={(event) => { void nm.setComputeMode(event.target.value); }} disabled={nm.evolving}>
+            <option value="auto">{isFa ? 'خودکار' : 'Automatic'}</option>
+            <option value="balanced">{isFa ? 'متعادل' : 'Balanced'}</option>
+            <option value="eco">{isFa ? 'کم‌مصرف' : 'Eco'}</option>
+          </select>
+        </label>
 
         <button
           type="button"
           className="nmc-btn"
           data-testid="nmc-pause-toggle"
+          disabled={nm.evolving}
           onClick={nm.togglePaused}
         >
           {nm.paused
@@ -351,6 +332,7 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
           type="button"
           className="nmc-btn"
           data-testid="nmc-reset-btn"
+          disabled={nm.evolving}
           onClick={() => { void nm.resetLocalCortex(); }}
         >
           {isFa ? 'بازنشانی سیناپس‌های دستگاه' : 'Reset Device Synapses'}
@@ -359,8 +341,8 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
 
       <p className="nmc-note">
         {isFa
-          ? 'مرز امنیتی سخت: کورتکس نورومورفیک هیچ دسترسی به کلید خصوصی ندارد، هیچ تراکنشی را امضا یا اجرا نمی‌کند (canExecute: false)، و صرفاً تحلیل و تکامل هوش را روی سخت‌افزار خود شما انجام می‌دهد.'
-          : 'Hard security boundary: the neuromorphic cortex never accesses private keys and never signs or executes transactions (canExecute: false). Informational intelligence only, not financial advice.'}
+          ? 'محاسبه و حافظهٔ کورتکس محلی است؛ دادهٔ نمودار ممکن است جداگانه از شبکه دریافت شود. باتری و دمای دقیق در همهٔ مرورگرها در دسترس نیست. این تحلیل توصیهٔ مالی نیست و هیچ تراکنشی اجرا نمی‌کند.'
+          : 'Cortex computation and memory are local; chart data may be fetched separately. Battery and temperature are not available in every browser. Informational only; no transaction execution.'}
       </p>
     </section>
   );
