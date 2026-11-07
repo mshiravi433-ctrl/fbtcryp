@@ -17,6 +17,7 @@ import { OpsCardIcon, OpsCategoryIcon } from './OpsIcons.jsx';
 /* The benchmark/lab dashboard reads its own additive endpoints and only mounts
    when its tab is opened, so the default «models» view makes no extra call. */
 import AiBenchmarkPanel from './ai/AiBenchmarkPanel.jsx';
+import NeuromorphicCortexPanel from './ai/NeuromorphicCortexPanel.jsx';
 /*
  * Panel chrome in fa/en/ar. Replaces forty inline `locale === 'en' ? …` pairs
  * that were a two-way switch in a three-language app AND compared against a
@@ -841,6 +842,9 @@ export function IntelligencePanel({
           <button type="button" role="tab" aria-selected={tab === 'learning'} data-testid="intel-tab-learning" className={`iaos-history-tab${tab === 'learning' ? ' is-on' : ''}`} onClick={() => setTab('learning')}>
             {isEn ? 'Learning Loop' : 'چرخه یادگیری'}
           </button>
+          <button type="button" role="tab" aria-selected={tab === 'neuromorphic'} data-testid="intel-tab-neuromorphic" className={`iaos-history-tab${tab === 'neuromorphic' ? ' is-on' : ''}`} onClick={() => setTab('neuromorphic')}>
+            {isEn ? 'Neuromorphic 2050' : 'کورتکس ۲۰۵۰'}
+          </button>
         </div>
 
         <div className="iaos-panel-scroll">
@@ -1100,6 +1104,10 @@ export function IntelligencePanel({
                 </p>
               ) : null}
             </div>
+          ) : null}
+
+          {tab === 'neuromorphic' ? (
+            <NeuromorphicCortexPanel locale={locale} />
           ) : null}
         </div>
       </div>

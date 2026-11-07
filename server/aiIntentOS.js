@@ -177,6 +177,7 @@ import { orchestratorEnabled, ORCHESTRATOR_SCHEMA } from './aiOrchestrator.js';
 /* The process-level orchestrator singleton lives with its routes (that is
    where `_setOrchestrator` lets a probe or an operator swap it). */
 import { getOrchestrator } from './aiOrchestratorRoutes.js';
+import { getNeuromorphicSwarm } from './aiNeuromorphic.js';
 
 const router = Router();
 
@@ -2346,7 +2347,20 @@ router.post('/chat', async (req, res) => {
         limits: (orchestration.limits || []).map((l) => l.code),
         latencyMs: orchestration.latencyMs || 0,
         executionAuthorized: false
-      } : null
+      } : null,
+      neuromorphic: await (async () => {
+        try {
+          const st = await getNeuromorphicSwarm().getStatus({ owner: ownerFor(req) });
+          return {
+            globalGeneration: st.globalGeneration,
+            activeNodes24h: st.activeNodes24h,
+            zeroServerGpu: true,
+            executionAuthorized: false
+          };
+        } catch {
+          return null;
+        }
+      })()
     },
     ui: human.ui,
     card: human.card || tokenCard,

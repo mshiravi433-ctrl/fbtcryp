@@ -12,6 +12,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCentralBrain } from '../../context/CentralBrainContext.jsx';
 import { ThinkingOrb } from './ThinkingOrb.jsx';
+import NeuromorphicCortexPanel from './NeuromorphicCortexPanel.jsx';
 import {
   BRAIN_VERSION,
   generateDailyBrief,
@@ -75,6 +76,7 @@ const STYLES = `
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: '🧠' },
+  { id: 'cortex2050', label: 'Cortex 2050', icon: '⚡' },
   { id: 'guardian', label: 'Guardian', icon: '🛡️' },
   { id: 'opportunities', label: 'Opportunities', icon: '💡' },
   { id: 'predictions', label: 'Predictions', icon: '📈' },
@@ -166,6 +168,7 @@ function AiControlCenterInner() {
 
       {/* Content */}
       {activeTab === 'overview' && <OverviewTab brain={brain} brainData={brainData} brief={brief} isRTL={isRTL} />}
+      {activeTab === 'cortex2050' && <NeuromorphicCortexPanel locale={locale} />}
       {activeTab === 'guardian' && <GuardianTab brainData={brainData} isRTL={isRTL} />}
       {activeTab === 'opportunities' && <OpportunitiesTab brainData={brainData} isRTL={isRTL} />}
       {activeTab === 'predictions' && <PredictionsTab brainData={brainData} isRTL={isRTL} />}
@@ -175,7 +178,7 @@ function AiControlCenterInner() {
 }
 
 const TAB_LABELS_FA = {
-  overview: 'نمای کلی', guardian: 'محافظ', opportunities: 'فرصت‌ها',
+  overview: 'نمای کلی', cortex2050: 'کورتکس ۲۰۵۰', guardian: 'محافظ', opportunities: 'فرصت‌ها',
   predictions: 'پیش‌بینی', modules: 'ماژول‌ها'
 };
 

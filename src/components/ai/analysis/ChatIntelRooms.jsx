@@ -28,6 +28,7 @@ import PortfolioTab from './PortfolioTab';
 import OpportunitiesTab from './OpportunitiesTab';
 import ReportTab from './ReportTab';
 import AnalysisTabs from './AnalysisTabs';
+import NeuromorphicRoomStrip from '../NeuromorphicRoomStrip';
 import './chat-intel.css';
 
 const MARKET_ROOMS = [
@@ -120,6 +121,8 @@ function MarketRoomBody({ room, setRoom, locale, onOpenRoute }) {
         <span>{ct(locale, 'page.rowsCounted', { counted: pulse.breadth.counted, total: pulse.breadth.total })}</span>
       </div>
 
+      <NeuromorphicRoomStrip markets={markets} pulse={pulse} locale={locale} />
+
       <AnalysisTabs
         tabs={MARKET_ROOMS}
         active={room}
@@ -179,19 +182,26 @@ function TokenRoomBody({ tokenId, setTokenId, locale, onOpenRoute }) {
   } = useTokenRoom({ tokenId, days, markets: market.markets });
 
   return (
-    <TokenTab
-      markets={market.markets}
-      locale={locale}
-      selectedId={tokenId}
-      onSelect={setTokenId}
-      pack={pack}
-      score={score}
-      coin={coin}
-      loading={loading || market.loading}
-      days={days}
-      onDays={setDays}
-      onOpenFull={(id) => onOpenRoute?.(`/coin/${id}`)}
-    />
+    <>
+      <NeuromorphicRoomStrip
+        candles={pack?.series?.candles || null}
+        symbol={coin?.symbol || tokenId}
+        locale={locale}
+      />
+      <TokenTab
+        markets={market.markets}
+        locale={locale}
+        selectedId={tokenId}
+        onSelect={setTokenId}
+        pack={pack}
+        score={score}
+        coin={coin}
+        loading={loading || market.loading}
+        days={days}
+        onDays={setDays}
+        onOpenFull={(id) => onOpenRoute?.(`/coin/${id}`)}
+      />
+    </>
   );
 }
 
