@@ -27,6 +27,7 @@ import TokenTab from './TokenTab';
 import PortfolioTab from './PortfolioTab';
 import OpportunitiesTab from './OpportunitiesTab';
 import ReportTab from './ReportTab';
+import AnalysisTabs from './AnalysisTabs';
 import './chat-intel.css';
 
 const MARKET_ROOMS = [
@@ -119,19 +120,14 @@ function MarketRoomBody({ room, setRoom, locale, onOpenRoute }) {
         <span>{ct(locale, 'page.rowsCounted', { counted: pulse.breadth.counted, total: pulse.breadth.total })}</span>
       </div>
 
-      <nav className="aix-tabs aix-tabs-chat" aria-label={ct(locale, 'page.title')}>
-        {MARKET_ROOMS.map((x) => (
-          <button
-            key={x.id}
-            type="button"
-            className={`aix-tab${room === x.id ? ' is-active' : ''}`}
-            onClick={() => setRoom(x.id)}
-            aria-current={room === x.id ? 'page' : undefined}
-          >
-            {ct(locale, x.key)}
-          </button>
-        ))}
-      </nav>
+      <AnalysisTabs
+        tabs={MARKET_ROOMS}
+        active={room}
+        onChange={setRoom}
+        locale={locale}
+        label={ct(locale, 'page.title')}
+        className="aix-tabs-chat"
+      />
 
       {room === 'opportunities' ? (
         <OpportunitiesTab scan={scan} locale={locale} onOpenToken={openToken} />

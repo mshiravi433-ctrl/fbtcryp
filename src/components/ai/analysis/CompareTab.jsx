@@ -91,36 +91,41 @@ export default function CompareTab({ markets = [], locale, initial = [] }) {
         </div>
 
         {selected.length >= 2 ? (
-          <div className="aix-compare-table">
-            <div className="aix-cmp-row aix-cmp-head">
-              <span>{t(locale, 'cmp.metric')}</span>
-              {selected.map((r) => <span key={r.id}>{r.symbol}</span>)}
+          <>
+            <p className="aix-card-hint aix-swipe-hint">
+              {locale === 'fa' ? 'برای دیدن همه توکن‌ها، جدول را افقی ورق بزنید.' : 'Swipe the table horizontally to see every token.'}
+            </p>
+            <div className="aix-compare-table">
+              <div className="aix-cmp-row aix-cmp-head">
+                <span>{t(locale, 'cmp.metric')}</span>
+                {selected.map((r) => <span key={r.id}>{r.symbol}</span>)}
+              </div>
+              {METRICS.map((m) => {
+                const values = selected.map((r) => m.value(r));
+                const finite = values.filter((v) => Number.isFinite(v));
+                const best = m.better && finite.length > 1
+                  ? (m.better === 'high' ? Math.max(...finite) : Math.min(...finite))
+                  : null;
+                return (
+                  <div key={m.id} className="aix-cmp-row">
+                    <span className="aix-cmp-label">{t(locale, m.key)}</span>
+                    {selected.map((r, i) => {
+                      const v = values[i];
+                      const isBest = best != null && v === best;
+                      return (
+                        <span key={r.id} className={isBest ? 'is-best' : ''}>
+                          {m.change
+                            ? <Change value={v} />
+                            : (m.format ? m.format(v, locale) : (Number.isFinite(v) ? fmtNumber(v, 2) : '—'))}
+                          {isBest ? <i className="aix-best-dot" title={t(locale, 'cmp.best')} /> : null}
+                        </span>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
-            {METRICS.map((m) => {
-              const values = selected.map((r) => m.value(r));
-              const finite = values.filter((v) => Number.isFinite(v));
-              const best = m.better && finite.length > 1
-                ? (m.better === 'high' ? Math.max(...finite) : Math.min(...finite))
-                : null;
-              return (
-                <div key={m.id} className="aix-cmp-row">
-                  <span className="aix-cmp-label">{t(locale, m.key)}</span>
-                  {selected.map((r, i) => {
-                    const v = values[i];
-                    const isBest = best != null && v === best;
-                    return (
-                      <span key={r.id} className={isBest ? 'is-best' : ''}>
-                        {m.change
-                          ? <Change value={v} />
-                          : (m.format ? m.format(v, locale) : (Number.isFinite(v) ? fmtNumber(v, 2) : '—'))}
-                        {isBest ? <i className="aix-best-dot" title={t(locale, 'cmp.best')} /> : null}
-                      </span>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
+          </>
         ) : (
           <p className="aix-card-hint">{t(locale, 'cmp.pick')}</p>
         )}

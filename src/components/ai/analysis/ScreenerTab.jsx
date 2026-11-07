@@ -13,6 +13,7 @@ import { Change, Chip, ProvenanceDot, SectionCard, Spark } from './ui.jsx';
 import { fmtMoney, fmtNumber, fmtTimeAgo, t } from '../../../lib/intelligence/copy.js';
 import { rangePosition } from '../../../lib/intelligence/indicators.js';
 import { bucketOf } from '../../../lib/intelligence/portfolioAnalysis.js';
+import { IconSearch } from '../../Icons';
 
 const FILTERS = [
   { id: 'all', key: 'screener.filter.all' },
@@ -94,41 +95,51 @@ export default function ScreenerTab({ markets, locale, onOpenToken, updatedAt, p
           </>
         )}
       >
-        <div className="aix-toolbar">
-          <input
-            className="aix-search"
-            type="search"
-            value={query}
-            placeholder={t(locale, 'screener.search')}
-            onChange={(e) => { setQuery(e.target.value); setLimit(60); }}
-            aria-label={t(locale, 'screener.search')}
-          />
+        <div className="aix-screener-controls">
+          <div className="aix-search-wrap">
+            <IconSearch width={18} height={18} aria-hidden="true" />
+            <input
+              className="aix-search"
+              type="search"
+              value={query}
+              placeholder={t(locale, 'screener.search')}
+              onChange={(e) => { setQuery(e.target.value); setLimit(60); }}
+              aria-label={t(locale, 'screener.search')}
+            />
+          </div>
+
+          <div className="aix-control-group">
+            <span className="aix-control-label">{locale === 'fa' ? 'فیلتر بازار' : 'Market filter'}</span>
+            <div className="aix-chips">
+              {FILTERS.map((f) => (
+                <Chip key={f.id} active={filter === f.id} onClick={() => { setFilter(f.id); setLimit(60); }}>
+                  {t(locale, f.key)}
+                </Chip>
+              ))}
+            </div>
+          </div>
+
+          <div className="aix-control-group aix-sort-group">
+            <span className="aix-control-label">{locale === 'fa' ? 'مرتب‌سازی بر اساس' : 'Sort by'}</span>
+            <div className="aix-sortrow">
+              {COLUMNS.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`aix-sort${sort.key === c.id ? ' is-active' : ''}`}
+                  onClick={() => onSort(c.id)}
+                  aria-pressed={sort.key === c.id}
+                >
+                  {t(locale, c.key)}
+                  {sort.key === c.id ? <span aria-hidden="true">{sort.dir === 'desc' ? ' ↓' : ' ↑'}</span> : null}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        <div className="aix-chips">
-          {FILTERS.map((f) => (
-            <Chip key={f.id} active={filter === f.id} onClick={() => { setFilter(f.id); setLimit(60); }}>
-              {t(locale, f.key)}
-            </Chip>
-          ))}
-        </div>
-
-        <div className="aix-sortrow">
-          {COLUMNS.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className={`aix-sort${sort.key === c.id ? ' is-active' : ''}`}
-              onClick={() => onSort(c.id)}
-            >
-              {t(locale, c.key)}
-              {sort.key === c.id ? <span aria-hidden="true">{sort.dir === 'desc' ? ' ↓' : ' ↑'}</span> : null}
-            </button>
-          ))}
-          <span className="aix-sort-label">{locale === 'fa' ? 'مرتب‌سازی' : 'Sort'}</span>
-        </div>
-
-        <div className="aix-table" role="table" aria-label={t(locale, 'tab.screener')}>
+        <div className="aix-table-shell">
+          <div className="aix-table" role="table" aria-label={t(locale, 'tab.screener')}>
           <div className="aix-thead" role="row">
             <span role="columnheader">{t(locale, 'screener.col.token')}</span>
             <span role="columnheader" className="aix-col-price">{t(locale, 'screener.col.price')}</span>
@@ -148,8 +159,11 @@ export default function ScreenerTab({ markets, locale, onOpenToken, updatedAt, p
                 onClick={() => onOpenToken?.(row.id)}
                 title={t(locale, 'screener.analyze')}
               >
-                <span className="aix-token-sym">{row.symbol}</span>
-                <span className="aix-token-name">{row.name}</span>
+                <span className="aix-token-avatar" aria-hidden="true">{String(row.symbol || '?').slice(0, 1)}</span>
+                <span className="aix-token-copy">
+                  <span className="aix-token-sym">{row.symbol}</span>
+                  <span className="aix-token-name">{row.name}</span>
+                </span>
               </button>
               <span className="aix-col-price aix-mono">
                 {row.price >= 1 ? `$${row.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : `$${Number(row.price).toPrecision(3)}`}
@@ -163,7 +177,8 @@ export default function ScreenerTab({ markets, locale, onOpenToken, updatedAt, p
             </div>
           ))}
 
-          {!visible.length ? <p className="aix-card-hint aix-pad">{t(locale, 'screener.empty')}</p> : null}
+            {!visible.length ? <p className="aix-card-hint aix-pad">{t(locale, 'screener.empty')}</p> : null}
+          </div>
         </div>
 
         {rows.length > visible.length ? (

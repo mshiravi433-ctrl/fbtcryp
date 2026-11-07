@@ -63,6 +63,7 @@ export default function TokenTab({
   return (
     <div className="aix-tab-body">
       <SectionCard
+        className="aix-token-picker-card"
         title={t(locale, 'tab.token')}
         hint={locale === 'fa' ? 'پرونده کامل هر توکن با شواهد عددی' : 'One token, every number with its evidence'}
         actions={coin ? <ProvenanceDot provenance={coin.provenance || coin.dataProvenance || 'unknown'} /> : null}
@@ -85,13 +86,16 @@ export default function TokenTab({
 
         {coin ? (
           <div className="aix-token-head">
-            <div>
-              <h3 className="aix-token-title">{coin.symbol}<span>{coin.name}</span></h3>
-              <div className="aix-token-meta">
-                <strong>{fmtPrice(coin.price)}</strong>
-                <Change value={coin.change24h} />
-                {coin.rank ? <span className="aix-chip-static">#{coin.rank}</span> : null}
-                {coin.mcap ? <span className="aix-muted">{fmtMoney(coin.mcap, locale)}</span> : null}
+            <div className="aix-token-identity">
+              <span className="aix-token-avatar aix-token-avatar-large" aria-hidden="true">{String(coin.symbol || '?').slice(0, 1)}</span>
+              <div>
+                <h3 className="aix-token-title">{coin.symbol}<span>{coin.name}</span></h3>
+                <div className="aix-token-meta">
+                  <strong>{fmtPrice(coin.price)}</strong>
+                  <Change value={coin.change24h} />
+                  {coin.rank ? <span className="aix-chip-static">#{coin.rank}</span> : null}
+                  {coin.mcap ? <span className="aix-muted">{fmtMoney(coin.mcap, locale)}</span> : null}
+                </div>
               </div>
             </div>
             <div className="aix-token-head-right">
@@ -107,7 +111,7 @@ export default function TokenTab({
       </SectionCard>
 
       <div className="aix-score-wrap">
-        <SectionCard title={t(locale, 'token.score')} hint={t(locale, `band.${score?.band || 'neutral'}`)}>
+        <SectionCard className="aix-score-card" title={t(locale, 'token.score')} hint={t(locale, `band.${score?.band || 'neutral'}`)}>
           <div className="aix-score">
             <ScoreRing value={score?.composite ?? null} band={score?.band} caption={t(locale, 'token.score')} />
             <div className="aix-score-body">

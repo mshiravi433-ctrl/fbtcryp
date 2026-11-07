@@ -44,9 +44,12 @@ export default function OpportunitiesTab({ scan, locale, onOpenToken }) {
             return (
               <article key={`${o.kind}-${o.coin.id}`} className={`aix-opp aix-opp-${TONE[meta?.tone] || 'cyan'}`}>
                 <header className="aix-opp-head">
-                  <div>
-                    <h3>{o.coin.symbol}</h3>
-                    <span className="aix-opp-kind">{t(locale, `opp.kind.${o.kind}`)}</span>
+                  <div className="aix-opp-identity">
+                    <span className="aix-token-avatar" aria-hidden="true">{String(o.coin.symbol || '?').slice(0, 1)}</span>
+                    <div>
+                      <h3>{o.coin.symbol}</h3>
+                      <span className="aix-opp-kind">{t(locale, `opp.kind.${o.kind}`)}</span>
+                    </div>
                   </div>
                   <ProvenanceDot provenance={o.provenance} />
                 </header>
@@ -70,7 +73,7 @@ export default function OpportunitiesTab({ scan, locale, onOpenToken }) {
                   <p className="aix-opp-caveat">{o.caveats.map((c) => t(locale, `caveat.${c}`)).join(' · ')}</p>
                 ) : null}
 
-                <button type="button" className="aix-cta aix-cta-ghost" onClick={() => onOpenToken?.(o.coin.id)}>
+                <button type="button" className="aix-cta aix-cta-ghost aix-opp-open" onClick={() => onOpenToken?.(o.coin.id)}>
                   {t(locale, 'opp.open')} →
                 </button>
               </article>

@@ -127,6 +127,11 @@ describe('AI intelligence page', () => {
     await mount();
 
     expect(await screen.findByText('FBT AI Intelligence')).toBeTruthy();
+    /* The navigation is a product landmark, not seven anonymous text pills. */
+    expect(document.querySelectorAll('.aix-tab .aix-tab-icon')).toHaveLength(7);
+    expect(document.querySelector('.aix-tab-overview')?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelector('.aix-regime-layout')).toBeTruthy();
+    expect(document.querySelector('.aix-regime-narrative')).toBeTruthy();
     expect(await screen.findByText('$2.45T')).toBeTruthy(); // total market cap
     expect(await screen.findByText('58.2%')).toBeTruthy(); // BTC dominance
 
@@ -151,6 +156,9 @@ describe('AI intelligence page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Token screener' }));
     expect(await screen.findByText('AAVE')).toBeTruthy();
     expect(screen.getByText('PEPE')).toBeTruthy();
+    expect(document.querySelector('.aix-tab-screener')?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelector('.aix-table-shell')).toBeTruthy();
+    expect(document.querySelectorAll('.aix-trow .aix-token-avatar').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: 'Losers' }));
     await waitFor(() => {
@@ -194,6 +202,26 @@ describe('AI intelligence page', () => {
     expect(screen.getByText('What to watch over the next 24h')).toBeTruthy();
     expect(screen.getByText(/^Source: /)).toBeTruthy();
     expect(screen.getByText('Copy text')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/NaN|undefined|Infinity/);
+  });
+
+  it('supports keyboard navigation and keeps opportunity and comparison rooms structured', async () => {
+    await mount();
+    const overview = await screen.findByRole('button', { name: 'Overview' });
+    fireEvent.keyDown(overview, { key: 'ArrowRight' });
+    expect(await screen.findByText('AAVE')).toBeTruthy();
+    expect(document.querySelector('.aix-tab-screener')?.getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Opportunities' }));
+    expect(await screen.findByText('Opportunity scanner')).toBeTruthy();
+    expect(document.querySelectorAll('.aix-opp').length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('.aix-opp-identity .aix-token-avatar').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Compare' }));
+    expect(await screen.findByText('7-day performance (normalised to 100)')).toBeTruthy();
+    expect(document.querySelectorAll('.aix-compare-add .aix-chip')).toHaveLength(3);
+    expect(document.querySelector('.aix-swipe-hint')).toBeTruthy();
+    expect(document.querySelector('.aix-tab-compare')?.getAttribute('aria-pressed')).toBe('true');
     expect(document.body.textContent).not.toMatch(/NaN|undefined|Infinity/);
   });
 

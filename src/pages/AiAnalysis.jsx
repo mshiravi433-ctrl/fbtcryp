@@ -28,11 +28,11 @@
  * · It never renders a recommendation; suggestions are labelled with horizon,
  *   risk, confidence and "not investment advice".
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
-import { IconChevronLeft, IconRefresh, IconSparkle } from '../components/Icons';
+import { IconChevronLeft, IconInfo, IconRefresh, IconSparkle } from '../components/Icons';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { fmtTimeAgo, t as ct } from '../lib/intelligence/copy';
 import {
@@ -47,8 +47,10 @@ import PortfolioTab from '../components/ai/analysis/PortfolioTab';
 import OpportunitiesTab from '../components/ai/analysis/OpportunitiesTab';
 import CompareTab from '../components/ai/analysis/CompareTab';
 import ReportTab from '../components/ai/analysis/ReportTab';
+import AnalysisTabs from '../components/ai/analysis/AnalysisTabs';
 import '../styles/ai-analysis.css';
 import '../styles/ai-analysis-modern.css';
+import '../styles/ai-analysis-refined.css';
 
 const TABS = [
   { id: 'overview', key: 'tab.overview' },
@@ -174,57 +176,59 @@ export default function AiAnalysis() {
     <PageTransition>
       <div className="aix-page" dir={isRTL ? 'rtl' : 'ltr'}>
         <header className="aix-header">
-          <button type="button" className="icon-btn" onClick={() => navigate(-1)} aria-label={ct(locale, 'page.close')}>
-            <IconChevronLeft width={18} height={18} />
-          </button>
-          <div className="aix-head-main">
-            <h1 className="aix-title">
-              <IconSparkle width={18} height={18} />
-              {ct(locale, 'page.title')}
-            </h1>
-            <p className="aix-subtitle">{ct(locale, 'page.subtitle')}</p>
-          </div>
-          <div className="aix-head-actions">
-            <button type="button" className="aix-cta aix-cta-ghost" onClick={refreshAll} aria-label={ct(locale, 'page.refresh')}>
-              <IconRefresh width={15} height={15} />
-              <span>{ct(locale, 'page.refresh')}</span>
+          <div className="aix-header-line">
+            <button type="button" className="icon-btn aix-back" onClick={() => navigate(-1)} aria-label={ct(locale, 'page.close')}>
+              <IconChevronLeft width={18} height={18} />
             </button>
-            <button type="button" className="aix-cta aix-cta-ghost" onClick={() => setSourcesOpen(true)}>
-              {ct(locale, 'page.sources')}
-            </button>
+            <div className="aix-head-main">
+              <span className="aix-eyebrow" aria-hidden="true">
+                <span>FBT</span>
+                <i />
+                <span>AI INTELLIGENCE</span>
+              </span>
+              <h1 className="aix-title">
+                <span className="aix-title-mark"><IconSparkle width={19} height={19} /></span>
+                <span>{ct(locale, 'page.title')}</span>
+              </h1>
+            </div>
+            <div className="aix-head-actions">
+              <button type="button" className="aix-cta aix-cta-ghost aix-head-action" onClick={refreshAll} aria-label={ct(locale, 'page.refresh')} title={ct(locale, 'page.refresh')}>
+                <IconRefresh width={16} height={16} />
+                <span>{ct(locale, 'page.refresh')}</span>
+              </button>
+              <button type="button" className="aix-cta aix-cta-ghost aix-head-action" onClick={() => setSourcesOpen(true)} aria-label={ct(locale, 'page.sources')} title={ct(locale, 'page.sources')}>
+                <IconInfo width={16} height={16} />
+                <span>{ct(locale, 'page.sources')}</span>
+              </button>
+            </div>
           </div>
+          <p className="aix-subtitle">{ct(locale, 'page.subtitle')}</p>
         </header>
 
         <div className={`aix-statusbar aix-status-${pulse?.provenance || 'unknown'}`}>
-          <span className="aix-status-dot" aria-hidden="true" />
-          <span>{ct(locale, PROV_KEY[pulse?.provenance || 'unknown'])}</span>
-          <span className="aix-status-sep">·</span>
-          <span>{ct(locale, 'page.updated', { time: fmtTimeAgo(updatedAt, locale) })}</span>
-          <span className="aix-status-sep">·</span>
-          <span>{pulse ? ct(locale, 'page.rowsCounted', { counted: pulse.breadth.counted, total: pulse.breadth.total }) : '—'}</span>
-          <span className="aix-status-sep">·</span>
-          <span>{ct(locale, 'page.usdNote')}</span>
+          <span className="aix-status-primary">
+            <span className="aix-status-dot" aria-hidden="true" />
+            <b>{ct(locale, PROV_KEY[pulse?.provenance || 'unknown'])}</b>
+          </span>
+          <span className="aix-status-item">{ct(locale, 'page.updated', { time: fmtTimeAgo(updatedAt, locale) })}</span>
+          <span className="aix-status-sep" aria-hidden="true">·</span>
+          <span className="aix-status-item">{pulse ? ct(locale, 'page.rowsCounted', { counted: pulse.breadth.counted, total: pulse.breadth.total }) : '—'}</span>
+          <span className="aix-status-item aix-status-currency">{ct(locale, 'page.usdNote')}</span>
         </div>
 
         {marketError && !markets.length ? (
           <div className="aix-error" role="alert">{ct(locale, 'page.error')}</div>
         ) : null}
 
-        <nav className="aix-tabs" aria-label={ct(locale, 'page.title')}>
-          {TABS.map((x) => (
-            <button
-              key={x.id}
-              type="button"
-              className={`aix-tab${tab === x.id ? ' is-active' : ''}`}
-              onClick={() => setTab(x.id)}
-              aria-current={tab === x.id ? 'page' : undefined}
-            >
-              {ct(locale, x.key)}
-            </button>
-          ))}
-        </nav>
+        <AnalysisTabs
+          tabs={TABS}
+          active={tab}
+          onChange={setTab}
+          locale={locale}
+          label={ct(locale, 'page.title')}
+        />
 
-        <main className="aix-main">
+        <main className="aix-main" key={tab}>
           {pulse ? renderTab() : (
             marketError ? <p className="aix-loading">{ct(locale, 'page.error')}</p> : <p className="aix-loading">{ct(locale, 'page.loading')}</p>
           )}
