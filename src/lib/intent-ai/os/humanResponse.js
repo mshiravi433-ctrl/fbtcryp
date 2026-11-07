@@ -805,6 +805,11 @@ function tokenCard(token, lang) {
     : [];
   return {
     kind: 'TOKEN',
+    /* The chat's token room reads candles by CoinGecko id. The compact card
+       only needed a symbol, so the id used to be dropped here and the room
+       had to guess a slug — which is exactly how «تحلیل بیت کوین» could open
+       an empty file. */
+    coinId: token.coinId || token.id || null,
     symbol: token.symbol || null,
     name: token.name || null,
     priceUsd: numOr(token.priceUsd),
@@ -833,6 +838,33 @@ function rangeLine(token, lang) {
   if (hi == null && lo == null) return null;
   if (lang === 'fa') return `بالاترین قیمت ۲۴ ساعت: ${moneyOrNa(hi)} · کمترین: ${moneyOrNa(lo)}`;
   return `24h high: ${moneyOrNa(hi)} · low: ${moneyOrNa(lo)}`;
+}
+
+/**
+ * WHICH ROOM OF «هوش بازار» THE SENTENCE ASKED FOR.
+ * -------------------------------------------------------------------------
+ * The market answer in chat is the analysis centre's own room, so the same
+ * words that would have sent someone to the page now choose the tab inside
+ * the bubble: opportunities for «فرصت», screener for «فیلتر/لیست», the daily
+ * report for «گزارش». Default is the overview — the question «بازار چطوره»
+ * is answered by numbers, not by a menu.
+ */
+function marketRoomForText(rawText = '') {
+  const text = String(rawText || '');
+  if (/فرصت|opportunit|اسکن|scan/i.test(text)) return 'opportunities';
+  if (/اسکرین|screener|فیلتر|filter|لیست\s*توکن|token\s*list/i.test(text)) return 'screener';
+  if (/گزارش|report|خلاصه|summary/i.test(text)) return 'report';
+  return 'overview';
+}
+
+/** The marker the chat bubble reads to mount the market room. */
+function marketChatCard({ room = 'overview', lang = 'fa' } = {}) {
+  return {
+    kind: 'MARKET',
+    room,
+    title: lang === 'fa' ? 'هوش بازار' : 'Market intelligence',
+    at: Date.now()
+  };
 }
 
 export function buildHumanResponse({ intent, context = {}, results = {}, plan = null, locale = 'fa' } = {}) {
@@ -1072,6 +1104,29 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         route: '/bridge',
         label: lang === 'fa' ? 'بررسی صفحهٔ بریج' : 'Inspect bridge options'
       }]
+    };
+  }
+
+  /*
+   * «امروز چه خبر» IS A QUESTION ABOUT THE MARKET, NOT A REQUEST FOR A PAGE.
+   * ---------------------------------------------------------------------
+   * The parser classified it as NEWS_SEARCH and the answer was «صفحه اخبار را
+   * باز کردم» — the user was sent away from the chat to find out what is going
+   * on. The market room answers it where it was asked: measured totals,
+   * breadth, the 24h movers and the report, with a chip to the headline feed
+   * for anyone who wants the articles themselves. Nothing is navigated.
+   */
+  if (type === 'NEWS_SEARCH' && /چ\s*خبر|چه\s*خبر|چه\s*خبره|what'?s\s+(up|happening|new)|how'?s\s+the\s+market|بازار\s*چه\s*خبر/i.test(rawText)) {
+    return {
+      message: lang === 'fa'
+        ? 'خبر امروز را از دادهٔ زنده می‌گویم: نمای بازار، گستردگی صعود/نزول، بیشترین حرکت‌های ۲۴ ساعت و گزارش روزانه در اتاق زیر است. اگر تیترهای خبری می‌خواهی، چیپ اخبار همان‌جاست — چیزی را که منبع نداده باشد از خودم نمی‌سازم.'
+        : 'Here is what is happening, from live data: the market overview, breadth, the biggest 24h movers and the daily report are in the room below. If you want the headlines themselves, the news chip is right there — I will not invent a story the source did not publish.',
+      ui: { type: 'MARKET_CARD' },
+      card: marketChatCard({ room: marketRoomForText(rawText), lang }),
+      actions: [
+        { id: 'open-news', route: '/news', label: lang === 'fa' ? 'تیترهای خبری' : 'News headlines' },
+        { id: 'open-market', route: '/', label: lang === 'fa' ? 'بازار' : 'Market' }
+      ]
     };
   }
 
@@ -1337,6 +1392,12 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
       return bv - av;
     });
     const card = portfolioCard(sorted, lang, portfolio, analysis);
+    /* «ریسک پرتفوی» is not the same question as «موجودی من چقدر است». The card
+       opens on its risk/allocation room when that is what was asked, instead of
+       making the user find the tab. */
+    card.focusRoom = /ریسک|risk|تمرکز|concentrat|تخصیص|allocat|همبستگ|correlat|تنوع|diversif/i.test(rawText)
+      ? 'risk'
+      : null;
     const knownValue = card.totalValueUsd;
     const lines = allocationLines(sorted, knownValue);
     const totalLabel = money(knownValue);
@@ -1723,7 +1784,7 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         if (stats.length) parts.push(stats.join(' · '));
         if (sig) parts.push(`سیگنال تحلیل فنی (بک‌تست‌شده): ${sig}${tk.analysis?.rsi != null ? ` · RSI ${Math.round(Number(tk.analysis.rsi))}` : ''}`);
         parts.push('');
-        parts.push('نمودار ۷ روز اخیر در کارت زیر است — روی صفحه بازار کندل کامل را ببین.');
+        parts.push('پرونده کامل این توکن در اتاق تحلیل زیر است: کندل، اندیکاتورها (SMA/RSI/MACD)، حمایت و مقاومت و امتیاز ترکیبی با شواهد هر جزء. هر عددی که منبع نداده باشد، «—» می‌ماند.');
         return {
           message: parts.join('\n'),
           ui: { type: 'TOKEN_CARD' },
@@ -1744,7 +1805,7 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
       if (numOr(tk.rank) != null) stats.push(`Rank #${numOr(tk.rank)}`);
       if (stats.length) parts.push(stats.join(' · '));
       if (sig) parts.push(`Backtested signal: ${sig}${tk.analysis?.rsi != null ? ` · RSI ${Math.round(Number(tk.analysis.rsi))}` : ''}`);
-      parts.push('', 'The 7-day chart is in the card below — the market page has the full candles.');
+      parts.push('', 'This token\'s complete file is in the analysis room below: candles, indicators (SMA/RSI/MACD), support and resistance, and the composite score with the evidence behind each part. Anything the source did not return stays an em dash.');
       return {
         message: parts.join('\n'),
         ui: { type: 'TOKEN_CARD' },
@@ -1760,12 +1821,29 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
           ? `بازار را از منبع زنده پرسیدم${token ? ` (${token})` : ''}، اما داده تازه برنگشت. چند لحظه دیگر دوباره می‌پرسم — منبع را همین حالا دوباره صدا می‌زنم.`
           : `I queried live market data${token ? ` (${token})` : ''}, but nothing fresh came back. Retrying the source now — ask again in a moment.`,
         ui: { type: 'TEXT' },
+        /* The market read failed, but the candle endpoint is a different
+           service — the token room still opens and says what it got. */
+        card: token ? { kind: 'TOKEN_ROOM', symbol: String(token).toUpperCase(), at: Date.now() } : null,
         refresh: true
       };
     }
     /* Whole-market ask: name the leaders with real numbers from the read. */
     const top = Array.isArray(market?.top) ? market.top.filter((r) => numOr(r.priceUsd) != null) : [];
     if (top.length) {
+      /* A coin was named but its own read did not come back: the answer is
+         still that coin's room, fed straight from the candle endpoint — not a
+         leaderboard the user never asked for. */
+      if (token) {
+        const sym = String(token).toUpperCase();
+        return {
+          message: lang === 'fa'
+            ? `دادهٔ زندهٔ ${sym} از فید بازار برنگشت، اما اتاق تحلیل ${sym} باز است و کندل را مستقیم از منبع کندل می‌خواند. اگر کندلی نیاید، اندیکاتور و امتیاز ساخته نمی‌شود و همین را می‌نویسد.`
+            : `The live ${sym} row did not come back from the market feed, but its analysis room is open and reads candles from the candle endpoint directly. If no candles arrive, no indicator or score is invented — the room says so.`,
+          ui: { type: 'TOKEN_ROOM' },
+          card: { kind: 'TOKEN_ROOM', symbol: sym, at: Date.now() },
+          actions: [{ id: 'open-market', route: '/', label: lang === 'fa' ? 'بازار' : 'Market' }]
+        };
+      }
       const rows = top.slice(0, 6).map((r) => {
         const c = numOr(r.change24hPct);
         return `${String(r.symbol || '').toUpperCase()}: ${moneyOrNa(r.priceUsd)}${c != null ? ` (${c >= 0 ? '+' : ''}${Math.round(c * 100) / 100}%)` : ''}`;
@@ -1776,18 +1854,20 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         : null;
       return {
         message: (lang === 'fa'
-          ? `نمای کلی بازار از داده زنده:\n\n${rows.join('\n')}${capLine ? `\n\n${capLine}` : ''}\n\nبرای هر کوین نمودار و بالاترین/کمترین قیمت را جداگانه بپرس — مثلاً «تحلیل بیت کوین».`
-          : `Market snapshot from live data:\n\n${rows.join('\n')}${capLine ? `\n\n${capLine}` : ''}\n\nAsk for any coin by name for the chart with 24h high/low — e.g. "analyze bitcoin".`),
-        ui: { type: 'TEXT' },
+          ? `نمای کلی بازار از داده زنده:\n\n${rows.join('\n')}${capLine ? `\n\n${capLine}` : ''}\n\nاتاق کامل بازار در کارت زیر است — نمای بازار، گستردگی، فرصت‌ها، اسکرینر و گزارش روزانه. برای هر کوین هم بپرس «تحلیل بیت کوین» تا پرونده کاملش باز شود.`
+          : `Market snapshot from live data:\n\n${rows.join('\n')}${capLine ? `\n\n${capLine}` : ''}\n\nThe full market room is in the card below — overview, breadth, opportunities, screener and the daily report. Ask \"analyze bitcoin\" for any coin's complete file.`),
+        ui: { type: 'MARKET_CARD' },
         market,
+        card: marketChatCard({ room: marketRoomForText(rawText), lang }),
         actions: [{ id: 'open-market', route: '/', label: lang === 'fa' ? 'بازار' : 'Market' }]
       };
     }
     return {
       message: lang === 'fa'
-        ? `بازار${token ? ` ${token}` : ''} را از ماژول زنده خواندم. جزئیات کامل روی صفحه بازار است — می‌خواهید آنجا را باز کنم؟`
-        : `I read live market data${token ? ` for ${token}` : ''}. Want me to open the market page?`,
-      ui: { type: 'TEXT' },
+        ? `بازار${token ? ` ${token}` : ''} را از ماژول زنده خواندم. اتاق بازار همین‌جاست — هر عددی که منبع نداده باشد، نام‌برده می‌شود.`
+        : `I read live market data${token ? ` for ${token}` : ''}. The market room is right here — anything the source did not return is named, not guessed.`,
+      ui: { type: 'MARKET_CARD' },
+      card: marketChatCard({ room: marketRoomForText(rawText), lang }),
       actions: [{ id: 'open-market', route: '/', label: lang === 'fa' ? 'بازار' : 'Market' }]
     };
   }

@@ -309,6 +309,7 @@ import {
 import { EcosystemPanel } from './IntentEcosystemPanel.jsx';
 import { opsText } from '../lib/intent-ai/os/opsPanelStrings.js';
 import { TokenMarketCard, PortfolioChatCard, ConditionalAllocationCard } from './IntentChatCards.jsx';
+import { ChatMarketRoom, ChatTokenRoom, ChatPortfolioRoom } from './ai/analysis/ChatIntelRooms.jsx';
 import IntentSwapQuoteReview, { quoteReviewSummary } from './IntentSwapQuoteReview.jsx';
 import { LendingMarketsCard, LendingActionReviewCard } from './IntentLendingReview.jsx';
 
@@ -671,7 +672,8 @@ export const ConversationRow = memo(function ConversationRow({
   onAutonomyMode,
   onAutonomyStart,
   onAutonomyStop,
-  onAutonomyTick
+  onAutonomyTick,
+  isLatest = false
 }) {
   const fa = locale.startsWith('fa');
   const intel = m.intelligence || null;
@@ -682,8 +684,17 @@ export const ConversationRow = memo(function ConversationRow({
   const actionRoutes = Array.isArray(m.actions)
     ? m.actions.filter((a) => a && typeof a.route === 'string' && a.route.trim())
     : [];
+  /*
+   * A bubble that holds an intelligence room is wider than a paragraph and
+   * carries the analysis centre's own panels. The class tells the stylesheet
+   * so — the room itself is only mounted by the cards below.
+   */
+  const hasIntel = m.card?.kind === 'MARKET'
+    || m.card?.kind === 'TOKEN'
+    || m.card?.kind === 'TOKEN_ROOM'
+    || m.card?.kind === 'PORTFOLIO';
   return (
-    <div className={`iaos-msg iaos-${m.role} ${m.kind ? `iaos-kind-${m.kind}` : ''}`}>
+    <div className={`iaos-msg iaos-${m.role} ${m.kind ? `iaos-kind-${m.kind}` : ''}${hasIntel ? ' iaos-has-intel' : ''}`}>
       <div className="iaos-bubble">
         {/*
           THE GREETING IS TRANSLATED AT RENDER TIME, NOT WHEN IT IS CREATED.
@@ -741,10 +752,46 @@ export const ConversationRow = memo(function ConversationRow({
         {/* Rich tool-output cards: live token chart + 24h high/low, and the
             allocation view for portfolio answers. */}
         {m.card?.kind === 'TOKEN' ? (
-          <TokenMarketCard card={m.card} locale={locale} onOpenRoute={onOpenRoute} />
+          <>
+            <TokenMarketCard card={m.card} locale={locale} onOpenRoute={onOpenRoute} />
+            {/* The compact read above is the headline; this is the token's
+                complete file — candles, indicators, levels and the weighted
+                score — the same room /ai-analysis renders. */}
+            <ChatTokenRoom
+              card={m.card}
+              locale={locale}
+              onOpenRoute={onOpenRoute}
+              defaultOpen={isLatest}
+            />
+          </>
+        ) : null}
+        {m.card?.kind === 'TOKEN_ROOM' ? (
+          <ChatTokenRoom
+            card={m.card}
+            locale={locale}
+            onOpenRoute={onOpenRoute}
+            defaultOpen={isLatest}
+          />
         ) : null}
         {m.card?.kind === 'PORTFOLIO' ? (
-          <PortfolioChatCard card={m.card} locale={locale} onOpenRoute={onOpenRoute} onQuickPrompt={onPortfolioPrompt} />
+          <>
+            <PortfolioChatCard card={m.card} locale={locale} onOpenRoute={onOpenRoute} onQuickPrompt={onPortfolioPrompt} />
+            {/* «ریسک پرتفوی» opens the portfolio room straight away; any other
+                portfolio answer keeps it one tap away. */}
+            <ChatPortfolioRoom
+              locale={locale}
+              onOpenRoute={onOpenRoute}
+              defaultOpen={m.card?.focusRoom === 'risk'}
+            />
+          </>
+        ) : null}
+        {m.card?.kind === 'MARKET' ? (
+          <ChatMarketRoom
+            card={m.card}
+            locale={locale}
+            onOpenRoute={onOpenRoute}
+            defaultOpen={isLatest}
+          />
         ) : null}
         {m.yieldMarkets ? <LendingMarketsCard data={m.yieldMarkets} locale={locale} /> : null}
         {/* Phase 217 — a cross-asset conditional instruction («اگر طلا ۵٪ اصلاح
@@ -7579,10 +7626,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 onAction={handleNeuralQuickAction}
               />
             ) : null}
-            {visibleMessages.map((m) => (
+            {visibleMessages.map((m, index) => (
               <ConversationRow
                 key={m.id}
                 m={m}
+                isLatest={index === visibleMessages.length - 1}
                 t={t}
                 locale={locale}
                 onConnectWallet={connectFromBubble}
