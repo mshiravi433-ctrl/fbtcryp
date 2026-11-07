@@ -377,11 +377,16 @@ const GROUPS = [
        * same flat treatment.
        */
       /*
-       * «هوش بازار» — the analysis centre. It sits beside Smart Money because
-       * both answer "what is the market doing", and it is the doorway to the
-       * full screener, the token file, portfolio risk and the daily report.
+       * «هوش بازار» IS NOT A DESTINATION ANY MORE.
+       * ---------------------------------------------------------------------
+       * It used to sit here as a tile. The owner's ask was the opposite of a
+       * new page: the AI's answers should BE those rooms. So the seven rooms
+       * now mount inside the chat bubble (src/components/ai/analysis/
+       * ChatIntelRooms.jsx) — the token file for «تحلیل بیت کوین», the market
+       * room for «امروز چه خبر», the portfolio room for «ریسک پرتفوی».
+       * The /ai-analysis route still resolves for old links, but no menu
+       * entry advertises a screen the assistant already answers in place.
        */
-      { to: '/ai-analysis', key: 'nav.aiAnalysis', Icon: IconActivity, hue: 'var(--rgb-2)' },
       { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney, hue: 'var(--rgb-7)' },
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
       /* The social feed's second doorway. Its icon is the same conversation

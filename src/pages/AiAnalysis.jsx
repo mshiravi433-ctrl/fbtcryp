@@ -28,25 +28,18 @@
  * · It never renders a recommendation; suggestions are labelled with horizon,
  *   risk, confidence and "not investment advice".
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import { IconChevronLeft, IconRefresh, IconSparkle } from '../components/Icons';
-import { usePoll } from '../hooks/useMarket';
-import { getGlobal, getMarkets, getOhlc, normalizeGlobal } from '../lib/api';
-import { useWallet } from '../context/WalletContext';
-import { useWalletBalances } from '../hooks/useWalletBalances';
-import { useMultiChainPortfolio } from '../hooks/useMultiChainPortfolio';
 import { useHideBalances } from '../hooks/useHideBalances';
-import { buildIntelligence } from '../lib/portfolioIntel';
-import { EVM_CHAIN_ORDER } from '../lib/chains';
-import { buildMarketPulse, pickRow } from '../lib/intelligence/marketPulse';
-import { scanOpportunities } from '../lib/intelligence/opportunities';
-import { computeIndicators } from '../lib/intelligence/indicators';
-import { scoreToken } from '../lib/intelligence/tokenScore';
-import { buildPortfolioAnalysis, correlationMatrix } from '../lib/intelligence/portfolioAnalysis';
 import { fmtTimeAgo, t as ct } from '../lib/intelligence/copy';
+import {
+  useMarketRoom,
+  usePortfolioRoom,
+  useTokenRoom
+} from '../hooks/useIntelligenceRooms';
 import OverviewTab from '../components/ai/analysis/OverviewTab';
 import ScreenerTab from '../components/ai/analysis/ScreenerTab';
 import TokenTab from '../components/ai/analysis/TokenTab';
@@ -66,11 +59,6 @@ const TABS = [
   { id: 'report', key: 'tab.report' }
 ];
 
-/* 250 rows is the widest page the market API serves without a second request;
-   the scanner and the screener both work on exactly this set. */
-const MARKET_PAGE_SIZE = 250;
-const CORRELATION_SYMBOLS = 4;
-
 const PROV_KEY = { live: 'page.live', stale: 'page.stale', offline: 'page.offline', unknown: 'page.unknown' };
 
 export default function AiAnalysis() {
@@ -85,139 +73,20 @@ export default function AiAnalysis() {
   const [days, setDays] = useState(90);
   const [sourcesOpen, setSourcesOpen] = useState(false);
 
-  /* ── Market feed ─────────────────────────────────────────────────────── */
-  const market = usePoll(async () => {
-    const [markets, global] = await Promise.all([
-      getMarkets({ perPage: MARKET_PAGE_SIZE, vs: 'usd' }),
-      getGlobal().catch(() => null)
-    ]);
-    return { markets: Array.isArray(markets) ? markets : [], global };
-  }, [], 45000);
+  /* The spine lives in hooks/useIntelligenceRooms so the chat rooms and this
+     page can never disagree about a number. */
+  const {
+    markets, pulse, scan, updatedAt, loading: marketLoading, error: marketError, refresh: refreshMarket
+  } = useMarketRoom();
 
-  const markets = market.data?.markets ?? [];
-  /* /api/global answers in the provider's RAW shape (`data.total_market_cap…`).
-     normalizeGlobal() is what every other screen uses; skipping it here made
-     every market-cap tile read `—` while the rows beside them were live — the
-     normaliser is the contract, so it is applied at the edge. `dataProvenance`
-     is carried through because normalizeGlobal() only knows numbers. */
-  const global = useMemo(() => {
-    const raw = market.data?.global;
-    if (!raw) return null;
-    return { ...normalizeGlobal(raw), dataProvenance: raw.dataProvenance ?? 'unknown' };
-  }, [market.data?.global]);
+  const {
+    pack, coin, score, loading: ohlcLoading, refresh: refreshOhlc
+  } = useTokenRoom({ tokenId, days, markets });
 
-  const pulse = useMemo(() => {
-    if (!markets.length && !global) return null;
-    return buildMarketPulse({
-      global,
-      markets,
-      updatedAt: market.updatedAt,
-      provider: markets[0]?.marketProvider ?? null
-    });
-  }, [markets, global, market.updatedAt]);
-
-  const scan = useMemo(() => scanOpportunities({ markets, pulse }), [markets, pulse]);
-
-  /* ── Selected token ──────────────────────────────────────────────────── */
-  const ohlc = usePoll(
-    () => (tokenId ? getOhlc(tokenId, days) : Promise.resolve([])),
-    [tokenId, days],
-    120000
-  );
-
-  const pack = useMemo(() => computeIndicators(ohlc.data || []), [ohlc.data]);
-  const rawCoin = useMemo(() => markets.find((r) => r.id === tokenId) || null, [markets, tokenId]);
-  const coin = useMemo(() => (rawCoin ? pickRow(rawCoin) : null), [rawCoin]);
-  const score = useMemo(
-    () => (coin ? scoreToken({ coin, pack, universe: markets }) : null),
-    [coin, pack, markets]
-  );
-
-  /* ── Portfolio ───────────────────────────────────────────────────────── */
-  const wallet = useWallet();
-  const walletReady = Boolean(wallet?.address);
-  const useMulti = Boolean(walletReady && typeof wallet.getReadProvider === 'function');
-  /*
-   * `useWallet()` answers `{}` when no provider is above the tree, and that
-   * fallback is a NEW object on every render. Handing it to useWalletBalances
-   * would re-create its `load` callback each render, re-run the effect, set a
-   * fresh `[]`, and loop — a render storm with no network activity to blame.
-   * So the hook only ever sees a real wallet, or `null`.
-   */
-  const single = useWalletBalances(useMulti || !walletReady ? null : wallet);
-  const multi = useMultiChainPortfolio(useMulti ? wallet : null);
-  const source = useMulti ? multi : single;
-  /* One identity for the rows: buildIntelligence writes a portfolio snapshot
-     when it runs, so it must not run once per render. */
-  const rows = useMemo(() => source.rows ?? [], [source.rows]);
-
-  const intel = useMemo(
-    () => buildIntelligence({
-      holdings: rows.map((r) => ({ ...r, chainId: r.chainId ?? wallet.chainId ?? null }))
-    }),
-    [rows, wallet.chainId]
-  );
-
-  /* Daily candles for the largest holdings, ONLY to measure how they move
-     together. Bounded to four symbols and re-read only when the symbol set
-     changes — not on every 30-second price tick. */
-  const correlationTargets = useMemo(
-    () => (intel.rows || [])
-      .filter((r) => r.coingeckoId && Number(r.value) > 0)
-      .slice(0, CORRELATION_SYMBOLS)
-      .map((r) => ({ symbol: r.symbol, id: r.coingeckoId })),
-    [intel.rows]
-  );
-  const targetsKey = correlationTargets.map((x) => `${x.symbol}:${x.id}`).join('|');
-  const [seriesBySymbol, setSeriesBySymbol] = useState({});
-  const [correlationStatus, setCorrelationStatus] = useState('idle');
-
-  useEffect(() => {
-    if (!correlationTargets.length) {
-      setSeriesBySymbol({});
-      setCorrelationStatus('idle');
-      return undefined;
-    }
-    let cancelled = false;
-    setCorrelationStatus('loading');
-    (async () => {
-      const results = await Promise.allSettled(
-        correlationTargets.map((x) => getOhlc(x.id, 30).then((bars) => ({
-          symbol: x.symbol,
-          closes: (bars || []).map((b) => Number(b.c)).filter(Number.isFinite)
-        })))
-      );
-      if (cancelled) return;
-      const next = {};
-      for (const res of results) {
-        if (res.status === 'fulfilled' && res.value.closes.length) next[res.value.symbol] = res.value.closes;
-      }
-      setSeriesBySymbol(next);
-      setCorrelationStatus('done');
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetsKey]);
-
-  const correlation = useMemo(
-    () => (Object.keys(seriesBySymbol).length >= 2 ? correlationMatrix(seriesBySymbol) : null),
-    [seriesBySymbol]
-  );
-
-  const portfolioAnalysis = useMemo(
-    () => buildPortfolioAnalysis({ intel, correlation, seriesUsed: Object.keys(seriesBySymbol) }),
-    [intel, correlation, seriesBySymbol]
-  );
-
-  const coverage = useMemo(() => {
-    if (!useMulti) return null;
-    return {
-      readChains: (source.chains ?? []).filter((c) => !c.error).length,
-      totalChains: EVM_CHAIN_ORDER.length,
-      pricedRows: rows.filter((r) => r.value != null).length,
-      totalRows: rows.length
-    };
-  }, [useMulti, source.chains, rows]);
+  const {
+    connected, intel, analysis: portfolioAnalysis, coverage, rows,
+    loading: portfolioLoading, correlationStatus
+  } = usePortfolioRoom();
 
   const openToken = useCallback((id) => {
     if (!id) return;
@@ -226,14 +95,14 @@ export default function AiAnalysis() {
   }, []);
 
   const refreshAll = useCallback(() => {
-    market.refresh?.();
-    ohlc.refresh?.();
-  }, [market, ohlc]);
+    refreshMarket?.();
+    refreshOhlc?.();
+  }, [refreshMarket, refreshOhlc]);
 
   const sourceLabel = markets[0]?.marketProvider === 'coingecko' ? 'CoinGecko' : 'FBT market API';
 
   const renderTab = () => {
-    if (!pulse && (market.loading || !market.data)) {
+    if (!pulse && (marketLoading || !markets.length)) {
       return <p className="aix-loading">{ct(locale, 'page.loading')}</p>;
     }
     switch (tab) {
@@ -242,7 +111,7 @@ export default function AiAnalysis() {
           <ScreenerTab
             markets={markets}
             locale={locale}
-            updatedAt={market.updatedAt}
+            updatedAt={updatedAt}
             provenance={pulse?.provenance}
             onOpenToken={openToken}
           />
@@ -257,7 +126,7 @@ export default function AiAnalysis() {
             pack={pack}
             score={score}
             coin={coin}
-            loading={ohlc.loading}
+            loading={ohlcLoading}
             days={days}
             onDays={setDays}
             onOpenFull={(id) => navigate(`/coin/${id}`)}
@@ -266,12 +135,12 @@ export default function AiAnalysis() {
       case 'portfolio':
         return (
           <PortfolioTab
-            connected={Boolean(wallet?.address)}
+            connected={connected}
             intel={intel}
             analysis={portfolioAnalysis}
             locale={locale}
             onConnect={(path) => navigate(path)}
-            loading={source.loading}
+            loading={portfolioLoading}
             coverage={coverage}
           />
         );
@@ -321,14 +190,14 @@ export default function AiAnalysis() {
           <span className="aix-status-dot" aria-hidden="true" />
           <span>{ct(locale, PROV_KEY[pulse?.provenance || 'unknown'])}</span>
           <span className="aix-status-sep">·</span>
-          <span>{ct(locale, 'page.updated', { time: fmtTimeAgo(market.updatedAt, locale) })}</span>
+          <span>{ct(locale, 'page.updated', { time: fmtTimeAgo(updatedAt, locale) })}</span>
           <span className="aix-status-sep">·</span>
           <span>{pulse ? ct(locale, 'page.rowsCounted', { counted: pulse.breadth.counted, total: pulse.breadth.total }) : '—'}</span>
           <span className="aix-status-sep">·</span>
           <span>{ct(locale, 'page.usdNote')}</span>
         </div>
 
-        {market.error && !market.data ? (
+        {marketError && !markets.length ? (
           <div className="aix-error" role="alert">{ct(locale, 'page.error')}</div>
         ) : null}
 
@@ -348,7 +217,7 @@ export default function AiAnalysis() {
 
         <main className="aix-main">
           {pulse ? renderTab() : (
-            market.error ? <p className="aix-loading">{ct(locale, 'page.error')}</p> : <p className="aix-loading">{ct(locale, 'page.loading')}</p>
+            marketError ? <p className="aix-loading">{ct(locale, 'page.error')}</p> : <p className="aix-loading">{ct(locale, 'page.loading')}</p>
           )}
         </main>
 
@@ -379,7 +248,7 @@ export default function AiAnalysis() {
               <div className="aix-src-row">
                 <span>{isRTL ? 'همبستگی' : 'Correlation'}</span>
                 <b>{isRTL ? 'کندل روزانه ۳۰ روز' : '30d daily candles'}</b>
-                <em>{correlationStatus === 'done' ? Object.keys(seriesBySymbol).length : '…'}</em>
+                <em>{correlationStatus === 'done' ? (analysis?.correlation?.computedOn?.length ?? '…') : '…'}</em>
               </div>
 
               <h3>{ct(locale, 'unavailable.title')}</h3>

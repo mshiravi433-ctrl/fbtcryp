@@ -39,8 +39,10 @@ const groups = [
   ],
   [
     { to: '/signals', key: 'nav.signals', Icon: IconActivity },
-    /* The analysis centre, one tap from anywhere the rail is open. */
-    { to: '/ai-analysis', key: 'nav.aiAnalysis', Icon: IconActivity },
+    /* No «هوش بازار» tile: those rooms are rendered inside the AI's answers
+       now (see ChatIntelRooms.jsx). The route stays for old deep links, but
+       the quick rail does not advertise a second place to read the same
+       numbers. */
     { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney },
     { to: '/news', key: 'nav.news', Icon: IconNews },
     { to: '/global', key: 'nav.global', Icon: IconWorld },
