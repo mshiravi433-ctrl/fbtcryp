@@ -310,6 +310,8 @@ import { EcosystemPanel } from './IntentEcosystemPanel.jsx';
 import { opsText } from '../lib/intent-ai/os/opsPanelStrings.js';
 import { TokenMarketCard, PortfolioChatCard, ConditionalAllocationCard } from './IntentChatCards.jsx';
 import { ChatMarketRoom, ChatTokenRoom, ChatPortfolioRoom } from './ai/analysis/ChatIntelRooms.jsx';
+import { NeuromorphicModal } from './ai/NeuromorphicCortexPanel.jsx';
+import { useNeuromorphicCortex } from '../lib/neuromorphic/useNeuromorphicCortex.js';
 import IntentSwapQuoteReview, { quoteReviewSummary } from './IntentSwapQuoteReview.jsx';
 import { LendingMarketsCard, LendingActionReviewCard } from './IntentLendingReview.jsx';
 
@@ -967,6 +969,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const location = useLocation();
   const navigate = useNavigate();
   const currentPage = location.pathname || '/intent';
+  const neuromorphic = useNeuromorphicCortex({ autoSync: false });
 
   // UPGRADE 8 — OS state refs must be initialized BEFORE convState boot
   const os8StateRef = useRef(loadLocalIntentOSState('intent-unified'));
@@ -7566,6 +7569,18 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
               <span className="fbt-chip fbt-chip-hide-sm" data-tone={walletChip.tone || 'idle'} data-testid="neural-wallet-chip">
                 <i aria-hidden="true" />{walletChip.text}
               </span>
+              <button
+                type="button"
+                className="nmc-head-chip fbt-chip-hide-sm"
+                data-testid="neural-neuromorphic-chip"
+                onClick={() => setPanel('neuromorphic')}
+                title={fa ? 'کورتکس نورومورفیک ۲۰۵۰ روی GPU/CPU شما' : 'Neuromorphic Cortex 2050 on your GPU/CPU'}
+              >
+                <span className="nmc-head-dot" aria-hidden="true" />
+                {neuromorphic.backend === 'webgpu'
+                  ? `WebGPU · Gen #${neuromorphic.globalGeneration ?? neuromorphic.localGeneration}`
+                  : (fa ? `کورتکس ۲۰۵۰ · نسل #${neuromorphic.globalGeneration ?? neuromorphic.localGeneration}` : `Cortex 2050 · Gen #${neuromorphic.globalGeneration ?? neuromorphic.localGeneration}`)}
+              </button>
             </span>
             {/* Thinking Orb in header when active */}
             {thinkingState !== 'idle' ? (
@@ -8463,6 +8478,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         learningStats={learningStats}
         locale={locale}
         onSpawnAgent={spawnFleetAgent}
+      />
+      <NeuromorphicModal
+        open={panel === 'neuromorphic'}
+        onClose={() => setPanel(null)}
+        locale={locale}
       />
       <MonitorDraftForm
         key={monitorDraftOpen ? `mon-${monitorInitial ? `${monitorInitial.asset?.symbol || ''}${monitorInitial.metric || ''}${monitorInitial.smartTarget?.chain || ''}${monitorInitial.smartTarget?.token || ''}` : 'open'}` : 'mon-closed'}

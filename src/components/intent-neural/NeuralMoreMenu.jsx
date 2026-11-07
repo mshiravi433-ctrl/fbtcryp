@@ -61,7 +61,8 @@ function buildGroups(fa, speculationOn) {
         { id: 'global', icon: 'globe', title: t('هوش جهانی', 'Global Intelligence'), sub: t('افق جهانی بازارها', 'Global market horizon'), kind: 'route', target: '/global' },
         { id: 'smartmoney', icon: 'whale', title: t('اسمارت‌مانی', 'Smart Money'), sub: t('ردیابی پول هوشمند', 'Smart-money tracking'), kind: 'route', target: '/smart-money' },
         { id: 'market', icon: 'chart', title: t('تحلیل بازار', 'Market Analysis'), sub: t('سیگنال‌ها و تحلیل‌ها', 'Signals & analysis'), kind: 'route', target: '/signals' },
-        { id: 'multimodel', icon: 'spark', title: t('هوش چندمدلی', 'Multi-Model Intelligence'), sub: t('مدل‌ها، اجماع و اعتماد', 'Models, consensus & trust'), kind: 'panel', target: 'intelligence', testid: 'intent-ai-intelligence' }
+        { id: 'multimodel', icon: 'spark', title: t('هوش چندمدلی', 'Multi-Model Intelligence'), sub: t('مدل‌ها، اجماع و اعتماد', 'Models, consensus & trust'), kind: 'panel', target: 'intelligence', testid: 'intent-ai-intelligence' },
+        { id: 'neuromorphic', icon: 'pulse', title: t('کورتکس نورومورفیک ۲۰۵۰', 'Neuromorphic Cortex 2050'), sub: t('مغز زنده و خودتکاملی روی GPU/CPU شما', 'Self-evolving brain on your GPU/CPU'), kind: 'panel', target: 'neuromorphic', testid: 'intent-ai-neuromorphic' }
       ]
     },
     {

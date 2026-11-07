@@ -7326,6 +7326,14 @@ app.use('/api/v1/ai', lazyMount('ai-orchestrator', () => import('./aiOrchestrato
  */
 app.use('/api/v1/ai', lazyMount('ai-benchmark', () => import('./aiBenchmarkRoutes.js')));
 
+/* ---------- FBT NEUROMORPHIC CORTEX 2050 — zero-GPU swarm (additive) ---------- */
+/*
+ * Aggregates verified walk-forward synaptic deltas from users' own WebGPU/CPU
+ * devices into Global Generations via Byzantine-resilient trimmed mean.
+ * Read/evolve only: cannot sign, execute, or move funds.
+ */
+app.use('/api/v1/ai', lazyMount('ai-neuromorphic', () => import('./aiNeuromorphicRoutes.js')));
+
 /* ----------------- FBT CENTRAL INTELLIGENCE OS — the central brain ---------------- */
 /*
  * One brain for all thirty modules (§14), mounted as a single gateway (§37) so no
