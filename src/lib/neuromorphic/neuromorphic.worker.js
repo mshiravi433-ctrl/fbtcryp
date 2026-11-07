@@ -51,13 +51,18 @@ function fail(id, err) {
 }
 
 async function ensureReady(msg = {}) {
-  if (initialized && cortex) return;
+  if (initialized && cortex) {
+    governor.configure({ environment: msg.environment, computeMode: msg.computeMode });
+    return;
+  }
   cortex = createNeuromorphicCortex();
   engrams = createEngramMemory();
   governor = createHardwareGovernor({
     paused: Boolean(msg.paused),
-    swarmOptIn: msg.swarmOptIn !== false
+    swarmOptIn: msg.swarmOptIn !== false,
+    computeMode: msg.computeMode
   });
+  governor.configure({ environment: msg.environment, computeMode: msg.computeMode });
 
   gpuKernel = await createWebGpuLifKernel();
   governor.configure({
@@ -182,7 +187,11 @@ async function handleTick(id, msg) {
 async function handleEvolve(id, msg) {
   await ensureReady(msg);
   const gov = await governor.evaluate();
-  const candles = Array.isArray(msg.candles) ? msg.candles : [];
+  const candles = Array.isArray(msg.candles) ? msg.candles.slice(-256) : [];
+  if (!gov.allowInference || !gov.allowPlasticity || !gov.swarmCloneBudget) {
+    reply(id, { ok: false, reason: gov.reason, governor: gov });
+    return;
+  }
   if (candles.length < 16) {
     reply(id, { ok: false, reason: 'INSUFFICIENT_CANDLES_FOR_EVOLUTION', governor: gov });
     return;
@@ -199,8 +208,8 @@ async function handleEvolve(id, msg) {
     // eslint-disable-next-line no-await-in-loop
     lastReadout = await cortex.step(feat.vector, {
       observedPrice: feat.meta.lastClose,
-      learningEnabled: true,
-      sparseMode: false,
+      learningEnabled: gov.allowPlasticity,
+      sparseMode: gov.mode === 'ECO_SPARSE',
       gpuLifRunner: gpuKernel?.available ? gpuKernel.runLifStep : null
     });
     if (lastReadout.learning?.rewardOutcome) {
@@ -213,9 +222,13 @@ async function handleEvolve(id, msg) {
     }
   }
 
-  if (lastReadout) {
+  if (!lastReadout) {
+    reply(id, { ok: false, reason: 'INSUFFICIENT_OBSERVATIONS', governor: gov });
+    return;
+  }
+  if (gov.allowNeurogenesis) {
     const st = runStructuralPlasticity(cortex, {
-      anomalySurprise: Math.max(0.58, lastReadout.anomalySurprise),
+      anomalySurprise: lastReadout.anomalySurprise,
       maxReservoirNeurons: gov.maxReservoirNeurons || 192
     });
     structuralSummary = st;
@@ -230,13 +243,15 @@ async function handleEvolve(id, msg) {
     candles,
     baseWeights: cortex.getSwarmWeights(),
     baseGeneration: snapBefore.generation,
-    cloneCount: Math.max(2, gov.swarmCloneBudget || 4),
-    computeBackend: gpuKernel?.available ? 'webgpu' : 'cpu-float32'
+    cloneCount: gov.swarmCloneBudget,
+    computeBackend: 'cpu-float32'
   });
 
-  if (evo.ok && evo.improved && evo.nextWeights) {
-    cortex.setSwarmWeights(evo.nextWeights, snapBefore.generation);
+  if (!evo.ok) {
+    reply(id, { ok: false, reason: evo.reason, governor: gov });
+    return;
   }
+  // Never promote a candidate selected on the same sample without independent validation.
 
   await saveLocalCortexBundle({
     cortexSnapshot: cortex.exportSnapshot(),
@@ -257,7 +272,8 @@ async function handleEvolve(id, msg) {
       resolvedSteps: evo.resolvedSteps ?? 0,
       winnerHitRate: evo.winnerHitRate ?? null,
       winnerBrier: evo.winnerBrier ?? null,
-      deltaPacket: evo.deltaPacket || null
+      candidateApplied: false,
+      validation: 'selection-sample-only'
     },
     engramRecall: recall,
     governor: gov
@@ -288,7 +304,8 @@ async function handleConfigure(id, msg) {
   await ensureReady(msg);
   governor.configure({
     paused: typeof msg.paused === 'boolean' ? msg.paused : undefined,
-    swarmOptIn: typeof msg.swarmOptIn === 'boolean' ? msg.swarmOptIn : undefined
+    swarmOptIn: typeof msg.swarmOptIn === 'boolean' ? msg.swarmOptIn : undefined,
+    computeMode: msg.computeMode, environment: msg.environment
   });
   let genomeResult = null;
   if (msg.intentGenome) {
@@ -313,17 +330,20 @@ async function handleReset(id) {
   });
 }
 
+// Serialize messages so initialization, reset and evolution cannot mutate the
+// same cortex concurrently while awaiting GPU or IndexedDB operations.
+let messageQueue = Promise.resolve();
 self.onmessage = (event) => {
   const msg = event.data || {};
   const { id, type } = msg;
-  if (type === 'init') handleInit(id, msg).catch((e) => fail(id, e));
-  else if (type === 'tick') handleTick(id, msg).catch((e) => fail(id, e));
-  else if (type === 'evolve') handleEvolve(id, msg).catch((e) => fail(id, e));
-  else if (type === 'syncGenome') handleSyncGenome(id, msg).catch((e) => fail(id, e));
-  else if (type === 'configure') handleConfigure(id, msg).catch((e) => fail(id, e));
-  else if (type === 'reset') handleReset(id).catch((e) => fail(id, e));
-  else if (type === 'dispose') {
-    gpuKernel?.dispose?.();
-    reply(id, { ok: true });
-  }
+  messageQueue = messageQueue.then(async () => {
+    if (type === 'init') await handleInit(id, msg);
+    else if (type === 'tick') await handleTick(id, msg);
+    else if (type === 'evolve') await handleEvolve(id, msg);
+    else if (type === 'syncGenome') await handleSyncGenome(id, msg);
+    else if (type === 'configure') await handleConfigure(id, msg);
+    else if (type === 'reset') await handleReset(id);
+    else if (type === 'dispose') { gpuKernel?.dispose?.(); reply(id, { ok: true }); }
+    else reply(id, { ok: false, reason: 'UNKNOWN_MESSAGE' });
+  }).catch((e) => fail(id, e));
 };

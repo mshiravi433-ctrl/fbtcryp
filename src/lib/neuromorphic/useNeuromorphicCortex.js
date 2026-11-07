@@ -3,7 +3,7 @@
  * ===========================================================================
  * Single shared bridge between any React surface (`/intent`, Chat Rooms,
  * `AiControlCenter`, `IntentOpsPanels`) and the off-main-thread WebGPU/CPU
- * Neuromorphic Worker (`neuromorphic.worker.js`), plus zero-GPU Swarm sync.
+ * Neuromorphic Worker (`neuromorphic.worker.js`); no network or swarm sync.
  *
  * Honesty Rules:
  *   · Initial readout, hitRate, meanBrier, latencyMs, and firingRateHz are
@@ -13,11 +13,9 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { apiBase } from '../apiBase.js';
-import { getOhlc } from '../api.js';
 import { createNeuromorphicCortex } from './cortexCore.js';
 import { featuresFromCandles, featuresFromMarketPulse } from './spikeEncoder.js';
-import { createHardwareGovernor } from './hardwareGovernor.js';
+import { createHardwareGovernor, readBatteryTelemetry } from './hardwareGovernor.js';
 import { coupleIntentGenome, runStructuralPlasticity } from './plasticity.js';
 import {
   createEngramMemory,
@@ -25,69 +23,23 @@ import {
 } from './engramMemory.js';
 import { blendGlobalSwarmWeights, runLocalSwarmEvolution } from './swarmClient.js';
 
-const PREFS_KEY = 'fbt.neuromorphic.prefs.v1';
-const DEVICE_KEY = 'fbt.ai.device.v1';
-
+// New key deliberately does not inherit the legacy auto-start / swarm settings.
+const PREFS_KEY = 'fbt.neuromorphic.local.v2';
 function readPrefs() {
   try {
-    if (typeof localStorage === 'undefined') return { swarmOptIn: true, paused: false };
-    const raw = localStorage.getItem(PREFS_KEY);
-    if (!raw) return { swarmOptIn: true, paused: false };
-    const parsed = JSON.parse(raw);
-    return {
-      swarmOptIn: parsed?.swarmOptIn !== false,
-      paused: Boolean(parsed?.paused)
-    };
-  } catch {
-    return { swarmOptIn: true, paused: false };
-  }
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(PREFS_KEY) : null;
+    const parsed = raw ? JSON.parse(raw) : {};
+    return { paused: parsed.paused !== false, computeMode: ['auto', 'eco', 'balanced'].includes(parsed.computeMode) ? parsed.computeMode : 'auto' };
+  } catch { return { paused: true, computeMode: 'auto' }; }
 }
-
 function savePrefs(prefs) {
-  try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
-    }
-  } catch { /* ignore */ }
+  try { if (typeof localStorage !== 'undefined') localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* storage optional */ }
 }
-
-function deviceHeaderValue() {
-  try {
-    if (typeof window === 'undefined' || !window.localStorage) return '';
-    let id = window.localStorage.getItem(DEVICE_KEY);
-    if (!id) {
-      id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
-      window.localStorage.setItem(DEVICE_KEY, id);
-    }
-    return id;
-  } catch {
-    return '';
-  }
-}
-
-async function swarmFetch(path, { method = 'GET', body = null, timeoutMs = 10000 } = {}) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const root = (typeof apiBase === 'function' ? apiBase() : '') || '/api';
-    const headers = { accept: 'application/json' };
-    if (body) headers['content-type'] = 'application/json';
-    const dev = deviceHeaderValue();
-    if (dev) headers['x-fbt-device'] = dev;
-    const res = await fetch(`${root}${path}`, {
-      method,
-      signal: ctrl.signal,
-      headers,
-      body: body ? JSON.stringify(body) : undefined
-    });
-    const text = await res.text();
-    const json = text ? (() => { try { return JSON.parse(text); } catch { return {}; } })() : {};
-    return { ok: res.ok && json.ok !== false, status: res.status, ...json };
-  } catch (err) {
-    return { ok: false, status: 0, error: String(err?.message || 'NETWORK_ERROR').slice(0, 120) };
-  } finally {
-    clearTimeout(timer);
-  }
+async function deviceEnvironment() {
+  return {
+    tabVisible: typeof document === 'undefined' || document.visibilityState !== 'hidden',
+    battery: await readBatteryTelemetry()
+  };
 }
 
 /* ── Shared Singleton Store ───────────────────────────────────────────────── */
@@ -108,8 +60,10 @@ let storeState = {
   structuralLast: null,
   evolutionLast: null,
   swarmStatus: null,
-  swarmOptIn: initialPrefs.swarmOptIn,
+  swarmOptIn: false, // remote sharing is disabled in the local ecosystem
   paused: initialPrefs.paused,
+  computeMode: initialPrefs.computeMode,
+  availableCandles: 0,
   evolving: false,
   lastSymbol: null,
   lastUpdatedAt: null,
@@ -126,6 +80,8 @@ function emit(patch) {
 
 /* ── Worker + Inline Fallback Transport ───────────────────────────────────── */
 
+let latestCandles = null;
+let latestCandleSymbol = null;
 let workerInstance = null;
 let workerInitPromise = null;
 let msgSeq = 0;
@@ -142,12 +98,14 @@ function ensureInlineRuntime() {
     inlineEngrams = createEngramMemory();
     inlineGovernor = createHardwareGovernor({
       paused: storeState.paused,
-      swarmOptIn: storeState.swarmOptIn
+      swarmOptIn: true,
+      computeMode: storeState.computeMode
     });
   }
 }
 
-function sendWorkerMessage(payload, timeoutMs = 25000) {
+async function sendWorkerMessage(payload, timeoutMs = 25000) {
+  payload = { ...payload, environment: await deviceEnvironment(), computeMode: storeState.computeMode };
   if (typeof Worker === 'undefined') {
     return runInlineFallback(payload);
   }
@@ -167,6 +125,9 @@ function sendWorkerMessage(payload, timeoutMs = 25000) {
       }
     };
     workerInstance.onerror = (err) => {
+      workerInstance?.terminate();
+      workerInstance = null;
+      workerInitPromise = null;
       for (const [, entry] of pendingWorkerCalls) {
         clearTimeout(entry.timer);
         entry.reject(err);
@@ -178,18 +139,36 @@ function sendWorkerMessage(payload, timeoutMs = 25000) {
   const id = `nm_${++msgSeq}`;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      pendingWorkerCalls.delete(id);
-      reject(new Error('WORKER_TIMEOUT'));
+      workerInstance?.terminate();
+      workerInstance = null;
+      workerInitPromise = null;
+      for (const [pendingId, entry] of pendingWorkerCalls) {
+        clearTimeout(entry.timer);
+        pendingWorkerCalls.delete(pendingId);
+        entry.reject(new Error('WORKER_TIMEOUT'));
+      }
     }, timeoutMs);
     pendingWorkerCalls.set(id, { resolve, reject, timer });
     workerInstance.postMessage({ ...payload, id });
   });
 }
 
+async function requestWorker(payload) {
+  try {
+    return await sendWorkerMessage(payload);
+  } catch (err) {
+    const error = String(err?.message || err || 'WORKER_ERROR').slice(0, 140);
+    emit({ lastError: error });
+    return { ok: false, error };
+  }
+}
+
 async function runInlineFallback(msg) {
   ensureInlineRuntime();
   const type = msg.type;
+  inlineGovernor.configure({ environment: msg.environment, computeMode: msg.computeMode });
   if (type === 'init') {
+    inlineGovernor.configure({ paused: msg.paused, swarmOptIn: msg.swarmOptIn });
     if (msg.intentGenome) coupleIntentGenome(inlineCortex, msg.intentGenome);
     const gov = await inlineGovernor.evaluate();
     const snap = inlineCortex.exportSnapshot();
@@ -241,6 +220,7 @@ async function runInlineFallback(msg) {
   if (type === 'evolve') {
     const gov = await inlineGovernor.evaluate();
     const candles = Array.isArray(msg.candles) ? msg.candles : [];
+    if (!gov.allowInference || !gov.allowPlasticity || !gov.swarmCloneBudget) return { ok: false, reason: gov.reason, governor: gov };
     if (candles.length < 16) return { ok: false, reason: 'INSUFFICIENT_CANDLES_FOR_EVOLUTION', governor: gov };
     let lastReadout = null;
     for (let end = Math.max(4, candles.length - 32); end <= candles.length; end += 1) {
@@ -257,20 +237,20 @@ async function runInlineFallback(msg) {
         });
       }
     }
-    const structural = runStructuralPlasticity(inlineCortex, {
-      anomalySurprise: Math.max(0.58, lastReadout?.anomalySurprise || 0.6),
-      maxReservoirNeurons: gov.maxReservoirNeurons || 192
-    });
+    const structural = gov.allowNeurogenesis && lastReadout ? runStructuralPlasticity(inlineCortex, {
+      anomalySurprise: lastReadout.anomalySurprise,
+      maxReservoirNeurons: gov.maxReservoirNeurons
+    }) : null;
     const snap = inlineCortex.exportSnapshot();
     const evo = runLocalSwarmEvolution({
       candles,
       baseWeights: inlineCortex.getSwarmWeights(),
       baseGeneration: snap.generation,
-      cloneCount: Math.max(2, gov.swarmCloneBudget || 4)
+      cloneCount: gov.swarmCloneBudget
     });
-    if (evo.ok && evo.improved && evo.nextWeights) {
-      inlineCortex.setSwarmWeights(evo.nextWeights, snap.generation);
-    }
+    if (!lastReadout) return { ok: false, reason: 'INSUFFICIENT_OBSERVATIONS', governor: gov };
+    if (!evo.ok) return { ok: false, reason: evo.reason, governor: gov };
+    // Experimental candidates are not promoted based on the selection sample.
     return {
       ok: true,
       readout: lastReadout,
@@ -282,7 +262,8 @@ async function runInlineFallback(msg) {
         resolvedSteps: evo.resolvedSteps ?? 0,
         winnerHitRate: evo.winnerHitRate ?? null,
         winnerBrier: evo.winnerBrier ?? null,
-        deltaPacket: evo.deltaPacket || null
+        candidateApplied: false,
+        validation: 'selection-sample-only'
       },
       engramRecall: inlineEngrams.recall(inlineCortex._internals().getLiquidState()),
       governor: gov
@@ -312,9 +293,9 @@ async function runInlineFallback(msg) {
 
 export async function initNeuromorphicRuntime({ intentGenome = null } = {}) {
   if (!workerInitPromise) {
-    workerInitPromise = sendWorkerMessage({
+    workerInitPromise = requestWorker({
       type: 'init',
-      swarmOptIn: storeState.swarmOptIn,
+      swarmOptIn: true,
       paused: storeState.paused,
       intentGenome
     })
@@ -330,6 +311,9 @@ export async function initNeuromorphicRuntime({ intentGenome = null } = {}) {
             engramCount: res.engramCount ?? 0,
             lastError: null
           });
+        } else {
+          workerInitPromise = null;
+          emit({ lastError: res.error || res.reason || 'INIT_FAILED' });
         }
         return res;
       })
@@ -342,43 +326,24 @@ export async function initNeuromorphicRuntime({ intentGenome = null } = {}) {
   return workerInitPromise;
 }
 
+// Local-only by design. No sync, upload or server fallback, including old callers.
 export async function syncWithGlobalSwarm() {
-  await initNeuromorphicRuntime();
-  const [statusRes, genomeRes] = await Promise.all([
-    swarmFetch('/v1/ai/neuromorphic/status'),
-    swarmFetch(`/v1/ai/neuromorphic/genome?sinceGeneration=${encodeURIComponent(storeState.localGeneration)}`)
-  ]);
-
-  if (statusRes.ok) {
-    emit({
-      swarmStatus: statusRes,
-      globalGeneration: statusRes.globalGeneration ?? storeState.globalGeneration
-    });
-  }
-
-  if (genomeRes.ok && genomeRes.upToDate === false && Array.isArray(genomeRes.weights)) {
-    const syncOut = await sendWorkerMessage({
-      type: 'syncGenome',
-      weights: genomeRes.weights,
-      generation: genomeRes.generation
-    });
-    if (syncOut.ok) {
-      emit({
-        localGeneration: genomeRes.generation,
-        globalGeneration: genomeRes.generation
-      });
-    }
-  }
-  return { statusRes, genomeRes };
+  return { ok: false, reason: 'LOCAL_ONLY' };
 }
 
 export async function tickNeuromorphicWithCandles(candles, { symbol = null, breadthRatio = null } = {}) {
   if (!Array.isArray(candles) || candles.length < 3) return { ok: false, reason: 'INSUFFICIENT_CANDLES' };
-  await initNeuromorphicRuntime();
-  const res = await sendWorkerMessage({ type: 'tick', candles, symbol, breadthRatio });
+  latestCandles = candles.slice(-256).map((c) => ({ ...c }));
+  latestCandleSymbol = symbol;
+  emit({ availableCandles: latestCandles.length });
+  if (storeState.paused) return { ok: false, reason: 'USER_PAUSED' };
+  const init = await initNeuromorphicRuntime();
+  if (!init.ok) return init;
+  const res = await requestWorker({ type: 'tick', candles: latestCandles, symbol, breadthRatio });
   if (res.ok && res.readout) {
     emit({
       readout: res.readout,
+      backend: res.readout.computeBackend || storeState.backend,
       engramRecall: res.engramRecall || storeState.engramRecall,
       structuralLast: res.structural || storeState.structuralLast,
       governor: res.governor || storeState.governor,
@@ -393,11 +358,14 @@ export async function tickNeuromorphicWithCandles(candles, { symbol = null, brea
 }
 
 export async function tickNeuromorphicWithMarketPulse({ markets = [], pulse = null } = {}) {
-  await initNeuromorphicRuntime();
-  const res = await sendWorkerMessage({ type: 'tick', markets, pulse, symbol: 'MARKET' });
+  if (storeState.paused) return { ok: false, reason: 'USER_PAUSED' };
+  const init = await initNeuromorphicRuntime();
+  if (!init.ok) return init;
+  const res = await requestWorker({ type: 'tick', markets, pulse, symbol: 'MARKET' });
   if (res.ok && res.readout) {
     emit({
       readout: res.readout,
+      backend: res.readout.computeBackend || storeState.backend,
       engramRecall: res.engramRecall || storeState.engramRecall,
       structuralLast: res.structural || storeState.structuralLast,
       governor: res.governor || storeState.governor,
@@ -411,134 +379,63 @@ export async function tickNeuromorphicWithMarketPulse({ markets = [], pulse = nu
   return res;
 }
 
-const COIN_SLUG = Object.freeze({
-  BTC: 'bitcoin',
-  ETH: 'ethereum',
-  SOL: 'solana',
-  BNB: 'binancecoin',
-  ARB: 'arbitrum',
-  TON: 'the-open-network'
-});
-
-/**
- * Execute a full On-Device Walk-Forward Self-Evolution + Swarm Delta Upload
- * on real market OHLC candles using the user's own GPU/CPU!
- */
-export async function evolveNeuromorphicOnLiveCandles({ symbol = 'BTC', candles = null } = {}) {
+/** Research on candles already supplied by the application, without a request. */
+export async function evolveNeuromorphicOnLiveCandles({ symbol = null, candles = null } = {}) {
+  if (storeState.paused) return { ok: false, reason: 'USER_PAUSED' };
   if (storeState.evolving) return { ok: false, reason: 'ALREADY_EVOLVING' };
+  const series = Array.isArray(candles) ? candles.slice(-256) : latestCandles;
+  const selectedSymbol = symbol || latestCandleSymbol || 'MARKET';
+  if (!series || series.length < 16) {
+    emit({ lastError: 'INSUFFICIENT_LOCAL_CANDLES' });
+    return { ok: false, reason: 'INSUFFICIENT_LOCAL_CANDLES' };
+  }
   emit({ evolving: true, lastError: null });
   try {
-    await initNeuromorphicRuntime();
-    await syncWithGlobalSwarm();
-
-    let series = Array.isArray(candles) ? candles : null;
-    if (!series || series.length < 16) {
-      const id = COIN_SLUG[String(symbol || 'BTC').toUpperCase()] || 'bitcoin';
-      const rows = await getOhlc(id, 30, 'usd');
-      if (Array.isArray(rows)) {
-        series = rows
-          .map((r) => ({
-            time: r.t ?? r.time ?? null,
-            open: r.o ?? r.open,
-            high: r.h ?? r.high,
-            low: r.l ?? r.low,
-            close: r.c ?? r.close
-          }))
-          .filter((c) => Number.isFinite(Number(c.close)) && Number(c.close) > 0);
-      }
-    }
-
-    if (!series || series.length < 16) {
-      emit({ evolving: false, lastError: 'INSUFFICIENT_LIVE_CANDLES' });
-      return { ok: false, reason: 'INSUFFICIENT_LIVE_CANDLES' };
-    }
-
-    const res = await sendWorkerMessage({ type: 'evolve', candles: series, symbol });
+    const init = await initNeuromorphicRuntime();
+    if (!init.ok) throw new Error(init.error || 'INIT_FAILED');
+    const res = await requestWorker({ type: 'evolve', candles: series, symbol: selectedSymbol });
     if (!res.ok) {
-      emit({ evolving: false, lastError: res.reason || 'EVOLVE_FAILED' });
+      emit({ evolving: false, lastError: res.reason || 'EVOLVE_FAILED', governor: res.governor || storeState.governor });
       return res;
     }
-
-    let swarmUpload = null;
-    if (storeState.swarmOptIn && res.evolution?.improved && res.evolution?.deltaPacket) {
-      // Ensure baseGeneration matches latest known globalGeneration
-      const packet = {
-        ...res.evolution.deltaPacket,
-        baseGeneration: storeState.globalGeneration ?? storeState.localGeneration ?? 0
-      };
-      swarmUpload = await swarmFetch('/v1/ai/neuromorphic/delta', {
-        method: 'POST',
-        body: packet
-      });
-      if (swarmUpload.ok) {
-        if (swarmUpload.crystallized && Array.isArray(swarmUpload.globalWeights)) {
-          await sendWorkerMessage({
-            type: 'syncGenome',
-            weights: swarmUpload.globalWeights,
-            generation: swarmUpload.globalGeneration
-          });
-        }
-        const refreshed = await swarmFetch('/v1/ai/neuromorphic/status');
-        if (refreshed.ok) {
-          emit({
-            swarmStatus: refreshed,
-            globalGeneration: refreshed.globalGeneration,
-            localGeneration: swarmUpload.globalGeneration ?? storeState.localGeneration
-          });
-        }
-      }
-    }
-
     emit({
-      evolving: false,
-      readout: res.readout || storeState.readout,
+      evolving: false, readout: res.readout || storeState.readout,
+      backend: res.readout?.computeBackend || storeState.backend,
       structuralLast: res.structural || storeState.structuralLast,
-      evolutionLast: {
-        ...res.evolution,
-        swarmUpload,
-        at: Date.now(),
-        symbol
-      },
+      evolutionLast: { ...res.evolution, at: Date.now(), symbol: selectedSymbol },
       engramRecall: res.engramRecall || storeState.engramRecall,
       governor: res.governor || storeState.governor,
       reservoirNeurons: res.readout?.topology?.reservoirNeurons ?? storeState.reservoirNeurons,
       engramCount: res.engramRecall?.totalEngrams ?? storeState.engramCount,
-      lastSymbol: symbol,
-      lastUpdatedAt: Date.now()
+      lastSymbol: selectedSymbol, lastUpdatedAt: Date.now()
     });
-
-    return { ok: true, ...res, swarmUpload };
+    return res;
   } catch (err) {
-    const msg = String(err?.message || err || 'EVOLVE_ERROR').slice(0, 140);
-    emit({ evolving: false, lastError: msg });
-    return { ok: false, error: msg };
+    const error = String(err?.message || err || 'EVOLVE_ERROR').slice(0, 140);
+    emit({ evolving: false, lastError: error });
+    return { ok: false, error };
   }
 }
 
-export async function setNeuromorphicPreferences({ swarmOptIn, paused, intentGenome } = {}) {
+export async function setNeuromorphicPreferences({ paused, computeMode, intentGenome } = {}) {
   const nextPrefs = {
-    swarmOptIn: typeof swarmOptIn === 'boolean' ? swarmOptIn : storeState.swarmOptIn,
-    paused: typeof paused === 'boolean' ? paused : storeState.paused
+    paused: typeof paused === 'boolean' ? paused : storeState.paused,
+    computeMode: ['auto', 'eco', 'balanced'].includes(computeMode) ? computeMode : storeState.computeMode
   };
   savePrefs(nextPrefs);
   emit(nextPrefs);
-  const res = await sendWorkerMessage({
-    type: 'configure',
-    swarmOptIn: nextPrefs.swarmOptIn,
-    paused: nextPrefs.paused,
-    intentGenome
-  });
-  if (res.ok && res.governor) {
-    emit({ governor: res.governor });
-  }
+  const res = await requestWorker({ type: 'configure', swarmOptIn: true, ...nextPrefs, intentGenome });
+  if (res.ok && res.governor) emit({ governor: res.governor });
   return res;
 }
 
 export async function resetLocalNeuromorphicCortex() {
-  const res = await sendWorkerMessage({ type: 'reset' });
+  latestCandles = null; latestCandleSymbol = null;
+  const res = await requestWorker({ type: 'reset' });
   if (res.ok) {
     emit({
       localGeneration: 0,
+      availableCandles: 0,
       reservoirNeurons: res.reservoirNeurons ?? 96,
       engramCount: 0,
       readout: null,
@@ -554,23 +451,20 @@ export async function resetLocalNeuromorphicCortex() {
 
 /* ── React Hook ───────────────────────────────────────────────────────────── */
 
-export function useNeuromorphicCortex({ autoSync = true } = {}) {
+export function useNeuromorphicCortex() {
   const [state, setState] = useState(storeState);
 
   useEffect(() => {
     const onUpdate = (next) => setState(next);
     listeners.add(onUpdate);
-    void initNeuromorphicRuntime();
-    if (autoSync) {
-      void syncWithGlobalSwarm();
-    }
+    if (!storeState.paused) void initNeuromorphicRuntime();
     return () => {
       listeners.delete(onUpdate);
     };
-  }, [autoSync]);
+  }, []);
 
   const toggleSwarmOptIn = useCallback(() => {
-    void setNeuromorphicPreferences({ swarmOptIn: !storeState.swarmOptIn });
+    // Remote sharing is intentionally unavailable in local-only mode.
   }, []);
 
   const togglePaused = useCallback(() => {
@@ -585,6 +479,7 @@ export function useNeuromorphicCortex({ autoSync = true } = {}) {
     syncSwarm: syncWithGlobalSwarm,
     toggleSwarmOptIn,
     togglePaused,
+    setComputeMode: (computeMode) => setNeuromorphicPreferences({ computeMode }),
     resetLocalCortex: resetLocalNeuromorphicCortex
   };
 }
