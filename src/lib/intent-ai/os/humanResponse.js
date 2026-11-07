@@ -10,6 +10,7 @@ import { resolveChatRoute } from '../autonomy/chatRoutes.js';
 import { parseGoalSpec } from '../../strategyBrain/goalSpec.js';
 import { portfolioRiskScore } from '../commandCenter.js';
 import { normalizeChainId } from '../contextResolver.js';
+import { buildPerformance } from '../../intelligence/performance.js';
 
 const LEAK_PATTERNS = [
   /Prepared\s+\d+\s+real\s+action\(s\)\.?/gi,
@@ -759,6 +760,42 @@ function portfolioCard(sortedHoldings, lang, portfolio = {}, analysis = {}) {
     ? Number(portfolioMix.score)
     : null;
 
+  /*
+   * ─── THE REVIEW THE GREY BOX NEVER DID ────────────────────────────────
+   * «در زیر هر درخواست بررسی پرتفوی طوسی است که یعنی در نظر نگرفته»
+   *
+   * A portfolio answer used to hand the reader two "not available" tiles and
+   * call that a review. The measured half is available and always has been:
+   * each holding is priced from the market feed, and that same feed carries
+   * its 24h/7d move. `buildPerformance` turns those into the weighted return
+   * of THIS mix, its dollar move and the best/worst holding — with the rule
+   * that a holding without a quote is excluded rather than counted as 0%.
+   *
+   * `markets` arrives on the card input as `marketRows`; when it is missing
+   * the block stays null and the UI prints em dashes, never a zero.
+   */
+  const performance = (() => {
+    const markets = Array.isArray(portfolio.marketRows) ? portfolio.marketRows
+      : Array.isArray(portfolio.markets) ? portfolio.markets
+        : [];
+    if (!markets.length || !pricedRows.length) return null;
+    try {
+      return buildPerformance({
+        rows: pricedRows.map((row) => ({
+          symbol: row.symbol,
+          value: Number(row.valueUsd),
+          weight: row.allocationPct,
+          amount: row.amount,
+          chainId: row.chainId
+        })),
+        markets
+      });
+    } catch {
+      /* A performance read must never take the whole answer down. */
+      return null;
+    }
+  })();
+
   return {
     kind: 'PORTFOLIO',
     title: lang === 'fa' ? 'هوش پرتفوی' : 'Portfolio intelligence',
@@ -780,6 +817,35 @@ function portfolioCard(sortedHoldings, lang, portfolio = {}, analysis = {}) {
     portfolioMixScore,
     portfolioMixBand: portfolioMixScore == null ? null : (portfolioMix?.label || null),
     portfolioMixModel: portfolioMixScore == null ? null : 'wallet-composition-heuristic-v1',
+    /* ── measured performance, so the review has something to show ─────── */
+    performance24h: performance?.returns?.d1 ?? null,
+    performance7d: performance?.returns?.d7 ?? null,
+    movedUsd24h: performance?.returns?.absUsd1d ?? null,
+    performanceStatus: performance?.status ?? 'unavailable',
+    performanceCoveragePct: performance?.coverage?.coveredSharePct ?? null,
+    performanceMissing: performance?.missing ?? [],
+    /* The strongest and weakest holding, and the losses — the three things a
+       review is expected to name. Each is a measured percentage plus the
+       dollars it moved. */
+    topPerformers: performance?.best?.d1
+      ? [{ symbol: performance.best.d1.symbol, change: performance.best.d1.change1d, moveUsd: performance.best.d1.move1dUsd }]
+      : [],
+    weakestPerformer: performance?.worst?.d1
+      ? { symbol: performance.worst.d1.symbol, change: performance.worst.d1.change1d, moveUsd: performance.worst.d1.move1dUsd }
+      : null,
+    movers: [
+      ...(performance?.best?.d1
+        ? [{ symbol: performance.best.d1.symbol, change: performance.best.d1.change1d }]
+        : []),
+      ...(performance?.worst?.d1
+        ? [{ symbol: performance.worst.d1.symbol, change: performance.worst.d1.change1d }]
+        : [])
+    ],
+    losses: (performance?.losses || []).map((l) => ({ symbol: l.symbol, change: l.change, moveUsd: l.moveUsd })),
+    /* P&L stays its own field: the card prints it separately and never lets a
+       price return stand in for it. */
+    pnlStatus: 'unknown',
+    unrealisedPnl: null,
     networks,
     failedNetworks: networks.filter((network) => network.failed === true || network.status === 'failed').length,
     staleNetworks: networks.filter((network) => network.stale === true || network.status === 'stale').length,

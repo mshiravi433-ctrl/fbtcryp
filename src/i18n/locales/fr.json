@@ -3774,7 +3774,13 @@
         "noCostBasis": "Le prix d’achat et l’historique ne sont pas connectés.",
         "riskUnavailable": "Nécessite une lecture complète et à jour contenant au moins une position valorisée.",
         "notComputed": "Indicateurs du portefeuille",
-        "riskBasis": "Heuristique : concentration des tokens valorisés, part de stablecoins et nombre de positions et de réseaux ; un score plus élevé indique une exposition plus forte."
+        "riskBasis": "Heuristique : concentration des tokens valorisés, part de stablecoins et nombre de positions et de réseaux ; un score plus élevé indique une exposition plus forte.",
+        "performance24h": "Rendement 24h",
+        "performance7d": "Rendement 7j",
+        "currentWeights": "pondérations actuelles",
+        "movedUsd": "Variation en USD",
+        "last24h": "dernières 24h",
+        "riskBasisShort": "actifs et réseaux"
       },
       "note": {
         "pricedSubtotal": "Cette valeur inclut uniquement les actifs avec un prix valide.",

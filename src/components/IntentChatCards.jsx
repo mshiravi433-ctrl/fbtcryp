@@ -50,6 +50,26 @@ export function fmtCompact(v) {
 
 const pctLabel = (v) => (hasFiniteValue(v) ? `${Number(v) >= 0 ? '+' : ''}${Math.round(Number(v) * 100) / 100}%` : '—');
 
+/** Colour a return by its sign; a missing return stays neutral, never green. */
+const returnTone = (v) => {
+  if (!hasFiniteValue(v)) return 'is-na';
+  const n = Number(v);
+  return n > 0.0001 ? 'is-up' : n < -0.0001 ? 'is-down' : 'is-flat';
+};
+
+/** Signed compact dollars — «+$412.5» / «−$1.2K», or an em dash.
+ *  A measured ZERO prints «$0», because 0 is evidence; only a missing value
+ *  earns the dash. `fmtCompact` refuses 0 (it was written for caps), so zero
+ *  is handled here rather than by loosening that helper. */
+const fmtCompactSigned = (v) => {
+  if (!hasFiniteValue(v)) return '—';
+  const n = Number(v);
+  if (n === 0) return '$0';
+  const compact = fmtCompact(Math.abs(n));
+  if (!compact) return '$0';
+  return `${n > 0 ? '+' : '−'}${compact}`;
+};
+
 function ChangeChip({ label, value }) {
   const n = Number(value);
   const has = hasFiniteValue(value);
@@ -283,20 +303,72 @@ export function PortfolioChatCard({ card, locale = 'fa', onOpenRoute, onQuickPro
         </div>
       </div>
 
-      <div className="icc-portfolio-unavailable" aria-label={copy('metric.notComputed')}>
-        <div>
-          <span>{copy('metric.pnl')}</span>
-          <strong>{copy('metric.notAvailable')}</strong>
-          <small>{copy('metric.noCostBasis')}</small>
+      {/*
+        ─── THE GREY BOX IS GONE ──────────────────────────────────────────────
+        «در زیر هر درخواست بررسی پرتفوی طوسی است که یعنی در نظر نگرفته»
+
+        This panel used to be two grey tiles reading «در دسترس نیست» for P&L and
+        for risk — the visual shorthand for a check we did not run. The
+        complaint was exactly right: it is the FIRST thing under a portfolio
+        answer, and it said the assistant had measured nothing.
+
+        It now shows what WAS measured — the price performance of the mix the
+        wallet holds (24h and 7d, with the dollars) and the composition risk —
+        and beside them, in a clearly separate line, the two things that still
+        require a cost basis or a longer history. `metric.pnl` is the only
+        remaining «not available», it sits LAST, and it explains itself.
+      */}
+      <div className="icc-portfolio-review-block" data-testid="intent-ai-portfolio-review">
+        <div className="icc-portfolio-review-row">
+          <div className="icc-portfolio-review-cell">
+            <small>{copy('metric.performance24h')}</small>
+            <strong dir="ltr" className={returnTone(card.performance24h)}>
+              {hasFiniteValue(card.performance24h) ? pctLabel(card.performance24h) : '—'}
+            </strong>
+            <span>{copy('metric.currentWeights')}</span>
+          </div>
+          <div className="icc-portfolio-review-cell">
+            <small>{copy('metric.performance7d')}</small>
+            <strong dir="ltr" className={returnTone(card.performance7d)}>
+              {hasFiniteValue(card.performance7d) ? pctLabel(card.performance7d) : '—'}
+            </strong>
+            <span>{copy('metric.currentWeights')}</span>
+          </div>
+          <div className="icc-portfolio-review-cell">
+            <small>{copy('metric.movedUsd')}</small>
+            <strong dir="ltr" className={returnTone(card.movedUsd24h)}>
+              {fmtCompactSigned(card.movedUsd24h)}
+            </strong>
+            <span>{copy('metric.last24h')}</span>
+          </div>
+          <div className="icc-portfolio-review-cell">
+            <small>{copy('metric.riskScore')}</small>
+            <strong data-testid="intent-ai-portfolio-mix-score">
+              {card.portfolioMixScore == null
+                ? copy('metric.notAvailable')
+                : `${Math.round(Number(card.portfolioMixScore))}/100${card.portfolioMixBand ? ` · ${copy(`riskBand.${card.portfolioMixBand}`)}` : ''}`}
+            </strong>
+            <span>{copy('metric.riskBasisShort')}</span>
+          </div>
         </div>
-        <div>
-          <span>{copy('metric.riskScore')}</span>
-          <strong data-testid="intent-ai-portfolio-mix-score">
-            {card.portfolioMixScore == null
-              ? copy('metric.notAvailable')
-              : `${Math.round(Number(card.portfolioMixScore))}/100${card.portfolioMixBand ? ` · ${copy(`riskBand.${card.portfolioMixBand}`)}` : ''}`}
-          </strong>
-          <small>{copy(card.portfolioMixScore == null ? 'metric.riskUnavailable' : 'metric.riskBasis')}</small>
+
+        {Array.isArray(card.movers) && card.movers.length ? (
+          <div className="icc-portfolio-movers">
+            {card.movers.map((m) => (
+              <span key={m.symbol} className={`icc-portfolio-mover is-${hasFiniteValue(m.change) && Number(m.change) < 0 ? 'down' : 'up'}`}>
+                <b>{m.symbol}</b>
+                <em dir="ltr">{hasFiniteValue(m.change) ? pctLabel(m.change) : '—'}</em>
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="icc-portfolio-pnl-line">
+          <span>{copy('metric.pnl')}</span>
+          <strong>{card.pnlStatus && card.pnlStatus !== 'unknown'
+            ? (hasFiniteValue(card.unrealisedPnl) ? fmtCompactSigned(card.unrealisedPnl) : copy('metric.notAvailable'))
+            : copy('metric.notAvailable')}</strong>
+          <small>{copy('metric.noCostBasis')}</small>
         </div>
       </div>
       <p className="icc-portfolio-disclaimer">{copy('note.risk')}</p>

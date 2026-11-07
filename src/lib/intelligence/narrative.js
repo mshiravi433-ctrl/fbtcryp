@@ -168,7 +168,52 @@ export function suggestionText(locale, suggestion) {
   if (params.weight != null) params.weight = Number(params.weight).toFixed(1);
   if (params.stablePct != null) params.stablePct = Number(params.stablePct).toFixed(1);
   if (params.avgCorrelation != null) params.avgCorrelation = Number(params.avgCorrelation).toFixed(2);
+  if (params.d1 != null) params.d1 = Number(params.d1).toFixed(2);
+  if (params.change != null) params.change = Number(params.change).toFixed(2);
+  if (params.moveUsd != null) params.moveUsd = fmtMoney(params.moveUsd, locale);
   return t(locale, `sugg.${suggestion.action}`, params);
+}
+
+/**
+ * One review finding as a sentence.
+ *
+ * The finding carries `evidence` as `[{ key, value }]`, which is exactly what
+ * a test can assert and what a reader can check against the card beside it.
+ * This function's only job is to pull those values into the copy template —
+ * it never invents a number and never falls back to a generic sentence when a
+ * measured one exists.
+ */
+export function findingText(locale, reviewFinding) {
+  if (!reviewFinding) return '';
+  const ev = Object.fromEntries((reviewFinding.evidence || []).map((e) => [e.key, e.value]));
+  const params = {
+    symbol: ev.symbol ?? '—',
+    topShare: isNum(ev['top-share']) ? ev['top-share'].toFixed(1) : '—',
+    effectiveHoldings: isNum(ev['effective-holdings']) ? String(ev['effective-holdings']) : '—',
+    change: isNum(ev['change-24h']) ? ev['change-24h'].toFixed(2) : '—',
+    moveUsd: isNum(ev['move-usd-24h']) ? fmtMoney(ev['move-usd-24h'], locale) : '—',
+    stablePct: isNum(ev['stablecoin-share']) ? ev['stablecoin-share'].toFixed(1) : '—',
+    avg: isNum(ev['average-correlation']) ? ev['average-correlation'].toFixed(2) : '—',
+    weight: isNum(ev['chain-share']) ? ev['chain-share'].toFixed(1)
+      : isNum(ev['holding-weight']) ? ev['holding-weight'].toFixed(1) : '—',
+    chainId: ev['chain-id'] ?? '—',
+    count: isNum(ev['unpriced-rows']) ? String(ev['unpriced-rows'])
+      : isNum(findingCount(reviewFinding)) ? String(findingCount(reviewFinding)) : '—',
+    unrealised: isNum(ev['unrealised-pnl']) ? fmtMoney(ev['unrealised-pnl'], locale) : '—',
+    d1: isNum(ev['portfolio-return-24h']) ? ev['portfolio-return-24h'].toFixed(2) : '—',
+    absUsd: isNum(ev['portfolio-move-usd-24h']) ? fmtMoney(ev['portfolio-move-usd-24h'], locale) : '—'
+  };
+  const raw = t(locale, `review.finding.${reviewFinding.kind}`, params);
+  /* An unknown kind is a bug, not a sentence — showing the key is how it gets
+     noticed instead of rendering as an empty list item. */
+  return raw;
+}
+
+/** The `{count}` placeholder: a measured row count, or the finding's value. */
+function findingCount(reviewFinding) {
+  const measured = (reviewFinding?.evidence || []).find((e) => e.key === 'rows-without-cost')?.value;
+  if (isNum(measured)) return measured;
+  return reviewFinding?.kind === 'missing-cost-basis' ? reviewFinding.value : null;
 }
 
 export { pctText, ratioText };

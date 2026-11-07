@@ -15,7 +15,10 @@
  *                        → scanOpportunities()
  *   useTokenRoom()       /api/ohlc/:id → computeIndicators() → scoreToken()
  *   usePortfolioRoom()   wallet balances + lots → buildIntelligence()
+ *                        → buildPerformance()   (measured price return + attribution)
  *                        → correlationMatrix() → buildPortfolioAnalysis()
+ *                        → buildPortfolioReview() (the review, its findings and
+ *                                                  its ordered actions)
  *
  * The rules from the page travel with them and are unchanged:
  *   · a feed that did not answer is named, never replaced by a number;
@@ -38,6 +41,9 @@ import { scanOpportunities } from '../lib/intelligence/opportunities';
 import { computeIndicators } from '../lib/intelligence/indicators';
 import { scoreToken } from '../lib/intelligence/tokenScore';
 import { buildPortfolioAnalysis, correlationMatrix } from '../lib/intelligence/portfolioAnalysis';
+import { buildPerformance } from '../lib/intelligence/performance';
+import { buildPortfolioReview } from '../lib/intelligence/portfolioReview';
+import { buildMarketAnalysis } from '../lib/intelligence/marketAnalysis';
 
 /* 250 rows is the widest page the market API serves without a second request;
    the screener and the scanner both work on exactly this set. */
@@ -79,11 +85,20 @@ export function useMarketRoom({ perPage = MARKET_ROOM_PAGE_SIZE, enabled = true 
 
   const scan = useMemo(() => scanOpportunities({ markets, pulse }), [markets, pulse]);
 
+  /* The deeper read: ranked relative strength, divergence against the tape,
+     dispersion, and the thresholds that would move the regime. Same feed, no
+     second request — see marketAnalysis.js for why each number exists. */
+  const analysis = useMemo(
+    () => buildMarketAnalysis({ markets, pulse }),
+    [markets, pulse]
+  );
+
   return {
     markets,
     global,
     pulse,
     scan,
+    analysis,
     updatedAt: market.updatedAt,
     loading: market.loading,
     error: market.error,
@@ -212,9 +227,37 @@ export function usePortfolioRoom({ enabled = true } = {}) {
     [seriesBySymbol]
   );
 
+  /*
+   * MEASURED PERFORMANCE — «سود، زیان، بهترین و ضعیف‌ترین عملکرد».
+   *
+   * The market feed already polled by useMultiChainPortfolio carries each
+   * asset's own 24h/7d move, so the portfolio's return can be computed for the
+   * mix the wallet holds RIGHT NOW — without a cost basis, and without
+   * inventing an entry price. `performance.js` owns the arithmetic and the
+   * refusals (a holding with no quote is excluded, never counted as 0%).
+   */
+  const marketRows = useMemo(
+    () => (Array.isArray(source.marketRows) ? source.marketRows : []),
+    [source.marketRows]
+  );
+
+  const performance = useMemo(
+    () => (intel && intel.total > 0
+      ? buildPerformance({ rows: intel.rows || [], markets: marketRows })
+      : null),
+    [intel, marketRows]
+  );
+
   const analysis = useMemo(
-    () => buildPortfolioAnalysis({ intel, correlation, seriesUsed: Object.keys(seriesBySymbol) }),
-    [intel, correlation, seriesBySymbol]
+    () => buildPortfolioAnalysis({
+      intel, correlation, seriesUsed: Object.keys(seriesBySymbol), performance
+    }),
+    [intel, correlation, seriesBySymbol, performance]
+  );
+
+  const review = useMemo(
+    () => buildPortfolioReview({ intel, analysis, performance }),
+    [intel, analysis, performance]
   );
 
   const coverage = useMemo(() => {
@@ -231,6 +274,9 @@ export function usePortfolioRoom({ enabled = true } = {}) {
     connected,
     intel,
     analysis,
+    review,
+    performance,
+    markets: marketRows,
     correlation,
     correlationStatus,
     coverage,

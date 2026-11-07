@@ -150,6 +150,75 @@ describe('Intent AI portfolio chat card', () => {
     expect(onOpenRoute).not.toHaveBeenCalled();
   });
 
+  /* ── the review block absorbed the grey "not considered" panel ──────────
+     «در زیر هر درخواست بررسی پرتفوی طوسی است که یعنی در نظر نگرفته»
+     The card must lead with what WAS measured and keep P&L as its own,
+     last, self-explaining line. */
+  it('leads with the measured mix return instead of a grey not-available panel', () => {
+    const measured = {
+      ...sampleCard,
+      performance24h: 0.9,
+      performance7d: -2.4,
+      movedUsd24h: 412.5,
+      performanceStatus: 'complete',
+      performanceCoveragePct: 100,
+      movers: [{ symbol: 'SOL', change: 6 }, { symbol: 'ETH', change: -3 }],
+      pnlStatus: 'unknown',
+      unrealisedPnl: null
+    };
+    const { container } = renderCard({ card: measured });
+    const block = screen.getByTestId('intent-ai-portfolio-review');
+    expect(block).toBeTruthy();
+
+    /* The measured numbers are present... */
+    expect(container.textContent).toContain('+0.9%');
+    expect(container.textContent).toContain('-2.4%');
+    expect(container.textContent).toContain('+$412.5');
+
+    /* ...and they are toned by sign, with missing data never coloured green. */
+    expect(block.querySelector('.is-up')).toBeTruthy();
+    expect(block.querySelector('.is-down')).toBeTruthy();
+
+    /* P&L is still unknown, still separated, and it is the LAST line. */
+    const pnlLine = block.querySelector('.icc-portfolio-pnl-line');
+    expect(pnlLine).toBeTruthy();
+    expect(pnlLine.textContent).toContain('Not available');
+    expect(block.lastElementChild.className).toContain('icc-portfolio-pnl-line');
+  });
+
+  it('prints em dashes — never zeros — when no quote reached the card', () => {
+    const cold = {
+      ...sampleCard,
+      performance24h: null,
+      performance7d: null,
+      movedUsd24h: null,
+      performanceStatus: 'unavailable',
+      movers: [],
+      pnlStatus: 'unknown'
+    };
+    const { container } = renderCard({ card: cold });
+    const block = screen.getByTestId('intent-ai-portfolio-review');
+    const strongs = [...block.querySelectorAll('.icc-portfolio-review-cell strong')];
+    /* The mix-score cell legitimately reads "Not available"; the three
+       measured cells must be em dashes and never "+0%". */
+    expect(strongs.filter((el) => el.textContent.trim() === '—').length).toBe(3);
+    expect(container.textContent).not.toContain('+0%');
+  });
+
+  it('renders a genuine measured zero as $0 rather than a dash', () => {
+    const flat = {
+      ...sampleCard,
+      performance24h: 0,
+      performance7d: 0,
+      movedUsd24h: 0,
+      performanceStatus: 'complete',
+      pnlStatus: 'unknown'
+    };
+    const { container } = renderCard({ card: flat });
+    expect(container.textContent).toContain('$0');
+    expect(container.textContent).toContain('+0%');
+  });
+
   it('renders a localized RTL surface when Persian is selected', async () => {
     await testI18n.changeLanguage('fa');
     const { container } = render(

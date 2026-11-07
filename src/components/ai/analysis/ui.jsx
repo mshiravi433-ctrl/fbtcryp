@@ -5,10 +5,30 @@
  * tabs stay readable and the numbers on screen always come from one of the
  * pure engines in lib/intelligence.
  *
- * Two rules are coded in here rather than repeated in each screen:
+ * ─── THE MODERN PASS (why this file was rewritten) ──────────────────────────
+ * «در هوش بازار … دکمه‌ها و باکس‌ها و اطلاعات که نشان می‌دهد باید خیلی مدرن‌تر
+ *  و خاص‌تر باشد»
+ *
+ * The old primitives were flat rectangles with a 1px border. They were honest
+ * and quiet, and they read like a settings screen rather than an intelligence
+ * desk. This pass keeps every number and every honesty rule EXACTLY as it was
+ * and changes only how a reading is DRAWN:
+ *
+ *   · `StatTile` becomes a layered reading — an accent rail, a hairline
+ *     highlight, a micro-trend, an optional gauge arc and an optional count-up
+ *     on the value. The tone still drives the colour, so a bad number is still
+ *     visibly bad.
+ *   · `SectionCard` gains a header mark and a soft top light, so a column of
+ *     cards has hierarchy instead of being one flat list.
+ *   · `Meter` / `ScoreRing` get centre labels and a tone-matched glow.
+ *   · `Spark` gains an area fill and an end dot.
+ *
+ * ─── WHAT DID NOT CHANGE, ON PURPOSE ────────────────────────────────────────
  *   · `null` renders as an em dash, never as 0 or an empty cell that reads
  *     like zero.
  *   · anything derived from a feed carries its provenance dot next to it.
+ *   · no component here fetches, computes or defaults a financial value.
+ *   · all colour comes from theme tokens, so the light theme still works.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -28,24 +48,105 @@ export function ProvenanceDot({ provenance = 'unknown', label }) {
   );
 }
 
-export function StatTile({ label, value, sub, tone = 'neutral', hint }) {
+/**
+ * Count from 0 to `value` once on mount (and whenever the value moves).
+ *
+ * ─── WHY A HOOK AND NOT A KEYFRAME ──────────────────────────────────────────
+ * The number is text, and CSS cannot tween text. requestAnimationFrame can,
+ * and it stops the moment the component unmounts or the tab is hidden, so an
+ * off-screen tile is not scheduling frames. `prefers-reduced-motion` skips
+ * the animation entirely and prints the final value — an animated number is
+ * decoration, and decoration must never be the thing standing between a
+ * reader and their balance.
+ */
+export function useCountUp(target, { duration = 620, enabled = true } = {}) {
+  const numeric = Number(target);
+  const canAnimate = enabled && Number.isFinite(numeric)
+    && typeof window !== 'undefined'
+    && typeof window.requestAnimationFrame === 'function'
+    && !(typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  const [shown, setShown] = useState(() => (canAnimate ? 0 : (Number.isFinite(numeric) ? numeric : null)));
+
+  useEffect(() => {
+    if (!canAnimate) {
+      setShown(Number.isFinite(numeric) ? numeric : null);
+      return undefined;
+    }
+    let raf = 0;
+    let start = 0;
+    const from = 0;
+    const step = (ts) => {
+      if (!start) start = ts;
+      const t = Math.min(1, (ts - start) / duration);
+      /* easeOutCubic — fast first, settling on the real value. */
+      const eased = 1 - (1 - t) ** 3;
+      setShown(from + (numeric - from) * eased);
+      if (t < 1) raf = window.requestAnimationFrame(step);
+    };
+    raf = window.requestAnimationFrame(step);
+    return () => window.cancelAnimationFrame(raf);
+  }, [numeric, duration, canAnimate]);
+
+  return shown;
+}
+
+/**
+ * A reading. `value` may be a string (already formatted, counted up by the
+ * caller) or a node. `gauge` is 0..100 and draws the arc; it is only ever
+ * passed when the number really is a share of a whole, because a ring on a
+ * number that is not a percentage is a lie drawn in a circle.
+ */
+export function StatTile({
+  label, value, sub, tone = 'neutral', hint, gauge, icon, trend, className = ''
+}) {
+  const pct = gauge == null || !Number.isFinite(Number(gauge))
+    ? null
+    : Math.max(0, Math.min(100, Number(gauge)));
+  const arcLen = 2 * Math.PI * 15;
   return (
-    <div className={`aix-tile aix-tone-${tone}`} title={hint || undefined}>
-      <span className="aix-tile-label">{label}</span>
-      <strong className="aix-tile-value">{value}</strong>
+    <div className={`aix-tile aix-tone-${tone}${className ? ` ${className}` : ''}`} title={hint || undefined}>
+      <span className="aix-tile-glow" aria-hidden="true" />
+      <div className="aix-tile-top">
+        {icon ? <span className="aix-tile-icon" aria-hidden="true">{icon}</span> : null}
+        <span className="aix-tile-label">{label}</span>
+      </div>
+      <div className="aix-tile-figure">
+        <strong className="aix-tile-value">{value}</strong>
+        {pct != null ? (
+          <svg className="aix-tile-gauge" viewBox="0 0 36 36" aria-hidden="true">
+            <circle className="aix-tile-gauge-track" cx="18" cy="18" r="15" />
+            <circle
+              className="aix-tile-gauge-arc"
+              cx="18"
+              cy="18"
+              r="15"
+              strokeDasharray={`${(pct / 100) * arcLen} ${arcLen}`}
+              transform="rotate(-90 18 18)"
+            />
+          </svg>
+        ) : null}
+      </div>
       {sub ? <span className="aix-tile-sub">{sub}</span> : null}
+      {trend ? <span className="aix-tile-trend">{trend}</span> : null}
     </div>
   );
 }
 
-export function SectionCard({ title, hint, actions, children, className = '' }) {
+/* `sectionProps` lets a caller attach an id, a test hook or an aria label to
+   the frame without SectionCard having to know every attribute up front. */
+export function SectionCard({ title, hint, actions, children, className = '', mark, ...sectionProps }) {
   return (
-    <section className={`aix-card ${className}`.trim()}>
+    <section className={`aix-card ${className}`.trim()} {...sectionProps}>
+      <span className="aix-card-sheen" aria-hidden="true" />
       {(title || actions) && (
         <header className="aix-card-head">
-          <div>
-            <h2 className="aix-card-title">{title}</h2>
-            {hint ? <p className="aix-card-hint">{hint}</p> : null}
+          <div className="aix-card-heading">
+            {mark ? <span className="aix-card-mark" aria-hidden="true">{mark}</span> : null}
+            <div>
+              <h2 className="aix-card-title">{title}</h2>
+              {hint ? <p className="aix-card-hint">{hint}</p> : null}
+            </div>
           </div>
           {actions ? <div className="aix-card-actions">{actions}</div> : null}
         </header>
@@ -55,14 +156,17 @@ export function SectionCard({ title, hint, actions, children, className = '' }) 
   );
 }
 
-export function Meter({ value, max = 100, tone = 'cyan', label }) {
+export function Meter({ value, max = 100, tone = 'cyan', label, caption }) {
   const pct = value == null || !Number.isFinite(Number(value))
     ? null
     : Math.max(0, Math.min(100, (Number(value) / max) * 100));
   return (
-    <div className="aix-meter" aria-label={label || undefined}>
-      <div className={`aix-meter-fill aix-bar-${tone}`} style={{ width: pct == null ? '0%' : `${pct}%` }} />
-      {pct == null ? <span className="aix-meter-na">—</span> : null}
+    <div className="aix-meter-wrap">
+      <div className={`aix-meter aix-meter-${tone}`} aria-label={label || undefined} role="presentation">
+        <div className={`aix-meter-fill aix-bar-${tone}`} style={{ width: pct == null ? '0%' : `${pct}%` }} />
+        {pct == null ? <span className="aix-meter-na">—</span> : null}
+      </div>
+      {caption ? <span className="aix-meter-caption">{caption}</span> : null}
     </div>
   );
 }
@@ -82,6 +186,7 @@ export function ScoreRing({ value, band, size = 108, caption }) {
   const tone = BAND_TONE[band] || 'violet';
   return (
     <div className={`aix-ring aix-ring-${tone}`} style={{ width: size, height: size }}>
+      <span className="aix-ring-halo" aria-hidden="true" />
       <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} role="img" aria-label={caption || ''}>
         <circle className="aix-ring-track" cx={size / 2} cy={size / 2} r={r} />
         <circle
@@ -109,20 +214,22 @@ export function Chip({ active = false, onClick, children, title }) {
   );
 }
 
-export function Change({ value, digits = 2, suffix = '%' }) {
+export function Change({ value, digits = 2, suffix = '%', arrow = false }) {
   if (value == null || !Number.isFinite(Number(value))) return <span className="aix-na">—</span>;
   const v = Number(value);
   const tone = v > 0.005 ? 'up' : v < -0.005 ? 'down' : 'flat';
   return (
     <span className={`aix-change aix-${tone}`}>
+      {arrow ? <span className="aix-change-arrow" aria-hidden="true">{v > 0 ? '▲' : v < 0 ? '▼' : '·'}</span> : null}
       {v > 0 ? '+' : ''}{v.toFixed(digits)}{suffix}
     </span>
   );
 }
 
-export function EmptyState({ title, hint, action }) {
+export function EmptyState({ title, hint, action, icon }) {
   return (
     <div className="aix-empty">
+      {icon ? <span className="aix-empty-icon" aria-hidden="true">{icon}</span> : null}
       <strong>{title}</strong>
       {hint ? <p>{hint}</p> : null}
       {action || null}
@@ -130,21 +237,48 @@ export function EmptyState({ title, hint, action }) {
   );
 }
 
+/**
+ * Sparkline. The AREA under the line is what makes a small chart readable at a
+ * glance; the end dot marks "now" so the eye lands on the current value rather
+ * than the last pixel. Both are geometry, not data — nothing here is invented.
+ */
 export function Spark({ values = [], width = 96, height = 28, up = true }) {
-  const points = useMemo(() => {
+  const geo = useMemo(() => {
     const nums = (Array.isArray(values) ? values : []).map(Number).filter(Number.isFinite);
     if (nums.length < 2) return null;
     const min = Math.min(...nums);
     const max = Math.max(...nums);
     const span = max - min || 1;
-    return nums
-      .map((v, i) => `${(i / (nums.length - 1)) * (width - 2) + 1},${height - 1 - ((v - min) / span) * (height - 2)}`)
-      .join(' ');
+    const pts = nums.map((v, i) => [
+      (i / (nums.length - 1)) * (width - 2) + 1,
+      height - 1 - ((v - min) / span) * (height - 2)
+    ]);
+    return {
+      line: pts.map(([x, y]) => `${x},${y}`).join(' '),
+      area: `1,${height} ${pts.map(([x, y]) => `${x},${y}`).join(' ')} ${width - 1},${height}`,
+      last: pts[pts.length - 1]
+    };
   }, [values, width, height]);
-  if (!points) return <span className="aix-na">—</span>;
+
+  if (!geo) return <span className="aix-na">—</span>;
+  const gid = `aix-spark-${up ? 'u' : 'd'}`;
   return (
-    <svg className={`aix-spark ${up ? 'is-up' : 'is-down'}`} width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
-      <polyline points={points} fill="none" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
+    <svg
+      className={`aix-spark ${up ? 'is-up' : 'is-down'}`}
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="currentColor" stopOpacity="0.32" />
+          <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon points={geo.area} fill={`url(#${gid})`} stroke="none" />
+      <polyline points={geo.line} fill="none" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
+      <circle className="aix-spark-dot" cx={geo.last[0]} cy={geo.last[1]} r="1.9" />
     </svg>
   );
 }
@@ -214,5 +348,49 @@ export function MultiLine({ series = [], height = 150 }) {
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * A horizontal share bar with a label, a value and an optional rank badge.
+ * Used for allocation, network split, breadth and holdings — the four places
+ * the old screen drew three different bars that all meant "this is a share".
+ */
+export function ShareBar({
+  label, value, weight, tone = 'violet', detail, badge, onClick
+}) {
+  const pct = weight == null || !Number.isFinite(Number(weight))
+    ? null
+    : Math.max(0, Math.min(100, Number(weight)));
+  const Tag = onClick ? 'button' : 'div';
+  return (
+    <Tag
+      type={onClick ? 'button' : undefined}
+      className={`aix-share${onClick ? ' is-action' : ''}`}
+      onClick={onClick || undefined}
+    >
+      <span className="aix-share-head">
+        {badge ? <span className="aix-share-badge">{badge}</span> : null}
+        <span className="aix-share-name">{label}</span>
+        <span className="aix-share-value">{value}</span>
+      </span>
+      <span className="aix-share-track">
+        <i className={`aix-bar-${tone}`} style={{ width: pct == null ? '0%' : `${Math.max(1, pct)}%` }} />
+      </span>
+      <span className="aix-share-foot">
+        <span>{pct == null ? '—' : `${pct.toFixed(1)}%`}</span>
+        {detail ? <span className="aix-share-detail">{detail}</span> : null}
+      </span>
+    </Tag>
+  );
+}
+
+/** Severity / status pill. One shape for every badge on the page. */
+export function Pill({ tone = 'neutral', children, dot = false, title }) {
+  return (
+    <span className={`aix-pill aix-pill-${tone}`} title={title}>
+      {dot ? <i aria-hidden="true" /> : null}
+      {children}
+    </span>
   );
 }

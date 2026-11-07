@@ -48,6 +48,7 @@ import OpportunitiesTab from '../components/ai/analysis/OpportunitiesTab';
 import CompareTab from '../components/ai/analysis/CompareTab';
 import ReportTab from '../components/ai/analysis/ReportTab';
 import '../styles/ai-analysis.css';
+import '../styles/ai-analysis-modern.css';
 
 const TABS = [
   { id: 'overview', key: 'tab.overview' },
@@ -76,7 +77,7 @@ export default function AiAnalysis() {
   /* The spine lives in hooks/useIntelligenceRooms so the chat rooms and this
      page can never disagree about a number. */
   const {
-    markets, pulse, scan, updatedAt, loading: marketLoading, error: marketError, refresh: refreshMarket
+    markets, pulse, scan, analysis, updatedAt, loading: marketLoading, error: marketError, refresh: refreshMarket
   } = useMarketRoom();
 
   const {
@@ -84,7 +85,8 @@ export default function AiAnalysis() {
   } = useTokenRoom({ tokenId, days, markets });
 
   const {
-    connected, intel, analysis: portfolioAnalysis, coverage, rows,
+    connected, intel, analysis: portfolioAnalysis, review: portfolioReview,
+    performance: portfolioPerformance, coverage, rows,
     loading: portfolioLoading, correlationStatus
   } = usePortfolioRoom();
 
@@ -138,10 +140,17 @@ export default function AiAnalysis() {
             connected={connected}
             intel={intel}
             analysis={portfolioAnalysis}
+            review={portfolioReview}
+            performance={portfolioPerformance}
             locale={locale}
             onConnect={(path) => navigate(path)}
             loading={portfolioLoading}
             coverage={coverage}
+            onOpenToken={(symbol) => {
+              if (!symbol) return;
+              const hit = markets.find((m) => String(m.symbol).toUpperCase() === String(symbol).toUpperCase());
+              if (hit) openToken(hit.id);
+            }}
           />
         );
       case 'opportunities':
@@ -157,7 +166,7 @@ export default function AiAnalysis() {
       case 'report':
         return <ReportTab pulse={pulse} scan={scan} locale={locale} markets={markets} sourceLabel={sourceLabel} />;
       default:
-        return <OverviewTab pulse={pulse} locale={locale} onOpenToken={openToken} />;
+        return <OverviewTab pulse={pulse} analysis={analysis} locale={locale} onOpenToken={openToken} />;
     }
   };
 

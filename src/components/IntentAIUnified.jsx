@@ -1626,7 +1626,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       chains: chainReads,
       fromSnapshot,
       balanceUpdatedAt: freshestReadAt || null,
-      partial
+      partial,
+      marketRows: Array.isArray(multi?.marketRows) ? multi.marketRows : []
     };
     const real = createRealServices({
       wallet: walletSnap,
@@ -1974,7 +1975,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         fromSnapshot,
         balanceUpdatedAt: freshestReadAt || null,
         chains: chainReads,
-        partial
+        partial,
+        /* The SAME market feed the portfolio room reads. Handed to the answer
+           card so it can measure the mix's own 24h/7d return instead of
+           printing «در دسترس نیست» under a portfolio review. It is a price
+           observation, not a second data source. */
+        marketRows: Array.isArray(multi?.marketRows) ? multi.marketRows : []
       },
       balances,
       openOrders: [],

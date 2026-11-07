@@ -3772,7 +3772,13 @@
         "noCostBasis": "Maliyet esası ve satın alma geçmişi bağlı değil.",
         "riskUnavailable": "En az bir fiyatlanmış varlık içeren eksiksiz ve güncel bir okuma gerekir.",
         "notComputed": "Portföy metrikleri",
-        "riskBasis": "Sezgisel ölçüm: fiyatlanan token yoğunluğu, stablecoin payı ve varlık/ağ sayısı; yüksek puan bu modelde daha fazla maruziyet demektir."
+        "riskBasis": "Sezgisel ölçüm: fiyatlanan token yoğunluğu, stablecoin payı ve varlık/ağ sayısı; yüksek puan bu modelde daha fazla maruziyet demektir.",
+        "performance24h": "24s getiri",
+        "performance7d": "7g getiri",
+        "currentWeights": "güncel ağırlıklar",
+        "movedUsd": "Dolar cinsinden değişim",
+        "last24h": "son 24s",
+        "riskBasisShort": "varlıklar ve ağlar"
       },
       "note": {
         "pricedSubtotal": "Bu değere yalnızca geçerli fiyatı olan varlıklar dahildir.",

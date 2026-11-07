@@ -3765,7 +3765,13 @@
         "noCostBasis": "未连接买入成本和交易历史。",
         "riskUnavailable": "需要完整且最新的读取结果，并至少包含一项已定价持仓。",
         "notComputed": "投资组合指标",
-        "riskBasis": "启发式指标：已定价代币的集中度、稳定币占比及持仓和网络数量；分数越高表示此模型下的敞口越大。"
+        "riskBasis": "启发式指标：已定价代币的集中度、稳定币占比及持仓和网络数量；分数越高表示此模型下的敞口越大。",
+        "performance24h": "组合24小时回报",
+        "performance7d": "组合7日回报",
+        "currentWeights": "当前权重",
+        "movedUsd": "美元变动",
+        "last24h": "最近24小时",
+        "riskBasisShort": "持仓与网络"
       },
       "note": {
         "pricedSubtotal": "该数值仅包含有有效价格的资产。",

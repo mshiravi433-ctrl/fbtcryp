@@ -3772,7 +3772,13 @@
         "noCostBasis": "Custo de aquisição e histórico não estão conectados.",
         "riskUnavailable": "Exige uma leitura completa e atual com pelo menos uma posição avaliada.",
         "notComputed": "Métricas da carteira",
-        "riskBasis": "Heurística: concentração de tokens avaliados, participação de stablecoins e número de posições e redes; um valor maior indica mais exposição."
+        "riskBasis": "Heurística: concentração de tokens avaliados, participação de stablecoins e número de posições e redes; um valor maior indica mais exposição.",
+        "performance24h": "Retorno 24h",
+        "performance7d": "Retorno 7d",
+        "currentWeights": "pesos atuais",
+        "movedUsd": "Variação em USD",
+        "last24h": "últimas 24h",
+        "riskBasisShort": "ativos e redes"
       },
       "note": {
         "pricedSubtotal": "Este valor inclui apenas ativos com preço válido.",
