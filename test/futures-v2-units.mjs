@@ -306,6 +306,135 @@ test('the account thresholds are the SAME numbers the Intent OS risk engine uses
   assert.equal(RISK_POLICY_DEFAULTS.fundingVsEquityWarnPct, 1);
 });
 
+/* ─────────────────── 3b · THE DESK (components/perp-terminal) ───────────── */
+
+test('the desk top bar: five figures, an honest status, and no invented change', async () => {
+  const { topBar } = await import('../src/components/perp-terminal/desk.js');
+  const b = topBar({ mark: 100, high24h: 110, low24h: 90, priceChange24H: -2.5, volume24H: 1e6, openInterest: 5e5, nextFundingRate: 0.0000125 });
+  assert.equal(b.mark, 100);
+  assert.equal(b.markSource, 'venue-mid');
+  assert.equal(b.change24hPct, -2.5);
+  assert.ok(close(b.rangePositionPct, 50), 'the mark sits halfway through its range');
+  /* 0.0000125 per hour × 24 × 365 × 100 = 10.95% APR */
+  assert.ok(close(b.fundingAprPct, 10.95, 1e-9));
+  assert.equal(b.dataStatus, 'live');
+
+  /* No range → partial, and the mark is still shown. */
+  const partial = topBar({ mark: 100 });
+  assert.equal(partial.dataStatus, 'partial');
+  assert.equal(partial.high24h, null);
+  assert.equal(partial.rangePositionPct, null);
+  /* Nothing at all → unavailable, and every figure null (never zero). */
+  const none = topBar({});
+  assert.equal(none.dataStatus, 'unavailable');
+  assert.equal(none.mark, null);
+  assert.equal(none.change24hPct, null);
+  assert.equal(none.fundingAprPct, null);
+});
+
+test('the desk ticket: notional, size and fee from the venue numbers', async () => {
+  const { ticketMath } = await import('../src/components/perp-terminal/desk.js');
+  const t = ticketMath({
+    providerId: 'dydx', side: 'long', collateralUsd: 50, leverage: 3, entryPrice: 100,
+    maxLeverage: 20, maintenanceMarginFraction: 0.025, takerFeeBps: 5, fundingAprPct: 10.95,
+    orderType: 'market', equityUsd: 1000, availableBalanceUsd: 1000
+  });
+  assert.equal(t.notionalUsd, 150);
+  assert.equal(t.size, 1.5);
+  assert.equal(t.openFeeUsd, 0.075, '5 bps of 150');
+  assert.equal(t.blocked, null);
+  assert.equal(t.liquidation.provenance, 'venue-maintenance-margin');
+  assert.equal(t.liquidation.exact, true);
+  assert.ok(t.liquidation.distancePct > 0 && t.liquidation.distancePct < 100);
+  assert.equal(t.warnings.includes('LIQUIDATION_IS_AN_UPPER_BOUND'), false);
+
+  /* No fee rate → the fee is UNKNOWN, not zero. */
+  const noFee = ticketMath({ providerId: 'dydx', side: 'long', collateralUsd: 50, leverage: 3, entryPrice: 100 });
+  assert.equal(noFee.openFeeUsd, null);
+  assert.ok(noFee.warnings.includes('FEE_UNKNOWN'));
+
+  /* No price → NO_PRICE, and nothing is sized. */
+  const noPrice = ticketMath({ providerId: 'dydx', side: 'long', collateralUsd: 50, leverage: 3 });
+  assert.equal(noPrice.blocked, 'NO_PRICE');
+  /* the arithmetic still exists (50 × 3) but the ticket does not present it as
+     a tradeable size: with no price there is no size, and the block says so. */
+  assert.equal(noPrice.notionalUsd, null);
+  assert.equal(noPrice.rawNotionalUsd, 150);
+
+  /* Above the venue's own maximum → refused by code. */
+  const tooMuch = ticketMath({ providerId: 'dydx', side: 'long', collateralUsd: 50, leverage: 30, entryPrice: 100, maxLeverage: 20 });
+  assert.equal(tooMuch.blocked, 'LEVERAGE_ABOVE_VENUE_MAX');
+
+  /* An order type the venue cannot take → refused BEFORE anything is built. */
+  const badType = ticketMath({ providerId: 'dydx', side: 'long', collateralUsd: 50, leverage: 3, entryPrice: 100, orderType: 'stopLimit', price: 99, stopPrice: 98 });
+  assert.equal(badType.blocked, 'ORDER_TYPE_NOT_SUPPORTED');
+
+  /* A venue with no mounted order path refuses by name. */
+  const hl = ticketMath({ providerId: 'hyperliquid', side: 'long', collateralUsd: 50, leverage: 3, entryPrice: 100 });
+  assert.equal(hl.blocked, 'EXECUTION_NOT_MOUNTED');
+});
+
+test('the desk depth and tape compute their own statistics from the rows', async () => {
+  const { depthLevels, tapeRows } = await import('../src/components/perp-terminal/desk.js');
+  const d = depthLevels({ bids: [{ price: 99, size: 2 }, { price: 98, size: 3 }], asks: [{ price: 101, size: 1 }] });
+  assert.deepEqual(d.bids.map((b) => b.cumulativeUsd), [198, 492]);
+  assert.equal(d.bidUsd, 492);
+  assert.equal(d.askUsd, 101);
+  assert.ok(close(d.imbalancePct, (492 / 593) * 100));
+  /* the ladder's offsets are from its OWN touch, not from a mid we were not given */
+  assert.ok(close(d.bids[1].offsetFromTouchPct, ((98 - 99) / 99) * 100));
+  assert.equal(depthLevels({}).empty, true);
+
+  const tape = tapeRows([
+    { price: 100, size: 2, usd: 200, side: 'buy' },
+    { price: 99, size: 1, usd: 100, side: 'sell' },
+    { price: 98, size: 1, usd: 50, side: 'weird' }
+  ]);
+  assert.equal(tape.rows[0].barPct, 100);
+  assert.equal(tape.rows[1].barPct, 50);
+  assert.equal(tape.rows[2].side, 'unknown', 'a print with no stated side is neutral');
+  assert.ok(close(tape.buySharePct, (200 / 300) * 100), 'buy share counts only the prints the venue labelled');
+  assert.equal(tapeRows([]).empty, true);
+});
+
+test('the desk funding table costs each settlement and covers only the window it has', async () => {
+  const { fundingTable } = await import('../src/components/perp-terminal/desk.js');
+  const f = fundingTable([
+    { atMs: 0, rateHourlyPct: 0.001, aprPct: 8.76 },
+    { atMs: 3_600_000, rateHourlyPct: 0.002, aprPct: 17.52 },
+    { atMs: 7_200_000, rateHourlyPct: -0.001, aprPct: -8.76 }
+  ], { notionalUsd: 10_000 });
+  assert.equal(f.rows.length, 3);
+  assert.equal(f.rows[0].usd, 0.1);
+  assert.equal(f.rows[2].longPays, false);
+  assert.ok(close(f.cumulativePct, 0.002));
+  assert.ok(close(f.cumulativeUsd, 0.2));
+  /* 0.002% over 2 hours → 8.76% annualised, not the sum of the APRs */
+  /* the window runs from the FIRST timestamp to the LAST: 2 hours over 3
+     settlements, so the total 0.002% annualises to exactly the 8.76% each
+     hourly row reports on average. */
+  assert.ok(close(f.windowAprPct, 8.76, 1e-6), String(f.windowAprPct));
+  assert.equal(fundingTable([]).cumulativePct, null);
+});
+
+test('the desk translates the two risk vocabularies in both directions, totally', async () => {
+  const { RISK_VOCABULARY, toIntentRiskWord, toFuturesRiskLevel, riskLevelFromScore } = await import('../src/components/perp-terminal/desk.js');
+  assert.deepEqual(RISK_VOCABULARY.futuresToIntent, { LOW: 'LOW', MEDIUM: 'ELEVATED', HIGH: 'HIGH', EXTREME: 'CRITICAL' });
+  assert.deepEqual(RISK_VOCABULARY.intentToFutures, { LOW: 'LOW', MODERATE: 'MEDIUM', ELEVATED: 'MEDIUM', HIGH: 'HIGH', CRITICAL: 'EXTREME' });
+  /* every engine level has a word: a badge can never be blank for a real level */
+  for (const lvl of ['LOW', 'MEDIUM', 'HIGH', 'EXTREME']) assert.ok(toIntentRiskWord(lvl), lvl);
+  /* every Intent OS word has a level */
+  for (const w of ['LOW', 'MODERATE', 'ELEVATED', 'HIGH', 'CRITICAL']) assert.ok(toFuturesRiskLevel(w), w);
+  assert.equal(toIntentRiskWord('MODERATE'), null, 'MODERATE exists only on the intent scale');
+  assert.equal(toFuturesRiskLevel('nope'), null);
+  /* and a score lands in exactly one band */
+  assert.equal(riskLevelFromScore(90), 'EXTREME');
+  assert.equal(riskLevelFromScore(60), 'HIGH');
+  assert.equal(riskLevelFromScore(35), 'MEDIUM');
+  assert.equal(riskLevelFromScore(0), 'LOW');
+  assert.equal(riskLevelFromScore(null), null);
+});
+
 /* ──────────────────────── 4 · CHART MATH ────────────────────────────────── */
 
 const series = [
