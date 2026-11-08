@@ -30,6 +30,9 @@ import {
 import {
   orderTypesFor, validateOrderForVenue, liquidationPlan, contractFor, LIQUIDATION_SOURCE
 } from '../../lib/futures-engine/venueContract.js';
+import {
+  FUTURES_TO_INTENT, INTENT_TO_FUTURES, intentWord, futuresLevel
+} from '../../lib/futures-engine/riskBridge.js';
 
 const num = (v) => {
   if (v === null || v === undefined || v === '') return null;
@@ -412,33 +415,29 @@ export function portfolioFor({ positions = [], equityUsd = null, maintenanceMarg
  * Going the other way, MODERATE maps to MEDIUM. Neither direction is lossy in a
  * way that changes a decision, and both are pinned in the tests.
  */
+/*
+ * ONE MAPPING, ONE HOME. This used to be a table defined here as well as in
+ * futures-engine/riskBridge.js — two copies of the same translation is exactly
+ * how a badge ends up saying ELEVATED while the engine that produced it said
+ * MEDIUM. The bridge owns it; the desk re-exports it so a component keeps
+ * importing one module.
+ */
 export const RISK_VOCABULARY = Object.freeze({
-  futuresToIntent: Object.freeze({
-    [RISK_LEVEL.LOW]: 'LOW',
-    [RISK_LEVEL.MEDIUM]: 'ELEVATED',
-    [RISK_LEVEL.HIGH]: 'HIGH',
-    [RISK_LEVEL.EXTREME]: 'CRITICAL'
-  }),
-  intentToFutures: Object.freeze({
-    LOW: RISK_LEVEL.LOW,
-    MODERATE: RISK_LEVEL.MEDIUM,
-    ELEVATED: RISK_LEVEL.MEDIUM,
-    HIGH: RISK_LEVEL.HIGH,
-    CRITICAL: RISK_LEVEL.EXTREME
-  })
+  futuresToIntent: FUTURES_TO_INTENT,
+  intentToFutures: INTENT_TO_FUTURES
 });
 
 /** Translate an engine level into the Intent OS word. Unknown → null, never a guess. */
-export const toIntentRiskWord = (level) => RISK_VOCABULARY.futuresToIntent[String(level || '').toUpperCase()] ?? null;
+export const toIntentRiskWord = intentWord;
 /** Translate an Intent OS word into the engine's level. */
-export const toFuturesRiskLevel = (word) => RISK_VOCABULARY.intentToFutures[String(word || '').toUpperCase()] ?? null;
+export const toFuturesRiskLevel = futuresLevel;
 
 /**
  * The same translation for a NUMBER, which is how the two modules will meet in
  * practice: `futuresRisk()` and `assessRisk()` both produce a 0–100 score, and
  * a panel that shows a badge from one and a score from the other must use one
- * band table. The bands are the engine's (`RISK_POLICY_DEFAULTS.riskBands`) so
- * the badge is derived, not decided twice.
+ * band table. The bands are the engine's, so the badge is derived, not decided
+ * twice.
  */
 export const riskLevelFromScore = (score) => {
   const n = num(score);

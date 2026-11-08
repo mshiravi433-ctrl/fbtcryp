@@ -11,6 +11,11 @@
  *                            modes, liquidation model), and the per-venue
  *                            ticket validator the UI and the BFF share
  *   fees.js         §7     — Protocol + Network + FBT = Total, policies, caps
+ *   riskBridge.js   §24    — the ONE mapping between the futures vocabulary
+ *                            (LOW/MEDIUM/HIGH/EXTREME) and the Intent OS
+ *                            vocabulary (LOW/MODERATE/ELEVATED/HIGH/CRITICAL),
+ *                            plus the futures row and scan context the other
+ *                            two engines consume
  *   risk.js         §8     — riskScore/riskLevel/liquidation distance/warnings
  *                            + account-level margin, exposure, shock and
  *                            funding-horizon maths (v2 terminal, §7/§10)
@@ -27,6 +32,7 @@
 
 export * from './providers.js';
 export * from './venueContract.js';
+export * from './riskBridge.js';
 export * from './fees.js';
 export * from './risk.js';
 export * from './router.js';

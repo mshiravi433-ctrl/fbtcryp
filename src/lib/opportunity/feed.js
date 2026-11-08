@@ -35,6 +35,7 @@
  */
 
 import { scanOpportunities, OPPORTUNITY_CATEGORIES } from '../brain/opportunityEngine.js';
+import { futuresScanContext, attachFuturesContext } from '../futures-engine/riskBridge.js';
 
 /** Yield-feed projects that are money markets rather than farms. */
 const LENDING_RE = /^(aave|compound|morpho|spark|kamino-lend|jupiter-lend|fluid-lending|venus|save|sky-lending|maple|benqi-lending|radiant|euler)/i;
@@ -287,7 +288,26 @@ export function chainFit({ chain, capitalUsd = 0, activeChains = [], gasUsdPerLe
  */
 export function scanPersonalised({
   capital = null, riskProfile = 'MODERATE', horizonDays = 30,
-  feeds = {}, cortexReadout = null, now = Date.now(), limit = 40
+  feeds = {}, cortexReadout = null, now = Date.now(), limit = 40,
+  /*
+   * ─── THE LEVERAGED PART OF THE SAME ACCOUNT ──────────────────────────────
+   * A user can be 4× levered on a perp venue and still ask the scan what to do
+   * with their money. Before this argument the scan answered as if they were
+   * flat: it ranked rows against the full balance and against the appetite they
+   * picked, with no knowledge that most of the risk budget was already spent.
+   *
+   * `futures` is the raw account read — `{ positions, equityUsd,
+   * maintenanceMarginUsd, availableBalanceUsd, fundingAprPct }` — and the
+   * translation into what the scan may say lives in futures-engine/riskBridge.js
+   * (one mapping, shared with the Intent OS, tested). Two rules survive:
+   *   · an UNREADABLE futures account is not "no exposure" — the context
+   *     reports `available: false` and the appetite is left alone rather than
+   *     quietly lowered or raised;
+   *   · breaches of the product's own limits (central/risk.js RISK_LIMITS) lower
+   *     the appetite CEILING, so the scan cannot hand an over-levered account a
+   *     row sized for an aggressive one.
+   */
+  futures = null
 } = {}) {
   /* Accept either shape a caller has at hand: `feeds.yields` (the array the
      yields endpoint returns) or `feeds.pools` (the same array under the name the
@@ -300,10 +320,29 @@ export function scanPersonalised({
   const whaleFlows = normalizeWhaleRows(feeds.whaleConsensus);
   const emergingTokens = normalizeEmergingRows(feeds.emergingTokens);
 
+  /* Futures context FIRST: it can lower the appetite and the capital the scan
+     is allowed to plan with. Computed from the raw read, never from a guess. */
+  const futuresContext = futures
+    ? futuresScanContext({
+      positions: list(futures.positions),
+      equityUsd: futures.equityUsd ?? null,
+      maintenanceMarginUsd: futures.maintenanceMarginUsd ?? null,
+      availableBalanceUsd: futures.availableBalanceUsd ?? null,
+      fundingAprPct: futures.fundingAprPct ?? null,
+      riskProfile,
+      at: now
+    })
+    : null;
+  /* The ceiling only ever LOWERS the appetite: an unknown account leaves it
+     untouched, and a healthy one cannot raise a conservative user's profile. */
+  const effectiveProfile = futuresContext?.available
+    ? (riskProfileRank(futuresContext.profile) < riskProfileRank(riskProfile) ? futuresContext.profile : riskProfile)
+    : riskProfile;
+
   const scan = scanOpportunities({
     now,
     userCapitalUsd: capital?.investableUsd ?? 0,
-    riskProfile,
+    riskProfile: effectiveProfile,
     horizonDays,
     limit,
     liquidityPools: yieldRows.liquidityPools,
@@ -336,9 +375,15 @@ export function scanPersonalised({
 
   const discovered = [...scan.opportunities, ...scan.rejected].sort((a, b) => b.discoveredAt - a.discoveredAt);
 
-  return {
+  return attachFuturesContext({
     ...scan,
     capital,
+    /* The appetite that was ACTUALLY used, so the UI can say "lowered because
+       of your futures exposure" instead of showing the user's stored choice and
+       contradicting the rows underneath it. */
+    profileRequested: riskProfile,
+    profileApplied: effectiveProfile,
+    profileLoweredByFutures: effectiveProfile !== riskProfile,
     coverage,
     scannedAt: now,
     /* Personalisation provenance: which of the four inputs actually contributed.
@@ -350,7 +395,15 @@ export function scanPersonalised({
       riskProfile: scan.profile?.riskProfile ?? riskProfile,
       riskTolerance: scan.profile?.riskTolerance ?? null,
       horizonDays: scan.profile?.horizonDays ?? horizonDays,
-      candidates: Object.values(scan.coverage || {}).reduce((a, b) => a + b, 0)
+      candidates: Object.values(scan.coverage || {}).reduce((a, b) => a + b, 0),
+      /* What the futures account contributed — or why it contributed nothing. */
+      futures: futuresContext ? {
+        available: futuresContext.available,
+        exposureUsd: futuresContext.exposureUsd,
+        leverageRatio: futuresContext.leverageRatio,
+        action: futuresContext.action,
+        profileLowered: effectiveProfile !== riskProfile
+      } : { available: false, reason: 'NOT_SUPPLIED' }
     },
     /* The AI Scanner room: newest discoveries with the reason each matched. */
     scanner: discovered.slice(0, 24).map((o) => ({
@@ -368,5 +421,13 @@ export function scanPersonalised({
       exclusionCodes: list(o.exclusionReasons).map((r) => r.code)
     })),
     top: scan.opportunities.slice(0, 6)
-  };
+  }, futuresContext);
 }
+
+/* The scan's appetites, ordered. Used only to compare two of them so a ceiling
+   can lower a profile but never raise one. */
+const RISK_PROFILE_ORDER = ['CONSERVATIVE', 'MODERATE', 'BALANCED', 'AGGRESSIVE'];
+const riskProfileRank = (id) => {
+  const i = RISK_PROFILE_ORDER.indexOf(String(id || '').toUpperCase());
+  return i === -1 ? 1 : i;
+};
