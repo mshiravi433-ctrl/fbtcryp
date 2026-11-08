@@ -881,12 +881,14 @@ export const ConversationRow = memo(function ConversationRow({
         {m.kind === 'order' && m.order ? (
           <OrderCard order={m.order} locale={locale} />
         ) : null}
+        {/* Navigation belongs to the parent. Reading openBubbleRoute here
+            threw ReferenceError as soon as a scan (live or restored) rendered. */}
         {m.opportunityScan ? (
           <OpportunityDashboard
             scan={m.opportunityScan}
             locale={locale}
             onRescan={onRescanOpportunity}
-            onOpenRoom={openBubbleRoute}
+            onOpenRoom={onOpenRoute}
           />
         ) : Array.isArray(m.opportunities) && m.opportunities.length ? (
           <OpportunityList rows={m.opportunities} onMonitor={onMonitorOpportunity} locale={locale} />
