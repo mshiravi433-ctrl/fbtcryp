@@ -700,3 +700,58 @@
     transition: none;
   }
 }
+
+/* ==========================================================================
+   PHASE 9 — ADAPTIVE INTELLIGENCE ECOSYSTEM
+   Only theme tokens, no new colours; respects RTL and reduced motion.
+   ========================================================================== */
+
+.nmc-adaptive-card {
+  border-color: rgba(16, 185, 129, 0.28);
+}
+
+:root[data-theme='light'] .nmc-adaptive-card {
+  border-color: rgba(4, 120, 87, 0.26);
+}
+
+.nmc-adaptive-card .nmc-section-head small[data-testid='nmc-adaptive-profile'] {
+  color: var(--nmc-mint);
+  font-weight: 600;
+}
+
+/* Conditions read as a compact instrument row, not as another wall of cards. */
+.nmc-adaptive-conditions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+
+.nmc-adaptive-conditions .nmc-regime-row {
+  background: var(--nmc-card-2);
+}
+
+.nmc-adaptive-conditions .nmc-bar-fill {
+  background: linear-gradient(90deg, var(--nmc-mint), var(--nmc-cyan));
+  transition: width 0.35s ease;
+}
+
+.nmc-adaptive-card .nmc-stat strong[data-testid='nmc-adaptive-efficacy'],
+.nmc-adaptive-card .nmc-stat strong[data-testid='nmc-adaptive-rate'] {
+  background: linear-gradient(92deg, var(--nmc-mint), var(--nmc-cyan));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@media (max-width: 560px) {
+  .nmc-adaptive-conditions {
+    grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nmc-adaptive-conditions .nmc-bar-fill {
+    transition: none;
+  }
+}

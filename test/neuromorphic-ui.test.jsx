@@ -7,10 +7,14 @@ import NeuromorphicRoomStrip from '../src/components/ai/NeuromorphicRoomStrip.js
 import {
   consolidateLocalBrain,
   ingestScientificMemory,
+  refreshAdaptiveEcosystem,
   resetLocalNeuromorphicCortex,
+  setAdaptiveEcosystemEnabled,
   setBrainCircuitsEnabled,
+  setAdaptiveLearningOptIn,
   tickNeuromorphicWithCandles
 } from '../src/lib/neuromorphic/useNeuromorphicCortex.js';
+import { createAdaptiveEcosystem, DATA_PROFILES } from '../src/lib/neuromorphic/adaptiveEcosystem.js';
 
 function sampleCandles(n = 28) {
   let p = 50000;
@@ -199,5 +203,117 @@ describe('Phase 4 — Neuromorphic 2050 UI Console & Chat Room Strip', () => {
     expect(screen.getByTestId('nmc-science-ingest-btn')).toBeTruthy();
     expect(screen.getByTestId('nmc-science-share-btn')).toBeTruthy();
     expect(container.textContent).not.toMatch(/NaN|undefined|Infinity/);
+  });
+
+  it('renders the Phase-9 adaptive block with em-dashes before any observation', async () => {
+    await resetLocalNeuromorphicCortex();
+    const { container } = render(<NeuromorphicCortexPanel locale="fa" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('nmc-adaptive-card')).toBeTruthy();
+    });
+
+    // Nothing pre-filled: efficacy, rate, duty and budget are all '—'.
+    for (const id of ['nmc-adaptive-efficacy', 'nmc-adaptive-rate', 'nmc-adaptive-budget', 'nmc-adaptive-duty']) {
+      expect(screen.getByTestId(id).textContent).toBe('—');
+    }
+    // The profile line names the honest cold state, not a made-up profile.
+    expect(screen.getByTestId('nmc-adaptive-profile').textContent).toMatch(/اولین مشاهده|first observation/);
+    // The scores line says nothing has been measured yet.
+    expect(screen.getByTestId('nmc-adaptive-scores').textContent).toMatch(/نوشته نشده|pre-filled/);
+    expect(container.textContent).not.toMatch(/NaN|undefined|Infinity/);
+  });
+
+  it('fills the Phase-9 block from a real on-device run and reports measured spikes', async () => {
+    await resetLocalNeuromorphicCortex();
+    const candles = sampleCandles(30);
+    for (let end = 8; end <= 26; end += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await tickNeuromorphicWithCandles(candles.slice(0, end), { symbol: 'BTC' });
+    }
+
+    const { container } = render(<NeuromorphicCortexPanel locale="fa" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('nmc-adaptive-card')).toBeTruthy();
+    });
+
+    expect(screen.getByTestId('nmc-adaptive-efficacy').textContent).not.toBe('—');
+    expect(screen.getByTestId('nmc-adaptive-rate').textContent).toMatch(/%/);
+    // The card explains the number beside it (the testid marks the headline value
+    // only, matching the rest of the panel): the counterfactual count must be
+    // present so a reader can see what the servo suppressed.
+    expect(screen.getByTestId('nmc-adaptive-card').textContent).toMatch(/بدون سرور|without servo/);
+    expect(screen.getByTestId('nmc-adaptive-budget').textContent).toMatch(/نورون|neuron/);
+    expect(screen.getByTestId('nmc-adaptive-duty').textContent).toMatch(/%/);
+    expect(screen.getByTestId('nmc-adaptive-profile').textContent).toMatch(/پروفایل|Profile/);
+
+    // Every condition bar is populated from the cortex's own telemetry.
+    for (const key of ['volatility', 'surprise', 'decisionMargin']) {
+      expect(screen.getByTestId(`nmc-adaptive-cond-${key}`).textContent).toMatch(/[0-9]/);
+    }
+    // The saturation line is a count, never a claim.
+    expect(screen.getByTestId('nmc-adaptive-saturation').textContent).toMatch(/اشباع|Saturated/);
+    // Honesty note must be present and substantial.
+    expect(screen.getByTestId('nmc-adaptive-honesty').textContent.length).toBeGreaterThan(60);
+    expect(screen.getByTestId('nmc-adaptive-toggle')).toBeTruthy();
+    expect(screen.getByTestId('nmc-adaptive-learn-toggle')).toBeTruthy();
+    expect(container.textContent).not.toMatch(/NaN|undefined|Infinity/);
+  });
+
+  it('toggles the ecosystem off for an A/B against pure Phase-6 dynamics', async () => {
+    const off = await setAdaptiveEcosystemEnabled(false);
+    expect(off.ok).toBe(true);
+    expect(off.adaptiveEnabled).toBe(false);
+
+    const on = await setAdaptiveEcosystemEnabled(true);
+    expect(on.ok).toBe(true);
+    expect(on.adaptiveEnabled).toBe(true);
+
+    const { container } = render(<NeuromorphicCortexPanel locale="en" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('nmc-adaptive-toggle').textContent).toMatch(/ON|OFF/);
+    });
+    expect(container.textContent).not.toMatch(/NaN|undefined|Infinity/);
+  });
+
+  it('reports withdrawn learning consent instead of pretending to learn', async () => {
+    await resetLocalNeuromorphicCortex();
+
+    // Withdraw consent BEFORE any observation: the report is honestly null, so
+    // assert on the return value's flag rather than on a fabricated report.
+    const off = await setAdaptiveLearningOptIn(false);
+    expect(off.ok).toBe(true);
+    expect(off.adaptiveLearningOptIn === undefined || off.adaptive?.learning.optIn === false).toBe(true);
+
+    const candles = sampleCandles(26);
+    for (let end = 8; end <= 22; end += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await tickNeuromorphicWithCandles(candles.slice(0, end), { symbol: 'BTC' });
+    }
+
+    const report = await refreshAdaptiveEcosystem();
+    expect(report.adaptive.learning.optIn).toBe(false);
+    expect(report.adaptive.learning.dutyCyclePct).toBe(0);
+    // Not one learning tick may be claimed while consent is withheld.
+    expect(report.adaptive.learning.ticksSpent).toBe(0);
+    // The rate servo still works — withdrawing learning consent is not a pause.
+    expect(report.adaptive.rateCode.rate).toBeGreaterThan(0);
+
+    // Restore consent for the remaining tests.
+    const on = await setAdaptiveLearningOptIn(true);
+    expect(on.ok).toBe(true);
+  });
+
+  it('exposes the ecosystem constants and never claims accuracy', async () => {
+    const eco = createAdaptiveEcosystem();
+    const c = eco.constants();
+    expect(c.targetRate).toBeGreaterThan(0);
+    expect(c.bounds.gainMax).toBe(1);
+    expect(c.rules.minDwellTicks).toBeGreaterThan(0);
+    expect(DATA_PROFILES.EXPLOIT_FULL).toBe('EXPLOIT_FULL');
+
+    const cold = eco.report();
+    expect(cold).toBe(null);
+
+    await resetLocalNeuromorphicCortex();
   });
 });

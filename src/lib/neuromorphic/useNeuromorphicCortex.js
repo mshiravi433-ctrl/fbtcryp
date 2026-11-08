@@ -14,6 +14,9 @@
  *   · PHASE 7: the Universal Scientific Memory is fed by this device's real
  *     resolved engrams and its report is exported here. Nothing is pre-computed
  *     in this module — the worker (or the inline mirror) owns the statistics.
+ *   · PHASE 9: the Adaptive Intelligence Ecosystem runs in the same place as the
+ *     cortex — worker thread in the browser, inline mirror in jsdom/SSR — so the
+ *     console shows the same profile, servo and budget on both paths.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -30,6 +33,7 @@ import {
 } from './engramMemory.js';
 import { blendGlobalSwarmWeights, runLocalSwarmEvolution } from './swarmClient.js';
 import { createScientificMemory } from './scientificMemory.js';
+import { createAdaptiveEcosystem } from './adaptiveEcosystem.js';
 
 const PREFS_KEY = 'fbt.neuromorphic.prefs.v1';
 const DEVICE_KEY = 'fbt.ai.device.v1';
@@ -121,6 +125,10 @@ let storeState = {
   evolutionLast: null,
   consolidationLast: null,
   brainEnabled: true,
+  /* PHASE 9 — adaptive ecosystem (data conditioning + device budget). */
+  adaptiveEnabled: true,
+  adaptive: null,
+  adaptiveLearningOptIn: true,
   swarmStatus: null,
   swarmOptIn: initialPrefs.swarmOptIn,
   paused: initialPrefs.paused,
@@ -150,6 +158,7 @@ let inlineCortex = null;
 let inlineEngrams = null;
 let inlineGovernor = null;
 let inlineScience = null;
+let inlineEcosystem = null;
 
 function ensureInlineRuntime() {
   if (!inlineCortex) {
@@ -160,6 +169,7 @@ function ensureInlineRuntime() {
       paused: storeState.paused,
       swarmOptIn: storeState.swarmOptIn
     });
+    inlineEcosystem = createAdaptiveEcosystem({ learningOptIn: storeState.adaptiveLearningOptIn });
   }
 }
 
@@ -218,6 +228,8 @@ async function runInlineFallback(msg) {
       reservoirNeurons: snap.reservoirSize,
       engramCount: inlineEngrams.size(),
       brainEnabled: inlineCortex.isBrainEnabled(),
+      adaptiveEnabled: storeState.adaptiveEnabled,
+      adaptive: storeState.adaptiveEnabled ? inlineEcosystem.report() : null,
       science: inlineScience.report()
     };
   }
@@ -228,11 +240,23 @@ async function runInlineFallback(msg) {
       ? featuresFromCandles(msg.candles, { breadthRatio: msg.breadthRatio ?? null })
       : featuresFromMarketPulse({ markets: msg.markets || [], pulse: msg.pulse || null });
     if (!feat.ok) return { ok: false, reason: feat.reason, governor: gov };
+    /* PHASE 9 — same plan → step → observe ordering as the worker. */
+    const adaptiveOn = storeState.adaptiveEnabled !== false;
+    inlineEcosystem.setGovernorPolicy(gov);
+    const plan = adaptiveOn ? inlineEcosystem.plan() : null;
+    if (adaptiveOn) inlineCortex.setSynapticEfficacy(plan.synapticEfficacy);
     const readout = await inlineCortex.step(feat.vector, {
       observedPrice: feat.meta?.lastClose ?? null,
-      learningEnabled: gov.allowPlasticity,
+      learningEnabled: adaptiveOn ? (gov.allowPlasticity && plan.learnThisTick) : gov.allowPlasticity,
       sparseMode: gov.mode === 'ECO_SPARSE'
     });
+    const adaptive = adaptiveOn
+      ? inlineEcosystem.observe({
+          features: feat.vector,
+          readout,
+          staticSpikeBaseline: readout.rateCode?.spikesWithoutServo ?? null
+        })
+      : null;
     if (readout.learning?.rewardOutcome) {
       inlineEngrams.imprint({
         liquidState: inlineCortex._internals().getLiquidState(),
@@ -242,10 +266,12 @@ async function runInlineFallback(msg) {
       });
     }
     let structural = null;
-    if (gov.allowNeurogenesis && readout.localTicks % 6 === 0) {
+    const growthCap = plan?.reservoirCap ?? gov.maxReservoirNeurons;
+    const growthJustified = adaptive?.profile !== 'HOLD_SPARSE';
+    if (gov.allowNeurogenesis && growthJustified && readout.localTicks % 6 === 0) {
       structural = runStructuralPlasticity(inlineCortex, {
         anomalySurprise: readout.anomalySurprise,
-        maxReservoirNeurons: gov.maxReservoirNeurons
+        maxReservoirNeurons: growthCap
       });
     }
     const scienceIngest = inlineScience.ingestEngrams(inlineEngrams.exportEpisodes());
@@ -253,6 +279,7 @@ async function runInlineFallback(msg) {
       ok: true,
       readout,
       structural,
+      adaptive,
       engramRecall: inlineEngrams.recall(inlineCortex._internals().getLiquidState()),
       science: inlineScience.report(),
       scienceIngest,
@@ -284,7 +311,8 @@ async function runInlineFallback(msg) {
     }
     const structural = runStructuralPlasticity(inlineCortex, {
       anomalySurprise: Math.max(0.58, lastReadout?.anomalySurprise || 0.6),
-      maxReservoirNeurons: gov.maxReservoirNeurons || 192
+      /* PHASE 9 — walk-forward evolution also respects the data-shaped budget. */
+      maxReservoirNeurons: inlineEcosystem.report()?.actuators?.reservoirCap || gov.maxReservoirNeurons || 192
     });
     const snap = inlineCortex.exportSnapshot();
     const evo = runLocalSwarmEvolution({
@@ -320,6 +348,30 @@ async function runInlineFallback(msg) {
     const blended = blendGlobalSwarmWeights(inlineCortex.getSwarmWeights(), arr, { globalShare: 0.68 });
     inlineCortex.setSwarmWeights(blended, msg.generation || 0);
     return { ok: true, generation: msg.generation || 0 };
+  }
+  if (type === 'adaptive') {
+    const action = String(msg.action || 'report');
+    if (action === 'set') {
+      if (typeof msg.enabled === 'boolean') {
+        emit({ adaptiveEnabled: msg.enabled });
+        inlineCortex.setAdaptiveEnabled(msg.enabled);
+        if (!msg.enabled) inlineEcosystem.reset();
+      }
+      if (typeof msg.learningOptIn === 'boolean') {
+        emit({ adaptiveLearningOptIn: msg.learningOptIn });
+        inlineEcosystem.setLearningOptIn(msg.learningOptIn);
+      }
+    }
+    const gov = await inlineGovernor.evaluate();
+    inlineEcosystem.setGovernorPolicy(gov);
+    return {
+      ok: true,
+      action,
+      adaptiveEnabled: storeState.adaptiveEnabled !== false,
+      adaptive: inlineEcosystem.report(),
+      governor: gov,
+      constants: inlineEcosystem.constants()
+    };
   }
   if (type === 'configure') {
     inlineGovernor.configure({ paused: msg.paused, swarmOptIn: msg.swarmOptIn });
@@ -378,6 +430,7 @@ async function runInlineFallback(msg) {
     inlineCortex.reset();
     inlineEngrams.clear();
     inlineScience.wipe();
+    if (inlineEcosystem) inlineEcosystem.reset();
     await wipeLocalCortexBundle();
     return { ok: true, generation: 0, reservoirNeurons: 96, engramCount: 0, governor: await inlineGovernor.evaluate() };
   }
@@ -405,6 +458,8 @@ export async function initNeuromorphicRuntime({ intentGenome = null } = {}) {
             reservoirNeurons: res.reservoirNeurons ?? 96,
             engramCount: res.engramCount ?? 0,
             brainEnabled: res.brainEnabled !== false,
+            adaptiveEnabled: res.adaptiveEnabled !== false,
+            adaptive: res.adaptive || storeState.adaptive,
             lastError: null
           });
         }
@@ -464,6 +519,7 @@ export async function tickNeuromorphicWithCandles(candles, { symbol = null, brea
       science: res.science || storeState.science,
       scienceIngest: res.scienceIngest || storeState.scienceIngest,
       sciencePrior: res.sciencePrior || storeState.sciencePrior,
+      adaptive: res.adaptive || storeState.adaptive,
       lastSymbol: symbol || storeState.lastSymbol,
       lastUpdatedAt: Date.now(),
       lastError: null
@@ -486,6 +542,7 @@ export async function tickNeuromorphicWithMarketPulse({ markets = [], pulse = nu
       science: res.science || storeState.science,
       scienceIngest: res.scienceIngest || storeState.scienceIngest,
       sciencePrior: res.sciencePrior || storeState.sciencePrior,
+      adaptive: res.adaptive || storeState.adaptive,
       lastSymbol: 'MARKET',
       lastUpdatedAt: Date.now(),
       lastError: null
@@ -628,6 +685,9 @@ export async function resetLocalNeuromorphicCortex() {
       engramRecall: null,
       structuralLast: null,
       evolutionLast: null,
+      /* PHASE 9 — a reset wipes the measured condition, profile and servo too:
+       * keeping the old report would show a state this cortex no longer has. */
+      adaptive: null,
       governor: res.governor || storeState.governor,
       lastError: null
     });
@@ -673,6 +733,60 @@ export async function configureGovernor({ paused, swarmOptIn, intentGenome } = {
 
 export async function resetNeuromorphicRuntime() {
   return resetLocalNeuromorphicCortex();
+}
+
+/* ── Phase 9: Adaptive Intelligence Ecosystem ─────────────────────────────── */
+
+/**
+ * Read the ecosystem's measured state: data condition, chosen profile, the
+ * firing-rate servo, and the actuators currently in force.
+ */
+export async function refreshAdaptiveEcosystem() {
+  await initNeuromorphicRuntime();
+  const res = await sendWorkerMessage({ type: 'adaptive', action: 'report' });
+  if (res.ok) emit({ adaptive: res.adaptive || storeState.adaptive });
+  return res;
+}
+
+/** Turn the data-conditioned adaptation on/off (A/B against fixed Phase-6 dynamics). */
+export async function setAdaptiveEcosystemEnabled(enabled) {
+  const on = enabled !== false;
+  const res = await sendWorkerMessage({ type: 'adaptive', action: 'set', enabled: on });
+  if (res.ok) {
+    emit({
+      adaptiveEnabled: on,
+      adaptive: on ? (res.adaptive || storeState.adaptive) : null
+    });
+  }
+  return res;
+}
+
+/**
+ * Consent switch for the *learning duty cycle* only. When off, the ecosystem keeps
+ * adapting the firing rate and the budget but stops spending learning steps; it
+ * never claims to have learned while this is false.
+ */
+export async function setAdaptiveLearningOptIn(optIn) {
+  const on = optIn !== false;
+  const res = await sendWorkerMessage({ type: 'adaptive', action: 'set', learningOptIn: on });
+  if (res.ok) emit({ adaptiveLearningOptIn: on, adaptive: res.adaptive || storeState.adaptive });
+  return res;
+}
+
+/**
+ * Replay this device's measured spike counts through a fresh servo and report
+ * where it would have moved synaptic efficacy. Reports `isConstant: true` if the
+ * controller would have output a constant — which is the failure this check exists
+ * to catch.
+ */
+export async function counterfactualServoReplay(spikeCounts = [], reservoirSize = 96) {
+  await initNeuromorphicRuntime();
+  return sendWorkerMessage({
+    type: 'adaptive',
+    action: 'counterfactual',
+    spikeCounts,
+    reservoirSize
+  });
 }
 
 /* ── Phase 7: Universal Scientific Memory ─────────────────────────────────── */
@@ -836,6 +950,12 @@ export function useNeuromorphicCortex({ autoSync = true } = {}) {
     shareSciencePrior: () => shareScientificPrior(),
     syncScienceWorld: () => syncScienceWorld(),
     mergeSciencePrior: (packet) => mergeScientificPrior(packet),
+
+    /* Phase 9 — adaptive intelligence ecosystem */
+    refreshAdaptive: () => refreshAdaptiveEcosystem(),
+    setAdaptiveEnabled: (enabled) => setAdaptiveEcosystemEnabled(enabled),
+    setLearningOptIn: (on) => setAdaptiveLearningOptIn(on),
+    counterfactualServo: (counts, size) => counterfactualServoReplay(counts, size),
 
     /* preferences & governance */
     toggleSwarmOptIn: () => setNeuromorphicPreferences({ swarmOptIn: !storeState.swarmOptIn }),
