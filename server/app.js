@@ -67,8 +67,9 @@ import {
 import { fetchPerpMarkets } from './perp.js';
 import { fetchSolanaIntel, fetchSolanaWhales, solscanConfigured, SOLANA_SIGNAL_MINTS } from './solanaIntel.js';
 import {
-  fetchDydxAccount, fetchDydxCandles, fetchDydxFills, fetchDydxMarkets, fetchDydxOrderbook,
-  fetchDydxOrders, normaliseCandleQuery, normaliseFillsBody, normaliseOrdersBody
+  fetchDydx24hRange, fetchDydxAccount, fetchDydxCandles, fetchDydxFills, fetchDydxHistoricalFunding,
+  fetchDydxMarkets, fetchDydxOrderbook, fetchDydxOrders, fetchDydxTrades,
+  normaliseCandleQuery, normaliseFillsBody, normaliseFundingLimit, normaliseOrdersBody, normaliseTradesLimit
 } from './dydx.js';
 import { fetchOstiumPrices, fetchOstiumSubgraph } from './ostium.js';
 import { resolveIds } from './coinIndex.js';
@@ -5635,6 +5636,58 @@ app.get('/api/dydx/orderbook/:ticker', (req, res) => {
     return res.status(400).json({ error: 'BAD_DYDX_TICKER' });
   }
   return serve(res, 5_000)(() => fetchDydxOrderbook(ticker), `dydx-orderbook:${ticker}`);
+});
+
+/*
+ * 24h HIGH / LOW — the two numbers every desk prints and this app did not.
+ *
+ * The market row carries a 24h change but no range, so the terminal's top bar
+ * had a gap. The range is derived from the venue's own 24 hourly candles on the
+ * server, which means one upstream call for every client rather than 24. 60s
+ * cache: the newest hourly bar is still filling, so the extreme CAN move inside
+ * the hour even though the bar boundary does not.
+ */
+app.get('/api/dydx/range/:ticker', (req, res) => {
+  const ticker = String(req.params.ticker || '').toUpperCase();
+  if (!/^[A-Z0-9]+-[A-Z0-9]+$/.test(ticker)) {
+    return res.status(400).json({ error: 'BAD_DYDX_TICKER' });
+  }
+  return serve(res, 60_000)(() => fetchDydx24hRange(ticker), `dydx-range:${ticker}`);
+});
+
+/*
+ * THE TAPE. Public trades for one market, newest first.
+ *
+ * 2s cache, deliberately far shorter than the 5s used for the order book: the
+ * terminal's tape is the one panel a trader watches for fills, and a tape that
+ * is five seconds behind the book it sits next to reads as a broken feed. The
+ * limit is clamped INSIDE the fetch (1–100) so this path cannot mint unbounded
+ * cache keys from a query string — the same rule candles follow.
+ */
+app.get('/api/dydx/trades/:ticker', (req, res) => {
+  const ticker = String(req.params.ticker || '').toUpperCase();
+  if (!/^[A-Z0-9]+-[A-Z0-9]+$/.test(ticker)) {
+    return res.status(400).json({ error: 'BAD_DYDX_TICKER' });
+  }
+  /* Clamped BEFORE the key, so the cache holds at most one entry per ticker
+     per distinct (bounded) limit instead of one per arbitrary query string. */
+  const limit = normaliseTradesLimit(req.query.limit);
+  return serve(res, 2_000)(() => fetchDydxTrades(ticker, limit), `dydx-trades:${ticker}:${limit}`);
+});
+
+/*
+ * HISTORICAL FUNDING — what holding the position has actually cost, rather than
+ * the single forward-looking rate in the market row. 5-minute cache: the venue
+ * settles hourly, so five minutes cannot miss a settlement by more than a
+ * fraction of one, and the panel that shows it is a cost table, not a ticker.
+ */
+app.get('/api/dydx/funding-history/:ticker', (req, res) => {
+  const ticker = String(req.params.ticker || '').toUpperCase();
+  if (!/^[A-Z0-9]+-[A-Z0-9]+$/.test(ticker)) {
+    return res.status(400).json({ error: 'BAD_DYDX_TICKER' });
+  }
+  const limit = normaliseFundingLimit(req.query.limit);
+  return serve(res, 300_000)(() => fetchDydxHistoricalFunding(ticker, limit), `dydx-funding:${ticker}:${limit}`);
 });
 
 /*
