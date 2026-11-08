@@ -65,6 +65,7 @@ import SpotTokenRisk from './SpotTokenRisk';
 import { tokenInfo, tokenItems } from './SpotMarketList';
 import Trade from '../../pages/Trade';
 import '../../styles/spot-trade.css';
+import { pollWhileVisible } from '../../lib/visibilityPoll';
 
 /* The networks this tab can trade on: a chain with a curated token list. */
 export const SPOT_CHAINS = EVM_CHAIN_ORDER.filter((id) => EVM_CHAINS[id] && (TOKENS[id]?.length ?? 0) >= 2);
@@ -344,12 +345,14 @@ export default function SpotTrade() {
   // expires, a NEW quote is requested. The old one is never executed.
   useEffect(() => {
     if (quoteView.status !== 'ok') return undefined;
-    const id = setInterval(() => {
+    /* Quote-expiry clock. A hidden tab must not keep re-quoting: coming back
+       ticks immediately and re-quotes if the quote aged out while away, which
+       is exactly the behaviour a user sees anyway. */
+    return pollWhileVisible(() => {
       const n = Date.now();
       setClock(n);
       if (isQuoteStale(quoteView.fetchedAt, n, SPOT_QUOTE_MAX_AGE_MS)) setNonce((x) => x + 1);
     }, 1000);
-    return () => clearInterval(id);
   }, [quoteView.status, quoteView.fetchedAt]);
 
   const quoteMatches = quoteView.key === currentKey && quoteView.status === 'ok';

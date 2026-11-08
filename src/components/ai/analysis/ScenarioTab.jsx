@@ -18,6 +18,7 @@ import {
   stressScenario,
 } from "../../../lib/intelligence/scenario2";
 import "../../../styles/scenario-intelligence.css";
+import { pollWhileVisible } from '../../../lib/visibilityPoll';
 
 const copy = {
   fa: {
@@ -297,8 +298,9 @@ export default function ScenarioTab({
   const selectedHoldings = candidates.slice(0, 4);
   const assetKey = selectedHoldings.map((x) => x.id).join("|");
   useEffect(() => {
-    const timer = setInterval(() => setEpoch((x) => x + 1), 120000);
-    return () => clearInterval(timer);
+    /* Forces a re-price every two minutes. On a hidden tab that is pure CPU
+       with no reader: the returning tick recomputes immediately anyway. */
+    return pollWhileVisible(() => setEpoch((x) => x + 1), 120000);
   }, []);
   useEffect(() => {
     if (mode === "portfolio" && !connected) {

@@ -604,10 +604,11 @@ export default function IranianBuyPanel({ capability }) {
 
   useEffect(() => {
     if (!preview?.expiresAt) return undefined;
+    /* Same rule as BuySellPanel: an expiry ticker is a poll, and a hidden tab
+       has no countdown to show. Returning to the tab ticks immediately. */
     const tick = () => setExpired(Date.now() >= Date.parse(preview.expiresAt));
     tick();
-    const timer = setInterval(tick, 1_000);
-    return () => clearInterval(timer);
+    return pollWhileVisible(tick, 1_000);
   }, [preview?.expiresAt]);
 
   const showError = useCallback((reason) => setError(errorCode(reason)), []);

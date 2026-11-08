@@ -6,6 +6,7 @@ import { useMarkets } from '../../hooks/useMarket';
 import { SPOT_DEPTH_BANDS, SPOT_DEPTH_TTL_MS, createDepthCache, usdPriceFor } from '../../lib/spotDepth';
 import { loadSpotDepth, makeSpotQuoteFn } from '../../lib/spotDepthQuotes';
 import '../../styles/spot-depth.css';
+import { pollWhileVisible } from '../../lib/visibilityPoll';
 
 /*
  * ─── SPOT DEPTH, AS A CARD ───────────────────────────────────────────────────
@@ -91,8 +92,8 @@ export default function SpotDepth({
 
   /* Re-render every 10 s so the «قدیمی» label appears without a new request. */
   useEffect(() => {
-    const id = setInterval(() => setTick((n) => n + 1), 10_000);
-    return () => clearInterval(id);
+    /* Ages the «قدیمی» label. Gated, like every other ticker here. */
+    return pollWhileVisible(() => setTick((n) => n + 1), 10_000);
   }, []);
 
   const stale = state.refreshedAt ? Date.now() - state.refreshedAt > SPOT_DEPTH_TTL_MS : false;

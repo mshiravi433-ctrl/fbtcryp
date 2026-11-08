@@ -35,6 +35,7 @@ import { useTelegram } from '../context/TelegramContext';
 import { useWallet } from '../context/WalletContext';
 import { POINT_VALUES } from '../lib/ranks';
 import { pollWhileVisible } from '../lib/visibilityPoll';
+import { pollWhileVisible } from '../lib/visibilityPoll';
 
 /**
  * THORChain panel — quote for every chain, SIGN HERE for EVM sources.
@@ -77,8 +78,8 @@ export default function ThorPanel({ initialFrom, initialTo } = {}) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
+    /* The quote's remaining validity — a clock, and therefore a poll. */
+    return pollWhileVisible(() => setNow(Date.now()), 1000);
   }, []);
   const request = { from, to, amount, destination };
   const depositState = thorDepositState(quote, request, now);
