@@ -11,6 +11,7 @@
  *   GET  /neuromorphic/brain    Phase 6 brain-inspired evidence probe (measured)
  *   GET  /neuromorphic/science         Phase 7 universal scientific memory: measured statistics + world registry
  *   POST /neuromorphic/science/prior   Upload a portable prior packet (no raw data, pre-specified families only)
+ *   GET  /neuromorphic/universes       Phase 8 parallel research universes: deterministic engine self-test
  *
  * Owner derivation matches `server/aiOrchestratorRoutes.js` (`x-fbt-device`
  * salted SHA-256 → `dev:...`) so zero raw device IDs or IPs are stored in the
@@ -25,6 +26,7 @@ import {
 } from './aiNeuromorphic.js';
 import { getBrainInspiredReport } from './aiNeuromorphicBrain.js';
 import { getScienceProbeReport, getScienceRegistry } from './aiNeuromorphicScience.js';
+import { getResearchUniversesProbe } from './aiResearchUniverses.js';
 
 export const NEUROMORPHIC_ROUTES_SCHEMA = 'fbt.neuromorphic.routes.v1';
 
@@ -109,6 +111,20 @@ export function createNeuromorphicRouter({ swarm = null, log = () => {} } = {}) 
     const probe = getScienceProbeReport({ nullTests, altTests });
     const world = await getScienceRegistry().getWorld({ limit: 12 });
     return { ...probe, world };
+  }));
+
+  /**
+   * Phase 8 — Parallel Research Universes.
+   * Deterministic engine self-test on a synthetic fixture, cached for 60 s.
+   * Real candles and device genomes never leave the device.
+   */
+  router.get('/neuromorphic/universes', wrap(async (req) => {
+    const populationRaw = Number(req.query?.population);
+    const stepsRaw = Number(req.query?.steps);
+    return getResearchUniversesProbe({
+      population: Number.isFinite(populationRaw) ? populationRaw : undefined,
+      steps: Number.isFinite(stepsRaw) ? stepsRaw : undefined
+    });
   }));
 
   /**

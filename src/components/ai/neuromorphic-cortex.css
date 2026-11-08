@@ -497,3 +497,206 @@
 .nmc-science-card .nmc-stat strong[data-testid='nmc-science-bf'] {
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Phase 8 — Parallel Research Universes ──────────────────────────────── */
+
+.nmc-pru-root {
+  margin-top: 14px;
+  border-color: rgba(16, 185, 129, 0.26);
+}
+
+:root[data-theme='light'] .nmc-pru-root {
+  border-color: rgba(4, 120, 87, 0.24);
+}
+
+.nmc-pru-orb {
+  background: radial-gradient(circle at 35% 35%, var(--nmc-mint), var(--nmc-violet) 68%, transparent 100%);
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.34);
+  font-size: 16px;
+}
+
+.nmc-pru-card {
+  margin-top: 12px;
+  border-color: rgba(16, 185, 129, 0.22);
+}
+
+:root[data-theme='light'] .nmc-pru-card {
+  border-color: rgba(4, 120, 87, 0.2);
+}
+
+.nmc-pru-empty {
+  border: 1px dashed var(--nmc-border);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.nmc-pru-prob {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 8px;
+}
+
+.nmc-pru-prob strong {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  color: var(--nmc-mint);
+}
+
+.nmc-pru-prob small {
+  font-size: 11px;
+  color: var(--nmc-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.nmc-pru-prob-track {
+  height: 8px;
+}
+
+.nmc-pru-metrics .nmc-stat strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.nmc-pru-compare {
+  font-variant-numeric: tabular-nums;
+}
+
+.nmc-pru-lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.nmc-pru-lane {
+  display: grid;
+  grid-template-columns: 34px minmax(56px, 92px) 1fr 72px 48px;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--nmc-muted);
+}
+
+.nmc-pru-lane-id {
+  font-weight: 700;
+  color: var(--nmc-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.nmc-pru-lane-hyp {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nmc-pru-spark {
+  width: 100%;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--nmc-card-2);
+}
+
+.nmc-pru-spark polyline {
+  stroke: var(--nmc-cyan);
+}
+
+.nmc-pru-lane-weight {
+  display: block;
+  height: 6px;
+  border-radius: 99px;
+  background: var(--nmc-card-2);
+  overflow: hidden;
+}
+
+.nmc-pru-lane-weight i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--nmc-mint), var(--nmc-cyan));
+  border-radius: 99px;
+}
+
+.nmc-pru-lane-score {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  color: var(--nmc-text);
+}
+
+.nmc-pru-table {
+  margin-top: 12px;
+  border-top: 1px dashed var(--nmc-border-soft);
+}
+
+.nmc-pru-row {
+  display: grid;
+  grid-template-columns: 1.4fr 0.6fr 0.7fr 0.8fr 0.8fr 0.8fr 0.9fr;
+  gap: 6px;
+  padding: 5px 0;
+  font-size: 10.5px;
+  color: var(--nmc-muted);
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--nmc-border-soft);
+}
+
+.nmc-pru-row-head {
+  color: var(--nmc-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.nmc-pru-row b {
+  color: var(--nmc-text);
+}
+
+.nmc-pru-row em {
+  font-style: normal;
+  font-size: 9.5px;
+  color: var(--nmc-dim);
+  margin-inline-start: 4px;
+}
+
+.nmc-pru-ledger {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.nmc-pru-ledger strong {
+  display: block;
+  font-size: 11px;
+  color: var(--nmc-text);
+  margin-bottom: 3px;
+}
+
+.nmc-pru-ledger small {
+  display: block;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--nmc-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .nmc-pru-lane {
+    grid-template-columns: 30px 1fr 64px 44px;
+  }
+  .nmc-pru-lane-hyp {
+    display: none;
+  }
+  .nmc-pru-row {
+    grid-template-columns: 1.3fr 0.7fr 0.8fr 0.9fr 0.9fr;
+  }
+  .nmc-pru-row > span:nth-child(2),
+  .nmc-pru-row > span:nth-child(6) {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nmc-pru-lane-weight i,
+  .nmc-pru-prob-track .nmc-bar-fill {
+    transition: none;
+  }
+}

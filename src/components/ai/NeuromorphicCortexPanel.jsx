@@ -25,6 +25,7 @@
 
 import { memo } from 'react';
 import { useNeuromorphicCortex } from '../../lib/neuromorphic/useNeuromorphicCortex.js';
+import ParallelUniversesPanel from './ParallelUniversesPanel.jsx';
 import { BASE_RESERVOIR_SIZE, LIQUID_SIZE } from '../../lib/neuromorphic/cortexCore.js';
 import './neuromorphic-cortex.css';
 
@@ -623,6 +624,9 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
             : `Honesty rule: hypotheses were fixed in code (${sciTotals?.prespecifiedFamilies ?? 1} family) before any data was seen, duplicate observations are rejected by provenance hash, "confirmed" needs a decisive Bayes factor AND FDR survival, and evidence decays with a ${science ? Math.round(science.halfLifeMs / 86400000) : 45}-day half-life. No raw data leaves the device.`}
         </p>
       </div>
+
+      {/* ── Phase 8 — Parallel Research Universes ─────────────────────────── */}
+      <ParallelUniversesPanel locale={locale} />
 
       {/* Cognitive Readout & Market Regime */}
       <div className="nmc-raster-card">
