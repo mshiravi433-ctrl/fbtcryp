@@ -69,7 +69,7 @@ export default function ReportTab({ pulse, scan, locale, markets, sourceLabel })
         <p className="aix-foot-note">
           {t(locale, 'report.generatedAt', { time: new Date(report.generatedAt).toISOString().slice(0, 16).replace('T', ' ') })}
           {' · '}
-          {markets?.length ?? 0} {locale === 'fa' ? 'ردیف بازار خوانده شد' : 'market rows read'}
+          {markets?.length ?? 0} {String(locale || '').startsWith('fa') ? 'ردیف بازار خوانده شد' : 'market rows read'}
           {' · '}
           {t(locale, 'page.notAdvice')}
         </p>

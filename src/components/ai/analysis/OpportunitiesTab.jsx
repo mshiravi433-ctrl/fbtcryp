@@ -1,4 +1,4 @@
-import CoinLogo from '../../CoinLogo.jsx';
+import CoinAvatar from './CoinAvatar.jsx';
 /**
  * AI INTELLIGENCE — OPPORTUNITY SCANNER UI
  * ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ export default function OpportunitiesTab({ scan, locale, onOpenToken }) {
               <article key={`${o.kind}-${o.coin.id}`} className={`aix-opp aix-opp-${TONE[meta?.tone] || 'cyan'}`}>
                 <header className="aix-opp-head">
                   <div className="aix-opp-identity">
-                    <CoinLogo coin={o.coin} ticker={o.coin.symbol} px={32} />
+                    <CoinAvatar coin={o.coin} px={32} />
                     <div>
                       <h3>{o.coin.symbol}</h3>
                       <span className="aix-opp-kind">{t(locale, `opp.kind.${o.kind}`)}</span>
@@ -91,7 +91,7 @@ export default function OpportunitiesTab({ scan, locale, onOpenToken }) {
         {t(locale, 'page.notAdvice')}
         {' · '}
         {scan?.medianTurnoverPct != null
-          ? `${locale === 'fa' ? 'میانه گردش مرجع' : 'reference median turnover'}: ${scan.medianTurnoverPct.toFixed(2)}%`
+          ? `${String(locale || '').startsWith('fa') ? 'میانه گردش مرجع' : 'reference median turnover'}: ${scan.medianTurnoverPct.toFixed(2)}%`
           : ''}
       </p>
     </div>

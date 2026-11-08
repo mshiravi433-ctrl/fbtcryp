@@ -130,10 +130,36 @@ describe('intelligence rooms inside the chat', () => {
     const movers = frame.querySelectorAll('.aix-mover');
     expect(movers.length).toBeGreaterThan(0);
     movers.forEach((row) => expect(row.querySelector('.coin-logo')).toBeTruthy());
-    expect(frame.querySelectorAll('.aix-tab')).toHaveLength(4);
+    const tabs = frame.querySelectorAll('.aix-tab');
+    expect(tabs).toHaveLength(4);
+    expect(frame.querySelector('[role="tablist"]')).toBeTruthy();
+    expect(frame.querySelectorAll('[role="tab"][aria-selected="true"]')).toHaveLength(1);
+    const panel = frame.querySelector('[role="tabpanel"]');
+    expect(panel.getAttribute('aria-labelledby')).toBe(frame.querySelector('[role="tab"][aria-selected="true"]').id);
+    /* Offline artwork: every mover paints a bundled vector or a readable
+       monogram — never an empty box while a remote logo is still loading. */
+    movers.forEach((row) => {
+      const logo = row.querySelector('.coin-logo');
+      expect(logo.querySelector('svg') || logo.textContent.trim()).toBeTruthy();
+    });
     fireEvent.click(toggle);
     expect(frame.querySelector('.aix-room-body')).toBeNull();
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('moves through tabs with the keyboard and keeps one labelled panel', async () => {
+    render(<ChatMarketRoom locale="en" defaultOpen />);
+    await screen.findByText('$2.45T');
+    const frame = screen.getByTestId('intent-ai-market-room');
+    const overview = frame.querySelector('.aix-tab-overview');
+    fireEvent.keyDown(overview, { key: 'ArrowRight' });
+    await waitFor(() => expect(frame.querySelector('.aix-tab-opportunities').getAttribute('aria-selected')).toBe('true'));
+    expect(frame.querySelector('.aix-tab-overview').tabIndex).toBe(-1);
+    expect(frame.querySelector('.aix-tab-opportunities').tabIndex).toBe(0);
+    const panel = frame.querySelector('[role="tabpanel"]');
+    expect(panel.getAttribute('aria-labelledby')).toBe(frame.querySelector('.aix-tab-opportunities').id);
+    fireEvent.keyDown(frame.querySelector('.aix-tab-opportunities'), { key: 'Home' });
+    await waitFor(() => expect(frame.querySelector('.aix-tab-overview').getAttribute('aria-selected')).toBe('true'));
   });
 
   it('opens on the room the sentence asked for', async () => {
@@ -141,7 +167,7 @@ describe('intelligence rooms inside the chat', () => {
     expect(await screen.findByText('Opportunities')).toBeTruthy();
     await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/markets'))).toBe(true));
     /* Switching rooms stays inside the bubble — nothing is navigated. */
-    fireEvent.click(screen.getByRole('button', { name: 'Overview' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
     expect(await screen.findByText('$2.45T')).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/NaN|undefined|Infinity/);
   });

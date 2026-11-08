@@ -6,7 +6,7 @@
  * amber, compare magenta and report slate. The same map therefore produces
  * the same landmark wherever the room is opened.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import {
   IconChart,
   IconDoc,
@@ -34,9 +34,14 @@ export default function AnalysisTabs({
   onChange,
   locale,
   label,
+  id,
+  panelId,
   className = ''
 }) {
   const navRef = useRef(null);
+  const generatedId = useId();
+  const navId = id || `aix-tabs-${generatedId}`;
+  const contentId = panelId || `${navId}-panel`;
 
   /* Opening a token from a mover can select a tab that is currently outside
      the mobile rail. Move only the rail horizontally (never the document),
@@ -50,10 +55,10 @@ export default function AnalysisTabs({
     const delta = tabBox.left - navBox.left - (navBox.width - tabBox.width) / 2;
     const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     nav.scrollBy?.({ left: delta, behavior: reduced ? 'auto' : 'smooth' });
-  }, [active]);
+  }, [active, locale]);
 
   const move = (event, index) => {
-    const rtl = String(locale || '').startsWith('fa');
+    const rtl = event.currentTarget.closest('[dir]')?.getAttribute('dir') === 'rtl';
     let next = null;
     if (event.key === 'Home') next = 0;
     if (event.key === 'End') next = tabs.length - 1;
@@ -67,19 +72,29 @@ export default function AnalysisTabs({
   };
 
   return (
-    <nav ref={navRef} className={`aix-tabs ${className}`.trim()} aria-label={label || t(locale, 'page.title')}>
+    <nav
+      ref={navRef}
+      id={navId}
+      className={`aix-tabs ${className}`.trim()}
+      role="tablist"
+      aria-label={label || t(locale, 'page.title')}
+      aria-orientation="horizontal"
+    >
       {tabs.map((item, index) => {
         const Icon = TAB_ICONS[item.id] || IconMarket;
         const selected = active === item.id;
         return (
           <button
             key={item.id}
+            id={`${navId}-${item.id}`}
             type="button"
+            role="tab"
             className={`aix-tab aix-tab-${item.id}${selected ? ' is-active' : ''}`}
             onClick={() => onChange(item.id)}
             onKeyDown={(event) => move(event, index)}
-            aria-current={selected ? 'page' : undefined}
-            aria-pressed={selected}
+            aria-selected={selected}
+            aria-controls={contentId}
+            tabIndex={selected ? 0 : -1}
           >
             <span className="aix-tab-icon" aria-hidden="true">
               <Icon width={18} height={18} />

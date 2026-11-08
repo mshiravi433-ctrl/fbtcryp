@@ -11,6 +11,7 @@ import {
   Change, Chip, ProvenanceDot, ScoreRing, SectionCard, Spark, StatTile
 } from './ui.jsx';
 import IndicatorChart from './IndicatorChart.jsx';
+import CoinAvatar from './CoinAvatar.jsx';
 import { fmtMoney, fmtNumber, fmtPrice, t } from '../../../lib/intelligence/copy.js';
 import { tokenNarrative } from '../../../lib/intelligence/narrative.js';
 import { SCORE_LABELS, missingForScore } from '../../../lib/intelligence/tokenScore.js';
@@ -65,7 +66,7 @@ export default function TokenTab({
       <SectionCard
         className="aix-token-picker-card"
         title={t(locale, 'tab.token')}
-        hint={locale === 'fa' ? 'پرونده کامل هر توکن با شواهد عددی' : 'One token, every number with its evidence'}
+        hint={String(locale || '').startsWith('fa') ? 'پرونده کامل هر توکن با شواهد عددی' : 'One token, every number with its evidence'}
         actions={coin ? <ProvenanceDot provenance={coin.provenance || coin.dataProvenance || 'unknown'} /> : null}
       >
         <div className="aix-toolbar aix-toolbar-split">
@@ -87,7 +88,7 @@ export default function TokenTab({
         {coin ? (
           <div className="aix-token-head">
             <div className="aix-token-identity">
-              <span className="aix-token-avatar aix-token-avatar-large" aria-hidden="true">{String(coin.symbol || '?').slice(0, 1)}</span>
+              <CoinAvatar coin={coin} px={44} priority />
               <div>
                 <h3 className="aix-token-title">{coin.symbol}<span>{coin.name}</span></h3>
                 <div className="aix-token-meta">
@@ -125,7 +126,7 @@ export default function TokenTab({
               {score?.components?.map((c) => (
                 <div key={c.key} className={`aix-comp${c.available ? '' : ' is-missing'}`}>
                   <span className="aix-comp-name">
-                    {locale === 'fa' ? SCORE_LABELS[c.key].fa : SCORE_LABELS[c.key].en}
+                    {String(locale || '').startsWith('fa') ? SCORE_LABELS[c.key].fa : SCORE_LABELS[c.key].en}
                     <em>×{c.weight.toFixed(2)}</em>
                   </span>
                   <span className="aix-comp-bar">
@@ -136,7 +137,7 @@ export default function TokenTab({
               ))}
               {score?.composite == null ? (
                 <p className="aix-card-hint">
-                  {missingForScore(score).map((m) => `${locale === 'fa' ? SCORE_LABELS[m.key].fa : SCORE_LABELS[m.key].en}: ${m.reason}`).join(' · ')}
+                  {missingForScore(score).map((m) => `${String(locale || '').startsWith('fa') ? SCORE_LABELS[m.key].fa : SCORE_LABELS[m.key].en}: ${m.reason}`).join(' · ')}
                 </p>
               ) : null}
               <button type="button" className="aix-link" onClick={() => setShowWeights((x) => !x)}>
@@ -144,7 +145,7 @@ export default function TokenTab({
               </button>
               {showWeights ? (
                 <p className="aix-card-hint">
-                  {t(locale, 'token.weights')}: {Object.entries(score?.weights || {}).map(([k, w]) => `${locale === 'fa' ? SCORE_LABELS[k].fa : SCORE_LABELS[k].en} ${(w * 100).toFixed(0)}%`).join(' · ')}
+                  {t(locale, 'token.weights')}: {Object.entries(score?.weights || {}).map(([k, w]) => `${String(locale || '').startsWith('fa') ? SCORE_LABELS[k].fa : SCORE_LABELS[k].en} ${(w * 100).toFixed(0)}%`).join(' · ')}
                   {' — '}
                   {t(locale, 'page.notAdvice')}
                 </p>
@@ -225,7 +226,7 @@ export default function TokenTab({
       <p className="aix-foot-note">
         {t(locale, 'page.notAdvice')}
         {' · '}
-        {fmtNumber(pack?.bars ?? 0)} {locale === 'fa' ? 'کندل خوانده شد' : 'bars read'}
+        {fmtNumber(pack?.bars ?? 0)} {String(locale || '').startsWith('fa') ? 'کندل خوانده شد' : 'bars read'}
       </p>
     </div>
   );
