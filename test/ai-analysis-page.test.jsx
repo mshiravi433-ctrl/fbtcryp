@@ -158,7 +158,7 @@ describe('AI intelligence page', () => {
     expect(screen.getByText('PEPE')).toBeTruthy();
     expect(document.querySelector('.aix-tab-screener')?.getAttribute('aria-pressed')).toBe('true');
     expect(document.querySelector('.aix-table-shell')).toBeTruthy();
-    expect(document.querySelectorAll('.aix-trow .aix-token-avatar').length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('.aix-trow .coin-logo').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: 'Losers' }));
     await waitFor(() => {
@@ -215,7 +215,7 @@ describe('AI intelligence page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Opportunities' }));
     expect(await screen.findByText('Opportunity scanner')).toBeTruthy();
     expect(document.querySelectorAll('.aix-opp').length).toBeGreaterThan(0);
-    expect(document.querySelectorAll('.aix-opp-identity .aix-token-avatar').length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('.aix-opp-identity .coin-logo').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: 'Compare' }));
     expect(await screen.findByText('7-day performance (normalised to 100)')).toBeTruthy();

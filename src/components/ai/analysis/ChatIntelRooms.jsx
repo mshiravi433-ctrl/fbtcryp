@@ -18,7 +18,7 @@
  * COST: a room is a real poll, so a room renders ONLY while it is open, and a
  * collapsed card in a long thread makes no request at all.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useMarketRoom, usePortfolioRoom, useTokenRoom } from '../../../hooks/useIntelligenceRooms';
 import { fmtTimeAgo, t as ct } from '../../../lib/intelligence/copy';
 import OverviewTab from './OverviewTab';
@@ -65,13 +65,15 @@ function useLatestGate(defaultOpen) {
  * (title, hint, provenance) and a body that only exists while open.
  */
 function RoomFrame({ open, onToggle, mark, title, hint, chip, testId, footer, locale, children }) {
+  const bodyId = useId();
   return (
-    <section className={`aix-room${open ? ' is-open' : ''}`} data-testid={testId}>
+    <section dir={fa(locale) ? 'rtl' : 'ltr'} lang={fa(locale) ? 'fa' : 'en'} className={`aix-room${open ? ' is-open' : ''}`} data-testid={testId}>
       <button
         type="button"
         className="aix-room-head"
         onClick={onToggle}
         aria-expanded={open}
+        aria-controls={open ? bodyId : undefined}
       >
         <span className="aix-room-mark" aria-hidden="true">{mark}</span>
         <span className="aix-room-copy">
@@ -82,7 +84,7 @@ function RoomFrame({ open, onToggle, mark, title, hint, chip, testId, footer, lo
         <span className="aix-room-chevron" aria-hidden="true">{open ? '−' : '+'}</span>
       </button>
       {open ? (
-        <div className="aix-room-body aix-page aix-embed" dir={fa(locale) ? 'rtl' : 'ltr'}>
+        <div id={bodyId} className="aix-room-body aix-page aix-embed" dir={fa(locale) ? 'rtl' : 'ltr'}>
           {children}
           {footer ? <p className="aix-room-foot">{footer}</p> : null}
         </div>

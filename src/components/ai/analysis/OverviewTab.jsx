@@ -1,3 +1,4 @@
+import CoinLogo from '../../CoinLogo.jsx';
 /**
  * AI INTELLIGENCE — MARKET OVERVIEW
  * ---------------------------------------------------------------------------
@@ -60,7 +61,8 @@ function MoverRow({ coin, locale, onOpen, rank }) {
     <button type="button" className="aix-mover" onClick={() => onOpen?.(coin.id)}>
       <span className="aix-mover-sym">
         {rank ? <em className="aix-mover-rank">{rank}</em> : null}
-        {coin.symbol}
+        <CoinLogo coin={coin} ticker={coin.symbol} px={28} />
+        <bdi>{coin.symbol}</bdi>
       </span>
       <Spark values={coin.sparkline} up={(coin.change24h ?? 0) >= 0} width={62} height={20} />
       <span className="aix-mover-price">{fmtPrice(coin.price)}</span>
@@ -286,7 +288,7 @@ export default function OverviewTab({ pulse, analysis, locale, onOpenToken }) {
               <ShareBar
                 key={c.id}
                 badge={`×${c.surgeRatio.toFixed(1)}`}
-                label={c.symbol}
+                label={<span className="aix-coin-label"><CoinLogo coin={c} ticker={c.symbol} px={28} /><bdi>{c.symbol}</bdi></span>}
                 value={fmtPrice(c.price)}
                 weight={Math.min(100, c.surgeRatio * 20)}
                 tone="amber"
@@ -317,7 +319,7 @@ export default function OverviewTab({ pulse, analysis, locale, onOpenToken }) {
                 <ShareBar
                   key={row.id ?? row.symbol}
                   badge={`#${i + 1}`}
-                  label={row.symbol}
+                  label={<span className="aix-coin-label"><CoinLogo coin={row} ticker={row.symbol} px={28} /><bdi>{row.symbol}</bdi></span>}
                   value={row.rs.toFixed(1)}
                   weight={row.rs}
                   tone={row.vsTape != null && row.vsTape < 0 ? 'rose' : 'indigo'}
@@ -379,7 +381,7 @@ export default function OverviewTab({ pulse, analysis, locale, onOpenToken }) {
               <div className="aix-chips">
                 {analysis.divergence.againstTape.map((r) => (
                   <button key={r.id ?? r.symbol} type="button" className="aix-chip-btn" onClick={() => onOpenToken?.(r.id)}>
-                    <b>{r.symbol}</b>
+                    <CoinLogo coin={r} ticker={r.symbol} px={24} /><bdi>{r.symbol}</bdi>
                     <Change value={r.change24h} />
                   </button>
                 ))}
@@ -392,7 +394,7 @@ export default function OverviewTab({ pulse, analysis, locale, onOpenToken }) {
               <div className="aix-chips">
                 {analysis.divergence.quietVolume.map((r) => (
                   <button key={r.id ?? r.symbol} type="button" className="aix-chip-btn" onClick={() => onOpenToken?.(r.id)}>
-                    <b>{r.symbol}</b>
+                    <CoinLogo coin={r} ticker={r.symbol} px={24} /><bdi>{r.symbol}</bdi>
                     <span dir="ltr">{(r.turnoverPct == null ? '—' : `${r.turnoverPct.toFixed(2)}%`)}</span>
                   </button>
                 ))}

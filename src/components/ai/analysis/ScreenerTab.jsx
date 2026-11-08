@@ -1,3 +1,4 @@
+import CoinLogo from '../../CoinLogo.jsx';
 /**
  * AI INTELLIGENCE — TOKEN SCREENER
  * ---------------------------------------------------------------------------
@@ -159,7 +160,7 @@ export default function ScreenerTab({ markets, locale, onOpenToken, updatedAt, p
                 onClick={() => onOpenToken?.(row.id)}
                 title={t(locale, 'screener.analyze')}
               >
-                <span className="aix-token-avatar" aria-hidden="true">{String(row.symbol || '?').slice(0, 1)}</span>
+                <CoinLogo coin={row} ticker={row.symbol} px={32} />
                 <span className="aix-token-copy">
                   <span className="aix-token-sym">{row.symbol}</span>
                   <span className="aix-token-name">{row.name}</span>
