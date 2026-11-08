@@ -1,3 +1,4 @@
+import CoinLogo from '../../CoinLogo.jsx';
 /**
  * AI INTELLIGENCE — OPPORTUNITY SCANNER UI
  * ---------------------------------------------------------------------------
@@ -45,7 +46,7 @@ export default function OpportunitiesTab({ scan, locale, onOpenToken }) {
               <article key={`${o.kind}-${o.coin.id}`} className={`aix-opp aix-opp-${TONE[meta?.tone] || 'cyan'}`}>
                 <header className="aix-opp-head">
                   <div className="aix-opp-identity">
-                    <span className="aix-token-avatar" aria-hidden="true">{String(o.coin.symbol || '?').slice(0, 1)}</span>
+                    <CoinLogo coin={o.coin} ticker={o.coin.symbol} px={32} />
                     <div>
                       <h3>{o.coin.symbol}</h3>
                       <span className="aix-opp-kind">{t(locale, `opp.kind.${o.kind}`)}</span>

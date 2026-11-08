@@ -1,3 +1,4 @@
+@import '../../../styles/ai-analysis.css';
 /* The rooms inherit the analysis centre's MODERN layer as well as its base
    sheet — a room inside the bubble must look like the same product, not a
    plainer copy of it. Imported here (not in the page) so the chat pays for it
@@ -186,3 +187,76 @@
 }
 :root[data-theme='light'] .aix-room-copy small,
 :root[data-theme='light'] .aix-room-foot { color: rgba(15, 23, 42, .58); }
+
+/* Chat is a container, not a viewport: a narrow desktop bubble needs the same
+   reductions as a phone. Keep this after the page refinements deliberately. */
+.aix-room { container: intelligence / inline-size; color: var(--text-1); }
+.aix-room, .aix-room * { box-sizing: border-box; }
+.aix-room-head { min-height: 76px; padding: 16px; gap: 12px; }
+.aix-room-copy strong { font-size: 14px; line-height: 1.6; }
+.aix-room-copy small { font-size: 11px; }
+.aix-room-head:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: -4px; }
+.aix-page.aix-embed {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  border-top: 1px solid var(--aix-ref-line);
+  color: var(--aix-ink);
+}
+.aix-embed > * { min-width: 0; margin-block: 0; }
+.aix-embed .aix-statusbar { gap: 6px; padding: 10px 12px; font-size: 11px; line-height: 1.7; }
+.aix-embed .aix-tabs-chat {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 6px;
+  overflow: visible;
+}
+.aix-embed .aix-tabs-chat .aix-tab {
+  flex-direction: column;
+  gap: 6px;
+  min-height: 76px;
+  padding: 9px 4px;
+  font-size: 11px;
+}
+.aix-embed .aix-tabs-chat .aix-tab-label { max-width: 100%; }
+.aix-embed .aix-tab-body { display: flex; flex-direction: column; gap: 16px; }
+.aix-embed .aix-card { padding: 16px; border-radius: 18px; }
+.aix-embed .aix-card-head { gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.aix-embed .aix-card-title { font-size: 14px; line-height: 1.7; }
+.aix-embed .aix-card-hint { font-size: 11px; line-height: 1.85; overflow-wrap: anywhere; }
+.aix-embed .aix-chips { gap: 8px; }
+.aix-embed .aix-chip { min-height: 40px; padding: 8px 12px; font-size: 11px; }
+.aix-embed .aix-toolbar { gap: 16px; }
+.aix-embed .aix-mover {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  min-height: 56px;
+  padding: 10px;
+}
+.aix-embed .aix-mover .aix-spark { display: none; }
+.aix-embed .aix-mover-sym { gap: 7px; font-size: 12px; }
+.aix-embed .aix-mover-rank { margin: 0; font-size: 10px; }
+.aix-embed .aix-mover-price { font-size: 11px; }
+.aix-embed .aix-change { direction: ltr; unicode-bidi: isolate; white-space: nowrap; }
+.aix-embed .aix-room-foot { margin: 0; padding-top: 12px; border-top: 1px solid var(--aix-ref-line); font-size: 11px; }
+
+@container intelligence (max-width: 520px) {
+  .aix-page.aix-embed { padding: 12px; gap: 12px; }
+  .aix-room-head { flex-wrap: wrap; padding: 12px; }
+  .aix-room-copy { flex-basis: calc(100% - 80px); }
+  .aix-room-chip { margin-inline-start: 40px; }
+  .aix-room-chevron { margin-inline-start: auto; }
+  .aix-embed .aix-tabs-chat { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .aix-embed .aix-tabs-chat .aix-tab { flex-direction: row; min-height: 48px; gap: 7px; }
+  .aix-embed .aix-regime, .aix-embed .aix-score, .aix-embed .aix-facts,
+  .aix-embed .aix-review-stats { grid-template-columns: minmax(0, 1fr); }
+  .aix-embed .aix-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .aix-embed .aix-card { padding: 12px; }
+  .aix-embed .aix-col-d7, .aix-embed .aix-col-vol, .aix-embed .aix-col-spark { display: none; }
+  .aix-embed .aix-thead, .aix-embed .aix-trow { grid-template-columns: minmax(0, 1fr) 76px 62px; gap: 6px; }
+  .aix-embed .aix-mover { gap: 6px; padding: 8px 6px; }
+  .aix-embed .aix-mover-rank { display: none; }
+}

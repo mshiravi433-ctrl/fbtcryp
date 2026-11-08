@@ -118,6 +118,24 @@ describe('intelligence rooms inside the chat', () => {
     expect(document.body.textContent).not.toMatch(/NaN|undefined|Infinity/);
   });
 
+  it('owns its language, linked disclosure and offline token artwork', async () => {
+    render(<ChatMarketRoom locale="fa" defaultOpen />);
+    await screen.findByText('$2.45T');
+    const frame = screen.getByTestId('intent-ai-market-room');
+    expect(frame.getAttribute('dir')).toBe('rtl');
+    expect(frame.getAttribute('lang')).toBe('fa');
+    const toggle = frame.querySelector('.aix-room-head');
+    const body = frame.querySelector('.aix-room-body');
+    expect(toggle.getAttribute('aria-controls')).toBe(body.id);
+    const movers = frame.querySelectorAll('.aix-mover');
+    expect(movers.length).toBeGreaterThan(0);
+    movers.forEach((row) => expect(row.querySelector('.coin-logo')).toBeTruthy());
+    expect(frame.querySelectorAll('.aix-tab')).toHaveLength(4);
+    fireEvent.click(toggle);
+    expect(frame.querySelector('.aix-room-body')).toBeNull();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('opens on the room the sentence asked for', async () => {
     render(<ChatMarketRoom card={{ kind: 'MARKET', room: 'opportunities' }} locale="en" defaultOpen />);
     expect(await screen.findByText('Opportunities')).toBeTruthy();
