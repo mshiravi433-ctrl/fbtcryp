@@ -822,6 +822,13 @@ export function getTrending() {
  * to the candle view. Inventing them would be making up the data the user
  * came for. When it cannot load, the UI says so.
  */
+export function getScenarioDailyCloses(id) {
+  if (!/^[a-z0-9-]{2,80}$/.test(String(id || ''))) return Promise.reject(new Error('BAD_ASSET_ID'));
+  // The server returns actual daily closes. No offline/sparkline fallback is
+  // acceptable in a walk-forward model whose dates must align to evidence.
+  return fetchJson(`${apiBase()}/scenario/daily/${id}`);
+}
+
 export function getOhlc(id, days = 30, vs = 'usd') {
   return resilient(`ohlc:${id}:${days}`, {
     ttl: 60000,

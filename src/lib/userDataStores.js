@@ -39,7 +39,7 @@
 export const STORE_KEY_MAP = Object.freeze({
   memory: Object.freeze({ exact: ['fbt-intent-memory-v1', 'fbt-learning-params-v1', 'fbt-learning-optin-v1'], prefix: [] }),
   sessions: Object.freeze({ exact: ['fbt-intents-v1', 'fbt-intent-lifecycle-v1', 'fbt-policy-v1', 'fbt-quote-commit-v1'], prefix: [] }),
-  audit: Object.freeze({ exact: ['fbt-audit-v1', 'fbt-learning-events-v1'], prefix: [] }),
+  audit: Object.freeze({ exact: ['fbt-audit-v1', 'fbt-learning-events-v1', 'fbt.scenario-forecast-journal.v1'], prefix: [] }),
   preferences: Object.freeze({ exact: ['fbt-notify-v1', 'fbt-radio-v1', 'fbt-swap-v1'], prefix: [] }),
   receipts: Object.freeze({ exact: ['fbt-execution-proofs-v1', 'fbt-dca-receipts-v1', 'fbt-orders-v1', 'fbt-portfolio-lots-v1', 'fbt-portfolio-snap-v1'], prefix: [] }),
   alerts: Object.freeze({ exact: ['fbt-price-alerts-v1', 'fbt-price-alert-base-v1', 'fbt-btc-watch-v1'], prefix: [] }),

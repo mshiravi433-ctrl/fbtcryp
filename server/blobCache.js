@@ -65,6 +65,19 @@ export async function upstashGetAtomic(key) {
   try { return JSON.parse(answer.result); } catch { return null; }
 }
 
+/** One bounded batch read for public, timestamped model evidence. Never use
+ * this for mutable payment leases; each key was written with SET NX. */
+export async function upstashMultiGetAtomic(keys) {
+  if (!upstashConfigured() || !Array.isArray(keys) || !keys.length || keys.length > 400
+      || keys.some((key) => typeof key !== 'string' || !key)) return null;
+  const answer = await upstashCommand(['MGET', ...keys.map(safeKey)]);
+  if (!answer.ok || !Array.isArray(answer.result) || answer.result.length !== keys.length) return null;
+  return answer.result.map((raw) => {
+    if (typeof raw !== 'string') return null;
+    try { return JSON.parse(raw); } catch { return null; }
+  });
+}
+
 export async function upstashSetAtomic(key, value, ttlMs) {
   if (!upstashConfigured() || typeof key !== 'string' || !key) return false;
   const seconds = Math.max(60, Math.ceil(Number(ttlMs) / 1000));

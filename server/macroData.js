@@ -117,6 +117,8 @@ export const MACRO_SYMBOLS = Object.freeze([
   { symbol: 'SPX', name: 'S&P 500 E-mini futures', kind: 'equity', unit: 'index points', stooq: 'ES.F', yahoo: 'ES=F', fred: null, fredcsv: null },
   { symbol: 'US10Y', name: 'US 10Y Treasury yield (%)', kind: 'rate', unit: '%', stooq: null, yahoo: '^TNX', fred: 'DGS10', fredcsv: 'DGS10', avKind: 'treasury', avMaturity: '10year' },
   { symbol: 'US2Y', name: 'US 2Y Treasury yield (%)', kind: 'rate', unit: '%', stooq: null, yahoo: null, fred: 'DGS2', fredcsv: 'DGS2', avKind: 'treasury', avMaturity: '2year' },
+  /* Official observed overnight policy-rate proxy; not a Fed target range or a forecast. */
+  { symbol: 'EFFR', name: 'Effective Federal Funds Rate (%)', kind: 'rate', unit: '%', stooq: null, yahoo: null, fred: 'DFF', fredcsv: 'DFF' },
   { symbol: 'US30Y', name: 'US 30Y Treasury yield (%)', kind: 'rate', unit: '%', stooq: null, yahoo: null, fred: 'DGS30', fredcsv: 'DGS30', avKind: 'treasury', avMaturity: '30year' },
   { symbol: 'US2S10S', name: 'US 2s10s spread (pct)', kind: 'curve', unit: 'percentage points', stooq: null, yahoo: null, fred: 'T10Y2Y', fredcsv: 'T10Y2Y' },
   /* The tokenised-equity venue and stooq/yahoo can both go dark on an
