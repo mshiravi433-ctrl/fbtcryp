@@ -32,6 +32,7 @@ import {
 } from '../lib/opportunity/deepAnalysis.js';
 import { openActionFor, analysisRoute } from '../lib/opportunity/openAction.js';
 import { readStoredOpportunity } from '../hooks/useOpportunityEngine.js';
+import { text as label } from '../lib/opportunity/sanitize.js';
 import { getOhlc } from '../lib/api.js';
 import { getYieldHistory } from '../lib/yields.js';
 import '../styles/opportunity-engine.css';
@@ -116,6 +117,13 @@ export default function OpportunityDetail() {
 
   const econ = row.economics;
   const m = row.metrics || {};
+  /* Same law as the card: what this page puts inside a child is text. The row
+     is already sanitised by readStoredOpportunity; this is the belt for the
+     braces, because a cached row outlives the build that wrote it. */
+  const chainLabel = label(row.chain, 32);
+  const protocolLabel = label(row.protocol, 80);
+  const symbolLabel = label(row.symbol, 40);
+  const titleLabel = label(row.title, 200);
   const cat = categoryLabel(row.category, locale);
   const validFor = remaining(row.expiresAt, locale);
 
@@ -139,10 +147,10 @@ export default function OpportunityDetail() {
             <div className="oed-hero-top">
               <CategoryBadge category={row.category} size={40} />
               <div style={{ minWidth: 0, flex: 1 }}>
-                <h1 className="oed-hero-title">{row.protocol ? `${row.protocol} — ` : ''}{row.symbol || row.title}</h1>
+                <h1 className="oed-hero-title">{protocolLabel ? `${protocolLabel} — ` : ''}{symbolLabel || titleLabel || '—'}</h1>
                 <div className="oed-hero-sub">
                   <Tag>{cat}</Tag>
-                  {row.chain ? <Tag>{row.chain}</Tag> : null}
+                  {chainLabel ? <Tag>{chainLabel}</Tag> : null}
                   {row.risk?.level ? <Tag tone={row.risk.level === 'LOW' ? 'up' : row.risk.level === 'MEDIUM' ? 'warn' : 'down'}>
                     {fa ? 'ریسک' : 'Risk'}: {riskLabel(row.risk.level, locale)}
                   </Tag> : null}

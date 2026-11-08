@@ -44,12 +44,32 @@ export const SUPPORTED_CHAINS = Object.freeze([
   'ethereum', 'bsc', 'polygon', 'arbitrum', 'optimism', 'base', 'avalanche', 'solana', 'linea', 'sonic'
 ]);
 
+/**
+ * A number, in the shapes the yield feed actually sends — same law as the
+ * engine's own `num`: a percent sign or a thousands separator is formatting,
+ * not information. Without this, `apy: '12%'` parsed to NaN, the row was
+ * skipped as "no rate", and a real pool silently vanished from the scan.
+ */
 const num = (v) => {
-  if (v === null || v === undefined || v === '') return null;
-  const n = Number(v);
+  if (v === null || v === undefined || v === '' || typeof v === 'boolean') return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  const n = Number(String(v).trim().replace(/,/g, '').replace(/%$/, ''));
   return Number.isFinite(n) ? n : null;
 };
 const list = (v) => (Array.isArray(v) ? v : []);
+/**
+ * ─── A ROW IS AN OBJECT, OR IT IS NOT A ROW ─────────────────────────────────
+ * Every normaliser below maps over what a proxy handed us. Those arrays are
+ * built by concatenating several adapters, and a `null` (or a bare number, or a
+ * string) in the middle is not exotic: it is what a partially failed upstream
+ * join looks like.
+ *
+ * `.map((r) => r.symbol)` on that array throws `Cannot read properties of null`
+ * INSIDE the scan, which `runScan` reports as «اسکن انجام نشد؛ دوباره تلاش
+ * کنید» — the other half of the same bug report. One unreadable row must cost
+ * one row, never the scan, so the rows are filtered before they are read.
+ */
+const rows = (v) => list(v).filter((r) => r && typeof r === 'object' && !Array.isArray(r));
 const chainKey = (v) => String(v ?? '').trim().toLowerCase();
 const pairSymbol = (s) => /[-/]/.test(String(s ?? ''));
 
@@ -161,13 +181,13 @@ export function riskProfileNote(id, fa) {
  */
 export function normalizeYieldRows({ pools = [], venues = [] } = {}) {
   const venueByPool = new Map();
-  for (const v of list(venues)) {
+  for (const v of rows(venues)) {
     if (v?.id) venueByPool.set(String(v.id), v.venue || v.venueId || null);
   }
   const liquidityPools = [];
   const farms = [];
   const lendingMarkets = [];
-  for (const p of list(pools)) {
+  for (const p of rows(pools)) {
     const apy = num(p.apy);
     if (apy == null || apy <= 0) continue;
     const shared = {
@@ -217,7 +237,7 @@ export function normalizeYieldRows({ pools = [], venues = [] } = {}) {
 
 /** Whale-flow consensus rows (verified swaps only) → engine rows. */
 export function normalizeWhaleRows(consensusRows = []) {
-  return list(consensusRows).map((r) => ({
+  return rows(consensusRows).map((r) => ({
     asset: r.symbol ?? null,
     chain: r.chain ?? null,
     direction: /ACCUM/i.test(String(r.signal ?? '')) ? 'accumulation' : 'distribution',
@@ -229,7 +249,7 @@ export function normalizeWhaleRows(consensusRows = []) {
 
 /** Early-token rows → engine rows. A past 24h move never becomes a forecast. */
 export function normalizeEmergingRows(tokens = []) {
-  return list(tokens).map((t) => ({
+  return rows(tokens).map((t) => ({
     symbol: t.symbol ?? null,
     name: t.name ?? null,
     chain: t.chain ?? null,

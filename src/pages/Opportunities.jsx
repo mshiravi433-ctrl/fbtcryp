@@ -27,14 +27,15 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition from '../components/PageTransition.jsx';
 import {
-  IconChevronLeft, IconRefresh, IconSparkle, IconWallet, IconShield, IconSearch, IconGlobe
+  IconRefresh, IconSparkle, IconWallet, IconShield, IconSearch, IconGlobe
 } from '../components/Icons.jsx';
+import SectionGuard from '../components/SectionGuard.jsx';
 import OpportunityCard from '../components/opportunity/OpportunityCard.jsx';
+import { text as label, sanitizeScannerRow } from '../lib/opportunity/sanitize.js';
 import {
-  CATEGORIES, categoryLabel, money, num, pct, timeAgo, isFa, exclusionText
+  CATEGORIES, categoryLabel, money, num, timeAgo, isFa, exclusionText
 } from '../components/opportunity/ui.jsx';
 import { RISK_PROFILES, riskProfileNote } from '../lib/opportunity/feed.js';
-import { openActionFor } from '../lib/opportunity/openAction.js';
 import { useOpportunityEngine } from '../hooks/useOpportunityEngine.js';
 import '../styles/opportunity-engine.css';
 
@@ -311,16 +312,26 @@ export default function Opportunities() {
               </div>
             ) : filtered.length ? (
               <div className="oep-grid">
+                {/* ONE CARD IS GUARDED ON ITS OWN.
+                    A row whose shape this build has never seen used to throw
+                    inside the card and take the ENTIRE route to «این صفحه به
+                    مشکل خورد» — the reported bug. The engine and the cache now
+                    normalise every drawn field (lib/opportunity/sanitize.js),
+                    and this guard is the backstop: a fault that still gets
+                    through hides THAT card and heals on the next scan
+                    (`resetKey`), so one bad row can never blank eighty good
+                    ones again. */}
                 {filtered.map((o) => (
-                  <OpportunityCard
-                    key={o.opportunityId}
-                    opportunity={o}
-                    locale={locale}
-                    excluded={showExcluded}
-                    onOpen={open}
-                    onExternal={openExternal}
-                    onDetails={openDetails}
-                  />
+                  <SectionGuard key={o.opportunityId} resetKey={`${o.opportunityId}:${o.score ?? ''}:${scan?.scannedAt ?? ''}`}>
+                    <OpportunityCard
+                      opportunity={o}
+                      locale={locale}
+                      excluded={showExcluded}
+                      onOpen={open}
+                      onExternal={openExternal}
+                      onDetails={openDetails}
+                    />
+                  </SectionGuard>
                 ))}
               </div>
             ) : (
@@ -350,35 +361,42 @@ export default function Opportunities() {
             {scan?.scanner?.length ? (
               <div className="oep-scan-feed">
                 {scan.scanner.map((item) => {
-                  const action = openActionFor({ ...item, ref: item.ref || {} });
+                  /* The scanner room draws a row's title, chain and first reason
+                     straight into the page, so they are put through the same
+                     sanitiser the cards use — a feed (or an old cached scan)
+                     that hands back an object here would otherwise throw during
+                     render and take the route with it. */
+                  const row = sanitizeScannerRow(item);
+                  if (!row) return null;
+                  const reason = row.reasons?.[0]?.detail ? label(row.reasons[0].detail, 200) : null;
                   return (
-                    <div key={item.opportunityId} className="oep-scan-row">
+                    <div key={row.opportunityId} className="oep-scan-row">
                       <span className="oep-scan-kind">
                         <IconSparkle width={13} height={13} />
                       </span>
                       <div className="oep-scan-body">
-                        <strong>{item.title}</strong>
+                        <strong>{row.title || '—'}</strong>
                         <p>
-                          {categoryLabel(item.category, locale)}
-                          {item.chain ? ` · ${item.chain}` : ''}
-                          {item.reasons?.[0]?.detail ? ` — ${item.reasons[0].detail}` : ''}
+                          {categoryLabel(row.category, locale)}
+                          {row.chain ? ` · ${row.chain}` : ''}
+                          {reason ? ` — ${reason}` : ''}
                         </p>
                         <p style={{ marginTop: 4, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                          <span className={`oep-status-pill ${item.eligible ? 'is-live' : 'is-empty'}`}>
-                            {item.eligible ? (fa ? 'واجد شرایط' : 'Eligible') : (fa ? 'بررسی‌شده / خارج' : 'Reviewed / excluded')}
+                          <span className={`oep-status-pill ${row.eligible ? 'is-live' : 'is-empty'}`}>
+                            {row.eligible ? (fa ? 'واجد شرایط' : 'Eligible') : (fa ? 'بررسی‌شده / خارج' : 'Reviewed / excluded')}
                           </span>
-                          {item.exclusionCodes?.length ? (
+                          {row.exclusionCodes?.length ? (
                             <span style={{ fontSize: 10, opacity: 0.8 }}>
-                              {exclusionText(item.exclusionCodes[0], locale)}
+                              {exclusionText(label(row.exclusionCodes[0], 60), locale)}
                             </span>
                           ) : null}
-                          <span className="oep-scan-when">{timeAgo(item.discoveredAt, locale)}</span>
+                          <span className="oep-scan-when">{timeAgo(row.discoveredAt, locale)}</span>
                         </p>
                       </div>
                       <button
                         type="button"
                         className="oep-detail-btn"
-                        onClick={() => openDetails(item.opportunityId)}
+                        onClick={() => openDetails(row.opportunityId)}
                         aria-label={fa ? 'تحلیل عمیق' : 'Deep analysis'}
                         title={fa ? 'تحلیل عمیق' : 'Deep analysis'}
                       >

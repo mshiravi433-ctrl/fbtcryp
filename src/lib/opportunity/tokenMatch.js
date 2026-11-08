@@ -48,8 +48,12 @@ const pairLike = (s) => /[-/]/.test(String(s ?? ''));
 export function buildSymbolIndex(markets = []) {
   const index = new Map();
   for (const row of list(markets)) {
-    const sym = String(row?.symbol ?? '').trim().toUpperCase();
-    const id = row?.id;
+    /* A market page is a JSON array from an upstream we do not control: a null
+       or a bare string in it must not become a symbol. (It used to become the
+       literal symbol "NULL", which could then match a pool.) */
+    if (!row || typeof row !== 'object') continue;
+    const sym = String(row.symbol ?? '').trim().toUpperCase();
+    const id = typeof row.id === 'string' || typeof row.id === 'number' ? row.id : null;
     if (!sym || !id || index.has(sym)) continue;
     index.set(sym, { id, symbol: sym, name: row?.name ?? null, price: row?.price ?? null, provenance: row?.dataProvenance ?? null });
   }
