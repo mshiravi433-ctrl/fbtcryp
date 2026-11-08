@@ -298,8 +298,34 @@ export function readCortex(cortex, featureVector) {
 /* ═══════════════════════ CANDIDATE BUILDERS ═══════════════════════ */
 
 let seq = 0;
-function base({ category, type, title, symbol = null, chain = null, protocol = null, direction = 'NEUTRAL', confidence, horizonDays, evidence, economics, risk, expiresInMs = 24 * 3600_000, now }) {
+/**
+ * Build one candidate.
+ *
+ * ─── `ref` AND `metrics` ARE WHAT MAKE A CARD ACTIONABLE ────────────────────
+ * A ranked card used to say «Kamino — 12% APY» and nothing else: no pool id,
+ * no venue id, no TVL, no evidence count, so the UI could not open the token
+ * page, the pool row or the venue panel for it, and could not show the three
+ * numbers the owner asked every card to carry (capital needed, fees+slippage,
+ * confidence). Both are pass-through data the caller already supplied — an id
+ * from the feed and the row it came from — so nothing here is invented:
+ *
+ *   ref.tokenId    CoinGecko id, when the row is a known market asset
+ *   ref.poolId     yield-feed pool id (DefiLlama UUID / `kamino-…`)
+ *   ref.venue      our execution venue id, when the pool is one we can sign for
+ *   ref.externalUrl the feed's own page for a pool we cannot open in-app
+ *   metrics        capitalNeededUsd, grossApyPct, feeUsd, slippageUsd, gasUsd,
+ *                  liquidityUsd, tvlUsd, priceUsd, change24hPct, sampleSize
+ */
+function base({
+  category, type, title, symbol = null, chain = null, protocol = null, direction = 'NEUTRAL',
+  confidence, horizonDays, evidence, economics, risk, expiresInMs = 24 * 3600_000, now,
+  ref = null, metrics = null
+}) {
   seq += 1;
+  const cleanRef = ref && Object.values(ref).some((v) => v != null) ? {
+    tokenId: ref.tokenId ?? null, poolId: ref.poolId ?? null,
+    venue: ref.venue ?? null, externalUrl: ref.externalUrl ?? null
+  } : null;
   return {
     opportunityId: `opp_${now.toString(36)}_${category.toLowerCase()}_${seq}`,
     category, type: type || category, title, symbol, chain, protocol, direction,
@@ -308,8 +334,29 @@ function base({ category, type, title, symbol = null, chain = null, protocol = n
     riskAdjustedApyPct: economics?.netApyPct != null && risk?.score != null
       ? round(economics.netApyPct / (1 + risk.score / 3), 1) : economics?.netApyPct ?? null,
     evidence: evidence || [], caveats: ['not-a-signal'],
+    ref: cleanRef, metrics: metrics || null,
     cortex: null, score: 0, eligible: true, exclusionReasons: [],
     discoveredAt: now, expiresAt: now + expiresInMs
+  };
+}
+
+/** One shared metrics block so every family reports the same keys. */
+function rowMetrics({ capitalUsd = null, grossApyPct = null, fees = null, liquidityUsd = null, tvlUsd = null, volume24hUsd = null, priceUsd = null, change24hPct = null, sampleSize = null, extra = null }) {
+  return {
+    capitalNeededUsd: round(capitalUsd),
+    grossApyPct: round(grossApyPct),
+    feeUsd: fees?.totalUsd ?? null,
+    protocolFeeUsd: fees?.protocolUsd ?? null,
+    slippageUsd: fees?.slippageUsd ?? null,
+    slippagePctAssumed: fees?.slippagePctAssumed ?? null,
+    gasUsd: fees?.networkGasUsd ?? null,
+    liquidityUsd: round(liquidityUsd),
+    tvlUsd: round(tvlUsd),
+    volume24hUsd: round(volume24hUsd),
+    priceUsd: round(priceUsd, 6),
+    change24hPct: round(change24hPct),
+    sampleSize: sampleSize == null ? null : Math.trunc(sampleSize),
+    ...(extra || {})
   };
 }
 
@@ -324,7 +371,12 @@ function fromPools(rows, ctx) {
       symbol: p.pair || p.symbol, chain: p.chain, protocol: p.protocol, now: ctx.now, horizonDays: ctx.horizonDays,
       confidence: clamp(0.45 + (tvl >= 1e6 ? 0.25 : tvl >= 1e5 ? 0.12 : 0) + (num(p.volume24hUsd) > 0 ? 0.08 : 0), 0, 0.9),
       economics: econ, evidence: [{ type: 'POOL', detail: `APY ${apy}% · TVL ${tvl ?? 'unknown'} · fee APR ${p.feeApy ?? '—'} + rewards ${p.rewardApy ?? '—'}` }],
-      risk: compositeRisk({ smartContract: num(p.riskScore, 5), liquidity: liquidityRisk(tvl), volatility: volRisk(num(p.volatilityPct)), impermanentLoss: il })
+      risk: compositeRisk({ smartContract: num(p.riskScore, 5), liquidity: liquidityRisk(tvl), volatility: volRisk(num(p.volatilityPct)), impermanentLoss: il }),
+      ref: { poolId: p.id ?? p.poolId ?? null, venue: p.venue ?? null, externalUrl: p.url ?? null },
+      metrics: rowMetrics({
+        capitalUsd: ctx.capital > 0 ? ctx.capital : null, grossApyPct: apy, fees, tvlUsd: tvl,
+        liquidityUsd: tvl, volume24hUsd: num(p.volume24hUsd ?? p.volumeUsd1d), sampleSize: num(p.samples, null)
+      })
     });
   });
 }
@@ -340,7 +392,13 @@ function fromFarms(rows, ctx, category = 'FARMING') {
       chain: f.chain, protocol: f.protocol || f.project, now: ctx.now, horizonDays: ctx.horizonDays,
       confidence: clamp(0.4 + (tvl >= 1e6 ? 0.22 : 0.08) + (apy <= 60 ? 0.1 : -0.08), 0, 0.88),
       economics: econ, evidence: [{ type: 'YIELD_DATA', detail: `APY ${apy}% · TVL ${tvl ?? 'unknown'}${f.lockDays ? ` · lock ${f.lockDays}d` : ''}` }],
-      risk: compositeRisk({ smartContract: num(f.riskScore, 5.5), liquidity: liquidityRisk(tvl), volatility: apy > 100 ? 8 : apy > 40 ? 6 : 3.5, counterparty: num(f.riskScore, 5) })
+      risk: compositeRisk({ smartContract: num(f.riskScore, 5.5), liquidity: liquidityRisk(tvl), volatility: apy > 100 ? 8 : apy > 40 ? 6 : 3.5, counterparty: num(f.riskScore, 5) }),
+      ref: { poolId: f.id ?? f.poolId ?? null, venue: f.venue ?? null, externalUrl: f.url ?? null },
+      metrics: rowMetrics({
+        capitalUsd: ctx.capital > 0 ? ctx.capital : null, grossApyPct: apy, fees, tvlUsd: tvl,
+        liquidityUsd: tvl, volume24hUsd: num(f.volume24hUsd ?? f.volumeUsd1d),
+        sampleSize: num(f.samples, null), extra: { lockDays: num(f.lockDays, null) }
+      })
     });
   });
 }
@@ -357,7 +415,13 @@ function fromLending(rows, ctx) {
       symbol: m.asset || m.symbol, chain: m.chain, protocol: m.protocol, now: ctx.now, horizonDays: ctx.horizonDays,
       confidence: clamp(0.55 + (tvl >= 1e7 ? 0.2 : 0.05) - (util > 92 ? 0.15 : 0), 0, 0.92),
       economics: econ, evidence: [{ type: 'LENDING_MARKET', detail: `supply APY ${apy}% · utilisation ${util ?? '—'}% · LTV ${m.ltvPct ?? '—'}%` }],
-      risk: compositeRisk({ smartContract: num(m.riskScore, 4), liquidity: util > 95 ? 8 : liquidityRisk(tvl), liquidation: 1.5, counterparty: num(m.riskScore, 4) })
+      risk: compositeRisk({ smartContract: num(m.riskScore, 4), liquidity: util > 95 ? 8 : liquidityRisk(tvl), liquidation: 1.5, counterparty: num(m.riskScore, 4) }),
+      ref: { poolId: m.id ?? m.poolId ?? null, venue: m.venue ?? null, externalUrl: m.url ?? null },
+      metrics: rowMetrics({
+        capitalUsd: ctx.capital > 0 ? ctx.capital : null, grossApyPct: apy, fees, tvlUsd: tvl,
+        liquidityUsd: tvl, sampleSize: num(m.samples, null),
+        extra: { utilizationPct: util, ltvPct: num(m.ltvPct, null) }
+      })
     });
   });
 }
@@ -393,7 +457,12 @@ function fromArbitrage(rows, ctx) {
       symbol: a.asset || a.symbol, chain: a.chain, now: ctx.now, horizonDays: ctx.horizonDays, expiresInMs: 15 * 60_000,
       confidence: clamp(0.5 + (depth >= 2e5 ? 0.25 : depth >= 2e4 ? 0.1 : -0.1) + (spreadPct >= 1 ? 0.08 : 0), 0, 0.93),
       economics: econ, evidence: [{ type: 'PRICE_SPREAD', detail: `buy ${buy ?? '—'} @${a.buyVenue || '?'} → sell ${sell ?? '—'} @${a.sellVenue || '?'} · depth ${depth ?? 'unknown'}` }],
-      risk: compositeRisk({ liquidity: liquidityRisk(depth), smartContract: 3, bridge: a.bridgeFeePct || a.buyVenue !== a.sellVenue ? 4 : 1, volatility: 4, counterparty: 4 })
+      risk: compositeRisk({ liquidity: liquidityRisk(depth), smartContract: 3, bridge: a.bridgeFeePct || a.buyVenue !== a.sellVenue ? 4 : 1, volatility: 4, counterparty: 4 }),
+      ref: { tokenId: a.tokenId ?? null, externalUrl: a.url ?? null },
+      metrics: rowMetrics({
+        capitalUsd: ctx.capital > 0 ? ctx.capital : null, fees, liquidityUsd: depth,
+        extra: { spreadPct: round(spreadPct), buyVenue: a.buyVenue ?? null, sellVenue: a.sellVenue ?? null }
+      })
     });
   }).filter(Boolean);
 }
@@ -411,7 +480,14 @@ function fromEmerging(rows, ctx) {
       now: ctx.now, horizonDays: ctx.horizonDays, expiresInMs: 6 * 3600_000,
       confidence: clamp(0.3 + (liq >= 5e5 ? 0.2 : liq >= 5e4 ? 0.08 : -0.08) + (num(t.smartMoneyBuys) > 0 ? 0.15 : 0) + (num(t.holdersGrowthPct) > 10 ? 0.08 : 0), 0, 0.85),
       economics: econ, evidence: [{ type: 'EMERGING_FLOW', detail: `age ${t.ageDays ?? '—'}d · mcap ${t.mcap ?? 'unknown'} · liquidity ${liq ?? 'unknown'} · holders growth ${t.holdersGrowthPct ?? '—'}% · smart-money buys ${t.smartMoneyBuys ?? '—'}` }],
-      risk: compositeRisk({ smartContract: num(t.riskScore, 8), liquidity: liquidityRisk(liq), volatility: 9, concentration: 7, counterparty: 6 })
+      risk: compositeRisk({ smartContract: num(t.riskScore, 8), liquidity: liquidityRisk(liq), volatility: 9, concentration: 7, counterparty: 6 }),
+      ref: { tokenId: t.tokenId ?? t.coingeckoId ?? null, externalUrl: t.url ?? null },
+      metrics: rowMetrics({
+        capitalUsd: ctx.capital > 0 ? ctx.capital : null, fees, liquidityUsd: liq,
+        tvlUsd: num(t.tvlUsd, null), priceUsd: num(t.priceUsd, null), change24hPct: growth,
+        sampleSize: num(t.tradeSamples ?? t.samples, null),
+        extra: { ageDays: num(t.ageDays, null), mcap: num(t.mcap, null) }
+      })
     }), feesIfActedUsd: ctx.capital > 0 ? fees.totalUsd : null };
   });
 }
@@ -428,7 +504,12 @@ function fromRwa(rows, ctx) {
       symbol: r.symbol, chain: r.chain, protocol: r.issuer || r.protocol, now: ctx.now, horizonDays: ctx.horizonDays,
       confidence: num(r.confidence, 0.62), economics: econ,
       evidence: r.evidence?.length ? r.evidence : [{ type: y == null ? 'RWA_PRICE' : 'RWA_CATALOG', detail: y == null ? `Market price $${r.priceUsd} · 24h ${r.priceChange24h ?? '—'}% · yield unknown` : `${r.category || 'RWA'} · issuer ${r.issuer || '—'} · lock ${r.lockDays ?? '—'}d · min ${r.minInvestmentUsd ?? '—'}` }],
-      risk: y == null ? compositeRisk({ smartContract: 6, liquidity: 7, volatility: 7, counterparty: 6 }) : compositeRisk({ smartContract: 3.5, liquidity: r.liquidity === 'HIGH' ? 2 : r.liquidity === 'MEDIUM' ? 5 : 8, volatility: 2, counterparty: 5 })
+      risk: y == null ? compositeRisk({ smartContract: 6, liquidity: 7, volatility: 7, counterparty: 6 }) : compositeRisk({ smartContract: 3.5, liquidity: r.liquidity === 'HIGH' ? 2 : r.liquidity === 'MEDIUM' ? 5 : 8, volatility: 2, counterparty: 5 }),
+      ref: { tokenId: r.tokenId ?? r.coingeckoId ?? null, externalUrl: r.url ?? null },
+      metrics: rowMetrics({
+        capitalUsd: ctx.capital > 0 ? ctx.capital : null, grossApyPct: y, fees,
+        priceUsd: num(r.priceUsd, null), change24hPct: num(r.priceChange24h, null)
+      })
     });
     if (y == null) o.feesIfActedUsd = ctx.capital > 0 ? fees.totalUsd : null;
     if (num(r.minInvestmentUsd) > 0) o.minCapitalUsd = num(r.minInvestmentUsd);
@@ -451,7 +532,14 @@ function fromWhales(rows, ctx) {
       // return is priced for it (fees of acting on it are shown in `fees`).
       economics: null, feesIfActedUsd: fees.totalUsd,
       evidence: [{ type: 'ON_CHAIN', detail: `net flow ${net ?? '—'} USD · wallets ${w.walletCount ?? '—'} · exchange flow ${w.exchangeFlowUsd ?? '—'}` }],
-      risk: compositeRisk({ liquidity: liquidityRisk(num(w.liquidityUsd)), volatility: 6.5, smartContract: 2, concentration: 6 })
+      risk: compositeRisk({ liquidity: liquidityRisk(num(w.liquidityUsd)), volatility: 6.5, smartContract: 2, concentration: 6 }),
+      ref: { tokenId: w.tokenId ?? w.coingeckoId ?? null, externalUrl: w.url ?? null },
+      metrics: rowMetrics({
+        capitalUsd: ctx.capital > 0 ? ctx.capital : null, fees,
+        liquidityUsd: num(w.liquidityUsd, null), priceUsd: num(w.priceUsd, null),
+        change24hPct: num(w.change24h, null), sampleSize: num(w.walletCount, null),
+        extra: { netFlowUsd: net, exchangeFlowUsd: num(w.exchangeFlowUsd, null) }
+      })
     }), feesIfActedUsd: ctx.capital > 0 ? fees.totalUsd : null };
   }).filter(Boolean);
 }

@@ -160,6 +160,10 @@ const AiControlCenter = lazyRetry(() => import('./components/ai/AiControlCenter'
    Wallet and replaces nothing. Lazy, with its own CSS chunk, so /market never
    pays for it. */
 const AiAnalysis = lazyRetry(() => import('./pages/AiAnalysis'));
+/* AI Opportunity Engine — the room that finds, prices and opens opportunities.
+   Lazy like every other page: it pulls its own stylesheet and two engines. */
+const Opportunities = lazyRetry(() => import('./pages/Opportunities'));
+const OpportunityDetail = lazyRetry(() => import('./pages/OpportunityDetail'));
 /* Phase 211 — Global Intelligence («هوش جهانی»). ADDITIVE route: the nine
    global intelligence domains, the cross-asset regime and the proactive
    briefing, on the FI's own /api/ai/global/* endpoints. It is its OWN PAGE now
@@ -545,6 +549,8 @@ function AnimatedRoutes() {
             <Route path="/intent-ai" element={<Navigate to="/intent" replace />} />
             <Route path="/ai-control" element={<AiControlCenter />} />
             <Route path="/ai-analysis" element={<AiAnalysis />} />
+            <Route path="/opportunities" element={<Opportunities />} />
+            <Route path="/opportunities/:opportunityId" element={<OpportunityDetail />} />
             <Route path="/global" element={<GlobalWorld />} />
             <Route path="/ai-global" element={<Navigate to="/global" replace />} />
             <Route path="/flash-liquidity" element={<FlashLiquidity />} />
