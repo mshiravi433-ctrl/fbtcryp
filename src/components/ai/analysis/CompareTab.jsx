@@ -93,7 +93,7 @@ export default function CompareTab({ markets = [], locale, initial = [] }) {
         {selected.length >= 2 ? (
           <>
             <p className="aix-card-hint aix-swipe-hint">
-              {locale === 'fa' ? 'برای دیدن همه توکن‌ها، جدول را افقی ورق بزنید.' : 'Swipe the table horizontally to see every token.'}
+              {String(locale || '').startsWith('fa') ? 'برای دیدن همه توکن‌ها، جدول را افقی ورق بزنید.' : 'Swipe the table horizontally to see every token.'}
             </p>
             <div className="aix-compare-table">
               <div className="aix-cmp-row aix-cmp-head">
@@ -132,7 +132,7 @@ export default function CompareTab({ markets = [], locale, initial = [] }) {
       </SectionCard>
 
       {series.filter((s) => s.values.length > 1).length >= 2 ? (
-        <SectionCard title={locale === 'fa' ? 'عملکرد ۷ روز (نرمال‌شده به ۱۰۰)' : '7-day performance (normalised to 100)'}>
+        <SectionCard title={String(locale || '').startsWith('fa') ? 'عملکرد ۷ روز (نرمال‌شده به ۱۰۰)' : '7-day performance (normalised to 100)'}>
           <MultiLine series={series} />
         </SectionCard>
       ) : null}

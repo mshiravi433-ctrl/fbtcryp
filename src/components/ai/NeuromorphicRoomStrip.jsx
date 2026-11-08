@@ -26,7 +26,7 @@ const NeuromorphicRoomStrip = memo(function NeuromorphicRoomStrip({
   symbol = null,
   locale = 'fa'
 }) {
-  const isFa = !String(locale || 'fa').toLowerCase().startsWith('en');
+  const isFa = String(locale || 'fa').toLowerCase().startsWith('fa');
   const nm = useNeuromorphicCortex({ autoSync: false });
   const lastFeedSig = useRef('');
 
@@ -68,28 +68,28 @@ const NeuromorphicRoomStrip = memo(function NeuromorphicRoomStrip({
       <div className="nmc-strip-metrics">
         <span className="nmc-strip-kv">
           ⚡ <strong>{isFa ? 'کورتکس ۲۰۵۰ دستگاه شما' : 'On-Device Cortex 2050'}</strong>
-          <small>({backendTag} · Gen #{gen})</small>
+          <small dir="ltr">({backendTag} · {isFa ? 'نسل' : 'Gen'} #{gen})</small>
         </span>
         <span className="nmc-strip-kv">
           {isFa ? 'رژیم مایع:' : 'Regime:'} <b>{reg}</b>
         </span>
         <span className="nmc-strip-kv">
-          {isFa ? 'کشش سیناپسی:' : 'Drive:'} <b>{driveStr}</b>
+          {isFa ? 'کشش سیناپسی:' : 'Drive:'} <b dir="ltr">{driveStr}</b>
         </span>
         <span className="nmc-strip-kv">
-          {isFa ? 'شلیک:' : 'Spikes:'} <b>{r.spikes.firingRateHz} Hz</b>
+          {isFa ? 'شلیک:' : 'Spikes:'} <b dir="ltr">{r.spikes.firingRateHz} Hz</b>
         </span>
         <span className="nmc-strip-kv">
-          {isFa ? 'نورون:' : 'Neurons:'} <b>{r.topology.reservoirNeurons}</b>
+          {isFa ? 'نورون:' : 'Neurons:'} <b dir="ltr">{r.topology.reservoirNeurons}</b>
         </span>
         {brain ? (
           <span className="nmc-strip-kv" data-testid="nmc-strip-brain">
-            {isFa ? 'تصمیم مغزمحور:' : 'Brain action:'} <b>{brain.basalGanglia.action}</b>
-            {feStr ? <small> · F={feStr}</small> : null}
+            {isFa ? 'تصمیم مغزمحور:' : 'Brain action:'} <b dir="ltr">{brain.basalGanglia.action}</b>
+            {feStr ? <small dir="ltr"> · F={feStr}</small> : null}
           </span>
         ) : null}
       </div>
-      <small>{r.latencyMs} ms</small>
+      <small className="nmc-strip-latency" dir="ltr">{r.latencyMs} ms</small>
     </div>
   );
 });

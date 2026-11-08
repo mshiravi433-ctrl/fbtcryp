@@ -81,6 +81,12 @@ export function symbolSvg(rawSymbol) {
   const sym = String(rawSymbol || '').toUpperCase().replace(/[^A-Z0-9&.]/g, '');
   if (!sym) return null;
   if (TOKEN_SVG[sym]) return TOKEN_SVG[sym];
+  /* Dogecoin is a top-ten market row but was absent from the vendored token
+     sheet, so offline intelligence lists fell back to a bare «DOG» monogram.
+     The canonical Ð glyph on the coin's gold is honest, local artwork. */
+  if (sym === 'DOGE') {
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#C2A633"/><path fill="#fff" d="M10.136 5.5h2.42c3.02 0 5.09 2.18 5.09 6.5s-2.07 6.5-5.09 6.5h-2.42v-5.32H8.5v-2.36h1.636zm2.42 2.36v8.28c1.62 0 2.63-1.28 2.63-4.14s-1.01-4.14-2.63-4.14z"/></svg>';
+  }
   if (sym === 'WETH') return TOKEN_SVG.ETH || null;
   if (sym === 'WBNB') return TOKEN_SVG.BNB || null;
   if (sym === 'BTCB' || sym === 'CBBTC' || sym === 'TBTC') return TOKEN_SVG.BTC || null;

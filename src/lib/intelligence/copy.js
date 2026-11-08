@@ -32,6 +32,10 @@ export const COPY = {
     'page.close': 'بستن',
 
     'tab.overview': 'نمای بازار',
+    'tab.overview.short': 'نمای بازار',
+    'tab.screener.short': 'اسکرینر',
+    'tab.opportunities.short': 'فرصت‌ها',
+    'tab.report.short': 'گزارش',
     'tab.screener': 'اسکرینر توکن‌ها',
     'tab.token': 'تحلیل توکن',
     'tab.portfolio': 'پرتفوی',
@@ -352,6 +356,10 @@ export const COPY = {
     'page.close': 'Close',
 
     'tab.overview': 'Overview',
+    'tab.overview.short': 'Overview',
+    'tab.screener.short': 'Screener',
+    'tab.opportunities.short': 'Opportunities',
+    'tab.report.short': 'Report',
     'tab.screener': 'Token screener',
     'tab.token': 'Token analysis',
     'tab.portfolio': 'Portfolio',

@@ -95,12 +95,25 @@ export default function CoinLogo({
   const preloadStyle = !loaded && !scopedSvg
     ? {
         ...box,
-        background: `linear-gradient(140deg, hsl(${hue} 58% 28%), hsl(${(hue + 38) % 360} 58% 20%))`
+        position: 'relative',
+        display: 'grid',
+        placeItems: 'center',
+        overflow: 'hidden',
+        background: `linear-gradient(140deg, hsl(${hue} 58% 28%), hsl(${(hue + 38) % 360} 58% 20%))`,
+        color: '#fff',
+        fontWeight: 800,
+        fontSize: Math.max(9, Math.round((px || 32) * 0.3)),
+        lineHeight: 1
       }
     : box;
 
   return (
     <span className={className} style={preloadStyle}>
+      {/* A remote logo that has not arrived yet must never leave an empty
+          circle: the deterministic monogram paints underneath it immediately. */}
+      {!loaded && !scopedSvg && (
+        <span className="coin-logo-monogram" aria-hidden="true">{symbol}</span>
+      )}
       {!loaded && scopedSvg && (
         <span
           className="coin-logo-underlay"

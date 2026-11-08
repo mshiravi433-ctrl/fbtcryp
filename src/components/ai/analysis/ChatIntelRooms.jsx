@@ -29,13 +29,14 @@ import OpportunitiesTab from './OpportunitiesTab';
 import ReportTab from './ReportTab';
 import AnalysisTabs from './AnalysisTabs';
 import NeuromorphicRoomStrip from '../NeuromorphicRoomStrip';
+import { IconActivity, IconArrowDown } from '../../Icons';
 import './chat-intel.css';
 
 const MARKET_ROOMS = [
-  { id: 'overview', key: 'tab.overview' },
-  { id: 'opportunities', key: 'tab.opportunities' },
-  { id: 'screener', key: 'tab.screener' },
-  { id: 'report', key: 'tab.report' }
+  { id: 'overview', key: 'tab.overview.short' },
+  { id: 'opportunities', key: 'tab.opportunities.short' },
+  { id: 'screener', key: 'tab.screener.short' },
+  { id: 'report', key: 'tab.report.short' }
 ];
 
 const PROV_KEY = { live: 'page.live', stale: 'page.stale', offline: 'page.offline', unknown: 'page.unknown' };
@@ -77,11 +78,15 @@ function RoomFrame({ open, onToggle, mark, title, hint, chip, testId, footer, lo
       >
         <span className="aix-room-mark" aria-hidden="true">{mark}</span>
         <span className="aix-room-copy">
-          <strong>{title}</strong>
+          <span className="aix-room-titleline">
+            <strong>{title}</strong>
+            {chip ? <span className="aix-room-chip">{chip}</span> : null}
+          </span>
           {hint ? <small>{hint}</small> : null}
         </span>
-        {chip ? <span className="aix-room-chip">{chip}</span> : null}
-        <span className="aix-room-chevron" aria-hidden="true">{open ? '−' : '+'}</span>
+        <span className="aix-room-chevron" aria-hidden="true">
+          <IconArrowDown width={16} height={16} />
+        </span>
       </button>
       {open ? (
         <div id={bodyId} className="aix-room-body aix-page aix-embed" dir={fa(locale) ? 'rtl' : 'ltr'}>
@@ -96,6 +101,8 @@ function RoomFrame({ open, onToggle, mark, title, hint, chip, testId, footer, lo
 /* ── ROOM 1 — THE MARKET (overview · opportunities · screener · report) ──── */
 
 function MarketRoomBody({ room, setRoom, locale, onOpenRoute }) {
+  const tabsId = useId();
+  const panelId = `${tabsId}-panel`;
   const {
     markets, pulse, scan, analysis, updatedAt, loading, error
   } = useMarketRoom();
@@ -115,25 +122,34 @@ function MarketRoomBody({ room, setRoom, locale, onOpenRoute }) {
   return (
     <>
       <div className={`aix-statusbar aix-status-${pulse.provenance || 'unknown'}`}>
-        <span className="aix-status-dot" aria-hidden="true" />
-        <span>{ct(locale, PROV_KEY[pulse.provenance || 'unknown'])}</span>
-        <span className="aix-status-sep">·</span>
-        <span>{ct(locale, 'page.updated', { time: fmtTimeAgo(updatedAt, locale) })}</span>
-        <span className="aix-status-sep">·</span>
-        <span>{ct(locale, 'page.rowsCounted', { counted: pulse.breadth.counted, total: pulse.breadth.total })}</span>
+        <span className="aix-status-primary">
+          <span className="aix-status-dot" aria-hidden="true" />
+          <b>{ct(locale, PROV_KEY[pulse.provenance || 'unknown'])}</b>
+        </span>
+        <span className="aix-status-item">{ct(locale, 'page.updated', { time: fmtTimeAgo(updatedAt, locale) })}</span>
+        <span className="aix-status-item aix-status-coverage">
+          {ct(locale, 'page.rowsCounted', { counted: pulse.breadth.counted, total: pulse.breadth.total })}
+        </span>
       </div>
-
-      <NeuromorphicRoomStrip markets={markets} pulse={pulse} locale={locale} />
 
       <AnalysisTabs
         tabs={MARKET_ROOMS}
         active={room}
         onChange={setRoom}
         locale={locale}
+        id={tabsId}
+        panelId={panelId}
         label={ct(locale, 'page.title')}
         className="aix-tabs-chat"
       />
 
+      <div
+        id={panelId}
+        role="tabpanel"
+        className="aix-room-panel"
+        aria-labelledby={`${tabsId}-${room}`}
+        tabIndex={0}
+      >
       {room === 'opportunities' ? (
         <OpportunitiesTab scan={scan} locale={locale} onOpenToken={openToken} />
       ) : room === 'screener' ? (
@@ -149,6 +165,16 @@ function MarketRoomBody({ room, setRoom, locale, onOpenRoute }) {
       ) : (
         <OverviewTab pulse={pulse} analysis={analysis} locale={locale} onOpenToken={openToken} />
       )}
+      </div>
+
+      <details className="aix-room-engine">
+        <summary>
+          <IconActivity width={15} height={15} aria-hidden="true" />
+          <span>{fa(locale) ? 'پردازش عصبی روی دستگاه' : 'On-device neural processing'}</span>
+          <IconArrowDown className="aix-room-engine-chevron" width={14} height={14} aria-hidden="true" />
+        </summary>
+        <NeuromorphicRoomStrip markets={markets} pulse={pulse} locale={locale} />
+      </details>
     </>
   );
 }

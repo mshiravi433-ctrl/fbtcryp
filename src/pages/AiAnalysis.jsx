@@ -225,10 +225,19 @@ export default function AiAnalysis() {
           active={tab}
           onChange={setTab}
           locale={locale}
+          id="aix-analysis-tabs"
+          panelId="aix-analysis-panel"
           label={ct(locale, 'page.title')}
         />
 
-        <main className="aix-main" key={tab}>
+        <main
+          className="aix-main"
+          id="aix-analysis-panel"
+          role="tabpanel"
+          aria-labelledby={`aix-analysis-tabs-${tab}`}
+          tabIndex={0}
+          key={tab}
+        >
           {pulse ? renderTab() : (
             marketError ? <p className="aix-loading">{ct(locale, 'page.error')}</p> : <p className="aix-loading">{ct(locale, 'page.loading')}</p>
           )}

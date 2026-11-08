@@ -779,18 +779,6 @@
   .aix-review-stat strong { font-size: 13.5px; }
 }
 
-/* ── the chats' embedded rooms get the same material, one step tighter ── */
-
-.aix-embed .aix-tile { min-height: 72px; border-radius: 13px; }
-.aix-embed .aix-tile-value { font-size: 14.5px; }
-.aix-embed .aix-tab { padding: 6px 10px; border-radius: 9px; font-size: 11px; }
-.aix-embed .aix-tabs { padding: 3px; border-radius: 12px; }
-.aix-embed .aix-card { border-radius: 15px; padding: 11px; }
-.aix-embed .aix-card-mark { width: 22px; height: 22px; border-radius: 8px; }
-.aix-embed .aix-card-title { font-size: 12.5px; }
-.aix-embed .aix-review-hero { padding: 11px; border-radius: 14px; }
-.aix-embed .aix-review-verdict { font-size: 12.5px; }
-
 /* ── respect the reader's settings ─────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {

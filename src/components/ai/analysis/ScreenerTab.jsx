@@ -1,4 +1,4 @@
-import CoinLogo from '../../CoinLogo.jsx';
+import CoinAvatar from './CoinAvatar.jsx';
 /**
  * AI INTELLIGENCE — TOKEN SCREENER
  * ---------------------------------------------------------------------------
@@ -110,7 +110,7 @@ export default function ScreenerTab({ markets, locale, onOpenToken, updatedAt, p
           </div>
 
           <div className="aix-control-group">
-            <span className="aix-control-label">{locale === 'fa' ? 'فیلتر بازار' : 'Market filter'}</span>
+            <span className="aix-control-label">{String(locale || '').startsWith('fa') ? 'فیلتر بازار' : 'Market filter'}</span>
             <div className="aix-chips">
               {FILTERS.map((f) => (
                 <Chip key={f.id} active={filter === f.id} onClick={() => { setFilter(f.id); setLimit(60); }}>
@@ -121,7 +121,7 @@ export default function ScreenerTab({ markets, locale, onOpenToken, updatedAt, p
           </div>
 
           <div className="aix-control-group aix-sort-group">
-            <span className="aix-control-label">{locale === 'fa' ? 'مرتب‌سازی بر اساس' : 'Sort by'}</span>
+            <span className="aix-control-label">{String(locale || '').startsWith('fa') ? 'مرتب‌سازی بر اساس' : 'Sort by'}</span>
             <div className="aix-sortrow">
               {COLUMNS.map((c) => (
                 <button
@@ -160,7 +160,7 @@ export default function ScreenerTab({ markets, locale, onOpenToken, updatedAt, p
                 onClick={() => onOpenToken?.(row.id)}
                 title={t(locale, 'screener.analyze')}
               >
-                <CoinLogo coin={row} ticker={row.symbol} px={32} />
+                <CoinAvatar coin={row} px={28} />
                 <span className="aix-token-copy">
                   <span className="aix-token-sym">{row.symbol}</span>
                   <span className="aix-token-name">{row.name}</span>
@@ -184,7 +184,7 @@ export default function ScreenerTab({ markets, locale, onOpenToken, updatedAt, p
 
         {rows.length > visible.length ? (
           <button type="button" className="aix-more" onClick={() => setLimit((v) => v + 80)}>
-            {locale === 'fa' ? `نمایش ${Math.min(80, rows.length - visible.length)} ردیف بیشتر` : `Show ${Math.min(80, rows.length - visible.length)} more`}
+            {String(locale || '').startsWith('fa') ? `نمایش ${Math.min(80, rows.length - visible.length)} ردیف بیشتر` : `Show ${Math.min(80, rows.length - visible.length)} more`}
           </button>
         ) : null}
 
@@ -193,7 +193,7 @@ export default function ScreenerTab({ markets, locale, onOpenToken, updatedAt, p
             counted: (markets || []).filter((r) => Number.isFinite(r.change24h)).length,
             total: (markets || []).length
           })}
-          {rows.length ? ` · ${fmtNumber(rows.length)} ${locale === 'fa' ? 'در فیلتر' : 'matched'}` : ''}
+          {rows.length ? ` · ${fmtNumber(rows.length)} ${String(locale || '').startsWith('fa') ? 'در فیلتر' : 'matched'}` : ''}
         </p>
       </SectionCard>
     </div>

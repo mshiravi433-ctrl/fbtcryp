@@ -129,7 +129,9 @@ describe('AI intelligence page', () => {
     expect(await screen.findByText('FBT AI Intelligence')).toBeTruthy();
     /* The navigation is a product landmark, not seven anonymous text pills. */
     expect(document.querySelectorAll('.aix-tab .aix-tab-icon')).toHaveLength(7);
-    expect(document.querySelector('.aix-tab-overview')?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelector('.aix-tab-overview')?.getAttribute('aria-selected')).toBe('true');
+    expect(document.querySelector('[role="tablist"]')).toBeTruthy();
+    expect(document.querySelector('[role="tabpanel"]')?.getAttribute('aria-labelledby')).toBe('aix-analysis-tabs-overview');
     expect(document.querySelector('.aix-regime-layout')).toBeTruthy();
     expect(document.querySelector('.aix-regime-narrative')).toBeTruthy();
     expect(await screen.findByText('$2.45T')).toBeTruthy(); // total market cap
@@ -153,10 +155,10 @@ describe('AI intelligence page', () => {
     await mount();
     await screen.findByText('FBT AI Intelligence');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Token screener' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Token screener' }));
     expect(await screen.findByText('AAVE')).toBeTruthy();
     expect(screen.getByText('PEPE')).toBeTruthy();
-    expect(document.querySelector('.aix-tab-screener')?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelector('.aix-tab-screener')?.getAttribute('aria-selected')).toBe('true');
     expect(document.querySelector('.aix-table-shell')).toBeTruthy();
     expect(document.querySelectorAll('.aix-trow .coin-logo').length).toBeGreaterThan(0);
 
@@ -172,7 +174,7 @@ describe('AI intelligence page', () => {
     await mount();
     await screen.findByText('FBT AI Intelligence');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Token analysis' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Token analysis' }));
     await waitFor(() => {
       expect(screen.getByText('Composite score')).toBeTruthy();
     });
@@ -194,7 +196,7 @@ describe('AI intelligence page', () => {
     await mount();
     await screen.findByText('FBT AI Intelligence');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Daily report' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Daily report' }));
     await waitFor(() => {
       expect(screen.getByText('Market overview')).toBeTruthy();
     });
@@ -207,21 +209,21 @@ describe('AI intelligence page', () => {
 
   it('supports keyboard navigation and keeps opportunity and comparison rooms structured', async () => {
     await mount();
-    const overview = await screen.findByRole('button', { name: 'Overview' });
+    const overview = await screen.findByRole('tab', { name: 'Overview' });
     fireEvent.keyDown(overview, { key: 'ArrowRight' });
     expect(await screen.findByText('AAVE')).toBeTruthy();
-    expect(document.querySelector('.aix-tab-screener')?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelector('.aix-tab-screener')?.getAttribute('aria-selected')).toBe('true');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Opportunities' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Opportunities' }));
     expect(await screen.findByText('Opportunity scanner')).toBeTruthy();
     expect(document.querySelectorAll('.aix-opp').length).toBeGreaterThan(0);
     expect(document.querySelectorAll('.aix-opp-identity .coin-logo').length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Compare' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
     expect(await screen.findByText('7-day performance (normalised to 100)')).toBeTruthy();
     expect(document.querySelectorAll('.aix-compare-add .aix-chip')).toHaveLength(3);
     expect(document.querySelector('.aix-swipe-hint')).toBeTruthy();
-    expect(document.querySelector('.aix-tab-compare')?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelector('.aix-tab-compare')?.getAttribute('aria-selected')).toBe('true');
     expect(document.body.textContent).not.toMatch(/NaN|undefined|Infinity/);
   });
 
@@ -229,7 +231,7 @@ describe('AI intelligence page', () => {
     await mount();
     await screen.findByText('FBT AI Intelligence');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Portfolio' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Portfolio' }));
     await waitFor(() => {
       expect(screen.getAllByText(/Connect a wallet/).length).toBeGreaterThan(0);
     });

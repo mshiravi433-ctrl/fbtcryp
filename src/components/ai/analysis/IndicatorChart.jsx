@@ -97,7 +97,7 @@ export default function IndicatorChart({ pack, locale = 'fa', maxBars = 120, hei
   if (!view) {
     return (
       <div className="aix-chart aix-chart-empty" ref={ref}>
-        {locale === 'fa' ? 'کندل کافی برای رسم نمودار نیست' : 'Not enough candles to draw the chart'}
+        {String(locale || '').startsWith('fa') ? 'کندل کافی برای رسم نمودار نیست' : 'Not enough candles to draw the chart'}
       </div>
     );
   }
@@ -157,7 +157,7 @@ export default function IndicatorChart({ pack, locale = 'fa', maxBars = 120, hei
         height={totalH}
         viewBox={`0 0 ${width} ${totalH}`}
         role="img"
-        aria-label={locale === 'fa' ? 'نمودار شمعی با اندیکاتورها' : 'Candlestick chart with indicators'}
+        aria-label={String(locale || '').startsWith('fa') ? 'نمودار شمعی با اندیکاتورها' : 'Candlestick chart with indicators'}
         onPointerMove={onMove}
         onPointerLeave={() => setHover(null)}
       >
@@ -214,7 +214,7 @@ export default function IndicatorChart({ pack, locale = 'fa', maxBars = 120, hei
 
       {/* ── activity pane (candle range, NOT volume) ───────────── */}
       <text className="aix-pane-label" x={PAD_L} y={volTop + 9}>
-        {locale === 'fa' ? 'دامنه کندل' : 'Candle range'}
+        {String(locale || '').startsWith('fa') ? 'دامنه کندل' : 'Candle range'}
       </text>
       {window.map((c, i) => {
         const v = c.h - c.l;
@@ -284,9 +284,9 @@ export default function IndicatorChart({ pack, locale = 'fa', maxBars = 120, hei
         <span className="aix-line-key aix-key-sma200">SMA200</span>
         <span className="aix-line-key aix-key-bb">Bollinger</span>
         <span className="aix-chart-meta">
-          {window.length} {locale === 'fa' ? 'کندل' : 'bars'}
+          {window.length} {String(locale || '').startsWith('fa') ? 'کندل' : 'bars'}
           {' · '}
-          {locale === 'fa' ? 'شروع ایندکس' : 'offset'} {start}
+          {String(locale || '').startsWith('fa') ? 'شروع ایندکس' : 'offset'} {start}
         </span>
       </div>
 
