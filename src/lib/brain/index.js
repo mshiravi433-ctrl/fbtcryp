@@ -136,6 +136,10 @@ export function orchestrateBrain({
   defiOpportunities = [],
   rwaOpportunities = [],
   smartMoneySignals = [],
+  liquidityPools = [], farms = [], lendingMarkets = [], arbitrage = [],
+  venuePrices = [], emergingTokens = [], rwaAssets = [], whaleFlows = [],
+  userCapitalUsd = null, horizonDays = 30, riskTolerance = null,
+  cortex = null, cortexReadout = null,
   recentTransactions = [],
   autonomyLevel = 2,
   now = Date.now()
@@ -159,6 +163,9 @@ export function orchestrateBrain({
     financialState, userProfile, goals: activeGoals,
     walletBalances, portfolio, marketContext,
     defiOpportunities, rwaOpportunities, smartMoneySignals,
+    liquidityPools, farms, lendingMarkets, arbitrage, venuePrices,
+    emergingTokens, rwaAssets, whaleFlows,
+    userCapitalUsd, horizonDays, riskTolerance, cortex, cortexReadout,
     riskProfile: riskProfile || userProfile?.riskProfile || 'MODERATE',
     now
   });
