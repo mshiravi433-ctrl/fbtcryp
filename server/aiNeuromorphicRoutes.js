@@ -12,6 +12,7 @@
  *   GET  /neuromorphic/science         Phase 7 universal scientific memory: measured statistics + world registry
  *   POST /neuromorphic/science/prior   Upload a portable prior packet (no raw data, pre-specified families only)
  *   GET  /neuromorphic/universes       Phase 8 parallel research universes: deterministic engine self-test
+ *   GET  /neuromorphic/adaptive        Phase 9 adaptive ecosystem: measured static-vs-adaptive runs
  *
  * Owner derivation matches `server/aiOrchestratorRoutes.js` (`x-fbt-device`
  * salted SHA-256 → `dev:...`) so zero raw device IDs or IPs are stored in the
@@ -27,6 +28,7 @@ import {
 import { getBrainInspiredReport } from './aiNeuromorphicBrain.js';
 import { getScienceProbeReport, getScienceRegistry } from './aiNeuromorphicScience.js';
 import { getResearchUniversesProbe } from './aiResearchUniverses.js';
+import { getAdaptiveReport } from './aiNeuromorphicAdaptive.js';
 
 export const NEUROMORPHIC_ROUTES_SCHEMA = 'fbt.neuromorphic.routes.v1';
 
@@ -126,6 +128,14 @@ export function createNeuromorphicRouter({ swarm = null, log = () => {} } = {}) 
       steps: Number.isFinite(stepsRaw) ? stepsRaw : undefined
     });
   }));
+
+  /**
+   * Phase 9 — Adaptive Intelligence Ecosystem evidence.
+   * Runs this repo's own cortex twice (static vs adaptive) on a fixed synthetic
+   * fixture and reports the measured firing-rate control. Cached 60 s, zero
+   * server GPU, no execution authority, and it never claims accuracy.
+   */
+  router.get('/neuromorphic/adaptive', wrap(async () => getAdaptiveReport()));
 
   /**
    * Phase 7 — publish this device's portable prior.

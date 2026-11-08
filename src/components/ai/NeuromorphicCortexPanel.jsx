@@ -43,6 +43,38 @@ const MODE_LABELS = Object.freeze({
   PAUSED: { fa: 'متوقف توسط کاربر', en: 'PAUSED' }
 });
 
+const PROFILE_LABELS = Object.freeze({
+  EXPLOIT_FULL: {
+    fa: 'بهره‌برداری کامل (داده ساختار دارد)',
+    en: 'EXPLOIT FULL'
+  },
+  CONSOLIDATE: {
+    fa: 'تثبیت (ساختار نسبی)',
+    en: 'CONSOLIDATE'
+  },
+  HOLD_SPARSE: {
+    fa: 'نگه‌داشت کم‌مصرف (چیزی برای یادگیری نیست)',
+    en: 'HOLD SPARSE'
+  }
+});
+
+const ADAPTIVE_REASON_LABELS = Object.freeze({
+  NO_OBSERVATION_YET: { fa: 'بدون مشاهده', en: 'No observation yet' },
+  SURPRISE_ABOVE_CEILING: { fa: 'شگفتی بالاتر از سقف', en: 'Surprise above ceiling' },
+  DECISION_UNDECIDED: { fa: 'تصمیم حل‌نشده', en: 'Decision undecided' },
+  DECIDED_AND_PREDICTABLE: { fa: 'قابل پیش‌بینی و مصمم', en: 'Decided & predictable' },
+  STRUCTURE_PARTIAL: { fa: 'ساختار نسبی', en: 'Structure partial' },
+  NO_DECISION_TELEMETRY: { fa: 'بدون تل‌متری تصمیم', en: 'No decision telemetry' }
+});
+
+const CORTEX_CONDITION_LABELS = Object.freeze({
+  volatility: { fa: 'نوسان جریان مشاهده', en: 'Stream volatility' },
+  surprise: { fa: 'شگفتی (خطای پیش‌بینی)', en: 'Surprise (prediction error)' },
+  regimeEntropy: { fa: 'آنتروپی رژیم', en: 'Regime entropy' },
+  decisionMargin: { fa: 'حاشیهٔ تصمیم', en: 'Decision margin' },
+  signalToNoise: { fa: 'نسبت سیگنال به نویز', en: 'Signal / noise' }
+});
+
 const ACTION_LABELS = Object.freeze({
   LONG: { fa: 'خرید / LONG', en: 'LONG' },
   FLAT: { fa: 'بی‌طرف / FLAT', en: 'FLAT' },
@@ -105,6 +137,23 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
   const brainOn = nm.brainEnabled !== false;
 
   const consolidation = nm.consolidationLast;
+
+  /* ── Phase 9 — Adaptive Intelligence Ecosystem ────────────────────────── */
+  const adaptive = nm.adaptive || null;
+  const adScores = adaptive?.scores || null;
+  const adCond = adaptive?.condition || null;
+  const adServo = adaptive?.servo || null;
+  const adAct = adaptive?.actuators || null;
+  const adBudget = adaptive?.budget || null;
+  const adLearn = adaptive?.learning || null;
+  const adRate = adaptive?.rateCode || null;
+  const adOn = nm.adaptiveEnabled !== false;
+  const adaptiveProfileLabel = adaptive?.profile
+    ? (isFa ? PROFILE_LABELS[adaptive.profile]?.fa : PROFILE_LABELS[adaptive.profile]?.en) || adaptive.profile
+    : '—';
+  const adaptiveReasonLabel = adaptive?.reason
+    ? (isFa ? ADAPTIVE_REASON_LABELS[adaptive.reason]?.fa : ADAPTIVE_REASON_LABELS[adaptive.reason]?.en) || adaptive.reason
+    : '—';
 
   /* ── Phase 7 — Universal Scientific Memory ─────────────────────────────── */
   const science = nm.science || null;
@@ -442,6 +491,157 @@ const NeuromorphicCortexPanel = memo(function NeuromorphicCortexPanel({ locale =
         </div>
       </div>
 
+
+      {/* ── Phase 9 — Adaptive Intelligence Ecosystem ─────────────────────── */}
+      <div className="nmc-raster-card nmc-adaptive-card" data-testid="nmc-adaptive-card">
+        <div className="nmc-section-head">
+          <strong>
+            {isFa
+              ? 'اکوسیستم هوش تطبیقی — تطبیق کورتکس با شرایط داده و توان دستگاه'
+              : 'Adaptive Intelligence Ecosystem — cortex adapts to the data and to the device'}
+          </strong>
+          <small data-testid="nmc-adaptive-profile">
+            {adaptive
+              ? (isFa
+                  ? `پروفایل: ${adaptiveProfileLabel} · دلیل: ${adaptiveReasonLabel}`
+                  : `Profile: ${adaptiveProfileLabel} · ${adaptiveReasonLabel}`)
+              : (isFa
+                  ? 'در انتظار اولین مشاهده — هیچ پروفایلی پیش از داده انتخاب نمی‌شود'
+                  : 'Awaiting the first observation — no profile is chosen before data')}
+          </small>
+        </div>
+
+        <div className="nmc-grid-4">
+          <div className="nmc-stat">
+            <span>{isFa ? 'اثربخشی سیناپسی هموستاتیک (سرور نرخ شلیک)' : 'Homeostatic synaptic efficacy (rate servo)'}</span>
+            <strong data-testid="nmc-adaptive-efficacy">{fmtNum(adAct?.synapticEfficacy, 3)}</strong>
+            <small>
+              {adServo
+                ? (isFa
+                    ? `نرخ ${fmtPct(adServo.rate, 1)} از هدف ${fmtPct(adServo.targetRate, 0)} · خطای میانگین ${fmtNum(adServo.stats?.meanAbsError, 3)}`
+                    : `rate ${fmtPct(adServo.rate, 1)} of target ${fmtPct(adServo.targetRate, 0)} · mean |error| ${fmtNum(adServo.stats?.meanAbsError, 3)}`)
+                : (isFa ? 'کنترل بازخوردی روی نرخ شلیک اندازه‌گیری‌شده' : 'Closed loop on the measured firing rate')}
+            </small>
+          </div>
+
+          <div className="nmc-stat">
+            <span>{isFa ? 'نرخ شلیک واقعی / بدون سرور' : 'Measured rate / without servo'}</span>
+            <strong data-testid="nmc-adaptive-rate">{fmtPct(adRate?.rate, 1)}</strong>
+            <small>
+              {adRate
+                ? (isFa
+                    ? `${adRate.spikes} از ${adRate.neurons} نورون · بدون سرور ${adRate.spikesWithoutServo} · آنتروپی کد نرخ ${fmtNum(adRate.firingRateEntropy, 3)}`
+                    : `${adRate.spikes} of ${adRate.neurons} neurons · without servo ${adRate.spikesWithoutServo} · rate-code entropy ${fmtNum(adRate.firingRateEntropy, 3)}`)
+                : (isFa ? 'شمارش واقعی پالس‌ها، نه تخمین' : 'Counted spikes, not a model')}
+            </small>
+          </div>
+
+          <div className="nmc-stat">
+            <span>{isFa ? 'تخصیص بودجهٔ دستگاه' : 'Device budget allocation'}</span>
+            <strong data-testid="nmc-adaptive-budget">
+              {adBudget
+                ? (isFa
+                    ? `${adBudget.spentReservoirNeurons} از ${adBudget.governorReservoirCeiling ?? '—'} نورون`
+                    : `${adBudget.spentReservoirNeurons} of ${adBudget.governorReservoirCeiling ?? '—'} neurons`)
+                : '—'}
+            </strong>
+            <small>
+              {adBudget
+                ? (isFa
+                    ? `استفاده ${fmtPct((adBudget.utilisationPct ?? 0) / 100, 0)} از سقف سخت‌افزار · سقف داده‌محور ${adAct?.reservoirCap ?? '—'}`
+                    : `${fmtPct((adBudget.utilisationPct ?? 0) / 100, 0)} of the hardware ceiling · data-shaped cap ${adAct?.reservoirCap ?? '—'}`)
+                : (isFa ? 'سقف سخت‌افزار × آنچه داده توجیه می‌کند' : 'Hardware ceiling ∩ what the data justifies')}
+            </small>
+          </div>
+
+          <div className="nmc-stat">
+            <span>{isFa ? 'چرخهٔ وظیفهٔ یادگیری R-STDP' : 'R-STDP learning duty cycle'}</span>
+            <strong data-testid="nmc-adaptive-duty">{adLearn ? fmtPct((adLearn.dutyCyclePct ?? 0) / 100, 0) : '—'}</strong>
+            <small>
+              {adLearn
+                ? (isFa
+                    ? `${adLearn.ticksSpent} تیک یادگیری واقعی از ${adaptive?.ticks ?? '—'} · رضایت یادگیری: ${adLearn.optIn ? 'آری' : 'خیر'}`
+                    : `${adLearn.ticksSpent} real learning ticks of ${adaptive?.ticks ?? '—'} · consent: ${adLearn.optIn ? 'yes' : 'no'}`)
+                : (isFa ? 'یادگیری بدون رضایت خرج نمی‌شود' : 'Learning is never spent without consent')}
+            </small>
+          </div>
+        </div>
+
+        {/* Measured conditions — the inputs the profile is computed from */}
+        <div className="nmc-adaptive-conditions">
+          {Object.entries(CORTEX_CONDITION_LABELS).map(([key, label]) => {
+            const value = adCond ? adCond[key] : null;
+            const pct = value === null || value === undefined ? 0 : Math.max(0, Math.min(100, Math.round(Number(value) * 100)));
+            return (
+              <div key={key} className="nmc-regime-row" data-testid={`nmc-adaptive-cond-${key}`}>
+                <div className="nmc-regime-top">
+                  <span>{isFa ? label.fa : label.en}</span>
+                  <strong>{fmtNum(value, 3)}</strong>
+                </div>
+                <div className="nmc-bar-track">
+                  <div className="nmc-bar-fill" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Decision confidence — the distance to the nearest cut point, not a slogan */}
+        <p className="nmc-note" data-testid="nmc-adaptive-scores">
+          {adScores
+            ? (isFa
+                ? `امتیاز تصمیم: پیش‌بینی‌پذیری ${fmtNum(adScores.predictability, 3)} · فاصله تا «نگه‌داشت» ${fmtSigned(adScores.distanceToHold, 3)} · فاصله تا «بهره‌برداری کامل» ${fmtSigned(adScores.distanceToExploit, 3)} — هر سه از تل‌متری خود کورتکس، با هیسترزیس ${adaptive?.rules?.hysteresis ?? '—'}`
+                : `Decision scores: predictability ${fmtNum(adScores.predictability, 3)} · distance to HOLD ${fmtSigned(adScores.distanceToHold, 3)} · distance to EXPLOIT ${fmtSigned(adScores.distanceToExploit, 3)} — all from the cortex's own telemetry, hysteresis ${adaptive?.rules?.hysteresis ?? '—'}`)
+            : (isFa
+                ? 'هیچ عددی از پیش نوشته نشده؛ این بلوک با اولین مشاهدهٔ واقعی بازار پر می‌شود.'
+                : 'Nothing is pre-filled — this block fills on the first real market observation.')}
+        </p>
+
+        {adServo?.stats ? (
+          <p className="nmc-note" data-testid="nmc-adaptive-saturation">
+            {isFa
+              ? `پالس‌های اشباع (نرخ ≥ ۹۵٪): ${adServo.stats.saturationTicks} از ${adServo.stats.ticks} تیک · تیک‌های سکوت: ${adServo.stats.silentTicks} · بازده صرفه‌جویی‌شدهٔ اندازه‌گیری‌شده: ${adaptive?.efficiency?.spikeSavingPct != null ? fmtPct(adaptive.efficiency.spikeSavingPct / 100, 1) : '—'} (${adaptive?.efficiency?.statement || '—'})`
+              : `Saturated ticks (rate ≥ 95%): ${adServo.stats.saturationTicks} of ${adServo.stats.ticks} · silent ticks: ${adServo.stats.silentTicks} · measured spike saving: ${adaptive?.efficiency?.spikeSavingPct != null ? fmtPct(adaptive.efficiency.spikeSavingPct / 100, 1) : '—'} (${adaptive?.efficiency?.statement || '—'})`}
+          </p>
+        ) : null}
+
+        <div className="nmc-controls">
+          <button
+            type="button"
+            className={`nmc-btn ${adOn ? 'nmc-btn-on' : ''}`}
+            data-testid="nmc-adaptive-toggle"
+            onClick={() => nm.setAdaptiveEnabled(!adOn)}
+          >
+            {adOn
+              ? (isFa ? 'تطبیق داده‌محور: روشن' : 'Data adaptation: ON')
+              : (isFa ? 'تطبیق داده‌محور: خاموش (فاز ۶ خالص)' : 'Data adaptation: OFF (pure Phase 6)')}
+          </button>
+          <button
+            type="button"
+            className={`nmc-btn ${adLearn?.optIn ? 'nmc-btn-on' : ''}`}
+            data-testid="nmc-adaptive-learn-toggle"
+            onClick={() => nm.setLearningOptIn(!(adLearn?.optIn !== false))}
+          >
+            {adLearn?.optIn !== false
+              ? (isFa ? 'رضایت یادگیری روی دستگاه: آری' : 'On-device learning consent: YES')
+              : (isFa ? 'رضایت یادگیری روی دستگاه: خیر' : 'On-device learning consent: NO')}
+          </button>
+          <button
+            type="button"
+            className="nmc-btn"
+            data-testid="nmc-adaptive-refresh-btn"
+            onClick={() => nm.refreshAdaptive()}
+          >
+            {isFa ? 'خوانش تازهٔ شرایط' : 'Re-read conditions'}
+          </button>
+        </div>
+
+        <p className="nmc-note" data-testid="nmc-adaptive-honesty">
+          {isFa
+            ? 'قاعدهٔ صداقت: پروفایل فقط از دو سنجهٔ خودِ کورتکس (شگفتی پیش‌بینی و حاشیهٔ تصمیم عقده‌های قاعده‌ای) ساخته می‌شود؛ بقیهٔ شرایط فقط گزارش می‌شوند چون در اندازه‌گیری از هم جدا نشدند. اثربخشی سیناپسی همان یادگیری R-STDP را کند یا تند می‌کند و هرگز جایگزین آن نمی‌شود. هیچ ادعای دقت یا سوددهی در این بلوک نیست و هیچ داده‌ای از دستگاه خارج نمی‌شود.'
+            : 'Honesty rule: the profile is computed from exactly two of the cortex\u2019s own measurements — predictive surprise and the basal-ganglia decision margin. The rest of the conditions are reported but do not switch the profile, because on the probe they did not separate. Synaptic efficacy paces R-STDP; it never replaces it. No accuracy or profitability is claimed here, and no data leaves the device.'}
+        </p>
+      </div>
 
       {/* ── Phase 7 — Universal Scientific Memory ─────────────────────────── */}
       <div className="nmc-raster-card nmc-science-card">

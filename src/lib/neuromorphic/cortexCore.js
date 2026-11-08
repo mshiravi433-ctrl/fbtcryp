@@ -290,7 +290,12 @@ export function createNeuromorphicCortex({
   swarmWeights = null,
   generation = 0,
   /** PHASE 6: run the brain-inspired core (`false` reproduces Phase-5 behaviour). */
-  brain = true
+  brain = true,
+  /**
+   * PHASE 9: accept the adaptive ecosystem's homeostatic synaptic efficacy.
+   * `false` pins efficacy at 1 and reproduces Phase-6 behaviour byte-for-byte.
+   */
+  adaptive = true
 } = {}) {
   const initialSize = clamp(Math.round(reservoirSize) || BASE_RESERVOIR_SIZE, 32, MAX_RESERVOIR_SIZE);
   const encoder = createSpikeEncoder();
@@ -333,6 +338,25 @@ export function createNeuromorphicCortex({
   });
   let brainEnabled = brain !== false;
   let lastBrain = null;
+
+  /*
+   * PHASE 9 — global synaptic efficacy `g ∈ [gainMin, 1]`, written every tick by
+   * the adaptive ecosystem's firing-rate servo (`adaptiveEcosystem.js`).
+   *
+   * This is Turrigiano's synaptic scaling made explicit: every afferent is
+   * multiplied by one homeostatic factor, so the *excitability* of the reservoir
+   * is controlled while the relative pattern of its synapses — everything
+   * neuroevolution and the swarm genome own — is left untouched. `g = 1` is the
+   * identity, so `adaptive:false` reproduces Phase-6 dynamics exactly.
+   *
+   * Why efficacy and not threshold: measured (see the phase-9 document), an
+   * additive threshold offset up to 0.92 changes the spike count by **zero**
+   * because the network sits in a reverberating attractor where the firing
+   * decision is made by the current, not by the distance to threshold. Scaling
+   * the drive is monotone and bistability-free.
+   */
+  let adaptiveEnabled = adaptive !== false;
+  let synapticEfficacy = 1;
   /** Readout heads from the previous tick (used as the volatility prior for the brain). */
   let rawHeadsLast = new Float32Array(READOUT_DIM);
   /** Reservoir spikes fired in the previous tick (event-driven energy accounting). */
@@ -402,6 +426,15 @@ export function createNeuromorphicCortex({
     const N = res.size;
     const nextSpikes = new Float32Array(N);
     let spikeCount = 0;
+    /**
+     * PHASE 9 — homeostatic synaptic efficacy. The reservoir's only feedback until
+     * now was its own clamp-limited adaptive threshold, which is why the network
+     * settled at ~100% firing. One global factor scales every afferent current.
+     * The *unscaled* spike count is computed on the same inputs in the same pass,
+     * so the counterfactual is measured rather than modelled.
+     */
+    const efficacy = adaptiveEnabled ? synapticEfficacy : 1;
+    let countWithoutServo = 0;
 
     for (let j = 0; j < N; j += 1) {
       // 1. Sensory current
@@ -422,8 +455,14 @@ export function createNeuromorphicCortex({
       }
 
       // 3. Leaky Integrate-and-Fire membrane dynamics + adaptive homeostatic threshold
-      const vNext = res.alphaDecay[j] * res.membraneV[j] + iSyn;
       const effThreshold = res.baseThreshold[j] + res.thresholdAdapt[j];
+      // PHASE 9: homeostatic synaptic scaling is applied to the *current*, so the
+      // stored weight matrices (and therefore the genome) never move.
+      const vPrev = res.alphaDecay[j] * res.membraneV[j];
+      const vNoServo = vPrev + iSyn;
+      const vNext = vPrev + iSyn * efficacy;
+
+      if (vNoServo >= effThreshold) countWithoutServo += 1;
 
       if (vNext >= effThreshold) {
         nextSpikes[j] = 1;
@@ -440,7 +479,7 @@ export function createNeuromorphicCortex({
       res.firingRateEma[j] = 0.95 * res.firingRateEma[j] + 0.05 * nextSpikes[j];
     }
 
-    return { nextSpikes, spikeCount };
+    return { nextSpikes, spikeCount, countWithoutServo };
   }
 
   /**
@@ -673,10 +712,12 @@ export function createNeuromorphicCortex({
       }
     }
 
+    let spikesWithoutServo = spikeCount;
     if (!nextSpikes) {
       const cpuOut = cpuLifStep(encoded.spikes, encoded.currents);
       nextSpikes = cpuOut.nextSpikes;
       spikeCount = cpuOut.spikeCount;
+      spikesWithoutServo = Number.isFinite(cpuOut.countWithoutServo) ? cpuOut.countWithoutServo : spikeCount;
     }
 
     // 5. Update STDP Eligibility Traces
@@ -829,6 +870,9 @@ export function createNeuromorphicCortex({
         firingRateHz: Number(firingRateHz.toFixed(2)),
         totalSpikesEmitted
       },
+      /* PHASE 9 — measured rate code, including the counterfactual with efficacy
+       * held at 1, so the servo can be scored instead of believed. */
+      rateCode: readRateCode(spikeCount, spikesWithoutServo),
       liquidPreview: Array.from(liquidState.slice(0, 12), (v) => Number(v.toFixed(4))),
       membranePreview: Array.from(res.membraneV.slice(0, 24), (v) => Number(v.toFixed(4))),
       topology: {
@@ -1035,6 +1079,77 @@ export function createNeuromorphicCortex({
     };
   }
 
+  /**
+   * PHASE 9 — normalised Shannon entropy of the reservoir firing-rate code.
+   *
+   * `firingRateEma` is the only per-neuron statistic the network maintains. When
+   * every neuron fires on every tick (the measured behaviour of `main` before
+   * this phase) this value pins itself to 1.0 and stays there: the reservoir has
+   * a *rate* code only if the rates differ, so entropy is the direct, measured
+   * answer to "is this network saying anything?".
+   *
+   * Returns `null` before the first tick — never a fabricated 0.
+   */
+  function firingRateEntropy() {
+    if (localTicks === 0) return null;
+    let total = 0;
+    const vals = new Float32Array(res.size);
+    for (let j = 0; j < res.size; j += 1) {
+      const v = Math.max(0, res.firingRateEma[j]);
+      vals[j] = v;
+      total += v;
+    }
+    if (!(total > 0)) return 0;
+    let h = 0;
+    for (let j = 0; j < res.size; j += 1) {
+      if (vals[j] > 0) {
+        const p = vals[j] / total;
+        h -= p * Math.log2(p);
+      }
+    }
+    return res.size > 1 ? Number((h / Math.log2(res.size)).toFixed(4)) : 0;
+  }
+
+  /**
+   * PHASE 9 — the measured rate code for one tick: how many neurons fired under
+   * the applied homeostatic efficacy, how many would have fired at efficacy 1, and
+   * how many spikes the servo therefore suppressed this tick.
+   */
+  function readRateCode(spikeCount, spikeCountWithoutServo) {
+    const size = Math.max(1, res.size);
+    const after = Math.max(0, Number(spikeCount) || 0);
+    const before = Number.isFinite(Number(spikeCountWithoutServo))
+      ? Math.max(0, Number(spikeCountWithoutServo))
+      : after;
+    return {
+      neurons: res.size,
+      spikes: after,
+      rate: Number((after / size).toFixed(4)),
+      spikesWithoutServo: before,
+      rateWithoutServo: Number((before / size).toFixed(4)),
+      /* Positive = the servo suppressed this many spikes this tick. */
+      suppressed: before - after,
+      firingRateEntropy: firingRateEntropy(),
+      synapticEfficacy: Number(synapticEfficacy.toFixed(4)),
+      servoEnabled: adaptiveEnabled
+    };
+  }
+
+  /**
+   * PHASE 9 — the adaptive ecosystem's servo writes one global synaptic efficacy
+   * factor here each tick. Bounded inside the cortex as well: a controller bug can
+   * silence the network or restore it, but cannot amplify it past the genome.
+   */
+  function setSynapticEfficacy(gain) {
+    const g = Number(gain);
+    synapticEfficacy = Number.isFinite(g) ? clamp(g, 0.02, 1) : 1;
+    return synapticEfficacy;
+  }
+
+  function getSynapticEfficacy() {
+    return synapticEfficacy;
+  }
+
   /** True when the last `importSnapshot` also restored the Phase-6 circuits. */
   let brainStateRestored = false;
 
@@ -1116,6 +1231,11 @@ export function createNeuromorphicCortex({
       /** Sharp-wave-ripple consolidation over real resolved engrams. */
       consolidate: ({ episodes = [], iterations = 6 } = {}) => brainCore.consolidate({ episodes, iterations }),
       getLastReadout: () => lastReadout,
+      firingRateEntropy,
+      readRateCode,
+      setSynapticEfficacy,
+      getSynapticEfficacy,
+      isAdaptiveEnabled: () => adaptiveEnabled,
       getStats: () => ({
         generation: currentGeneration,
         localTicks,
@@ -1135,6 +1255,7 @@ export function createNeuromorphicCortex({
     brainCore.reset();
     brainStateRestored = false;
     lastBrain = null;
+    synapticEfficacy = 1;
     rawHeadsLast = new Float32Array(READOUT_DIM);
     lastSpikeCount = 0;
     res = buildReservoirState(BASE_RESERVOIR_SIZE, seed);
@@ -1160,6 +1281,16 @@ export function createNeuromorphicCortex({
     step,
     stepSync,
     getSwarmWeights,
+    /* PHASE 9 — homeostatic actuator written by the adaptive ecosystem. */
+    setSynapticEfficacy,
+    getSynapticEfficacy,
+    firingRateEntropy,
+    setAdaptiveEnabled: (on) => {
+      adaptiveEnabled = on !== false;
+      if (!adaptiveEnabled) synapticEfficacy = 1;
+      return adaptiveEnabled;
+    },
+    isAdaptiveEnabled: () => adaptiveEnabled,
     setBrainEnabled: (on) => { brainEnabled = on !== false; return brainEnabled; },
     isBrainEnabled: () => brainEnabled,
     getBrainSnapshot: () => lastBrain,

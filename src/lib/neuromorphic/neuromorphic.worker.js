@@ -13,6 +13,7 @@
  *   → { id, type: 'configure', paused?, swarmOptIn?, intentGenome? }
  *   → { id, type: 'consolidate', iterations? }   (Phase 6 sharp-wave replay)
  *   → { id, type: 'science', action, packet? }   (Phase 7 universal scientific memory)
+ *   → { id, type: 'adaptive', enabled?, learningOptIn? }  (Phase 9 data/device adaptation)
  *   → { id, type: 'reset' }
  *   → { id, type: 'dispose' }
  */
@@ -33,12 +34,21 @@ import {
 } from './engramMemory.js';
 import { blendGlobalSwarmWeights, runLocalSwarmEvolution } from './swarmClient.js';
 import { createScientificMemory } from './scientificMemory.js';
+import {
+  ADAPTIVE_SCHEMA,
+  createAdaptiveEcosystem,
+  replayServoCounterfactual
+} from './adaptiveEcosystem.js';
 
 let cortex = null;
 let gpuKernel = null;
 let governor = null;
 let engrams = null;
 let science = null;
+/** PHASE 9 — data-conditioning + device-budget ecosystem (rate servo lives here). */
+let ecosystem = null;
+let adaptiveEnabled = true;
+let learningOptIn = true;
 let initialized = false;
 let ticksSinceSave = 0;
 
@@ -69,6 +79,7 @@ async function ensureReady(msg = {}) {
   cortex = createNeuromorphicCortex();
   engrams = createEngramMemory();
   science = createScientificMemory();
+  ecosystem = createAdaptiveEcosystem({ learningOptIn });
   governor = createHardwareGovernor({
     paused: Boolean(msg.paused),
     swarmOptIn: msg.swarmOptIn !== false
@@ -119,6 +130,8 @@ async function handleInit(id, msg) {
     reservoirNeurons: snap.reservoirSize,
     engramCount: engrams.size(),
     brainEnabled: cortex.isBrainEnabled(),
+    adaptiveEnabled,
+    adaptive: adaptiveEnabled ? ecosystem.report() : null,
     stats: snap.stats
   });
 }
@@ -147,14 +160,33 @@ async function handleTick(id, msg) {
     return;
   }
 
+  /*
+   * PHASE 9 — the ecosystem plans BEFORE the step (homeostatic efficacy from the
+   * previous measured rate, learning duty cycle, reservoir growth cap) and
+   * observes AFTER it. The gate is the *intersection* of the device budget and
+   * the data profile: a TURBO device on flat data no longer spends 512 neurons.
+   */
+  ecosystem.setGovernorPolicy(gov);
+  const plan = adaptiveEnabled ? ecosystem.plan() : null;
+  if (adaptiveEnabled) cortex.setSynapticEfficacy(plan.synapticEfficacy);
+
   const readout = await cortex.step(feat.vector, {
     observedPrice: feat.meta?.lastClose ?? null,
-    learningEnabled: gov.allowPlasticity,
+    learningEnabled: adaptiveEnabled ? (gov.allowPlasticity && plan.learnThisTick) : gov.allowPlasticity,
     sparseMode: gov.mode === 'ECO_SPARSE',
     gpuLifRunner: gpuKernel?.available ? gpuKernel.runLifStep : null
   });
 
   governor.recordTickDuration(readout.latencyMs);
+
+  const adaptive = adaptiveEnabled
+    ? ecosystem.observe({
+        features: feat.vector,
+        readout,
+        /* The counterfactual the cortex already measured on this very tick. */
+        staticSpikeBaseline: readout.rateCode?.spikesWithoutServo ?? null
+      })
+    : null;
 
   // Imprint episodic liquid memory whenever a real prediction resolves
   if (readout.learning?.rewardOutcome) {
@@ -169,10 +201,18 @@ async function handleTick(id, msg) {
 
   // Periodic Phase 2 Structural Self-Development (every 6 ticks when allowed)
   let structural = null;
-  if (gov.allowNeurogenesis && readout.localTicks % 6 === 0) {
+  /*
+   * PHASE 9 — the growth cap is the ecosystem's, i.e. the smaller of what the
+   * device can afford and what the data justifies. Growth is also refused while
+   * the profile is HOLD_SPARSE: growing a network on a stream the cortex cannot
+   * predict adds parameters, not information.
+   */
+  const growthCap = plan?.reservoirCap ?? gov.maxReservoirNeurons;
+  const growthJustified = adaptive?.profile !== 'HOLD_SPARSE';
+  if (gov.allowNeurogenesis && growthJustified && readout.localTicks % 6 === 0) {
     structural = runStructuralPlasticity(cortex, {
       anomalySurprise: readout.anomalySurprise,
-      maxReservoirNeurons: gov.maxReservoirNeurons
+      maxReservoirNeurons: growthCap
     });
     readout.topology.reservoirNeurons = structural.reservoirNeurons;
     readout.topology.activeSynapses = structural.activeSynapses;
@@ -205,6 +245,7 @@ async function handleTick(id, msg) {
     science: scienceReport,
     scienceIngest,
     sciencePrior,
+    adaptive,
     governor: gov,
     observationMeta: feat.meta
   });
@@ -403,11 +444,80 @@ async function handleScience(id, msg) {
   reply(id, { ok: true, type: 'scienceResult', action: 'report', science: science.report() });
 }
 
+/**
+ * PHASE 9 — adaptive ecosystem control.
+ *   report      → the current measured condition, profile, servo and budget
+ *   counterfactual → replay this device's measured spike counts through a fresh
+ *                    servo and report where it would have moved efficacy
+ *   enable/disable the ecosystem for an A/B comparison (cortex returns to the
+ *   Phase-6 dynamics when it is off, because efficacy resets to 1)
+ */
+async function handleAdaptive(id, msg) {
+  await ensureReady(msg);
+  const action = String(msg.action || 'report');
+
+  if (action === 'set') {
+    if (typeof msg.enabled === 'boolean') {
+      adaptiveEnabled = msg.enabled;
+      cortex.setAdaptiveEnabled(adaptiveEnabled);
+    }
+    if (typeof msg.learningOptIn === 'boolean') {
+      learningOptIn = msg.learningOptIn;
+      ecosystem.setLearningOptIn(learningOptIn);
+    }
+    if (typeof msg.enabled === 'boolean' && !msg.enabled) ecosystem.reset();
+    const gov = await governor.evaluate();
+    ecosystem.setGovernorPolicy(gov);
+    return reply(id, {
+      ok: true,
+      type: 'adaptiveResult',
+      action: 'set',
+      adaptiveEnabled,
+      learningOptIn,
+      adaptive: adaptiveEnabled ? ecosystem.report() : null,
+      governor: gov
+    });
+  }
+
+  if (action === 'counterfactual') {
+    /*
+     * Honest scope: this replays the rates this device ACTUALLY produced. It is
+     * not a second simulation of a second cortex, and the reply says so.
+     */
+    const counts = Array.isArray(msg.spikeCounts) ? msg.spikeCounts.slice(0, 512) : [];
+    const size = Math.max(1, Math.round(Number(msg.reservoirSize) || 96));
+    const replay = replayServoCounterfactual(counts, size, msg.servo || {});
+    return reply(id, {
+      ok: true,
+      type: 'adaptiveResult',
+      action: 'counterfactual',
+      schema: ADAPTIVE_SCHEMA,
+      replay,
+      note: 'replays measured rates; does not re-simulate the reservoir',
+      laws: { canExecute: false, canSign: false, canMoveFunds: false }
+    });
+  }
+
+  const gov = await governor.evaluate();
+  ecosystem.setGovernorPolicy(gov);
+  return reply(id, {
+    ok: true,
+    type: 'adaptiveResult',
+    action: 'report',
+    adaptiveEnabled,
+    learningOptIn,
+    adaptive: ecosystem.report(),
+    governor: gov,
+    constants: ecosystem.constants()
+  });
+}
+
 async function handleReset(id) {
   await ensureReady({});
   cortex.reset();
   engrams.clear();
   science.wipe();
+  if (ecosystem) ecosystem.reset();
   await wipeLocalCortexBundle();
   const gov = await governor.evaluate();
   reply(id, {
@@ -429,6 +539,7 @@ self.onmessage = (event) => {
   else if (type === 'configure') handleConfigure(id, msg).catch((e) => fail(id, e));
   else if (type === 'consolidate') handleConsolidate(id, msg).catch((e) => fail(id, e));
   else if (type === 'science') handleScience(id, msg).catch((e) => fail(id, e));
+  else if (type === 'adaptive') handleAdaptive(id, msg).catch((e) => fail(id, e));
   else if (type === 'reset') handleReset(id).catch((e) => fail(id, e));
   else if (type === 'dispose') {
     gpuKernel?.dispose?.();
