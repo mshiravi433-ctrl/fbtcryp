@@ -18350,7 +18350,10 @@
     },
     "chart": {
       "loading": "Reading the venue catalogue…",
-      "noVenue": "No in-app venue lists this pair, so there is no chart to show."
+      "noVenue": "No in-app venue lists this pair, so there is no chart to show.",
+      "heikin": "Heikin Ashi",
+      "heikinHint": "Open/high/low/close below are Heikin Ashi values: the average of the bar, not its traded price.",
+      "noVolume": "This feed sends no bar volume, so there is no VWAP to draw."
     },
     "tabs": {
       "book": "Book",

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import CandleChart from './CandleChart';
 import { fmtPrice } from '../lib/format';
+import { toHeikinAshi, volumeWeightedAveragePrice } from '../lib/proChartMath';
 import '../styles/trading-chart.css';
 
 /**
@@ -50,13 +51,25 @@ function ma(values, period) {
   return out;
 }
 
-export default function TradingChart({ data, symbol = '', height = 280 }) {
+/**
+ * `barsWithVolume` says how many of the incoming bars carried a volume. It is
+ * NOT inferred here: the parent already had to decide that per row, and two
+ * places deciding whether a zero means "no volume" or "no volume READ" is how a
+ * VWAP gets drawn from nothing.
+ */
+export default function TradingChart({ data, symbol = '', height = 280, barsWithVolume = 0 }) {
   const { t, i18n } = useTranslation();
   const hostRef = useRef(null);
   const [failed, setFailed] = useState(false);
   const [ready, setReady] = useState(false);
   const [showMa7, setShowMa7] = useState(true);
   const [showMa25, setShowMa25] = useState(true);
+  /* Two view options, both OFF by default: a chart that changes the candles
+     the user asked for without being told is a chart that lies about the
+     market's shape. Both are also disabled (not merely hidden) when the data
+     they need is missing. */
+  const [heikin, setHeikin] = useState(false);
+  const [showVwap, setShowVwap] = useState(false);
   const [legend, setLegend] = useState(null);
   const apiRef = useRef(null);
 
@@ -77,7 +90,31 @@ export default function TradingChart({ data, symbol = '', height = 280 }) {
       .sort((a, b) => a.time - b.time);
   }, [data]);
 
-  const last = candles[candles.length - 1] ?? null;
+  /* The series actually drawn. Heikin Ashi is a SOURCE change (§2 of the
+     plan), so it rebuilds the candle array rather than tinting the bars; the
+     MA overlays are then computed from the source that is on screen, which is
+     the only way the two things mean the same thing. */
+  const drawn = useMemo(() => (heikin ? toHeikinAshi(candles) : candles), [candles, heikin]);
+
+  /* VWAP needs a bar volume per bar. `alignVolumeToCandles` skips a bar whose
+     nearest reading is outside one candle's spacing, so a partially covered
+     series yields FEWER points rather than a line invented across the gap. */
+  const vwap = useMemo(() => {
+    const vols = (Array.isArray(data) ? data : [])
+      .map((d, i) => ({ t: Number(d?.t), v: Number(d?.v), i }))
+      .filter((d) => Number.isFinite(d.t) && Number.isFinite(d.v) && d.v > 0);
+    if (!vols.length || candles.length < 2) return [];
+    /* `volumeWeightedAveragePrice` is positional, so the volume array must be
+       the same length as the candles and in the same order. Candles that were
+       deduped or filtered out above would shift every later bar, so the
+       alignment is rebuilt from the candle's own timestamp. */
+    const byTime = new Map(vols.map((v) => [Math.floor(v.t / 1000), v.v]));
+    const aligned = candles.map((c) => byTime.get(c.time));
+    if (aligned.some((v) => !Number.isFinite(v))) return [];
+    return volumeWeightedAveragePrice(candles, aligned);
+  }, [candles, data]);
+
+  const last = drawn[drawn.length - 1] ?? null;
   const precision = precisionFor(last?.close);
 
   useEffect(() => {
@@ -97,7 +134,7 @@ export default function TradingChart({ data, symbol = '', height = 280 }) {
           throw new Error('CHART_ENV_UNSUPPORTED');
         }
         const lib = await import('lightweight-charts');
-        if (dead || !hostRef.current || candles.length < 2) return;
+        if (dead || !hostRef.current || drawn.length < 2) return;
         const { createChart, CandlestickSeries, LineSeries, CrosshairMode } = lib;
         const ColorType = lib.ColorType ?? { Solid: 'solid' };
 
@@ -141,7 +178,7 @@ export default function TradingChart({ data, symbol = '', height = 280 }) {
           borderVisible: false,
           priceFormat: { type: 'price', precision, minMove: 1 / 10 ** precision }
         });
-        candle.setData(candles);
+        candle.setData(drawn);
         candle.priceScale().applyOptions({ scaleMargins: { top: 0.12, bottom: 0.18 } });
 
         const ma7 = chart.addSeries(LineSeries, {
@@ -151,7 +188,7 @@ export default function TradingChart({ data, symbol = '', height = 280 }) {
           lastValueVisible: false,
           crosshairMarkerVisible: false
         });
-        ma7.setData(ma(candles, 7));
+        ma7.setData(ma(drawn, 7));
         ma7.applyOptions({ visible: true });
 
         const ma25 = chart.addSeries(LineSeries, {
@@ -161,9 +198,24 @@ export default function TradingChart({ data, symbol = '', height = 280 }) {
           lastValueVisible: false,
           crosshairMarkerVisible: false
         });
-        ma25.setData(ma(candles, 25));
+        ma25.setData(ma(drawn, 25));
 
-        apiRef.current = { chart, candle, ma7, ma25 };
+        /* VWAP is drawn only when there is a real series for it: an empty
+           series would put a legend entry on the chart for a line that does
+           not exist, which reads as "the venue sends no volume" when the truth
+           is "this venue's candles carry none". */
+        const vwapSeries = vwap.length > 1
+          ? chart.addSeries(LineSeries, {
+            color: '#b388ff',
+            lineWidth: 2,
+            priceLineVisible: false,
+            lastValueVisible: true,
+            crosshairMarkerVisible: true
+          })
+          : null;
+        if (vwapSeries) vwapSeries.setData(vwap);
+
+        apiRef.current = { chart, candle, ma7, ma25, vwap: vwapSeries };
         setLegend({ ...last });
         setReady(true);
 
@@ -193,9 +245,14 @@ export default function TradingChart({ data, symbol = '', height = 280 }) {
       try { chart?.remove(); } catch { /* noop */ }
       apiRef.current = null;
     };
-    // Mount-once per dataset by design (parent remounts per range).
+    /* Mount-once per dataset by design (the parent remounts per range and per
+       symbol), EXCEPT when the SOURCE changes: Heikin Ashi is a different set
+       of candles, not a tint, so the chart is rebuilt from `drawn`. `drawn`
+       and `vwap` are fresh arrays every render, so they cannot be dependencies
+       without looping — `heikin` is the only input that flips them without a
+       remount, so it is the one listed. */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [heikin]);
 
   /* MA toggles ride on the live series — no rebuild, no refetch. */
   useEffect(() => {
@@ -204,6 +261,9 @@ export default function TradingChart({ data, symbol = '', height = 280 }) {
   useEffect(() => {
     try { apiRef.current?.ma25?.applyOptions({ visible: showMa25 }); } catch { /* noop */ }
   }, [showMa25]);
+  useEffect(() => {
+    try { apiRef.current?.vwap?.applyOptions({ visible: showVwap }); } catch { /* noop */ }
+  }, [showVwap]);
 
   /* The recharts candle is the safety net: if the library ever fails to load
      (blocked CDN is impossible — it is bundled — but a broken WebGL-less
@@ -218,6 +278,11 @@ export default function TradingChart({ data, symbol = '', height = 280 }) {
     <div className="tv-wrap" dir="ltr">
       <div className="tv-legend" aria-live="polite">
         <span className="tv-sym">{symbol}</span>
+        {heikin ? (
+          /* The numbers in this legend are then the TRANSFORMED values. Saying
+             so on screen is the difference between a style and a claim. */
+          <span className="faint" title={t('perpTerminal.chart.heikinHint', { defaultValue: 'Open/high/low/close below are Heikin Ashi values: the average of the bar, not its traded price.' })}>HA</span>
+        ) : null}
         {legend ? (
           <span className="tv-ohlc mono">
             <span><em>{t('coin.open')}</em> {fmtPrice(legend.open)}</span>
@@ -251,6 +316,28 @@ export default function TradingChart({ data, symbol = '', height = 280 }) {
           aria-pressed={showMa25}
         >
           <span className="tv-dot" style={{ background: '#ff9800' }} /> MA 25
+        </button>
+        <button
+          type="button"
+          className={`tag ${heikin ? 'active' : ''}`}
+          onClick={() => setHeikin((v) => !v)}
+          aria-pressed={heikin}
+        >
+          <span className="tv-dot" style={{ background: '#26a69a' }} />
+          {t('perpTerminal.chart.heikin', { defaultValue: 'Heikin Ashi' })}
+        </button>
+        <button
+          type="button"
+          className={`tag ${showVwap ? 'active' : ''}`}
+          onClick={() => setShowVwap((v) => !v)}
+          aria-pressed={showVwap}
+          disabled={vwap.length < 2}
+          title={vwap.length < 2
+            ? t('perpTerminal.chart.noVolume', { defaultValue: 'This feed sends no bar volume, so there is no VWAP to draw.' })
+            : undefined}
+        >
+          <span className="tv-dot" style={{ background: '#b388ff' }} />
+          VWAP
         </button>
         <span className="faint tv-hint">{t('coin.tvHint')}</span>
       </div>
