@@ -64,7 +64,7 @@ import { pingWatchTick } from './lib/watchTick';
 import GalaxyBackdrop from './components/GalaxyBackdrop';
 import AppLock from './components/AppLock';
 import { initTheme, useSettingsStore } from './store/useSettingsStore';
-import { AI_TRADE_ENABLED, SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from './lib/features';
+import { AI_TRADE_ENABLED, PERP_TERMINAL_ENABLED, SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from './lib/features';
 import { languageIsUnset } from './i18n';
 import { initServiceWorker, initNativePushListeners, autoRegisterNativePush, refreshWebPushIfOptedIn, maybeSendDailyPromo, pickPromoKey, installPushBridge } from './lib/notify';
 import { newsIsStale, getNews } from './lib/news';
@@ -96,6 +96,17 @@ const About = lazyRetry(() => import('./pages/About'));
 const Contact = lazyRetry(() => import('./pages/Contact'));
 const Legal = lazyRetry(() => import('./pages/Legal'));
 const Perp = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/Perp')) : () => null;
+/*
+ * The futures TERMINAL — its own route and its own chunk.
+ *
+ * It is not a mode of `/perp`: that page is a pair list, and two suites assert
+ * the absence of a ticket, a fee table and a liquidation table on it
+ * (test/perp-redesign.test.jsx, test/perp-layout.test.jsx). A desk on its own
+ * path means those guarantees stay true AND a user who never opens the desk
+ * never downloads the book/tape/risk panels — the first-paint budget in
+ * scripts/check-first-paint.mjs is unaffected.
+ */
+const PerpTerminal = PERP_TERMINAL_ENABLED ? lazyRetry(() => import('./pages/PerpTerminal')) : () => null;
 /*
  * The spot tab. With speculation on it lives inside Perp (its rail). With
  * speculation off but the spot flag on, `/perp` serves this page instead, so
@@ -499,6 +510,7 @@ function AnimatedRoutes() {
             <Route path="/contact" element={<Contact />} />
             <Route path="/legal/:doc" element={<Legal />} />
             {SPECULATION_ENABLED && <Route path="/perp" element={<Perp />} />}
+            {PERP_TERMINAL_ENABLED && <Route path="/perp/terminal" element={<PerpTerminal />} />}
             {!SPECULATION_ENABLED && SPOT_TRADE_ENABLED && <Route path="/perp" element={<SpotPage />} />}
             <Route path="/farm" element={<Farm />} />
             <Route path="/signals" element={<Signals />} />

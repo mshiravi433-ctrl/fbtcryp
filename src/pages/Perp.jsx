@@ -20,9 +20,10 @@ import { fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from '../lib/features';
+import { PERP_TERMINAL_ENABLED, SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from '../lib/features';
 import { getFuturesFeePreview, getFuturesMarkets, prepareFutures, verifyFutures } from '../lib/futuresClient';
 import { liquidationDistance } from '../lib/futures-engine';
+import { pollWhileVisible } from '../lib/visibilityPoll';
 import {
   ROUTE, ROUTE_META, PERP_OWN_ERRORS, indexVenueMarkets, pickRoute, leverageCeiling,
   dydxOrderSize, classifyDydxOrderError
@@ -36,6 +37,7 @@ import { useSolanaWallet } from '../hooks/useSolanaWallet';
 import { publicAppUrl } from '../lib/solanaWallet.js';
 import lazyRetry from '../lib/lazyRetry';
 import '../styles/perp-modern.css';
+import '../styles/perp-terminal.css';
 import '../styles/futures-positions.css';
 import '../styles/derivatives-glass.css';
 
@@ -394,6 +396,19 @@ export default function Perp() {
   const [venues, setVenues] = useState({ velocity: [], ostium: [], dydx: [], dydxLoaded: false });
   useEffect(() => {
     let alive = true;
+    /*
+     * ─── POLLING A SCREEN NOBODY IS LOOKING AT ────────────────────────────
+     * This was `setInterval(load, 30_000)`. Three upstreams, twice a minute,
+     * for as long as the component was mounted — including the whole time the
+     * tab sat in the background, which on this app is most of the time. Each
+     * tick is three serverless invocations against three venues that answer
+     * nobody: 8,640 reads a day per open tab, before the ticket's own polls.
+     *
+     * `pollWhileVisible` is the house fix (lib/visibilityPoll.js): a hidden tab
+     * skips the tick entirely, and coming back runs it immediately, so the
+     * first thing a returning user sees is fresh data rather than a 30-second-
+     * old price. The cadence while visible is unchanged.
+     */
     const load = async () => {
       const [v, o, d] = await Promise.allSettled([
         getFuturesMarkets('drift'),
@@ -410,9 +425,9 @@ export default function Perp() {
         dydxLoaded: cur.dydxLoaded || Boolean(dydxRows)
       }));
     };
+    const off = pollWhileVisible(load, 30_000);
     load();
-    const id = setInterval(load, 30_000);
-    return () => { alive = false; clearInterval(id); };
+    return () => { alive = false; off(); };
   }, []);
 
   /** base symbol → { velocity?, ostium?, dydx? } */
@@ -971,6 +986,28 @@ export default function Perp() {
       <motion.div variants={riseIn} initial="hidden" animate="show">
         <h1 className="h1">{t(perpTab === 'spot' ? 'trade.title' : 'perp.title')}</h1>
         <p className="muted">{t(perpTab === 'spot' ? 'spot.subtitle' : 'perp.subtitle')}</p>
+        {/*
+          ─── THE DESK LIVES ONE ROUTE AWAY ────────────────────────────────
+          This page stays a pair LIST: the ticket, the fees and the
+          liquidation table stay inside the sheet, and the redesign suites
+          assert exactly that. The desk is a separate route, so the only thing
+          added here is a way to reach it — a quiet link, not a second ticket.
+
+          Not rendered on the spot tab: the desk is a futures screen, and a
+          "terminal" button above a spot swap would be an answer to a question
+          nobody asked.
+        */}
+        {PERP_TERMINAL_ENABLED && perpTab !== 'spot' && (
+          <button
+            type="button"
+            className="perp-terminal-link"
+            data-testid="perp-open-terminal"
+            onClick={() => navigate('/perp/terminal')}
+          >
+            {t('perp.terminalLink', { defaultValue: 'Open the trading terminal' })}
+            <span aria-hidden="true">→</span>
+          </button>
+        )}
       </motion.div>
 
       {/*

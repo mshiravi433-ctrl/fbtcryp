@@ -117,6 +117,92 @@ export function fetchDydxCandles(ticker, resolution = DYDX_CANDLE_RESOLUTION_DEF
   );
 }
 
+/**
+ * 24h high/low for one market, built from the venue's OWN hourly candles.
+ *
+ * `perpetualMarkets` publishes a 24h CHANGE but no 24h range, which is why the
+ * terminal's top bar had a gap where every other desk prints a high and a low.
+ * The indexer does publish the range that matters — 24 hourly bars — so the
+ * high and low here are the extremes of real trades over the last 24 hours, not
+ * a percentage applied to a price.
+ *
+ * Cached for 60s by the route (the hourly bar itself only changes once an hour,
+ * but the newest bar is still filling). Returns nulls rather than zeros when the
+ * indexer gives us fewer than two bars: "no range yet" is a fact, "0.00" is a
+ * claim.
+ */
+export const DYDX_RANGE_RESOLUTION = '1HOUR';
+export const DYDX_RANGE_BARS = 24;
+export async function fetchDydx24hRange(ticker) {
+  if (!validTicker(ticker)) throw upstreamError('BAD_DYDX_TICKER', 400);
+  const body = await fetchDydxCandles(ticker, DYDX_RANGE_RESOLUTION, DYDX_RANGE_BARS);
+  const rows = Array.isArray(body?.candles) ? body.candles : [];
+  const highs = rows.map((c) => Number(c.high)).filter((n) => Number.isFinite(n) && n > 0);
+  const lows = rows.map((c) => Number(c.low)).filter((n) => Number.isFinite(n) && n > 0);
+  if (rows.length < 2 || !highs.length || !lows.length) {
+    return { ticker, high24h: null, low24h: null, bars: rows.length, resolution: DYDX_RANGE_RESOLUTION };
+  }
+  return {
+    ticker,
+    high24h: Math.max(...highs),
+    low24h: Math.min(...lows),
+    bars: rows.length,
+    resolution: DYDX_RANGE_RESOLUTION,
+    /* Which bars the extremes came from, so a screen can say "of the last 24
+       hourly candles" instead of implying a rolling 60-minute window. */
+    firstBarAt: rows[0]?.startedAt ? new Date(rows[0].startedAt).toISOString() : null,
+    lastBarAt: rows[rows.length - 1]?.startedAt ? new Date(rows[rows.length - 1].startedAt).toISOString() : null
+  };
+}
+
+/**
+ * Recent public trades for one market — the tape the terminal draws beside the
+ * book. `/v4/trades/perpetualMarket/:ticker?limit=` is public and keyless, and
+ * the limit is clamped here (not in the route) so the cached key-space stays
+ * bounded: 1–100 only.
+ */
+export const DYDX_TRADES_LIMIT_MAX = 100;
+export const DYDX_TRADES_LIMIT_DEFAULT = 50;
+/**
+ * Clamp a caller's limit to the range we will ask upstream for, and do it in a
+ * function the ROUTE can also call before it builds its cache key. That is the
+ * rule `normaliseCandleQuery` set: the response cache is an unbounded Map, so a
+ * raw query string in a key lets an anonymous caller allocate entries forever.
+ * Two numbers, one function, no drift between what is cached and what is asked.
+ */
+export function normaliseTradesLimit(limit) {
+  const raw = typeof limit === 'string' ? limit.trim() : limit;
+  const n = raw === '' || raw == null ? NaN : Number(raw);
+  return Number.isFinite(n)
+    ? Math.min(DYDX_TRADES_LIMIT_MAX, Math.max(1, Math.trunc(n)))
+    : DYDX_TRADES_LIMIT_DEFAULT;
+}
+
+export function fetchDydxTrades(ticker, limit = DYDX_TRADES_LIMIT_DEFAULT) {
+  if (!validTicker(ticker)) throw upstreamError('BAD_DYDX_TICKER', 400);
+  return request(`/v4/trades/perpetualMarket/${encodeURIComponent(ticker)}?limit=${normaliseTradesLimit(limit)}`);
+}
+
+/**
+ * Historical funding for one market — what the position actually COST to hold,
+ * as opposed to the single forward-looking `nextFundingRate` the market row
+ * carries. Same clamp discipline; the indexer caps at 100 rows per page.
+ */
+export const DYDX_FUNDING_LIMIT_MAX = 100;
+export const DYDX_FUNDING_LIMIT_DEFAULT = 48;
+export function normaliseFundingLimit(limit) {
+  const raw = typeof limit === 'string' ? limit.trim() : limit;
+  const n = raw === '' || raw == null ? NaN : Number(raw);
+  return Number.isFinite(n)
+    ? Math.min(DYDX_FUNDING_LIMIT_MAX, Math.max(1, Math.trunc(n)))
+    : DYDX_FUNDING_LIMIT_DEFAULT;
+}
+
+export function fetchDydxHistoricalFunding(ticker, limit = DYDX_FUNDING_LIMIT_DEFAULT) {
+  if (!validTicker(ticker)) throw upstreamError('BAD_DYDX_TICKER', 400);
+  return request(`/v4/historicalFunding/${encodeURIComponent(ticker)}?limit=${normaliseFundingLimit(limit)}`);
+}
+
 export function fetchDydxAccount(address, number = 0) {
   if (!validAddress(address)) throw upstreamError('BAD_DYDX_ADDRESS', 400);
   const subaccount = Number(number);

@@ -62,21 +62,53 @@ export function dydxFeeUsd(notional) {
   return (n * DYDX_BUILDER_FEE_PPM) / 1_000_000;
 }
 
-const normaliseMarket = (m) => ({
-  ticker: m.ticker,
-  status: m.status,
-  oraclePrice: Number(m.oraclePrice),
-  priceChange24H: Number(m.priceChange24H || 0),
-  volume24H: Number(m.volume24H || 0),
-  openInterest: Number(m.openInterest || 0),
-  nextFundingRate: Number(m.nextFundingRate || 0),
-  atomicResolution: Number(m.atomicResolution),
-  quantumConversionExponent: Number(m.quantumConversionExponent),
-  stepBaseQuantums: Number(m.stepBaseQuantums),
-  subticksPerTick: Number(m.subticksPerTick),
-  clobPairId: String(m.clobPairId),
-  raw: m
-});
+/**
+ * The indexer's numbers, as numbers — and `null` when the field is absent.
+ *
+ * The difference matters more than it looks. The old map wrote
+ * `Number(m.priceChange24H || 0)` and `Number(m.nextFundingRate || 0)`, so a
+ * market whose row arrived without a funding rate printed **0.000%**, which on
+ * a leveraged screen is not "unknown", it is a promise that holding the
+ * position is free. Every optional field here is `null` when absent and the UI
+ * shows «—». Only the fields a market cannot exist without are coerced.
+ */
+const num = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+const normaliseMarket = (m) => {
+  /* Margin fractions, the pair the liquidation model reads. dYdX publishes
+     them as decimal strings ("0.025" = 2.5%); they are the difference between
+     an exact liquidation price and the 100%-loss bound we used to print. */
+  const imf = num(m.initialMarginFraction);
+  const mmf = num(m.maintenanceMarginFraction);
+  return {
+    ticker: m.ticker,
+    status: m.status,
+    oraclePrice: Number(m.oraclePrice),
+    priceChange24H: num(m.priceChange24H),
+    volume24H: num(m.volume24H),
+    /** Real trades in the last 24h (the indexer's `trades24H`), not notional. */
+    trades24H: num(m.trades24H),
+    openInterest: num(m.openInterest),
+    nextFundingRate: num(m.nextFundingRate),
+    /** Epoch seconds after which the next funding payment lands. */
+    nextFundingAt: m.nextFundingAt || null,
+    nextFundingAtMs: m.nextFundingAt ? Date.parse(m.nextFundingAt) : null,
+    initialMarginFraction: imf,
+    maintenanceMarginFraction: mmf,
+    /** 1 / IMF, floored — the venue's own leverage cap for this market. */
+    maxLeverage: imf != null && imf > 0 ? Math.max(1, Math.floor(1 / imf)) : null,
+    atomicResolution: Number(m.atomicResolution),
+    quantumConversionExponent: Number(m.quantumConversionExponent),
+    stepBaseQuantums: Number(m.stepBaseQuantums),
+    subticksPerTick: Number(m.subticksPerTick),
+    clobPairId: String(m.clobPairId),
+    raw: m
+  };
+};
 
 /** Public market metadata through our same-origin CORS proxy. */
 export async function getDydxMarkets() {
@@ -115,7 +147,7 @@ export async function getDydxMarkets() {
  * component says so instead of drawing a flat line at zero.
  */
 export async function getDydxCandles(ticker, resolution = '1HOUR', limit = 96) {
-  const safe = /^[A-Z0-9]+-[A-Z0-9]+$/.test(String(ticker || '')) ? String(ticker).toUpperCase() : '';
+  const safe = normaliseTicker(ticker);
   if (!safe) return { candles: [], live: false, ticker: null, resolution };
   try {
     const body = await timeoutFetch(
@@ -155,11 +187,56 @@ export async function getDydxOrderbook(ticker) {
       const p = Number(r.price); const s = Number(r.size);
       return Number.isFinite(p) && Number.isFinite(s) && mid > 0 && Math.abs(p / mid - 1) <= 0.01 ? n + p * s : n;
     }, 0);
+    /*
+     * THE LADDER, not just the ±1% total.
+     *
+     * `bidDepth1Pct` answered "how much is within 1%", which is the wrong
+     * question for a depth chart and for the slippage estimate a ticket needs:
+     * the terminal draws 10–20 levels per side and asks "what would my size
+     * cost me at each price". The rows are already in the response (the indexer
+     * sends the whole book), so keeping them costs nothing but honest shape.
+     * `offsetPct` is distance from the mid, so a component can scale the chart
+     * without knowing the price scale.
+     */
+    const ladder = (rows, sign) => (Array.isArray(rows) ? rows : [])
+      .map((r) => {
+        const price = Number(r.price);
+        const size = Number(r.size);
+        if (!Number.isFinite(price) || !Number.isFinite(size) || price <= 0 || size <= 0 || !(mid > 0)) return null;
+        return {
+          price,
+          size,
+          usd: price * size,
+          offsetPct: ((price - mid) / mid) * 100 * sign,
+          /* cumulative notional from the touch outward — the curve a slippage
+             estimate walks. */
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.offsetPct - b.offsetPct);
+    const bidLadder = ladder(bids, -1);
+    const askLadder = ladder(asks, 1);
+    const withCumulative = (rows) => {
+      let run = 0;
+      return rows.map((r) => { run += r.usd; return { ...r, cumulativeUsd: run }; });
+    };
+    const bidDepth = withCumulative(bidLadder);
+    const askDepth = withCumulative(askLadder);
+    const bidUsd1Pct = sum(bids);
+    const askUsd1Pct = sum(asks);
+    const total1Pct = bidUsd1Pct + askUsd1Pct;
     return {
       live: Number.isFinite(mid) && mid > 0,
-      bestBid, bestAsk,
+      bestBid, bestAsk, mid: Number.isFinite(mid) && mid > 0 ? mid : null,
       spreadBps: mid > 0 ? ((bestAsk - bestBid) / mid) * 10_000 : null,
-      bidDepth1Pct: sum(bids), askDepth1Pct: sum(asks)
+      bidDepth1Pct: bidUsd1Pct,
+      askDepth1Pct: askUsd1Pct,
+      bidDepth,
+      askDepth,
+      /* Share of the ±1% book that is bids. 50% is balanced; 80% means the
+         book is bid-heavy and a market sell is the cheaper side. */
+      imbalancePct: total1Pct > 0 ? (bidUsd1Pct / total1Pct) * 100 : null,
+      ticker: String(ticker).toUpperCase()
     };
   } catch {
     return { live: false };
@@ -216,6 +293,130 @@ export async function getDydxOrders({ address, subaccount = 0, status = 'UNTRIGG
   } catch (err) {
     if (String(err?.message).includes('HTTP_404')) return { orders: [], live: true };
     return { orders: [], live: false, reason: 'INDEXER_UNAVAILABLE' };
+  }
+}
+
+/**
+ * Normalise a ticker BEFORE validating it.
+ *
+ * The three reads below shipped with `test(ticker) ? upper(ticker) : ''`, which
+ * rejects `btc-usd` because the regex runs on the RAW string — a lowercase
+ * ticker from a deep link, a URL, or a user's own pair shortcut would silently
+ * become "BAD_TICKER" and the panel would sit empty for no stated reason. The
+ * shape is all that matters; normalise first, then test.
+ */
+const normaliseTicker = (ticker) => {
+  const up = String(ticker || '').trim().toUpperCase();
+  return /^[A-Z0-9]+-[A-Z0-9]+$/.test(up) ? up : '';
+};
+
+/**
+ * 24h HIGH / LOW from the venue's own hourly candles (server-side, one call).
+ *
+ * Returns `{ high24h, low24h, bars, live }`; nulls mean "the indexer did not
+ * give us enough bars", which the UI renders as «—» rather than as a zero.
+ */
+export async function getDydx24hRange(ticker) {
+  const safe = normaliseTicker(ticker);
+  if (!safe) return { high24h: null, low24h: null, live: false, reason: 'BAD_TICKER' };
+  try {
+    const body = await timeoutFetch(`${API_BASE}/dydx/range/${encodeURIComponent(safe)}`);
+    /* Number(null) is 0 — the exact trap this panel must not fall into. A
+       missing high is NOT a high of zero, so absence is checked before the
+       conversion, not after it. */
+    const high24h = body?.high24h == null ? null : Number(body.high24h);
+    const low24h = body?.low24h == null ? null : Number(body.low24h);
+    return {
+      high24h: Number.isFinite(high24h) ? high24h : null,
+      low24h: Number.isFinite(low24h) ? low24h : null,
+      bars: Number(body?.bars) || 0,
+      live: Number.isFinite(high24h) && Number.isFinite(low24h)
+    };
+  } catch {
+    return { high24h: null, low24h: null, live: false, reason: 'INDEXER_UNAVAILABLE' };
+  }
+}
+
+/**
+ * The tape. Newest first, normalised to `{ price, size, usd, side, at }`.
+ *
+ * `side` comes from the indexer's taker side (`BUY`/`SELL`), which is the only
+ * honest way to colour a print: the side of the RESTING order is the opposite
+ * one, and colouring by it would paint every buy green and every sell red
+ * backwards. Trades with no side drop to 'UNKNOWN' and the UI draws them
+ * neutral rather than guessing.
+ */
+export async function getDydxTrades(ticker, limit = 50) {
+  const safe = normaliseTicker(ticker);
+  if (!safe) return { trades: [], live: false, reason: 'BAD_TICKER' };
+  const count = Math.min(100, Math.max(1, Math.trunc(Number(limit) || 50)));
+  try {
+    const body = await timeoutFetch(`${API_BASE}/dydx/trades/${encodeURIComponent(safe)}?limit=${count}`);
+    const rows = Array.isArray(body?.trades) ? body.trades : [];
+    const trades = rows.map((t) => {
+      const price = Number(t.price);
+      const size = Number(t.size);
+      return {
+        id: String(t.id || `${t.createdAt}-${price}-${size}`),
+        price: Number.isFinite(price) ? price : null,
+        size: Number.isFinite(size) ? size : null,
+        usd: Number.isFinite(price) && Number.isFinite(size) ? price * size : null,
+        side: t.side === 'BUY' ? 'buy' : t.side === 'SELL' ? 'sell' : 'unknown',
+        at: t.createdAt || null,
+        atMs: t.createdAt ? Date.parse(t.createdAt) : null,
+        type: t.type || null
+      };
+    }).filter((t) => t.price != null && t.size != null);
+    return { trades, live: trades.length > 0, ticker: safe };
+  } catch {
+    return { trades: [], live: false, reason: 'INDEXER_UNAVAILABLE', ticker: safe };
+  }
+}
+
+/**
+ * Historical funding — the realised cost of holding, not the next payment.
+ *
+ * Rows come back oldest-first with `effectiveAt`, an hourly rate and the
+ * annualised figure the venue itself computes. `aprPct` here is that published
+ * number; when the row omits it the client derives from the hourly rate with
+ * the same 24×365 the rest of the app uses, never with a different constant.
+ */
+export async function getDydxFundingHistory(ticker, limit = 48) {
+  const safe = normaliseTicker(ticker);
+  if (!safe) return { rows: [], live: false, reason: 'BAD_TICKER' };
+  const count = Math.min(100, Math.max(1, Math.trunc(Number(limit) || 48)));
+  try {
+    const body = await timeoutFetch(`${API_BASE}/dydx/funding-history/${encodeURIComponent(safe)}?limit=${count}`);
+    const raw = Array.isArray(body?.historicalFunding) ? body.historicalFunding : [];
+    /* The indexer sends an HOURLY rate as a decimal string ("0.0000125").
+       % = ×100; APR = the same 24 × 365 every other funding number in this app
+       uses. The row's `price` is the oracle at settlement, not a rate, so it is
+       carried through only for reference — deriving an APR from it would
+       multiply a price by a year. */
+    const rows = raw.map((r) => {
+      const hourly = Number(r.rate);
+      return {
+        at: r.effectiveAt || null,
+        atMs: r.effectiveAt ? Date.parse(r.effectiveAt) : null,
+        rateHourlyPct: Number.isFinite(hourly) ? hourly * 100 : null,
+        aprPct: Number.isFinite(hourly) ? hourly * 100 * 24 * 365 : null,
+        oracleAtSettlement: Number.isFinite(Number(r.price)) ? Number(r.price) : null
+      };
+    }).filter((r) => Number.isFinite(r.atMs)).sort((a, b) => a.atMs - b.atMs);
+    const paid = rows.reduce((n, r) => n + (r.rateHourlyPct || 0), 0);
+    return {
+      rows,
+      live: rows.length > 0,
+      ticker: safe,
+      /* Sum of the hourly rates over the window: the total % of notional a long
+         paid (positive) or received (negative) across these settlements. */
+      cumulativePct: rows.length ? paid : null,
+      hourlyVolatilityPct: rows.length > 1
+        ? Math.sqrt(rows.reduce((n, r) => n + (r.rateHourlyPct || 0) ** 2, 0) / rows.length)
+        : null
+    };
+  } catch {
+    return { rows: [], live: false, reason: 'INDEXER_UNAVAILABLE', ticker: safe };
   }
 }
 

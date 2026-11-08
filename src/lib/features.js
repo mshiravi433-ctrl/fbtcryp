@@ -120,6 +120,27 @@ export const SPECULATION_ENABLED =
 export const AI_TRADE_ENABLED =
   SPECULATION_ENABLED && import.meta.env?.VITE_ENABLE_AI_TRADE !== 'false';
 
+/*
+ * ─── FUTURES TERMINAL (/perp/terminal) — ON WITH THE SPECULATION BUILD ──────
+ * The desk lives at its own route because `/perp` is a pair LIST and two
+ * suites pin that (test/perp-redesign.test.jsx, test/perp-layout.test.jsx:
+ * no ticket, no fee table, no liquidation table on that page). Turning the
+ * list into a terminal would mean deleting the assertions that protect it.
+ *
+ * It is a SEPARATE flag from SPECULATION_ENABLED so the desk can be switched
+ * off on its own if it ever misbehaves, without touching the venue screens:
+ *
+ *     VITE_ENABLE_PERP_TERMINAL=false npm run build
+ *
+ * Default is ON whenever the speculation build is on — the same shape as
+ * AI_TRADE_ENABLED above, and for the same reason: a second flag that nothing
+ * in the repository sets is a feature that never ships (see the AI-tab note).
+ * The store build cannot contain it either way, because SPECULATION_ENABLED is
+ * false there and the route is not registered at all.
+ */
+export const PERP_TERMINAL_ENABLED =
+  SPECULATION_ENABLED && import.meta.env?.VITE_ENABLE_PERP_TERMINAL !== 'false';
+
 /* -------------------------------------------------------------------------- */
 /* AAVE V3 · BASE · USDC SUPPLY — OFF BY DEFAULT, IN EVERY BUILD               */
 /* -------------------------------------------------------------------------- */

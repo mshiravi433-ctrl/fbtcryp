@@ -34,6 +34,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiBase } from '../lib/apiBase.js';
+import { pollWhileVisible } from '../lib/visibilityPoll';
 
 const RISK_OPTIONS = ['conservative', 'balanced', 'aggressive'];
 
@@ -74,8 +75,9 @@ export default function ProfitPlanner() {
   useEffect(() => {
     if (state.phase !== 'loading') return undefined;
     setElapsed(0);
-    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
-    return () => clearInterval(id);
+    /* An elapsed-seconds counter under a loading state. Gated: nobody is
+       reading it on a hidden tab, and the first visible frame is correct. */
+    return pollWhileVisible(() => setElapsed((s) => s + 1), 1000);
   }, [state.phase]);
 
   const build = useCallback(async () => {

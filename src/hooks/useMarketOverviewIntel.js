@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getMarketOverviewIntel, peekCachedOverviewIntel } from '../lib/marketOverviewIntel.js';
 import { mergeNetworkTelemetry } from '../lib/fbtSwapNetworks.js';
+import { pollWhileVisible } from '../lib/visibilityPoll.js';
 
 const POLL_INTERVAL_MS = 90_000;
 
@@ -28,7 +29,12 @@ export function useMarketOverviewIntel({ enabled = true } = {}) {
       }
     })();
 
-    const timer = setInterval(async () => {
+    /* Every 90 s, for as long as the hook is mounted — which used to include
+       every minute the tab spent in the background. This reads a shared intel
+       endpoint, so a hidden poll is an answer nobody asked for at the server's
+       expense. pollWhileVisible also refreshes immediately on return, which is
+       strictly better than the stale 90-second window the old timer gave. */
+    const off = pollWhileVisible(async () => {
       const res = await getMarketOverviewIntel({ force: true });
       if (!cancelled) {
         setData(res);
@@ -38,7 +44,7 @@ export function useMarketOverviewIntel({ enabled = true } = {}) {
 
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      off();
     };
   }, [enabled]);
 

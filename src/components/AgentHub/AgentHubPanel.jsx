@@ -39,6 +39,7 @@ import RecommendedAgents from './RecommendedAgents.jsx';
 import NativeDataDisclosure from './NativeDataDisclosure.jsx';
 import { setActiveAgent } from '../../lib/intent-ai/agentHub/activeAgent.js';
 import '../../styles/agent-hub.css';
+import { pollWhileVisible } from '../../lib/visibilityPoll';
 
 const ACCESS_FILTERS = [
   { id: 'all', fa: 'همه', en: 'All' },
@@ -414,12 +415,16 @@ export default function AgentHubPanel({ fa = false, onClose = null, onActivateIn
   useEffect(() => {
     if (!taskId || !taskActive) return undefined;
     let stopped = false;
-    const timer = setInterval(async () => {
+    /* Same rule as the rest of the app: a hidden tab does not chase a task.
+       The task is on the provider's side and keeps running; coming back to the
+       screen re-reads it immediately, so nothing is missed — only the polls
+       nobody could see are gone. */
+    const off = pollWhileVisible(async () => {
       if (stopped) return;
       const out = await getTask(taskId);
       if (!stopped && out.ok) setRun((prev) => ({ ...prev, task: out.task }));
     }, 3000);
-    return () => { stopped = true; clearInterval(timer); };
+    return () => { stopped = true; off(); };
   }, [taskId, taskActive]);
 
   const agents = catalog.data?.agents || [];

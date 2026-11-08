@@ -57,8 +57,12 @@ async function readCandles({ provider, market, resolution }) {
   }
   if (provider === 'spot') {
     const raw = await getOhlc(market, SPOT_DAYS[resolution] || 2);
+    /* `v` is the market feed's own bar volume. It is carried through rather
+       than dropped: the chart's VWAP and its volume histogram both refuse to
+       draw without it, and a chart that silently omits them looks like a
+       venue that sends no volume instead of a mapper that threw it away. */
     return {
-      rows: (Array.isArray(raw) ? raw : []).map((d) => ({ startedAt: d.t, open: d.o, high: d.h, low: d.l, close: d.c })),
+      rows: (Array.isArray(raw) ? raw : []).map((d) => ({ startedAt: d.t, open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v })),
       symbol: null
     };
   }
@@ -117,11 +121,27 @@ export default function FuturesMarketChart({ provider, market, symbol, height = 
     return () => { alive = false; if (retryTimer) clearTimeout(retryTimer); };
   }, [provider, market, resolution, spotId]);
 
-  /* TradingChart takes { t, o, h, l, c } in milliseconds (getOhlc's shape). */
+  /* TradingChart takes { t, o, h, l, c } in milliseconds (getOhlc's shape).
+     `v` rides along only when the venue actually sent a bar volume — an
+     undefined is passed as absent, never as zero, because zero volume is a
+     fact about the market and undefined is a fact about the reader. */
   const data = useMemo(
-    () => candles.map((c) => ({ t: Number(c.startedAt), o: Number(c.open), h: Number(c.high), l: Number(c.low), c: Number(c.close) })),
+    () => candles.map((c) => {
+      const v = Number(c.volume);
+      return {
+        t: Number(c.startedAt),
+        o: Number(c.open),
+        h: Number(c.high),
+        l: Number(c.low),
+        c: Number(c.close),
+        ...(Number.isFinite(v) && v > 0 ? { v } : {})
+      };
+    }),
     [candles]
   );
+  /* How many of the bars carry volume. The chart uses it to label the volume
+     features as "not in this feed" instead of leaving an empty panel. */
+  const barsWithVolume = data.filter((d) => Number.isFinite(d.v)).length;
   const change = useMemo(() => {
     if (candles.length < 2) return 0;
     const first = Number(candles[0].close);
@@ -158,7 +178,13 @@ export default function FuturesMarketChart({ provider, market, symbol, height = 
 
       {has ? (
         <Suspense fallback={<div className="skel" style={{ height }} />}>
-          <TradingChart key={`${provider}:${market}:${resolution}:${candles.length}:${spot ? 's' : 'v'}`} data={data} symbol={label} height={height} />
+          <TradingChart
+            key={`${provider}:${market}:${resolution}:${candles.length}:${spot ? 's' : 'v'}`}
+            data={data}
+            symbol={label}
+            height={height}
+            barsWithVolume={barsWithVolume}
+          />
         </Suspense>
       ) : loading ? (
         <div className="skel" style={{ height }} />

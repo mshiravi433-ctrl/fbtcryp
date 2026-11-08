@@ -383,10 +383,13 @@ export default function BuySellPanel({ initialOrderId = null }) {
 
   useEffect(() => {
     if (!quote?.expiresAt) return undefined;
+    /* An expiry COUNTDOWN is still a poll: a second-granularity ticker that
+       runs for as long as the quote is open. Gated, because a hidden tab has
+       no clock to display — and because returning to the tab fires a tick
+       immediately, the "expired" flag is correct the instant it is seen. */
     const tick = () => setQuoteExpiry(Date.now() >= Date.parse(quote.expiresAt));
     tick();
-    const timer = setInterval(tick, 1000);
-    return () => clearInterval(timer);
+    return pollWhileVisible(tick, 1000);
   }, [quote?.expiresAt]);
 
   const loadQuote = useCallback(async () => {

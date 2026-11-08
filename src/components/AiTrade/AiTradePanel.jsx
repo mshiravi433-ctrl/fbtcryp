@@ -55,6 +55,7 @@ import {
 import { requestProposals, buildAnalystMessages, AI_DEFAULT_ENDPOINT } from '../../lib/hyperliquid/aiClient';
 import { AI_TRADE_COPY as C, AI_TRADE_TAB_LABEL } from '../../lib/hyperliquid/aiTradeCopy';
 import '../../styles/ai-trade.css';
+import { pollWhileVisible } from '../../lib/visibilityPoll';
 
 const STEPS = ['connect', 'account', 'limits', 'ai', 'approve', 'report'];
 const FRESH_MS = 120000;
@@ -669,8 +670,10 @@ function PendingCard({ item, onApprove, onReject, now }) {
 function ApproveStep({ pending, onApprove, onReject }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
+    /* A hold-timer display. Gated like every other ticker in the app: a hidden
+       tab has no clock on screen, and coming back ticks immediately, so the
+       first frame a user sees is the correct remaining time. */
+    return pollWhileVisible(() => setNow(Date.now()), 1000);
   }, []);
   if (pending.length === 0) {
     return (

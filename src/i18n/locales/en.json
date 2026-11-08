@@ -2206,7 +2206,8 @@
       "dydxUnfunded": "Your dYdX account ({{address}}) holds less than this order's collateral. dYdX has no in-app deposit; fund the account with USDC first or the order will be rejected.",
       "confirmDydx": "Confirm, sign and place order",
       "tpSlUnsupported": "Take-profit and stop-loss are written into the order only on the Ostium route. On this route they are not placed — don't count on them."
-    }
+    },
+    "terminalLink": "Open the trading terminal"
   },
   "farm": {
     "title": "Yield Farm",
@@ -18330,5 +18331,196 @@
     "controlsNetworkType": "Network type",
     "controlsShowMore": "Show all {{count}}",
     "controlsShowLess": "Show less"
+  },
+  "perpTerminal": {
+    "back": "Markets",
+    "stale": "stale read",
+    "live": "live",
+    "top": {
+      "mark": "Mark",
+      "change": "24h",
+      "high": "24h high",
+      "low": "24h low",
+      "funding": "Funding",
+      "nextFunding": "Next",
+      "rangeAlt": "Where the mark sits inside the 24 hour range"
+    },
+    "markets": {
+      "title": "Markets",
+      "empty": "No venue answered. The catalogue reappears when one does."
+    },
+    "chart": {
+      "loading": "Reading the venue catalogue…",
+      "noVenue": "No in-app venue lists this pair, so there is no chart to show.",
+      "heikin": "Heikin Ashi",
+      "heikinHint": "Open/high/low/close below are Heikin Ashi values: the average of the bar, not its traded price.",
+      "noVolume": "This feed sends no bar volume, so there is no VWAP to draw."
+    },
+    "tabs": {
+      "book": "Book",
+      "tape": "Tape",
+      "risk": "Risk",
+      "funding": "Funding"
+    },
+    "depth": {
+      "title": "Order book depth",
+      "spread": "spread",
+      "empty": "The venue did not return a book for this market.",
+      "alt": "Cumulative order book depth, bids on the left and asks on the right",
+      "bids": "bids",
+      "asks": "asks",
+      "reach": "to ±{{pct}}%",
+      "reachFlat": "single level",
+      "imbalanceHint": "Share of the visible book that is bids",
+      "bidSide": "bid"
+    },
+    "tape": {
+      "title": "Tape",
+      "price": "Price",
+      "size": "Size",
+      "time": "Time",
+      "buys": "buys",
+      "unavailable": "The indexer is not answering, so there are no prints to show.",
+      "none": "No trades in the window the venue returned.",
+      "alt": "Recent trades: price, size and side of the aggressor",
+      "sideNote": "Colour is the side of the aggressor (the taker), not the resting order."
+    },
+    "ticket": {
+      "side": "Direction",
+      "long": "Long",
+      "short": "Short",
+      "orderType": "Order type",
+      "price": "Limit price",
+      "stopPrice": "Trigger price",
+      "collateral": "Collateral",
+      "leverage": "Leverage",
+      "max": "max",
+      "maxUnknown": "venue max unknown",
+      "notional": "Notional",
+      "size": "Size",
+      "openFee": "Open fee",
+      "funding8h": "Funding 8h",
+      "liquidation": "Liquidation",
+      "notOnVenue": "{{venue}} does not accept: {{list}}",
+      "types": {
+        "market": "Market",
+        "limit": "Limit",
+        "stopMarket": "Stop",
+        "stopLimit": "Stop limit",
+        "takeProfit": "Take profit",
+        "takeProfitLimit": "TP limit",
+        "postOnly": "post-only",
+        "reduceOnly": "reduce-only",
+        "tpSl": "TP/SL"
+      },
+      "connect": "Connect a wallet",
+      "placing": "Sending…",
+      "submit": "{{side}} {{notional}} at {{lev}}×",
+      "signPrepared": "Sign the prepared order",
+      "custody": "Signed by your own wallet on {{chain}}. FBT never holds a key and never takes custody.",
+      "blocked": {
+        "UNKNOWN_VENUE": "This venue is not in the catalogue.",
+        "EXECUTION_NOT_MOUNTED": "This build does not send orders to this venue yet.",
+        "NO_SIZE": "Enter a collateral amount and a leverage.",
+        "NO_PRICE": "The venue has not returned a price for this market.",
+        "PRICE_REQUIRED": "A limit order needs a price.",
+        "STOP_PRICE_REQUIRED": "A stop order needs a trigger price.",
+        "ORDER_TYPE_NOT_SUPPORTED": "This venue does not accept that order type.",
+        "POST_ONLY_NOT_SUPPORTED": "This venue cannot rest a maker-only order here.",
+        "POST_ONLY_REQUIRES_LIMIT": "Post-only only applies to limit orders.",
+        "POST_ONLY_REQUIRES_GTC": "Post-only must be Good-Til-Cancelled.",
+        "TIME_IN_FORCE_NOT_SUPPORTED": "This venue does not accept that time in force.",
+        "REDUCE_ONLY_NOT_SUPPORTED": "This venue does not accept reduce-only here.",
+        "TPSL_NOT_SUPPORTED": "This venue cannot attach a TP/SL leg.",
+        "LEVERAGE_ABOVE_VENUE_MAX": "The leverage is above what this market allows.",
+        "BELOW_MIN_NOTIONAL": "The order is below the venue minimum notional."
+      },
+      "warn": {
+        "LIQUIDATION_IS_AN_UPPER_BOUND": "Liquidation is shown as an upper bound: this venue does not publish the maintenance margin it would be exact for.",
+        "FEE_UNKNOWN": "The venue did not publish a taker fee for this market, so the fee is not shown.",
+        "FUNDING_UNKNOWN": "The venue did not publish a funding rate for this market.",
+        "MMR_MISSING_FROM_MARKET": "The market row did not include its maintenance margin fraction."
+      },
+      "error": {
+        "MARKET_NOT_LISTED": "No in-app venue lists this pair.",
+        "BELOW_MIN": "The order is below the venue's minimum size.",
+        "BROADCAST_FAILED": "The venue did not confirm the order.",
+        "WALLET_NOT_CONNECTED": "Connect a wallet first.",
+        "WRONG_NETWORK": "Switch your wallet to the venue's chain and try again.",
+        "QUOTE_EXPIRED": "The quote expired. Prepare it again.",
+        "RISK_BLOCKED": "The risk engine blocked this order.",
+        "PROVIDER_UNAVAILABLE": "The venue did not answer. Nothing was sent."
+      }
+    },
+    "liq": {
+      "provenance": {
+        "venue-maintenance-margin": "exact · venue maintenance margin",
+        "venue-rule": "exact · venue documented rule",
+        "upper-bound": "approximate · 100% loss bound",
+        "unavailable": "not available"
+      }
+    },
+    "risk": {
+      "title": "Account risk",
+      "noWallet": "Connect a wallet to see margin, exposure and shocks for this account.",
+      "unreadable": "The venue did not return this account. Nothing is shown rather than a guess.",
+      "empty": "This account has no open positions.",
+      "noPositions": "No open positions to shock.",
+      "noFunding": "The venue did not publish a funding rate for this market.",
+      "margin": "Margin",
+      "marginRatio": "Margin ratio",
+      "buffer": "Buffer to maintenance",
+      "equity": "Equity",
+      "exposure": "Exposure",
+      "gross": "Gross",
+      "net": "Net",
+      "leverage": "Account leverage",
+      "hedged": "hedged",
+      "shocks": "Scenario shocks",
+      "move": "Move",
+      "pnl": "P&L",
+      "marginAfter": "Margin after",
+      "liq": "liquidation",
+      "liqWarning": "A {{pct}}% move would take this account under maintenance.",
+      "funding": "Funding cost",
+      "level": {
+        "low": "LOW",
+        "medium": "MEDIUM",
+        "high": "HIGH",
+        "extreme": "EXTREME"
+      },
+      "warn": {
+        "MARGIN_RATIO_HIGH": "More than 70% of the account is held as maintenance margin.",
+        "PORTFOLIO_LEVERAGE_HIGH": "Account leverage is above 3× the equity.",
+        "CONCENTRATED_EXPOSURE": "One asset is more than 60% of the gross exposure.",
+        "HEDGED_ASSETS_TWO_FEES": "An asset is held on both sides, so it pays two sets of fees.",
+        "FUNDING_MATERIAL_VS_EQUITY": "Funding over 24 hours is more than 1% of the account's equity.",
+        "LIQUIDATION_WITHIN_SCENARIO": "One of the scenario moves would liquidate the account.",
+        "NO_OPEN_POSITIONS": "No open positions.",
+        "NO_ACCOUNT_DATA": "No account data to assess."
+      }
+    },
+    "funding": {
+      "apr": "Funding APR",
+      "next": "Next settlement in",
+      "oi": "Open interest",
+      "volume": "24h volume",
+      "settlesAt": "Settles at {{at}} — the next hourly funding on this venue."
+    },
+    "venue": {
+      "status": {
+        "unknown": "status unknown",
+        "AVAILABLE": "live",
+        "DEGRADED": "degraded",
+        "READ_ONLY": "read only",
+        "MAINTENANCE": "maintenance",
+        "UNREACHABLE": "unreachable",
+        "NOT_CONFIGURED": "not configured"
+      }
+    },
+    "foot": {
+      "custody": "Non-custodial: orders are signed by your wallet on the venue's own chain. No centralised-exchange trading API is used anywhere in this app.",
+      "risk": "Leveraged perpetual futures can lose more than the margin posted. Liquidation prices are model output, not a guarantee."
+    }
   }
 }

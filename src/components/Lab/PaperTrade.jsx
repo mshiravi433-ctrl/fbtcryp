@@ -28,6 +28,7 @@ import { LabIcon } from './LabIcons';
 import { COINS, getPrices, tickPrice } from '../../lib/lab/marketData';
 import { useLabStore } from '../../store/useLabStore';
 import { useTelegram } from '../../context/TelegramContext';
+import { pollWhileVisible } from '../../lib/visibilityPoll';
 
 export default function PaperTrade({ onBack }) {
   const { t } = useTranslation();
@@ -68,10 +69,13 @@ export default function PaperTrade({ onBack }) {
   }, [coinId]);
 
   useEffect(() => {
-    const id = setInterval(() => {
+    /* A paper position's mark moves on a hidden tab too — but there is nobody
+       watching it and the stop/TP checks below run on the same tick, so the
+       interval is gated exactly like a live one. */
+    const off = pollWhileVisible(() => {
       setLivePrice((prev) => (prev ? tickPrice(coinId, prev, 0) : prev));
     }, 3000);
-    return () => clearInterval(id);
+    return () => off();
   }, [coinId]);
 
   const open = trades.filter((x) => !x.closed)[0];
@@ -146,8 +150,8 @@ export default function PaperTrade({ onBack }) {
   const rotating = !open && coachTone === 'good';
   useEffect(() => {
     if (!rotating) return undefined;
-    const id = setInterval(() => setTipIdx((v) => (v + 1) % 4), 8000);
-    return () => clearInterval(id);
+    const off = pollWhileVisible(() => setTipIdx((v) => (v + 1) % 4), 8000);
+    return () => off();
   }, [rotating]);
 
   const TIP_KEYS = ['coachGood', 'coachTip1', 'coachTip2', 'coachTip3'];

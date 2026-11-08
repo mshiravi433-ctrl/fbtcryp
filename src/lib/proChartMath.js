@@ -426,3 +426,184 @@ export function alignVolumeToCandles(volume, candles) {
   }
   return out;
 }
+
+/* ═════════════════════ FOURIER-ANALYSIS PIECES (v2 terminal) ════════════════════
+ *
+ * Four additions, all pure and all testable without a DOM:
+ *   toHeikinAshi      a candle SOURCE, not decoration (§2 of the plan)
+ *   volumeWeightedAveragePrice   VWAP, from the volume the venue actually sent
+ *   aggregateCandles  a real 1W/1M bar built from real 1D candles
+ *   volumeProfile     where the volume actually traded, as price bins
+ *
+ * The one rule they all share: when the input is not there (no volume, one
+ * candle, a gap in the timeline) they return less data — never a filled-in
+ * guess. A VWAP computed with invented volume is a line that means nothing,
+ * and a "weekly candle" stitched from three days is a lie about the week.
+ */
+
+/**
+ * Heikin Ashi from a plain OHLC series.
+ *
+ *   haClose = (o + h + l + c) / 4
+ *   haOpen  = (prevHaOpen + prevHaClose) / 2   (first bar: (o + c) / 2)
+ *   haHigh  = max(h, haOpen, haClose)
+ *   haLow   = min(l, haOpen, haClose)
+ *
+ * Time is preserved so the same chart, the same crosshair and the same overlays
+ * keep working; only the four prices change. Because `haOpen` depends on the
+ * previous bar, the output is as long as the input and starts at bar 0.
+ */
+export function toHeikinAshi(candles) {
+  const src = Array.isArray(candles) ? candles : [];
+  const out = [];
+  let prevOpen = null;
+  let prevClose = null;
+  for (const c of src) {
+    if (!c || ![c.open, c.high, c.low, c.close].every(Number.isFinite)) continue;
+    const haClose = (c.open + c.high + c.low + c.close) / 4;
+    const haOpen = prevOpen == null ? (c.open + c.close) / 2 : (prevOpen + prevClose) / 2;
+    out.push({
+      time: c.time,
+      open: haOpen,
+      high: Math.max(c.high, haOpen, haClose),
+      low: Math.min(c.low, haOpen, haClose),
+      close: haClose
+    });
+    prevOpen = haOpen;
+    prevClose = haClose;
+  }
+  return out;
+}
+
+/**
+ * VWAP over the supplied window, resetting at each new session when
+ * `sessionMs` is given (a rolling VWAP that never resets drifts into a moving
+ * average and stops being the price the market paid).
+ *
+ * Bars with no volume are SKIPPED rather than treated as zero: zero volume
+ * would not move the numerator but would move the denominator in the wrong
+ * direction, and a VWAP that trends to the last close is not a VWAP.
+ *
+ * `volume` is positional — volume[i] belongs to candles[i] — which is why
+ * `alignVolumeToCandles` exists above. Mismatched lengths yield []: a silently
+ * truncated series would be a line drawn from the wrong bars.
+ */
+export function volumeWeightedAveragePrice(candles, volume, { sessionMs = null } = {}) {
+  const src = Array.isArray(candles) ? candles : [];
+  const vols = Array.isArray(volume) ? volume : [];
+  if (!src.length || src.length !== vols.length) return [];
+  const out = [];
+  let pv = 0;
+  let v = 0;
+  let session = null;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    const vol = Number(vols[i]);
+    if (!c || !Number.isFinite(c.high) || !Number.isFinite(c.low) || !Number.isFinite(c.close)) continue;
+    const bucket = sessionMs ? Math.floor((c.time * 1000) / sessionMs) : 0;
+    if (bucket !== session) { session = bucket; pv = 0; v = 0; }
+    if (!Number.isFinite(vol) || vol <= 0) { if (v > 0) out.push({ time: c.time, value: pv / v }); continue; }
+    const typical = (c.high + c.low + c.close) / 3;
+    pv += typical * vol;
+    v += vol;
+    if (v > 0) out.push({ time: c.time, value: pv / v });
+  }
+  return out;
+}
+
+/**
+ * Roll candles up into a longer interval (1W from 1D, 4h from 1h).
+ *
+ * A bucket is only emitted when it is COMPLETE, unless it is the last bucket of
+ * the series (which is the live one and is allowed to be partial — that is what
+ * a live weekly candle IS). `bucketMs` must be a whole multiple of the candle
+ * spacing and the series must be aligned to it, otherwise the first "week"
+ * would start on a Wednesday. The bucket is aligned to the UNIX epoch, which is
+ * how every charting library does it, and the reason a weekly bar opens on
+ * Monday for a market that trades 24/7.
+ */
+export function aggregateCandles(candles, bucketMs) {
+  const src = Array.isArray(candles) ? candles : [];
+  const size = Math.floor(Number(bucketMs) || 0);
+  if (!src.length || size <= 0) return [];
+  /* candleSpacingMs reports SECONDS (candle.time is in seconds, as
+     toCandles guarantees) while the bucket arrives in milliseconds. Comparing
+     the two without converting let a 90-minute bucket through, because
+     5,400,000 ms divides evenly by 3600 — the number, not the unit. */
+  const spacing = candleSpacingMs(src);
+  const sizeSeconds = size / 1000;
+  if (spacing && (!Number.isInteger(sizeSeconds / spacing))) return [];
+  const out = [];
+  let cur = null;
+  for (const c of src) {
+    if (!c || ![c.open, c.high, c.low, c.close].every(Number.isFinite)) continue;
+    const key = Math.floor((c.time * 1000) / size) * size;
+    if (!cur || cur.time !== key / 1000) {
+      if (cur) out.push(cur);
+      cur = { time: key / 1000, open: c.open, high: c.high, low: c.low, close: c.close };
+    } else {
+      cur.high = Math.max(cur.high, c.high);
+      cur.low = Math.min(cur.low, c.low);
+      cur.close = c.close;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+/**
+ * A volume-by-price histogram from OHLCV bars — the "Volume Profile" the plan
+ * asks for, with its own honesty label.
+ *
+ * Each bar's volume is spread UNIFORMLY across the price range it covered
+ * (the standard approximation; the true split needs tick data we do not have).
+ * Output bins carry `low`, `high`, `volume`, and `sharePct` of the total, so a
+ * component can draw bars without doing arithmetic of its own.
+ *
+ * `pointOfControl` is the centre of the heaviest bin: the price the market
+ * spent the most volume at, which is the number this whole exercise is for.
+ * A bin at the edge of the histogram is flagged `open` because a bar whose low
+ * or high sits outside the requested range is being truncated by the window,
+ * not by the market.
+ */
+export function volumeProfile(candles, volume, { bins = 24 } = {}) {
+  const src = Array.isArray(candles) ? candles : [];
+  const vols = Array.isArray(volume) ? volume : [];
+  const n = Math.max(4, Math.min(120, Math.floor(Number(bins) || 24)));
+  if (src.length < 2 || src.length !== vols.length) return { bins: [], totalVolume: 0, pointOfControl: null };
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const c of src) {
+    if (!c || !Number.isFinite(c.high) || !Number.isFinite(c.low)) continue;
+    lo = Math.min(lo, c.low);
+    hi = Math.max(hi, c.high);
+  }
+  if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return { bins: [], totalVolume: 0, pointOfControl: null };
+  const step = (hi - lo) / n;
+  const acc = new Array(n).fill(0);
+  let total = 0;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    const vol = Number(vols[i]);
+    if (!c || !Number.isFinite(vol) || vol <= 0) continue;
+    total += vol;
+    const from = Math.max(0, Math.min(n - 1, Math.floor((c.low - lo) / step)));
+    const to = Math.max(0, Math.min(n - 1, Math.floor((c.high - lo) / step)));
+    const span = Math.max(1, to - from + 1);
+    for (let b = from; b <= to; b++) acc[b] += vol / span;
+  }
+  const peak = acc.reduce((best, v, i) => (v > acc[best] ? i : best), 0);
+  const rows = acc.map((v, i) => ({
+    low: lo + i * step,
+    high: lo + (i + 1) * step,
+    volume: v,
+    sharePct: total > 0 ? (v / total) * 100 : 0
+  }));
+  return {
+    bins: rows,
+    totalVolume: total,
+    pointOfControl: rows[peak] ? (rows[peak].low + rows[peak].high) / 2 : null,
+    range: { low: lo, high: hi },
+    approximation: 'volume spread uniformly within each bar\'s high–low range'
+  };
+}

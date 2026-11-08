@@ -41,6 +41,7 @@ import { IconCheck, IconClock, IconXCircle, LabIcon } from './LabIcons';
 import { COINS, getPrices, tickPrice } from '../../lib/lab/marketData';
 import { useLabStore } from '../../store/useLabStore';
 import { useTelegram } from '../../context/TelegramContext';
+import { pollWhileVisible } from '../../lib/visibilityPoll';
 
 const DURATIONS = [
   { key: '1m', ms: 60000, icon: 'bolt' },
@@ -94,16 +95,14 @@ export default function PredictionCard({ onBack }) {
 
   // Tick the live price every 3s for the sparkline feel
   useEffect(() => {
-    const id = setInterval(() => {
+    return pollWhileVisible(() => {
       setLivePrice((prev) => (prev ? tickPrice(coinId, prev, 0) : prev));
     }, 3000);
-    return () => clearInterval(id);
   }, [coinId]);
 
   // Tick the countdown clock every 1s
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
+    return pollWhileVisible(() => setNow(Date.now()), 1000);
   }, []);
 
   const aiDir = useMemo(() => aiHeuristic(coinId, history), [history, coinId]);
