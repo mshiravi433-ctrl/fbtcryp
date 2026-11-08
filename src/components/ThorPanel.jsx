@@ -35,7 +35,6 @@ import { useTelegram } from '../context/TelegramContext';
 import { useWallet } from '../context/WalletContext';
 import { POINT_VALUES } from '../lib/ranks';
 import { pollWhileVisible } from '../lib/visibilityPoll';
-import { pollWhileVisible } from '../lib/visibilityPoll';
 
 /**
  * THORChain panel — quote for every chain, SIGN HERE for EVM sources.
