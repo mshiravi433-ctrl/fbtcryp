@@ -231,7 +231,7 @@ await t('a malformed body is rejected by the JSON parser before any brain runs',
   assert.equal(seenRuns.length, runsBefore, 'the orchestrator is never called with an unparsed body');
 });
 
-await t('every new endpoint is POST/GET under /api/v1/ai — the mount is unchanged', async () => {
+await t('AI routers remain mounted additively under the shared /api/v1/ai prefix', async () => {
   const rows = read('server/app.js');
   /*
    * The mount is asserted in its LAZY form: server/app.js now imports this
@@ -257,8 +257,13 @@ await t('every new endpoint is POST/GET under /api/v1/ai — the mount is unchan
     'the existing AI router is untouched'
   );
   const mountCount = rows.split("app.use('/api/v1/ai'").length - 1;
-  /* the shared rate limiter + the existing router + the additive one */
-  assert.equal(mountCount, 3, 'the prefix keeps its limiter and gains exactly one additive router');
+  /* New feature routers are additive. Pin the minimum contract, not a brittle
+     count that fails whenever another independently lazy-loaded AI router is
+     correctly added to the shared prefix. */
+  assert.ok(mountCount >= 3, `expected the shared limiter and at least two AI routers, found ${mountCount}`);
+  for (const router of ['ai-orchestrator', 'ai-benchmark', 'ai-neuromorphic']) {
+    assert.ok(rows.includes(`lazyMount('${router}',`), `${router} must stay on the shared AI prefix`);
+  }
   assert.ok(rows.includes('orchestratorRateLimit') || rows.includes("app.use('/api/v1/ai', (req, res, next)"), 'the shared budget middleware still guards the prefix');
 });
 
