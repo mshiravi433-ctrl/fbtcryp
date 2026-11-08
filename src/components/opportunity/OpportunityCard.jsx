@@ -34,6 +34,7 @@ import {
   money, pct, num, remaining, isFa, categoryLabel, categoryOf, riskLabel, exclusionText
 } from './ui.jsx';
 import { openActionFor, analysisRoute, CATEGORY_TONE, RISK_TONE, msRemaining } from '../../lib/opportunity/openAction.js';
+import { text as label } from '../../lib/opportunity/sanitize.js';
 
 /** The strategy word for a category, in the owner's own vocabulary. */
 const STRATEGY_WORD = {
@@ -62,8 +63,23 @@ export default function OpportunityCard({
 }) {
   const fa = isFa(locale);
   const o = opportunity;
-  const cat = categoryOf(o.category);
-  const tone = CATEGORY_TONE[o.category] || 'cyan';
+  /*
+   * ─── EVERY FIELD THIS CARD PUTS INSIDE A CHILD IS TEXT ────────────────────
+   * The reported crash was `{o.chain}` with `chain: { name: 'Base' }`:
+   *   Error: Objects are not valid as a React child
+   * That one throw unwound the WHOLE ROUTE — eighty fine cards included — into
+   * «این صفحه به مشکل خورد». The engine and the scan cache now normalise rows
+   * at their boundary, and this is the second lock: the card renders strings
+   * even when it is handed a row from somewhere that did not. A malformed field
+   * now costs a dash on ONE card, which is what a bad field should cost.
+   */
+  const chainLabel = label(o.chain, 32);
+  const protocolLabel = label(o.protocol, 80);
+  const symbolLabel = label(o.symbol, 40);
+  const titleLabel = label(o.title, 200);
+  const riskLevel = label(o.risk?.level, 16);
+  const cat = label(o.category, 40) || 'LIQUIDITY_POOL';
+  const tone = CATEGORY_TONE[cat] || 'cyan';
   const action = useMemo(() => openActionFor(o), [o]);
   const econ = o.economics || null;
   const m = o.metrics || {};
@@ -74,8 +90,8 @@ export default function OpportunityCard({
   const grossApy = m.grossApyPct != null ? Number(m.grossApyPct)
     : econ?.grossProfitUsd != null && econ?.capitalUsd ? (Number(econ.grossProfitUsd) / Number(econ.capitalUsd)) * (365 / (Number(econ.horizonDays) || 30)) * 100
       : null;
-  const oneOff = o.category === 'ARBITRAGE' && m.spreadPct != null;
-  const netApy = o.category === 'ARBITRAGE' ? econ?.netReturnPct : econ?.netApyPct;
+  const oneOff = cat === 'ARBITRAGE' && m.spreadPct != null;
+  const netApy = cat === 'ARBITRAGE' ? econ?.netReturnPct : econ?.netApyPct;
 
   const openLabel = (() => {
     const key = action.labelKey;
@@ -102,21 +118,21 @@ export default function OpportunityCard({
       className={`oep-card${excluded ? ' is-excluded' : ''}`}
       data-tone={tone}
       data-testid="opportunity-card"
-      data-category={o.category}
-      aria-label={`${categoryLabel(o.category, locale)} — ${o.title}`}
+      data-category={cat}
+      aria-label={`${categoryLabel(cat, locale)} — ${titleLabel || ''}`}
     >
       <header className="oep-card-head">
-        <CategoryBadge category={o.category} />
+        <CategoryBadge category={cat} />
         <div className="oep-card-id">
           <span className="oep-card-cat">
-            {STRATEGY_WORD[o.category]?.[fa ? 'fa' : 'en'] || categoryLabel(o.category, locale)}
-            {o.chain ? ` · ${o.chain}` : ''}
+            {STRATEGY_WORD[cat]?.[fa ? 'fa' : 'en'] || categoryLabel(cat, locale)}
+            {chainLabel ? ` · ${chainLabel}` : ''}
           </span>
-          <h3 className="oep-card-title">{o.protocol ? `${o.protocol} — ` : ''}{o.symbol || o.title}</h3>
+          <h3 className="oep-card-title">{protocolLabel ? `${protocolLabel} — ` : ''}{symbolLabel || titleLabel}</h3>
           <div className="oep-card-meta">
-            {o.chain ? <Tag>{o.chain}</Tag> : null}
-            {o.risk?.level ? <Tag tone={RISK_TONE[o.risk.level] === 'mint' ? 'up' : RISK_TONE[o.risk.level] === 'rose' ? 'down' : 'warn'}>
-              {fa ? 'ریسک' : 'Risk'}: {riskLabel(o.risk.level, locale)}
+            {chainLabel ? <Tag>{chainLabel}</Tag> : null}
+            {riskLevel ? <Tag tone={RISK_TONE[riskLevel] === 'mint' ? 'up' : RISK_TONE[riskLevel] === 'rose' ? 'down' : 'warn'}>
+              {fa ? 'ریسک' : 'Risk'}: {riskLabel(riskLevel, locale)}
             </Tag> : null}
             {validFor ? <Tag tone={expired ? 'warn' : ''}><IconClock width={9} height={9} /> {validFor}</Tag> : null}
           </div>

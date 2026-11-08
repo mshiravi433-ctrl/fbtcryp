@@ -79,7 +79,47 @@ export const CHAIN_GAS_USD = Object.freeze({
 });
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
-const num = (v, fallback = null) => (isNum(Number(v)) && v !== null && v !== '' ? Number(v) : fallback);
+
+/**
+ * ─── A NUMBER, AS THE FEEDS ACTUALLY SEND IT ────────────────────────────────
+ * `Number('7.4%')` is NaN, and a NaN APY is not merely ugly: it silently turns
+ * a real row into `null` and drags the economics down with it. The yield feed
+ * is a proxy over a dozen adapters and they do not agree on types — the same
+ * pool arrives as `7.4`, `'7.4'` or `'7.4%'` depending on which adapter wrote
+ * the row that hour. Percent signs and thousands separators are formatting,
+ * not information, so they are stripped before the parse; anything still not
+ * numeric stays `fallback`, exactly as before.
+ */
+const num = (v, fallback = null) => {
+  if (v === null || v === undefined || v === '') return fallback;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : fallback;
+  if (typeof v === 'boolean') return fallback;
+  const n = Number(String(v).trim().replace(/,/g, '').replace(/%$/, ''));
+  return Number.isFinite(n) ? n : fallback;
+};
+
+/**
+ * A DRAWABLE LABEL, FROM A FIELD THAT MAY NOT BE A STRING.
+ *
+ * `chain: { name: 'Base' }` reached a card's `<Tag>{chain}</Tag>` and React
+ * threw "Objects are not valid as a React child" — which unwinds the whole
+ * route into «این صفحه به مشکل خورد». The field is the feed's, the crash was
+ * ours. Normalising at the boundary where the row is BUILT (rather than only
+ * where it is drawn) means the stored scan, the detail page and the chat card
+ * all carry the same string.
+ */
+const label = (v, max = 120) => {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'string') return v.trim().slice(0, max) || null;
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : null;
+  if (typeof v === 'object') {
+    const inner = v.name ?? v.symbol ?? v.label ?? v.title ?? v.id ?? null;
+    return inner === null || inner === undefined ? null : label(inner, max);
+  }
+  return null;
+};
+/** Only an absolute http(s) string may become a button that opens a window. */
+const safeUrl = (v) => (typeof v === 'string' && /^https?:\/\/\S+$/i.test(v.trim()) ? v.trim().slice(0, 500) : null);
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const round = (v, d = 2) => (isNum(v) ? Math.round(v * 10 ** d) / 10 ** d : null);
 
@@ -323,17 +363,33 @@ function base({
 }) {
   seq += 1;
   const cleanRef = ref && Object.values(ref).some((v) => v != null) ? {
-    tokenId: ref.tokenId ?? null, poolId: ref.poolId ?? null,
-    venue: ref.venue ?? null, externalUrl: ref.externalUrl ?? null
+    tokenId: label(ref.tokenId, 80), poolId: label(ref.poolId, 120),
+    venue: label(ref.venue, 60), externalUrl: safeUrl(ref.externalUrl)
   } : null;
+  /* Every field below is DRAWN by the card, the scanner and the detail page.
+     They are labels here, not rows: whatever the feed's type, what leaves this
+     function can be put inside a React child without throwing. */
   return {
     opportunityId: `opp_${now.toString(36)}_${category.toLowerCase()}_${seq}`,
-    category, type: type || category, title, symbol, chain, protocol, direction,
+    category,
+    type: label(type, 40) || category,
+    title: label(title, 200),
+    symbol: label(symbol, 40),
+    chain: label(chain, 32),
+    protocol: label(protocol, 80),
+    direction: label(direction, 16) || 'NEUTRAL',
     confidence: round(clamp(confidence ?? 0.5, 0.02, 0.97), 2),
     economics, risk,
     riskAdjustedApyPct: economics?.netApyPct != null && risk?.score != null
       ? round(economics.netApyPct / (1 + risk.score / 3), 1) : economics?.netApyPct ?? null,
-    evidence: evidence || [], caveats: ['not-a-signal'],
+    /* evidence rows are drawn verbatim on the card and the detail page: the
+       `detail` reaches a `<span>`, so it is text here, at the source. */
+    evidence: (Array.isArray(evidence) ? evidence : [])
+      .map((e) => (e && typeof e === 'object'
+        ? { ...e, type: label(e.type, 40) || 'EVIDENCE', detail: label(e.detail, 300) ?? '' }
+        : null))
+      .filter((e) => e && e.detail),
+    caveats: ['not-a-signal'],
     ref: cleanRef, metrics: metrics || null,
     cortex: null, score: 0, eligible: true, exclusionReasons: [],
     discoveredAt: now, expiresAt: now + expiresInMs
@@ -367,7 +423,7 @@ function fromPools(rows, ctx) {
     const fees = estimateFees({ capitalUsd: ctx.capital, category: 'LIQUIDITY_POOL', chain: p.chain, tvlUsd: tvl, gasUsd: p.gasUsd, feePct: { protocolPct: p.protocolFeePct } });
     const econ = computeEconomics({ capitalUsd: ctx.capital, horizonDays: ctx.horizonDays, grossApyPct: apy, fees });
     return base({
-      category: 'LIQUIDITY_POOL', title: `${p.protocol || 'DEX'} ${p.pair || p.symbol || 'pool'} — ${round(apy)}% APY`,
+      category: 'LIQUIDITY_POOL', title: `${label(p.protocol, 60) || 'DEX'} ${label(p.pair, 40) || label(p.symbol, 40) || 'pool'} — ${round(apy)}% APY`,
       symbol: p.pair || p.symbol, chain: p.chain, protocol: p.protocol, now: ctx.now, horizonDays: ctx.horizonDays,
       confidence: clamp(0.45 + (tvl >= 1e6 ? 0.25 : tvl >= 1e5 ? 0.12 : 0) + (num(p.volume24hUsd) > 0 ? 0.08 : 0), 0, 0.9),
       economics: econ, evidence: [{ type: 'POOL', detail: `APY ${apy}% · TVL ${tvl ?? 'unknown'} · fee APR ${p.feeApy ?? '—'} + rewards ${p.rewardApy ?? '—'}` }],
@@ -388,7 +444,7 @@ function fromFarms(rows, ctx, category = 'FARMING') {
     const econ = computeEconomics({ capitalUsd: ctx.capital, horizonDays: ctx.horizonDays, grossApyPct: apy, fees });
     return base({
       category, type: category === 'FARMING' ? 'DEFI_YIELD' : category,
-      title: `${f.protocol || f.project || 'Farm'} — ${round(apy)}% APY`, symbol: f.symbol || f.asset,
+      title: `${label(f.protocol, 60) || label(f.project, 60) || 'Farm'} — ${round(apy)}% APY`, symbol: label(f.symbol, 40) || label(f.asset, 40),
       chain: f.chain, protocol: f.protocol || f.project, now: ctx.now, horizonDays: ctx.horizonDays,
       confidence: clamp(0.4 + (tvl >= 1e6 ? 0.22 : 0.08) + (apy <= 60 ? 0.1 : -0.08), 0, 0.88),
       economics: econ, evidence: [{ type: 'YIELD_DATA', detail: `APY ${apy}% · TVL ${tvl ?? 'unknown'}${f.lockDays ? ` · lock ${f.lockDays}d` : ''}` }],
@@ -411,7 +467,7 @@ function fromLending(rows, ctx) {
     const util = num(m.utilizationPct);
     return base({
       category: 'LENDING', type: 'LENDING_SUPPLY',
-      title: `${m.protocol || 'Lending'} ${m.asset || m.symbol || ''} supply — ${round(apy)}% APY`.trim(),
+      title: `${label(m.protocol, 60) || 'Lending'} ${label(m.asset, 40) || label(m.symbol, 40) || ''} supply — ${round(apy)}% APY`.trim(),
       symbol: m.asset || m.symbol, chain: m.chain, protocol: m.protocol, now: ctx.now, horizonDays: ctx.horizonDays,
       confidence: clamp(0.55 + (tvl >= 1e7 ? 0.2 : 0.05) - (util > 92 ? 0.15 : 0), 0, 0.92),
       economics: econ, evidence: [{ type: 'LENDING_MARKET', detail: `supply APY ${apy}% · utilisation ${util ?? '—'}% · LTV ${m.ltvPct ?? '—'}%` }],
@@ -453,7 +509,7 @@ function fromArbitrage(rows, ctx) {
     const econ = computeEconomics({ capitalUsd: ctx.capital, horizonDays: ctx.horizonDays, oneOffReturnPct: spreadPct, fees });
     return base({
       category: 'ARBITRAGE', type: 'ARBITRAGE',
-      title: `${a.asset || a.symbol} arb ${a.buyVenue || 'venue A'} → ${a.sellVenue || 'venue B'} — ${round(spreadPct)}% spread`,
+      title: `${label(a.asset, 40) || label(a.symbol, 40) || 'asset'} arb ${label(a.buyVenue, 40) || 'venue A'} → ${label(a.sellVenue, 40) || 'venue B'} — ${round(spreadPct)}% spread`,
       symbol: a.asset || a.symbol, chain: a.chain, now: ctx.now, horizonDays: ctx.horizonDays, expiresInMs: 15 * 60_000,
       confidence: clamp(0.5 + (depth >= 2e5 ? 0.25 : depth >= 2e4 ? 0.1 : -0.1) + (spreadPct >= 1 ? 0.08 : 0), 0, 0.93),
       economics: econ, evidence: [{ type: 'PRICE_SPREAD', detail: `buy ${buy ?? '—'} @${a.buyVenue || '?'} → sell ${sell ?? '—'} @${a.sellVenue || '?'} · depth ${depth ?? 'unknown'}` }],
@@ -475,7 +531,7 @@ function fromEmerging(rows, ctx) {
     const econ = null;
     return { ...base({
       category: 'EMERGING_TOKEN', type: 'EMERGING_TOKEN',
-      title: `${t.symbol || t.name || 'Token'} — emerging${growth != null ? ` (${round(growth)}% 24h)` : ''}`,
+      title: `${label(t.symbol, 40) || label(t.name, 60) || 'Token'} — emerging${growth != null ? ` (${round(growth)}% 24h)` : ''}`,
       symbol: t.symbol, chain: t.chain, protocol: t.protocol, direction: growth == null ? 'NEUTRAL' : growth >= 0 ? 'BULLISH' : 'BEARISH',
       now: ctx.now, horizonDays: ctx.horizonDays, expiresInMs: 6 * 3600_000,
       confidence: clamp(0.3 + (liq >= 5e5 ? 0.2 : liq >= 5e4 ? 0.08 : -0.08) + (num(t.smartMoneyBuys) > 0 ? 0.15 : 0) + (num(t.holdersGrowthPct) > 10 ? 0.08 : 0), 0, 0.85),
@@ -500,7 +556,7 @@ function fromRwa(rows, ctx) {
     const econ = y == null ? null : computeEconomics({ capitalUsd: ctx.capital, horizonDays: Math.max(ctx.horizonDays, num(r.lockDays, ctx.horizonDays)), grossApyPct: y, fees });
     const o = base({
       category: 'RWA', type: 'RWA_INVESTMENT',
-      title: `${r.category || 'RWA'} — ${r.name || 'Real-world asset'}${y == null ? '' : ` (${round(y)}% yield)`}`,
+      title: `${label(r.category, 60) || 'RWA'} — ${label(r.name, 80) || 'Real-world asset'}${y == null ? '' : ` (${round(y)}% yield)`}`,
       symbol: r.symbol, chain: r.chain, protocol: r.issuer || r.protocol, now: ctx.now, horizonDays: ctx.horizonDays,
       confidence: num(r.confidence, 0.62), economics: econ,
       evidence: r.evidence?.length ? r.evidence : [{ type: y == null ? 'RWA_PRICE' : 'RWA_CATALOG', detail: y == null ? `Market price $${r.priceUsd} · 24h ${r.priceChange24h ?? '—'}% · yield unknown` : `${r.category || 'RWA'} · issuer ${r.issuer || '—'} · lock ${r.lockDays ?? '—'}d · min ${r.minInvestmentUsd ?? '—'}` }],
@@ -524,7 +580,7 @@ function fromWhales(rows, ctx) {
     const fees = estimateFees({ capitalUsd: ctx.capital, category: 'WHALE_FLOW', chain: w.chain, depthUsd: num(w.liquidityUsd), gasUsd: w.gasUsd });
     return { ...base({
       category: 'WHALE_FLOW', type: 'SMART_MONEY',
-      title: `Whale ${accumulating ? 'accumulation' : 'distribution'} — ${w.asset || w.symbol || 'asset'}`,
+      title: `Whale ${accumulating ? 'accumulation' : 'distribution'} — ${label(w.asset, 40) || label(w.symbol, 40) || 'asset'}`,
       symbol: w.asset || w.symbol, chain: w.chain, direction: accumulating ? 'BULLISH' : 'BEARISH',
       now: ctx.now, horizonDays: ctx.horizonDays, expiresInMs: 12 * 3600_000,
       confidence: num(w.confidence, clamp(0.4 + (Math.abs(net || 0) >= 1e6 ? 0.25 : 0.1) + (num(w.walletCount) >= 5 ? 0.1 : 0), 0, 0.9)),
@@ -576,7 +632,7 @@ function legacyCandidates(input, ctx) {
   }
   for (const g of (goals || []).slice(0, 3)) {
     if (g.progressPct < 50 && g.horizonMonths > 2) out.push(base({
-      category: 'RWA', type: 'GOAL_OPTIMIZATION', title: `Optimize strategy for "${g.name}"`,
+      category: 'RWA', type: 'GOAL_OPTIMIZATION', title: `Optimize strategy for "${label(g.name, 80) || 'goal'}"`,
       now: ctx.now, horizonDays: ctx.horizonDays, confidence: 0.7, economics: null,
       evidence: [{ type: 'GOAL_PROGRESS', detail: `${g.progressPct || 0}% toward ${g.targetUsd || 'target'}` }],
       risk: compositeRisk({ volatility: 2, liquidity: 2 })
@@ -592,7 +648,7 @@ function legacyCandidates(input, ctx) {
   }
   for (const s of (input.smartMoneySignals || []).slice(0, 3)) {
     out.push(base({
-      category: 'WHALE_FLOW', type: 'SMART_MONEY', title: `Smart Money: ${s.action || 'Activity'} on ${s.asset || 'asset'}`,
+      category: 'WHALE_FLOW', type: 'SMART_MONEY', title: `Smart Money: ${label(s.action, 60) || 'Activity'} on ${label(s.asset, 40) || 'asset'}`,
       symbol: s.asset, now: ctx.now, horizonDays: ctx.horizonDays, confidence: num(s.confidence, 0.5), economics: null,
       evidence: [{ type: 'ON_CHAIN', detail: s.detail || s.action || '' }],
       risk: compositeRisk({ volatility: 5, liquidity: 3 })

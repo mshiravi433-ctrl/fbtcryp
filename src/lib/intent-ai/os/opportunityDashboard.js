@@ -3,6 +3,7 @@
 import { scanOpportunities } from '../../brain/opportunityEngine.js';
 import { fetchIntelligence, fetchEarlyTokens } from '../../smartMoneyClient.js';
 import { verifiedSignals } from '../../smartMoneyEvidence.js';
+import { sanitizeScan } from '../../opportunity/sanitize.js';
 
 const LENDING = /^(aave|compound|morpho|spark|kamino-lend|jupiter-lend|fluid-lending|venus)/i;
 const list = (x) => Array.isArray(x) ? x : [];
@@ -54,5 +55,11 @@ export async function scanOpportunityDashboard({ capitalUsd = 0, riskProfile = '
     ['ARBITRAGE', 'arbitrage', list(got.arbitrage.value).length], ['EMERGING_TOKEN', 'emerging', early.length],
     ['RWA', 'rwa', rwaRows.length], ['WHALE_FLOW', 'whale', whales.length]
   ].map(([category, source, count]) => ({ category, count, status: source === 'yields' ? (yieldFresh ? (count ? 'live' : 'empty') : 'unavailable') : source === 'whale' ? (count ? 'observed' : 'insufficient-evidence') : source === 'emerging' && !Array.isArray(earlyPayload) && !earlyFresh ? 'unavailable' : got[source].value == null ? 'unavailable' : (count ? 'live' : 'empty') }));
-  return { ...scan, coverageDetails: coverage, sources: { yields: { at: yieldFresh ? stamp : null, error: got.yields.error }, market: { rows: markets.length, error: got.market.error }, whale: { status: consensus.dataStatus, error: got.whale.error } }, updatedAt: Date.now(), dataStatus: coverage.some((c) => c.count) ? 'live' : 'unavailable' };
+  /* THIS SCAN IS DRAWN INSIDE THE CHAT, which is inside the route boundary: a
+     row whose `chain` (or `title`, or a reason) is not a string would throw
+     "Objects are not valid as a React child" and blank the whole /intent
+     screen. The same sanitiser the engine room uses runs here, so the two
+     surfaces can never disagree about what a drawable row is. */
+  const safe = sanitizeScan(scan) || scan;
+  return { ...safe, coverageDetails: coverage, sources: { yields: { at: yieldFresh ? stamp : null, error: got.yields.error }, market: { rows: markets.length, error: got.market.error }, whale: { status: consensus.dataStatus, error: got.whale.error } }, updatedAt: Date.now(), dataStatus: coverage.some((c) => c.count) ? 'live' : 'unavailable' };
 }

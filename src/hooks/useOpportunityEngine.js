@@ -31,6 +31,7 @@ import {
   buildCapitalSnapshot, scanPersonalised, readRiskProfile, writeRiskProfile
 } from '../lib/opportunity/feed.js';
 import { attachTokenIds } from '../lib/opportunity/tokenMatch.js';
+import { sanitizeScan, sanitizeOpportunityRow } from '../lib/opportunity/sanitize.js';
 
 /** How long one scan is considered current before it is re-run on mount. */
 const SCAN_TTL_MS = 3 * 60_000;
@@ -53,7 +54,12 @@ function readStoredScan(capital) {
     const storedCapital = Number(data.capitalUsd);
     const capitalNow = Number(capital?.investableUsd);
     if (!Number.isFinite(storedCapital) || !Number.isFinite(capitalNow) || Math.abs(storedCapital - capitalNow) > 0.5) return null;
-    return { ...data, restored: true };
+    /* A STORED SHAPE IS NOT A VALIDATED SHAPE. The cache outlives builds: a row
+       written by an older version is read by this one, and a field that used to
+       be a string can be an object now (or vice versa). Sanitising on the way
+       OUT is what keeps the room renderable across a deploy — see
+       lib/opportunity/sanitize.js for the crash this fixes. */
+    return { ...sanitizeScan(data), restored: true };
   } catch {
     return null;
   }
@@ -93,8 +99,12 @@ export function readStoredOpportunity(opportunityId) {
     const raw = globalThis.localStorage?.getItem(SCAN_STORAGE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    const all = [...(data?.opportunities ?? []), ...(data?.rejected ?? [])];
-    return all.find((r) => r.opportunityId === opportunityId) || null;
+    const all = [
+      ...(Array.isArray(data?.opportunities) ? data.opportunities : []),
+      ...(Array.isArray(data?.rejected) ? data.rejected : [])
+    ];
+    const found = all.find((r) => r && r.opportunityId === opportunityId) || null;
+    return found ? sanitizeOpportunityRow(found) : null;
   } catch {
     return null;
   }
@@ -177,7 +187,12 @@ export async function runScan({
   attachTokenIds(scan, marketRows);
   scan.dataStatus = [scan.feeds.yields.status, scan.feeds.whales.status, scan.feeds.emerging.status]
     .some((s) => s === 'live' || s === 'observed') ? 'live' : 'unavailable';
-  return scan;
+  /* ONE PASS, ONE SHAPE. The engine already labels its own rows, but `scanner`
+     and `coverage` are assembled HERE from the same feed values, and this hook
+     is also the thing that WRITES the cache. Sanitising the finished scan means
+     the card, the detail page and the stored copy can never disagree — and no
+     later refactor of a feed adapter can put an object inside a React child. */
+  return sanitizeScan(scan);
 }
 
 /**
