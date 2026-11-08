@@ -57,6 +57,16 @@ import './notification-design-probe.mjs';
    while the established mobile shell and page gutters remain pinned. */
 import './responsive-layout-probe.mjs';
 /*
+ * ─── THE AI RISK ENGINE ────────────────────────────────────────────────────
+ * «فقط درصد ریسک نباشد؛ قبل، حین و بعد از تصمیم خطرات را تشخیص بدهد.»
+ * The arithmetic (ten families, the green gate, the seeded Monte-Carlo, the
+ * stress scenarios, the pre-trade gate, the book snapshot) and the screen
+ * (/risk mounted against a mocked wallet: a dot for an unmeasured cell, never
+ * a zero). Imported ABOVE the Business probe for the reason in the note below.
+ */
+import './risk-engine-probe.mjs';
+
+/*
  * NOTE ON ORDER — the two locale probes below are not interchangeable.
  * `test/business-locales-probe.mjs` ends with an unconditional
  * `process.exit(failures ? 1 : 0)`, so on success it ends the WHOLE process at

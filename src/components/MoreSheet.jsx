@@ -336,6 +336,16 @@ const GROUPS = [
        * FBT acts as Router + Fee layer only; non-custodial.
        */
       { to: '/loan', key: 'nav.loan', Icon: IconShield, hue: 'var(--rgb-2)' },
+      /*
+       * ─── THE AI RISK ENGINE IS A DOORWAY, NOT A REPORT ────────────────────
+       * /risk is where the book is measured, predicted, stressed and monitored
+       * — the three phases the owner asked for in one screen. It sits in
+       * «امنیت» next to Loan and Insurance because that is the question a user
+       * is asking when they open this group: «چه چیزی ممکن است پول من را ببرد».
+       * The violet stroke is --rgb-2 (the risk board's own accent) so the tile
+       * matches the room it opens.
+       */
+      { to: '/risk', key: 'nav.riskEngine', Icon: IconShield, hue: 'var(--rgb-2)' },
       /* FBT Insurance OS — /insurance (sandbox providers, non-custodial). */
       { to: '/insurance', key: 'nav.protection', Icon: IconShield, hue: 'var(--rgb-8)' },
       /* Intent OS now owns the raised centre button. Orders therefore needs a

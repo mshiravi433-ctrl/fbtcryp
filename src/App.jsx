@@ -160,6 +160,7 @@ const AiControlCenter = lazyRetry(() => import('./components/ai/AiControlCenter'
    Wallet and replaces nothing. Lazy, with its own CSS chunk, so /market never
    pays for it. */
 const AiAnalysis = lazyRetry(() => import('./pages/AiAnalysis'));
+const AiRiskEngine = lazyRetry(() => import('./pages/AiRiskEngine'));
 /* AI Opportunity Engine — the room that finds, prices and opens opportunities.
    Lazy like every other page: it pulls its own stylesheet and two engines. */
 const Opportunities = lazyRetry(() => import('./pages/Opportunities'));
@@ -408,7 +409,10 @@ function AppChrome() {
   /* «نه جمع شده» — the world console is a dashboard, not a phone column, so it
      gets the widest shell. All routes keep their phone layout on mobile and
      gain a wider, centred shell from tablet/desktop breakpoints. */
-  const wide = pathname === '/global' || pathname.startsWith('/global/');
+  const wide = pathname === '/global' || pathname.startsWith('/global/')
+    /* The risk engine draws a 7-column heat table and a family grid — it is a
+       board, not a phone column, and it earns the same wide shell. */
+    || pathname === '/risk';
   /*
     ─── THE BOTTOM EDGE BELONGS TO WHOEVER NEEDS IT MOST ───────────────────
     «منو پایین صفحه محو و دکمه زیبا و ندرن سواپ ظاهر شود» — on a coin page
@@ -549,6 +553,7 @@ function AnimatedRoutes() {
             <Route path="/intent-ai" element={<Navigate to="/intent" replace />} />
             <Route path="/ai-control" element={<AiControlCenter />} />
             <Route path="/ai-analysis" element={<AiAnalysis />} />
+            <Route path="/risk" element={<AiRiskEngine />} />
             <Route path="/opportunities" element={<Opportunities />} />
             <Route path="/opportunities/:opportunityId" element={<OpportunityDetail />} />
             <Route path="/global" element={<GlobalWorld />} />
