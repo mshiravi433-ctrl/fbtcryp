@@ -116,6 +116,8 @@ export const ROUTED_PATHS = Object.freeze([
   '/order/result/:orderId', '/smart-wallet', '/smart-money',
   '/smart-money/wallet/:chain/:address', '/smart-money/token/:chain/:address',
   '/portfolio', '/intent', '/intent-ai', '/ai-control', '/flash-liquidity',
+  /* AI Opportunity Engine: the ranked room and one row's deep analysis. */
+  '/opportunities', '/opportunities/:opportunityId',
   '/vault', '/loan',
   /* FBT AI Risk Engine — its own page at /risk (the insurance module keeps
      /insurance/risk; they are different rooms and must not be confused). */

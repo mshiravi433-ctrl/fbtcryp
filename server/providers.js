@@ -501,6 +501,21 @@ export async function fetchDailyCloses(id, days = 365, vs = 'usd', { timeoutMs =
   return dailyCloseBarsFromChart(raw);
 }
 
+/** For factor validation, timestamp a daily closing observation at the
+ * following UTC midnight (never at the START of the day whose last price we
+ * sampled). Drop today's incomplete bucket entirely. This sacrifices up to a
+ * day of freshness instead of making future intraday prices look historical. */
+export function completedScenarioDays(bars, now = Date.now()) {
+  const today = Math.floor(now / 86_400_000) * 86_400_000;
+  return (Array.isArray(bars) ? bars : [])
+    .filter((b) => Number.isFinite(b?.t) && Number.isFinite(b?.c) && b.c > 0
+      && b.t + 86_400_000 <= today)
+    .map((b) => ({ t: b.t + 86_400_000, c: b.c }));
+}
+export async function fetchScenarioDailyCloses(id, { now = Date.now() } = {}) {
+  return completedScenarioDays(await fetchDailyCloses(id, 365), now);
+}
+
 /**
  * OHLC CANDLES.
  *

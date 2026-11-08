@@ -882,7 +882,12 @@ export const ConversationRow = memo(function ConversationRow({
           <OrderCard order={m.order} locale={locale} />
         ) : null}
         {m.opportunityScan ? (
-          <OpportunityDashboard scan={m.opportunityScan} locale={locale} onRescan={onRescanOpportunity} />
+          <OpportunityDashboard
+            scan={m.opportunityScan}
+            locale={locale}
+            onRescan={onRescanOpportunity}
+            onOpenRoom={openBubbleRoute}
+          />
         ) : Array.isArray(m.opportunities) && m.opportunities.length ? (
           <OpportunityList rows={m.opportunities} onMonitor={onMonitorOpportunity} locale={locale} />
         ) : null}

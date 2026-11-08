@@ -4,9 +4,9 @@
  * «بخش AI Analysis را از یک صفحه ساده نمایش قیمت به یک مرکز تحلیل حرفه‌ای
  *  بازار تبدیل کن»
  *
- * Seven rooms, one data spine:
+ * Eight rooms, one data spine:
  *
- *   Overview · Screener · Token · Portfolio · Opportunities · Compare · Report
+ *   Overview · Screener · Token · Portfolio · Opportunities · Compare · Report · Scenario
  *
  * ─── THE SPINE ──────────────────────────────────────────────────────────────
  * Every number on every tab comes from a pure engine in lib/intelligence and
@@ -48,6 +48,7 @@ import OpportunitiesTab from '../components/ai/analysis/OpportunitiesTab';
 import CompareTab from '../components/ai/analysis/CompareTab';
 import ReportTab from '../components/ai/analysis/ReportTab';
 import AnalysisTabs from '../components/ai/analysis/AnalysisTabs';
+import ScenarioTab from '../components/ai/analysis/ScenarioTab';
 import '../styles/ai-analysis.css';
 import '../styles/ai-analysis-modern.css';
 import '../styles/ai-analysis-refined.css';
@@ -59,7 +60,8 @@ const TABS = [
   { id: 'portfolio', key: 'tab.portfolio' },
   { id: 'opportunities', key: 'tab.opportunities' },
   { id: 'compare', key: 'tab.compare' },
-  { id: 'report', key: 'tab.report' }
+  { id: 'report', key: 'tab.report' },
+  { id: 'scenario', key: 'tab.scenario' }
 ];
 
 const PROV_KEY = { live: 'page.live', stale: 'page.stale', offline: 'page.offline', unknown: 'page.unknown' };
@@ -106,7 +108,7 @@ export default function AiAnalysis() {
   const sourceLabel = markets[0]?.marketProvider === 'coingecko' ? 'CoinGecko' : 'FBT market API';
 
   const renderTab = () => {
-    if (!pulse && (marketLoading || !markets.length)) {
+    if (tab !== 'scenario' && !pulse && (marketLoading || !markets.length)) {
       return <p className="aix-loading">{ct(locale, 'page.loading')}</p>;
     }
     switch (tab) {
@@ -165,6 +167,8 @@ export default function AiAnalysis() {
             initial={[tokenId, 'ethereum', 'solana'].filter(Boolean)}
           />
         );
+      case 'scenario':
+        return <ScenarioTab locale={locale} markets={markets} tokenId={tokenId} updatedAt={updatedAt} connected={connected} holdings={rows} />;
       case 'report':
         return <ReportTab pulse={pulse} scan={scan} locale={locale} markets={markets} sourceLabel={sourceLabel} />;
       default:

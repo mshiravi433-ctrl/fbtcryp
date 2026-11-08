@@ -28,6 +28,7 @@ import {
   IconTrophy,
   IconX,
   IconSearch,
+  IconSparkle,
   IconClock,
   IconWorld
 } from './Icons';
@@ -397,6 +398,16 @@ const GROUPS = [
        * The /ai-analysis route still resolves for old links, but no menu
        * entry advertises a screen the assistant already answers in place.
        */
+      /*
+       * AI OPPORTUNITY ENGINE — /opportunities.
+       *
+       * It sits above Smart Money because it is the screen that CONSUMES smart
+       * money: the engine reads the verified whale consensus, the yield feed and
+       * the wallet, prices every candidate against the user's own capital and
+       * opens the token page or pool behind each card. One doorway, four rooms
+       * (top, personalised, scanner, coverage) inside.
+       */
+      { to: '/opportunities', key: 'nav.opportunities', Icon: IconSparkle, hue: 'var(--rgb-2)' },
       { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney, hue: 'var(--rgb-7)' },
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
       /* The social feed's second doorway. Its icon is the same conversation
