@@ -60,6 +60,7 @@ import { useAppStore } from '../store/useAppStore';
 import TokenRiskCard from '../components/TokenRiskCard';
 import MevGuard from '../components/MevGuard';
 import { evaluateExecutionGate, isBlocked, requiresAcknowledgement } from '../lib/executionGate';
+import { evaluateSwapRisk, verdictSummary, GATE_VERDICT as RISK_VERDICT } from '../lib/risk/tradeGate.js';
 import { checkPolicy, recordSpend } from '../lib/smartWallet';
 import { recordLot } from '../lib/portfolioIntel';
 import { recordSwap, confirmSwap, cancelSwap, failSwap } from '../lib/swapHistory';
@@ -206,7 +207,7 @@ function pickDefaultCounter(chainId, curatedList) {
 
 export default function Swap() {
   useHideBalances();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { haptic } = useTelegram();
   const wallet = useWallet();
 
@@ -410,6 +411,9 @@ export default function Swap() {
   // swap for a different one.
   const [toTokenRisk, setToTokenRisk] = useState(null);
   const [riskAcknowledged, setRiskAcknowledged] = useState(false);
+  /* The portfolio-risk acknowledgement is its OWN flag: acknowledging a token
+     risk must not silently acknowledge a different gate's warning. */
+  const [riskGateAcknowledged, setRiskGateAcknowledged] = useState(false);
   const still = useStill();
 
   // Reset the lifted risk verdict and its acknowledgement whenever the target
@@ -1596,6 +1600,35 @@ export default function Swap() {
     [toTokenRisk, simForGate, riskAcknowledged]
   );
 
+  /*
+   * ─── THE PORTFOLIO-RISK GATE (the "before" half of the risk engine) ──────
+   * The execution gate above judges the TOKEN; this one judges the BOOK. It is
+   * computed only while the review sheet is open, from the snapshot the risk
+   * page last wrote, so opening a review never triggers a second chain read.
+   *
+   * It does NOT call the engine during the swap unless a snapshot exists; with
+   * no snapshot the banner says exactly that (`no-book`) and the security gates
+   * keep their authority. It never blocks on its own either: `useRiskEngine`
+   * re-scores the book and a 10-point rise is reported as a `block` verdict,
+   * which the review treats as an acknowledgement — the same two-press ritual
+   * as a high token risk, never a silent refusal.
+   */
+  const swapRiskGate = useMemo(() => {
+    if (!reviewing || !wallet?.address) return null;
+    return evaluateSwapRisk({
+      wallet: wallet.address,
+      fromSymbol: fromToken?.symbol,
+      toSymbol: toToken?.symbol,
+      amountUsd: spendUsdGuess(),
+      chainId
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewing, wallet?.address, fromToken?.symbol, toToken?.symbol, chainId, amount]);
+
+  const riskGateNeedsAck = Boolean(swapRiskGate && swapRiskGate.verdict === RISK_VERDICT.BLOCK);
+  const isRTL = String(i18n?.language || '').startsWith('fa');
+  const locale = isRTL ? 'fa' : 'en';
+
   const confirmDisabled =
     (exec.enforced && (exec.simulating || exec.simulation?.status !== 'passed')) ||
     isBlocked(execGate);
@@ -2543,6 +2576,57 @@ export default function Swap() {
               </div>
             )}
 
+            {/*
+              * ─── PORTFOLIO RISK, BESIDE TOKEN RISK ──────────────────────────
+              * The two gates answer different questions and both are printed:
+              * `execGate` asks «is this token safe to touch», this one asks
+              * «what does this trade do to the book I already hold». A trade
+              * can pass the first and fail the second — buying a clean token
+              * that doubles an already 80%-concentrated position.
+              *
+              * Colour follows the engine's verdict, so a measured improvement
+              * is the only green thing on the sheet, and `no-book` is neutral
+              * (not green): no evidence is not evidence of safety.
+              */}
+            {swapRiskGate ? (
+              <div
+                className={`infobox ${
+                  swapRiskGate.verdict === RISK_VERDICT.BLOCK || swapRiskGate.verdict === RISK_VERDICT.WARN
+                    ? 'infobox-warn'
+                    : swapRiskGate.verdict === RISK_VERDICT.CLEAR && swapRiskGate.evidenceStatus === 'fresh'
+                      ? ''
+                      : 'infobox-info'
+                }`}
+                style={{ marginTop: 12 }}
+              >
+                <strong>{isRTL ? 'ریسک این معامله روی پرتفوی' : 'This trade’s effect on the portfolio'}</strong>
+                <p style={{ marginTop: 6, lineHeight: 1.6 }}>
+                  {verdictSummary(swapRiskGate, locale)}
+                </p>
+                {swapRiskGate.before?.value != null && swapRiskGate.after?.value != null ? (
+                  <p className="faint" style={{ marginTop: 6, fontSize: 11, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                    <span>{isRTL ? 'اکنون' : 'Now'}: <b className="mono">{swapRiskGate.before.value}/100</b></span>
+                    <span>{isRTL ? 'پس از معامله' : 'After'}: <b className="mono">{swapRiskGate.after.value}/100</b></span>
+                    {swapRiskGate.delta != null ? (
+                      <span>{isRTL ? 'تغییر' : 'Change'}: <b className="mono">{swapRiskGate.delta > 0 ? '+' : ''}{swapRiskGate.delta}</b></span>
+                    ) : null}
+                  </p>
+                ) : null}
+                {riskGateNeedsAck && !riskGateAcknowledged ? (
+                  <p style={{ marginTop: 6, fontSize: 11, lineHeight: 1.6 }}>
+                    {isRTL
+                      ? 'این معامله ریسک پرتفوی را بیش از ۱۰ امتیاز بالا می‌برد. برای ادامه، یک‌بار دیگر تأیید کنید.'
+                      : 'This trade raises portfolio risk by more than 10 points. Press confirm once more to continue.'}
+                  </p>
+                ) : null}
+                <p className="faint" style={{ marginTop: 6, fontSize: 10, lineHeight: 1.6 }}>
+                  {isRTL
+                    ? 'این گیت فقط ریسک پرتفوی را می‌سنجد؛ گیت‌های امنیتی و شبیه‌سازی مسیر خودشان سر جای خود هستند.'
+                    : 'This gate measures portfolio risk only; the security and route-simulation gates keep their own authority.'}
+                </p>
+              </div>
+            ) : null}
+
             <div className="row" style={{ gap: 10, marginTop: 12 }}>
               <button className="btn btn-ghost" onClick={() => setReviewing(false)}>{t('common.cancel')}</button>
               <button
@@ -2567,6 +2651,13 @@ export default function Swap() {
                      warning. */
                   if (requiresAcknowledgement(execGate) && !riskAcknowledged) {
                     setRiskAcknowledged(true);
+                    return;
+                  }
+                  /* The portfolio gate's own two-press ritual, after the token
+                     gate's — a blocked-risk trade is acknowledged, never
+                     silently signed on the same press that surfaced it. */
+                  if (riskGateNeedsAck && !riskGateAcknowledged) {
+                    setRiskGateAcknowledged(true);
                     return;
                   }
                   runSwap();

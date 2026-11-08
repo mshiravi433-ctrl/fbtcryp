@@ -117,6 +117,9 @@ export const ROUTED_PATHS = Object.freeze([
   '/smart-money/wallet/:chain/:address', '/smart-money/token/:chain/:address',
   '/portfolio', '/intent', '/intent-ai', '/ai-control', '/flash-liquidity',
   '/vault', '/loan',
+  /* FBT AI Risk Engine — its own page at /risk (the insurance module keeps
+     /insurance/risk; they are different rooms and must not be confused). */
+  '/risk',
   // FBT Launch — token & liquidity launchpad (non-custodial module).
   '/launch',
   // Phase 211 — Global Intelligence («جهانی»): its own page at /global; /ai-global is the alias.
