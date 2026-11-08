@@ -401,36 +401,36 @@ function fromArbitrage(rows, ctx) {
 function fromEmerging(rows, ctx) {
   return rows.map((t) => {
     const liq = num(t.liquidityUsd ?? t.tvlUsd); const growth = num(t.change24h);
-    // Expected return is NOT forecast: we expose momentum as evidence and price
-    // the position at the user's horizon using observed 24h move, haircut 75%.
-    const assumedApy = growth != null ? clamp(growth * 365 * 0.25, -50, 400) : null;
+    // A past 24h move cannot support a forecast or annualised profit estimate.
     const fees = estimateFees({ capitalUsd: ctx.capital, category: 'EMERGING_TOKEN', chain: t.chain, depthUsd: liq, gasUsd: t.gasUsd });
-    const econ = assumedApy == null ? null : computeEconomics({ capitalUsd: ctx.capital, horizonDays: ctx.horizonDays, grossApyPct: assumedApy, fees });
-    return base({
+    const econ = null;
+    return { ...base({
       category: 'EMERGING_TOKEN', type: 'EMERGING_TOKEN',
       title: `${t.symbol || t.name || 'Token'} — emerging${growth != null ? ` (${round(growth)}% 24h)` : ''}`,
-      symbol: t.symbol, chain: t.chain, protocol: t.protocol, direction: growth >= 0 ? 'BULLISH' : 'BEARISH',
+      symbol: t.symbol, chain: t.chain, protocol: t.protocol, direction: growth == null ? 'NEUTRAL' : growth >= 0 ? 'BULLISH' : 'BEARISH',
       now: ctx.now, horizonDays: ctx.horizonDays, expiresInMs: 6 * 3600_000,
       confidence: clamp(0.3 + (liq >= 5e5 ? 0.2 : liq >= 5e4 ? 0.08 : -0.08) + (num(t.smartMoneyBuys) > 0 ? 0.15 : 0) + (num(t.holdersGrowthPct) > 10 ? 0.08 : 0), 0, 0.85),
       economics: econ, evidence: [{ type: 'EMERGING_FLOW', detail: `age ${t.ageDays ?? '—'}d · mcap ${t.mcap ?? 'unknown'} · liquidity ${liq ?? 'unknown'} · holders growth ${t.holdersGrowthPct ?? '—'}% · smart-money buys ${t.smartMoneyBuys ?? '—'}` }],
       risk: compositeRisk({ smartContract: num(t.riskScore, 8), liquidity: liquidityRisk(liq), volatility: 9, concentration: 7, counterparty: 6 })
-    });
+    }), feesIfActedUsd: ctx.capital > 0 ? fees.totalUsd : null };
   });
 }
 
 function fromRwa(rows, ctx) {
   return rows.map((r) => {
-    const y = num(r.expectedYield ?? r.yieldPct ?? r.apy); if (y == null) return null;
+    const y = num(r.expectedYield ?? r.yieldPct ?? r.apy);
+    if (y == null && !(num(r.priceUsd) > 0)) return null;
     const fees = estimateFees({ capitalUsd: ctx.capital, category: 'RWA', chain: r.chain, gasUsd: r.gasUsd, feePct: { protocolPct: num(r.feePct, 0.1), swapPct: 0.1, exitPct: 0.1 } });
-    const econ = computeEconomics({ capitalUsd: ctx.capital, horizonDays: Math.max(ctx.horizonDays, num(r.lockDays, ctx.horizonDays)), grossApyPct: y, fees });
+    const econ = y == null ? null : computeEconomics({ capitalUsd: ctx.capital, horizonDays: Math.max(ctx.horizonDays, num(r.lockDays, ctx.horizonDays)), grossApyPct: y, fees });
     const o = base({
       category: 'RWA', type: 'RWA_INVESTMENT',
-      title: `${r.category || 'RWA'} — ${r.name || 'Real-world asset'} (${round(y)}% yield)`,
+      title: `${r.category || 'RWA'} — ${r.name || 'Real-world asset'}${y == null ? '' : ` (${round(y)}% yield)`}`,
       symbol: r.symbol, chain: r.chain, protocol: r.issuer || r.protocol, now: ctx.now, horizonDays: ctx.horizonDays,
       confidence: num(r.confidence, 0.62), economics: econ,
-      evidence: r.evidence?.length ? r.evidence : [{ type: 'RWA_CATALOG', detail: `${r.category || 'RWA'} · issuer ${r.issuer || '—'} · lock ${r.lockDays ?? '—'}d · min ${r.minInvestmentUsd ?? '—'}` }],
-      risk: compositeRisk({ smartContract: 3.5, liquidity: r.liquidity === 'HIGH' ? 2 : r.liquidity === 'MEDIUM' ? 5 : 8, volatility: 2, counterparty: 5 })
+      evidence: r.evidence?.length ? r.evidence : [{ type: y == null ? 'RWA_PRICE' : 'RWA_CATALOG', detail: y == null ? `Market price $${r.priceUsd} · 24h ${r.priceChange24h ?? '—'}% · yield unknown` : `${r.category || 'RWA'} · issuer ${r.issuer || '—'} · lock ${r.lockDays ?? '—'}d · min ${r.minInvestmentUsd ?? '—'}` }],
+      risk: y == null ? compositeRisk({ smartContract: 6, liquidity: 7, volatility: 7, counterparty: 6 }) : compositeRisk({ smartContract: 3.5, liquidity: r.liquidity === 'HIGH' ? 2 : r.liquidity === 'MEDIUM' ? 5 : 8, volatility: 2, counterparty: 5 })
     });
+    if (y == null) o.feesIfActedUsd = ctx.capital > 0 ? fees.totalUsd : null;
     if (num(r.minInvestmentUsd) > 0) o.minCapitalUsd = num(r.minInvestmentUsd);
     return o;
   }).filter(Boolean);
@@ -441,7 +441,7 @@ function fromWhales(rows, ctx) {
     const net = num(w.netFlowUsd); if (net == null && !w.asset) return null;
     const accumulating = (w.direction ? /accum|inflow|buy/i.test(w.direction) : net > 0);
     const fees = estimateFees({ capitalUsd: ctx.capital, category: 'WHALE_FLOW', chain: w.chain, depthUsd: num(w.liquidityUsd), gasUsd: w.gasUsd });
-    return base({
+    return { ...base({
       category: 'WHALE_FLOW', type: 'SMART_MONEY',
       title: `Whale ${accumulating ? 'accumulation' : 'distribution'} — ${w.asset || w.symbol || 'asset'}`,
       symbol: w.asset || w.symbol, chain: w.chain, direction: accumulating ? 'BULLISH' : 'BEARISH',
@@ -452,7 +452,7 @@ function fromWhales(rows, ctx) {
       economics: null, feesIfActedUsd: fees.totalUsd,
       evidence: [{ type: 'ON_CHAIN', detail: `net flow ${net ?? '—'} USD · wallets ${w.walletCount ?? '—'} · exchange flow ${w.exchangeFlowUsd ?? '—'}` }],
       risk: compositeRisk({ liquidity: liquidityRisk(num(w.liquidityUsd)), volatility: 6.5, smartContract: 2, concentration: 6 })
-    });
+    }), feesIfActedUsd: ctx.capital > 0 ? fees.totalUsd : null };
   }).filter(Boolean);
 }
 
@@ -610,7 +610,7 @@ export function scanOpportunities(input = {}) {
     schema: OPPORTUNITY_SCHEMA, status: 'OK', at: now,
     profile: { riskProfile, riskTolerance: tolerance, goal: PROFILE_GOAL[riskProfile] || 'balanced', capitalUsd: round(capital), horizonDays },
     opportunities, rejected,
-    total: opportunities.length, rejectedTotal: rejected.length,
+    total: opportunities.length, eligibleTotal: accepted.length, rejectedTotal: rejected.length,
     byType: byCategory, byCategory, byRisk,
     coverage,
     cortex: {

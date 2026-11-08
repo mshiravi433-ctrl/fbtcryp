@@ -266,7 +266,8 @@ import {
   syncOrderWatches,
   orderPreview
 } from '../lib/intent-ai/os/conditionalOrder.js';
-import { runOpportunityEngine } from '../lib/intent-ai/os/opportunityEngine.js';
+import { scanOpportunityDashboard } from '../lib/intent-ai/os/opportunityDashboard.js';
+import OpportunityDashboard from './ai/OpportunityDashboard.jsx';
 import {
   appendConversation,
   appendOperation,
@@ -656,6 +657,7 @@ export const ConversationRow = memo(function ConversationRow({
   onChoose,
   onMonitorAction,
   onMonitorOpportunity,
+  onRescanOpportunity,
   onFeedback,
   onOpenRoute,
   onOsChip,
@@ -879,7 +881,9 @@ export const ConversationRow = memo(function ConversationRow({
         {m.kind === 'order' && m.order ? (
           <OrderCard order={m.order} locale={locale} />
         ) : null}
-        {Array.isArray(m.opportunities) && m.opportunities.length ? (
+        {m.opportunityScan ? (
+          <OpportunityDashboard scan={m.opportunityScan} locale={locale} onRescan={onRescanOpportunity} />
+        ) : Array.isArray(m.opportunities) && m.opportunities.length ? (
           <OpportunityList rows={m.opportunities} onMonitor={onMonitorOpportunity} locale={locale} />
         ) : null}
         {(m.detectedIntent || (m.intentType && m.intentType !== 'GENERAL') || m.missingInfo) ? (
@@ -6332,42 +6336,27 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   }, [location.search, openPanel, openEcosystem]);
 
 
-  const runOpportunity = useCallback(async (card) => {
+  const runOpportunity = useCallback(async (card, settings = {}) => {
     setOpsBusy(true);
-    const result = await runOpportunityEngine({
-      portfolio: aiContext.portfolio,
-      services: liveModuleServices,
-      goal: null
-    });
-    const rows = result.opportunities || [];
-    const ok = result.status === 'live';
-    const summary = ok
-      ? (locale.startsWith('fa')
-        ? `اسکن فرصت انجام شد: ${rows.length} فرصت با داده واقعی (کیفیت داده: ${result.dataQuality}). هیچ بازدهی تضمینی نیست.`
-        : `Opportunity scan complete: ${rows.length} opportunities with real data (quality: ${result.dataQuality}). No return is guaranteed.`)
-      : (locale.startsWith('fa')
-        ? 'موتور فرصت نتوانست داده کافی جمع کند؛ وضعیت داده: ' + result.dataStatus
-        : 'The opportunity engine could not collect enough data. Data status: ' + result.dataStatus);
-    pushTurn({
-      id: makeId(),
-      role: 'ai',
-      kind: 'opportunity',
-      ui: { type: 'OPPORTUNITY_CARD' },
-      content: summary,
-      opportunities: rows,
-      dataQuality: result.dataQuality,
-      card: { title: locale.startsWith('fa') ? '✦ موتور فرصت' : '✦ Opportunity Engine' }
-    });
-    appendOp({
-      kind: 'OPPORTUNITY_SCAN',
-      status: ok ? 'COMPLETED' : 'FAILED',
-      title: card?.title || 'Opportunity scan',
-      detail: `${rows.length} found · quality ${result.dataQuality} · no guarantees`,
-      ref: null,
-      refKind: null
-    });
-    setOpsBusy(false);
-  }, [aiContext.portfolio, liveModuleServices, locale, pushTurn, appendOp]);
+    try {
+      const result = await scanOpportunityDashboard({
+        capitalUsd: settings.capitalUsd ?? 0,
+        riskProfile: settings.riskProfile || 'MODERATE',
+        horizonDays: settings.horizonDays || 30,
+        cortexTick: neuromorphic.paused ? null : neuromorphic.tickWithMarketPulse
+      });
+      const ok = result.dataStatus === 'live';
+      pushTurn({ id: makeId(), role: 'ai', kind: 'opportunity', ui: { type: 'OPPORTUNITY_CARD' },
+        content: locale.startsWith('fa')
+          ? (ok ? 'اسکن منابع موجود انجام شد؛ نتایج تخمینی و بدون تضمین هستند.' : 'دادهٔ کافی در منابع متصل در دسترس نیست؛ وضعیت هر دسته را ببینید.')
+          : (ok ? 'Available sources scanned; estimates are not guaranteed.' : 'Not enough data is available from connected sources. See coverage below.'),
+        opportunityScan: result, card: { title: locale.startsWith('fa') ? '✦ موتور فرصت' : '✦ Opportunity Engine' } });
+      appendOp({ kind: 'OPPORTUNITY_SCAN', status: ok ? 'COMPLETED' : 'FAILED', title: card?.title || 'Opportunity scan',
+        detail: `${result.opportunities.length} ranked · ${result.rejectedTotal} excluded · no guarantees`, ref: null, refKind: null });
+    } catch (err) {
+      pushTurn({ id: makeId(), role: 'ai', kind: 'assistant', content: locale.startsWith('fa') ? 'اسکن انجام نشد؛ لطفاً دوباره تلاش کنید.' : 'Scan failed. Please try again.' });
+    } finally { setOpsBusy(false); }
+  }, [neuromorphic.paused, neuromorphic.tickWithMarketPulse, locale, pushTurn, appendOp]);
 
   const handleOpsAction = useCallback(async (card) => {
     if (!card || opsBusy || busyRef.current) return;
@@ -7658,6 +7647,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 onChoose={chooseOption}
                 onMonitorAction={handleMonitorAction}
                 onMonitorOpportunity={monitorOpportunityRow}
+                onRescanOpportunity={(settings) => !opsBusy ? runOpportunity(null, settings) : undefined}
                 onFeedback={sendFeedback}
                 onOpenRoute={openBubbleRoute}
                 onOsChip={sendSuggested}
