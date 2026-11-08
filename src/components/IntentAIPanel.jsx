@@ -2901,7 +2901,7 @@ function MessageContent({ msg, onDraftReady, onQuickReply, onOpenGate }) {
               SAME navigation command (the chip text is matched by
               chatNavigation before the parser ever sees it), so one click
               lands the user on the shop's gift-card tab. It is deliberately
-              phrased as a purchase noun («گیفت کارت» / "Gift card"), not a
+              phrased as a purchase noun ("Gift card"), not a
               sentence: the navigation layer is a command surface, and a chip
               that opens a chat paragraph is a chip that re-parses on every
               locale edit.

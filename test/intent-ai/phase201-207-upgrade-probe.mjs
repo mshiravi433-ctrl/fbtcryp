@@ -131,7 +131,9 @@ try {
   check('the honest fee wording exists everywhere', locales.every((l) => typeof l.intentAI?.fee?.quotedOnly === 'string'));
   check('the broadcast failure wording exists everywhere', locales.every((l) => typeof l.intentAI?.broadcastFail?.error === 'string' && typeof l.intentAI?.broadcastFail?.venue === 'string'));
 
-  console.log(JSON.stringify({ probe: 'phase201-207-upgrades', passed: results.filter((r) => r.ok).length, results }, null, 2));
+  const passed = results.filter((r) => r.ok).length;
+  const failed = results.length - passed;
+  console.log(JSON.stringify({ probe: 'phase201-207-upgrades', total: results.length, passed, failed, results }, null, 2));
   if (results.some((r) => !r.ok)) process.exitCode = 1;
 } catch (e) {
   console.error(e);

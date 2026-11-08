@@ -47,6 +47,11 @@ export * from './appCapabilities.js';
 export * from './toolRegistry.js';
 export * from './intentUnderstanding.js';
 export * from './intentUnderstandingEngine.js';
+// Resolve the star-export collision explicitly: the confidence-engine API is
+// the canonical public name; expose the parser-specific score under its own
+// unambiguous name for callers that need it.
+export { calculateConfidenceBreakdown } from './confidenceEngine.js';
+export { calculateConfidenceBreakdown as calculateIntentConfidenceBreakdown } from './intentUnderstandingEngine.js';
 export * from './intentSession.js';
 export * from './contextEngine.js';
 export * from './memoryEngine.js';
