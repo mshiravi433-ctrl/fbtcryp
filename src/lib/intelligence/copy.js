@@ -42,6 +42,7 @@ export const COPY = {
     'tab.opportunities': 'فرصت‌ها',
     'tab.compare': 'مقایسه',
     'tab.report': 'گزارش روزانه',
+    'tab.scenario': 'سناریو ۲٫۰',
 
     'kpi.marketCap': 'ارزش کل بازار',
     'kpi.volume': 'حجم ۲۴ ساعته',
@@ -366,6 +367,7 @@ export const COPY = {
     'tab.opportunities': 'Opportunities',
     'tab.compare': 'Compare',
     'tab.report': 'Daily report',
+    'tab.scenario': 'Scenarios 2.0',
 
     'kpi.marketCap': 'Total market cap',
     'kpi.volume': '24h volume',

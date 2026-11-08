@@ -86,6 +86,9 @@ function makeResponse(data, ok = true) {
 function installFeed() {
   global.fetch = vi.fn(async (url) => {
     const href = String(url);
+    if (href.includes('/scenario/daily/')) return makeResponse(CANDLES.map(({ t, c }) => ({ t, c })));
+    if (href.includes('/scenario/history')) return makeResponse({ schema: 'fbt.scenario-evidence.v1', status: 'NOT_CONFIGURED', rows: [] });
+    if (href.includes('/scenario/context')) return makeResponse({ schema: 'fbt.scenario-context.v1', quotes: { US10Y: { status: 'OK', value: 4.1, source: 'treasury', at: Date.now() }, EFFR: { status: 'OK', value: 4.83, source: 'fredcsv:DFF', at: Date.now() } }, stablecoin: { status: 'OK', net24hUsd: -100000, source: 'defillama', at: Date.now() }, exchange: { status: 'UNAVAILABLE' }, headlines: { status: 'OK', items: [{ title: 'Fed decision reported', source: 'source', url: 'https://news.example/story', at: Date.now() }] } });
     if (href.includes('/ohlc/')) return makeResponse(CANDLES);
     if (href.includes('/markets')) return makeResponse(ROWS);
     if (href.includes('/global')) return makeResponse(GLOBAL);
@@ -128,7 +131,7 @@ describe('AI intelligence page', () => {
 
     expect(await screen.findByText('FBT AI Intelligence')).toBeTruthy();
     /* The navigation is a product landmark, not seven anonymous text pills. */
-    expect(document.querySelectorAll('.aix-tab .aix-tab-icon')).toHaveLength(7);
+    expect(document.querySelectorAll('.aix-tab .aix-tab-icon')).toHaveLength(8);
     expect(document.querySelector('.aix-tab-overview')?.getAttribute('aria-selected')).toBe('true');
     expect(document.querySelector('[role="tablist"]')).toBeTruthy();
     expect(document.querySelector('[role="tabpanel"]')?.getAttribute('aria-labelledby')).toBe('aix-analysis-tabs-overview');
@@ -148,6 +151,29 @@ describe('AI intelligence page', () => {
     expect(screen.getByText('Fear & Greed index')).toBeTruthy();
     expect(screen.getByText('Derivatives open interest')).toBeTruthy();
 
+    expect(document.body.textContent).not.toMatch(/NaN|undefined|Infinity/);
+  });
+
+  it('renders scenario intelligence from measured candles and labels the limits of calibration', async () => {
+    await mount();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Scenarios 2.0' }));
+    expect(await screen.findByText('Scenario Lab 2.0')).toBeTruthy();
+    expect(await screen.findByText('Walk-forward model performance')).toBeTruthy();
+    expect(screen.getByText('Bull')).toBeTruthy();
+    expect(screen.getByText('Neutral')).toBeTruthy();
+    expect(screen.getByText('Bear')).toBeTruthy();
+    expect(screen.getByText(/Live rates, news and whale flows are context only/)).toBeTruthy();
+    expect(await screen.findByText('Live driver readings')).toBeTruthy();
+    expect(await screen.findByText('Fed decision reported')).toBeTruthy();
+    expect(screen.getByText('Effective Fed funds rate (not the target range)')).toBeTruthy();
+    expect(screen.getByText('Forecasts actually issued on this device')).toBeTruthy();
+    expect(screen.getByText('Leakage-safe multi-factor validation')).toBeTruthy();
+    expect(await screen.findByText('Configure Upstash Redis on the server to collect a shared archive.')).toBeTruthy();
+    expect(screen.queryByText(/Held-out association validated/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Test a shock equal to BTC move' }));
+    expect(screen.getByLabelText('Uniform price shock (%)').value).toBe('4.1');
+    fireEvent.click(screen.getByRole('button', { name: 'Portfolio' }));
+    expect(await screen.findByText('Connect a wallet to simulate your portfolio.')).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/NaN|undefined|Infinity/);
   });
 

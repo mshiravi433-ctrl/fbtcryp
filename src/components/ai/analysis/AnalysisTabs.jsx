@@ -3,7 +3,7 @@
  *
  * The visual accent belongs to the room, not to an arbitrary button index:
  * overview is cyan, screener violet, token blue, portfolio mint, opportunities
- * amber, compare magenta and report slate. The same map therefore produces
+ * amber, compare magenta, report slate and scenario teal. The same map therefore produces
  * the same landmark wherever the room is opened.
  */
 import { useEffect, useId, useRef } from 'react';
@@ -25,7 +25,8 @@ const TAB_ICONS = {
   portfolio: IconWallet,
   opportunities: IconRocket,
   compare: IconSwap,
-  report: IconDoc
+  report: IconDoc,
+  scenario: IconChart
 };
 
 export default function AnalysisTabs({

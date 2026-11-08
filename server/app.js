@@ -16,6 +16,7 @@ import { blobConfigured, blobSet, upstashIncrementWindow, withPersistentCache } 
 import {
   compactMarketRows,
   fetchChart,
+  fetchScenarioDailyCloses,
   fetchCoinDetail,
   fetchCategory,
   fetchDexPools,
@@ -42,6 +43,8 @@ import { fetchAudio } from './audio.js';
 import { calmResultIsUsable, fetchCalm } from './calm.js';
 import { fetchThorPools, fetchThorTxStatus, thorQuote, thorStatus } from './thorchain.js';
 import { fetchNews } from './news.js';
+import { readScenarioContext } from './scenarioContext.js';
+import { recordScenarioEvidence, readScenarioEvidence } from './scenarioArchive.js';
 import {
   getEtfList,
   getEtfQuote,
@@ -4125,6 +4128,39 @@ app.get('/api/search', (req, res) => {
  * decides how long to keep it, the server only decides how often to refetch.
  */
 app.get('/api/news', (_req, res) => serve(res, 1_800_000)(fetchNews, 'news'));
+
+/* One shared, read-only point-in-time evidence read for Scenario Lab. Never
+   carries wallet holdings or converts these factors into probabilities. */
+app.get('/api/scenario/context', async (_req, res) => {
+  const context = await readScenarioContext();
+  /* One immutable public observation per UTC day, only if durable storage is configured. */
+  context.archive = await recordScenarioEvidence(context);
+  const available = Object.values(context.quotes || {}).some((q) => q.status === 'OK')
+    || context.stablecoin?.status === 'OK' || context.exchange?.status === 'OK'
+    || context.headlines?.status === 'OK';
+  res.set('cache-control', available ? 'public, max-age=30, s-maxage=60' : 'no-store');
+  return res.json(context);
+});
+/* Dedicated once-daily prospective capture; Vercel Hobby supports daily cron.
+   Authenticated and independent of whether anyone opens the Scenario tab. */
+app.get('/api/cron/scenario-evidence', async (req, res) => {
+  if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
+  const context = await readScenarioContext();
+  const archive = await recordScenarioEvidence(context);
+  res.set('cache-control', 'no-store');
+  return res.json({ schema: 'fbt.scenario-evidence-cron.v1', ...archive });
+});
+app.get('/api/scenario/history', async (_req, res) => {
+  const history = await readScenarioEvidence();
+  res.set('cache-control', history.status === 'OK' ? 'public, max-age=60, s-maxage=300' : 'no-store');
+  return res.json(history);
+});
+/* Daily close-only series, not synthetic OHLC. No offline price fallback. */
+app.get('/api/scenario/daily/:id', (req, res) => {
+  const id = String(req.params.id || '');
+  if (!/^[a-z0-9-]{2,80}$/.test(id)) return res.status(400).json({ error: 'BAD_ASSET_ID' });
+  return serve(res, 120000)(() => fetchScenarioDailyCloses(id), `scenario:daily:${id}`);
+});
 
 /*
  * ETF + Gold (Alpha Vantage) — read-only market data.

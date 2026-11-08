@@ -178,6 +178,7 @@
 .aix-tab-opportunities { --aix-tab-accent: var(--aix-amber); }
 .aix-tab-compare { --aix-tab-accent: var(--aix-magenta); }
 .aix-tab-report { --aix-tab-accent: color-mix(in oklab, var(--aix-violet) 55%, var(--aix-ink-2)); }
+.aix-tab-scenario { --aix-tab-accent: var(--aix-mint); }
 
 .aix-tab-icon {
   display: grid;
