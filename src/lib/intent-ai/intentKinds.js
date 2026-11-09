@@ -261,6 +261,19 @@ export function classifyUserIntent(message, classification = null) {
       kind = votes.find((v) => v.kind !== 'CONDITIONAL_ALLOCATION')?.kind || fromCommandCenter(classification);
     }
   }
+  /* Advice-seeking, discovery recommendation, and distress turns are NEVER
+     executable trade orders: «یه ارز خوب معرفی کن بخرم» or «حالم بده همشو
+     بفروشم؟» must be researched/contained calmly, never routed to a swap card
+     or a CONNECT_WALLET prompt. */
+  if (['BUY', 'SELL', 'SWAP'].includes(kind)) {
+    const isDiscoveryRec = /(معرفی\s*کن|پیشنهاد\s*(?:بده|کن)|چه\s*(?:ارزی|کوینی|توکنی)|کدوم\s*(?:ارز|کوین|توکن)|چی\s*بخرم|which\s+(?:coin|token|crypto)|what\s+(?:coin|token|crypto)\s+to\s+buy|recommend\s+(?:a\s+)?(?:coin|token|crypto))/i.test(raw);
+    const isDistressSell = /(?:خیلی\s*)?ضرر\s*کردم|همه\s*(?:چیمو|پولمو)\s*از\s*دست|حالم\s*بد|(?:همشو|همه‌شو)\s*بفروشم/i.test(raw);
+    const isImperativeTrade = /(?:بخر(?![م])|بفروش(?![م])|سواپ\s*کن|تبدیل\s*کن|اجرا\s*کن|بخر\s*برام|بفروش\s*برام)/i.test(raw);
+    const isAdvisoryQuestion = !isImperativeTrade && /(به\s*نظرت|نظرت\s*(?:چیه|چیست)|آیا\b|یا\s*نه|یا\s*صبر\s*کنم|مناسبه|ارزش\s*داره|\bshould\s+i\s+(?:buy|sell|swap|hold)\b|\bworth\s+buying\b|\bgood\s+time\s+to\s+buy\b)/i.test(raw);
+    if (isDiscoveryRec || isDistressSell || isAdvisoryQuestion) {
+      kind = 'RESEARCH';
+    }
+  }
   if (!USER_INTENTS.includes(kind)) kind = 'GENERAL';
 
   const top = votes[0]?.score || 0;

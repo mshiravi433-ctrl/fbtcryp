@@ -27,6 +27,7 @@ import { clipDeep, containsSensitiveKeyOrPhrase, redactSecrets } from './redact.
 import { createSmartMemory } from './smartMemory.js';
 import { createPerformanceLearning } from './performanceLearning.js';
 import { COUNCIL_ROSTER, createAdaptiveCouncil, selectCouncilMembers } from './adaptiveCouncil.js';
+import { searchKnowledge } from '../os/knowledgeCenter.js';
 
 export const CENTRAL_BRAIN_SCHEMA = 'fbt.central-brain.v2';
 export const CENTRAL_BRAIN_VERSION = '2.0.0';
@@ -328,6 +329,12 @@ export function classifyRequest(rawMessage = '', { userProfile = null } = {}) {
   if (signals.executionQuote && assets.length >= 2) requiredTools.add('fbt_get_quote_preview');
 
   const requiresToolTruth = signals.portfolioWallet || signals.priceOnly || signals.executionQuote;
+  const isDistress = (
+    /(?:حالم\s*بد|ناراحتم|ترسیدم|پریشونم|داغونم|خسته\s*شدم|panic|scared|terrified|lost\s+everything)/i.test(cleanMsg)
+    && /(?:ضرر|باخت|بفروشم|خروج|همشو|همه\s*چیمو|همه\s*پولمو|sell|loss|lose)/i.test(cleanMsg)
+  ) || /(?:همشو|همه\s*چیمو|همه\s*پولمو|کل\s*سرمایه.{0,12}بفروشم|sell\s*everything|liquidate\s*all)/i.test(cleanMsg);
+  const isDiscovery = /(?:ارز|توکن|کوین|گزینه).{0,28}(?:معرفی\s*کن|پیشنهاد\s*بده|چی\s*خوبه)|(?:معرفی\s*کن|پیشنهاد\s*بده).{0,28}(?:ارز|توکن|کوین)|(?:what|which)\s+(?:coin|token|asset)\s+(?:should\s+i|to)\s+buy|(?:suggest|recommend)\s+(?:a\s+)?(?:low[\s-]*risk\s+)?(?:coin|token|asset)/i.test(cleanMsg)
+    && amountUsd == null;
 
   return {
     category,
@@ -339,7 +346,9 @@ export function classifyRequest(rawMessage = '', { userProfile = null } = {}) {
       assets,
       amountUsd,
       horizon,
-      isComparison: signals.comparison
+      isComparison: signals.comparison,
+      isDistress,
+      isDiscovery
     },
     activeDomainCount,
     requiredTools: [...requiredTools],
@@ -1183,11 +1192,28 @@ export function assessUncertaintyAndClarify({
   const prefs = userProfile?.preferencesMap || {};
   const goals = userProfile?.goals || [];
   const assets = classification?.entities?.assets || [];
+  const isDistress = Boolean(classification?.entities?.isDistress);
+  const isDiscovery = Boolean(classification?.entities?.isDiscovery);
+
+  // Emotional panic/distress or open-ended discovery recommendations must NOT
+  // interrogate for a ticker symbol.
+  if (isDistress) {
+    return {
+      uncertaintyScore: 15,
+      isUncertain: false,
+      requiredDataUnavailable: false,
+      required: false,
+      missingSlots: [],
+      questions: []
+    };
+  }
 
   // Case 1: Ambiguous request with no asset/subject
   if (
-    classification.category === 'AMBIGUOUS_INCOMPLETE'
-    || (['TRADING_STRATEGY', 'TECHNICAL_ANALYSIS', 'PRICE_LOOKUP', 'EXECUTION_PLANNING'].includes(classification.category) && assets.length === 0 && !/(بازار|مارکت|سبد|پرتفوی|market|portfolio|crypto)/i.test(message))
+    !isDiscovery && (
+      classification.category === 'AMBIGUOUS_INCOMPLETE'
+      || (['TRADING_STRATEGY', 'TECHNICAL_ANALYSIS', 'PRICE_LOOKUP', 'EXECUTION_PLANNING'].includes(classification.category) && assets.length === 0 && !/(بازار|مارکت|سبد|پرتفوی|market|portfolio|crypto)/i.test(message))
+    )
   ) {
     missingSlots.push('target_asset');
     questions.push('لطفاً مشخص کنید کدام ارز یا دارایی مدنظر شماست؟ (مثلاً BTC، ETH یا SOL)');
@@ -1206,7 +1232,7 @@ export function assessUncertaintyAndClarify({
   }
 
   // Case 3: Trading strategy / investment advice missing both risk tolerance AND horizon (when not in user's long-term memory!)
-  if (classification.category === 'TRADING_STRATEGY' && !prefs.riskTolerance && !classification.entities?.horizon && goals.length === 0) {
+  if (!isDiscovery && classification.category === 'TRADING_STRATEGY' && !prefs.riskTolerance && !classification.entities?.horizon && goals.length === 0) {
     if (normalizeDigits(message).length < 45) {
       missingSlots.push('risk_and_horizon');
       questions.push('افق زمانی سرمایه‌گذاری شما (کوتاه‌مدت یا بلندمدت) و میزان ریسک‌پذیری‌تان (کم‌ریسک، متعادل یا پرریسک) چگونه است؟');
@@ -1253,6 +1279,7 @@ export function createCentralBrain({
   toolRunner = null,       // async (toolName, args, ctx) => { status, summary, ms }
   providerInvoker = null,  // async ({ provider, model, prompt, agentId, timeoutMs }) => { text, stance, confidence, model }
   availableProviders = null,
+  internalSynthesizer = null, // optional server-side deterministic multi-domain reasoner
   /* Which intelligence mode the deployment/request is in, and the gateway's
      flagship ladders (`{ provider: [modelId, …] }`). Both are supplied by the
      server runtime; the brain never imports a provider table it cannot honour. */
@@ -1660,8 +1687,49 @@ export function createCentralBrain({
 
         if (!directText) {
           const obsPrice = evidence.find((e) => e.facetId === 'market_prices' && e.status === 'observed');
+          const obsPortfolio = evidence.find((e) => e.facetId === 'portfolio_state' && e.status === 'observed');
+          const kbHits = searchKnowledge(message, { locale: classification.language, limit: 2 });
+          let synthOut = null;
+          if (typeof internalSynthesizer === 'function') {
+            const priceMap = {};
+            const rows = Array.isArray(obsPrice?.summary?.assets) ? obsPrice.summary.assets : [];
+            for (const r of rows) {
+              if (r?.symbol && r?.price != null) priceMap[String(r.symbol).toUpperCase()] = Number(r.price);
+            }
+            try {
+              synthOut = internalSynthesizer({
+                message,
+                locale: classification.language,
+                context: {
+                  market: Object.keys(priceMap).length ? { dataStatus: 'live', priceMap } : { dataStatus: 'unavailable' },
+                  portfolio: obsPortfolio?.summary || null
+                },
+                knowledge: kbHits
+              });
+            } catch { synthOut = null; }
+          }
+
           if (classification.category === 'SOCIAL_CHITCHAT') {
             directText = 'سلام! مغز مرکزی FBT آماده تحلیل بازار، بررسی ریسک، مدیریت اهداف مالی و پاسخ به پرسش‌های شماست.';
+          } else if (synthOut?.ok && synthOut.answer) {
+            directText = synthOut.answer;
+            usedProvider = 'internal-synthesizer';
+            usedModel = 'fbt-internal-reasoner-v1';
+          } else if (classification.entities?.isDistress) {
+            directText = 'در شرایط ضرر سنگین و فشار عصبی، بهترین تصمیم این است که الان تحت استرس معامله جدید یا خروج هیجانی انجام ندهید. ابتدا نفس عمیق بکشید و مشخص کنید آیا پوزیشن اهرمی در خطر لیکوییدیشن دارید یا اسپات است؛ اگر هزینه‌های ضروری زندگی درگیر است، مدیریت نقدینگی در اولویت است و نیازی به تصمیم فوری زیر فشار احساسی نیست.';
+          } else if (kbHits.length > 0) {
+            const isFa = classification.language === 'fa';
+            directText = kbHits.map((k) => (isFa ? k.body : k.bodyEn || k.body)).join('\n\n');
+            if (obsPrice) {
+              const sym = classification.entities.assets[0] || 'بازار';
+              const rows = Array.isArray(obsPrice.summary?.assets) ? obsPrice.summary.assets : [];
+              const row = rows.find((r) => String(r.symbol || '').toUpperCase() === sym) || rows[0];
+              if (row?.price) {
+                directText += `\n\nقیمت لحظه‌ای ${row.symbol || sym}: $${row.price}`;
+              }
+            }
+          } else if (classification.entities?.isDiscovery) {
+            directText = 'پیشنهاد یک ارز واحد بدون شناخت افق زمانی و تحمل ریسک شما علمی نیست، اما می‌توان دسته‌های ریسک را شفاف کرد:\n• ریسک بسیار پایین (حفظ نقدینگی): استیبل‌کوین‌های معتبر مانند USDC / USDT\n• هسته کم‌ریسک‌تر بازار کریپتو: BTC و ETH با نوسان کمتر نسبت به آلت‌کوین‌ها\n• ریسک بالا: آلت‌کوین‌ها و توکن‌های کوچک با خطر افت سنگین\nاگر افق زمانی و سطح ریسک خود را بگویید، چارچوب مقایسه را دقیق‌تر می‌چینم.';
           } else if (obsPrice) {
             const sym = classification.entities.assets[0] || 'بازار';
             const rows = Array.isArray(obsPrice.summary?.assets) ? obsPrice.summary.assets : [];
@@ -1670,7 +1738,7 @@ export function createCentralBrain({
               ? `بر اساس خوانش لحظه‌ای بازار، قیمت ${row.symbol || sym} حدود $${row.price} است${Number.isFinite(Number(row.change24h)) ? ` (تغییر ۲۴ساعته: ${row.change24h}%)` : ''}.`
               : `خلاصه داده بازار مشاهده شد: ${JSON.stringify(obsPrice.summary).slice(0, 220)}`;
           } else {
-            directText = `درخواست شما (${classification.category}) در مسیر بهینه بررسی شد.${memoryContext.userProfile?.preferences?.length ? ' ترجیحات ذخیره‌شده شما در نظر گرفته شد.' : ''}`;
+            directText = 'برای پاسخ دقیق‌تر به این پرسش، لازم است یا داده‌های زنده بازار/پرتفوی در دسترس باشد یا موضوع و دارایی موردنظرتان را دقیق‌تر مشخص کنید.';
           }
         }
 
@@ -1741,16 +1809,50 @@ export function createCentralBrain({
       let finalConfidence = councilReport?.confidence?.score ?? agentOutputs[0]?.confidence ?? 70;
       let answer = councilReport?.finalDecision?.summary || agentOutputs[0]?.summary || '';
 
-      if (finalUncertainty.required) {
+      if (classification.entities?.isDistress) {
+        finalAction = 'HOLD_WAIT';
+        finalStance = 'cautious';
+        finalConfidence = Math.min(60, finalConfidence);
+        if (typeof internalSynthesizer === 'function') {
+          try {
+            const distressSynth = internalSynthesizer({ message, locale: classification.language, context: {} });
+            if (distressSynth?.ok && distressSynth.answer) answer = distressSynth.answer;
+          } catch { /* keep baseline */ }
+        }
+        if (!answer || /در مسیر بهینه بررسی شد/.test(answer)) {
+          answer = 'در شرایط ضرر سنگین و فشار عصبی، هیچ تصمیم فروش یا خرید هیجانی نگیرید. ابتدا نفس عمیق بکشید و مشخص کنید آیا پوزیشن اهرمی در خطر لیکوییدیشن دارید یا اسپات است؛ اگر پول برای مخارج ضروری زندگی است، مدیریت ریسک در اولویت است.';
+        }
+      } else if (finalUncertainty.required) {
         finalAction = 'CLARIFY';
         finalStance = 'uncertain';
         finalConfidence = Math.min(42, finalConfidence);
         answer = `برای ارائه تحلیل و تصمیم دقیق، نیاز به اطلاعات تکمیلی دارم:\n• ${finalUncertainty.questions.join('\n• ')}`;
       } else if (finalUncertainty.requiredDataUnavailable) {
-        finalAction = 'ABSTAIN';
-        finalStance = 'abstain';
-        finalConfidence = Math.min(25, finalConfidence);
-        answer = 'داده واقعی موردنیاز (کیف‌پول/پرتفوی/قیمت) در حال حاضر از ابزار خوانده نشد؛ بر اساس قوانین ایمنی FBT از حدس زدن ارقام خودداری می‌شود.';
+        const kbMatches = searchKnowledge(message, { locale: classification.language, limit: 2 });
+        let partialSynth = null;
+        if (typeof internalSynthesizer === 'function') {
+          try {
+            partialSynth = internalSynthesizer({ message, locale: classification.language, context: {}, knowledge: kbMatches });
+          } catch { partialSynth = null; }
+        }
+        if (partialSynth?.ok && partialSynth.knowledgeUsed && partialSynth.answer) {
+          answer = partialSynth.answer;
+        } else if (kbMatches.length > 0 && /(چیست|چیه|کارمزد|غیرامانی|what\s+is|fee)/i.test(message)) {
+          const isFa = classification.language === 'fa';
+          answer = `${kbMatches.map((k) => (isFa ? k.body : k.bodyEn || k.body)).join('\n\n')}\n\nداده زنده قیمت یا موجودی در این لحظه از ابزار خوانده نشد؛ بنابراین عدد لحظه‌ای ارائه نمی‌دهم.`;
+        } else {
+          finalAction = 'ABSTAIN';
+          finalStance = 'abstain';
+          finalConfidence = Math.min(25, finalConfidence);
+          answer = 'داده واقعی موردنیاز (کیف‌پول/پرتفوی/قیمت) در حال حاضر از ابزار خوانده نشد؛ بر اساس قوانین ایمنی FBT از حدس زدن ارقام خودداری می‌شود.';
+        }
+      } else if (councilReport?.councilConvened && agentOutputs.every((a) => !a.provider || ['deterministic-specialist', 'deterministic-direct', 'deterministic-fallback', 'local-kb', 'internal-reasoner', 'fbt-council-arbiter'].includes(a.provider)) && evidence.every((e) => e.status !== 'observed') && typeof internalSynthesizer === 'function') {
+        try {
+          const offlineCouncilSynth = internalSynthesizer({ message, locale: classification.language, context: {} });
+          if (offlineCouncilSynth?.ok && offlineCouncilSynth.answer && (offlineCouncilSynth.internalSynthesis || offlineCouncilSynth.knowledgeUsed)) {
+            answer = offlineCouncilSynth.answer;
+          }
+        } catch { /* keep council arbiter summary */ }
       }
 
       /* A split council is a fact the user is entitled to. The answer keeps the

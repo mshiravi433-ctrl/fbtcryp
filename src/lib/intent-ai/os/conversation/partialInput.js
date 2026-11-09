@@ -300,13 +300,19 @@ export function readPartialInput({ message = '', locale = 'fa', context = {}, pr
   try { social = classifySocialAct(String(message || ''), { locale }); } catch { social = null; }
   const pureSocial = Boolean(social && social.pure);
 
+  const act = actOf(text);
   const rawAssets = assetsIn(text, { message, context: {} });
   const assets = [...rawAssets];
   const priorAssets = Array.isArray(context?.lastAssets) ? context.lastAssets.filter(Boolean) : [];
-  const contextAsset = !assets.length && priorAssets.length ? String(priorAssets[0]).toUpperCase() : null;
+  const opaqueAsciiGibberish = tokens.length === 1
+    && !repair.repairs.length
+    && act === 'unknown'
+    && !rawAssets.length
+    && !pureSocial
+    && /^[a-z0-9_.-]{6,}$/i.test(text.trim())
+    && !/^(btc|eth|sol|usdt|usdc|bnb|xrp|ada|doge|avax|link|uni|aave|matic|pol|ton|sui|arb|op|pepe|shib|fbt|swap|buy|sell|price|help|hi|hello)$/i.test(text.trim());
+  const contextAsset = !opaqueAsciiGibberish && !assets.length && priorAssets.length ? String(priorAssets[0]).toUpperCase() : null;
   if (contextAsset) assets.push(contextAsset);
-
-  const act = actOf(text);
   const amount = (() => {
     if (entities.amount != null) {
       const asNumber = Number(String(entities.amount).replace(/,/g, ''));

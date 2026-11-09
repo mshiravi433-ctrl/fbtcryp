@@ -148,7 +148,7 @@ const KEYWORD_WEIGHT = 3;
 
 const KEYWORD_LEXICON = Object.freeze([
   { type: 'PORTFOLIO_ANALYSIS', words: ['پرتفوی', 'پرتفولیو', 'پورتفولیو', 'پرتفو', 'سبد دارایی', 'سبد من', 'داراییهای من', 'تخصیص', 'توزیع دارایی', 'portfolio', 'holdings', 'allocation', 'asset allocation'] },
-  { type: 'WALLET_BALANCE', words: ['کیف پول', 'کیفپول', 'والت', 'موجودی', 'موجودیم', 'دارایی', 'داراییها', 'wallet', 'balance', 'balances'] },
+  { type: 'WALLET_BALANCE', words: ['کیف پول', 'کیفپول', 'والت', 'موجودی', 'موجودیم', 'دارایی من', 'داراییم', 'wallet', 'balance', 'balances'] },
   { type: 'YIELD_DISCOVERY', words: ['سود', 'سودآوری', 'سود اوری', 'بازدهی', 'بازده', 'درامد', 'درآمد', 'ییلد', 'apy', 'apr', 'yield', 'earn', 'staking', 'استیک', 'سپرده'] },
   { type: 'MARKET_ANALYSIS', words: ['تحلیل', 'انالیز', 'آنالیز', 'بررسی', 'بازار', 'مارکت', 'قیمت', 'نرخ', 'روند', 'analysis', 'analyse', 'analyze', 'market', 'price', 'trend'] },
   { type: 'RISK_ANALYSIS', words: ['ریسک', 'خطر', 'risk', 'exposure', 'drawdown'] },
@@ -847,6 +847,7 @@ export function understandIntent(message, context = {}) {
   const allocationPlanQuestion = Boolean(entities.amountUsd && entities.tokens?.length >= 2
     && /(?:\b(?:split|allocate|allocation|divide|spread|invest|distribute)\b|تخصیص|تقسیم|پخش|سرمایه.?گذاری)/i.test(foldedQuestion)
     && !/(?:\b(?:swap|convert|exchange|buy|sell|execute)\b|سواپ|تبدیل|بخر|بفروش)/i.test(foldedQuestion));
+  const whyMacroQuestion = /(?:چرا|علت|دلیل|چطور|چگونه|اثر|تأثیر|تاثیر|why|how|does|impact).{0,50}(?:تورم|نرخ\s*بهره|فدرال|نقدینگی|دارایی[‌\s]*های\s*کمیاب|کمیاب|رکود|سیاست\s*پولی|inflation|interest\s*rate|fed\b|monetary|scarce\s*assets?|real\s*yield)/i.test(foldedQuestion);
   const whyMarketQuestion = /(?:why|reason|explain\s+why|چه\s*دلیلی|چرا|علت|دلیل).{0,40}(?:drop|fall|down|rise|pump|move|افت|ریزش|کاهش|سقوط|رشد|بالا\s*رفت)|(?:drop|fall|down|rise|pump|move|افت|ریزش|کاهش|سقوط|رشد).{0,40}(?:why|reason|چرا|علت|دلیل)/i.test(foldedQuestion);
   const walletSafetyQuestion = /(?:wallet|کیف\s*پول|دارایی).{0,40}(?:safe|secure|security|امن|امنیت|در\s*امان)|(?:safe|secure|امن|امنیت).{0,40}(?:wallet|کیف\s*پول|دارایی)/i.test(foldedQuestion);
   const explanationQuestion = /(?:what\s+does|what\s+is(?:\s+(?:meant\s+by|a\b|an\b|the\b))?|explain|define|meaning\s+of|یعنی\s*چی|معنی\s*(?:چی|چیه)|(?:چیست|چیه).{0,30}(?:کارمزد|گس|استیک|وام|ریسک|سود|ضرر)|توضیح\s*بده|مفهوم\s*)/i.test(foldedQuestion);
@@ -860,7 +861,14 @@ export function understandIntent(message, context = {}) {
   const scenarioQuestion = Boolean(entities.token && entities.amountPct != null && scenarioDirection && scenarioPrompt);
   const portfolioScenario = scenarioQuestion && /(?:portfolio|holdings|پرتفوی|سبد\s*دارایی)/i.test(foldedQuestion);
   const generalQuestion = /[?؟]$|^(?:what|why|how|when|where|which|who|is|are|can|do|does|should|چرا|چطور|چگونه|چی|کدام|آیا|میشه)\b/i.test(foldedQuestion);
+  const discoveryRecommendation = /(?:معرفی\s*کن|پیشنهاد\s*بده|چی\s*(?:خوبه|بخرم)|یه\s*چی\s*(?:خوب|بخرم)|کدوم\s*(?:ارز|توکن|کوین)|چه\s*ارزی|بهترین\s*(?:گزینه|ارز).{0,20}(?:خرید|بخرم)|what\s+(?:should\s+i|to)\s+buy|which\s+(?:coin|token|asset)\s+(?:should\s+i|to)\s+buy|suggest\s+(?:something|a\s+(?:coin|token|asset))|recommend\s+(?:something|a\s+(?:coin|token|asset)))/i.test(foldedQuestion)
+    && entities.amount == null && entities.amountUsd == null;
+  const panicSellDistress = (
+    /(?:حالم\s*بد|ناراحتم|ترسیدم|استرس\s*دارم|پریشونم|ناامیدم|داغونم|خسته\s*شدم|panic|scared|terrified|lost\s+everything)/i.test(foldedQuestion)
+    && /(?:ضرر|باخت|بفروشم|خروج|همشو|همه\s*چیمو|همه\s*پولمو|sell|loss|lose)/i.test(foldedQuestion)
+  ) || /(?:همشو|همه\s*چیمو|همه\s*پولمو|کل\s*سرمایه.{0,12}بفروشم|sell\s*everything|liquidate\s*all)/i.test(foldedQuestion);
   const decisionQuestion = /(?:should\s+i\s+(?:buy|sell|swap|hold|keep|invest)|should\s+(?:i|we)\s+|would\s+you\s+recommend|is\s+it\s+(?:a\s+)?good\s+idea|is\s+it\s+safe\s+to\s+(?:buy|sell|swap)|(?:is|are)\s+.{1,40}(?:a\s+)?(?:good\s+investment|worth\s+investing|safe\s+investment|good\s+time\s+to\s+buy)|worth\s+(?:buying|selling)|(?:آیا|ایا).{0,24}(?:بخرم|بفروشم|نگه\s*دارم|تبدیل\s*کنم)|بهتره.{0,24}(?:بخرم|بفروشم|نگه\s*دارم)|بهتر\s*است.{0,24}(?:بخرم|بفروشم|نگه\s*دارم)|بخرم\s*یا|بفروشم\s*یا|پیشنهاد\s*می?کنی)/i.test(foldedQuestion)
+    || discoveryRecommendation
     || (questionType === QUESTION_TYPES.RECOMMENDATION
       && /(?:should\s+i|would\s+you|is\s+it\s+(?:a\s+)?good\s+idea|is\s+it\s+safe\s+to|worth\s+(?:buying|selling)|آیا|ایا|بهتره|بهتر\s*است|بخرم\s*یا|پیشنهاد\s*می?کنی)/i.test(foldedQuestion));
   const questionFrame = walletSafetyQuestion ? 'WALLET_SAFETY'
@@ -871,10 +879,19 @@ export function understandIntent(message, context = {}) {
       : decisionQuestion ? 'INVESTMENT_RECOMMENDATION'
       : followUpAsset && !comparisonQuestion ? 'FOLLOW_UP_ASSET'
       : comparisonQuestion ? 'ASSET_COMPARISON'
+      : whyMacroQuestion ? 'WHY_ECONOMICS'
       : whyMarketQuestion ? 'WHY_MARKET_MOVE'
         : explanationQuestion ? 'EXPLANATION'
           : troubleshootingQuestion ? 'TROUBLESHOOTING'
             : generalQuestion ? 'GENERAL_QUESTION' : null;
+  if (whyMacroQuestion && !/(?:افق|باز\s*کن|بخر|سواپ|پرتفوی\s*من|موجودی\s*من)/i.test(foldedQuestion)) {
+    scores.set('MARKET_ANALYSIS', (scores.get('MARKET_ANALYSIS') || 0) + 14);
+    matched.push({ type: 'MARKET_ANALYSIS', score: 14, questionFrame: 'WHY_ECONOMICS' });
+  }
+  if (/دارایی/.test(foldedQuestion) && !whyMacroQuestion && /(?:من|موجودی|چقدر|دارم|حساب|my|wallet)/i.test(foldedQuestion)) {
+    scores.set('WALLET_BALANCE', (scores.get('WALLET_BALANCE') || 0) + 3);
+    matched.push({ type: 'WALLET_BALANCE', score: 3, keyword: 'personal-asset' });
+  }
   // Semantic question frames: distinguish a wallet-risk question from balance
   // lookup, and preserve the user's compare/explain task for downstream agents.
   if (allocationPlanQuestion) {
@@ -1078,17 +1095,22 @@ export function understandIntent(message, context = {}) {
   const confidence = Math.min(0.98, top[1] / (top[1] + (sorted[1]?.[1] || 0) + 1) + 0.3);
   const secondary = sorted.slice(1, 3).map(([k]) => k);
   let selectedType = (correction && correction.newIntent) ? correction.newIntent : top[0];
-  if ((['BUY', 'SELL', 'SWAP'].includes(selectedType) || (selectedType === 'GENERAL' && entities.tokens?.length)) && decisionQuestion) {
-    // Advice-seeking is a read, not a trade request. Preserve the candidate(s)
-    // and route to analysis instead of ever building an execution card.
-    selectedType = entities.tokens?.length ? 'ANALYZE_TOKEN' : 'MARKET_ANALYSIS';
-    entities.analysisMode = entities.tokens?.length > 1 ? 'COMPARISON_RECOMMENDATION' : 'RECOMMENDATION';
+  if ((['BUY', 'SELL', 'SWAP'].includes(selectedType) || (selectedType === 'GENERAL' && (entities.tokens?.length || discoveryRecommendation || panicSellDistress))) && (decisionQuestion || panicSellDistress)) {
+    // Advice-seeking or emotional panic sell is a read/containment, not a trade request.
+    selectedType = panicSellDistress
+      ? 'RISK_ANALYSIS'
+      : (entities.tokens?.length ? 'ANALYZE_TOKEN' : 'MARKET_ANALYSIS');
+    entities.analysisMode = panicSellDistress
+      ? 'DISTRESS_CONTAINMENT'
+      : (entities.tokens?.length > 1
+        ? 'COMPARISON_RECOMMENDATION'
+        : (discoveryRecommendation && !entities.tokens?.length ? 'DISCOVERY_RECOMMENDATION' : 'RECOMMENDATION'));
     if (entities.tokens?.length > 1) {
       entities.comparisonTokens = entities.tokens.slice(0, 4);
       entities.fromToken = null;
       entities.toToken = null;
     }
-    matched.push({ type: selectedType, score: 9, questionFrame: 'INVESTMENT_RECOMMENDATION' });
+    matched.push({ type: selectedType, score: 9, questionFrame: panicSellDistress ? 'DISTRESS_CONTAINMENT' : 'INVESTMENT_RECOMMENDATION' });
   }
 
   const clarification = calculateClarificationPriority({ intentType: selectedType, entities, context });

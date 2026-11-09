@@ -31,6 +31,7 @@
  */
 
 import { redactSecrets } from './redact.js';
+import { searchKnowledge } from '../os/knowledgeCenter.js';
 
 export const ADAPTIVE_COUNCIL_SCHEMA = 'fbt.adaptive-council.v1';
 
@@ -416,6 +417,25 @@ function buildDomainSpecialistBaseline(memberId, {
     if (newsEv) markCited(newsEv);
     if (macroEv) markCited(macroEv);
     if (!newsEv && !macroEv) {
+      const kbHits = searchKnowledge(question, { limit: 2 });
+      const kbMacro = kbHits.find((k) => ['MACRO_ECONOMICS', 'GENERAL_CRYPTO', 'RISK'].includes(k.category)) || kbHits[0] || null;
+      const isConceptualMacro = /(?:تورم|نرخ\s*بهره|فدرال|دارایی[‌\s]*های\s*کمیاب|سیاست\s*پولی|نقدینگی|رکود|inflation|interest\s*rate|fed\b|monetary|scarce\s*assets?|real\s*yield)/i.test(question);
+      if (kbMacro || isConceptualMacro) {
+        return {
+          stance: 'neutral',
+          action: 'HOLD_WAIT',
+          confidence: 48,
+          summary: kbMacro
+            ? `${kbMacro.body}\n(توجه: فید اخبار و نماگرهای لحظه‌ای اقتصاد کلان در این نوبت در دسترس نبود، بنابراین این جمع‌بندی بر پایه مکانیسم‌های کلان تاییدشده و بدون استناد به اعداد زنده است.)`
+            : 'در تحلیل کلان بدون فید لحظه‌ای: افزایش تورم زمانی به نفع دارایی‌های کمیاب است که نرخ بهره واقعی منفی یا نقدینگی رو به رشد باشد؛ در مقابل، افزایش نرخ بهره واقعی توسط فدرال رزرو هزینه نگهداری دارایی‌های بدون بازده نقدی را بالا می‌برد و فشار ریسک‌گریزی ایجاد می‌کند.',
+          keyArguments: [
+            'انتقال سیاست پولی از مسیر نرخ بهره واقعی (Real Yield) و نقدینگی دلاری',
+            'تفاوت دارایی کمیاب با پوشش تورم در افق میان‌مدت/بلندمدت در برابر نوسان کوتاه‌مدت'
+          ],
+          risks: ['ریسک داده‌های تورمی/شغلی پیش رو (CPI / FOMC) و تغییر لحن بانک مرکزی'],
+          evidenceCited: cited
+        };
+      }
       return {
         stance: 'neutral',
         action: 'HOLD_WAIT',

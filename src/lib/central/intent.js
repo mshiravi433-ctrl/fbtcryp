@@ -105,7 +105,7 @@ const RULES = Object.freeze([
   { intent: 'PROFIT_PLAN', patterns: /برنامه (سود|کسب سود|درآمد)|profit plan|بهینه ?سازی (سود|پرتفوی)|بهترین مسیر/i, requires: ['portfolio'] },
   { intent: 'NEWS_SUMMARY', patterns: /(?<!چی )(?<!چه )خبر|اخبار|\bnews\b|آپدیت (جدید|بازار)|رویداد/i, requires: ['news'] },
   { intent: 'SIGNAL_READING', patterns: /سیگنال|signal|اندیکاتور|تایم?فریم/i, requires: ['signals'] },
-  { intent: 'MARKET_OVERVIEW', patterns: [/بازار|market|قیمت (کلی|بازار)|وضعیت (کلی )?بازار|نهنگ|whale|اسمارت ?مانی|smart money/i], requires: ['markets'] },
+  { intent: 'MARKET_OVERVIEW', patterns: [/بازار|market|قیمت (کلی|بازار)|وضعیت (کلی )?بازار|نهنگ|whale|اسمارت ?مانی|smart money|تورم|نرخ\s*بهره|فدرال|دارایی[‌\s]*های\s*کمیاب|سیاست\s*پولی|inflation|interest\s*rate|\bfed\b|monetary/i], requires: ['markets'] },
   { intent: 'QUOTE_SWAP', patterns: /نرخ (تبدیل|سواپ)|چند می ?ده(?:د)?|quote|قیمت (تبدیل|خرید|فروش)/i, requires: ['markets'] },
   { intent: 'EXECUTE_SWAP', patterns: [/تبدیلش? (کن|کنید|بکن|بده|بدهید)|سواپ|\bswap\b|convert .* to|\bexchange .* for|(بفروشش|بفروشمش|بفروش|بفرست|بخرمش|بخرش|بخرم?|بخرید|فروش بزن|خرید بزن|\bsell\b|\bbuy\b|\bpurchase\b|قصد خرید|دنبال خرید)/i], requires: ['wallet'] },
   { intent: 'EXECUTE_BRIDGE', patterns: /به (آربیتروم|آربیتروm ?one|آربیتروم one|arbitrum|پالیگان|بیس|اپتیمیزم|اربیترم)|منتقل کن به|برو به شبکه|\bbridge\b|پل بزن|ببر (به|روی)|\bmove\b .{0,24}\bto\b|\btransfer\b .{0,24}\bto\b/i, requires: ['wallet'] },
@@ -146,8 +146,15 @@ function SERVE_UNAVAILABLE(context, section) {
 export function classify(message = '', { context = {}, state = {}, suggestions = null } = {}) {
   const text = normalizeText(message);
   const follow = context.followUp || detectFollowUp(message, context.memory, context.page);
+  const isDistress = (
+    /(?:حالم\s*بد|ناراحتم|ترسیدم|پریشونم|داغونم|خسته\s*شدم|panic|scared|terrified|lost\s+everything)/i.test(text)
+    && /(?:ضرر|باخت|بفروشم|خروج|همشو|همه\s*چیمو|همه\s*پولمو|sell|loss|lose)/i.test(text)
+  ) || /(?:همشو|همه\s*چیمو|همه\s*پولمو|کل\s*سرمایه.{0,12}بفروشم|sell\s*everything|liquidate\s*all)/i.test(text);
+  const isDiscovery = /(?:معرفی\s*کن|پیشنهاد\s*بده|چی\s*(?:خوبه|بخرم)|کدوم\s*(?:ارز|توکن|کوین)|چه\s*ارزی|بهترین\s*(?:گزینه|ارز).{0,20}(?:خرید|بخرم)|what\s+(?:should\s+i|to)\s+buy|which\s+(?:coin|token|asset)\s+(?:should\s+i|to)\s+buy|suggest\s+(?:a\s+)?(?:coin|token|asset)|recommend\s+(?:a\s+)?(?:coin|token|asset))/i.test(text)
+    && !/[0-9]+/.test(text);
   const hits = [];
   for (const rule of RULES) {
+    if (rule.intent === 'EXECUTE_SWAP' && (isDistress || isDiscovery)) continue;
     /* Two shapes are allowed on purpose: one RegExp per rule, or an array of
        alternatives. Normalising here (instead of demanding one style) is what
        keeps a lexicon editable — and a lexicon that is painful to edit is a
@@ -178,11 +185,24 @@ export function classify(message = '', { context = {}, state = {}, suggestions =
       score: round(Math.min(0.95, avail + priority + warm), 3)
     });
   }
+  if (isDistress || isDiscovery) {
+    const unavailable = SERVE_UNAVAILABLE(context, 'markets') ? ['markets'] : [];
+    hits.push({
+      intent: 'MARKET_OVERVIEW',
+      missingRequires: unavailable,
+      needsFetch: context.stateHas?.markets ? [] : ['markets'],
+      avail: unavailable.length ? 0.45 : 0.75,
+      priority: 0.08,
+      score: unavailable.length ? 0.48 : 0.85
+    });
+  }
   /* A follow-up rewrites the intent, because in a conversation the referent IS
      the intent: «بفروشم؟» after a BTC analysis is a swap quote on BTC, not a
      generic question about selling. */
   const followupIntent = followIntent(follow, context);
-  if (followupIntent) hits.unshift({ ...followupIntent, score: followupIntent.score ?? 0.9 });
+  if (followupIntent && !(isDistress && ['EXECUTE_SWAP'].includes(followupIntent.intent))) {
+    hits.unshift({ ...followupIntent, score: followupIntent.score ?? 0.9 });
+  }
 
   /* Multi-step compound requests: «بعد از خرید به Arbitrum ببر» must become ONE
      intent whose plan has both legs, not two turns that race each other. */
@@ -221,6 +241,8 @@ export function classify(message = '', { context = {}, state = {}, suggestions =
   const best = hits[0] || null;
   const definition = best ? INTENT_TYPES[best.intent] : null;
   const entities = extractEntities(message, { context, state });
+  entities.isDistress = isDistress;
+  entities.isDiscovery = isDiscovery;
   const executable = Boolean(definition) && !best?.missingRequires?.length;
   const proposed = suggestions && typeof suggestions === 'object' ? suggestions : null;
   const modelUsed = Boolean(proposed?.intent && (!best || best.score < 0.5));

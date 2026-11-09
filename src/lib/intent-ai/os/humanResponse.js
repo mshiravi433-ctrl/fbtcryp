@@ -1048,6 +1048,8 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
    * Definition question (e.g. "بیت کوین چیه؟")
    */
   if (/(چیست|چیه|what is|tell me about)/i.test(rawText) && intent?.entities?.token) {
+    const complexOrMultiTopic = /(?:mvrv|sopr|nvt|funding|open\s*interest|tvl|apy|apr|etf|تورم|نرخ\s*بهره|فدرال|نقدینگی|چرا|علت|رشد|سقوط|ریزش|مقایسه|ریسک|استراتژی|why|how|inflation|rates?|compare|growth|driver|و\s+(?:چرا|چطور|آیا|چه|کدام))/i.test(rawText)
+      || (/[?؟].*[?؟]/.test(rawText));
     const sym = intent.entities.token.toUpperCase();
     const tokenInfo = {
       BTC: { fa: 'بیت‌کوین (BTC) نخستین و شناخته‌شده‌ترین ارز دیجیتال غیرمتمرکز است که به عنوان طلای دیجیتال و ذخیره ارزش استفاده می‌شود.', en: 'Bitcoin (BTC) is the first decentralized cryptocurrency, widely used as digital gold and store of value.' },
@@ -1061,6 +1063,7 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
 
     return {
       message: lang === 'fa' ? tokenInfo.fa : tokenInfo.en,
+      ...(complexOrMultiTopic ? { deferToServer: true } : {}),
       ui: results?.token?.dataStatus === 'unavailable' || !results?.token ? { type: 'TEXT' } : { type: 'TOKEN_CARD' },
       card: results?.token && results.token.dataStatus !== 'unavailable'
         ? tokenCard(results.token, lang)
@@ -1848,6 +1851,18 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
 
   if (['MARKET_ANALYSIS', 'SMART_MONEY', 'WHALE', 'ANALYZE_TOKEN'].includes(type)
     || (type === 'INVESTMENT_PLAN' && intent?.questionFrame === 'READ_ONLY_ALLOCATION_PLAN')) {
+    const deepAnalyticalTurn = intent?.questionFrame === 'WHY_ECONOMICS'
+      || intent?.questionFrame === 'WHY_MARKET_MOVE'
+      || ['DISCOVERY_RECOMMENDATION', 'RECOMMENDATION'].includes(intent?.entities?.analysisMode);
+    if (deepAnalyticalTurn) {
+      return {
+        deferToServer: true,
+        message: lang === 'fa'
+          ? 'در حال بررسی دقیق اقتصادی، داده‌های بازار و جوانب ریسک هستم…'
+          : 'Analyzing economic drivers, market context and risks…',
+        ui: { type: 'TEXT' }
+      };
+    }
     const token = intent?.entities?.token;
     const allocationPlan = intent?.questionFrame === 'READ_ONLY_ALLOCATION_PLAN';
     const comparisons = Array.isArray(results?.tokenComparisons) ? results.tokenComparisons : [];
@@ -2055,6 +2070,7 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
        read is re-armed so the next ask (or the UI auto-retry) gets data. */
     if (market && (market.dataStatus === 'unavailable' || market.ok === false) && !market.overview) {
       return {
+        deferToServer: true,
         message: lang === 'fa'
           ? `بازار را از منبع زنده پرسیدم${token ? ` (${token})` : ''}، اما داده تازه برنگشت. چند لحظه دیگر دوباره می‌پرسم — منبع را همین حالا دوباره صدا می‌زنم.`
           : `I queried live market data${token ? ` (${token})` : ''}, but nothing fresh came back. Retrying the source now — ask again in a moment.`,
@@ -2101,12 +2117,23 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
       };
     }
     return {
+      deferToServer: true,
       message: lang === 'fa'
         ? `بازار${token ? ` ${token}` : ''} را از ماژول زنده خواندم. اتاق بازار همین‌جاست — هر عددی که منبع نداده باشد، نام‌برده می‌شود.`
         : `I read live market data${token ? ` for ${token}` : ''}. The market room is right here — anything the source did not return is named, not guessed.`,
       ui: { type: 'MARKET_CARD' },
       card: marketChatCard({ room: marketRoomForText(rawText), lang }),
       actions: [{ id: 'open-market', route: '/', label: lang === 'fa' ? 'بازار' : 'Market' }]
+    };
+  }
+
+  if (type === 'LEARN') {
+    return {
+      deferToServer: true,
+      message: lang === 'fa'
+        ? 'در حال آماده‌سازی توضیح دقیق و ساختاریافته هستم…'
+        : 'Preparing a clear, structured explanation…',
+      ui: { type: 'TEXT' }
     };
   }
 

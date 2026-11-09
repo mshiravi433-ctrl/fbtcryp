@@ -16,6 +16,7 @@ import { createSmartMemory } from '../src/lib/intent-ai/orchestrator/smartMemory
 import { createPerformanceLearning } from '../src/lib/intent-ai/orchestrator/performanceLearning.js';
 import { createAdaptiveCouncil } from '../src/lib/intent-ai/orchestrator/adaptiveCouncil.js';
 import { createCentralBrain, MODEL_FLEET_CATALOGUE } from '../src/lib/intent-ai/orchestrator/centralBrain.js';
+import { synthesizeInternalAnswer } from './aiInternalReasoner.js';
 import { executeToolRequests } from './aiToolBroker.js';
 import {
   executeProviderChat,
@@ -136,6 +137,7 @@ export function getCentralBrain() {
       performanceLearning: getPerformanceLearning(),
       adaptiveCouncil: getAdaptiveCouncil(),
       availableProviders: () => reachable(),
+      internalSynthesizer: synthesizeInternalAnswer,
       toolRunner: async (toolName, args = {}, ctx = {}) => {
         const facetId = TOOL_TO_FACET[toolName] || 'market_prices';
         const primaryToken = Array.isArray(args.symbols) && args.symbols[0] ? args.symbols[0] : null;
