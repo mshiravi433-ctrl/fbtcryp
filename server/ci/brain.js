@@ -43,6 +43,7 @@ import { normalizeText } from '../../src/lib/central/context.js';
 import { buildCentralContext, emptyMemory, applyTurn, resolvePage, FOLLOWUP_KINDS } from '../../src/lib/central/context.js';
 import { classify, createIntent, transition } from '../../src/lib/central/intent.js';
 import { buildPlan, validatePlan, templateFor } from '../../src/lib/central/planner.js';
+import { synthesizeInternalAnswer } from '../aiInternalReasoner.js';
 import { evaluatePolicy, planDigest } from '../../src/lib/central/policy.js';
 import { assessRisk } from '../../src/lib/central/risk.js';
 import { buildRecommendation, possibleActionsFrom } from '../../src/lib/central/recommend.js';
@@ -569,6 +570,47 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
       now: Date.now()
     });
 
+    const isConceptualOrAdvisory = Boolean(
+      !refusal
+      && policy.verdict !== 'SAFE_STOP'
+      && policy.verdict !== 'BLOCK'
+      && !policy.requiresConfirmation
+      && (
+        classification.entities?.isDistress
+        || classification.entities?.isDiscovery
+        || /(?:تورم|نرخ\s*بهره|فدرال|دارایی[‌\s]*های\s*کمیاب|کارمزد|غیرامانی|چیست|چیه)/i.test(message)
+      )
+    );
+    let internalSynthesisUsed = false;
+    if (isConceptualOrAdvisory) {
+      const mktData = state.sections.markets.data;
+      const rawPrices = mktData?.prices && typeof mktData.prices === 'object' ? mktData.prices : {};
+      const priceMap = {};
+      for (const [sym, info] of Object.entries(rawPrices)) {
+        const p = info?.priceUsd ?? info?.price ?? (typeof info === 'number' ? info : null);
+        if (p != null && Number.isFinite(Number(p))) priceMap[String(sym).toUpperCase()] = Number(p);
+      }
+      const synth = synthesizeInternalAnswer({
+        message,
+        locale,
+        context: {
+          market: Object.keys(priceMap).length ? { dataStatus: 'live', priceMap } : { dataStatus: 'unavailable' },
+          portfolio: state.sections.portfolio.data || null
+        }
+      });
+      if (synth?.ok && synth.answer && (synth.safetyContainment || synth.knowledgeUsed || synth.internalSynthesis)) {
+        internalSynthesisUsed = true;
+        recommendation.ok = true;
+        recommendation.recommendation = synth.answer;
+        if (classification.entities?.isDistress) {
+          recommendation.actions = [];
+          recommendation.reason = [locale === 'fa' ? 'پاسخ ایمنی در شرایط فشار احساسی بدون پیشنهاد معامله' : 'emotional safety containment without trade recommendation'];
+        } else {
+          recommendation.reason = [...new Set([...(Array.isArray(recommendation.reason) ? recommendation.reason : []), locale === 'fa' ? 'تلفیق دانش تاییدشده و داده‌های خوانده‌شده' : 'verified knowledge + read tool data'])].slice(0, 4);
+        }
+      }
+    }
+
     /* 8–11. QUOTE → SIMULATION → CONFIRMATION → EXECUTION */
     let execution = null;
     let created = null;
@@ -657,6 +699,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     const response = composeResponse({
       intent, context, plan, policy, results, risk, recommendation, refusal,
       gapLead: (() => {
+        if (internalSynthesisUsed) return null;
         const primary = (SECTION_FOR_INTENT[intent.intentType] || [])[0] || null;
         const failed = primary && readResults[primary] && readResults[primary].status === 'UNAVAILABLE' ? readResults[primary] : null;
         if (!failed) return null;
@@ -680,7 +723,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
         input: boundMoneyInput || { ...classification.entities, ...(hints || {}) },
         actionId: created?.action?.actionId || null
       },
-      error: firstError(readResults), execution, locale, state,
+      error: internalSynthesisUsed ? null : firstError(readResults), execution, locale, state,
       lastFingerprint: memory.conversationContext?.lastReplyFingerprint, now: Date.now()
     });
     memory = applyTurn(memory, {

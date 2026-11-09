@@ -519,13 +519,25 @@ async function buildAIContext(req, body = {}, opts = {}) {
       at: nowMs()
     };
   };
-  const [market, yields, solanaAssets, goals, news, longTermMemory] = await Promise.all([
+  const [market, yields, solanaAssets, goals, news, longTermMemory, smartMemorySnapshot, recentSmartConvs] = await Promise.all([
     ctxDeadline(marketContext()).then((v) => v || { dataStatus: 'unavailable', change24hPct: null, priceMap: null }),
     ctxDeadline(yieldContext()).then((v) => v || null),
     ctxDeadline(solanaAssetsContext()).then((v) => v || null),
     ctxDeadline(readGoals(userId)).then((v) => v || { ok: true, dataStatus: 'unavailable', goals: [] }),
     ctxDeadline(newsContext(), 4000).then((v) => v || { dataStatus: 'unavailable', at: null, items: [] }),
-    opts.longTermQuery ? longTermMemoryContext() : Promise.resolve(null)
+    opts.longTermQuery ? longTermMemoryContext() : Promise.resolve(null),
+    ctxDeadline(
+      getSmartMemory().contextualRecall({
+        owner: userId,
+        query: typeof opts.longTermQuery === 'string' ? opts.longTermQuery.trim().slice(0, 300) : '',
+        limitPerKind: 3
+      }),
+      400
+    ).catch(() => null),
+    ctxDeadline(
+      getSmartMemory().recallConversations({ owner: userId, query: '', limit: 4 }),
+      400
+    ).catch(() => ({ rows: [] }))
   ]);
 
   const wallet = sanitizeWallet(client.wallet || b.wallet);
@@ -551,6 +563,22 @@ async function buildAIContext(req, body = {}, opts = {}) {
      its text here instead of reading as empty forever. */
   const memoryRows = normalizeMemoryRow(await storeGet(MEMORY_KEY(userId), null));
   const summary = safe(memoryRows.conversationSummary, 600) || '';
+  const rememberedAssets = [];
+  for (const row of [...(recentSmartConvs?.rows || []), ...(smartMemorySnapshot?.relevantConversations || [])]) {
+    if (Array.isArray(row?.assets)) {
+      for (const a of row.assets) {
+        const sym = String(a || '').toUpperCase().trim();
+        if (sym && !rememberedAssets.includes(sym)) rememberedAssets.push(sym);
+      }
+    }
+  }
+  const clientLastAssets = Array.isArray(client.lastAssets) ? client.lastAssets : (Array.isArray(b.lastAssets) ? b.lastAssets : []);
+  const lastAssets = [...new Set([
+    ...clientLastAssets.map((a) => String(a || '').toUpperCase().trim()).filter(Boolean),
+    ...(Array.isArray(memoryRows.lastAssets) ? memoryRows.lastAssets : []).map((a) => String(a || '').toUpperCase().trim()).filter(Boolean),
+    ...rememberedAssets
+  ])].slice(0, 6);
+  const smartMemorySummary = safe(smartMemorySnapshot?.promptSummary || '', 900) || '';
 
   /* (A `wallet.evmAddresses.map(() => null).filter(Boolean)` spread used to sit
      first here. It mapped every address to `null` and then filtered nulls out,
@@ -607,6 +635,11 @@ async function buildAIContext(req, body = {}, opts = {}) {
     activeAutomations: automations,
     recentActivity,
     conversationSummary: summary,
+    smartMemorySummary,
+    lastAssets: [...new Set([
+      ...(activePage?.selectedAsset ? [String(activePage.selectedAsset).toUpperCase().trim()] : []),
+      ...lastAssets
+    ])].slice(0, 6),
     financialGoals: goals?.goals || [],
     market,
     yields,
@@ -652,7 +685,8 @@ function normalizeMemoryRow(raw) {
     goals: [],
     preferences: [],
     activeTasks: [],
-    recentIntents: []
+    recentIntents: [],
+    lastAssets: []
   };
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return base;
   const text = typeof raw.summary === 'string' && raw.summary.trim()
@@ -695,6 +729,12 @@ async function appendMemory(owner, payload = {}) {
   for (const field of ['goals', 'preferences', 'activeTasks', 'recentIntents']) {
     const rows = Array.isArray(payload[field]) ? payload[field].map((v) => safeMemoryText(v, 120)).filter(Boolean).slice(-16) : [];
     if (rows.length) next[field] = [...new Set([...(Array.isArray(mem[field]) ? mem[field] : []), ...rows])].slice(-16);
+  }
+  if (Array.isArray(payload.lastAssets) && payload.lastAssets.length) {
+    const cleanAssets = payload.lastAssets.map((a) => String(a || '').toUpperCase().trim()).filter(Boolean);
+    if (cleanAssets.length) {
+      next.lastAssets = [...new Set([...cleanAssets, ...(Array.isArray(mem.lastAssets) ? mem.lastAssets : [])])].slice(0, 6);
+    }
   }
   if (payload.conversationId) next.conversationId = safe(payload.conversationId, 64);
   /* Enforce a size bound so an unbounded chat cannot grow a per-user KV row. */
@@ -1898,7 +1938,8 @@ router.post('/chat', async (req, res) => {
       recentIntents: [rich.intent?.type || 'GENERAL', safe(message, 240)],
       preferences: [],
       activeTasks: [],
-      goals: rich.goalDetected ? ['financial-goal'] : []
+      goals: rich.goalDetected ? ['financial-goal'] : [],
+      lastAssets: u4?.entities?.tokens || (u4?.entities?.token ? [u4.entities.token] : [])
     });
     rememberDurableTurn(req, {
       message,
@@ -1909,7 +1950,7 @@ router.post('/chat', async (req, res) => {
       ok: true,
       schema: 'fbt.ai-chat.v1',
       reply,
-      context: { ...context, conversationSummary: nextMemory.summary || context.conversationSummary },
+      context: { ...context, conversationSummary: nextMemory.summary || context.conversationSummary, lastAssets: nextMemory.lastAssets || context.lastAssets },
       at: nowMs()
     });
   }
@@ -2167,7 +2208,8 @@ router.post('/chat', async (req, res) => {
     'GENERAL', 'MARKET_ANALYSIS', 'MARKET_CONTEXT', 'NEWS_SEARCH', 'ANALYZE_TOKEN',
     'RISK_ANALYSIS', 'LEARN', 'SIGNALS', 'SMART_MONEY', 'STRATEGY', 'OPEN_CALM',
     'PORTFOLIO_ANALYSIS', 'INVESTMENT_PLAN', 'YIELD_DISCOVERY', 'STAKING', 'LEND',
-    'FARM', 'REBALANCE', 'STOCKS', 'WHALE'
+    'FARM', 'REBALANCE', 'STOCKS', 'WHALE',
+    'RESEARCH', 'WHY_ECONOMICS', 'DISCOVERY_RECOMMENDATION', 'RECOMMENDATION', 'WHY_MARKET_MOVE'
   ];
   /*
    * ─── INTELLIGENCE MODE — THE ANSWER TO «باهوش‌ترین حالت» ────────────────
@@ -2255,8 +2297,12 @@ router.post('/chat', async (req, res) => {
      `human.message`, so the only thing this guard does is stop the model from
      talking over it. */
   const productAnswered = Boolean(productRead && productRead.confidence === 'verified');
+  const hasNonProductSubQuestions = Boolean(
+    productAnswered
+    && /(?:بیت[\s\u200c]*کوین|بیتکوین|اتریوم|سولانا|btc|eth|sol|چنده|قیمت|price|تورم|mvrv)/i.test(message)
+  );
   const collaborationWanted = isCollaborativeIntent
-    && !productAnswered
+    && (!productAnswered || hasNonProductSubQuestions)
     && !human.pendingIntent
     && !['ACTION_CARD', 'CONNECT_WALLET', 'CHOICE'].includes(human.ui?.type)
     /* A deliberate fail-closed answer («no verified executor», «no live
@@ -2274,6 +2320,7 @@ router.post('/chat', async (req, res) => {
         context: {
           market: context.market,
           portfolio: context.portfolio,
+          lastAssets: context.lastAssets,
           locale: locale || 'fa',
           /* Two things the model was previously told nothing about: what the
              user already said in this session (the summary was written every
@@ -2287,6 +2334,7 @@ router.post('/chat', async (req, res) => {
              as a directive. Without it the turn was re-derived from scratch and
              the question was silently dropped. */
           directives: [
+            context.smartMemorySummary || null,
             req.body?.hints?.answerBinding?.prompt,
             req.body?.hints?.answerBinding?.verdict?.stillOpen === true
               ? 'The previously asked question is still unanswered; if you serve a new request, remind about it once at the end in fresh wording.'
@@ -2321,8 +2369,17 @@ router.post('/chat', async (req, res) => {
      Fires only when the turn is actually about an asset, uses the same
      cached market read the coin page renders, and can only ADD a card —
      it never rewrites the deterministic text or the execution state. */
-  const chatToken = u4?.entities?.token || null;
   const chatIntentType = String(human.intent?.type || intent || '').toUpperCase();
+  const canInheritFollowUpAsset = Boolean(
+    partialRead?.inferred?.assets?.length === 1
+    && !['RESEARCH', 'WHY_ECONOMICS', 'DISCOVERY_RECOMMENDATION', 'RECOMMENDATION', 'WHY_MARKET_MOVE', 'PORTFOLIO_ANALYSIS', 'YIELD_DISCOVERY', 'LEARN'].includes(chatIntentType)
+    && (
+      partialRead?.inferred?.assetSource === 'message'
+      || partialRead?.completeness !== 'complete'
+      || /(?:همین|اون|آن|اش|ش|\bit\b|\bits\b|\bthat\b)/i.test(message)
+    )
+  );
+  const chatToken = u4?.entities?.token || (canInheritFollowUpAsset ? partialRead.inferred.assets[0] : null);
   let tokenCard = null;
   if (
     chatToken
@@ -2340,7 +2397,7 @@ router.post('/chat', async (req, res) => {
   const collaborationUsable = Boolean(
     collaboration?.ok
     && String(collaboration.answer || '').trim().length > 20
-    && (!collaboration.degraded || collaboration.evidence.knowledgeUsed || collaboration.evidence.toolDataUsed || collaboration.evidence.webUsed)
+    && (!collaboration.degraded || collaboration.evidence.knowledgeUsed || collaboration.evidence.toolDataUsed || collaboration.evidence.webUsed || collaboration.evidence.internalSynthesis)
   );
   let finalText = socialTurn.handled ? socialTurn.text : human.message;
   if (socialTurn.handled) {
@@ -2407,9 +2464,13 @@ router.post('/chat', async (req, res) => {
    * (there is nothing to read back), while the duplicate check inside
    * `withPartialReading` keeps the deterministic branch byte-identical.
    */
+  const isDistressContainment = Boolean(
+    u4?.entities?.analysisMode === 'DISTRESS_CONTAINMENT'
+    || /در این حالت هیچ توصیهٔ معاملاتی|I will not offer trading advice/i.test(String(finalText || ''))
+  );
   finalText = withPartialReading(finalText, partialRead, {
     lang: deterministicLocale,
-    skip: productAnswered || socialTurn.handled
+    skip: (productAnswered && !hasNonProductSubQuestions) || socialTurn.handled || isDistressContainment
   });
 
   /*
@@ -2892,7 +2953,8 @@ router.post('/chat', async (req, res) => {
     recentIntents: [out.plan.intent, safeSummary],
     preferences: [],
     activeTasks: (out.plan.actions || []).map((a) => `${a.type}:${a.asset || ''}`),
-    goals: goalDetected ? ['financial-goal'] : []
+    goals: goalDetected ? ['financial-goal'] : [],
+    lastAssets: u4?.entities?.tokens || (u4?.entities?.token ? [u4.entities.token] : [])
   });
   rememberDurableTurn(req, { message, goalDetected, intentType: human.intent?.type || intent });
 
@@ -2902,6 +2964,7 @@ router.post('/chat', async (req, res) => {
     reply,
     context: {
       ...context,
+      lastAssets: nextMemory.lastAssets || context.lastAssets,
       conversationSummary: nextMemory.summary || context.conversationSummary,
       /* What long-term memory did for THIS turn — honest either way, so the
          client can show «حافظهٔ بلندمدت» instead of guessing. */

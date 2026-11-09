@@ -674,7 +674,7 @@ export function createIntentOS({
            * collaboration fleet). Reported here, decided by the caller, so the
            * OS stays a pure function of the message.
            */
-          understood: human?.code !== 'UNSURE',
+          understood: human?.code !== 'UNSURE' && human?.deferToServer !== true,
           intent: workingIntent,
           context,
           plan,
