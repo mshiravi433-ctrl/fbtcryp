@@ -22,6 +22,10 @@
  */
 import { memo } from 'react';
 import { SPECULATION_ENABLED } from '../../lib/features';
+/* The same three settings the intelligence panel offers, from the same source of
+   truth — so the label in this menu and the label in the panel cannot drift
+   apart, and neither one invents a fourth mode. */
+import { INTELLIGENCE_MODES } from '../../lib/aiIntelligenceMode.js';
 
 const glyph = (paths) => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -108,7 +112,9 @@ const NeuralMoreMenu = memo(function NeuralMoreMenu({
   onNavigate,
   onPanel,
   onChatAction,
-  onEcosystem
+  onEcosystem,
+  intelligenceMode = null,
+  onIntelligenceMode
 }) {
   const fa = String(locale || 'fa').startsWith('fa');
   const groups = buildGroups(fa, SPECULATION_ENABLED);
@@ -117,6 +123,58 @@ const NeuralMoreMenu = memo(function NeuralMoreMenu({
       {groups.map((g) => (
         <section key={g.id} className="fbt-more-group" aria-label={g.title}>
           <h3 className="fbt-more-title">{g.title}</h3>
+          {/*
+           * THE MODE, AS PART OF THIS MENU — not only a link into a panel.
+           *
+           * Below 900px this menu is the only place the intelligence setting
+           * lived, and it offered a single row that opened a panel; at 900px
+           * and above the tab bar (which carried that row) is hidden by design,
+           * so the panel was reachable only from a header chip that phones
+           * hide. Three buttons here close both halves of that: the setting is
+           * visible and switchable inside the menu, in the user's own words,
+           * with the mode that the NEXT message will use marked. Nothing here
+           * decides models — it says what depth to ask for, and the server still
+           * owns the ladder (see server/aiIntelligence.js).
+           */}
+          {g.id === 'intelligence' && typeof onIntelligenceMode === 'function' ? (
+            <div
+              className="fbt-more-modeseg"
+              data-testid="neural-more-mode-picker"
+              data-mode={intelligenceMode || 'max'}
+              role="group"
+              aria-label={fa ? 'حالت هوش مصنوعی برای پیام بعدی' : 'AI mode for the next message'}
+            >
+              <span className="fbt-more-modeseg-lead">
+                {fa ? 'عمق پاسخ' : 'Answer depth'}
+              </span>
+              <div className="fbt-more-modeseg-btns">
+                {INTELLIGENCE_MODES.map((m) => {
+                  const on = (intelligenceMode || 'max') === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className="fbt-more-modebtn"
+                      data-mode={m.id}
+                      data-on={on ? 'true' : 'false'}
+                      aria-pressed={on}
+                      data-testid={`neural-more-mode-${m.id}`}
+                      title={m.hint?.[fa ? 'fa' : 'en'] || ''}
+                      onClick={() => onIntelligenceMode(m.id)}
+                    >
+                      {fa ? m.label.fa : m.label.en}
+                    </button>
+                  );
+                })}
+              </div>
+              <small className="fbt-more-modeseg-note">
+                {fa
+                  ? 'همین انتخاب، از پیام بعدی. مدل‌ها و دلیل هر کدام در «هوش چندمدلی».'
+                  : 'Takes effect from the next message. The models behind each setting are listed under Multi-Model Intelligence.'}
+              </small>
+            </div>
+          ) : null}
+
           <div className="fbt-more-rows">
             {g.items.map((item) => {
               const disabled = item.kind === 'na';

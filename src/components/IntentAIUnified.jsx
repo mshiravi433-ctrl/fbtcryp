@@ -298,7 +298,7 @@ import {
 import { getYields } from '../lib/yields.js';
 import { loadOrders } from '../lib/orders.js';
 import { fetchAiProviders, fetchGatewaySelfTest, fetchLearningStats, fetchAiTools } from '../lib/aiGatewayClient.js';
-import { getIntelligenceMode, intelligenceModeLabel } from '../lib/aiIntelligenceMode.js';
+import { getIntelligenceMode, intelligenceModeLabel, setIntelligenceMode } from '../lib/aiIntelligenceMode.js';
 import {
   OperationsPanel,
   HistoryPanel,
@@ -1225,7 +1225,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const [aiProviders, setAiProviders] = useState([]);
   /* The mode the next turn will ask for. Stored in one place (the helper), so
      the chip here and the selector in the intelligence panel cannot disagree.
-     The header chip is a shortcut to that panel, not a second control. */
+     Both the header chip and the composer pill OPEN that panel — they are
+     shortcuts to the one control, never a second, divergent switch. */
   const [intelligenceMode, setIntelligenceModeState] = useState(() => getIntelligenceMode());
   useEffect(() => {
     const onMode = (e) => setIntelligenceModeState(getIntelligenceMode() || e?.detail?.mode || 'max');
@@ -7591,15 +7592,26 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             </span>
             {/* Real system availability: fleet read + wallet link. Nothing invented. */}
             <span className="fbt-head-meta" aria-live="polite">
+              {/*
+               * THE ONE CONTROL THAT MUST NEVER BE HIDDEN. Everything else in
+               * this cluster (fleet, wallet, cortex) is decoration; this chip is
+               * the only handle on how hard the assistant thinks. It used to
+               * carry `fbt-chip-hide-sm` — a rule that drops `display: none`
+               * below 560px — so on a phone the mode existed, was defaulted to
+               * the smartest seat, and could not be seen or touched. A feature
+               * you cannot reach is a feature you cannot trust, which is exactly
+               * the report: «هیچ‌جایی برای عوض کردنش نیست». The hiding class
+               * stays on the decorative chips and is deliberately NOT here.
+               */}
               <button
                 type="button"
-                className="fbt-chip fbt-chip-hide-sm"
+                className="fbt-chip"
                 data-tone={intelligenceMode === 'max' ? 'ok' : intelligenceMode === 'swift' ? 'idle' : 'warn'}
                 data-testid="neural-intelligence-chip"
-                onClick={() => setPanel('intelligence')}
+                onClick={() => openPanel('intelligence')}
                 title={locale.startsWith('fa')
-                  ? 'حالت هوش مصنوعی — باهوش‌ترین، متعادل یا سریع'
-                  : 'AI intelligence mode — smartest, balanced or swift'}
+                  ? 'حالت هوش مصنوعی — باز کردن پنل هوش: سریعالجواب، متعادل یا هوش عمیق'
+                  : 'AI intelligence mode — open the intelligence panel: swift, balanced or deep'}
               >
                 <i aria-hidden="true" />
                 {locale.startsWith('fa') ? 'هوش: ' : 'AI: '}
@@ -7987,6 +7999,33 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             dir="auto"
             disabled={Boolean(multiSlot.slot)}
           />
+          {/*
+           * THE MODE, WHERE YOU ACTUALLY TYPE.
+           *
+           * A header chip can be scrolled past, and on a narrow phone the
+           * header is the first thing the keyboard pushes out of the way. The
+           * question this answers is «حالا چی؟ همون مدل ارزون؟» — so the answer
+           * sits next to the send button: which brain the NEXT message goes to,
+           * and one tap to the panel that changes it. It is a shortcut to
+           * `IntelligencePanel`, not a second switch, so the two can never
+           * disagree about the mode the turn will run under.
+           */}
+          <button
+            type="button"
+            className="iaos-mode-pill"
+            data-tone={intelligenceMode === 'max' ? 'ok' : intelligenceMode === 'swift' ? 'idle' : 'warn'}
+            data-testid="neural-intelligence-composer"
+            onClick={() => openPanel('intelligence')}
+            aria-label={fa
+              ? `حالت هوش مصنوعی برای پیام بعدی: ${intelligenceModeLabel(intelligenceMode, locale)}`
+              : `AI mode for the next message: ${intelligenceModeLabel(intelligenceMode, locale)}`}
+            title={fa
+              ? 'مدل‌هایی که پیام بعدی به آن‌ها می‌رود را ببین و عوض کن'
+              : 'See — and change — the models the next message goes to'}
+          >
+            <span className="iaos-mode-dot" aria-hidden="true" />
+            <span className="iaos-mode-text">{intelligenceModeLabel(intelligenceMode, locale)}</span>
+          </button>
           <button
             type="submit"
             className="iaos-send"
@@ -8347,6 +8386,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
               onPanel={(name) => openPanel(name)}
               onChatAction={handleNeuralChatAction}
               onEcosystem={(kind) => openEcosystem(kind || 'agent')}
+              intelligenceMode={intelligenceMode}
+              onIntelligenceMode={(id) => setIntelligenceModeState(setIntelligenceMode(id))}
             />
           </section>
         ) : null}

@@ -263,8 +263,8 @@ export const PRODUCT_FACTS = Object.freeze([
 
 /** The assistant's own layers, one honest line each. */
 export const PRODUCT_CAPABILITIES = Object.freeze([
-  { id: 'modes', fa: 'سه حالت هوش: swift / balanced / max؛ حالت «باهوش‌ترین» عمیق‌ترین تحلیل و بیشترین راستی‌آزمایی را می‌دهد.', en: 'Three intelligence modes — swift / balanced / max; max gives the deepest analysis and verification.' },
-  { id: 'multi-model', fa: 'در حالت باهوش‌ترین، چند مدل مستقل تحلیل می‌کنند، ادعاها راستی‌آزمایی و تناقض‌ها افشا می‌شود.', en: 'In max, several independent models analyse, claims are verified and contradictions are disclosed.' },
+  { id: 'modes', fa: 'سه حالت هوش: سریع / متعادل / هوش عمیق؛ «هوش عمیق» پیش‌فرض است و عمیق‌ترین تحلیل و بیشترین راستی‌آزمایی را می‌دهد.', en: 'Three intelligence modes — swift / balanced / max; max gives the deepest analysis and verification.' },
+  { id: 'multi-model', fa: 'در حالت هوش عمیق، چند مدل مستقل تحلیل می‌کنند، ادعاها راستی‌آزمایی و تناقض‌ها افشا می‌شود.', en: 'In max, several independent models analyse, claims are verified and contradictions are disclosed.' },
   { id: 'research', fa: 'دستور کار پژوهشی: چیزی که یک نوبت نتوانست ثابت کند، در نوبت بعد به‌عنوان پرسش باز دنبال می‌شود.', en: 'A research agenda: what one turn could not establish is carried forward as an open question.' },
   { id: 'market-frame', fa: 'چارچوب بازار: پهنای بازار، پراکندگی، رژیم و افقِ واقعی داده محاسبه می‌شود و اندیکاتورِ بدون سری زمانی رد می‌شود.', en: 'A market frame: breadth, dispersion, regime and the honest horizon are computed, and indicators without a price series are refused.' },
   { id: 'strategy', fa: 'چارچوب استراتژی: برنامه فقط روی سرمایهٔ واقعی، کارمزد واقعی و سقف‌های سیاست بسته می‌شود، با چک‌لیست کامل‌بودن.', en: 'A strategy frame: the plan stands only on real capital, the real fee and policy caps, with a completeness rubric.' },

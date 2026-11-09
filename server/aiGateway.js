@@ -822,19 +822,46 @@ export function getModelCandidates(providerId, requestedModel = null, { mode = n
 
 /**
  * What one provider's model env var is doing to the smartest mode, in words a
- * panel can render. Three states, because the operator needs three different
+ * panel can render. Four states, because the operator needs four different
  * answers:
  *   · `unset`     — nothing pinned, the ladder leads in `max` as designed;
  *   · `leads`     — a deliberate pin (an id that is NOT this provider's old
  *                   cheap default): it outranks the ladder on purpose;
  *   · `shadowed`  — the pin repeats the historical default, so `max` steps it
  *                   behind the flagships and the value is a leftover, not an
- *                   instruction. Deleting the variable is the fix.
+ *                   instruction. Deleting the variable is the fix;
+ *   · `retired`   — the pin names an id the vendor has retired, so it can never
+ *                   be honoured. Say so, or the panel claims leadership a dead
+ *                   reference does not have.
  */
 export function describeModelPin(providerId, cfg = PROVIDER_CONFIGS[providerId]) {
   const envVar = cfg?.modelEnv || null;
   const pinned = envVar ? normalizeSecretValue(process.env[envVar]) : '';
-  if (!envVar || !pinned) return { state: 'unset', envVar, value: null, leads: false, shadowed: false };
+  if (!envVar || !pinned) return { state: 'unset', envVar, value: null, leads: false, shadowed: false, retired: false };
+  /*
+   * ─── THE FOURTH STATE: A PIN TO A MODEL THAT NO LONGER EXISTS ─────────────
+   * `GROQ_MODEL=llama-3.3-70b-versatile` is this deployment's live example.
+   * Groq retired that id for Free/Developer tiers on 2026-08-16, so every call
+   * made with it answers HTTP 404. The candidate builder already refuses to
+   * choose it automatically — but the diagnostic still reported `leads: true`
+   * with `fix: null`, i.e. «this provider is deliberately pinned and working»,
+   * while the panel's own `intelligenceCandidates` listed two live ids. The
+   * operator reading that could only conclude the code was lying.
+   *
+   * So a retired pin is named as what it is: not leadership, a dead reference.
+   */
+  const retired = (cfg?.retiredModels || []).includes(pinned);
+  if (retired) {
+    return {
+      state: 'retired',
+      envVar,
+      value: pinned,
+      leads: false,
+      shadowed: false,
+      retired: true,
+      fix: `${envVar} names ${pinned}, a model this vendor retired — it is never chosen automatically. Point it at a live id or remove it.`
+    };
+  }
   const shadowed = pinned === normalizeSecretValue(cfg.baseModel);
   return {
     state: shadowed ? 'shadowed' : 'leads',
@@ -847,7 +874,8 @@ export function describeModelPin(providerId, cfg = PROVIDER_CONFIGS[providerId])
 }
 
 /** True when a model id is on any provider's retired list. Used by the probe. */
-export function isRetiredModel(model) {  const id = normalizeSecretValue(model);
+export function isRetiredModel(model) {
+  const id = normalizeSecretValue(model);
   return Object.values(PROVIDER_CONFIGS).some((cfg) => (cfg.retiredModels || []).includes(id));
 }
 

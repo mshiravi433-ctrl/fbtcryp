@@ -14,7 +14,7 @@
  *     resolves to the deployment default and reports `rejected`, so a corrupt
  *     key can never downgrade the assistant silently.
  *
- * Default is `max` ("باهوش‌ترین"), matching the server. The value is sent as
+ * Default is `max` ("هوش عمیق"), matching the server. The value is sent as
  * `intelligence` on the chat body; the server accepts ids and the Persian
  * spellings through its alias table, so an old client cannot ask for a mode
  * that does not exist.
@@ -33,7 +33,14 @@ export const INTELLIGENCE_MODES = Object.freeze([
   },
   {
     id: 'max',
-    label: { fa: 'باهوش‌ترین', en: 'Smartest' },
+    /*
+     * The label is the user's own words. «عمیق‌ترین حالت» was asked for as
+     * «هوش عمیق» («set it on deep intelligence by default»), and a control
+     * named «باهوش‌ترین» is not something they can point at. The old phrase
+     * stays resolvable below in `ALIASES`, so a request — or a stored
+     * preference — that still says it keeps working.
+     */
+    label: { fa: 'هوش عمیق', en: 'Smartest' },
     hint: { fa: 'پرچم‌دار + سه تحلیل + بازبینی + لنز اقتصاددان', en: 'Flagships + 3 analyses + review + economist lens' }
   }
 ]);
@@ -45,16 +52,23 @@ const ALIASES = Object.freeze({
   swift: 'swift',
   fast: 'swift',
   eco: 'swift',
+  'سریع': 'swift',
   balanced: 'balanced',
   normal: 'balanced',
   default: 'balanced',
+  'متعادل': 'balanced',
   max: 'max',
   smart: 'max',
   smartest: 'max',
   deep: 'max',
   best: 'max',
   ultra: 'max',
-  high: 'max'
+  high: 'max',
+  'هوش عمیق': 'max',
+  'عمیق': 'max',
+  'باهوش‌ترین': 'max',
+  'باهوش': 'max',
+  'حداکثر': 'max'
 });
 
 export function normalizeIntelligenceMode(value) {

@@ -1163,8 +1163,17 @@ router.post('/gateway/chat', async (req, res) => {
 
 router.post('/gateway/consensus', async (req, res) => {
   try {
-    const { message, context, locale, preferredProviders } = req.body || {};
-    const consensus = await runMultiAiDebate({ message, context, locale, preferredProviders });
+    const { message, context, locale, preferredProviders, intelligence } = req.body || {};
+    /* The mode rides along. A debate that ignores it is a debate where three
+       seats decide their own depth — which is how «همه‌جا روی هوش عمیق» can be
+       true for the chat answer and false for the consensus card under it. */
+    const consensus = await runMultiAiDebate({
+      message,
+      context,
+      locale,
+      preferredProviders,
+      intelligence: intelligence ?? null
+    });
     return res.json({ ok: true, ...consensus });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
@@ -1270,6 +1279,7 @@ router.post('/debate', async (req, res) => {
       locale,
       rounds: body.rounds,
       reflection,
+      intelligence: body.intelligence ?? null,
       preferredProviders: Array.isArray(body.preferredProviders) ? body.preferredProviders.slice(0, 4) : []
     });
     let decision = null;

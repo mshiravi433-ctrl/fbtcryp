@@ -161,10 +161,18 @@ export const INTELLIGENCE_MODES = Object.freeze({
   }),
   max: Object.freeze({
     id: 'max',
-    label: { fa: 'باهوش‌ترین', en: 'Smartest' },
+    /*
+     * `label.fa` is what the operator reads on a button. It used to say
+     * «باهوش‌ترین» while the request that created the mode said «هوش عمیق» —
+     * and a control whose label does not match the words the user searches for
+     * is a control that gets reported as missing. Both spellings resolve to
+     * this mode (`MODE_ALIASES` below and in src/lib/aiIntelligenceMode.js),
+     * so nothing stored or requested under the old name breaks.
+     */
+    label: { fa: 'هوش عمیق', en: 'Smartest' },
     description: {
-      fa: 'مدل‌های پرچم‌دار اول، استدلال عمیق، سه تحلیل مستقل، بازبینی خصمانهٔ پیش‌نویس و بودجهٔ پاسخ بلند. پیش‌فرض.',
-      en: 'Flagship models first, deep reasoning, three independent analyses, an adversarial review of the draft, and a long-answer budget. Default.'
+      fa: 'پیش‌فرض: مدل‌های پرچم‌دار اول، استدلال عمیق، سه تحلیل مستقل، بازبینی خصمانهٔ پیش‌نویس و بودجهٔ پاسخ بلند.',
+      en: 'Default: flagship models first, deep reasoning, three independent analyses, an adversarial review of the draft, and a long-answer budget.'
     },
     collaborationFloor: 4,
     collaborationCeiling: 5,
@@ -228,7 +236,11 @@ const MODE_ALIASES = Object.freeze({
   'باهوش‌ترین': 'max',
   'باهوش‌تر': 'max',
   'حداکثر': 'max',
-  'عمیق': 'max'
+  'عمیق': 'max',
+  /* The words the mode is now labelled with, in the UI and in the request that
+     created it. Kept as an alias so «هوش عمیق» typed anywhere — a payload, a
+     query string, a saved preference — resolves here rather than to `rejected`. */
+  'هوش عمیق': 'max'
 });
 
 export function isIntelligenceMode(value) {
