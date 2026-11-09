@@ -114,6 +114,11 @@ export function createOrchestrator({
           });
           expected = input;
         }
+      } else if (type === 'INVESTMENT_PLAN' && intent.questionFrame === 'READ_ONLY_ALLOCATION_PLAN') {
+        // A multi-asset split request is planning, not yield discovery and never
+        // an implicit swap. Retrieve no execution tool; specialists assess the
+        // named assets and the response can state only a draft/limitations.
+        actions.length = 0;
       } else if (type === 'INVESTMENT_PLAN') {
         const yieldTool = tools.find(t => t.id === 'yield.discover');
         if (yieldTool) {
@@ -144,6 +149,8 @@ export function createOrchestrator({
         requiresConfirmation,
         readOnly,
         context,
+        answerGuidance: intent.answerStyle || 'DIRECT_ANSWER',
+        questionFrame: intent.questionFrame || null,
         planId: `plan_${Date.now().toString(36)}`,
         createdAt: Date.now()
       };
@@ -152,8 +159,23 @@ export function createOrchestrator({
     async routeToAgents(intent, context) {
       const type = intent.type;
       const agentsList = ['intent-agent'];
-      
-      if (['PORTFOLIO_ANALYSIS', 'REBALANCE'].includes(type)) {
+
+      // Question framing changes which specialists should reason over the same
+      // underlying intent: definitions need research, comparisons need market +
+      // risk perspectives, and troubleshooting needs wallet/risk diagnostics.
+      if (intent.questionFrame === 'READ_ONLY_ALLOCATION_PLAN') {
+        agentsList.push('market-agent', 'risk-agent', 'strategy-agent');
+      } else if (intent.questionFrame === 'EXPLANATION') {
+        agentsList.push('research-agent');
+      } else if (intent.questionFrame === 'SCENARIO_SIMULATION') {
+        agentsList.push('market-agent', 'risk-agent', 'portfolio-agent');
+      } else if (['ASSET_COMPARISON', 'INVESTMENT_RECOMMENDATION', 'ASSET_RISK'].includes(intent.questionFrame)) {
+        agentsList.push('market-agent', 'risk-agent', 'research-agent');
+      } else if (intent.questionFrame === 'FOLLOW_UP_ASSET') {
+        agentsList.push('market-agent', 'risk-agent');
+      } else if (intent.questionFrame === 'TROUBLESHOOTING') {
+        agentsList.push('wallet-agent', 'risk-agent', 'research-agent');
+      } else if (['PORTFOLIO_ANALYSIS', 'REBALANCE'].includes(type)) {
         agentsList.push('portfolio-agent', 'risk-agent', 'market-agent', 'strategy-agent');
       } else if (['MARKET_ANALYSIS', 'MARKET_CONTEXT'].includes(type)) {
         agentsList.push('market-agent', 'research-agent', 'risk-agent');

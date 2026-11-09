@@ -824,9 +824,146 @@ export function understandIntent(message, context = {}) {
 
   // Entity extraction (Upgrade 4)
   const entities = extractEntities(text, context);
+  const contextualPronoun = /\b(?:it|its|that|those|there)\b|\b(?:this|these)\b|(?:همین|اون|آن|اش|ش)/i.test(normalized);
+  const previousUserText = Array.isArray(context.conversation)
+    ? [...context.conversation].reverse().find((row) => ['user', 'human'].includes(String(row?.role || '').toLowerCase()))?.content
+    : null;
+  const priorAsset = aliasToken(context.selectedAsset || extractEntities(previousUserText || '', {}).token || '') || context.selectedAsset || null;
+  if (!entities.token && priorAsset && contextualPronoun) {
+    entities.token = String(priorAsset).toUpperCase();
+    entities.tokens = [entities.token];
+    entities.resolvedReferences = { ...(entities.resolvedReferences || {}), token: 'conversation_context' };
+  }
+  const followUpAsset = Boolean(priorAsset && entities.token && String(priorAsset).toUpperCase() !== String(entities.token).toUpperCase()
+    && /^(?:and|also|what\s+about|و|همچنین)\b/i.test(normalized) && normalized.length < 48);
 
   // Upgrade 4 NLP classification & conflict/correction analysis
   const questionType = classifyQuestionType(text);
+  const foldedQuestion = normalized.toLowerCase();
+  const comparisonQuestion = /(?:compare|comparison|versus|\bvs\b|which\s+(?:is\s+)?(?:better|safer|cheaper|faster)|safer\s+than|less\s+risky|more\s+volatile|lower\s+risk|better\s+investment|کدام\s*(?:بهتر|امن|کم.?ریسک|فرق)|مقایسه|تفاوت|فرق\s*بین|امن.?تر|کم.?ریسک.?تر|کم.?نوسان.?تر|ارزان.?تر|سریع.?تر)/i.test(foldedQuestion)
+    || (Array.isArray(entities.tokens) && entities.tokens.length >= 2 && /\b(?:or|vs)\b|یا/i.test(foldedQuestion))
+    || (followUpAsset && /^(?:compare|مقایسه|و|همچنین)/i.test(foldedQuestion));
+  const assetRiskQuestion = /(?:\b(?:risk|safe|secure|safer|volatile)\b|ریسک|امن|امنیت|نوسان)/i.test(foldedQuestion) && Boolean(entities.token);
+  const allocationPlanQuestion = Boolean(entities.amountUsd && entities.tokens?.length >= 2
+    && /(?:\b(?:split|allocate|allocation|divide|spread|invest|distribute)\b|تخصیص|تقسیم|پخش|سرمایه.?گذاری)/i.test(foldedQuestion)
+    && !/(?:\b(?:swap|convert|exchange|buy|sell|execute)\b|سواپ|تبدیل|بخر|بفروش)/i.test(foldedQuestion));
+  const whyMarketQuestion = /(?:why|reason|explain\s+why|چه\s*دلیلی|چرا|علت|دلیل).{0,40}(?:drop|fall|down|rise|pump|move|افت|ریزش|کاهش|سقوط|رشد|بالا\s*رفت)|(?:drop|fall|down|rise|pump|move|افت|ریزش|کاهش|سقوط|رشد).{0,40}(?:why|reason|چرا|علت|دلیل)/i.test(foldedQuestion);
+  const walletSafetyQuestion = /(?:wallet|کیف\s*پول|دارایی).{0,40}(?:safe|secure|security|امن|امنیت|در\s*امان)|(?:safe|secure|امن|امنیت).{0,40}(?:wallet|کیف\s*پول|دارایی)/i.test(foldedQuestion);
+  const explanationQuestion = /(?:what\s+does|what\s+is(?:\s+(?:meant\s+by|a\b|an\b|the\b))?|explain|define|meaning\s+of|یعنی\s*چی|معنی\s*(?:چی|چیه)|(?:چیست|چیه).{0,30}(?:کارمزد|گس|استیک|وام|ریسک|سود|ضرر)|توضیح\s*بده|مفهوم\s*)/i.test(foldedQuestion);
+  const troubleshootingQuestion = /(?:not\s+working|doesn.t\s+work|failed|stuck|can.t\s+connect|why\s+can.t|خطا\s*می?ده|کار\s*نمی?کنه|وصل\s*نمی?شه|گیر\s*کرده|ناموفق)/i.test(foldedQuestion);
+  const hasDownMove = /(?:fall|drop|decline|crash|lose|افت|ریزش|کاهش|سقوط|ضرر)/i.test(foldedQuestion);
+  const hasUpMove = /(?:rise|grow|gain|increase|pump|رشد|افزایش|بالا\s*رفتن|سود)/i.test(foldedQuestion);
+  const scenarioDirectionConflict = hasDownMove && hasUpMove;
+  const scenarioDirection = scenarioDirectionConflict ? 0 : hasDownMove ? -1 : hasUpMove ? 1 : 0;
+  const scenarioPrompt = /(?:what\s+if|if\s+.{0,60}(?:fall|drop|rise|grow)|how\s+much\s+would\s+i\s+lose|اگر|اگه|فرض\s*کن|چه\s*می?شود|چی\s*میشه)/i.test(foldedQuestion);
+  const scenarioAmbiguous = Boolean(entities.token && entities.amountPct != null && scenarioDirectionConflict && scenarioPrompt);
+  const scenarioQuestion = Boolean(entities.token && entities.amountPct != null && scenarioDirection && scenarioPrompt);
+  const portfolioScenario = scenarioQuestion && /(?:portfolio|holdings|پرتفوی|سبد\s*دارایی)/i.test(foldedQuestion);
+  const generalQuestion = /[?؟]$|^(?:what|why|how|when|where|which|who|is|are|can|do|does|should|چرا|چطور|چگونه|چی|کدام|آیا|میشه)\b/i.test(foldedQuestion);
+  const decisionQuestion = /(?:should\s+i\s+(?:buy|sell|swap|hold|keep|invest)|should\s+(?:i|we)\s+|would\s+you\s+recommend|is\s+it\s+(?:a\s+)?good\s+idea|is\s+it\s+safe\s+to\s+(?:buy|sell|swap)|(?:is|are)\s+.{1,40}(?:a\s+)?(?:good\s+investment|worth\s+investing|safe\s+investment|good\s+time\s+to\s+buy)|worth\s+(?:buying|selling)|(?:آیا|ایا).{0,24}(?:بخرم|بفروشم|نگه\s*دارم|تبدیل\s*کنم)|بهتره.{0,24}(?:بخرم|بفروشم|نگه\s*دارم)|بهتر\s*است.{0,24}(?:بخرم|بفروشم|نگه\s*دارم)|بخرم\s*یا|بفروشم\s*یا|پیشنهاد\s*می?کنی)/i.test(foldedQuestion)
+    || (questionType === QUESTION_TYPES.RECOMMENDATION
+      && /(?:should\s+i|would\s+you|is\s+it\s+(?:a\s+)?good\s+idea|is\s+it\s+safe\s+to|worth\s+(?:buying|selling)|آیا|ایا|بهتره|بهتر\s*است|بخرم\s*یا|پیشنهاد\s*می?کنی)/i.test(foldedQuestion));
+  const questionFrame = walletSafetyQuestion ? 'WALLET_SAFETY'
+    : allocationPlanQuestion ? 'READ_ONLY_ALLOCATION_PLAN'
+      : scenarioAmbiguous ? 'SCENARIO_AMBIGUOUS'
+        : scenarioQuestion ? 'SCENARIO_SIMULATION'
+      : assetRiskQuestion && !comparisonQuestion ? 'ASSET_RISK'
+      : decisionQuestion ? 'INVESTMENT_RECOMMENDATION'
+      : followUpAsset && !comparisonQuestion ? 'FOLLOW_UP_ASSET'
+      : comparisonQuestion ? 'ASSET_COMPARISON'
+      : whyMarketQuestion ? 'WHY_MARKET_MOVE'
+        : explanationQuestion ? 'EXPLANATION'
+          : troubleshootingQuestion ? 'TROUBLESHOOTING'
+            : generalQuestion ? 'GENERAL_QUESTION' : null;
+  // Semantic question frames: distinguish a wallet-risk question from balance
+  // lookup, and preserve the user's compare/explain task for downstream agents.
+  if (allocationPlanQuestion) {
+    entities.analysisMode = 'READ_ONLY_ALLOCATION_PLAN';
+    entities.allocationAssets = entities.tokens.slice(0, 4).map((symbol) => String(symbol).toUpperCase());
+    entities.allocationBudgetUsd = Number(entities.amountUsd);
+    const equalSplit = /(?:\bequal(?:ly)?\b|\bevenly\b|\b50\s*[/:-]\s*50\b|برابر|مساوی|نصف\s*نصف)/i.test(foldedQuestion);
+    const explicitWeights = equalSplit
+      ? entities.allocationAssets.map((symbol) => ({ symbol, weightPct: 100 / entities.allocationAssets.length }))
+      : entities.allocationAssets.map((symbol) => {
+        const percentBefore = foldedQuestion.match(new RegExp(`(?:^|[^\\p{L}\\p{N}])([0-9]+(?:\\.[0-9]+)?)\\s*%\\s*${symbol}(?:$|[^\\p{L}\\p{N}])`, 'iu'));
+        const percentAfter = foldedQuestion.match(new RegExp(`(?:^|[^\\p{L}\\p{N}])${symbol}\\s*([0-9]+(?:\\.[0-9]+)?)\\s*%(?:$|[^\\p{L}\\p{N}])`, 'iu'));
+        const match = percentBefore || percentAfter;
+        return match ? { symbol, weightPct: Number(match[1]) } : null;
+      });
+    if (explicitWeights.every(Boolean)
+      && explicitWeights.every((row) => Number.isFinite(row.weightPct) && row.weightPct > 0 && row.weightPct <= 100)
+      && Math.abs(explicitWeights.reduce((sum, row) => sum + row.weightPct, 0) - 100) < 0.01) {
+      entities.allocationWeights = explicitWeights;
+    } else {
+      entities.allocationWeights = null;
+    }
+    entities.fromToken = null;
+    entities.toToken = null;
+    scores.set('INVESTMENT_PLAN', (scores.get('INVESTMENT_PLAN') || 0) + 12);
+    matched.push({ type: 'INVESTMENT_PLAN', score: 12, questionFrame: 'READ_ONLY_ALLOCATION_PLAN', assets: entities.allocationAssets, budgetUsd: entities.allocationBudgetUsd });
+  }
+  if (scenarioAmbiguous) {
+    entities.analysisMode = 'SCENARIO_CLARIFICATION';
+    entities.scenarioDirectionConflict = true;
+    scores.set('ANALYZE_TOKEN', (scores.get('ANALYZE_TOKEN') || 0) + 12);
+    matched.push({ type: 'ANALYZE_TOKEN', score: 12, questionFrame: 'SCENARIO_AMBIGUOUS', token: String(entities.token).toUpperCase() });
+  }
+  if (scenarioQuestion) {
+    entities.scenarioMovePct = scenarioDirection * Math.abs(Number(entities.amountPct));
+    entities.scenarioToken = String(entities.token).toUpperCase();
+    entities.analysisMode = portfolioScenario ? 'PORTFOLIO_SCENARIO' : 'SCENARIO_SIMULATION';
+    const scenarioIntent = portfolioScenario ? 'PORTFOLIO_ANALYSIS' : 'ANALYZE_TOKEN';
+    scores.set(scenarioIntent, (scores.get(scenarioIntent) || 0) + 12);
+    matched.push({ type: scenarioIntent, score: 12, questionFrame: 'SCENARIO_SIMULATION', token: entities.scenarioToken, movePct: entities.scenarioMovePct });
+  }
+  if (comparisonQuestion && entities.token && (!entities.tokens || entities.tokens.length < 2)
+    && priorAsset && String(priorAsset).toUpperCase() !== String(entities.token).toUpperCase()) {
+    entities.tokens = [String(priorAsset).toUpperCase(), String(entities.token).toUpperCase()];
+  }
+  if (followUpAsset) {
+    entities.relatedToken = String(priorAsset).toUpperCase();
+    entities.analysisMode = 'FOLLOW_UP_ASSET';
+    scores.set('ANALYZE_TOKEN', (scores.get('ANALYZE_TOKEN') || 0) + 8);
+    matched.push({ type: 'ANALYZE_TOKEN', score: 8, questionFrame: 'FOLLOW_UP_ASSET', token: entities.token, relatedToken: entities.relatedToken });
+  }
+  if (assetRiskQuestion && !comparisonQuestion) {
+    entities.analysisMode = 'ASSET_RISK';
+    scores.set('ANALYZE_TOKEN', (scores.get('ANALYZE_TOKEN') || 0) + 8);
+    matched.push({ type: 'ANALYZE_TOKEN', score: 8, questionFrame: 'ASSET_RISK', token: entities.token });
+  }
+  if (decisionQuestion && entities.token) {
+    scores.set('ANALYZE_TOKEN', (scores.get('ANALYZE_TOKEN') || 0) + 8);
+    entities.analysisMode = entities.tokens?.length > 1 ? 'COMPARISON_RECOMMENDATION' : 'RECOMMENDATION';
+    if (entities.tokens?.length > 1) {
+      entities.comparisonTokens = entities.tokens.slice(0, 4);
+      entities.fromToken = null;
+      entities.toToken = null;
+    }
+    matched.push({ type: 'ANALYZE_TOKEN', score: 8, questionFrame: 'INVESTMENT_RECOMMENDATION', token: entities.token });
+  }
+  if (walletSafetyQuestion) {
+    scores.set('RISK_ANALYSIS', (scores.get('RISK_ANALYSIS') || 0) + 8);
+    matched.push({ type: 'RISK_ANALYSIS', score: 8, questionFrame: 'WALLET_SAFETY' });
+  }
+  if (whyMarketQuestion && entities.token) {
+    scores.set('MARKET_ANALYSIS', (scores.get('MARKET_ANALYSIS') || 0) + 8);
+    matched.push({ type: 'MARKET_ANALYSIS', score: 8, questionFrame: 'WHY_MARKET_MOVE', token: entities.token });
+  }
+  if (comparisonQuestion && Array.isArray(entities.tokens) && entities.tokens.length >= 2) {
+    entities.comparisonTokens = entities.tokens.slice(0, 4);
+    entities.comparisonCriteria = /(?:safe|secure|risk|volatile|امن|ریسک|نوسان)/i.test(foldedQuestion) ? ['risk']
+      : /(?:return|performance|outperform|growth|بازده|عملکرد|رشد)/i.test(foldedQuestion) ? ['performance']
+        : /(?:fee|cost|gas|کارمزد|هزینه|گس)/i.test(foldedQuestion) ? ['cost']
+          : /(?:yield|apy|apr|سود|بازدهی)/i.test(foldedQuestion) ? ['yield']
+            : ['market'];
+    entities.analysisMode = decisionQuestion ? 'COMPARISON_RECOMMENDATION' : 'COMPARISON';
+    // Entity extraction treats any two tickers as a potential swap pair;
+    // comparison semantics explicitly clear that misleading interpretation.
+    entities.fromToken = null;
+    entities.toToken = null;
+    scores.set('ANALYZE_TOKEN', (scores.get('ANALYZE_TOKEN') || 0) + 8);
+    matched.push({ type: 'ANALYZE_TOKEN', score: 8, questionFrame: 'ASSET_COMPARISON', tokens: entities.comparisonTokens });
+  }
   const conflict = detectConflict(text);
   const correction = detectUserCorrection(text, context);
 
@@ -916,6 +1053,15 @@ export function understandIntent(message, context = {}) {
       confidence: 0.3,
       confidenceBreakdown: breakdown,
       questionType,
+      questionFrame,
+      answerStyle: questionFrame === 'EXPLANATION' ? 'PLAIN_LANGUAGE_WITH_EXAMPLE'
+        : questionFrame === 'TROUBLESHOOTING' ? 'DIAGNOSE_THEN_MINIMAL_NEXT_STEP'
+          : questionFrame === 'SCENARIO_SIMULATION' ? 'CALCULATE_FROM_EXPLICIT_ASSUMPTIONS'
+            : questionFrame === 'ASSET_COMPARISON' ? 'SIDE_BY_SIDE_WITH_TRADEOFFS'
+            : questionFrame === 'ASSET_RISK' ? 'RISK_EVIDENCE_AND_LIMITS'
+              : questionFrame === 'FOLLOW_UP_ASSET' ? 'ANSWER_SAME_QUESTION_FOR_NEW_ASSET'
+                : questionFrame === 'INVESTMENT_RECOMMENDATION' ? 'EVIDENCE_AND_RISK_BEFORE_OPINION'
+              : 'DIRECT_ANSWER',
       entities,
       raw: text,
       matched,
@@ -931,7 +1077,19 @@ export function understandIntent(message, context = {}) {
 
   const confidence = Math.min(0.98, top[1] / (top[1] + (sorted[1]?.[1] || 0) + 1) + 0.3);
   const secondary = sorted.slice(1, 3).map(([k]) => k);
-  const selectedType = (correction && correction.newIntent) ? correction.newIntent : top[0];
+  let selectedType = (correction && correction.newIntent) ? correction.newIntent : top[0];
+  if ((['BUY', 'SELL', 'SWAP'].includes(selectedType) || (selectedType === 'GENERAL' && entities.tokens?.length)) && decisionQuestion) {
+    // Advice-seeking is a read, not a trade request. Preserve the candidate(s)
+    // and route to analysis instead of ever building an execution card.
+    selectedType = entities.tokens?.length ? 'ANALYZE_TOKEN' : 'MARKET_ANALYSIS';
+    entities.analysisMode = entities.tokens?.length > 1 ? 'COMPARISON_RECOMMENDATION' : 'RECOMMENDATION';
+    if (entities.tokens?.length > 1) {
+      entities.comparisonTokens = entities.tokens.slice(0, 4);
+      entities.fromToken = null;
+      entities.toToken = null;
+    }
+    matched.push({ type: selectedType, score: 9, questionFrame: 'INVESTMENT_RECOMMENDATION' });
+  }
 
   const clarification = calculateClarificationPriority({ intentType: selectedType, entities, context });
   const breakdown = calculateConfidenceBreakdown({ intentType: selectedType, entities, context, questionType });
@@ -958,6 +1116,15 @@ export function understandIntent(message, context = {}) {
     confidence: Math.round(confidence * 100) / 100,
     confidenceBreakdown: breakdown,
     questionType,
+    questionFrame,
+    answerStyle: questionFrame === 'EXPLANATION' ? 'PLAIN_LANGUAGE_WITH_EXAMPLE'
+      : questionFrame === 'TROUBLESHOOTING' ? 'DIAGNOSE_THEN_MINIMAL_NEXT_STEP'
+        : questionFrame === 'SCENARIO_SIMULATION' ? 'CALCULATE_FROM_EXPLICIT_ASSUMPTIONS'
+          : questionFrame === 'ASSET_COMPARISON' ? 'SIDE_BY_SIDE_WITH_TRADEOFFS'
+          : questionFrame === 'ASSET_RISK' ? 'RISK_EVIDENCE_AND_LIMITS'
+            : questionFrame === 'FOLLOW_UP_ASSET' ? 'ANSWER_SAME_QUESTION_FOR_NEW_ASSET'
+              : questionFrame === 'INVESTMENT_RECOMMENDATION' ? 'EVIDENCE_AND_RISK_BEFORE_OPINION'
+            : 'DIRECT_ANSWER',
     entities,
     goal: entities.targetReturn ? 'TARGET_RETURN' : entities.timeframe ? 'TIMEFRAME_GROWTH' : null,
     assets: entities.tokens?.map((sym) => ({ symbol: sym, role: sym === entities.toToken ? 'target' : 'primary' })) || [],

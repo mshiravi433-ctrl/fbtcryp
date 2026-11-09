@@ -1452,6 +1452,33 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
       };
     }
 
+    if (intent?.entities?.analysisMode === 'PORTFOLIO_SCENARIO') {
+      const symbol = String(intent.entities.scenarioToken || intent.entities.token || '').toUpperCase();
+      const movePct = Number(intent.entities.scenarioMovePct);
+      const exposure = holdings.filter((row) => String(row.symbol || '').toUpperCase() === symbol && positiveUsd(row.valueUsd))
+        .reduce((sum, row) => sum + Number(row.valueUsd), 0);
+      if (!symbol || !Number.isFinite(movePct) || movePct <= -100 || exposure <= 0) {
+        return {
+          message: lang === 'fa'
+            ? `برای سناریوی ${symbol || 'دارایی'}، ارزش دلاریِ قابل‌تأیید از پرتفوی پیدا نشد؛ اثر را حدس نمی‌زنم.`
+            : `I could not verify a priced ${symbol || 'asset'} exposure in this portfolio, so I will not guess the scenario impact.`,
+          ui: { type: 'TEXT' }
+        };
+      }
+      const impact = exposure * movePct / 100;
+      const signedImpact = `${impact >= 0 ? '+' : '−'}${money(impact)}`;
+      const incompleteNote = readIncomplete
+        ? (lang === 'fa' ? ' پوشش پرتفوی ناقص یا قدیمی است؛ این فقط روی دارایی‌های قیمت‌گذاری‌شدهٔ خوانده‌شده حساب شده.' : ' Portfolio coverage is partial or stale; this uses only the priced holdings that were read.')
+        : '';
+      return {
+        message: lang === 'fa'
+          ? `سناریوی فرضی: اگر ${symbol} ${movePct}٪ تغییر کند و بقیهٔ دارایی‌ها ثابت بمانند، مواجههٔ فعلیِ قابل‌قیمت‌گذاری ${money(exposure)} حدود ${signedImpact} اثر می‌گیرد.${incompleteNote} این محاسبه شرطی است، نه پیش‌بینی و نه توصیه.`
+          : `Hypothetical scenario: if ${symbol} moves ${movePct}% while all other assets stay unchanged, the currently priced exposure of ${money(exposure)} changes by about ${signedImpact}.${incompleteNote} This is conditional arithmetic, not a forecast or recommendation.`,
+        ui: { type: 'TEXT' },
+        scenario: { symbol, exposureUsd: exposure, movePct, impactUsd: impact, forecast: false, partial: readIncomplete }
+      };
+    }
+
     const sorted = [...holdings].sort((a, b) => {
       const av = positiveUsd(a.valueUsd) ? Number(a.valueUsd) : -1;
       const bv = positiveUsd(b.valueUsd) ? Number(b.valueUsd) : -1;
@@ -1607,7 +1634,8 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
     };
   }
 
-  if (type === 'YIELD_DISCOVERY' || type === 'INVESTMENT_PLAN' || type === 'STAKING') {
+  if (type === 'YIELD_DISCOVERY' || type === 'STAKING'
+    || (type === 'INVESTMENT_PLAN' && intent?.questionFrame !== 'READ_ONLY_ALLOCATION_PLAN')) {
     const rawMsg = String(intent?.raw || '').toLowerCase();
     const isVagueGrowth = /(پولم.*زیاد|سرمایه‌ام.*بیشتر|سرمایه.*رشد|grow.*money|make.*money.*work)/i.test(rawMsg)
       && !intent?.entities?.timeframe && !intent?.entities?.riskPreference && !intent?.entities?.amount;
@@ -1818,8 +1846,71 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
     };
   }
 
-  if (['MARKET_ANALYSIS', 'SMART_MONEY', 'WHALE', 'ANALYZE_TOKEN'].includes(type)) {
+  if (['MARKET_ANALYSIS', 'SMART_MONEY', 'WHALE', 'ANALYZE_TOKEN'].includes(type)
+    || (type === 'INVESTMENT_PLAN' && intent?.questionFrame === 'READ_ONLY_ALLOCATION_PLAN')) {
     const token = intent?.entities?.token;
+    const allocationPlan = intent?.questionFrame === 'READ_ONLY_ALLOCATION_PLAN';
+    const comparisons = Array.isArray(results?.tokenComparisons) ? results.tokenComparisons : [];
+    if ((intent?.entities?.analysisMode?.includes('COMPARISON') || allocationPlan) && comparisons.length > 1) {
+      const criteria = allocationPlan ? ['market'] : (intent?.entities?.comparisonCriteria || ['market']);
+      const rows = comparisons.map(({ symbol, result }) => {
+        const data = result?.data || result || {};
+        const bits = [];
+        const addNumber = (labelFa, labelEn, value, format = (v) => String(v)) => {
+          if (hasNumber(value)) bits.push(`${lang === 'fa' ? labelFa : labelEn} ${format(Number(value))}`);
+        };
+        const addText = (labelFa, labelEn, value) => {
+          if (value != null && String(value).trim()) bits.push(`${lang === 'fa' ? labelFa : labelEn} ${String(value)}`);
+        };
+        if (criteria.includes('risk')) {
+          addText('ریسک:', 'risk:', data.riskLevel ?? data.risk);
+          addNumber('نوسان:', 'volatility:', data.volatilityPct ?? data.volatility, (v) => `${Math.round(v * 10) / 10}%`);
+        } else if (criteria.includes('performance')) {
+          addNumber('تغییر ۲۴ساعت:', '24h:', data.change24hPct ?? data.change24h, (v) => `${v >= 0 ? '+' : ''}${v}%`);
+          addNumber('تغییر ۷روز:', '7d:', data.change7dPct ?? data.change7d, (v) => `${v >= 0 ? '+' : ''}${v}%`);
+        } else if (criteria.includes('cost')) {
+          addNumber('کارمزد:', 'fee:', data.feeUsd ?? data.gasFeeUsd, (v) => money(v));
+          addNumber('کارمزد پایه:', 'fee rate:', data.feeBps, (v) => `${v} bps`);
+        } else if (criteria.includes('yield')) {
+          addNumber('بازده اعلام‌شده:', 'reported yield:', data.apy ?? data.apr ?? data.yieldPct, (v) => `${v}%`);
+        } else {
+          addNumber('قیمت:', 'price:', data.priceUsd ?? data.price, (v) => money(v));
+          addNumber('تغییر ۲۴ساعت:', '24h:', data.change24hPct ?? data.change24h, (v) => `${v >= 0 ? '+' : ''}${v}%`);
+          addNumber('رتبه:', 'rank:', data.rank, (v) => `#${v}`);
+        }
+        const unavailable = lang === 'fa' ? 'دادهٔ لازم برای این مقایسه در دسترس نیست' : 'requested comparison data unavailable';
+        return `• ${String(symbol || data.symbol || '—').toUpperCase()}: ${bits.length ? bits.join(' · ') : unavailable}`;
+      });
+      const header = lang === 'fa' ? 'مقایسه بر پایهٔ داده‌های واقعاً دریافت‌شده:' : 'Comparison from data actually retrieved:';
+      let allocationSummary = '';
+      let allocationAmounts = null;
+      if (allocationPlan && Array.isArray(intent.entities.allocationWeights)) {
+        allocationAmounts = intent.entities.allocationWeights.map(({ symbol, weightPct }) => {
+          const budgetUsd = Number(intent.entities.allocationBudgetUsd) * weightPct / 100;
+          const quoteRow = comparisons.find((row) => String(row.symbol).toUpperCase() === symbol);
+          const data = quoteRow?.result?.data || quoteRow?.result || {};
+          const price = Number(data.priceUsd ?? data.price);
+          const priceFresh = ['live', 'fresh'].includes(String(data.dataStatus || quoteRow?.result?.dataStatus || '').toLowerCase())
+            && data.ok !== false && quoteRow?.result?.ok !== false;
+          return { symbol, weightPct, budgetUsd, estimatedUnits: priceFresh && Number.isFinite(price) && price > 0 ? budgetUsd / price : null, priceUsd: priceFresh && Number.isFinite(price) && price > 0 ? price : null, priceFresh };
+        });
+        allocationSummary = lang === 'fa'
+          ? `\n\nتقسیمِ مطابق درصدهای صریح شما (محاسبهٔ تقریبی، بدون اجرا):\n${allocationAmounts.map((row) => `• ${row.symbol}: ${row.weightPct}% = ${money(row.budgetUsd)}${row.estimatedUnits == null ? '' : `، حدود ${row.estimatedUnits.toPrecision(6)} واحد با قیمت فعلی`}`).join('\n')}`
+          : `\n\nSplit using your explicitly stated weights (estimates, not executed):\n${allocationAmounts.map((row) => `• ${row.symbol}: ${row.weightPct}% = ${money(row.budgetUsd)}${row.estimatedUnits == null ? '' : `, about ${row.estimatedUnits.toPrecision(6)} units at the retrieved price`}`).join('\n')}`;
+      }
+      const caveat = allocationPlan
+        ? (Array.isArray(intent.entities.allocationWeights)
+          ? (lang === 'fa'
+            ? 'این تقسیم فقط از درصدهایی که خودتان مشخص کردید محاسبه شده؛ قیمت و مقدار نهایی ممکن است با لغزش، کارمزد و تغییر بازار فرق کند. «امن بودن» تضمین نمی‌شود و هیچ معامله‌ای انجام نشده است.'
+            : 'This split uses only the percentages you specified; final prices and quantities may differ due to slippage, fees and market movement. It is not a guarantee of safety, and no trades were made.')
+          : (lang === 'fa'
+            ? `بودجهٔ اعلام‌شده: ${money(intent.entities.allocationBudgetUsd)}. قیمت‌ها فقط snapshot هستند و به‌تنهایی «تقسیم امن» یا وزن مناسب را تعیین نمی‌کنند. برای محاسبهٔ سهم هر دارایی باید وزن مدنظرتان (مثلاً برابر یا درصدهای مشخص) و افق زمانی را بدانم؛ هیچ معامله‌ای انجام نشده است.`
+            : `Stated budget: ${money(intent.entities.allocationBudgetUsd)}. Prices are only a snapshot and do not establish a “safe” split or suitable weights. To calculate each asset's share, I need your preferred weights (for example, equal or specified percentages) and time horizon; no trades were made.`))
+        : (lang === 'fa'
+          ? 'این مقایسه snapshot بازار است، نه تضمین عملکرد آینده. برای انتخاب، افق زمانی، تحمل ریسک و هدف خودت را هم در نظر بگیر.'
+          : 'This is a market snapshot, not a forecast or guarantee. Consider your horizon, risk tolerance and goals before deciding.');
+      return { message: `${header}\n${rows.join('\n')}${allocationSummary}\n\n${caveat}`, ui: { type: 'TEXT' }, comparison: comparisons, allocationPlan: allocationPlan ? { budgetUsd: intent.entities.allocationBudgetUsd, assets: intent.entities.allocationAssets, weights: intent.entities.allocationWeights, amounts: allocationAmounts, weightsProvided: Boolean(intent.entities.allocationWeights), executionRequested: false } : undefined };
+    }
     const market = results.market || results.smartMoney || results.whale || null;
     /* A real per-token read beats an overview: when the tool answered with a
        price, answer with numbers + a chart card, never with «open the page». */
@@ -1828,6 +1919,85 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
       && results.token.dataStatus !== 'unavailable'
       ? results.token
       : null;
+    const moveQuestion = intent?.questionFrame === 'WHY_MARKET_MOVE';
+    const newsRows = results.news?.news || results.news?.items || [];
+    const evidenceLines = moveQuestion
+      ? (newsRows.length
+        ? [lang === 'fa' ? 'سرنخ‌های خبری مرتبط (نه اثبات علت حرکت):' : 'Relevant news leads (not proof of causation):', ...newsRows.slice(0, 3).map((row) => {
+            const title = row?.title || row?.headline || row?.summary;
+            const source = row?.source || row?.publisher;
+            return title ? `• ${String(title).slice(0, 180)}${source ? ` — ${String(source).slice(0, 60)}` : ''}` : null;
+          }).filter(Boolean)]
+        : [lang === 'fa' ? 'منبع خبری مرتبطی برای تأیید علت این حرکت پیدا نشد؛ تغییر قیمت به‌تنهایی علت را ثابت نمی‌کند.' : 'No relevant news source was found to verify the cause; price movement alone does not establish why it happened.'])
+      : [];
+    if (intent?.entities?.analysisMode === 'SCENARIO_CLARIFICATION') {
+      const symbol = String(intent.entities.token || '').toUpperCase();
+      return {
+        message: lang === 'fa'
+          ? `در سؤال ${symbol} هم حرکت نزولی و هم صعودی آمده است. منظورتان کدام سناریو و چند درصد تغییر است؟ تا روشن نشود، عددی محاسبه نمی‌کنم.`
+          : `Your ${symbol} scenario mentions both a downward and an upward move. Which direction and percentage do you want to model? I will not calculate until that is clear.`,
+        ui: { type: 'TEXT' },
+        clarification: { required: true, fields: ['direction', 'movePct'] }
+      };
+    }
+    if (intent?.entities?.analysisMode === 'SCENARIO_SIMULATION') {
+      const basePrice = tk ? numOr(tk.priceUsd ?? tk.price) : null;
+      const movePct = Number(intent.entities.scenarioMovePct);
+      if (basePrice == null || !Number.isFinite(movePct) || movePct <= -100) {
+        return {
+          message: lang === 'fa'
+            ? 'برای محاسبهٔ سناریو، قیمت پایهٔ معتبر یا درصد تغییر قابل‌استفاده در دسترس نیست؛ نتیجه را حدس نمی‌زنم.'
+            : 'I do not have a reliable base price or a usable move percentage for this scenario, so I will not guess the result.',
+          ui: { type: 'TEXT' }
+        };
+      }
+      const scenarioPrice = basePrice * (1 + movePct / 100);
+      const delta = scenarioPrice - basePrice;
+      const signedDelta = `${delta >= 0 ? '+' : '−'}${money(delta)}`;
+      const symbol = String(tk.symbol || token || '').toUpperCase();
+      const quantity = Number(intent.entities.amount);
+      const quantityUnit = String(intent.entities.amountSymbol || intent.entities.amountUnit || '').toUpperCase();
+      const explicitQuantity = Number.isFinite(quantity) && quantity > 0 && quantityUnit === symbol;
+      const positionImpact = explicitQuantity ? delta * quantity : null;
+      const signedPositionImpact = positionImpact == null ? null : `${positionImpact >= 0 ? '+' : '−'}${money(positionImpact)}`;
+      const message = lang === 'fa'
+        ? `سناریوی فرضی${explicitQuantity ? ` برای ${quantity} ${symbol}` : ` برای هر ۱ ${symbol}`}: با قیمت پایهٔ دریافت‌شدهٔ ${money(basePrice)} و تغییر ${movePct}٪، قیمت محاسباتی ${money(scenarioPrice)} می‌شود (تغییر ${signedDelta} برای هر واحد)${signedPositionImpact ? `؛ اثر تقریبی روی مقدار گفته‌شده: ${signedPositionImpact}` : ''}. این فقط محاسبهٔ شرطی است، نه پیش‌بینی؛ سایر تغییرات بازار در آن لحاظ نشده‌اند.`
+        : `Hypothetical scenario${explicitQuantity ? ` for ${quantity} ${symbol}` : ` per 1 ${symbol}`}: from the retrieved base price of ${money(basePrice)}, a ${movePct}% move gives a calculated price of ${money(scenarioPrice)} (change ${signedDelta} per unit)${signedPositionImpact ? `; approximate impact on the stated quantity: ${signedPositionImpact}` : ''}. This is conditional arithmetic, not a forecast; other market moves are not included.`;
+      return { message, ui: { type: 'TEXT' }, scenario: { symbol, basePrice, movePct, scenarioPrice, perUnitChange: delta, quantity: explicitQuantity ? quantity : null, positionImpact, forecast: false } };
+    }
+    if (intent?.entities?.analysisMode === 'ASSET_RISK') {
+      if (!tk) {
+        return {
+          message: lang === 'fa'
+            ? `برای سنجش ریسک بازار ${String(token || '').toUpperCase()} دادهٔ معتبر در دسترس نیست؛ از روی نام دارایی حدس نمی‌زنم.`
+            : `I do not have reliable market-risk data for ${String(token || '').toUpperCase()}; I will not infer it from the asset name.`,
+          ui: { type: 'TEXT' }
+        };
+      }
+      const price = numOr(tk.priceUsd ?? tk.price);
+      const high = numOr(tk.high24h);
+      const low = numOr(tk.low24h);
+      const rangePct = price > 0 && high != null && low != null && high >= low ? ((high - low) / price) * 100 : null;
+      const moves = [];
+      const move = (labelFa, labelEn, value) => {
+        if (value != null) moves.push(`${lang === 'fa' ? labelFa : labelEn} ${value >= 0 ? '+' : ''}${pct(value)}`);
+      };
+      move('تغییر ۲۴ساعت:', '24h move:', numOr(tk.change24hPct ?? tk.change24h));
+      move('تغییر ۷روز:', '7d move:', numOr(tk.change7dPct ?? tk.change7d));
+      const range = rangePct == null ? null : `${Math.round(rangePct * 10) / 10}%`;
+      if (lang === 'fa') {
+        return {
+          message: `دادهٔ قابل‌مشاهده برای ${String(tk.symbol || token || '').toUpperCase()}: ${moves.length ? moves.join(' · ') : 'تغییر زمانی موجود نیست'}${range ? ` · دامنهٔ نوسان ثبت‌شدهٔ ۲۴ساعت: ${range}` : ''}. این‌ها فقط حرکت اخیر قیمت‌اند، نه امتیاز کامل ریسک؛ نقدشوندگی، ریسک قرارداد و شرایط ورود هم باید جداگانه بررسی شوند.`,
+          ui: { type: 'TEXT' },
+          riskEvidence: { change24hPct: numOr(tk.change24hPct ?? tk.change24h), change7dPct: numOr(tk.change7dPct ?? tk.change7d), observed24hRangePct: rangePct }
+        };
+      }
+      return {
+        message: `Observed data for ${String(tk.symbol || token || '').toUpperCase()}: ${moves.length ? moves.join(' · ') : 'no period change available'}${range ? ` · recorded 24h range: ${range}` : ''}. These are recent price moves, not a complete risk score; liquidity, contract risk and entry conditions require separate checks.`,
+        ui: { type: 'TEXT' },
+        riskEvidence: { change24hPct: numOr(tk.change24hPct ?? tk.change24h), change7dPct: numOr(tk.change7dPct ?? tk.change7d), observed24hRangePct: rangePct }
+      };
+    }
     if (tk && (tk.priceUsd != null || tk.price != null)) {
       const price = numOr(tk.priceUsd ?? tk.price);
       const c24 = numOr(tk.change24hPct ?? tk.change24h);
@@ -1849,6 +2019,7 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         if (numOr(tk.rank) != null) stats.push(`رتبه #${numOr(tk.rank)}`);
         if (stats.length) parts.push(stats.join(' · '));
         if (sig) parts.push(`سیگنال تحلیل فنی (بک‌تست‌شده): ${sig}${tk.analysis?.rsi != null ? ` · RSI ${Math.round(Number(tk.analysis.rsi))}` : ''}`);
+        if (evidenceLines.length) parts.push(...evidenceLines);
         parts.push('');
         parts.push('پرونده کامل این توکن در اتاق تحلیل زیر است: کندل، اندیکاتورها (SMA/RSI/MACD)، حمایت و مقاومت و امتیاز ترکیبی با شواهد هر جزء. هر عددی که منبع نداده باشد، «—» می‌ماند.');
         return {
@@ -1871,6 +2042,7 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
       if (numOr(tk.rank) != null) stats.push(`Rank #${numOr(tk.rank)}`);
       if (stats.length) parts.push(stats.join(' · '));
       if (sig) parts.push(`Backtested signal: ${sig}${tk.analysis?.rsi != null ? ` · RSI ${Math.round(Number(tk.analysis.rsi))}` : ''}`);
+      if (evidenceLines.length) parts.push(...evidenceLines);
       parts.push('', 'This token\'s complete file is in the analysis room below: candles, indicators (SMA/RSI/MACD), support and resistance, and the composite score with the evidence behind each part. Anything the source did not return stays an em dash.');
       return {
         message: parts.join('\n'),

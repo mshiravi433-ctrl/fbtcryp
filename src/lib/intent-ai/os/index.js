@@ -497,6 +497,7 @@ export function createIntentOS({
                  — without this pass-through the rich token answer could
                  never see the tool that fetched it. */
               token: flat.token || toolRun.data.token,
+              tokenComparisons: flat.tokenComparisons || toolRun.data.tokenComparisons,
               smartMoney: flat.smartMoney || toolRun.data.smartMoney,
               whale: flat.whale || toolRun.data.whale,
               toolsUsed: toolRun.toolsUsed,

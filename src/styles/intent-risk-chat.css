@@ -1,0 +1,35 @@
+.intent-risk-answer {
+  margin: 12px 0 4px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--rgb-2, 132 94 247) 35%, transparent);
+  border-radius: 16px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--surface, #111827) 90%, #49328b), var(--surface, #111827));
+  color: var(--text, #f4f5fa);
+}
+.intent-risk-answer header,
+.intent-risk-answer .intent-risk-score,
+.intent-risk-answer li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.intent-risk-answer header span,
+.intent-risk-answer .intent-risk-note,
+.intent-risk-answer .intent-risk-missing {
+  color: var(--muted, #a7adbd);
+  font-size: .82em;
+}
+.intent-risk-score {
+  flex-wrap: wrap;
+  margin: 12px 0;
+  padding: 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface, #111827) 72%, #fff 4%);
+}
+.intent-risk-score > b { font-size: 1.5em; }
+.intent-risk-score > b small { font-size: .58em; opacity: .7; }
+.intent-risk-answer ul { display: grid; gap: 6px; margin: 8px 0; padding: 0; list-style: none; }
+.intent-risk-answer li { padding: 7px 9px; border-radius: 9px; background: color-mix(in srgb, var(--surface, #111827) 78%, #fff 3%); }
+.intent-risk-answer .intent-risk-missing { overflow-wrap: anywhere; }
+.intent-risk-answer .intent-risk-note { display: block; line-height: 1.5; }

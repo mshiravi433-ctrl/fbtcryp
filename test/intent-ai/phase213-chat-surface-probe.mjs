@@ -260,6 +260,14 @@ globalThis.localStorage = {
 
 /* ── 6. SMALL TALK: THE SAME VOICE, EVEN WITH NO SERVER ──────────────────── */
 {
+  const wellbeing = offlineSocialFallback('خیلی خسته‌ام و ناراحتم', { locale: 'fa' });
+  t('6.0 wellbeing disclosures receive an offline supportive reply', Boolean(wellbeing) && wellbeing.social?.act === 'WELLBEING' && wellbeing.social?.offline === true);
+  t('6.0b wellbeing reply has no action authority', Boolean(wellbeing) && wellbeing.actions?.length === 0);
+  t('6.0c a social-sounding follow-up after an intent stays in contextual understanding',
+    offlineSocialFallback('خوبی؟', { locale: 'fa', prior: { intent: 'ASSET_ANALYSIS' } }) === null);
+  t('6.0d a standalone pleasantry still answers locally',
+    Boolean(offlineSocialFallback('خوبی؟', { locale: 'fa' })));
+
   const fa = composeSocialReply('حالت چطوره؟', { locale: 'fa' });
   t('6.1 «حالت چطوره» is understood as a social act and answered', fa.ok === true && fa.act === 'HOW_ARE_YOU', JSON.stringify({ act: fa.act, ok: fa.ok, reason: fa.reason }));
   t('6.2 the answer is in Persian, not English', fa.lang === 'fa' && !/^hello/i.test(fa.text || ''), fa.text);

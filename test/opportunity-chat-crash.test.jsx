@@ -60,18 +60,17 @@ describe('the opportunity answer owns no parent navigation closure', () => {
   it('renders a scan without reading a variable outside ConversationRow', () => {
     const view = renderRow({ ...rowProps, onOpenRoute: vi.fn() });
     expect(view.getByTestId('opportunity-dashboard')).toBeTruthy();
-    expect(view.getAllByRole('button', { name: 'Full engine ↗' }).length).toBeGreaterThan(0);
+    expect(view.queryByRole('button', { name: 'Full engine ↗' })).toBeNull();
     view.unmount();
   });
 
-  it('uses the parent route callback for both engine links, and forwards a rescan', async () => {
+  it('keeps the engine in the AI conversation and forwards an in-card rescan', async () => {
     const onOpenRoute = vi.fn();
     const onRescanOpportunity = vi.fn().mockResolvedValue(undefined);
     const view = renderRow({ ...rowProps, onOpenRoute, onRescanOpportunity });
-    const links = view.getAllByRole('button', { name: 'Full engine ↗' });
-    for (const link of links) fireEvent.click(link);
-    expect(onOpenRoute).toHaveBeenCalledTimes(links.length);
-    expect(onOpenRoute).toHaveBeenCalledWith('/opportunities');
+    expect(view.queryByRole('button', { name: 'Full engine ↗' })).toBeNull();
+    expect(view.queryByRole('button', { name: 'Deep analysis ↗' })).toBeNull();
+    expect(onOpenRoute).not.toHaveBeenCalled();
 
     fireEvent.change(view.getByLabelText('Investable capital ($)'), { target: { value: '1000' } });
     fireEvent.change(view.getByLabelText('Horizon (days)'), { target: { value: '60' } });
@@ -147,13 +146,9 @@ it('Yield request → full engine → restored chat never reaches RouteBoundary'
     const dashboard = document.querySelector('[data-testid="opportunity-dashboard"]');
     expect(dashboard.querySelectorAll('.opd-card').length).toBeGreaterThan(0);
 
-    await act(async () => { fireEvent.click(within(dashboard).getByRole('button', { name: 'موتور کامل ↗' })); });
-    await waitFor(() => expect(document.querySelector('[data-testid="opportunities-page"]')).toBeTruthy(), { timeout: 30_000 });
-    expect(window.location.hash).toBe('#/opportunities');
-    noCrash();
-
-    await act(async () => { window.location.hash = '#/intent'; });
-    await waitFor(() => expect(document.querySelector('[data-testid="opportunity-dashboard"]')).toBeTruthy(), { timeout: 30_000 });
+    expect(within(dashboard).queryByRole('button', { name: 'موتور کامل ↗' })).toBeNull();
+    expect(document.querySelector('[data-testid="opportunities-page"]')).toBeNull();
+    expect(window.location.hash).toBe('#/intent');
     noCrash();
   } finally {
     console.error = originalError;

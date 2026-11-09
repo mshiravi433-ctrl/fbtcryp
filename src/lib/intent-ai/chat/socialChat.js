@@ -44,6 +44,7 @@ const OFFLINE_ACTS = Object.freeze([
   SOCIAL_ACTS.FAREWELL,
   SOCIAL_ACTS.IDENTITY,
   SOCIAL_ACTS.CAPABILITY,
+  SOCIAL_ACTS.WELLBEING,
   SOCIAL_ACTS.APOLOGY,
   SOCIAL_ACTS.CONGRATS,
   SOCIAL_ACTS.SMALL_TALK
@@ -100,14 +101,25 @@ function honestText(act, locale) {
  * Understand one sentence as small talk.
  * @returns {null|{ok,act,lang,text,mentionsNumbers,serverNeeded,reason,executionAuthorized}}
  */
-export function composeSocialReply(text, { locale = 'fa', seed = null } = {}) {
+export function composeSocialReply(text, { locale = 'fa', seed = null, prior = null } = {}) {
   let classified = null;
   try {
-    classified = classifySocialAct(text, { locale });
+    classified = classifySocialAct(text, { locale, prior });
   } catch {
     return null;
   }
   const act = classified?.act || null;
+  if (classified?.followUpLike) {
+    return {
+      ok: false,
+      act,
+      reason: 'CONTEXTUAL_FOLLOW_UP',
+      lang: classified.lang || null,
+      serverNeeded: false,
+      followUpLike: true,
+      executionAuthorized: false
+    };
+  }
   if (!classified?.social) {
     return {
       ok: false,
@@ -165,8 +177,8 @@ export function composeSocialReply(text, { locale = 'fa', seed = null } = {}) {
  * the honest "this one needs live data" refusal. `null` for anything that is
  * not small talk at all, so a real request keeps its normal error path.
  */
-export function offlineSocialFallback(text, { locale = 'fa' } = {}) {
-  const turn = composeSocialReply(text, { locale });
+export function offlineSocialFallback(text, { locale = 'fa', prior = null } = {}) {
+  const turn = composeSocialReply(text, { locale, prior });
   if (!turn) return null;
   if (turn.ok) {
     return {
@@ -197,6 +209,6 @@ export function offlineSocialFallback(text, { locale = 'fa' } = {}) {
  * True when the sentence is small talk the local layer can answer with a voice
  * alone — used by the chat to route it before the pipeline.
  */
-export function isPureSocialTurn(text, { locale = 'fa' } = {}) {
-  return composeSocialReply(text, { locale })?.ok === true;
+export function isPureSocialTurn(text, { locale = 'fa', prior = null } = {}) {
+  return composeSocialReply(text, { locale, prior })?.ok === true;
 }
