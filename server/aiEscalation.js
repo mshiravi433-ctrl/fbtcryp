@@ -369,12 +369,12 @@ function safeContext(context = {}) {
   const rows = [];
   const market = context.market;
   if (market?.priceMap && Object.keys(market.priceMap).length) {
-    rows.push(`MARKET(quote cache): ${Object.entries(market.priceMap).map(([s, p]) => Number.isFinite(Number(p)) ? `${s}=${Number(p)}` : `${s}=unavailable`).join(', ')}${market.change24hPct != null ? `, btc24h=${Number(market.change24hPct).toFixed(2)}%` : ''}`);
+    rows.push(`MARKET(quote cache, status ${market.dataStatus || 'unknown'}; stale is not live): ${Object.entries(market.priceMap).map(([s, p]) => Number.isFinite(Number(p)) ? `${s}=${Number(p)}` : `${s}=unavailable`).join(', ')}${market.change24hPct != null ? `, btc24h=${Number(market.change24hPct).toFixed(2)}%` : ''}`);
   }
   if (Array.isArray(context.yields) && context.yields.length) {
     rows.push(`YIELDS(top): ${context.yields.slice(0, 5).map((y) => `${y.symbol || y.protocol}@${y.apy}%`).join(', ')}`);
   }
-  if (Number.isFinite(Number(context.portfolio?.totalValueUsd))) {
+  if (context.portfolio?.totalValueUsd != null && context.portfolio.totalValueUsd !== '' && Number.isFinite(Number(context.portfolio.totalValueUsd))) {
     rows.push(`PORTFOLIO(aggregate only): $${Number(context.portfolio.totalValueUsd).toFixed(0)}`);
   }
   /* Bounded, labelled background — the same rule `buildSafeContextBlock` uses.

@@ -30,7 +30,7 @@
  *   - Every number returned is real data or reported unavailable — never a
  *     guess and never a hard-coded balance/price/hash.
  */
-import { chatTurnCeiling, recentChatHistory } from './aiChatReliability.js';
+import { chatTurnCeiling, recentChatHistory, normalizeMarketSnapshot } from './aiChatReliability.js';
 import { Router } from 'express';
 import { createHash } from 'node:crypto';
 import {
@@ -249,14 +249,8 @@ async function marketContext() {
   try {
     /* swr: a warm cache answers instantly and refreshes in the background —
        a chat turn never waits on CoinGecko when a recent read exists. */
-    const { value } = await withCache('ai-os:market', 60_000, () => fetchSimplePrices(['bitcoin', 'ethereum', 'solana'], 'usd'), { swr: true });
-    const g = value || {};
-    const price = (row) => (Number.isFinite(Number(row?.usd)) ? Number(row.usd) : null);
-    return {
-      dataStatus: 'live',
-      change24hPct: Number.isFinite(Number(g.bitcoin?.usd_24h_change)) ? Number(g.bitcoin.usd_24h_change) : null,
-      priceMap: { BTC: price(g.bitcoin), ETH: price(g.ethereum), SOL: price(g.solana) }
-    };
+    const { value, stale } = await withCache('ai-os:market', 60_000, () => fetchSimplePrices(['bitcoin', 'ethereum', 'solana'], 'usd'), { swr: true });
+    return normalizeMarketSnapshot(value, stale);
   } catch {
     return { dataStatus: 'unavailable', change24hPct: null, priceMap: null };
   }

@@ -37,11 +37,11 @@ export const PROFESSOR_LENSES = Object.freeze({
   }),
   BASE_RATE: Object.freeze({
     id: 'BASE_RATE',
-    line: 'give the base rate before the story: what usually happens in this situation, and how many instances support it.'
+    line: 'when a relevant, reliable base rate and sample size are supplied, give them before the story; otherwise say the base rate is unknown, never invent one.'
   }),
   CONCRETE_EXAMPLE: Object.freeze({
     id: 'CONCRETE_EXAMPLE',
-    line: 'attach one concrete worked example (one number, one position, one date) so the reader can check the logic instead of trusting it.'
+    line: 'where useful attach a worked example; use supplied numbers or clearly label hypothetical numbers, never present them as live observations.'
   }),
   UNCERTAINTY_RANGE: Object.freeze({
     id: 'UNCERTAINTY_RANGE',

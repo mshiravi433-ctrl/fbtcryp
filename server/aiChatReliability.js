@@ -14,3 +14,16 @@ export function recentChatHistory(messages, currentMessage, safeText) {
     return text ? `${row.role === 'user' ? 'User' : 'Assistant'}: ${text}` : '';
   }).filter(Boolean).join('\n').slice(-600);
 }
+
+/** Keep missing prices missing and preserve cache freshness for all chat layers. */
+export function normalizeMarketSnapshot(value, stale = false) {
+  const data = value || {};
+  const number = (v) => v == null || v === '' || typeof v === 'boolean' || !Number.isFinite(Number(v)) ? null : Number(v);
+  const price = (row) => { const n = number(row?.usd); return n != null && n > 0 ? n : null; };
+  const priceMap = { BTC: price(data.bitcoin), ETH: price(data.ethereum), SOL: price(data.solana) };
+  return {
+    dataStatus: !Object.values(priceMap).some((v) => v != null) ? 'unavailable' : stale ? 'stale' : 'live',
+    change24hPct: number(data.bitcoin?.usd_24h_change),
+    priceMap
+  };
+}
