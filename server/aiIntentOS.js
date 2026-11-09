@@ -2135,6 +2135,10 @@ router.post('/chat', async (req, res) => {
     intelligence: resolvedIntelligence.mode,
     intelligenceFloor: intelligenceProfile.collaborationFloor,
     intelligenceCeiling: intelligenceProfile.collaborationCeiling
+,
+    /* Increment 23 — deep thinking is the default; a deployment can turn it
+       off with FBT_AI_DEEP_THINK=0 and get the pre-increment behaviour. */
+    deepThink: String(process.env.FBT_AI_DEEP_THINK ?? '1') !== '0'
   });
   /*
    * ─── UPGRADE 13 — THE SOCIAL TURN IS ANSWERED BEFORE ANYTHING ELSE ──────
@@ -2642,6 +2646,11 @@ router.post('/chat', async (req, res) => {
         rejected: resolvedIntelligence.rejected,
         reasoning: Boolean(intelligenceProfile.reasoning),
         plan: u5.intelligence || null,
+        /* Increment 23 — deep thinking is on by default, and an incomplete
+           message is never answered on the one-line path. `partial` is what the
+           turn understood the message to mean when the words did not say it. */
+        deepThink: u5.deepThink || null,
+        partial: u5.partial || null,
         authority: { canExecute: false, canSign: false, canMoveFunds: false }
       },
       /* Upgrade 13: the escalation trail. `gapReasons` says WHY the fleet was

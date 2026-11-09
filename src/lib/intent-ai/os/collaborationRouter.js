@@ -33,6 +33,11 @@ import { normalizeUpgrade4 } from './intentUnderstandingEngine.js';
    its result onto the conversation kinds it already emits, so every existing
    consumer (needsWeb, complexity, level, roles) keeps working unchanged. */
 import { classifySocialAct, socialCostOf, SOCIAL_ACTS } from './conversation/socialIntent.js';
+/* Increment 23 — the partial-input read. A fragment («بیتکوین؟»), a sentence cut
+   mid-thought («استراتژی من با ۲۰۰۰۰») or a line typed in the wrong keyboard
+   layout is not small talk: it is where a wrong reading costs the most, so it
+   gets a depth floor of its own (see `deepThinkFloor` in that module). */
+import { readPartialInput, deepThinkFloor } from './conversation/partialInput.js';
 
 export const COLLABORATION_ROUTER_SCHEMA = 'fbt.collaboration-router.v5';
 export const COLLABORATION_ROUTER_VERSION = '5.0.0';
@@ -489,7 +494,13 @@ export function planCollaboration({
    * five-model run because someone chose "smartest". */
   intelligence = null,
   intelligenceFloor = 0,
-  intelligenceCeiling = 5
+  intelligenceCeiling = 5,
+  /* ── deep thinking (2026-11-09, increment 23) ──────────────────────────
+   * On by default: understanding is always read deeply (the partial-input
+   * layer runs in every mode, at every level, for free), and an incomplete
+   * message is never answered on the one-line path. `FBT_AI_DEEP_THINK=0`
+   * restores the pre-increment behaviour for a deployment that needs it. */
+  deepThink = true
 } = {}) {
   const text = String(message || '').trim();
   const normalized = normalizeUpgrade4(text);
@@ -528,12 +539,28 @@ export function planCollaboration({
     CONVERSATION_KINDS.CASUAL,
     CONVERSATION_KINDS.WHATS_UP
   ].includes(conversationKind);
-  const floor = Math.max(0, Math.min(5, Number(intelligenceFloor) || 0));
+  /* The partial-input read runs for every message in every mode: it costs no
+     model call, and a fragment that is misread is expensive in a way that a
+     cheap answer is not. */
+  const partialRead = readPartialInput({ message: text, locale, context, priorIntent });
+  const partialDepth = deepThink
+    ? deepThinkFloor({ read: partialRead, smallTalk: pureSocial })
+    : { floor: 0, reason: 'disabled' };
+  const modeFloor = Math.max(0, Math.min(5, Number(intelligenceFloor) || 0));
+  /* The deep-think floor can only raise a real request, never a greeting, and
+     never past the mode's own ceiling. */
+  const floor = Math.max(modeFloor, partialDepth.floor);
   const ceiling = Math.max(1, Math.min(5, Number(intelligenceCeiling) || 5));
   const raised = !pureSocial && floor > baseEffectiveLevel;
   const effectiveLevel = pureSocial
     ? Math.min(baseEffectiveLevel, 2)
     : Math.min(ceiling, Math.max(baseEffectiveLevel, floor));
+  /* What the level would have been WITHOUT the partial-input floor — so
+     `deepThink.applied` means "the incomplete reading bought this turn depth",
+     not "the mode happened to be deep anyway". */
+  const levelWithoutPartial = pureSocial
+    ? Math.min(baseEffectiveLevel, 2)
+    : Math.min(ceiling, Math.max(baseEffectiveLevel, modeFloor));
   const depthTasks = raised && effectiveLevel >= 4
     ? [...new Set([...taskTypes, 'reasoning', 'verification'])].filter((t) => TASK_TYPES.includes(t))
     : taskTypes;
@@ -593,6 +620,26 @@ export function planCollaboration({
       raised,
       smallTalkProtected: pureSocial,
       analyzerLevel: baseEffectiveLevel
+    },
+    /* Increment 23 — what the message probably meant when it did not say it,
+       and how deep that reading forced the turn to run. */
+    partial: {
+      completeness: partialRead.completeness,
+      confidence: partialRead.confidence,
+      act: partialRead.inferred.act,
+      assets: partialRead.inferred.assets,
+      amount: partialRead.inferred.amount,
+      missing: partialRead.missing.map((m) => m.slot),
+      assumptions: partialRead.assumptions.map((a) => ({ slot: a.slot, value: a.value, basis: a.basis })),
+      repairs: partialRead.repairs.map((r) => ({ from: r.token, to: r.to, how: r.how })),
+      questionBudget: partialRead.questionBudget
+    },
+    deepThink: {
+      enabled: deepThink !== false,
+      understanding: 'deep',
+      partialFloor: partialDepth.floor,
+      reason: partialDepth.reason,
+      applied: !pureSocial && effectiveLevel > levelWithoutPartial
     },
     needsAssetClarification,
     requiresExecutionGuard: fomo.detected || emotion.state === 'panic',

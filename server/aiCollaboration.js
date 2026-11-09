@@ -95,6 +95,12 @@ import {
   renderDiscourseDeficit
 } from './aiDiscourseMirror.js';
 import {
+  readPartialInput,
+  renderPartialContract,
+  checkPartialAnswer,
+  renderPartialDeficit
+} from '../src/lib/intent-ai/os/conversation/partialInput.js';
+import {
   detectProductQuestion,
   answerProduct,
   renderProductBrief,
@@ -373,7 +379,7 @@ const ROLE_TASK = {
   [AI_ROLES.FINAL_ANSWER_AI]: 'reasoning'
 };
 
-async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '', decisionBrief = '', dialogueBrief = '', professorBrief = '', researchBrief = '', marketBrief = '', requestBrief = '', emotionBrief = '', situationBrief = '', discourseBrief = '', productBrief = '' }) {
+async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '', decisionBrief = '', dialogueBrief = '', professorBrief = '', researchBrief = '', marketBrief = '', requestBrief = '', emotionBrief = '', situationBrief = '', discourseBrief = '', productBrief = '', partialBrief = '' }) {
   /*
    * ─── DEEP REASONING CONTRACT (smartest mode only) ─────────────────────────
    * The role prompts are shared by every mode, so the extra discipline lives
@@ -400,7 +406,7 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
     /* The economist's lens is a reasoning contract, not a costume: it rides on
        the specialists and the synthesiser, never on the reviewer (whose job is
        to break the draft, not to reason about the economy). */
-    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}${dialogueBrief ? `\n${dialogueBrief}` : ''}${professorBrief ? `\n${professorBrief}` : ''}${researchBrief ? `\n${researchBrief}` : ''}${marketBrief ? `\n${marketBrief}` : ''}${requestBrief ? `\n${requestBrief}` : ''}${emotionBrief ? `\n${emotionBrief}` : ''}${situationBrief ? `\n${situationBrief}` : ''}${discourseBrief ? `\n${discourseBrief}` : ''}${productBrief ? `\n${productBrief}` : ''}`;
+    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}${dialogueBrief ? `\n${dialogueBrief}` : ''}${professorBrief ? `\n${professorBrief}` : ''}${researchBrief ? `\n${researchBrief}` : ''}${marketBrief ? `\n${marketBrief}` : ''}${requestBrief ? `\n${requestBrief}` : ''}${emotionBrief ? `\n${emotionBrief}` : ''}${situationBrief ? `\n${situationBrief}` : ''}${discourseBrief ? `\n${discourseBrief}` : ''}${productBrief ? `\n${productBrief}` : ''}${partialBrief ? `\n${partialBrief}` : ''}`;
   /*
    * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
    * This line used to be a ternary: Persian or English. Everything a Turkish,
@@ -751,6 +757,10 @@ export async function runCollaborativeAnalysis({
     intelligence: preResolved.mode,
     intelligenceFloor: preProfile.collaborationFloor,
     intelligenceCeiling: preProfile.collaborationCeiling
+,
+    /* Increment 23 — deep thinking is the default; a deployment can turn it
+       off with FBT_AI_DEEP_THINK=0 and get the pre-increment behaviour. */
+    deepThink: String(process.env.FBT_AI_DEEP_THINK ?? '1') !== '0'
   });
   /* One resolution for the whole run. `analysis.intelligence.mode` is the mode
      the plan was built with; an explicit argument wins over it. */
@@ -823,6 +833,23 @@ export async function runCollaborativeAnalysis({
     ? readDiscourse({ message, locale, social: socialRead, emotion: emotionRead })
     : null;
   const discourseBrief = renderDiscourseContract(discourseRead);
+  /*
+   * ─── PARTIAL INPUT (every mode) ────────────────────────────────────────────
+   * Most messages are not complete sentences. «بیتکوین؟»، «استراتژی من با
+   * ۲۰۰۰۰»، «fovl» (typed on the wrong keyboard layout) — a layer that waits for
+   * a well-formed question treats all of that as small talk, and one that
+   * guesses silently answers a question nobody asked, with numbers nobody gave.
+   * So the read runs in EVERY mode (it costs no model call), names the
+   * assumption, and allows exactly one question. When the message is complete,
+   * the brief is '' and every earlier prompt stays byte-identical.
+   */
+  const partialRead = readPartialInput({
+    message,
+    locale,
+    context: context || {},
+    priorIntent: intentType || plan?.intentType || null
+  });
+  const partialBrief = renderPartialContract(partialRead);
   /*
    * ─── PRODUCT BRAIN (smartest mode) ─────────────────────────────────────────
    * «FBT چیه؟»، «این صفحه چیکار می‌کنه؟»، «کارمزد چقدره؟»، «سازنده‌هاش کی هستن؟»
@@ -998,6 +1025,9 @@ export async function runCollaborativeAnalysis({
        knowledge does NOT contain, plus whether the final text stayed inside it.
        Set only on turns that ask about the product. null otherwise. */
     product: null,
+    /* What an incomplete message probably meant, what was assumed, and whether
+       the final text named the assumption and kept to one question. */
+    partial: null,
     /* The emotional state the answer was written for, and whether the final
        text respected it. null outside max, or for a neutral message. */
     emotion: null,
@@ -1173,7 +1203,7 @@ export async function runCollaborativeAnalysis({
       : plan.taskTypes.includes('crypto-analysis') || plan.taskTypes.includes('research') ? AI_ROLES.CRYPTO_RESEARCH_AI
       : plan.taskTypes.includes('risk') ? AI_ROLES.RISK_AI
       : AI_ROLES.CRYPTO_RESEARCH_AI;
-    const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: 0, intelligence: mode, emotionBrief, situationBrief, discourseBrief, productBrief }), null);
+    const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: 0, intelligence: mode, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief }), null);
     if (single?.ok) { analyses.push(single); result.answer = single.answer; }
     else { result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale }); result.degraded = true; }
   } else if (plan.level === 3) {
@@ -1182,7 +1212,7 @@ export async function runCollaborativeAnalysis({
        analyses are genuinely different providers, not one model twice. */
     const roles = pickAnalysisRoles(plan, 2);
     const settled = await withDeadline(
-      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief, dialogueBrief, professorBrief, researchBrief, marketBrief, requestBrief, emotionBrief, situationBrief, discourseBrief, productBrief }))),
+      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief, dialogueBrief, professorBrief, researchBrief, marketBrief, requestBrief, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief }))),
       []
     );
     analyses.push(...(settled || []).filter(Boolean));
@@ -1261,7 +1291,8 @@ export async function runCollaborativeAnalysis({
         emotionBrief,
         situationBrief,
         discourseBrief,
-        productBrief
+        productBrief,
+        partialBrief
       }), null);
       if (verifier?.ok) analyses.push(verifier);
     }
@@ -1331,7 +1362,8 @@ export async function runCollaborativeAnalysis({
         emotionBrief,
         situationBrief,
         discourseBrief,
-        productBrief
+        productBrief,
+        partialBrief
       }), null);
       result.answer = finalRole?.ok
         ? finalRole.answer
@@ -1387,6 +1419,7 @@ export async function runCollaborativeAnalysis({
       const draftSituation = situationRead ? checkSituationResponse({ situation: situationRead, answer: result.answer }) : null;
       const draftDiscourse = discourseRead ? checkDiscourseMirror({ discourse: discourseRead, answer: result.answer }) : null;
       const draftProduct = productRead ? checkProductAnswer({ product: productRead, answer: result.answer }) : null;
+      const draftPartial = checkPartialAnswer({ read: partialRead, answer: result.answer });
       /*
        * ─── DECISION VERDICT ON THE DRAFT ─────────────────────────────────────
        * Re-score the evidence now that the analyses, the verifier and the claim
@@ -1466,9 +1499,10 @@ export async function runCollaborativeAnalysis({
           const situationDeficitBlock = renderSituationDeficit(draftSituation);
           const discourseDeficitBlock = renderDiscourseDeficit(draftDiscourse);
           const productDeficitBlock = renderProductDeficit(draftProduct);
+          const partialDeficitBlock = renderPartialDeficit(draftPartial);
           const criticRole = {
             role: AI_ROLES.VERIFICATION_AI,
-            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}${dialogueDeficitBlock ? `\n\n${dialogueDeficitBlock}` : ''}${falsifierDeficitBlock ? `\n\n${falsifierDeficitBlock}` : ''}${marketViolationBlock ? `\n\n${marketViolationBlock}` : ''}${requestDeficitBlock ? `\n\n${requestDeficitBlock}` : ''}${emotionDeficitBlock ? `\n\n${emotionDeficitBlock}` : ''}${situationDeficitBlock ? `\n\n${situationDeficitBlock}` : ''}${discourseDeficitBlock ? `\n\n${discourseDeficitBlock}` : ''}${productDeficitBlock ? `\n\n${productDeficitBlock}` : ''}`,
+            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}${dialogueDeficitBlock ? `\n\n${dialogueDeficitBlock}` : ''}${falsifierDeficitBlock ? `\n\n${falsifierDeficitBlock}` : ''}${marketViolationBlock ? `\n\n${marketViolationBlock}` : ''}${requestDeficitBlock ? `\n\n${requestDeficitBlock}` : ''}${emotionDeficitBlock ? `\n\n${emotionDeficitBlock}` : ''}${situationDeficitBlock ? `\n\n${situationDeficitBlock}` : ''}${discourseDeficitBlock ? `\n\n${discourseDeficitBlock}` : ''}${productDeficitBlock ? `\n\n${productDeficitBlock}` : ''}${partialDeficitBlock ? `\n\n${partialDeficitBlock}` : ''}`,
             contextBlock: '',
             locale,
             deps: D,
@@ -1692,6 +1726,25 @@ export async function runCollaborativeAnalysis({
       numbers: situationRead.numbers,
       violations: finalSituation.issues.map((i) => i.id),
       compliant: finalSituation.compliant
+    };
+  }
+
+  {
+    /* Published on every turn: `completeness: complete` is itself the answer to
+       "did you understand me, or did you guess?" */
+    const finalPartial = checkPartialAnswer({ read: partialRead, answer: result.answer });
+    result.partial = {
+      schema: partialRead.schema,
+      completeness: partialRead.completeness,
+      confidence: partialRead.confidence,
+      act: partialRead.inferred.act,
+      assets: partialRead.inferred.assets,
+      missing: partialRead.missing.map((m) => m.slot),
+      assumptions: partialRead.assumptions.map((a) => a.slot),
+      repairs: partialRead.repairs.map((r) => r.how),
+      questionBudget: partialRead.questionBudget,
+      violations: finalPartial.issues.map((i) => i.id),
+      compliant: finalPartial.compliant
     };
   }
 
