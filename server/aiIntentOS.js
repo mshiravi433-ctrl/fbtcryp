@@ -2498,6 +2498,23 @@ router.post('/chat', async (req, res) => {
           relationship: collaboration.socialRead.relationship || null,
           signals: Array.isArray(collaboration.socialRead.signals) ? collaboration.socialRead.signals.slice(0, 8) : []
         } : null,
+        /* The emotional state the answer was written for: the primary emotion,
+           how strongly, whether it is self- or other-directed, what the answer
+           owed it, and whether the final text respected that. */
+        emotion: collaboration?.emotion ? {
+          primary: collaboration.emotion.primary,
+          mixed: Array.isArray(collaboration.emotion.mixed) ? collaboration.emotion.mixed : [],
+          intensity: collaboration.emotion.intensity,
+          acute: collaboration.emotion.acute === true,
+          selfDirected: collaboration.emotion.selfDirected === true,
+          cause: collaboration.emotion.cause || null,
+          valence: collaboration.emotion.valence,
+          arousal: collaboration.emotion.arousal,
+          needs: Array.isArray(collaboration.emotion.needs) ? collaboration.emotion.needs : [],
+          trajectory: collaboration.emotion.trajectory || 'unknown',
+          violations: Array.isArray(collaboration.emotion.violations) ? collaboration.emotion.violations : [],
+          compliant: collaboration.emotion.compliant === true
+        } : null,
         /* What the turn understood the request to be: the deliverable, the
            constraints the user actually gave, the slots they left empty, and
            whether the answer kept those promises. null outside max/level 3+. */
