@@ -1,16 +1,5 @@
 /**
- * THE TAPE — recent prints, newest first.
- * ---------------------------------------------------------------------------
- * Every row answers "who was the aggressor, at what price, for how much". The
- * colour is the TAKER side (see lib/dydx.js): a print where a buyer lifted an
- * offer is green because the buyer crossed, which is the only reading that
- * matches what happened. A print whose side the venue did not state is drawn
- * neutral and labelled — not coloured by a guess.
- *
- * The size bar is normalised to the biggest print in the window, so it shows
- * relative weight inside the tape and nothing about the market beyond it. That
- * is stated in the aria label, because a bar chart on a trading screen is read
- * as a statistic whether or not it is one.
+ * THE TAPE — Redesigned recent trade stream inside a glass telemetry box.
  */
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -51,11 +40,16 @@ export default function Tape({ trades = [], live = false, loading = false, reaso
     return (
       <div className="pt-tape" data-testid={testId}>
         <div className="pt-panel-head">
-          <span className="pt-panel-title">{t('perpTerminal.tape.title', { defaultValue: 'Tape' })}</span>
+          <div className="pt-panel-title-wrap">
+            <span className="pt-panel-dot is-emerald" aria-hidden="true" />
+            <span className="pt-panel-title">{t('perpTerminal.tape.title', { defaultValue: 'Tape' })}</span>
+          </div>
         </div>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="pt-skel pt-skel-row" />
-        ))}
+        <div className="pt-tape-box">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="pt-skel pt-skel-row" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -64,13 +58,23 @@ export default function Tape({ trades = [], live = false, loading = false, reaso
     return (
       <div className="pt-tape" data-testid={testId}>
         <div className="pt-panel-head">
-          <span className="pt-panel-title">{t('perpTerminal.tape.title', { defaultValue: 'Tape' })}</span>
+          <div className="pt-panel-title-wrap">
+            <span className="pt-panel-dot is-emerald" aria-hidden="true" />
+            <span className="pt-panel-title">{t('perpTerminal.tape.title', { defaultValue: 'Tape' })}</span>
+          </div>
         </div>
-        <p className="pt-empty" data-testid="perp-tape-empty">
-          {reason === 'INDEXER_UNAVAILABLE'
-            ? t('perpTerminal.tape.unavailable', { defaultValue: 'The indexer is not answering, so there are no prints to show.' })
-            : t('perpTerminal.tape.none', { defaultValue: 'No trades in the window the venue returned.' })}
-        </p>
+        <div className="pt-empty-box">
+          <span className="pt-empty-ico" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+            </svg>
+          </span>
+          <p className="pt-empty" data-testid="perp-tape-empty">
+            {reason === 'INDEXER_UNAVAILABLE'
+              ? t('perpTerminal.tape.unavailable', { defaultValue: 'The indexer is not answering, so there are no prints to show.' })
+              : t('perpTerminal.tape.none', { defaultValue: 'No trades in the window the venue returned.' })}
+          </p>
+        </div>
       </div>
     );
   }
@@ -78,39 +82,55 @@ export default function Tape({ trades = [], live = false, loading = false, reaso
   return (
     <div className="pt-tape" data-testid={testId}>
       <div className="pt-panel-head">
-        <span className="pt-panel-title">{t('perpTerminal.tape.title', { defaultValue: 'Tape' })}</span>
+        <div className="pt-panel-title-wrap">
+          <span className="pt-panel-dot is-emerald" aria-hidden="true" />
+          <span className="pt-panel-title">{t('perpTerminal.tape.title', { defaultValue: 'Tape' })}</span>
+          {live && <span className="pt-live" aria-label={t('perpTerminal.live', { defaultValue: 'live' })} />}
+        </div>
         {tape.buySharePct != null && (
-          <span className="pt-muted pt-mono" data-testid="perp-tape-buyshare">
+          <span className="pt-pill-stat pt-mono" data-testid="perp-tape-buyshare">
             {t('perpTerminal.tape.buys', { defaultValue: 'buys' })} {tape.buySharePct.toFixed(0)}%
           </span>
         )}
-        {live && <span className="pt-live" aria-label={t('perpTerminal.live', { defaultValue: 'live' })} />}
       </div>
 
-      <div className="pt-tape-grid pt-mono" role="table"
-        aria-label={t('perpTerminal.tape.alt', { defaultValue: 'Recent trades: price, size and side of the aggressor' })}>
-        <div className="pt-tape-head" role="row">
-          <span role="columnheader">{t('perpTerminal.tape.price', { defaultValue: 'Price' })}</span>
-          <span role="columnheader">{t('perpTerminal.tape.size', { defaultValue: 'Size' })}</span>
-          <span role="columnheader">{t('perpTerminal.tape.time', { defaultValue: 'Time' })}</span>
-        </div>
-        {tape.rows.map((r) => (
-          <div key={r.id} className="pt-tape-row" role="row" data-side={r.side}
-            data-testid={`perp-tape-row-${r.side}`}>
-            <span role="cell" className={r.side === 'buy' ? 'pt-up' : r.side === 'sell' ? 'pt-down' : 'pt-muted'}>
-              {/* The arrow is the non-colour cue: direction is never colour-only. */}
-              {r.side === 'buy' ? '▲ ' : r.side === 'sell' ? '▼ ' : '• '}
-              {fmtPrice(r.price)}
-            </span>
-            <span role="cell" className="pt-tape-size">
-              <span className="pt-tape-bar" style={{ width: `${(r.barPct ?? 0).toFixed(0)}%` }} aria-hidden="true" />
-              <span>{fmtSize(r.size)}</span>
-            </span>
-            <span role="cell" className="pt-muted" title={fmtUsd(r.usd)}>{fmtClock(r.atMs, locale)}</span>
+      <div className="pt-tape-box">
+        <div
+          className="pt-tape-grid pt-mono"
+          role="table"
+          dir="ltr"
+          aria-label={t('perpTerminal.tape.alt', { defaultValue: 'Recent trades: price, size and side of the aggressor' })}
+        >
+          <div className="pt-tape-head" role="row">
+            <span role="columnheader">{t('perpTerminal.tape.price', { defaultValue: 'Price' })}</span>
+            <span role="columnheader">{t('perpTerminal.tape.size', { defaultValue: 'Size' })}</span>
+            <span role="columnheader">{t('perpTerminal.tape.time', { defaultValue: 'Time' })}</span>
           </div>
-        ))}
+          {tape.rows.map((r) => (
+            <div
+              key={r.id}
+              className="pt-tape-row"
+              role="row"
+              data-side={r.side}
+              data-testid={`perp-tape-row-${r.side}`}
+            >
+              <span role="cell" className={`pt-tape-px-cell ${r.side === 'buy' ? 'pt-up' : r.side === 'sell' ? 'pt-down' : 'pt-muted'}`}>
+                {r.side === 'buy' ? '▲ ' : r.side === 'sell' ? '▼ ' : '• '}
+                {fmtPrice(r.price)}
+              </span>
+              <span role="cell" className="pt-tape-size">
+                <span className="pt-tape-bar" style={{ width: `${(r.barPct ?? 0).toFixed(0)}%` }} aria-hidden="true" />
+                <span>{fmtSize(r.size)}</span>
+              </span>
+              <span role="cell" className="pt-muted pt-tape-time" title={fmtUsd(r.usd)}>
+                {fmtClock(r.atMs, locale)}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
-      <p className="pt-note">
+
+      <p className="pt-note pt-tape-foot">
         {t('perpTerminal.tape.sideNote', {
           defaultValue: 'Colour is the side of the aggressor (the taker), not the resting order.'
         })}

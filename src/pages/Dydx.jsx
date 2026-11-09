@@ -428,10 +428,18 @@ export default function Dydx({ embedded = false } = {}) {
             )}
           </div>
 
-          {market && <div className="row-between" style={{ margin: '12px 0' }}>
-            <div><div className="faint">{t('dydx.oraclePrice')}</div><div className="stat-mini mono">${fmtPrice(market.oraclePrice)}</div></div>
-            <div style={{ textAlign: 'end' }}><div className="faint">{t('dydx.openInterest')}</div><div className="mono">{fmtUsd(market.openInterest * market.oraclePrice)}</div></div>
-          </div>}
+          {market && (
+            <div className="deriv-kpi-strip">
+              <div className="deriv-kpi-pod">
+                <div className="faint" style={{ fontSize: 11 }}>{t('dydx.oraclePrice')}</div>
+                <div className="stat-mini mono">${fmtPrice(market.oraclePrice)}</div>
+              </div>
+              <div className="deriv-kpi-pod">
+                <div className="faint" style={{ fontSize: 11 }}>{t('dydx.openInterest')}</div>
+                <div className="stat-mini mono">{fmtUsd(market.openInterest * market.oraclePrice)}</div>
+              </div>
+            </div>
+          )}
 
           <div className="dir-switch">
             <button
@@ -441,7 +449,7 @@ export default function Dydx({ embedded = false } = {}) {
             >
               <span className="dir-ico">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 19V5" /><path d="m5 12 7-7 7 7" />
+                  <path d="M7 17L17 7" /><path d="M8 7h9v9" />
                 </svg>
               </span>
               {t('dydx.buy')}
@@ -454,7 +462,7 @@ export default function Dydx({ embedded = false } = {}) {
             >
               <span className="dir-ico">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 5v14" /><path d="m19 12-7 7-7-7" />
+                  <path d="M7 7l10 10" /><path d="M17 8v9H8" />
                 </svg>
               </span>
               {t('dydx.sell')}
@@ -462,41 +470,47 @@ export default function Dydx({ embedded = false } = {}) {
             </button>
           </div>
 
-          <div className="segmented" style={{ marginBottom: 12 }}>
-            {[
-              { id: 'market', label: t('dydx.order.market') },
-              { id: 'limit', label: t('dydx.order.limit') }
-            ].map((o) => (
-              <button key={o.id} className={orderType === o.id ? 'active' : ''} onClick={() => setOrderType(o.id)} style={{ isolation: 'isolate' }}>
-                {orderType === o.id && <SegIndicator id="dydx-otype" />}
-                {o.label}
-              </button>
-            ))}
+          <div className="deriv-field-card">
+            <div className="segmented">
+              {[
+                { id: 'market', label: t('dydx.order.market') },
+                { id: 'limit', label: t('dydx.order.limit') }
+              ].map((o) => (
+                <button key={o.id} type="button" className={orderType === o.id ? 'active' : ''} onClick={() => setOrderType(o.id)} style={{ isolation: 'isolate' }}>
+                  {orderType === o.id && <SegIndicator id="dydx-otype" />}
+                  {o.label}
+                </button>
+              ))}
+            </div>
+
+            {orderType === 'limit' && (
+              <div style={{ marginTop: 6 }}>
+                <label className="field-label">{t('dydx.order.limitPrice')}</label>
+                <input type="number" inputMode="decimal" min="0" value={limitPrice} onChange={(e) => setLimitPrice(e.target.value)} placeholder={market ? `$${market.oraclePrice.toFixed(2)}` : '0.00'} />
+                <p className="faint" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.7 }}>{t('dydx.order.limitHint')}</p>
+              </div>
+            )}
           </div>
 
-          {orderType === 'limit' && (
-            <>
-              <label className="field-label">{t('dydx.order.limitPrice')}</label>
-              <input type="number" inputMode="decimal" min="0" value={limitPrice} onChange={(e) => setLimitPrice(e.target.value)} placeholder={market ? `$${market.oraclePrice.toFixed(2)}` : '0.00'} />
-              <p className="faint" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.7 }}>{t('dydx.order.limitHint')}</p>
-            </>
-          )}
-
-          <label className="field-label">{t('dydx.size', { asset: market?.ticker?.split('-')[0] || '' })}</label>
-          <input type="number" inputMode="decimal" min="0" value={size} onChange={(e) => setSize(e.target.value)} placeholder="0.00" />
-          <label className="field-label" style={{ marginTop: 10 }}>{t('dydx.slippage')}</label>
-          <div className="row" style={{ gap: 6 }}>
-            {[0.1, 0.5, 1].map((n) => <button className={`tag ${Number(slippage) === n ? 'active' : ''}`} key={n} onClick={() => setSlippage(String(n))}>{n}%</button>)}
+          <div className="deriv-field-card">
+            <label className="field-label">{t('dydx.size', { asset: market?.ticker?.split('-')[0] || '' })}</label>
+            <input type="number" inputMode="decimal" min="0" value={size} onChange={(e) => setSize(e.target.value)} placeholder="0.00" />
+            <label className="field-label" style={{ marginTop: 6 }}>{t('dydx.slippage')}</label>
+            <div className="lev-row">
+              {[0.1, 0.5, 1].map((n) => (
+                <button type="button" className={`lev-chip ${Number(slippage) === n ? 'active' : ''}`} key={n} onClick={() => setSlippage(String(n))}>{n}%</button>
+              ))}
+            </div>
           </div>
 
-          <div className="brg-quote" style={{ marginTop: 12 }}>
+          <div className="brg-quote deriv-telemetry-card" style={{ marginTop: 12 }}>
             <div className="row-between"><span className="faint">{t('dydx.notional')}</span><span className="mono">{fmtUsd(notional)}</span></div>
             <div className="row-between"><span className="faint">{t('dydx.builderFee')}</span><span className="mono">{fmtUsd(fee)}</span></div>
             <div className="row-between"><span className="faint">{t('dydx.funding')}</span><span className="mono">{Number(market?.nextFundingRate || 0).toFixed(6)}%</span></div>
           </div>
 
           {error && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t(`dydx.err.${error}`, { defaultValue: error })}</p>}
-          <button className={`btn ${side === 'buy' ? 'btn-success' : 'btn-danger'}`} disabled={!canReview || busy} onClick={() => setReviewing(true)} style={{ width: '100%', marginTop: 12 }}>
+          <button className={`btn ${side === 'buy' ? 'btn-success' : 'btn-danger'}`} disabled={!canReview || busy} onClick={() => setReviewing(true)} style={{ width: '100%', minHeight: 48, marginTop: 12, borderRadius: 14, fontWeight: 800 }}>
             {dydxAddress ? t('dydx.review') : t('dydx.connect')}
           </button>
         </motion.section>

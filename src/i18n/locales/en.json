@@ -2212,7 +2212,26 @@
     "subtabs": {
       "aria": "Perpetual view",
       "pairs": "Token pairs",
-      "terminal": "Terminal"
+      "terminal": "Terminal",
+      "pairsHint": "Quick scan & instant order sheet",
+      "terminalHint": "Live chart, depth book, tape & risk"
+    },
+    "banner": {
+      "eyebrow": "Non-Custodial Derivatives · Direct Wallet Settlement",
+      "modeSpot": "Spot Swap",
+      "modePerp": "Perpetual Desk",
+      "modeDydx": "dYdX Orderbook",
+      "modeOnchain": "On-Chain Engine",
+      "statMarkets": "Active Markets",
+      "statBtc": "BTC Benchmark",
+      "statMaxLev": "Max Leverage",
+      "statMaxLevVal": "Up to 50×",
+      "statCustody": "Custody Model",
+      "statCustodyVal": "Self-Custody",
+      "liveFeed": "Live Oracle & Venue Feed",
+      "syncingFeed": "Syncing Market Feed",
+      "openTerminal": "Pro Terminal",
+      "viewPairs": "Market Pairs"
     }
   },
   "farm": {
@@ -18486,7 +18505,12 @@
         "RISK_BLOCKED": "The risk engine blocked this order.",
         "PROVIDER_UNAVAILABLE": "The venue did not answer. Nothing was sent."
       },
-      "activateDydx": "Activate the dYdX session — one signature"
+      "activateDydx": "Activate the dYdX session — one signature",
+      "headerTitle": "Order Ticket",
+      "longSub": "Profit on upside",
+      "shortSub": "Profit on downside",
+      "summaryTitle": "Order & Liquidation Preview",
+      "usdUnit": "USD"
     },
     "liq": {
       "provenance": {
@@ -18584,6 +18608,10 @@
     "book": {
       "ostium": "Ostium is a peer-to-pool venue: it publishes no order book. Slippage is priced from the oracle instead.",
       "velocity": "The Velocity book is not exposed to this screen yet. The price above is the venue’s own mid."
-    }
+    },
+    "pairModalTitle": "Select Perpetual Market",
+    "pairModalSub": "Search by ticker or filter by settlement venue",
+    "pairModalClose": "Close",
+    "pairModalCount": "{{n}} markets"
   }
 }
