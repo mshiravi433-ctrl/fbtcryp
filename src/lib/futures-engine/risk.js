@@ -273,6 +273,8 @@ export function assessFuturesRisk({
     if (collateral > availableBalanceUsd + 1e-9) blockReasons.push('INSUFFICIENT_BALANCE');
     else if (pctOfBalance > P.warnPctOfBalance) { score += 15; warnings.push('LARGE_SHARE_OF_BALANCE'); }
     else if (pctOfBalance > P.riskBudgetPctOfBalance) { score += 8; warnings.push('ABOVE_RISK_BUDGET'); }
+  } else if (num(availableBalanceUsd) === 0 && collateral != null && collateral > 0) {
+    blockReasons.push('INSUFFICIENT_BALANCE');
   } else if (availableBalanceUsd == null) {
     warnings.push('BALANCE_UNKNOWN');
   }

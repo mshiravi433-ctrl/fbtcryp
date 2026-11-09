@@ -8780,7 +8780,7 @@
       "margin": "Margin required",
       "liq": "To liquidation",
       "liqPrice": "Liquidation price",
-      "needEquity": "The account balance has not been read, so leverage cannot size the order. Connect dYdX or type the size yourself.",
+      "needEquity": "Free collateral is unavailable or zero, so the size cannot be filled automatically. Check your account or enter a size manually.",
       "hint": "On dYdX leverage is not a separate setting: it is position value divided by the account equity backing it, capped by this market's own initial margin fraction. Each rung sizes the order from the account's real balance."
     },
     "desk": {
@@ -8789,11 +8789,12 @@
       "tabs": {
         "ai": "AI",
         "risk": "Risk engine",
-        "opp": "Opportunity engine"
+        "opp": "Opportunity engine",
+        "early": "Early watch"
       },
       "refresh": "Refresh",
       "bars": "{{count}} hourly candles",
-      "stale": "These candles did not arrive from the dYdX indexer — the chart above says the same.",
+      "stale": "Candle data is stale or unavailable; treat these results with caution.",
       "noData": "No candles arrived to analyse; nothing is shown instead of a guess.",
       "noRead": "Not read yet",
       "unavailable": {
@@ -8836,7 +8837,8 @@
         "margin": "Margin required",
         "liq": "To liquidation",
         "liqPrice": "Liquidation price",
-        "hint": "Every number here comes from the same engine the confirmation sheet and the ledger use, recomputed on every change of size or leverage."
+        "hint": "Every number here comes from the same engine the confirmation sheet and the ledger use, recomputed on every change of size or leverage.",
+        "crossMarginNote": "Initial margin is based on this market. Liquidation is an estimate and excludes other positions and cross-margin effects."
       },
       "opp": {
         "empty": "No setup found",
@@ -8913,7 +8915,20 @@
           "NETWORK_UNAVAILABLE": "Could not reach the AI server.",
           "NO_ANSWER": "The model returned no answer; try a simpler question.",
           "UNKNOWN": "The question failed; try again."
-        }
+        },
+        "degraded": "This answer is from the internal rules engine, not a live model."
+      },
+      "early": {
+        "watch": "On watch",
+        "none": "No early watch right now",
+        "unavailable": "Early watch unavailable",
+        "up": "Approaching the prior 20-candle high with upward momentum",
+        "down": "Approaching the prior 20-candle low with downward momentum",
+        "boundary": "Range boundary",
+        "distance": "Distance to boundary",
+        "stale": "Live, fresh data is unavailable.",
+        "history": "Insufficient history or valid volatility.",
+        "disclaimer": "Based on closed hourly candles; a watch is not trading advice or a guarantee."
       }
     }
   },

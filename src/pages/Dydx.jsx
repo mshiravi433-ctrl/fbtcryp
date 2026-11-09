@@ -187,14 +187,14 @@ export default function Dydx({ embedded = false } = {}) {
    * Free collateral is what a NEW position can actually be opened with —
    * equity minus the margin already committed to the open ones. Sizing from
    * equity would hand the user an order the venue rejects the moment they
-   * already hold a position, so the free figure wins and equity is the
-   * fallback when the indexer did not send it.
+   * already hold a position. Never substitute equity when free collateral
+   * is missing.
    */
   const freeCollateralUsd = (() => {
     const fc = Number(account?.subaccount?.freeCollateral);
-    return Number.isFinite(fc) && fc > 0 ? fc : null;
+    return Number.isFinite(fc) && account?.subaccount?.freeCollateral != null && fc >= 0 ? fc : null;
   })();
-  const sizeableUsd = freeCollateralUsd ?? equityUsd;
+  const sizeableUsd = freeCollateralUsd;
   const maxLeverage = Number.isFinite(Number(market?.maxLeverage)) ? Number(market.maxLeverage) : null;
   const effectiveLeverage = notional > 0 && equityUsd ? notional / equityUsd : null;
   const marginRequired = (() => {
@@ -375,7 +375,7 @@ export default function Dydx({ embedded = false } = {}) {
 
   return (
     <PageTransition embedded={embedded}>
-      <div className="derivatives-hall">
+      <div className="derivatives-hall dydx-app">
         <div className="derivatives-aurora" aria-hidden="true" />
         <motion.section className="derivatives-hero" variants={riseIn} initial="hidden" animate="show">
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
@@ -415,7 +415,23 @@ export default function Dydx({ embedded = false } = {}) {
           </InfoBox>
         </motion.div>
 
-      <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18 }}>
+      {market && (
+          <DydxTokenDesk
+            key={ticker}
+            ticker={ticker}
+            market={market}
+            side={side}
+            notionalUsd={notional}
+            collateralUsd={marginRequired}
+            availableBalanceUsd={freeCollateralUsd}
+            leverage={effectiveLeverage ?? leverage}
+            entryPrice={entryPrice}
+            onApplyLeverage={applyLeverage}
+            testId="dydx-token-desk"
+          />
+      )}
+
+      <motion.section data-testid="dydx-account" className="card card-rgb dydx-account" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18 }}>
         <div className="sheen" />
         <div className="row-between">
           <div>
@@ -431,14 +447,14 @@ export default function Dydx({ embedded = false } = {}) {
         {dydxAddress && (
           <div className="row-between" style={{ marginTop: 10 }}>
             <span className="faint">{t('dydx.equity')}</span>
-            <span className="mono">{account?.subaccount?.equity ? fmtUsd(account.subaccount.equity) : '0 USDC'}</span>
+            <span className="mono">{account?.subaccount?.equity != null ? fmtUsd(account.subaccount.equity) : '—'}</span>
           </div>
         )}
         <p className="faint" style={{ marginTop: 9 }}>{t('dydx.connectNote')}</p>
       </motion.section>
 
       {!markets.length ? <p className="notice" style={{ marginTop: 16 }}>{t('dydx.marketUnavailable')}</p> : (
-        <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, width: '100%', boxSizing: 'border-box' }}>
+        <motion.section className="card dydx-ticket" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, width: '100%', boxSizing: 'border-box' }}>
           {!live && <p className="notice" style={{ marginBottom: 12 }}>{t('dydx.marketUnavailable')}</p>}
           <div className="field-label">{t('dydx.market')}</div>
           <ModernSelect
@@ -494,32 +510,6 @@ export default function Dydx({ embedded = false } = {}) {
               </div>
             </div>
           )}
-
-          {/*
-            ─── THE DESK FOR THE TOKEN ON THE CHART ABOVE ────────────────────
-            «برای هر توکن انتخابی، باکس هوش مصنوعی، موتور ریسک و موتور فرصت
-             را در یک باکس بازشونده زیر آن بگذار و از هوش مصنوعی هم بپرس اضافه
-             کن»
-
-            Keyed by ticker: switching the market gives the new token its own
-            box and its own candle read, so a panel cannot keep the previous
-            pair's numbers under a new name. It is collapsed by default — a
-            folded box with a verdict on its title line is read; an open wall
-            of metrics is scrolled past — and it fetches nothing until opened.
-          */}
-          <DydxTokenDesk
-            key={ticker}
-            ticker={ticker}
-            market={market}
-            side={side}
-            notionalUsd={notional}
-            collateralUsd={equityUsd}
-            availableBalanceUsd={freeCollateralUsd}
-            leverage={effectiveLeverage ?? leverage}
-            entryPrice={entryPrice}
-            onApplyLeverage={applyLeverage}
-            testId="dydx-token-desk"
-          />
 
           <div className="dir-switch">
             <button

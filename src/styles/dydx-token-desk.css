@@ -1,5 +1,5 @@
 /*
- * dYdX TOKEN DESK — the folded analysis box under the dYdX chart.
+ * dYdX TOKEN DESK — the folded analysis box above the dYdX account.
  * ---------------------------------------------------------------------------
  * «برای هر توکن انتخابی، باکس هوش مصنوعی، موتور ریسک و موتور فرصت را در یک
  *  باکس بازشونده زیر آن بگذار و از هوش مصنوعی هم بپرس اضافه کن»
@@ -396,3 +396,37 @@
 @media (max-width: 400px) {
   .dtd-pods { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* dYdX mobile-first trading workspace */
+.dydx-app .dtd-box {
+  border: 1px solid rgba(119, 146, 250, .3);
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(93, 110, 220, .14), rgba(27, 187, 191, .06));
+  box-shadow: 0 12px 36px rgba(10, 18, 47, .12);
+}
+.dydx-app .dtd-head { padding: 16px; gap: 12px; }
+.dydx-app .dtd-head-mark { width: 42px; height: 42px; flex-basis: 42px; border-radius: 14px; color: #8d9dff; background: rgba(115, 126, 255, .15); border-color: rgba(115, 126, 255, .3); }
+.dydx-app .dtd-head-title { font-size: 15px; }
+.dydx-app .dtd-body { padding: 0 16px 16px; gap: 14px; }
+.dydx-app .dtd-tabs { flex-wrap: wrap; padding: 5px; border-radius: 15px; }
+.dydx-app .dtd-tabs > button:not(.dtd-refresh) { flex: 1 1 auto; justify-content: center; min-height: 38px; white-space: nowrap; }
+.dydx-app .dtd-refresh { min-height: 36px; }
+.dydx-app .dtd-pod, .dydx-app .dtd-block, .dydx-app .dtd-setup { padding: 12px; border-radius: 15px; }
+.dydx-app .dtd-ask { padding: 14px; border-radius: 16px; border-style: solid; border-color: rgba(135, 137, 255, .25); background: rgba(115, 126, 255, .07); }
+.dydx-app .dtd-ask-head { color: var(--text-1); }
+.dydx-app .dtd-chip { min-height: 34px; font-size: 11px; }
+.dydx-app .dtd-ask-input input { min-height: 42px; }
+.dtd-signal { display: grid; gap: 8px; padding: 15px; border: 1px solid rgba(105, 143, 255, .3); background: rgba(105, 143, 255, .08); border-radius: 16px; font-size: 13px; }
+.dtd-signal > strong { font-size: 14px; }
+.dydx-app .dydx-account { border-radius: 20px; }
+.dtd-head:focus-visible, .dtd-chip:focus-visible, .dtd-refresh:focus-visible { outline: 2px solid #8296ff; outline-offset: 2px; }
+@media (max-width: 440px) {
+  .dydx-app .dtd-tabs > button:not(.dtd-refresh) { flex-basis: 42%; }
+  .dydx-app .dtd-refresh { margin-inline-start: 0; width: 100%; }
+  .dydx-app .dtd-head-price { font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) { .dtd-meter-fill { transition: none; } }
+.dydx-app .derivatives-hero { border-radius: 22px; }
+.dydx-app .dydx-ticket { border-radius: 22px; border-color: rgba(126, 149, 237, .22); box-shadow: 0 14px 38px rgba(10, 18, 47, .10); }
+.dydx-app .deriv-field-card { border-radius: 16px; }
+.dydx-app .dydx-account { border-color: rgba(126, 149, 237, .24); }

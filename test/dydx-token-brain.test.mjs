@@ -247,3 +247,20 @@ describe('scanTokenSetups', () => {
     assert.deepEqual(scores, [...scores].sort((x, y) => y - x));
   });
 });
+
+describe('volume and early watch regressions', () => {
+  it('uses the last candle volume, and never borrows a previous candle when missing', () => {
+    const rows = candles({ bars: 60 });
+    rows[59].baseTokenVolume = '5000';
+    assert.ok(analyseMarket({ candles: rows }).volume.ratio > 3);
+    assert.ok(scanTokenSetups({ candles: rows }).setups.some((s) => s.id === 'volume-spike'));
+    delete rows[59].baseTokenVolume;
+    assert.equal(analyseMarket({ candles: rows }).volume.ratio, null);
+    assert.ok(!scanTokenSetups({ candles: rows }).setups.some((s) => s.id === 'volume-spike'));
+  });
+  it('accepts indexer ISO timestamps', () => {
+    const rows = candles({ bars: 30 });
+    rows[0].startedAt = new Date(rows[0].startedAt).toISOString();
+    assert.equal(normaliseCandles(rows).length, 30);
+  });
+});
