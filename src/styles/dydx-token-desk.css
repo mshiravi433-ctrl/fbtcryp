@@ -1,0 +1,398 @@
+/*
+ * dYdX TOKEN DESK — the folded analysis box under the dYdX chart.
+ * ---------------------------------------------------------------------------
+ * «برای هر توکن انتخابی، باکس هوش مصنوعی، موتور ریسک و موتور فرصت را در یک
+ *  باکس بازشونده زیر آن بگذار و از هوش مصنوعی هم بپرس اضافه کن»
+ *
+ * RULES THIS SHEET OBEYS
+ *   · it reuses the app's own tokens (--text-3, --rgb-1, .card, .segmented,
+ *     .faint, .notice) rather than introducing a second palette — the desk has
+ *     to read as part of the dYdX tab, not as a widget dropped into it;
+ *   · every colour that carries MEANING (up / down / watch) is a class, never
+ *     an inline style, so the dark and light themes both stay correct;
+ *   · no fixed heights and no transforms on the accordion body: the body
+ *     animates height only, which is the one property that cannot desync the
+ *     chart above it.
+ */
+
+.dtd-box {
+  overflow: hidden;
+  border-color: rgba(0, 229, 255, 0.14);
+  background: linear-gradient(145deg, rgba(0, 229, 255, 0.05), rgba(255, 255, 255, 0.02));
+}
+
+/* ─── the always-visible head ─────────────────────────────────────────────── */
+
+.dtd-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 12px;
+  background: transparent;
+  border: 0;
+  color: var(--text-1, #fff);
+  text-align: start;
+  cursor: pointer;
+  font: inherit;
+}
+
+.dtd-head-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 10px;
+  background: rgba(0, 229, 255, 0.12);
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  color: var(--rgb-1);
+}
+
+.dtd-head-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.dtd-head-title {
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dtd-head-sub {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dtd-head-price {
+  font-size: 12px;
+  color: var(--text-2);
+  flex: 0 0 auto;
+}
+
+.dtd-chev {
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+  flex: 0 0 auto;
+}
+
+/* ─── body ────────────────────────────────────────────────────────────────── */
+
+.dtd-body {
+  padding: 0 12px 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.dtd-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dtd-tabs > button:not(.dtd-refresh) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+}
+
+.dtd-refresh {
+  margin-inline-start: auto;
+  padding: 5px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: var(--text-3);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.dtd-refresh:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.dtd-bars {
+  font-size: 10.5px;
+  color: var(--text-3);
+  letter-spacing: 0.2px;
+}
+
+.dtd-room {
+  display: grid;
+  gap: 10px;
+}
+
+.dtd-unavailable {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* ─── the verdict ─────────────────────────────────────────────────────────── */
+
+.dtd-verdict {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dtd-verdict-label {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.dtd-verdict-score {
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+
+.dtd-verdict-trend-up { border-color: rgba(45, 189, 121, 0.28); background: rgba(45, 189, 121, 0.10); }
+.dtd-verdict-trend-down { border-color: rgba(255, 59, 107, 0.28); background: rgba(255, 59, 107, 0.10); }
+.dtd-verdict-range { border-color: rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.04); }
+.dtd-verdict-volatile { border-color: rgba(255, 176, 32, 0.28); background: rgba(255, 176, 32, 0.10); }
+
+/* ─── metric pods ─────────────────────────────────────────────────────────── */
+
+.dtd-pods {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dtd-pod {
+  padding: 8px 6px;
+  border-radius: 11px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.10));
+  background: rgba(255, 255, 255, 0.03);
+  text-align: center;
+  min-width: 0;
+}
+
+.dtd-pod .faint {
+  font-size: 9.5px;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dtd-pod-val {
+  margin-top: 3px;
+  font-size: 12.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.dtd-up { color: var(--up, #2dbd79); }
+.dtd-down { color: var(--down, #ff3b6b); }
+
+/* ─── blocks, rows, caveats ───────────────────────────────────────────────── */
+
+.dtd-block {
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.10));
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dtd-block-head {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-2);
+  margin-bottom: 6px;
+}
+
+.dtd-row {
+  font-size: 11.5px;
+  padding: 2px 0;
+}
+
+.dtd-caveats,
+.dtd-setup-why {
+  margin: 0;
+  padding-inline-start: 16px;
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.7;
+}
+
+.dtd-fine {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.8;
+  color: var(--text-3);
+}
+
+/* ─── the opportunity engine ──────────────────────────────────────────────── */
+
+.dtd-setup {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dtd-setup-title {
+  font-size: 12.5px;
+}
+
+.dtd-setup-score {
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.dtd-setup-meta,
+.dtd-setup-missing {
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+.dtd-setup-evidence {
+  display: grid;
+  gap: 2px;
+}
+
+.dtd-setup-why {
+  padding-inline-start: 15px;
+}
+
+.dtd-tone-up { border-color: rgba(45, 189, 121, 0.26); }
+.dtd-tone-down { border-color: rgba(255, 59, 107, 0.26); }
+.dtd-tone-watch { border-color: rgba(255, 176, 32, 0.26); }
+
+/* ─── the meter ───────────────────────────────────────────────────────────── */
+
+.dtd-meter {
+  display: block;
+  height: 5px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.10);
+  overflow: hidden;
+}
+
+.dtd-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--text-3);
+  transition: width 0.24s ease;
+}
+
+.dtd-tone-up .dtd-meter-fill { background: var(--up, #2dbd79); }
+.dtd-tone-down .dtd-meter-fill { background: var(--down, #ff3b6b); }
+.dtd-tone-watch .dtd-meter-fill { background: #ffb020; }
+
+/* ─── the ask box ─────────────────────────────────────────────────────────── */
+
+.dtd-ask {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 13px;
+  border: 1px dashed rgba(0, 229, 255, 0.22);
+  background: rgba(0, 229, 255, 0.04);
+}
+
+.dtd-ask-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--rgb-1);
+}
+
+.dtd-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dtd-chip {
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.14));
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-2);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.dtd-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.dtd-ask-input {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.dtd-ask-input input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dtd-ask-input .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+
+.dtd-ask-pending {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.dtd-ask-error {
+  margin: 0;
+  font-size: 11.5px;
+}
+
+.dtd-answer {
+  padding: 9px 10px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+}
+
+.dtd-answer-text {
+  font-size: 12px;
+  line-height: 1.9;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.dtd-answer-meta {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+@media (max-width: 400px) {
+  .dtd-pods { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

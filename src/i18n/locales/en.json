@@ -8690,7 +8690,19 @@
       "limitPrice": "Limit price (USD)",
       "limitHint": "A limit order executes only when the price reaches this value. The 0.10% fee still applies to the notional.",
       "type": "Order type",
-      "limitAt": "Limit @ ${{price}}"
+      "limitAt": "Limit @ ${{price}}",
+      "goodTil": "Order lifetime",
+      "goodTilOptions": {
+        "1h": "1 hour",
+        "1d": "1 day",
+        "7d": "1 week",
+        "28d": "28 days"
+      },
+      "postOnly": "Post only",
+      "postOnlyHint": "If the order would cross the book it is cancelled instead of filled — you either pay the maker fee or you do not trade at all.",
+      "reduceOnly": "Reduce only",
+      "reduceOnlyHint": "It can only shrink an existing position and can never open one on the other side. The venue enforces this, not us.",
+      "options": "Options"
     },
     "fundingHelp": {
       "title": "Where do I fund the account?",
@@ -8759,6 +8771,149 @@
         "REJECTED": "The request was not signed.",
         "SUBMIT_FAILED": "The order could not be submitted. Check the account and try again.",
         "CANCEL_FAILED": "The order could not be cancelled. Try again."
+      }
+    },
+    "leverage": {
+      "title": "Leverage",
+      "max": "This market's cap: {{max}}×",
+      "effective": "Effective leverage",
+      "margin": "Margin required",
+      "liq": "To liquidation",
+      "liqPrice": "Liquidation price",
+      "needEquity": "The account balance has not been read, so leverage cannot size the order. Connect dYdX or type the size yourself.",
+      "hint": "On dYdX leverage is not a separate setting: it is position value divided by the account equity backing it, capped by this market's own initial margin fraction. Each rung sizes the order from the account's real balance."
+    },
+    "desk": {
+      "title": "{{ticker}} desk",
+      "close": "Close",
+      "tabs": {
+        "ai": "AI",
+        "risk": "Risk engine",
+        "opp": "Opportunity engine"
+      },
+      "refresh": "Refresh",
+      "bars": "{{count}} hourly candles",
+      "stale": "These candles did not arrive from the dYdX indexer — the chart above says the same.",
+      "noData": "No candles arrived to analyse; nothing is shown instead of a guess.",
+      "noRead": "Not read yet",
+      "unavailable": {
+        "NO_CANDLES": "No candles arrived for this market. Without data nothing is analysed.",
+        "SHORT_HISTORY": "Fewer than {{min}} candles arrived; the read waits for enough history."
+      },
+      "ai": {
+        "read": {
+          "trend-up": "Uptrend",
+          "trend-down": "Downtrend",
+          "range": "Ranging",
+          "volatile": "High volatility",
+          "unknown": "Could not be read"
+        },
+        "coverage": "Evidence coverage",
+        "metrics": {
+          "change": "Window change",
+          "rsi": "RSI 14",
+          "atr": "ATR volatility",
+          "position": "Position in range"
+        },
+        "levels": "Nearby levels",
+        "support": "Support",
+        "resistance": "Resistance",
+        "plan": "Suggested stop and target (from ATR)",
+        "stop": "Stop",
+        "target": "Target",
+        "rr": "Reward:risk",
+        "caveat": {
+          "NO_VOLUME": "This feed sends no volume, so the volume term was left out of the read.",
+          "NO_FUNDING": "No funding rate published, so the cost of holding is not part of this read.",
+          "HIGH_VOLATILITY": "This market is highly volatile; an ordinary size here is a large one.",
+          "SHORT_HISTORY": "The candle history is short, so this read is less supported than on older markets."
+        },
+        "notAdvice": "This read is arithmetic on real data. It is not a forecast and not a buy or sell signal."
+      },
+      "risk": {
+        "title": "The risk of this order",
+        "notional": "Position value",
+        "margin": "Margin required",
+        "liq": "To liquidation",
+        "liqPrice": "Liquidation price",
+        "hint": "Every number here comes from the same engine the confirmation sheet and the ledger use, recomputed on every change of size or leverage."
+      },
+      "opp": {
+        "empty": "No setup found",
+        "emptyBody": "The engine searched its patterns over this market's candles and none met the bar. \"Nothing found\" is the engine's honest output, not a broken engine.",
+        "confidence": "Confidence",
+        "missing": "Data that did not arrive",
+        "title": {
+          "breakout": "Break of the range high",
+          "breakdown": "Break of the range low",
+          "momentum-up": "Bullish momentum",
+          "momentum-down": "Bearish momentum",
+          "volume-spike": "Volume spike",
+          "mean-reversion-up": "Mean reversion, to the upside",
+          "mean-reversion-down": "Mean reversion, to the downside",
+          "funding-crowded-long": "Longs are crowded and paying",
+          "funding-crowded-short": "Shorts are crowded and paying",
+          "chop": "Dead range"
+        },
+        "why": {
+          "maAlignment": "Aligned with the moving averages",
+          "closedAboveWindowHigh": "The last candle closed above the whole window's high",
+          "closedBelowWindowLow": "The last candle closed below the whole window's low",
+          "fastAboveSlow": "The fast average is above the slow one",
+          "fastBelowSlow": "The fast average is below the slow one",
+          "windowChangePositive": "The window's change is positive",
+          "windowChangeNegative": "The window's change is negative",
+          "lastBarVolumeAboveAverage": "The last candle traded more than the average of the candles before it",
+          "belowSlowMa": "Price is below its long-term average",
+          "aboveSlowMa": "Price is above its long-term average",
+          "rsiOversold": "RSI is in oversold territory",
+          "rsiOverbought": "RSI is in overbought territory",
+          "longsPayingShorts": "Longs are paying funding to shorts",
+          "shortsPayingLongs": "Shorts are paying funding to longs",
+          "rangeTooSmallForCosts": "The average move is smaller than the fees and funding you pay to sit in it"
+        },
+        "evidence": {
+          "price": "Price",
+          "priorHigh": "Prior high",
+          "priorLow": "Prior low",
+          "overshoot": "Overshoot",
+          "volumeRatio": "Volume ratio",
+          "change": "Window change",
+          "maGap": "Average gap",
+          "rsi": "RSI",
+          "distanceFromMa": "Distance from average",
+          "fundingApr": "Funding APR",
+          "costPerDay": "Cost per day",
+          "atrPct": "ATR volatility"
+        },
+        "missingItem": {
+          "volume": "volume",
+          "rsi": "RSI"
+        },
+        "caveat": {
+          "notASignal": "These are descriptions of the market's shape with their arithmetic, not buy or sell signals.",
+          "NO_VOLUME": "Volume is not in this feed.",
+          "NO_FUNDING": "Funding was not published."
+        }
+      },
+      "ask": {
+        "title": "Ask the AI",
+        "placeholder": "Ask about {{ticker}}…",
+        "send": "Ask",
+        "sending": "Asking…",
+        "quick": {
+          "why": "Why has the price moved like this?",
+          "risk": "How risky is this position?",
+          "stop": "Where should I put the stop?"
+        },
+        "disclaimer": "The answer is written by an AI model from these numbers and your question, and it is not trading advice. The model that answered is named under the reply.",
+        "answeredBy": "Answered by {{provider}} · {{model}}",
+        "err": {
+          "TIMEOUT": "No answer arrived in time; ask again.",
+          "NETWORK_UNAVAILABLE": "Could not reach the AI server.",
+          "NO_ANSWER": "The model returned no answer; try a simpler question.",
+          "UNKNOWN": "The question failed; try again."
+        }
       }
     }
   },
