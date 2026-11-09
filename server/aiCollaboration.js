@@ -82,6 +82,12 @@ import {
   checkMarketAnalysis,
   renderMarketViolations
 } from './aiMarketFrame.js';
+import {
+  analyzeRequest,
+  renderRequestPlan,
+  checkRequestPlan,
+  renderRequestDeficit
+} from './aiRequestPlan.js';
 import { storeGet, storeSet } from './store.js';
 import { checkPlanArithmetic, renderStrategyViolations, isPlanParameter } from './aiStrategyPlanCheck.js';
 import { assessEvidence, evaluateDecision, renderDecisionContract, renderDecisionDeficit } from './aiDecisionGate.js';
@@ -342,7 +348,7 @@ const ROLE_TASK = {
   [AI_ROLES.FINAL_ANSWER_AI]: 'reasoning'
 };
 
-async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '', decisionBrief = '', dialogueBrief = '', professorBrief = '', researchBrief = '', marketBrief = '' }) {
+async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '', decisionBrief = '', dialogueBrief = '', professorBrief = '', researchBrief = '', marketBrief = '', requestBrief = '' }) {
   /*
    * ─── DEEP REASONING CONTRACT (smartest mode only) ─────────────────────────
    * The role prompts are shared by every mode, so the extra discipline lives
@@ -369,7 +375,7 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
     /* The economist's lens is a reasoning contract, not a costume: it rides on
        the specialists and the synthesiser, never on the reviewer (whose job is
        to break the draft, not to reason about the economy). */
-    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}${dialogueBrief ? `\n${dialogueBrief}` : ''}${professorBrief ? `\n${professorBrief}` : ''}${researchBrief ? `\n${researchBrief}` : ''}${marketBrief ? `\n${marketBrief}` : ''}`;
+    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}${dialogueBrief ? `\n${dialogueBrief}` : ''}${professorBrief ? `\n${professorBrief}` : ''}${researchBrief ? `\n${researchBrief}` : ''}${marketBrief ? `\n${marketBrief}` : ''}${requestBrief ? `\n${requestBrief}` : ''}`;
   /*
    * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
    * This line used to be a ternary: Persian or English. Everything a Turkish,
@@ -767,6 +773,27 @@ export async function runCollaborativeAnalysis({
     : null;
   const dialogueBrief = renderDialogueBrief(dialogueRead);
   /*
+   * ─── REQUEST PLAN (smartest mode, substantive turns) ───────────────────────
+   * socialRead reads the person, dialogueRead reads the question. This one asks
+   * the question a reviewer of answers has to ask: what is the user holding
+   * when this ends — a verdict, a number, a plan with weights? Which facts does
+   * that deliverable require, and did they give them, or is the answer about to
+   * invent a budget nobody mentioned? The plan is deterministic and costs no
+   * model call; the reviewer is told afterwards which promise the draft broke.
+   * A distress turn is exempt: the safety brief already governs it.
+   */
+  const requestPlan = mode === 'max' && plan.level >= 3 && !socialRead?.distress
+    ? analyzeRequest({
+      message,
+      locale,
+      context,
+      history: context?.conversationSummary || '',
+      social: socialRead,
+      dialogue: dialogueRead
+    })
+    : null;
+  const requestBrief = renderRequestPlan(requestPlan);
+  /*
    * ─── RESEARCH POSTURE (smartest mode, substantive turns) ───────────────────
    * A professor of this field defines terms, says where every number came from,
    * gives the base rate, and — enforced below, not merely requested — states what
@@ -888,6 +915,10 @@ export async function runCollaborativeAnalysis({
     /* The market frame the analysis stood on: what the data measured, what it
        could not, and whether the final text respected that line. */
     market: null,
+    /* What this turn understood the request to BE: the deliverable, the
+       constraints the user actually gave, the slots they did not, and whether
+       the final text kept the plan's promises. */
+    request: null,
     /* The continuous-improvement loop: which open questions this turn was given,
        which it opened, and which it closed. null when no agenda store is live. */
     research: null,
@@ -1033,7 +1064,7 @@ export async function runCollaborativeAnalysis({
        analyses are genuinely different providers, not one model twice. */
     const roles = pickAnalysisRoles(plan, 2);
     const settled = await withDeadline(
-      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief, dialogueBrief, professorBrief, researchBrief, marketBrief }))),
+      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief, dialogueBrief, professorBrief, researchBrief, marketBrief, requestBrief }))),
       []
     );
     analyses.push(...(settled || []).filter(Boolean));
@@ -1107,7 +1138,8 @@ export async function runCollaborativeAnalysis({
         dialogueBrief,
         professorBrief,
         researchBrief,
-        marketBrief
+        marketBrief,
+        requestBrief
       }), null);
       if (verifier?.ok) analyses.push(verifier);
     }
@@ -1172,7 +1204,8 @@ export async function runCollaborativeAnalysis({
         dialogueBrief,
         professorBrief,
         researchBrief,
-        marketBrief
+        marketBrief,
+        requestBrief
       }), null);
       result.answer = finalRole?.ok
         ? finalRole.answer
@@ -1223,6 +1256,7 @@ export async function runCollaborativeAnalysis({
        * unfalsifiable. The reviewer gets each as a MUST-FIX.
        */
       const draftMarket = marketFrame ? checkMarketAnalysis({ frame: marketFrame, answer: result.answer }) : null;
+      const draftRequest = requestPlan ? checkRequestPlan({ plan: requestPlan, answer: result.answer }) : null;
       /*
        * ─── DECISION VERDICT ON THE DRAFT ─────────────────────────────────────
        * Re-score the evidence now that the analyses, the verifier and the claim
@@ -1297,9 +1331,10 @@ export async function runCollaborativeAnalysis({
           const dialogueDeficitBlock = renderDialogueDeficit(draftDialogue);
           const falsifierDeficitBlock = renderFalsifierDeficit(draftFalsifier);
           const marketViolationBlock = renderMarketViolations(draftMarket);
+          const requestDeficitBlock = renderRequestDeficit(draftRequest);
           const criticRole = {
             role: AI_ROLES.VERIFICATION_AI,
-            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}${dialogueDeficitBlock ? `\n\n${dialogueDeficitBlock}` : ''}${falsifierDeficitBlock ? `\n\n${falsifierDeficitBlock}` : ''}${marketViolationBlock ? `\n\n${marketViolationBlock}` : ''}`,
+            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}${dialogueDeficitBlock ? `\n\n${dialogueDeficitBlock}` : ''}${falsifierDeficitBlock ? `\n\n${falsifierDeficitBlock}` : ''}${marketViolationBlock ? `\n\n${marketViolationBlock}` : ''}${requestDeficitBlock ? `\n\n${requestDeficitBlock}` : ''}`,
             contextBlock: '',
             locale,
             deps: D,
@@ -1470,6 +1505,20 @@ export async function runCollaborativeAnalysis({
       gaps: marketFrame.gaps,
       violations: finalMarket.issues.map((i) => i.id),
       compliant: finalMarket.compliant
+    };
+  }
+
+  if (requestPlan) {
+    const finalRequest = checkRequestPlan({ plan: requestPlan, answer: result.answer });
+    result.request = {
+      schema: requestPlan.schema,
+      deliverable: requestPlan.deliverable,
+      constraints: requestPlan.constraints,
+      missing: requestPlan.missing,
+      expertise: requestPlan.expertise,
+      lengthTarget: requestPlan.blueprint.maxSentences,
+      violations: finalRequest.issues.map((i) => i.id),
+      compliant: finalRequest.compliant
     };
   }
 

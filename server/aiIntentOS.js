@@ -2498,6 +2498,18 @@ router.post('/chat', async (req, res) => {
           relationship: collaboration.socialRead.relationship || null,
           signals: Array.isArray(collaboration.socialRead.signals) ? collaboration.socialRead.signals.slice(0, 8) : []
         } : null,
+        /* What the turn understood the request to be: the deliverable, the
+           constraints the user actually gave, the slots they left empty, and
+           whether the answer kept those promises. null outside max/level 3+. */
+        request: collaboration?.request ? {
+          deliverable: collaboration.request.deliverable,
+          constraints: collaboration.request.constraints || null,
+          missing: Array.isArray(collaboration.request.missing) ? collaboration.request.missing : [],
+          expertise: collaboration.request.expertise || null,
+          lengthTarget: collaboration.request.lengthTarget ?? null,
+          violations: Array.isArray(collaboration.request.violations) ? collaboration.request.violations : [],
+          compliant: collaboration.request.compliant === true
+        } : null,
         /* The market frame: what this turn's data measured (breadth, regime,
            relative strength, supported horizon), what it could not, and whether
            the answer respected that line. null outside market analysis turns. */
