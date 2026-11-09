@@ -3937,7 +3937,7 @@
       }
     },
     "how": {
-      "sub": "Effet de levier, liquidation et financement — en 30 secondes",
+      "sub": "PnL, liquidation, funding, levier — en direct",
       "what": {
         "t": "Un perpétuel n’arrive jamais à échéance",
         "d": "Il suit le prix de la pièce : vous prenez position sur la direction du prix, pas sur la pièce. C’est pourquoi vous pouvez être long ou short sur la même paire."
@@ -3953,24 +3953,8 @@
       "fees": {
         "t": "Vous payez des frais à l’entrée et à la sortie",
         "d": "La répartition exacte est affichée avant confirmation, et l’ordre est construit et vérifié par cette application — puis signé par votre portefeuille. Cette application ne conserve jamais vos fonds ni vos clés."
-      }
-    },
-    "banner": {
-      "eyebrow": "Non-Custodial Derivatives · Direct Wallet Settlement",
-      "modeSpot": "Spot Swap",
-      "modePerp": "Perpetual Desk",
-      "modeDydx": "dYdX Orderbook",
-      "modeOnchain": "On-Chain Engine",
-      "statMarkets": "Active Markets",
-      "statBtc": "BTC Benchmark",
-      "statMaxLev": "Max Leverage",
-      "statMaxLevVal": "Up to 50×",
-      "statCustody": "Custody Model",
-      "statCustodyVal": "Self-Custody",
-      "liveFeed": "Live Oracle & Venue Feed",
-      "syncingFeed": "Syncing Market Feed",
-      "openTerminal": "Pro Terminal",
-      "viewPairs": "Market Pairs"
+      },
+      "title": "Les futures, expliqués par la pratique"
     },
     "subtabs": {
       "pairsHint": "Quick scan & instant order sheet",

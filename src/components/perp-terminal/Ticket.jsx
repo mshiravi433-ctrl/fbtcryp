@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { ticketMath, orderTypeOptions } from './desk.js';
 import { contractFor } from '../../lib/futures-engine/venueContract.js';
 import { liquidationProvenanceLabel, blockReasonLabel } from './labels.js';
+import FuturesAiRisk from '../futures/FuturesAiRisk.jsx';
 
 const usd = (v, digits = 2) => {
   const n = Number(v);
@@ -292,6 +293,23 @@ export default function Ticket({
           />
         </div>
       </div>
+
+      {/* ── AI RISK — live engine verdict for THIS order ──────────────── */}
+      <FuturesAiRisk
+        providerId={venue}
+        side={side}
+        collateralUsd={Number(collateral) > 0 ? Number(collateral) : null}
+        leverage={Number(leverage) > 0 ? Number(leverage) : null}
+        maxLeverage={maxLeverage}
+        entryPrice={orderType === 'limit' ? (Number(price) || mark) : mark}
+        availableBalanceUsd={availableBalanceUsd ?? equityUsd}
+        fundingAprPct={quote?.fundingAprPct ?? market?.fundingAprPct ?? null}
+        maintenanceMarginFraction={mmr}
+        takerFeeBps={takerFeeBps}
+        compact
+        onApplyLeverage={(v) => setLeverage(v)}
+        testId="perp-ticket-ai-risk"
+      />
 
       {/* ── Order & Liquidation Telemetry Receipt ──────────────────────── */}
       <div className="pt-math-box">

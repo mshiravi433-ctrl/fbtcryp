@@ -3937,7 +3937,7 @@
       }
     },
     "how": {
-      "sub": "Apalancamiento, liquidación y financiación — en 30 segundos",
+      "sub": "P&L, liquidación, funding y apalancamiento — en vivo",
       "what": {
         "t": "Un perpetuo nunca caduca",
         "d": "Sigue el precio de la moneda: apostas por hacia dónde va el precio, no compras la moneda. Por eso puedes ir largo o corto en el mismo par."
@@ -3953,24 +3953,8 @@
       "fees": {
         "t": "Pagas comisión al entrar y al salir",
         "d": "El desglose exacto se muestra antes de confirmar, y la orden la construye y revisa esta misma app — luego la firmas con tu wallet. Esta app nunca custodia tus fondos ni tus claves."
-      }
-    },
-    "banner": {
-      "eyebrow": "Non-Custodial Derivatives · Direct Wallet Settlement",
-      "modeSpot": "Spot Swap",
-      "modePerp": "Perpetual Desk",
-      "modeDydx": "dYdX Orderbook",
-      "modeOnchain": "On-Chain Engine",
-      "statMarkets": "Active Markets",
-      "statBtc": "BTC Benchmark",
-      "statMaxLev": "Max Leverage",
-      "statMaxLevVal": "Up to 50×",
-      "statCustody": "Custody Model",
-      "statCustodyVal": "Self-Custody",
-      "liveFeed": "Live Oracle & Venue Feed",
-      "syncingFeed": "Syncing Market Feed",
-      "openTerminal": "Pro Terminal",
-      "viewPairs": "Market Pairs"
+      },
+      "title": "Futuros, explicado con tus manos"
     },
     "subtabs": {
       "pairsHint": "Quick scan & instant order sheet",

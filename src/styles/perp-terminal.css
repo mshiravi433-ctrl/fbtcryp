@@ -1932,3 +1932,51 @@
     max-height: min(84dvh, 560px);
   }
 }
+
+/* ── 2026-11-09 · THE AI-RISK VERDICT LINE (account level) ───────────────── */
+.pt-ai-verdict {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 12px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  background:
+    radial-gradient(140% 160% at 85% -30%, rgba(167, 139, 250, 0.16), transparent 55%),
+    rgba(139, 92, 246, 0.06);
+}
+.pt-ai-verdict-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #c4b5fd;
+}
+.pt-ai-verdict-badge svg { filter: drop-shadow(0 0 5px rgba(196, 181, 253, 0.6)); }
+.pt-ai-verdict-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--text-2, #cbd5e1);
+}
+.pt-ai-verdict-score {
+  flex: none;
+  font-size: 16px;
+  font-weight: 800;
+  color: #e9d5ff;
+}
+.pt-ai-verdict-score small { font-size: 9px; color: var(--text-3, #94a3b8); margin-inline-start: 2px; }
+.pt-ai-verdict[data-level='high'] { border-color: rgba(251, 146, 60, 0.35); background: radial-gradient(140% 160% at 85% -30%, rgba(251, 146, 60, 0.14), transparent 55%), rgba(251, 146, 60, 0.05); }
+.pt-ai-verdict[data-level='high'] .pt-ai-verdict-badge { color: #fdba74; }
+.pt-ai-verdict[data-level='extreme'] { border-color: rgba(244, 63, 94, 0.4); background: radial-gradient(140% 160% at 85% -30%, rgba(244, 63, 94, 0.16), transparent 55%), rgba(244, 63, 94, 0.05); }
+.pt-ai-verdict[data-level='extreme'] .pt-ai-verdict-badge { color: #fda4af; }
+.pt-ai-verdict[data-level='medium'] { border-color: rgba(251, 191, 36, 0.32); background: radial-gradient(140% 160% at 85% -30%, rgba(251, 191, 36, 0.13), transparent 55%), rgba(251, 191, 36, 0.05); }
+.pt-ai-verdict[data-level='medium'] .pt-ai-verdict-badge { color: #fcd34d; }
+.pt-ai-verdict[data-level='low'] { border-color: rgba(52, 211, 153, 0.3); background: radial-gradient(140% 160% at 85% -30%, rgba(52, 211, 153, 0.12), transparent 55%), rgba(52, 211, 153, 0.05); }
+.pt-ai-verdict[data-level='low'] .pt-ai-verdict-badge { color: #6ee7b7; }

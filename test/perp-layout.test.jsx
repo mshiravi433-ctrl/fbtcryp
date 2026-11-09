@@ -186,7 +186,7 @@ describe('what the page actually looks like', () => {
     const text = document.body.textContent;
     expect(text).not.toMatch(/perp\.[a-z.]+/i);
     expect(text).not.toContain('{{');
-    expect(screen.getByText(/How do perpetual futures work/)).toBeTruthy();
+    expect(screen.getByText(/Futures, explained by your hands/)).toBeTruthy();
     const btc = screen.getByTestId('perp-row-BTC');
     expect(btc.querySelector('.perp-row-go').textContent.trim()).toBe('Trade');
   });

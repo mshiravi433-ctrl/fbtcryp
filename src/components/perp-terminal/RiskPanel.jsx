@@ -98,6 +98,27 @@ export default function RiskPanel({
         )}
       </div>
 
+      {/* ── AI RISK — the engine's account-level verdict, one line ───────
+          The ticket scores the order about to be sent (perp-terminal/
+          Ticket.jsx); this line scores the book you ALREADY have, from the
+          same engine family. Both name the model, neither invents a number. */}
+      <div className="pt-ai-verdict" data-testid="perp-risk-ai-verdict" data-level={String(level || 'unknown').toLowerCase()}>
+        <span className="pt-ai-verdict-badge">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z" />
+          </svg>
+          {t('futures.risk.title', { defaultValue: 'AI risk' })}
+        </span>
+        <span className="pt-ai-verdict-text">
+          {t(`futures.risk.account.${String(level || 'unknown').toLowerCase()}`, { defaultValue: 'Live engine score for this account.' })}
+        </span>
+        {Number.isFinite(Number(model.riskScore)) && (
+          <span className="pt-ai-verdict-score mono" data-testid="perp-risk-ai-score">
+            {Math.round(Number(model.riskScore))}<small>/100</small>
+          </span>
+        )}
+      </div>
+
       <div className="pt-risk-grid">
         {/* ── 1. Margin ──────────────────────────────────────────────── */}
         <div className="pt-risk-block">
