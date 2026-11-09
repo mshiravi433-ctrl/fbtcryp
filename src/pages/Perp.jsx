@@ -43,6 +43,15 @@ import '../styles/derivatives-glass.css';
 
 const LazyDydx = SPECULATION_ENABLED ? lazyRetry(() => import('./Dydx')) : null;
 /*
+ * ─── THE «ترمینال» SUB-TAB ──────────────────────────────────────────────────
+ * The full desk (chart + ticket + book/tape/risk), lazy so the pair-list room
+ * never pays for it on first paint. The SAME component serves the
+ * `/perp/terminal` deep link; `embedded` only swaps the height class.
+ */
+const LazyTerminal = PERP_TERMINAL_ENABLED && SPECULATION_ENABLED
+  ? lazyRetry(() => import('../components/perp-terminal/PerpTerminalPane'))
+  : null;
+/*
  * ─── THE THIRD TAB: ON-CHAIN ────────────────────────────────────────────────
  * Futures Engine v3. Perpetual (this overview) · dYdX (client-signed session)
  * · On-Chain (server-built unsigned calldata against audited perp contracts,
@@ -440,6 +449,17 @@ export default function Perp() {
     return m;
   }, [coins]);
 
+  /* SYM → {image, name, id} — the logos for the «ترمینال» picker. Built from
+     the same market table, keyed by uppercase symbol, first row wins. */
+  const imagesMap = useMemo(() => {
+    const m = {};
+    for (const c of coins ?? []) {
+      const sym = String(c?.symbol || '').trim().toUpperCase();
+      if (sym && !m[sym]) m[sym] = { image: c.image || null, name: c.name || '', id: c.id || null };
+    }
+    return m;
+  }, [coins]);
+
   /*
    * ─── THE PAIR UNIVERSE, BUILT ───────────────────────────────────────────
    * Featured + whatever the venues list + the live market table, merged
@@ -672,16 +692,53 @@ export default function Perp() {
   }, [location.search, perpTab]);
 
   /*
+   * ─── THE TWO SUB-TABS OF «پرپچوال» ────────────────────────────────────────
+   *   «در فیوجرز، تب پرپچوال باید دو زیر تب جفت توکن و ترمینال باشد و نباید
+   *    بازارها یکسان یا شبیه هم باشد»
+   *
+   * «جفت توکن» is the market-cap catalogue — every row the feed carries, with
+   * sparklines; what it is FOR is discovery. «ترمینال» is the execution
+   * universe — only pairs an in-app venue (dYdX / Ostium / Velocity) settles,
+   * in a full-height fixed desk. Two different lists on purpose.
+   *
+   * `ptab` is a URL param so a shared link lands on the same room.
+   */
+  const [perpSubTab, setPerpSubTab] = useState(() => {
+    try {
+      const raw = String(window.location.hash || '').split('?')[1] || '';
+      const want = new URLSearchParams(raw).get('ptab');
+      return want === 'terminal' && PERP_TERMINAL_ENABLED ? 'terminal' : 'pairs';
+    } catch { return 'pairs'; }
+  });
+  useEffect(() => {
+    try {
+      const want = new URLSearchParams(location.search || '').get('ptab');
+      const next = want === 'terminal' && PERP_TERMINAL_ENABLED ? 'terminal' : 'pairs';
+      if (next !== perpSubTab) setPerpSubTab(next);
+    } catch { /* a malformed query is not worth breaking the page over */ }
+  }, [location.search, perpSubTab]);
+  const selectSubTab = (k) => {
+    setPerpSubTab(k);
+    try {
+      const sp = new URLSearchParams(location.search || '');
+      sp.set('ptab', k);
+      navigate({ search: `?${sp.toString()}` }, { replace: true });
+    } catch { /* the sub-tab already changed; only the URL write was lost */ }
+  };
+
+  /*
    * The two venue tabs are BOARDS (five measured columns, a depth chart, an
-   * order book), so while one is on screen the app column gets the same ~48px
-   * of extra width the derivatives hall asks for — and gives it back after.
+   * order book) — and so is the «ترمینال» sub-tab of this one — so while one
+   * is on screen the app column gets the same ~48px of extra width the
+   * derivatives hall asks for, and gives it back after.
    * See `body.hall-wide` in styles/derivatives-glass.css.
    */
   useEffect(() => {
-    if (perpTab === 'overview' || perpTab === 'spot') return undefined;
+    if (perpTab === 'spot') return undefined;
+    if (perpTab === 'overview' && perpSubTab !== 'terminal') return undefined;
     document.body.classList.add('hall-wide');
     return () => { document.body.classList.remove('hall-wide'); };
-  }, [perpTab]);
+  }, [perpTab, perpSubTab]);
 
   const [prepared, setPrepared] = useState(null);
   const [preparing, setPreparing] = useState(false);
@@ -987,26 +1044,33 @@ export default function Perp() {
         <h1 className="h1">{t(perpTab === 'spot' ? 'trade.title' : 'perp.title')}</h1>
         <p className="muted">{t(perpTab === 'spot' ? 'spot.subtitle' : 'perp.subtitle')}</p>
         {/*
-          ─── THE DESK LIVES ONE ROUTE AWAY ────────────────────────────────
-          This page stays a pair LIST: the ticket, the fees and the
-          liquidation table stay inside the sheet, and the redesign suites
-          assert exactly that. The desk is a separate route, so the only thing
-          added here is a way to reach it — a quiet link, not a second ticket.
-
-          Not rendered on the spot tab: the desk is a futures screen, and a
-          "terminal" button above a spot swap would be an answer to a question
-          nobody asked.
+          ─── THE TWO SUB-TABS («جفت توکن» / «ترمینال») ──────────────────────
+          «تب پرپچوال باید دو زیر تب جفت توکن و ترمینال باشد» — here they are.
+          «جفت توکن» is the market-cap catalogue (the default this page has
+          always been); «ترمینال» is the venue-executable desk, full-height
+          and fixed, WITHOUT leaving this tab. They are not the same list.
         */}
-        {PERP_TERMINAL_ENABLED && perpTab !== 'spot' && (
-          <button
-            type="button"
-            className="perp-terminal-link"
-            data-testid="perp-open-terminal"
-            onClick={() => navigate('/perp/terminal')}
-          >
-            {t('perp.terminalLink', { defaultValue: 'Open the trading terminal' })}
-            <span aria-hidden="true">→</span>
-          </button>
+        {/* Only the perpetual room carries the sub-tabs — the dYdX and
+            on-chain rooms are their own venues with their own screens. */}
+        {PERP_TERMINAL_ENABLED && perpTab === 'overview' && (
+          <div className="perp-subtabs" role="tablist" aria-label={t('perp.subtabs.aria', { defaultValue: 'Perpetual view' })}>
+            {['pairs', 'terminal'].map((k) => {
+              const active = perpSubTab === k;
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  className={`perp-subtab ${active ? 'is-on' : ''}`}
+                  onClick={() => selectSubTab(k)}
+                  data-testid={`perp-subtab-${k}`}
+                >
+                  {t(k === 'pairs' ? 'perp.subtabs.pairs' : 'perp.subtabs.terminal', { defaultValue: k === 'pairs' ? 'Token pairs' : 'Terminal' })}
+                </button>
+              );
+            })}
+          </div>
         )}
       </motion.div>
 
@@ -1053,6 +1117,17 @@ export default function Perp() {
       ) : perpTab === 'onchain' ? (
         <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
           {LazyOnchain && <LazyOnchain embedded />}
+        </Suspense>
+      ) : perpSubTab === 'terminal' ? (
+        /*
+         * ─── «ترمینال» — the full desk, embedded ────────────────────────────
+         * The same PerpTerminalPane the `/perp/terminal` route serves. It is
+         * NOT the pair list with a different skin: its universe is exactly the
+         * pairs an in-app venue settles, and every number on it is the venue's
+         * own or «—».
+         */
+        <Suspense fallback={<div className="card" style={{ minHeight: 320, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
+          {LazyTerminal && <LazyTerminal embedded images={imagesMap} testId="perp-terminal-embedded" />}
         </Suspense>
       ) : (
         <div className="perp-modern">

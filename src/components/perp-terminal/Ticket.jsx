@@ -51,7 +51,11 @@ const COLLATERAL_CHIPS = [25, 50, 100, 250];
 export default function Ticket({
   venue, market, quote, side = 'long', onSideChange,
   onPlace, placing = false, walletReady = false, onConnect,
-  equityUsd = null, availableBalanceUsd = null, errorCode = null, testId = 'perp-ticket'
+  equityUsd = null, availableBalanceUsd = null, errorCode = null, testId = 'perp-ticket',
+  /* dYdX session path: the wallet IS connected, but the venue signs from a
+     session key derived in memory. Showing «connect a wallet» (or a dead
+     submit) to that user was the reported «وصل کنی» bug. */
+  needsActivation = false, onActivate, activating = false, activationStage = null
 }) {
   const { t } = useTranslation();
   const [collateral, setCollateral] = useState('50');
@@ -240,6 +244,14 @@ export default function Ticket({
       {!walletReady ? (
         <button type="button" className="pt-submit" data-testid="perp-ticket-connect" onClick={() => onConnect?.()}>
           {t('perpTerminal.ticket.connect', { defaultValue: 'Connect a wallet' })}
+        </button>
+      ) : needsActivation ? (
+        <button type="button" className="pt-submit is-activate" data-testid="perp-ticket-activate" onClick={() => onActivate?.()} disabled={activating}>
+          {activating
+            ? (activationStage
+              ? t(`dydx.stage.${activationStage}`, { defaultValue: t('common.loading', { defaultValue: 'Working…' }) })
+              : t('common.loading', { defaultValue: 'Working…' }))
+            : t('perpTerminal.ticket.activateDydx', { defaultValue: 'Activate the dYdX session — one signature' })}
         </button>
       ) : (
         <button type="button" className={`pt-submit ${side === 'long' ? 'is-long' : 'is-short'}`}

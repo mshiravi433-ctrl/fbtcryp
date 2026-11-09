@@ -1,0 +1,95 @@
+/* ==========================================================================
+   FUTURES CHART — the AI forecast HUD (on-device Kronos)
+   --------------------------------------------------------------------------
+   Loaded by components/FuturesMarketChart.jsx so every consumer of the chart
+   (perp terminal, dYdX room, on-chain room, Ostium) gets the toggle and the
+   phase HUD styled — the model is opt-in per chart, the styling is not.
+   Violet family on purpose: the projection series on the chart is violet, and
+   the colour is the thread that ties «this is the AI» together.
+   ========================================================================== */
+
+/* ── the chart's AI HUD (toggle + every phase) ───────────────────────────── */
+.futures-ai-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(167, 139, 250, 0.45);
+  background: rgba(167, 139, 250, 0.1);
+  color: #c4b5fd;
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+.futures-ai-toggle.is-on { background: linear-gradient(135deg, #a78bfa, #7c3aed); border-color: transparent; color: #fff; box-shadow: 0 6px 18px rgba(124, 58, 237, 0.4); }
+
+.futures-ai-hud { margin: 6px 2px 4px; }
+.futures-ai-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  border-radius: 12px;
+  background: linear-gradient(150deg, rgba(124, 58, 237, 0.14), rgba(56, 189, 248, 0.05));
+  padding: 8px 12px;
+  font-size: 11.5px;
+}
+.futures-ai-row.is-error { border-color: rgba(234, 57, 67, 0.4); background: rgba(234, 57, 67, 0.07); }
+.futures-ai-copy { color: var(--pt-text, var(--text-1, #e9edf5)); line-height: 1.45; flex: 1 1 220px; min-width: 0; }
+.futures-ai-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.futures-ai-btn {
+  border: 1px solid var(--pt-line, var(--border, rgba(255, 255, 255, 0.08)));
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--pt-text, var(--text-1, #e9edf5));
+  border-radius: 9px;
+  padding: 7px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.futures-ai-btn:hover { border-color: #a78bfa; color: #c4b5fd; }
+.futures-ai-btn.is-primary { background: linear-gradient(135deg, #a78bfa, #7c3aed); border-color: transparent; color: #fff; }
+.futures-ai-spinner {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid rgba(196, 181, 253, 0.3);
+  border-top-color: #c4b5fd;
+  animation: futures-ai-spin 0.9s linear infinite;
+  flex: none;
+}
+@keyframes futures-ai-spin { to { transform: rotate(360deg); } }
+.futures-ai-progress {
+  flex: 1 1 160px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+  min-width: 120px;
+}
+.futures-ai-progress > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #38bdf8, #a78bfa);
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+.futures-ai-dir { font-size: 13px; font-weight: 800; letter-spacing: 0.02em; white-space: nowrap; }
+.futures-ai-dir.is-up { color: var(--pt-up, var(--up, #16c784)); }
+.futures-ai-dir.is-down { color: var(--pt-down, var(--down, #ea3943)); }
+.futures-ai-horizon { display: inline-flex; gap: 4px; }
+.futures-ai-horizon button,
+.futures-ai-horizon [role='button'] {
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: transparent;
+  color: #c4b5fd;
+  border-radius: 8px;
+  padding: 4px 9px;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.futures-ai-horizon .is-on,
+.futures-ai-horizon button.is-on { background: rgba(167, 139, 250, 0.25); border-color: #a78bfa; color: #fff; }
+
+[data-theme='light'] .futures-ai-row { background: linear-gradient(150deg, rgba(124, 58, 237, 0.08), rgba(56, 189, 248, 0.04)); }

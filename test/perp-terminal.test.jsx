@@ -372,8 +372,11 @@ describe('the perpetual pair catalogue', () => {
     expect(list.textContent).toContain('BTC');
     expect(list.textContent).toContain('APT');
     /* the count is STATED, not implied — a hundred rows with no number reads
-       as "still broken" when the user reaches the end */
-    expect(screen.getByText(/جفت توکن/)).toBeTruthy();
+       as "still broken" when the user reaches the end.
+       Anchored on the number: the «جفت توکن» sub-tab of «پرپچوال» now carries
+       the same phrase as a button label (that is its required name), so the
+       bare text query is ambiguous. */
+    expect(screen.getByText(/\d+\s*جفت توکن/)).toBeTruthy();
 
     /* search narrows it without reordering: the majors stay first */
     fireEvent.change(screen.getByTestId('perp-pair-search'), { target: { value: 'pudgy' } });

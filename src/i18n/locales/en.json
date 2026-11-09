@@ -88,7 +88,8 @@
     "search": "Search",
     "noResults": "No results",
     "max": "Max",
-    "showing": "Showing {{shown}} of {{total}}"
+    "showing": "Showing {{shown}} of {{total}}",
+    "notNow": "Not now"
   },
   "market": {
     "totalMcap": "Total market cap",
@@ -2207,7 +2208,12 @@
       "confirmDydx": "Confirm, sign and place order",
       "tpSlUnsupported": "Take-profit and stop-loss are written into the order only on the Ostium route. On this route they are not placed — don't count on them."
     },
-    "terminalLink": "Open the trading terminal"
+    "terminalLink": "Open the trading terminal",
+    "subtabs": {
+      "aria": "Perpetual view",
+      "pairs": "Token pairs",
+      "terminal": "Terminal"
+    }
   },
   "farm": {
     "title": "Yield Farm",
@@ -16339,6 +16345,35 @@
         "velocity": "Velocity: TP/SL is set from the on-chain futures tab, after you choose the market.",
         "open": "Open {{venue}}"
       }
+    },
+    "ai": {
+      "button": "AI forecast",
+      "buttonHint": "Project the next candles with the on-device AI model",
+      "chipHint": "Violet candles are the on-device Kronos AI projection, not printed price action.",
+      "download": "Download & forecast",
+      "downloadPrompt": "Download the on-device AI model ({{ size }})?",
+      "downloadSizeUnknown": "size unknown",
+      "downloading": "Downloading model… {{ pct }}%",
+      "preparing": "Preparing the AI model on this device…",
+      "running": "Projecting the next candles on this device…",
+      "ready": "AI projection of the next {{ horizon }} candles. Violet bars are model output, not price action.",
+      "recompute": "Recompute projection",
+      "horizon": "Projection length",
+      "horizonAuto": "Auto",
+      "err": {
+        "deviceUnsupported": "This device cannot run the on-device AI model.",
+        "backendFailed": "The AI engine could not start. Try again.",
+        "noStorage": "Not enough free storage for the model.",
+        "hostMissing": "The AI model is not hosted yet.",
+        "downloadFailed": "The model download failed. Check the connection and retry.",
+        "corrupt": "The downloaded model was corrupt. Clear it and retry.",
+        "oom": "Not enough memory to run the model.",
+        "unavailable": "The AI model is unavailable right now.",
+        "busy": "The model is busy with another task.",
+        "cancelled": "Forecast cancelled.",
+        "shortHistory": "Not enough candles yet for the AI model (at least 40).",
+        "invalidOutput": "The model returned an invalid projection. Try again."
+      }
     }
   },
   "profileBadge": {
@@ -18450,7 +18485,8 @@
         "QUOTE_EXPIRED": "The quote expired. Prepare it again.",
         "RISK_BLOCKED": "The risk engine blocked this order.",
         "PROVIDER_UNAVAILABLE": "The venue did not answer. Nothing was sent."
-      }
+      },
+      "activateDydx": "Activate the dYdX session — one signature"
     },
     "liq": {
       "provenance": {
@@ -18516,11 +18552,38 @@
         "MAINTENANCE": "maintenance",
         "UNREACHABLE": "unreachable",
         "NOT_CONFIGURED": "not configured"
-      }
+      },
+      "velocity": "Velocity",
+      "ostium": "Ostium",
+      "dydx": "dYdX"
     },
     "foot": {
       "custody": "Non-custodial: orders are signed by your wallet on the venue's own chain. No centralised-exchange trading API is used anywhere in this app.",
       "risk": "Leveraged perpetual futures can lose more than the margin posted. Liquidation prices are model output, not a guarantee."
+    },
+    "pairPerp": "Perpetual",
+    "pairSelectVenue": "venue-settled markets",
+    "pairSelectLabel": "Select a perpetual market",
+    "pairSelectSearch": "Search a market…",
+    "pairSelectNone": "No venue-settled market matches that search.",
+    "pairSelectLoading": "Reading the venue catalogues…",
+    "pairSelectFoot": "Only markets settled by an in-app venue are listed here.",
+    "venueAll": "All",
+    "venueFilter": "Filter by venue",
+    "venueShort": {
+      "velocity": "Velocity",
+      "ostium": "Ostium",
+      "dydx": "dYdX"
+    },
+    "server": {
+      "live": "Server connected",
+      "degraded": "Some feeds unreachable",
+      "offline": "Server unreachable",
+      "connecting": "Connecting to server…"
+    },
+    "book": {
+      "ostium": "Ostium is a peer-to-pool venue: it publishes no order book. Slippage is priced from the oracle instead.",
+      "velocity": "The Velocity book is not exposed to this screen yet. The price above is the venue’s own mid."
     }
   }
 }

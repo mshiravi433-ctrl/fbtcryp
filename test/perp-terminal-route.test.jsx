@@ -4,9 +4,12 @@
  * ---------------------------------------------------------------------------
  * What only a render can prove:
  *
- *   · the three columns exist at desktop width and the ticket is STICKY at
- *     phone width (which is a CSS contract, so it is asserted on the stylesheet
- *     as well as on the DOM);
+ *   · the desk is a FIXED full-height grid at desktop width and a natural
+ *     stack on a phone (which is a CSS contract, so it is asserted on the
+ *     stylesheet as well as on the DOM). The old sticky-bottom ticket was
+ *     removed on purpose: the report was «پایین صفحه ثابت و بالای صفحه متحرک»
+ *     — bottom fixed, top floating — and the fix is that EVERYTHING is fixed,
+ *     not that something else sticks. Asserted against the stylesheet.
  *   · every money figure is inside a `.pt-mono` element — the RTL/tabular rule
  *     the whole screen depends on;
  *   · an unknown number renders as «—» and NEVER as 0, and the top bar says
@@ -80,10 +83,22 @@ vi.mock('../src/hooks/useSolanaWallet', () => ({ useSolanaWallet: () => SOL }));
 /* ── the venue feeds ─────────────────────────────────────────────────────── */
 let FUTURES_MARKETS = { drift: [], ostium: [] };
 vi.mock('../src/lib/futuresClient', () => ({
-  getFuturesMarkets: async (p) => ({ ok: true, data: { markets: FUTURES_MARKETS[p] || [] } }),
+  /* `null` in the fixture = the read FAILED (this is how the server badge
+     tells «server answered, zero markets» from «server unreachable»). */
+  getFuturesMarkets: async (p) => (FUTURES_MARKETS[p] == null
+    ? { ok: false, error: { code: 'UNAVAILABLE' } }
+    : { ok: true, data: { markets: FUTURES_MARKETS[p] } }),
+  getFuturesPositions: async () => ({ ok: true, data: { positions: [] } }),
+  getFuturesAccount: async () => ({ ok: true, data: { balanceUsd: null } }),
   prepareFutures: async () => ({ ok: true, data: { executionId: 'x', transactions: [] } }),
   verifyFutures: async () => ({ ok: true }),
   getFuturesFeePreview: async () => ({ ok: true, data: null })
+}));
+
+/* The route wrapper reads the market table for the dropdown logos; keep the
+   suite hermetic. */
+vi.mock('../src/hooks/useMarket', () => ({
+  useMarkets: () => ({ data: [], loading: false, error: null, updatedAt: 0, refresh: () => {} })
 }));
 
 let DYDX_MARKETS = [];
@@ -92,6 +107,7 @@ let TRADES = [];
 let RANGE = { high24h: null, low24h: null, live: false };
 let SUBACCOUNT = { account: null, live: false };
 let SESSION_ADDRESS = null;
+let CONNECT_CALLS = [];
 vi.mock('../src/lib/dydx', () => ({
   getDydxMarkets: async () => ({ markets: DYDX_MARKETS, live: DYDX_MARKETS.length > 0 }),
   getDydxOrderbook: async () => BOOK,
@@ -100,7 +116,10 @@ vi.mock('../src/lib/dydx', () => ({
   getDydxSubaccount: async () => SUBACCOUNT,
   dydxSessionAddress: () => SESSION_ADDRESS,
   placeDydxOrder: async () => ({ hash: '0xabc' }),
-  classifyDydxError: (e) => String(e?.message || e)
+  connectDydx: async ({ onStage } = {}) => { CONNECT_CALLS.push('connect'); onStage?.('sign'); SESSION_ADDRESS = 'dydx1sessiontest000000000000000000000000'; return { address: SESSION_ADDRESS }; },
+  disconnectDydx: () => { CONNECT_CALLS.push('disconnect'); SESSION_ADDRESS = null; },
+  classifyDydxError: (e) => String(e?.message || e),
+  classifyDydxOrderError: (e) => String(e?.message || e)
 }));
 
 const dydxMarket = (over = {}) => ({
@@ -127,6 +146,7 @@ beforeEach(() => {
   RANGE = { high24h: 110, low24h: 90, live: true };
   SUBACCOUNT = { account: null, live: false };
   SESSION_ADDRESS = null;
+  CONNECT_CALLS = [];
   WALLET = { isConnected: false, address: null, chainId: 1 };
   SOL = { address: null, isConnected: false };
 });
@@ -149,9 +169,12 @@ const renderDesk = async (initial = '/perp/terminal') => {
 };
 
 describe('the desk', () => {
-  it('renders the three columns and mounts the chart for the routed venue', async () => {
+  it('renders the picker, the chart and the ticket, and mounts the chart for the routed venue', async () => {
     await renderDesk();
-    expect(screen.getByTestId('perp-terminal-markets')).toBeTruthy();
+    /* The market list is now the LOGO DROPDOWN — the requirement was «برای
+       انتخاب توکن ها با لوگو و باکس بازشونده باشد». */
+    expect(screen.getByTestId('pair-select')).toBeTruthy();
+    expect(screen.getByTestId('pair-select-button')).toBeTruthy();
     expect(screen.getByTestId('perp-terminal-chart')).toBeTruthy();
     expect(screen.getByTestId('perp-ticket')).toBeTruthy();
     expect(screen.getByTestId('perp-terminal-bottom')).toBeTruthy();
@@ -288,14 +311,65 @@ describe('the desk', () => {
     expect(screen.getByTestId('perp-risk-warnings').textContent.length).toBeGreaterThan(0);
   });
 
-  it('the ticket is a real column on desktop and sticky on a phone', async () => {
+  it('says the server is connected only after real reads land', async () => {
     await renderDesk();
+    await waitFor(() => expect(screen.getByTestId('perp-terminal-server').className).toContain('is-live'));
+  });
+
+  it('when every read fails the header says so — with a retry, never a fake «live»', async () => {
+    FUTURES_MARKETS = { drift: null, ostium: null };
+    DYDX_MARKETS = [];
+    await renderDesk('/perp/terminal?market=DOGE');
+    await waitFor(() => expect(screen.getByTestId('perp-terminal-server').className).toContain('is-offline'));
+    expect(screen.getByTestId('perp-terminal-retry')).toBeTruthy();
+  });
+
+  it('retrying after an outage recovers the badge when the feeds return', async () => {
+    FUTURES_MARKETS = { drift: null, ostium: null };
+    DYDX_MARKETS = [];
+    await renderDesk('/perp/terminal?market=ETH');
+    await waitFor(() => expect(screen.getByTestId('perp-terminal-server').className).toContain('is-offline'));
+    FUTURES_MARKETS = { drift: [{ marketId: '2', base: 'ETH', symbol: 'ETH/USDT', mid: 2500, maxLeverage: 10 }], ostium: [] };
+    DYDX_MARKETS = [dydxMarket({ ticker: 'ETH-USD' })];
+    fireEvent.click(screen.getByTestId('perp-terminal-retry'));
+    await waitFor(() => expect(screen.getByTestId('perp-terminal-server').className).toContain('is-live'));
+  });
+
+  it('a connected EVM wallet gets the one-signature dYdX activation — never «connect a wallet»', async () => {
+    /* The reported bug: «با اینکه کیف پول وصله ارتباط با سرور برقرار نمیکنه و
+       میگه وصل کنی». The wallet IS connected here; the missing piece is the
+       in-memory session, so the button must offer activation, not connection. */
+    WALLET = { isConnected: true, address: '0xabc123', chainId: 1, mode: 'wc' };
+    await renderDesk();
+    await waitFor(() => expect(screen.getByTestId('perp-ticket-activate')).toBeTruthy());
+    expect(screen.queryByTestId('perp-ticket-connect')).toBeNull();
+    fireEvent.click(screen.getByTestId('perp-ticket-activate'));
+    await waitFor(() => expect(CONNECT_CALLS).toContain('connect'));
+    /* after the signature the submit button replaces the activation button */
+    await waitFor(() => expect(screen.getByTestId('perp-ticket-submit')).toBeTruthy());
+    expect(screen.queryByTestId('perp-ticket-activate')).toBeNull();
+  });
+
+  it('the desk is a fixed full-height grid on desktop — nothing sticky, everything fits', async () => {
+    /* THE CONTRACT CHANGED ON PURPOSE. The user reported «بالای صفحه متحرک،
+       پایین صفحه ثابت» — the top scrolled while the bottom stayed glued — and
+       asked for «همه ثابت باشد» (EVERYTHING fixed, with proper spacing) plus
+       «تمام صفحه باشد» (full page). The old contract pinned a sticky ticket;
+       the new one pins a FIXED 100dvh grid where every row/column owns its
+       space and the page never scrolls on desktop. Below 1200px the grid
+       stacks and the page flows again — a clipped phone desk is not «fixed». */
     const fs = await import('node:fs');
     const css = fs.readFileSync(`${process.cwd()}/src/styles/perp-terminal.css`, 'utf8');
-    expect(css).toMatch(/grid-template-columns:\s*240px minmax\(0, 1fr\) 320px/);
+    /* desktop: fixed full-height grid with explicit rows */
+    expect(css).toMatch(/@media \(min-width: 1200px\)/);
+    expect(css).toMatch(/height:\s*calc\(100dvh/);
+    expect(css).toMatch(/grid-template-rows:\s*auto auto minmax\(0, 1fr\) 252px auto/);
+    /* the desk itself: chart + 340px ticket */
+    expect(css).toMatch(/\.ptx-main\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 340px/s);
+    /* NOTHING inside the desk is sticky any more — especially not the ticket */
+    expect(css).not.toMatch(/\.ptx-ticket\s*\{[^}]*position:\s*sticky/s);
     expect(css).toMatch(/@media \(max-width: 1199px\)/);
     expect(css).toMatch(/@media \(max-width: 899px\)/);
-    expect(css).toMatch(/\.pt-col-ticket\s*\{[^}]*position:\s*sticky/s);
     expect(css).toMatch(/font-variant-numeric:\s*tabular-nums/);
   });
 });
