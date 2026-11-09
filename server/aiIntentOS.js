@@ -2533,6 +2533,20 @@ router.post('/chat', async (req, res) => {
           violations: Array.isArray(collaboration.discourse.violations) ? collaboration.discourse.violations : [],
           compliant: collaboration.discourse.compliant === true
         } : null,
+        /* What FBT itself is: the intent of the product question, how far the
+           verified knowledge could answer it (verified / partial / absent — and
+           «absent» is a real answer for the founders), which pages the answer
+           stands on, and whether the final text invented anything. */
+        product: collaboration?.product ? {
+          intent: collaboration.product.intent,
+          confidence: collaboration.product.confidence,
+          gaps: Array.isArray(collaboration.product.gaps) ? collaboration.product.gaps : [],
+          pageCount: Number.isFinite(collaboration.product.pageCount) ? collaboration.product.pageCount : null,
+          pages: Array.isArray(collaboration.product.pages) ? collaboration.product.pages.slice(0, 8) : [],
+          sources: Array.isArray(collaboration.product.sources) ? collaboration.product.sources.slice(0, 8) : [],
+          violations: Array.isArray(collaboration.product.violations) ? collaboration.product.violations : [],
+          compliant: collaboration.product.compliant === true
+        } : null,
         /* The user's money and mood read together: direction and magnitude of
            their own portfolio, the basis of that figure (unrealized / today's
            move / none), concentration, and whether the answer respected it. */
