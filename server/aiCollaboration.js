@@ -58,6 +58,14 @@ import { buildClaimLedger, renderClaimLedger } from './aiClaimLedger.js';
 import { selectEconomicLenses, renderEconomistLens, economistPersona } from './aiEconomistLens.js';
 import { readSocialContext, renderSocialBrief } from '../src/lib/intent-ai/os/conversation/socialRead.js';
 import {
+  detectStrategyRequest,
+  buildStrategyFrame,
+  renderStrategyFrame,
+  renderStrategyRubricContract,
+  checkStrategyRubric,
+  renderStrategyGaps
+} from './aiStrategyFrame.js';
+import {
   decomposeQuestion,
   assessQuestionCoverage,
   renderSubQuestionChecklist,
@@ -306,7 +314,7 @@ const ROLE_TASK = {
   [AI_ROLES.FINAL_ANSWER_AI]: 'reasoning'
 };
 
-async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '' }) {
+async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '' }) {
   /*
    * ─── DEEP REASONING CONTRACT (smartest mode only) ─────────────────────────
    * The role prompts are shared by every mode, so the extra discipline lives
@@ -333,7 +341,7 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
     /* The economist's lens is a reasoning contract, not a costume: it rides on
        the specialists and the synthesiser, never on the reviewer (whose job is
        to break the draft, not to reason about the economy). */
-    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}`;
+    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}`;
   /*
    * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
    * This line used to be a ternary: Persian or English. Everything a Turkish,
@@ -717,6 +725,22 @@ export async function runCollaborativeAnalysis({
     ? readSocialContext({ message, locale, history: context?.conversationSummary || '' })
     : null;
   const socialBrief = renderSocialBrief(socialRead);
+  /*
+   * ─── STRATEGY FRAME + RUBRIC (smartest mode, strategy turns) ───────────────
+   * A plan may stand on the user's real capital, their actual weights, the
+   * platform fee and the policy caps — and on nothing else. Everything the
+   * frame could not read is named as a gap instead of being invented. The
+   * rubric tells the model, before it writes, which sections a strategy answer
+   * must contain; the reviewer is told afterwards which ones are missing.
+   */
+  const isStrategyTurn = mode === 'max'
+    && ((Array.isArray(plan.taskTypes) && plan.taskTypes.includes('strategy')) || detectStrategyRequest(message));
+  const strategyFrame = mode === 'max' && isStrategyTurn
+    ? buildStrategyFrame({ context, message })
+    : null;
+  const strategyBrief = strategyFrame
+    ? `${renderStrategyFrame(strategyFrame)}\n${renderStrategyRubricContract()}`
+    : '';
   /* Role budgets follow the mode: `max` gives an analysis room for its
      reasoning and its answer instead of a single paragraph. Latency-bound
      conversation roles are exempt (see intelligenceGeneration). */
@@ -785,6 +809,9 @@ export async function runCollaborativeAnalysis({
     /* The social read of the message (smartest mode): register, tone, the need
        behind the words, and how much was left unsaid. null otherwise. */
     socialRead,
+    /* Strategy turns in the smartest mode: the computed frame the plan stood on
+       and the rubric result for the final answer. null otherwise. */
+    strategy: null,
     perRole: transparency ? [] : undefined,
     latencyMs: 0,
     at: Date.now()
@@ -893,7 +920,7 @@ export async function runCollaborativeAnalysis({
        analyses are genuinely different providers, not one model twice. */
     const roles = pickAnalysisRoles(plan, 2);
     const settled = await withDeadline(
-      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief }))),
+      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief }))),
       []
     );
     analyses.push(...(settled || []).filter(Boolean));
@@ -927,6 +954,7 @@ export async function runCollaborativeAnalysis({
         intelligence: mode,
         economistLens,
         socialBrief,
+        strategyBrief,
         /* The last analytical seat is the dissenting one, and only in the
            smartest mode: one of the three reads must be trying to break the
            other two, not agreeing with them. */
@@ -959,7 +987,8 @@ export async function runCollaborativeAnalysis({
         maxTokens: tokensFor(600),
         intelligence: mode,
         economistLens,
-        socialBrief
+        socialBrief,
+        strategyBrief
       }), null);
       if (verifier?.ok) analyses.push(verifier);
     }
@@ -1018,12 +1047,26 @@ export async function runCollaborativeAnalysis({
         maxTokens: tokensFor(800),
         intelligence: mode,
         economistLens,
-        socialBrief
+        socialBrief,
+        strategyBrief
       }), null);
       result.answer = finalRole?.ok
         ? finalRole.answer
         : mergeTwoAnswers(validFinal, isFa);
       if (finalRole?.ok) analyses.push(finalRole);
+
+      /*
+       * ─── STRATEGY RUBRIC ON THE DRAFT ──────────────────────────────────────
+       * The model was told the eight sections before writing; this records which
+       * ones the draft actually contains and hands the missing ones to the
+       * reviewer below. Completeness only — it does not claim the plan is good.
+       */
+      if (strategyFrame) {
+        result.strategy = {
+          frame: strategyFrame,
+          rubric: checkStrategyRubric(result.answer)
+        };
+      }
 
       /*
        * ─── NUMERIC EVIDENCE AUDIT (deterministic, no extra call) ─────────────
@@ -1072,9 +1115,10 @@ export async function runCollaborativeAnalysis({
             : { covered: [], uncovered: [] };
           const unansweredBlock = renderUnansweredParts(draftCoverage.uncovered, locale);
           const unsourcedBlock = renderUnsourcedBlock(draftAudit);
+          const strategyGapsBlock = renderStrategyGaps(result.strategy?.rubric);
           const criticRole = {
             role: AI_ROLES.VERIFICATION_AI,
-            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}`,
+            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}`,
             contextBlock: '',
             locale,
             deps: D,

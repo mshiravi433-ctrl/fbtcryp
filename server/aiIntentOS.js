@@ -2407,6 +2407,16 @@ router.post('/chat', async (req, res) => {
         lenses: Array.isArray(collaboration?.persona?.lenses) ? collaboration.persona.lenses : [],
         /* The social read of the user's message: register, tone, the need
            behind the literal question, and how much was left unsaid. */
+        /* Strategy turns: the computed frame the plan stood on and the rubric
+           result for the answer. null when the turn was not a strategy turn. */
+        strategy: collaboration?.strategy ? {
+          capitalUsd: collaboration.strategy.frame?.capitalUsd ?? null,
+          concentration: collaboration.strategy.frame?.concentration ?? null,
+          feeRoundTripPct: collaboration.strategy.frame?.feeRoundTripPct ?? null,
+          gaps: Array.isArray(collaboration.strategy.frame?.gaps) ? collaboration.strategy.frame.gaps : [],
+          rubricScore: collaboration.strategy.rubric?.score ?? null,
+          rubricMissing: Array.isArray(collaboration.strategy.rubric?.missing) ? collaboration.strategy.rubric.missing : []
+        } : null,
         social: collaboration?.socialRead ? {
           register: collaboration.socialRead.register,
           tone: collaboration.socialRead.tone,
