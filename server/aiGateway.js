@@ -110,6 +110,9 @@ import {
 export { describeIntelligence };
 /* …and so can describe the fleet it is allowed to call. */
 export { describeProviderFleet, DEFAULT_PROVIDER_FLEET };
+/* The central brain needs the resolved mode and the flagship ladders to name
+   the ids its seats will actually call; both live in aiIntelligence. */
+export { resolveIntelligenceMode, intelligenceModelLadder };
 
 export const PROVIDER_CONFIGS = Object.freeze({
   openrouter: {
