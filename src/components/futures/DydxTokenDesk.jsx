@@ -45,7 +45,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 
 import SegIndicator from '../SegIndicator';
-import CoinLogo from '../CoinLogo';
+import { TOKEN_SVG } from '../../lib/assetIconData';
+import { iconCandidates } from '../../lib/tokenIcon';
 import FuturesAiRisk from './FuturesAiRisk';
 import { IconArrowUpRight, IconChevronRight, IconClock, IconRefresh, IconShield, IconSparkle, IconTrend } from '../Icons';
 import { getDydxCandles, getDydxOrderbook } from '../../lib/dydx';
@@ -69,6 +70,17 @@ const TABS = [
 /** The candles one read needs: a week of hours. */
 const RESOLUTION = '1HOUR';
 const CANDLE_LIMIT = 168;
+
+/* Venue-listed symbols only: known offline crypto artwork, then the curated
+   crypto catalogue, finally an honest monogram if no image is available. */
+function DydxTokenLogo({ symbol }) {
+  const [failed, setFailed] = useState(false);
+  const svg = TOKEN_SVG[symbol];
+  const src = iconCandidates({ symbol })[0];
+  if (svg) return <span className="dtd-token-svg" aria-hidden="true" dangerouslySetInnerHTML={{ __html: svg }} />;
+  if (src && !failed) return <img src={src} alt="" width="44" height="44" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+  return <span className="dtd-token-fallback" aria-hidden="true">{symbol.slice(0, 3) || '?'}</span>;
+}
 
 /* ─── small parts ─────────────────────────────────────────────────────────── */
 
@@ -474,6 +486,7 @@ export default function DydxTokenDesk({
   const i18nLanguage = i18n?.language || 'en';
   const [open, setOpen] = useState(Boolean(defaultOpen || standalone));
   const DeskHeader = standalone ? 'div' : 'button';
+  const baseSymbol = String(ticker || '').split('-')[0].toUpperCase();
   const [tab, setTab] = useState('ai');
   const [candles, setCandles] = useState([]);
   const [book, setBook] = useState(null);
@@ -587,7 +600,7 @@ export default function DydxTokenDesk({
         onClick={standalone ? undefined : () => setOpen((v) => !v)}
         data-testid={`${testId}-toggle`}
       >
-        {standalone ? <span className="dtd-token-avatar" data-testid={`${testId}-token-logo`}><CoinLogo ticker={String(ticker || '').replace(/-USD$/, '')} px={44} priority /></span> : <span className="dtd-head-mark" aria-hidden="true"><IconSparkle width={15} height={15} /></span>}
+        {standalone ? <span className="dtd-token-avatar" data-testid={`${testId}-token-logo`} data-symbol={baseSymbol}><DydxTokenLogo key={baseSymbol} symbol={baseSymbol} /></span> : <span className="dtd-head-mark" aria-hidden="true"><IconSparkle width={15} height={15} /></span>}
         <span className="dtd-head-text">
           <span className="dtd-head-title">{t('dydx.desk.title', { ticker: String(ticker || '—').replace('-USD', '') })}</span>
           <span className="dtd-head-sub">{standalone ? t('dydx.desk.workspace') : open ? t('dydx.desk.close') : verdictLabel}</span>

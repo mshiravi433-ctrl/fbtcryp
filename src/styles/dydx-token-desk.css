@@ -685,3 +685,56 @@
   .dydx-desk-sheet .dtd-tabs { margin: 0; border: 1px solid color-mix(in srgb, #8ec9e9 20%, var(--line)); }
   .dydx-desk-sheet :is(.dtd-pod, .dtd-block, .dtd-setup, .dtd-ask, .dtd-signal) { border-radius: 16px; background: color-mix(in srgb, var(--bg-panel-solid) 88%, #4f96bd); }
 }
+
+/* dYdX-only atmosphere and trading controls. */
+.dydx-app .derivatives-aurora {
+  inset: -60px -16px auto; height: 650px; border-radius: 0;
+  background: radial-gradient(ellipse at 20% 4%, rgba(46, 151, 206, .14), transparent 52%),
+              radial-gradient(ellipse at 85% 34%, rgba(82, 100, 216, .12), transparent 55%);
+}
+.dydx-app .derivatives-aurora::before { background: radial-gradient(circle, #44b6dc, transparent 62%); opacity: .14; }
+.dydx-app .derivatives-aurora::after { background: radial-gradient(circle, #6f80e4, transparent 62%); opacity: .12; }
+.dydx-app .derivatives-hero {
+  padding: 22px; border-radius: 26px;
+  border: 1px solid color-mix(in srgb, #85cfff 36%, var(--line));
+  background: radial-gradient(ellipse at 94% 2%, rgba(95, 191, 238, .20), transparent 50%),
+              linear-gradient(140deg, color-mix(in srgb, var(--bg-panel-solid) 84%, #488ac0), var(--bg-panel-solid));
+  box-shadow: 0 18px 45px rgba(7, 37, 73, .20), inset 0 1px rgba(255,255,255,.2);
+}
+.dydx-app .derivatives-hero::before { background: linear-gradient(115deg, #9addff, #5990db, transparent 78%); opacity: .32; }
+.dydx-hero-content { position: relative; z-index: 1; }
+.dydx-hero-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.dydx-hero-mark { flex: 0 0 48px; width: 48px; height: 48px; display: grid; place-items: center; color: #eafaff; border: 1px solid rgba(188,235,255,.55); border-radius: 16px; background: linear-gradient(145deg, #56b6d7, #425eaa); box-shadow: inset 0 1px rgba(255,255,255,.4), 0 7px 18px rgba(42,115,172,.24); }
+.dydx-hero-copy { min-width: 0; flex: 1 1 auto; }
+.dydx-hero-eyebrow { display: block; color: var(--text-2); font-size: 10px; font-weight: 800; letter-spacing: .14em; direction: ltr; text-align: start; }
+.dydx-hero-title { margin: 4px 0 0; color: var(--text-1); font-size: clamp(19px, 5vw, 26px); line-height: 1.25; font-weight: 850; }
+.dydx-hero-subtitle { color: var(--text-2); margin: 16px 0 0; font-size: 12px; line-height: 1.9; max-width: 60ch; }
+.dydx-hero-status { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 999px; border: 1px solid rgba(67,187,165,.30); background: rgba(33,161,130,.12); color: var(--text-1); font-size: 10px; font-weight: 800; }
+.dydx-hero-status > span { width: 7px; height: 7px; border-radius: 50%; background: #27c99c; box-shadow: 0 0 8px rgba(39,201,156,.7); }
+.dydx-hero-status.is-offline > span { background: #ee7280; box-shadow: 0 0 8px rgba(238,114,128,.55); }
+.dydx-workflow .infobox { border: 1px solid color-mix(in srgb, #8acaf2 30%, var(--line)); border-radius: 20px; background: linear-gradient(145deg, color-mix(in srgb,var(--bg-panel-solid) 86%,#5ba8d2), var(--bg-panel-solid)); box-shadow: inset 0 1px rgba(255,255,255,.15), 0 12px 30px rgba(8,38,65,.10); overflow: hidden; }
+.dydx-workflow .infobox-head { padding: 15px; gap: 12px; }
+.dydx-workflow .infobox-icon { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 38px; color: #a8e7ff; border-radius: 13px; background: linear-gradient(145deg, #388db9, #5269ae); border: 1px solid rgba(183,226,255,.35); }
+.dydx-workflow .infobox-title { color: var(--text-1); font-weight: 800; }
+.dydx-workflow .infobox-body { padding: 0 15px 16px; }
+.dydx-workflow-list { margin: 0; padding: 0; display: grid; gap: 7px; list-style: none; }
+.dydx-workflow-list li { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding: 10px; border-radius: 13px; border: 1px solid color-mix(in srgb, #85c5eb 18%, var(--line)); background: color-mix(in srgb, var(--bg-panel-solid) 90%, #6ab6dd); color: var(--text-2); font-size: 12px; line-height: 1.9; }
+.dydx-workflow-number { flex: 0 0 27px; width: 27px; height: 27px; display: grid; place-items: center; border-radius: 9px; background: rgba(74,164,211,.15); color: var(--text-1); font: 800 10px/1 sans-serif; direction: ltr; }
+.dydx-app .lev-chip.active, :root[data-theme='light'] .dydx-app .lev-chip.active {
+  color: #edfbff; border-color: rgba(146, 216, 255, .75);
+  background: linear-gradient(145deg, #287fa9, #4268ac);
+  box-shadow: inset 0 1px rgba(255,255,255,.32), 0 5px 15px rgba(32,108,169,.25);
+}
+.dydx-app .lev-chip:focus-visible { outline: 2px solid #74d1f5; outline-offset: 2px; }
+.dtd-token-avatar img, .dtd-token-svg, .dtd-token-fallback { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; overflow: hidden; }
+.dtd-token-svg svg { width: 100%; height: 100%; }
+.dtd-token-fallback { background: linear-gradient(145deg, #428cae, #545caa); color: #fff; font: 800 12px/1 sans-serif; }
+@media (max-width: 767px) {
+  /* An absolutely-positioned grid child otherwise anchors to the middle
+     CELL. Auto grid placement anchors to the whole bar instead. */
+  .dydx-mobile-dock .dydx-dock-desk {
+    grid-column: auto; grid-row: auto;
+    left: 0; right: 0; top: 0; margin: 0 auto;
+    transform: translateY(-50%); justify-self: auto; align-self: auto;
+  }
+}

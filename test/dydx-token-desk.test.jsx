@@ -607,6 +607,44 @@ describe('dYdX mobile trading dock', () => {
     expect(screen.getByTestId('dydx-mobile-dock')).toBeTruthy();
   });
 
+  it('updates the selected token artwork and falls back safely when unavailable', async () => {
+    EXTRA_MARKETS = [marketRow('UNKNOWNCOIN')];
+    render(<Dydx embedded />);
+    await screen.findByTestId('dydx-market-select');
+    fireEvent.click(screen.getByTestId('dydx-mobile-desk-open'));
+    let logo = await screen.findByTestId('dydx-mobile-desk-token-logo');
+    expect(logo.getAttribute('data-symbol')).toBe('BTC');
+    expect(logo.querySelector('svg')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('dydx-mobile-desk-sheet-close'));
+    fireEvent.change(screen.getByTestId('dydx-market-select'), { target: { value: 'ETH-USD' } });
+    fireEvent.click(screen.getByTestId('dydx-mobile-desk-open'));
+    logo = await screen.findByTestId('dydx-mobile-desk-token-logo');
+    expect(logo.getAttribute('data-symbol')).toBe('ETH');
+    expect(logo.querySelector('svg')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('dydx-mobile-desk-sheet-close'));
+    fireEvent.change(screen.getByTestId('dydx-market-select'), { target: { value: 'UNKNOWNCOIN-USD' } });
+    fireEvent.click(screen.getByTestId('dydx-mobile-desk-open'));
+    logo = await screen.findByTestId('dydx-mobile-desk-token-logo');
+    expect(logo.getAttribute('data-symbol')).toBe('UNKNOWNCOIN');
+    expect(logo.querySelector('.dtd-token-fallback').textContent).toBe('UNK');
+  });
+
+  it('keeps workflow accessible and marks slippage and leverage selections', async () => {
+    render(<Dydx embedded />);
+    await screen.findByTestId('dydx-leverage-2');
+    const steps = screen.getByRole('button', { name: fa.dydx.steps.title });
+    expect(steps.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(steps);
+    expect(steps.getAttribute('aria-expanded')).toBe('true');
+    expect(document.querySelectorAll('.dydx-workflow-list li')).toHaveLength(5);
+    const slip = screen.getByRole('button', { name: '0.5%' });
+    fireEvent.click(slip);
+    expect(slip.getAttribute('aria-pressed')).toBe('true');
+    const lever = screen.getByTestId('dydx-leverage-2');
+    fireEvent.click(lever);
+    expect(lever.getAttribute('aria-pressed')).toBe('true');
+  });
+
   it('keeps the dock on screen if markets are unavailable, without inventing a desk', async () => {
     MARKETS_AVAILABLE = false;
     render(<Dydx embedded />);

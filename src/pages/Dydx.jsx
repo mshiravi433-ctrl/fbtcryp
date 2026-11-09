@@ -7,7 +7,7 @@ import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
 import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
-import { IconInfo, IconSparkle } from '../components/Icons';
+import { IconInfo, IconSparkle, IconRoute } from '../components/Icons';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { fmtPrice, fmtUsd } from '../lib/format';
@@ -390,15 +390,16 @@ export default function Dydx({ embedded = false } = {}) {
       <div className="derivatives-hall dydx-app">
         <div className="derivatives-aurora" aria-hidden="true" />
         <motion.section className="derivatives-hero" variants={riseIn} initial="hidden" animate="show">
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-            <div>
-              <div className="derivatives-title">
-                <span className="derivatives-title-glow">{t('dydx.title')}</span>
-                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', letterSpacing: 1 }}>• dYdX</span>
+          <div className="dydx-hero-content">
+            <div className="dydx-hero-brand">
+              <span className="dydx-hero-mark" aria-hidden="true"><IconSparkle width={23} height={23} /></span>
+              <div className="dydx-hero-copy">
+                <span className="dydx-hero-eyebrow">dYdX CHAIN</span>
+                <h2 className="dydx-hero-title">{t('dydx.title')}</h2>
               </div>
-              <p className="derivatives-subtitle">{t('dydx.subtitle')}</p>
+              <span className={`dydx-hero-status ${live ? 'is-live' : 'is-offline'}`}><span aria-hidden="true" />{live ? t('dydx.live') : t('dydx.offline')}</span>
             </div>
-            <span className={`pill ${live ? 'pill-up' : 'pill-down'}`} style={{ alignSelf: 'flex-start' }}>{live ? t('dydx.live') : t('dydx.offline')}</span>
+            <p className="dydx-hero-subtitle">{t('dydx.subtitle')}</p>
           </div>
         </motion.section>
 
@@ -407,11 +408,11 @@ export default function Dydx({ embedded = false } = {}) {
         </motion.div>
 
         {/* Dismissible workflow guidance that reflects connection state. */}
-        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
-          <InfoBox title={t('dydx.steps.title')} tone="info" id="dydx-steps">
-            <ol style={{ margin: 0, paddingInlineStart: 18, display: 'grid', gap: 7, fontSize: 12.5, lineHeight: 1.9 }}>
-              {['connect', 'marketSize', 'review', 'confirm', 'afterSubmit'].map((step) => (
-                <li key={step}>{t(`dydx.steps.${step}`)}</li>
+        <motion.div className="dydx-workflow" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
+          <InfoBox title={t('dydx.steps.title')} tone="info" id="dydx-steps" icon={<IconRoute width={19} height={19} />}>
+            <ol className="dydx-workflow-list">
+              {['connect', 'marketSize', 'review', 'confirm', 'afterSubmit'].map((step, index) => (
+                <li key={step}><span className="dydx-workflow-number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span><span>{t(`dydx.steps.${step}`)}</span></li>
               ))}
             </ol>
             {dydxAddress && !canReview && (
@@ -587,7 +588,7 @@ export default function Dydx({ embedded = false } = {}) {
             <label className="field-label" style={{ marginTop: 6 }}>{t('dydx.slippage')}</label>
             <div className="lev-row">
               {[0.1, 0.5, 1].map((n) => (
-                <button type="button" className={`lev-chip ${Number(slippage) === n ? 'active' : ''}`} key={n} onClick={() => setSlippage(String(n))}>{n}%</button>
+                <button type="button" className={`lev-chip ${Number(slippage) === n ? 'active' : ''}`} aria-pressed={Number(slippage) === n} key={n} onClick={() => setSlippage(String(n))}>{n}%</button>
               ))}
             </div>
           </div>
@@ -605,6 +606,7 @@ export default function Dydx({ embedded = false } = {}) {
                 <button
                   type="button"
                   className={`lev-chip ${Number(leverage) === n ? 'active' : ''}`}
+                  aria-pressed={Number(leverage) === n}
                   key={n}
                   onClick={() => applyLeverage(n)}
                   data-testid={`dydx-leverage-${n}`}
