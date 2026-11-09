@@ -1019,9 +1019,46 @@ export function IntelligencePanel({
                         {isEn ? 'Next if it refuses: ' : 'در صورت رد: '}<code>{modelLadder.slice(1).join(' → ')}</code>
                       </small>
                     ) : null}
-                    {!live && p.envVar ? (
+                    {!live && p.envVar && p.keyPresent ? (
+                      /* The key IS there — the provider is simply outside the
+                         declared fleet. Telling this operator to set a variable
+                         they already set is how five working keys stayed
+                         invisible while the panel asked for a sixth. */
+                      <small className="iaos-intel-env" dir="ltr" data-testid={`intel-out-of-fleet-${p.id}`}>
+                        {isEn
+                          ? `Key present, outside the fleet — add it to FBT_AI_PROVIDERS (or set FBT_AI_PROVIDERS=all) and redeploy.`
+                          : `کلید موجود است ولی این صندلی بیرون از ناوگان است — به FBT_AI_PROVIDERS اضافه کنید (یا FBT_AI_PROVIDERS=all) و دوباره استقرار دهید.`}
+                      </small>
+                    ) : (!live && p.envVar ? (
                       <small className="iaos-intel-env" dir="ltr">
                         {isEn ? 'Enable with ' : 'فعال‌سازی با '}<code>{p.envVar}</code>
+                      </small>
+                    ) : null)}
+                    {/*
+                     * ─── THE ENV VAR THAT DECIDES WHICH MODEL GETS ASKED ────────
+                     * `AI_MODEL` (or a provider's own `*_MODEL`) outranks the
+                     * flagship ladder when it names something the provider did
+                     * not already default to. On the live deployment a leftover
+                     * pin to the old cheap model was the whole reason
+                     * «باهوش‌ترین» looked identical to «متعادل». The panel now
+                     * says which seat is pinned, by what, and what was done
+                     * about it — so the next operator reads a cause, not a
+                     * mystery.
+                     */}
+                    {p.modelPin && p.modelPin.state !== 'unset' ? (
+                      <small
+                        className="iaos-intel-env"
+                        dir="ltr"
+                        data-testid={`intel-pin-${p.id}`}
+                        data-state={p.modelPin.state}
+                      >
+                        {p.modelPin.shadowed
+                          ? (isEn
+                            ? `${p.modelPin.envVar} pins ${p.modelPin.value} — the old default; the smartest mode puts the flagship first and keeps this as fallback.`
+                            : `${p.modelPin.envVar} روی ${p.modelPin.value} قفل شده — همان مدل ارزانِ قبلی؛ در حالت باهوش‌ترین، پرچم‌دار اول می‌آید و این مدل به‌عنوان ذخیره می‌ماند.`)
+                          : (isEn
+                            ? `${p.modelPin.envVar} pins ${p.modelPin.value}; an explicit pin outranks the flagship ladder.`
+                            : `${p.modelPin.envVar} روی ${p.modelPin.value} قفل کرده است؛ انتخاب صریح اپراتور بر نردبان پرچم‌دار اولویت دارد.`)}
                       </small>
                     ) : null}
                     {/* The key is present but the stored copy carries quotes or

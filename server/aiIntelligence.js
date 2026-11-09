@@ -128,7 +128,11 @@ export const INTELLIGENCE_MODES = Object.freeze({
     analysesCount: 2,
     selfCritique: false,
     knowledgeTopK: 3,
-    modelLadders: Object.freeze({})
+    modelLadders: Object.freeze({}),
+    /* Wall-clock room for one collaborative turn, in ms. A mode that asks a
+       flagship for a 1200-token reasoned answer cannot fit in the window tuned
+       for a 400-token cheap-model reply — see `intelligenceDeadlineMs`. */
+    turnDeadlineMs: 8000
   }),
   balanced: Object.freeze({
     id: 'balanced',
@@ -149,7 +153,11 @@ export const INTELLIGENCE_MODES = Object.freeze({
     analysesCount: 2,
     selfCritique: false,
     knowledgeTopK: 4,
-    modelLadders: Object.freeze({})
+    modelLadders: Object.freeze({}),
+    /* Exactly the pre-mode `AI_COLLAB_DEADLINE_MS` default, so `balanced`
+       keeps the latency contract it always had — bit for bit, as its tests
+       pin for the request body and the prompt. */
+    turnDeadlineMs: 20000
   }),
   max: Object.freeze({
     id: 'max',
@@ -179,7 +187,20 @@ export const INTELLIGENCE_MODES = Object.freeze({
     analysesCount: 3,
     selfCritique: true,
     knowledgeTopK: 6,
-    modelLadders: MAX_MODEL_LADDERS
+    modelLadders: MAX_MODEL_LADDERS,
+    /*
+     * ─── WHY THE DEADLINE IS PART OF THE MODE ───────────────────────────────
+     * The smartest mode buys depth with TIME as much as with tokens: a flagship
+     * with a thinking budget, three independent analyses, a verifier and an
+     * adversarial repair pass do not fit inside the 20 s window that was tuned
+     * for one 600-token gpt-4o-mini reply. When the window is too small, every
+     * stage after the first races against an expired budget, `withDeadline`
+     * hands back its fallback, and the deployment answers exactly as it did
+     * before the upgrade — a mode that is silently self-defeating. `max`
+     * therefore asks for a bigger budget and the server clamps the whole turn
+     * under the platform's own wall clock (see `AI_TURN_CEILING_MS`).
+     */
+    turnDeadlineMs: 45000
   })
 });
 
@@ -406,6 +427,54 @@ export function intelligenceAnthropicThinking(mode, model, maxTokens = 800, { en
 }
 
 /**
+ * Hard wall-clock ceiling for ONE AI turn, whatever the mode asked for.
+ *
+ * Vercel runs `api/index.js` with `maxDuration: 60`; a function killed mid-await
+ * returns nothing at all, so an over-long budget is worse than a short one — it
+ * turns "the deep answer arrived late" into "the request errored and the client
+ * kept its deterministic reply". 52 s leaves the response time to flush.
+ */
+export function turnCeilingMs(env = process.env) {
+  const configured = Number(env?.AI_TURN_CEILING_MS);
+  return Number.isFinite(configured) && configured >= 5000
+    ? Math.min(configured, 58000)
+    : 52000;
+}
+
+/**
+ * Latency budget for one collaborative turn under a mode.
+ *
+ *   1. an explicit `requested` budget — a caller that knows better (the
+ *      `/analyze` route forwards an operator-supplied `deadlineMs`);
+ *   2. `AI_COLLAB_DEADLINE_MS` — the deployment's own word, which predates the
+ *      modes and is still obeyed to the letter;
+ *   3. the mode's budget — 8 s swift, 20 s balanced (the historical value),
+ *      45 s smartest.
+ *
+ * Then the result is clamped into [MIN_TURN_MS, `AI_TURN_CEILING_MS`], so a
+ * typo in any of the three cannot produce either a turn that never returns or
+ * a 500 ms budget that guarantees every stage degrades.
+ */
+export function intelligenceDeadlineMs(mode, requested = null, { env = process.env } = {}) {
+  const profile = getIntelligenceProfile(mode);
+  const explicit = Number(requested);
+  const fromEnv = Number(env?.AI_COLLAB_DEADLINE_MS);
+  const MIN = 2000;
+  const base = Number.isFinite(explicit) && explicit >= MIN
+    ? explicit
+    : (Number.isFinite(fromEnv) && fromEnv >= MIN ? fromEnv : profile.turnDeadlineMs);
+  const ceiling = turnCeilingMs(env);
+  return {
+    mode: profile.id,
+    deadlineMs: Math.max(MIN, Math.min(base, ceiling)),
+    ceilingMs: ceiling,
+    source: (Number.isFinite(explicit) && explicit >= MIN)
+      ? 'request'
+      : (Number.isFinite(fromEnv) && fromEnv >= MIN ? 'env' : 'mode')
+  };
+}
+
+/**
  * Collaboration depth for one plan.
  *   · max      raises substantive turns to at least level 4 (multi-model +
  *              verification) but NEVER turns small talk into a five-model run;
@@ -432,6 +501,7 @@ export function intelligenceCollaborationLevel(mode, baseLevel, { conversationKi
 export function describeIntelligence({ env = process.env, requested = null } = {}) {
   const resolved = resolveIntelligenceMode(requested, { env });
   const profile = getIntelligenceProfile(resolved.mode);
+  const budget = intelligenceDeadlineMs(profile.id, null, { env });
   return {
     schema: INTELLIGENCE_SCHEMA,
     version: INTELLIGENCE_VERSION,
@@ -455,7 +525,13 @@ export function describeIntelligence({ env = process.env, requested = null } = {
       selfCritique: profile.selfCritique,
       knowledgeTopK: profile.knowledgeTopK,
       reasoning: profile.reasoning,
-      flagshipFirst: Object.keys(profile.modelLadders || {}).length > 0
+      flagshipFirst: Object.keys(profile.modelLadders || {}).length > 0,
+      /* The latency budget this mode needs, and the ceiling the server clamps
+         it into. Published because a mode that cannot finish is indistinguishable
+         from a mode that never ran, and the panel must be able to tell them apart. */
+      turnDeadlineMs: budget.deadlineMs,
+      turnCeilingMs: budget.ceilingMs,
+      deadlineSource: budget.source
     },
     modes: Object.values(INTELLIGENCE_MODES).map((m) => ({
       id: m.id,

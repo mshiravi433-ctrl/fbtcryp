@@ -86,6 +86,28 @@ export function setIntelligenceMode(mode) {
   return id;
 }
 
+/**
+ * How long the browser waits for one turn, per mode.
+ *
+ * The server clamps a turn to `AI_TURN_CEILING_MS` (52 s by default) and the
+ * Vercel function that runs it is killed at 60 s. A client that hangs up at
+ * 30 s — the number written when an answer meant one cheap 600-token call —
+ * throws away the deep reply before it lands and shows its own cache instead.
+ * That is indistinguishable, from the user's chair, from a feature that was
+ * never deployed. So the wait is a property of the mode: swift stays snappy,
+ * `max` waits as long as its budget and no longer.
+ */
+export const INTELLIGENCE_TURN_MS = Object.freeze({
+  swift: 15000,
+  balanced: 30000,
+  max: 58000
+});
+
+export function intelligenceTurnBudgetMs(mode) {
+  const id = normalizeIntelligenceMode(mode) || DEFAULT_INTELLIGENCE_MODE;
+  return INTELLIGENCE_TURN_MS[id] || INTELLIGENCE_TURN_MS.balanced;
+}
+
 export function intelligenceModeLabel(mode, locale = 'fa') {
   const hit = INTELLIGENCE_MODES.find((m) => m.id === normalizeIntelligenceMode(mode)) || INTELLIGENCE_MODES[2];
   return String(locale || '').toLowerCase().startsWith('en') ? hit.label.en : hit.label.fa;

@@ -7,7 +7,7 @@
  * balance or a price.
  */
 import { apiBase } from './apiBase.js';
-import { getIntelligenceMode } from './aiIntelligenceMode.js';
+import { getIntelligenceMode, intelligenceTurnBudgetMs } from './aiIntelligenceMode.js';
 
 const TIMEOUT_MS = 12000;
 const DEVICE_KEY = 'fbt.ai.device.v1';
@@ -75,8 +75,12 @@ export const aiSuggest = ({ message, conversationId, context, prior } = {}) =>
 /* AI Upgrade 5: complex turns can coordinate several models + web research,
    so the chat turn gets a longer budget than the default 12s. The server
    enforces its own deadline and always answers with what it has. */
-export const aiChat = ({ message, messages, surface, conversationId, aiControl, prior, context, resume, hints, transparency, intelligence } = {}) =>
-  call('/v1/ai/chat', {
+export const aiChat = ({ message, messages, surface, conversationId, aiControl, prior, context, resume, hints, transparency, intelligence } = {}) => {
+  /* One resolution, used twice: the mode decides both what the server runs and
+     how long the browser waits for it. Deriving them separately is how a `max`
+     turn got aborted by a `balanced` timeout. */
+  const mode = normalizeRequestedIntelligence(intelligence);
+  return call('/v1/ai/chat', {
     method: 'POST',
     /* The mode travels with every turn, not only the ones that look deep: the
        answer to «این را عمیق توضیح بده» is decided server-side, and a
@@ -94,10 +98,11 @@ export const aiChat = ({ message, messages, surface, conversationId, aiControl, 
       resume,
       hints,
       transparency,
-      intelligence: normalizeRequestedIntelligence(intelligence)
+      intelligence: mode
     }),
-    timeout: 30000
+    timeout: intelligenceTurnBudgetMs(mode)
   });
+};
 
 function normalizeRequestedIntelligence(intelligence) {
   if (intelligence === true) return 'max';

@@ -42,9 +42,14 @@ ok('chat header shows the mode and the deep-thinking path requests max');
 
 const client = read('src/lib/aiIntentClient.js');
 assert.ok(client.includes('getIntelligenceMode'), 'the transport must read the stored mode');
-assert.ok(/intelligence: normalizeRequestedIntelligence\(intelligence\)/.test(client), 'the chat body must carry the mode');
+assert.ok(/intelligence: mode\b/.test(client), 'the chat body must carry the mode');
+assert.ok(/const mode = normalizeRequestedIntelligence\(intelligence\)/.test(client), 'the mode must be resolved once, by the transport');
 assert.ok(client.includes("intelligence === true) return 'max'"), 'a boolean request must mean max, not a silent default');
-ok('every chat request carries the resolved mode');
+/* The mode decides how long the turn may take, so the wait must follow it: a
+   fixed 30 s window throws away the deep answer before it lands, and that reads
+   to the user as «هیچ تغییری نکرده». */
+assert.ok(/timeout: intelligenceTurnBudgetMs\(mode\)/.test(client), 'the chat timeout must be the mode’s, not a constant');
+ok('every chat request carries the resolved mode — and waits as long as that mode needs');
 
 const helper = read('src/lib/aiIntelligenceMode.js');
 assert.ok(helper.includes('fbt.ai.intelligence.v1'), 'the choice must survive a reload');

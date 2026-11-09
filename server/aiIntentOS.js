@@ -156,6 +156,8 @@ import { runCollaborativeAnalysis, formatEmotionalAcknowledgement } from './aiCo
 import {
   resolveIntelligenceMode,
   getIntelligenceProfile,
+  intelligenceDeadlineMs,
+  turnCeilingMs,
   describeIntelligence
 } from './aiIntelligence.js';
 import { researchWeb, analyzeWithSources, analyzeNewsImpact } from './aiWebResearch.js';
@@ -1038,21 +1040,37 @@ router.get('/tools', (_req, res) => res.json({ ok: true, schema: AI_TOOL_SCHEMA,
 router.get('/intelligence', (req, res) => {
   const requested = typeof req.query?.mode === 'string' && req.query.mode.trim() ? req.query.mode.trim() : null;
   const report = describeIntelligence({ requested });
+  /* One read of the fleet for the whole payload: the per-provider rows and the
+     keyed-but-out-of-fleet note are the same nine objects, and walking the
+     registry twice for a free diagnostic endpoint is a cost with no answer. */
+  const fleetRows = getAvailableProviders();
   return res.json({
     ok: true,
     ...report,
     /* Which providers this deployment may call at all, and on whose say-so. */
     fleet: describeProviderFleet(),
     /* What the gateway would actually try, provider by provider. */
-    providers: getAvailableProviders().map((p) => ({
+    providers: fleetRows.map((p) => ({
       id: p.id,
       configured: p.configured,
       inFleet: p.inFleet !== false,
       excludedBy: p.excludedBy || null,
       defaultModel: p.defaultModel,
       intelligenceModel: p.intelligenceModel,
-      intelligenceCandidates: p.intelligenceCandidates
+      intelligenceCandidates: p.intelligenceCandidates,
+      /* Why the seat is what it is: a `*_MODEL` pin that only repeats the old
+         cheap default used to veto the whole flagship ladder in silence. */
+      modelPin: p.modelPin || null
     })),
+    /* The latency budget the mode will actually run under, and the ceiling the
+       turn is clamped to. A mode that cannot finish is indistinguishable from a
+       mode that never ran, so the numbers are published, not assumed. */
+    budget: intelligenceDeadlineMs(report.mode),
+    /* Keyed providers the declared fleet will not call — the answer to
+       «کلید را گذاشتیم ولی استفاده نمی‌شود». */
+    keyedButOutOfFleet: fleetRows
+      .filter((p) => p.id !== 'internal' && p.keyPresent && p.inFleet === false)
+      .map((p) => ({ id: p.id, envVar: p.envVar, fix: `Add ${p.id} to FBT_AI_PROVIDERS (or set FBT_AI_PROVIDERS=all) and redeploy.` })),
     at: nowMs()
   });
 });
@@ -2150,6 +2168,24 @@ router.post('/chat', async (req, res) => {
    */
   const resolvedIntelligence = resolveIntelligenceMode(req.body?.intelligence ?? null);
   const intelligenceProfile = getIntelligenceProfile(resolvedIntelligence.mode);
+  /*
+   * ─── ONE CLOCK FOR THE WHOLE TURN ─────────────────────────────────────────
+   * A chat turn spends its time in three places: the context reads, the
+   * collaboration (models + verification + repair) and the escalation ladder
+   * that fills a gap. Each had its own constant, and none of them knew about
+   * `max` — so the deeper the mode, the more certain the turn was to be killed
+   * mid-await by the platform instead of answered late. `turnCeiling` is the
+   * single budget all three are clamped against, and `turnBudgetFor` hands a
+   * stage only what the turn can still pay for, keeping the escalation floor
+   * reserved for the stage that runs after it.
+   */
+  const turnCeiling = turnCeilingMs();
+  const escalationFloorMs = Number(process.env.AI_ESCALATION_DEADLINE_MS || 9000);
+  const turnBudgetFor = (mode) => {
+    const wanted = intelligenceDeadlineMs(mode, null);
+    const left = turnCeiling - (Date.now() - turnStartedAt) - escalationFloorMs;
+    return Math.max(2500, Math.min(wanted.deadlineMs, left));
+  };
   const u5 = planCollaboration({
     message,
     intentType: intent || 'GENERAL',
@@ -2241,6 +2277,17 @@ router.post('/chat', async (req, res) => {
         analysis: u5,
         intelligence: resolvedIntelligence.mode,
         locale: locale || 'fa',
+        /*
+         * The mode owns the budget (8 s / 20 s / 45 s), the TURN owns the clock.
+         * Handing `max` its full 45 s here would leave nothing for the
+         * escalation ladder below and, worse, would let the whole handler run
+         * past the serverless function's own 60 s — a killed function returns
+         * no JSON at all, so the client keeps its deterministic reply and the
+         * operator reads that as «هیچ‌چیز عوض نشده». The budget is therefore
+         * clamped to what the turn can still pay for, with the escalation
+         * floor reserved.
+         */
+        deadlineMs: turnBudgetFor(resolvedIntelligence.mode),
         transparency: req.body?.transparency === true
       });
     } catch (err) {
@@ -2375,10 +2422,14 @@ router.post('/chat', async (req, res) => {
            or runs out of it. So the graph is capped by both the configured
            chat budget and whatever is left of the turn after the ladder's
            floor is reserved. */
-        const ladderFloorMs = Number(process.env.AI_ESCALATION_DEADLINE_MS || 9000);
+        const ladderFloorMs = escalationFloorMs;
         const chatBudgetMs = Number(process.env.AI_ORCH_CHAT_DEADLINE_MS || 8000);
         const elapsedMs = Date.now() - turnStartedAt;
-        const roomForLadder = Math.max(2500, 26000 - ladderFloorMs - elapsedMs);
+        /* The turn ceiling, not a second constant invented here: with `max`
+           spending up to 45 s on the collaboration, a hard-coded 26 s ladder
+           budget is arithmetic nobody checked — the function dies at 60 s
+           before the answer is written. */
+        const roomForLadder = Math.max(2500, turnCeiling - ladderFloorMs - elapsedMs);
         orchestration = await getOrchestrator().run({
           message,
           context,
@@ -2401,6 +2452,7 @@ router.post('/chat', async (req, res) => {
     }
     if (!orchestration?.answer) {
       escalation = await escalateToProviders({
+        deadlineMs: Math.max(2000, turnCeiling - (Date.now() - turnStartedAt) - 1500),
         message,
         locale: socialTurn.social?.lang || u5.social?.lang || locale || 'fa',
         context,

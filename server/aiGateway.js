@@ -94,6 +94,8 @@ import {
   intelligenceReasoningFields,
   intelligenceGeminiThinking,
   intelligenceAnthropicThinking,
+  intelligenceDeadlineMs,
+  turnCeilingMs,
   resolveIntelligenceMode,
   describeIntelligence
 } from './aiIntelligence.js';
@@ -113,7 +115,15 @@ export { describeProviderFleet, DEFAULT_PROVIDER_FLEET };
 /* The central brain needs the resolved mode and the flagship ladders to name
    the ids its seats will actually call; both live in aiIntelligence. */
 export { resolveIntelligenceMode, intelligenceModelLadder };
+/* …and so does the latency budget that mode is allowed, clamped to the wall
+   clock the platform will actually give us. */
+export { intelligenceDeadlineMs, turnCeilingMs };
 
+/*
+ * `baseModel` on every seat is that provider's historical default with NO env
+ * pin. `max` uses it to tell a deliberate operator choice apart from a stale
+ * copy of the cheap model — see `getModelCandidates` and `describeModelPin`.
+ */
 export const PROVIDER_CONFIGS = Object.freeze({
   openrouter: {
     name: 'OpenRouter',
@@ -124,6 +134,7 @@ export const PROVIDER_CONFIGS = Object.freeze({
        diagnostics report WHICH name supplied it. */
     envKeys: ['OPENROUTER_API_KEY', 'OPENROUTER_KEY', 'OPEN_ROUTER_API_KEY'],
     modelEnv: 'AI_MODEL',
+    baseModel: 'openai/gpt-4o-mini',
     defaultModel: process.env.AI_MODEL || 'openai/gpt-4o-mini',
     fallbackModels: [
       'google/gemini-2.5-flash',
@@ -154,6 +165,7 @@ export const PROVIDER_CONFIGS = Object.freeze({
     modelEnv: 'OPENAI_MODEL',
     /* gpt-4o-mini is the cheap, currently-listed default. The reasoning seats
        sit behind it so a richer account gets them without a code change. */
+    baseModel: 'gpt-4o-mini',
     defaultModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
     fallbackModels: ['gpt-4o', 'gpt-4.1-mini', 'gpt-4.1'],
     retiredModels: ['gpt-4-turbo', 'gpt-4-32k', 'gpt-3.5-turbo'],
@@ -170,6 +182,7 @@ export const PROVIDER_CONFIGS = Object.freeze({
        for first; the diagnostics report WHICH name supplied the key. */
     envKeys: ['XAI_API_KEY', 'GROK_API_KEY', 'XAI_KEY'],
     modelEnv: 'XAI_MODEL',
+    baseModel: 'grok-4-fast',
     defaultModel: process.env.XAI_MODEL || 'grok-4-fast',
     fallbackModels: ['grok-4', 'grok-3-mini'],
     retiredModels: ['grok-beta', 'grok-2-1212', 'grok-2-vision-1212'],
@@ -187,6 +200,7 @@ export const PROVIDER_CONFIGS = Object.freeze({
     /* Was `llama-3.3-70b-versatile`, which Groq shut down for Free/Developer
        tiers on 2026-08-16 → HTTP 404 on every call. gpt-oss-20b is the cheap,
        fast, currently-listed Production model (~1000 t/s). */
+    baseModel: 'openai/gpt-oss-20b',
     defaultModel: process.env.GROQ_MODEL || 'openai/gpt-oss-20b',
     fallbackModels: ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b'],
     retiredModels: [
@@ -215,6 +229,7 @@ export const PROVIDER_CONFIGS = Object.freeze({
        longer available") → HTTP 404 on every call. 2.5-flash is the current
        stable workhorse; `gemini-flash-latest` is Google's own always-current
        alias and sits right behind it. */
+    baseModel: 'gemini-2.5-flash',
     defaultModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
     fallbackModels: ['gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-2.5-pro'],
     retiredModels: [
@@ -242,6 +257,7 @@ export const PROVIDER_CONFIGS = Object.freeze({
        Haiku 4.5 is the current cheap seat for policy/risk checks; Sonnet 4.6
        is the escalation. NOTE: the deployed account also answers
        "Your credit balance is too low" — that part is billing, not code. */
+    baseModel: 'claude-haiku-4-5',
     defaultModel: process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5',
     fallbackModels: ['claude-sonnet-4-6', 'claude-sonnet-4-5', 'claude-3-5-haiku-latest'],
     retiredModels: [
@@ -271,6 +287,7 @@ export const PROVIDER_CONFIGS = Object.freeze({
     envKey: 'DEEPSEEK_API_KEY',
     envKeys: ['DEEPSEEK_API_KEY', 'DEEPSEEK_KEY'],
     modelEnv: 'DEEPSEEK_MODEL',
+    baseModel: 'deepseek-chat',
     defaultModel: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
     fallbackModels: ['deepseek-reasoner'],
     retiredModels: [],
@@ -289,6 +306,7 @@ export const PROVIDER_CONFIGS = Object.freeze({
        HTTP 403 tier_not_allowed. Small is the free-tier model; the paid ones
        stay at the END of the list so a funded account still gets them if the
        free ids ever move. */
+    baseModel: 'mistral-small-latest',
     defaultModel: process.env.MISTRAL_MODEL || 'mistral-small-latest',
     fallbackModels: ['mistral-small-2506', 'open-mistral-nemo', 'mistral-medium-latest', 'mistral-large-latest'],
     retiredModels: ['open-mixtral-8x7b', 'mistral-tiny', 'mistral-small-2312'],
@@ -304,6 +322,7 @@ export const PROVIDER_CONFIGS = Object.freeze({
     envKeys: ['CLOUDFLARE_API_TOKEN', 'CF_API_TOKEN', 'CLOUDFLARE_AI_TOKEN'],
     accountEnvKeys: ['CLOUDFLARE_ACCOUNT_ID', 'CF_ACCOUNT_ID'],
     modelEnv: 'WORKERSAI_MODEL',
+    baseModel: '@cf/meta/llama-3.1-8b-instruct',
     defaultModel: process.env.WORKERSAI_MODEL || '@cf/meta/llama-3.1-8b-instruct',
     fallbackModels: ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/mistral/mistral-7b-instruct-v0.2', '@cf/deepseek/deepseek-r1-distill-qwen-32b', '@cf/meta/llama-3.2-3b-instruct'],
     retiredModels: [],
@@ -318,6 +337,7 @@ export const PROVIDER_CONFIGS = Object.freeze({
     envKey: 'AIMLAPI_KEY',
     envKeys: ['AIMLAPI_KEY', 'AIMLAPI_API_KEY'],
     modelEnv: 'AIMLAPI_MODEL',
+    baseModel: 'gpt-4o-mini',
     defaultModel: process.env.AIMLAPI_MODEL || 'gpt-4o-mini',
     /* `anthropic/claude-3.5-sonnet` and `google/gemini-2.0-flash` were here;
        both are retired upstream, so a funded account would still have failed. */
@@ -757,14 +777,35 @@ export function getModelCandidates(providerId, requestedModel = null, { mode = n
    * instruction — and the wiring probe pins that contract with an exact
    * attempt count.
    */
+  /*
+   * ─── A PIN THAT REPEATS THE OLD CHEAP DEFAULT IS NOT AN INTENT ───────────
+   * The deployment this runs on carries `AI_MODEL=openai/gpt-4o-mini` and
+   * `WORKERSAI_MODEL=@cf/meta/llama-3.1-8b-instruct` — values copied from the
+   * pre-mode README years before any mode existed. Treating every modelEnv as
+   * an instruction put those two ids ABOVE the flagship ladder, so `max`
+   * resolved, reported `mode: max`, and then called exactly the model it always
+   * called. The 14 000 lines were live and inert at the same time.
+   *
+   * So the pin is read for MEANING, not for existence:
+   *   · a pin naming anything but the provider's historical default is a
+   *     deliberate choice (an Enterprise id, a self-hosted gateway, a fine-tune)
+   *     and still outranks the ladder, exactly as before;
+   *   · a pin that merely repeats the old cheap default is stale, and in `max`
+   *     it steps behind the flagships — it is still in the list, still tried the
+   *     moment a flagship fails, and still the whole story in `balanced`/`swift`.
+   * Nothing is removed from the chain either way; only the order changes.
+   */
+  const stalePin = Boolean(envModel) && envModel === normalizeSecretValue(cfg.baseModel);
   if (maxMode && !requestedModel) {
-    /* An operator's modelEnv is an intent, so it outranks the ladder. */
-    push(envModel);
+    if (!stalePin) push(envModel);
     /* Two flagships, then the historical default — not the whole ladder. The
        attempt cap is finite on purpose; letting a four-id ladder eat every
        attempt would mean a provider's own known-good default never got a
        turn. */
     for (const m of intelligenceModelLadder(providerId, mode).slice(0, Math.max(1, MODEL_ATTEMPTS - 1))) push(m);
+    /* A stale pin needs no explicit push: `cfg.defaultModel` below IS that id,
+       so it lands in the chain right after the flagships and is tried the
+       moment a flagship fails. */
   } else {
     push(envModel);
   }
@@ -779,9 +820,34 @@ export function getModelCandidates(providerId, requestedModel = null, { mode = n
   return ordered.slice(0, Math.max(ordered.length > 1 ? attempts : 1, 1));
 }
 
+/**
+ * What one provider's model env var is doing to the smartest mode, in words a
+ * panel can render. Three states, because the operator needs three different
+ * answers:
+ *   · `unset`     — nothing pinned, the ladder leads in `max` as designed;
+ *   · `leads`     — a deliberate pin (an id that is NOT this provider's old
+ *                   cheap default): it outranks the ladder on purpose;
+ *   · `shadowed`  — the pin repeats the historical default, so `max` steps it
+ *                   behind the flagships and the value is a leftover, not an
+ *                   instruction. Deleting the variable is the fix.
+ */
+export function describeModelPin(providerId, cfg = PROVIDER_CONFIGS[providerId]) {
+  const envVar = cfg?.modelEnv || null;
+  const pinned = envVar ? normalizeSecretValue(process.env[envVar]) : '';
+  if (!envVar || !pinned) return { state: 'unset', envVar, value: null, leads: false, shadowed: false };
+  const shadowed = pinned === normalizeSecretValue(cfg.baseModel);
+  return {
+    state: shadowed ? 'shadowed' : 'leads',
+    envVar,
+    value: pinned,
+    leads: !shadowed,
+    shadowed,
+    fix: shadowed ? `Remove ${envVar} (or set it to a flagship id) — it pins this seat to the pre-mode default.` : null
+  };
+}
+
 /** True when a model id is on any provider's retired list. Used by the probe. */
-export function isRetiredModel(model) {
-  const id = normalizeSecretValue(model);
+export function isRetiredModel(model) {  const id = normalizeSecretValue(model);
   return Object.values(PROVIDER_CONFIGS).some((cfg) => (cfg.retiredModels || []).includes(id));
 }
 
@@ -853,6 +919,14 @@ export function getAvailableProviders() {
       intelligenceModel: getModelCandidates(id, null, { mode: activeIntelligenceMode })[0] || cfg.defaultModel,
       intelligenceCandidates: getModelCandidates(id, null, { mode: activeIntelligenceMode }),
       modelEnv: cfg.modelEnv || null,
+      /*
+       * WHY THIS IS IN THE PAYLOAD: «حالت باهوش‌ترین روشن است ولی هیچ‌چیز عوض
+       * نشد» had one answer the panels could not show — an env var pinned the
+       * cheap seat and the mode stepped behind it. `modelPin` names the
+       * variable, what it holds, and whether it still leads, so the operator
+       * reads the cause instead of guessing at it.
+       */
+      modelPin: describeModelPin(id, cfg),
       specialty: cfg.specialty,
       costTier: cfg.costTier,
       latencyTier: cfg.latencyTier,
@@ -1678,6 +1752,15 @@ export async function gatewaySelfTest() {
   const started = Date.now();
   const providers = getAvailableProviders();
   const activeIds = getActiveProviderIds();
+  /*
+   * The probe runs in the deployment's ACTIVE MODE. Probing without a mode
+   * asked every provider for its historical cheap default, so a panel could
+   * print «HEALTHY» for a seat whose flagship the key has never served — the
+   * exact blind spot that made the smartest mode look inert. `max` now pings
+   * the id `max` will really call; the mode is echoed in the report so a
+   * healthy row can never be read as a promise about a different one.
+   */
+  const probeMode = resolveIntelligenceMode(null).mode;
 
   const probe = async (p) => {
     if (!p.configured) {
@@ -1714,6 +1797,7 @@ export async function gatewaySelfTest() {
         maxTokens: 10,
         temperature: 0,
         json: false,
+        mode: probeMode,
         timeout: Math.min(TIMEOUT_MS, Math.max(5000, SELFTEST_DEADLINE_MS - (Date.now() - started)))
       });
       return {
@@ -1721,6 +1805,11 @@ export async function gatewaySelfTest() {
         name: p.name,
         status: 'HEALTHY',
         model: res.model,
+        /* Which mode this row describes. A «HEALTHY» earned on the cheap seat
+           is not a promise about the flagship, and the panel must not imply
+           one — so the mode rides on the row that was probed under it. */
+        intelligenceMode: probeMode,
+        modelPin: p.modelPin || null,
         engine: res.engine,
         latencyMs: res.durationMs,
         sample: String(res.text || '').slice(0, 30),
@@ -1758,6 +1847,13 @@ export async function gatewaySelfTest() {
     gatewayVersion: 'fbt.ai-gateway.v3.0',
     totalConfigured: activeIds.length,
     activeProviderIds: activeIds,
+    /* The turn budget each mode gets, published with the live probe so a slow
+       result can be read as «the flagship is thinking» rather than as a hang. */
+    intelligence: {
+      mode: probeMode,
+      ...intelligenceDeadlineMs(probeMode),
+      providerCount: healthy.length + errored.length
+    },
     providers: testResults,
     summary: {
       ...getFleetSummary(),
