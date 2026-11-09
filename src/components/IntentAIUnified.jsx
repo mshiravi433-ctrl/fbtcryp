@@ -2911,7 +2911,20 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         osResult.intent.minimalQuestion = null;
       }
 
-      const isLocalHandled = osResult.ok && !needsFinancialConfirmation && (
+      /*
+       * ─── A TURN THE LOCAL OS COULD NOT READ IS NOT A FINISHED TURN ─────────
+       * «بیتکوین؟» and «کارمزد FBT چقدره؟» used to be answered HERE, by the
+       * offline rule engine, with «مطمئن نشدم دقیقاً کدام بخش را میخواهید» —
+       * and because `ok` was true and the plan was read-only, the turn never
+       * reached `/api/v1/ai/chat`. Every smarter layer the backend grew (the
+       * product brain, the partial-input read, the model fleet) was therefore
+       * invisible in production while looking perfect in a key-less test.
+       *
+       * `understood === false` is the OS saying «I have no answer»: the server,
+       * which does, takes the turn. Small talk, navigation, scheduled reads and
+       * every known intent still answer in place — no round trip, no latency.
+       */
+      const isLocalHandled = osResult.ok && osResult.understood !== false && !needsFinancialConfirmation && (
         osResult.intent?.readOnly === true ||
         osResult.execution?.handoff === true ||
         Boolean(osResult.navigated) ||
@@ -3295,10 +3308,24 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         const recoveryMsg = toolChecker.getRecoveryMessage({ message: code }, { toolId: res?.intent?.type });
         const retryStrategy = toolChecker.getRetryStrategy({ message: code }, { attempt: 0 });
 
+        /*
+         * ─── THE SERVER FAILED, NOT THE QUESTION ────────────────────────────
+         * A turn the OS could not read is now sent to the server on purpose.
+         * If that call fails (offline, 5xx, a deploy in flight), the user must
+         * not lose the little the device still knew: the OS's own reading of
+         * the message and its next-step chips are appended under the error, so
+         * a failed call costs one retry instead of the whole conversation.
+         */
+        const localReading = osResult?.understood === false
+          ? String(osResult?.human?.message || '').trim()
+          : '';
+
         setMessages((prev) => [...prev, {
           id: makeId(),
           role: 'ai',
-          content: visibleText(res, human.message) + (retryStrategy.recoverable ? `\n\n${recoveryMsg}` : ''),
+          content: visibleText(res, human.message)
+            + (retryStrategy.recoverable ? `\n\n${recoveryMsg}` : '')
+            + (localReading ? `\n\n${localReading}` : ''),
           kind: connect ? 'connect' : 'error',
           ui: { type: connect ? 'CONNECT_WALLET' : 'TEXT' }
         }]);

@@ -2260,8 +2260,22 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
      * "did not map to a specific module" and stopped, which read as a refusal
      * and gave the user nothing to do next. It now names concrete next steps
      * and offers the capability list, so a miss costs one tap, not a restart.
+     *
+     * ─── `code: 'UNSURE'` IS A CONTRACT, NOT A LABEL ────────────────────────
+     * This sentence is the only place in the OS that admits it did not
+     * understand. The browser used to treat it as a normal, finished answer —
+     * `ok: true`, `plan.readOnly: true` — and returned it without ever asking
+     * the server, which owns the layers that CAN read these turns (the product
+     * brain, the partial-input read, the whole collaboration fleet). So a
+     * deployment could ship a smarter brain and the user would still read this
+     * line: «بیتکوین؟» and «کارمزد FBT چقدره؟» never left the device.
+     *
+     * The code travels with the answer so the caller can tell the difference
+     * between "here is your answer" and "I did not understand — ask somebody
+     * who can". Nothing about the visible text changes.
      */
     return {
+      code: 'UNSURE',
       message: lang === 'fa'
         ? 'مطمئن نشدم دقیقاً کدام بخش را می‌خواهید. مثلاً بنویسید: «پرتفوی» · «سود» · «تحلیل بیت کوین» · «اخبار» · «مرکز عملیات» — یا بپرسید «چه کاری بلدی؟» تا همه قابلیت‌ها را فهرست کنم.'
         : 'I am not sure which part you meant. Try: "portfolio" · "yield" · "analyze bitcoin" · "news" · "ops center" — or ask "what can you do?" and I will list everything.',
