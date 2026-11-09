@@ -2387,7 +2387,11 @@ router.post('/chat', async (req, res) => {
            models agree on, and how many subjects two analysts contradict. */
         verifiedClaims: collaboration.synthesisLedger?.verifiedCount ?? null,
         consensusOnlyClaims: collaboration.synthesisLedger?.consensusOnlyCount ?? null,
-        conflictingFigures: collaboration.synthesisLedger?.conflictCount ?? null
+        conflictingFigures: collaboration.synthesisLedger?.conflictCount ?? null,
+        /* The dissenting seat: which role was told to argue against the obvious
+           reading, and whether it produced an analysis. null outside `max`. */
+        redTeamRole: collaboration.counterCase?.role ?? null,
+        redTeamAnswered: collaboration.counterCase ? collaboration.counterCase.answered === true : null
       } : null,
       /* Which brain was asked for, what it actually did, and whether the mode
          raised this turn's depth. The UI prints the mode; the plan fields let

@@ -304,7 +304,7 @@ const ROLE_TASK = {
   [AI_ROLES.FINAL_ANSWER_AI]: 'reasoning'
 };
 
-async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null }) {
+async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false }) {
   /*
    * ─── DEEP REASONING CONTRACT (smartest mode only) ─────────────────────────
    * The role prompts are shared by every mode, so the extra discipline lives
@@ -315,9 +315,20 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
   const deepReasoning = getIntelligenceProfile(intelligence).id === 'max'
     ? '\nDEEP REASONING (FBT smartest mode): before answering, identify the 2-3 facts that actually decide this question and reason from them. Name the strongest counter-argument against your own conclusion. Never introduce a number, price, date, balance or percentage that is absent from the provided data; write "not readable" instead of a guess. If the evidence is thin, say which specific reading would settle it.'
     : '';
+  /*
+   * ─── RED TEAM SEAT (smartest mode only) ───────────────────────────────────
+   * Three analyses that all reason from the same obvious reading are one
+   * analysis paid for three times. The LAST analytical seat is therefore given
+   * a dissenting brief: assume the obvious conclusion is wrong and build the
+   * strongest evidence-based case against it. It is still bound by the same
+   * evidence block and the same JSON shape — dissent, not invention.
+   */
+  const counterCaseContract = counterCase
+    ? '\nRED TEAM (you hold the dissenting seat): the other analysts will argue the obvious reading of this data. Assume that reading is WRONG and build the strongest case the evidence can actually support for the opposite conclusion. Do not hedge into "both sides"; give the counter-conclusion, the evidence that would have to be true for it, and the single reading that would settle which side is right. You may not introduce any number that is absent from the provided data.'
+    : '';
   const system = systemOverride
     ? `${systemOverride}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}`
-    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}`;
+    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}`;
   /*
    * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
    * This line used to be a ternary: Persian or English. Everything a Turkish,
@@ -738,6 +749,9 @@ export async function runCollaborativeAnalysis({
        tool/web-verified, model-consensus-only, and conflicting figures. null
        outside the smartest mode. */
     synthesisLedger: null,
+    /* The dissenting seat (smartest mode): which role was asked to argue
+       against the obvious reading, and whether it answered. */
+    counterCase: null,
     perRole: transparency ? [] : undefined,
     latencyMs: 0,
     at: Date.now()
@@ -868,10 +882,32 @@ export async function runCollaborativeAnalysis({
     const wantedAnalyses = Math.max(baseAnalyses, Math.min(5, Number(modeProfile.analysesCount) || baseAnalyses));
     const roles = pickAnalysisRoles(plan, wantedAnalyses, wantedAnalyses);
     const settled = await withDeadline(
-      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode }))),
+      Promise.all(roles.map((r, i) => runRole({
+        role: r,
+        message,
+        contextBlock,
+        locale,
+        deps: D,
+        maxTokens: tokensFor(600),
+        fleet,
+        seat: i,
+        intelligence: mode,
+        /* The last analytical seat is the dissenting one, and only in the
+           smartest mode: one of the three reads must be trying to break the
+           other two, not agreeing with them. */
+        counterCase: modeProfile.selfCritique && i === roles.length - 1
+      }))),
       []
     );
     analyses.push(...(settled || []).filter(Boolean));
+    if (modeProfile.selfCritique && roles.length) {
+      const dissenting = analyses.find((a) => a.ok && a.role === roles[roles.length - 1]);
+      result.counterCase = {
+        role: roles[roles.length - 1],
+        answered: Boolean(dissenting),
+        provider: dissenting?.provider || null
+      };
+    }
 
     const valid = analyses.filter((a) => a.ok);
     if (valid.length >= 2 && !overBudget()) {
@@ -1015,7 +1051,25 @@ export async function runCollaborativeAnalysis({
             draft.length < 200 ? repaired.length >= 40 : repaired.length >= Math.round(draft.length * 0.6)
           );
           const changed = critic?.ok && repaired && repaired !== draft;
-          if (changed && substantial) {
+          /*
+           * ─── REPAIR ACCEPTANCE GATE (v2) ─────────────────────────────────
+           * Length alone was a weak proxy for "better". Two deterministic
+           * regressions are now refused:
+           *   1. the repair ADDS a number no evidence can source (the reviewer
+           *      may withdraw an invented figure, never introduce one);
+           *   2. the repair DROPS a part of the question the draft answered.
+           * A refused repair leaves the draft untouched, exactly like a crash.
+           */
+          const draftUncovered = new Set((draftAudit?.unsourced || []).map((n) => n.value));
+          const repairedAudit = repaired ? auditNumbers(repaired, evidenceCorpus()) : null;
+          const introducedNumbers = (repairedAudit?.unsourced || []).filter((n) => !draftUncovered.has(n.value));
+          const repairedCoverage = subQuestions.length >= 2 && repaired
+            ? assessQuestionCoverage(subQuestions, repaired)
+            : null;
+          const lostCoverage = Boolean(repairedCoverage
+            && repairedCoverage.uncovered.length > draftCoverage.uncovered.length);
+          const safe = substantial && !introducedNumbers.length && !lostCoverage;
+          if (changed && safe) {
             result.critique = {
               used: true,
               provider: critic.provider || null,
@@ -1040,7 +1094,13 @@ export async function runCollaborativeAnalysis({
               issues: Array.isArray(critic?.claims) ? critic.claims.slice(0, 4).map((c) => String(c.claim || '').slice(0, 200)) : [],
               draftLength: draft.length,
               repairedLength: repaired.length,
-              reason: critic?.ok ? (substantial ? 'UNCHANGED' : 'STUB_OR_TRUNCATED') : 'NO_CRITIC_ANSWER'
+              /* Why a repair was not used, in order of severity. */
+              reason: critic?.ok
+                ? (introducedNumbers.length ? 'REPAIR_ADDED_UNSOURCED_NUMBER'
+                  : lostCoverage ? 'REPAIR_LOST_COVERAGE'
+                    : substantial ? 'UNCHANGED' : 'STUB_OR_TRUNCATED')
+                : 'NO_CRITIC_ANSWER',
+              rejectedNumbers: introducedNumbers.slice(0, 4).map((n) => n.value)
             };
           }
         } else {
