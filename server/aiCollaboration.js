@@ -48,6 +48,7 @@ import { researchWeb, analyzeWithSources } from './aiWebResearch.js';
 import { resolveIntelligenceMode, intelligenceGeneration, intelligenceDeadlineMs, getIntelligenceProfile } from './aiIntelligence.js';
 import { searchKnowledge } from '../src/lib/intent-ai/os/knowledgeCenter.js';
 import { retrieve as retrieveBm25 } from '../src/lib/intent-ai/retrieval.js';
+import { gatherExpandedKnowledge, synthesizeInternalAnswer } from './aiInternalReasoner.js';
 import {
   planCollaboration,
   CONVERSATION_KINDS,
@@ -672,10 +673,61 @@ const certaintyProxy = (u = {}) => ({ LOW: 85, MEDIUM: 65, HIGH: 40 }[u.level] ?
 /*  DEGRADED PATH — internal-only, honest, tool-grounded (§47, §59)            */
 /* -------------------------------------------------------------------------- */
 
-function buildDegradedAnswer({ message, analysis, context = {}, knowledge = [], sources = [], locale = 'fa' }) {
-  const isFa = String(locale || 'fa').startsWith('fa');
-  const parts = [];
+function buildDegradedOutcome(params = {}) {
+  const {
+    message,
+    analysis,
+    context = {},
+    knowledge = [],
+    sources = [],
+    locale = 'fa',
+    subQuestions = [],
+    economistLenses = [],
+    professorLenses = [],
+    socialRead = null,
+    emotionRead = null,
+    situationRead = null,
+    discourseRead = null,
+    dialogueRead = null,
+    marketFrame = null,
+    strategyFrame = null,
+    decisionEvidence = null,
+    partialRead = null,
+    productRead = null
+  } = params;
 
+  const isFa = String(locale || 'fa').startsWith('fa');
+  const synth = synthesizeInternalAnswer({
+    message,
+    locale,
+    context,
+    knowledge,
+    sources,
+    subQuestions,
+    economistLenses,
+    professorLenses,
+    socialRead,
+    emotionRead,
+    situationRead,
+    discourseRead,
+    dialogueRead,
+    marketFrame,
+    strategyFrame,
+    decisionEvidence,
+    partialRead,
+    productRead,
+    plan: analysis
+  });
+  if (synth?.ok && synth.answer) {
+    return {
+      answer: synth.answer,
+      knowledgeUsed: Boolean(synth.knowledgeUsed),
+      internalSynthesis: Boolean(synth.internalSynthesis),
+      safetyContainment: Boolean(synth.safetyContainment)
+    };
+  }
+
+  const parts = [];
   if (knowledge.length) {
     parts.push(isFa ? knowledge[0].body : knowledge[0].bodyEn || knowledge[0].body);
   }
@@ -710,7 +762,16 @@ function buildDegradedAnswer({ message, analysis, context = {}, knowledge = [], 
         ? 'همهٔ مدل‌های فعال را برای این سؤال صدا زدم و هیچ‌کدام جواب قابل استناد نداد؛ دادهٔ معتبری هم پیدا نشد. بدون شاهد پاسخ قطعی نمی‌دهم.'
         : 'Every configured model was consulted for this question and none returned a citable answer, and no trusted data was found. I will not answer definitively without evidence.'));
   }
-  return parts.join('\n\n');
+  return {
+    answer: parts.join('\n\n'),
+    knowledgeUsed: knowledge.length > 0,
+    internalSynthesis: false,
+    safetyContainment: false
+  };
+}
+
+function buildDegradedAnswer(params = {}) {
+  return buildDegradedOutcome(params).answer;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1200,6 +1261,40 @@ export async function runCollaborativeAnalysis({
   const marketBrief = marketFrame
     ? `${renderMarketFrame(marketFrame)}\n${renderMarketContract(marketFrame)}`
     : '';
+  let degradedSafetyContainment = false;
+  const applyDegraded = () => {
+    const out = buildDegradedOutcome({
+      message,
+      analysis: plan,
+      context,
+      knowledge,
+      sources: result.sources,
+      locale,
+      subQuestions,
+      economistLenses,
+      professorLenses,
+      socialRead,
+      emotionRead,
+      situationRead,
+      discourseRead,
+      dialogueRead,
+      marketFrame,
+      strategyFrame,
+      decisionEvidence,
+      partialRead,
+      productRead
+    });
+    result.answer = out.answer;
+    result.degraded = true;
+    if (out.knowledgeUsed) result.evidence.knowledgeUsed = true;
+    if (out.internalSynthesis) result.evidence.internalSynthesis = true;
+    if (out.safetyContainment) degradedSafetyContainment = true;
+  };
+  const isDistressTurn = Boolean(
+    socialRead?.distress
+    || /(?:خیلی\s*)?ضرر\s*کردم.{0,40}(?:حالم\s*بد|ناراحتم|ترسیدم)|(?:همشو|همه‌شو|همه\s*چیمو|همه\s*پولمو)\s*بفروشم/i.test(String(message || ''))
+    || (emotionRead?.acute && ['grief', 'shame', 'burnout'].includes(emotionRead.primary) && Number(emotionRead.intensity) >= 0.7)
+  );
   if (plan.level === 1 || !externalConfigured) {
     /* Conversation / simple, or no external provider configured at all. */
     /*
@@ -1234,21 +1329,19 @@ export async function runCollaborativeAnalysis({
         result.answer = naturalConversationReply(plan.conversationKind, isFa, { locale, social: plan.social }) || result.answer || '';
         result.degraded = true;
       }
-    } else if (plan.conversationKind === CONVERSATION_KINDS.GREETING || plan.conversationKind === CONVERSATION_KINDS.THANKS || plan.conversationKind === CONVERSATION_KINDS.CASUAL) {
+    } else if (!isDistressTurn && (plan.conversationKind === CONVERSATION_KINDS.GREETING || plan.conversationKind === CONVERSATION_KINDS.THANKS || plan.conversationKind === CONVERSATION_KINDS.CASUAL)) {
       const socialLine = naturalConversationReply(plan.conversationKind, isFa, { locale, social: plan.social });
       result.answer = socialLine || result.answer || '';
       result.degraded = !externalConfigured && plan.level > 1;
     } else if (!externalConfigured) {
-      result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale });
-      result.degraded = true;
+      applyDegraded();
     } else {
       const single = await withDeadline(runRole({ role: AI_ROLES.CONVERSATION_AI, message, contextBlock, locale, deps: D, maxTokens: tokensFor(400, 'fast'), fleet, seat: 0, intelligence: mode }), null);
       if (single?.ok) {
         analyses.push(single);
         result.answer = single.answer;
       } else {
-        result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale });
-        result.degraded = true;
+        applyDegraded();
       }
     }
   } else if (plan.level === 2) {
@@ -1258,7 +1351,7 @@ export async function runCollaborativeAnalysis({
       : AI_ROLES.CRYPTO_RESEARCH_AI;
     const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: 0, intelligence: mode, socialBrief, decisionBrief, dialogueBrief, professorBrief, marketBrief, requestBrief, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief }), null);
     if (single?.ok) { analyses.push(single); result.answer = single.answer; }
-    else { result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale }); result.degraded = true; }
+    else { applyDegraded(); }
   } else if (plan.level === 3) {
     /* Two independent models + tools (+web when live). Each role takes a
        different seat of the shared fleet (seat = role index), so the two
@@ -1270,8 +1363,8 @@ export async function runCollaborativeAnalysis({
     );
     analyses.push(...(settled || []).filter(Boolean));
     const valid = analyses.filter((a) => a.ok);
-    result.answer = valid.length ? mergeTwoAnswers(valid, isFa) : buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale });
-    result.degraded = valid.length === 0;
+    if (valid.length) result.answer = mergeTwoAnswers(valid, isFa);
+    else applyDegraded();
   } else {
     /* Levels 4-5: multi-model debate + web + verification (§10, §20). Roles
        take distinct seats of the shared fleet (seat = role index); the
@@ -1637,8 +1730,7 @@ export async function runCollaborativeAnalysis({
         }
       }
     } else {
-      result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale });
-      result.degraded = true;
+      applyDegraded();
     }
   }
 
@@ -1893,7 +1985,9 @@ export async function runCollaborativeAnalysis({
   result.uncertainty = computeUncertainty({ analyses, comparison, evidence: result.evidence, freshness: plan.freshness });
 
   /* ---- Emotional adaptation (§25-27): acknowledge, never amplify ---- */
-  const acknowledgement = formatEmotionalAcknowledgement({ emotion: plan.emotion, fomo: plan.fomo, locale });
+  const acknowledgement = degradedSafetyContainment
+    ? null
+    : formatEmotionalAcknowledgement({ emotion: plan.emotion, fomo: plan.fomo, locale });
   if (acknowledgement) result.answer = prepend(acknowledgement, result.answer);
 
   /* ---- Quality score (§36) ---- */

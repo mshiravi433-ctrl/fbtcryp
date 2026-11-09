@@ -200,6 +200,69 @@ export const FBT_KNOWLEDGE = Object.freeze([
     bodyFa: 'فهرست صفحه‌های FBT از خود جدول مسیرهای برنامه خوانده می‌شود و شامل بازار، صفحهٔ هر دارایی، مقایسه، سواپ، بریج، کیف پول، سبد، سیگنال‌ها، اسمارت مانی، سهام توکن‌شده، وام، کسب سود، فارم، خزانه، سفارش‌ها، NFT، اخبار، کشف، فرصت‌ها، اکوسیستم، توسعه‌دهندگان، آموزش، راهنما، امنیت، تنظیمات، جوایز، اجتماعی، رهبران بازار، بیمه، آزمایشگاه، لانچ‌پد و صفحات حقوقی است. مسیرهای مربوط به معاملات مشتقه و شرط‌بندی قیمتی فقط وقتی فعال‌اند که پرچم مربوطه روشن باشد. هیچ صفحه‌ای خارج از این جدول وجود ندارد و دستیار مسیر نمی‌سازد.',
     bodyEn: 'The page list is read from the app’s own route table: market, per-asset pages, compare, swap, bridge, wallet, portfolio, signals, smart money, tokenized stocks, loans, earn, farm, vault, orders, NFT, news, discover, opportunities, ecosystem, developers, learn, help, security, settings, rewards, social, leaderboard, insurance, lab, launchpad and the legal pages. Derivative and price-prediction routes exist only when their feature flag is on. No page exists outside this table, and the assistant never invents a route.',
     updatedAt: now()
+  },
+  {
+    id: 'kb.analytics.mvrv', version: 1, category: 'GENERAL_CRYPTO', status: 'verified', confidence: 95,
+    source: 'onchain-valuation-standard',
+    tags: ['mvrv', 'realized', 'cap', 'valuation', 'ارزش‌گذاری', 'ام وی آر وی', 'انچین', 'آنچین'],
+    titleFa: 'شاخص MVRV چیست و چطور تفسیر می‌شود؟', titleEn: 'What is MVRV and how is it read?',
+    bodyFa: 'MVRV نسبت ارزش بازار به ارزش تحقق‌یافته (Market Cap ÷ Realized Cap) است. Realized Cap هر کوین را با آخرین قیمت جابه‌جایی روی‌زنجیره ارزش‌گذاری می‌کند و برآوردی از میانگین بهای تمام‌شدهٔ هولدرهاست. وقتی MVRV بسیار بالاتر از محدوده‌های تاریخی باشد (مثلاً بالای ۳ تا ۳٫۷ در چرخه‌های گذشته BTC)، سود تحقق‌نیافته و فشار فروش احتمالی بالاست؛ وقتی نزدیک یا زیر ۱ باشد، بخش بزرگی از بازار در زیان است که تاریخاً با نواحی تسلیم و انباشت هم‌زمان بوده است. محدودیت مهم: انتقال‌های نهادی و ETFها می‌توانند Realized Cap را جابه‌جا کنند، بنابراین MVRV به‌تنهایی ابزار زمان‌بندی دقیق نیست و با جریان نقدینگی و ساختار بازار خوانده می‌شود.',
+    bodyEn: 'MVRV is the ratio of Market Cap to Realized Cap (which values each coin at the price it last moved on-chain, estimating aggregate holder cost basis). Historically, elevated MVRV (for example above 3–3.7 in past Bitcoin cycles) indicates large unrealized profits and higher distribution risk, whereas MVRV near or below 1 indicates widespread unrealized loss and historical capitulation/accumulation zones. Key caveat: institutional custody and ETF settlement flows alter on-chain UTXO velocity, so MVRV is a macro valuation gauge rather than a standalone timing signal.',
+    updatedAt: now()
+  },
+  {
+    id: 'kb.analytics.onchain-metrics', version: 1, category: 'TRADING', status: 'verified', confidence: 93,
+    source: 'derivatives-onchain-handbook',
+    tags: ['sopr', 'funding', 'open interest', 'etf', 'netflow', 'فاندینگ', 'اوپن اینترست', 'آنچین', 'نقدینگی'],
+    titleFa: 'شاخص‌های آن‌چین و مشتقات (SOPR، Funding Rate، Open Interest، جریان ETF)', titleEn: 'On-chain & derivatives signals (SOPR, Funding Rate, Open Interest, ETF flows)',
+    bodyFa: 'در تحلیل ساختار بازار چهار شاخص مکمل قیمت هستند: ۱) SOPR نشان می‌دهد کوین‌های جابه‌جاشده با سود (>۱) یا ضرر (<۱) خرج شده‌اند؛ ۲) Funding Rate هزینهٔ نگهداری پوزیشن‌های دائمی است — فاندینگ بسیار مثبت نشانهٔ ازدحام لانگ اهرمی و ریسک لانگ‌اسکوئیز است؛ ۳) Open Interest مجموع قراردادهای باز است که جهش آن همراه با افزایش قیمت یعنی ورود اهرم تازه؛ ۴) جریان خالص ETF و صرافی‌ها (Exchange Netflow) فشار تقاضای نهادی در برابر عرضهٔ قابل‌فروش در صرافی را نشان می‌دهد.',
+    bodyEn: 'Four structural series complement spot price: (1) SOPR shows whether coins moving on-chain are spent in profit (>1) or loss (<1); (2) Funding Rate reflects perpetual-futures positioning bias — extreme positive funding signals crowded longs vulnerable to squeezes; (3) Open Interest tracks active leverage; (4) Spot ETF net inflows and Exchange Netflows measure institutional absorption versus coins positioned to sell.',
+    updatedAt: now()
+  },
+  {
+    id: 'kb.economics.inflation-scarce-assets', version: 1, category: 'RISK', status: 'verified', confidence: 94,
+    source: 'monetary-economics-principles',
+    tags: ['تورم', 'کمیاب', 'طلا', 'دارایی', 'نرخ بهره', 'inflation', 'scarce', 'gold', 'debasement', 'real yield'],
+    titleFa: 'چرا تورم و سیاست پولی بر دارایی‌های کمیاب (طلا و بیت‌کوین) اثر می‌گذارد؟', titleEn: 'Why inflation affects scarce assets (gold, Bitcoin, real assets)',
+    bodyFa: 'از دید اقتصاد کلان، سازوکار اثر تورم بر دارایی‌های کمیاب سه بخش دارد: ۱) رقیق‌شدن قدرت خرید پول فیات (Monetary Debasement): وقتی عرضه پول سریع‌تر از تولید واقعی رشد می‌کند، قیمت اسمی دارایی‌هایی که عرضهٔ غیرکشسان و محدود دارند (مثل ۲۱ میلیون واحد بیت‌کوین یا استخراج محدود طلا) بازتنظیم می‌شود؛ ۲) هزینهٔ فرصت و نرخ بهره واقعی (Real Yield = نرخ اسمی منهای تورم): وقتی تورم از نرخ بهره پیشی بگیرد یا نرخ واقعی منفی شود، هزینهٔ فرصت نگهداری دارایی بدون سود نقدی کاهش می‌یابد و سرمایه به سمت ذخیرهٔ ارزش حرکت می‌کند؛ ۳) نکته و شرط ابطال: در موج اول تورم اگر بانک مرکزی نرخ بهره واقعی را تند بالا ببرد و نقدینگی را جمع کند (QT)، دارایی‌های ریسکی و حتی طلا ممکن است موقتاً زیر فشار نقدینگی افت کنند تا زمانی که انقباض متوقف یا نرخ واقعی افت کند.',
+    bodyEn: 'In macroeconomics, inflation transmits to scarce assets through three channels: (1) Fiat dilution & supply inelasticity — when money supply outpaces real output, assets with hard or slow-growing supply (such as gold or capped 21M Bitcoin) reprice in nominal terms; (2) Real yield & opportunity cost — lower or negative real interest rates (nominal rate minus inflation) cut the opportunity cost of holding non-yielding stores of value; (3) Crucial nuance & falsifier — if inflation forces central banks into aggressive real-rate hikes and quantitative tightening, liquidity contraction can pressure scarce and risk assets in the short run until tightening peaks.',
+    updatedAt: now()
+  },
+  {
+    id: 'kb.economics.rates-liquidity', version: 1, category: 'TRADING', status: 'verified', confidence: 93,
+    source: 'macro-transmission-framework',
+    tags: ['نرخ بهره', 'فدرال', 'دلار', 'dxy', 'نقدینگی', 'fed', 'fomc', 'liquidity', 'rates', 'm2'],
+    titleFa: 'کانال انتقال نرخ بهره، شاخص دلار (DXY) و نقدینگی جهانی به بازار کریپتو', titleEn: 'How interest rates, DXY and global liquidity transmit to crypto',
+    bodyFa: 'بیت‌کوین و بازار کریپتو به چرخهٔ نقدینگی جهانی حساس‌اند: کاهش نرخ بهره واقعی و تضعیف شاخص دلار (DXY) هزینهٔ تأمین مالی را کم کرده و اشتهای ریسک (Risk-On) را تقویت می‌کند؛ برعکس، جهش بازده اوراق خزانه و انقباض نقدینگی (QT) اهرم‌ها را جمع می‌کند و بر دارایی‌های پرنوسان فشار می‌آورد. شرط ابطال این رابطه زمانی است که یک محرک خاص درون‌بخشی (مثل بحران اعتباری بانکی یا ورود مستقیم سرمایه نهادی) همبستگی کوتاه‌مدت با بازار سهام را بشکند.',
+    bodyEn: 'Crypto is highly sensitive to global liquidity cycles: falling real yields and a softer DXY lower financing costs and support risk-on allocation, while rising real treasury yields and quantitative tightening drain marginal leverage. This transmission breaks temporarily when crypto-specific flows (such as institutional spot ETF inflows or systemic credit stress) dominate macro beta.',
+    updatedAt: now()
+  },
+  {
+    id: 'kb.economics.btc-drivers', version: 1, category: 'GENERAL_CRYPTO', status: 'verified', confidence: 94,
+    source: 'btc-market-structure',
+    tags: ['بیت کوین', 'رشد', 'صعود', 'هاوینگ', 'etf', 'عرضه', 'btc', 'bitcoin', 'growth', 'halving'],
+    titleFa: 'محرک‌های بنیادین و ریسک‌های رشد بیت‌کوین (BTC)', titleEn: 'Fundamental drivers and invalidation risks for Bitcoin (BTC)',
+    bodyFa: 'برآیند رشد یا افت بیت‌کوین بر چهار اهرم می‌چرخد: ۱) عرضهٔ غیرکشسان (سقف ۲۱ میلیون و نصف‌شدن صدور جدید در هر هاوینگ)، ۲) تقاضای حاشیه‌ای و جریان نهادی (ورود/خروج خالص ETFها و خزانه‌های شرکتی)، ۳) نقدینگی کلان و نرخ بهره واقعی، و ۴) بازتاب‌پذیری اهرم در مشتقات. بر پایه نرخ پایه تاریخی، چرخه‌های صعودی پایدار معمولاً هم‌زمان با تقاضای واقعی اسپات و انبساط نقدینگی بوده‌اند؛ در مقابل، خروج مداوم جریان ETF، افزایش نرخ بهره واقعی یا شوک نقدینگی می‌تواند فرضیه رشد را باطل یا به تأخیر بیندازد.',
+    bodyEn: 'Bitcoin’s medium-term trajectory rests on four pillars: (1) supply inelasticity (21M hard cap and post-halving issuance reduction), (2) marginal spot demand such as net ETF/institutional inflows, (3) macro liquidity and real interest rates, and (4) derivatives leverage reflexivity. Historically, durable expansions combine positive spot demand with easing liquidity; sustained ETF outflows, rising real rates, or macro risk-off shocks weaken or invalidate a bullish thesis.',
+    updatedAt: now()
+  },
+  {
+    id: 'kb.analytics.tokenomics-valuation', version: 1, category: 'RISK', status: 'verified', confidence: 92,
+    source: 'tokenomics-risk-standard',
+    tags: ['fdv', 'market cap', 'unlock', 'عرضه', 'توکنومیکس', 'حجم بازار', 'تورم توکن'],
+    titleFa: 'تفاوت Market Cap و FDV و ریسک آزادسازی توکن‌ها (Token Unlocks)', titleEn: 'Market Cap vs FDV and token unlock dilution risk',
+    bodyFa: 'Market Cap حاصل‌ضرب قیمت در عرضهٔ در گردش فعلی است، اما FDV (ارزش رقیق‌شدهٔ کامل) قیمت را در کل عرضهٔ نهایی ضرب می‌کند. پروژه‌هایی با شناوری پایین (Low Float) و FDV بالا در زمان آزادسازی توکن‌های تیم یا سرمایه‌گذاران (Vesting Unlocks) با فشار عرضهٔ ساختاری روبه‌رو می‌شوند، مگر آنکه تقاضای واقعی و درآمد پروتکل هم‌زمان رشد کند.',
+    bodyEn: 'Market Cap multiplies price by circulating supply, while FDV uses total maximum supply. Low-float / high-FDV tokens face structural sell pressure during scheduled team and investor unlocks unless organic protocol demand scales proportionally.',
+    updatedAt: now()
+  },
+  {
+    id: 'kb.risk.position-sizing', version: 1, category: 'RISK', status: 'verified', confidence: 95,
+    source: 'fbt-risk-discipline',
+    tags: ['مدیریت ریسک', 'پله', 'سبد', 'حد ضرر', 'اهرم', 'تنوع', 'position', 'sizing', 'dca', 'allocation'],
+    titleFa: 'اصول تخصیص سبد، ورود پله‌ای و مدیریت ریسک بدون اهرم', titleEn: 'Portfolio allocation, staged entry and non-leveraged risk control',
+    bodyFa: 'در بازار پرنوسان، بقا بر بیشینه‌سازی سود کوتاه‌مدت اولویت دارد: ۱) مشخص کردن افق زمانی و بیشینه افت قابل‌تحمل (Drawdown Budget) پیش از ورود؛ ۲) نگهداری دارایی‌های هسته‌ای با نقدشوندگی بالا و پرهیز از تمرکز بیش از حد روی یک توکن پرریسک؛ ۳) ورود و خروج پله‌ای (DCA / Staged Scaling) به‌جای خرید یک‌جا؛ ۴) نگهداری حاشیه نقدینگی استیبل‌کوین و اجتناب از اهرم برای جلوگیری از لیکوییدیشن اجباری.',
+    bodyEn: 'In volatile markets, survival precedes optimization: (1) define time horizon and maximum acceptable drawdown before sizing positions; (2) anchor core allocation in deep-liquidity assets and cap single-asset concentration; (3) scale entries and exits in stages rather than lump-sum timing; (4) hold a stablecoin buffer and avoid leverage that forces liquidation on routine swings.',
+    updatedAt: now()
   }
 ]);
 
@@ -216,26 +279,48 @@ function tokenize(text) {
   );
 }
 
+function tokenizeWithAliases(text) {
+  const raw = String(text || '')
+    .replace(/بیت\s*کوین|بیتکوین/gi, ' بیتکوین بیت کوین btc bitcoin ')
+    .replace(/اتریوم/gi, ' اتریوم eth ethereum ')
+    .replace(/سولانا/gi, ' سولانا sol solana ')
+    .replace(/ام\s*وی\s*ار\s*وی|ام\s*وی\s*آر\s*وی/gi, ' mvrv ')
+    .replace(/نرخ\s*بهره/gi, ' نرخ بهره rates interest yield ')
+    .replace(/تورم/gi, ' تورم inflation ');
+  return new Set(
+    normalizeUpgrade4(raw)
+      .split(/\s+/)
+      .map((w) => w.replace(/\u200c/g, ''))
+      .filter((w) => w.length >= 3)
+  );
+}
+
 /**
  * Retrieve the most relevant knowledge items for a question. Deterministic
  * token-overlap scoring; deprecated items are never returned.
  */
 export function searchKnowledge(query, { locale = 'fa', limit = 3, category = null } = {}) {
-  const qTokens = tokenize(query);
+  const qTokens = tokenizeWithAliases(query);
   if (!qTokens.size) return [];
 
   const scored = [];
   for (const item of FBT_KNOWLEDGE) {
     if (item.status === 'deprecated') continue;
     if (category && item.category !== category) continue;
-    const title = String(locale).startsWith('fa') ? item.titleFa : item.titleEn;
-    const body = String(locale).startsWith('fa') ? item.bodyFa : item.bodyEn;
-    const iTokens = tokenize(`${title} ${body} ${item.category}`);
+    const isFa = String(locale).startsWith('fa');
+    const title = isFa ? item.titleFa : item.titleEn;
+    const body = isFa ? item.bodyFa : item.bodyEn;
+    const tagStr = Array.isArray(item.tags) ? item.tags.join(' ') : '';
+    const titleTokens = tokenizeWithAliases(`${title} ${tagStr}`);
+    const iTokens = tokenizeWithAliases(`${title} ${body} ${tagStr} ${item.category}`);
     let overlap = 0;
-    for (const t of qTokens) if (iTokens.has(t)) overlap += 1;
+    for (const t of qTokens) {
+      if (titleTokens.has(t)) overlap += 1.6;
+      else if (iTokens.has(t)) overlap += 1;
+    }
     /* Partial-word bonus for Persian stems («کیف پول» vs «کیف پولم») */
     for (const t of qTokens) {
-      if (!iTokens.has(t)) {
+      if (!iTokens.has(t) && t.length >= 4) {
         for (const it of iTokens) {
           if (it.startsWith(t.slice(0, 4)) || t.startsWith(it.slice(0, 4))) { overlap += 0.5; break; }
         }
@@ -251,8 +336,9 @@ export function searchKnowledge(query, { locale = 'fa', limit = 3, category = nu
       status: item.status,
       confidence: item.confidence,
       source: item.source,
-      title: String(locale).startsWith('fa') ? item.titleFa : item.titleEn,
-      body: String(locale).startsWith('fa') ? item.bodyFa : item.bodyEn,
+      title,
+      body,
+      bodyEn: item.bodyEn,
       score
     });
   }
