@@ -57,6 +57,7 @@ import { auditNumbers, buildEvidenceCorpus, renderUnsourcedBlock } from './aiEvi
 import { buildClaimLedger, renderClaimLedger } from './aiClaimLedger.js';
 import { selectEconomicLenses, renderEconomistLens, economistPersona } from './aiEconomistLens.js';
 import { readSocialContext, renderSocialBrief } from '../src/lib/intent-ai/os/conversation/socialRead.js';
+import { checkPlanArithmetic, renderStrategyViolations, isPlanParameter } from './aiStrategyPlanCheck.js';
 import {
   detectStrategyRequest,
   buildStrategyFrame,
@@ -1067,6 +1068,14 @@ export async function runCollaborativeAnalysis({
           rubric: checkStrategyRubric(result.answer)
         };
       }
+      /*
+       * Arithmetic is separate from completeness: the draft can have all eight
+       * sections and still contradict itself (allocations over 100%, a long
+       * whose stop is above the entry, a position bigger than the capital).
+       * The reviewer below receives every violation as MUST-FIX; the reply
+       * re-checks the FINAL text.
+       */
+      const draftArithmetic = strategyFrame ? checkPlanArithmetic(result.answer, strategyFrame) : null;
 
       /*
        * ─── NUMERIC EVIDENCE AUDIT (deterministic, no extra call) ─────────────
@@ -1116,9 +1125,10 @@ export async function runCollaborativeAnalysis({
           const unansweredBlock = renderUnansweredParts(draftCoverage.uncovered, locale);
           const unsourcedBlock = renderUnsourcedBlock(draftAudit);
           const strategyGapsBlock = renderStrategyGaps(result.strategy?.rubric);
+          const strategyArithmeticBlock = renderStrategyViolations(draftArithmetic);
           const criticRole = {
             role: AI_ROLES.VERIFICATION_AI,
-            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}`,
+            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}`,
             contextBlock: '',
             locale,
             deps: D,
@@ -1145,7 +1155,15 @@ export async function runCollaborativeAnalysis({
            */
           const draftUncovered = new Set((draftAudit?.unsourced || []).map((n) => n.value));
           const repairedAudit = repaired ? auditNumbers(repaired, evidenceCorpus()) : null;
-          const introducedNumbers = (repairedAudit?.unsourced || []).filter((n) => !draftUncovered.has(n.value));
+          /*
+           * A strategy repair may legitimately move a stop or an entry: those
+           * are plan parameters, not asserted market facts. Only in a strategy
+           * turn are such levels exempt from the "new unsourced number" rule;
+           * every other number still has to come from the evidence.
+           */
+          const introducedNumbers = (repairedAudit?.unsourced || [])
+            .filter((n) => !draftUncovered.has(n.value))
+            .filter((n) => !(strategyFrame && isPlanParameter(repaired, n.value)));
           const repairedCoverage = subQuestions.length >= 2 && repaired
             ? assessQuestionCoverage(subQuestions, repaired)
             : null;
@@ -1216,6 +1234,11 @@ export async function runCollaborativeAnalysis({
         && a.role !== AI_ROLES.VERIFICATION_AI
         && a.role !== 'critique')
     }));
+  }
+
+  /* Re-check the FINAL text: the reviewer may have fixed a figure. */
+  if (result.strategy) {
+    result.strategy.arithmetic = checkPlanArithmetic(result.answer, result.strategy.frame);
   }
 
   if (subQuestions.length >= 2 && !result.degraded) {

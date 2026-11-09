@@ -170,6 +170,7 @@ export function renderStrategyRubricContract() {
   const required = STRATEGY_RUBRIC.filter((r) => r.required).map((r) => r.id);
   return `STRATEGY RUBRIC (a strategy answer that omits any of these is unfinished): ${required.join(', ')}. `
     + 'For each: the objective and horizon, the risk budget and maximum tolerable drawdown, the size of every leg, the entry condition, the invalidation level, the cost (fees/slippage) and the bull/base/bear scenarios. '
+    + 'Sizing must satisfy the arithmetic: position% × stop% ≤ the per-trade risk budget%, allocations must sum to ≤ 100%, a long stop must sit below its entry (and a short stop above it), and leverage may not exceed the policy cap. '
     + 'If the frame lacks an input, say which reading is missing instead of inventing it.';
 }
 

@@ -2415,7 +2415,13 @@ router.post('/chat', async (req, res) => {
           feeRoundTripPct: collaboration.strategy.frame?.feeRoundTripPct ?? null,
           gaps: Array.isArray(collaboration.strategy.frame?.gaps) ? collaboration.strategy.frame.gaps : [],
           rubricScore: collaboration.strategy.rubric?.score ?? null,
-          rubricMissing: Array.isArray(collaboration.strategy.rubric?.missing) ? collaboration.strategy.rubric.missing : []
+          rubricMissing: Array.isArray(collaboration.strategy.rubric?.missing) ? collaboration.strategy.rubric.missing : [],
+          /* Arithmetic of the FINAL text: allocations, stop side, leverage,
+             position size and risk budget agree with each other. */
+          arithmeticClean: collaboration.strategy.arithmetic ? collaboration.strategy.arithmetic.clean === true : null,
+          arithmeticViolations: Array.isArray(collaboration.strategy.arithmetic?.violations)
+            ? collaboration.strategy.arithmetic.violations.map((v) => v.id).slice(0, 6)
+            : []
         } : null,
         social: collaboration?.socialRead ? {
           register: collaboration.socialRead.register,
