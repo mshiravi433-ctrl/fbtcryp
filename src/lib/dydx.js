@@ -854,8 +854,17 @@ export function orderFlagsFor(type, timeInForce = null) {
   return 'SHORT_TERM';
 }
 
-/** Market/IOC order with our builder address and fee inside the signed order. */
-export async function placeDydxOrder({ market, side, size, slippagePct = 0.5, reduceOnly = false, orderType = 'market', limitPrice: userPrice = null, goodTilSeconds = DYDX_LIMIT_GOOD_TIL_SECONDS }) {
+/**
+ * Market/IOC or resting-limit order with our builder address and fee inside
+ * the signed order.
+ *
+ * `postOnly` is the venue's own maker-only flag and is only meaningful for a
+ * LIMIT + GTT order (see sendDydxOrder): a post-only order that would cross
+ * the book is CANCELLED by the matching engine instead of taking liquidity,
+ * which is what "maker" has to mean. It is ignored for market orders, where
+ * the SDK's flag helper would reject the combination anyway.
+ */
+export async function placeDydxOrder({ market, side, size, slippagePct = 0.5, reduceOnly = false, orderType = 'market', limitPrice: userPrice = null, goodTilSeconds = DYDX_LIMIT_GOOD_TIL_SECONDS, postOnly = false }) {
   if (!session) throw new Error('NOT_CONNECTED');
   if (!market?.ticker || !market?.raw) throw new Error('BAD_MARKET');
   const qty = Number(size);
@@ -882,7 +891,7 @@ export async function placeDydxOrder({ market, side, size, slippagePct = 0.5, re
       timeInForce: 'GTT',
       goodTilTimeInSeconds: seconds,
       execution: 'DEFAULT',
-      postOnly: false,
+      postOnly: Boolean(postOnly),
       memo: 'FBT Swap builder limit order'
     });
   }

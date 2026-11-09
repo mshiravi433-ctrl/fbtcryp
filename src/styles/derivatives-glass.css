@@ -1059,6 +1059,59 @@
   background: rgba(6, 182, 212, 0.14);
 }
 
+/*
+ * ─── THE ORDER-FLAG TOGGLES (post-only / reduce-only) ──────────────────────
+ * Added with the dYdX ticket's order options. A switch here has to read as a
+ * switch WITHOUT a checkbox: on a phone the tap target is the whole row, and
+ * the state is carried by colour AND a filled dot, never by colour alone.
+ */
+.dydx-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px 10px;
+  border-radius: 11px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.48);
+  color: var(--text-2);
+  text-align: start;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+:root[data-theme='light'] .dydx-toggle {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(15, 23, 42, 0.12);
+  color: #334155;
+}
+
+.dydx-toggle-dot {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: transparent;
+  transition: all 0.15s ease;
+}
+
+.dydx-toggle.is-on {
+  border-color: rgba(6, 182, 212, 0.7);
+  background: linear-gradient(155deg, rgba(6, 182, 212, 0.18), rgba(139, 92, 246, 0.10));
+  color: var(--rgb-1);
+}
+
+.dydx-toggle.is-on .dydx-toggle-dot {
+  border-color: transparent;
+  background: linear-gradient(135deg, #06b6d4, #8b5cf6);
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.18);
+}
+
 /* Pair knowledge header (Ostium "این جفت چیست؟") */
 .pair-info-strip {
   display: flex;

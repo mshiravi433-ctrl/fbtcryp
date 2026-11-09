@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import PageTransition, { riseIn } from '../components/PageTransition';
@@ -14,6 +14,7 @@ import '../styles/derivatives-glass.css';
 import {
   DYDX_BUILDER_ADDRESS,
   DYDX_BUILDER_FEE_PPM,
+  DYDX_LIMIT_GOOD_TIL_SECONDS,
   classifyDydxError,
   connectDydx,
   disconnectDydx,
@@ -23,6 +24,9 @@ import {
   placeDydxOrder
 } from '../lib/dydx';
 import FuturesMarketChart from '../components/FuturesMarketChart';
+import DydxTokenDesk from '../components/futures/DydxTokenDesk';
+import { dydxOrderSize } from '../lib/perpRoutes';
+import { liquidationDistance } from '../lib/futures-engine';
 import lazyRetry from '../lib/lazyRetry';
 import { DYDX_TPSL_ENABLED, FUTURES_HISTORY_ENABLED } from '../lib/features';
 import ModernSelect from '../components/ModernSelect';
@@ -47,6 +51,41 @@ const LazyDydxTpSlCard = DYDX_TPSL_ENABLED
 const LazyFuturesHistory = FUTURES_HISTORY_ENABLED
   ? lazyRetry(() => import('../components/futures/FuturesHistory'))
   : null;
+
+/*
+ * ─── LEVERAGE, WHICH THIS TAB DID NOT HAVE ──────────────────────────────────
+ *   «در فیوجرز تب dydx اهرم و امکانات دیگر را اضافه کن»
+ *
+ * dYdX v4 has no "set leverage" call: leverage is a CONSEQUENCE — a position's
+ * notional divided by the equity backing it, hard-capped by the market's own
+ * initial margin fraction (1 / IMF, published per market and already carried
+ * on every row as `maxLeverage`). So the control below does the only honest
+ * thing a leverage control can do here: it SIZES THE ORDER from the account's
+ * real equity, and it reports the leverage the resulting order actually has.
+ *
+ * Two consequences are deliberate:
+ *   · the ladder is CLIPPED to the market's own cap. A 20× button on a market
+ *     whose IMF is 0.1 (10× max) is a button the venue will reject;
+ *   · with no connected account there is no equity to size from, so the ladder
+ *     still sets the target leverage (the risk engine and the AI both read it)
+ *     but says out loud that the size has to be typed until the account is
+ *     read. Silently doing nothing on a tap is how a control gets reported as
+ *     broken.
+ */
+const LEVERAGE_LADDER = [1, 2, 5, 10, 20];
+
+/**
+ * Lifetimes offered for a resting limit order. dYdX measures a LONG_TERM
+ * order's life in absolute seconds from the block it lands in, so these are
+ * the numbers that become `goodTilTimeInSeconds` — not a UI preference, a
+ * protocol field. The 28-day default is unchanged from before this existed.
+ */
+const GOOD_TIL = Object.freeze([
+  { id: '1h', seconds: 3600 },
+  { id: '1d', seconds: 86_400 },
+  { id: '7d', seconds: 604_800 },
+  { id: '28d', seconds: DYDX_LIMIT_GOOD_TIL_SECONDS }
+]);
 
 /**
  * `embedded` — hosted by the Perpetual page, which has already drawn the one
@@ -89,6 +128,12 @@ export default function Dydx({ embedded = false } = {}) {
   const [dydxAddress, setDydxAddress] = useState(null);
   const [account, setAccount] = useState(null);
   const [accountLive, setAccountLive] = useState(true);
+  /* The leverage this ticket is aiming at, and the two limit-order options
+     that were previously impossible to express from this screen. */
+  const [leverage, setLeverage] = useState(2);
+  const [postOnly, setPostOnly] = useState(false);
+  const [reduceOnly, setReduceOnly] = useState(false);
+  const [goodTil, setGoodTil] = useState('28d');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [reviewing, setReviewing] = useState(false);
@@ -111,8 +156,87 @@ export default function Dydx({ embedded = false } = {}) {
     if (market && !markets.some((m) => m.ticker === ticker)) setTicker(market.ticker);
   }, [market, markets, ticker]);
 
-  const notional = Number(size || 0) * Number(market?.oraclePrice || 0);
+  /*
+   * ─── THE NUMBERS BEHIND THE LEVERAGE CONTROL ────────────────────────────
+   * Every one of them is derived, never stored, so none can drift from the
+   * inputs it was computed from:
+   *   entryPrice        the limit price when one is set, otherwise the oracle.
+   *                     Everything below uses the SAME price, so the fee, the
+   *                     notional on the review sheet and the liquidation
+   *                     distance can never disagree by a limit price — the
+   *                     three used to be computed from two different prices.
+   *   equityUsd         the subaccount's own equity (cross margin: on dYdX the
+   *                     whole account backs every position). null when the
+   *                     account has not been read — never 0, because 0 would
+   *                     print an infinite leverage instead of an honest dash.
+   *   effectiveLeverage notional / equity: what the order ACTUALLY is, which
+   *                     is the number the venue uses, not the one on the chip.
+   *   marginRequired    notional × the market's own initial margin fraction.
+   */
+  const limitPriceNum = Number(limitPrice);
+  const entryPrice = orderType === 'limit' && limitPriceNum > 0
+    ? limitPriceNum
+    : (Number(market?.oraclePrice) || null);
+  const notional = (Number(size) || 0) * (entryPrice || 0);
   const fee = dydxFeeUsd(notional);
+  const equityUsd = (() => {
+    const eq = Number(account?.subaccount?.equity);
+    return Number.isFinite(eq) && eq > 0 ? eq : null;
+  })();
+  /*
+   * Free collateral is what a NEW position can actually be opened with —
+   * equity minus the margin already committed to the open ones. Sizing from
+   * equity would hand the user an order the venue rejects the moment they
+   * already hold a position, so the free figure wins and equity is the
+   * fallback when the indexer did not send it.
+   */
+  const freeCollateralUsd = (() => {
+    const fc = Number(account?.subaccount?.freeCollateral);
+    return Number.isFinite(fc) && fc > 0 ? fc : null;
+  })();
+  const sizeableUsd = freeCollateralUsd ?? equityUsd;
+  const maxLeverage = Number.isFinite(Number(market?.maxLeverage)) ? Number(market.maxLeverage) : null;
+  const effectiveLeverage = notional > 0 && equityUsd ? notional / equityUsd : null;
+  const marginRequired = (() => {
+    const imf = Number(market?.initialMarginFraction);
+    return Number.isFinite(imf) && imf > 0 && notional > 0 ? notional * imf : null;
+  })();
+  const liq = useMemo(() => liquidationDistance({
+    providerId: 'dydx',
+    side: side === 'sell' ? 'short' : 'long',
+    entryPrice,
+    leverage: effectiveLeverage ?? leverage,
+    maxLeverage,
+    maintenanceMarginFraction: market?.maintenanceMarginFraction ?? null,
+    takerFeeRate: DYDX_BUILDER_FEE_PPM / 1_000_000
+  }), [side, entryPrice, effectiveLeverage, leverage, maxLeverage, market?.maintenanceMarginFraction]);
+
+  /* The ladder the ticket offers: the house rungs, clipped to the venue's own
+     cap for THIS market, with the cap itself always reachable. */
+  const leverageOptions = useMemo(() => {
+    const list = LEVERAGE_LADDER.filter((n) => (maxLeverage == null ? true : n <= maxLeverage));
+    if (maxLeverage != null && maxLeverage > 0 && !list.includes(maxLeverage)) list.push(maxLeverage);
+    if (!list.length) list.push(1);
+    return [...new Set(list)].sort((a, b) => a - b);
+  }, [maxLeverage]);
+
+  /**
+   * Tap a rung → size the order from the account's real equity.
+   *
+   * The size goes through `dydxOrderSize`, the same function the venue routes
+   * use, so it is rounded to the market's own step and cannot come back as a
+   * rejected order for carrying more precision than the pair accepts. With no
+   * equity read there is nothing to size from: the target leverage is still
+   * recorded (the risk engine and the AI desk both read it) and the page says
+   * why the size did not move.
+   */
+  const applyLeverage = (n) => {
+    haptic?.('light');
+    setLeverage(n);
+    if (!sizeableUsd || !entryPrice) return;
+    const qty = dydxOrderSize({ notionalUsd: sizeableUsd * n, price: entryPrice, market });
+    if (qty) setSize(String(qty));
+  };
   const positions = account?.subaccount?.openPerpetualPositions
     ? Object.values(account.subaccount.openPerpetualPositions)
     : [];
@@ -167,7 +291,19 @@ export default function Dydx({ embedded = false } = {}) {
     setBusy(true);
     setError(null);
     try {
-      const order = await placeDydxOrder({ market, side, size, slippagePct: slippage, orderType, limitPrice });
+      const order = await placeDydxOrder({
+        market,
+        side,
+        size,
+        slippagePct: slippage,
+        orderType,
+        limitPrice,
+        reduceOnly,
+        /* Post-only is a LIMIT+GTT flag; for a market order the SDK's own
+           helper rejects the combination, so it is not sent. */
+        postOnly: orderType === 'limit' ? postOnly : false,
+        goodTilSeconds: (GOOD_TIL.find((g) => g.id === goodTil) || GOOD_TIL[3]).seconds
+      });
       setResult(order);
       setReviewing(false);
       await refreshAccount();
@@ -359,6 +495,32 @@ export default function Dydx({ embedded = false } = {}) {
             </div>
           )}
 
+          {/*
+            ─── THE DESK FOR THE TOKEN ON THE CHART ABOVE ────────────────────
+            «برای هر توکن انتخابی، باکس هوش مصنوعی، موتور ریسک و موتور فرصت
+             را در یک باکس بازشونده زیر آن بگذار و از هوش مصنوعی هم بپرس اضافه
+             کن»
+
+            Keyed by ticker: switching the market gives the new token its own
+            box and its own candle read, so a panel cannot keep the previous
+            pair's numbers under a new name. It is collapsed by default — a
+            folded box with a verdict on its title line is read; an open wall
+            of metrics is scrolled past — and it fetches nothing until opened.
+          */}
+          <DydxTokenDesk
+            key={ticker}
+            ticker={ticker}
+            market={market}
+            side={side}
+            notionalUsd={notional}
+            collateralUsd={equityUsd}
+            availableBalanceUsd={freeCollateralUsd}
+            leverage={effectiveLeverage ?? leverage}
+            entryPrice={entryPrice}
+            onApplyLeverage={applyLeverage}
+            testId="dydx-token-desk"
+          />
+
           <div className="dir-switch">
             <button
               type="button"
@@ -419,6 +581,99 @@ export default function Dydx({ embedded = false } = {}) {
                 <button type="button" className={`lev-chip ${Number(slippage) === n ? 'active' : ''}`} key={n} onClick={() => setSlippage(String(n))}>{n}%</button>
               ))}
             </div>
+          </div>
+
+          {/* ─── LEVERAGE: the rung sizes the order, the rows report it ──── */}
+          <div className="deriv-field-card">
+            <div className="row-between">
+              <label className="field-label" style={{ marginBottom: 0 }}>{t('dydx.leverage.title')}</label>
+              <span className="faint" style={{ fontSize: 11 }}>
+                {maxLeverage ? t('dydx.leverage.max', { max: maxLeverage }) : '—'}
+              </span>
+            </div>
+            <div className="lev-row">
+              {leverageOptions.map((n) => (
+                <button
+                  type="button"
+                  className={`lev-chip ${Number(leverage) === n ? 'active' : ''}`}
+                  key={n}
+                  onClick={() => applyLeverage(n)}
+                  data-testid={`dydx-leverage-${n}`}
+                >
+                  {n}×
+                </button>
+              ))}
+            </div>
+            <div className="row-between" style={{ marginTop: 8 }}>
+              <span className="faint">{t('dydx.leverage.effective')}</span>
+              <span className="mono">{effectiveLeverage ? `${effectiveLeverage.toFixed(2)}×` : '—'}</span>
+            </div>
+            <div className="row-between">
+              <span className="faint">{t('dydx.leverage.margin')}</span>
+              <span className="mono">{marginRequired != null ? fmtUsd(marginRequired) : '—'}</span>
+            </div>
+            <div className="row-between">
+              <span className="faint">{t('dydx.leverage.liq')}</span>
+              <span className="mono" style={liq.distancePct != null && liq.distancePct < 5 ? { color: 'var(--down, #ff3b6b)' } : undefined}>
+                {liq.distancePct == null ? '—' : `${Number(liq.distancePct).toFixed(2)}%`}
+              </span>
+            </div>
+            <div className="row-between">
+              <span className="faint">{t('dydx.leverage.liqPrice')}</span>
+              <span className="mono">{liq.liquidationPrice == null ? '—' : `$${fmtPrice(liq.liquidationPrice)}`}</span>
+            </div>
+            {!sizeableUsd && (
+              <p className="faint" style={{ fontSize: 11, marginTop: 6, lineHeight: 1.7 }}>{t('dydx.leverage.needEquity')}</p>
+            )}
+            <p className="faint" style={{ fontSize: 10.5, marginTop: 6, lineHeight: 1.7 }}>{t('dydx.leverage.hint')}</p>
+          </div>
+
+          {/* ─── THE ORDER OPTIONS dYdX ACTUALLY ACCEPTS ────────────────── */}
+          <div className="deriv-field-card">
+            {orderType === 'limit' && (
+              <>
+                <label className="field-label">{t('dydx.order.goodTil')}</label>
+                <div className="lev-row">
+                  {GOOD_TIL.map((g) => (
+                    <button
+                      type="button"
+                      className={`lev-chip ${goodTil === g.id ? 'active' : ''}`}
+                      key={g.id}
+                      onClick={() => { haptic?.('light'); setGoodTil(g.id); }}
+                      data-testid={`dydx-goodtil-${g.id}`}
+                    >
+                      {t(`dydx.order.goodTilOptions.${g.id}`)}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className={`dydx-toggle ${postOnly ? 'is-on' : ''}`}
+                  onClick={() => { haptic?.('light'); setPostOnly((v) => !v); }}
+                  aria-pressed={postOnly}
+                  data-testid="dydx-post-only"
+                >
+                  <span className="dydx-toggle-dot" aria-hidden="true" />
+                  <span>
+                    <strong>{t('dydx.order.postOnly')}</strong>
+                    <span className="faint" style={{ display: 'block', fontSize: 10.5, lineHeight: 1.7 }}>{t('dydx.order.postOnlyHint')}</span>
+                  </span>
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              className={`dydx-toggle ${reduceOnly ? 'is-on' : ''}`}
+              onClick={() => { haptic?.('light'); setReduceOnly((v) => !v); }}
+              aria-pressed={reduceOnly}
+              data-testid="dydx-reduce-only"
+            >
+              <span className="dydx-toggle-dot" aria-hidden="true" />
+              <span>
+                <strong>{t('dydx.order.reduceOnly')}</strong>
+                <span className="faint" style={{ display: 'block', fontSize: 10.5, lineHeight: 1.7 }}>{t('dydx.order.reduceOnlyHint')}</span>
+              </span>
+            </button>
           </div>
 
           <div className="brg-quote deriv-telemetry-card" style={{ marginTop: 12 }}>
@@ -503,7 +758,20 @@ export default function Dydx({ embedded = false } = {}) {
           <div className="row-between"><span className="faint">{t('dydx.order.type')}</span><strong>{orderType === 'limit' ? t('dydx.order.limitAt', { price: limitPrice }) : t('dydx.order.market')}</strong></div>
           <div className="row-between"><span className="faint">{t('dydx.direction')}</span><strong>{t(`dydx.${side}`)}</strong></div>
           <div className="row-between"><span className="faint">{t('dydx.notional')}</span><span className="mono">{fmtUsd(notional)}</span></div>
+          <div className="row-between"><span className="faint">{t('dydx.leverage.effective')}</span><span className="mono">{effectiveLeverage ? `${effectiveLeverage.toFixed(2)}×` : (leverage ? `${leverage}×` : '—')}</span></div>
+          <div className="row-between"><span className="faint">{t('dydx.leverage.margin')}</span><span className="mono">{marginRequired != null ? fmtUsd(marginRequired) : '—'}</span></div>
+          <div className="row-between"><span className="faint">{t('dydx.leverage.liqPrice')}</span><span className="mono">{liq.liquidationPrice == null ? '—' : `$${fmtPrice(liq.liquidationPrice)}`}</span></div>
           <div className="row-between"><span className="faint">{t('dydx.builderFee')}</span><span className="mono">{fmtUsd(fee)}</span></div>
+          {/* What is actually being signed: the same three flags the venue
+              will enforce. A review sheet that hides them is a sheet that
+              asks someone to sign something it did not describe. */}
+          <div className="row-between"><span className="faint">{t('dydx.order.options')}</span><span className="mono" style={{ fontSize: 11 }}>
+            {[
+              orderType === 'limit' ? t(`dydx.order.goodTilOptions.${goodTil}`) : t('dydx.order.market'),
+              postOnly && orderType === 'limit' ? t('dydx.order.postOnly') : null,
+              reduceOnly ? t('dydx.order.reduceOnly') : null
+            ].filter(Boolean).join(' · ')}
+          </span></div>
         </div>
         <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('dydx.confirmRisk')}</p>
         <div className="row" style={{ gap: 10, marginTop: 12 }}><button className="btn btn-ghost" onClick={() => setReviewing(false)}>{t('common.cancel')}</button><button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? t('common.loading') : t('common.confirm')}</button></div>
