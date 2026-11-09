@@ -29,28 +29,12 @@ import DydxTokenDesk from '../components/futures/DydxTokenDesk';
 import { dydxOrderSize } from '../lib/perpRoutes';
 import { liquidationDistance } from '../lib/futures-engine';
 import lazyRetry from '../lib/lazyRetry';
-import { DYDX_TPSL_ENABLED, FUTURES_HISTORY_ENABLED } from '../lib/features';
+import { DYDX_TPSL_ENABLED } from '../lib/features';
 import ModernSelect from '../components/ModernSelect';
 
 /* The TP/SL card loads only when DYDX_TPSL_ENABLED is on. */
 const LazyDydxTpSlCard = DYDX_TPSL_ENABLED
   ? lazyRetry(() => import('../components/futures/DydxTpSlCard'))
-  : null;
-
-/*
- * ─── THE dYdX HISTORY LIVES ON THE dYdX SCREEN ──────────────────────────────
- *   «هر تاریخچه را در صفحه مربوط به خودش، زیر صفحه، در باکس باز‌شونده بگذار»
- *
- * This table used to be a fourth tab on the Perpetual rail, where it mixed
- * one venue's real fills with two venues' «not available» notes — a tab that
- * belonged to no screen the reader was on. It is dYdX data, read through the
- * dYdX session this very page establishes, so it now sits at the BOTTOM of
- * this page inside a folded box: closed by default (it is the least urgent
- * thing on a trading screen), one tap to open, and nothing about the panel
- * itself changed.
- */
-const LazyFuturesHistory = FUTURES_HISTORY_ENABLED
-  ? lazyRetry(() => import('../components/futures/FuturesHistory'))
   : null;
 
 /*
@@ -231,7 +215,7 @@ export default function Dydx({ embedded = false } = {}) {
     leverage: effectiveLeverage ?? leverage,
     maxLeverage,
     maintenanceMarginFraction: market?.maintenanceMarginFraction ?? null,
-    takerFeeRate: DYDX_BUILDER_FEE_PPM / 1_000_000
+    takerFeeRate: null // The builder fee is not the venue taker fee.
   }), [side, entryPrice, effectiveLeverage, leverage, maxLeverage, market?.maintenanceMarginFraction]);
 
   /* The ladder the ticket offers: the house rungs, clipped to the venue's own
@@ -450,6 +434,7 @@ export default function Dydx({ embedded = false } = {}) {
             leverage={effectiveLeverage ?? leverage}
             entryPrice={entryPrice}
             onApplyLeverage={applyLeverage}
+            address={dydxAddress}
             testId="dydx-token-desk"
           />
       )}
@@ -537,7 +522,7 @@ export default function Dydx({ embedded = false } = {}) {
 
           </div>
           <div className="dydx-order-column" ref={ticketRef} data-testid="dydx-order-ticket">
-          <div className="dir-switch">
+          {!mobile ? <div className="dir-switch">
             <button
               type="button"
               className={`dir-btn long ${side === 'buy' ? 'active' : ''}`}
@@ -564,7 +549,7 @@ export default function Dydx({ embedded = false } = {}) {
               {t('dydx.sell')}
               <span className="dir-sub">{t('dydx.shortSub')}</span>
             </button>
-          </div>
+          </div> : <div className={`dydx-selected-side ${side === 'buy' ? 'is-long' : 'is-short'}`} data-testid="dydx-selected-side"><span>{t('dydx.direction')}</span><strong>{t(`dydx.${side}`)}</strong></div>}
 
           <div className="deriv-field-card">
             <div className="segmented">
@@ -642,6 +627,7 @@ export default function Dydx({ embedded = false } = {}) {
               <p className="faint" style={{ fontSize: 11, marginTop: 6, lineHeight: 1.7 }}>{t('dydx.leverage.needEquity')}</p>
             )}
             <p className="faint" style={{ fontSize: 10.5, marginTop: 6, lineHeight: 1.7 }}>{t('dydx.leverage.hint')}</p>
+            <p className="faint" style={{ fontSize: 10.5, lineHeight: 1.7 }}>{t('dydx.leverage.liqCaveat')}</p>
           </div>
 
           {/* ─── THE ORDER OPTIONS dYdX ACTUALLY ACCEPTS ────────────────── */}
@@ -757,17 +743,6 @@ export default function Dydx({ embedded = false } = {}) {
         </p>
       </motion.section>
 
-      {/* The folded trade history — this venue's fills, on this venue's page. */}
-      {LazyFuturesHistory && (
-        <div style={{ marginTop: 18 }}>
-          <InfoBox title={t('futures.history.title')} tone="info" id="dydx-history-box">
-            <Suspense fallback={<div className="spinner" />}>
-              <LazyFuturesHistory />
-            </Suspense>
-          </InfoBox>
-        </div>
-      )}
-
       {mobile && typeof document !== 'undefined' && createPortal(
         <nav className="dydx-mobile-dock" aria-label={t('dydx.mobile.actions')} data-testid="dydx-mobile-dock">
           <button type="button" className="dydx-dock-long" aria-pressed={side === 'buy'} onClick={() => { setSide('buy'); ticketRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }} data-testid="dydx-mobile-long">
@@ -784,7 +759,7 @@ export default function Dydx({ embedded = false } = {}) {
       <Sheet open={mobile && deskOpen && Boolean(market)} onClose={() => setDeskOpen(false)} size="lg" className="dydx-desk-sheet" layerClassName="dydx-desk-layer" title={t('dydx.desk.title', { ticker: String(ticker || '—').replace('-USD', '') })} testId="dydx-mobile-desk-sheet">
         {mobile && deskOpen && market && <DydxTokenDesk key={ticker} ticker={ticker} market={market} side={side}
           notionalUsd={notional} collateralUsd={marginRequired} availableBalanceUsd={freeCollateralUsd}
-          leverage={effectiveLeverage ?? leverage} entryPrice={entryPrice} onApplyLeverage={applyLeverage}
+          leverage={effectiveLeverage ?? leverage} entryPrice={entryPrice} onApplyLeverage={applyLeverage} address={dydxAddress}
           standalone testId="dydx-mobile-desk" />}
       </Sheet>
       <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />

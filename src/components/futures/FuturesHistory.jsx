@@ -42,10 +42,10 @@ const OTHER_VENUE_TPSL = Object.freeze([
   { id: 'velocity', to: '/perp?tab=onchain', textKey: 'futures.history.tpsl.velocity' }
 ]);
 
-export default function FuturesHistory({ onOpenDydx = null }) {
+export default function FuturesHistory({ onOpenDydx = null, address: suppliedAddress = undefined, dydxOnly = false }) {
   const { t, i18n } = useTranslation();
   /* Read on every render: the session is set on the dYdX tab and this page can mount first. */
-  const address = dydxSessionAddress();
+  const address = suppliedAddress === undefined ? dydxSessionAddress() : suppliedAddress;
   const [rows, setRows] = useState([]);
   const [cursor, setCursor] = useState(null);
   const [exhausted, setExhausted] = useState(false);
@@ -140,8 +140,8 @@ export default function FuturesHistory({ onOpenDydx = null }) {
   return (
     <section className="fhist" aria-labelledby="fhist-title">
       <div className="fhist-head">
-        <h2 id="fhist-title" className="fhist-title">{t('futures.history.title')}</h2>
-        <p className="faint fhist-sub">{t('futures.history.subtitle')}</p>
+        <h2 id="fhist-title" className="fhist-title">{t(dydxOnly ? 'dydx.desk.history.title' : 'futures.history.title')}</h2>
+        <p className="faint fhist-sub">{t(dydxOnly ? 'dydx.desk.history.subtitle' : 'futures.history.subtitle')}</p>
       </div>
 
       {!address ? (
@@ -155,6 +155,7 @@ export default function FuturesHistory({ onOpenDydx = null }) {
         </div>
       ) : (
         <>
+          <button type="button" className="btn btn-ghost btn-sm fhist-touch" disabled={loading} onClick={() => { setShown(HISTORY_PAGE_SIZE); fetchPage({ reset: true }); }} data-testid="dydx-history-refresh">{t('dydx.desk.refresh')}</button>
           <div className="fhist-filters">
             <div className="fhist-filter">
               <label className="field-label" htmlFor="fhist-market">{t('futures.history.filters.market')}</label>
@@ -254,7 +255,7 @@ export default function FuturesHistory({ onOpenDydx = null }) {
         </>
       )}
 
-      <div className="fhist-venues">
+      {!dydxOnly && <div className="fhist-venues">
         {HISTORY_VENUES.filter((v) => !v.available).map((v) => (
           <InfoBox key={v.id} title={t(`futures.history.venue.${v.id}`)} tone="info" id={`fhist-${v.id}`} defaultOpen>
             <p className="faint" style={{ fontSize: 12.5, lineHeight: 1.8 }}>{t(v.reasonKey)}</p>
@@ -276,7 +277,8 @@ export default function FuturesHistory({ onOpenDydx = null }) {
         <p className="faint fhist-note">
           {t('futures.history.venue.dydxSource')}
         </p>
-      </div>
+      </div>}
+      {dydxOnly && <p className="faint fhist-note">{t('futures.history.venue.dydxSource')}</p>}
     </section>
   );
 }

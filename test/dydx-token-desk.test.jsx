@@ -114,6 +114,9 @@ let BOOK = { live: true, bestBid: 99, bestAsk: 101, spreadBps: 200 };
 let BOOK_CALLS = 0;
 let CONNECT_CALLS = 0;
 let MARKETS_AVAILABLE = true;
+let HISTORY_LIVE = true;
+let HISTORY_FILLS = [];
+let HISTORY_CALLS = [];
 const ORDERS = [];
 let AI_ANSWER = { ok: true, text: 'این یک پاسخ آزمایشی است.', provider: 'openrouter', providerName: 'OpenRouter', model: 'test/model' };
 const AI_CALLS = [];
@@ -164,6 +167,8 @@ vi.mock('../src/lib/dydx', async () => {
     getDydxMarkets: async () => ({ markets: MARKETS_AVAILABLE ? [marketRow('BTC'), marketRow('ETH')] : [], live: MARKETS_AVAILABLE }),
     getDydxSubaccount: async () => ({ account: { subaccount: { equity: String(EQUITY), freeCollateral: FREE_COLLATERAL == null ? null : String(FREE_COLLATERAL) } }, live: true }),
     getDydxOrderbook: async () => { BOOK_CALLS += 1; return BOOK; },
+    getDydxFills: async (params) => { HISTORY_CALLS.push(params); return { fills: HISTORY_FILLS, live: HISTORY_LIVE }; },
+    getDydxOrders: async () => ({ orders: [{ id: 'order1', reduceOnly: false, type: 'LIMIT' }], live: HISTORY_LIVE }),
     getDydxCandles: async () => ({ candles: CANDLES, live: CANDLE_LIVE, ticker: 'BTC-USD', resolution: '1HOUR' }),
     connectDydx: async () => { CONNECT_CALLS += 1; return { address: 'dydx1testderivedaddress00000000000000000000000' }; },
     disconnectDydx: () => {},
@@ -211,6 +216,9 @@ beforeEach(() => {
   BOOK_CALLS = 0;
   CONNECT_CALLS = 0;
   MARKETS_AVAILABLE = true;
+  HISTORY_LIVE = true;
+  HISTORY_FILLS = [];
+  HISTORY_CALLS = [];
   ORDERS.length = 0;
   AI_CALLS.length = 0;
   AI_ANSWER = { ok: true, text: 'این یک پاسخ آزمایشی است.', provider: 'openrouter', providerName: 'OpenRouter', model: 'test/model' };
@@ -345,6 +353,47 @@ describe('dYdX tab — the token desk', () => {
     expect(screen.getByTestId('dydx-desk-early').textContent).toContain(fa.dydx.desk.early.unavailable);
   });
 
+  it('shows dYdX-only history in the desk and clears it on disconnect', async () => {
+    HISTORY_FILLS = [{ id: 'fill1', createdAt: new Date().toISOString(), size: '1', price: '123', fee: '0.1', side: 'BUY', orderId: 'order1', market: 'BTC-USD' }];
+    render(<Dydx embedded />);
+    await openDesk();
+    fireEvent.click(screen.getByTestId('dydx-token-desk-tab-history'));
+    expect(await screen.findByText(fa.futures.history.notConnected)).toBeTruthy();
+    expect(HISTORY_CALLS).toHaveLength(0);
+    await connectAccount();
+    await waitFor(() => expect(HISTORY_CALLS.length).toBe(1));
+    expect(HISTORY_CALLS[0].address).toBe('dydx1testderivedaddress00000000000000000000000');
+    expect(await screen.findByText('$123')).toBeTruthy();
+    expect(screen.queryByText(fa.futures.history.venue.ostium)).toBeNull();
+    expect(document.getElementById('dydx-history-box')).toBeNull();
+    fireEvent.click(screen.getByTestId('dydx-history-refresh'));
+    await waitFor(() => expect(HISTORY_CALLS.length).toBe(2));
+    fireEvent.click(screen.getByText(fa.wallet.disconnect));
+    expect(await screen.findByText(fa.futures.history.notConnected)).toBeTruthy();
+    expect(screen.queryByText('$123')).toBeNull();
+  });
+
+  it('distinguishes an unavailable history feed from an empty history', async () => {
+    HISTORY_LIVE = false;
+    render(<Dydx embedded />);
+    await connectAccount();
+    await openDesk();
+    fireEvent.click(screen.getByTestId('dydx-token-desk-tab-history'));
+    expect(await screen.findByText(fa.futures.history.emptyUnavailable)).toBeTruthy();
+  });
+
+  it('shows a fresh completed-candle watch with real evidence', async () => {
+    const hour = 3600_000;
+    const end = Math.floor(Date.now() / hour) * hour;
+    CANDLES = Array.from({ length: 40 }, (_, i) => ({ startedAt: end - (40 - i) * hour, open: 100, high: 102, low: 98, close: i === 39 ? 101 : 100 }));
+    render(<Dydx embedded />);
+    await openDesk();
+    fireEvent.click(screen.getByTestId('dydx-token-desk-tab-early'));
+    await waitFor(() => expect(screen.getByTestId('dydx-desk-early').textContent).toContain(fa.dydx.desk.early.watch));
+    expect(screen.getByTestId('dydx-desk-early').textContent).toContain('102');
+    expect(screen.getByTestId('dydx-desk-early').textContent).toContain(fa.dydx.desk.early.closedAt);
+  });
+
   it('labels a degraded internal answer', async () => {
     AI_ANSWER = { ok: true, text: 'Fallback', provider: 'internal', degraded: true, notice: { fa: 'موتور داخلی' } };
     render(<Dydx embedded />);
@@ -420,7 +469,8 @@ describe('dYdX tab — the token desk', () => {
     fireEvent.click(screen.getByTestId('dydx-desk-ask-quick-risk'));
     await waitFor(() => expect(AI_CALLS.length).toBe(1));
     const [call] = AI_CALLS;
-    expect(call.taskType).toBe('market_intelligence');
+    expect(call.taskType).toBe('fast');
+    expect(call.intelligence).toBe('swift');
     expect(String(call.user)).toContain(fa.dydx.desk.ask.quick.risk);
     expect(String(call.user)).toContain('BTC-USD');
     expect(call.user).toContain('Market facts:\nmarket: BTC-USD');
@@ -495,6 +545,8 @@ describe('dYdX mobile trading dock', () => {
     expect(screen.getByTestId('dydx-mobile-long').getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByTestId('dydx-mobile-short'));
     expect(screen.getByTestId('dydx-mobile-short').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('dydx-selected-side').textContent).toContain(fa.dydx.sell);
+    expect(document.querySelector('.dydx-order-column .dir-switch')).toBeNull();
     expect(CONNECT_CALLS).toBe(0);
     expect(ORDERS).toHaveLength(0);
     cleanup();
@@ -512,8 +564,9 @@ describe('dYdX mobile trading dock', () => {
     const first = screen.getByTestId('dydx-mobile-desk-tab-ai');
     first.focus();
     fireEvent.keyDown(first, { key: 'End' });
-    expect(screen.getByTestId('dydx-mobile-desk-tab-ask').getAttribute('aria-selected')).toBe('true');
-    expect(document.activeElement).toBe(screen.getByTestId('dydx-mobile-desk-tab-ask'));
+    expect(screen.getByTestId('dydx-mobile-desk-tab-history').getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(screen.getByTestId('dydx-mobile-desk-tab-history'));
+    fireEvent.click(screen.getByTestId('dydx-mobile-desk-tab-ask'));
     expect(screen.getByTestId('dydx-desk-ask').parentElement.hidden).toBe(false);
     fireEvent.click(screen.getByTestId('dydx-mobile-desk-sheet-close'));
     await waitFor(() => expect(screen.queryByTestId('dydx-mobile-desk-sheet')).toBeNull());

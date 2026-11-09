@@ -40,25 +40,29 @@
  *   · no setup is a signal. Every panel prints the same caveat, and the AI
  *     answer is labelled with the model that produced it.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 
 import SegIndicator from '../SegIndicator';
 import FuturesAiRisk from './FuturesAiRisk';
-import { IconArrowUpRight, IconChevronRight, IconRefresh, IconShield, IconSparkle, IconTrend } from '../Icons';
+import { IconArrowUpRight, IconChevronRight, IconClock, IconRefresh, IconShield, IconSparkle, IconTrend } from '../Icons';
 import { getDydxCandles, getDydxOrderbook } from '../../lib/dydx';
 import { analyseMarket, scanTokenSetups, fundingAprPct, earlyTokenSignal, normaliseCandles } from '../../lib/futures/dydxTokenBrain';
 import { assessFuturesRisk, liquidationDistance } from '../../lib/futures-engine/risk.js';
 import { fmtCompact, fmtPct, fmtPrice } from '../../lib/format';
 import '../../styles/dydx-token-desk.css';
 
+const LazyDydxHistory = lazy(() => import('./FuturesHistory'));
+
+
 const TABS = [
   { id: 'ai', key: 'dydx.desk.tabs.ai', Icon: IconSparkle },
   { id: 'risk', key: 'dydx.desk.tabs.risk', Icon: IconShield },
   { id: 'opp', key: 'dydx.desk.tabs.opp', Icon: IconTrend },
   { id: 'early', key: 'dydx.desk.tabs.early', Icon: IconTrend },
-  { id: 'ask', key: 'dydx.desk.tabs.ask', Icon: IconSparkle }
+  { id: 'ask', key: 'dydx.desk.tabs.ask', Icon: IconSparkle },
+  { id: 'history', key: 'dydx.desk.tabs.history', Icon: IconClock }
 ];
 
 /** The candles one read needs: a week of hours. */
@@ -347,7 +351,8 @@ function AskRoom({ ticker, analysis, scan, market, side, leverage, notionalUsd, 
         `setups and evidence: ${scan ? JSON.stringify((scan.setups || []).slice(0, 5).map(({ id, score, evidence, missing }) => ({ id, score, evidence, missing }))) : 'unknown'}`
       ].join('\n');
       const res = await executeAiGatewayChat({
-        taskType: 'market_intelligence',
+        taskType: 'fast',
+        intelligence: 'swift',
         system: [
           'You are the analyst inside a perpetual-futures trading screen.',
           'You are given measured market facts and the trader\'s own ticket. Answer only from them.',
@@ -356,7 +361,7 @@ function AskRoom({ ticker, analysis, scan, market, side, leverage, notionalUsd, 
         ].join(' '),
         user: `Market facts:\n${context}\n\nQuestion: ${q}`,
         json: false,
-        maxTokens: 700
+        maxTokens: 420
       });
       if (!alive.current) return;
       const text = String(res?.text || '').trim();
@@ -384,6 +389,7 @@ function AskRoom({ ticker, analysis, scan, market, side, leverage, notionalUsd, 
         {t('dydx.desk.ask.title')}
       </div>
 
+      <p className="dtd-ask-speed">{t('dydx.desk.ask.swift')}</p>
       <div className="dtd-quick">
         {QUICK_PROMPTS.map((p) => (
           <button
@@ -460,9 +466,11 @@ export default function DydxTokenDesk({
   onApplyLeverage = null,
   defaultOpen = false,
   standalone = false,
+  address = null,
   testId = 'dydx-desk'
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const i18nLanguage = i18n?.language || 'en';
   const [open, setOpen] = useState(Boolean(defaultOpen || standalone));
   const DeskHeader = standalone ? 'div' : 'button';
   const [tab, setTab] = useState('ai');
@@ -471,6 +479,7 @@ export default function DydxTokenDesk({
   const [loading, setLoading] = useState(false);
   const [live, setLive] = useState(false);
   const [nonce, setNonce] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
 
   /*
    * ─── THE READ IS NOT FETCHED UNTIL THE BOX IS OPENED ────────────────────
@@ -526,15 +535,19 @@ export default function DydxTokenDesk({
   const scan = useMemo(() => scanTokenSetups({ candles, market }), [candles, market]);
   const fresh = useMemo(() => {
     const last = normaliseCandles(candles).at(-1);
-    const age = last ? Date.now() - last.t : Infinity;
+    const age = last ? now - last.t : Infinity;
     return live && age >= 0 && age <= 3 * 3600_000;
-  }, [candles, live]);
-  const early = useMemo(() => earlyTokenSignal({ candles, live: fresh }), [candles, fresh]);
+  }, [candles, live, now]);
+  const early = useMemo(() => earlyTokenSignal({ candles, live: fresh, now }), [candles, fresh, now]);
 
   useEffect(() => {
     if (!open) return undefined;
-    const timer = setInterval(() => setNonce((n) => n + 1), 60_000);
-    return () => clearInterval(timer);
+    setNow(Date.now());
+    const refresh = () => { setNow(Date.now()); setNonce((n) => n + 1); };
+    const timer = setInterval(refresh, 60_000);
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
   }, [open]);
 
   const fundingApr = useMemo(() => {
@@ -657,6 +670,11 @@ export default function DydxTokenDesk({
                     <Row label={t('dydx.desk.early.boundary')} value={`$${fmtPrice(early.boundary)}`} />
                     <Row label={t('dydx.desk.early.distance')} value={`${early.distanceAtr} ATR`} />
                   </>}
+                  {early.status === 'none' && early.nearestBoundary != null && <>
+                    <Row label={t('dydx.desk.early.nearest')} value={`$${fmtPrice(early.nearestBoundary)}`} />
+                    <Row label={t('dydx.desk.early.distance')} value={`${early.nearestDistanceAtr} ATR`} />
+                  </>}
+                  {early.candleTime && <Row label={t('dydx.desk.early.closedAt')} value={new Date(early.candleTime + 3600000).toLocaleString(i18nLanguage)} />}
                   {early.status === 'unavailable' && <span>{t(`dydx.desk.early.${early.reason}`)}</span>}
                   <p className="dtd-fine">{t('dydx.desk.early.disclaimer')}</p>
                 </div>
@@ -681,6 +699,7 @@ export default function DydxTokenDesk({
                 />
               )}
 
+              {tab === 'history' && <Suspense fallback={<div className="spinner" />}><LazyDydxHistory address={address} dydxOnly /></Suspense>}
               <div hidden={tab !== 'ask'}>
               <AskRoom
                 ticker={ticker}

@@ -482,5 +482,7 @@ export function earlyTokenSignal({ candles = [], now = Date.now(), live = true }
   return { status: direction ? 'watch' : 'none', direction,
     price: last.c, boundary: direction === 'up' ? high : direction === 'down' ? low : null,
     distanceAtr: direction ? round(direction === 'up' ? upDistance : downDistance, 2) : null,
+    nearestBoundary: Math.abs(upDistance) <= Math.abs(downDistance) ? high : low,
+    nearestDistanceAtr: round(Math.min(Math.abs(upDistance), Math.abs(downDistance)), 2),
     candleTime: last.t, bars: bars.length };
 }

@@ -100,7 +100,7 @@ export async function executeAiGatewayChat({ taskType = 'general', system, user,
   return request('/v1/ai/gateway/chat', {
     method: 'POST',
     body: { taskType, system, user, preferredProvider, model, temperature, maxTokens, json, intelligence: mode },
-    timeout: modeWindow()
+    timeout: Math.max(TIMEOUT_MS, intelligenceTurnBudgetMs(mode))
   });
 }
 

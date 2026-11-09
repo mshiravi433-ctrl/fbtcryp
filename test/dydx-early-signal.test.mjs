@@ -14,7 +14,11 @@ test('early watch uses completed candles near a prior boundary', () => {
   const down = rows.map((r) => ({...r}));
   down[39] = {...down[39], close: 99, low: 98};
   assert.equal(earlyTokenSignal({candles: down, now}).direction, 'down');
-  assert.equal(earlyTokenSignal({candles: rows, now}).status, 'none');
+  const quiet = earlyTokenSignal({candles: rows, now});
+  assert.equal(quiet.status, 'none');
+  assert.equal(quiet.nearestBoundary, 102);
+  assert.equal(quiet.nearestDistanceAtr, 0.5);
+  assert.equal(quiet.candleTime, start + 39 * hour);
   assert.equal(earlyTokenSignal({candles: up, now: now + 4 * hour}).status, 'unavailable');
   assert.equal(earlyTokenSignal({candles: up, now, live: false}).status, 'unavailable');
   assert.equal(earlyTokenSignal({candles: up.filter((_, i) => i !== 20), now}).status, 'unavailable');

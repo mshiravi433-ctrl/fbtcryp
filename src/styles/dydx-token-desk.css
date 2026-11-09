@@ -575,3 +575,47 @@
   .dydx-mobile-dock .dydx-dock-short > span:last-child { unicode-bidi: plaintext; }
   .dydx-desk-sheet div.dtd-head { cursor: default; }
 }
+
+/* Cool blue glass ties the dYdX workspace together; risk still keeps distinct tones. */
+:is(.dydx-app,.dydx-desk-sheet) .dtd-tone-watch .dtd-meter-fill { background: #55bdf9; }
+:is(.dydx-app,.dydx-desk-sheet) .fairisk.is-medium { --fr-accent: #63c7ff; --fr-accent-rgb: 99, 199, 255; }
+:is(.dydx-app,.dydx-desk-sheet) .fairisk.is-high { --fr-accent: #df77ad; --fr-accent-rgb: 223, 119, 173; }
+:is(.dydx-app,.dydx-desk-sheet) .fairisk-flag { color: #7fcaff; background: rgba(56, 151, 230, .12); border-color: rgba(89, 181, 245, .35); }
+:root[data-theme='light'] :is(.dydx-app,.dydx-desk-sheet) .fairisk-flag { color: #075687; }
+.dtd-ask-speed { margin: 0; font-size: 11px; color: var(--text-2); line-height: 1.7; }
+
+@media (max-width: 767px) {
+  .dydx-selected-side { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 11px 14px; border: 1px solid var(--line); border-radius: 14px; background: color-mix(in srgb, var(--bg-panel-solid) 91%, #468ed0); color: var(--text-2); font-size: 12px; }
+  .dydx-selected-side.is-long strong { color: #18a979; }
+  .dydx-selected-side.is-short strong { color: #dc536e; }
+  .dydx-mobile-dock {
+    height: 70px;
+    grid-template-columns: minmax(0, 1fr) 66px minmax(0, 1fr);
+    border-color: color-mix(in srgb, #83caff 35%, var(--line));
+    background: linear-gradient(145deg, color-mix(in srgb, var(--bg-panel-solid) 70%, transparent), color-mix(in srgb, var(--bg-panel-solid) 82%, #3d7eb4));
+    box-shadow: 0 20px 50px rgba(6, 25, 53, .35), inset 0 1px rgba(255,255,255,.24);
+    -webkit-backdrop-filter: blur(30px) saturate(170%);
+    backdrop-filter: blur(30px) saturate(170%);
+  }
+  /* A 64px hit area surrounds a smaller 42px diamond. The label and icon
+     stay upright; no transformed child can interfere with tapping. */
+  .dydx-mobile-dock .dydx-dock-desk {
+    width: 64px; min-height: 64px !important; margin: -10px 0 0;
+    border: 0 !important; border-radius: 0 !important;
+    background: transparent; box-shadow: none; isolation: isolate; gap: 2px;
+  }
+  .dydx-dock-desk::before {
+    content: ''; position: absolute; z-index: -1; width: 44px; height: 44px;
+    border-radius: 12px; transform: rotate(45deg);
+    border: 1px solid rgba(194, 230, 255, .8);
+    background: linear-gradient(145deg, #9ae9ff, #348ddd 50%, #315ab1);
+    box-shadow: 0 6px 20px rgba(43, 139, 218, .45), inset 0 1px rgba(255,255,255,.55);
+  }
+  .dydx-dock-orb { width: 23px; height: 23px; background: transparent; box-shadow: none; }
+  .dydx-dock-orb svg { width: 18px; height: 18px; }
+  .dydx-dock-desk > span:last-child { font-size: 9px; }
+  .dydx-desk-sheet .dtd-tabs { background: color-mix(in srgb, var(--bg-panel-solid) 90%, #399adb); }
+  .dydx-desk-sheet .dtd-tabs .seg-indicator { background: linear-gradient(135deg, rgba(46, 154, 231, .35), rgba(107, 200, 255, .14)); }
+  .dydx-desk-sheet .dtd-tabs > button.active { border-color: rgba(97, 188, 255, .55); }
+}
+.dydx-app, .dydx-desk-sheet { --rgb-5: #58bdfa; }

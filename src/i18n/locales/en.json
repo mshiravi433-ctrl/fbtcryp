@@ -8781,6 +8781,7 @@
       "liq": "To liquidation",
       "liqPrice": "Liquidation price",
       "needEquity": "Free collateral is unavailable or zero, so the size cannot be filled automatically. Check your account or enter a size manually.",
+      "liqCaveat": "Liquidation is an estimate; cross-margin positions and the unknown venue fee are not included.",
       "hint": "On dYdX leverage is not a separate setting: it is position value divided by the account equity backing it, capped by this market's own initial margin fraction. Each rung sizes the order from the account's real balance."
     },
     "desk": {
@@ -8792,7 +8793,8 @@
         "risk": "Risk engine",
         "opp": "Opportunity engine",
         "early": "Early watch",
-        "ask": "Ask AI"
+        "ask": "Ask AI",
+        "history": "Trade history"
       },
       "refresh": "Refresh",
       "bars": "{{count}} hourly candles",
@@ -8902,6 +8904,7 @@
       },
       "ask": {
         "title": "Ask the AI",
+        "swift": "Fast response with a lighter model; verify the answer against the data.",
         "placeholder": "Ask about {{ticker}}…",
         "send": "Ask",
         "sending": "Asking…",
@@ -8926,11 +8929,17 @@
         "unavailable": "Early watch unavailable",
         "up": "Approaching the prior 20-candle high with upward momentum",
         "down": "Approaching the prior 20-candle low with downward momentum",
+        "nearest": "Nearest range boundary",
+        "closedAt": "Candle closed at",
         "boundary": "Range boundary",
         "distance": "Distance to boundary",
         "stale": "Live, fresh data is unavailable.",
         "history": "Insufficient history or valid volatility.",
         "disclaimer": "Based on closed hourly candles; a watch is not trading advice or a guarantee."
+      },
+      "history": {
+        "title": "dYdX trade history",
+        "subtitle": "Only this dYdX account’s fills; realized P&L is not included in this feed."
       },
       "market": {
         "title": "Order book & market",
