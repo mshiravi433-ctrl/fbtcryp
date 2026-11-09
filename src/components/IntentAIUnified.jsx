@@ -298,6 +298,7 @@ import {
 import { getYields } from '../lib/yields.js';
 import { loadOrders } from '../lib/orders.js';
 import { fetchAiProviders, fetchGatewaySelfTest, fetchLearningStats, fetchAiTools } from '../lib/aiGatewayClient.js';
+import { getIntelligenceMode, intelligenceModeLabel } from '../lib/aiIntelligenceMode.js';
 import {
   OperationsPanel,
   HistoryPanel,
@@ -1222,6 +1223,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const [serverReachable, setServerReachable] = useState(null);
   const [activeContext, setActiveContext] = useState(null);
   const [aiProviders, setAiProviders] = useState([]);
+  /* The mode the next turn will ask for. Stored in one place (the helper), so
+     the chip here and the selector in the intelligence panel cannot disagree.
+     The header chip is a shortcut to that panel, not a second control. */
+  const [intelligenceMode, setIntelligenceModeState] = useState(() => getIntelligenceMode());
+  useEffect(() => {
+    const onMode = (e) => setIntelligenceModeState(getIntelligenceMode() || e?.detail?.mode || 'max');
+    window.addEventListener('fbt:ai-intelligence', onMode);
+    return () => window.removeEventListener('fbt:ai-intelligence', onMode);
+  }, []);
   /*
    * The fleet summary and the live self-test.
    *
@@ -3245,6 +3255,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       const bindingHint = answerBindingHint({ verdict: ledgerVerdict?.ok ? ledgerVerdict : null, locale });
       const res = await aiChat({
         message: effectiveMessage,
+        /* «تفکر عمیق» (the multi-slot form completion) is an explicit request
+           for the top mode; every other turn carries the user's stored
+           preference, which the server resolves against its own default. */
+        intelligence: opts.deepThinking === true ? 'max' : undefined,
         // The server fallback uses the SAME unfinished goal as the local chat.
         // Send a bounded, plain-text history, never entire UI/plan/wallet blobs.
         messages: (messagesRef.current || []).filter((row) => row?.role === 'user' || row?.role === 'ai')
@@ -7577,6 +7591,20 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             </span>
             {/* Real system availability: fleet read + wallet link. Nothing invented. */}
             <span className="fbt-head-meta" aria-live="polite">
+              <button
+                type="button"
+                className="fbt-chip fbt-chip-hide-sm"
+                data-tone={intelligenceMode === 'max' ? 'ok' : intelligenceMode === 'swift' ? 'idle' : 'warn'}
+                data-testid="neural-intelligence-chip"
+                onClick={() => setPanel('intelligence')}
+                title={locale.startsWith('fa')
+                  ? 'حالت هوش مصنوعی — باهوش‌ترین، متعادل یا سریع'
+                  : 'AI intelligence mode — smartest, balanced or swift'}
+              >
+                <i aria-hidden="true" />
+                {locale.startsWith('fa') ? 'هوش: ' : 'AI: '}
+                {intelligenceModeLabel(intelligenceMode, locale)}
+              </button>
               {fleetChip ? (
                 <span className="fbt-chip fbt-chip-hide-sm" data-tone={fleetChip.tone} data-testid="neural-fleet-chip">
                   <i aria-hidden="true" />{fleetChip.text}

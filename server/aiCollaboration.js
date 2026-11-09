@@ -44,6 +44,7 @@ import {
 } from './aiGateway.js';
 import { runMultiAiDebate } from './aiConsensus.js';
 import { researchWeb, analyzeWithSources } from './aiWebResearch.js';
+import { resolveIntelligenceMode, intelligenceGeneration, getIntelligenceProfile } from './aiIntelligence.js';
 import { searchKnowledge } from '../src/lib/intent-ai/os/knowledgeCenter.js';
 import { retrieve as retrieveBm25 } from '../src/lib/intent-ai/retrieval.js';
 import {
@@ -52,6 +53,89 @@ import {
   AI_ROLES
 } from '../src/lib/intent-ai/os/collaborationRouter.js';
 import { renderSocialReply } from '../src/lib/intent-ai/os/conversation/socialVoice.js';
+import { auditNumbers, buildEvidenceCorpus, renderUnsourcedBlock } from './aiEvidenceAudit.js';
+import { buildClaimLedger, renderClaimLedger } from './aiClaimLedger.js';
+import { selectEconomicLenses, renderEconomistLens, economistPersona } from './aiEconomistLens.js';
+import { readSocialContext, renderSocialBrief } from '../src/lib/intent-ai/os/conversation/socialRead.js';
+import {
+  readDialogue,
+  renderDialogueBrief,
+  checkDialogueCompliance,
+  renderDialogueDeficit
+} from '../src/lib/intent-ai/os/conversation/dialogueRead.js';
+import {
+  selectProfessorLenses,
+  renderProfessorContract,
+  checkFalsifier,
+  renderFalsifierDeficit
+} from './aiProfessor.js';
+import {
+  createResearchAgenda,
+  deriveResearchFindings,
+  selectAgendaItems
+} from './aiResearchAgenda.js';
+import {
+  detectMarketAnalysis,
+  buildMarketFrame,
+  renderMarketFrame,
+  renderMarketContract,
+  checkMarketAnalysis,
+  renderMarketViolations
+} from './aiMarketFrame.js';
+import {
+  readEmotion,
+  renderEmpathyContract,
+  checkEmotionTone,
+  renderEmotionDeficit
+} from './aiEmotionRead.js';
+import {
+  readDiscourse,
+  renderDiscourseContract,
+  checkDiscourseMirror,
+  renderDiscourseDeficit
+} from './aiDiscourseMirror.js';
+import {
+  readPartialInput,
+  renderPartialContract,
+  checkPartialAnswer,
+  renderPartialDeficit
+} from '../src/lib/intent-ai/os/conversation/partialInput.js';
+import {
+  detectProductQuestion,
+  answerProduct,
+  renderProductBrief,
+  checkProductAnswer,
+  renderProductDeficit
+} from './aiProductBrain.js';
+import {
+  readSituation,
+  renderSituationContract,
+  checkSituationResponse,
+  renderSituationDeficit
+} from './aiSituationRead.js';
+import {
+  analyzeRequest,
+  renderRequestPlan,
+  checkRequestPlan,
+  renderRequestDeficit
+} from './aiRequestPlan.js';
+import { storeGet, storeSet } from './store.js';
+import { checkPlanArithmetic, renderStrategyViolations, isPlanParameter } from './aiStrategyPlanCheck.js';
+import { assessEvidence, evaluateDecision, renderDecisionContract, renderDecisionDeficit } from './aiDecisionGate.js';
+import {
+  detectStrategyRequest,
+  buildStrategyFrame,
+  renderStrategyFrame,
+  renderStrategyRubricContract,
+  checkStrategyRubric,
+  renderStrategyGaps
+} from './aiStrategyFrame.js';
+import {
+  decomposeQuestion,
+  assessQuestionCoverage,
+  renderSubQuestionChecklist,
+  renderUnansweredParts
+} from '../src/lib/intent-ai/os/questionDecomposition.js';
 import { SOCIAL_ACTS } from '../src/lib/intent-ai/os/conversation/socialIntent.js';
 
 export const COLLABORATION_SCHEMA = 'fbt.ai-collaboration.v1';
@@ -179,6 +263,21 @@ const ROLE_PROMPTS = {
   [AI_ROLES.FINAL_ANSWER_AI]: `You are FBT's Final Answer AI.\nSynthesize the specialists' work into ONE coherent FBT answer in the user's language. Never mention model names or providers. State uncertainty honestly. If specialists disagreed, present both views and which evidence supports which.\n${FBT_RULES}`
 };
 
+/*
+ * ─── ADVERSARIAL SELF-REVIEWER (smartest mode) ───────────────────────────────
+ * A separate voice from the synthesiser: it did not write the draft, it is
+ * asked to break it. The only evidence it sees is the same safe context block
+ * the draft was allowed to use, so "unsupported" has a precise meaning — not
+ * "I personally doubt it", but "this number is not in the block".
+ */
+const CRITIQUE_SYSTEM = `You are FBT's adversarial self-reviewer. You receive the user's question, a DRAFT ANSWER, and the ONLY evidence the answer was allowed to use. Your job is to make the draft honest and useful — not to rewrite it for style.
+Check, in this order:
+1. every number, price, percentage, date, balance and fee against the evidence: delete it or mark it unknown if it is not there;
+2. certainty: soften claims the evidence cannot support, and add the strongest counter-argument the draft ignores;
+3. completeness: answer the question actually asked; if a required reading is missing, name the specific reading.
+Keep the user's language and FBT's voice. If the draft is already sound, return it unchanged.
+Put the corrected FINAL ANSWER in "answer". Put each change you made (or "no change") as one claim in "claims". Put what remains uncertain in "uncertainty".`;
+
 const ANALYSIS_JSON_SHAPE = `
 Respond in STRICT JSON:
 {
@@ -191,7 +290,7 @@ Respond in STRICT JSON:
 /*  SECURE CONTEXT — the ONLY thing external models may see (§43-44)           */
 /* -------------------------------------------------------------------------- */
 
-export function buildSafeContextBlock({ context = {}, knowledge = [], sources = [] } = {}) {
+export function buildSafeContextBlock({ context = {}, knowledge = [], sources = [], knowledgeLimit = 4 } = {}) {
   const lines = [];
   /*
    * Phase 213 — directives come FIRST and are read as constraints, not data.
@@ -245,7 +344,8 @@ export function buildSafeContextBlock({ context = {}, knowledge = [], sources = 
   }
   if (knowledge.length) {
     lines.push('FBT INTERNAL KNOWLEDGE (verified product facts):');
-    for (const k of knowledge.slice(0, 4)) lines.push(`- [${k.id} v${k.version} ${k.status}] ${k.title}: ${String(k.body).slice(0, 300)}`);
+    const limit = Math.max(1, Math.min(12, Number(knowledgeLimit) || 4));
+    for (const k of knowledge.slice(0, limit)) lines.push(`- [${k.id} v${k.version} ${k.status}] ${k.title}: ${String(k.body).slice(0, 300)}`);
   }
   if (sources.length) {
     lines.push('WEB SOURCES (cite by number; social=tier4 is a lead only):');
@@ -279,8 +379,34 @@ const ROLE_TASK = {
   [AI_ROLES.FINAL_ANSWER_AI]: 'reasoning'
 };
 
-async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0 }) {
-  const system = `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}`;
+async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '', decisionBrief = '', dialogueBrief = '', professorBrief = '', researchBrief = '', marketBrief = '', requestBrief = '', emotionBrief = '', situationBrief = '', discourseBrief = '', productBrief = '', partialBrief = '' }) {
+  /*
+   * ─── DEEP REASONING CONTRACT (smartest mode only) ─────────────────────────
+   * The role prompts are shared by every mode, so the extra discipline lives
+   * here: identify the deciding facts first, weigh the counter-case, and never
+   * introduce a number/price/date that the evidence block does not contain.
+   * `balanced` and `swift` send the exact prompt they always did.
+   */
+  const deepReasoning = getIntelligenceProfile(intelligence).id === 'max'
+    ? '\nDEEP REASONING (FBT smartest mode): before answering, identify the 2-3 facts that actually decide this question and reason from them. Name the strongest counter-argument against your own conclusion. Never introduce a number, price, date, balance or percentage that is absent from the provided data; write "not readable" instead of a guess. If the evidence is thin, say which specific reading would settle it.'
+    : '';
+  /*
+   * ─── RED TEAM SEAT (smartest mode only) ───────────────────────────────────
+   * Three analyses that all reason from the same obvious reading are one
+   * analysis paid for three times. The LAST analytical seat is therefore given
+   * a dissenting brief: assume the obvious conclusion is wrong and build the
+   * strongest evidence-based case against it. It is still bound by the same
+   * evidence block and the same JSON shape — dissent, not invention.
+   */
+  const counterCaseContract = counterCase
+    ? '\nRED TEAM (you hold the dissenting seat): the other analysts will argue the obvious reading of this data. Assume that reading is WRONG and build the strongest case the evidence can actually support for the opposite conclusion. Do not hedge into "both sides"; give the counter-conclusion, the evidence that would have to be true for it, and the single reading that would settle which side is right. You may not introduce any number that is absent from the provided data.'
+    : '';
+  const system = systemOverride
+    ? `${systemOverride}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}`
+    /* The economist's lens is a reasoning contract, not a costume: it rides on
+       the specialists and the synthesiser, never on the reviewer (whose job is
+       to break the draft, not to reason about the economy). */
+    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}${dialogueBrief ? `\n${dialogueBrief}` : ''}${professorBrief ? `\n${professorBrief}` : ''}${researchBrief ? `\n${researchBrief}` : ''}${marketBrief ? `\n${marketBrief}` : ''}${requestBrief ? `\n${requestBrief}` : ''}${emotionBrief ? `\n${emotionBrief}` : ''}${situationBrief ? `\n${situationBrief}` : ''}${discourseBrief ? `\n${discourseBrief}` : ''}${productBrief ? `\n${productBrief}` : ''}${partialBrief ? `\n${partialBrief}` : ''}`;
   /*
    * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
    * This line used to be a ternary: Persian or English. Everything a Turkish,
@@ -321,7 +447,11 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
         user,
         temperature: 0.3,
         maxTokens,
-        json: true
+        json: true,
+        /* The mode travels with the call so the gateway can put the flagship
+           model first and attach reasoning fields where they are supported.
+           An injected test executor ignores it. */
+        intelligence
       });
       const parsed = parseJsonSafe(res.text) || { answer: String(res.text || '').slice(0, 900), claims: [], uncertainty: '' };
       /*
@@ -591,7 +721,10 @@ export async function runCollaborativeAnalysis({
   intentType = null,
   entities = {},
   analysis = null,
+  intelligence = null,
   transparency = false,
+  /* Whose research agenda this turn reads and updates. null = the shared one. */
+  owner = null,
   deps = {},
   deadlineMs = DEADLINE_MS
 } = {}) {
@@ -606,7 +739,212 @@ export async function runCollaborativeAnalysis({
     ]).finally(() => clearTimeout(timer));
   };
 
-  const plan = analysis || planCollaboration({ message, intentType, entities, context, locale });
+  /*
+   * Resolve the mode BEFORE planning when no plan was supplied, so a direct
+   * caller (`runCollaborativeAnalysis({ intelligence: 'max' })`) gets the same
+   * depth floor the chat route gets. Previously only the route's pre-built plan
+   * carried it, and a direct call silently ran at the analyzer's level with
+   * `max` budgets — a mode that was half applied.
+   */
+  const preResolved = resolveIntelligenceMode(intelligence ?? analysis?.intelligence?.mode ?? null);
+  const preProfile = getIntelligenceProfile(preResolved.mode);
+  const plan = analysis || planCollaboration({
+    message,
+    intentType,
+    entities,
+    context,
+    locale,
+    intelligence: preResolved.mode,
+    intelligenceFloor: preProfile.collaborationFloor,
+    intelligenceCeiling: preProfile.collaborationCeiling
+,
+    /* Increment 23 — deep thinking is the default; a deployment can turn it
+       off with FBT_AI_DEEP_THINK=0 and get the pre-increment behaviour. */
+    deepThink: String(process.env.FBT_AI_DEEP_THINK ?? '1') !== '0'
+  });
+  /* One resolution for the whole run. `analysis.intelligence.mode` is the mode
+     the plan was built with; an explicit argument wins over it. */
+  const resolvedIntelligence = resolveIntelligenceMode(intelligence ?? plan?.intelligence?.mode ?? null);
+  const mode = resolvedIntelligence.mode;
+  const modeProfile = getIntelligenceProfile(mode);
+  /*
+   * Multi-part questions get a checklist, not a second engine. The splitter is
+   * deterministic and conservative: it only fires on structure the user typed
+   * (numbering, newlines, semicolons, several question marks, «و همچنین»).
+   * Only the smartest mode pays for it — `balanced` must stay byte-identical.
+   */
+  const subQuestions = mode === 'max' ? decomposeQuestion(message) : [];
+  /*
+   * ─── ECONOMIST'S LENS (smartest mode, substantive turns only) ──────────────
+   * A professor of economics reasons by mechanism, base rate, transmission,
+   * incentives and falsifiability — not by narrating the last candle. The
+   * lenses are selected deterministically from the question and the router's
+   * task types, then appended to every specialist's system prompt. Small talk
+   * never reaches level 4, so it never gets this.
+   */
+  const economistLenses = mode === 'max' && plan.level >= 4
+    ? selectEconomicLenses({ message, taskTypes: plan.taskTypes, intentType })
+    : [];
+  const economistLens = renderEconomistLens(economistLenses);
+  /*
+   * ─── SOCIAL READ (smartest mode, every substantive turn) ───────────────────
+   * Register, tone, the need behind the literal question and how much the
+   * message leaves unsaid. The brief tells the specialists how to answer this
+   * PERSON; an unremarkable question renders nothing and keeps its prompt.
+   */
+  const socialRead = mode === 'max' && plan.level >= 2
+    ? readSocialContext({ message, locale, history: context?.conversationSummary || '' })
+    : null;
+  const socialBrief = renderSocialBrief(socialRead);
+  /*
+   * ─── EMOTION (smartest mode) ───────────────────────────────────────────────
+   * `socialRead` gives one label; a person can be grieving AND ashamed AND
+   * hopeful at once, and the obligations differ. This reads the emotion on
+   * three axes (valence, arousal, dominance), separates self-directed shame
+   * from anger at the platform, and says what the answer owes — an
+   * acknowledgement, containment, or nothing but the facts. Empty for a
+   * neutral message, so an ordinary question keeps its prompt.
+   */
+  const emotionRead = mode === 'max'
+    ? readEmotion({ message, locale, history: context?.conversationSummary || '', social: socialRead })
+    : null;
+  const emotionBrief = renderEmpathyContract(emotionRead);
+  /*
+   * ─── SITUATION (smartest mode) ─────────────────────────────────────────────
+   * Down 18% and panicking is a different conversation from up 30% and
+   * euphoric, and both are different from a portfolio the turn never read. The
+   * read joins the aggregate portfolio numbers with the emotion read and says
+   * what the answer owes — and what it may never claim (a P&L the turn does
+   * not hold, a recovery, more risk after a loss).
+   */
+  const situationRead = mode === 'max'
+    ? readSituation({ context, emotion: emotionRead, social: socialRead, message, locale })
+    : null;
+  const situationBrief = renderSituationContract(situationRead);
+  /*
+   * ─── DISCOURSE (smartest mode) ─────────────────────────────────────────────
+   * Kind message, kind answer; an order answered in orders; swearing at the
+   * situation may be matched at the SAME level once — never above, never a
+   * slur, never back at the user; swearing AT the assistant is not mirrored at
+   * all. When nothing readable is present the renderer returns '' and the
+   * answer stays normal, which is the fallback.
+   */
+  const discourseRead = mode === 'max'
+    ? readDiscourse({ message, locale, social: socialRead, emotion: emotionRead })
+    : null;
+  const discourseBrief = renderDiscourseContract(discourseRead);
+  /*
+   * ─── PARTIAL INPUT (every mode) ────────────────────────────────────────────
+   * Most messages are not complete sentences. «بیتکوین؟»، «استراتژی من با
+   * ۲۰۰۰۰»، «fovl» (typed on the wrong keyboard layout) — a layer that waits for
+   * a well-formed question treats all of that as small talk, and one that
+   * guesses silently answers a question nobody asked, with numbers nobody gave.
+   * So the read runs in EVERY mode (it costs no model call), names the
+   * assumption, and allows exactly one question. When the message is complete,
+   * the brief is '' and every earlier prompt stays byte-identical.
+   */
+  const partialRead = readPartialInput({
+    message,
+    locale,
+    context: context || {},
+    priorIntent: intentType || plan?.intentType || null
+  });
+  const partialBrief = renderPartialContract(partialRead);
+  /*
+   * ─── PRODUCT BRAIN (smartest mode) ─────────────────────────────────────────
+   * «FBT چیه؟»، «این صفحه چیکار می‌کنه؟»، «کارمزد چقدره؟»، «سازنده‌هاش کی هستن؟»
+   * are not market questions, so no amount of market reasoning answers them —
+   * and a model answering from memory invents a founder, a fee or a page. The
+   * brain reads the router, the verified knowledge and the real fee, then hands
+   * the facts over as the source of truth (with the gaps named out loud).
+   */
+  const productQuestion = mode === 'max' && detectProductQuestion(message);
+  const productRead = productQuestion ? answerProduct({ message, locale }) : null;
+  const productBrief = renderProductBrief(productRead);
+  /*
+   * ─── DIALOGUE READ (smartest mode) ─────────────────────────────────────────
+   * The social read says WHO is asking; this says WHAT the turn is doing —
+   * a correction, an elliptical follow-up, or a question whose shape (why /
+   * how much / which) the answer must match. A distress turn is exempt: it is
+   * not a question to be shaped, and the safety brief already governs it.
+   */
+  const dialogueRead = mode === 'max' && plan.level >= 2 && !socialRead?.distress
+    ? readDialogue({ message, locale, history: context?.conversationSummary || '', social: socialRead })
+    : null;
+  const dialogueBrief = renderDialogueBrief(dialogueRead);
+  /*
+   * ─── REQUEST PLAN (smartest mode, substantive turns) ───────────────────────
+   * socialRead reads the person, dialogueRead reads the question. This one asks
+   * the question a reviewer of answers has to ask: what is the user holding
+   * when this ends — a verdict, a number, a plan with weights? Which facts does
+   * that deliverable require, and did they give them, or is the answer about to
+   * invent a budget nobody mentioned? The plan is deterministic and costs no
+   * model call; the reviewer is told afterwards which promise the draft broke.
+   * A distress turn is exempt: the safety brief already governs it.
+   */
+  const requestPlan = mode === 'max' && plan.level >= 3 && !socialRead?.distress
+    ? analyzeRequest({
+      message,
+      locale,
+      context,
+      history: context?.conversationSummary || '',
+      social: socialRead,
+      dialogue: dialogueRead
+    })
+    : null;
+  const requestBrief = renderRequestPlan(requestPlan);
+  /*
+   * ─── RESEARCH POSTURE (smartest mode, substantive turns) ───────────────────
+   * A professor of this field defines terms, says where every number came from,
+   * gives the base rate, and — enforced below, not merely requested — states what
+   * would prove the reading wrong. Small talk never reaches level 4.
+   */
+  const professorLenses = mode === 'max' && plan.level >= 4
+    ? selectProfessorLenses({ message, taskTypes: plan.taskTypes })
+    : [];
+  const professorBrief = renderProfessorContract(professorLenses);
+  /*
+   * ─── RESEARCH AGENDA (smartest mode) ───────────────────────────────────────
+   * Every deep turn already knows what it could not establish; until now that
+   * knowledge died with the turn. The agenda keeps it per owner, puts the
+   * relevant open questions in front of this turn's models, and records what
+   * this turn opened and closed. A store is optional: without one it is inert.
+   */
+  const researchSession = mode === 'max' && plan.level >= 4
+    ? createResearchAgenda({
+      load: D.researchLoad || ((ownerKey) => storeGet(`ai:research-agenda:v1:${ownerKey || 'anon'}`, [])),
+      save: D.researchSave || ((ownerKey, items) => storeSet(`ai:research-agenda:v1:${ownerKey || 'anon'}`, items))
+    })
+    : null;
+  const priorAgenda = researchSession?.enabled
+    ? await withDeadline(researchSession.read(owner), [], 400)
+    : [];
+  const briefedItems = researchSession?.enabled ? selectAgendaItems(priorAgenda, message, { limit: 3 }) : [];
+  const researchBrief = researchSession?.enabled ? researchSession.brief(priorAgenda, message, { limit: 3, locale }) : '';
+  /*
+   * ─── STRATEGY FRAME + RUBRIC (smartest mode, strategy turns) ───────────────
+   * A plan may stand on the user's real capital, their actual weights, the
+   * platform fee and the policy caps — and on nothing else. Everything the
+   * frame could not read is named as a gap instead of being invented. The
+   * rubric tells the model, before it writes, which sections a strategy answer
+   * must contain; the reviewer is told afterwards which ones are missing.
+   */
+  const isStrategyTurn = mode === 'max'
+    && ((Array.isArray(plan.taskTypes) && plan.taskTypes.includes('strategy')) || detectStrategyRequest(message));
+  const strategyFrame = mode === 'max' && isStrategyTurn
+    ? buildStrategyFrame({ context, message })
+    : null;
+  const strategyBrief = strategyFrame
+    ? `${renderStrategyFrame(strategyFrame)}\n${renderStrategyRubricContract()}`
+    : '';
+  /* Role budgets follow the mode: `max` gives an analysis room for its
+     reasoning and its answer instead of a single paragraph. Latency-bound
+     conversation roles are exempt (see intelligenceGeneration). */
+  const tokensFor = (base, taskType = 'reasoning') =>
+    intelligenceGeneration(mode, { maxTokens: base, temperature: 0.3, taskType }).maxTokens;
+  /* Evidence depth follows the mode: the smartest seat gets more verified
+     product facts to reason over (and to be checked against later). */
+  const knowledgeTopK = Math.max(3, Math.min(10, Number(modeProfile.knowledgeTopK) || 4));
   const isFa = String(locale || 'fa').startsWith('fa');
   const externalConfigured = Boolean(D.selectProviders) || getActiveProviderIds().some((id) => id !== 'internal');
 
@@ -615,6 +953,14 @@ export async function runCollaborativeAnalysis({
     schema: COLLABORATION_SCHEMA,
     version: COLLABORATION_VERSION,
     level: plan.level,
+    intelligence: {
+      mode,
+      source: resolvedIntelligence.source,
+      requested: resolvedIntelligence.requested,
+      rejected: resolvedIntelligence.rejected,
+      reasoning: Boolean(modeProfile.reasoning),
+      plan: plan.intelligence || null
+    },
     conversationKind: plan.conversationKind,
     complexity: plan.complexity,
     taskTypes: plan.taskTypes,
@@ -637,6 +983,67 @@ export async function runCollaborativeAnalysis({
     evidence: { toolDataUsed: false, webUsed: false, knowledgeUsed: false, corroborated: false },
     degraded: false,
     transparency: Boolean(transparency),
+    /* null = the mode did not run a review. An object says whether one ran, on
+       which seat, and whether its repair was used. */
+    critique: null,
+    /* Multi-part questions only (smartest mode). null = one question, nothing
+       to check — the same shape the reply had before this existed. */
+    subQuestions: null,
+    /* The deterministic unsourced-number report for this draft. null when the
+       mode ran no audit (swift/balanced) — those turns cannot have changed. */
+    numericAudit: null,
+    /* What the specialists actually asserted, classified before synthesis:
+       tool/web-verified, model-consensus-only, and conflicting figures. null
+       outside the smartest mode. */
+    synthesisLedger: null,
+    /* The dissenting seat (smartest mode): which role was asked to argue
+       against the obvious reading, and whether it answered. */
+    counterCase: null,
+    /* The reasoning persona used for this turn (smartest mode): which
+       economist lenses the specialists were held to. null otherwise. */
+    persona: economistPersona(economistLenses),
+    /* The social read of the message (smartest mode): register, tone, the need
+       behind the words, and how much was left unsaid. null otherwise. */
+    socialRead,
+    /* What the turn is DOING (smartest mode): the speech act (correction,
+       follow-up, question), the ask shape, and whether the final answer matched
+       it. null outside the smartest mode. */
+    dialogue: null,
+    /* The research posture of this turn: which pedagogy lenses the specialists
+       were held to, and whether the final text carries a falsifier. */
+    professor: null,
+    /* The market frame the analysis stood on: what the data measured, what it
+       could not, and whether the final text respected that line. */
+    market: null,
+    /* How the user is talking (warm, commanding, charged, playful) and whether
+       the final text stayed inside that register. null outside max. */
+    discourse: null,
+    /* The user's money and mood read together, and whether the final text
+       respected that. null outside max. */
+    situation: null,
+    /* What FBT itself is, which pages exist and what the verified product
+       knowledge does NOT contain, plus whether the final text stayed inside it.
+       Set only on turns that ask about the product. null otherwise. */
+    product: null,
+    /* What an incomplete message probably meant, what was assumed, and whether
+       the final text named the assumption and kept to one question. */
+    partial: null,
+    /* The emotional state the answer was written for, and whether the final
+       text respected it. null outside max, or for a neutral message. */
+    emotion: null,
+    /* What this turn understood the request to BE: the deliverable, the
+       constraints the user actually gave, the slots they did not, and whether
+       the final text kept the plan's promises. */
+    request: null,
+    /* The continuous-improvement loop: which open questions this turn was given,
+       which it opened, and which it closed. null when no agenda store is live. */
+    research: null,
+    /* Strategy turns in the smartest mode: the computed frame the plan stood on
+       and the rubric result for the final answer. null otherwise. */
+    strategy: null,
+    /* The decision verdict for the turn: whether it asked for a decision, the
+       evidence level, what that permits, and whether the answer obeyed. */
+    decision: null,
     perRole: transparency ? [] : undefined,
     latencyMs: 0,
     at: Date.now()
@@ -651,8 +1058,8 @@ export async function runCollaborativeAnalysis({
        degraded answer is built from). Passages carry citable ids. */
     try {
       const seen = new Set(knowledge.map((k) => k.id));
-      for (const p of retrieveBm25(message, { locale, limit: 3 })) {
-        if (knowledge.length >= 4) break;
+      for (const p of retrieveBm25(message, { locale, limit: knowledgeTopK })) {
+        if (knowledge.length >= knowledgeTopK) break;
         if (seen.has(p.id)) continue;
         knowledge.push({ ...p, version: 1, bodyEn: p.body });
         seen.add(p.id);
@@ -682,7 +1089,24 @@ export async function runCollaborativeAnalysis({
     }
   }
 
-  const contextBlock = buildSafeContextBlock({ context, knowledge, sources: result.sources });
+  /*
+   * ─── DECISION GATE (smartest mode, before anyone writes) ───────────────────
+   * Is this a decision question, and how much evidence does the turn actually
+   * hold? The specialists are told what the evidence level permits BEFORE they
+   * write; the Reviewer is told afterwards if the draft ignored it.
+   */
+  const decisionEvidence = mode === 'max'
+    ? assessEvidence({ context, sources: result.sources, knowledge })
+    : null;
+  const decisionBrief = decisionEvidence
+    ? renderDecisionContract({ message, evidence: decisionEvidence })
+    : '';
+
+  const subQuestionChecklist = renderSubQuestionChecklist(subQuestions, locale);
+  const baseContextBlock = buildSafeContextBlock({ context, knowledge, sources: result.sources, knowledgeLimit: knowledgeTopK });
+  const contextBlock = subQuestionChecklist
+    ? `${baseContextBlock}\n\n${subQuestionChecklist}`
+    : baseContextBlock;
 
   /* The ordered fleet for THIS question: the dominant task's preferred order
      first, then every other configured provider (health-aware). One shared
@@ -708,9 +1132,56 @@ export async function runCollaborativeAnalysis({
   /* ---- Stage 1-2: independent analyses by level (§9) ---- */
   const analyses = [];
 
+  /*
+   * ─── MARKET FRAME (smartest mode, market-analysis turns) ───────────────────
+   * What this turn's data actually measures — instruments, breadth, dispersion,
+   * regime, relative strength — and, just as important, what it cannot carry
+   * (no OHLC series, no depth, no funding). The answer may not use an indicator
+   * whose input is absent, and may not carry a three-month target on a 24h
+   * print without marking it a scenario.
+   */
+  /* Level 3+ only: a level-2 turn is one model with no brief slots, and holding
+     a draft to a contract it never received would be an unfair check. */
+  const isMarketTurn = mode === 'max' && plan.level >= 3 && detectMarketAnalysis(message, plan.taskTypes);
+  const marketFrame = isMarketTurn ? buildMarketFrame({ context, message, knowledge }) : null;
+  const marketBrief = marketFrame
+    ? `${renderMarketFrame(marketFrame)}\n${renderMarketContract(marketFrame)}`
+    : '';
   if (plan.level === 1 || !externalConfigured) {
     /* Conversation / simple, or no external provider configured at all. */
-    if (plan.conversationKind === CONVERSATION_KINDS.GREETING || plan.conversationKind === CONVERSATION_KINDS.THANKS || plan.conversationKind === CONVERSATION_KINDS.CASUAL) {
+    /*
+     * A short message that discloses a state («ناراحتم», «خسته شدم») is not a
+     * shrug. In the smartest mode it gets one real, careful reply instead of
+     * the canned small-talk line — with the emotion contract attached, so it
+     * acknowledges without advising and without a pep talk. Greetings, thanks
+     * and ordinary small talk stay on the free path.
+     */
+    const disclosing = mode === 'max' && externalConfigured && emotionBrief
+      && ['grief', 'shame', 'fear', 'burnout', 'loneliness'].includes(emotionRead?.primary)
+      && Number(emotionRead?.intensity) >= 0.4
+      && plan.conversationKind === CONVERSATION_KINDS.CASUAL;
+    if (disclosing) {
+      const single = await withDeadline(runRole({
+        role: AI_ROLES.CONVERSATION_AI,
+        message,
+        contextBlock,
+        locale,
+        deps: D,
+        maxTokens: tokensFor(300, 'fast'),
+        fleet,
+        seat: 0,
+        intelligence: mode,
+        emotionBrief,
+        situationBrief
+      }), null);
+      if (single?.ok) {
+        analyses.push(single);
+        result.answer = single.answer;
+      } else {
+        result.answer = naturalConversationReply(plan.conversationKind, isFa, { locale, social: plan.social }) || result.answer || '';
+        result.degraded = true;
+      }
+    } else if (plan.conversationKind === CONVERSATION_KINDS.GREETING || plan.conversationKind === CONVERSATION_KINDS.THANKS || plan.conversationKind === CONVERSATION_KINDS.CASUAL) {
       const socialLine = naturalConversationReply(plan.conversationKind, isFa, { locale, social: plan.social });
       result.answer = socialLine || result.answer || '';
       result.degraded = !externalConfigured && plan.level > 1;
@@ -718,7 +1189,7 @@ export async function runCollaborativeAnalysis({
       result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale });
       result.degraded = true;
     } else {
-      const single = await withDeadline(runRole({ role: AI_ROLES.CONVERSATION_AI, message, contextBlock, locale, deps: D, maxTokens: 400, fleet, seat: 0 }), null);
+      const single = await withDeadline(runRole({ role: AI_ROLES.CONVERSATION_AI, message, contextBlock, locale, deps: D, maxTokens: tokensFor(400, 'fast'), fleet, seat: 0, intelligence: mode }), null);
       if (single?.ok) {
         analyses.push(single);
         result.answer = single.answer;
@@ -732,7 +1203,7 @@ export async function runCollaborativeAnalysis({
       : plan.taskTypes.includes('crypto-analysis') || plan.taskTypes.includes('research') ? AI_ROLES.CRYPTO_RESEARCH_AI
       : plan.taskTypes.includes('risk') ? AI_ROLES.RISK_AI
       : AI_ROLES.CRYPTO_RESEARCH_AI;
-    const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D, fleet, seat: 0 }), null);
+    const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: 0, intelligence: mode, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief }), null);
     if (single?.ok) { analyses.push(single); result.answer = single.answer; }
     else { result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale }); result.degraded = true; }
   } else if (plan.level === 3) {
@@ -741,7 +1212,7 @@ export async function runCollaborativeAnalysis({
        analyses are genuinely different providers, not one model twice. */
     const roles = pickAnalysisRoles(plan, 2);
     const settled = await withDeadline(
-      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, fleet, seat: i }))),
+      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief, dialogueBrief, professorBrief, researchBrief, marketBrief, requestBrief, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief }))),
       []
     );
     analyses.push(...(settled || []).filter(Boolean));
@@ -753,12 +1224,46 @@ export async function runCollaborativeAnalysis({
        take distinct seats of the shared fleet (seat = role index); the
        verifier and the final-answer synthesiser continue the rotation so a
        high-stakes question walks several different providers end to end. */
-    const roles = pickAnalysisRoles(plan, plan.level >= 5 ? 3 : 2);
+    /*
+     * Independent analyses: the historical rule is 2 at level 4 and 3 at
+     * level 5. The smartest mode asks for 3 at level 4 too — three independent
+     * reads are what later disagreement and the critique step have to work
+     * with. It never exceeds the number of distinct analytical roles.
+     */
+    const baseAnalyses = plan.level >= 5 ? 3 : 2;
+    const wantedAnalyses = Math.max(baseAnalyses, Math.min(5, Number(modeProfile.analysesCount) || baseAnalyses));
+    const roles = pickAnalysisRoles(plan, wantedAnalyses, wantedAnalyses);
     const settled = await withDeadline(
-      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, fleet, seat: i }))),
+      Promise.all(roles.map((r, i) => runRole({
+        role: r,
+        message,
+        contextBlock,
+        locale,
+        deps: D,
+        maxTokens: tokensFor(600),
+        fleet,
+        seat: i,
+        intelligence: mode,
+        economistLens,
+        socialBrief,
+        strategyBrief,
+        decisionBrief,
+        /* The last analytical seat is the dissenting one, and only in the
+           smartest mode: one of the three reads must be trying to break the
+           other two, not agreeing with them. */
+        counterCase: modeProfile.selfCritique && i === roles.length - 1
+      }))),
       []
     );
     analyses.push(...(settled || []).filter(Boolean));
+    if (modeProfile.selfCritique && roles.length) {
+      const dissenting = analyses.find((a) => a.ok && a.role === roles[roles.length - 1]);
+      result.counterCase = {
+        role: roles[roles.length - 1],
+        answered: Boolean(dissenting),
+        provider: dissenting?.provider || null
+      };
+    }
 
     const valid = analyses.filter((a) => a.ok);
     if (valid.length >= 2 && !overBudget()) {
@@ -771,33 +1276,543 @@ export async function runCollaborativeAnalysis({
         locale,
         deps: D,
         fleet,
-        seat: roles.length
+        seat: roles.length,
+        maxTokens: tokensFor(600),
+        intelligence: mode,
+        economistLens,
+        socialBrief,
+        strategyBrief,
+        decisionBrief,
+        dialogueBrief,
+        professorBrief,
+        researchBrief,
+        marketBrief,
+        requestBrief,
+        emotionBrief,
+        situationBrief,
+        discourseBrief,
+        productBrief,
+        partialBrief
       }), null);
       if (verifier?.ok) analyses.push(verifier);
     }
 
     const validFinal = analyses.filter((a) => a.ok && a.role !== AI_ROLES.VERIFICATION_AI);
     if (validFinal.length) {
+      /*
+       * ─── CLAIM LEDGER (smartest mode, before synthesis) ─────────────────────
+       * The synthesiser used to write before verification ran, so a claim backed
+       * by live tool data and a claim three models merely repeated reached it as
+       * identical prose. The ledger classifies the analysts' factual claims
+       * deterministically and names every subject on which two analysts quote
+       * different figures, so the final answer can resolve instead of average.
+       */
+      let claimLedgerBlock = '';
+      if (modeProfile.selfCritique) {
+        const preAnalytical = analyses.filter((a) => a.ok && a.answer && a.role !== AI_ROLES.VERIFICATION_AI);
+        const preComparison = compareAnalyses(preAnalytical);
+        const preVerification = verifyClaims({ factualClaims: preComparison.factualClaims, context, sources: result.sources });
+        result.synthesisLedger = buildClaimLedger({
+          verified: preVerification.verified,
+          consensusOnly: preVerification.aiConsensusOnly,
+          factualClaims: preComparison.factualClaims,
+          context
+        });
+        claimLedgerBlock = renderClaimLedger(result.synthesisLedger);
+      }
+      /* Deep analyses must not be cut to a soundbite before synthesis: at max
+         the digest keeps more of each answer; other modes keep the historical
+         budget byte for byte. */
+      const digestCap = modeProfile.selfCritique ? 800 : 500;
       /* Stage 6: one clean FBT answer from the specialists' work (§37). */
-      const digest = analyses.filter((a) => a.ok).map((a) => `[${a.role}] ${String(a.answer).slice(0, 500)}`).join('\n\n');
+      const digest = analyses.filter((a) => a.ok).map((a) => `[${a.role}] ${String(a.answer).slice(0, digestCap)}`).join('\n\n');
+      /*
+       * The verifier's findings used to be just another paragraph in the
+       * digest. In the smartest mode the synthesiser is told to RESOLVE them:
+       * drop or qualify every claim the evidence does not support, and say
+       * which evidence wins when two analyses disagree. That is the difference
+       * between "we asked a verifier" and "the answer was verified".
+       */
+      const verifierFinding = analyses.find((a) => a.ok && a.role === AI_ROLES.VERIFICATION_AI);
+      const verifierNote = verifierFinding
+        ? `\n\nVERIFIER FINDINGS (resolve every point; remove or qualify anything it flags as unsupported):\n${String(verifierFinding.answer).slice(0, 900)}`
+        : '';
+      const revisionRule = modeProfile.selfCritique
+        ? '\n\nHARD RULE: do not introduce a number, price, date or percentage that is absent from the data above. If two analyses disagree, state which evidence wins and what remains unknown.'
+        : '';
       const finalRole = await withDeadline(runRole({
         role: AI_ROLES.FINAL_ANSWER_AI,
-        message: `${message}\n\nSPECIALIST WORK:\n${digest}`,
+        message: `${message}\n\nSPECIALIST WORK:\n${digest}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${verifierNote}${revisionRule}`,
         contextBlock,
         locale,
         deps: D,
         fleet,
         seat: roles.length + 1,
-        maxTokens: 800
+        maxTokens: tokensFor(800),
+        intelligence: mode,
+        economistLens,
+        socialBrief,
+        strategyBrief,
+        decisionBrief,
+        dialogueBrief,
+        professorBrief,
+        researchBrief,
+        marketBrief,
+        requestBrief,
+        emotionBrief,
+        situationBrief,
+        discourseBrief,
+        productBrief,
+        partialBrief
       }), null);
       result.answer = finalRole?.ok
         ? finalRole.answer
         : mergeTwoAnswers(validFinal, isFa);
       if (finalRole?.ok) analyses.push(finalRole);
+
+      /*
+       * ─── STRATEGY RUBRIC ON THE DRAFT ──────────────────────────────────────
+       * The model was told the eight sections before writing; this records which
+       * ones the draft actually contains and hands the missing ones to the
+       * reviewer below. Completeness only — it does not claim the plan is good.
+       */
+      if (strategyFrame) {
+        result.strategy = {
+          frame: strategyFrame,
+          rubric: checkStrategyRubric(result.answer)
+        };
+      }
+      /*
+       * Arithmetic is separate from completeness: the draft can have all eight
+       * sections and still contradict itself (allocations over 100%, a long
+       * whose stop is above the entry, a position bigger than the capital).
+       * The reviewer below receives every violation as MUST-FIX; the reply
+       * re-checks the FINAL text.
+       */
+      const draftArithmetic = strategyFrame ? checkPlanArithmetic(result.answer, strategyFrame) : null;
+      /*
+       * ─── DIALOGUE COMPLIANCE ON THE DRAFT ─────────────────────────────────
+       * Did the draft answer the question that was asked? A corrected claim
+       * that is restated, a follow-up answered as a new topic, a «چرا» answered
+       * with a checklist, a «چقدر» answered with «بستگی دارد» — each is handed
+       * to the reviewer as a MUST-FIX. The final text is re-checked below.
+       */
+      const draftDialogue = dialogueRead
+        ? checkDialogueCompliance({ read: dialogueRead, answer: result.answer })
+        : null;
+      /*
+       * ─── FALSIFIER ON THE DRAFT ────────────────────────────────────────────
+       * A forecast without a disconfirming condition is the one thing a
+       * researcher never ships. Deterministic: prediction markers in the text,
+       * falsifier markers absent → MUST-FIX for the reviewer.
+       */
+      const draftFalsifier = professorBrief ? checkFalsifier({ message, answer: result.answer }) : null;
+      /*
+       * ─── MARKET FRAME ON THE DRAFT ─────────────────────────────────────────
+       * RSI/trendline on a turn with no OHLC series, or a three-month target on
+       * a 24h print, is the classic market answer that sounds expert and is
+       * unfalsifiable. The reviewer gets each as a MUST-FIX.
+       */
+      const draftMarket = marketFrame ? checkMarketAnalysis({ frame: marketFrame, answer: result.answer }) : null;
+      const draftRequest = requestPlan ? checkRequestPlan({ plan: requestPlan, answer: result.answer }) : null;
+      const draftEmotion = emotionRead ? checkEmotionTone({ read: emotionRead, answer: result.answer }) : null;
+      const draftSituation = situationRead ? checkSituationResponse({ situation: situationRead, answer: result.answer }) : null;
+      const draftDiscourse = discourseRead ? checkDiscourseMirror({ discourse: discourseRead, answer: result.answer }) : null;
+      const draftProduct = productRead ? checkProductAnswer({ product: productRead, answer: result.answer }) : null;
+      const draftPartial = checkPartialAnswer({ read: partialRead, answer: result.answer });
+      /*
+       * ─── DECISION VERDICT ON THE DRAFT ─────────────────────────────────────
+       * Re-score the evidence now that the analyses, the verifier and the claim
+       * ledger exist, then ask the one question that matters: did the draft
+       * issue a directional instruction this evidence cannot support?
+       */
+      if (decisionEvidence) {
+        const comparisonForDecision = compareAnalyses(analyses.filter((a) => a.ok
+          && a.role !== AI_ROLES.VERIFICATION_AI && a.role !== 'critique'));
+        const finalEvidence = assessEvidence({
+          context,
+          sources: result.sources,
+          knowledge,
+          comparison: comparisonForDecision,
+          ledger: result.synthesisLedger
+        });
+        const gate = evaluateDecision({ message, evidence: finalEvidence, answer: result.answer });
+        /* A non-decision turn is not published as a verdict at all. */
+        result.decision = gate.applicable ? gate : null;
+      }
+
+      /*
+       * ─── NUMERIC EVIDENCE AUDIT (deterministic, no extra call) ─────────────
+       * Every meaningful number in the draft is checked against the evidence
+       * the draft was allowed to use: live context, verified knowledge, cited
+       * sources, and the analysts' own work. The synthesiser AND the verifier
+       * are deliberately excluded from the corpus — otherwise the draft (or a
+       * reviewer's aside) would source itself and the audit would always be
+       * clean. The report never edits the text: the draft's findings go to the
+       * reviewer below, and the FINAL text is re-audited for the reply.
+       */
+      const evidenceCorpus = () => buildEvidenceCorpus({
+        context,
+        knowledge,
+        sources: result.sources,
+        analyses: analyses.filter((a) => a.ok
+          && a.role !== AI_ROLES.FINAL_ANSWER_AI
+          && a.role !== AI_ROLES.VERIFICATION_AI
+          && a.role !== 'critique')
+      });
+      const draftAudit = modeProfile.selfCritique && !result.degraded
+        ? auditNumbers(result.answer, evidenceCorpus())
+        : null;
+
+      /*
+       * ─── ADVERSARIAL SELF-REVIEW (smartest mode) ───────────────────────────
+       * One bounded extra call, on a DIFFERENT seat, that receives the draft
+       * and the same evidence block and returns a repaired answer. It is
+       * allowed to replace the draft only when the repair is substantial
+       * (≥60% of the draft's length, or the draft was a two-liner). A review
+       * that times out, refuses, or returns a stub leaves the draft standing:
+       * this step can only improve an answer, never delete one.
+       */
+      if (modeProfile.selfCritique && !result.degraded) {
+        const draft = String(result.answer || '').trim();
+        const remaining = deadlineMs - (Date.now() - startedAt);
+        if (draft.length >= 80 && remaining > 2500) {
+          const critiqueBudget = Math.min(7000, remaining - 800);
+          /*
+           * Deterministic completeness check on the draft: a part the draft
+           * never touches is handed to the reviewer by name, so "the answer
+           * dropped half the question" is caught without a second model call.
+           */
+          const draftCoverage = subQuestions.length >= 2
+            ? assessQuestionCoverage(subQuestions, draft)
+            : { covered: [], uncovered: [] };
+          const unansweredBlock = renderUnansweredParts(draftCoverage.uncovered, locale);
+          const unsourcedBlock = renderUnsourcedBlock(draftAudit);
+          const strategyGapsBlock = renderStrategyGaps(result.strategy?.rubric);
+          const strategyArithmeticBlock = renderStrategyViolations(draftArithmetic);
+          const decisionDeficitBlock = renderDecisionDeficit(result.decision);
+          const dialogueDeficitBlock = renderDialogueDeficit(draftDialogue);
+          const falsifierDeficitBlock = renderFalsifierDeficit(draftFalsifier);
+          const marketViolationBlock = renderMarketViolations(draftMarket);
+          const requestDeficitBlock = renderRequestDeficit(draftRequest);
+          const emotionDeficitBlock = renderEmotionDeficit(draftEmotion);
+          const situationDeficitBlock = renderSituationDeficit(draftSituation);
+          const discourseDeficitBlock = renderDiscourseDeficit(draftDiscourse);
+          const productDeficitBlock = renderProductDeficit(draftProduct);
+          const partialDeficitBlock = renderPartialDeficit(draftPartial);
+          const criticRole = {
+            role: AI_ROLES.VERIFICATION_AI,
+            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}${dialogueDeficitBlock ? `\n\n${dialogueDeficitBlock}` : ''}${falsifierDeficitBlock ? `\n\n${falsifierDeficitBlock}` : ''}${marketViolationBlock ? `\n\n${marketViolationBlock}` : ''}${requestDeficitBlock ? `\n\n${requestDeficitBlock}` : ''}${emotionDeficitBlock ? `\n\n${emotionDeficitBlock}` : ''}${situationDeficitBlock ? `\n\n${situationDeficitBlock}` : ''}${discourseDeficitBlock ? `\n\n${discourseDeficitBlock}` : ''}${productDeficitBlock ? `\n\n${productDeficitBlock}` : ''}${partialDeficitBlock ? `\n\n${partialDeficitBlock}` : ''}`,
+            contextBlock: '',
+            locale,
+            deps: D,
+            fleet,
+            seat: roles.length + 2,
+            maxTokens: tokensFor(800),
+            intelligence: mode,
+            systemOverride: CRITIQUE_SYSTEM
+          };
+          const critic = await withDeadline(runRole(criticRole), null, critiqueBudget);
+          const repaired = String(critic?.answer || '').trim();
+          const substantial = repaired.length >= 40 && (
+            draft.length < 200 ? repaired.length >= 40 : repaired.length >= Math.round(draft.length * 0.6)
+          );
+          const changed = critic?.ok && repaired && repaired !== draft;
+          /*
+           * ─── REPAIR ACCEPTANCE GATE (v2) ─────────────────────────────────
+           * Length alone was a weak proxy for "better". Two deterministic
+           * regressions are now refused:
+           *   1. the repair ADDS a number no evidence can source (the reviewer
+           *      may withdraw an invented figure, never introduce one);
+           *   2. the repair DROPS a part of the question the draft answered.
+           * A refused repair leaves the draft untouched, exactly like a crash.
+           */
+          const draftUncovered = new Set((draftAudit?.unsourced || []).map((n) => n.value));
+          const repairedAudit = repaired ? auditNumbers(repaired, evidenceCorpus()) : null;
+          /*
+           * A strategy repair may legitimately move a stop or an entry: those
+           * are plan parameters, not asserted market facts. Only in a strategy
+           * turn are such levels exempt from the "new unsourced number" rule;
+           * every other number still has to come from the evidence.
+           */
+          const introducedNumbers = (repairedAudit?.unsourced || [])
+            .filter((n) => !draftUncovered.has(n.value))
+            .filter((n) => !(strategyFrame && isPlanParameter(repaired, n.value)));
+          const repairedCoverage = subQuestions.length >= 2 && repaired
+            ? assessQuestionCoverage(subQuestions, repaired)
+            : null;
+          const lostCoverage = Boolean(repairedCoverage
+            && repairedCoverage.uncovered.length > draftCoverage.uncovered.length);
+          const safe = substantial && !introducedNumbers.length && !lostCoverage;
+          if (changed && safe) {
+            result.critique = {
+              used: true,
+              provider: critic.provider || null,
+              model: critic.model || null,
+              changed: true,
+              issues: Array.isArray(critic.claims) ? critic.claims.slice(0, 4).map((c) => String(c.claim || '').slice(0, 200)) : [],
+              draftLength: draft.length,
+              repairedLength: repaired.length,
+              reason: 'REPAIRED'
+            };
+            result.answer = repaired;
+            /* Attribution only: an empty `answer` keeps the reviewer out of
+               claim comparison (its "changes" are not market claims), while
+               the model/provider still reach modelsConsulted/providersUsed. */
+            analyses.push({ role: 'critique', provider: critic.provider || null, model: critic.model || null, answer: '', claims: [], ok: true });
+          } else {
+            result.critique = {
+              used: false,
+              provider: critic?.provider || null,
+              model: critic?.model || null,
+              changed: Boolean(changed),
+              issues: Array.isArray(critic?.claims) ? critic.claims.slice(0, 4).map((c) => String(c.claim || '').slice(0, 200)) : [],
+              draftLength: draft.length,
+              repairedLength: repaired.length,
+              /* Why a repair was not used, in order of severity. */
+              reason: critic?.ok
+                ? (introducedNumbers.length ? 'REPAIR_ADDED_UNSOURCED_NUMBER'
+                  : lostCoverage ? 'REPAIR_LOST_COVERAGE'
+                    : substantial ? 'UNCHANGED' : 'STUB_OR_TRUNCATED')
+                : 'NO_CRITIC_ANSWER',
+              rejectedNumbers: introducedNumbers.slice(0, 4).map((n) => n.value)
+            };
+          }
+        } else {
+          result.critique = { used: false, reason: draft.length < 80 ? 'DRAFT_TOO_SHORT' : 'OUT_OF_TIME' };
+        }
+      }
     } else {
       result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale });
       result.degraded = true;
     }
+  }
+
+  /*
+   * Publish the completeness result on the FINAL text the user reads (the
+   * adversarial review may have repaired it). Deterministic keyword check:
+   * it can only ever report a part as unanswered, never edit the answer.
+   */
+  /*
+   * The audit published in the reply describes the text the user actually
+   * reads — after the adversarial review had its chance to fix or withdraw a
+   * figure. `collaboration.critique` says whether it had to.
+   */
+  if (modeProfile.selfCritique && !result.degraded) {
+    result.numericAudit = auditNumbers(result.answer, buildEvidenceCorpus({
+      context,
+      knowledge,
+      sources: result.sources,
+      analyses: analyses.filter((a) => a.ok
+        && a.role !== AI_ROLES.FINAL_ANSWER_AI
+        && a.role !== AI_ROLES.VERIFICATION_AI
+        && a.role !== 'critique')
+    }));
+  }
+
+  /* The reviewer may have downgraded a recommendation: re-check the FINAL text. */
+  if (result.decision?.applicable) {
+    result.decision = evaluateDecision({
+      message,
+      evidence: result.decision.evidence,
+      answer: result.answer
+    });
+  }
+
+  /*
+   * Re-check the dialogue contract on the FINAL text, and publish it: which act
+   * the turn was, which shape the question had, and whether the answer the user
+   * actually reads matched it.
+   */
+  if (dialogueRead) {
+    const finalDialogue = checkDialogueCompliance({ read: dialogueRead, answer: result.answer });
+    result.dialogue = {
+      schema: dialogueRead.schema,
+      act: dialogueRead.act,
+      askShape: dialogueRead.askShape,
+      applicable: finalDialogue.applicable,
+      signals: dialogueRead.signals,
+      referent: dialogueRead.referent?.resolvesTo || null,
+      issues: finalDialogue.issues.map((i) => i.id),
+      compliant: finalDialogue.compliant
+    };
+  }
+
+  /*
+   * Falsifier on the FINAL text (the reviewer may have added one), then the
+   * research agenda: this turn's findings are merged and persisted, so the next
+   * turn starts from what is still missing instead of from zero.
+   */
+  if (professorBrief) {
+    const finalFalsifier = checkFalsifier({ message, answer: result.answer });
+    result.professor = {
+      schema: 'fbt.ai-professor.v1',
+      lenses: professorLenses,
+      falsifier: {
+        applicable: finalFalsifier.applicable,
+        present: finalFalsifier.hasFalsifier,
+        compliant: finalFalsifier.compliant
+      }
+    };
+  }
+
+  if (marketFrame) {
+    const finalMarket = checkMarketAnalysis({ frame: marketFrame, answer: result.answer });
+    result.market = {
+      schema: marketFrame.schema,
+      dataStatus: marketFrame.dataStatus,
+      stale: marketFrame.stale,
+      instruments: marketFrame.instruments.length,
+      breadth: marketFrame.breadth,
+      dispersionPct: marketFrame.dispersionPct,
+      regime: marketFrame.regime,
+      relative: marketFrame.relative,
+      leadership: marketFrame.leadership,
+      horizon: marketFrame.horizon,
+      notSupported: marketFrame.notSupported,
+      gaps: marketFrame.gaps,
+      violations: finalMarket.issues.map((i) => i.id),
+      compliant: finalMarket.compliant
+    };
+  }
+
+  if (emotionRead && emotionRead.primary !== 'neutral') {
+    const finalEmotion = checkEmotionTone({ read: emotionRead, answer: result.answer });
+    result.emotion = {
+      schema: emotionRead.schema,
+      primary: emotionRead.primary,
+      mixed: emotionRead.mixed,
+      valence: emotionRead.valence,
+      arousal: emotionRead.arousal,
+      dominance: emotionRead.dominance,
+      intensity: emotionRead.intensity,
+      acute: emotionRead.acute,
+      selfDirected: emotionRead.selfDirected,
+      cause: emotionRead.cause,
+      needs: emotionRead.needs,
+      trajectory: emotionRead.trajectory,
+      violations: finalEmotion.issues.map((i) => i.id),
+      compliant: finalEmotion.compliant
+    };
+  }
+
+  if (discourseRead && discourseRead.confidence === 'read') {
+    const finalDiscourse = checkDiscourseMirror({ discourse: discourseRead, answer: result.answer });
+    result.discourse = {
+      schema: discourseRead.schema,
+      style: discourseRead.style,
+      energy: discourseRead.energy,
+      warmth: discourseRead.warmth,
+      profanity: discourseRead.profanity,
+      emoji: discourseRead.emoji,
+      signals: discourseRead.signals,
+      violations: finalDiscourse.issues.map((i) => i.id),
+      compliant: finalDiscourse.compliant
+    };
+  }
+
+  if (situationRead) {
+    const finalSituation = checkSituationResponse({ situation: situationRead, answer: result.answer });
+    result.situation = {
+      schema: situationRead.schema,
+      state: situationRead.state,
+      direction: situationRead.direction,
+      basis: situationRead.basis,
+      pct: situationRead.pct,
+      magnitudePct: situationRead.magnitudePct,
+      hasRead: situationRead.hasRead,
+      concentration: situationRead.concentration,
+      cashPct: situationRead.cashPct,
+      numbers: situationRead.numbers,
+      violations: finalSituation.issues.map((i) => i.id),
+      compliant: finalSituation.compliant
+    };
+  }
+
+  {
+    /* Published on every turn: `completeness: complete` is itself the answer to
+       "did you understand me, or did you guess?" */
+    const finalPartial = checkPartialAnswer({ read: partialRead, answer: result.answer });
+    result.partial = {
+      schema: partialRead.schema,
+      completeness: partialRead.completeness,
+      confidence: partialRead.confidence,
+      act: partialRead.inferred.act,
+      assets: partialRead.inferred.assets,
+      missing: partialRead.missing.map((m) => m.slot),
+      assumptions: partialRead.assumptions.map((a) => a.slot),
+      repairs: partialRead.repairs.map((r) => r.how),
+      questionBudget: partialRead.questionBudget,
+      violations: finalPartial.issues.map((i) => i.id),
+      compliant: finalPartial.compliant
+    };
+  }
+
+  if (productRead) {
+    const finalProduct = checkProductAnswer({ product: productRead, answer: result.answer });
+    result.product = {
+      schema: productRead.schema,
+      intent: productRead.intent,
+      confidence: productRead.confidence,
+      gaps: productRead.gaps,
+      sources: productRead.sources,
+      pageCount: productRead.pageCount,
+      pages: productRead.pages.map((p) => p.path),
+      violations: finalProduct.issues.map((i) => i.id),
+      compliant: finalProduct.compliant
+    };
+  }
+
+  if (requestPlan) {
+    const finalRequest = checkRequestPlan({ plan: requestPlan, answer: result.answer });
+    result.request = {
+      schema: requestPlan.schema,
+      deliverable: requestPlan.deliverable,
+      constraints: requestPlan.constraints,
+      missing: requestPlan.missing,
+      expertise: requestPlan.expertise,
+      lengthTarget: requestPlan.blueprint.maxSentences,
+      violations: finalRequest.issues.map((i) => i.id),
+      compliant: finalRequest.compliant
+    };
+  }
+
+  if (researchSession?.enabled) {
+    const findings = deriveResearchFindings({
+      strategy: result.strategy,
+      decision: result.decision,
+      subQuestions: result.subQuestions,
+      numericAudit: result.numericAudit,
+      dialogue: result.dialogue,
+      falsifier: result.professor?.falsifier
+        ? { applicable: result.professor.falsifier.applicable, compliant: result.professor.falsifier.compliant }
+        : null,
+      market: result.market,
+      context
+    });
+    const recorded = await withDeadline(
+      researchSession.record(owner, { agenda: priorAgenda, findings, locale }),
+      null,
+      500
+    );
+    result.research = recorded
+      ? { ...recorded, briefed: briefedItems.map((i) => i.id) }
+      : null;
+  }
+
+  /* Re-check the FINAL text: the reviewer may have fixed a figure. */
+  if (result.strategy) {
+    result.strategy.arithmetic = checkPlanArithmetic(result.answer, result.strategy.frame);
+  }
+
+  if (subQuestions.length >= 2 && !result.degraded) {
+    const coverage = assessQuestionCoverage(subQuestions, result.answer);
+    result.subQuestions = {
+      parts: subQuestions,
+      covered: coverage.covered,
+      uncovered: coverage.uncovered,
+      complete: coverage.uncovered.length === 0
+    };
   }
 
   /* ---- Stage 3-4: compare + verify ---- */
@@ -896,7 +1911,7 @@ function naturalConversationReply(kind, isFa, { locale = null, social = null } =
   return rendered.ok ? rendered.text : null;
 }
 
-function pickAnalysisRoles(plan, max) {
+function pickAnalysisRoles(plan, max, min = Math.min(2, max)) {
   const priority = [
     [AI_ROLES.MARKET_AI, plan.taskTypes.includes('market')],
     [AI_ROLES.CRYPTO_RESEARCH_AI, plan.taskTypes.includes('crypto-analysis') || plan.taskTypes.includes('research')],
@@ -906,10 +1921,24 @@ function pickAnalysisRoles(plan, max) {
     [AI_ROLES.PORTFOLIO_AI, plan.taskTypes.includes('portfolio')]
   ];
   const chosen = priority.filter(([, wanted]) => wanted).map(([r]) => r).slice(0, max);
-  while (chosen.length < Math.min(2, max)) {
-    const fallback = [AI_ROLES.MARKET_AI, AI_ROLES.RISK_AI].find((r) => !chosen.includes(r));
-    if (!fallback) break;
-    chosen.push(fallback);
+  /*
+   * Fill up to `min` with DISTINCT analytical roles before repeating a view.
+   * The old loop only guaranteed two, so asking for three on a market-only
+   * question silently collapsed back to two analyses.
+   */
+  /* Market + risk lead the fill: they are the two views the protocol always
+     had, so a third analysis extends that pair instead of replacing it. */
+  const fillPool = [
+    AI_ROLES.MARKET_AI,
+    AI_ROLES.RISK_AI,
+    AI_ROLES.CRYPTO_RESEARCH_AI,
+    AI_ROLES.STRATEGY_AI,
+    AI_ROLES.PORTFOLIO_AI,
+    AI_ROLES.NEWS_AI
+  ];
+  for (const candidate of fillPool) {
+    if (chosen.length >= Math.min(min, max)) break;
+    if (!chosen.includes(candidate)) chosen.push(candidate);
   }
   return chosen.length ? chosen : [AI_ROLES.MARKET_AI, AI_ROLES.RISK_AI].slice(0, max);
 }

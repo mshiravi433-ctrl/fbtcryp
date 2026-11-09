@@ -18,6 +18,12 @@
  */
 
 import { normalizeUpgrade4 } from './intentUnderstandingEngine.js';
+/* The one place the platform fee exists. The knowledge item below states it
+   from this constant, so the assistant can never quote a fee the engine does
+   not charge. */
+import { FEE_BPS, FEE_BPS_MAX, feePercentString, toEasternDigits } from '../../feeBps.js';
+
+const feeFa = (bps = FEE_BPS) => toEasternDigits(feePercentString(bps)).replace('.', '٫');
 
 export const KNOWLEDGE_SCHEMA = 'fbt.knowledge.v1';
 export const KNOWLEDGE_CATEGORIES = Object.freeze([
@@ -169,6 +175,30 @@ export const FBT_KNOWLEDGE = Object.freeze([
     titleFa: 'خرید خودکار (DCA)', titleEn: 'DCA automation',
     bodyFa: 'با خودکارسازی FBT می‌توانید خرید دوره‌ای (مثلاً روزانه یا هفتگی) بسازید تا نوسان نقطه ورود میانگین شود. هر چرخه طبق قوانین اجرا و در صورت نیاز تأیید می‌شود؛ می‌توانید هر زمان مکث یا لغو کنید.',
     bodyEn: 'FBT automations let you schedule recurring buys (e.g. daily or weekly) so entry timing is averaged. Each cycle runs under your rules, can be paused or cancelled at any time.',
+    updatedAt: now()
+  },
+  {
+    id: 'kb.product.fee', version: 1, category: 'PRODUCT', status: 'verified', confidence: 97,
+    source: 'src/lib/feeBps.js',
+    titleFa: 'کارمزد پلتفرم چقدر است؟', titleEn: 'What is the platform fee?',
+    bodyFa: `کارمزد پلتفرم FBT ${feeFa()}٪ (${toEasternDigits(String(FEE_BPS))} بیسیس‌پوینت) برای هر سواپ است و سقف سخت آن ${feeFa(FEE_BPS_MAX)}٪ است. کارمزد شبکه (گس) جدا از این مبلغ است و به شبکهٔ مقصد بستگی دارد. این عدد در یک ماژول واحد تعریف شده و مقدار خارج از بازهٔ مجاز به پیش‌فرض برمی‌گردد.`,
+    bodyEn: `The FBT platform fee is ${feePercentString()}% (${FEE_BPS} bps) per swap, hard-capped at ${feePercentString(FEE_BPS_MAX)}%. Network gas is separate and depends on the destination chain. The rate lives in one module, and an out-of-range value falls back to the default.`,
+    updatedAt: now()
+  },
+  {
+    id: 'kb.product.team', version: 1, category: 'PRODUCT', status: 'verified', confidence: 99,
+    source: 'fbt-app',
+    titleFa: 'سازندگان FBT چه کسانی هستند؟', titleEn: 'Who are the makers of FBT?',
+    bodyFa: 'نام سازندگان، بنیان‌گذاران و اعضای تیم FBT در دانش تأییدشدهٔ محصول ثبت نشده است. دستیار هوشمند FBT در این حالت به‌جای حدس زدن نام، صریح می‌گوید که این اطلاعات در دانش ثبت نشده و کاربر را به کانال‌های رسمی (صفحهٔ دربارهٔ ما و صفحهٔ تماس) ارجاع می‌دهد. آنچه تأیید شده این است: FBT غیرامانی است، کلیدها روی دستگاه کاربر می‌مانند و FBT هرگز عبارت بازیابی یا کلید خصوصی نمی‌خواهد.',
+    bodyEn: 'The names of FBT’s makers, founders and team members are not recorded in the verified product knowledge. Instead of guessing a name, the assistant says the information is not recorded and points the user to the official channels (About and Contact pages). What is verified: FBT is non-custodial, keys stay on the user device, and FBT never asks for a recovery phrase or private key.',
+    updatedAt: now()
+  },
+  {
+    id: 'kb.product.pages', version: 1, category: 'PRODUCT', status: 'verified', confidence: 94,
+    source: 'src/App.jsx',
+    titleFa: 'FBT چه صفحه‌هایی دارد؟', titleEn: 'Which pages does FBT have?',
+    bodyFa: 'فهرست صفحه‌های FBT از خود جدول مسیرهای برنامه خوانده می‌شود و شامل بازار، صفحهٔ هر دارایی، مقایسه، سواپ، بریج، کیف پول، سبد، سیگنال‌ها، اسمارت مانی، سهام توکن‌شده، وام، کسب سود، فارم، خزانه، سفارش‌ها، NFT، اخبار، کشف، فرصت‌ها، اکوسیستم، توسعه‌دهندگان، آموزش، راهنما، امنیت، تنظیمات، جوایز، اجتماعی، رهبران بازار، بیمه، آزمایشگاه، لانچ‌پد و صفحات حقوقی است. مسیرهای مربوط به معاملات مشتقه و شرط‌بندی قیمتی فقط وقتی فعال‌اند که پرچم مربوطه روشن باشد. هیچ صفحه‌ای خارج از این جدول وجود ندارد و دستیار مسیر نمی‌سازد.',
+    bodyEn: 'The page list is read from the app’s own route table: market, per-asset pages, compare, swap, bridge, wallet, portfolio, signals, smart money, tokenized stocks, loans, earn, farm, vault, orders, NFT, news, discover, opportunities, ecosystem, developers, learn, help, security, settings, rewards, social, leaderboard, insurance, lab, launchpad and the legal pages. Derivative and price-prediction routes exist only when their feature flag is on. No page exists outside this table, and the assistant never invents a route.',
     updatedAt: now()
   }
 ]);

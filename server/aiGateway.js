@@ -85,6 +85,35 @@
  * fixed by the account owner; the gateway now names them precisely instead of
  * silently answering from the rule engine.
  */
+import {
+  getIntelligenceProfile,
+  normalizeIntelligenceMode,
+  intelligenceModelLadder,
+  intelligenceProviderOrder,
+  intelligenceGeneration,
+  intelligenceReasoningFields,
+  intelligenceGeminiThinking,
+  intelligenceAnthropicThinking,
+  resolveIntelligenceMode,
+  describeIntelligence
+} from './aiIntelligence.js';
+import {
+  isProviderInFleet,
+  providerFleetExclusion,
+  describeProviderFleet,
+  resolveProviderFleet,
+  DEFAULT_PROVIDER_FLEET
+} from './aiProviderFleet.js';
+
+/* Re-exported so every consumer of the gateway can describe the mode it used
+   without importing a second module. */
+export { describeIntelligence };
+/* …and so can describe the fleet it is allowed to call. */
+export { describeProviderFleet, DEFAULT_PROVIDER_FLEET };
+/* The central brain needs the resolved mode and the flagship ladders to name
+   the ids its seats will actually call; both live in aiIntelligence. */
+export { resolveIntelligenceMode, intelligenceModelLadder };
+
 export const PROVIDER_CONFIGS = Object.freeze({
   openrouter: {
     name: 'OpenRouter',
@@ -100,7 +129,14 @@ export const PROVIDER_CONFIGS = Object.freeze({
       'google/gemini-2.5-flash',
       'deepseek/deepseek-chat',
       'anthropic/claude-3.5-haiku',
-      'meta-llama/llama-3.3-70b-instruct'
+      'meta-llama/llama-3.3-70b-instruct',
+      /* The flagship spellings used by the smartest-mode ladder live here too,
+         so the fleet panel lists them and the retired-model guard checks them.
+         They sit at the END: the historical failover order is unchanged. */
+      'google/gemini-2.5-pro',
+      'openai/gpt-4.1',
+      'anthropic/claude-sonnet-4-6',
+      'x-ai/grok-4'
     ],
     type: 'openai-compatible',
     // Also carries the market-intelligence and live-search duties that used to
@@ -424,10 +460,22 @@ function getCloudflareAccountId() {
   return readEnvAny(PROVIDER_CONFIGS.workersai.accountEnvKeys || ['CLOUDFLARE_ACCOUNT_ID']).value;
 }
 
+/**
+ * Is this provider usable RIGHT NOW: declared in the fleet, and carrying a key.
+ *
+ * The fleet check comes first on purpose. On this deployment three keys work
+ * (OpenRouter, Groq, Workers AI) and the other seven are absent or expired;
+ * a present-but-expired key used to make `isProviderConfigured` return true,
+ * so every request paid for a round-trip that could only fail. A provider
+ * outside `FBT_AI_PROVIDERS` is indistinguishable from one without a key —
+ * which is the point: nothing downstream (ordering, collaboration seats,
+ * escalation, debate, diagnostics) has to learn a second rule.
+ */
 export function isProviderConfigured(providerId) {
   if (providerId === 'internal') return true;
   const cfg = PROVIDER_CONFIGS[providerId];
   if (!cfg) return false;
+  if (!isProviderInFleet(providerId)) return false;
   const key = getProviderKey(providerId);
   if (!key || key.trim().length === 0) return false;
   // Workers AI also needs the account id to build the run endpoint
@@ -677,25 +725,58 @@ const MODEL_ATTEMPTS = Math.max(1, Number(process.env.AI_MODEL_ATTEMPTS || 3));
  * Deduped, capped at AI_MODEL_ATTEMPTS (default 3) so one broken provider
  * cannot spend four round-trips before the router moves on.
  */
-export function getModelCandidates(providerId, requestedModel = null) {
+export function getModelCandidates(providerId, requestedModel = null, { mode = null } = {}) {
   const cfg = PROVIDER_CONFIGS[providerId];
   if (!cfg || cfg.type === 'internal-engine') return [cfg?.defaultModel || 'fbt-rules-v3'];
   const retired = new Set(cfg.retiredModels || []);
   const envModel = cfg.modelEnv ? normalizeSecretValue(process.env[cfg.modelEnv]) : '';
   const ordered = [];
-  const push = (m) => {
+  const push = (m, { explicit = false } = {}) => {
     const id = normalizeSecretValue(m);
     if (!id || ordered.includes(id)) return;
+    /* An explicitly requested id is never refused here: a paying Enterprise
+       account may still serve an id its vendor retired for new customers. Only
+       AUTOMATIC choices are filtered. */
+    if (!explicit && retired.has(id)) return;
     ordered.push(id);
   };
-  push(requestedModel);
-  push(envModel);
+  /*
+   * An explicit request still wins — that contract predates this mode and the
+   * wiring probe pins it (an Enterprise account may own a retired id).
+   * Behind it, `max` puts the provider's flagship ids FIRST so the flagship is
+   * what actually reaches the wire; every historical candidate stays in the
+   * list behind them, so a stale flagship degrades to the old behaviour
+   * instead of taking the provider down.
+   */
+  const maxMode = normalizeIntelligenceMode(mode) === 'max';
+  push(requestedModel, { explicit: true });
+  /*
+   * An explicitly requested model keeps the pre-mode behaviour exactly: that
+   * id, then the operator/default chain. Injecting a flagship ABOVE a caller's
+   * explicit choice would be the gateway second-guessing a deliberate
+   * instruction — and the wiring probe pins that contract with an exact
+   * attempt count.
+   */
+  if (maxMode && !requestedModel) {
+    /* An operator's modelEnv is an intent, so it outranks the ladder. */
+    push(envModel);
+    /* Two flagships, then the historical default — not the whole ladder. The
+       attempt cap is finite on purpose; letting a four-id ladder eat every
+       attempt would mean a provider's own known-good default never got a
+       turn. */
+    for (const m of intelligenceModelLadder(providerId, mode).slice(0, Math.max(1, MODEL_ATTEMPTS - 1))) push(m);
+  } else {
+    push(envModel);
+  }
   push(cfg.defaultModel);
   for (const m of cfg.fallbackModels || []) {
     if (retired.has(m)) continue; // a retired id must never be an automatic choice
     push(m);
   }
-  return ordered.slice(0, Math.max(ordered.length > 1 ? MODEL_ATTEMPTS : 1, 1));
+  /* `max` is allowed one extra attempt: the first is the flagship, and paying
+     for a stronger model is the point of the mode. It is still bounded. */
+  const attempts = maxMode && !requestedModel ? MODEL_ATTEMPTS + 1 : MODEL_ATTEMPTS;
+  return ordered.slice(0, Math.max(ordered.length > 1 ? attempts : 1, 1));
 }
 
 /** True when a model id is on any provider's retired list. Used by the probe. */
@@ -706,10 +787,18 @@ export function isRetiredModel(model) {
 
 export function getAvailableProviders() {
   const health = getProviderHealth();
+  /* One read for the whole list: the mode is deployment-wide unless a request
+     overrides it, and this endpoint describes the deployment. */
+  const activeIntelligenceMode = resolveIntelligenceMode(null).mode;
   const list = [];
   for (const [id, cfg] of Object.entries(PROVIDER_CONFIGS)) {
     const configured = isProviderConfigured(id);
     const keyInfo = getProviderKeyInfo(id);
+    /* Three distinct reasons a provider is not used, so the panel never says
+       «کلید ندارد» about a provider whose key is present but out of the
+       declared fleet. */
+    const fleetExclusion = providerFleetExclusion(id);
+    const keyPresent = id === 'internal' ? true : Boolean(keyInfo.present);
     const h = health[id] || null;
     /*
      * ─── WHY STATUS AND THE ENV VAR NAME ARE PART OF THE PAYLOAD ─────────
@@ -741,13 +830,28 @@ export function getAvailableProviders() {
       id,
       name: cfg.name,
       configured,
-      status: configured ? 'ACTIVE' : (id === 'internal' ? 'ACTIVE' : 'NEEDS_KEY'),
+      inFleet: fleetExclusion === null,
+      excludedBy: fleetExclusion,
+      keyPresent,
+      status: configured
+        ? 'ACTIVE'
+        : (id === 'internal'
+            ? 'ACTIVE'
+            : (fleetExclusion === 'NOT_IN_FLEET' ? 'OUT_OF_FLEET' : 'NEEDS_KEY')),
       envVar: id === 'internal' ? null : (cfg.altEnvKey ? `${cfg.envKey} (or ${cfg.altEnvKey})` : cfg.envKey),
       acceptedEnvVars: id === 'internal' ? [] : envNamesFor(cfg),
       keySourceEnv: keyInfo.sourceEnv,
       keyDirtyInEnv: Boolean(keyInfo.dirtyInEnv),
       defaultModel: getModelCandidates(id)[0] || cfg.defaultModel,
       modelCandidates: getModelCandidates(id),
+      /*
+       * What the smartest mode would actually try, published next to the
+       * historical default so a panel can show both without guessing. On a
+       * provider with no flagship ladder these are identical.
+       */
+      intelligenceMode: activeIntelligenceMode,
+      intelligenceModel: getModelCandidates(id, null, { mode: activeIntelligenceMode })[0] || cfg.defaultModel,
+      intelligenceCandidates: getModelCandidates(id, null, { mode: activeIntelligenceMode }),
       modelEnv: cfg.modelEnv || null,
       specialty: cfg.specialty,
       costTier: cfg.costTier,
@@ -764,7 +868,7 @@ export function getAvailableProviders() {
        * what it says (we have never called it), never "it failed a moment ago".
        */
       verdict: !configured
-        ? 'NEEDS_KEY'
+        ? (fleetExclusion === 'NOT_IN_FLEET' ? 'OUT_OF_FLEET' : 'NEEDS_KEY')
         : (h?.circuitOpen || h?.lastError
             ? `ERROR:${h.openReason || h.lastError.reasonCode || 'UNKNOWN'}`
             : (h?.lastSuccess ? 'HEALTHY' : 'UNTESTED'))
@@ -788,6 +892,7 @@ export function getFleetSummary() {
   const providers = getAvailableProviders();
   const external = providers.filter((p) => p.id !== 'internal');
   const configured = external.filter((p) => p.configured);
+  const outOfFleet = external.filter((p) => p.inFleet === false);
   const healthy = configured.filter((p) => p.verdict === 'HEALTHY');
   const failing = configured.filter((p) => String(p.verdict).startsWith('ERROR'));
   return {
@@ -796,7 +901,13 @@ export function getFleetSummary() {
     healthy: healthy.length,
     failing: failing.length,
     untested: configured.filter((p) => p.verdict === 'UNTESTED').length,
-    needsKey: external.filter((p) => !p.configured).map((p) => p.envVar),
+    /* `needsKey` now means exactly that: in the fleet, no key. A provider the
+       operator left out of `FBT_AI_PROVIDERS` is named separately instead of
+       being reported as a missing key it may well have. */
+    needsKey: external.filter((p) => !p.configured && p.inFleet !== false).map((p) => p.envVar),
+    fleet: describeProviderFleet(),
+    outOfFleet: outOfFleet.map((p) => p.id),
+    outOfFleetWithKey: outOfFleet.filter((p) => p.keyPresent).map((p) => p.id),
     healthyIds: healthy.map((p) => p.id),
     failingIds: failing.map((p) => ({ id: p.id, verdict: p.verdict, reason: p.health?.lastError?.reasonCode || null, fix: p.health?.lastError?.fix || null })),
     /* The answer to «چرا هوش مصنوعی کار نمی‌کند؟» in one field: which brain is
@@ -854,7 +965,7 @@ export function normalizeUsage(raw) {
 // ---------------------------------------------------------------------------
 
 /** OpenAI Compatible Chat (OpenRouter, Groq, DeepSeek, Mistral, AIMLAPI) */
-async function callOpenAICompatible({ url, apiKey, model, system, user, temperature = 0.3, maxTokens = 800, json = false, extraHeaders = {}, timeout = TIMEOUT_MS, withUsage = false, signal = null }) {
+async function callOpenAICompatible({ url, apiKey, model, system, user, temperature = 0.3, maxTokens = 800, json = false, extraHeaders = {}, extraBody = {}, timeout = TIMEOUT_MS, withUsage = false, signal = null }) {
   assertNoSecretsInPayload({ system, user });
   const sanitizedSystem = sanitizePrompt(system);
   const sanitizedUser = sanitizePrompt(user);
@@ -873,7 +984,10 @@ async function callOpenAICompatible({ url, apiKey, model, system, user, temperat
     ],
     temperature,
     max_tokens: maxTokens,
-    ...(json ? { response_format: { type: 'json_object' } } : {})
+    ...(json ? { response_format: { type: 'json_object' } } : {}),
+    /* Only the smartest mode adds vendor-specific reasoning knobs, and only
+       for model ids that document them — see server/aiIntelligence.js. */
+    ...(extraBody && typeof extraBody === 'object' ? extraBody : {})
   };
 
   const raw = await httpReq(url, {
@@ -888,7 +1002,7 @@ async function callOpenAICompatible({ url, apiKey, model, system, user, temperat
 }
 
 /** Google Gemini Chat */
-async function callGemini({ apiKey, model, system, user, temperature = 0.3, maxTokens = 800, json = false, timeout = TIMEOUT_MS, withUsage = false, signal = null }) {
+async function callGemini({ apiKey, model, system, user, temperature = 0.3, maxTokens = 800, json = false, thinkingConfig = null, timeout = TIMEOUT_MS, withUsage = false, signal = null }) {
   assertNoSecretsInPayload({ system, user });
   const sanitizedSystem = sanitizePrompt(system);
   const sanitizedUser = sanitizePrompt(user);
@@ -905,7 +1019,8 @@ async function callGemini({ apiKey, model, system, user, temperature = 0.3, maxT
     generationConfig: {
       temperature,
       maxOutputTokens: maxTokens,
-      ...(json ? { responseMimeType: 'application/json' } : {})
+      ...(json ? { responseMimeType: 'application/json' } : {}),
+      ...(thinkingConfig && typeof thinkingConfig === 'object' ? thinkingConfig : {})
     }
   };
 
@@ -931,11 +1046,25 @@ async function callGemini({ apiKey, model, system, user, temperature = 0.3, maxT
 }
 
 /** Anthropic Claude Chat */
-async function callAnthropic({ apiKey, model, system, user, temperature = 0.3, maxTokens = 800, timeout = TIMEOUT_MS, withUsage = false, signal = null }) {
+async function callAnthropic({ apiKey, model, system, user, temperature = 0.3, maxTokens = 800, thinking = null, timeout = TIMEOUT_MS, withUsage = false, signal = null }) {
   assertNoSecretsInPayload({ system, user });
   const sanitizedSystem = sanitizePrompt(system);
   const sanitizedUser = sanitizePrompt(user);
 
+  /*
+   * Extended thinking is a mode decision, not a default: `thinking` is null
+   * unless the caller asked for the smartest mode AND the model is a Claude
+   * 4.x id. When it is on, the API rejects sampling parameters, so the
+   * temperature is omitted on the FIRST attempt instead of paying for a 400
+   * and a retry.
+   */
+  const body = {
+    model,
+    system: sanitizedSystem || undefined,
+    messages: [{ role: 'user', content: sanitizedUser }],
+    max_tokens: maxTokens,
+    ...(thinking && typeof thinking === 'object' ? { thinking } : {})
+  };
   const call = (withTemperature) => httpReq(PROVIDER_CONFIGS.anthropic.url, {
     method: 'POST',
     headers: {
@@ -944,17 +1073,14 @@ async function callAnthropic({ apiKey, model, system, user, temperature = 0.3, m
       'anthropic-version': '2023-06-01'
     },
     body: JSON.stringify({
-      model,
-      system: sanitizedSystem || undefined,
-      messages: [{ role: 'user', content: sanitizedUser }],
-      max_tokens: maxTokens,
+      ...body,
       ...(withTemperature ? { temperature } : {})
     })
   }, timeout, signal);
 
   let raw;
   try {
-    raw = await call(true);
+    raw = await call(!thinking);
   } catch (err) {
     /*
      * Current Claude models (Sonnet 5 and the thinking family) run adaptive
@@ -1105,15 +1231,28 @@ function callInternalEngine({ system = '', user = '', taskType = 'general', json
 // ---------------------------------------------------------------------------
 
 /** One attempt against ONE model of one provider. */
-async function runProviderModel(providerId, cfg, apiKey, model, { system, user, temperature, maxTokens, json, timeout, withUsage, signal }) {
+async function runProviderModel(providerId, cfg, apiKey, model, { system, user, temperature, maxTokens, json, mode = null, timeout, withUsage, signal }) {
   if (providerId === 'internal') {
     return callInternalEngine({ system, user, json });
   }
   if (cfg.type === 'gemini-native') {
-    return callGemini({ apiKey, model, system, user, temperature, maxTokens, json, timeout, withUsage, signal });
+    const thinkingConfig = intelligenceGeminiThinking(mode, model);
+    return callGemini({ apiKey, model, system, user, temperature, maxTokens, json, thinkingConfig, timeout, withUsage, signal });
   }
   if (cfg.type === 'anthropic-native') {
-    return callAnthropic({ apiKey, model, system, user, temperature, maxTokens, timeout, withUsage, signal });
+    const budget = intelligenceAnthropicThinking(mode, model, maxTokens);
+    return callAnthropic({
+      apiKey,
+      model,
+      system,
+      user,
+      temperature,
+      maxTokens: budget ? budget.maxTokens : maxTokens,
+      thinking: budget ? budget.thinking : null,
+      timeout,
+      withUsage,
+      signal
+    });
   }
   if (cfg.type === 'workersai-native') {
     const accountId = getCloudflareAccountId();
@@ -1126,7 +1265,8 @@ async function runProviderModel(providerId, cfg, apiKey, model, { system, user, 
     extraHeaders['HTTP-Referer'] = SITE_URL;
     extraHeaders['X-Title'] = 'FBT Smart Intent OS';
   }
-  return callOpenAICompatible({ url: cfg.url, apiKey, model, system, user, temperature, maxTokens, json, extraHeaders, timeout, withUsage, signal });
+  const extraBody = intelligenceReasoningFields(providerId, mode, model);
+  return callOpenAICompatible({ url: cfg.url, apiKey, model, system, user, temperature, maxTokens, json, extraHeaders, extraBody, timeout, withUsage, signal });
 }
 
 /**
@@ -1154,6 +1294,7 @@ export async function executeProviderChat(providerId, {
   temperature = 0.3,
   maxTokens = 800,
   json = false,
+  intelligence = null,
   timeout = TIMEOUT_MS,
   withUsage = false,
   signal = null
@@ -1161,6 +1302,14 @@ export async function executeProviderChat(providerId, {
   const cfg = PROVIDER_CONFIGS[providerId];
   if (!cfg) throw new Error(`UNKNOWN_PROVIDER:${providerId}`);
 
+  /*
+   * Every path that reaches a provider lands here, so this is where a mode
+   * becomes real. Without an explicit mode the deployment default applies —
+   * which is `max` — meaning direct callers (consensus, web research, the
+   * collaboration roles) get the flagship ladder too, not just chat.
+   */
+  const resolved = resolveIntelligenceMode(intelligence);
+  const mode = resolved.mode;
   const startedAt = Date.now();
   const attempts = [];
 
@@ -1173,7 +1322,7 @@ export async function executeProviderChat(providerId, {
       throw err;
     }
 
-    const candidates = getModelCandidates(providerId, model);
+    const candidates = getModelCandidates(providerId, model, { mode });
     let lastErr = null;
     let lastClass = null;
 
@@ -1183,7 +1332,7 @@ export async function executeProviderChat(providerId, {
            it. The provider already returns it in the same response body, so
            the only cost is a few bytes — and without it the dashboard's token
            counter would be structurally blind. */
-        const response = await runProviderModel(providerId, cfg, apiKey, candidate, { system, user, temperature, maxTokens, json, timeout, withUsage: true, signal });
+        const response = await runProviderModel(providerId, cfg, apiKey, candidate, { system, user, temperature, maxTokens, json, mode, timeout, withUsage: true, signal });
         const text = typeof response === 'string' ? response : response.text;
         const usage = typeof response === 'string' ? null : response.usage;
         const durationMs = Date.now() - startedAt;
@@ -1199,7 +1348,10 @@ export async function executeProviderChat(providerId, {
           /* Which seat the answer really came from: a model, not the rules. */
           engine: 'external-model',
           usage: usage ?? null,
-          usageReported: usage != null
+          usageReported: usage != null,
+          /* Which intelligence mode produced this seat, so a caller can print
+             it instead of guessing. */
+          intelligence: { mode, source: resolved.source }
         };
       } catch (err) {
         const cls = classifyAiError(err, providerId);
@@ -1266,7 +1418,7 @@ export async function executeProviderChat(providerId, {
  * - fast / intent: Workers AI -> Groq -> Gemini -> Mistral -> AIMLAPI -> OpenRouter -> Internal
  * - default: OpenRouter -> Groq -> Gemini -> Workers AI -> AIMLAPI -> DeepSeek -> Anthropic -> Mistral -> Internal
  */
-export function getPreferredProvidersForTask(taskType = 'general', { configuredOnly = false } = {}) {
+export function getPreferredProvidersForTask(taskType = 'general', { configuredOnly = false, intelligence = null } = {}) {
   const type = String(taskType).toLowerCase();
   let candidateOrder = [];
 
@@ -1309,6 +1461,22 @@ export function getPreferredProvidersForTask(taskType = 'general', { configuredO
       break;
   }
 
+  /*
+   * `max` re-orders the substantive tasks toward the reasoning seats. This is
+   * deliberately opt-in through an explicit mode argument: callers that never
+   * pass one (and every historical test) keep the exact list above, so a
+   * smarter default cannot silently move a pinned route. Latency-bound jobs
+   * (`fast` / `intent`) are returned unchanged by `intelligenceProviderOrder`.
+   */
+  const smartOrder = intelligenceProviderOrder(type, intelligence);
+  if (smartOrder) {
+    /* The ladder is an ordering, not a licence: a flagship id on a provider
+       outside the fleet would just be a name we cannot call. */
+    const registered = smartOrder.filter((id) => Boolean(PROVIDER_CONFIGS[id]) && isProviderInFleet(id));
+    const rest = candidateOrder.filter((id) => !registered.includes(id));
+    candidateOrder = [...registered, ...rest];
+  }
+
   if (!configuredOnly) {
     return candidateOrder;
   }
@@ -1333,6 +1501,9 @@ export async function routedChat({
   json = false,
   allowInternalFallback = true,
   withUsage = false,
+  /* 'swift' | 'balanced' | 'max' | null. Null means "use the deployment
+     default", which is `max`. See server/aiIntelligence.js. */
+  intelligence = null,
   signal = null,
   /* Operator kill-switch / drill lever: a provider named here is skipped for
      THIS request only. The benchmark lab uses it to exercise the real failover
@@ -1349,7 +1520,16 @@ export async function routedChat({
   const envPrimary = normalizeSecretValue(process.env.AI_PRIMARY_PROVIDER).toLowerCase();
   const primary = preferredProvider || (PROVIDER_CONFIGS[envPrimary] ? envPrimary : null);
 
-  const taskOrder = getPreferredProvidersForTask(taskType, { configuredOnly: true }).filter((p) => p !== primary && p !== 'internal');
+  /*
+   * One resolution for the whole request: the mode decides provider ORDER,
+   * model ladder, temperature and token budget together. Resolving it four
+   * times would let a request disagree with itself.
+   */
+  const resolvedIntelligence = resolveIntelligenceMode(intelligence);
+  const mode = resolvedIntelligence.mode;
+  const generation = intelligenceGeneration(mode, { temperature, maxTokens, taskType });
+
+  const taskOrder = getPreferredProvidersForTask(taskType, { configuredOnly: true, intelligence: mode }).filter((p) => p !== primary && p !== 'internal');
   const ordered = primary && isProviderConfigured(primary) ? [primary, ...taskOrder] : taskOrder;
   /*
    * Health-aware, not just preference-aware. Before this, a `fast` task walked
@@ -1371,8 +1551,9 @@ export async function routedChat({
         system,
         user,
         model: providerId === primary ? model : null,
-        temperature,
-        maxTokens,
+        temperature: generation.temperature,
+        maxTokens: generation.maxTokens,
+        intelligence: mode,
         json,
         withUsage,
         signal
@@ -1381,6 +1562,13 @@ export async function routedChat({
         ...res,
         taskType,
         requestedProvider: primary,
+        intelligence: {
+          mode,
+          source: resolvedIntelligence.source,
+          requested: resolvedIntelligence.requested,
+          rejected: resolvedIntelligence.rejected,
+          apiAnswerMode: getIntelligenceProfile(mode).id
+        },
         triedBefore: errors,
         failoverTrail: errors
       };
@@ -1410,6 +1598,12 @@ export async function routedChat({
     ...internalRes,
     taskType,
     requestedProvider: primary,
+    intelligence: {
+      mode,
+      source: resolvedIntelligence.source,
+      requested: resolvedIntelligence.requested,
+      rejected: resolvedIntelligence.rejected
+    },
     failoverTrail: errors,
     triedBefore: errors,
     degraded: true,
@@ -1430,10 +1624,11 @@ export async function routedChat({
  * Parallel Multi-Provider Query (for Debate, Consensus, and Multi-Agent Reasoning).
  */
 export async function parallelMultiProviderChat({
-  // Grok's debate seat is gone; OpenRouter, Gemini and Anthropic are the
-  // three configured providers with the widest disagreement, which is the
-  // point of a debate.
-  providers = ['openrouter', 'gemini', 'anthropic'],
+  /* Grok's debate seat is gone. The debate seats are the fleet that can
+     actually answer here — OpenRouter, Groq and Workers AI — because a debate
+     whose seats are keyed-out providers collapses to one voice (or none), and
+     `isProviderConfigured` below would silently drop them. */
+  providers = ['openrouter', 'groq', 'workersai'],
   system = '',
   user = '',
   temperature = 0.3,
@@ -1486,6 +1681,21 @@ export async function gatewaySelfTest() {
 
   const probe = async (p) => {
     if (!p.configured) {
+      /* Out of the declared fleet is not the same fact as a missing key: the
+         operator chose not to call this provider, and the fix is a value, not
+         a secret. */
+      if (p.inFleet === false) {
+        return {
+          id: p.id,
+          name: p.name,
+          status: 'OUT_OF_FLEET',
+          reasonCode: 'NOT_IN_FLEET',
+          reason: `Provider is outside the declared fleet (FBT_AI_PROVIDERS=${describeProviderFleet().providers})`,
+          fix: 'Add it to FBT_AI_PROVIDERS (or set FBT_AI_PROVIDERS=all) and redeploy.',
+          envVar: p.envVar,
+          keyPresent: Boolean(p.keyPresent)
+        };
+      }
       return {
         id: p.id,
         name: p.name,
@@ -1554,6 +1764,7 @@ export async function gatewaySelfTest() {
       healthyCount: healthy.length,
       errorCount: errored.length,
       unconfiguredCount: testResults.filter((r) => r.status === 'UNCONFIGURED').length,
+      outOfFleetCount: testResults.filter((r) => r.status === 'OUT_OF_FLEET').length,
       /* The single number that answers the operator's question: how many of
          the keyed providers can actually serve a request right now. */
       usableExternalModels: healthy.filter((r) => r.id !== 'internal').length

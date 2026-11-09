@@ -39,6 +39,13 @@ const PROVIDER_ENV = {
 const ALL_EXTERNAL = ['openrouter', 'groq', 'gemini', 'anthropic', 'deepseek', 'mistral', 'workersai', 'aimlapi'];
 const ALL_NINE = [...ALL_EXTERNAL, 'internal'];
 
+/* These checks exercise the routing mechanics for EVERY provider the gateway
+   registers, so the deployment's declared fleet (three working keys) is lifted
+   for the duration. The fleet restriction is tested in
+   ai-provider-fleet.test.mjs. */
+const savedFleet = process.env.FBT_AI_PROVIDERS;
+process.env.FBT_AI_PROVIDERS = 'all';
+
 const savedEnv = {};
 for (const [k, v] of Object.entries(PROVIDER_ENV)) {
   savedEnv[k] = process.env[k];
@@ -164,4 +171,6 @@ function restoreEnv() {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
+  if (savedFleet === undefined) delete process.env.FBT_AI_PROVIDERS;
+  else process.env.FBT_AI_PROVIDERS = savedFleet;
 }

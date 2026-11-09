@@ -103,6 +103,7 @@ import { getVerifiedIntelligence } from './smartMoney/intelligence.js';
 import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { ownerFromRequest, listGoals, createGoal, parseGoalFromText } from './financialGoals.js';
+import { normalizeResearchAgenda } from './aiResearchAgenda.js';
 import { withCache } from './cache.js';
 import {
   INTENT_OS_PROMPT_VERSION,
@@ -119,6 +120,7 @@ import {
   getActiveProviderIds,
   getFleetSummary,
   getProviderHealth,
+  describeProviderFleet,
   routedChat,
   gatewaySelfTest
 } from './aiGateway.js';
@@ -146,9 +148,16 @@ import {
    models/tools/web inside that budget; question-intel learns what users
    actually ask. Execution authority is untouched (§67). */
 import { planCollaboration } from '../src/lib/intent-ai/os/collaborationRouter.js';
+import { readPartialInput } from '../src/lib/intent-ai/os/conversation/partialInput.js';
+import { detectProductQuestion, answerProduct } from './aiProductBrain.js';
 import { resolveAsset } from './intentMonitoring.js';
 import { fetchCoinDetail } from './providers.js';
 import { runCollaborativeAnalysis, formatEmotionalAcknowledgement } from './aiCollaboration.js';
+import {
+  resolveIntelligenceMode,
+  getIntelligenceProfile,
+  describeIntelligence
+} from './aiIntelligence.js';
 import { researchWeb, analyzeWithSources, analyzeNewsImpact } from './aiWebResearch.js';
 import {
   recordQuestion,
@@ -398,9 +407,26 @@ function sanitizePortfolio(value) {
     };
   });
   const totalValueUsd = Number.isFinite(Number(value?.totalValueUsd ?? value?.totalValue)) ? Number(value.totalValueUsd ?? value.totalValue) : null;
+  /*
+   * Aggregate profit/loss, when the client has it. These are the numbers the
+   * situation layer (§۵٫۲۳) reads to tell a loss from a gain — and the reason
+   * it must never guess: a portfolio without a cost basis has no P&L, only a
+   * daily move. Bounded, finite, aggregate only: no addresses, no per-trade
+   * history, nothing that identifies a wallet.
+   */
+  const money = (v) => (Number.isFinite(Number(v)) && Math.abs(Number(v)) < 1e12 ? Number(v) : null);
+  const costBasisUsd = money(value?.costBasisUsd ?? value?.costBasis);
+  const pnlUsd = money(value?.pnlUsd ?? value?.unrealizedPnlUsd);
+  const pnlPct = money(value?.pnlPct ?? value?.unrealizedPnlPct);
   return {
     dataStatus: value.dataStatus || (totalValueUsd != null ? 'client' : 'unavailable'),
     totalValueUsd,
+    costBasisUsd,
+    pnlUsd,
+    pnlPct,
+    realizedPnlUsd: money(value?.realizedPnlUsd),
+    change24hPct: money(value?.change24hPct),
+    cashUsd: money(value?.cashUsd),
     holdings,
     /* Chain-read diagnostics: lets the reply distinguish «portfolio is
        empty» (a definitive on-chain answer) from «the chain read failed»
@@ -550,7 +576,12 @@ async function buildAIContext(req, body = {}, opts = {}) {
   try {
     centralIngestClientData(userId, {
       wallet: { connected: wallet.connected, canSign: wallet.canSign, evmAddresses: wallet.evmAddresses, solanaAddresses: wallet.solanaAddresses },
-      portfolio: { totalValueUsd: portfolio.totalValueUsd, holdings: portfolio.holdings, partial: portfolio.partial },
+      portfolio: {
+        totalValueUsd: portfolio.totalValueUsd,
+        change24hPct: portfolio.change24hPct,
+        holdings: portfolio.holdings,
+        partial: portfolio.partial
+      },
       balances,
       positions,
       openOrders: orders,
@@ -994,11 +1025,75 @@ router.get('/system-prompt', (_req, res) => res.json({
 router.get('/tools', (_req, res) => res.json({ ok: true, schema: AI_TOOL_SCHEMA, tools: listAiTools(), at: nowMs() }));
 
 /* FBT AI Gateway Endpoints (Spec Phase 3) */
+/*
+ * The intelligence-mode contract, readable without spending a token.
+ *
+ *   GET /api/v1/ai/intelligence            → the active mode + all modes
+ *   GET /api/v1/ai/intelligence?mode=swift → what *that* mode would do
+ *
+ * It exists so the UI (and an operator debugging «چرا جواب کوتاه است؟») can
+ * show the real default instead of hard-coding one, and so `max` is
+ * inspectable: the model ladders and token budgets are in the payload.
+ */
+router.get('/intelligence', (req, res) => {
+  const requested = typeof req.query?.mode === 'string' && req.query.mode.trim() ? req.query.mode.trim() : null;
+  const report = describeIntelligence({ requested });
+  return res.json({
+    ok: true,
+    ...report,
+    /* Which providers this deployment may call at all, and on whose say-so. */
+    fleet: describeProviderFleet(),
+    /* What the gateway would actually try, provider by provider. */
+    providers: getAvailableProviders().map((p) => ({
+      id: p.id,
+      configured: p.configured,
+      inFleet: p.inFleet !== false,
+      excludedBy: p.excludedBy || null,
+      defaultModel: p.defaultModel,
+      intelligenceModel: p.intelligenceModel,
+      intelligenceCandidates: p.intelligenceCandidates
+    })),
+    at: nowMs()
+  });
+});
+
+/**
+ * The research agenda: what this assistant still does not know about this
+ * owner's questions, and what it has closed. Owner-scoped, no message text —
+ * facets, counters and timestamps only. It exists so «همیشه در حال ارتقا»
+ * is inspectable instead of a claim.
+ */
+router.get('/research/agenda', async (req, res) => {
+  const owner = ownerFor(req);
+  let raw = [];
+  try {
+    raw = await storeGet(`ai:research-agenda:v1:${owner || 'anon'}`, []) || [];
+  } catch {
+    raw = [];
+  }
+  const items = normalizeResearchAgenda(raw);
+  const open = items.filter((i) => i.status === 'open');
+  const resolved = items.filter((i) => i.status === 'resolved');
+  return res.json({
+    ok: true,
+    schema: 'fbt.ai-research-agenda.v1',
+    open,
+    resolved: resolved.slice(-8),
+    counts: {
+      open: open.length,
+      resolved: resolved.length,
+      repeated: open.filter((i) => i.seenCount > 1).length
+    },
+    at: nowMs()
+  });
+});
+
 router.get('/gateway/providers', (_req, res) => res.json({
   ok: true,
   schema: 'fbt.ai-providers.v1',
   providers: getAvailableProviders(),
   activeProviderIds: getActiveProviderIds(),
+  fleet: describeProviderFleet(),
   /*
    * The fleet in one object: how many keys are present, how many of those
    * actually answered the last time they were called, and what is wrong with
@@ -1018,6 +1113,7 @@ router.get('/gateway/health', (_req, res) => res.json({
   ok: true,
   schema: 'fbt.ai-gateway-health.v1',
   summary: getFleetSummary(),
+  fleet: describeProviderFleet(),
   health: getProviderHealth(),
   providers: getAvailableProviders().map((p) => ({
     id: p.id,
@@ -1234,6 +1330,7 @@ router.post('/collaborate', async (req, res) => {
     const context = req.body?.context && typeof req.body.context === 'object' ? req.body.context : {};
     const result = await runCollaborativeAnalysis({
       message,
+      owner: ownerFor(req),
       context,
       locale,
       intentType: req.body?.intentType || null,
@@ -1928,6 +2025,27 @@ router.post('/chat', async (req, res) => {
    * nothing that carries a language while the interface is Persian. Never
    * Persian by default for somebody who cannot read it.
    */
+  /*
+   * ─── PARTIAL INPUT, BEFORE THE DETERMINISTIC REPLY ────────────────────────
+   * This route answers most short messages with the rule engine, and a fragment
+   * used to leave it through one generic sentence. Read the message first, so
+   * the reply can say what it understood (and ask the one question) instead.
+   * Deterministic, no model call, and '' for a complete message.
+   */
+  const partialRead = readPartialInput({
+    message,
+    locale: locale || 'fa',
+    context: {
+      currentPage: req.body?.surface || req.body?.currentPage || '/',
+      lastAssets: Array.isArray(context?.lastAssets) ? context.lastAssets : []
+    },
+    priorIntent: u4?.type || null
+  });
+  /* A question about FBT itself gets the verified answer from the repository —
+     deterministically, in every mode, without a wallet and without a model. */
+  const productRead = detectProductQuestion(message)
+    ? answerProduct({ message, locale: locale || 'fa' })
+    : null;
   const replyLang = respondIn(message, { declared: locale || 'fa' }).lang;
   const deterministicLocale = replyLang === 'fa' ? 'fa' : 'en';
   const human = formatHumanResponse({
@@ -1939,6 +2057,8 @@ router.post('/chat', async (req, res) => {
     resumed,
     suggestions,
     intentId,
+    partial: partialRead,
+    product: productRead,
     resolvedHints: {
       /* What the SENTENCE states — the amount, the unit it was written in and
          the network the user named. The parser's from/to token guesses are
@@ -2020,13 +2140,30 @@ router.post('/chat', async (req, res) => {
     'PORTFOLIO_ANALYSIS', 'INVESTMENT_PLAN', 'YIELD_DISCOVERY', 'STAKING', 'LEND',
     'FARM', 'REBALANCE', 'STOCKS', 'WHALE'
   ];
+  /*
+   * ─── INTELLIGENCE MODE — THE ANSWER TO «باهوش‌ترین حالت» ────────────────
+   * Resolved once per turn, before the plan: the mode sets both the DEPTH
+   * floor of the collaboration plan and the model ladder the gateway will
+   * walk. An unknown value is reported, never silently obeyed, and a
+   * deployment can change its default with `FBT_AI_INTELLIGENCE` without a
+   * deploy of logic. Small talk stays small even in the smartest mode.
+   */
+  const resolvedIntelligence = resolveIntelligenceMode(req.body?.intelligence ?? null);
+  const intelligenceProfile = getIntelligenceProfile(resolvedIntelligence.mode);
   const u5 = planCollaboration({
     message,
     intentType: intent || 'GENERAL',
     entities: u4.entities || {},
     context: { currentPage: req.body?.surface || req.body?.currentPage || '/' },
     priorIntent: prior?.intent || null,
-    locale: locale || 'fa'
+    locale: locale || 'fa',
+    intelligence: resolvedIntelligence.mode,
+    intelligenceFloor: intelligenceProfile.collaborationFloor,
+    intelligenceCeiling: intelligenceProfile.collaborationCeiling
+,
+    /* Increment 23 — deep thinking is the default; a deployment can turn it
+       off with FBT_AI_DEEP_THINK=0 and get the pre-increment behaviour. */
+    deepThink: String(process.env.FBT_AI_DEEP_THINK ?? '1') !== '0'
   });
   /*
    * ─── UPGRADE 13 — THE SOCIAL TURN IS ANSWERED BEFORE ANYTHING ELSE ──────
@@ -2054,7 +2191,15 @@ router.post('/chat', async (req, res) => {
     transparency: req.body?.transparency === true
   });
   const isCollaborativeIntent = COLLABORATION_INTENTS.includes(String(human.intent?.type || intent || 'GENERAL'));
+  /* Questions about FBT itself are answered from the verified product brain —
+     deterministically, in every mode, and never handed to a model. A model has
+     nothing to add to «کارمزد ۰٫۷٪ است» except the chance of inventing a fee, a
+     founder or a route (increment 22). The brain's answer is already in
+     `human.message`, so the only thing this guard does is stop the model from
+     talking over it. */
+  const productAnswered = Boolean(productRead && productRead.confidence === 'verified');
   const collaborationWanted = isCollaborativeIntent
+    && !productAnswered
     && !human.pendingIntent
     && !['ACTION_CARD', 'CONNECT_WALLET', 'CHOICE'].includes(human.ui?.type)
     /* A deliberate fail-closed answer («no verified executor», «no live
@@ -2068,6 +2213,7 @@ router.post('/chat', async (req, res) => {
     try {
       collaboration = await runCollaborativeAnalysis({
         message,
+        owner: ownerFor(req),
         context: {
           market: context.market,
           portfolio: context.portfolio,
@@ -2093,6 +2239,7 @@ router.post('/chat', async (req, res) => {
         intentType: human.intent?.type || intent,
         entities: u4.entities || {},
         analysis: u5,
+        intelligence: resolvedIntelligence.mode,
         locale: locale || 'fa',
         transparency: req.body?.transparency === true
       });
@@ -2316,6 +2463,229 @@ router.post('/chat', async (req, res) => {
       degraded: collaboration?.degraded ?? false,
       webUsed: collaboration?.evidence?.webUsed || false,
       latencyMs: collaboration?.latencyMs || 0,
+      /* The depth that actually happened: how many models were consulted and
+         whether the adversarial review ran and repaired the draft. The UI can
+         print this without re-deriving anything. */
+      depth: collaboration ? {
+        level: collaboration.level ?? null,
+        models: (collaboration.modelsConsulted || []).length,
+        reviewed: collaboration.critique?.used === true,
+        reviewReason: collaboration.critique?.reason || null,
+        reviewIssues: Array.isArray(collaboration.critique?.issues) ? collaboration.critique.issues.slice(0, 4) : [],
+        /* Multi-part questions (smartest mode): how many parts the message
+           explicitly asked for and how many the final answer left untouched.
+           `null` = one question; nothing was split. */
+        parts: Array.isArray(collaboration.subQuestions?.parts) ? collaboration.subQuestions.parts.length : null,
+        unanswered: Array.isArray(collaboration.subQuestions?.uncovered) ? collaboration.subQuestions.uncovered.length : null,
+        complete: collaboration.subQuestions ? collaboration.subQuestions.complete === true : null,
+        /* Numbers in the final answer that the evidence cannot source. The
+           review fixes or withdraws them before the user reads the answer, so
+           a non-zero value here is post-review telemetry, not a warning. */
+        unsourcedNumbers: Array.isArray(collaboration.numericAudit?.unsourced) ? collaboration.numericAudit.unsourced.length : null,
+        /* Pre-synthesis claim ledger (smartest mode): how many of the analysts'
+           factual claims tool/web evidence actually supports, how many only
+           models agree on, and how many subjects two analysts contradict. */
+        verifiedClaims: collaboration.synthesisLedger?.verifiedCount ?? null,
+        consensusOnlyClaims: collaboration.synthesisLedger?.consensusOnlyCount ?? null,
+        conflictingFigures: collaboration.synthesisLedger?.conflictCount ?? null,
+        /* The dissenting seat: which role was told to argue against the obvious
+           reading, and whether it produced an analysis. null outside `max`. */
+        redTeamRole: collaboration.counterCase?.role ?? null,
+        redTeamAnswered: collaboration.counterCase ? collaboration.counterCase.answered === true : null
+      } : null,
+      /* Which brain was asked for, what it actually did, and whether the mode
+         raised this turn's depth. The UI prints the mode; the plan fields let
+         it explain WHY a turn was deep without re-deriving anything. */
+      mode: {
+        schema: 'fbt.ai-intelligence.v1',
+        id: resolvedIntelligence.mode,
+        /* The reasoning persona of this turn: in the smartest mode the
+           specialists are held to an economist's lenses (mechanism, base rate,
+           transmission, incentives, opportunity cost, time horizon,
+           falsifiability). null when no lens was selected. */
+        persona: collaboration?.persona?.id || null,
+        lenses: Array.isArray(collaboration?.persona?.lenses) ? collaboration.persona.lenses : [],
+        /* The social read of the user's message: register, tone, the need
+           behind the literal question, and how much was left unsaid. */
+        /* The decision verdict of the turn (smartest mode): whether the user
+           asked for a decision, how much evidence the turn held, what that
+           permits, and whether the final answer obeyed. */
+        decision: collaboration?.decision?.applicable ? {
+          verdict: collaboration.decision.verdict,
+          evidenceLevel: collaboration.decision.evidence?.level ?? null,
+          evidenceScore: collaboration.decision.evidence?.score ?? null,
+          evidenceReasons: Array.isArray(collaboration.decision.evidence?.reasons) ? collaboration.decision.evidence.reasons : [],
+          missing: Array.isArray(collaboration.decision.evidence?.missing) ? collaboration.decision.evidence.missing : [],
+          recommendationDetected: collaboration.decision.recommendationDetected === true,
+          compliant: collaboration.decision.compliant === true
+        } : null,
+        /* Strategy turns: the computed frame the plan stood on and the rubric
+           result for the answer. null when the turn was not a strategy turn. */
+        strategy: collaboration?.strategy ? {
+          capitalUsd: collaboration.strategy.frame?.capitalUsd ?? null,
+          concentration: collaboration.strategy.frame?.concentration ?? null,
+          feeRoundTripPct: collaboration.strategy.frame?.feeRoundTripPct ?? null,
+          gaps: Array.isArray(collaboration.strategy.frame?.gaps) ? collaboration.strategy.frame.gaps : [],
+          /* The goal turned into an obligation: required monthly/annual return
+             and the fee-adjusted gross target. null when the user stated none. */
+          goal: collaboration.strategy.frame?.goal ? {
+            targetPct: collaboration.strategy.frame.goal.targetPct,
+            months: collaboration.strategy.frame.goal.months,
+            requiredMonthlyPct: collaboration.strategy.frame.goal.requiredMonthlyPct,
+            requiredAnnualPct: collaboration.strategy.frame.goal.requiredAnnualPct,
+            grossTargetPct: collaboration.strategy.frame.goal.grossTargetPct
+          } : null,
+          rubricScore: collaboration.strategy.rubric?.score ?? null,
+          rubricMissing: Array.isArray(collaboration.strategy.rubric?.missing) ? collaboration.strategy.rubric.missing : [],
+          /* Arithmetic of the FINAL text: allocations, stop side, leverage,
+             position size and risk budget agree with each other. */
+          arithmeticClean: collaboration.strategy.arithmetic ? collaboration.strategy.arithmetic.clean === true : null,
+          arithmeticViolations: Array.isArray(collaboration.strategy.arithmetic?.violations)
+            ? collaboration.strategy.arithmetic.violations.map((v) => v.id).slice(0, 6)
+            : []
+        } : null,
+        social: collaboration?.socialRead ? {
+          register: collaboration.socialRead.register,
+          tone: collaboration.socialRead.tone,
+          need: collaboration.socialRead.need,
+          ambiguity: collaboration.socialRead.ambiguity,
+          challenged: collaboration.socialRead.challenged === true,
+          /* Safety state: the turn describes serious loss or distress, so no
+             trading advice was given and no promise was made. */
+          distress: collaboration.socialRead.distress === true,
+          pragmatics: collaboration.socialRead.pragmatics || null,
+          relationship: collaboration.socialRead.relationship || null,
+          signals: Array.isArray(collaboration.socialRead.signals) ? collaboration.socialRead.signals.slice(0, 8) : []
+        } : null,
+        /* How the user is talking and how far the answer followed: register,
+           energy, profanity level and its policy (match at level / do not
+           mirror / never a slur), and whether the final text kept to it. */
+        discourse: collaboration?.discourse ? {
+          style: collaboration.discourse.style,
+          energy: collaboration.discourse.energy,
+          warmth: collaboration.discourse.warmth,
+          profanity: collaboration.discourse.profanity || null,
+          emoji: collaboration.discourse.emoji === true,
+          signals: Array.isArray(collaboration.discourse.signals) ? collaboration.discourse.signals : [],
+          violations: Array.isArray(collaboration.discourse.violations) ? collaboration.discourse.violations : [],
+          compliant: collaboration.discourse.compliant === true
+        } : null,
+        /* What FBT itself is: the intent of the product question, how far the
+           verified knowledge could answer it (verified / partial / absent — and
+           «absent» is a real answer for the founders), which pages the answer
+           stands on, and whether the final text invented anything. */
+        product: collaboration?.product ? {
+          intent: collaboration.product.intent,
+          confidence: collaboration.product.confidence,
+          gaps: Array.isArray(collaboration.product.gaps) ? collaboration.product.gaps : [],
+          pageCount: Number.isFinite(collaboration.product.pageCount) ? collaboration.product.pageCount : null,
+          pages: Array.isArray(collaboration.product.pages) ? collaboration.product.pages.slice(0, 8) : [],
+          sources: Array.isArray(collaboration.product.sources) ? collaboration.product.sources.slice(0, 8) : [],
+          violations: Array.isArray(collaboration.product.violations) ? collaboration.product.violations : [],
+          compliant: collaboration.product.compliant === true
+        } : null,
+        /* The user's money and mood read together: direction and magnitude of
+           their own portfolio, the basis of that figure (unrealized / today's
+           move / none), concentration, and whether the answer respected it. */
+        situation: collaboration?.situation ? {
+          state: collaboration.situation.state,
+          direction: collaboration.situation.direction,
+          basis: collaboration.situation.basis,
+          pct: collaboration.situation.pct,
+          magnitudePct: collaboration.situation.magnitudePct,
+          hasRead: collaboration.situation.hasRead === true,
+          concentration: collaboration.situation.concentration || null,
+          cashPct: collaboration.situation.cashPct ?? null,
+          numbers: Array.isArray(collaboration.situation.numbers) ? collaboration.situation.numbers.slice(0, 6) : [],
+          violations: Array.isArray(collaboration.situation.violations) ? collaboration.situation.violations : [],
+          compliant: collaboration.situation.compliant === true
+        } : null,
+        /* The emotional state the answer was written for: the primary emotion,
+           how strongly, whether it is self- or other-directed, what the answer
+           owed it, and whether the final text respected that. */
+        emotion: collaboration?.emotion ? {
+          primary: collaboration.emotion.primary,
+          mixed: Array.isArray(collaboration.emotion.mixed) ? collaboration.emotion.mixed : [],
+          intensity: collaboration.emotion.intensity,
+          acute: collaboration.emotion.acute === true,
+          selfDirected: collaboration.emotion.selfDirected === true,
+          cause: collaboration.emotion.cause || null,
+          valence: collaboration.emotion.valence,
+          arousal: collaboration.emotion.arousal,
+          needs: Array.isArray(collaboration.emotion.needs) ? collaboration.emotion.needs : [],
+          trajectory: collaboration.emotion.trajectory || 'unknown',
+          violations: Array.isArray(collaboration.emotion.violations) ? collaboration.emotion.violations : [],
+          compliant: collaboration.emotion.compliant === true
+        } : null,
+        /* What the turn understood the request to be: the deliverable, the
+           constraints the user actually gave, the slots they left empty, and
+           whether the answer kept those promises. null outside max/level 3+. */
+        request: collaboration?.request ? {
+          deliverable: collaboration.request.deliverable,
+          constraints: collaboration.request.constraints || null,
+          missing: Array.isArray(collaboration.request.missing) ? collaboration.request.missing : [],
+          expertise: collaboration.request.expertise || null,
+          lengthTarget: collaboration.request.lengthTarget ?? null,
+          violations: Array.isArray(collaboration.request.violations) ? collaboration.request.violations : [],
+          compliant: collaboration.request.compliant === true
+        } : null,
+        /* The market frame: what this turn's data measured (breadth, regime,
+           relative strength, supported horizon), what it could not, and whether
+           the answer respected that line. null outside market analysis turns. */
+        market: collaboration?.market ? {
+          dataStatus: collaboration.market.dataStatus,
+          stale: collaboration.market.stale === true,
+          instruments: collaboration.market.instruments ?? null,
+          breadth: collaboration.market.breadth || null,
+          dispersionPct: collaboration.market.dispersionPct ?? null,
+          regime: collaboration.market.regime || null,
+          relative: Array.isArray(collaboration.market.relative) ? collaboration.market.relative.slice(0, 6) : [],
+          leadership: Array.isArray(collaboration.market.leadership) ? collaboration.market.leadership.slice(0, 3) : [],
+          horizon: collaboration.market.horizon || null,
+          notSupported: Array.isArray(collaboration.market.notSupported) ? collaboration.market.notSupported.slice(0, 8) : [],
+          gaps: Array.isArray(collaboration.market.gaps) ? collaboration.market.gaps : [],
+          violations: Array.isArray(collaboration.market.violations) ? collaboration.market.violations : [],
+          compliant: collaboration.market.compliant === true
+        } : null,
+        /* The research posture: which pedagogy lenses the specialists were held
+           to, and whether the final text carries a falsifier. */
+        professor: collaboration?.professor ? {
+          lenses: Array.isArray(collaboration.professor.lenses) ? collaboration.professor.lenses : [],
+          falsifierApplicable: collaboration.professor.falsifier?.applicable === true,
+          falsifierPresent: collaboration.professor.falsifier?.present === true,
+          falsifierCompliant: collaboration.professor.falsifier?.compliant !== false
+        } : null,
+        /* Continuous improvement: which open questions this turn was given,
+           which it opened, which it closed, and how many remain. */
+        research: collaboration?.research ? {
+          briefed: Array.isArray(collaboration.research.briefed) ? collaboration.research.briefed : [],
+          opened: Array.isArray(collaboration.research.opened) ? collaboration.research.opened : [],
+          closed: Array.isArray(collaboration.research.closed) ? collaboration.research.closed : [],
+          repeated: Array.isArray(collaboration.research.repeated) ? collaboration.research.repeated : [],
+          openTotal: collaboration.research.openTotal ?? null
+        } : null,
+        /* What the turn was DOING and whether the answer matched the ask:
+           correction vs follow-up vs question, and the shape (why / how much /
+           which) the answer had to satisfy. null when the turn was not gated. */
+        dialogue: collaboration?.dialogue ? {
+          act: collaboration.dialogue.act,
+          askShape: collaboration.dialogue.askShape,
+          referent: collaboration.dialogue.referent,
+          issues: Array.isArray(collaboration.dialogue.issues) ? collaboration.dialogue.issues : [],
+          compliant: collaboration.dialogue.compliant === true
+        } : null,
+        source: resolvedIntelligence.source,
+        requested: resolvedIntelligence.requested,
+        rejected: resolvedIntelligence.rejected,
+        reasoning: Boolean(intelligenceProfile.reasoning),
+        plan: u5.intelligence || null,
+        /* Increment 23 — deep thinking is on by default, and an incomplete
+           message is never answered on the one-line path. `partial` is what the
+           turn understood the message to mean when the words did not say it. */
+        deepThink: u5.deepThink || null,
+        partial: u5.partial || null,
+        authority: { canExecute: false, canSign: false, canMoveFunds: false }
+      },
       /* Upgrade 13: the escalation trail. `gapReasons` says WHY the fleet was
          consulted and `providersTried` says who was asked and what each of them
          did — including the refusals, because "the model declined" is a fact

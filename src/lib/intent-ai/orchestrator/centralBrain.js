@@ -38,7 +38,10 @@ export const CENTRAL_BRAIN_VERSION = '2.0.0';
 export const MODEL_FLEET_CATALOGUE = Object.freeze({
   groq: {
     provider: 'groq',
-    defaultModel: 'llama-3.3-70b-versatile',
+    /* Groq retired llama-3.3-70b-versatile for free/developer tiers; the
+       gateway's economy seat is the same id named here, so the plan a trace
+       prints is an id that can actually answer. */
+    defaultModel: 'openai/gpt-oss-20b',
     costUnits: 1,
     latencyClass: 'ultra_fast',
     specialties: { fast_general: 0.95, classification: 0.94, quant_technical: 0.72, macro_news: 0.75, strategy_design: 0.72, risk_safety: 0.70, onchain_defi: 0.70, smart_money_flow: 0.70, adversarial_critic: 0.68, synthesis_arbiter: 0.72 }
@@ -112,6 +115,70 @@ const KNOWN_ASSETS = Object.freeze([
   ['USDC', /(?:\busdc\b|یو[\s\u200c]*اس[\s\u200c]*دی[\s\u200c]*سی)/i],
   ['GOLD', /(?:\bxau\b|\bgold\b|طلا|انس\s*جهانی)/i]
 ]);
+
+/**
+ * SEAT WEIGHTS — what the brain optimises when it picks a model.
+ *
+ * The weights below decide whether a seat is chosen for its SPECIALTY or for
+ * its PRICE. One table for every request was the old behaviour, and it made
+ * the two modes lie about themselves: in «باهوش‌ترین» a cheap generalist could
+ * outrank the specialist that is better at exactly this job (cost carried 12%
+ * of the score and a 0.72 affinity gap could be paid for), while in «سریع» the
+ * cheapest seat was not actually preferred enough to matter.
+ *
+ * `default` is the historical table, untouched, so a caller that says nothing
+ * gets the same plan it always got.
+ */
+export const SEAT_WEIGHT_PROFILES = Object.freeze({
+  default: Object.freeze({ affinity: 0.44, trust: 0.28, health: 0.16, cost: 0.12 }),
+  /* `max`: the specialist wins unless it is much less trusted or unhealthy.
+     Cost still breaks ties (6%), it just cannot buy a worse answer. */
+  max: Object.freeze({ affinity: 0.54, trust: 0.26, health: 0.14, cost: 0.06 }),
+  /* `swift`: the cheapest sufficient seat wins; affinity only has to clear
+     «this model can do the job». */
+  swift: Object.freeze({ affinity: 0.36, trust: 0.22, health: 0.18, cost: 0.24 }),
+  balanced: Object.freeze({ affinity: 0.44, trust: 0.28, health: 0.16, cost: 0.12 })
+});
+
+/** The weights for a mode; an unknown/absent mode is the historical table. */
+export function seatWeightsForMode(mode = null) {
+  const key = String(mode || '').toLowerCase();
+  return SEAT_WEIGHT_PROFILES[key] || SEAT_WEIGHT_PROFILES.default;
+}
+
+/**
+ * Which model id a seat actually calls.
+ *
+ * `modelLadders` is the SAME flagship ladder the gateway uses (passed in by the
+ * runtime from `aiIntelligence`, never imported here — this module is shipped
+ * to the client and must stay server-free):
+ *
+ *   max      → the flagship head of the ladder, with the rest as a step-down
+ *   swift    → the cheapest documented step
+ *   balanced / no mode → the catalogue's historical default
+ *
+ * The step-down matters because a retired flagship id is one round-trip, not a
+ * provider switch: the brain names the ids it will try, in order, and the
+ * gateway can honour that list.
+ */
+export function resolveSeatModel(provider, { mode = null, modelLadders = null } = {}) {
+  const base = MODEL_FLEET_CATALOGUE[provider]?.defaultModel || null;
+  const ladder = Array.isArray(modelLadders?.[provider])
+    ? modelLadders[provider].filter((id) => typeof id === 'string' && id.trim())
+    : [];
+  const key = String(mode || '').toLowerCase();
+
+  if (!ladder.length || key === 'balanced' || !key) {
+    return { model: base, modelFallbacks: [], modelSource: 'catalogue' };
+  }
+  if (key === 'max') {
+    return { model: ladder[0], modelFallbacks: ladder.slice(1), modelSource: 'ladder_flagship' };
+  }
+  if (key === 'swift') {
+    return { model: ladder[ladder.length - 1], modelFallbacks: [], modelSource: 'ladder_cheapest' };
+  }
+  return { model: base, modelFallbacks: [], modelSource: 'catalogue' };
+}
 
 export const SOURCE_CREDIBILITY_WEIGHTS = Object.freeze({
   observed_user_state: 1.00,   // Direct wallet / portfolio / quote read
@@ -290,12 +357,18 @@ export function selectOptimalModels({
   subTasks = [],
   availableProviders = null, // array of provider IDs; defaults to configured or full fleet
   providerHealth = {},       // { [provider]: { healthy: boolean, errorRate: 0..1 } }
-  trustWeights = {}          // { [provider]: 0.35..1.65 } from PerformanceLearning
+  trustWeights = {},         // { [provider]: 0.35..1.65 } from PerformanceLearning
+  /* 'max' | 'balanced' | 'swift' | null. Null = historical behaviour. */
+  intelligenceMode = null,
+  /* { provider: [modelId, …] } — the gateway's flagship ladders, passed in by
+     the server runtime. Absent → the catalogue default, exactly as before. */
+  modelLadders = null
 } = {}) {
   const fleetIds = Array.isArray(availableProviders) && availableProviders.length
     ? availableProviders.filter((id) => MODEL_FLEET_CATALOGUE[id])
     : Object.keys(MODEL_FLEET_CATALOGUE);
 
+  const weights = seatWeightsForMode(intelligenceMode);
   const complexity = classification?.complexity || 'SIMPLE';
   // Strict model count budget by complexity!
   const maxDistinctModels = complexity === 'TRIVIAL'
@@ -326,7 +399,8 @@ export function selectOptimalModels({
         provider: p,
         reason: maxDistinctModels === 0 ? 'TRIVIAL_REQUEST_ZERO_LLM_COST_SAVING' : 'NO_PROVIDER_CONFIGURED'
       })),
-      estimatedCostUnits: 0
+      estimatedCostUnits: 0,
+      seatPolicy: { intelligenceMode: intelligenceMode || null, weights: { ...weights }, modelRule: 'none' }
     };
   }
 
@@ -342,10 +416,18 @@ export function selectOptimalModels({
         const trust = clamp(Number(trustWeights[id] ?? 1.0), 0.35, 1.65);
         const healthScore = 1 - clamp(Number(healthInfo.errorRate || 0), 0, 1);
         const costEfficiency = (6 - spec.costUnits) / 5; // prefers cheaper when quality is equal
-        const totalScore = affinity * 0.44 + (trust / 1.4) * 0.28 + healthScore * 0.16 + costEfficiency * 0.12 - overBudgetPenalty;
+        const totalScore = affinity * weights.affinity
+          + (trust / 1.4) * weights.trust
+          + healthScore * weights.health
+          + costEfficiency * weights.cost
+          - overBudgetPenalty;
+        const seat = resolveSeatModel(id, { mode: intelligenceMode, modelLadders });
         return {
           provider: id,
-          model: spec.defaultModel,
+          model: seat.model || spec.defaultModel,
+          modelFallbacks: seat.modelFallbacks,
+          modelSource: seat.modelSource,
+          catalogueDefaultModel: spec.defaultModel,
           costUnits: spec.costUnits,
           latencyClass: spec.latencyClass,
           specialty,
@@ -386,13 +468,15 @@ export function selectOptimalModels({
     const fallbacks = ranked
       .filter((r) => r.provider !== primary.provider)
       .slice(0, 3)
-      .map((r) => ({ provider: r.provider, model: r.model, score: r.score }));
+      .map((r) => ({ provider: r.provider, model: r.model, modelFallbacks: r.modelFallbacks || [], score: r.score }));
 
     taskAssignments[task.taskId] = {
       taskId: task.taskId,
       agentId: task.agentId,
       primaryProvider: primary.provider,
       primaryModel: primary.model,
+      primaryModelFallbacks: primary.modelFallbacks || [],
+      primaryModelSource: primary.modelSource || 'catalogue',
       selectionScore: primary.score,
       trustWeight: primary.trustWeight,
       costUnits: primary.costUnits,
@@ -419,7 +503,17 @@ export function selectOptimalModels({
     selectedModels,
     taskAssignments,
     skippedModels,
-    estimatedCostUnits: selectedModels.reduce((s, m) => s + m.costUnits, 0)
+    estimatedCostUnits: selectedModels.reduce((s, m) => s + m.costUnits, 0),
+    /* Why these seats: the weights the brain optimised and the rule it used to
+       name a model id. Published so the trace explains the plan instead of
+       only listing it. */
+    seatPolicy: {
+      intelligenceMode: intelligenceMode || null,
+      weights: { ...weights },
+      modelRule: intelligenceMode === 'max'
+        ? 'ladder_flagship_with_stepdown'
+        : (intelligenceMode === 'swift' ? 'ladder_cheapest_step' : 'catalogue_default')
+    }
   };
 }
 
@@ -679,15 +773,187 @@ export function compareAgentResults(agentOutputs = []) {
   };
 }
 
+/**
+ * NUMERIC CLAIMS — a number, its unit, and WHOSE number it is.
+ *
+ * The old extractor compared every percentage any agent mentioned against every
+ * other percentage, across topics. That produced the two failures this fixes:
+ *
+ *   1. a FALSE conflict: «کارمزد رفت‌وبرگشت ۱٫۴٪» against «بازده هدف ۱۸٪» was
+ *      reported as agents disagreeing about the same quantity — they were
+ *      talking about different things entirely;
+ *   2. a MISSED conflict: `checkSpread` returned after the first divergent pair,
+ *      so a council that disagreed about both price and return reported one.
+ *
+ * A claim now carries a subject: the asset in its sentence (when any) plus the
+ * nearest domain keyword BEFORE the number (price, return, drawdown, risk, fee,
+ * probability, position). Two numbers are compared only when both subject and
+ * unit match — the same quantity, stated differently.
+ */
+const CLAIM_DOMAINS = Object.freeze([
+  ['price', /(?:\bprice\b|\bquote\b|\bmark\b|قیمت|نرخ|کوت\s*شدن)/i],
+  ['return', /(?:\breturn\b|\byield\b|\bapr\b|\bapy\b|\bprofit\b|بازده|سود\s*دهی|سوددهی|بهره)/i],
+  ['drawdown', /(?:\bdrawdown\b|\bmax(?:imum)?\s+loss\b|\bloss\b|دراودان|حداکثر\s*افت|افت|ضرر)/i],
+  ['risk', /(?:\brisk\b|\bvolatil\w*|\bvar\b|ریسک|نوسان)/i],
+  ['fee', /(?:\bfee\b|\bcommission\b|\bslippage\b|کارمزد|اسلیپیج|کمیسیون)/i],
+  ['probability', /(?:\bprobability\b|\bchance\b|\blikelihood\b|احتمال)/i],
+  ['position', /(?:\bposition\b|\ballocation\b|\bsize\b|پوزیشن|تخصیص|سرمایه|حجم)/i]
+]);
+
+const DOMAIN_LABELS_FA = Object.freeze({
+  price: 'قیمت',
+  return: 'بازده',
+  drawdown: 'حداکثر افت',
+  risk: 'ریسک',
+  fee: 'کارمزد',
+  probability: 'احتمال',
+  position: 'اندازهٔ پوزیشن',
+  rate: 'نرخ',
+  amount: 'مبلغ'
+});
+
+/** «BTC:price» → «قیمت BTC» — a label a Persian reader can act on. */
+function subjectLabelFa(subject = '') {
+  const [assetPart, domainPart] = String(subject).split(':');
+  const asset = assetPart && assetPart !== 'general' ? assetPart.toUpperCase() : '';
+  const domain = DOMAIN_LABELS_FA[domainPart] || domainPart || 'مقدار';
+  return asset ? `${domain} ${asset}` : domain;
+}
+
+function assetsInText(text = '') {
+  const found = [];
+  for (const [symbol, re] of KNOWN_ASSETS) {
+    if (re.test(text)) found.push(symbol);
+  }
+  return found;
+}
+
+/** The sentence a character index falls in (Persian and Latin terminators). */
+function sentenceAround(text, index) {
+  const bounds = [];
+  const re = /[.!?؟؛\n]/g;
+  let m;
+  while ((m = re.exec(text))) bounds.push(m.index);
+  const start = bounds.filter((b) => b < index).pop();
+  const end = bounds.find((b) => b >= index);
+  return text.slice(start == null ? 0 : start + 1, end == null ? text.length : end);
+}
+
+/** The domain keyword closest to the number — before it wins over after it. */
+function nearestDomain(text, index) {
+  let best = null;
+  for (const [name, re] of CLAIM_DOMAINS) {
+    const scan = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`);
+    let m;
+    while ((m = scan.exec(text))) {
+      const isBefore = m.index + m[0].length <= index;
+      const distance = isBefore
+        ? index - (m.index + m[0].length)
+        : Math.max(0, m.index - index) + 40; // a quantified "price rises 4%"
+      if (!best || distance < best.distance) best = { name, distance };
+      if (m[0].length === 0) scan.lastIndex += 1;
+    }
+  }
+  return best ? best.name : null;
+}
+
+/**
+ * Every meaningful number in a text, with its unit and subject.
+ * Counters (۲ سناریو, 3 months) are excluded: they are not claims about the
+ * market, and comparing them would manufacture conflicts ("3 scenarios vs
+ * 2 scenarios").
+ */
+export function extractNumberClaims(text = '') {
+  /* `normalizeDigits` maps Persian/Arabic DIGITS; the Persian thousands and
+     decimal separators are separate code points (٬ U+066C, ٫ U+066B), so
+     «۶۸٬۰۰۰» became 68 — a ten-thousand-fold error in a price claim. */
+  const norm = normalizeDigits(String(text || ''))
+    .replace(/\u066C/g, ',')
+    .replace(/\u066B/g, '.');
+  const claims = [];
+  const re = /(?:\$\s*)?([0-9][0-9,]*(?:\.[0-9]+)?)\s*(%|درصد|٪|دلار|usd|تتر|تومان)?/gi;
+  let m;
+  while ((m = re.exec(norm))) {
+    const value = Number(String(m[1]).replace(/,/g, ''));
+    if (!Number.isFinite(value) || value <= 0 || value === 24 || value === 100) continue;
+    const rawUnit = String(m[2] || '').toLowerCase();
+    const unit = (rawUnit === '%' || rawUnit === 'درصد' || rawUnit === '٪')
+      ? 'pct'
+      : (rawUnit === 'دلار' || rawUnit === 'usd' || rawUnit === '$' || rawUnit === 'تتر' || rawUnit === 'تومان')
+        ? 'usd'
+        : (value >= 50 ? 'usd' : 'count');
+    if (unit === 'count') continue;
+    const sentence = sentenceAround(norm, m.index);
+    const domain = nearestDomain(norm, m.index);
+    const assets = assetsInText(sentence);
+    claims.push({
+      value,
+      unit,
+      domain,
+      asset: assets[0] || null,
+      subject: `${assets[0] || 'general'}:${domain || (unit === 'pct' ? 'rate' : 'amount')}`
+    });
+    if (m[0].length === 0) re.lastIndex += 1;
+  }
+  return claims;
+}
+
+/** Historical helper kept for callers that only need the raw numbers. */
 function extractNumbers(text = '') {
-  const norm = normalizeDigits(text);
-  const matches = [...norm.matchAll(/(?:\$\s*)?([0-9][0-9,]*(?:\.[0-9]+)?)\s*(%|درصد|دلار|usd)?/gi)];
-  return matches
-    .map((m) => ({
-      value: Number(String(m[1]).replace(/,/g, '')),
-      unit: (m[2] || '').toLowerCase()
-    }))
-    .filter((n) => Number.isFinite(n.value) && n.value > 0 && n.value !== 24 && n.value !== 100);
+  return extractNumberClaims(text).map((c) => ({ value: c.value, unit: c.unit }));
+}
+
+/**
+ * Every numeric disagreement between two agents about the SAME quantity.
+ *
+ * Exported so a caller (and the tests) can see the full list, while
+ * `detectContradictions` publishes the per-subject summary.
+ */
+export function findNumericConflicts(agentOutputs = []) {
+  const domainAgents = (Array.isArray(agentOutputs) ? agentOutputs : [])
+    .filter((a) => a && (a.memberId || a.agentId) !== 'final_arbiter');
+  const parsed = domainAgents
+    .map((a) => ({ agentId: a.memberId || a.agentId, claims: extractNumberClaims(a.summary || '') }))
+    .filter((a) => a.claims.length > 0);
+
+  const found = [];
+  const seen = new Set();
+  for (let i = 0; i < parsed.length; i++) {
+    for (let j = i + 1; j < parsed.length; j++) {
+      const a = parsed[i];
+      const b = parsed[j];
+      if (a.agentId === b.agentId) continue;
+      for (const ca of a.claims) {
+        for (const cb of b.claims) {
+          /* Different subject or different unit = a different question. */
+          if (ca.subject !== cb.subject || ca.unit !== cb.unit) continue;
+          const hi = Math.max(ca.value, cb.value);
+          const lo = Math.min(ca.value, cb.value);
+          if (!(lo > 0)) continue;
+          const spread = (hi - lo) / hi;
+          const tolerance = ca.unit === 'pct' ? 0.35 : 0.15;
+          if (spread <= tolerance || hi - lo < 1.5) continue;
+          const key = `${ca.subject}|${lo}|${hi}|${[a.agentId, b.agentId].sort().join('|')}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          found.push({
+            type: 'NUMERIC_CONTRADICTION',
+            /* Half again as much money on the table is not a rounding detail. */
+            severity: spread >= 0.5 ? 'HIGH' : 'MEDIUM',
+            subject: ca.subject,
+            unit: ca.unit,
+            agentsA: [a.agentId],
+            agentsB: [b.agentId],
+            values: [ca.value, cb.value],
+            spread: Math.round(spread * 1000) / 1000,
+            subjectLabel: subjectLabelFa(ca.subject),
+            description: `اختلاف عددی در ${subjectLabelFa(ca.subject)} (${ca.unit === 'pct' ? 'درصد' : 'مقدار دلاری'}): ${a.agentId} مقدار ${ca.value} و ${b.agentId} مقدار ${cb.value} را گزارش کرده‌اند.`
+          });
+        }
+      }
+    }
+  }
+  return found;
 }
 
 export function detectContradictions({ agentOutputs = [], evidence = [], userProfile = null } = {}) {
@@ -707,38 +973,24 @@ export function detectContradictions({ agentOutputs = [], evidence = [], userPro
     });
   }
 
-  // 2. Numeric Contradiction across agents on percentage or USD figures
-  const pctClaims = [];
+  // 2. Numeric Contradiction — SAME SUBJECT ONLY, every divergent pair, deduped
+  const numericFound = findNumericConflicts(domainAgents);
+  const bySubject = new Map();
+  for (const c of numericFound) {
+    if (!bySubject.has(c.subject)) bySubject.set(c.subject, []);
+    bySubject.get(c.subject).push(c);
+  }
+  /* One row per subject is enough for the reviewer: two agents who disagree
+     about price usually disagree about the derived return as well, and listing
+     both would turn one disagreement into a wall of text. */
+  for (const [, list] of bySubject) contradictions.push(list[0]);
+
   const usdClaims = [];
   for (const ag of domainAgents) {
-    const nums = extractNumbers(ag.summary || '');
-    for (const n of nums) {
-      if (n.unit === '%' || n.unit === 'درصد') pctClaims.push({ agentId: ag.memberId || ag.agentId, value: n.value });
-      else if (n.unit === 'دلار' || n.unit === 'usd' || n.value >= 50) usdClaims.push({ agentId: ag.memberId || ag.agentId, value: n.value });
+    for (const c of extractNumberClaims(ag.summary || '')) {
+      if (c.unit === 'usd') usdClaims.push({ agentId: ag.memberId || ag.agentId, value: c.value, subject: c.subject });
     }
   }
-  const checkSpread = (claims, label, relTolerance = 0.25) => {
-    for (let i = 0; i < claims.length; i++) {
-      for (let j = i + 1; j < claims.length; j++) {
-        if (claims[i].agentId === claims[j].agentId) continue;
-        const hi = Math.max(claims[i].value, claims[j].value);
-        const lo = Math.min(claims[i].value, claims[j].value);
-        if (lo > 0 && (hi - lo) / hi > relTolerance && (hi - lo) >= 1.5) {
-          contradictions.push({
-            type: 'NUMERIC_CONTRADICTION',
-            severity: 'MEDIUM',
-            agentsA: [claims[i].agentId],
-            agentsB: [claims[j].agentId],
-            values: [claims[i].value, claims[j].value],
-            description: `اختلاف عددی در ${label}: ${claims[i].agentId} مقدار ${claims[i].value} و ${claims[j].agentId} مقدار ${claims[j].value} را گزارش کرده‌اند.`
-          });
-          return;
-        }
-      }
-    }
-  };
-  checkSpread(pctClaims, 'درصد/نرخ', 0.35);
-  checkSpread(usdClaims, 'مقدار دلاری/قیمت', 0.15);
 
   // 3. Unsupported Numeric Claim when zero observed tools exist
   const observedTools = evidence.filter((e) => e.status === 'observed');
@@ -778,6 +1030,68 @@ export function detectContradictions({ agentOutputs = [], evidence = [], userPro
 /* ────────────────────────────────────────────────────────────────────────── */
 /*  CAPABILITY 7: انتخاب نتیجه نهایی بر اساس شواهد و اعتبار منابع             */
 /* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * WHAT THE COUNCIL DISAGREED ABOUT — as a result, not as a footnote.
+ *
+ * `selectEvidenceBasedResult` picks one winner, and a winner is a single story
+ * told over a council that may have split. A HIGH or CRITICAL contradiction is
+ * therefore not only a scoring input: the answer must say so, and its
+ * confidence cannot stay at a level that implies consensus.
+ */
+export function summarizeArbitration(contradictions = []) {
+  const list = Array.isArray(contradictions) ? contradictions.filter(Boolean) : [];
+  const bySeverity = (sev) => list.filter((c) => c.severity === sev);
+  const critical = bySeverity('CRITICAL');
+  const high = bySeverity('HIGH');
+  const directionalSplit = list.find((c) => c.type === 'DIRECTIONAL_CONFLICT') || null;
+  const numeric = list.filter((c) => c.type === 'NUMERIC_CONTRADICTION');
+  return {
+    schema: 'fbt.central-arbitration.v1',
+    conflictCount: list.length,
+    critical: critical.length,
+    high: high.length,
+    medium: bySeverity('MEDIUM').length,
+    types: [...new Set(list.map((c) => c.type))],
+    conflictingAgents: [...new Set(list.flatMap((c) => [...(c.agentsA || []), ...(c.agentsB || [])]))],
+    directionalSplit: directionalSplit
+      ? { bull: directionalSplit.agentsA || [], bear: directionalSplit.agentsB || [] }
+      : null,
+    numericUnresolved: numeric.map((c) => ({
+      subject: c.subject,
+      subjectLabel: c.subjectLabel || subjectLabelFa(c.subject),
+      values: c.values,
+      agents: [...(c.agentsA || []), ...(c.agentsB || [])]
+    })),
+    mustDisclose: critical.length + high.length > 0
+  };
+}
+
+/** The one-line disclosure appended to an answer whose council was split. */
+export function renderArbitrationDisclosure(arbitration, labels = {}) {
+  if (!arbitration?.mustDisclose) return '';
+  const name = (id) => labels[id] || id;
+  const parts = [];
+  const faNum = (n) => String(n).replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+  const listNames = (ids = []) => {
+    const names = ids.map(name);
+    return names.length > 3 ? `${names.slice(0, 3).join('، ')} و ${faNum(names.length - 3)} نفر دیگر` : names.join('، ');
+  };
+  if (arbitration.directionalSplit) {
+    const bull = listNames(arbitration.directionalSplit.bull);
+    const bear = listNames(arbitration.directionalSplit.bear);
+    if (bull || bear) parts.push(`جهت‌گیری یکدست نیست: ${bull || '—'} صعودی و ${bear || '—'} نزولی/محتاط است.`);
+  }
+  if (arbitration.numericUnresolved?.length) {
+    const rows = arbitration.numericUnresolved
+      .slice(0, 2)
+      .map((n) => `${n.subjectLabel || subjectLabelFa(n.subject)} (${n.values.join(' در برابر ')})`)
+      .join('، ');
+    parts.push(`عددهای متناقض: ${rows}.`);
+  }
+  if (!parts.length) parts.push(`${arbitration.conflictCount} تناقض حل‌نشده در شورا ثبت شد.`);
+  return `\n\n⚠️ ${parts.join(' ')}`;
+}
 
 export function selectEvidenceBasedResult({
   agentOutputs = [],
@@ -846,7 +1160,10 @@ export function selectEvidenceBasedResult({
   return {
     winner: scoredCandidates[0] || null,
     rankedCandidates: scoredCandidates,
-    credibilityHierarchyUsed: SOURCE_CREDIBILITY_WEIGHTS
+    credibilityHierarchyUsed: SOURCE_CREDIBILITY_WEIGHTS,
+    /* The winner is a selection, not a consensus: say so when the council
+       actually split, so no caller can present one voice as the whole room. */
+    arbitration: summarizeArbitration(contradictions)
   };
 }
 
@@ -936,6 +1253,11 @@ export function createCentralBrain({
   toolRunner = null,       // async (toolName, args, ctx) => { status, summary, ms }
   providerInvoker = null,  // async ({ provider, model, prompt, agentId, timeoutMs }) => { text, stance, confidence, model }
   availableProviders = null,
+  /* Which intelligence mode the deployment/request is in, and the gateway's
+     flagship ladders (`{ provider: [modelId, …] }`). Both are supplied by the
+     server runtime; the brain never imports a provider table it cannot honour. */
+  intelligenceMode = null,
+  modelLadders = null,
   maxTracesPerOwner = 60,
   now = () => Date.now()
 } = {}) {
@@ -991,6 +1313,12 @@ export function createCentralBrain({
     tracesByOwner.set(key, list);
   }
 
+  /* Both may be functions: the fleet and the health of a provider change while
+     the brain lives, and a plan built from a snapshot taken at process start
+     would keep naming a provider whose circuit opened ten minutes ago. */
+  const providersNow = () => (typeof availableProviders === 'function' ? availableProviders() : availableProviders);
+  const laddersNow = () => (typeof modelLadders === 'function' ? modelLadders() : modelLadders);
+
   return {
     schema: CENTRAL_BRAIN_SCHEMA,
     version: CENTRAL_BRAIN_VERSION,
@@ -1009,15 +1337,17 @@ export function createCentralBrain({
         owner,
         asset: classification.entities.assets[0] || null,
         taskType: classification.category,
-        candidateProviders: availableProviders || Object.keys(MODEL_FLEET_CATALOGUE)
+        candidateProviders: providersNow() || Object.keys(MODEL_FLEET_CATALOGUE)
       });
       const decomposition = decomposeTask({ classification, message, learningGuidance: guidance });
       const modelPlan = selectOptimalModels({
         classification,
         subTasks: decomposition.subTasks,
-        availableProviders,
+        availableProviders: providersNow(),
         providerHealth: getHealthMap(),
-        trustWeights: guidance.modelTrustWeights
+        trustWeights: guidance.modelTrustWeights,
+        intelligenceMode,
+        modelLadders: laddersNow()
       });
       const uncertainty = assessUncertaintyAndClarify({
         classification,
@@ -1100,7 +1430,7 @@ export function createCentralBrain({
         owner,
         asset: classification.entities.assets[0] || null,
         taskType: classification.category,
-        candidateProviders: availableProviders || Object.keys(MODEL_FLEET_CATALOGUE)
+        candidateProviders: providersNow() || Object.keys(MODEL_FLEET_CATALOGUE)
       });
       const decomposition = decomposeTask({
         classification,
@@ -1131,14 +1461,24 @@ export function createCentralBrain({
       const modelPlan = selectOptimalModels({
         classification,
         subTasks: decomposition.subTasks,
-        availableProviders,
+        availableProviders: providersNow(),
         providerHealth: getHealthMap(),
-        trustWeights: guidance.modelTrustWeights
+        trustWeights: guidance.modelTrustWeights,
+        intelligenceMode,
+        modelLadders: laddersNow()
       });
       recordStage('3_MODEL_SELECTION_AND_TASK_DECOMPOSITION', t0, {
+        seatPolicy: modelPlan.seatPolicy,
         maxModelBudget: modelPlan.maxModelBudget,
         selectedModelCount: modelPlan.selectedModels.length,
-        selectedModels: modelPlan.selectedModels.map((m) => ({ provider: m.provider, model: m.model, costUnits: m.costUnits, trustWeight: m.trustWeight })),
+        selectedModels: modelPlan.selectedModels.map((m) => ({
+          provider: m.provider,
+          model: m.model,
+          modelFallbacks: m.modelFallbacks || [],
+          modelSource: m.modelSource || 'catalogue',
+          costUnits: m.costUnits,
+          trustWeight: m.trustWeight
+        })),
         skippedModelCount: modelPlan.skippedModels.length,
         skippedSample: modelPlan.skippedModels.slice(0, 4),
         subTaskCount: decomposition.subTasks.length,
@@ -1413,10 +1753,31 @@ export function createCentralBrain({
         answer = 'داده واقعی موردنیاز (کیف‌پول/پرتفوی/قیمت) در حال حاضر از ابزار خوانده نشد؛ بر اساس قوانین ایمنی FBT از حدس زدن ارقام خودداری می‌شود.';
       }
 
+      /* A split council is a fact the user is entitled to. The answer keeps the
+         most credible finding, but it cannot carry a consensus-sized confidence
+         over a room that disagreed. */
+      const arbitration = evidenceSelection.arbitration;
+      let arbitrationDisclosed = false;
+      if (arbitration?.mustDisclose && !['CLARIFY', 'ABSTAIN'].includes(finalAction)) {
+        const labels = {};
+        for (const a of agentOutputs) labels[a.memberId || a.agentId] = a.roleFa || a.memberId || a.agentId;
+        const disclosure = renderArbitrationDisclosure(arbitration, labels);
+        if (disclosure) {
+          answer = `${answer}${disclosure}`;
+          finalConfidence = Math.min(Number.isFinite(finalConfidence) ? finalConfidence : 60, 62);
+          arbitrationDisclosed = true;
+        }
+      }
+
       recordStage('9_FINAL_VERDICT', t0, {
         finalAction,
         finalStance,
-        finalConfidence
+        finalConfidence,
+        arbitration: {
+          conflicts: arbitration?.conflictCount ?? 0,
+          mustDisclose: Boolean(arbitration?.mustDisclose),
+          disclosed: arbitrationDisclosed
+        }
       });
 
       // ── STAGE 10: ثبت در حافظه معنایی بلندمدت و لاگ پیش‌بینی برای یادگیری ──
@@ -1525,6 +1886,11 @@ export function createCentralBrain({
           confidence: finalConfidence,
           clarificationQuestions: finalUncertainty.questions
         },
+        /* What the seats were chosen for, and what the council disagreed about.
+           Both are published so a caller explains the answer instead of only
+           printing it. */
+        seatPolicy: modelPlan.seatPolicy,
+        arbitration,
         decisionTrace,
         // Mandatory non-custodial safety flags
         executionAuthorized: false,

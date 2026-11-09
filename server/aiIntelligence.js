@@ -1,0 +1,469 @@
+/**
+ * FBT AI — INTELLIGENCE MODES (the "smartest mode" contract)
+ * ---------------------------------------------------------------------------
+ * The gateway already had failover, health memory and model fallbacks. What it
+ * did NOT have was a single, named answer to the question the operator kept
+ * asking: «هوش مصنوعی را باهوش‌ترین حالت کن» — put the assistant in its
+ * smartest mode.
+ *
+ * Before this file, "smartest" was an accident of three unrelated defaults:
+ *
+ *   · every provider's FIRST model was its cheapest one (gpt-4o-mini,
+ *     claude-haiku-4-5, gemini-2.5-flash, grok-4-fast, llama-3.1-8b);
+ *   · the collaboration engine stopped at the level the question analyzer
+ *     guessed, usually 2 (one model, no verification);
+ *   · every call was capped at 400-800 output tokens, which is enough for a
+ *     paragraph and not enough for a reasoning trace plus an answer.
+ *
+ * A user who wanted depth had no switch, no endpoint and nothing on screen
+ * that said which brain was answering. This module is that switch, made
+ * explicit and inspectable.
+ *
+ * THREE MODES, ONE MEANING EACH
+ * ---------------------------------------------------------------------------
+ *   swift     — cheapest/fastest seat that can answer (classification, social
+ *               turns, tight latency budgets). Depth is deliberately capped.
+ *   balanced  — the historical behaviour, unchanged: provider defaults, the
+ *               analyzer's own collaboration level, 800-token answers.
+ *   max       — THE DEFAULT: flagship model ids first, reasoning parameters
+ *               where the vendor actually supports them, collaboration raised
+ *               to multi-model + verification on substantive turns, and room
+ *               for a long, careful answer.
+ *
+ * HONESTY RULES BAKED IN
+ * ---------------------------------------------------------------------------
+ * 1. A mode changes ORDER and BUDGET, never truth. Grounding, tool-truth,
+ *    approval gates and `canExecute = false` are untouched. No mode can make a
+ *    model supply a balance or sign a transaction.
+ * 2. "Smartest" never means "invent a model id". Every id below is either
+ *    already present in `PROVIDER_CONFIGS` (direct or fallback) or the
+ *    well-known gateway spelling of one. If a provider's account does not serve
+ *    it, the gateway's existing model-level walk steps down to the next id on
+ *    the SAME key — a stale flagship costs one round-trip, not an outage.
+ * 3. Reasoning parameters are only attached where the vendor documents them
+ *    (OpenAI reasoning ids, OpenRouter reasoning models, Groq gpt-oss, Gemini
+ *    2.5 Pro/Flash thinking, Anthropic 4.x extended thinking). Sending
+ *    `reasoning_effort` to a model that does not accept it is how a "smarter"
+ *    switch becomes a 400 on every request, so the matchers are narrow.
+ * 4. The operator can always override: `FBT_AI_INTELLIGENCE=balanced` restores
+ *    the old behaviour exactly, and `FBT_AI_EXTENDED_THINKING=0` disables the
+ *    Anthropic thinking budget without touching anything else.
+ */
+
+export const INTELLIGENCE_SCHEMA = 'fbt.ai-intelligence.v1';
+export const INTELLIGENCE_VERSION = '1.0.0';
+
+/**
+ * Flagship-first ladders. The gateway appends the provider's own default and
+ * fallback list behind these, so the ladder is an ORDERING, not a whitelist:
+ * nothing that answered before can stop answering because of this table.
+ */
+const MAX_MODEL_LADDERS = Object.freeze({
+  openrouter: Object.freeze([
+    'google/gemini-2.5-pro',
+    'openai/gpt-4.1',
+    'anthropic/claude-sonnet-4-6',
+    'x-ai/grok-4'
+  ]),
+  openai: Object.freeze(['gpt-4.1', 'gpt-4o']),
+  xai: Object.freeze(['grok-4', 'grok-4-fast']),
+  gemini: Object.freeze(['gemini-2.5-pro', 'gemini-2.5-flash']),
+  anthropic: Object.freeze(['claude-sonnet-4-6', 'claude-sonnet-4-5', 'claude-haiku-4-5']),
+  deepseek: Object.freeze(['deepseek-reasoner', 'deepseek-chat']),
+  groq: Object.freeze(['openai/gpt-oss-120b', 'openai/gpt-oss-20b']),
+  mistral: Object.freeze(['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest']),
+  workersai: Object.freeze([
+    '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    '@cf/deepseek/deepseek-r1-distill-qwen-32b',
+    '@cf/meta/llama-3.1-8b-instruct'
+  ]),
+  aimlapi: Object.freeze(['gpt-4o', 'meta-llama/Llama-3.3-70B-Instruct', 'gpt-4o-mini'])
+});
+
+/**
+ * Provider preference when the mode is `max` and the task is not latency
+ * bound. This is only consulted when a caller explicitly asks for a mode —
+ * `getPreferredProvidersForTask()` without one keeps its historical order, so
+ * nothing that pinned a route silently moves.
+ */
+const MAX_PROVIDER_ORDER = Object.freeze({
+  general: ['openai', 'anthropic', 'openrouter', 'xai', 'gemini', 'deepseek', 'groq', 'aimlapi', 'mistral', 'workersai', 'internal'],
+  market: ['xai', 'openrouter', 'openai', 'gemini', 'anthropic', 'deepseek', 'groq', 'aimlapi', 'workersai', 'internal'],
+  research: ['xai', 'openrouter', 'openai', 'gemini', 'anthropic', 'deepseek', 'groq', 'aimlapi', 'workersai', 'internal'],
+  reasoning: ['openai', 'anthropic', 'openrouter', 'deepseek', 'gemini', 'xai', 'aimlapi', 'groq', 'workersai', 'internal'],
+  risk: ['anthropic', 'openai', 'deepseek', 'openrouter', 'gemini', 'xai', 'aimlapi', 'groq', 'workersai', 'internal']
+});
+
+const TASK_ALIASES = Object.freeze({
+  market_intelligence: 'market',
+  crypto_trend: 'market',
+  news: 'research',
+  web_research: 'research',
+  'crypto-analysis': 'research',
+  complex_plan: 'reasoning',
+  portfolio_optimization: 'reasoning',
+  guardian: 'risk',
+  verification: 'risk'
+});
+
+export const INTELLIGENCE_MODES = Object.freeze({
+  swift: Object.freeze({
+    id: 'swift',
+    label: { fa: 'سریع', en: 'Swift' },
+    description: {
+      fa: 'ارزان‌ترین و سریع‌ترین مدل کافی؛ برای پرسش‌های ساده و پاسخ فوری. عمق عمداً محدود است.',
+      en: 'The cheapest seat that can answer, for simple questions and fast replies. Depth is deliberately capped.'
+    },
+    /* The analyzer's own level is capped, never raised. */
+    collaborationFloor: 0,
+    collaborationCeiling: 2,
+    tokenScale: 0.8,
+    tokenFloor: 0,
+    tokenCeiling: 1200,
+    temperature: 0.3,
+    reasoning: false,
+    maxModels: 2,
+    /* Deep reasoning is off in the cheap mode: extra passes buy latency, not
+       accuracy, when the seat itself is small. */
+    analysesCount: 2,
+    selfCritique: false,
+    knowledgeTopK: 3,
+    modelLadders: Object.freeze({})
+  }),
+  balanced: Object.freeze({
+    id: 'balanced',
+    label: { fa: 'متعادل', en: 'Balanced' },
+    description: {
+      fa: 'رفتار تاریخی: مدل پیش‌فرض هر ارائه‌دهنده، سطح همکاری همان‌که تحلیل‌گر تشخیص می‌دهد، بودجهٔ ۸۰۰ توکن.',
+      en: 'Historical behaviour: each provider’s default model, the analyzer’s own collaboration level, 800-token answers.'
+    },
+    collaborationFloor: 0,
+    collaborationCeiling: 5,
+    tokenScale: 1,
+    tokenFloor: 0,
+    tokenCeiling: 1600,
+    temperature: null,
+    reasoning: false,
+    maxModels: 4,
+    /* Historical behaviour: level 4 runs two analyses, level 5 runs three. */
+    analysesCount: 2,
+    selfCritique: false,
+    knowledgeTopK: 4,
+    modelLadders: Object.freeze({})
+  }),
+  max: Object.freeze({
+    id: 'max',
+    label: { fa: 'باهوش‌ترین', en: 'Smartest' },
+    description: {
+      fa: 'مدل‌های پرچم‌دار اول، استدلال عمیق، سه تحلیل مستقل، بازبینی خصمانهٔ پیش‌نویس و بودجهٔ پاسخ بلند. پیش‌فرض.',
+      en: 'Flagship models first, deep reasoning, three independent analyses, an adversarial review of the draft, and a long-answer budget. Default.'
+    },
+    collaborationFloor: 4,
+    collaborationCeiling: 5,
+    tokenScale: 1.6,
+    tokenFloor: 1200,
+    tokenCeiling: 3200,
+    temperature: 0.25,
+    reasoning: true,
+    maxModels: 5,
+    /*
+     * ─── THE THREE THINGS THAT MAKE "SMARTER" MEAN MORE THAN "BIGGER MODEL" ─
+     * A stronger model alone still answers once. Depth comes from comparing
+     * independent analyses, forcing the draft through an adversarial review,
+     * and giving that review more verified context to check against:
+     *   · analysesCount 3 — three independent reads instead of two;
+     *   · selfCritique true — one bounded critique/repair pass after the draft,
+     *     which can only replace it when the repaired text is substantial;
+     *   · knowledgeTopK 6 — more verified product facts in the evidence block.
+     */
+    analysesCount: 3,
+    selfCritique: true,
+    knowledgeTopK: 6,
+    modelLadders: MAX_MODEL_LADDERS
+  })
+});
+
+/** Spellings people (and older clients) actually use for each mode. */
+const MODE_ALIASES = Object.freeze({
+  swift: 'swift',
+  fast: 'swift',
+  eco: 'swift',
+  quick: 'swift',
+  'سریع': 'swift',
+  balanced: 'balanced',
+  balance: 'balanced',
+  normal: 'balanced',
+  default: 'balanced',
+  'متعادل': 'balanced',
+  max: 'max',
+  maximum: 'max',
+  smart: 'max',
+  smartest: 'max',
+  deep: 'max',
+  best: 'max',
+  high: 'max',
+  ultra: 'max',
+  'باهوش': 'max',
+  'باهوش‌ترین': 'max',
+  'باهوش‌تر': 'max',
+  'حداکثر': 'max',
+  'عمیق': 'max'
+});
+
+export function isIntelligenceMode(value) {
+  const id = String(value || '').trim().toLowerCase();
+  return Boolean(MODE_ALIASES[id]);
+}
+
+/**
+ * Turn anything a caller can send (a query string, a JSON body, a Persian
+ * word, an env var) into a real mode id. Unknown values resolve to `null`
+ * instead of silently pretending to be `max` — the resolver below decides
+ * what an unknown request means.
+ */
+export function normalizeIntelligenceMode(value) {
+  const id = String(value ?? '').trim().toLowerCase();
+  if (!id) return null;
+  return MODE_ALIASES[id] || null;
+}
+
+export function getIntelligenceProfile(mode) {
+  return INTELLIGENCE_MODES[normalizeIntelligenceMode(mode)] || INTELLIGENCE_MODES.max;
+}
+
+/**
+ * Resolve the mode for one request.
+ *
+ * Order, and why:
+ *   1. the request — a user who picked "swift" in the UI gets swift;
+ *   2. `FBT_AI_INTELLIGENCE` — the deployment-wide default;
+ *   3. `max` — because this deployment's explicit product decision is that the
+ *      assistant answers with its strongest available brain unless told
+ *      otherwise.
+ *
+ * An UNKNOWN request value never overrides anything: a typo in a URL should
+ * not quietly downgrade the assistant, so it is reported in `rejected` and the
+ * deployment default applies.
+ */
+export function resolveIntelligenceMode(requested = null, { env = process.env, defaultMode = 'max' } = {}) {
+  const envMode = normalizeIntelligenceMode(env?.FBT_AI_INTELLIGENCE);
+  const fallback = envMode || normalizeIntelligenceMode(defaultMode) || 'max';
+  if (requested == null || String(requested).trim() === '') {
+    return { mode: fallback, requested: null, source: envMode ? 'env' : 'default', rejected: null };
+  }
+  const wanted = normalizeIntelligenceMode(requested);
+  if (!wanted) {
+    return {
+      mode: fallback,
+      requested: String(requested).slice(0, 32),
+      source: envMode ? 'env' : 'default',
+      rejected: 'UNKNOWN_MODE'
+    };
+  }
+  return {
+    mode: wanted,
+    requested: wanted,
+    source: 'request',
+    rejected: envMode && envMode !== wanted ? 'ENV_OVERRIDDEN' : null
+  };
+}
+
+/** The flagship-first model ids for one provider in one mode (may be empty). */
+export function intelligenceModelLadder(providerId, mode) {
+  const profile = getIntelligenceProfile(mode);
+  const ladder = profile.modelLadders?.[providerId];
+  return Array.isArray(ladder) ? ladder.slice() : [];
+}
+
+/**
+ * Provider order for a task under an explicit mode.
+ * Returns `null` when the mode does not re-order anything (swift/balanced), so
+ * the caller can keep its historical route untouched.
+ */
+export function intelligenceProviderOrder(taskType, mode) {
+  /* No mode means "historical": a caller that did not ask for one must get the
+     untouched route, not the default mode's route. */
+  if (normalizeIntelligenceMode(mode) !== 'max') return null;
+  const task = String(taskType || 'general').toLowerCase();
+  /* Latency-bound jobs stay latency-bound even in the smartest mode: spending
+     two seconds choosing which model should classify "hi" is not intelligence. */
+  if (['fast', 'intent', 'classification'].includes(task)) return null;
+  const key = MAX_PROVIDER_ORDER[task] ? task : (TASK_ALIASES[task] || null);
+  return key ? MAX_PROVIDER_ORDER[key].slice() : MAX_PROVIDER_ORDER.general.slice();
+}
+
+/**
+ * Sampling + budget for one call.
+ *
+ * `max` lowers temperature slightly (stable, auditable reasoning), gives a
+ * long answer room, and never shrinks a budget a caller explicitly asked for.
+ * `swift` is the only mode allowed to shrink one.
+ */
+export function intelligenceGeneration(mode, { temperature = 0.3, maxTokens = 800, taskType = 'general' } = {}) {
+  const profile = getIntelligenceProfile(mode);
+  const requestedTokens = Number.isFinite(Number(maxTokens)) && Number(maxTokens) > 0 ? Number(maxTokens) : 800;
+  const requestedTemp = Number.isFinite(Number(temperature)) ? Number(temperature) : 0.3;
+
+  if (profile.id === 'balanced') {
+    return { mode: profile.id, temperature: requestedTemp, maxTokens: requestedTokens, reasoning: false };
+  }
+
+  const scaled = Math.round(requestedTokens * profile.tokenScale);
+  const withFloor = profile.tokenFloor > 0 ? Math.max(scaled, profile.tokenFloor) : scaled;
+  const capped = Math.min(withFloor, profile.tokenCeiling);
+  /* A fast/intent classification must not be turned into an essay. */
+  const latencyBound = ['fast', 'intent', 'classification'].includes(String(taskType || '').toLowerCase());
+  const tokens = latencyBound ? Math.min(capped, requestedTokens) : capped;
+
+  return {
+    mode: profile.id,
+    temperature: profile.temperature == null ? requestedTemp : Math.min(requestedTemp, profile.temperature),
+    maxTokens: Math.max(1, tokens),
+    reasoning: Boolean(profile.reasoning) && !latencyBound
+  };
+}
+
+/** Does this model id expose a reasoning knob the provider documents? */
+function isOpenAIReasoningModel(model) {
+  return /^(gpt-5|o[1-9])([.-]|$)/i.test(String(model || ''));
+}
+
+function isGatewayReasoningModel(model) {
+  return /(gpt-5|(^|[/-])o[1-9]([.-]|$)|deepseek-r1|deepseek-reasoner|qwq|thinking)/i.test(String(model || ''));
+}
+
+function isGroqReasoningModel(model) {
+  return /gpt-oss/i.test(String(model || ''));
+}
+
+function isAnthropicThinkingModel(model) {
+  /* Claude 4.x and later run extended thinking; the 3.x family does not. */
+  return /claude-(sonnet|opus|haiku)-(?:[4-9]|\d{2,})/i.test(String(model || '')) && !/claude-3/i.test(String(model || ''));
+}
+
+function isGeminiThinkingModel(model) {
+  return /^gemini-2\.5-(pro|flash)$/i.test(String(model || '').trim());
+}
+
+/**
+ * Extra JSON body fields for the OpenAI-compatible adapter.
+ * Only the vendors that document the field get it:
+ *   · OpenAI direct — `reasoning_effort` on o-series / gpt-5 only;
+ *   · OpenRouter   — `reasoning: { effort }` on reasoning-capable ids;
+ *   · Groq         — `reasoning_effort` on gpt-oss.
+ * Everything else returns `{}` and the request body is byte-identical to
+ * before this module existed.
+ */
+export function intelligenceReasoningFields(providerId, mode, model) {
+  if (!getIntelligenceProfile(mode).reasoning) return {};
+  const id = String(providerId || '');
+  const m = String(model || '');
+  if (id === 'openai' && isOpenAIReasoningModel(m)) return { reasoning_effort: 'high' };
+  if (id === 'groq' && isGroqReasoningModel(m)) return { reasoning_effort: 'high' };
+  if (id === 'openrouter' && isGatewayReasoningModel(m)) return { reasoning: { effort: 'high' } };
+  if (id === 'aimlapi' && isGatewayReasoningModel(m)) return { reasoning_effort: 'high' };
+  return {};
+}
+
+/**
+ * Gemini native `generationConfig` additions. `thinkingBudget` is accepted on
+ * the 2.5 Pro/Flash family; -1 is the vendor's "let the model decide".
+ */
+export function intelligenceGeminiThinking(mode, model) {
+  if (!getIntelligenceProfile(mode).reasoning) return {};
+  if (!isGeminiThinkingModel(model)) return {};
+  return { thinkingConfig: { includeThoughts: false, thinkingBudget: /pro/i.test(String(model)) ? -1 : 4096 } };
+}
+
+/**
+ * Anthropic extended thinking for one call.
+ *
+ * Returns `null` when the mode/model/operator switch does not allow it, so the
+ * caller sends the old body unchanged. When enabled:
+ *   · `budget_tokens` must be smaller than `max_tokens`, so the output budget
+ *     is raised to fit the reasoning plus the answer;
+ *   · the API rejects sampling parameters while thinking is on, so temperature
+ *     must be omitted (the adapter already knows how to retry without it).
+ */
+export function intelligenceAnthropicThinking(mode, model, maxTokens = 800, { env = process.env } = {}) {
+  if (!getIntelligenceProfile(mode).reasoning) return null;
+  if (String(env?.FBT_AI_EXTENDED_THINKING ?? '').trim() === '0') return null;
+  if (!isAnthropicThinkingModel(model)) return null;
+  /*
+   * The budget scales with the answer we asked for: an 800-token role call
+   * does not need Claude to think for 4096 tokens (that is 4096 tokens of
+   * latency inside an 8–20s turn deadline). Minimum is the vendor's 1024;
+   * maximum is 4096.
+   */
+  const requested = Math.max(0, Number(maxTokens) || 0);
+  const budget = Math.min(4096, Math.max(1024, Math.round(requested)));
+  const total = Math.min(12000, Math.max(requested, budget + 1024));
+  return {
+    thinking: { type: 'enabled', budget_tokens: budget },
+    maxTokens: total,
+    omitTemperature: true
+  };
+}
+
+/**
+ * Collaboration depth for one plan.
+ *   · max      raises substantive turns to at least level 4 (multi-model +
+ *              verification) but NEVER turns small talk into a five-model run;
+ *   · swift    caps the level so a simple question cannot become expensive;
+ *   · balanced returns the analyzer's own level untouched.
+ */
+export function intelligenceCollaborationLevel(mode, baseLevel, { conversationKind = null, pureSmallTalk = false } = {}) {
+  const profile = getIntelligenceProfile(mode);
+  const level = Number.isFinite(Number(baseLevel)) ? Number(baseLevel) : 2;
+  const smallTalk = pureSmallTalk
+    || ['GREETING', 'THANKS', 'CASUAL', 'WHATS_UP'].includes(String(conversationKind || '').toUpperCase());
+  if (smallTalk) return Math.min(level, 2);
+  if (profile.id === 'max') {
+    /* A high-stakes question was already 5; everything substantive becomes at
+       least 4. A turn the analyzer called level 1 for a real (non-social)
+       question is raised too, because a one-model answer is the behaviour the
+       operator asked to stop. */
+    return Math.max(level, profile.collaborationFloor);
+  }
+  return Math.min(level, profile.collaborationCeiling);
+}
+
+/** Human + machine description for the API and the UI. */
+export function describeIntelligence({ env = process.env, requested = null } = {}) {
+  const resolved = resolveIntelligenceMode(requested, { env });
+  const profile = getIntelligenceProfile(resolved.mode);
+  return {
+    schema: INTELLIGENCE_SCHEMA,
+    version: INTELLIGENCE_VERSION,
+    mode: profile.id,
+    label: profile.label,
+    description: profile.description,
+    source: resolved.source,
+    requested: resolved.requested,
+    rejected: resolved.rejected,
+    defaultMode: resolveIntelligenceMode(null, { env }).mode,
+    envVar: 'FBT_AI_INTELLIGENCE',
+    extendedThinkingEnvVar: 'FBT_AI_EXTENDED_THINKING',
+    features: {
+      collaborationFloor: profile.collaborationFloor,
+      collaborationCeiling: profile.collaborationCeiling,
+      tokenScale: profile.tokenScale,
+      tokenFloor: profile.tokenFloor,
+      tokenCeiling: profile.tokenCeiling,
+      maxModels: profile.maxModels,
+      analysesCount: profile.analysesCount,
+      selfCritique: profile.selfCritique,
+      knowledgeTopK: profile.knowledgeTopK,
+      reasoning: profile.reasoning,
+      flagshipFirst: Object.keys(profile.modelLadders || {}).length > 0
+    },
+    modes: Object.values(INTELLIGENCE_MODES).map((m) => ({
+      id: m.id,
+      label: m.label,
+      description: m.description,
+      default: m.id === resolveIntelligenceMode(null, { env }).mode
+    })),
+    /* An honest boundary, stated where a client can render it. */
+    authority: { canExecute: false, canSign: false, canMoveFunds: false }
+  };
+}

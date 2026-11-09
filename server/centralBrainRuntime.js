@@ -17,7 +17,13 @@ import { createPerformanceLearning } from '../src/lib/intent-ai/orchestrator/per
 import { createAdaptiveCouncil } from '../src/lib/intent-ai/orchestrator/adaptiveCouncil.js';
 import { createCentralBrain, MODEL_FLEET_CATALOGUE } from '../src/lib/intent-ai/orchestrator/centralBrain.js';
 import { executeToolRequests } from './aiToolBroker.js';
-import { executeProviderChat, getActiveProviderIds, isProviderHealthy } from './aiGateway.js';
+import {
+  executeProviderChat,
+  getActiveProviderIds,
+  isProviderHealthy,
+  resolveIntelligenceMode,
+  intelligenceModelLadder
+} from './aiGateway.js';
 import { storeGet, storeSet } from './store.js';
 
 const SMART_MEM_KV_KEY = 'ai:smart-memory:v1';
@@ -91,18 +97,45 @@ export function getAdaptiveCouncil() {
   return sharedAdaptiveCouncil;
 }
 
+/**
+ * The flagship ladders of the providers the brain may actually call.
+ *
+ * The brain names model ids in its plan (and in its decision trace), so it must
+ * name ids that exist on vendors we can reach: the gateway's own ladder for the
+ * active mode, restricted to the declared fleet. A mode we do not recognise
+ * yields no ladders, and the brain keeps its historical catalogue defaults.
+ */
+export function buildSeatLadders({ mode, providers = [] } = {}) {
+  const ladders = {};
+  if (!mode) return ladders;
+  for (const provider of providers) {
+    const ladder = intelligenceModelLadder(provider, mode);
+    if (Array.isArray(ladder) && ladder.length) ladders[provider] = ladder;
+  }
+  return ladders;
+}
+
 export function getCentralBrain() {
   if (!sharedCentralBrain) {
     const activeExternal = () => {
       const configured = getActiveProviderIds().filter((id) => id !== 'internal' && MODEL_FLEET_CATALOGUE[id]);
       return configured.filter((id) => isProviderHealthy(id) !== false);
     };
+    /* The declared fleet is the only real limit: a provider outside it is never
+       planned, and when nothing external is configured the brain plans no seat
+       at all instead of pretending the full catalogue is reachable. */
+    const reachable = () => activeExternal();
+    const intelligenceMode = resolveIntelligenceMode(null).mode;
 
     sharedCentralBrain = createCentralBrain({
+      intelligenceMode,
+      /* Functions, not snapshots: the fleet and provider health change while
+         the singleton lives. */
+      modelLadders: () => buildSeatLadders({ mode: resolveIntelligenceMode(null).mode, providers: reachable() }),
       smartMemory: getSmartMemory(),
       performanceLearning: getPerformanceLearning(),
       adaptiveCouncil: getAdaptiveCouncil(),
-      availableProviders: activeExternal().length ? activeExternal() : Object.keys(MODEL_FLEET_CATALOGUE),
+      availableProviders: () => reachable(),
       toolRunner: async (toolName, args = {}, ctx = {}) => {
         const facetId = TOOL_TO_FACET[toolName] || 'market_prices';
         const primaryToken = Array.isArray(args.symbols) && args.symbols[0] ? args.symbols[0] : null;
