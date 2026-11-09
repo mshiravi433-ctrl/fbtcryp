@@ -2405,6 +2405,16 @@ router.post('/chat', async (req, res) => {
            falsifiability). null when no lens was selected. */
         persona: collaboration?.persona?.id || null,
         lenses: Array.isArray(collaboration?.persona?.lenses) ? collaboration.persona.lenses : [],
+        /* The social read of the user's message: register, tone, the need
+           behind the literal question, and how much was left unsaid. */
+        social: collaboration?.socialRead ? {
+          register: collaboration.socialRead.register,
+          tone: collaboration.socialRead.tone,
+          need: collaboration.socialRead.need,
+          ambiguity: collaboration.socialRead.ambiguity,
+          challenged: collaboration.socialRead.challenged === true,
+          signals: Array.isArray(collaboration.socialRead.signals) ? collaboration.socialRead.signals.slice(0, 8) : []
+        } : null,
         source: resolvedIntelligence.source,
         requested: resolvedIntelligence.requested,
         rejected: resolvedIntelligence.rejected,
