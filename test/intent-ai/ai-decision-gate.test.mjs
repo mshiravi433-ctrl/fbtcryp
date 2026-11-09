@@ -176,7 +176,9 @@ test('max: a decision on thin evidence reaches the model with the gate and the r
 
   assert.equal(out.decision.applicable, true);
   assert.equal(out.decision.verdict, 'NO_ACTION_OR_CONDITIONAL');
-  assert.equal(out.decision.compliant, false);
+  assert.equal(out.decision.compliant, true);
+  assert.equal(out.decision.safetyFallback, true);
+  assert.doesNotMatch(out.answer, /الان بخر/);
 });
 
 test('max: an information question is not gated', async () => {
@@ -193,7 +195,7 @@ test('max: an information question is not gated', async () => {
   for (const c of fleet.calls) assert.equal(c.system.includes('DECISION GATE'), false);
 });
 
-test('balanced: no gate, no verdict, no block', async () => {
+test('balanced: decision gate and safe fallback are active', async () => {
   const fleet = makeFleet();
   const out = await runCollaborativeAnalysis({
     message: 'الان بخرم یا نه؟',
@@ -203,6 +205,6 @@ test('balanced: no gate, no verdict, no block', async () => {
     deps: fleet,
     deadlineMs: 15000
   });
-  assert.equal(out.decision, null);
-  for (const c of fleet.calls) assert.equal(c.system.includes('DECISION GATE'), false);
+  assert.equal(out.decision.safetyFallback, true);
+  assert.ok(fleet.calls.some(c => c.system.includes('DECISION GATE')));
 });

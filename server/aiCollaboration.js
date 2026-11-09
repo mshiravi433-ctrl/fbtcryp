@@ -1,3 +1,4 @@
+import { buildExpertiseContract } from './aiExpertiseContract.js';
 /**
  * FBT SMART INTENT OS — AI UPGRADE 5: COLLABORATIVE INTELLIGENCE ENGINE
  * ---------------------------------------------------------------------------
@@ -245,7 +246,7 @@ export function languageInstruction(locale = 'en') {
 
 const FBT_RULES = [
   'You are one specialist inside FBT\'s own intelligence layer — not a chatbot brand.',
-  'Ground every factual claim in the DATA provided. Never invent prices, balances, news, TVL, APYs or dates.',
+  'Explain general educational concepts from general knowledge, but ground time-sensitive and personal claims in the DATA provided. Never invent prices, balances, news, TVL, APYs, dates or citations.',
   'If data is missing, say the point cannot be verified instead of guessing.',
   'This is analysis, never financial advice and never a promise.',
   'Never ask for or mention private keys, seed phrases or passwords.'
@@ -308,7 +309,7 @@ export function buildSafeContextBlock({ context = {}, knowledge = [], sources = 
   }
   const market = context.market;
   if (market?.priceMap && Object.keys(market.priceMap).length) {
-    lines.push(`LIVE MARKET DATA (source of truth — overrides model memory): ${JSON.stringify(market.priceMap)}`);
+    lines.push(`MARKET DATA (status: ${market.dataStatus || 'unknown'}; do not present stale or missing prices as live): ${JSON.stringify(market.priceMap)}`);
     if (market.change24hPct != null) lines.push(`BTC 24h change: ${market.change24hPct}%`);
     if (market.dataStatus && market.dataStatus !== 'live') lines.push(`Market data status: ${market.dataStatus}`);
   }
@@ -417,7 +418,7 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
     /* The economist's lens is a reasoning contract, not a costume: it rides on
        the specialists and the synthesiser, never on the reviewer (whose job is
        to break the draft, not to reason about the economy). */
-    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}${dialogueBrief ? `\n${dialogueBrief}` : ''}${professorBrief ? `\n${professorBrief}` : ''}${researchBrief ? `\n${researchBrief}` : ''}${marketBrief ? `\n${marketBrief}` : ''}${requestBrief ? `\n${requestBrief}` : ''}${emotionBrief ? `\n${emotionBrief}` : ''}${situationBrief ? `\n${situationBrief}` : ''}${discourseBrief ? `\n${discourseBrief}` : ''}${productBrief ? `\n${productBrief}` : ''}${partialBrief ? `\n${partialBrief}` : ''}`;
+    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}\n${deps.expertiseContract || ''}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}${dialogueBrief ? `\n${dialogueBrief}` : ''}${professorBrief ? `\n${professorBrief}` : ''}${researchBrief ? `\n${researchBrief}` : ''}${marketBrief ? `\n${marketBrief}` : ''}${requestBrief ? `\n${requestBrief}` : ''}${emotionBrief ? `\n${emotionBrief}` : ''}${situationBrief ? `\n${situationBrief}` : ''}${discourseBrief ? `\n${discourseBrief}` : ''}${productBrief ? `\n${productBrief}` : ''}${partialBrief ? `\n${partialBrief}` : ''}`;
   /*
    * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
    * This line used to be a ternary: Persian or English. Everything a Turkish,
@@ -818,6 +819,7 @@ export async function runCollaborativeAnalysis({
   const resolvedIntelligence = resolveIntelligenceMode(intelligence ?? plan?.intelligence?.mode ?? null);
   const mode = resolvedIntelligence.mode;
   const modeProfile = getIntelligenceProfile(mode);
+  D.expertiseContract = plan.level >= 2 ? buildExpertiseContract({ message, taskTypes: plan.taskTypes }) : '';
   /*
    * Multi-part questions get a checklist, not a second engine. The splitter is
    * deterministic and conservative: it only fires on structure the user typed
@@ -856,7 +858,7 @@ export async function runCollaborativeAnalysis({
    * acknowledgement, containment, or nothing but the facts. Empty for a
    * neutral message, so an ordinary question keeps its prompt.
    */
-  const emotionRead = mode === 'max'
+  const emotionRead = mode !== 'swift'
     ? readEmotion({ message, locale, history: context?.conversationSummary || '', social: socialRead })
     : null;
   const emotionBrief = renderEmpathyContract(emotionRead);
@@ -868,7 +870,7 @@ export async function runCollaborativeAnalysis({
    * what the answer owes — and what it may never claim (a P&L the turn does
    * not hold, a recovery, more risk after a loss).
    */
-  const situationRead = mode === 'max'
+  const situationRead = mode !== 'swift'
     ? readSituation({ context, emotion: emotionRead, social: socialRead, message, locale })
     : null;
   const situationBrief = renderSituationContract(situationRead);
@@ -950,7 +952,7 @@ export async function runCollaborativeAnalysis({
    * gives the base rate, and — enforced below, not merely requested — states what
    * would prove the reading wrong. Small talk never reaches level 4.
    */
-  const professorLenses = mode === 'max' && plan.level >= 4
+  const professorLenses = mode !== 'swift' && plan.level >= 2
     ? selectProfessorLenses({ message, taskTypes: plan.taskTypes })
     : [];
   const professorBrief = renderProfessorContract(professorLenses);
@@ -1122,7 +1124,7 @@ export async function runCollaborativeAnalysis({
     /* Live market/portfolio data injected into the context block IS tool
        grounding (§43) — the answer must be scored as data-backed. */
     result.evidence.toolDataUsed = Boolean(
-      (context.market?.priceMap && Object.keys(context.market.priceMap).length) ||
+      (context.market?.dataStatus === 'live' && context.market?.priceMap && Object.values(context.market.priceMap).some((v) => v != null && Number(v) > 0)) ||
       context.portfolio?.totalValueUsd != null
     );
   }
@@ -1146,7 +1148,7 @@ export async function runCollaborativeAnalysis({
    * hold? The specialists are told what the evidence level permits BEFORE they
    * write; the Reviewer is told afterwards if the draft ignored it.
    */
-  const decisionEvidence = mode === 'max'
+  const decisionEvidence = mode !== 'swift'
     ? assessEvidence({ context, sources: result.sources, knowledge })
     : null;
   const decisionBrief = decisionEvidence
@@ -1193,7 +1195,7 @@ export async function runCollaborativeAnalysis({
    */
   /* Level 3+ only: a level-2 turn is one model with no brief slots, and holding
      a draft to a contract it never received would be an unfair check. */
-  const isMarketTurn = mode === 'max' && plan.level >= 3 && detectMarketAnalysis(message, plan.taskTypes);
+  const isMarketTurn = mode !== 'swift' && plan.level >= 2 && detectMarketAnalysis(message, plan.taskTypes);
   const marketFrame = isMarketTurn ? buildMarketFrame({ context, message, knowledge }) : null;
   const marketBrief = marketFrame
     ? `${renderMarketFrame(marketFrame)}\n${renderMarketContract(marketFrame)}`
@@ -1254,7 +1256,7 @@ export async function runCollaborativeAnalysis({
       : plan.taskTypes.includes('crypto-analysis') || plan.taskTypes.includes('research') ? AI_ROLES.CRYPTO_RESEARCH_AI
       : plan.taskTypes.includes('risk') ? AI_ROLES.RISK_AI
       : AI_ROLES.CRYPTO_RESEARCH_AI;
-    const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: 0, intelligence: mode, socialBrief, dialogueBrief, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief }), null);
+    const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: 0, intelligence: mode, socialBrief, decisionBrief, dialogueBrief, professorBrief, marketBrief, requestBrief, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief }), null);
     if (single?.ok) { analyses.push(single); result.answer = single.answer; }
     else { result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale }); result.degraded = true; }
   } else if (plan.level === 3) {
@@ -1299,6 +1301,7 @@ export async function runCollaborativeAnalysis({
         socialBrief,
         strategyBrief,
         decisionBrief,
+        dialogueBrief, professorBrief, researchBrief, marketBrief, requestBrief, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief,
         /* The last analytical seat is the dissenting one, and only in the
            smartest mode: one of the three reads must be trying to break the
            other two, not agreeing with them. */
@@ -1662,12 +1665,16 @@ export async function runCollaborativeAnalysis({
   }
 
   /* The reviewer may have downgraded a recommendation: re-check the FINAL text. */
-  if (result.decision?.applicable) {
-    result.decision = evaluateDecision({
-      message,
-      evidence: result.decision.evidence,
-      answer: result.answer
-    });
+  if (decisionEvidence && !result.degraded) {
+    const gate = evaluateDecision({ message, evidence: result.decision?.evidence || decisionEvidence, answer: result.answer });
+    result.decision = gate.applicable ? gate : null;
+    // A failed or absent reviewer is not permission to ship an unsupported order.
+    if (result.decision && !result.decision.compliant) {
+      result.answer = isFa
+        ? 'برای توصیهٔ خرید یا فروش، شواهد و شرایط شخصی کافی در دسترس نیست. فعلاً جهت معامله را حدس نمی‌زنم؛ دارایی، افق زمانی و میزان زیان قابل‌تحمل را مشخص کنید تا گزینه‌ها و ریسکشان را بررسی کنیم.'
+        : 'There is not enough evidence or personal context for a buy or sell recommendation. I will not guess a direction; share the asset, time horizon and loss you can tolerate so we can examine the options and risks.';
+      result.decision = { ...evaluateDecision({ message, evidence: gate.evidence, answer: result.answer }), safetyFallback: true };
+    }
   }
 
   /*

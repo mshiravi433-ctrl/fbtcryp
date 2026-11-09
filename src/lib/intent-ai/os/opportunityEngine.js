@@ -47,8 +47,8 @@ function riskFrom({ volatilityPct = null, drawdownPct = null, apy = null, poolRi
   if ((num(volatilityPct) || 0) > 6) score += 2;
   else if ((num(volatilityPct) || 0) > 3) score += 1;
   if ((num(drawdownPct) || 0) > 40) score += 2;
-  if ((num(volumeUsd) || 0) < 1_000_000) score += 1;
-  return score >= 5 ? 'high' : score >= 2 ? 'medium' : 'low';
+  if (num(volumeUsd) != null && num(volumeUsd) < 1_000_000) score += 1;
+  return score >= 5 ? 'high' : score >= 2 ? 'medium' : 'unknown';
 }
 
 function confidenceFrom(samples, provenance) {
@@ -75,9 +75,9 @@ function marketOpportunities(markets = [], ohlcById = {}) {
     .filter((m) => m?.current_price != null && m?.symbol)
     .map((m) => {
       const hist = ohlcById[m.id] || null;
-      const volPct = Math.abs(num(m.price_change_percentage_24h) || 0);
+      const volPct = num(m.price_change_percentage_24h);
       const move7d = num(m.price_change_percentage_7d_in_currency ?? m.price_change_percentage_7d);
-      const volatilityPct = Math.max(volPct, Math.abs(move7d || 0) / 2);
+      const volatilityPct = volPct == null && move7d == null ? null : Math.max(Math.abs(volPct ?? 0), Math.abs(move7d ?? 0) / 2);
       const br = hist?.baseRate || null;
       const dd = hist?.drawdown ?? (move7d != null ? Math.min(100, Math.max(0, -move7d)) : null);
       return {
@@ -127,7 +127,8 @@ function yieldOpportunities(pools = [], kind = 'YIELD') {
       risk: p.risk || riskFrom({ apy, poolRisk: p.risk, tvlUsd: tvl }),
       confidence: apy != null ? 0.6 : 0.3,
       dataQuality: dataQualityFrom(p.dataProvenance || p.status || 'live'),
-      potentialDrawdownPct: p.ilRisk === 'high' ? 20 : p.ilRisk === 'medium' ? 10 : 5,
+      // An IL category is not a measured drawdown percentage.
+      potentialDrawdownPct: null,
       volatilityPct: null,
       volumeUsd: num(p.volumeUsd),
       tvlUsd: tvl,

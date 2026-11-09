@@ -287,7 +287,7 @@ test('max: a cheerful platitude is sent back to the reviewer', async () => {
   assert.ok(out.emotion.violations.includes('TOXIC_POSITIVITY'));
 });
 
-test('balanced: no emotion read reaches the models', async () => {
+test('balanced: emotion read reaches the models', async () => {
   const fleet = makeFleet();
   const out = await runCollaborativeAnalysis({
     message: GRIEF_TURN,
@@ -297,8 +297,6 @@ test('balanced: no emotion read reaches the models', async () => {
     deps: fleet,
     deadlineMs: 15000
   });
-  assert.equal(out.emotion, null);
-  for (const call of fleet.calls) {
-    assert.equal(call.system.includes('EMOTION READ'), false);
-  }
+  assert.ok(out.emotion);
+  assert.ok(fleet.calls.some(call => call.system.includes('EMOTION READ')));
 });

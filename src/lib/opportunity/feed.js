@@ -210,7 +210,7 @@ export function normalizeYieldRows({ pools = [], venues = [] } = {}) {
         rewardApy: num(p.apyReward),
         volume24hUsd: num(p.volumeUsd1d),
         impermanentLossRisk: p.ilRisk === true ? 7 : null,
-        riskScore: p.risk === 'high' ? 7 : p.risk === 'medium' ? 4.5 : 2.5
+        riskScore: p.risk === 'high' ? 7 : p.risk === 'medium' ? 4.5 : p.risk === 'low' ? 2.5 : null
       });
       continue;
     }
@@ -221,7 +221,7 @@ export function normalizeYieldRows({ pools = [], venues = [] } = {}) {
         supplyApy: apy,
         utilizationPct: num(p.utilizationPct),
         ltvPct: num(p.ltvPct),
-        riskScore: p.risk === 'high' ? 7 : p.risk === 'medium' ? 4.5 : 2.5
+        riskScore: p.risk === 'high' ? 7 : p.risk === 'medium' ? 4.5 : p.risk === 'low' ? 2.5 : null
       });
       continue;
     }
@@ -230,7 +230,7 @@ export function normalizeYieldRows({ pools = [], venues = [] } = {}) {
       symbol: p.symbol ?? null,
       asset: p.symbol ?? null,
       lockDays: num(p.lockDays),
-      riskScore: p.risk === 'high' ? 7 : p.risk === 'medium' ? 4.5 : 2.5
+      riskScore: p.risk === 'high' ? 7 : p.risk === 'medium' ? 4.5 : p.risk === 'low' ? 2.5 : null
     });
   }
   return { liquidityPools, farms, lendingMarkets };

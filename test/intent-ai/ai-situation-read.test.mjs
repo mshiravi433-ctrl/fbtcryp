@@ -350,7 +350,7 @@ test('a loss described in words is never answered on the small-talk path', () =>
   assert.equal(planCollaboration({ message: 'سلام، چطوری؟', intelligence: 'max' }).conversationKind, 'GREETING');
 });
 
-test('balanced: no situation read reaches the models', async () => {
+test('balanced: situation read reaches the models', async () => {
   const fleet = makeFleet();
   const out = await runCollaborativeAnalysis({
     message: LOSS_TURN,
@@ -360,8 +360,6 @@ test('balanced: no situation read reaches the models', async () => {
     deps: fleet,
     deadlineMs: 15000
   });
-  assert.equal(out.situation, null);
-  for (const call of fleet.calls) {
-    assert.equal(call.system.includes('SITUATION (their money'), false);
-  }
+  assert.ok(out.situation);
+  assert.ok(fleet.calls.some(call => call.system.includes('SITUATION (their money')));
 });

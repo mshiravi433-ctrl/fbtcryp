@@ -35,24 +35,25 @@ const ADVICE_RE = /(بخر|بخرید|بخرش|بفروش|بفروشید|بفر�
 /* A condition turns an instruction into a plan. */
 const CONDITION_RE = /(اگر|در\s*صورت|به\s*شرط|مشروط|شرطش|تنها\s*در|فقط\s*در\s*صورت|unless|\bif\b|only\s+if|conditional|as\s+long\s+as)/i;
 
-/* The safe direction: telling someone NOT to act is never the dangerous case. */
-const SAFE_DIRECTION_RE = /(نخر|نخرید|نفروش|نگه\s*ندار|صبر\s*کن|دست\s*نگه\s*دار|عجله\s*نکن|do\s+not\s+buy|don'?t\s+buy|do\s+not\s+sell|don'?t\s+sell|wait)/i;
-
 /* A negation anywhere in the run-up to the verb negates it («توصیه نمی‌کنم
    بخرید», «do not buy»). Checking only the final characters missed Persian,
    where the verb form is «نمی‌کنم» and the sentence continues. */
 const NEGATION_RE = /(نمی|نه|بدون|never|do\s+not|don'?t|\bnot\b)/i;
 
-function hasDirectionalAdvice(text) {
-  const body = String(text || '');
-  const re = new RegExp(ADVICE_RE.source, 'gi');
-  let m;
-  while ((m = re.exec(body)) !== null) {
-    const before = body.slice(Math.max(0, m.index - 16), m.index);
-    if (NEGATION_RE.test(before)) continue;
-    return true;
-  }
-  return false;
+function hasUnconditionalAdvice(text) {
+  // A warning or condition in one sentence must not excuse a bare order in
+  // another ("don't sell. Buy now"). Check each clause independently.
+  const clauses = String(text || '').split(/[.!?؟؛;\n]+|\bbut\b|اما|ولی/i);
+  return clauses.some((clause) => {
+    if (CONDITION_RE.test(clause)) return false;
+    const re = new RegExp(ADVICE_RE.source, 'gi');
+    let match;
+    while ((match = re.exec(clause)) !== null) {
+      const before = clause.slice(Math.max(0, match.index - 16), match.index);
+      if (!NEGATION_RE.test(before)) return true;
+    }
+    return false;
+  });
 }
 
 /**
@@ -64,7 +65,7 @@ export function assessEvidence({ context = {}, sources = [], knowledge = [], com
   let score = 0;
 
   const market = context?.market;
-  const hasPrices = Boolean(market?.priceMap && Object.keys(market.priceMap).length);
+  const hasPrices = Boolean(market?.priceMap && Object.values(market.priceMap).some((v) => v != null && v !== '' && Number.isFinite(Number(v)) && Number(v) > 0));
   const status = market?.dataStatus;
   if (hasPrices && (!status || status === 'live')) {
     score += 2;
@@ -74,7 +75,7 @@ export function assessEvidence({ context = {}, sources = [], knowledge = [], com
     reasons.push('stale_market');
   }
 
-  if (Number.isFinite(Number(context?.portfolio?.totalValueUsd))) {
+  if (context?.portfolio?.totalValueUsd != null && context.portfolio.totalValueUsd !== '' && Number.isFinite(Number(context.portfolio.totalValueUsd)) && !['unavailable', 'stale', 'offline'].includes(context.portfolio.dataStatus)) {
     score += 1;
     reasons.push('portfolio');
   }
@@ -97,7 +98,7 @@ export function assessEvidence({ context = {}, sources = [], knowledge = [], com
     const agreement = String(comparison.agreement || '');
     const [agree, total] = agreement.split('/').map(Number);
     if (Number.isFinite(agree) && Number.isFinite(total) && total > 0 && agree === total) {
-      score += 1;
+      // Agreement is not independent evidence.
       reasons.push('models_agree');
     }
     if (comparison.disagreement) {
@@ -140,22 +141,18 @@ export function evaluateDecision({ message = '', evidence = null, answer = '' } 
       compliant: true
     };
   }
-  const recommendationDetected = hasDirectionalAdvice(answer);
-  const safeDirection = SAFE_DIRECTION_RE.test(String(answer || ''));
+  const recommendationDetected = hasUnconditionalAdvice(answer);
   const conditional = CONDITION_RE.test(String(answer || ''));
   const verdict = ev.level === 'sufficient' ? 'ALLOWED'
     : ev.level === 'partial' ? 'CONDITIONAL' : 'NO_ACTION_OR_CONDITIONAL';
-  const compliant = ev.level === 'sufficient'
-    || !recommendationDetected
-    || safeDirection
-    || conditional;
+  const compliant = ev.level === 'sufficient' || !recommendationDetected;
   return {
     schema: DECISION_GATE_SCHEMA,
     applicable: true,
     asksDecision: true,
     evidence: ev,
     verdict,
-    recommendationDetected: recommendationDetected && !safeDirection,
+    recommendationDetected,
     conditional,
     compliant
   };

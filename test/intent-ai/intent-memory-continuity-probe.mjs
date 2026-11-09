@@ -148,7 +148,7 @@ const block = buildSafeContextBlock({
 t('the session summary reaches the model prompt', block.includes('CONVERSATION SO FAR') && block.includes('۱۰۰۰ دلار'));
 t('long-term memory reaches the model prompt', block.includes('USER LONG-TERM MEMORY') && block.includes('صبح‌ها خبرهای بازار'));
 t('the memory block is labelled as background, not data', /BACKGROUND ONLY/.test(block));
-t('market data still reaches the prompt (no regression)', block.includes('LIVE MARKET DATA') && block.includes('BTC'));
+t('market data still reaches the prompt (no regression)', block.includes('MARKET DATA (status:') && block.includes('BTC'));
 t('memory items are capped at five', (block.match(/^- /gm) || []).length === 5, String((block.match(/^- /gm) || []).length));
 t('a single memory line is bounded to 200 chars', !block.includes('x'.repeat(201)));
 

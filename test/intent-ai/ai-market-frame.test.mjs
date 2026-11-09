@@ -145,7 +145,7 @@ test('stale and offline data are marked, and the gap is named', () => {
 
 test('the supported horizon follows the data, not the question', () => {
   const asked = buildMarketFrame({ context: THIN_CONTEXT, message: 'BTC تا سه ماه آینده چه می‌شود؟' });
-  assert.equal(asked.horizon.requestedDays, 180);
+  assert.equal(asked.horizon.requestedDays, 90);
   assert.equal(asked.horizon.supportedDays, 1);
   assert.equal(asked.horizon.exceeded, true);
 
@@ -157,7 +157,7 @@ test('the supported horizon follows the data, not the question', () => {
 
   /* An OHLC series is the one thing that would lift the ceiling. */
   const withHistory = buildMarketFrame({
-    context: { market: { ...RICH_CONTEXT.market, ohlc: [{ t: 1, o: 1, h: 2, l: 1, c: 1.5 }] } },
+    context: { market: { ...RICH_CONTEXT.market, ohlc: [{ t: 1, o: 1, h: 2, l: 1, c: 1.5 }, { t: 2, o: 1.5, h: 2, l: 1, c: 1.6 }] } },
     message: 'تحلیل BTC تا سه ماه آینده'
   });
   assert.equal(withHistory.horizon.basis, 'ohlc_history');
@@ -172,7 +172,7 @@ test('the rendered frame carries the numbers, the limit and the gaps', () => {
   assert.match(text, /status=زنده/);
   assert.match(text, /- BTC: \$68400, -2\.4% 24h/);
   assert.match(text, /horizon this data supports: today only/);
-  assert.match(text, /the question asks for 180 days/);
+  assert.match(text, /the question asks for 90 days/);
   assert.match(text, /NOT SUPPORTED by this data/);
   assert.match(text, /gaps: /);
 
@@ -204,7 +204,7 @@ test('an indicator the data cannot compute is a HIGH violation', () => {
 
 test('with an OHLC series the same indicator is legitimate', () => {
   const frame = buildMarketFrame({
-    context: { market: { ...THIN_CONTEXT.market, ohlc: [{ t: 1, o: 1, h: 2, l: 1, c: 1.5 }] } },
+    context: { market: { ...THIN_CONTEXT.market, ohlc: [{ t: 1, o: 1, h: 2, l: 1, c: 1.5 }, { t: 2, o: 1.5, h: 2, l: 1, c: 1.6 }] } },
     message: 'تحلیل بازار BTC'
   });
   const check = checkMarketAnalysis({ frame, answer: RSI_ANSWER });
@@ -392,7 +392,7 @@ test('max: a non-market turn carries no frame at all', async () => {
   }
 });
 
-test('balanced: the frame never reaches the models', async () => {
+test('balanced: market frame reaches the models', async () => {
   const fleet = makeFleet();
   const out = await runCollaborativeAnalysis({
     message: MARKET_QUESTION,
@@ -402,8 +402,6 @@ test('balanced: the frame never reaches the models', async () => {
     deps: fleet,
     deadlineMs: 15000
   });
-  assert.equal(out.market, null);
-  for (const call of fleet.calls) {
-    assert.equal(call.system.includes('MARKET FRAME'), false);
-  }
+  assert.ok(out.market);
+  assert.ok(fleet.calls.some(call => call.system.includes('MARKET FRAME')));
 });
