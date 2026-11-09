@@ -2363,6 +2363,16 @@ router.post('/chat', async (req, res) => {
       degraded: collaboration?.degraded ?? false,
       webUsed: collaboration?.evidence?.webUsed || false,
       latencyMs: collaboration?.latencyMs || 0,
+      /* The depth that actually happened: how many models were consulted and
+         whether the adversarial review ran and repaired the draft. The UI can
+         print this without re-deriving anything. */
+      depth: collaboration ? {
+        level: collaboration.level ?? null,
+        models: (collaboration.modelsConsulted || []).length,
+        reviewed: collaboration.critique?.used === true,
+        reviewReason: collaboration.critique?.reason || null,
+        reviewIssues: Array.isArray(collaboration.critique?.issues) ? collaboration.critique.issues.slice(0, 4) : []
+      } : null,
       /* Which brain was asked for, what it actually did, and whether the mode
          raised this turn's depth. The UI prints the mode; the plan fields let
          it explain WHY a turn was deep without re-deriving anything. */

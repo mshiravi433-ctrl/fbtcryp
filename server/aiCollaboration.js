@@ -180,6 +180,21 @@ const ROLE_PROMPTS = {
   [AI_ROLES.FINAL_ANSWER_AI]: `You are FBT's Final Answer AI.\nSynthesize the specialists' work into ONE coherent FBT answer in the user's language. Never mention model names or providers. State uncertainty honestly. If specialists disagreed, present both views and which evidence supports which.\n${FBT_RULES}`
 };
 
+/*
+ * ─── ADVERSARIAL SELF-REVIEWER (smartest mode) ───────────────────────────────
+ * A separate voice from the synthesiser: it did not write the draft, it is
+ * asked to break it. The only evidence it sees is the same safe context block
+ * the draft was allowed to use, so "unsupported" has a precise meaning — not
+ * "I personally doubt it", but "this number is not in the block".
+ */
+const CRITIQUE_SYSTEM = `You are FBT's adversarial self-reviewer. You receive the user's question, a DRAFT ANSWER, and the ONLY evidence the answer was allowed to use. Your job is to make the draft honest and useful — not to rewrite it for style.
+Check, in this order:
+1. every number, price, percentage, date, balance and fee against the evidence: delete it or mark it unknown if it is not there;
+2. certainty: soften claims the evidence cannot support, and add the strongest counter-argument the draft ignores;
+3. completeness: answer the question actually asked; if a required reading is missing, name the specific reading.
+Keep the user's language and FBT's voice. If the draft is already sound, return it unchanged.
+Put the corrected FINAL ANSWER in "answer". Put each change you made (or "no change") as one claim in "claims". Put what remains uncertain in "uncertainty".`;
+
 const ANALYSIS_JSON_SHAPE = `
 Respond in STRICT JSON:
 {
@@ -192,7 +207,7 @@ Respond in STRICT JSON:
 /*  SECURE CONTEXT — the ONLY thing external models may see (§43-44)           */
 /* -------------------------------------------------------------------------- */
 
-export function buildSafeContextBlock({ context = {}, knowledge = [], sources = [] } = {}) {
+export function buildSafeContextBlock({ context = {}, knowledge = [], sources = [], knowledgeLimit = 4 } = {}) {
   const lines = [];
   /*
    * Phase 213 — directives come FIRST and are read as constraints, not data.
@@ -246,7 +261,8 @@ export function buildSafeContextBlock({ context = {}, knowledge = [], sources = 
   }
   if (knowledge.length) {
     lines.push('FBT INTERNAL KNOWLEDGE (verified product facts):');
-    for (const k of knowledge.slice(0, 4)) lines.push(`- [${k.id} v${k.version} ${k.status}] ${k.title}: ${String(k.body).slice(0, 300)}`);
+    const limit = Math.max(1, Math.min(12, Number(knowledgeLimit) || 4));
+    for (const k of knowledge.slice(0, limit)) lines.push(`- [${k.id} v${k.version} ${k.status}] ${k.title}: ${String(k.body).slice(0, 300)}`);
   }
   if (sources.length) {
     lines.push('WEB SOURCES (cite by number; social=tier4 is a lead only):');
@@ -280,8 +296,20 @@ const ROLE_TASK = {
   [AI_ROLES.FINAL_ANSWER_AI]: 'reasoning'
 };
 
-async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null }) {
-  const system = `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}`;
+async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null }) {
+  /*
+   * ─── DEEP REASONING CONTRACT (smartest mode only) ─────────────────────────
+   * The role prompts are shared by every mode, so the extra discipline lives
+   * here: identify the deciding facts first, weigh the counter-case, and never
+   * introduce a number/price/date that the evidence block does not contain.
+   * `balanced` and `swift` send the exact prompt they always did.
+   */
+  const deepReasoning = getIntelligenceProfile(intelligence).id === 'max'
+    ? '\nDEEP REASONING (FBT smartest mode): before answering, identify the 2-3 facts that actually decide this question and reason from them. Name the strongest counter-argument against your own conclusion. Never introduce a number, price, date, balance or percentage that is absent from the provided data; write "not readable" instead of a guess. If the evidence is thin, say which specific reading would settle it.'
+    : '';
+  const system = systemOverride
+    ? `${systemOverride}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}`
+    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}`;
   /*
    * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
    * This line used to be a ternary: Persian or English. Everything a Turkish,
@@ -612,7 +640,25 @@ export async function runCollaborativeAnalysis({
     ]).finally(() => clearTimeout(timer));
   };
 
-  const plan = analysis || planCollaboration({ message, intentType, entities, context, locale });
+  /*
+   * Resolve the mode BEFORE planning when no plan was supplied, so a direct
+   * caller (`runCollaborativeAnalysis({ intelligence: 'max' })`) gets the same
+   * depth floor the chat route gets. Previously only the route's pre-built plan
+   * carried it, and a direct call silently ran at the analyzer's level with
+   * `max` budgets — a mode that was half applied.
+   */
+  const preResolved = resolveIntelligenceMode(intelligence ?? analysis?.intelligence?.mode ?? null);
+  const preProfile = getIntelligenceProfile(preResolved.mode);
+  const plan = analysis || planCollaboration({
+    message,
+    intentType,
+    entities,
+    context,
+    locale,
+    intelligence: preResolved.mode,
+    intelligenceFloor: preProfile.collaborationFloor,
+    intelligenceCeiling: preProfile.collaborationCeiling
+  });
   /* One resolution for the whole run. `analysis.intelligence.mode` is the mode
      the plan was built with; an explicit argument wins over it. */
   const resolvedIntelligence = resolveIntelligenceMode(intelligence ?? plan?.intelligence?.mode ?? null);
@@ -623,6 +669,9 @@ export async function runCollaborativeAnalysis({
      conversation roles are exempt (see intelligenceGeneration). */
   const tokensFor = (base, taskType = 'reasoning') =>
     intelligenceGeneration(mode, { maxTokens: base, temperature: 0.3, taskType }).maxTokens;
+  /* Evidence depth follows the mode: the smartest seat gets more verified
+     product facts to reason over (and to be checked against later). */
+  const knowledgeTopK = Math.max(3, Math.min(10, Number(modeProfile.knowledgeTopK) || 4));
   const isFa = String(locale || 'fa').startsWith('fa');
   const externalConfigured = Boolean(D.selectProviders) || getActiveProviderIds().some((id) => id !== 'internal');
 
@@ -661,6 +710,9 @@ export async function runCollaborativeAnalysis({
     evidence: { toolDataUsed: false, webUsed: false, knowledgeUsed: false, corroborated: false },
     degraded: false,
     transparency: Boolean(transparency),
+    /* null = the mode did not run a review. An object says whether one ran, on
+       which seat, and whether its repair was used. */
+    critique: null,
     perRole: transparency ? [] : undefined,
     latencyMs: 0,
     at: Date.now()
@@ -675,8 +727,8 @@ export async function runCollaborativeAnalysis({
        degraded answer is built from). Passages carry citable ids. */
     try {
       const seen = new Set(knowledge.map((k) => k.id));
-      for (const p of retrieveBm25(message, { locale, limit: 3 })) {
-        if (knowledge.length >= 4) break;
+      for (const p of retrieveBm25(message, { locale, limit: knowledgeTopK })) {
+        if (knowledge.length >= knowledgeTopK) break;
         if (seen.has(p.id)) continue;
         knowledge.push({ ...p, version: 1, bodyEn: p.body });
         seen.add(p.id);
@@ -706,7 +758,7 @@ export async function runCollaborativeAnalysis({
     }
   }
 
-  const contextBlock = buildSafeContextBlock({ context, knowledge, sources: result.sources });
+  const contextBlock = buildSafeContextBlock({ context, knowledge, sources: result.sources, knowledgeLimit: knowledgeTopK });
 
   /* The ordered fleet for THIS question: the dominant task's preferred order
      first, then every other configured provider (health-aware). One shared
@@ -777,7 +829,15 @@ export async function runCollaborativeAnalysis({
        take distinct seats of the shared fleet (seat = role index); the
        verifier and the final-answer synthesiser continue the rotation so a
        high-stakes question walks several different providers end to end. */
-    const roles = pickAnalysisRoles(plan, plan.level >= 5 ? 3 : 2);
+    /*
+     * Independent analyses: the historical rule is 2 at level 4 and 3 at
+     * level 5. The smartest mode asks for 3 at level 4 too — three independent
+     * reads are what later disagreement and the critique step have to work
+     * with. It never exceeds the number of distinct analytical roles.
+     */
+    const baseAnalyses = plan.level >= 5 ? 3 : 2;
+    const wantedAnalyses = Math.max(baseAnalyses, Math.min(5, Number(modeProfile.analysesCount) || baseAnalyses));
+    const roles = pickAnalysisRoles(plan, wantedAnalyses, wantedAnalyses);
     const settled = await withDeadline(
       Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode }))),
       []
@@ -806,9 +866,23 @@ export async function runCollaborativeAnalysis({
     if (validFinal.length) {
       /* Stage 6: one clean FBT answer from the specialists' work (§37). */
       const digest = analyses.filter((a) => a.ok).map((a) => `[${a.role}] ${String(a.answer).slice(0, 500)}`).join('\n\n');
+      /*
+       * The verifier's findings used to be just another paragraph in the
+       * digest. In the smartest mode the synthesiser is told to RESOLVE them:
+       * drop or qualify every claim the evidence does not support, and say
+       * which evidence wins when two analyses disagree. That is the difference
+       * between "we asked a verifier" and "the answer was verified".
+       */
+      const verifierFinding = analyses.find((a) => a.ok && a.role === AI_ROLES.VERIFICATION_AI);
+      const verifierNote = verifierFinding
+        ? `\n\nVERIFIER FINDINGS (resolve every point; remove or qualify anything it flags as unsupported):\n${String(verifierFinding.answer).slice(0, 900)}`
+        : '';
+      const revisionRule = modeProfile.selfCritique
+        ? '\n\nHARD RULE: do not introduce a number, price, date or percentage that is absent from the data above. If two analyses disagree, state which evidence wins and what remains unknown.'
+        : '';
       const finalRole = await withDeadline(runRole({
         role: AI_ROLES.FINAL_ANSWER_AI,
-        message: `${message}\n\nSPECIALIST WORK:\n${digest}`,
+        message: `${message}\n\nSPECIALIST WORK:\n${digest}${verifierNote}${revisionRule}`,
         contextBlock,
         locale,
         deps: D,
@@ -821,6 +895,71 @@ export async function runCollaborativeAnalysis({
         ? finalRole.answer
         : mergeTwoAnswers(validFinal, isFa);
       if (finalRole?.ok) analyses.push(finalRole);
+
+      /*
+       * ─── ADVERSARIAL SELF-REVIEW (smartest mode) ───────────────────────────
+       * One bounded extra call, on a DIFFERENT seat, that receives the draft
+       * and the same evidence block and returns a repaired answer. It is
+       * allowed to replace the draft only when the repair is substantial
+       * (≥60% of the draft's length, or the draft was a two-liner). A review
+       * that times out, refuses, or returns a stub leaves the draft standing:
+       * this step can only improve an answer, never delete one.
+       */
+      if (modeProfile.selfCritique && !result.degraded) {
+        const draft = String(result.answer || '').trim();
+        const remaining = deadlineMs - (Date.now() - startedAt);
+        if (draft.length >= 80 && remaining > 2500) {
+          const critiqueBudget = Math.min(7000, remaining - 800);
+          const criticRole = {
+            role: AI_ROLES.VERIFICATION_AI,
+            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}`,
+            contextBlock: '',
+            locale,
+            deps: D,
+            fleet,
+            seat: roles.length + 2,
+            maxTokens: tokensFor(800),
+            intelligence: mode,
+            systemOverride: CRITIQUE_SYSTEM
+          };
+          const critic = await withDeadline(runRole(criticRole), null, critiqueBudget);
+          const repaired = String(critic?.answer || '').trim();
+          const substantial = repaired.length >= 40 && (
+            draft.length < 200 ? repaired.length >= 40 : repaired.length >= Math.round(draft.length * 0.6)
+          );
+          const changed = critic?.ok && repaired && repaired !== draft;
+          if (changed && substantial) {
+            result.critique = {
+              used: true,
+              provider: critic.provider || null,
+              model: critic.model || null,
+              changed: true,
+              issues: Array.isArray(critic.claims) ? critic.claims.slice(0, 4).map((c) => String(c.claim || '').slice(0, 200)) : [],
+              draftLength: draft.length,
+              repairedLength: repaired.length,
+              reason: 'REPAIRED'
+            };
+            result.answer = repaired;
+            /* Attribution only: an empty `answer` keeps the reviewer out of
+               claim comparison (its "changes" are not market claims), while
+               the model/provider still reach modelsConsulted/providersUsed. */
+            analyses.push({ role: 'critique', provider: critic.provider || null, model: critic.model || null, answer: '', claims: [], ok: true });
+          } else {
+            result.critique = {
+              used: false,
+              provider: critic?.provider || null,
+              model: critic?.model || null,
+              changed: Boolean(changed),
+              issues: Array.isArray(critic?.claims) ? critic.claims.slice(0, 4).map((c) => String(c.claim || '').slice(0, 200)) : [],
+              draftLength: draft.length,
+              repairedLength: repaired.length,
+              reason: critic?.ok ? (substantial ? 'UNCHANGED' : 'STUB_OR_TRUNCATED') : 'NO_CRITIC_ANSWER'
+            };
+          }
+        } else {
+          result.critique = { used: false, reason: draft.length < 80 ? 'DRAFT_TOO_SHORT' : 'OUT_OF_TIME' };
+        }
+      }
     } else {
       result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale });
       result.degraded = true;
@@ -923,7 +1062,7 @@ function naturalConversationReply(kind, isFa, { locale = null, social = null } =
   return rendered.ok ? rendered.text : null;
 }
 
-function pickAnalysisRoles(plan, max) {
+function pickAnalysisRoles(plan, max, min = Math.min(2, max)) {
   const priority = [
     [AI_ROLES.MARKET_AI, plan.taskTypes.includes('market')],
     [AI_ROLES.CRYPTO_RESEARCH_AI, plan.taskTypes.includes('crypto-analysis') || plan.taskTypes.includes('research')],
@@ -933,10 +1072,24 @@ function pickAnalysisRoles(plan, max) {
     [AI_ROLES.PORTFOLIO_AI, plan.taskTypes.includes('portfolio')]
   ];
   const chosen = priority.filter(([, wanted]) => wanted).map(([r]) => r).slice(0, max);
-  while (chosen.length < Math.min(2, max)) {
-    const fallback = [AI_ROLES.MARKET_AI, AI_ROLES.RISK_AI].find((r) => !chosen.includes(r));
-    if (!fallback) break;
-    chosen.push(fallback);
+  /*
+   * Fill up to `min` with DISTINCT analytical roles before repeating a view.
+   * The old loop only guaranteed two, so asking for three on a market-only
+   * question silently collapsed back to two analyses.
+   */
+  /* Market + risk lead the fill: they are the two views the protocol always
+     had, so a third analysis extends that pair instead of replacing it. */
+  const fillPool = [
+    AI_ROLES.MARKET_AI,
+    AI_ROLES.RISK_AI,
+    AI_ROLES.CRYPTO_RESEARCH_AI,
+    AI_ROLES.STRATEGY_AI,
+    AI_ROLES.PORTFOLIO_AI,
+    AI_ROLES.NEWS_AI
+  ];
+  for (const candidate of fillPool) {
+    if (chosen.length >= Math.min(min, max)) break;
+    if (!chosen.includes(candidate)) chosen.push(candidate);
   }
   return chosen.length ? chosen : [AI_ROLES.MARKET_AI, AI_ROLES.RISK_AI].slice(0, max);
 }

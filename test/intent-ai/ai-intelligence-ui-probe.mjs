@@ -66,6 +66,24 @@ assert.ok(collab.includes('intelligence: mode'), 'the mode must reach the provid
 assert.ok(collab.includes('intelligence: {\n      mode,'), 'the result must name the mode that produced it');
 ok('collaboration scales budgets and passes the mode down');
 
+/*
+ * The DEPTH half: a stronger model alone still answers once. These checks pin
+ * that the self-review actually exists, is bounded, and cannot replace a draft
+ * with a stub.
+ */
+assert.ok(collab.includes('CRITIQUE_SYSTEM'), 'the adversarial reviewer prompt must exist');
+assert.ok(collab.includes('adversarial self-reviewer'), 'the reviewer must be a separate voice');
+assert.ok(collab.includes('VERIFIER FINDINGS (resolve every point'), 'the synthesiser must be told to resolve findings');
+assert.ok(collab.includes("reason: 'REPAIRED'"), 'a used repair must be reported');
+assert.ok(collab.includes("'STUB_OR_TRUNCATED'"), 'a stub repair must be refused');
+assert.ok(collab.includes('DEEP REASONING (FBT smartest mode)'), 'the deep-reasoning contract must reach every role');
+ok('the smartest mode reviews the draft and can only keep a substantial repair');
+
+const routeDepth = read('server/aiIntentOS.js');
+assert.ok(routeDepth.includes('depth: collaboration ?'), 'the reply must report the depth that actually happened');
+assert.ok(routeDepth.includes('reviewed: collaboration.critique?.used === true'), 'the UI must be able to say the answer was reviewed');
+ok('the chat reply publishes how deep the turn actually went');
+
 const gateway = read('server/aiGateway.js');
 assert.ok(gateway.includes('intelligenceModelLadder'), 'the gateway must use the flagship ladder');
 assert.ok(gateway.includes('intelligenceReasoningFields'), 'reasoning fields must come from the guarded helper');

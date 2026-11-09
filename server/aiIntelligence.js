@@ -123,6 +123,11 @@ export const INTELLIGENCE_MODES = Object.freeze({
     temperature: 0.3,
     reasoning: false,
     maxModels: 2,
+    /* Deep reasoning is off in the cheap mode: extra passes buy latency, not
+       accuracy, when the seat itself is small. */
+    analysesCount: 2,
+    selfCritique: false,
+    knowledgeTopK: 3,
     modelLadders: Object.freeze({})
   }),
   balanced: Object.freeze({
@@ -140,14 +145,18 @@ export const INTELLIGENCE_MODES = Object.freeze({
     temperature: null,
     reasoning: false,
     maxModels: 4,
+    /* Historical behaviour: level 4 runs two analyses, level 5 runs three. */
+    analysesCount: 2,
+    selfCritique: false,
+    knowledgeTopK: 4,
     modelLadders: Object.freeze({})
   }),
   max: Object.freeze({
     id: 'max',
     label: { fa: 'باهوش‌ترین', en: 'Smartest' },
     description: {
-      fa: 'مدل‌های پرچم‌دار اول، استدلال عمیق جایی که ارائه‌دهنده پشتیبانی می‌کند، همکاری چندمدلی + راستی‌آزمایی و بودجهٔ پاسخ بلند. پیش‌فرض.',
-      en: 'Flagship models first, deep reasoning where the vendor supports it, multi-model collaboration + verification, and a long-answer budget. Default.'
+      fa: 'مدل‌های پرچم‌دار اول، استدلال عمیق، سه تحلیل مستقل، بازبینی خصمانهٔ پیش‌نویس و بودجهٔ پاسخ بلند. پیش‌فرض.',
+      en: 'Flagship models first, deep reasoning, three independent analyses, an adversarial review of the draft, and a long-answer budget. Default.'
     },
     collaborationFloor: 4,
     collaborationCeiling: 5,
@@ -157,6 +166,19 @@ export const INTELLIGENCE_MODES = Object.freeze({
     temperature: 0.25,
     reasoning: true,
     maxModels: 5,
+    /*
+     * ─── THE THREE THINGS THAT MAKE "SMARTER" MEAN MORE THAN "BIGGER MODEL" ─
+     * A stronger model alone still answers once. Depth comes from comparing
+     * independent analyses, forcing the draft through an adversarial review,
+     * and giving that review more verified context to check against:
+     *   · analysesCount 3 — three independent reads instead of two;
+     *   · selfCritique true — one bounded critique/repair pass after the draft,
+     *     which can only replace it when the repaired text is substantial;
+     *   · knowledgeTopK 6 — more verified product facts in the evidence block.
+     */
+    analysesCount: 3,
+    selfCritique: true,
+    knowledgeTopK: 6,
     modelLadders: MAX_MODEL_LADDERS
   })
 });
@@ -429,6 +451,9 @@ export function describeIntelligence({ env = process.env, requested = null } = {
       tokenFloor: profile.tokenFloor,
       tokenCeiling: profile.tokenCeiling,
       maxModels: profile.maxModels,
+      analysesCount: profile.analysesCount,
+      selfCritique: profile.selfCritique,
+      knowledgeTopK: profile.knowledgeTopK,
       reasoning: profile.reasoning,
       flagshipFirst: Object.keys(profile.modelLadders || {}).length > 0
     },
