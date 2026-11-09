@@ -54,6 +54,7 @@ import {
 } from '../src/lib/intent-ai/os/collaborationRouter.js';
 import { renderSocialReply } from '../src/lib/intent-ai/os/conversation/socialVoice.js';
 import { auditNumbers, buildEvidenceCorpus, renderUnsourcedBlock } from './aiEvidenceAudit.js';
+import { buildClaimLedger, renderClaimLedger } from './aiClaimLedger.js';
 import {
   decomposeQuestion,
   assessQuestionCoverage,
@@ -733,6 +734,10 @@ export async function runCollaborativeAnalysis({
     /* The deterministic unsourced-number report for this draft. null when the
        mode ran no audit (swift/balanced) — those turns cannot have changed. */
     numericAudit: null,
+    /* What the specialists actually asserted, classified before synthesis:
+       tool/web-verified, model-consensus-only, and conflicting figures. null
+       outside the smartest mode. */
+    synthesisLedger: null,
     perRole: transparency ? [] : undefined,
     latencyMs: 0,
     at: Date.now()
@@ -888,8 +893,33 @@ export async function runCollaborativeAnalysis({
 
     const validFinal = analyses.filter((a) => a.ok && a.role !== AI_ROLES.VERIFICATION_AI);
     if (validFinal.length) {
+      /*
+       * ─── CLAIM LEDGER (smartest mode, before synthesis) ─────────────────────
+       * The synthesiser used to write before verification ran, so a claim backed
+       * by live tool data and a claim three models merely repeated reached it as
+       * identical prose. The ledger classifies the analysts' factual claims
+       * deterministically and names every subject on which two analysts quote
+       * different figures, so the final answer can resolve instead of average.
+       */
+      let claimLedgerBlock = '';
+      if (modeProfile.selfCritique) {
+        const preAnalytical = analyses.filter((a) => a.ok && a.answer && a.role !== AI_ROLES.VERIFICATION_AI);
+        const preComparison = compareAnalyses(preAnalytical);
+        const preVerification = verifyClaims({ factualClaims: preComparison.factualClaims, context, sources: result.sources });
+        result.synthesisLedger = buildClaimLedger({
+          verified: preVerification.verified,
+          consensusOnly: preVerification.aiConsensusOnly,
+          factualClaims: preComparison.factualClaims,
+          context
+        });
+        claimLedgerBlock = renderClaimLedger(result.synthesisLedger);
+      }
+      /* Deep analyses must not be cut to a soundbite before synthesis: at max
+         the digest keeps more of each answer; other modes keep the historical
+         budget byte for byte. */
+      const digestCap = modeProfile.selfCritique ? 800 : 500;
       /* Stage 6: one clean FBT answer from the specialists' work (§37). */
-      const digest = analyses.filter((a) => a.ok).map((a) => `[${a.role}] ${String(a.answer).slice(0, 500)}`).join('\n\n');
+      const digest = analyses.filter((a) => a.ok).map((a) => `[${a.role}] ${String(a.answer).slice(0, digestCap)}`).join('\n\n');
       /*
        * The verifier's findings used to be just another paragraph in the
        * digest. In the smartest mode the synthesiser is told to RESOLVE them:
@@ -906,7 +936,7 @@ export async function runCollaborativeAnalysis({
         : '';
       const finalRole = await withDeadline(runRole({
         role: AI_ROLES.FINAL_ANSWER_AI,
-        message: `${message}\n\nSPECIALIST WORK:\n${digest}${verifierNote}${revisionRule}`,
+        message: `${message}\n\nSPECIALIST WORK:\n${digest}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${verifierNote}${revisionRule}`,
         contextBlock,
         locale,
         deps: D,
@@ -969,7 +999,7 @@ export async function runCollaborativeAnalysis({
           const unsourcedBlock = renderUnsourcedBlock(draftAudit);
           const criticRole = {
             role: AI_ROLES.VERIFICATION_AI,
-            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}`,
+            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}`,
             contextBlock: '',
             locale,
             deps: D,

@@ -2381,7 +2381,13 @@ router.post('/chat', async (req, res) => {
         /* Numbers in the final answer that the evidence cannot source. The
            review fixes or withdraws them before the user reads the answer, so
            a non-zero value here is post-review telemetry, not a warning. */
-        unsourcedNumbers: Array.isArray(collaboration.numericAudit?.unsourced) ? collaboration.numericAudit.unsourced.length : null
+        unsourcedNumbers: Array.isArray(collaboration.numericAudit?.unsourced) ? collaboration.numericAudit.unsourced.length : null,
+        /* Pre-synthesis claim ledger (smartest mode): how many of the analysts'
+           factual claims tool/web evidence actually supports, how many only
+           models agree on, and how many subjects two analysts contradict. */
+        verifiedClaims: collaboration.synthesisLedger?.verifiedCount ?? null,
+        consensusOnlyClaims: collaboration.synthesisLedger?.consensusOnlyCount ?? null,
+        conflictingFigures: collaboration.synthesisLedger?.conflictCount ?? null
       } : null,
       /* Which brain was asked for, what it actually did, and whether the mode
          raised this turn's depth. The UI prints the mode; the plan fields let
