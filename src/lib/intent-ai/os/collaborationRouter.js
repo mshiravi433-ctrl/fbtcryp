@@ -215,7 +215,18 @@ export function classifyConversationKind(rawText, { priorIntent = null, locale =
 
   /* ── Upgrade 13: multilingual social act, twelve locales ─────────────── */
   const social = classifySocialAct(text, { locale, prior: priorIntent ? { intent: priorIntent } : null });
-  if (social.social) {
+  /*
+   * A feeling inside a real question is a feeling, not the question.
+   *
+   * «سبد من ضرر کرده و ناراحتم. چرا این اتفاق افتاد؟» was read as WELLBEING and
+   * answered on the small-talk path — one canned line for a person who just
+   * described a loss. A substantive message (a question mark and enough words
+   * to carry one) is never demoted by a wellbeing/boredom phrase inside it.
+   * Greetings and thanks are untouched: «سلام، چطوری؟» is still a greeting.
+   */
+  const substantive = /[?؟]/.test(text) && text.trim().split(/\s+/).filter(Boolean).length >= 5;
+  const demotable = social.act === SOCIAL_ACTS.WELLBEING || social.act === SOCIAL_ACTS.SMALL_TALK;
+  if (social.social && !(demotable && substantive)) {
     switch (social.act) {
       case SOCIAL_ACTS.WHATS_UP: return CONVERSATION_KINDS.WHATS_UP;
       case SOCIAL_ACTS.GREETING:

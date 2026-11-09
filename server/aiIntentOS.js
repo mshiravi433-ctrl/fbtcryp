@@ -405,9 +405,26 @@ function sanitizePortfolio(value) {
     };
   });
   const totalValueUsd = Number.isFinite(Number(value?.totalValueUsd ?? value?.totalValue)) ? Number(value.totalValueUsd ?? value.totalValue) : null;
+  /*
+   * Aggregate profit/loss, when the client has it. These are the numbers the
+   * situation layer (§۵٫۲۳) reads to tell a loss from a gain — and the reason
+   * it must never guess: a portfolio without a cost basis has no P&L, only a
+   * daily move. Bounded, finite, aggregate only: no addresses, no per-trade
+   * history, nothing that identifies a wallet.
+   */
+  const money = (v) => (Number.isFinite(Number(v)) && Math.abs(Number(v)) < 1e12 ? Number(v) : null);
+  const costBasisUsd = money(value?.costBasisUsd ?? value?.costBasis);
+  const pnlUsd = money(value?.pnlUsd ?? value?.unrealizedPnlUsd);
+  const pnlPct = money(value?.pnlPct ?? value?.unrealizedPnlPct);
   return {
     dataStatus: value.dataStatus || (totalValueUsd != null ? 'client' : 'unavailable'),
     totalValueUsd,
+    costBasisUsd,
+    pnlUsd,
+    pnlPct,
+    realizedPnlUsd: money(value?.realizedPnlUsd),
+    change24hPct: money(value?.change24hPct),
+    cashUsd: money(value?.cashUsd),
     holdings,
     /* Chain-read diagnostics: lets the reply distinguish «portfolio is
        empty» (a definitive on-chain answer) from «the chain read failed»
@@ -557,7 +574,12 @@ async function buildAIContext(req, body = {}, opts = {}) {
   try {
     centralIngestClientData(userId, {
       wallet: { connected: wallet.connected, canSign: wallet.canSign, evmAddresses: wallet.evmAddresses, solanaAddresses: wallet.solanaAddresses },
-      portfolio: { totalValueUsd: portfolio.totalValueUsd, holdings: portfolio.holdings, partial: portfolio.partial },
+      portfolio: {
+        totalValueUsd: portfolio.totalValueUsd,
+        change24hPct: portfolio.change24hPct,
+        holdings: portfolio.holdings,
+        partial: portfolio.partial
+      },
       balances,
       positions,
       openOrders: orders,
@@ -2497,6 +2519,22 @@ router.post('/chat', async (req, res) => {
           pragmatics: collaboration.socialRead.pragmatics || null,
           relationship: collaboration.socialRead.relationship || null,
           signals: Array.isArray(collaboration.socialRead.signals) ? collaboration.socialRead.signals.slice(0, 8) : []
+        } : null,
+        /* The user's money and mood read together: direction and magnitude of
+           their own portfolio, the basis of that figure (unrealized / today's
+           move / none), concentration, and whether the answer respected it. */
+        situation: collaboration?.situation ? {
+          state: collaboration.situation.state,
+          direction: collaboration.situation.direction,
+          basis: collaboration.situation.basis,
+          pct: collaboration.situation.pct,
+          magnitudePct: collaboration.situation.magnitudePct,
+          hasRead: collaboration.situation.hasRead === true,
+          concentration: collaboration.situation.concentration || null,
+          cashPct: collaboration.situation.cashPct ?? null,
+          numbers: Array.isArray(collaboration.situation.numbers) ? collaboration.situation.numbers.slice(0, 6) : [],
+          violations: Array.isArray(collaboration.situation.violations) ? collaboration.situation.violations : [],
+          compliant: collaboration.situation.compliant === true
         } : null,
         /* The emotional state the answer was written for: the primary emotion,
            how strongly, whether it is self- or other-directed, what the answer
