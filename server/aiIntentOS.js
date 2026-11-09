@@ -2498,6 +2498,24 @@ router.post('/chat', async (req, res) => {
           relationship: collaboration.socialRead.relationship || null,
           signals: Array.isArray(collaboration.socialRead.signals) ? collaboration.socialRead.signals.slice(0, 8) : []
         } : null,
+        /* The market frame: what this turn's data measured (breadth, regime,
+           relative strength, supported horizon), what it could not, and whether
+           the answer respected that line. null outside market analysis turns. */
+        market: collaboration?.market ? {
+          dataStatus: collaboration.market.dataStatus,
+          stale: collaboration.market.stale === true,
+          instruments: collaboration.market.instruments ?? null,
+          breadth: collaboration.market.breadth || null,
+          dispersionPct: collaboration.market.dispersionPct ?? null,
+          regime: collaboration.market.regime || null,
+          relative: Array.isArray(collaboration.market.relative) ? collaboration.market.relative.slice(0, 6) : [],
+          leadership: Array.isArray(collaboration.market.leadership) ? collaboration.market.leadership.slice(0, 3) : [],
+          horizon: collaboration.market.horizon || null,
+          notSupported: Array.isArray(collaboration.market.notSupported) ? collaboration.market.notSupported.slice(0, 8) : [],
+          gaps: Array.isArray(collaboration.market.gaps) ? collaboration.market.gaps : [],
+          violations: Array.isArray(collaboration.market.violations) ? collaboration.market.violations : [],
+          compliant: collaboration.market.compliant === true
+        } : null,
         /* The research posture: which pedagogy lenses the specialists were held
            to, and whether the final text carries a falsifier. */
         professor: collaboration?.professor ? {

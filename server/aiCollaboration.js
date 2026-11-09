@@ -74,6 +74,14 @@ import {
   deriveResearchFindings,
   selectAgendaItems
 } from './aiResearchAgenda.js';
+import {
+  detectMarketAnalysis,
+  buildMarketFrame,
+  renderMarketFrame,
+  renderMarketContract,
+  checkMarketAnalysis,
+  renderMarketViolations
+} from './aiMarketFrame.js';
 import { storeGet, storeSet } from './store.js';
 import { checkPlanArithmetic, renderStrategyViolations, isPlanParameter } from './aiStrategyPlanCheck.js';
 import { assessEvidence, evaluateDecision, renderDecisionContract, renderDecisionDeficit } from './aiDecisionGate.js';
@@ -334,7 +342,7 @@ const ROLE_TASK = {
   [AI_ROLES.FINAL_ANSWER_AI]: 'reasoning'
 };
 
-async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '', decisionBrief = '', dialogueBrief = '', professorBrief = '', researchBrief = '' }) {
+async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '', decisionBrief = '', dialogueBrief = '', professorBrief = '', researchBrief = '', marketBrief = '' }) {
   /*
    * ─── DEEP REASONING CONTRACT (smartest mode only) ─────────────────────────
    * The role prompts are shared by every mode, so the extra discipline lives
@@ -361,7 +369,7 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
     /* The economist's lens is a reasoning contract, not a costume: it rides on
        the specialists and the synthesiser, never on the reviewer (whose job is
        to break the draft, not to reason about the economy). */
-    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}${dialogueBrief ? `\n${dialogueBrief}` : ''}${professorBrief ? `\n${professorBrief}` : ''}${researchBrief ? `\n${researchBrief}` : ''}`;
+    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}${dialogueBrief ? `\n${dialogueBrief}` : ''}${professorBrief ? `\n${professorBrief}` : ''}${researchBrief ? `\n${researchBrief}` : ''}${marketBrief ? `\n${marketBrief}` : ''}`;
   /*
    * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
    * This line used to be a ternary: Persian or English. Everything a Turkish,
@@ -877,6 +885,9 @@ export async function runCollaborativeAnalysis({
     /* The research posture of this turn: which pedagogy lenses the specialists
        were held to, and whether the final text carries a falsifier. */
     professor: null,
+    /* The market frame the analysis stood on: what the data measured, what it
+       could not, and whether the final text respected that line. */
+    market: null,
     /* The continuous-improvement loop: which open questions this turn was given,
        which it opened, and which it closed. null when no agenda store is live. */
     research: null,
@@ -974,6 +985,21 @@ export async function runCollaborativeAnalysis({
   /* ---- Stage 1-2: independent analyses by level (§9) ---- */
   const analyses = [];
 
+  /*
+   * ─── MARKET FRAME (smartest mode, market-analysis turns) ───────────────────
+   * What this turn's data actually measures — instruments, breadth, dispersion,
+   * regime, relative strength — and, just as important, what it cannot carry
+   * (no OHLC series, no depth, no funding). The answer may not use an indicator
+   * whose input is absent, and may not carry a three-month target on a 24h
+   * print without marking it a scenario.
+   */
+  /* Level 3+ only: a level-2 turn is one model with no brief slots, and holding
+     a draft to a contract it never received would be an unfair check. */
+  const isMarketTurn = mode === 'max' && plan.level >= 3 && detectMarketAnalysis(message, plan.taskTypes);
+  const marketFrame = isMarketTurn ? buildMarketFrame({ context, message, knowledge }) : null;
+  const marketBrief = marketFrame
+    ? `${renderMarketFrame(marketFrame)}\n${renderMarketContract(marketFrame)}`
+    : '';
   if (plan.level === 1 || !externalConfigured) {
     /* Conversation / simple, or no external provider configured at all. */
     if (plan.conversationKind === CONVERSATION_KINDS.GREETING || plan.conversationKind === CONVERSATION_KINDS.THANKS || plan.conversationKind === CONVERSATION_KINDS.CASUAL) {
@@ -1007,7 +1033,7 @@ export async function runCollaborativeAnalysis({
        analyses are genuinely different providers, not one model twice. */
     const roles = pickAnalysisRoles(plan, 2);
     const settled = await withDeadline(
-      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief, dialogueBrief, professorBrief, researchBrief }))),
+      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief, dialogueBrief, professorBrief, researchBrief, marketBrief }))),
       []
     );
     analyses.push(...(settled || []).filter(Boolean));
@@ -1080,7 +1106,8 @@ export async function runCollaborativeAnalysis({
         decisionBrief,
         dialogueBrief,
         professorBrief,
-        researchBrief
+        researchBrief,
+        marketBrief
       }), null);
       if (verifier?.ok) analyses.push(verifier);
     }
@@ -1144,7 +1171,8 @@ export async function runCollaborativeAnalysis({
         decisionBrief,
         dialogueBrief,
         professorBrief,
-        researchBrief
+        researchBrief,
+        marketBrief
       }), null);
       result.answer = finalRole?.ok
         ? finalRole.answer
@@ -1188,6 +1216,13 @@ export async function runCollaborativeAnalysis({
        * falsifier markers absent → MUST-FIX for the reviewer.
        */
       const draftFalsifier = professorBrief ? checkFalsifier({ message, answer: result.answer }) : null;
+      /*
+       * ─── MARKET FRAME ON THE DRAFT ─────────────────────────────────────────
+       * RSI/trendline on a turn with no OHLC series, or a three-month target on
+       * a 24h print, is the classic market answer that sounds expert and is
+       * unfalsifiable. The reviewer gets each as a MUST-FIX.
+       */
+      const draftMarket = marketFrame ? checkMarketAnalysis({ frame: marketFrame, answer: result.answer }) : null;
       /*
        * ─── DECISION VERDICT ON THE DRAFT ─────────────────────────────────────
        * Re-score the evidence now that the analyses, the verifier and the claim
@@ -1261,9 +1296,10 @@ export async function runCollaborativeAnalysis({
           const decisionDeficitBlock = renderDecisionDeficit(result.decision);
           const dialogueDeficitBlock = renderDialogueDeficit(draftDialogue);
           const falsifierDeficitBlock = renderFalsifierDeficit(draftFalsifier);
+          const marketViolationBlock = renderMarketViolations(draftMarket);
           const criticRole = {
             role: AI_ROLES.VERIFICATION_AI,
-            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}${dialogueDeficitBlock ? `\n\n${dialogueDeficitBlock}` : ''}${falsifierDeficitBlock ? `\n\n${falsifierDeficitBlock}` : ''}`,
+            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}${dialogueDeficitBlock ? `\n\n${dialogueDeficitBlock}` : ''}${falsifierDeficitBlock ? `\n\n${falsifierDeficitBlock}` : ''}${marketViolationBlock ? `\n\n${marketViolationBlock}` : ''}`,
             contextBlock: '',
             locale,
             deps: D,
@@ -1417,6 +1453,26 @@ export async function runCollaborativeAnalysis({
     };
   }
 
+  if (marketFrame) {
+    const finalMarket = checkMarketAnalysis({ frame: marketFrame, answer: result.answer });
+    result.market = {
+      schema: marketFrame.schema,
+      dataStatus: marketFrame.dataStatus,
+      stale: marketFrame.stale,
+      instruments: marketFrame.instruments.length,
+      breadth: marketFrame.breadth,
+      dispersionPct: marketFrame.dispersionPct,
+      regime: marketFrame.regime,
+      relative: marketFrame.relative,
+      leadership: marketFrame.leadership,
+      horizon: marketFrame.horizon,
+      notSupported: marketFrame.notSupported,
+      gaps: marketFrame.gaps,
+      violations: finalMarket.issues.map((i) => i.id),
+      compliant: finalMarket.compliant
+    };
+  }
+
   if (researchSession?.enabled) {
     const findings = deriveResearchFindings({
       strategy: result.strategy,
@@ -1427,6 +1483,7 @@ export async function runCollaborativeAnalysis({
       falsifier: result.professor?.falsifier
         ? { applicable: result.professor.falsifier.applicable, compliant: result.professor.falsifier.compliant }
         : null,
+      market: result.market,
       context
     });
     const recorded = await withDeadline(

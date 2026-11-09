@@ -47,6 +47,9 @@ export const RESEARCH_FACETS = Object.freeze({
   question_coverage: Object.freeze({ facet: 'question_coverage', needs: { fa: 'پاسخ به همهٔ بخش‌های پرسش', en: 'an answer to every part of the question' }, keywords: [] }),
   answer_shape: Object.freeze({ facet: 'answer_shape', needs: { fa: 'پاسخ در شکلِ خواسته‌شده (سازوکار/عدد/مقایسه)', en: 'an answer in the shape that was asked (mechanism/number/comparison)' }, keywords: [] }),
   falsifier: Object.freeze({ facet: 'falsifier', needs: { fa: 'شرط ابطال برای پیش‌بینی', en: 'a falsifier for the forecast' }, keywords: ['پیش‌بینی', 'forecast', 'هدف', 'target'] }),
+  market_history: Object.freeze({ facet: 'market_history', needs: { fa: 'سری زمانی OHLC برای اندیکاتورها (الان فقط آخرین قیمت و تغییر روزانه داریم)', en: 'an OHLC series for indicators (today we only carry last price and the daily move)' }, keywords: ['تاریخ', 'سری', 'تایم‌فریم', 'history', 'ohlc', 'timeframe'] }),
+  market_depth: Object.freeze({ facet: 'market_depth', needs: { fa: 'عمق بازار و جریان سفارش‌ها (فاندینگ، لیکوییدیتی، اسلیپیج)', en: 'market depth and order flow (funding, liquidity, slippage)' }, keywords: ['عمق', 'نقدشوندگی', 'فاندینگ', 'depth', 'liquidity', 'funding'] }),
+  market_breadth: Object.freeze({ facet: 'market_breadth', needs: { fa: 'پهنای بازار: چند دارایی صعودی و چند نزولی‌اند', en: 'market breadth: how many assets advanced versus declined' }, keywords: ['پهنا', 'breadth', 'بازار'] }),
   rubric_section: Object.freeze({ facet: 'rubric_section', needs: { fa: 'بخشِ غایبِ برنامهٔ سرمایه‌گذاری', en: 'the missing section of the investment plan' }, keywords: ['استراتژی', 'strategy', 'برنامه', 'plan'] })
 });
 
@@ -84,6 +87,7 @@ export function deriveResearchFindings({
   numericAudit = null,
   dialogue = null,
   falsifier = null,
+  market = null,
   context = null
 } = {}) {
   const findings = [];
@@ -126,6 +130,23 @@ export function deriveResearchFindings({
   if (subQuestions && Array.isArray(subQuestions.uncovered)) {
     if (subQuestions.uncovered.length) push('question_coverage');
     else push('question_coverage', { status: 'satisfied' });
+  }
+
+  /* ── the market frame: what the data could not measure ──
+     Only a real deficit opens an item. The frame always carries a long
+     `notSupported` list (that is the honest shape of a 24h feed); treating it
+     as a finding would open three unclosable items on every market turn. */
+  if (market) {
+    const violations = Array.isArray(market.violations) ? market.violations : [];
+    const breadth = market.breadth || {};
+    const tracked = Number(breadth.tracked) || 0;
+    const measured = (Number(breadth.advancers) || 0) + (Number(breadth.decliners) || 0) + (Number(breadth.flat) || 0);
+    if (market.horizon?.exceeded === true || violations.includes('INDICATOR_WITHOUT_HISTORY')) push('market_history');
+    else if (market.horizon?.exceeded === false && market.horizon?.supportedDays >= 7) push('market_history', { status: 'satisfied' });
+    if (tracked >= 3 && measured === 0) push('market_breadth');
+    else if (measured >= 3) push('market_breadth', { status: 'satisfied' });
+    if (tracked === 0) push('live_market');
+    else push('live_market', { status: 'satisfied' });
   }
 
   /* ── the shape of the answer ── */
