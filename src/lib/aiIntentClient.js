@@ -45,9 +45,16 @@ async function call(path, { method = 'GET', body = null, timeout = TIMEOUT_MS } 
       body: body ? JSON.stringify(body) : undefined
     });
     const text = await res.text();
-    const json = text ? (() => { try { return JSON.parse(text); } catch { return { raw: text.slice(0, 240) }; } })() : {};
-    if (!res.ok) return { ok: false, status: res.status, ...json };
-    return { ok: true, status: res.status, ...json };
+    let json;
+    try { json = text ? JSON.parse(text) : {}; } catch { json = null; }
+    if (!json || typeof json !== 'object' || Array.isArray(json)) {
+      return { ok: false, status: res.status, error: 'INVALID_RESPONSE' };
+    }
+    // The transport status is authoritative: a proxy error body must not turn
+    // an HTTP failure into a successful chat turn.
+    if (!res.ok) return { ...json, ok: false, status: res.status };
+    return { ...json, ok: json.ok !== false, status: res.status };
+
   } catch (err) {
     return {
       ok: false,

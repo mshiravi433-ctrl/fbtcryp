@@ -814,12 +814,12 @@ export async function runCollaborativeAnalysis({
     : [];
   const economistLens = renderEconomistLens(economistLenses);
   /*
-   * ─── SOCIAL READ (smartest mode, every substantive turn) ───────────────────
+   * ─── SOCIAL READ (balanced and smartest, substantive turns) ───────────────────
    * Register, tone, the need behind the literal question and how much the
    * message leaves unsaid. The brief tells the specialists how to answer this
    * PERSON; an unremarkable question renders nothing and keeps its prompt.
    */
-  const socialRead = mode === 'max' && plan.level >= 2
+  const socialRead = mode !== 'swift' && plan.level >= 2
     ? readSocialContext({ message, locale, history: context?.conversationSummary || '' })
     : null;
   const socialBrief = renderSocialBrief(socialRead);
@@ -889,13 +889,13 @@ export async function runCollaborativeAnalysis({
   const productRead = productQuestion ? answerProduct({ message, locale }) : null;
   const productBrief = renderProductBrief(productRead);
   /*
-   * ─── DIALOGUE READ (smartest mode) ─────────────────────────────────────────
+   * ─── DIALOGUE READ (balanced and smartest modes) ─────────────────────────────────────────
    * The social read says WHO is asking; this says WHAT the turn is doing —
    * a correction, an elliptical follow-up, or a question whose shape (why /
    * how much / which) the answer must match. A distress turn is exempt: it is
    * not a question to be shaped, and the safety brief already governs it.
    */
-  const dialogueRead = mode === 'max' && plan.level >= 2 && !socialRead?.distress
+  const dialogueRead = mode !== 'swift' && plan.level >= 2 && !socialRead?.distress
     ? readDialogue({ message, locale, history: context?.conversationSummary || '', social: socialRead })
     : null;
   const dialogueBrief = renderDialogueBrief(dialogueRead);
@@ -1230,7 +1230,7 @@ export async function runCollaborativeAnalysis({
       : plan.taskTypes.includes('crypto-analysis') || plan.taskTypes.includes('research') ? AI_ROLES.CRYPTO_RESEARCH_AI
       : plan.taskTypes.includes('risk') ? AI_ROLES.RISK_AI
       : AI_ROLES.CRYPTO_RESEARCH_AI;
-    const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: 0, intelligence: mode, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief }), null);
+    const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: 0, intelligence: mode, socialBrief, dialogueBrief, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief }), null);
     if (single?.ok) { analyses.push(single); result.answer = single.answer; }
     else { result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale }); result.degraded = true; }
   } else if (plan.level === 3) {

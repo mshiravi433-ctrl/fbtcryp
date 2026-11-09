@@ -3321,41 +3321,30 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
          *   · at most ONE automatic retry (`attempt` travels in opts);
          *   · a timeout retries at `balanced`, not at the depth that just ran
          *     out of clock — a 20 s answer beats a second 60 s failure;
-         *   · a non-transient failure (a 4xx/5xx the server actually returned)
-         *     is never retried, because it would fail identically forever.
+         *   · retry only network failures, timeouts and gateway 502/503 responses;
+         *     validation and authorization failures are not transient.
          */
         const status = Number(res?.status || 0);
-        const timedOut = status === 504 || status === 408 || res?.error === 'TIMEOUT' || status === 0;
+        const timedOut = status === 504 || status === 408 || res?.error === 'TIMEOUT';
+        const transient = timedOut || res?.error === 'NETWORK_UNAVAILABLE' || [502, 503].includes(status);
         const attempt = Number(opts.attempt || 0);
         const toolChecker = toolCheckerRef.current;
         const retryStrategy = toolChecker.getRetryStrategy({ message: code }, { attempt });
-        const canRetry = attempt < 1 && (timedOut || (retryStrategy.recoverable && retryStrategy.action === 'RETRY'));
+        const canRetry = attempt < 1 && transient && !connect;
         const fa = String(locale || 'fa').toLowerCase().startsWith('fa');
         const recoveryMsg = canRetry
-          ? (fa ? 'پاسخ در مهلت نرسید؛ یک‌بار دیگر — این بار سبک‌تر — می‌پرسم.' : 'The answer did not arrive in time; asking once more with a lighter budget.')
-          : `${toolChecker.getRecoveryMessage({ message: code }, { toolId: res?.intent?.type })}`;
-
-        /*
-         * ─── THE SERVER FAILED, NOT THE QUESTION ────────────────────────────
-         * A turn the OS could not read is now sent to the server on purpose.
-         * If that call fails (offline, 5xx, a deploy in flight), the user must
-         * not lose the little the device still knew: the OS's own reading of
-         * the message and its next-step chips are appended under the error, so
-         * a failed call costs one retry instead of the whole conversation.
-         */
-        /* The offline OS reading is shown when the turn ENDS here. While a
-           retry is still coming, stapling «مطمئن نشدم…» under an in-flight
-           retry is noise — and it is what made one failure read as three. */
-        const localReading = !canRetry && osResult?.understood === false
-          ? String(osResult?.human?.message || '').trim()
-          : '';
-
-        setMessages((prev) => [...prev, {
+          ? (timedOut
+            ? (fa ? 'پاسخ در مهلت نرسید؛ یک‌بار دیگر — این بار سبک‌تر — می‌پرسم.' : 'The answer timed out; trying once more with a lighter budget.')
+            : (fa ? 'اتصال به سرویس برقرار نشد؛ یک‌بار دیگر تلاش می‌کنم.' : 'The service could not be reached; trying once more.'))
+          : (fa ? 'فعلاً پاسخ‌گویی هوش مصنوعی در دسترس نیست. لطفاً کمی بعد دوباره تلاش کنید.' : 'The AI service is unavailable right now. Please try again shortly.');
+        const socialRow = !canRetry ? offlineSocialFallback(message, {
+          locale,
+          prior: convStateRef.current?.currentIntent ? { intent: convStateRef.current.currentIntent } : null
+        }) : null;
+        setMessages((prev) => [...prev, socialRow || {
           id: makeId(),
           role: 'ai',
-          content: visibleText(res, human.message)
-            + (canRetry || retryStrategy.recoverable ? `\n\n${recoveryMsg}` : '')
-            + (localReading ? `\n\n${localReading}` : ''),
+          content: connect ? human.message : recoveryMsg,
           kind: connect ? 'connect' : 'error',
           statusCode: status || null,
           ui: { type: connect ? 'CONNECT_WALLET' : 'TEXT' }
@@ -3628,11 +3617,14 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         setActivitySteps([]);
         return true;
       }
-      const human = humanizeError('NETWORK_FAILED', { locale });
+      // This catch also covers local processing errors, not just fetch failures.
+      const failureText = String(locale || 'fa').toLowerCase().startsWith('fa')
+        ? 'پردازش پاسخ کامل نشد. لطفاً دوباره تلاش کنید.'
+        : 'The response could not be completed. Please try again.';
       setMessages((prev) => [...prev, {
         id: makeId(),
         role: 'ai',
-        content: human.message,
+        content: failureText,
         kind: 'error',
         ui: { type: 'TEXT' },
         error: String(err?.message || '')
