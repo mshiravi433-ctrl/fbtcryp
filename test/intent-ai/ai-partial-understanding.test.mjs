@@ -29,6 +29,7 @@ import {
   deepThinkFloor
 } from '../../src/lib/intent-ai/os/conversation/partialInput.js';
 import { planCollaboration } from '../../src/lib/intent-ai/os/collaborationRouter.js';
+import { formatHumanResponse } from '../../src/lib/intent-ai/humanResponse.js';
 import { runCollaborativeAnalysis } from '../../server/aiCollaboration.js';
 
 const read = (message, extra = {}) => readPartialInput({ message, ...extra });
@@ -365,4 +366,42 @@ test('max: a draft that names its assumption passes clean', async () => {
   });
   assert.equal(out.partial.compliant, true);
   assert.deepEqual(out.partial.violations, []);
+});
+
+
+/* -------------------------------------------------------------------------- */
+/*  G. THE LIVE RENDERER (no model, no key)                                   */
+/* -------------------------------------------------------------------------- */
+
+const render = (message, extra = {}) => formatHumanResponse({ message, locale: 'fa', context: {}, suggestions: [], ...extra });
+
+test('a fragment is answered with what was understood, not with «tell me more»', () => {
+  const fa = render('بیتکوین؟', { partial: read('بیتکوین؟') });
+  assert.match(fa.message, /اگر درست خوانده باشم/);
+  assert.match(fa.message, /BTC/);
+  assert.match(fa.message, /وضعیت و تحلیل/);
+  assert.equal(/درباره پرتفوی، خرید، تبدیل یا هدف/.test(fa.message), false, 'fell back to the generic line');
+
+  const garbled = render('fovl', { partial: read('fovl') });
+  assert.match(garbled.message, /خرید/);
+  assert.match(garbled.message, /fovl→بخرم/);
+  /* One question, and it is the missing slot. */
+  assert.equal((garbled.message.match(/؟/g) || []).length, 1);
+});
+
+test('a complete message is left to the rest of the renderer', () => {
+  const out = render('سلام، حالت چطوره؟', { partial: read('سلام، حالت چطوره؟') });
+  assert.equal(/اگر درست خوانده باشم/.test(out.message), false);
+});
+
+test('a product answer beats the wallet branch and reaches the user verbatim', () => {
+  const product = {
+    schema: 'fbt.ai-product-brain.v1',
+    confidence: 'verified',
+    answer: 'کارمزد پلتفرم ۰٫۷٪ (۷۰ bps) هر سواپ است با سقف سخت ۱٪.'
+  };
+  const out = render('کارمزد FBT چقدره؟', { product });
+  assert.equal(out.message, product.answer);
+  assert.equal(out.intent.type, 'GENERAL');
+  assert.equal(/کیف پول/.test(out.message), false);
 });

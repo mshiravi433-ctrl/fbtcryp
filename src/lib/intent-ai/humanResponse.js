@@ -293,6 +293,82 @@ function suggestionLabels(suggestions, lang) {
  * Only `message` and `ui` (plus card payloads) reach the bubble. Internal
  * fields travel alongside for the execution runtime and the log.
  */
+const ACT_LABELS = Object.freeze({
+  buy: { fa: 'خرید', en: 'a buy' },
+  sell: { fa: 'فروش', en: 'a sell' },
+  swap: { fa: 'تبدیل', en: 'a swap' },
+  analysis: { fa: 'وضعیت و تحلیل', en: 'a state/analysis question' },
+  price: { fa: 'قیمت', en: 'a price question' },
+  fee: { fa: 'کارمزد', en: 'a fee question' },
+  security: { fa: 'امنیت', en: 'a security question' },
+  portfolio: { fa: 'سبد', en: 'a portfolio question' },
+  strategy: { fa: 'برنامهٔ سرمایه‌گذاری', en: 'an investment plan' },
+  howto: { fa: 'نحوهٔ انجام کار', en: 'a how-to' },
+  definition: { fa: 'تعریف', en: 'a definition' },
+  unknown: { fa: 'همین موضوع', en: 'this topic' }
+});
+
+/**
+ * What the assistant understood, said back in one short paragraph.
+ *
+ * Returns '' for a complete message, so a well-formed turn still gets the real
+ * answer from the rest of this module and nothing here is reached.
+ */
+function partialReadingMessage(partial, lang) {
+  if (!partial || !partial.completeness) return '';
+  const incomplete = ['fragment', 'truncated', 'garbled', 'ambiguous'].includes(partial.completeness);
+  if (!incomplete) return '';
+  const inferred = partial.inferred || {};
+  /* When the words carried no act, the read may still have assumed one ("a bare
+     asset name is a state question"). Speak the assumption, not «unknown». */
+  const assumedAct = (Array.isArray(partial.assumptions) ? partial.assumptions : [])
+    .find((a) => a.slot === 'act')?.value;
+  const actKey = inferred.act && inferred.act !== 'unknown' ? inferred.act : (assumedAct || 'unknown');
+  const act = ACT_LABELS[actKey] || ACT_LABELS.unknown;
+  const assets = Array.isArray(inferred.assets) ? inferred.assets.filter(Boolean).slice(0, 2) : [];
+  const reading = [assets.join('/'), lang === 'fa' ? act.fa : act.en].filter(Boolean).join(' — ');
+
+  const lines = [];
+  if (lang === 'fa') {
+    lines.push(`اگر درست خوانده باشم، منظورت «${reading}» است.`);
+    if (partial.question) {
+      lines.push(partial.question.fa);
+    } else {
+      lines.push('اگر منظور دیگری داشتی همان را بنویس تا از نو بخوانم.');
+    }
+  } else {
+    lines.push(`If I read you right, you mean ${reading}.`);
+    if (partial.question) {
+      lines.push(partial.question.en);
+    } else {
+      lines.push('If you meant something else, write it and I will read it again.');
+    }
+  }
+  if (Array.isArray(partial.repairs) && partial.repairs.length) {
+    const fixed = partial.repairs.map((r) => `${r.token || r.from}→${r.to}`).join('، ');
+    lines.push(lang === 'fa' ? `(نوشتار پیام را هم ترمیم کردم: ${fixed})` : `(I repaired the wording too: ${fixed})`);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * An answer about the product itself — what FBT is, what a page does, the fee,
+ * custody, or the honest "the founders are not recorded" — comes from the
+ * verified product brain, not from the rule engine and never from memory.
+ *
+ * This is checked BEFORE the wallet branch on purpose: «کارمزد FBT چقدره؟» is
+ * an informational question, and answering it with «اول کیف پولتان را وصل
+ * کنید» is the exact failure that makes an assistant feel deaf.
+ */
+function productAnswerMessage(product, lang) {
+  if (!product || !product.answer) return '';
+  const text = String(product.answer).trim();
+  if (!text) return '';
+  /* When the repository genuinely has no answer (the founders), the brain's
+     answer already says so; nothing is padded onto it here. */
+  return text;
+}
+
 export function formatHumanResponse({
   message = '',
   classification = null,
@@ -302,7 +378,16 @@ export function formatHumanResponse({
   resumed = false,
   suggestions = [],
   intentId = null,
-  resolvedHints = null
+  resolvedHints = null,
+  /* Increment 23 — the partial-input read. When the message was a fragment, a
+     cut sentence or a garbled line, the deterministic renderer used to answer
+     all of them with one generic sentence («tell me about the portfolio»),
+     which reads as "I did not understand you". With the reading in hand it can
+     say what it understood and ask the one question that matters. */
+  partial = null,
+  /* The verified product answer for a question about FBT itself (see
+     server/aiProductBrain.js). '' for every other turn. */
+  product = null
 } = {}) {
   const lang = langOf(locale);
   const userIntent = classifyUserIntent(message, classification || orchestrateOut?.classification);
@@ -313,6 +398,18 @@ export function formatHumanResponse({
 
   if (resumed && connected) {
     /* Fall through and produce the real answer; the UI prepends the thanks. */
+  }
+
+  /* A question about the product is answered from the verified knowledge —
+     and it never asks for a wallet, because reading a fee does not need one. */
+  const productAnswer = productAnswerMessage(product, lang);
+  if (productAnswer) {
+    return finalize({
+      message: productAnswer,
+      intent: { type: 'GENERAL', status: 'READY' },
+      ui: { type: 'TEXT' },
+      suggestions: suggestionLabels(suggestions, lang)
+    });
   }
 
   const needsWallet = intentRequiresWallet(kind) || (userIntent.prefersWallet && kind === 'ANALYZE_PORTFOLIO' && !connected);
@@ -513,6 +610,18 @@ export function formatHumanResponse({
       card: narrated.card,
       actions: plan.actions,
       actionPlan: plan,
+      suggestions: suggestionLabels(suggestions, lang)
+    });
+  }
+
+  /* An incomplete message is answered with what was understood — never with a
+     generic "tell me more", which is indistinguishable from not listening. */
+  const readBack = partialReadingMessage(partial, lang);
+  if (readBack) {
+    return finalize({
+      message: readBack,
+      intent: { type: kind, status: 'READY' },
+      ui: { type: 'TEXT' },
       suggestions: suggestionLabels(suggestions, lang)
     });
   }

@@ -148,6 +148,8 @@ import {
    models/tools/web inside that budget; question-intel learns what users
    actually ask. Execution authority is untouched (§67). */
 import { planCollaboration } from '../src/lib/intent-ai/os/collaborationRouter.js';
+import { readPartialInput } from '../src/lib/intent-ai/os/conversation/partialInput.js';
+import { detectProductQuestion, answerProduct } from './aiProductBrain.js';
 import { resolveAsset } from './intentMonitoring.js';
 import { fetchCoinDetail } from './providers.js';
 import { runCollaborativeAnalysis, formatEmotionalAcknowledgement } from './aiCollaboration.js';
@@ -2023,6 +2025,27 @@ router.post('/chat', async (req, res) => {
    * nothing that carries a language while the interface is Persian. Never
    * Persian by default for somebody who cannot read it.
    */
+  /*
+   * ─── PARTIAL INPUT, BEFORE THE DETERMINISTIC REPLY ────────────────────────
+   * This route answers most short messages with the rule engine, and a fragment
+   * used to leave it through one generic sentence. Read the message first, so
+   * the reply can say what it understood (and ask the one question) instead.
+   * Deterministic, no model call, and '' for a complete message.
+   */
+  const partialRead = readPartialInput({
+    message,
+    locale: locale || 'fa',
+    context: {
+      currentPage: req.body?.surface || req.body?.currentPage || '/',
+      lastAssets: Array.isArray(context?.lastAssets) ? context.lastAssets : []
+    },
+    priorIntent: u4?.type || null
+  });
+  /* A question about FBT itself gets the verified answer from the repository —
+     deterministically, in every mode, without a wallet and without a model. */
+  const productRead = detectProductQuestion(message)
+    ? answerProduct({ message, locale: locale || 'fa' })
+    : null;
   const replyLang = respondIn(message, { declared: locale || 'fa' }).lang;
   const deterministicLocale = replyLang === 'fa' ? 'fa' : 'en';
   const human = formatHumanResponse({
@@ -2034,6 +2057,8 @@ router.post('/chat', async (req, res) => {
     resumed,
     suggestions,
     intentId,
+    partial: partialRead,
+    product: productRead,
     resolvedHints: {
       /* What the SENTENCE states — the amount, the unit it was written in and
          the network the user named. The parser's from/to token guesses are
@@ -2166,7 +2191,15 @@ router.post('/chat', async (req, res) => {
     transparency: req.body?.transparency === true
   });
   const isCollaborativeIntent = COLLABORATION_INTENTS.includes(String(human.intent?.type || intent || 'GENERAL'));
+  /* Questions about FBT itself are answered from the verified product brain —
+     deterministically, in every mode, and never handed to a model. A model has
+     nothing to add to «کارمزد ۰٫۷٪ است» except the chance of inventing a fee, a
+     founder or a route (increment 22). The brain's answer is already in
+     `human.message`, so the only thing this guard does is stop the model from
+     talking over it. */
+  const productAnswered = Boolean(productRead && productRead.confidence === 'verified');
   const collaborationWanted = isCollaborativeIntent
+    && !productAnswered
     && !human.pendingIntent
     && !['ACTION_CARD', 'CONNECT_WALLET', 'CHOICE'].includes(human.ui?.type)
     /* A deliberate fail-closed answer («no verified executor», «no live

@@ -160,15 +160,20 @@ export function pageCatalog({ fresh = false } = {}) {
       const [, path, rawElement] = match;
       const page = (rawElement.match(/<([A-Z][A-Za-z0-9]*)/) || [])[1];
       if (!path || !page) continue;
+      /* A route can be a redirect (`/trade` → the perp terminal's spot tab when
+         spot trading is on). Catalogue it as what it does, not as "Navigate". */
+      const redirectTo = page === 'Navigate'
+        ? ((rawElement.match(/to="([^"]+)"/) || [])[1] || null)
+        : null;
       /* A route wrapped in a feature flag is still real; it is just gated. */
       const before = source.slice(Math.max(0, match.index - 120), match.index);
       const gate = (before.match(/\{([A-Z][A-Z0-9_]+)\s*&&\s*$/) || [])[1] || null;
-      routes.push({ path, page, gated: Boolean(gate), gate });
+      routes.push({ path, page: redirectTo ? 'Redirect' : page, redirectTo, gated: Boolean(gate), gate });
     }
   } catch {
-    routes = FALLBACK_ROUTES.map((r) => ({ ...r, gated: false, gate: null }));
+    routes = FALLBACK_ROUTES.map((r) => ({ ...r, gated: false, gate: null, redirectTo: null }));
   }
-  if (!routes.length) routes = FALLBACK_ROUTES.map((r) => ({ ...r, gated: false, gate: null }));
+  if (!routes.length) routes = FALLBACK_ROUTES.map((r) => ({ ...r, gated: false, gate: null, redirectTo: null }));
 
   /* One entry per path. A path can appear twice on purpose — `/perp` is the
      perp terminal when speculation is on and a spot page when it is off — so
@@ -185,6 +190,14 @@ export function pageCatalog({ fresh = false } = {}) {
   }
 
   CACHE = [...byPath.values()].map((r) => {
+    if (r.redirectTo) {
+      return {
+        ...r,
+        purposeFa: `هدایت به ${r.redirectTo}`,
+        purposeEn: `redirects to ${r.redirectTo}`,
+        described: true
+      };
+    }
     const purpose = PAGE_PURPOSE[r.page] || null;
     return {
       ...r,
@@ -356,7 +369,7 @@ export function answerProduct({ message = '', locale = 'fa', limit = 6 } = {}) {
   if (intent === 'pages') {
     matchedPages = pages;
     answer = fa
-      ? `FBT ${pages.length} مسیر دارد. مهم‌ترین‌ها: ${pages.slice(0, 12).map((p) => `${p.path} (${p.purposeFa})`).join('، ')}.`
+      ? `FBT ${toEasternDigits(String(pages.length))} مسیر دارد. مهم‌ترین‌ها: ${pages.slice(0, 12).map((p) => `${p.path} (${p.purposeFa})`).join('، ')}.`
       : `FBT ships ${pages.length} routes. The main ones: ${pages.slice(0, 12).map((p) => `${p.path} (${p.purposeEn})`).join(', ')}.`;
     confidence = 'verified';
   } else if (intent === 'page') {
