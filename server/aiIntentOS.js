@@ -2520,6 +2520,19 @@ router.post('/chat', async (req, res) => {
           relationship: collaboration.socialRead.relationship || null,
           signals: Array.isArray(collaboration.socialRead.signals) ? collaboration.socialRead.signals.slice(0, 8) : []
         } : null,
+        /* How the user is talking and how far the answer followed: register,
+           energy, profanity level and its policy (match at level / do not
+           mirror / never a slur), and whether the final text kept to it. */
+        discourse: collaboration?.discourse ? {
+          style: collaboration.discourse.style,
+          energy: collaboration.discourse.energy,
+          warmth: collaboration.discourse.warmth,
+          profanity: collaboration.discourse.profanity || null,
+          emoji: collaboration.discourse.emoji === true,
+          signals: Array.isArray(collaboration.discourse.signals) ? collaboration.discourse.signals : [],
+          violations: Array.isArray(collaboration.discourse.violations) ? collaboration.discourse.violations : [],
+          compliant: collaboration.discourse.compliant === true
+        } : null,
         /* The user's money and mood read together: direction and magnitude of
            their own portfolio, the basis of that figure (unrealized / today's
            move / none), concentration, and whether the answer respected it. */

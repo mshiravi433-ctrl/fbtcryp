@@ -225,7 +225,7 @@ export function classifyConversationKind(rawText, { priorIntent = null, locale =
    * Greetings and thanks are untouched: «سلام، چطوری؟» is still a greeting.
    */
   const substantive = /[?؟]/.test(text) && text.trim().split(/\s+/).filter(Boolean).length >= 5;
-  const demotable = social.act === SOCIAL_ACTS.WELLBEING || social.act === SOCIAL_ACTS.SMALL_TALK;
+  const demotable = [SOCIAL_ACTS.WELLBEING, SOCIAL_ACTS.SMALL_TALK, SOCIAL_ACTS.THANKS, SOCIAL_ACTS.GREETING, SOCIAL_ACTS.HOW_ARE_YOU, SOCIAL_ACTS.GOODBYE].includes(social.act);
   if (social.social && !(demotable && substantive)) {
     switch (social.act) {
       case SOCIAL_ACTS.WHATS_UP: return CONVERSATION_KINDS.WHATS_UP;
@@ -244,8 +244,13 @@ export function classifyConversationKind(rawText, { priorIntent = null, locale =
      catch a localised greeting the lexicon has not met yet. «پس بفروشم؟» and
      friends are untouched below. */
   if (/^(?:سلام[\s,،]*)?خوبی[\s؟?!.]*$/.test(text)) return CONVERSATION_KINDS.GREETING;
-  if (short && greeting && !ACTION_RE.test(text)) return CONVERSATION_KINDS.GREETING;
-  if (thanks && !ACTION_RE.test(text)) return CONVERSATION_KINDS.THANKS;
+  /* A pleasantry that opens a real question is an opener, not the turn:
+     «ممنون که جواب می‌دی، لطف داری. استراتژی من با ۲۰۰۰۰ دلار چه باشد؟» was
+     answered with a canned thank-you line. Politeness decorates the reply; the
+     question decides the path. */
+  const asksSomething = /[?؟]/.test(text) && text.trim().split(/\s+/).filter(Boolean).length >= 5;
+  if (short && greeting && !ACTION_RE.test(text) && !asksSomething) return CONVERSATION_KINDS.GREETING;
+  if (thanks && !ACTION_RE.test(text) && !asksSomething) return CONVERSATION_KINDS.THANKS;
   if (short && CASUAL_RE.test(text)) return CONVERSATION_KINDS.CASUAL;
   if (FOLLOW_UP_RE.test(text) && priorIntent) return CONVERSATION_KINDS.FOLLOW_UP;
   if (DECISION_QUESTION_RE.test(text)) return CONVERSATION_KINDS.QUESTION;
