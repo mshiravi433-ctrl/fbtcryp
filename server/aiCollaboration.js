@@ -63,6 +63,18 @@ import {
   checkDialogueCompliance,
   renderDialogueDeficit
 } from '../src/lib/intent-ai/os/conversation/dialogueRead.js';
+import {
+  selectProfessorLenses,
+  renderProfessorContract,
+  checkFalsifier,
+  renderFalsifierDeficit
+} from './aiProfessor.js';
+import {
+  createResearchAgenda,
+  deriveResearchFindings,
+  selectAgendaItems
+} from './aiResearchAgenda.js';
+import { storeGet, storeSet } from './store.js';
 import { checkPlanArithmetic, renderStrategyViolations, isPlanParameter } from './aiStrategyPlanCheck.js';
 import { assessEvidence, evaluateDecision, renderDecisionContract, renderDecisionDeficit } from './aiDecisionGate.js';
 import {
@@ -322,7 +334,7 @@ const ROLE_TASK = {
   [AI_ROLES.FINAL_ANSWER_AI]: 'reasoning'
 };
 
-async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '', decisionBrief = '', dialogueBrief = '' }) {
+async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '', decisionBrief = '', dialogueBrief = '', professorBrief = '', researchBrief = '' }) {
   /*
    * ─── DEEP REASONING CONTRACT (smartest mode only) ─────────────────────────
    * The role prompts are shared by every mode, so the extra discipline lives
@@ -349,7 +361,7 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
     /* The economist's lens is a reasoning contract, not a costume: it rides on
        the specialists and the synthesiser, never on the reviewer (whose job is
        to break the draft, not to reason about the economy). */
-    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}${dialogueBrief ? `\n${dialogueBrief}` : ''}`;
+    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}${dialogueBrief ? `\n${dialogueBrief}` : ''}${professorBrief ? `\n${professorBrief}` : ''}${researchBrief ? `\n${researchBrief}` : ''}`;
   /*
    * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
    * This line used to be a ternary: Persian or English. Everything a Turkish,
@@ -666,6 +678,8 @@ export async function runCollaborativeAnalysis({
   analysis = null,
   intelligence = null,
   transparency = false,
+  /* Whose research agenda this turn reads and updates. null = the shared one. */
+  owner = null,
   deps = {},
   deadlineMs = DEADLINE_MS
 } = {}) {
@@ -744,6 +758,34 @@ export async function runCollaborativeAnalysis({
     ? readDialogue({ message, locale, history: context?.conversationSummary || '', social: socialRead })
     : null;
   const dialogueBrief = renderDialogueBrief(dialogueRead);
+  /*
+   * ─── RESEARCH POSTURE (smartest mode, substantive turns) ───────────────────
+   * A professor of this field defines terms, says where every number came from,
+   * gives the base rate, and — enforced below, not merely requested — states what
+   * would prove the reading wrong. Small talk never reaches level 4.
+   */
+  const professorLenses = mode === 'max' && plan.level >= 4
+    ? selectProfessorLenses({ message, taskTypes: plan.taskTypes })
+    : [];
+  const professorBrief = renderProfessorContract(professorLenses);
+  /*
+   * ─── RESEARCH AGENDA (smartest mode) ───────────────────────────────────────
+   * Every deep turn already knows what it could not establish; until now that
+   * knowledge died with the turn. The agenda keeps it per owner, puts the
+   * relevant open questions in front of this turn's models, and records what
+   * this turn opened and closed. A store is optional: without one it is inert.
+   */
+  const researchSession = mode === 'max' && plan.level >= 4
+    ? createResearchAgenda({
+      load: D.researchLoad || ((ownerKey) => storeGet(`ai:research-agenda:v1:${ownerKey || 'anon'}`, [])),
+      save: D.researchSave || ((ownerKey, items) => storeSet(`ai:research-agenda:v1:${ownerKey || 'anon'}`, items))
+    })
+    : null;
+  const priorAgenda = researchSession?.enabled
+    ? await withDeadline(researchSession.read(owner), [], 400)
+    : [];
+  const briefedItems = researchSession?.enabled ? selectAgendaItems(priorAgenda, message, { limit: 3 }) : [];
+  const researchBrief = researchSession?.enabled ? researchSession.brief(priorAgenda, message, { limit: 3, locale }) : '';
   /*
    * ─── STRATEGY FRAME + RUBRIC (smartest mode, strategy turns) ───────────────
    * A plan may stand on the user's real capital, their actual weights, the
@@ -832,6 +874,12 @@ export async function runCollaborativeAnalysis({
        follow-up, question), the ask shape, and whether the final answer matched
        it. null outside the smartest mode. */
     dialogue: null,
+    /* The research posture of this turn: which pedagogy lenses the specialists
+       were held to, and whether the final text carries a falsifier. */
+    professor: null,
+    /* The continuous-improvement loop: which open questions this turn was given,
+       which it opened, and which it closed. null when no agenda store is live. */
+    research: null,
     /* Strategy turns in the smartest mode: the computed frame the plan stood on
        and the rubric result for the final answer. null otherwise. */
     strategy: null,
@@ -959,7 +1007,7 @@ export async function runCollaborativeAnalysis({
        analyses are genuinely different providers, not one model twice. */
     const roles = pickAnalysisRoles(plan, 2);
     const settled = await withDeadline(
-      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief, dialogueBrief }))),
+      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief, dialogueBrief, professorBrief, researchBrief }))),
       []
     );
     analyses.push(...(settled || []).filter(Boolean));
@@ -1030,7 +1078,9 @@ export async function runCollaborativeAnalysis({
         socialBrief,
         strategyBrief,
         decisionBrief,
-        dialogueBrief
+        dialogueBrief,
+        professorBrief,
+        researchBrief
       }), null);
       if (verifier?.ok) analyses.push(verifier);
     }
@@ -1092,7 +1142,9 @@ export async function runCollaborativeAnalysis({
         socialBrief,
         strategyBrief,
         decisionBrief,
-        dialogueBrief
+        dialogueBrief,
+        professorBrief,
+        researchBrief
       }), null);
       result.answer = finalRole?.ok
         ? finalRole.answer
@@ -1129,6 +1181,13 @@ export async function runCollaborativeAnalysis({
       const draftDialogue = dialogueRead
         ? checkDialogueCompliance({ read: dialogueRead, answer: result.answer })
         : null;
+      /*
+       * ─── FALSIFIER ON THE DRAFT ────────────────────────────────────────────
+       * A forecast without a disconfirming condition is the one thing a
+       * researcher never ships. Deterministic: prediction markers in the text,
+       * falsifier markers absent → MUST-FIX for the reviewer.
+       */
+      const draftFalsifier = professorBrief ? checkFalsifier({ message, answer: result.answer }) : null;
       /*
        * ─── DECISION VERDICT ON THE DRAFT ─────────────────────────────────────
        * Re-score the evidence now that the analyses, the verifier and the claim
@@ -1201,9 +1260,10 @@ export async function runCollaborativeAnalysis({
           const strategyArithmeticBlock = renderStrategyViolations(draftArithmetic);
           const decisionDeficitBlock = renderDecisionDeficit(result.decision);
           const dialogueDeficitBlock = renderDialogueDeficit(draftDialogue);
+          const falsifierDeficitBlock = renderFalsifierDeficit(draftFalsifier);
           const criticRole = {
             role: AI_ROLES.VERIFICATION_AI,
-            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}${dialogueDeficitBlock ? `\n\n${dialogueDeficitBlock}` : ''}`,
+            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}${dialogueDeficitBlock ? `\n\n${dialogueDeficitBlock}` : ''}${falsifierDeficitBlock ? `\n\n${falsifierDeficitBlock}` : ''}`,
             contextBlock: '',
             locale,
             deps: D,
@@ -1337,6 +1397,46 @@ export async function runCollaborativeAnalysis({
       issues: finalDialogue.issues.map((i) => i.id),
       compliant: finalDialogue.compliant
     };
+  }
+
+  /*
+   * Falsifier on the FINAL text (the reviewer may have added one), then the
+   * research agenda: this turn's findings are merged and persisted, so the next
+   * turn starts from what is still missing instead of from zero.
+   */
+  if (professorBrief) {
+    const finalFalsifier = checkFalsifier({ message, answer: result.answer });
+    result.professor = {
+      schema: 'fbt.ai-professor.v1',
+      lenses: professorLenses,
+      falsifier: {
+        applicable: finalFalsifier.applicable,
+        present: finalFalsifier.hasFalsifier,
+        compliant: finalFalsifier.compliant
+      }
+    };
+  }
+
+  if (researchSession?.enabled) {
+    const findings = deriveResearchFindings({
+      strategy: result.strategy,
+      decision: result.decision,
+      subQuestions: result.subQuestions,
+      numericAudit: result.numericAudit,
+      dialogue: result.dialogue,
+      falsifier: result.professor?.falsifier
+        ? { applicable: result.professor.falsifier.applicable, compliant: result.professor.falsifier.compliant }
+        : null,
+      context
+    });
+    const recorded = await withDeadline(
+      researchSession.record(owner, { agenda: priorAgenda, findings, locale }),
+      null,
+      500
+    );
+    result.research = recorded
+      ? { ...recorded, briefed: briefedItems.map((i) => i.id) }
+      : null;
   }
 
   /* Re-check the FINAL text: the reviewer may have fixed a figure. */

@@ -103,6 +103,7 @@ import { getVerifiedIntelligence } from './smartMoney/intelligence.js';
 import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { ownerFromRequest, listGoals, createGoal, parseGoalFromText } from './financialGoals.js';
+import { normalizeResearchAgenda } from './aiResearchAgenda.js';
 import { withCache } from './cache.js';
 import {
   INTENT_OS_PROMPT_VERSION,
@@ -1032,6 +1033,37 @@ router.get('/intelligence', (req, res) => {
   });
 });
 
+/**
+ * The research agenda: what this assistant still does not know about this
+ * owner's questions, and what it has closed. Owner-scoped, no message text —
+ * facets, counters and timestamps only. It exists so «همیشه در حال ارتقا»
+ * is inspectable instead of a claim.
+ */
+router.get('/research/agenda', async (req, res) => {
+  const owner = ownerFor(req);
+  let raw = [];
+  try {
+    raw = await storeGet(`ai:research-agenda:v1:${owner || 'anon'}`, []) || [];
+  } catch {
+    raw = [];
+  }
+  const items = normalizeResearchAgenda(raw);
+  const open = items.filter((i) => i.status === 'open');
+  const resolved = items.filter((i) => i.status === 'resolved');
+  return res.json({
+    ok: true,
+    schema: 'fbt.ai-research-agenda.v1',
+    open,
+    resolved: resolved.slice(-8),
+    counts: {
+      open: open.length,
+      resolved: resolved.length,
+      repeated: open.filter((i) => i.seenCount > 1).length
+    },
+    at: nowMs()
+  });
+});
+
 router.get('/gateway/providers', (_req, res) => res.json({
   ok: true,
   schema: 'fbt.ai-providers.v1',
@@ -1274,6 +1306,7 @@ router.post('/collaborate', async (req, res) => {
     const context = req.body?.context && typeof req.body.context === 'object' ? req.body.context : {};
     const result = await runCollaborativeAnalysis({
       message,
+      owner: ownerFor(req),
       context,
       locale,
       intentType: req.body?.intentType || null,
@@ -2121,6 +2154,7 @@ router.post('/chat', async (req, res) => {
     try {
       collaboration = await runCollaborativeAnalysis({
         message,
+        owner: ownerFor(req),
         context: {
           market: context.market,
           portfolio: context.portfolio,
@@ -2463,6 +2497,23 @@ router.post('/chat', async (req, res) => {
           pragmatics: collaboration.socialRead.pragmatics || null,
           relationship: collaboration.socialRead.relationship || null,
           signals: Array.isArray(collaboration.socialRead.signals) ? collaboration.socialRead.signals.slice(0, 8) : []
+        } : null,
+        /* The research posture: which pedagogy lenses the specialists were held
+           to, and whether the final text carries a falsifier. */
+        professor: collaboration?.professor ? {
+          lenses: Array.isArray(collaboration.professor.lenses) ? collaboration.professor.lenses : [],
+          falsifierApplicable: collaboration.professor.falsifier?.applicable === true,
+          falsifierPresent: collaboration.professor.falsifier?.present === true,
+          falsifierCompliant: collaboration.professor.falsifier?.compliant !== false
+        } : null,
+        /* Continuous improvement: which open questions this turn was given,
+           which it opened, which it closed, and how many remain. */
+        research: collaboration?.research ? {
+          briefed: Array.isArray(collaboration.research.briefed) ? collaboration.research.briefed : [],
+          opened: Array.isArray(collaboration.research.opened) ? collaboration.research.opened : [],
+          closed: Array.isArray(collaboration.research.closed) ? collaboration.research.closed : [],
+          repeated: Array.isArray(collaboration.research.repeated) ? collaboration.research.repeated : [],
+          openTotal: collaboration.research.openTotal ?? null
         } : null,
         /* What the turn was DOING and whether the answer matched the ask:
            correction vs follow-up vs question, and the shape (why / how much /
