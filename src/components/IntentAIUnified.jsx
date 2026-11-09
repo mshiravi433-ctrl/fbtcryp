@@ -267,7 +267,9 @@ import {
   orderPreview
 } from '../lib/intent-ai/os/conditionalOrder.js';
 import { scanOpportunityDashboard } from '../lib/intent-ai/os/opportunityDashboard.js';
+import { isOpportunityEngineRequest, isPortfolioRiskEngineRequest } from '../lib/intent-ai/os/engineRequestRouting.js';
 import OpportunityDashboard from './ai/OpportunityDashboard.jsx';
+import RiskEngineChatCard from './ai/RiskEngineChatCard.jsx';
 import {
   appendConversation,
   appendOperation,
@@ -883,12 +885,12 @@ export const ConversationRow = memo(function ConversationRow({
         ) : null}
         {/* Navigation belongs to the parent. Reading openBubbleRoute here
             threw ReferenceError as soon as a scan (live or restored) rendered. */}
+        {m.riskRequest ? <RiskEngineChatCard locale={locale} /> : null}
         {m.opportunityScan ? (
           <OpportunityDashboard
             scan={m.opportunityScan}
             locale={locale}
             onRescan={onRescanOpportunity}
-            onOpenRoom={onOpenRoute}
           />
         ) : Array.isArray(m.opportunities) && m.opportunities.length ? (
           <OpportunityList rows={m.opportunities} onMonitor={onMonitorOpportunity} locale={locale} />
@@ -2562,7 +2564,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
        * here: it asks for a real brief, so it falls through to the server.
        */
       try {
-        const socialRow = offlineSocialFallback(message, { locale });
+        const socialRow = offlineSocialFallback(message, {
+          locale,
+          prior: convStateRef.current?.currentIntent ? { intent: convStateRef.current.currentIntent } : null
+        });
         if (socialRow && socialRow.social?.needsServer !== true) {
           setMessages((prev) => [...prev, socialRow]);
           setConvState((prev) => appendConvMessage(prev, socialRow));
@@ -3529,7 +3534,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
          turn itself was social, answer it with the same voice table the server
          uses; the error banner stays for every turn that actually needed data. */
       const socialRow = (() => {
-        try { return offlineSocialFallback(message, { locale }); } catch { return null; }
+        try {
+          return offlineSocialFallback(message, {
+            locale,
+            prior: convStateRef.current?.currentIntent ? { intent: convStateRef.current.currentIntent } : null
+          });
+        } catch { return null; }
       })();
       if (socialRow) {
         setMessages((prev) => [...prev, socialRow]);
@@ -7237,19 +7247,29 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       }
     }
 
-    if (/فرصت|opportunit|بهترین.*درآمد|بازدهی/i.test(text) && /هدف|goal|سود/i.test(text)) {
+    const asksPortfolioRisk = isPortfolioRiskEngineRequest(text);
+    const asksOpportunity = isOpportunityEngineRequest(text);
+    if (asksPortfolioRisk) {
+      pushTurn({
+        id: makeId(), role: 'ai', kind: 'risk', riskRequest: true,
+        content: locale.startsWith('fa')
+          ? 'ریسک را از داده‌های موجود پرتفوی، بازار و منابع قابل‌دسترسی می‌سنجم؛ دادهٔ ناموجود را صفر فرض نمی‌کنم.'
+          : 'I’m assessing risk from the available portfolio, market and provider evidence; missing data will not be treated as zero.'
+      });
+    }
+    if (asksOpportunity) {
       pushTurn({
         id: makeId(),
         role: 'ai',
         kind: 'assistant',
         ui: { type: 'TEXT' },
         content: locale.startsWith('fa')
-          ? 'در حال اجرای موتور فرصت روی پرتفوی و بازار واقعی…'
-          : 'Running the opportunity engine on your real portfolio and the market…'
+          ? 'در حال اجرای موتور فرصت روی داده‌های بازار و شواهد تأییدشده…'
+          : 'Running the opportunity engine on market data and verified evidence…'
       });
       await runOpportunity(null);
-      return { handled: true };
     }
+    if (asksPortfolioRisk || asksOpportunity) return { handled: true };
 
     return { handled: false };
   }, [pendingDraft, activeContext, monitors, locale, pushTurn, handleMonitorCreate, handleOrderCreate, handleMonitorAction, runOpportunity, advanceAgentDraft, strategyQuestionTurn]);

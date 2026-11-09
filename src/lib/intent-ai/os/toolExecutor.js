@@ -150,15 +150,35 @@ export async function executeIntentTools({ intent, context = {}, services = {} }
     }
   }
 
-  if (['MARKET_ANALYSIS', 'MARKET_CONTEXT', 'ANALYZE_TOKEN'].includes(type)) {
+  if (['MARKET_ANALYSIS', 'MARKET_CONTEXT', 'ANALYZE_TOKEN'].includes(type)
+    || (type === 'INVESTMENT_PLAN' && intent?.questionFrame === 'READ_ONLY_ALLOCATION_PLAN')) {
     /* Overview and the per-token read answer different questions and share
        no state — running them together keeps a token ask off the overview's
        critical path. */
     const jobs = [need('market.overview', {})];
-    if (intent?.entities?.token) jobs.push(need('market.tokenDetail', { symbol: intent.entities.token }));
-    const [overviewRow, tokenRow] = await Promise.all(jobs);
+    const token = intent?.entities?.token;
+    const comparisonSource = intent?.questionFrame === 'READ_ONLY_ALLOCATION_PLAN'
+      ? intent?.entities?.allocationAssets
+      : intent?.entities?.comparisonTokens;
+    const comparisons = Array.isArray(comparisonSource)
+      ? [...new Set(comparisonSource.map((s) => String(s || '').toUpperCase()))].slice(0, 4)
+      : [];
+    if (token && comparisons.length < 2) jobs.push(need('market.tokenDetail', { symbol: token }));
+    const comparisonJobs = comparisons.length > 1
+      ? comparisons.map((symbol) => need('market.tokenDetail', { symbol }))
+      : [];
+    const [overviewRow, tokenRow, comparisonRows] = await Promise.all([
+      Promise.all(jobs),
+      Promise.all(comparisonJobs)
+    ]).then(([primaryRows, compared]) => [primaryRows[0], primaryRows[1] || null, compared]);
     data.market = overviewRow.result;
     if (tokenRow) data.token = tokenRow.result;
+    if (comparisonRows.length) {
+      data.tokenComparisons = comparisonRows.map((row, index) => ({
+        symbol: comparisons[index],
+        result: row?.result || { ok: false, dataStatus: 'unavailable', reason: row?.reason || 'NO_DATA' }
+      }));
+    }
   }
 
   if (['SMART_MONEY'].includes(type)) {

@@ -28,7 +28,6 @@ import {
   IconTrophy,
   IconX,
   IconSearch,
-  IconSparkle,
   IconClock,
   IconWorld
 } from './Icons';
@@ -336,16 +335,6 @@ const GROUPS = [
        * FBT acts as Router + Fee layer only; non-custodial.
        */
       { to: '/loan', key: 'nav.loan', Icon: IconShield, hue: 'var(--rgb-2)' },
-      /*
-       * ─── THE AI RISK ENGINE IS A DOORWAY, NOT A REPORT ────────────────────
-       * /risk is where the book is measured, predicted, stressed and monitored
-       * — the three phases the owner asked for in one screen. It sits in
-       * «امنیت» next to Loan and Insurance because that is the question a user
-       * is asking when they open this group: «چه چیزی ممکن است پول من را ببرد».
-       * The violet stroke is --rgb-2 (the risk board's own accent) so the tile
-       * matches the room it opens.
-       */
-      { to: '/risk', key: 'nav.riskEngine', Icon: IconShield, hue: 'var(--rgb-2)' },
       /* FBT Insurance OS — /insurance (sandbox providers, non-custodial). */
       { to: '/insurance', key: 'nav.protection', Icon: IconShield, hue: 'var(--rgb-8)' },
       /* Intent OS now owns the raised centre button. Orders therefore needs a
@@ -398,16 +387,6 @@ const GROUPS = [
        * The /ai-analysis route still resolves for old links, but no menu
        * entry advertises a screen the assistant already answers in place.
        */
-      /*
-       * AI OPPORTUNITY ENGINE — /opportunities.
-       *
-       * It sits above Smart Money because it is the screen that CONSUMES smart
-       * money: the engine reads the verified whale consensus, the yield feed and
-       * the wallet, prices every candidate against the user's own capital and
-       * opens the token page or pool behind each card. One doorway, four rooms
-       * (top, personalised, scanner, coverage) inside.
-       */
-      { to: '/opportunities', key: 'nav.opportunities', Icon: IconSparkle, hue: 'var(--rgb-2)' },
       { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney, hue: 'var(--rgb-7)' },
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
       /* The social feed's second doorway. Its icon is the same conversation
