@@ -454,7 +454,8 @@ test('the client defaults to the smartest mode and accepts the same aliases', ()
   assert.equal(DEFAULT_INTELLIGENCE_MODE, 'max');
   assert.equal(getClientMode(), 'max', 'no window / empty storage resolves to max, never to a weaker mode');
   assert.equal(normalizeClientMode('smartest'), 'max');
-  assert.equal(normalizeClientMode('باهوش‌ترین'), 'max');
+  assert.equal(normalizeClientMode('باهوش‌ترین'), 'max', 'the old label still resolves — a saved preference must not silently downgrade');
+  assert.equal(normalizeClientMode('هوش عمیق'), 'max', 'the label the UI shows now resolves too');
   assert.equal(normalizeClientMode('fast'), 'swift');
   assert.equal(normalizeClientMode('nonsense'), null);
   assert.equal(CLIENT_MODES.length, 3);
@@ -462,7 +463,7 @@ test('the client defaults to the smartest mode and accepts the same aliases', ()
 });
 
 test('the mode label is localised in both languages', () => {
-  assert.equal(intelligenceModeLabel('max', 'fa'), 'باهوش‌ترین');
+  assert.equal(intelligenceModeLabel('max', 'fa'), 'هوش عمیق');
   assert.equal(intelligenceModeLabel('max', 'en-US'), 'Smartest');
   assert.equal(intelligenceModeLabel('swift', 'fa-IR'), 'سریع');
 });

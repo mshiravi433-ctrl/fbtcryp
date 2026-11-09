@@ -229,9 +229,68 @@
 .fbt-chip[data-tone='warn'] i { background: var(--fbt-amber); box-shadow: 0 0 8px var(--fbt-amber); }
 .fbt-chip[data-tone='bad'] { color: var(--fbt-red); border-color: rgba(251, 113, 133, 0.32); }
 .fbt-chip[data-tone='bad'] i { background: var(--fbt-red); box-shadow: 0 0 8px var(--fbt-red); }
+/*
+ * ─── WHAT `fbt-chip-hide-sm` IS ALLOWED TO HIDE ─────────────────────────
+ * The rule is a DECORATION SHED: under 560px the header drops the fleet count,
+ * the wallet address and the cortex badge, because those are read-outs. It must
+ * never be applied to a control. The intelligence chip used to carry it, which
+ * is how «کجا باید روشنش کنم؟» ended with nothing on screen to press — the mode
+ * was live and defaulted to the deepest setting, and the only entry point to
+ * see or change it was display:none on a phone. So: nothing in the markup below
+ * puts that class on the mode chip, and this cluster wraps instead of
+ * overflowing when the one surviving chip meets a narrow title.
+ */
+.fbt-head-meta {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  min-width: 0;
+}
 @media (max-width: 560px) {
   .fbt-chip.fbt-chip-hide-sm { display: none; }
 }
+
+/*
+ * ─── THE MODE, AT THE POINT OF ASKING ────────────────────────────────────
+ * Same fact as the header chip, placed where the question is typed: which
+ * intelligence setting the next message gets, one tap from the panel that
+ * changes it. Compact by design — it shares a row with the mic, the input and
+ * the send button, and on a 360px phone that row has nothing to spare.
+ */
+.iaos-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  max-width: 132px;
+  padding: 6px 10px;
+  border-radius: var(--fbt-r-pill);
+  border: 1px solid var(--fbt-line-soft);
+  background: rgba(10, 16, 32, 0.55);
+  color: var(--fbt-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+.iaos-mode-pill:hover { border-color: var(--fbt-line-bright); box-shadow: var(--fbt-glow-soft); }
+.iaos-mode-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.iaos-mode-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--fbt-dim);
+}
+.iaos-mode-pill[data-tone='ok'] { color: var(--fbt-cyan-soft); border-color: rgba(34, 211, 238, 0.3); }
+.iaos-mode-pill[data-tone='ok'] .iaos-mode-dot { background: var(--fbt-cyan); box-shadow: 0 0 8px var(--fbt-cyan); }
+.iaos-mode-pill[data-tone='warn'] { color: var(--fbt-amber); border-color: rgba(251, 191, 36, 0.3); }
+.iaos-mode-pill[data-tone='warn'] .iaos-mode-dot { background: var(--fbt-amber); box-shadow: 0 0 8px var(--fbt-amber); }
 
 /* ── 3. NEURAL CORE EMBLEM ──────────────────────────────────────────────── */
 .fbt-core {
@@ -1136,6 +1195,52 @@ button.fbt-neural .tag-row, .fbt-neural button.tag-row { font-family: inherit; f
 .fbt-more-chevron { color: var(--fbt-dim); flex: none; }
 [dir='rtl'] .fbt-more-chevron svg { transform: scaleX(-1); }
 
+/*
+ * ── THE INTELLIGENCE SEGMENT (inside the More menu's «هوشمندی» group) ──────
+ * Not a row: a row navigates, this SETS. It gets its own markup for that
+ * reason, and its own accent, so it cannot be mistaken for one more link into a
+ * panel. Three buttons — the same three the intelligence panel offers — with the
+ * active one lit, plus the honest line about what the choice does.
+ */
+.fbt-more-modeseg {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid rgba(34, 211, 238, 0.22);
+  background: rgba(34, 211, 238, 0.05);
+  border-radius: var(--fbt-r-md);
+  padding: 11px 12px;
+}
+.fbt-more-modeseg-lead {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--fbt-cyan-soft);
+}
+.fbt-more-modeseg-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.fbt-more-modebtn {
+  flex: 1 1 auto;
+  min-width: 88px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--fbt-muted);
+  background: var(--fbt-glass);
+  border: 1px solid var(--fbt-line-soft);
+  border-radius: var(--fbt-r-pill);
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: color var(--fbt-motion-fast) var(--fbt-ease), border-color var(--fbt-motion-fast) var(--fbt-ease), box-shadow var(--fbt-motion-fast) var(--fbt-ease);
+}
+.fbt-more-modebtn:hover { border-color: var(--fbt-line-bright); color: var(--fbt-text); }
+.fbt-more-modebtn[data-on='true'] {
+  color: var(--fbt-cyan-soft);
+  border-color: rgba(34, 211, 238, 0.45);
+  background: rgba(34, 211, 238, 0.12);
+  box-shadow: var(--fbt-glow-soft);
+}
+.fbt-more-modeseg-note { font-size: 10.5px; color: var(--fbt-muted); line-height: 1.6; }
+
 /* ── 11. OVERLAYS (drawer + panels stay functional, gain the finish) ────── */
 .fbt-neural .iaos-overlay {
   background: rgba(2, 5, 12, 0.72);
@@ -1363,7 +1468,10 @@ button.fbt-neural .tag-row, .fbt-neural button.tag-row { font-family: inherit; f
 }
 :root[data-theme='light'] .fbt-neural .tag-row,
 :root[data-theme='light'] .fbt-more-row,
-:root[data-theme='light'] .fbt-empty-action { background: rgba(255, 255, 255, 0.85); }
+:root[data-theme='light'] .fbt-neural.tag-page .iaos-mode-pill,
+:root[data-theme='light'] .fbt-more-modebtn { background: rgba(255, 255, 255, 0.85); }
+:root[data-theme='light'] .fbt-neural.tag-page .iaos-mode-pill[data-tone='ok'] { background: rgba(34, 211, 238, 0.1); }
+:root[data-theme='light'] .fbt-more-modebtn[data-on='true'] { background: rgba(14, 116, 144, 0.1); }
 :root[data-theme='light'] .fbt-neural .iaos-drawer,
 :root[data-theme='light'] .fbt-neural .iaos-panel {
   background: linear-gradient(180deg, #ffffff 0%, #f2f6fc 100%);

@@ -19,7 +19,15 @@
  *       • lowConfidence (flagged if divergence is high or confidence < 60%)
  */
 
-import { parallelMultiProviderChat, getActiveProviderIds, isProviderConfigured, executeProviderChat, orderByHealth } from './aiGateway.js';
+import {
+  parallelMultiProviderChat,
+  getActiveProviderIds,
+  isProviderConfigured,
+  executeProviderChat,
+  orderByHealth,
+  getModelCandidates,
+  resolveIntelligenceMode
+} from './aiGateway.js';
 
 function parseJsonSafe(text) {
   let t = String(text || '').trim();
@@ -78,7 +86,7 @@ Respond in STRICT JSON:
 /*
  * Specialized multi-model routing.
  *
- * ─── WHY MOST OF THIS TABLE IS NOW `null` ──────────────────────────────────
+ * ─── WHY THIS TABLE IS ALL `null` ──────────────────────────────────────────
  * It used to pin concrete model ids per role: Groq's seats said
  * `llama-3.3-70b-versatile` and `mixtral-8x7b-32768`, OpenRouter's risk seat
  * said `anthropic/claude-3.5-sonnet`. All three are retired upstream (Groq shut
@@ -87,15 +95,16 @@ Respond in STRICT JSON:
  * 2025-10-28), so the debate's Groq seats failed with HTTP 404 on every run and
  * a "multi-AI consensus" was assembled from whoever survived.
  *
- * `null` means "use this provider's own current default", which the gateway
- * resolves live from the registry and its environment override — one place to
- * keep current instead of a second, silently-stale copy here. Only the
- * single-provider case still names models, because there the POINT is three
- * different brains; those ids come from the gateway's own OpenRouter list.
+ * `null` means "this provider's own current seat for this mode", which the
+ * gateway resolves live from its registry, its env and `resolveIntelligenceMode`
+ * — one place to keep current instead of a second, silently-stale copy here.
+ * Even the single-provider case, where the POINT is three different brains, no
+ * longer names ids in this file: `diverseSeatModels` takes them from the
+ * gateway's own ladder for the mode in force.
  */
 const ROLE_MODELS = {
   openrouter: {
-    market_intelligence: process.env.AI_MODEL || null,
+    market_intelligence: null,
     risk_guardian: null,
     strategy_architect: null
   },
@@ -106,12 +115,45 @@ const ROLE_MODELS = {
   }
 };
 
-/** Three genuinely different brains reachable through one OpenRouter key. */
-const OPENROUTER_DIVERSE_MODELS = Object.freeze([
-  process.env.AI_MODEL || 'openai/gpt-4o-mini',
+/**
+ * Three genuinely different brains reachable through one OpenRouter key.
+ *
+ * The first entry used to be `process.env.AI_MODEL`. That looked harmless — the
+ * same variable the gateway reads — but it arrived here as an EXPLICIT model
+ * request, and an explicit request outranks the flagship ladder by contract
+ * (`getModelCandidates` refuses to second-guess a caller who named an id). On
+ * this deployment `AI_MODEL=openai/gpt-4o-mini`, a stale copy of the pre-mode
+ * default: so the chat ran `google/gemini-2.5-pro` in the deep mode while the
+ * DEBATE behind it ran `gpt-4o-mini`, and the fix that made the chat deeper
+ * silently did not reach the consensus path. Same stale-pin logic, one layer
+ * down, invisible because both halves reported `mode: max`.
+ *
+ * Seats are therefore chosen from the gateway's own ladder for the mode in
+ * force — which already knows how to demote a stale pin, skip retired ids and
+ * keep the historical failover order — and the list below is only the fallback
+ * for a deployment where the gateway cannot be consulted.
+ */
+const HISTORIC_DIVERSE_MODELS = Object.freeze([
+  'openai/gpt-4o-mini',
   'google/gemini-2.5-flash',
   'anthropic/claude-3.5-haiku'
 ]);
+
+/**
+ * Distinct models for the seats of a single-provider debate, in the order the
+ * gateway would try them for `mode`. Diversity is preserved by taking the
+ * first N DIFFERENT ids of that ladder, so «three brains» never collapses to
+ * three copies of one — and never to three cheap ones.
+ */
+export function diverseSeatModels(providerId = 'openrouter', mode = null, count = 3) {
+  const ladder = getModelCandidates(providerId, null, mode ? { mode } : {});
+  const picked = [];
+  for (const id of [...ladder, ...HISTORIC_DIVERSE_MODELS]) {
+    if (picked.length >= count) break;
+    if (id && !picked.includes(id)) picked.push(id);
+  }
+  return picked;
+}
 
 /**
  * Run Multi-AI Debate and calculate Consensus.
@@ -169,8 +211,12 @@ export async function runMultiAiDebate({
   message = '',
   context = {},
   locale = 'fa',
-  preferredProviders = []
+  preferredProviders = [],
+  /* Whose depth this debate runs at. `null` = the deployment's mode, which is
+     the deep one; an explicit id from the caller wins, exactly as in `routedChat`. */
+  intelligence = null
 } = {}) {
+  const mode = resolveIntelligenceMode(intelligence).mode;
   const active = getActiveProviderIds();
   
   /*
@@ -190,10 +236,11 @@ export async function runMultiAiDebate({
   let executionPlan = [];
   if (debateProviders.includes('openrouter') && debateProviders.length === 1) {
     const roles = ['market_intelligence', 'risk_guardian', 'strategy_architect'];
+    const seats = diverseSeatModels('openrouter', mode, roles.length);
     executionPlan = roles.map((role, i) => ({
       provider: 'openrouter',
       role,
-      model: OPENROUTER_DIVERSE_MODELS[i % OPENROUTER_DIVERSE_MODELS.length]
+      model: seats[i % seats.length]
     }));
   } else if (debateProviders.includes('groq') && debateProviders.includes('openrouter')) {
     /* Each provider answers from its OWN current default (model: null) — the
@@ -242,7 +289,11 @@ export async function runMultiAiDebate({
         model: assignedModel,
         temperature: 0.25,
         maxTokens: 500,
-        json: true
+        json: true,
+        /* The seat answers at the depth the turn was asked for. Without it the
+           debate inherits the gateway default, which happens to be right today
+           and is a silent coincidence rather than a decision. */
+        intelligence: mode
       });
 
       const parsed = parseJsonSafe(res.text) || {
@@ -438,7 +489,7 @@ Respond in STRICT JSON:
 const clip = (s, n) => String(s || '').slice(0, n);
 const arr = (a, n = 3, len = 200) => (Array.isArray(a) ? a.slice(0, n).map((x) => clip(x, len)).filter(Boolean) : []);
 
-function pickDebateSeats(preferredProviders = []) {
+function pickDebateSeats(preferredProviders = [], mode = null) {
   const active = getActiveProviderIds().filter((p) => p !== 'internal');
   const preferred = preferredProviders.filter((p) => isProviderConfigured(p) && p !== 'internal');
   const priority = ['anthropic', 'openrouter', 'deepseek', 'gemini', 'groq', 'aimlapi', 'mistral', 'workersai'];
@@ -453,10 +504,11 @@ function pickDebateSeats(preferredProviders = []) {
      `deepseek/deepseek-chat` pair silently lost its first member when
      Anthropic retired Claude 3.5 Sonnet). */
   if (pool.length === 1 && pool[0] === 'openrouter') {
+    const seats = diverseSeatModels('openrouter', mode, 3);
     return {
-      bull: { provider: 'openrouter', model: OPENROUTER_DIVERSE_MODELS[0] },
-      bear: { provider: 'openrouter', model: OPENROUTER_DIVERSE_MODELS[1] },
-      judge: { provider: 'openrouter', model: OPENROUTER_DIVERSE_MODELS[2] }
+      bull: { provider: 'openrouter', model: seats[0] },
+      bear: { provider: 'openrouter', model: seats[1] },
+      judge: { provider: 'openrouter', model: seats[2] }
     };
   }
   return {
@@ -483,7 +535,7 @@ function evidenceBlock({ message, context, reflection, isPersian }) {
   ].filter(Boolean).join('\n');
 }
 
-async function argue(seat, side, evidence, opponent, execute) {
+async function argue(seat, side, evidence, opponent, execute, mode = null) {
   const user = opponent
     ? `${evidence}\n\nOPPOSING ARGUMENT TO REBUT:\n${clip(opponent, 900)}`
     : evidence;
@@ -495,7 +547,8 @@ async function argue(seat, side, evidence, opponent, execute) {
       model: seat.model,
       temperature: 0.4,
       maxTokens: 500,
-      json: true
+      json: true,
+      intelligence: mode
     });
     const j = parseJsonSafe(res.text);
     if (!j || !j.thesis) throw new Error('UNPARSEABLE');
@@ -533,12 +586,14 @@ export async function runAdversarialDebate({
   rounds = 2,
   reflection = null,
   preferredProviders = [],
+  intelligence = null,
   deps = {}
 } = {}) {
+  const mode = resolveIntelligenceMode(intelligence).mode;
   const execute = deps.execute || executeProviderChat;
   const isPersian = String(locale || 'fa').startsWith('fa') || /[آ-ی]/.test(message);
   const nRounds = Math.min(3, Math.max(1, Math.round(Number(rounds) || 2)));
-  const seats = deps.seats || pickDebateSeats(preferredProviders);
+  const seats = deps.seats || pickDebateSeats(preferredProviders, mode);
   const base = {
     schema: ADVERSARIAL_DEBATE_SCHEMA,
     rounds: 0,
@@ -569,8 +624,8 @@ export async function runAdversarialDebate({
   let lastBear = null;
   for (let r = 1; r <= nRounds; r += 1) {
     /* Bull speaks first; the Bear answers THIS round's bull argument. */
-    const bull = await argue(seats.bull, 'bull', evidence, lastBear ? `${lastBear.thesis}\n${lastBear.arguments.join('\n')}` : null, execute);
-    const bear = await argue(seats.bear, 'bear', evidence, bull.ok ? `${bull.thesis}\n${bull.arguments.join('\n')}` : null, execute);
+    const bull = await argue(seats.bull, 'bull', evidence, lastBear ? `${lastBear.thesis}\n${lastBear.arguments.join('\n')}` : null, execute, mode);
+    const bear = await argue(seats.bear, 'bear', evidence, bull.ok ? `${bull.thesis}\n${bull.arguments.join('\n')}` : null, execute, mode);
     base.transcript.push({ round: r, bull, bear });
     base.rounds = r;
     if (bull.ok) lastBull = bull;
@@ -608,7 +663,8 @@ export async function runAdversarialDebate({
       model: seats.judge.model,
       temperature: 0.1,
       maxTokens: 500,
-      json: true
+      json: true,
+      intelligence: mode
     });
     judge = parseJsonSafe(res.text);
     if (judge) judge._provider = seats.judge.provider;

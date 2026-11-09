@@ -1052,13 +1052,17 @@ export function IntelligencePanel({
                         data-testid={`intel-pin-${p.id}`}
                         data-state={p.modelPin.state}
                       >
-                        {p.modelPin.shadowed
+                        {p.modelPin.state === 'retired'
                           ? (isEn
-                            ? `${p.modelPin.envVar} pins ${p.modelPin.value} — the old default; the smartest mode puts the flagship first and keeps this as fallback.`
-                            : `${p.modelPin.envVar} روی ${p.modelPin.value} قفل شده — همان مدل ارزانِ قبلی؛ در حالت باهوش‌ترین، پرچم‌دار اول می‌آید و این مدل به‌عنوان ذخیره می‌ماند.`)
-                          : (isEn
-                            ? `${p.modelPin.envVar} pins ${p.modelPin.value}; an explicit pin outranks the flagship ladder.`
-                            : `${p.modelPin.envVar} روی ${p.modelPin.value} قفل کرده است؛ انتخاب صریح اپراتور بر نردبان پرچم‌دار اولویت دارد.`)}
+                            ? `${p.modelPin.envVar} names ${p.modelPin.value}, a model this vendor retired — it is never called automatically. Point the variable at a live id or remove it.`
+                            : `${p.modelPin.envVar} روی ${p.modelPin.value} تنظیم شده؛ مدلی که این ارائه‌دهنده بازنشسته کرده — خودکار هرگز صدا زده نمی‌شود. متغیر را به یک مدل زنده تغییر دهید یا حذفش کنید.`)
+                          : (p.modelPin.shadowed
+                            ? (isEn
+                              ? `${p.modelPin.envVar} pins ${p.modelPin.value} — the old default; the smartest mode puts the flagship first and keeps this as fallback.`
+                              : `${p.modelPin.envVar} روی ${p.modelPin.value} قفل شده — همان مدل ارزانِ قبلی؛ در حالت هوش عمیق، پرچم‌دار اول می‌آید و این مدل به‌عنوان ذخیره می‌ماند.`)
+                            : (isEn
+                              ? `${p.modelPin.envVar} pins ${p.modelPin.value}; an explicit pin outranks the flagship ladder.`
+                              : `${p.modelPin.envVar} روی ${p.modelPin.value} قفل کرده است؛ انتخاب صریح اپراتور بر نردبان پرچم‌دار اولویت دارد.`))}
                       </small>
                     ) : null}
                     {/* The key is present but the stored copy carries quotes or

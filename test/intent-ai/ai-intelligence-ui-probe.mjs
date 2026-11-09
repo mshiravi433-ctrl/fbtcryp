@@ -37,8 +37,56 @@ ok('intelligence panel renders a real three-way mode selector');
 const unified = read('src/components/IntentAIUnified.jsx');
 assert.ok(unified.includes('neural-intelligence-chip'), 'the chat header must show which mode is active');
 assert.ok(unified.includes("opts.deepThinking === true ? 'max' : undefined"), 'deep-thinking turns must explicitly ask for max');
-assert.ok(unified.includes("import { getIntelligenceMode, intelligenceModeLabel }"), 'the chip reads the same shared preference');
+assert.match(unified, /import \{[^}]*getIntelligenceMode[^}]*intelligenceModeLabel[^}]*\} from '\.\.\/lib\/aiIntelligenceMode\.js'/,
+  'the chip reads the same shared preference');
 ok('chat header shows the mode and the deep-thinking path requests max');
+
+/*
+ * ─── REACHABILITY, PINNED ─────────────────────────────────────────────────
+ * WHY THESE CHECKS EXIST: «هنوز نشده اصلاً سه نقطه نمیاد». The mode was live,
+ * defaulted to `max`, and unreachable — the header chip carried
+ * `fbt-chip-hide-sm` (display:none at ≤560px) while the tab bar that held the
+ * panel's only other entry point is hidden at ≥900px. So the control existed in
+ * the source and nowhere on the user's screen, and a report that told them to
+ * open a menu that was never shipped.
+ *
+ * A behaviour test cannot see this: nothing fails when an affordance is
+ * display:none. So the markup itself is pinned here — the two entry points that
+ * must survive every breakpoint, and the rule that no control is ever allowed
+ * to be the decoration-shed's victim.
+ */
+/* The chip's own opening tag, and nothing else — prose about the class above it
+   must not be able to satisfy (or break) this check. */
+const chipTagStart = unified.lastIndexOf('<button', unified.indexOf('data-testid="neural-intelligence-chip"'));
+const chipTagEnd = unified.indexOf('>', unified.indexOf('data-testid="neural-intelligence-chip"'));
+const chipTag = unified.slice(chipTagStart, chipTagEnd);
+assert.ok(chipTag.includes('className="fbt-chip"'), 'the mode chip must be a real chip in the header');
+assert.ok(chipTag.length > 40 && !chipTag.includes('fbt-chip-hide-sm'),
+  'the intelligence chip must NEVER be hidden on a small screen — it is a control, not decoration');
+assert.ok(/data-testid="neural-intelligence-chip"[\s\S]{0,200}onClick=\{\(\) => openPanel\('intelligence'\)\}/.test(unified),
+  'the chip must open the panel through openPanel, which also loads the fleet read the panel shows');
+assert.ok(unified.includes('neural-intelligence-composer'),
+  'the composer needs its own mode affordance: the header can be scrolled or keyboard-covered');
+assert.ok(/data-testid="neural-intelligence-composer"[\s\S]{0,200}onClick=\{\(\) => openPanel\('intelligence'\)\}/.test(unified),
+  'the composer pill opens the same panel — one control, two handles, no divergent switch');
+assert.ok(/<NeuralMoreMenu[\s\S]{0,600}onIntelligenceMode=\{\(id\) => setIntelligenceModeState\(setIntelligenceMode\(id\)\)\}/.test(unified),
+  'the mode picker inside the More menu must WRITE the shared preference, not render three dead buttons');
+ok('the mode is reachable on a phone, on a desktop, and while typing');
+
+const moreMenu = read('src/components/intent-neural/NeuralMoreMenu.jsx');
+assert.ok(moreMenu.includes('neural-more-mode-${m.id}'), 'each mode gets its own testable button in the More menu');
+assert.ok(moreMenu.includes('onIntelligenceMode(m.id)'), 'a pressed button must report the id it carries');
+assert.ok(moreMenu.includes('INTELLIGENCE_MODES'), 'the More menu must render the published modes, not its own list');
+assert.ok(!/onClick=\{\(\) => \{\}\}/.test(moreMenu), 'no decorative no-op button in the More menu');
+ok('the More menu owns a real mode picker');
+
+const styles = read('src/styles/fbt-neural-command.css');
+assert.ok(!/\[data-testid='neural-intelligence-chip'\][^{]*\{[^}]*display:\s*none/.test(styles)
+  && !/\[data-testid="neural-intelligence-chip"\][^{]*\{[^}]*display:\s*none/.test(styles),
+  'the stylesheet must not hide the intelligence control at any width');
+assert.match(styles, /\.fbt-head-meta\s*\{[^}]*flex-wrap:\s*wrap/, 'the chip cluster must wrap instead of overflowing once the mode chip stays visible');
+assert.ok(styles.includes('.iaos-mode-pill'), 'the composer pill needs real styling next to the send button');
+ok('the CSS keeps the mode visible and the header intact');
 
 const client = read('src/lib/aiIntentClient.js');
 assert.ok(client.includes('getIntelligenceMode'), 'the transport must read the stored mode');
