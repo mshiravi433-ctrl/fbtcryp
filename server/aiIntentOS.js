@@ -158,6 +158,7 @@ import {
   getIntelligenceProfile,
   intelligenceDeadlineMs,
   turnCeilingMs,
+  turnSafeCeilingMs,
   describeIntelligence
 } from './aiIntelligence.js';
 import { researchWeb, analyzeWithSources, analyzeNewsImpact } from './aiWebResearch.js';
@@ -2189,7 +2190,17 @@ router.post('/chat', async (req, res) => {
    * stage only what the turn can still pay for, keeping the escalation floor
    * reserved for the stage that runs after it.
    */
-  const turnCeiling = turnCeilingMs();
+  /*
+   * ─── `turnSafeCeilingMs`, NOT `turnCeilingMs` ────────────────────────────
+   * The mode's ceiling answers «how long may this think?»; the platform answers
+   * «how long until I kill the request?» (60 s). A turn planned against the
+   * larger number is a turn the host can abort mid-await, and an aborted turn
+   * has no answer to show: the deep mode spent its budget, the browser waited,
+   * and what came back was a failure that retried itself. The safety clamp is a
+   * few seconds smaller than the mode ceiling and can never be larger, so this
+   * is the only line that had to change for the budget to be honest.
+   */
+  const turnCeiling = turnSafeCeilingMs();
   const escalationFloorMs = Number(process.env.AI_ESCALATION_DEADLINE_MS || 9000);
   const turnBudgetFor = (mode) => {
     const wanted = intelligenceDeadlineMs(mode, null);
