@@ -114,8 +114,11 @@ describe('what the page actually looks like', () => {
   it('states the count and folds the explainer, so the page opens on the list', async () => {
     mount();
     await waitFor(() => expect(screen.getByTestId('perp-pair-strip')).toBeTruthy());
-    /* the count is text on the page, not a number nobody has to count */
-    expect(screen.getByText(/جفت توکن/)).toBeTruthy();
+    /* the count is text on the page, not a number nobody has to count.
+       Anchored on the number: the «جفت توکن» sub-tab of «پرپچوال» now carries
+       the same phrase as a button label (that is its required name), so the
+       bare text query is ambiguous. */
+    expect(screen.getByText(/\d+\s*جفت توکن/)).toBeTruthy();
     /* the explainer is a button, and its body is not in the tree */
     const toggle = screen.getByTestId('perp-how-toggle');
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
