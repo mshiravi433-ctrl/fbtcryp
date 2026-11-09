@@ -34,7 +34,7 @@ export const INTELLIGENCE_MODES = Object.freeze([
   {
     id: 'max',
     label: { fa: 'باهوش‌ترین', en: 'Smartest' },
-    hint: { fa: 'پرچم‌دار + سه تحلیل + بازبینی', en: 'Flagships + 3 analyses + review' }
+    hint: { fa: 'پرچم‌دار + سه تحلیل + بازبینی + لنز اقتصاددان', en: 'Flagships + 3 analyses + review + economist lens' }
   }
 ]);
 

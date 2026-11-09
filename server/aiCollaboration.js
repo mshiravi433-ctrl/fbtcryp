@@ -55,6 +55,7 @@ import {
 import { renderSocialReply } from '../src/lib/intent-ai/os/conversation/socialVoice.js';
 import { auditNumbers, buildEvidenceCorpus, renderUnsourcedBlock } from './aiEvidenceAudit.js';
 import { buildClaimLedger, renderClaimLedger } from './aiClaimLedger.js';
+import { selectEconomicLenses, renderEconomistLens, economistPersona } from './aiEconomistLens.js';
 import {
   decomposeQuestion,
   assessQuestionCoverage,
@@ -304,7 +305,7 @@ const ROLE_TASK = {
   [AI_ROLES.FINAL_ANSWER_AI]: 'reasoning'
 };
 
-async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false }) {
+async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '' }) {
   /*
    * ─── DEEP REASONING CONTRACT (smartest mode only) ─────────────────────────
    * The role prompts are shared by every mode, so the extra discipline lives
@@ -328,7 +329,10 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
     : '';
   const system = systemOverride
     ? `${systemOverride}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}`
-    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}`;
+    /* The economist's lens is a reasoning contract, not a costume: it rides on
+       the specialists and the synthesiser, never on the reviewer (whose job is
+       to break the draft, not to reason about the economy). */
+    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${economistLens ? `\n${economistLens}` : ''}`;
   /*
    * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
    * This line used to be a ternary: Persian or English. Everything a Turkish,
@@ -690,6 +694,18 @@ export async function runCollaborativeAnalysis({
    * Only the smartest mode pays for it — `balanced` must stay byte-identical.
    */
   const subQuestions = mode === 'max' ? decomposeQuestion(message) : [];
+  /*
+   * ─── ECONOMIST'S LENS (smartest mode, substantive turns only) ──────────────
+   * A professor of economics reasons by mechanism, base rate, transmission,
+   * incentives and falsifiability — not by narrating the last candle. The
+   * lenses are selected deterministically from the question and the router's
+   * task types, then appended to every specialist's system prompt. Small talk
+   * never reaches level 4, so it never gets this.
+   */
+  const economistLenses = mode === 'max' && plan.level >= 4
+    ? selectEconomicLenses({ message, taskTypes: plan.taskTypes, intentType })
+    : [];
+  const economistLens = renderEconomistLens(economistLenses);
   /* Role budgets follow the mode: `max` gives an analysis room for its
      reasoning and its answer instead of a single paragraph. Latency-bound
      conversation roles are exempt (see intelligenceGeneration). */
@@ -752,6 +768,9 @@ export async function runCollaborativeAnalysis({
     /* The dissenting seat (smartest mode): which role was asked to argue
        against the obvious reading, and whether it answered. */
     counterCase: null,
+    /* The reasoning persona used for this turn (smartest mode): which
+       economist lenses the specialists were held to. null otherwise. */
+    persona: economistPersona(economistLenses),
     perRole: transparency ? [] : undefined,
     latencyMs: 0,
     at: Date.now()
@@ -892,6 +911,7 @@ export async function runCollaborativeAnalysis({
         fleet,
         seat: i,
         intelligence: mode,
+        economistLens,
         /* The last analytical seat is the dissenting one, and only in the
            smartest mode: one of the three reads must be trying to break the
            other two, not agreeing with them. */
@@ -922,7 +942,8 @@ export async function runCollaborativeAnalysis({
         fleet,
         seat: roles.length,
         maxTokens: tokensFor(600),
-        intelligence: mode
+        intelligence: mode,
+        economistLens
       }), null);
       if (verifier?.ok) analyses.push(verifier);
     }
@@ -979,7 +1000,8 @@ export async function runCollaborativeAnalysis({
         fleet,
         seat: roles.length + 1,
         maxTokens: tokensFor(800),
-        intelligence: mode
+        intelligence: mode,
+        economistLens
       }), null);
       result.answer = finalRole?.ok
         ? finalRole.answer

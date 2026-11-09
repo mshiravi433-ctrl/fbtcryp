@@ -2399,6 +2399,12 @@ router.post('/chat', async (req, res) => {
       mode: {
         schema: 'fbt.ai-intelligence.v1',
         id: resolvedIntelligence.mode,
+        /* The reasoning persona of this turn: in the smartest mode the
+           specialists are held to an economist's lenses (mechanism, base rate,
+           transmission, incentives, opportunity cost, time horizon,
+           falsifiability). null when no lens was selected. */
+        persona: collaboration?.persona?.id || null,
+        lenses: Array.isArray(collaboration?.persona?.lenses) ? collaboration.persona.lenses : [],
         source: resolvedIntelligence.source,
         requested: resolvedIntelligence.requested,
         rejected: resolvedIntelligence.rejected,
