@@ -454,6 +454,31 @@ export function turnCeilingMs(env = process.env) {
 }
 
 /**
+ * ─── THE CEILING THE ROUTE ACTUALLY USES: PLATFORM-SAFE, NOT MODEL-FRIENDLY ──
+ * `turnCeilingMs()` answers «how long may a turn think?». This answers «how long
+ * may it think before the host kills the request?», and the answer is smaller:
+ * the serverless function has 60 s (`functions.api/index.js .maxDuration` in
+ * vercel.json), and the cold start, the context reads, the pending-intent write
+ * and the JSON serialisation all happen inside the same 60 s.
+ *
+ * The gap was visible as a dead deep mode: a turn that spent a 52 s ceiling was
+ * aborted by the platform with nothing to show, while the browser waited its own
+ * 58 s for an answer that no longer existed — the orb spun, and «Service
+ * temporarily unavailable» was the only output of the smartest mode.
+ *
+ * The reserve is 18 s by default (`AI_TURN_HEADROOM_MS` overrides it, never below
+ * 5 s), and the result can only ever be SMALLER than `turnCeilingMs()`: this is a
+ * safety clamp, not a second opinion about depth. The mode's published deadline
+ * is untouched, so the contract the panel shows stays honest.
+ */
+export function turnSafeCeilingMs(env = process.env) {
+  const PLATFORM_FUNCTION_LIMIT_MS = 60000;
+  const configured = Number(env?.AI_TURN_HEADROOM_MS);
+  const reserve = Number.isFinite(configured) && configured >= 5000 ? configured : 18000;
+  return Math.max(5000, Math.min(turnCeilingMs(env), PLATFORM_FUNCTION_LIMIT_MS - reserve));
+}
+
+/**
  * Latency budget for one collaborative turn under a mode.
  *
  *   1. an explicit `requested` budget — a caller that knows better (the

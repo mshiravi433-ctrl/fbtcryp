@@ -3272,7 +3272,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         /* «تفکر عمیق» (the multi-slot form completion) is an explicit request
            for the top mode; every other turn carries the user's stored
            preference, which the server resolves against its own default. */
-        intelligence: opts.deepThinking === true ? 'max' : undefined,
+        /* A retried turn asks for a LIGHTER budget on purpose: the deep pass
+           already ran out of the platform's clock once (see the retry branch
+           below), so asking for it again would spend another minute to fail the
+           same way. */
+        intelligence: opts.intelligenceOverride
+          || (opts.deepThinking === true ? 'max' : undefined),
         // The server fallback uses the SAME unfinished goal as the local chat.
         // Send a bounded, plain-text history, never entire UI/plan/wallet blobs.
         messages: (messagesRef.current || []).filter((row) => row?.role === 'user' || row?.role === 'ai')
@@ -3303,10 +3308,32 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         const connect = human.ui === 'CONNECT_WALLET' || res?.ui?.type === 'CONNECT_WALLET';
         if (connect) rememberPending(res?.pendingIntent || message, res?.intent?.type || 'GENERAL');
 
-        // §30 Error Recovery
+        /*
+         * ─── A FAILED TURN IS RETRIED ONCE, LIGHTER, AND THEN IT STOPS ──────
+         * The retry below used to pass `attempt: 0` every time, so a turn the
+         * server could not finish — a deep answer the platform killed at its own
+         * timeout — retried itself forever: the orb kept spinning, «Service
+         * temporarily unavailable. Retrying...» came back in English inside a
+         * Persian chat, and then the offline OS line («مطمئن نشدم…») was stapled
+         * underneath it because that is what this surface now carries.
+         *
+         * Three rules now:
+         *   · at most ONE automatic retry (`attempt` travels in opts);
+         *   · a timeout retries at `balanced`, not at the depth that just ran
+         *     out of clock — a 20 s answer beats a second 60 s failure;
+         *   · a non-transient failure (a 4xx/5xx the server actually returned)
+         *     is never retried, because it would fail identically forever.
+         */
+        const status = Number(res?.status || 0);
+        const timedOut = status === 504 || status === 408 || res?.error === 'TIMEOUT' || status === 0;
+        const attempt = Number(opts.attempt || 0);
         const toolChecker = toolCheckerRef.current;
-        const recoveryMsg = toolChecker.getRecoveryMessage({ message: code }, { toolId: res?.intent?.type });
-        const retryStrategy = toolChecker.getRetryStrategy({ message: code }, { attempt: 0 });
+        const retryStrategy = toolChecker.getRetryStrategy({ message: code }, { attempt });
+        const canRetry = attempt < 1 && (timedOut || (retryStrategy.recoverable && retryStrategy.action === 'RETRY'));
+        const fa = String(locale || 'fa').toLowerCase().startsWith('fa');
+        const recoveryMsg = canRetry
+          ? (fa ? 'پاسخ در مهلت نرسید؛ یک‌بار دیگر — این بار سبک‌تر — می‌پرسم.' : 'The answer did not arrive in time; asking once more with a lighter budget.')
+          : `${toolChecker.getRecoveryMessage({ message: code }, { toolId: res?.intent?.type })}`;
 
         /*
          * ─── THE SERVER FAILED, NOT THE QUESTION ────────────────────────────
@@ -3316,7 +3343,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
          * the message and its next-step chips are appended under the error, so
          * a failed call costs one retry instead of the whole conversation.
          */
-        const localReading = osResult?.understood === false
+        /* The offline OS reading is shown when the turn ENDS here. While a
+           retry is still coming, stapling «مطمئن نشدم…» under an in-flight
+           retry is noise — and it is what made one failure read as three. */
+        const localReading = !canRetry && osResult?.understood === false
           ? String(osResult?.human?.message || '').trim()
           : '';
 
@@ -3324,18 +3354,25 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           id: makeId(),
           role: 'ai',
           content: visibleText(res, human.message)
-            + (retryStrategy.recoverable ? `\n\n${recoveryMsg}` : '')
+            + (canRetry || retryStrategy.recoverable ? `\n\n${recoveryMsg}` : '')
             + (localReading ? `\n\n${localReading}` : ''),
           kind: connect ? 'connect' : 'error',
+          statusCode: status || null,
           ui: { type: connect ? 'CONNECT_WALLET' : 'TEXT' }
         }]);
 
-        if (retryStrategy.action === 'RETRY' && retryStrategy.recoverable) {
-          // Auto retry for transient
+        if (canRetry) {
           setTimeout(() => {
-            void sendMessage(message, { ...opts, skipUserBubble: true });
-          }, retryStrategy.delayMs);
-          obsRef.current.log({ intentId: convStateRef.current.intentId, type: 'RETRY', payload: retryStrategy });
+            void sendMessage(message, {
+              ...opts,
+              skipUserBubble: true,
+              attempt: attempt + 1,
+              /* A timeout is a budget problem, not a reasoning problem. */
+              intelligenceOverride: timedOut ? 'balanced' : opts.intelligenceOverride,
+              deepThinking: timedOut ? false : opts.deepThinking
+            });
+          }, 800);
+          obsRef.current.log({ intentId: convStateRef.current.intentId, type: 'RETRY', payload: { ...retryStrategy, status, timedOut, attempt: attempt + 1 } });
           busV6.emit(EVENTS_V6.RECOVERY, { strategy: retryStrategy });
         }
 
