@@ -443,7 +443,11 @@ test('routedChat skips an excluded provider and attributes the answer to the nex
       maxTokens: 20
     });
     assert.equal(res.provider, 'gemini');
-    assert.equal(res.model, 'gemini-2.5-flash');
+    /* 2026-11-09 — the default mode is `max`, whose Gemini ladder leads with
+       the Pro seat. What this test guards is the EXCLUSION and attribution,
+       not which Gemini id ranks first (the mode contract pins the ladder in
+       test/intent-ai/ai-intelligence-mode.test.mjs). */
+    assert.match(String(res.model), /^gemini-2\.5-(pro|flash)$/);
     assert.ok(!calls.some((u) => u.includes('api.openai.com')), 'the excluded provider must not be called');
   } finally {
     globalThis.fetch = originalFetch;

@@ -261,13 +261,26 @@ async function runAll() {
     stubFetch(() => ({ status: 200, body: { result: { response: 'cf-answered' } } }));
     const res = await executeProviderChat('workersai', { system: 's', user: 'u', json: false });
     assert.equal(res.text, 'cf-answered');
+    /*
+     * 2026-11-09 — the default intelligence mode is `max`, so the bare call
+     * now leads with the provider's flagship seat. The regression this check
+     * exists for is the URL SHAPE (literal `@`, literal slashes), not which
+     * model ranks first; `balanced` below still reaches the historical id.
+     */
     assert.equal(
       calls[0].url,
-      'https://api.cloudflare.com/client/v4/accounts/32hexaccountid/ai/run/@cf/meta/llama-3.1-8b-instruct'
+      'https://api.cloudflare.com/client/v4/accounts/32hexaccountid/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast'
     );
     /* The padded account id was trimmed; the model kept its `@` and slashes. */
     assert.ok(!calls[0].url.includes('%40'), 'the model id must not be percent-encoded into one segment');
     assert.ok(!calls[0].url.includes('%2F'), 'the model path must keep its slashes');
+
+    await executeProviderChat('workersai', { system: 's', user: 'u', json: false, intelligence: 'balanced' });
+    assert.equal(
+      calls[1].url,
+      'https://api.cloudflare.com/client/v4/accounts/32hexaccountid/ai/run/@cf/meta/llama-3.1-8b-instruct',
+      'balanced must still reach the historical default'
+    );
   });
 
   await atest('a malformed Cloudflare account is classified as an account problem, not retried across models', async () => {
@@ -297,7 +310,11 @@ async function runAll() {
     stubFetch((rec) => (rec.body.temperature !== undefined
       ? { status: 400, body: { type: 'error', error: { type: 'invalid_request_error', message: '`temperature` is not supported with thinking enabled' } } }
       : { status: 200, body: { content: [{ type: 'text', text: 'claude-answered' }] } }));
-    const res = await executeProviderChat('anthropic', { system: 's', user: 'u', temperature: 0.4, json: false });
+    /* `balanced` is the historical sampling path this check guards. In `max`
+       the gateway enables extended thinking and omits temperature on the FIRST
+       attempt, so there is no 400 to retry — that is asserted in
+       test/intent-ai/ai-intelligence-mode.test.mjs instead. */
+    const res = await executeProviderChat('anthropic', { system: 's', user: 'u', temperature: 0.4, json: false, intelligence: 'balanced' });
     assert.equal(res.text, 'claude-answered');
     assert.equal(calls.length, 2);
     assert.equal(calls[1].body.temperature, undefined);

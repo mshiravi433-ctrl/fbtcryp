@@ -149,6 +149,11 @@ import { planCollaboration } from '../src/lib/intent-ai/os/collaborationRouter.j
 import { resolveAsset } from './intentMonitoring.js';
 import { fetchCoinDetail } from './providers.js';
 import { runCollaborativeAnalysis, formatEmotionalAcknowledgement } from './aiCollaboration.js';
+import {
+  resolveIntelligenceMode,
+  getIntelligenceProfile,
+  describeIntelligence
+} from './aiIntelligence.js';
 import { researchWeb, analyzeWithSources, analyzeNewsImpact } from './aiWebResearch.js';
 import {
   recordQuestion,
@@ -994,6 +999,34 @@ router.get('/system-prompt', (_req, res) => res.json({
 router.get('/tools', (_req, res) => res.json({ ok: true, schema: AI_TOOL_SCHEMA, tools: listAiTools(), at: nowMs() }));
 
 /* FBT AI Gateway Endpoints (Spec Phase 3) */
+/*
+ * The intelligence-mode contract, readable without spending a token.
+ *
+ *   GET /api/v1/ai/intelligence            → the active mode + all modes
+ *   GET /api/v1/ai/intelligence?mode=swift → what *that* mode would do
+ *
+ * It exists so the UI (and an operator debugging «چرا جواب کوتاه است؟») can
+ * show the real default instead of hard-coding one, and so `max` is
+ * inspectable: the model ladders and token budgets are in the payload.
+ */
+router.get('/intelligence', (req, res) => {
+  const requested = typeof req.query?.mode === 'string' && req.query.mode.trim() ? req.query.mode.trim() : null;
+  const report = describeIntelligence({ requested });
+  return res.json({
+    ok: true,
+    ...report,
+    /* What the gateway would actually try, provider by provider. */
+    providers: getAvailableProviders().map((p) => ({
+      id: p.id,
+      configured: p.configured,
+      defaultModel: p.defaultModel,
+      intelligenceModel: p.intelligenceModel,
+      intelligenceCandidates: p.intelligenceCandidates
+    })),
+    at: nowMs()
+  });
+});
+
 router.get('/gateway/providers', (_req, res) => res.json({
   ok: true,
   schema: 'fbt.ai-providers.v1',
@@ -2020,13 +2053,26 @@ router.post('/chat', async (req, res) => {
     'PORTFOLIO_ANALYSIS', 'INVESTMENT_PLAN', 'YIELD_DISCOVERY', 'STAKING', 'LEND',
     'FARM', 'REBALANCE', 'STOCKS', 'WHALE'
   ];
+  /*
+   * ─── INTELLIGENCE MODE — THE ANSWER TO «باهوش‌ترین حالت» ────────────────
+   * Resolved once per turn, before the plan: the mode sets both the DEPTH
+   * floor of the collaboration plan and the model ladder the gateway will
+   * walk. An unknown value is reported, never silently obeyed, and a
+   * deployment can change its default with `FBT_AI_INTELLIGENCE` without a
+   * deploy of logic. Small talk stays small even in the smartest mode.
+   */
+  const resolvedIntelligence = resolveIntelligenceMode(req.body?.intelligence ?? null);
+  const intelligenceProfile = getIntelligenceProfile(resolvedIntelligence.mode);
   const u5 = planCollaboration({
     message,
     intentType: intent || 'GENERAL',
     entities: u4.entities || {},
     context: { currentPage: req.body?.surface || req.body?.currentPage || '/' },
     priorIntent: prior?.intent || null,
-    locale: locale || 'fa'
+    locale: locale || 'fa',
+    intelligence: resolvedIntelligence.mode,
+    intelligenceFloor: intelligenceProfile.collaborationFloor,
+    intelligenceCeiling: intelligenceProfile.collaborationCeiling
   });
   /*
    * ─── UPGRADE 13 — THE SOCIAL TURN IS ANSWERED BEFORE ANYTHING ELSE ──────
@@ -2093,6 +2139,7 @@ router.post('/chat', async (req, res) => {
         intentType: human.intent?.type || intent,
         entities: u4.entities || {},
         analysis: u5,
+        intelligence: resolvedIntelligence.mode,
         locale: locale || 'fa',
         transparency: req.body?.transparency === true
       });
@@ -2316,6 +2363,19 @@ router.post('/chat', async (req, res) => {
       degraded: collaboration?.degraded ?? false,
       webUsed: collaboration?.evidence?.webUsed || false,
       latencyMs: collaboration?.latencyMs || 0,
+      /* Which brain was asked for, what it actually did, and whether the mode
+         raised this turn's depth. The UI prints the mode; the plan fields let
+         it explain WHY a turn was deep without re-deriving anything. */
+      mode: {
+        schema: 'fbt.ai-intelligence.v1',
+        id: resolvedIntelligence.mode,
+        source: resolvedIntelligence.source,
+        requested: resolvedIntelligence.requested,
+        rejected: resolvedIntelligence.rejected,
+        reasoning: Boolean(intelligenceProfile.reasoning),
+        plan: u5.intelligence || null,
+        authority: { canExecute: false, canSign: false, canMoveFunds: false }
+      },
       /* Upgrade 13: the escalation trail. `gapReasons` says WHY the fleet was
          consulted and `providersTried` says who was asked and what each of them
          did — including the refusals, because "the model declined" is a fact

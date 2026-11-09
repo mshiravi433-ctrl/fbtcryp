@@ -455,7 +455,26 @@ export function isPureSmallTalk(conversationKind) {
  * @param {string|null} params.priorIntent  previous turn intent (follow-ups §41)
  * @param {string} params.locale         'fa' | 'en' | …
  */
-export function planCollaboration({ message = '', intentType = null, entities = {}, context = {}, priorIntent = null, locale = 'fa' } = {}) {
+export function planCollaboration({
+  message = '',
+  intentType = null,
+  entities = {},
+  context = {},
+  priorIntent = null,
+  locale = 'fa',
+  /* ── intelligence mode (2026-11-09) ────────────────────────────────────
+   * A DEPTH request, not a second classifier. The server resolves the mode and
+   * passes its floor/ceiling here, so this file stays pure and browser-safe
+   * (the client imports it too) and there is exactly one definition of each
+   * mode — server/aiIntelligence.js. With no arguments the plan is byte-for-
+   * byte the historical one.
+   *
+   * The small-talk law outranks every mode: a greeting never becomes a
+   * five-model run because someone chose "smartest". */
+  intelligence = null,
+  intelligenceFloor = 0,
+  intelligenceCeiling = 5
+} = {}) {
   const text = String(message || '').trim();
   const normalized = normalizeUpgrade4(text);
 
@@ -473,7 +492,38 @@ export function planCollaboration({ message = '', intentType = null, entities = 
 
   /* Emotional questions get at least one careful model pass (§25) — but never
      the full 5-model machine unless the money decision is real. */
-  const effectiveLevel = conversationKind === CONVERSATION_KINDS.EMOTIONAL ? Math.max(2, level) : level;
+  const baseEffectiveLevel = conversationKind === CONVERSATION_KINDS.EMOTIONAL ? Math.max(2, level) : level;
+
+  /*
+   * The mode adjusts DEPTH only:
+   *   floor raises a substantive turn (max = 4 → multi-model + verification);
+   *   ceiling caps it (swift = 2 → one model + tools).
+   * Social turns are immune to both. `reasoning`/`verification` are added to
+   * the task and role sets when the floor actually raised the level, because
+   * a level-4 run without a verifier is a multi-model answer pretending to be
+   * a verified one.
+   */
+  /* WHATS_UP belongs here even though it is not "small talk": its brief is
+     computed from data the app already holds, so raising it into a three-model
+     debate would buy latency and no information. */
+  const pureSocial = [
+    CONVERSATION_KINDS.GREETING,
+    CONVERSATION_KINDS.THANKS,
+    CONVERSATION_KINDS.CASUAL,
+    CONVERSATION_KINDS.WHATS_UP
+  ].includes(conversationKind);
+  const floor = Math.max(0, Math.min(5, Number(intelligenceFloor) || 0));
+  const ceiling = Math.max(1, Math.min(5, Number(intelligenceCeiling) || 5));
+  const raised = !pureSocial && floor > baseEffectiveLevel;
+  const effectiveLevel = pureSocial
+    ? Math.min(baseEffectiveLevel, 2)
+    : Math.min(ceiling, Math.max(baseEffectiveLevel, floor));
+  const depthTasks = raised && effectiveLevel >= 4
+    ? [...new Set([...taskTypes, 'reasoning', 'verification'])].filter((t) => TASK_TYPES.includes(t))
+    : taskTypes;
+  const depthRoles = raised && effectiveLevel >= 4
+    ? [...new Set([...roles, AI_ROLES.VERIFICATION_AI])]
+    : roles;
 
   /* Personalization guard (§40): "این ارز خوبه؟" with no asset anywhere must
      end in a clarification, never a guess. */
@@ -515,9 +565,19 @@ export function planCollaboration({ message = '', intentType = null, entities = 
     needsWeb,
     answerPath,
     level: effectiveLevel,
-    baseLevel: level,
-    taskTypes,
-    roles,
+    baseLevel: baseEffectiveLevel,
+    taskTypes: depthTasks,
+    roles: depthRoles,
+    /* How the mode changed (or did not change) this plan. `raised` is the only
+       field a UI needs to say «حالت باهوش‌ترین این پرسش را عمیق‌تر کرد». */
+    intelligence: {
+      mode: intelligence || null,
+      floor,
+      ceiling,
+      raised,
+      smallTalkProtected: pureSocial,
+      analyzerLevel: baseEffectiveLevel
+    },
     needsAssetClarification,
     requiresExecutionGuard: fomo.detected || emotion.state === 'panic',
     locale: String(locale || 'fa').slice(0, 5)

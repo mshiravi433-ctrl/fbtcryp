@@ -44,6 +44,7 @@ import {
 } from './aiGateway.js';
 import { runMultiAiDebate } from './aiConsensus.js';
 import { researchWeb, analyzeWithSources } from './aiWebResearch.js';
+import { resolveIntelligenceMode, intelligenceGeneration, getIntelligenceProfile } from './aiIntelligence.js';
 import { searchKnowledge } from '../src/lib/intent-ai/os/knowledgeCenter.js';
 import { retrieve as retrieveBm25 } from '../src/lib/intent-ai/retrieval.js';
 import {
@@ -279,7 +280,7 @@ const ROLE_TASK = {
   [AI_ROLES.FINAL_ANSWER_AI]: 'reasoning'
 };
 
-async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0 }) {
+async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null }) {
   const system = `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}`;
   /*
    * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
@@ -321,7 +322,11 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
         user,
         temperature: 0.3,
         maxTokens,
-        json: true
+        json: true,
+        /* The mode travels with the call so the gateway can put the flagship
+           model first and attach reasoning fields where they are supported.
+           An injected test executor ignores it. */
+        intelligence
       });
       const parsed = parseJsonSafe(res.text) || { answer: String(res.text || '').slice(0, 900), claims: [], uncertainty: '' };
       /*
@@ -591,6 +596,7 @@ export async function runCollaborativeAnalysis({
   intentType = null,
   entities = {},
   analysis = null,
+  intelligence = null,
   transparency = false,
   deps = {},
   deadlineMs = DEADLINE_MS
@@ -607,6 +613,16 @@ export async function runCollaborativeAnalysis({
   };
 
   const plan = analysis || planCollaboration({ message, intentType, entities, context, locale });
+  /* One resolution for the whole run. `analysis.intelligence.mode` is the mode
+     the plan was built with; an explicit argument wins over it. */
+  const resolvedIntelligence = resolveIntelligenceMode(intelligence ?? plan?.intelligence?.mode ?? null);
+  const mode = resolvedIntelligence.mode;
+  const modeProfile = getIntelligenceProfile(mode);
+  /* Role budgets follow the mode: `max` gives an analysis room for its
+     reasoning and its answer instead of a single paragraph. Latency-bound
+     conversation roles are exempt (see intelligenceGeneration). */
+  const tokensFor = (base, taskType = 'reasoning') =>
+    intelligenceGeneration(mode, { maxTokens: base, temperature: 0.3, taskType }).maxTokens;
   const isFa = String(locale || 'fa').startsWith('fa');
   const externalConfigured = Boolean(D.selectProviders) || getActiveProviderIds().some((id) => id !== 'internal');
 
@@ -615,6 +631,14 @@ export async function runCollaborativeAnalysis({
     schema: COLLABORATION_SCHEMA,
     version: COLLABORATION_VERSION,
     level: plan.level,
+    intelligence: {
+      mode,
+      source: resolvedIntelligence.source,
+      requested: resolvedIntelligence.requested,
+      rejected: resolvedIntelligence.rejected,
+      reasoning: Boolean(modeProfile.reasoning),
+      plan: plan.intelligence || null
+    },
     conversationKind: plan.conversationKind,
     complexity: plan.complexity,
     taskTypes: plan.taskTypes,
@@ -718,7 +742,7 @@ export async function runCollaborativeAnalysis({
       result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale });
       result.degraded = true;
     } else {
-      const single = await withDeadline(runRole({ role: AI_ROLES.CONVERSATION_AI, message, contextBlock, locale, deps: D, maxTokens: 400, fleet, seat: 0 }), null);
+      const single = await withDeadline(runRole({ role: AI_ROLES.CONVERSATION_AI, message, contextBlock, locale, deps: D, maxTokens: tokensFor(400, 'fast'), fleet, seat: 0, intelligence: mode }), null);
       if (single?.ok) {
         analyses.push(single);
         result.answer = single.answer;
@@ -732,7 +756,7 @@ export async function runCollaborativeAnalysis({
       : plan.taskTypes.includes('crypto-analysis') || plan.taskTypes.includes('research') ? AI_ROLES.CRYPTO_RESEARCH_AI
       : plan.taskTypes.includes('risk') ? AI_ROLES.RISK_AI
       : AI_ROLES.CRYPTO_RESEARCH_AI;
-    const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D, fleet, seat: 0 }), null);
+    const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: 0, intelligence: mode }), null);
     if (single?.ok) { analyses.push(single); result.answer = single.answer; }
     else { result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale }); result.degraded = true; }
   } else if (plan.level === 3) {
@@ -741,7 +765,7 @@ export async function runCollaborativeAnalysis({
        analyses are genuinely different providers, not one model twice. */
     const roles = pickAnalysisRoles(plan, 2);
     const settled = await withDeadline(
-      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, fleet, seat: i }))),
+      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode }))),
       []
     );
     analyses.push(...(settled || []).filter(Boolean));
@@ -755,7 +779,7 @@ export async function runCollaborativeAnalysis({
        high-stakes question walks several different providers end to end. */
     const roles = pickAnalysisRoles(plan, plan.level >= 5 ? 3 : 2);
     const settled = await withDeadline(
-      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, fleet, seat: i }))),
+      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode }))),
       []
     );
     analyses.push(...(settled || []).filter(Boolean));
@@ -771,7 +795,9 @@ export async function runCollaborativeAnalysis({
         locale,
         deps: D,
         fleet,
-        seat: roles.length
+        seat: roles.length,
+        maxTokens: tokensFor(600),
+        intelligence: mode
       }), null);
       if (verifier?.ok) analyses.push(verifier);
     }
@@ -788,7 +814,8 @@ export async function runCollaborativeAnalysis({
         deps: D,
         fleet,
         seat: roles.length + 1,
-        maxTokens: 800
+        maxTokens: tokensFor(800),
+        intelligence: mode
       }), null);
       result.answer = finalRole?.ok
         ? finalRole.answer
