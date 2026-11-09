@@ -418,6 +418,10 @@ test('a lab run with no keys is honest: nothing connected, nothing passed', asyn
 
 test('routedChat skips an excluded provider and attributes the answer to the next one', async () => {
   const saved = {};
+  /* This test is about EXCLUSION, and it needs two providers outside the
+     deployment's three-provider fleet, so the fleet is lifted here. */
+  saved.FBT_AI_PROVIDERS = process.env.FBT_AI_PROVIDERS;
+  process.env.FBT_AI_PROVIDERS = 'openai,gemini,openrouter,groq,workersai';
   for (const [k, v] of Object.entries({ OPENAI_API_KEY: 'sk-test', GEMINI_API_KEY: 'gm-test' })) {
     saved[k] = process.env[k];
     process.env[k] = v;

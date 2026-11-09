@@ -97,10 +97,19 @@ import {
   resolveIntelligenceMode,
   describeIntelligence
 } from './aiIntelligence.js';
+import {
+  isProviderInFleet,
+  providerFleetExclusion,
+  describeProviderFleet,
+  resolveProviderFleet,
+  DEFAULT_PROVIDER_FLEET
+} from './aiProviderFleet.js';
 
 /* Re-exported so every consumer of the gateway can describe the mode it used
    without importing a second module. */
 export { describeIntelligence };
+/* …and so can describe the fleet it is allowed to call. */
+export { describeProviderFleet, DEFAULT_PROVIDER_FLEET };
 
 export const PROVIDER_CONFIGS = Object.freeze({
   openrouter: {
@@ -448,10 +457,22 @@ function getCloudflareAccountId() {
   return readEnvAny(PROVIDER_CONFIGS.workersai.accountEnvKeys || ['CLOUDFLARE_ACCOUNT_ID']).value;
 }
 
+/**
+ * Is this provider usable RIGHT NOW: declared in the fleet, and carrying a key.
+ *
+ * The fleet check comes first on purpose. On this deployment three keys work
+ * (OpenRouter, Groq, Workers AI) and the other seven are absent or expired;
+ * a present-but-expired key used to make `isProviderConfigured` return true,
+ * so every request paid for a round-trip that could only fail. A provider
+ * outside `FBT_AI_PROVIDERS` is indistinguishable from one without a key —
+ * which is the point: nothing downstream (ordering, collaboration seats,
+ * escalation, debate, diagnostics) has to learn a second rule.
+ */
 export function isProviderConfigured(providerId) {
   if (providerId === 'internal') return true;
   const cfg = PROVIDER_CONFIGS[providerId];
   if (!cfg) return false;
+  if (!isProviderInFleet(providerId)) return false;
   const key = getProviderKey(providerId);
   if (!key || key.trim().length === 0) return false;
   // Workers AI also needs the account id to build the run endpoint
@@ -770,6 +791,11 @@ export function getAvailableProviders() {
   for (const [id, cfg] of Object.entries(PROVIDER_CONFIGS)) {
     const configured = isProviderConfigured(id);
     const keyInfo = getProviderKeyInfo(id);
+    /* Three distinct reasons a provider is not used, so the panel never says
+       «کلید ندارد» about a provider whose key is present but out of the
+       declared fleet. */
+    const fleetExclusion = providerFleetExclusion(id);
+    const keyPresent = id === 'internal' ? true : Boolean(keyInfo.present);
     const h = health[id] || null;
     /*
      * ─── WHY STATUS AND THE ENV VAR NAME ARE PART OF THE PAYLOAD ─────────
@@ -801,7 +827,14 @@ export function getAvailableProviders() {
       id,
       name: cfg.name,
       configured,
-      status: configured ? 'ACTIVE' : (id === 'internal' ? 'ACTIVE' : 'NEEDS_KEY'),
+      inFleet: fleetExclusion === null,
+      excludedBy: fleetExclusion,
+      keyPresent,
+      status: configured
+        ? 'ACTIVE'
+        : (id === 'internal'
+            ? 'ACTIVE'
+            : (fleetExclusion === 'NOT_IN_FLEET' ? 'OUT_OF_FLEET' : 'NEEDS_KEY')),
       envVar: id === 'internal' ? null : (cfg.altEnvKey ? `${cfg.envKey} (or ${cfg.altEnvKey})` : cfg.envKey),
       acceptedEnvVars: id === 'internal' ? [] : envNamesFor(cfg),
       keySourceEnv: keyInfo.sourceEnv,
@@ -832,7 +865,7 @@ export function getAvailableProviders() {
        * what it says (we have never called it), never "it failed a moment ago".
        */
       verdict: !configured
-        ? 'NEEDS_KEY'
+        ? (fleetExclusion === 'NOT_IN_FLEET' ? 'OUT_OF_FLEET' : 'NEEDS_KEY')
         : (h?.circuitOpen || h?.lastError
             ? `ERROR:${h.openReason || h.lastError.reasonCode || 'UNKNOWN'}`
             : (h?.lastSuccess ? 'HEALTHY' : 'UNTESTED'))
@@ -856,6 +889,7 @@ export function getFleetSummary() {
   const providers = getAvailableProviders();
   const external = providers.filter((p) => p.id !== 'internal');
   const configured = external.filter((p) => p.configured);
+  const outOfFleet = external.filter((p) => p.inFleet === false);
   const healthy = configured.filter((p) => p.verdict === 'HEALTHY');
   const failing = configured.filter((p) => String(p.verdict).startsWith('ERROR'));
   return {
@@ -864,7 +898,13 @@ export function getFleetSummary() {
     healthy: healthy.length,
     failing: failing.length,
     untested: configured.filter((p) => p.verdict === 'UNTESTED').length,
-    needsKey: external.filter((p) => !p.configured).map((p) => p.envVar),
+    /* `needsKey` now means exactly that: in the fleet, no key. A provider the
+       operator left out of `FBT_AI_PROVIDERS` is named separately instead of
+       being reported as a missing key it may well have. */
+    needsKey: external.filter((p) => !p.configured && p.inFleet !== false).map((p) => p.envVar),
+    fleet: describeProviderFleet(),
+    outOfFleet: outOfFleet.map((p) => p.id),
+    outOfFleetWithKey: outOfFleet.filter((p) => p.keyPresent).map((p) => p.id),
     healthyIds: healthy.map((p) => p.id),
     failingIds: failing.map((p) => ({ id: p.id, verdict: p.verdict, reason: p.health?.lastError?.reasonCode || null, fix: p.health?.lastError?.fix || null })),
     /* The answer to «چرا هوش مصنوعی کار نمی‌کند؟» in one field: which brain is
@@ -1427,7 +1467,9 @@ export function getPreferredProvidersForTask(taskType = 'general', { configuredO
    */
   const smartOrder = intelligenceProviderOrder(type, intelligence);
   if (smartOrder) {
-    const registered = smartOrder.filter((id) => Boolean(PROVIDER_CONFIGS[id]));
+    /* The ladder is an ordering, not a licence: a flagship id on a provider
+       outside the fleet would just be a name we cannot call. */
+    const registered = smartOrder.filter((id) => Boolean(PROVIDER_CONFIGS[id]) && isProviderInFleet(id));
     const rest = candidateOrder.filter((id) => !registered.includes(id));
     candidateOrder = [...registered, ...rest];
   }
@@ -1579,10 +1621,11 @@ export async function routedChat({
  * Parallel Multi-Provider Query (for Debate, Consensus, and Multi-Agent Reasoning).
  */
 export async function parallelMultiProviderChat({
-  // Grok's debate seat is gone; OpenRouter, Gemini and Anthropic are the
-  // three configured providers with the widest disagreement, which is the
-  // point of a debate.
-  providers = ['openrouter', 'gemini', 'anthropic'],
+  /* Grok's debate seat is gone. The debate seats are the fleet that can
+     actually answer here — OpenRouter, Groq and Workers AI — because a debate
+     whose seats are keyed-out providers collapses to one voice (or none), and
+     `isProviderConfigured` below would silently drop them. */
+  providers = ['openrouter', 'groq', 'workersai'],
   system = '',
   user = '',
   temperature = 0.3,
@@ -1635,6 +1678,21 @@ export async function gatewaySelfTest() {
 
   const probe = async (p) => {
     if (!p.configured) {
+      /* Out of the declared fleet is not the same fact as a missing key: the
+         operator chose not to call this provider, and the fix is a value, not
+         a secret. */
+      if (p.inFleet === false) {
+        return {
+          id: p.id,
+          name: p.name,
+          status: 'OUT_OF_FLEET',
+          reasonCode: 'NOT_IN_FLEET',
+          reason: `Provider is outside the declared fleet (FBT_AI_PROVIDERS=${describeProviderFleet().providers})`,
+          fix: 'Add it to FBT_AI_PROVIDERS (or set FBT_AI_PROVIDERS=all) and redeploy.',
+          envVar: p.envVar,
+          keyPresent: Boolean(p.keyPresent)
+        };
+      }
       return {
         id: p.id,
         name: p.name,
@@ -1703,6 +1761,7 @@ export async function gatewaySelfTest() {
       healthyCount: healthy.length,
       errorCount: errored.length,
       unconfiguredCount: testResults.filter((r) => r.status === 'UNCONFIGURED').length,
+      outOfFleetCount: testResults.filter((r) => r.status === 'OUT_OF_FLEET').length,
       /* The single number that answers the operator's question: how many of
          the keyed providers can actually serve a request right now. */
       usableExternalModels: healthy.filter((r) => r.id !== 'internal').length

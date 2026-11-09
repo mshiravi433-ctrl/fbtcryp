@@ -119,6 +119,7 @@ import {
   getActiveProviderIds,
   getFleetSummary,
   getProviderHealth,
+  describeProviderFleet,
   routedChat,
   gatewaySelfTest
 } from './aiGateway.js';
@@ -1015,10 +1016,14 @@ router.get('/intelligence', (req, res) => {
   return res.json({
     ok: true,
     ...report,
+    /* Which providers this deployment may call at all, and on whose say-so. */
+    fleet: describeProviderFleet(),
     /* What the gateway would actually try, provider by provider. */
     providers: getAvailableProviders().map((p) => ({
       id: p.id,
       configured: p.configured,
+      inFleet: p.inFleet !== false,
+      excludedBy: p.excludedBy || null,
       defaultModel: p.defaultModel,
       intelligenceModel: p.intelligenceModel,
       intelligenceCandidates: p.intelligenceCandidates
@@ -1032,6 +1037,7 @@ router.get('/gateway/providers', (_req, res) => res.json({
   schema: 'fbt.ai-providers.v1',
   providers: getAvailableProviders(),
   activeProviderIds: getActiveProviderIds(),
+  fleet: describeProviderFleet(),
   /*
    * The fleet in one object: how many keys are present, how many of those
    * actually answered the last time they were called, and what is wrong with
@@ -1051,6 +1057,7 @@ router.get('/gateway/health', (_req, res) => res.json({
   ok: true,
   schema: 'fbt.ai-gateway-health.v1',
   summary: getFleetSummary(),
+  fleet: describeProviderFleet(),
   health: getProviderHealth(),
   providers: getAvailableProviders().map((p) => ({
     id: p.id,

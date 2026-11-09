@@ -274,6 +274,11 @@ test('a plan built with no mode is byte-identical to the historical plan', () =>
 
 /* ── 7. the wire: stubbed provider calls ─────────────────────────────────── */
 
+/* These tests exercise the ladder mechanics for EVERY registered provider, so
+   the deployment fleet only has three seats is deliberately lifted here. The
+   fleet restriction itself is tested in ai-provider-fleet.test.mjs. */
+process.env.FBT_AI_PROVIDERS = 'all';
+
 const ENV_KEYS = {
   OPENROUTER_API_KEY: 'sk-or-test',
   OPENAI_API_KEY: 'sk-oa-test',
