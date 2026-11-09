@@ -110,6 +110,8 @@ let EQUITY = 1000;
 let FREE_COLLATERAL = 1000;
 let CANDLES = [];
 let CANDLE_LIVE = true;
+let BOOK = { live: true, bestBid: 99, bestAsk: 101, spreadBps: 200 };
+let BOOK_CALLS = 0;
 const ORDERS = [];
 let AI_ANSWER = { ok: true, text: 'این یک پاسخ آزمایشی است.', provider: 'openrouter', providerName: 'OpenRouter', model: 'test/model' };
 const AI_CALLS = [];
@@ -159,6 +161,7 @@ vi.mock('../src/lib/dydx', async () => {
     ...actual,
     getDydxMarkets: async () => ({ markets: [marketRow('BTC'), marketRow('ETH')], live: true }),
     getDydxSubaccount: async () => ({ account: { subaccount: { equity: String(EQUITY), freeCollateral: FREE_COLLATERAL == null ? null : String(FREE_COLLATERAL) } }, live: true }),
+    getDydxOrderbook: async () => { BOOK_CALLS += 1; return BOOK; },
     getDydxCandles: async () => ({ candles: CANDLES, live: CANDLE_LIVE, ticker: 'BTC-USD', resolution: '1HOUR' }),
     connectDydx: async () => ({ address: 'dydx1testderivedaddress00000000000000000000000' }),
     disconnectDydx: () => {},
@@ -202,6 +205,8 @@ beforeEach(() => {
   FREE_COLLATERAL = 1000;
   CANDLES = mkCandles();
   CANDLE_LIVE = true;
+  BOOK = { live: true, bestBid: 99, bestAsk: 101, spreadBps: 200 };
+  BOOK_CALLS = 0;
   ORDERS.length = 0;
   AI_CALLS.length = 0;
   AI_ANSWER = { ok: true, text: 'این یک پاسخ آزمایشی است.', provider: 'openrouter', providerName: 'OpenRouter', model: 'test/model' };
@@ -340,6 +345,7 @@ describe('dYdX tab — the token desk', () => {
     AI_ANSWER = { ok: true, text: 'Fallback', provider: 'internal', degraded: true, notice: { fa: 'موتور داخلی' } };
     render(<Dydx embedded />);
     await openDesk();
+    fireEvent.click(screen.getByTestId('dydx-token-desk-tab-ask'));
     fireEvent.click(screen.getByTestId('dydx-desk-ask-quick-risk'));
     expect((await screen.findByTestId('dydx-desk-answer')).textContent).toContain('موتور داخلی');
   });
@@ -352,6 +358,8 @@ describe('dYdX tab — the token desk', () => {
     expect(screen.getByTestId('dydx-token-desk-tab-ai').textContent).toContain(fa.dydx.desk.tabs.ai);
     expect(screen.getByTestId('dydx-token-desk-tab-risk').textContent).toContain(fa.dydx.desk.tabs.risk);
     expect(screen.getByTestId('dydx-token-desk-tab-opp').textContent).toContain(fa.dydx.desk.tabs.opp);
+    expect(screen.getByTestId('dydx-token-desk-tab-ask').textContent).toContain(fa.dydx.desk.tabs.ask);
+    expect(screen.getByTestId('dydx-desk-ask').parentElement.hidden).toBe(true);
 
     /* Room 1 — the read, with its verdict translated, not a raw key. */
     expect(screen.getByTestId('dydx-desk-ai').textContent).not.toContain('dydx.desk.ai.read.');
@@ -364,6 +372,29 @@ describe('dYdX tab — the token desk', () => {
     fireEvent.click(screen.getByTestId('dydx-token-desk-tab-opp'));
     const opp = await screen.findByTestId('dydx-desk-opp');
     expect(opp.textContent).toContain(fa.dydx.desk.opp.caveat.notASignal);
+  });
+
+  it('reads the book only when open, and refreshes both data sources', async () => {
+    render(<Dydx embedded />);
+    await screen.findByTestId('dydx-token-desk');
+    expect(BOOK_CALLS).toBe(0);
+    await openDesk();
+    const panel = await screen.findByTestId('dydx-desk-market-data');
+    await waitFor(() => expect(panel.textContent).toContain('200.00 bps'));
+    expect(panel.textContent).toContain('99');
+    expect(screen.getByTestId('dydx-token-desk-refresh').getAttribute('aria-label')).toBe(fa.dydx.desk.refresh);
+    fireEvent.click(screen.getByTestId('dydx-token-desk-refresh'));
+    await waitFor(() => expect(BOOK_CALLS).toBe(2));
+  });
+
+  it('does not show fake order-book numbers when the feed fails', async () => {
+    BOOK = { live: false };
+    render(<Dydx embedded />);
+    await openDesk();
+    const panel = await screen.findByTestId('dydx-desk-market-data');
+    await waitFor(() => expect(BOOK_CALLS).toBe(1));
+    expect(panel.textContent).toContain(fa.dydx.offline);
+    expect(panel.textContent).not.toContain('bps');
   });
 
   it('says so when the indexer sent no candles instead of inventing a read', async () => {
@@ -381,6 +412,7 @@ describe('dYdX tab — the token desk', () => {
     await openDesk();
     await screen.findByTestId('dydx-desk-ai');
 
+    fireEvent.click(screen.getByTestId('dydx-token-desk-tab-ask'));
     fireEvent.click(screen.getByTestId('dydx-desk-ask-quick-risk'));
     await waitFor(() => expect(AI_CALLS.length).toBe(1));
     const [call] = AI_CALLS;
@@ -389,6 +421,9 @@ describe('dYdX tab — the token desk', () => {
     expect(String(call.user)).toContain('BTC-USD');
     expect(call.user).toContain('Market facts:\nmarket: BTC-USD');
     expect(String(call.system)).toMatch(/Persian|فارسی/);
+    expect(call.user).toContain('spread 200.00 bps');
+    expect(call.user).toContain('WIDE_SPREAD');
+    expect(call.user).toContain('setups and evidence:');
 
     const answer = await screen.findByTestId('dydx-desk-answer');
     expect(answer.textContent).toContain('این یک پاسخ آزمایشی است.');
@@ -400,6 +435,7 @@ describe('dYdX tab — the token desk', () => {
     render(<Dydx embedded />);
     await openDesk();
     await screen.findByTestId('dydx-desk-ai');
+    fireEvent.click(screen.getByTestId('dydx-token-desk-tab-ask'));
     fireEvent.click(screen.getByTestId('dydx-desk-ask-quick-why'));
     const err = await screen.findByTestId('dydx-desk-ask-error');
     expect(err.textContent).toContain(fa.dydx.desk.ask.err.TIMEOUT);
@@ -436,5 +472,32 @@ describe('dYdX tab — copy', () => {
     for (const key of ['dydx.leverage.', 'dydx.order.goodTilOptions.', 'dydx.desk.tabs.', 'dydx.desk.ask.']) {
       expect(body).not.toContain(key);
     }
+  });
+});
+
+
+describe('dYdX mobile trading dock', () => {
+  const originalMatchMedia = window.matchMedia;
+  beforeEach(() => {
+    window.matchMedia = vi.fn().mockImplementation((query) => ({ matches: query.includes('767'), media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+  });
+  afterEach(() => { window.matchMedia = originalMatchMedia; });
+
+  it('opens a dismissible desk sheet from the center and connects from the dock', async () => {
+    render(<Dydx embedded />);
+    expect(await screen.findByTestId('dydx-mobile-dock')).toBeTruthy();
+    expect(screen.queryByTestId('dydx-token-desk')).toBeNull();
+    fireEvent.click(screen.getByTestId('dydx-mobile-desk-open'));
+    expect(await screen.findByTestId('dydx-mobile-desk-sheet')).toBeTruthy();
+    expect(await screen.findByTestId('dydx-mobile-desk-tab-ask')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('dydx-mobile-desk-tab-ask'));
+    expect(screen.getByTestId('dydx-desk-ask').parentElement.hidden).toBe(false);
+    fireEvent.click(screen.getByTestId('dydx-mobile-desk-sheet-close'));
+    await waitFor(() => expect(screen.queryByTestId('dydx-mobile-desk-sheet')).toBeNull());
+    fireEvent.click(screen.getByTestId('dydx-mobile-connect'));
+    await screen.findByTestId('dydx-mobile-short');
+    fireEvent.click(screen.getByTestId('dydx-mobile-short'));
+    expect(screen.getByTestId('dydx-mobile-short').getAttribute('aria-pressed')).toBe('true');
+    expect(ORDERS).toHaveLength(0);
   });
 });

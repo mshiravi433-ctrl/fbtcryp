@@ -8790,7 +8790,8 @@
         "ai": "AI",
         "risk": "Risk engine",
         "opp": "Opportunity engine",
-        "early": "Early watch"
+        "early": "Early watch",
+        "ask": "Ask AI"
       },
       "refresh": "Refresh",
       "bars": "{{count}} hourly candles",
@@ -8908,7 +8909,7 @@
           "risk": "How risky is this position?",
           "stop": "Where should I put the stop?"
         },
-        "disclaimer": "The answer is written by an AI model from these numbers and your question, and it is not trading advice. The model that answered is named under the reply.",
+        "disclaimer": "Your question and a summary of the market and order are sent to the AI service. The answer is not trading advice.",
         "answeredBy": "Answered by {{provider}} · {{model}}",
         "err": {
           "TIMEOUT": "No answer arrived in time; ask again.",
@@ -8929,7 +8930,21 @@
         "stale": "Live, fresh data is unavailable.",
         "history": "Insufficient history or valid volatility.",
         "disclaimer": "Based on closed hourly candles; a watch is not trading advice or a guarantee."
+      },
+      "market": {
+        "title": "Order book & market",
+        "bid": "Best bid",
+        "ask": "Best ask",
+        "spread": "Spread",
+        "funding": "Funding APR",
+        "openInterest": "Open interest value",
+        "snapshot": "The order book is fetched every 30 seconds. It is a snapshot; source freshness and execution are not guaranteed."
       }
+    },
+    "mobile": {
+      "actions": "dYdX trading controls",
+      "openDesk": "Open analysis desk",
+      "desk": "Desk"
     }
   },
   "derivatives": {

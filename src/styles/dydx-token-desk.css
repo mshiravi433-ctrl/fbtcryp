@@ -430,3 +430,57 @@
 .dydx-app .dydx-ticket { border-radius: 22px; border-color: rgba(126, 149, 237, .22); box-shadow: 0 14px 38px rgba(10, 18, 47, .10); }
 .dydx-app .deriv-field-card { border-radius: 16px; }
 .dydx-app .dydx-account { border-color: rgba(126, 149, 237, .24); }
+
+/* Trading workstation: teal for liquidity, violet for intelligence, rose for risk. */
+.dtd-topline { display:flex; align-items:center; min-width:0; }
+.dtd-topline .dtd-head { flex:1 1 auto; width:auto; min-width:0; }
+.dtd-topline .dtd-refresh { flex:0 0 38px; height:38px; display:grid; place-items:center; padding:0; margin:0 14px; color:var(--text-2); border-radius:12px; }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-box { border:1px solid color-mix(in srgb,#8b83ff 28%,var(--line)); border-radius:22px; background: radial-gradient(ellipse at 95% 0%,rgba(117,91,255,.17),transparent 48%), linear-gradient(145deg,color-mix(in srgb,var(--bg-panel-solid) 96%,#8b83ff),var(--bg-panel-solid)); box-shadow:0 18px 50px -32px rgba(5,13,40,.65); }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-head { padding:17px; gap:12px; }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-head-mark { width:42px; height:42px; flex-basis:42px; border-radius:14px; color:#a49aff; background:rgba(129,110,255,.16); border-color:rgba(129,110,255,.3); }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-head-title { font-size:15px; }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-body { padding:0 16px 16px; gap:14px; }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-tabs { display:flex; flex-wrap:nowrap; justify-content:flex-start; overflow-x:auto; overscroll-behavior-inline:contain; scrollbar-width:thin; gap:5px; padding:5px; border:1px solid var(--line); border-radius:16px; background:color-mix(in srgb,var(--bg-panel-solid) 88%,transparent); touch-action:pan-x; }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-tabs > button:not(.dtd-refresh) { flex:0 0 auto; min-height:40px; padding:8px 14px; white-space:nowrap; border-radius:12px; }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-tabs > button.active { color:var(--text-1); }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-pod, :is(.dydx-app,.dydx-desk-sheet) .dtd-block, :is(.dydx-app,.dydx-desk-sheet) .dtd-setup { border-radius:15px; padding:12px; background:color-mix(in srgb,var(--bg-panel-solid) 90%,#8295ff); }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-ask { padding:16px; border:1px solid rgba(133,120,255,.28); border-radius:17px; background:rgba(120,105,255,.08); }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-ask-head { color:var(--text-1); }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-ask-input input { min-height:44px; }
+.dtd-body [hidden] { display:none !important; }
+.dtd-head:focus-visible, .dtd-tabs button:focus-visible, .dtd-refresh:focus-visible, .dydx-mobile-dock button:focus-visible { outline:2px solid #8f9fff; outline-offset:2px; }
+.dtd-row { gap:10px; min-width:0; }
+.dtd-row .mono { direction:ltr; unicode-bidi:isolate; text-align:end; }
+
+.dydx-app .derivatives-hero { border:1px solid color-mix(in srgb,#867fff 25%,var(--line)); background:radial-gradient(ellipse at 100% 0%,rgba(116,94,255,.20),transparent 45%),linear-gradient(135deg,color-mix(in srgb,var(--bg-panel-solid) 94%,#273064),var(--bg-panel-solid)); border-radius:24px; }
+.dydx-app .dydx-ticket, .dydx-app .dydx-account { border-radius:22px; border-color:color-mix(in srgb,#7588ed 25%,var(--line)); background:linear-gradient(155deg,color-mix(in srgb,var(--bg-panel-solid) 95%,#5867b5),var(--bg-panel-solid)); }
+.dydx-market-column,.dydx-order-column { min-width:0; }
+.dydx-order-column { scroll-margin-top:90px; }
+.dydx-app .deriv-field-card { border-radius:16px; }
+@media (min-width: 900px) {
+  body.dydx-screen .app-shell, body.hall-wide.dydx-screen .app-shell { width:100%; max-width:none; }
+  body.dydx-screen .app-shell .top-bar, body.hall-wide.dydx-screen .app-shell .top-bar { max-width:none; width:100%; }
+  body.dydx-screen .page:not(.page--global) { padding-inline:clamp(20px,2.4vw,48px); }
+  .dydx-app .dydx-ticket { display:grid; grid-template-columns:minmax(0,1.8fr) minmax(320px,.8fr); gap:clamp(18px,2vw,34px); align-items:start; padding:clamp(18px,2vw,28px); }
+  .dydx-app .dydx-market-warning { grid-column:1/-1; }
+  .dydx-market-column { position:sticky; top:90px; }
+  .dydx-order-column { border-inline-start:1px solid var(--line); padding-inline-start:clamp(18px,2vw,30px); }
+  .dydx-app .dtd-room { max-width:100%; }
+  .dydx-app .dtd-pods { gap:12px; }
+}
+@media (max-width: 767px) {
+  body.dydx-screen .app-shell { padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 95px); }
+  .dydx-mobile-dock { position:fixed; z-index:45; left:10px; right:10px; bottom:calc(88px + env(safe-area-inset-bottom)); max-width:520px; margin-inline:auto; display:grid; grid-template-columns:1fr 76px 1fr; align-items:end; gap:8px; padding:10px; border:1px solid rgba(145,153,241,.22); border-radius:20px; background:color-mix(in srgb,var(--bg-panel-solid) 94%,transparent); box-shadow:0 16px 45px rgba(4,10,30,.30); backdrop-filter:blur(18px); }
+  .dydx-mobile-dock button { border:0; font:inherit; font-weight:800; cursor:pointer; min-height:44px; border-radius:13px; }
+  .dydx-dock-long { grid-column:1; grid-row:1; color:#053b2b; background:#57dfb0; }
+  .dydx-dock-short { grid-column:3; grid-row:1; color:#4a0e24; background:#ff839b; }
+  .dydx-dock-long[aria-pressed='false'], .dydx-dock-short[aria-pressed='false'] { opacity:.72; }
+  .dydx-dock-connect { grid-column:1 / 4; grid-row:1; padding-inline-end:84px; color:#fff; background:linear-gradient(115deg,#605de6,#657efa); }
+  .dydx-dock-desk { grid-column:2; grid-row:1; align-self:end; display:grid; place-items:center; gap:0; position:relative; margin-top:-27px; min-height:67px !important; border-radius:36px 36px 16px 16px !important; color:#fff; background:linear-gradient(150deg,#a082ff,#6258dc); border:3px solid var(--bg-panel-solid) !important; box-shadow:0 8px 20px rgba(98,88,220,.4); }
+  .dydx-dock-desk span { font-size:10px; line-height:1; }
+  body.dydx-screen:has(input:focus) .dydx-mobile-dock { display:none; }
+  .dydx-desk-sheet { max-width:560px; width:100%; background:var(--bg-panel-solid); }
+  .dydx-desk-sheet .dtd-box { margin-top:0 !important; }
+  .dydx-desk-sheet .sheet-body { max-height:70dvh; }
+}
+@media (prefers-reduced-motion:reduce) { .dydx-mobile-dock *, .dtd-meter-fill { animation:none !important; transition:none !important; } }

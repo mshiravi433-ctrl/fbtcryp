@@ -1,4 +1,5 @@
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import PageTransition, { riseIn } from '../components/PageTransition';
@@ -6,7 +7,7 @@ import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
 import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
-import { IconInfo } from '../components/Icons';
+import { IconInfo, IconSparkle } from '../components/Icons';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { fmtPrice, fmtUsd } from '../lib/format';
@@ -96,8 +97,30 @@ const GOOD_TIL = Object.freeze([
  * The standalone route (/dydx) still renders its own page.
  */
 
+function useDydxMobile() {
+  const [mobile, setMobile] = useState(() => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined;
+    const query = window.matchMedia('(max-width: 767px)');
+    const update = (e) => setMobile(e.matches);
+    setMobile(query.matches);
+    if (query.addEventListener) query.addEventListener('change', update);
+    else query.addListener(update);
+    return () => { if (query.removeEventListener) query.removeEventListener('change', update); else query.removeListener(update); };
+  }, []);
+  return mobile;
+}
+
 export default function Dydx({ embedded = false } = {}) {
   const { t } = useTranslation();
+  const mobile = useDydxMobile();
+  const [deskOpen, setDeskOpen] = useState(false);
+  const ticketRef = useRef(null);
+  useEffect(() => {
+    document.body.classList.add('dydx-screen');
+    return () => document.body.classList.remove('dydx-screen');
+  }, []);
+  useEffect(() => { if (!mobile) setDeskOpen(false); }, [mobile]);
   const wallet = useWallet();
   const { haptic } = useTelegram();
   /*
@@ -415,7 +438,7 @@ export default function Dydx({ embedded = false } = {}) {
           </InfoBox>
         </motion.div>
 
-      {market && (
+      {market && !mobile && (
           <DydxTokenDesk
             key={ticker}
             ticker={ticker}
@@ -455,7 +478,8 @@ export default function Dydx({ embedded = false } = {}) {
 
       {!markets.length ? <p className="notice" style={{ marginTop: 16 }}>{t('dydx.marketUnavailable')}</p> : (
         <motion.section className="card dydx-ticket" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, width: '100%', boxSizing: 'border-box' }}>
-          {!live && <p className="notice" style={{ marginBottom: 12 }}>{t('dydx.marketUnavailable')}</p>}
+          {!live && <p className="notice dydx-market-warning" style={{ marginBottom: 12 }}>{t('dydx.marketUnavailable')}</p>}
+          <div className="dydx-market-column">
           <div className="field-label">{t('dydx.market')}</div>
           <ModernSelect
             value={market?.ticker || ''}
@@ -493,7 +517,7 @@ export default function Dydx({ embedded = false } = {}) {
               provider="dydx"
               market={ticker}
               symbol={ticker}
-              height={230}
+              height={mobile ? 260 : 380}
               testId="dydx-candles"
             />
           </div>
@@ -506,11 +530,13 @@ export default function Dydx({ embedded = false } = {}) {
               </div>
               <div className="deriv-kpi-pod">
                 <div className="faint" style={{ fontSize: 11 }}>{t('dydx.openInterest')}</div>
-                <div className="stat-mini mono">{fmtUsd(market.openInterest * market.oraclePrice)}</div>
+                <div className="stat-mini mono">{market.openInterest != null && Number.isFinite(market.oraclePrice) && market.oraclePrice > 0 ? fmtUsd(market.openInterest * market.oraclePrice) : '—'}</div>
               </div>
             </div>
           )}
 
+          </div>
+          <div className="dydx-order-column" ref={ticketRef} data-testid="dydx-order-ticket">
           <div className="dir-switch">
             <button
               type="button"
@@ -669,13 +695,14 @@ export default function Dydx({ embedded = false } = {}) {
           <div className="brg-quote deriv-telemetry-card" style={{ marginTop: 12 }}>
             <div className="row-between"><span className="faint">{t('dydx.notional')}</span><span className="mono">{fmtUsd(notional)}</span></div>
             <div className="row-between"><span className="faint">{t('dydx.builderFee')}</span><span className="mono">{fmtUsd(fee)}</span></div>
-            <div className="row-between"><span className="faint">{t('dydx.funding')}</span><span className="mono">{Number(market?.nextFundingRate || 0).toFixed(6)}%</span></div>
+            <div className="row-between"><span className="faint">{t('dydx.funding')}</span><span className="mono">{market?.nextFundingRate == null ? '—' : `${(market.nextFundingRate * 100).toFixed(6)}% / h`}</span></div>
           </div>
 
           {error && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t(`dydx.err.${error}`, { defaultValue: error })}</p>}
-          <button className={`btn ${side === 'buy' ? 'btn-success' : 'btn-danger'}`} disabled={!canReview || busy} onClick={() => setReviewing(true)} style={{ width: '100%', minHeight: 48, marginTop: 12, borderRadius: 14, fontWeight: 800 }}>
+          <button className={`btn ${side === 'buy' ? 'btn-success' : 'btn-danger'}`} disabled={busy || (Boolean(dydxAddress) && !canReview)} onClick={() => dydxAddress ? setReviewing(true) : connect()} style={{ width: '100%', minHeight: 48, marginTop: 12, borderRadius: 14, fontWeight: 800 }}>
             {dydxAddress ? t('dydx.review') : t('dydx.connect')}
           </button>
+          </div>
         </motion.section>
       )}
 
@@ -741,6 +768,25 @@ export default function Dydx({ embedded = false } = {}) {
         </div>
       )}
 
+      {mobile && market && typeof document !== 'undefined' && createPortal(
+        <nav className="dydx-mobile-dock" aria-label={t('dydx.mobile.actions')} data-testid="dydx-mobile-dock">
+          {!dydxAddress ? (
+            <button type="button" className="dydx-dock-connect" disabled={busy} onClick={connect} data-testid="dydx-mobile-connect">{busy ? t('common.loading') : t('dydx.connect')}</button>
+          ) : <>
+            <button type="button" className="dydx-dock-long" aria-pressed={side === 'buy'} onClick={() => { setSide('buy'); ticketRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }} data-testid="dydx-mobile-long">{t('dydx.buy')}</button>
+            <button type="button" className="dydx-dock-short" aria-pressed={side === 'sell'} onClick={() => { setSide('sell'); ticketRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }} data-testid="dydx-mobile-short">{t('dydx.sell')}</button>
+          </>}
+          <button type="button" className="dydx-dock-desk" onClick={() => setDeskOpen(true)} aria-label={t('dydx.mobile.openDesk')} data-testid="dydx-mobile-desk-open">
+            <IconSparkle width={19} height={19} /><span>{t('dydx.mobile.desk')}</span>
+          </button>
+        </nav>, document.body
+      )}
+      <Sheet open={mobile && deskOpen && Boolean(market)} onClose={() => setDeskOpen(false)} anchor="bottom" size="lg" className="dydx-desk-sheet" title={t('dydx.desk.title', { ticker: String(ticker || '—').replace('-USD', '') })} testId="dydx-mobile-desk-sheet">
+        {mobile && deskOpen && market && <DydxTokenDesk key={ticker} ticker={ticker} market={market} side={side}
+          notionalUsd={notional} collateralUsd={marginRequired} availableBalanceUsd={freeCollateralUsd}
+          leverage={effectiveLeverage ?? leverage} entryPrice={entryPrice} onApplyLeverage={applyLeverage}
+          defaultOpen testId="dydx-mobile-desk" />}
+      </Sheet>
       <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
       <Sheet open={reviewing} onClose={() => !busy && setReviewing(false)} title={t('dydx.confirmTitle')}>
         <div className="card card-tight stack" style={{ gap: 8 }}>
