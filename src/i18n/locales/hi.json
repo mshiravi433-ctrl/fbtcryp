@@ -3937,7 +3937,7 @@
       }
     },
     "how": {
-      "sub": "लीवरेज, लिक्विडेशन और फंडिंग — 30 सेकंड में",
+      "sub": "PnL, लिक्विडेशन, फंडिंग, लीवरेज — लाइव और इंटरैक्टिव",
       "what": {
         "t": "परपेटुअल कभी समाप्त नहीं होता",
         "d": "यह टोकन के मूल्य पर चलता है: आप कीमत की दिशा पर दाँव लगा रहे हैं, टोकन खरीद नहीं रहे। इसीलिए एक ही जोड़ी पर दोनों तरफ़ से ट्रेड हो सकती है।"
@@ -3953,24 +3953,8 @@
       "fees": {
         "t": "प्रवेश और निकास दोनों पर शुल्क है",
         "d": "सही विभाजन पुष्टि से पहले दिखता है, और पूरा ऑर्डर इसी ऐप में बनकर जोखिम जाँच से गुज़रता है — फिर आपके अपने वॉलेट से हस्ताक्षर होता है। यह ऐप कभी आपके पैसे या कुंजियाँ नहीं रखता।"
-      }
-    },
-    "banner": {
-      "eyebrow": "Non-Custodial Derivatives · Direct Wallet Settlement",
-      "modeSpot": "Spot Swap",
-      "modePerp": "Perpetual Desk",
-      "modeDydx": "dYdX Orderbook",
-      "modeOnchain": "On-Chain Engine",
-      "statMarkets": "Active Markets",
-      "statBtc": "BTC Benchmark",
-      "statMaxLev": "Max Leverage",
-      "statMaxLevVal": "Up to 50×",
-      "statCustody": "Custody Model",
-      "statCustodyVal": "Self-Custody",
-      "liveFeed": "Live Oracle & Venue Feed",
-      "syncingFeed": "Syncing Market Feed",
-      "openTerminal": "Pro Terminal",
-      "viewPairs": "Market Pairs"
+      },
+      "title": "फ्यूचर्स समीकरण — खुद आज़माएँ"
     },
     "subtabs": {
       "pairsHint": "Quick scan & instant order sheet",

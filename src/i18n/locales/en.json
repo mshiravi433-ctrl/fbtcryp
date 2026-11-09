@@ -2080,12 +2080,12 @@
     "costNoRate": "No venue is reporting a funding rate for this market right now, so the holding cost cannot be calculated.",
     "thirdPartyNoticeEarning": "These are independent third-party protocols. Fanous Bazaar Pishgam is not the counterparty, does not control them, and cannot help recover losses. We do receive a share of the trading fee from GMX when you use our link — and you receive a 5% fee discount for the same reason, so the link costs you less than going direct. Verify every URL yourself — perp venues are a common phishing target.",
     "how": {
-      "title": "How do perpetual futures work?",
+      "title": "Futures, explained by your hands",
       "p1": "A perpetual future is a contract that tracks an asset’s price without ever expiring. You are not buying the coin — you are taking a position on where its price goes, and you can do that in either direction.",
       "p2": "Leverage means the exchange lends you exposure. At 10x, $100 of your own money controls $1,000 of position. A 10% move in your favour doubles your money; a 10% move against you erases it entirely. That second sentence is the one that matters and it is why most accounts using high leverage end at zero.",
       "p3": "Because the contract never expires, a \"funding rate\" keeps its price tied to the real market. Every few hours, whichever side is crowded pays the other. Hold a position long enough and funding alone can cost more than the price move you were right about.",
       "p4": "Liquidation is automatic. If the market moves far enough against you, the position closes and the money is gone — there is no margin call and nobody to appeal to.",
-      "sub": "Leverage, liquidation and funding — in 30 seconds",
+      "sub": "P&L, liquidation, funding, leverage — live and interactive",
       "what": {
         "t": "A perpetual never expires",
         "d": "It tracks the price of the coin, so you are taking a position on where the price goes — not buying the coin itself. That is why you can go long or short on the same pair."
@@ -2215,23 +2215,6 @@
       "terminal": "Terminal",
       "pairsHint": "Quick scan & instant order sheet",
       "terminalHint": "Live chart, depth book, tape & risk"
-    },
-    "banner": {
-      "eyebrow": "Non-Custodial Derivatives · Direct Wallet Settlement",
-      "modeSpot": "Spot Swap",
-      "modePerp": "Perpetual Desk",
-      "modeDydx": "dYdX Orderbook",
-      "modeOnchain": "On-Chain Engine",
-      "statMarkets": "Active Markets",
-      "statBtc": "BTC Benchmark",
-      "statMaxLev": "Max Leverage",
-      "statMaxLevVal": "Up to 50×",
-      "statCustody": "Custody Model",
-      "statCustodyVal": "Self-Custody",
-      "liveFeed": "Live Oracle & Venue Feed",
-      "syncingFeed": "Syncing Market Feed",
-      "openTerminal": "Pro Terminal",
-      "viewPairs": "Market Pairs"
     }
   },
   "farm": {
@@ -16086,7 +16069,56 @@
       "LOW": "Low",
       "MEDIUM": "Medium",
       "HIGH": "High",
-      "EXTREME": "Extreme"
+      "EXTREME": "Extreme",
+      "title": "AI risk",
+      "live": "Live engine",
+      "level": {
+        "low": "Low risk",
+        "medium": "Medium risk",
+        "high": "High risk",
+        "extreme": "Extreme risk"
+      },
+      "verdict": {
+        "low": "This trade looks healthy — just keep a stop-loss on.",
+        "medium": "Workable with care — keep the leverage sane.",
+        "high": "Risky — cut the leverage or size down.",
+        "extreme": "Blocked — do not enter this trade."
+      },
+      "suggested": "Engine-suggested leverage",
+      "apply": "Apply",
+      "liqGap": "Distance to liquidation",
+      "rr": "Reward : risk",
+      "disclaimer": "An estimate from a live model, not financial advice. Liquidation math uses the venue's own parameters when published.",
+      "account": {
+        "low": "Your open book looks healthy — margin and concentration are in range.",
+        "medium": "Your open book carries moderate strain — watch account leverage.",
+        "high": "Your open book is under stress — cut leverage or add margin.",
+        "extreme": "Your open book is near the edge — de-risk now.",
+        "unknown": "The risk engine cannot score this account yet."
+      },
+      "block": {
+        "NO_COLLATERAL": "No collateral entered",
+        "NO_LEVERAGE": "No leverage entered",
+        "LEVERAGE_ABOVE_POLICY": "Above the policy leverage cap",
+        "LEVERAGE_ABOVE_VENUE_MAX": "Above the market leverage cap",
+        "MARKET_CLOSED": "Market is closed",
+        "LIQUIDATION_TOO_CLOSE": "Liquidation too close",
+        "INSUFFICIENT_BALANCE": "Insufficient balance",
+        "STOP_LOSS_WRONG_SIDE": "Stop-loss on the wrong side",
+        "TAKE_PROFIT_WRONG_SIDE": "Take-profit on the wrong side",
+        "EXCEEDS_OPEN_INTEREST_CAP": "Above the market open-interest cap"
+      },
+      "warn": {
+        "NO_STOP_LOSS": "No stop-loss set",
+        "BALANCE_UNKNOWN": "Balance unknown",
+        "LARGE_SHARE_OF_BALANCE": "Large share of balance",
+        "ABOVE_RISK_BUDGET": "Above the risk budget",
+        "EXPENSIVE_FUNDING": "Expensive funding",
+        "WIDE_SPREAD": "Wide spread",
+        "LIQUIDATION_MODEL_APPROXIMATE": "Liquidation price is approximate",
+        "LIQUIDATION_FEE_EXCLUDED": "Fees excluded from liquidation price",
+        "STOP_LOSS_BEYOND_LIQUIDATION": "Stop-loss beyond liquidation"
+      }
     },
     "providers": "Protocols",
     "providersUnavailable": "The protocol registry is unavailable right now. Nothing is shown rather than a guessed list.",
@@ -16392,6 +16424,86 @@
         "cancelled": "Forecast cancelled.",
         "shortHistory": "Not enough candles yet for the AI model (at least 40).",
         "invalidOutput": "The model returned an invalid projection. Try again."
+      }
+    },
+    "banner": {
+      "eyebrow": "Futures Desk · Settled straight from your wallet",
+      "liveFeed": "Live oracle & venue feed",
+      "syncingFeed": "Syncing market feed",
+      "modeFutures": "Futures Desk",
+      "modeSpot": "Spot Swap",
+      "modeDydx": "dYdX Orderbook",
+      "modeOnchain": "On-Chain Engine",
+      "wordmark": "Futures",
+      "wordmarkEn": "FUTURES",
+      "tagline": "Perpetual futures on live prices",
+      "subtitle": "Long and short with up to 50× leverage — no expiry, no custody, signed straight from your wallet.",
+      "selfCustody": "Self-custody",
+      "curveLabel": "Futures curve from spot to expiry",
+      "curveNote": "Futures curve · spot to expiry",
+      "statMarkets": "Futures markets",
+      "statBtc": "BTC benchmark",
+      "statMaxLev": "Max leverage",
+      "statMaxLevVal": "Up to 50×",
+      "statCustody": "Settlement",
+      "statCustodyVal": "Your wallet"
+    },
+    "quick": {
+      "tp": "Quick take-profit",
+      "sl": "Quick stop-loss"
+    },
+    "math": {
+      "aria": "Futures equations",
+      "tab": {
+        "pnl": "P&L",
+        "liq": "Liquidation",
+        "funding": "Funding",
+        "leverage": "Leverage"
+      },
+      "pnl": {
+        "what": "Longs profit when price rises, shorts when it falls. Profit scales with position size (leverage × collateral), not with collateral alone.",
+        "hint": "PnL scales with position size — that is why a 10% move at 10× leverage is 100% of your collateral."
+      },
+      "collateral": "Collateral",
+      "move": "Price move",
+      "liq": {
+        "what": "The price at which your collateral is gone and the venue force-closes the position. The more leverage, the closer liquidation sits.",
+        "leverage": "Leverage",
+        "hint": "Computed with the venue's own maintenance-margin formula — the same math the confirmation screen uses."
+      },
+      "funding": {
+        "what": "Every 8h, the crowded side pays the other to pin the contract to spot. Positive means longs pay shorts.",
+        "hint": "Funding is charged on position size, not collateral — at 10× it accrues ten times faster."
+      },
+      "leverage": {
+        "what": "Distance to liquidation across leverage rungs — the one picture that shows why leverage is never free.",
+        "hint": "Computed at {{mmr}}% maintenance margin and 0.05% taker fee; policy cap {{cap}}×. Real venues can liquidate sooner."
+      },
+      "gloss": {
+        "long": {
+          "t": "Long",
+          "d": "Buying, expecting the price to rise"
+        },
+        "short": {
+          "t": "Short",
+          "d": "Selling, expecting the price to fall"
+        },
+        "funding": {
+          "t": "Funding",
+          "d": "Periodic payment between longs and shorts"
+        },
+        "liquidation": {
+          "t": "Liquidation",
+          "d": "The venue force-closing your position"
+        },
+        "margin": {
+          "t": "Margin",
+          "d": "Collateral posted to hold the position"
+        },
+        "spread": {
+          "t": "Spread",
+          "d": "Gap between the buy and sell price"
+        }
       }
     }
   },

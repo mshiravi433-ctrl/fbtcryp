@@ -1629,3 +1629,194 @@
   .perp-rail-tab { min-width: 96px; min-height: 50px; gap: 8px; padding-inline: 10px; }
   .perp-rail-label { font-size: 12px; }
 }
+
+/* ==========================================================================
+   2026-11-09 · THE GOLD REFRESH — modern layer for the futures desk
+   Overrides the list → sheet → explainer stack with the new molten-gold
+   identity. Kept as an additive layer so every pre-existing contract keeps
+   holding.
+   ========================================================================== */
+
+/* ── the page itself: deeper canvas, faint gold aura ────────────────────── */
+.perp-modern {
+  position: relative;
+  border-radius: 22px;
+}
+
+/* ── the explainer toggle: gold filament identity ───────────────────────── */
+.perp-how {
+  border-radius: 18px !important;
+  border: 1px solid rgba(245, 158, 11, 0.32) !important;
+  background:
+    radial-gradient(150% 170% at 12% -30%, rgba(245, 158, 11, 0.22), transparent 52%),
+    linear-gradient(150deg, rgba(30, 24, 12, 0.82), rgba(12, 10, 6, 0.88)) !important;
+  box-shadow: 0 16px 40px -20px rgba(245, 158, 11, 0.35), inset 0 1px 0 rgba(253, 230, 138, 0.14) !important;
+  transition: transform 0.2s ease, box-shadow 0.25s ease, border-color 0.25s ease !important;
+}
+.perp-how:hover { transform: translateY(-1px); border-color: rgba(245, 158, 11, 0.5) !important; }
+.perp-how-ico {
+  color: #fbbf24 !important;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.32);
+  width: 34px; height: 34px; border-radius: 11px;
+}
+.perp-how[aria-expanded='true'] { border-color: rgba(245, 158, 11, 0.55) !important; box-shadow: 0 18px 46px -18px rgba(245, 158, 11, 0.45), inset 0 1px 0 rgba(253, 230, 138, 0.2) !important; }
+.perp-how-body {
+  border-radius: 18px !important;
+  border: 1px solid rgba(245, 158, 11, 0.2) !important;
+  background: rgba(12, 10, 6, 0.55) !important;
+  padding: 12px !important;
+  margin: -6px 0 14px !important;
+}
+
+/* ── search: command-bar pill ────────────────────────────────────────────── */
+.perp-pair-search input {
+  border-radius: 999px !important;
+  border: 1px solid rgba(245, 158, 11, 0.18) !important;
+  background: rgba(2, 6, 23, 0.5) !important;
+  padding-block: 10px !important;
+  transition: border-color 0.2s ease, box-shadow 0.25s ease, background 0.2s ease !important;
+}
+.perp-pair-search input:focus {
+  border-color: rgba(245, 158, 11, 0.55) !important;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12), 0 0 24px -8px rgba(245, 158, 11, 0.4) !important;
+  background: rgba(2, 6, 23, 0.75) !important;
+}
+
+/* ── pair rows: glass cards with a gold live seam ───────────────────────── */
+.perp-rows { gap: 10px !important; }
+.perp-rows .perp-row {
+  position: relative;
+  border-radius: 18px !important;
+  border: 1px solid rgba(148, 163, 184, 0.12) !important;
+  background:
+    linear-gradient(160deg, rgba(23, 28, 46, 0.72), rgba(10, 13, 24, 0.78)) !important;
+  box-shadow: 0 10px 26px -16px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  padding: 11px 12px !important;
+  transition: transform 0.18s ease, border-color 0.22s ease, box-shadow 0.25s ease !important;
+}
+.perp-rows .perp-row:hover {
+  transform: translateY(-2px);
+  border-color: rgba(245, 158, 11, 0.38) !important;
+  box-shadow: 0 18px 38px -16px rgba(245, 158, 11, 0.28), inset 0 1px 0 rgba(253, 230, 138, 0.1) !important;
+}
+.perp-rows .perp-row:hover .perp-row-sym { color: #fde68a; }
+.perp-row-sym { transition: color 0.2s ease; }
+.perp-pair-live {
+  background: #f59e0b !important;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.9) !important;
+}
+
+/* the trade button: molten gold */
+.perp-row-go {
+  border-radius: 13px !important;
+  border: 1px solid rgba(253, 230, 138, 0.4) !important;
+  background: linear-gradient(150deg, #fde68a 0%, #f59e0b 48%, #d97706 100%) !important;
+  color: #451a03 !important;
+  box-shadow: 0 8px 22px -10px rgba(245, 158, 11, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.65) !important;
+}
+.perp-row-go:hover {
+  box-shadow: 0 12px 28px -10px rgba(245, 158, 11, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+  filter: brightness(1.05);
+}
+
+/* ── rail tabs: gold active cell ─────────────────────────────────────────── */
+.perp-rail-tab.is-active {
+  border-color: rgba(245, 158, 11, 0.45) !important;
+  background:
+    radial-gradient(130% 160% at 50% -40%, rgba(245, 158, 11, 0.32), transparent 60%),
+    rgba(30, 24, 12, 0.6) !important;
+  box-shadow: 0 10px 30px -14px rgba(245, 158, 11, 0.5), inset 0 1px 0 rgba(253, 230, 138, 0.18) !important;
+}
+.perp-rail-tab.is-active .perp-rail-label { color: #fde68a !important; }
+.perp-rail-tab.is-active .perp-rail-ico { color: #fbbf24 !important; }
+
+/* ── sub-tabs: two rooms, gold active ───────────────────────────────────── */
+.perp-subtab.is-on {
+  border-color: rgba(245, 158, 11, 0.45) !important;
+  background:
+    radial-gradient(130% 170% at 18% -40%, rgba(245, 158, 11, 0.26), transparent 55%),
+    rgba(30, 24, 12, 0.55) !important;
+  box-shadow: 0 8px 26px -12px rgba(245, 158, 11, 0.4) !important;
+}
+.perp-subtab.is-on .perp-subtab-title { color: #fde68a !important; }
+.perp-subtab.is-on .perp-subtab-ico { color: #fbbf24 !important; }
+
+/* ── the sheet: deeper glass + gold hairline ─────────────────────────────── */
+.perp-sheet-full .sheet, .perp-sheet {
+  background:
+    radial-gradient(160% 120% at 50% -20%, rgba(245, 158, 11, 0.1), transparent 55%),
+    linear-gradient(170deg, rgba(15, 17, 28, 0.97), rgba(6, 8, 16, 0.99)) !important;
+}
+.perp-sheet-sym { letter-spacing: 0.01em; }
+.perp-sheet-tag {
+  border-color: rgba(245, 158, 11, 0.4) !important;
+  color: #fde68a !important;
+  background: rgba(245, 158, 11, 0.12) !important;
+}
+.perp-sheet-price .perp-row-chg { vertical-align: middle; }
+
+/* direction buttons — long: emerald, short: rose, both elevated */
+.dir-btn.long.active {
+  border-color: rgba(52, 211, 153, 0.55) !important;
+  background: linear-gradient(160deg, rgba(16, 185, 129, 0.22), rgba(6, 78, 59, 0.28)) !important;
+  box-shadow: 0 10px 26px -12px rgba(16, 185, 129, 0.5), inset 0 1px 0 rgba(167, 243, 208, 0.25) !important;
+}
+.dir-btn.short.active {
+  border-color: rgba(251, 113, 133, 0.55) !important;
+  background: linear-gradient(160deg, rgba(244, 63, 94, 0.2), rgba(76, 5, 25, 0.3)) !important;
+  box-shadow: 0 10px 26px -12px rgba(244, 63, 94, 0.5), inset 0 1px 0 rgba(254, 205, 211, 0.22) !important;
+}
+
+/* leverage chips — gold active */
+.lev-chip.active {
+  border-color: rgba(245, 158, 11, 0.6) !important;
+  background: linear-gradient(150deg, #fde68a, #f59e0b 70%, #d97706) !important;
+  color: #451a03 !important;
+  box-shadow: 0 6px 18px -8px rgba(245, 158, 11, 0.7) !important;
+  font-weight: 800 !important;
+}
+
+/* summary rows — hairline separators, tabular numerals */
+.perp-summary {
+  border: 1px solid rgba(148, 163, 184, 0.12) !important;
+  border-radius: 16px !important;
+  background: rgba(2, 6, 23, 0.4) !important;
+  padding: 10px 12px !important;
+}
+
+/* ── the quick TP/SL exits (new, in the risk-controls box) ────────────────── */
+.perp-quick-exits { display: grid; gap: 8px; margin-top: 10px; }
+.perp-quick-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.perp-quick-chips { display: inline-flex; gap: 6px; }
+.lev-chip.is-tp {
+  border-color: rgba(52, 211, 153, 0.4) !important;
+  color: #6ee7b7 !important;
+  background: rgba(16, 185, 129, 0.1) !important;
+}
+.lev-chip.is-tp:hover { background: rgba(16, 185, 129, 0.2) !important; }
+.lev-chip.is-sl {
+  border-color: rgba(251, 113, 133, 0.4) !important;
+  color: #fda4af !important;
+  background: rgba(244, 63, 94, 0.1) !important;
+}
+.lev-chip.is-sl:hover { background: rgba(244, 63, 94, 0.2) !important; }
+
+/* CTA under the sheet: long/short glow */
+.perp-sheet-go.long {
+  background: linear-gradient(160deg, #34d399, #059669 60%, #047857) !important;
+  box-shadow: 0 14px 36px -14px rgba(16, 185, 129, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+}
+.perp-sheet-go.short {
+  background: linear-gradient(160deg, #fb7185, #e11d48 60%, #be123d) !important;
+  box-shadow: 0 14px 36px -14px rgba(244, 63, 94, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .perp-how, .perp-rows .perp-row, .perp-rail-tab.is-active { transition: none !important; }
+}

@@ -3935,7 +3935,7 @@
       }
     },
     "how": {
-      "sub": "Kaldıraç, likidasyon ve fonlama — 30 saniyede",
+      "sub": "PnL, likidasyon, fonlama, kaldıraç — canlı ve etkileşimli",
       "what": {
         "t": "Sürekli sözleşmenin süresi bitmez",
         "d": "Token fiyatını takip eder; yani belirleyen fiyatın nereye gittiğidir, tokenin kendisi değil. Bu yüzden aynı çiftte hem long hem short açabilirsiniz."
@@ -3951,24 +3951,8 @@
       "fees": {
         "t": "Girişte ve çıkışta ücret ödersiniz",
         "d": "Kesin bölünme onaydan önce gösterilir ve emir tamamen bu uygulama içinde oluşturulup risk kontrolünden geçirilir — sonra kendi cüzdanınla imzalanır. Bu uygulama paranı veya anahtarlarını asla saklamaz."
-      }
-    },
-    "banner": {
-      "eyebrow": "Non-Custodial Derivatives · Direct Wallet Settlement",
-      "modeSpot": "Spot Swap",
-      "modePerp": "Perpetual Desk",
-      "modeDydx": "dYdX Orderbook",
-      "modeOnchain": "On-Chain Engine",
-      "statMarkets": "Active Markets",
-      "statBtc": "BTC Benchmark",
-      "statMaxLev": "Max Leverage",
-      "statMaxLevVal": "Up to 50×",
-      "statCustody": "Custody Model",
-      "statCustodyVal": "Self-Custody",
-      "liveFeed": "Live Oracle & Venue Feed",
-      "syncingFeed": "Syncing Market Feed",
-      "openTerminal": "Pro Terminal",
-      "viewPairs": "Market Pairs"
+      },
+      "title": "Vadeli işlemler — ellerinizle öğrenin"
     },
     "subtabs": {
       "pairsHint": "Quick scan & instant order sheet",

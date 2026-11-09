@@ -3939,7 +3939,7 @@
       }
     },
     "how": {
-      "sub": "Плечо, ликвидация и фандинг — за 30 секунд",
+      "sub": "PnL, ликвидация, фандинг, плечо — вживую",
       "what": {
         "t": "Бессрочный контракт не истекает",
         "d": "Отслеживает цену токена: вы ставите на направление цены, а не покупаете сам токен. Поэтому по одной паре можно открыть и лонг, и шорт."
@@ -3955,24 +3955,8 @@
       "fees": {
         "t": "Комиссия платится на входе и выходе",
         "d": "Точная разбивка показывается до подтверждения, а весь ордер строит и проверяет на риски это же приложение — после чего вы подписываете его своим кошельком. Приложение никогда не хранит ваши средства и ключи."
-      }
-    },
-    "banner": {
-      "eyebrow": "Non-Custodial Derivatives · Direct Wallet Settlement",
-      "modeSpot": "Spot Swap",
-      "modePerp": "Perpetual Desk",
-      "modeDydx": "dYdX Orderbook",
-      "modeOnchain": "On-Chain Engine",
-      "statMarkets": "Active Markets",
-      "statBtc": "BTC Benchmark",
-      "statMaxLev": "Max Leverage",
-      "statMaxLevVal": "Up to 50×",
-      "statCustody": "Custody Model",
-      "statCustodyVal": "Self-Custody",
-      "liveFeed": "Live Oracle & Venue Feed",
-      "syncingFeed": "Syncing Market Feed",
-      "openTerminal": "Pro Terminal",
-      "viewPairs": "Market Pairs"
+      },
+      "title": "Фьючерсы — формулы вживую"
     },
     "subtabs": {
       "pairsHint": "Quick scan & instant order sheet",

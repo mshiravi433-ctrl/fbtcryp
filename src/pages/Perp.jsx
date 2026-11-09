@@ -14,6 +14,8 @@ import TokenIcon from '../lib/tokenIcon';
 import FundingPanel from '../components/FundingPanel';
 import FuturesPositionsCard from '../components/FuturesPositionsCard';
 import FuturesHeroBanner from '../components/futures/FuturesHeroBanner';
+import FuturesAiRisk from '../components/futures/FuturesAiRisk';
+import FuturesMathLab from '../components/futures/FuturesMathLab';
 import { IconActivity, IconRoute, IconShield, IconSparkle, IconSwap, IconTrend } from '../components/Icons';
 import SpotTrade from '../components/spot/SpotTrade';
 import { useMarkets } from '../hooks/useMarket';
@@ -195,7 +197,74 @@ export const FEATURED_PAIRS = [
   { id: 'floki', symbol: 'FLOKI' },
   { id: 'fartcoin', symbol: 'FARTCOIN' },
   { id: 'spx6900', symbol: 'SPX' },
-  { id: 'official-trump', symbol: 'TRUMP' }
+  { id: 'official-trump', symbol: 'TRUMP' },
+  /* ─── 2026-11-09 · THE CATALOGUE DEEPENS ───────────────────────────────────
+     The first-party catalogue below is deliberately picked from OUTSIDE the
+     three venue lists the sister tabs render (dYdX USD pairs, Velocity on
+     Solana, Ostium-crypto on Arbitrum): these are large, liquid, perp-relevant
+     names the venue index does not already lead with, so the strip widens the
+     universe instead of duplicating it. A curated id the feed cannot confirm is
+     adopted by symbol at merge time, or the cell says «—» — never a guess. */
+  /* DeFi — lending, perps, LSD, liquidity */
+  { id: 'lido-dao', symbol: 'LDO' },
+  { id: 'rocket-pool', symbol: 'RPL' },
+  { id: 'pendle', symbol: 'PENDLE' },
+  { id: 'gmx', symbol: 'GMX' },
+  { id: 'dydx-chain', symbol: 'DYDX' },
+  { id: 'havven', symbol: 'SNX' },
+  { id: 'compound-governance-token', symbol: 'COMP' },
+  { id: '1inch', symbol: '1INCH' },
+  { id: 'sushi', symbol: 'SUSHI' },
+  { id: 'yearn-finance', symbol: 'YFI' },
+  { id: 'balancer', symbol: 'BAL' },
+  { id: 'frax-share', symbol: 'FXS' },
+  { id: 'convex-finance', symbol: 'CVX' },
+  { id: 'thorchain', symbol: 'RUNE' },
+  { id: 'morpho', symbol: 'MORPHO' },
+  { id: 'raydium', symbol: 'RAY' },
+  { id: 'orca', symbol: 'ORCA' },
+  { id: 'drift-protocol', symbol: 'DRIFT' },
+  { id: 'kamino-finance', symbol: 'KMNO' },
+  /* L1 / L2 / app-chains */
+  { id: 'blockstack', symbol: 'STX' },
+  { id: 'starknet', symbol: 'STRK' },
+  { id: 'zksync', symbol: 'ZK' },
+  { id: 'layerzero', symbol: 'ZRO' },
+  { id: 'wormhole', symbol: 'W' },
+  { id: 'pyth-network', symbol: 'PYTH' },
+  { id: 'jito-governance-token', symbol: 'JTO' },
+  { id: 'ronin', symbol: 'RON' },
+  { id: 'conflux-token', symbol: 'CFX' },
+  { id: 'oasis-network', symbol: 'ROSE' },
+  { id: 'kava', symbol: 'KAVA' },
+  { id: 'celo', symbol: 'CELO' },
+  { id: 'flow', symbol: 'FLOW' },
+  { id: 'mina-protocol', symbol: 'MINA' },
+  { id: 'quant-network', symbol: 'QNT' },
+  { id: 'akash-network', symbol: 'AKT' },
+  { id: 'theta-token', symbol: 'THETA' },
+  { id: 'nervos-network', symbol: 'CKB' },
+  { id: 'iotex', symbol: 'IOTX' },
+  { id: 'zilliqa', symbol: 'ZIL' },
+  /* LSDFi & restaking */
+  { id: 'ether.fi-staked-eth', symbol: 'EETH' },
+  { id: 'ethena', symbol: 'ENA' },
+  { id: 'eigenlayer', symbol: 'EIGEN' },
+  { id: 'ether.fi', symbol: 'ETHFI' },
+  /* AI & DePIN */
+  { id: 'ocean-protocol', symbol: 'OCEAN' },
+  /* Gaming & metaverse */
+  { id: 'apecoin', symbol: 'APE' },
+  { id: 'decentraland', symbol: 'MANA' },
+  { id: 'the-sandbox', symbol: 'SAND' },
+  { id: 'axie-infinity', symbol: 'AXS' },
+  { id: 'illuvium', symbol: 'ILV' },
+  /* Memes — the tail the tape keeps pricing in */
+  { id: 'memecoin-2', symbol: 'MEME' },
+  { id: 'book-of-meme', symbol: 'BOME' },
+  { id: 'brett', symbol: 'BRETT' },
+  { id: 'mog-coin', symbol: 'MOG' },
+  { id: 'peanut-the-squirrel', symbol: 'PNUT' }
 ];
 
 /** How many live-feed rows may join the strip. A strip is a browser, not a dump. */
@@ -631,6 +700,24 @@ export default function Perp() {
     [side, entryPrice, leverageOk, leverageNum]
   );
 
+  /* ── AI RISK inputs from the venue's own row ───────────────────────────
+     Velocity rows publish `fundingAprPct`; dYdX rows publish an hourly
+     `nextFundingRate` (and the MMR its liquidation model needs); Ostium
+     rows publish neither consistently — the engine then prints honest
+     «unknown» fields instead of a guess. */
+  const venueRow = routeEntry?.row ?? null;
+  const venueFundingApr = Number(venueRow?.fundingAprPct);
+  const venueFundingRate = Number(venueRow?.nextFundingRate);
+  const fundingAprPct = venueRow?.fundingAprPct != null && Number.isFinite(venueFundingApr)
+    ? venueFundingApr
+    : venueRow?.nextFundingRate != null && Number.isFinite(venueFundingRate)
+      ? venueFundingRate * 100 * 24 * 365
+      : null;
+  const venueMmrRaw = Number(venueRow?.maintenanceMarginFraction);
+  const venueMmr = venueRow?.maintenanceMarginFraction != null && Number.isFinite(venueMmrRaw) && venueMmrRaw >= 0 && venueMmrRaw < 1
+    ? venueMmrRaw
+    : null;
+
   /*
    * ─── FEE PREVIEW — backend numbers only, debounced ─────────────────────
    * Velocity and Ostium: computed by the shared engine inside the BFF from the
@@ -1038,6 +1125,19 @@ export default function Perp() {
 
   const tp = Number(takeProfit) > 0 ? Number(takeProfit) : null;
   const sl = Number(stopLoss) > 0 ? Number(stopLoss) : null;
+  /* «امکانات بیشتر» — one-tap exits. Prices are derived from the SAME live
+     entry the summary prints, rounded to a precision a venue will accept,
+     and written into the same TP/SL fields (never behind the engine's back). */
+  const quickExit = (kind, pctMove) => {
+    if (!Number.isFinite(entryPrice) || entryPrice <= 0) return;
+    const dir = side === 'long' ? 1 : -1;
+    const px = kind === 'tp'
+      ? entryPrice * (1 + (pctMove / 100) * dir)
+      : entryPrice * (1 - (pctMove / 100) * dir);
+    const s = px >= 100 ? px.toFixed(2) : px >= 1 ? px.toFixed(4) : px.toPrecision(6);
+    haptic?.('light');
+    if (kind === 'tp') setTakeProfit(s); else setStopLoss(s);
+  };
   const heroBtc = byId.get('bitcoin') ?? null;
   const heroBtcLive = Boolean(heroBtc) && heroBtc.offline !== true && heroBtc.dataProvenance !== 'offline';
   const heroEth = byId.get('ethereum') ?? null;
@@ -1048,8 +1148,6 @@ export default function Perp() {
       <motion.div variants={riseIn} initial="hidden" animate="show">
         <FuturesHeroBanner
           activeTab={perpTab}
-          title={t(perpTab === 'spot' ? 'trade.title' : 'perp.title')}
-          subtitle={t(perpTab === 'spot' ? 'spot.subtitle' : 'perp.subtitle')}
           marketCount={listPairs.length}
           btcPrice={heroBtcLive ? heroBtc.current_price : null}
           btcChange={heroBtcLive ? heroBtc.price_change_percentage_24h : null}
@@ -1219,12 +1317,14 @@ export default function Perp() {
       </button>
       {howOpen && (
         <div className="perp-how-body" data-testid="perp-how-body">
-          {['what', 'liquidate', 'funding', 'fees'].map((k) => (
-            <div className="perp-how-row" key={k}>
-              <span className="perp-how-row-t">{t(`perp.how.${k}.t`)}</span>
-              <span className="perp-how-row-d">{t(`perp.how.${k}.d`)}</span>
-            </div>
-          ))}
+          {/*
+            ─── THE EXPLAINER, AS A WORKSHOP ──────────────────────────────
+            This was four static paragraphs nobody finished reading. The
+            equations a futures trader actually needs — PnL, liquidation,
+            funding, the leverage ladder — are now a live room: sliders in,
+            engine-computed numbers out, zero invented figures.
+          */}
+          <FuturesMathLab testId="perp-math-lab" />
         </div>
       )}
 
@@ -1576,6 +1676,23 @@ export default function Perp() {
             />
           </div>
 
+          {/* ---- AI RISK — the engine re-scores THIS ticket on every keystroke ---- */}
+          <FuturesAiRisk
+            providerId={meta?.providerId ?? null}
+            side={side}
+            collateralUsd={collateralOk ? collateralNum : null}
+            leverage={leverageOk ? leverageNum : null}
+            maxLeverage={maxLeverage}
+            entryPrice={entryPrice}
+            takeProfit={tp}
+            stopLoss={sl}
+            availableBalanceUsd={null}
+            fundingAprPct={fundingAprPct}
+            maintenanceMarginFraction={venueMmr}
+            onApplyLeverage={(v) => { haptic?.('light'); setLeverage(String(v)); }}
+            testId="perp-sheet-ai-risk"
+          />
+
           {/* ---- the numbers that decide it ---- */}
           <div className="perp-summary" data-testid="perp-summary">
             <div className="row-between">
@@ -1644,6 +1761,26 @@ export default function Perp() {
                 <input type="text" inputMode="decimal" placeholder="0" value={supportsTpSl ? stopLoss : ''} disabled={!supportsTpSl} onChange={(e) => setStopLoss(e.target.value)} />
               </label>
             </div>
+            {supportsTpSl && Number.isFinite(entryPrice) && entryPrice > 0 && (
+              <div className="perp-quick-exits" data-testid="perp-quick-exits">
+                <div className="perp-quick-row">
+                  <span className="faint">{t('futures.quick.tp', { defaultValue: 'Quick take-profit' })}</span>
+                  <span className="perp-quick-chips">
+                    {[2, 5, 10].map((p) => (
+                      <button key={`tp${p}`} type="button" className="lev-chip is-tp" onClick={() => quickExit('tp', p)} data-testid={`perp-quick-tp-${p}`}>+{p}%</button>
+                    ))}
+                  </span>
+                </div>
+                <div className="perp-quick-row">
+                  <span className="faint">{t('futures.quick.sl', { defaultValue: 'Quick stop-loss' })}</span>
+                  <span className="perp-quick-chips">
+                    {[2, 5, 10].map((p) => (
+                      <button key={`sl${p}`} type="button" className="lev-chip is-sl" onClick={() => quickExit('sl', p)} data-testid={`perp-quick-sl-${p}`}>−{p}%</button>
+                    ))}
+                  </span>
+                </div>
+              </div>
+            )}
             {!supportsTpSl && (
               <p className="faint" style={{ margin: '8px 0 0', fontSize: 11.5, lineHeight: 1.8 }} data-testid="perp-tpsl-note">
                 {t('perp.terminal.tpSlUnsupported')}

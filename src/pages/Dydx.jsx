@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import PageTransition, { riseIn } from '../components/PageTransition';
@@ -18,12 +18,11 @@ import {
   connectDydx,
   disconnectDydx,
   dydxFeeUsd,
-  getDydxCandles,
   getDydxMarkets,
   getDydxSubaccount,
   placeDydxOrder
 } from '../lib/dydx';
-import TrendChart from '../components/TrendChart';
+import FuturesMarketChart from '../components/FuturesMarketChart';
 import lazyRetry from '../lib/lazyRetry';
 import { DYDX_TPSL_ENABLED, FUTURES_HISTORY_ENABLED } from '../lib/features';
 import ModernSelect from '../components/ModernSelect';
@@ -94,48 +93,6 @@ export default function Dydx({ embedded = false } = {}) {
   const [error, setError] = useState(null);
   const [reviewing, setReviewing] = useState(false);
   const [result, setResult] = useState(null);
-
-  /* Candles for the selected market — see the chart block below for why. */
-  const [resolution, setResolution] = useState('4HOURS');
-  const [candles, setCandles] = useState([]);
-  const [candlesLoading, setCandlesLoading] = useState(false);
-
-  useEffect(() => {
-    if (!ticker) return undefined;
-    let alive = true;
-    let retryTimer = null;
-    let attempt = 0;
-    /* Two bounded retries: a cold instance or a transient indexer blip used to
-       leave the chart on "no candles" until the user changed resolution — the
-       read heals itself now before giving up honestly. */
-    const run = async () => {
-      setCandlesLoading(true);
-      const limit = resolution === '1DAY' ? 30 : resolution === '15MINS' ? 60 : 24;
-      try {
-        const r = await getDydxCandles(ticker, resolution, limit);
-        if (!alive) return;
-        const rows = r?.candles || [];
-        if (rows.length > 1) { setCandles(rows); setCandlesLoading(false); return; }
-      } catch { /* handled below like an empty read */ }
-      if (!alive) return;
-      if (attempt < 2) { attempt += 1; retryTimer = setTimeout(run, 3_500); return; }
-      setCandles([]);
-      setCandlesLoading(false);
-    };
-    run();
-    return () => { alive = false; if (retryTimer) clearTimeout(retryTimer); };
-  }, [ticker, resolution]);
-
-  const candlePoints = useMemo(
-    () => candles.map((c) => ({ x: c.startedAt, y: c.close })),
-    [candles]
-  );
-  const candleChange = useMemo(() => {
-    if (candles.length < 2) return 0;
-    const first = Number(candles[0].close);
-    const last = Number(candles[candles.length - 1].close);
-    return first > 0 ? ((last - first) / first) * 100 : 0;
-  }, [candles]);
 
   useEffect(() => {
     let alive = true;
@@ -370,62 +327,23 @@ export default function Dydx({ embedded = false } = {}) {
           />
 
           {/*
-            ─── THE MARKET HAD NO HISTORY AT ALL ──────────────────────────────
-            Reported as: "does the dYdX market not need a chart?" It did not
-            have one. A leveraged position was being sized from a single oracle
-            price and an open-interest figure — the two numbers that say least
-            about whether the market has been trending or chopping sideways.
-
-            The candles come from the same read-only indexer the rest of this
-            screen uses. When it is unreachable the chart says so; it never
-            draws a flat line at zero, because a flat line reads as "price has
-            not moved" and that is a claim about the market, not about us.
-
-            The chart is placed first so the price shape is the first thing a
-            user reads after choosing a market.
+            ─── CANDLES + ON-DEVICE AI ──────────────────────────────────────
+            The line chart is gone. The dYdX tab now runs the same TradingChart
+            candlestick engine as the rest of the futures desk — pinch-zoom,
+            crosshair OHLC, venue candles straight from the indexer — with the
+            on-device AI forecast toggle (Kronos) wired into it: one tap and
+            the model projects the next bars in violet, computed locally, nothing
+            leaves the device until the user decides to download the model.
           */}
-          <div className="dydx-chart" data-testid="dydx-chart">
-            <div className="dydx-chart-head">
-              <span className="faint">
-                {candlesLoading || candles.length > 1
-                  ? t('dydx.chartTitle', { defaultValue: 'Price · last 4 days' })
-                  : t('futures.chartUnavailableShort')}
-              </span>
-              <div className="dydx-chart-res">
-                {[
-                  ['15MINS', t('dydx.res.15m', { defaultValue: '15m' })],
-                  ['1HOUR', t('dydx.res.1h', { defaultValue: '1h' })],
-                  ['4HOURS', t('dydx.res.4h', { defaultValue: '4h' })],
-                  ['1DAY', t('dydx.res.1d', { defaultValue: '1d' })]
-                ].map(([res, label]) => (
-                  <button
-                    key={res}
-                    type="button"
-                    className={resolution === res ? 'active' : ''}
-                    onClick={() => setResolution(res)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <TrendChart
-              points={candlePoints}
-              height={132}
-              up={candleChange >= 0}
-              loading={candlesLoading}
-              emptyLabel={candlesLoading ? '' : t('dydx.chartUnavailable', { defaultValue: 'The dYdX indexer did not return candles for this market.' })}
-              formatValue={(v) => `$${fmtPrice(v)}`}
-              testId="dydx-trend"
+          <div data-testid="dydx-chart" style={{ marginTop: 12 }}>
+            <FuturesMarketChart
+              key={ticker}
+              provider="dydx"
+              market={ticker}
+              symbol={ticker}
+              height={230}
+              testId="dydx-candles"
             />
-            {candles.length > 1 && (
-              <div className="dydx-chart-foot">
-                <span className={`mono ${candleChange >= 0 ? 'up' : 'down'}`}>
-                  {candleChange >= 0 ? '+' : ''}{candleChange.toFixed(2)}%
-                </span>
-                <span className="faint">{t('dydx.chartSource', { defaultValue: 'dYdX indexer candles' })}</span>
-              </div>
-            )}
           </div>
 
           {market && (
