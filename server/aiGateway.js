@@ -1546,7 +1546,7 @@ export function getPreferredProvidersForTask(taskType = 'general', { configuredO
     case 'portfolio_optimization':
       // High-precision logic: OpenRouter's multi-model route first, then the
       // DIRECT GPT and Claude seats, then DeepSeek.
-      candidateOrder = ['openrouter', 'openai', 'anthropic', 'deepseek', 'gemini', 'aimlapi', 'workersai', 'internal'];
+      candidateOrder = ['openrouter', 'openai', 'anthropic', 'deepseek', 'gemini', 'aimlapi', 'groq', 'workersai', 'internal'];
       break;
     case 'risk':
     case 'guardian':

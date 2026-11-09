@@ -30,6 +30,7 @@
  *   - Every number returned is real data or reported unavailable — never a
  *     guess and never a hard-coded balance/price/hash.
  */
+import { chatTurnCeiling, recentChatHistory } from './aiChatReliability.js';
 import { Router } from 'express';
 import { createHash } from 'node:crypto';
 import {
@@ -317,7 +318,7 @@ async function buildTokenCard(symbolRaw) {
       p,
       new Promise((resolve) => { const t = setTimeout(() => resolve(null), ms); t.unref?.(); })
     ]);
-    const { value: coin } = await withCache(
+    const cached = await withDeadline(withCache(
       `ai-os:tokencard:${asset.coinId}`,
       TOKEN_CARD_TTL,
       async () => {
@@ -326,7 +327,8 @@ async function buildTokenCard(symbolRaw) {
         return row;
       },
       { swr: true }
-    );
+    ), 1500);
+    const coin = cached?.value;
     if (!coin) return null;
     return {
       kind: 'TOKEN',
@@ -1813,6 +1815,8 @@ router.post('/chat', async (req, res) => {
   const turnStartedAt = Date.now();
   const context = await buildAIContext(req, req.body || {}, { longTermQuery: message });
   const locale = safe(req.body?.locale, 5) || null;
+  const history = recentChatHistory(req.body?.messages, message, safeMemoryText);
+  if (history) context.conversationSummary = history;
   const conversationId = safe(req.body?.conversationId, 64) || null;
   const prior = req.body?.prior && AI_INTENTS.includes(String(req.body.prior.intent || '').toUpperCase())
     ? { intent: String(req.body.prior.intent).toUpperCase(), surface: req.body.prior.surface || null }
@@ -2200,12 +2204,12 @@ router.post('/chat', async (req, res) => {
    * few seconds smaller than the mode ceiling and can never be larger, so this
    * is the only line that had to change for the budget to be honest.
    */
-  const turnCeiling = turnSafeCeilingMs();
+  const turnCeiling = chatTurnCeiling(resolvedIntelligence.mode, turnSafeCeilingMs());
   const escalationFloorMs = Number(process.env.AI_ESCALATION_DEADLINE_MS || 9000);
   const turnBudgetFor = (mode) => {
     const wanted = intelligenceDeadlineMs(mode, null);
     const left = turnCeiling - (Date.now() - turnStartedAt) - escalationFloorMs;
-    return Math.max(2500, Math.min(wanted.deadlineMs, left));
+    return Math.max(0, Math.min(wanted.deadlineMs, left));
   };
   const u5 = planCollaboration({
     message,
@@ -2266,7 +2270,7 @@ router.post('/chat', async (req, res) => {
     && !socialTurn.handled;
 
   let collaboration = null;
-  if (collaborationWanted) {
+  if (collaborationWanted && turnBudgetFor(resolvedIntelligence.mode) >= 2500) {
     try {
       collaboration = await runCollaborativeAnalysis({
         message,
@@ -2456,7 +2460,7 @@ router.post('/chat', async (req, res) => {
      *   3. the deterministic reply — which always stands underneath both.
      * A turn is never worse than it was before this block existed.
      */
-    if (orchestratorEnabled()) {
+    if (orchestratorEnabled() && turnCeiling - (Date.now() - turnStartedAt) - escalationFloorMs >= 2500) {
       try {
         /* The graph gets a slice of the TURN, not a budget of its own: the
            escalation ladder below must still have room if the graph abstains
@@ -2491,7 +2495,7 @@ router.post('/chat', async (req, res) => {
         orchestration = orchestration ? { ...orchestration, used: false } : null;
       }
     }
-    if (!orchestration?.answer) {
+    if (!orchestration?.answer && turnCeiling - (Date.now() - turnStartedAt) >= 3500) {
       escalation = await escalateToProviders({
         deadlineMs: Math.max(2000, turnCeiling - (Date.now() - turnStartedAt) - 1500),
         message,

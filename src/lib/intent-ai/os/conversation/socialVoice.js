@@ -61,7 +61,7 @@ const VOICE = Object.freeze({
     fr: ['Bonjour, content de vous lire 👋 Marché, portefeuille ou objectif : je suis là.', 'Salut ! Je suis prêt : prix, portefeuille, swap ou plan.'],
 },
   [SOCIAL_ACTS.HOW_ARE_YOU]: {
-    fa: ['ممنون که پرسیدی — من همیشه آماده‌ام 🙂 کاری داری یا خلاصه‌ای از بازار می‌خوای؟', 'مرسی، من که همیشه بیدار و آماده‌ام! اگه بخوای همین الان وضعیت بازار رو خلاصه کنم بگو.'],
+    fa: ['ممنون که پرسیدی 🙂 من یک دستیار هوش مصنوعی‌ام و آماده‌ام کمکت کنم. تو چطوری؟', 'مرسی که پرسیدی 🙂 آماده‌ام با هم گفتگو کنیم. دوست داری درباره چه چیزی صحبت کنیم؟'],
     en: ['Thanks for asking — I am always ready. Want a quick read on the market, or is there something to sort out?', 'Appreciate it. No bad days when you are a program 🙂 What can I look at for you?'],
     ar: ['شكرًا لسؤالك — أنا جاهز دائمًا. تحب قراءة سريعة للسوق أم عندك مهمة؟', 'بخير، شكرًا! كل شيء يعمل. أخبرني بما أبدأ: سعر، محفظة، أم خطة؟'],
     tr: ['İyiyim, sorduğun için sağ ol — her zaman hazırım 🙂 Bir piyasa özeti mi istersin?', 'Teşekkürler, çalışıyorum. İstersen hemen bugünün pazarına bakalım.'],
