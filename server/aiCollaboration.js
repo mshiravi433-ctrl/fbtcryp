@@ -58,6 +58,7 @@ import { buildClaimLedger, renderClaimLedger } from './aiClaimLedger.js';
 import { selectEconomicLenses, renderEconomistLens, economistPersona } from './aiEconomistLens.js';
 import { readSocialContext, renderSocialBrief } from '../src/lib/intent-ai/os/conversation/socialRead.js';
 import { checkPlanArithmetic, renderStrategyViolations, isPlanParameter } from './aiStrategyPlanCheck.js';
+import { assessEvidence, evaluateDecision, renderDecisionContract, renderDecisionDeficit } from './aiDecisionGate.js';
 import {
   detectStrategyRequest,
   buildStrategyFrame,
@@ -315,7 +316,7 @@ const ROLE_TASK = {
   [AI_ROLES.FINAL_ANSWER_AI]: 'reasoning'
 };
 
-async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '' }) {
+async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '', decisionBrief = '' }) {
   /*
    * ─── DEEP REASONING CONTRACT (smartest mode only) ─────────────────────────
    * The role prompts are shared by every mode, so the extra discipline lives
@@ -342,7 +343,7 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
     /* The economist's lens is a reasoning contract, not a costume: it rides on
        the specialists and the synthesiser, never on the reviewer (whose job is
        to break the draft, not to reason about the economy). */
-    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}`;
+    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}`;
   /*
    * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
    * This line used to be a ternary: Persian or English. Everything a Turkish,
@@ -813,6 +814,9 @@ export async function runCollaborativeAnalysis({
     /* Strategy turns in the smartest mode: the computed frame the plan stood on
        and the rubric result for the final answer. null otherwise. */
     strategy: null,
+    /* The decision verdict for the turn: whether it asked for a decision, the
+       evidence level, what that permits, and whether the answer obeyed. */
+    decision: null,
     perRole: transparency ? [] : undefined,
     latencyMs: 0,
     at: Date.now()
@@ -857,6 +861,19 @@ export async function runCollaborativeAnalysis({
       result.evidence.corroborated = Boolean(research.corroborated);
     }
   }
+
+  /*
+   * ─── DECISION GATE (smartest mode, before anyone writes) ───────────────────
+   * Is this a decision question, and how much evidence does the turn actually
+   * hold? The specialists are told what the evidence level permits BEFORE they
+   * write; the Reviewer is told afterwards if the draft ignored it.
+   */
+  const decisionEvidence = mode === 'max'
+    ? assessEvidence({ context, sources: result.sources, knowledge })
+    : null;
+  const decisionBrief = decisionEvidence
+    ? renderDecisionContract({ message, evidence: decisionEvidence })
+    : '';
 
   const subQuestionChecklist = renderSubQuestionChecklist(subQuestions, locale);
   const baseContextBlock = buildSafeContextBlock({ context, knowledge, sources: result.sources, knowledgeLimit: knowledgeTopK });
@@ -921,7 +938,7 @@ export async function runCollaborativeAnalysis({
        analyses are genuinely different providers, not one model twice. */
     const roles = pickAnalysisRoles(plan, 2);
     const settled = await withDeadline(
-      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief }))),
+      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief }))),
       []
     );
     analyses.push(...(settled || []).filter(Boolean));
@@ -956,6 +973,7 @@ export async function runCollaborativeAnalysis({
         economistLens,
         socialBrief,
         strategyBrief,
+        decisionBrief,
         /* The last analytical seat is the dissenting one, and only in the
            smartest mode: one of the three reads must be trying to break the
            other two, not agreeing with them. */
@@ -989,7 +1007,8 @@ export async function runCollaborativeAnalysis({
         intelligence: mode,
         economistLens,
         socialBrief,
-        strategyBrief
+        strategyBrief,
+        decisionBrief
       }), null);
       if (verifier?.ok) analyses.push(verifier);
     }
@@ -1049,7 +1068,8 @@ export async function runCollaborativeAnalysis({
         intelligence: mode,
         economistLens,
         socialBrief,
-        strategyBrief
+        strategyBrief,
+        decisionBrief
       }), null);
       result.answer = finalRole?.ok
         ? finalRole.answer
@@ -1076,6 +1096,26 @@ export async function runCollaborativeAnalysis({
        * re-checks the FINAL text.
        */
       const draftArithmetic = strategyFrame ? checkPlanArithmetic(result.answer, strategyFrame) : null;
+      /*
+       * ─── DECISION VERDICT ON THE DRAFT ─────────────────────────────────────
+       * Re-score the evidence now that the analyses, the verifier and the claim
+       * ledger exist, then ask the one question that matters: did the draft
+       * issue a directional instruction this evidence cannot support?
+       */
+      if (decisionEvidence) {
+        const comparisonForDecision = compareAnalyses(analyses.filter((a) => a.ok
+          && a.role !== AI_ROLES.VERIFICATION_AI && a.role !== 'critique'));
+        const finalEvidence = assessEvidence({
+          context,
+          sources: result.sources,
+          knowledge,
+          comparison: comparisonForDecision,
+          ledger: result.synthesisLedger
+        });
+        const gate = evaluateDecision({ message, evidence: finalEvidence, answer: result.answer });
+        /* A non-decision turn is not published as a verdict at all. */
+        result.decision = gate.applicable ? gate : null;
+      }
 
       /*
        * ─── NUMERIC EVIDENCE AUDIT (deterministic, no extra call) ─────────────
@@ -1126,9 +1166,10 @@ export async function runCollaborativeAnalysis({
           const unsourcedBlock = renderUnsourcedBlock(draftAudit);
           const strategyGapsBlock = renderStrategyGaps(result.strategy?.rubric);
           const strategyArithmeticBlock = renderStrategyViolations(draftArithmetic);
+          const decisionDeficitBlock = renderDecisionDeficit(result.decision);
           const criticRole = {
             role: AI_ROLES.VERIFICATION_AI,
-            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}`,
+            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}`,
             contextBlock: '',
             locale,
             deps: D,
@@ -1234,6 +1275,15 @@ export async function runCollaborativeAnalysis({
         && a.role !== AI_ROLES.VERIFICATION_AI
         && a.role !== 'critique')
     }));
+  }
+
+  /* The reviewer may have downgraded a recommendation: re-check the FINAL text. */
+  if (result.decision?.applicable) {
+    result.decision = evaluateDecision({
+      message,
+      evidence: result.decision.evidence,
+      answer: result.answer
+    });
   }
 
   /* Re-check the FINAL text: the reviewer may have fixed a figure. */

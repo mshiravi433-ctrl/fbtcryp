@@ -2407,6 +2407,18 @@ router.post('/chat', async (req, res) => {
         lenses: Array.isArray(collaboration?.persona?.lenses) ? collaboration.persona.lenses : [],
         /* The social read of the user's message: register, tone, the need
            behind the literal question, and how much was left unsaid. */
+        /* The decision verdict of the turn (smartest mode): whether the user
+           asked for a decision, how much evidence the turn held, what that
+           permits, and whether the final answer obeyed. */
+        decision: collaboration?.decision?.applicable ? {
+          verdict: collaboration.decision.verdict,
+          evidenceLevel: collaboration.decision.evidence?.level ?? null,
+          evidenceScore: collaboration.decision.evidence?.score ?? null,
+          evidenceReasons: Array.isArray(collaboration.decision.evidence?.reasons) ? collaboration.decision.evidence.reasons : [],
+          missing: Array.isArray(collaboration.decision.evidence?.missing) ? collaboration.decision.evidence.missing : [],
+          recommendationDetected: collaboration.decision.recommendationDetected === true,
+          compliant: collaboration.decision.compliant === true
+        } : null,
         /* Strategy turns: the computed frame the plan stood on and the rubric
            result for the answer. null when the turn was not a strategy turn. */
         strategy: collaboration?.strategy ? {
