@@ -56,8 +56,62 @@ const checkOnly = process.argv.includes('--check');
 const required = process.argv.includes('--required') || process.env.KRONOS_MODEL_REQUIRED === '1';
 
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
+
+/*
+ * ─── WHY A TRANSIENT BLIP MUST NOT COST A DEPLOYMENT ────────────────────────
+ * `vercel.json` runs this script with `--required`, so a single failed curl —
+ * a reset connection, a GitHub 502, a slow minute on codeload — aborts the
+ * WHOLE production build. Vercel then keeps serving the previous deployment,
+ * silently: the merge is on `main`, the site is old, and nobody is told. That
+ * is exactly how «تغییرات نمی‌آید» happens with nothing wrong in the code
+ * (deployment dpl_5SLJTjDqqjGVwJcHcf3R4EihJ2Yt on main failed on this command
+ * while the site kept serving the commit before it).
+ *
+ * Two layers of patience, both bounded:
+ *   • curl retries the request itself (`--retry*`) for 5xx and resets;
+ *   • this adds up to three whole attempts with 2s/6s backoff for DNS blips and
+ *     timeouts, which curl's own retry does not cover.
+ *
+ * Nothing about what is accepted changes: the bytes are still verified against
+ * the manifest's size and SHA-256, and a model that is genuinely unavailable
+ * still fails the build under `--required`. Only flakiness is absorbed.
+ */
+const CURL_RETRY_ATTEMPTS = 3;
+const CURL_RETRY_DELAYS_MS = [2000, 6000];
+
+const sleepSync = (ms) => {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch {
+    /* No SharedArrayBuffer (exotic runtime): skip the pause, keep the retry. */
+  }
+};
+
+/**
+ * `spawnSync('curl', …)` with the two retry layers above.
+ * Returns the last result; callers keep their existing `status !== 0` handling.
+ */
+function curl(args, options = {}) {
+  const patience = ['--retry', '3', '--retry-delay', '2', '--retry-connrefused'];
+  let last = null;
+  for (let attempt = 0; attempt < CURL_RETRY_ATTEMPTS; attempt += 1) {
+    last = spawnSync('curl', [...patience, ...args], options);
+    if (last && last.status === 0) return last;
+    const why = String((last && last.stderr) || '').trim().split('\n').pop() || `curl exit ${last && last.status}`;
+    if (attempt < CURL_RETRY_ATTEMPTS - 1) {
+      say(`attempt ${attempt + 1}/${CURL_RETRY_ATTEMPTS} failed (${why}) — retrying`);
+      sleepSync(CURL_RETRY_DELAYS_MS[attempt] || 6000);
+    }
+  }
+  return last;
+}
 const failOrSkip = (message) => {
   say(message);
+  if (required) {
+    /* Loud on purpose: a failed build here does not break the site, it freezes
+       it at the previous deployment — which looks exactly like «تغییرات نیامد». */
+    say('this build is REQUIRED to carry the model: failing it means production keeps the previous deployment');
+  }
   process.exit(required ? 1 : 0);
 };
 const say = (msg) => console.log(`[kronos-model] ${msg}`);
@@ -65,7 +119,7 @@ const say = (msg) => console.log(`[kronos-model] ${msg}`);
 /** Read the manifest from the published branch. Returns null if unreachable. */
 function readPublishedManifest() {
   const api = `https://api.github.com/repos/${REPO}/contents/model-manifest.json?ref=${encodeURIComponent(REF)}`;
-  const res = spawnSync('curl', ['-fsSL', '--max-time', '60', '-H', 'Accept: application/vnd.github.raw', api], {
+  const res = curl(['-fsSL', '--max-time', '60', '-H', 'Accept: application/vnd.github.raw', api], {
     encoding: 'utf8', maxBuffer: 8 << 20
   });
   if (res.status !== 0 || !res.stdout) {
@@ -83,7 +137,7 @@ function readPublishedManifest() {
 /** Read one published file as bytes. Returns null on any failure. */
 function readPublishedFile(name) {
   const api = `https://api.github.com/repos/${REPO}/contents/${encodeURIComponent(name)}?ref=${encodeURIComponent(REF)}`;
-  const res = spawnSync('curl', ['-fsSL', '--max-time', '300', '-H', 'Accept: application/vnd.github.raw', api], {
+  const res = curl(['-fsSL', '--max-time', '300', '-H', 'Accept: application/vnd.github.raw', api], {
     maxBuffer: 64 << 20
   });
   if (res.status !== 0 || !res.stdout) {
