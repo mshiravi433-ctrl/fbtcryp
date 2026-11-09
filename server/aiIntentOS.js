@@ -2371,7 +2371,17 @@ router.post('/chat', async (req, res) => {
         models: (collaboration.modelsConsulted || []).length,
         reviewed: collaboration.critique?.used === true,
         reviewReason: collaboration.critique?.reason || null,
-        reviewIssues: Array.isArray(collaboration.critique?.issues) ? collaboration.critique.issues.slice(0, 4) : []
+        reviewIssues: Array.isArray(collaboration.critique?.issues) ? collaboration.critique.issues.slice(0, 4) : [],
+        /* Multi-part questions (smartest mode): how many parts the message
+           explicitly asked for and how many the final answer left untouched.
+           `null` = one question; nothing was split. */
+        parts: Array.isArray(collaboration.subQuestions?.parts) ? collaboration.subQuestions.parts.length : null,
+        unanswered: Array.isArray(collaboration.subQuestions?.uncovered) ? collaboration.subQuestions.uncovered.length : null,
+        complete: collaboration.subQuestions ? collaboration.subQuestions.complete === true : null,
+        /* Numbers in the final answer that the evidence cannot source. The
+           review fixes or withdraws them before the user reads the answer, so
+           a non-zero value here is post-review telemetry, not a warning. */
+        unsourcedNumbers: Array.isArray(collaboration.numericAudit?.unsourced) ? collaboration.numericAudit.unsourced.length : null
       } : null,
       /* Which brain was asked for, what it actually did, and whether the mode
          raised this turn's depth. The UI prints the mode; the plan fields let

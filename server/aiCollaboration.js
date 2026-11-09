@@ -53,6 +53,13 @@ import {
   AI_ROLES
 } from '../src/lib/intent-ai/os/collaborationRouter.js';
 import { renderSocialReply } from '../src/lib/intent-ai/os/conversation/socialVoice.js';
+import { auditNumbers, buildEvidenceCorpus, renderUnsourcedBlock } from './aiEvidenceAudit.js';
+import {
+  decomposeQuestion,
+  assessQuestionCoverage,
+  renderSubQuestionChecklist,
+  renderUnansweredParts
+} from '../src/lib/intent-ai/os/questionDecomposition.js';
 import { SOCIAL_ACTS } from '../src/lib/intent-ai/os/conversation/socialIntent.js';
 
 export const COLLABORATION_SCHEMA = 'fbt.ai-collaboration.v1';
@@ -664,6 +671,13 @@ export async function runCollaborativeAnalysis({
   const resolvedIntelligence = resolveIntelligenceMode(intelligence ?? plan?.intelligence?.mode ?? null);
   const mode = resolvedIntelligence.mode;
   const modeProfile = getIntelligenceProfile(mode);
+  /*
+   * Multi-part questions get a checklist, not a second engine. The splitter is
+   * deterministic and conservative: it only fires on structure the user typed
+   * (numbering, newlines, semicolons, several question marks, «و همچنین»).
+   * Only the smartest mode pays for it — `balanced` must stay byte-identical.
+   */
+  const subQuestions = mode === 'max' ? decomposeQuestion(message) : [];
   /* Role budgets follow the mode: `max` gives an analysis room for its
      reasoning and its answer instead of a single paragraph. Latency-bound
      conversation roles are exempt (see intelligenceGeneration). */
@@ -713,6 +727,12 @@ export async function runCollaborativeAnalysis({
     /* null = the mode did not run a review. An object says whether one ran, on
        which seat, and whether its repair was used. */
     critique: null,
+    /* Multi-part questions only (smartest mode). null = one question, nothing
+       to check — the same shape the reply had before this existed. */
+    subQuestions: null,
+    /* The deterministic unsourced-number report for this draft. null when the
+       mode ran no audit (swift/balanced) — those turns cannot have changed. */
+    numericAudit: null,
     perRole: transparency ? [] : undefined,
     latencyMs: 0,
     at: Date.now()
@@ -758,7 +778,11 @@ export async function runCollaborativeAnalysis({
     }
   }
 
-  const contextBlock = buildSafeContextBlock({ context, knowledge, sources: result.sources, knowledgeLimit: knowledgeTopK });
+  const subQuestionChecklist = renderSubQuestionChecklist(subQuestions, locale);
+  const baseContextBlock = buildSafeContextBlock({ context, knowledge, sources: result.sources, knowledgeLimit: knowledgeTopK });
+  const contextBlock = subQuestionChecklist
+    ? `${baseContextBlock}\n\n${subQuestionChecklist}`
+    : baseContextBlock;
 
   /* The ordered fleet for THIS question: the dominant task's preferred order
      first, then every other configured provider (health-aware). One shared
@@ -897,6 +921,29 @@ export async function runCollaborativeAnalysis({
       if (finalRole?.ok) analyses.push(finalRole);
 
       /*
+       * ─── NUMERIC EVIDENCE AUDIT (deterministic, no extra call) ─────────────
+       * Every meaningful number in the draft is checked against the evidence
+       * the draft was allowed to use: live context, verified knowledge, cited
+       * sources, and the analysts' own work. The synthesiser AND the verifier
+       * are deliberately excluded from the corpus — otherwise the draft (or a
+       * reviewer's aside) would source itself and the audit would always be
+       * clean. The report never edits the text: the draft's findings go to the
+       * reviewer below, and the FINAL text is re-audited for the reply.
+       */
+      const evidenceCorpus = () => buildEvidenceCorpus({
+        context,
+        knowledge,
+        sources: result.sources,
+        analyses: analyses.filter((a) => a.ok
+          && a.role !== AI_ROLES.FINAL_ANSWER_AI
+          && a.role !== AI_ROLES.VERIFICATION_AI
+          && a.role !== 'critique')
+      });
+      const draftAudit = modeProfile.selfCritique && !result.degraded
+        ? auditNumbers(result.answer, evidenceCorpus())
+        : null;
+
+      /*
        * ─── ADVERSARIAL SELF-REVIEW (smartest mode) ───────────────────────────
        * One bounded extra call, on a DIFFERENT seat, that receives the draft
        * and the same evidence block and returns a repaired answer. It is
@@ -910,9 +957,19 @@ export async function runCollaborativeAnalysis({
         const remaining = deadlineMs - (Date.now() - startedAt);
         if (draft.length >= 80 && remaining > 2500) {
           const critiqueBudget = Math.min(7000, remaining - 800);
+          /*
+           * Deterministic completeness check on the draft: a part the draft
+           * never touches is handed to the reviewer by name, so "the answer
+           * dropped half the question" is caught without a second model call.
+           */
+          const draftCoverage = subQuestions.length >= 2
+            ? assessQuestionCoverage(subQuestions, draft)
+            : { covered: [], uncovered: [] };
+          const unansweredBlock = renderUnansweredParts(draftCoverage.uncovered, locale);
+          const unsourcedBlock = renderUnsourcedBlock(draftAudit);
           const criticRole = {
             role: AI_ROLES.VERIFICATION_AI,
-            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}`,
+            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}`,
             contextBlock: '',
             locale,
             deps: D,
@@ -964,6 +1021,38 @@ export async function runCollaborativeAnalysis({
       result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale });
       result.degraded = true;
     }
+  }
+
+  /*
+   * Publish the completeness result on the FINAL text the user reads (the
+   * adversarial review may have repaired it). Deterministic keyword check:
+   * it can only ever report a part as unanswered, never edit the answer.
+   */
+  /*
+   * The audit published in the reply describes the text the user actually
+   * reads — after the adversarial review had its chance to fix or withdraw a
+   * figure. `collaboration.critique` says whether it had to.
+   */
+  if (modeProfile.selfCritique && !result.degraded) {
+    result.numericAudit = auditNumbers(result.answer, buildEvidenceCorpus({
+      context,
+      knowledge,
+      sources: result.sources,
+      analyses: analyses.filter((a) => a.ok
+        && a.role !== AI_ROLES.FINAL_ANSWER_AI
+        && a.role !== AI_ROLES.VERIFICATION_AI
+        && a.role !== 'critique')
+    }));
+  }
+
+  if (subQuestions.length >= 2 && !result.degraded) {
+    const coverage = assessQuestionCoverage(subQuestions, result.answer);
+    result.subQuestions = {
+      parts: subQuestions,
+      covered: coverage.covered,
+      uncovered: coverage.uncovered,
+      complete: coverage.uncovered.length === 0
+    };
   }
 
   /* ---- Stage 3-4: compare + verify ---- */
