@@ -63,6 +63,18 @@ function numberValue(raw) {
   return Number.isFinite(value) ? value : null;
 }
 
+/** First PRICE-like number in a fragment (percentages are sizes, not levels). */
+function priceBefore(fragment, exclude = null) {
+  const re = /(\d[\d.,]*)(\s*(?:٪|%|درصد))?/g;
+  let m;
+  while ((m = re.exec(fragment)) !== null) {
+    if (m[2]) continue; // a percentage, not a price
+    const value = numberValue(m[1]);
+    if (value != null && value >= 100 && value !== exclude) return value;
+  }
+  return null;
+}
+
 const ENTRY_RE = /(?:ورود|خرید|بخرم|لانگ|entry|buy|long)/i;
 const EXIT_RE = /(?:فروش|بفروشم|شورت|short|sell)/i;
 const STOP_RE = /(?:حد\s*ضرر|استاپ|stop[-\s]?loss|stop)/i;
@@ -79,9 +91,7 @@ function stopSideViolations(text) {
     if (!stopMatch) continue;
     const stop = numberValue(stopMatch[1]);
     if (stop == null) continue;
-    const beforeStop = sentence.slice(0, stopMatch.index);
-    const candidates = [...beforeStop.matchAll(/(\d[\d.,]*)/g)].map((m) => numberValue(m[1]));
-    const entry = candidates.find((v) => v != null && v >= 10 && v !== stop);
+    const entry = priceBefore(sentence.slice(0, stopMatch.index), stop);
     if (entry == null) continue;
     if (isLong && stop >= entry) {
       out.push({ id: 'stop_on_wrong_side', detail: `long entry ${entry} with stop ${stop} — the stop is not below the entry` });
@@ -164,6 +174,70 @@ function riskBudgetViolations(text) {
   return [];
 }
 
+/*
+ * Plan-level risk: every leg that can hit its stop at once. 40% with an 8% stop
+ * plus 30% with a 10% stop is a 6.2% portfolio loss at the stops — which is a
+ * different number from 3.2% and 3% seen separately, and it is the number that
+ * has to fit the drawdown the user actually agreed to.
+ */
+function portfolioRiskViolations(text) {
+  const stated = text.match(/(?:حداکثر\s*(?:افت|ضرر)|max(?:imum)?\s*(?:drawdown|loss))\D{0,12}(\d+(?:\.\d+)?)\s*(?:٪|%|درصد)?/i);
+  const budgetPct = stated ? Number(stated[1]) : null;
+  if (budgetPct == null || !(budgetPct > 0)) return [];
+  let total = 0;
+  let legs = 0;
+  /*
+   * Legs are pairs: a size% and the stop% that follows it, in order. Reading
+   * them as "one leg per sentence" collapsed a two-leg plan into one and hid
+   * exactly the aggregate this check exists for.
+   */
+  const legRe = /(\d+(?:\.\d+)?)\s*(?:٪|%|درصد)[^%٪]{0,80}?(?:حد\s*ضرر|استاپ|stop[\s-]?loss|stop)\D{0,10}(\d+(?:\.\d+)?)\s*(?:٪|%|درصد)/gi;
+  let m;
+  while ((m = legRe.exec(text)) !== null) {
+    const size = Number(m[1]);
+    const stopPct = Number(m[2]);
+    if (!(size > 0 && size <= 100) || !(stopPct > 0 && stopPct <= 100)) continue;
+    total += (size * stopPct) / 100;
+    legs += 1;
+  }
+  if (legs < 2) return [];
+  return total > budgetPct * 1.1
+    ? [{
+      id: 'portfolio_risk_exceeds_budget',
+      detail: `${legs} legs lose ${Math.round(total * 100) / 100}% of capital if every stop is hit, above the stated ${budgetPct}% maximum loss`
+    }]
+    : [];
+}
+
+/*
+ * Reward-to-risk. A plan that risks 5,000 to make 2,000 is a losing strategy
+ * even when every level is "correct"; the ratio is arithmetic once entry, stop
+ * and target are in the same sentence.
+ */
+function riskRewardViolations(text) {
+  for (const sentence of sentenceSplit(text)) {
+    if (!STOP_RE.test(sentence)) continue;
+    const targetMatch = sentence.match(/(?:هدف\s*قیمتی|هدف|تارگت|take[\s-]?profit|target)\D{0,10}(\d[\d.,]*)/i);
+    const stopMatch = sentence.match(/(?:حد\s*ضرر|استاپ|stop[\s-]?loss|stop)\D{0,10}(\d[\d.,]*)/i);
+    if (!targetMatch || !stopMatch) continue;
+    const stop = numberValue(stopMatch[1]);
+    const target = numberValue(targetMatch[1]);
+    const entry = priceBefore(sentence.slice(0, stopMatch.index), stop);
+    if (entry == null || stop == null || target == null) continue;
+    const risk = Math.abs(entry - stop);
+    const reward = Math.abs(target - entry);
+    if (risk <= 0 || reward <= 0) continue;
+    const rr = Math.round((reward / risk) * 100) / 100;
+    if (rr < 1) {
+      return [{
+        id: 'risk_reward_below_1',
+        detail: `entry ${entry}, stop ${stop}, target ${target}: risking ${risk} to make ${reward} is a reward/risk of ${rr} — not a plan worth taking`
+      }];
+    }
+  }
+  return [];
+}
+
 /**
  * Check a strategy draft against its own frame.
  * @returns {{schema, violations:Array<{id,detail}>, clean:boolean, checked:string[]}}
@@ -175,13 +249,15 @@ export function checkPlanArithmetic(text, frame = null) {
     ...stopSideViolations(body),
     ...leverageViolations(body, frame),
     ...amountViolations(body, frame),
-    ...riskBudgetViolations(body)
+    ...riskBudgetViolations(body),
+    ...portfolioRiskViolations(body),
+    ...riskRewardViolations(body)
   ];
   return {
     schema: STRATEGY_ARITHMETIC_SCHEMA,
     /* What this check can see. Stated so a caller never reads `clean` as a
        guarantee about facts the text did not contain. */
-    checked: ['allocations', 'stop_side', 'leverage', 'position_size', 'risk_budget'],
+    checked: ['allocations', 'stop_side', 'leverage', 'position_size', 'risk_budget', 'portfolio_risk', 'reward_to_risk'],
     violations,
     clean: violations.length === 0
   };

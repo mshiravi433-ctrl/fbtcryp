@@ -29,6 +29,7 @@
  */
 
 import { FEE_BPS } from '../src/lib/feeBps.js';
+import { normalizeDigits } from './aiEvidenceAudit.js';
 import { DEFAULT_POLICY_CAPS } from '../src/lib/intent-ai/permissions.js';
 
 export const STRATEGY_FRAME_SCHEMA = 'fbt.ai-strategy-frame.v1';
@@ -63,6 +64,62 @@ const STRATEGY_REQUEST_RE = /(استراتژی|استراتژي|برنامه[\s\
 
 export function detectStrategyRequest(message) {
   return STRATEGY_REQUEST_RE.test(String(message || ''));
+}
+
+/*
+ * ─── GOAL MATH ──────────────────────────────────────────────────────────────
+ * «۲۰٪ سود در ۶ ماه» is a number a professor turns into an obligation before
+ * anything else: 3.1% a month compounded, ~44% annualised, and after the
+ * round-trip fee the gross target is higher still. That arithmetic is exact,
+ * so it is computed here instead of being left to the model's intuition — and
+ * when the horizon or the target is missing, it is a named gap.
+ */
+const WORD_NUMBERS = { 'یک': 1, 'دو': 2, 'سه': 3, 'چهار': 4, 'پنج': 5, 'شش': 6, 'شیش': 6, 'هفت': 7, 'هشت': 8, 'نه': 9, 'ده': 10, 'یازده': 11, 'دوازده': 12, 'هجده': 18, 'بیست': 20, 'بیست و چهار': 24 };
+
+function wordNumbersToDigits(text) {
+  let out = text;
+  /* Longest first, and never inside another word: «دوازده» must not become
+     «دواز» + «ده». */
+  const entries = Object.entries(WORD_NUMBERS).sort((a, b) => b[0].length - a[0].length);
+  for (const [word, value] of entries) {
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(
+      new RegExp(`(?<![\\p{L}])${escaped}\\s*(?=(?:ماه|ماهه|سال|هفته|روز|month|year|week|day))`, 'gu'),
+      `${value} `
+    );
+  }
+  return out;
+}
+
+function parseGoal(message, feeRoundTripPct) {
+  const text = wordNumbersToDigits(normalizeDigits(String(message || '')).replace(/\u200c/g, ''));
+  const targetMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:٪|%|درصد)\s*(?:سود|بازده|رشد|سالیانه|profit|return|gain)/i)
+    || text.match(/(?:سود|بازده|رشد|profit|return|gain)\D{0,20}(\d+(?:\.\d+)?)\s*(?:٪|%|درصد)/i)
+    || text.match(/(?:هدف|target)\D{0,12}(\d+(?:\.\d+)?)\s*(?:٪|%|درصد)/i);
+  const horizonMatch = text.match(/(\d+)\s*(ماه|ماهه|ماه‌|سال|هفته|روز|month|months|year|years|week|weeks|day|days)/i);
+  const targetPct = targetMatch ? Number(targetMatch[1]) : null;
+  let months = null;
+  if (horizonMatch) {
+    const n = Number(horizonMatch[1]);
+    const unit = horizonMatch[2].toLowerCase();
+    if (/سال|year/.test(unit)) months = n * 12;
+    else if (/هفته|week/.test(unit)) months = (n * 7) / 30.44;
+    else if (/روز|day/.test(unit)) months = n / 30.44;
+    else months = n;
+  }
+  const usable = targetPct != null && targetPct > 0 && targetPct <= 1000 && months != null && months > 0 && months <= 600;
+  if (!usable) return { targetPct: usable ? targetPct : null, months: usable ? months : null, gaps: true };
+  const growth = 1 + targetPct / 100;
+  const requiredMonthlyPct = round((growth ** (1 / months) - 1) * 100, 2);
+  const requiredAnnualPct = round((growth ** (12 / months) - 1) * 100, 2);
+  return {
+    targetPct,
+    months: round(months, 2),
+    requiredMonthlyPct,
+    requiredAnnualPct,
+    grossTargetPct: round(targetPct + feeRoundTripPct, 2),
+    gaps: false
+  };
 }
 
 function detectRiskBand(message) {
@@ -120,6 +177,11 @@ export function buildStrategyFrame({ context = {}, message = '' } = {}) {
   const feeBps = Number(FEE_BPS) || 0;
   const feeRoundTripPct = round((feeBps * 2) / 100, 2);
 
+  const parsedGoal = parseGoal(message, feeRoundTripPct);
+  const goal = parsedGoal && !parsedGoal.gaps ? parsedGoal : null;
+  if (!goal) gaps.push('goal');
+  if (goal) delete goal.gaps;
+
   return {
     schema: STRATEGY_FRAME_SCHEMA,
     capitalUsd,
@@ -128,6 +190,7 @@ export function buildStrategyFrame({ context = {}, message = '' } = {}) {
     concentration,
     priceSymbols: priceMap,
     riskBand,
+    goal,
     feeBps,
     feeRoundTripPct,
     policy: {
@@ -158,6 +221,12 @@ export function renderStrategyFrame(frame) {
   if (frame.riskBand) lines.push(`- the user's stated risk posture: ${frame.riskBand} (do not re-label it; state the drawdown assumption it implies)`);
   lines.push(`- platform fee: ${frame.feeBps} bps per side → ${frame.feeRoundTripPct}% round trip. Any leg must clear this before it is worth doing.`);
   lines.push(`- policy caps that a plan may not exceed: leverage ≤ ${frame.policy.maxLeverage}×, slippage ≤ ${frame.policy.maxSlippagePct}%, single transaction ≤ $${frame.policy.maxTransactionUsd}`);
+  if (frame.goal) {
+    lines.push(`- GOAL MATH (computed from the user's own words): +${frame.goal.targetPct}% over ${frame.goal.months} months = `
+      + `${frame.goal.requiredMonthlyPct}%/month compounded ≈ ${frame.goal.requiredAnnualPct}% annualised; `
+      + `after a ${frame.feeRoundTripPct}% round trip the strategy must earn ≈ ${frame.goal.grossTargetPct}% gross. `
+      + 'State plainly whether the evidence supports that, and do not round the obligation away.');
+  }
   if (frame.gaps.length) {
     lines.push(`- NOT READ (do not guess these; name them as what the plan is missing): ${frame.gaps.join(', ')}`);
   }

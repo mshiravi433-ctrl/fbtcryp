@@ -2414,6 +2414,15 @@ router.post('/chat', async (req, res) => {
           concentration: collaboration.strategy.frame?.concentration ?? null,
           feeRoundTripPct: collaboration.strategy.frame?.feeRoundTripPct ?? null,
           gaps: Array.isArray(collaboration.strategy.frame?.gaps) ? collaboration.strategy.frame.gaps : [],
+          /* The goal turned into an obligation: required monthly/annual return
+             and the fee-adjusted gross target. null when the user stated none. */
+          goal: collaboration.strategy.frame?.goal ? {
+            targetPct: collaboration.strategy.frame.goal.targetPct,
+            months: collaboration.strategy.frame.goal.months,
+            requiredMonthlyPct: collaboration.strategy.frame.goal.requiredMonthlyPct,
+            requiredAnnualPct: collaboration.strategy.frame.goal.requiredAnnualPct,
+            grossTargetPct: collaboration.strategy.frame.goal.grossTargetPct
+          } : null,
           rubricScore: collaboration.strategy.rubric?.score ?? null,
           rubricMissing: Array.isArray(collaboration.strategy.rubric?.missing) ? collaboration.strategy.rubric.missing : [],
           /* Arithmetic of the FINAL text: allocations, stop side, leverage,
