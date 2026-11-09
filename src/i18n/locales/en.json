@@ -8786,6 +8786,7 @@
     "desk": {
       "title": "{{ticker}} desk",
       "close": "Close",
+      "workspace": "Market, risk and opportunity",
       "tabs": {
         "ai": "AI",
         "risk": "Risk engine",

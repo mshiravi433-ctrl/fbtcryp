@@ -459,10 +459,12 @@ export default function DydxTokenDesk({
   entryPrice = null,
   onApplyLeverage = null,
   defaultOpen = false,
+  standalone = false,
   testId = 'dydx-desk'
 }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(Boolean(defaultOpen));
+  const [open, setOpen] = useState(Boolean(defaultOpen || standalone));
+  const DeskHeader = standalone ? 'div' : 'button';
   const [tab, setTab] = useState('ai');
   const [candles, setCandles] = useState([]);
   const [book, setBook] = useState(null);
@@ -564,23 +566,23 @@ export default function DydxTokenDesk({
       data-testid={testId}
     >
       <div className="dtd-topline">
-      <button
-        type="button"
+      <DeskHeader
+        type={standalone ? undefined : "button"}
         className="dtd-head"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        aria-expanded={standalone ? undefined : open}
+        onClick={standalone ? undefined : () => setOpen((v) => !v)}
         data-testid={`${testId}-toggle`}
       >
         <span className="dtd-head-mark" aria-hidden="true"><IconSparkle width={15} height={15} /></span>
         <span className="dtd-head-text">
           <span className="dtd-head-title">{t('dydx.desk.title', { ticker: String(ticker || '—').replace('-USD', '') })}</span>
-          <span className="dtd-head-sub">{open ? t('dydx.desk.close') : verdictLabel}</span>
+          <span className="dtd-head-sub">{standalone ? t('dydx.desk.workspace') : open ? t('dydx.desk.close') : verdictLabel}</span>
         </span>
         {market?.oraclePrice > 0 && <span className="mono dtd-head-price">${fmtPrice(market.oraclePrice)}</span>}
-        <motion.span className="dtd-chev" animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.18 }} aria-hidden="true">
+        {!standalone && <motion.span className="dtd-chev" animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.18 }} aria-hidden="true">
           <IconChevronRight width={15} height={15} />
-        </motion.span>
-      </button>
+        </motion.span>}
+      </DeskHeader>
       {open && <button type="button" className="dtd-refresh" onClick={() => setNonce((n) => n + 1)}
         disabled={loading} title={t('dydx.desk.refresh')} aria-label={t('dydx.desk.refresh')}
         data-testid={`${testId}-refresh`}><IconRefresh width={17} height={17} /></button>}
@@ -604,6 +606,17 @@ export default function DydxTokenDesk({
                     type="button"
                     role="tab"
                     aria-selected={tab === tb.id}
+                    tabIndex={tab === tb.id ? 0 : -1}
+                    onKeyDown={(event) => {
+                      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                      event.preventDefault();
+                      const rtl = getComputedStyle(event.currentTarget).direction === 'rtl';
+                      const step = (event.key === 'ArrowRight' ? 1 : -1) * (rtl ? -1 : 1);
+                      const index = TABS.findIndex((item) => item.id === tab);
+                      const next = event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1 : (index + step + TABS.length) % TABS.length;
+                      setTab(TABS[next].id);
+                      event.currentTarget.parentElement?.querySelectorAll('[role="tab"]')[next]?.focus();
+                    }}
                     className={tab === tb.id ? 'active' : ''}
                     onClick={() => setTab(tb.id)}
                     style={{ isolation: 'isolate' }}

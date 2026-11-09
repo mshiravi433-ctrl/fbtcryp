@@ -768,24 +768,24 @@ export default function Dydx({ embedded = false } = {}) {
         </div>
       )}
 
-      {mobile && market && typeof document !== 'undefined' && createPortal(
+      {mobile && typeof document !== 'undefined' && createPortal(
         <nav className="dydx-mobile-dock" aria-label={t('dydx.mobile.actions')} data-testid="dydx-mobile-dock">
-          {!dydxAddress ? (
-            <button type="button" className="dydx-dock-connect" disabled={busy} onClick={connect} data-testid="dydx-mobile-connect">{busy ? t('common.loading') : t('dydx.connect')}</button>
-          ) : <>
-            <button type="button" className="dydx-dock-long" aria-pressed={side === 'buy'} onClick={() => { setSide('buy'); ticketRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }} data-testid="dydx-mobile-long">{t('dydx.buy')}</button>
-            <button type="button" className="dydx-dock-short" aria-pressed={side === 'sell'} onClick={() => { setSide('sell'); ticketRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }} data-testid="dydx-mobile-short">{t('dydx.sell')}</button>
-          </>}
-          <button type="button" className="dydx-dock-desk" onClick={() => setDeskOpen(true)} aria-label={t('dydx.mobile.openDesk')} data-testid="dydx-mobile-desk-open">
-            <IconSparkle width={19} height={19} /><span>{t('dydx.mobile.desk')}</span>
+          <button type="button" className="dydx-dock-long" aria-pressed={side === 'buy'} onClick={() => { setSide('buy'); ticketRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }} data-testid="dydx-mobile-long">
+            <span className="dydx-dock-arrow" aria-hidden="true">↗</span><span>{t('dydx.buy')}</span>
+          </button>
+          <button type="button" className="dydx-dock-desk" disabled={!market} onClick={() => setDeskOpen(true)} aria-label={t('dydx.mobile.openDesk')} data-testid="dydx-mobile-desk-open">
+            <span className="dydx-dock-orb"><IconSparkle width={21} height={21} /></span><span>{t('dydx.mobile.desk')}</span>
+          </button>
+          <button type="button" className="dydx-dock-short" aria-pressed={side === 'sell'} onClick={() => { setSide('sell'); ticketRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }} data-testid="dydx-mobile-short">
+            <span className="dydx-dock-arrow" aria-hidden="true">↘</span><span>{t('dydx.sell')}</span>
           </button>
         </nav>, document.body
       )}
-      <Sheet open={mobile && deskOpen && Boolean(market)} onClose={() => setDeskOpen(false)} anchor="bottom" size="lg" className="dydx-desk-sheet" title={t('dydx.desk.title', { ticker: String(ticker || '—').replace('-USD', '') })} testId="dydx-mobile-desk-sheet">
+      <Sheet open={mobile && deskOpen && Boolean(market)} onClose={() => setDeskOpen(false)} size="lg" className="dydx-desk-sheet" layerClassName="dydx-desk-layer" title={t('dydx.desk.title', { ticker: String(ticker || '—').replace('-USD', '') })} testId="dydx-mobile-desk-sheet">
         {mobile && deskOpen && market && <DydxTokenDesk key={ticker} ticker={ticker} market={market} side={side}
           notionalUsd={notional} collateralUsd={marginRequired} availableBalanceUsd={freeCollateralUsd}
           leverage={effectiveLeverage ?? leverage} entryPrice={entryPrice} onApplyLeverage={applyLeverage}
-          defaultOpen testId="dydx-mobile-desk" />}
+          standalone testId="dydx-mobile-desk" />}
       </Sheet>
       <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
       <Sheet open={reviewing} onClose={() => !busy && setReviewing(false)} title={t('dydx.confirmTitle')}>

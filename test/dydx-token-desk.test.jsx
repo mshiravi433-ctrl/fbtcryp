@@ -112,6 +112,8 @@ let CANDLES = [];
 let CANDLE_LIVE = true;
 let BOOK = { live: true, bestBid: 99, bestAsk: 101, spreadBps: 200 };
 let BOOK_CALLS = 0;
+let CONNECT_CALLS = 0;
+let MARKETS_AVAILABLE = true;
 const ORDERS = [];
 let AI_ANSWER = { ok: true, text: 'این یک پاسخ آزمایشی است.', provider: 'openrouter', providerName: 'OpenRouter', model: 'test/model' };
 const AI_CALLS = [];
@@ -159,11 +161,11 @@ vi.mock('../src/lib/dydx', async () => {
   const actual = await vi.importActual('../src/lib/dydx');
   return {
     ...actual,
-    getDydxMarkets: async () => ({ markets: [marketRow('BTC'), marketRow('ETH')], live: true }),
+    getDydxMarkets: async () => ({ markets: MARKETS_AVAILABLE ? [marketRow('BTC'), marketRow('ETH')] : [], live: MARKETS_AVAILABLE }),
     getDydxSubaccount: async () => ({ account: { subaccount: { equity: String(EQUITY), freeCollateral: FREE_COLLATERAL == null ? null : String(FREE_COLLATERAL) } }, live: true }),
     getDydxOrderbook: async () => { BOOK_CALLS += 1; return BOOK; },
     getDydxCandles: async () => ({ candles: CANDLES, live: CANDLE_LIVE, ticker: 'BTC-USD', resolution: '1HOUR' }),
-    connectDydx: async () => ({ address: 'dydx1testderivedaddress00000000000000000000000' }),
+    connectDydx: async () => { CONNECT_CALLS += 1; return { address: 'dydx1testderivedaddress00000000000000000000000' }; },
     disconnectDydx: () => {},
     placeDydxOrder: async (o) => { ORDERS.push(o); return { hash: 'DYDXHASH1', clientId: 1 }; }
   };
@@ -207,6 +209,8 @@ beforeEach(() => {
   CANDLE_LIVE = true;
   BOOK = { live: true, bestBid: 99, bestAsk: 101, spreadBps: 200 };
   BOOK_CALLS = 0;
+  CONNECT_CALLS = 0;
+  MARKETS_AVAILABLE = true;
   ORDERS.length = 0;
   AI_CALLS.length = 0;
   AI_ANSWER = { ok: true, text: 'این یک پاسخ آزمایشی است.', provider: 'openrouter', providerName: 'OpenRouter', model: 'test/model' };
@@ -483,21 +487,54 @@ describe('dYdX mobile trading dock', () => {
   });
   afterEach(() => { window.matchMedia = originalMatchMedia; });
 
-  it('opens a dismissible desk sheet from the center and connects from the dock', async () => {
+  it('always shows long and short without connecting or submitting an order', async () => {
     render(<Dydx embedded />);
-    expect(await screen.findByTestId('dydx-mobile-dock')).toBeTruthy();
-    expect(screen.queryByTestId('dydx-token-desk')).toBeNull();
+    await screen.findByTestId('dydx-mobile-dock');
+    expect(document.body.classList.contains('dydx-screen')).toBe(true);
+    expect(screen.queryByTestId('dydx-mobile-connect')).toBeNull();
+    expect(screen.getByTestId('dydx-mobile-long').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByTestId('dydx-mobile-short'));
+    expect(screen.getByTestId('dydx-mobile-short').getAttribute('aria-pressed')).toBe('true');
+    expect(CONNECT_CALLS).toBe(0);
+    expect(ORDERS).toHaveLength(0);
+    cleanup();
+    expect(document.body.classList.contains('dydx-screen')).toBe(false);
+  });
+
+  it('opens the full-screen desk and supports switching tabs and closing', async () => {
+    render(<Dydx embedded />);
+    await screen.findByTestId('dydx-mobile-dock');
     fireEvent.click(screen.getByTestId('dydx-mobile-desk-open'));
-    expect(await screen.findByTestId('dydx-mobile-desk-sheet')).toBeTruthy();
-    expect(await screen.findByTestId('dydx-mobile-desk-tab-ask')).toBeTruthy();
-    fireEvent.click(screen.getByTestId('dydx-mobile-desk-tab-ask'));
+    const sheet = await screen.findByTestId('dydx-mobile-desk-sheet');
+    expect(sheet.getAttribute('aria-modal')).toBe('true');
+    expect(sheet.parentElement.classList.contains('dydx-desk-layer')).toBe(true);
+    expect(sheet.getAttribute('aria-label')).toContain('BTC');
+    const first = screen.getByTestId('dydx-mobile-desk-tab-ai');
+    first.focus();
+    fireEvent.keyDown(first, { key: 'End' });
+    expect(screen.getByTestId('dydx-mobile-desk-tab-ask').getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(screen.getByTestId('dydx-mobile-desk-tab-ask'));
     expect(screen.getByTestId('dydx-desk-ask').parentElement.hidden).toBe(false);
     fireEvent.click(screen.getByTestId('dydx-mobile-desk-sheet-close'));
     await waitFor(() => expect(screen.queryByTestId('dydx-mobile-desk-sheet')).toBeNull());
-    fireEvent.click(screen.getByTestId('dydx-mobile-connect'));
-    await screen.findByTestId('dydx-mobile-short');
+    expect(screen.getByTestId('dydx-mobile-dock')).toBeTruthy();
+  });
+
+  it('keeps the dock on screen if markets are unavailable, without inventing a desk', async () => {
+    MARKETS_AVAILABLE = false;
+    render(<Dydx embedded />);
+    await screen.findByText(fa.dydx.marketUnavailable);
+    expect(screen.getByTestId('dydx-mobile-desk-open').disabled).toBe(true);
     fireEvent.click(screen.getByTestId('dydx-mobile-short'));
     expect(screen.getByTestId('dydx-mobile-short').getAttribute('aria-pressed')).toBe('true');
-    expect(ORDERS).toHaveLength(0);
+    expect(CONNECT_CALLS).toBe(0);
+  });
+
+  it('scopes full-screen and global navigation replacement to the mobile dYdX screen', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/styles/dydx-token-desk.css'), 'utf8');
+    expect(css).toContain('body.dydx-screen .bottom-nav');
+    expect(css).toContain('body.dydx-screen .nav-centre');
+    expect(css).toContain('.dydx-desk-layer .dydx-desk-sheet');
+    expect(css).toContain('height: 100dvh');
   });
 });
