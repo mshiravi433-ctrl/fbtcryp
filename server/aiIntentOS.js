@@ -2464,6 +2464,16 @@ router.post('/chat', async (req, res) => {
           relationship: collaboration.socialRead.relationship || null,
           signals: Array.isArray(collaboration.socialRead.signals) ? collaboration.socialRead.signals.slice(0, 8) : []
         } : null,
+        /* What the turn was DOING and whether the answer matched the ask:
+           correction vs follow-up vs question, and the shape (why / how much /
+           which) the answer had to satisfy. null when the turn was not gated. */
+        dialogue: collaboration?.dialogue ? {
+          act: collaboration.dialogue.act,
+          askShape: collaboration.dialogue.askShape,
+          referent: collaboration.dialogue.referent,
+          issues: Array.isArray(collaboration.dialogue.issues) ? collaboration.dialogue.issues : [],
+          compliant: collaboration.dialogue.compliant === true
+        } : null,
         source: resolvedIntelligence.source,
         requested: resolvedIntelligence.requested,
         rejected: resolvedIntelligence.rejected,

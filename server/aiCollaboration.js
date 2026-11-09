@@ -57,6 +57,12 @@ import { auditNumbers, buildEvidenceCorpus, renderUnsourcedBlock } from './aiEvi
 import { buildClaimLedger, renderClaimLedger } from './aiClaimLedger.js';
 import { selectEconomicLenses, renderEconomistLens, economistPersona } from './aiEconomistLens.js';
 import { readSocialContext, renderSocialBrief } from '../src/lib/intent-ai/os/conversation/socialRead.js';
+import {
+  readDialogue,
+  renderDialogueBrief,
+  checkDialogueCompliance,
+  renderDialogueDeficit
+} from '../src/lib/intent-ai/os/conversation/dialogueRead.js';
 import { checkPlanArithmetic, renderStrategyViolations, isPlanParameter } from './aiStrategyPlanCheck.js';
 import { assessEvidence, evaluateDecision, renderDecisionContract, renderDecisionDeficit } from './aiDecisionGate.js';
 import {
@@ -316,7 +322,7 @@ const ROLE_TASK = {
   [AI_ROLES.FINAL_ANSWER_AI]: 'reasoning'
 };
 
-async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '', decisionBrief = '' }) {
+async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '', decisionBrief = '', dialogueBrief = '' }) {
   /*
    * ─── DEEP REASONING CONTRACT (smartest mode only) ─────────────────────────
    * The role prompts are shared by every mode, so the extra discipline lives
@@ -343,7 +349,7 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
     /* The economist's lens is a reasoning contract, not a costume: it rides on
        the specialists and the synthesiser, never on the reviewer (whose job is
        to break the draft, not to reason about the economy). */
-    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}`;
+    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}${dialogueBrief ? `\n${dialogueBrief}` : ''}`;
   /*
    * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
    * This line used to be a ternary: Persian or English. Everything a Turkish,
@@ -728,6 +734,17 @@ export async function runCollaborativeAnalysis({
     : null;
   const socialBrief = renderSocialBrief(socialRead);
   /*
+   * ─── DIALOGUE READ (smartest mode) ─────────────────────────────────────────
+   * The social read says WHO is asking; this says WHAT the turn is doing —
+   * a correction, an elliptical follow-up, or a question whose shape (why /
+   * how much / which) the answer must match. A distress turn is exempt: it is
+   * not a question to be shaped, and the safety brief already governs it.
+   */
+  const dialogueRead = mode === 'max' && plan.level >= 2 && !socialRead?.distress
+    ? readDialogue({ message, locale, history: context?.conversationSummary || '', social: socialRead })
+    : null;
+  const dialogueBrief = renderDialogueBrief(dialogueRead);
+  /*
    * ─── STRATEGY FRAME + RUBRIC (smartest mode, strategy turns) ───────────────
    * A plan may stand on the user's real capital, their actual weights, the
    * platform fee and the policy caps — and on nothing else. Everything the
@@ -811,6 +828,10 @@ export async function runCollaborativeAnalysis({
     /* The social read of the message (smartest mode): register, tone, the need
        behind the words, and how much was left unsaid. null otherwise. */
     socialRead,
+    /* What the turn is DOING (smartest mode): the speech act (correction,
+       follow-up, question), the ask shape, and whether the final answer matched
+       it. null outside the smartest mode. */
+    dialogue: null,
     /* Strategy turns in the smartest mode: the computed frame the plan stood on
        and the rubric result for the final answer. null otherwise. */
     strategy: null,
@@ -938,7 +959,7 @@ export async function runCollaborativeAnalysis({
        analyses are genuinely different providers, not one model twice. */
     const roles = pickAnalysisRoles(plan, 2);
     const settled = await withDeadline(
-      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief }))),
+      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief, dialogueBrief }))),
       []
     );
     analyses.push(...(settled || []).filter(Boolean));
@@ -1008,7 +1029,8 @@ export async function runCollaborativeAnalysis({
         economistLens,
         socialBrief,
         strategyBrief,
-        decisionBrief
+        decisionBrief,
+        dialogueBrief
       }), null);
       if (verifier?.ok) analyses.push(verifier);
     }
@@ -1069,7 +1091,8 @@ export async function runCollaborativeAnalysis({
         economistLens,
         socialBrief,
         strategyBrief,
-        decisionBrief
+        decisionBrief,
+        dialogueBrief
       }), null);
       result.answer = finalRole?.ok
         ? finalRole.answer
@@ -1096,6 +1119,16 @@ export async function runCollaborativeAnalysis({
        * re-checks the FINAL text.
        */
       const draftArithmetic = strategyFrame ? checkPlanArithmetic(result.answer, strategyFrame) : null;
+      /*
+       * ─── DIALOGUE COMPLIANCE ON THE DRAFT ─────────────────────────────────
+       * Did the draft answer the question that was asked? A corrected claim
+       * that is restated, a follow-up answered as a new topic, a «چرا» answered
+       * with a checklist, a «چقدر» answered with «بستگی دارد» — each is handed
+       * to the reviewer as a MUST-FIX. The final text is re-checked below.
+       */
+      const draftDialogue = dialogueRead
+        ? checkDialogueCompliance({ read: dialogueRead, answer: result.answer })
+        : null;
       /*
        * ─── DECISION VERDICT ON THE DRAFT ─────────────────────────────────────
        * Re-score the evidence now that the analyses, the verifier and the claim
@@ -1167,9 +1200,10 @@ export async function runCollaborativeAnalysis({
           const strategyGapsBlock = renderStrategyGaps(result.strategy?.rubric);
           const strategyArithmeticBlock = renderStrategyViolations(draftArithmetic);
           const decisionDeficitBlock = renderDecisionDeficit(result.decision);
+          const dialogueDeficitBlock = renderDialogueDeficit(draftDialogue);
           const criticRole = {
             role: AI_ROLES.VERIFICATION_AI,
-            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}`,
+            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}${dialogueDeficitBlock ? `\n\n${dialogueDeficitBlock}` : ''}`,
             contextBlock: '',
             locale,
             deps: D,
@@ -1284,6 +1318,25 @@ export async function runCollaborativeAnalysis({
       evidence: result.decision.evidence,
       answer: result.answer
     });
+  }
+
+  /*
+   * Re-check the dialogue contract on the FINAL text, and publish it: which act
+   * the turn was, which shape the question had, and whether the answer the user
+   * actually reads matched it.
+   */
+  if (dialogueRead) {
+    const finalDialogue = checkDialogueCompliance({ read: dialogueRead, answer: result.answer });
+    result.dialogue = {
+      schema: dialogueRead.schema,
+      act: dialogueRead.act,
+      askShape: dialogueRead.askShape,
+      applicable: finalDialogue.applicable,
+      signals: dialogueRead.signals,
+      referent: dialogueRead.referent?.resolvesTo || null,
+      issues: finalDialogue.issues.map((i) => i.id),
+      compliant: finalDialogue.compliant
+    };
   }
 
   /* Re-check the FINAL text: the reviewer may have fixed a figure. */
