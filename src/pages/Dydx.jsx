@@ -144,6 +144,7 @@ export default function Dydx({ embedded = false } = {}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [reviewing, setReviewing] = useState(false);
+  const [reviewedTicker, setReviewedTicker] = useState(null);
   const [result, setResult] = useState(null);
 
   useEffect(() => {
@@ -158,10 +159,12 @@ export default function Dydx({ embedded = false } = {}) {
     return () => { alive = false; clearInterval(id); };
   }, []);
 
-  const market = markets.find((m) => m.ticker === ticker) || markets[0];
+  // Settled markets are useful for existing positions, but never tradeable.
+  const activeMarkets = markets.filter((m) => m.status === 'ACTIVE');
+  const market = activeMarkets.find((m) => m.ticker === ticker);
   useEffect(() => {
-    if (market && !markets.some((m) => m.ticker === ticker)) setTicker(market.ticker);
-  }, [market, markets, ticker]);
+    if (!market && activeMarkets.length) setTicker(activeMarkets[0].ticker);
+  }, [market, activeMarkets]);
 
   /*
    * ─── THE NUMBERS BEHIND THE LEVERAGE CONTROL ────────────────────────────
@@ -295,6 +298,8 @@ export default function Dydx({ embedded = false } = {}) {
   };
 
   const submit = async () => {
+    // If a market is removed or changed while reviewing, require a new review.
+    if (!market || market.ticker !== reviewedTicker || market.status !== 'ACTIVE') return;
     setBusy(true);
     setError(null);
     try {
@@ -461,7 +466,7 @@ export default function Dydx({ embedded = false } = {}) {
         <p className="faint" style={{ marginTop: 9 }}>{t('dydx.connectNote')}</p>
       </motion.section>
 
-      {!markets.length ? <p className="notice" style={{ marginTop: 16 }}>{t('dydx.marketUnavailable')}</p> : (
+      {!activeMarkets.length ? <p className="notice" style={{ marginTop: 16 }}>{t(live ? 'dydx.noActiveMarkets' : 'dydx.marketUnavailable')}</p> : (
         <motion.section className="card dydx-ticket" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, width: '100%', boxSizing: 'border-box' }}>
           {!live && <p className="notice dydx-market-warning" style={{ marginBottom: 12 }}>{t('dydx.marketUnavailable')}</p>}
           <div className="dydx-market-column">
@@ -469,7 +474,7 @@ export default function Dydx({ embedded = false } = {}) {
           <ModernSelect
             value={market?.ticker || ''}
             onChange={setTicker}
-            options={markets.filter((m) => m.status === 'ACTIVE').map((m) => {
+            options={activeMarkets.map((m) => {
               const [base, quote] = m.ticker.split('-');
               return {
                 value: m.ticker,
@@ -484,8 +489,11 @@ export default function Dydx({ embedded = false } = {}) {
             title={t('dydx.market')}
             placeholder={market?.ticker || 'BTC-USD'}
             searchable
+            maxRender={activeMarkets.length}
             testId="dydx-market-select"
           />
+
+          <p className="dydx-market-count" data-testid="dydx-market-count">{t('dydx.marketCounts', { active: activeMarkets.length, total: markets.length })}</p>
 
           {/*
             ─── CANDLES + ON-DEVICE AI ──────────────────────────────────────
@@ -685,7 +693,7 @@ export default function Dydx({ embedded = false } = {}) {
           </div>
 
           {error && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t(`dydx.err.${error}`, { defaultValue: error })}</p>}
-          <button className={`btn ${side === 'buy' ? 'btn-success' : 'btn-danger'}`} disabled={busy || (Boolean(dydxAddress) && !canReview)} onClick={() => dydxAddress ? setReviewing(true) : connect()} style={{ width: '100%', minHeight: 48, marginTop: 12, borderRadius: 14, fontWeight: 800 }}>
+          <button className={`btn ${side === 'buy' ? 'btn-success' : 'btn-danger'}`} disabled={busy || (Boolean(dydxAddress) && !canReview)} onClick={() => dydxAddress ? (setReviewedTicker(market?.ticker), setReviewing(true)) : connect()} style={{ width: '100%', minHeight: 48, marginTop: 12, borderRadius: 14, fontWeight: 800 }}>
             {dydxAddress ? t('dydx.review') : t('dydx.connect')}
           </button>
           </div>
@@ -785,7 +793,7 @@ export default function Dydx({ embedded = false } = {}) {
           </span></div>
         </div>
         <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('dydx.confirmRisk')}</p>
-        <div className="row" style={{ gap: 10, marginTop: 12 }}><button className="btn btn-ghost" onClick={() => setReviewing(false)}>{t('common.cancel')}</button><button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? t('common.loading') : t('common.confirm')}</button></div>
+        <div className="row" style={{ gap: 10, marginTop: 12 }}><button className="btn btn-ghost" onClick={() => setReviewing(false)}>{t('common.cancel')}</button><button className="btn btn-primary" disabled={busy || !market || market.ticker !== reviewedTicker} onClick={submit}>{busy ? t('common.loading') : t('common.confirm')}</button></div>
       </Sheet>
       </div>
     </PageTransition>

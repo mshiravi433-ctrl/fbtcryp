@@ -45,6 +45,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 
 import SegIndicator from '../SegIndicator';
+import CoinLogo from '../CoinLogo';
 import FuturesAiRisk from './FuturesAiRisk';
 import { IconArrowUpRight, IconChevronRight, IconClock, IconRefresh, IconShield, IconSparkle, IconTrend } from '../Icons';
 import { getDydxCandles, getDydxOrderbook } from '../../lib/dydx';
@@ -571,11 +572,11 @@ export default function DydxTokenDesk({
 
   return (
     <motion.section
-      className={`card dtd-box ${open ? 'is-open' : ''}`}
+      className={`${standalone ? 'dtd-standalone' : 'card'} dtd-box ${open ? 'is-open' : ''}`}
       variants={{ hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0 } }}
       initial="hidden"
       animate="show"
-      style={{ marginTop: 12, width: '100%', boxSizing: 'border-box' }}
+      style={{ marginTop: standalone ? 0 : 12, width: '100%', boxSizing: 'border-box' }}
       data-testid={testId}
     >
       <div className="dtd-topline">
@@ -586,7 +587,7 @@ export default function DydxTokenDesk({
         onClick={standalone ? undefined : () => setOpen((v) => !v)}
         data-testid={`${testId}-toggle`}
       >
-        <span className="dtd-head-mark" aria-hidden="true"><IconSparkle width={15} height={15} /></span>
+        {standalone ? <span className="dtd-token-avatar" data-testid={`${testId}-token-logo`}><CoinLogo ticker={String(ticker || '').replace(/-USD$/, '')} px={44} priority /></span> : <span className="dtd-head-mark" aria-hidden="true"><IconSparkle width={15} height={15} /></span>}
         <span className="dtd-head-text">
           <span className="dtd-head-title">{t('dydx.desk.title', { ticker: String(ticker || '—').replace('-USD', '') })}</span>
           <span className="dtd-head-sub">{standalone ? t('dydx.desk.workspace') : open ? t('dydx.desk.close') : verdictLabel}</span>
@@ -612,6 +613,11 @@ export default function DydxTokenDesk({
             style={{ overflow: 'hidden' }}
           >
             <div className="dtd-body">
+              {standalone && <div className="dtd-market-snapshot" data-testid={`${testId}-snapshot`}>
+                <div><span>{t('dydx.desk.snapshot.volume')}</span><strong className="mono">{market?.volume24H == null ? '—' : fmtCompact(market.volume24H)}</strong></div>
+                <div><span>{t('dydx.desk.snapshot.funding')}</span><strong className="mono">{market?.nextFundingRate == null ? '—' : `${(market.nextFundingRate * 100).toFixed(6)}% / h`}</strong></div>
+                <div><span>{t('dydx.desk.snapshot.leverage')}</span><strong className="mono">{market?.maxLeverage == null ? '—' : `${market.maxLeverage}×`}</strong></div>
+              </div>}
               <div className="segmented dtd-tabs" role="tablist" aria-label={t('dydx.desk.title', { ticker: String(ticker || '—').replace('-USD', '') })} onTouchStart={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
                 {TABS.map((tb) => (
                   <button

@@ -96,8 +96,8 @@ vi.mock('../src/components/FuturesMarketChart', () => ({
 
 vi.mock('../src/components/ModernSelect', () => ({
   __esModule: true,
-  default: ({ value, onChange, options = [], testId }) => (
-    <select data-testid={testId} value={value} onChange={(e) => onChange(e.target.value)}>
+  default: ({ value, onChange, options = [], testId, maxRender }) => (
+    <select data-testid={testId} data-max-render={maxRender} value={value} onChange={(e) => onChange(e.target.value)}>
       {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   )
@@ -114,6 +114,7 @@ let BOOK = { live: true, bestBid: 99, bestAsk: 101, spreadBps: 200 };
 let BOOK_CALLS = 0;
 let CONNECT_CALLS = 0;
 let MARKETS_AVAILABLE = true;
+let EXTRA_MARKETS = [];
 let HISTORY_LIVE = true;
 let HISTORY_FILLS = [];
 let HISTORY_CALLS = [];
@@ -164,7 +165,7 @@ vi.mock('../src/lib/dydx', async () => {
   const actual = await vi.importActual('../src/lib/dydx');
   return {
     ...actual,
-    getDydxMarkets: async () => ({ markets: MARKETS_AVAILABLE ? [marketRow('BTC'), marketRow('ETH')] : [], live: MARKETS_AVAILABLE }),
+    getDydxMarkets: async () => ({ markets: MARKETS_AVAILABLE ? [marketRow('BTC'), marketRow('ETH'), ...EXTRA_MARKETS] : [], live: MARKETS_AVAILABLE }),
     getDydxSubaccount: async () => ({ account: { subaccount: { equity: String(EQUITY), freeCollateral: FREE_COLLATERAL == null ? null : String(FREE_COLLATERAL) } }, live: true }),
     getDydxOrderbook: async () => { BOOK_CALLS += 1; return BOOK; },
     getDydxFills: async (params) => { HISTORY_CALLS.push(params); return { fills: HISTORY_FILLS, live: HISTORY_LIVE }; },
@@ -216,6 +217,7 @@ beforeEach(() => {
   BOOK_CALLS = 0;
   CONNECT_CALLS = 0;
   MARKETS_AVAILABLE = true;
+  EXTRA_MARKETS = [];
   HISTORY_LIVE = true;
   HISTORY_FILLS = [];
   HISTORY_CALLS = [];
@@ -309,6 +311,20 @@ describe('dYdX tab — the order options the venue accepts', () => {
     expect(ORDERS[0].reduceOnly).toBe(true);
     expect(ORDERS[0].goodTilSeconds).toBe(604800);
     expect(ORDERS[0].orderType).toBe('limit');
+  });
+
+  it('does not submit an order for a different market than the reviewed market', async () => {
+    render(<Dydx embedded />);
+    await screen.findByTestId('dydx-leverage-2');
+    await connectAccount();
+    fireEvent.click(screen.getByTestId('dydx-leverage-2'));
+    fireEvent.click(await screen.findByText(fa.dydx.review));
+    const confirm = await screen.findByText(fa.common.confirm);
+    expect(confirm.disabled).toBe(false);
+    fireEvent.change(screen.getByTestId('dydx-market-select'), { target: { value: 'ETH-USD' } });
+    expect(confirm.disabled).toBe(true);
+    fireEvent.click(confirm);
+    expect(ORDERS).toHaveLength(0);
   });
 
   it('shows the same flags on the review sheet before they are signed', async () => {
@@ -530,6 +546,21 @@ describe('dYdX tab — copy', () => {
 });
 
 
+describe('dYdX market catalogue', () => {
+  it('offers every active market, including beyond 300, but never settled markets', async () => {
+    EXTRA_MARKETS = Array.from({ length: 320 }, (_, i) => marketRow(`T${i}`));
+    EXTRA_MARKETS.push({ ...marketRow('CLOSED'), status: 'FINAL_SETTLEMENT' });
+    render(<Dydx embedded />);
+    const select = await screen.findByTestId('dydx-market-select');
+    expect(select.options).toHaveLength(322);
+    expect(select.getAttribute('data-max-render')).toBe('322');
+    expect(select.querySelector('option[value="T319-USD"]')).toBeTruthy();
+    expect(select.querySelector('option[value="CLOSED-USD"]')).toBeNull();
+    expect(screen.getByTestId('dydx-market-count').textContent).toContain('322');
+    expect(screen.getByTestId('dydx-market-count').textContent).toContain('323');
+  });
+});
+
 describe('dYdX mobile trading dock', () => {
   const originalMatchMedia = window.matchMedia;
   beforeEach(() => {
@@ -561,6 +592,9 @@ describe('dYdX mobile trading dock', () => {
     expect(sheet.getAttribute('aria-modal')).toBe('true');
     expect(sheet.parentElement.classList.contains('dydx-desk-layer')).toBe(true);
     expect(sheet.getAttribute('aria-label')).toContain('BTC');
+    expect(screen.getByTestId('dydx-mobile-desk-token-logo')).toBeTruthy();
+    expect(screen.getByTestId('dydx-mobile-desk-snapshot').textContent).toContain('20×');
+    expect(screen.getByTestId('dydx-mobile-desk').classList.contains('card')).toBe(false);
     const first = screen.getByTestId('dydx-mobile-desk-tab-ai');
     first.focus();
     fireEvent.keyDown(first, { key: 'End' });
