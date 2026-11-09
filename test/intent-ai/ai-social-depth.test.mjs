@@ -170,7 +170,7 @@ test('max: the session summary becomes a conversation-level read', async () => {
   assert.match(fleet.finalCalls()[0].system, /already asked this/);
 });
 
-test('balanced: no social read at all, even for a distressed message', async () => {
+test('balanced: a distressed substantive message receives a social safety read', async () => {
   const fleet = makeFleet();
   const out = await runCollaborativeAnalysis({
     message: 'همه پولمو از دست دادم، دیگه فایده‌ای نداره',
@@ -180,6 +180,6 @@ test('balanced: no social read at all, even for a distressed message', async () 
     deps: fleet,
     deadlineMs: 15000
   });
-  assert.equal(out.socialRead, null);
-  for (const c of fleet.calls) assert.equal(c.system.includes('SAFETY'), false);
+  assert.equal(out.socialRead.distress, true);
+  assert.ok(fleet.calls.some(c => c.system.includes('SAFETY')));
 });

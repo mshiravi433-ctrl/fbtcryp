@@ -161,7 +161,7 @@ test('max: a neutral, specific question sends no social block at all', async () 
   for (const c of fleet.calls) assert.equal(c.system.includes('SOCIAL READ'), false);
 });
 
-test('balanced: no social read, no brief anywhere', async () => {
+test('balanced: social context reaches the model', async () => {
   const fleet = makeFleet();
   const out = await runCollaborativeAnalysis({
     message: 'بازم ضرر کردم، به نظرت اینو نگه دارم؟',
@@ -171,8 +171,8 @@ test('balanced: no social read, no brief anywhere', async () => {
     deps: fleet,
     deadlineMs: 15000
   });
-  assert.equal(out.socialRead, null);
-  for (const c of fleet.calls) assert.equal(c.system.includes('SOCIAL READ'), false);
+  assert.ok(out.socialRead);
+  assert.ok(fleet.calls.some(c => c.system.includes('SOCIAL READ')));
 });
 
 test('a greeting is not given a social analysis', async () => {

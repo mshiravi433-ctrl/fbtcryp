@@ -220,6 +220,8 @@ export function classifyConversationKind(rawText, { priorIntent = null, locale =
 
   /* ── Upgrade 13: multilingual social act, twelve locales ─────────────── */
   const social = classifySocialAct(text, { locale, prior: priorIntent ? { intent: priorIntent } : null });
+  // A greeting plus a real request belongs to the request, even without a question mark.
+  if (social.guard?.mixedRequest) return ACTION_RE.test(text) ? CONVERSATION_KINDS.ACTION : CONVERSATION_KINDS.QUESTION;
   /*
    * A feeling inside a real question is a feeling, not the question.
    *
