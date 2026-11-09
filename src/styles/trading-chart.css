@@ -57,3 +57,19 @@
 .tv-hint { font-size: 10.5px; margin-inline-start: auto; }
 
 :root[data-theme='light'] .tv-watermark { opacity: 0.07; }
+
+/* The AI-projection chip in the chart legend — violet, matching the projection series. */
+.tv-ai-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #c4b5fd;
+  border: 1px solid rgba(167, 139, 250, 0.45);
+  background: rgba(167, 139, 250, 0.1);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+:root[data-theme='light'] .tv-ai-chip { color: #7c3aed; border-color: rgba(124, 58, 237, 0.4); background: rgba(124, 58, 237, 0.07); }

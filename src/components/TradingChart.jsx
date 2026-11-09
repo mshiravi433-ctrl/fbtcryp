@@ -57,7 +57,7 @@ function ma(values, period) {
  * places deciding whether a zero means "no volume" or "no volume READ" is how a
  * VWAP gets drawn from nothing.
  */
-export default function TradingChart({ data, symbol = '', height = 280, barsWithVolume = 0 }) {
+export default function TradingChart({ data, symbol = '', height = 280, barsWithVolume = 0, forecastBars = null }) {
   const { t, i18n } = useTranslation();
   const hostRef = useRef(null);
   const [failed, setFailed] = useState(false);
@@ -215,7 +215,26 @@ export default function TradingChart({ data, symbol = '', height = 280, barsWith
           : null;
         if (vwapSeries) vwapSeries.setData(vwap);
 
-        apiRef.current = { chart, candle, ma7, ma25, vwap: vwapSeries };
+        /* ── AI projection series: violet, never the green/red of real bars.
+           Created hidden on every mount; the forecast effect below feeds it
+           when a model answer exists. A projection must never be mistakable
+           for a printed candle, so it keeps its own colour at every width. */
+        const forecastSeries = chart.addSeries(CandlestickSeries, {
+          upColor: 'rgba(167, 139, 250, 0.55)',
+          downColor: 'rgba(167, 139, 250, 0.35)',
+          wickUpColor: '#a78bfa',
+          wickDownColor: '#a78bfa',
+          borderUpColor: '#c4b5fd',
+          borderDownColor: '#8b5cf6',
+          borderVisible: true,
+          priceLineVisible: false,
+          lastValueVisible: true,
+          crosshairMarkerVisible: false,
+          title: 'AI'
+        });
+        forecastSeries.applyOptions({ visible: false });
+
+        apiRef.current = { chart, candle, ma7, ma25, vwap: vwapSeries, forecast: forecastSeries };
         setLegend({ ...last });
         setReady(true);
 
@@ -253,6 +272,46 @@ export default function TradingChart({ data, symbol = '', height = 280, barsWith
        remount, so it is the one listed. */
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [heikin]);
+
+  /*
+   * ─── THE AI PROJECTION, FED TO THE SAME CHART ─────────────────────────────
+   * `forecastBars` arrive from the Kronos pipeline in FuturesMarketChart.
+   * The projection is drawn ONLY when its timestamps are strictly after the
+   * last printed bar — a model bar placed over history would be a fabricated
+   * candle with a future label on it. Validation here is the same gate the
+   * engine uses: finite numbers, real OHLC shape, unique ordered times.
+   */
+  const forecastSignature = useMemo(
+    () => (Array.isArray(forecastBars) ? forecastBars.map((b) => Math.floor(Number(b?.t) / 1000)).join(',') : ''),
+    [forecastBars]
+  );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!ready) return undefined;
+    const api = apiRef.current;
+    if (!api?.forecast) return undefined;
+    const lastReal = drawn.length ? drawn[drawn.length - 1].time : 0;
+    const seen = new Set();
+    const bars = (Array.isArray(forecastBars) ? forecastBars : [])
+      .map((b) => ({
+        time: Math.floor(Number(b?.t) / 1000),
+        open: Number(b?.o), high: Number(b?.h), low: Number(b?.l), close: Number(b?.c)
+      }))
+      .filter((b) => [b.time, b.open, b.high, b.low, b.close].every(Number.isFinite)
+        && b.high >= b.low && b.time > lastReal)
+      .filter((b) => (seen.has(b.time) ? false : (seen.add(b.time), true)))
+      .sort((a, b) => a.time - b.time);
+    try {
+      api.forecast.setData(bars);
+      api.forecast.applyOptions({ visible: bars.length > 0 });
+      /* Keep the boundary and the future in view: the projection is the whole
+         point of asking for it. */
+      api.chart.timeScale().applyOptions({ rightOffset: bars.length ? Math.min(12, bars.length + 3) : 3 });
+      if (bars.length) api.chart.timeScale().fitContent();
+    } catch { /* a rejected setData must not take the printed candles down */ }
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, forecastSignature]);
 
   /* MA toggles ride on the live series — no rebuild, no refetch. */
   useEffect(() => {
@@ -339,6 +398,12 @@ export default function TradingChart({ data, symbol = '', height = 280, barsWith
           <span className="tv-dot" style={{ background: '#b388ff' }} />
           VWAP
         </button>
+        {Array.isArray(forecastBars) && forecastBars.length > 0 && (
+          <span className="tv-ai-chip" data-testid="tv-ai-chip" title={t('futures.ai.chipHint', { defaultValue: 'Violet candles are the on-device Kronos AI projection, not printed price action.' })}>
+            <span className="tv-dot" style={{ background: '#a78bfa' }} />
+            AI
+          </span>
+        )}
         <span className="faint tv-hint">{t('coin.tvHint')}</span>
       </div>
     </div>

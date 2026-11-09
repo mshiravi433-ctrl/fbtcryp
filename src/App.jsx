@@ -423,7 +423,11 @@ function AppChrome() {
   const wide = pathname === '/global' || pathname.startsWith('/global/')
     /* The risk engine draws a 7-column heat table and a family grid — it is a
        board, not a phone column, and it earns the same wide shell. */
-    || pathname === '/risk';
+    || pathname === '/risk'
+    /* The futures terminal is a fixed full-height desk: chart + ticket + book.
+       It needs the widest shell the app has, exactly like the derivatives
+       hall. */
+    || pathname === '/perp/terminal';
   /*
     ─── THE BOTTOM EDGE BELONGS TO WHOEVER NEEDS IT MOST ───────────────────
     «منو پایین صفحه محو و دکمه زیبا و ندرن سواپ ظاهر شود» — on a coin page
