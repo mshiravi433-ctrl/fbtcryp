@@ -1,9 +1,12 @@
-import { Fragment, useState } from 'react';
+import { Fragment, Suspense, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTelegram } from '../context/TelegramContext';
-import MoreSheet from './MoreSheet';
+import lazyRetry from '../lib/lazyRetry';
+
+// The menu is opened on demand; keep the loaded sheet mounted for its exit animation.
+const MoreSheet = lazyRetry(() => import('./MoreSheet'));
 import {
   AnimatedPlus,
   AnimatedSignal,
@@ -151,6 +154,7 @@ export default function BottomNav() {
   const { pathname } = useLocation();
   const { haptic } = useTelegram();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [moreLoaded, setMoreLoaded] = useState(false);
   const still = useStill();
 
   // Bumped on every tap so re-tapping the tab you are already on replays the
@@ -270,6 +274,7 @@ export default function BottomNav() {
           aria-expanded={moreOpen}
           onClick={() => {
             haptic?.('light');
+            setMoreLoaded(true);
             setMoreOpen((v) => !v);
           }}
         >
@@ -311,7 +316,7 @@ export default function BottomNav() {
         }}
       />
 
-      <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
+      {moreLoaded && <Suspense fallback={null}><MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} /></Suspense>}
     </>
   );
 }
