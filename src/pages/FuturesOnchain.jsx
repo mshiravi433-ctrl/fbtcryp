@@ -718,14 +718,16 @@ export default function FuturesOnchain({ embedded = false } = {}) {
 
         <button
           type="button"
-          className="btn btn-ghost"
+          className="deriv-rwa-banner"
           data-testid="futures-traditional-link"
           onClick={() => navigate('/stocks?tab=ostium')}
-          style={{ width: '100%', marginTop: 12, boxSizing: 'border-box' }}
         >
-          {t('futures.onchain.traditionalCta')}
+          <span>{t('futures.onchain.traditionalCta')}</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M7 17L17 7" /><path d="M8 7h9v9" />
+          </svg>
         </button>
-        <p className="faint" style={{ margin: '6px 0 0', fontSize: 12 }}>{t('futures.onchain.traditionalHint')}</p>
+        <p className="faint" style={{ margin: '6px 2px 0', fontSize: 12 }}>{t('futures.onchain.traditionalHint')}</p>
 
         {/* ── NO venue card, on instruction: which venues feed the engine is
            not the customer's business and is not ours to hand to competitors.
@@ -745,8 +747,13 @@ export default function FuturesOnchain({ embedded = false } = {}) {
             </button>
           ))}
         </div>
-        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('futures.searchPlaceholder', { count: markets.length })} style={{ flex: 1, fontSize: 12.5 }} />
+        <div className="deriv-search-row">
+          <div className="deriv-search-box">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" aria-hidden="true" style={{ opacity: 0.6, flexShrink: 0 }}>
+              <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+            </svg>
+            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('futures.searchPlaceholder', { count: markets.length })} />
+          </div>
           {search && <button className="tag" onClick={() => setSearch('')}>{t('futures.clearSearch')}</button>}
         </div>
 
@@ -793,23 +800,25 @@ export default function FuturesOnchain({ embedded = false } = {}) {
               )}
 
               {market && (
-                <div className="row-between" style={{ margin: '12px 0' }}>
-                  <div>
-                    <div className="faint">{t('futures.midPrice')}</div>
+                <div className="deriv-kpi-strip">
+                  <div className="deriv-kpi-pod">
+                    <div className="row-between" style={{ gap: 6 }}>
+                      <span className="faint" style={{ fontSize: 11 }}>{t('futures.midPrice')}</span>
+                      <span className={`pill ${market.isMarketOpen ? 'pill-up' : 'pill-down'}`}>{market.isMarketOpen ? t('futures.marketOpen') : t('futures.marketClosed')}</span>
+                    </div>
                     <div className="stat-mini mono">${fmtPrice(market.mid)}</div>
-                    <span className={`pill ${market.isMarketOpen ? 'pill-up' : 'pill-down'}`}>{market.isMarketOpen ? t('futures.marketOpen') : t('futures.marketClosed')}</span>
                   </div>
-                  <div style={{ textAlign: 'end' }}>
-                    <div className="faint">{t('futures.spread')}</div>
-                    <div className="mono" style={{ fontSize: 12 }}>${fmtPrice(market.bid)} — ${fmtPrice(market.ask)}</div>
-                    <div className="faint" style={{ marginTop: 5 }}>{t('futures.maxLeverage', { value: effectiveMax ?? '—' })}</div>
+                  <div className="deriv-kpi-pod">
+                    <div className="faint" style={{ fontSize: 11 }}>{t('futures.spread')}</div>
+                    <div className="mono" style={{ fontSize: 13, fontWeight: 800 }}>${fmtPrice(market.bid)} — ${fmtPrice(market.ask)}</div>
+                    <div className="faint" style={{ fontSize: 11 }}>{t('futures.maxLeverage', { value: effectiveMax ?? '—' })}</div>
                   </div>
                 </div>
               )}
 
               {/* market info — every number a live read from /stats/markets + DLOB */}
               {market && (
-                <div className="brg-quote" style={{ marginTop: 12 }} data-testid="futures-market-info">
+                <div className="brg-quote deriv-telemetry-card" style={{ marginTop: 12 }} data-testid="futures-market-info">
                   <div className="row-between"><span className="faint">{t('futures.oraclePrice')}</span><span className="mono">{market.oraclePrice == null ? '—' : `$${fmtPrice(market.oraclePrice)}`}</span></div>
                   <div className="row-between"><span className="faint">{t('futures.spreadBps')}</span><span className="mono">{market.spreadBps == null ? '—' : `${market.spreadBps.toFixed(1)} bps`}</span></div>
                   <div className="row-between"><span className="faint">{t('futures.change24h')}</span><span className={`mono ${market.priceChange24hPct == null ? '' : market.priceChange24hPct >= 0 ? 'up' : 'down'}`}>{market.priceChange24hPct == null ? '—' : fmtPct(market.priceChange24hPct)}</span></div>
@@ -823,9 +832,9 @@ export default function FuturesOnchain({ embedded = false } = {}) {
               )}
 
               {market && (
-                <div className="brg-quote" style={{ marginTop: 12 }} data-testid="futures-crypto-desk">
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>{t('futures.onchain.deskTitle')}</div>
-                  <p className="faint" style={{ margin: '4px 0 8px' }}>{t('futures.onchain.deskBody')}</p>
+                <div className="brg-quote deriv-telemetry-card" style={{ marginTop: 12 }} data-testid="futures-crypto-desk">
+                  <div style={{ fontWeight: 800, fontSize: 13 }}>{t('futures.onchain.deskTitle')}</div>
+                  <p className="faint" style={{ margin: '2px 0 6px' }}>{t('futures.onchain.deskBody')}</p>
                   <div className="row-between"><span className="faint">{t('futures.funding')}</span><span className="mono">{market.fundingAprPct == null ? '—' : `${fmtPct(market.fundingAprPct)} ${t('futures.perYear')}`}</span></div>
                   <div className="row-between"><span className="faint">{t('futures.liquidationDistance')}</span><span className="mono">{risk?.liquidationDistancePct == null ? '—' : `${fmtPct(-Math.abs(risk.liquidationDistancePct))} → $${fmtPrice(risk.liquidationPrice)}`}</span></div>
                   <div className="row-between"><span className="faint">{t('futures.openInterest')}</span><span className="mono">{fmtUsd(market.openInterestUsd)}</span></div>
@@ -833,33 +842,35 @@ export default function FuturesOnchain({ embedded = false } = {}) {
               )}
 
               {/* ticket */}
-              <div className="dir-switch" style={{ marginTop: 12 }}>
+              <div className="dir-switch" style={{ marginTop: 14 }}>
                 <button type="button" className={`dir-btn long ${side === 'long' ? 'active' : ''}`} onClick={() => setSide('long')}>
-                  <span className="dir-ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5" /><path d="m5 12 7-7 7 7" /></svg></span>
+                  <span className="dir-ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7" /><path d="M8 7h9v9" /></svg></span>
                   {t('futures.long')}<span className="dir-sub">{t('futures.longSub')}</span>
                 </button>
                 <button type="button" className={`dir-btn short ${side === 'short' ? 'active' : ''}`} onClick={() => setSide('short')}>
-                  <span className="dir-ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="m19 12-7 7-7-7" /></svg></span>
+                  <span className="dir-ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M7 7l10 10" /><path d="M17 8v9H8" /></svg></span>
                   {t('futures.short')}<span className="dir-sub">{t('futures.shortSub')}</span>
                 </button>
               </div>
 
-              <div className="row" style={{ gap: 10 }}>
-                <label style={{ flex: 1 }}>
+              <div className="deriv-field-grid">
+                <label className="deriv-field-card" style={{ marginBottom: 0 }}>
                   <span className="field-label">{t('futures.collateral', { asset: provider?.collateral || 'USDC' })}</span>
                   <input type="number" min="5" inputMode="decimal" value={collateral} onChange={(e) => setCollateral(e.target.value)} data-testid="futures-collateral" />
                 </label>
-                <label style={{ flex: 1 }}>
+                <label className="deriv-field-card" style={{ marginBottom: 0 }}>
                   <span className="field-label">{t('futures.leverage')}</span>
                   <input type="number" min="1" max={effectiveMax || 50} step="0.25" inputMode="decimal" value={leverage} onChange={(e) => setLeverage(e.target.value)} data-testid="futures-leverage" />
                 </label>
               </div>
-              <div className="lev-row" style={{ marginTop: 8 }}>
-                {LEVERAGE_PRESETS.filter((n) => n <= (effectiveMax || 50)).map((n) => (
-                  <button key={n} type="button" className={`lev-chip ${Number(leverage) === n ? 'active' : ''}`} onClick={() => setLeverage(String(n))}>{n}×</button>
-                ))}
+              <div className="deriv-field-card" style={{ marginTop: 10 }}>
+                <div className="lev-row">
+                  {LEVERAGE_PRESETS.filter((n) => n <= (effectiveMax || 50)).map((n) => (
+                    <button key={n} type="button" className={`lev-chip ${Number(leverage) === n ? 'active' : ''}`} onClick={() => setLeverage(String(n))}>{n}×</button>
+                  ))}
+                </div>
+                <input type="range" min="1" max={Math.min(effectiveMax || 50, 50)} step="0.25" value={Math.min(Number(leverage) || 1, effectiveMax || 50)} onChange={(e) => setLeverage(e.target.value)} style={{ width: '100%', marginTop: 4, accentColor: 'var(--rgb-1)' }} />
               </div>
-              <input type="range" min="1" max={Math.min(effectiveMax || 50, 50)} step="0.25" value={Math.min(Number(leverage) || 1, effectiveMax || 50)} onChange={(e) => setLeverage(e.target.value)} style={{ width: '100%', marginTop: 8, accentColor: 'var(--rgb-1)' }} />
 
               <InfoBox title={t('futures.riskControls')} tone="info" id="futures-controls">
                 <div className="row" style={{ gap: 10 }}>
@@ -872,7 +883,7 @@ export default function FuturesOnchain({ embedded = false } = {}) {
               {/* fee + risk — backend numbers only */}
               {quoteError && !quote && <p className="notice" style={{ marginTop: 10 }}>{t(`futures.err.${quoteError}`, { defaultValue: t('futures.quoteUnavailable') })}</p>}
               {fee && (
-                <div className="brg-quote" style={{ marginTop: 12 }} data-testid="futures-fee-breakdown">
+                <div className="brg-quote deriv-telemetry-card" style={{ marginTop: 12 }} data-testid="futures-fee-breakdown">
                   <div className="row-between"><span className="faint">{t('futures.notional')}</span><span className="mono">{fmtUsd(fee.notionalUsd)}</span></div>
                   <div className="row-between"><span className="faint">{t('futures.fee.protocol')}</span><span className="mono">{fee.protocol.known ? fmtUsd(fee.protocol.feeUsd) : t('futures.unknown')}</span></div>
                   <div className="row-between"><span className="faint">{t('futures.fee.network')}</span><span className="mono">{fee.network.known ? fmtUsd(fee.network.feeUsd) : t('futures.fee.networkAtReview')}</span></div>
@@ -883,7 +894,7 @@ export default function FuturesOnchain({ embedded = false } = {}) {
                 </div>
               )}
               {risk && (
-                <div className="brg-quote" style={{ marginTop: 10 }} data-testid="futures-risk">
+                <div className="brg-quote deriv-telemetry-card" style={{ marginTop: 10 }} data-testid="futures-risk">
                   <div className="row-between">
                     <span className="faint">{t('futures.riskLevel')}</span>
                     <span className={`pill ${risk.riskLevel === 'LOW' ? 'pill-up' : risk.riskLevel === 'MEDIUM' ? 'pill-neutral' : 'pill-down'}`}>{t(`futures.risk.${risk.riskLevel}`)} · {risk.riskScore}/100</span>
@@ -896,9 +907,9 @@ export default function FuturesOnchain({ embedded = false } = {}) {
               )}
 
               {connected && tradingAddress && (
-                <div className="row-between" style={{ marginTop: 12 }} data-testid="futures-wallet-row">
+                <div className="deriv-wallet-bar" data-testid="futures-wallet-row">
                   <span className="faint">{shortAddress(tradingAddress)} · {provider?.chainName}</span>
-                  <span className="mono" style={{ fontSize: 12 }}>
+                  <span className="mono" style={{ fontSize: 12, fontWeight: 700 }}>
                     {walletFunds.usdt == null ? '—' : walletFunds.usdt.toFixed(2)} USDT
                     {' · '}
                     {walletFunds.sol == null ? '—' : walletFunds.sol.toFixed(4)} SOL
@@ -918,7 +929,7 @@ export default function FuturesOnchain({ embedded = false } = {}) {
                 </div>
               )}
 
-              <button className={`btn ${side === 'long' ? 'btn-success' : 'btn-danger'}`} style={{ width: '100%', marginTop: 12 }} disabled={readOnly || (connected && !canReview)} onClick={openReview} data-testid="futures-review">
+              <button className={`btn ${side === 'long' ? 'btn-success' : 'btn-danger'}`} style={{ width: '100%', minHeight: 48, marginTop: 12, borderRadius: 14, fontWeight: 800 }} disabled={readOnly || (connected && !canReview)} onClick={openReview} data-testid="futures-review">
                 {busy ? t('common.loading') : buttonLabel}
               </button>
               {/* No Solana wallet on this device at all: a readable line instead

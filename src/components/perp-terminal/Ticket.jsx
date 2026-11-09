@@ -1,25 +1,9 @@
 /**
- * THE TICKET — the panel a trader actually presses.
+ * THE TICKET — Redesigned modular Obsidian-Prism order panel.
  * ---------------------------------------------------------------------------
- * It shows what the order WILL be before anything is built, and it sends the
- * order through the SAME code that `/perp` uses, because a second order path
- * would be a second place to get signing wrong:
- *
- *   Velocity (Solana)  → prepareFutures → openVelocityPosition (signed in tab)
- *   Ostium (Arbitrum)  → prepareFutures → wallet sends the built calldata
- *   dYdX Chain         → getDydxSubaccount → placeDydxOrder (client session)
- *
- * ─── WHAT IT REFUSES TO DO ──────────────────────────────────────────────────
- * · It will not offer an order type the venue does not accept. The chips come
- *   from `orderTypeOptions(providerId)` (venueContract.js), and a disabled chip
- *   carries the reason. dYdX has no Stop-Limit; Ostium has no Stop-Market.
- * · It will not print a liquidation price it cannot stand behind. The number is
- *   the risk engine's, and the label under it says whether the venue published
- *   the maintenance margin behind it or whether it is a bound.
- * · It will not send anything with `blocked` set, and the block reason is shown
- *   where the button would be, not in a toast after the tap.
- * · It will not pre-fill a size from a fabricated price. With no mark, the
- *   notional reads «—» and the button is disabled with NO_PRICE.
+ * Preserves every venue contract, exact liquidation provenance badge, and
+ * non-custodial signing path while presenting Order Type, Collateral, Leverage,
+ * Long/Short direction, and Order Math in crisp, spacious glass pods.
  */
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -41,10 +25,6 @@ const pct = (v, digits = 2) => (Number.isFinite(Number(v)) ? `${Number(v).toFixe
 const num = (v, digits = 6) => (Number.isFinite(Number(v)) ? Number(v).toFixed(digits).replace(/\.?0+$/, '') : '—');
 
 const LEVERAGE_CHIPS = [1, 2, 3, 5, 10, 20, 50];
-
-/* The chain each venue settles on, in the words a user recognises. This is
-   display only — the signing path is decided by lib/perpRoutes.js, which owns
-   the wallet family and the chain id. */
 const CHAIN_NAME = { drift: 'Solana', ostium: 'Arbitrum', dydx: 'dYdX Chain', hyperliquid: 'Hyperliquid' };
 const COLLATERAL_CHIPS = [25, 50, 100, 250];
 
@@ -52,9 +32,6 @@ export default function Ticket({
   venue, market, quote, side = 'long', onSideChange,
   onPlace, placing = false, walletReady = false, onConnect,
   equityUsd = null, availableBalanceUsd = null, errorCode = null, testId = 'perp-ticket',
-  /* dYdX session path: the wallet IS connected, but the venue signs from a
-     session key derived in memory. Showing «connect a wallet» (or a dead
-     submit) to that user was the reported «وصل کنی» bug. */
   needsActivation = false, onActivate, activating = false, activationStage = null
 }) {
   const { t } = useTranslation();
@@ -66,6 +43,7 @@ export default function Ticket({
 
   const venueMeta = contractFor(venue);
   const maxLeverage = Number(quote?.maxLeverage) || Number(market?.maxLeverage) || null;
+  const sliderMax = maxLeverage && Number.isFinite(maxLeverage) && maxLeverage >= 1 ? Math.floor(maxLeverage) : 20;
   const mark = Number(quote?.mark ?? quote?.oraclePrice ?? market?.oraclePrice) || null;
   const takerFeeBps = Number(market?.openFeeBps ?? market?.takerFeeBps) || (venueMeta?.takerFeeBpsDefault ?? null);
   const mmr = market?.maintenanceMarginFraction ?? market?.raw?.maintenanceMarginFraction ?? null;
@@ -111,120 +89,252 @@ export default function Ticket({
   };
 
   return (
-    <section className="pt-ticket" data-testid={testId} dir="ltr">
+    <section className="pt-ticket" data-testid={testId}>
+      {/* Header strip */}
+      <div className="pt-ticket-head">
+        <span className="pt-ticket-title">
+          {t('perpTerminal.ticket.headerTitle', { defaultValue: 'Order Ticket' })}
+        </span>
+        {venueMeta?.name && (
+          <span className={`pt-ticket-venue pt-venue-${venue || 'default'}`}>
+            <i aria-hidden="true" />
+            {venueMeta.name}
+          </span>
+        )}
+      </div>
+
+      {/* ── Long / Short tactile directional selector ──────────────────── */}
       <div className="pt-seg" role="group" aria-label={t('perpTerminal.ticket.side', { defaultValue: 'Direction' })}>
-        <button type="button" className={`pt-seg-btn ${side === 'long' ? 'is-on is-long' : ''}`}
-          data-testid="perp-ticket-long" onClick={() => onSideChange?.('long')} aria-pressed={side === 'long'}>
-          ▲ {t('perpTerminal.ticket.long', { defaultValue: 'Long' })}
+        <button
+          type="button"
+          className={`pt-seg-btn is-long ${side === 'long' ? 'is-on' : ''}`}
+          data-testid="perp-ticket-long"
+          onClick={() => onSideChange?.('long')}
+          aria-pressed={side === 'long'}
+        >
+          <span className="pt-seg-ico" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 17L17 7" />
+              <path d="M8 7h9v9" />
+            </svg>
+          </span>
+          <span className="pt-seg-copy">
+            <span className="pt-seg-main">{t('perpTerminal.ticket.long', { defaultValue: 'Long' })}</span>
+            <span className="pt-seg-sub">{t('perpTerminal.ticket.longSub', { defaultValue: 'Profit on upside' })}</span>
+          </span>
         </button>
-        <button type="button" className={`pt-seg-btn ${side === 'short' ? 'is-on is-short' : ''}`}
-          data-testid="perp-ticket-short" onClick={() => onSideChange?.('short')} aria-pressed={side === 'short'}>
-          ▼ {t('perpTerminal.ticket.short', { defaultValue: 'Short' })}
+
+        <button
+          type="button"
+          className={`pt-seg-btn is-short ${side === 'short' ? 'is-on' : ''}`}
+          data-testid="perp-ticket-short"
+          onClick={() => onSideChange?.('short')}
+          aria-pressed={side === 'short'}
+        >
+          <span className="pt-seg-ico" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 7l10 10" />
+              <path d="M17 8v9H8" />
+            </svg>
+          </span>
+          <span className="pt-seg-copy">
+            <span className="pt-seg-main">{t('perpTerminal.ticket.short', { defaultValue: 'Short' })}</span>
+            <span className="pt-seg-sub">{t('perpTerminal.ticket.shortSub', { defaultValue: 'Profit on downside' })}</span>
+          </span>
         </button>
       </div>
 
-      {/* ── order type ─────────────────────────────────────────────────── */}
-      <div className="pt-field">
-        <span className="pt-label">{t('perpTerminal.ticket.orderType', { defaultValue: 'Order type' })}</span>
-        <div className="pt-chips">
+      {/* ── Order Type Pod ─────────────────────────────────────────────── */}
+      <div className="pt-field pt-field-card">
+        <div className="pt-label-row">
+          <span className="pt-label">{t('perpTerminal.ticket.orderType', { defaultValue: 'Order type' })}</span>
+          <span className="pt-label-pill">
+            {t(`perpTerminal.ticket.types.${orderType}`, { defaultValue: orderType })}
+          </span>
+        </div>
+
+        <div className="pt-type-bar">
           {types.options.map((o) => (
-            <button key={o.id} type="button" className={`pt-chip ${orderType === o.id ? 'is-on' : ''}`}
-              data-testid={`perp-ticket-type-${o.id}`} onClick={() => setOrderType(o.id)} aria-pressed={orderType === o.id}>
+            <button
+              key={o.id}
+              type="button"
+              className={`pt-type-btn ${orderType === o.id ? 'is-on' : ''}`}
+              data-testid={`perp-ticket-type-${o.id}`}
+              onClick={() => setOrderType(o.id)}
+              aria-pressed={orderType === o.id}
+            >
               {t(`perpTerminal.ticket.types.${o.id}`, { defaultValue: o.label })}
             </button>
           ))}
         </div>
+
         {types.unavailable.length > 0 && (
-          <p className="pt-note" data-testid="perp-ticket-unavailable-types">
-            {t('perpTerminal.ticket.notOnVenue', {
-              defaultValue: '{{venue}} does not accept: {{list}}',
-              venue: venueMeta?.name || venue,
-              list: types.unavailable.map((u) => t(`perpTerminal.ticket.types.${u}`, { defaultValue: u })).join(', ')
-            })}
+          <p className="pt-venue-note" data-testid="perp-ticket-unavailable-types">
+            <span className="pt-venue-note-dot" aria-hidden="true">i</span>
+            <span>
+              {t('perpTerminal.ticket.notOnVenue', {
+                defaultValue: '{{venue}} does not accept: {{list}}',
+                venue: venueMeta?.name || venue,
+                list: types.unavailable.map((u) => t(`perpTerminal.ticket.types.${u}`, { defaultValue: u })).join(', ')
+              })}
+            </span>
           </p>
+        )}
+
+        {needsPrice && (
+          <label className="pt-sub-field">
+            <span className="pt-label">{t('perpTerminal.ticket.price', { defaultValue: 'Limit price' })}</span>
+            <div className="pt-input-well">
+              <span className="pt-input-prefix pt-mono">$</span>
+              <input
+                className="pt-input pt-mono"
+                inputMode="decimal"
+                value={price}
+                placeholder={mark ? String(mark) : ''}
+                data-testid="perp-ticket-price"
+                onChange={(e) => setPrice(e.target.value.replace(/[^\d.]/g, ''))}
+              />
+              <span className="pt-input-unit pt-mono">USD</span>
+            </div>
+          </label>
+        )}
+
+        {needsStop && (
+          <label className="pt-sub-field">
+            <span className="pt-label">{t('perpTerminal.ticket.stopPrice', { defaultValue: 'Trigger price' })}</span>
+            <div className="pt-input-well">
+              <span className="pt-input-prefix pt-mono">$</span>
+              <input
+                className="pt-input pt-mono"
+                inputMode="decimal"
+                value={stopPrice}
+                placeholder={mark ? String(mark) : ''}
+                data-testid="perp-ticket-stop"
+                onChange={(e) => setStopPrice(e.target.value.replace(/[^\d.]/g, ''))}
+              />
+              <span className="pt-input-unit pt-mono">USD</span>
+            </div>
+          </label>
         )}
       </div>
 
-      {needsPrice && (
-        <label className="pt-field">
-          <span className="pt-label">{t('perpTerminal.ticket.price', { defaultValue: 'Limit price' })}</span>
-          <input className="pt-input pt-mono" inputMode="decimal" value={price} placeholder={mark ? String(mark) : ''}
-            data-testid="perp-ticket-price" onChange={(e) => setPrice(e.target.value.replace(/[^\d.]/g, ''))} />
-        </label>
-      )}
-      {needsStop && (
-        <label className="pt-field">
-          <span className="pt-label">{t('perpTerminal.ticket.stopPrice', { defaultValue: 'Trigger price' })}</span>
-          <input className="pt-input pt-mono" inputMode="decimal" value={stopPrice} placeholder={mark ? String(mark) : ''}
-            data-testid="perp-ticket-stop" onChange={(e) => setStopPrice(e.target.value.replace(/[^\d.]/g, ''))} />
-        </label>
-      )}
+      {/* ── Collateral Pod ─────────────────────────────────────────────── */}
+      <div className="pt-field pt-field-card">
+        <div className="pt-label-row">
+          <span className="pt-label">{t('perpTerminal.ticket.collateral', { defaultValue: 'Collateral' })}</span>
+          <span className="pt-unit-tag pt-mono">{venueMeta?.collateral || 'USDC'}</span>
+        </div>
 
-      {/* ── collateral ─────────────────────────────────────────────────── */}
-      <div className="pt-field">
-        <span className="pt-label">
-          {t('perpTerminal.ticket.collateral', { defaultValue: 'Collateral' })}
-          <span className="pt-muted"> · {venueMeta?.collateral || '—'}</span>
-        </span>
-        <div className="pt-chips">
+        <div className="pt-input-well">
+          <span className="pt-input-prefix pt-mono">$</span>
+          <input
+            className="pt-input pt-mono"
+            inputMode="decimal"
+            value={collateral}
+            data-testid="perp-ticket-collateral"
+            onChange={(e) => setCollateral(e.target.value.replace(/[^\d.]/g, ''))}
+          />
+          <span className="pt-input-unit pt-mono">{venueMeta?.collateral || 'USD'}</span>
+        </div>
+
+        <div className="pt-preset-grid">
           {COLLATERAL_CHIPS.map((c) => (
-            <button key={c} type="button" className={`pt-chip ${Number(collateral) === c ? 'is-on' : ''}`}
-              onClick={() => setCollateral(String(c))}>{c}</button>
+            <button
+              key={c}
+              type="button"
+              className={`pt-chip pt-mono ${Number(collateral) === c ? 'is-on' : ''}`}
+              onClick={() => setCollateral(String(c))}
+            >
+              ${c}
+            </button>
           ))}
         </div>
-        <input className="pt-input pt-mono" inputMode="decimal" value={collateral} data-testid="perp-ticket-collateral"
-          onChange={(e) => setCollateral(e.target.value.replace(/[^\d.]/g, ''))} />
       </div>
 
-      {/* ── leverage ───────────────────────────────────────────────────── */}
-      <div className="pt-field">
-        <span className="pt-label">
-          {t('perpTerminal.ticket.leverage', { defaultValue: 'Leverage' })}
-          <span className="pt-muted"> · {maxLeverage ? `${t('perpTerminal.ticket.max', { defaultValue: 'max' })} ${maxLeverage}×` : t('perpTerminal.ticket.maxUnknown', { defaultValue: 'venue max unknown' })}</span>
-        </span>
-        <div className="pt-chips">
+      {/* ── Leverage Pod ───────────────────────────────────────────────── */}
+      <div className="pt-field pt-field-card">
+        <div className="pt-label-row">
+          <span className="pt-label">{t('perpTerminal.ticket.leverage', { defaultValue: 'Leverage' })}</span>
+          <span className="pt-lev-readout pt-mono">
+            <strong>{leverage}×</strong>
+            <small>
+              {maxLeverage
+                ? ` · ${t('perpTerminal.ticket.max', { defaultValue: 'max' })} ${maxLeverage}×`
+                : ` · ${t('perpTerminal.ticket.maxUnknown', { defaultValue: 'venue max unknown' })}`}
+            </small>
+          </span>
+        </div>
+
+        <div className="pt-lev-chips">
           {LEVERAGE_CHIPS.filter((l) => !maxLeverage || l <= maxLeverage).map((l) => (
-            <button key={l} type="button" className={`pt-chip ${leverage === l ? 'is-on' : ''}`}
-              data-testid={`perp-ticket-lev-${l}`} onClick={() => setLeverage(l)}>{l}×</button>
+            <button
+              key={l}
+              type="button"
+              className={`pt-chip pt-mono ${leverage === l ? 'is-on' : ''}`}
+              data-testid={`perp-ticket-lev-${l}`}
+              onClick={() => setLeverage(l)}
+            >
+              {l}×
+            </button>
           ))}
+        </div>
+
+        <div className="pt-slider-wrap">
+          <input
+            type="range"
+            min={1}
+            max={sliderMax}
+            step={1}
+            value={Math.min(leverage, sliderMax)}
+            onChange={(e) => setLeverage(Number(e.target.value))}
+            className="pt-slider"
+            aria-label={t('perpTerminal.ticket.leverage', { defaultValue: 'Leverage' })}
+          />
         </div>
       </div>
 
-      {/* ── the numbers ────────────────────────────────────────────────── */}
-      <dl className="pt-kv pt-mono pt-ticket-math" data-testid="perp-ticket-math">
-        <div>
-          <dt>{t('perpTerminal.ticket.notional', { defaultValue: 'Notional' })}</dt>
-          <dd data-testid="perp-ticket-notional">{usd(math.notionalUsd)}</dd>
+      {/* ── Order & Liquidation Telemetry Receipt ──────────────────────── */}
+      <div className="pt-math-box">
+        <div className="pt-math-head">
+          {t('perpTerminal.ticket.summaryTitle', { defaultValue: 'Order & Liquidation Preview' })}
         </div>
-        <div>
-          <dt>{t('perpTerminal.ticket.size', { defaultValue: 'Size' })}</dt>
-          <dd data-testid="perp-ticket-size">{num(math.size, 4)}</dd>
-        </div>
-        <div>
-          <dt>{t('perpTerminal.ticket.openFee', { defaultValue: 'Open fee' })}</dt>
-          <dd data-testid="perp-ticket-fee">
-            {math.openFeeUsd != null ? `${usd(math.openFeeUsd)} · ${pct(math.openFeeBps / 100, 3)}` : '—'}
-          </dd>
-        </div>
-        <div>
-          <dt>{t('perpTerminal.ticket.funding8h', { defaultValue: 'Funding 8h' })}</dt>
-          <dd data-testid="perp-ticket-funding">{math.fundingUsd8h != null ? usd(math.fundingUsd8h) : '—'}</dd>
-        </div>
-        <div className="pt-ticket-liq">
-          <dt>{t('perpTerminal.ticket.liquidation', { defaultValue: 'Liquidation' })}</dt>
-          <dd data-testid="perp-ticket-liq">
-            <span className="pt-mono">{math.liquidation.price != null ? usd(math.liquidation.price, 2) : '—'}</span>
-            {math.liquidation.distancePct != null && (
-              <span className="pt-muted"> · {pct(math.liquidation.distancePct, 2)}</span>
-            )}
-            {/* The provenance label is not decoration: an exact venue number and
-                a 100%-loss bound look identical without it. */}
-            <span className="pt-tag pt-liq-tag" data-testid="perp-ticket-liq-provenance" data-provenance={math.liquidation.provenance}>
-              {liquidationProvenanceLabel(t, math.liquidation.provenance)}
-            </span>
-          </dd>
-        </div>
-      </dl>
+        <dl className="pt-kv pt-mono pt-ticket-math" data-testid="perp-ticket-math">
+          <div>
+            <dt>{t('perpTerminal.ticket.notional', { defaultValue: 'Notional' })}</dt>
+            <dd data-testid="perp-ticket-notional">{usd(math.notionalUsd)}</dd>
+          </div>
+          <div>
+            <dt>{t('perpTerminal.ticket.size', { defaultValue: 'Size' })}</dt>
+            <dd data-testid="perp-ticket-size">{num(math.size, 4)}</dd>
+          </div>
+          <div>
+            <dt>{t('perpTerminal.ticket.openFee', { defaultValue: 'Open fee' })}</dt>
+            <dd data-testid="perp-ticket-fee">
+              {math.openFeeUsd != null ? `${usd(math.openFeeUsd)} · ${pct(math.openFeeBps / 100, 3)}` : '—'}
+            </dd>
+          </div>
+          <div>
+            <dt>{t('perpTerminal.ticket.funding8h', { defaultValue: 'Funding 8h' })}</dt>
+            <dd data-testid="perp-ticket-funding">{math.fundingUsd8h != null ? usd(math.fundingUsd8h) : '—'}</dd>
+          </div>
+          <div className="pt-ticket-liq">
+            <dt>{t('perpTerminal.ticket.liquidation', { defaultValue: 'Liquidation' })}</dt>
+            <dd data-testid="perp-ticket-liq">
+              <span className="pt-mono">{math.liquidation.price != null ? usd(math.liquidation.price, 2) : '—'}</span>
+              {math.liquidation.distancePct != null && (
+                <span className="pt-muted"> · {pct(math.liquidation.distancePct, 2)}</span>
+              )}
+              <span
+                className={`pt-tag pt-liq-tag is-${String(math.liquidation.provenance || '').toLowerCase()}`}
+                data-testid="perp-ticket-liq-provenance"
+                data-provenance={math.liquidation.provenance}
+              >
+                {liquidationProvenanceLabel(t, math.liquidation.provenance)}
+              </span>
+            </dd>
+          </div>
+        </dl>
+      </div>
 
       {math.warnings.length > 0 && (
         <ul className="pt-warnings pt-small" data-testid="perp-ticket-warnings">
@@ -240,9 +350,9 @@ export default function Ticket({
         </p>
       )}
 
-      {/* ── the button ─────────────────────────────────────────────────── */}
+      {/* ── Primary Action Button ──────────────────────────────────────── */}
       {!walletReady ? (
-        <button type="button" className="pt-submit" data-testid="perp-ticket-connect" onClick={() => onConnect?.()}>
+        <button type="button" className="pt-submit is-connect" data-testid="perp-ticket-connect" onClick={() => onConnect?.()}>
           {t('perpTerminal.ticket.connect', { defaultValue: 'Connect a wallet' })}
         </button>
       ) : needsActivation ? (
@@ -254,8 +364,13 @@ export default function Ticket({
             : t('perpTerminal.ticket.activateDydx', { defaultValue: 'Activate the dYdX session — one signature' })}
         </button>
       ) : (
-        <button type="button" className={`pt-submit ${side === 'long' ? 'is-long' : 'is-short'}`}
-          data-testid="perp-ticket-submit" disabled={Boolean(blocked) || placing} onClick={submit}>
+        <button
+          type="button"
+          className={`pt-submit ${side === 'long' ? 'is-long' : 'is-short'}`}
+          data-testid="perp-ticket-submit"
+          disabled={Boolean(blocked) || placing}
+          onClick={submit}
+        >
           {placing
             ? t('perpTerminal.ticket.placing', { defaultValue: 'Sending…' })
             : blocked
@@ -269,11 +384,16 @@ export default function Ticket({
         </button>
       )}
 
-      <p className="pt-note" data-testid="perp-ticket-custody">
-        {t('perpTerminal.ticket.custody', {
-          defaultValue: 'Signed by your own wallet on {{chain}}. FBT never holds a key and never takes custody.',
-          chain: CHAIN_NAME[venue] || venueMeta?.family || '—'
-        })}
+      <p className="pt-custody" data-testid="perp-ticket-custody">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M12 2L3 7v6c0 5.25 3.75 9.75 9 11 5.25-1.25 9-5.75 9-11V7l-9-5z" />
+        </svg>
+        <span>
+          {t('perpTerminal.ticket.custody', {
+            defaultValue: 'Signed by your own wallet on {{chain}}. FBT never holds a key and never takes custody.',
+            chain: CHAIN_NAME[venue] || venueMeta?.family || '—'
+          })}
+        </span>
       </p>
     </section>
   );

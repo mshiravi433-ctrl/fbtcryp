@@ -1381,6 +1381,27 @@
       "dydxEquity": "رصيد حساب dYdX",
       "confirmDydx": "تأكيد وتوقيع وإرسال الأمر",
       "tpSlUnsupported": "جني الأرباح ووقف الخسارة يُكتبان في الأمر على مسار Ostium فقط."
+    },
+    "banner": {
+      "eyebrow": "مشتقات غير وصائية · تسوية مباشرة من محفظتك",
+      "modeSpot": "تداول فوري",
+      "modePerp": "مكتب العقود الدائمة",
+      "modeDydx": "دفتر أوامر dYdX",
+      "modeOnchain": "محرك السلسلة",
+      "statMarkets": "الأسواق النشطة",
+      "statBtc": "مؤشر BTC",
+      "statMaxLev": "أقصى رافعة",
+      "statMaxLevVal": "حتى 50×",
+      "statCustody": "نموذج الحفظ",
+      "statCustodyVal": "حفظ ذاتي",
+      "liveFeed": "بث حي للسوق",
+      "syncingFeed": "جارٍ مزامنة البث",
+      "openTerminal": "المحطة الاحترافية",
+      "viewPairs": "أزواج السوق"
+    },
+    "subtabs": {
+      "pairsHint": "مسح سريع وتذكرة فورية",
+      "terminalHint": "رسم بياني حي ودفتر أوامر ومخاطر"
     }
   },
   "farm": {
@@ -10068,5 +10089,18 @@
     "controlsNetworkType": "نوع الشبكة",
     "controlsShowMore": "عرض الكل ({{count}})",
     "controlsShowLess": "عرض أقل"
+  },
+  "perpTerminal": {
+    "pairModalTitle": "اختر سوق العقود الدائمة",
+    "pairModalSub": "ابحث بالرمز أو صفِّ حسب المنصة",
+    "pairModalClose": "إغلاق",
+    "pairModalCount": "{{n}} سوق",
+    "ticket": {
+      "headerTitle": "تذكرة الأمر",
+      "longSub": "ربح مع الصعود",
+      "shortSub": "ربح مع الهبوط",
+      "summaryTitle": "ملخص الأمر والتصفية",
+      "usdUnit": "USD"
+    }
   }
 }

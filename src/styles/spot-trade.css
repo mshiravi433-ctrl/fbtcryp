@@ -53,12 +53,13 @@
   grid-template-columns: 1fr 1fr;
   gap: var(--sp-1);
   width: 100%;
-  max-width: 520px;
+  max-width: 540px;
   margin-inline: auto;
   padding: var(--sp-1);
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 16%, var(--line));
+  border-radius: 16px;
   background: var(--bg-panel);
+  box-shadow: var(--glass-shadow);
 }
 
 .spot-root .spot-mode-tab {

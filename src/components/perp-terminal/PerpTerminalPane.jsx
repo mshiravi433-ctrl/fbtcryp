@@ -570,8 +570,32 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
       : serverState === 'offline' ? t('perpTerminal.server.offline', { defaultValue: 'Server unreachable' })
         : t('perpTerminal.server.connecting', { defaultValue: 'Connecting to server…' });
 
+  const TAB_ICON = {
+    book: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 6h7M4 12h10M4 18h6M16 6h4M17 12h3M14 18h6" />
+      </svg>
+    ),
+    tape: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <polyline points="22 12 18 12 15 20 9 4 6 12 2 12" />
+      </svg>
+    ),
+    risk: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 2L3 7v6c0 5.25 3.75 9.75 9 11 5.25-1.25 9-5.75 9-11V7l-9-5z" />
+      </svg>
+    ),
+    funding: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </svg>
+    )
+  };
+
   return (
-    <div className={`ptx ${embedded ? 'ptx--embedded' : 'ptx--route'}`} data-testid={testId} dir="ltr">
+    <div className={`ptx ${embedded ? 'ptx--embedded' : 'ptx--route'}`} data-testid={testId}>
       {/* ── top bar: picker · stats · server truth ─────────────────────── */}
       <header className="ptx-top panel">
         <div className="ptx-picker">
@@ -637,7 +661,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
 
       {/* ── the 24h range bar ──────────────────────────────────────────── */}
       {bar.rangePositionPct != null && (
-        <div className="ptx-range" role="img" aria-label={t('perpTerminal.top.rangeAlt', { defaultValue: 'Where the mark sits inside the 24 hour range' })}>
+        <div className="ptx-range" role="img" dir="ltr" aria-label={t('perpTerminal.top.rangeAlt', { defaultValue: 'Where the mark sits inside the 24 hour range' })}>
           <span className="ptx-range-track"><span className="ptx-range-dot" style={{ insetInlineStart: `${bar.rangePositionPct.toFixed(1)}%` }} /></span>
         </div>
       )}
@@ -661,7 +685,15 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
             />
           ) : (
             <div className="pt-chart-skeleton" data-testid="perp-chart-none">
-              <p className="pt-empty">{t('perpTerminal.chart.noVenue', { defaultValue: 'No in-app venue lists this pair, so there is no chart to show.' })}</p>
+              <div className="pt-empty-box">
+                <span className="pt-empty-ico" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 3v18h18" />
+                    <path d="M7 14l4-4 4 3 5-6" />
+                  </svg>
+                </span>
+                <p className="pt-empty">{t('perpTerminal.chart.noVenue', { defaultValue: 'No in-app venue lists this pair, so there is no chart to show.' })}</p>
+              </div>
             </div>
           )}
         </section>
@@ -706,7 +738,8 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
               onClick={() => setTab(k)}
               data-testid={`perp-terminal-tab-${k}`}
             >
-              {t(`perpTerminal.tabs.${k}`, { defaultValue: k })}
+              <span className="pt-tab-ico">{TAB_ICON[k]}</span>
+              <span>{t(`perpTerminal.tabs.${k}`, { defaultValue: k })}</span>
             </button>
           ))}
           {tab === 'risk' && account.loading && <span className="pt-muted pt-small pt-loading-note">{t('common.loading', { defaultValue: 'Loading…' })}</span>}
@@ -717,17 +750,35 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
             isDydx
               ? <DepthChart book={book} testId="perp-terminal-depth" />
               : (
-                <p className="pt-empty" data-testid="perp-book-unavailable">
-                  {route.route === ROUTE.OSTIUM
-                    ? t('perpTerminal.book.ostium', { defaultValue: 'Ostium is a peer-to-pool venue: it publishes no order book. Slippage is priced from the oracle instead.' })
-                    : t('perpTerminal.book.velocity', { defaultValue: 'The Velocity book is not exposed to this screen yet. The price above is the venue’s own mid.' })}
-                </p>
+                <div className="pt-empty-box">
+                  <span className="pt-empty-ico" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 6h7M4 12h10M4 18h6M16 6h4M17 12h3M14 18h6" />
+                    </svg>
+                  </span>
+                  <p className="pt-empty" data-testid="perp-book-unavailable">
+                    {route.route === ROUTE.OSTIUM
+                      ? t('perpTerminal.book.ostium', { defaultValue: 'Ostium is a peer-to-pool venue: it publishes no order book. Slippage is priced from the oracle instead.' })
+                      : t('perpTerminal.book.velocity', { defaultValue: 'The Velocity book is not exposed to this screen yet. The price above is the venue’s own mid.' })}
+                  </p>
+                </div>
               )
           )}
           {tab === 'tape' && (
             isDydx
               ? <Tape trades={tape.trades} live={tape.live} loading={tape.loading} reason={tape.reason} testId="perp-terminal-tape" />
-              : <p className="pt-empty" data-testid="perp-tape-unavailable">{t('perpTerminal.tape.unavailable', { defaultValue: 'The prints feed is dYdX-only. The 24h stats above are the venue’s own.' })}</p>
+              : (
+                <div className="pt-empty-box">
+                  <span className="pt-empty-ico" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="22 12 18 12 15 20 9 4 6 12 2 12" />
+                    </svg>
+                  </span>
+                  <p className="pt-empty" data-testid="perp-tape-unavailable">
+                    {t('perpTerminal.tape.unavailable', { defaultValue: 'The prints feed is dYdX-only. The 24h stats above are the venue’s own.' })}
+                  </p>
+                </div>
+              )
           )}
           {tab === 'risk' && (
             <RiskPanel
@@ -743,14 +794,28 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
           )}
           {tab === 'funding' && (
             <div className="pt-funding" data-testid="perp-terminal-funding">
-              <dl className="pt-kv pt-mono">
-                <div><dt>{t('perpTerminal.funding.apr', { defaultValue: 'Funding APR' })}</dt><dd>{bar.fundingAprPct != null ? fmtPct(bar.fundingAprPct) : '—'}</dd></div>
-                <div><dt>{t('perpTerminal.funding.next', { defaultValue: 'Next settlement in' })}</dt><dd>{bar.fundingInHours != null ? `${bar.fundingInHours.toFixed(1)}h` : '—'}</dd></div>
-                <div><dt>{t('perpTerminal.funding.oi', { defaultValue: 'Open interest' })}</dt><dd>{bar.openInterestUsd != null ? fmtUsd(bar.openInterestUsd) : '—'}</dd></div>
-                <div><dt>{t('perpTerminal.funding.volume', { defaultValue: '24h volume' })}</dt><dd>{bar.volume24hUsd != null ? fmtUsd(bar.volume24hUsd) : '—'}</dd></div>
-              </dl>
+              <div className="pt-funding-grid pt-mono">
+                <div className="pt-funding-card">
+                  <span className="pt-funding-label">{t('perpTerminal.funding.apr', { defaultValue: 'Funding APR' })}</span>
+                  <strong className={`pt-funding-val ${bar.fundingAprPct > 0 ? 'pt-up' : bar.fundingAprPct < 0 ? 'pt-down' : ''}`}>
+                    {bar.fundingAprPct != null ? fmtPct(bar.fundingAprPct) : '—'}
+                  </strong>
+                </div>
+                <div className="pt-funding-card">
+                  <span className="pt-funding-label">{t('perpTerminal.funding.next', { defaultValue: 'Next settlement in' })}</span>
+                  <strong className="pt-funding-val">{bar.fundingInHours != null ? `${bar.fundingInHours.toFixed(1)}h` : '—'}</strong>
+                </div>
+                <div className="pt-funding-card">
+                  <span className="pt-funding-label">{t('perpTerminal.funding.oi', { defaultValue: 'Open interest' })}</span>
+                  <strong className="pt-funding-val">{bar.openInterestUsd != null ? fmtUsd(bar.openInterestUsd) : '—'}</strong>
+                </div>
+                <div className="pt-funding-card">
+                  <span className="pt-funding-label">{t('perpTerminal.funding.volume', { defaultValue: '24h volume' })}</span>
+                  <strong className="pt-funding-val">{bar.volume24hUsd != null ? fmtUsd(bar.volume24hUsd) : '—'}</strong>
+                </div>
+              </div>
               {bar.nextFundingAtMs != null && (
-                <p className="pt-note">
+                <p className="pt-funding-banner">
                   {t('perpTerminal.funding.settlesAt', { defaultValue: 'Settles at {{at}} — the next hourly funding on this venue.', at: new Date(bar.nextFundingAtMs).toLocaleString() })}
                 </p>
               )}

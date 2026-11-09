@@ -13,6 +13,7 @@ import FuturesMarketChart from '../components/FuturesMarketChart';
 import TokenIcon from '../lib/tokenIcon';
 import FundingPanel from '../components/FundingPanel';
 import FuturesPositionsCard from '../components/FuturesPositionsCard';
+import FuturesHeroBanner from '../components/futures/FuturesHeroBanner';
 import { IconActivity, IconRoute, IconShield, IconSparkle, IconSwap, IconTrend } from '../components/Icons';
 import SpotTrade from '../components/spot/SpotTrade';
 import { useMarkets } from '../hooks/useMarket';
@@ -1037,41 +1038,25 @@ export default function Perp() {
 
   const tp = Number(takeProfit) > 0 ? Number(takeProfit) : null;
   const sl = Number(stopLoss) > 0 ? Number(stopLoss) : null;
+  const heroBtc = byId.get('bitcoin') ?? null;
+  const heroBtcLive = Boolean(heroBtc) && heroBtc.offline !== true && heroBtc.dataProvenance !== 'offline';
+  const heroEth = byId.get('ethereum') ?? null;
+  const heroEthLive = Boolean(heroEth) && heroEth.offline !== true && heroEth.dataProvenance !== 'offline';
 
   return (
     <PageTransition>
       <motion.div variants={riseIn} initial="hidden" animate="show">
-        <h1 className="h1">{t(perpTab === 'spot' ? 'trade.title' : 'perp.title')}</h1>
-        <p className="muted">{t(perpTab === 'spot' ? 'spot.subtitle' : 'perp.subtitle')}</p>
-        {/*
-          ─── THE TWO SUB-TABS («جفت توکن» / «ترمینال») ──────────────────────
-          «تب پرپچوال باید دو زیر تب جفت توکن و ترمینال باشد» — here they are.
-          «جفت توکن» is the market-cap catalogue (the default this page has
-          always been); «ترمینال» is the venue-executable desk, full-height
-          and fixed, WITHOUT leaving this tab. They are not the same list.
-        */}
-        {/* Only the perpetual room carries the sub-tabs — the dYdX and
-            on-chain rooms are their own venues with their own screens. */}
-        {PERP_TERMINAL_ENABLED && perpTab === 'overview' && (
-          <div className="perp-subtabs" role="tablist" aria-label={t('perp.subtabs.aria', { defaultValue: 'Perpetual view' })}>
-            {['pairs', 'terminal'].map((k) => {
-              const active = perpSubTab === k;
-              return (
-                <button
-                  key={k}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  className={`perp-subtab ${active ? 'is-on' : ''}`}
-                  onClick={() => selectSubTab(k)}
-                  data-testid={`perp-subtab-${k}`}
-                >
-                  {t(k === 'pairs' ? 'perp.subtabs.pairs' : 'perp.subtabs.terminal', { defaultValue: k === 'pairs' ? 'Token pairs' : 'Terminal' })}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        <FuturesHeroBanner
+          activeTab={perpTab}
+          title={t(perpTab === 'spot' ? 'trade.title' : 'perp.title')}
+          subtitle={t(perpTab === 'spot' ? 'spot.subtitle' : 'perp.subtitle')}
+          marketCount={listPairs.length}
+          btcPrice={heroBtcLive ? heroBtc.current_price : null}
+          btcChange={heroBtcLive ? heroBtc.price_change_percentage_24h : null}
+          ethPrice={heroEthLive ? heroEth.current_price : null}
+          ethChange={heroEthLive ? heroEth.price_change_percentage_24h : null}
+          liveReady={heroBtcLive || routeIndex.size > 0}
+        />
       </motion.div>
 
       {/*
@@ -1102,6 +1087,50 @@ export default function Perp() {
                   <Icon width={16} height={16} />
                 </span>
                 <span className="perp-rail-label">{t(TAB_LABEL_KEY[k])}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Only the perpetual room carries the sub-tabs — uses role="group" so
+          the page has a single primary role="tablist" (.perp-rail). */}
+      {PERP_TERMINAL_ENABLED && perpTab === 'overview' && (
+        <div className="perp-subtabs" role="group" aria-label={t('perp.subtabs.aria', { defaultValue: 'Perpetual view' })}>
+          {['pairs', 'terminal'].map((k) => {
+            const active = perpSubTab === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={active}
+                className={`perp-subtab ${active ? 'is-on' : ''}`}
+                onClick={() => selectSubTab(k)}
+                data-testid={`perp-subtab-${k}`}
+              >
+                <span className="perp-subtab-ico" aria-hidden="true">
+                  {k === 'pairs' ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="4" width="7" height="7" rx="1.5" />
+                      <rect x="14" y="4" width="7" height="7" rx="1.5" />
+                      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                    </svg>
+                  ) : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 3v18h18" />
+                      <path d="M7 15l4-4 4 3 5-6" />
+                    </svg>
+                  )}
+                </span>
+                <span className="perp-subtab-copy">
+                  <span className="perp-subtab-title">
+                    {t(k === 'pairs' ? 'perp.subtabs.pairs' : 'perp.subtabs.terminal', { defaultValue: k === 'pairs' ? 'Token pairs' : 'Terminal' })}
+                  </span>
+                  <span className="perp-subtab-hint">
+                    {t(k === 'pairs' ? 'perp.subtabs.pairsHint' : 'perp.subtabs.terminalHint', { defaultValue: k === 'pairs' ? 'Quick scan & instant order sheet' : 'Live chart, depth book, tape & risk' })}
+                  </span>
+                </span>
               </button>
             );
           })}

@@ -2212,7 +2212,26 @@
     "subtabs": {
       "aria": "نمای پرپچوال",
       "pairs": "جفت توکن",
-      "terminal": "ترمینال"
+      "terminal": "ترمینال",
+      "pairsHint": "پایش سریع قیمت و ثبت فوری سفارش",
+      "terminalHint": "چارت زنده، دفتر سفارش، تیپ و ریسک"
+    },
+    "banner": {
+      "eyebrow": "مشتقات غیرامانی · تسویه مستقیم از کیف‌پول شخصی",
+      "modeSpot": "مبادله اسپات",
+      "modePerp": "میز پرپچوال",
+      "modeDydx": "دفتر سفارش dYdX",
+      "modeOnchain": "موتور آن‌چین",
+      "statMarkets": "بازارهای فعال",
+      "statBtc": "شاخص BTC",
+      "statMaxLev": "سقف اهرم",
+      "statMaxLevVal": "تا ۵۰×",
+      "statCustody": "مدل نگهداری",
+      "statCustodyVal": "کیف‌پول شخصی",
+      "liveFeed": "فید زنده اوراکل و بازار",
+      "syncingFeed": "در حال همگام‌سازی فید",
+      "openTerminal": "ترمینال حرفه‌ای",
+      "viewPairs": "فهرست بازارها"
     }
   },
   "farm": {
@@ -18486,7 +18505,12 @@
         "RISK_BLOCKED": "موتور ریسک این سفارش را مسدود کرد.",
         "PROVIDER_UNAVAILABLE": "ونو پاسخ نداد. چیزی ارسال نشد."
       },
-      "activateDydx": "فعال‌سازی نشست dYdX — فقط یک امضا"
+      "activateDydx": "فعال‌سازی نشست dYdX — فقط یک امضا",
+      "headerTitle": "پنل ثبت سفارش",
+      "longSub": "سود از رشد قیمت",
+      "shortSub": "سود از ریزش قیمت",
+      "summaryTitle": "پیش‌نمایش سفارش و لیکوییدیشن",
+      "usdUnit": "دلار"
     },
     "liq": {
       "provenance": {
@@ -18584,6 +18608,10 @@
     "book": {
       "ostium": "Ostium یک وندور peer-to-pool است و دفتر سفارش ندارد؛ لغزش از روی اوراکل قیمت‌گذاری می‌شود",
       "velocity": "دفتر سفارش Velocity هنوز در این صفحه در دسترس نیست؛ قیمت بالا همان mid خود وندور است"
-    }
+    },
+    "pairModalTitle": "انتخاب بازار پرپچوال",
+    "pairModalSub": "جستجوی نماد یا فیلتر بر اساس محل تسویه",
+    "pairModalClose": "بستن",
+    "pairModalCount": "{{n}} بازار"
   }
 }

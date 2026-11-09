@@ -3954,6 +3954,27 @@
         "t": "Pagas comisión al entrar y al salir",
         "d": "El desglose exacto se muestra antes de confirmar, y la orden la construye y revisa esta misma app — luego la firmas con tu wallet. Esta app nunca custodia tus fondos ni tus claves."
       }
+    },
+    "banner": {
+      "eyebrow": "Non-Custodial Derivatives · Direct Wallet Settlement",
+      "modeSpot": "Spot Swap",
+      "modePerp": "Perpetual Desk",
+      "modeDydx": "dYdX Orderbook",
+      "modeOnchain": "On-Chain Engine",
+      "statMarkets": "Active Markets",
+      "statBtc": "BTC Benchmark",
+      "statMaxLev": "Max Leverage",
+      "statMaxLevVal": "Up to 50×",
+      "statCustody": "Custody Model",
+      "statCustodyVal": "Self-Custody",
+      "liveFeed": "Live Oracle & Venue Feed",
+      "syncingFeed": "Syncing Market Feed",
+      "openTerminal": "Pro Terminal",
+      "viewPairs": "Market Pairs"
+    },
+    "subtabs": {
+      "pairsHint": "Quick scan & instant order sheet",
+      "terminalHint": "Live chart, depth book, tape & risk"
     }
   },
   "secCenter": {
@@ -4710,5 +4731,18 @@
     "controlsNetworkType": "Tipo de red",
     "controlsShowMore": "Ver los {{count}}",
     "controlsShowLess": "Ver menos"
+  },
+  "perpTerminal": {
+    "pairModalTitle": "Select Perpetual Market",
+    "pairModalSub": "Search by ticker or filter by settlement venue",
+    "pairModalClose": "Close",
+    "pairModalCount": "{{n}} markets",
+    "ticket": {
+      "headerTitle": "Order Ticket",
+      "longSub": "Profit on upside",
+      "shortSub": "Profit on downside",
+      "summaryTitle": "Order & Liquidation Preview",
+      "usdUnit": "USD"
+    }
   }
 }

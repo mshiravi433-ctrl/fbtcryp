@@ -1,22 +1,14 @@
 /**
- * PAIR SELECT — the token picker of the terminal.
+ * PAIR SELECT — Portalled Perpetual Market Picker Modal.
  * ---------------------------------------------------------------------------
- * «برای انتخاب توکن ها با لوگو و باکس بازشونده باشد»
+ * «انتخاب توکن باید پاپ اپ با اندازه و فاصله درست باشد الان نیمی صفحه در موبایل نمیاد»
  *
- * One button (logo + symbol) opens a dropdown panel with search and a venue
- * filter. The list is the EXECUTION UNIVERSE — only markets an in-app venue
- * settles — which is deliberately a different catalogue from the Perpetual
- * tab's market-cap list: two screens, two jobs, two sets of markets.
- *
- *   • every row carries the token's logo (CoinGecko image when the parent
- *     feed knows one, a deterministic monogram otherwise — never a broken
- *     image icon);
- *   • venue badges say WHERE the pair settles (Velocity / Ostium / dYdX);
- *   • search matches symbol or name; the venue chips narrow it further;
- *   • keyboard: Escape closes, focus returns to the trigger — a dropdown a
- *     keyboard cannot leave is a trap.
+ * Portals `.ps-panel` into `document.body` inside a centered/responsive
+ * viewport-safe modal backdrop (`.ps-backdrop`) so it never clips or slides
+ * half off-screen on mobile phones or inside overflow-clipped containers.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import TokenIcon from '../../lib/tokenIcon';
 import { fmtCompact, fmtPct, fmtPrice } from '../../lib/format';
@@ -30,28 +22,42 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
   const [query, setQuery] = useState('');
   const [venue, setVenue] = useState('all');
   const rootRef = useRef(null);
+  const panelRef = useRef(null);
   const searchRef = useRef(null);
   const buttonRef = useRef(null);
 
   const rows = useMemo(() => (Array.isArray(options) ? options : []), [options]);
 
-  /* Outside tap or Escape closes; returning focus to the trigger keeps the
-     keyboard trap-free. */
+  /* Outside tap or Escape closes; body scroll locks while modal is open. */
   useEffect(() => {
     if (!open) return undefined;
-    const onDoc = (e) => { if (!rootRef.current?.contains(e.target)) setOpen(false); };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const onDoc = (e) => {
+      if (rootRef.current?.contains(e.target)) return;
+      if (panelRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
     const onKey = (e) => {
-      if (e.key === 'Escape') { setOpen(false); buttonRef.current?.focus(); }
+      if (e.key === 'Escape') {
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
     };
     document.addEventListener('pointerdown', onDoc);
     document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('pointerdown', onDoc); document.removeEventListener('keydown', onKey); };
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('pointerdown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
   }, [open]);
 
   /* Focus lands on the search field, ready to type. */
   useEffect(() => {
     if (open) {
-      const id = setTimeout(() => searchRef.current?.focus(), 50);
+      const id = setTimeout(() => searchRef.current?.focus(), 40);
       return () => clearTimeout(id);
     }
     return undefined;
@@ -76,35 +82,52 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
     setQuery('');
   };
 
-  return (
-    <div className="ps-root" ref={rootRef} data-testid={testId}>
-      <button
-        type="button"
-        ref={buttonRef}
-        className={`ps-trigger ${open ? 'is-open' : ''}`}
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        data-testid="pair-select-button"
+  const modal = open && typeof document !== 'undefined'
+    ? createPortal(
+      <div
+        className="ps-backdrop"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) setOpen(false);
+        }}
       >
-        <TokenIcon token={{ symbol: selected || '?', image: currentImage }} size={30} />
-        <span className="ps-trigger-text">
-          <span className="ps-trigger-sym" dir="ltr">{selected || '—'}<span className="ps-trigger-quote">-PERP</span></span>
-          <span className="ps-trigger-sub">
-            {current?.venues?.length
-              ? current.venues.map((v) => t(`perpTerminal.venue.${v}`, { defaultValue: v })).join(' · ')
-              : t('perpTerminal.pairSelectVenue', { defaultValue: 'venue-settled markets' })}
-          </span>
-        </span>
-        <svg className="ps-trigger-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </button>
+        <div
+          ref={panelRef}
+          className="ps-panel"
+          role="listbox"
+          aria-label={t('perpTerminal.pairSelectLabel', { defaultValue: 'Select a perpetual market' })}
+          data-testid="pair-select-panel"
+        >
+          <div className="ps-modal-head">
+            <div className="ps-modal-titles">
+              <div className="ps-modal-title-row">
+                <strong className="ps-modal-title">
+                  {t('perpTerminal.pairModalTitle', { defaultValue: 'Select Perpetual Market' })}
+                </strong>
+                <span className="ps-count pt-mono">
+                  {t('perpTerminal.pairModalCount', { n: filtered.length, defaultValue: `${filtered.length} markets` })}
+                </span>
+              </div>
+              <span className="ps-modal-sub">
+                {t('perpTerminal.pairModalSub', { defaultValue: 'Search by ticker or filter by settlement venue' })}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="ps-close-btn"
+              onClick={() => { setOpen(false); buttonRef.current?.focus(); }}
+              aria-label={t('perpTerminal.pairModalClose', { defaultValue: 'Close' })}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
 
-      {open && (
-        <div className="ps-panel" role="listbox" aria-label={t('perpTerminal.pairSelectLabel', { defaultValue: 'Select a perpetual market' })} data-testid="pair-select-panel">
           <div className="ps-search">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
             <input
               ref={searchRef}
               type="text"
@@ -117,7 +140,14 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
               autoComplete="off"
             />
             {query && (
-              <button type="button" className="ps-search-clear" onClick={() => setQuery('')} aria-label={t('common.clear', { defaultValue: 'Clear' })}>×</button>
+              <button
+                type="button"
+                className="ps-search-clear"
+                onClick={() => { setQuery(''); searchRef.current?.focus(); }}
+                aria-label={t('common.clear', { defaultValue: 'Clear' })}
+              >
+                ×
+              </button>
             )}
           </div>
 
@@ -134,7 +164,6 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
                 {v === 'all' ? t('perpTerminal.venueAll', { defaultValue: 'All' }) : t(`perpTerminal.venue.${v}`, { defaultValue: v })}
               </button>
             ))}
-            <span className="ps-count mono">{filtered.length}</span>
           </div>
 
           <ul className="ps-list">
@@ -151,22 +180,28 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
                     onClick={() => pick(m.base)}
                     data-testid={`pair-select-option-${m.base}`}
                   >
-                    <TokenIcon token={{ symbol: m.base, image: img }} size={26} />
-                    <span className="ps-option-id">
-                      <span className="ps-option-sym" dir="ltr">{m.base}<span className="ps-option-quote">/USD</span></span>
-                      <span className="ps-option-name">{images?.[m.base]?.name || t('perpTerminal.pairPerp', { defaultValue: 'Perpetual' })}</span>
+                    <span className="ps-option-avatar">
+                      <TokenIcon token={{ symbol: m.base, image: img }} size={32} />
                     </span>
-                    <span className="ps-option-nums">
-                      <span className="ps-option-price mono">{m.price != null ? fmtPrice(m.price) : '—'}</span>
-                      <span className={`ps-option-chg mono ${m.change24hPct > 0 ? 'is-up' : m.change24hPct < 0 ? 'is-down' : ''}`}>
-                        {m.change24hPct != null ? fmtPct(m.change24hPct) : '—'}
+                    <span className="ps-option-id">
+                      <span className="ps-option-sym pt-mono" dir="ltr">
+                        {m.base}<span className="ps-option-quote">/USD</span>
+                      </span>
+                      <span className="ps-option-sub">
+                        <span className="ps-option-name">{images?.[m.base]?.name || t('perpTerminal.pairPerp', { defaultValue: 'Perpetual' })}</span>
+                        <span className="ps-option-badges">
+                          {[...(m.venues || [])].sort((a, b) => (VENUE_RANK[a] ?? 9) - (VENUE_RANK[b] ?? 9)).map((v) => (
+                            <span key={v} className={`ps-badge ps-badge-${v}`}>{t(`perpTerminal.venueShort.${v}`, { defaultValue: v })}</span>
+                          ))}
+                        </span>
                       </span>
                     </span>
-                    <span className="ps-option-badges">
-                      {[...(m.venues || [])].sort((a, b) => (VENUE_RANK[a] ?? 9) - (VENUE_RANK[b] ?? 9)).map((v) => (
-                        <span key={v} className={`ps-badge ps-badge-${v}`}>{t(`perpTerminal.venueShort.${v}`, { defaultValue: v })}</span>
-                      ))}
-                      {m.volume24hUsd != null && <span className="ps-vol mono">{fmtCompact(m.volume24hUsd)}</span>}
+                    <span className="ps-option-nums pt-mono">
+                      <span className="ps-option-price">{m.price != null ? fmtPrice(m.price) : '—'}</span>
+                      <span className={`ps-option-chg ${m.change24hPct > 0 ? 'is-up' : m.change24hPct < 0 ? 'is-down' : 'is-flat'}`}>
+                        {m.change24hPct != null ? fmtPct(m.change24hPct) : '—'}
+                      </span>
+                      {m.volume24hUsd != null && <span className="ps-vol">{fmtCompact(m.volume24hUsd)}</span>}
                     </span>
                   </button>
                 </li>
@@ -183,7 +218,42 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
 
           <p className="ps-foot">{t('perpTerminal.pairSelectFoot', { defaultValue: 'Only markets settled by an in-app venue are listed here.' })}</p>
         </div>
-      )}
+      </div>,
+      document.body
+    )
+    : null;
+
+  return (
+    <div className="ps-root" ref={rootRef} data-testid={testId}>
+      <button
+        type="button"
+        ref={buttonRef}
+        className={`ps-trigger ${open ? 'is-open' : ''}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        data-testid="pair-select-button"
+      >
+        <span className="ps-trigger-avatar">
+          <TokenIcon token={{ symbol: selected || '?', image: currentImage }} size={32} />
+        </span>
+        <span className="ps-trigger-text">
+          <span className="ps-trigger-sym pt-mono" dir="ltr">
+            {selected || '—'}<span className="ps-trigger-quote">-PERP</span>
+          </span>
+          <span className="ps-trigger-sub">
+            {current?.venues?.length
+              ? current.venues.map((v) => t(`perpTerminal.venue.${v}`, { defaultValue: v })).join(' · ')
+              : t('perpTerminal.pairSelectVenue', { defaultValue: 'venue-settled markets' })}
+          </span>
+        </span>
+        <span className="ps-trigger-chev-box" aria-hidden="true">
+          <svg className="ps-trigger-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </span>
+      </button>
+      {modal}
     </div>
   );
 }
