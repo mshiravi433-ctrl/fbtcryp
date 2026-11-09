@@ -126,6 +126,8 @@ const PAGE_PURPOSE = {
   SolanaSwap: { fa: 'سواپ سولانا', en: 'Solana swap' },
   AparatVideos: { fa: 'ویدیوهای آموزشی', en: 'video tutorials' },
   Navigate: { fa: 'ناوبری همهٔ بخش‌ها', en: 'navigate all sections' },
+  P2P: { fa: 'معاملهٔ همتا‌به‌همتا (P2P) بین کاربران', en: 'peer-to-peer (P2P) trading between users' },
+  AiTradePanel: { fa: 'پنل معاملهٔ هوش مصنوعی (وگرنه هدایت به /intent)', en: 'AI trade panel (otherwise redirects to /intent)' },
   Collective: { fa: 'لایهٔ جمعی', en: 'collective layer' },
   Docs2: { fa: 'مستندات', en: 'docs' }
 };
