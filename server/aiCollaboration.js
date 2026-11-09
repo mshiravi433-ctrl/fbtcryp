@@ -358,6 +358,17 @@ export function buildSafeContextBlock({ context = {}, knowledge = [], sources = 
 /*  STAGE 1-2 — INDEPENDENT PARALLEL ANALYSIS (§9)                             */
 /* -------------------------------------------------------------------------- */
 
+// Preserve completed seats when another seat exceeds the shared deadline.
+export async function collectAvailableAnalyses(promises, timeoutMs) {
+  const results = new Array(promises.length);
+  let timer;
+  const all = Promise.all(promises.map((promise, i) => Promise.resolve(promise)
+    .then((value) => { results[i] = value; }, () => {})));
+  await Promise.race([all, new Promise((resolve) => { timer = setTimeout(resolve, Math.max(0, timeoutMs)); })]);
+  clearTimeout(timer);
+  return results.filter(Boolean);
+}
+
 function parseJsonSafe(text) {
   let t = String(text || '').trim();
   if (t.startsWith('```')) t = t.replace(/^```(?:json)?\s*/i, '').replace(/```$/, '').trim();
@@ -440,9 +451,16 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
           })()
         : healthyProvidersForTask(ROLE_TASK[role] || 'general', { max: 3, fullFleet: true }));
   const startedAt = Date.now();
-  for (const providerId of candidates) {
+  for (const [index, providerId] of candidates.entries()) {
+    const left = deps.turnDeadlineAt - Date.now();
+    if (left < 500) break;
+    // Leave room for the other providers, rather than letting one hung socket
+    // consume the whole turn. Abort also prevents model retries after timeout.
+    const timeout = Math.max(250, Math.min(10000, Math.floor(left / (candidates.length - index))));
+    const controller = new AbortController();
+    let timer;
     try {
-      const res = await deps.execute(providerId, {
+      const res = await Promise.race([deps.execute(providerId, {
         system,
         user,
         temperature: 0.3,
@@ -451,9 +469,12 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
         /* The mode travels with the call so the gateway can put the flagship
            model first and attach reasoning fields where they are supported.
            An injected test executor ignores it. */
-        intelligence
-      });
+        intelligence, timeout, signal: controller.signal
+      }), new Promise((_, reject) => {
+        timer = setTimeout(() => { controller.abort(); reject(new Error('PROVIDER_TIMEOUT')); }, timeout);
+      })]);
       const parsed = parseJsonSafe(res.text) || { answer: String(res.text || '').slice(0, 900), claims: [], uncertainty: '' };
+      if (!String(parsed.answer || '').trim()) throw new Error('EMPTY_AI_ANSWER');
       /*
        * Only record what the gateway did not. A call through `executeProviderChat`
        * is recorded THERE, with the model that answered; recording it again here
@@ -490,6 +511,8 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
         recordProviderCall(providerId, { ok: false, durationMs: Date.now() - startedAt, error: String(err?.message || err).slice(0, 200) });
       }
       // fall through to next candidate (§47)
+    } finally {
+      clearTimeout(timer);
     }
   }
   return { role, provider: null, model: null, answer: '', claims: [], uncertainty: '', ok: false, error: 'NO_PROVIDER_AVAILABLE' };
@@ -756,6 +779,7 @@ export async function runCollaborativeAnalysis({
   const budgetMode = resolveIntelligenceMode(intelligence ?? analysis?.intelligence?.mode ?? null);
   const budget = intelligenceDeadlineMs(budgetMode.mode, requestedDeadlineMs);
   const deadlineMs = budget.deadlineMs;
+  D.turnDeadlineAt = startedAt + deadlineMs;
   const remainingMs = () => Math.max(500, deadlineMs - (Date.now() - startedAt));
   const overBudget = () => Date.now() - startedAt > deadlineMs;
   const withDeadline = (promise, fallback, timeoutMs = remainingMs()) => {
@@ -1238,9 +1262,9 @@ export async function runCollaborativeAnalysis({
        different seat of the shared fleet (seat = role index), so the two
        analyses are genuinely different providers, not one model twice. */
     const roles = pickAnalysisRoles(plan, 2);
-    const settled = await withDeadline(
-      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief, dialogueBrief, professorBrief, researchBrief, marketBrief, requestBrief, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief }))),
-      []
+    const settled = await collectAvailableAnalyses(
+      roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief, dialogueBrief, professorBrief, researchBrief, marketBrief, requestBrief, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief })),
+      remainingMs()
     );
     analyses.push(...(settled || []).filter(Boolean));
     const valid = analyses.filter((a) => a.ok);
@@ -1260,8 +1284,8 @@ export async function runCollaborativeAnalysis({
     const baseAnalyses = plan.level >= 5 ? 3 : 2;
     const wantedAnalyses = Math.max(baseAnalyses, Math.min(5, Number(modeProfile.analysesCount) || baseAnalyses));
     const roles = pickAnalysisRoles(plan, wantedAnalyses, wantedAnalyses);
-    const settled = await withDeadline(
-      Promise.all(roles.map((r, i) => runRole({
+    const settled = await collectAvailableAnalyses(
+      roles.map((r, i) => runRole({
         role: r,
         message,
         contextBlock,
@@ -1279,8 +1303,8 @@ export async function runCollaborativeAnalysis({
            smartest mode: one of the three reads must be trying to break the
            other two, not agreeing with them. */
         counterCase: modeProfile.selfCritique && i === roles.length - 1
-      }))),
-      []
+      })),
+      remainingMs()
     );
     analyses.push(...(settled || []).filter(Boolean));
     if (modeProfile.selfCritique && roles.length) {
