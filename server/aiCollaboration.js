@@ -44,7 +44,7 @@ import {
 } from './aiGateway.js';
 import { runMultiAiDebate } from './aiConsensus.js';
 import { researchWeb, analyzeWithSources } from './aiWebResearch.js';
-import { resolveIntelligenceMode, intelligenceGeneration, getIntelligenceProfile } from './aiIntelligence.js';
+import { resolveIntelligenceMode, intelligenceGeneration, intelligenceDeadlineMs, getIntelligenceProfile } from './aiIntelligence.js';
 import { searchKnowledge } from '../src/lib/intent-ai/os/knowledgeCenter.js';
 import { retrieve as retrieveBm25 } from '../src/lib/intent-ai/retrieval.js';
 import {
@@ -712,7 +712,10 @@ const DEFAULT_DEPS = {
  * @param {object} params.analysis     pre-computed planCollaboration() result (optional)
  * @param {boolean} params.transparency  expose per-model views (§37)
  * @param {object} params.deps         injectable provider fns (tests)
- * @param {number} params.deadlineMs   hard latency budget
+ * @param {number} params.deadlineMs   hard latency budget; when omitted the
+ *                                     mode's own budget is used (8s swift,
+ *                                     20s balanced, 45s smartest), always
+ *                                     clamped under the platform wall clock
  */
 export async function runCollaborativeAnalysis({
   message = '',
@@ -726,12 +729,36 @@ export async function runCollaborativeAnalysis({
   /* Whose research agenda this turn reads and updates. null = the shared one. */
   owner = null,
   deps = {},
-  deadlineMs = DEADLINE_MS
+  deadlineMs: requestedDeadlineMs = null
 } = {}) {
   const D = { ...DEFAULT_DEPS, ...deps };
   const startedAt = Date.now();
+  /*
+   * ─── THE BUDGET IS THE MODE'S, AND IT IS SPENT, NOT RENEWED ──────────────
+   * Two defects made the smartest mode unfinishable on a real deployment, and
+   * they compounded:
+   *
+   *   1. the budget was ONE number for every mode — `AI_COLLAB_DEADLINE_MS ||
+   *      20000`, tuned when an answer meant 600 tokens from a cheap model. A
+   *      `max` turn asks a flagship with a thinking budget for three analyses,
+   *      a verifier and a repair pass; 20 s is not that, so the deep stages
+   *      raced against an already-spent budget and the turn ended in the
+   *      fallback text — indistinguishable from the pre-upgrade app.
+   *   2. `withDeadline` defaulted to the WHOLE `deadlineMs` measured from the
+   *      moment the stage started, not from the start of the turn. Every stage
+   *      therefore got a fresh 20 s: the pipeline could run four stages long
+   *      (~80 s) while the serverless function is killed at 60 s and the
+   *      browser gives up at 30 s. «هیچ تغییری» was in fact «هیچ پاسخی».
+   *
+   * Both are fixed by construction now: the mode owns the budget, and every
+   * stage gets what the turn has LEFT.
+   */
+  const budgetMode = resolveIntelligenceMode(intelligence ?? analysis?.intelligence?.mode ?? null);
+  const budget = intelligenceDeadlineMs(budgetMode.mode, requestedDeadlineMs);
+  const deadlineMs = budget.deadlineMs;
+  const remainingMs = () => Math.max(500, deadlineMs - (Date.now() - startedAt));
   const overBudget = () => Date.now() - startedAt > deadlineMs;
-  const withDeadline = (promise, fallback, timeoutMs = deadlineMs) => {
+  const withDeadline = (promise, fallback, timeoutMs = remainingMs()) => {
     let timer;
     return Promise.race([
       promise,
@@ -746,7 +773,7 @@ export async function runCollaborativeAnalysis({
    * carried it, and a direct call silently ran at the analyzer's level with
    * `max` budgets — a mode that was half applied.
    */
-  const preResolved = resolveIntelligenceMode(intelligence ?? analysis?.intelligence?.mode ?? null);
+  const preResolved = budgetMode;
   const preProfile = getIntelligenceProfile(preResolved.mode);
   const plan = analysis || planCollaboration({
     message,
@@ -1859,6 +1886,20 @@ export async function runCollaborativeAnalysis({
   result.providersUsed = [...new Set(analyses.filter((a) => a.ok && a.provider).map((a) => a.provider))];
   result.modelsConsulted = [...new Set(analyses.filter((a) => a.ok && a.model).map((a) => a.model))];
   result.latencyMs = Date.now() - startedAt;
+  /*
+   * The budget travels with the answer. `degraded: true` with
+   * `latencyMs ≈ budget.deadlineMs` is a TIMEOUT; the same flag with a two-line
+   * latency is a refusal. Before this field those two looked identical on the
+   * panel, which is how a mode that was too slow to run was read as a mode that
+   * was never implemented.
+   */
+  result.intelligence.budget = {
+    deadlineMs: budget.deadlineMs,
+    ceilingMs: budget.ceilingMs,
+    source: budget.source,
+    usedMs: result.latencyMs,
+    overBudget: overBudget()
+  };
   result.at = Date.now();
   return result;
 }
