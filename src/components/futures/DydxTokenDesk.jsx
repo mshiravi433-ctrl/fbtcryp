@@ -1,5 +1,5 @@
 /**
- * dYdX TOKEN DESK — one folded box, under the chart, about the token on it.
+ * dYdX TOKEN DESK — one folded box above the account, about the selected token.
  * ===========================================================================
  *   «برای هر توکن انتخابی، باکس هوش مصنوعی، موتور ریسک و موتور فرصت را در یک
  *    باکس بازشونده زیر آن بگذار و از هوش مصنوعی هم بپرس اضافه کن»
@@ -12,7 +12,7 @@
  *   which safety copy stops working.
  *
  *   So the three things a trader actually wants live in ONE collapsed panel
- *   directly under the candles of the token they selected:
+ *   above the account controls for the token they selected:
  *
  *     · هوش مصنوعی   — the read: trend, momentum, volatility, the range the
  *                      price sits in and ATR-sized levels (lib/futures/
@@ -48,7 +48,7 @@ import SegIndicator from '../SegIndicator';
 import FuturesAiRisk from './FuturesAiRisk';
 import { IconArrowUpRight, IconChevronRight, IconShield, IconSparkle, IconTrend } from '../Icons';
 import { getDydxCandles } from '../../lib/dydx';
-import { analyseMarket, scanTokenSetups, fundingAprPct } from '../../lib/futures/dydxTokenBrain';
+import { analyseMarket, scanTokenSetups, fundingAprPct, earlyTokenSignal, normaliseCandles } from '../../lib/futures/dydxTokenBrain';
 import { liquidationDistance } from '../../lib/futures-engine/risk.js';
 import { fmtCompact, fmtPct, fmtPrice } from '../../lib/format';
 import '../../styles/dydx-token-desk.css';
@@ -61,7 +61,8 @@ const BUILDER_FEE_RATE = 0.001;
 const TABS = [
   { id: 'ai', key: 'dydx.desk.tabs.ai', Icon: IconSparkle },
   { id: 'risk', key: 'dydx.desk.tabs.risk', Icon: IconShield },
-  { id: 'opp', key: 'dydx.desk.tabs.opp', Icon: IconTrend }
+  { id: 'opp', key: 'dydx.desk.tabs.opp', Icon: IconTrend },
+  { id: 'early', key: 'dydx.desk.tabs.early', Icon: IconTrend }
 ];
 
 /** The candles one read needs: a week of hours. */
@@ -210,14 +211,15 @@ function RiskRoom({ market, side, notionalUsd, collateralUsd, availableBalanceUs
            free collateral, not the equity already committed to the open ones.
            Passing equity here would let the engine call an unaffordable order
            affordable. */
-        availableBalanceUsd={availableBalanceUsd ?? collateralUsd}
-        fundingAprPct={fundingApr}
+        availableBalanceUsd={availableBalanceUsd}
+        fundingAprPct={fundingApr == null ? null : (side === 'sell' ? -fundingApr : fundingApr)}
         maintenanceMarginFraction={market?.maintenanceMarginFraction ?? null}
         takerFeeBps={BUILDER_FEE_RATE * 10_000}
         onApplyLeverage={onApplyLeverage}
         testId="dydx-desk-ai-risk"
       />
 
+      <p className="dtd-fine">{t('dydx.desk.risk.crossMarginNote')}</p>
       <div className="dtd-block" style={{ marginTop: 10 }}>
         <div className="dtd-block-head">{t('dydx.desk.risk.title')}</div>
         <Row label={t('dydx.desk.risk.notional')} value={notionalUsd > 0 ? fmtCompact(notionalUsd) : '—'} />
@@ -289,7 +291,7 @@ function OpportunityRoom({ scan }) {
 
 const QUICK_PROMPTS = ['why', 'risk', 'stop'];
 
-function AskRoom({ ticker, analysis, scan, market, side, leverage, notionalUsd }) {
+function AskRoom({ ticker, analysis, scan, market, side, leverage, notionalUsd, live, early }) {
   const { t, i18n } = useTranslation();
   const [question, setQuestion] = useState('');
   const [phase, setPhase] = useState('idle'); // idle | asking | done | error
@@ -302,6 +304,7 @@ function AskRoom({ ticker, analysis, scan, market, side, leverage, notionalUsd }
    * a bug that appears in development and nowhere else.
    */
   const alive = useRef(true);
+  const inFlight = useRef(false);
   useEffect(() => {
     alive.current = true;
     return () => { alive.current = false; };
@@ -309,7 +312,8 @@ function AskRoom({ ticker, analysis, scan, market, side, leverage, notionalUsd }
 
   const ask = async (raw) => {
     const q = String(raw || '').trim();
-    if (!q || phase === 'asking') return;
+    if (!q || inFlight.current) return;
+    inFlight.current = true;
     setPhase('asking');
     setErrorKey('UNKNOWN');
     try {
@@ -320,6 +324,9 @@ function AskRoom({ ticker, analysis, scan, market, side, leverage, notionalUsd }
       const lang = String(i18n?.language || 'fa').slice(0, 2);
       const context = [
         `market: ${ticker}`,
+        `candle source: ${live ? 'available (verify timestamps)' : 'unavailable or stale'}`,
+        `early watch: ${early?.status ?? 'unavailable'}${early?.direction ? ` (${early.direction})` : ''}`,
+        'Liquidation is an estimate and does not account for the complete cross-margin portfolio.',
         `price: ${market?.oraclePrice ?? 'unknown'}`,
         `window change: ${analysis?.changePct ?? 'unknown'}%`,
         `RSI14: ${analysis?.momentum?.rsi ?? 'unknown'}`,
@@ -329,7 +336,7 @@ function AskRoom({ ticker, analysis, scan, market, side, leverage, notionalUsd }
         `max leverage: ${market?.maxLeverage ?? 'unknown'}`,
         `side: ${side}, leverage: ${leverage ?? 'unknown'}, notional USD: ${notionalUsd || 'unknown'}`,
         `read: ${analysis?.read?.id ?? 'unknown'}`,
-        `setups: ${(scan?.setups || []).map((s) => s.id).join(', ') || 'none'}`
+        `setups: ${scan ? (scan.setups || []).map((s) => s.id).join(', ') || 'none' : 'unknown'}`
       ].join('\n');
       const res = await executeAiGatewayChat({
         taskType: 'market_intelligence',
@@ -350,13 +357,15 @@ function AskRoom({ ticker, analysis, scan, market, side, leverage, notionalUsd }
         setPhase('error');
         return;
       }
-      setAnswer({ text, provider: res?.providerName || res?.provider || null, model: res?.model || null });
+      setAnswer({ text, provider: res?.providerName || res?.provider || null, model: res?.model || null, notice: res?.degraded ? (res?.notice?.[lang] || res?.notice?.en || t('dydx.desk.ask.degraded')) : null });
       setPhase('done');
     } catch {
       if (alive.current) {
         setErrorKey('UNKNOWN');
         setPhase('error');
       }
+    } finally {
+      inFlight.current = false;
     }
   };
 
@@ -415,6 +424,7 @@ function AskRoom({ ticker, analysis, scan, market, side, leverage, notionalUsd }
       {phase === 'done' && answer && (
         <div className="dtd-answer" data-testid="dydx-desk-answer">
           <div className="dtd-answer-text">{answer.text}</div>
+          {answer.notice && <p className="dtd-fine" role="status">{answer.notice}</p>}
           {answer.provider && (
             <div className="dtd-answer-meta">
               {t('dydx.desk.ask.answeredBy', { provider: answer.provider, model: answer.model || '—' })}
@@ -481,6 +491,18 @@ export default function DydxTokenDesk({
 
   const analysis = useMemo(() => analyseMarket({ candles, market }), [candles, market]);
   const scan = useMemo(() => scanTokenSetups({ candles, market }), [candles, market]);
+  const fresh = useMemo(() => {
+    const last = normaliseCandles(candles).at(-1);
+    const age = last ? Date.now() - last.t : Infinity;
+    return live && age >= 0 && age <= 3 * 3600_000;
+  }, [candles, live]);
+  const early = useMemo(() => earlyTokenSignal({ candles, live: fresh }), [candles, fresh]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const timer = setInterval(() => setNonce((n) => n + 1), 60_000);
+    return () => clearInterval(timer);
+  }, [open]);
 
   const fundingApr = useMemo(() => {
     const apr = analysis?.funding?.aprPct;
@@ -567,7 +589,7 @@ export default function DydxTokenDesk({
                 </p>
               ) : (
                 <>
-                  {!live && <p className="notice dtd-unavailable">{t('dydx.desk.stale')}</p>}
+                  {!fresh && <p className="notice dtd-unavailable">{t('dydx.desk.stale')}</p>}
                   <div className="dtd-bars">
                     {t('dydx.desk.bars', { count: analysis.bars })}
                     {analysis.read.coverage != null && ` · ${t('dydx.desk.ai.coverage')}: ${Math.round(analysis.read.coverage * 100)}%`}
@@ -576,6 +598,19 @@ export default function DydxTokenDesk({
                   {tab === 'ai' && <AiRoom analysis={analysis} side={side} />}
                   {tab === 'opp' && <OpportunityRoom scan={scan} />}
                 </>
+              )}
+
+              {tab === 'early' && (
+                <div className="dtd-signal" data-testid="dydx-desk-early" role="status">
+                  <strong>{t(`dydx.desk.early.${early.status}`)}</strong>
+                  {early.status === 'watch' && <>
+                    <span>{t(`dydx.desk.early.${early.direction}`)}</span>
+                    <Row label={t('dydx.desk.early.boundary')} value={`$${fmtPrice(early.boundary)}`} />
+                    <Row label={t('dydx.desk.early.distance')} value={`${early.distanceAtr} ATR`} />
+                  </>}
+                  {early.status === 'unavailable' && <span>{t(`dydx.desk.early.${early.reason}`)}</span>}
+                  <p className="dtd-fine">{t('dydx.desk.early.disclaimer')}</p>
+                </div>
               )}
 
               {/* The risk engine needs no candles: it scores the TICKET. It is
@@ -598,6 +633,8 @@ export default function DydxTokenDesk({
 
               <AskRoom
                 ticker={ticker}
+                live={fresh}
+                early={early}
                 analysis={analysis?.ready ? analysis : null}
                 scan={scan?.ready ? scan : null}
                 market={market}

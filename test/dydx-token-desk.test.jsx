@@ -107,6 +107,7 @@ vi.mock('../src/components/ModernSelect', () => ({
 const HOUR = 3600_000;
 let MARKET_IMF = 0.05;        // 1 / 0.05 → 20× cap
 let EQUITY = 1000;
+let FREE_COLLATERAL = 1000;
 let CANDLES = [];
 let CANDLE_LIVE = true;
 const ORDERS = [];
@@ -157,7 +158,7 @@ vi.mock('../src/lib/dydx', async () => {
   return {
     ...actual,
     getDydxMarkets: async () => ({ markets: [marketRow('BTC'), marketRow('ETH')], live: true }),
-    getDydxSubaccount: async () => ({ account: { subaccount: { equity: String(EQUITY) } }, live: true }),
+    getDydxSubaccount: async () => ({ account: { subaccount: { equity: String(EQUITY), freeCollateral: FREE_COLLATERAL == null ? null : String(FREE_COLLATERAL) } }, live: true }),
     getDydxCandles: async () => ({ candles: CANDLES, live: CANDLE_LIVE, ticker: 'BTC-USD', resolution: '1HOUR' }),
     connectDydx: async () => ({ address: 'dydx1testderivedaddress00000000000000000000000' }),
     disconnectDydx: () => {},
@@ -198,6 +199,7 @@ beforeEach(() => {
   LANG = 'fa';
   MARKET_IMF = 0.05;
   EQUITY = 1000;
+  FREE_COLLATERAL = 1000;
   CANDLES = mkCandles();
   CANDLE_LIVE = true;
   ORDERS.length = 0;
@@ -235,6 +237,18 @@ describe('dYdX tab — leverage', () => {
     fireEvent.click(screen.getByTestId('dydx-leverage-5'));
     /* equity 1000 × 5 ÷ price 100 = 50, rounded to the market's own step. */
     await waitFor(() => expect(sizeInput.value).toBe('50'));
+  });
+
+  it('does not size from equity when free collateral is zero', async () => {
+    FREE_COLLATERAL = 0;
+    render(<Dydx embedded />);
+    await screen.findByTestId('dydx-leverage-5');
+    fireEvent.click((await screen.findAllByText(fa.dydx.connect))[0]);
+    await waitFor(() => expect(screen.getByTestId('dydx-account').textContent).toContain('dydx1'));
+    const input = document.querySelector('input[type="number"]');
+    fireEvent.change(input, { target: { value: '1' } });
+    fireEvent.click(screen.getByTestId('dydx-leverage-5'));
+    expect(input.value).toBe('1');
   });
 
   it('reports the leverage the order actually has, not the rung that was tapped', async () => {
@@ -313,6 +327,23 @@ describe('dYdX tab — the token desk', () => {
     expect(screen.getByTestId('dydx-desk-ask')).toBeTruthy();
   });
 
+  it('places the desk above the connection card and offers early watch', async () => {
+    render(<Dydx embedded />);
+    const desk = await screen.findByTestId('dydx-token-desk');
+    expect(desk.compareDocumentPosition(screen.getByTestId('dydx-account')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await openDesk();
+    fireEvent.click(screen.getByTestId('dydx-token-desk-tab-early'));
+    expect(screen.getByTestId('dydx-desk-early').textContent).toContain(fa.dydx.desk.early.unavailable);
+  });
+
+  it('labels a degraded internal answer', async () => {
+    AI_ANSWER = { ok: true, text: 'Fallback', provider: 'internal', degraded: true, notice: { fa: 'موتور داخلی' } };
+    render(<Dydx embedded />);
+    await openDesk();
+    fireEvent.click(screen.getByTestId('dydx-desk-ask-quick-risk'));
+    expect((await screen.findByTestId('dydx-desk-answer')).textContent).toContain('موتور داخلی');
+  });
+
   it('holds the three rooms and the AI question box, all i18n-rendered', async () => {
     render(<Dydx embedded />);
     await openDesk();
@@ -356,6 +387,7 @@ describe('dYdX tab — the token desk', () => {
     expect(call.taskType).toBe('market_intelligence');
     expect(String(call.user)).toContain(fa.dydx.desk.ask.quick.risk);
     expect(String(call.user)).toContain('BTC-USD');
+    expect(call.user).toContain('Market facts:\nmarket: BTC-USD');
     expect(String(call.system)).toMatch(/Persian|فارسی/);
 
     const answer = await screen.findByTestId('dydx-desk-answer');
