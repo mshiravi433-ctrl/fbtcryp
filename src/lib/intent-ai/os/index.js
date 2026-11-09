@@ -665,6 +665,16 @@ export function createIntentOS({
 
         return {
           ok: true,
+          /*
+           * ─── WHO OWNS THIS TURN ────────────────────────────────────────────
+           * `understood: false` means the local OS reached its «مطمئن نشدم»
+           * line: it has no answer, only an apology with buttons. The host
+           * surface must NOT present that as the reply — the server owns the
+           * layers that can read the turn (product brain, partial input, the
+           * collaboration fleet). Reported here, decided by the caller, so the
+           * OS stays a pure function of the message.
+           */
+          understood: human?.code !== 'UNSURE',
           intent: workingIntent,
           context,
           plan,

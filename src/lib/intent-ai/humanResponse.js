@@ -352,6 +352,38 @@ function partialReadingMessage(partial, lang) {
 }
 
 /**
+ * The reading of an incomplete message, as its own exportable line.
+ *
+ * `partialReadingMessage` above renders it inside `formatHumanResponse`, which
+ * makes it part of the DETERMINISTIC reply — and therefore something the model
+ * path could replace wholesale. This export (and `withPartialReading` below)
+ * lets the route attach the same line to whichever answer actually ships, so
+ * «اگر درست خوانده باشم، منظورت …» is present in every branch, not only in the
+ * one the sandbox happens to take.
+ */
+export function partialReadingLine(partial, lang = 'fa') {
+  return partialReadingMessage(partial, lang);
+}
+
+/**
+ * Put the reading in front of an answer without ever duplicating it.
+ *
+ * `skip` is for the turns where the reading must not be added: the product
+ * brain already answered the question itself, or the turn was pure small talk.
+ * The first line is what is compared — the rest of the block is the single
+ * question it allows, and it may legitimately appear again in the body.
+ */
+export function withPartialReading(text, partial, { lang = 'fa', skip = false } = {}) {
+  const base = String(text == null ? '' : text).trim();
+  if (skip) return base;
+  const line = partialReadingMessage(partial, lang);
+  if (!line) return base;
+  const first = line.split('\n')[0];
+  if (base && base.includes(first)) return base;
+  return base ? `${line}\n\n${base}` : line;
+}
+
+/**
  * An answer about the product itself — what FBT is, what a page does, the fee,
  * custody, or the honest "the founders are not recorded" — comes from the
  * verified product brain, not from the rule engine and never from memory.

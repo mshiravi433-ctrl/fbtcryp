@@ -48,7 +48,7 @@ import {
   AI_CONTROL_CHAINS
 } from '../src/lib/intent-ai/commandCenter.js';
 import { listAiTools, AI_TOOL_SCHEMA } from '../src/lib/intent-ai/aiToolRegistry.js';
-import { formatHumanResponse, formatExecutionResult, stripInternalLeaks } from '../src/lib/intent-ai/humanResponse.js';
+import { formatHumanResponse, formatExecutionResult, stripInternalLeaks, withPartialReading } from '../src/lib/intent-ai/humanResponse.js';
 import { classifyUserIntent } from '../src/lib/intent-ai/intentKinds.js';
 /* Phase 217 — cross-asset conditional intents. «اگر طلا ۵٪ اصلاح کرد و BTC
    بالای X بود، ۱۰٪ سرمایه را به طلا اختصاص بده» is answered HERE instead of
@@ -2380,6 +2380,26 @@ router.post('/chat', async (req, res) => {
       finalText = `${ack}\n\n${finalText}`;
     }
   }
+
+  /*
+   * ─── INCREMENT 24 — THE READING IS PART OF THE ANSWER ────────────────────
+   * The deterministic reply already says what it understood, but the two
+   * branches above can REPLACE that reply: a usable model answer wins
+   * (`collaborationUsable`) and a live price card wins after that. On a
+   * deployment with keys — production — the model branch is the normal one, so
+   * «اگر درست خوانده باشم، منظورت «BTC — وضعیت و تحلیل» است» existed in the
+   * code and never appeared in a single answer the user read.
+   *
+   * A reading that is only shown when the fleet fails is not honesty, it is
+   * luck. It now travels in front of whichever answer ships. The product brain
+   * is exempt (its answer IS the reading of the question) and so is small talk
+   * (there is nothing to read back), while the duplicate check inside
+   * `withPartialReading` keeps the deterministic branch byte-identical.
+   */
+  finalText = withPartialReading(finalText, partialRead, {
+    lang: deterministicLocale,
+    skip: productAnswered || socialTurn.handled
+  });
 
   /*
    * ─── UPGRADE 13 — "ASK THE OTHER ONES" IS NOW LITERAL ──────────────────
