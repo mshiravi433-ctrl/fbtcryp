@@ -714,7 +714,7 @@ export async function runCollaborativeAnalysis({
    * PERSON; an unremarkable question renders nothing and keeps its prompt.
    */
   const socialRead = mode === 'max' && plan.level >= 2
-    ? readSocialContext({ message, locale })
+    ? readSocialContext({ message, locale, history: context?.conversationSummary || '' })
     : null;
   const socialBrief = renderSocialBrief(socialRead);
   /* Role budgets follow the mode: `max` gives an analysis room for its

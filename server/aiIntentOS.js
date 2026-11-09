@@ -2413,6 +2413,11 @@ router.post('/chat', async (req, res) => {
           need: collaboration.socialRead.need,
           ambiguity: collaboration.socialRead.ambiguity,
           challenged: collaboration.socialRead.challenged === true,
+          /* Safety state: the turn describes serious loss or distress, so no
+             trading advice was given and no promise was made. */
+          distress: collaboration.socialRead.distress === true,
+          pragmatics: collaboration.socialRead.pragmatics || null,
+          relationship: collaboration.socialRead.relationship || null,
           signals: Array.isArray(collaboration.socialRead.signals) ? collaboration.socialRead.signals.slice(0, 8) : []
         } : null,
         source: resolvedIntelligence.source,
