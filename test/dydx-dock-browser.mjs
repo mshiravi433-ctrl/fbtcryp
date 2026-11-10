@@ -5,7 +5,7 @@ import puppeteer from 'puppeteer';
 
 const executablePath = process.env.CHROME_PATH;
 if (!executablePath) throw new Error('Set CHROME_PATH to a Chromium executable');
-const sheets = await Promise.all(['src/index.css', 'src/styles/derivatives-glass.css', 'src/styles/dydx-token-desk.css'].map((p) => readFile(p, 'utf8')));
+const sheets = await Promise.all(['src/index.css', 'src/styles/derivatives-glass.css', 'src/styles/futures-hero-banner.css', 'src/styles/perp-modern.css', 'src/styles/dydx-token-desk.css'].map((p) => readFile(p, 'utf8')));
 const browser = await puppeteer.launch({ executablePath, headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
 try {
   const page = await browser.newPage();
@@ -27,5 +27,28 @@ try {
       assert.equal(b.deskCenter, a.deskCenter, `desk moved on side selection: ${direction} ${width}`);
     }
   }
-  console.log('dYdX dock: centered in RTL and LTR at 5 viewport widths; no shift on selection');
+  for (const theme of ['dark', 'light']) {
+    await page.setContent(`<!doctype html><html data-theme="${theme}"><head><style>${sheets.join('\n')}</style></head><body class="dydx-screen"><main class="page"><section class="fhb" data-mode="dydx"><span class="fhb-word-fa">Futures</span><span class="fhb-chip is-gold">Custody</span><svg class="fhb-curve"><defs><linearGradient id="fhbCurveLine"><stop/><stop/><stop/></linearGradient></defs></svg></section><div class="perp-rail"><button class="perp-rail-tab is-active"><span class="seg-indicator"></span><span class="perp-rail-ico">X</span><span class="perp-rail-label">dYdX</span></button></div><div class="dydx-app derivatives-hall" style="height:1400px"><div class="derivatives-aurora"></div><div class="notice">Info</div><div class="notice notice-danger">Danger</div></div></main><nav class="dydx-mobile-dock"><button class="dydx-dock-long">Long</button><button class="dydx-dock-desk"><span class="dydx-dock-orb">✦</span><span>Desk</span></button><button class="dydx-dock-short">Short</button></nav></body></html>`);
+    const styles = await page.evaluate(() => {
+      const css = (selector, pseudo) => getComputedStyle(document.querySelector(selector), pseudo);
+      const aurora = document.querySelector('.derivatives-aurora').getBoundingClientRect();
+      const hall = document.querySelector('.dydx-app').getBoundingClientRect();
+      return { pageBg: css('.page').backgroundImage, auroraHeight: aurora.height, hallHeight: hall.height,
+        rail: css('.perp-rail-label').color, notice: css('.notice').backgroundColor,
+        risk: css('.notice-danger').backgroundColor, desk: css('.dydx-dock-desk', '::before').backgroundImage,
+        banner: css('.fhb-word-fa').backgroundImage, curve: css('#fhbCurveLine stop').stopColor };
+    });
+    assert.ok(styles.pageBg.includes('gradient'), `${theme}: page background missing`);
+    assert.ok(styles.auroraHeight >= styles.hallHeight, `${theme}: background stops before end of workspace`);
+    assert.notEqual(styles.notice, styles.risk, `${theme}: risk warning lost its distinction`);
+    assert.match(styles.desk, /238, 229, 255/);
+    assert.doesNotMatch(styles.banner, /245, 158, 11/);
+    assert.equal(styles.curve, 'rgb(188, 178, 245)');
+    await page.evaluate(() => { document.body.classList.remove('dydx-screen'); document.querySelector('.fhb').dataset.mode = 'overview'; });
+    const other = await page.evaluate(() => ({ page: getComputedStyle(document.querySelector('.page')).backgroundImage, rail: getComputedStyle(document.querySelector('.perp-rail-label')).color, curve: getComputedStyle(document.querySelector('#fhbCurveLine stop')).stopColor }));
+    assert.equal(other.page, 'none', `${theme}: dYdX background leaked to other page`);
+    assert.notEqual(other.rail, styles.rail, `${theme}: dYdX rail styling leaked`);
+    assert.notEqual(other.curve, styles.curve, `${theme}: dYdX artwork styling leaked`);
+  }
+  console.log('dYdX dock, full-page background and scoped palette verified in RTL/LTR and both themes');
 } finally { await browser.close(); }

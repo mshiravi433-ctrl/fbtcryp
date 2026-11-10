@@ -7,7 +7,7 @@ import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
 import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
-import { IconInfo, IconSparkle, IconRoute } from '../components/Icons';
+import { IconInfo, IconSparkle, IconRoute, IconAlertTriangle } from '../components/Icons';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { fmtPrice, fmtUsd } from '../lib/format';
@@ -403,8 +403,10 @@ export default function Dydx({ embedded = false } = {}) {
           </div>
         </motion.section>
 
-        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
-          <div className="glass-notice" style={{ borderColor: 'rgba(255,59,107,0.16)', background: 'rgba(255,59,107,0.08)' }}>{t('dydx.risk')}</div>
+        <motion.div className="dydx-risk-info" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
+          <InfoBox title={t('dydx.riskTitle')} tone="danger" id="dydx-risk" icon={<IconAlertTriangle width={19} height={19} />}>
+            <p>{t('dydx.risk')}</p>
+          </InfoBox>
         </motion.div>
 
         {/* Dismissible workflow guidance that reflects connection state. */}

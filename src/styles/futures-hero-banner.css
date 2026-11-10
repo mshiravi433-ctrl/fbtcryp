@@ -351,3 +351,34 @@
   .fhb-curve-line { animation: none; stroke-dashoffset: 0; }
   .fhb-dot.is-live, .fhb-dot.is-sync { animation: none; }
 }
+
+/* dYdX mode has its own non-gold palette, including the artwork that used
+   literal gold colours rather than the mode tokens. Other venues keep theirs. */
+.fhb[data-mode='dydx'] { box-shadow: 0 24px 56px -18px rgba(0,0,0,.7), inset 0 1px rgba(221,218,255,.20); }
+.fhb[data-mode='dydx'] .fhb-backdrop {
+  background: radial-gradient(70% 100% at 12% 0%, rgba(165,180,252,.20), transparent 58%),
+              radial-gradient(55% 90% at 88% 100%, rgba(129,140,248,.18), transparent 62%),
+              linear-gradient(rgba(165,180,252,.04) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(165,180,252,.04) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 30px 30px, 30px 30px;
+}
+.fhb[data-mode='dydx'] .fhb-crest { color: #d7d5ff; background: linear-gradient(145deg,rgba(146,136,220,.35),rgba(89,94,169,.15)); border-color: rgba(185,178,239,.45); box-shadow: 0 0 12px rgba(123,115,201,.28); }
+.fhb[data-mode='dydx'] .fhb-dot.is-sync { background: #aaa9ef; box-shadow: 0 0 8px rgba(170,169,239,.7); }
+.fhb[data-mode='dydx'] :is(.fhb-pill.is-mode, .fhb-chip.is-gold) { color: #e2dcff; border-color: rgba(184,174,239,.4); background: rgba(125,112,196,.14); }
+.fhb[data-mode='dydx'] .fhb-word-fa { background-image: linear-gradient(168deg, #fcf9ff 8%, #d9d0ff 28%, #a69ade 58%, #7169a9 86%, #bcb0ef 100%); filter: drop-shadow(0 6px 22px rgba(133,121,208,.35)); }
+.fhb[data-mode='dydx'] .fhb-kpi-val.is-gold { color: #dcd5ff; }
+.fhb[data-mode='dydx'] #fhbCurveLine stop:nth-child(1) { stop-color: #bcb2f5; }
+.fhb[data-mode='dydx'] #fhbCurveLine stop:nth-child(2) { stop-color: #8176cf; }
+.fhb[data-mode='dydx'] #fhbCurveLine stop:nth-child(3) { stop-color: #e4ddff; }
+.fhb[data-mode='dydx'] #fhbCurveFill stop { stop-color: #9285da; }
+.fhb[data-mode='dydx'] #fhbMarkDot stop:first-child { stop-color: #e4ddff; }
+.fhb[data-mode='dydx'] #fhbMarkDot stop:last-child { stop-color: #9285da; }
+.fhb[data-mode='dydx'] .fhb-curve > line:last-of-type { stroke: rgba(165,180,252,.35); }
+.fhb[data-mode='dydx'] .fhb-curve > circle[stroke] { stroke: #bcb2f5; }
+.fhb[data-mode='dydx'] .fhb-curve > circle:last-of-type { fill: #e4ddff; }
+[data-theme='light'] .fhb[data-mode='dydx'] { --fhb-bg-top: #f2f2fc; --fhb-bg-bot: #e4e9f9; --fhb-border: rgba(94, 105, 174, .30); --fhb-pod-bg: rgba(255,255,255,.72); --fhb-pod-border: rgba(94,105,174,.22); --fhb-ink-1: #252b51; --fhb-ink-2: #444d6d; --fhb-ink-3: #59647c; box-shadow: 0 18px 44px -18px rgba(48,59,113,.32), inset 0 1px rgba(255,255,255,.8); }
+[data-theme='light'] .fhb[data-mode='dydx'] .fhb-backdrop { background: radial-gradient(70% 100% at 12% 0%, rgba(129,140,248,.16), transparent 58%), radial-gradient(55% 90% at 88% 100%, rgba(148,163,220,.17), transparent 62%), linear-gradient(rgba(95,112,180,.06) 1px,transparent 1px), linear-gradient(90deg,rgba(95,112,180,.06) 1px,transparent 1px); background-size: 100% 100%, 100% 100%, 30px 30px, 30px 30px; }
+[data-theme='light'] .fhb[data-mode='dydx'] .fhb-word-fa { background-image: linear-gradient(145deg,#62588e,#383e79,#796bb4); filter: none; }
+[data-theme='light'] .fhb[data-mode='dydx'] .fhb-word-en { -webkit-text-stroke-color: rgba(75,77,140,.65); }
+[data-theme='light'] .fhb[data-mode='dydx'] :is(.fhb-pill,.fhb-chip,.fhb-kpi) { border-color: rgba(95,112,180,.25); }
+[data-theme='light'] .fhb[data-mode='dydx'] :is(.fhb-pill.is-mode,.fhb-chip.is-gold,.fhb-kpi-val.is-gold) { color: #44457a; }

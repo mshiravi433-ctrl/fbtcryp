@@ -738,3 +738,59 @@
     transform: translateY(-50%); justify-self: auto; align-self: auto;
   }
 }
+
+/* The venue atmosphere starts above the futures banner and continues behind
+   the whole workspace. It is removed with the dYdX screen class on exit. */
+body.dydx-screen .page {
+  background: radial-gradient(ellipse 95% 680px at 90% 0, rgba(115, 99, 190, .13), transparent 75%),
+              radial-gradient(ellipse 110% 950px at 0 520px, rgba(47, 148, 158, .10), transparent 75%),
+              linear-gradient(180deg, color-mix(in srgb, var(--bg-void) 92%, #6872a5), var(--bg-void));
+}
+.dydx-app .derivatives-aurora {
+  inset: 0 -16px 0;
+  height: auto;
+  background: radial-gradient(ellipse 80% 500px at 90% 0, rgba(108, 103, 205, .14), transparent 75%),
+              radial-gradient(ellipse 80% 650px at 10% 650px, rgba(64, 166, 169, .09), transparent 75%);
+}
+
+/* Readable risk heading stays visible; only the explanatory text collapses.
+   The separate confirmation risk warning remains permanently visible. */
+.dydx-risk-info .infobox {
+  border: 1px solid rgba(221, 91, 121, .35);
+  border-radius: 19px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-panel-solid) 89%, #c84f70), var(--bg-panel-solid));
+  box-shadow: inset 0 1px rgba(255,255,255,.14), 0 10px 28px rgba(76, 28, 50, .10);
+}
+.dydx-risk-info .infobox-head { padding: 14px 15px; gap: 12px; }
+.dydx-risk-info .infobox-icon { width: 38px; height: 38px; border-radius: 13px; color: #fff0f3; background: linear-gradient(145deg, #ce607d, #99465f); border: 1px solid rgba(255,205,217,.35); }
+.dydx-risk-info .infobox-title { color: var(--text-1); font-weight: 800; }
+.dydx-risk-info .infobox-body { padding: 0 15px 16px; }
+.dydx-risk-info .infobox-body p { margin: 0; line-height: 1.9; }
+.dydx-risk-info .infobox-head:focus-visible { outline: 2px solid #dd778e; outline-offset: -3px; border-radius: 16px; }
+
+/* Remove inherited amber from informational elements, without muting red
+   liquidation, error and confirmation warnings. */
+:is(.dydx-app, .dydx-desk-sheet) { --ink-amber: #8fc2ee; }
+:is(.dydx-app, .dydx-desk-sheet) .notice:not(.notice-danger) {
+  background: rgba(95, 145, 200, .10); border-color: rgba(107, 164, 214, .33); color: var(--text-2);
+}
+:is(.dydx-app, .dydx-desk-sheet) .notice:not(.notice-danger)::before { background: #568ab5; color: #fff; }
+:root[data-theme='light'] :is(.dydx-app, .dydx-desk-sheet) { --ink-amber: #365f87; }
+:root[data-theme='light'] :is(.dydx-app, .dydx-desk-sheet) .notice:not(.notice-danger) { background: #eef5fb; border-color: #91b4d1; color: #284762; }
+:root[data-theme='light'] :is(.dydx-app, .dydx-desk-sheet) .notice:not(.notice-danger)::before { background: #426e95; color: #fff; }
+
+/* The floating diamond uses a softer, modern amethyst/graphite glass finish;
+   geometry and 64px hit area remain unchanged. */
+@media (max-width: 767px) {
+  .dydx-mobile-dock .dydx-dock-desk::before {
+    background: linear-gradient(145deg, #eee5ff 0%, #b3a3dc 19%, #7464a6 54%, #3a3e67 100%);
+    border-color: rgba(235, 225, 255, .85);
+    box-shadow: 0 9px 0 -4px #353454, 0 13px 24px rgba(52, 42, 92, .46), inset 0 2px 2px rgba(255,255,255,.64), inset 0 -3px 5px rgba(31,27,59,.40);
+  }
+  .dydx-mobile-dock .dydx-dock-orb { color: #fffaff; filter: drop-shadow(0 1px 2px rgba(38,25,65,.8)); }
+}
+/* The parent futures venue rail lives outside .dydx-app. */
+body.dydx-screen .perp-rail-tab.is-active { border-color: rgba(164,153,223,.48) !important; background: radial-gradient(130% 160% at 50% -40%, rgba(141,126,210,.30), transparent 60%), color-mix(in srgb, var(--bg-panel-solid) 85%, #7367aa) !important; box-shadow: 0 10px 30px -14px rgba(102,91,167,.4), inset 0 1px rgba(225,216,255,.18) !important; }
+body.dydx-screen .perp-rail-tab.is-active .perp-rail-label { color: var(--text-1) !important; }
+body.dydx-screen .perp-rail-tab.is-active .perp-rail-ico { color: #fff !important; background: linear-gradient(145deg,#9387c9,#5f6095); }
+body.dydx-screen .perp-rail-tab.is-active .seg-indicator { background: linear-gradient(135deg,rgba(159,143,214,.27),rgba(109,125,192,.18)); }

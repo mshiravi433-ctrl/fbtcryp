@@ -8621,6 +8621,7 @@
     "subtitle": "Live perpetual markets on dYdX Chain, directly with your wallet.",
     "live": "Live",
     "offline": "Unavailable",
+    "riskTitle": "Perpetual trading risk warning",
     "risk": "Perpetuals are leveraged derivatives. You can lose all collateral, and most retail leveraged traders lose money. You do not own the underlying asset.",
     "tradingAccount": "dYdX Chain account",
     "notConnected": "Not connected",

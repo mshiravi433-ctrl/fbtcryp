@@ -629,6 +629,26 @@ describe('dYdX mobile trading dock', () => {
     expect(logo.querySelector('.dtd-token-fallback').textContent).toBe('UNK');
   });
 
+  it.each(['fa', 'en'])('exposes the full leverage risk in a collapsible %s warning', async (language) => {
+    LANG = language;
+    render(<Dydx embedded />);
+    await screen.findByTestId('dydx-market-select');
+    const button = screen.getByRole('button', { name: dict[language].dydx.riskTitle });
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText(dict[language].dydx.risk)).toBeNull();
+    fireEvent.click(button);
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText(dict[language].dydx.risk)).toBeTruthy();
+    fireEvent.click(button);
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText(dict[language].dydx.risk)).toBeNull();
+    fireEvent.click((await screen.findAllByText(dict[language].dydx.connect))[0]);
+    await waitFor(() => expect(document.body.textContent).not.toContain(dict[language].dydx.leverage.needEquity));
+    fireEvent.click(screen.getByTestId('dydx-leverage-2'));
+    fireEvent.click(screen.getByText(dict[language].dydx.review));
+    expect(screen.getByText(dict[language].dydx.confirmRisk)).toBeTruthy();
+  });
+
   it('keeps workflow accessible and marks slippage and leverage selections', async () => {
     render(<Dydx embedded />);
     await screen.findByTestId('dydx-leverage-2');
