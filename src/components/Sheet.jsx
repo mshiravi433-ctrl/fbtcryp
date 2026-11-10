@@ -29,7 +29,7 @@ import { IconX } from './Icons';
  * animated: the animated layer and the positioned layer must not be the same
  * element.)
  */
-export default function Sheet({ open, onClose, children, title, size = 'md', anchor = 'center', className, testId }) {
+export default function Sheet({ open, onClose, children, title, size = 'md', anchor = 'center', className, layerClassName, testId }) {
   const { t } = useTranslation();
   /*
    * prefers-reduced-motion (and the in-app reduce-motion setting): the dialog
@@ -78,7 +78,7 @@ export default function Sheet({ open, onClose, children, title, size = 'md', anc
             onClick={onClose}
           />
           <div
-            className={`sheet-layer ${anchor === 'bottom' ? 'sheet-layer-bottom' : ''}`}
+            className={`sheet-layer ${anchor === 'bottom' ? 'sheet-layer-bottom' : ''}${layerClassName ? ` ${layerClassName}` : ''}`}
             style={layerStyle}
           >
             <motion.div
@@ -86,6 +86,7 @@ export default function Sheet({ open, onClose, children, title, size = 'md', anc
               data-testid={testId}
               role="dialog"
               aria-modal="true"
+              aria-label={typeof title === 'string' ? title : undefined}
               initial={still ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={still ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 8 }}

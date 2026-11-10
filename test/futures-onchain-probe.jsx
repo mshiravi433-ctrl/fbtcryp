@@ -338,6 +338,19 @@ export async function run(container) {
       && /Funding/.test(byId('futures-crypto-desk')?.textContent || '')
       && /Liquidation/.test(byId('futures-crypto-desk')?.textContent || '')
       && /Open interest/.test(byId('futures-crypto-desk')?.textContent || ''));
+    t('on-chain workspace marks the body only while active', document.body.classList.contains('onchain-screen'));
+    t('the trading dock is portalled outside the transformed page', !!document.querySelector('body > [data-testid="onchain-mobile-dock"]'));
+    await act(async () => { click(document.querySelector('[data-testid="onchain-mobile-short"]')); });
+    t('dock short selects the form direction without preparing an order', document.querySelector('[data-testid="onchain-mobile-short"]')?.getAttribute('aria-pressed') === 'true' && bff.prepares === 0);
+    t('side changes clear the old quote before the replacement arrives', !byId('futures-fee-breakdown') && !byId('futures-risk'));
+    await act(async () => { await sleep(500); });
+    await act(async () => { click(document.querySelector('[data-testid="onchain-mobile-desk-open"]')); });
+    t('desk shows the actual selected market, funding and open interest', /SOL\/USDT/.test(document.querySelector('[data-testid="onchain-desk-panel"]')?.textContent || '') && /8\.4/.test(document.querySelector('[data-testid="onchain-desk-panel"]')?.textContent || '') && /42,000,000/.test(document.querySelector('[data-testid="onchain-desk-panel"]')?.textContent || ''));
+    t('desk states liquidation is estimated and did not prepare an order', /estimate/.test(document.querySelector('[data-testid="onchain-desk-panel"]')?.textContent || '') && bff.prepares === 0);
+    await act(async () => { click(document.querySelector('[data-testid="onchain-mobile-desk-sheet-close"]')); });
+    await act(async () => { click(document.querySelector('[data-testid="onchain-mobile-long"]')); });
+    await act(async () => { await sleep(450); });
+    t('dock long restores direction without executing', document.querySelector('[data-testid="onchain-mobile-long"]')?.getAttribute('aria-pressed') === 'true' && bff.prepares === 0);
     t('this tab never quotes the traditional venue', !bff.quoteProviders.includes('ostium'));
     t('the Solana perp stays selected', pickerValue('futures-market-select') === 'SOL/USDT');
 
@@ -470,6 +483,7 @@ export async function run(container) {
     await act(async () => { click(strip[1]); });
     await act(async () => { await sleep(500); });
     t('the dYdX tab still mounts', /dYdX/.test(container.textContent));
+    t('on-chain body class and dock are cleaned up on exit', !document.body.classList.contains('onchain-screen') && !document.querySelector('[data-testid="onchain-mobile-dock"]'));
     t('switching to dYdX selects its tab and updates the deep-link query',
       tabs()[1]?.getAttribute('aria-selected') === 'true' && /[?&]tab=dydx(?:&|$)/.test(String(window.location.hash)));
     await mountAt('#/perp');

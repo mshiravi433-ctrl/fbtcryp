@@ -1,4 +1,5 @@
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import PageTransition, { riseIn } from '../components/PageTransition';
@@ -6,7 +7,7 @@ import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
 import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
-import { IconInfo } from '../components/Icons';
+import { IconInfo, IconSparkle, IconRoute, IconAlertTriangle } from '../components/Icons';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { fmtPrice, fmtUsd } from '../lib/format';
@@ -28,28 +29,12 @@ import DydxTokenDesk from '../components/futures/DydxTokenDesk';
 import { dydxOrderSize } from '../lib/perpRoutes';
 import { liquidationDistance } from '../lib/futures-engine';
 import lazyRetry from '../lib/lazyRetry';
-import { DYDX_TPSL_ENABLED, FUTURES_HISTORY_ENABLED } from '../lib/features';
+import { DYDX_TPSL_ENABLED } from '../lib/features';
 import ModernSelect from '../components/ModernSelect';
 
 /* The TP/SL card loads only when DYDX_TPSL_ENABLED is on. */
 const LazyDydxTpSlCard = DYDX_TPSL_ENABLED
   ? lazyRetry(() => import('../components/futures/DydxTpSlCard'))
-  : null;
-
-/*
- * ─── THE dYdX HISTORY LIVES ON THE dYdX SCREEN ──────────────────────────────
- *   «هر تاریخچه را در صفحه مربوط به خودش، زیر صفحه، در باکس باز‌شونده بگذار»
- *
- * This table used to be a fourth tab on the Perpetual rail, where it mixed
- * one venue's real fills with two venues' «not available» notes — a tab that
- * belonged to no screen the reader was on. It is dYdX data, read through the
- * dYdX session this very page establishes, so it now sits at the BOTTOM of
- * this page inside a folded box: closed by default (it is the least urgent
- * thing on a trading screen), one tap to open, and nothing about the panel
- * itself changed.
- */
-const LazyFuturesHistory = FUTURES_HISTORY_ENABLED
-  ? lazyRetry(() => import('../components/futures/FuturesHistory'))
   : null;
 
 /*
@@ -96,8 +81,30 @@ const GOOD_TIL = Object.freeze([
  * The standalone route (/dydx) still renders its own page.
  */
 
+function useDydxMobile() {
+  const [mobile, setMobile] = useState(() => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined;
+    const query = window.matchMedia('(max-width: 767px)');
+    const update = (e) => setMobile(e.matches);
+    setMobile(query.matches);
+    if (query.addEventListener) query.addEventListener('change', update);
+    else query.addListener(update);
+    return () => { if (query.removeEventListener) query.removeEventListener('change', update); else query.removeListener(update); };
+  }, []);
+  return mobile;
+}
+
 export default function Dydx({ embedded = false } = {}) {
   const { t } = useTranslation();
+  const mobile = useDydxMobile();
+  const [deskOpen, setDeskOpen] = useState(false);
+  const ticketRef = useRef(null);
+  useEffect(() => {
+    document.body.classList.add('dydx-screen');
+    return () => document.body.classList.remove('dydx-screen');
+  }, []);
+  useEffect(() => { if (!mobile) setDeskOpen(false); }, [mobile]);
   const wallet = useWallet();
   const { haptic } = useTelegram();
   /*
@@ -137,6 +144,7 @@ export default function Dydx({ embedded = false } = {}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [reviewing, setReviewing] = useState(false);
+  const [reviewedTicker, setReviewedTicker] = useState(null);
   const [result, setResult] = useState(null);
 
   useEffect(() => {
@@ -151,10 +159,12 @@ export default function Dydx({ embedded = false } = {}) {
     return () => { alive = false; clearInterval(id); };
   }, []);
 
-  const market = markets.find((m) => m.ticker === ticker) || markets[0];
+  // Settled markets are useful for existing positions, but never tradeable.
+  const activeMarkets = markets.filter((m) => m.status === 'ACTIVE');
+  const market = activeMarkets.find((m) => m.ticker === ticker);
   useEffect(() => {
-    if (market && !markets.some((m) => m.ticker === ticker)) setTicker(market.ticker);
-  }, [market, markets, ticker]);
+    if (!market && activeMarkets.length) setTicker(activeMarkets[0].ticker);
+  }, [market, activeMarkets]);
 
   /*
    * ─── THE NUMBERS BEHIND THE LEVERAGE CONTROL ────────────────────────────
@@ -187,14 +197,14 @@ export default function Dydx({ embedded = false } = {}) {
    * Free collateral is what a NEW position can actually be opened with —
    * equity minus the margin already committed to the open ones. Sizing from
    * equity would hand the user an order the venue rejects the moment they
-   * already hold a position, so the free figure wins and equity is the
-   * fallback when the indexer did not send it.
+   * already hold a position. Never substitute equity when free collateral
+   * is missing.
    */
   const freeCollateralUsd = (() => {
     const fc = Number(account?.subaccount?.freeCollateral);
-    return Number.isFinite(fc) && fc > 0 ? fc : null;
+    return Number.isFinite(fc) && account?.subaccount?.freeCollateral != null && fc >= 0 ? fc : null;
   })();
-  const sizeableUsd = freeCollateralUsd ?? equityUsd;
+  const sizeableUsd = freeCollateralUsd;
   const maxLeverage = Number.isFinite(Number(market?.maxLeverage)) ? Number(market.maxLeverage) : null;
   const effectiveLeverage = notional > 0 && equityUsd ? notional / equityUsd : null;
   const marginRequired = (() => {
@@ -208,7 +218,7 @@ export default function Dydx({ embedded = false } = {}) {
     leverage: effectiveLeverage ?? leverage,
     maxLeverage,
     maintenanceMarginFraction: market?.maintenanceMarginFraction ?? null,
-    takerFeeRate: DYDX_BUILDER_FEE_PPM / 1_000_000
+    takerFeeRate: null // The builder fee is not the venue taker fee.
   }), [side, entryPrice, effectiveLeverage, leverage, maxLeverage, market?.maintenanceMarginFraction]);
 
   /* The ladder the ticket offers: the house rungs, clipped to the venue's own
@@ -288,6 +298,8 @@ export default function Dydx({ embedded = false } = {}) {
   };
 
   const submit = async () => {
+    // If a market is removed or changed while reviewing, require a new review.
+    if (!market || market.ticker !== reviewedTicker || market.status !== 'ACTIVE') return;
     setBusy(true);
     setError(null);
     try {
@@ -375,31 +387,34 @@ export default function Dydx({ embedded = false } = {}) {
 
   return (
     <PageTransition embedded={embedded}>
-      <div className="derivatives-hall">
+      <div className="derivatives-hall dydx-app">
         <div className="derivatives-aurora" aria-hidden="true" />
         <motion.section className="derivatives-hero" variants={riseIn} initial="hidden" animate="show">
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-            <div>
-              <div className="derivatives-title">
-                <span className="derivatives-title-glow">{t('dydx.title')}</span>
-                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', letterSpacing: 1 }}>• dYdX</span>
+          <div className="dydx-hero-content">
+            <div className="dydx-hero-brand">
+              <span className="dydx-hero-mark" aria-hidden="true"><IconSparkle width={23} height={23} /></span>
+              <div className="dydx-hero-copy">
+                <span className="dydx-hero-eyebrow">dYdX CHAIN</span>
+                <h2 className="dydx-hero-title">{t('dydx.title')}</h2>
               </div>
-              <p className="derivatives-subtitle">{t('dydx.subtitle')}</p>
+              <span className={`dydx-hero-status ${live ? 'is-live' : 'is-offline'}`}><span aria-hidden="true" />{live ? t('dydx.live') : t('dydx.offline')}</span>
             </div>
-            <span className={`pill ${live ? 'pill-up' : 'pill-down'}`} style={{ alignSelf: 'flex-start' }}>{live ? t('dydx.live') : t('dydx.offline')}</span>
+            <p className="dydx-hero-subtitle">{t('dydx.subtitle')}</p>
           </div>
         </motion.section>
 
-        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
-          <div className="glass-notice" style={{ borderColor: 'rgba(255,59,107,0.16)', background: 'rgba(255,59,107,0.08)' }}>{t('dydx.risk')}</div>
+        <motion.div className="dydx-risk-info" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
+          <InfoBox title={t('dydx.riskTitle')} tone="danger" id="dydx-risk" icon={<IconAlertTriangle width={19} height={19} />}>
+            <p>{t('dydx.risk')}</p>
+          </InfoBox>
         </motion.div>
 
         {/* Dismissible workflow guidance that reflects connection state. */}
-        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
-          <InfoBox title={t('dydx.steps.title')} tone="info" id="dydx-steps">
-            <ol style={{ margin: 0, paddingInlineStart: 18, display: 'grid', gap: 7, fontSize: 12.5, lineHeight: 1.9 }}>
-              {['connect', 'marketSize', 'review', 'confirm', 'afterSubmit'].map((step) => (
-                <li key={step}>{t(`dydx.steps.${step}`)}</li>
+        <motion.div className="dydx-workflow" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
+          <InfoBox title={t('dydx.steps.title')} tone="info" id="dydx-steps" icon={<IconRoute width={19} height={19} />}>
+            <ol className="dydx-workflow-list">
+              {['connect', 'marketSize', 'review', 'confirm', 'afterSubmit'].map((step, index) => (
+                <li key={step}><span className="dydx-workflow-number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span><span>{t(`dydx.steps.${step}`)}</span></li>
               ))}
             </ol>
             {dydxAddress && !canReview && (
@@ -415,7 +430,24 @@ export default function Dydx({ embedded = false } = {}) {
           </InfoBox>
         </motion.div>
 
-      <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18 }}>
+      {market && !mobile && (
+          <DydxTokenDesk
+            key={ticker}
+            ticker={ticker}
+            market={market}
+            side={side}
+            notionalUsd={notional}
+            collateralUsd={marginRequired}
+            availableBalanceUsd={freeCollateralUsd}
+            leverage={effectiveLeverage ?? leverage}
+            entryPrice={entryPrice}
+            onApplyLeverage={applyLeverage}
+            address={dydxAddress}
+            testId="dydx-token-desk"
+          />
+      )}
+
+      <motion.section data-testid="dydx-account" className="card card-rgb dydx-account" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18 }}>
         <div className="sheen" />
         <div className="row-between">
           <div>
@@ -431,20 +463,21 @@ export default function Dydx({ embedded = false } = {}) {
         {dydxAddress && (
           <div className="row-between" style={{ marginTop: 10 }}>
             <span className="faint">{t('dydx.equity')}</span>
-            <span className="mono">{account?.subaccount?.equity ? fmtUsd(account.subaccount.equity) : '0 USDC'}</span>
+            <span className="mono">{account?.subaccount?.equity != null ? fmtUsd(account.subaccount.equity) : '—'}</span>
           </div>
         )}
         <p className="faint" style={{ marginTop: 9 }}>{t('dydx.connectNote')}</p>
       </motion.section>
 
-      {!markets.length ? <p className="notice" style={{ marginTop: 16 }}>{t('dydx.marketUnavailable')}</p> : (
-        <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, width: '100%', boxSizing: 'border-box' }}>
-          {!live && <p className="notice" style={{ marginBottom: 12 }}>{t('dydx.marketUnavailable')}</p>}
+      {!activeMarkets.length ? <p className="notice" style={{ marginTop: 16 }}>{t(live ? 'dydx.noActiveMarkets' : 'dydx.marketUnavailable')}</p> : (
+        <motion.section className="card dydx-ticket" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, width: '100%', boxSizing: 'border-box' }}>
+          {!live && <p className="notice dydx-market-warning" style={{ marginBottom: 12 }}>{t('dydx.marketUnavailable')}</p>}
+          <div className="dydx-market-column">
           <div className="field-label">{t('dydx.market')}</div>
           <ModernSelect
             value={market?.ticker || ''}
             onChange={setTicker}
-            options={markets.filter((m) => m.status === 'ACTIVE').map((m) => {
+            options={activeMarkets.map((m) => {
               const [base, quote] = m.ticker.split('-');
               return {
                 value: m.ticker,
@@ -459,8 +492,11 @@ export default function Dydx({ embedded = false } = {}) {
             title={t('dydx.market')}
             placeholder={market?.ticker || 'BTC-USD'}
             searchable
+            maxRender={activeMarkets.length}
             testId="dydx-market-select"
           />
+
+          <p className="dydx-market-count" data-testid="dydx-market-count">{t('dydx.marketCounts', { active: activeMarkets.length, total: markets.length })}</p>
 
           {/*
             ─── CANDLES + ON-DEVICE AI ──────────────────────────────────────
@@ -477,7 +513,7 @@ export default function Dydx({ embedded = false } = {}) {
               provider="dydx"
               market={ticker}
               symbol={ticker}
-              height={230}
+              height={mobile ? 260 : 380}
               testId="dydx-candles"
             />
           </div>
@@ -490,38 +526,14 @@ export default function Dydx({ embedded = false } = {}) {
               </div>
               <div className="deriv-kpi-pod">
                 <div className="faint" style={{ fontSize: 11 }}>{t('dydx.openInterest')}</div>
-                <div className="stat-mini mono">{fmtUsd(market.openInterest * market.oraclePrice)}</div>
+                <div className="stat-mini mono">{market.openInterest != null && Number.isFinite(market.oraclePrice) && market.oraclePrice > 0 ? fmtUsd(market.openInterest * market.oraclePrice) : '—'}</div>
               </div>
             </div>
           )}
 
-          {/*
-            ─── THE DESK FOR THE TOKEN ON THE CHART ABOVE ────────────────────
-            «برای هر توکن انتخابی، باکس هوش مصنوعی، موتور ریسک و موتور فرصت
-             را در یک باکس بازشونده زیر آن بگذار و از هوش مصنوعی هم بپرس اضافه
-             کن»
-
-            Keyed by ticker: switching the market gives the new token its own
-            box and its own candle read, so a panel cannot keep the previous
-            pair's numbers under a new name. It is collapsed by default — a
-            folded box with a verdict on its title line is read; an open wall
-            of metrics is scrolled past — and it fetches nothing until opened.
-          */}
-          <DydxTokenDesk
-            key={ticker}
-            ticker={ticker}
-            market={market}
-            side={side}
-            notionalUsd={notional}
-            collateralUsd={equityUsd}
-            availableBalanceUsd={freeCollateralUsd}
-            leverage={effectiveLeverage ?? leverage}
-            entryPrice={entryPrice}
-            onApplyLeverage={applyLeverage}
-            testId="dydx-token-desk"
-          />
-
-          <div className="dir-switch">
+          </div>
+          <div className="dydx-order-column" ref={ticketRef} data-testid="dydx-order-ticket">
+          {!mobile ? <div className="dir-switch">
             <button
               type="button"
               className={`dir-btn long ${side === 'buy' ? 'active' : ''}`}
@@ -548,7 +560,7 @@ export default function Dydx({ embedded = false } = {}) {
               {t('dydx.sell')}
               <span className="dir-sub">{t('dydx.shortSub')}</span>
             </button>
-          </div>
+          </div> : <div className={`dydx-selected-side ${side === 'buy' ? 'is-long' : 'is-short'}`} data-testid="dydx-selected-side"><span>{t('dydx.direction')}</span><strong>{t(`dydx.${side}`)}</strong></div>}
 
           <div className="deriv-field-card">
             <div className="segmented">
@@ -578,7 +590,7 @@ export default function Dydx({ embedded = false } = {}) {
             <label className="field-label" style={{ marginTop: 6 }}>{t('dydx.slippage')}</label>
             <div className="lev-row">
               {[0.1, 0.5, 1].map((n) => (
-                <button type="button" className={`lev-chip ${Number(slippage) === n ? 'active' : ''}`} key={n} onClick={() => setSlippage(String(n))}>{n}%</button>
+                <button type="button" className={`lev-chip ${Number(slippage) === n ? 'active' : ''}`} aria-pressed={Number(slippage) === n} key={n} onClick={() => setSlippage(String(n))}>{n}%</button>
               ))}
             </div>
           </div>
@@ -596,6 +608,7 @@ export default function Dydx({ embedded = false } = {}) {
                 <button
                   type="button"
                   className={`lev-chip ${Number(leverage) === n ? 'active' : ''}`}
+                  aria-pressed={Number(leverage) === n}
                   key={n}
                   onClick={() => applyLeverage(n)}
                   data-testid={`dydx-leverage-${n}`}
@@ -626,6 +639,7 @@ export default function Dydx({ embedded = false } = {}) {
               <p className="faint" style={{ fontSize: 11, marginTop: 6, lineHeight: 1.7 }}>{t('dydx.leverage.needEquity')}</p>
             )}
             <p className="faint" style={{ fontSize: 10.5, marginTop: 6, lineHeight: 1.7 }}>{t('dydx.leverage.hint')}</p>
+            <p className="faint" style={{ fontSize: 10.5, lineHeight: 1.7 }}>{t('dydx.leverage.liqCaveat')}</p>
           </div>
 
           {/* ─── THE ORDER OPTIONS dYdX ACTUALLY ACCEPTS ────────────────── */}
@@ -679,13 +693,14 @@ export default function Dydx({ embedded = false } = {}) {
           <div className="brg-quote deriv-telemetry-card" style={{ marginTop: 12 }}>
             <div className="row-between"><span className="faint">{t('dydx.notional')}</span><span className="mono">{fmtUsd(notional)}</span></div>
             <div className="row-between"><span className="faint">{t('dydx.builderFee')}</span><span className="mono">{fmtUsd(fee)}</span></div>
-            <div className="row-between"><span className="faint">{t('dydx.funding')}</span><span className="mono">{Number(market?.nextFundingRate || 0).toFixed(6)}%</span></div>
+            <div className="row-between"><span className="faint">{t('dydx.funding')}</span><span className="mono">{market?.nextFundingRate == null ? '—' : `${(market.nextFundingRate * 100).toFixed(6)}% / h`}</span></div>
           </div>
 
           {error && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t(`dydx.err.${error}`, { defaultValue: error })}</p>}
-          <button className={`btn ${side === 'buy' ? 'btn-success' : 'btn-danger'}`} disabled={!canReview || busy} onClick={() => setReviewing(true)} style={{ width: '100%', minHeight: 48, marginTop: 12, borderRadius: 14, fontWeight: 800 }}>
+          <button className={`btn ${side === 'buy' ? 'btn-success' : 'btn-danger'}`} disabled={busy || (Boolean(dydxAddress) && !canReview)} onClick={() => dydxAddress ? (setReviewedTicker(market?.ticker), setReviewing(true)) : connect()} style={{ width: '100%', minHeight: 48, marginTop: 12, borderRadius: 14, fontWeight: 800 }}>
             {dydxAddress ? t('dydx.review') : t('dydx.connect')}
           </button>
+          </div>
         </motion.section>
       )}
 
@@ -740,17 +755,25 @@ export default function Dydx({ embedded = false } = {}) {
         </p>
       </motion.section>
 
-      {/* The folded trade history — this venue's fills, on this venue's page. */}
-      {LazyFuturesHistory && (
-        <div style={{ marginTop: 18 }}>
-          <InfoBox title={t('futures.history.title')} tone="info" id="dydx-history-box">
-            <Suspense fallback={<div className="spinner" />}>
-              <LazyFuturesHistory />
-            </Suspense>
-          </InfoBox>
-        </div>
+      {mobile && typeof document !== 'undefined' && createPortal(
+        <nav className="dydx-mobile-dock" aria-label={t('dydx.mobile.actions')} data-testid="dydx-mobile-dock">
+          <button type="button" className="dydx-dock-long" aria-pressed={side === 'buy'} onClick={() => { setSide('buy'); ticketRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }} data-testid="dydx-mobile-long">
+            <span className="dydx-dock-arrow" aria-hidden="true">↗</span><span>{t('dydx.buy')}</span>
+          </button>
+          <button type="button" className="dydx-dock-desk" disabled={!market} onClick={() => setDeskOpen(true)} aria-label={t('dydx.mobile.openDesk')} data-testid="dydx-mobile-desk-open">
+            <span className="dydx-dock-orb"><IconSparkle width={21} height={21} /></span><span>{t('dydx.mobile.desk')}</span>
+          </button>
+          <button type="button" className="dydx-dock-short" aria-pressed={side === 'sell'} onClick={() => { setSide('sell'); ticketRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }} data-testid="dydx-mobile-short">
+            <span className="dydx-dock-arrow" aria-hidden="true">↘</span><span>{t('dydx.sell')}</span>
+          </button>
+        </nav>, document.body
       )}
-
+      <Sheet open={mobile && deskOpen && Boolean(market)} onClose={() => setDeskOpen(false)} size="lg" className="dydx-desk-sheet" layerClassName="dydx-desk-layer" title={t('dydx.desk.title', { ticker: String(ticker || '—').replace('-USD', '') })} testId="dydx-mobile-desk-sheet">
+        {mobile && deskOpen && market && <DydxTokenDesk key={ticker} ticker={ticker} market={market} side={side}
+          notionalUsd={notional} collateralUsd={marginRequired} availableBalanceUsd={freeCollateralUsd}
+          leverage={effectiveLeverage ?? leverage} entryPrice={entryPrice} onApplyLeverage={applyLeverage} address={dydxAddress}
+          standalone testId="dydx-mobile-desk" />}
+      </Sheet>
       <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
       <Sheet open={reviewing} onClose={() => !busy && setReviewing(false)} title={t('dydx.confirmTitle')}>
         <div className="card card-tight stack" style={{ gap: 8 }}>
@@ -774,7 +797,7 @@ export default function Dydx({ embedded = false } = {}) {
           </span></div>
         </div>
         <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('dydx.confirmRisk')}</p>
-        <div className="row" style={{ gap: 10, marginTop: 12 }}><button className="btn btn-ghost" onClick={() => setReviewing(false)}>{t('common.cancel')}</button><button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? t('common.loading') : t('common.confirm')}</button></div>
+        <div className="row" style={{ gap: 10, marginTop: 12 }}><button className="btn btn-ghost" onClick={() => setReviewing(false)}>{t('common.cancel')}</button><button className="btn btn-primary" disabled={busy || !market || market.ticker !== reviewedTicker} onClick={submit}>{busy ? t('common.loading') : t('common.confirm')}</button></div>
       </Sheet>
       </div>
     </PageTransition>

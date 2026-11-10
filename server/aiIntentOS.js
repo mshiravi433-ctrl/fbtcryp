@@ -30,6 +30,14 @@
  *   - Every number returned is real data or reported unavailable — never a
  *     guess and never a hard-coded balance/price/hash.
  */
+import { chatTurnCeiling, recentChatHistory, normalizeMarketSnapshot } from './aiChatReliability.js';
+import {
+  guardChatTurn,
+  chatTurnSnapshot,
+  aiWriteBudgets,
+  aiLimiterStats,
+  AI_JSON_BODY_LIMIT
+} from './aiChatHardening.js';
 import { Router } from 'express';
 import { createHash } from 'node:crypto';
 import {
@@ -248,14 +256,8 @@ async function marketContext() {
   try {
     /* swr: a warm cache answers instantly and refreshes in the background —
        a chat turn never waits on CoinGecko when a recent read exists. */
-    const { value } = await withCache('ai-os:market', 60_000, () => fetchSimplePrices(['bitcoin', 'ethereum', 'solana'], 'usd'), { swr: true });
-    const g = value || {};
-    const price = (row) => (Number.isFinite(Number(row?.usd)) ? Number(row.usd) : null);
-    return {
-      dataStatus: 'live',
-      change24hPct: Number.isFinite(Number(g.bitcoin?.usd_24h_change)) ? Number(g.bitcoin.usd_24h_change) : null,
-      priceMap: { BTC: price(g.bitcoin), ETH: price(g.ethereum), SOL: price(g.solana) }
-    };
+    const { value, stale } = await withCache('ai-os:market', 60_000, () => fetchSimplePrices(['bitcoin', 'ethereum', 'solana'], 'usd'), { swr: true });
+    return normalizeMarketSnapshot(value, stale);
   } catch {
     return { dataStatus: 'unavailable', change24hPct: null, priceMap: null };
   }
@@ -317,7 +319,7 @@ async function buildTokenCard(symbolRaw) {
       p,
       new Promise((resolve) => { const t = setTimeout(() => resolve(null), ms); t.unref?.(); })
     ]);
-    const { value: coin } = await withCache(
+    const cached = await withDeadline(withCache(
       `ai-os:tokencard:${asset.coinId}`,
       TOKEN_CARD_TTL,
       async () => {
@@ -326,7 +328,8 @@ async function buildTokenCard(symbolRaw) {
         return row;
       },
       { swr: true }
-    );
+    ), 1500);
+    const coin = cached?.value;
     if (!coin) return null;
     return {
       kind: 'TOKEN',
@@ -983,8 +986,39 @@ async function readPending(owner) {
   return row && row.schema === 'fbt.ai-pending-intent.v1' ? row : null;
 }
 
+/*
+ * ─── A PENDING INTENT IS NOT WORTH A FAILED TURN ───────────────────────────
+ * `storeSet` throws when the durable backend refuses or times out a write —
+ * the right contract for a ledger, and the wrong one here: this write sat
+ * un-caught in the middle of the chat turn, so a paused or slow store turned
+ * «۱۰ دلار اتریوم بخر» into an HTML 500 after the card was already built.
+ *
+ * `storeSet` puts the value in this process's map BEFORE it talks to the
+ * backend, and `readPending` reads that map first. So when the durable write
+ * does not land in time the intent still exists for the instance that built
+ * the card — which is the instance a warm confirm normally reaches — and the
+ * worst case is the honest one that already exists: «این درخواست منقضی شده
+ * است». Nothing here signs or sends; the wallet still confirms every step.
+ */
+const PENDING_WRITE_WAIT_MS = Number(process.env.AI_PENDING_WRITE_WAIT_MS || 2500);
+const pendingWriteState = { failures: 0, lastFailureAt: null, lastOkAt: null };
+
 async function writePending(owner, intent) {
-  await storeSet(`ai:pending:v1:${owner}`, intent || null, EPHEMERAL_TTL_MS);
+  const write = Promise.resolve()
+    .then(() => storeSet(`ai:pending:v1:${owner}`, intent || null, EPHEMERAL_TTL_MS))
+    .then(() => true, () => false);
+  let timer;
+  const landed = await Promise.race([
+    write,
+    new Promise((resolve) => { timer = setTimeout(() => resolve(null), PENDING_WRITE_WAIT_MS); timer.unref?.(); })
+  ]).finally(() => clearTimeout(timer));
+  if (landed === true) {
+    pendingWriteState.lastOkAt = nowMs();
+  } else {
+    pendingWriteState.failures += 1;
+    pendingWriteState.lastFailureAt = nowMs();
+    console.warn(`[intent-os] pending intent kept in memory only (${landed === false ? 'durable write failed' : 'durable write slow'})`);
+  }
   return intent;
 }
 
@@ -1845,7 +1879,41 @@ function rememberDurableTurn(req, { message, goalDetected = false, intentType = 
   }
 }
 
-router.post('/chat', async (req, res) => {
+/*
+ * ─── HOW PRODUCTION TURNS ACTUALLY END ─────────────────────────────────────
+ * Public and free of content: no message text, no wallet, no address — only
+ * how long each recent turn took, which depth it ran at, how it ended, and
+ * the transport refusals (429 / 413) around it. It exists because the outage
+ * this file's guard answers was invisible from the server side: every health
+ * probe was green while no browser could complete a turn.
+ */
+router.get('/chat/health', async (req, res) => {
+  const snapshot = await chatTurnSnapshot({ limit: Number(req.query?.limit) || 30 });
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',').map((v) => v.trim()).filter(Boolean);
+  res.set('cache-control', 'no-store');
+  res.json({
+    ok: true,
+    schema: 'fbt.ai-chat-health.v1',
+    at: nowMs(),
+    limits: {
+      jsonBody: AI_JSON_BODY_LIMIT,
+      writesPerMinute: aiWriteBudgets(),
+      refusedOnThisInstance: aiLimiterStats()
+    },
+    pendingIntentStore: { durable: storeDurable(), ...pendingWriteState },
+    /* How THIS request reached the function — the same road a chat turn takes.
+       A second proxy in front of the platform shows up here as extra hops. */
+    edge: {
+      forwardedHops: forwarded.length,
+      platformRegion: String(req.headers['x-vercel-id'] || '').split('::')[0] || null,
+      viaCloudflare: Boolean(req.headers['cf-ray']),
+      viaOtherProxy: Boolean(req.headers.via || req.headers['ar-real-ip'] || req.headers['x-real-ip'])
+    },
+    ...snapshot
+  });
+});
+
+router.post('/chat', guardChatTurn(async (req, res) => {
   const message = String(req.body?.message || '').slice(0, MAX_MESSAGE);
   if (!message.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_MESSAGE' });
   /* Only this route asks for a semantic recall — it is the only one where a
@@ -1853,6 +1921,8 @@ router.post('/chat', async (req, res) => {
   const turnStartedAt = Date.now();
   const context = await buildAIContext(req, req.body || {}, { longTermQuery: message });
   const locale = safe(req.body?.locale, 5) || null;
+  const history = recentChatHistory(req.body?.messages, message, safeMemoryText);
+  if (history) context.conversationSummary = history;
   const conversationId = safe(req.body?.conversationId, 64) || null;
   const prior = req.body?.prior && AI_INTENTS.includes(String(req.body.prior.intent || '').toUpperCase())
     ? { intent: String(req.body.prior.intent).toUpperCase(), surface: req.body.prior.surface || null }
@@ -1963,7 +2033,10 @@ router.post('/chat', async (req, res) => {
   try {
     conditional = await conditionalAllocationReply({ message, context, locale: locale || 'fa' });
   } catch (err) {
-    log?.(`ai-os:conditional-failed:${String(err?.message || err).slice(0, 80)}`);
+    /* (This used to call a `log` helper that was never declared in this
+       module. Optional-calling an undeclared name is still a ReferenceError,
+       so the one branch meant to survive a failed conditional read threw.) */
+    console.warn(`[intent-os] conditional-allocation read failed: ${String(err?.message || err).slice(0, 80)}`);
   }
   if (conditional?.ok) {
     const intentId = `int_${nowMs().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -2242,12 +2315,12 @@ router.post('/chat', async (req, res) => {
    * few seconds smaller than the mode ceiling and can never be larger, so this
    * is the only line that had to change for the budget to be honest.
    */
-  const turnCeiling = turnSafeCeilingMs();
+  const turnCeiling = chatTurnCeiling(resolvedIntelligence.mode, turnSafeCeilingMs());
   const escalationFloorMs = Number(process.env.AI_ESCALATION_DEADLINE_MS || 9000);
   const turnBudgetFor = (mode) => {
     const wanted = intelligenceDeadlineMs(mode, null);
     const left = turnCeiling - (Date.now() - turnStartedAt) - escalationFloorMs;
-    return Math.max(2500, Math.min(wanted.deadlineMs, left));
+    return Math.max(0, Math.min(wanted.deadlineMs, left));
   };
   const u5 = planCollaboration({
     message,
@@ -2312,7 +2385,7 @@ router.post('/chat', async (req, res) => {
     && !socialTurn.handled;
 
   let collaboration = null;
-  if (collaborationWanted) {
+  if (collaborationWanted && turnBudgetFor(resolvedIntelligence.mode) >= 2500) {
     try {
       collaboration = await runCollaborativeAnalysis({
         message,
@@ -2517,7 +2590,7 @@ router.post('/chat', async (req, res) => {
      *   3. the deterministic reply — which always stands underneath both.
      * A turn is never worse than it was before this block existed.
      */
-    if (orchestratorEnabled()) {
+    if (orchestratorEnabled() && turnCeiling - (Date.now() - turnStartedAt) - escalationFloorMs >= 2500) {
       try {
         /* The graph gets a slice of the TURN, not a budget of its own: the
            escalation ladder below must still have room if the graph abstains
@@ -2552,7 +2625,7 @@ router.post('/chat', async (req, res) => {
         orchestration = orchestration ? { ...orchestration, used: false } : null;
       }
     }
-    if (!orchestration?.answer) {
+    if (!orchestration?.answer && turnCeiling - (Date.now() - turnStartedAt) >= 3500) {
       escalation = await escalateToProviders({
         deadlineMs: Math.max(2000, turnCeiling - (Date.now() - turnStartedAt) - 1500),
         message,
@@ -2977,7 +3050,7 @@ router.post('/chat', async (req, res) => {
     },
     at: nowMs()
   });
-});
+}));
 
 router.post('/execute', async (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};

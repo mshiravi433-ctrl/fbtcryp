@@ -1,5 +1,5 @@
 /*
- * dYdX TOKEN DESK — the folded analysis box under the dYdX chart.
+ * dYdX TOKEN DESK — the folded analysis box above the dYdX account.
  * ---------------------------------------------------------------------------
  * «برای هر توکن انتخابی، باکس هوش مصنوعی، موتور ریسک و موتور فرصت را در یک
  *  باکس بازشونده زیر آن بگذار و از هوش مصنوعی هم بپرس اضافه کن»
@@ -396,3 +396,401 @@
 @media (max-width: 400px) {
   .dtd-pods { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* dYdX mobile-first trading workspace */
+.dydx-app .dtd-box {
+  border: 1px solid rgba(119, 146, 250, .3);
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(93, 110, 220, .14), rgba(27, 187, 191, .06));
+  box-shadow: 0 12px 36px rgba(10, 18, 47, .12);
+}
+.dydx-app .dtd-head { padding: 16px; gap: 12px; }
+.dydx-app .dtd-head-mark { width: 42px; height: 42px; flex-basis: 42px; border-radius: 14px; color: #8d9dff; background: rgba(115, 126, 255, .15); border-color: rgba(115, 126, 255, .3); }
+.dydx-app .dtd-head-title { font-size: 15px; }
+.dydx-app .dtd-body { padding: 0 16px 16px; gap: 14px; }
+.dydx-app .dtd-tabs { flex-wrap: wrap; padding: 5px; border-radius: 15px; }
+.dydx-app .dtd-tabs > button:not(.dtd-refresh) { flex: 1 1 auto; justify-content: center; min-height: 38px; white-space: nowrap; }
+.dydx-app .dtd-refresh { min-height: 36px; }
+.dydx-app .dtd-pod, .dydx-app .dtd-block, .dydx-app .dtd-setup { padding: 12px; border-radius: 15px; }
+.dydx-app .dtd-ask { padding: 14px; border-radius: 16px; border-style: solid; border-color: rgba(135, 137, 255, .25); background: rgba(115, 126, 255, .07); }
+.dydx-app .dtd-ask-head { color: var(--text-1); }
+.dydx-app .dtd-chip { min-height: 34px; font-size: 11px; }
+.dydx-app .dtd-ask-input input { min-height: 42px; }
+.dtd-signal { display: grid; gap: 8px; padding: 15px; border: 1px solid rgba(105, 143, 255, .3); background: rgba(105, 143, 255, .08); border-radius: 16px; font-size: 13px; }
+.dtd-signal > strong { font-size: 14px; }
+.dydx-app .dydx-account { border-radius: 20px; }
+.dtd-head:focus-visible, .dtd-chip:focus-visible, .dtd-refresh:focus-visible { outline: 2px solid #8296ff; outline-offset: 2px; }
+@media (max-width: 440px) {
+  .dydx-app .dtd-tabs > button:not(.dtd-refresh) { flex-basis: 42%; }
+  .dydx-app .dtd-refresh { margin-inline-start: 0; width: 100%; }
+  .dydx-app .dtd-head-price { font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) { .dtd-meter-fill { transition: none; } }
+.dydx-app .derivatives-hero { border-radius: 22px; }
+.dydx-app .dydx-ticket { border-radius: 22px; border-color: rgba(126, 149, 237, .22); box-shadow: 0 14px 38px rgba(10, 18, 47, .10); }
+.dydx-app .deriv-field-card { border-radius: 16px; }
+.dydx-app .dydx-account { border-color: rgba(126, 149, 237, .24); }
+
+/* Trading workstation: teal for liquidity, violet for intelligence, rose for risk. */
+.dtd-topline { display:flex; align-items:center; min-width:0; }
+.dtd-topline .dtd-head { flex:1 1 auto; width:auto; min-width:0; }
+.dtd-topline .dtd-refresh { flex:0 0 38px; height:38px; display:grid; place-items:center; padding:0; margin:0 14px; color:var(--text-2); border-radius:12px; }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-box { border:1px solid color-mix(in srgb,#8b83ff 28%,var(--line)); border-radius:22px; background: radial-gradient(ellipse at 95% 0%,rgba(117,91,255,.17),transparent 48%), linear-gradient(145deg,color-mix(in srgb,var(--bg-panel-solid) 96%,#8b83ff),var(--bg-panel-solid)); box-shadow:0 18px 50px -32px rgba(5,13,40,.65); }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-head { padding:17px; gap:12px; }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-head-mark { width:42px; height:42px; flex-basis:42px; border-radius:14px; color:#a49aff; background:rgba(129,110,255,.16); border-color:rgba(129,110,255,.3); }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-head-title { font-size:15px; }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-body { padding:0 16px 16px; gap:14px; }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-tabs { display:flex; flex-wrap:nowrap; justify-content:flex-start; overflow-x:auto; overscroll-behavior-inline:contain; scrollbar-width:thin; gap:5px; padding:5px; border:1px solid var(--line); border-radius:16px; background:color-mix(in srgb,var(--bg-panel-solid) 88%,transparent); touch-action:pan-x; }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-tabs > button:not(.dtd-refresh) { flex:0 0 auto; min-height:40px; padding:8px 14px; white-space:nowrap; border-radius:12px; }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-tabs > button.active { color:var(--text-1); }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-pod, :is(.dydx-app,.dydx-desk-sheet) .dtd-block, :is(.dydx-app,.dydx-desk-sheet) .dtd-setup { border-radius:15px; padding:12px; background:color-mix(in srgb,var(--bg-panel-solid) 90%,#8295ff); }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-ask { padding:16px; border:1px solid rgba(133,120,255,.28); border-radius:17px; background:rgba(120,105,255,.08); }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-ask-head { color:var(--text-1); }
+:is(.dydx-app,.dydx-desk-sheet) .dtd-ask-input input { min-height:44px; }
+.dtd-body [hidden] { display:none !important; }
+.dtd-head:focus-visible, .dtd-tabs button:focus-visible, .dtd-refresh:focus-visible, .dydx-mobile-dock button:focus-visible { outline:2px solid #8f9fff; outline-offset:2px; }
+.dtd-row { gap:10px; min-width:0; }
+.dtd-row .mono { direction:ltr; unicode-bidi:isolate; text-align:end; }
+
+.dydx-app .derivatives-hero { border:1px solid color-mix(in srgb,#867fff 25%,var(--line)); background:radial-gradient(ellipse at 100% 0%,rgba(116,94,255,.20),transparent 45%),linear-gradient(135deg,color-mix(in srgb,var(--bg-panel-solid) 94%,#273064),var(--bg-panel-solid)); border-radius:24px; }
+.dydx-app .dydx-ticket, .dydx-app .dydx-account { border-radius:22px; border-color:color-mix(in srgb,#7588ed 25%,var(--line)); background:linear-gradient(155deg,color-mix(in srgb,var(--bg-panel-solid) 95%,#5867b5),var(--bg-panel-solid)); }
+.dydx-market-column,.dydx-order-column { min-width:0; }
+.dydx-order-column { scroll-margin-top:90px; }
+.dydx-app .deriv-field-card { border-radius:16px; }
+@media (min-width: 900px) {
+  body.dydx-screen .app-shell, body.hall-wide.dydx-screen .app-shell { width:100%; max-width:none; }
+  body.dydx-screen .app-shell .top-bar, body.hall-wide.dydx-screen .app-shell .top-bar { max-width:none; width:100%; }
+  body.dydx-screen .page:not(.page--global) { padding-inline:clamp(20px,2.4vw,48px); }
+  .dydx-app .dydx-ticket { display:grid; grid-template-columns:minmax(0,1.8fr) minmax(320px,.8fr); gap:clamp(18px,2vw,34px); align-items:start; padding:clamp(18px,2vw,28px); }
+  .dydx-app .dydx-market-warning { grid-column:1/-1; }
+  .dydx-market-column { position:sticky; top:90px; }
+  .dydx-order-column { border-inline-start:1px solid var(--line); padding-inline-start:clamp(18px,2vw,30px); }
+  .dydx-app .dtd-room { max-width:100%; }
+  .dydx-app .dtd-pods { gap:12px; }
+}
+@media (max-width: 767px) {
+  body.dydx-screen .app-shell { padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 95px); }
+  .dydx-mobile-dock { position:fixed; z-index:45; left:10px; right:10px; bottom:calc(88px + env(safe-area-inset-bottom)); max-width:520px; margin-inline:auto; display:grid; grid-template-columns:1fr 76px 1fr; align-items:end; gap:8px; padding:10px; border:1px solid rgba(145,153,241,.22); border-radius:20px; background:color-mix(in srgb,var(--bg-panel-solid) 94%,transparent); box-shadow:0 16px 45px rgba(4,10,30,.30); backdrop-filter:blur(18px); }
+  .dydx-mobile-dock button { border:0; font:inherit; font-weight:800; cursor:pointer; min-height:44px; border-radius:13px; }
+  .dydx-dock-long { grid-column:1; grid-row:1; color:#053b2b; background:#57dfb0; }
+  .dydx-dock-short { grid-column:3; grid-row:1; color:#4a0e24; background:#ff839b; }
+  .dydx-dock-long[aria-pressed='false'], .dydx-dock-short[aria-pressed='false'] { opacity:.72; }
+  .dydx-dock-connect { grid-column:1 / 4; grid-row:1; padding-inline-end:84px; color:#fff; background:linear-gradient(115deg,#605de6,#657efa); }
+  .dydx-dock-desk { grid-column:2; grid-row:1; align-self:end; display:grid; place-items:center; gap:0; position:relative; margin-top:-27px; min-height:67px !important; border-radius:36px 36px 16px 16px !important; color:#fff; background:linear-gradient(150deg,#a082ff,#6258dc); border:3px solid var(--bg-panel-solid) !important; box-shadow:0 8px 20px rgba(98,88,220,.4); }
+  .dydx-dock-desk span { font-size:10px; line-height:1; }
+  body.dydx-screen:has(input:focus) .dydx-mobile-dock { display:none; }
+  .dydx-desk-sheet { max-width:560px; width:100%; background:var(--bg-panel-solid); }
+  .dydx-desk-sheet .dtd-box { margin-top:0 !important; }
+  .dydx-desk-sheet .sheet-body { max-height:70dvh; }
+}
+@media (prefers-reduced-motion:reduce) { .dydx-mobile-dock *, .dtd-meter-fill { animation:none !important; transition:none !important; } }
+
+/* Mobile venue chrome: one trading bar replaces both pieces of the global nav. */
+@media (max-width: 767px) {
+  body.dydx-screen .bottom-nav,
+  body.dydx-screen .nav-centre { display: none !important; }
+  body.dydx-screen .app-shell { padding-bottom: calc(108px + env(safe-area-inset-bottom)); }
+  .dydx-mobile-dock {
+    direction: ltr;
+    position: fixed;
+    inset: auto 12px calc(10px + env(safe-area-inset-bottom));
+    z-index: 45;
+    max-width: 520px;
+    height: 72px;
+    box-sizing: border-box;
+    grid-template-columns: minmax(0, 1fr) 80px minmax(0, 1fr);
+    gap: 8px;
+    padding: 10px;
+    align-items: center;
+    border: 1px solid color-mix(in srgb, #a6b4ff 30%, var(--line));
+    border-radius: 25px;
+    background: linear-gradient(145deg, color-mix(in srgb, var(--bg-panel-solid) 82%, transparent), color-mix(in srgb, var(--bg-panel-solid) 95%, #5546ad));
+    box-shadow: 0 20px 50px rgba(5, 9, 30, .34), inset 0 1px rgba(255,255,255,.16);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+    backdrop-filter: blur(24px) saturate(150%);
+  }
+  .dydx-mobile-dock .dydx-dock-long,
+  .dydx-mobile-dock .dydx-dock-short {
+    min-width: 0;
+    min-height: 48px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 5px;
+    font-size: clamp(10px, 3.1vw, 13px);
+    border: 1px solid transparent;
+    transition: opacity .2s, box-shadow .2s, border-color .2s;
+  }
+  .dydx-mobile-dock .dydx-dock-long { grid-column: 1; color: #e9fff7; background: linear-gradient(135deg, #087b64, #16b882); }
+  .dydx-mobile-dock .dydx-dock-short { grid-column: 3; color: #fff2f5; background: linear-gradient(135deg, #a82953, #e3566b); }
+  .dydx-mobile-dock .dydx-dock-long[aria-pressed='true'] { border-color: #9dffe0; box-shadow: 0 0 20px rgba(33, 214, 155, .28); }
+  .dydx-mobile-dock .dydx-dock-short[aria-pressed='true'] { border-color: #ffc1cc; box-shadow: 0 0 20px rgba(250, 97, 129, .28); }
+  .dydx-dock-arrow { font: 700 17px/1 sans-serif; }
+  .dydx-mobile-dock .dydx-dock-desk {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    position: relative;
+    margin: -36px 0 0;
+    min-height: 78px !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    border-radius: 44px 44px 19px 19px !important;
+    border: 1px solid rgba(207, 198, 255, .55) !important;
+    background: linear-gradient(145deg, #b397ff, #6955da 68%, #48449e);
+    box-shadow: 0 8px 25px rgba(91, 76, 202, .48), inset 0 1px rgba(255,255,255,.5);
+  }
+  .dydx-dock-desk:disabled { opacity: .55; cursor: not-allowed; }
+  .dydx-dock-orb { display: grid; place-items: center; width: 31px; height: 31px; border-radius: 50%; background: rgba(255,255,255,.17); box-shadow: inset 0 1px rgba(255,255,255,.3); }
+  .dydx-dock-desk > span:last-child { color: #fff; font-size: 10px; line-height: 1; }
+  /* Keep the bar available; opening the keyboard must not remove its actions. */
+  body.dydx-screen:has(input:focus) .dydx-mobile-dock { display: grid; }
+
+  .dydx-desk-layer { padding: 0; align-items: stretch; }
+  .dydx-desk-layer .dydx-desk-sheet {
+    width: 100%; max-width: none; height: 100%; height: 100dvh; max-height: none;
+    border: 0; border-radius: 0;
+    padding: calc(env(safe-area-inset-top) + 16px) 14px calc(env(safe-area-inset-bottom) + 14px);
+    background: radial-gradient(ellipse at 90% 0%, rgba(122, 99, 255, .17), transparent 42%), var(--bg-panel-solid);
+  }
+  .dydx-desk-sheet .sheet-title { padding: 3px 2px 14px; border-bottom: 1px solid var(--line); }
+  .dydx-desk-sheet .sheet-title .h2 { font-size: 16px; letter-spacing: -.02em; }
+  .dydx-desk-sheet .sheet-close { width: 42px; height: 42px; border-radius: 14px; background: color-mix(in srgb, var(--bg-panel-solid) 82%, #8b83ff); border: 1px solid var(--line); }
+  .dydx-desk-sheet .sheet-body { flex: 1 1 auto; max-height: none; padding: 4px 2px 24px; }
+  .dydx-desk-sheet .dtd-box { border-radius: 24px; box-shadow: 0 18px 55px -32px rgba(10, 10, 50, .6), inset 0 1px rgba(255,255,255,.12); }
+  .dydx-desk-sheet .dtd-head-mark { width: 46px; height: 46px; flex-basis: 46px; border-radius: 16px; }
+  .dydx-desk-sheet .dtd-tabs { gap: 7px; padding: 6px; border-radius: 18px; background: color-mix(in srgb, var(--bg-panel-solid) 88%, #766be1); scrollbar-width: none; }
+  .dydx-desk-sheet .dtd-tabs::-webkit-scrollbar { display: none; }
+  .dydx-desk-sheet .dtd-tabs > button:not(.dtd-refresh) { min-height: 44px; padding: 9px 15px; font-weight: 750; border: 1px solid transparent; }
+  .dydx-desk-sheet .dtd-tabs > button.active { border-color: color-mix(in srgb, #a99bff 55%, transparent); }
+  .dydx-desk-sheet .dtd-tabs .seg-indicator { background: linear-gradient(135deg, rgba(130, 111, 255, .30), rgba(78, 150, 240, .16)); border-radius: 12px; }
+  .dydx-desk-sheet :is(.dtd-pod, .dtd-block, .dtd-setup, .dtd-ask, .dtd-signal) { border: 1px solid color-mix(in srgb, #9d9dff 18%, var(--line)); box-shadow: inset 0 1px rgba(255,255,255,.08); }
+}
+@media (max-width: 767px) {
+  .dydx-mobile-dock .dydx-dock-long > span:last-child,
+  .dydx-mobile-dock .dydx-dock-short > span:last-child { unicode-bidi: plaintext; }
+  .dydx-desk-sheet div.dtd-head { cursor: default; }
+}
+
+/* Cool blue glass ties the dYdX workspace together; risk still keeps distinct tones. */
+:is(.dydx-app,.dydx-desk-sheet) .dtd-tone-watch .dtd-meter-fill { background: #55bdf9; }
+:is(.dydx-app,.dydx-desk-sheet) .fairisk.is-medium { --fr-accent: #63c7ff; --fr-accent-rgb: 99, 199, 255; }
+:is(.dydx-app,.dydx-desk-sheet) .fairisk.is-high { --fr-accent: #df77ad; --fr-accent-rgb: 223, 119, 173; }
+:is(.dydx-app,.dydx-desk-sheet) .fairisk-flag { color: #7fcaff; background: rgba(56, 151, 230, .12); border-color: rgba(89, 181, 245, .35); }
+:root[data-theme='light'] :is(.dydx-app,.dydx-desk-sheet) .fairisk-flag { color: #075687; }
+.dtd-ask-speed { margin: 0; font-size: 11px; color: var(--text-2); line-height: 1.7; }
+
+@media (max-width: 767px) {
+  .dydx-selected-side { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 11px 14px; border: 1px solid var(--line); border-radius: 14px; background: color-mix(in srgb, var(--bg-panel-solid) 91%, #468ed0); color: var(--text-2); font-size: 12px; }
+  .dydx-selected-side.is-long strong { color: #18a979; }
+  .dydx-selected-side.is-short strong { color: #dc536e; }
+  .dydx-mobile-dock {
+    height: 70px;
+    grid-template-columns: minmax(0, 1fr) 66px minmax(0, 1fr);
+    border-color: color-mix(in srgb, #83caff 35%, var(--line));
+    background: linear-gradient(145deg, color-mix(in srgb, var(--bg-panel-solid) 70%, transparent), color-mix(in srgb, var(--bg-panel-solid) 82%, #3d7eb4));
+    box-shadow: 0 20px 50px rgba(6, 25, 53, .35), inset 0 1px rgba(255,255,255,.24);
+    -webkit-backdrop-filter: blur(30px) saturate(170%);
+    backdrop-filter: blur(30px) saturate(170%);
+  }
+  /* A 64px hit area surrounds a smaller 42px diamond. The label and icon
+     stay upright; no transformed child can interfere with tapping. */
+  .dydx-mobile-dock .dydx-dock-desk {
+    width: 64px; min-height: 64px !important; margin: -10px 0 0;
+    border: 0 !important; border-radius: 0 !important;
+    background: transparent; box-shadow: none; isolation: isolate; gap: 2px;
+  }
+  .dydx-dock-desk::before {
+    content: ''; position: absolute; z-index: -1; width: 44px; height: 44px;
+    border-radius: 12px; transform: rotate(45deg);
+    border: 1px solid rgba(194, 230, 255, .8);
+    background: linear-gradient(145deg, #9ae9ff, #348ddd 50%, #315ab1);
+    box-shadow: 0 6px 20px rgba(43, 139, 218, .45), inset 0 1px rgba(255,255,255,.55);
+  }
+  .dydx-dock-orb { width: 23px; height: 23px; background: transparent; box-shadow: none; }
+  .dydx-dock-orb svg { width: 18px; height: 18px; }
+  .dydx-dock-desk > span:last-child { font-size: 9px; }
+  .dydx-desk-sheet .dtd-tabs { background: color-mix(in srgb, var(--bg-panel-solid) 90%, #399adb); }
+  .dydx-desk-sheet .dtd-tabs .seg-indicator { background: linear-gradient(135deg, rgba(46, 154, 231, .35), rgba(107, 200, 255, .14)); }
+  .dydx-desk-sheet .dtd-tabs > button.active { border-color: rgba(97, 188, 255, .55); }
+}
+.dydx-app, .dydx-desk-sheet { --rgb-5: #58bdfa; }
+
+/* Market count distinguishes current tradeable listings from the indexer's
+   historical catalogue. Never turn a settled market into a live order. */
+.dydx-market-count { margin: 8px 2px 0; color: var(--text-3); font-size: 11px; line-height: 1.6; }
+.dydx-app .btn-primary, .dydx-desk-sheet .btn-primary {
+  color: #fff; border: 1px solid rgba(155, 213, 255, .36);
+  background: linear-gradient(135deg, #267ba9, #4766b5);
+  box-shadow: inset 0 1px rgba(255,255,255,.25), 0 6px 18px rgba(35,107,175,.24);
+}
+.dydx-app .dir-btn { border-radius: 16px; box-shadow: inset 0 1px rgba(255,255,255,.12); }
+
+@media (max-width: 767px) {
+  .dydx-mobile-dock {
+    overflow: visible;
+    border-color: color-mix(in srgb, #b0dcff 42%, transparent);
+    background: linear-gradient(160deg, color-mix(in srgb, var(--bg-panel-solid) 77%, transparent), color-mix(in srgb, var(--bg-panel-solid) 86%, #478bb4));
+    box-shadow: 0 16px 38px rgba(5, 25, 45, .35), inset 0 1px rgba(255,255,255,.3), inset 0 -1px rgba(123,190,229,.12);
+  }
+  /* The diamond's centre is exactly on the bar's upper edge: half above,
+     half inside. Its unrotated 64px control remains the generous tap target. */
+  .dydx-mobile-dock .dydx-dock-desk {
+    position: absolute; left: 50%; top: 0; transform: translate(-50%, -50%);
+    margin: 0; z-index: 2;
+  }
+  .dydx-dock-desk::before {
+    background: linear-gradient(145deg, #d1efff 0%, #6bc9f0 24%, #3385c3 60%, #315494 100%);
+    border-color: rgba(220,246,255,.88);
+    box-shadow: 0 9px 0 -4px #244b7b, 0 13px 22px rgba(24,89,145,.48), inset 0 2px 2px rgba(255,255,255,.65), inset 0 -3px 5px rgba(20,53,105,.35);
+  }
+  .dydx-dock-orb { color: #f6fdff; filter: drop-shadow(0 1px 2px rgba(10,44,94,.65)); }
+  .dydx-mobile-dock .dydx-dock-long,
+  .dydx-mobile-dock .dydx-dock-short {
+    border-radius: 16px; border: 1px solid rgba(255,255,255,.25);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.24), 0 5px 12px rgba(0,0,0,.18);
+  }
+  .dydx-mobile-dock .dydx-dock-long { background: linear-gradient(145deg, #16866f, #08735f); }
+  .dydx-mobile-dock .dydx-dock-short { background: linear-gradient(145deg, #d0556d, #a63556); }
+
+  /* A single fullscreen surface, not a card inside another card. */
+  .dydx-desk-layer .dydx-desk-sheet {
+    padding: calc(env(safe-area-inset-top) + 10px) 12px calc(env(safe-area-inset-bottom) + 8px);
+    background: radial-gradient(ellipse at 80% 0%, rgba(69,169,229,.19), transparent 45%),
+      linear-gradient(165deg, color-mix(in srgb, var(--bg-panel-solid) 94%, #3680a6), var(--bg-panel-solid) 65%);
+  }
+  .dydx-desk-sheet .sheet-title { padding: 2px 3px 10px; }
+  .dydx-desk-sheet .sheet-close { background: color-mix(in srgb, var(--bg-panel-solid) 75%, #78bce5); }
+  .dydx-desk-sheet .sheet-body { padding: 4px 0 24px; margin: 0; }
+  .dydx-desk-sheet .dtd-standalone {
+    overflow: visible; border: 0; border-radius: 0; padding: 0;
+    background: transparent; box-shadow: none;
+  }
+  .dydx-desk-sheet .dtd-topline { padding: 2px 0 8px; }
+  .dydx-desk-sheet .dtd-head { padding: 8px 4px; }
+  .dydx-desk-sheet .dtd-head-title { font-size: 16px; }
+  .dydx-desk-sheet .dtd-head-price { font-size: 14px; }
+  .dydx-desk-sheet .dtd-body { padding: 0 2px 12px; gap: 14px; }
+  .dtd-token-avatar { flex: 0 0 52px; width: 52px; height: 52px; display: grid; place-items: center; border-radius: 18px; background: color-mix(in srgb, var(--bg-panel-solid) 75%, #55b4e6); border: 1px solid rgba(143,211,246,.38); box-shadow: inset 0 1px rgba(255,255,255,.22); }
+  .dtd-token-avatar .coin-logo { border-radius: 50%; overflow: hidden; }
+  .dtd-market-snapshot { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .dtd-market-snapshot > div { min-width: 0; padding: 11px 7px; border: 1px solid color-mix(in srgb, #8ec9e9 25%, var(--line)); border-radius: 14px; background: color-mix(in srgb, var(--bg-panel-solid) 80%, #62a6cf); box-shadow: inset 0 1px rgba(255,255,255,.13); }
+  .dtd-market-snapshot span, .dtd-market-snapshot strong { display: block; overflow-wrap: anywhere; }
+  .dtd-market-snapshot span { color: var(--text-3); font-size: 10px; line-height: 1.5; }
+  .dtd-market-snapshot strong { margin-top: 4px; color: var(--text-1); font-size: 11px; direction: ltr; text-align: start; }
+  .dydx-desk-sheet .dtd-tabs { margin: 0; border: 1px solid color-mix(in srgb, #8ec9e9 20%, var(--line)); }
+  .dydx-desk-sheet :is(.dtd-pod, .dtd-block, .dtd-setup, .dtd-ask, .dtd-signal) { border-radius: 16px; background: color-mix(in srgb, var(--bg-panel-solid) 88%, #4f96bd); }
+}
+
+/* dYdX-only atmosphere and trading controls. */
+.dydx-app .derivatives-aurora {
+  inset: -60px -16px auto; height: 650px; border-radius: 0;
+  background: radial-gradient(ellipse at 20% 4%, rgba(46, 151, 206, .14), transparent 52%),
+              radial-gradient(ellipse at 85% 34%, rgba(82, 100, 216, .12), transparent 55%);
+}
+.dydx-app .derivatives-aurora::before { background: radial-gradient(circle, #44b6dc, transparent 62%); opacity: .14; }
+.dydx-app .derivatives-aurora::after { background: radial-gradient(circle, #6f80e4, transparent 62%); opacity: .12; }
+.dydx-app .derivatives-hero {
+  padding: 22px; border-radius: 26px;
+  border: 1px solid color-mix(in srgb, #85cfff 36%, var(--line));
+  background: radial-gradient(ellipse at 94% 2%, rgba(95, 191, 238, .20), transparent 50%),
+              linear-gradient(140deg, color-mix(in srgb, var(--bg-panel-solid) 84%, #488ac0), var(--bg-panel-solid));
+  box-shadow: 0 18px 45px rgba(7, 37, 73, .20), inset 0 1px rgba(255,255,255,.2);
+}
+.dydx-app .derivatives-hero::before { background: linear-gradient(115deg, #9addff, #5990db, transparent 78%); opacity: .32; }
+.dydx-hero-content { position: relative; z-index: 1; }
+.dydx-hero-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.dydx-hero-mark { flex: 0 0 48px; width: 48px; height: 48px; display: grid; place-items: center; color: #eafaff; border: 1px solid rgba(188,235,255,.55); border-radius: 16px; background: linear-gradient(145deg, #56b6d7, #425eaa); box-shadow: inset 0 1px rgba(255,255,255,.4), 0 7px 18px rgba(42,115,172,.24); }
+.dydx-hero-copy { min-width: 0; flex: 1 1 auto; }
+.dydx-hero-eyebrow { display: block; color: var(--text-2); font-size: 10px; font-weight: 800; letter-spacing: .14em; direction: ltr; text-align: start; }
+.dydx-hero-title { margin: 4px 0 0; color: var(--text-1); font-size: clamp(19px, 5vw, 26px); line-height: 1.25; font-weight: 850; }
+.dydx-hero-subtitle { color: var(--text-2); margin: 16px 0 0; font-size: 12px; line-height: 1.9; max-width: 60ch; }
+.dydx-hero-status { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 999px; border: 1px solid rgba(67,187,165,.30); background: rgba(33,161,130,.12); color: var(--text-1); font-size: 10px; font-weight: 800; }
+.dydx-hero-status > span { width: 7px; height: 7px; border-radius: 50%; background: #27c99c; box-shadow: 0 0 8px rgba(39,201,156,.7); }
+.dydx-hero-status.is-offline > span { background: #ee7280; box-shadow: 0 0 8px rgba(238,114,128,.55); }
+.dydx-workflow .infobox { border: 1px solid color-mix(in srgb, #8acaf2 30%, var(--line)); border-radius: 20px; background: linear-gradient(145deg, color-mix(in srgb,var(--bg-panel-solid) 86%,#5ba8d2), var(--bg-panel-solid)); box-shadow: inset 0 1px rgba(255,255,255,.15), 0 12px 30px rgba(8,38,65,.10); overflow: hidden; }
+.dydx-workflow .infobox-head { padding: 15px; gap: 12px; }
+.dydx-workflow .infobox-icon { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 38px; color: #a8e7ff; border-radius: 13px; background: linear-gradient(145deg, #388db9, #5269ae); border: 1px solid rgba(183,226,255,.35); }
+.dydx-workflow .infobox-title { color: var(--text-1); font-weight: 800; }
+.dydx-workflow .infobox-body { padding: 0 15px 16px; }
+.dydx-workflow-list { margin: 0; padding: 0; display: grid; gap: 7px; list-style: none; }
+.dydx-workflow-list li { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding: 10px; border-radius: 13px; border: 1px solid color-mix(in srgb, #85c5eb 18%, var(--line)); background: color-mix(in srgb, var(--bg-panel-solid) 90%, #6ab6dd); color: var(--text-2); font-size: 12px; line-height: 1.9; }
+.dydx-workflow-number { flex: 0 0 27px; width: 27px; height: 27px; display: grid; place-items: center; border-radius: 9px; background: rgba(74,164,211,.15); color: var(--text-1); font: 800 10px/1 sans-serif; direction: ltr; }
+.dydx-app .lev-chip.active, :root[data-theme='light'] .dydx-app .lev-chip.active {
+  color: #edfbff; border-color: rgba(146, 216, 255, .75);
+  background: linear-gradient(145deg, #287fa9, #4268ac);
+  box-shadow: inset 0 1px rgba(255,255,255,.32), 0 5px 15px rgba(32,108,169,.25);
+}
+.dydx-app .lev-chip:focus-visible { outline: 2px solid #74d1f5; outline-offset: 2px; }
+.dtd-token-avatar img, .dtd-token-svg, .dtd-token-fallback { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; overflow: hidden; }
+.dtd-token-svg svg { width: 100%; height: 100%; }
+.dtd-token-fallback { background: linear-gradient(145deg, #428cae, #545caa); color: #fff; font: 800 12px/1 sans-serif; }
+@media (max-width: 767px) {
+  /* An absolutely-positioned grid child otherwise anchors to the middle
+     CELL. Auto grid placement anchors to the whole bar instead. */
+  .dydx-mobile-dock .dydx-dock-desk {
+    grid-column: auto; grid-row: auto;
+    left: 0; right: 0; top: 0; margin: 0 auto;
+    transform: translateY(-50%); justify-self: auto; align-self: auto;
+  }
+}
+
+/* The venue atmosphere starts above the futures banner and continues behind
+   the whole workspace. It is removed with the dYdX screen class on exit. */
+body.dydx-screen .page {
+  background: radial-gradient(ellipse 95% 680px at 90% 0, rgba(115, 99, 190, .13), transparent 75%),
+              radial-gradient(ellipse 110% 950px at 0 520px, rgba(47, 148, 158, .10), transparent 75%),
+              linear-gradient(180deg, color-mix(in srgb, var(--bg-void) 92%, #6872a5), var(--bg-void));
+}
+.dydx-app .derivatives-aurora {
+  inset: 0 -16px 0;
+  height: auto;
+  background: radial-gradient(ellipse 80% 500px at 90% 0, rgba(108, 103, 205, .14), transparent 75%),
+              radial-gradient(ellipse 80% 650px at 10% 650px, rgba(64, 166, 169, .09), transparent 75%);
+}
+
+/* Readable risk heading stays visible; only the explanatory text collapses.
+   The separate confirmation risk warning remains permanently visible. */
+.dydx-risk-info .infobox {
+  border: 1px solid rgba(221, 91, 121, .35);
+  border-radius: 19px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-panel-solid) 89%, #c84f70), var(--bg-panel-solid));
+  box-shadow: inset 0 1px rgba(255,255,255,.14), 0 10px 28px rgba(76, 28, 50, .10);
+}
+.dydx-risk-info .infobox-head { padding: 14px 15px; gap: 12px; }
+.dydx-risk-info .infobox-icon { width: 38px; height: 38px; border-radius: 13px; color: #fff0f3; background: linear-gradient(145deg, #ce607d, #99465f); border: 1px solid rgba(255,205,217,.35); }
+.dydx-risk-info .infobox-title { color: var(--text-1); font-weight: 800; }
+.dydx-risk-info .infobox-body { padding: 0 15px 16px; }
+.dydx-risk-info .infobox-body p { margin: 0; line-height: 1.9; }
+.dydx-risk-info .infobox-head:focus-visible { outline: 2px solid #dd778e; outline-offset: -3px; border-radius: 16px; }
+
+/* Remove inherited amber from informational elements, without muting red
+   liquidation, error and confirmation warnings. */
+:is(.dydx-app, .dydx-desk-sheet) { --ink-amber: #8fc2ee; }
+:is(.dydx-app, .dydx-desk-sheet) .notice:not(.notice-danger) {
+  background: rgba(95, 145, 200, .10); border-color: rgba(107, 164, 214, .33); color: var(--text-2);
+}
+:is(.dydx-app, .dydx-desk-sheet) .notice:not(.notice-danger)::before { background: #568ab5; color: #fff; }
+:root[data-theme='light'] :is(.dydx-app, .dydx-desk-sheet) { --ink-amber: #365f87; }
+:root[data-theme='light'] :is(.dydx-app, .dydx-desk-sheet) .notice:not(.notice-danger) { background: #eef5fb; border-color: #91b4d1; color: #284762; }
+:root[data-theme='light'] :is(.dydx-app, .dydx-desk-sheet) .notice:not(.notice-danger)::before { background: #426e95; color: #fff; }
+
+/* The floating diamond uses a softer, modern amethyst/graphite glass finish;
+   geometry and 64px hit area remain unchanged. */
+@media (max-width: 767px) {
+  .dydx-mobile-dock .dydx-dock-desk::before {
+    background: linear-gradient(145deg, #eee5ff 0%, #b3a3dc 19%, #7464a6 54%, #3a3e67 100%);
+    border-color: rgba(235, 225, 255, .85);
+    box-shadow: 0 9px 0 -4px #353454, 0 13px 24px rgba(52, 42, 92, .46), inset 0 2px 2px rgba(255,255,255,.64), inset 0 -3px 5px rgba(31,27,59,.40);
+  }
+  .dydx-mobile-dock .dydx-dock-orb { color: #fffaff; filter: drop-shadow(0 1px 2px rgba(38,25,65,.8)); }
+}
+/* The parent futures venue rail lives outside .dydx-app. */
+body.dydx-screen .perp-rail-tab.is-active { border-color: rgba(164,153,223,.48) !important; background: radial-gradient(130% 160% at 50% -40%, rgba(141,126,210,.30), transparent 60%), color-mix(in srgb, var(--bg-panel-solid) 85%, #7367aa) !important; box-shadow: 0 10px 30px -14px rgba(102,91,167,.4), inset 0 1px rgba(225,216,255,.18) !important; }
+body.dydx-screen .perp-rail-tab.is-active .perp-rail-label { color: var(--text-1) !important; }
+body.dydx-screen .perp-rail-tab.is-active .perp-rail-ico { color: #fff !important; background: linear-gradient(145deg,#9387c9,#5f6095); }
+body.dydx-screen .perp-rail-tab.is-active .seg-indicator { background: linear-gradient(135deg,rgba(159,143,214,.27),rgba(109,125,192,.18)); }

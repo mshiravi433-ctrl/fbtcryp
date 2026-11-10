@@ -25,7 +25,7 @@ test('B1 · the ceiling the ROUTE uses leaves the platform at least 15 s of head
   /* Safety is a clamp, never an opinion: it cannot exceed the mode ceiling. */
   assert.ok(safe <= turnCeilingMs({}));
   const route = readFileSync(new URL('../../server/aiIntentOS.js', import.meta.url), 'utf8');
-  assert.match(route, /const turnCeiling = turnSafeCeilingMs\(\)/);
+  assert.match(route, /const turnCeiling = chatTurnCeiling\(resolvedIntelligence.mode, turnSafeCeilingMs\(\)\)/);
 });
 
 test('B2 · the published contract is untouched (a ceiling, not a rewrite)', () => {
@@ -65,7 +65,7 @@ test('B6 · the retry notice is Persian in a Persian chat, not an English stub',
   assert.match(ui, /پاسخ در مهلت نرسید؛ یک‌بار دیگر/);
 });
 
-test('B7 · the offline reading is not stapled under a retry that is still coming', () => {
+test('B7 · an unrelated local shrug is not appended to an error', () => {
   const ui = readFileSync(new URL('../../src/components/IntentAIUnified.jsx', import.meta.url), 'utf8');
-  assert.match(ui, /const localReading = !canRetry && osResult\?\.understood === false/);
+  assert.doesNotMatch(ui, /const localReading = !canRetry/);
 });

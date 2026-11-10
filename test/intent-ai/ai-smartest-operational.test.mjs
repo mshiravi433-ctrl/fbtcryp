@@ -447,24 +447,99 @@ test('a debate seat is never named by the deployment’s stale model pin', async
   }
 });
 
-test('the gateway client waits as long as the mode needs — and names the mode', () => {
+test('the gateway client waits as long as the mode needs — and names the mode', async (t) => {
   /*
    * `aiGatewayClient.js` is the transport behind the consensus card and the
    * gateway chat surface. It carried a 15 s window written for a health read,
    * while a deep debate legitimately needs tens of seconds: the request was
    * aborted mid-answer and the panel fell back to its local text, which reads
    * exactly like «هیچ تغییری نکرده».
+   *
+   * Checked by what the client DOES — the mode it puts on the wire and the
+   * millisecond it hangs up on a server that never answers — not by how the
+   * line is spelled. This test used to pin the text `timeout: modeWindow()`.
+   * When the futures desk began asking for `swift` on its own, the wait was
+   * (rightly) tied to the mode the request names instead of the one stored for
+   * the chat: the client was correct, the text no longer matched, and the
+   * suite read 505/506. Asked as a question about behaviour, the same check
+   * also found the half that WAS wrong — `runAiConsensus` sent the caller's
+   * mode and waited by the stored one, so a debate asked for at `max` from a
+   * chat set to `swift` was cut at 15 s.
    */
-  const gw = src('src/lib/aiGatewayClient.js');
-  assert.match(gw, /import \{ getIntelligenceMode, intelligenceTurnBudgetMs \} from '.\/aiIntelligenceMode\.js'/,
-    'the client must read the same shared preference the chat uses');
-  assert.match(gw, /const modeWindow = \(floor = 15000\) => Math\.max\(floor, intelligenceTurnBudgetMs\(getIntelligenceMode\(\)\)\)/);
-  const chat = gw.slice(gw.indexOf('export async function executeAiGatewayChat'), gw.indexOf('export async function runAiConsensus'));
-  assert.match(chat, /intelligence: mode/);
-  assert.match(chat, /timeout: modeWindow\(\)/);
-  const consensus = gw.slice(gw.indexOf('export async function runAiConsensus'), gw.indexOf('export async function evaluateConfidence'));
-  assert.match(consensus, /intelligence: mode/);
-  assert.match(consensus, /timeout: modeWindow\(\)/, 'a debate is the slowest call in this file, not the fastest');
+  /* Loaded here, not at the top: a browser module that stops loading under
+     Node should fail this one check, not the twenty around it. */
+  const { executeAiGatewayChat, runAiConsensus } = await import('../../src/lib/aiGatewayClient.js');
+  const { INTELLIGENCE_STORAGE_KEY, INTELLIGENCE_TURN_MS } = await import('../../src/lib/aiIntelligenceMode.js');
+  const { swift, balanced, max } = INTELLIGENCE_TURN_MS;
+
+  /* The preference the chat obeys, answered only for the key that owns it: a
+     client reading any other store would send the default and fail below. */
+  let stored = null;
+  const hadWindow = Object.hasOwn(globalThis, 'window');
+  const realWindow = globalThis.window;
+  globalThis.window = { localStorage: { getItem: (key) => (key === INTELLIGENCE_STORAGE_KEY ? stored : null) } };
+
+  /* A server that accepts the request and never answers: the only way out is
+     the client's own window. */
+  const realFetch = globalThis.fetch;
+  const wire = [];
+  globalThis.fetch = (url, init = {}) => new Promise((_resolve, reject) => {
+    wire.push({ url: String(url), body: JSON.parse(init.body) });
+    init.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+  });
+
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.after(() => {
+    t.mock.timers.reset();
+    globalThis.fetch = realFetch;
+    if (hadWindow) globalThis.window = realWindow; else delete globalThis.window;
+  });
+
+  const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
+  /* One millisecond either side of every window a mode can have. */
+  const marks = [...new Set([swift, balanced, max].flatMap((ms) => [ms - 1, ms]))]
+    .sort((a, b) => a - b)
+    .concat(10 * 60 * 1000);
+  /** What one call put on the wire, and the millisecond at which it gave up. */
+  const hangUp = async (start) => {
+    const before = wire.length;
+    let result = null;
+    start().then((r) => { result = r; });
+    await nextTurn();
+    let at = 0;
+    for (const mark of marks) {
+      t.mock.timers.tick(mark - at);
+      at = mark;
+      await nextTurn();
+      if (result) break;
+    }
+    const sent = wire.length > before ? wire.at(-1) : null;
+    return { at: result ? at : Infinity, error: result?.error, mode: sent?.body?.intelligence, url: sent?.url };
+  };
+
+  const calls = [
+    ['chat', '/v1/ai/gateway/chat', (extra) => executeAiGatewayChat({ user: 'x', ...extra })],
+    ['consensus', '/v1/ai/gateway/consensus', (extra) => runAiConsensus({ message: 'x', ...extra })]
+  ];
+  /* [the chat is set to, the caller asks for] → [the mode sent, the wait it earns] */
+  const cases = [
+    ['max', undefined, 'max', max],            // nothing asked: the chat's own preference…
+    ['swift', undefined, 'swift', swift],      // …whichever it is
+    ['max', 'swift', 'swift', swift],          // a quick read must not hold its screen for the deep window
+    ['swift', 'max', 'max', max],              // a deep turn must not be cut at the quick window
+    ['max', 'balanced', 'balanced', balanced]
+  ];
+  for (const [name, path, call] of calls) {
+    for (const [preference, asked, mode, wait] of cases) {
+      stored = preference;
+      const seen = await hangUp(() => call(asked ? { intelligence: asked } : {}));
+      const where = `${name}, chat set to ${preference}, caller asks for ${asked ?? 'nothing'}`;
+      assert.ok(seen.url?.endsWith(path), `${where}: the request went to ${seen.url}`);
+      assert.equal(seen.mode, mode, `${where}: the request must name its mode`);
+      assert.equal(seen.at, wait, `${where}: hung up after ${seen.at} ms; the mode it sent allows ${wait}`);
+      assert.equal(seen.error, 'TIMEOUT', `${where}: a hang-up must be reported as one`);
+    }
+  }
 });
 
 test('the consensus and debate routes carry the caller’s mode to the seats', () => {

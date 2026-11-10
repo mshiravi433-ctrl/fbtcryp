@@ -29,7 +29,7 @@
 export const MARKET_FRAME_SCHEMA = 'fbt.ai-market-frame.v1';
 export const MARKET_FRAME_VERSION = '1.0.0';
 
-const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+const num = (v) => (v == null || v === '' || typeof v === 'boolean' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
 const round = (v, d = 2) => (v == null ? null : Math.round(v * 10 ** d) / 10 ** d);
 
 const ASSET_RE = /\b(btc|eth|sol|bnb|xrp|ada|doge|ton|avax|link|arb|op|matic|gold|xau)\b|بیت[\s]*کوین|اتریوم|سولانا|ریپل|دوج/gi;
@@ -80,7 +80,7 @@ function collectInstruments(context = {}) {
   const put = (row) => {
     if (!row) return;
     const existing = bySymbol.get(row.symbol);
-    bySymbol.set(row.symbol, existing ? { ...existing, ...row } : row);
+    bySymbol.set(row.symbol, existing ? { ...existing, ...Object.fromEntries(Object.entries(row).filter(([, value]) => value != null)) } : row);
   };
 
   for (const key of ['assets', 'coins', 'rows', 'instruments']) {
@@ -102,11 +102,15 @@ function collectInstruments(context = {}) {
 const Z = '[\\s\\u200c]*';
 const HORIZON_WORDS = [
   { re: new RegExp(`(?:تا|در)${Z}(?:یک|۱|1)${Z}(?:سال|ساله)`), days: 365 },
-  { re: new RegExp(`(?:تا|در)${Z}(?:شش|۶|6|نه|۹|9|سه|۳|3)${Z}ماه`), days: 180 },
+  { re: new RegExp(`(?:تا|در)${Z}(?:شش|۶|6)${Z}ماه`), days: 180 },
   { re: new RegExp(`(?:تا|در)${Z}(?:سه|۳|3)${Z}ماه`), days: 90 },
+  { re: new RegExp(`(?:تا|در)${Z}(?:نه|۹|9)${Z}ماه`), days: 270 },
   { re: new RegExp(`(?:تا|در)${Z}(?:یک|۱|1)${Z}ماه|ماه${Z}آینده|ماه${Z}بعد`), days: 30 },
   { re: new RegExp(`(?:تا|در)${Z}(?:یک|۱|1)${Z}هفته|هفته${Z}آینده|هفته${Z}بعد|چند${Z}هفته`), days: 7 },
-  { re: /\b(?:next|in\s+(?:a|one))\s+(?:week|month|quarter|year)\b/i, days: 30 }
+  { re: /\b(?:next|in\s+(?:a|one))\s+week\b/i, days: 7 },
+  { re: /\b(?:next|in\s+(?:a|one))\s+month\b/i, days: 30 },
+  { re: /\b(?:next|in\s+(?:a|one))\s+quarter\b/i, days: 90 },
+  { re: /\b(?:next|in\s+(?:a|one))\s+year\b/i, days: 365 }
 ];
 
 function requestedHorizonDays(message = '') {
@@ -179,7 +183,7 @@ export function buildMarketFrame({ context = {}, message = '', knowledge = [] } 
 
   /* Horizon: the honest one is what the data can speak to. */
   const has7d = instruments.some((i) => i.change7dPct != null);
-  const hasOhlc = Boolean(market.ohlc || market.candles);
+  const hasOhlc = [market.ohlc, market.candles].some((rows) => Array.isArray(rows) && rows.length >= 2);
   const supportedDays = has7d || hasOhlc ? 7 : 1;
   const askedDays = requestedHorizonDays(message);
   const horizonGap = askedDays != null && askedDays > supportedDays;

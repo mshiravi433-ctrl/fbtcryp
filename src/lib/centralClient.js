@@ -17,6 +17,7 @@
  * device header scopes the session so one browser = one brain session.
  */
 import { apiBase } from './apiBase.js';
+import { encodeWireBody } from './aiWireContext.js';
 
 const TIMEOUT_MS = 15000;
 const DEVICE_KEY = 'fbt.ai.device.v1'; // SAME device identity as the V1 AI client
@@ -47,11 +48,14 @@ async function call(path, { method = 'GET', body = null, timeout = TIMEOUT_MS } 
     const headers = { accept: 'application/json' };
     if (body) headers['content-type'] = 'application/json';
     if (device) headers['x-fbt-device'] = device;
+    /* Same wire rule as the V1 AI client: the screen's context object carries a
+       browser-only market feed, and posting it verbatim put `/system/state`
+       over the server's 256 KB JSON limit (see lib/aiWireContext.js). */
     const res = await fetch(`${base()}${path}`, {
       method,
       signal: ctrl.signal,
       headers,
-      body: body ? JSON.stringify(body) : undefined
+      body: body ? encodeWireBody(body).text : undefined
     });
     const text = await res.text();
     const json = text ? (() => { try { return JSON.parse(text); } catch { return { raw: text.slice(0, 240) }; } })() : {};

@@ -385,7 +385,7 @@ import {
 import { createSurfaceGate, eventToChatMessage } from '../lib/intent-ai/chat/osSurface.js';
 import { buildNegotiationContext, runSurfaceCommand } from '../lib/intent-ai/chat/surfaceCommands.js';
 import { executeStopPlan, goalRequestText } from '../lib/intent-ai/chat/negotiationActions.js';
-import { offlineSocialFallback } from '../lib/intent-ai/chat/socialChat.js';
+import { offlineSocialFallback, unreachableSocialFallback } from '../lib/intent-ai/chat/socialChat.js';
 import { OsEventCard, PendingQuestionBar } from './chat/IntentOsSurface.jsx';
 import {
   loadLocalIntentOSState,
@@ -1412,6 +1412,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   const threadRef = useRef(null);
   const busyRef = useRef(false);
+  /* Counts turns as they START. A delayed automatic retry checks it before it
+     fires, so a retry never lands on top of a question the user asked since. */
+  const turnSeqRef = useRef(0);
   const resumeLock = useRef(false);
   const sendRef = useRef(null);
   const osRef = useRef(null);
@@ -2317,6 +2320,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     }
 
     busyRef.current = true;
+    const turnSeq = (turnSeqRef.current += 1);
 
     const os8Before = os8StateRef.current || loadLocalIntentOSState('intent-unified');
     let os8Turn = null;
@@ -3246,7 +3250,19 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         services: liveModuleServices
       });
 
-      if (!verifyResult.ok && verifyResult.reason === 'WALLET_NOT_CONNECTED') {
+      /*
+       * ─── A QUESTION NEEDS NO WALLET ───────────────────────────────────────
+       * This gate is «verify before EXECUTION». It also sat in front of every
+       * turn the local OS could not read (`understood === false`) — which is,
+       * by definition, not an execution: «کارمزد FBT چقدره؟»، «بیتکوین؟»، «یه
+       * جوک بگو». A visitor without a wallet therefore got «برای انجام این کار
+       * باید ابتدا کیف پولتان را متصل کنید» for a question, and the server that
+       * can answer it was never asked. The server stays the authority: when a
+       * turn does need a wallet it answers with its own CONNECT_WALLET card,
+       * handled below exactly as before.
+       */
+      const serverOwnsReading = osResult?.understood === false && !needsFinancialConfirmation;
+      if (!serverOwnsReading && !verifyResult.ok && verifyResult.reason === 'WALLET_NOT_CONNECTED') {
         // Need wallet
         const human = humanizeError('WALLET_REQUIRED', { locale });
         setMessages((prev) => [...prev, {
@@ -3278,6 +3294,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
            same way. */
         intelligence: opts.intelligenceOverride
           || (opts.deepThinking === true ? 'max' : undefined),
+        /* Set only by the retry that follows a size rejection (413): the same
+           turn, in a much smaller envelope. */
+        maxBodyBytes: opts.maxBodyBytes || undefined,
         // The server fallback uses the SAME unfinished goal as the local chat.
         // Send a bounded, plain-text history, never entire UI/plan/wallet blobs.
         messages: (messagesRef.current || []).filter((row) => row?.role === 'user' || row?.role === 'ai')
@@ -3321,41 +3340,68 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
          *   · at most ONE automatic retry (`attempt` travels in opts);
          *   · a timeout retries at `balanced`, not at the depth that just ran
          *     out of clock — a 20 s answer beats a second 60 s failure;
-         *   · a non-transient failure (a 4xx/5xx the server actually returned)
-         *     is never retried, because it would fail identically forever.
+         *   · retry only network failures, timeouts and gateway 502/503 responses;
+         *     validation and authorization failures are not transient.
          */
         const status = Number(res?.status || 0);
-        const timedOut = status === 504 || status === 408 || res?.error === 'TIMEOUT' || status === 0;
+        const timedOut = status === 504 || status === 408 || res?.error === 'TIMEOUT';
+        /*
+         * ─── EVERY REFUSAL IS NAMED, AND ANSWERED IN KIND ───────────────────
+         * This branch used to know two failures (a timeout, a gateway 502/503)
+         * and called everything else «در دسترس نیست» without a retry. On
+         * production «everything else» was the whole outage:
+         *   · 413 — the request was too large (the context carried a market
+         *     feed; see lib/aiWireContext.js). Answer: send a smaller envelope.
+         *   · 429 — too many writes this minute. Answer: wait the seconds the
+         *     server named, then ask again; or say exactly how long to wait.
+         *   · 500 / an unreadable body — THIS attempt broke. Answer: one more
+         *     attempt at a lighter depth, like a timeout.
+         * Still at most ONE automatic retry, and validation / authorization
+         * failures (400, 401, 403, 412) are still never retried.
+         */
+        const tooLarge = status === 413 || res?.error === 'PAYLOAD_TOO_LARGE';
+        const rateLimited = status === 429;
+        const retryAfterSec = Math.max(1, Math.min(300, Math.ceil(Number(res?.retryAfterSec) || 0) || 30));
+        /* Waiting is automatic only while it is short enough to sit through. */
+        const waitable = rateLimited && Number(res?.retryAfterSec) > 0 && retryAfterSec <= 12;
+        const waitFa = String(retryAfterSec).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+        /* An unreadable body counts as a broken attempt unless it arrived with
+           a 4xx: a block page or a 404 will not read differently next time. */
+        const serverFault = status >= 500 || (res?.error === 'INVALID_RESPONSE' && !(status >= 400 && status < 500));
+        const transient = timedOut || res?.error === 'NETWORK_UNAVAILABLE' || serverFault || tooLarge || waitable;
         const attempt = Number(opts.attempt || 0);
         const toolChecker = toolCheckerRef.current;
         const retryStrategy = toolChecker.getRetryStrategy({ message: code }, { attempt });
-        const canRetry = attempt < 1 && (timedOut || (retryStrategy.recoverable && retryStrategy.action === 'RETRY'));
+        const canRetry = attempt < 1 && transient && !connect;
         const fa = String(locale || 'fa').toLowerCase().startsWith('fa');
+        /* A broken attempt is retried lighter, for the same reason a timeout
+           is: the deep pass is what just failed. A size or rate refusal says
+           nothing about depth, so the mode is kept. */
+        const lighter = serverFault && !tooLarge && !rateLimited;
         const recoveryMsg = canRetry
-          ? (fa ? 'پاسخ در مهلت نرسید؛ یک‌بار دیگر — این بار سبک‌تر — می‌پرسم.' : 'The answer did not arrive in time; asking once more with a lighter budget.')
-          : `${toolChecker.getRecoveryMessage({ message: code }, { toolId: res?.intent?.type })}`;
-
-        /*
-         * ─── THE SERVER FAILED, NOT THE QUESTION ────────────────────────────
-         * A turn the OS could not read is now sent to the server on purpose.
-         * If that call fails (offline, 5xx, a deploy in flight), the user must
-         * not lose the little the device still knew: the OS's own reading of
-         * the message and its next-step chips are appended under the error, so
-         * a failed call costs one retry instead of the whole conversation.
-         */
-        /* The offline OS reading is shown when the turn ENDS here. While a
-           retry is still coming, stapling «مطمئن نشدم…» under an in-flight
-           retry is noise — and it is what made one failure read as three. */
-        const localReading = !canRetry && osResult?.understood === false
-          ? String(osResult?.human?.message || '').trim()
-          : '';
-
-        setMessages((prev) => [...prev, {
+          ? (timedOut
+            ? (fa ? 'پاسخ در مهلت نرسید؛ یک‌بار دیگر — این بار سبک‌تر — می‌پرسم.' : 'The answer timed out; trying once more with a lighter budget.')
+            : tooLarge
+              ? (fa ? 'اطلاعات همراه پیام سنگین بود؛ همین پرسش را سبک‌تر می‌فرستم.' : 'The request was too large; sending the same question in a smaller envelope.')
+              : waitable
+                ? (fa ? `درخواست‌ها پشت‌سرهم شد؛ ${waitFa} ثانیه صبر می‌کنم و خودم دوباره می‌پرسم.` : `Too many requests in a row; waiting ${retryAfterSec}s and asking again myself.`)
+                : (fa ? 'اتصال به سرویس برقرار نشد؛ یک‌بار دیگر تلاش می‌کنم.' : 'The service could not be reached; trying once more.'))
+          : rateLimited
+            ? (fa ? `در این دقیقه درخواست‌های زیادی فرستاده شد. حدود ${waitFa} ثانیهٔ دیگر همین پرسش را دوباره بفرست.` : `Too many requests this minute. Send the same question again in about ${retryAfterSec} seconds.`)
+            : timedOut
+              ? (fa ? 'پاسخ این پرسش در مهلت نرسید. کمی بعد دوباره بپرس، یا پرسش را کوتاه‌تر بنویس.' : 'The answer did not arrive in time. Ask again shortly, or make the question shorter.')
+              : (fa ? 'فعلاً پاسخ‌گویی هوش مصنوعی در دسترس نیست. لطفاً کمی بعد دوباره تلاش کنید.' : 'The AI service is unavailable right now. Please try again shortly.');
+        /* The server was asked and could not answer. A pleasantry — including
+           the «خوبی؟» that was sent there only so the reply could lean on the
+           previous turn — is still answered as one, not with an outage banner. */
+        const socialRow = !canRetry ? unreachableSocialFallback(message, {
+          locale,
+          prior: convStateRef.current?.currentIntent ? { intent: convStateRef.current.currentIntent } : null
+        }) : null;
+        setMessages((prev) => [...prev, socialRow || {
           id: makeId(),
           role: 'ai',
-          content: visibleText(res, human.message)
-            + (canRetry || retryStrategy.recoverable ? `\n\n${recoveryMsg}` : '')
-            + (localReading ? `\n\n${localReading}` : ''),
+          content: connect ? human.message : recoveryMsg,
           kind: connect ? 'connect' : 'error',
           statusCode: status || null,
           ui: { type: connect ? 'CONNECT_WALLET' : 'TEXT' }
@@ -3363,16 +3409,22 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
         if (canRetry) {
           setTimeout(() => {
+            /* The user asked something else while this one waited: that turn
+               owns the conversation now; an old question must not answer late. */
+            if (turnSeqRef.current !== turnSeq) return;
             void sendMessage(message, {
               ...opts,
               skipUserBubble: true,
               attempt: attempt + 1,
               /* A timeout is a budget problem, not a reasoning problem. */
-              intelligenceOverride: timedOut ? 'balanced' : opts.intelligenceOverride,
-              deepThinking: timedOut ? false : opts.deepThinking
+              intelligenceOverride: timedOut ? 'balanced' : (lighter ? 'balanced' : opts.intelligenceOverride),
+              deepThinking: (timedOut || lighter) ? false : opts.deepThinking,
+              /* After a size refusal the same turn travels in a third of the
+                 normal envelope: wallet, top holdings, the last few lines. */
+              ...(tooLarge ? { maxBodyBytes: 48000 } : {})
             });
-          }, 800);
-          obsRef.current.log({ intentId: convStateRef.current.intentId, type: 'RETRY', payload: { ...retryStrategy, status, timedOut, attempt: attempt + 1 } });
+          }, waitable ? retryAfterSec * 1000 + 250 : 800);
+          obsRef.current.log({ intentId: convStateRef.current.intentId, type: 'RETRY', payload: { ...retryStrategy, status, timedOut, tooLarge, rateLimited, attempt: attempt + 1 } });
           busV6.emit(EVENTS_V6.RECOVERY, { strategy: retryStrategy });
         }
 
@@ -3614,7 +3666,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
          uses; the error banner stays for every turn that actually needed data. */
       const socialRow = (() => {
         try {
-          return offlineSocialFallback(message, {
+          return unreachableSocialFallback(message, {
             locale,
             prior: convStateRef.current?.currentIntent ? { intent: convStateRef.current.currentIntent } : null
           });
@@ -3628,11 +3680,14 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         setActivitySteps([]);
         return true;
       }
-      const human = humanizeError('NETWORK_FAILED', { locale });
+      // This catch also covers local processing errors, not just fetch failures.
+      const failureText = String(locale || 'fa').toLowerCase().startsWith('fa')
+        ? 'پردازش پاسخ کامل نشد. لطفاً دوباره تلاش کنید.'
+        : 'The response could not be completed. Please try again.';
       setMessages((prev) => [...prev, {
         id: makeId(),
         role: 'ai',
-        content: human.message,
+        content: failureText,
         kind: 'error',
         ui: { type: 'TEXT' },
         error: String(err?.message || '')

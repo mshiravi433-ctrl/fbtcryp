@@ -38,6 +38,14 @@ import {
   FORECAST_PREDLEN_MAX
 } from './kronosForecast.js';
 import { telegramAuth, verifyInitData, normalizeBotToken, extractInitData } from './telegramAuth.js';
+import {
+  AI_JSON_BODY_LIMIT,
+  AI_CONTEXT_BODY_PATHS,
+  slimAiRequestMiddleware,
+  createAiWriteLimiter,
+  createApiErrorHandler,
+  recordTransportEvent
+} from './aiChatHardening.js';
 import { telegramBotIdentity, tokenDiagnostics } from './telegramIdentity.js';
 import { fetchAudio } from './audio.js';
 import { calmResultIsUsable, fetchCalm } from './calm.js';
@@ -570,6 +578,18 @@ app.post('/api/intents/v1/confidential/reveal', rejectUnavailableConfidentialWri
 app.use(sloMeterMiddleware());
 
 /*
+ * THE AI ROUTES TAKE A LARGER BODY — AND THROW THE EXCESS AWAY.
+ *
+ * Mounted BEFORE the global 256 KB parser so it is the one that reads these
+ * paths (a request whose body is already consumed is skipped by the next
+ * parser). Clients that are already installed post their whole context object,
+ * a 250-row market feed included, and at 256 KB every chat turn and every
+ * intent confirmation from them answered 413. The feed is dropped right after
+ * parsing: the server never read it. See server/aiChatHardening.js.
+ */
+app.use(AI_CONTEXT_BODY_PATHS, express.json({ limit: AI_JSON_BODY_LIMIT }), slimAiRequestMiddleware);
+
+/*
  * RAW BODY, ONLY WHERE A SIGNATURE NEEDS IT.
  *
  * Provider webhooks (server/agentHub/webhooks.js) are signed over the exact
@@ -1058,31 +1078,31 @@ setInterval(() => {
   for (const [k, v] of aiHits) if (now > v.reset) aiHits.delete(k);
 }, WINDOW_MS).unref?.();
 
-/* The unified `/api/v1/ai` gateway shares the same deliberate budget as the
-   older command-center routes: AI calls spend real provider quota, so a cheap
-   script must not be able to take the assistant down for everyone. */
-const aiV1Hits = new Map();
-const AI_V1_MAX_PER_WINDOW = Number(process.env.AI_RATE_LIMIT || 10);
-app.use('/api/v1/ai', (req, res, next) => {
-  if (req.method === 'GET') return next();
-  const key = req.tgUser?.id ?? req.ip;
-  const now = Date.now();
-  const rec = aiV1Hits.get(key);
-  if (!rec || now > rec.reset) {
-    aiV1Hits.set(key, { count: 1, reset: now + WINDOW_MS });
-    return next();
+/*
+ * The unified `/api/v1/ai` gateway keeps a deliberate budget — AI calls spend
+ * real provider quota, so a cheap script must not be able to take the
+ * assistant down for everyone — but it is no longer ONE budget.
+ *
+ * It used to be 10 writes a minute for everything under this path, on the
+ * stated assumption that «10/min is far above what the UI generates». That
+ * stopped being true when the chat began posting one telemetry record per
+ * message (`/learning/record`): a message that needs the server is two writes,
+ * so the sixth such message of a minute — or the second person behind a shared
+ * address — would be refused with 429, which the chat showed as «در دسترس
+ * نیست» with no retry.
+ *
+ * The writes are now budgeted by what they cost (bookkeeping / the human's own
+ * turn / explicit model calls); `AI_RATE_LIMIT` keeps protecting the last one.
+ * See server/aiChatHardening.js.
+ */
+const aiV1WriteLimiter = createAiWriteLimiter({
+  windowMs: WINDOW_MS,
+  onReject: ({ cls, retryAfterSec, scope }) => {
+    recordTransportEvent({ kind: 'rate-limited', status: 429, error: 'AI_RATE_LIMITED', scope: cls, by: scope, retryAfterSec });
   }
-  rec.count += 1;
-  if (rec.count > AI_V1_MAX_PER_WINDOW) {
-    res.set('retry-after', String(Math.ceil((rec.reset - now) / 1000)));
-    return res.status(429).json({ error: 'AI_RATE_LIMITED' });
-  }
-  return next();
 });
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of aiV1Hits) if (now > v.reset) aiV1Hits.delete(k);
-}, WINDOW_MS).unref?.();
+app.use('/api/v1/ai', aiV1WriteLimiter);
+setInterval(() => aiV1WriteLimiter.sweep(), WINDOW_MS).unref?.();
 
 /* On-chain anchor verification spends uncached RPC quota. It is public because
    the event is self-authenticating, but it gets the same small per-caller
@@ -8954,5 +8974,22 @@ app.get('/api/v1/ledger', async (req, res) => {
   const ledger = await getLedger(owner);
   res.json({ ok: true, data: ledger, schema: 'fbt.universal-ledger.v1' });
 });
+
+/*
+ * ─── THE API ANSWERS IN JSON, INCLUDING WHEN IT FAILS ──────────────────────
+ * LAST, after every route and lazy mount: Express hands an error to the first
+ * error middleware registered after the point it was raised. Until this
+ * existed the default handler answered with an HTML page — for an oversized
+ * body, a malformed one and a thrown handler alike — and a client calling
+ * `res.json()` could not tell any of them from an outage. Status codes are
+ * unchanged; only the body is now readable.
+ */
+app.use(createApiErrorHandler({
+  onError: ({ path, status, error }) => {
+    if (status === 413 && /^\/api\/(v1\/ai|system\/state|intent)(\/|$)/.test(path)) {
+      recordTransportEvent({ kind: 'payload-too-large', status, error, path: path.slice(0, 64) });
+    }
+  }
+}));
 
 export default app;

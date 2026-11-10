@@ -8618,9 +8618,10 @@
     "close": "Close",
     "closeSent": "Close order submitted:",
     "title": "dYdX Orbit",
-    "subtitle": "200+ perpetual markets on dYdX Chain — always live, directly with your wallet.",
+    "subtitle": "Live perpetual markets on dYdX Chain, directly with your wallet.",
     "live": "Live",
     "offline": "Unavailable",
+    "riskTitle": "Perpetual trading risk warning",
     "risk": "Perpetuals are leveraged derivatives. You can lose all collateral, and most retail leveraged traders lose money. You do not own the underlying asset.",
     "tradingAccount": "dYdX Chain account",
     "notConnected": "Not connected",
@@ -8628,6 +8629,8 @@
     "connectNote": "Your EVM wallet signs the official onboarding message. The derived dYdX key exists only in memory and is never sent to FBT or stored.",
     "equity": "Account equity",
     "marketUnavailable": "The dYdX indexer is unavailable. Orders are disabled instead of using stale data.",
+    "noActiveMarkets": "The dYdX indexer returned no active markets. Orders are unavailable.",
+    "marketCounts": "{{active}} active markets · {{total}} with a valid price in the indexer; settled markets cannot be traded.",
     "market": "Market",
     "oraclePrice": "Oracle price",
     "openInterest": "Open interest",
@@ -8780,20 +8783,26 @@
       "margin": "Margin required",
       "liq": "To liquidation",
       "liqPrice": "Liquidation price",
-      "needEquity": "The account balance has not been read, so leverage cannot size the order. Connect dYdX or type the size yourself.",
+      "needEquity": "Free collateral is unavailable or zero, so the size cannot be filled automatically. Check your account or enter a size manually.",
+      "liqCaveat": "Liquidation is an estimate; cross-margin positions and the unknown venue fee are not included.",
       "hint": "On dYdX leverage is not a separate setting: it is position value divided by the account equity backing it, capped by this market's own initial margin fraction. Each rung sizes the order from the account's real balance."
     },
     "desk": {
       "title": "{{ticker}} desk",
       "close": "Close",
+      "workspace": "Market, risk and opportunity",
+      "snapshot": {"volume": "24h volume", "funding": "Funding rate", "leverage": "Max leverage"},
       "tabs": {
         "ai": "AI",
         "risk": "Risk engine",
-        "opp": "Opportunity engine"
+        "opp": "Opportunity engine",
+        "early": "Early watch",
+        "ask": "Ask AI",
+        "history": "Trade history"
       },
       "refresh": "Refresh",
       "bars": "{{count}} hourly candles",
-      "stale": "These candles did not arrive from the dYdX indexer — the chart above says the same.",
+      "stale": "Candle data is stale or unavailable; treat these results with caution.",
       "noData": "No candles arrived to analyse; nothing is shown instead of a guess.",
       "noRead": "Not read yet",
       "unavailable": {
@@ -8836,7 +8845,8 @@
         "margin": "Margin required",
         "liq": "To liquidation",
         "liqPrice": "Liquidation price",
-        "hint": "Every number here comes from the same engine the confirmation sheet and the ledger use, recomputed on every change of size or leverage."
+        "hint": "Every number here comes from the same engine the confirmation sheet and the ledger use, recomputed on every change of size or leverage.",
+        "crossMarginNote": "Initial margin is based on this market. Liquidation is an estimate and excludes other positions and cross-margin effects."
       },
       "opp": {
         "empty": "No setup found",
@@ -8898,6 +8908,7 @@
       },
       "ask": {
         "title": "Ask the AI",
+        "swift": "Fast response with a lighter model; verify the answer against the data.",
         "placeholder": "Ask about {{ticker}}…",
         "send": "Ask",
         "sending": "Asking…",
@@ -8906,15 +8917,48 @@
           "risk": "How risky is this position?",
           "stop": "Where should I put the stop?"
         },
-        "disclaimer": "The answer is written by an AI model from these numbers and your question, and it is not trading advice. The model that answered is named under the reply.",
+        "disclaimer": "Your question and a summary of the market and order are sent to the AI service. The answer is not trading advice.",
         "answeredBy": "Answered by {{provider}} · {{model}}",
         "err": {
           "TIMEOUT": "No answer arrived in time; ask again.",
           "NETWORK_UNAVAILABLE": "Could not reach the AI server.",
           "NO_ANSWER": "The model returned no answer; try a simpler question.",
           "UNKNOWN": "The question failed; try again."
-        }
+        },
+        "degraded": "This answer is from the internal rules engine, not a live model."
+      },
+      "early": {
+        "watch": "On watch",
+        "none": "No early watch right now",
+        "unavailable": "Early watch unavailable",
+        "up": "Approaching the prior 20-candle high with upward momentum",
+        "down": "Approaching the prior 20-candle low with downward momentum",
+        "nearest": "Nearest range boundary",
+        "closedAt": "Candle closed at",
+        "boundary": "Range boundary",
+        "distance": "Distance to boundary",
+        "stale": "Live, fresh data is unavailable.",
+        "history": "Insufficient history or valid volatility.",
+        "disclaimer": "Based on closed hourly candles; a watch is not trading advice or a guarantee."
+      },
+      "history": {
+        "title": "dYdX trade history",
+        "subtitle": "Only this dYdX account’s fills; realized P&L is not included in this feed."
+      },
+      "market": {
+        "title": "Order book & market",
+        "bid": "Best bid",
+        "ask": "Best ask",
+        "spread": "Spread",
+        "funding": "Funding APR",
+        "openInterest": "Open interest value",
+        "snapshot": "The order book is fetched every 30 seconds. It is a snapshot; source freshness and execution are not guaranteed."
       }
+    },
+    "mobile": {
+      "actions": "dYdX trading controls",
+      "openDesk": "Open analysis desk",
+      "desk": "Desk"
     }
   },
   "derivatives": {
@@ -16214,10 +16258,17 @@
     "onchain": {
       "title": "On-chain futures",
       "subtitle": "Crypto perpetual contracts on Solana, settled in USDT. Funding, open interest and liquidation distance stay on this desk. Gold, forex and stocks are on Global Horizon. Your wallet signs every order.",
+      "openDesk": "Open on-chain desk",
+      "mobileDesk": "Desk",
+      "deskLiveNote": "Selected market and ticket snapshot; figures come from this page’s data and quote.",
+      "deskRiskNote": "Liquidation distance is an estimate, not a substitute for order review.",
+      "goTicket": "Go to order",
+      "goPositions": "Positions",
+      "goHome": "Home",
       "deskTitle": "Crypto desk",
       "deskBody": "Funding, liquidation distance and open interest for this perp — not a stock or forex ticket.",
       "traditionalCta": "Gold, forex and stocks are on Global Horizon",
-      "traditionalHint": "This tab is crypto perps only. Traditional markets open on their own screen.",
+      "traditionalHint": "This tab currently offers only Solana crypto perps. Global Horizon markets are on a separate screen and network.",
       "ledgerNotice": "The order was signed. The server record could not be updated — the position is still on-chain."
     },
     "risk": {

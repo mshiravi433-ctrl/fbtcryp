@@ -32,7 +32,7 @@
  */
 import {
   atr as atrSeries, clamp, ema as emaSeries, lastValue, mean, rsi as rsiSeries,
-  sanitizeCandles, supportResistance
+  supportResistance
 } from '../intelligence/indicators.js';
 
 export const DYDXT_TOKEN_BRAIN_VERSION = 'fbt.dydx-token-brain.1';
@@ -72,13 +72,14 @@ const round = (v, digits = 2) => {
 export function normaliseCandles(rows = []) {
   const out = [];
   for (const r of Array.isArray(rows) ? rows : []) {
-    const t = Number(r?.startedAt ?? r?.t ?? r?.time);
+    const rawTime = r?.startedAt ?? r?.t ?? r?.time;
+    const t = typeof rawTime === 'string' && !Number.isFinite(Number(rawTime)) ? Date.parse(rawTime) : Number(rawTime);
     const o = Number(r?.open ?? r?.o);
     const h = Number(r?.high ?? r?.h);
     const l = Number(r?.low ?? r?.l);
     const c = Number(r?.close ?? r?.c);
     if (![t, o, h, l, c].every(Number.isFinite)) continue;
-    if (h < l || h < Math.max(o, c) || l > Math.min(o, c)) continue;
+    if (t <= 0 || Math.min(o, h, l, c) <= 0 || h < l || h < Math.max(o, c) || l > Math.min(o, c)) continue;
     const raw = r?.usdVolume ?? r?.baseTokenVolume ?? r?.volume ?? r?.v;
     const v = num(raw);
     out.push({ t, o, h, l, c, ...(v != null && v > 0 ? { v } : {}) });
@@ -103,7 +104,7 @@ export function fundingAprPct(rate) {
  *                   bars are missing or too few.
  */
 export function analyseMarket({ candles = [], market = null } = {}) {
-  const bars = sanitizeCandles(normaliseCandles(candles));
+  const bars = normaliseCandles(candles);
   if (bars.length < MIN_BARS) {
     return {
       version: DYDXT_TOKEN_BRAIN_VERSION,
@@ -140,8 +141,9 @@ export function analyseMarket({ candles = [], market = null } = {}) {
   /* Volume: only when the feed actually carried it. */
   const volumes = bars.map((b) => b.v).filter((v) => Number.isFinite(v));
   const volumePresent = volumes.length > 0;
-  const lastVolume = volumePresent ? volumes[volumes.length - 1] : null;
-  const avgVolume = volumePresent ? mean(volumes.slice(-21, -1)) : null;
+  const lastVolume = Number.isFinite(bars[bars.length - 1]?.v) ? bars[bars.length - 1].v : null;
+  const previousVolumes = bars.slice(-21, -1).map((b) => b.v).filter(Number.isFinite);
+  const avgVolume = previousVolumes.length >= 10 ? mean(previousVolumes) : null;
   const volumeRatio = lastVolume != null && avgVolume != null && avgVolume > 0 ? lastVolume / avgVolume : null;
 
   /* Levels: swing pivots, and an ATR-derived stop/target pair. Both are
@@ -220,7 +222,7 @@ export function analyseMarket({ candles = [], market = null } = {}) {
       position: position == null ? null : round(position, 3)
     },
     volume: { last: round(lastVolume, 2), avg: round(avgVolume, 2), ratio: round(volumeRatio, 2), present: volumePresent },
-    funding: { ratePct: round((num(market?.nextFundingRate) ?? 0) * 100, 6), aprPct: round(fundingApr, 2) },
+    funding: { ratePct: num(market?.nextFundingRate) == null ? null : round(num(market.nextFundingRate) * 100, 6), aprPct: round(fundingApr, 2) },
     openInterestUsd: openInterestUsd == null ? null : Math.round(openInterestUsd),
     levels: {
       support: round(support, 6),
@@ -266,7 +268,7 @@ export const SETUP_IDS = Object.freeze([
  *            unit:string}>, why:string[], missing:string[]}>, caveats:string[]}}
  */
 export function scanTokenSetups({ candles = [], market = null } = {}) {
-  const bars = sanitizeCandles(normaliseCandles(candles));
+  const bars = normaliseCandles(candles);
   if (bars.length < MIN_BARS) {
     return {
       version: DYDXT_TOKEN_BRAIN_VERSION,
@@ -300,8 +302,9 @@ export function scanTokenSetups({ candles = [], market = null } = {}) {
 
   const volumes = bars.map((b) => b.v).filter((v) => Number.isFinite(v));
   const volumePresent = volumes.length > 0;
-  const lastVolume = volumePresent ? volumes[volumes.length - 1] : null;
-  const avgVolume = volumePresent ? mean(volumes.slice(-21, -1)) : null;
+  const lastVolume = Number.isFinite(bars[bars.length - 1]?.v) ? bars[bars.length - 1].v : null;
+  const previousVolumes = bars.slice(-21, -1).map((b) => b.v).filter(Number.isFinite);
+  const avgVolume = previousVolumes.length >= 10 ? mean(previousVolumes) : null;
   const volumeRatio = lastVolume != null && avgVolume != null && avgVolume > 0 ? lastVolume / avgVolume : null;
 
   const fundingApr = fundingAprPct(market?.nextFundingRate);
@@ -335,7 +338,7 @@ export function scanTokenSetups({ candles = [], market = null } = {}) {
         { k: 'overshoot', v: round(overshoot, 2), unit: 'pct' },
         ...(volumeRatio != null ? [{ k: 'volumeRatio', v: round(volumeRatio, 2), unit: 'x' }] : [])
       ],
-      ['closedAboveWindowHigh', 'maAlignment'],
+      ['closedAboveWindowHigh'],
       volumeRatio == null ? ['volume'] : []);
   } else if (price < priorLow && priorLow > 0) {
     const overshoot = Math.abs(pct(price, priorLow));
@@ -450,4 +453,36 @@ export function scanTokenSetups({ candles = [], market = null } = {}) {
       ...(fundingApr == null ? ['NO_FUNDING'] : [])
     ]
   };
+}
+
+/** Early watch, not a prediction: completed hourly candles approaching the
+ * prior 20-bar boundary with momentum. Never alert on old or partial data. */
+export function earlyTokenSignal({ candles = [], now = Date.now(), live = true } = {}) {
+  const hour = 3600_000;
+  const bars = normaliseCandles(candles).filter((b) => b.t + hour <= now);
+  const last = bars[bars.length - 1];
+  if (!live || !last || now - (last.t + hour) > 2 * hour || last.t + hour > now) {
+    return { status: 'unavailable', reason: 'stale' };
+  }
+  if (bars.length < MIN_BARS) return { status: 'unavailable', reason: 'history' };
+  const recent = bars.slice(-30);
+  if (recent.some((bar, i) => i > 0 && bar.t - recent[i - 1].t !== hour)) {
+    return { status: 'unavailable', reason: 'history' };
+  }
+  const prior = bars.slice(-21, -1);
+  const high = Math.max(...prior.map((b) => b.h));
+  const low = Math.min(...prior.map((b) => b.l));
+  const atr = lastValue(atrSeries(bars, 14));
+  if (!(atr > 0) || !(last.c > 0)) return { status: 'unavailable', reason: 'history' };
+  const previous = bars[bars.length - 2].c;
+  const upDistance = (high - last.c) / atr;
+  const downDistance = (last.c - low) / atr;
+  const direction = upDistance >= 0 && upDistance <= 0.5 && last.c > previous ? 'up'
+    : downDistance >= 0 && downDistance <= 0.5 && last.c < previous ? 'down' : null;
+  return { status: direction ? 'watch' : 'none', direction,
+    price: last.c, boundary: direction === 'up' ? high : direction === 'down' ? low : null,
+    distanceAtr: direction ? round(direction === 'up' ? upDistance : downDistance, 2) : null,
+    nearestBoundary: Math.abs(upDistance) <= Math.abs(downDistance) ? high : low,
+    nearestDistanceAtr: round(Math.min(Math.abs(upDistance), Math.abs(downDistance)), 2),
+    candleTime: last.t, bars: bars.length };
 }

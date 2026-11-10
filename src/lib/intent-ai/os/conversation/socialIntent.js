@@ -286,6 +286,10 @@ function hasAny(text, patterns) {
   return false;
 }
 
+// A social opener must not swallow a separate question or request, including
+// general-knowledge follow-ups that contain no cryptocurrency keyword.
+const MIXED_REQUEST = /(?:توضیح\s*(?:بده|بدی|دهید|میده|می\s*ده)|(?:در\s*مورد|درباره|راجع\s*به)|چرا|چگونه|چطور\s+(?:کار|می|میشه|میتون|باید)|چجوری|چیست|چیه|یعنی\s*چی|منظورت|یادت\s*(?:هست|میاد)|(?:\b(?:explain|describe|tell\s+me|what\s+is|why|how\s+(?:does|do|can|is)|remember\s+me)\b))/i;
+
 /**
  * Classify one utterance into its social structure.
  *
@@ -335,7 +339,8 @@ export function classifySocialAct(raw, { locale = null, prior = null } = {}) {
      money sentence decorates the reply, it does not steer the turn. */
   const action = hasAny(lower, ACTION_HINTS);
   const specific = hasAny(lower, SPECIFICITY);
-  const guard = { action, specific, blocks: action || specific };
+  const mixedRequest = acts.length > 0 && MIXED_REQUEST.test(lower);
+  const guard = { action, specific, mixedRequest, blocks: action || specific || mixedRequest };
 
   if (!acts.length) {
     /* No social marker at all. Only a message with NOTHING in it but
@@ -377,7 +382,7 @@ export function classifySocialAct(raw, { locale = null, prior = null } = {}) {
 
   /* A greeting that opens a sentence about the market is still a greeting plus
      a question; the guard decides which one the pipeline serves. */
-  if (guard.blocks && act !== SOCIAL_ACTS.WHATS_UP) {
+  if ((guard.blocks && act !== SOCIAL_ACTS.WHATS_UP) || mixedRequest) {
     return {
       ...empty,
       act: SOCIAL_ACTS.NOT_SOCIAL,

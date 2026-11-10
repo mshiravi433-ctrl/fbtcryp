@@ -16,7 +16,7 @@
  *
  * The checks are narrow and deterministic: each fires only when the ask is
  * unambiguous and the answer lacks the ONE element that ask cannot do without.
- * Only `max` sends the contract, and `balanced` stays byte-identical.
+ * Both `max` and `balanced` send the contract on substantive turns.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -227,7 +227,7 @@ test('max: a mechanism answer passes, and the reply reports it', async () => {
   assert.equal(fleet.critiqueCalls()[0].message.includes('DIALOGUE DEFICIT'), false);
 });
 
-test('balanced: no contract, no compliance, nothing changes', async () => {
+test('balanced: the dialogue contract follows the question', async () => {
   const fleet = makeFleet();
   const out = await runCollaborativeAnalysis({
     message: 'چرا قیمت BTC این هفته ریخت؟',
@@ -237,8 +237,8 @@ test('balanced: no contract, no compliance, nothing changes', async () => {
     deps: fleet,
     deadlineMs: 15000
   });
-  assert.equal(out.dialogue, null);
-  for (const call of fleet.calls) assert.equal(call.system.includes('DIALOGUE CONTRACT'), false);
+  assert.equal(out.dialogue.askShape, 'CAUSAL');
+  assert.ok(fleet.calls.some(call => call.system.includes('DIALOGUE CONTRACT')));
 });
 
 test('a distress turn is exempt even in max', async () => {

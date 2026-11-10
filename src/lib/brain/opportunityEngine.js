@@ -224,7 +224,8 @@ export function compositeRisk(components = {}) {
   const score = sum / wSum;
   return {
     score: round(score, 1),
-    level: score <= 3 ? 'LOW' : score <= 5.5 ? 'MEDIUM' : score <= 7.5 ? 'HIGH' : 'CRITICAL',
+    // A low score from one observed component is not a low overall risk.
+    level: score <= 3 && wSum < 0.4 ? 'UNKNOWN' : score <= 3 ? 'LOW' : score <= 5.5 ? 'MEDIUM' : score <= 7.5 ? 'HIGH' : 'CRITICAL',
     components: detail,
     coverage: round(wSum, 2)
   };
@@ -419,7 +420,7 @@ function rowMetrics({ capitalUsd = null, grossApyPct = null, fees = null, liquid
 function fromPools(rows, ctx) {
   return rows.filter((p) => num(p.apy ?? p.apr) > 0).map((p) => {
     const apy = num(p.apy ?? p.apr); const tvl = num(p.tvlUsd ?? p.tvl);
-    const il = num(p.impermanentLossRisk, null) ?? (num(p.volatilityPct) != null ? clamp(p.volatilityPct / 10, 1, 9) : 5);
+    const il = num(p.impermanentLossRisk, null) ?? (num(p.volatilityPct) != null ? clamp(p.volatilityPct / 10, 1, 9) : null);
     const fees = estimateFees({ capitalUsd: ctx.capital, category: 'LIQUIDITY_POOL', chain: p.chain, tvlUsd: tvl, gasUsd: p.gasUsd, feePct: { protocolPct: p.protocolFeePct } });
     const econ = computeEconomics({ capitalUsd: ctx.capital, horizonDays: ctx.horizonDays, grossApyPct: apy, fees });
     return base({
@@ -427,7 +428,7 @@ function fromPools(rows, ctx) {
       symbol: p.pair || p.symbol, chain: p.chain, protocol: p.protocol, now: ctx.now, horizonDays: ctx.horizonDays,
       confidence: clamp(0.45 + (tvl >= 1e6 ? 0.25 : tvl >= 1e5 ? 0.12 : 0) + (num(p.volume24hUsd) > 0 ? 0.08 : 0), 0, 0.9),
       economics: econ, evidence: [{ type: 'POOL', detail: `APY ${apy}% · TVL ${tvl ?? 'unknown'} · fee APR ${p.feeApy ?? '—'} + rewards ${p.rewardApy ?? '—'}` }],
-      risk: compositeRisk({ smartContract: num(p.riskScore, 5), liquidity: liquidityRisk(tvl), volatility: volRisk(num(p.volatilityPct)), impermanentLoss: il }),
+      risk: compositeRisk({ smartContract: num(p.riskScore, null), liquidity: liquidityRisk(tvl), volatility: volRisk(num(p.volatilityPct)), impermanentLoss: il }),
       ref: { poolId: p.id ?? p.poolId ?? null, venue: p.venue ?? null, externalUrl: p.url ?? null },
       metrics: rowMetrics({
         capitalUsd: ctx.capital > 0 ? ctx.capital : null, grossApyPct: apy, fees, tvlUsd: tvl,
@@ -448,7 +449,7 @@ function fromFarms(rows, ctx, category = 'FARMING') {
       chain: f.chain, protocol: f.protocol || f.project, now: ctx.now, horizonDays: ctx.horizonDays,
       confidence: clamp(0.4 + (tvl >= 1e6 ? 0.22 : 0.08) + (apy <= 60 ? 0.1 : -0.08), 0, 0.88),
       economics: econ, evidence: [{ type: 'YIELD_DATA', detail: `APY ${apy}% · TVL ${tvl ?? 'unknown'}${f.lockDays ? ` · lock ${f.lockDays}d` : ''}` }],
-      risk: compositeRisk({ smartContract: num(f.riskScore, 5.5), liquidity: liquidityRisk(tvl), volatility: apy > 100 ? 8 : apy > 40 ? 6 : 3.5, counterparty: num(f.riskScore, 5) }),
+      risk: compositeRisk({ smartContract: num(f.riskScore, null), liquidity: liquidityRisk(tvl), volatility: num(f.volatilityPct) != null ? volRisk(num(f.volatilityPct)) : null, counterparty: null }),
       ref: { poolId: f.id ?? f.poolId ?? null, venue: f.venue ?? null, externalUrl: f.url ?? null },
       metrics: rowMetrics({
         capitalUsd: ctx.capital > 0 ? ctx.capital : null, grossApyPct: apy, fees, tvlUsd: tvl,
@@ -471,7 +472,7 @@ function fromLending(rows, ctx) {
       symbol: m.asset || m.symbol, chain: m.chain, protocol: m.protocol, now: ctx.now, horizonDays: ctx.horizonDays,
       confidence: clamp(0.55 + (tvl >= 1e7 ? 0.2 : 0.05) - (util > 92 ? 0.15 : 0), 0, 0.92),
       economics: econ, evidence: [{ type: 'LENDING_MARKET', detail: `supply APY ${apy}% · utilisation ${util ?? '—'}% · LTV ${m.ltvPct ?? '—'}%` }],
-      risk: compositeRisk({ smartContract: num(m.riskScore, 4), liquidity: util > 95 ? 8 : liquidityRisk(tvl), liquidation: 1.5, counterparty: num(m.riskScore, 4) }),
+      risk: compositeRisk({ smartContract: num(m.riskScore, null), liquidity: util > 95 ? 8 : liquidityRisk(tvl), liquidation: null, counterparty: null }),
       ref: { poolId: m.id ?? m.poolId ?? null, venue: m.venue ?? null, externalUrl: m.url ?? null },
       metrics: rowMetrics({
         capitalUsd: ctx.capital > 0 ? ctx.capital : null, grossApyPct: apy, fees, tvlUsd: tvl,

@@ -276,7 +276,7 @@ test('max: the agenda is read, briefed and written through an injected store', a
   assert.ok(out.research.closed.includes('live_market'));
 });
 
-test('balanced: no professor, no agenda, nothing changes', async () => {
+test('balanced: professor reaches models without persistent agenda', async () => {
   const fleet = makeFleet();
   const out = await runCollaborativeAnalysis({
     message: FORECAST_QUESTION,
@@ -286,10 +286,8 @@ test('balanced: no professor, no agenda, nothing changes', async () => {
     deps: { ...fleet, researchLoad: async () => [{ id: 'capital', facet: 'capital', status: 'open' }], researchSave: async () => {} },
     deadlineMs: 15000
   });
-  assert.equal(out.professor, null);
+  assert.ok(out.professor);
   assert.equal(out.research, null);
-  for (const call of fleet.calls) {
-    assert.equal(call.system.includes('RESEARCH POSTURE'), false);
-    assert.equal(call.system.includes('RESEARCH AGENDA'), false);
-  }
+  assert.ok(fleet.calls.some(call => call.system.includes('RESEARCH POSTURE')));
+  for (const call of fleet.calls) assert.equal(call.system.includes('RESEARCH AGENDA'), false);
 });

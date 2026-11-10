@@ -28,8 +28,15 @@ const TIMEOUT_MS = 15000;
  * WRITTEN — the surface showed its local fallback and the operator read that
  * as «هوش مصنوعی تغییر نکرده». So the wait follows the mode here exactly as it
  * does in `aiIntentClient.js`, and never precedes the server's own deadline.
+ *
+ * The mode is the one THIS REQUEST names, not the one stored for the chat. The
+ * two differ whenever a caller asks for a depth of its own: the futures desk's
+ * quick read asks for `swift` and must not hold its screen for the 58 s a deep
+ * turn is allowed, and a caller that asks for `max` while the chat is set to
+ * `swift` must not be cut off at 15 s, mid-answer. One helper, so the two AI
+ * calls below cannot drift apart again.
  */
-const modeWindow = (floor = 15000) => Math.max(floor, intelligenceTurnBudgetMs(getIntelligenceMode()));
+const modeWindow = (mode, floor = TIMEOUT_MS) => Math.max(floor, intelligenceTurnBudgetMs(mode));
 
 async function request(path, { method = 'GET', body = null, timeout = TIMEOUT_MS } = {}) {
   const ctrl = new AbortController();
@@ -100,7 +107,7 @@ export async function executeAiGatewayChat({ taskType = 'general', system, user,
   return request('/v1/ai/gateway/chat', {
     method: 'POST',
     body: { taskType, system, user, preferredProvider, model, temperature, maxTokens, json, intelligence: mode },
-    timeout: modeWindow()
+    timeout: modeWindow(mode)
   });
 }
 
@@ -109,7 +116,7 @@ export async function runAiConsensus({ message, context = {}, locale = 'fa', pre
   return request('/v1/ai/gateway/consensus', {
     method: 'POST',
     body: { message, context, locale, preferredProviders, intelligence: mode },
-    timeout: modeWindow()
+    timeout: modeWindow(mode)
   });
 }
 
