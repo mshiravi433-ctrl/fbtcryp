@@ -1,10 +1,62 @@
+# ============================================================================
+# A COPY OF A WORKFLOW — PASTE IT INTO .github/workflows/ BY HAND (2 minutes)
+#
+# GitHub rejects an app token writing under `.github/workflows/`, so this file
+# cannot be committed to its real home by the agent that wrote it. Every other
+# workflow in this repository has the same twin here (ci/build-apk.yml,
+# ci/aave-base-fork-probe.yml, …).
+#
+# ONE-TIME SETUP:
+#   1. Repository → Settings → Secrets and variables → Actions → New secret
+#        Name: CRON_SECRET   Value: the value already configured on Vercel
+#   2. Create the file .github/workflows/order-watch-tick.yml in the GitHub
+#      editor and paste everything below `name:` (the whole file is fine — the
+#      `name:` line, the schedule and the job are all it needs).
+#   3. Actions tab → "Order watch tick" → Run workflow, to confirm it answers
+#      200 instead of 401.
+#
+# WHY IT MATTERS: without it the order watcher is only woken by app traffic
+# plus the once-a-day cron, so a swap that comes due while the phone is closed
+# can be announced up to a day late. With it, every twenty minutes.
+#
+# ─── ۲۰۲۶-۱۱-۱۰: FROM EVERY 5 MINUTES TO EVERY 20 ───────────────────────────
+# The Hobby team was soft-blocked for `fluidCpuDuration` (103% of the 4-hour
+# allowance — see 2026-11-10-vercel-fluid-cpu-free-tier-rescue-fa.md). This job
+# is the only trigger that fires with ZERO traffic, so it decides how many times
+# a day a cold serverless instance has to be created — and a cold instance bills
+# the whole module graph before the handler can even answer "THROTTLED"
+# (server/cpuMeter.js reports that cost as `coldStartCpuMs`). The cycle itself
+# is throttled to one real run per four minutes (server/watch.js,
+# WATCH_TICK_MIN_MS), so most of the 288 daily calls were paying almost entirely
+# for being cold. 72 calls a day is still far more often than the four-minute
+# window needs.
+#
+# TIMELINESS IS NOT LOST: the app pings the same endpoint on open and on
+# foreground (src/lib/watchTick.js — at most once per four minutes per tab), so
+# an order that comes due while somebody is using the site is announced
+# immediately. This schedule is the backstop for a quiet site.
+#
+# THE CHANGE MUST BE APPLIED BY HAND: the workflow in .github/workflows/ still
+# says `*/5 * * * *` because a commit from an automated agent cannot touch that
+# directory. Copy this file over it (repo → .github/workflows/order-watch-tick.yml
+# → Edit → paste) — it is the one saving in the free-tier fix a commit cannot
+# deliver by itself.
+#
+# ============================================================================
 name: Order watch tick
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    # Every twenty minutes (was every five — see the note at the top). GitHub's
+    # scheduler is best-effort and can lag under load, which is fine here: the
+    # daily cron remains the floor, and a tick that arrives late is still a
+    # tick. The point is that the alarm is no longer measured in hours.
+    - cron: '*/20 * * * *'
+  # Manual trigger, so a suspected silence can be tested without waiting for
+  # the next slot.
   workflow_dispatch:
 
+# One at a time: a slow run must not overlap the next tick into a queue.
 concurrency:
   group: order-watch-tick
   cancel-in-progress: false
@@ -16,16 +68,26 @@ jobs:
     steps:
       - name: Advance the order watch clock
         env:
+          # Canonical production origin. A preview URL would work too, but the
+          # watches live in production's durable store — ticking a preview
+          # would advance a store nobody's phone is registered against.
           TICK_URL: https://fbtswap.ir/api/cron/watch
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail
 
           if [ -z "${CRON_SECRET}" ]; then
+            # Deliberately not a failure: a missing secret is a setup problem,
+            # and failing every run would bury real errors in noise.
+            # The message says exactly which one button to press.
             echo "::warning::CRON_SECRET is not set — add it in Settings → Secrets and variables → Actions. Skipping this tick."
             exit 0
           fi
 
+          # --fail-with-body so a 401/500 is a visible red X AND the server's
+          # own explanation lands in the log (the cycle returns its counters and
+          # any { error: 'PRICES_UNAVAILABLE' }), instead of a bare curl error.
+          # --max-time keeps a hung request from occupying the job.
           echo "Ticking ${TICK_URL} …"
           curl --silent --show-error \
                --fail-with-body \
