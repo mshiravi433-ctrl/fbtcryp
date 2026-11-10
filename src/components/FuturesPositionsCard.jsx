@@ -74,6 +74,7 @@ export default function FuturesPositionsCard() {
      which matters because the empty state is an assurance and must not be
      shown before the read has actually happened. */
   const [live, setLive] = useState(null);
+  const [failedVenues, setFailedVenues] = useState([]);
   const [busyId, setBusyId] = useState(null);
   const [confirm, setConfirm] = useState(null); // { row, pct }
   const [error, setError] = useState(null);
@@ -89,6 +90,7 @@ export default function FuturesPositionsCard() {
   const refresh = useCallback(async () => {
     const out = [];
     let anyLive = false;
+    const failed = [];
 
     if (solAddress) {
       try {
@@ -130,7 +132,7 @@ export default function FuturesPositionsCard() {
             side: rawBase >= 0 ? 'long' : 'short',
             baseSize,
             notionalUsd: mid ? baseSize * mid : (quoteUsd > 0 ? quoteUsd : null),
-            entryPrice: mid,
+            entryPrice: null,
             markPrice: mid,
             collateralUsd: quoteUsd > 0 ? quoteUsd : null,
             takeProfit: r.takeProfit ?? null,
@@ -139,7 +141,7 @@ export default function FuturesPositionsCard() {
           });
         }
         anyLive = true;
-      } catch { /* Solana read failed — the EVM half still reports */ }
+      } catch { failed.push('Velocity'); }
     }
 
     if (evmAddress) {
@@ -161,18 +163,17 @@ export default function FuturesPositionsCard() {
               collateralUsd: Number(p.collateralUsd) || null,
               takeProfit: p.takeProfit ?? null,
               stopLoss: p.stopLoss ?? null,
-              pnlUsd: Number.isFinite(Number(p.grossPnlUsd)) ? Number(p.grossPnlUsd) : null
+              pnlUsd: p.grossPnlUsd != null && Number.isFinite(Number(p.grossPnlUsd)) ? Number(p.grossPnlUsd) : null
             });
           }
           anyLive = true;
-        } else if (res?.ok) {
-          anyLive = true; // answered, just empty
-        }
-      } catch { /* same: one venue failing does not hide the other */ }
+        } else { failed.push('Ostium'); }
+      } catch { failed.push('Ostium'); }
     }
 
     if (!aliveRef.current) return;
     setRows(out);
+    setFailedVenues(failed);
     setLive(anyLive);
   }, [solAddress, evmAddress]);
 
@@ -290,7 +291,7 @@ export default function FuturesPositionsCard() {
         <div className="fut-pos-title">
           <span>{t('perp.positions.title')}</span>
           <span className="fut-pos-sub">
-            {rows.length > 0 ? t('perp.positions.count', { n: rows.length }) : t('perp.positions.sub')}
+            {rows.length > 0 && <>{t('perp.positions.count', { n: rows.length })} · </>}{t('perp.positions.sub')}
           </span>
         </div>
         {hasPnl && (
@@ -304,11 +305,11 @@ export default function FuturesPositionsCard() {
         <p className="fut-pos-note faint">{t('perp.positions.reading')}</p>
       )}
 
-      {live === false && rows.length === 0 && (
-        <p className="fut-pos-note faint">{t('perp.positions.unavailable')}</p>
+      {live !== null && failedVenues.length > 0 && (
+        <p className="fut-pos-note faint" data-testid="fut-pos-unavailable">{t('perp.positions.unavailable')} ({failedVenues.join(', ')})</p>
       )}
 
-      {live !== null && rows.length === 0 && live !== false && (
+      {live !== null && rows.length === 0 && live !== false && failedVenues.length === 0 && (
         <p className="fut-pos-note faint" data-testid="fut-pos-empty">{t('perp.positions.empty')}</p>
       )}
 

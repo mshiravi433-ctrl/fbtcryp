@@ -176,10 +176,11 @@ export async function run(container) {
          /market/:symbol/candles endpoint (raw payload + its mapping are pinned
          by test/futures-velocity-feed-probe.mjs): startedAt in ms, fill-series
          OHLC. 24 hourly buckets, rising gently. */
-      const nowSec = Math.floor(Date.now() / 1000);
+      const nowSec = url.searchParams.get('resolution') === '1D' ? Math.floor(Date.now() / 86400000) * 86400 : Math.floor(Date.now() / 1000);
+      const step = url.searchParams.get('resolution') === '1D' ? 86400 : 3600;
       const candles = Array.from({ length: 24 }, (_, i) => {
         const px = 146 + i * 0.12;
-        return { startedAt: (nowSec - (24 - i) * 3_600) * 1000, open: px, high: px + 0.4, low: px - 0.4, close: px + 0.1 };
+        return { startedAt: (nowSec - (24 - i) * step) * 1000, open: px, high: px + 0.4, low: px - 0.4, close: px + 0.1 };
       });
       return json(envelope({ provider: url.searchParams.get('provider') || 'drift', ok: true, candles, live: true, resolution: url.searchParams.get('resolution') || '60' }));
     }
@@ -347,6 +348,16 @@ export async function run(container) {
     await act(async () => { click(document.querySelector('[data-testid="onchain-mobile-desk-open"]')); });
     t('desk shows the actual selected market, funding and open interest', /SOL\/USDT/.test(document.querySelector('[data-testid="onchain-desk-panel"]')?.textContent || '') && /8\.4/.test(document.querySelector('[data-testid="onchain-desk-panel"]')?.textContent || '') && /42,000,000/.test(document.querySelector('[data-testid="onchain-desk-panel"]')?.textContent || ''));
     t('desk states liquidation is estimated and did not prepare an order', /estimate/.test(document.querySelector('[data-testid="onchain-desk-panel"]')?.textContent || '') && bff.prepares === 0);
+    t('risk notice starts collapsed with an explicit warning title', byId('onchain-risk-notice')?.querySelector('button')?.getAttribute('aria-expanded') === 'false' && /risk/i.test(byId('onchain-risk-notice')?.textContent || ''));
+    await act(async () => { click(byId('onchain-risk-notice')?.querySelector('button')); });
+    t('risk notice expands to the original leveraged trading warning', /leveraged/i.test(byId('onchain-risk-notice')?.textContent || '') && byId('onchain-risk-notice')?.querySelector('button')?.getAttribute('aria-expanded') === 'true');
+    await act(async () => { click(document.querySelector('[data-testid="onchain-desk-tab-risk"]')); });
+    t('AI risk tab scores this ticket without preparing an order', !!document.querySelector('[data-testid="onchain-desk-ai-risk"]') && bff.prepares === 0);
+    await act(async () => { click(document.querySelector('[data-testid="onchain-desk-tab-past"]')); await sleep(450); });
+    t('past tab reads closed daily candles of the selected venue', !!document.querySelector('[data-testid="onchain-past"]') && bff.prepares === 0);
+    await act(async () => { click(document.querySelector('[data-testid="onchain-desk-tab-overview"]')); });
+    t('home action lives in overview', /Home/.test(document.querySelector('[data-testid="onchain-desk-panel"]')?.textContent || ''));
+
     await act(async () => { click(document.querySelector('[data-testid="onchain-mobile-desk-sheet-close"]')); });
     await act(async () => { click(document.querySelector('[data-testid="onchain-mobile-long"]')); });
     await act(async () => { await sleep(450); });

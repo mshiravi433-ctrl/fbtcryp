@@ -794,3 +794,7 @@ body.dydx-screen .perp-rail-tab.is-active { border-color: rgba(164,153,223,.48) 
 body.dydx-screen .perp-rail-tab.is-active .perp-rail-label { color: var(--text-1) !important; }
 body.dydx-screen .perp-rail-tab.is-active .perp-rail-ico { color: #fff !important; background: linear-gradient(145deg,#9387c9,#5f6095); }
 body.dydx-screen .perp-rail-tab.is-active .seg-indicator { background: linear-gradient(135deg,rgba(159,143,214,.27),rgba(109,125,192,.18)); }
+/* Match slippage and leverage to the amethyst desk, not the shared gold rule. */
+.dydx-app .lev-chip.active, :root[data-theme='light'] .dydx-app .lev-chip.active {
+  border-color: #cfc0ef !important; background: linear-gradient(145deg,#e2d5f5,#ab9bd1 46%,#7566a3) !important; color: #251c3e !important; box-shadow: 0 6px 18px rgba(96,76,150,.3) !important;
+}

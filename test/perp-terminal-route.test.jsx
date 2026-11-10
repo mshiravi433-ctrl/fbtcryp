@@ -373,3 +373,38 @@ describe('the desk', () => {
     expect(css).toMatch(/font-variant-numeric:\s*tabular-nums/);
   });
 });
+
+describe('mobile terminal dock', () => {
+  it('changes direction without submitting and opens all four real panels in a sheet', async () => {
+    const old = window.matchMedia;
+    window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
+    try {
+      const { unmount } = await renderDesk();
+      expect(document.body.classList.contains('perp-terminal-screen')).toBe(true);
+      expect(screen.queryByTestId('perp-terminal-bottom')).toBeNull();
+      const toggle = screen.getByTestId('ptx-mobile-side');
+      expect(toggle.getAttribute('aria-checked')).toBe('false');
+      fireEvent.click(toggle, { detail: 0 });
+      expect(toggle.getAttribute('aria-checked')).toBe('true');
+      expect(screen.getByTestId('perp-ticket-short').getAttribute('aria-pressed')).toBe('true');
+      expect(screen.queryByTestId('perp-ticket-sign')).toBeNull();
+      fireEvent.click(screen.getByTestId('ptx-mobile-panels'));
+      expect(screen.getByTestId('ptx-mobile-sheet')).toBeTruthy();
+      for (const tab of ['book','risk','funding','tape']) {
+        fireEvent.click(screen.getByTestId(`perp-terminal-tab-${tab}`));
+        expect(screen.getByTestId(`perp-terminal-tab-${tab}`).getAttribute('aria-selected')).toBe('true');
+      }
+      expect(screen.getByTestId('perp-terminal-tape')).toBeTruthy();
+      fireEvent.click(screen.getByTestId('ptx-mobile-sheet-close'));
+      expect(screen.queryByTestId('ptx-mobile-sheet')).toBeNull();
+      unmount();
+      expect(document.body.classList.contains('perp-terminal-screen')).toBe(false);
+    } finally { window.matchMedia = old; }
+  });
+  it('does not show a dYdX book for a Velocity route', async () => {
+    SOL = { address: 'sol-wallet', isConnected: true };
+    await renderDesk('/perp/terminal?market=ETH');
+    await waitFor(() => expect(screen.getByTestId('perp-book-unavailable')).toBeTruthy());
+    expect(screen.queryByTestId('perp-terminal-depth')).toBeNull();
+  });
+});

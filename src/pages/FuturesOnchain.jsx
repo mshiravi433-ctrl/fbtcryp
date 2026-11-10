@@ -21,7 +21,7 @@
  * .card / .brg-quote / .dir-switch / .lev-row / .segmented) so it reads as the
  * same product. Copy is entirely i18n (`futures.*`).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -33,6 +33,8 @@ import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
 import { IconShield, IconTrend, IconSparkle } from '../components/Icons';
 import AssetIcon from '../components/AssetIcon';
+import FuturesAiRisk from '../components/futures/FuturesAiRisk';
+const OnchainPast = lazy(() => import('../components/futures/OnchainPast'));
 import '../styles/onchain-desk.css';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
@@ -108,6 +110,7 @@ export default function FuturesOnchain({ embedded = false } = {}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [deskOpen, setDeskOpen] = useState(false);
+  const [deskTab, setDeskTab] = useState('overview');
   const ticketRef = useRef(null);
   const historyRef = useRef(null);
   useEffect(() => {
@@ -726,8 +729,8 @@ export default function FuturesOnchain({ embedded = false } = {}) {
           </div>
         </motion.section>
 
-        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
-          <div className="glass-notice" style={{ borderColor: 'rgba(255,59,107,0.16)', background: 'rgba(255,59,107,0.08)' }}>{t('futures.riskNotice')}</div>
+        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }} data-testid="onchain-risk-notice">
+          <InfoBox title={t('futures.onchain.riskTitle')} tone="danger" id="onchain-risk-notice"><p>{t('futures.riskNotice')}</p></InfoBox>
         </motion.div>
 
         <button
@@ -856,7 +859,7 @@ export default function FuturesOnchain({ embedded = false } = {}) {
               )}
 
               {/* ticket */}
-              <div className="dir-switch" ref={ticketRef} style={{ marginTop: 14 }}>
+              <div className="dir-switch" style={{ marginTop: 14 }}>
                 <button type="button" className={`dir-btn long ${side === 'long' ? 'active' : ''}`} onClick={() => setSide('long')}>
                   <span className="dir-ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7" /><path d="M8 7h9v9" /></svg></span>
                   {t('futures.long')}<span className="dir-sub">{t('futures.longSub')}</span>
@@ -867,7 +870,7 @@ export default function FuturesOnchain({ embedded = false } = {}) {
                 </button>
               </div>
 
-              <div className="deriv-field-grid">
+              <div className="deriv-field-grid" ref={ticketRef}>
                 <label className="deriv-field-card" style={{ marginBottom: 0 }}>
                   <span className="field-label">{t('futures.collateral', { asset: provider?.collateral || 'USDC' })}</span>
                   <input type="number" min="5" inputMode="decimal" value={collateral} onChange={(e) => setCollateral(e.target.value)} data-testid="futures-collateral" />
@@ -1046,13 +1049,17 @@ export default function FuturesOnchain({ embedded = false } = {}) {
         {typeof document !== 'undefined' && createPortal(
           <nav className="onchain-mobile-dock" aria-label={t('dydx.mobile.actions')} data-testid="onchain-mobile-dock">
             <button type="button" className="oc-long" aria-pressed={side === 'long'} onClick={() => { setSide('long'); ticketRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }} data-testid="onchain-mobile-long"><span aria-hidden="true">↗</span> {t('futures.long')}</button>
-            <button type="button" className="oc-desk" disabled={!market} onClick={() => setDeskOpen(true)} aria-label={t('futures.onchain.openDesk')} data-testid="onchain-mobile-desk-open"><span className="oc-diamond" aria-hidden="true" /><IconSparkle width={20} height={20} /><span>{t('futures.onchain.mobileDesk')}</span></button>
+            <button type="button" className="oc-desk" disabled={!market} onClick={() => { setDeskTab('overview'); setDeskOpen(true); }} aria-label={t('futures.onchain.openDesk')} data-testid="onchain-mobile-desk-open"><span className="oc-diamond" aria-hidden="true" /><IconSparkle width={20} height={20} /><span>{t('futures.onchain.mobileDesk')}</span></button>
             <button type="button" className="oc-short" aria-pressed={side === 'short'} onClick={() => { setSide('short'); ticketRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }} data-testid="onchain-mobile-short"><span aria-hidden="true">↘</span> {t('futures.short')}</button>
           </nav>, document.body
         )}
         <Sheet open={deskOpen && Boolean(market)} onClose={() => setDeskOpen(false)} title={t('futures.onchain.mobileDesk')} size="lg" className="onchain-desk-sheet" layerClassName="onchain-desk-layer" testId="onchain-mobile-desk-sheet">
           {market && <div className="oc-panel" data-testid="onchain-desk-panel">
             <div className="oc-panel-heading"><AssetIcon symbol={market.base} size={48} /><div><small>SOLANA · PERPETUAL</small><h3>{market.symbol}</h3></div><strong className="mono">{market.mid == null ? '—' : `$${fmtPrice(market.mid)}`}</strong></div>
+            <div className="oc-tabs" role="tablist" aria-label={t('futures.onchain.mobileDesk')}>
+              {['overview', 'past', 'risk'].map((key) => <button key={key} role="tab" type="button" aria-selected={deskTab === key} className={deskTab === key ? 'is-on' : ''} onClick={() => setDeskTab(key)} data-testid={`onchain-desk-tab-${key}`}>{t(`futures.onchain.tab.${key}`)}</button>)}
+            </div>
+            {deskTab === 'overview' && <>
             <p className="oc-panel-note">{t('futures.onchain.deskLiveNote')}</p>
             {marketsState.stale && <p className="notice">{t('futures.staleNotice')}</p>}
             <div className="oc-panel-grid">
@@ -1070,6 +1077,9 @@ export default function FuturesOnchain({ embedded = false } = {}) {
               <button type="button" onClick={() => { setDeskOpen(false); historyRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }}>{t('futures.history.title')}</button>
               <button type="button" onClick={() => { setDeskOpen(false); navigate('/'); }}>{t('futures.onchain.goHome')}</button>
             </div>
+            </>}
+            {deskTab === 'past' && <Suspense fallback={<p>{t('common.loading')}</p>}><OnchainPast key={market.uid} provider={market.providerId} market={market.marketId} /></Suspense>}
+            {deskTab === 'risk' && <FuturesAiRisk providerId={providerId} side={side} collateralUsd={collateral} leverage={leverage} maxLeverage={effectiveMax} entryPrice={side === 'long' ? market.ask : market.bid} takeProfit={takeProfit} stopLoss={stopLoss} availableBalanceUsd={isSolanaVenue ? walletFunds.usdt : account?.balanceUsd} fundingAprPct={market.fundingAprPct == null ? null : (side === 'short' ? -market.fundingAprPct : market.fundingAprPct)} spreadBps={market.spreadBps} takerFeeBps={market.openFeeBps} onApplyLeverage={(n) => setLeverage(String(n))} testId="onchain-desk-ai-risk" />}
           </div>}
         </Sheet>
 

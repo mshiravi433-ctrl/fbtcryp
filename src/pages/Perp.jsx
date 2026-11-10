@@ -1176,6 +1176,7 @@ export default function Perp() {
                 type="button"
                 role="tab"
                 aria-selected={active}
+                data-venue={k}
                 className={`perp-rail-tab ${active ? 'is-active' : ''}`}
                 style={{ isolation: 'isolate' }}
                 onClick={() => selectTab(k)}
@@ -1277,7 +1278,7 @@ export default function Perp() {
         Solana SDK in this tab, Ostium through our BFF as unsigned calldata.
         Nothing here holds a key, and every close is signed by the user.
       */}
-      {(solReady || evmReady) && <FuturesPositionsCard />}
+      {(solReady || evmReady) && <InfoBox title={t('perp.positions.title')} tone="info" id="perp-live-positions"><FuturesPositionsCard /></InfoBox>}
 
       {/*
         ─── THE PAGE IS A LIST. THAT IS THE WHOLE REDESIGN ──────────────────

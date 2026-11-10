@@ -1820,3 +1820,13 @@
 @media (prefers-reduced-motion: reduce) {
   .perp-how, .perp-rows .perp-row, .perp-rail-tab.is-active { transition: none !important; }
 }
+/* The Perpetual rail and pair browser have their own cool-blue identity. */
+.perp-rail-tab.is-active:not([data-venue='dydx']):not([data-venue='onchain']) { border-color: rgba(65,177,219,.5) !important; background: radial-gradient(130% 160% at 50% -40%,rgba(51,164,211,.30),transparent 60%),color-mix(in srgb,var(--bg-panel-solid) 86%,#357da2) !important; box-shadow: 0 8px 26px -12px rgba(36,145,191,.4) !important; }
+.perp-rail-tab.is-active:not([data-venue='dydx']):not([data-venue='onchain']) :is(.perp-rail-label,.perp-rail-ico) { color: #8eddf8 !important; }
+.perp-subtab.is-on { border-color: rgba(65,177,219,.5) !important; background: radial-gradient(130% 170% at 18% -40%,rgba(51,164,211,.27),transparent 55%),color-mix(in srgb,var(--bg-panel-solid) 86%,#357da2) !important; box-shadow: 0 8px 26px -12px rgba(36,145,191,.4) !important; }
+.perp-subtab.is-on :is(.perp-subtab-title,.perp-subtab-ico) { color: #8eddf8 !important; }
+.perp-modern .perp-row-go, .perp-modern .perp-row-go span { color: #8eddf8 !important; }
+:root[data-theme='light'] .perp-subtab.is-on :is(.perp-subtab-title,.perp-subtab-ico), :root[data-theme='light'] .perp-rail-tab.is-active:not([data-venue='dydx']):not([data-venue='onchain']) :is(.perp-rail-label,.perp-rail-ico), :root[data-theme='light'] .perp-modern .perp-row-go, :root[data-theme='light'] .perp-modern .perp-row-go span { color: #125c7d !important; }
+
+.perp-modern .perp-row-go { background: linear-gradient(145deg,#a4e9f7,#4db7d6 65%,#3389b1) !important; border-color:#88d8ee !important; color:#08394f !important; box-shadow:0 8px 22px -10px rgba(36,151,191,.65) !important; }
+.perp-modern .perp-row-go span { color: inherit !important; }

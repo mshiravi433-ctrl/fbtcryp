@@ -144,8 +144,24 @@ describe('open positions', () => {
     h.solAddress = null;
     h.positions = { ok: false, error: { code: 'PROVIDER_UNAVAILABLE' } };
     render(<FuturesPositionsCard />);
-    await waitFor(() => expect(screen.getByText('perp.positions.unavailable')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('fut-pos-unavailable')).toBeTruthy());
     expect(screen.queryByTestId('fut-pos-empty')).toBeNull();
+  });
+
+  it('shows a partial venue failure instead of assuring there are no positions', async () => {
+    h.positions = { ok: false };
+    render(<FuturesPositionsCard />);
+    await waitFor(() => expect(screen.getByTestId('fut-pos-unavailable').textContent).toContain('Ostium'));
+    expect(screen.queryByTestId('fut-pos-empty')).toBeNull();
+  });
+
+  it('does not label the current Velocity mark as the entry price', async () => {
+    h.velocity = { positions: [{ marketIndex: 1, baseAssetAmount: '50000000', quoteAssetAmount: '-3250000000', openOrders: 0 }] };
+    render(<FuturesPositionsCard />);
+    const row = await screen.findByTestId('fut-pos-row');
+    const stats = row.querySelector('.fut-pos-stats');
+    expect(stats.children[0].textContent).toContain('—');
+    expect(stats.children[1].textContent).toContain('65000');
   });
 
   it('a close is two steps, and the percentage is on the confirm button', async () => {

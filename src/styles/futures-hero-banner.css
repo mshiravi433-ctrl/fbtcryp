@@ -382,3 +382,19 @@
 [data-theme='light'] .fhb[data-mode='dydx'] .fhb-word-en { -webkit-text-stroke-color: rgba(75,77,140,.65); }
 [data-theme='light'] .fhb[data-mode='dydx'] :is(.fhb-pill,.fhb-chip,.fhb-kpi) { border-color: rgba(95,112,180,.25); }
 [data-theme='light'] .fhb[data-mode='dydx'] :is(.fhb-pill.is-mode,.fhb-chip.is-gold,.fhb-kpi-val.is-gold) { color: #44457a; }
+/* Product-specific, descriptive banner. No synthetic curve or mislabelled spot prices. */
+.fhb.fhb-product { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 165px; padding: clamp(20px, 4vw, 32px); }
+.fhb-product-copy { position: relative; z-index: 1; max-width: 680px; }
+.fhb-product-eyebrow { color: var(--fhb-accent-1); font: 800 10px/1.3 sans-serif; letter-spacing: .16em; direction: ltr; width: fit-content; }
+.fhb-product h1.fhb-word-fa { display: block; margin: 9px 0; font-size: clamp(23px,4vw,34px); line-height: 1.35; }
+.fhb-product p { color: var(--fhb-ink-2); margin: 0; line-height: 1.9; font-size: 13px; }
+.fhb-product-pills { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
+.fhb-product-pills span { border: 1px solid rgba(var(--fhb-accent-rgb),.28); background: rgba(var(--fhb-accent-rgb),.09); color: var(--fhb-ink-2); padding: 5px 9px; border-radius: 99px; font-size: 11px; }
+.fhb-product-mark { position: relative; z-index: 1; flex: 0 0 90px; width: 90px; height: 90px; border-radius: 28px; display: grid; grid-template-columns: 1fr 1fr; place-items: center; font: 800 32px sans-serif; color: var(--fhb-accent-3); border: 1px solid rgba(var(--fhb-accent-rgb),.35); background: linear-gradient(145deg,rgba(var(--fhb-accent-rgb),.25),rgba(var(--fhb-accent2-rgb),.04)); box-shadow: inset 0 1px rgba(255,255,255,.2),0 15px 28px rgba(0,0,0,.18); }
+.fhb[data-mode='overview'] { --fhb-accent-1:#5bc9ee; --fhb-accent-2:#4d91d8; --fhb-accent-3:#c4edff; --fhb-accent-rgb:91,201,238; --fhb-accent2-rgb:77,145,216; --fhb-bg-top:rgba(9,35,52,.96); --fhb-bg-bot:rgba(6,17,32,.98); --fhb-border:rgba(91,201,238,.25); --fhb-ink-1:#effaff; }
+.fhb[data-mode='dydx'] { --fhb-accent-1:#c9b9e9; --fhb-accent-2:#8d7cb7; --fhb-accent-3:#f0e6ff; --fhb-accent-rgb:201,185,233; --fhb-accent2-rgb:141,124,183; }
+@media (max-width: 420px) { .fhb-product-mark { flex-basis: 62px; width: 62px; height: 62px; border-radius: 20px; font-size: 23px; } }
+.fhb.fhb-product .fhb-word-fa { background-image: linear-gradient(145deg,var(--fhb-accent-3),var(--fhb-accent-1),var(--fhb-accent-2)); }
+:root[data-theme='light'] .fhb.fhb-product[data-mode='overview'] { --fhb-bg-top:#e5f6fc; --fhb-bg-bot:#d2ebf5; --fhb-border:rgba(47,133,166,.3); --fhb-ink-2:#264e62; --fhb-accent-1:#277b9a; --fhb-accent-2:#315e8a; --fhb-accent-3:#164d6c; }
+:root[data-theme='light'] .fhb.fhb-product[data-mode='onchain'] { --fhb-bg-top:#e6f9f2; --fhb-bg-bot:#d3f0e6; --fhb-border:rgba(35,151,122,.3); --fhb-ink-2:#285a4e; --fhb-accent-1:#178267; --fhb-accent-2:#1a6e70; --fhb-accent-3:#135743; }
+:root[data-theme='light'] .fhb.fhb-product[data-mode='spot'] { --fhb-bg-top:#e7f8f6; --fhb-bg-bot:#d5eeed; --fhb-ink-2:#285a58; --fhb-accent-1:#187e77; --fhb-accent-2:#1d696c; --fhb-accent-3:#145852; }

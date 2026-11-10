@@ -60,3 +60,13 @@ body.onchain-screen .fhb[data-mode='onchain'] .fhb-backdrop { background: radial
 .oc-quick-links { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 16px; }
 .oc-quick-links button { border-radius: 14px; min-height: 46px; border: 1px solid color-mix(in srgb,#49b8a3 30%,var(--line)); background: color-mix(in srgb,var(--bg-panel-solid) 85%,#37a88f); color: var(--text-1); font-weight: 700; }
 .onchain-mobile-dock button:focus-visible, .oc-quick-links button:focus-visible { outline: 2px solid #39c9a9; outline-offset: 3px; }
+/* Ticket directions remain on desktop; on mobile the dock is the one selector. */
+@media (max-width: 767px) { .onchain-app .dir-switch { display: none; } }
+.onchain-app .lev-chip.active, :root[data-theme='light'] .onchain-app .lev-chip.active {
+  border-color: #63e5c8 !important; background: linear-gradient(145deg,#83ecd5,#1ca890 70%,#137a73) !important; color: #042e28 !important; box-shadow: 0 6px 18px rgba(17,148,126,.3) !important;
+}
+.oc-tabs { display: flex; gap: 6px; overflow-x: auto; margin: 20px 0 14px; padding: 5px; border-radius: 15px; background: color-mix(in srgb,var(--bg-panel-solid) 86%,#219a87); }
+.oc-tabs button { flex: 1 0 auto; min-height: 44px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--text-2); font-weight: 750; padding: 8px 12px; }
+.oc-tabs button.is-on { color: var(--text-1); background: color-mix(in srgb,var(--bg-panel-solid) 73%,#36c0a3); border-color: #54bfa8; }
+.oc-tabs button:focus-visible { outline: 2px solid #39c9a9; outline-offset: -2px; }
+.onchain-app .infobox-danger { border-color: rgba(218,95,112,.34); }

@@ -37,6 +37,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { createPortal } from 'react-dom';
+import Sheet from '../Sheet';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import FuturesMarketChart from '../FuturesMarketChart';
@@ -89,6 +91,22 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
   const [serverNonce, setServerNonce] = useState(0);
   const [side, setSide] = useState('long');
   const [tab, setTab] = useState('book');
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [mobile, setMobile] = useState(() => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 767px)').matches);
+  const ticketRef = useRef(null);
+  const swipeStart = useRef(null);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined;
+    const m = window.matchMedia('(max-width: 767px)');
+    const update = () => { setMobile(m.matches); if (!m.matches) setPanelOpen(false); };
+    update();
+    if (m.addEventListener) m.addEventListener('change', update); else m.addListener(update);
+    return () => { if (m.removeEventListener) m.removeEventListener('change', update); else m.removeListener(update); };
+  }, []);
+  useEffect(() => {
+    document.body.classList.add('perp-terminal-screen');
+    return () => document.body.classList.remove('perp-terminal-screen');
+  }, []);
   const [book, setBook] = useState(null);
   const [bookState, setBookState] = useState({ loading: false, reason: null });
   const [tape, setTape] = useState({ trades: [], live: false, reason: null, loading: false });
@@ -116,7 +134,6 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
     [venues.dydx, selectedBase]
   );
   const ticker = dydxMarket?.ticker || `${selectedBase}-USD`;
-  const isDydx = Boolean(dydxMarket) || venues.dydxLoaded;
 
   /* ── wallets ───────────────────────────────────────────────────────── */
   const wallets = useMemo(() => ({
@@ -141,6 +158,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
   }, [routeIndex, selectedBase, solReady, evmReady]);
 
   const venueId = route.meta?.providerId || null;
+  const isDydx = route.route === ROUTE.DYDX;
 
   /* ── market list (visibility-gated; the raw material of the desk) ───── */
   useEffect(() => {
@@ -176,6 +194,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
 
   /* ── dYdX order book (the only venue with a public book) ───────────── */
   useEffect(() => {
+    setBook(null);
     if (!isDydx) return undefined;
     let stopped = false;
     const load = async () => {
@@ -391,11 +410,11 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
       nextFundingRate: fromRoute.nextFundingRate,
       nextFundingAtMs: fromRoute.nextFundingAtMs ?? null,
       maxLeverage: route.route && route.entry ? leverageCeiling(route.entry[route.route]) : null,
-      spreadBps: book?.spreadBps ?? null,
+      spreadBps: isDydx ? (book?.spreadBps ?? null) : (fromRoute.spreadBps ?? null),
       high24h: range?.high24h ?? fromRoute.high24h ?? null,
       low24h: range?.low24h ?? fromRoute.low24h ?? null
     };
-  }, [route.route, route.entry, book, range]);
+  }, [route.route, route.entry, book, range, isDydx]);
 
   const bar = useMemo(() => topBar(quote || {}), [quote]);
 
@@ -594,6 +613,106 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
     )
   };
 
+  const bottomPanel = (
+    <section className="ptx-bottom panel" data-testid="perp-terminal-bottom">
+        <div className="pt-tabs" role="tablist">
+          {TABS.map((k) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={tab === k}
+              className={`pt-tab ${tab === k ? 'is-on' : ''}`}
+              onClick={() => setTab(k)}
+              data-testid={`perp-terminal-tab-${k}`}
+            >
+              <span className="pt-tab-ico">{TAB_ICON[k]}</span>
+              <span>{t(`perpTerminal.tabs.${k}`, { defaultValue: k })}</span>
+            </button>
+          ))}
+          {tab === 'risk' && account.loading && <span className="pt-muted pt-small pt-loading-note">{t('common.loading', { defaultValue: 'Loading…' })}</span>}
+        </div>
+
+        <div className="pt-tabpanel">
+          {tab === 'book' && (
+            isDydx
+              ? <DepthChart book={book} testId="perp-terminal-depth" />
+              : (
+                <div className="pt-empty-box">
+                  <span className="pt-empty-ico" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 6h7M4 12h10M4 18h6M16 6h4M17 12h3M14 18h6" />
+                    </svg>
+                  </span>
+                  <p className="pt-empty" data-testid="perp-book-unavailable">
+                    {route.route === ROUTE.OSTIUM
+                      ? t('perpTerminal.book.ostium', { defaultValue: 'Ostium is a peer-to-pool venue: it publishes no order book. Slippage is priced from the oracle instead.' })
+                      : t('perpTerminal.book.velocity', { defaultValue: 'The Velocity book is not exposed to this screen yet. The price above is the venue’s own mid.' })}
+                  </p>
+                </div>
+              )
+          )}
+          {tab === 'tape' && (
+            isDydx
+              ? <Tape trades={tape.trades} live={tape.live} loading={tape.loading} reason={tape.reason} testId="perp-terminal-tape" />
+              : (
+                <div className="pt-empty-box">
+                  <span className="pt-empty-ico" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="22 12 18 12 15 20 9 4 6 12 2 12" />
+                    </svg>
+                  </span>
+                  <p className="pt-empty" data-testid="perp-tape-unavailable">
+                    {t('perpTerminal.tape.unavailable', { defaultValue: 'The prints feed is dYdX-only. The 24h stats above are the venue’s own.' })}
+                  </p>
+                </div>
+              )
+          )}
+          {tab === 'risk' && (
+            <RiskPanel
+              positions={account.positions}
+              equityUsd={account.equityUsd}
+              maintenanceMarginUsd={account.maintenanceMarginUsd}
+              availableBalanceUsd={account.availableBalanceUsd}
+              fundingAprPct={bar.fundingAprPct}
+              loading={account.loading}
+              reason={account.reason}
+              testId="perp-terminal-risk"
+            />
+          )}
+          {tab === 'funding' && (
+            <div className="pt-funding" data-testid="perp-terminal-funding">
+              <div className="pt-funding-grid pt-mono">
+                <div className="pt-funding-card">
+                  <span className="pt-funding-label">{t('perpTerminal.funding.apr', { defaultValue: 'Funding APR' })}</span>
+                  <strong className={`pt-funding-val ${bar.fundingAprPct > 0 ? 'pt-up' : bar.fundingAprPct < 0 ? 'pt-down' : ''}`}>
+                    {bar.fundingAprPct != null ? fmtPct(bar.fundingAprPct) : '—'}
+                  </strong>
+                </div>
+                <div className="pt-funding-card">
+                  <span className="pt-funding-label">{t('perpTerminal.funding.next', { defaultValue: 'Next settlement in' })}</span>
+                  <strong className="pt-funding-val">{bar.fundingInHours != null ? `${bar.fundingInHours.toFixed(1)}h` : '—'}</strong>
+                </div>
+                <div className="pt-funding-card">
+                  <span className="pt-funding-label">{t('perpTerminal.funding.oi', { defaultValue: 'Open interest' })}</span>
+                  <strong className="pt-funding-val">{bar.openInterestUsd != null ? fmtUsd(bar.openInterestUsd) : '—'}</strong>
+                </div>
+                <div className="pt-funding-card">
+                  <span className="pt-funding-label">{t('perpTerminal.funding.volume', { defaultValue: '24h volume' })}</span>
+                  <strong className="pt-funding-val">{bar.volume24hUsd != null ? fmtUsd(bar.volume24hUsd) : '—'}</strong>
+                </div>
+              </div>
+              {bar.nextFundingAtMs != null && (
+                <p className="pt-funding-banner">
+                  {t('perpTerminal.funding.settlesAt', { defaultValue: 'Settles at {{at}} — the next hourly funding on this venue.', at: new Date(bar.nextFundingAtMs).toLocaleString() })}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+  );
+
   return (
     <div className={`ptx ${embedded ? 'ptx--embedded' : 'ptx--route'}`} data-testid={testId}>
       {/* ── top bar: picker · stats · server truth ─────────────────────── */}
@@ -698,7 +817,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
           )}
         </section>
 
-        <aside className="ptx-ticket panel" data-testid="perp-terminal-ticket-col">
+        <aside ref={ticketRef} className="ptx-ticket panel" data-testid="perp-terminal-ticket-col">
           <Ticket
             venue={venueId}
             market={route.route && route.entry ? route.entry[route.route]?.row : null}
@@ -726,103 +845,18 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
       </div>
 
       {/* ── bottom stack: book / tape / risk / funding ──────────────────── */}
-      <section className="ptx-bottom panel" data-testid="perp-terminal-bottom">
-        <div className="pt-tabs" role="tablist">
-          {TABS.map((k) => (
-            <button
-              key={k}
-              type="button"
-              role="tab"
-              aria-selected={tab === k}
-              className={`pt-tab ${tab === k ? 'is-on' : ''}`}
-              onClick={() => setTab(k)}
-              data-testid={`perp-terminal-tab-${k}`}
-            >
-              <span className="pt-tab-ico">{TAB_ICON[k]}</span>
-              <span>{t(`perpTerminal.tabs.${k}`, { defaultValue: k })}</span>
-            </button>
-          ))}
-          {tab === 'risk' && account.loading && <span className="pt-muted pt-small pt-loading-note">{t('common.loading', { defaultValue: 'Loading…' })}</span>}
-        </div>
-
-        <div className="pt-tabpanel">
-          {tab === 'book' && (
-            isDydx
-              ? <DepthChart book={book} testId="perp-terminal-depth" />
-              : (
-                <div className="pt-empty-box">
-                  <span className="pt-empty-ico" aria-hidden="true">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4 6h7M4 12h10M4 18h6M16 6h4M17 12h3M14 18h6" />
-                    </svg>
-                  </span>
-                  <p className="pt-empty" data-testid="perp-book-unavailable">
-                    {route.route === ROUTE.OSTIUM
-                      ? t('perpTerminal.book.ostium', { defaultValue: 'Ostium is a peer-to-pool venue: it publishes no order book. Slippage is priced from the oracle instead.' })
-                      : t('perpTerminal.book.velocity', { defaultValue: 'The Velocity book is not exposed to this screen yet. The price above is the venue’s own mid.' })}
-                  </p>
-                </div>
-              )
-          )}
-          {tab === 'tape' && (
-            isDydx
-              ? <Tape trades={tape.trades} live={tape.live} loading={tape.loading} reason={tape.reason} testId="perp-terminal-tape" />
-              : (
-                <div className="pt-empty-box">
-                  <span className="pt-empty-ico" aria-hidden="true">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="22 12 18 12 15 20 9 4 6 12 2 12" />
-                    </svg>
-                  </span>
-                  <p className="pt-empty" data-testid="perp-tape-unavailable">
-                    {t('perpTerminal.tape.unavailable', { defaultValue: 'The prints feed is dYdX-only. The 24h stats above are the venue’s own.' })}
-                  </p>
-                </div>
-              )
-          )}
-          {tab === 'risk' && (
-            <RiskPanel
-              positions={account.positions}
-              equityUsd={account.equityUsd}
-              maintenanceMarginUsd={account.maintenanceMarginUsd}
-              availableBalanceUsd={account.availableBalanceUsd}
-              fundingAprPct={bar.fundingAprPct}
-              loading={account.loading}
-              reason={account.reason}
-              testId="perp-terminal-risk"
-            />
-          )}
-          {tab === 'funding' && (
-            <div className="pt-funding" data-testid="perp-terminal-funding">
-              <div className="pt-funding-grid pt-mono">
-                <div className="pt-funding-card">
-                  <span className="pt-funding-label">{t('perpTerminal.funding.apr', { defaultValue: 'Funding APR' })}</span>
-                  <strong className={`pt-funding-val ${bar.fundingAprPct > 0 ? 'pt-up' : bar.fundingAprPct < 0 ? 'pt-down' : ''}`}>
-                    {bar.fundingAprPct != null ? fmtPct(bar.fundingAprPct) : '—'}
-                  </strong>
-                </div>
-                <div className="pt-funding-card">
-                  <span className="pt-funding-label">{t('perpTerminal.funding.next', { defaultValue: 'Next settlement in' })}</span>
-                  <strong className="pt-funding-val">{bar.fundingInHours != null ? `${bar.fundingInHours.toFixed(1)}h` : '—'}</strong>
-                </div>
-                <div className="pt-funding-card">
-                  <span className="pt-funding-label">{t('perpTerminal.funding.oi', { defaultValue: 'Open interest' })}</span>
-                  <strong className="pt-funding-val">{bar.openInterestUsd != null ? fmtUsd(bar.openInterestUsd) : '—'}</strong>
-                </div>
-                <div className="pt-funding-card">
-                  <span className="pt-funding-label">{t('perpTerminal.funding.volume', { defaultValue: '24h volume' })}</span>
-                  <strong className="pt-funding-val">{bar.volume24hUsd != null ? fmtUsd(bar.volume24hUsd) : '—'}</strong>
-                </div>
-              </div>
-              {bar.nextFundingAtMs != null && (
-                <p className="pt-funding-banner">
-                  {t('perpTerminal.funding.settlesAt', { defaultValue: 'Settles at {{at}} — the next hourly funding on this venue.', at: new Date(bar.nextFundingAtMs).toLocaleString() })}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      </section>
+      {!mobile && bottomPanel}
+      {mobile && typeof document !== 'undefined' && createPortal(
+        <nav className="ptx-mobile-dock" aria-label={t('perpTerminal.mobile.actions')} data-testid="ptx-mobile-dock">
+          <button type="button" role="switch" aria-checked={side === 'short'} aria-label={t('perpTerminal.mobile.side')} className={`ptx-side-switch is-${side}`} data-testid="ptx-mobile-side" onPointerDown={(e) => { swipeStart.current = e.clientX; e.currentTarget.setPointerCapture?.(e.pointerId); }} onPointerUp={(e) => { const start = swipeStart.current; swipeStart.current = null; if (start == null) return; const delta = e.clientX - start; setSide(Math.abs(delta) > 20 ? (delta > 0 ? 'short' : 'long') : (side === 'long' ? 'short' : 'long')); }} onPointerCancel={() => { swipeStart.current = null; }} onClick={(e) => { if (e.detail === 0) setSide((value) => value === 'long' ? 'short' : 'long'); }}>
+            <span className="ptx-side-label">{t('perpTerminal.ticket.long')}</span><span className="ptx-side-knob" aria-hidden="true">↔</span><span className="ptx-side-label">{t('perpTerminal.ticket.short')}</span>
+          </button>
+          <button type="button" className="ptx-mobile-info" aria-label={t('perpTerminal.mobile.openPanels')} onClick={() => setPanelOpen(true)} data-testid="ptx-mobile-panels"><svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h7M4 12h10M4 18h6M16 6h4M17 12h3M14 18h6" /></svg></button>
+        </nav>, document.body
+      )}
+      <Sheet open={mobile && panelOpen} onClose={() => setPanelOpen(false)} title={t('perpTerminal.mobile.openPanels')} size="lg" className="ptx-mobile-sheet" layerClassName="ptx-mobile-layer" testId="ptx-mobile-sheet">
+        <div className="ptx ptx--popup">{bottomPanel}</div>
+      </Sheet>
 
       <footer className="ptx-foot">
         <p className="pt-note">

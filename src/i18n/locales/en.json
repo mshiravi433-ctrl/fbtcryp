@@ -1950,7 +1950,7 @@
   "perp": {
     "positions": {
       "title": "Open positions",
-      "sub": "Live from the venues",
+      "sub": "Live from Velocity and Ostium; dYdX positions are in its desk",
       "count": "{n} open",
       "reading": "Reading your positions…",
       "unavailable": "The venue did not answer. Your position is untouched — this is only a read.",
@@ -16258,6 +16258,10 @@
     "onchain": {
       "title": "On-chain futures",
       "subtitle": "Crypto perpetual contracts on Solana, settled in USDT. Funding, open interest and liquidation distance stay on this desk. Gold, forex and stocks are on Global Horizon. Your wallet signs every order.",
+      "riskTitle": "Leveraged trading risk warning",
+      "pastUnavailable": "Not enough fresh daily candles are available for this market.",
+      "pastNote": "Based on {{count}} closed daily candles for this market; history does not predict the future.",
+      "tab": {"overview": "Overview", "past": "What the past says", "risk": "AI risk"},
       "openDesk": "Open on-chain desk",
       "mobileDesk": "Desk",
       "deskLiveNote": "Selected market and ticket snapshot; figures come from this page’s data and quote.",
@@ -16633,6 +16637,7 @@
       }
     },
     "banner": {
+      "variant": {"overviewSettlement": "Settlement varies by market", "spotSettlement": "Network dependent", "overview": {"title": "Perpetual", "body": "Explore trading pairs and the terminal; price, leverage and order route depend on the market and venue."}, "dydx": {"title": "dYdX Orbit", "body": "Perpetuals, order book and risk on dYdX Chain; orders are signed with your own account and wallet."}, "onchain": {"title": "On-chain futures", "body": "Crypto perpetuals on Solana with USDT collateral; review the market and risk, then sign with your wallet."}, "spot": {"title": "Spot trading", "body": "Swap assets from your own wallet; the network and route depend on the assets selected."}},
       "eyebrow": "Futures Desk · Settled straight from your wallet",
       "liveFeed": "Live oracle & venue feed",
       "syncingFeed": "Syncing market feed",
@@ -18705,6 +18710,7 @@
     "controlsShowLess": "Show less"
   },
   "perpTerminal": {
+    "mobile": {"actions": "Terminal controls", "side": "Change long or short direction", "openPanels": "Order book and analysis", "order": "Order"},
     "back": "Markets",
     "stale": "stale read",
     "live": "live",
