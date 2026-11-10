@@ -23,6 +23,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import PageTransition, { riseIn } from '../components/PageTransition';
@@ -30,7 +31,9 @@ import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
 import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
-import { IconShield, IconTrend } from '../components/Icons';
+import { IconShield, IconTrend, IconSparkle } from '../components/Icons';
+import AssetIcon from '../components/AssetIcon';
+import '../styles/onchain-desk.css';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -104,6 +107,13 @@ function readPrefill() {
 export default function FuturesOnchain({ embedded = false } = {}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [deskOpen, setDeskOpen] = useState(false);
+  const ticketRef = useRef(null);
+  const historyRef = useRef(null);
+  useEffect(() => {
+    document.body.classList.add('onchain-screen');
+    return () => document.body.classList.remove('onchain-screen');
+  }, []);
   const wallet = useWallet();
   const solWallet = useSolanaWallet();
   const { haptic } = useTelegram();
@@ -317,10 +327,13 @@ export default function FuturesOnchain({ embedded = false } = {}) {
 
   /* ── live quote (debounced) — fee + risk + route from the backend ────── */
   useEffect(() => {
-    if (!market || !Number(collateral) || !Number(leverage)) { setQuote(null); setQuoteError(null); return undefined; }
+    if (!market || !Number(collateral) || !Number(leverage)) { setQuote(null); setQuoteError(null); setQuoting(false); return undefined; }
+    // A previous side/market/size quote is not valid for the new ticket.
+    setQuote(null);
+    setQuoteError(null);
+    setQuoting(true);
     let alive = true;
     const timer = setTimeout(async () => {
-      setQuoting(true);
       const res = await quoteFutures({
         provider: providerId, market: market.marketId, side, collateralUsd: Number(collateral), leverage: Number(leverage),
         takeProfit: takeProfit === '' ? null : Number(takeProfit), stopLoss: stopLoss === '' ? null : Number(stopLoss),
@@ -702,11 +715,12 @@ export default function FuturesOnchain({ embedded = false } = {}) {
 
   return (
     <PageTransition embedded={embedded}>
-      <div className="derivatives-hall">
+      <div className="derivatives-hall onchain-app">
         <div className="derivatives-aurora" aria-hidden="true" />
 
         <motion.section className="derivatives-hero" variants={riseIn} initial="hidden" animate="show">
-          <div>
+          <div className="onchain-hero-copy">
+            <div className="onchain-eyebrow"><span /> SOLANA · PERPETUALS</div>
             <div className="derivatives-title"><span className="derivatives-title-glow">{t('futures.onchain.title')}</span></div>
             <p className="derivatives-subtitle">{t('futures.onchain.subtitle')}</p>
           </div>
@@ -842,7 +856,7 @@ export default function FuturesOnchain({ embedded = false } = {}) {
               )}
 
               {/* ticket */}
-              <div className="dir-switch" style={{ marginTop: 14 }}>
+              <div className="dir-switch" ref={ticketRef} style={{ marginTop: 14 }}>
                 <button type="button" className={`dir-btn long ${side === 'long' ? 'active' : ''}`} onClick={() => setSide('long')}>
                   <span className="dir-ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7" /><path d="M8 7h9v9" /></svg></span>
                   {t('futures.long')}<span className="dir-sub">{t('futures.longSub')}</span>
@@ -1023,11 +1037,41 @@ export default function FuturesOnchain({ embedded = false } = {}) {
           صفحه مربوط به خودش»); for this venue the honest statement today is
           that only live positions are read, and it belongs HERE.
         */}
-        <div style={{ marginTop: 12 }}>
+        <div ref={historyRef} style={{ marginTop: 12 }}>
           <InfoBox title={t('futures.history.title')} tone="info" id="onchain-history-box">
             <p className="faint" style={{ fontSize: 12.5, lineHeight: 1.8, margin: 0 }}>{t('futures.history.venue.velocityUnavailable')}</p>
           </InfoBox>
         </div>
+
+        {typeof document !== 'undefined' && createPortal(
+          <nav className="onchain-mobile-dock" aria-label={t('dydx.mobile.actions')} data-testid="onchain-mobile-dock">
+            <button type="button" className="oc-long" aria-pressed={side === 'long'} onClick={() => { setSide('long'); ticketRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }} data-testid="onchain-mobile-long"><span aria-hidden="true">↗</span> {t('futures.long')}</button>
+            <button type="button" className="oc-desk" disabled={!market} onClick={() => setDeskOpen(true)} aria-label={t('futures.onchain.openDesk')} data-testid="onchain-mobile-desk-open"><span className="oc-diamond" aria-hidden="true" /><IconSparkle width={20} height={20} /><span>{t('futures.onchain.mobileDesk')}</span></button>
+            <button type="button" className="oc-short" aria-pressed={side === 'short'} onClick={() => { setSide('short'); ticketRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }} data-testid="onchain-mobile-short"><span aria-hidden="true">↘</span> {t('futures.short')}</button>
+          </nav>, document.body
+        )}
+        <Sheet open={deskOpen && Boolean(market)} onClose={() => setDeskOpen(false)} title={t('futures.onchain.mobileDesk')} size="lg" className="onchain-desk-sheet" layerClassName="onchain-desk-layer" testId="onchain-mobile-desk-sheet">
+          {market && <div className="oc-panel" data-testid="onchain-desk-panel">
+            <div className="oc-panel-heading"><AssetIcon symbol={market.base} size={48} /><div><small>SOLANA · PERPETUAL</small><h3>{market.symbol}</h3></div><strong className="mono">{market.mid == null ? '—' : `$${fmtPrice(market.mid)}`}</strong></div>
+            <p className="oc-panel-note">{t('futures.onchain.deskLiveNote')}</p>
+            {marketsState.stale && <p className="notice">{t('futures.staleNotice')}</p>}
+            <div className="oc-panel-grid">
+              <div><span>{t('futures.oraclePrice')}</span><strong className="mono">{market.oraclePrice == null ? '—' : `$${fmtPrice(market.oraclePrice)}`}</strong></div>
+              <div><span>{t('futures.funding')}</span><strong className="mono">{market.fundingAprPct == null ? '—' : `${fmtPct(market.fundingAprPct)} ${t('futures.perYear')}`}</strong></div>
+              <div><span>{t('futures.openInterest')}</span><strong className="mono">{market.openInterestUsd == null ? '—' : fmtUsd(market.openInterestUsd)}</strong></div>
+              <div><span>{t('futures.spreadBps')}</span><strong className="mono">{market.spreadBps == null ? '—' : `${market.spreadBps.toFixed(1)} bps`}</strong></div>
+              <div><span>{t('futures.liquidationDistance')}</span><strong className="mono">{risk?.liquidationDistancePct == null ? '—' : `${fmtPct(-Math.abs(risk.liquidationDistancePct))} → $${fmtPrice(risk.liquidationPrice)}`}</strong></div>
+              <div><span>{t('futures.notional')}</span><strong className="mono">{fee?.notionalUsd == null ? '—' : fmtUsd(fee.notionalUsd)}</strong></div>
+            </div>
+            <p className="oc-panel-note">{t('futures.onchain.deskRiskNote')}</p>
+            <div className="oc-quick-links">
+              <button type="button" onClick={() => { setDeskOpen(false); ticketRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }}>{t('futures.onchain.goTicket')}</button>
+              {connected && <button type="button" onClick={() => { setDeskOpen(false); positionsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }}>{t('futures.onchain.goPositions')}</button>}
+              <button type="button" onClick={() => { setDeskOpen(false); historyRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }}>{t('futures.history.title')}</button>
+              <button type="button" onClick={() => { setDeskOpen(false); navigate('/'); }}>{t('futures.onchain.goHome')}</button>
+            </div>
+          </div>}
+        </Sheet>
 
         <WalletConnectSheet open={walletOpen} onClose={() => setWalletOpen(false)} />
 

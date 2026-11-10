@@ -16258,10 +16258,17 @@
     "onchain": {
       "title": "On-chain futures",
       "subtitle": "Crypto perpetual contracts on Solana, settled in USDT. Funding, open interest and liquidation distance stay on this desk. Gold, forex and stocks are on Global Horizon. Your wallet signs every order.",
+      "openDesk": "Open on-chain desk",
+      "mobileDesk": "Desk",
+      "deskLiveNote": "Selected market and ticket snapshot; figures come from this page’s data and quote.",
+      "deskRiskNote": "Liquidation distance is an estimate, not a substitute for order review.",
+      "goTicket": "Go to order",
+      "goPositions": "Positions",
+      "goHome": "Home",
       "deskTitle": "Crypto desk",
       "deskBody": "Funding, liquidation distance and open interest for this perp — not a stock or forex ticket.",
       "traditionalCta": "Gold, forex and stocks are on Global Horizon",
-      "traditionalHint": "This tab is crypto perps only. Traditional markets open on their own screen.",
+      "traditionalHint": "This tab currently offers only Solana crypto perps. Global Horizon markets are on a separate screen and network.",
       "ledgerNotice": "The order was signed. The server record could not be updated — the position is still on-chain."
     },
     "risk": {
