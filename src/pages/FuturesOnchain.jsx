@@ -191,7 +191,23 @@ export default function FuturesOnchain({ embedded = false } = {}) {
     store.setProviders(venue, res.ok ? 'live' : 'unavailable');
   }, [store]);
 
-  useEffect(() => { loadProviders(); const id = setInterval(loadProviders, 30_000); return () => clearInterval(id); }, [loadProviders]);
+  /*
+   * Poll budgets, deliberately slower than they were.
+   *
+   * `loadMarkets` is TWO requests (one per on-chain venue) and used to run every
+   * 15 s — 8 invocations a minute from one open tab, before the provider list
+   * poll is counted. Venue catalogues and provider routing do not change on a
+   * fifteen-second scale; the numbers a trader acts on come from the order
+   * quote, not from this list. 60 s / 120 s with hidden tabs ticking zero times
+   * keeps the screen honest at roughly one-eighth of the cost.
+   */
+  useEffect(() => {
+    loadProviders();
+    const id = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') loadProviders();
+    }, 120_000);
+    return () => clearInterval(id);
+  }, [loadProviders]);
 
   /* ── markets — one merged catalogue across every on-chain venue ─────── */
   const loadMarkets = useCallback(async () => {
@@ -220,7 +236,9 @@ export default function FuturesOnchain({ embedded = false } = {}) {
   useEffect(() => {
     setMarketsState((s) => ({ ...s, loading: true }));
     loadMarkets();
-    const id = setInterval(loadMarkets, 15_000);
+    const id = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') loadMarkets();
+    }, 60_000);
     return () => clearInterval(id);
   }, [loadMarkets]);
 

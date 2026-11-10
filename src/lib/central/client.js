@@ -227,7 +227,13 @@ export function openEventStream({ onEvent, onTransport } = {}) {
   const startPolling = (why) => {
     if (closed || paused || poll) return;
     onTransport?.({ transport: 'polling', reason: why || null });
-    poll = setInterval(() => { void readOnce(); }, 15000);
+    /* The fallback transport for hosts without EventSource. 15 s was chosen
+       when this was the only path; it is now a last resort, and on a serverless
+       host each tick is a billed invocation. 60 s with hidden tabs skipped. */
+    poll = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void readOnce();
+    }, 60000);
   };
 
   const connect = () => {

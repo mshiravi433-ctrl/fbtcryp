@@ -147,7 +147,13 @@ export default function Dydx({ embedded = false } = {}) {
       setLive(r.live);
     });
     load();
-    const id = setInterval(load, 20_000);
+    /* 60 s, not 20 s: the oracle price on a perp venue does not move enough in
+       twenty seconds to justify three times the invocations, and on a paused
+       or exhausted free tier each poll is a billable function call. The price
+       a trade is actually quoted at comes from the venue at order time. */
+    const id = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') load();
+    }, 60_000);
     return () => { alive = false; clearInterval(id); };
   }, []);
 

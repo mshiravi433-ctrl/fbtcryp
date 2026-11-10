@@ -185,7 +185,12 @@ export default function Ostium({ embedded = false }) {
 
   useEffect(() => {
     loadMarkets();
-    const id = setInterval(loadMarkets, 20_000);
+    /* 60 s, not 20 s — same reasoning as the dYdX screen: this poll reaches our
+       own API, which means a function invocation per tick on a host that bills
+       CPU per invocation. Hidden tabs tick zero times. */
+    const id = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') loadMarkets();
+    }, 60_000);
     return () => clearInterval(id);
   }, [loadMarkets]);
 

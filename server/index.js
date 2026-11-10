@@ -8,6 +8,12 @@
  * On Vercel, api/index.js imports the same app without these.
  */
 import 'dotenv/config';
+/* First, so the cold-start baseline is taken before the app graph evaluates —
+   the same ordering rule api/index.js follows. On a container this number is
+   the boot cost rather than a per-request bill, and it is what makes the
+   `/api/usage/cpu` report comparable between the two hosts. */
+import './coldStart.js';
+import { markColdStart } from './cpuMeter.js';
 import './intentSandboxOps.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,6 +64,10 @@ app.use((req, res) => {
 });
 
 /* --------------------------------- boot ---------------------------------- */
+
+/* Module evaluation is over: record what booting this process cost, so
+   `/api/usage/cpu` reports a `coldStartCpuMs` on a container too. */
+markColdStart();
 
 // Only the long-running Node entry starts the durable worker. api/index.js on
 // Vercel deliberately does not. Disabled mode is a no-op; enabled mode fails

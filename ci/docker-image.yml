@@ -1,0 +1,88 @@
+# ============================================================================
+# BUILD THE APP IMAGE → GHCR (free), so a free host can run it without
+# building it itself.
+#
+# WHY THE IMAGE IS BUILT HERE AND NOT ON THE HOST
+# ----------------------------------------------------------------------------
+# `npm run build` needs ~3–4 GB of RAM (vite with --max-old-space-size plus the
+# prebuild vendor scripts). Several free hosts give the RUNTIME 512 MB and the
+# BUILDER not much more, so a build-on-host deploy dies with an OOM that looks
+# like a code error. GitHub's public-repo runners are free and have 7–16 GB, so
+# the image is built once here and every host then only has to `docker pull`.
+#
+# ONE-TIME SETUP (this file is placed in ci/ because an automated commit cannot
+# write to .github/workflows — GitHub refuses app tokens there; copy it by hand
+# exactly like ci/aave-base-fork-probe.yml):
+#
+#   1. Repo → Add file → create `.github/workflows/docker-image.yml` and paste
+#      this file's contents.
+#   2. Actions → "Build app image" → Run workflow.
+#   3. The image appears at:
+#        ghcr.io/mshiravi433-ctrl/fbtcryp:latest
+#      If the package is private: Settings → Packages → the package →
+#      "Change visibility" → Public. (Free hosts can then pull it anonymously.)
+#
+# The image runs `node server/index.js`: the same Express app the Vercel
+# function mounts, plus the built frontend, on port 8787.
+# ============================================================================
+name: Build app image
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: app-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # The lockfile pins macOS-only fsevents as a REQUIRED dep, which makes
+      # `npm ci` fail on Linux with EBADPLATFORM. The Dockerfile passes --force
+      # for the same reason; this step is here so a local `npm ci` in the job
+      # would not surprise anyone reading the log.
+      - name: Lockfile platform guard
+        run: node ci/lock-platform-guard.mjs
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # The build stage needs the headroom; the runtime stage does not.
+          build-args: |
+            NODE_ENV=production
+
+      - name: Summary
+        run: |
+          echo "### Image pushed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "ghcr.io/${{ github.repository }}:latest" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Run it anywhere with:  docker run -p 8787:8787 --env-file .env ghcr.io/${{ github.repository }}:latest" >> "$GITHUB_STEP_SUMMARY"
