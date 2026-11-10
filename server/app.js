@@ -480,6 +480,7 @@ import { monitorEvidence, recordHeartbeat } from './intentMonitor.js';
 import { schedulerEvidence } from './intentScheduler.js';
 import { backupRestoreDrill, reproducibleBuildCheck, rollbackDrill, sloMeasurement } from './intentDrill.js';
 import { sloMeterMiddleware, sloSnapshot, sloStallSnapshot } from './intentSloMeter.js';
+import { cpuMeter, cpuSnapshot } from './cpuMeter.js';
 import { selfProbeReport, runSelfProbe, ensureHydrated, SELF_PROBE_KINDS } from './intentSelfProbe.js';
 import { opsProbeReport, runOpsProbe, ensureOpsHydrated, OPS_DRILL_KINDS } from './intentOpsProbe.js';
 import {
@@ -568,6 +569,17 @@ app.post('/api/intents/v1/confidential/reveal', rejectUnavailableConfidentialWri
  * here, not from a constant.
  */
 app.use(sloMeterMiddleware());
+/*
+ * ─── THE FLUID ACTIVE CPU METER ─────────────────────────────────────────────
+ * Mounted here, above body parsing, so the number includes the JSON parse and
+ * everything else the instance really spent. `POST /api/...` with a 256 KB body
+ * is not free, and Vercel counts it exactly the same way.
+ *
+ * See server/cpuMeter.js for why this exists: the 2026-11-10 soft block named
+ * the METRIC (fluidCpuDuration) but not the route, and guessing which of 389
+ * routes spent 4 hours is how a free tier gets lost twice.
+ */
+app.use(cpuMeter);
 
 /*
  * RAW BODY, ONLY WHERE A SIGNATURE NEEDS IT.
@@ -8503,6 +8515,31 @@ app.get('/api/cron/status', async (_req, res) => {
     },
     canSend: (webReady && subs > 0) || (fcmReady && fcm > 0)
   });
+});
+
+/*
+ * ─── WHERE DID THE FREE TIER GO? ────────────────────────────────────────────
+ * Fluid Active CPU, per route, for THIS instance. The 2026-11-10 block was
+ * `fluidCpuDuration` at 103% of 4 h, and the dashboard could not say which
+ * route spent it — see server/cpuMeter.js for why that is not a guess worth
+ * making twice.
+ *
+ *   curl -s -H "x-cron-secret: $CRON_SECRET" https://fbtswap.ir/api/usage/cpu
+ *
+ * Behind the cron secret because a cost table is operational information, and
+ * because the numbers are only honest when nothing else is scraping them.
+ */
+app.get('/api/usage/cpu', (req, res) => {
+  res.set('cache-control', 'no-store');
+  if (!cronAuthorized(req)) {
+    return res.status(401).json({
+      error: 'UNAUTHORIZED',
+      detail: process.env.CRON_SECRET
+        ? 'Send x-cron-secret: <CRON_SECRET>.'
+        : 'CRON_SECRET is not set on this deployment, so this report is closed rather than public.'
+    });
+  }
+  return res.json(cpuSnapshot());
 });
 
 async function readSubscriptionsSafe() {

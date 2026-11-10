@@ -33,6 +33,24 @@ const fmtTime = (v) => v ? new Date(v).toLocaleString(undefined, { month: 'short
 const money = (v) => `$${Number(v || 0).toFixed(4)}`;
 const tone = (s) => ({ Completed: 'good', Running: 'live', Failed: 'bad', 'Waiting Approval': 'warn', Paused: 'warn', Cancelled: 'muted' }[s] || 'muted');
 
+/**
+ * ─── HOW OFTEN THIS SCREEN MAY WAKE THE SERVER ──────────────────────────────
+ * One refresh is FIVE requests (status, missions, opportunities, learning,
+ * events) because they are five questions with five answers. At the old 5 s
+ * period that was 60 requests a minute from a single open tab — 86,400 a day
+ * for a screen left open — and on a serverless host every one of those is a
+ * function invocation billed as Fluid Active CPU. That is the shape of the
+ * 2026-11-10 free-tier block (`fluidCpuDuration`, 103% of 4 h).
+ *
+ * 30 s changes nothing a person can perceive: a mission moves through Pending →
+ * Planning → Running on the scale of minutes, and the same tab still refreshes
+ * IMMEDIATELY when it is brought back to the foreground (the
+ * `visibilitychange` listener below), which is when someone is actually
+ * looking. Cost at 30 s: 10 requests a minute, a 6× cut, with a fresher
+ * first paint than the old timer gave a returning user.
+ */
+const MISSION_POLL_MS = 30_000;
+
 export default function MissionControl() {
   const navigate = useNavigate(); const { i18n } = useTranslation();
   const fa = String(i18n.language || 'fa').startsWith('fa'); const tr = (a, b) => fa ? a : b;
@@ -52,8 +70,8 @@ export default function MissionControl() {
     let ctrl; let timer;
     const load = () => { ctrl?.abort(); ctrl = new AbortController(); refresh(ctrl.signal); };
     load();
-    const tick = () => { if (document.visibilityState === 'visible') load(); timer = setTimeout(tick, 5000); };
-    timer = setTimeout(tick, 5000);
+    const tick = () => { if (document.visibilityState === 'visible') load(); timer = setTimeout(tick, MISSION_POLL_MS); };
+    timer = setTimeout(tick, MISSION_POLL_MS);
     const onVisible = () => { if (document.visibilityState === 'visible') load(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => { ctrl?.abort(); clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible); };

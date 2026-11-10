@@ -34,7 +34,48 @@
  */
 import { apiBase } from './apiBase.js';
 
+/**
+ * ─── ONE PING PER TAB PER WINDOW, EVEN ACROSS APP OPENS ─────────────────────
+ * The server already throttles the CYCLE (one run per WATCH_TICK_MIN_MS,
+ * four minutes by default), so an extra ping cannot do extra work — but it
+ * still costs a function invocation, and evidence of a cold instance says the
+ * invocation itself is the expensive part on a free tier: the module graph is
+ * evaluated before the handler can answer "THROTTLED".
+ *
+ * This screen fired one on every app open and one every three minutes while
+ * the Orders page sat open. That is fine for a server that is always warm and
+ * wasteful for one that is not. The client-side stamp below collapses repeated
+ * opens (an installed PWA reopened five times in a minute) into one call, and
+ * never delays a genuinely useful tick: four minutes is the server's own
+ * window, so a ping older than that is the only kind that can do anything.
+ *
+ * `sessionStorage` is per-tab, so two tabs still tick independently — that is
+ * deliberate. The server's throttle makes the second one a no-op, and a shared
+ * stamp would let one tab starve the other's timely announcement.
+ */
+const TICK_STAMP_KEY = 'fbt.watchTick.at.v1';
+const CLIENT_MIN_GAP_MS = 240_000;
+
+function recentlyTicked() {
+  try {
+    const last = Number(globalThis.sessionStorage?.getItem(TICK_STAMP_KEY)) || 0;
+    return Date.now() - last < CLIENT_MIN_GAP_MS;
+  } catch {
+    /* Private mode, a blocked storage API, an embedded WebView: no stamp is a
+       reason to ping, never a reason to throw. */
+    return false;
+  }
+}
+
+function stampTick() {
+  try {
+    globalThis.sessionStorage?.setItem(TICK_STAMP_KEY, String(Date.now()));
+  } catch { /* the ping already left; a lost stamp costs one extra call */ }
+}
+
 export async function pingWatchTick() {
+  if (recentlyTicked()) return false;
+  stampTick();
   try {
     const res = await fetch(`${apiBase()}/cron/tick`, {
       method: 'POST',

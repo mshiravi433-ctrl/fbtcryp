@@ -531,7 +531,17 @@ export default function SmartMoney() {
     }
   }, []);
 
-  useEffect(() => { load(winKey); const i = setInterval(() => load(winKey), 45_000); return () => { clearInterval(i); abortRef.current?.abort?.(); }; }, [winKey, load]);
+  /* 90 s and hidden tabs tick zero times: the flow window this screen shows is
+     a rolling 24 h/7 d aggregate, so a 45 s refresh was re-reading the same
+     numbers three times as often as anything could change — at the cost of a
+     serverless invocation each time (see src/lib/visibilityPoll.js). */
+  useEffect(() => {
+    load(winKey);
+    const i = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') load(winKey);
+    }, 90_000);
+    return () => { clearInterval(i); abortRef.current?.abort?.(); };
+  }, [winKey, load]);
 
   /*
    * The rail is the single source of truth, and the URL mirrors it. `replace`
