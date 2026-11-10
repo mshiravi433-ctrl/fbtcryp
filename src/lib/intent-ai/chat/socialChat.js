@@ -206,6 +206,27 @@ export function offlineSocialFallback(text, { locale = 'fa', prior = null } = {}
 }
 
 /**
+ * The row for a turn the SERVER WAS ASKED ABOUT AND COULD NOT ANSWER.
+ *
+ * Same as `offlineSocialFallback`, with one difference. With a previous answer
+ * on screen a bare «خوبی؟» is deliberately not answered locally: it is sent to
+ * the server so the reply can lean on that turn (`followUpLike`). This runs
+ * when that attempt has already failed — nothing is left to lean on, and the
+ * sentence is still a pleasantry. It is answered as one, instead of with an
+ * outage banner for a sentence that asked for nothing.
+ *
+ * Anything that is not small talk («چرا؟»، «باشه»، a price question) still
+ * returns `null`, so a real request keeps its honest error.
+ */
+export function unreachableSocialFallback(text, { locale = 'fa', prior = null } = {}) {
+  const row = offlineSocialFallback(text, { locale, prior });
+  if (row || !prior) return row;
+  return composeSocialReply(text, { locale, prior })?.followUpLike === true
+    ? offlineSocialFallback(text, { locale })
+    : null;
+}
+
+/**
  * True when the sentence is small talk the local layer can answer with a voice
  * alone — used by the chat to route it before the pipeline.
  */

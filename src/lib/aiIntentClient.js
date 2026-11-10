@@ -8,6 +8,7 @@
  */
 import { apiBase } from './apiBase.js';
 import { getIntelligenceMode, intelligenceTurnBudgetMs } from './aiIntelligenceMode.js';
+import { encodeWireBody } from './aiWireContext.js';
 
 const TIMEOUT_MS = 12000;
 const DEVICE_KEY = 'fbt.ai.device.v1';
@@ -30,7 +31,18 @@ const base = () => {
   try { return (typeof apiBase === 'function' ? apiBase() : '') || '/api'; } catch { return '/api'; }
 };
 
-async function call(path, { method = 'GET', body = null, timeout = TIMEOUT_MS } = {}) {
+/** `Retry-After` in whole seconds, when the server named one. */
+function retryAfterSeconds(res) {
+  try {
+    const raw = res?.headers?.get?.('retry-after');
+    const n = Number(raw);
+    return raw != null && raw !== '' && Number.isFinite(n) && n >= 0 ? Math.ceil(n) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function call(path, { method = 'GET', body = null, timeout = TIMEOUT_MS, maxBodyBytes = undefined } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   const device = deviceScope();
@@ -38,21 +50,34 @@ async function call(path, { method = 'GET', body = null, timeout = TIMEOUT_MS } 
     const headers = { accept: 'application/json' };
     if (body) headers['content-type'] = 'application/json';
     if (device) headers['x-fbt-device'] = device;
+    /*
+     * The body is ENCODED FOR THE WIRE, not stringified as it sits in memory.
+     * The chat screen's context object also feeds the in-browser OS and carries
+     * a 250-row market feed with sparklines for it; posted verbatim that is
+     * ~300 KB, the server's JSON parser stops at 256 KB, and every server turn
+     * died as a 413 the user read as «هوش مصنوعی در دسترس نیست». See
+     * lib/aiWireContext.js for the rule and the byte budget.
+     */
+    const wire = body ? encodeWireBody(body, maxBodyBytes ? { maxBytes: maxBodyBytes } : undefined) : null;
     const res = await fetch(`${base()}${path}`, {
       method,
       signal: ctrl.signal,
       headers,
-      body: body ? JSON.stringify(body) : undefined
+      body: wire ? wire.text : undefined
     });
     const text = await res.text();
     let json;
     try { json = text ? JSON.parse(text) : {}; } catch { json = null; }
+    const retryAfterSec = retryAfterSeconds(res);
+    const extra = retryAfterSec != null ? { retryAfterSec } : {};
     if (!json || typeof json !== 'object' || Array.isArray(json)) {
-      return { ok: false, status: res.status, error: 'INVALID_RESPONSE' };
+      /* A size rejection is named even when the body is the proxy's HTML page:
+         the caller can answer it (send less), unlike an anonymous bad response. */
+      return { ok: false, status: res.status, error: res.status === 413 ? 'PAYLOAD_TOO_LARGE' : 'INVALID_RESPONSE', ...extra };
     }
     // The transport status is authoritative: a proxy error body must not turn
     // an HTTP failure into a successful chat turn.
-    if (!res.ok) return { ...json, ok: false, status: res.status };
+    if (!res.ok) return { ...json, ok: false, status: res.status, ...extra };
     return { ...json, ok: json.ok !== false, status: res.status };
 
   } catch (err) {
@@ -82,7 +107,7 @@ export const aiSuggest = ({ message, conversationId, context, prior } = {}) =>
 /* AI Upgrade 5: complex turns can coordinate several models + web research,
    so the chat turn gets a longer budget than the default 12s. The server
    enforces its own deadline and always answers with what it has. */
-export const aiChat = ({ message, messages, surface, conversationId, aiControl, prior, context, resume, hints, transparency, intelligence } = {}) => {
+export const aiChat = ({ message, messages, surface, conversationId, aiControl, prior, context, resume, hints, transparency, intelligence, maxBodyBytes } = {}) => {
   /* One resolution, used twice: the mode decides both what the server runs and
      how long the browser waits for it. Deriving them separately is how a `max`
      turn got aborted by a `balanced` timeout. */
@@ -107,7 +132,9 @@ export const aiChat = ({ message, messages, surface, conversationId, aiControl, 
       transparency,
       intelligence: mode
     }),
-    timeout: intelligenceTurnBudgetMs(mode)
+    timeout: intelligenceTurnBudgetMs(mode),
+    /* A retry after a size rejection asks for a smaller envelope explicitly. */
+    maxBodyBytes
   });
 };
 

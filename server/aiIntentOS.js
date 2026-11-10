@@ -31,6 +31,13 @@
  *     guess and never a hard-coded balance/price/hash.
  */
 import { chatTurnCeiling, recentChatHistory, normalizeMarketSnapshot } from './aiChatReliability.js';
+import {
+  guardChatTurn,
+  chatTurnSnapshot,
+  aiWriteBudgets,
+  aiLimiterStats,
+  AI_JSON_BODY_LIMIT
+} from './aiChatHardening.js';
 import { Router } from 'express';
 import { createHash } from 'node:crypto';
 import {
@@ -979,8 +986,39 @@ async function readPending(owner) {
   return row && row.schema === 'fbt.ai-pending-intent.v1' ? row : null;
 }
 
+/*
+ * ─── A PENDING INTENT IS NOT WORTH A FAILED TURN ───────────────────────────
+ * `storeSet` throws when the durable backend refuses or times out a write —
+ * the right contract for a ledger, and the wrong one here: this write sat
+ * un-caught in the middle of the chat turn, so a paused or slow store turned
+ * «۱۰ دلار اتریوم بخر» into an HTML 500 after the card was already built.
+ *
+ * `storeSet` puts the value in this process's map BEFORE it talks to the
+ * backend, and `readPending` reads that map first. So when the durable write
+ * does not land in time the intent still exists for the instance that built
+ * the card — which is the instance a warm confirm normally reaches — and the
+ * worst case is the honest one that already exists: «این درخواست منقضی شده
+ * است». Nothing here signs or sends; the wallet still confirms every step.
+ */
+const PENDING_WRITE_WAIT_MS = Number(process.env.AI_PENDING_WRITE_WAIT_MS || 2500);
+const pendingWriteState = { failures: 0, lastFailureAt: null, lastOkAt: null };
+
 async function writePending(owner, intent) {
-  await storeSet(`ai:pending:v1:${owner}`, intent || null, EPHEMERAL_TTL_MS);
+  const write = Promise.resolve()
+    .then(() => storeSet(`ai:pending:v1:${owner}`, intent || null, EPHEMERAL_TTL_MS))
+    .then(() => true, () => false);
+  let timer;
+  const landed = await Promise.race([
+    write,
+    new Promise((resolve) => { timer = setTimeout(() => resolve(null), PENDING_WRITE_WAIT_MS); timer.unref?.(); })
+  ]).finally(() => clearTimeout(timer));
+  if (landed === true) {
+    pendingWriteState.lastOkAt = nowMs();
+  } else {
+    pendingWriteState.failures += 1;
+    pendingWriteState.lastFailureAt = nowMs();
+    console.warn(`[intent-os] pending intent kept in memory only (${landed === false ? 'durable write failed' : 'durable write slow'})`);
+  }
   return intent;
 }
 
@@ -1841,7 +1879,41 @@ function rememberDurableTurn(req, { message, goalDetected = false, intentType = 
   }
 }
 
-router.post('/chat', async (req, res) => {
+/*
+ * ─── HOW PRODUCTION TURNS ACTUALLY END ─────────────────────────────────────
+ * Public and free of content: no message text, no wallet, no address — only
+ * how long each recent turn took, which depth it ran at, how it ended, and
+ * the transport refusals (429 / 413) around it. It exists because the outage
+ * this file's guard answers was invisible from the server side: every health
+ * probe was green while no browser could complete a turn.
+ */
+router.get('/chat/health', async (req, res) => {
+  const snapshot = await chatTurnSnapshot({ limit: Number(req.query?.limit) || 30 });
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',').map((v) => v.trim()).filter(Boolean);
+  res.set('cache-control', 'no-store');
+  res.json({
+    ok: true,
+    schema: 'fbt.ai-chat-health.v1',
+    at: nowMs(),
+    limits: {
+      jsonBody: AI_JSON_BODY_LIMIT,
+      writesPerMinute: aiWriteBudgets(),
+      refusedOnThisInstance: aiLimiterStats()
+    },
+    pendingIntentStore: { durable: storeDurable(), ...pendingWriteState },
+    /* How THIS request reached the function — the same road a chat turn takes.
+       A second proxy in front of the platform shows up here as extra hops. */
+    edge: {
+      forwardedHops: forwarded.length,
+      platformRegion: String(req.headers['x-vercel-id'] || '').split('::')[0] || null,
+      viaCloudflare: Boolean(req.headers['cf-ray']),
+      viaOtherProxy: Boolean(req.headers.via || req.headers['ar-real-ip'] || req.headers['x-real-ip'])
+    },
+    ...snapshot
+  });
+});
+
+router.post('/chat', guardChatTurn(async (req, res) => {
   const message = String(req.body?.message || '').slice(0, MAX_MESSAGE);
   if (!message.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_MESSAGE' });
   /* Only this route asks for a semantic recall — it is the only one where a
@@ -1961,7 +2033,10 @@ router.post('/chat', async (req, res) => {
   try {
     conditional = await conditionalAllocationReply({ message, context, locale: locale || 'fa' });
   } catch (err) {
-    log?.(`ai-os:conditional-failed:${String(err?.message || err).slice(0, 80)}`);
+    /* (This used to call a `log` helper that was never declared in this
+       module. Optional-calling an undeclared name is still a ReferenceError,
+       so the one branch meant to survive a failed conditional read threw.) */
+    console.warn(`[intent-os] conditional-allocation read failed: ${String(err?.message || err).slice(0, 80)}`);
   }
   if (conditional?.ok) {
     const intentId = `int_${nowMs().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -2975,7 +3050,7 @@ router.post('/chat', async (req, res) => {
     },
     at: nowMs()
   });
-});
+}));
 
 router.post('/execute', async (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
