@@ -1,0 +1,283 @@
+/* ============================================================================
+   WHAT'S NEW — «چه چیزی جدید است؟»
+   ----------------------------------------------------------------------------
+   The material is the app's own violet-black glass, built from the tokens in
+   src/index.css (--bg-panel, --line, --rgb-2/--rgb-1, --text-1/2/3) so the
+   light theme and the noir theme both re-tint it without a second stylesheet.
+
+   BUDGET, stated because this project bills CPU per invocation: nothing here
+   animates on scroll, there is no backdrop-filter per card, and the only
+   motion is a one-shot fade on mount (opacity + y, compositor-only). A page
+   whose job is to show a list must not cost more than the list.
+   ========================================================================== */
+
+.wn-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 2px calc(var(--nav-h, 88px) + 18px);
+  min-height: 60vh;
+}
+
+/* ── header ─────────────────────────────────────────────────────────────── */
+
+.wn-head {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg, 22px);
+  padding: 18px 16px 16px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--rgb-2, #7c4dff) 26%, transparent), transparent 60%),
+    linear-gradient(160deg, var(--bg-panel), var(--bg-panel-solid, #0a0c12));
+}
+
+.wn-head::after {
+  content: '';
+  position: absolute;
+  inset-inline-end: -40px;
+  top: -60px;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--rgb-1, #00e5ff) 22%, transparent), transparent 70%);
+  pointer-events: none;
+}
+
+.wn-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs, 12px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--rgb-1, #00e5ff) 78%, var(--text-1, #fff));
+  margin: 0 0 6px;
+}
+
+.wn-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1.35;
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+.wn-sub {
+  margin: 8px 0 0;
+  font-size: var(--fs-sm, 14px);
+  line-height: 1.7;
+  color: var(--text-2);
+}
+
+.wn-sub b {
+  color: var(--text-1);
+  font-weight: 700;
+}
+
+/* ── filter rail ────────────────────────────────────────────────────────── */
+
+.wn-filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px;
+  scrollbar-width: none;
+}
+
+.wn-filters::-webkit-scrollbar {
+  display: none;
+}
+
+.wn-chip {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: var(--fs-xs, 12px);
+  font-weight: 700;
+  color: var(--text-2);
+  background: var(--bg-panel);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.wn-chip[aria-pressed='true'] {
+  color: var(--text-1);
+  border-color: color-mix(in srgb, var(--rgb-2, #7c4dff) 60%, transparent);
+  background: color-mix(in srgb, var(--rgb-2, #7c4dff) 20%, var(--bg-panel));
+}
+
+.wn-count {
+  font-size: var(--fs-xs, 12px);
+  color: var(--text-3);
+  padding-inline: 2px;
+}
+
+/* ── entry cards ────────────────────────────────────────────────────────── */
+
+.wn-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.wn-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 16px);
+  background: var(--bg-panel);
+  padding: 14px;
+  animation: wn-in 0.2s ease both;
+}
+
+@keyframes wn-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wn-card { animation: none; }
+}
+
+.wn-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.wn-date {
+  flex: 0 0 auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--rgb-1, #00e5ff) 70%, var(--text-2));
+  border: 1px solid color-mix(in srgb, var(--rgb-1, #00e5ff) 26%, transparent);
+  border-radius: 8px;
+  padding: 3px 7px;
+  background: color-mix(in srgb, var(--rgb-1, #00e5ff) 8%, transparent);
+}
+
+.wn-new {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--bg-abyss, #05060a);
+  background: var(--rgb-4, #00ff9d);
+  border-radius: 6px;
+  padding: 3px 6px;
+}
+
+.wn-card-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  line-height: 1.6;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.wn-points {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wn-points li {
+  position: relative;
+  padding-inline-start: 14px;
+  font-size: var(--fs-xs, 12px);
+  line-height: 1.75;
+  color: var(--text-2);
+}
+
+.wn-points li::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0.62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--rgb-2, #7c4dff) 70%, transparent);
+}
+
+.wn-detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--rgb-1, #00e5ff) 80%, var(--text-1));
+  text-decoration: none;
+  border-bottom: 1px dashed currentColor;
+  padding-bottom: 1px;
+}
+
+.wn-detail:hover {
+  color: var(--text-1);
+}
+
+/* ── states ─────────────────────────────────────────────────────────────── */
+
+.wn-state {
+  border: 1px dashed var(--line-strong, rgba(255, 255, 255, 0.16));
+  border-radius: var(--radius, 16px);
+  padding: 22px 16px;
+  text-align: center;
+  color: var(--text-2);
+  font-size: var(--fs-sm, 14px);
+  line-height: 1.8;
+}
+
+.wn-state button {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--fs-xs, 12px);
+  font-weight: 700;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.wn-skel {
+  height: 92px;
+  border-radius: var(--radius, 16px);
+  background: linear-gradient(90deg, var(--bg-panel), var(--bg-raised, rgba(255, 255, 255, 0.06)), var(--bg-panel));
+  background-size: 200% 100%;
+  animation: wn-shimmer 1.4s linear infinite;
+}
+
+@keyframes wn-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wn-skel { animation: none; }
+}
+
+.wn-foot {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-3);
+  padding-top: 4px;
+}
+
+.wn-foot a {
+  color: inherit;
+  text-decoration: underline;
+}

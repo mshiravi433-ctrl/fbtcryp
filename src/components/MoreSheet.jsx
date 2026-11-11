@@ -29,7 +29,8 @@ import {
   IconX,
   IconSearch,
   IconClock,
-  IconWorld
+  IconWorld,
+  IconSparkle
 } from './Icons';
 
 /**
@@ -401,6 +402,16 @@ const GROUPS = [
        */
       { to: '/global', key: 'nav.global', Icon: IconWorld, hue: 'var(--rgb-2)' },
       { to: '/explore-hub', key: 'exploreHub.title', Icon: IconSearch, hue: 'var(--rgb-4)' },
+      /*
+       * «تغییرات» — the changelog page.
+       *
+       * It belongs in this group and nowhere else: it is not a market, not a
+       * money screen, and not a settings page, which are the other three
+       * categories. One row, no badge, no "NEW" dot in the menu itself — the
+       * page marks its own newest entry, and a menu that advertises freshness
+       * has to keep doing it forever.
+       */
+      { to: '/whats-new', key: 'nav.whatsNew', Icon: IconSparkle, hue: 'var(--rgb-3)' },
       /* Auto Orders moved into the Earn group when Intent OS became the raised
          centre action. Keeping this note here prevents a later refactor from
          adding a second duplicate doorway in the More group. */

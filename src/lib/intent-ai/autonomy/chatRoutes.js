@@ -131,7 +131,13 @@ export const ROUTED_PATHS = Object.freeze([
   '/insurance/coverage', '/insurance/coverage/:id', '/insurance/claims',
   '/insurance/risk', '/insurance/providers', '/insurance/settings',
   /* Headerless customer landing — mounted in App.jsx's HEADERLESS ROUTES. */
-  '/pay/:code'
+  '/pay/:code',
+  /* The changelog page: «چه چیزی جدید است؟». Mounted in App.jsx and reachable
+     from the More sheet; `/changelog` is its alias. It is listed here because
+     this contract is the router's shadow — the probe compares the two in both
+     directions, and a mounted route that is absent here fails as loudly as an
+     invented one. */
+  '/whats-new', '/changelog'
 ]);
 
 /** Does a pathname exist in the router? Params (`:id`) match by segment count. */

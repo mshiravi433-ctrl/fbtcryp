@@ -133,6 +133,16 @@ const Social = lazyRetry(() => import('./pages/Social'));
 const Shop = lazyRetry(() => import('./pages/Shop'));
 const Help = lazyRetry(() => import('./pages/Help'));
 const Docs = lazyRetry(() => import('./pages/Docs'));
+/*
+ * «چه چیزی جدید است؟» — the changelog, readable inside the product.
+ *
+ * Route-level lazy like every other screen: the page's chunk and its ~90 KB
+ * JSON are only fetched when someone opens /#/whats-new, so the first paint of
+ * the market does not pay for a list nobody asked for. See
+ * scripts/gen-whats-new.mjs for why the data is a build-time file rather than
+ * an API route.
+ */
+const WhatsNew = lazyRetry(() => import('./pages/WhatsNew'));
 const Security = lazyRetry(() => import('./pages/Security'));
 const Developers = lazyRetry(() => import('./pages/Developers'));
 const Ecosystem = lazyRetry(() => import('./pages/Ecosystem'));
@@ -525,6 +535,11 @@ function AnimatedRoutes() {
             <Route path="/shop" element={<Shop />} />
             <Route path="/help" element={<Help />} />
             <Route path="/docs" element={<Docs />} />
+            {/* Sits next to Docs: both answer «how does this thing work», one
+                about the product and one about what changed in it. */}
+            <Route path="/whats-new" element={<WhatsNew />} />
+            {/* Alias so the English and Persian habits both resolve. */}
+            <Route path="/changelog" element={<WhatsNew />} />
             <Route path="/audit" element={<Security />} />
             <Route path="/security" element={<Security />} />
             <Route path="/developers" element={<Developers />} />
