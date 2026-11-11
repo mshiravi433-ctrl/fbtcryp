@@ -1,12 +1,34 @@
+# ─── build context for the app image (Dockerfile) ───────────────────────────
+# Everything here is a file the image does NOT need. The image is a delivery
+# artifact, not a checkout.
 node_modules
 dist
 .git
 .sandbox
-.env
-.env.*
 data
 android
 coverage
 *.log
 .shots
-test/.out
+
+# ─── runtime env: never baked in ────────────────────────────────────────────
+# The ONLY build-time configuration file allowed into the context is
+# `build.env`, written by ci/docker-image.yml from the repo variable
+# VITE_ENV_FILE (public keys only — they are compiled into a public bundle).
+# `.env` / `.env.*` stays out, so a real `.env.production` on someone's laptop
+# cannot leak into a published image; the Dockerfile creates its own
+# `.env.production` inside the stage from build.env instead.
+.env
+.env.*
+
+# ─── not read by the build or the runtime (2026-11-11) ─────────────────────
+# Dropping these shortens every build and keeps hundreds of probe files out of
+# the layers. `ci/` must stay (build-parity env files), and so must
+# `CHANGELOG.md` (scripts/gen-whats-new.mjs reads it at build time).
+test
+docs
+.github
+
+# Generated from CHANGELOG.md inside the build stage. A local copy must never
+# be baked in: it would be a snapshot older than the commit being built.
+public/whats-new.json
