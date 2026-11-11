@@ -224,6 +224,37 @@ cloudflared tunnel --url http://localhost:8787     # → https://xxxx.trycloudfl
 > بیمه باقی می‌مانند. هر وقت خواستید A یا B را بالا بیاورید، ایمیج از قبل آماده و
 > smoke-tested است — کارِ امروز دور ریخته نشد.
 
+#### مسیر D — پیش‌نمایش در مرورگر با GitHub Codespaces (بدون نصب، بدون کارت) ✅ برای «درست کردن ظاهر»
+
+اگر هدف این است که **ظاهر سایت را ببینیم و اصلاح کنیم**، هیچ میزبانی لازم نیست: یک Codespace
+همان dev server را در مرورگر بالا می‌آورد و آدرس عمومی می‌دهد.
+
+1. https://github.com/codespaces/new?hide_repo_select=true&repo=mshiravi433-ctrl/fbtcryp&ref=main
+   (یا در مخزن: دکمهٔ سبز **Code** → تب **Codespaces** → *Create codespace on main*)
+2. `.devcontainer/devcontainer.json` خودش Node 22 را می‌آورد و `npm ci --force` را اجرا می‌کند
+   (≈۱ دقیقه، یک‌بار برای هر Codespace). در ترمینالِ پایین فقط بزنید:
+   ```bash
+   npm run dev
+   ```
+3. تب **Ports** → ردیف `5173` → روی آیکن 🌐 (*Open in Browser*) کلیک کنید.
+   آدرس این شکلی است: `https://<codespace-name>-5173.app.github.dev`
+4. برای دیدن چیدمان موبایل روی دسکتاپ: `F12` → `Ctrl+Shift+M`. (خودِ اپ `max-width: 520px`
+   است، پس دسکتاپ تقریباً همان نمای گوشی را نشان می‌دهد.)
+
+نکته‌های واقعی:
+
+| موضوع | جزئیات |
+|---|---|
+| هزینه | سهمیهٔ رایگان حساب شخصی: ۱۲۰ core-hour در ماه (ماشین ۲ هسته‌ای ≈ ۶۰ ساعت) — بدون کارت |
+| امنیت پورت | پورت‌ها پیش‌فرض **Private** هستند (فقط با نشست خودتان باز می‌شوند). عمداً Public نکردم: dev server به `/api` پروکسی می‌کند و یک پورت عمومی یعنی API شما هم عمومی |
+| خواب | بعد از ~۳۰ دقیقه بی‌کاری Codespace می‌خوابد؛ از https://github.com/codespaces دوباره روشنش کنید (state حفظ می‌شود) |
+| داده | مثل سندباکس: بدون کلیدها. UI/چیدمان/CSS کامل، قیمت‌ها و AI نه |
+| چرا قبلاً ۴۰۳ می‌داد | Vite هر Host ناشناس را رد می‌کند (محافظت DNS-rebinding). `.app.github.dev` به `server.allowedHosts` اضافه شد؛ تست: همان Host → ۲۰۰، و `evil.example.com` هنوز ۴۰۳ |
+
+> پیش‌نمایشِ سندباکسِ Arena (`https://5173-<sandbox>.e2b.app`) فقط تا وقتی آن نوبت در حال
+> اجراست زنده است و بعد می‌خوابد (`502 Sandbox not found`)؛ برای کارِ طولانی روی ظاهر
+> از Codespaces استفاده کنید.
+
 ### ۲.۳ دامنه
 
 در پنل میزبان، دامنهٔ `fbtswap.ir` را اضافه کنید و رکورد DNS را همان‌طور که میزبان

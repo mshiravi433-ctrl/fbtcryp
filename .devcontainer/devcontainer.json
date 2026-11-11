@@ -1,0 +1,34 @@
+{
+  "name": "FBT Swap — preview",
+  "_comment": "WHY THIS FILE EXISTS (2026-11-11): the owner has no foreign card, no second account, and — after Render, Hugging Face and Koyeb all answered with a payment form — no free host that can run a container. Vercel is paused. So the only way to LOOK at the site while fixing its appearance is a browser-based dev environment, and a Codespace is the one that costs nothing and installs nothing locally. This file makes that a single click: Node 22, dependencies installed on creation, the dev server's two ports forwarded. The matching Vite change is `.app.github.dev` in server.allowedHosts — without it the forwarded URL is refused with an opaque 403. NOT a deployment: this runs `npm run dev`, not the production build.",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "postCreateCommand": "npm ci --force --no-audit --no-fund",
+  "postStartCommand": "echo 'Run:  npm run dev   →  Ports tab → 5173 → Open in Browser'",
+  "forwardPorts": [5173, 8787],
+  "portsAttributes": {
+    "5173": {
+      "label": "FBT Swap (Vite dev)",
+      "onAutoForward": "notify"
+    },
+    "8787": {
+      "label": "API (Express)",
+      "onAutoForward": "ignore"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+  "remoteUser": "node"
+}
