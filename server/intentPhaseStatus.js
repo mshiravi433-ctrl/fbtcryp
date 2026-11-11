@@ -21,6 +21,7 @@ import { freezeStateReport } from './intentFreezeControl.js';
 export const PHASE_STATUS_SCHEMA = 'fbt.intent-ai-phase-status.v1';
 
 import { SPEC_PHASES, sourceExists } from './intentSpecPhases.js';
+import { getProductArcProbe, refreshProductArcProbe } from './intentPhaseRuntimeProbeCache.js';
 
 /* Re-exported for status consumers. The registry lives in the leaf module. */
 export { SPEC_PHASES };
@@ -28,7 +29,7 @@ export { SPEC_PHASES };
 function laterInactiveStatus() {
   return {
     configuration: 'not-configured',
-    operational: 'unavailable',
+    operational: false,
     ready: false,
     live: false,
     dataStatus: 'unavailable',
@@ -41,7 +42,11 @@ function phase10Status() {
   const certifier = certificationsConfigured();
   return {
     configuration: registry && certifier ? 'partially-configured' : 'not-configured',
-    operational: 'unavailable',
+    /* `operational` is a BOOLEAN on every phase row. It used to be the
+       string 'unavailable' here and in `laterInactiveStatus()`, which broke
+       the invariant that `operational === live` — and the public status
+       route checks exactly that. */
+    operational: false,
     ready: false,
     live: false,
     dataStatus: registry ? 'partial' : 'unavailable',
@@ -59,11 +64,46 @@ function phase10Status() {
 function inactiveStatus(phase) {
   return {
     configuration: 'not-configured',
-    operational: 'unavailable',
+    operational: false,
     ready: false,
     live: false,
     dataStatus: 'unavailable',
     blockers: phase.requiredEvidence.map((item) => `${item.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_REQUIRED`)
+  };
+}
+
+/*
+ * A product-arc phase (51–216) is judged on its OWN merits.
+ *
+ * It used to be published live only when the whole control plane was live,
+ * so a missing production signer — something this deployment genuinely does
+ * not have — marked all 165 product arcs "not live", even though 159 of
+ * them are pure deterministic logic with no provider at all.
+ *
+ * Now each phase is probed directly: its modules must load, its API must
+ * exist, its probe must be a real test, and if it needs a provider, that
+ * provider must really be configured.
+ */
+function productArcStatus(phase) {
+  const probe = getProductArcProbe();
+  const row = probe?.byPhase?.[phase.phase];
+  if (!row) {
+    return {
+      configuration: 'not-configured',
+      operational: false,
+      ready: false,
+      live: false,
+      dataStatus: 'unavailable',
+      blockers: ['RUNTIME_PROBE_NOT_COMPLETED']
+    };
+  }
+  return {
+    configuration: row.configuration,
+    operational: row.live === true,
+    ready: row.live === true,
+    live: row.live === true,
+    dataStatus: row.live === true ? 'live' : 'unavailable',
+    blockers: row.blockers || []
   };
 }
 
@@ -102,8 +142,8 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
           ? operationalPhase21Row(scan)
           : phase.phase >= 22 && phase.phase <= 50
             ? controlPlaneRow(phase.phase, scan.controlPlane)
-            : phase.phase > 50 && !live
-              ? laterInactiveStatus()
+            : phase.phase > 50
+              ? productArcStatus(phase)
               : live
                 ? activeStatus()
                 : inactiveStatus(phase);

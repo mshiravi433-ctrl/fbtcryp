@@ -391,9 +391,25 @@ export function classifySocialAct(raw, { locale = null, prior = null } = {}) {
     };
   }
 
-  /* A bare «خوبی؟» immediately after a real answer is a follow-up tick, not a
-     new greeting — flagged so the router can lean on the previous turn. */
-  const followUpLike = Boolean(prior?.intent) && text.length <= 18 && (act === SOCIAL_ACTS.HOW_ARE_YOU || act === SOCIAL_ACTS.SMALL_TALK);
+  /*
+   * A bare «خوبی؟» immediately after a real answer is a follow-up tick, not a
+   * new greeting — flagged so the router can lean on the previous turn.
+   *
+   * But «حالت چطوره» / «چطوری» are a COMPLETE question on their own, not a
+   * tick. They used to be flagged as follow-up-like whenever any prior
+   * intent existed, so a pleasantry typed after an earlier turn was handed
+   * back to the pipeline instead of being answered — and the pipeline read
+   * it as a request to connect a wallet, producing «برای انجام این کار باید
+   * ابتدا کیف پولتان را متصل کنید» as the answer to «حالت چطوره».
+   *
+   * So the tick shapes are listed explicitly: the short «خوبی؟» forms.
+   */
+  const TICK_SHAPES = /^(?:\s*(?:خوبی|خوبین|خوبی\?|خوبی؟|چطوری|چطوری\?|چطوری؟|خوبیَ|ok\?|okay\?|you\s*ok\?|how\s*are\s*you\?|how's\s*it\s*going\?)\s*)$/iu;
+  const isTickShape = TICK_SHAPES.test(String(text || '').trim());
+  const followUpLike = Boolean(prior?.intent)
+    && text.length <= 18
+    && isTickShape
+    && (act === SOCIAL_ACTS.HOW_ARE_YOU || act === SOCIAL_ACTS.SMALL_TALK);
 
   /* `needsData` is the whole point of the split: one act asks for the market,
      the others ask for nothing. `pure` says "nothing besides politeness was

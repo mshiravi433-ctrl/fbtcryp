@@ -43,7 +43,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconLock, IconSparkle, IconCheck, IconShield, IconKey, IconWallet, IconChart, IconDoc, IconAlertTriangle } from '../Icons';
 import { validateAgentKeyFormat } from '../../lib/hyperliquid/agentKey';
-import { agentAddress } from '../../lib/hyperliquid/signing';
+import { agentAddressAsync } from '../../lib/hyperliquid/signing';
 import { isValidHlAddress, readAccountSummary } from '../../lib/hyperliquid/readonly';
 import { defaultCapsSettings, validateCapsSettings } from '../../lib/hyperliquid/capsSettings';
 import { fetchMarkets, eligibleMarkets, fetchCandles, fetchRealisedSince } from '../../lib/hyperliquid/market';
@@ -261,8 +261,21 @@ function ConnectStep({ session, setSession, onConnect, busy, error }) {
   const addressOk = isValidHlAddress(session.address.trim());
   const keyCheck = session.agentKey ? validateAgentKeyFormat(session.agentKey) : null;
   const keyOk = keyCheck?.ok === true;
-  let shown = null;
-  if (keyOk) { try { const a = agentAddress(session.agentKey.trim()); shown = `${a.slice(0, 6)}…${a.slice(-4)}`; } catch { shown = null; } }
+  /*
+   * The agent address needs secp256k1, which is loaded on demand — so it is
+   * derived in an effect, not during render. Rendering used to call a
+   * synchronous `agentAddress()` that no longer exists, and the masked
+   * address silently showed nothing.
+   */
+  const [shown, setShown] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    if (!keyOk) { setShown(null); return () => { alive = false; }; }
+    agentAddressAsync(session.agentKey.trim())
+      .then((a) => { if (alive) setShown(`${a.slice(0, 6)}…${a.slice(-4)}`); })
+      .catch(() => { if (alive) setShown(null); });
+    return () => { alive = false; };
+  }, [keyOk, session.agentKey]);
   const keyError = keyCheck && !keyCheck.ok ? C.connect.errors[keyCheck.code] || C.connect.errors.AGENT_KEY_BAD_FORMAT : null;
   const ready = addressOk && keyOk && !busy;
 

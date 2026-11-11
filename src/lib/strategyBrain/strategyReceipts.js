@@ -7,7 +7,7 @@
  * independent verifiers; other venues (and native-coin outputs) remain pending
  * until they have equally specific reconciliation. A hash is not sufficient.
  */
-import { Interface, parseUnits } from '../../../server/ethersLite.js';
+import { Interface, parseUnitsSync } from '../../../server/ethersLite.js';
 import { AAVE_V3_POOLS, lendingAssetsFor } from '../lending.js';
 import { TOKENS } from '../chains.js';
 import { defaultStorage, loadStrategyPlan } from './strategyStore.js';
@@ -157,7 +157,7 @@ export function hasStrategyReceiptHint({ strategyId, stageId, store = defaultSto
 
 /** Write ONLY after the venue got a successful receipt. This remains an
  * untrusted localStorage locator: the read provider rechecks everything. */
-export async function recordStrategyReceiptHint({
+export function recordStrategyReceiptHint({
   strategyId, stageId, actionIndex, txHash, owner, chainId, asset, amountWei,
   store = defaultStorage(), now = Date.now()
 } = {}) {
@@ -173,7 +173,7 @@ export async function recordStrategyReceiptHint({
     || String(asset).toUpperCase() !== (isSupply ? 'USDC' : swap?.bought?.symbol?.toUpperCase())
     || !/^[1-9]\d*$/.test(String(amountWei || ''))) return { ok: false, code: 'ACTION_MISMATCH' };
   const usdc = isSupply ? lendingAssetsFor(expectedChain).find((a) => a.symbol === 'USDC') : swap.usdc;
-  if (!usdc || !await matchingAmount(amountWei, action.params.amountUsd, usdc.decimals)) return { ok: false, code: 'AMOUNT_MISMATCH' };
+  if (!usdc || !matchingAmount(amountWei, action.params.amountUsd, usdc.decimals)) return { ok: false, code: 'AMOUNT_MISMATCH' };
   const hint = {
     strategyId, stageId, actionIndex: Number(actionIndex),
     txHash: String(txHash).toLowerCase(), owner: String(owner).toLowerCase(),
@@ -203,10 +203,10 @@ async function checkStageBlock(provider, receipt, startedAt) {
   return { ok: true };
 }
 
-async function matchingAmount(actual, usd, decimals) {
+function matchingAmount(actual, usd, decimals) {
   try {
     if (!Number.isFinite(Number(usd)) || Number(usd) <= 0) return false;
-    const expected = await parseUnits(String(usd), decimals);
+    const expected = parseUnitsSync(String(usd), decimals);
     const value = BigInt(actual);
     // USDC is close to $1 but not a promise of a peg. A very small tolerance
     // permits a user's quoted input to differ by up to 0.5%; unrelated dust or
@@ -238,9 +238,15 @@ export async function verifyAaveStrategySupply({ action, txHash, owner, provider
       || (receipt.from && !same(receipt.from, owner)) || (receipt.to && !same(receipt.to, pool))) {
       return { ok: false, code: 'RECEIPT_MISMATCH' };
     }
+    /* `Interface` is LAZY in `server/ethersLite.js`: it loads `ethers/abi`
+       on demand and returns a PROMISE. So the coder is AWAITED here. Without
+       the await, `AAVE_SUPPLY.parseTransaction` is not a function, and the
+       reconciliation failed with "ok: false" on a valid receipt. */
+    const AAVE_SUPPLY = await AAVE_SUPPLYReady();
+    const AAVE_EVENTS = await AAVE_EVENTSReady();
     const call = AAVE_SUPPLY.parseTransaction({ data: tx.data ?? tx.input, value: tx.value ?? 0 });
     if (call?.name !== 'supply' || !same(call.args[0], usdc.address)
-      || !same(call.args[2], owner) || !await matchingAmount(call.args[1], action.params.amountUsd, usdc.decimals)) {
+      || !same(call.args[2], owner) || !matchingAmount(call.args[1], action.params.amountUsd, usdc.decimals)) {
       return { ok: false, code: 'SUPPLY_MISMATCH' };
     }
     const event = (receipt.logs || []).some((log) => {
@@ -288,6 +294,7 @@ export async function verifyStrategySwap({ action, txHash, owner, provider, star
     }
     let paidWei = 0n;
     let acquiredWei = 0n;
+    const ERC20_EVENTS = await ERC20_EVENTSReady();
     for (const log of receipt.logs || []) {
       if (!same(log.address, spec.usdc.address) && !same(log.address, spec.bought.address)) continue;
       try {
@@ -299,7 +306,7 @@ export async function verifyStrategySwap({ action, txHash, owner, provider, star
         }
       } catch { /* another event from a token contract */ }
     }
-    if (!await matchingAmount(paidWei, action.params.amountUsd, spec.usdc.decimals)) {
+    if (!matchingAmount(paidWei, action.params.amountUsd, spec.usdc.decimals)) {
       return { ok: false, code: 'SWAP_INPUT_MISMATCH' };
     }
     if (spec.bought.native) {

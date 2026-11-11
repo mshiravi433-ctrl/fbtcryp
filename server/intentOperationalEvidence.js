@@ -18,6 +18,7 @@ import { activateControlPlane } from '../src/lib/intent-ai/controlPlaneActivatio
 import { sandboxEvidenceEnabled, SANDBOX_EVIDENCE_PROVENANCE } from './intentSandboxEvidence.js';
 import { getPlaneAttestations, resolveActivationMode } from './intentPlaneAttestations.js';
 import { collectPlaneInputs } from './intentRuntimePlaneInputs.js';
+import { buildRealPlaneFacts } from './intentRealPlaneFacts.js';
 
 /* Read the operator store directly. Keeping this adapter on a global registry
    made the first serverless invocation dependent on module load order and
@@ -30,6 +31,63 @@ function getInjectedEvidence() {
 }
 
 export const PHASE21_STATUS_SCHEMA = 'fbt.intent-ai-phase21-status.v1';
+
+/* ══════════════════════════════════════════════════════════════════════
+ * THE MEASUREMENT CACHE
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/*
+ * The measured facts are cached because the measurement is async and the
+ * scan is sync. The cache is refreshed on every scan once it is older than
+ * the TTL, and the refresh runs in the background so a request never waits
+ * on it.
+ *
+ * The very first scan may therefore report the planes as unmeasured. That
+ * is the honest state of a cold process: nothing has been exercised yet.
+ * `refreshMeasuredPlaneFacts()` forces a measurement and is called by the
+ * status route before it answers.
+ */
+let measuredCache = { facts: null, at: 0, refreshing: false, generation: 0 };
+const MEASURED_TTL_MS = 60_000;
+
+/**
+ * Force a fresh measurement of the plane facts.
+ * @param {{ now?: number }} [options]
+ * @returns {Promise<object>} the measured facts
+ */
+export async function refreshMeasuredPlaneFacts({ now = Date.now() } = {}) {
+  try {
+    const facts = await buildRealPlaneFacts({ now });
+    measuredCache = { facts, at: now, refreshing: false, generation: measuredCache.generation + 1 };
+    return facts;
+  } catch {
+    measuredCache = { facts: measuredCache.facts, at: measuredCache.at, refreshing: false, generation: measuredCache.generation };
+    return measuredCache.facts || {};
+  }
+}
+
+/**
+ * Read the cached measurement, refreshing it in the background when stale.
+ * @param {{ now?: number }} [options]
+ * @returns {{ facts: object|null, ageMs: number, stale: boolean, generation: number }}
+ */
+function getMeasuredPlaneFacts({ now = Date.now() } = {}) {
+  const ageMs = measuredCache.facts ? now - measuredCache.at : Infinity;
+  const stale = ageMs > MEASURED_TTL_MS;
+  if (stale && !measuredCache.refreshing) {
+    measuredCache.refreshing = true;
+    /* Fire-and-forget: the scan must not wait on the measurement. */
+    Promise.resolve()
+      .then(() => refreshMeasuredPlaneFacts({ now: Date.now() }))
+      .catch(() => { measuredCache.refreshing = false; });
+  }
+  return {
+    facts: measuredCache.facts,
+    ageMs,
+    stale,
+    generation: measuredCache.generation
+  };
+}
 
 function configurationSnapshot(env = process.env) {
   return {
@@ -84,9 +142,35 @@ export function scanOperationalProviders({ env = process.env, injectedEvidence =
   /* Control-plane inputs: attested facts + live runtime overlays. In `off`
      mode every plane gets empty inputs and stays blocked (historic). */
   const launchAllowed = readiness.launchAllowed === true && readiness.operational === 'operational';
+  /*
+   * The plane facts are MEASURED, not asserted.
+   *
+   * `buildRealPlaneFacts()` exercises the sandbox runtime, computes a real
+   * backtest, builds and verifies a real audit hash chain, and reads the
+   * deployment's own configuration. A plane it cannot measure gets NO fact
+   * and stays blocked with its real blocker code visible.
+   *
+   * The measurement is asynchronous (it awaits the gateway registry), so it
+   * is cached and refreshed in the background. The scan itself stays
+   * synchronous — every caller of `scanOperationalProviders()` is sync, and
+   * the cache is populated long before a status route is hit.
+   */
+  const measured = getMeasuredPlaneFacts({ now });
+  /*
+   * The built-in bundle is the system attesting to itself, so its facts may
+   * not stand in for a measurement. Only an operator-attested bundle — one
+   * that actually arrived through the attestation endpoint — may supply a
+   * fact for a plane this process cannot measure on its own.
+   */
+  const operatorAttested = Boolean(
+    attestations && attestations.source === 'operator-attestation-endpoint'
+  );
   const collected = collectPlaneInputs({
     mode: activationMode,
-    facts: activationMode === 'owner' ? (attestations?.normalized.planes || null) : null,
+    facts: activationMode === 'owner' && operatorAttested
+      ? (attestations?.normalized.planes || null)
+      : null,
+    realFacts: measured.facts,
     launchAllowed,
     now
   });

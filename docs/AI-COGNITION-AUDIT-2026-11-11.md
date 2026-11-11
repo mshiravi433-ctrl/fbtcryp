@@ -994,15 +994,88 @@ The probes are green: phase-status **24/24**, phase-21 **42/42**, phase-142
 
 ### 14.2 The report
 
+**Before this work** the report said `206 / 206` live with zero blockers —
+and that number was manufactured by a bundle that attested to itself.
+
+**After this work**, a deployment with no operator attestation reports what
+it can actually do:
+
 ```
-status        : operational
+status        : implementation-available
 gate          : evidence
-live phases   : 206 / 206
+live phases   : 153 / 206
+control planes live : 11 / 30
+product arcs live   : 103 / 156
 evidence      : 21 / 21
-criticalBlockers : 0
+criticalBlockers : 68
 executionActivated : false
 rawCredentialsAllowed : false
 ```
+
+And with a **valid operator attestation bundle** — two operators, real
+certificate authority, real backup drill, real independent review — the
+control planes release and the release goes live:
+
+```
+status        : operational
+launchAllowed : true
+live phases   : 183 / 206
+control planes live : 30 / 30
+remaining blockers  : WALLET_RUNTIME_REQUIRED, EXECUTION_FEED_REQUIRED,
+                      VENUE_ADAPTER_REQUIRED  (provider requirements only)
+```
+
+The difference between those two reports is not a change of code — it is
+the difference between an assertion and an attestation. The first is what
+the process measured; the second is what the operators signed. Neither is
+a self-report.
+
+**The 19 control planes that stay blocked without an attestation** each
+name a real, external blocker:
+
+| plane | blocker | what it really needs |
+|---|---|---|
+| 22 | `CA_INVALID` | a real certificate authority |
+| 25 | `SMART_WALLET_UNAVAILABLE`, `SIGNER_WITHOUT_POLICY`, `FEE_CATEGORIES_INCOMPLETE` | a smart wallet, a policy-bound signer, a fee-category table |
+| 26 | `PROVIDER_HEALTH_FAILURE`, `VENUE_UNAVAILABLE` | live venue adapters |
+| 27 | `RPC_OUTAGE`, `POLICY_DIGEST_REQUIRED` | a live mainnet RPC and a policy digest |
+| 28 | `BACKUP_RESTORE_FAILURE` | a real backup and a restore drill that answers |
+| 29 | `SECURITY_REVIEW_NOT_INDEPENDENT` | an independent, signed security review |
+| 31 | `INCIDENT_UNDECLARED` | a named incident commander |
+| 32 | `SECRET_MANAGER_NOT_VERIFIED` | `INTENT_SECRET_MANAGER_PROVIDER` |
+| 33 | `PRIMARY_REGION_UNAVAILABLE` | `INTENT_FAILOVER_SECONDARY_REGION` |
+| 35 | `DISCLOSURE_CHANNEL_UNATTESTED` | `INTENT_DISCLOSURE_CHANNEL` |
+| 36 | `RESIDENCY_NOT_ENFORCED` | `INTENT_DATA_RESIDENCY_REGION` |
+| 40 | `SUSTAINMENT_OWNER_REQUIRED` | `INTENT_SUSTAINMENT_OWNER` |
+| 42 | `SUPPORT_TICKET_REQUIRED` | `INTENT_SUPPORT_TICKET_ID` |
+| 43 | `SPEND_CAP_UNDEFINED` | `INTENT_SPEND_CAP_USD` |
+| 44 | `WORKFORCE_SSO_UNATTESTED` | `INTENT_WORKFORCE_SSO` |
+| 45 | `TELEMETRY_STREAM_UNATTESTED` | `INTENT_TELEMETRY_STREAM` + opt-in |
+| 48 | `BOND_NOT_DECLARED` | `INTENT_BOND_ID` |
+| 49 | `REGULATORY_FILING_MISSING` | `INTENT_REGULATORY_FILING_ID` + counsel |
+
+Ten of those are opened by a single environment variable each — they name
+a service or a role, never a secret. The full procedure is in
+`docs/OPERATING-PLANES-ACTIVATION.md`.
+
+#### The distinction that makes the merge honest
+
+A measurement beats an assertion **where it speaks**, and stays silent
+where it cannot:
+
+* a positive measurement (`isolated: true`) replaces the assertion;
+* a negative measurement (it was tried and it was absent) replaces the
+  assertion — pretending it is there would be the whole defect;
+* **an absence of knowledge** (`review: null` for the independent security
+  review, which a process cannot produce or disprove) **does not** replace
+  the assertion.
+
+Getting that third case wrong was a real bug: the first implementation of
+the merge overwrote an operator's attested review with a `null` that only
+meant "this process did not measure it", which manufactured three false
+blockers and made the release look broken. The merge is now depth-aware:
+`null` means *not measured*, and `false`/`0`/`''` — which ARE measurements —
+replace the attested value.
 
 ### 14.3 What the "21/21 evidence" actually is
 

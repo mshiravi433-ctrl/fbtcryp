@@ -137,7 +137,25 @@ export const ROUTED_PATHS = Object.freeze([
      this contract is the router's shadow — the probe compares the two in both
      directions, and a mounted route that is absent here fails as loudly as an
      invented one. */
-  '/whats-new', '/changelog'
+  '/whats-new', '/changelog',
+  /* ── The routes mounted after this contract was first written ──────────
+   * The contract is the router's shadow, and it drifted: these seven routes
+   * were mounted in App.jsx while this list still said they did not exist.
+   * A mounted route that is absent here fails the probe loudly, which is
+   * the whole point of the contract — a route the chat may name has to be
+   * a route that really exists.
+   *
+   *   /perp/terminal — the futures desk (build-flagged; the chat may still
+   *                    name it, and the flag decides whether it renders)
+   *   /social       — the social feed
+   *   /lab/chart-guide — the chart-reading guide inside the Lab
+   *   /missions     — the missions page (a redirect to /intent)
+   *   /ai-trade     — the AI trade panel
+   *   /ai-analysis  — the AI analysis room
+   *   /collective   — the collective strategies room
+   */
+  '/perp/terminal', '/social', '/lab/chart-guide', '/missions',
+  '/ai-trade', '/ai-analysis', '/collective'
 ]);
 
 /** Does a pathname exist in the router? Params (`:id`) match by segment count. */

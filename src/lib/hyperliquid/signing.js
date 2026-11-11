@@ -13,7 +13,7 @@
  * public test key; the unit test checks these bytes match exactly.
  */
 
-import { Wallet, keccak256, Signature } from '../../../server/ethersLite.js';
+import { Wallet, keccak256, signatureFrom } from '../../../server/ethersLite.js';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
@@ -88,19 +88,42 @@ export function actionHash(action, nonce) {
  * /exchange endpoint expects it.
  */
 export async function signL1Action(privateKey, action, nonce, { isMainnet = true } = {}) {
-  const wallet = new Wallet(privateKey);
+  /*
+   * `Wallet` and `Signature` are LAZY in `server/ethersLite.js`: they load
+   * `ethers/wallet` and `ethers/crypto` on demand and return a PROMISE. So
+   * they are AWAITED here. Without the await, `wallet.signTypedData` is not
+   * a function — the promise has no such method — and the signing failed
+   * with "wallet.signTypedData is not a function".
+   */
+  const wallet = await new Wallet(privateKey);
   const connectionId = actionHash(action, nonce);
   const sig = await wallet.signTypedData(
     { name: 'Exchange', version: '1', chainId: 1337, verifyingContract: ZERO_ADDRESS },
     { Agent: [{ name: 'source', type: 'string' }, { name: 'connectionId', type: 'bytes32' }] },
     { source: isMainnet ? 'a' : 'b', connectionId }
   );
-  const parsed = Signature.from(sig);
+  const parsed = await signatureFrom(sig);
   return { r: parsed.r, s: parsed.s, v: parsed.v };
 }
 
-/** Address of an agent key, for display only (masked in the UI). */
+/**
+ * Address of an agent key, for display only (masked in the UI).
+ *
+ * ASYNCHRONOUS, because deriving an address needs secp256k1 — the public
+ * key from a private key — and that machinery is loaded on demand.
+ *
+ * The UI used to call this during render, which cannot await. It now calls
+ * `agentAddressAsync` in an effect instead; this synchronous-looking name is
+ * kept only so a stale caller fails loudly rather than silently showing
+ * nothing.
+ */
 export function agentAddress(privateKey) {
-  return new Wallet(privateKey).address;
+  throw new Error('AGENT_ADDRESS_IS_ASYNC: await agentAddressAsync(privateKey)');
+}
+
+/** The address of an agent key. @returns {Promise<string>} */
+export async function agentAddressAsync(privateKey) {
+  const wallet = await new Wallet(privateKey);
+  return wallet.address;
 }
 

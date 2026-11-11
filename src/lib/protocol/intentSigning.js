@@ -62,20 +62,29 @@ export function buildSolanaSignMessage(intent) {
 
 /**
  * Verifies EVM EIP-712 typed data signature.
+ *
+ * ASYNCHRONOUS, because the recovery needs secp256k1: `verifyTypedData`
+ * and `verifyMessage` live in `ethers/hash`, which the lazy boundary in
+ * `server/ethersLite.js` loads on demand and hands back as a PROMISE.
+ *
+ * When they were called synchronously the recovered address was a promise,
+ * `getAddress(promise)` threw, and every signature — valid or forged —
+ * came back `false`. The check now awaits, so a valid signature verifies
+ * and a forged one still does not.
  */
-export function verifyEVMSignature(intent, signature, chainId = null, verifyingContract = '0x0000000000000000000000000000000000000000') {
+export async function verifyEVMSignature(intent, signature, chainId = null, verifyingContract = '0x0000000000000000000000000000000000000000') {
   if (!signature || typeof signature !== 'string') return false;
 
   try {
     const { domain, types, message } = buildEIP712IntentPayload(intent, chainId, verifyingContract);
-    const recovered = verifyTypedData(domain, types, message, signature);
+    const recovered = await verifyTypedData(domain, types, message, signature);
     const expected = getAddress(intent.user);
     if (getAddress(recovered) === expected) return true;
   } catch (err) {
     // Fall back to personal_sign message verification if wallet does not support EIP-712
     try {
       const personalMsg = `FBT INTENT:\nintentId: ${intent.intentId}\nuser: ${intent.user}\namount: ${intent.amount}\nminAmountOut: ${intent.minAmountOut}\nnonce: ${intent.nonce}`;
-      const recoveredPersonal = verifyMessage(personalMsg, signature);
+      const recoveredPersonal = await verifyMessage(personalMsg, signature);
       if (getAddress(recoveredPersonal) === getAddress(intent.user)) return true;
     } catch {
       return false;
@@ -106,7 +115,7 @@ export function verifySolanaSignature(intent, signature) {
 /**
  * Universal verification router for both EVM and Solana.
  */
-export function verifyIntentSignature(intent, signature = intent.signature, options = {}) {
+export async function verifyIntentSignature(intent, signature = intent.signature, options = {}) {
   const sig = signature || intent.signature;
   if (!sig) {
     return {
@@ -125,7 +134,7 @@ export function verifyIntentSignature(intent, signature = intent.signature, opti
       reason: valid ? null : 'Invalid Solana Ed25519 signature'
     };
   } else {
-    const valid = verifyEVMSignature(intent, sig, options.chainId, options.verifyingContract);
+    const valid = await verifyEVMSignature(intent, sig, options.chainId, options.verifyingContract);
     return {
       valid,
       chainType: 'evm',

@@ -36,8 +36,14 @@ const PROVIDER_ENV = {
   CLOUDFLARE_ACCOUNT_ID: 'acct-test',
   AIMLAPI_KEY: 'aiml-test'
 };
-const ALL_EXTERNAL = ['openrouter', 'groq', 'gemini', 'anthropic', 'deepseek', 'mistral', 'workersai', 'aimlapi'];
-const ALL_NINE = [...ALL_EXTERNAL, 'internal'];
+/*
+ * `openrouterfree` is a REGISTERED seat in its own right: it shares the
+ * OpenRouter key but asks for the `:free` model ids, which is the only way a
+ * free key gets an answer at all (a paid id returns 402). It therefore joins
+ * the rotation as its own provider, and the count is ten, not nine.
+ */
+const ALL_EXTERNAL = ['openrouter', 'openrouterfree', 'groq', 'gemini', 'anthropic', 'deepseek', 'mistral', 'workersai', 'aimlapi'];
+const ALL_REGISTERED = [...ALL_EXTERNAL, 'internal'];
 
 /* These checks exercise the routing mechanics for EVERY provider the gateway
    registers, so the deployment's declared fleet (three working keys) is lifted
@@ -96,10 +102,10 @@ const MARKET_CTX = { market: { priceMap: { BTC: 63450 }, change24hPct: 1.2, data
 async function runAll() {
   console.log('\n--- AI Fleet Rotation & Diversity ---');
 
-  await atest('all nine registered providers report ACTIVE when configured', () => {
+  await atest('all ten registered providers report ACTIVE when configured', () => {
     const active = getActiveProviderIds();
-    for (const id of ALL_NINE) assert.ok(active.includes(id), `missing active provider ${id}`);
-    assert.equal(active.length, ALL_NINE.length, 'unexpected extra providers');
+    for (const id of ALL_REGISTERED) assert.ok(active.includes(id), `missing active provider ${id}`);
+    assert.equal(active.length, ALL_REGISTERED.length, 'unexpected extra providers');
   });
 
   await atest('a multi-model question is answered by DISTINCT providers (no model re-used)', async () => {

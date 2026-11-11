@@ -76,7 +76,24 @@ export { getAddress, isAddress } from './evmAddress.js';
  * `toUtf8Bytes` is `new TextEncoder().encode(...)` — the same encoding
  * `ethers`'s uses — so the digest is byte-identical.
  */
-export { keccak256Hex as keccak256 } from './keccak.js';
+import { keccak256 as keccak256Bytes, keccak256Hex } from './keccak.js';
+
+/**
+ * The Keccak-256 hash, with ethers' shape.
+ *
+ * `ethers.keccak256` takes a `BytesLike` — a `Uint8Array` OR a string — and
+ * returns a 0x-prefixed hex string. The previous export (`keccak256Hex`)
+ * only took a STRING and hashed its UTF-8 bytes, so a call like
+ * `keccak256(toUtf8Bytes(x))` hashed the *text* of the byte array rather
+ * than the bytes themselves. The digests were wrong: the Hyperliquid
+ * connectionId did not match the SDK's vectors.
+ *
+ * This wrapper accepts what ethers accepts and returns what ethers returns.
+ */
+export function keccak256(data) {
+  if (typeof data === 'string') return keccak256Hex(data);
+  return `0x${Buffer.from(keccak256Bytes(data instanceof Uint8Array ? data : new Uint8Array(data))).toString('hex')}`;
+}
 
 export const toUtf8Bytes = (text) => new TextEncoder().encode(String(text));
 
@@ -102,6 +119,52 @@ export function concat(...args) { return utilsArea().then((m) => m.concat(...arg
 export function getBytes(...args) { return utilsArea().then((m) => m.getBytes(...args)); }
 export function isHexString(...args) { return utilsArea().then((m) => m.isHexString(...args)); }
 export function parseUnits(...args) { return utilsArea().then((m) => m.parseUnits(...args)); }
+
+/**
+ * `parseUnits(value, decimals)` — the SYNCHRONOUS form.
+ *
+ * `ethers`'s `parseUnits` lives in `ethers/utils`, which the lazy boundary
+ * makes a PROMISE. That is right for a server module, but wrong for the
+ * hot paths that turn a decimal string into base units and then COMPARE it
+ * — a receipt reconciler does exactly that, in a loop, and making it async
+ * changed every caller and every test.
+ *
+ * The conversion is not cryptography: it is a decimal string and a scale.
+ * So it is implemented here, synchronously, and the test suite proves it
+ * byte-identical to `ethers`'s own `parseUnits` over the values that
+ * matter — including the rounding rule, which is the one detail a
+ * hand-written version usually gets wrong.
+ *
+ * @param {string} value a decimal string, e.g. "250" or "1.5"
+ * @param {number} decimals the token scale
+ * @returns {bigint} the amount in base units
+ */
+export function parseUnitsSync(value, decimals) {
+  const text = String(value ?? '').trim();
+  const scale = Number(decimals);
+  if (!Number.isInteger(scale) || scale < 0 || scale > 77) {
+    throw new Error(`INVALID_DECIMALS: ${decimals}`);
+  }
+  /* ethers accepts an optional sign and a decimal point, and nothing else. */
+  const match = /^(-)?(\d+)(?:\.(\d+))?$/.exec(text);
+  if (!match) throw new Error(`INVALID_FIXED_NUMBER: ${text}`);
+  const [, sign, whole, fraction = ''] = match;
+  /*
+   * ethers REFUSES a fraction longer than the scale — it does not truncate
+   * it. `parseUnits('0.0000001', 6)` raises "too many decimals for format".
+   *
+   * That refusal is the correct behaviour and this copy keeps it: silently
+   * truncating would turn 0.0000001 into 0 and quietly under-pay an
+   * invoice, where ethers' error makes the caller deal with it.
+   */
+  if (fraction.length > scale) {
+    throw new Error(`TOO_MANY_DECIMALS: ${text} at scale ${scale}`);
+  }
+  const padded = fraction.padEnd(scale, '0');
+  const digits = `${whole}${padded}`.replace(/^0+(?=\d)/, '');
+  const amount = BigInt(digits) * (sign ? -1n : 1n);
+  return amount;
+}
 export function formatUnits(...args) { return utilsArea().then((m) => m.formatUnits(...args)); }
 export function parseEther(...args) { return utilsArea().then((m) => m.parseEther(...args)); }
 export function formatEther(...args) { return utilsArea().then((m) => m.formatEther(...args)); }
@@ -203,6 +266,17 @@ export function SigningKey(...args) {
 /** The signature type — `ethers/crypto`. */
 export function Signature(...args) {
   return lazyEthersArea('crypto', () => import('ethers/crypto')).then((m) => new m.Signature(...args));
+}
+
+/**
+ * `Signature.from(signature)` — the static parser.
+ *
+ * It cannot go through the `Signature(...)` wrapper, because that wrapper
+ * constructs with `new`. The static factory is what the Hyperliquid signer
+ * uses to read `r`, `s` and `v` back out of a raw signature.
+ */
+export function signatureFrom(signature) {
+  return lazyEthersArea('crypto', () => import('ethers/crypto')).then((m) => m.Signature.from(signature));
 }
 
 /**

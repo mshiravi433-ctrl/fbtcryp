@@ -1,7 +1,7 @@
 /* Units for signing, formatting, executor, engine, AI parsing, market parsing.
  * No network: every request goes through an injected fake fetch. */
 import { readFileSync } from 'node:fs';
-import { actionHash, signL1Action, agentAddress } from '../src/lib/hyperliquid/signing.js';
+import { actionHash, signL1Action, agentAddressAsync } from '../src/lib/hyperliquid/signing.js';
 import {
   toWire, roundPrice, roundSize, orderAction, stopAction, parseOrderStatuses,
   makeNonceSource, executeIntent, HL_EXEC_CODES
@@ -26,7 +26,7 @@ for (const [name, c] of Object.entries(vec.cases)) {
   check(`sdk vector ${name}: hash, r, s, v match`,
     actionHash(c.action, c.nonce) === c.hash && s.r === c.signature.r && s.s === c.signature.s && s.v === c.signature.v);
 }
-check('agent address derived from key matches SDK', agentAddress(vec.keyForVectors) === vec.address);
+check('agent address derived from key matches SDK', (await agentAddressAsync(vec.keyForVectors)) === vec.address);
 check('testnet signature differs from mainnet (source a vs b)',
   (await signL1Action(vec.keyForVectors, vec.cases.update_leverage.action, vec.cases.update_leverage.nonce, { isMainnet: false })).r
   !== vec.cases.update_leverage.signature.r);
@@ -287,7 +287,7 @@ for (const m of live) {
       { Agent: [{ name: 'source', type: 'string' }, { name: 'connectionId', type: 'bytes32' }] },
       { source: 'a', connectionId: actionHash(c.action, c.nonce) }, c.signature
     );
-    if (sig.toLowerCase() !== agentAddress(KEY).toLowerCase()) good = false;
+    if (sig.toLowerCase() !== (await agentAddressAsync(KEY)).toLowerCase()) good = false;
     manySigned += 1;
   }
   for (const order of calls.filter((c) => c.action.type === 'order').flatMap((c) => c.action.orders)) {

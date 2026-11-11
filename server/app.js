@@ -518,6 +518,8 @@ lazyModule('intentPhaseStatus', () => import('./intentPhaseStatus.js'));
 const phaseStatusReport = lazyFn('intentPhaseStatus', 'phaseStatusReport');
 import { handleOperatorEvidence, evidenceStoreStatus, getStoredEvidence, ensureOperatorEvidenceHydrated } from './intentOperatorEvidence.js';
 import { handlePlaneAttestations, planeAttestationsStatus, ensurePlaneAttestationsHydrated } from './intentPlaneAttestations.js';
+import { refreshMeasuredPlaneFacts } from './intentOperationalEvidence.js';
+import { refreshProductArcProbe } from './intentPhaseRuntimeProbeCache.js';
 import { activationConfigPresence } from './intentActivationConfig.js';
 import { collectVenueFeeds, buildProfitPlan, PROFIT_PLAN_SCHEMA } from './multiVenue.js';
 import {
@@ -2031,6 +2033,12 @@ app.get('/api/intents/v1/activation', async (_req, res) => {
 app.get('/api/intents/v1/phase-status', async (_req, res) => {
   await ensureOperatorEvidenceHydrated().catch(() => {});
   await ensurePlaneAttestationsHydrated().catch(() => {});
+  /* Measure the control planes before answering. The measurement exercises
+     the sandbox, computes a backtest, builds and verifies an audit chain and
+     reads the deployment's own configuration — so the answer describes THIS
+     process, not an assertion made at some earlier time. */
+  await refreshMeasuredPlaneFacts().catch(() => {});
+  await refreshProductArcProbe().catch(() => {});
   res.set('cache-control', 'public, max-age=15, s-maxage=15, stale-while-revalidate=60');
   return res.json(await phaseStatusReport());
 });
@@ -2038,6 +2046,8 @@ app.get('/api/intents/v1/phase-status', async (_req, res) => {
 app.get('/api/intents/v1/public-status', async (_req, res) => {
   await ensureOperatorEvidenceHydrated().catch(() => {});
   await ensurePlaneAttestationsHydrated().catch(() => {});
+  await refreshMeasuredPlaneFacts().catch(() => {});
+  await refreshProductArcProbe().catch(() => {});
   const status = await phaseStatusReport();
   const activation = status.phase21?.readiness;
   const active = status.launchAllowed === true;

@@ -6,7 +6,6 @@
  * from the core canonical Intent model.
  */
 
-import { Interface } from '../../../server/ethersLite.js';
 import { ethers } from 'ethers';
 import { Connection, PublicKey, Transaction, SystemProgram } from '@solana/web3.js';
 import { buildEIP712IntentPayload, buildSolanaSignMessage } from './intentSigning.js';

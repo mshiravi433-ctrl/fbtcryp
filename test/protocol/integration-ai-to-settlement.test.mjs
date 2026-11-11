@@ -67,7 +67,7 @@ const signedIntent = {
   signature: userSignature
 };
 
-const sigCheck = verifyIntentSignature(signedIntent, userSignature, { chainId: 8453 });
+const sigCheck = await verifyIntentSignature(signedIntent, userSignature, { chainId: 8453 });
 assert.equal(sigCheck.valid, true, 'User signature must be valid');
 lifecycle.transition('SIGNED');
 

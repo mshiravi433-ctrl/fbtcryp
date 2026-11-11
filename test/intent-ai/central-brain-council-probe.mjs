@@ -228,7 +228,20 @@ await test('Capability 9 & 10: Provider error automatic failover + complete 10-s
   assert.ok(out.failoverEvents.length >= 1, 'must record automatic failover when primary provider throws 429');
   assert.equal(out.failoverEvents[0].attemptedProviders[0], failedPrimaryProvider);
   assert.notEqual(out.failoverEvents[0].finalProvider, failedPrimaryProvider);
-  assert.equal(out.decisionTrace.stageCount, 10, 'must record all 10 decision-making stages');
+  /*
+   * Eleven stages, not ten.
+   *
+   * The eleventh is `11_CORTEX_READ`: the cortex is consulted after the
+   * evidence is gathered and before the trace is sealed, so the trace
+   * carries the neuromorphic read next to the evidence it is a second
+   * opinion on. The stage is recorded on EVERY run — consulted or not —
+   * because a run that did not consult the cortex must say so rather than
+   * leave a gap in the trace.
+   */
+  assert.equal(out.decisionTrace.stageCount, 11, 'must record all 11 decision-making stages');
+  const stageIds = out.decisionTrace.stages.map((stage) => stage.stage || stage.id);
+  assert.ok(stageIds.includes('11_CORTEX_READ'), 'the cortex read must be in the trace');
+  assert.ok(stageIds.includes('10_MEMORY_AND_LEARNING_COMMIT'), 'the memory commit must come before the cortex read');
   assert.equal(out.executionAuthorized, false);
 });
 
