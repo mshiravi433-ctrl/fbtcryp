@@ -560,3 +560,169 @@ the corpus is 103 items. The retrieval now finds the right item far more
 often, but it cannot answer what the corpus does not contain. The cortex
 still does not participate in answering (§2). And the deployment is still
 CPU-capped, so the free seats remain the only supply.
+
+---
+
+## §11 — THE REASONING LEDGER (LEVER #4)
+
+The last open lever. Levers #1-#3 made the assistant better *grounded*, better
+*retrieving*, and better *budgeted*. None of them touched the thing the user
+actually notices: whether the answer is **reasoned** or merely **asserted**.
+
+### 11.1 The finding
+
+The pipeline ASKED for reasoning and then **DISCARDED** it.
+
+`deepReasoning` (server/aiCollaboration.js) says, in the smartest mode:
+
+> before answering, identify the 2-3 facts that actually decide this question
+> and reason from them. Name the strongest counter-argument against your own
+> conclusion.
+
+That instruction is real and it is good. But it went into the **system prompt
+as prose**, while the JSON shape the model had to answer was:
+
+```json
+{ "answer": "your analysis, 2-5 sentences",
+  "claims": [...],
+  "uncertainty": "..." }
+```
+
+There was **nowhere to put the reasoning**. So the model reasoned, and the
+reasoning was thrown away — only the conclusion came back.
+
+And that is precisely the state in which a weaker seat looks exactly like a
+stronger one. A 27B model asked to "reason from the deciding facts" and then
+report only its conclusion produces a fluent, plausible, **unverifiable**
+conclusion. The pipeline cannot tell it apart from a 550B model's conclusion,
+because it never sees the path.
+
+### 11.2 What the fix does
+
+`server/aiReasoningLedger.js` gives the reasoning somewhere to go.
+
+1. **The JSON shape gains an optional `"reasoning"` field** — the deciding
+   facts and the inference from them, in the model's own words.
+2. **The path is captured per role** and carried into the synthesis as its
+   own block, so the final synthesiser sees five *paths*, not five
+   *conclusions*.
+3. **The answer is checked against its own reasoning.** A conclusion that
+   cites facts which never appear in the answer is **flagged**, and the
+   synthesiser is told not to launder it.
+
+### 11.3 Why the paths matter to the synthesis
+
+Two analysts that reached the same answer by **different routes** are
+corroborating each other. Two that reached it by the **same route** are one
+opinion paid for twice. From the conclusions alone the synthesiser cannot
+tell those apart — so it averages them as if they agreed independently. The
+paths are what make the difference visible.
+
+### 11.4 The check, and what it catches
+
+The check asks whether the answer carries the facts its own reasoning named.
+It is forgiving about paraphrase — it compares the *distinctive* words of a
+fact against the answer's content words, and a fact counts as used when a
+meaningful share of them appears.
+
+It catches the case that matters: **a conclusion that contradicts its own
+reasoning.**
+
+```
+[market]
+  - on-chain exchange reserves fell 4% this quarter
+  - the 7-day moving average is still below the 200-day
+  inference: Falling reserves and a bearish moving average point to continued weakness.
+  [WARNING: this conclusion does not carry the facts its own reasoning named
+   — treat it as asserted, not reasoned]
+
+HARD RULE: 1 conclusion(s) above are not supported by their own reasoning.
+Do not carry their claims forward unqualified — state the uncertainty instead.
+```
+
+Before the ledger, that answer reached the user as a confident conclusion.
+Now it reaches them qualified — or not at all.
+
+### 11.5 Why it is not a prompt tweak
+
+Adding "think step by step" to a prompt makes a model produce **more text**; it
+does not make the pipeline able to **use** what the model thought. The
+difference between the two is measurable: with the ledger, a claim can be
+traced to a deciding fact; without it, it cannot.
+
+The field is **optional** on purpose. A seat that does not fill it behaves
+exactly as it does today — which is what makes this safe to ship: it can only
+add evidence, never remove it. Forcing it would make a weak seat emit a fake
+path, which is worse than no path at all.
+
+### 11.6 The cost
+
+| | |
+|---|---|
+| provider calls per turn | **10 → 10** (unchanged) |
+| prompt growth | ~4401 → ~5677 tokens per call (**+20%**) |
+| network calls | 0 |
+| CPU | the check is token comparison over ≤5 facts — negligible |
+
+**The binding constraint is untouched.** OpenRouter's free tier is limited to
+**50 REQUESTS a day**, not tokens, and the ledger adds no requests. The
++20% prompt is real, but it is paid to Groq and Cloudflare, which are nowhere
+near their limits. The `max` turn still costs 4 OpenRouter calls, so the
+12-turns/day figure from §8 stands.
+
+### 11.7 Observability
+
+The ledger is not invisible. It rides on the turn (`result.reasoningLedger`)
+and on `/api/v1/ai/status` under `fleet.reasoningLedger`:
+
+```json
+{ "schema": "fbt.ai.reasoning-ledger.v1",
+  "rolesWithReasoning": 4, "rolesChecked": 4,
+  "fullySupported": 3, "partiallySupported": 1, "unsupported": 0,
+  "paths": [{ "role": "market", "model": "openai/gpt-oss-120b",
+              "facts": 2, "supported": true }] }
+```
+
+An operator can now see **how many roles actually produced a reasoning path**
+and **how many conclusions did not carry their own reasoning forward**. That
+is the first measurement of the assistant's reasoning quality that the
+deployment has ever had — the existing rubric (grounding 30, quality 25,
+honesty 20, safety 15, attribution 10) measures grounding and honesty, and
+cannot see this at all.
+
+### 11.8 The tests
+
+`test/intent-ai/ai-reasoning-ledger.test.mjs` — 20 tests, all pass:
+
+- the canonical shape is captured, and **every** shape a model may return is
+  (a plain-string fact is never dropped — a bug this suite caught);
+- a conclusion that carries its reasoning is `supported`; one that
+  contradicts it is `false` and **named**; one that partly carries it is
+  `partial`, not a pass;
+- the ledger collects the paths of every role and counts the unsupported ones;
+- the synthesis receives the paths, the warning, and the hard rule;
+- the JSON shape has somewhere to put the reasoning, and the turn publishes
+  the ledger.
+
+---
+
+## §12 — WHERE THE AUDIT STANDS
+
+| lever | state |
+|---|---|
+| **1. grow the knowledge base** | ✅ 27 → 103 items, all 12 categories, retriever rebuilt |
+| **2. wire the semantic vector store into the chat route** | ✅ hybrid retriever live; **17/18 vs 11/18** on paraphrase |
+| **3. cut the identical-payload failover retries** | ✅ per-turn ledger; **13 → 9** calls healthy, **16 → 10** with a provider down |
+| **4. make the reasoning USABLE, not just requested** | ✅ the reasoning ledger: paths captured, answers checked against them, **0 extra requests** |
+| **5. leave the cortex as an honest showcase** | ✅ no change; it remains a showcase and is labelled as one |
+
+**What is still the ceiling.** The assistant's knowledge is the corpus, and
+the corpus is 103 items. The retrieval now finds the right item far more
+often, and the reasoning is now captured and checked — but neither can answer
+what the corpus does not contain, and neither can manufacture reasoning
+capacity that a free 27B model does not have.
+
+The remaining honest options are all **supply-side**, not code-side:
+more free seats, more seats per provider, or a paid flagship. The code cannot
+make a 27B model reason like a 550B one — but it can now **tell** when it
+does not.

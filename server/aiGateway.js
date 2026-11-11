@@ -107,6 +107,7 @@ import {
   DEFAULT_PROVIDER_FLEET
 } from './aiProviderFleet.js';
 import { aiAnswerCacheStats } from './aiAnswerCache.js';
+import { lastReasoningLedger } from './aiReasoningLedger.js';
 
 /* Re-exported so every consumer of the gateway can describe the mode it used
    without importing a second module. */
@@ -1231,7 +1232,14 @@ export function getFleetSummary() {
      * the original providers, models, claims and uncertainty, so a client
      * cannot be misled by one. See server/aiAnswerCache.js.
      */
-    answerCache: aiAnswerCacheStats()
+    answerCache: aiAnswerCacheStats(),
+    /*
+     * The reasoning ledger of the last turn (§8 — LEVER #4). It makes the
+     * layer observable: an operator can see how many roles actually
+     * produced a reasoning path, and how many conclusions did not carry
+     * their own reasoning forward.
+     */
+    reasoningLedger: lastReasoningLedger()
   };
 }
 

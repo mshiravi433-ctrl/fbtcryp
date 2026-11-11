@@ -56,6 +56,15 @@ import {
 } from './aiAnswerCache.js';
 import { searchKnowledge } from '../src/lib/intent-ai/os/knowledgeCenter.js';
 import { hybridKnowledgeSearch } from '../src/lib/intent-ai/os/semanticKnowledge.js';
+import {
+  REASONING_CONTRACT,
+  captureReasoning,
+  checkReasoningSupportsAnswer,
+  buildReasoningLedger,
+  renderReasoningLedger,
+  reasoningLedgerSummary,
+  recordReasoningLedger
+} from './aiReasoningLedger.js';
 import { retrieve as retrieveBm25 } from '../src/lib/intent-ai/retrieval.js';
 import { gatherExpandedKnowledge, synthesizeInternalAnswer } from './aiInternalReasoner.js';
 import {
@@ -289,12 +298,30 @@ Check, in this order:
 Keep the user's language and FBT's voice. If the draft is already sound, return it unchanged.
 Put the corrected FINAL ANSWER in "answer". Put each change you made (or "no change") as one claim in "claims". Put what remains uncertain in "uncertainty".`;
 
+/*
+ * ─── THE REASONING FIELD (§8 — LEVER #4) ───────────────────────────────────
+ * The shape grew a "reasoning" object.
+ *
+ * It used to be prose: the `deepReasoning` line asked the model to identify
+ * the deciding facts and reason from them, but the schema had nowhere to put
+ * the result — so the reasoning was DISCARDED and only the conclusion came
+ * back. A seat that reasoned and a seat that asserted then looked identical
+ * to the pipeline, because the pipeline never saw the difference.
+ *
+ * The field is optional: a seat that does not fill it behaves exactly as it
+ * does today. Forcing it would make a weak seat emit a fake path, which is
+ * worse than no path at all.
+ */
 const ANALYSIS_JSON_SHAPE = `
 Respond in STRICT JSON:
 {
   "answer": "your analysis, 2-5 sentences",
   "claims": [{"claim": "one factual statement", "type": "factual"|"opinion", "confidence": 0-100}],
-  "uncertainty": "what you are NOT sure about"
+  "uncertainty": "what you are NOT sure about",
+  "reasoning": {
+    "decidingFacts": ["the 2-3 facts that actually decide this question, each taken from the provided evidence"],
+    "inference": "the step from those facts to your conclusion"
+  }
 }`;
 
 /* -------------------------------------------------------------------------- */
@@ -402,6 +429,16 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
     ? '\nDEEP REASONING (FBT smartest mode): before answering, identify the 2-3 facts that actually decide this question and reason from them. Name the strongest counter-argument against your own conclusion. Never introduce a number, price, date, balance or percentage that is absent from the provided data; write "not readable" instead of a guess. If the evidence is thin, say which specific reading would settle it.'
     : '';
   /*
+   * The reasoning CONTRACT rides with the deep-reasoning line, because the
+   * deep-reasoning line alone was prose the schema could not hold: the model
+   * reasoned and the pipeline never saw it. Now the contract says what the
+   * "reasoning" field must contain, and the pipeline checks the answer
+   * against it.
+   */
+  const reasoningContract = getIntelligenceProfile(intelligence).id === 'max'
+    ? '\n' + REASONING_CONTRACT
+    : '';
+  /*
    * ─── RED TEAM SEAT (smartest mode only) ───────────────────────────────────
    * Three analyses that all reason from the same obvious reading are one
    * analysis paid for three times. The LAST analytical seat is therefore given
@@ -413,11 +450,11 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
     ? '\nRED TEAM (you hold the dissenting seat): the other analysts will argue the obvious reading of this data. Assume that reading is WRONG and build the strongest case the evidence can actually support for the opposite conclusion. Do not hedge into "both sides"; give the counter-conclusion, the evidence that would have to be true for it, and the single reading that would settle which side is right. You may not introduce any number that is absent from the provided data.'
     : '';
   const system = systemOverride
-    ? `${systemOverride}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}`
+    ? `${systemOverride}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${reasoningContract}`
     /* The economist's lens is a reasoning contract, not a costume: it rides on
        the specialists and the synthesiser, never on the reviewer (whose job is
        to break the draft, not to reason about the economy). */
-    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}${dialogueBrief ? `\n${dialogueBrief}` : ''}${professorBrief ? `\n${professorBrief}` : ''}${researchBrief ? `\n${researchBrief}` : ''}${marketBrief ? `\n${marketBrief}` : ''}${requestBrief ? `\n${requestBrief}` : ''}${emotionBrief ? `\n${emotionBrief}` : ''}${situationBrief ? `\n${situationBrief}` : ''}${discourseBrief ? `\n${discourseBrief}` : ''}${productBrief ? `\n${productBrief}` : ''}${partialBrief ? `\n${partialBrief}` : ''}`;
+    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${reasoningContract}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}${dialogueBrief ? `\n${dialogueBrief}` : ''}${professorBrief ? `\n${professorBrief}` : ''}${researchBrief ? `\n${researchBrief}` : ''}${marketBrief ? `\n${marketBrief}` : ''}${requestBrief ? `\n${requestBrief}` : ''}${emotionBrief ? `\n${emotionBrief}` : ''}${situationBrief ? `\n${situationBrief}` : ''}${discourseBrief ? `\n${discourseBrief}` : ''}${productBrief ? `\n${productBrief}` : ''}${partialBrief ? `\n${partialBrief}` : ''}`;
   /*
    * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
    * This line used to be a ternary: Persian or English. Everything a Turkish,
@@ -492,6 +529,12 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
         provider: providerId,
         model: res.model || null,
         answer: String(parsed.answer || '').slice(0, 1200),
+        /*
+         * The reasoning path, captured (§8 — LEVER #4). It was asked for and
+         * discarded; now it is kept, so the synthesis can see the paths and
+         * the pipeline can check a conclusion against its own reasoning.
+         */
+        reasoning: captureReasoning(parsed),
         claims: Array.isArray(parsed.claims) ? parsed.claims.slice(0, 6).map((c) => ({
           claim: String(c?.claim || '').slice(0, 240),
           type: c?.type === 'factual' ? 'factual' : 'opinion',
@@ -1641,6 +1684,29 @@ async function runCollaborativeAnalysisInner({
       const digestCap = modeProfile.selfCritique ? 800 : 500;
       /* Stage 6: one clean FBT answer from the specialists' work (§37). */
       const digest = analyses.filter((a) => a.ok).map((a) => `[${a.role}] ${String(a.answer).slice(0, digestCap)}`).join('\n\n');
+
+      /*
+       * ─── THE REASONING LEDGER (§8 — LEVER #4) ─────────────────────────────
+       * The digest carries the specialists' CONCLUSIONS. The ledger carries
+       * their PATHS — the deciding facts and the inference from them.
+       *
+       * Why the synthesiser needs both: two analysts that reached the same
+       * answer by different routes are corroborating each other; two that
+       * reached it the same way are one opinion paid for twice. From the
+       * conclusions alone the synthesiser cannot tell those apart, so it
+       * averages them as if they agreed independently.
+       *
+       * And the ledger carries the CHECK: a conclusion that does not carry
+       * the facts its own reasoning named is flagged, and the synthesiser is
+       * told not to launder it.
+       */
+      const reasoningLedger = buildReasoningLedger(analyses);
+      result.reasoningLedger = reasoningLedgerSummary(reasoningLedger);
+      /* Recorded for the status endpoint, so the layer is observable. */
+      recordReasoningLedger(reasoningLedger);
+      const reasoningBlock = modeProfile.selfCritique
+        ? renderReasoningLedger(reasoningLedger)
+        : '';
       /*
        * The verifier's findings used to be just another paragraph in the
        * digest. In the smartest mode the synthesiser is told to RESOLVE them:
@@ -1658,7 +1724,8 @@ async function runCollaborativeAnalysisInner({
       const finalRole = await withDeadline(runRole({
         turnBudget,
         role: AI_ROLES.FINAL_ANSWER_AI,
-        message: `${message}\n\nSPECIALIST WORK:\n${digest}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${verifierNote}${revisionRule}`,
+        /* The paths ride along with the conclusions. */
+        message: `${message}\n\nSPECIALIST WORK:\n${digest}${reasoningBlock ? `\n\n${reasoningBlock}` : ''}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${verifierNote}${revisionRule}`,
         contextBlock,
         locale,
         deps: D,
@@ -1818,7 +1885,7 @@ async function runCollaborativeAnalysisInner({
           const partialDeficitBlock = renderPartialDeficit(draftPartial);
           const criticRole = {
             role: AI_ROLES.VERIFICATION_AI,
-            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}${dialogueDeficitBlock ? `\n\n${dialogueDeficitBlock}` : ''}${falsifierDeficitBlock ? `\n\n${falsifierDeficitBlock}` : ''}${marketViolationBlock ? `\n\n${marketViolationBlock}` : ''}${requestDeficitBlock ? `\n\n${requestDeficitBlock}` : ''}${emotionDeficitBlock ? `\n\n${emotionDeficitBlock}` : ''}${situationDeficitBlock ? `\n\n${situationDeficitBlock}` : ''}${discourseDeficitBlock ? `\n\n${discourseDeficitBlock}` : ''}${productDeficitBlock ? `\n\n${productDeficitBlock}` : ''}${partialDeficitBlock ? `\n\n${partialDeficitBlock}` : ''}`,
+            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${reasoningBlock ? `\n\n${reasoningBlock}` : ''}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}${dialogueDeficitBlock ? `\n\n${dialogueDeficitBlock}` : ''}${falsifierDeficitBlock ? `\n\n${falsifierDeficitBlock}` : ''}${marketViolationBlock ? `\n\n${marketViolationBlock}` : ''}${requestDeficitBlock ? `\n\n${requestDeficitBlock}` : ''}${emotionDeficitBlock ? `\n\n${emotionDeficitBlock}` : ''}${situationDeficitBlock ? `\n\n${situationDeficitBlock}` : ''}${discourseDeficitBlock ? `\n\n${discourseDeficitBlock}` : ''}${productDeficitBlock ? `\n\n${productDeficitBlock}` : ''}${partialDeficitBlock ? `\n\n${partialDeficitBlock}` : ''}`,
             contextBlock: '',
             locale,
             deps: D,
