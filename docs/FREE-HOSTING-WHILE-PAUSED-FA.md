@@ -19,7 +19,8 @@
 | ۱ | محتوای `ci/order-watch-tick.yml` را روی `.github/workflows/order-watch-tick.yml` جای‌گذاری و commit کنید | GitHub، همین ریپو | گیت‌هاب کامیتِ ابزار خودکار در `.github/workflows/` را رد می‌کند (`refusing to allow a GitHub App to create or update workflow`) |
 | ۲ | `CRON_SECRET` را در Settings → Secrets and variables → Actions چک کنید | GitHub | بدون آن، همین تیک هم اجرا نمی‌شود (خودش warning می‌دهد) |
 | ۳ | تیکت برداشتن مکث بزنید (§۱) | vercel.com/help | تصمیم با پشتیبانی است، نه با کد |
-| ۴ | یک‌بار `main` را بعد از باز شدن حساب deploy کنید | Vercel | تا حساب باز نشود build هم اجرا نمی‌شود |
+| ۴ | متغیر `VITE_ENV_FILE` را بسازید (Settings → Secrets and variables → Actions → **Variables**) | GitHub | `VITE_*` در **زمان بیلد** داخل باندل کامپایل می‌شوند؛ اگر نباشد سایت بالا می‌آید ولی WalletConnect، web-push و نمایش کارمزد بی‌صدا از کار می‌افتند (سناریوی «همه‌چیز هست، فقط کار نمی‌کند») |
+| ۵ | یک‌بار `main` را بعد از باز شدن حساب deploy کنید | Vercel | تا حساب باز نشود build هم اجرا نمی‌شود |
 
 > نکتهٔ مهم دربارهٔ شاخه‌ها: کاهش‌های سمت کلاینت و سرور فقط وقتی روی سایت اثر دارند که
 > روی **`main`** باشند. `vercel.json` صریحاً `"deploymentEnabled": { "arena/*": false }`
@@ -86,20 +87,83 @@
 
 `npm run build` حدود ۳ تا ۴ گیگابایت رم می‌خواهد (vite + اسکریپت‌های vendor). بعضی
 میزبان‌های رایگان به builder بیشتر از ۵۱۲ مگ نمی‌دهند و build با OOM می‌میرد — پس ایمیج
-را بیرون از میزبان می‌سازیم و منتشر می‌کنیم:
+را بیرون از میزبان می‌سازیم و منتشر می‌کنیم.
 
-1. فایل `ci/docker-image.yml` را در `.github/workflows/docker-image.yml` کپی کنید
-   (گیت‌هاب اجازه نمی‌دهد ابزارهای خودکار در آن پوشه کامیت کنند؛ دستی اضافه کنید).
-2. تب **Actions** → «Build app image» → **Run workflow**.
-3. ایمیج این‌جا آماده می‌شود:
-   `ghcr.io/mshiravi433-ctrl/fbtcryp:latest`
-   اگر بسته خصوصی بود: Settings → Packages → همان بسته → Change visibility → **Public**.
+#### گام ۱ — فایل ورک‌فلو را سر جایش بگذارید (فقط یک دستور)
 
-اگر به Actions دسترسی ندارید، روی لپ‌تاپ خودتان (با رم کافی و اینترنت آزاد):
+گیت‌هاب اجازه نمی‌دهد ابزارهای خودکار در `.github/workflows/` کامیت کنند، پس فایل در
+`ci/docker-image.yml` نگه داشته می‌شود. یک‌بار از روی کلون مخزن:
 
 ```bash
-docker build -t ghcr.io/USER/fbtcryp:latest .
-docker push ghcr.io/USER/fbtcryp:latest   # بعد از docker login ghcr.io
+mkdir -p .github/workflows \
+  && cp ci/docker-image.yml .github/workflows/docker-image.yml \
+  && git add .github/workflows/docker-image.yml \
+  && git commit -m "ci: build app image" && git push
+```
+
+(یا از رابط وب: **Add file → Create new file** → مسیر
+`.github/workflows/docker-image.yml` → محتوای فایل را paste کنید.)
+
+#### گام ۲ — متغیر `VITE_ENV_FILE` را بسازید
+
+**Settings → Secrets and variables → Actions → Variables → New repository variable**
+
+نام: `VITE_ENV_FILE` · مقدار: خط‌به‌خط، هر خط یک `KEY=value` (بدون `export` و بدون
+گیومه دور کل خط). حداقلِ لازم برای اینکه سایت «مثل خودش» باشد:
+
+```
+VITE_WALLETCONNECT_PROJECT_ID=...
+VITE_VAPID_PUBLIC_KEY=...
+VITE_FEE_RECIPIENT=...
+VITE_FEE_BPS=25
+```
+
+> **چرا Variable و نه Secret؟** این مقدارها در زمان بیلد داخل جاوااسکریپت عمومی کامپایل
+> می‌شوند؛ Secret گذاشتن‌شان حس امنیت کاذب می‌دهد و لاگ را کور می‌کند. خودِ ورک‌فلو
+> جلوی کلیدِ شبیهِ راز (`VITE_*_SECRET`, `..._PRIVATE`, `..._MNEMONIC`) را می‌گیرد.
+>
+> **`VITE_API_BASE` لازم نیست:** روی کانتینر، API و فرانت یک پروسه و یک دامنه‌اند، پس
+> درخواست‌ها نسبی می‌مانند. (روی Vercel هم همین‌طور است.)
+
+#### گام ۳ — Actions → «Build app image» → Run workflow
+
+ورک‌فلو چهار کار می‌کند و لاگش سند است:
+
+| مرحله | چه چیزی را ثابت می‌کند |
+|---|---|
+| `Lockfile platform guard` + `npm ci --force` | بیلدِ لینوکسی روی قفل‌فایلی که `fsevents` مک را اجباری کرده گیر نمی‌کند |
+| `Write build.env` | فقط کلیدهای `VITE_*` و فقط نام‌شان چاپ می‌شود؛ خطِ بدشکل یا شبیه‌راز **قبل از** ۲۰ دقیقه بیلد، build را می‌شکند |
+| `Build and push` | ایمیج `linux/amd64` با دو تگ: `:latest` و `:${sha}` (برای برگشت، sha لازم است) |
+| **`Smoke test`** | ایمیج را pull و اجرا می‌کند و تا ۶۰ ثانیه منتظر `200` از `/api/health` می‌ماند — «ساخته شد» با «بالا می‌آید» یکی نیست |
+
+خروجی: `ghcr.io/mshiravi433-ctrl/fbtcryp:latest`. اگر بسته خصوصی بود:
+Settings → Packages → همان بسته → **Change visibility → Public** (میزبان رایگان باید
+بدون توکن pull کند).
+
+#### اگر Actions در دسترس نبود — روی لپ‌تاپ خودتان
+
+```bash
+docker build -t ghcr.io/USER/fbtcryp:latest .            # رم و اینترنت لازم دارد
+# اختیاری: بدون سرمایهٔ فارم (کلید خاموشیِ مستند)
+docker build --build-arg FARM_CAPITAL=off -t fbt-swap:safe .
+docker run --rm -p 8787:8787 ghcr.io/USER/fbtcryp:latest  # بعد /api/health را ببینید
+docker push ghcr.io/USER/fbtcryp:latest                   # بعد از docker login ghcr.io
+```
+
+#### چه چیزی داخل ایمیج دقیقاً مثل production است (و چرا مهم است)
+
+`Dockerfile` عمداً همان دو فایلِ محیطیِ `npm run build:full` را source می‌کند
+(`ci/farm-rollout.env.sh` و `ci/web-season.env.sh`) و همان دو فلگ درون‌خطی را هم
+پاس می‌دهد. بدون این، `VITE_ENABLE_*` همه `false` کامپایل می‌شدند، هر پنج آداپتر فارم
+`null` برمی‌گرداندند و «آینه» یک فارمِ فقط‌خواندنی نشان می‌داد — همان باگی که یک‌بار روی
+خودِ سایت رخ داد. `VERCEL_ENV=production` هم به همین دلیل ست می‌شود (سطحِ تاریخچهٔ
+معاملات فقط برای بیلدِ production باز است)؛ برای بیلدِ بسته،
+`--build-arg VERCEL_ENV=preview`.
+
+حالا سه فایل (Dockerfile، `.dockerignore` و ورک‌فلو) با یک probe قفل شده‌اند:
+
+```bash
+node test/docker-image-probe.mjs   # 39/39 — drift در هر سه فایل همین‌جا می‌شکند
 ```
 
 ### ۲.۲ اجرا روی میزبان
