@@ -968,3 +968,182 @@ test that fails without its fix:
 - an empty frame yields no state — an absent signal is never fabricated.
 
 **The whole suite: 493 → 534, all green.**
+
+---
+
+## §14 — THE PHASES: WHAT IS ACTUALLY CONNECTED, AND WHAT IS ACTUALLY OPERATIONAL
+
+The question behind §13's wiring: *are the phases connected? are they
+operational? and what do they actually do?* So they were checked rather than
+assumed.
+
+### 14.1 The shape of it
+
+`server/intentSpecPhases.js` is the authoritative registry: **206
+specification phases, 10 → 216**. Every row carries its implementation
+sources, its probe files, and the operational evidence it requires.
+
+| area | phases | what it is |
+|---|---|---|
+| 10–20 | 11 | the core product arcs (trust, strategy, wallet policy, live intents, memory, runtime, execution, policy, proof, compliance, launch) |
+| 21–50 | 30 | the **control planes** — CA ops, sandbox mesh, sim/monitor ops, signer ops, venue federation, RPC quorum, audit/DR, assurance network, launch control plane, incident command, secret rotation, failover, rate limits, disclosure, legal hold, attestation, gameday, SLO, model supply chain, agent fleet, spend caps… |
+| 51–216 | 165 | the product arcs (wallet signing, quote lock, consented memory, agent protocol/escrow/sandbox/dispute, conditional allocation, …) |
+
+The probes are green: phase-status **24/24**, phase-21 **42/42**, phase-142
+**20/20**, phase-151 **11/11**, phase-217 **81/81**, neuromorphic **105/105**.
+
+### 14.2 The report
+
+```
+status        : operational
+gate          : evidence
+live phases   : 206 / 206
+evidence      : 21 / 21
+criticalBlockers : 0
+executionActivated : false
+rawCredentialsAllowed : false
+```
+
+### 14.3 What the "21/21 evidence" actually is
+
+This is the part worth being exact about, because the number looks far
+stronger than what it proves.
+
+`kindDigest()` computes a SHA-256 over the **source files that implement the
+capability**:
+
+```js
+hash.update(`fbt.intent-ai.activation.v1\n${salt}\n${kind}\n`);
+for (const file of KIND_SOURCES[kind] || []) hash.update(readFileSync(abs));
+```
+
+So `approved-durable-registry` is a hash of `server/store.js` +
+`server/blobCache.js`; `production-signer` is a hash of `walletRuntime.js`;
+`independent-security-review` is a hash of `securityCompliance.js`.
+
+**The evidence proves the code exists and has not changed. It does not prove
+that an RPC answered, that a signer signed, or that an independent reviewer
+reviewed anything.**
+
+The comment in `intentOperationalEvidence.js` says exactly this, and it is
+worth repeating because it is the honest framing:
+
+> Hashes of source files prove code existed, NOT that a production RPC,
+> signer, independent reviewer or broker answered.
+
+And the bundle that carries those hashes is **built by the code itself**:
+
+```js
+buildDefaultOwnerBundle({ now })
+  → operators: ['owner-a', 'owner-b']
+  → reviewerId: 'owner-independent-reviewer'
+  → salt: 'fbt-production-auto-activation'
+```
+
+So "owner-activated" means *the built-in bundle*, not *a human owner signed
+anything*.
+
+### 14.4 What happens when the built-in bundle is not allowed
+
+Set `INTENT_AI_SANDBOX_EVIDENCE=0` and the report changes completely:
+
+```
+status        : implementation-available
+gate          : open-mode-access
+live phases   : 0 / 206
+evidence      : 0/21
+criticalBlockers : 85
+```
+
+**Zero live phases and 85 blockers.** The implementation is all there —
+206/206 have their source and their probe — but nothing is *operational*,
+because nothing has attested to it.
+
+That is the honest reading of the whole phase system:
+
+> **the phases are CONNECTED and IMPLEMENTED; they are OPERATIONAL only
+> against the built-in owner bundle, which is a self-attestation.**
+
+Which is exactly why the code keeps `executionActivated: false` and
+`rawCredentialsAllowed: false` no matter what. The phase system can say
+"operational" without ever being allowed to move money — and that boundary
+holds.
+
+### 14.5 The gap the audit found: no phase reaches a model provider
+
+48 of the 206 phases are AI-bearing by name and title (agent marketplace,
+strategy competition, intent genome, external agent runtime, consented
+memory, agent protocol, escrow, sandbox, dispute, model supply chain…).
+
+**Not one of them references a provider.** The check:
+
+```
+for each AI-bearing phase:
+  does any of its source files mention aiGateway | executeProviderChat |
+  providerInvoker | routedChat ?
+→ 0 / 48
+```
+
+So the phase system certifies the **governance, memory, escrow, protocol,
+policy and operations** layers — the parts that decide *what may be done and
+how it is recorded* — and not the *reasoning* layer. The reasoning layer is
+`server/aiCollaboration.js` and `server/aiGateway.js`, which sit **outside**
+the phase registry entirely.
+
+That is not a defect in the phases; it is where they stop. The registry is
+about custody and policy, and it is honest about it. But it means:
+
+- **206/206 operational says nothing about whether the AI is smart.**
+- The AI's own quality is measured elsewhere — the reasoning ledger
+  (§11) and the cortex bridge (§13).
+
+### 14.6 Two wiring gaps found and closed
+
+**Gap 1 — the central brain had no neuromorphic input at all.**
+`createCentralBrain` accepted a `cortexReader`, but the server runtime
+(`server/centralBrainRuntime.js`) never passed one. The cortex was a
+spectator to the whole pipeline — including the one component whose entire
+purpose is to be the brain.
+
+Now it is wired. `buildBrainMarketFrame()` reads the **same live tool the
+rest of the pipeline uses** (`fbt_get_market_snapshot`), derives the eight
+sensory axes from it, and hands the state to the cortex. The brain consults
+it on market turns only, and the read is published on the trace next to the
+evidence — never above it.
+
+```
+=== the brain WITH a real market frame ===
+{ "consulted": true,
+  "read": { "usable": true,
+            "directional": { "drive": 0.8324, "confidence": 0.7565 },
+            "regime": "trendUp",
+            "discrimination": 0.7565 } }
+```
+
+With no market feed reachable (the sandbox has no provider keys) the brain
+still works and still publishes **why** there was no read — `"the cortex had
+no read"`. An absent signal is never turned into a fabricated one.
+
+**Gap 2 — the chat route never uses the central brain.**
+`POST /api/v1/ai/chat` calls `runCollaborativeAnalysis`, not the central
+brain. The central brain is reachable, but on **separate** routes
+(`/api/v1/ai/orchestrator/*` and `/api/v1/ai/brain/*`).
+
+Both paths are legitimate and both are mounted — but a reader should know
+that the central brain is an **orchestrator surface**, not the chat
+pipeline. The cortex reaches the chat through the collaboration pipeline
+(§13.6) and the central brain through the orchestrator routes.
+
+### 14.7 The verdict
+
+| question | answer |
+|---|---|
+| **Connected?** | Yes — the phase-status, public-status and phase-21 routes are mounted; 206/206 have their sources and their probes; the probes are green. |
+| **Operational?** | Yes, against the built-in owner bundle (21/21, 206/206 live, 0 blockers). With sandbox evidence off it is **0/206 live, 85 blockers**. It is a self-attestation, not an external verification. |
+| **What do they do?** | They govern **custody and policy**: who may act, under what policy, with what evidence, and what is recorded. 30 of them are control planes (CA, sandbox, signer, venue, RPC, audit, incident, secrets, failover, rate limits, disclosure, legal hold, attestation, SLO, spend caps). |
+| **Do they make the AI smarter?** | **No** — and they are honest about it. 0 of the 48 AI-bearing phases reach a model provider. The reasoning quality lives in the collaboration pipeline and is measured by the reasoning ledger and the cortex bridge, both outside the registry. |
+
+The boundary that holds through all of it: `executionActivated: false` and
+`rawCredentialsAllowed: false`, in every mode, with the evidence on or off.
+The phase system can claim "operational" and still never be allowed to sign
+or move funds.

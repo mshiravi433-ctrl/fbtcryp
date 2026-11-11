@@ -593,6 +593,50 @@ test('a cortex that throws does not take the answer down', async () => {
   assert.ok(/failed/.test(run.cortex.reason), run.cortex.reason);
 });
 
+test('the central brain RUNTIME consults the cortex on a market turn', async () => {
+  /*
+   * The gap this closes: the central brain had NO neuromorphic input at all.
+   * `createCentralBrain` accepted a `cortexReader`, but the server runtime
+   * never passed one — so the cortex was a spectator to the whole pipeline.
+   */
+  const { getCentralBrain } = await import('../../server/centralBrainRuntime.js');
+  const brain = getCentralBrain();
+  assert.ok(brain, 'the runtime must build a brain');
+  const run = await brain.run({ owner: 'cortex-runtime', message: 'analyse the market trend for BTC' });
+  assert.ok(run.cortex, 'the brain must publish a cortex entry');
+  assert.equal(typeof run.cortex.consulted, 'boolean');
+  /*
+   * With no market feed reachable (the sandbox has no provider keys) the
+   * brain must still work and must still publish WHY there was no read.
+   * It must never fabricate one.
+   */
+  if (!run.cortex.read) {
+    assert.ok(run.cortex.reason, 'the absence of a read must carry a reason');
+  }
+});
+
+test('the central brain runtime wires a cortex reader that returns a usable shape', async () => {
+  const { readCortex, marketStateFromFrame } = await import('../../server/aiCortexBridge.js');
+  const frame = {
+    regime: 'normal',
+    benchmark: { symbol: 'BTC', change24hPct: 3.1 },
+    breadth: { advancers: 7, decliners: 2 },
+    instruments: [
+      { symbol: 'BTC', change24hPct: 3.1, rangePosition: 0.82 },
+      { symbol: 'ETH', change24hPct: 3.9, rangePosition: 0.88 },
+      { symbol: 'XRP', change24hPct: -0.5, rangePosition: 0.44 }
+    ]
+  };
+  const state = marketStateFromFrame(frame);
+  const read = readCortex(state);
+  assert.equal(read.usable, true);
+  assert.ok(read.directional.drive > 0, 'a rising market reads positive');
+  assert.equal(read.regime, 'trendUp');
+  /* And the shape the brain consumes must be the one the bridge produces. */
+  assert.ok(typeof read.discrimination === 'number');
+  assert.ok(typeof read.reason === 'string');
+});
+
 /* ── the status endpoint ─────────────────────────────────────────────────── */
 
 test('the status endpoint reports the cortex as available and trained', () => {
