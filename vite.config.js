@@ -362,7 +362,15 @@ export default defineConfig({
      * DEV SERVER ONLY. `vite preview` and the production build ignore this
      * entirely, and nothing here is reachable from a deployed site.
      */
-    allowedHosts: ['.e2b.app', '.ngrok-free.app', '.ngrok.io', '.trycloudflare.com', 'localhost'],
+    /*
+     * `.app.github.dev` added 2026-11-11: a GitHub Codespace forwards port 5173
+     * to that hostname, and without it the dev server answers a bare
+     * "403 Blocked request" that names neither the host nor the fix. This is
+     * the one preview path that needs no card and no local toolchain — which is
+     * the whole point of the repo's hosting constraint. See
+     * .devcontainer/devcontainer.json.
+     */
+    allowedHosts: ['.e2b.app', '.app.github.dev', '.ngrok-free.app', '.ngrok.io', '.trycloudflare.com', 'localhost'],
     proxy: {
       // keep API keys server-side even in dev
       '/api': {
