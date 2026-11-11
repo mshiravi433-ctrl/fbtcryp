@@ -276,15 +276,15 @@ async function runAll() {
      * exists for is the URL SHAPE (literal `@`, literal slashes), not which
      * model ranks first; `balanced` below still reaches the historical id.
      *
-     * 2026-11-11 — the `max` seat of Cloudflare is now the R1 distill
-     * (`@cf/deepseek/deepseek-r1-distill-qwen-32b`), because "smartest" on
-     * a free tier should mean the model that actually reasons rather than
-     * the biggest one. The URL shape is unchanged: the `@` and the slashes
+     * 2026-11-11 — the `max` seat of Cloudflare is now Qwen 3.8 27B
+     * (`@cf/qwen/qwen3.8-27b`): it reasons, it takes `reasoning_effort`,
+     * and the R1 distill it replaced is scheduled for deprecation on
+     * 2026-11-20. The URL shape is unchanged: the `@` and the slashes
      * are still literal.
      */
     assert.equal(
       calls[0].url,
-      'https://api.cloudflare.com/client/v4/accounts/32hexaccountid/ai/run/@cf/deepseek/deepseek-r1-distill-qwen-32b'
+      'https://api.cloudflare.com/client/v4/accounts/32hexaccountid/ai/run/@cf/qwen/qwen3.8-27b'
     );
     /* The padded account id was trimmed; the model kept its `@` and slashes. */
     assert.ok(!calls[0].url.includes('%40'), 'the model id must not be percent-encoded into one segment');

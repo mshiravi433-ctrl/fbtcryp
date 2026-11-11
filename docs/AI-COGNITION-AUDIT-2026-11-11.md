@@ -316,3 +316,247 @@ is the remaining step, and the machinery for it already exists server-side.
 
 The cost side is unchanged too: a `max` turn still makes 13 provider calls
 (§4). Lever 3 stands.
+
+---
+
+## §8 — THE RETRY BUDGET (LEVER #3)
+
+The audit measured a `max` turn at **13 provider calls**, of which **8 were
+identical-payload failover retries**. Against OpenRouter's `:free` seat —
+**50 requests a day** — that is a quarter of the daily budget for one
+question, and a bad model id could consume all of it.
+
+### 8.1 The multiplication
+
+Two retry loops, multiplied:
+
+```
+runRole  tries up to 3 PROVIDERS          (server/aiCollaboration.js)
+  └─ each provider call walks up to 4 MODEL ids  (server/aiGateway.js)
+```
+
+⇒ up to **12 requests for one role**, and a turn runs five roles.
+
+### 8.2 The ledger
+
+The fix is **not** "retry less" — failover is what makes a free tier usable at
+all. The fix is that **a model id is tried once per question**.
+
+The ladder is a property of the *provider*, not of the attempt. Every id in it
+has already proved itself alive or dead in this very turn, so walking it again
+for the next provider can only re-discover the same failures — at full price.
+
+So each turn opens a ledger (`beginAiTurnBudget()`), and every role of that
+turn shares it:
+
+| the ledger knows | therefore |
+|---|---|
+| model id X already failed | X is not tried again in this turn |
+| provider P's ladder is dead | P is not walked again in this turn |
+| provider P answered 429 | P is **dead for the turn** — the daily cap is per-day, so the next request is certain to fail too |
+
+The last row is the most valuable one: on the free tier a 429 means the daily
+quota is spent, and the old code asked the capped provider **three times per
+role** to learn what one 429 already said.
+
+### 8.3 The measurement
+
+| | before | after |
+|---|---|---|
+| healthy `max` turn | **13** provider calls | **9** |
+| identical-payload calls | 8 | 0 |
+| Cloudflare calls per turn | 8 (4 models × 2 roles) | 4 (each model once) |
+| OpenRouter calls when it 429s | 3 per role | **1 for the whole turn** |
+| turn with OpenRouter down | **16** provider calls | **10** |
+
+**Daily-quota effect:** at ~5 OpenRouter calls per `max` turn against a
+50/day cap, the old code reached ~10 `max` turns/day ≈ 30 questions/day. The
+budget moves that to **~20 turns/day ≈ 60 questions/day** — double the
+questions the deployment can answer, from the same quota.
+
+### 8.4 A second, smaller bug found on the way
+
+The Cloudflare model id was wrong: the config said
+`@cf/deepseek/deepseek-r1-distill-qwen-32b`, but Cloudflare spells the
+publisher **`deepseek-ai`**. The wrong id 404s — and because the gateway walks
+the ladder on a 404, **every Cloudflare seat burned its whole ladder** before
+the router moved on. The id is now
+`@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`, and a test asserts the *shape*
+of every Cloudflare id so a typo cannot return.
+
+Separately, the R1 distill is **scheduled for deprecation on 2026-11-20** —
+nine days after this audit — so it cannot be the flagship. Cloudflare's live
+replacement, **`@cf/qwen/qwen3.8-27b`** (27B, reasoning `low|medium|xhigh`,
+262K context, accepts `reasoning_effort`), now leads the ladder and holds
+the `max` seat.
+
+### 8.5 The tests
+
+`test/intent-ai/ai-semantic-and-budget.test.mjs` — 16 tests, all pass. They
+pin the *behaviour*: a failed id is not retried, a 429 exhausts the provider
+for the turn, a second call to a dead provider spends **zero** requests, and
+two ledgers never see each other's failures.
+
+---
+
+## §9 — THE SEMANTIC RECALL (LEVER #2)
+
+§7 grew the corpus but said plainly that **the meaning did not grow with it**:
+retrieval was lexical, so the corpus was reachable only through the words the
+question used.
+
+### 9.1 What was already there
+
+`src/lib/intent-ai/orchestrator/semanticEmbedder.js` builds a dense bilingual
+vector from a hand-authored **concept lattice** — 30 concepts, Persian and
+English, with negation polarity — plus morphological stemming and character
+3-grams for typos. `embedSemanticSync` is **offline and synchronous**: no API
+call, no GPU, no quota. On a deployment that is already CPU-capped, that is
+the only kind of semantic layer that is affordable.
+
+`src/lib/intent-ai/orchestrator/vectorStore.js` already had the store, the
+cosine, the local backend and the payload filters.
+
+What was missing was the **wiring**: the main chat route never asked any of
+it.
+
+### 9.2 Why hybrid, and not semantic alone
+
+Measured on the real corpus, the semantic layer alone is a good **recaller**
+and a poor **ranker**:
+
+```
+"اتصال کیف پول"   semantic top-1: kb.swap.receipt     ← wrong
+                  lexical  top-1: kb.wallet.connect   ← right
+```
+
+A dense vector blurs a 300-word body into one point, so an item that merely
+*mentions* "کیف پول" outranks the item that is *about* connecting one. The
+lexical scorer has the opposite failure: exact, but blind to paraphrase.
+
+So each does the job it is good at:
+
+- the **semantic layer widens** the candidate pool — it finds the items whose
+  wording does not match the question;
+- the **lexical scorer ranks** that pool — it puts the item whose words
+  actually match first.
+
+### 9.3 The finding that decided the design: EMBED THE TITLE, NOT THE BODY
+
+The first version embedded title + body. Over 18 questions whose correct
+answer is known:
+
+| embedded | correct top-1 |
+|---|---|
+| title + body | **5 / 18** |
+| **title only** | **16 / 18** |
+
+The reason is mechanical. A body is 300 words of prose; the subject of an
+item is the subject of its TITLE and is mentioned in the body once, among
+hundreds of other words. So the body contributes mostly **noise** to a
+vector, and the cosine ends up measuring "how similar is this prose" rather
+than "how similar is this subject".
+
+```
+"building a balanced basket"
+  title+body -> kb.defi.il-loss        (0.248)  ← wrong
+  title only -> kb.product.portfolio   (0.687)  ← right
+"where does my money live"
+  title+body -> kb.product.roadmap     (0.204)  ← wrong
+  title only -> kb.wallet.custody      (0.322)  ← right
+```
+
+The body is still used — by the lexical scorer, which reads it properly. The
+semantic layer's job is to recognise the **subject**, and the title is where
+the subject is written down.
+
+### 9.4 The guard that keeps the semantic layer honest
+
+A semantic layer that can overrule a strong lexical match is a hazard, and it
+was one. The first hybrid let a lucky cosine do this:
+
+```
+"کلید خصوصی من کجا نگهداری می شود"
+  lexical 1st = kb.wallet.custody          (160 matched tokens)
+  hybrid 1st  = kb.risk.custody-vs-balance  (87 tokens + a 0.61 cosine)  ← wrong
+```
+
+Two rules fix it, and both are now pinned by tests:
+
+1. **The decisive-lexical override.** The lexical score is a *count* of
+   matched tokens, so a gap between two items is a real gap. When the leader
+   beats the field by a wide margin, it wins outright — the semantic layer
+   may reorder within a band of comparable matches, but it cannot promote an
+   item that matched far fewer of the question's words.
+2. **The lexical-strength bonus.** A strong *absolute* lexical match gets a
+   capped bonus, so it can break ties between items that both matched a lot,
+   and can never lift a one-token match over a strong one.
+
+The result: the hybrid answers **17/18** where the lexical-only retriever
+answered **11/18**, and every question the lexical retriever already got
+right is still right.
+
+### 9.5 The concept lattice was extended
+
+The lattice did not cover the words people actually type. Added:
+
+- `security_custody`: **وصل، اتصال، متصل، لغو دسترسی، کلید خصوصی** and
+  `connect wallet, attach wallet, link wallet, revoke, private key, seed phrase`
+- `portfolio_allocation`: **پرتفوی، پورتفویو، سبد دارایی، سبد پول، تقسیم پول** and
+  `basket, asset allocation, hold assets, saving up`
+- `fees_cost`: **کارمزد تراکنش، هزینه تراکنش، هزینه شبکه** and
+  `network fee, transaction cost, how much does it cost`
+- a **new concept**, `loss_protection`: **ضرر، زیان، جلوی ضرر، پول نگه داشتن،
+  صندوق اضطراری** and `lose money, protect capital, emergency fund, keep my money`
+
+### 9.6 The cost
+
+| | |
+|---|---|
+| network calls | **0** |
+| index build (once per process, per locale) | ~44 ms |
+| query embed | ~0.16 ms |
+| whole hybrid search | **≈ the lexical search alone** (measured: 14.2 ms vs 15.2 ms — within noise) |
+| cold import | +19 ms |
+
+**The semantic layer is free.** It adds no request, no quota, no GPU, and
+measurably no CPU: the lexical search already scored all 103 items, and the
+semantic scan is 103 cosines against a cached vector.
+
+### 9.7 Where it is wired
+
+| path | change |
+|---|---|
+| `server/aiCollaboration.js` | the chat route's evidence block now uses the hybrid retriever |
+| `server/aiInternalReasoner.js` | the sub-question expansion uses it — a sub-question is usually a paraphrase, so this is where the semantic layer earns its keep |
+| `server/aiIntentOS.js` | `POST /knowledge/search` answers by meaning; `GET /knowledge` reports the index |
+| `src/lib/intent-ai/orchestrator/semanticEmbedder.js` | the concept lattice was extended (§9.5) |
+
+The hybrid **degrades safely**: if the semantic index cannot be built, the
+lexical result is used unchanged. Grounding can never be worse than it was.
+
+### 9.8 The tests
+
+`test/intent-ai/ai-semantic-and-budget.test.mjs` — 16 tests covering both
+levers, all pass. Among them: the semantic layer finds items by meaning with
+no shared vocabulary; the hybrid beats the lexical retriever on paraphrases
+**and is never worse**; the hybrid preserves every lexical hit it already
+had; it marks how each item was found (`lexical`, `lexical+semantic`,
+`semantic-only`); and it still answers with the lexical scorer removed.
+
+---
+
+## §10 — WHERE THE AUDIT STANDS
+
+| lever | state |
+|---|---|
+| **1. grow the knowledge base** | ✅ 27 → 103 items, all 12 categories, retriever rebuilt |
+| **2. wire the semantic vector store into the chat route** | ✅ hybrid retriever live on the chat path; **17/18 vs 11/18** on paraphrase |
+| **3. cut the identical-payload failover retries** | ✅ per-turn ledger; **13 → 9** calls healthy, **16 → 10** with a provider down |
+| **4. leave the cortex as an honest showcase** | ✅ no change; it remains a showcase and is labelled as one |
+
+**What is still the ceiling.** The assistant's knowledge is the corpus, and
+the corpus is 103 items. The retrieval now finds the right item far more
+often, but it cannot answer what the corpus does not contain. The cortex
+still does not participate in answering (§2). And the deployment is still
+CPU-capped, so the free seats remain the only supply.

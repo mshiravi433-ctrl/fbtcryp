@@ -17,6 +17,7 @@
  */
 
 import { searchKnowledge } from '../src/lib/intent-ai/os/knowledgeCenter.js';
+import { hybridKnowledgeSearch } from '../src/lib/intent-ai/os/semanticKnowledge.js';
 import { retrieve as retrieveBm25 } from '../src/lib/intent-ai/retrieval.js';
 import { checkFalsifier } from './aiProfessor.js';
 import { FEE_BPS, feePercentString } from '../src/lib/feeBps.js';
@@ -64,7 +65,14 @@ export function gatherExpandedKnowledge({
   ].filter((q) => typeof q === 'string' && q.trim().length >= 2);
 
   for (const q of queries) {
-    for (const k of searchKnowledge(q, { locale, limit: 3 })) {
+    /* The hybrid retriever: a SUB-QUESTION is usually a paraphrase, so this
+       is where the semantic layer earns its keep. */
+    let hits = [];
+    try {
+      hits = hybridKnowledgeSearch(q, { locale, limit: 3, lexicalSearch: searchKnowledge });
+    } catch { hits = []; }
+    if (!hits.length) hits = searchKnowledge(q, { locale, limit: 3 });
+    for (const k of hits) {
       pool.push(k);
     }
     try {

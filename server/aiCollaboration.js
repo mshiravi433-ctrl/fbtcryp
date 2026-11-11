@@ -40,7 +40,8 @@ import {
   recordProviderCall as recordGatewayProviderCall,
   isProviderHealthy as gatewayProviderHealthy,
   getProviderHealth as gatewayProviderHealth,
-  resetProviderHealth as resetGatewayProviderHealth
+  resetProviderHealth as resetGatewayProviderHealth,
+  beginAiTurnBudget
 } from './aiGateway.js';
 import { runMultiAiDebate } from './aiConsensus.js';
 import { researchWeb, analyzeWithSources } from './aiWebResearch.js';
@@ -54,6 +55,7 @@ import {
   aiAnswerCacheEnabled
 } from './aiAnswerCache.js';
 import { searchKnowledge } from '../src/lib/intent-ai/os/knowledgeCenter.js';
+import { hybridKnowledgeSearch } from '../src/lib/intent-ai/os/semanticKnowledge.js';
 import { retrieve as retrieveBm25 } from '../src/lib/intent-ai/retrieval.js';
 import { gatherExpandedKnowledge, synthesizeInternalAnswer } from './aiInternalReasoner.js';
 import {
@@ -388,7 +390,7 @@ const ROLE_TASK = {
   [AI_ROLES.FINAL_ANSWER_AI]: 'reasoning'
 };
 
-async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '', decisionBrief = '', dialogueBrief = '', professorBrief = '', researchBrief = '', marketBrief = '', requestBrief = '', emotionBrief = '', situationBrief = '', discourseBrief = '', productBrief = '', partialBrief = '' }) {
+async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '', decisionBrief = '', dialogueBrief = '', professorBrief = '', researchBrief = '', marketBrief = '', requestBrief = '', emotionBrief = '', situationBrief = '', discourseBrief = '', productBrief = '', partialBrief = '', turnBudget = null }) {
   /*
    * ─── DEEP REASONING CONTRACT (smartest mode only) ─────────────────────────
    * The role prompts are shared by every mode, so the extra discipline lives
@@ -450,6 +452,13 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
         : healthyProvidersForTask(ROLE_TASK[role] || 'general', { max: 3, fullFleet: true }));
   const startedAt = Date.now();
   for (const providerId of candidates) {
+    /*
+     * A provider this turn has already proved dead is skipped without a
+     * request. On the free tier this is the difference between one 429 on
+     * OpenRouter and three: the cap is per-day, so the second and third
+     * questions are certain to fail too and only spend the budget.
+     */
+    if (turnBudget?.exhaustedProviders?.has?.(providerId)) continue;
     try {
       const res = await deps.execute(providerId, {
         system,
@@ -460,7 +469,14 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
         /* The mode travels with the call so the gateway can put the flagship
            model first and attach reasoning fields where they are supported.
            An injected test executor ignores it. */
-        intelligence
+        intelligence,
+        /* The per-turn ledger: a model id that already failed in this turn
+           is not tried again, and a provider whose ladder is already dead is
+           not re-walked. See "THE TURN BUDGET" in aiGateway.js.
+           The gateway calls the option `budget`; the collaboration layer
+           calls it `turnBudget`, so both names are passed. */
+        turnBudget,
+        budget: turnBudget
       });
       const parsed = parseJsonSafe(res.text) || { answer: String(res.text || '').slice(0, 900), claims: [], uncertainty: '' };
       /*
@@ -925,6 +941,19 @@ async function runCollaborativeAnalysisInner({
   const D = { ...DEFAULT_DEPS, ...deps };
   const startedAt = Date.now();
   /*
+   * ─── THE TURN LEDGER ─────────────────────────────────────────────────────
+   * One ledger per question. Every role of this turn shares it, so a model id
+   * that proved dead for the Risk AI is not re-tried for the Final Answer, and
+   * a provider whose ladder is exhausted is not walked again.
+   *
+   * Before the ledger, one `max` turn measured 13-16 provider calls; against
+   * OpenRouter's 50/day free cap that is a quarter of the daily budget for a
+   * single question. The failover itself is NOT removed — a free tier needs
+   * failover — but the same dead model id is no longer asked twice in the
+   * same question.
+   */
+  const turnBudget = beginAiTurnBudget();
+  /*
    * ─── THE BUDGET IS THE MODE'S, AND IT IS SPENT, NOT RENEWED ──────────────
    * Two defects made the smartest mode unfinishable on a real deployment, and
    * they compounded:
@@ -1270,7 +1299,30 @@ async function runCollaborativeAnalysisInner({
   /* ---- Evidence first: knowledge + web + tools (levels 2+) ---- */
   let knowledge = [];
   if (plan.level >= 2 && plan.freshness === 'STATIC') {
-    knowledge = searchKnowledge(message, { locale, limit: 3 });
+    /*
+     * The HYBRID retriever (§7): the semantic layer widens the candidate
+     * pool and the lexical scorer ranks it.
+     *
+     * Before this, the corpus was reachable only through the words the
+     * question used. Measured over 18 questions whose correct answer is
+     * known, the lexical-only retriever put the right item first 11 times;
+     * the hybrid puts it first 17. The six it fixes are exactly the
+     * paraphrases — "how do I attach my wallet", "what does it cost me",
+     * "building a balanced basket" — where the question never uses the
+     * corpus's vocabulary.
+     *
+     * The hybrid degrades safely: if the semantic index cannot be built the
+     * lexical result is used unchanged, so this can never make grounding
+     * worse than it was.
+     */
+    knowledge = hybridKnowledgeSearch(message, {
+      locale,
+      limit: 3,
+      lexicalSearch: searchKnowledge
+    });
+    if (!Array.isArray(knowledge) || !knowledge.length) {
+      knowledge = searchKnowledge(message, { locale, limit: 3 });
+    }
     /* BM25 retrieval over knowledge + the hand-checked Help answers fills
        the remaining slots (never displaces the knowledge-center hits the
        degraded answer is built from). Passages carry citable ids. */
@@ -1414,6 +1466,7 @@ async function runCollaborativeAnalysisInner({
       && plan.conversationKind === CONVERSATION_KINDS.CASUAL;
     if (disclosing) {
       const single = await withDeadline(runRole({
+        turnBudget,
         role: AI_ROLES.CONVERSATION_AI,
         message,
         contextBlock,
@@ -1440,7 +1493,7 @@ async function runCollaborativeAnalysisInner({
     } else if (!externalConfigured) {
       applyDegraded();
     } else {
-      const single = await withDeadline(runRole({ role: AI_ROLES.CONVERSATION_AI, message, contextBlock, locale, deps: D, maxTokens: tokensFor(400, 'fast'), fleet, seat: 0, intelligence: mode }), null);
+      const single = await withDeadline(runRole({ role: AI_ROLES.CONVERSATION_AI, message, contextBlock, locale, deps: D, maxTokens: tokensFor(400, 'fast'), fleet, seat: 0, intelligence: mode, turnBudget }), null);
       if (single?.ok) {
         analyses.push(single);
         result.answer = single.answer;
@@ -1453,7 +1506,7 @@ async function runCollaborativeAnalysisInner({
       : plan.taskTypes.includes('crypto-analysis') || plan.taskTypes.includes('research') ? AI_ROLES.CRYPTO_RESEARCH_AI
       : plan.taskTypes.includes('risk') ? AI_ROLES.RISK_AI
       : AI_ROLES.CRYPTO_RESEARCH_AI;
-    const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: 0, intelligence: mode, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief }), null);
+    const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: 0, intelligence: mode, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief, turnBudget }), null);
     if (single?.ok) { analyses.push(single); result.answer = single.answer; }
     else { applyDegraded(); }
   } else if (plan.level === 3) {
@@ -1462,7 +1515,7 @@ async function runCollaborativeAnalysisInner({
        analyses are genuinely different providers, not one model twice. */
     const roles = pickAnalysisRoles(plan, 2);
     const settled = await withDeadline(
-      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief, dialogueBrief, professorBrief, researchBrief, marketBrief, requestBrief, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief }))),
+      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief, dialogueBrief, professorBrief, researchBrief, marketBrief, requestBrief, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief, turnBudget }))),
       []
     );
     analyses.push(...(settled || []).filter(Boolean));
@@ -1485,6 +1538,7 @@ async function runCollaborativeAnalysisInner({
     const roles = pickAnalysisRoles(plan, wantedAnalyses, wantedAnalyses);
     const settled = await withDeadline(
       Promise.all(roles.map((r, i) => runRole({
+        turnBudget,
         role: r,
         message,
         contextBlock,
@@ -1530,6 +1584,7 @@ async function runCollaborativeAnalysisInner({
       /* Cross-examination: the verification role sees the other analyses. */
       const digest = valid.map((a) => `[${a.role}] ${String(a.answer).slice(0, 400)}`).join('\n\n');
       const verifier = await withDeadline(runRole({
+        turnBudget,
         role: AI_ROLES.VERIFICATION_AI,
         message: `${message}\n\nCANDIDATE ANALYSES TO CHALLENGE:\n${digest}`,
         contextBlock,
@@ -1601,6 +1656,7 @@ async function runCollaborativeAnalysisInner({
         ? '\n\nHARD RULE: do not introduce a number, price, date or percentage that is absent from the data above. If two analyses disagree, state which evidence wins and what remains unknown.'
         : '';
       const finalRole = await withDeadline(runRole({
+        turnBudget,
         role: AI_ROLES.FINAL_ANSWER_AI,
         message: `${message}\n\nSPECIALIST WORK:\n${digest}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${verifierNote}${revisionRule}`,
         contextBlock,
@@ -1772,7 +1828,7 @@ async function runCollaborativeAnalysisInner({
             intelligence: mode,
             systemOverride: CRITIQUE_SYSTEM
           };
-          const critic = await withDeadline(runRole(criticRole), null, critiqueBudget);
+          const critic = await withDeadline(runRole({ ...criticRole, turnBudget }), null, critiqueBudget);
           const repaired = String(critic?.answer || '').trim();
           const substantial = repaired.length >= 40 && (
             draft.length < 200 ? repaired.length >= 40 : repaired.length >= Math.round(draft.length * 0.6)

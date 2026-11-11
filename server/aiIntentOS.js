@@ -171,6 +171,7 @@ import {
   getQualityDashboard
 } from './aiQuestionIntel.js';
 import { searchKnowledge, listKnowledge, knowledgeStats } from '../src/lib/intent-ai/os/knowledgeCenter.js';
+import { hybridKnowledgeSearch, semanticKnowledgeReport } from '../src/lib/intent-ai/os/semanticKnowledge.js';
 /* Upgrade 13 — conversational depth. The social layer answers a pleasantry in
    the language it was written in, turns «چخبر» into an economic brief, and the
    escalation ladder spends the REST of the fleet when the deterministic reply
@@ -1498,7 +1499,12 @@ router.get('/quality', async (req, res) => {
 
 /* Knowledge center — the internal knowledge layer the AI retrieves from (§55-57). */
 router.get('/knowledge', (_req, res) => {
-  return res.json({ ok: true, stats: knowledgeStats(), items: listKnowledge() });
+  /* The semantic index is reported alongside the corpus so the layer is
+     observable: an operator can see that it is built, how many items it
+     holds and that it costs no network calls. */
+  let semantic = null;
+  try { semantic = semanticKnowledgeReport(); } catch { semantic = null; }
+  return res.json({ ok: true, stats: knowledgeStats(), items: listKnowledge(), semantic });
 });
 
 router.post('/knowledge/search', (req, res) => {
@@ -1506,7 +1512,16 @@ router.post('/knowledge/search', (req, res) => {
   if (!query.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_QUERY' });
   const locale = safe(req.body?.locale, 5) || 'fa';
   const limit = Math.min(5, Math.max(1, Number(req.body?.limit) || 3));
-  const results = searchKnowledge(query, { locale, limit });
+  /*
+   * The search endpoint now answers by MEANING as well as by wording. The
+   * hybrid retriever is used here, so the public search finds the item even
+   * when the caller used their own words for it.
+   */
+  let results = [];
+  try {
+    results = hybridKnowledgeSearch(query, { locale, limit, lexicalSearch: searchKnowledge });
+  } catch { results = []; }
+  if (!results.length) results = searchKnowledge(query, { locale, limit });
   return res.json({ ok: true, results });
 });
 

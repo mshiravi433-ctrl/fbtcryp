@@ -425,14 +425,27 @@ export const PROVIDER_CONFIGS = Object.freeze({
      * The old default was `@cf/meta/llama-3.1-8b-instruct` — an 8B model.
      * It answers quickly and says almost nothing useful. The free tier of
      * Workers AI also serves a genuine reasoning model:
-     * `@cf/deepseek/deepseek-r1-distill-qwen-32b` (R1 distilled into a 32B
-     * Qwen), which is the deepest answer available on Cloudflare's free
-     * tier. Putting it first costs latency, so the mode decides:
+     * `@cf/qwen/qwen3.8-27b` (27B, reasoning low|medium|xhigh, 262K context)
+     * and `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b` (R1 distilled into a
+     * 32B Qwen). Putting the deep ones first costs latency, so the mode
+     * decides:
      *
      *   · `swift`      — the 8B model: it exists to classify and greet;
      *   · `balanced`   — the 70B fp8 model;
-     *   · `max`        — the R1 distill, because "smartest" should mean the
+     *   · `max`        — Qwen 3.8 27B, because "smartest" should mean the
      *                    model that actually reasons.
+     *
+     * ─── TWO IDS THAT WERE WRONG ─────────────────────────────────────────────
+     * The R1 distill was configured as `@cf/deepseek/deepseek-r1-distill-qwen-32b`
+     * but Cloudflare's catalogue spells the publisher `deepseek-ai`:
+     * `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`. The wrong id 404s, and
+     * because the gateway walks the model ladder on a 404, EVERY Cloudflare
+     * seat burned its whole ladder before the router moved on — which is what
+     * made one `max` turn cost 13-16 provider calls.
+     *
+     * The same model is also scheduled for deprecation on 2026-11-20, so it
+     * cannot be the flagship. `@cf/qwen/qwen3.8-27b` is the live replacement:
+     * it reasons, it takes `reasoning_effort`, and it is not going away.
      *
      * `intelligenceModelLadder` (aiIntelligence.js) carries that order, and
      * `getModelCandidates` puts the ladder in front of the default in `max`
@@ -443,8 +456,9 @@ export const PROVIDER_CONFIGS = Object.freeze({
     baseModel: '@cf/meta/llama-3.1-8b-instruct',
     defaultModel: process.env.WORKERSAI_MODEL || '@cf/meta/llama-3.1-8b-instruct',
     fallbackModels: [
+      '@cf/qwen/qwen3.8-27b',
+      '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
       '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
-      '@cf/deepseek/deepseek-r1-distill-qwen-32b',
       '@cf/mistral/mistral-7b-instruct-v0.2',
       '@cf/meta/llama-3.2-3b-instruct'
     ],
@@ -855,6 +869,62 @@ export function classifyAiError(err, providerId = null) {
 // ---------------------------------------------------------------------------
 
 const MODEL_ATTEMPTS = Math.max(1, Number(process.env.AI_MODEL_ATTEMPTS || 3));
+
+/*
+ * ─── THE TURN BUDGET (§7) ──────────────────────────────────────────────────
+ * The gateway had TWO retry loops and they multiplied:
+ *
+ *   runRole tries up to 3 PROVIDERS
+ *     └─ each provider call walks up to 4 MODEL candidates
+ *
+ * One `max` turn could therefore spend 3 × 4 = 12 provider calls for ONE
+ * role, and a turn runs five roles — measured at 13-16 calls per question.
+ * On the free tier that is the whole daily quota: OpenRouter's `:free`
+ * seat allows 50 requests a day, so a single deep question could consume a
+ * quarter of the budget, and a bad provider id could consume it entirely.
+ *
+ * The fix is not "retry less" — failover is what makes a free tier usable
+ * at all. The fix is that a MODEL id is tried ONCE per turn. Walking the
+ * same ladder again for the next provider is pure waste: the ladder is a
+ * property of the provider, not of the attempt, and every id in it has
+ * already proved itself dead or alive in this very turn.
+ *
+ * So the budget is a per-turn ledger:
+ *   · a model id that already FAILED in this turn is not tried again;
+ *   · a provider that already failed on every candidate is not re-walked.
+ *
+ * The ledger is request-scoped, so two concurrent turns never see each
+ * other's failures, and it expires with the request.
+ */
+/** Start a fresh turn ledger. Returns the token that scopes this turn. */
+export function beginAiTurnBudget() {
+  return {
+    failedModels: new Map(),
+    exhaustedProviders: new Set()
+  };
+}
+
+/**
+ * A budget is an object with the ledger's shape, or null for "no budget"
+ * (the legacy behaviour, used by single direct calls).
+ */
+function normalizeBudget(budget) {
+  if (!budget || typeof budget !== 'object') return null;
+  if (!budget.failedModels || typeof budget.failedModels.set !== 'function') return null;
+  if (!budget.exhaustedProviders || typeof budget.exhaustedProviders.add !== 'function') return null;
+  return budget;
+}
+
+/** Models of this provider that already failed in this turn. */
+function failedModelsFor(budget, providerId) {
+  if (!budget) return new Set();
+  let set = budget.failedModels.get(providerId);
+  if (!set) {
+    set = new Set();
+    budget.failedModels.set(providerId, set);
+  }
+  return set;
+}
 
 /**
  * Ordered model candidates for one call.
@@ -1374,11 +1444,11 @@ async function callWorkersAI({ accountId, apiToken, model, system, user, tempera
     max_tokens: maxTokens,
     /*
      * ─── THE REASONING KNOB ON CLOUDFLARE'S FREE SEAT ───────────────────────
-     * `@cf/deepseek/deepseek-r1-distill-qwen-32b` is an R1 distill: a
-     * reasoning model on Cloudflare's free tier. Without this field it was
-     * being called like a plain chat model — the reasoning existed in the
+     * `@cf/qwen/qwen3.8-27b` and `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`
+     * are reasoning models on Cloudflare's free tier. Without this field they
+     * were being called like plain chat models — the reasoning existed in the
      * weights but was never asked for, so the smartest mode got the same
-     * answer from it as from the 8B model it used to default to.
+     * answer from them as from the 8B model it used to default to.
      *
      * `extraBody` is empty for every other Workers AI model, so their
      * request bodies stay byte-identical to before this change.
@@ -1555,10 +1625,32 @@ export async function executeProviderChat(providerId, {
   intelligence = null,
   timeout = TIMEOUT_MS,
   withUsage = false,
-  signal = null
+  signal = null,
+  /* The per-turn ledger. See "THE TURN BUDGET" above: without it the gateway
+     re-walks a provider's whole model ladder every time the caller retries
+     with the next provider, and one question spends 13-16 provider calls. */
+  budget = null
 } = {}) {
   const cfg = PROVIDER_CONFIGS[providerId];
   if (!cfg) throw new Error(`UNKNOWN_PROVIDER:${providerId}`);
+
+  /*
+   * A provider this turn has already PROVED dead is not asked again.
+   *
+   * This is the single most valuable line in the budget. On the free tier a
+   * 429 means the daily cap is reached — the next request is certain to
+   * fail too, so asking again spends quota to learn nothing. Before the
+   * ledger, one question could ask the capped provider three times.
+   */
+  const turnBudget = normalizeBudget(budget);
+  if (turnBudget?.exhaustedProviders?.has?.(providerId)) {
+    const err = new Error(`PROVIDER_EXHAUSTED_THIS_TURN:${providerId}`);
+    err.reasonCode = 'PROVIDER_EXHAUSTED';
+    err.provider = providerId;
+    err.attempts = [];
+    err.fix = 'This provider already failed in this turn; try the next seat.';
+    throw err;
+  }
 
   /*
    * Every path that reaches a provider lands here, so this is where a mode
@@ -1580,7 +1672,28 @@ export async function executeProviderChat(providerId, {
       throw err;
     }
 
-    const candidates = getModelCandidates(providerId, model, { mode });
+    const allCandidates = getModelCandidates(providerId, model, { mode });
+    /*
+     * ─── THE BUDGET CUT ────────────────────────────────────────────────────
+     * Candidates this turn has already PROVED dead are dropped before the
+     * first request goes out. That is the whole point: the ladder is a
+     * property of the provider, so a second walk of it in the same turn
+     * costs real requests and can only re-discover the same failures.
+     */
+    const alreadyFailed = failedModelsFor(turnBudget, providerId);
+    const candidates = turnBudget
+      ? allCandidates.filter((c) => !alreadyFailed.has(c))
+      : allCandidates;
+    /* Every candidate was already tried in this turn — do not spend another
+       request to learn that. */
+    if (turnBudget && !candidates.length && allCandidates.length) {
+      const out = new Error(`ALL_MODELS_ALREADY_TRIED:${providerId}`);
+      out.reasonCode = 'MODEL_UNAVAILABLE';
+      out.provider = providerId;
+      out.attempts = [];
+      out.fix = 'Every model for this provider already failed in this turn.';
+      throw out;
+    }
     let lastErr = null;
     let lastClass = null;
 
@@ -1614,6 +1727,20 @@ export async function executeProviderChat(providerId, {
       } catch (err) {
         const cls = classifyAiError(err, providerId);
         attempts.push({ model: candidate, reasonCode: cls.kind, status: cls.status || null, error: cls.message.slice(0, 200) });
+        /* Mark the id dead for the rest of THIS turn. */
+        if (turnBudget) alreadyFailed.add(candidate);
+        /*
+         * And if the failure says "another model of this provider cannot
+         * help" — a 429 on the free tier, an auth error, a billing refusal —
+         * then this PROVIDER is done for the turn. The caller's next
+         * provider retry must not spend another request to learn the same
+         * thing.
+         *
+         * This is the case that mattered most: OpenRouter's `:free` seat
+         * answers 429 as soon as the daily cap is hit, and the gateway used
+         * to ask it three times per role before giving up.
+         */
+        if (turnBudget && !cls.retryNextModel) turnBudget.exhaustedProviders.add(providerId);
         lastErr = err;
         lastClass = cls;
         console.warn(`[ai-gateway] ${providerId}/${candidate} failed (${cls.kind}${cls.status ? ` HTTP ${cls.status}` : ''}): ${cls.message.slice(0, 180)}`);
@@ -1621,6 +1748,9 @@ export async function executeProviderChat(providerId, {
       }
     }
 
+    /* The provider's ladder is done for this turn: the next provider retry
+       must not walk it again. */
+    if (turnBudget && !candidates.length) turnBudget.exhaustedProviders.add(providerId);
     const durationMs = Date.now() - startedAt;
     recordProviderCall(providerId, {
       ok: false,

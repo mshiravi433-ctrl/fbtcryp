@@ -73,7 +73,8 @@ const MAX_MODEL_LADDERS = Object.freeze({
   groq: Object.freeze(['openai/gpt-oss-120b', 'openai/gpt-oss-20b']),
   mistral: Object.freeze(['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest']),
   workersai: Object.freeze([
-    '@cf/deepseek/deepseek-r1-distill-qwen-32b',
+    '@cf/qwen/qwen3.8-27b',
+    '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
     '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     '@cf/meta/llama-3.1-8b-instruct'
   ]),
@@ -446,11 +447,19 @@ function isFreeTierReasoningModel(model) {
 
 /**
  * Cloudflare Workers AI reasoning models. The `@cf/` prefix hides the family
- * name from the shared matcher, so it gets its own branch: the R1 distill is
- * the only free reasoning model Cloudflare serves.
+ * name from the shared matcher, so it gets its own branch.
+ *
+ * Two families qualify:
+ *   · `qwen3.8-27b`   — Cloudflare documents Reasoning: low | medium | xhigh
+ *   · `deepseek-r1-*` — the R1 distill, which reasons by construction
+ *
+ * The matcher is deliberately narrow. A false positive sends a `reasoning`
+ * field to a model that does not accept it, and that is how a "smarter"
+ * switch becomes a 400 on every request.
  */
 function isWorkersAIReasoningModel(model) {
-  return /deepseek-r1/i.test(String(model || ''));
+  const id = String(model || '');
+  return /deepseek-r1/i.test(id) || /qwen3\.8-27b/i.test(id);
 }
 
 function isAnthropicThinkingModel(model) {

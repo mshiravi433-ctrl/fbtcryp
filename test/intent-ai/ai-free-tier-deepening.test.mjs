@@ -200,9 +200,16 @@ test('swift and balanced send no reasoning fields at all', () => {
   }
 });
 
-test('Cloudflare\'s R1 distill gets a reasoning effort', () => {
+test('Cloudflare\'s reasoning models get a reasoning effort', () => {
   assert.deepEqual(
-    intelligenceReasoningFields('workersai', 'max', '@cf/deepseek/deepseek-r1-distill-qwen-32b'),
+    intelligenceReasoningFields('workersai', 'max', '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b'),
+    { reasoning_effort: 'high' }
+  );
+  /* 2026-11-11 — Qwen 3.8 27B is the new Cloudflare flagship. Cloudflare
+     documents Reasoning: low | medium | xhigh for it, and it accepts
+     `reasoning_effort` exactly as the R1 distill does. */
+  assert.deepEqual(
+    intelligenceReasoningFields('workersai', 'max', '@cf/qwen/qwen3.8-27b'),
     { reasoning_effort: 'high' }
   );
   /* And its other models stay untouched. */
@@ -230,8 +237,27 @@ test('the paid seats are unchanged — this work is additive', () => {
 
 test('the Cloudflare max seat is the reasoning model, not the 8B model', () => {
   const ladder = intelligenceModelLadder('workersai', 'max');
-  assert.equal(ladder[0], '@cf/deepseek/deepseek-r1-distill-qwen-32b');
+  /* 2026-11-11 — Qwen 3.8 27B took the flagship seat. The R1 distill it
+     replaced is scheduled for deprecation on 2026-11-20, so it cannot be the
+     seat the smartest mode depends on. */
+  assert.equal(ladder[0], '@cf/qwen/qwen3.8-27b');
+  assert.ok(ladder.includes('@cf/deepseek-ai/deepseek-r1-distill-qwen-32b'));
   assert.ok(ladder.includes('@cf/meta/llama-3.3-70b-instruct-fp8-fast'));
+});
+
+test('every Cloudflare model id in the ladder is spelled the way Cloudflare spells it', () => {
+  /* The publisher segment is part of the id: `@cf/deepseek-ai/…`, not
+     `@cf/deepseek/…`. A wrong id 404s, and because the gateway walks the
+     ladder on a 404, one wrong id makes the provider burn every candidate
+     before the router moves on. */
+  const ladder = intelligenceModelLadder('workersai', 'max');
+  const fallbacks = PROVIDER_CONFIGS.workersai.fallbackModels;
+  const all = [...ladder, ...fallbacks];
+  for (const id of all) {
+    assert.ok(id.startsWith('@cf/'), `${id} must keep the literal @cf/ prefix`);
+    assert.ok(/^@cf\/[a-z0-9-]+\/[A-Za-z0-9._:-]+$/.test(id), `${id} must be @cf/<publisher>/<model>`);
+  }
+  assert.ok(!all.some((id) => id.startsWith('@cf/deepseek/')), 'the wrong publisher spelling must be gone');
 });
 
 test('Cloudflare\'s default stays the fast model', () => {
