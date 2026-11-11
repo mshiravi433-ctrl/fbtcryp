@@ -1,0 +1,196 @@
+# ============================================================================
+# BUILD THE APP IMAGE → GHCR (free), so a free host can run it without
+# building it itself.
+#
+# WHY THE IMAGE IS BUILT HERE AND NOT ON THE HOST
+# ----------------------------------------------------------------------------
+# `npm run build` needs ~3–4 GB of RAM (vite with --max-old-space-size plus the
+# prebuild vendor scripts). Several free hosts give the RUNTIME 512 MB and the
+# BUILDER not much more, so a build-on-host deploy dies with an OOM that looks
+# like a code error. GitHub's public-repo runners are free and have 7–16 GB, so
+# the image is built once here and every host then only has to `docker pull`.
+#
+# ONE-TIME SETUP (this file lives in ci/ because an automated commit cannot
+# write to .github/workflows — GitHub refuses app tokens there). Two ways to
+# place it, pick one:
+#
+#   A. one command, from a clone of the repo:
+#        mkdir -p .github/workflows \
+#          && cp ci/docker-image.yml .github/workflows/docker-image.yml \
+#          && git add .github/workflows/docker-image.yml \
+#          && git commit -m "ci: build app image" && git push
+#
+#   B. GitHub web UI → Add file → Create new file →
+#      `.github/workflows/docker-image.yml` → paste this file's contents.
+#
+# THEN:
+#   1. Repo → Settings → Secrets and variables → Actions → **Variables** →
+#      New repository variable → `VITE_ENV_FILE`, value = the lines your build
+#      needs (one `KEY=value` per line, e.g. VITE_API_BASE https://fbtswap.ir
+#      is NOT needed for the image — the API is same-origin; the ones that
+#      matter are VITE_WALLETCONNECT_PROJECT_ID, VITE_VAPID_PUBLIC_KEY,
+#      VITE_FEE_RECIPIENT, VITE_FEE_BPS). Without it the image still builds and
+#      runs; WalletConnect, web-push and fee display silently degrade.
+#      Use a **variable**, not a secret: these values are compiled into a
+#      public JavaScript bundle, so a secret gives false comfort and worse logs.
+#   2. Actions → "Build app image" → Run workflow.
+#   3. The image appears at:
+#        ghcr.io/mshiravi433-ctrl/fbtcryp:latest
+#      If the package is private: Settings → Packages → the package →
+#      "Change visibility" → Public. (Free hosts can then pull it anonymously.)
+#
+# The image runs `node server/index.js`: the same Express app the Vercel
+# function mounts, plus the built frontend, on port 8787 (or $PORT — Render and
+# Koyeb inject their own, and server/index.js already honours it).
+#
+# THE SMOKE TEST AT THE END IS THE POINT
+# ----------------------------------------------------------------------------
+# A pushed image is not a working site. The last job pulls the image it just
+# pushed and waits for `/api/health` to answer 200 with the app's own process,
+# so "Render keeps restarting it" is answered here in 2 minutes instead of on a
+# host dashboard an hour later. A red X on this step still leaves the image in
+# GHCR — read the log, fix, re-run.
+# ============================================================================
+name: Build app image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Dockerfile'
+      - 'src/**'
+      - 'server/**'
+      - 'api/**'
+      - 'scripts/**'
+      - 'ci/*.env.sh'
+      - 'package.json'
+      - 'ci/docker-image.yml'
+# No `push: tags:` trigger on purpose: the tag is `latest` + sha, so a v* tag
+# would only rebuild an identical image. The branches/paths filter keeps the
+# cost bounded on a private repo's free minutes.
+concurrency:
+  group: app-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # The lockfile pins macOS-only fsevents as a REQUIRED dep, which makes
+      # `npm ci` fail on Linux with EBADPLATFORM. The Dockerfile passes --force
+      # for the same reason; this step is here so a local `npm ci` in the job
+      # would not surprise anyone reading the log.
+      - name: Lockfile platform guard
+        run: node ci/lock-platform-guard.mjs
+
+      # ── build-time public configuration ──────────────────────────────────
+      # Written as a file rather than twenty build-args: the key list changes
+      # without anyone touching this workflow.
+      - name: Write build.env from the VITE_ENV_FILE variable
+        env:
+          VITE_ENV: ${{ vars.VITE_ENV_FILE }}
+        run: |
+          if [ -z "${VITE_ENV:-}" ]; then
+            echo "::warning title=No VITE_ENV_FILE::The image will build without VITE_* values — WalletConnect, web-push and fee display will degrade. Set the repository variable VITE_ENV_FILE (Settings → Secrets and variables → Actions → Variables)."
+            exit 0
+          fi
+          printf '%s\n' "$VITE_ENV" > build.env
+          # A line that is not KEY=value is almost always a pasted export or
+          # quote and would silently be ignored by Vite.
+          if grep -vE '^[[:space:]]*$|^[[:space:]]*#' build.env | grep -qvE '^[A-Za-z_][A-Za-z0-9_]*='; then
+            echo "::error title=Malformed VITE_ENV_FILE::Every non-empty line must be KEY=value (no 'export', no quotes around the whole line). Offending lines:"
+            grep -vE '^[[:space:]]*$|^[[:space:]]*#' build.env | grep -vE '^[A-Za-z_][A-Za-z0-9_]*=' | sed 's/^/  /'
+            exit 1
+          fi
+          # Only VITE_* reaches the bundle. Anything else in this file is dead
+          # weight — and if it looks like a secret, it is a mistake worth loud
+          # output in the log.
+          NON_VITE="$(grep -E '^[A-Za-z_][A-Za-z0-9_]*=' build.env | cut -d= -f1 | grep -v '^VITE_' || true)"
+          if [ -n "$NON_VITE" ]; then
+            echo "::warning title=Ignored keys in VITE_ENV_FILE::Vite only inlines VITE_* keys. Ignored: $(echo "$NON_VITE" | tr '\n' ' ')"
+          fi
+          if grep -qiE '^VITE_[A-Z0-9_]*(SECRET|PRIVATE|MNEMONIC|PASSWORD)' build.env; then
+            echo "::error title=Secret-looking VITE_ key::VITE_* values are compiled into a public bundle. Remove that line from VITE_ENV_FILE."; 
+            grep -iE '^VITE_[A-Z0-9_]*(SECRET|PRIVATE|MNEMONIC|PASSWORD)' build.env | cut -d= -f1 | sed 's/^/  /'
+            exit 1
+          fi
+          echo "build.env keys (values not printed):"
+          grep -E '^VITE_' build.env | cut -d= -f1 | sort | sed 's/^/  · /'
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # Hosts run amd64. Pinned so an arm runner (or a future arm64-only
+          # builder) cannot silently produce an image Render/Koyeb cannot run.
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # `build.env`, if written above, is copied by `COPY . .` and becomes
+          # `.env.production` inside the build stage (see the Dockerfile).
+          # VERCEL_ENV/FARM_CAPITAL are the two parity switches; the defaults
+          # (production / on) match the live Vercel build.
+          build-args: |
+            VERCEL_ENV=production
+            FARM_CAPITAL=on
+
+      # ── the image is not a site until it boots ──────────────────────────
+      - name: Smoke test — does the image actually serve?
+        run: |
+          IMAGE="ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          docker pull "$IMAGE"
+          docker run -d --name fbt-smoke -p 8787:8787 "$IMAGE"
+          ok=0
+          for i in $(seq 1 30); do
+            sleep 2
+            if curl -fsS -m 3 http://127.0.0.1:8787/api/health > /tmp/health.json 2>/dev/null; then ok=1; break; fi
+            if ! docker ps --quiet --filter name=fbt-smoke | grep -q .; then
+              echo "::error title=Image exited during boot::"
+              docker logs fbt-smoke || true
+              exit 1
+            fi
+          done
+          echo "--- /api/health ---"; cat /tmp/health.json 2>/dev/null || true; echo
+          echo "--- container logs ---"; docker logs fbt-smoke 2>&1 | tail -30 || true
+          docker rm -f fbt-smoke >/dev/null 2>&1 || true
+          if [ "$ok" != "1" ]; then
+            echo "::error title=Health check never answered::The image was pushed, but /api/health did not return 200 within 60s. Do not point a host at this image until this is green."
+            exit 1
+          fi
+          echo "✅ image boots and answers /api/health"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Image" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "ghcr.io/${{ github.repository }}:latest" >> "$GITHUB_STEP_SUMMARY"
+          echo "ghcr.io/${{ github.repository }}:${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Run anywhere:  docker run -p 8787:8787 ghcr.io/${{ github.repository }}:latest" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "If the package is private, make it public: Settings → Packages → this package → Change visibility → Public." >> "$GITHUB_STEP_SUMMARY"
