@@ -192,10 +192,127 @@ it means **"the benchmark score went up" is not evidence that the AI got smarter
 **If the goal is a smarter AI, the cortex is the wrong lever.** The levers that
 matter, in order:
 
-1. **Grow the knowledge base** (27 → hundreds). It is the direct ceiling on what
-   the AI can know, and it is cheap to grow — no GPU, no quota.
+1. ~~**Grow the knowledge base** (27 → hundreds). It is the direct ceiling on what
+   the AI can know, and it is cheap to grow — no GPU, no quota.~~ **DONE —
+   see §7 below.**
 2. **Wire the semantic vector store into the main chat route** so recall is by
    meaning, not keyword. The machinery exists and is already server-side.
 3. **Cut the identical-payload retries** so the same quota buys 2–3× the turns.
 4. **Leave the cortex where it is** — it is a good, honest showcase. Just do not
    count it as the mind.
+
+---
+
+## 7. THE KNOWLEDGE BASE — EXPANDED (2026-11-11)
+
+Lever 1 has been executed. The corpus went from **27 items to 103**, and the
+retriever was rebuilt around it.
+
+### 7.1 The corpus
+
+| | before | after |
+|---|---|---|
+| items | 27 | **103** |
+| categories with ≥1 item | 11 of 12 | **12 of 12** |
+| categories with ≥3 items | 4 of 12 | **12 of 12** |
+| items carrying tags | 12 | **103** |
+
+`FAQ` was empty and is now 5 items. Every one of the twelve categories carries
+at least three. The 76 new items live in `src/lib/intent-ai/os/knowledgeWide.js`
+(the seed corpus stays in `knowledgeCenter.js`, untouched and auditable).
+
+Coverage added: slippage and price impact · the two-step approval flow ·
+quote expiry · gas and priority fees · APR vs APY and why real yield is lower ·
+impermanent loss · stablecoin risk · smart-contract risk · a deposit checklist ·
+leverage and the funding cost on both sides · stop loss placement ·
+diversification · exchange custody · DCA vs lump sum · why traders lose ·
+emergency reserves · funding rate · perpetual vs spot · liquidation ·
+open interest · order types and time-in-force · what a wallet really is ·
+seed phrases · phishing · spending approvals · gas · what a blockchain solves ·
+tokens vs coins · NFTs · bridges · ERC-20 vs native · the MVRV in practice ·
+CEX vs DEX · dusting · Solana fees, speed, failed transactions, senders, PDA ·
+signal reliability · smart-money limits · the assistant's own data sources ·
+its honesty rules and its limits · portfolio, earn, signals, security,
+derivatives, insurance, support and roadmap · macro liquidity, real rates, safe
+haven and ETF flows · SOPR · volume and on-chain divergence · the risk score and
+the scenarios.
+
+Every item states only **stable** knowledge. No item contains a price, a
+balance, an APY or a date — those come from the live tools at answer time, and
+the benchmark asserts that rule.
+
+### 7.2 The retriever was the real problem
+
+Expanding the corpus alone would not have helped: the retriever diluted the
+meaning of a question with its function words, could not match a word to its
+inflection, and resolved ties by comparing id strings.
+
+Four fixes, all measured:
+
+| fix | what it was doing wrong |
+|---|---|
+| **stopwords** | the score is `overlap / qTokens.size`, so "how do I recover my wallet" spent two thirds of its budget on *how* and *do*. English and Persian function words are now dropped from the **query only** — the corpus keeps every word, because a stopword can be the whole answer ("is my wallet safe" → "safe"). |
+| **light English morphology** | the corpus said *liquidation*, the user wrote *liquidated*; the corpus said *staking*, the user wrote *stake*. A shallow stemmer now converges the `-ation/-ated/-ate` and `-ing/-ed/-s` families. A small blocklist keeps genuinely different words apart: *liquidity* must not collapse into *liquidated*, or a question about getting liquidated retrieves the ETF-flows item. |
+| **definitional intent** | "بیت کوین چیست؟" and "what is ethereum" ask for the **definition** of one subject, but many items mention that subject, so plain overlap tied them all and an id comparison decided the winner. The item whose title *is* the definition now wins outright; an item that merely mentions the subject does not. |
+| **title tie-break** | when two items are about the same subject and only one carries it in its **title** (not its tags), the title wins. Without this, "how does staking work" was a coin flip between the Earn section and the DeFi yield-risk item. |
+
+One bug worth recording: the `-ing` rules were ordered wrongly, so `staking`
+stemmed to `stak` while `stake` stayed `stake` — two tokens for one word, the
+exact failure the stemmer existed to prevent. The specific forms must be tried
+**before** the general one.
+
+### 7.3 Measured result
+
+Same 56 realistic questions, old corpus + old retriever against the new one:
+
+| | before | after |
+|---|---|---|
+| corpus size | 27 | **103** |
+| questions that find an item | 55 / 56 (98%) | **56 / 56 (100%)** |
+| **weak matches** (top score < 60) | **10** | **0** |
+
+The ten weak matches were the expensive kind: a question about impermanent loss
+retrieved the MVRV item, a question about liquidation retrieved the MVRV item,
+a question about connecting a wallet retrieved the MVRV item. The answer was
+grounded — but on the **wrong** knowledge, which is worse than an honest
+"here is what I know" because the model would answer confidently from it.
+
+End to end, the answers now land on the right item:
+
+```
+ضرر غیرخطی چیست        -> ریسک ضرر غیرخطی (Impermanent Loss) چیست؟
+لیکویید شدن یعنی چی    -> لیکوییدشدن (Liquidation) چیست و چطور جلویش را بگیرم؟
+چطور وصل کنم           -> چطور کیف پول را وصل کنم؟
+پشتیبانی چطوره         -> چطور با پشتیبانی FBT تماس بگیرم؟
+نرخ تاموینگ چیه        -> نرخ تاموینگ (Funding Rate) چیست؟
+حجم معامله خوبه؟       -> آیا حجم معاملهٔ بالا همیشه خوب است؟
+what is funding rate   -> What is the funding rate?
+how do i recover my wallet -> What if I lose my phone or browser?
+```
+
+### 7.4 The benchmark
+
+`test/intent-ai/ai-knowledge-corpus.test.mjs` — 11 tests, **11/11 pass**:
+
+- every item is well formed, and every category carries at least three items
+- every item carries tags in **both** languages, because the retriever is
+  bilingual and a Persian-only tag cannot serve an English question
+- **41 precision cases** — the right item must come **first**, not merely be
+  present, in Persian and in English
+- the corpus never states a live price, balance or APY
+- retrieval stays deterministic and order-stable
+- a deprecated item is never retrieved
+
+The precision cases are the point of the file: they pin the *ordering*, so a
+future corpus edit that silently breaks grounding fails loudly instead of
+quietly answering from the wrong item.
+
+### 7.5 What this did NOT do
+
+The corpus grew; **the meaning did not**. Retrieval is still lexical. Two
+questions with the same intent but different words still need different
+wording. Lever 2 — wiring the semantic vector store into the main chat route —
+is the remaining step, and the machinery for it already exists server-side.
+
+The cost side is unchanged too: a `max` turn still makes 13 provider calls
+(§4). Lever 3 stands.
