@@ -76,6 +76,10 @@ __pycache__/
 # at ~1 MB; a clone never pays for weights it may not need.
 public/kronos-local/
 public/kronos-onnx/
+# Generated at build time by scripts/gen-whats-new.mjs from CHANGELOG.md.
+# Committing it would mean a file that drifts from the changelog it summarises
+# and a merge conflict on every release note.
+public/whats-new.json
 
 # ONNX Runtime Web engine files (ort-wasm-simd-threaded[.asyncify].{mjs,wasm},
 # ~37 MB). Vendored from node_modules into public/kronos-ort/ on every build by
