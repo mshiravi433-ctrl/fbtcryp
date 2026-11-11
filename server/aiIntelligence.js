@@ -73,11 +73,37 @@ const MAX_MODEL_LADDERS = Object.freeze({
   groq: Object.freeze(['openai/gpt-oss-120b', 'openai/gpt-oss-20b']),
   mistral: Object.freeze(['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest']),
   workersai: Object.freeze([
-    '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     '@cf/deepseek/deepseek-r1-distill-qwen-32b',
+    '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     '@cf/meta/llama-3.1-8b-instruct'
   ]),
-  aimlapi: Object.freeze(['gpt-4o', 'meta-llama/Llama-3.3-70B-Instruct', 'gpt-4o-mini'])
+  aimlapi: Object.freeze(['gpt-4o', 'meta-llama/Llama-3.3-70B-Instruct', 'gpt-4o-mini']),
+  /*
+   * ─── THE FREE SEAT'S LADDER ────────────────────────────────────────────────
+   * `openrouterfree` is a SEPARATE seat from `openrouter` because it serves a
+   * different catalogue: the `:free` ids. The paid ladder's flagships
+   * (`gemini-2.5-pro`, `gpt-4.1`, `claude-sonnet-4-6`, `grok-4`) are all paid
+   * ids, and a free key calling one answers 402 — an account-level failure
+   * that stops the model walk. So the free seat gets its own ladder, drawn
+   * only from ids that were verified to answer on the free tier:
+   *
+   *   · nvidia/nemotron-3.5-super-vl:free — the default: 1M context, the
+   *     only free id that answered JSON extraction, a tool call and a coding
+   *     task on every attempt across a 10-day benchmark;
+   *   · nvidia/nemotron-3-ultra-550b-a55b:free — the deepest free answer
+   *     (a 550B MoE built for reasoning and orchestration);
+   *   · nvidia/nemotron-3.5-lightning:free — fast, high-volume.
+   *
+   * The remaining free ids (the nano reasoning one, North Mini Code, Gemma 4
+   * and OpenRouter's own free router) stay behind them in the provider's
+   * fallback list, so a withdrawn flagship costs one round-trip rather than
+   * an outage — the ladder is an ORDERING, never a whitelist.
+   */
+  openrouterfree: Object.freeze([
+    'nvidia/nemotron-3.5-super-vl:free',
+    'nvidia/nemotron-3-ultra-550b-a55b:free',
+    'nvidia/nemotron-3.5-lightning:free'
+  ])
 });
 
 /**
@@ -87,11 +113,11 @@ const MAX_MODEL_LADDERS = Object.freeze({
  * nothing that pinned a route silently moves.
  */
 const MAX_PROVIDER_ORDER = Object.freeze({
-  general: ['openai', 'anthropic', 'openrouter', 'xai', 'gemini', 'deepseek', 'groq', 'aimlapi', 'mistral', 'workersai', 'internal'],
-  market: ['xai', 'openrouter', 'openai', 'gemini', 'anthropic', 'deepseek', 'groq', 'aimlapi', 'workersai', 'internal'],
-  research: ['xai', 'openrouter', 'openai', 'gemini', 'anthropic', 'deepseek', 'groq', 'aimlapi', 'workersai', 'internal'],
-  reasoning: ['openai', 'anthropic', 'openrouter', 'deepseek', 'gemini', 'xai', 'aimlapi', 'groq', 'workersai', 'internal'],
-  risk: ['anthropic', 'openai', 'deepseek', 'openrouter', 'gemini', 'xai', 'aimlapi', 'groq', 'workersai', 'internal']
+  general: ['openai', 'anthropic', 'openrouter', 'openrouterfree', 'xai', 'gemini', 'deepseek', 'groq', 'aimlapi', 'mistral', 'workersai', 'internal'],
+  market: ['xai', 'openrouter', 'openrouterfree', 'openai', 'gemini', 'anthropic', 'deepseek', 'groq', 'aimlapi', 'workersai', 'internal'],
+  research: ['xai', 'openrouter', 'openrouterfree', 'openai', 'gemini', 'anthropic', 'deepseek', 'groq', 'aimlapi', 'workersai', 'internal'],
+  reasoning: ['openai', 'anthropic', 'openrouter', 'openrouterfree', 'deepseek', 'gemini', 'xai', 'aimlapi', 'groq', 'workersai', 'internal'],
+  risk: ['anthropic', 'openai', 'deepseek', 'openrouter', 'openrouterfree', 'gemini', 'xai', 'aimlapi', 'groq', 'workersai', 'internal']
 });
 
 const TASK_ALIASES = Object.freeze({
@@ -369,6 +395,64 @@ function isGroqReasoningModel(model) {
   return /gpt-oss/i.test(String(model || ''));
 }
 
+/**
+ * ─── THE FREE-TIER REASONING MODELS ────────────────────────────────────────
+ *
+ * The original matcher (`isGatewayReasoningModel`) only recognised ids that
+ * literally spell a reasoning family: `gpt-5`, `o1`..`o9`, `deepseek-r1`,
+ * `deepseek-reasoner`, `qwq`, `thinking`. That regex was written when the
+ * gateway only ever spoke to paid catalogues.
+ *
+ * The free catalogues are different, and they were silently losing their
+ * reasoning knob:
+ *
+ *   · OpenRouter's free tier serves NVIDIA's Nemotron family. The flagship
+ *     `nvidia/nemotron-3-ultra-550b-a55b:free` is a reasoning AND
+ *     orchestration model — it thinks by default — but no substring of its id
+ *     matched, so the gateway sent it a plain request with no reasoning
+ *     budget. The model still reasoned (it reasons by default), but the
+ *     gateway could not ask for MORE of it, which is the whole point of the
+ *     smartest mode. `nemotron-3.5-lightning` and
+ *     `nemotron-3-nano-omni-...-reasoning` are the same story.
+ *
+ *   · Cloudflare's free tier serves `@cf/deepseek/deepseek-r1-distill-qwen-32b`
+ *     — an R1 distill, i.e. a reasoning model — under a `@cf/` prefix that
+ *     the matcher never saw, because `workersai` had no reasoning branch at
+ *     all.
+ *
+ * So this matcher names the free reasoning families explicitly. It is
+ * deliberately narrow: a false positive would send a `reasoning` field to a
+ * model that does not accept it, and that is how a "smarter" switch becomes a
+ * 400 on every request — the exact failure the original comment warns about.
+ */
+function isFreeTierReasoningModel(model) {
+  /*
+   * ONLY the Nemotron family, and only the members that were verified to
+   * expose a reasoning knob on the free tier in November 2026:
+   *
+   *   · nvidia/nemotron-3-ultra-550b-a55b:free — reasoning + orchestration;
+   *   · nvidia/nemotron-3.5-super-vl:free — tools + reasoning;
+   *   · nvidia/nemotron-3.5-lightning:free — tools + reasoning;
+   *   · nvidia/nemotron-3-nano-omni-...-reasoning:free — reasoning.
+   *
+   * `google/gemma-4-*` is deliberately NOT here: Gemma 4's thinking is
+   * optional rather than a documented effort knob, and `cohere/north-mini-code`
+   * has none at all. A false positive sends a field the model rejects, and
+   * that is how a "smarter" switch becomes a 400 on every request — so the
+   * matcher names only what was actually verified.
+   */
+  return /nemotron-3(\.5)?-(ultra|super-vl|lightning|nano)|nemotron-3.*reasoning/i.test(String(model || ''));
+}
+
+/**
+ * Cloudflare Workers AI reasoning models. The `@cf/` prefix hides the family
+ * name from the shared matcher, so it gets its own branch: the R1 distill is
+ * the only free reasoning model Cloudflare serves.
+ */
+function isWorkersAIReasoningModel(model) {
+  return /deepseek-r1/i.test(String(model || ''));
+}
+
 function isAnthropicThinkingModel(model) {
   /* Claude 4.x and later run extended thinking; the 3.x family does not. */
   return /claude-(sonnet|opus|haiku)-(?:[4-9]|\d{2,})/i.test(String(model || '')) && !/claude-3/i.test(String(model || ''));
@@ -386,6 +470,23 @@ function isGeminiThinkingModel(model) {
  *   · Groq         — `reasoning_effort` on gpt-oss.
  * Everything else returns `{}` and the request body is byte-identical to
  * before this module existed.
+ *
+ * ─── AND THE FREE SEATS ────────────────────────────────────────────────────
+ * Two additions, both about models the gateway was calling WITHOUT their
+ * reasoning knob:
+ *
+ *   · `openrouterfree` — the free `:free` Nemotron ids reason by default,
+ *     but the gateway never sent a reasoning budget, so the smartest mode
+ *     could not ask for more depth from the deepest free model there is.
+ *     OpenRouter documents `reasoning: { effort }` for reasoning-capable ids
+ *     on both the paid and the free catalogue, so the same field applies.
+ *   · `workersai` — Cloudflare's `@cf/deepseek/deepseek-r1-distill-qwen-32b`
+ *     is an R1 distill and had NO branch at all. Workers AI accepts
+ *     `reasoning_effort` on its reasoning models.
+ *
+ * `isFreeTierReasoningModel` is narrow on purpose: a false positive sends a
+ * field the model rejects, and that is how a "smarter" switch becomes a 400
+ * on every request.
  */
 export function intelligenceReasoningFields(providerId, mode, model) {
   if (!getIntelligenceProfile(mode).reasoning) return {};
@@ -395,6 +496,10 @@ export function intelligenceReasoningFields(providerId, mode, model) {
   if (id === 'groq' && isGroqReasoningModel(m)) return { reasoning_effort: 'high' };
   if (id === 'openrouter' && isGatewayReasoningModel(m)) return { reasoning: { effort: 'high' } };
   if (id === 'aimlapi' && isGatewayReasoningModel(m)) return { reasoning_effort: 'high' };
+  if (id === 'openrouterfree' && (isGatewayReasoningModel(m) || isFreeTierReasoningModel(m))) {
+    return { reasoning: { effort: 'high' } };
+  }
+  if (id === 'workersai' && isWorkersAIReasoningModel(m)) return { reasoning_effort: 'high' };
   return {};
 }
 

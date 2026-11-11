@@ -157,6 +157,103 @@ export const PROVIDER_CONFIGS = Object.freeze({
     costTier: 'medium',
     latencyTier: 'medium'
   },
+  /*
+   * ═══ THE FREE SEAT OF OPENROUTER ═════════════════════════════════════════
+   *
+   * WHY THIS IS A SEPARATE PROVIDER AND NOT A FLAG ON `openrouter`
+   * ---------------------------------------------------------------------
+   * The deployment's OpenRouter key is on the FREE tier. Every model id the
+   * `openrouter` seat knows — `openai/gpt-4o-mini`, `google/gemini-2.5-pro`,
+   * `anthropic/claude-sonnet-4-6`, `x-ai/grok-4` — is a PAID id. A free key
+   * calling a paid id answers HTTP 402 "Insufficient Balance", which the
+   * gateway classifies as BILLING: an ACCOUNT-level failure that stops the
+   * model walk immediately instead of stepping to the next id. So the paid
+   * seat spent a round-trip on every request, burned CPU, and produced
+   * nothing — the free capacity the key actually has was never reachable,
+   * because the registry contained no `:free` id at all.
+   *
+   * Making it a flag on `openrouter` would have been worse: the same key
+   * would then have to be trusted to serve a PAID id, so a key that was
+   * topped up would silently change which model answered. Two seats, one
+   * key, two honest model lists: the operator chooses by declaring the
+   * fleet (`FBT_AI_PROVIDERS`), not by hoping a request lands on the right
+   * id.
+   *
+   * WHY THESE SPECIFIC IDS
+   * ---------------------------------------------------------------------
+   * The free catalog churns — ids appear and disappear, and a withdrawn id
+   * answers 404 forever. So this list is deliberately short, and every id
+   * in it was verified to answer on the free tier in November 2026:
+   *
+   *   · nvidia/nemotron-3.5-super-vl:free — the strongest all-rounder in the
+   *     free catalog: 1M context, and the only one that passed JSON
+   *     extraction, a tool call and a small coding task on every attempt
+   *     across a 10-day benchmark. It is the default because "it answered
+   *     correctly" beats "it is the biggest".
+   *   · nvidia/nemotron-3-ultra-550b-a55b:free — the flagship: a 550B MoE
+   *     built for reasoning and orchestration, also 1M context. Slower
+   *     (29 tok/s) but the deepest answer available for free.
+   *   · nvidia/nemotron-3.5-lightning:free — the fast, high-volume seat.
+   *   · nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free — a
+   *     reasoning-labelled id; the one whose uptime is least reliable, so it
+   *     is tried and skipped rather than trusted first.
+   *   · cohere/north-mini-code:free — the code specialist.
+   *   · google/gemma-4-31b-it:free — the only free id that does NOT train
+   *     on prompts, which is why it is here at all.
+   *   · openrouter/free — OpenRouter's own router over the free catalog.
+   *     The safety net: when a named id is withdrawn, this still answers.
+   *
+   * The free tier allows 20 requests/minute and 50/day (1,000/day once
+   * $10 has been bought on the account). The daily cap is why the answer
+   * cache exists and why this seat is not the one a busy screen polls.
+   */
+  openrouterfree: {
+    name: 'OpenRouter Free',
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    envKey: 'OPENROUTER_API_KEY',
+    /* The SAME key as the paid seat. This is a second model list, not a
+       second account — no new key, no new secret to store. */
+    envKeys: ['OPENROUTER_API_KEY', 'OPENROUTER_KEY', 'OPEN_ROUTER_API_KEY'],
+    modelEnv: 'OPENROUTER_FREE_MODEL',
+    baseModel: 'nvidia/nemotron-3.5-super-vl:free',
+    defaultModel: process.env.OPENROUTER_FREE_MODEL || 'nvidia/nemotron-3.5-super-vl:free',
+    fallbackModels: [
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'nvidia/nemotron-3.5-lightning:free',
+      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+      'cohere/north-mini-code:free',
+      'google/gemma-4-31b-it:free',
+      /* OpenRouter's own free router: it picks a live free model for us, so
+         a withdrawn id above costs one round-trip, not an outage. */
+      'openrouter/free'
+    ],
+    retiredModels: [
+      /* Ids that were in the free catalog and are gone now. They answer 404,
+         so they must never be chosen automatically — but an explicit request
+         for one is still honoured (a paid account may own the paid id). */
+      'poolside/laguna-s-2.1:free',
+      'poolside/laguna-xs-2.1:free',
+      'poolside/laguna-m.1:free',
+      'poolside/laguna-xs.2:free',
+      'nvidia/nemotron-3.5-content-safety:free',
+      'nvidia/nemotron-3-super-120b-a12b:free',
+      'nvidia/nemotron-nano-12b-v2-vl:free',
+      'nvidia/nemotron-nano-9b-v2:free',
+      'openai/gpt-oss-120b:free',
+      'qwen/qwen3-coder:free',
+      'deepseek/deepseek-r1:free',
+      'mistralai/mistral-7b-instruct:free',
+      'nousresearch/hermes-3-llama-3.1-405b:free',
+      'arcee-ai/trinity-large-thinking:free',
+      'google/gemma-3-27b-it:free',
+      'z-ai/glm-4.5-air:free',
+      'deepseek/deepseek-chat-v3-0324:free'
+    ],
+    type: 'openai-compatible',
+    specialty: 'Free Tier Reasoning & Orchestration — 1M-Context Nemotron/Gemma Seats at Zero Cost',
+    costTier: 'free',
+    latencyTier: 'medium'
+  },
   openai: {
     name: 'OpenAI GPT',
     url: 'https://api.openai.com/v1/chat/completions',
@@ -322,12 +419,37 @@ export const PROVIDER_CONFIGS = Object.freeze({
     envKeys: ['CLOUDFLARE_API_TOKEN', 'CF_API_TOKEN', 'CLOUDFLARE_AI_TOKEN'],
     accountEnvKeys: ['CLOUDFLARE_ACCOUNT_ID', 'CF_ACCOUNT_ID'],
     modelEnv: 'WORKERSAI_MODEL',
+    /*
+     * ─── TWO SEATS IN ONE PROVIDER: FAST AND DEEP ──────────────────────────
+     * The old default was `@cf/meta/llama-3.1-8b-instruct` — an 8B model.
+     * It answers quickly and says almost nothing useful. The free tier of
+     * Workers AI also serves a genuine reasoning model:
+     * `@cf/deepseek/deepseek-r1-distill-qwen-32b` (R1 distilled into a 32B
+     * Qwen), which is the deepest answer available on Cloudflare's free
+     * tier. Putting it first costs latency, so the mode decides:
+     *
+     *   · `swift`      — the 8B model: it exists to classify and greet;
+     *   · `balanced`   — the 70B fp8 model;
+     *   · `max`        — the R1 distill, because "smartest" should mean the
+     *                    model that actually reasons.
+     *
+     * `intelligenceModelLadder` (aiIntelligence.js) carries that order, and
+     * `getModelCandidates` puts the ladder in front of the default in `max`
+     * while leaving `balanced`/`swift` exactly as they were. The default
+     * stays the fast model so an unconfigured mode never inherits the
+     * slowest seat on the fleet.
+     */
     baseModel: '@cf/meta/llama-3.1-8b-instruct',
     defaultModel: process.env.WORKERSAI_MODEL || '@cf/meta/llama-3.1-8b-instruct',
-    fallbackModels: ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/mistral/mistral-7b-instruct-v0.2', '@cf/deepseek/deepseek-r1-distill-qwen-32b', '@cf/meta/llama-3.2-3b-instruct'],
+    fallbackModels: [
+      '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+      '@cf/deepseek/deepseek-r1-distill-qwen-32b',
+      '@cf/mistral/mistral-7b-instruct-v0.2',
+      '@cf/meta/llama-3.2-3b-instruct'
+    ],
     retiredModels: [],
     type: 'workersai-native',
-    specialty: 'Free Serverless Open Models (Llama/Mistral/DeepSeek) — Private Edge Inference',
+    specialty: 'Free Serverless Open Models (Llama/DeepSeek-R1/Mistral) — Private Edge Inference',
     costTier: 'free',
     latencyTier: 'fast'
   },
@@ -1204,7 +1326,7 @@ async function callAnthropic({ apiKey, model, system, user, temperature = 0.3, m
 }
 
 /** Cloudflare Workers AI (serverless open models via REST run endpoint) */
-async function callWorkersAI({ accountId, apiToken, model, system, user, temperature = 0.3, maxTokens = 800, timeout = TIMEOUT_MS, withUsage = false, signal = null }) {
+async function callWorkersAI({ accountId, apiToken, model, system, user, temperature = 0.3, maxTokens = 800, timeout = TIMEOUT_MS, withUsage = false, signal = null, extraBody = {} }) {
   assertNoSecretsInPayload({ system, user });
   const sanitizedSystem = sanitizePrompt(system);
   const sanitizedUser = sanitizePrompt(user);
@@ -1233,7 +1355,19 @@ async function callWorkersAI({ accountId, apiToken, model, system, user, tempera
       { role: 'user', content: sanitizedUser }
     ],
     temperature,
-    max_tokens: maxTokens
+    max_tokens: maxTokens,
+    /*
+     * ─── THE REASONING KNOB ON CLOUDFLARE'S FREE SEAT ───────────────────────
+     * `@cf/deepseek/deepseek-r1-distill-qwen-32b` is an R1 distill: a
+     * reasoning model on Cloudflare's free tier. Without this field it was
+     * being called like a plain chat model — the reasoning existed in the
+     * weights but was never asked for, so the smartest mode got the same
+     * answer from it as from the 8B model it used to default to.
+     *
+     * `extraBody` is empty for every other Workers AI model, so their
+     * request bodies stay byte-identical to before this change.
+     */
+    ...(extraBody && typeof extraBody === 'object' ? extraBody : {})
   };
 
   const raw = await httpReq(url, {
@@ -1359,11 +1493,17 @@ async function runProviderModel(providerId, cfg, apiKey, model, { system, user, 
   if (cfg.type === 'workersai-native') {
     const accountId = getCloudflareAccountId();
     if (!accountId) throw new Error('NO_CLOUDFLARE_ACCOUNT_ID');
-    return callWorkersAI({ accountId, apiToken: apiKey, model, system, user, temperature, maxTokens, timeout, withUsage, signal });
+    /* Workers AI accepts `reasoning_effort` on its reasoning models (the R1
+       distill). Empty for every other model, so their bodies are unchanged. */
+    const workersExtraBody = intelligenceReasoningFields(providerId, mode, model);
+    return callWorkersAI({ accountId, apiToken: apiKey, model, system, user, temperature, maxTokens, timeout, withUsage, signal, extraBody: workersExtraBody });
   }
   // OpenAI Compatible (OpenRouter, Groq, DeepSeek, Mistral, AIMLAPI)
   const extraHeaders = {};
-  if (providerId === 'openrouter') {
+  /* Both OpenRouter seats get the attribution headers. OpenRouter uses them
+     for its leaderboard and rate-limits harder on requests that omit them, so
+     the free seat needs them exactly as much as the paid one. */
+  if (providerId === 'openrouter' || providerId === 'openrouterfree') {
     extraHeaders['HTTP-Referer'] = SITE_URL;
     extraHeaders['X-Title'] = 'FBT Smart Intent OS';
   }

@@ -275,10 +275,16 @@ async function runAll() {
      * now leads with the provider's flagship seat. The regression this check
      * exists for is the URL SHAPE (literal `@`, literal slashes), not which
      * model ranks first; `balanced` below still reaches the historical id.
+     *
+     * 2026-11-11 — the `max` seat of Cloudflare is now the R1 distill
+     * (`@cf/deepseek/deepseek-r1-distill-qwen-32b`), because "smartest" on
+     * a free tier should mean the model that actually reasons rather than
+     * the biggest one. The URL shape is unchanged: the `@` and the slashes
+     * are still literal.
      */
     assert.equal(
       calls[0].url,
-      'https://api.cloudflare.com/client/v4/accounts/32hexaccountid/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast'
+      'https://api.cloudflare.com/client/v4/accounts/32hexaccountid/ai/run/@cf/deepseek/deepseek-r1-distill-qwen-32b'
     );
     /* The padded account id was trimmed; the model kept its `@` and slashes. */
     assert.ok(!calls[0].url.includes('%40'), 'the model id must not be percent-encoded into one segment');
@@ -426,10 +432,12 @@ async function runAll() {
     assert.equal(report.degraded, false);
     assert.notEqual(report.provider, 'internal');
     /* Every REGISTERED external provider is reported, not three. The registry
-       now has ten: the eight keyed ones plus OpenAI and xAI, which are
+       now has eleven: the nine keyed ones plus OpenAI and xAI, which are
        registered but unconfigured in this fixture and must appear as
-       NEEDS_KEY rather than vanish. */
-    assert.equal(report.providers.length, 10);
+       NEEDS_KEY rather than vanish. (Eleven since 2026-11-11, when the free
+       OpenRouter seat joined the paid one — two seats, one key, two model
+       lists.) */
+    assert.equal(report.providers.length, 11);
     assert.ok(report.providers.some((p) => p.id === 'openai' && p.keyPresent === false));
     assert.ok(report.providers.some((p) => p.id === 'xai' && p.keyPresent === false));
     assert.ok(report.providers.every((p) => 'keyPresent' in p && 'verdict' in p && 'model' in p));
@@ -451,7 +459,10 @@ async function runAll() {
     recordProviderCall('openrouter', { ok: true, durationMs: 800, model: 'openai/gpt-4o-mini' });
     recordProviderCall('groq', { ok: false, durationMs: 70, model: 'openai/gpt-oss-20b', error: 'HTTP 404', reasonCode: 'MODEL_UNAVAILABLE', fix: 'retired id' });
     const summary = getFleetSummary();
-    assert.equal(summary.configured, 8, 'eight external keys are present');
+    /* Nine external seats hold a key: the eight keyed providers plus the free
+       OpenRouter seat, which shares the paid seat's key (two seats, one
+       key). It counts as configured because a key really is present for it. */
+    assert.equal(summary.configured, 9, 'nine external seats hold a key');
     assert.equal(summary.healthy, 1, '…and exactly one of them answered');
     assert.equal(summary.failing, 1);
     assert.deepEqual(summary.healthyIds, ['openrouter']);
@@ -484,7 +495,7 @@ async function runAll() {
     assert.equal(row.verdict, 'ERROR:NETWORK', 'the panel says it did not answer, with the reason');
     const summary = getFleetSummary();
     assert.equal(summary.failing, 1);
-    assert.equal(summary.untested, 7, 'the other seven were never called');
+    assert.equal(summary.untested, 8, 'the other eight were never called');
     assert.equal(summary.healthy, 0);
     assert.equal(summary.failingIds[0].reason, 'NETWORK');
 
