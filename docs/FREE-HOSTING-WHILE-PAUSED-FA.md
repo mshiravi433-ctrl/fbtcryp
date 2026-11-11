@@ -231,13 +231,17 @@ cloudflared tunnel --url http://localhost:8787     # → https://xxxx.trycloudfl
 
 1. https://github.com/codespaces/new?hide_repo_select=true&repo=mshiravi433-ctrl/fbtcryp&ref=main
    (یا در مخزن: دکمهٔ سبز **Code** → تب **Codespaces** → *Create codespace on main*)
-2. `.devcontainer/devcontainer.json` خودش Node 22 را می‌آورد و `npm ci --force` را اجرا می‌کند
-   (≈۱ دقیقه، یک‌بار برای هر Codespace). در ترمینالِ پایین فقط بزنید:
+2. **هیچ دستوری لازم نیست.** `.devcontainer/devcontainer.json` خودش Node 22 را می‌آورد،
+   `npm ci --force` را اجرا می‌کند (≈۱ دقیقه، یک‌بار) و بعد `.devcontainer/start-dev.sh`
+   در هر بوت، dev server را در پس‌زمینه بالا می‌آورد (log: `/tmp/fbt-dev.log`).
+3. پورت `5173` با `onAutoForward: openPreview` **خودش** در پنجرهٔ پیش‌نمایش ادیتور باز می‌شود.
+   اگر باز نشد: تب **Ports** → ردیف `5173` → آیکن 🌐. آدرس این شکلی است:
+   `https://<codespace-name>-5173.app.github.dev`
+
+   اگر خواستید دستی اجرا کنید (یا سرور را ری‌استارت کنید):
    ```bash
-   npm run dev
+   bash .devcontainer/start-dev.sh     # idempotent: اگر بالاست، کاری نمی‌کند
    ```
-3. تب **Ports** → ردیف `5173` → روی آیکن 🌐 (*Open in Browser*) کلیک کنید.
-   آدرس این شکلی است: `https://<codespace-name>-5173.app.github.dev`
 4. برای دیدن چیدمان موبایل روی دسکتاپ: `F12` → `Ctrl+Shift+M`. (خودِ اپ `max-width: 520px`
    است، پس دسکتاپ تقریباً همان نمای گوشی را نشان می‌دهد.)
 
