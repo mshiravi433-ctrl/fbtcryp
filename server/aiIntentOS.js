@@ -191,6 +191,7 @@ import { orchestratorEnabled, ORCHESTRATOR_SCHEMA } from './aiOrchestrator.js';
    where `_setOrchestrator` lets a probe or an operator swap it). */
 import { getOrchestrator } from './aiOrchestratorRoutes.js';
 import { getNeuromorphicSwarm } from './aiNeuromorphic.js';
+import { cortexBridgeStatus } from './aiCortexBridge.js';
 
 const router = Router();
 
@@ -2887,6 +2888,21 @@ router.post('/chat', async (req, res) => {
         latencyMs: orchestration.latencyMs || 0,
         executionAuthorized: false
       } : null,
+      /*
+       * The neuromorphic layer (§8 — LEVER #5).
+       *
+       * This block used to publish SWARM METADATA ONLY: the generation
+       * counter, the node count and the fact that it costs no server GPU.
+       * It never fed the answer, so the cortex was a spectator.
+       *
+       * It now carries the CORTEX BRIDGE STATUS: whether the cortex is
+       * available, whether its readout was TRAINED, and the measured
+       * discrimination between a rising and a falling market state. The
+       * untrained readout measured 0.07 — the cortex could not tell an
+       * uptrend from a downtrend, and wiring THAT to an answer would have
+       * made the assistant confidently wrong. The trained readout measures
+       * 0.96.
+       */
       neuromorphic: await (async () => {
         try {
           const st = await getNeuromorphicSwarm().getStatus({ owner: ownerFor(req) });
@@ -2894,7 +2910,8 @@ router.post('/chat', async (req, res) => {
             globalGeneration: st.globalGeneration,
             activeNodes24h: st.activeNodes24h,
             zeroServerGpu: true,
-            executionAuthorized: false
+            executionAuthorized: false,
+            cortex: cortexBridgeStatus()
           };
         } catch {
           return null;

@@ -108,6 +108,7 @@ import {
 } from './aiProviderFleet.js';
 import { aiAnswerCacheStats } from './aiAnswerCache.js';
 import { lastReasoningLedger } from './aiReasoningLedger.js';
+import { cortexBridgeStatus } from './aiCortexBridge.js';
 
 /* Re-exported so every consumer of the gateway can describe the mode it used
    without importing a second module. */
@@ -1239,7 +1240,15 @@ export function getFleetSummary() {
      * produced a reasoning path, and how many conclusions did not carry
      * their own reasoning forward.
      */
-    reasoningLedger: lastReasoningLedger()
+    reasoningLedger: lastReasoningLedger(),
+    /*
+     * The cortex bridge (§8 — LEVER #5). It reports whether the cortex is
+     * available, whether its readout was TRAINED (it used not to be — the
+     * weights were hand-set once and never fitted, which is why the cortex
+     * could not tell an uptrend from a downtrend), and the measured
+     * discrimination between a rising and a falling state.
+     */
+    cortexBridge: cortexBridgeStatus()
   };
 }
 

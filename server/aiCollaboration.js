@@ -65,6 +65,7 @@ import {
   reasoningLedgerSummary,
   recordReasoningLedger
 } from './aiReasoningLedger.js';
+import { renderCortexBlock, cortexReadPayload, marketStateFromFrame } from './aiCortexBridge.js';
 import { retrieve as retrieveBm25 } from '../src/lib/intent-ai/retrieval.js';
 import { gatherExpandedKnowledge, synthesizeInternalAnswer } from './aiInternalReasoner.js';
 import {
@@ -1460,6 +1461,25 @@ async function runCollaborativeAnalysisInner({
   const marketBrief = marketFrame
     ? `${renderMarketFrame(marketFrame)}\n${renderMarketContract(marketFrame)}`
     : '';
+
+  /*
+   * ─── THE CORTEX READ (lever #5) ────────────────────────────────────────────
+   * The cortex is a trained spiking reservoir that reads the SHAPE of the
+   * market state. It is a second opinion, not evidence: it carries no prices
+   * and it is never allowed to contradict the data.
+   *
+   * The read is derived from the SAME market frame the specialists are given,
+   * so it is not a separate fetch and not a separate world — it is another
+   * reading of the data already on the table.
+   *
+   * The block is EMPTY unless the cortex's own probe passes. That gate is
+   * the whole point of wiring it this way: a cortex that cannot separate a
+   * state from its mirror contributes nothing, so it cannot make the answer
+   * wrong.
+   */
+  const cortexState = marketFrame ? marketStateFromFrame(marketFrame) : null;
+  const cortexBlock = cortexState ? renderCortexBlock({ state: cortexState }) : '';
+  const cortexRead = cortexState ? cortexReadPayload({ state: cortexState }) : null;
   let degradedSafetyContainment = false;
   const applyDegraded = () => {
     const out = buildDegradedOutcome({
@@ -1725,7 +1745,7 @@ async function runCollaborativeAnalysisInner({
         turnBudget,
         role: AI_ROLES.FINAL_ANSWER_AI,
         /* The paths ride along with the conclusions. */
-        message: `${message}\n\nSPECIALIST WORK:\n${digest}${reasoningBlock ? `\n\n${reasoningBlock}` : ''}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${verifierNote}${revisionRule}`,
+        message: `${message}\n\nSPECIALIST WORK:\n${digest}${reasoningBlock ? `\n\n${reasoningBlock}` : ''}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${cortexBlock ? `\n\n${cortexBlock}` : ''}${verifierNote}${revisionRule}`,
         contextBlock,
         locale,
         deps: D,
@@ -1885,7 +1905,7 @@ async function runCollaborativeAnalysisInner({
           const partialDeficitBlock = renderPartialDeficit(draftPartial);
           const criticRole = {
             role: AI_ROLES.VERIFICATION_AI,
-            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${reasoningBlock ? `\n\n${reasoningBlock}` : ''}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}${dialogueDeficitBlock ? `\n\n${dialogueDeficitBlock}` : ''}${falsifierDeficitBlock ? `\n\n${falsifierDeficitBlock}` : ''}${marketViolationBlock ? `\n\n${marketViolationBlock}` : ''}${requestDeficitBlock ? `\n\n${requestDeficitBlock}` : ''}${emotionDeficitBlock ? `\n\n${emotionDeficitBlock}` : ''}${situationDeficitBlock ? `\n\n${situationDeficitBlock}` : ''}${discourseDeficitBlock ? `\n\n${discourseDeficitBlock}` : ''}${productDeficitBlock ? `\n\n${productDeficitBlock}` : ''}${partialDeficitBlock ? `\n\n${partialDeficitBlock}` : ''}`,
+            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${cortexBlock ? `\n\n${cortexBlock}` : ''}${reasoningBlock ? `\n\n${reasoningBlock}` : ''}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}${dialogueDeficitBlock ? `\n\n${dialogueDeficitBlock}` : ''}${falsifierDeficitBlock ? `\n\n${falsifierDeficitBlock}` : ''}${marketViolationBlock ? `\n\n${marketViolationBlock}` : ''}${requestDeficitBlock ? `\n\n${requestDeficitBlock}` : ''}${emotionDeficitBlock ? `\n\n${emotionDeficitBlock}` : ''}${situationDeficitBlock ? `\n\n${situationDeficitBlock}` : ''}${discourseDeficitBlock ? `\n\n${discourseDeficitBlock}` : ''}${productDeficitBlock ? `\n\n${productDeficitBlock}` : ''}${partialDeficitBlock ? `\n\n${partialDeficitBlock}` : ''}`,
             contextBlock: '',
             locale,
             deps: D,
@@ -2036,6 +2056,18 @@ async function runCollaborativeAnalysisInner({
         compliant: finalFalsifier.compliant
       }
     };
+  }
+
+  /*
+   * The cortex read rides on the turn, next to the reasoning ledger. It is
+   * the observability for lever #5: without it there is no way to tell a
+   * cortex that read the market from one that was asked and said nothing.
+   *
+   * `cortexRead` is null when the turn was not a market turn — the cortex is
+   * only asked about markets.
+   */
+  if (cortexRead) {
+    result.cortexRead = cortexRead;
   }
 
   if (marketFrame) {

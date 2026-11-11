@@ -714,7 +714,7 @@ cannot see this at all.
 | **2. wire the semantic vector store into the chat route** | ✅ hybrid retriever live; **17/18 vs 11/18** on paraphrase |
 | **3. cut the identical-payload failover retries** | ✅ per-turn ledger; **13 → 9** calls healthy, **16 → 10** with a provider down |
 | **4. make the reasoning USABLE, not just requested** | ✅ the reasoning ledger: paths captured, answers checked against them, **0 extra requests** |
-| **5. leave the cortex as an honest showcase** | ✅ no change; it remains a showcase and is labelled as one |
+| **5. make the cortex READ, and connect it** | ✅ the readout is **trained** (discrimination **0.07 → 0.96**), the bridge refuses to quote an untrustworthy read, and the read reaches the synthesiser and the critic — see **§13** |
 
 **What is still the ceiling.** The assistant's knowledge is the corpus, and
 the corpus is 103 items. The retrieval now finds the right item far more
@@ -722,7 +722,249 @@ often, and the reasoning is now captured and checked — but neither can answer
 what the corpus does not contain, and neither can manufacture reasoning
 capacity that a free 27B model does not have.
 
+**§13 changed one thing in this picture.** The cortex was the one component
+that could add capacity without a provider — it runs on the server CPU and
+costs nothing per call — and it was the one component that had never been
+trained. It now is: the readout is fitted, it separates a rising market from
+a falling one at 0.963, and its read reaches the synthesis through a gate
+that withholds it when it cannot be trusted.
+
+That is a real, provider-free capacity increase. It is also a bounded one:
+the cortex is a **sensor**, not an oracle. It reads the SHAPE of a market
+state; it does not know a price and it must never be presented as if it did.
+
 The remaining honest options are all **supply-side**, not code-side:
 more free seats, more seats per provider, or a paid flagship. The code cannot
 make a 27B model reason like a 550B one — but it can now **tell** when it
-does not.
+does not, and it can now **read** a market state on its own.
+
+---
+
+## §13 — LEVER #5: THE CORTEX (trained, bridged, wired)
+
+### 13.1 The instruction, and why the measurement came first
+
+The instruction was: *make the assistant smarter — upgrade the cortex, connect
+the cortex to the central brain.*
+
+The obvious reading was "wire the cortex in". So the cortex was measured
+first, and the measurement killed the obvious plan.
+
+Feeding the cortex a clean trend sweep and reading its readout:
+
+```
+trend  -1.0  ->  directionalDrive 0.4999   regime trendUp
+trend  -0.5  ->  directionalDrive 0.4922   regime trendUp
+trend   0.0  ->  directionalDrive 0.0619   regime meanRevert
+trend  +0.5  ->  directionalDrive 0.4621   regime trendUp
+trend  +1.0  ->  directionalDrive 0.4893   regime trendUp
+
+average drive, NEGATIVE trend: 0.4799
+average drive, POSITIVE trend: 0.4695
+DISCRIMINATION:                -0.0104
+```
+
+**The cortex could not tell an uptrend from a downtrend.** It reported
+`trendUp` for a −1.0 downtrend. Wiring *that* to an answer would have made
+the assistant confidently wrong — strictly worse than not using it.
+
+### 13.2 Two causes, and the second one was the real one
+
+**Cause A — the encoder saturates.** The spike encoder is ON/OFF + delta
+driven:
+
+```
+onDrive  = max(0, val) * 0.65 + max(0, delta) * 0.85
+offDrive = max(0, -val) * 0.65 + max(0, -delta) * 0.85
+```
+
+On a fresh encoder `prevValues` is zero, so `delta === val` and the first
+drive is dominated by the CHANGE, not the LEVEL. On the drive the reservoir
+actually receives (`spikes * 0.75 + currents * 0.35`):
+
+```
+t = -1.0  ->  ON - OFF = -0.822   (correct)
+t = -0.6  ->  ON - OFF = -0.018   (sign lost)
+t = -0.3  ->  ON - OFF = +0.021   (sign INVERTED)
+t =  0.0  ->  ON - OFF = +0.089
+```
+
+Across a 21-point sweep there were only **two** distinct spike patterns. The
+cortex was seeing "strong vs weak", not "up vs down".
+
+**Cause B — the readout was never trained.** This is the one that mattered:
+
+```
+rawHeads[r] = readoutBias[r] + Σ readoutW[r][m] · liquidState[m]
+directionalDrive = clamp(tanh(rawHeads[0]) * riskDamp, -1, 1)
+```
+
+```
+grep -rn "readoutW\|readoutBias" src/lib/ server/ --include=*.js | grep -v cortexCore.js
+  (no output)
+```
+
+The weights lived in the genome builder and were hand-set ONCE:
+
+```js
+if (r === 0 && (axis === 0 || axis === 1 || axis === 6)) w += 0.34;
+```
+
+The reservoir has R-STDP plasticity. The brain core has neuromodulators. But
+the layer that produces the **answer** was a random projection with a lucky
+bias. The cortex learned everything except the thing it is asked to report.
+
+### 13.3 What was built
+
+Three new modules, in the order the diagnosis demanded them:
+
+| file | what it is |
+|---|---|
+| `src/lib/neuromorphic/cortexReadout.js` | the honest bridge: feature mapping, warm start, the mirror probe, and the gate that withholds a read it cannot trust |
+| `src/lib/neuromorphic/cortexReadoutTrainer.js` | the missing training phase: closed-form ridge for the scalar heads, softmax cross-entropy descent for the four regime heads, and the normalisation |
+| `src/lib/neuromorphic/cortexReadoutTrain.js` | the episode generator and the factory that builds a cortex with a trained readout |
+| `server/aiCortexBridge.js` | the server-side holder, the market-state extractor, the block renderer and the status payload |
+
+**The training.** Ridge regression is the standard reservoir-computing
+readout: one linear solve over the liquid state, no GPU, no backprop through
+the reservoir, no epochs over the network. It matters on a deployment whose
+entire CPU budget is measured in minutes per day.
+
+The four regime heads are a **softmax**, so they are read as a distribution
+and must be trained **jointly**. Fitting them as four independent
+regressions is the wrong objective: it produces four heads that each
+approximate a number instead of four heads that AGREE on a distribution, and
+the argmax — which is what `dominantRegime` reports — stays wrong.
+
+**The normalisation.** The liquid state is all-positive and small (0.03 to
+0.33, mean 0.155) and the class separation inside it is small too: the mean
+difference between a rising and a falling episode was 0.090 at its largest.
+Centring and scaling each unit by its own mean and standard deviation turns
+that into a number of standard deviations. The normalisation is then **folded
+into the weights algebraically** — `w/σ` and `b − w·μ/σ` — so the live
+cortex needs no change at all.
+
+### 13.4 Five bugs the measurement caught
+
+Each of these was silent, and each was found by measuring rather than by
+reading the code:
+
+1. **The ridge solver returned all zeros.** The back-substitution initialised
+   its row to zeros and only ever *subtracted* from it — the right-hand side
+   never entered the solution. The trainer still reported `ok: true`, so a
+   model that had learned nothing looked trained.
+2. **The gradient buffer was four wide instead of six.** It was allocated as
+   wide as the *regime group* rather than the whole readout, so the gradient
+   for two of the four regime heads was `undefined` and those weights became
+   NaN. The loss still looked good.
+3. **`SWARM_PARAM_LAYOUT.readoutW` is a SIZE, not an OFFSET.** It is 384;
+   the offset is 1568. Using the size as an offset lands in the middle of the
+   **recurrent** weights — the reservoir is corrupted, the readout keeps its
+   untrained values, and nothing looks broken. The offsets are now exported
+   separately and guarded by a self-check.
+4. **`getSwarmWeights()` returns a COPY.** A trained readout patched into
+   that copy never reaches the cortex. The install has to go through
+   `setSwarmWeights`.
+5. **The probe rejected a correct downtrend.** The mirror of a downtrend is an
+   uptrend, so a *correct* falling read has a **negative** spread — and the
+   probe called that "the cortex reads this state BACKWARDS". A −0.76 drive
+   was withheld while the regime correctly said `trendDown`.
+
+Two more were found by the tests:
+
+6. **`usable` meant two things.** It was set to `Boolean(volatility)` when
+   the directional probe failed, so a report whose directional call had been
+   **withheld** still announced itself as usable. `usable` now means exactly
+   one thing — the directional read may be quoted — and the volatility read
+   carries its own flag.
+7. **The squash could leave [−1, 1].** The logarithmic knee pushed a 50× move
+   to 2.44, and an axis outside ±1 is exactly what an ON/OFF channel cannot
+   represent. The clamp is the point of the squash.
+
+### 13.5 The measured result
+
+The same sweep, the same seed, the same cortex — one difference, whether the
+readout was trained:
+
+| | untrained | trained |
+|---|---|---|
+| discrimination (rising − falling) | **0.072** | **0.963** |
+| average drive, NEGATIVE trend | +0.749 (wrong sign) | **−0.265** (right sign) |
+| average drive, POSITIVE trend | +0.821 | +0.698 |
+| regimes over the sweep | trendUp 2, shock 9 | trendUp 4, **trendDown 4**, meanRevert 3 |
+| directional correlation | 0 | **1.0** |
+| regime loss (chance = 1.386) | 1.34 | **0.036** |
+
+And end to end, on the live cortex with the trained weights installed:
+
+```
+ dir   | drive   | regime     | up / down / revert
+   -1  | -0.681  | trendDown  | 0.00 / 0.99 / 0.00
+  -0.5 | -0.415  | trendDown  | 0.00 / 0.93 / 0.05
+ -0.25 | -0.221  | meanRevert | 0.00 / 0.10 / 0.89
+    0  | -0.002  | meanRevert | 0.00 / 0.00 / 0.99
+  +0.5 | +0.415  | trendUp    | 0.97 / 0.02 / 0.00
+  +1.0 | +0.681  | trendUp    | 1.00 / 0.00 / 0.00
+```
+
+**33/33 correct across three volatilities** (0.2 / 0.4 / 0.6): the sign of
+the drive and the regime, every time.
+
+### 13.6 The wiring, and the gate that keeps it honest
+
+The cortex is now connected to the central brain — through the pipeline, not
+around it:
+
+- `marketStateFromFrame()` derives the eight sensory axes from the **market
+  frame the specialists already have** — the benchmark's 24h change, the
+  breadth split, the dispersion, the range position, the frame's own regime.
+  Same data, another reading of it: not a separate fetch, not a separate
+  world.
+- The read is rendered as a block and injected into the **synthesiser** and
+  the **critic** — the same two places the reasoning ledger goes.
+- The block says what it is: *"a second opinion on market SHAPE — it is not
+  evidence and it carries no prices"*, with a hard rule that the data wins
+  when the two disagree.
+- **The block is EMPTY unless the mirror probe passes.** A cortex that cannot
+  separate a state from its mirror contributes nothing, so it cannot make the
+  answer wrong. The probe is kept even though the trained cortex passes it,
+  because the trained weights are a fitted artefact: a different seed, a
+  different reservoir size or a changed feature mapping could reintroduce the
+  blindness, and the gate is what stops that reaching an answer.
+
+Observability: `result.cortexRead` on the turn, `fleet.cortexBridge` on
+`/api/v1/ai/status`, and `neuromorphic.cortex` in the intentOS payload.
+
+### 13.7 What it costs
+
+- **Training**: one linear solve plus 2 000 convex softmax epochs — a few
+  hundred milliseconds, once, at first use, cached. No GPU, no network, no
+  provider call, deterministic.
+- **Per read**: one cortex step, on a fresh instance. The cortex is
+  **stateful** — its liquid state carries over — so every step gets its own
+  instance, or the read reports the previous read's regime. This was
+  measured, not assumed: a shared instance turned a +0.83 uptrend into
+  −0.88.
+- **Per turn**: one extra read on market turns only, and nothing at all on
+  every other turn.
+
+### 13.8 The tests
+
+`test/intent-ai/ai-cortex-bridge.test.mjs` — **41 tests, all pass**. They
+are written around the measurements, and each of the seven bugs above has a
+test that fails without its fix:
+
+- the solver is not the zero solver, and it reports a singular system
+  instead of guessing;
+- the regime heads are all six wide, and no NaN survives the solve;
+- the layout offsets are not the layout sizes;
+- the trained swarm is installed through `setSwarmWeights`;
+- the untrained cortex is nearly blind and the trained one is not;
+- a rising market reads positive, a falling market reads **negative**, a
+  directionless one reads as mean reversion;
+- the bridge withholds a directionless read, and the volatility read carries
+  its own flag;
+- the probe catches a blind cortex, an inverted cortex, and a throwing one;
+- an empty frame yields no state — an absent signal is never fabricated.
+
+**The whole suite: 493 → 534, all green.**
