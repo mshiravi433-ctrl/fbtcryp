@@ -30,7 +30,7 @@
  *     REGION_UNSUPPORTED.
  */
 import { createVerify, randomUUID } from 'node:crypto';
-import { getAddress, isAddress } from 'ethers';
+import { getAddress, isAddress } from '../ethersLite.js';
 import { EVM_CHAINS } from '../chainsLite.js';
 import { upstashConfigured } from '../blobCache.js';
 

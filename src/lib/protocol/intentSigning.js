@@ -5,7 +5,7 @@
  * Signed user constraints must remain immutable.
  */
 
-import { verifyTypedData, getAddress, toUtf8Bytes, verifyMessage, keccak256 } from 'ethers';
+import { verifyTypedData, getAddress, toUtf8Bytes, verifyMessage, keccak256 } from '../../../server/ethersLite.js';
 import nacl from 'tweetnacl';
 import bs58 from 'bs58';
 import {

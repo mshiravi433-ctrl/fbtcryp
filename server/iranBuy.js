@@ -10,7 +10,7 @@
  * blockchain receipt.
  */
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { getAddress, verifyMessage } from 'ethers';
+import { getAddress, verifyMessage } from './ethersLite.js';
 import { EVM_CHAINS } from './chainsLite.js';
 import { storeGetFresh, storeSet } from './store.js';
 import {
@@ -395,7 +395,7 @@ export async function verifyIranBuyWalletChallenge({ ownerId, challengeId, signa
     || challenge.action !== 'VERIFY_DESTINATION') fail('WALLET_CHALLENGE_EXPIRED', 409);
   if (typeof signature !== 'string' || signature.length > 512) fail('WALLET_SIGNATURE_INVALID', 401);
   let signer;
-  try { signer = getAddress(verifyMessage(challenge.message, signature)); } catch { signer = null; }
+  try { signer = getAddress(await verifyMessage(challenge.message, signature)); } catch { signer = null; }
   if (!signer || signer !== challenge.address) fail('WALLET_SIGNATURE_INVALID', 401);
   const consumed = await upstashSetIfAbsent(`iran-buy:wallet-challenge-used:${id}`, { at: Date.now() }, TTL.challengeMs);
   if (!consumed) fail('WALLET_CHALLENGE_USED', 409);
@@ -1027,7 +1027,7 @@ export async function authorizeIranBuySettlement({ ownerId, orderId, orderAccess
   }
   if (typeof signature !== 'string' || signature.length > 512) fail('WALLET_SIGNATURE_INVALID', 401);
   let signer;
-  try { signer = getAddress(verifyMessage(challenge.message, signature)); } catch { signer = null; }
+  try { signer = getAddress(await verifyMessage(challenge.message, signature)); } catch { signer = null; }
   if (!signer || signer !== challenge.address) fail('WALLET_SIGNATURE_INVALID', 401);
   const consumed = await upstashSetIfAbsent(`iran-buy:wallet-challenge-used:${challenge.challengeId}`, { at: Date.now() }, TTL.challengeMs);
   if (!consumed) fail('WALLET_CHALLENGE_USED', 409);

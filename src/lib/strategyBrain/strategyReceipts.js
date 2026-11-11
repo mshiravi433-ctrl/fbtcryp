@@ -7,7 +7,7 @@
  * independent verifiers; other venues (and native-coin outputs) remain pending
  * until they have equally specific reconciliation. A hash is not sufficient.
  */
-import { Interface, parseUnits } from 'ethers';
+import { Interface, parseUnits } from '../../../server/ethersLite.js';
 import { AAVE_V3_POOLS, lendingAssetsFor } from '../lending.js';
 import { TOKENS } from '../chains.js';
 import { defaultStorage, loadStrategyPlan } from './strategyStore.js';
@@ -16,15 +16,27 @@ export const STRATEGY_RECEIPT_HINTS_KEY = 'fbt.strategy-brain.receipt-hints.v1';
 const HASH = /^0x[0-9a-f]{64}$/i;
 const ADDRESS = /^0x[0-9a-f]{40}$/i;
 const SUPPORTED_VENUES = Object.freeze({ 'aave-base': 8453, 'aave-arbitrum': 42161 });
-const AAVE_EVENTS = new Interface([
+let AAVE_EVENTSP = null;
+const AAVE_EVENTSReady = async () => {
+  if (!AAVE_EVENTSP) AAVE_EVENTSP = await Interface([
   'event Supply(address indexed reserve, address user, address indexed onBehalfOf, uint256 amount, uint16 indexed referralCode)'
 ]);
-const AAVE_SUPPLY = new Interface([
+  return AAVE_EVENTSP;
+};
+let AAVE_SUPPLYP = null;
+const AAVE_SUPPLYReady = async () => {
+  if (!AAVE_SUPPLYP) AAVE_SUPPLYP = await Interface([
   'function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode)'
 ]);
-const ERC20_EVENTS = new Interface([
+  return AAVE_SUPPLYP;
+};
+let ERC20_EVENTSP = null;
+const ERC20_EVENTSReady = async () => {
+  if (!ERC20_EVENTSP) ERC20_EVENTSP = await Interface([
   'event Transfer(address indexed from,address indexed to,uint256 value)'
 ]);
+  return ERC20_EVENTSP;
+};
 const same = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
 
 function findAction(record, stageId, actionIndex) {
@@ -145,7 +157,7 @@ export function hasStrategyReceiptHint({ strategyId, stageId, store = defaultSto
 
 /** Write ONLY after the venue got a successful receipt. This remains an
  * untrusted localStorage locator: the read provider rechecks everything. */
-export function recordStrategyReceiptHint({
+export async function recordStrategyReceiptHint({
   strategyId, stageId, actionIndex, txHash, owner, chainId, asset, amountWei,
   store = defaultStorage(), now = Date.now()
 } = {}) {
@@ -161,7 +173,7 @@ export function recordStrategyReceiptHint({
     || String(asset).toUpperCase() !== (isSupply ? 'USDC' : swap?.bought?.symbol?.toUpperCase())
     || !/^[1-9]\d*$/.test(String(amountWei || ''))) return { ok: false, code: 'ACTION_MISMATCH' };
   const usdc = isSupply ? lendingAssetsFor(expectedChain).find((a) => a.symbol === 'USDC') : swap.usdc;
-  if (!usdc || !matchingAmount(amountWei, action.params.amountUsd, usdc.decimals)) return { ok: false, code: 'AMOUNT_MISMATCH' };
+  if (!usdc || !await matchingAmount(amountWei, action.params.amountUsd, usdc.decimals)) return { ok: false, code: 'AMOUNT_MISMATCH' };
   const hint = {
     strategyId, stageId, actionIndex: Number(actionIndex),
     txHash: String(txHash).toLowerCase(), owner: String(owner).toLowerCase(),
@@ -191,10 +203,10 @@ async function checkStageBlock(provider, receipt, startedAt) {
   return { ok: true };
 }
 
-function matchingAmount(actual, usd, decimals) {
+async function matchingAmount(actual, usd, decimals) {
   try {
     if (!Number.isFinite(Number(usd)) || Number(usd) <= 0) return false;
-    const expected = parseUnits(String(usd), decimals);
+    const expected = await parseUnits(String(usd), decimals);
     const value = BigInt(actual);
     // USDC is close to $1 but not a promise of a peg. A very small tolerance
     // permits a user's quoted input to differ by up to 0.5%; unrelated dust or
@@ -228,7 +240,7 @@ export async function verifyAaveStrategySupply({ action, txHash, owner, provider
     }
     const call = AAVE_SUPPLY.parseTransaction({ data: tx.data ?? tx.input, value: tx.value ?? 0 });
     if (call?.name !== 'supply' || !same(call.args[0], usdc.address)
-      || !same(call.args[2], owner) || !matchingAmount(call.args[1], action.params.amountUsd, usdc.decimals)) {
+      || !same(call.args[2], owner) || !await matchingAmount(call.args[1], action.params.amountUsd, usdc.decimals)) {
       return { ok: false, code: 'SUPPLY_MISMATCH' };
     }
     const event = (receipt.logs || []).some((log) => {
@@ -287,7 +299,7 @@ export async function verifyStrategySwap({ action, txHash, owner, provider, star
         }
       } catch { /* another event from a token contract */ }
     }
-    if (!matchingAmount(paidWei, action.params.amountUsd, spec.usdc.decimals)) {
+    if (!await matchingAmount(paidWei, action.params.amountUsd, spec.usdc.decimals)) {
       return { ok: false, code: 'SWAP_INPUT_MISMATCH' };
     }
     if (spec.bought.native) {

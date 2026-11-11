@@ -13,7 +13,7 @@
  * public test key; the unit test checks these bytes match exactly.
  */
 
-import { Wallet, keccak256, Signature } from 'ethers';
+import { Wallet, keccak256, Signature } from '../../../server/ethersLite.js';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 

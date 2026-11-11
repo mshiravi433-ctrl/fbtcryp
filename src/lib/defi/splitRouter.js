@@ -33,7 +33,7 @@
  * app display a fee the contract does not charge, or vice versa.
  */
 
-import { Interface } from 'ethers';
+import { Interface } from '../../../server/ethersLite.js';
 import { parseReceiptLogs } from './executionGuards.js';
 
 const env = (k) => (typeof import.meta !== 'undefined' ? import.meta.env?.[k] : undefined) || '';
@@ -59,7 +59,11 @@ const ROUTER_ABI = Object.freeze([
   'function supplyMorpho(uint256 amount)',
   'function stakeLido() payable'
 ]);
-const ROUTER_IFACE = new Interface(ROUTER_ABI);
+let ROUTER_IFACEP = null;
+const ROUTER_IFACEReady = async () => {
+  if (!ROUTER_IFACEP) ROUTER_IFACEP = await Interface(ROUTER_ABI);
+  return ROUTER_IFACEP;
+};
 
 /** adapter id → router method. These are the five ids FarmPositionHub pins. */
 export const SPLIT_ROUTER_METHODS = Object.freeze({
@@ -136,7 +140,11 @@ export function quoteSplit(amount, feeBps) {
   return { feeAmount, netAmount: amount - feeAmount };
 }
 
-const ERC20_IFACE = new Interface(['function approve(address spender, uint256 amount)']);
+let ERC20_IFACEP = null;
+const ERC20_IFACEReady = async () => {
+  if (!ERC20_IFACEP) ERC20_IFACEP = await Interface(['function approve(address spender, uint256 amount)']);
+  return ERC20_IFACEP;
+};
 
 /* ─── routed-deposit receipts ────────────────────────────────────────────────
  *
@@ -153,7 +161,11 @@ const ERC20_IFACE = new Interface(['function approve(address spender, uint256 am
 export const SPLIT_ROUTER_EVENT_ABI = [
   'event Routed(address indexed target, address indexed user, address indexed asset, uint256 amountIn, uint256 feeTaken, uint256 netAmount)'
 ];
-const ROUTER_EVENT_IFACE = new Interface(SPLIT_ROUTER_EVENT_ABI);
+let ROUTER_EVENT_IFACEP = null;
+const ROUTER_EVENT_IFACEReady = async () => {
+  if (!ROUTER_EVENT_IFACEP) ROUTER_EVENT_IFACEP = await Interface(SPLIT_ROUTER_EVENT_ABI);
+  return ROUTER_EVENT_IFACEP;
+};
 
 export class SplitRouterProofError extends Error {
   constructor(detail) {

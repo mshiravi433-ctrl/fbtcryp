@@ -27,7 +27,7 @@
 
 import * as ed from '@noble/ed25519';
 import { sha512 } from '@noble/hashes/sha2.js';
-import { getAddress } from 'ethers';
+import { getAddress } from '../../server/ethersLite.js';
 import { apiBase } from './apiBase.js';
 
 /* noble/ed25519 v2 needs its sha512 wired to a concrete implementation. */

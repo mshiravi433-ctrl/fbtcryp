@@ -45,6 +45,14 @@ import {
 import { runMultiAiDebate } from './aiConsensus.js';
 import { researchWeb, analyzeWithSources } from './aiWebResearch.js';
 import { resolveIntelligenceMode, intelligenceGeneration, intelligenceDeadlineMs, getIntelligenceProfile } from './aiIntelligence.js';
+import {
+  aiAnswerCacheKey,
+  aiAnswerCacheSet,
+  aiAnswerCacheTtlMs,
+  isCacheableAnswer,
+  withAiAnswerCache,
+  aiAnswerCacheEnabled
+} from './aiAnswerCache.js';
 import { searchKnowledge } from '../src/lib/intent-ai/os/knowledgeCenter.js';
 import { retrieve as retrieveBm25 } from '../src/lib/intent-ai/retrieval.js';
 import { gatherExpandedKnowledge, synthesizeInternalAnswer } from './aiInternalReasoner.js';
@@ -788,6 +796,128 @@ export async function runCollaborativeAnalysis({
   intelligence = null,
   transparency = false,
   /* Whose research agenda this turn reads and updates. null = the shared one. */
+  owner = null,
+  deps = {},
+  deadlineMs: requestedDeadlineMs = null
+} = {}) {
+  /*
+   * ═══ THE ANSWER CACHE (2026-11-11) ═══════════════════════════════════════
+   *
+   * This fleet is three free tiers, and two ceilings bind it at once: about
+   * EIGHT MINUTES OF CPU PER DAY (the Hobby Fluid Active CPU allowance) and
+   * OpenRouter's free catalogue's 50-requests-a-day cap. A `max` turn spends
+   * three of those requests and seconds of CPU. Without a cache the daily
+   * allowance is gone in about fifteen questions.
+   *
+   * So the cache wraps the WHOLE TURN, not one provider call: everything the
+   * turn does — the analyses, the verifier, the adversarial repair pass — is
+   * inside the producer, and a hit skips all of it.
+   *
+   * Two rules keep this honest:
+   *
+   *   1. A HIT REPLAYS THE VERDICT, NOT A GUESS. The cached value carries the
+   *      original `providersUsed`, `modelsConsulted`, `claims`,
+   *      `verifiedClaims`, `aiConsensusOnly` and `uncertainty`. A client
+   *      cannot tell a cached answer from a fresh one, and cannot be misled
+   *      by one: the cache does not make a weak answer look strong, it makes
+   *      a strong answer free.
+   *
+   *   2. THE KEY INCLUDES EVERYTHING THAT CHANGES THE ANSWER — the locale,
+   *      the mode, the conversation id and history, and the user's own
+   *      ground truth. A cache that ignored the last of those would serve one
+   *      user's portfolio-grounded answer to another user, which is a
+   *      privacy leak and not merely a wrong answer.
+   */
+  const cacheKey = aiAnswerCacheKey({
+    question: message,
+    locale,
+    intelligence: resolveIntelligenceMode(intelligence ?? analysis?.intelligence?.mode ?? null).mode,
+    conversationId: context?.conversationId || null,
+    priorMessages: context?.conversationSummary || null,
+    /* The user's own ground truth: portfolio, wallet, last assets. Digested
+       into the key, never stored. */
+    groundTruth: {
+      portfolio: context?.portfolio || null,
+      wallet: context?.wallet || null,
+      lastAssets: context?.lastAssets || null
+    },
+    surface: context?.surface || null,
+    intentType
+  });
+
+  const runTurn = () => runCollaborativeAnalysisInner({
+    message,
+    context,
+    locale,
+    intentType,
+    entities,
+    analysis,
+    intelligence,
+    transparency,
+    owner,
+    deps,
+    deadlineMs: requestedDeadlineMs
+  });
+
+  /*
+   * AN INJECTED FLEET MEANS THE CACHE IS OFF.
+   *
+   * `deps` is how a caller supplies its own provider fleet — the test path
+   * and the diagnostic path. Two different fleets can answer the SAME
+   * question with DIFFERENT answers, and the fleet identity alone does not
+   * tell them apart: two mock fleets that expose the same seat names are
+   * different fleets with the same name.
+   *
+   * So a turn with injected dependencies is never cached, and never served
+   * from the cache. The cache is for the production path, where the fleet
+   * is the deployment's own — the same one, for the same question, which
+   * is exactly the case where replaying the answer is right.
+   */
+  const injectedFleet = Boolean(deps && Object.keys(deps).length > 0);
+
+  if (!cacheKey || injectedFleet || !aiAnswerCacheEnabled()) {
+    const value = await runTurn();
+    return value;
+  }
+
+  /* The TTL needs the freshness class, which is only known once the turn has
+     been planned. So the cache is written INSIDE the turn (where `plan` is
+     in hand) and this wrapper only READS it. The read is what spares the
+     fleet; the write needs the plan's freshness verdict. */
+  const cached = await withAiAnswerCache(cacheKey, 0, async () => {
+    const value = await runTurn();
+    if (!isCacheableAnswer(value, { freshness: value?.freshness })) return value;
+    aiAnswerCacheSetForTurn(cacheKey, value, value?.freshness);
+    return value;
+  }, { enabled: true });
+
+  return cached.value;
+}
+
+/**
+ * Write one turn's answer into the cache, with the TTL its freshness class
+ * earns.
+ *
+ * Kept separate from the read path so the TTL decision — which needs the
+ * plan's freshness verdict — lives next to the plan that produced it.
+ */
+function aiAnswerCacheSetForTurn(key, value, freshness) {
+  try {
+    aiAnswerCacheSet(key, value, aiAnswerCacheTtlMs(freshness));
+  } catch {
+    /* A cache write must never take down a turn that already has an answer. */
+  }
+}
+
+async function runCollaborativeAnalysisInner({
+  message = '',
+  context = {},
+  locale = 'fa',
+  intentType = null,
+  entities = {},
+  analysis = null,
+  intelligence = null,
+  transparency = false,
   owner = null,
   deps = {},
   deadlineMs: requestedDeadlineMs = null

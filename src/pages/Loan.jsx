@@ -3556,7 +3556,7 @@ export default function Loan() {
          * the actual supply transaction/event before it can unlock the stage. */
         if (exec.action === 'supply' && exec.asset?.symbol === 'USDC') {
           const supplyHash = (result.completed || []).find((step) => step.id === 'supply')?.hash;
-          if (supplyHash) recordStrategyReceiptHint({
+          if (supplyHash) await recordStrategyReceiptHint({
             strategyId: searchParams.get('strategyId'),
             stageId: searchParams.get('stageId'),
             actionIndex: searchParams.get('actionIndex'),

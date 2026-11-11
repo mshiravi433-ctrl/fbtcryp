@@ -12,7 +12,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { Interface, getAddress } from 'ethers';
+import { Interface, getAddress } from './ethersLite.js';
 import { blobConfigured } from './blobCache.js';
 import { canonicalValue } from './intentSignatures.js';
 import { merkleRoot } from './intentTransparency.js';
@@ -26,7 +26,12 @@ export const MERKLE_ROOT_ANCHOR_ABI = Object.freeze([
   'event MerkleRootAnchored(bytes32 indexed rootId, bytes32 indexed intentHash, bytes32 indexed merkleRoot, uint64 logSize, address anchorer)'
 ]);
 
-const iface = new Interface(MERKLE_ROOT_ANCHOR_ABI);
+/* The ABI machinery is loaded ON DEMAND — see server/ethersLite.js. */
+let ifaceP = null;
+const ifaceReady = async () => {
+  if (!ifaceP) ifaceP = await Interface(MERKLE_ROOT_ANCHOR_ABI);
+  return ifaceP;
+};
 const TX_RE_64 = /^0x[a-fA-F0-9]{64}$/;
 const ALLOWED_CHAINS = new Set([1, 10, 56, 137, 146, 8453, 42161, 43114, 59144]);
 const MANIFEST_CLAIM_FIELDS = new Set([
@@ -142,7 +147,7 @@ export function buildMerkleRootManifest(log) {
   return { ok: true, manifest: { ...core, rootId: rootIdFor(core) } };
 }
 
-export function buildMerkleRootAnchorCalldata(manifest, chainId, networks = parseMerkleAnchorNetworks()) {
+export async function buildMerkleRootAnchorCalldata(manifest, chainId, networks = parseMerkleAnchorNetworks()) {
   const checked = validateMerkleRootManifest(manifest);
   if (!checked.ok) return checked;
   const network = networks.get(Number(chainId));
@@ -155,7 +160,7 @@ export function buildMerkleRootAnchorCalldata(manifest, chainId, networks = pars
       contract: network.contract,
       to: network.contract,
       value: '0x0',
-      data: iface.encodeFunctionData('anchorRoot', [
+      data: (await ifaceReady()).encodeFunctionData('anchorRoot', [
         checked.manifest.rootId,
         checked.manifest.intentHash,
         checked.manifest.merkleRoot,
@@ -228,7 +233,7 @@ export async function verifyMerkleRootAnchorClaim(manifest, claim, {
   for (const log of Array.isArray(receipt.logs) ? receipt.logs : []) {
     if (log?.removed || !same(log.address, network.contract)) continue;
     try {
-      const parsed = iface.parseLog({ topics: log.topics, data: log.data });
+      const parsed = (await ifaceReady()).parseLog({ topics: log.topics, data: log.data });
       if (parsed?.name !== 'MerkleRootAnchored'
         || !same(parsed.args.rootId, checked.manifest.rootId)
         || !same(parsed.args.intentHash, checked.manifest.intentHash)
@@ -403,4 +408,7 @@ export function merkleRootAnchorStatus(networks = parseMerkleAnchorNetworks()) {
   };
 }
 
-export { iface as merkleRootAnchorInterface };
+/* The interface itself is now loaded on demand — the accessor is exported
+   instead of the eagerly-built object, because an eager build would pull the
+   whole ABI machinery onto the cold-start path. */
+export { ifaceReady as merkleRootAnchorInterface };

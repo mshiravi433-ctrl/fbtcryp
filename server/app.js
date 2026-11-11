@@ -28,7 +28,8 @@ import {
   fetchTrending,
   fetchVolumeSeries,
 } from './providers.js';
-import { fetchMarketOverviewIntel } from './marketOverviewIntel.js';
+lazyModule('marketOverviewIntel', () => import('./marketOverviewIntel.js'));
+const fetchMarketOverviewIntel = lazyFn('marketOverviewIntel', 'fetchMarketOverviewIntel');
 import { MARKET_CATEGORIES, isBinanceRiskSector } from '../src/lib/marketSectors.js';
 import {
   forecastService,
@@ -43,7 +44,8 @@ import { fetchAudio } from './audio.js';
 import { calmResultIsUsable, fetchCalm } from './calm.js';
 import { fetchThorPools, fetchThorTxStatus, thorQuote, thorStatus } from './thorchain.js';
 import { fetchNews } from './news.js';
-import { readScenarioContext } from './scenarioContext.js';
+lazyModule('scenarioContext', () => import('./scenarioContext.js'));
+const readScenarioContext = lazyFn('scenarioContext', 'readScenarioContext');
 import { recordScenarioEvidence, readScenarioEvidence } from './scenarioArchive.js';
 import {
   getEtfList,
@@ -76,20 +78,45 @@ import { resolveIds } from './coinIndex.js';
 import { priceTokensByAddress } from './stockPrices.js';
 import { chartTokensByAddress } from './stockCharts.js';
 import { resolveVenue, resolveVenues } from './coinVenue.js';
-import {
-  checkBuySellEligibility,
-  createBuySellCheckout,
-  createBuySellOrder,
-  createBuySellQuote,
-  getBuySellCapabilities,
-  getBuySellOrder,
-  getBuySellOrderAudit,
-  listAssets as buySellAssets,
-  listNetworks as buySellNetworks,
-  cancelBuySellOrder,
-  handleBuySellProviderWebhook,
-  verifyBuySellOrder
-} from './buySell.js';
+/*
+ * THE BUY/SELL MODULE IS DEFERRED — and it was the single most expensive
+ * import in the whole application.
+ *
+ * `ethers` costs 168 ms of CPU to compile, and `buySell.js` is the only
+ * reason it was compiled. On Vercel Hobby the Fluid Active CPU allowance
+ * is 4 hours per rolling 30 days — roughly eight minutes of CPU per day —
+ * so 168 ms is 0.35% of the entire day's budget spent before the first
+ * question was answered, on every single cold start, including the ones
+ * that only serve `/api/health` and the mission-control poll.
+ *
+ * The trade is clean: the trading routes are hit by a human who is about to
+ * trade, and the cost of one import is a few milliseconds of latency on the
+ * FIRST such request only. Every later request reuses the loaded module.
+ *
+ * The functions below are PROXIES: they are closures created eagerly, and
+ * they compile `buySell.js` (and therefore `ethers`) the first time they
+ * are CALLED. The call sites are unchanged — same names, same arguments,
+ * same return values — because a proxy that forwards verbatim is
+ * indistinguishable from the original at the call site.
+ *
+ * Note the two names that are ALIASED in the original import
+ * (`listAssets as buySellAssets`, `listNetworks as buySellNetworks`): the
+ * alias lives on the export name, so the lazy form asks for the ORIGINAL
+ * name and keeps the local alias.
+ */
+const buySellModule = lazyModule('buy-sell', () => import('./buySell.js'));
+const checkBuySellEligibility = lazyFn('buy-sell', 'checkBuySellEligibility');
+const createBuySellCheckout = lazyFn('buy-sell', 'createBuySellCheckout');
+const createBuySellOrder = lazyFn('buy-sell', 'createBuySellOrder');
+const createBuySellQuote = lazyFn('buy-sell', 'createBuySellQuote');
+const getBuySellCapabilities = lazyFn('buy-sell', 'getBuySellCapabilities');
+const getBuySellOrder = lazyFn('buy-sell', 'getBuySellOrder');
+const getBuySellOrderAudit = lazyFn('buy-sell', 'getBuySellOrderAudit');
+const buySellAssets = lazyFn('buy-sell', 'listAssets');
+const buySellNetworks = lazyFn('buy-sell', 'listNetworks');
+const cancelBuySellOrder = lazyFn('buy-sell', 'cancelBuySellOrder');
+const handleBuySellProviderWebhook = lazyFn('buy-sell', 'handleBuySellProviderWebhook');
+const verifyBuySellOrder = lazyFn('buy-sell', 'verifyBuySellOrder');
 import {
   authorizeIranBuySettlement,
   cancelIranBuyOrder,
@@ -140,7 +167,25 @@ import {
   submitSolanaTrigger
 } from './solanaLimitOrders.js';
 import { lifiSolanaStatus, lifiSolanaSwapQuote } from './solanaLifi.js';
-import { jupFeeQuote, jupFeeStatus, jupFeeStatusAsync, jupFeeSwapQuote, refreshJupFeeCoverage } from './solanaJupFee.js';
+/*
+ * THE SOLANA JUP-FEE MODULE IS DEFERRED — the second most expensive import.
+ *
+ * `@solana/web3.js` costs 131 ms of CPU to compile, and this module is the
+ * only reason it was compiled. Same trade as `buySell.js`: the swap-quote
+ * routes are hit by a human about to swap, so paying the import on the
+ * first such request is right — and paying it on EVERY cold start, for
+ * traffic that never swaps, is not.
+ *
+ * `jupFeeStatus` is the one that is NOT deferred here in spirit: it is
+ * read synchronously inside a route that also awaits `jupFeeStatusAsync`.
+ * Both are proxied, so both wait for the same single-flight import.
+ */
+lazyModule('solana-jup-fee', () => import('./solanaJupFee.js'));
+const jupFeeQuote = lazyFn('solana-jup-fee', 'jupFeeQuote');
+const jupFeeStatus = lazyFn('solana-jup-fee', 'jupFeeStatus');
+const jupFeeStatusAsync = lazyFn('solana-jup-fee', 'jupFeeStatusAsync');
+const jupFeeSwapQuote = lazyFn('solana-jup-fee', 'jupFeeSwapQuote');
+const refreshJupFeeCoverage = lazyFn('solana-jup-fee', 'refreshJupFeeCoverage');
 import { p2pCountries, p2pCurrencies, p2pOffers, p2pPaymentMethods, p2pStatus } from './hodlhodl.js';
 import { btcAddress, btcFees, btcBroadcast, btcStatus } from './btcChain.js';
 import { proxyKyberBuild, proxyKyberRoutes, proxyOoDecode, proxyOoQuote, proxyOoSwap, proxyVeloraPrices } from './swapProxy.js';
@@ -304,7 +349,24 @@ import { fetchTokenRisk } from './tokenRisk.js';
  * are GET-only by construction. See the mounter's header for the contract.
  */
 import { registerExploreRoutes, registerSecurityRoutes } from './exploreSecurityRoutes.js';
-import { registerCollectiveRoutes } from './collective/routes.js';
+import { lazyModule, lazyFn, loadModule } from './lazyModules.js';
+/*
+ * THE COLLECTIVE ROUTES ARE DEFERRED.
+ *
+ * `collective/routes.js` is a router that mounts its own routes, so it
+ * cannot be `lazyMount`ed the way the other routers are — it is a
+ * REGISTRATION function, not a middleware. It is deferred by loading it at
+ * first use and calling the registration then.
+ */
+lazyModule('collective-routes', () => import('./collective/routes.js'));
+const registerCollectiveRoutes = async (target) => {
+  const mod = await loadModule('collective-routes');
+  const register = mod?.registerCollectiveRoutes ?? mod?.default;
+  if (typeof register !== 'function') {
+    throw new Error('lazy-module:collective-routes:MISSING_EXPORT:registerCollectiveRoutes');
+  }
+  return register(target);
+};
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
 import { flashLiquidityCapabilities, flashScan, flashSimulate, flashPlan } from './flashLiquidity.js';
 import {
@@ -450,8 +512,10 @@ import {
   parseOperatorRegistry,
   publicOperatorRegistry
 } from './intentConfidential.js';
-import { activationReport } from './intentActivation.js';
-import { phaseStatusReport } from './intentPhaseStatus.js';
+lazyModule('intentActivation', () => import('./intentActivation.js'));
+const activationReport = lazyFn('intentActivation', 'activationReport');
+lazyModule('intentPhaseStatus', () => import('./intentPhaseStatus.js'));
+const phaseStatusReport = lazyFn('intentPhaseStatus', 'phaseStatusReport');
 import { handleOperatorEvidence, evidenceStoreStatus, getStoredEvidence, ensureOperatorEvidenceHydrated } from './intentOperatorEvidence.js';
 import { handlePlaneAttestations, planeAttestationsStatus, ensurePlaneAttestationsHydrated } from './intentPlaneAttestations.js';
 import { activationConfigPresence } from './intentActivationConfig.js';
@@ -492,13 +556,12 @@ import {
   publicReviewPackage,
   STAGE3_KINDS
 } from './intentStage3Probe.js';
-import {
-  runLaterPhaseProbe,
-  laterPhaseProbeReport,
-  laterPhasePublicSummary,
-  runExternalProviderDigest,
-  LATER_PHASE_SCHEMA
-} from './intentLaterPhaseProbe.js';
+import { LATER_PHASE_SCHEMA } from './intentLaterPhaseProbe.js';
+lazyModule('intentLaterPhaseProbe', () => import('./intentLaterPhaseProbe.js'));
+const laterPhaseProbeReport = lazyFn('intentLaterPhaseProbe', 'laterPhaseProbeReport');
+const laterPhasePublicSummary = lazyFn('intentLaterPhaseProbe', 'laterPhasePublicSummary');
+const runExternalProviderDigest = lazyFn('intentLaterPhaseProbe', 'runExternalProviderDigest');
+const runLaterPhaseProbe = lazyFn('intentLaterPhaseProbe', 'runLaterPhaseProbe');
 import { venueHealthEvidence, probeAllVenues, venueHealthStatus } from './intentVenueHealth.js';
 import { bridgeProviderEvidence, bridgeStatus as intentBridgeStatus, getBridgeQuote } from './intentBridgeQuote.js';
 
@@ -1960,7 +2023,7 @@ app.get('/api/intents/v1/capabilities', (_req, res) => {
 app.get('/api/intents/v1/activation', async (_req, res) => {
   await ensureOperatorEvidenceHydrated().catch(() => {});
   res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
-  return res.json(activationReport());
+  return res.json(await activationReport());
 });
 
 /* Phases 10–100: the read-only status contract publishes the reviewed live
@@ -1969,13 +2032,13 @@ app.get('/api/intents/v1/phase-status', async (_req, res) => {
   await ensureOperatorEvidenceHydrated().catch(() => {});
   await ensurePlaneAttestationsHydrated().catch(() => {});
   res.set('cache-control', 'public, max-age=15, s-maxage=15, stale-while-revalidate=60');
-  return res.json(phaseStatusReport());
+  return res.json(await phaseStatusReport());
 });
 
 app.get('/api/intents/v1/public-status', async (_req, res) => {
   await ensureOperatorEvidenceHydrated().catch(() => {});
   await ensurePlaneAttestationsHydrated().catch(() => {});
-  const status = phaseStatusReport();
+  const status = await phaseStatusReport();
   const activation = status.phase21?.readiness;
   const active = status.launchAllowed === true;
   const activeBanner = [
@@ -2515,7 +2578,7 @@ app.get('/api/intents/v1/later-phase-probe', async (req, res) => {
       ? await runLaterPhaseProbe({})
       : await laterPhaseProbeReport({ force: req.query.force === '1' });
     res.set('cache-control', 'public, max-age=30, s-maxage=30');
-    return res.json({ ...laterPhasePublicSummary(report), schema: LATER_PHASE_SCHEMA });
+    return res.json({ ...await laterPhasePublicSummary(report), schema: LATER_PHASE_SCHEMA });
   } catch (e) {
     return res.status(500).json({ schema: LATER_PHASE_SCHEMA, ok: false, code: 'LATER_PHASE_PROBE_FAILED', detail: e.message });
   }
@@ -2829,8 +2892,8 @@ app.get('/api/intents/v1/atomic-swap/status', (_req, res) => {
   return res.json(atomicSwapProtocolStatus());
 });
 
-app.post('/api/intents/v1/atomic-swap/plan', (req, res) => {
-  const plan = buildAtomicSwapPlan(req.body);
+app.post('/api/intents/v1/atomic-swap/plan', async (req, res) => {
+  const plan = await buildAtomicSwapPlan(req.body);
   if (!plan.ok) {
     const status = ['ATOMIC_SWAP_CONTRACT_NOT_CONFIGURED'].includes(plan.code) ? 503 : 400;
     return res.status(status).json({ error: plan.code });
@@ -3114,7 +3177,7 @@ app.get('/api/intents/v1/log/:intentHash/root-anchor-calldata/:chainId', async (
   if (log.error) return res.status(log.error === 'LOG_READ_FAILED' ? 503 : 400).json(log);
   const built = buildMerkleRootManifest(log);
   if (!built.ok) return res.status(400).json({ error: built.code });
-  const result = buildMerkleRootAnchorCalldata(built.manifest, Number(req.params.chainId));
+  const result = await buildMerkleRootAnchorCalldata(built.manifest, Number(req.params.chainId));
   return res.status(result.ok ? 200 : 400).json(result.ok ? result : { error: result.code });
 });
 
@@ -3289,7 +3352,7 @@ app.get('/api/intents/v1/auctions/:intentHash/anchor-calldata/:chainId', async (
   const state = await readAuction(req.params.intentHash);
   if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
   if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
-  const result = buildAnchorCalldata(state.close, Number(req.params.chainId));
+  const result = await buildAnchorCalldata(state.close, Number(req.params.chainId));
   return res.status(result.ok ? 200 : 400).json(result.ok ? result : { error: result.code });
 });
 
@@ -6213,7 +6276,40 @@ app.get('/api/coin-venues', async (req, res) => {
  * shapes as the rest of the read-only API. They add no execution paths. */
 registerExploreRoutes(app);
 registerSecurityRoutes(app);
-registerCollectiveRoutes(app);
+/*
+ * The collective routes are DEFERRED (see the import above), so their
+ * registration is deferred too.
+ *
+ * This is the one place where a deferred module changes the SHAPE of the
+ * route table instead of only the timing of a handler: the collective
+ * endpoints are not mounted until the module is loaded. The alternative —
+ * mounting them eagerly — is what would have cost 114 ms on every cold
+ * start, which is the thing being fixed.
+ *
+ * So they are mounted on the FIRST request that arrives, and every request
+ * after that finds them already mounted. The mount is registered on the
+ * `app` object itself, so Express sees it from the next request onward.
+ *
+ * The failure is deliberately loud: a collective module that cannot load
+ * must not look like a collective module that does not exist. The rejected
+ * promise is logged, and the routes stay unmounted — which is honest, and
+ * is better than a router that throws on every request.
+ */
+let collectiveMounted = false;
+const mountCollectiveRoutes = () => {
+  if (collectiveMounted) return Promise.resolve();
+  collectiveMounted = true;
+  return registerCollectiveRoutes(app).catch((err) => {
+    collectiveMounted = false;
+    console.error('[lazy-module:collective-routes] mount failed:', err?.message || err);
+    throw err;
+  });
+};
+/* Mount on the first request, whatever it is. This costs one dynamic
+   `import()` on the first request of an instance and nothing after it. */
+app.use((req, res, next) => {
+  mountCollectiveRoutes().then(() => next(), next);
+});
 
 /* ------------------------- THORChain native swaps ------------------------- */
 /*
@@ -7223,6 +7319,54 @@ const lazyMount = (label, loader) => {
              (a transient failure during a cold start must not poison the
              instance for its whole life) — but the current caller gets the
              error now. */
+          loaded = null;
+          err.message = `lazy-mount:${label}:${err.message}`;
+          throw err;
+        });
+    }
+    return loaded;
+  };
+  const mounted = (req, res, next) => {
+    warm().then(() => holder.handle(req, res, next)).catch(next);
+  };
+  mounted.__lazyMount = label;
+  return mounted;
+};
+
+/*
+ * LAZY MOUNT FOR A ROUTER FACTORY.
+ *
+ * Six of the desk routers — business, structured products, options, payments,
+ * credit and RWA — export a FACTORY (`businessFinanceRouter()`), not a
+ * router. `lazyMount` above deliberately REJECTS a factory (it would hang
+ * the request), so this variant is the one that knows how to call it.
+ *
+ * The factory is called ONCE and its router is memoised, because a factory
+ * that builds a fresh router per call would rebuild the whole route table
+ * on every request — the opposite of what deferral is for.
+ */
+const lazyMountFactory = (label, loader, exportName) => {
+  const holder = express.Router();
+  let loaded = null;
+  const warm = () => {
+    if (!loaded) {
+      loaded = Promise.resolve()
+        .then(loader)
+        .then((mod) => {
+          const factory = exportName ? mod?.[exportName] : (mod?.default ?? mod);
+          if (typeof factory !== 'function') {
+            throw new Error(`lazy-mount:${label}:NOT_A_FACTORY (${typeof factory})`);
+          }
+          const router = factory();
+          if (typeof router !== 'function' || router.length < 2) {
+            throw new Error(
+              `lazy-mount:${label}:FACTORY_DID_NOT_RETURN_A_MIDDLEWARE (arity ${typeof router === 'function' ? router.length : typeof router})`
+            );
+          }
+          holder.use(router);
+          return router;
+        })
+        .catch((err) => {
           loaded = null;
           err.message = `lazy-mount:${label}:${err.message}`;
           throw err;
@@ -8971,19 +9115,23 @@ if (BOOT_PROBES_ENABLED && process.env.NODE_ENV !== 'test') {
   console.log('  (serverless host: boot probes skipped — evidence is earned by /api/cron/daily and the on-demand /api/intents/v1/*-probe routes; set INTENT_BOOT_PROBES=1 to force them here)');
 }
 
-import { businessFinanceRouter } from './businessFinance.js';
-import { structuredProductsRouter } from './structuredProducts.js';
-import { optionsRouter } from './options.js';
-import { paymentsOsRouter } from './paymentsOs.js';
-import { creditRouter } from './credit.js';
-import { rwaRouter } from './rwa.js';
-
-app.use('/api/business', businessFinanceRouter());
-app.use('/api/structured-products', structuredProductsRouter());
-app.use('/api/options', optionsRouter());
-app.use('/api/payments', paymentsOsRouter());
-app.use('/api/credit', creditRouter());
-app.use('/api/rwa', rwaRouter());
+/*
+ * THE SIX DESK ROUTERS ARE DEFERRED.
+ *
+ * Together they cost about 90 ms of CPU to compile, and a serverless cold
+ * start pays that BEFORE the first byte of the first request — usually a
+ * health check or a price read, which cannot reach any of them.
+ *
+ * They are router FACTORIES, so they use `lazyMountFactory` (which calls the
+ * factory once and memoises its router) rather than `lazyMount` (which would
+ * reject a factory and hang the request).
+ */
+app.use('/api/business', lazyMountFactory('business-finance', () => import('./businessFinance.js'), 'businessFinanceRouter'));
+app.use('/api/structured-products', lazyMountFactory('structured-products', () => import('./structuredProducts.js'), 'structuredProductsRouter'));
+app.use('/api/options', lazyMountFactory('options', () => import('./options.js'), 'optionsRouter'));
+app.use('/api/payments', lazyMountFactory('payments-os', () => import('./paymentsOs.js'), 'paymentsOsRouter'));
+app.use('/api/credit', lazyMountFactory('credit', () => import('./credit.js'), 'creditRouter'));
+app.use('/api/rwa', lazyMountFactory('rwa', () => import('./rwa.js'), 'rwaRouter'));
 
 import { appendLedgerEvent, getLedger } from './universalLedger.js';
 app.get('/api/v1/ledger', async (req, res) => {

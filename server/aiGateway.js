@@ -106,6 +106,7 @@ import {
   resolveProviderFleet,
   DEFAULT_PROVIDER_FLEET
 } from './aiProviderFleet.js';
+import { aiAnswerCacheStats } from './aiAnswerCache.js';
 
 /* Re-exported so every consumer of the gateway can describe the mode it used
    without importing a second module. */
@@ -1145,7 +1146,22 @@ export function getFleetSummary() {
        had been made. */
     servingFrom: healthy.length
       ? healthy.map((p) => p.id)
-      : (failing.length ? ['degraded:internal-rules'] : ['internal-rules'])
+      : (failing.length ? ['degraded:internal-rules'] : ['internal-rules']),
+    /*
+     * The answer cache's own report.
+     *
+     * It is here, and not on a separate endpoint, because the question it
+     * answers is the same one this whole summary answers: «چرا هوش مصنوعی
+     * کار نمی‌کند؟» — and on a free fleet the answer is often «the daily
+     * allowance is already spent». `hitRate` is the fraction of turns the
+     * fleet did not have to answer, so it is the number that says whether the
+     * cache is doing its job.
+     *
+     * A cached answer is NOT a different answer: the stored verdict carries
+     * the original providers, models, claims and uncertainty, so a client
+     * cannot be misled by one. See server/aiAnswerCache.js.
+     */
+    answerCache: aiAnswerCacheStats()
   };
 }
 

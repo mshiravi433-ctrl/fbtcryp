@@ -18,7 +18,7 @@
  * Buy unavailable.
  */
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { getAddress, isAddress } from 'ethers';
+import { getAddress, isAddress } from './ethersLite.js';
 import { EVM_CHAINS } from './chainsLite.js';
 import { storeGet, storeSet } from './store.js';
 import { upstashConfigured, upstashSetIfAbsent } from './blobCache.js';

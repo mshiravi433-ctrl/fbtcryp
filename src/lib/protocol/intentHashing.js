@@ -5,7 +5,7 @@
  * across frontend, backend, solver, smart contracts, and verification services.
  */
 
-import { keccak256, toUtf8Bytes, AbiCoder } from 'ethers';
+import { keccak256, toUtf8Bytes, AbiCoder } from '../../../server/ethersLite.js';
 import {
   EIP712_DOMAIN_NAME,
   EIP712_DOMAIN_VERSION,
@@ -13,7 +13,11 @@ import {
   PROTOCOL_VERSION
 } from './types.js';
 
-const abiCoder = AbiCoder.defaultAbiCoder();
+let abiCoderP = null;
+const abiCoderReady = async () => {
+  if (!abiCoderP) abiCoderP = await AbiCoder();
+  return abiCoderP;
+};
 
 /**
  * Deterministic JSON stringifier (recursive key-sorted).

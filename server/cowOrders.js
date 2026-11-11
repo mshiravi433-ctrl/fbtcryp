@@ -18,7 +18,7 @@
  * are what lets the watcher send a «filled» notification while the app is
  * closed.
  */
-import { keccak256, toUtf8Bytes, verifyTypedData } from 'ethers';
+import { keccak256, toUtf8Bytes, verifyTypedData } from './ethersLite.js';
 import { PAYOUT_ADDRESSES } from '../src/lib/payout.js';
 import {
   COW_ORDER_TYPES,
@@ -120,7 +120,7 @@ export async function relayCowCreate(input) {
   let recovered;
   try {
     const td = cowOrderTypedData(chainId, input.order);
-    recovered = verifyTypedData(td.domain, COW_ORDER_TYPES, td.message, input.signature);
+    recovered = await verifyTypedData(td.domain, COW_ORDER_TYPES, td.message, input.signature);
   } catch {
     return { status: 400, body: { error: 'BAD_SIGNATURE' } };
   }
@@ -194,7 +194,7 @@ export async function relayCowCancel(input) {
   let recovered;
   try {
     const td = cowCancelTypedData(chainId, uids);
-    recovered = verifyTypedData(td.domain, COW_CANCEL_TYPES, td.message, input.signature);
+    recovered = await verifyTypedData(td.domain, COW_CANCEL_TYPES, td.message, input.signature);
   } catch {
     return { status: 400, body: { error: 'BAD_SIGNATURE' } };
   }

@@ -1,9 +1,17 @@
-import { Interface, isAddress } from 'ethers';
+import { Interface, isAddress } from '../ethersLite.js';
 import { VAULT_EVENT_ABI, QUEUE_EVENT_ABI } from './abi.js';
 import { COLLECTIVE_MAX_EVENT_SPAN } from './config.js';
 
-const vaultInterface = new Interface(VAULT_EVENT_ABI);
-const queueInterface = new Interface(QUEUE_EVENT_ABI);
+let vaultInterfaceP = null;
+const vaultInterfaceReady = async () => {
+  if (!vaultInterfaceP) vaultInterfaceP = await Interface(VAULT_EVENT_ABI);
+  return vaultInterfaceP;
+};
+let queueInterfaceP = null;
+const queueInterfaceReady = async () => {
+  if (!queueInterfaceP) queueInterfaceP = await Interface(QUEUE_EVENT_ABI);
+  return queueInterfaceP;
+};
 
 const safeInteger = (value) => {
   const n = Number(value);
@@ -19,9 +27,9 @@ function serializeArgs(fragment, args) {
   return output;
 }
 
-function parseLog(log, iface, source) {
+async function parseLog(log, iface, source) {
   try {
-    const parsed = iface.parseLog({ topics: log.topics, data: log.data });
+    const parsed = (await ifaceReady()).parseLog({ topics: log.topics, data: log.data });
     if (!parsed) return null;
     return {
       source,
@@ -64,9 +72,13 @@ export async function scanVaultEvents(provider, {
     provider.getLogs({ address: vaultAddress, fromBlock: from, toBlock: to }),
     provider.getLogs({ address: queueAddress, fromBlock: from, toBlock: to })
   ]);
+  /* The ABI machinery is loaded once, BEFORE the maps — the map callbacks
+     are synchronous, so the interfaces are awaited here and handed to them. */
+  const vaultIface = await vaultInterfaceReady();
+  const queueIface = await queueInterfaceReady();
   const events = [
-    ...vaultLogs.map((log) => parseLog(log, vaultInterface, 'vault')),
-    ...queueLogs.map((log) => parseLog(log, queueInterface, 'withdrawal-queue'))
+    ...vaultLogs.map((log) => parseLog(log, vaultIface, 'vault')),
+    ...queueLogs.map((log) => parseLog(log, queueIface, 'withdrawal-queue'))
   ].filter(Boolean);
 
   const wallet = walletAddress?.toLowerCase();

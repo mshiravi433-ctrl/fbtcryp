@@ -37,7 +37,7 @@
  *     quota-share / validator lists) need a dedicated input UI, so the
  *     marketplace does not surface them — no guessed metadata.
  */
-import { Interface, getAddress } from 'ethers';
+import { Interface, getAddress } from '../../ethersLite.js';
 import { InsuranceProviderAdapter } from '../adapter.js';
 import { httpGet, httpPost } from '../http.js';
 import * as store from '../store.js';
@@ -552,9 +552,9 @@ export class NexusMutualAdapter extends InsuranceProviderAdapter {
       commissionDestination: commissionRatioBps > 0 ? this.commissionDestination : '0x0000000000000000000000000000000000000000'
     };
 
-    const iface = new Interface([configData.abi.CoverBroker.buyCover]);
+    const iface = await Interface([configData.abi.CoverBroker.buyCover]);
     const allocations = mapPoolAllocations(poolAllocationRequests);
-    const data = iface.encodeFunctionData('buyCover', [finalParams, allocations.map((r) => [r.poolId, r.coverAmountInAsset])]);
+    const data = (await ifaceReady()).encodeFunctionData('buyCover', [finalParams, allocations.map((r) => [r.poolId, r.coverAmountInAsset])]);
 
     const isNativePayment = coverAssetId === COVER_ASSETS.ETH.id;
     const tx = {

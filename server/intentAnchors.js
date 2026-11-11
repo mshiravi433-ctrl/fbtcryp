@@ -7,7 +7,7 @@
  * for the signed close and the configured confirmation threshold is met.
  */
 
-import { Interface, getAddress } from 'ethers';
+import { Interface, getAddress } from './ethersLite.js';
 import { verifyAuctionClose } from './intentAuctions.js';
 
 export const AUCTION_ANCHOR_CLAIM_SCHEMA = 'fbt.auction-anchor-claim.v1';
@@ -15,7 +15,12 @@ export const INTENT_ANCHOR_ABI = [
   'function anchor(bytes32 closeId, bytes32 intentHash, bytes32 logRoot, uint64 logSize, uint64 closedAt)',
   'event AuctionRootAnchored(bytes32 indexed closeId, bytes32 indexed intentHash, bytes32 indexed logRoot, uint64 logSize, uint64 closedAt, address anchorer)'
 ];
-const iface = new Interface(INTENT_ANCHOR_ABI);
+/* The ABI machinery is loaded ON DEMAND — see server/ethersLite.js. */
+let ifaceP = null;
+const ifaceReady = async () => {
+  if (!ifaceP) ifaceP = await Interface(INTENT_ANCHOR_ABI);
+  return ifaceP;
+};
 const TX_RE = /^0x[a-fA-F0-9]{64}$/;
 const ALLOWED_CHAINS = new Set([1, 10, 56, 137, 146, 8453, 42161, 43114, 59144]);
 
@@ -104,7 +109,7 @@ export function publicAnchorNetworks(networks = parseAnchorNetworks()) {
   return [...networks.values()].map(({ rpcUrl: _rpcUrl, ...network }) => network);
 }
 
-export function buildAnchorCalldata(close, chainId, networks = parseAnchorNetworks()) {
+export async function buildAnchorCalldata(close, chainId, networks = parseAnchorNetworks()) {
   if (!verifyAuctionClose(close)) return { ok: false, code: 'INVALID_AUCTION_CLOSE' };
   const network = networks.get(Number(chainId));
   if (!network) return { ok: false, code: 'ANCHOR_NETWORK_NOT_CONFIGURED' };
@@ -116,7 +121,7 @@ export function buildAnchorCalldata(close, chainId, networks = parseAnchorNetwor
       contract: network.contract,
       to: network.contract,
       value: '0x0',
-      data: iface.encodeFunctionData('anchor', [
+      data: (await ifaceReady()).encodeFunctionData('anchor', [
         close.closeId,
         close.intentHash,
         close.logRoot,
@@ -191,7 +196,7 @@ export async function verifyAnchorClaim(close, claim, {
   for (const log of Array.isArray(receipt.logs) ? receipt.logs : []) {
     if (log?.removed || !same(log.address, network.contract)) continue;
     try {
-      const parsed = iface.parseLog({ topics: log.topics, data: log.data });
+      const parsed = (await ifaceReady()).parseLog({ topics: log.topics, data: log.data });
       if (parsed?.name !== 'AuctionRootAnchored') continue;
       if (!same(parsed.args.closeId, close.closeId)
         || !same(parsed.args.intentHash, close.intentHash)
