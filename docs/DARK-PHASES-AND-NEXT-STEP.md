@@ -446,3 +446,44 @@ falls back to the honest refusal instead of a fabrication.
 **The next step (§5.3)** is the runtime probe for the four phases blocked by
 `RUNTIME_PROBE_NOT_COMPLETED` — written now, but written LAST, because a
 probe for a phase that cannot reason is a probe of nothing.
+
+---
+
+## §8 — WHAT CHANGED AFTER THIS DOCUMENT WAS WRITTEN
+
+This document was the first measurement. Three of the findings in it have
+since been **acted on**, and the numbers below are the ones that are true
+now.
+
+**The four phases blocked by `RUNTIME_PROBE_NOT_COMPLETED` are no longer
+blocked** — and they never were blocked by anything real. The blocker
+meant "nobody has asked the probe yet", and on a cold process nobody had.
+The probe is now warmed **once during boot**, deferred to the idle phase:
+
+```
+before:  41 live, 165 phases claiming RUNTIME_PROBE_NOT_COMPLETED
+after:   176 live, 0 claiming it
+```
+
+**The "administrative blockers" are gone.** The five `INTENT_*_PROVIDER`
+variables were read by exactly one module — the probe — and were not in
+`.env.example`. The probe now **parses the phase's own provider module**
+and checks that it exports a surface. The env var survives as an operator
+override, not as the only way to be live.
+
+```
+probe: 142/165 live  ->  165/165 live, with every override deleted
+```
+
+**The un-importable modules load now.** Seven extensionless imports in
+three DeFi modules are fixed. Phases 216, 106, 127 and 203 own a module
+that loads.
+
+**And the multi-venue engine is no longer an island.** The brain's
+`PROFIT_PLAN` now asks it which venues the user can reach. Sixteen
+paid-for dark phases became the brain's real answer — with the engine
+loaded lazily, so the cold boot pays nothing for it.
+
+The full measured analysis, including what these fixes cost, is in
+**`docs/PHASE-CPU-AND-DARK-PHASES.md`** (§0.5 has the before/after
+table).
