@@ -118,6 +118,65 @@ function activeStatus() {
   };
 }
 
+/**
+ * The SUMMARY of the phase report.
+ *
+ * ─── WHY THIS EXISTS ─────────────────────────────────────────────────────
+ *
+ * The full report is **148 KB**, and it is paid for on every call:
+ * 116 KB of the 206 phase rows, plus a 30 KB `phase21` readiness block.
+ * A dashboard that renders a status badge does not read any of it.
+ *
+ * So the report has two forms:
+ *
+ *   • the SUMMARY — the counts, the status, the gate, the blockers, and a
+ *     per-phase line of just `phase`, `id`, `live` and `blockers`;
+ *   • the DETAIL — everything, for the caller that really wants it.
+ *
+ * The summary is what a monitoring client polls, and it is roughly an
+ * order of magnitude smaller. The detail is unchanged, and still available.
+ *
+ * @param {object} report the full report
+ * @returns {object} the summary
+ */
+export function phaseStatusSummary(report) {
+  const { phases = [], phase21 = null, ...rest } = report || {};
+  return {
+    ...rest,
+    phaseCount: phases.length,
+    operationalPhaseCount: phases.filter((p) => p.live === true).length,
+    blockedPhaseCount: phases.filter((p) => p.live !== true).length,
+    /* The per-phase LINE, not the per-phase record. A client that wants to
+       know WHICH phase is blocked needs the blocker codes; it does not need
+       the source list, the test list and the claims block of all 206. */
+    phases: phases.map((p) => ({
+      phase: p.phase,
+      id: p.id,
+      live: p.live === true,
+      operational: p.operational === true,
+      blockers: p.blockers || []
+    })),
+    /* The readiness block is 30 KB and is only meaningful to a client that
+       is about to act on it. The summary carries its verdict. */
+    phase21: phase21 ? {
+      phase: phase21.phase,
+      id: phase21.id,
+      live: phase21.live === true,
+      operational: phase21.operational === true,
+      /* The activation MODE — 'sandbox-operator-self-attested' and friends —
+         is what the activation board reads to label the release. It is one
+         string and it is in the summary for that reason. */
+      mode: phase21.mode ?? null,
+      readiness: phase21.readiness ? {
+        status: phase21.readiness.status,
+        launchAllowed: phase21.readiness.launchAllowed === true,
+        operational: phase21.readiness.operational,
+        blockers: phase21.readiness.blockers || []
+      } : null
+    } : null
+  };
+}
+
 export function phaseStatusReport({ now = Date.now(), operationalScan = null } = {}) {
   const scan = operationalScan || scanOperationalProviders({ now });
   const freeze = freezeStateReport({ now });

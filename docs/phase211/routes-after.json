@@ -1,7 +1,7 @@
 {
   "schema": "fbt.phase211.route-inventory.v1",
   "label": "after",
-  "generatedAt": "2026-11-12T07:23:02.573Z",
+  "generatedAt": "2026-11-12T07:40:43.376Z",
   "frontend": {
     "routeCount": 85,
     "routes": [
@@ -1007,6 +1007,7 @@
         "GET /api/coin/:id",
         "GET /api/community",
         "GET /api/cron/daily",
+        "GET /api/cron/daily/:job",
         "GET /api/cron/monitors",
         "GET /api/cron/scenario-evidence",
         "GET /api/cron/smart-money",
@@ -1111,6 +1112,7 @@
         "GET /api/intents/v1/outcome/log/:intentHash",
         "GET /api/intents/v1/output-locales",
         "GET /api/intents/v1/phase-status",
+        "GET /api/intents/v1/phase-status/summary",
         "GET /api/intents/v1/plane-attestations",
         "GET /api/intents/v1/public-status",
         "GET /api/intents/v1/scheduler-status",

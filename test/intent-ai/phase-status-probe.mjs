@@ -33,7 +33,7 @@ try {
   };
 
   /* 1. Fail-closed boot: a deployment without evidence must not launch. */
-  const cold = await get('/api/intents/v1/phase-status');
+  const cold = await get('/api/intents/v1/phase-status?detail=1');
   assert.equal(cold.response.status, 200);
   assert.equal(cold.body.launchAllowed, false);
   assert.notEqual(cold.body.evidence.status, '21/21');
@@ -44,7 +44,7 @@ try {
         deployment receives it (INTENT_OPERATIONAL_EVIDENCE or the route). */
   await injectReviewedEvidence(base);
 
-  const phaseStatus = await get('/api/intents/v1/phase-status');
+  const phaseStatus = await get('/api/intents/v1/phase-status?detail=1');
   assert.equal(phaseStatus.response.status, 200);
   assert.equal(phaseStatus.body.schema, 'fbt.intent-ai-phase-status.v1');
   assert.deepEqual([...phaseStatus.body.phases.map((row) => row.phase)].sort((a, b) => a - b), [...EXPECTED_PHASES]);
@@ -133,7 +133,7 @@ try {
   try {
     await injectOwnerAttestations(base);
 
-    const activated = await get('/api/intents/v1/phase-status');
+    const activated = await get('/api/intents/v1/phase-status?detail=1');
     assert.equal(activated.body.phaseCount, 206);
     assert.equal(activated.body.evidence.status, '21/21');
     assert.equal(activated.body.phase21?.mode, 'owner-activated');

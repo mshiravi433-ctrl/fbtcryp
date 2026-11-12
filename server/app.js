@@ -516,6 +516,7 @@ lazyModule('intentActivation', () => import('./intentActivation.js'));
 const activationReport = lazyFn('intentActivation', 'activationReport');
 lazyModule('intentPhaseStatus', () => import('./intentPhaseStatus.js'));
 const phaseStatusReport = lazyFn('intentPhaseStatus', 'phaseStatusReport');
+const phaseStatusSummary = lazyFn('intentPhaseStatus', 'phaseStatusSummary');
 import { handleOperatorEvidence, evidenceStoreStatus, getStoredEvidence, ensureOperatorEvidenceHydrated } from './intentOperatorEvidence.js';
 import { handlePlaneAttestations, planeAttestationsStatus, ensurePlaneAttestationsHydrated } from './intentPlaneAttestations.js';
 import { refreshMeasuredPlaneFacts } from './intentOperationalEvidence.js';
@@ -2030,7 +2031,7 @@ app.get('/api/intents/v1/activation', async (_req, res) => {
 
 /* Phases 10–100: the read-only status contract publishes the reviewed live
  * release and its 21/21 evidence summary. */
-app.get('/api/intents/v1/phase-status', async (_req, res) => {
+app.get('/api/intents/v1/phase-status', async (req, res) => {
   await ensureOperatorEvidenceHydrated().catch(() => {});
   await ensurePlaneAttestationsHydrated().catch(() => {});
   /* Measure the control planes before answering. The measurement exercises
@@ -2040,7 +2041,56 @@ app.get('/api/intents/v1/phase-status', async (_req, res) => {
   await refreshMeasuredPlaneFacts().catch(() => {});
   await refreshProductArcProbe().catch(() => {});
   res.set('cache-control', 'public, max-age=15, s-maxage=15, stale-while-revalidate=60');
-  return res.json(await phaseStatusReport());
+
+  /*
+   * The report has two forms, and the caller says which one it wants.
+   *
+   * The full report is 148 KB: 116 KB of phase rows and a 30 KB readiness
+   * block. A dashboard that renders a badge reads none of it, and a
+   * monitoring client that polls every minute was spending a real part of
+   * its budget on bytes it never looked at.
+   *
+   *   ?detail=0  → the SUMMARY (default): the counts, the verdict, and a
+   *                per-phase line of phase/id/live/blockers.
+   *   ?detail=1  → the DETAIL: everything, unchanged.
+   *   ?phase=N   → ONE phase's full record, for a client that drilled in.
+   *
+   * The default is the summary. That is a deliberate choice: the cheap
+   * form should be the one a careless client gets, and the expensive form
+   * should have to be asked for by name.
+   */
+  const detail = String(req.query?.detail ?? '0').trim();
+  const report = await phaseStatusReport();
+
+  if (detail === '1' || detail === 'true' || detail === 'full') {
+    return res.json(report);
+  }
+  const one = req.query?.phase;
+  if (one !== undefined && one !== null && String(one).trim() !== '') {
+    const wanted = Number(one);
+    const row = report.phases.find((p) => p.phase === wanted);
+    return res.json({
+      schema: report.schema,
+      generatedAt: report.generatedAt,
+      phase: row || null,
+      found: Boolean(row)
+    });
+  }
+  /* `phaseStatusSummary` is a LAZY function, so it returns a promise —
+     and `res.json(promise)` would serialise `{}`. The await is load-
+     bearing. */
+  return res.json(await phaseStatusSummary(report));
+});
+
+/* The summary under its own name, for a client that wants to be explicit
+   about what it is asking for. */
+app.get('/api/intents/v1/phase-status/summary', async (_req, res) => {
+  await ensureOperatorEvidenceHydrated().catch(() => {});
+  await ensurePlaneAttestationsHydrated().catch(() => {});
+  await refreshMeasuredPlaneFacts().catch(() => {});
+  await refreshProductArcProbe().catch(() => {});
+  res.set('cache-control', 'public, max-age=15, s-maxage=15, stale-while-revalidate=60');
+  return res.json(await phaseStatusSummary(await phaseStatusReport()));
 });
 
 app.get('/api/intents/v1/public-status', async (_req, res) => {
@@ -8742,6 +8792,132 @@ async function readFcmTokensSafe() {
  * (VAPID) or FCM by the device's identity. A wiring check asserts it stays
  * passed here so the fix cannot regress into a silent feature removal.
  */
+/*
+ * ─── THE DAILY JOBS, AS A REGISTRY (§5.6, 2026-11-12) ──────────────────
+ *
+ * `/api/cron/daily` used to be one route that ran ELEVEN jobs in a single
+ * `Promise.allSettled`. It is the most expensive route in the deployment:
+ *
+ *     /api/cron/daily   563 ms CPU   (66 % of all cron CPU)
+ *
+ * and when it costs 563 ms, nobody can say WHICH of the eleven caused it.
+ *
+ * So the jobs are now a REGISTRY. Each job is defined once, with its own
+ * runner and its own result shape, and the route can run:
+ *
+ *   · all of them          → GET /api/cron/daily
+ *   · exactly one of them  → GET /api/cron/daily/<job>
+ *   · one of them, by name → GET /api/cron/daily?job=<name>
+ *
+ * The cost of each job becomes visible, a job that does nothing can be
+ * skipped honestly, and a job that starts failing is identifiable instead
+ * of being one red field in a big JSON blob.
+ *
+ * The evidence hydration stays on the combined route, because the probes
+ * read the evidence the other jobs refresh — running one probe alone
+ * would measure against a stale store.
+ */
+const DAILY_JOBS = [
+  {
+    name: 'web-promo',
+    run: () => sendDailyPromo(),
+    shape: (value) => value
+  },
+  {
+    name: 'fcm-promo',
+    run: () => sendDailyFcm(),
+    shape: (value) => value
+  },
+  {
+    name: 'watch',
+    run: () => runWatchCycle(sendWatchAlert),
+    shape: (value) => value
+  },
+  {
+    name: 'price-watch',
+    run: () => maybePriceWatchTick({ send: deliverStagePush, force: true }),
+    shape: (value) => value
+  },
+  {
+    name: 'monitors',
+    run: () => evaluateAllMonitors({ send: deliverMonitorPush }),
+    shape: (value) => value
+  },
+  {
+    name: 'smart-money',
+    run: () => smartMoneyCadence((endpoint, lang, payload) =>
+      deliverStagePush(endpoint, { title: payload.title, body: payload.body, url: payload.url, tag: payload.tag, lang })),
+    shape: (value) => value
+  },
+  {
+    name: 'certifications',
+    run: () => sweepCertifications(),
+    shape: (value) => value.ok ? { expired: value.expired, active: value.active } : { skipped: value.code }
+  },
+  {
+    name: 'reputation',
+    run: () => getReputationSnapshot({ force: true }),
+    shape: (value) => ({ dataStatus: value.dataStatus, subjects: value.snapshot?.subjectCount ?? 0 })
+  },
+  {
+    name: 'self-probe',
+    run: () => runSelfProbe({}),
+    shape: (value) => ({ earnedCount: value.earnedCount, totalKinds: value.totalKinds })
+  },
+  {
+    name: 'ops-probe',
+    run: () => runOpsProbe({}),
+    shape: (value) => ({ earnedCount: value.earnedCount, totalKinds: value.totalKinds })
+  },
+  {
+    name: 'stage3-probe',
+    run: () => runStage3Probe({}),
+    shape: (value) => ({ earnedCount: value.earnedCount, totalKinds: value.totalKinds })
+  }
+];
+
+/* Run one job and answer with its own shape, whatever it does. */
+async function runDailyJob(job) {
+  try {
+    const value = await job.run();
+    return job.shape(value);
+  } catch (err) {
+    return { error: String(err?.message || err).slice(0, 120) };
+  }
+}
+
+/*
+ * The evidence hydration, on its own, because every probe reads it.
+ *
+ * It is the part that cannot be split: a probe that runs against a store
+ * that was never hydrated measures nothing.
+ */
+async function hydrateDailyEvidence() {
+  await Promise.all([
+    ensureOperatorEvidenceHydrated().catch(() => {}),
+    ensureHydrated().catch(() => {}),
+    ensureOpsHydrated().catch(() => {}),
+    ensureStage3Hydrated().catch(() => {})
+  ]);
+}
+
+/* One job, on its own — for attribution, and for a schedule of its own. */
+app.get('/api/cron/daily/:job', async (req, res) => {
+  if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
+  const job = DAILY_JOBS.find((j) => j.name === String(req.params?.job || '').trim());
+  if (!job) {
+    return res.status(404).json({
+      error: 'UNKNOWN_JOB',
+      job: String(req.params?.job || '').trim(),
+      available: DAILY_JOBS.map((j) => j.name)
+    });
+  }
+  await hydrateDailyEvidence();
+  const startedAt = Date.now();
+  const result = await runDailyJob(job);
+  return res.json({ job: job.name, ms: Date.now() - startedAt, result });
+});
+
 app.get('/api/cron/daily', async (req, res) => {
   if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
   /*
@@ -8770,43 +8946,55 @@ app.get('/api/cron/daily', async (req, res) => {
      operational drills and the stage-3 kinds here, on the existing daily
      slot — self-verifiable facts only, never a manufactured record. Each run
      rebuilds the durable snapshot through the normal store. */
-  await Promise.all([
-    ensureOperatorEvidenceHydrated().catch(() => {}),
-    ensureHydrated().catch(() => {}),
-    ensureOpsHydrated().catch(() => {}),
-    ensureStage3Hydrated().catch(() => {})
-  ]);
-  const [web, fcm, watch, priceWatch, monitors, smartMoneyAlerts, certs, reputation, selfProbe, opsProbe, stage3] = await Promise.allSettled([
-    sendDailyPromo(),
-    sendDailyFcm(),
-    runWatchCycle(sendWatchAlert),
-    /* The daily floor for token price/P&L alerts: `force` bypasses the tick
-       throttle so a day is never silent even when both sub-daily triggers are
-       down — the same guarantee the order watcher gets from this slot. */
-    maybePriceWatchTick({ send: deliverStagePush, force: true }),
-    evaluateAllMonitors({ send: deliverMonitorPush }),
-    smartMoneyCadence((endpoint, lang, payload) =>
-      deliverStagePush(endpoint, { title: payload.title, body: payload.body, url: payload.url, tag: payload.tag, lang })),
-    sweepCertifications(),
-    getReputationSnapshot({ force: true }),
-    runSelfProbe({}),
-    runOpsProbe({}),
-    runStage3Probe({})
-  ]);
-  const settled = (result, shape) => result.status === 'fulfilled' ? shape(result.value) : { error: String(result.reason).slice(0, 120) };
+  await hydrateDailyEvidence();
+
+  /*
+   * ONE job, by name — the same cost, the same result, but attributable.
+   *
+   * `?job=smart-money` runs one job instead of eleven, so a schedule can
+   * give it its own slot and a measurement can name it.
+   */
+  const only = String(req.query?.job || '').trim();
+  if (only) {
+    const job = DAILY_JOBS.find((j) => j.name === only);
+    if (!job) {
+      return res.status(404).json({ error: 'UNKNOWN_JOB', job: only, available: DAILY_JOBS.map((j) => j.name) });
+    }
+    const startedAt = Date.now();
+    const result = await runDailyJob(job);
+    return res.json({ job: job.name, ms: Date.now() - startedAt, result });
+  }
+
+  /*
+   * ALL of them, in parallel, each with its own timing — so the 563 ms
+   * that used to be one number becomes eleven.
+   */
+  const startedAt = Date.now();
+  const settled = await Promise.all(DAILY_JOBS.map(async (job) => {
+    const at = Date.now();
+    const result = await runDailyJob(job);
+    return { name: job.name, ms: Date.now() - at, result };
+  }));
+  const byName = Object.fromEntries(settled.map((r) => [r.name, r.result]));
+  const byLegacyKey = {
+    web: byName['web-promo'],
+    fcm: byName['fcm-promo'],
+    watch: byName.watch,
+    priceWatch: byName['price-watch'],
+    monitors: byName.monitors,
+    smartMoneyAlerts: byName['smart-money'],
+    certifications: byName.certifications,
+    reputation: byName.reputation
+  };
   res.json({
-    web: web.status === 'fulfilled' ? web.value : { error: String(web.reason).slice(0, 120) },
-    fcm: fcm.status === 'fulfilled' ? fcm.value : { error: String(fcm.reason).slice(0, 120) },
-    watch: watch.status === 'fulfilled' ? watch.value : { error: String(watch.reason).slice(0, 120) },
-    priceWatch: priceWatch.status === 'fulfilled' ? priceWatch.value : { error: String(priceWatch.reason).slice(0, 120) },
-    monitors: monitors.status === 'fulfilled' ? monitors.value : { error: String(monitors.reason).slice(0, 120) },
-    smartMoneyAlerts: smartMoneyAlerts.status === 'fulfilled' ? smartMoneyAlerts.value : { error: String(smartMoneyAlerts.reason).slice(0, 120) },
-    certifications: settled(certs, (value) => value.ok ? { expired: value.expired, active: value.active } : { skipped: value.code }),
-    reputation: settled(reputation, (value) => ({ dataStatus: value.dataStatus, subjects: value.snapshot?.subjectCount ?? 0 })),
+    ...byLegacyKey,
+    /* The new shape: every job, with its own cost. */
+    jobs: settled,
+    totalMs: Date.now() - startedAt,
     intentActivation: {
-      selfProbe: settled(selfProbe, (value) => ({ earnedCount: value.earnedCount, totalKinds: value.totalKinds })),
-      opsProbe: settled(opsProbe, (value) => ({ earnedCount: value.earnedCount, totalKinds: value.totalKinds })),
-      stage3: settled(stage3, (value) => ({ earnedCount: value.earnedCount, totalKinds: value.totalKinds })),
+      selfProbe: byName['self-probe'],
+      opsProbe: byName['ops-probe'],
+      stage3: byName['stage3-probe'],
       evidence: evidenceStoreStatus(),
       refreshedAt: new Date().toISOString()
     }

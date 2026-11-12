@@ -112,7 +112,7 @@ try {
        to read "live / 21-21" on a server that had never been given a single
        evidence record, which is exactly the behaviour that made the dashboard
        unable to report "not ready". */
-    const phaseStatus = await get('/api/intents/v1/phase-status');
+    const phaseStatus = await get('/api/intents/v1/phase-status?detail=1');
     const publicStatus = await get('/api/intents/v1/public-status');
     check('phase-status reports phase 21 implemented but not live without evidence', phaseStatus.body.phases.some((row) => row.phase === 21 && row.implementation === 'implemented' && row.operational === false && row.live === false));
     check('phase-status names the missing evidence instead of going quiet', phaseStatus.body.phases.some((row) => row.phase === 21 && Array.isArray(row.blockers) && row.blockers.length > 0));

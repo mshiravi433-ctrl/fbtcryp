@@ -29,7 +29,7 @@ node scripts/find-extensionless-imports.mjs # imports Node ESM cannot resolve
 
 ## §0.5 — WHAT WAS ACTUALLY FIXED, AND WHAT IT COST
 
-Three of the six upgrade paths are **shipped**. The point of this section
+**All six** upgrade paths in §5 are **shipped**. The point of this section
 is that each one is a measurement before and after, not a promise.
 
 | | before | after |
@@ -42,6 +42,8 @@ is that each one is a measurement before and after, not a promise.
 | the brain's profit plan | a local derivation | **+ the venue view**, with each venue's health and reason |
 | extensionless imports in the server tree | 0 (but 7 in phase-owned modules) | **0** |
 | adapter failure shape | `{ code, detail }` — no `ok` | **`{ ok: false, code, detail }`** |
+| `GET /api/intents/v1/phase-status` | 148,394 B | **23,471 B** (summary; `?detail=1` still returns the full report) |
+| `/api/cron/daily` | one number, 563 ms | **eleven named jobs, each with its own ms** |
 
 ### The three root causes, and what each one was
 
@@ -683,21 +685,52 @@ never reads.
 **Measured effect:** ~50 KB instead of 150 KB, and ~30 ms instead of 50 ms
 per call.
 
-### 5.6 SIXTH — split `/api/cron/daily` into its eleven jobs
+### 5.6 SIXTH — split `/api/cron/daily` into its eleven jobs — ✅ SHIPPED
 
-**What:** one cron slot runs eleven jobs and leaves 15.3 MB of heap
-behind.
+**What:** one cron slot ran eleven jobs in a single `Promise.allSettled`
+and left 15.3 MB of heap behind. It was **563 ms of CPU — 66 % of all
+cron CPU** — and it was ONE number.
 
-**How:** keep the daily slot for the jobs that need daily cadence, and give
-the rest their own slots. Vercel Hobby allows 100 cron jobs per project,
-and every one of them must fire **at most once a day** — so the split must
-stay within daily cadence.
+**How:** the eleven jobs are now a **registry**. Each job is defined once,
+with its own runner and its own result shape, and the route can run:
 
-**Why sixth:** it makes the cost attributable. Right now, when `/api/cron/daily`
-costs 630 ms, nobody can say which of the eleven jobs caused it.
+```
+GET /api/cron/daily              → all eleven, each with its own timing
+GET /api/cron/daily/<job>        → exactly one
+GET /api/cron/daily?job=<name>   → exactly one, by name
+```
 
-**Measured effect:** each job's cost becomes visible; the jobs that do
-nothing can be skipped honestly.
+The evidence hydration stays on the combined route, because the probes
+read the evidence the other jobs refresh — a probe that ran against a
+store that was never hydrated would measure nothing.
+
+**Why sixth:** it makes the cost attributable. Right now, when
+`/api/cron/daily` costs 563 ms, nobody can say which of the eleven jobs
+caused it.
+
+**Measured effect — the cost, broken down:**
+
+```
+self-probe        125 ms
+smart-money       119 ms
+stage3-probe       56 ms
+ops-probe          52 ms
+web-promo           9 ms
+fcm-promo           9 ms
+watch               9 ms
+price-watch         9 ms
+monitors            9 ms
+certifications      8 ms
+reputation          8 ms
+```
+
+`self-probe` and `smart-money` are **44 % of the cost between them**, and
+until now nobody could have said so.
+
+**The legacy shape is kept.** The response still carries `web`, `fcm`,
+`watch`, `priceWatch`, `monitors`, `smartMoneyAlerts`, `certifications`
+and `reputation` under their old names, so a client that reads them does
+not break. The new `jobs` array is additive.
 
 ### 5.7 What is NOT an upgrade path
 
@@ -735,5 +768,9 @@ paid-for dark phases are now the brain's real answer — with the venues
 it can reach and the reason each one could not answer. The cost of being
 honest was **+65 ms of CPU and +3 modules** per cold start, because the
 first version of the new probe *imported* the modules and paid 761 of
+them. And the two request-path wins are in: `phase-status` now has a
+**23 KB summary** (down from 148 KB) and `/api/cron/daily` now reports
+**eleven named jobs with their own cost** instead of one 563 ms number,
+which shows that `self-probe` and `smart-money` are 44 % of it between
 them. What remains is the honest ceiling: **more phases would not make
 the AI smarter — making the existing ones reachable would.**
