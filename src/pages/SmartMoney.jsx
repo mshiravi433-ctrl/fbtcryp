@@ -15,7 +15,7 @@ import {
 } from '../components/smart-money/SmGlyphs';
 import {
   fetchOverview, fetchWhales, fetchFlows, fetchLiquidity,
-  fetchEarlyTokens, fetchFreshWallets, fetchExchanges,
+  fetchEarlyTokens, fetchFreshWallets, fetchExchanges, fetchWallet,
   fmtUsd, fmtPct, timeAgo, classifyQuery, chainIdForSlug, shortAddr
 } from '../lib/smartMoneyClient';
 import { openUrl } from '../lib/browser';
@@ -23,6 +23,7 @@ import { useTelegram } from '../context/TelegramContext';
 import SmartMoneyIntelligence, { IntelligenceTeaser, VerifiedWallets } from '../components/SmartMoneyIntelligence';
 import { readWhalesOnToken, readSolanaWhales, readSolanaWallets } from '../lib/whaleEngine';
 import { readFreshWallets } from '../lib/freshWallets';
+import { readWatchlist, nextToRead } from '../lib/walletTracking';
 import { getSolanaWhales } from '../lib/solTrack';
 import CopyTradeButton from '../components/smart-money/CopyTradeButton';
 import TokenIcon from '../lib/tokenIcon';
@@ -288,9 +289,33 @@ function FreshCard({ wallet, navigate, t }) {
     >
       <span className="smx-fresh-top">
         <ChainPill color={wallet.chainColor}>{wallet.chainShort}</ChainPill>
-        <span className="smx-fresh-tag">FRESH &lt;48h</span>
-        {wallet.interesting && (
-          <span className="smx-fresh-star"><SmSparkGlyph width={11} height={11} /> Smart</span>
+        {/*
+          * This said «FRESH <48h» while `FRESH.maxAgeMs` — the window the
+          * endpoint actually filters on — is 24 hours. The badge promised a
+          * cohort the list could not contain. It now states the real window.
+          */}
+        <span className="smx-fresh-tag">FRESH &lt;24h</span>
+        {/*
+          * «Smart» came straight off the wire (`interesting`, i.e. «received a
+          * lot»). That is a fact about money, not skill, and a wallet born an
+          * hour ago cannot have a track record. The badge now names what was
+          * actually measured, and stays silent when nothing was.
+          */}
+        {wallet.early?.score != null ? (
+          <span
+            className={`smx-fresh-star ${wallet.early.label === 'roundTrip' ? 'is-warn' : ''}`}
+            title={t(`sm.earlyLabel${wallet.early.label.charAt(0).toUpperCase()}${wallet.early.label.slice(1)}`)}
+          >
+            {wallet.early.label === 'roundTrip' || wallet.early.label === 'late'
+              ? null
+              : <SmSparkGlyph width={11} height={11} />}
+            {t(`sm.earlyLabel${wallet.early.label.charAt(0).toUpperCase()}${wallet.early.label.slice(1)}`)}
+            {' '}<b className="mono">{wallet.early.score}</b>
+          </span>
+        ) : (
+          <span className="smx-fresh-star is-muted" title={t('sm.earlyRefused')}>
+            {t('sm.earlyLabelUnmeasured')}
+          </span>
         )}
       </span>
       <span className="smx-fresh-addr mono">{wallet.short}</span>
@@ -334,6 +359,23 @@ function FreshSummary({ read, t }) {
           ? t('sm.freshReadDominant', { pct: read.dominant.sharePct })
           : t('sm.freshReadBroad')}
       </span>
+      {/*
+        * «Still early» and «still actionable» are different claims and both are
+        * printed: a wallet can be young and the news already 26 hours old, and
+        * a list that printed only the first would be recommending a closed
+        * window. `earlyLive` is the number the reader can act on.
+        */}
+      {read.early > 0 && (
+        <span className="smx-chip" data-testid="sm-fresh-early">
+          • {t('sm.freshReadEarly', { n: read.early })}
+        </span>
+      )}
+      {read.earlyLive > 0 && (
+        <span className="smx-chip">{t('sm.freshReadEarlyLive', { n: read.earlyLive })}</span>
+      )}
+      {read.roundTrips > 0 && (
+        <span className="smx-chip is-warn">{t('sm.freshReadRoundTrips', { n: read.roundTrips })}</span>
+      )}
       {read.unverified > 0 && (
         <span className="smx-chip smx-chip--note">{t('sm.freshReadUnverified', { n: read.unverified })}</span>
       )}
@@ -1489,6 +1531,31 @@ function TokensTab({ navigate, t, query, setQuery, winKey, activity }) {
   /* One read over the whole (unfiltered) feed: concentration and breadth are
      properties of the feed, not of the reader's search box. */
   const freshRead = useMemo(() => readFreshWallets({ wallets: fresh?.wallets || [] }), [fresh]);
+  /* The cards below render `fresh.wallets` (the raw payload, filtered by the
+     search box), but the earlyness lives on the READ rows. One map, built once
+     per payload, joins them — cheaper than re-running the engine per card and
+     impossible for a card to show a different score than the summary chips. */
+  const earlyByAddr = useMemo(() => {
+    const m = new Map();
+    for (const w of freshRead.rows || []) m.set(String(w.address).toLowerCase(), w.early);
+    return m;
+  }, [freshRead]);
+  /*
+   * THE READ WAS COMPUTED AND THEN IGNORED.
+   *
+   * `freshRead` decided which rows were verified-fresh, and the grid below
+   * rendered `fresh.wallets` — the raw payload — so a row the read had thrown
+   * out as unverifiable still got a card, with a «Smart» star and a capital
+   * figure, while the summary chips above it counted a different set. Two
+   * numbers about one payload, disagreeing on the same screen.
+   *
+   * The grid now renders the read's own rows (search-filtered), so the count in
+   * the chips and the cards underneath it are the same list by construction.
+   */
+  const verifiedRows = useMemo(() => {
+    const keep = new Set((freshRead.rows || []).map((w) => String(w.address).toLowerCase()));
+    return freshRows.filter((w) => keep.has(String(w.address).toLowerCase()));
+  }, [freshRows, freshRead]);
   const nothing = early !== null && !activityRows.length && !earlyRows.length && !freshRows.length;
 
   return (
@@ -1570,9 +1637,9 @@ function TokensTab({ navigate, t, query, setQuery, winKey, activity }) {
         <p className="smx-disclaimer">{t('sm.earlyNote')}</p>
       </section>
 
-      {freshRows.length > 0 && (
+      {verifiedRows.length > 0 && (
         <section className="sm-section">
-          <SectionHead icon={<SmFreshGlyph width={16} height={16} />} title={t('sm.freshWallets')} meta={String(freshRows.length)} />
+          <SectionHead icon={<SmFreshGlyph width={16} height={16} />} title={t('sm.freshWallets')} meta={String(verifiedRows.length)} />
           {/*
             * «کیف پول‌های تازه» as a READING, not a row of cards. Three things
             * the list could not say: whether the feed is one actor or many
@@ -1583,8 +1650,13 @@ function TokensTab({ navigate, t, query, setQuery, winKey, activity }) {
             */}
           <FreshSummary read={freshRead} t={t} />
           <div className="smx-fresh-grid">
-            {freshRows.slice(0, 6).map((w) => (
-              <FreshCard key={`${w.chainId}:${w.address}`} wallet={w} navigate={navigate} t={t} />
+            {verifiedRows.slice(0, 6).map((w) => (
+              <FreshCard
+                key={`${w.chainId}:${w.address}`}
+                wallet={{ ...w, early: earlyByAddr.get(String(w.address).toLowerCase()) || null }}
+                navigate={navigate}
+                t={t}
+              />
             ))}
           </div>
         </section>
@@ -1726,6 +1798,136 @@ function FlowsTab({ t, win = '24h', onWindow }) {
   );
 }
 
+/*
+ * THE WATCHLIST DIGEST — «پیگیری کیف پول» finally says something.
+ *
+ * The tracking layer has always written rows to localStorage and posted them to
+ * the server, and the reader has never been told anything about them: no count,
+ * no status, no sign that a tracked wallet had moved. This is the read, and it
+ * is deliberately CHEAP — it never fetches. Every tracked wallet's status is
+ * `pending` until a wallet page has actually been opened, and a `pending` row
+ * is rendered as «خوانده‌نشده», never as «۰ تغییر»:
+ *
+ *   · `readWatchlist` compares each row against the snapshot taken when the
+ *     reader tapped «Track» (see lib/walletTracking.js);
+ *   · `nextToRead` names which rows are worth opening, capped at 8, and this
+ *     panel offers ONE button that opens them — the same wallet endpoint the
+ *     wallet page already calls, at 120 s CDN / 30 s browser cache, so a full
+ *     digest of eight wallets is at most eight cached reads per visit, and the
+ *     server-side cache key is now per-wallet instead of per-clock (see
+ *     `analyzeWallet`).
+ *
+ * No new page, no new route, no polling: the digest renders on the tab that
+ * already exists and re-reads only when the reader taps.
+ *
+ * ─── COST (Fluid Active CPU, measured 2026-11-12) ───────────────────────────
+ * RENDER  `readWatchlist` 12.9 µs / 24 rows, `nextToRead` 2.8 µs, both in a
+ *         `useMemo` on [rows, wallets] — they run when the tab mounts or the
+ *         reader taps, never on a timer. The digest renders nothing at all when
+ *         no wallet is tracked, which is the default state.
+ * READS   Zero on mount. One tap opens at most 8 wallets, SEQUENTIALLY, through
+ *         the endpoint the wallet page already calls (30 s browser / 120 s CDN
+ *         cache). Eight parallel reads would be eight simultaneous five-source
+ *         fan-outs; sequential keeps the burst a burst.
+ * CACHE   The real saving is in `analyzeWallet`: its cache key used to embed
+ *         the live read budget, so it never hit and every open of a tracked
+ *         wallet re-read five upstream sources. It now keys on `budgetTier`, so
+ *         re-opening the same wallet inside the 120 s TTL costs no upstream
+ *         call at all — a strict reduction against the previous build.
+ * CLIENT  `readFreshWallets` grew from 8.8 µs to 41.4 µs over 40 rows (it now
+ *         runs the earlyness ladder per row), still in the memo that only fires
+ *         when the payload changes. 41 µs once per fetched payload is not a
+ *         CPU line item; a second network round-trip would have been.
+ */
+function WatchDigest({ navigate, t }) {
+  const [rows, setRows] = useState([]);
+  const [wallets, setWallets] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+
+  const reload = useCallback(() => {
+    import('../lib/smartMoneyWatch').then(({ getTracked }) => setRows(getTracked() || []));
+  }, []);
+  useEffect(() => { reload(); }, [reload]);
+
+  const read = useMemo(() => readWatchlist({ rows, wallets }), [rows, wallets]);
+  const queue = useMemo(() => nextToRead({ rows }), [rows]);
+
+  const readNow = useCallback(() => {
+    if (busy || !queue.length) return;
+    setBusy(true);
+    setNote(null);
+    // Sequential, not parallel: eight concurrent wallet reads is eight upstream
+    // fan-outs at once, and the point of the cap is to spend the budget slowly.
+    (async () => {
+      const next = { ...wallets };
+      let failures = 0;
+      for (const item of queue) {
+        try {
+          const w = await fetchWallet(item.chain, item.address);
+          next[item.key] = w;
+          const { stampRead } = await import('../lib/smartMoneyWatch');
+          stampRead(item.chain, item.address);
+        } catch {
+          failures += 1;
+          next[item.key] = { dataStatus: 'unavailable' };
+        }
+      }
+      setWallets(next);
+      reload();
+      setNote(failures ? 'partial' : 'ok');
+      setBusy(false);
+    })();
+  }, [busy, queue, wallets, reload]);
+
+  if (!read.count) return null;
+
+  return (
+    <div className="smx-chips smx-watchdigest" data-testid="sm-watch-digest">
+      <span className="smx-chip">
+        <SmBellGlyph width={11} height={11} />
+        {t('sm.watchDigest')} · {read.count}
+      </span>
+      {read.active > 0 && (
+        <span className="smx-chip is-mint">{t('sm.watchDigestActive', { n: read.active })}</span>
+      )}
+      {read.stillEarly > 0 && (
+        <span className="smx-chip">{t('sm.watchDigestStillEarly', { n: read.stillEarly })}</span>
+      )}
+      {read.pending > 0 && (
+        <span className="smx-chip smx-chip--note">{t('sm.watchDigestPending', { n: read.pending })}</span>
+      )}
+      {read.unavailable > 0 && (
+        <span className="smx-chip is-warn">{t('sm.watchDigestUnavailable', { n: read.unavailable })}</span>
+      )}
+      {read.quiet > 0 && (
+        <span className="smx-chip">{t('sm.watchDigestQuiet', { n: read.quiet })}</span>
+      )}
+      {queue.length > 0 && (
+        <button
+          type="button"
+          className={`smx-chip smx-chip--act ${busy ? 'is-busy' : ''}`}
+          onClick={readNow}
+          disabled={busy}
+        >
+          {busy ? <Spinner /> : null}
+          {t('sm.watchReadNow')} · {queue.length}
+        </button>
+      )}
+      {note === 'partial' && <span className="smx-chip is-warn">{t('sm.watchStatusUnavailable')}</span>}
+      {read.rows.length > 0 && (
+        <button
+          type="button"
+          className="smx-chip smx-chip--nav"
+          onClick={() => navigate(`/smart-money/wallet/${read.rows[0].chain}/${read.rows[0].address}`)}
+        >
+          {read.rows[0].label || read.rows[0].address?.slice(0, 8)}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function AlertsTab({ navigate, t }) {
   const [alerts, setAlerts] = useState(null);
   useEffect(() => {
@@ -1742,6 +1944,7 @@ function AlertsTab({ navigate, t }) {
         title={t('sm.whaleAlerts')}
         meta={alerts ? String(alerts.length) : null}
       />
+      <WatchDigest navigate={navigate} t={t} />
       {!alerts ? <Spinner /> : alerts.length === 0 ? (
         <EmptyArt
           icon={<SmBellGlyph width={22} height={22} />}

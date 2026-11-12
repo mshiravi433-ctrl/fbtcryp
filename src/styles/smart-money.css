@@ -2054,6 +2054,67 @@
   border-color: rgba(160, 106, 0, 0.34);
 }
 
+/* ─── round 7 · the earlyness badge and the watchlist digest ──────────────────
+   Both reuse the chip and the fresh-star that were already here rather than
+   adding a card, a panel or a section: the earlyness badge replaces a static
+   «Smart» label on a card that already existed, and the digest is a row of
+   chips on the alerts tab that already existed. Nothing new to learn, and no
+   new surface to keep alive. */
+
+/* A round trip is the one earlyness label that means «do not follow this», so
+   it borrows the amber the risk bands use instead of the gold of a find. */
+.smx-fresh-star.is-warn { color: var(--sm-amber); }
+:root[data-theme='light'] .smx-fresh-star.is-warn { color: #8a5a00; }
+
+/* «Not measured» is quieter than a number: dashed and dim, never gold. */
+.smx-fresh-star.is-muted {
+  color: var(--sm-ink-dim);
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+/* The digest's actionable chip is a BUTTON — a chip-sized affordance rather
+   than a new control, because «read these eight wallets» is a small decision
+   and should not look like a primary CTA. */
+.smx-chip--act,
+.smx-chip--nav {
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.smx-chip--act {
+  border-color: rgba(120, 240, 200, 0.34);
+  color: var(--sm-mint);
+  background: rgba(120, 240, 200, 0.08);
+}
+
+.smx-chip--act:hover:not(:disabled) {
+  border-color: var(--sm-mint);
+  background: rgba(120, 240, 200, 0.16);
+}
+
+.smx-chip--act:disabled { opacity: 0.6; cursor: progress; }
+.smx-chip--act.is-busy { cursor: progress; }
+
+:root[data-theme='light'] .smx-chip--act {
+  color: #06705a;
+  border-color: rgba(6, 112, 90, 0.32);
+  background: rgba(6, 112, 90, 0.07);
+}
+
+.smx-chip--nav:hover { border-color: var(--sm-line-strong, var(--sm-line)); color: var(--sm-ink); }
+
+.smx-watchdigest {
+  margin: 0 0 10px;
+  align-items: center;
+}
+
+.smx-watchdigest .smx-chip b { font-variant-numeric: tabular-nums; }
+
 /* ─── the Solana whale card on the whale tab ─────────────────────────────────
    A plate, not a new section: it sits under the EVM board with the same border
    and radius as every other block on the page, so the tab still reads as one

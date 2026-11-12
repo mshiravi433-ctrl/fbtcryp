@@ -9,6 +9,7 @@ import {
   fetchWallet, fmtUsd, shortAddr, timeAgo, CHAIN_OPTIONS
 } from '../lib/smartMoneyClient';
 import { isTracked, trackWallet, untrackWallet } from '../lib/smartMoneyWatch';
+import { snapshotWallet } from '../lib/walletTracking';
 import { explorerTx } from '../lib/chains';
 import { useTelegram } from '../context/TelegramContext';
 import { openUrl } from '../lib/browser';
@@ -89,7 +90,19 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
     haptic?.('light');
     if (tracked) { untrackWallet(chainId, address); setTracked(false); }
     else {
-      trackWallet({ chain: chainId, address, label: shortAddr(address, chainId === 'solana' ? 'solana' : 'evm') });
+      trackWallet({
+        chain: chainId,
+        address,
+        label: shortAddr(address, chainId === 'solana' ? 'solana' : 'evm'),
+        /*
+         * The figures ON SCREEN at the moment of tracking. Without them the
+         * watchlist can only ever say «not comparable» — which is at least
+         * honest, but useless: the whole question a watchlist answers is «what
+         * changed since I started watching?», and that needs a starting point.
+         * Null when this page has not loaded yet, and then the digest says so.
+         */
+        baseline: data ? snapshotWallet(data) : null
+      });
       setTracked(true);
     }
   };

@@ -32,6 +32,10 @@ import { readSmartMoney, readForConsensus } from '../src/lib/smartMoneyRead.js';
 import { planCopyTrade, planLabel, MIN_MEASURED_GATES } from '../src/lib/copyTrade.js';
 import { readWhalesOnToken, readSolanaWhales, readSolanaWallets, readWhaleEngine, venueOf } from '../src/lib/whaleEngine.js';
 import { readFreshWallets } from '../src/lib/freshWallets.js';
+import { readEarlyness, EARLY_MAX_STALENESS_MS } from '../src/lib/walletEarlyness.js';
+import {
+  readTrackedWallet, readWatchlist, nextToRead, TRACK_MAX_READS, TRACK_MOVE_MIN_USD
+} from '../src/lib/walletTracking.js';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const loadLocale = (l) => JSON.parse(read(`../src/i18n/locales/${l}.json`));
@@ -414,12 +418,148 @@ function run() {
       /verifiedInflight/.test(smIndex) && /VERIFIED_SUMMARY_TTL = 90_000/.test(smIndex));
 
     /* the client engines stay pure: no fetch, no timer, no storage */
-    for (const file of ['smartMoneyRead.js', 'copyTrade.js', 'whaleEngine.js', 'freshWallets.js']) {
+    for (const file of ['smartMoneyRead.js', 'copyTrade.js', 'whaleEngine.js', 'freshWallets.js',
+      'walletEarlyness.js', 'walletTracking.js']) {
       const src = strip(read(`../src/lib/${file}`));
       t(`${file} costs no request, timer or storage`,
         !/\bfetch\(/.test(src) && !/setInterval|setTimeout/.test(src)
         && !/localStorage|sessionStorage/.test(src));
     }
+  }
+
+  /* ── 8c · EARLY WALLETS: earlyness is measured, never assumed (round 7) ────
+     The old feed called a wallet «Smart» because `interesting` was true, which
+     is a fact about money received. Earlyness is a fact about TIMING, and these
+     assertions pin the three ways a timing claim can be wrong. */
+  {
+    const NOW = 1_800_000_000_000;
+    const H = 3600_000;
+
+    const young = readEarlyness({ walletAgeMs: 5 * H, seenAt: NOW - 1 * H, receivedUsd: 2e6, heldUsd: 1.8e6,
+      activity: 6, buyerRank: 1, buyers: 20, now: NOW });
+    t('a young wallet whose capital stayed scores as early and is still live',
+      young.label === 'earlyWatch' && young.live && young.score >= 55);
+
+    /* Same wallet, same capital — observed 26 hours ago. The wallet is still
+       young TODAY; the news is not. A score that ignored this would put a
+       closed window on the screen. */
+    const lateOne = readEarlyness({ walletAgeMs: 30 * H, seenAt: NOW - 26 * H, receivedUsd: 2e6, heldUsd: 1.8e6,
+      activity: 6, now: NOW });
+    t('the same young wallet observed 26h ago is LATE, not early',
+      lateOne.label === 'late' && lateOne.live === false);
+    t('and its staleness is the observation age, not the wallet age',
+      lateOne.observationAgeMs === 26 * H && lateOne.observationAgeMs > EARLY_MAX_STALENESS_MS);
+
+    /* Nothing left of the money that arrived. */
+    const roundTrip = readEarlyness({ walletAgeMs: 5 * H, seenAt: NOW - 1 * H, receivedUsd: 2e6, heldUsd: 0.2e6,
+      activity: 6, now: NOW });
+    t('capital that arrived and left is a round trip, not an early find',
+      roundTrip.label === 'roundTrip');
+
+    /* THE IMPORTANT ONE: no timestamps at all. `stayed` and `thinActivity` are
+       still computable, so a naive weighted score would return ~96 and label it
+       earlyWatch — a confident claim with zero timing evidence. */
+    const blind = readEarlyness({ receivedUsd: 2e6, heldUsd: 1.95e6, activity: 3, now: NOW });
+    t('no timing evidence yields NO score, not a high one',
+      blind.score === null && blind.label === 'unmeasured');
+    t('and the refusal names what was missing',
+      /youngAtEntry/.test(blind.refusedBecause || '') && /actionable/.test(blind.refusedBecause || ''));
+
+    /* Breadth: one wallet holding most of the capital is one actor. This runs
+       through `readFreshWallets` — the path the screen actually uses — so the
+       assertion cannot drift away from the code it claims to protect. */
+    const feed = readFreshWallets({ now: NOW, wallets: [
+      { address: 'a', capitalUsd: 9e6, receivedUsd: 9e6, txCount: 2, firstSeen: NOW - H },
+      { address: 'b', capitalUsd: 1e5, receivedUsd: 1e5, txCount: 2, firstSeen: NOW - H }
+    ] });
+    t('one wallet holding the capital is reported as dominant, not broad',
+      feed.dominant?.sharePct >= 55 && feed.note === 'single-actor-dominated');
+    t('the feed rolls the earlyness read up into counts, not adjectives',
+      feed.early >= 1 && feed.earlyLive >= 1 && typeof feed.bestEarlyScore === 'number');
+    t('the read never promotes a young wallet to "smart"',
+      !/smart/i.test(JSON.stringify(feed)) && !/smart/i.test(young.label));
+
+    /* And the ceiling is the SERVER's number: 25, not a second opinion. */
+    const cfg = strip(read('../server/smartMoney/config.js'));
+    const fresh = strip(read('../src/lib/freshWallets.js'));
+    /* The config reads it through `num(env…, 25)`, so the default is the second
+       argument — matching a bare literal here would silently pass on `NaN`. */
+    const serverCeiling = Number((cfg.match(/maxActivityCount:\s*num\([^,]+,\s*(\d+)\)/) || [])[1]);
+    const clientCeiling = Number((fresh.match(/FRESH_ACTIVITY_CEILING\s*=\s*(\d+)/) || [])[1]);
+    t('the client activity ceiling is the server\'s, not a second opinion',
+      serverCeiling === 25 && clientCeiling === serverCeiling, `server=${serverCeiling} client=${clientCeiling}`);
+  }
+
+  /* ── 8d · TRACKING: a watchlist is a comparison, not a bookmark (round 7) ─ */
+  {
+    const NOW = 1_800_000_000_000;
+    const H = 3600_000;
+    const row = { chain: 1, address: '0xabc', label: 'a', target: 'wallet', createdAt: NOW - 3 * H,
+      baseline: { at: NOW - 3 * H, portfolioUsd: 500_000, closedTrades: 4, txCount: 40 } };
+
+    const pending = readTrackedWallet({ row, wallet: null, now: NOW });
+    t('a tracked wallet that was never read is «pending», never «quiet»',
+      pending.status === 'pending' && pending.change === null);
+
+    const offline = readTrackedWallet({ row, wallet: { dataStatus: 'unavailable' }, now: NOW });
+    t('an outage is «unavailable», never a zero change',
+      offline.status === 'unavailable' && offline.moved === false);
+
+    const noBaseline = readTrackedWallet({ row: { ...row, baseline: null },
+      wallet: { dataStatus: 'live', portfolioUsd: 500_000 }, now: NOW });
+    t('without a baseline a wallet is «not comparable», never «unchanged»',
+      noBaseline.status === 'unmeasured' && noBaseline.change.portfolioUsd === null);
+
+    const moved = readTrackedWallet({ row,
+      wallet: { dataStatus: 'live', portfolioUsd: 500_000 + TRACK_MOVE_MIN_USD * 2, closedTrades: 6, txCount: 44 }, now: NOW });
+    t('a wallet that moved since tracking reads as active, with the delta',
+      moved.status === 'active' && moved.change.portfolioUsd === TRACK_MOVE_MIN_USD * 2);
+
+    /* Noise is not movement: $1k on a $500k book is not «your wallet did
+       something», and a watchlist that alerted on it would be unusable. */
+    const noise = readTrackedWallet({ row,
+      wallet: { dataStatus: 'live', portfolioUsd: 500_500, closedTrades: 4, txCount: 40 }, now: NOW });
+    t('a sub-threshold change is quiet, not active', noise.status === 'quiet' && noise.moved === false);
+
+    const quietLong = readTrackedWallet({ row: { ...row, createdAt: NOW - 40 * H },
+      wallet: { dataStatus: 'live', portfolioUsd: 500_000, closedTrades: 4, txCount: 40 }, now: NOW });
+    t('a wallet tracked for 40 hours with nothing new is «stale», a different sentence',
+      quietLong.status === 'stale');
+
+    /* A row with a baseline and an unchanged live read is `quiet`. The second
+       row has no baseline at all, so it is `unmeasured` — which is why the
+       pending count below is 2 and not 3. */
+    const list = readWatchlist({ now: NOW, rows: [row, { ...row, address: '0xdef' }, { ...row, address: '0xghi' }],
+      wallets: { '1:0xabc': { dataStatus: 'live', portfolioUsd: 500_000 } } });
+    t('the digest counts what it read and says how much of the list that is',
+      list.count === 3 && list.reads === 1 && list.breadth === 1 / 3);
+    t('and the two it never opened stay pending, not quiet',
+      list.pending === 2 && list.rows.filter((r) => r.status === 'pending').length === 2);
+    /* A list that read one of three rows may not be described as quiet: the
+       two it never opened are the whole reason it looks quiet. */
+    t('a list that read one row of three is not called «quiet»',
+      list.note === 'mostly-unread', list.note);
+
+    const queue = nextToRead({ now: NOW, rows: [
+      { ...row, address: 'x1', lastReadAt: NOW - H },
+      { ...row, address: 'x2', lastReadAt: null },
+      { ...row, address: 'x3', lastReadAt: NOW - 10 * H }
+    ] });
+    t('the read queue puts never-read wallets first and is capped',
+      queue[0].key === '1:x2' && queue.length <= TRACK_MAX_READS);
+    t('the queue is deterministic, so a re-render cannot reshuffle fetches',
+      JSON.stringify(nextToRead({ now: NOW, rows: [{ ...row, address: 'x1', lastReadAt: NOW - H },
+        { ...row, address: 'x2', lastReadAt: null }] })) ===
+      JSON.stringify(nextToRead({ now: NOW, rows: [{ ...row, address: 'x2', lastReadAt: null },
+        { ...row, address: 'x1', lastReadAt: NOW - H }] })));
+
+    /* The cache key is the wallet, not the clock: this is the same fault the
+       scan/overview/liquidity feeds had, and it is why a tracked wallet used to
+       re-read five upstream sources on every open. */
+    const intel = strip(read('../server/smartMoney/walletIntel.js'));
+    t('the wallet cache key is bucketed, not keyed on the live budget',
+      /sm:wallet:[^`]*\$\{budgetTier\(timeoutMs\)\}/.test(intel)
+      && !/\$\{timeoutMs\}/.test(intel));
   }
 
   /* ── 9 · the new copy is translated (a raw key on a money screen is a bug) ─ */

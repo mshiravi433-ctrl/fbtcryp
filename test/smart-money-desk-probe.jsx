@@ -110,13 +110,38 @@ const overview = (win) => ({
       risk: 'MEDIUM'
     }]
   },
+  /*
+   * THREE rows, deliberately, because the read and the grid used to disagree:
+   *   · `0x9f2c` — 37 activity, OVER the server ceiling (25), so it is NOT
+   *     verified-fresh and must not get a card;
+   *   · `0x4a7e` — young, funded, movement seen an hour ago → must score and
+   *     must read «early»;
+   *   · `0xb31d` — young-looking on the wire but NO `firstSeen`, so the
+   *     earlyness engine has no timing evidence and must refuse a score rather
+   *     than invent one.
+   */
   freshWallets: {
-    wallets: [{
-      short: '0x9f2c…41ab', address: '0x9f2c1a2b3c4d5e6f708192a3b4c5d6e7f80941ab',
-      chainId: 8453, chainShort: 'BASE', chainColor: '#0052ff',
-      capitalUsd: 1_240_000, txCount: 37, interesting: true
-    }],
-    note: 'Wallets first observed in the last 48 hours.'
+    wallets: [
+      {
+        short: '0x9f2c…41ab', address: '0x9f2c1a2b3c4d5e6f708192a3b4c5d6e7f80941ab',
+        chainId: 8453, chainShort: 'BASE', chainColor: '#0052ff',
+        capitalUsd: 1_240_000, receivedUsd: 1_200_000, txCount: 31, tokenTransfersCount: 6,
+        firstSeen: Date.now() - 3 * 3600_000, interesting: true
+      },
+      {
+        short: '0x4a7e…9c22', address: '0x4a7e55aa11bb22cc33dd44ee55ff66aa77bb9c22',
+        chainId: 1, chainShort: 'ETH', chainColor: '#627eea',
+        capitalUsd: 860_000, receivedUsd: 860_000, txCount: 4, tokenTransfersCount: 1,
+        firstSeen: Date.now() - 1 * 3600_000, interesting: true
+      },
+      {
+        short: '0xb31d…7f05', address: '0xb31d09ff88ee77dd66cc55bb44aa33ff22117f05',
+        chainId: 1, chainShort: 'ETH', chainColor: '#627eea',
+        capitalUsd: 410_000, receivedUsd: 380_000, txCount: 7, tokenTransfersCount: 2,
+        firstSeen: null, interesting: false
+      }
+    ],
+    note: 'Wallets first observed in the last 24 hours.'
   },
   liquidityEvents: {
     events: [{
@@ -406,7 +431,57 @@ export async function run(container) {
     !!q('.smi-workspace') && !!q('.smi-hero'));
   t('its section heads carry glyph tiles', qa('.smi-head-ico').length >= 3);
 
-  /* 13 · no runtime noise */
+  /* 13 · the fresh-wallet READ drives the grid (round 7)
+     The whole point: `freshRead` used to be computed and then ignored, so the
+     grid rendered rows the read had thrown out. These assertions fail loudly if
+     that ever comes back. */
+  const tokensTab2 = dock.find((b) => b.textContent === fa.sm.tabs.tokens);
+  await click(tokensTab2, 90);
+  const freshCards = [...qa('.smx-fresh')];
+  t('the fresh grid renders the read\'s rows, not the raw payload',
+    freshCards.length === 2, `cards=${freshCards.length} (expected 2 of 3: 37-activity row is over the ceiling)`);
+  t('the over-ceiling wallet gets no card at all',
+    !freshCards.some((c) => /9f2c/.test(c.textContent)));
+  t('the verified-fresh count in the summary equals the number of cards',
+    (q('[data-testid="sm-fresh-read"]')?.textContent || '').includes(String(freshCards.length)),
+    q('[data-testid="sm-fresh-read"]')?.textContent || '(no summary)');
+  t('the summary states how many are still EARLY',
+    !!q('[data-testid="sm-fresh-early"]'));
+  t('an early card prints a measured score, not the old "Smart" badge',
+    freshCards.some((c) => /۹?\d+/.test(c.textContent) && !/Smart/.test(c.textContent)));
+  t('a card with no timing evidence says «not measured» instead of scoring',
+    (() => {
+      const c = freshCards.find((x) => /b31d/.test(x.textContent));
+      return !!c && new RegExp(fa.sm.earlyLabelUnmeasured).test(c.textContent);
+    })(), freshCards.map((c) => c.textContent).join(' | '));
+
+  /* 14 · the watchlist digest says something, and says «not read» honestly */
+  const alertsTab2 = dock.find((b) => b.textContent === fa.sm.tabs.alerts);
+  await click(alertsTab2, 90);
+  t('with no tracked wallets the digest renders nothing (no empty chrome)',
+    !q('[data-testid="sm-watch-digest"]'));
+  act(() => {
+    localStorage.setItem('fbt-smart-money-watch-v1', JSON.stringify([
+      { id: '1:0xaaa', chain: 1, address: '0xaaa', label: 'eth-a', target: 'wallet', createdAt: Date.now() - 7200_000, baseline: null },
+      { id: '1:0xbbb', chain: 1, address: '0xbbb', label: 'eth-b', target: 'wallet', createdAt: Date.now() - 3600_000, baseline: { at: Date.now() - 3600_000, portfolioUsd: 100_000 } }
+    ]));
+  });
+  await click(dock.find((b) => b.textContent === fa.sm.tabs.overview), 40);
+  await click(alertsTab2, 120);
+  const digest = q('[data-testid="sm-watch-digest"]');
+  t('tracked wallets surface as a digest on the alerts tab', !!digest);
+  /* Built from the locale itself: a hand-copied Persian string with the wrong
+     zero-width-joiner silently never matches, and a probe that can't fail on
+     the thing it tests is worse than no probe. */
+  t('the digest counts rows it has never read as «not read», never as «۰ تغییر»',
+    (digest?.textContent || '').includes(fa.sm.watchDigestPending.replace('{{n}}', '2')),
+    digest?.textContent);
+  t('a row with no baseline is never reported as «unchanged»',
+    !/بدون تغییر/.test(digest?.textContent || ''));
+  t('the digest offers exactly one way to read them, capped, not eight fetches on mount',
+    qa('[data-testid="sm-watch-digest"] .smx-chip--act').length === 1);
+
+  /* 15 · no runtime noise */
   const realErrors = errors.filter((e) => !/not wrapped in act|React Router Future Flag|ReactDOMTestUtils\.act/.test(e));
   t('no React error was logged during any of that',
     realErrors.length === 0, realErrors.slice(0, 3).join(' | '));

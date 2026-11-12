@@ -24,6 +24,8 @@
  * Pure arithmetic over the payload the page already fetched.
  */
 
+import { readEarlyness } from './walletEarlyness.js';
+
 const num = (v) => {
   if (v === null || v === undefined || v === '') return null;
   const n = Number(v);
@@ -31,8 +33,17 @@ const num = (v) => {
 };
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
-/** The activity ceiling the server applies; a wallet over it is not "fresh". */
-export const FRESH_ACTIVITY_CEILING = 20;
+/**
+ * The activity ceiling the server applies; a wallet over it is not «fresh».
+ *
+ * This said 20 while `FRESH.maxActivityCount` on the server said 25, so five
+ * wallets the endpoint had deliberately kept were being relabelled
+ * «unverified» in the browser — the list and the count disagreed about the
+ * same payload. One number, and it is the server's.
+ */
+export const FRESH_ACTIVITY_CEILING = 25;
+/** A wallet younger than this is «new» in the plain sense (matches the server). */
+export const FRESH_MAX_AGE_MS = 24 * 3600_000;
 /** One wallet holding this much of the observed capital is a single actor. */
 export const CONCENTRATION_WARN = 0.55;
 
@@ -54,6 +65,7 @@ export function readFreshWallets({ wallets = [], now = Date.now() } = {}) {
     const activity = (num(w.txCount) ?? 0) + (num(w.tokenTransfersCount) ?? 0);
     const capital = num(w.capitalUsd);
     const received = num(w.receivedUsd);
+    const firstSeen = num(w.firstSeen);
     /* A wallet with no counter reading is unverified: the server should have
        dropped it, and if a payload ever carries one this module still refuses
        to label it. */
@@ -76,7 +88,22 @@ export function readFreshWallets({ wallets = [], now = Date.now() } = {}) {
         : (received !== null && capital !== null && received >= capital * 0.5) ? 'watch'
           : 'passThrough',
       arrivalShare: arrivalShare === null ? null : Math.round(arrivalShare * 100) / 100,
-      firstSeen: num(w.firstSeen)
+      firstSeen: num(w.firstSeen),
+      /* How EARLY it was, not just how young it is today — see
+         lib/walletEarlyness.js. A row with no `firstSeen` keeps `early: null`,
+         which is a different statement from «score 0». */
+      early: readEarlyness({
+        /* `firstSeen` is when the movement was seen, so the wallet's age is the
+           distance back to it from now. */
+        walletAgeMs: firstSeen === null ? null : Math.max(0, now - firstSeen),
+        seenAt: firstSeen,
+        receivedUsd: received,
+        capitalUsd: capital,
+        /* The money that arrived and is still counted as capital. */
+        heldUsd: received === null || capital === null ? null : Math.min(received, capital),
+        activity,
+        now
+      })
     };
   }).filter((w) => !w.firstSeen || w.firstSeen <= now);
 
@@ -100,6 +127,14 @@ export function readFreshWallets({ wallets = [], now = Date.now() } = {}) {
     watch: verified.filter((w) => w.label === 'watch').length,
     passThrough: verified.filter((w) => w.label === 'passThrough').length,
     unverified: scored.length - verified.length,
+    /* The earlyness read, aggregated over the verified rows: how many are still
+       actionable, and how many already round-tripped their capital out. */
+    early: verified.filter((w) => w.early?.label === 'early' || w.early?.label === 'earlyWatch').length,
+    earlyLive: verified.filter((w) => w.early?.live).length,
+    roundTrips: verified.filter((w) => w.early?.label === 'roundTrip').length,
+    bestEarlyScore: verified.reduce((m, w) => Math.max(m, w.early?.score ?? -1), -1) < 0
+      ? null
+      : verified.reduce((m, w) => Math.max(m, w.early?.score ?? -1), -1),
     /* «Nothing verifiable in the feed» is its own sentence: with zero verified
        rows the list is not broad-based, it is unread. */
     note: !verified.length ? 'no-verified-fresh-wallet'
