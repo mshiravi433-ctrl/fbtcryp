@@ -190,17 +190,57 @@ export async function readQuotaForFleet(providerIds = [], { now = Date.now(), en
  * and says that the depth was reduced. A turn with no answer is worse
  * than a shallow one.
  */
-export async function quotaAwareCallCap(providerIds = [], { now = Date.now(), env = process.env, baseCap = 6 } = {}) {
+export async function quotaAwareCallCap(providerIds = [], { now = Date.now(), env = process.env, baseCap = null } = {}) {
+  /* The base cap is the turn's own ceiling, and the caller normally
+     passes it. When it does not, the turn's default is used — six,
+     which is the shape of a deep turn with its repair pass. */
+  const base = Number.isFinite(Number(baseCap)) && Number(baseCap) > 0 ? Math.floor(Number(baseCap)) : 6;
   const fleet = await readQuotaForFleet(providerIds, { now, env });
   const headroom = fleet.limit > 0 ? fleet.left / fleet.limit : 1;
   if (!fleet.durable) {
     /* No durable counter means no knowledge of the day. The turn keeps
        its normal cap, and the deployment is told the counter is off. */
-    return { cap: baseCap, headroom: null, durable: false, fleet };
+    return { cap: base, headroom: null, durable: false, fleet };
   }
-  if (headroom <= 0.10) return { cap: Math.min(baseCap, 1), headroom, durable: true, fleet };
-  if (headroom <= 0.25) return { cap: Math.min(baseCap, Math.max(2, Math.ceil(baseCap / 3))), headroom, durable: true, fleet };
-  return { cap: baseCap, headroom, durable: true, fleet };
+  if (headroom <= 0.10) return { cap: Math.min(base, 1), headroom, durable: true, fleet };
+  if (headroom <= 0.25) return { cap: Math.min(base, Math.max(2, Math.ceil(base / 3))), headroom, durable: true, fleet };
+  return { cap: base, headroom, durable: true, fleet };
+}
+
+/**
+ * Whether the day's allowance is SPENT.
+ *
+ * This is the one case where the turn must not call a provider at all.
+ *
+ * The call cap lowers the turn's DEPTH as the day runs out — a turn with
+ * one call left answers from one role instead of five. That is a real
+ * saving, and it is also the honest one: the number of turns the day can
+ * buy does not change, so the depth is what has to give.
+ *
+ * But at zero the arithmetic is different. A call made against an
+ * exhausted allowance is not a shallow answer — it is a request that
+ * will come back 429, and on this tier a failed request COUNTS. So the
+ * turn must stop calling, and say so.
+ *
+ * The threshold is deliberately not exactly zero: a request that fails
+ * for the provider's own reasons counts against the daily cap there, so
+ * the last few requests are worth spending on questions that can be
+ * answered from the cache or from the local corpus — which is what the
+ * cache-first path is for.
+ */
+export async function quotaExhausted(providerIds = [], { now = Date.now(), env = process.env } = {}) {
+  const fleet = await readQuotaForFleet(providerIds, { now, env });
+  if (!fleet.durable) return { exhausted: false, reason: 'the day is not counted', fleet };
+  const headroom = fleet.limit > 0 ? fleet.left / fleet.limit : 1;
+  /* One request left is still worth spending on a cache miss — it is the
+     difference between an answer and a refusal. Zero is not. */
+  if (fleet.left <= 0) {
+    return { exhausted: true, reason: 'the daily provider allowance is spent', fleet };
+  }
+  if (headroom <= 0.02 && fleet.left <= 1) {
+    return { exhausted: true, reason: 'the daily provider allowance is spent', fleet };
+  }
+  return { exhausted: false, reason: null, fleet };
 }
 
 /**

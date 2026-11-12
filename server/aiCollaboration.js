@@ -522,6 +522,22 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
         capErr.fix = 'This turn has spent its provider-call cap; the answer is built from what it already read.';
         throw capErr;
       }
+      /*
+       * The DAY's allowance, checked at the last possible moment.
+       *
+       * The call cap lowers the turn's DEPTH as the day runs out, and
+       * that is a real saving. But at ZERO the arithmetic changes: a
+       * request made against an exhausted allowance does not come back
+       * shallow — it comes back 429, and on this tier a FAILED request
+       * counts. So the turn stops calling, here, where the refusal can
+       * still be a failed ROLE rather than a failed turn.
+       */
+      if (turnBudget?.quotaExhausted) {
+        const quotaErr = new Error('PROVIDER_QUOTA_EXHAUSTED');
+        quotaErr.reasonCode = 'QUOTA';
+        quotaErr.fix = "the day's provider allowance is spent; the answer is built from what it already read";
+        throw quotaErr;
+      }
       const res = await deps.execute(providerId, {
         system,
         user,
@@ -1047,8 +1063,13 @@ async function runCollaborativeAnalysisInner({
    * running keeps its normal cap; the next one gets the reduced one.
    */
   let quotaCapApplied = null;
+  /* The day's state, whether or not the lookup succeeds. `false` means
+     «the day is not spent» — which is what an uncounted day IS, since a
+     turn that cannot see the day must not behave as though it were
+     exhausted. */
+  turnBudget.quotaExhausted = false;
   try {
-    const { quotaAwareCallCap } = await import('./aiQuotaBudget.js');
+    const { quotaAwareCallCap, quotaExhausted } = await import('./aiQuotaBudget.js');
     /*
      * The provider ids to count are the ones this turn would actually
      * use. An injected fleet has its own seat names; the deployment's
@@ -1067,6 +1088,19 @@ async function runCollaborativeAnalysisInner({
     if (quotaCapApplied && Number.isFinite(quotaCapApplied.cap) && quotaCapApplied.cap < turnBudget.maxCalls) {
       turnBudget.maxCalls = quotaCapApplied.cap;
     }
+    /*
+     * And the day's own state. When the allowance is SPENT the turn
+     * must not call a provider at all — a request against an exhausted
+     * allowance comes back 429, and on this tier a failed request
+     * counts against the very budget that is already gone.
+     *
+     * The check lives on the turn's own ledger, so every role sees it,
+     * and the refusal becomes a failed ROLE: the analyses that did run
+     * still have their answers, and the turn still produces something.
+     */
+    const exhausted = await quotaExhausted(fleetIds);
+    turnBudget.quotaExhausted = exhausted.exhausted === true;
+    turnBudget.quotaReason = exhausted.reason || null;
   } catch (err) {
     /* No counter, no reduction. The turn keeps its normal cap. */
     if (process.env.AI_QUOTA_DEBUG === '1') console.warn('[ai-quota] cap lookup failed:', String(err?.message || err));
@@ -2515,7 +2549,22 @@ async function runCollaborativeAnalysisInner({
     callsUsed: turnBudget.calls || 0,
     capHits: turnBudget.capHits || 0,
     dayHeadroom: quotaCapApplied?.headroom == null ? null : Math.round(quotaCapApplied.headroom * 100),
-    dayCounterDurable: quotaCapApplied?.durable === true
+    dayCounterDurable: quotaCapApplied?.durable === true,
+    /*
+     * And the day's own state, when it stopped the turn. A turn that
+     * answered without a provider because the allowance was gone has to
+     * SAY that, or the answer looks like a normal one and the user
+     * cannot tell it is thinner than it should be.
+     */
+    /* The flag is ALWAYS present, because a turn that answered without
+       a provider because the allowance was gone has to SAY that, or the
+       answer looks like a normal one and the user cannot tell it is
+       thinner than it should be. And a turn that spent the day
+       normally has to be able to say that too. */
+    quotaExhausted: turnBudget.quotaExhausted === true,
+    ...(turnBudget.quotaExhausted
+      ? { quotaReason: turnBudget.quotaReason || "the day's provider allowance is spent" }
+      : {})
   };
   result.at = Date.now();
   return result;

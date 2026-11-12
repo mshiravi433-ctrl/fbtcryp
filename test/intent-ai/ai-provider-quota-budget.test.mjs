@@ -33,6 +33,7 @@ import {
   spendQuota,
   readQuotaForFleet,
   quotaAwareCallCap,
+  quotaExhausted,
   turnsRemaining,
   DEFAULT_DAILY_LIMITS
 } from '../../server/aiQuotaBudget.js';
@@ -67,11 +68,24 @@ const turn = (extra = {}) => ({
 /* ─── 1. THE CALL CAP ──────────────────────────────────────────────────── */
 
 test('the turn cap defaults to six provider requests', () => {
+  /*
+   * Six, because the sixth call is the critic's REPAIR PASS — the
+   * stage that sends a draft back when it invents a number or drops a
+   * part of the question. A ceiling that silently removed it would make
+   * the product's «max» mode weaker than it claims to be.
+   *
+   * The QUOTA is handled where the quota is known: the day's headroom
+   * lowers this cap, and the durable cache means a repeated question
+   * costs one collaboration rather than two. A deployment that wants the
+   * shallower shape can set `AI_MAX_PROVIDER_CALLS=5` — ten questions a
+   * day instead of eight, with the repair pass dropped.
+   */
   assert.equal(maxProviderCallsPerTurn({}), 6);
 });
 
 test('the turn cap is configurable and rejects nonsense', () => {
   assert.equal(maxProviderCallsPerTurn({ AI_MAX_PROVIDER_CALLS: '3' }), 3);
+  assert.equal(maxProviderCallsPerTurn({ AI_MAX_PROVIDER_CALLS: '6' }), 6, 'a paid seat can restore the repair pass');
   assert.equal(maxProviderCallsPerTurn({ AI_MAX_PROVIDER_CALLS: '0' }), 0);
   assert.equal(maxProviderCallsPerTurn({ AI_MAX_PROVIDER_CALLS: 'abc' }), 6);
   assert.equal(maxProviderCallsPerTurn({ AI_MAX_PROVIDER_CALLS: '' }), 6);
@@ -195,4 +209,36 @@ test('the remaining turns are the remaining allowance over the turn cost', () =>
   assert.equal(turnsRemaining(fleet, 5), 6);
   assert.equal(turnsRemaining({ left: 0, limit: 50 }, 5), 0);
   assert.equal(turnsRemaining({ left: 32, limit: 50 }, 0), 32);
+});
+
+/* ─── 4. THE SPENT DAY ────────────────────────────────────────────────── */
+
+test('a day that cannot be counted is not treated as spent', async () => {
+  const out = await quotaExhausted(['openrouterfree'], { env: { AI_QUOTA_DURABLE: '0' } });
+  assert.equal(out.exhausted, false, 'no counter means no knowledge, not exhaustion');
+  assert.equal(out.reason, 'the day is not counted');
+});
+
+test('the exhaustion check reports the fleet it read', async () => {
+  const out = await quotaExhausted(['openrouterfree', 'groq'], { env: { AI_QUOTA_DURABLE: '0' } });
+  assert.ok(out.fleet);
+  assert.equal(out.fleet.providers.length, 2);
+});
+
+test('the turn reports the exhaustion when the day is spent', async () => {
+  const { deps, calls } = fakeFleet();
+  const previous = process.env.AI_MAX_PROVIDER_CALLS;
+  process.env.AI_MAX_PROVIDER_CALLS = '3';
+  try {
+    /* The injected path is not quota-counted, so the cap is what
+       bounds this turn; the exhaustion path is exercised through the
+       ledger the gateway and the collaboration layer share. */
+    const result = await runCollaborativeAnalysis(turn({ deps, fleet: ['openrouterfree'] }));
+    assert.equal(typeof result.budget.quotaExhausted, 'boolean');
+    assert.equal(result.budget.quotaExhausted, false, 'an injected fleet does not spend the day');
+    assert.equal(result.budget.callCap, 3);
+  } finally {
+    if (previous === undefined) delete process.env.AI_MAX_PROVIDER_CALLS;
+    else process.env.AI_MAX_PROVIDER_CALLS = previous;
+  }
 });

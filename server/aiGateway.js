@@ -941,6 +941,39 @@ export function beginAiTurnBudget() {
  * only on a paid tier.
  */
 export function maxProviderCallsPerTurn(env = process.env) {
+  /*
+   * The default is SIX, and the ceiling is on the TURN — the whole
+   * collaboration, not one request.
+   *
+   * A deep turn spends five provider calls on the free tier: the two
+   * analyses, the crypto research, the verification and the final
+   * answer. The sixth is the critic's REPAIR PASS — the stage that
+   * sends a draft back to the reviewer when it invents a number or
+   * drops a part of the question.
+   *
+   * So the sixth call is not a luxury: the existing suites pin the
+   * repair behaviour, and a ceiling that silently removes it would
+   * make the product's «max» mode quietly weaker than it claims to be.
+   * That is the same failure this repo keeps fixing — a capability
+   * that is present in the code and absent in the answer.
+   *
+   * The QUOTA is handled where the quota is known, not here:
+   *
+   *   · the day's headroom lowers this cap (server/aiQuotaBudget.js),
+   *     so the last requests of the day are spread over several
+   *     questions rather than spent on the first one;
+   *   · the durable answer cache means a repeated question costs one
+   *     collaboration rather than two;
+   *   · and a deployment that WANTS the shallower shape can set
+   *     `AI_MAX_PROVIDER_CALLS=5` — ten questions a day instead of
+   *     eight, with the repair pass dropped.
+   *
+   * The trade is measurable and it is the operator's to make:
+   *
+   *   cap 6 → 6 calls, nothing dropped → 8 turns a day
+   *   cap 5 → 5 calls, the critic dropped → 10 turns a day
+   *   cap 4 → 4 calls, verifier and critic dropped → 12 turns a day
+   */
   const raw = env?.AI_MAX_PROVIDER_CALLS;
   if (raw === undefined || raw === null || String(raw).trim() === '') return 6;
   const n = Number(raw);
