@@ -29,13 +29,15 @@ node scripts/find-extensionless-imports.mjs # imports Node ESM cannot resolve
 
 ## §0.5 — WHAT WAS ACTUALLY FIXED, AND WHAT IT COST
 
-**All thirteen** upgrade paths in §5 are **shipped** (5.1–5.6 plus the
+**All seventeen** upgrade paths in §5 are **shipped** (5.1–5.6 plus the
 seventh, the yield surface, in §5.9, the eighth, the global surface, in
 §5.10, the ninth, the daily cron, in §5.11, the tenth, the measured
 prompt diet, in §5.12, the eleventh, the fit surface, in §5.14, the
-twelfth, the macro graph, in §5.15, and the thirteenth, the goal
-scenarios, in §5.16). The point of this section is that each one is a
-measurement before and after, not a promise.
+twelfth, the macro graph, in §5.15, the thirteenth, the goal
+scenarios, in §5.16, the fourteenth, the quota and the route engine, in
+§5.17 and §5.18, the fifteenth, the why engine, in §5.19, and the
+sixteenth, the session machinery, in §5.20). The point of this section
+is that each one is a measurement before and after, not a promise.
 
 | | before | after |
 |---|---|---|
@@ -66,6 +68,14 @@ measurement before and after, not a promise.
 | the brain over HTTP | `PROVIDER_NOT_WIRED` for every global/fit question | **the real engines answer** — the provider is wired on the first turn (§5.14) |
 | «بازار در چه رژیمی است؟» | breadth + the top movers | **the regime**: the macro graph over the global snapshot, the world model and the portfolio (§5.15) |
 | «برای رسیدن به هدفم چه برنامه‌ای داشته باشم؟» | one feasibility figure | **three profiles** with drawdown, probability of loss and probability of halving (§5.16) |
+| the free tier's daily allowance | invisible — learned by getting a 429 | **counted per provider per UTC day**, and published before it runs out (§5.17) |
+| a deep turn's provider calls | unbounded within the turn | **capped** (`AI_MAX_PROVIDER_CALLS`, default 6), and the dropped stages are named (§5.17) |
+| the answer cache across instances | one in-memory `Map` — a cold start emptied it | **durable**, so a repeated question costs one collaboration, not two (§5.17) |
+| «کدام پل برای انتقال بهتر است؟» | `UNSUPPORTED` | **`ROUTE_INTELLIGENCE`** → the live candidates, ranked, with the unread dimensions named (§5.18) |
+| «چرا این را گفتی؟» | `UNSUPPORTED` | **`WHY_DECISION`** → five reason lines and four named falsifiers (§5.19) |
+| the conversation's own shape | not modelled | **a state machine in the session layer**, asking ONE adaptive question (§5.20) |
+| a replan when the world moves | computed, never read | **read by the turn**, and announced only when something decision-relevant changed (§5.20) |
+| `server/fios/` engines the brain can reach | 0 of 50 | **all of them** — the dark-engine count is ZERO (§5.18–§5.20) |
 
 ### The three root causes, and what each one was
 
@@ -814,26 +824,32 @@ left open on purpose, and it is worth naming:
    **number of calls**, and the local-first gate is what reduces that
    (100 → 55 calls for 20 questions).
 
-6. **Three deep `server/fios/` engines** (`whyEngine`,
+6. ~~**Three deep `server/fios/` engines** (`whyEngine`,
    `routeIntelligence`, `conversationState`, `eventReplanning` — about
-   46 KB) are still imported by nothing in the brain. The global
-   surface (§5.10), the fit surface (§5.14), the macro graph (§5.15) and
-   the goal scenarios (§5.16) each reached one of the eight; these are
-   the ones that remain.
+   46 KB) are still imported by nothing in the brain.~~ **SHIPPED** —
+   see §5.17 (the quota), §5.18 (the route engine), §5.19 (the why
+   engine) and §5.20 (the session machinery).
 
-   They are not equally ready, and saying so is the point:
+   The three were not equally ready, and that is why they did not get
+   the same treatment:
 
-   · `routeIntelligence` — needs candidate routes from the quote step,
-     so it needs a live venue adapter. Without one it would rank
-     nothing, and ranking nothing with a confident voice is worse than
-     saying nothing.
-   · `whyEngine` — needs a decision bundle the brain does not produce
-     yet. It explains a decision that already exists, so the wiring
-     starts with the brain making a decision, not with the engine.
+   · `routeIntelligence` — needed candidate routes from the quote step,
+     so it needed a live venue adapter. It now has one: the
+     deployment's EXISTING route provider, one call, no second quote.
+   · `whyEngine` — needed a decision bundle the brain did not produce.
+     The brain DOES produce a decision — its own recommendation, its own
+     findings, its own risk view — so the work was a translation, not a
+     new decision engine.
    · `conversationState` and `eventReplanning` — session and event
-     machinery, not a question. They belong to the turn's continuity,
-     not to a new capability, and the honest place for them is the
-     session layer rather than a module.
+     machinery, not a question. They were wired into the SESSION LAYER,
+     where they belong, and deliberately NOT turned into modules: a
+     user-facing «replan my conversation» button is not what a
+     conversation-state machine IS.
+
+   **The dark-engine count is now ZERO.** Every engine in
+   `server/fios/` is reachable from the brain, and each one was reached
+   in the way its own nature demanded — a surface, a translation, or
+   session machinery.
 
 ### 5.9 Path 7 — the yield surface (SHIPPED)
 
@@ -1362,6 +1378,238 @@ forecast».
 
 ---
 
+### 5.17 Path 14a — the quota: the 50-a-day bottleneck, measured and fixed
+
+**The measurement.** The `:free` seat's whole daily allowance is 50
+requests, and **a failed request counts**. A deep turn costs five
+provider calls — Market, Risk, Crypto Research, Verification, Final
+Answer — so the nominal budget was **eight turns a day**. The harness
+is `scripts/measure-quota-budget.mjs`.
+
+The project knew the per-turn numbers (the model ledger, the provider
+ladder, the local-first gate) and **none of them could see the DAY**. So
+the deployment learned it was out of quota by getting a 429, and the
+operator saw a failure instead of a number.
+
+**A second, quieter defect.** The answer cache was **one in-memory
+`Map`**. On Vercel that map is empty on every cold start, so the same
+question asked twice — on two different lambdas — cost two full
+collaborations, five calls each. The cache was in the code and did
+nothing for the deployment it was written for.
+
+**Three layers, each doing one job.**
+
+| Layer | What it does | Why it is not enough alone |
+|---|---|---|
+| `server/aiQuotaBudget.js` | A durable per-UTC-day, per-provider counter. It publishes the allowance **before** it runs out, and when the day is nearly spent it lowers the turn's call cap. | It counts; it does not stop a turn from asking. |
+| The call cap (`AI_MAX_PROVIDER_CALLS`, default 6) | A ceiling on the provider requests ONE turn may spend, enforced in the gateway **and** in the collaboration layer. | It bounds the turn; it does not know the day. |
+| The durable answer cache | The same answer is served across instances, so a repeated question costs one collaboration, not two. | It helps only when the question repeats. |
+
+**The cap had to be enforced in two places, and that was not obvious.**
+The gateway enforces it at the request site, but the collaboration layer
+calls `deps.execute` directly on the injected-executor path — and a cap
+that only one layer knows about is not a cap. The first test showed
+**six calls with a cap of three**; the second, after the collaboration
+layer spent the budget itself, showed three.
+
+**What the cap drops, and what it never drops.** The stages that carry
+the answer (the analyses, the synthesiser) run first; the stages that
+refine it (the verifier, the critic) are the ones that get dropped — and
+the turn **says which**:
+
+```
+{"verifierSkipped":"provider call cap reached — the turn answered from its own
+analyses","criticSkipped":"provider call cap reached — the draft was not put
+through a repair pass","callCap":3,"callsUsed":3,"capHits":1}
+```
+
+The refinement gates use `>=` and not `>`, because a turn with exactly
+one call left CAN still spend it, and the stage that spends it is the
+LAST one.
+
+**The counter is honest about its own blind spot.** Without a durable
+store it reports `durable: false` and the turn keeps its normal cap —
+the deployment is told the counter is off rather than being handed a
+number it cannot trust.
+
+**The health route now publishes the day's spending:**
+
+```json
+{"quota":{"day":"2026-11-12","used":18,"limit":50,"left":32,
+  "turnsRemaining":6,"turnCostAssumption":5,
+  "tightest":{"providerId":"openrouterfree","left":32,"limit":50}}}
+```
+
+**Tests:** `test/intent-ai/ai-provider-quota-budget.test.mjs` (15) and
+`test/intent-ai/ai-answer-cache-durable.test.mjs` (12).
+
+---
+
+### 5.18 Path 14b — the route engine gets a LIVE source
+
+`server/fios/routeIntelligence.js` was **complete and dark**. It ranked
+candidate routes across five honest dimensions — total cost, liquidity
+impact, time in flight, historical success, bridge risk — it refused to
+invent a dimension it could not read, and it discounted the score by the
+weight of the unread ones. Its own comment said why it had no
+customers:
+
+> «a route plan needs candidate routes from the quote step; the
+> intelligence layer does not dial providers itself»
+
+So «which bridge should carry this transfer?» had no route intelligence
+anywhere, and the engine waited for candidates nobody asked it for.
+
+**The missing half already existed.** The deployment had a live route
+provider — the same LI.FI endpoint the wallet's own route list uses.
+One call, one set of numbers: **no second provider and no second
+quote.**
+
+**The adapter is conservative on purpose.** For each dimension the
+provider's OWN field is used when it sent one; otherwise the dimension
+is left absent, which the engine reads as UNKNOWN:
+
+| Dimension | Source | What happens when the provider is silent |
+|---|---|---|
+| total cost | `totalCostUsd`, or the sum of the named fee legs | stays UNKNOWN — the engine reads that as «not free», not as zero |
+| time in flight | the provider's own `executionDuration` sum | stays UNKNOWN |
+| liquidity depth | **not reported by LI.FI** | **not invented** — the impact estimate stays UNKNOWN and the score is discounted |
+| historical success | **not reported by LI.FI** | **not invented** — the engine's own rule is «never imputed» |
+| bridge risk | the hop count (known) plus the provider's reliability when supplied | always computable from the hops |
+
+The adapter does not fill a gap with a default that would read as a
+measurement. A route with two known dimensions and a route with five
+known dimensions are then honestly comparable, because the unknown ones
+carry their full weight against both.
+
+**The surface is wired end to end:** the `ROUTE_INTELLIGENCE` intent,
+the `routeIntelligence` state section, the `route-intelligence` module,
+the planner step, the brain's finding and the headline.
+
+**Two intent-level details worth naming.**
+
+*Why the route question is not an execution.* `EXECUTE_BRIDGE`'s pattern
+is deliberately loose — «برو به شبکه» appears at the end of ordinary
+sentences — and «کدام پل برای انتقال بیت‌کوین به شبکهٔ پالیگان بهتر
+است؟» contains «انتقال … به شبکه», so the bridge leg fired and the
+sentence was read as «buy, then bridge». The tell is the sentence's own
+grammar: a sentence that asks «کدام» / «بهتر» / «which» / «best» is
+asking the product to CHOOSE, and a choice is never a leg of a two-step
+execution. The guard lives in `detectCompound`, because it is a property
+of the sentence and not of one verb.
+
+*Why the ranking is advisory.* The finding carries the unread
+dimensions, because a ranking that silently drops half of them is a
+ranking the reader cannot audit; and it carries
+`executionPermission: false`, because the execution path re-quotes with
+a real address and keeps its own gates.
+
+**Tests:** `test/intent-ai/route-intelligence-surface.test.mjs` (23).
+
+---
+
+### 5.19 Path 15 — the why engine, fed by the brain's OWN decision
+
+`server/fios/whyEngine.js` answers the question every assistant is
+eventually asked — **«چرا این را گفتی؟»** — with five why-lines (asset,
+network, now, amount, strategy), four named **falsifiers** and the
+invalidation conditions. It holds itself to a strict standard: every
+«because» line points at a **number** in the decision bundle, an unread
+number is NAMED rather than invented, and it refuses to explain a
+decision that does not exist.
+
+It was dark, and **the reason was not its fault**: it expected a
+decision record from the FIOs decision engine, and the central brain
+does not use that engine. The brain has its OWN decision — the
+recommendation it builds from its own findings, with its own confidence,
+its own risk view and its own evidence list. That is a different shape,
+and nobody translated it into the engine's language. So «چرا این را
+گفتی؟» was **UNSUPPORTED**.
+
+**The translation, and its one rule.** `server/ci/whyBridge.js` converts
+the brain's artefacts into the engine's vocabulary, and the rule is
+absolute: **every number in the bundle came from a finding the brain
+actually read.** A finding that could not be read leaves the
+corresponding line absent, which the engine renders as «unread» rather
+than as a zero. The explanation and the answer are therefore made of the
+same numbers, and they cannot disagree.
+
+**The read happens AFTER the recommendation is built**, because it
+explains THAT recommendation. Reading it earlier would explain the
+previous turn's decision — a different and wrong thing.
+
+**The falsifiers travel with the answer**, because «why» without «what
+would prove this wrong» is a justification, not an explanation.
+
+**A correction worth naming.** The English patterns for both new
+surfaces were first written with a literal **backspace character** where
+a word boundary belonged, which made every one of them silently never
+match. The Persian patterns worked, which is exactly how a one-language
+surface can hide a broken regex. Both files were scanned for the
+character, and the boundary is now a real one.
+
+**Tests:** `test/intent-ai/why-decision-surface.test.mjs` (19).
+
+---
+
+### 5.20 Path 16 — the session machinery, under the turn and not beside it
+
+The last two dark engines are **not surfaces**. They are **machinery**.
+
+`conversationState` is a state machine over a financial conversation —
+DISCOVERY → UNDERSTANDING → CLARIFICATION → RESEARCH → STRATEGY →
+SIMULATION → PROPOSAL → CONFIRMATION → EXECUTION → VERIFICATION →
+MONITORING → REPLAN → COMPLETED — with legal edges, an adaptive question
+bank that asks only for the fields the conversation still lacks, and a
+rule that an illegal edge is REFUSED with the legal edges named.
+
+`eventReplanning` listens on the central event bus and re-plans when the
+world moves under a plan: a price moved, a balance changed, the risk
+level moved, a module degraded. It has cooldowns per trigger family, so
+a busy market does not produce a replan storm.
+
+**Making them modules would be a lie of the same kind this repo keeps
+fixing.** A module is something the user asks for. A user-facing
+«replan my conversation» button is not what a conversation-state
+machine IS. The honest integration is two halves:
+
+**The TURN ingests the message** into the conversation, advances the
+state, and asks **ONE** adaptive question — the first missing field, not
+a questionnaire — in the machine's own voice. The question joins the
+turn's own missing-information list, so it is asked in the same voice as
+every other missing field. The conversation's row is written into the
+**session section** beside the compacted memory: the memory is what the
+brain REMEMBERS, and the conversation row is where the conversation IS.
+
+**The EVENT BUS drives the replan.** The engine already listened on the
+bus and already knew which events mean «reconsider the plan». What was
+missing was that **nobody READ the result**. The turn now reads the
+last attempt and publishes it as a finding, carrying what changed and
+whether the owner should be told. A replan that crossed nothing
+decision-relevant is recorded and **NOT announced**: a notification for
+every price tick is how an alert stream becomes noise.
+
+**Three things this integration deliberately does NOT do:**
+
+· it does **not** trigger a replan from the turn. Triggering belongs to
+  the bus, and the cooldowns exist to prevent a replan on every message;
+· it does **not** make the machinery a capability. There is no module to
+  invoke, and there should not be one;
+· it does **not** let a missing engine break a turn. A turn without the
+  conversation machine is a **shallower** turn — it asks no adaptive
+  question — not a failed one.
+
+**The turn now also reports its findings.** They ARE the evidence: the
+recommendation's reasons point at them, and a reader who cannot see
+them cannot check it. This is also how the route ranking, the why block
+and the replan become observable without each of them inventing a new
+field.
+
+**Tests:** `test/intent-ai/session-machinery.test.mjs` (23) and
+`test/intent-ai/session-machinery-integration.test.mjs` (6).
+
+---
+
 ## §6 — The one-paragraph answer
 
 Of 206 registered intent phases, **51 are actually connected to the AI**
@@ -1429,15 +1677,29 @@ feasibility figure into three profiles — conservative, balanced,
 aggressive — each with its modelled drawdown, its probability of loss
 and its probability of halving, and each willing to say «a scenario
 needs real capital; nothing was modelled and nothing was guessed» when
-the capital is not there. Four of the eight deep engines are now
-reachable from a question a person can actually type; the ones that
-remain need a live venue adapter, a decision bundle, or the session
-layer — not another bridge. What remains is the honest ceiling: **more
-phases would not make
-the AI smarter — making the existing ones reachable would.** That sentence
-is now the method, not a slogan: it is exactly what §5.9, §5.10 and
-§5.11 did, with four intents, four findings, no new phase and no new
-provider call.
+the capital is not there. And then the last four arrived, each in the
+way its own nature demanded: the **route ranking** (§5.18) got the
+deployment's EXISTING live route provider as its candidate source — one
+call, no second quote — so «which bridge should carry this transfer?»
+now compares priced, timed routes and names the dimensions the provider
+never measured; the **why engine** (§5.19) was fed by a **translation**
+of the brain's own decision into the vocabulary it reads, so «چرا این را
+گفتی؟» — which was `UNSUPPORTED` — now answers with five reason lines
+and four named falsifiers; and the **conversation state and the event
+replanning** (§5.20) were wired into the **session layer** rather than
+made into modules, because a user-facing «replan my conversation» button
+is not what a conversation-state machine IS. The turn now ingests the
+message into the conversation, advances the state, and asks ONE adaptive
+question — the first missing field, not a questionnaire — while the
+event bus re-plans when the world moves and the turn says so only when
+something decision-relevant actually changed. **The dark-engine count
+is ZERO.** What remains is the honest ceiling: **more phases would not
+make the AI smarter — making the existing ones reachable would.** That
+sentence is now the method, not a slogan: it is exactly what §5.9,
+§5.10 and §5.11 did, with four intents, four findings, no new phase and
+no new provider call — and what §5.17 added on top, because the quota
+is spent on the **number of calls**: a turn now has a ceiling, the day
+has a counter, and the cache survives a cold start.
 
 The sharpest illustrations were not the hard ones. `server/fios/` is 50
 files and 980 KB of working global-intelligence engines that **zero**
