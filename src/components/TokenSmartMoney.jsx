@@ -244,6 +244,19 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
                 <span className="warn">{t('sm.flow.coveragePct', { pct: coveredPct })}</span>
               )}
             </div>
+            {/*
+              THE WINDOW IS PRINTED, NOT ASSUMED.
+
+              The badge in the header already says «۲۴ ساعت», but a reader who
+              has scrolled into the tiles is reading three numbers whose window
+              is no longer on screen — and a flow figure with the wrong window
+              attached is worse than no figure. This states it next to the
+              numbers themselves, in the same sentence as the sample they came
+              from.
+            */}
+            <p className="smi-footnote" data-testid="sm-token-window-note">
+              {t('sm.flow.windowCovered', { window: t('sm.windows.24h') })}
+            </p>
             {basis === 'none' && <p className="smi-footnote" data-testid="sm-token-no-flow-data">{t('sm.flow.noData')}</p>}
           </div>
 

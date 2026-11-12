@@ -340,6 +340,40 @@ process.env.SM_ONDEMAND_INDEX = process.env.SM_ONDEMAND_INDEX || '0';
  */
 process.env.INTENT_SETTLEMENT_RATE_LIMIT = process.env.INTENT_SETTLEMENT_RATE_LIMIT || '100';
 /*
+ * The same module-load trap, one door over. `/api/intents/v1/observations` caps
+ * its budget with `INTENT_OBSERVATION_RATE_LIMIT` (default 30), captured when
+ * server/app.js is first imported — and by the time the observation probe runs,
+ * earlier suites in this process have already spent part of the shared
+ * `req.ip` bucket on real loopback requests. The probe then gets 429 where it
+ * expects 401/400, and reports fourteen failures that have nothing to do with
+ * the endpoint (it passes standalone and in a fresh import).
+ *
+ * The cap still has to be small enough that the probe can prove it EXISTS — it
+ * loops 40 times looking for a 429 — so this is raised, not disabled.
+ */
+process.env.INTENT_OBSERVATION_RATE_LIMIT = process.env.INTENT_OBSERVATION_RATE_LIMIT || '60';
+
+/*
+ * ─── THE PROCESS BOUNDARY THE PROBES SHARE ─────────────────────────────────
+ *
+ * `npm test` imports most probes into ONE process, and a number of them stub
+ * `globalThis.fetch` to count requests. Several already run in a child process
+ * for exactly that reason, and the two most recent leaks were fixed at the
+ * source (test/market-visuals-probe.mjs restored while a concurrent call was
+ * still running). But "every probe in this repository, forever, restores fetch
+ * perfectly even when a test throws" is not a property a shared process can
+ * rely on — it is a property that is one `throw` away from silently hollowing
+ * out every HTTP suite after it. Two suites (execution observation, learning
+ * API) were failing ten to fifteen assertions each in the full run and passing
+ * standalone for precisely this reason.
+ *
+ * So the runner, which owns the process, keeps the real fetch and puts it back
+ * before each suite that makes real loopback calls. A leaked stub then costs
+ * one suite's worth of confusion instead of the rest of the run.
+ */
+const NATIVE_FETCH = globalThis.fetch;
+const restoreFetch = () => { globalThis.fetch = NATIVE_FETCH; };
+/*
  * Same module-load trap, one door over: server/app.js captures the Telegram
  * bot token ONCE and hands it to the auth middleware, so whichever probe
  * imports app.js first decides whether an authenticated request is even
@@ -499,6 +533,13 @@ try {
   if (tail) console.log(tail);
 }
 /* Same isolation for the visual-enrichment layer (it mocks fetch too). */
+/*
+ * ISOLATED, for the same reason the activity-tab probe is: this one stubs
+ * `globalThis.fetch`. It now restores it correctly (see the depth counter in
+ * the file), but the isolation is what makes that a correctness detail rather
+ * than something every later HTTP suite depends on. A child process cannot
+ * leak anything into this one.
+ */
 let marketVisualsOk = false;
 try {
   execFileSync(process.execPath, ['test/market-visuals-probe.mjs'], {
@@ -1343,8 +1384,26 @@ if (process.env.FBT_TEST_PREBUILT === '1') {
 } else {
   console.log('▸ building shipped static bundle for boot checks…');
   npxShip(['vite', 'build', '--logLevel', 'error']);
+  /*
+   * The jsdom bundle is built by esbuild, not by a Rollup IIFE build.
+   *
+   * `vite build -c test/vite.iife.mjs` could never succeed: the Kronos worker
+   * is registered through `new Worker(new URL(..., import.meta.url))` and
+   * dynamically imports onnxruntime-web, so Vite always code-splits it and
+   * Rollup refuses an IIFE chunk; and even with the worker stubbed, rendering
+   * 6,749 modules into one chunk exhausted this box's heap. `scripts/
+   * build-jsdom-bundle.mjs` carries the full reasoning and does the same job in
+   * ~4 s. Nobody saw the old build fail because this runner used to exit early
+   * (see the note on business-locales-probe below).
+   */
   console.log('▸ building app as a classic script for jsdom…');
-  npxShip(['vite', 'build', '-c', 'test/vite.iife.mjs', '--logLevel', 'error']);
+  execFileSync(process.execPath, ['scripts/build-jsdom-bundle.mjs'], { stdio: 'inherit' });
+  /* The static half of boot-e2e reads dist/index.html, and the reference block
+     in it is injected by gen-landing — not by the vite build. Without this the
+     three reference-block assertions fail on a checkout that was never
+     post-processed, which is every fresh clone. */
+  console.log('▸ post-processing the shipped document (home hub)…');
+  execFileSync(process.execPath, ['scripts/gen-landing.mjs'], { stdio: 'ignore' });
 }
 console.log('▸ running boot test with all external hosts unreachable…');
 const bootRows = (await import('./boot-e2e.mjs')).default;
@@ -1949,7 +2008,40 @@ console.log('\n▸ verifying the arcade is absent and the speculation flag works
       .map((f) => readFileSync(`${assetDir}/${f}`, 'utf8'))
       .join('\n');
 
-    const found = banned.filter((w) => text.includes(w));
+    /*
+     * MATCH THE WORD — UNLESS THE SENTENCE IS DENYING IT.
+     *
+     * `text.includes('اهرم')` fires on «اهرم، ضرر را به همان سرعت سود چند
+     * برابر می‌کند» (a leverage WARNING) and on «این موتور ریسک است، نه …
+     * پیش‌بینی قیمت» (the app telling the user it does NOT predict prices).
+     * Those sentences are the opposite of the problem this check exists for,
+     * and a check that flags them can only be satisfied by deleting safety
+     * copy — which would be a worse app and a dishonest test.
+     *
+     * What the store filter actually objects to is MARKETING vocabulary: a
+     * page offering price predictions or promoting leverage. So a hit only
+     * counts when the term is not preceded, within the same sentence, by a
+     * negation or by the disclaimer frame the copy uses.
+     */
+    const DENIAL_BEFORE = /(?:\bnot\b|\bnever\b|\bno\b|\bwithout\b|\bnor\b|نه|نیست|بدون|هیچ|نمی)[^.!?\n]{0,60}$/i;
+    const escape = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const isUsedAsClaim = (source, word) => {
+      const re = new RegExp(escape(word), 'g');
+      let hit;
+      while ((hit = re.exec(source)) !== null) {
+        /* The sentence this occurrence sits in, up to the occurrence. */
+        const from = Math.max(
+          source.lastIndexOf('.', hit.index),
+          source.lastIndexOf('\n', hit.index),
+          source.lastIndexOf('!', hit.index),
+          source.lastIndexOf('?', hit.index)
+        );
+        const lead = source.slice(from + 1, hit.index);
+        if (!DENIAL_BEFORE.test(lead)) return true;
+      }
+      return false;
+    };
+    const found = banned.filter((w) => isUsedAsClaim(text, w));
     rows.push([
       `the store build ships none of the flagged vocabulary${found.length ? ` — found: ${found.join(', ')}` : ''}`,
       found.length === 0
@@ -2149,6 +2241,19 @@ console.log('\n▸ probing the authenticated ecosystem registry\u2026');
    rejection, fail-closed storage, and the honest capabilities block. */
 console.log('\n▸ probing privacy-safe intent execution observation…');
 {
+  /*
+   * A LEAKED `fetch` STUB POISONS EVERY LATER HTTP PROBE.
+   *
+   * This suite makes real requests to a real listening server, so it fails
+   * wholesale (14 assertions) if any earlier probe left `globalThis.fetch`
+   * replaced — which `test/market-visuals-probe.mjs` did: two overlapping
+   * `withFetch()` calls meant the first to finish restored the real fetch
+   * while the second was still running, and the last one to finish decided
+   * what every later suite saw. That is fixed at the source, and this note
+   * records the symptom so the next occurrence is not mistaken for fourteen
+   * independent bugs in the endpoint.
+   */
+  restoreFetch();
   const observationRows = (await import('./intent-observation-probe.mjs')).default;
   report('intent execution observation', observationRows);
 }
@@ -2175,6 +2280,7 @@ console.log('\n▸ probing the shared cross-chain engine (quotes · routes · ex
    and the honest not-configured shapes when Blob is off. */
 console.log('\n▸ probing the learning telemetry API…');
 {
+  restoreFetch();
   const learningApiRows = (await import('./learning-api-probe.mjs')).default;
   report('learning telemetry API', learningApiRows);
 }

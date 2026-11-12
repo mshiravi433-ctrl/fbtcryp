@@ -380,6 +380,7 @@ import {
   cancelForm,
   clearForm,
   detectFormTrigger,
+  messageLooksLikeSlotAnswer,
   FORMS
 } from '../lib/intent-ai/chat/multiSlotCollector.js';
 import { createSurfaceGate, eventToChatMessage } from '../lib/intent-ai/chat/osSurface.js';
@@ -2309,11 +2310,32 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
     // اگر فرم چندمرحله‌ای فعال است، هر پیام عادی باید به آن پاسخ حساب شود
     // (مگر اینکه skipUserBubble باشد که از submit داخلی می‌آید)
+    /*
+     * A FORM THAT IS OPEN IS NOT A FORM THAT OWNS THE CONVERSATION.
+     *
+     * While a multi-slot form was pending, EVERY message was fed to it as an
+     * answer — including a completely unrelated request. A user who left the
+     * strategy form open and then typed «اتوماسیون را با حالت کاغذی شروع کن»
+     * had their automation request stored as a slot value and never answered.
+     * That is the second half of the reported «اتوماسیون خوب کار نمی‌کنه».
+     *
+     * A different, self-contained request now abandons the form and is
+     * processed normally; a short answer or a value («۱۰۰۰ دلار», «۹۰ روز»)
+     * still fills the slot, which is the case the form exists for. An explicit
+     * interruption («توقف», «لغو») has already been handled above.
+     */
     const activeFormBefore = getActiveForm({ conversationId });
     if (activeFormBefore && !opts?.skipFormIntercept && !opts.surfaceAction) {
-      multiSlotSubmit(message);
-      setInput('');
-      return null;
+      const isSlotAnswer = messageLooksLikeSlotAnswer(message);
+      if (isSlotAnswer) {
+        multiSlotSubmit(message);
+        setInput('');
+        return null;
+      }
+      /* Otherwise: drop the stale form and let the new request through. */
+      try { cancelForm({ conversationId }); } catch { /* best effort */ }
+      setMultiSlot(null);
+      setMultiSlotParseError(null);
     }
 
     busyRef.current = true;
@@ -2433,7 +2455,26 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     const quickSpec = parseGoalSpec({ text: message, portfolio: aiContext.portfolio, wallet, balances: aiContext.balances });
     const formType = detectFormTrigger(message) || (quickSpec.targetPct != null ? 'STRATEGY_GOAL' : null);
     if (formType && !opts.skipFormIntercept) {
-      if (!quickSpec.ok && !opts.surfaceAction) {
+      /*
+       * ─── AN INCOMPLETE GOAL STILL GETS ITS CARD ──────────────────────────
+       *
+       * This used to open the multi-slot form for ANY goal sentence that was
+       * not fully specified, and `return true` — so the turn never reached the
+       * OS. A user typed «سودم ۲ برابر شود در ۹۰ روز» and got
+       * «اطلاعاتی که گفتی حفظ شد …» instead of a plan card. The card it
+       * should have received already exists and already knows how to be
+       * honest: `compileChatGoal` returns `GOAL_INCOMPLETE` with the exact
+       * `missing` list, and GoalPlanCard renders that as a refusal.
+       *
+       * A refusal that NAMES the missing fields is better than a form that
+       * guesses at why, and it is the same answer the report was complaining
+       * about («کارت پلن نمی‌آید»). So the form now opens only when the
+       * sentence carried NO numbers at all — nothing to grade, so asking is
+       * the only useful move. As soon as a target or horizon is stated, the
+       * turn flows through and the card answers.
+       */
+      const nothingToGrade = quickSpec.targetPct == null && quickSpec.horizonDays == null;
+      if (nothingToGrade && !opts.surfaceAction) {
         const initialValues = { capitalUsd: quickSpec.capitalUsd, targetPct: quickSpec.targetPct,
           horizonDays: quickSpec.horizonDays, floorPct: quickSpec.floorPct,
           ...(quickSpec.riskSource !== 'default' ? { riskProfile: quickSpec.riskProfile } : {}) };

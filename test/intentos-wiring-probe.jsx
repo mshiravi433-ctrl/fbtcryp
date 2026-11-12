@@ -510,9 +510,23 @@ export async function run(container) {
     t('the Loan page renders its tabs', qa('button').filter((b) => /supply|deposit|lend/i.test(b.textContent || '')).length > 0);
     t('a workflow hand-off lands on the supply tab',
       q('[data-testid="loan-tab-supply"]')?.getAttribute('data-active') === 'true');
-    const prefilled = q('input[type="number"]');
+    /*
+     * The amount field is identified by its `0.00` placeholder, not by being
+     * the first `input[type=number]` on the page.
+     *
+     * The loan screen renders its strategy/loop settings alongside the deposit
+     * form, and those are number inputs too (`1.35`, `75`, `85`, …). The old
+     * assertion took `querySelector('input[type=number]')` — document order —
+     * so it read the first SETTINGS field and reported the prefill as missing
+     * while `250` was sitting in the deposit box the whole time. Placeholder is
+     * a stable, content-level identity for the amount field; document position
+     * is not.
+     */
+    const amountFields = qa('input[type="number"]').filter((i) => i.placeholder === '0.00');
+    const prefilled = amountFields.find((i) => i.value === '250') || amountFields[0];
     t('the hand-off arrives prefilled — the amount is already in the field',
-      !!prefilled && prefilled.value === '250');
+      !!prefilled && prefilled.value === '250',
+      amountFields.map((i) => i.value).join(','));
 
     /* No wallet is connected in this suite, so the only honest primary action
        is the connect gate — never a navigation that pretends to deposit. */

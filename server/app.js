@@ -2734,8 +2734,31 @@ const observationHits = new Map();
 const OBSERVATION_MAX_PER_WINDOW = Number(process.env.INTENT_OBSERVATION_RATE_LIMIT || 30);
 
 app.post('/api/intents/v1/observations', async (req, res) => {
-  const key = req.tgUser?.id ?? req.ip;
+  /*
+   * CONSENT BEFORE BUDGET.
+   *
+   * The rate limiter used to run first and spend a shared `req.ip` bucket on
+   * every request — including the ones that were about to be refused for
+   * having no opt-in token. Two consequences, both real:
+   *
+   *   · a client that does not consent could exhaust the whole IP's budget by
+   *     retrying, and then a consenting client behind the same NAT got 429
+   *     for requests it was entitled to make;
+   *   · a test or a user could never observe a clean 401 after thirty
+   *     requests, because the limiter answered 429 before the consent check
+   *     ever ran. That is what this probe hit, in order, in one process.
+   *
+   * Refusing an unauthenticated write costs nothing and should not be
+   * counted against anyone's quota. The budget now applies to requests that
+   * would actually be stored.
+   */
   const nowMs = Date.now();
+  const consent = req.get('x-telemetry-consent') ?? '';
+  if (!OBSERVATION_CONSENT_RE.test(String(consent))) {
+    return res.status(401).json({ error: 'OPT_IN_REQUIRED' });
+  }
+
+  const key = req.tgUser?.id ?? req.ip;
   const bucket = observationHits.get(key);
   if (!bucket || nowMs > bucket.reset) {
     observationHits.set(key, { count: 1, reset: nowMs + WINDOW_MS });
@@ -2745,11 +2768,6 @@ app.post('/api/intents/v1/observations', async (req, res) => {
       res.set('retry-after', String(Math.ceil((bucket.reset - nowMs) / 1000)));
       return res.status(429).json({ error: 'OBSERVATION_RATE_LIMITED' });
     }
-  }
-
-  const consent = req.get('x-telemetry-consent') ?? '';
-  if (!OBSERVATION_CONSENT_RE.test(String(consent))) {
-    return res.status(401).json({ error: 'OPT_IN_REQUIRED' });
   }
 
   const checked = validateObservation(req.body, nowMs);

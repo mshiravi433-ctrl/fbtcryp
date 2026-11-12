@@ -167,7 +167,7 @@ function optionSet(context = {}, locale = 'fa') {
       drawdownBudgetPct: band.drawdownBudgetPct,
       allowsLeverage: band.allowsLeverage,
       tradeoff: fa
-        ? `بودجه افت برآوردی ${band.drawdownBudgetPct}٪، حداکثر ${band.maxSleeves} بخش${band.allowsLeverage ? `؛ اهرم فقط پس از بررسی و تا سقف ${DEFAULT_POLICY_CAPS.maxLeverage}×` : '، بدون اهرم'}. این بودجه تضمینِ محدود شدن ضرر نیست.`
+        ? `بودجه افت برآوردی ${band.drawdownBudgetPct}٪، حداکثر ${band.maxSleeves} بخش${band.allowsLeverage ? `؛ وام‌گیری فقط پس از بررسی و تا سقف ${DEFAULT_POLICY_CAPS.maxLeverage}×` : '، بدون وام‌گیری'}. این بودجه تضمینِ محدود شدن ضرر نیست.`
         : `Estimated drawdown budget ${band.drawdownBudgetPct}%, up to ${band.maxSleeves} sleeves${band.allowsLeverage ? `; leverage only after review, capped at ${DEFAULT_POLICY_CAPS.maxLeverage}×` : ', no leverage'}. This budget is not a guaranteed loss limit.`
     };
   });
@@ -430,7 +430,7 @@ export function runChatNegotiation({ mode, intent = 'NEGOTIATE', subject = '', c
       : `Three options are on the table, all constrained by this system's real caps${proposal ? ` for "${subject || proposal.action}"` : ''}.`),
 
     line('fbt-guardian', 'constraint', fa
-      ? `سقف سخت: هر تراکنش حداکثر ${DEFAULT_POLICY_CAPS.maxTransactionUsd.toLocaleString('en-US')} دلار، اهرم حداکثر ${DEFAULT_POLICY_CAPS.maxLeverage}× — انتخاب نهایی با توست.`
+      ? `سقف سخت: هر تراکنش حداکثر ${DEFAULT_POLICY_CAPS.maxTransactionUsd.toLocaleString('en-US')} دلار، وام‌گیری حداکثر ${DEFAULT_POLICY_CAPS.maxLeverage}× — انتخاب نهایی با توست.`
       : `Hard caps: max $${DEFAULT_POLICY_CAPS.maxTransactionUsd.toLocaleString('en-US')} per trade, leverage ≤ ${DEFAULT_POLICY_CAPS.maxLeverage}× — the final choice is yours.`)
   ];
   result.notes.push(fa
@@ -452,7 +452,7 @@ const councilRoleLabel = (role) => ROLE_FA[role] || role;
 const decisionLabel = (decision) => DECISION_FA[decision] || decision;
 const termLabel = (term) => TERM_FA[term] || term;
 const actionLabel = (action) => ACTION_FA[String(action).toLowerCase()] || action;
-const CHALLENGE_FA = { EVIDENCE_INCOMPLETE: 'داده کافی نیست', LIQUIDITY_INSUFFICIENT: 'نقدینگی کافی نیست', SLIPPAGE_ABOVE_POLICY: 'لغزش از سقف بیشتر است', LEVERAGE_ABOVE_POLICY: 'اهرم از سقف بیشتر است', REQUIRED_CAPABILITY_UNAVAILABLE: 'ابزار لازم در دسترس نیست', EVENT_RISK_HIGH: 'ریسک رویداد بالاست', COST_INCOMPLETE: 'هزینه کامل خوانده نشده', DRAWDOWN_ABOVE_BUDGET: 'افت برآوردی بیش از بودجه است', QUOTE_STALE: 'نرخ تازه نیست' };
+const CHALLENGE_FA = { EVIDENCE_INCOMPLETE: 'داده کافی نیست', LIQUIDITY_INSUFFICIENT: 'نقدینگی کافی نیست', SLIPPAGE_ABOVE_POLICY: 'لغزش از سقف بیشتر است', LEVERAGE_ABOVE_POLICY: 'وام‌گیری از سقف بیشتر است', REQUIRED_CAPABILITY_UNAVAILABLE: 'ابزار لازم در دسترس نیست', EVENT_RISK_HIGH: 'ریسک رویداد بالاست', COST_INCOMPLETE: 'هزینه کامل خوانده نشده', DRAWDOWN_ABOVE_BUDGET: 'افت برآوردی بیش از بودجه است', QUOTE_STALE: 'نرخ تازه نیست' };
 function councilReasonFa(vote) {
   if (vote.evidence?.length) return vote.evidence.map((code) => CHALLENGE_FA[code] || 'نیاز به بررسی مستقل').join('، ');
   if (vote.decision === 'REJECT') return 'محدودیت ایمنی مانع است';

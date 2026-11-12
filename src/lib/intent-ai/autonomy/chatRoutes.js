@@ -126,6 +126,21 @@ export const ROUTED_PATHS = Object.freeze([
   '/launch',
   // Phase 211 — Global Intelligence («جهانی»): its own page at /global; /ai-global is the alias.
   '/global', '/ai-global',
+  /*
+   * The routes that had been mounted and never listed (round 10).
+   *
+   * `chat-route-contract-probe` compared App.jsx's real table against this
+   * list and had been failing on seven of them — which means the chat could
+   * not name a route the app actually serves, and nothing noticed because the
+   * probe that checks it stopped the run before anyone read its output.
+   *
+   * `/perp/terminal` is behind PERP_TERMINAL_ENABLED, so its presence here is
+   * a statement about the ROUTE TABLE, not about availability — the answer must
+   * still check the flag before sending somebody there, exactly as it does for
+   * every other gated surface.
+   */
+  '/perp/terminal', '/social', '/lab/chart-guide', '/missions',
+  '/ai-trade', '/ai-analysis', '/collective',
   // FBT Insurance OS (protection marketplace) — nested under the shell route.
   '/insurance', '/insurance/marketplace', '/insurance/quote/:quoteId',
   '/insurance/coverage', '/insurance/coverage/:id', '/insurance/claims',

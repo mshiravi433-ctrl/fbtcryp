@@ -148,12 +148,6 @@ export const IconRepeat = (p) => (
   </svg>
 );
 
-export const IconStar = (p) => (
-  <svg {...base} {...p}>
-    <path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1.05 5.9L12 16.9 6.75 19.7l1.05-5.9L3.5 9.7l5.9-.8L12 3.5Z" />
-  </svg>
-);
-
 export const IconUsers = (p) => (
   <svg {...base} {...p}>
     <circle cx="9" cy="8" r="3.4" />

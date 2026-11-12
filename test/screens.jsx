@@ -1068,11 +1068,30 @@ export async function run(container) {
     out.push(['the limit-order button exists', Boolean(newLimit)]);
     await act(async () => newLimit?.click());
 
+    /*
+     * The limit sheet opens on the AUTOPILOT (keeper) tab, which is its own
+     * surface: chain, expiry, estimated output. The direction control belongs
+     * to the MANUAL form, so the probe has to switch there first — exactly the
+     * tap a user makes. Without this the first `.segmented` on the page is the
+     * expiry picker (three options), and the check reported "the direction
+     * control has two options" as a failure against a control that was never
+     * on screen.
+     */
+    const watchTab = document.querySelector('[data-exec="watch"]');
+    out.push(['the manual (watch) tab is offered', Boolean(watchTab)]);
+    if (watchTab && !watchTab.classList.contains('active')) {
+      await act(async () => watchTab.click());
+    }
+
     // The sheet portals to document.body, so query there rather than in host.
     const seg = [...document.querySelectorAll('.segmented')];
     out.push([`the order form has segmented controls (${seg.length})`, seg.length >= 1]);
 
-    const dirBtns = seg[0] ? [...seg[0].querySelectorAll('button')] : [];
+    /* Pick the two-option control by SHAPE, not by position: the manual form
+       also carries a 3-option expiry picker, and their order is a rendering
+       detail this probe should not depend on. */
+    const dirSeg = seg.find((el) => el.querySelectorAll('button').length === 2);
+    const dirBtns = dirSeg ? [...dirSeg.querySelectorAll('button')] : [];
     out.push(['the direction control has two options', dirBtns.length === 2]);
 
     if (dirBtns.length === 2) {

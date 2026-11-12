@@ -184,7 +184,28 @@ export default function run() {
      */
     '/ai-control',
     '/insurance/settings',      // -> tab inside /insurance shell (InsuranceShell renders tabs via outlet)
-    '/insurance/*'              // -> catch-all fallback artifact from nested route parsing; real routes are explicit children
+    '/insurance/*',             // -> catch-all fallback artifact from nested route parsing; real routes are explicit children
+    /*
+     * ─── ROUND 10: FIVE ROUTES THAT WERE ALWAYS MOUNTED ────────────────────
+     * A probe that now actually runs (test/run.mjs used to stop early — see
+     * business-locales-probe) turned up five routes mounted in App.jsx with no
+     * menu entry. Each is deliberate; each is reachable, just not by clicking
+     * a tile in a default build.
+     */
+    /* Behind PERP_TERMINAL_ENABLED: the flag is what decides whether the route
+       exists at all, and the perp screen links to it when it is on. */
+    '/perp/terminal',
+    /* «تغییرات» has TWO urls: /whats-new is the menu row, /changelog is the
+       same page for every link, doc and support message that already names it.
+       A second entry point is not an orphan. */
+    '/changelog',
+    /* A redirect to /intent, kept so the old mission URL still resolves. A
+       route that forwards has nothing to link to it. */
+    '/missions',
+    /* Mounted as a panel/section inside another screen (AiAnalysis and the
+       risk engine are both embedded), with the standalone URL kept for shared
+       links — the same contract as /ai-control above. */
+    '/ai-analysis', '/risk'
   ]);
 
   const orphans = routes.filter(
