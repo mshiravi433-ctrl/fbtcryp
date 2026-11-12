@@ -4865,7 +4865,7 @@ async function smartMoneyCadence(send) {
   } catch {
     lastIndexAt = null;
   }
-  return runSmartMoneyCadence({
+  return await runSmartMoneyCadence({
     alerts: () => smartMoney.runAlertCycle(async (endpoint, lang, payload) => send(endpoint, lang, payload)),
     intelligence: () => smartMoney.runIntelligenceCycle(),
     durable: storeDurable,

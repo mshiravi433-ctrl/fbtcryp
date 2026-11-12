@@ -206,7 +206,12 @@ export const EVENT_TYPES = Object.freeze([
      that exists (nothing has moved, so nothing may be invalidated — only the UI
      needs to show it) and a signature that has been broadcast but not yet
      confirmed on-chain (the transaction list must stop showing it as absent). */
-  'ACTION_PROPOSED', 'TRANSACTION_PENDING'
+  'ACTION_PROPOSED', 'TRANSACTION_PENDING',
+  /* The global snapshot was read (2026-11-12). It invalidates itself and
+     the risk view, because a flow that says the market is accumulating is
+     a risk input, and a stale flow next to a fresh risk number would
+     read as current. */
+  'GLOBAL_SNAPSHOT_READ'
 ]);
 
 /*
@@ -239,7 +244,8 @@ export const REFRESH_CASCADE = Object.freeze({
   TRANSACTION_PENDING: { invalidate: ['transactions'], cascade: false },
   ALERT_FIRED: { invalidate: ['alerts'], cascade: false },
   MODULE_DEGRADED: { invalidate: ['capabilities', 'health'], cascade: false },
-  MODULE_RECOVERED: { invalidate: ['capabilities', 'health'], cascade: false }
+  MODULE_RECOVERED: { invalidate: ['capabilities', 'health'], cascade: false },
+  GLOBAL_SNAPSHOT_READ: { invalidate: ['globalIntel'], cascade: false }
 });
 
 /** §10 Module registry — the ids the brain must be able to discover. */
@@ -247,7 +253,13 @@ export const MODULE_IDS = Object.freeze([
   'wallet', 'portfolio', 'swap', 'bridge', 'lending', 'borrowing', 'farming',
   'liquidity', 'staking', 'futures', 'dydx', 'stocks', 'etf', 'funds', 'forex',
   'commodities', 'rwa', 'crypto', 'signals', 'news', 'events', 'alerts', 'goals',
-  'profit-plan', 'prediction', 'lab', 'risk', 'forecast', 'transactions', 'notifications'
+  'profit-plan', 'prediction', 'lab', 'risk', 'forecast', 'transactions', 'notifications',
+  /* The global-intelligence module (2026-11-12) — the bridge to
+     `server/fios/`, which holds the smart-money, whale, on-chain and macro
+     engines. A module that is not in this list is reported as
+     `NOT_IN_SPEC_MODULE_LIST` by the registry, which is exactly the
+     warning that catches a module added by accident. */
+  'global-intel'
 ]);
 
 /**
