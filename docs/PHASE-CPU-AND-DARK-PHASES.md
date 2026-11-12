@@ -29,11 +29,11 @@ node scripts/find-extensionless-imports.mjs # imports Node ESM cannot resolve
 
 ## §0.5 — WHAT WAS ACTUALLY FIXED, AND WHAT IT COST
 
-**All nine** upgrade paths in §5 are **shipped** (5.1–5.6 plus the
+**All ten** upgrade paths in §5 are **shipped** (5.1–5.6 plus the
 seventh, the yield surface, in §5.9, the eighth, the global surface, in
-§5.10, and the ninth, the daily cron, in §5.11). The point of this
-section is that each one is a measurement before and after, not a
-promise.
+§5.10, the ninth, the daily cron, in §5.11, and the tenth, the measured
+prompt diet, in §5.12). The point of this section is that each one is a
+measurement before and after, not a promise.
 
 | | before | after |
 |---|---|---|
@@ -58,6 +58,8 @@ promise.
 | the smart-money index | ran from two crons | **one pass per 12-hour window**, and it says so — *with a durable store; §5.11.1* |
 | `/api/cron/daily` CPU | 621 ms | **469 ms** measured here — *the reuse path needs a store to fire; §5.11.1* |
 | «پول هوشمند کجاست؟» | `UNSUPPORTED` | **`SMART_MONEY_READ`** → the global section is read |
+| the prompt's share of evidence | 92.5 % contracts, 5.3 % facts | **measured** — a prompt diet has nothing to cut (§5.12) |
+| the durable audit board | claimed verified, checked nothing | **reports `DURABLE_STORE_NOT_CONFIGURED` until a store exists** |
 
 ### The three root causes, and what each one was
 
@@ -761,9 +763,9 @@ not break. The new `jobs` array is additive.
   max turns). §2.4.
 * **Qdrant.** It buys persistence, not CPU. Already documented.
 
-### 5.8 What is STILL open after all eight paths
+### 5.8 What is STILL open after all ten paths
 
-The eight paths in §5 are shipped, and they were the eight that the
+The ten paths in §5 are shipped, and they were the ten that the
 measurement justified. What the measurement did **not** justify is left
 open on purpose, and it is worth naming:
 
@@ -797,6 +799,21 @@ open on purpose, and it is worth naming:
    is: 50 requests/day ≈ 8 max turns. Every CPU number in this document
    is a correctness and cost-accounting fix, not a way to stretch the
    allowance.
+
+5. ~~**A prompt/token diet would stretch the quota.**~~ **MEASURED and
+   closed** — §5.12. The prompt is 92.5 % contracts and 5.3 % evidence,
+   the contracts repeat in every seat because each call is an
+   independent request, and the rules are the quality. There is nothing
+   to cut that would not cost accuracy. The quota is spent on the
+   **number of calls**, and the local-first gate is what reduces that
+   (100 → 55 calls for 20 questions).
+
+6. **The eight deep `server/fios/` engines** (`macroGraph`, `whyEngine`,
+   `goalScenarios`, `routeIntelligence`, `traditionalAssets`,
+   `opportunityFit`, `conversationState`, `eventReplanning` — about
+   122 KB) are still imported by nothing in the brain. The global
+   surface (§5.10) wired one set of engines; these are the next ones,
+   and they are a real path rather than a placeholder.
 
 ### 5.9 Path 7 — the yield surface (SHIPPED)
 
@@ -1046,6 +1063,117 @@ tested; the saving needs a durable store to happen.**
 
 ---
 
+### 5.12 Path 10 — the prompt diet, measured (and why there is nothing to cut)
+
+The resource audit kept recommending a "prompt/token diet" as the lever
+that would make the free tier last longer, and the recommendation was
+never measured. It is measured now, by
+`scripts/measure-prompt-weight.mjs`, which splits one real turn's prompt
+into its four parts:
+
+| part | chars | share |
+|---|---:|---:|
+| role prompt | 139 | 0.6 % |
+| **contracts** | **23,367** | **92.5 %** |
+| question | 310 | 1.2 % |
+| context (evidence) | 1,349 | 5.3 % |
+| **total** | **25,255** | |
+
+The finding is the opposite of what the recommendation assumed. **The
+contracts are 92.5 % of the prompt, and the evidence is 5.3 %.** The
+rules that make the model honest — the JSON shape, the reasoning
+contract, the deep-reasoning line, the grounding rule, the professor
+posture, the request read — are the expensive part, and they are
+repeated in every seat: **24 contract lines appear in all five calls**,
+for 15,148 characters of repeated text.
+
+The obvious move is to send them once. The obvious answer is that they
+**cannot** be sent once: each call is an independent request to a
+provider, and a provider sees only its own request. There is no shared
+system prompt across calls, and no provider here supports one.
+
+So a prompt diet has almost nothing to cut. Cutting the contracts would
+buy quota with accuracy — it would remove the rule that says *never
+introduce a number the evidence does not contain*, and the rule that
+makes the answer's claims checkable against its own reasoning. That is
+the trade this project does not make, and the measurement is the reason
+it is now a closed question rather than an open proposal.
+
+Two things are worth keeping from the measurement:
+
+* the harness (`scripts/measure-prompt-weight.mjs`), so the number can be
+  re-checked after any change to the contracts;
+* the per-line repeat table, so a future change that adds a 500-char
+  rule to every seat is visible as such.
+
+**What this closes:** the `:free` quota is the binding constraint (§0.4),
+and the prompt is not where it is spent. The prompt is 25 KB of rules for
+5 KB of facts; the quota is consumed by the **number of calls**, which
+the local-first gate already cut from 100 to 55 for 20 questions.
+
+
+---
+
+### 5.13 The regression sweep, and the two bugs it caught
+
+The branch touches the central brain, the intent classifier, the corpus
+and the cron. The test suite that covers those (`test:ai-intelligence`)
+is 678 assertions and it does not cover the whole repository. So the
+whole corpus was swept: **608 test files**, run in parallel, each file
+on its own.
+
+Running a sweep is not the same as trusting it. A parallel run produces
+false failures — files that touch the same port, the same temp file or
+the same cache. So the sweep was **diffed against a fresh baseline**:
+the same 608 files, on `origin/main`, in a separate worktree, under the
+same conditions. Only a file that fails on the branch and passes on the
+base is a regression.
+
+**39 files failed on the branch. 37 of them also fail on `origin/main`** —
+they are environment failures (a missing native binary, a missing file,
+a `.jsx` the runner cannot load), pre-existing on main, and not this
+branch's business.
+
+**Two files failed only on the branch, and both were real:**
+
+**1. `server/intentSelfProbe.js` — the audit evidence lost its `await`.**
+When the reuse path was added, the fresh measurement was rewritten as
+`carried('durable-immutable-audit') || auditEvidence({...})`. The `||`
+operator does not await, so `audit` became a **promise**. Every
+downstream read — `r.ok`, `r.code` — saw an unresolved promise, so the
+kind was reported as `UNKNOWN` instead of
+`DURABLE_STORE_NOT_CONFIGURED`.
+
+That is the bad direction. The durable audit log claimed to be verified
+while nothing had been appended, verified or read back: **the board was
+green about a store that was never checked.** The `await` is back, and
+the probe now reports `DURABLE_STORE_NOT_CONFIGURED` until a store
+really exists.
+
+**2. `src/lib/intent-ai/qualityCorpus.js` — the whale corpus still
+pinned to the old intent.** `SMART_MONEY_READ` claims «نهنگ» and
+«smart money» on purpose — its priority sits above `MARKET_OVERVIEW`,
+which is written down in `intent.js`. The corpus predates that intent
+and still expected `MARKET_OVERVIEW`, so the **whale category had
+fallen to 0 %** while every one of its sentences was being answered
+*more* specifically than the corpus predicted. The expectation was
+moved to `SMART_MONEY_READ`.
+
+Both are fixed: `earnable-evidence-probe` 52/52,
+`quality-corpus-probe` 39/39, `test:ai-intelligence` 678/678. **Every
+one of the 39 sweep failures now also fails on `origin/main`: no
+branch-only regression remains.**
+
+The second bug is the more interesting one, and it is worth stating
+plainly: **the corpus check was the tripwire.** It caught a drift
+between what the corpus says the system does and what the system
+actually does — and it caught it in the direction that matters, because
+a corpus that pins a question to an intent the system no longer uses is
+a corpus that will call a *better* answer a regression.
+
+
+---
+
 ## §6 — The one-paragraph answer
 
 Of 206 registered intent phases, **51 are actually connected to the AI**
@@ -1087,7 +1215,12 @@ which shows that `self-probe` and `smart-money` are 44 % of it between
 them — and, since that measurement, the two request-path wins have been
 turned into real savings: the daily cron no longer re-measures evidence
 whose TTL is six hours, and no longer runs the wallet indexer twice a
-day (§5.11). What remains is the honest ceiling: **more phases would not make
+day (§5.11). The last open lever on the cost side was then measured
+rather than assumed: the prompt is **92.5 % contracts and 5.3 % evidence**
+(§5.12), so a "prompt diet" has nothing left to cut, and the quota is
+spent on the **number of calls**, not on the size of the rules — the
+local-first gate already cut 20 questions from 100 provider calls to 55.
+What remains is the honest ceiling: **more phases would not make
 the AI smarter — making the existing ones reachable would.** That sentence
 is now the method, not a slogan: it is exactly what §5.9, §5.10 and
 §5.11 did, with four intents, four findings, no new phase and no new
