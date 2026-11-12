@@ -29,11 +29,12 @@ node scripts/find-extensionless-imports.mjs # imports Node ESM cannot resolve
 
 ## §0.5 — WHAT WAS ACTUALLY FIXED, AND WHAT IT COST
 
-**All ten** upgrade paths in §5 are **shipped** (5.1–5.6 plus the
+**All eleven** upgrade paths in §5 are **shipped** (5.1–5.6 plus the
 seventh, the yield surface, in §5.9, the eighth, the global surface, in
-§5.10, the ninth, the daily cron, in §5.11, and the tenth, the measured
-prompt diet, in §5.12). The point of this section is that each one is a
-measurement before and after, not a promise.
+§5.10, the ninth, the daily cron, in §5.11, the tenth, the measured
+prompt diet, in §5.12, and the eleventh, the fit surface, in §5.14).
+The point of this section is that each one is a measurement before and
+after, not a promise.
 
 | | before | after |
 |---|---|---|
@@ -60,6 +61,8 @@ measurement before and after, not a promise.
 | «پول هوشمند کجاست؟» | `UNSUPPORTED` | **`SMART_MONEY_READ`** → the global section is read |
 | the prompt's share of evidence | 92.5 % contracts, 5.3 % facts | **measured** — a prompt diet has nothing to cut (§5.12) |
 | the durable audit board | claimed verified, checked nothing | **reports `DURABLE_STORE_NOT_CONFIGURED` until a store exists** |
+| «کدام گزینه مناسب من است؟» | `UNSUPPORTED` | **`OPPORTUNITY_FIT`** → the ranking, with the profile it was scored against |
+| the brain over HTTP | `PROVIDER_NOT_WIRED` for every global/fit question | **the real engines answer** — the provider is wired on the first turn (§5.14) |
 
 ### The three root causes, and what each one was
 
@@ -763,9 +766,9 @@ not break. The new `jobs` array is additive.
   max turns). §2.4.
 * **Qdrant.** It buys persistence, not CPU. Already documented.
 
-### 5.8 What is STILL open after all ten paths
+### 5.8 What is STILL open after all eleven paths
 
-The ten paths in §5 are shipped, and they were the ten that the
+The eleven paths in §5 are shipped, and they were the eleven that the
 measurement justified. What the measurement did **not** justify is left
 open on purpose, and it is worth naming:
 
@@ -808,12 +811,18 @@ open on purpose, and it is worth naming:
    **number of calls**, and the local-first gate is what reduces that
    (100 → 55 calls for 20 questions).
 
-6. **The eight deep `server/fios/` engines** (`macroGraph`, `whyEngine`,
+6. **Six deep `server/fios/` engines** (`macroGraph`, `whyEngine`,
    `goalScenarios`, `routeIntelligence`, `traditionalAssets`,
-   `opportunityFit`, `conversationState`, `eventReplanning` — about
-   122 KB) are still imported by nothing in the brain. The global
-   surface (§5.10) wired one set of engines; these are the next ones,
+   `conversationState`, `eventReplanning` — about 90 KB) are still
+   imported by nothing in the brain. The global surface (§5.10) and the
+   fit surface (§5.14) wired two of the eight; these are the next ones,
    and they are a real path rather than a placeholder.
+
+   Two of them are close to a natural question and will be the next
+   ones: `routeIntelligence` («کدام مسیر انتقال بهتر است؟») and
+   `macroGraph` («بازار در چه رژیمی است؟»). `whyEngine` needs a
+   decision bundle first — it explains a decision that already exists,
+   and the brain does not produce one yet.
 
 ### 5.9 Path 7 — the yield surface (SHIPPED)
 
@@ -1174,6 +1183,75 @@ a corpus that will call a *better* answer a regression.
 
 ---
 
+### 5.14 Path 11 — the fit surface, and the bug the global surface was hiding
+
+The yield surface (path 7) answers «which of these pays the most». The
+**fit surface** answers the question that actually matters about one's
+own money: «which of these suits **me**?».
+
+**The engine existed and was unreachable.** `server/fios/opportunityFit.js`
+scores an opportunity against the owner's risk profile, capital,
+liquidity need and goal — profit, probability, risk, liquidity, costs,
+capital — and answers `FITTED` / `CONDITIONAL` / `NOT_FITTED` with a
+reason for every dimension, in Persian:
+
+```
+«برای شما مناسب است: 5 از 5 معیار با پروفایل شما سازگار است»
+```
+
+While it sat there, «کدام گزینه مناسب من است؟» was `UNSUPPORTED`.
+
+**What was added.** The intent `OPPORTUNITY_FIT`; the module
+`opportunity-fit`, reached through the same one-slot bridge as the
+global surface (`server/ci/fitBridge.js`); the state section
+`opportunityFit`; the plan template; the finding; and 13 contract tests.
+
+The intent sits **above** the yield question, and the reason is
+specific: the yield question never mentions the owner («بهترین ییلد
+کجاست؟»), while the fit question is *about* the owner, and nothing is
+more specific than a fit. The first pattern written for it was too
+greedy — it claimed «وضعیت ریسک من چیه», which is a question about the
+profile itself and belongs to `PORTFOLIO_ANALYSIS`. The quality corpus
+caught it (the `risk` category fell to 80 %) and the pattern now needs
+the fit word beside the profile word.
+
+**The opportunities come from two places.** The crypto ones (the yield
+pools, the LP positions) are read from the state sections the brain
+*already reads* — they were there, they were just never scored against
+a profile. The traditional ones come from the cross-asset feed. The
+impermanent-loss flag travels with each pool, because an LP is a
+directional position wearing a yield costume, and a fit that ignored
+that would be a fit against a lie.
+
+**The bug the fit surface found.** The global surface (path 8) had
+never worked over HTTP. The bridge was correct, the module was
+correct, the intent was correct — and every «پول هوشمند کجاست؟»
+answered `PROVIDER_NOT_WIRED` while a working smart-money engine sat
+in the same process. The reason: the provider was only wired when
+`/api/ai` was mounted, and **`/api/brain` never mounts it**. The tests
+passed because they mocked the provider.
+
+So the provider bootstrap now happens on the **first turn**, not at
+boot: `createCentralIntelligence` takes an `ensureProviders` hook, and
+the app wires it to `ensureFinancialIntelligence()`. The import is
+still lazy, and the promise is cached:
+
+| | before | after |
+|---|---:|---:|
+| boot wall / CPU / RSS | 656 ms / 311 ms / 96 MB | **228 ms / 306 ms / 96 MB** |
+| boot module count | 305 | **305** (unchanged) |
+| first turn | `PROVIDER_NOT_WIRED` | **the real answer** |
+| one-time wiring cost | — | **813 ms CPU, once per process** |
+| second turn | — | does not pay it again |
+
+**What this closes.** The 8 deep `fios` engines of §5.8 item 6 are
+still dark, but the two that had a natural question — *which of these
+suits me* and *where is the smart money* — are now reachable, and the
+reason they were not was a mount, not a design.
+
+
+---
+
 ## §6 — The one-paragraph answer
 
 Of 206 registered intent phases, **51 are actually connected to the AI**
@@ -1220,7 +1298,17 @@ rather than assumed: the prompt is **92.5 % contracts and 5.3 % evidence**
 (§5.12), so a "prompt diet" has nothing left to cut, and the quota is
 spent on the **number of calls**, not on the size of the rules — the
 local-first gate already cut 20 questions from 100 provider calls to 55.
-What remains is the honest ceiling: **more phases would not make
+And the deep engines stopped being an inventory: the **fit surface**
+(§5.14) reached the one that answers «کدام گزینه مناسب من است؟» — the
+question about the user's own money, which had a complete engine
+(FITTED / CONDITIONAL / NOT_FITTED, with a reason per dimension) sitting
+unreachable — and reaching it exposed the real reason the global
+surface had never worked over HTTP: the provider was wired only when
+`/api/ai` was mounted, and `/api/brain` never mounts it, so every
+«پول هوشمند کجاست؟» had been answering `PROVIDER_NOT_WIRED` next to a
+working smart-money engine. The bootstrap now happens on the **first
+turn** (813 ms CPU, once per process) and the boot is untouched
+(306 ms CPU, 305 modules). What remains is the honest ceiling: **more phases would not make
 the AI smarter — making the existing ones reachable would.** That sentence
 is now the method, not a slogan: it is exactly what §5.9, §5.10 and
 §5.11 did, with four intents, four findings, no new phase and no new
