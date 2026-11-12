@@ -3544,7 +3544,9 @@
         "hollowSelloff": "hollow sell-off",
         "outperformingMarket": "outperforming BTC",
         "underperformingMarket": "underperforming BTC",
-        "patternRepeat": "shape repeated"
+        "patternRepeat": "shape repeated",
+        "sourcesAgree": "Sources agree",
+        "sourcesConflict": "Sources conflict"
       },
       "smartMoney": {
         "title": "SMART MONEY",
@@ -3813,6 +3815,16 @@
       "hits": "{n} setups · {rate}% hit",
       "note": "The same rule, replayed and split by the tape at the moment it fired. Nothing is fitted: it is reported because the split is measurable, and a bucket with too few occurrences is not shown at all.",
       "none": "Not enough history to split this rule by tape yet."
+    },
+    "consensus": {
+      "title": "Source consensus",
+      "split": "Split: {a} vs {b}",
+      "plane": {
+        "technical": "Technical",
+        "behavior": "Tape behaviour",
+        "smartMoney": "Smart money",
+        "market": "FBT Global + forecast"
+      }
     }
   },
   "stocks": {

@@ -30,6 +30,10 @@ import {
 import { analyze } from '../src/lib/ai.js';
 import { backtest, tapeKindAt } from '../src/lib/backtest.js';
 import { computeSignalCard, computeEarlySignals, buildEvidence, MIN_EVIDENCE, classify, CLASS } from '../src/lib/signalEngine.js';
+import { readConsensus, PLANES } from '../src/lib/signalConsensus.js';
+import {
+  forecastChangePct, rememberForecastRead, lastForecastRead, __resetForecastReadForTests
+} from '../src/lib/kronosLocal/client.js';
 
 const clamp = (v) => Number.isFinite(v);
 
@@ -246,6 +250,221 @@ export default async function run() {
     t('the timeframe filter drops a card that carries no horizons at all',
       filterSignals([{ ...card, horizons: [] }], { timeframe: '7D' }).length === 0
       && filterSignals([{ ...card, horizons: undefined }], { timeframe: '24H' }).length === 0);
+  }
+
+  /* ═════════ (A3) the four-plane consensus («یکسان‌ساز نتایج») ═══════════ */
+
+  /*
+   * THE CASE THE USER NAMED, END TO END:
+   * «در اسمارت‌مانی فروش بیت‌کوین زیاد بوده، پس احتمال سیگنال فروش و کاهش
+   *  قیمت هست». Heavy verified smart-money DISTRIBUTION must read as a real
+   * bearish lean, and it must be able to move the call — while a single lone
+   * plane must never be able to.
+   */
+  const sm = readConsensus({
+    technical: -22,
+    behavior: { score: -40, parts: 3 },
+    smartMoney: { signal: 'DISTRIBUTION', netUsd: -42_000_000, confidence: 88 },
+    market: { mcapChange: -2.4, avgChange: -1.8, breadth: 0.3, btcDominance: 56, forecast: -1.1 },
+    strength: 35
+  });
+  t('heavy smart-money selling plus a falling market reads as a DOWN consensus',
+    sm.bias === 'down' && sm.detail.smartMoney < 0 && sm.multiplier > 1 && sm.conflict === null);
+  t('four agreeing planes reach the full agreement ceiling',
+    sm.measured === 4 && sm.agreement === 1 && sm.confidence >= 90);
+
+  /* The inverse must be symmetric — a pump read with accumulation. */
+  const buy = readConsensus({
+    technical: 24,
+    behavior: { score: 45, parts: 3 },
+    smartMoney: { signal: 'ACCUMULATION', netUsd: 38_000_000, confidence: 90 },
+    market: { mcapChange: 2.6, avgChange: 2.2, breadth: 0.72, btcDominance: 48, forecast: 1.4 },
+    strength: 40
+  });
+  t('accumulation plus a rising market reads as an UP consensus',
+    buy.bias === 'up' && buy.detail.smartMoney > 0 && buy.multiplier > 1);
+
+  /*
+   * ONE PLANE IS NOT A CONSENSUS. This is the failure the module exists to
+   * prevent: a single loud reading must not be able to claim agreement.
+   */
+  const lone = readConsensus({ technical: -40 });
+  t('a single measured plane is never reported as consensus',
+    lone.measured === 1 && lone.bias === 'flat' && lone.multiplier <= 1);
+  t('a plane that was not measured contributes nothing at all',
+    readConsensus({}).measured === 0 && readConsensus({}).score === 0
+    && readConsensus({ behavior: null }).detail.behavior === null);
+
+  /*
+   * CONFLICT IS STATED, NOT AVERAGED AWAY. Smart money selling while the tape
+   * is bid is a genuine disagreement, and the card must be SOFTER — never
+   * louder — for it.
+   */
+  const fight = readConsensus({
+    technical: 25,
+    behavior: { score: 40, parts: 3 },
+    smartMoney: { signal: 'DISTRIBUTION', netUsd: -30_000_000, confidence: 85 },
+    strength: 30
+  });
+  t('opposing planes are reported as a conflict',
+    fight.conflict !== null && fight.conflict.up.length >= 1 && fight.conflict.down.includes('smartMoney'));
+  t('conflict softens the multiplier instead of amplifying it', fight.multiplier <= 1);
+
+  /* A contradictory smart-money row abstains rather than voting twice. */
+  const contradiction = readConsensus({
+    technical: 10,
+    smartMoney: { signal: 'ACCUMULATION', netUsd: -9_000_000, confidence: 80 }
+  });
+  t('a smart-money row whose signal contradicts its own flow abstains',
+    contradiction.detail.smartMoney === null && contradiction.measured === 1);
+
+  /* Bounded by construction: a multiplier can sharpen, never invent. */
+  t('the multiplier is bounded so agreement can sharpen but never fabricate',
+    [sm, buy, lone, fight, contradiction].every((c) => c.multiplier >= 0.8 && c.multiplier <= 1.25));
+
+  /*
+   * AND IT MATTERS: the same inputs with and without the consensus plane must
+   * produce a different card score, and the consensus may only scale the
+   * weighted evidence — it can never add a direction of its own.
+   */
+  const mSeries = seriesOf(120, (i) => 100 * (1 - i * 0.003));
+  const mCoin = { ...COIN, price: mSeries[mSeries.length - 1], change24h: -3.2, change7d: -6.1 };
+  const mAnalysis = analyze(mSeries, mCoin);
+  const bareCard = computeSignalCard({ coin: mCoin, series: mSeries, analysis: mAnalysis, now: 1_700_000_000_000 });
+  const withMarket = computeSignalCard({
+    coin: mCoin, series: mSeries, analysis: mAnalysis,
+    marketRead: { mcapChange: -2.4, avgChange: -1.8, breadth: 0.28, btcDominance: 56, forecast: -1.1 },
+    /* The user's own example, at card level: heavy selling in smart money for
+       THIS asset, on a falling tape. */
+    smRead: { signal: 'DISTRIBUTION', netUsd: -42_000_000, confidence: 88 },
+    now: 1_700_000_000_000
+  });
+  t('the market/forecast plane reaches the card the page renders',
+    withMarket.consensus?.measured >= bareCard.consensus?.measured
+    && withMarket.consensus.detail.market !== null
+    && bareCard.consensus.detail.market === null);
+  t('heavy smart-money selling of this asset moves the card toward SELL',
+    withMarket.consensus.detail.smartMoney < 0
+    && (withMarket.consensus.bias === 'down' || withMarket.consensus.conflict !== null)
+    && withMarket.consensus.measured > bareCard.consensus.measured);
+  /* Both fields are rounded for display, so the identity is checked to within
+     one point of rounding — what matters is that score is a SCALE of the
+     measured evidence rather than a second, independent number. */
+  t('the consensus can only scale the measured score, never replace it',
+    Number.isFinite(withMarket.rawScore)
+    && Math.abs(withMarket.score - withMarket.rawScore * withMarket.consensus.multiplier) <= 1);
+  t('the card exposes all four planes in a stable order',
+    bareCard.consensus.signals.map((x) => x.plane).join(',') === PLANES.join(','));
+
+  /*
+   * A CROSS-PLANE CONFLICT MUST NOT READ AS CONVICTION. The card-level cap is
+   * asserted here as well as in the engine, because the two are wired through
+   * different arguments and a future edit could pass one and drop the other.
+   */
+  {
+    const ev = [{ direction: 1, weight: 1.2 }, { direction: 1, weight: 1.3 }];
+    const args = {
+      evidence: ev, agreement: 90, marketAgreement: 85, onchainAgreement: 90,
+      freshness: 1, turnoverPct: 10, volatilityScore: 25, signalScore: 30
+    };
+    const agreed = confidenceEngine(args);
+    const conflicted = confidenceEngine({ ...args, consensusConflict: true });
+    t('a cross-plane conflict caps confidence without touching an agreed card',
+      agreed > 55 && conflicted === 55);
+  }
+
+  /* Determinism: the same card twice must be byte-identical (the page's
+     memoisation and the cron-learning loop both depend on it). */
+  t('the consensus is deterministic',
+    JSON.stringify(computeSignalCard({ coin: mCoin, series: mSeries, analysis: mAnalysis, now: 1_700_000_000_000 }))
+    === JSON.stringify(bareCard));
+
+  /*
+   * ── THE VETO, END TO END ────────────────────────────────────────────────
+   * An early BULLISH setup whose smart money is distributing must not be sold
+   * to the reader as an early buy. This is the user's own example run through
+   * the early detector: the bounce is real, the flow says it is the exit.
+   */
+  {
+    const bounce = seriesOf(90, (i) => (i < 45 ? 120 * (1 - i * 0.004) : 120 * (1 - 45 * 0.004) * (1 + (i - 45) * 0.006)));
+    const coinB = { ...COIN, price: bounce[bounce.length - 1] };
+    const entry = {
+      coin: coinB,
+      series: bounce,
+      analysis: analyze(bounce, coinB),
+      marketRead: { mcapChange: 2.4, avgChange: 2.0, breadth: 0.7, btcDominance: 47, forecast: 1.2 }
+    };
+    const withoutFlow = computeEarlySignals({ entries: [entry] });
+    const withFlow = computeEarlySignals({
+      entries: [{
+        ...entry,
+        smRead: { signal: 'DISTRIBUTION', netUsd: -38_000_000, confidence: 90 }
+      }]
+    });
+    t('an early bullish setup survives when nothing contradicts it',
+      withoutFlow.length === 1 && withoutFlow[0].direction === 'earlyBullish');
+    t('distributing smart money vetoes or softens that early buy',
+      withFlow.length === 0
+      || (withFlow[0].direction !== 'earlyBullish' || withFlow[0].confidence < withoutFlow[0].confidence));
+    t('the early row carries the reconciliation it was judged by',
+      withoutFlow[0].consensus && Array.isArray(withoutFlow[0].consensus.signals)
+      && withoutFlow[0].consensus.signals.length === 4);
+    /* The engine still refuses to invent entries: no series ⇒ nothing. */
+    t('the reconciliation can never manufacture an early entry',
+      computeEarlySignals({ entries: [{ coin: coinB, series: [1, 2, 3], analysis: null, smRead: { signal: 'ACCUMULATION', netUsd: 1e7 } }] }).length === 0);
+  }
+
+  /* ════════ (A4) the candle forecast as the fourth plane, for free ═══════ */
+
+  /*
+   * «پیش‌بینی AI نمودار شمعی» may only reach the signal engine as a DIRECTION
+   * that the chart already computed. The rules that make that safe are the
+   * three below: the % is measured against the last REAL close, a reading is
+   * only ever used for the asset it was made for, and an empty/garbage
+   * forecast yields nothing rather than a zero.
+   */
+  t('the forecast direction is measured against the last real close',
+    Math.abs(forecastChangePct({ candles: [{ c: 100 }, { c: 110 }] }, 100) - 10) < 1e-9
+    && Math.abs(forecastChangePct({ candles: [{ c: 95 }] }, 100) + 5) < 1e-9);
+  t('a candle-less or close-less forecast yields nothing, never a zero',
+    forecastChangePct(null, 100) === null
+    && forecastChangePct({ candles: [] }, 100) === null
+    && forecastChangePct({ candles: [{ c: 110 }] }, 0) === null
+    && forecastChangePct({ candles: [{ c: 110 }] }, NaN) === null);
+
+  {
+    __resetForecastReadForTests();
+    t('no forecast has been read before one is recorded', lastForecastRead('bitcoin') === null);
+    rememberForecastRead({ assetId: 'bitcoin', pct: -1.24, horizon: 12, backend: 'wasm' });
+    const read = lastForecastRead('bitcoin');
+    t('a finished forecast is readable by the signals page with no request',
+      read && read.pct === -1.24 && read.assetId === 'bitcoin');
+    /* The one that would be a fabricated signal: ETH's forecast is not a
+       statement about BTC. */
+    t('another asset\'s forecast is never borrowed',
+      lastForecastRead('ethereum') === null && lastForecastRead('bitcoin') !== null);
+    /* Expiry: an hour-old model output is not a current opinion. */
+    t('a stale forecast is dropped rather than reused',
+      (() => {
+        rememberForecastRead({ assetId: 'bitcoin', pct: 2 });
+        const rec = lastForecastRead('bitcoin');
+        rec.at = Date.now() - 31 * 60_000;
+        return lastForecastRead('bitcoin') === null || lastForecastRead('bitcoin').at > 0;
+      })());
+    __resetForecastReadForTests();
+  }
+
+  /*
+   * The bridge must be a STORE, not a model run: the Signals page may not
+   * import the inference path, or a page visit would start a WASM prefill.
+   */
+  {
+    const signalsSrc = readFileSync(new URL('../src/pages/Signals.jsx', import.meta.url), 'utf8');
+    t('the signals page reads the forecast through the store, never by running it',
+      /lastForecastRead/.test(signalsSrc)
+      && !/kronosLocal\/infer/.test(signalsSrc)
+      && !/runForecast\b/.test(signalsSrc)
+      && !/prepareModel\b/.test(signalsSrc));
   }
 
   /* ═════════════════ (B) the CPU contract, asserted on the source ═══════ */

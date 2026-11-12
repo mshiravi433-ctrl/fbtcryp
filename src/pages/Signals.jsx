@@ -13,6 +13,7 @@ import AdBanner from '../components/AdBanner';
 import AnimatedNumber from '../components/AnimatedNumber';
 import Sparkline from '../components/Sparkline';
 import { useChart, useCoin, useGlobalStats, useMarkets, usePoll } from '../hooks/useMarket';
+import { lastForecastRead } from '../lib/kronosLocal/client.js';
 import { analyze, projectRange } from '../lib/ai';
 import { fmtPct, fmtPrice, fmtCompact, timeAgo } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
@@ -1436,7 +1437,7 @@ function SelectedSignalCard({ coin, signal, analysis, series, scanning, watched,
  * series was too short simply shows fewer rows — never a zero, never a dash
  * pretending to be a measurement.
  * ──────────────────────────────────────────────────────────────────────────── */
-function behaviorRows(behavior, t, tapeEdge = null) {
+function behaviorRows(behavior, t, tapeEdge = null, consensus = null) {
   if (!behavior) return [];
   const rows = [];
   const push = (key, label, value, tone = '') => {
@@ -1498,6 +1499,28 @@ function behaviorRows(behavior, t, tapeEdge = null) {
       `${tapeEdge.spiky.edge >= 0 ? '+' : ''}${tapeEdge.spiky.edge}pp · n=${tapeEdge.spiky.n}`,
       tapeEdge.spiky.edge >= 0 ? 'up' : 'down');
   }
+  /*
+   * «چند منبع مستقل همین را می‌گویند؟» — the four-plane reconciliation, shown
+   * as one more row in the SAME list. It is the answer to «آیا سیگنال دقیق
+   * است؟»: a number plus WHICH planes agree, and, when they do not, which two
+   * are fighting. Nothing is rendered for a plane that was not measured.
+   */
+  if (consensus && consensus.measured >= 2) {
+    const agreeing = (consensus.bias === 'up'
+      ? consensus.signals.filter((x) => x.dir > 0)
+      : consensus.signals.filter((x) => x.dir < 0)).map((x) => t(`signals.consensus.plane.${x.plane}`));
+    const fighting = consensus.conflict
+      ? consensus.conflict[consensus.bias === 'down' ? 'up' : 'down'].map((p) => t(`signals.consensus.plane.${p}`))
+      : [];
+    if (consensus.bias !== 'flat' && agreeing.length >= 2) {
+      push('consensus', t('signals.consensus.title'), `${agreeing.join(' · ')}${fighting.length ? ` ⚔ ${fighting.join(' · ')}` : ''}`,
+        fighting.length ? 'warn' : consensus.bias === 'up' ? 'up' : 'down');
+    } else if (consensus.conflict) {
+      push('consensus', t('signals.consensus.title'),
+        t('signals.consensus.split', { a: consensus.conflict.up.map((p) => t(`signals.consensus.plane.${p}`)).join(' · '), b: consensus.conflict.down.map((p) => t(`signals.consensus.plane.${p}`)).join(' · ') }),
+        'warn');
+    }
+  }
   return rows;
 }
 
@@ -1511,6 +1534,7 @@ function SignalBreakdown({
   invalidation,
   backtestInfo,
   tapeEdge,
+  consensus,
   hasOnchain,
   onchainRows,
   behavior
@@ -1518,7 +1542,7 @@ function SignalBreakdown({
   const { t } = useTranslation();
   if (!analysis) return <div className="sic-insufficient">{t('signals.intel.card.insufficient')}</div>;
 
-  const behaviorRead = behaviorRows(behavior, t, tapeEdge);
+  const behaviorRead = behaviorRows(behavior, t, tapeEdge, consensus);
 
   return (
     <div className="sic-breakdown">
@@ -2158,6 +2182,45 @@ export default function Signals() {
     })).filter(Boolean);
   }, [coins]);
 
+  /*
+   * ─── THE FOURTH PLANE, ASSEMBLED FROM DATA ALREADY ON SCREEN ─────────────
+   * «نتایج FBT جهانی + پیش‌بینی AI نمودار شمعی» must sharpen the signal, not
+   * cost a request. Both halves are already here:
+   *
+   *  · FBT Global — `useGlobalStats` (45s, shared with the market page) plus
+   *    the breadth of the very market rows this page is scoring;
+   *  · the candle forecast — whatever KHRONOS last produced for this asset on
+   *    this device, read from the shared module store (see
+   *    `rememberForecastRead` in src/lib/kronosLocal/client.js). No model is
+   *    downloaded or run here, nothing is posted anywhere, and a forecast made
+   *    for a different asset is ignored rather than borrowed.
+   *
+   * When neither half exists the object is `null` and the consensus runs on
+   * three planes — an unmeasured plane is never counted as a neutral vote.
+   */
+  const forecastRead = useMemo(
+    () => safeCalc(() => lastForecastRead(coin?.id || null), null),
+    // `watchVersion`/`briefKey` are not dependencies of the reading itself;
+    // re-reading per poll is one sessionStorage hit at most.
+    [coin?.id, smPoll.data, pulse]
+  );
+  const marketBreadth = useMemo(() => {
+    const rows = (coins ?? []).slice(0, 40).filter((c) => Number.isFinite(Number(c?.change24h)));
+    if (rows.length < 5) return null;
+    return rows.filter((c) => Number(c.change24h) > 0).length / rows.length;
+  }, [coins]);
+  const marketRead = useMemo(() => {
+    const read = {
+      mcapChange: Number(global?.mcapChange ?? NaN),
+      avgChange: Number(global?.avgChange ?? NaN),
+      breadth: marketBreadth,
+      btcDominance: Number(global?.btcDominance ?? NaN),
+      forecast: forecastRead ? Number(forecastRead.pct) : null
+    };
+    const any = Object.values(read).some((v) => Number.isFinite(v));
+    return any ? read : null;
+  }, [global?.mcapChange, global?.avgChange, global?.btcDominance, marketBreadth, forecastRead]);
+
   const globalSignals = useMemo(() => {
     if (!analysedRows.length) return [];
     /* One poisoned market row must cost ONE card, never the whole list —
@@ -2174,11 +2237,19 @@ export default function Signals() {
         smToken: smForCoin(row.coin),
         pulse,
         marketSeries: btcSeries,
+        /* FBT Global + the candle forecast: the market plane of the consensus
+           engine. Same poll, no extra request. The smart-money plane for a
+           global row is the verified per-contract row only — the market-wide
+           figure is not a statement about this token. */
+        marketRead,
+        smRead: smForCoin(row.coin)
+          ? { signal: smForCoin(row.coin).signal, netUsd: smForCoin(row.coin).netFlowUsd, confidence: smForCoin(row.coin).confidence }
+          : null,
         now: Date.now()
       });
     })).filter(Boolean);
     return safeCalc(() => rankSignals(list), list);
-  }, [analysedRows, pulse, smForCoin, btcSeries]);
+  }, [analysedRows, pulse, smForCoin, btcSeries, marketRead]);
 
   /* One picker, one active token. Bitcoin stays first and selected by default
      in the global view; Solana stays first in the Solana view. */
@@ -2309,6 +2380,43 @@ export default function Signals() {
   }, null), [tokenOnchain, onchainTarget]);
 
   /*
+   * ─── THE SMART-MONEY PLANE, PER ASSET, FROM DATA ALREADY FETCHED ─────────
+   * «در اسمارت‌مانی فروش بیت‌کوین زیاد بوده» has to reach the card as THIS
+   * asset's flow — never as the market-wide net figure, which would tilt every
+   * card in the same direction. Three sources are tried in order of how
+   * specific they are, and the first measured one wins:
+   *
+   *   1. the on-chain read for the selected target (`tokenOnchain.smartMoneyFlow`,
+   *      already cached for 5 minutes and already on screen);
+   *   2. a verified per-contract row (`verifiedForTarget`, the ≥3-independent-
+   *      vote gate);
+   *   3. a symbol-matched row from the smart-money overview the page polled,
+   *      used only when it carries a signed USD figure.
+   *
+   * Nothing here is fetched: all three are already in state. A miss leaves the
+   * plane unmeasured, which the consensus treats as silence rather than as a
+   * neutral vote.
+   */
+  const smReadFor = useCallback((c) => {
+    if (!c?.id) return null;
+    const verified = verifiedForTarget;
+    if (verified && Number.isFinite(Number(verified.netFlowUsd))) {
+      return { signal: verified.signal, netUsd: Number(verified.netFlowUsd), confidence: Number(verified.confidence) || null };
+    }
+    const flow = tokenOnchain?.smartMoneyFlow;
+    const net = Number(flow?.netUsd ?? flow?.netFlowUsd ?? NaN);
+    if (Number.isFinite(net) && Math.abs(net) > 0) {
+      return { netUsd: net, confidence: Number(flow?.confidence) || null };
+    }
+    const rows = Array.isArray(sm?.tokenActivity) ? sm.tokenActivity : [];
+    const hit = rows.find((r) => String(r?.symbol || '').toUpperCase() === String(c.symbol || '').toUpperCase());
+    if (hit && Number.isFinite(Number(hit.netUsd)) && Math.abs(Number(hit.netUsd)) > 0) {
+      return { signal: hit.signal, netUsd: Number(hit.netUsd), confidence: Number(hit.confidence) || null };
+    }
+    return null;
+  }, [verifiedForTarget, tokenOnchain, sm]);
+
+  /*
    * The measured on-chain rows, built ONCE and shared by the detail lab and
    * the Why-modal. Two surfaces reading the same asset used to be able to
    * disagree; now they cannot, because they render the same array.
@@ -2415,9 +2523,11 @@ export default function Signals() {
       pulse,
       behavior: tokenBehavior,
       marketSeries: btcSeries,
+      marketRead,
+      smRead: smReadFor(coin),
       now: Date.now()
     });
-  }), [tab, globalSignals, coinId, coin, analysis, priceSeries, intel, smForCoin, pulse, tokenBehavior, btcSeries]);
+  }), [tab, globalSignals, coinId, coin, analysis, priceSeries, intel, smForCoin, pulse, tokenBehavior, btcSeries, marketRead, smReadFor]);
 
   const portfolioImpactData = useMemo(
     () => (selectedSignal?.status === 'READY'
@@ -2432,6 +2542,13 @@ export default function Signals() {
     return analysedRows.map((row) => safeCalc(() => ({
       coin: row.coin,
       series: row.series,
+      /* The same two planes the cards use, so the early list and the card
+         cannot disagree about the same token — and so a bounce against
+         distributing smart money is vetoed instead of celebrated. */
+      smRead: smForCoin(row.coin)
+        ? { signal: smForCoin(row.coin).signal, netUsd: smForCoin(row.coin).netFlowUsd, confidence: smForCoin(row.coin).confidence }
+        : null,
+      marketRead,
       analysis: row.analysis,
       smToken: smForCoin(row.coin),
       /* `marketSeries` lets the early detector read relative strength against
@@ -2439,7 +2556,7 @@ export default function Signals() {
          market bounced» — from a series the page already holds. */
       marketSeries: btcSeries
     }))).filter(Boolean);
-  }, [analysedRows, smForCoin, btcSeries]);
+  }, [analysedRows, smForCoin, btcSeries, marketRead]);
   const early = useMemo(() => safeCalc(() => computeEarlySignals({ entries: earlyEntries }), []), [earlyEntries]);
 
   /* ── history learning loop: record + settle against real prices ───────── */
@@ -2756,6 +2873,7 @@ export default function Signals() {
                       invalidation={invalidation}
                       backtestInfo={backtestInfo}
                       tapeEdge={tapeEdge}
+                      consensus={selectedSignal?.consensus ?? null}
                       hasOnchain={hasOnchain}
                       onchainRows={onchainRows}
                     />

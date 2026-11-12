@@ -26,6 +26,7 @@
 
 import { verifiedSignals } from './smartMoneyEvidence.js';
 import { readTokenBehavior } from './tokenBehavior.js';
+import { readConsensus } from './signalConsensus.js';
 
 export const CLASS = Object.freeze({
   STRONG_BUY: 'STRONG_BUY',
@@ -350,6 +351,22 @@ function evidenceScore(ev) {
 }
 
 /**
+ * The weighted score of ONE evidence plane.
+ *
+ * `evidenceScore` collapses every source into one number, which is exactly
+ * what the consensus module must not do — it needs «what did the technical
+ * plane say on its own», so it can compare planes rather than average them.
+ * Same weighting, same denominator, restricted to the requested sources.
+ */
+function planeScore(ev, sources) {
+  const rows = (ev || []).filter((e) => num(e.direction) !== 0 && sources.includes(e.source));
+  if (!rows.length) return null;
+  const weighted = rows.reduce((s2, e) => s2 + (num(e.direction) || 0) * (num(e.weight) ?? 1), 0);
+  const max = rows.reduce((s2, e) => s2 + Math.abs(num(e.weight) ?? 1), 0) || 1;
+  return (weighted / (max * 1.5)) * 100;
+}
+
+/**
  * Map the weighted evidence score to one of the six classes.
  *
  * Symmetric by construction: the band at ±14 and the band at ±32 are the same
@@ -376,7 +393,10 @@ export function confidenceEngine({
   turnoverPct = null,
   volatilityScore = 50,
   signalScore = 0,
-  consensusAgreement = 100
+  consensusAgreement = 100,
+  consensusMultiplier = 1,
+  consensusBias = 'flat',
+  consensusConflict = false
 } = {}) {
   const dirEvidence = evidence.filter((e) => num(e.direction) !== 0);
   /*
@@ -435,10 +455,17 @@ export function confidenceEngine({
   );
   const min = dirEvidence.length >= MIN_EVIDENCE ? 15 : 5;
   const out = clampf(weighted, min, 95);
-  /* A contested card still shows how much was measured — it just cannot show
-     the number that reads as conviction. 55 is the same «moderate» line the
-     card already uses for its momentum label. */
-  return Math.round(contradicts ? Math.min(out, 55) : out);
+  /*
+   * A CONTESTED CARD CANNOT SHOW CONVICTION — and «contested» now has two
+   * independent definitions that both only ever LOWER the number:
+   *   • the evidence runs against the direction being scored, or is split
+   *     (the local check above), or
+   *   • the four independent planes disagree (`consensusConflict`).
+   * 55 is the same «moderate» line the card already uses for its momentum
+   * label, so a softer card still says how much was measured.
+   */
+  const capped = contradicts || consensusConflict ? Math.min(out, 55) : out;
+  return Math.round(capped);
 }
 
 /**
@@ -457,6 +484,15 @@ export function computeSignalCard({
   aiConsensus = null,
   behavior = null,
   marketSeries = [],
+  /* FBT Global + the AI candle forecast's own direction, as one measured
+     market read: { mcapChange, avgChange, breadth, btcDominance, forecast }.
+     Optional — a page that has none of it simply contributes three planes. */
+  marketRead = null,
+  /* Smart money for THIS asset only: a verified per-contract row, or a
+     symbol-matched consensus row. Deliberately NOT the market-wide net flow:
+     «wallets sold $40M of something» is not a statement about this token, and
+     feeding it in would tilt every card in the same direction. */
+  smRead = null,
   now = Date.now()
 } = {}) {
   if (!coin || !num(coin.price) || !analysis || (series ?? []).length < 30) {
@@ -475,7 +511,41 @@ export function computeSignalCard({
     return { status: 'INSUFFICIENT_DATA', coin, at: now, confidence: null, classification: null, evidence, horizonRisks };
   }
 
-  const score = evidenceScore(evidence);
+  const rawScore = evidenceScore(evidence);
+
+  /*
+   * ─── «موتور یکسان‌ساز نتایج» ────────────────────────────────────────────
+   * The same four observations the evidence list already carries, read as four
+   * PLANES rather than as one flat bag of votes. Two things come out of it:
+   *
+   *  1. CONFLICT IS STATED. If behaviour and smart money point opposite ways,
+   *     the card says so (`consensus.conflict`) instead of averaging them into
+   *     a bland WATCH that hides a real disagreement.
+   *  2. AGREEMENT IS WORTH SOMETHING. When independent planes agree, the same
+   *     evidence counts for more (up to ×1.25); when they fight, the card is
+   *     softer (down to ×0.8) rather than louder. The multiplier is bounded,
+   *     so this sharpens a call and can never manufacture one — «فروش زیاد
+   *     بیت‌کوین در اسمارت‌مانی» moves the call only when the other planes do
+   *     not contradict it.
+   *
+   * Cost: pure arithmetic over values already in this function's hands. No
+   * fetch, no timer, no storage — see the header of signalConsensus.js.
+   */
+  const consensus = readConsensus({
+    technical: planeScore(evidence, ['technical']),
+    behavior: beh,
+    smartMoney: smRead,
+    market: marketRead,
+    strength: rawScore
+  });
+  /*
+   * The consensus may only AMPLIFY or DAMP what the weighted evidence already
+   * said: it multiplies the measured score, it never adds to it. That keeps
+   * the class thresholds meaningful (a card that was WATCH stays WATCH unless
+   * the agreement pushes it past a cut it was already near) and keeps this
+   * module from being a hidden fifth indicator.
+   */
+  const score = clampf(rawScore * consensus.multiplier, -100, 100);
   /*
    * ─── FOUR BANDS, NOT THREE AND A BROKEN SYMMETRY ─────────────────────────
    * The downside read used to be `score <= -32 ? SELL : score <= -14 ? SELL`,
@@ -526,7 +596,20 @@ export function computeSignalCard({
     freshness: coin.dataProvenance === 'live' ? 1 : 0.45,
     turnoverPct,
     volatilityScore: risk7?.riskScore ?? 50,
-    signalScore: score
+    signalScore: score,
+    /*
+     * THE FOUR-PLANE READ FEEDS CONFIDENCE TOO — DOWNWARD ONLY.
+     * A card whose technicals agree but whose smart money and tape are
+     * fighting is less certain than its indicator count suggests; the cap in
+     * `confidenceEngine` reflects that. Amplification of the SCORE is handled
+     * by the multiplier above; confidence is about whether the picture is
+     * coherent, which is the same question the consensus answers. Passing it
+     * can only lower the number, so a plane that was not measured (a WATCH on
+     * three planes) is never treated as a reason to doubt or to believe.
+     */
+    consensusMultiplier: consensus.multiplier,
+    consensusBias: consensus.bias,
+    consensusConflict: Boolean(consensus.conflict)
   });
 
   /* ── target / stop: volatility-scaled, direction of the measured score.
@@ -603,6 +686,13 @@ export function computeSignalCard({
     /* The measured behaviour read, so the detail panel can show WHY the tape
        was read the way it was — every field nullable, nothing synthesised. */
     behavior: beh,
+    /* The four-plane reconciliation, so the panel can show WHY the call is
+       confident or contested — and so nothing here is a number the reader has
+       to take on faith. */
+    consensus,
+    /* The pre-consensus score, for the panel to show what amplification did
+       (and to prove amplification happened rather than invention). */
+    rawScore: Math.round(rawScore),
     aiConsensus: aiConsensus ?? null
   };
 }
@@ -755,16 +845,65 @@ export function computeEarlySignals({ entries = [], now = Date.now() } = {}) {
 
     /* Independence gate: ≥2 flags AND ≥2 different observation planes. */
     if (flags.length < 2 || groups.size < 2) continue;
+
+    /*
+     * ─── THE SAME RECONCILIATION AS THE CARD, APPLIED AS A VETO ─────────────
+     * An early flag set is a THIN observation by definition — that is what
+     * «early» means — so it is exactly where a loud single plane can mislead.
+     * The consensus runs on the same four planes and has three effects here,
+     * all of them aimed at precision rather than at producing more signals:
+     *
+     *   • if the planes point the OTHER way with real agreement (≥2 planes,
+     *     none agreeing with this entry), the entry is dropped — a bounce
+     *     while smart money distributes is not an early buy, it is the exit;
+     *   • if the planes disagree with each other, the entry is downgraded to
+     *     «watch» rather than claiming a direction the evidence does not have;
+     *   • confidence is nudged by how many planes actually agree, and a
+     *     conflict can only lower it.
+     *
+     * It can never ADD an entry: every candidate still has to pass the two-
+     * flag / two-group gate above first.
+     */
+    const consensus = readConsensus({
+      technical: strength * 22,
+      behavior: beh,
+      smartMoney: e.smRead ?? null,
+      market: e.marketRead ?? null,
+      strength: Math.abs(strength) * 20
+    });
+    const entryDir = strength > 0.3 ? 'up' : strength < -0.3 ? 'down' : 'flat';
+    const consensusOpposes = entryDir !== 'flat' && consensus.bias !== 'flat' && consensus.bias !== entryDir
+      && consensus.agreement >= 0.5;
+    if (consensusOpposes) continue;
+
+    const directionOut = entryDir !== 'flat' && consensus.bias !== entryDir && consensus.conflict
+      ? 'earlyWatch'
+      : (strength > 0.3 ? 'earlyBullish' : strength < -0.3 ? 'earlyBearish' : 'earlyWatch');
+
     out.push({
       coin: e.coin,
       symbol: e.coin.symbol,
       at: now,
-      direction: strength > 0.3 ? 'earlyBullish' : strength < -0.3 ? 'earlyBearish' : 'earlyWatch',
+      direction: directionOut,
       /* Confidence rises with the NUMBER of independent planes that agree,
          not merely with how loud one of them is — two loud readings from the
          same plane are still one observation. */
-      confidence: Math.round(clampf(42 + Math.abs(strength) * 13 + flags.length * 5 + (groups.size > 2 ? 4 : 0) + (groups.size >= 3 ? 4 : 0), 25, 92)),
-      flags,
+      confidence: Math.round(clampf(
+        42 + Math.abs(strength) * 13 + flags.length * 5 + (groups.size > 2 ? 4 : 0) + (groups.size >= 3 ? 4 : 0)
+        + (consensus.bias === entryDir ? 6 : 0)
+        - (consensus.conflict ? 8 : 0),
+        25,
+        consensus.conflict ? 62 : 92
+      )),
+      /* The reconciliation rides along so the row can say WHICH sources agree
+         — the same object shape the card carries, so both surfaces speak the
+         same language about the same token. */
+      consensus,
+      flags: [
+        ...flags,
+        ...(consensus.bias === entryDir && consensus.measured >= 2 ? ['sourcesAgree'] : []),
+        ...(consensus.conflict ? ['sourcesConflict'] : [])
+      ],
       momentumAccelPct: Math.round(accel * 100) / 100,
       /* The behaviour read rides along so the section can show the STRUCTURE
          behind an early flag (participation, relative strength) without a

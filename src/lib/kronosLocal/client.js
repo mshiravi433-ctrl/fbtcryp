@@ -199,6 +199,85 @@ export function normalizeForecastResult(raw) {
   return value && Array.isArray(value.candles) && value.candles.length ? value : null;
 }
 
+/* ── the forecast's DIRECTION, shared through the one store both screens use ─
+
+   WHY A MODULE-LEVEL STORE AND NOT A NEW REQUEST
+   ----------------------------------------------
+   The Signals page is forbidden from running the model itself (it is a
+   ~hundreds-of-MB download plus a WASM prefill — the opposite of what a
+   Fluid-CPU budget allows), and it must not post candles anywhere either. But
+   a reader who already ran KHRONOS on the token page has a real forecast in
+   hand, and that forecast is a measured opinion about where this asset is
+   going: exactly the fourth plane the signal consensus compares.
+
+   The two screens share this module instance (Vite bundles it once), so a
+   tiny record written when a forecast finishes is readable by the Signals
+   page with ZERO network calls and zero storage. `pct` is the signed % move
+   from the last real close to the last forecast candle — the same number the
+   chart panel prints. It is `null` until a forecast has actually run.
+
+   The record is also written to `sessionStorage`, so a tab that navigates
+   between the chart and the signals page keeps the reading without keeping
+   the model alive. It is deliberately small (five fields), has no price
+   history in it, and expires on its own. */
+const FORECAST_READ_KEY = 'fbt-kronos-read-v1';
+const FORECAST_READ_TTL_MS = 30 * 60_000;
+let lastRead = null;
+
+/** The signed % move implied by a finished forecast, or null. Pure. */
+export function forecastChangePct(result, lastClose) {
+  const candles = Array.isArray(result?.candles) ? result.candles : null;
+  if (!candles || !candles.length) return null;
+  const lastBar = candles[candles.length - 1];
+  const end = Number(lastBar?.c);
+  const from = Number(lastClose);
+  if (!Number.isFinite(end) || !Number.isFinite(from) || from <= 0) return null;
+  return (end / from - 1) * 100;
+}
+
+/**
+ * Remember the direction of a finished forecast so the signal engine can use
+ * it as the «پیش‌بینی AI نمودار شمعی» plane. Called by the chart, never by the
+ * signals page.
+ */
+export function rememberForecastRead({ assetId = null, pct = null, horizon = null, backend = null } = {}) {
+  const value = Number(pct);
+  const record = Number.isFinite(value) && assetId
+    ? { assetId: String(assetId), pct: Math.round(value * 100) / 100, horizon: horizon ?? null, backend: backend ?? null, at: Date.now() }
+    : null;
+  lastRead = record;
+  try {
+    if (record) globalThis.sessionStorage?.setItem(FORECAST_READ_KEY, JSON.stringify(record));
+    else globalThis.sessionStorage?.removeItem?.(FORECAST_READ_KEY);
+  } catch { /* private mode / disabled storage: the in-memory copy still works */ }
+  return record;
+}
+
+/**
+ * The last forecast for THIS asset, or null.
+ *
+ * Returns null for another asset's forecast on purpose: a model reading for
+ * ETH is not evidence about BTC, and using it would be a fabricated signal.
+ */
+export function lastForecastRead(assetId = null) {
+  let record = lastRead;
+  if (!record) {
+    try {
+      const raw = globalThis.sessionStorage?.getItem(FORECAST_READ_KEY);
+      record = raw ? JSON.parse(raw) : null;
+    } catch { record = null; }
+  }
+  if (!record || !Number.isFinite(Number(record.pct))) return null;
+  if (Date.now() - Number(record.at || 0) > FORECAST_READ_TTL_MS) return null;
+  if (assetId && String(record.assetId) !== String(assetId)) return null;
+  return record;
+}
+
+export function __resetForecastReadForTests() {
+  lastRead = null;
+  try { globalThis.sessionStorage?.removeItem?.(FORECAST_READ_KEY); } catch { /* ignore */ }
+}
+
 /** Run one forecast on the device. Never falls back to a server model. */
 export async function runForecast(candles, opts = {}) {
   const {

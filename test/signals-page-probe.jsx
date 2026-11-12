@@ -717,6 +717,10 @@ export async function run(container) {
         ['signals.intel.behavior', ['title', 'participation', 'spikeShare', 'pressure', 'relative',
           'volume', 'anomaly', 'pattern', 'patternSeen', 'biasUp', 'biasDown', 'biasFlat', 'note']],
         ['signals.intel.behavior.vol', ['accumulating', 'distributing', 'hollow-rally', 'drifting-down', 'balanced', 'unclear']],
+        /* The four-plane reconciliation row (src/lib/signalConsensus.js). */
+        ['signals.consensus', ['title', 'split']],
+        ['signals.consensus.plane', ['technical', 'behavior', 'smartMoney', 'market']],
+        ['signals.intel.early', ['sourcesAgree', 'sourcesConflict']],
         /* src/lib/signalEngine.js buildEvidence → EvidenceChips */
         ['signals.intel.early', ['momentum24Up', 'momentum24Down', 'trend7dUp', 'trend7dDown', 'rsiOversold', 'rsiOverbought', 'rsiNeutral', 'macdUp', 'macdDown', 'maBullish', 'maBearish', 'aboveMa20', 'belowMa20', 'bollingerLow', 'bollingerHigh', 'bollingerMid', 'liquidityActive', 'liquidityThin', 'holderSpread', 'marketSentimentUp', 'marketSentimentDown']],
         /* server/signalEngine.js scoreSolanaToken → RadarSection */
@@ -869,6 +873,22 @@ export async function run(container) {
           && behaviorRows.filter((row) => /[\d]/.test(row.textContent || '')).length >= 4);
         check('the behaviour section leaks no raw i18n key',
           !/\bsignals\.intel\.behavior\b/.test(container.textContent || ''));
+
+        /*
+         * «یکسان‌ساز نتایج»: the four-plane row must appear in the SAME list as
+         * the behaviour rows — inside the existing breakdown lab, never as a
+         * new section — and must name the planes that agree. A card computed
+         * without the consensus (the pre-change shape) renders none of this,
+         * so the assertion fails exactly when the wiring is dropped.
+         */
+        const consensusRow = behaviorBody
+          ? [...behaviorBody.querySelectorAll('.sic-key-value-list > div')].find((row) => /consensus|هم‌صدایی|توافق/i.test(row.textContent || ''))
+          : null;
+        check('the four-plane consensus renders inside the existing breakdown list', Boolean(consensusRow));
+        check('the consensus row names the planes that agree',
+          Boolean(consensusRow) && /technical|تکنیکال|فني|behaviour|رفتار|سلوك/i.test(consensusRow.textContent || ''));
+        check('the consensus row leaks no raw i18n key',
+          !/\bsignals\.consensus\b/.test(container.textContent || ''));
 
         /* AI analysis is a sibling tab inside the one selected-token box. */
         const detailTabs = [...container.querySelectorAll('.sic-detail-tabs button')];
