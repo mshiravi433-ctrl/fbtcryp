@@ -85,6 +85,7 @@ import { createFiRouter, setLendingProvider } from './router.js';
 import { setGlobalIntelProvider } from '../ci/globalIntelBridge.js';
 import { setFitProvider, setMacroGraphProvider, setScenarioProvider } from '../ci/fitBridge.js';
 import { setRouteProvider, adaptRoutesForIntelligence } from '../ci/routeBridge.js';
+import { setWhyProvider } from '../ci/whyBridge.js';
 
 export const FI_ROOT_SCHEMA = 'fbt.fi.composition-root.v1';
 
@@ -904,6 +905,28 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
    * asked for rarely. It is loaded the first time a route is actually
    * needed, and then cached by the module system.
    */
+  /*
+   * The WHY reader (path 15).
+   *
+   * The why engine answers «چرا این را گفتی؟» — why this asset, why this
+   * network, why now, why this amount, why this strategy — and it answers
+   * it with four named falsifiers. It was dark because it expected a
+   * decision record from the FIOs decision engine, and the central brain
+   * does not use that engine: the brain has its own decision, with its
+   * own findings, its own confidence and its own risk view.
+   *
+   * The bridge translates the brain's artefacts into the engine's
+   * vocabulary, and the rule is absolute — every number in the bundle
+   * came from a finding the brain actually read.
+   */
+  setWhyProvider(async (owner, bundle = {}) => {
+    const out = await whyEngine.explain(owner, bundle, { persist: true });
+    if (!out?.ok) {
+      return { ok: false, code: out?.code || 'WHY_FAILED', detail: out?.detail || null, why: null };
+    }
+    return { ok: true, why: out.why };
+  });
+
   setRouteProvider(async (owner, opts = {}) => {
     const request = opts?.request || {};
     const fromChain = request.fromChain ?? request.fromChainId ?? null;

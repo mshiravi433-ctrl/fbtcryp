@@ -177,7 +177,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     borrowing: 'borrowing', farming: 'farming', liquidity: 'liquidity', futures: 'futures',
     dydx: 'dydx', signals: 'signals', news: 'news', goals: 'goals', alerts: 'alerts',
     transactions: 'transactions', events: 'events', risk: 'risk', profitPlan: 'profit-plan',
-    globalIntel: 'global-intel', opportunityFit: 'opportunity-fit', macroGraph: 'macro-graph', goalScenarios: 'goal-scenarios', routeIntelligence: 'route-intelligence',
+    globalIntel: 'global-intel', opportunityFit: 'opportunity-fit', macroGraph: 'macro-graph', goalScenarios: 'goal-scenarios', routeIntelligence: 'route-intelligence', whyDecision: 'why-decision',
     positions: 'lending', recentActions: 'transactions', pendingActions: 'transactions',
     errors: 'risk', eventsList: 'events'
   };
@@ -756,6 +756,58 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
       refusalMode: Boolean(refusal),
       now: Date.now()
     });
+
+    /*
+     * ── THE WHY READ (path 15) ────────────────────────────────────────────
+     *
+     * The why module is read AFTER the recommendation, because it
+     * explains THAT recommendation. Reading it earlier would explain the
+     * previous turn's decision — which is a different, and wrong, thing.
+     *
+     * The bundle it receives is the brain's OWN artefacts: the
+     * recommendation, the findings it was built from, the risk view it
+     * was judged against and the owner's own state. So the explanation
+     * and the answer are made of the same numbers, and they cannot
+     * disagree.
+     *
+     * It is a READ, like every other step, and it is OPTIONAL: a turn
+     * with no recommendation has nothing to explain, and the reply says
+     * so rather than inventing a reason.
+     */
+    if (intent.intentType === 'WHY_DECISION') {
+      const whyModule = registry.map['why-decision'];
+      if (whyModule && typeof whyModule.read === 'function') {
+        try {
+          const res = await whyModule.read({
+            recommendation,
+            findings,
+            risk,
+            state,
+            routeIntelligence: readResults.routeIntelligence?.data || null,
+            macroGraph: readResults.macroGraph?.data || null
+          }, { owner, intentId: intent.intentId, context });
+          results['why.read'] = {
+            status: res.status,
+            summary: summariseModuleRead('whyDecision', res),
+            data: res.data,
+            source: res.source || 'why-decision',
+            dataAt: res.at || Date.now(),
+            reason: res.reason || null,
+            stale: res.status === 'PARTIAL'
+          };
+        } catch (err) {
+          results['why.read'] = {
+            status: 'UNAVAILABLE',
+            summary: 'the why engine could not be read',
+            data: null,
+            source: 'why-decision',
+            dataAt: Date.now(),
+            reason: String(err?.message || err).slice(0, 160) || null,
+            stale: true
+          };
+        }
+      }
+    }
 
     const isConceptualOrAdvisory = Boolean(
       !refusal
@@ -1511,6 +1563,71 @@ function buildFindings({ intent, classification, state, results, risk, readResul
   }
 
   /*
+   * ── THE WHY SURFACE (path 15) ───────────────────────────────────────────
+   *
+   * «چرا این را گفتی؟» used to be UNSUPPORTED. The product had a why
+   * engine — five why-lines, four named falsifiers, invalidation
+   * conditions — and no way to reach it.
+   *
+   * The finding carries the engine's own content, and its discipline:
+   *
+   *   · the five why-lines travel as they were written, so the answer
+   *     and the explanation are the same words;
+   *   · the FALSIFIERS travel with them, because «why» without «what
+   *     would prove this wrong» is a justification, not an explanation;
+   *   · it is an EXPLANATION, not a new recommendation. It moves nothing.
+   */
+  if (intent.intentType === 'WHY_DECISION') {
+    const whyRead = readResults.whyDecision || results['why.read'] || null;
+    if (whyRead?.status === 'OK' && whyRead.data?.why) {
+      const w = whyRead.data.why;
+      const lines = [];
+      for (const [key, value] of Object.entries(w.why || {})) {
+        if (Array.isArray(value) && value.length) lines.push(...value.map((v) => String(v)));
+      }
+      const falsifiers = (w.falsifiers || []).map((f) => ({
+        id: f.id ?? null,
+        question: f.question ?? null,
+        threshold: f.threshold ?? null,
+        modelledImpactUsd: f.modelledImpactUsd ?? null,
+        action: f.action ?? null,
+        invalidates: f.invalidates ?? null
+      }));
+      findings.push({
+        id: 'why-decision',
+        status: 'OK',
+        why: w.why || null,
+        lines: lines.slice(0, 10),
+        falsifiers,
+        invalidationConditions: w.invalidationConditions || [],
+        decisionId: w.decisionId ?? null,
+        confidence: w.confidence ?? null,
+        nextReviewAt: w.nextReviewAt ?? null,
+        reviewWindowDays: w.reviewWindowDays ?? null,
+        estimate: w.estimate === true,
+        detail: lines.length
+          ? `${lines.length} reason line(s) from the decision that was actually made; ${falsifiers.length} named falsifier(s) and ${(w.invalidationConditions || []).length} invalidation condition(s) travel with it`
+          : 'the engine produced the why block but no readable reason line — nothing is filled in',
+        reason: w.note || 'every because-line points at a number in the decision bundle; unread numbers are named, never invented',
+        source: 'why-engine',
+        dataAt: w.at || Date.now(),
+        partial: false
+      });
+    } else if (whyRead?.status === 'UNAVAILABLE') {
+      findings.push({
+        id: 'why-decision',
+        status: 'UNAVAILABLE',
+        detail: null,
+        reason: whyRead.reason === 'NO_DECISION'
+          ? 'there is no decision to explain — the last turn produced no recommendation, so there is nothing to justify and nothing is invented'
+          : `the why engine could not be read (${whyRead.reason || 'NO_DATA'})`,
+        source: 'why-engine',
+        partial: true
+      });
+    }
+  }
+
+  /*
    * ── THE ROUTE SURFACE (path 14) ─────────────────────────────────────────
    *
    * The route-intelligence engine was complete and dark. It ranked
@@ -2008,7 +2125,12 @@ const SECTION_FOR_INTENT = {
      markets read is optional in effect but declared here, because a
      route priced without any market context is a price and not an
      answer. */
-  ROUTE_INTELLIGENCE: ['routeIntelligence', 'markets', 'risk']
+  ROUTE_INTELLIGENCE: ['routeIntelligence', 'markets', 'risk'],
+  /* The why surface (path 15): the brain's own decision, explained. It
+     needs the portfolio and the risk view, because those are what the
+     decision was sized and judged against — an explanation that omits
+     them is an explanation of a decision nobody made. */
+  WHY_DECISION: ['whyDecision', 'portfolio', 'risk']
 };
 function sectionsForIntent(classification, { context, state }) {
   const base = SECTION_FOR_INTENT[classification.type] || ANALYSIS_MINIMUM;

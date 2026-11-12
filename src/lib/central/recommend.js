@@ -192,6 +192,33 @@ function makeHeadline({ kind, findings, intent, locale, risk }) {
    * recommendation the reader cannot audit; one that named the cost and
    * the time and the unread dimensions can be.
    */
+  /*
+   * The why answer (path 15).
+   *
+   * The engine's own reason lines are the answer — a paraphrase of them
+   * would lose the numbers they point at. The headline names the FIRST
+   * line, because a single reason line is a sentence and five of them is
+   * an essay; the rest travel with the finding.
+   */
+  const why = by('why-decision');
+  if (why && intentType === 'WHY_DECISION') {
+    const lines = Array.isArray(why.lines) ? why.lines.filter(Boolean) : [];
+    const falsifiers = Array.isArray(why.falsifiers) ? why.falsifiers : [];
+    const first = lines[0] || null;
+    const tail = falsifiers.length
+      ? (fa
+          ? ` — و ${falsifiers.length} شرطِ نقض‌کننده نام برده شده‌اند: «${falsifiers[0].question || ''}».`
+          : ` — and ${falsifiers.length} named falsifier(s), the first being “${falsifiers[0].question || ''}”.`)
+      : (fa ? ' — اما شرطِ نقض‌کننده‌ای خوانده نشد.' : ' — but no falsifier was readable.');
+    if (first) {
+      return fa
+        ? `${first}${tail}`
+        : `${first}${tail}`;
+    }
+    return fa
+      ? 'دلیلی خوانده نشد؛ چیزی ساخته نمی‌شود.'
+      : 'No reason was readable; nothing is invented.';
+  }
   const route = by('route-intelligence');
   if (route && intentType === 'ROUTE_INTELLIGENCE' && route.bestRoute) {
     const b = route.bestRoute;

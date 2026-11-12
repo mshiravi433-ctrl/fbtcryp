@@ -107,6 +107,10 @@ export const INTENT_TYPES = Object.freeze({
      transfer, priced against the others. It reads the route ranking and
      the market context it is judged in. */
   ROUTE_INTELLIGENCE: { modules: ['route-intelligence', 'markets', 'risk'], permission: PERMISSION.READ },
+  /* The why surface: «چرا این را گفتی؟» — the explanation of the
+     brain's OWN decision, with its five why-lines and its falsifiers. It
+     reads the decision, the risk view and the owner's own state. */
+  WHY_DECISION: { modules: ['why-decision', 'portfolio', 'risk'], permission: PERMISSION.READ },
   ASSET_ANALYSIS: { modules: ['crypto', 'signals', 'news', 'risk'], permission: PERMISSION.READ },
   BALANCE_QUERY: { modules: ['wallet'], permission: PERMISSION.READ },
   LOAN_STATUS: { modules: ['lending', 'borrowing', 'portfolio', 'risk'], permission: PERMISSION.READ },
@@ -160,13 +164,44 @@ export const INTENT_TYPES = Object.freeze({
  */
 const EXPLICIT_INTENTS = Object.freeze(new Set([
   'STAKING_REWARD', 'LIQUIDITY_RISK', 'YIELD_OPPORTUNITY', 'OPPORTUNITY_FIT',
-  'ROUTE_INTELLIGENCE',
+  'ROUTE_INTELLIGENCE', 'WHY_DECISION',
   'FUTURES_RISK', 'LOAN_STATUS', 'BORROW_CAPACITY',
   'EXECUTE_LEND', 'EXECUTE_BORROW', 'EXECUTE_REPAY', 'EXECUTE_REBALANCE',
   'CREATE_GOAL', 'SET_ALERT', 'INSTRUMENT_QUERY'
 ]));
 
 const RULES = Object.freeze([
+  /*
+   * WHY DECISION (path 15).
+   *
+   * «چرا این را گفتی؟» — «why did you say that?» — is the question every
+   * assistant is eventually asked, and until now it was UNSUPPORTED: the
+   * product had a why engine (five why-lines and four named falsifiers)
+   * and no way to reach it.
+   *
+   * It is placed FIRST on purpose. The question is about the PREVIOUS
+   * answer, and it is a question about the assistant's own reasoning — so
+   * it cannot be captured by a surface that reads the market, the
+   * portfolio or the goals. And it is a FOLLOW-UP in the literal sense:
+   * «چرا؟» after any answer means «explain what you just said».
+   *
+   * The wording is deliberately specific about WHAT is being explained.
+   * «چرا بیت‌کوین بالا رفت؟» is a market question and belongs to the
+   * market surface; «چرا این را گفتی؟» is a question about the answer.
+   */
+  {
+    intent: 'WHY_DECISION',
+    patterns: [
+      /(چرا|چطور|چه\s*طور|بر\s*چه\s*اساس|دلیل|منطق)\s*.{0,26}?(این\s*(را|و)?\s*(گفتی|گفتید|پیشنهاد\s*دادی|پیشنهاد\s*دادید|انتخاب\s*کردی|انتخاب\s*کردید|انتخاب\s*کردم)|تصمیم|پیشنهاد|توصیه|پاسخ|جواب|کاری\s*که\s*کردی)/i,
+      /(چرا|بر\s*چه\s*اساس|دلیل)\s*.{0,20}?(این|اون)\s*(گزینه|مسیر|پل|استراتژی|راه|برنامه|حساب)?\s*(را\s*)?(انتخاب|پیشنهاد|گفتی|گزیدی|ساختی)?/i,
+      /\bwhy\s+(did\s+you|do\s+you|you)\s+(say|recommend|suggest|choose|pick|tell\s+me)/i,
+      /\bwhy\s+(this|that|it)\s+(recommendation|suggestion|answer|choice|path|route)/i,
+      /\bwhy\s+did\s+you\s+(say|recommend|choose|pick)\b/i,
+      /\b(reason|reasoning|rationale|justify)\b.{0,26}\b(recommendation|suggestion|answer|decision|choice)\b/i,
+      /\bwhy\b.{0,26}\b(recommend|suggest|choose|pick)\b/i
+    ],
+    requires: ['why-decision']
+  },
   { intent: 'PORTFOLIO_ANALYSIS', patterns: [/پرتفوی|پورتفوی|سبد (سرمایه|من)|portfolio|holdings|ارزش (کیف|سبد)|ریسک (من|پرتفوی|سبد)|ارزیابی ریسک|my risk|risk (assessment|check|level)/i], requires: ['portfolio'] },
   { intent: 'CONCENTRATION_CHECK', patterns: [/زیاد (دارم|است|داری)|تمرکز|concentration|too much|比重|تک‌دارایی|تک دارایی/i], requires: ['portfolio'] },
   { intent: 'LOAN_STATUS', patterns: /وامم|وام من|وام(?:م)? (چطور|چقدر|چنده|امن|سلامت)|وضعیت وام|loan status|بدهی ?م|my loan/i, requires: ['lending'] },
@@ -257,8 +292,8 @@ const RULES = Object.freeze([
       /(انتقال|عبور|بردن|فرستادن|جابه‌جا|منتقل)\s*.{0,26}?(بین\s*.{0,18}?)?(شبکه|chain|بلاک‌چین)/i,
       /(cross[-\s]?chain|bridging|crossing)\s*.{0,26}?(route|cheapest|fastest|best|compare|rank)?/i,
       /(ارزان‌ترین|سریع‌ترین|کم‌هزینه‌ترین|کم‌ریسک‌ترین)\s*.{0,26}?(پل|بریج|bridge|راه|مسیر|روت|route)/i,
-      /(best|cheapest|fastest|safest)\s+(bridge|route|path)/i,
-      /(compare|rank).{0,26}(routes?|bridges?|paths?)/i
+      /\b(best|cheapest|fastest|safest)\s+(bridge|route|path)\b/i,
+      /\b(compare|rank)\b.{0,26}\b(routes?|bridges?|paths?)\b/i
     ],
     requires: ['route-intelligence']
   },
@@ -559,6 +594,15 @@ const INTENT_PRIORITY = Object.freeze({
    * transfer?» would be read as an instruction to move the money.
    */
   ROUTE_INTELLIGENCE: 0.055,
+  /*
+   * The why surface sits at the TOP of the priority list. «چرا این را
+   * گفتی؟» is a question about the previous answer, and it is the
+   * clearest signal a user can give that they want the REASONING rather
+   * than another reading. Anything that would steal it — a market
+   * question, a portfolio question — is a question about the world, and
+   * the world did not just get a recommendation.
+   */
+  WHY_DECISION: 0.09,
   QUOTE_SWAP: 0.035, EXECUTE_REBALANCE: 0.035, CONCENTRATION_CHECK: 0.03, EXECUTE_SWAP: 0.03,
   CREATE_GOAL: 0.04, GOAL_PLAN: 0.03, BALANCE_QUERY: 0.03, EXECUTE_LEND: 0.025, EXECUTE_BORROW: 0.025,
   PORTFOLIO_ANALYSIS: 0.0, MARKET_OVERVIEW: 0.0, ASSET_ANALYSIS: -0.045, NAVIGATE: -0.02,

@@ -113,6 +113,17 @@ export const STATE_SECTIONS = Object.freeze({
    * and a ranking built on an expired quote is a ranking of nothing.
    */
   routeIntelligence: { owner: 'route-intelligence', ttlMs: 2 * 60_000, authoritative: true, required: false },
+  /*
+   * The why block: the brain's OWN decision, explained — why this asset,
+   * why this network, why now, why this amount, why this strategy, plus
+   * the four named falsifiers.
+   *
+   * It is SHORT-LIVED, and the reason matters: an explanation of a
+   * decision is only true while the decision is. The prices, the risk
+   * view and the capital move, so a why block quoted from an hour ago
+   * would be explaining a decision nobody made.
+   */
+  whyDecision: { owner: 'why-decision', ttlMs: 5 * 60_000, authoritative: true, required: false },
   events: { owner: 'events', ttlMs: 60_000, authoritative: true, required: false },
   alerts: { owner: 'alerts', ttlMs: 60_000, authoritative: true, required: false },
   capabilities: { owner: 'registry', ttlMs: 60_000, authoritative: true, required: true },
@@ -275,7 +286,11 @@ export const EVENT_TYPES = Object.freeze([
   /* The route ranking was read (2026-11-12). It invalidates itself and
      nothing else: a new quote changes WHICH route is best, not what the
      portfolio holds. */
-  'ROUTE_INTELLIGENCE_READ'
+  'ROUTE_INTELLIGENCE_READ',
+  /* The why block was read (2026-11-12). It invalidates itself: a new
+     decision needs a new explanation, and an explanation of a decision
+     that was never made is a plausible-sounding fiction. */
+  'WHY_DECISION_READ'
 ]);
 
 /*
@@ -315,7 +330,8 @@ export const REFRESH_CASCADE = Object.freeze({
   GOAL_SCENARIOS_READ: { invalidate: ['goalScenarios'], cascade: false },
   /* The route read invalidates the route ranking and nothing else: a new
      quote changes WHICH route is best, not what the portfolio holds. */
-  ROUTE_INTELLIGENCE_READ: { invalidate: ['routeIntelligence'], cascade: false }
+  ROUTE_INTELLIGENCE_READ: { invalidate: ['routeIntelligence'], cascade: false },
+  WHY_DECISION_READ: { invalidate: ['whyDecision'], cascade: false }
 });
 
 /** §10 Module registry — the ids the brain must be able to discover. */
@@ -346,7 +362,12 @@ export const MODULE_IDS = Object.freeze([
      ranking engine in `server/fios/routeIntelligence.js`, fed by the
      deployment's LIVE route provider. It answers «which bridge should I
      use to move my money?» with a ranked, priced, timed comparison. */
-  'route-intelligence'
+  'route-intelligence',
+  /* The why-decision module (2026-11-12) — the bridge to the why engine
+     in `server/fios/whyEngine.js`, fed with the brain's OWN decision:
+     its findings, its confidence, its risk view and the owner's own
+     state. It answers «چرا این را گفتی؟». */
+  'why-decision'
 ]);
 
 /**

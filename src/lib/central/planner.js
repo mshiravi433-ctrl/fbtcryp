@@ -224,6 +224,21 @@ export const PLAN_TEMPLATES = Object.freeze({
     step('risk.analyze', 'risk', 'read', { optional: true }),
     step('present', 'session', 'read', { dependsOn: ['routes.read'] })
   ],
+  /*
+   * The why plan (path 15): explain the brain's own decision.
+   *
+   * The decision is what the brain ALREADY produced, so the plan does not
+   * build anything new — it reads the owner's own state and the risk view
+   * the decision was judged against, and hands them to the why engine.
+   * The why step is OPTIONAL, because a turn with no recommendation has
+   * nothing to explain and the reply must say so rather than fail.
+   */
+  WHY_DECISION: () => [
+    step('portfolio.read', 'portfolio', 'read', { optional: true }),
+    step('risk.analyze', 'risk', 'read', { optional: true }),
+    step('why.read', 'why-decision', 'read', { optional: true, dependsOn: ['portfolio.read', 'risk.analyze'] }),
+    step('present', 'session', 'read', { dependsOn: ['why.read'] })
+  ],
   GOAL_PLAN: () => [
     step('goals.read', 'goals', 'read', { optional: true }),
     step('portfolio.read', 'portfolio', 'read'),

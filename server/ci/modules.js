@@ -33,6 +33,7 @@ import { hasFitProvider, readFit } from './fitBridge.js';
 import { hasMacroGraphProvider, readMacroGraph } from './fitBridge.js';
 import { hasScenarioProvider, readScenarios } from './fitBridge.js';
 import { hasRouteProvider, readRouteCandidates } from './routeBridge.js';
+import { hasWhyProvider, explainWhy, buildBrainDecisionBundle } from './whyBridge.js';
 import { storeGet, storeSet, storeDurable, EPHEMERAL_TTL_MS } from '../store.js';
 import { createGoal, getGoal, validateGoalInput, FINANCIAL_GOAL_LIMITATIONS } from '../financialGoals.js';
 import { randomUUID, createHash } from 'node:crypto';
@@ -1144,6 +1145,75 @@ export function createModules(ctx = {}) {
     recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the candidates are re-quoted from the live provider on the next turn' } })
   });
 
+  /*
+   * THE WHY-DECISION MODULE (path 15).
+   *
+   * The why engine answers the question every assistant is eventually
+   * asked — «چرا این را گفتی؟» — with five why-lines (asset, network,
+   * now, amount, strategy), four named falsifiers and the invalidation
+   * conditions. It was dark because it expected a decision record from
+   * the FIOs decision engine, and the central brain does not use that
+   * engine: the brain has its OWN decision, built from its own findings.
+   *
+   * So this module builds the bundle in the engine's vocabulary from the
+   * brain's own artefacts, and the rule is absolute — every number in
+   * the bundle came from a finding the brain actually read. A finding
+   * that could not be read leaves the corresponding line absent, and the
+   * engine renders it as «unread» rather than as a zero.
+   *
+   * It refuses to explain a decision that does not exist. That refusal
+   * is the valuable part: an explanation of nothing is a plausible
+   * sentence with no number in it, which is exactly what §25 forbids.
+   */
+  const whyDecision = defineModule({
+    id: 'why-decision', name: 'Why decision', capability: CAPABILITY.AVAILABLE,
+    state: ['whyDecision'], tools: ['why.read'], events: ['WHY_DECISION_READ'],
+    errors: ['WHY_PROVIDER_NOT_WIRED', 'WHY_PROVIDER_BAD_RESULT', 'WHY_FAILED', 'NO_DECISION'],
+    permissions: { max: PERMISSION.READ },
+    fallback: ['the last why block this owner read, labelled stale'],
+    getState: async () => ok('OK', null),
+    healthCheck: async () => (hasWhyProvider()
+      ? { status: 'HEALTHY', detail: 'the why engine is mounted and can explain this owner’s own decision' }
+      : { status: 'UNKNOWN', detail: 'the why engine is not mounted in this process' }),
+    capabilities: async () => ({
+      operations: ['read'],
+      executes: false,
+      reason: 'an explanation executes nothing; it only says why'
+    }),
+    read: async (input = {}, readCtx = {}) => {
+      const built = buildBrainDecisionBundle({
+        recommendation: input.recommendation || null,
+        findings: Array.isArray(input.findings) ? input.findings : [],
+        risk: input.risk || null,
+        state: input.state || null,
+        routeIntelligence: input.routeIntelligence || null,
+        macroGraph: input.macroGraph || null,
+        simulation: input.simulation || null,
+        preferences: input.preferences || null,
+        goal: input.goal || null
+      });
+      if (!built.ok) return unavailable(built.code, { detail: built.detail });
+      const out = await explainWhy(readCtx.owner || owner, built.bundle);
+      if (!out.ok) return unavailable(out.code, { detail: out.detail });
+      const why = out.why || {};
+      return ok('OK', {
+        at: why.at ?? null,
+        decisionId: why.decisionId ?? null,
+        why: why.why || null,
+        invalidationConditions: why.invalidationConditions || [],
+        falsifiers: why.falsifiers || [],
+        nextReviewAt: why.nextReviewAt ?? null,
+        reviewWindowDays: why.reviewWindowDays ?? null,
+        confidence: why.confidence ?? null,
+        estimate: why.estimate === true,
+        note: why.note || null
+      }, { source: 'why-engine' });
+    },
+    quote: NA('an explanation has no price'), prepare: NA('an explanation is not prepared'), simulate: NA('the engine models the falsifiers itself'),
+    execute: NA('an explanation executes nothing'), verify: NA('verifying an explanation means rebuilding the decision'),
+    recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the explanation is rebuilt from the decision that stands now' } })
+  });
+
   const events = defineModule({
     id: 'events', name: 'Event bus', capability: CAPABILITY.AVAILABLE,
     state: ['events'], tools: ['events.recent', 'events.subscribe'], events: [],
@@ -1450,7 +1520,7 @@ export function createModules(ctx = {}) {
     recover: async () => ({ status: 'RECOVERED', data: { strategy: 'recompute after the underlying sections are refreshed' } })
   });
 
-  return [wallet, portfolio, swap, bridge, lending, borrowing, farming, liquidity, staking, futures, dydx, stocks, etf, funds, forex, commodities, rwa, crypto, signals, news, globalIntel, opportunityFit, macroGraph, goalScenarios, routeIntelligence, events, alerts, goals, profitPlan, prediction, lab, risk, forecast, transactions, notifications];
+  return [wallet, portfolio, swap, bridge, lending, borrowing, farming, liquidity, staking, futures, dydx, stocks, etf, funds, forex, commodities, rwa, crypto, signals, news, globalIntel, opportunityFit, macroGraph, goalScenarios, routeIntelligence, whyDecision, events, alerts, goals, profitPlan, prediction, lab, risk, forecast, transactions, notifications];
 }
 
 /* ── helpers ───────────────────────────────────────────────────────────── */
