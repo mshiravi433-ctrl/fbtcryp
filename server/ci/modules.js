@@ -32,6 +32,7 @@ import { hasGlobalIntelProvider, readGlobalIntel } from './globalIntelBridge.js'
 import { hasFitProvider, readFit } from './fitBridge.js';
 import { hasMacroGraphProvider, readMacroGraph } from './fitBridge.js';
 import { hasScenarioProvider, readScenarios } from './fitBridge.js';
+import { hasRouteProvider, readRouteCandidates } from './routeBridge.js';
 import { storeGet, storeSet, storeDurable, EPHEMERAL_TTL_MS } from '../store.js';
 import { createGoal, getGoal, validateGoalInput, FINANCIAL_GOAL_LIMITATIONS } from '../financialGoals.js';
 import { randomUUID, createHash } from 'node:crypto';
@@ -1049,6 +1050,100 @@ export function createModules(ctx = {}) {
     recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the profiles are rebuilt on demand from the goal and the real capital' } })
   });
 
+  /*
+   * THE ROUTE INTELLIGENCE MODULE (path 14).
+   *
+   * The engine in `server/fios/routeIntelligence.js` was complete and dark.
+   * It ranks candidate routes across five dimensions — cost, liquidity
+   * impact, time in flight, historical success and bridge risk — and it
+   * refuses to invent a dimension it could not read. But it had no
+   * customers, because it deliberately does not dial providers itself: it
+   * waits for candidate routes.
+   *
+   * This module supplies the candidates from the deployment's LIVE route
+   * provider — the same LI.FI endpoint the wallet's own route list uses —
+   * and then ranks them in the engine.
+   *
+   * Two things it refuses to do, and both matter:
+   *
+   *   · it does NOT rank an empty candidate list. With no routes there is
+   *     no ranking, and the module says the transfer was never specified
+   *     rather than inventing a «best route»;
+   *   · it does NOT execute. The ranking is advisory; the execution path
+   *     re-quotes with a real address and keeps its own gates.
+   */
+  const routeIntelligence = defineModule({
+    id: 'route-intelligence', name: 'Route intelligence', capability: CAPABILITY.AVAILABLE,
+    state: ['routeIntelligence'], tools: ['routes.read'], events: ['ROUTE_INTELLIGENCE_READ'],
+    errors: [
+      'ROUTE_PROVIDER_NOT_WIRED', 'ROUTE_PROVIDER_BAD_RESULT', 'ROUTE_SOURCE_FAILED',
+      'ROUTE_SOURCE_UNAVAILABLE', 'ROUTE_REQUEST_INCOMPLETE', 'ROUTE_QUOTE_FAILED',
+      'NO_ROUTE', 'NO_CANDIDATE_ROUTES'
+    ],
+    permissions: { max: PERMISSION.READ },
+    fallback: ['the last route ranking this owner read, labelled stale'],
+    getState: async () => ok('OK', null),
+    healthCheck: async () => (hasRouteProvider()
+      ? { status: 'HEALTHY', detail: 'the live route source is mounted and the ranking engine can rank its candidates' }
+      : { status: 'UNKNOWN', detail: 'the live route source is not mounted in this process' }),
+    capabilities: async () => ({
+      operations: ['read'],
+      executes: false,
+      reason: 'a route ranking is advice; the execution path re-quotes with a real address and keeps its own gates'
+    }),
+    read: async (input = {}, readCtx = {}) => {
+      const request = input.request || input;
+      const out = await readRouteCandidates(readCtx.owner || owner, { request });
+      if (!out.ok) return unavailable(out.code, { detail: out.detail, request: out.request || null });
+      /*
+       * The ranking itself lives in the engine, and the engine is reached
+       * through the FIOs bridge — the brain never imports `server/fios/*`
+       * directly, because that file is on the cold-start path of every
+       * serverless instance.
+       */
+      let ranked = null;
+      try {
+        const { routeIntelligenceFor } = await import('./routeBridge.js');
+        ranked = await routeIntelligenceFor(readCtx.owner || owner, {
+          request: out.request || request,
+          routes: out.routes
+        });
+      } catch (err) {
+        return unavailable('ROUTE_RANKING_FAILED', {
+          detail: String(err?.message || err).slice(0, 200) || null,
+          routeCount: out.routes.length
+        });
+      }
+      if (!ranked?.ok) {
+        return unavailable(ranked?.code || 'ROUTE_RANKING_FAILED', {
+          detail: ranked?.detail || null,
+          routeCount: out.routes.length
+        });
+      }
+      const ri = ranked.result;
+      return ok(ri.bestRoute ? 'OK' : 'PARTIAL', {
+        at: ri.at ?? null,
+        source: out.source || null,
+        request: ri.request || null,
+        routeCount: ri.routeCount ?? out.routes.length,
+        bestRoute: ri.bestRoute || null,
+        bestRouteReasons: ri.bestRouteReasons || [],
+        ranked: (ri.ranked || []).slice(0, 6),
+        rejected: (ri.rejected || []).slice(0, 6),
+        unranked: (ri.unranked || []).slice(0, 6),
+        executionPermission: false,
+        estimate: true,
+        note: ri.note || null
+      }, { source: 'route-intelligence-engine' });
+    },
+    quote: NA('the route ranking is built on a quote, not a price for one'),
+    prepare: NA('a route ranking moves nothing'),
+    simulate: NA('the provider already priced the crossing; simulating it would be a second estimate'),
+    execute: NA('the brain never executes a route ranking; the execution path re-quotes with a real address'),
+    verify: NA('verifying a route ranking means re-quoting it'),
+    recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the candidates are re-quoted from the live provider on the next turn' } })
+  });
+
   const events = defineModule({
     id: 'events', name: 'Event bus', capability: CAPABILITY.AVAILABLE,
     state: ['events'], tools: ['events.recent', 'events.subscribe'], events: [],
@@ -1355,7 +1450,7 @@ export function createModules(ctx = {}) {
     recover: async () => ({ status: 'RECOVERED', data: { strategy: 'recompute after the underlying sections are refreshed' } })
   });
 
-  return [wallet, portfolio, swap, bridge, lending, borrowing, farming, liquidity, staking, futures, dydx, stocks, etf, funds, forex, commodities, rwa, crypto, signals, news, globalIntel, opportunityFit, macroGraph, goalScenarios, events, alerts, goals, profitPlan, prediction, lab, risk, forecast, transactions, notifications];
+  return [wallet, portfolio, swap, bridge, lending, borrowing, farming, liquidity, staking, futures, dydx, stocks, etf, funds, forex, commodities, rwa, crypto, signals, news, globalIntel, opportunityFit, macroGraph, goalScenarios, routeIntelligence, events, alerts, goals, profitPlan, prediction, lab, risk, forecast, transactions, notifications];
 }
 
 /* ── helpers ───────────────────────────────────────────────────────────── */

@@ -177,7 +177,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     borrowing: 'borrowing', farming: 'farming', liquidity: 'liquidity', futures: 'futures',
     dydx: 'dydx', signals: 'signals', news: 'news', goals: 'goals', alerts: 'alerts',
     transactions: 'transactions', events: 'events', risk: 'risk', profitPlan: 'profit-plan',
-    globalIntel: 'global-intel', opportunityFit: 'opportunity-fit', macroGraph: 'macro-graph', goalScenarios: 'goal-scenarios',
+    globalIntel: 'global-intel', opportunityFit: 'opportunity-fit', macroGraph: 'macro-graph', goalScenarios: 'goal-scenarios', routeIntelligence: 'route-intelligence',
     positions: 'lending', recentActions: 'transactions', pendingActions: 'transactions',
     errors: 'risk', eventsList: 'events'
   };
@@ -1511,6 +1511,89 @@ function buildFindings({ intent, classification, state, results, risk, readResul
   }
 
   /*
+   * ── THE ROUTE SURFACE (path 14) ─────────────────────────────────────────
+   *
+   * The route-intelligence engine was complete and dark. It ranked
+   * candidates across five honest dimensions and had no customers,
+   * because it waits for candidates and nothing ever asked it for any.
+   *
+   * This finding is what makes it visible. It carries the same discipline
+   * the engine has:
+   *
+   *   · the best route is named WITH its cost, its time and its risk, so
+   *     «this one» is never a bare opinion;
+   *   · the UNREAD dimensions travel with it, because a ranking that
+   *     silently drops half its dimensions is a ranking the reader
+   *     cannot audit;
+   *   · it is ADVISORY. The finding says so, and the execution path
+   *     re-quotes with a real address and keeps its own gates.
+   */
+  if (intent.intentType === 'ROUTE_INTELLIGENCE') {
+    const routeRead = readResults.routeIntelligence;
+    if (routeRead?.status === 'OK' && routeRead.data) {
+      const ri = routeRead.data;
+      const best = ri.bestRoute || null;
+      const ranked = Array.isArray(ri.ranked) ? ri.ranked : [];
+      const runnerUp = ranked.find((r) => r.routeId !== best?.routeId) || null;
+      const cost = best?.totalCostUsd ?? null;
+      const seconds = best?.dimensions?.time?.value ?? null;
+      const unknown = Array.isArray(best?.unknownDimensions) ? best.unknownDimensions : [];
+      findings.push({
+        id: 'route-intelligence',
+        status: best ? 'OK' : 'PARTIAL',
+        source: ri.source || 'route-intelligence-engine',
+        dataAt: ri.at || Date.now(),
+        estimate: true,
+        executionPermission: false,
+        bestRoute: best
+          ? {
+              routeId: best.routeId ?? null,
+              tool: best.tool ?? null,
+              score: best.score ?? null,
+              totalCostUsd: cost,
+              estimatedSeconds: seconds,
+              failureProbabilityPct: best.failureProbabilityPct ?? null,
+              riskLevel: best.riskLevel ?? null,
+              unknownDimensions: unknown
+            }
+          : null,
+        ranked: ranked.slice(0, 5).map((r) => ({
+          routeId: r.routeId ?? null,
+          tool: r.tool ?? null,
+          score: r.score ?? null,
+          totalCostUsd: r.totalCostUsd ?? null,
+          estimatedSeconds: r.dimensions?.time?.value ?? null,
+          failureProbabilityPct: r.failureProbabilityPct ?? null,
+          unknownDimensions: Array.isArray(r.unknownDimensions) ? r.unknownDimensions : []
+        })),
+        rejected: (ri.rejected || []).slice(0, 5),
+        unranked: (ri.unranked || []).slice(0, 5),
+        routeCount: ri.routeCount ?? 0,
+        detail: best
+          ? `${ranked.length} live candidate route(s); the best is ${best.tool || best.routeId}${cost != null ? ` at ${cost} USD` : ''}${seconds != null ? ` in ~${seconds}s` : ''}${runnerUp?.totalCostUsd != null && cost != null ? ` against ${runnerUp.totalCostUsd} USD for the runner-up` : ''}`
+          : `${ri.routeCount ?? 0} candidate route(s) were read but none could be ranked — none of them had a readable dimension`,
+        reason: best
+          ? (unknown.length
+              ? `chosen over ${runnerUp?.tool || runnerUp?.routeId || 'the other candidates'}; ${unknown.length} of the dimensions were unread (${unknown.join(', ')}) and the margin over the runner-up is therefore unverified — advisory only, the execution path re-quotes`
+              : `chosen over ${runnerUp?.tool || runnerUp?.routeId || 'the other candidates'} on the dimensions the provider actually priced — advisory only, the execution path re-quotes`)
+          : 'no candidate route had a single readable dimension — nothing is recommended and nothing is faked',
+        partial: !best
+      });
+    } else if (routeRead?.status === 'UNAVAILABLE') {
+      findings.push({
+        id: 'route-intelligence',
+        status: 'UNAVAILABLE',
+        detail: null,
+        reason: routeRead.reason === 'ROUTE_REQUEST_INCOMPLETE'
+          ? 'a route comparison needs a source chain, a destination chain, both tokens and an amount — none of them was specified, so no route was quoted'
+          : `the live route source could not be read (${routeRead.reason || 'NO_DATA'})`,
+        source: 'route-intelligence-engine',
+        partial: true
+      });
+    }
+  }
+
+  /*
    * ── THE YIELD SURFACE (2026-11-12) ─────────────────────────────────────
    *
    * Three capabilities were readable and never asked for. These findings
@@ -1919,7 +2002,13 @@ const SECTION_FOR_INTENT = {
    * reason `globalIntel` is — the brain reads modules THROUGH the state
    * store, so a module with no section is a module nothing ever asks.
    */
-  OPPORTUNITY_FIT: ['opportunityFit', 'portfolio', 'risk']
+  OPPORTUNITY_FIT: ['opportunityFit', 'portfolio', 'risk'],
+  /* The route ranking (path 14): the live candidates for the transfer,
+     the market they are crossing, and the risk of the crossing. The
+     markets read is optional in effect but declared here, because a
+     route priced without any market context is a price and not an
+     answer. */
+  ROUTE_INTELLIGENCE: ['routeIntelligence', 'markets', 'risk']
 };
 function sectionsForIntent(classification, { context, state }) {
   const base = SECTION_FOR_INTENT[classification.type] || ANALYSIS_MINIMUM;

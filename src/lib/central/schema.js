@@ -101,6 +101,18 @@ export const STATE_SECTIONS = Object.freeze({
    * is rebuilt from the capital as it stands now.
    */
   goalScenarios: { owner: 'goal-scenarios', ttlMs: 5 * 60_000, authoritative: true, required: false },
+  /*
+   * The route intelligence: the ranked cross-chain candidates for ONE
+   * transfer, with the cost, the time, the impact and the risk of each,
+   * and the reasons the best one won.
+   *
+   * It is a state section for the same reason the others are — a module
+   * with NO section is a module nothing ever asks — and it is
+   * SHORT-LIVED on purpose: a route quote is the cheapest thing in the
+   * product to go stale. The provider's own quote expires in minutes,
+   * and a ranking built on an expired quote is a ranking of nothing.
+   */
+  routeIntelligence: { owner: 'route-intelligence', ttlMs: 2 * 60_000, authoritative: true, required: false },
   events: { owner: 'events', ttlMs: 60_000, authoritative: true, required: false },
   alerts: { owner: 'alerts', ttlMs: 60_000, authoritative: true, required: false },
   capabilities: { owner: 'registry', ttlMs: 60_000, authoritative: true, required: true },
@@ -259,7 +271,11 @@ export const EVENT_TYPES = Object.freeze([
      and the risk view: a profile with a drawdown estimate is a risk
      input, and a stale profile next to a fresh risk number would read as
      current. */
-  'GOAL_SCENARIOS_READ'
+  'GOAL_SCENARIOS_READ',
+  /* The route ranking was read (2026-11-12). It invalidates itself and
+     nothing else: a new quote changes WHICH route is best, not what the
+     portfolio holds. */
+  'ROUTE_INTELLIGENCE_READ'
 ]);
 
 /*
@@ -296,7 +312,10 @@ export const REFRESH_CASCADE = Object.freeze({
   GLOBAL_SNAPSHOT_READ: { invalidate: ['globalIntel'], cascade: false },
   FIT_RANKING_READ: { invalidate: ['opportunityFit'], cascade: false },
   MACRO_GRAPH_READ: { invalidate: ['macroGraph'], cascade: false },
-  GOAL_SCENARIOS_READ: { invalidate: ['goalScenarios'], cascade: false }
+  GOAL_SCENARIOS_READ: { invalidate: ['goalScenarios'], cascade: false },
+  /* The route read invalidates the route ranking and nothing else: a new
+     quote changes WHICH route is best, not what the portfolio holds. */
+  ROUTE_INTELLIGENCE_READ: { invalidate: ['routeIntelligence'], cascade: false }
 });
 
 /** §10 Module registry — the ids the brain must be able to discover. */
@@ -322,7 +341,12 @@ export const MODULE_IDS = Object.freeze([
   /* The goal-scenarios module (2026-11-12) — the bridge to the scenario
      engine in `server/fios/goalScenarios.js`, which builds three profiles
      for a target and refuses to model anything without real capital. */
-  'goal-scenarios'
+  'goal-scenarios',
+  /* The route-intelligence module (2026-11-12) — the bridge to the route
+     ranking engine in `server/fios/routeIntelligence.js`, fed by the
+     deployment's LIVE route provider. It answers «which bridge should I
+     use to move my money?» with a ranked, priced, timed comparison. */
+  'route-intelligence'
 ]);
 
 /**

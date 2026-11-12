@@ -1170,25 +1170,48 @@ router.get('/gateway/providers', (_req, res) => res.json({
  * provider, which costs tokens and seconds; this returns what the gateway
  * already knows from the traffic it has served, so a panel can poll it.
  */
-router.get('/gateway/health', (_req, res) => res.json({
-  ok: true,
-  schema: 'fbt.ai-gateway-health.v1',
-  summary: getFleetSummary(),
-  fleet: describeProviderFleet(),
-  health: getProviderHealth(),
-  providers: getAvailableProviders().map((p) => ({
-    id: p.id,
-    name: p.name,
-    configured: p.configured,
-    verdict: p.verdict,
-    model: p.defaultModel,
-    reasonCode: p.health?.lastError?.reasonCode || null,
-    lastError: p.health?.lastError?.message || null,
-    fix: p.health?.lastError?.fix || null,
-    lastSuccessAt: p.health?.lastSuccess?.at || null
-  })),
-  at: nowMs()
-}));
+router.get('/gateway/health', async (_req, res) => {
+  /*
+   * THE DAY'S ALLOWANCE IS PART OF THE HEALTH.
+   *
+   * Before this, the only way to learn that the free tier was spent
+   * was to spend it: the next request came back 429 and the operator
+   * saw a failure instead of a number. The quota counter makes the
+   * day's spending visible BEFORE it runs out — «32 of 50 left, about
+   * six deep turns still affordable» — which is the difference between
+   * a budget and a surprise.
+   */
+  let quota = null;
+  try {
+    const { readQuotaForFleet, turnsRemaining } = await import('./aiQuotaBudget.js');
+    const ids = getAvailableProviders().map((p) => p.id);
+    quota = await readQuotaForFleet(ids);
+    quota.turnsRemaining = turnsRemaining(quota, 5);
+    quota.turnCostAssumption = 5;
+  } catch {
+    quota = null;
+  }
+  return res.json({
+    ok: true,
+    schema: 'fbt.ai-gateway-health.v1',
+    summary: getFleetSummary(),
+    fleet: describeProviderFleet(),
+    health: getProviderHealth(),
+    quota,
+    providers: getAvailableProviders().map((p) => ({
+      id: p.id,
+      name: p.name,
+      configured: p.configured,
+      verdict: p.verdict,
+      model: p.defaultModel,
+      reasonCode: p.health?.lastError?.reasonCode || null,
+      lastError: p.health?.lastError?.message || null,
+      fix: p.health?.lastError?.fix || null,
+      lastSuccessAt: p.health?.lastSuccess?.at || null
+    })),
+    at: nowMs()
+  });
+});
 
 router.get('/gateway/selftest', async (_req, res) => {
   const report = await gatewaySelfTest();

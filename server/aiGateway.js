@@ -106,6 +106,7 @@ import {
   resolveProviderFleet,
   DEFAULT_PROVIDER_FLEET
 } from './aiProviderFleet.js';
+import { spendQuota } from './aiQuotaBudget.js';
 import { aiAnswerCacheStats } from './aiAnswerCache.js';
 import { lastReasoningLedger } from './aiReasoningLedger.js';
 import { cortexBridgeStatus } from './aiCortexBridge.js';
@@ -902,8 +903,73 @@ const MODEL_ATTEMPTS = Math.max(1, Number(process.env.AI_MODEL_ATTEMPTS || 3));
 export function beginAiTurnBudget() {
   return {
     failedModels: new Map(),
-    exhaustedProviders: new Set()
+    exhaustedProviders: new Set(),
+    /* The CALL CAP — the third half of the budget, and the one that
+       protects the DAILY allowance rather than the turn.
+       ·
+       · `calls` counts the provider requests this turn has actually
+       ·   spent. `maxCalls` is the ceiling.
+       ·
+       · The ceiling is not "be lazy". It is the answer to a question the
+       ·   old budget could not ask: WHEN should a turn stop asking? The
+       ·   time budget answers "when the turn is late"; the model ledger
+       ·   answers "when this model is known dead". Neither knows that
+       ·   the daily allowance is nearly spent, and on the `:free` tier
+       ·   that allowance IS the product.
+       ·
+       · The cap is deliberately a CAP ON SPEND, not a cap on quality:
+       ·   the stages that carry the answer (the analyses, the
+       ·   synthesiser) run first, and the stages that refine it (the
+       ·   verifier, the critic) are the ones that get dropped. A turn
+       ·   that hits the cap answers with what it has, and says so.
+       */
+    calls: 0,
+    maxCalls: maxProviderCallsPerTurn(),
+    capHits: 0
   };
+}
+
+/**
+ * How many provider requests ONE turn may spend.
+ *
+ * The default is 6 — the measured cost of a full `max` turn (three
+ * analyses, a verifier, a final answer and a critic). Lowering it does
+ * not make the turn cheaper in tokens; it makes it cheaper in QUOTA,
+ * which on the free tier is the scarce thing.
+ *
+ * `0` means "no cap", which is the pre-budget behaviour and is safe
+ * only on a paid tier.
+ */
+export function maxProviderCallsPerTurn(env = process.env) {
+  const raw = env?.AI_MAX_PROVIDER_CALLS;
+  if (raw === undefined || raw === null || String(raw).trim() === '') return 6;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return 6;
+  return Math.floor(n);
+}
+
+/** Spend one unit of the turn's call cap. Returns false when it is spent. */
+export function spendProviderCall(budget) {
+  if (!budget || typeof budget !== 'object') return true;
+  const cap = Number(budget.maxCalls);
+  if (!Number.isFinite(cap) || cap <= 0) {
+    budget.calls = (budget.calls || 0) + 1;
+    return true;
+  }
+  if ((budget.calls || 0) >= cap) {
+    budget.capHits = (budget.capHits || 0) + 1;
+    return false;
+  }
+  budget.calls = (budget.calls || 0) + 1;
+  return true;
+}
+
+/** How much of the turn's call cap is left. */
+export function providerCallBudgetLeft(budget) {
+  if (!budget || typeof budget !== 'object') return Infinity;
+  const cap = Number(budget.maxCalls);
+  if (!Number.isFinite(cap) || cap <= 0) return Infinity;
+  return Math.max(0, cap - (budget.calls || 0));
 }
 
 /**
@@ -1716,6 +1782,27 @@ export async function executeProviderChat(providerId, {
 
     for (const candidate of candidates) {
       try {
+        /*
+         * ─── THE CALL CAP (the daily allowance's share) ───────────────────
+         * Spend one unit of the turn's cap BEFORE the request goes out.
+         *
+         * This is the line that protects the DAILY quota, not the turn's
+         * latency. On the `:free` tier the whole allowance is fifty
+         * requests a day, and a `max` turn costs six of them — so a
+         * handful of deep questions exhausts the day.
+         *
+         * When the cap is spent the turn does NOT fail: it answers with
+         * what it already has, and the caller can say so. A turn that
+         * refused to answer would be worse than a shallower answer.
+         */
+        if (!spendProviderCall(turnBudget)) {
+          const out = new Error(`PROVIDER_CALL_CAP_SPENT:${providerId}`);
+          out.reasonCode = 'QUOTA';
+          out.provider = providerId;
+          out.attempts = attempts.slice();
+          out.fix = 'This turn has spent its provider-call cap; the answer is built from what it already read.';
+          throw out;
+        }
         /* Usage is requested on EVERY call, not only when a caller asked for
            it. The provider already returns it in the same response body, so
            the only cost is a few bytes — and without it the dashboard's token
@@ -1725,6 +1812,21 @@ export async function executeProviderChat(providerId, {
         const usage = typeof response === 'string' ? null : response.usage;
         const durationMs = Date.now() - startedAt;
         recordProviderCall(providerId, { ok: true, durationMs, model: candidate, usage });
+        /*
+         * Count it against the day's allowance.
+         *
+         * This is the project's own accounting, not the provider's: the
+         * provider remains the authority on when the cap is reached, and
+         * it says so with a 429. But a deployment that can COUNT its own
+         * spending can decide to spend it deliberately — and can publish
+         * «18 of 50 used today» instead of discovering the cap by
+         * failing against it.
+         *
+         * It is counted on success only. A request the provider rejected
+         * for an auth error did not consume the daily allowance there,
+         * and counting it would make the deployment too pessimistic.
+         */
+        spendQuota(providerId).catch(() => {});
         return {
           ok: true,
           provider: providerId,

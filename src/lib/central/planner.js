@@ -207,6 +207,23 @@ export const PLAN_TEMPLATES = Object.freeze({
     step('risk.analyze', 'risk', 'read', { optional: true, riskContext: 'portfolio' }),
     step('present', 'session', 'read', { dependsOn: ['fit.read'] })
   ],
+  /*
+   * The route plan (path 14): quote the live candidates, rank them in
+   * the engine, and present the best one WITH the reasons.
+   *
+   * The route step is OPTIONAL, because a route question without a
+   * transfer to plan is a question that was never fully asked — and the
+   * plan must still return a usable answer («which transfer?») instead
+   * of failing the whole turn. The market context is optional too: the
+   * ranking is over the provider's own numbers, and the market view only
+   * adds the conditions the crossing happens in.
+   */
+  ROUTE_INTELLIGENCE: () => [
+    step('routes.read', 'route-intelligence', 'read', { optional: true }),
+    step('markets.read', 'crypto', 'read', { optional: true }),
+    step('risk.analyze', 'risk', 'read', { optional: true }),
+    step('present', 'session', 'read', { dependsOn: ['routes.read'] })
+  ],
   GOAL_PLAN: () => [
     step('goals.read', 'goals', 'read', { optional: true }),
     step('portfolio.read', 'portfolio', 'read'),

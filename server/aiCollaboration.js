@@ -41,13 +41,16 @@ import {
   isProviderHealthy as gatewayProviderHealthy,
   getProviderHealth as gatewayProviderHealth,
   resetProviderHealth as resetGatewayProviderHealth,
-  beginAiTurnBudget
+  beginAiTurnBudget,
+  providerCallBudgetLeft,
+  spendProviderCall
 } from './aiGateway.js';
 import { runMultiAiDebate } from './aiConsensus.js';
 import { researchWeb, analyzeWithSources } from './aiWebResearch.js';
 import { resolveIntelligenceMode, intelligenceGeneration, intelligenceDeadlineMs, getIntelligenceProfile } from './aiIntelligence.js';
 import {
   aiAnswerCacheKey,
+  aiAnswerCachePersist,
   aiAnswerCacheSet,
   aiAnswerCacheTtlMs,
   isCacheableAnswer,
@@ -499,6 +502,26 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
      */
     if (turnBudget?.exhaustedProviders?.has?.(providerId)) continue;
     try {
+      /*
+       * The call cap, enforced here as well as in the gateway.
+       *
+       * The gateway is the authority for a real request, but the
+       * collaboration layer is the authority for the TURN: it knows which
+       * stage is asking and whether the answer already exists. A cap
+       * enforced only inside the gateway would be invisible here, and a
+       * stage that cannot afford to ask must be told so, not left to
+       * discover it by failing.
+       *
+       * It sits INSIDE the try, so a spent cap is a failed ROLE and not
+       * a failed turn: the other roles keep their answers and the
+       * synthesiser still has something to work with.
+       */
+      if (!spendProviderCall(turnBudget)) {
+        const capErr = new Error('PROVIDER_CALL_CAP_SPENT');
+        capErr.reasonCode = 'QUOTA';
+        capErr.fix = 'This turn has spent its provider-call cap; the answer is built from what it already read.';
+        throw capErr;
+      }
       const res = await deps.execute(providerId, {
         system,
         user,
@@ -964,7 +987,18 @@ export async function runCollaborativeAnalysis({
  */
 function aiAnswerCacheSetForTurn(key, value, freshness) {
   try {
-    aiAnswerCacheSet(key, value, aiAnswerCacheTtlMs(freshness));
+    const ttl = aiAnswerCacheTtlMs(freshness);
+    aiAnswerCacheSet(key, value, ttl);
+    /*
+     * And write it where the NEXT lambda can find it.
+     *
+     * This is the line that makes the cache real on a serverless
+     * deployment. The in-memory tier dies with the instance; the durable
+     * tier does not, so a question asked twice on two different lambdas
+     * costs ONE collaboration instead of two — and on the `:free` tier
+     * that is five provider calls saved, out of fifty a day.
+     */
+    aiAnswerCachePersist(key, value, ttl)?.catch(() => {});
   } catch {
     /* A cache write must never take down a turn that already has an answer. */
   }
@@ -998,6 +1032,83 @@ async function runCollaborativeAnalysisInner({
    * same question.
    */
   const turnBudget = beginAiTurnBudget();
+  /*
+   * ─── THE DAY'S ALLOWANCE, AND THE CAP IT LEAVES ─────────────────────────
+   *
+   * The turn's own cap (six requests) is the normal shape of a deep
+   * turn. But the DAY is the scarce thing on the free tier, and a
+   * deployment that can count its own spending can decide to spend it
+   * deliberately: when the day's allowance is nearly gone, the turn
+   * keeps its cap low, so the last requests of the day are spread over
+   * several questions instead of spent on the first one.
+   *
+   * The cap is computed asynchronously, so it is applied as soon as the
+   * number arrives — before any role asks. A turn that is already
+   * running keeps its normal cap; the next one gets the reduced one.
+   */
+  let quotaCapApplied = null;
+  try {
+    const { quotaAwareCallCap } = await import('./aiQuotaBudget.js');
+    /*
+     * The provider ids to count are the ones this turn would actually
+     * use. An injected fleet has its own seat names; the deployment's
+     * own fleet is the three free tiers. Either way the list is the
+     * ids, and an empty list means «the default fleet».
+     */
+    let fleetIds = [];
+    try {
+      const picked = typeof D.selectProviders === 'function' ? await D.selectProviders({ message, locale }) : null;
+      if (Array.isArray(picked)) fleetIds = picked.filter((x) => typeof x === 'string' && x);
+    } catch {
+      fleetIds = [];
+    }
+    if (!fleetIds.length) fleetIds = ['openrouterfree', 'groq', 'workersai'];
+    quotaCapApplied = await quotaAwareCallCap(fleetIds, { baseCap: turnBudget.maxCalls });
+    if (quotaCapApplied && Number.isFinite(quotaCapApplied.cap) && quotaCapApplied.cap < turnBudget.maxCalls) {
+      turnBudget.maxCalls = quotaCapApplied.cap;
+    }
+  } catch (err) {
+    /* No counter, no reduction. The turn keeps its normal cap. */
+    if (process.env.AI_QUOTA_DEBUG === '1') console.warn('[ai-quota] cap lookup failed:', String(err?.message || err));
+  }
+  /*
+   * ─── THE CALL CAP, AND WHAT IT DROPS ────────────────────────────────────
+   *
+   * The turn has a hard ceiling on provider requests, because the daily
+   * allowance is the scarce resource on the free tier — not the latency
+   * and not the tokens.
+   *
+   * When the cap is close, the stages that REFINE the answer are the ones
+   * that go: the verifier (a cross-examination of the analyses) and the
+   * critic (a repair pass over the draft). The stages that CARRY the
+   * answer — the analyses and the synthesiser — always run.
+   *
+   * The order matters and it is deliberate. A turn that lost its third
+   * analysis still has two independent reads; a turn that lost its
+   * final answer has nothing to show the user. So the cap is spent from
+   * the bottom of the stack up, never from the top down.
+   */
+  const callsLeft = () => providerCallBudgetLeft(turnBudget);
+  /* One call is reserved for the synthesiser. Without this reservation a
+     turn could spend its last unit on a verifier and then have nothing
+     left to write the answer with. */
+  /*
+   * Whether ONE more provider call is affordable right now.
+   *
+   * `>=` and not `>`: a turn with exactly one call left CAN still spend
+   * it, and the stage that spends it must be the LAST one — the critic.
+   * The two stages therefore ask differently:
+   *
+   *   · the verifier asks "can I afford this AND still have one left
+   *     for the synthesiser?" — because the answer needs the
+   *     synthesiser, and a turn with no final answer is a turn with no
+   *     answer;
+   *   · the critic asks "can I afford this at all?" — because it is last
+   *     and optional.
+   */
+  const canAffordRefinement = () => callsLeft() >= 1;
+  /* The verifier must leave room for the synthesiser. */
+  const canAffordVerification = () => callsLeft() >= 2;
   /*
    * ─── THE BUDGET IS THE MODE'S, AND IT IS SPENT, NOT RENEWED ──────────────
    * Two defects made the smartest mode unfinishable on a real deployment, and
@@ -1719,7 +1830,20 @@ async function runCollaborativeAnalysisInner({
     }
 
     const valid = analyses.filter((a) => a.ok);
-    if (valid.length >= 2 && !overBudget()) {
+    /*
+     * The verifier is a REFINEMENT: the analyses are already in hand,
+     * and the cross-examination improves them but does not create them.
+     * So when the call cap is spent the verifier is what goes, and the
+     * turn says so rather than silently answering less.
+     */
+    const verificationSkippedForBudget = valid.length >= 2 && !canAffordVerification();
+    if (verificationSkippedForBudget) {
+      result.budget = {
+        ...(result.budget || {}),
+        verifierSkipped: 'provider call cap reached — the turn answered from its own analyses'
+      };
+    }
+    if (valid.length >= 2 && !overBudget() && !verificationSkippedForBudget) {
       /* Cross-examination: the verification role sees the other analyses. */
       const digest = valid.map((a) => `[${a.role}] ${String(a.answer).slice(0, 400)}`).join('\n\n');
       const verifier = await withDeadline(runRole({
@@ -1955,7 +2079,21 @@ async function runCollaborativeAnalysisInner({
       if (modeProfile.selfCritique && !result.degraded) {
         const draft = String(result.answer || '').trim();
         const remaining = deadlineMs - (Date.now() - startedAt);
-        if (draft.length >= 80 && remaining > 2500) {
+        /*
+         * The critic is the LAST stage and the most optional one: it
+         * improves a draft that already exists and can never create the
+         * answer. So when the call cap is spent it is the critic that is
+         * dropped, and the turn says that it happened rather than
+         * pretending the draft was always this good.
+         */
+        const critiqueSkippedForBudget = !canAffordRefinement();
+        if (critiqueSkippedForBudget) {
+          result.budget = {
+            ...(result.budget || {}),
+            criticSkipped: 'provider call cap reached — the draft was not put through a repair pass'
+          };
+        }
+        if (draft.length >= 80 && remaining > 2500 && !critiqueSkippedForBudget) {
           const critiqueBudget = Math.min(7000, remaining - 800);
           /*
            * Deterministic completeness check on the draft: a part the draft
@@ -2364,6 +2502,20 @@ async function runCollaborativeAnalysisInner({
     source: budget.source,
     usedMs: result.latencyMs,
     overBudget: overBudget()
+  };
+  /*
+   * The PROVIDER budget is published here, at the END of the turn, not
+   * midway: a report written before the verifier and the critic have
+   * run counts only half the calls the turn actually made, and a
+   * budget report that undercounts is worse than none.
+   */
+  result.budget = {
+    ...(result.budget || {}),
+    callCap: turnBudget.maxCalls,
+    callsUsed: turnBudget.calls || 0,
+    capHits: turnBudget.capHits || 0,
+    dayHeadroom: quotaCapApplied?.headroom == null ? null : Math.round(quotaCapApplied.headroom * 100),
+    dayCounterDurable: quotaCapApplied?.durable === true
   };
   result.at = Date.now();
   return result;

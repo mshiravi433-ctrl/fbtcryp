@@ -103,6 +103,10 @@ export const INTENT_TYPES = Object.freeze({
    * directly would put 980 KB of engines on every cold start.
    */
   OPPORTUNITY_FIT: { modules: ['opportunity-fit', 'portfolio', 'risk'], permission: PERMISSION.READ },
+  /* The route-intelligence surface: WHICH bridge should carry this
+     transfer, priced against the others. It reads the route ranking and
+     the market context it is judged in. */
+  ROUTE_INTELLIGENCE: { modules: ['route-intelligence', 'markets', 'risk'], permission: PERMISSION.READ },
   ASSET_ANALYSIS: { modules: ['crypto', 'signals', 'news', 'risk'], permission: PERMISSION.READ },
   BALANCE_QUERY: { modules: ['wallet'], permission: PERMISSION.READ },
   LOAN_STATUS: { modules: ['lending', 'borrowing', 'portfolio', 'risk'], permission: PERMISSION.READ },
@@ -156,6 +160,7 @@ export const INTENT_TYPES = Object.freeze({
  */
 const EXPLICIT_INTENTS = Object.freeze(new Set([
   'STAKING_REWARD', 'LIQUIDITY_RISK', 'YIELD_OPPORTUNITY', 'OPPORTUNITY_FIT',
+  'ROUTE_INTELLIGENCE',
   'FUTURES_RISK', 'LOAN_STATUS', 'BORROW_CAPACITY',
   'EXECUTE_LEND', 'EXECUTE_BORROW', 'EXECUTE_REPAY', 'EXECUTE_REBALANCE',
   'CREATE_GOAL', 'SET_ALERT', 'INSTRUMENT_QUERY'
@@ -228,6 +233,35 @@ const RULES = Object.freeze([
   { intent: 'MARKET_OVERVIEW', patterns: [/بازار|market|قیمت (کلی|بازار)|وضعیت (کلی )?بازار|نهنگ|whale|اسمارت ?مانی|smart money|تورم|نرخ\s*بهره|فدرال|دارایی[‌\s]*های\s*کمیاب|سیاست\s*پولی|inflation|interest\s*rate|\bfed\b|monetary/i], requires: ['markets'] },
   { intent: 'QUOTE_SWAP', patterns: /نرخ (تبدیل|سواپ)|چند می ?ده(?:د)?|quote|قیمت (تبدیل|خرید|فروش)/i, requires: ['markets'] },
   { intent: 'EXECUTE_SWAP', patterns: [/تبدیلش? (کن|کنید|بکن|بده|بدهید)|سواپ|\bswap\b|convert .* to|\bexchange .* for|(بفروشش|بفروشمش|بفروش|بفرست|بخرمش|بخرش|بخرم?|بخرید|فروش بزن|خرید بزن|\bsell\b|\bbuy\b|\bpurchase\b|قصد خرید|دنبال خرید)/i], requires: ['wallet'] },
+  {
+    /*
+     * ROUTE INTELLIGENCE (2026-11-12).
+     *
+     * The question is «which BRIDGE», and the words that carry it are the
+     * crossing words: پل / بریج / انتقال / عبور / تبدیل بین شبکه‌ها.
+     * A route question is a COMPARISON between ways of moving money, and
+     * it is the one place where the answer has to name a cost, a time and
+     * a risk — so the ranking is over the LIVE candidates the provider
+     * returned, not over a preference order.
+     *
+     * It is placed above YIELD_OPPORTUNITY because «کدام پل بهتر است»
+     * is a route question and not a yield question: a bridge does not
+     * yield anything, it charges for the crossing. And it is placed
+     * below OPPORTUNITY_FIT because «کدام گزینه مناسب من است» is about
+     * the OWNER, not about the route.
+     */
+    intent: 'ROUTE_INTELLIGENCE',
+    patterns: [
+      /(کدام|کدوم|چه|چند|which|what)\s*.{0,26}?(پل|بریج|bridge|روت|route).{0,26}?(بهتر|بهترین|ارزان|ارزان‌تر|سریع‌تر|safe|safer|cheaper|fastest|best)?/i,
+      /(پل|بریج|bridge|روت|route)\s*.{0,26}?(کدام|کدوم|بهتر|بهترین|ارزان|ارزان‌تر|سریع‌تر|compare|مقایسه|رتبه|rank)/i,
+      /(انتقال|عبور|بردن|فرستادن|جابه‌جا|منتقل)\s*.{0,26}?(بین\s*.{0,18}?)?(شبکه|chain|بلاک‌چین)/i,
+      /(cross[-\s]?chain|bridging|crossing)\s*.{0,26}?(route|cheapest|fastest|best|compare|rank)?/i,
+      /(ارزان‌ترین|سریع‌ترین|کم‌هزینه‌ترین|کم‌ریسک‌ترین)\s*.{0,26}?(پل|بریج|bridge|راه|مسیر|روت|route)/i,
+      /(best|cheapest|fastest|safest)\s+(bridge|route|path)/i,
+      /(compare|rank).{0,26}(routes?|bridges?|paths?)/i
+    ],
+    requires: ['route-intelligence']
+  },
   { intent: 'EXECUTE_BRIDGE', patterns: /به (آربیتروم|آربیتروm ?one|آربیتروم one|arbitrum|پالیگان|بیس|اپتیمیزم|اربیترم)|منتقل کن به|برو به شبکه|\bbridge\b|پل بزن|ببر (به|روی)|\bmove\b .{0,24}\bto\b|\btransfer\b .{0,24}\bto\b/i, requires: ['wallet'] },
   { intent: 'EXECUTE_BORROW', patterns: /وام.{0,16}(بگیر|گرفتن|دریافت کن)|borrow (me|some)?|بخوام بگیرم/i, requires: ['lending'] },
   { intent: 'EXECUTE_LEND', patterns: /سپرده.{0,16}(گذاری|بگذار|کن|کنید|بذار|بذارید)|لند (کن|کنید)|\blend\b|\bsupply\b|\bdeposit\b/i, requires: ['lending'] },
@@ -512,6 +546,19 @@ const INTENT_PRIORITY = Object.freeze({
   CONDITIONAL_ALLOCATION: 0.085,
   INSTRUMENT_QUERY: 0.05, SET_ALERT: 0.05, NEWS_SUMMARY: 0.045, SIGNAL_READING: 0.045,
   PROFIT_PLAN: 0.045, QUOTE_BRIDGE: 0.04, EXECUTE_BRIDGE: 0.04, FUTURES_RISK: 0.04,
+  /*
+   * The route surface sits ABOVE EXECUTE_BRIDGE, and the reason is the
+   * question's own grammar: «کدام پل بهتر است» and «which bridge is
+   * cheapest» are COMPARISONS, while «پل بزن» and «move X to Y» are
+   * commands. Both sentences mention a bridge and a network, and the
+   * EXECUTE_BRIDGE pattern is deliberately loose — it has to be, because
+   * «برو به شبکه» appears in the middle of an ordinary sentence.
+   *
+   * So the comparison words decide, and they are given the higher
+   * priority. Without this, «which bridge is cheapest for this
+   * transfer?» would be read as an instruction to move the money.
+   */
+  ROUTE_INTELLIGENCE: 0.055,
   QUOTE_SWAP: 0.035, EXECUTE_REBALANCE: 0.035, CONCENTRATION_CHECK: 0.03, EXECUTE_SWAP: 0.03,
   CREATE_GOAL: 0.04, GOAL_PLAN: 0.03, BALANCE_QUERY: 0.03, EXECUTE_LEND: 0.025, EXECUTE_BORROW: 0.025,
   PORTFOLIO_ANALYSIS: 0.0, MARKET_OVERVIEW: 0.0, ASSET_ANALYSIS: -0.045, NAVIGATE: -0.02,
@@ -570,7 +617,31 @@ const COMPOUND_PATTERNS = [
   { leg: 2, intent: 'EXECUTE_BRIDGE', score: 0.76, test: /((بعد از (خرید|سواپ|تبدیل)|بعدش|سپس|و بعد|بعد|then|after ?that)[^\n]{0,24})?\s*(و\s*)?(به\s+|روی\s+|بریز?د?\s*(روی|به)?\s+|ببر\s*(به|روی)?\s*|منتقل\s*(به|روی)?\s*|پل\s*بزن|bridge\s*(to)?\s*)(arbitrum|arbi\b|base\b|polygon|matic|optimism|bnb chain|bsc\b|avalanche|پل\b|bridge|شبکه)/i },
   { leg: 2, intent: 'EXECUTE_LEND', score: 0.68, test: /(بعد از (خرید|سواپ)|then|سپس).{0,40}(لند|وام بده|supply)/i }
 ];
+/*
+ * A COMPARISON IS NOT A COMMAND.
+ *
+ * The compound patterns are loose on purpose — «برو به شبکه» and
+ * «منتقل کن به ...» appear at the end of ordinary sentences, and the
+ * connector is optional. But that looseness also catches a QUESTION:
+ *
+ *   «کدام پل برای انتقال بیت‌کوین به شبکهٔ پالیگان بهتر است؟»
+ *
+ * contains «انتقال ... به شبکه», so the bridge leg fires and the
+ * sentence is read as «buy, then bridge». It is not a command at all —
+ * the user is asking WHICH bridge, which is a comparison.
+ *
+ * The comparison words are the tell. A sentence that asks «کدام»,
+ * «بهتر», «ارزان‌تر» or «which/best/cheapest» is asking the product to
+ * CHOOSE, and a choice is never a leg of a two-step execution.
+ *
+ * The guard is here, in the compound detector, rather than in each
+ * pattern: it is a property of the sentence, not of one verb.
+ */
+const COMPARISON_QUESTION = /(کدام|کدوم|چه\s*پل|چند\s*پل|بهتر(?:ین)?|ارزان(?:تر|‌تر)?|سریع(?:تر|‌تر)?|کم\s*هزینه|کم\s*ریسک|رتبه|مقایسه|which|what|best|cheapest|fastest|safest|compare|rank)/i;
+
 function detectCompound(text) {
+  /* A comparison asks for a choice; a choice is not an execution leg. */
+  if (COMPARISON_QUESTION.test(text)) return [];
   return COMPOUND_PATTERNS.filter((p) => p.test.test(text)).map(({ leg, intent, score }) => ({ leg, intent, score }));
 }
 

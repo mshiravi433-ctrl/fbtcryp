@@ -84,6 +84,7 @@ import { fiFlags } from './flags.js';
 import { createFiRouter, setLendingProvider } from './router.js';
 import { setGlobalIntelProvider } from '../ci/globalIntelBridge.js';
 import { setFitProvider, setMacroGraphProvider, setScenarioProvider } from '../ci/fitBridge.js';
+import { setRouteProvider, adaptRoutesForIntelligence } from '../ci/routeBridge.js';
 
 export const FI_ROOT_SCHEMA = 'fbt.fi.composition-root.v1';
 
@@ -888,7 +889,120 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
      of which the brain passes in. */
   setScenarioProvider((owner, opts = {}) => goalScenarios.scenariosFor(owner, opts));
 
+  /* The LIVE route source (path 14).
+   *
+   * The route-intelligence engine was complete and dark: it ranked
+   * candidate routes across five honest dimensions, and it had no
+   * customers because it refused to dial providers itself. This is the
+   * missing half — one call to the deployment's existing route provider
+   * (the same LI.FI endpoint the wallet's own route list already uses),
+   * adapted into the engine's dimension vocabulary.
+   *
+   * The import is DYNAMIC on purpose. `server/crossChain.js` reaches the
+   * quote/record layer, and importing it eagerly would put it on the
+   * cold-start path of every serverless instance for a feature that is
+   * asked for rarely. It is loaded the first time a route is actually
+   * needed, and then cached by the module system.
+   */
+  setRouteProvider(async (owner, opts = {}) => {
+    const request = opts?.request || {};
+    const fromChain = request.fromChain ?? request.fromChainId ?? null;
+    const toChain = request.toChain ?? request.toChainId ?? null;
+    const fromToken = request.fromToken ?? request.fromTokenAddress ?? null;
+    const toToken = request.toToken ?? request.toTokenAddress ?? null;
+    const fromAmount = request.fromAmount ?? request.amount ?? null;
+    /* A route plan without a transfer to plan is not a failed plan — it
+       is a question that was never asked. The brain turns this into an
+       honest sentence («which transfer?») rather than an error. */
+    if (fromChain == null || toChain == null || !fromToken || !toToken || !fromAmount) {
+      return {
+        ok: false,
+        code: 'ROUTE_REQUEST_INCOMPLETE',
+        detail: 'a route plan needs a source chain, a destination chain, both tokens and an amount',
+        routes: [],
+        request: null,
+        source: null
+      };
+    }
+    let getRoutes;
+    try {
+      ({ getRoutes } = await import('../crossChain.js'));
+    } catch (err) {
+      return {
+        ok: false,
+        code: 'ROUTE_SOURCE_UNAVAILABLE',
+        detail: String(err?.message || err).slice(0, 160) || null,
+        routes: [],
+        request: null,
+        source: null
+      };
+    }
+    const quoted = await getRoutes({
+      fromChain,
+      toChain,
+      fromToken,
+      toToken,
+      fromAmount: String(fromAmount),
+      fromAddress: request.fromAddress || undefined,
+      toAddress: request.toAddress || undefined,
+      slippage: request.slippage ?? undefined
+    }, { record: false });
+    if (!quoted?.ok) {
+      return {
+        ok: false,
+        code: quoted?.code || 'ROUTE_QUOTE_FAILED',
+        detail: quoted?.detail || null,
+        routes: [],
+        request: null,
+        source: 'lifi'
+      };
+    }
+    return {
+      ok: true,
+      routes: adaptRoutesForIntelligence(quoted.routes || [], { request }),
+      request: {
+        fromChain: String(fromChain),
+        toChain: String(toChain),
+        fromToken: String(fromToken),
+        toToken: String(toToken),
+        amountUsd: num(request.amountUsd)
+      },
+      source: quoted.provider || 'lifi',
+      at: Date.now()
+    };
+  });
+
+  mountedRoot = fi;
+
   return fi;
+}
+
+/**
+ * Rank live route candidates for one owner.
+ *
+ * This is the FIOs-side entry point the brain's route bridge calls. It is
+ * a module-level function rather than a method on `fi` because the bridge
+ * holds a lazy reference to the ROOT, not to an instance — the ordering
+ * constraint (the brain is built before `fios`) means it cannot hold an
+ * instance at construction time.
+ *
+ * The last mounted root wins. That is the same rule every provider slot
+ * in this file follows, and it is what makes the root swappable in a
+ * test without a global mutable instance.
+ */
+let mountedRoot = null;
+
+/** Rank the candidates with the mounted engine, or say why it cannot. */
+export async function routeIntelligenceForOwner(owner, { request = {}, routes = [], correlationId = null } = {}) {
+  const root = mountedRoot;
+  if (!root?.routeIntelligence?.plan) {
+    return {
+      ok: false,
+      code: 'ROUTE_ENGINE_NOT_MOUNTED',
+      detail: 'the route-intelligence engine is not mounted in this process'
+    };
+  }
+  return root.routeIntelligence.plan(owner, { request, routes, correlationId, persist: true });
 }
 
 /** The honest one-liner for /health: which financial inputs are readable

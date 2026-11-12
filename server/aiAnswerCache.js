@@ -80,6 +80,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { blobConfigured as durableStoreConfigured } from './blobCache.js';
 
 export const AI_CACHE_SCHEMA = 'fbt.ai-answer-cache.v1';
 export const AI_CACHE_VERSION = '1.0.0';
@@ -122,8 +123,69 @@ const MAX_ENTRIES = Math.max(50, Number(process.env.AI_CACHE_MAX_ENTRIES) || 500
 /** What fraction of the ceiling we evict down to when it is crossed. */
 const EVICT_TO = 0.8;
 
-/** The store. One Map, one instance, no persistence. */
+/**
+ * The store. One Map, one instance — plus a DURABLE tier behind it.
+ *
+ * The Map alone is the reason this cache never did anything in
+ * production. On Vercel every request is a fresh lambda, so an in-memory
+ * Map is empty when the turn starts, and a question asked twice costs
+ * two full collaborations — five provider calls each on the `:free`
+ * tier, whose whole daily budget is fifty.
+ *
+ * So the store is now two tiers:
+ *
+ *   · the Map — fast, and the only tier when no durable backend exists;
+ *   · `store.js` — Blob-backed, and therefore SHARED between lambdas.
+ *
+ * The durable tier is opt-in by configuration, because a cache that
+ * silently writes every answer to a metered store has a bill, and a
+ * cache that silently does not persist has no value on a serverless
+ * deployment. `AI_ANSWER_CACHE_DURABLE=1` turns it on; the default
+ * follows the deployment's own durable-store configuration, which is
+ * the honest default: a deployment that has a durable store configured
+ * wants its cache to be durable too.
+ */
 const store = new Map();
+
+/** The durable key namespace. It is namespaced so it cannot collide. */
+const DURABLE_PREFIX = 'ai-cache/v1/';
+
+/** Is the durable tier on? */
+function durableEnabled(env = process.env) {
+  const raw = String(env?.AI_ANSWER_CACHE_DURABLE ?? 'auto').trim().toLowerCase();
+  if (raw === '0' || raw === 'off' || raw === 'false' || raw === 'no') return false;
+  if (raw === '1' || raw === 'on' || raw === 'true' || raw === 'yes') return true;
+  /* 'auto': follow the deployment's own durable store. */
+  return durableStoreConfigured();
+}
+
+/** Read one entry from the durable tier. Never throws. */
+async function durableGet(key) {
+  if (!durableEnabled()) return null;
+  try {
+    const { storeGet } = await import('./store.js');
+    const row = await storeGet(`${DURABLE_PREFIX}${key}`, null);
+    if (!row || typeof row !== 'object') return null;
+    if (row.expires && Date.now() > row.expires) return null;
+    return row.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Write one entry to the durable tier. Never throws. */
+async function durableSet(key, value, ttlMs) {
+  if (!durableEnabled()) return false;
+  const ttl = Number(ttlMs);
+  if (!Number.isFinite(ttl) || ttl <= 0) return false;
+  try {
+    const { storeSet } = await import('./store.js');
+    await storeSet(`${DURABLE_PREFIX}${key}`, { value, expires: Date.now() + ttl }, ttl);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** In-flight producers, so two identical questions do not both call a model. */
 const inflight = new Map();
@@ -347,6 +409,29 @@ export async function withAiAnswerCache(key, ttlMs, producer, opts = {}) {
   if (hit) {
     return { value: { ...hit, cached: true }, cached: true, stale: false };
   }
+  /*
+   * The DURABLE tier, and this is the line that makes the cache worth
+   * having on a serverless deployment.
+   *
+   * The Map above is empty on a fresh lambda, so without this read the
+   * same question asked twice costs two full collaborations — five
+   * provider calls each, on a tier whose whole daily budget is fifty.
+   * The durable tier is shared between instances, so the second lambda
+   * finds the first lambda's answer.
+   *
+   * The read is best-effort and never throws: a cache that breaks the
+   * turn when its backend is unreachable would be worse than no cache.
+   */
+  if (!opts.skipDurable) {
+    const durable = await durableGet(key);
+    if (durable) {
+      stats.hits += 1;
+      /* Warm the local tier too, so the rest of this instance's turns
+         find it without another round trip. */
+      aiAnswerCacheSet(key, durable, ttlMs || AI_CACHE_TTL_MS.RECENT);
+      return { value: { ...durable, cached: true }, cached: true, stale: false };
+    }
+  }
   if (inflight.has(key)) {
     const value = await inflight.get(key);
     return { value: { ...value, cached: true }, cached: true, stale: false };
@@ -356,10 +441,24 @@ export async function withAiAnswerCache(key, ttlMs, producer, opts = {}) {
   try {
     const value = await p;
     aiAnswerCacheSet(key, value, ttlMs);
+    /* And write it where the next lambda can find it. */
+    if (!opts.skipDurable) await durableSet(key, value, ttlMs);
     return { value, cached: false, stale: false };
   } finally {
     inflight.delete(key);
   }
+}
+
+/**
+ * Write one turn's answer to the durable tier.
+ *
+ * Kept separate from the read path so the TTL decision — which needs the
+ * plan's freshness verdict — lives next to the plan that produced it. It
+ * is exported so the collaboration layer can write the answer with the
+ * TTL it earned, once the plan is in hand.
+ */
+export async function aiAnswerCachePersist(key, value, ttlMs) {
+  return durableSet(key, value, ttlMs);
 }
 
 /**

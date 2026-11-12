@@ -182,6 +182,33 @@ function makeHeadline({ kind, findings, intent, locale, risk }) {
       ? `${asset.asset} اکنون ${fmtPrice(asset.price, fa)} دلار است؛ تغییر ۲۴ ساعت ${pctStr(asset.change24hPct)}${asset.volatilityPct != null ? `، نوسان روزانه ${pctStr(asset.volatilityPct)}` : ''}${asset.fundingAprPct != null ? `، funding سالانه ${pctStr(asset.fundingAprPct)}` : ''}${sig}${news}.`
       : `${asset.asset} is ${fmtPrice(asset.price, fa)} USD now; 24h ${pctStr(asset.change24hPct)}${asset.volatilityPct != null ? `, daily volatility ${pctStr(asset.volatilityPct)}` : ''}${asset.fundingAprPct != null ? `, ${pctStr(asset.fundingAprPct)}% annualised funding` : ''}${sig ? `, technical signal ${dirLabel(asset.signal.direction, fa)}` : ''}${news}.`;
   }
+  /*
+   * The route comparison (path 14).
+   *
+   * A route answer has to carry a COST, a TIME and a RISK, and it has to
+   * say that it is advisory — the ranking compares the provider's quotes,
+   * and the execution path re-quotes with a real address before anything
+   * moves. A headline that named only the winning route would be a
+   * recommendation the reader cannot audit; one that named the cost and
+   * the time and the unread dimensions can be.
+   */
+  const route = by('route-intelligence');
+  if (route && intentType === 'ROUTE_INTELLIGENCE' && route.bestRoute) {
+    const b = route.bestRoute;
+    const cost = b.totalCostUsd != null ? `${fa ? 'هزینهٔ ' : 'cost '}${fmtUsd(b.totalCostUsd, fa)}` : (fa ? 'هزینه خوانده نشد' : 'cost unread');
+    const time = b.estimatedSeconds != null
+      ? `${fa ? 'در حدود ' : 'in ~'}${fmtNum(Math.round(Number(b.estimatedSeconds) / 60), fa)}${fa ? ' دقیقه' : ' min'}`
+      : (fa ? 'زمان خوانده نشد' : 'time unread');
+    const risk = b.failureProbabilityPct != null
+      ? `${fa ? 'ریسک شکست ' : 'failure risk '}${fmtNum(b.failureProbabilityPct, fa)}٪`
+      : (fa ? 'ریسک خوانده نشد' : 'risk unread');
+    const unknown = Array.isArray(b.unknownDimensions) && b.unknownDimensions.length
+      ? (fa ? ` — ${b.unknownDimensions.length} بُعد ناخواندنی، پس برتری تأییدنشده است` : ` — ${b.unknownDimensions.length} dimension(s) unread, so the margin is unverified`)
+      : '';
+    return fa
+      ? `از ${fmtNum(route.routeCount ?? 0, fa)} مسیر زنده، بهترین گزینه ${b.tool || b.routeId || '—'} با ${cost} و ${time} و ${risk}${unknown}. این فقط مشاوره است؛ مسیر اجرا پیش از انتقال دوباره قیمت می‌گیرد.`
+      : `Of ${fmtNum(route.routeCount ?? 0, fa)} live route(s), the best is ${b.tool || b.routeId || '—'} with ${cost}, ${time} and ${risk}${unknown}. Advisory only — the execution path re-quotes before anything moves.`;
+  }
   const overview = by('market-overview');
   if (overview && intentType === 'MARKET_OVERVIEW') {
     const b = overview.breadth || {};
