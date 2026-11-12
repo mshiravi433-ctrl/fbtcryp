@@ -714,6 +714,7 @@ export function lendingRouter() {
         explorer: chain.explorer || null,
         protocols: ['aave-v3'],
         oracle: 'aave-oracle',
+        family: 'EVM',
         enabled: Boolean(AAVE_V3_POOLS[chainId]),
         pool: AAVE_V3_POOLS[chainId]
       };
@@ -727,6 +728,17 @@ export function lendingRouter() {
         explorer: 'https://solscan.io',
         protocols: ['kamino-klend'],
         oracle: 'kamino-oracle',
+        /*
+         * The family is not decoration. This registry used to be implicitly
+         * EVM-only, and every consumer could assume a `0x…` pool. Once the
+         * Solana/Kamino market was wired, `pool` became a base58 program
+         * address on a chain id that is not a real EVM network — and a
+         * caller that validates `^0x[0-9a-fA-F]{40}$` (or hands the pool to
+         * an ABI encoder) has no way to tell the two rows apart except by
+         * sniffing the string. `family` states the distinction the same way
+         * server/crossChain.js and src/services/cross-chain/core.js do.
+         */
+        family: 'SVM',
         enabled: true,
         pool: '7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF'
       }],

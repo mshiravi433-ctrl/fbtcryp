@@ -3946,23 +3946,6 @@
         "d": "确切的费用拆分会在确认前显示，整笔订单由本应用构建并做风控检查 — 然后由你自己的钱包签名。本应用绝不保管你的资金或密钥。"
       }
     },
-    "banner": {
-      "eyebrow": "Non-Custodial Derivatives · Direct Wallet Settlement",
-      "modeSpot": "Spot Swap",
-      "modePerp": "Perpetual Desk",
-      "modeDydx": "dYdX Orderbook",
-      "modeOnchain": "On-Chain Engine",
-      "statMarkets": "Active Markets",
-      "statBtc": "BTC Benchmark",
-      "statMaxLev": "Max Leverage",
-      "statMaxLevVal": "Up to 50×",
-      "statCustody": "Custody Model",
-      "statCustodyVal": "Self-Custody",
-      "liveFeed": "Live Oracle & Venue Feed",
-      "syncingFeed": "Syncing Market Feed",
-      "openTerminal": "Pro Terminal",
-      "viewPairs": "Market Pairs"
-    },
     "subtabs": {
       "pairsHint": "Quick scan & instant order sheet",
       "terminalHint": "Live chart, depth book, tape & risk"

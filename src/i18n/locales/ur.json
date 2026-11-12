@@ -3949,23 +3949,6 @@
         "d": "درست تقسیم تصدیق سے پہلے دکھایا جاتا ہے، اور پوری آرڈر اسی ایپ میں بن کر رسک چیک سے گزرتی ہے — پھر آپ کے اپنے والیٹ سے دستخط ہوتی ہے۔ یہ ایپ کبھی آپ کے پیسے یا کلیدیں نہیں رکھتی۔"
       }
     },
-    "banner": {
-      "eyebrow": "Non-Custodial Derivatives · Direct Wallet Settlement",
-      "modeSpot": "Spot Swap",
-      "modePerp": "Perpetual Desk",
-      "modeDydx": "dYdX Orderbook",
-      "modeOnchain": "On-Chain Engine",
-      "statMarkets": "Active Markets",
-      "statBtc": "BTC Benchmark",
-      "statMaxLev": "Max Leverage",
-      "statMaxLevVal": "Up to 50×",
-      "statCustody": "Custody Model",
-      "statCustodyVal": "Self-Custody",
-      "liveFeed": "Live Oracle & Venue Feed",
-      "syncingFeed": "Syncing Market Feed",
-      "openTerminal": "Pro Terminal",
-      "viewPairs": "Market Pairs"
-    },
     "subtabs": {
       "pairsHint": "Quick scan & instant order sheet",
       "terminalHint": "Live chart, depth book, tape & risk"

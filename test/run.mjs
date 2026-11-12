@@ -2702,12 +2702,33 @@ console.log('\n▸ checking the Buy / Sell wizard action row…');
      it from a regex that expects `;` then whitespace. */
   const css = readFileSync('src/styles/buy-sell.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 
-  /* Last declaration wins in CSS: collect the final body for a selector. */
+  /*
+   * MERGE the declarations, do not take the last block wholesale.
+   *
+   * "Last rule wins" is only true PER PROPERTY. This returned the last block
+   * that mentions `.bsw-next`, which is a `@media (prefers-reduced-motion)`
+   * override carrying nothing but `transition: none` — so `flex`, `width` and
+   * `min-width` all read as absent, and six checks reported the layout as
+   * broken when the base rule is exactly right (`flex: 1 1 0; width: auto`).
+   *
+   * Declarations are merged in source order instead, later values overriding
+   * earlier ones property by property, which is what a browser does for the
+   * unconditional rules.
+   */
   const bodyOf = (selector) => {
     const re = new RegExp(`\\${selector}\\s*(?:,[^{]*)?\\{([^}]*)\\}`, 'g');
-    let m, last = null;
-    while ((m = re.exec(css))) last = m[1];
-    return last || '';
+    const merged = new Map();
+    let m;
+    while ((m = re.exec(css))) {
+      for (const part of m[1].split(';')) {
+        const idx = part.indexOf(':');
+        if (idx === -1) continue;
+        const prop = part.slice(0, idx).trim().toLowerCase();
+        const value = part.slice(idx + 1).trim();
+        if (prop) merged.set(prop, value);
+      }
+    }
+    return [...merged.entries()].map(([k, v]) => `${k}: ${v}`).join('; ');
   };
   const decl = (body, prop) => {
     const m = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`, 'i').exec(body);
