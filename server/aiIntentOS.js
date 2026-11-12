@@ -1183,11 +1183,23 @@ router.get('/gateway/health', async (_req, res) => {
    */
   let quota = null;
   try {
-    const { readQuotaForFleet, turnsRemaining } = await import('./aiQuotaBudget.js');
+    const { readQuotaForFleet, turnsRemaining, quotaExhausted } = await import('./aiQuotaBudget.js');
     const ids = getAvailableProviders().map((p) => p.id);
     quota = await readQuotaForFleet(ids);
     quota.turnsRemaining = turnsRemaining(quota, 5);
     quota.turnCostAssumption = 5;
+    /*
+     * Whether the day is SPENT is a different question from how much of
+     * it is left, and the operator needs both. «3 of 50 left» is a
+     * warning; «the day's provider allowance is spent» is a fact, and
+     * it is the fact that explains why the turns have gone thin.
+     *
+     * The check reads the same counter the turns read, so the health
+     * route and the turns cannot disagree about the day.
+     */
+    const exhausted = await quotaExhausted(ids);
+    quota.exhausted = exhausted.exhausted === true;
+    quota.exhaustedReason = exhausted.exhausted ? exhausted.reason : null;
   } catch {
     quota = null;
   }

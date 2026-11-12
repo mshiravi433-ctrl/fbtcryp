@@ -18,6 +18,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { runCollaborativeAnalysis } from '../../server/aiCollaboration.js';
 import {
@@ -241,4 +242,33 @@ test('the turn reports the exhaustion when the day is spent', async () => {
     if (previous === undefined) delete process.env.AI_MAX_PROVIDER_CALLS;
     else process.env.AI_MAX_PROVIDER_CALLS = previous;
   }
+});
+
+/* ─── 5. THE HEALTH ROUTE SEES THE SAME DAY ────────────────────────────── */
+
+test('the health route publishes whether the day is spent', () => {
+  /*
+   * The operator needs two different facts and they are not the same
+   * fact: «3 of 50 left» is a warning, and «the day's allowance is
+   * spent» is the fact that explains why the turns have gone thin.
+   *
+   * The health route reads the SAME counter the turns read, so the two
+   * cannot disagree about the day.
+   */
+  const route = readFileSync(
+    new URL('../../server/aiIntentOS.js', import.meta.url),
+    'utf8'
+  );
+  assert.match(route, /quotaExhausted/, 'the health route asks the same question the turn asks');
+  assert.match(route, /quota\.exhausted = exhausted\.exhausted/, 'and publishes the answer, not the raw check');
+  assert.match(route, /exhaustedReason/, 'and says WHY, so the operator does not have to guess');
+});
+
+test('the health route keeps publishing the headroom as well', () => {
+  const route = readFileSync(
+    new URL('../../server/aiIntentOS.js', import.meta.url),
+    'utf8'
+  );
+  assert.match(route, /readQuotaForFleet/, 'the headroom is still published');
+  assert.match(route, /turnsRemaining/, 'and the number of turns it buys');
 });

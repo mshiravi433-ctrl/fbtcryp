@@ -1465,8 +1465,15 @@ number it cannot trust.
 ```json
 {"quota":{"day":"2026-11-12","used":18,"limit":50,"left":32,
   "turnsRemaining":6,"turnCostAssumption":5,
+  "exhausted":false,"exhaustedReason":null,
   "tightest":{"providerId":"openrouterfree","left":32,"limit":50}}}
 ```
+
+**Two facts, not one.** How much of the day is LEFT is a warning; whether
+the day is SPENT is the fact that explains why the turns have gone thin.
+The health route publishes both, and it reads the **same counter the
+turns read**, so the operator and the deployment cannot disagree about
+the day.
 
 **What the sixth call is, and why the default ceiling stayed at six.**
 The obvious move was to lower the turn's default ceiling from six to
