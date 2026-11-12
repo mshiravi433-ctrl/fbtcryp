@@ -14,6 +14,8 @@ import AnimatedNumber from '../components/AnimatedNumber';
 import Sparkline from '../components/Sparkline';
 import { useChart, useCoin, useGlobalStats, useMarkets, usePoll } from '../hooks/useMarket';
 import { lastForecastRead } from '../lib/kronosLocal/client.js';
+import { createScoreTracker } from '../lib/signalMomentum.js';
+import { scenarioFan } from '../lib/scenarioFan.js';
 import { analyze, projectRange } from '../lib/ai';
 import { fmtPct, fmtPrice, fmtCompact, timeAgo } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
@@ -1214,6 +1216,49 @@ function PortfolioCard({ impact, embedded = false }) {
             <div className="sic-stat"><div className="k">{t('signals.intel.portfolio.concentration')}</div><div className="v">{impact.concentrationPct}%</div></div>
             <div className="sic-stat"><div className="k">{t('signals.intel.portfolio.position')}</div><div className="v">{t(`signals.intel.portfolio.${impact.hasPosition ? 'yes' : 'no'}`)}</div></div>
           </div>
+          {/*
+            * THE PRECISE PART: what this signal can actually cost, in the
+            * reader's own book. Every figure is null when the input it needs
+            * was not measured, and the block simply does not render then — an
+            * em-dash row is worse than an absent one.
+            */}
+          {(impact.riskUsd != null || impact.scenarioLossPct != null) && (
+            <div className="sic-key-value-list sic-onchain-list">
+              {impact.valueUsd != null && (
+                <div><span>{t('signals.intel.portfolio.valueUsd')}</span><b className="mono">${fmtCompact(impact.valueUsd)}</b></div>
+              )}
+              {impact.riskUsd != null && (
+                <div>
+                  <span>{t('signals.intel.portfolio.riskUsd')}</span>
+                  <b className="mono down">${fmtCompact(impact.riskUsd)}</b>
+                </div>
+              )}
+              {impact.riskPctOfBook != null && (
+                <div>
+                  <span>{t('signals.intel.portfolio.riskOfBook')}</span>
+                  <b className={`mono ${impact.riskPctOfBook >= 3 ? 'down' : ''}`}>{impact.riskPctOfBook}%</b>
+                </div>
+              )}
+              {impact.scenarioLossPct != null && (
+                <div>
+                  <span>{t('signals.intel.portfolio.scenarioLoss')}</span>
+                  <b className="mono down">−{impact.scenarioLossPct}%</b>
+                </div>
+              )}
+              {impact.stopLossUsd != null && (
+                <div>
+                  <span>{t('signals.intel.portfolio.stopCost')}</span>
+                  <b className="mono down">${fmtCompact(impact.stopLossUsd)}</b>
+                </div>
+              )}
+              {impact.bookAfterRiskUsd != null && (
+                <div>
+                  <span>{t('signals.intel.portfolio.bookAfterRisk')}</span>
+                  <b className="mono">${fmtCompact(impact.bookAfterRiskUsd)}</b>
+                </div>
+              )}
+            </div>
+          )}
           <div className="sic-note">
             {impact.notes.map((n) => t(`signals.intel.portfolio.notes.${n}`)).join(' ')}
           </div>
@@ -1437,7 +1482,7 @@ function SelectedSignalCard({ coin, signal, analysis, series, scanning, watched,
  * series was too short simply shows fewer rows — never a zero, never a dash
  * pretending to be a measurement.
  * ──────────────────────────────────────────────────────────────────────────── */
-function behaviorRows(behavior, t, tapeEdge = null, consensus = null) {
+function behaviorRows(behavior, t, tapeEdge = null, consensus = null, acceleration = null) {
   if (!behavior) return [];
   const rows = [];
   const push = (key, label, value, tone = '') => {
@@ -1521,6 +1566,19 @@ function behaviorRows(behavior, t, tapeEdge = null, consensus = null) {
         'warn');
     }
   }
+  /*
+   * «شتاب سیگنال» — same list, one more row, and only when there is a real
+   * delta to report (a single sample is not an acceleration). The arrow is the
+   * direction of the MOVE of the score, not of the score itself: «the case is
+   * being built» and «the case is bullish» are different statements and the
+   * wording says which one this is.
+   */
+  if (acceleration && acceleration.state !== 'new' && acceleration.delta != null) {
+    const stateKey = acceleration.state;
+    const tone = stateKey === 'reversing' ? 'warn' : stateKey === 'fading' ? 'down' : stateKey === 'accelerating' ? 'up' : '';
+    push('accel', t('signals.accel.title'),
+      `${t(`signals.accel.state.${stateKey}`)} ${acceleration.delta > 0 ? '+' : ''}${acceleration.delta}`, tone);
+  }
   return rows;
 }
 
@@ -1535,6 +1593,7 @@ function SignalBreakdown({
   backtestInfo,
   tapeEdge,
   consensus,
+  acceleration,
   hasOnchain,
   onchainRows,
   behavior
@@ -1542,7 +1601,7 @@ function SignalBreakdown({
   const { t } = useTranslation();
   if (!analysis) return <div className="sic-insufficient">{t('signals.intel.card.insufficient')}</div>;
 
-  const behaviorRead = behaviorRows(behavior, t, tapeEdge, consensus);
+  const behaviorRead = behaviorRows(behavior, t, tapeEdge, consensus, acceleration);
 
   return (
     <div className="sic-breakdown">
@@ -1609,19 +1668,56 @@ function SignalBreakdown({
         <SignalSection
           id="scenarios"
           title={t('signals.scenarios.title')}
-          summary={`↑ ${scenarios.pctUp}% · ↓ ${scenarios.pctDown}%`}
+          summary={`↑ ${scenarios.pctUp ?? scenarios.up}% · ↓ ${scenarios.pctDown ?? scenarios.down}%`}
         >
           <div className="sic-scenario-track">
-            <motion.i initial={{ width: 0 }} animate={{ width: `${scenarios.pctUp}%` }} transition={{ duration: 0.7 }} className="up" />
-            <motion.i initial={{ width: 0 }} animate={{ width: `${scenarios.pctNeutral}%` }} transition={{ duration: 0.7 }} className="neutral" />
-            <motion.i initial={{ width: 0 }} animate={{ width: `${scenarios.pctDown}%` }} transition={{ duration: 0.7 }} className="down" />
+            <motion.i initial={{ width: 0 }} animate={{ width: `${scenarios.pctUp ?? scenarios.up}%` }} transition={{ duration: 0.7 }} className="up" />
+            <motion.i initial={{ width: 0 }} animate={{ width: `${scenarios.pctNeutral ?? scenarios.neutral}%` }} transition={{ duration: 0.7 }} className="neutral" />
+            <motion.i initial={{ width: 0 }} animate={{ width: `${scenarios.pctDown ?? scenarios.down}%` }} transition={{ duration: 0.7 }} className="down" />
           </div>
           <div className="sic-scenario-legend">
-            <span className="up">↑ {scenarios.pctUp}% {t('signals.scenarios.bullish')}</span>
-            <span className="faint">{scenarios.pctNeutral}% {t('signals.scenarios.neutral')}</span>
-            <span className="down">↓ {scenarios.pctDown}% {t('signals.scenarios.bearish')}</span>
+            <span className="up">↑ {scenarios.pctUp ?? scenarios.up}% {t('signals.scenarios.bullish')}</span>
+            <span className="faint">{scenarios.pctNeutral ?? scenarios.neutral}% {t('signals.scenarios.neutral')}</span>
+            <span className="down">↓ {scenarios.pctDown ?? scenarios.down}% {t('signals.scenarios.bearish')}</span>
           </div>
-          <div className="faint sic-panel-note">{t('signals.scenarios.hint', { n: scenarios.samples, d: horizon.days })}</div>
+          {/*
+            * WHAT CONDITIONING BOUGHT — or didn't. The conditional frequency and
+            * the unconditional one are printed side by side, plus the LOSS if
+            * the adverse half happens. A probability without its cost is a
+            * number that invites a bad decision; this pair is the whole point
+            * of the block.
+            */}
+          {scenarios.edgeUp != null && (
+            <div className="sic-key-value-list sic-onchain-list">
+              <div>
+                <span>{t('signals.scenarios.vsBase')}</span>
+                <b className="mono">
+                  <span className={scenarios.edgeUp >= 0 ? 'up' : 'down'}>{scenarios.edgeUp >= 0 ? '+' : ''}{scenarios.edgeUp}pp</span>
+                  {' / '}
+                  <span className={scenarios.edgeDown >= 0 ? 'up' : 'down'}>{scenarios.edgeDown >= 0 ? '+' : ''}{scenarios.edgeDown}pp</span>
+                </b>
+              </div>
+              {scenarios.lossPct != null && (
+                <div>
+                  <span>{t('signals.scenarios.costIfWrong', { d: horizon.days })}</span>
+                  <b className="mono down">{scenarios.lossPct}%</b>
+                </div>
+              )}
+              {scenarios.gainPct != null && (
+                <div>
+                  <span>{t('signals.scenarios.gainIfRight')}</span>
+                  <b className="mono up">+{scenarios.gainPct}%</b>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="faint sic-panel-note">
+            {t(scenarios.note === 'conditionalFrequency' ? 'signals.scenarios.conditioned' : 'signals.scenarios.hint', {
+              n: scenarios.samples,
+              d: horizon.days,
+              e: scenarios.effectiveN ?? scenarios.samples
+            })}
+          </div>
         </SignalSection>
       )}
 
@@ -2173,6 +2269,18 @@ export default function Signals() {
    * The cards and the early list therefore cannot disagree about a token's
    * indicators either — they share one measurement.
    */
+  /*
+   * ─── THE ACCELERATION TRACKER: ONE BOUNDED MAP, NO STORAGE ───────────────
+   * «موتور شتاب سیگنال‌ها» needs the last few scores per token, and nothing
+   * else. This is an in-memory factory capped at 40 coins × 6 samples, so a
+   * tab left open overnight holds at most 240 numbers — no localStorage, no
+   * serialisation, no request, and nothing to migrate. It resets on reload,
+   * which is the honest behaviour: a score from before a page reload was
+   * measured on data the page no longer holds.
+   */
+  const scoreTracker = useRef(null);
+  if (!scoreTracker.current) scoreTracker.current = createScoreTracker();
+
   const analysedRows = useMemo(() => {
     if (!coins?.length) return [];
     return coins.slice(0, 24).map((c) => safeCalc(() => {
@@ -2245,9 +2353,24 @@ export default function Signals() {
         smRead: smForCoin(row.coin)
           ? { signal: smForCoin(row.coin).signal, netUsd: smForCoin(row.coin).netFlowUsd, confidence: smForCoin(row.coin).confidence }
           : null,
+        /* Read BEFORE this poll's score is pushed — see the tracker note above
+           `analysedRows`. Passing it here keeps «acceleration» a statement
+           about history, not about the number being computed right now. */
+        scoreHistory: safeCalc(() => scoreTracker.current.samples(row.coin.id), []),
         now: Date.now()
       });
     })).filter(Boolean);
+    /*
+     * Record each measured score so the NEXT poll can read its acceleration.
+     * Done here, where the score is produced, so the history and the card can
+     * never disagree about what this token scored.
+     */
+    const at = Date.now();
+    for (const card of list) {
+      if (card?.status === 'READY' && card.coin?.id && Number.isFinite(Number(card.score))) {
+        safeCalc(() => scoreTracker.current.push(card.coin.id, card.score, at));
+      }
+    }
     return safeCalc(() => rankSignals(list), list);
   }, [analysedRows, pulse, smForCoin, btcSeries, marketRead]);
 
@@ -2525,16 +2648,10 @@ export default function Signals() {
       marketSeries: btcSeries,
       marketRead,
       smRead: smReadFor(coin),
+      scoreHistory: scoreTracker.current ? safeCalc(() => scoreTracker.current.samples(coin?.id), []) : [],
       now: Date.now()
     });
   }), [tab, globalSignals, coinId, coin, analysis, priceSeries, intel, smForCoin, pulse, tokenBehavior, btcSeries, marketRead, smReadFor]);
-
-  const portfolioImpactData = useMemo(
-    () => (selectedSignal?.status === 'READY'
-      ? safeCalc(() => portfolioImpact({ positions, priceMap, coin: selectedSignal.coin, classification: selectedSignal.classification }))
-      : null),
-    [selectedSignal, positions, priceMap]
-  );
 
   /* ── Early signals: momentum acceleration + flow/on-chain agreement ─────
         Market-wide (both tabs): every number comes from real market data. */
@@ -2700,10 +2817,70 @@ export default function Signals() {
     const half = (projection.high - projection.low) / 2;
     return Math.max(0.5, Math.min(10, (half / projection.mid) * 100));
   }, 2), [projection]);
-  const scenarios = useMemo(
-    () => (priceSeries.length ? safeCalc(() => scenarioSplit(priceSeries, horizon.days, bandPct)) : null),
-    [priceSeries, horizon.days, bandPct]
+  /*
+   * ─── SCENARIOS, CONDITIONED ON WHAT IS ACTUALLY HAPPENING ─────────────────
+   * `scenarioSplit` answers «how often did a horizon-sized move leave this
+   * band?» across ALL of the token's history — an unconditional base rate.
+   * `scenarioFan` asks the same question of the windows that LOOK LIKE NOW
+   * (technical state, tilted by the other three planes), so the three numbers
+   * reflect the present instead of the average of the past. The unconditional
+   * split is kept alongside as the benchmark: `edge` is the conditional minus
+   * the unconditional, which is the only honest way to show whether
+   * conditioning bought anything at all.
+   *
+   * Both are one pass over the series the page already holds, and the fan
+   * refuses to answer (`null`) when fewer than 24 windows or effective N < 12
+   * remain — a probability from six observations is not printed.
+   */
+  const scenarios = useMemo(() => {
+    if (!priceSeries.length) return null;
+    return safeCalc(() => {
+      const unconditional = scenarioSplit(priceSeries, horizon.days, bandPct);
+      const conditional = scenarioFan({
+        series: priceSeries,
+        horizon: horizon.days,
+        bandPct,
+        technical: analysis?.score ?? null,
+        behavior: tokenBehavior,
+        smartMoney: smReadFor(coin),
+        market: marketRead
+      });
+      if (!conditional) return unconditional;
+      return {
+        ...conditional,
+        /* The unconditional split, kept as the benchmark the conditional one
+           is measured against. */
+        base: unconditional
+          ? { pctUp: unconditional.pctUp, pctDown: unconditional.pctDown, pctNeutral: unconditional.pctNeutral }
+          : null,
+        edgeUp: unconditional ? Math.round((conditional.up - unconditional.pctUp) * 10) / 10 : null,
+        edgeDown: unconditional ? Math.round((conditional.down - unconditional.pctDown) * 10) / 10 : null
+      };
+    });
+  }, [priceSeries, horizon.days, bandPct, analysis?.score, tokenBehavior, smReadFor, coin, marketRead]);
+  const portfolioImpactData = useMemo(
+    () => (selectedSignal?.status === 'READY'
+      ? safeCalc(() => portfolioImpact({
+        positions,
+        priceMap,
+        coin: selectedSignal.coin,
+        classification: selectedSignal.classification,
+        /* The measured inputs that turn the impact from a size label into a
+           risk figure: the card's own 7-day volatility, the scenario fan's
+           adverse outcome, which way the call points, and its stop distance.
+           All four already exist by this point in the render — nothing here
+           triggers work. */
+        volatilityPct: selectedSignal.riskScore != null
+          ? (selectedSignal.horizons ?? []).find((h) => h.days === 7)?.volatilityPct ?? null
+          : null,
+        scenario: scenarios,
+        tradeDirection: selectedSignal.tradeDirection,
+        stopPct: selectedSignal.stopPct
+      }))
+      : null),
+    [selectedSignal, positions, priceMap, scenarios]
   );
+
   const invalidation = useMemo(() => safeCalc(() => {
     if (!priceSeries.length) return null;
     const price = priceSeries[priceSeries.length - 1];
@@ -2874,6 +3051,7 @@ export default function Signals() {
                       backtestInfo={backtestInfo}
                       tapeEdge={tapeEdge}
                       consensus={selectedSignal?.consensus ?? null}
+                      acceleration={selectedSignal?.acceleration ?? null}
                       hasOnchain={hasOnchain}
                       onchainRows={onchainRows}
                     />

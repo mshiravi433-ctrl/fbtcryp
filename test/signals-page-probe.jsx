@@ -721,6 +721,11 @@ export async function run(container) {
         ['signals.consensus', ['title', 'split']],
         ['signals.consensus.plane', ['technical', 'behavior', 'smartMoney', 'market']],
         ['signals.intel.early', ['sourcesAgree', 'sourcesConflict']],
+        /* «موتور شتاب سیگنال‌ها» + the conditioned scenario block. Both build
+           their keys at render time from values the engines produce. */
+        ['signals.accel', ['title']],
+        ['signals.accel.state', ['accelerating', 'fading', 'steady', 'reversing']],
+        ['signals.scenarios', ['vsBase', 'costIfWrong', 'gainIfRight', 'conditioned']],
         /* src/lib/signalEngine.js buildEvidence → EvidenceChips */
         ['signals.intel.early', ['momentum24Up', 'momentum24Down', 'trend7dUp', 'trend7dDown', 'rsiOversold', 'rsiOverbought', 'rsiNeutral', 'macdUp', 'macdDown', 'maBullish', 'maBearish', 'aboveMa20', 'belowMa20', 'bollingerLow', 'bollingerHigh', 'bollingerMid', 'liquidityActive', 'liquidityThin', 'holderSpread', 'marketSentimentUp', 'marketSentimentDown']],
         /* server/signalEngine.js scoreSolanaToken → RadarSection */
@@ -889,6 +894,17 @@ export async function run(container) {
           Boolean(consensusRow) && /technical|تکنیکال|فني|behaviour|رفتار|سلوك/i.test(consensusRow.textContent || ''));
         check('the consensus row leaks no raw i18n key',
           !/\bsignals\.consensus\b/.test(container.textContent || ''));
+
+        /*
+         * «شتاب سیگنال» and «سناریوهای احتمالی» must land in the surfaces that
+         * already exist. The acceleration row is deliberately absent on a
+         * first paint (one sample is not an acceleration) — what is asserted
+         * is that its absence is a MISSING ROW, not a raw key or a crash, and
+         * that the scenario block still renders its three-way split.
+         */
+        check('no raw acceleration or scenario key leaks',
+          !/\bsignals\.accel\b/.test(container.textContent || '')
+          && !/\bsignals\.scenarios\.(vsBase|costIfWrong|gainIfRight|conditioned)\b/.test(container.textContent || ''));
 
         /* AI analysis is a sibling tab inside the one selected-token box. */
         const detailTabs = [...container.querySelectorAll('.sic-detail-tabs button')];

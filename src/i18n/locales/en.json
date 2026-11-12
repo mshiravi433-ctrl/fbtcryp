@@ -3360,7 +3360,11 @@
       "bullish": "up",
       "neutral": "flat",
       "bearish": "down",
-      "hint": "From {{n}} similar {{d}}-day windows in this coin’s own history"
+      "hint": "From {{n}} similar {{d}}-day windows in this coin’s own history",
+      "vsBase": "Conditional vs base rate",
+      "costIfWrong": "Loss if the adverse half happens ({d}d)",
+      "gainIfRight": "Gain if the favourable half happens",
+      "conditioned": "Weighted over {n} historical windows; {e} look-alike windows effectively. A conditional frequency, not a forecast."
     },
     "invalidationBelow": "below now",
     "backtestHistory": "How this setup did before",
@@ -3690,10 +3694,20 @@
           "highConcentration": "Portfolio is highly concentrated.",
           "existingPositionUp": "You already hold this asset.",
           "noExistingPosition": "No existing position — signal adds diversification.",
-          "balanced": "Portfolio impact is balanced."
+          "balanced": "Portfolio impact is balanced.",
+          "riskLargeShare": "This signal can cost a large share of the book.",
+          "signalAgainstHolding": "The call points against a position you hold.",
+          "signalAgainstEntry": "The call is against entering here.",
+          "stopCostly": "The stop distance alone is a material cost for this position."
         },
         "local": "Computed locally from your app positions. Nothing was sent anywhere.",
-        "subtitle": "How the selected signal affects your current asset mix."
+        "subtitle": "How the selected signal affects your current asset mix.",
+        "valueUsd": "Position value",
+        "riskUsd": "Measured downside",
+        "riskOfBook": "Downside / book",
+        "scenarioLoss": "Loss if the adverse scenario happens",
+        "stopCost": "Loss if the stop is hit",
+        "bookAfterRisk": "Book after that downside"
       },
       "history": {
         "title": "SIGNAL HISTORY",
@@ -3824,6 +3838,15 @@
         "behavior": "Tape behaviour",
         "smartMoney": "Smart money",
         "market": "FBT Global + forecast"
+      }
+    },
+    "accel": {
+      "title": "Signal acceleration",
+      "state": {
+        "accelerating": "building ↑",
+        "fading": "fading ↓",
+        "steady": "steady ·",
+        "reversing": "reversed"
       }
     }
   },

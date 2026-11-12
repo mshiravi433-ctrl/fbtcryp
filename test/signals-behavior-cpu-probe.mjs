@@ -31,6 +31,9 @@ import { analyze } from '../src/lib/ai.js';
 import { backtest, tapeKindAt } from '../src/lib/backtest.js';
 import { computeSignalCard, computeEarlySignals, buildEvidence, MIN_EVIDENCE, classify, CLASS } from '../src/lib/signalEngine.js';
 import { readConsensus, PLANES } from '../src/lib/signalConsensus.js';
+import { createScoreTracker, readAcceleration, MAX_TRACKED, SAMPLES_PER_TOKEN } from '../src/lib/signalMomentum.js';
+import { scenarioFan, MIN_SAMPLES, MIN_EFFECTIVE } from '../src/lib/scenarioFan.js';
+import { portfolioImpact } from '../src/lib/signalEngine.js';
 import {
   forecastChangePct, rememberForecastRead, lastForecastRead, __resetForecastReadForTests
 } from '../src/lib/kronosLocal/client.js';
@@ -412,6 +415,138 @@ export default async function run() {
     /* The engine still refuses to invent entries: no series ⇒ nothing. */
     t('the reconciliation can never manufacture an early entry',
       computeEarlySignals({ entries: [{ coin: coinB, series: [1, 2, 3], analysis: null, smRead: { signal: 'ACCUMULATION', netUsd: 1e7 } }] }).length === 0);
+  }
+
+  /* ════════════ (A5) acceleration · scenario fan · portfolio risk ═════════ */
+
+  /*
+   * «موتور شتاب سیگنال‌ها». A score's LEVEL and its ACCELERATION are different
+   * facts, and the module must not confuse them: the same +20 is «being built»
+   * if it came from +6 and «being dismantled» if it came from +34.
+   */
+  {
+    const tracker = createScoreTracker();
+    const base = 1_700_000_000_000;
+    [6, 18, 20].forEach((v, i) => tracker.push('bitcoin', v, base + i * 45_000));
+    const building = readAcceleration(tracker.samples('bitcoin'));
+    [40, 28, 20].forEach((v, i) => tracker.push('ethereum', v, base + i * 45_000));
+    const fading = readAcceleration(tracker.samples('ethereum'));
+    t('the same level reads as building or fading depending on where it came from',
+      building.currentScore === 20 && fading.currentScore === 20
+      && building.state === 'accelerating' && fading.state === 'fading'
+      && building.delta > 0 && fading.delta < 0);
+
+    /* Normalised across uneven polls: an un-normalised delta would read as
+       «exploding» after a paused tab. */
+    tracker.push('solana', 10, base);
+    tracker.push('solana', 20, base + 60 * 60_000);
+    const slow = readAcceleration(tracker.samples('solana'));
+    t('acceleration is normalised over real elapsed time, not per tick',
+      slow.delta === 10 && Math.abs(slow.perHour - 10) < 0.5 && slow.spanMin === 60);
+
+    /* A sign flip is a REVERSAL — and a reversal may only ever lower
+       confidence, whatever the new direction is. */
+    [30, 34, -12].forEach((v, i) => tracker.push('bnb', v, base + i * 45_000));
+    const flipped = readAcceleration(tracker.samples('bnb'));
+    t('a sign flip is reported as a reversal and never lifts confidence',
+      flipped.state === 'reversing' && flipped.confidenceNudge < 0);
+
+    t('one sample is not an acceleration', readAcceleration([{ score: 12, at: base }]).state === 'new'
+      && readAcceleration([]).state === 'new' && readAcceleration(null).state === 'new');
+    t('the confidence nudge is bounded to ±4 points',
+      [building, fading, flipped].every((a) => Math.abs(a.confidenceNudge) <= 4));
+    t('the tracker is bounded in coins and samples',
+      (() => {
+        const small = createScoreTracker({ maxCoins: 3, maxSamples: 4 });
+        for (let i = 0; i < 10; i += 1) small.push(`c${i}`, i, base + i);
+        return small.size <= 3 && small.samples('c9').length <= 4
+          && MAX_TRACKED === 40 && SAMPLES_PER_TOKEN === 6;
+      })());
+  }
+
+  /*
+   * «سناریوهای احتمالی». The fan must be a CONDITIONAL frequency over real
+   * history: it can re-weight windows but never invent a return, it must
+   * refuse thin samples, and a bearish state must shift weight toward the
+   * downside without changing the underlying distribution.
+   */
+  {
+    const series = seriesOf(220, (i) => 100 * (1 + Math.sin(i / 11) * 0.08 + i * 0.0008));
+    const bear = scenarioFan({
+      series, horizon: 7, bandPct: 1.5,
+      technical: -45, behavior: { score: -50, parts: 3 },
+      smartMoney: { netUsd: -30_000_000 }, market: { mcapChange: -2.4, breadth: 0.3, forecast: -1.2 }
+    });
+    const bull = scenarioFan({
+      series, horizon: 7, bandPct: 1.5,
+      technical: 45, behavior: { score: 50, parts: 3 },
+      smartMoney: { netUsd: 30_000_000 }, market: { mcapChange: 2.4, breadth: 0.72, forecast: 1.2 }
+    });
+    t('a bearish state moves the conditional probability toward the downside',
+      bear && bull && bear.up < bull.up && bear.lossPct < bull.lossPct);
+    t('the fan reports how many windows actually contributed',
+      bear.effectiveN > 0 && bear.effectiveN <= bear.samples && bear.samples >= MIN_SAMPLES);
+    /* 40 prices produce 33 overlapping 7-bar windows — mostly the same week
+       shifted by one — so they are NOT 33 independent observations. */
+    t('the fan refuses a series too short to condition on',
+      scenarioFan({ series: series.slice(0, 40), horizon: 7, bandPct: 1.5 }) === null
+      && scenarioFan({ series: series.slice(0, 100), horizon: 30, bandPct: 1.5 }) === null);
+    t('a probability is never printed without its cost',
+      bear.down > 0 && bear.lossPct != null && bear.lossPct < 0 && bull.gainPct > 0);
+    t('the three outcomes are a distribution, not three guesses',
+      Math.abs((bear.up + bear.neutral + bear.down) - 100) < 0.3
+      && Math.abs((bull.up + bull.neutral + bull.down) - 100) < 0.3);
+    t('the fan is deterministic', JSON.stringify(
+      scenarioFan({ series, horizon: 7, bandPct: 1.5, technical: -45 })
+    ) === JSON.stringify(scenarioFan({ series, horizon: 7, bandPct: 1.5, technical: -45 })));
+  }
+
+  /*
+   * «تاثیر بر پرتفوی». The impact must be a RISK figure, not a size label: a
+   * small position in a violent asset is not «LOW», a large quiet one is not
+   * automatically «HIGH», and a SELL call against a holding must say so.
+   */
+  {
+    const book = [{ coinId: 'bitcoin', qty: 1 }, { coinId: 'ethereum', qty: 10 }];
+    const prices = { bitcoin: 60_000, ethereum: 3_000 };
+    const againstHolding = portfolioImpact({
+      positions: book, priceMap: prices, coin: { id: 'bitcoin' },
+      classification: 'SELL', volatilityPct: 12,
+      scenario: { lossPct: -6.2, gainPct: 5.1 }, tradeDirection: 'down', stopPct: 3.1
+    });
+    t('the portfolio impact is a dollar figure and a share of the book',
+      againstHolding.riskUsd > 0 && againstHolding.riskPctOfBook > 0
+      && againstHolding.valueUsd > 0 && againstHolding.scenarioLossUsd > 0);
+    t('a SELL call against a held position says so, in its own note',
+      againstHolding.againstHolding === true && againstHolding.notes.includes('signalAgainstHolding'));
+    /* The scenario path, not the volatility envelope, decides the risk when
+       both exist — an envelope is not a loss. */
+    t('the measured scenario path decides the risk, not the volatility envelope',
+      againstHolding.riskUsd === againstHolding.scenarioLossUsd
+      && againstHolding.riskAtVolatilityUsd !== againstHolding.riskUsd);
+
+    /* Risk-aware label: a 1/30th position in a violent asset can no longer pass
+       as «LOW» just because the percentage is small. */
+    const small = portfolioImpact({
+      positions: [{ coinId: 'x', qty: 1 }, ...Array.from({ length: 29 }, (_, i) => ({ coinId: `o${i}`, qty: 1 }))],
+      priceMap: { x: 30_000, ...Object.fromEntries(Array.from({ length: 29 }, (_, i) => [`o${i}`, 30_000])) },
+      coin: { id: 'x' }, classification: 'BUY', volatilityPct: 40,
+      scenario: { lossPct: -22, gainPct: 18 }, tradeDirection: 'up', stopPct: 12
+    });
+    /* Precision cuts both ways: a 0.7%-of-book downside really is small, and
+       the label says so even for a violently moving asset. What must NOT
+       happen is a size-only HIGH. */
+    t('the label follows measured risk, not position size alone',
+      small.exposurePct < 5 && small.impact === 'LOW' && small.riskPctOfBook < 1
+      && againstHolding.impact !== 'LOW');
+
+    /* Nothing measured ⇒ nothing printed. */
+    const blind = portfolioImpact({
+      positions: book, priceMap: prices, coin: { id: 'bitcoin' }, classification: 'BUY'
+    });
+    t('with no volatility, scenario or stop, the risk figures are null',
+      blind.riskUsd === null && blind.riskPctOfBook === null
+      && blind.scenarioLossPct === null && blind.bookAfterRiskUsd === null);
   }
 
   /* ════════ (A4) the candle forecast as the fourth plane, for free ═══════ */

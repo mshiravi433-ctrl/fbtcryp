@@ -27,6 +27,7 @@
 import { verifiedSignals } from './smartMoneyEvidence.js';
 import { readTokenBehavior } from './tokenBehavior.js';
 import { readConsensus } from './signalConsensus.js';
+import { readAcceleration } from './signalMomentum.js';
 
 export const CLASS = Object.freeze({
   STRONG_BUY: 'STRONG_BUY',
@@ -493,6 +494,9 @@ export function computeSignalCard({
      «wallets sold $40M of something» is not a statement about this token, and
      feeding it in would tilt every card in the same direction. */
   smRead = null,
+  /* The last few measured scores for this asset, oldest → newest, from the
+     page's bounded tracker. Optional: no history means «new», never a guess. */
+  scoreHistory = [],
   now = Date.now()
 } = {}) {
   if (!coin || !num(coin.price) || !analysis || (series ?? []).length < 30) {
@@ -546,6 +550,17 @@ export function computeSignalCard({
    * module from being a hidden fifth indicator.
    */
   const score = clampf(rawScore * consensus.multiplier, -100, 100);
+
+  /*
+   * ─── «موتور شتاب سیگنال‌ها» ─────────────────────────────────────────────
+   * The same score, one tick earlier, is information the card can use: a case
+   * being built is not the same as a case being dismantled, even at the same
+   * level. `readAcceleration` normalises the delta across uneven polls, calls
+   * a sign flip a REVERSAL (which outranks any slope), and bounds what it may
+   * do to confidence to ±4 points. With no history it reports «new» and moves
+   * nothing. Pure arithmetic over a handful of numbers the page already had.
+   */
+  const acceleration = readAcceleration(scoreHistory);
   /*
    * ─── FOUR BANDS, NOT THREE AND A BROKEN SYMMETRY ─────────────────────────
    * The downside read used to be `score <= -32 ? SELL : score <= -14 ? SELL`,
@@ -611,6 +626,13 @@ export function computeSignalCard({
     consensusBias: consensus.bias,
     consensusConflict: Boolean(consensus.conflict)
   });
+  /*
+   * The acceleration nudge is applied AFTER the engine's own ceilings, and it
+   * is the only place it is applied — so «the case is being built» can lift a
+   * card by at most four points and «the case just flipped» can lower it by at
+   * most four, never overriding the contested-card cap in the other direction.
+   */
+  const confidenceFinal = Math.round(clampf(confidence + acceleration.confidenceNudge, 5, 95));
 
   /* ── target / stop: volatility-scaled, direction of the measured score.
         WATCH carries no directional target — an honest neutral. ─────────── */
@@ -659,7 +681,7 @@ export function computeSignalCard({
     /* Offline-snapshot data is never relabeled as a live fact. */
     offline: coin.dataProvenance === 'offline',
     classification,
-    confidence,
+    confidence: confidenceFinal,
     risk: riskLevel,
     riskScore: risk7?.riskScore ?? null,
     timeframe: 7,
@@ -693,6 +715,9 @@ export function computeSignalCard({
     /* The pre-consensus score, for the panel to show what amplification did
        (and to prove amplification happened rather than invention). */
     rawScore: Math.round(rawScore),
+    /* How fast the measured case is being built or dismantled, and what that
+       was allowed to change. */
+    acceleration,
     aiConsensus: aiConsensus ?? null
   };
 }
@@ -933,7 +958,20 @@ export function computeEarlySignals({ entries = [], now = Date.now() } = {}) {
  * is NEVER sent to an AI by this module; the UI additionally gates the
  * AI "why" call behind an explicit user consent.
  */
-export function portfolioImpact({ positions = [], priceMap = {}, coin = null, classification = 'WATCH' } = {}) {
+export function portfolioImpact({
+  positions = [],
+  priceMap = {},
+  coin = null,
+  classification = 'WATCH',
+  /* ── what makes the impact PRECISE rather than a percentage label ────────
+     `volatilityPct` is the 7-day horizon volatility the card already computed;
+     `scenario` is `scenarioFan()`'s output; `tradeDirection` is which way the
+     card points; `stopPct` is the card's own stop distance. */
+  volatilityPct = null,
+  scenario = null,
+  tradeDirection = null,
+  stopPct = null
+} = {}) {
   const rows = (positions ?? [])
     .map((p) => ({
       ...p,
@@ -950,14 +988,87 @@ export function portfolioImpact({ positions = [], priceMap = {}, coin = null, cl
   const top3 = sorted.slice(0, 3).reduce((s, p) => s + p.value, 0);
   const concentrationPct = (top3 / total) * 100;
 
-  const impact = exposurePct >= 40 ? 'HIGH' : exposurePct >= 15 ? 'MEDIUM' : 'LOW';
+  /*
+   * ─── THE IMPACT IS A RISK-DOLLAR FIGURE, NOT A LABEL ──────────────────────
+   * «HIGH exposure» used to mean only «this asset is ≥40% of the book», which
+   * is a SIZE statement, not a risk one: 40% of a book in a token that moves 2%
+   * a week is quieter than 12% in one that moves 25% a day. The figures below
+   * convert the same signal into what it can actually cost, so the answer is
+   * specific to this position and this reading:
+   *
+   *   · dollar exposure        — position value, the denominator everything else
+   *   · risk-at-volatility     — value × the horizon volatility the card measured
+   *   · loss-if-adverse        — value × the scenario fan's adverse outcome,
+   *                              i.e. what the measured conditional downside is
+   *   · breach-if-stopped      — the same quantity when the card's own stop is
+   *                              hit, so the reader sees the worst case the
+   *                              signal itself defines
+   *   · impactPct of book      — loss as a share of the WHOLE portfolio, which
+   *                              is the number that decides whether a position
+   *                              is survivable
+   *
+   * Everything is null when the input it needs was not measured. Nothing is
+   * assumed: no volatility figure, no cost estimate.
+   */
+  const value = pos?.value ?? null;
+  const vol = num(volatilityPct);
+  const sigRiskUsd = value != null && vol != null ? Math.round((value * Math.abs(vol)) / 100) : null;
+
+  /* Downside is taken from whichever side the card points: a SELL call is a
+     risk to a LONG holder, and a BUY call is a risk to a short. */
+  const adverseSide = tradeDirection === 'down' ? 'up' : 'down';
+  const scenarioLossPct = scenario && num(scenario.lossPct) !== null && adverseSide === 'down'
+    ? Math.abs(num(scenario.lossPct))
+    : scenario && num(scenario.gainPct) !== null && adverseSide === 'up'
+      ? Math.abs(num(scenario.gainPct))
+      : null;
+  const scenarioLossUsd = value != null && scenarioLossPct != null
+    ? Math.round((value * scenarioLossPct) / 100)
+    : null;
+
+  const stopLossUsd = value != null && num(stopPct) != null
+    ? Math.round((value * Math.abs(num(stopPct))) / 100)
+    : null;
+
+  /*
+   * Risk that actually matters: the worst of the measured downside PATHS.
+   * The volatility figure is a ±1σ envelope, not a loss — it is reported as
+   * `riskAtVolatilityUsd` and used only as a fallback when neither a scenario
+   * nor a stop distance was measured, because putting an envelope and an
+   * outcome into the same `max()` would overstate the cost of the signal.
+   */
+  const pathLosses = [scenarioLossUsd, stopLossUsd].filter((x) => x != null);
+  const riskUsd = pathLosses.length ? Math.max(...pathLosses) : sigRiskUsd;
+  const impactPctOfBook = riskUsd != null && total > 0 ? Math.round((riskUsd / total) * 1000) / 10 : null;
+
+  /*
+   * The label now combines SIZE with RISK. Size alone can never produce HIGH,
+   * and a small position in a violently-moving asset can no longer pass as
+   * LOW — which is exactly the case a percentage-only rule got wrong.
+   */
+  /* A share of the book that is a quarter of a percent is small by any
+     standard, and the label must say so even when the asset is violent — the
+     point of the risk figures is precision, not permanent alarm. */
+  const riskShare = riskUsd != null && total > 0 ? riskUsd / total : null;
+  const loud = (riskShare != null && riskShare >= 0.03)
+    || (classification === CLASS.AVOID || classification === CLASS.HIGH_RISK);
+  const impact = exposurePct >= 40 && loud ? 'HIGH'
+    : riskShare != null && riskShare < 0.005 ? 'LOW'
+      : exposurePct >= 15 || (riskShare != null && riskShare >= 0.015) ? 'MEDIUM'
+        : 'LOW';
+
   const notes = [];
   if (exposurePct >= 30) notes.push('highExposure');
   if (concentrationPct >= 70) notes.push('highConcentration');
+  if (impactPctOfBook != null && impactPctOfBook >= 3) notes.push('riskLargeShare');
   if (classification === CLASS.BUY || classification === CLASS.STRONG_BUY) {
     if (pos) notes.push('existingPositionUp');
     else notes.push('noExistingPosition');
   }
+  if (classification === CLASS.SELL || classification === CLASS.AVOID) {
+    notes.push(pos ? 'signalAgainstHolding' : 'signalAgainstEntry');
+  }
+  if (stopLossUsd != null && value != null && total > 0 && stopLossUsd / total >= 0.02) notes.push('stopCostly');
   if (notes.length === 0) notes.push('balanced');
 
   return {
@@ -965,6 +1076,21 @@ export function portfolioImpact({ positions = [], priceMap = {}, coin = null, cl
     concentrationPct: Math.round(concentrationPct * 10) / 10,
     impact,
     hasPosition: Boolean(pos),
+    /* The dollar figures, all nullable. */
+    valueUsd: value != null ? Math.round(value) : null,
+    bookUsd: Math.round(total),
+    riskUsd,
+    riskAtVolatilityUsd: sigRiskUsd,
+    riskPctOfBook: impactPctOfBook,
+    volatilityPct: vol != null ? Math.round(vol * 10) / 10 : null,
+    scenarioLossPct: scenarioLossPct != null ? Math.round(scenarioLossPct * 100) / 100 : null,
+    scenarioLossUsd,
+    stopLossUsd,
+    /* If the worst measured path happens, this is what the book looks like. */
+    bookAfterRiskUsd: riskUsd != null ? Math.round(total - riskUsd) : null,
+    /* Which way the card points, so the panel can say «a SELL call against a
+       holding» instead of a generic warning. */
+    againstHolding: Boolean(pos) && (classification === CLASS.SELL || classification === CLASS.AVOID),
     notes
   };
 }
