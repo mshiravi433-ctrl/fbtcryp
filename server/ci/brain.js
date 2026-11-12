@@ -44,6 +44,31 @@ import { buildCentralContext, emptyMemory, applyTurn, resolvePage, FOLLOWUP_KIND
 import { classify, createIntent, transition } from '../../src/lib/central/intent.js';
 import { buildPlan, validatePlan, templateFor } from '../../src/lib/central/planner.js';
 import { synthesizeInternalAnswer } from '../aiInternalReasoner.js';
+/*
+ * The brain asks the SHARED gate, not its own copy of the rule. Two copies of
+ * one rule is one copy too many: the brain's inline version drifted from the
+ * gate within a day — the gate refused «ریسک X چیست؟» while the brain
+ * answered it from a glossary. One rule, one place to be wrong.
+ */
+import { evaluateLocalFirst } from '../aiLocalFirstGate.js';
+/*
+ * The MODEL FALLBACK (step 5.2). The corpus answers what the corpus holds; the
+ * chat path, one endpoint away, answers the rest with a model. The central
+ * brain had NO provider path at all — so for a judgement, a scenario, or a
+ * question the 36-rule registry does not cover, it refused, while the chat
+ * beside it answered.
+ *
+ * Same gateway as the chat path, same turn budget, same free ladder. Not a
+ * second, cheaper, private pipeline: one pipeline, so there is one place
+ * where the quota is spent and one place where a failure can be observed.
+ */
+import {
+  executeProviderChat,
+  getPreferredProvidersForTask,
+  isProviderConfigured,
+  beginAiTurnBudget
+} from '../aiGateway.js';
+import { searchKnowledge } from '../../src/lib/intent-ai/os/knowledgeCenter.js';
 import { evaluatePolicy, planDigest } from '../../src/lib/central/policy.js';
 import { assessRisk } from '../../src/lib/central/risk.js';
 import { buildRecommendation, possibleActionsFrom } from '../../src/lib/central/recommend.js';
@@ -402,6 +427,165 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
        failure the brief forbids. Instead: no findings, no recommendation, and a
        question that names the closest things this brain can actually do. */
     if (intent.intentType === 'UNSUPPORTED' && !plan.steps.length) {
+      /*
+       * ─── THE CORPUS SHORT-CIRCUIT (2026-11-12) ──────────────────────────
+       *
+       * This branch used to answer «به هیچ مسیر ثبت‌شده‌ای نرساندم» for EVERY
+       * question the 36-rule registry did not cover. That included questions
+       * the repository already answers correctly — «کارمزد پلتفرم FBT چقدر
+       * است؟», «بیت کوین چیست؟», «کیف پول من کجا ذخیره می شود؟».
+       *
+       * Measured before this change: 0 of 7 corpus-answerable questions got
+       * an answer from this brain. The chat path answered all 7 with zero
+       * provider calls.
+       *
+       * The brain asked "which of my 36 registered intents is this?" BEFORE
+       * it asked "can I answer?". A question outside the registry therefore
+       * never reached the part that could have answered it. This block puts
+       * the corpus check FIRST, for the UNSUPPORTED case only.
+       *
+       * Three properties make this safe:
+       *
+       *   1. It runs ONLY when the registry found nothing and the plan has no
+       *      steps — so it can never override a real read, a quote, a policy
+       *      verdict or a safety refusal. Every one of those happens earlier
+       *      in the chain and returns before this point.
+       *   2. The gate's own safety floor applies (SAFETY_PRECHECK_RE), so a
+       *      distressed person is never answered from a glossary.
+       *   3. It costs ZERO provider calls, which is the whole point: the
+       *      `:free` quota is 50 requests a day and a `max` turn is 6 calls.
+       */
+      let corpusAnswer = null;
+      let corpusMatch = null;
+      try {
+        const rows = searchKnowledge(context.message || '', { locale, limit: 3 });
+        const gate = evaluateLocalFirst({
+          message: context.message || '',
+          locale,
+          knowledge: rows,
+          context: {
+            market: state.sections?.markets?.data
+              ? { dataStatus: 'live', priceMap: state.sections.markets.data.prices || {} }
+              : { dataStatus: 'unavailable' },
+            portfolio: state.sections?.portfolio?.data || null
+          },
+          socialRead: classification.entities?.isDistress ? { distress: true } : null,
+          emotionRead: null,
+          env: process.env
+        });
+        if (gate?.used && gate.answer) {
+          corpusAnswer = String(gate.answer).trim();
+          corpusMatch = gate.evidence?.matched ? { id: gate.evidence.matched } : null;
+        }
+      } catch {
+        corpusAnswer = null;
+      }
+
+      if (corpusAnswer) {
+        /* Answered from the verified corpus: this is NOT an unsupported turn
+           any more, and it is not a refusal. It is a grounded answer with a
+           citation, and it says where it came from. */
+        intent = {
+          ...intent,
+          unsupported: false,
+          needsUserInput: false,
+          answeredFromCorpus: true,
+          corpusMatch: corpusMatch?.id || null,
+          intentType: 'CORPUS_LOOKUP'
+        };
+        Object.assign(context, {
+          missingInformation: Array.from(new Set((context.missingInformation || []).filter((m) => m !== 'intent'))),
+          nearMisses: []
+        });
+        /* The recommendation is BUILT later from this intent (the brain's
+           chain builds it after the reads), so the intent carries the answer
+           and the citation, and the recommendation inherits both. */
+        intent.corpusAnswer = corpusAnswer;
+        intent.corpusSource = corpusMatch?.source || 'verified-knowledge';
+        intent.corpusTitle = corpusMatch?.titleFa || corpusMatch?.titleEn || corpusMatch?.id || null;
+      } else {
+        /*
+         * ─── THE MODEL FALLBACK (2026-11-12) ─────────────────────────────────
+         *
+         * The corpus declined. That leaves two honest options: refuse, or ask
+         * a model. Refusing was the old behaviour and it was wrong here — the
+         * chat path answers these questions, and the user cannot tell which
+         * door they walked through.
+         *
+         * The budget shape is deliberate:
+         *
+         *   · ONE call. The brain has no six-role fan-out to pay for; the
+         *     `:free` quota is 50 requests a day and a `max` turn costs 6.
+         *     A question here costs 1, not 6.
+         *   · `beginAiTurnBudget()` — the SAME ledger the chat path uses, so
+         *     a provider that just failed in this turn is not asked again.
+         *   · At most 3 seats, tried in the registry's health order.
+         *   · `intelligence: 'balanced'` — a free tier's answer, not a
+         *     flagship's, because the free tier IS the product here.
+         *
+         * And the rule that matters most: A FAILURE NEVER BECOMES AN ANSWER.
+         * If no seat produces text, the brain falls through to the old honest
+         * refusal. A refusal is a better answer than a fabrication.
+         */
+        let modelAnswer = null;
+        let modelProvider = null;
+        let modelId = null;
+        try {
+          const turnBudget = beginAiTurnBudget();
+          /* `getPreferredProvidersForTask` returns provider IDS, and
+             `executeProviderChat` takes an id. The `internal` seat is the
+             deterministic local reasoner, not a model — asking it for a
+             market answer would produce a template, so it is excluded. */
+          const seats = (getPreferredProvidersForTask('general', { configuredOnly: true }) || [])
+            .filter((id) => typeof id === 'string' && id !== 'internal' && isProviderConfigured(id))
+            .slice(0, 3);
+          const question = String(context.message || '').trim();
+          for (const seat of seats) {
+            try {
+              const reply = await executeProviderChat(seat, {
+                system: locale === 'fa'
+                  ? 'تو دستیار صریح FBT هستی. به پرسش کاربر کوتاه و دقیق پاسخ بده. اگر چیزی را نمی‌دانی، صریح بگو که نمی‌دانی. عددی از خودت نساز.'
+                  : 'You are FBT, an honest assistant. Answer the user briefly and precisely. If you do not know something, say so plainly. Never invent a number.',
+                user: question,
+                temperature: 0.3,
+                maxTokens: 700,
+                json: false,
+                intelligence: 'balanced',
+                budget: turnBudget
+              });
+              const text = String(reply?.text || reply?.content || reply?.answer || '').trim();
+              if (text.length >= 20) {
+                modelAnswer = text;
+                modelProvider = seat;
+                modelId = reply?.model || null;
+                break;
+              }
+            } catch {
+              /* try the next seat */
+            }
+          }
+        } catch {
+          modelAnswer = null;
+        }
+
+        if (modelAnswer) {
+          intent = {
+            ...intent,
+            unsupported: false,
+            needsUserInput: false,
+            answeredFromModel: true,
+            modelProvider,
+            modelId,
+            intentType: 'MODEL_ANSWER'
+          };
+          Object.assign(context, {
+            missingInformation: Array.from(new Set((context.missingInformation || []).filter((m) => m !== 'intent'))),
+            nearMisses: []
+          });
+          intent.modelAnswer = modelAnswer;
+          intent.modelProvider = modelProvider;
+          intent.modelId = modelId;
+        } else {
       const near = (classification.evidence || []).map((e) => e.rule || e.pattern || null).filter(Boolean);
       const assetName = classification.entities.asset || classification.entities.fromAsset || null;
       /* The matrix's `capabilities` map holds a STATUS STRING per module, so the
@@ -432,6 +616,8 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
           ? `«${String(context.message || '').trim().slice(0, 60)}» را به هیچ برنامه‌ای در رجیستری نرساندم، پس هیچ عددی از این مسیر عرض نمی‌شود. اگر منظورت کاری با ${assetName} است، بگو کدام: ${offered.slice(0, 3).join('، ')}.`
           : `«${String(context.message || '').trim().slice(0, 60)}» را به هیچ برنامه‌ای در رجیستری نرساندم، پس هیچ عددی از این مسیر عرض نمی‌شود. مسیرهای آمادهٔ همین نشست: ${offered.slice(0, 4).join('، ')}.`
       };
+        }
+      }
     }
 
     /* §5/§20 — a money request with a hole in it is answered with a NAMED question,
@@ -552,7 +738,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
 
     /* Findings → recommendation (§26). Built from the same `results` the reply
        uses, so the advice and the numbers cannot diverge. */
-    const findings = buildFindings({ intent, classification, state, results, risk, readResults, stepResults, context });
+    const findings = buildFindings({ intent, classification, state, results, risk, readResults, stepResults, context, locale });
     const capabilitiesMap = capabilities.capabilities;
     const actions = possibleActionsFrom({ findings, capabilities: capabilitiesMap, risk, policy, walletConnected: Boolean(wallet?.connected) });
     /* When the answer is a refusal, the reply IS the refusal: the portfolio numbers
@@ -1156,11 +1342,68 @@ function findingCopy(f) {
   }
 }
 
-function buildFindings({ intent, classification, state, results, risk, readResults, stepResults, context }) {
+function buildFindings({ intent, classification, state, results, risk, readResults, stepResults, context, locale = 'en' }) {
   const findings = [];
   const portfolio = state.sections.portfolio.data;
   const markets = state.sections.markets.data;
   const lendingSection = state.sections.lending.data;
+
+  /*
+   * ─── THE CORPUS FINDING (2026-11-12) ───────────────────────────────────
+   *
+   * When the registry did not match but the verified corpus could answer,
+   * the brain already holds the answer on the intent (`intent.corpusAnswer`).
+   * The recommendation is built from FINDINGS, so without this the answer
+   * would be carried by the intent and never reach the reply.
+   *
+   * It is a finding like any other: it carries its source and its reason, so
+   * the composer attributes it and the user can see that it was RETRIEVED
+   * rather than generated. The section it produces is a `result` — the
+   * headline — because that is what it is: the answer to the question.
+   */
+  /*
+   * A GENERATED answer, labelled as one. The corpus finding above says
+   * «retrieved, not generated»; this one says the opposite, because the
+   * difference is the whole point: a retrieved fact carries a citation and
+   * cannot drift, a generated one can. The user must always be able to tell
+   * which they received.
+   */
+  if (intent?.modelAnswer) {
+    findings.push({
+      id: 'model-answer',
+      value: intent.modelAnswer,
+      detail: intent.modelAnswer,
+      detailFa: intent.modelAnswer,
+      reason: locale === 'fa'
+        ? `تولیدشده توسط ${intent.modelProvider || 'مدل'} — تولید، نه بازیابی`
+        : `generated by ${intent.modelProvider || 'the model'} — generated, not retrieved`,
+      reasonFa: locale === 'fa'
+        ? `تولیدشده توسط ${intent.modelProvider || 'مدل'} — تولید، نه بازیابی`
+        : `generated by ${intent.modelProvider || 'the model'} — generated, not retrieved`,
+      source: intent.modelProvider || 'model',
+      dataAt: Date.now(),
+      status: 'OK'
+    });
+  }
+
+  if (intent?.corpusAnswer) {
+    findings.push({
+      id: intent.corpusMatch || 'kb.verified',
+      value: intent.corpusAnswer,
+      detail: intent.corpusAnswer,
+      detailFa: intent.corpusAnswer,
+      reason: locale === 'fa'
+        ? `از دانش تاییدشدهٔ محصول بازیابی شد (${intent.corpusMatch || 'kb'}) — بازیابی، نه تولید`
+        : `retrieved from the verified product corpus (${intent.corpusMatch || 'kb'}) — retrieved, not generated`,
+      reasonFa: locale === 'fa'
+        ? `از دانش تاییدشدهٔ محصول بازیابی شد (${intent.corpusMatch || 'kb'}) — بازیابی، نه تولید`
+        : `retrieved from the verified product corpus (${intent.corpusMatch || 'kb'}) — retrieved, not generated`,
+      source: intent.corpusSource || 'verified-knowledge',
+      label: intent.corpusTitle || null,
+      dataAt: Date.now(),
+      status: 'OK'
+    });
+  }
 
   const concentration = analyzeConcentration(portfolio);
   if (concentration.status === 'OK') {
@@ -1482,7 +1725,16 @@ function publicIntent(intent) {
     plan: intent.plan, risk: intent.risk, policy: intent.policy, compound: intent.compound || null,
     confirmationRequired: intent.confirmationRequired, executionRequired: intent.executionRequired, verificationRequired: intent.verificationRequired,
     history: intent.history, followUp: intent.classification?.followUp || null, classificationSource: intent.classification?.source || null,
-    error: intent.error, attempts: intent.attempts
+    error: intent.error, attempts: intent.attempts,
+    /* The corpus citation. A retrieved answer must say WHERE it was
+       retrieved from — that is the difference between a lookup and a
+       generation, and it is the thing the user can check. */
+    answeredFromCorpus: intent.answeredFromCorpus === true,
+    corpusMatch: intent.corpusMatch || null,
+    /* And the same for a generated answer: which provider produced it. */
+    answeredFromModel: intent.answeredFromModel === true,
+    modelProvider: intent.modelProvider || null,
+    modelId: intent.modelId || null
   };
 }
 

@@ -1827,13 +1827,29 @@ export function getPreferredProvidersForTask(taskType = 'general', { configuredO
   const type = String(taskType).toLowerCase();
   let candidateOrder = [];
 
+  /*
+   * `openrouterfree` sits NEXT TO `openrouter` in every order, and that is the
+   * point of it: it is the SAME KEY with a different model list. A free key
+   * on the PAID seat answers 402 on every paid model, so a route that names
+   * only `openrouter` is a route that fails with a free deployment — and the
+   * deployment's default fleet is `['openrouterfree','groq','workersai']`.
+   *
+   * Before this fix the free seat was reachable ONLY in `max` mode (via
+   * `MAX_PROVIDER_ORDER`), so `balanced` — the mode the central brain and
+   * most direct callers use — could not see it at all. The seat existed,
+   * the fleet named it, and no route ever asked it.
+   *
+   * Position: immediately after `openrouter`, so the PAID seat still leads a
+   * deployment that has paid access, and the historical order (which the
+   * mode test pins by index 0) does not move.
+   */
   switch (type) {
     case 'market':
     case 'market_intelligence':
     case 'crypto_trend':
       // OpenRouter leads (its online-capable models are the general route),
       // then the DIRECT Grok seat for real-time narrative, then Gemini/Groq.
-      candidateOrder = ['openrouter', 'xai', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
+      candidateOrder = ['openrouter', 'openrouterfree', 'xai', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
       break;
     case 'research':
     case 'news':
@@ -1842,27 +1858,27 @@ export function getPreferredProvidersForTask(taskType = 'general', { configuredO
       // Perplexity's old job: sourced, web-grounded answers. OpenRouter's
       // online-capable models lead; Grok's direct real-time seat and Gemini
       // back it up.
-      candidateOrder = ['openrouter', 'xai', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
+      candidateOrder = ['openrouter', 'openrouterfree', 'xai', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
       break;
     case 'reasoning':
     case 'complex_plan':
     case 'portfolio_optimization':
       // High-precision logic: OpenRouter's multi-model route first, then the
       // DIRECT GPT and Claude seats, then DeepSeek.
-      candidateOrder = ['openrouter', 'openai', 'anthropic', 'deepseek', 'gemini', 'aimlapi', 'workersai', 'internal'];
+      candidateOrder = ['openrouter', 'openrouterfree', 'openai', 'anthropic', 'deepseek', 'gemini', 'aimlapi', 'workersai', 'internal'];
       break;
     case 'risk':
     case 'guardian':
     case 'verification':
-      candidateOrder = ['anthropic', 'openai', 'deepseek', 'openrouter', 'aimlapi', 'gemini', 'groq', 'workersai', 'internal'];
+      candidateOrder = ['anthropic', 'openai', 'deepseek', 'openrouter', 'openrouterfree', 'aimlapi', 'gemini', 'groq', 'workersai', 'internal'];
       break;
     case 'intent':
     case 'fast':
     case 'classification':
-      candidateOrder = ['workersai', 'groq', 'gemini', 'mistral', 'aimlapi', 'openrouter', 'internal'];
+      candidateOrder = ['workersai', 'groq', 'gemini', 'mistral', 'aimlapi', 'openrouter', 'openrouterfree', 'internal'];
       break;
     default:
-      candidateOrder = ['openrouter', 'openai', 'groq', 'gemini', 'xai', 'workersai', 'aimlapi', 'deepseek', 'anthropic', 'mistral', 'internal'];
+      candidateOrder = ['openrouter', 'openrouterfree', 'openai', 'groq', 'gemini', 'xai', 'workersai', 'aimlapi', 'deepseek', 'anthropic', 'mistral', 'internal'];
       break;
   }
 

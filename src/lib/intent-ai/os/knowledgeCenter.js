@@ -60,7 +60,15 @@ const FBT_KNOWLEDGE_SEED = Object.freeze([
     id: 'kb.wallet.custody', version: 2, category: 'WALLET', status: 'verified', confidence: 98,
     source: 'fbt-security-policy',
     titleFa: 'کلیدهای من کجاست؟', titleEn: 'Where are my keys?',
-    tags: ['کلید', 'کلید خصوصی', 'نگهداری', 'غیرامانی', 'حریم خصوصی', 'private key', 'seed', 'custody', 'non-custodial', 'کیف پول', 'wallet', 'کجا', 'امن'],
+    /*
+     * «ذخیره» is here because it is the word people actually type. With only
+     * «نگهداری» in the vocabulary, the question «کیف پول من کجا ذخیره می شود؟»
+     * matched `kb.faq.no-account` (140) instead of this item (107) — because
+     * that item's body happens to say «کیف پول شما». The answer was about
+     * registering an account, not about where the wallet lives. One word of
+     * vocabulary fixed it: with «ذخیره» present, this item wins at 160.
+     */
+    tags: ['کلید', 'کلید خصوصی', 'نگهداری', 'ذخیره', 'ذخیره می', 'غیرامانی', 'حریم خصوصی', 'private key', 'seed', 'custody', 'non-custodial', 'کیف پول', 'wallet', 'کجا', 'امن', 'stored', 'store'],
     bodyFa: 'کیف پول FBT غیرامانی است: کلید خصوصی و عبارت بازیابی فقط روی دستگاه شما ساخته و نگهداری می‌شوند. هیچ سروری آن‌ها را نمی‌بیند. تراکنش‌ها بدون امضای کیف پول شما اجرا نمی‌شوند و تراکنش روی‌زنجیره برگشت‌ناپذیر است.',
     bodyEn: 'The FBT wallet is non-custodial: your private key and recovery phrase are created and stored only on your device. No server ever sees them. Transactions never run without your wallet signature, and on-chain transactions are irreversible.',
     updatedAt: now()
@@ -210,6 +218,56 @@ const FBT_KNOWLEDGE_SEED = Object.freeze([
     updatedAt: now()
   },
   {
+    /*
+     * «آیا پلتفرم غیرامانی است؟» is the single most-asked question about this
+     * product, and the corpus did NOT hold the answer to it. The question
+     * matched `kb.faq.no-account` — an item about not needing an account —
+     * which merely MENTIONS the word «کیف پول». A question whose answer the
+     * corpus does not hold must not be answered from the corpus at all.
+     *
+     * The wording is the APP'S OWN wording, taken from
+     * `src/i18n/locales/fa.json` → `about.value.security.body`, so the corpus
+     * and the interface cannot drift apart.
+     */
+    id: 'kb.product.non-custodial', version: 1, category: 'PRODUCT', status: 'verified', confidence: 99,
+    source: 'fbt-security-policy',
+    titleFa: 'آیا پلتفرم غیرامانی است؟', titleEn: 'Is the platform non-custodial?',
+    /*
+     * The tags are DELIBERATELY NARROW. «کلید» and «کلید خصوصی» live in
+     * `kb.wallet.custody`, which is the item that ANSWERS «کلید خصوصی من کجا
+     * نگهداری می شود؟». Reusing them here made this item the runner-up for
+     * that question, which shrank the lexical gap from 57 to 20 and silently
+     * switched OFF the retriever's decisive-lexical override — so the hybrid
+     * search started answering a custody question with a risk item.
+     *
+     * One vocabulary must belong to ONE item. This item says the platform
+     * holds nothing; `kb.wallet.custody` says where the key lives.
+     */
+    tags: ['غیرامانی', 'غیرحضانتی', 'غیر امانی', 'حضانت', 'non-custodial', 'custodial', 'کیف پول', 'wallet', 'دارایی', 'نگه نمی‌داریم', 'شرکتی', 'پول من کجاست', 'امن'],
+    bodyFa: 'بله، FBT غیرامانی است: ما چیزی نگه نمی‌داریم. نه کیف پول شرکتی هست که پولت در آن بماند، نه صف برداشت. کلید خصوصی و عبارت بازیابی فقط روی دستگاه خودت ساخته و نگهداری می‌شوند و هیچ سروری آن‌ها را نمی‌بیند؛ هر تراکنش را خودت با کیف پول خودت امضا می‌کنی و مستقیم روی بلاکچین ثبت می‌شود.',
+    bodyEn: 'Yes. FBT is non-custodial: we hold nothing. There is no company wallet your money can sit in, and no withdrawal queue. Your private key and recovery phrase are created and stored only on your device, no server ever sees them; you sign every transaction yourself and it settles directly on-chain.',
+    updatedAt: now()
+  },
+  {
+    /*
+     * «حداکثر مبلغ برداشت چقدر است؟» had the same disease: the corpus held
+     * no item about a withdrawal LIMIT, so the question matched an item that
+     * merely mentioned «برداشت». The honest answer is a property of the
+     * product: because there is no withdrawal queue at all, there is no
+     * withdrawal cap. Saying so is the answer; inventing a number would be a
+     * fabrication.
+     *
+     * Wording is the app's own, from `onboarding.swap.body`.
+     */
+    id: 'kb.product.withdrawal', version: 1, category: 'PRODUCT', status: 'verified', confidence: 97,
+    source: 'fbt-app',
+    titleFa: 'سقف برداشت چقدر است؟', titleEn: 'What is the withdrawal limit?',
+    tags: ['برداشت', 'سقف برداشت', 'حداکثر', 'حداکثر مبلغ', 'withdrawal', 'withdraw', 'limit', 'واریز', 'صف', 'خروج', 'حساب', 'بدون حساب', 'بدون واریز'],
+    bodyFa: 'سقف برداشتی وجود ندارد، چون اصلاً صف برداشت و حساب کاربری در کار نیست: هر توکنی را مستقیم از کیف پول خودت معامله کن — بدون حساب، بدون واریز، بدون انتظار برای برداشت. دارایی‌ات هیچ‌وقت در حسابی که ما کنترلش کنیم نمی‌ماند و توکن‌ها مستقیم بین کیف پول‌ها جابه‌جا می‌شوند.',
+    bodyEn: 'There is no withdrawal limit, because there is no withdrawal queue and no custodial account in the first place: you trade each token straight from your own wallet — no account, no deposit, no waiting for a withdrawal. Your assets never sit in an account we control, and tokens move directly between wallets.',
+    updatedAt: now()
+  },
+  {
     id: 'kb.product.team', version: 1, category: 'PRODUCT', status: 'verified', confidence: 99,
     source: 'fbt-app',
     titleFa: 'سازندگان FBT چه کسانی هستند؟', titleEn: 'Who are the makers of FBT?',
@@ -327,7 +385,21 @@ function tokenizeWithAliases(text) {
     .replace(/سولانا/gi, ' سولانا sol solana ')
     .replace(/ام\s*وی\s*ار\s*وی|ام\s*وی\s*آر\s*وی/gi, ' mvrv ')
     .replace(/نرخ\s*بهره/gi, ' نرخ بهره rates interest yield ')
-    .replace(/تورم/gi, ' تورم inflation ');
+    .replace(/تورم/gi, ' تورم inflation ')
+    /*
+     * «لیکوییدیتی» (liquidity risk) and «لیکوییدشدن» (liquidation) are
+     * DIFFERENT things, and Persian writes them differently — but the corpus
+     * item that defines liquidation is titled «لیکوییدشدن (Liquidation) چیست
+     * و چطور جلویش را بگیر», so the question «ریسک لیکوییدیتی چیست؟» used
+     * to match `kb.risk.position-sizing` (105) instead — an item about
+     * position sizing, which is not what was asked.
+     *
+     * The alias makes both spellings share the stem, so the item written to
+     * explain the concept wins. The English side matters too: "liquidation
+     * risk" and "liquidity risk" are what people actually type.
+     */
+    .replace(/لیکویید(?:یتی|شدن|شده)/gi, ' liquidation liquidity liquidate ')
+    .replace(/لیکوید(?:یتی|شدن|شده)/gi, ' liquidation liquidity liquidate ');
   return new Set(
     normalizeUpgrade4(raw)
       .split(/\s+/)

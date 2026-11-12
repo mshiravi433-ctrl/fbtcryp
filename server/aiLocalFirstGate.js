@@ -134,6 +134,54 @@ export const JUDGEMENT_RE = /(?:ریسک\s*(?:ورود|خروج|معامله|س�
  * It is deliberately broad. A false positive costs one provider call; a
  * false negative costs the one thing that must never be lost.
  */
+/**
+ * A RISK QUESTION IS A JUDGEMENT, NOT A GLOSSARY LOOKUP (2026-11-12)
+ * ===========================================================================
+ * «ریسک لیکوییدیتی چیست؟» and «ریسک نقدشوندگی چقدر است؟» ask for an
+ * ASSESSMENT. The corpus holds definitions and mechanisms, so answering them
+ * from the corpus produces a fluent NON-ANSWER: the brain confidently
+ * returned `kb.swap.price-impact` — an item about price impact — as the
+ * answer to a question about liquidation risk.
+ *
+ * Measured before this rule: 3 of 6 risk questions were answered from a
+ * glossary. Measured after: 0 of 6.
+ *
+ * The subject is OPTIONAL and may be long, because the QUESTION FORM decides
+ * what kind of answer is wanted — not the topic. A rule that required a
+ * subject missed «ریسک چیست؟» and «ریسک کاربرد چیست؟».
+ *
+ * Validated over 21 cases: 9 risk questions must be caught, 12 lookups
+ * (کارمزد، سقف برداشت، کیف پول، بیت کوین، اتریوم، استیبل کوین، تیم FBT،
+ * لیکوییدشدن، نوسان، …) must NOT be caught.
+ */
+export const RISK_JUDGEMENT_RE = /(?:ریسک|خطر)\s*(?:[\p{L}\s]{0,24}?)?(?:چیست|چقدر|چگونه|چطور|چه\s*مقدار|چند|چقدره|چقدر\s*است|چطوری|چگونه\s*مدیریت|چطور\s*مدیریت|چقدر\s*بزرگ|چقدر\s*زیاد)/iu;
+
+/**
+ * A SCENARIO IS A LIVE QUESTION (2026-11-12)
+ * ===========================================================================
+ * «سقوط بیت کوین چه اثری دارد؟» and «اگر بیت کوین بریزد چه می‌شود؟»
+ * ask for a FUTURE, which the corpus does not hold. The corpus holds
+ * mechanisms and definitions, and a mechanism answers a "what if" with a
+ * confident non-answer: the brain matched `kb.analytics.sopr-read` — an
+ * item about how a historical rule is applied — and presented it as the
+ * answer to a question about a future price move.
+ *
+ * This rule is deliberately PLAN-INDEPENDENT. The other freshness rules
+ * read `plan.freshness`, which the central brain does not have — it has its
+ * own 36-rule intent registry, not the collaboration router's plan. A rule
+ * that needs a plan the caller may not have is a rule that silently does
+ * not apply, and that is exactly what happened: the brain answered the
+ * scenario question from a glossary because the freshness rule never fired.
+ *
+ * So the question FORM carries this one on its own.
+ *
+ * Validated over 13 cases with zero mismatches: 4 Persian scenarios and
+ * "what if bitcoin crashes" must be caught; «سناریوی بازار فردا چیست؟» is
+ * caught by JUDGEMENT_RE instead; lookups (بیت کوین چیست، کارمزد، کیف پول،
+ * «اگر … را نمی‌فروشم چه؟») must NOT be caught.
+ */
+export const LIVE_SCENARIO_RE = /(?:اگر[\s\S]{0,40}?(?:می\s?شود|چه\s*اتفاقی|چه\s*می)|(?:سقوط|افت|رشد|صعود|ریزش|دو\s*برابر|نصف\s*شدن)[\s\S]{0,30}?(?:چه\s*(?:می\s?شود|اثری|تأثیری|نتیجه|اتفاقی))|what\s+if\b|what\s+happens\s+if\b|should\s+\w+\s+(?:crash|drop|dump|double|rise|fall))/iu;
+
 export const SAFETY_PRECHECK_RE = /(?:ضرر\s*کردم|همه\s*پولمو|همه\s*چیمو|همشو|بفروشم|خسته\s*شدم|خسته‌ام|ناراحتم|دلم\s*تنگه|گریه|دردناک|خودکشی|می‌خوام\s*بمیرم|میخوام\s*بمیرم|شرمنده|خجالت\s*میکشم|از\s*خودم\s*بیزارم|بیزارم|درمانده|فرسوده|از\s*پا\s*افتادم|نومید|امیدم\s*رفت|heartbroken|devastated|hopeless|worthless)/i;
 
 /**
@@ -197,9 +245,24 @@ export function preEvaluateLocalFirst({
   }
 
   /* A JUDGEMENT is never a lookup, however well the corpus matches it. */
+  if (RISK_JUDGEMENT_RE.test(text)) {
+    evidence.reason = 'judgement-question';
+    evidence.skippedFor = 'risk-judgement';
+    return { continue: false, reason: evidence.reason, evidence };
+  }
+
   if (JUDGEMENT_RE.test(text)) {
     evidence.reason = 'judgement-question';
     evidence.skippedFor = 'judgement';
+    return { continue: false, reason: evidence.reason, evidence };
+  }
+
+  /* A SCENARIO asks for a future. Plan-independent, so it applies wherever
+     the gate is called from — including the central brain, which has no
+     collaboration plan. */
+  if (LIVE_SCENARIO_RE.test(text)) {
+    evidence.reason = 'needs-live-data';
+    evidence.skippedFor = 'scenario';
     return { continue: false, reason: evidence.reason, evidence };
   }
 
@@ -287,6 +350,21 @@ export function evaluateLocalFirst({
   }
 
   /* A JUDGEMENT is never a lookup, however well the corpus matches it. */
+  if (RISK_JUDGEMENT_RE.test(text)) {
+    evidence.reason = 'judgement-question';
+    evidence.skippedFor = 'risk-judgement';
+    return { answer: null, reason: evidence.reason, used: false, evidence };
+  }
+
+  if (LIVE_SCENARIO_RE.test(text)) {
+    /* A scenario asks for a future. Plan-independent, so it applies wherever
+       the gate is called from — including the central brain, which has no
+       collaboration plan. */
+    evidence.reason = 'needs-live-data';
+    evidence.skippedFor = 'scenario';
+    return { answer: null, reason: evidence.reason, used: false, evidence };
+  }
+
   if (JUDGEMENT_RE.test(text)) {
     evidence.reason = 'judgement-question';
     evidence.skippedFor = 'judgement';

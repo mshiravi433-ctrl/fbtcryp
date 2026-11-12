@@ -245,3 +245,102 @@ test('the pre-gate declines a live, a judgement and a multi-part question', () =
   /* An ordinary product question is NOT declined: the gate gets to look. */
   assert.equal(pre('کارمزد پلتفرم FBT چقدر است', { freshness: 'STATIC' }).continue, true);
 });
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * THE RISK RULE (2026-11-12)
+ *
+ * «ریسک X چیست؟» asks for an ASSESSMENT. The corpus holds definitions, so
+ * answering it from the corpus produces a fluent non-answer: the brain
+ * confidently returned `kb.swap.price-impact` — an item about price impact —
+ * as the answer to a question about liquidation risk.
+ *
+ * The subject is OPTIONAL and may be long: the QUESTION FORM decides what
+ * kind of answer is wanted, not the topic.
+ * ───────────────────────────────────────────────────────────────────────── */
+test('a risk question is a judgement, never a glossary answer', () => {
+  const gate = (message) => evaluateLocalFirst({
+    message, locale: 'fa', knowledge: [], context: {}, env: {}
+  });
+  for (const q of [
+    'ریسک لیکوییدیتی چیست؟',
+    'ریسک نقدشوندگی چقدر است؟',
+    'خطر لیکوییدشدن چقدر بزرگ است؟',
+    'ریسک چیست؟',
+    'ریسک کاربرد چیست؟',
+    'ریسک بازار چطور مدیریت می‌شود؟'
+  ]) {
+    assert.equal(gate(q).used, false, `a risk question must not be answered from a glossary: ${q}`);
+  }
+});
+
+test('the risk rule does not catch an ordinary lookup', () => {
+  const gate = (message) => evaluateLocalFirst({
+    message, locale: 'fa', knowledge: [], context: {}, env: {}
+  });
+  for (const q of [
+    'کارمزد پلتفرم FBT چقدر است؟',
+    'سقف برداشت چقدر است؟',
+    'کیف پول من کجا ذخیره می شود؟',
+    'بیت کوین چیست؟',
+    'اتریوم چیست؟',
+    'استیبل کوین چیست؟',
+    'تیم FBT چه کسانی هستند؟',
+    'لیکوییدشدن چیست؟',
+    'نوسان بازار چیست؟'
+  ]) {
+    const r = gate(q);
+    assert.notEqual(r.reason, 'judgement-question', `a lookup must not be read as a risk judgement: ${q}`);
+  }
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * THE SCENARIO RULE (2026-11-12)
+ *
+ * «سقوط بیت کوین چه اثری دارد؟» asks for a FUTURE, which the corpus does
+ * not hold. The brain matched `kb.analytics.sopr-read` — an item about how
+ * a historical rule is applied — and presented it as the answer.
+ *
+ * This rule is PLAN-INDEPENDENT on purpose: the other freshness rules read
+ * `plan.freshness`, and the central brain has no collaboration plan, so a
+ * plan-dependent rule silently does not apply there. That is exactly what
+ * happened.
+ * ───────────────────────────────────────────────────────────────────────── */
+test('a scenario question is a live question, never a glossary answer', () => {
+  const gate = (message) => evaluateLocalFirst({
+    message, locale: 'fa', knowledge: [], context: {}, env: {}
+  });
+  for (const q of [
+    'سقوط بیت کوین چه اثری دارد؟',
+    'اگر بیت کوین بریزد چه می‌شود؟',
+    'اگر بیت کوین دو برابر شود چه می‌شود؟',
+    'اگر قیمت بیت کوین نصف شود چه می‌شود؟'
+  ]) {
+    const r = gate(q);
+    assert.equal(r.used, false, `a scenario must not be answered from a glossary: ${q}`);
+    assert.equal(r.reason, 'needs-live-data', `the reason must be the live one: ${q}`);
+  }
+});
+
+test('the scenario rule does not catch an ordinary lookup', () => {
+  const gate = (message) => evaluateLocalFirst({
+    message, locale: 'fa', knowledge: [], context: {}, env: {}
+  });
+  for (const q of [
+    'بیت کوین چیست؟',
+    'کارمزد پلتفرم FBT چقدر است؟',
+    'چطور کیف پول بسازم؟',
+    'اگر بیت کوین را نمی‌فروشم چه؟',
+    'قیمت بیت کوین چنده؟'
+  ]) {
+    const r = gate(q);
+    assert.notEqual(r.skippedFor, 'scenario', `a lookup must not be read as a scenario: ${q}`);
+  }
+});
+
+test('the pre-gate declines a risk question and a scenario', () => {
+  const pre = (message) => preEvaluateLocalFirst({ message, plan: {}, env: {} });
+  assert.equal(pre('ریسک لیکوییدیتی چیست؟').continue, false);
+  assert.equal(pre('ریسک لیکوییدیتی چیست؟').reason, 'judgement-question');
+  assert.equal(pre('سقوط بیت کوین چه اثری دارد؟').continue, false);
+  assert.equal(pre('سقوط بیت کوین چه اثری دارد؟').reason, 'needs-live-data');
+});
