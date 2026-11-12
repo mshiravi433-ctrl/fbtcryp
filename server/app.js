@@ -4479,6 +4479,9 @@ app.get('/api/v1/smart-money/wallets/verified', async (_req, res) => {
     const out = await smartMoney.getVerifiedIntelligence({ window: '7d' });
     return smJson(res, { schema: 'fbt.smart-money-leaderboard.v1', dataStatus: out.dataStatus,
       at: out.at, indexedAt: out.indexedAt, refresh: out.refresh, coverage: out.coverage, wallets: out.leaderboard,
+      // Display order is decided by the client from each row's SAMPLE, not by
+      // the raw score this array is sorted on (see lib/verifiedEvidence.js).
+      leaderboardBasis: out.leaderboardBasis,
       // Every analysed wallet with its MEASURED stats, qualified or not —
       // "under evaluation", never promoted into the leaderboard above.
       candidates: (out.observed?.candidates || []).filter((c) => !c.qualified).slice(0, 12) }, { sMax: 60 });

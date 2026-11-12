@@ -36,6 +36,10 @@ import { readEarlyness, EARLY_MAX_STALENESS_MS } from '../src/lib/walletEarlynes
 import {
   readTrackedWallet, readWatchlist, nextToRead, TRACK_MAX_READS, TRACK_MOVE_MIN_USD
 } from '../src/lib/walletTracking.js';
+import {
+  readEvidenceQuality, readBoardQuality, readQualificationGaps,
+  EVIDENCE_MIN_CLOSES, EVIDENCE_COVERAGE_WEAK
+} from '../src/lib/verifiedEvidence.js';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const loadLocale = (l) => JSON.parse(read(`../src/i18n/locales/${l}.json`));
@@ -419,7 +423,7 @@ function run() {
 
     /* the client engines stay pure: no fetch, no timer, no storage */
     for (const file of ['smartMoneyRead.js', 'copyTrade.js', 'whaleEngine.js', 'freshWallets.js',
-      'walletEarlyness.js', 'walletTracking.js']) {
+      'walletEarlyness.js', 'walletTracking.js', 'verifiedEvidence.js']) {
       const src = strip(read(`../src/lib/${file}`));
       t(`${file} costs no request, timer or storage`,
         !/\bfetch\(/.test(src) && !/setInterval|setTimeout/.test(src)
@@ -560,6 +564,88 @@ function run() {
     t('the wallet cache key is bucketed, not keyed on the live budget',
       /sm:wallet:[^`]*\$\{budgetTier\(timeoutMs\)\}/.test(intel)
       && !/\$\{timeoutMs\}/.test(intel));
+  }
+
+  /* ── 8e · VERIFIED INTELLIGENCE: a score weighs what it was built on ──────
+     «هوش تأییدشده» already refused to invent numbers. What it could not say is
+     how much the number is worth believing: a 91 from five closes and a 91 from
+     forty are the same glyph on the card. */
+  {
+    const deep = readEvidenceQuality({ score: 88, coverage: 1, measuredCoverage: 1, closedTrades: 40,
+      sample: { swaps: 120, closedTrades: 40, observedDays: 180 }, qualified: true });
+    t('a deep, long, broad sample reads as strong evidence',
+      deep.verdict === 'strong' && deep.confidence === 100);
+
+    /* THE ONE THAT MATTERS: the admission floor is not a sample. A 95 built on
+       five closes in under a day must not be described as strong evidence. */
+    const thin = readEvidenceQuality({ score: 95, coverage: 0.63, measuredCoverage: 0.7, closedTrades: 5,
+      sample: { swaps: 10, closedTrades: 5, observedDays: 0.4 }, qualified: true });
+    t('five closes in one session is a THIN sample, not a strong wallet',
+      thin.verdict === 'thin' && thin.confidence < 40);
+    t('and «thin» is never reported as «weak»: the sample is the fault, not the trader',
+      thin.note && /too small to judge/.test(thin.note));
+
+    /* The other direction: adequate evidence, bad result. This must NOT read as
+       strong evidence either — the first draft did exactly that (verdict
+       'strong' beside a score of 42), which is praise for a losing wallet. */
+    const weak = readEvidenceQuality({ score: 42, coverage: 0.7, measuredCoverage: 0.7, closedTrades: 22,
+      sample: { swaps: 60, closedTrades: 22, observedDays: 45 }, qualified: false });
+    t('a well-evidenced BAD result is «weak», not «strong»', weak.verdict === 'weak');
+
+    /* Shrinkage only ever pulls down, and it is shown, not hidden. */
+    t('the adjusted score is a downward pull on a thin sample and never a lift',
+      thin.adjustedScore < thin.score && deep.adjustedScore === deep.score);
+    t('a row with no score is unmeasured, with the reason named',
+      readEvidenceQuality({ score: null, closedTrades: 0 }).verdict === 'unmeasured');
+    t('and a row with closes but no span refuses a confidence instead of guessing',
+      readEvidenceQuality({ score: 80, closedTrades: 20, coverage: 0.7 }).confidence === null);
+
+    /* The factors that were thrown away at the index boundary. */
+    const partial = readEvidenceQuality({ score: 80, coverage: 0.7, measuredCoverage: 0.7, closedTrades: 12,
+      sample: { swaps: 30, closedTrades: 12, observedDays: 20 },
+      factors: { profitability: 0.8, winRate: 0.75, earlyEntryAccuracy: null, exitTiming: null,
+        consistency: 0.6, capitalEfficiency: 0.7, riskAdjustedPerformance: 0.5 } });
+    t('the read names exactly which of the seven factors went unmeasured',
+      partial.missingFactors.length === 2 && partial.missingFactors.includes('exitTiming')
+      && partial.measuredFactors.length === 5);
+
+    /* THE BOARD ORDER — the whole point of the exercise. */
+    const board = readBoardQuality({ wallets: [
+      { address: 'a-lucky', score: 95, coverage: 0.63, measuredCoverage: 0.7, closedTrades: 5,
+        sample: { swaps: 10, closedTrades: 5, observedDays: 0.4 } },
+      { address: 'b-solid', score: 78, coverage: 1, measuredCoverage: 1, closedTrades: 40,
+        sample: { swaps: 120, closedTrades: 40, observedDays: 180 } }
+    ] });
+    t('a lucky 95 from five closes does NOT outrank a measured 78 from forty',
+      board.rows[0].address === 'b-solid', board.rows.map((r) => `${r.address}:${r.evidence.adjustedScore}`).join(' '));
+    t('the board states its own mean evidence and its thin count',
+      board.boardConfidence === 62 && board.thin === 1 && board.established === 1);
+    t('the raw score is kept beside the adjusted one, so the pull is auditable',
+      board.rows[1].score === 95 && board.rows[1].evidence.adjustedScore < 95);
+    t('a board whose evidence sits in one wallet says so',
+      readBoardQuality({ wallets: [
+        { address: 'x', score: 80, closedTrades: 40, coverage: 1, measuredCoverage: 1, sample: { swaps: 100, observedDays: 90 } },
+        { address: 'y', score: 80, closedTrades: 5, coverage: 0.7, measuredCoverage: 0.7, sample: { swaps: 10, observedDays: 10 } }
+      ] }).concentratedIn?.address === 'x');
+
+    /* WHY not qualified — four different situations behind one status word. */
+    const multi = readQualificationGaps({ closedTrades: 2, sample: { observedDays: 0.5 }, winRate: 30, score: 40 });
+    t('the first binding gate is named, not a generic «insufficient evidence»',
+      multi.primary === 'closes' && multi.gaps[0].need === EVIDENCE_MIN_CLOSES);
+    t('a wallet blocked only on win rate names the win rate',
+      readQualificationGaps({ closedTrades: 20, sample: { observedDays: 30 }, winRate: 40, score: 80 }).primary === 'winRate');
+    t('a thin-coverage wallet names coverage against the same constant the read uses',
+      readQualificationGaps({ closedTrades: 20, sample: { observedDays: 30 }, coverage: 0.4, score: 80 })
+        .gaps.some((g) => g.gate === 'coverage' && g.need === EVIDENCE_COVERAGE_WEAK));
+    t('a qualified wallet has no gaps to explain', readQualificationGaps({ qualified: true }).gaps.length === 0);
+
+    /* And the factors must actually REACH the client — they used to be dropped
+       at the index boundary, so every screen had a score it could not explain. */
+    const intel = strip(read('../server/smartMoney/intelligence.js'));
+    t('the indexed profile carries its factor breakdown to the client',
+      /factors: sm\.factors/.test(intel));
+    const app = strip(read('../server/app.js'));
+    t('the leaderboard says it is NOT in display order', /leaderboardBasis: out\.leaderboardBasis/.test(app));
   }
 
   /* ── 9 · the new copy is translated (a raw key on a money screen is a bug) ─ */

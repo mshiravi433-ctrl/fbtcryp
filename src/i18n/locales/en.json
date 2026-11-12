@@ -13679,7 +13679,28 @@
       "statusScored": "Scored",
       "copyTradeNote": "Copy trade opens the swap screen with the same token and side; amount, fees and final confirmation stay yours.",
       "liquidityShort": "Liquidity",
-      "noPrice": "Price unavailable"
+      "noPrice": "Price unavailable",
+      "evidenceBoard": "Mean evidence: {{n}}/100",
+      "evidenceEstablished": "{{n}} of {{total}} wallets rest on an established sample",
+      "evidenceThin": "{{n}} wallets have too small a sample to judge yet",
+      "evidenceConcentrated": "{{pct}}% of this board's evidence sits in one wallet",
+      "evidenceRaw": "(raw {{n}})",
+      "evidenceAdjustedNote": "The score is weighted by its evidence: a small sample pulls it toward the midpoint and never lifts it.",
+      "evidenceVerdict": {
+        "strong": "Strong evidence",
+        "fair": "Fair evidence",
+        "thin": "Thin sample",
+        "weak": "Weak result",
+        "unmeasured": "Unmeasured"
+      },
+      "gap": {
+        "closes": "{{have}} of {{need}} closes",
+        "days": "{{have}} of {{need}} days",
+        "coverage": "coverage {{have}} of {{need}}",
+        "score": "score {{have}} of {{need}}",
+        "winRate": "win rate {{have}}% of {{need}}%",
+        "realized": "no realized profit yet"
+      }
     },
     "title": "Smart Money",
     "windowAria": "Time window",

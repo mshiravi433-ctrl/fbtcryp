@@ -214,7 +214,41 @@ const intelligence = {
   graph: { nodes: [], edges: [] }
 };
 
-const verifiedWallets = { wallets: [], coverage: { analyzedWallets: 10 } };
+/*
+ * TWO VERIFIED WALLETS, deliberately different in EVIDENCE and not in outcome:
+ *   · `0x1111…` scored 95 off FIVE closes in a single session — the lucky-but-
+ *     thin row the board used to print first;
+ *   · `0x2222…` scored 78 off FORTY closes over six months — the measured row.
+ * If the board ever sorts on the raw score again, the thin wallet comes first
+ * and the probe says so.
+ */
+const verifiedWallets = {
+  dataStatus: 'observed',
+  indexedAt: Date.now() - 120_000,
+  leaderboardBasis: 'raw-verified-score; clients must re-rank by sample evidence before display',
+  wallets: [
+    {
+      chain: 1, address: `0x${'1'.repeat(40)}`, label: 'thin-lucky', score: 95,
+      coverage: 0.63, measuredCoverage: 0.7, closedTrades: 5, realizedUsd: 40_000, winRate: 80,
+      qualified: true, updatedAt: Date.now() - 60_000,
+      sample: { swaps: 10, closedTrades: 5, observedDays: 0.4, historyTruncated: false },
+      factors: { profitability: 0.9, winRate: 0.8, earlyEntryAccuracy: null, exitTiming: null,
+        consistency: 0.5, capitalEfficiency: 0.6, riskAdjustedPerformance: null }
+    },
+    {
+      chain: 1, address: `0x${'2'.repeat(40)}`, label: 'deep-measured', score: 78,
+      coverage: 1, measuredCoverage: 1, closedTrades: 40, realizedUsd: 900_000, winRate: 62,
+      qualified: true, updatedAt: Date.now() - 60_000,
+      sample: { swaps: 120, closedTrades: 40, observedDays: 180, historyTruncated: false },
+      factors: { profitability: 0.7, winRate: 0.62, earlyEntryAccuracy: 0.5, exitTiming: 0.4,
+        consistency: 0.8, capitalEfficiency: 0.75, riskAdjustedPerformance: 0.6 }
+    }
+  ],
+  candidates: [{ chain: 1, address: `0x${'3'.repeat(40)}`, label: 'not-yet', score: 40,
+    closedTrades: 2, winRate: 30, swaps: 3, status: 'INSUFFICIENT_EVIDENCE', qualified: false,
+    sample: { swaps: 3, closedTrades: 2, observedDays: 0.5 } }],
+  coverage: { analyzedWallets: 10, classifiedWallets: 2, observedSwaps: 130 }
+};
 
 const alerts = {
   alerts: [{
@@ -481,7 +515,44 @@ export async function run(container) {
   t('the digest offers exactly one way to read them, capped, not eight fetches on mount',
     qa('[data-testid="sm-watch-digest"] .smx-chip--act').length === 1);
 
-  /* 15 · no runtime noise */
+  /* 15 · the verified board weighs each score (round 8)
+     The board that carries `SmartMoneyIntelligence` is the WALLETS tab, not the
+     intelligence tab — the probe went to the wrong one first and reported
+     «cards=0», which is exactly the sort of assertion that fails for the right
+     reason and gets «fixed» for the wrong one. */
+  const walletsTab = dock.find((b) => b.textContent === fa.sm.tabs.wallets);
+  await click(walletsTab, 160);
+  const cards = qa('.smi-wallet-card');
+  t('the verified board renders the wallets the index actually holds',
+    cards.length === 2, `cards=${cards.length}`);
+  t('the board leads with MEASURED evidence, not with the highest raw score',
+    /deep-measured/.test(cards[0]?.textContent || ''),
+    cards.map((c) => (c.textContent || '').slice(0, 40)).join(' | '));
+  const badges = qa('[data-testid="sm-evidence-badge"]');
+  /* Asserted as a SET, not by index: the point is that both verdicts appear,
+     and pinning them to positions would re-break the moment the sort changes —
+     which is the very thing the assertion above is meant to protect. */
+  t('every card states the strength of its own sample',
+    badges.length === 2
+    && badges.some((b) => new RegExp(fa.sm.engine.evidenceVerdict.thin).test(b.textContent))
+    && badges.some((b) => new RegExp(fa.sm.engine.evidenceVerdict.strong).test(b.textContent)),
+    badges.map((b) => b.textContent).join(' | '));
+  t('the thin card prints its ADJUSTED score, with the raw one still visible',
+    /(raw|خام)/.test(cards[1]?.textContent || '') || /(raw|خام)/.test(cards[0]?.textContent || ''),
+    cards[1]?.textContent?.slice(0, 80));
+  const boardLine = q('[data-testid="sm-evidence-board"]');
+  t('the board states its mean evidence above the cards', !!boardLine);
+  t('and how many of its wallets rest on an established sample',
+    new RegExp(fa.sm.engine.evidenceEstablished.replace('{{n}}', '1').replace('{{total}}', '2')).test(boardLine?.textContent || ''),
+    boardLine?.textContent);
+  t('and that one of them is too thin to judge yet',
+    new RegExp(fa.sm.engine.evidenceThin.replace('{{n}}', '1')).test(boardLine?.textContent || ''));
+  const cands = qa('.smi-candidate-box');
+  t('an unqualified wallet names its FIRST binding gate, not a generic status',
+    cands.length === 1 && new RegExp(fa.sm.engine.gap.closes.replace('{{have}}', '2').replace('{{need}}', '5'))
+      .test(cands[0].textContent || ''), cands[0]?.textContent);
+
+  /* 16 · no runtime noise */
   const realErrors = errors.filter((e) => !/not wrapped in act|React Router Future Flag|ReactDOMTestUtils\.act/.test(e));
   t('no React error was logged during any of that',
     realErrors.length === 0, realErrors.slice(0, 3).join(' | '));
