@@ -349,6 +349,22 @@ function evidenceScore(ev) {
   return clampf((weighted / (max * 1.5)) * 100, -100, 100);
 }
 
+/**
+ * Map the weighted evidence score to one of the six classes.
+ *
+ * Symmetric by construction: the band at ±14 and the band at ±32 are the same
+ * two cuts on both sides. Anything between the cuts is WATCH — the honest
+ * «the evidence does not agree yet» answer, not a coin flip dressed up as a
+ * call. Exported so the ladder itself is testable in isolation.
+ */
+export function classify(score) {
+  const v = num(score) ?? 0;
+  if (v >= 32) return CLASS.STRONG_BUY;
+  if (v >= 14) return CLASS.BUY;
+  if (v <= -14) return CLASS.SELL;
+  return CLASS.WATCH;
+}
+
 /** Weighted confidence from the seven measured factors. */
 export function confidenceEngine({
   evidence = [],
@@ -363,6 +379,43 @@ export function confidenceEngine({
   consensusAgreement = 100
 } = {}) {
   const dirEvidence = evidence.filter((e) => num(e.direction) !== 0);
+  /*
+   * ─── THE ONE THING A CONFIDENCE NUMBER MUST NEVER DO ─────────────────────
+   * Report high confidence on a card whose own evidence points the other way.
+   * That was reachable: `liquidity`, `volatility` and `strength` are all
+   * direction-BLIND (a violent collapse scores as «strong»), and `agreement`
+   * counts how loudly the indicators speak, not whether they agree with the
+   * class. So a card driven by behaviour and flow — two planes the technical
+   * `agreement` figure does not see — could show «WATCH at 71%» while its own
+   * evidence ran net negative.
+   *
+   * The fix is a CEILING, not a new term: when the evidence net is at least
+   * `OPPOSED` points away from the claimed direction, confidence is capped
+   * below the level that would read as conviction. A cap can only ever lower
+   * the number, so nothing here can inflate a signal, and a missing/neutral
+   * score leaves the existing calculus untouched.
+   */
+  const OPPOSED = 8;
+  const scoreNum = num(signalScore) ?? 0;
+  /*
+   * Measured on the SAME scale the score uses (net direction × weight, over
+   * the total weight actually present, ×100/1.5) so the comparison is
+   * like-for-like: «the evidence nets at least 8 points against the direction
+   * this card is being scored in».
+   */
+  const netW = dirEvidence.reduce((s2, e) => s2 + (num(e.direction) || 0) * (num(e.weight) ?? 1), 0);
+  const totalW = dirEvidence.reduce((s2, e) => s2 + Math.abs(num(e.weight) ?? 1), 0) || 1;
+  const netScale = (netW / (totalW * 1.5)) * 100;
+  /* Two ways a card can be contested: the evidence runs AGAINST the direction
+     being scored, or it is genuinely split (both sides carry weight and the net
+     is inside the 8-point noise band) — «WATCH at 73%» reads as conviction the
+     engine does not have. */
+  const opposed = Math.abs(scoreNum) >= 5
+    && Math.sign(netScale) !== Math.sign(scoreNum) && Math.abs(netScale) >= OPPOSED;
+  const split = dirEvidence.some((e) => num(e.direction) > 0) && dirEvidence.some((e) => num(e.direction) < 0)
+    && Math.abs(netScale) < OPPOSED;
+  const contradicts = opposed || split;
+
   const techAgreement = num(agreement) ?? 50;
   const fresh = clampf(freshness, 0.4, 1);
   const liquidity = turnoverPct != null ? clampf(15 + turnoverPct * 12, 40, 96) : 55;
@@ -381,7 +434,11 @@ export function confidenceEngine({
     (0.4 * volFit + 0.6 * strength) * 0.15
   );
   const min = dirEvidence.length >= MIN_EVIDENCE ? 15 : 5;
-  return Math.round(clampf(weighted, min, 95));
+  const out = clampf(weighted, min, 95);
+  /* A contested card still shows how much was measured — it just cannot show
+     the number that reads as conviction. 55 is the same «moderate» line the
+     card already uses for its momentum label. */
+  return Math.round(contradicts ? Math.min(out, 55) : out);
 }
 
 /**
@@ -419,12 +476,17 @@ export function computeSignalCard({
   }
 
   const score = evidenceScore(evidence);
-  let classification =
-    score >= 32 ? CLASS.STRONG_BUY
-      : score >= 14 ? CLASS.BUY
-        : score <= -32 ? CLASS.SELL
-          : score <= -14 ? CLASS.SELL
-            : CLASS.WATCH;
+  /*
+   * ─── FOUR BANDS, NOT THREE AND A BROKEN SYMMETRY ─────────────────────────
+   * The downside read used to be `score <= -32 ? SELL : score <= -14 ? SELL`,
+   * so «strong sell» and «sell» rendered as the same word while «strong buy»
+   * and «buy» did not. Two different amounts of evidence produced one label,
+   * which makes the class useless for ranking the sell side and hides exactly
+   * how convinced the engine is. The mirror of the buy ladder is now explicit
+   * and it is a `classify()` export, so the asymmetry cannot come back by
+   * accident and can be asserted without constructing an entire card.
+   */
+  let classification = classify(score);
 
   /* Risk override: the six classes include risk-aware categories. A strong
      risk read can only downgrade a call, never upgrade it. */
@@ -473,13 +535,28 @@ export function computeSignalCard({
   let stop = null;
   let targetPct = null;
   let stopPct = null;
+  let tradeDir = null;
   if (classification === CLASS.BUY || classification === CLASS.STRONG_BUY || classification === CLASS.SELL || classification === CLASS.HIGH_RISK) {
     const volH = risk7?.volatilityPct ?? 3;
-    const dir = score >= 0 ? 1 : -1;
+    /*
+     * ─── THE DIRECTION MUST BE THE CLASS'S, NOT THE SIGN OF A ROUNDED SCORE ─
+     * `score >= 0 ? 1 : -1` looked harmless until the risk override landed: a
+     * card downgraded to HIGH_RISK while the evidence sat just under zero got
+     * a DOWNWARD target and stop, plus a positive `targetPct`, and the panel
+     * renders that number behind a literal «+» (`+${signal.targetPct}%`). The
+     * screen then said «target +1.2%» for a call whose own numbers pointed
+     * down — a fabricated level, which is the one thing this engine does not
+     * do. The direction now comes from the class, and for HIGH_RISK from the
+     * sign of the evidence, so the two can never disagree.
+     */
+    const dir = classification === CLASS.BUY || classification === CLASS.STRONG_BUY ? 1
+      : classification === CLASS.SELL ? -1
+        : score >= 0 ? 1 : -1;
     targetPct = clampf(volH * (classification === CLASS.STRONG_BUY ? 0.7 : 0.55), 0.8, 26);
     stopPct = clampf(targetPct * 0.5, 0.6, 14);
     target = coin.price * (1 + (dir * targetPct) / 100);
     stop = coin.price * (1 - (dir * stopPct) / 100);
+    tradeDir = dir > 0 ? 'up' : 'down';
   }
 
   /* Reasons lead with BEHAVIOUR when behaviour is the loudest measured thing:
@@ -519,6 +596,8 @@ export function computeSignalCard({
     stop,
     targetPct: targetPct != null ? Math.round(targetPct * 100) / 100 : null,
     stopPct: stopPct != null ? Math.round(stopPct * 100) / 100 : null,
+    /* WHICH WAY the target points, so the panel stops assuming «up». */
+    tradeDirection: tradeDir,
     reasons,
     evidence,
     /* The measured behaviour read, so the detail panel can show WHY the tape
@@ -817,11 +896,17 @@ export function filterSignals(signals = [], filters = {}, marketOf = () => null)
     }
     if (risk !== 'all' && String(s?.risk || '').toLowerCase() !== risk) return false;
     if (conf > 0 && (s?.confidence ?? 0) < conf) return false;
-    if (timeframe !== 'all' && s?.timeframe !== Number(timeframe.replace('D', '')) && s?.timeframe !== Number(timeframe.replace('H', ''))) {
-      // 24H is the 1-day horizon; accept either representation.
-      const days = timeframe === '24H' ? 1 : Number(timeframe.replace('D', ''));
-      const key = timeframe === '24H' ? '24H' : `${days}D`;
-      if (!(s.horizons || []).some((h) => h.key === key)) return false;
+    if (timeframe !== 'all') {
+      /*
+       * The timeframe filter asks one question: does this card carry a measured
+       * horizon for the window the reader picked? It used to answer a second,
+       * broken one first — `Number('24H'.replace('D',''))` is NaN, so the 24H
+       * comparison could never be true and the whole filter fell through to a
+       * fallback that only looked right by accident. One mapping, one check,
+       * and a card with no horizons is filtered out rather than silently kept.
+       */
+      const key = timeframe === '24H' ? '24H' : `${Number(timeframe.replace('D', ''))}D`;
+      if (!(s.horizons || []).some((h) => h && h.key === key)) return false;
     }
     if (asset !== 'all') {
       const sym = String(c.symbol || '').toUpperCase();

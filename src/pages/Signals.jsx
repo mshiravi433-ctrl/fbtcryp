@@ -1379,8 +1379,24 @@ function SelectedSignalCard({ coin, signal, analysis, series, scanning, watched,
                     tone={risk === 'high' ? 'down' : risk === 'low' ? 'up' : 'warn'}
                   />
                   <MetricTile k={t('signals.intel.card.timeframe')} v={t('signals.intel.card.timeframeLabel', { d: signal.timeframe })} />
-                  <MetricTile k={t('signals.intel.card.target')} v={signal.targetPct != null ? `+${signal.targetPct}%` : '—'} tone="up" />
-                  <MetricTile k={t('signals.intel.card.stop')} v={signal.stopPct != null ? `-${signal.stopPct}%` : '—'} tone="down" />
+                  {/*
+                    * THE SIGN COMES FROM THE CALL, NOT FROM THE TEMPLATE.
+                    * Both tiles used to hardcode one direction (`+target`,
+                    * `-stop`), so a SELL or a HIGH_RISK call read «+1.2%» for
+                    * a target it measured downward — a level that pointed the
+                    * opposite way from its own sign. `tradeDirection` is the
+                    * direction the engine actually used.
+                    */}
+                  <MetricTile
+                    k={t('signals.intel.card.target')}
+                    v={signal.targetPct != null ? `${signal.tradeDirection === 'down' ? '−' : '+'}${signal.targetPct}%` : '—'}
+                    tone={signal.tradeDirection === 'down' ? 'down' : 'up'}
+                  />
+                  <MetricTile
+                    k={t('signals.intel.card.stop')}
+                    v={signal.stopPct != null ? `${signal.tradeDirection === 'down' ? '+' : '−'}${signal.stopPct}%` : '—'}
+                    tone={signal.tradeDirection === 'down' ? 'up' : 'down'}
+                  />
                 </div>
               ) : (
                 <div className="sic-insufficient">
@@ -1420,7 +1436,7 @@ function SelectedSignalCard({ coin, signal, analysis, series, scanning, watched,
  * series was too short simply shows fewer rows — never a zero, never a dash
  * pretending to be a measurement.
  * ──────────────────────────────────────────────────────────────────────────── */
-function behaviorRows(behavior, t) {
+function behaviorRows(behavior, t, tapeEdge = null) {
   if (!behavior) return [];
   const rows = [];
   const push = (key, label, value, tone = '') => {
@@ -1460,6 +1476,28 @@ function behaviorRows(behavior, t) {
   if (behavior.pattern && behavior.pattern.repeat) {
     push('repeat', t('signals.intel.behavior.pattern'), t('signals.intel.behavior.patternSeen', { n: behavior.pattern.seenStepsAgo }), 'warn');
   }
+  /*
+   * HAS THE TAPE ACTUALLY MATTERED? The rows above describe what the tape is
+   * doing; a row here says whether the same rule historically did better when
+   * the tape looked that way (`behaviorEdge` in src/lib/backtest.js). It is
+   * EVIDENCE for the argument the panel already makes, not a new claim: it is
+   * printed only when one of the two buckets has enough occurrences to be
+   * measurable, and it is stated against that bucket's own base rate so a
+   * drifting market cannot flatter it.
+   *
+   * Cost: zero. `analyze()` already computed it from the series in hand, so
+   * this reads one field of an object the page already had — no request, no
+   * timer, no second pass over the prices.
+   */
+  if (tapeEdge && tapeEdge.broad) {
+    push('edge-broad', t('signals.intel.behavior.edgeWhen', { kind: t('signals.intel.behavior.edgeBroad') }),
+      `${tapeEdge.broad.edge >= 0 ? '+' : ''}${tapeEdge.broad.edge}pp · n=${tapeEdge.broad.n}`,
+      tapeEdge.broad.edge >= 0 ? 'up' : 'down');
+  } else if (tapeEdge && tapeEdge.spiky) {
+    push('edge-spiky', t('signals.intel.behavior.edgeWhen', { kind: t('signals.intel.behavior.edgeSpiky') }),
+      `${tapeEdge.spiky.edge >= 0 ? '+' : ''}${tapeEdge.spiky.edge}pp · n=${tapeEdge.spiky.n}`,
+      tapeEdge.spiky.edge >= 0 ? 'up' : 'down');
+  }
   return rows;
 }
 
@@ -1472,6 +1510,7 @@ function SignalBreakdown({
   horizon,
   invalidation,
   backtestInfo,
+  tapeEdge,
   hasOnchain,
   onchainRows,
   behavior
@@ -1479,7 +1518,7 @@ function SignalBreakdown({
   const { t } = useTranslation();
   if (!analysis) return <div className="sic-insufficient">{t('signals.intel.card.insufficient')}</div>;
 
-  const behaviorRead = behaviorRows(behavior, t);
+  const behaviorRead = behaviorRows(behavior, t, tapeEdge);
 
   return (
     <div className="sic-breakdown">
@@ -1589,6 +1628,41 @@ function SignalBreakdown({
             <div><b className="mono">{backtestInfo.samples}</b><span>{t('signals.backtestSamples')}</span></div>
           </div>
           <div className="faint sic-panel-note">{t('signals.backtestHint', { base: Math.round(backtestInfo.base) })}</div>
+          {/*
+            * The same replay, split by the SHAPE OF THE TAPE at the moment the
+            * rule fired. This is the historical answer to the question the
+            * behaviour read raises («a broad move is worth more than a spike»),
+            * inside the panel that already exists — no new section, no new
+            * control. Buckets with too few occurrences are not rendered at
+            * all: `behaviorEdge` refuses to report them, and an unmeasurable
+            * claim is worse than an empty space.
+            */}
+          {tapeEdge && (tapeEdge.broad || tapeEdge.spiky) && (
+            <div className="sic-tape-edge">
+              <div className="faint sic-mini-label">{t('signals.behaviorEdge.title')}</div>
+              <div className="sic-key-value-list sic-onchain-list">
+                {tapeEdge.broad && (
+                  <div>
+                    <span>{t('signals.behaviorEdge.broad')}</span>
+                    <b className={`mono ${tapeEdge.broad.edge >= 0 ? 'up' : 'down'}`}>
+                      {tapeEdge.broad.edge >= 0 ? '+' : ''}{tapeEdge.broad.edge}pp
+                      <small> · {t('signals.behaviorEdge.hits', { n: tapeEdge.broad.n, rate: Math.round(tapeEdge.broad.rate) })}</small>
+                    </b>
+                  </div>
+                )}
+                {tapeEdge.spiky && (
+                  <div>
+                    <span>{t('signals.behaviorEdge.spiky')}</span>
+                    <b className={`mono ${tapeEdge.spiky.edge >= 0 ? 'up' : 'down'}`}>
+                      {tapeEdge.spiky.edge >= 0 ? '+' : ''}{tapeEdge.spiky.edge}pp
+                      <small> · {t('signals.behaviorEdge.hits', { n: tapeEdge.spiky.n, rate: Math.round(tapeEdge.spiky.rate) })}</small>
+                    </b>
+                  </div>
+                )}
+              </div>
+              <div className="faint sic-panel-note">{t('signals.behaviorEdge.note')}</div>
+            </div>
+          )}
         </SignalSection>
       )}
 
@@ -2529,6 +2603,13 @@ export default function Signals() {
     if (!side || side.total < 8 || side.edge === null || side.edge === undefined) return null;
     return { rate: side.rate, edge: side.edge, samples: side.total, base: bt.baseRate };
   }), [analysis]);
+  /*
+   * The behaviour-conditioned replay rides on `analysis` — `analyze()` already
+   * computed it from the SAME series during the poll, so this line adds no
+   * request, no interval and no extra pass over the prices. Null (too little
+   * history, or no bucket large enough to report) hides the block entirely.
+   */
+  const tapeEdge = useMemo(() => safeCalc(() => analysis?.behaviorEdge ?? null), [analysis]);
   const activeHorizons = useMemo(() => safeCalc(() => computeHorizonRisks({ series: priceSeries, analysis }), []), [priceSeries, analysis]);
   const layerRows = useMemo(() => {
     if (!read?.layers) return [];
@@ -2674,6 +2755,7 @@ export default function Signals() {
                       horizon={horizon}
                       invalidation={invalidation}
                       backtestInfo={backtestInfo}
+                      tapeEdge={tapeEdge}
                       hasOnchain={hasOnchain}
                       onchainRows={onchainRows}
                     />

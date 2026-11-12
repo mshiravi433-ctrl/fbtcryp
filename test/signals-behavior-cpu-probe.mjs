@@ -28,7 +28,8 @@ import {
   volumeAgreement, moveAnomaly, patternRepeat, seriesVolPct
 } from '../src/lib/tokenBehavior.js';
 import { analyze } from '../src/lib/ai.js';
-import { computeSignalCard, computeEarlySignals, buildEvidence, MIN_EVIDENCE } from '../src/lib/signalEngine.js';
+import { backtest, tapeKindAt } from '../src/lib/backtest.js';
+import { computeSignalCard, computeEarlySignals, buildEvidence, MIN_EVIDENCE, classify, CLASS } from '../src/lib/signalEngine.js';
 
 const clamp = (v) => Number.isFinite(v);
 
@@ -149,6 +150,103 @@ export default async function run() {
 
   t('the early detector still refuses an entry with no measurable behaviour',
     computeEarlySignals({ entries: [{ coin: COIN, series: [1, 2, 3], analysis: null }] }).length === 0);
+
+  /* ═══════════ (A2) the class ladder, the levels and the confidence ══════ */
+
+  /*
+   * A symmetric ladder. The sell side used to collapse ±32 into one label, so
+   * «strong» meant nothing on the downside and the function could not be
+   * reasoned about. Both sides are now the same two cuts.
+   */
+  t('the class ladder is symmetric around zero',
+    classify(40) === CLASS.STRONG_BUY && classify(14) === CLASS.BUY
+    && classify(13.9) === CLASS.WATCH && classify(0) === CLASS.WATCH
+    && classify(-13.9) === CLASS.WATCH && classify(-14) === CLASS.SELL
+    && classify(-40) === CLASS.SELL && classify(-80) === CLASS.SELL);
+
+  /*
+   * THE LEVELS MUST AGREE WITH THE CALL. `tradeDirection` exists because the
+   * panel rendered `+target / −stop` unconditionally; a card downgraded to
+   * HIGH_RISK while its evidence sat below zero carried a DOWNWARD target
+   * behind a literal «+». Whenever a target exists the direction must be
+   * stated, and a BUY/SELL must never carry the opposite one.
+   */
+  const cardFor = (seriesIn) => computeSignalCard({
+    coin: { ...COIN, price: seriesIn[seriesIn.length - 1] },
+    series: seriesIn,
+    analysis: analyze(seriesIn, COIN),
+    now: 1_700_000_000_000
+  });
+  const upCard = cardFor(broadUptrend(120));
+  const downCard = cardFor(seriesOf(120, (i) => 200 * (1 - i * 0.004)));
+  t('a target always carries the direction it was measured in',
+    (upCard.target == null || ['up', 'down'].includes(upCard.tradeDirection))
+    && (downCard.target == null || ['up', 'down'].includes(downCard.tradeDirection)));
+  t('a BUY never points down and a SELL never points up',
+    ((upCard.classification !== CLASS.BUY && upCard.classification !== CLASS.STRONG_BUY) || upCard.tradeDirection === 'up')
+    && (downCard.classification !== CLASS.SELL || downCard.tradeDirection === 'down'));
+
+  /*
+   * CONFIDENCE CANNOT CONTRADICT ITS OWN EVIDENCE. Everything direction-blind
+   * (volatility, liquidity, strength) used to push a contested card to 70+
+   * while its evidence netted the other way. The cap is 55 — the same
+   * «moderate» line the card already uses — and it only ever LOWERS a number.
+   */
+  const { confidenceEngine } = await import('../src/lib/signalEngine.js');
+  const contested = confidenceEngine({
+    evidence: [{ direction: 1, weight: 1.2 }, { direction: -1, weight: 1.3 }, { direction: -1, weight: 1.1 }],
+    agreement: 95, marketAgreement: 90, onchainAgreement: 95,
+    freshness: 1, turnoverPct: 12, volatilityScore: 20, signalScore: 8
+  });
+  const aligned = confidenceEngine({
+    evidence: [{ direction: 1, weight: 1.2 }, { direction: 1, weight: 1.3 }],
+    agreement: 95, marketAgreement: 90, onchainAgreement: 95,
+    freshness: 1, turnoverPct: 12, volatilityScore: 20, signalScore: 30
+  });
+  t('a card whose evidence points the other way cannot read as conviction',
+    contested <= 55 && aligned > contested);
+
+  /*
+   * THE TAPE SPLIT MUST BE MEASURABLE OR ABSENT. `behaviorEdge` replays the
+   * untouched rule and buckets it by participation; a bucket under six
+   * occurrences is not reported at all, a short series returns null, and the
+   * result is deterministic (so it can be shown on a card without flicker).
+   */
+  const choppy = seriesOf(200, (i) => 100 * (1 + Math.sin(i / 3) * 0.05));
+  const be1 = backtest(choppy, 7)?.tape;
+  const be2 = backtest(choppy, 7)?.tape;
+  t('the tape split is deterministic and reports only measurable buckets',
+    JSON.stringify(be1) === JSON.stringify(be2)
+    && be1 != null
+    && [be1.broad, be1.spiky].filter(Boolean).every((b) => b.n >= be1.minBucket && Number.isFinite(b.edge)));
+  t('the tape split refuses a series too short to judge',
+    backtest(seriesOf(60, (i) => 100 + i), 7) === null);
+  t('nothing is fitted: the same rule and horizon are replayed',
+    be1.horizon === 7);
+  /* The split must be a REAL split: the two tapes are classified by different
+     structure, so a series with both must not collapse into one bucket, and the
+     classifier must never guess in the unclassified middle. */
+  const mixed = seriesOf(220, (i) => {
+    const trend = 100 * (1 + i * 0.002);
+    return i % 40 < 20 ? trend : trend * (1 + (i % 40 === 20 ? 0.05 : 0));
+  });
+  t('the tape classifier answers broad, spiky or nothing — never a guess',
+    [60, 80, 100, 120, 140, 160, 180].every((i) => [null, 'broad', 'spiky'].includes(tapeKindAt(mixed, i))));
+  t('the split rides on the ONE backtest pass instead of a second walk',
+    /const kind = tapeKindAt\(v, i\)/.test(readFileSync(new URL('../src/lib/backtest.js', import.meta.url), 'utf8'))
+    && (readFileSync(new URL('../src/lib/backtest.js', import.meta.url), 'utf8').match(/for \(let i = 50;/g) || []).length === 1);
+
+  /* ── the timeframe filter answers the question it is asked ───────────── */
+  {
+    const { filterSignals } = await import('../src/lib/signalEngine.js');
+    const horizons = [{ key: '24H' }, { key: '7D' }, { key: '30D' }];
+    const card = { coin: COIN, status: 'READY', classification: 'BUY', confidence: 70, horizons };
+    t('the timeframe filter keeps a card that carries that horizon',
+      ['24H', '7D', '30D'].every((tf) => filterSignals([card], { timeframe: tf }).length === 1));
+    t('the timeframe filter drops a card that carries no horizons at all',
+      filterSignals([{ ...card, horizons: [] }], { timeframe: '7D' }).length === 0
+      && filterSignals([{ ...card, horizons: undefined }], { timeframe: '24H' }).length === 0);
+  }
 
   /* ═════════════════ (B) the CPU contract, asserted on the source ═══════ */
 

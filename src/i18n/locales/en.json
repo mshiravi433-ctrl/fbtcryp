@@ -3797,10 +3797,23 @@
           "drifting-down": "falling, thin volume",
           "balanced": "in line with volume",
           "unclear": "unmeasured"
-        }
+        },
+        "edgeWhen": "Edge when {kind}",
+        "edgeBroad": "participation was broad",
+        "edgeSpiky": "the move was spiky"
       }
     },
-    "aiPowered": "Powered by AI"
+    "aiPowered": "Powered by AI",
+    "behaviorEdge": {
+      "title": "Tape-conditioned replay",
+      "summary": "{n} setups · edge {edge}",
+      "broad": "Broad participation",
+      "spiky": "Spiked move",
+      "edge": "edge vs its own base rate",
+      "hits": "{n} setups · {rate}% hit",
+      "note": "The same rule, replayed and split by the tape at the moment it fired. Nothing is fitted: it is reported because the split is measurable, and a bucket with too few occurrences is not shown at all.",
+      "none": "Not enough history to split this rule by tape yet."
+    }
   },
   "stocks": {
     "held": {
