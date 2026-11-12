@@ -736,13 +736,40 @@ not break. The new `jobs` array is additive.
 
 * **Setting the five `INTENT_*_PROVIDER` env vars.** It changes the report
   and nothing else. §1.2 proves it: nothing outside the probe reads them.
+  (And since §5.2 they are not even needed to make a phase live.)
 * **Adding more phases.** The registry already has 206. The problem is that
-  64 of them are dark and 155 of them are unreachable from the brain.
-  Adding a 207th makes the ratio worse.
+  155 of them are unreachable from the brain. Adding a 207th makes the
+  ratio worse.
 * **Cutting CPU to make the allowance last.** The allowance is not the
   binding constraint — the `:free` provider quota is (50 requests/day ≈ 8
   max turns). §2.4.
 * **Qdrant.** It buys persistence, not CPU. Already documented.
+
+### 5.8 What is STILL open after all six paths
+
+The six paths in §5 are shipped, and they were the six that the
+measurement justified. What the measurement did **not** justify is left
+open on purpose, and it is worth naming:
+
+1. **52 of 206 phases reach a reasoning module.** The registry is 206 and
+   the AI only asks 52 of them. The fix is not more phases — it is making
+   the brain's intents reach the modules that already exist. The
+   multi-venue wiring (§5.4) moved that number by one; the next twenty
+   intents would move it by twenty.
+
+2. **`server/fios/` (50 files, 980 KB) is still a one-way wire.** It
+   RECEIVES the brain (`server/fios/index.js:90,197,232`) but the brain
+   does not know it exists — it is not in `server/ci/modules.js`.
+
+3. **`/api/cron/daily` is still 621 ms of CPU**, even though its cost is
+   now attributable: `self-probe` (125 ms) and `smart-money` (119 ms) are
+   44 % of it. Whether either needs a daily cadence is a product
+   decision, not a measurement.
+
+4. **The CPU allowance is not the constraint.** The `:free` provider quota
+   is: 50 requests/day ≈ 8 max turns. Every CPU number in this document
+   is a correctness and cost-accounting fix, not a way to stretch the
+   allowance.
 
 ---
 
