@@ -104,6 +104,11 @@ export const PLAN_TEMPLATES = Object.freeze({
     step('markets.read', 'crypto', 'read', { input: { include: ['price', 'volume', 'funding', 'openInterest'] } }),
     step('signals.read', 'signals', 'read', { optional: true }),
     step('news.read', 'news', 'read', { optional: true }),
+    /* The regime (path 12): the macro graph over the global snapshot, the
+       world model and the portfolio. Optional, because the graph is an
+       ENRICHMENT of the overview, not its source — an unreadable graph
+       must not cost the user the market prices. */
+    step('global.read', 'global-intel', 'read', { optional: true }),
     step('present', 'session', 'read', { dependsOn: ['markets.read', 'signals.read', 'news.read'] })
   ],
   NEWS_SUMMARY: () => [

@@ -108,7 +108,11 @@ export const INTENT_TYPES = Object.freeze({
   LOAN_STATUS: { modules: ['lending', 'borrowing', 'portfolio', 'risk'], permission: PERMISSION.READ },
   BORROW_CAPACITY: { modules: ['lending', 'borrowing', 'wallet', 'risk'], permission: PERMISSION.READ },
   FUTURES_RISK: { modules: ['futures', 'dydx', 'portfolio', 'risk'], permission: PERMISSION.READ },
-  MARKET_OVERVIEW: { modules: ['crypto', 'signals', 'news'], permission: PERMISSION.READ },
+  /* The market overview now also reads the global surface (path 12). The
+     macro graph is not a price list — it is the REGIME: what the world
+     model, the global snapshot and the portfolio together say about the
+     market right now. It was a complete engine, unreachable. */
+  MARKET_OVERVIEW: { modules: ['crypto', 'signals', 'news', 'global-intel', 'macro-graph'], permission: PERMISSION.READ },
   NEWS_SUMMARY: { modules: ['news', 'signals', 'events'], permission: PERMISSION.READ },
   SIGNAL_READING: { modules: ['signals', 'crypto', 'news'], permission: PERMISSION.READ },
   GOAL_PLAN: { modules: ['goals', 'portfolio', 'forecast', 'risk', 'profit-plan'], permission: PERMISSION.READ },

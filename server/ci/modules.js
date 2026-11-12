@@ -30,6 +30,7 @@ import { defineModule } from '../../src/lib/central/registry.js';
 import { ciSource, healthSnapshot, chainIdFor } from './sources.js';
 import { hasGlobalIntelProvider, readGlobalIntel } from './globalIntelBridge.js';
 import { hasFitProvider, readFit } from './fitBridge.js';
+import { hasMacroGraphProvider, readMacroGraph } from './fitBridge.js';
 import { storeGet, storeSet, storeDurable, EPHEMERAL_TTL_MS } from '../store.js';
 import { createGoal, getGoal, validateGoalInput, FINANCIAL_GOAL_LIMITATIONS } from '../financialGoals.js';
 import { randomUUID, createHash } from 'node:crypto';
@@ -936,6 +937,59 @@ export function createModules(ctx = {}) {
     recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the ranking is rebuilt on demand from the owner profile and the live feed' } })
   });
 
+  /* ── macro graph (the regime) ─────────────────────────────────────────── */
+  /*
+   * The macro graph is not a price list. It is the REGIME: the global
+   * snapshot, the world model and the portfolio read together, with the
+   * transmission edges between them — which is what a market overview
+   * is missing when it only quotes breadth and the top movers.
+   *
+   * The engine (server/fios/macroGraph.js) existed and was unreachable.
+   *
+   * Like the other two bridges, it has no state section of its own — the
+   * graph is built per-owner from that owner's portfolio — and it is
+   * reached through the same lazy one-slot bridge, so `fios` stays off
+   * the boot path.
+   */
+  const macroGraph = defineModule({
+    id: 'macro-graph', name: 'Macro graph', capability: CAPABILITY.AVAILABLE,
+    state: ['macroGraph'], tools: ['macro.read'], events: ['MACRO_GRAPH_READ'],
+    errors: ['PROVIDER_NOT_WIRED', 'NO_MACRO_GRAPH', 'MACRO_GRAPH_FAILED'],
+    permissions: { max: PERMISSION.READ },
+    fallback: ['the last graph this owner read, labelled stale'],
+    getState: async () => ok('OK', null),
+    healthCheck: async () => (hasMacroGraphProvider()
+      ? { status: 'HEALTHY', detail: 'the macro graph is mounted and can build the regime for this owner' }
+      : { status: 'UNKNOWN', detail: 'the macro graph is not mounted in this process' }),
+    capabilities: async () => ({
+      operations: ['read'],
+      executes: false,
+      reason: 'the macro graph describes the regime; it never moves money'
+    }),
+    read: async (input = {}, readCtx = {}) => {
+      const out = await readMacroGraph(readCtx.owner || owner, { refresh: input.refresh === true });
+      if (!out.ok) return unavailable(out.code, { detail: out.detail });
+      const graph = out.graph?.graph || out.graph || null;
+      if (!graph || typeof graph !== 'object') {
+        return unavailable('NO_MACRO_GRAPH', { detail: 'the macro graph answered with no graph' });
+      }
+      return ok('OK', {
+        at: graph.at ?? null,
+        nodes: Array.isArray(graph.nodes) ? graph.nodes.slice(0, 12) : [],
+        edges: Array.isArray(graph.edges) ? graph.edges.slice(0, 12) : [],
+        coverage: graph.coverage ?? null,
+        portfolioRiskImpulse: graph.portfolioRiskImpulse ?? null,
+        impulse: graph.impulse ?? null,
+        pressure: graph.pressure ?? null,
+        whyRiskier: out.graph?.whyRiskier ?? null,
+        whyPortfolioRiskier: out.graph?.whyPortfolioRiskier ?? null,
+        estimate: graph.estimate === true
+      }, { source: 'macro-graph-engine' });
+    },
+    quote: NA('a macro graph has no price'), prepare: NA('a macro graph is not a transaction'), simulate: NA('the macro graph models its own scenarios'), execute: NA('the brain never acts on a macro graph'), verify: NA('verifying a macro graph means building it again'),
+    recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the graph is rebuilt on demand from the global snapshot, the world model and the portfolio' }  })
+  });
+
   const events = defineModule({
     id: 'events', name: 'Event bus', capability: CAPABILITY.AVAILABLE,
     state: ['events'], tools: ['events.recent', 'events.subscribe'], events: [],
@@ -1242,7 +1296,7 @@ export function createModules(ctx = {}) {
     recover: async () => ({ status: 'RECOVERED', data: { strategy: 'recompute after the underlying sections are refreshed' } })
   });
 
-  return [wallet, portfolio, swap, bridge, lending, borrowing, farming, liquidity, staking, futures, dydx, stocks, etf, funds, forex, commodities, rwa, crypto, signals, news, globalIntel, opportunityFit, events, alerts, goals, profitPlan, prediction, lab, risk, forecast, transactions, notifications];
+  return [wallet, portfolio, swap, bridge, lending, borrowing, farming, liquidity, staking, futures, dydx, stocks, etf, funds, forex, commodities, rwa, crypto, signals, news, globalIntel, opportunityFit, macroGraph, events, alerts, goals, profitPlan, prediction, lab, risk, forecast, transactions, notifications];
 }
 
 /* ── helpers ───────────────────────────────────────────────────────────── */

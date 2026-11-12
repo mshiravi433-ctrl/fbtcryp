@@ -83,7 +83,7 @@ import { reasonAboutGoal, requiredAnnualizedPct } from './goalReasoning.js';
 import { fiFlags } from './flags.js';
 import { createFiRouter, setLendingProvider } from './router.js';
 import { setGlobalIntelProvider } from '../ci/globalIntelBridge.js';
-import { setFitProvider } from '../ci/fitBridge.js';
+import { setFitProvider, setMacroGraphProvider } from '../ci/fitBridge.js';
 
 export const FI_ROOT_SCHEMA = 'fbt.fi.composition-root.v1';
 
@@ -876,6 +876,11 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
      "which of these suits me" answer. It takes an owner, so the brain
      gets its own ranking, never a shared one. */
   setFitProvider(fitFor);
+
+  /* The regime reader (path 12): the macro graph over the global
+     snapshot, the world model and the portfolio. It takes an owner, so
+     the brain gets its own graph. */
+  setMacroGraphProvider(macroGraphFor);
 
   return fi;
 }

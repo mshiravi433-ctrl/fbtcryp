@@ -37,6 +37,7 @@
  */
 
 let provider = null;
+let macroProvider = null;
 
 /**
  * Register the fit reader.
@@ -54,6 +55,62 @@ export function setFitProvider(fn) {
 /** True once `fios` has wired itself in. */
 export function hasFitProvider() {
   return typeof provider === 'function';
+}
+
+/**
+ * Register the macro-graph reader (path 12).
+ *
+ * The macro graph is the REGIME: the global snapshot, the world model and
+ * the portfolio read together, with the transmission edges between them.
+ * It is a different read from the global snapshot — the snapshot is the
+ * domains, the graph is what they do to each other — so it gets its own
+ * slot rather than being folded into the fit provider.
+ *
+ * @param {(owner: string, opts?: object) => Promise<any>} fn
+ * @returns {() => void} a disposer.
+ */
+export function setMacroGraphProvider(fn) {
+  const previous = macroProvider;
+  macroProvider = typeof fn === 'function' ? fn : null;
+  return () => { macroProvider = previous; };
+}
+
+/** True once the macro-graph reader is wired. */
+export function hasMacroGraphProvider() {
+  return typeof macroProvider === 'function';
+}
+
+/**
+ * Read the macro graph for one owner.
+ *
+ * @returns {Promise<{ ok: true, graph: any } | { ok: false, code: string, detail: string }>}
+ */
+export async function readMacroGraph(owner, opts = {}) {
+  if (typeof macroProvider !== 'function') {
+    return {
+      ok: false,
+      code: 'PROVIDER_NOT_WIRED',
+      detail: 'the macro graph is not mounted in this process'
+    };
+  }
+  try {
+    const out = await macroProvider(owner, opts);
+    if (!out || typeof out !== 'object') {
+      return { ok: false, code: 'NO_MACRO_GRAPH', detail: 'the macro graph answered with nothing' };
+    }
+    /* The graph reports its own failure with `ok:false`; that is an honest
+       answer and it travels with its code. */
+    if (out.ok === false) {
+      return { ok: false, code: out.code || 'NO_MACRO_GRAPH', detail: out.detail || null };
+    }
+    return { ok: true, graph: out };
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'MACRO_GRAPH_FAILED',
+      detail: String(err?.message || err || '').slice(0, 160)
+    };
+  }
 }
 
 /**

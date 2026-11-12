@@ -78,6 +78,17 @@ export const STATE_SECTIONS = Object.freeze({
    * and a fit quoted from yesterday is a different fit. 5 minutes.
    */
   opportunityFit: { owner: 'opportunity-fit', ttlMs: 5 * 60_000, authoritative: true, required: false },
+  /*
+   * The macro graph: the REGIME, read over the global snapshot, the world
+   * model and the portfolio together. It is a state section for the same
+   * reason the other two are — the brain reads modules through the state
+   * store, and a module with NO section is a module nothing ever asks.
+   *
+   * The graph is per-owner (it carries that owner's portfolio risk
+   * impulse) and short-lived: a regime quoted from an hour ago is a
+   * different regime.
+   */
+  macroGraph: { owner: 'macro-graph', ttlMs: 5 * 60_000, authoritative: true, required: false },
   events: { owner: 'events', ttlMs: 60_000, authoritative: true, required: false },
   alerts: { owner: 'alerts', ttlMs: 60_000, authoritative: true, required: false },
   capabilities: { owner: 'registry', ttlMs: 60_000, authoritative: true, required: true },
@@ -227,7 +238,11 @@ export const EVENT_TYPES = Object.freeze([
      risk view: a ranking that says "this suits a conservative owner" is a
      risk input, and a stale ranking next to a fresh risk number would read
      as current. */
-  'FIT_RANKING_READ'
+  'FIT_RANKING_READ',
+  /* The macro graph was read (2026-11-12). It invalidates itself and the
+     risk view: a portfolio risk impulse is a risk input, and a stale
+     impulse next to a fresh risk number would read as current. */
+  'MACRO_GRAPH_READ'
 ]);
 
 /*
@@ -262,7 +277,8 @@ export const REFRESH_CASCADE = Object.freeze({
   MODULE_DEGRADED: { invalidate: ['capabilities', 'health'], cascade: false },
   MODULE_RECOVERED: { invalidate: ['capabilities', 'health'], cascade: false },
   GLOBAL_SNAPSHOT_READ: { invalidate: ['globalIntel'], cascade: false },
-  FIT_RANKING_READ: { invalidate: ['opportunityFit'], cascade: false }
+  FIT_RANKING_READ: { invalidate: ['opportunityFit'], cascade: false },
+  MACRO_GRAPH_READ: { invalidate: ['macroGraph'], cascade: false }
 });
 
 /** §10 Module registry — the ids the brain must be able to discover. */
@@ -280,7 +296,11 @@ export const MODULE_IDS = Object.freeze([
   /* The fit module (2026-11-12) — the bridge to the opportunity-fit engine
      in `server/fios/`, which answers «کدام گزینه مناسب من است؟» by scoring
      each opportunity against the owner's own profile, capital and goal. */
-  'opportunity-fit'
+  'opportunity-fit',
+  /* The macro-graph module (2026-11-12) — the bridge to the regime engine
+     in `server/fios/macroGraph.js`, which reads the global snapshot, the
+     world model and the portfolio TOGETHER. */
+  'macro-graph'
 ]);
 
 /**

@@ -177,7 +177,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     borrowing: 'borrowing', farming: 'farming', liquidity: 'liquidity', futures: 'futures',
     dydx: 'dydx', signals: 'signals', news: 'news', goals: 'goals', alerts: 'alerts',
     transactions: 'transactions', events: 'events', risk: 'risk', profitPlan: 'profit-plan',
-    globalIntel: 'global-intel', opportunityFit: 'opportunity-fit',
+    globalIntel: 'global-intel', opportunityFit: 'opportunity-fit', macroGraph: 'macro-graph',
     positions: 'lending', recentActions: 'transactions', pendingActions: 'transactions',
     errors: 'risk', eventsList: 'events'
   };
@@ -1660,6 +1660,46 @@ function buildFindings({ intent, classification, state, results, risk, readResul
     } else findings.push({ id: 'market-overview', status: 'UNAVAILABLE', reason: readResults.markets?.reason || 'the market-data source returned nothing', detail: null });
   }
 
+  /*
+   * The regime (path 12). A market overview that quotes breadth and the
+   * top movers answers "what is moving" — not "what kind of market is
+   * this". The macro graph is the second half: the global snapshot, the
+   * world model and the portfolio read TOGETHER, with the transmission
+   * edges between them.
+   *
+   * It is an ENRICHMENT, not the source: when the graph is unreadable
+   * the overview still stands on the prices it did read. And the graph
+   * says what it is — `estimate: true` — so the finding says it too.
+   */
+  if (intent.intentType === 'MARKET_OVERVIEW') {
+    const graphRead = readResults.macroGraph;
+    if (graphRead?.status === 'OK' && graphRead.data) {
+      const g = graphRead.data;
+      const domainsRead = Array.isArray(g.coverage?.domainsRead) ? g.coverage.domainsRead : [];
+      const impulse = g.portfolioRiskImpulse ?? null;
+      findings.push({
+        id: 'market-regime',
+        status: domainsRead.length ? 'OK' : 'PARTIAL',
+        domainsRead,
+        nodeCount: Array.isArray(g.nodes) ? g.nodes.length : 0,
+        edgeCount: Array.isArray(g.edges) ? g.edges.length : 0,
+        portfolioRiskImpulse: impulse,
+        impulse: g.impulse ?? null,
+        pressure: g.pressure ?? null,
+        detail: domainsRead.length
+          ? `the regime is read from ${domainsRead.join(', ')}; ${g.coverage?.nodes ?? 0} node(s) and ${g.coverage?.edges ?? 0} transmission edge(s)`
+          : 'the macro graph read no domain this pass',
+        reason: impulse !== null && impulse !== undefined
+          ? `the portfolio risk impulse is ${impulse} — a first-order model over the read domains, not a forecast`
+          : 'no portfolio risk impulse was derivable: the graph is a model, and it says which domains it read',
+        estimate: g.estimate === true,
+        source: 'macro-graph-engine',
+        dataAt: g.at || Date.now(),
+        partial: domainsRead.length === 0
+      });
+    }
+  }
+
   if (intent.intentType === 'NEWS_SUMMARY') {
     const news = state.sections.news.data;
     const items = Array.isArray(news?.items) ? news.items : [];
@@ -1773,7 +1813,11 @@ const SECTION_FOR_INTENT = {
   LOAN_STATUS: ['wallet', 'lending', 'portfolio', 'risk'],
   BORROW_CAPACITY: ['wallet', 'lending', 'borrowing', 'portfolio', 'risk'],
   FUTURES_RISK: ['futures', 'dydx', 'portfolio', 'markets', 'risk'],
-  MARKET_OVERVIEW: ['markets', 'signals', 'news'],
+  /* The market overview also reads the global section (path 12): the
+     regime is not a price list, it is what the global snapshot, the
+     world model and the portfolio say TOGETHER. `globalIntel` is a state
+     section, and a module with no section is a module nothing ever asks. */
+  MARKET_OVERVIEW: ['markets', 'signals', 'news', 'globalIntel', 'macroGraph'],
   NEWS_SUMMARY: ['news', 'signals', 'markets'],
   SIGNAL_READING: ['signals', 'markets', 'news'],
   GOAL_PLAN: ['wallet', 'portfolio', 'markets', 'goals', 'farming', 'risk'],
