@@ -298,8 +298,15 @@ for (const text of ['موجودی من چقدره', 'بالانس چنده', 'چ
 for (const text of ['اخبار امروز چیه', 'خبر جدید داره بازار؟', 'news summary', 'آپدیت بازار بده', 'اخبار کریپتو', 'today news']) {
   TEMPLATES.push(make('news', text, /[a-z]/i.test(text) ? 'en' : 'fa', 'NEWS_SUMMARY', { risk: RISK.read }));
 }
+/* SMART_MONEY_READ, not MARKET_OVERVIEW. The whale/smart-money surface got
+   its own intent when the global-intel module landed, and it reads the
+   smart-money engine instead of the generic market block. The corpus used
+   to pin these sentences to MARKET_OVERVIEW, which was right when that was
+   the only surface that could answer them; pinning them to the old intent
+   now leaves the whale category at 0 % while the newer, more specific
+   intent answers every one of them correctly. */
 for (const text of ['نهنگ ها چی کار میکنن', 'نهنگ', 'whale activity', 'whales today', 'اسمارت مانی چیکار میکنه', 'smart money flows', 'نهنگ‌ها دارن میفروشن؟']) {
-  TEMPLATES.push(make('whale', text, /[a-z]/i.test(text) ? 'en' : 'fa', 'MARKET_OVERVIEW', { risk: RISK.read }));
+  TEMPLATES.push(make('whale', text, /[a-z]/i.test(text) ? 'en' : 'fa', 'SMART_MONEY_READ', { risk: RISK.read }));
 }
 for (const text of ['بازار چطوره', 'وضعیت بازار', 'market overview', 'بازار امروز', 'market today', 'قیمت کلی بازار']) {
   TEMPLATES.push(make('market-overview', text, /[a-z]/i.test(text) ? 'en' : 'fa', 'MARKET_OVERVIEW', { risk: RISK.read }));
@@ -477,7 +484,7 @@ for (const text of ['اخبار بازار', 'crypto news', 'news today']) {
   TEMPLATES.push(make('news', text, /[a-z]/i.test(text) ? 'en' : 'fa', 'NEWS_SUMMARY', { risk: RISK.read }));
 }
 for (const text of ['whale alert', 'نهنگ‌های بزرگ']) {
-  TEMPLATES.push(make('whale', text, /[a-z]/i.test(text) ? 'en' : 'fa', 'MARKET_OVERVIEW', { risk: RISK.read }));
+  TEMPLATES.push(make('whale', text, /[a-z]/i.test(text) ? 'en' : 'fa', 'SMART_MONEY_READ', { risk: RISK.read }));
 }
 for (const text of ['هدف 20 درصدی دارم', 'می‌خوام به هدفم برسم']) {
   TEMPLATES.push(make('goal', text, 'fa', 'GOAL_PLAN', { risk: RISK.plan }));

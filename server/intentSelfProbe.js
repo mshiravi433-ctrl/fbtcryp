@@ -352,7 +352,7 @@ export async function runSelfProbe({
     : { ok: false, code: 'ORIGIN_UNKNOWN', detail: { hint: 'set PUBLIC_ORIGIN to the public https origin' } });
   const venue = carried('venue-health') || await probeVenueHealth({ ttlHours, now });
   const slo = carried('slo-measurement') || sloEvidenceFromMeter({ now, ttlHours });
-  const audit = carried('durable-immutable-audit') || auditEvidence({ now, ttlHours });
+  const audit = carried('durable-immutable-audit') || await auditEvidence({ now, ttlHours });
 
   const byKind = {
     'certificate-authority': cert,
