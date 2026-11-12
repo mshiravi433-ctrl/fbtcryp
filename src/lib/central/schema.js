@@ -89,6 +89,18 @@ export const STATE_SECTIONS = Object.freeze({
    * different regime.
    */
   macroGraph: { owner: 'macro-graph', ttlMs: 5 * 60_000, authoritative: true, required: false },
+  /*
+   * The goal scenarios: three profiles for a target, each with its
+   * allocation, expected value, drawdown, probability of loss and
+   * probability of halving. It is a state section for the same reason
+   * the others are — a module with NO section is a module nothing ever
+   * asks.
+   *
+   * The scenarios are per-owner (they are built from that owner's
+   * capital and that owner's goal) and short-lived: a plan for a target
+   * is rebuilt from the capital as it stands now.
+   */
+  goalScenarios: { owner: 'goal-scenarios', ttlMs: 5 * 60_000, authoritative: true, required: false },
   events: { owner: 'events', ttlMs: 60_000, authoritative: true, required: false },
   alerts: { owner: 'alerts', ttlMs: 60_000, authoritative: true, required: false },
   capabilities: { owner: 'registry', ttlMs: 60_000, authoritative: true, required: true },
@@ -242,7 +254,12 @@ export const EVENT_TYPES = Object.freeze([
   /* The macro graph was read (2026-11-12). It invalidates itself and the
      risk view: a portfolio risk impulse is a risk input, and a stale
      impulse next to a fresh risk number would read as current. */
-  'MACRO_GRAPH_READ'
+  'MACRO_GRAPH_READ',
+  /* The goal scenarios were read (2026-11-12). They invalidate themselves
+     and the risk view: a profile with a drawdown estimate is a risk
+     input, and a stale profile next to a fresh risk number would read as
+     current. */
+  'GOAL_SCENARIOS_READ'
 ]);
 
 /*
@@ -278,7 +295,8 @@ export const REFRESH_CASCADE = Object.freeze({
   MODULE_RECOVERED: { invalidate: ['capabilities', 'health'], cascade: false },
   GLOBAL_SNAPSHOT_READ: { invalidate: ['globalIntel'], cascade: false },
   FIT_RANKING_READ: { invalidate: ['opportunityFit'], cascade: false },
-  MACRO_GRAPH_READ: { invalidate: ['macroGraph'], cascade: false }
+  MACRO_GRAPH_READ: { invalidate: ['macroGraph'], cascade: false },
+  GOAL_SCENARIOS_READ: { invalidate: ['goalScenarios'], cascade: false }
 });
 
 /** §10 Module registry — the ids the brain must be able to discover. */
@@ -300,7 +318,11 @@ export const MODULE_IDS = Object.freeze([
   /* The macro-graph module (2026-11-12) — the bridge to the regime engine
      in `server/fios/macroGraph.js`, which reads the global snapshot, the
      world model and the portfolio TOGETHER. */
-  'macro-graph'
+  'macro-graph',
+  /* The goal-scenarios module (2026-11-12) — the bridge to the scenario
+     engine in `server/fios/goalScenarios.js`, which builds three profiles
+     for a target and refuses to model anything without real capital. */
+  'goal-scenarios'
 ]);
 
 /**

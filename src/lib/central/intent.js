@@ -115,7 +115,7 @@ export const INTENT_TYPES = Object.freeze({
   MARKET_OVERVIEW: { modules: ['crypto', 'signals', 'news', 'global-intel', 'macro-graph'], permission: PERMISSION.READ },
   NEWS_SUMMARY: { modules: ['news', 'signals', 'events'], permission: PERMISSION.READ },
   SIGNAL_READING: { modules: ['signals', 'crypto', 'news'], permission: PERMISSION.READ },
-  GOAL_PLAN: { modules: ['goals', 'portfolio', 'forecast', 'risk', 'profit-plan'], permission: PERMISSION.READ },
+  GOAL_PLAN: { modules: ['goals', 'portfolio', 'forecast', 'risk', 'profit-plan', 'goal-scenarios'], permission: PERMISSION.READ },
   PROFIT_PLAN: { modules: ['profit-plan', 'portfolio', 'crypto', 'forecast', 'risk', 'goals'], permission: PERMISSION.READ },
   WHATIF_SIMULATION: { modules: ['lab', 'portfolio', 'forecast', 'risk'], permission: PERMISSION.PREPARE },
   QUOTE_SWAP: { modules: ['swap', 'crypto', 'wallet', 'risk'], permission: PERMISSION.PREPARE },

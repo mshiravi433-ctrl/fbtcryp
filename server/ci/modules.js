@@ -31,6 +31,7 @@ import { ciSource, healthSnapshot, chainIdFor } from './sources.js';
 import { hasGlobalIntelProvider, readGlobalIntel } from './globalIntelBridge.js';
 import { hasFitProvider, readFit } from './fitBridge.js';
 import { hasMacroGraphProvider, readMacroGraph } from './fitBridge.js';
+import { hasScenarioProvider, readScenarios } from './fitBridge.js';
 import { storeGet, storeSet, storeDurable, EPHEMERAL_TTL_MS } from '../store.js';
 import { createGoal, getGoal, validateGoalInput, FINANCIAL_GOAL_LIMITATIONS } from '../financialGoals.js';
 import { randomUUID, createHash } from 'node:crypto';
@@ -987,7 +988,65 @@ export function createModules(ctx = {}) {
       }, { source: 'macro-graph-engine' });
     },
     quote: NA('a macro graph has no price'), prepare: NA('a macro graph is not a transaction'), simulate: NA('the macro graph models its own scenarios'), execute: NA('the brain never acts on a macro graph'), verify: NA('verifying a macro graph means building it again'),
-    recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the graph is rebuilt on demand from the global snapshot, the world model and the portfolio' }  })
+    recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the graph is rebuilt on demand from the global snapshot, the world model and the portfolio' } })
+  });
+
+  /* ── goal scenarios (the three profiles for a target) ────────────────── */
+  /*
+   * The brain's `goals.simulate` computes a feasibility figure: can this
+   * target be reached? The scenario engine is the other half — what the
+   * path LOOKS like, and how likely each version of it is to arrive.
+   *
+   * It builds three profiles (conservative, balanced, aggressive), each
+   * with its allocation, expected value, max drawdown, probability of
+   * loss and probability of halving, plus the percentiles of a modelled
+   * distribution. When the capital is unreadable it refuses to model
+   * anything: "a scenario needs real capital; nothing was modelled and
+   * nothing was guessed".
+   *
+   * That refusal is the most valuable thing about it, and it travels
+   * with the answer.
+   */
+  const goalScenarios = defineModule({
+    id: 'goal-scenarios', name: 'Goal scenarios', capability: CAPABILITY.AVAILABLE,
+    state: ['goalScenarios'], tools: ['scenarios.read'], events: ['GOAL_SCENARIOS_READ'],
+    errors: ['PROVIDER_NOT_WIRED', 'NO_SCENARIOS', 'SCENARIOS_FAILED', 'NO_STARTING_CAPITAL'],
+    permissions: { max: PERMISSION.READ },
+    fallback: ['the last scenarios this owner read, labelled stale'],
+    getState: async () => ok('OK', null),
+    healthCheck: async () => (hasScenarioProvider()
+      ? { status: 'HEALTHY', detail: 'the scenario engine is mounted and can build the profiles for this owner' }
+      : { status: 'UNKNOWN', detail: 'the scenario engine is not mounted in this process' }),
+    capabilities: async () => ({
+      operations: ['read'],
+      executes: false,
+      reason: 'a scenario is a model, not a transaction; it moves nothing'
+    }),
+    read: async (input = {}, readCtx = {}) => {
+      const out = await readScenarios(readCtx.owner || owner, {
+        goal: input.goal || null,
+        financial: input.financial || null,
+        liveYieldPct: input.liveYieldPct ?? null
+      });
+      if (!out.ok) return unavailable(out.code, { detail: out.detail });
+      const sc = out.scenarios;
+      const scenarios = Array.isArray(sc.scenarios) ? sc.scenarios : [];
+      return ok(scenarios.length ? 'OK' : 'PARTIAL', {
+        at: sc.at ?? null,
+        startUsd: sc.startUsd ?? null,
+        months: sc.months ?? null,
+        targetUsd: sc.targetUsd ?? null,
+        monthlyContributionUsd: sc.monthlyContributionUsd ?? null,
+        scenarios: scenarios.slice(0, 5),
+        recommended: sc.recommended ?? null,
+        whatIfs: Array.isArray(sc.whatIfs) ? sc.whatIfs.slice(0, 5) : [],
+        multiClass: sc.multiClass ?? null,
+        estimate: sc.estimate === true,
+        note: sc.note ?? null
+      }, { source: 'goal-scenarios-engine' });
+    },
+    quote: NA('a scenario has no price'), prepare: NA('a scenario is not a transaction'), simulate: NA('the scenario engine models its own profiles'), execute: NA('the brain never acts on a scenario'), verify: NA('verifying a scenario means building it again'),
+    recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the profiles are rebuilt on demand from the goal and the real capital' } })
   });
 
   const events = defineModule({
@@ -1296,7 +1355,7 @@ export function createModules(ctx = {}) {
     recover: async () => ({ status: 'RECOVERED', data: { strategy: 'recompute after the underlying sections are refreshed' } })
   });
 
-  return [wallet, portfolio, swap, bridge, lending, borrowing, farming, liquidity, staking, futures, dydx, stocks, etf, funds, forex, commodities, rwa, crypto, signals, news, globalIntel, opportunityFit, macroGraph, events, alerts, goals, profitPlan, prediction, lab, risk, forecast, transactions, notifications];
+  return [wallet, portfolio, swap, bridge, lending, borrowing, farming, liquidity, staking, futures, dydx, stocks, etf, funds, forex, commodities, rwa, crypto, signals, news, globalIntel, opportunityFit, macroGraph, goalScenarios, events, alerts, goals, profitPlan, prediction, lab, risk, forecast, transactions, notifications];
 }
 
 /* ── helpers ───────────────────────────────────────────────────────────── */

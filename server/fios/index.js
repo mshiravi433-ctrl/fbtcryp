@@ -83,7 +83,7 @@ import { reasonAboutGoal, requiredAnnualizedPct } from './goalReasoning.js';
 import { fiFlags } from './flags.js';
 import { createFiRouter, setLendingProvider } from './router.js';
 import { setGlobalIntelProvider } from '../ci/globalIntelBridge.js';
-import { setFitProvider, setMacroGraphProvider } from '../ci/fitBridge.js';
+import { setFitProvider, setMacroGraphProvider, setScenarioProvider } from '../ci/fitBridge.js';
 
 export const FI_ROOT_SCHEMA = 'fbt.fi.composition-root.v1';
 
@@ -881,6 +881,12 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
      snapshot, the world model and the portfolio. It takes an owner, so
      the brain gets its own graph. */
   setMacroGraphProvider(macroGraphFor);
+
+  /* The goal-scenario reader (path 13): three profiles for a target, each
+     with its allocation, expected value, drawdown, probability of loss and
+     probability of halving. It needs the owner's goal and capital, both
+     of which the brain passes in. */
+  setScenarioProvider((owner, opts = {}) => goalScenarios.scenariosFor(owner, opts));
 
   return fi;
 }

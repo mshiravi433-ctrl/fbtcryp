@@ -38,6 +38,7 @@
 
 let provider = null;
 let macroProvider = null;
+let scenarioProvider = null;
 
 /**
  * Register the fit reader.
@@ -140,6 +141,66 @@ export async function readFit(owner, opts = {}) {
     return {
       ok: false,
       code: 'FIT_FAILED',
+      detail: String(err?.message || err || '').slice(0, 160)
+    };
+  }
+}
+
+/**
+ * Register the goal-scenario reader (path 13).
+ *
+ * The scenario engine builds THREE profiles (conservative, balanced,
+ * aggressive) for a target, each with its allocation, expected value,
+ * drawdown, probability of loss and probability of halving — and, when
+ * the capital is unreadable, it refuses: "a scenario needs real capital;
+ * nothing was modelled and nothing was guessed".
+ *
+ * The brain's own `goals.simulate` computes a feasibility figure. The
+ * scenario engine is the other half: what the path LOOKS like, and how
+ * likely each version of it is to arrive.
+ *
+ * @param {(owner: string, opts?: object) => Promise<any>} fn
+ * @returns {() => void} a disposer.
+ */
+export function setScenarioProvider(fn) {
+  const previous = scenarioProvider;
+  scenarioProvider = typeof fn === 'function' ? fn : null;
+  return () => { scenarioProvider = previous; };
+}
+
+/** True once the scenario reader is wired. */
+export function hasScenarioProvider() {
+  return typeof scenarioProvider === 'function';
+}
+
+/**
+ * Read the goal scenarios for one owner.
+ *
+ * @returns {Promise<{ ok: true, scenarios: any } | { ok: false, code: string, detail: string }>}
+ */
+export async function readScenarios(owner, opts = {}) {
+  if (typeof scenarioProvider !== 'function') {
+    return {
+      ok: false,
+      code: 'PROVIDER_NOT_WIRED',
+      detail: 'the goal-scenario engine is not mounted in this process'
+    };
+  }
+  try {
+    const out = await scenarioProvider(owner, opts);
+    if (!out || typeof out !== 'object') {
+      return { ok: false, code: 'NO_SCENARIOS', detail: 'the scenario engine answered with nothing' };
+    }
+    /* The engine's own refusal is an answer — it names why it did not
+       model anything, and that reason must reach the user. */
+    if (out.ok === false) {
+      return { ok: false, code: out.code || 'NO_SCENARIOS', detail: out.detail || null };
+    }
+    return { ok: true, scenarios: out };
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'SCENARIOS_FAILED',
       detail: String(err?.message || err || '').slice(0, 160)
     };
   }

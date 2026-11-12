@@ -177,7 +177,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     borrowing: 'borrowing', farming: 'farming', liquidity: 'liquidity', futures: 'futures',
     dydx: 'dydx', signals: 'signals', news: 'news', goals: 'goals', alerts: 'alerts',
     transactions: 'transactions', events: 'events', risk: 'risk', profitPlan: 'profit-plan',
-    globalIntel: 'global-intel', opportunityFit: 'opportunity-fit', macroGraph: 'macro-graph',
+    globalIntel: 'global-intel', opportunityFit: 'opportunity-fit', macroGraph: 'macro-graph', goalScenarios: 'goal-scenarios',
     positions: 'lending', recentActions: 'transactions', pendingActions: 'transactions',
     errors: 'risk', eventsList: 'events'
   };
@@ -1452,6 +1452,62 @@ function buildFindings({ intent, classification, state, results, risk, readResul
     else findings.push({ id: 'goal-feasibility', status: 'UNAVAILABLE', reason: `goal arithmetic incomplete: ${feasibility.reason}`, detail: null });
     const opportunities = scanOpportunities({ yields: state.sections.farming.data, portfolio, risk, capabilities: {} });
     if (opportunities.status === 'OK') findings.push({ id: 'opportunities', candidates: opportunities.rows, detail: `${opportunities.rows.length} eligible pools, best ${opportunities.rows[0]?.aprPct ?? '—'}% APR`, reason: opportunities.rows[0] ? `the top eligible pool pays ${opportunities.rows[0].aprPct}% with ${opportunities.rows[0].riskLevel} protocol risk` : 'nothing met the eligibility floor', source: 'yields-engine', dataAt: opportunities.at });
+
+    /*
+     * The three profiles (path 13). The feasibility figure above answers
+     * "can this target be reached"; the scenarios answer "what does the
+     * road look like, and how likely is each version of it to arrive".
+     *
+     * Each profile carries its drawdown and its probability of loss, and
+     * the engine says `estimate: true` — a modelled distribution over a
+     * chosen return, not a promise. The finding carries the flag, so the
+     * answer cannot be read as a forecast.
+     */
+    const scenarioRead = readResults.goalScenarios;
+    if (scenarioRead?.status === 'OK' && scenarioRead.data) {
+      const sc = scenarioRead.data;
+      const profiles = Array.isArray(sc.scenarios) ? sc.scenarios : [];
+      if (profiles.length) {
+        const recommended = profiles.find((r) => r.profile === (sc.recommended?.profile || sc.recommended)) || sc.recommended || null;
+        findings.push({
+          id: 'goal-scenarios',
+          status: 'OK',
+          profiles: profiles.map((r) => ({
+            profile: r.profile,
+            expectedReturnPct: r.expectedReturnPct ?? null,
+            expectedValueUsd: r.expectedValueUsd ?? null,
+            maxDrawdownPct: r.maxDrawdownPct ?? null,
+            probabilityOfLossPct: r.probabilityOfLossPct ?? null,
+            probabilityOfHalvingPct: r.probabilityOfHalvingPct ?? null,
+            allocation: r.allocation ?? null,
+            p10: r.percentiles?.p10 ?? null,
+            p50: r.percentiles?.p50 ?? null,
+            p90: r.percentiles?.p90 ?? null
+          })),
+          recommended: recommended?.profile || null,
+          targetUsd: sc.targetUsd ?? null,
+          startUsd: sc.startUsd ?? null,
+          months: sc.months ?? null,
+          detail: `${profiles.length} profiles from ${sc.startUsd ?? '—'} USD over ${sc.months ?? '—'} month(s) toward ${sc.targetUsd ?? '—'} USD; the recommended one is ${recommended?.profile || 'none'}${recommended?.maxDrawdownPct != null ? ` with a ${recommended.maxDrawdownPct}% modelled drawdown` : ''}`,
+          reason: recommended
+            ? `${recommended.profile} is the recommended profile: ${recommended.expectedReturnPct ?? '—'}% modelled return with a ${recommended.probabilityOfLossPct ?? '—'}% modelled probability of loss — a model over a chosen return, not a forecast`
+            : 'the profiles were built but the engine recommended none; the reason travels with the numbers',
+          estimate: sc.estimate === true,
+          source: 'goal-scenarios-engine',
+          dataAt: sc.at || Date.now(),
+          partial: false
+        });
+      }
+    } else if (scenarioRead?.status === 'UNAVAILABLE' && scenarioRead.reason === 'NO_STARTING_CAPITAL') {
+      findings.push({
+        id: 'goal-scenarios',
+        status: 'UNAVAILABLE',
+        detail: null,
+        reason: 'a scenario needs real capital; nothing was modelled and nothing was guessed',
+        source: 'goal-scenarios-engine',
+        partial: true
+      });
+    }
   }
 
   /*
@@ -1820,7 +1876,11 @@ const SECTION_FOR_INTENT = {
   MARKET_OVERVIEW: ['markets', 'signals', 'news', 'globalIntel', 'macroGraph'],
   NEWS_SUMMARY: ['news', 'signals', 'markets'],
   SIGNAL_READING: ['signals', 'markets', 'news'],
-  GOAL_PLAN: ['wallet', 'portfolio', 'markets', 'goals', 'farming', 'risk'],
+  /* The goal scenarios travel with the goal plan (path 13): the three
+     profiles for the target, each with its drawdown and its probability
+     of loss. The feasibility figure answers "can it be reached"; the
+     scenarios answer "what does the road look like". */
+  GOAL_PLAN: ['wallet', 'portfolio', 'markets', 'goals', 'farming', 'risk', 'goalScenarios'],
   PROFIT_PLAN: ['wallet', 'portfolio', 'markets', 'farming', 'goals', 'signals', 'risk'],
   WHATIF_SIMULATION: ['wallet', 'portfolio', 'markets', 'lending', 'futures', 'risk'],
   QUOTE_SWAP: ['wallet', 'markets', 'portfolio', 'risk'],

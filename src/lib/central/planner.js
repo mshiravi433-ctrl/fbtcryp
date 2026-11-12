@@ -214,6 +214,11 @@ export const PLAN_TEMPLATES = Object.freeze({
     step('forecast.read', 'forecast', 'read', { optional: true }),
     step('risk.analyze', 'risk', 'read', { dependsOn: ['portfolio.read'], riskContext: 'goals' }),
     step('goals.plan', 'goals', 'simulate', { dependsOn: ['goals.read', 'portfolio.read', 'forecast.read', 'risk.analyze'] }),
+    /* The three profiles for the target (path 13): allocation, expected
+       value, drawdown, probability of loss and probability of halving.
+       Optional, because the engine refuses without real capital and a
+       refusal must not cost the user the feasibility figure. */
+    step('scenarios.read', 'goal-scenarios', 'read', { optional: true, dependsOn: ['goals.read', 'portfolio.read'] }),
     step('profitPlan.read', 'profit-plan', 'read', { optional: true }),
     step('present', 'session', 'read', { dependsOn: ['goals.plan', 'risk.analyze'] })
   ],
