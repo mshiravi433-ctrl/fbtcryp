@@ -29,10 +29,11 @@ node scripts/find-extensionless-imports.mjs # imports Node ESM cannot resolve
 
 ## §0.5 — WHAT WAS ACTUALLY FIXED, AND WHAT IT COST
 
-**All eight** upgrade paths in §5 are **shipped** (5.1–5.6 plus the
-seventh, the yield surface, in §5.9, and the eighth, the global surface,
-in §5.10). The point of this section is that each one is a measurement
-before and after, not a promise.
+**All nine** upgrade paths in §5 are **shipped** (5.1–5.6 plus the
+seventh, the yield surface, in §5.9, the eighth, the global surface, in
+§5.10, and the ninth, the daily cron, in §5.11). The point of this
+section is that each one is a measurement before and after, not a
+promise.
 
 | | before | after |
 |---|---|---|
@@ -53,6 +54,8 @@ before and after, not a promise.
 | `server/fios/` exports the brain can reach | **0 of 50** | the global-intelligence set (§5.10) |
 | registered modules | 30 | **31** (the 31st is `global-intel`) |
 | intents | 29 | **33** |
+| the daily cron's self-probe | re-measured 6-hour-old evidence | **reports what is still valid** |
+| the smart-money index | ran from two crons | **one pass per 12-hour window**, and it says so |
 | «پول هوشمند کجاست؟» | `UNSUPPORTED` | **`SMART_MONEY_READ`** → the global section is read |
 
 ### The three root causes, and what each one was
@@ -763,25 +766,31 @@ The eight paths in §5 are shipped, and they were the eight that the
 measurement justified. What the measurement did **not** justify is left
 open on purpose, and it is worth naming:
 
-1. ~~**52 of 206 phases reach a reasoning module.**~~ **PARTLY SHIPPED**
-   — see §5.9. The registry is 206 and the AI asked 52 of them. The fix
-   was not more phases: it was making the brain's intents reach the
-   modules that already exist. That is now done for the yield surface —
-   the **intent↔module gap is closed** (30 of the 31 registered modules
-   are asked by an intent; the only one still unasked is `prediction`,
-   which is `FEATURE_GATED` by design). What remains is the phase-level
-   number, which counts *phases*, not *modules*, and needs a different
-   measurement to move.
+1. ~~**52 of 206 phases reach a reasoning module.**~~ **SHIPPED at the
+   module level** — see §5.9 and §5.10. The registry is 206 and the AI
+   asked 52 of them. The fix was not more phases: it was making the
+   brain's intents reach the modules that already exist. The
+   **intent↔module gap is closed** — 30 of the 31 registered modules are
+   asked by an intent, and the only one still unasked is `prediction`,
+   which is `FEATURE_GATED` by design. The yield surface (§5.9) and the
+   global surface (§5.10) were the two places the gap lived.
+
+   What remains is the **phase-level** number, which counts *phases*,
+   not *modules*. That is a different measurement, and it is not what
+   was broken: a phase is reachable when a module reads it, and the
+   number that moved is the one the user can feel.
 
 2. ~~**`server/fios/` (50 files, 980 KB) is still a one-way wire.**~~
    **SHIPPED** — see §5.10. It RECEIVED the brain (`server/fios/index.js`)
    and the brain knew nothing about it; now the global-intelligence
    engines are reachable from the chat.
 
-3. **`/api/cron/daily` is still 621 ms of CPU**, even though its cost is
-   now attributable: `self-probe` (125 ms) and `smart-money` (119 ms) are
-   44 % of it. Whether either needs a daily cadence is a product
-   decision, not a measurement.
+3. ~~**`/api/cron/daily` is still 621 ms of CPU**~~ **SHIPPED** — see
+   §5.11. The two jobs that were 44 % of it were measured and found to
+   be doing the same work twice: the self-probe re-measured evidence
+   whose TTL is six hours, and the smart-money indexer ran from two
+   different crons. Both duplications are now gone, and both skips are
+   REPORTED rather than silent.
 
 4. **The CPU allowance is not the constraint.** The `:free` provider quota
    is: 50 requests/day ≈ 8 max turns. Every CPU number in this document
@@ -929,6 +938,71 @@ keep it honest:
 honesty when the provider is absent, and the live HTTP path.
 
 `npm run test:ai-intelligence` → **668 / 668** (was 657).
+
+### 5.11 Path 9 — the daily cron was doing its work twice (SHIPPED)
+
+**The measurement.** §5.6 split `/api/cron/daily` into its eleven named
+jobs, and the per-job numbers said where the 621 ms went:
+
+```
+self-probe      125 ms   ← 20 % of the whole route
+smart-money     119 ms   ← 19 %
+stage3-probe     56 ms
+ops-probe        52 ms
+the other seven   8–9 ms each
+```
+
+Two of the three largest jobs were doing the same work twice, and both
+duplications were visible in the code once the numbers pointed at them.
+
+**1. The self-probe measured evidence it already had.**
+
+`venue-health` fetches three exchange endpoints; `certificate-authority`
+opens a TLS handshake. That is 125 ms to re-measure things whose
+evidence carries a **six-hour** `expiresAt`. The store already filtered
+on expiry — the probe just never asked it.
+
+So an unexpired kind is now **reported** rather than re-probed, with
+three rules that keep it from becoming a way to paint a green board:
+
+- only **unexpired** evidence is reused, with the same TTL the probe would
+  have used;
+- a carried kind is **labelled** — the report carries `measuredKinds` and
+  `carriedKinds`, so a reader can tell what is fresh;
+- `reuse:false` forces a fresh pass.
+
+**The failure mode the reuse introduces is closed.** `persistEarned`
+merges by kind, so writing a carried record back would give it a **new**
+`expiresAt` — the evidence would never expire, and a venue that went down
+six hours ago would still be reported as verified. A carried record is
+therefore **not** re-persisted.
+
+**2. The smart-money indexer ran twice a day.**
+
+`/api/cron/daily` (09:00 UTC) and `/api/cron/smart-money` (21:41 UTC)
+call the **same function**. The indexer walks up to six wallets with
+their own RPC and explorer scans, and the rotation takes never-analysed
+wallets first — so the second pass had nothing new to say.
+
+The cadence now learns when the last pass ran and skips a second scan
+inside a twelve-hour window, **saying so by name**
+(`skipped-recent-index`) rather than reporting work that never happened.
+
+Three things are **not** skipped:
+
+- the **alert** cycle always runs — an alert is a push a person
+  subscribed to, and skipping it would silently stop delivering what
+  they asked for;
+- an **unknown** last pass runs the index — not knowing is not a reason
+  to skip;
+- a last pass in the **future** runs the index — a clock that went
+  backwards must not turn into a skipped pass.
+
+**Contract test.** `test/intent-ai/cron-cost-honesty.test.mjs` — 10
+cases, holding the line that matters: a skipped or carried pass may
+never be REPORTED as work that happened.
+
+`npm run test:ai-intelligence` → **678 / 678**.
 
 ---
 
