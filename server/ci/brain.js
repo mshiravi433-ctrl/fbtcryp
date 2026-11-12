@@ -177,7 +177,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     borrowing: 'borrowing', farming: 'farming', liquidity: 'liquidity', futures: 'futures',
     dydx: 'dydx', signals: 'signals', news: 'news', goals: 'goals', alerts: 'alerts',
     transactions: 'transactions', events: 'events', risk: 'risk', profitPlan: 'profit-plan',
-    globalIntel: 'global-intel',
+    globalIntel: 'global-intel', opportunityFit: 'opportunity-fit',
     positions: 'lending', recentActions: 'transactions', pendingActions: 'transactions',
     errors: 'risk', eventsList: 'events'
   };
@@ -1527,6 +1527,53 @@ function buildFindings({ intent, classification, state, results, risk, readResul
   }
 
   /*
+   * ── THE FIT SURFACE (2026-11-12) ───────────────────────────────────────
+   *
+   * "Which of these suits me?" is answered by the fit engine: each
+   * opportunity is scored against the OWNER's risk tolerance, capital,
+   * liquidity need and goal, and comes back FITTED / CONDITIONAL /
+   * NOT_FITTED with a reason for every dimension.
+   *
+   * The finding carries the verdict AND the reason it failed, because a
+   * verdict without a reason is not an answer — «NOT_FITTED because your
+   * capital does not cover the minimum» is a decision, «NOT_FITTED» is
+   * a shrug. It also carries the profile the score was made against, so
+   * the answer says WHOSE fit.
+   */
+  if (intent.intentType === 'OPPORTUNITY_FIT') {
+    const fitRead = readResults.opportunityFit;
+    const ranked = Array.isArray(fitRead?.data?.ranked) ? fitRead.data.ranked : [];
+    if (fitRead?.status === 'OK' && ranked.length) {
+      const best = ranked[0];
+      findings.push({
+        id: 'opportunity-fit',
+        status: 'OK',
+        ranked: ranked.slice(0, 5),
+        best,
+        verdict: best?.verdict || null,
+        score: best?.score ?? null,
+        riskTolerance: fitRead.data?.riskTolerance || null,
+        capitalUsd: fitRead.data?.capitalUsd ?? null,
+        detail: `${ranked.length} opportunit${ranked.length === 1 ? 'y' : 'ies'} scored against a ${fitRead.data?.riskTolerance || 'unreadable'} risk profile; the top one is ${best?.verdict || 'unranked'}${best?.score != null ? ` (score ${best.score})` : ''}`,
+        reason: best?.reason || best?.reasons?.[0] || 'the fit engine gave no reason for its verdict',
+        source: 'fit-engine',
+        dataAt: fitRead.data?.at || Date.now(),
+        partial: false
+      });
+    } else {
+      findings.push({
+        id: 'opportunity-fit',
+        status: 'UNAVAILABLE',
+        ranked: [],
+        detail: null,
+        reason: `the fit engine did not rank anything: ${fitRead?.reason || fitRead?.data?.detail || 'NO_FIT_DATA'}`,
+        source: 'fit-engine',
+        partial: true
+      });
+    }
+  }
+
+  /*
    * ── THE GLOBAL SURFACE (2026-11-12) ───────────────────────────────────
    *
    * The brain could not reach the global engines, so a question about
@@ -1760,7 +1807,15 @@ const SECTION_FOR_INTENT = {
    * module nothing ever asks. The snapshot is per-owner — the state store
    * is per-owner — so two users cannot see each other's flows.
    */
-  SMART_MONEY_READ: ['globalIntel', 'markets', 'risk']
+  SMART_MONEY_READ: ['globalIntel', 'markets', 'risk'],
+  /*
+   * The fit question needs the ranking AND the risk view beside it: a
+   * ranking that says «FITTED» is meaningless without the risk number it
+   * was scored against. `opportunityFit` is a state section for the same
+   * reason `globalIntel` is — the brain reads modules THROUGH the state
+   * store, so a module with no section is a module nothing ever asks.
+   */
+  OPPORTUNITY_FIT: ['opportunityFit', 'portfolio', 'risk']
 };
 function sectionsForIntent(classification, { context, state }) {
   const base = SECTION_FOR_INTENT[classification.type] || ANALYSIS_MINIMUM;

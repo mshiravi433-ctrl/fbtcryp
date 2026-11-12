@@ -7495,7 +7495,20 @@ const ensureCentralIntelligence = () => {
          them registered before any request could arrive. */
       await ensureCentralOS();
       const { createCentralIntelligence } = await import('./ci/api.js');
-      const ci = createCentralIntelligence({ log: (line) => app.locals.ciLog?.push?.(line) });
+      const ci = createCentralIntelligence({
+        log: (line) => app.locals.ciLog?.push?.(line),
+        /*
+         * The Financial Intelligence OS holds the global-intelligence and
+         * fit engines, and the brain reads both through bridges. Until it
+         * is built those modules report `PROVIDER_NOT_WIRED` — honest, but
+         * useless: the engines were working all along.
+         *
+         * It is built HERE, on the first turn, not at boot: 980 KB of
+         * engines must not sit on every cold start's import graph. The
+         * promise is cached, so it happens once per process.
+         */
+        ensureProviders: () => ensureFinancialIntelligence().then(() => undefined)
+      });
       app.set('centralIntelligence', ci);
       return ci;
     })().catch((err) => {

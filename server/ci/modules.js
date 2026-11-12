@@ -29,6 +29,7 @@ import { assessRisk } from '../../src/lib/central/risk.js';
 import { defineModule } from '../../src/lib/central/registry.js';
 import { ciSource, healthSnapshot, chainIdFor } from './sources.js';
 import { hasGlobalIntelProvider, readGlobalIntel } from './globalIntelBridge.js';
+import { hasFitProvider, readFit } from './fitBridge.js';
 import { storeGet, storeSet, storeDurable, EPHEMERAL_TTL_MS } from '../store.js';
 import { createGoal, getGoal, validateGoalInput, FINANCIAL_GOAL_LIMITATIONS } from '../financialGoals.js';
 import { randomUUID, createHash } from 'node:crypto';
@@ -876,6 +877,65 @@ export function createModules(ctx = {}) {
     recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the global domains are re-read on demand; there is nothing to recover' } })
   });
 
+
+  /* ── opportunity fit (the bridge to the Financial Intelligence OS) ──── */
+  /*
+   * The brain could answer "which of these pays the most" (the yield
+   * surface) but not "which of these suits ME" — and the second question
+   * is the one a person actually asks about their own money.
+   *
+   * The fit engine lives in `server/fios/opportunityFit.js`: it scores an
+   * opportunity against the owner's risk profile, capital, liquidity need
+   * and goal, and answers FITTED / CONDITIONAL / NOT_FITTED with a reason
+   * for every dimension. It existed and was unreachable.
+   *
+   * Like `global-intel`, it has NO state section: the ranking is built
+   * per-owner from the owner's own profile and capital, so it must never
+   * sit in a shared state store.
+   */
+  const opportunityFit = defineModule({
+    id: 'opportunity-fit', name: 'Opportunity fit', capability: CAPABILITY.AVAILABLE,
+    state: ['opportunityFit'], tools: ['fit.read'], events: ['FIT_RANKING_READ'],
+    errors: ['PROVIDER_NOT_WIRED', 'NO_FIT', 'FIT_FAILED', 'NO_TRADITIONAL_OPPORTUNITIES'],
+    permissions: { max: PERMISSION.READ },
+    fallback: ['the last ranking this owner read, labelled stale'],
+    getState: async () => ok('OK', null),
+    healthCheck: async () => (hasFitProvider()
+      ? { status: 'HEALTHY', detail: 'the fit engine is mounted and can rank opportunities for this owner' }
+      : { status: 'UNKNOWN', detail: 'the fit engine is not mounted in this process' }),
+    capabilities: async () => ({
+      operations: ['read'],
+      executes: false,
+      reason: 'a fit ranking is advice, not a transaction; every money move still goes through the wallet'
+    }),
+    read: async (input = {}, readCtx = {}) => {
+      const out = await readFit(readCtx.owner || owner, {
+        goal: input.goal || null,
+        financial: input.financial || null
+      });
+      if (!out.ok) return unavailable(out.code, { detail: out.detail });
+      const fit = out.fit;
+      /* The engine reports its own failure with `ok:false` and a code. That
+         is a real answer — "no readable cross-asset feed this pass" — and
+         it is passed through with its code so the brain can say WHY
+         there is no ranking instead of inventing one. */
+      if (fit && fit.ok === false) {
+        return unavailable(fit.code || 'NO_FIT', { detail: fit.detail || null });
+      }
+      const ranked = Array.isArray(fit?.result?.ranked) ? fit.result.ranked : [];
+      return ok(ranked.length ? 'OK' : 'PARTIAL', {
+        status: fit?.status || (ranked.length ? 'OK' : 'PARTIAL'),
+        ranked: ranked.slice(0, 10),
+        count: ranked.length,
+        coverage: fit?.result?.coverage ?? null,
+        riskTolerance: fit?.result?.riskTolerance ?? null,
+        capitalUsd: fit?.result?.capitalUsd ?? null
+      }, { source: 'fit-engine' });
+    },
+    quote: NA('a fit ranking has no price'), prepare: NA('a fit ranking is not a transaction'), simulate: NA('the fit engine allocates its own scenarios'), execute: NA('the brain never acts on a fit ranking'), verify: NA('verifying a fit ranking means reading it again'),
+    recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the ranking is rebuilt on demand from the owner profile and the live feed' } })
+  });
+
   const events = defineModule({
     id: 'events', name: 'Event bus', capability: CAPABILITY.AVAILABLE,
     state: ['events'], tools: ['events.recent', 'events.subscribe'], events: [],
@@ -1182,7 +1242,7 @@ export function createModules(ctx = {}) {
     recover: async () => ({ status: 'RECOVERED', data: { strategy: 'recompute after the underlying sections are refreshed' } })
   });
 
-  return [wallet, portfolio, swap, bridge, lending, borrowing, farming, liquidity, staking, futures, dydx, stocks, etf, funds, forex, commodities, rwa, crypto, signals, news, globalIntel, events, alerts, goals, profitPlan, prediction, lab, risk, forecast, transactions, notifications];
+  return [wallet, portfolio, swap, bridge, lending, borrowing, farming, liquidity, staking, futures, dydx, stocks, etf, funds, forex, commodities, rwa, crypto, signals, news, globalIntel, opportunityFit, events, alerts, goals, profitPlan, prediction, lab, risk, forecast, transactions, notifications];
 }
 
 /* ── helpers ───────────────────────────────────────────────────────────── */

@@ -83,6 +83,26 @@ export const INTENT_TYPES = Object.freeze({
      for the module. */
   LIQUIDITY_RISK: { modules: ['liquidity', 'portfolio', 'risk'], permission: PERMISSION.READ },
   STAKING_REWARD: { modules: ['staking', 'portfolio', 'risk'], permission: PERMISSION.READ },
+  /*
+   * ── THE FIT SURFACE (2026-11-12) ──────────────────────────────────────
+   *
+   * "Which of these suits ME?" is a different question from "which of
+   * these pays most?" — and the project could only answer the second one.
+   *
+   * The fit engine already existed in `server/fios/` (opportunityFit): it
+   * scores an opportunity against the OWNER's risk profile, their capital,
+   * their liquidity need and their goal — profit, probability, risk,
+   * liquidity, costs, capital — and returns FITTED / CONDITIONAL /
+   * NOT_FITTED with the reason for each dimension.
+   *
+   * What was missing was a way to ASK. «کدام گزینه مناسب من است؟» was
+   * UNSUPPORTED, so a working engine answered nothing.
+   *
+   * The module reads through the SAME bridge as the global surface, for
+   * the same reason: `fios` is built after the brain, and importing it
+   * directly would put 980 KB of engines on every cold start.
+   */
+  OPPORTUNITY_FIT: { modules: ['opportunity-fit', 'portfolio', 'risk'], permission: PERMISSION.READ },
   ASSET_ANALYSIS: { modules: ['crypto', 'signals', 'news', 'risk'], permission: PERMISSION.READ },
   BALANCE_QUERY: { modules: ['wallet'], permission: PERMISSION.READ },
   LOAN_STATUS: { modules: ['lending', 'borrowing', 'portfolio', 'risk'], permission: PERMISSION.READ },
@@ -131,7 +151,7 @@ export const INTENT_TYPES = Object.freeze({
  * capability name.
  */
 const EXPLICIT_INTENTS = Object.freeze(new Set([
-  'STAKING_REWARD', 'LIQUIDITY_RISK', 'YIELD_OPPORTUNITY',
+  'STAKING_REWARD', 'LIQUIDITY_RISK', 'YIELD_OPPORTUNITY', 'OPPORTUNITY_FIT',
   'FUTURES_RISK', 'LOAN_STATUS', 'BORROW_CAPACITY',
   'EXECUTE_LEND', 'EXECUTE_BORROW', 'EXECUTE_REPAY', 'EXECUTE_REBALANCE',
   'CREATE_GOAL', 'SET_ALERT', 'INSTRUMENT_QUERY'
@@ -244,6 +264,34 @@ const RULES = Object.freeze([
     requires: ['liquidity']
   },
   {
+    /*
+     * The fit question: the words that mean «suitable for me», «matches my
+     * profile», «what fits my situation».
+     *
+     * The distinguishing feature is the OWNER: «مناسب من», «با پروفایل من»,
+     * «طبق ریسک من», «for my profile», «fits me». A sentence that says
+     * only «کدام بهتر است» is a yield question, not a fit question — that
+     * is `YIELD_OPPORTUNITY`'s, and it is claimed above.
+     */
+    intent: 'OPPORTUNITY_FIT',
+    patterns: [
+      /(مناسب\s*[\u200c\s]*(من|ما|خودم|کاربر)|تناسب\s*[\u200c\s]*(من|ما|خودم|کاربر)|متناسب\s*[\u200c\s]*(من|ما|خودم|کاربر))/i,
+      /* The profile words need the FIT word with them. «وضعیت ریسک من
+         چیه» is a question about the profile itself — that is
+         PORTFOLIO_ANALYSIS, and stealing it would break the risk
+         category. So this pattern only fires when the sentence also says
+         which OPPORTUNITY fits: «کدام گزینه با ریسک من». */
+      /(پروفایل|ریسک|ترجیح|شرایط|سرمایه|سبک)\s*[\u200c\s]*(من|ما|خودم|کاربر)\s*.{0,26}?(مناسب|جور|هم\s*خوان|همخوان|می\s*خوره|میخوره|فیت|سازگار|بنده|بخوره)/i,
+      /(مناسب|جور|هم\s*خوان|همخوان|می\s*خوره|میخوره|فیت|سازگار)\s*.{0,26}?(پروفایل|ریسک|ترجیح|شرایط|سرمایه|سبک)\s*[\u200c\s]*(من|ما|خودم|کاربر)/i,
+      /((برای|با|طبق|بر اساس)\s*)[\u200c\s]*(ریسک|پروفایل|شرایط|پروفایل|سرمایه|سبک|ترجیح)\s*[\u200c\s]*(من|ما|خودم)/i,
+      /\b(fits?|fit\s+for|suitable\s+for|matches?\s+my|matches?\s+my\s+profile|right\s+for\s+me|for\s+my\s+profile)\b/i,
+      /\b(which|what|best)\b.{0,28}\b(fits?|suitable|match)\b/i,
+      /* «کدام گزینه به پروفایل ریسک من می‌خوره» / «کدوم با شرایط من جور است» */
+      /(کدام|کدوم|چی|چه|which|what)\s*.{0,30}?(جور|هم\s*خوان|همخوان|می\s*خوره|میخوره|مناسب|فیت)\s*[\u200c\s]*(من|ما|خودم)/i
+    ],
+    requires: ['opportunity-fit']
+  },
+  {
     intent: 'YIELD_OPPORTUNITY',
     patterns: [
       /* The yield noun and the farm noun, in either order, with anything in
@@ -295,7 +343,7 @@ const SECTION_OWNER = Object.freeze({
    * the owner is `farming` too.
    */
   farming: 'farming', liquidity: 'liquidity', staking: 'farming',
-  globalIntel: 'global-intel'
+  globalIntel: 'global-intel', opportunityFit: 'opportunity-fit'
 });
 function SERVE_UNAVAILABLE(context, section) {
   const caps = context?.capabilities;
@@ -470,7 +518,14 @@ const INTENT_PRIORITY = Object.freeze({
    */
   STAKING_REWARD: 0.05, LIQUIDITY_RISK: 0.05, YIELD_OPPORTUNITY: 0.05,
   /* Above MARKET_OVERVIEW, which claims «smart money» and «نهنگ». */
-  SMART_MONEY_READ: 0.06
+  SMART_MONEY_READ: 0.06,
+  /*
+   * The fit question is about the OWNER, and the owner is the most
+   * specific thing a sentence can name. It sits above the yield question
+   * («بهترین ییلد کجاست؟») because that one never mentions «من» — and
+   * below nothing, because there is nothing more specific than a fit.
+   */
+  OPPORTUNITY_FIT: 0.055
 });
 
 /**

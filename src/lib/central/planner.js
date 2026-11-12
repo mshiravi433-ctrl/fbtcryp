@@ -190,6 +190,18 @@ export const PLAN_TEMPLATES = Object.freeze({
     step('risk.analyze', 'risk', 'read', { optional: true, riskContext: 'portfolio' }),
     step('present', 'session', 'read', { dependsOn: ['global.read'] })
   ],
+  /*
+   * The fit question: rank the cross-asset opportunities against THIS
+   * owner's profile, capital and goal. The ranking is the answer; the
+   * risk view travels with it, because a «FITTED» verdict scored against
+   * a stale risk number is a verdict against nothing.
+   */
+  OPPORTUNITY_FIT: () => [
+    step('portfolio.read', 'portfolio', 'read', { optional: true }),
+    step('fit.read', 'opportunity-fit', 'read', { optional: true }),
+    step('risk.analyze', 'risk', 'read', { optional: true, riskContext: 'portfolio' }),
+    step('present', 'session', 'read', { dependsOn: ['fit.read'] })
+  ],
   GOAL_PLAN: () => [
     step('goals.read', 'goals', 'read', { optional: true }),
     step('portfolio.read', 'portfolio', 'read'),

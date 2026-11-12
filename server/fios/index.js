@@ -83,6 +83,7 @@ import { reasonAboutGoal, requiredAnnualizedPct } from './goalReasoning.js';
 import { fiFlags } from './flags.js';
 import { createFiRouter, setLendingProvider } from './router.js';
 import { setGlobalIntelProvider } from '../ci/globalIntelBridge.js';
+import { setFitProvider } from '../ci/fitBridge.js';
 
 export const FI_ROOT_SCHEMA = 'fbt.fi.composition-root.v1';
 
@@ -545,6 +546,114 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
     }
   }
 
+  /* ── THE FIT READER (2026-11-12) ─────────────────────────────────────
+   *
+   * "Which of these suits me?" needs a SET of opportunities and the
+   * OWNER's profile, and it needs both before it can answer.
+   *
+   * The opportunities come from two places, and the second is the one
+   * that matters: the CRYPTO ones (the yield pools, the LP positions)
+   * and the TRADITIONAL ones (the cross-asset feeds). A user asking
+   * «کدام گزینه مناسب من است؟» is asking about both — and an engine
+   * that only saw the traditional feed would answer a quarter of the
+   * question.
+   *
+   * The crypto opportunities are read from the SAME state sections the
+   * brain reads (`farming`, `liquidity`) — they are already there, they
+   * were just never scored against a profile.
+   *
+   * The profile comes from the personal-profile engine, and the capital
+   * from the canonical financial state. Both are per-owner.
+   *
+   * Every failure is named. There is no path here that returns a ranking
+   * it did not earn.
+   */
+  async function fitFor(owner, { refresh = false } = {}) {
+    const sections = sectionsFor(owner) || {};
+    const [profileRow, financial, goalRow] = await Promise.all([
+      personalProfile?.profileFor ? personalProfile.profileFor(owner).catch(() => null) : Promise.resolve(null),
+      financialStateFor(owner).catch(() => null),
+      Promise.resolve(null)
+    ]);
+    const profile = profileRow?.ok === false ? null : (profileRow?.profile || profileRow?.result || profileRow || null);
+    if (!profile) {
+      return { ok: false, code: 'NO_PROFILE', detail: 'the owner profile is not readable yet — a fit needs to know who it is fitting' };
+    }
+
+    /* The crypto opportunities: the pools the brain already read. */
+    const cryptoOpportunities = [];
+    const farmingPools = Array.isArray(sections.farming?.data?.pools) ? sections.farming.data.pools : [];
+    for (const pool of farmingPools.slice(0, 20)) {
+      cryptoOpportunities.push({
+        id: `pool:${pool.id || pool.symbol || pool.project}`,
+        kind: 'yield-pool',
+        asset: pool.symbol || pool.asset || null,
+        protocol: pool.project || null,
+        chain: pool.chain || null,
+        apyPct: num(pool.apy ?? pool.aprPct ?? pool.apr),
+        riskPct: num(pool.riskPct ?? pool.ilPct),
+        liquidity: num(pool.depthUsd ?? pool.tvlUsd ?? pool.liquidity),
+        capitalRequiredUsd: null,
+        horizonMonths: null,
+        probabilityPct: null,
+        feeUsd: null,
+        slippagePct: null,
+        /* The impermanent-loss flag travels with the opportunity, because an
+           LP is a directional position wearing a yield costume and a fit
+           that ignored that would be a fit against a lie. */
+        ilRisk: pool.ilRisk === true,
+        riskLevel: pool.riskLevel || (pool.ilRisk === true ? 'IL_RISK' : null)
+      });
+    }
+
+    /* The traditional opportunities: the cross-asset feeds. */
+    let traditionalOpportunities = [];
+    const globalSnapshot = await globalIntelFor(owner, { refresh }).catch(() => null);
+    const disc = await traditionalAssets.discover(owner, {
+      globalSnapshot: globalSnapshot && globalSnapshot.status !== 'UNAVAILABLE' ? globalSnapshot : null,
+      persist: false
+    }).catch(() => null);
+    if (disc?.ok && Array.isArray(disc.result?.opportunities)) {
+      traditionalOpportunities = disc.result.opportunities;
+    }
+
+    const opportunities = [...cryptoOpportunities, ...traditionalOpportunities];
+    if (!opportunities.length) {
+      return {
+        ok: false,
+        code: 'NO_OPPORTUNITIES',
+        detail: `nothing to rank: ${cryptoOpportunities.length} crypto pool(s) and ${traditionalOpportunities.length} traditional opportunity(ies) were readable`
+      };
+    }
+
+    const capital = num(financial?.net?.netWorthUsd);
+    const ranked = await opportunityFit.rankFor(owner, {
+      opportunities,
+      profile,
+      financial: financial && financial.status !== 'UNAVAILABLE' ? financial : null,
+      goal: goalRow || null,
+      limit: 10
+    });
+    if (!ranked?.ok) return { ok: false, code: ranked?.code || 'FIT_FAILED', detail: ranked?.detail || null };
+    return {
+      ok: true,
+      status: 'OK',
+      at: Date.now(),
+      result: {
+        ranked: ranked.ranked,
+        count: ranked.count,
+        capitalUsd: capital,
+        riskTolerance: profile?.riskTolerance || null,
+        coverage: {
+          crypto: cryptoOpportunities.length,
+          traditional: traditionalOpportunities.length,
+          profileReadable: true,
+          capitalReadable: capital !== null
+        }
+      }
+    };
+  }
+
   /** Phase 211 — cross-asset analysis over the world + global snapshot.
    *  Phase 211.2 — ACTIVE: reads the market through the brain when the state
    *  store is empty, stands the macro desk in for dead class feeds, and
@@ -730,6 +839,7 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
     routeIntelligence,
     traditionalAssets,
     multiClassFor,
+    fitFor,
     conditionalAllocation
   };
 
@@ -759,6 +869,13 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
    * construction time.
    */
   setGlobalIntelProvider(globalIntelFor);
+
+  /* The fit surface (2026-11-12): the same bridge, a second slot.
+     `multiClassFor` discovers the cross-asset opportunities, then allocates
+     them against the OWNER's risk tolerance, capital and goal — the
+     "which of these suits me" answer. It takes an owner, so the brain
+     gets its own ranking, never a shared one. */
+  setFitProvider(fitFor);
 
   return fi;
 }

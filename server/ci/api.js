@@ -45,7 +45,7 @@ const DEVICE_HEADER = 'x-fbt-device';
 const DEVICE_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const MAX_MESSAGE = 1200;
 
-export function createCentralIntelligence({ ioOverride = null, log = () => {} } = {}) {
+export function createCentralIntelligence({ ioOverride = null, log = () => {}, ensureProviders = null } = {}) {
   const stateStore = createCentralStateStore({ log });
   const events = createEventBus({ stateStore, log });
   const brain = createCentralBrain({ stateStore, events, io: ioOverride || {}, log });
@@ -94,6 +94,24 @@ export function createCentralIntelligence({ ioOverride = null, log = () => {} } 
     const owner = ownerFor(req);
     const message = String(req.body?.message ?? '').slice(0, MAX_MESSAGE);
     if (!message.trim() && !req.body?.txHash) return res.status(400).json({ ok: false, error: 'EMPTY_MESSAGE', hint: 'a message, or a txHash to verify an executed action' });
+    /*
+     * The optional-domain providers (the Financial Intelligence OS) are
+     * wired HERE, on the first real turn, and not at boot.
+     *
+     * Why here: `fios` is 50 files and 980 KB, and importing it eagerly
+     * would put it on the boot path of every serverless cold start — the
+     * exact cost §5 of `docs/PHASE-CPU-AND-DARK-PHASES.md` was written to
+     * avoid. But the brain CANNOT read the global or fit domains without
+     * it, and those modules report `PROVIDER_NOT_WIRED` until it exists.
+     *
+     * So: the import is still lazy, but it is triggered by a TURN rather
+     * than by a boot, and it happens exactly once (the promise is cached).
+     * A failure here must NOT take the turn down — the domain reports its
+     * own named reason instead.
+     */
+    if (typeof ensureProviders === 'function') {
+      try { await ensureProviders(); } catch (err) { log(`ci:provider-bootstrap-failed:${String(err?.message || err).slice(0, 80)}`); }
+    }
     const out = await brain.handle({
       owner,
       message,

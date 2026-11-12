@@ -67,6 +67,17 @@ export const STATE_SECTIONS = Object.freeze({
    * quickly, and a stale flow quoted as current is worse than no flow.
    */
   globalIntel: { owner: 'global-intel', ttlMs: 5 * 60_000, authoritative: true, required: false },
+  /*
+   * The fit ranking: which opportunities suit THIS owner. It is a state
+   * section for the same reason `globalIntel` is — the brain reads modules
+   * through the state store, and a module with NO section is a module
+   * nothing ever asks.
+   *
+   * The ranking is PER OWNER (it is scored against the owner's profile,
+   * capital and goal) and it is short-lived: the cross-asset feed moves,
+   * and a fit quoted from yesterday is a different fit. 5 minutes.
+   */
+  opportunityFit: { owner: 'opportunity-fit', ttlMs: 5 * 60_000, authoritative: true, required: false },
   events: { owner: 'events', ttlMs: 60_000, authoritative: true, required: false },
   alerts: { owner: 'alerts', ttlMs: 60_000, authoritative: true, required: false },
   capabilities: { owner: 'registry', ttlMs: 60_000, authoritative: true, required: true },
@@ -211,7 +222,12 @@ export const EVENT_TYPES = Object.freeze([
      the risk view, because a flow that says the market is accumulating is
      a risk input, and a stale flow next to a fresh risk number would
      read as current. */
-  'GLOBAL_SNAPSHOT_READ'
+  'GLOBAL_SNAPSHOT_READ',
+  /* The fit ranking was read (2026-11-12). It invalidates itself and the
+     risk view: a ranking that says "this suits a conservative owner" is a
+     risk input, and a stale ranking next to a fresh risk number would read
+     as current. */
+  'FIT_RANKING_READ'
 ]);
 
 /*
@@ -245,7 +261,8 @@ export const REFRESH_CASCADE = Object.freeze({
   ALERT_FIRED: { invalidate: ['alerts'], cascade: false },
   MODULE_DEGRADED: { invalidate: ['capabilities', 'health'], cascade: false },
   MODULE_RECOVERED: { invalidate: ['capabilities', 'health'], cascade: false },
-  GLOBAL_SNAPSHOT_READ: { invalidate: ['globalIntel'], cascade: false }
+  GLOBAL_SNAPSHOT_READ: { invalidate: ['globalIntel'], cascade: false },
+  FIT_RANKING_READ: { invalidate: ['opportunityFit'], cascade: false }
 });
 
 /** §10 Module registry — the ids the brain must be able to discover. */
@@ -259,7 +276,11 @@ export const MODULE_IDS = Object.freeze([
      engines. A module that is not in this list is reported as
      `NOT_IN_SPEC_MODULE_LIST` by the registry, which is exactly the
      warning that catches a module added by accident. */
-  'global-intel'
+  'global-intel',
+  /* The fit module (2026-11-12) — the bridge to the opportunity-fit engine
+     in `server/fios/`, which answers «کدام گزینه مناسب من است؟» by scoring
+     each opportunity against the owner's own profile, capital and goal. */
+  'opportunity-fit'
 ]);
 
 /**
