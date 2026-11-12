@@ -191,10 +191,23 @@ const RULES = Object.freeze([
   {
     intent: 'YIELD_OPPORTUNITY',
     patterns: [
-      /(ییلد|بازده|سود|درآمد|apr|apy)\s*(.{0,30})?(استیک|ستیک|farm|فارم|depos|سپرده|pool|استخر|lend| lend)/i,
-      /(بهترین|بهتر|بیشترین|کدام|کدوم|کجا|where|best)\s*(.{0,20})?(ییلد|بازده|استخر|pool|پروتکل|protocol|فارم|farm)/i,
-      /(ییلد|بازده|درآمد|سود)\s*(.{0,20})?(کدام|کدوم|چند|چقدر|بهترین|بیشترین)/i,
-      /(بهترین|بیشترین|کدام|کدوم|چند|چقدر|what|which|best|highest)\s*(.{0,20})?(ییلد|بازده|apy|apr|farm|فارم|pool|استخر)/i
+      /* The yield noun and the farm noun, in either order, with anything in
+         between: «بهترین فارم USDC», «فارم چیه بهتره برای USDC»,
+         «yield farming ETH», «کجا USDC فارم کنم». */
+      /(ییلد|بازده|سود|درآمد|apr|apy|farm|فارم|استخر|pool|کشت‌?سود|depos\w*|سپرده)\s*.{0,30}?(ییلد|بازده|سود|درآمد|apr|apy|farm|فارم|استخر|pool|depos\w*|سپرده|lend| lend|بهتره|بهتر|کجاست|کجا|where|best)/i,
+      /* «yield farming ETH» — the yield noun immediately followed by the farm
+         noun and nothing but the asset after it. The question word is the
+         yield noun itself: the sentence IS the request. */
+      /(yield|بازده|سود|درآمد|apy|apr)\s*(farm|فارم|pool|استخر|استیک|staking|deposit|سپرده)/i,
+      /* The question word and the yield noun: «بهترین APY برای ETH»,
+         «best apy on ETH», «کدام ییلد», «which pool pays most». */
+      /(بهترین|بهتر|بیشترین|کدام|کدوم|کجا|چند|چقدر|what|which|best|highest|top)\s*.{0,24}?(ییلد|بازده|apr|apy|farm|فارم|pool|استخر|کشت‌?سود)/i,
+      /* The yield noun and the question word: «apy USDC چنده»,
+         «سود استیکینگ چقدره», «ییلد چقدر است», «farm yield for ETH». */
+      /(ییلد|بازده|apr|apy|farm|فارم|pool|استخر|کشت‌?سود)\s*.{0,30}?(چند|چقدر|چقدره|چنده|چه ?مقدار|کدام|کدوم|کجا|بهترین|بیشترین|how much|how high|what|which|best|where|for\b)/i,
+      /* A verb that only makes sense for a pool: «USDC فارم کنم»,
+         «where can I farm USDC». */
+      /(.{0,30}?)(فارم\s*(کن|کنم|کنید)|استخر\s*(بذار|بگذار|بگذارم)|ییلد\s*(بگیرم|بگیر)|درآمد\s*(داشته\s*باشم|داشته باشم|بگیرم))/i
     ],
     requires: ['farming']
   },

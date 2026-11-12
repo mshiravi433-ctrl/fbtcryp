@@ -170,12 +170,29 @@ for (const stable of STABLES) {
 }
 
 /* ── farm / yield ───────────────────────────────────────────────────────── */
+/*
+ * WHY THE EXPECTATION CHANGED (2026-11-12)
+ *
+ * These eight templates used to expect ASSET_ANALYSIS, and they did so
+ * because ASSET_ANALYSIS was the ONLY intent that matched «ییلد» and
+ * «فارم». It was the wrong answer: its modules are crypto, signals, news
+ * and risk, so the yields engine was never consulted for a question about
+ * a pool — and a user who asked «بهترین فارم USDC» was told about the
+ * crypto market instead.
+ *
+ * YIELD_OPPORTUNITY now exists and reads the `farming` module, so these
+ * eight expect it.
+ *
+ * The two that stay ASSET_ANALYSIS are the ones that ask for the STATE of
+ * an asset rather than for a pool: «yield USDC چطوره» and «فارم USDC
+ * چطوره». «چطوره» is "how is it", not "where should I put it".
+ */
 for (const asset of ['USDC', 'ETH', 'BTC', 'SOL']) {
-  TEMPLATES.push(make('farm', `فارم چیه بهتره برای ${asset}`, 'fa', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
-  TEMPLATES.push(make('farm', `بهترین فارم ${asset}`, 'fa', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
-  TEMPLATES.push(make('farm', `farm yield for ${asset}`, 'en', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
-  TEMPLATES.push(make('farm', `apy ${asset} چنده`, 'fa', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
-  TEMPLATES.push(make('farm', `best apy on ${asset}`, 'en', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
+  TEMPLATES.push(make('farm', `فارم چیه بهتره برای ${asset}`, 'fa', 'YIELD_OPPORTUNITY', { risk: RISK.read, entities: { asset } }));
+  TEMPLATES.push(make('farm', `بهترین فارم ${asset}`, 'fa', 'YIELD_OPPORTUNITY', { risk: RISK.read, entities: { asset } }));
+  TEMPLATES.push(make('farm', `farm yield for ${asset}`, 'en', 'YIELD_OPPORTUNITY', { risk: RISK.read, entities: { asset } }));
+  TEMPLATES.push(make('farm', `apy ${asset} چنده`, 'fa', 'YIELD_OPPORTUNITY', { risk: RISK.read, entities: { asset } }));
+  TEMPLATES.push(make('farm', `best apy on ${asset}`, 'en', 'YIELD_OPPORTUNITY', { risk: RISK.read, entities: { asset } }));
   TEMPLATES.push(make('farm', `yield ${asset} چطوره`, 'fa', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
 }
 
@@ -380,9 +397,9 @@ for (const stable of STABLES) {
 /* farm / futures / dydx: asset × register matrix */
 for (const asset of ['USDC', 'ETH', 'BTC', 'SOL']) {
   TEMPLATES.push(make('farm', `فارم ${asset} چطوره`, 'fa', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
-  TEMPLATES.push(make('farm', `yield farming ${asset}`, 'en', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
-  TEMPLATES.push(make('farm', `بهترین APY برای ${asset}`, 'fa', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
-  TEMPLATES.push(make('farm', `کجا ${asset} فارم کنم`, 'fa', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
+  TEMPLATES.push(make('farm', `yield farming ${asset}`, 'en', 'YIELD_OPPORTUNITY', { risk: RISK.read, entities: { asset } }));
+  TEMPLATES.push(make('farm', `بهترین APY برای ${asset}`, 'fa', 'YIELD_OPPORTUNITY', { risk: RISK.read, entities: { asset } }));
+  TEMPLATES.push(make('farm', `کجا ${asset} فارم کنم`, 'fa', 'YIELD_OPPORTUNITY', { risk: RISK.read, entities: { asset } }));
 }
 for (const asset of ['BTC', 'ETH', 'SOL', 'ARB']) {
   TEMPLATES.push(make('futures', `فیوچرز ${asset} چی شده`, 'fa', 'FUTURES_RISK', { risk: RISK.futures, entities: { asset } }));

@@ -29,7 +29,8 @@ node scripts/find-extensionless-imports.mjs # imports Node ESM cannot resolve
 
 ## §0.5 — WHAT WAS ACTUALLY FIXED, AND WHAT IT COST
 
-**All six** upgrade paths in §5 are **shipped**. The point of this section
+**All seven** upgrade paths in §5 are **shipped** (5.1–5.6 plus the
+seventh, the yield surface, in §5.9). The point of this section
 is that each one is a measurement before and after, not a promise.
 
 | | before | after |
@@ -44,6 +45,10 @@ is that each one is a measurement before and after, not a promise.
 | adapter failure shape | `{ code, detail }` — no `ok` | **`{ ok: false, code, detail }`** |
 | `GET /api/intents/v1/phase-status` | 148,394 B | **23,471 B** (summary; `?detail=1` still returns the full report) |
 | `/api/cron/daily` | one number, 563 ms | **eleven named jobs, each with its own ms** |
+| modules an intent asks for | 27 of 30 | **30 of 30** (`prediction` is `FEATURE_GATED` by design) |
+| «بهترین ییلد کجاست؟» | `UNSUPPORTED` | **`YIELD_OPPORTUNITY`** → a live APR, with the risk and depth beside it |
+| «ریسک نقدینگی LP چقدره؟» | `UNSUPPORTED` | **`LIQUIDITY_RISK`** → the impermanent-loss flags |
+| an upstream failure's detail | empty | **the real reason** («fetch failed») |
 
 ### The three root causes, and what each one was
 
@@ -739,23 +744,29 @@ not break. The new `jobs` array is additive.
   (And since §5.2 they are not even needed to make a phase live.)
 * **Adding more phases.** The registry already has 206. The problem is that
   155 of them are unreachable from the brain. Adding a 207th makes the
-  ratio worse.
+  ratio worse. §5.9 is the opposite move: three new intents that make
+  three EXISTING capabilities reachable — no new phase, no new module,
+  no new provider call.
 * **Cutting CPU to make the allowance last.** The allowance is not the
   binding constraint — the `:free` provider quota is (50 requests/day ≈ 8
   max turns). §2.4.
 * **Qdrant.** It buys persistence, not CPU. Already documented.
 
-### 5.8 What is STILL open after all six paths
+### 5.8 What is STILL open after all seven paths
 
-The six paths in §5 are shipped, and they were the six that the
+The seven paths in §5 are shipped, and they were the seven that the
 measurement justified. What the measurement did **not** justify is left
 open on purpose, and it is worth naming:
 
-1. **52 of 206 phases reach a reasoning module.** The registry is 206 and
-   the AI only asks 52 of them. The fix is not more phases — it is making
-   the brain's intents reach the modules that already exist. The
-   multi-venue wiring (§5.4) moved that number by one; the next twenty
-   intents would move it by twenty.
+1. ~~**52 of 206 phases reach a reasoning module.**~~ **PARTLY SHIPPED**
+   — see §5.9. The registry is 206 and the AI asked 52 of them. The fix
+   was not more phases: it was making the brain's intents reach the
+   modules that already exist. That is now done for the yield surface —
+   the **intent↔module gap is closed** (30 of 30 registered modules are
+   asked by an intent; the only one still unasked is `prediction`, which
+   is `FEATURE_GATED` by design). What remains is the phase-level
+   number, which counts *phases*, not *modules*, and needs a different
+   measurement to move.
 
 2. **`server/fios/` (50 files, 980 KB) is still a one-way wire.** It
    RECEIVES the brain (`server/fios/index.js:90,197,232`) but the brain
@@ -771,12 +782,95 @@ open on purpose, and it is worth naming:
    is a correctness and cost-accounting fix, not a way to stretch the
    allowance.
 
+### 5.9 Path 7 — the yield surface (SHIPPED)
+
+**The measurement.** The gap between what the brain *asks for* and what
+the registry *registers* was counted directly:
+
+```
+intents                          : 29
+registered modules               : 30
+modules an intent asks for       : 27
+REGISTERED BUT NEVER ASKED       : farming, liquidity, staking
+ASKED BUT NOT REGISTERED         : session   (only NAVIGATE uses it)
+```
+
+Three capabilities were registered, readable, live — and **no intent
+could ever reach them**. A user who asked «بهترین ییلد کجاست؟» or
+«ریسک نقدینگی LP چقدره؟» got `UNSUPPORTED`, while the yields engine
+sat there answering nobody.
+
+**Why it was invisible.** Three separate causes, and none of them was
+"the feature was not built":
+
+1. **The words belonged to another intent.** `ASSET_ANALYSIS` matches
+   `\byield\b`, `\bfarm\b` and `\bapy\b`, and its modules are
+   `crypto, signals, news, risk`. The yield engine was never consulted
+   for a question about a pool.
+2. **The sections were owned by nobody.** `farming` and `liquidity` are
+   state sections in `createSystemState()`, but `SECTION_OWNER` did not
+   list them — so `SERVE_UNAVAILABLE` could not tell "missing" from
+   "unreadable", and `requires: ['farming']` was meaningless.
+3. **A follow-up rewrote the question.** `RISK_QUERY` fires on
+   «ریسک … چقدره؟» and rewrites the intent to `LOAN_STATUS`. That is
+   right for «ریسک وامم چقدره؟» and wrong for «ریسک نقدینگی LP
+   چقدره؟». The tell is not the word «ریسک» — it is that the sentence
+   **names a capability** («نقدینگی», «LP», «استیکینگ», «ییلد»), and a
+   name carries its own referent, so the sentence is not a follow-up to
+   whatever was said before.
+
+**What shipped.**
+
+| | before | after |
+|---|---|---|
+| intents | 29 | **32** |
+| modules asked by an intent | 27 | **30 / 30** |
+| registered but never asked | `farming`, `liquidity`, `staking` | **`prediction` only** (`FEATURE_GATED` by design) |
+| «بهترین ییلد کجاست؟» | `UNSUPPORTED` | `YIELD_OPPORTUNITY` → Uniswap WETH-USDC 24.5 % APR, 400 M USD depth |
+| «سود استیکینگ اتریوم چقدره؟» | `UNSUPPORTED` | `STAKING_REWARD` → Lido STETH 3.8 % APR, 9 000 M USD depth |
+| «ریسک نقدینگی LP چقدره؟» | `UNSUPPORTED` | `LIQUIDITY_RISK` → 3 pools, 1 carries an impermanent-loss flag |
+
+- Three intents with their own modules, their own rules (placed **above**
+  `ASSET_ANALYSIS`) and their own findings.
+- `SECTION_OWNER` gains `farming`, `liquidity`, `staking`.
+- An **explicit intent beats a follow-up** — but a confirmation or a
+  cancellation still wins, because those are about an action, not about a
+  topic. The set is deliberately narrow: `ASSET_ANALYSIS` matches
+  «چطور است» and «چطوره», so half the sentences in the product would
+  count as "explicit" and follow-ups would stop working entirely.
+- **A yield is never quoted alone.** The finding carries the risk level,
+  the depth and the impermanent-loss flag beside the APR, and a staking
+  question picks the liquid-staking row rather than the highest number
+  — a 24.5 % DEX pool is an impermanent-loss trap, not a return.
+- `guarded()` now keeps the real error text, so a failure says **why**
+  («fetch failed») instead of `UNCLASSIFIED_ERROR` with an empty detail.
+  An empty detail tells the operator that the module "did not answer"
+  and nothing about whether to retry.
+
+**Contract test.** `test/intent-ai/yield-surface-intents.test.mjs` —
+13 cases, including the live HTTP path (`POST /api/brain/intent`) and
+the regression guard that «وامم چطوره؟» still resolves to
+`LOAN_STATUS`.
+
+`npm run test:ai-intelligence` → **657 / 657** (was 644).
+
 ---
 
 ## §6 — The one-paragraph answer
 
 Of 206 registered intent phases, **51 are actually connected to the AI**
-— that number has not moved and it is the real ceiling. The background CPU
+— that number has not moved and it is the real ceiling. But the *module*
+half of the same question **has** moved: the brain now asks for **30 of
+the 30** registered modules instead of 27, because the yield surface —
+`farming`, `liquidity` and `staking`, three capabilities that were
+registered, readable and **unreachable by any intent** — now has three
+intents of its own (§5.9). A user who asked «بهترین ییلد کجاست؟» or
+«ریسک نقدینگی LP چقدره؟» got `UNSUPPORTED`; they now get a live APR
+with the risk, the depth and the impermanent-loss flag beside it, and the
+one thing that made it invisible was not a missing feature but a
+**mis-owned word**: «yield» belonged to `ASSET_ANALYSIS`, whose modules
+are the crypto ones, and a follow-up rewrite turned every «ریسک … چقدره؟»
+into a question about a loan. The background CPU
 is not in the phases at all: it is `/api/cron/daily` (630 ms, eleven jobs)
 and `/api/cron/scenario-evidence` (334 ms), which together are **92 %** of
 it, and the request path is cheap (`/api/ai/ask` 65 ms warm against a
@@ -800,4 +894,7 @@ them. And the two request-path wins are in: `phase-status` now has a
 **eleven named jobs with their own cost** instead of one 563 ms number,
 which shows that `self-probe` and `smart-money` are 44 % of it between
 them. What remains is the honest ceiling: **more phases would not make
-the AI smarter — making the existing ones reachable would.**
+the AI smarter — making the existing ones reachable would.** That sentence
+is now the method, not a slogan: it is exactly what §5.9 did, with three
+intents, three findings, no new phase, no new module and no new provider
+call — and a failure that finally says *why* it failed.
