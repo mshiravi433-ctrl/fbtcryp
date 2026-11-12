@@ -102,7 +102,7 @@ const KB = [
   {
     id: 'custody',
     k: {
-      en: ['custody', 'hold my funds', 'deposit', 'do you keep', 'safe', 'non-custodial'],
+      en: ['custody', 'hold my funds', 'deposit', 'do you keep', 'safe', 'non-custodial', 'my money', 'money safe', 'are my funds safe', 'keep my money'],
       fa: ['نگهداری', 'واریز', 'پول من', 'امن', 'غیرحضانتی', 'دارایی من کجاست'],
       ar: ['حفظ', 'إيداع', 'أموالي', 'آمن']
     },

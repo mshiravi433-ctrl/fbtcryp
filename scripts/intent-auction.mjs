@@ -61,7 +61,7 @@ if (command === 'calldata') {
     explorerBaseUrl: null,
     minConfirmations: 1
   }]]);
-  const result = buildAnchorCalldata(close, chainId, networks);
+  const result = await buildAnchorCalldata(close, chainId, networks);
   if (!result.ok) {
     console.error(result.code);
     process.exit(1);

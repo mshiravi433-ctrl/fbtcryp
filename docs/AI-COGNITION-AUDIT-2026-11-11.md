@@ -1220,3 +1220,242 @@ The boundary that holds through all of it: `executionActivated: false` and
 `rawCredentialsAllowed: false`, in every mode, with the evidence on or off.
 The phase system can claim "operational" and still never be allowed to sign
 or move funds.
+
+---
+
+## §15 — THE REAL BOTTLENECK: PROVIDER CALLS, AND THE TWO LEVERS THAT CUT THEM
+
+### 15.1 The measurement that reframed the whole question
+
+The task was: *find the resources that make the AI smarter AND cut CPU/GPU*.
+The naive reading of "cut CPU/GPU" is "run the model on cheaper hardware".
+The measurement says that reading is wrong for this project.
+
+Measured on the `max` path (the mode the deployment actually runs —
+`FBT_AI_INTELLIGENCE="max"`):
+
+| what | measured | note |
+|---|---|---|
+| cold start, full server | **280 ms wall / 343 ms CPU / 25 MB heap / 97 MB RSS** | CPU is *not* the bottleneck |
+| embeddings for the whole 103-item corpus | **94.5 ms**, fully offline and synchronous | `embedSemanticSync` — no provider call, no GPU |
+| local index rebuild, 500 memories | **77.3 ms** | |
+| lexical corpus search | **16 ms → 1.18 ms** (after the token cache) | |
+| **one `max` turn** | **6 provider calls, 1,198–1,602 prompt tokens each** | ≈ 7,000+ prompt tokens |
+| **OpenRouter `:free` cap** | **50 requests/day** | 6 of them per `max` turn ⇒ **~8 `max` turns/day** |
+| a greeting («سلام») | **0 provider calls** | |
+
+**The conclusion:** the constraint that binds this deployment is *provider
+supply*, not compute. A resource that saves 100 ms of CPU is worth less than
+a resource that saves one provider call, because the CPU budget is not the
+thing that runs out — the daily `:free` quota is.
+
+That reframes the whole resource question, and it is what §15.4 ranks.
+
+### 15.2 Lever one: the local-first grounded short-circuit
+
+**The finding:** the repository already contains a complete, no-LLM
+reasoner — `synthesizeInternalAnswer` in `server/aiInternalReasoner.js` —
+and until this turn it was called from exactly ONE place: the degraded
+fallback at `server/aiCollaboration.js:744`. A working answerer, used once.
+
+**The change:** `server/aiLocalFirstGate.js` asks, BEFORE the first provider
+call, whether the repository's own verified corpus can answer the question
+outright. If it can, the answer is **retrieved, not generated**.
+
+This is not only a budget saver, it is a **quality saver**. A retrieved fact
+carries its citation and cannot drift; a generated one can. The corpus
+entries are `verified`; a free model's paraphrase of them is not.
+
+**The gate's rules, and why each one exists:**
+
+| rule | what it refuses | why |
+|---|---|---|
+| safety floor | a message that carries distress | the local path has no emotional reads; the reasoner's containment must not be bypassed |
+| judgement | «آیا بخرم؟», «ریسک ورود چیست؟» | a corpus entry is a *definition* of entry risk, not an assessment of *this* user's entry |
+| multi-part | «۱) … ۲) …» | the corpus can answer part one and not part two; a half-answer that looks complete is worse than a full answer |
+| freshness | LIVE / BREAKING / RECENT | the corpus holds no prices |
+| live value | «قیمت BTC چنده؟» with no live price in the turn | a glossary is not a ticker |
+| score | a hit below `LOCAL_FIRST_MIN_SCORE = 100` | a weak hit is a confident non-answer |
+| the reasoner's own verdict | `local-reasoner-declined` | if the local reasoner declines, the pipeline runs — the gate can only ever *skip*, never *invent* |
+| length | an answer under `LOCAL_FIRST_MIN_ANSWER_CHARS = 40` | a fragment is not an answer |
+
+**Measured over 20 realistic questions (every provider mocked):**
+
+| | without the gate | with the gate |
+|---|---|---|
+| provider calls | **100** | **55** |
+| calls saved | — | **45 (−45 %)** |
+| answered locally | 0 | **9 / 20 (45 %)** |
+| OpenRouter `:free` days at 10 questions/day | **10.0** | **18.2 (+82 %)** |
+
+**False positives: zero.** The 11 questions that go to the model are the
+11 that should go to the model — liquidation risk, today's market, BTC's
+price, strategy scenarios, entry risk, two-part questions, the portfolio,
+"should I buy?", and the live-value questions.
+
+The gate reports itself on the turn (`result.localFirst` = `{ used, reason,
+matched, score, providerCallsSaved, preGate }`), so a turn's routing is
+auditable rather than inferred.
+
+### 15.3 The CPU work: why the local path was SLOWER, and what fixed it
+
+The first build of the gate was **slower than the provider path** — 2,923 ms
+against 704 ms. A gate that costs more than the calls it saves is worse than
+no gate. Two causes, both found by measurement rather than by reading:
+
+**Cause 1 — the corpus search tokenised 309 strings per search.**
+`searchKnowledge` called `tokenizeWithAliases` three times for every one of
+the 103 items (title+tags, title, title+body+tags+category), and every one
+of those calls ran `normalizeUpgrade4` — nine regex passes plus a
+typo-replacement loop. 309 tokenisations to answer one question.
+
+The fix is an **item token cache**: a `WeakMap` from the frozen knowledge
+item to its per-locale token sets, built lazily on first use.
+
+> **`searchKnowledge`: 16 ms → 1.18 ms (13.5×)**, with the ranking unchanged
+> (`kb.product.fee` is still the top hit for «کارمزد پلتفرم FBT چقدر است»).
+
+**Cause 2 — 58 % of the local CPU was spent compiling RegExps.**
+The CPU profile of ten `max` turns was unambiguous:
+
+| function | self time |
+|---|---|
+| `phrase` @ `socialRead.js` | **15.9 %** |
+| `word` @ `aiRequestPlan.js` | **15.2 %** |
+| `has` @ `aiDiscourseMirror.js` | **10.9 %** |
+| `has` @ `partialInput.js` | **8.6 %** |
+| `has` @ `aiEmotionRead.js` | **7.7 %** |
+
+Every one of those rebuilt its pattern on every call, and — worse — every
+"does ANY of these forty terms match?" question was answered by running
+**forty separate regexes**, each re-walking the message.
+
+The fix is `src/lib/intent-ai/os/regexCache.js`:
+
+* `cachedRegExp(source, flags)` — a bounded (4096) FIFO cache of compiled
+  patterns, so a fixed vocabulary is compiled once and reused;
+* `matchAnyTerm(text, terms, { fold, prefixMatch })` — **one** alternation
+  over a whole vocabulary instead of N separate executions;
+* `countMatchingTerms(...)` — counts *terms*, not occurrences, in one walk;
+* `matchFoldedPhrase`, `matchWord`, `matchTerm` — the per-term matchers,
+  now backed by the cache.
+
+Wired into: `socialRead.js`, `dialogueRead.js`, `partialInput.js`,
+`aiRequestPlan.js`, `aiDiscourseMirror.js`, `aiEmotionRead.js`, and
+`intentUnderstandingEngine.js` (whose 52-entry slang map was compiling and
+running 52 regexes per call).
+
+> **CPU profile: 1,131 samples → 689 samples — 39 % less CPU** on the same
+> ten-turn workload, with all 604 intelligence tests still green.
+
+**Two bugs the change caught, and what they teach:**
+
+1. *`«وضعیت بازار چطوره؟» stopped being an analysis.* The vocabulary
+   matcher originally treated a long Persian term as a PREFIX, matching
+   `socialRead`'s `phrase` — but `aiRequestPlan`'s `word` had always been
+   STRICT. One matcher cannot serve both. The fix is an explicit
+   `prefixMatch` flag, so each module keeps its own rule.
+2. *«BTC و ETH» reported only ETH.* An alternation with one capture group
+   per branch was tried first and rejected: with the `g` flag only the
+   LAST participating group is defined. Worse, a global regex keeps
+   `lastIndex` between calls, so the second term was searched only from
+   where the first one ended. The shipped version keeps the vocabulary
+   order with per-term cached patterns and no `g` flag.
+
+> **Lesson:** a shared matcher is only safe when the *semantics* are
+> shared. A performance refactor that quietly changes what matches is
+> worse than the performance it buys.
+
+### 15.4 The revised verdict: what makes the AI smarter AND costs fewer calls
+
+Reordered by *provider-call efficiency* — the resource that actually binds.
+
+| # | resource | makes it smarter? | cuts provider calls? | cuts CPU/GPU? | verdict |
+|---|---|---|---|---|---|
+| **1** | **the local-first grounded short-circuit** | **yes** — retrieved `verified` facts with citations beat a paraphrase | **yes — 45 %** | yes — 39 % less CPU | **ADOPT** (shipped) |
+| **2** | **the answer cache** (`server/aiAnswerCache.js`) | no — it serves the same answer | **yes** — a repeat question is free | marginally | **ADOPT** (shipped) |
+| **3** | **the local lexical retriever** (`searchKnowledge`, now 1.18 ms) | **yes** — grounding never costs a call | **yes** — grounding is free | yes — 13.5× faster | **ADOPT** (shipped) |
+| **4** | **a prompt/token diet** | **yes** — less context, less noise | **yes** — a smaller prompt is cheaper and more reliable | yes | **ADOPT, MEASURED** — the reasoning ledger raised prompt 4,401 → 5,677 tok/call (**+20 %**); that is the direction to reverse |
+| **5** | **dropping redundant roles** in `pickAnalysisRoles` | **yes** — six calls to the same model is one call to six *different* models | **yes — directly** | yes | **ADOPT** (the role fan-out is the 6) |
+| **6** | **a fastText-style local language gate** | slightly — it routes better | **yes** — a mis-routed turn costs a whole turn | no (126 MB model, 16-dim, language-ID only) | **ADAPT** — as a *router*, not as an embedder |
+| **7** | **Qdrant Cloud** | **no** — it stores what the corpus already holds | **no** | **no** — measured | **ADAPT** — for persistence and shared state, not for CPU |
+| — | `micrograd` | no — gradient descent already in `cortexReadoutTrainer.js` | no | no | **SKIP** — Python, scalar, slower |
+| — | `nanoGPT` | no — deprecated by its author; GPU; no data | no | **yes, negatively** | **SKIP** |
+| — | `autoresearch` | no — but its *workflow* is the lesson | no | no | **ADAPT the workflow only** — `cortex-experiments.tsv` + keep/discard + a `CORTEX-PROGRAM.md`; every retrain result is currently thrown away |
+| — | the dead gist (442a6) | no | no | no | **SKIP** — 404; the RNN lesson is already in the cortex design |
+| — | Redis Software | no | no | **no, negatively** — an always-on HA service | **SKIP** — Qdrant already covers the vector/memory need |
+| — | LangChain docs | no — for the agent, not the runtime | no | no | **ADAPT** — for the agent's own API accuracy |
+| — | LiteLLM | no | no | **no** — a Python/Rust service with 1–3 s cold start | **SKIP** — it also erases the `:free` suffix and the per-provider reasoning-field mapping (`aiIntelligence.js:500–513`) |
+
+**The disqualifying rule, stated once:** anything that needs a GPU, a Python
+service, or an always-on extra CPU is disqualified by this project's own
+constraints — not by taste.
+
+### 15.5 What Qdrant Cloud is actually worth
+
+The code already supported Qdrant completely (`vectorStore.js:789–799`), so
+enabling it is **zero code change** — only two environment variables.
+
+The honest verdict, from measurement rather than from the product page:
+
+* **It does NOT cut CPU.** Embeddings were already offline and synchronous
+  (0.102 ms/query, 94.5 ms for the whole corpus); the local index rebuild
+  is 77.3 ms for 500 memories; full cold start is 343 ms of CPU. There is
+  no meaningful CPU to give back.
+* **It DOES give persistence and shared state.** The vector index survives a
+  restart, and the long-term memory is shared between serverless
+  instances, so a user's note does not vanish between invocations.
+* **It degrades honestly.** If the service is unreachable, the store falls
+  back to the local mirror and reports `degraded: true` with
+  `backend: 'local-mirror'`. The answer is not lost — it is *reported*.
+
+**The Free tier is enough** (single node, 0.5 vCPU / 1 GB RAM / 4 GB disk,
+free forever) for a 103-item corpus.
+
+**The blocker is not technical.** `QDRANT_URL` and `QDRANT_API_KEY` have to
+be set in Vercel, and the account's soft block (`FAIR_USE_LIMITS_EXCEEDED`,
+unpause 2026-12-10) currently prevents creating environment variables. The
+protocol is therefore verified against a **local mock of the Qdrant REST
+API** — real cosine scoring, real 404/409/403, real API-key enforcement —
+which proves idempotent collection creation, upsert, filtered search, owner
+isolation, scroll pagination, delete-by-filter, mirror fallback, persistence
+across two store instances, and honest degradation on a wrong key.
+
+### 15.6 The safety gap this turn closed
+
+The first build of the gate passed `socialRead: null` and
+`emotionRead: null` into `synthesizeInternalAnswer`. The reasoner's
+containment contract fires on `socialRead.distress` and on
+`emotionRead.acute` (grief / shame / burnout at intensity ≥ 0.7), so the
+emotional paths were silently lost on exactly the turns they mattered most.
+The built-in `panicSellDistress` regex still fired, so the base case was
+safe — but the emotional-acute path was not.
+
+Two changes close it:
+
+1. **The safety floor.** A cheap, deliberately broad regex
+   (`SAFETY_PRECHECK_RE`) recognises the clearest distress shapes and
+   declines the local path for them. It is checked **first**, before every
+   other rule, so the reported reason is the true one. It is a floor, not
+   the whole safety net: the full contract still runs on the model path.
+2. **The real reads reach the reasoner.** The gate now passes the actual
+   `socialRead` and `emotionRead`, so the containment fires on the local
+   path exactly as it does on the model path.
+
+The lesson generalises: **a fast path that skips the safety path is not a
+fast path, it is a hole.** The pre-gate was added in the same change, and
+it exists precisely so that the local path can be fast without being
+unsafe.
+
+### 15.7 What still needs a human
+
+1. **Set the two Qdrant variables in Vercel** — blocked until the account is
+   unpaused (2026-12-10). Until then the local mirror is the store.
+2. **`FBT_AI_PROVIDERS` should be `openrouterfree,groq,workersai`** on the
+   deployment, not `"all"`.
+3. **Merge to `main`.** `git.deploymentEnabled {"arena/*": false}` means the
+   branch does not deploy.
+4. **The `:free` quota is the budget.** At 50 requests/day and 6 calls per
+   `max` turn, the deployment has roughly **8 `max` turns a day** — and
+   the gate turns ~45 % of realistic turns into 0 calls. That is the single
+   biggest lever available without a paid key.

@@ -7025,7 +7025,7 @@ export default async function run() {
         explorerBaseUrl: 'https://explorer.invalid',
         minConfirmations: 2
       }]]);
-      const calldata = buildAnchorCalldata(closed.close, 8453, anchorNetworks);
+      const calldata = await buildAnchorCalldata(closed.close, 8453, anchorNetworks);
       t('anchor calldata binds the exact signed close id, intent, root, size and time',
         calldata.ok && calldata.to.toLowerCase() === anchorContract.toLowerCase() && calldata.data.startsWith('0x'));
 
@@ -7742,7 +7742,7 @@ export default async function run() {
         [{ from: 'swap', to: 'x', dependency: 'success', valueBinding: null }]
       )).code === 'BAD_WORKFLOW_ACTION');
 
-    const built = buildWorkflowBatchCalldata(good);
+    const built = await buildWorkflowBatchCalldata(good);
     t('same-chain calldata is a planned envelope, not a live router payload',
       built.ok && built.liveRouterCalldata === false && built.verifiesCallOutputs === false
         && built.custody === false && built.holdsTokens === false
@@ -7754,14 +7754,14 @@ export default async function run() {
       [{ from: 'swap', to: 'deposit', dependency: 'success', valueBinding: null }]
     );
     t('mixed revert policies fall back to abort-all rather than guessing',
-      buildWorkflowBatchCalldata(mixed).policy === 'abort-all');
+      await buildWorkflowBatchCalldata(mixed).policy === 'abort-all');
 
     const bridged = dag(
       [node('swap'), node('bridge', { action: 'bridge', chainId: 1 })],
       [{ from: 'swap', to: 'bridge', dependency: 'success', valueBinding: null }]
     );
     t('cross-chain calldata is refused, not compiled',
-      buildWorkflowBatchCalldata(bridged).code === 'ATOMIC_CROSS_CHAIN_UNAVAILABLE'
+      await buildWorkflowBatchCalldata(bridged).code === 'ATOMIC_CROSS_CHAIN_UNAVAILABLE'
         && isSingleChainWorkflow(bridged) === false);
 
     const savedWorkflowAddr = process.env.INTENT_WORKFLOW_BATCH_ADDRESS;
@@ -8369,24 +8369,24 @@ export default async function run() {
         && fromProof.challenge.message.includes(initiatorKeys.publicKey)
         && fromProof.challenge.message.includes(String(now))
         && fromProof.challenge.message.includes('unit-nonce-1'));
-    const fromBinding = buildAccountBinding({
+    const fromBinding = await buildAccountBinding({
       state, partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address,
       issuedAt: now, expiresAt: now + 86400, walletProof: fromProof.proof
     }, initiatorKeys.privateKey, { now: now * 1000 });
-    const toBinding = buildAccountBinding({
+    const toBinding = await buildAccountBinding({
       state, partyId: 'p4c-counterparty', chainId: 42161, address: toWallet.address,
       issuedAt: now, expiresAt: now + 86400, walletProof: toProof.proof
     }, counterpartyKeys.privateKey, { now: now * 1000 });
     t('a valid EIP-191 wallet proof upgrades the binding to verified wallet control',
       fromBinding.ok && toBinding.ok
-        && verifyAccountBinding(fromBinding.binding, { state, now: now * 1000 }).ok
+        && await verifyAccountBinding(fromBinding.binding, { state, now: now * 1000 }).ok
         && fromBinding.binding.claims.walletSignatureScheme === 'EIP-191'
         && fromBinding.binding.claims.walletSignatureVerified === true
         && fromBinding.binding.claims.addressControlSelfAttested === true
         && fromBinding.binding.claims.fundsAuthorityGranted === false
         && fromBinding.binding.claims.custody === false
         && fromBinding.binding.walletProof.scheme === 'EIP-191');
-    const selfAttested = buildAccountBinding({
+    const selfAttested = await buildAccountBinding({
       state, partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address,
       issuedAt: now, expiresAt: now + 86400
     }, initiatorKeys.privateKey, { now: now * 1000 });
@@ -8395,55 +8395,55 @@ export default async function run() {
         && selfAttested.binding.walletProof === null
         && selfAttested.binding.claims.walletSignatureScheme === null
         && selfAttested.binding.claims.walletSignatureVerified === false
-        && verifyAccountBinding(selfAttested.binding, { state, now: now * 1000 }).ok);
+        && await verifyAccountBinding(selfAttested.binding, { state, now: now * 1000 }).ok);
     t('an EIP-191 signature from a different wallet (wrong recovered address) is refused',
-      buildAccountBinding({
+      (await buildAccountBinding({
         state, partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address,
         issuedAt: now, expiresAt: now + 86400,
         walletProof: { scheme: 'EIP-191', nonce: '', signature: await impostorWallet.signMessage(fromProof.challenge.message) }
-      }, initiatorKeys.privateKey, { now: now * 1000 }).code === 'WALLET_PROOF_INVALID');
+      }, initiatorKeys.privateKey, { now: now * 1000 })).code === 'WALLET_PROOF_INVALID');
     const tamperedWalletSig = `${fromProof.proof.signature.slice(0, -1)}${fromProof.proof.signature.endsWith('A') ? 'B' : 'A'}`;
     t('a tampered wallet signature is refused',
-      buildAccountBinding({
+      (await buildAccountBinding({
         state, partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address,
         issuedAt: now, expiresAt: now + 86400,
         walletProof: { scheme: 'EIP-191', nonce: '', signature: tamperedWalletSig }
-      }, initiatorKeys.privateKey, { now: now * 1000 }).code === 'WALLET_PROOF_INVALID');
+      }, initiatorKeys.privateKey, { now: now * 1000 })).code === 'WALLET_PROOF_INVALID');
     t('EIP-1271 (smart-contract wallets) is explicitly unsupported, not faked',
-      buildAccountBinding({
+      (await buildAccountBinding({
         state, partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address,
         issuedAt: now, expiresAt: now + 86400,
         walletProof: { scheme: 'EIP-1271', nonce: '', signature: fromProof.proof.signature }
-      }, initiatorKeys.privateKey, { now: now * 1000 }).code === 'WALLET_PROOF_SCHEME_UNSUPPORTED');
+      }, initiatorKeys.privateKey, { now: now * 1000 })).code === 'WALLET_PROOF_SCHEME_UNSUPPORTED');
     t('an expired account binding is refused',
-      verifyAccountBinding(fromBinding.binding, { state, now: (now + 90000) * 1000 }).code
+      await verifyAccountBinding(fromBinding.binding, { state, now: (now + 90000) * 1000 }).code
         === 'ACCOUNT_BINDING_EXPIRED');
     t('a binding issued beyond the clock-skew allowance is refused',
-      buildAccountBinding({
+      (await buildAccountBinding({
         state, partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address,
         issuedAt: now + 1000, expiresAt: now + 86400
-      }, initiatorKeys.privateKey, { now: now * 1000 }).code === 'BAD_BINDING_WINDOW');
+      }, initiatorKeys.privateKey, { now: now * 1000 })).code === 'BAD_BINDING_WINDOW');
     t('an unknown binding field fails closed',
-      verifyAccountBinding({ ...fromBinding.binding, extra: 1 }, { state, now: now * 1000 }).code
+      await verifyAccountBinding({ ...fromBinding.binding, extra: 1 }, { state, now: now * 1000 }).code
         === 'UNKNOWN_ACCOUNT_BINDING_FIELD');
     t('a non-canonical base64url party key is refused',
-      verifyAccountBinding({ ...fromBinding.binding, partyPublicKey: `${fromBinding.binding.partyPublicKey}=` },
+      await verifyAccountBinding({ ...fromBinding.binding, partyPublicKey: `${fromBinding.binding.partyPublicKey}=` },
         { state, now: now * 1000 }).code === 'BINDING_KEY_MISMATCH');
     t('a wrong partyId is refused',
-      verifyAccountBinding({ ...fromBinding.binding, partyId: 'p4c-nobody' }, { state, now: now * 1000 }).code
+      await verifyAccountBinding({ ...fromBinding.binding, partyId: 'p4c-nobody' }, { state, now: now * 1000 }).code
         === 'UNKNOWN_BINDING_PARTY');
     t('a wrong stateId is refused',
-      verifyAccountBinding({ ...fromBinding.binding, stateId: `0x${'ff'.repeat(32)}` }, { state, now: now * 1000 }).code
+      await verifyAccountBinding({ ...fromBinding.binding, stateId: `0x${'ff'.repeat(32)}` }, { state, now: now * 1000 }).code
         === 'BAD_ACCOUNT_BINDING_BINDING');
     t('a chain outside the plan is refused',
-      verifyAccountBinding({ ...fromBinding.binding, chainId: 8453 }, { state, now: now * 1000 }).code
+      await verifyAccountBinding({ ...fromBinding.binding, chainId: 8453 }, { state, now: now * 1000 }).code
         === 'BAD_BINDING_CHAIN');
     t('a binding signed by a key the state does not pin is refused',
-      buildAccountBinding({
+      (await buildAccountBinding({
         state, partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address, expiresAt: now + 86400
-      }, strangerKeys.privateKey, { now: now * 1000 }).code === 'BINDING_KEY_MISMATCH');
+      }, strangerKeys.privateKey, { now: now * 1000 })).code === 'BINDING_KEY_MISMATCH');
     t('tampering the bound address invalidates the binding',
-      !verifyAccountBinding({ ...fromBinding.binding, address: toWallet.address },
+      !await verifyAccountBinding({ ...fromBinding.binding, address: toWallet.address },
         { state, now: now * 1000 }).ok);
 
     const sourceReceipt = buildCrossChainReceipt({
@@ -8563,23 +8563,23 @@ export default async function run() {
         now: now * 1000
       })).code === 'VERIFICATION_NOT_RECOMPUTABLE');
     t('an unregistered verifier cannot produce an acceptable report',
-      verifyTxVerificationReport(report.report, {
+      await verifyTxVerificationReport(report.report, {
         state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
         registry: new Map(), now: now * 1000
       }).code === 'UNREGISTERED_VERIFIER');
     t('a verifier key that does not match the registry is refused',
-      verifyTxVerificationReport(report.report, {
+      await verifyTxVerificationReport(report.report, {
         state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
         registry: new Map([['p4c-verifier', { id: 'p4c-verifier', publicKey: strangerKeys.publicKey, active: true }]]),
         now: now * 1000
       }).code === 'UNREGISTERED_VERIFIER');
     t('tampering the signed verdict breaks the report id',
-      !verifyTxVerificationReport({ ...report.report, confirmations: 999 }, {
+      !await verifyTxVerificationReport({ ...report.report, confirmations: 999 }, {
         state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
         registry, now: now * 1000
       }).ok);
     t('tampering an observation breaks the report signature',
-      !verifyTxVerificationReport({
+      !await verifyTxVerificationReport({
         ...report.report,
         observations: report.report.observations.map((row, index) =>
           index === 0 ? { ...row, blockHash: `0x${'ab'.repeat(32)}` } : row)
@@ -8588,7 +8588,7 @@ export default async function run() {
         registry, now: now * 1000
       }).ok);
     t('a verification report tampering the signature fails closed',
-      verifyTxVerificationReport({
+      await verifyTxVerificationReport({
         ...report.report,
         signature: `${report.report.signature.slice(0, -1)}${report.report.signature.endsWith('A') ? 'B' : 'A'}`
       }, {
@@ -8706,7 +8706,7 @@ export default async function run() {
         && outcome.report.claims.custody === false
         && outcome.report.claims.escrow === false
         && outcome.report.claims.automaticSettlement === false
-        && verifyTxVerificationReport(outcome.report, {
+        && await verifyTxVerificationReport(outcome.report, {
           state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
           registry, now: now * 1000
         }).ok);
@@ -8907,11 +8907,11 @@ export default async function run() {
       const nativeToProof = await walletProofFor(fromWallet, {
         partyId: 'p4c-initiator', chainId: 1, address: fromWallet.address, expiresAt: now + 86400
       });
-      const nativeFrom = buildAccountBinding({
+      const nativeFrom = await buildAccountBinding({
         state, partyId: 'p4c-counterparty', chainId: 1, address: toWallet.address,
         issuedAt: now, expiresAt: now + 86400, walletProof: nativeFromProof.proof
       }, counterpartyKeys.privateKey, { now: now * 1000 });
-      const nativeTo = buildAccountBinding({
+      const nativeTo = await buildAccountBinding({
         state, partyId: 'p4c-initiator', chainId: 1, address: fromWallet.address,
         issuedAt: now, expiresAt: now + 86400, walletProof: nativeToProof.proof
       }, initiatorKeys.privateKey, { now: now * 1000 });
@@ -8986,11 +8986,11 @@ export default async function run() {
         failedNative.ok && failedNative.report.verdict === 'verification-rejected'
           && failedNative.report.reasonCodes[0] === 'TX_RECEIPT_FAILED');
       /* Self-attested bindings are never enough for onchain verification. */
-      const selfAttestedFrom = buildAccountBinding({
+      const selfAttestedFrom = await buildAccountBinding({
         state, partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address,
         issuedAt: now, expiresAt: now + 86400
       }, initiatorKeys.privateKey, { now: now * 1000 });
-      const selfAttestedTo = buildAccountBinding({
+      const selfAttestedTo = await buildAccountBinding({
         state, partyId: 'p4c-counterparty', chainId: 42161, address: toWallet.address,
         issuedAt: now, expiresAt: now + 86400
       }, counterpartyKeys.privateKey, { now: now * 1000 });
@@ -9059,7 +9059,7 @@ export default async function run() {
           && listedReports.records[0].serverRecomputedBeforeStorage === true
           && listedReports.records[0].report.verificationId === report.report.verificationId);
       t('registry rotation never deletes a historical verified report',
-        verifyTxVerificationReport(report.report, {
+        await verifyTxVerificationReport(report.report, {
           state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
           registry: new Map([['someone-else', { id: 'someone-else', publicKey: strangerKeys.publicKey, active: true }]]),
           now: now * 1000
@@ -9125,11 +9125,11 @@ export default async function run() {
       const outageToProof = await walletProofFor(toWallet, {
         partyId: 'outage-counterparty', chainId: 42161, address: toWallet.address, expiresAt: now + 86400
       }, outageState);
-      const outageFrom = buildAccountBinding({
+      const outageFrom = await buildAccountBinding({
         state: outageState, partyId: 'outage-initiator', chainId: 42161, address: fromWallet.address,
         issuedAt: now, expiresAt: now + 86400, walletProof: outageFromProof.proof
       }, initiatorKeys.privateKey, { now: now * 1000 }).binding;
-      const outageTo = buildAccountBinding({
+      const outageTo = await buildAccountBinding({
         state: outageState, partyId: 'outage-counterparty', chainId: 42161, address: toWallet.address,
         issuedAt: now, expiresAt: now + 86400, walletProof: outageToProof.proof
       }, counterpartyKeys.privateKey, { now: now * 1000 }).binding;
@@ -9243,7 +9243,7 @@ export default async function run() {
         const cliBinding = JSON.parse(cliBindOut);
         t('the CLI builds the public challenge and binds with only the public wallet signature',
           cliChallenge.domain === 'fbt.cross-chain-account-binding.v1/wallet-challenge'
-            && verifyAccountBinding(cliBinding, { state, now: now * 1000 }).ok
+            && await verifyAccountBinding(cliBinding, { state, now: now * 1000 }).ok
             && cliBinding.claims.walletSignatureVerified === true
             && !challengeOut.includes(initiatorKeys.privateKey)
             && !cliBindOut.includes(initiatorKeys.privateKey)
@@ -9380,7 +9380,7 @@ export default async function run() {
       explorerBaseUrl: 'https://explorer.invalid',
       minConfirmations: 2
     }]]);
-    const calldata = buildMerkleRootAnchorCalldata(manifest.manifest, 8453, networks);
+    const calldata = await buildMerkleRootAnchorCalldata(manifest.manifest, 8453, networks);
     t('root-anchor calldata binds rootId, intent, root and log size',
       calldata.ok && calldata.to.toLowerCase() === contract.toLowerCase());
     const rootInterface = new Interface(MERKLE_ROOT_ANCHOR_ABI);

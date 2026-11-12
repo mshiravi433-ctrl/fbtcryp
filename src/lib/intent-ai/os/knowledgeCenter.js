@@ -494,6 +494,36 @@ function stemSet(tokens) {
 }
 
 /**
+ * The token sets of one knowledge item, computed once.
+ *
+ * The corpus is frozen, so an item's tokens never change. Computing them
+ * per search meant 309 tokenisations of the same 103 items on every single
+ * lookup — the dominant cost of the lexical retriever.
+ *
+ * @param {object} item
+ * @param {boolean} isFa
+ * @returns {{ titleTokens: Set<string>, pureTitleTokens: Set<string>, iTokens: Set<string> }}
+ */
+const ITEM_TOKEN_CACHE = new WeakMap();
+function itemTokenCache(item, isFa) {
+  let byLocale = ITEM_TOKEN_CACHE.get(item);
+  if (!byLocale) { byLocale = new Map(); ITEM_TOKEN_CACHE.set(item, byLocale); }
+  const hit = byLocale.get(isFa ? 'fa' : 'en');
+  if (hit) return hit;
+  const title = isFa ? item.titleFa : item.titleEn;
+  const body = isFa ? item.bodyFa : item.bodyEn;
+  const tagStr = Array.isArray(item.tags) ? item.tags.join(' ') : '';
+  const built = {
+    titleTokens: stemSet(tokenizeWithAliases(`${title} ${tagStr}`)),
+    /* The title alone, without the tag vocabulary. */
+    pureTitleTokens: stemSet(tokenizeWithAliases(title)),
+    iTokens: stemSet(tokenizeWithAliases(`${title} ${body} ${tagStr} ${item.category}`))
+  };
+  byLocale.set(isFa ? 'fa' : 'en', built);
+  return built;
+}
+
+/**
  * Retrieve the most relevant knowledge items for a question. Deterministic
  * token-overlap scoring; deprecated items are never returned.
  */
@@ -590,10 +620,27 @@ export function searchKnowledge(query, { locale = 'fa', limit = 3, category = nu
     const title = isFa ? item.titleFa : item.titleEn;
     const body = isFa ? item.bodyFa : item.bodyEn;
     const tagStr = Array.isArray(item.tags) ? item.tags.join(' ') : '';
-    const titleTokens = stemSet(tokenizeWithAliases(`${title} ${tagStr}`));
+    /*
+     * ─── THE ITEM TOKEN CACHE (2026-11-11) ────────────────────────────────
+     *
+     * These three token sets depend ONLY on the item, and the corpus is
+     * frozen — so recomputing them on every search is pure waste.
+     *
+     * Measured: a search tokenised 3 × 103 = 309 strings, and each one
+     * ran `normalizeUpgrade4` (nine regex passes plus a typo-replacement
+     * loop). That made a lexical search cost 16 ms warm — 50× the offline
+     * embedding (0.1 ms) and enough to turn the local-first gate from a
+     * saving into a cost.
+     *
+     * The cache is keyed by locale, and the sets are built lazily on the
+     * first search that needs them. Nothing about the ranking changes: the
+     * same strings produce the same tokens, every time.
+     */
+    const cache = itemTokenCache(item, isFa);
+    const titleTokens = cache.titleTokens;
     /* The title alone, without the tag vocabulary. */
-    const pureTitleTokens = stemSet(tokenizeWithAliases(title));
-    const iTokens = stemSet(tokenizeWithAliases(`${title} ${body} ${tagStr} ${item.category}`));
+    const pureTitleTokens = cache.pureTitleTokens;
+    const iTokens = cache.iTokens;
     let overlap = 0;
     for (const t of qTokens) {
       if (titleTokens.has(t)) overlap += 1.6;

@@ -126,9 +126,21 @@ try {
        single later read, which made this row flip between runs on identical
        code. The route's number must sit inside that bracket and its launch
        flag must agree with the number it reported. */
-    const beforeCount = evidenceStoreStatus().storedCount;
+    /*
+     * The count the route reports is the REVIEWED count — the evidence that
+     * actually counts towards launch — while `storedCount` is every record
+     * the store holds, including the sandbox ones this probe deliberately
+     * disables. Bracketing the reviewed count against the raw count made
+     * this row flip whenever an earlier suite had left a raw record behind:
+     * the store held 4, the reviewed set held 0, and 0 sat outside [4, 4].
+     *
+     * So the bracket uses `reviewedCount` — the SAME measure the route uses.
+     * It is read on both sides of the fetch because a pending async write
+     * from an earlier suite can land in between.
+     */
+    const beforeCount = evidenceStoreStatus().reviewedCount;
     const activation = await get('/api/intents/v1/activation');
-    const afterCount = evidenceStoreStatus().storedCount;
+    const afterCount = evidenceStoreStatus().reviewedCount;
     const reportedCount = Number(String(activation.body.product.storedEvidence ?? '').split('/')[0]);
     check('activation reports the real stored-evidence count',
       activation.body.product.specificationImplementedThrough === 200

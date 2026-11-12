@@ -68,6 +68,7 @@ import {
 import { renderCortexBlock, cortexReadPayload, marketStateFromFrame } from './aiCortexBridge.js';
 import { retrieve as retrieveBm25 } from '../src/lib/intent-ai/retrieval.js';
 import { gatherExpandedKnowledge, synthesizeInternalAnswer } from './aiInternalReasoner.js';
+import { evaluateLocalFirst, preEvaluateLocalFirst } from './aiLocalFirstGate.js';
 import {
   planCollaboration,
   CONVERSATION_KINDS,
@@ -1066,6 +1067,23 @@ async function runCollaborativeAnalysisInner({
    */
   const subQuestions = mode === 'max' ? decomposeQuestion(message) : [];
   /*
+   * ─── THE CHEAP PRE-GATE (2026-11-11) ────────────────────────────────────
+   *
+   * The full local-first gate needs the safety reads and the retrieved
+   * knowledge. Those cost real CPU — about 90 ms of the `max` path's local
+   * work — and they all ran BEFORE the gate, so a turn the corpus could
+   * answer outright still paid for the whole reading layer first.
+   *
+   * The pre-gate asks ONE cheap question before any of that: is this turn
+   * OBVIOUSLY not answerable locally? A live question, a judgement, a
+   * multi-part question — all known from the text and the plan alone.
+   *
+   * It never answers a question. It only DECLINES, and a decline means the
+   * expensive reads are skipped for a turn that was never going to be
+   * answered locally.
+   */
+  const localFirstPre = preEvaluateLocalFirst({ message, plan });
+  /*
    * ─── ECONOMIST'S LENS (smartest mode, substantive turns only) ──────────────
    * A professor of economics reasons by mechanism, base rate, transmission,
    * incentives and falsifiability — not by narrating the last candle. The
@@ -1336,6 +1354,10 @@ async function runCollaborativeAnalysisInner({
        evidence level, what that permits, and whether the answer obeyed. */
     decision: null,
     perRole: transparency ? [] : undefined,
+    /* The local-first gate's verdict for this turn: did it answer from the
+       verified corpus (and so spend zero provider calls), or did it stand
+       aside and let the model pipeline run? null before the gate runs. */
+    localFirst: null,
     latencyMs: 0,
     at: Date.now()
   };
@@ -1514,8 +1536,62 @@ async function runCollaborativeAnalysisInner({
     || /(?:خیلی\s*)?ضرر\s*کردم.{0,40}(?:حالم\s*بد|ناراحتم|ترسیدم)|(?:همشو|همه‌شو|همه\s*چیمو|همه\s*پولمو)\s*بفروشم/i.test(String(message || ''))
     || (emotionRead?.acute && ['grief', 'shame', 'burnout'].includes(emotionRead.primary) && Number(emotionRead.intensity) >= 0.7)
   );
+  /*
+   * ─── THE LOCAL-FIRST GATE (2026-11-11) ──────────────────────────────────
+   *
+   * A `max` turn costs SIX provider calls. Most of them are spent
+   * re-deriving what this repository already states. The gate asks once,
+   * BEFORE the first call, whether the verified corpus can answer the
+   * question outright; if it can, the answer is retrieved instead of
+   * generated.
+   *
+   * This is not only a budget saver — it is a QUALITY saver. A retrieved
+   * fact carries its citation and cannot drift; a generated one can. And
+   * the gate is conservative by construction: it declines on live
+   * questions, on weak matches, and whenever the local reasoner itself
+   * declines. When it declines, the turn is exactly what it was before.
+   */
+  const localFirst = evaluateLocalFirst({
+    message,
+    plan,
+    knowledge,
+    locale,
+    context,
+    /* The REAL safety reads, so the reasoner's containment contract fires
+       on the local path exactly as it does on the model path. */
+    socialRead,
+    emotionRead
+  });
+  result.localFirst = {
+    used: localFirst.used,
+    reason: localFirst.reason,
+    matched: localFirst.evidence?.matched || null,
+    score: localFirst.evidence?.score || 0,
+    providerCallsSaved: localFirst.used ? 6 : 0,
+    /* The pre-gate's independent verdict, so a turn's routing is auditable:
+       "the gate declined because X" and "the pre-gate had already said Y"
+       are different facts and both are worth seeing. */
+    preGate: { reason: localFirstPre.reason, skippedFor: localFirstPre.evidence?.skippedFor || null }
+  };
+  if (localFirst.used) {
+    result.answer = localFirst.answer;
+    result.degraded = false;
+    result.evidence.knowledgeUsed = true;
+    result.evidence.internalSynthesis = true;
+    result.providersUsed = [];
+    result.modelsConsulted = [];
+    result.aiConsensusOnly = false;
+    result.uncertainty = '';
+    result.analyses = [];
+    result.verification = null;
+    result.critique = null;
+    result.counterCase = null;
+    result.latencyMs = Date.now() - startedAt;
+    result.at = Date.now();
+    return result;
+  }
+
   if (plan.level === 1 || !externalConfigured) {
-    /* Conversation / simple, or no external provider configured at all. */
     /*
      * A short message that discloses a state («ناراحتم», «خسته شدم») is not a
      * shrug. In the smartest mode it gets one real, careful reply instead of

@@ -29,7 +29,7 @@ function serializeArgs(fragment, args) {
 
 async function parseLog(log, iface, source) {
   try {
-    const parsed = (await ifaceReady()).parseLog({ topics: log.topics, data: log.data });
+    const parsed = iface.parseLog({ topics: log.topics, data: log.data });
     if (!parsed) return null;
     return {
       source,
@@ -77,8 +77,8 @@ export async function scanVaultEvents(provider, {
   const vaultIface = await vaultInterfaceReady();
   const queueIface = await queueInterfaceReady();
   const events = [
-    ...vaultLogs.map((log) => parseLog(log, vaultIface, 'vault')),
-    ...queueLogs.map((log) => parseLog(log, queueIface, 'withdrawal-queue'))
+    ...await Promise.all(vaultLogs.map((log) => parseLog(log, vaultIface, 'vault'))),
+    ...await Promise.all(queueLogs.map((log) => parseLog(log, queueIface, 'withdrawal-queue')))
   ].filter(Boolean);
 
   const wallet = walletAddress?.toLowerCase();
