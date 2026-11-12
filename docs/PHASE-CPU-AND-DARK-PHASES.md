@@ -1044,8 +1044,28 @@ them. And the two request-path wins are in: `phase-status` now has a
 **23 KB summary** (down from 148 KB) and `/api/cron/daily` now reports
 **eleven named jobs with their own cost** instead of one 563 ms number,
 which shows that `self-probe` and `smart-money` are 44 % of it between
-them. What remains is the honest ceiling: **more phases would not make
+them — and, since that measurement, the two request-path wins have been
+turned into real savings: the daily cron no longer re-measures evidence
+whose TTL is six hours, and no longer runs the wallet indexer twice a
+day (§5.11). What remains is the honest ceiling: **more phases would not make
 the AI smarter — making the existing ones reachable would.** That sentence
-is now the method, not a slogan: it is exactly what §5.9 did, with three
-intents, three findings, no new phase, no new module and no new provider
-call — and a failure that finally says *why* it failed.
+is now the method, not a slogan: it is exactly what §5.9, §5.10 and
+§5.11 did, with four intents, four findings, no new phase and no new
+provider call.
+
+The sharpest illustrations were not the hard ones. `server/fios/` is 50
+files and 980 KB of working global-intelligence engines that **zero**
+intents could reach, and the brain's own `signals` module is an SMA cross
+and a volatility — a price computation, and not smart money at all.
+Wiring it needed a **bridge** rather than an import, because `fios` is
+built after the brain and the brain before `fios`, and it needed a **plan
+template**, because an intent with no template has an EMPTY plan and an
+empty plan reads nothing. The daily cron, by contrast, turned out to be
+doing its work **twice**: the self-probe re-measured evidence whose TTL
+is six hours, and the smart-money indexer ran from two different crons.
+Both duplications are gone, and — this is the part that matters — both
+skips are **reported by name** rather than being silent, because a saving
+that is indistinguishable from a measurement is a saving that hides a
+failure. A failure finally says *why* it failed, an unexpired proof is
+never re-issued with a fresh expiry, and an intent that reaches nothing
+now fails the contract test that says it must.
