@@ -29,9 +29,10 @@ node scripts/find-extensionless-imports.mjs # imports Node ESM cannot resolve
 
 ## §0.5 — WHAT WAS ACTUALLY FIXED, AND WHAT IT COST
 
-**All seven** upgrade paths in §5 are **shipped** (5.1–5.6 plus the
-seventh, the yield surface, in §5.9). The point of this section
-is that each one is a measurement before and after, not a promise.
+**All eight** upgrade paths in §5 are **shipped** (5.1–5.6 plus the
+seventh, the yield surface, in §5.9, and the eighth, the global surface,
+in §5.10). The point of this section is that each one is a measurement
+before and after, not a promise.
 
 | | before | after |
 |---|---|---|
@@ -45,10 +46,14 @@ is that each one is a measurement before and after, not a promise.
 | adapter failure shape | `{ code, detail }` — no `ok` | **`{ ok: false, code, detail }`** |
 | `GET /api/intents/v1/phase-status` | 148,394 B | **23,471 B** (summary; `?detail=1` still returns the full report) |
 | `/api/cron/daily` | one number, 563 ms | **eleven named jobs, each with its own ms** |
-| modules an intent asks for | 27 of 30 | **30 of 30** (`prediction` is `FEATURE_GATED` by design) |
+| modules an intent asks for | 27 of 30 | **30 of 31** (the one left is `prediction`, `FEATURE_GATED` by design) |
 | «بهترین ییلد کجاست؟» | `UNSUPPORTED` | **`YIELD_OPPORTUNITY`** → a live APR, with the risk and depth beside it |
 | «ریسک نقدینگی LP چقدره؟» | `UNSUPPORTED` | **`LIQUIDITY_RISK`** → the impermanent-loss flags |
 | an upstream failure's detail | empty | **the real reason** («fetch failed») |
+| `server/fios/` exports the brain can reach | **0 of 50** | the global-intelligence set (§5.10) |
+| registered modules | 30 | **31** (the 31st is `global-intel`) |
+| intents | 29 | **33** |
+| «پول هوشمند کجاست؟» | `UNSUPPORTED` | **`SMART_MONEY_READ`** → the global section is read |
 
 ### The three root causes, and what each one was
 
@@ -744,17 +749,17 @@ not break. The new `jobs` array is additive.
   (And since §5.2 they are not even needed to make a phase live.)
 * **Adding more phases.** The registry already has 206. The problem is that
   155 of them are unreachable from the brain. Adding a 207th makes the
-  ratio worse. §5.9 is the opposite move: three new intents that make
-  three EXISTING capabilities reachable — no new phase, no new module,
-  no new provider call.
+  ratio worse. §5.9 and §5.10 are the opposite move: four new intents
+  that make FOUR EXISTING capabilities reachable — no new phase, no new
+  provider call, and (after the bridge) only one new module.
 * **Cutting CPU to make the allowance last.** The allowance is not the
   binding constraint — the `:free` provider quota is (50 requests/day ≈ 8
   max turns). §2.4.
 * **Qdrant.** It buys persistence, not CPU. Already documented.
 
-### 5.8 What is STILL open after all seven paths
+### 5.8 What is STILL open after all eight paths
 
-The seven paths in §5 are shipped, and they were the seven that the
+The eight paths in §5 are shipped, and they were the eight that the
 measurement justified. What the measurement did **not** justify is left
 open on purpose, and it is worth naming:
 
@@ -762,15 +767,16 @@ open on purpose, and it is worth naming:
    — see §5.9. The registry is 206 and the AI asked 52 of them. The fix
    was not more phases: it was making the brain's intents reach the
    modules that already exist. That is now done for the yield surface —
-   the **intent↔module gap is closed** (30 of 30 registered modules are
-   asked by an intent; the only one still unasked is `prediction`, which
-   is `FEATURE_GATED` by design). What remains is the phase-level
+   the **intent↔module gap is closed** (30 of the 31 registered modules
+   are asked by an intent; the only one still unasked is `prediction`,
+   which is `FEATURE_GATED` by design). What remains is the phase-level
    number, which counts *phases*, not *modules*, and needs a different
    measurement to move.
 
-2. **`server/fios/` (50 files, 980 KB) is still a one-way wire.** It
-   RECEIVES the brain (`server/fios/index.js:90,197,232`) but the brain
-   does not know it exists — it is not in `server/ci/modules.js`.
+2. ~~**`server/fios/` (50 files, 980 KB) is still a one-way wire.**~~
+   **SHIPPED** — see §5.10. It RECEIVED the brain (`server/fios/index.js`)
+   and the brain knew nothing about it; now the global-intelligence
+   engines are reachable from the chat.
 
 3. **`/api/cron/daily` is still 621 ms of CPU**, even though its cost is
    now attributable: `self-probe` (125 ms) and `smart-money` (119 ms) are
@@ -854,6 +860,76 @@ the regression guard that «وامم چطوره؟» still resolves to
 
 `npm run test:ai-intelligence` → **657 / 657** (was 644).
 
+### 5.10 Path 8 — the global surface (SHIPPED)
+
+**The measurement.** `server/fios/` is 50 files and 980 KB. The check
+that mattered was mechanical, not a judgement call:
+
+```
+fios files whose exports the brain knows:   0 of 50
+```
+
+Not one. `server/fios/` holds the global intelligence engines — smart
+money, whales, on-chain activity, the macro graph, the cross-asset view,
+the proactive briefing, the traditional-asset discovery. All of it was
+reachable by an HTTP route and by **nothing else**. A user who asked
+«پول هوشمند کجاست؟» got `UNSUPPORTED` while a working smart-money
+engine sat in that directory.
+
+**What the brain had instead.** The brain's own `signals` module is a
+price computation: an SMA cross and a realized volatility over 30 days
+of closes. It is **not** smart money — it has no whale transfers, no
+net flow, no accumulation vs distribution, no exchange inflow.
+
+**Why it was not simply wired.** The two halves are built in opposite
+order:
+
+- `fios` is built **after** the brain, because it calls
+  `brain.directToolCall(...)` for the four traditional-asset feeds;
+- the brain is built **before** `fios`, because `fios` needs it.
+
+So neither can hold the other at construction time, and a direct
+reference in either direction is a cycle. The fix is a **bridge** with a
+single function slot (`server/ci/globalIntelBridge.js`): `fios` registers
+its reader when it is built, and the brain's module calls it. Two rules
+keep it honest:
+
+1. the provider is **per owner** — the state store is per owner, so two
+   users can never see each other's flows;
+2. an absent provider reports **`PROVIDER_NOT_WIRED`** — a named reason,
+   never a number.
+
+**What shipped.**
+
+| | before | after |
+|---|---|---|
+| fios exports the brain can reach | 0 of 50 | the global-intelligence set |
+| registered modules | 30 | **31** (the 31st is `global-intel`) |
+| intents | 32 | **33** |
+| «پول هوشمند کجاست؟» | `UNSUPPORTED` | `SMART_MONEY_READ` → the global section is read |
+| «اسمارت مانی چطوره؟» | `MARKET_OVERVIEW` (a price summary) | `SMART_MONEY_READ` |
+| a domain that could not be read | dropped | **named** (`whales: NO_WHALE_EVENTS`) |
+
+- A `global-intel` module (state section `globalIntel`, tools
+  `global.read`) that carries only the domains that answered and names
+  the ones that did not.
+- The `SMART_MONEY_READ` intent, placed **above** `MARKET_OVERVIEW` —
+  that rule already claimed «اسمارت مانی» and «نهنگ» while its modules
+  were the crypto ones.
+- A **plan template**. This is the part that is easy to miss: without
+  one the plan is **EMPTY**, and an empty plan reads nothing. The three
+  yield intents of §5.9 had the same defect and it is fixed here too.
+- A finding that quotes the flows **and the qualifier that travels with
+  them**: a whale transfer is a **proxy**, not a paired trade. Saying
+  «نهنگ‌ها ۱۲ میلیون دلار خریدند» without that would be a fabrication
+  dressed as a fact.
+
+**Contract test.** `test/intent-ai/global-surface-intents.test.mjs` —
+11 cases, including the bridge's three failure modes, the module's
+honesty when the provider is absent, and the live HTTP path.
+
+`npm run test:ai-intelligence` → **668 / 668** (was 657).
+
 ---
 
 ## §6 — The one-paragraph answer
@@ -861,10 +937,11 @@ the regression guard that «وامم چطوره؟» still resolves to
 Of 206 registered intent phases, **51 are actually connected to the AI**
 — that number has not moved and it is the real ceiling. But the *module*
 half of the same question **has** moved: the brain now asks for **30 of
-the 30** registered modules instead of 27, because the yield surface —
+the 31** registered modules instead of 27, because the yield surface —
 `farming`, `liquidity` and `staking`, three capabilities that were
 registered, readable and **unreachable by any intent** — now has three
-intents of its own (§5.9). A user who asked «بهترین ییلد کجاست؟» or
+intents of its own (§5.9), and the global-intelligence engines in
+`server/fios/` now have a fourth (§5.10). A user who asked «بهترین ییلد کجاست؟» or
 «ریسک نقدینگی LP چقدره؟» got `UNSUPPORTED`; they now get a live APR
 with the risk, the depth and the impermanent-loss flag beside it, and the
 one thing that made it invisible was not a missing feature but a
