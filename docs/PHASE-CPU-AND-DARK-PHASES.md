@@ -68,7 +68,7 @@ is that each one is a measurement before and after, not a promise.
 | the brain over HTTP | `PROVIDER_NOT_WIRED` for every global/fit question | **the real engines answer** — the provider is wired on the first turn (§5.14) |
 | «بازار در چه رژیمی است؟» | breadth + the top movers | **the regime**: the macro graph over the global snapshot, the world model and the portfolio (§5.15) |
 | «برای رسیدن به هدفم چه برنامه‌ای داشته باشم؟» | one feasibility figure | **three profiles** with drawdown, probability of loss and probability of halving (§5.16) |
-| the free tier's daily allowance | invisible — learned by getting a 429 | **counted per provider per UTC day**, and published before it runs out (§5.17) |
+| the free tier's daily allowance | invisible — learned by getting a 429 | **counted per provider per UTC day**, published before it runs out, and the day's real yield measured at **twelve questions, not eight** (§5.17) |
 | a deep turn's provider calls | unbounded within the turn | **capped** (`AI_MAX_PROVIDER_CALLS`, default 6 — the sixth is the repair pass), and the dropped stages are named (§5.17) |
 | a spent day's provider calls | still made, and answered with a counted 429 | **refused before the request**, and the turn reports `quotaExhausted` (§5.17) |
 | the answer cache across instances | one in-memory `Map` — a cold start emptied it | **durable**, so a repeated question costs one collaboration, not two (§5.17) |
@@ -381,7 +381,10 @@ brain cold import:                198 ms
 ```
 
 The deployment's constraint has never been CPU. The `:free` quota is 50
-requests a day; a `max` turn costs 6 calls; that is ~8 turns a day. The
+requests a day; a `max` turn costs 6 calls; that is ~8 turns a day — and
+**that figure was itself wrong**, because it divided the allowance by the
+FULL turn cost and ignored that the last questions of a day cost less
+(§5.17). Measured, the day buys **twelve** questions, not eight. The
 Fluid CPU allowance is a *secondary* limit that only becomes visible when
 the cold-start count is high.
 
@@ -1386,6 +1389,30 @@ requests, and **a failed request counts**. A deep turn costs five
 provider calls — Market, Risk, Crypto Research, Verification, Final
 Answer — so the nominal budget was **eight turns a day**. The harness
 is `scripts/measure-quota-budget.mjs`.
+
+**That figure turned out to be the WRONG one**, and finding out why
+mattered more than the figure. It divided the allowance by the FULL turn
+cost, and the full turn cost is only what the FIRST questions of the day
+cost: the headroom ladder makes the later ones cheaper. So the day buys
+more questions than a flat division says — and the last of them are
+shallower, which a single headline number cannot say. The harness that
+measures it is `scripts/measure-day-turns.mjs`
+(`npm run measure:day-turns`), and it walks a day against the REAL
+counter, the REAL cap ladder and the REAL collaboration layer:
+
+```
+repetition   questions   cached   requests   avg depth   last 4
+     0%          12        0         49         4.1   2, 1, 1, 1
+    25%          15        3         49         4.1   2, 1, 1, 1
+    50%          22       10         49         4.1   2, 1, 1, 1
+```
+
+The cold case is the floor: **twelve questions a day, not eight**, and
+the average depth is 4.1 rather than 6 because the last four questions
+are one call deep. With half the questions repeated, the cache serves
+ten of them for nothing and the day reaches twenty-two questions — but
+ten of those are repeats, so the day is twelve NEW subjects and ten
+recalls, which is a different product claim and the harness says so.
 
 The project knew the per-turn numbers (the model ledger, the provider
 ladder, the local-first gate) and **none of them could see the DAY**. So
