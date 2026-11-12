@@ -54,8 +54,9 @@ promise.
 | `server/fios/` exports the brain can reach | **0 of 50** | the global-intelligence set (§5.10) |
 | registered modules | 30 | **31** (the 31st is `global-intel`) |
 | intents | 29 | **33** |
-| the daily cron's self-probe | re-measured 6-hour-old evidence | **reports what is still valid** |
-| the smart-money index | ran from two crons | **one pass per 12-hour window**, and it says so |
+| the daily cron's self-probe | re-measured 6-hour-old evidence | **reports what is still valid** — *with a durable store; §5.11.1* |
+| the smart-money index | ran from two crons | **one pass per 12-hour window**, and it says so — *with a durable store; §5.11.1* |
+| `/api/cron/daily` CPU | 621 ms | **469 ms** measured here — *the reuse path needs a store to fire; §5.11.1* |
 | «پول هوشمند کجاست؟» | `UNSUPPORTED` | **`SMART_MONEY_READ`** → the global section is read |
 
 ### The three root causes, and what each one was
@@ -1003,6 +1004,45 @@ cases, holding the line that matters: a skipped or carried pass may
 never be REPORTED as work that happened.
 
 `npm run test:ai-intelligence` → **678 / 678**.
+
+### 5.11.1 What the measurement can and cannot show (honesty note)
+
+Both savings depend on a **durable store**, and that is the condition
+they were measured under, so it has to be stated plainly:
+
+| | with a durable store | without one |
+|---|---|---|
+| the self-probe | reports unexpired evidence | measures every time (today's behaviour) |
+| the smart-money index | one pass per 12-hour window | one pass per cron call (today's behaviour) |
+
+`server/blobCache.js` — `blobConfigured()` is true when **Vercel Blob**
+or **Upstash Redis** is configured. With neither, `storeGet` returns
+`null`, there is nothing to carry and nothing to remember, and both
+paths correctly fall back to measuring.
+
+**So the saving is CONDITIONAL on the store, and the measurement here
+cannot claim it.** In this sandbox `blobConfigured()` is `false`, so
+both duplications still happen here; the numbers in §5.11 are the
+*upper* bound of what the change can save, not a measured saving in
+this deployment.
+
+What IS unconditional:
+
+- the **skip is reported by name** (`skipped-recent-index`), so the
+  saving is visible in the job's own result rather than invisible in a
+  faster wall clock;
+- the **carried kind is labelled** (`measuredKinds` / `carriedKinds`), so
+  a reader can tell what is fresh;
+- an **unknown** last pass still runs the index — the behaviour degrades
+  to the old one, never to a silent no-op;
+- the self-probe no longer **re-issues an expiry** for carried evidence,
+  which is a correctness fix whether or not the store is configured.
+
+`/api/cron/daily` measured in this deployment after the change:
+**469 ms of CPU** (was 621 ms) — but that difference is the
+`smart-money` and network timing of a sandbox without egress, not the
+reuse path. The honest statement is: **the code path is correct and
+tested; the saving needs a durable store to happen.**
 
 ---
 
