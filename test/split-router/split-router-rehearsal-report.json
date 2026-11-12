@@ -1,6 +1,6 @@
 {
   "schema": "fbt.split-router.rehearsal.v1",
-  "when": "2026-11-12T14:03:42.932Z",
+  "when": "2026-11-12T16:15:56.135Z",
   "chain": "local ganache (in-process EVM)",
   "counterparties": "mocks from contracts/rehearsal/SplitRouterMocks.sol — NOT the real protocols",
   "contractUnderTest": "the REAL compiled artifact src/lib/splitRouterArtifact.json (production bytecode)",

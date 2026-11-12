@@ -4848,10 +4848,28 @@ app.delete('/api/v1/smart-money/watchlist/:id', async (req, res) => {
 // Keep the existing delivery callback; only the ordering and bounded cadence
 // change. A slow index must not prevent subscribed alerts from being checked.
 async function smartMoneyCadence(send) {
+  /*
+   * The index pass is the most expensive thing the smart-money engine does,
+   * and TWO crons call this function — /api/cron/daily at 09:00 and
+   * /api/cron/smart-money at 21:41. The cadence now learns when the last
+   * pass ran and skips a second scan inside the same window, saying so by
+   * name instead of pretending to have indexed.
+   *
+   * The ALERT cycle always runs: an alert is a push a person subscribed to,
+   * and skipping it would silently stop delivering what they asked for.
+   */
+  let lastIndexAt = null;
+  try {
+    const index = await smartMoney.readVerifiedIndex({ fresh: true });
+    lastIndexAt = Number(index?.lastCycle?.at) || Number(index?.indexedAt) || null;
+  } catch {
+    lastIndexAt = null;
+  }
   return runSmartMoneyCadence({
     alerts: () => smartMoney.runAlertCycle(async (endpoint, lang, payload) => send(endpoint, lang, payload)),
     intelligence: () => smartMoney.runIntelligenceCycle(),
-    durable: storeDurable
+    durable: storeDurable,
+    lastIndexAt
   });
 }
 app.get('/api/cron/smart-money', async (req, res) => {
