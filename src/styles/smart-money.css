@@ -525,6 +525,22 @@
   color: var(--sm-ink-dim);
 }
 
+/* Round 9: the wider ADMISSION count under the voting count, shown only when
+   the two gates disagree. Amber, because it is the explanation for the pod
+   beside it reading zero — not a second headline. */
+.smx-pod-sub {
+  font-size: 7.5px;
+  font-style: normal;
+  font-weight: 750;
+  line-height: 1.3;
+  color: var(--sm-amber);
+  font-variant-numeric: tabular-nums;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+:root[data-theme='light'] .smx-pod-sub { color: #8a5a00; }
+
 :root[data-theme='light'] .smx-pod {
   background: #ffffff;
   border-color: rgba(15, 23, 42, 0.1);

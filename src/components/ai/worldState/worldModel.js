@@ -579,10 +579,21 @@ export function buildWeatherStations(data = {}) {
         severity: clamp(Math.abs(net) / 8_000_000, 0.15, 1),
         valueText: usdCompact(net), valueTextFa: usdFaCompact(net),
         evidence: [acc !== null ? { key: 'smartMoneyAcc', value: acc } : null, dist !== null ? { key: 'smartMoneyDist', value: dist } : null,
-          x.sm?.window ? { key: 'window', value: x.sm.window } : null],
+          x.sm?.window ? { key: 'window', value: x.sm.window } : null,
+          /* HOW MANY WALLETS STAND BEHIND THIS NUMBER (round 9). A verified net
+             built on two wallets and one built on twelve are different objects,
+             and the station could not say which it had. `null` when the payload
+             carries no countable set — unmeasured is not zero. */
+          num(x.sm?.voters?.voting) !== null ? { key: 'votingWallets', value: num(x.sm.voters.voting) } : null,
+          num(x.sm?.voters?.admitted) !== null && num(x.sm?.voters?.admitted) > num(x.sm?.voters?.voting)
+            ? { key: 'admittedWallets', value: num(x.sm.voters.admitted) } : null],
         source: x.envel.smart_money?.source || 'smartMoney:overview', quality: QUALITY.MEASURED,
-        noteFa: net > 0 ? 'انباشت برچسب‌دار بیشتر از توزیع است.' : 'توزیع برچسب‌دار بیشتر از انباشت است.',
-        noteEn: net > 0 ? 'labelled accumulation exceeds distribution.' : 'labelled distribution exceeds accumulation.'
+        noteFa: num(x.sm?.voters?.voting) !== null && num(x.sm.voters.voting) < 3
+          ? `این عدد از شواهدِ ${num(x.sm.voters.voting)} کیف پول ساخته شده؛ کمتر از سه رأی یک بازار نیست.`
+          : (net > 0 ? 'انباشت برچسب‌دار بیشتر از توزیع است.' : 'توزیع برچسب‌دار بیشتر از انباشت است.'),
+        noteEn: num(x.sm?.voters?.voting) !== null && num(x.sm.voters.voting) < 3
+          ? `this figure rests on ${num(x.sm.voters.voting)} wallets of evidence; fewer than three votes is not a market.`
+          : (net > 0 ? 'labelled accumulation exceeds distribution.' : 'labelled distribution exceeds accumulation.')
       }));
     } else if (pNet !== null) {
       /* the verified index had too little evidence; the descriptive transfer

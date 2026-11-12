@@ -16,6 +16,7 @@ import { runIntelligenceCycle } from '../server/smartMoney/intelligence.js';
 import { runSmartMoneyCadence } from '../server/smartMoney/cadence.js';
 import { smartMoneyMonitorHandoff, narrateIntelligence } from '../server/smartMoney/narration.js';
 import { verifiedFixture, walletReceipts, TOKEN } from './fixtures/verifiedSmartMoney.mjs';
+import { normalizeSmartMoney } from '../server/fios/globalIntel.js';
 
 const now = Date.now();
 const wallet = `0x${'1'.repeat(40)}`;
@@ -215,5 +216,52 @@ const delayedAlerts = await runSmartMoneyCadence({
 assert.equal(delayedAlerts.status, 'time-budget-exceeded');
 assert.equal(delayedAlerts.delivered, null);
 assert.equal(delayedAlerts.intelligence.status, 'sampled');
+
+/*
+ * ─── ROUND 9: «واجد شرایط» MUST MEAN THE WALLETS THAT ACTUALLY VOTE ──────────
+ *
+ * The overview hero has two pods side by side: «کیف پول واجد شرایط» and
+ * «اجماع». The first counted wallets that cleared the ADMISSION gate; the
+ * second counts consensus rows, which only exist for wallets that cleared a
+ * STRICTER gate. An index could therefore print «۱۲ واجد شرایط» beside
+ * «۰ اجماع» with nothing explaining the contradiction.
+ *
+ * `summariseVerified` now reports the voting count as `qualified` and keeps the
+ * wider number as `admitted`, so the two pods cannot contradict each other
+ * without the payload saying why.
+ */
+{
+  const { summariseVerified } = await import('../server/smartMoney/index.js');
+  const snap = verifiedFixture({ now }).snapshot;
+
+  const summary = summariseVerified(snap);
+  const voting = snap.leaderboard.filter((p) => p.qualified === true && Number.isFinite(p.score)
+    && p.score >= 70 && p.coverage >= 0.6 && p.closedTrades >= 5 && Number(p.realizedUsd) > 0
+    && p.winRate >= 55);
+  assert.equal(voting.length, snap.coverage.classifiedWallets,
+    'the fixture is fully qualified, so voting and admitted must agree');
+  assert.equal(summary.counts.qualified, voting.length);
+
+  /* THE CASE THAT WAS MISLEADING: a wallet that cleared ADMISSION but not the
+     voting gate. The pod must count it in `admitted` and NOT in `qualified`,
+     so a reader sees why the consensus pod beside it can read zero. */
+  const admittedOnly = { ...snap.leaderboard[0], score: 62 };
+  const mixed = summariseVerified({ ...snap,
+    leaderboard: [snap.leaderboard[0], admittedOnly],
+    coverage: { ...snap.coverage, classifiedWallets: 2 } });
+  assert.equal(mixed.counts.qualified, 1, 'only the qualifying wallet may be counted');
+  assert.equal(mixed.counts.admitted, 2, 'the wider admission count is kept, not hidden');
+  assert.equal(mixed.counts.voting, 1);
+
+  /* And the global (FBT Global) node states how many wallets stand behind it. */
+  const dom = normalizeSmartMoney({ ...snap, dataStatus: 'observed', verified: snap, window: '24h', metrics: {} }, now);
+  assert.equal(dom.status, 'OK');
+  assert.equal(dom.data.voters.voting, voting.length);
+  assert.equal(dom.data.voters.admitted, snap.coverage.classifiedWallets);
+  /* Unmeasured is not zero: no leaderboard → null, never 0. */
+  const noBoard = normalizeSmartMoney({ ...snap, verified: { ...snap, leaderboard: undefined },
+    dataStatus: 'observed', window: '24h', metrics: {} }, now);
+  assert.equal(noBoard.data.voters.voting, null);
+}
 
 console.log('Smart Money evidence, clustering, FIOS, Opportunity and Intent: all checks passed');

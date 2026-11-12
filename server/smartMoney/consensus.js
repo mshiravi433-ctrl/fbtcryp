@@ -14,7 +14,7 @@ import { isVerifiedPairedSwap } from './performance.js';
  * could ever be "fresh" at once — too few for three independent votes on any
  * token. Profiles now count for the same seven days the index retains them;
  * `updatedAt` is still shown so every reader sees how old the measurement is. */
-const MAX_PROFILE_AGE = 7 * WINDOWS.H24;
+export const MAX_PROFILE_AGE = 7 * WINDOWS.H24;
 const RECENT_SWAPS = 30;
 const LIMIT = 24;
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));

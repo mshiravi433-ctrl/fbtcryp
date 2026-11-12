@@ -23,6 +23,7 @@ import { analyzeToken } from './tokenIntel.js';
 import { registryManifest } from './registry.js';
 import { detectAccumulation, detectDistribution, pctChange } from './engines.js';
 import { readWalletRegistry } from './walletRegistry.js';
+import { MAX_PROFILE_AGE } from './consensus.js';
 import { getVerifiedIntelligence } from './intelligence.js';
 export { readWalletRegistry, putWalletIdentity, removeWalletIdentity, publicRegistry } from './walletRegistry.js';
 export { getVerifiedIntelligence, runIntelligenceCycle } from './intelligence.js';
@@ -123,8 +124,38 @@ const verifiedSummaries = new Map();
 /** One build at a time per window, shared by every caller waiting on it. */
 const verifiedInflight = new Map();
 
-function summariseVerified(v) {
+/*
+ * THE TWO NUMBERS THAT MEANT DIFFERENT THINGS (round 9, 2026-11-12)
+ * ---------------------------------------------------------------------------
+ * The overview hero has two pods: «کیف پول واجد شرایط» and «اجماع». The first
+ * counted `coverage.classifiedWallets` — wallets that CLEARED THE ADMISSION
+ * GATE (`smartMoney.qualified` in performance.js). The second counted consensus
+ * rows with a confidence, which only exist when a wallet cleared a STRICTER,
+ * DIFFERENT gate in `buildConsensus` (score ≥ 70, coverage ≥ 0.6, ≥ 5 closes,
+ * realized > 0, win rate ≥ 55, profile fresh).
+ *
+ * So an index could hold twelve «qualified» wallets, every consensus row could
+ * read INSUFFICIENT_EVIDENCE, and the hero would print 12 beside 0 with nothing
+ * to explain the contradiction — the exact «این دو همیشه صفر هستند» report this
+ * section was written to answer. The stricter count is the honest one for a pod
+ * labelled «واجد شرایط», because those are the wallets whose vote the board
+ * actually uses; the admission-gate count is kept beside it as `admitted` for
+ * anyone who wants the wider number.
+ *
+ * This is a COUNT over data already in hand — no read, no request, no clock.
+ */
+/** Exported for probes: the pod counts are a pure function of the payload. */
+export function summariseVerified(v) {
   const consensus = Array.isArray(v?.consensus) ? v.consensus : [];
+  /* The same clauses `buildConsensus` applies to `validProfiles`, restated here
+     so the pod and the consensus rows cannot drift apart again. Kept in one
+     place: if the gate changes, this comment is the alarm. */
+  const now = Date.now();
+  const votingProfiles = (Array.isArray(v?.leaderboard) ? v.leaderboard : [])
+    .filter((p) => p?.qualified === true && Number.isFinite(p.score) && p.score >= 70
+      && p.coverage >= 0.6 && p.closedTrades >= 5 && Number(p.realizedUsd) > 0
+      && p.winRate >= 55
+      && Number.isFinite(p.updatedAt) && p.updatedAt <= now && now - p.updatedAt <= MAX_PROFILE_AGE);
   return {
     dataStatus: v?.dataStatus || 'insufficient-evidence',
     indexedAt: v?.indexedAt || null,
@@ -133,7 +164,13 @@ function summariseVerified(v) {
     lastCycle: v?.lastCycle || null,
     coverage: v?.coverage || null,
     counts: {
-      qualified: v?.coverage?.classifiedWallets ?? null,
+      /* What the reader is told: wallets whose evidence actually earns a vote.
+         Falls back to the admission count only when this payload carries no
+         leaderboard to count (an older cached shape). */
+      qualified: Array.isArray(v?.leaderboard) ? votingProfiles.length : (v?.coverage?.classifiedWallets ?? null),
+      voting: Array.isArray(v?.leaderboard) ? votingProfiles.length : null,
+      /* The wider number: cleared admission, may still be short of voting. */
+      admitted: v?.coverage?.classifiedWallets ?? null,
       analysed: v?.coverage?.analyzedWallets ?? null,
       consensusActive: consensus.filter((r) => r.confidence != null).length,
       consensusRows: consensus.length,

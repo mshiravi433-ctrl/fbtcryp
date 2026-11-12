@@ -77,10 +77,16 @@ const overview = (win) => ({
       }
     }
   },
+  /*
+   * 940 ADMITTED, 2 VOTING. That gap is the round-9 bug: the hero pod used to
+   * print «940 واجد شرایط» beside «2 اجماع» with nothing to explain it. The pod
+   * now prints the voting count and names the wider admission number under it.
+   */
   verified: {
     dataStatus: 'live',
     indexedAt: NOW,
     coverage: { analyzedWallets: 1840, classifiedWallets: 940, swapsInWindow: 5210 },
+    counts: { qualified: 2, voting: 2, admitted: 940, analysed: 1840, consensusActive: 2, consensusRows: 2 },
     consensus: [
       { symbol: 'LINK', chain: 1, token: '0x514910771af9ca656af840dff83e8264ecf986ca', confidence: 82, swaps: 64 },
       { symbol: 'ARB', chain: 42161, token: '0x912ce59144191c1204e64559fe8253a0e49e6548', confidence: 71, swaps: 41 }
@@ -552,7 +558,20 @@ export async function run(container) {
     cands.length === 1 && new RegExp(fa.sm.engine.gap.closes.replace('{{have}}', '2').replace('{{need}}', '5'))
       .test(cands[0].textContent || ''), cands[0]?.textContent);
 
-  /* 16 · no runtime noise */
+  /* 16 · the two hero pods can no longer contradict each other (round 9) */
+  const overviewTab = dock.find((b) => b.textContent === fa.sm.tabs.overview);
+  await click(overviewTab, 120);
+  const qPod = q('[data-testid="sm-pod-qualified"]');
+  const cPod = q('[data-testid="sm-pod-consensus"]');
+  t('the «qualified» pod counts the wallets whose evidence earns a VOTE',
+    /۲|2/.test(qPod?.querySelector('b')?.textContent || ''), qPod?.textContent);
+  t('and it says how many merely cleared admission, so the gap is explained',
+    !!q('[data-testid="sm-pod-admitted"]'), qPod?.textContent);
+  t('the consensus pod is consistent with that count, not contradicted by it',
+    (cPod?.querySelector('b')?.textContent || '') === (qPod?.querySelector('b')?.textContent || ''),
+    `${qPod?.querySelector('b')?.textContent} vs ${cPod?.querySelector('b')?.textContent}`);
+
+  /* 17 · no runtime noise */
   const realErrors = errors.filter((e) => !/not wrapped in act|React Router Future Flag|ReactDOMTestUtils\.act/.test(e));
   t('no React error was logged during any of that',
     realErrors.length === 0, realErrors.slice(0, 3).join(' | '));

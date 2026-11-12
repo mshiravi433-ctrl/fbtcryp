@@ -13892,7 +13892,9 @@
     "copyTradeShort": "Copy",
     "pods": {
       "reading": "reading the verified engine",
-      "stale": "last successful engine read"
+      "stale": "last successful engine read",
+      "admitted": "{{n}} admitted, not voting",
+      "admittedButNotVoting": "{{admitted}} wallets cleared admission but only {{voting}} can vote: voting needs a 70+ score, 60%+ coverage, 5+ closes, positive realized P&L and a 55%+ win rate."
     },
     "whalesScope": "This board covers EVM chains only",
     "solWhalesTitle": "Solana whales",

@@ -40,6 +40,8 @@ import {
   readEvidenceQuality, readBoardQuality, readQualificationGaps,
   EVIDENCE_MIN_CLOSES, EVIDENCE_COVERAGE_WEAK
 } from '../src/lib/verifiedEvidence.js';
+import { summariseVerified } from '../server/smartMoney/index.js';
+import { verifiedFixture } from './fixtures/verifiedSmartMoney.mjs';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const loadLocale = (l) => JSON.parse(read(`../src/i18n/locales/${l}.json`));
@@ -646,6 +648,49 @@ function run() {
       /factors: sm\.factors/.test(intel));
     const app = strip(read('../server/app.js'));
     t('the leaderboard says it is NOT in display order', /leaderboardBasis: out\.leaderboardBasis/.test(app));
+  }
+
+  /* ── 8f · THE HERO PODS CANNOT CONTRADICT EACH OTHER (round 9) ───────────
+     «۱۲ واجد شرایط» beside «۰ اجماع», with nothing saying why, is the report
+     this whole section exists to answer. The two pods now count through the
+     SAME gate the consensus board uses. */
+  {
+    const now = Date.now();
+    const snap = verifiedFixture({ now }).snapshot;
+
+    const full = summariseVerified(snap);
+    t('a fully-qualified index reports the same count for voting and consensus',
+      full.counts.qualified === full.counts.voting);
+
+    /* Admission is wider than voting: a 62 never votes, however admitted it is. */
+    const mixed = summariseVerified({ ...snap,
+      leaderboard: [snap.leaderboard[0], { ...snap.leaderboard[0], score: 62 }],
+      coverage: { ...snap.coverage, classifiedWallets: 2 } });
+    t('a wallet that cleared admission but not the vote is NOT counted as qualified',
+      mixed.counts.qualified === 1 && mixed.counts.admitted === 2);
+    t('and the wider number is kept, so the gap can be printed instead of hidden',
+      mixed.counts.admitted > mixed.counts.qualified);
+
+    /* Stale profiles cannot vote — the same 7-day rule buildConsensus applies. */
+    const stale = summariseVerified({ ...snap,
+      leaderboard: [{ ...snap.leaderboard[0], updatedAt: now - 8 * 24 * 3_600_000 }],
+      coverage: { ...snap.coverage, classifiedWallets: 1 } });
+    t('a profile older than the index window does not vote', stale.counts.qualified === 0);
+
+    /* A payload with no leaderboard cannot be counted — null, never 0. */
+    const noBoard = summariseVerified({ ...snap, leaderboard: undefined });
+    t('an uncountable index reports null, not a zero that reads as measured',
+      noBoard.counts.voting === null);
+
+    /* And FBT Global's institutional node carries the same count. */
+    const globalIntel = strip(read('../server/fios/globalIntel.js'));
+    t('the global institutional node reports how many wallets stand behind it',
+      /voters:\s*\{/.test(globalIntel) && /voting:/.test(globalIntel));
+    const model = strip(read('../src/components/ai/worldState/worldModel.js'));
+    t('and the station carries it as evidence, not as prose',
+      /votingWallets/.test(model));
+    t('a verified net resting on fewer than three wallets says so',
+      /fewer than three votes is not a market/.test(model));
   }
 
   /* ── 9 · the new copy is translated (a raw key on a money screen is a bug) ─ */

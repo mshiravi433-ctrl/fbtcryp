@@ -26,6 +26,9 @@ export const EVIDENCE_META = {
   smartMoneyNet: { fa: 'نتیجهٔ پول هوشمند', en: 'smart-money net' },
   smartMoneyAcc: { fa: 'انباشت برچسب‌دار', en: 'labelled accumulation' },
   smartMoneyDist: { fa: 'توزیع برچسب‌دار', en: 'labelled distribution' },
+  /* Round 9: how much wallet evidence the institutional station rests on. */
+  votingWallets: { fa: 'کیف پول‌های رأی‌دهنده', en: 'voting wallets' },
+  admittedWallets: { fa: 'پذیرفته‌شده (بدون رأی)', en: 'admitted, not voting' },
   regime: { fa: 'رژیم', en: 'regime' },
   outlookScore: { fa: 'امتیاز چشم‌انداز', en: 'outlook score' },
   wti: { fa: 'نفت', en: 'WTI' },

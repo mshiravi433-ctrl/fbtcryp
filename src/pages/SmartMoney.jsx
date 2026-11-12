@@ -745,13 +745,32 @@ export default function SmartMoney() {
     && verified.dataStatus !== 'unavailable';
   const consensusActive = verified?.counts?.consensusActive
     ?? (verified?.consensus || []).filter((r) => r.confidence != null).length;
+  /*
+   * «واجد شرایط» HAS TO MEAN THE WALLETS THAT ACTUALLY VOTE.
+   *
+   * This pod used to read `coverage.classifiedWallets` — wallets that cleared
+   * the ADMISSION gate — while the pod beside it counted consensus rows, which
+   * only exist for wallets that cleared a STRICTER gate (score ≥ 70, coverage
+   * ≥ 0.6, ≥ 5 closes, realized > 0, win rate ≥ 55, fresh profile). An index of
+   * twelve admitted wallets could therefore print «۱۲ واجد شرایط» beside
+   * «۰ اجماع» with nothing explaining the contradiction.
+   *
+   * `counts.qualified` is now the voting count (server/smartMoney/index.js →
+   * summariseVerified) and `counts.admitted` keeps the wider number, which the
+   * pod's tooltip names whenever the two disagree.
+   */
   const qualifiedWallets = verified?.counts?.qualified ?? vCov?.classifiedWallets ?? null;
+  const admittedWallets = verified?.counts?.admitted ?? null;
+  const votingShortfall = verifiedRead && admittedWallets != null && qualifiedWallets != null
+    && admittedWallets > qualifiedWallets;
   const analysedWallets = verified?.counts?.analysed ?? vCov?.analyzedWallets ?? null;
   const verifiedNote = !verifiedRead
     ? t('sm.pods.reading', { defaultValue: 'در حال خواندن موتور تأییدشده' })
     : verified?.stale
       ? t('sm.pods.stale', { defaultValue: 'آخرین خواندن موفق موتور' })
-      : undefined;
+      : votingShortfall
+        ? t('sm.pods.admittedButNotVoting', { admitted: admittedWallets, voting: qualifiedWallets })
+        : undefined;
   const liveLabel = t(data?.dataStatus === 'live' ? 'sm.live' : data?.dataStatus === 'unavailable' ? 'sm.offlineShort' : 'sm.checking');
 
   const metricFoot = (metric) => {
@@ -836,6 +855,13 @@ export default function SmartMoney() {
               <span className="smx-pod-ico is-mint" aria-hidden="true"><SmVerifiedGlyph width={15} height={15} /></span>
               <b className="mono">{verifiedRead ? (qualifiedWallets ?? '—') : '—'}</b>
               <small>{t('sm.engine.qualified')}</small>
+              {/* Only when the two gates disagree: the wider admission count,
+                  so a reader is never left wondering why the next pod is 0. */}
+              {votingShortfall && (
+                <em className="smx-pod-sub" data-testid="sm-pod-admitted">
+                  {t('sm.pods.admitted', { n: admittedWallets })}
+                </em>
+              )}
             </div>
             <div className="smx-pod" data-testid="sm-pod-consensus" title={verifiedNote}>
               <span className="smx-pod-ico is-violet" aria-hidden="true"><SmSignalGlyph width={15} height={15} /></span>
