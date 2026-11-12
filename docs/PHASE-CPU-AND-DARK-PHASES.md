@@ -69,7 +69,8 @@ is that each one is a measurement before and after, not a promise.
 | «بازار در چه رژیمی است؟» | breadth + the top movers | **the regime**: the macro graph over the global snapshot, the world model and the portfolio (§5.15) |
 | «برای رسیدن به هدفم چه برنامه‌ای داشته باشم؟» | one feasibility figure | **three profiles** with drawdown, probability of loss and probability of halving (§5.16) |
 | the free tier's daily allowance | invisible — learned by getting a 429 | **counted per provider per UTC day**, and published before it runs out (§5.17) |
-| a deep turn's provider calls | unbounded within the turn | **capped** (`AI_MAX_PROVIDER_CALLS`, default 6), and the dropped stages are named (§5.17) |
+| a deep turn's provider calls | unbounded within the turn | **capped** (`AI_MAX_PROVIDER_CALLS`, default 6 — the sixth is the repair pass), and the dropped stages are named (§5.17) |
+| a spent day's provider calls | still made, and answered with a counted 429 | **refused before the request**, and the turn reports `quotaExhausted` (§5.17) |
 | the answer cache across instances | one in-memory `Map` — a cold start emptied it | **durable**, so a repeated question costs one collaboration, not two (§5.17) |
 | «کدام پل برای انتقال بهتر است؟» | `UNSUPPORTED` | **`ROUTE_INTELLIGENCE`** → the live candidates, ranked, with the unread dimensions named (§5.18) |
 | «چرا این را گفتی؟» | `UNSUPPORTED` | **`WHY_DECISION`** → five reason lines and four named falsifiers (§5.19) |
@@ -1440,8 +1441,67 @@ number it cannot trust.
   "tightest":{"providerId":"openrouterfree","left":32,"limit":50}}}
 ```
 
-**Tests:** `test/intent-ai/ai-provider-quota-budget.test.mjs` (15) and
+**What the sixth call is, and why the default ceiling stayed at six.**
+The obvious move was to lower the turn's default ceiling from six to
+five, because on the free tier that is the difference between eight
+questions a day and ten. But the sixth call is the **critic's repair
+pass** — the stage that sends a draft back to the reviewer when it
+invents a number or drops a part of the question — and the existing
+suites **pin** that behaviour. Lowering the default made twenty-five
+tests fail, and every one of them was saying the same thing: a ceiling
+that silently removes the repair pass makes the product's «max» mode
+weaker than it claims to be. That is the failure this repo keeps
+fixing — a capability present in the code and absent in the answer.
+
+So the default stays at **6**, and the quota is handled where the quota
+is **known**: the day's headroom lowers the cap, the durable cache means
+a repeated question costs one collaboration rather than two, and a
+deployment that wants the shallower shape can set
+`AI_MAX_PROVIDER_CALLS=5` and get ten questions a day with the repair
+pass dropped. The trade is measurable and it is the operator's to make:
+
+| Ceiling | Calls per turn | What is dropped | Turns a day |
+|---|---|---|---|
+| 6 (default) | 6 | nothing | 8 |
+| 5 | 5 | the critic's repair pass | 10 |
+| 4 | 4 | the verifier and the critic | 12 |
+| 3 | 3 | the verifier, the critic and the crypto research | 16 |
+
+**A spent day stops the turn.** The call cap lowers the turn's **depth**
+as the day runs out, and that is the honest saving: the number of turns
+the day can buy does not change, so the depth is what has to give. But
+at **zero** the arithmetic is different. A request made against an
+exhausted allowance does not come back shallow — it comes back **429**,
+and on this tier a **failed request counts** against the very budget
+that is already gone. So `quotaExhausted()` refuses the provider call
+instead of spending it:
+
+```js
+// server/aiQuotaBudget.js
+quotaExhausted(providerIds, { env, now })
+// → { exhausted, reason, fleet }
+```
+
+The turn's budget now carries the state, always, so a reader can tell
+a normal turn from a starved one:
+
+```json
+{"quotaExhausted": true,
+ "quotaReason": "the day's provider allowance is spent"}
+```
+
+The check sits at the **last possible moment** — inside the role's
+call, after the cache has had its chance — so the refusal is a failed
+**role**, not a failed turn: the analyses that did run keep their
+answers, and the turn still produces something.
+
+**An uncounted day is not an exhausted day.** With no durable counter
+the flag is `false` and the turn keeps its normal cap, because a turn
+that cannot see the day must not behave as though it were spent.
+
+**Tests:** `test/intent-ai/ai-provider-quota-budget.test.mjs` (18) and
 `test/intent-ai/ai-answer-cache-durable.test.mjs` (12).
+
 
 ---
 
