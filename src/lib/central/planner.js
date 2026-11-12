@@ -149,6 +149,47 @@ export const PLAN_TEMPLATES = Object.freeze({
     step('risk.analyze', 'risk', 'read', { dependsOn: ['lab.simulate'], input: { scope: 'post-shock' } }),
     step('present', 'session', 'read', { dependsOn: ['lab.simulate', 'risk.analyze'] })
   ],
+  /*
+   * ── THE YIELD SURFACE AND THE GLOBAL SURFACE (2026-11-12) ─────────────
+   *
+   * These four intents had NO plan template, which means their plan was
+   * EMPTY — the modules were named in `INTENT_TYPES` but nothing ever
+   * asked them for anything. A template is what turns "this intent needs
+   * the farming module" into an actual read.
+   *
+   * The reads are marked `optional` where a dead feed should prune itself
+   * and be REPORTED rather than take the whole answer down: a dead price
+   * feed must not stop the brain from quoting a yield, and a dead global
+   * feed must not stop it from quoting the portfolio.
+   */
+  YIELD_OPPORTUNITY: () => [
+    step('farming.read', 'farming', 'read', { optional: true }),
+    step('portfolio.read', 'portfolio', 'read', { optional: true }),
+    step('risk.analyze', 'risk', 'read', { optional: true, riskContext: 'farming' }),
+    step('present', 'session', 'read', { dependsOn: ['farming.read'] })
+  ],
+  STAKING_REWARD: () => [
+    step('farming.read', 'farming', 'read', { optional: true }),
+    step('portfolio.read', 'portfolio', 'read', { optional: true }),
+    step('risk.analyze', 'risk', 'read', { optional: true, riskContext: 'farming' }),
+    step('present', 'session', 'read', { dependsOn: ['farming.read'] })
+  ],
+  LIQUIDITY_RISK: () => [
+    step('liquidity.read', 'liquidity', 'read', { optional: true }),
+    step('portfolio.read', 'portfolio', 'read', { optional: true }),
+    step('risk.analyze', 'risk', 'read', { optional: true, riskContext: 'liquidity' }),
+    step('present', 'session', 'read', { dependsOn: ['liquidity.read'] })
+  ],
+  /*
+   * `global-intel` has no state section — the snapshot is per-owner and is
+   * read through the bridge — so it is a PLAN step, not a section read.
+   */
+  SMART_MONEY_READ: () => [
+    step('global.read', 'global-intel', 'read', { optional: true }),
+    step('markets.read', 'crypto', 'read', { optional: true }),
+    step('risk.analyze', 'risk', 'read', { optional: true, riskContext: 'portfolio' }),
+    step('present', 'session', 'read', { dependsOn: ['global.read'] })
+  ],
   GOAL_PLAN: () => [
     step('goals.read', 'goals', 'read', { optional: true }),
     step('portfolio.read', 'portfolio', 'read'),

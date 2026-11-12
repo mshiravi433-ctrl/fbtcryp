@@ -56,6 +56,17 @@ export const STATE_SECTIONS = Object.freeze({
   profitPlan: { owner: 'profit-plan', ttlMs: 10 * 60_000, authoritative: true, required: false },
   signals: { owner: 'signals', ttlMs: 5 * 60_000, authoritative: true, required: false },
   news: { owner: 'news', ttlMs: 15 * 60_000, authoritative: true, required: false },
+  /*
+   * The global intelligence snapshot: smart money, whales, on-chain
+   * activity, macro. It is a state section because the brain reads
+   * modules through the state store, and a module with NO section is a
+   * module nothing ever asks.
+   *
+   * The snapshot is PER OWNER — the state store is per owner, so two users
+   * can never see each other's flows. The TTL is 5 minutes: flows move
+   * quickly, and a stale flow quoted as current is worse than no flow.
+   */
+  globalIntel: { owner: 'global-intel', ttlMs: 5 * 60_000, authoritative: true, required: false },
   events: { owner: 'events', ttlMs: 60_000, authoritative: true, required: false },
   alerts: { owner: 'alerts', ttlMs: 60_000, authoritative: true, required: false },
   capabilities: { owner: 'registry', ttlMs: 60_000, authoritative: true, required: true },

@@ -82,6 +82,7 @@ import { createEventReplanningEngine } from './eventReplanning.js';
 import { reasonAboutGoal, requiredAnnualizedPct } from './goalReasoning.js';
 import { fiFlags } from './flags.js';
 import { createFiRouter, setLendingProvider } from './router.js';
+import { setGlobalIntelProvider } from '../ci/globalIntelBridge.js';
 
 export const FI_ROOT_SCHEMA = 'fbt.fi.composition-root.v1';
 
@@ -739,6 +740,26 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
 
   const router = createFiRouter({ fi, ownerFor, stateStore, brain, events, log });
   fi.router = router;
+
+  /* ── the bridge to the central brain (2026-11-12) ─────────────────────
+   *
+   * The central brain could not reach any of this. It holds the modules the
+   * chat answers from; this holds the global intelligence engines — smart
+   * money, whales, on-chain activity, the macro graph, the briefing. A
+   * user could ask «پول هوشمند کجاست؟» and get UNSUPPORTED while a
+   * working smart-money engine sat in this directory.
+   *
+   * The wiring is here, at the END of construction, because this is the
+   * only point where `globalIntelFor` exists — and it takes an owner, so
+   * the brain gets its OWN snapshot, never a shared one.
+   *
+   * See `server/ci/globalIntelBridge.js` for why a bridge is needed at
+   * all: `fios` is built AFTER the brain (it calls `brain.directToolCall`)
+   * and the brain is built BEFORE `fios`, so neither can hold the other at
+   * construction time.
+   */
+  setGlobalIntelProvider(globalIntelFor);
+
   return fi;
 }
 

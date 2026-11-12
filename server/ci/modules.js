@@ -28,6 +28,7 @@ import {
 import { assessRisk } from '../../src/lib/central/risk.js';
 import { defineModule } from '../../src/lib/central/registry.js';
 import { ciSource, healthSnapshot, chainIdFor } from './sources.js';
+import { hasGlobalIntelProvider, readGlobalIntel } from './globalIntelBridge.js';
 import { storeGet, storeSet, storeDurable, EPHEMERAL_TTL_MS } from '../store.js';
 import { createGoal, getGoal, validateGoalInput, FINANCIAL_GOAL_LIMITATIONS } from '../financialGoals.js';
 import { randomUUID, createHash } from 'node:crypto';
@@ -816,6 +817,65 @@ export function createModules(ctx = {}) {
     recover: async () => ({ status: 'RECOVERED', data: { strategy: 'SERVE_STALE_WITH_FLAG: one dead desk must not empty the feed' } })
   });
 
+  /* ── global intelligence (the bridge to the Financial Intelligence OS) ── */
+  /*
+   * The brain's own `signals` module is a price computation: an SMA cross
+   * and a realized volatility over 30 days of closes. It is NOT smart
+   * money.
+   *
+   * Smart money — paired-swap consensus, whale transfers, net flow,
+   * accumulation vs distribution, the macro graph, the cross-asset view —
+   * lives in `server/fios/` (50 files, 980 KB) and the brain could not
+   * reach any of it. A user who asked «پول هوشمند کجاست؟» got
+   * UNSUPPORTED while a working engine sat there.
+   *
+   * The module has NO state section: the global snapshot is per-owner and
+   * is read through the bridge, not stored in the state store. That is
+   * deliberate — a shared snapshot across two users would be a privacy
+   * bug, and the state store is exactly the place that gets shared.
+   */
+  const globalIntel = defineModule({
+    id: 'global-intel', name: 'Global intelligence', capability: CAPABILITY.AVAILABLE,
+    state: ['globalIntel'], tools: ['global.read'], events: ['GLOBAL_SNAPSHOT_READ'],
+    errors: ['PROVIDER_NOT_WIRED', 'NO_GLOBAL_SNAPSHOT', 'GLOBAL_INTEL_FAILED'],
+    permissions: { max: PERMISSION.READ },
+    fallback: ['the last snapshot this owner read, labelled stale'],
+    getState: async () => ok('OK', null),
+    healthCheck: async () => (hasGlobalIntelProvider()
+      ? { status: 'HEALTHY', detail: 'the financial intelligence OS is mounted and can read the global domains' }
+      : { status: 'UNKNOWN', detail: 'the financial intelligence OS is not mounted in this process' }),
+    capabilities: async () => ({
+      operations: ['read'],
+      executes: false,
+      reason: 'global intelligence is read-only; every money move still goes through the wallet'
+    }),
+    read: async (input = {}, readCtx = {}) => {
+      const out = await readGlobalIntel(readCtx.owner || owner, { refresh: input.refresh === true });
+      if (!out.ok) return unavailable(out.code, { detail: out.detail });
+      const snapshot = out.snapshot;
+      const domains = snapshot.domains || {};
+      /* Only the domains that actually answered are carried forward, each
+         with its own status. A domain that could not be read is named as
+         such — the brain must be able to say WHICH one failed. */
+      const readable = {};
+      const failed = {};
+      for (const [name, row] of Object.entries(domains)) {
+        if (row && row.status === 'OK') readable[name] = row;
+        else failed[name] = row?.reason || row?.status || 'UNAVAILABLE';
+      }
+      return ok(Object.keys(readable).length ? 'OK' : 'PARTIAL', {
+        status: snapshot.status || 'PARTIAL',
+        at: snapshot.at || null,
+        domains: readable,
+        failed,
+        coverage: snapshot.coverage ?? null,
+        providers: snapshot.providers ?? null
+      }, { source: 'global-intelligence-engine' });
+    },
+    quote: NA('a global snapshot has no price'), prepare: NA('a global snapshot is not a transaction'), simulate: NA('the global engines simulate their own scenarios'), execute: NA('the brain never acts on a global snapshot'), verify: NA('verifying a global snapshot means reading it again'),
+    recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the global domains are re-read on demand; there is nothing to recover' } })
+  });
+
   const events = defineModule({
     id: 'events', name: 'Event bus', capability: CAPABILITY.AVAILABLE,
     state: ['events'], tools: ['events.recent', 'events.subscribe'], events: [],
@@ -1122,7 +1182,7 @@ export function createModules(ctx = {}) {
     recover: async () => ({ status: 'RECOVERED', data: { strategy: 'recompute after the underlying sections are refreshed' } })
   });
 
-  return [wallet, portfolio, swap, bridge, lending, borrowing, farming, liquidity, staking, futures, dydx, stocks, etf, funds, forex, commodities, rwa, crypto, signals, news, events, alerts, goals, profitPlan, prediction, lab, risk, forecast, transactions, notifications];
+  return [wallet, portfolio, swap, bridge, lending, borrowing, farming, liquidity, staking, futures, dydx, stocks, etf, funds, forex, commodities, rwa, crypto, signals, news, globalIntel, events, alerts, goals, profitPlan, prediction, lab, risk, forecast, transactions, notifications];
 }
 
 /* ── helpers ───────────────────────────────────────────────────────────── */

@@ -177,6 +177,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     borrowing: 'borrowing', farming: 'farming', liquidity: 'liquidity', futures: 'futures',
     dydx: 'dydx', signals: 'signals', news: 'news', goals: 'goals', alerts: 'alerts',
     transactions: 'transactions', events: 'events', risk: 'risk', profitPlan: 'profit-plan',
+    globalIntel: 'global-intel',
     positions: 'lending', recentActions: 'transactions', pendingActions: 'transactions',
     errors: 'risk', eventsList: 'events'
   };
@@ -1525,6 +1526,72 @@ function buildFindings({ intent, classification, state, results, risk, readResul
     });
   }
 
+  /*
+   * ── THE GLOBAL SURFACE (2026-11-12) ───────────────────────────────────
+   *
+   * The brain could not reach the global engines, so a question about
+   * smart money was answered with a price summary.
+   *
+   * The finding carries the flows AND what they are NOT: a whale
+   * transfer is a proxy, not a paired trade, and the smart-money engine
+   * says so in its own data (`whaleTransferProxy.note`). An answer that
+   * quoted «nنهنگ‌ها ۱۲ میلیون دلار خریدند» without that qualifier would
+   * be a fabrication dressed as a fact, so the qualifier travels with the
+   * number.
+   */
+  if (intent.intentType === 'SMART_MONEY_READ') {
+    const global = readResults.globalIntel;
+    const domains = global?.data?.domains || {};
+    const smart = domains.smart_money || null;
+    const whales = domains.whales || null;
+    const onchain = domains.onchain || null;
+    const failed = global?.data?.failed || {};
+    if (smart || whales || onchain) {
+      const d = smart?.data || {};
+      const proxy = d.whaleTransferProxy || {};
+      findings.push({
+        id: 'global-intelligence',
+        status: 'OK',
+        domains: Object.keys(domains),
+        netFlowUsd: d.netFlowUsd ?? null,
+        accumulationUsd: d.accumulationUsd ?? null,
+        distributionUsd: d.distributionUsd ?? null,
+        topTokens: (d.topTokens || []).slice(0, 5),
+        whaleTransferProxy: {
+          count: proxy.whaleActivity?.count ?? null,
+          netFlowUsd: proxy.netFlowUsd ?? null,
+          exchangeInflowUsd: proxy.exchangeInflowUsd ?? null,
+          exchangeOutflowUsd: proxy.exchangeOutflowUsd ?? null,
+          note: proxy.note || 'transfer aggregates and exchange labels are proxies, not paired trades'
+        },
+        whaleEvents: (whales?.data?.events || []).slice(0, 5),
+        onchainActivity: onchain?.data || null,
+        detail: d.netFlowUsd !== null && d.netFlowUsd !== undefined
+          ? `net flow ${d.netFlowUsd} USD over ${d.window || '24h'}, confidence ${smart?.confidence ?? '—'}`
+          : `${Object.keys(domains).length} global domain(s) read; smart money has no verified flow yet`,
+        reason: d.dataStatus === 'insufficient-evidence' || d.verifiedStatus === 'insufficient-evidence'
+          ? 'the smart-money engine has no verified paired-swap consensus for this window, so the whale transfers below are PROXIES, not trades'
+          : `read from the ${smart?.source || 'global-intelligence engine'}; the window is ${d.window || '24h'} and it moves`,
+        source: smart?.source || 'global-intelligence-engine',
+        dataAt: smart?.at || Date.now(),
+        partial: Boolean(smart?.partial)
+      });
+    } else {
+      const named = Object.entries(failed).map(([k, v]) => `${k}: ${v}`).slice(0, 6);
+      findings.push({
+        id: 'global-intelligence',
+        status: 'UNAVAILABLE',
+        domains: [],
+        failed,
+        detail: named.length ? `no global domain answered — ${named.join('; ')}` : `the global engine answered with nothing (${global?.reason || 'NO_GLOBAL_SNAPSHOT'})`,
+        reason: global?.reason ? `the global engine could not be read: ${global.reason}` : 'no global domain answered in this pass',
+        source: 'global-intelligence-engine',
+        dataAt: Date.now(),
+        partial: true
+      });
+    }
+  }
+
   if (['ASSET_ANALYSIS', 'SIGNAL_READING', 'QUOTE_SWAP'].includes(intent.intentType) || (classification.entities.asset && intent.intentType === 'CONCENTRATION_CHECK')) {
     const ai = assetIntelligence({ asset: classification.entities.asset, markets, signals: state.sections.signals.data, news: state.sections.news.data, risk: { level: risk.level }, derivatives: state.sections.futures.data });
     if (ai.status !== 'UNAVAILABLE') findings.push({ id: 'asset-intelligence', status: ai.status === 'PARTIAL' ? 'PARTIAL' : 'OK', detail: `${ai.asset} ${ai.price} USD, ${ai.change24hPct}% 24h, stance ${ai.stance}`, reason: ai.missing.length ? `combined view is missing: ${ai.missing.join(', ')}` : 'price, signal, news and volatility all read for this asset', source: 'market + signals + news engines', dataAt: ai.at || Date.now(), value: `${ai.asset}: ${ai.price} USD (${ai.change24hPct ?? '—'}%)`, partial: ai.status === 'PARTIAL', missing: ai.missing, asset: ai.asset, price: ai.price, change24hPct: ai.change24hPct, volatilityPct: ai.volatilityPct, fundingAprPct: ai.fundingAprPct, signal: ai.signal, newsCount: (ai.news || []).length, news: ai.news, stance: ai.stance, confidence: ai.confidence });
@@ -1686,7 +1753,14 @@ const SECTION_FOR_INTENT = {
    */
   YIELD_OPPORTUNITY: ['farming', 'portfolio', 'risk'],
   LIQUIDITY_RISK: ['liquidity', 'portfolio', 'risk'],
-  STAKING_REWARD: ['farming', 'portfolio', 'risk']
+  STAKING_REWARD: ['farming', 'portfolio', 'risk'],
+  /*
+   * `globalIntel` IS a state section, and it has to be: the brain reads
+   * modules THROUGH the state store, so a module with no section is a
+   * module nothing ever asks. The snapshot is per-owner — the state store
+   * is per-owner — so two users cannot see each other's flows.
+   */
+  SMART_MONEY_READ: ['globalIntel', 'markets', 'risk']
 };
 function sectionsForIntent(classification, { context, state }) {
   const base = SECTION_FOR_INTENT[classification.type] || ANALYSIS_MINIMUM;

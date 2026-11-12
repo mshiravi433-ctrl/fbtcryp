@@ -59,6 +59,28 @@ export const INTENT_TYPES = Object.freeze({
    * These three intents are therefore the bridge between the two.
    */
   YIELD_OPPORTUNITY: { modules: ['farming', 'portfolio', 'risk'], permission: PERMISSION.READ },
+  /*
+   * ── THE GLOBAL SURFACE (2026-11-12) ───────────────────────────────────
+   *
+   * The brain's own `signals` module is a price computation: an SMA cross
+   * and a realized volatility over 30 days of closes. It is NOT smart
+   * money.
+   *
+   * Smart money — paired-swap consensus, whale transfers, net flow,
+   * accumulation vs distribution, the macro graph — lives in
+   * `server/fios/` (50 files, 980 KB) and no intent could reach it. A
+   * user who asked «پول هوشمند کجاست؟» got UNSUPPORTED while a working
+   * engine sat there.
+   *
+   * `global-intel` is the module the brain reads to get there; it has no
+   * state section because the snapshot is per-owner and is read through
+   * the bridge rather than stored in the shared state store.
+   */
+  SMART_MONEY_READ: { modules: ['global-intel', 'markets', 'risk'], permission: PERMISSION.READ },
+  /* The section is `globalIntel`; the module is `global-intel`. They have
+     different names because the section name is a state key and the module
+     name is a registry id, and the registry already uses `global-intel`
+     for the module. */
   LIQUIDITY_RISK: { modules: ['liquidity', 'portfolio', 'risk'], permission: PERMISSION.READ },
   STAKING_REWARD: { modules: ['staking', 'portfolio', 'risk'], permission: PERMISSION.READ },
   ASSET_ANALYSIS: { modules: ['crypto', 'signals', 'news', 'risk'], permission: PERMISSION.READ },
@@ -146,6 +168,39 @@ const RULES = Object.freeze([
   { intent: 'PROFIT_PLAN', patterns: /برنامه (سود|کسب سود|درآمد)|profit plan|بهینه ?سازی (سود|پرتفوی)|بهترین مسیر/i, requires: ['portfolio'] },
   { intent: 'NEWS_SUMMARY', patterns: /(?<!چی )(?<!چه )خبر|اخبار|\bnews\b|آپدیت (جدید|بازار)|رویداد/i, requires: ['news'] },
   { intent: 'SIGNAL_READING', patterns: /سیگنال|signal|اندیکاتور|تایم?فریم/i, requires: ['signals'] },
+  /*
+   * ── THE GLOBAL SURFACE (2026-11-12) ───────────────────────────────────
+   *
+   * This rule sits ABOVE MARKET_OVERVIEW, and it has to: that rule
+   * already claimed «نهنگ», «اسمارت مانی» and «smart money», and its
+   * modules are `markets, signals, news` — so a question about smart
+   * money was answered with a price summary instead of the flows.
+   *
+   * The words are separated by what the user is ASKING FOR:
+   *   · smart money / whale / net flow / accumulation ⇒ the global engine
+   *   · the market itself ⇒ MARKET_OVERVIEW
+   */
+  {
+    intent: 'SMART_MONEY_READ',
+    patterns: [
+      /* «پول هوشمند», «سرمایه هوشمند», «پول بزرگ», «پول نهادی» —
+         with the ZWNJ that Persian actually writes them with. */
+      /(پول|جریان|سرمایه)\s*[\u200c\s]*(هوشمند|بزرگ|نهادی|خرد)/i,
+      /(هوشمند|خرد)\s*[\u200c\s]*(پول|سرمایه|بازیگر)/i,
+      /smart\s*money/i,
+      /* «اسمارت مانی» — the two words with a plain space, which is how
+         it is written in Persian and how the market-overview rule spells
+         it. */
+      /اسمارت\s*مانی/i,
+      /* «نهنگ‌ها», «نهنگ ها», «نهنگها» — the plural suffix is written
+         three ways and the question word may come before it. */
+      /(نهنگ|نهنگها|نهنگ‌ها|نهنگ ها|whales?)/i,
+      /(ورود|خروج|انباشت|توزیع)\s*[\u200c\s]*(پول|نقدینگی|دارایی)/i,
+      /(جریان|فلو)\s*[\u200c\s]*(خالص|خروج|ورود)/i,
+      /(on-?chain|زنجیره.?ای)\s*[\u200c\s]*(فعالیت|رفتار|جریان)/i
+    ],
+    requires: []
+  },
   { intent: 'MARKET_OVERVIEW', patterns: [/بازار|market|قیمت (کلی|بازار)|وضعیت (کلی )?بازار|نهنگ|whale|اسمارت ?مانی|smart money|تورم|نرخ\s*بهره|فدرال|دارایی[‌\s]*های\s*کمیاب|سیاست\s*پولی|inflation|interest\s*rate|\bfed\b|monetary/i], requires: ['markets'] },
   { intent: 'QUOTE_SWAP', patterns: /نرخ (تبدیل|سواپ)|چند می ?ده(?:د)?|quote|قیمت (تبدیل|خرید|فروش)/i, requires: ['markets'] },
   { intent: 'EXECUTE_SWAP', patterns: [/تبدیلش? (کن|کنید|بکن|بده|بدهید)|سواپ|\bswap\b|convert .* to|\bexchange .* for|(بفروشش|بفروشمش|بفروش|بفرست|بخرمش|بخرش|بخرم?|بخرید|فروش بزن|خرید بزن|\bsell\b|\bbuy\b|\bpurchase\b|قصد خرید|دنبال خرید)/i], requires: ['wallet'] },
@@ -239,7 +294,8 @@ const SECTION_OWNER = Object.freeze({
    * `staking` has no section of its own: its module reads `farming`, so
    * the owner is `farming` too.
    */
-  farming: 'farming', liquidity: 'liquidity', staking: 'farming'
+  farming: 'farming', liquidity: 'liquidity', staking: 'farming',
+  globalIntel: 'global-intel'
 });
 function SERVE_UNAVAILABLE(context, section) {
   const caps = context?.capabilities;
@@ -412,7 +468,9 @@ const INTENT_PRIORITY = Object.freeze({
    * claims the words `yield`, `farm` and `apy` — and a question about a
    * pool's APR is not a question about the crypto market.
    */
-  STAKING_REWARD: 0.05, LIQUIDITY_RISK: 0.05, YIELD_OPPORTUNITY: 0.05
+  STAKING_REWARD: 0.05, LIQUIDITY_RISK: 0.05, YIELD_OPPORTUNITY: 0.05,
+  /* Above MARKET_OVERVIEW, which claims «smart money» and «نهنگ». */
+  SMART_MONEY_READ: 0.06
 });
 
 /**
