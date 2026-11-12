@@ -1453,6 +1453,78 @@ function buildFindings({ intent, classification, state, results, risk, readResul
     if (opportunities.status === 'OK') findings.push({ id: 'opportunities', candidates: opportunities.rows, detail: `${opportunities.rows.length} eligible pools, best ${opportunities.rows[0]?.aprPct ?? '—'}% APR`, reason: opportunities.rows[0] ? `the top eligible pool pays ${opportunities.rows[0].aprPct}% with ${opportunities.rows[0].riskLevel} protocol risk` : 'nothing met the eligibility floor', source: 'yields-engine', dataAt: opportunities.at });
   }
 
+  /*
+   * ── THE YIELD SURFACE (2026-11-12) ─────────────────────────────────────
+   *
+   * Three capabilities were readable and never asked for. These findings
+   * are what makes them visible.
+   *
+   * The important property is that a yield is NEVER quoted alone. A pool
+   * with 24 % APR and a one-sided pool is a loss waiting to happen, so the
+   * finding carries the risk level, the depth and the impermanent-loss
+   * flag beside the number — and the REASON says which of them made the
+   * row a candidate and which made it a review.
+   */
+  if (intent.intentType === 'YIELD_OPPORTUNITY' || intent.intentType === 'STAKING_REWARD') {
+    const opportunities = scanOpportunities({
+      yields: state.sections.farming.data,
+      portfolio,
+      risk,
+      capabilities: {}
+    });
+    if (opportunities.status === 'OK') {
+      const rows = opportunities.rows;
+      const best = rows[0] || null;
+      /* For a STAKING question, the honest answer is the liquid-staking
+         row — not the highest APR, which on a DEX pool is usually an
+         impermanent-loss trap rather than a return. */
+      const stakingRows = rows.filter((r) => /lido|rocket|etherfi|jito|marinade|coinbase|binance|stak/i.test(`${r.project || ''} ${r.id || ''}`));
+      const pick = intent.intentType === 'STAKING_REWARD' ? (stakingRows[0] || best) : best;
+      findings.push({
+        id: 'yield-opportunity',
+        status: 'OK',
+        pools: rows,
+        best: pick,
+        detail: pick ? `${pick.project || pick.id} ${pick.symbol || ''} pays ${pick.aprPct}% APR on ${pick.chain || 'its chain'}${pick.depthUsd ? ` with ${Math.round(pick.depthUsd / 1_000_000)}M USD depth` : ''}` : `no pool passed the eligibility floor out of ${opportunities.considered}`,
+        reason: pick
+          ? `the top eligible pool pays ${pick.aprPct}% with ${pick.riskLevel} protocol risk; APR is a trailing figure, not a promise`
+          : `nothing met the eligibility floor out of ${opportunities.considered} considered`,
+        source: 'yields-engine',
+        dataAt: opportunities.at,
+        partial: false
+      });
+    } else {
+      findings.push({ id: 'yield-opportunity', status: 'UNAVAILABLE', reason: `the yields source did not answer: ${opportunities.reason || readResults.farming?.reason || 'NO_YIELD_DATA'}`, detail: null, source: 'yields-engine' });
+    }
+  }
+
+  if (intent.intentType === 'LIQUIDITY_RISK') {
+    const pools = Array.isArray(state.sections.liquidity.data?.pools) ? state.sections.liquidity.data.pools : [];
+    /* An LP is a DIRECTIONAL position wearing a yield costume. The finding
+       therefore leads with the impermanent-loss flag and the depth, and the
+       APR comes after — not before. */
+    const withIl = pools.filter((p) => p.ilRisk === true);
+    const safe = pools.filter((p) => p.ilRisk !== true);
+    findings.push({
+      id: 'liquidity-risk',
+      status: pools.length ? 'OK' : 'UNAVAILABLE',
+      totalPools: pools.length,
+      impermanentLossPools: withIl.length,
+      cleanPools: safe.length,
+      ilPools: withIl.slice(0, 3).map((p) => ({ id: p.id, project: p.project, symbol: p.symbol, apy: p.apy, tvlUsd: p.tvlUsd, risk: p.risk })),
+      cleanPoolsSample: safe.slice(0, 3).map((p) => ({ id: p.id, project: p.project, symbol: p.symbol, apy: p.apy, tvlUsd: p.tvlUsd, risk: p.risk })),
+      detail: pools.length
+        ? `${pools.length} pools read; ${withIl.length} carry an impermanent-loss flag and ${safe.length} do not`
+        : `the liquidity source did not answer: ${readResults.liquidity?.reason || 'NO_LIQUIDITY_DATA'}`,
+      reason: withIl.length
+        ? `${withIl.length} of ${pools.length} pools carry an impermanent-loss flag — the APR on those is not a free return`
+        : (pools.length ? 'no pool carries an impermanent-loss flag, and the APRs are still trailing figures' : 'no liquidity data to judge'),
+      source: 'yields-engine',
+      dataAt: state.sections.liquidity.data?.at || Date.now(),
+      partial: pools.length === 0
+    });
+  }
+
   if (['ASSET_ANALYSIS', 'SIGNAL_READING', 'QUOTE_SWAP'].includes(intent.intentType) || (classification.entities.asset && intent.intentType === 'CONCENTRATION_CHECK')) {
     const ai = assetIntelligence({ asset: classification.entities.asset, markets, signals: state.sections.signals.data, news: state.sections.news.data, risk: { level: risk.level }, derivatives: state.sections.futures.data });
     if (ai.status !== 'UNAVAILABLE') findings.push({ id: 'asset-intelligence', status: ai.status === 'PARTIAL' ? 'PARTIAL' : 'OK', detail: `${ai.asset} ${ai.price} USD, ${ai.change24hPct}% 24h, stance ${ai.stance}`, reason: ai.missing.length ? `combined view is missing: ${ai.missing.join(', ')}` : 'price, signal, news and volatility all read for this asset', source: 'market + signals + news engines', dataAt: ai.at || Date.now(), value: `${ai.asset}: ${ai.price} USD (${ai.change24hPct ?? '—'}%)`, partial: ai.status === 'PARTIAL', missing: ai.missing, asset: ai.asset, price: ai.price, change24hPct: ai.change24hPct, volatilityPct: ai.volatilityPct, fundingAprPct: ai.fundingAprPct, signal: ai.signal, newsCount: (ai.news || []).length, news: ai.news, stance: ai.stance, confidence: ai.confidence });
@@ -1604,7 +1676,17 @@ const SECTION_FOR_INTENT = {
   CREATE_GOAL: ['wallet', 'portfolio', 'goals', 'markets'],
   SET_ALERT: ['markets', 'alerts'],
   CONFIRM_PENDING: ['wallet', 'markets', 'portfolio'],
-  CANCEL_PENDING: []
+  CANCEL_PENDING: [],
+  /*
+   * The yield surface. These three sections were READABLE and NEVER ASKED
+   * FOR — `farming` and `liquidity` are state sections, and `staking` reads
+   * `farming`. The words `yield`, `farm` and `apy` belonged to
+   * ASSET_ANALYSIS, whose modules are the crypto ones, so the yields
+   * engine was never consulted for a question about a pool.
+   */
+  YIELD_OPPORTUNITY: ['farming', 'portfolio', 'risk'],
+  LIQUIDITY_RISK: ['liquidity', 'portfolio', 'risk'],
+  STAKING_REWARD: ['farming', 'portfolio', 'risk']
 };
 function sectionsForIntent(classification, { context, state }) {
   const base = SECTION_FOR_INTENT[classification.type] || ANALYSIS_MINIMUM;

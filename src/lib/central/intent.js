@@ -37,6 +37,30 @@ export const INTENT_TYPES = Object.freeze({
      proposed, the broker hand-off is unsigned, the wallet signs. */
   CONDITIONAL_ALLOCATION: { modules: ['portfolio', 'risk', 'crypto', 'stocks', 'etf', 'funds', 'forex', 'commodities', 'rwa', 'goals'], permission: PERMISSION.PREPARE },
   CONCENTRATION_CHECK: { modules: ['portfolio', 'risk'], permission: PERMISSION.READ },
+  /*
+   * ── THE YIELD SURFACE (2026-11-12) ─────────────────────────────────────
+   *
+   * Three modules were REGISTERED and READABLE and NOTHING EVER ASKED THEM.
+   * The measurement was blunt:
+   *
+   *     modules an intent asks   : 27
+   *     REGISTERED BUT NEVER ASKED: farming, liquidity, staking
+   *
+   * So the brain could read the live yields engine, the live LP risk and
+   * the live staking APR — and a user who asked «بهترین ییلد کجاست؟» or
+   * «ریسک نقدینگی چقدره؟» got `UNSUPPORTED`.
+   *
+   * The corpus could answer a DEFINITION («استیکینگ چیه؟») but not a
+   * QUESTION about the CURRENT numbers, because APR moves and a glossary
+   * does not. Those are different questions and they need different
+   * sources: the definition comes from the corpus, the number comes from
+   * the engine.
+   *
+   * These three intents are therefore the bridge between the two.
+   */
+  YIELD_OPPORTUNITY: { modules: ['farming', 'portfolio', 'risk'], permission: PERMISSION.READ },
+  LIQUIDITY_RISK: { modules: ['liquidity', 'portfolio', 'risk'], permission: PERMISSION.READ },
+  STAKING_REWARD: { modules: ['staking', 'portfolio', 'risk'], permission: PERMISSION.READ },
   ASSET_ANALYSIS: { modules: ['crypto', 'signals', 'news', 'risk'], permission: PERMISSION.READ },
   BALANCE_QUERY: { modules: ['wallet'], permission: PERMISSION.READ },
   LOAN_STATUS: { modules: ['lending', 'borrowing', 'portfolio', 'risk'], permission: PERMISSION.READ },
@@ -74,6 +98,23 @@ export const INTENT_TYPES = Object.freeze({
  * LOAN_STATUS if a lending position could actually be read, otherwise the intent
  * is still LOAN_STATUS but with `executable:false` and a stated reason (§21).
  */
+/*
+ * Intents that NAME a capability, and therefore carry their own referent.
+ *
+ * `ASSET_ANALYSIS` is deliberately NOT in this set: it matches «چطور است»,
+ * «بررسی کن» and «چطوره», so half the sentences in the product would
+ * count as "explicit" and follow-ups would stop working entirely.
+ *
+ * `MARKET_OVERVIEW` is not in it either — «بازار» is a topic, not a
+ * capability name.
+ */
+const EXPLICIT_INTENTS = Object.freeze(new Set([
+  'STAKING_REWARD', 'LIQUIDITY_RISK', 'YIELD_OPPORTUNITY',
+  'FUTURES_RISK', 'LOAN_STATUS', 'BORROW_CAPACITY',
+  'EXECUTE_LEND', 'EXECUTE_BORROW', 'EXECUTE_REPAY', 'EXECUTE_REBALANCE',
+  'CREATE_GOAL', 'SET_ALERT', 'INSTRUMENT_QUERY'
+]));
+
 const RULES = Object.freeze([
   { intent: 'PORTFOLIO_ANALYSIS', patterns: [/پرتفوی|پورتفوی|سبد (سرمایه|من)|portfolio|holdings|ارزش (کیف|سبد)|ریسک (من|پرتفوی|سبد)|ارزیابی ریسک|my risk|risk (assessment|check|level)/i], requires: ['portfolio'] },
   { intent: 'CONCENTRATION_CHECK', patterns: [/زیاد (دارم|است|داری)|تمرکز|concentration|too much|比重|تک‌دارایی|تک دارایی/i], requires: ['portfolio'] },
@@ -116,6 +157,47 @@ const RULES = Object.freeze([
   { intent: 'CREATE_GOAL', patterns: /هدف (جدید|بساز|ثبت|-set)|create (a |new )?goal|هدفم رو ثبت/i, requires: [] },
   { intent: 'SET_ALERT', patterns: /هشدار|\bset (an )?alert\b|alert (set|کن|for|on|me)|به من خبر بده|وقتی رسید به|خبرم کن|یادم انداز|notify me when/i, requires: [] },
   { intent: 'BALANCE_QUERY', patterns: /مانده|بالانس|موجودی|\bbalance\b|چقدر (دارم|تومان|دلار)|how much (do i|have|i have|to i)/i, requires: ['wallet'] },
+  /*
+   * ── THE YIELD SURFACE (2026-11-12) ─────────────────────────────────────
+   *
+   * These three sit ABOVE the ASSET_ANALYSIS rule, and they have to.
+   *
+   * ASSET_ANALYSIS matches `\byield\b`, `\bfarm\b` and `\bapy\b` — so
+   * «بهترین ییلد کجاست؟» and «ریسک LP چقدره؟» were both landing on the
+   * crypto-analysis intent, whose modules are `crypto, signals, news,
+   * risk`. The yield engine was never consulted.
+   *
+   * The three rules are deliberately narrow. A sentence has to name the
+   * THING (staking / LP / a pool / a farm) AND the QUESTION (what does it
+   * yield / how risky / where is the best), because a bare «سود» is
+   * ambiguous and a wrong intent is worse than an unsupported one.
+   */
+  {
+    intent: 'STAKING_REWARD',
+    patterns: [
+      /(استیک|ستیک|استیکینگ|staking|stake|validat)/i,
+      /(ویگی|validator|delegat)/i
+    ],
+    requires: ['farming']
+  },
+  {
+    intent: 'LIQUIDITY_RISK',
+    patterns: [
+      /(نقدینگی|liquidity|امپرینت|permanent loss|\bIL\b)/i,
+      /\bLP\b/i
+    ],
+    requires: ['liquidity']
+  },
+  {
+    intent: 'YIELD_OPPORTUNITY',
+    patterns: [
+      /(ییلد|بازده|سود|درآمد|apr|apy)\s*(.{0,30})?(استیک|ستیک|farm|فارم|depos|سپرده|pool|استخر|lend| lend)/i,
+      /(بهترین|بهتر|بیشترین|کدام|کدوم|کجا|where|best)\s*(.{0,20})?(ییلد|بازده|استخر|pool|پروتکل|protocol|فارم|farm)/i,
+      /(ییلد|بازده|درآمد|سود)\s*(.{0,20})?(کدام|کدوم|چند|چقدر|بهترین|بیشترین)/i,
+      /(بهترین|بیشترین|کدام|کدوم|چند|چقدر|what|which|best|highest)\s*(.{0,20})?(ییلد|بازده|apy|apr|farm|فارم|pool|استخر)/i
+    ],
+    requires: ['farming']
+  },
   { intent: 'ASSET_ANALYSIS', patterns: /(بررسی|تحلیل|وضعیت) ?(کن|ش)?|analyze|check .* out|چطور (است|ه)|چطوره|چه حالی|\bfarm\b|فارم|\bapy\b|\byield\b/i, requires: ['markets'] },
   /* Price questions are the single most common message in a trading app, and a
      lexicon that misses them turns "36,000 USDT" into "please clarify". Ordered
@@ -134,7 +216,17 @@ const SECTION_OWNER = Object.freeze({
   wallet: 'wallet', portfolio: 'portfolio', positions: 'portfolio', markets: 'crypto',
   crypto: 'crypto', lending: 'lending', borrowing: 'borrowing', futures: 'futures',
   dydx: 'dydx', goals: 'goals', signals: 'signals', news: 'news', transactions: 'transactions',
-  alerts: 'alerts', risk: 'risk', capabilities: 'risk', health: 'risk'
+  alerts: 'alerts', risk: 'risk', capabilities: 'risk', health: 'risk',
+  /*
+   * The yield surface. `farming` and `liquidity` are STATE SECTIONS — they
+   * exist in `createSystemState()` and they were owned by nobody, which
+   * meant `SERVE_UNAVAILABLE` could not tell whether the section was
+   * missing or merely unreadable.
+   *
+   * `staking` has no section of its own: its module reads `farming`, so
+   * the owner is `farming` too.
+   */
+  farming: 'farming', liquidity: 'liquidity', staking: 'farming'
 });
 function SERVE_UNAVAILABLE(context, section) {
   const caps = context?.capabilities;
@@ -199,9 +291,36 @@ export function classify(message = '', { context = {}, state = {}, suggestions =
   /* A follow-up rewrites the intent, because in a conversation the referent IS
      the intent: «بفروشم؟» after a BTC analysis is a swap quote on BTC, not a
      generic question about selling. */
+  /*
+   * ── AN EXPLICIT INTENT BEATS A FOLLOW-UP (2026-11-12) ─────────────────
+   *
+   * This is the second half of the yield-surface fix, and it is the half
+   * that does NOT show up in a unit test of the classifier.
+   *
+   * `RISK_QUERY` fires on «ریسک … چقدره؟» and rewrites the intent to
+   * `LOAN_STATUS` — on the assumption that «ریسک» always means the risk of
+   * a loan. That assumption is true for «ریسک وامم چقدره؟» and false for
+   * «ریسک نقدینگی LP چقدره؟».
+   *
+   * The tell is not the word «ریسک» — it is that the sentence NAMES A
+   * CAPABILITY. «نقدینگی», «LP», «استیکینگ» and «ییلد» are names, not
+   * pronouns: they carry their own referent, so the sentence is not a
+   * follow-up to whatever was said before. Rewriting it to the previous
+   * intent answers a question the user did not ask.
+   *
+   * The rule is narrow on purpose. An explicit intent wins only when it
+   * is a REAL intent with its own modules (not `ASSET_ANALYSIS`, which
+   * matches almost any sentence containing «چطور است»), and only when
+   * the follow-up is not a confirmation or a cancellation — those are
+   * about an ACTION and must always win.
+   */
   const followupIntent = followIntent(follow, context);
   if (followupIntent && !(isDistress && ['EXECUTE_SWAP'].includes(followupIntent.intent))) {
-    hits.unshift({ ...followupIntent, score: followupIntent.score ?? 0.9 });
+    const explicit = hits.find((h) => EXPLICIT_INTENTS.has(h.intent) && (h.score || 0) >= 0.7);
+    const actionFollowUp = followupIntent.intent === 'CONFIRM_PENDING' || followupIntent.intent === 'CANCEL_PENDING';
+    if (!explicit || actionFollowUp) {
+      hits.unshift({ ...followupIntent, score: followupIntent.score ?? 0.9 });
+    }
   }
 
   /* Multi-step compound requests: «بعد از خرید به Arbitrum ببر» must become ONE
@@ -274,7 +393,13 @@ const INTENT_PRIORITY = Object.freeze({
   PROFIT_PLAN: 0.045, QUOTE_BRIDGE: 0.04, EXECUTE_BRIDGE: 0.04, FUTURES_RISK: 0.04,
   QUOTE_SWAP: 0.035, EXECUTE_REBALANCE: 0.035, CONCENTRATION_CHECK: 0.03, EXECUTE_SWAP: 0.03,
   CREATE_GOAL: 0.04, GOAL_PLAN: 0.03, BALANCE_QUERY: 0.03, EXECUTE_LEND: 0.025, EXECUTE_BORROW: 0.025,
-  PORTFOLIO_ANALYSIS: 0.0, MARKET_OVERVIEW: 0.0, ASSET_ANALYSIS: -0.045, NAVIGATE: -0.02
+  PORTFOLIO_ANALYSIS: 0.0, MARKET_OVERVIEW: 0.0, ASSET_ANALYSIS: -0.045, NAVIGATE: -0.02,
+  /*
+   * The yield surface sits above ASSET_ANALYSIS, because ASSET_ANALYSIS
+   * claims the words `yield`, `farm` and `apy` — and a question about a
+   * pool's APR is not a question about the crypto market.
+   */
+  STAKING_REWARD: 0.05, LIQUIDITY_RISK: 0.05, YIELD_OPPORTUNITY: 0.05
 });
 
 /**

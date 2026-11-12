@@ -129,7 +129,31 @@ export async function guarded(source, fn, { maxAttempts = 3, staleKey = null, tt
   }
   const stale = staleKey ? await getStale(staleKey) : null;
   if (stale !== null) return { ok: true, value: stale, stale: true, staleReason: lastError?.code || 'SOURCE_FAILED', attempts, at: Date.now() };
-  return { ok: false, error: lastError, code: lastError?.code || 'SOURCE_UNAVAILABLE', attempts, at: Date.now() };
+  return {
+    ok: false,
+    error: lastError,
+    code: lastError?.code || 'SOURCE_UNAVAILABLE',
+    /*
+     * WHY THIS IS HERE, AND WHY IT MATTERS.
+     *
+     * The classified error carries a `technical` field with the real
+     * message — "fetch failed", "ECONNREFUSED", "HTTP 503". It was
+     * dropped on the way out, so every upstream failure reached the user
+     * as `UNCLASSIFIED_ERROR` with an EMPTY detail.
+     *
+     * An empty detail is worse than an ugly one: it tells the operator
+     * that the module "did not answer" and nothing about WHY. The
+     * difference between "DefiLlama is unreachable" and "the pool list
+     * was empty" is the difference between a retry and a bug report.
+     *
+     * The detail is sanitised (control characters out, length bounded)
+     * and it is technical, so it is for the operator trail — the user
+     * still sees the humanised code.
+     */
+    detail: String(lastError?.technical || '').replace(/[\u0000-\u001f]/g, ' ').slice(0, 160),
+    attempts,
+    at: Date.now()
+  };
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -568,7 +592,9 @@ function extractDydxPositions(raw) {
 /* ── yields / news / goals ─────────────────────────────────────────────── */
 async function yields() {
   const res = await guarded('yields-engine', () => fetchYields(), { staleKey: 'ci:yields' });
-  if (!res.ok) return { ok: false, code: res.code };
+  /* The detail rides along, so the failure says WHY rather than only
+     that something failed. */
+  if (!res.ok) return { ok: false, code: res.code, detail: res.detail || '' };
   const pools = Array.isArray(res.value?.pools) ? res.value.pools : [];
   return {
     ok: pools.length > 0,
