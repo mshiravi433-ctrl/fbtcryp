@@ -245,18 +245,17 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
               )}
             </div>
             {/*
-              THE WINDOW IS PRINTED, NOT ASSUMED.
+              NO SECOND WINDOW SENTENCE HERE.
 
-              The badge in the header already says «۲۴ ساعت», but a reader who
-              has scrolled into the tiles is reading three numbers whose window
-              is no longer on screen — and a flow figure with the wrong window
-              attached is worse than no figure. This states it next to the
-              numbers themselves, in the same sentence as the sample they came
-              from.
+              A footnote was added to this block in round 10 saying «این اعداد
+              فقط بازهٔ ۲۴ ساعت را توصیف می‌کنند». It was removed again: the
+              badge in the header already states the window, and the
+              2026-10-28 single-window decision is explicit that this card
+              carries ONE window label and no second explanatory line — the
+              duplicate pushed the three tiles down for no new information.
+              `sm-token-window-badge` is the one place the window is stated, and
+              wiring.mjs pins it.
             */}
-            <p className="smi-footnote" data-testid="sm-token-window-note">
-              {t('sm.flow.windowCovered', { window: t('sm.windows.24h') })}
-            </p>
             {basis === 'none' && <p className="smi-footnote" data-testid="sm-token-no-flow-data">{t('sm.flow.noData')}</p>}
           </div>
 
