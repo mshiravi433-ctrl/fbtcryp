@@ -86,6 +86,7 @@ import { setGlobalIntelProvider } from '../ci/globalIntelBridge.js';
 import { setFitProvider, setMacroGraphProvider, setScenarioProvider } from '../ci/fitBridge.js';
 import { setRouteProvider, adaptRoutesForIntelligence } from '../ci/routeBridge.js';
 import { setWhyProvider } from '../ci/whyBridge.js';
+import { setConversationProvider, setReplanProvider, setReplanReader } from '../ci/sessionBridge.js';
 
 export const FI_ROOT_SCHEMA = 'fbt.fi.composition-root.v1';
 
@@ -905,6 +906,95 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
    * asked for rarely. It is loaded the first time a route is actually
    * needed, and then cached by the module system.
    */
+  /*
+   * The CONVERSATION reader (path 16).
+   *
+   * The conversation-state machine is not a capability — it is the layer
+   * UNDER them. It knows which state the conversation is in, which edges
+   * are legal, and which field the current state is still missing. The
+   * TURN uses it to ask ONE adaptive question instead of a
+   * questionnaire, and to refuse an illegal edge with the legal edges
+   * named.
+   */
+  setConversationProvider(async (owner, opts = {}) => {
+    /*
+     * The goal reasoning is READ HERE, from the turn's own message, by
+     * the same deterministic reasoner the financial engines use.
+     *
+     * It is deliberately not passed in from the brain: the brain extracts
+     * ENTITIES (an asset, an amount, a horizon) for its own routing, and
+     * the reasoner reads a different thing — the goal KIND, the drawdown
+     * ceiling, the liquidity need, and, most importantly, the list of
+     * fields it could NOT read. That list is the adaptive question's
+     * fuel, and it belongs to the reasoner.
+     */
+    const message = String(opts.message ?? '');
+    const goalReasoning = opts.goalReasoning
+      || (message.trim() ? reasonAboutGoal(message, { preferences: opts.preferences ?? null }) : null);
+    const out = await conversationState.ingest(owner, {
+      message,
+      locale: opts.locale ?? 'fa',
+      goalReasoning,
+      patch: opts.patch ?? {}
+    });
+    if (!out?.ok) {
+      return { ok: false, code: out?.code || 'CONVERSATION_FAILED', detail: out?.detail || null, conversation: out?.conversation || null };
+    }
+    return {
+      ok: true,
+      conversation: out.conversation,
+      suggestion: out.suggestion,
+      question: out.question,
+      durable: out.durable ?? null
+    };
+  });
+
+  /*
+   * The REPLAN trigger (path 16).
+   *
+   * The event-replanning engine is already subscribed to the central bus
+   * and already knows which events mean «reconsider the plan». This slot
+   * lets the session layer ask the same question directly — for the
+   * events that arrive as part of a turn rather than as bus traffic.
+   */
+  setReplanProvider(async (owner, opts = {}) => {
+    const out = await eventReplanning.replan(owner, {
+      trigger: opts.trigger || 'PRICE_CHANGED',
+      payload: opts.payload || {},
+      correlationId: opts.correlationId || null
+    });
+    if (!out?.ok) {
+      return { ok: false, code: out?.code || 'REPLAN_FAILED', detail: out?.detail || null };
+    }
+    return {
+      ok: true,
+      changed: out.changed === true,
+      notify: out.notify === true,
+      skipped: out.skipped === true,
+      reason: out.reason || null,
+      retryInMs: out.retryInMs ?? null,
+      summary: out.summary || null,
+      trigger: out.trigger || opts.trigger
+    };
+  });
+
+  /*
+   * The REPLAN READER (path 16).
+   *
+   * The replanning engine writes its attempt; the session layer reads the
+   * last one so the turn can say the world moved and the plan was
+   * reconsidered. A missing attempt is not an error — most turns have no
+   * event to react to.
+   */
+  setReplanReader(async (owner, opts = {}) => {
+    const out = await eventReplanning.recent(owner, { limit: opts.limit ?? 5 });
+    if (!out?.ok) {
+      return { ok: false, code: out?.code || 'REPLAN_READ_FAILED', replan: null, attempts: [] };
+    }
+    const attempts = Array.isArray(out.attempts) ? out.attempts : [];
+    return { ok: true, replan: attempts[0] || null, attempts };
+  });
+
   /*
    * The WHY reader (path 15).
    *

@@ -79,6 +79,7 @@ import {
   computeBorrowCapacity, goalFeasibility, scanOpportunities, simulateShock
 } from '../../src/lib/central/analysis.js';
 import { buildCapabilityMatrix } from '../../src/lib/central/registry.js';
+import { ingestTurn, conversationNeedsInput, readLastReplan } from './sessionBridge.js';
 import { createModules } from './modules.js';
 import { createActionEngine } from './actions.js';
 import { healthSnapshot } from './sources.js';
@@ -381,6 +382,79 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
       executable: classification.executable
     };
     turns.byIntent[intent.intentType] = (turns.byIntent[intent.intentType] || 0) + 1;
+
+    /*
+     * ── THE CONVERSATION MACHINERY (path 16) ──────────────────────────────
+     *
+     * This is the session layer's half of the last dark engine.
+     *
+     * The conversation-state machine is NOT a capability and it is NOT a
+     * module — it is the layer UNDER them. It knows which state the
+     * conversation is in, which edges are legal, and which field the
+     * current state still lacks. So it is read HERE, once per turn, and
+     * its answer goes into two places:
+     *
+     *   · `context.missingInformation` — so the reply asks for the ONE
+     *     field the conversation needs, instead of a questionnaire, and
+     *     instead of pretending it had enough to answer;
+     *   · the `session` section — so the conversation's own shape is
+     *     durable and the NEXT turn starts where this one left off.
+     *
+     * The turn does not die if the machine is not mounted. A missing
+     * conversation engine means no adaptive question — not a failed
+     * turn.
+     */
+    let conversation = null;
+    let conversationSuggestion = null;
+    let adaptiveQuestion = null;
+    let lastReplan = null;
+    /*
+     * The replan's own half. The event-replanning engine already listens
+     * on the central bus, so it has already run when the world moved; the
+     * turn's job here is to READ what it decided and to let the owner
+     * know that the plan was reconsidered.
+     *
+     * It is read, not triggered: triggering belongs to the bus. A turn
+     * that triggered its own replan would re-plan on every message, and
+     * the machine's cooldowns exist precisely to prevent that.
+     */
+    try {
+      const replanRead = await readLastReplan(owner, { limit: 3 });
+      if (replanRead.ok) lastReplan = replanRead.replan || null;
+    } catch {
+      /* No replan to report is the common case, not a failure. */
+    }
+    try {
+      const ingested = await ingestTurn(owner, { message, locale });
+      if (ingested.ok) {
+        conversation = ingested.conversation;
+        conversationSuggestion = ingested.suggestion;
+        adaptiveQuestion = ingested.question;
+        const needed = conversationNeedsInput(conversation, adaptiveQuestion);
+        if (needed) {
+          /*
+           * The missing field joins the turn's own missing-information
+           * list, so the reply asks for it in the same voice as every
+           * other missing field — and the machine's own question text
+           * travels with it, because it is the machine's question and
+           * the machine owns it.
+           */
+          context.missingInformation = Array.from(new Set([
+            ...(context.missingInformation || []),
+            needed.field || 'goal'
+          ]));
+          context.conversationQuestion = {
+            state: needed.state,
+            field: needed.field,
+            missing: needed.missing,
+            question: needed.question
+          };
+        }
+      }
+    } catch {
+      /* The conversation machinery is best-effort; a turn without it is
+         a shallower turn, not a broken one. */
+    }
 
     /* 3. CONTEXT_RESOLUTION — including "resolve the pending action" paths. */
     intent = transition(intent, 'CONTEXT_RESOLUTION', { reason: classification.followUp });
@@ -739,7 +813,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
 
     /* Findings → recommendation (§26). Built from the same `results` the reply
        uses, so the advice and the numbers cannot diverge. */
-    const findings = buildFindings({ intent, classification, state, results, risk, readResults, stepResults, context, locale });
+    const findings = buildFindings({ intent, classification, state, results, risk, readResults, stepResults, context, locale, lastReplan });
     const capabilitiesMap = capabilities.capabilities;
     const actions = possibleActionsFrom({ findings, capabilities: capabilitiesMap, risk, policy, walletConnected: Boolean(wallet?.connected) });
     /* When the answer is a refusal, the reply IS the refusal: the portfolio numbers
@@ -987,6 +1061,52 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     await stateStore.write(owner, 'pendingActions', { data: registry.actions.pending(owner), source: 'action-engine', status: 'OK', now: Date.now() });
     await stateStore.write(owner, 'errors', { data: errorLedger.recent(), source: 'error-engine', status: 'OK', now: Date.now() });
     await stateStore.write(owner, 'capabilities', { data: capabilities.capabilities, source: 'capability-manager', status: 'OK', now: Date.now() });
+    /*
+     * The conversation's own row goes into the SESSION section, beside the
+     * compacted memory. The two are the same thing seen from two sides:
+     * the memory is what the brain REMEMBERS, and the conversation row is
+     * where the conversation IS.
+     *
+     * It is written here — after the turn resolved — because that is when
+     * the conversation's state is known. The `session` section has a
+     * fifteen-minute TTL, so a conversation that the user walks away from
+     * ages out on its own instead of lingering as a stale state machine.
+     */
+    if (conversation) {
+      await stateStore.write(owner, 'session', {
+        data: {
+          memory: compactMemory(memory),
+          conversation: {
+            id: conversation.id,
+            state: conversation.state,
+            turns: conversation.turns ?? null,
+            locale: conversation.locale ?? null,
+            suggested: conversationSuggestion?.to ?? null,
+            because: conversationSuggestion?.because ?? null,
+            missing: Array.isArray(adaptiveQuestion?.missing) ? adaptiveQuestion.missing : [],
+            asked: context.conversationQuestion?.question ?? null
+          },
+          /*
+           * The last replan, when the world moved. It is kept beside the
+           * conversation because a replan IS a conversation event: the
+           * plan was reconsidered, and the conversation has to know it.
+           */
+          replan: lastReplan
+            ? {
+                trigger: lastReplan.trigger ?? null,
+                label: lastReplan.label ?? null,
+                at: lastReplan.at ?? null,
+                changed: lastReplan.changed ?? null,
+                notify: lastReplan.notify === true
+              }
+            : null,
+          at: Date.now()
+        },
+        source: 'conversation-state-engine',
+        status: 'OK',
+        now: Date.now()
+      });
+    }
     await stateStore.write(owner, 'health', { data: cachedHealth, source: 'capability-manager', status: 'OK', now: Date.now() });
     state = stateStore.peek(owner);
     const persist = await stateStore.persist(owner, state);
@@ -1010,10 +1130,60 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
       brain: CI_SCHEMA,
       intent: publicIntent(intent),
       context: { page: context.page, followUp: context.followUp.kind, entities: context.entities, missing: context.missingInformation, digest: context.contextDigest },
+      /*
+       * The conversation's own state travels with the turn. It is not a
+       * user-facing capability — it is the machinery's own bookkeeping —
+       * and it is here so an operator can see WHICH state the
+       * conversation is in and which field it was asked for.
+       */
+      conversation: conversation
+        ? {
+            id: conversation.id,
+            state: conversation.state,
+            turns: conversation.turns ?? null,
+            suggested: conversationSuggestion?.to ?? null,
+            because: conversationSuggestion?.because ?? null,
+            asked: context.conversationQuestion?.question ?? null,
+            missing: Array.isArray(adaptiveQuestion?.missing) ? adaptiveQuestion.missing : []
+          }
+        : null,
       plan: { steps: plan.steps.map((s) => ({ id: s.id, module: s.module, operation: s.operation, permission: s.permission, degraded: s.degraded === true })), skipped: plan.skipped, problems: plan.problems, digest: plan.digest },
       policy: { verdict: policy.verdict, reasons: policy.reasons, gates: policy.gates, requiresConfirmation: policy.requiresConfirmation, safeStop: policy.safeStop, allowExecute: policy.allowExecute, planDigest: policy.planDigest },
       risk,
       recommendation,
+      /*
+       * The findings the recommendation was built from. They travel with
+       * the turn because they ARE the evidence: the recommendation's
+       * reasons point at them, and a reader who cannot see them cannot
+       * check it. This is also how the new surfaces — the route
+       * ranking, the why block, the replan — become observable without
+       * each of them inventing a new field.
+       */
+      findings: findings.map((f) => ({
+        id: f.id ?? null,
+        status: f.status ?? null,
+        source: f.source ?? null,
+        detail: f.detail ?? null,
+        reason: f.reason ?? null,
+        dataAt: f.dataAt ?? null,
+        partial: f.partial === true,
+        /*
+         * The surfaces carry their own numbers — the replan's risk level,
+         * the route's cost, the why block's falsifiers — and those
+         * numbers ARE the finding. A summary that dropped them would
+         * report that something happened without saying what, which is
+         * the «it was recorded» failure this repo keeps fixing. So the
+         * known fields are carried through rather than re-invented here.
+         */
+        ...(f.riskLevel !== undefined ? { riskLevel: f.riskLevel } : {}),
+        ...(f.trigger !== undefined ? { trigger: f.trigger } : {}),
+        ...(f.changed !== undefined ? { changed: f.changed } : {}),
+        ...(f.executionAuthorized !== undefined ? { executionAuthorized: f.executionAuthorized } : {}),
+        ...(f.bestRoute !== undefined ? { bestRoute: f.bestRoute } : {}),
+        ...(f.why !== undefined ? { why: f.why } : {}),
+        ...(f.falsifiers !== undefined ? { falsifiers: f.falsifiers } : {}),
+        ...(f.lines !== undefined ? { lines: f.lines } : {})
+      })),
       execution,
       createdAction: created?.action || null,
       response,
@@ -1395,7 +1565,7 @@ function findingCopy(f) {
   }
 }
 
-function buildFindings({ intent, classification, state, results, risk, readResults, stepResults, context, locale = 'en' }) {
+function buildFindings({ intent, classification, state, results, risk, readResults, stepResults, context, locale = 'en', lastReplan = null }) {
   const findings = [];
   const portfolio = state.sections.portfolio.data;
   const markets = state.sections.markets.data;
@@ -1560,6 +1730,48 @@ function buildFindings({ intent, classification, state, results, risk, readResul
         partial: true
       });
     }
+  }
+
+  /*
+   * ── THE REPLAN SURFACE (path 16) ─────────────────────────────────────────
+   *
+   * The event-replanning engine listens on the central bus and re-plans
+   * when the world moves under a plan: a price changed, a balance
+   * changed, the risk level moved, a module degraded. It has cooldowns
+   * per trigger family, so a busy market does not produce a replan
+   * storm.
+   *
+   * The finding is what makes the machine's decision VISIBLE. It carries:
+   *
+   *   · what CHANGED — the macro impulse, the risk level, the council's
+   *     decision, whether a guardian line was crossed;
+   *   · whether the owner should be TOLD. A replan that changed nothing
+   *     decision-relevant is recorded and not announced: a notification
+   *     for every price tick is how an alert stream becomes noise.
+   *   · the fact that NO execution was authorised by the replan. The
+   *     machine reconsiders; it never acts.
+   */
+  if (lastReplan && lastReplan.notify === true) {
+    const changed = lastReplan.changed || {};
+    findings.push({
+      id: 'event-replan',
+      status: 'OK',
+      trigger: lastReplan.trigger ?? null,
+      family: lastReplan.family ?? null,
+      label: lastReplan.label ?? null,
+      changed,
+      impulse: lastReplan.impulse ?? null,
+      riskLevel: lastReplan.riskLevel ?? null,
+      council: lastReplan.council ?? null,
+      recommendation: lastReplan.recommendation ?? null,
+      executionAuthorized: false,
+      at: lastReplan.at ?? null,
+      detail: `${lastReplan.label || lastReplan.trigger || 'an event'} — ${lastReplan.recommendation || 'the plan was reconsidered'}${changed.riskLevel ? `; risk is now ${lastReplan.riskLevel}` : ''}${changed.macroImpulse ? `; the macro impulse moved to ${lastReplan.impulse}` : ''}${changed.guardianAlert ? '; a guardian line was crossed' : ''}`,
+      reason: 'the world moved under the plan and the decision engine was re-read; nothing was executed and no permission was granted by the replan',
+      source: 'event-replanning-engine',
+      dataAt: lastReplan.at || Date.now(),
+      partial: false
+    });
   }
 
   /*
