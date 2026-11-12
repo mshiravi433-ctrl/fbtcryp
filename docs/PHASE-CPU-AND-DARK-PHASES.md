@@ -29,12 +29,13 @@ node scripts/find-extensionless-imports.mjs # imports Node ESM cannot resolve
 
 ## §0.5 — WHAT WAS ACTUALLY FIXED, AND WHAT IT COST
 
-**All twelve** upgrade paths in §5 are **shipped** (5.1–5.6 plus the
+**All thirteen** upgrade paths in §5 are **shipped** (5.1–5.6 plus the
 seventh, the yield surface, in §5.9, the eighth, the global surface, in
 §5.10, the ninth, the daily cron, in §5.11, the tenth, the measured
-prompt diet, in §5.12, the eleventh, the fit surface, in §5.14, and the
-twelfth, the macro graph, in §5.15). The point of this section is that
-each one is a measurement before and after, not a promise.
+prompt diet, in §5.12, the eleventh, the fit surface, in §5.14, the
+twelfth, the macro graph, in §5.15, and the thirteenth, the goal
+scenarios, in §5.16). The point of this section is that each one is a
+measurement before and after, not a promise.
 
 | | before | after |
 |---|---|---|
@@ -64,6 +65,7 @@ each one is a measurement before and after, not a promise.
 | «کدام گزینه مناسب من است؟» | `UNSUPPORTED` | **`OPPORTUNITY_FIT`** → the ranking, with the profile it was scored against |
 | the brain over HTTP | `PROVIDER_NOT_WIRED` for every global/fit question | **the real engines answer** — the provider is wired on the first turn (§5.14) |
 | «بازار در چه رژیمی است؟» | breadth + the top movers | **the regime**: the macro graph over the global snapshot, the world model and the portfolio (§5.15) |
+| «برای رسیدن به هدفم چه برنامه‌ای داشته باشم؟» | one feasibility figure | **three profiles** with drawdown, probability of loss and probability of halving (§5.16) |
 
 ### The three root causes, and what each one was
 
@@ -767,11 +769,11 @@ not break. The new `jobs` array is additive.
   max turns). §2.4.
 * **Qdrant.** It buys persistence, not CPU. Already documented.
 
-### 5.8 What is STILL open after all twelve paths
+### 5.8 What is STILL open after all thirteen paths
 
-The twelve paths in §5 are shipped, and they were the twelve that the
-measurement justified. What the measurement did **not** justify is left
-open on purpose, and it is worth naming:
+The thirteen paths in §5 are shipped, and they were the thirteen that
+the measurement justified. What the measurement did **not** justify is
+left open on purpose, and it is worth naming:
 
 1. ~~**52 of 206 phases reach a reasoning module.**~~ **SHIPPED at the
    module level** — see §5.9 and §5.10. The registry is 206 and the AI
@@ -812,24 +814,26 @@ open on purpose, and it is worth naming:
    **number of calls**, and the local-first gate is what reduces that
    (100 → 55 calls for 20 questions).
 
-6. **Four deep `server/fios/` engines** (`whyEngine`, `goalScenarios`,
+6. **Three deep `server/fios/` engines** (`whyEngine`,
    `routeIntelligence`, `conversationState`, `eventReplanning` — about
-   58 KB) are still imported by nothing in the brain. The global
-   surface (§5.10), the fit surface (§5.14) and the macro graph (§5.15)
-   each reached one of the eight; these are the ones that remain.
+   46 KB) are still imported by nothing in the brain. The global
+   surface (§5.10), the fit surface (§5.14), the macro graph (§5.15) and
+   the goal scenarios (§5.16) each reached one of the eight; these are
+   the ones that remain.
 
    They are not equally ready, and saying so is the point:
 
-   · `goalScenarios` — **the closest**. Its `GOAL_PLAN` intent already
-     exists; the wiring is the missing half.
    · `routeIntelligence` — needs candidate routes from the quote step,
      so it needs a live venue adapter. Without one it would rank
-     nothing.
+     nothing, and ranking nothing with a confident voice is worse than
+     saying nothing.
    · `whyEngine` — needs a decision bundle the brain does not produce
-     yet. It explains a decision that already exists.
+     yet. It explains a decision that already exists, so the wiring
+     starts with the brain making a decision, not with the engine.
    · `conversationState` and `eventReplanning` — session and event
      machinery, not a question. They belong to the turn's continuity,
-     not to a new capability.
+     not to a new capability, and the honest place for them is the
+     session layer rather than a module.
 
 ### 5.9 Path 7 — the yield surface (SHIPPED)
 
@@ -1311,6 +1315,53 @@ it needs a live venue adapter), `conversationState` and
 
 ---
 
+### 5.16 Path 13 — the goal scenarios: three profiles for a target
+
+The brain's `goals.simulate` computes a **feasibility figure**: can this
+target be reached, and at what monthly contribution? That is half the
+question. The other half is **what the road looks like, and how likely
+each version of it is to arrive** — and the engine for that existed and
+was unreachable.
+
+`server/fios/goalScenarios.js` builds three profiles for a target:
+
+| | allocation | modelled return | max drawdown | probability of loss | probability of halving |
+|---|---|---:|---:|---:|---:|
+| CONSERVATIVE | 65 % stable / 30 % majors / 5 % alts | 6 % | −24.1 % | 37.9 % | 0.6 % |
+| BALANCED | 35 % stable / 45 % majors / 20 % alts | 14 % | −41.3 % | 48.2 % | 3.1 % |
+| AGGRESSIVE | 10 % stable / 40 % majors / 50 % alts | 26 % | −68.4 % | 63.7 % | 11.2 % |
+
+Each profile also carries the percentiles of a modelled distribution
+(`p10`, `p50`, `p90`) and, when the read is honest about it, the
+bracket the target falls into («even the 90th percentile of the modelled
+distribution is below the target»).
+
+**The refusal is the point.** With no real capital the engine does not
+model anything:
+
+> a scenario needs real capital; nothing was modelled and nothing was
+> guessed
+
+That refusal is more valuable than a number, and it travels with the
+answer — as a **named reason** in the finding, not as a missing value.
+The plan step is `optional` precisely so that a refusal never costs the
+user the feasibility figure they did earn.
+
+**What was added.** The module `goal-scenarios`, through a fourth slot
+in the same lazy bridge; the state section `goalScenarios`; the event
+`GOAL_SCENARIOS_READ`; `GOAL_PLAN` now asks for `goal-scenarios`; and
+the finding `goal-scenarios`, which carries each profile's drawdown and
+probability of loss, the recommended profile, and the `estimate` flag.
+
+**The estimate flag is not decoration.** A percentile of a Monte-Carlo
+distribution over a *chosen* expected return is a model of the
+arithmetic, not a prediction of the market. The finding says so, and
+the reason string repeats it: «a model over a chosen return, not a
+forecast».
+
+
+---
+
 ## §6 — The one-paragraph answer
 
 Of 206 registered intent phases, **51 are actually connected to the AI**
@@ -1372,8 +1423,17 @@ turn** (813 ms CPU, once per process) and the boot is untouched
 reading the global snapshot, the world model and the portfolio
 TOGETHER — was added to the market overview without a new intent at all,
 because «وضعیت بازار چطوره؟» was already `MARKET_OVERVIEW` and simply
-could not reach the engine that answered half of it. What remains is
-the honest ceiling: **more phases would not make
+could not reach the engine that answered half of it. And the fourth,
+the **goal scenarios** (§5.16), turned the goal plan from one
+feasibility figure into three profiles — conservative, balanced,
+aggressive — each with its modelled drawdown, its probability of loss
+and its probability of halving, and each willing to say «a scenario
+needs real capital; nothing was modelled and nothing was guessed» when
+the capital is not there. Four of the eight deep engines are now
+reachable from a question a person can actually type; the ones that
+remain need a live venue adapter, a decision bundle, or the session
+layer — not another bridge. What remains is the honest ceiling: **more
+phases would not make
 the AI smarter — making the existing ones reachable would.** That sentence
 is now the method, not a slogan: it is exactly what §5.9, §5.10 and
 §5.11 did, with four intents, four findings, no new phase and no new
