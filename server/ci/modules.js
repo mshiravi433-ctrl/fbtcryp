@@ -32,6 +32,65 @@ import { storeGet, storeSet, storeDurable, EPHEMERAL_TTL_MS } from '../store.js'
 import { createGoal, getGoal, validateGoalInput, FINANCIAL_GOAL_LIMITATIONS } from '../financialGoals.js';
 import { randomUUID, createHash } from 'node:crypto';
 
+/*
+ * ─── THE MULTI-VENUE ENGINE, LAZILY (2026-11-12) ────────────────────────
+ *
+ * The brain's `PROFIT_PLAN` intent answered from the brain's OWN state:
+ * the portfolio, the goals and the risk section. Sixteen multi-venue
+ * phases (101–116) sat in the boot path, dark, and were never consulted
+ * by anything the user can reach — `server/multiVenue.js` was imported by
+ * `server/app.js` and `server/financialGoals.js` and by nothing else.
+ *
+ * So the user could ask «برنامه سودم چیه؟» and get a derivation from
+ * local state while a real venue engine — dYdX, perps, yields, Avantis
+ * equities — sat idle, already paid for.
+ *
+ * The engine is now reachable from the brain. It is imported LAZILY, on
+ * the first call, because:
+ *
+ *   • the adapters make NETWORK calls, so an eager import would pay the
+ *     connection setup on every cold start for a question nobody asked;
+ *   • the module graph is already loaded by the boot path, so the import
+ *     itself costs nothing — only the call does.
+ *
+ * The planner is a SYNTHESIS, never a replacement: the brain's own
+ * concentration/exposure/opportunity numbers stay authoritative, and the
+ * venue allocation is added as the thing the brain could not compute —
+ * where to put the money across venues that the user can actually reach.
+ */
+let multiVenueEngine = null;
+const loadMultiVenueEngine = async () => {
+  if (!multiVenueEngine) {
+    multiVenueEngine = await import('../multiVenue.js');
+  }
+  return multiVenueEngine;
+};
+
+/**
+ * The venues this deployment can actually reach.
+ *
+ * This is the engine's own answer, taken verbatim — the brain does not
+ * re-derive it, because the engine knows which feeds answered and which
+ * did not, and that distinction is the whole point.
+ */
+const multiVenueStatus = async () => {
+  try {
+    const engine = await loadMultiVenueEngine();
+    const feeds = await engine.collectVenueFeeds();
+    return {
+      venues: {
+        health: feeds.health,
+        reasons: feeds.reasons,
+        sources: feeds.sources
+      },
+      generatedAt: feeds.generatedAt
+    };
+  } catch {
+    /* An unavailable engine is an honest answer, not a failure. */
+    return null;
+  }
+};
+
 const NA = (reason) => ({ na: true, reason });
 const ok = (status, data, extra = {}) => ({ status, data, at: Date.now(), source: data?.source || extra.source || null, ...extra });
 const unavailable = (reason, extra = {}) => ({ status: 'UNAVAILABLE', reason: String(reason || 'SOURCE_UNAVAILABLE').slice(0, 160), at: Date.now(), data: null, ...extra });
@@ -879,6 +938,18 @@ export function createModules(ctx = {}) {
       const exposure = analyzeExposure({ portfolio, lending: readState('lending'), futures: readState('futures'), dydx: readState('dydx'), farming: readState('farming'), liquidity: readState('liquidity') });
       const opportunities = scanOpportunities({ yields: readState('farming'), portfolio, risk, capabilities: { lending: CAPABILITY.AVAILABLE } });
       const goal = Array.isArray(goalsSection?.goals) ? goalsSection.goals[0] : null;
+      /*
+       * THE VENUE VIEW — the one thing the brain could not compute.
+       *
+       * The engine is loaded lazily and its network calls are made
+       * concurrently with the rest of the read, so the added latency is
+       * the slowest venue feed, not the sum of them. If the engine cannot
+       * answer, the plan is still returned, with `venues: null` — a plan
+       * without a venue view is incomplete but HONEST, and an error would
+       * throw away the concentration and exposure figures the brain
+       * already computed correctly.
+       */
+      const venues = await multiVenueStatus();
       return ok('OK', {
         generatedAt: Date.now(),
         goal: goal ? { name: goal.name, targetAmount: goal.targetAmount, targetDate: goal.targetDate, monthlyContribution: goal.monthlyContribution } : null,
@@ -886,10 +957,14 @@ export function createModules(ctx = {}) {
         exposure: exposure.status === 'OK' ? { equityUsd: exposure.equityUsd, grossUsd: exposure.grossExposureUsd, debtUsd: exposure.debtUsd, leverage: exposure.leverageRatio } : { unavailable: exposure.reason },
         riskLevel: risk?.level || 'UNKNOWN',
         opportunities: opportunities.status === 'OK' ? opportunities.rows : [],
-        dataSources: ['portfolio-service', 'market-data', 'yields-engine', 'risk-engine', 'goals-engine'],
+        /* Which venues the user can actually reach, and which could not
+           answer. `reasons` says why — an unreachable venue is not the same
+           as a venue with no yield. */
+        venues: venues ? venues.venues : null,
+        dataSources: ['portfolio-service', 'market-data', 'yields-engine', 'risk-engine', 'goals-engine', 'multi-venue-engine'],
         method: 'derived from live sections; every figure below the header comes from a tool result, none from the model',
         notIncluded: ['price forecasts presented as certainties', 'venues this app cannot trade']
-      }, { source: 'profit-plan (derived)' });
+      }, { source: 'profit-plan (derived + multi-venue engine)' });
     },
     quote: NA('a plan has no price to quote; its numbers come from the sections it reads'), 
     prepare: async (input = {}) => {

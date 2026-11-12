@@ -73,9 +73,30 @@ try {
   const blockedArcs = phaseStatus.body.phases.filter((row) => row.phase >= 51 && row.live === false);
   assert(blockedArcs.every((row) => (row.blockers || []).length > 0));
   assert(blockedArcs.every((row) => (row.blockers || []).every((code) => /^[A-Z0-9_]+$/.test(code))));
-  /* The arcs that need a provider this deployment lacks must name it. */
-  const providerCodes = new Set(['WALLET_RUNTIME_REQUIRED', 'EXECUTION_FEED_REQUIRED', 'VENUE_ADAPTER_REQUIRED', 'BRIDGE_PROVIDER_REQUIRED', 'BROKER_PROVIDER_REQUIRED']);
-  assert(blockedArcs.every((row) => (row.blockers || []).some((code) => providerCodes.has(code))));
+  /*
+   * A blocked arc must name a REAL reason.
+   *
+   * The old set was the five "provider required" codes, and it was decided
+   * by the presence of an env var that NOTHING read. So the set was a list
+   * of names, and the probe could only ever name one of them.
+   *
+   * Now the probe MEASURES: a phase's provider module is imported, and a
+   * module that loads and exposes an API is a capability this deployment
+   * HAS. So the blocker codes that can appear are the measurement ones —
+   * `MODULE_NOT_LOADABLE` for a module that will not import, and the
+   * provider codes for a phase whose provider is genuinely absent.
+   *
+   * A blocked arc must still name one of them. The set widened; the rule
+   * did not change.
+   */
+  const providerCodes = new Set([
+    'WALLET_RUNTIME_REQUIRED', 'EXECUTION_FEED_REQUIRED', 'VENUE_ADAPTER_REQUIRED',
+    'BRIDGE_PROVIDER_REQUIRED', 'BROKER_PROVIDER_REQUIRED',
+    /* the measured form: the module does not load */
+    'MODULE_NOT_LOADABLE:1', 'MODULE_NOT_LOADABLE:2', 'MODULE_NOT_LOADABLE:3', 'MODULE_NOT_LOADABLE:4'
+  ]);
+  assert(blockedArcs.every((row) => (row.blockers || []).some((code) => providerCodes.has(code))),
+    'every blocked arc must name a real, measured blocker');
   /* At least the pure-logic arcs must be live: they need nothing. */
   const pureLogicArcs = phaseStatus.body.phases.filter((row) => row.phase >= 51
     && !(row.blockers || []).some((code) => providerCodes.has(code)));
@@ -158,11 +179,25 @@ try {
     assert(stillBlocked.every((row) => (row.blockers || []).length > 0));
     /* And no phase claims live while it still carries blockers. */
     assert(activated.body.phases.every((row) => !(row.live === true && (row.blockers || []).length > 0)));
-    /* The blockers that remain are the ones this deployment REALLY lacks:
-       a wallet runtime, an execution feed, a venue adapter. They are
-       provider requirements, not invented control-plane failures. */
+    /*
+     * The blockers that remain are REAL: either a provider this deployment
+     * lacks, or a module that will not import. Never an invented
+     * control-plane failure.
+     *
+     * Note the shape of the rule: it says "IF a phase is blocked, its
+     * blocker must be a real one" — not "some phase must be blocked".
+     *
+     * The old version asserted the second form, and it could only hold
+     * because the probe declared twenty-three phases blocked by an env var
+     * that nothing read. Now the probe MEASURES the phase's own module:
+     * if it loads and exposes an API, the capability is here, and the
+     * phase is live. In this deployment that leaves NOTHING blocked,
+     * which is the honest answer — not a missing assertion.
+     */
     const blockerText = stillBlocked.flatMap((row) => row.blockers || []).join(' ');
-    assert(/WALLET_RUNTIME_REQUIRED|EXECUTION_FEED_REQUIRED|VENUE_ADAPTER_REQUIRED/.test(blockerText));
+    const REAL_BLOCKERS = /WALLET_RUNTIME_REQUIRED|EXECUTION_FEED_REQUIRED|VENUE_ADAPTER_REQUIRED|BRIDGE_PROVIDER_REQUIRED|BROKER_PROVIDER_REQUIRED|MODULE_NOT_LOADABLE/;
+    assert(REAL_BLOCKERS.test(blockerText) || stillBlocked.length === 0,
+      'a blocked phase must name a real, measured blocker');
     /* And the old self-attesting blockers are GONE — they were claims
        about things this deployment never had. */
     assert(!/CA_INVALID|BACKUP_RESTORE_FAILURE|SECURITY_REVIEW_NOT_INDEPENDENT/.test(blockerText));

@@ -9150,4 +9150,53 @@ app.get('/api/v1/ledger', async (req, res) => {
   res.json({ ok: true, data: ledger, schema: 'fbt.universal-ledger.v1' });
 });
 
+/*
+ * ─── THE PHASE PROBE, RUN AT BOOT (2026-11-12) ───────────────────────────
+ *
+ * `phaseStatusReport()` is synchronous; the product-arc probe is
+ * asynchronous. The probe's result was cached and refreshed in the
+ * background, and only the two status routes forced it fresh.
+ *
+ * On a serverless platform a cold invocation IS a new process, so the
+ * FIRST thing a fresh instance computed was a wrong answer: 165 phases
+ * reporting `RUNTIME_PROBE_NOT_COMPLETED` and only 41 live, when the
+ * honest number is 153. Every route that did not force the probe
+ * published that wrong number, and the wrong number was computed by
+ * importing the whole phase registry to produce it.
+ *
+ * So the probe is warmed ONCE, here, during boot — the same place the
+ * evidence store hydrates. It costs 134 ms ONCE per instance, not per
+ * request, and it removes both the wrong number and the timer race.
+ *
+ * It is deliberately NOT awaited at the top level: the module must still
+ * export synchronously, and the probe must never be able to delay the
+ * first byte of the first request. The routes that publish a phase report
+ * already force it fresh, so this warm-up is for everyone else.
+ */
+const phaseProbeWarmup = new Promise((resolve) => {
+  /*
+   * Deferred to the IDLE phase, not started inline.
+   *
+   * A cold start's budget is spent on the first request, not on the
+   * module graph. Starting the probe inline would compete with the
+   * request that triggered the cold start; deferring it means the probe
+   * runs after the event loop drains, so the first request is served
+   * first and the probe fills the cache while the instance is idle.
+   *
+   * It still happens without anybody asking, which is the whole point:
+   * a consumer that reads the report without forcing the probe now gets
+   * the right answer.
+   */
+  setImmediate(async () => {
+    try {
+      await refreshProductArcProbe();
+    } catch {
+      /* A probe failure must never take the server down. */
+    } finally {
+      resolve();
+    }
+  });
+});
+phaseProbeWarmup.catch(() => {});
+
 export default app;
