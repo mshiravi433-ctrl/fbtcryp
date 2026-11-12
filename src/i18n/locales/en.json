@@ -3848,6 +3848,28 @@
         "steady": "steady ·",
         "reversing": "reversed"
       }
+    },
+    "copyTrade": {
+      "title": "Copy-trade for this signal",
+      "side": "Side the evidence implies",
+      "conviction": "Evidence conviction",
+      "gates": "Gates passed",
+      "blockedBy": "Copying is not advised — these gates failed: {{gates}}",
+      "conflictNote": "The evidence conflicts; until it clears, copying is not advised.",
+      "size": "Planned size",
+      "stopTarget": "Stop / target",
+      "riskUsd": "Risk in dollars",
+      "riskOfBook": "Risk of portfolio",
+      "gate": {
+        "identity": "Contract identity",
+        "evidence": "Evidence",
+        "direction": "Direction",
+        "agreement": "Sources agree",
+        "freshness": "Evidence freshness",
+        "liquidity": "Liquidity depth",
+        "concentration": "Holder concentration",
+        "sizing": "Size"
+      }
     }
   },
   "stocks": {
@@ -13850,7 +13872,26 @@
     "pods": {
       "reading": "reading the verified engine",
       "stale": "last successful engine read"
-    }
+    },
+    "whalesScope": "This board covers EVM chains only",
+    "solWhalesTitle": "Solana whales",
+    "solWhaleMoved": "{{n}} SOL moved",
+    "solWhaleToVenues": "SOL into exchanges (sell intent)",
+    "solWhaleFromVenues": "SOL out of exchanges (accumulation)",
+    "solWhaleWalletToWallet": "Wallet to wallet",
+    "solWhaleNoLean": "No movement touched a named venue, so no direction is read. Wallet-to-wallet flow is not a buy or a sell.",
+    "solWhaleLeanConfident": "Direction from {{n}} labelled movements: {{side}}",
+    "solWhaleLeanThin": "Direction from {{n}} labelled movements: {{side}} — thin evidence",
+    "solWhaleAccumulating": "accumulating (leaving exchanges)",
+    "solWhaleDistributing": "distributing (into exchanges)",
+    "solWhaleCoverage": "This is a sample, not a census: one block is read per window and reused for up to {{reused}} minutes ({{n}} block per refresh). The figures describe that sample only.",
+    "solWhaleEmpty": "No large movement in the sampled block.",
+    "solWhaleUnavailable": "The Solana whale feed is unavailable right now — no figure was guessed.",
+    "freshReadCount": "{{n}} verified fresh wallets",
+    "freshReadCapital": "Verified capital",
+    "freshReadDominant": "One actor holds {{pct}}% of it",
+    "freshReadBroad": "Capital is spread across actors",
+    "freshReadUnverified": "{{n}} rows dropped for having no verifiable counter"
   },
   "crossChain": {
     "youReceive": "You receive",
@@ -18973,5 +19014,21 @@
     "pairModalSub": "Search by ticker or filter by settlement venue",
     "pairModalClose": "Close",
     "pairModalCount": "{{n}} markets"
+  },
+  "copyTrade": {
+    "none": "No plan to copy",
+    "noEvidence": "Not enough evidence read for this copy",
+    "conflict": "Evidence conflicts — copying is not advised until it clears",
+    "blocked": "A gate failed — see the token card",
+    "thin": "Thin evidence — small size only",
+    "fair": "Evidence agrees with the signal",
+    "strong": "Strong evidence, agrees with the signal",
+    "note": "This reading comes from data already on screen. It is not a buy or sell recommendation and it signs nothing.",
+    "provenance": {
+      "verified": "Verified wallets",
+      "labelledActivity": "Labelled scanner activity",
+      "unqualifiedTape": "Large swaps, identity unverified",
+      "whaleBoard": "Whale board"
+    }
   }
 }

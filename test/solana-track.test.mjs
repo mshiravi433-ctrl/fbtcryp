@@ -40,6 +40,7 @@ import {
   __setSolanaTrackFetchForTests,
   blockScanEnabled,
   isSolanaAddress,
+  sampleIsFresh,
   shortAddress,
   solanaWhaleWatch,
   whaleFloorSol,
@@ -223,6 +224,54 @@ test('solanaWhaleWatch keeps its shape and its honesty when nothing answers', as
   }
 });
 
+test('a sampled block is reused for a whole window, not per instance', () => {
+  /*
+   * «مصرف RPC سولانا را بهینه کن» — the read that matters is `getBlock`, and
+   * the waste was structural: the five-minute cache is a process-local Map, so
+   * every warm instance (and every cold start) read its own 5-24 MB block to
+   * answer the same question. `sampleIsFresh` is the gate that turns that into
+   * one read per deployment per window; these are its edge cases.
+   */
+  const now = 1_800_000_000_000;
+  assert.equal(sampleIsFresh({ at: now - 60_000 }, { now }), true, 'a minute-old sample is reused');
+  assert.equal(sampleIsFresh({ at: now - 19 * 60_000 }, { now }), true, 'still inside a 20-minute window');
+  assert.equal(sampleIsFresh({ at: now - 21 * 60_000 }, { now }), false, 'past the window, read a fresh block');
+  assert.equal(sampleIsFresh(null, { now }), false, 'nothing stored means nothing to reuse');
+  assert.equal(sampleIsFresh({ slot: 1 }, { now }), false, 'a sample with no clock cannot be aged, so it is not trusted');
+  /* A clock skew must not make a future sample immortal. */
+  assert.equal(sampleIsFresh({ at: now + 5 * 60_000 }, { now }), false, 'a sample ahead of our clock is refused');
+  assert.equal(sampleIsFresh({ at: now + 5_000 }, { now }), true, 'a few seconds of skew is tolerated');
+  /* The window is env-tunable, read per call, so ops can trade freshness for cost. */
+  assert.equal(sampleIsFresh({ at: now - 30 * 60_000 }, { now, windowMs: 60 * 60_000 }), true);
+});
+
+test('the whale watch states how old its sample is, and keeps its honesty', async () => {
+  process.env.SOLANA_WHALE_SOL_FLOOR = '4321'; /* a distinct floor ⇒ a distinct cache key */
+  process.env.SOLANA_WHALE_BLOCK_SCAN = 'false';
+  __resetWhaleLedger();
+  __setSolanaTrackFetchForTests(async () => { throw new Error('offline'); });
+  try {
+    const out = await solanaWhaleWatch({ vs: 'usd' });
+    assert.equal(out.schema, SOLANA_WHALE_SCHEMA);
+    assert.equal(out.floorSol, 4321);
+    /* The three fields the UI needs in order to say «this is a sample» rather
+       than imply a census: how many blocks, how often, and whether this answer
+       reused an earlier one. */
+    assert.equal(out.coverage.blocksPerRefresh, 0, 'the scan is off, and the payload says so');
+    assert.equal(typeof out.coverage.sampleMs, 'number');
+    assert.ok(out.coverage.sampleMs >= 60_000, 'a sampling window shorter than a minute would be a firehose');
+    assert.equal(typeof out.coverage.sampleReused, 'boolean');
+    assert.equal(typeof out.coverage.durable, 'boolean');
+    assert.equal(out.available, false, 'offline: no invented movements');
+    assert.ok(['UPSTREAM_UNAVAILABLE', 'NO_MOVEMENTS_IN_SAMPLE'].includes(out.reason));
+  } finally {
+    __setSolanaTrackFetchForTests(null);
+    delete process.env.SOLANA_WHALE_SOL_FLOOR;
+    delete process.env.SOLANA_WHALE_BLOCK_SCAN;
+    __resetWhaleLedger();
+  }
+});
+
 test('server/app.js registers both tracking routes with honest failure codes', () => {
   const app = readFileSync(new URL('../server/app.js', import.meta.url), 'utf8');
   assert.ok(app.includes("from './solanaTrack.js'"), 'the module is imported by the server');
@@ -241,7 +290,10 @@ test('server/app.js registers both tracking routes with honest failure codes', (
   const whaleRoute = app.slice(app.indexOf("app.get('/api/solana/track/whales'"));
   const whaleBody = whaleRoute.slice(0, whaleRoute.indexOf('\n});'));
   assert.ok(whaleBody.includes('solanaWhaleWatch({ vs })'));
-  assert.ok(whaleBody.includes('max-age=120'), 'the whale feed is cached far longer than a wallet');
+  /* The sample itself is reused for 20 minutes, so the CDN window must not
+     expire long before it: a shorter one buys nothing but lambda starts. */
+  assert.ok(whaleBody.includes('max-age=300'), 'the whale feed is cached far longer than a wallet');
+  assert.ok(whaleBody.includes('s-maxage=900'), 'and at the edge for as long as a sample is valid');
 
   /* getBlock stays OUT of the public relay allowlist: it answers in megabytes,
      and a public endpoint that forwards it is an abuse vector. */

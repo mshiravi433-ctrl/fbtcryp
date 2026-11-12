@@ -1016,6 +1016,13 @@ export default function SmartMoneyIntelligence() {
                     chain={chosen.chain}
                     token={chosen.token}
                     side={chosen.signal === 'DISTRIBUTION' ? 'SELL' : 'BUY'}
+                    /* The consensus row IS the verified evidence, so the
+                       engine reads it directly: no second source is invented
+                       and the verdict under the button is the same read the
+                       signal card would get. Liquidity and concentration come
+                       from the same payload this card already renders. */
+                    verified={chosen}
+                    window={win}
                     className="sm-copy--tight"
                   />
                   <button className="smi-link" type="button" onClick={() => navigate(`/smart-money/token/${chosen.chain}/${chosen.token}`)}>

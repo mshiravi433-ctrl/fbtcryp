@@ -17,7 +17,7 @@
  */
 import { withCache } from '../cache.js';
 import { TTL, WINDOWS, WINDOW_KEYS, FLOORS } from './config.js';
-import { labelledEvents, whaleBoard, exchangeFlows, earlyTokens, freshWallets, liquidityEvents, tokenSignals, windowCoverage, isNonWallet, SCAN_FLOOR } from './moneyFlow.js';
+import { budgetTier, labelledEvents, whaleBoard, exchangeFlows, earlyTokens, freshWallets, liquidityEvents, tokenSignals, windowCoverage, isNonWallet, SCAN_FLOOR } from './moneyFlow.js';
 import { analyzeWallet } from './walletIntel.js';
 import { analyzeToken } from './tokenIntel.js';
 import { registryManifest } from './registry.js';
@@ -52,7 +52,10 @@ const compactUsd = (n) => {
  */
 export async function getOverview({ window: winKey = '24h', timeoutMs = READ_DEADLINE_MS } = {}) {
   const readBudgetMs = Math.max(250, Math.min(READ_DEADLINE_MS, Number(timeoutMs) || READ_DEADLINE_MS));
-  const { value } = await withCache(`sm:overview:${winKey}:${readBudgetMs}`, TTL.overview,
+  /* The budget is NOT part of the answer's identity (see `budgetTier` in
+     moneyFlow.js): keying on the exact remaining milliseconds made every
+     request a cache miss, which is the most expensive thing a cache can do. */
+  const { value } = await withCache(`sm:overview:${winKey}:${budgetTier(readBudgetMs)}`, TTL.overview,
     () => buildOverview(winKey, { timeoutMs: readBudgetMs }), { swr: true });
   return value;
 }
@@ -100,9 +103,25 @@ function within(p, ms) {
  * The payload keeps `available` so the client can tell how it got the numbers,
  * and `counts` so both pods read one place.
  */
-const VERIFIED_SUMMARY_TTL = 60_000;
+/*
+ * ─── WHY THIS IS 90 SECONDS AND SINGLE-FLIGHT ───────────────────────────────
+ * The verified summary is the heaviest read the overview makes (a durable-store
+ * read plus a full consensus build), and it used to be rebuilt once a minute
+ * per instance — while the overview that contains it is cached for a minute and
+ * polled by the client every three. So for every three views of the same
+ * overview there could be three consensus builds, all identical.
+ *
+ * It is now 90 s (the underlying index is written by a cycle that runs far less
+ * often than that, so nothing fresher exists to read) and concurrent callers
+ * SHARE one in-flight build instead of each starting their own. The 15-minute
+ * last-good fallback is unchanged: a transient store hiccup still shows the
+ * last real numbers, marked stale, instead of a confident 0.
+ */
+const VERIFIED_SUMMARY_TTL = 90_000;
 const VERIFIED_SUMMARY_STALE_OK = 15 * 60_000;
 const verifiedSummaries = new Map();
+/** One build at a time per window, shared by every caller waiting on it. */
+const verifiedInflight = new Map();
 
 function summariseVerified(v) {
   const consensus = Array.isArray(v?.consensus) ? v.consensus : [];
@@ -130,13 +149,21 @@ export async function verifiedSection(winKey, budgetMs = 5_000) {
   if (hit && age <= VERIFIED_SUMMARY_TTL) return { ...hit.summary, available: true, cached: true, stale: false };
   let out = null;
   try {
-    /* No `now` (own clock, see fault 2), no prices (the overview never shows
-       token prices from this branch), background refresh (never block on a
-       whole indexing cycle). */
-    out = await within(
-      getVerifiedIntelligence({ window: winKey, includePrices: false, refresh: 'background' }).catch(() => null),
-      Math.max(5_000, Math.min(6_000, Number(budgetMs) || 5_000))
-    );
+    const budget = Math.max(5_000, Math.min(6_000, Number(budgetMs) || 5_000));
+    let build = verifiedInflight.get(winKey);
+    if (!build) {
+      /* No `now` (own clock, see fault 2), no prices (the overview never shows
+         token prices from this branch), background refresh (never block on a
+         whole indexing cycle). */
+      build = within(
+        getVerifiedIntelligence({ window: winKey, includePrices: false, refresh: 'background' }).catch(() => null),
+        budget
+      ).finally(() => { verifiedInflight.delete(winKey); });
+      verifiedInflight.set(winKey, build);
+    }
+    /* A caller with less patience than the shared build still gets an answer
+       at ITS deadline — never a longer wait because somebody else started. */
+    out = await within(build, budget);
   } catch { out = null; }
   if (out) {
     const summary = summariseVerified(out);
@@ -383,6 +410,8 @@ export async function getExchanges() {
 /** Liquidity feed (cached a touch longer than overview). */
 export function getLiquidityEvents(opts = {}) {
   const timeoutMs = Math.max(250, Math.min(READ_DEADLINE_MS, Number(opts.timeoutMs) || READ_DEADLINE_MS));
-  return withCache(`sm:liquidity:${timeoutMs}`, TTL.liquidity,
+  /* Same clock-in-the-key fault as the scan and the overview: the remaining
+     budget is different on every request, so a keyed-on-it cache never hits. */
+  return withCache(`sm:liquidity:${budgetTier(timeoutMs)}`, TTL.liquidity,
     () => liquidityEvents({ ...opts, timeoutMs }), { swr: true });
 }

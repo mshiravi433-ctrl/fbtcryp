@@ -6061,9 +6061,12 @@ app.get('/api/solana/track/wallet', async (req, res) => {
 
 app.get('/api/solana/track/whales', async (req, res) => {
   const vs = String(req.query.vs || 'usd').toLowerCase();
+  /* A sample is reused for SOLANA_WHALE_SAMPLE_MS (20 min by default), so the
+     CDN window is aligned with it instead of expiring long before the sample
+     does — every extra revalidation was a lambda start for the same bytes. */
   try {
     const out = await solanaWhaleWatch({ vs });
-    res.set('cache-control', 'public, max-age=120, s-maxage=300, stale-while-revalidate=900');
+    res.set('cache-control', 'public, max-age=300, s-maxage=900, stale-while-revalidate=1800');
     return res.json(out);
   } catch (err) {
     res.set('cache-control', 'no-store');

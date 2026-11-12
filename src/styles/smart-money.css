@@ -2036,6 +2036,142 @@
   font-weight: 750;
 }
 
+/* Two chip variants, no new component: a note chip is quieter than a fact chip,
+   and a warning chip borrows the amber the risk bands already use. */
+.smx-chip--note {
+  border-style: dashed;
+  color: var(--sm-ink-dim);
+  opacity: 0.9;
+}
+
+.smx-chip.is-warn {
+  border-color: rgba(255, 194, 75, 0.36);
+  color: var(--sm-amber);
+}
+
+:root[data-theme='light'] .smx-chip.is-warn {
+  color: #8a5a00;
+  border-color: rgba(160, 106, 0, 0.34);
+}
+
+/* ─── the Solana whale card on the whale tab ─────────────────────────────────
+   A plate, not a new section: it sits under the EVM board with the same border
+   and radius as every other block on the page, so the tab still reads as one
+   surface. The numbers are tabular because they are money, and the lean line
+   reuses the up/down colours the board already uses for the same idea. */
+.smx-solwhale {
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--sm-line);
+  border-radius: 14px;
+  background: var(--sm-surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.smx-solwhale-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.smx-solwhale-head b { font-weight: 850; }
+
+.smx-solwhale-ico {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  color: #7fd8ff;
+  background: rgba(56, 225, 255, 0.1);
+  border: 1px solid rgba(56, 225, 255, 0.22);
+}
+
+.smx-solwhale-meta {
+  margin-inline-start: auto;
+  font-size: 9.5px;
+  font-weight: 800;
+  color: var(--sm-ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.smx-solwhale-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.smx-solwhale-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  background: var(--sm-surface-2);
+  border: 1px solid var(--sm-line);
+}
+
+.smx-solwhale-stats small { font-size: 8.5px; color: var(--sm-ink-dim); font-weight: 700; }
+.smx-solwhale-stats b { font-size: 11.5px; font-variant-numeric: tabular-nums; }
+
+.smx-solwhale-lean {
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--sm-ink-dim);
+}
+
+.smx-solwhale-lean.is-up { color: #5df2c0; }
+.smx-solwhale-lean.is-down { color: #ff9db3; }
+:root[data-theme='light'] .smx-solwhale-lean.is-up { color: #0a7f5f; }
+:root[data-theme='light'] .smx-solwhale-lean.is-down { color: #a8244a; }
+
+.smx-solwhale-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.smx-solwhale-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 9.5px;
+  color: var(--sm-ink-dim);
+}
+
+.smx-solwhale-list li > .mono {
+  flex: 0 0 auto;
+  color: var(--sm-ink);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.smx-solwhale-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smx-solwhale-path i {
+  font-style: normal;
+  margin: 0 4px;
+  opacity: 0.6;
+}
+
+.smx-solwhale-note {
+  font-size: 9px;
+  line-height: 1.7;
+  color: var(--sm-ink-dim);
+}
+
 .smx-empty {
   display: flex;
   flex-direction: column;
@@ -2984,7 +3120,54 @@
   background: linear-gradient(150deg, rgba(0, 169, 107, 0.17), rgba(14, 165, 233, 0.08));
 }
 
+/* ─── the copy-trade verdict ──────────────────────────────────────────────────
+   The engine's one-line reading, UNDER the button it belongs to. It is a label,
+   not a control: no border of its own, no tap target, no new colour — it reuses
+   the three tones the page already has (mint = evidence, amber = caution, faint
+   = unmeasured). It also has to survive being squeezed between a row's text and
+   its right edge, so it wraps rather than pushing the row wider. */
+.sm-copy-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sm-copy-verdict {
+  display: block;
+  max-width: 100%;
+  font-size: 8.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  text-align: end;
+  white-space: normal;
+  color: var(--sm-mint);
+}
+
+.sm-copy-verdict.is-up { color: var(--sm-mint); }
+.sm-copy-verdict.is-muted { color: var(--sm-ink-dim); }
+.sm-copy-verdict.is-warn { color: var(--sm-amber); }
+
+.sm-copy.is-blocked {
+  border-color: rgba(255, 194, 75, 0.34);
+  color: #ffd89a;
+  background: linear-gradient(150deg, rgba(255, 194, 75, 0.13), rgba(255, 194, 75, 0.04));
+}
+
+:root[data-theme='light'] .sm-copy-verdict.is-warn { color: #8a5a00; }
+:root[data-theme='light'] .sm-copy.is-blocked {
+  color: #7a4d00;
+  border-color: rgba(160, 106, 0, 0.32);
+  background: linear-gradient(150deg, rgba(214, 143, 0, 0.12), rgba(214, 143, 0, 0.04));
+}
+:root[data-theme='light'] .sm-copy-verdict.is-muted { color: #5c6b80; }
+:root[data-theme='light'] .sm-copy-verdict.is-up { color: #066a51; }
+
 @media (max-width: 359px) {
+  .sm-copy-verdict { display: none; }
   .sm-copy--tight span { display: none; }
   .sm-copy--tight { padding: 0 7px; }
   .smx-row--split .smx-row-end { max-width: 34%; }

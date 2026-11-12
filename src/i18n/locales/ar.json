@@ -2581,6 +2581,28 @@
         "steady": "مستقر ·",
         "reversing": "انعكس"
       }
+    },
+    "copyTrade": {
+      "title": "نسخ الصفقة لهذه الإشارة",
+      "side": "الاتجاه الذي تشير إليه الأدلة",
+      "conviction": "قوة الأدلة",
+      "gates": "الشروط المجتازة",
+      "blockedBy": "لا يُنصح بالنسخ — فشلت هذه الشروط: {{gates}}",
+      "conflictNote": "الأدلة متعارضة؛ لا يُنصح بالنسخ حتى تتضح.",
+      "size": "الحجم المخطط",
+      "stopTarget": "وقف / هدف",
+      "riskUsd": "المخاطرة بالدولار",
+      "riskOfBook": "المخاطرة من المحفظة",
+      "gate": {
+        "identity": "هوية العقد",
+        "evidence": "الأدلة",
+        "direction": "الاتجاه",
+        "agreement": "توافق المصادر",
+        "freshness": "حداثة الأدلة",
+        "liquidity": "عمق السيولة",
+        "concentration": "تركز الحائزين",
+        "sizing": "الحجم"
+      }
     }
   },
   "stocks": {
@@ -9142,7 +9164,26 @@
     "pods": {
       "reading": "جارٍ قراءة المحرك الموثّق",
       "stale": "آخر قراءة ناجحة للمحرك"
-    }
+    },
+    "whalesScope": "هذه القائمة تغطي سلاسل EVM فقط",
+    "solWhalesTitle": "حيتان سولانا",
+    "solWhaleMoved": "تم نقل {{n}} SOL",
+    "solWhaleToVenues": "SOL إلى المنصات (نية بيع)",
+    "solWhaleFromVenues": "SOL خارج المنصات (تجميع)",
+    "solWhaleWalletToWallet": "محفظة إلى محفظة",
+    "solWhaleNoLean": "لم تلمس أي حركة منصة مسماة، لذلك لا يُقرأ اتجاه. النقل بين المحافظ ليس شراءً ولا بيعًا.",
+    "solWhaleLeanConfident": "الاتجاه من {{n}} حركات موسومة: {{side}}",
+    "solWhaleLeanThin": "الاتجاه من {{n}} حركات موسومة: {{side}} — الأدلة ضعيفة",
+    "solWhaleAccumulating": "تجميع (خروج من المنصات)",
+    "solWhaleDistributing": "توزيع (دخول إلى المنصات)",
+    "solWhaleCoverage": "هذه عينة وليست إحصاءً: يُقرأ بلوك واحد لكل نافذة ويُعاد استخدامه حتى {{reused}} دقيقة ({{n}} بلوك لكل تحديث). الأرقام تصف هذه العينة فقط.",
+    "solWhaleEmpty": "لا توجد حركة كبيرة في البلوك المُقتبس.",
+    "solWhaleUnavailable": "خلاصة حيتان سولانا غير متاحة الآن — لم يُقدَّر أي رقم.",
+    "freshReadCount": "{{n}} محفظة جديدة موثّقة",
+    "freshReadCapital": "رأس مال موثّق",
+    "freshReadDominant": "لاعب واحد يملك {{pct}}٪ منه",
+    "freshReadBroad": "رأس المال موزّع على عدة لاعبين",
+    "freshReadUnverified": "حُذف {{n}} صفًا لعدم وجود عدّاد قابل للتحقق"
   },
   "iranBuy": {
     "unavailableBody": "This Wallex Toman checkout is not live on this server yet. The tab is here so Iranian users can find it; no payment is taken until settlement is actually configured."
@@ -10176,6 +10217,22 @@
       "shortSub": "ربح مع الهبوط",
       "summaryTitle": "ملخص الأمر والتصفية",
       "usdUnit": "USD"
+    }
+  },
+  "copyTrade": {
+    "none": "لا توجد خطة للنسخ",
+    "noEvidence": "لا توجد أدلة كافية لهذه النسخة",
+    "conflict": "الأدلة متعارضة — لا يُنصح بالنسخ حتى تتضح",
+    "blocked": "فشل أحد الشروط — التفاصيل في بطاقة الرمز",
+    "thin": "أدلة ضعيفة — بحجم صغير فقط",
+    "fair": "الأدلة تتفق مع الإشارة",
+    "strong": "أدلة قوية ومتوافقة مع الإشارة",
+    "note": "هذه القراءة من بيانات موجودة على الشاشة بالفعل. ليست توصية شراء أو بيع ولا توقّع أي أمر.",
+    "provenance": {
+      "verified": "محافظ موثّقة",
+      "labelledActivity": "نشاط الموسوم من الماسح",
+      "unqualifiedTape": "صفقات كبيرة بدون تحقق من الهوية",
+      "whaleBoard": "لوحة الحيتان"
     }
   }
 }

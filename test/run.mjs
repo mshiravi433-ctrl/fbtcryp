@@ -93,6 +93,17 @@ import './smart-money-redesign-probe.mjs';
    deep-link contract, the four surfaces that carry the button, and the layout
    rules that keep a 7-tab row and a 40px controls row honest. */
 import './smart-money-copy-trade-probe.mjs';
+/*
+ * Copy-trade ↔ signal coherence, and the round-5 engines — imported as a
+ * STATIC import for the reason spelled out at the top of this file: it ends
+ * with its own `process.exit` on failure, and a module body's top-level
+ * `await import()` runs only AFTER every static import in the graph, i.e.
+ * after `business-locales-probe.mjs` has already exited the process on
+ * success. That is how this probe first shipped silently green here while
+ * passing standalone. It must sit above the Business import, like the Learn
+ * hub and discover probes.
+ */
+import './signals-copy-trade-flow-probe.mjs';
 /* The /business B2B console: every string it paints resolves in Persian and
    English, the tab and sub-tab labels resolve in all twelve locales, and the
    keys test/wiring.mjs also demands everywhere exist everywhere. It is the

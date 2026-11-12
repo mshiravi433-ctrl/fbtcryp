@@ -42,6 +42,10 @@ import { useLearningTelemetry } from '../hooks/telemetry';
 import useLearningParams from '../hooks/useLearningParams';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { fetchOverview, fetchToken } from '../lib/smartMoneyClient';
+import { readSmartMoney, readForConsensus } from '../lib/smartMoneyRead';
+import { readWhalesOnToken } from '../lib/whaleEngine';
+import { planCopyTrade, planLabel } from '../lib/copyTrade';
+import { READ_BASIS_LABEL } from '../lib/smartMoneyRead';
 import { verifiedSignals } from '../lib/smartMoneyEvidence';
 import { getSignalPulse, getSignalWhy } from '../lib/signalApi';
 import { swapUrlFor, swapTargetFor } from '../lib/coinToSwap';
@@ -1582,6 +1586,94 @@ function behaviorRows(behavior, t, tapeEdge = null, consensus = null, accelerati
   return rows;
 }
 
+/*
+ * ─── «کپی تراکنش» INSIDE THE PANEL THAT ALREADY EXISTS ──────────────────────
+ * The plan this renders comes from `planCopyTrade`, built from the SAME read
+ * the card was scored with. What is shown is the read and its gates — never an
+ * instruction:
+ *
+ *   · the side and the conviction the evidence earned (or the gate that blocks
+ *     it, named);
+ *   · the size, the stop and the dollar risk, but ONLY from a measured
+ *     volatility and a real position size — otherwise the row is not rendered
+ *     at all rather than printed as «—» three times;
+ *   · the provenance note, because a plan built on the unqualified tape must
+ *     read differently from one built on verified wallets.
+ *
+ * No button: the copy-trade action already lives on the smart-money surfaces,
+ * and the user asked for no new controls. This is the explanation the engine
+ * owes for that action.
+ */
+function CopyTradeRead({ plan }) {
+  const { t } = useTranslation();
+  if (!plan) return null;
+  const label = planLabel(plan);
+  const tone = label.tone === 'warn' ? 'down' : label.tone === 'up' ? 'up' : '';
+  const side = plan.action === 'BUY' ? t('sm.buying') : plan.action === 'SELL' ? t('sm.selling') : null;
+  const s = plan.sizing || {};
+  return (
+    <div className="sic-copyread" data-testid="sic-copy-read">
+      <div className="sic-copyread-head">
+        <span className="sic-copyread-title">{t('signals.copyTrade.title')}</span>
+        <b className={`sic-copyread-state ${tone}`}>{t(label.key)}</b>
+      </div>
+      {side && (
+        <div className="sic-key-value-list sic-onchain-list">
+          <div>
+            <span>{t('signals.copyTrade.side')}</span>
+            <b className={`mono ${plan.action === 'BUY' ? 'up' : 'down'}`}>{side}</b>
+          </div>
+          <div>
+            <span>{t('signals.copyTrade.conviction')}</span>
+            <b className="mono">{plan.conviction}/100</b>
+          </div>
+          <div>
+            <span>{t('signals.copyTrade.gates')}</span>
+            <b className="mono">
+              {plan.gates.filter((g) => g.pass === true).length}/{plan.gates.length}
+            </b>
+          </div>
+        </div>
+      )}
+      {!side && plan.failed.length > 0 && (
+        <p className="sic-copyread-note">
+          {t('signals.copyTrade.blockedBy', { gates: plan.failed.map((g) => t(`signals.copyTrade.gate.${g}`)).join(' · ') })}
+        </p>
+      )}
+      {!side && plan.read?.conflict && (
+        <p className="sic-copyread-note">{t('signals.copyTrade.conflictNote')}</p>
+      )}
+      {s.plannedUsd != null && s.stopPct != null && (
+        <div className="sic-key-value-list sic-onchain-list">
+          <div>
+            <span>{t('signals.copyTrade.size')}</span>
+            <b className="mono">${Math.round(s.plannedUsd).toLocaleString()}</b>
+          </div>
+          <div>
+            <span>{t('signals.copyTrade.stopTarget')}</span>
+            <b className="mono">-{s.stopPct}% / +{s.targetPct}%</b>
+          </div>
+          <div>
+            <span>{t('signals.copyTrade.riskUsd')}</span>
+            <b className="mono down">${Math.round(s.riskUsd).toLocaleString()}</b>
+          </div>
+          {s.riskPctOfBook != null && (
+            <div>
+              <span>{t('signals.copyTrade.riskOfBook')}</span>
+              <b className="mono">{s.riskPctOfBook}%</b>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="faint sic-panel-note">
+        {t(`copyTrade.provenance.${READ_BASIS_LABEL[plan.read?.basis] || 'unqualifiedTape'}`)}
+        {' · '}
+        {t('copyTrade.note')}
+      </div>
+    </div>
+  );
+}
+
 function SignalBreakdown({
   analysis,
   activeHorizons,
@@ -1596,7 +1688,8 @@ function SignalBreakdown({
   acceleration,
   hasOnchain,
   onchainRows,
-  behavior
+  behavior,
+  copyTradePlan
 }) {
   const { t } = useTranslation();
   if (!analysis) return <div className="sic-insufficient">{t('signals.intel.card.insufficient')}</div>;
@@ -1794,6 +1887,7 @@ function SignalBreakdown({
         >
           <OnchainRowList rows={onchainRows} />
           <div className="faint sic-panel-note">{t('signals.onchain.measuredNote')}</div>
+          {copyTradePlan && <CopyTradeRead plan={copyTradePlan} />}
         </SignalSection>
       )}
 
@@ -2522,21 +2616,27 @@ export default function Signals() {
    */
   const smReadFor = useCallback((c) => {
     if (!c?.id) return null;
-    const verified = verifiedForTarget;
-    if (verified && Number.isFinite(Number(verified.netFlowUsd))) {
-      return { signal: verified.signal, netUsd: Number(verified.netFlowUsd), confidence: Number(verified.confidence) || null };
-    }
-    const flow = tokenOnchain?.smartMoneyFlow;
-    const net = Number(flow?.netUsd ?? flow?.netFlowUsd ?? NaN);
-    if (Number.isFinite(net) && Math.abs(net) > 0) {
-      return { netUsd: net, confidence: Number(flow?.confidence) || null };
-    }
     const rows = Array.isArray(sm?.tokenActivity) ? sm.tokenActivity : [];
-    const hit = rows.find((r) => String(r?.symbol || '').toUpperCase() === String(c.symbol || '').toUpperCase());
-    if (hit && Number.isFinite(Number(hit.netUsd)) && Math.abs(Number(hit.netUsd)) > 0) {
-      return { signal: hit.signal, netUsd: Number(hit.netUsd), confidence: Number(hit.confidence) || null };
-    }
-    return null;
+    const hit = rows.find((r) => String(r?.symbol || '').toUpperCase() === String(c.symbol || '').toUpperCase()) || null;
+    /* ALL THREE sources are handed to one reader instead of the first one that
+       happens to have a number. That matters for correctness, not just tidiness:
+       the old order let a $400 unqualified tape print outrank a verified row
+       the moment the verified read had a null net, and it never noticed when
+       the two sources disagreed. `readSmartMoney` weights evidence by source,
+       builds confidence from breadth as well as size, and abstains on a real
+       conflict instead of averaging it into mush. Pure arithmetic over state
+       the page already holds — no new request. */
+    const read = readSmartMoney({
+      verified: verifiedForTarget,
+      tape: tokenOnchain?.smartMoneyFlow,
+      activity: hit,
+      /* The whale board the page already polled: it is the weakest source, so
+         the reader only uses it when nothing more specific was measured — and
+         only when several wallets agree (`confident`). */
+      whales: c.symbol ? readWhalesOnToken({ wallets: sm?.whales, symbol: c.symbol, window: '24h' }) : null,
+      window: '24h'
+    });
+    return readForConsensus(read);
   }, [verifiedForTarget, tokenOnchain, sm]);
 
   /*
@@ -2881,6 +2981,36 @@ export default function Signals() {
     [selectedSignal, positions, priceMap, scenarios]
   );
 
+  /*
+   * ─── «کپی تراکنش» ON THE SIGNAL CARD ───────────────────────────────────────
+   * The card already holds everything a copy-trade plan needs: the read that
+   * produced its call, the on-chain liquidity and concentration, its own
+   * volatility, and the reader's position size. So the plan below is pure
+   * arithmetic over state — no request, no timer, and the plan's read is the
+   * SAME object (`smReadFor`) the card was scored with, which is what makes the
+   * button and the card incapable of disagreeing.
+   */
+  const copyTradePlan = useMemo(() => safeCalc(() => {
+    if (!onchainTarget) return null;
+    return planCopyTrade({
+      chain: onchainTarget.chain,
+      token: onchainTarget.address,
+      symbol: coin?.symbol || null,
+      activity: (sm?.tokenActivity || []).find((r) => String(r?.symbol || '').toUpperCase()
+        === String(coin?.symbol || '').toUpperCase()) || null,
+      verified: verifiedForTarget,
+      tape: tokenOnchain?.smartMoneyFlow,
+      whales: coin?.symbol ? readWhalesOnToken({ wallets: sm?.whales, symbol: coin.symbol, window: '24h' }) : null,
+      window: '24h',
+      tokenIntel: tokenOnchain,
+      volatilityPct: (selectedSignal?.horizons ?? []).find((h) => h.days === 7)?.volatilityPct ?? null,
+      plannedUsd: Number(portfolioImpactData?.valueUsd) > 0 ? Number(portfolioImpactData.valueUsd) : null,
+      bookUsd: Number(portfolioImpactData?.bookUsd) > 0 ? Number(portfolioImpactData.bookUsd) : null
+    });
+  }, null), [onchainTarget, coin?.symbol, sm, verifiedForTarget, tokenOnchain, selectedSignal, portfolioImpactData]);
+  /* Never pay for this on every poll: it depends only on state, and an
+     unchanged asset produces a byte-identical plan. */
+
   const invalidation = useMemo(() => safeCalc(() => {
     if (!priceSeries.length) return null;
     const price = priceSeries[priceSeries.length - 1];
@@ -3053,6 +3183,7 @@ export default function Signals() {
                       consensus={selectedSignal?.consensus ?? null}
                       acceleration={selectedSignal?.acceleration ?? null}
                       hasOnchain={hasOnchain}
+                      copyTradePlan={copyTradePlan}
                       onchainRows={onchainRows}
                     />
                   </SectionGuard>

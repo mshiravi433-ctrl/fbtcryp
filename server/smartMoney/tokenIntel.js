@@ -22,6 +22,9 @@ import { dexPairsForTokens, bsTokenHolders, solanaTokenHolders } from './dataSou
 import { exchangeFor } from './registry.js';
 import { detectAccumulation, detectDistribution } from './engines.js';
 import { TTL, WINDOWS, WINDOW_KEYS } from './config.js';
+/* The budget tier, from the one module that owns it: a token read and a whale
+   scan must not disagree about what "the same read" means. */
+import { budgetTier } from './moneyFlow.js';
 
 const EVM_ADDR = /^0x[a-fA-F0-9]{40}$/;
 const SOL_ADDR = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -80,7 +83,7 @@ export async function analyzeToken(tokenAddress, chainId = 1, { timeoutMs = READ
     const e = new Error('BAD_ADDRESS'); e.code = 'BAD_ADDRESS'; throw e;
   }
 
-  const { value } = await withCache(`sm:token:${chainId}:${address}:${readBudgetMs}`, TTL.token, () =>
+  const { value } = await withCache(`sm:token:${chainId}:${address}:${budgetTier(readBudgetMs)}`, TTL.token, () =>
     buildTokenIntel(address, chainId, Date.now() + readBudgetMs)
   );
   return value;
