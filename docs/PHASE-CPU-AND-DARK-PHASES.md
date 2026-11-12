@@ -29,12 +29,12 @@ node scripts/find-extensionless-imports.mjs # imports Node ESM cannot resolve
 
 ## §0.5 — WHAT WAS ACTUALLY FIXED, AND WHAT IT COST
 
-**All eleven** upgrade paths in §5 are **shipped** (5.1–5.6 plus the
+**All twelve** upgrade paths in §5 are **shipped** (5.1–5.6 plus the
 seventh, the yield surface, in §5.9, the eighth, the global surface, in
 §5.10, the ninth, the daily cron, in §5.11, the tenth, the measured
-prompt diet, in §5.12, and the eleventh, the fit surface, in §5.14).
-The point of this section is that each one is a measurement before and
-after, not a promise.
+prompt diet, in §5.12, the eleventh, the fit surface, in §5.14, and the
+twelfth, the macro graph, in §5.15). The point of this section is that
+each one is a measurement before and after, not a promise.
 
 | | before | after |
 |---|---|---|
@@ -63,6 +63,7 @@ after, not a promise.
 | the durable audit board | claimed verified, checked nothing | **reports `DURABLE_STORE_NOT_CONFIGURED` until a store exists** |
 | «کدام گزینه مناسب من است؟» | `UNSUPPORTED` | **`OPPORTUNITY_FIT`** → the ranking, with the profile it was scored against |
 | the brain over HTTP | `PROVIDER_NOT_WIRED` for every global/fit question | **the real engines answer** — the provider is wired on the first turn (§5.14) |
+| «بازار در چه رژیمی است؟» | breadth + the top movers | **the regime**: the macro graph over the global snapshot, the world model and the portfolio (§5.15) |
 
 ### The three root causes, and what each one was
 
@@ -766,9 +767,9 @@ not break. The new `jobs` array is additive.
   max turns). §2.4.
 * **Qdrant.** It buys persistence, not CPU. Already documented.
 
-### 5.8 What is STILL open after all eleven paths
+### 5.8 What is STILL open after all twelve paths
 
-The eleven paths in §5 are shipped, and they were the eleven that the
+The twelve paths in §5 are shipped, and they were the twelve that the
 measurement justified. What the measurement did **not** justify is left
 open on purpose, and it is worth naming:
 
@@ -811,18 +812,24 @@ open on purpose, and it is worth naming:
    **number of calls**, and the local-first gate is what reduces that
    (100 → 55 calls for 20 questions).
 
-6. **Six deep `server/fios/` engines** (`macroGraph`, `whyEngine`,
-   `goalScenarios`, `routeIntelligence`, `traditionalAssets`,
-   `conversationState`, `eventReplanning` — about 90 KB) are still
-   imported by nothing in the brain. The global surface (§5.10) and the
-   fit surface (§5.14) wired two of the eight; these are the next ones,
-   and they are a real path rather than a placeholder.
+6. **Four deep `server/fios/` engines** (`whyEngine`, `goalScenarios`,
+   `routeIntelligence`, `conversationState`, `eventReplanning` — about
+   58 KB) are still imported by nothing in the brain. The global
+   surface (§5.10), the fit surface (§5.14) and the macro graph (§5.15)
+   each reached one of the eight; these are the ones that remain.
 
-   Two of them are close to a natural question and will be the next
-   ones: `routeIntelligence` («کدام مسیر انتقال بهتر است؟») and
-   `macroGraph` («بازار در چه رژیمی است؟»). `whyEngine` needs a
-   decision bundle first — it explains a decision that already exists,
-   and the brain does not produce one yet.
+   They are not equally ready, and saying so is the point:
+
+   · `goalScenarios` — **the closest**. Its `GOAL_PLAN` intent already
+     exists; the wiring is the missing half.
+   · `routeIntelligence` — needs candidate routes from the quote step,
+     so it needs a live venue adapter. Without one it would rank
+     nothing.
+   · `whyEngine` — needs a decision bundle the brain does not produce
+     yet. It explains a decision that already exists.
+   · `conversationState` and `eventReplanning` — session and event
+     machinery, not a question. They belong to the turn's continuity,
+     not to a new capability.
 
 ### 5.9 Path 7 — the yield surface (SHIPPED)
 
@@ -1252,6 +1259,58 @@ reason they were not was a mount, not a design.
 
 ---
 
+### 5.15 Path 12 — the macro graph: the regime next to the market overview
+
+A market overview that quotes breadth and the top movers answers **"what
+is moving"**. It does not answer **"what kind of market is this"** — and
+the second question is the one a person actually has.
+
+`server/fios/macroGraph.js` is that answer. It reads the global
+snapshot, the world model and the portfolio **together** and builds the
+transmission graph between them: which macro events carry into which
+instruments, and what the portfolio's risk impulse is. It existed, it
+was complete, and nothing could reach it.
+
+**What was added.** The module `macro-graph`, through a third slot in
+the same lazy bridge (`server/ci/fitBridge.js`); the state section
+`macroGraph`; the event `MACRO_GRAPH_READ`; `MARKET_OVERVIEW` now asks
+for `global-intel` and `macro-graph`; the plan reads the global section
+beside the prices; and the finding `market-regime`.
+
+**No new intent was needed.** «وضعیت بازار چطوره؟» was already
+`MARKET_OVERVIEW` — it just did not reach the engine that could answer
+half of it. A new intent would have been a second name for the same
+question.
+
+**The regime is an enrichment, not the source.** When the graph is
+unreadable the overview still stands on the prices it did read, and the
+finding is simply absent — the user is not left with nothing. That is
+why the graph step is `optional` in the plan and why the finding does
+not carry the overview's status.
+
+**The graph says what it is.** It reports `estimate: true`, and the
+finding carries that flag: a portfolio risk impulse is a *first-order
+model over the domains it read*, not a forecast, and the reason string
+says exactly that.
+
+Live, the turn says:
+
+> the regime is read from smart_money, onchain; the portfolio risk
+> impulse is 0 — a first-order model over the read domains, not a
+> forecast
+
+**The count of dark engines is now four, not eight.** The global
+surface (§5.10), the fit surface (§5.14) and the macro graph (§5.15)
+each reached one. What is left is `whyEngine` (it needs a decision
+bundle the brain does not produce yet), `goalScenarios` (its
+`GOAL_PLAN` intent already exists — the wiring is the missing half),
+`routeIntelligence` (it needs candidate routes from the quote step, so
+it needs a live venue adapter), `conversationState` and
+`eventReplanning` (both are session/event machinery, not a question).
+
+
+---
+
 ## §6 — The one-paragraph answer
 
 Of 206 registered intent phases, **51 are actually connected to the AI**
@@ -1308,7 +1367,13 @@ surface had never worked over HTTP: the provider was wired only when
 «پول هوشمند کجاست؟» had been answering `PROVIDER_NOT_WIRED` next to a
 working smart-money engine. The bootstrap now happens on the **first
 turn** (813 ms CPU, once per process) and the boot is untouched
-(306 ms CPU, 305 modules). What remains is the honest ceiling: **more phases would not make
+(306 ms CPU, 305 modules). And the third of the deep engines — the
+**macro graph** (§5.15), which answers «بازار در چه رژیمی است؟» by
+reading the global snapshot, the world model and the portfolio
+TOGETHER — was added to the market overview without a new intent at all,
+because «وضعیت بازار چطوره؟» was already `MARKET_OVERVIEW` and simply
+could not reach the engine that answered half of it. What remains is
+the honest ceiling: **more phases would not make
 the AI smarter — making the existing ones reachable would.** That sentence
 is now the method, not a slogan: it is exactly what §5.9, §5.10 and
 §5.11 did, with four intents, four findings, no new phase and no new
