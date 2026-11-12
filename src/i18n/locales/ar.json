@@ -2256,7 +2256,28 @@
         "liquidityActive": "سيولة نشطة",
         "liquidityThin": "سيولة ضعيفة",
         "marketSentimentUp": "مزاج السوق صاعد",
-        "marketSentimentDown": "مزاج السوق هابط"
+        "marketSentimentDown": "مزاج السوق هابط",
+        "oneSidedBuy": "شريط شراء أحادي",
+        "oneSidedSell": "شريط بيع أحادي",
+        "moveBroadUp": "صعود بمشاركة واسعة",
+        "moveBroadDown": "هبوط بمشاركة واسعة",
+        "moveHollowUp": "صعود أجوف",
+        "moveHollowDown": "هبوط أجوف",
+        "relativeStrengthUp": "أقوى من بيتكوين",
+        "relativeStrengthDown": "أضعف من بيتكوين",
+        "volumeWithTrend": "حجم مع الاتجاه",
+        "volumeWithDowntrend": "حجم مع الهبوط",
+        "volumeHollow": "صعود بحجم ضعيف",
+        "moveAnomaly": "الخطوة الأخيرة غير معتادة",
+        "tapeOneSidedBuy": "شريط شراء أحادي",
+        "tapeOneSidedSell": "شريط بيع أحادي",
+        "broadParticipationUp": "مشاركة واسعة ↑",
+        "broadParticipationDown": "مشاركة واسعة ↓",
+        "hollowRally": "صعود أجوف",
+        "hollowSelloff": "هبوط أجوف",
+        "outperformingMarket": "أقوى من بيتكوين",
+        "underperformingMarket": "أضعف من بيتكوين",
+        "patternRepeat": "تكرار الشكل"
       },
       "smartMoney": {
         "title": "الأموال الذكية",
@@ -2487,7 +2508,30 @@
       "breadth": "Top-20 up today",
       "avgChange": "Avg 24h move",
       "turnover": "Volume / mcap",
-      "trendTitle": "اتجاه سعر {{symbol}}"
+      "trendTitle": "اتجاه سعر {{symbol}}",
+      "behavior": {
+        "title": "سلوك الرمز",
+        "participation": "مشاركة الخطوات",
+        "spikeShare": "أكبر خطوة منفردة",
+        "pressure": "ضغط الشريط",
+        "relative": "مقابل بيتكوين (النافذة نفسها)",
+        "volume": "الحجم مقابل الاتجاه",
+        "anomaly": "آخر خطوة (σ)",
+        "pattern": "تكرار النمط",
+        "patternSeen": "النمط نفسه قبل {{n}} خطوة",
+        "biasUp": "البنية: شراء",
+        "biasDown": "البنية: بيع",
+        "biasFlat": "البنية: مختلطة",
+        "note": "مقيسة من خطوات سعر هذا الرمز ومن صف السوق الخاص به — المشاركة، أحادية الاتجاه، القوة النسبية، توافق الحجم والشكل. تصف ما فعله الشريط وليست تنبؤًا.",
+        "vol": {
+          "accumulating": "صعود مع حجم",
+          "distributing": "هبوط مع حجم",
+          "hollow-rally": "صعود بحجم ضعيف",
+          "drifting-down": "هبوط بحجم ضعيف",
+          "balanced": "متوافق مع الحجم",
+          "unclear": "غير مقيس"
+        }
+      }
     },
     "aiPowered": "مدعوم بالذكاء الاصطناعي"
   },

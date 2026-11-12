@@ -1205,6 +1205,19 @@ npx(['vite', 'build', '-c', 'test/vite.signalintel.mjs', '--logLevel', 'error'])
   report('signal intelligence', await signalIntelRows());
 }
 
+/*
+ * Behaviour read + CPU contract. Pure Node, so no bundling: the engine half
+ * proves «رفتارشناسی توکن» is measured and deterministic, and the second half
+ * reads the page/AI-client/hook SOURCE to pin the poll clocks and the
+ * "ask the AI only when its answer can change" rules — the exact edits that
+ * would otherwise silently restore a per-tick invocation.
+ */
+console.log('▸ probing token behaviour + the signal page CPU contract…');
+{
+  const { default: behaviorRows } = await import('./signals-behavior-cpu-probe.mjs');
+  report('signal behaviour + CPU budget', await behaviorRows());
+}
+
 /* The practice-trade page and the token detail sheet («گس و شبکه انتخابی») in
    light theme. Same discipline as the AI probe: real stylesheets in import
    order, WCAG contrast measured from computed style — the light theme shipped

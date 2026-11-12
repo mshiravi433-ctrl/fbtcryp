@@ -46,6 +46,7 @@ import {
   computeHorizonRisks, computeSignalCard, computeEarlySignals,
   computePulseLocal, portfolioImpact, rankSignals, classKey
 } from '../lib/signalEngine';
+import { readTokenBehavior } from '../lib/tokenBehavior';
 import {
   readWatchlist, toggleWatch, createAlert, readAlerts, deleteAlert, saveAlerts,
   evaluateSignalAlerts, recordSignal, settleHistory, readHistory, ALERT_KINDS
@@ -66,6 +67,21 @@ const HORIZONS = [
   { days: 30, key: '30D' }
 ];
 
+/*
+ * POLL CLOCKS, named so the reasoning above the hooks reads as a contract
+ * rather than a magic number. Each is at or above the server route's own
+ * cache TTL — polling a cache faster than it rebuilds buys nothing and, on a
+ * serverless host, costs a function invocation every time.
+ */
+/** `/api/signals/pulse` — server cache 60s. */
+const PULSE_POLL_MS = 90_000;
+/** `/api/v1/smart-money/overview` — server cache 60s, SWR 300s. */
+const SM_POLL_MS = 180_000;
+/** `/api/chart/:id` — server cache 60s, CDN SWR 240s. 30d closes move slowly. */
+const CHART_POLL_MS = 120_000;
+/** BTC series for the verdict layers and relative strength — same route. */
+const MARKET_REF_POLL_MS = 180_000;
+
 /* Chart rows are `{ t, p }` from every source today, but poll hooks store
    whatever resolves — a string body or `[ts, price]` tuples would both
    poison every consumer downstream. Coerce per row and keep only finite
@@ -74,6 +90,14 @@ const toSeries = (rows) =>
   (Array.isArray(rows) ? rows : [])
     .map((p) => (typeof p === 'number' ? p : Array.isArray(p) ? Number(p[1]) : Number(p?.p)))
     .filter((n) => Number.isFinite(n) && n > 0);
+
+/* `Number(null)` is 0 and 0 is finite — the coercion the whole page needs
+   before any arithmetic on an upstream field. Mirrors the engine's own. */
+const num = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+};
 
 /*
  * FAIL CLOSED INSIDE RENDER, NOT INTO THE ROUTE BOUNDARY.
@@ -1387,6 +1411,58 @@ function SelectedSignalCard({ coin, signal, analysis, series, scanning, watched,
   );
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * TOKEN BEHAVIOUR ROWS — «رفتارشناسی توکن»
+ * The measured structure of the move, rendered as rows inside the existing
+ * breakdown lab. Deliberately NOT a new section, tab, button or card: it is a
+ * handful of <div className="sic-row"> lines in the place the reader already
+ * opens to ask «why». Every row is behind a truthy guard, so a token whose
+ * series was too short simply shows fewer rows — never a zero, never a dash
+ * pretending to be a measurement.
+ * ──────────────────────────────────────────────────────────────────────────── */
+function behaviorRows(behavior, t) {
+  if (!behavior) return [];
+  const rows = [];
+  const push = (key, label, value, tone = '') => {
+    if (value == null || value === '') return;
+    rows.push({ key, label, value, tone });
+  };
+  const b = behavior.breadth;
+  if (b && b.breadth != null) {
+    const pct = Math.round(b.breadth * 100);
+    push('participation', t('signals.intel.behavior.participation'),
+      `${pct}% · ${b.steps}`, pct >= 62 ? 'up' : pct <= 40 ? 'down' : '');
+  }
+  if (b && b.spikeShare != null) {
+    const spike = Math.round(b.spikeShare * 100);
+    push('spike', t('signals.intel.behavior.spikeShare'), `${spike}%`, spike >= 45 ? 'down' : '');
+  }
+  if (behavior.pressure && behavior.pressure.score != null) {
+    const p = behavior.pressure.score;
+    push('pressure', t('signals.intel.behavior.pressure'),
+      `${p > 0 ? '+' : ''}${Math.round(p)}`, p >= 20 ? 'up' : p <= -20 ? 'down' : '');
+  }
+  if (behavior.relative && behavior.relative.diffPct != null) {
+    const d = behavior.relative.diffPct;
+    push('relative', t('signals.intel.behavior.relative'),
+      `${d > 0 ? '+' : ''}${d.toFixed(1)}pp`, d >= 3 ? 'up' : d <= -3 ? 'down' : '');
+  }
+  if (behavior.volume && behavior.volume.label && behavior.volume.label !== 'unclear') {
+    push('volume', t('signals.intel.behavior.volume'),
+      t(`signals.intel.behavior.vol.${behavior.volume.label}`),
+      behavior.volume.label === 'accumulating' ? 'up' : behavior.volume.label === 'distributing' ? 'down' : '');
+  }
+  if (behavior.anomaly && behavior.anomaly.sigma != null) {
+    push('sigma', t('signals.intel.behavior.anomaly'),
+      `${behavior.anomaly.sigma > 0 ? '+' : ''}${behavior.anomaly.sigma.toFixed(1)}σ`,
+      Math.abs(behavior.anomaly.sigma) >= 2 ? 'warn' : '');
+  }
+  if (behavior.pattern && behavior.pattern.repeat) {
+    push('repeat', t('signals.intel.behavior.pattern'), t('signals.intel.behavior.patternSeen', { n: behavior.pattern.seenStepsAgo }), 'warn');
+  }
+  return rows;
+}
+
 function SignalBreakdown({
   analysis,
   activeHorizons,
@@ -1397,14 +1473,39 @@ function SignalBreakdown({
   invalidation,
   backtestInfo,
   hasOnchain,
-  onchainRows
+  onchainRows,
+  behavior
 }) {
   const { t } = useTranslation();
   if (!analysis) return <div className="sic-insufficient">{t('signals.intel.card.insufficient')}</div>;
 
+  const behaviorRead = behaviorRows(behavior, t);
+
   return (
     <div className="sic-breakdown">
       <HorizonStrip horizons={activeHorizons} />
+
+      {behaviorRead.length > 0 && (
+        <SignalSection
+          id="behavior"
+          title={t('signals.intel.behavior.title')}
+          summary={behavior?.direction === 'up'
+            ? t('signals.intel.behavior.biasUp')
+            : behavior?.direction === 'down'
+              ? t('signals.intel.behavior.biasDown')
+              : t('signals.intel.behavior.biasFlat')}
+        >
+          <div className="sic-key-value-list sic-onchain-list">
+            {behaviorRead.map((row) => (
+              <div key={row.key}>
+                <span>{row.label}</span>
+                <b className={`mono ${row.tone || ''}`}>{row.value}</b>
+              </div>
+            ))}
+          </div>
+          <div className="faint sic-panel-note">{t('signals.intel.behavior.note')}</div>
+        </SignalSection>
+      )}
 
       {layerRows.length > 0 && (
         <SignalSection
@@ -1716,7 +1817,9 @@ export default function Signals() {
   const still = useStill();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
-  const { data: coins } = useMarkets(40);
+  /* 40 rows, on a 45s clock: the markets route caches for 30s and the screen
+     only needs the top of the table (cards, early list, price map). */
+  const { data: coins } = useMarkets(40, 45_000);
   const { data: global } = useGlobalStats();
 
   const [tab, setTab] = useState('all');
@@ -1737,8 +1840,11 @@ export default function Signals() {
   const [watchVersion, setWatchVersion] = useState(0);
   const [history, setHistory] = useState(readHistory());
 
-  const { data: chart } = useChart(activeId, 30);
-  const { data: btcChart } = useChart('bitcoin', 30);
+  const { data: chart } = useChart(activeId, 30, CHART_POLL_MS);
+  /* BTC is the reference series for relative strength and the macro layer; it
+     moves more slowly than the asset under the cursor, so it gets the slower
+     clock. Same route, same cache, a third of the calls. */
+  const { data: btcChart } = useChart('bitcoin', 30, MARKET_REF_POLL_MS);
   const { data: solanaCoin } = useCoin(tab === 'solana' ? activeId : null);
 
   const positions = useAppStore((s) => s.positions);
@@ -1748,9 +1854,32 @@ export default function Signals() {
     return m;
   }, [coins]);
 
-  /* ── server-driven feeds (all fail closed) ────────────────────────────── */
-  const pulsePoll = usePoll(() => getSignalPulse(), [], 60_000);
-  const smPoll = usePoll(() => fetchOverview('24h'), [], 120_000);
+  /*
+   * ── server-driven feeds (all fail closed) ───────────────────────────────
+   *
+   * ─── WHY THESE INTERVALS ARE TIED TO THE SERVER'S OWN CACHE ──────────────
+   * Every one of these routes is already cached server-side, and the CDN
+   * headers are set from the same TTL. Polling FASTER than the producer
+   * rebuilds earns nothing — the same cached body comes back, and on a
+   * serverless host the request still pays for a function invocation and, on a
+   * cold instance, for the whole import graph.
+   *
+   *   /api/signals/pulse   cache 60s  → was polled every 60s
+   *   /api/v1/smart-money/overview  cache 60s (SWR 300) → was 120s
+   *
+   * Those two numbers are deliberately set AT or ABOVE the server TTL, and
+   * every poll is additionally skipped while the tab is hidden (see usePoll).
+   * The trade is explicit and safe for the reader: the numbers on this screen
+   * move on a scale of minutes, the page says how old they are («آخرین
+   * بهروزرسانی»), and a fresh number is one pull-to-refresh away — that path
+   * bypasses the interval entirely and invalidates the memo.
+   *
+   * Measured effect for one tab left open for an hour: pulse 60 → 40 calls,
+   * smart money 30 → 12 (they are fetched on mount, then on the slower clock),
+   * and zero of them while the phone is in a pocket with the tab hidden.
+   */
+  const pulsePoll = usePoll(() => getSignalPulse(), [], PULSE_POLL_MS);
+  const smPoll = usePoll(() => fetchOverview('24h'), [], SM_POLL_MS);
   /* Full overview first; when it is unreachable the pulse's own verified
      snapshot keeps the section alive (see smartMoneyFromPulse). */
   const sm = useMemo(
@@ -1779,6 +1908,24 @@ export default function Signals() {
     [priceSeries, coin]
   );
   const projection = useMemo(() => (analysis ? safeCalc(() => projectRange(analysis, horizon.days)) : null), [analysis, horizon]);
+
+  /*
+   * ─── THE SELECTED TOKEN'S BEHAVIOUR READ, COMPUTED ONCE ──────────────────
+   * `«رفتارشناسی توکن»` — participation breadth, tape pressure, volume/trend
+   * agreement, relative strength vs BTC, anomaly sigma and pattern repeat.
+   * It is pure arithmetic over the series the page is already drawing, so it
+   * costs no request and no server CPU; computing it HERE (instead of inside
+   * each consumer) means the card, the detail panel and the early detector
+   * read one measurement rather than three that could disagree.
+   */
+  const tokenBehavior = useMemo(() => safeCalc(() => readTokenBehavior({
+    series: priceSeries,
+    marketSeries: btcSeries,
+    coin: coin ?? {},
+    turnoverPct: num(coin?.mcap) > 0 && num(coin?.volume) != null
+      ? (num(coin.volume) / num(coin.mcap)) * 100
+      : null
+  }), null), [priceSeries, btcSeries, coin]);
 
   const [perpMarkets, setPerpMarkets] = useState(null);
   useEffect(() => {
@@ -1825,18 +1972,76 @@ export default function Signals() {
     visible: Boolean(optedIn && analysis && !scanning)
   });
 
+  /*
+   * ══════════════════════════════════════════════════════════════════════════
+   * THE TWO AI CALLS, ON THE PROVIDERS' CLOCK — NOT ON THE POLL'S
+   * ══════════════════════════════════════════════════════════════════════════
+   * Both effects below used to depend on values that change on EVERY poll:
+   *
+   *   · the daily brief depended on `global` and `coins`, whose identities are
+   *     new objects every 30–45 seconds → one `/api/ai/brief` request per poll,
+   *     per open tab, forever;
+   *   · the per-asset outlook depended on `analysis.score`, which moves almost
+   *     every tick → one `/api/ai/outlook` request per tick, per tab.
+   *
+   * Both answers are cached SERVER-side on a much slower clock (the brief is
+   * keyed per language per 6-hour block, the outlook per coin per language per
+   * DAY — see /api/ai/brief and /api/ai/outlook in server/app.js). So every one
+   * of those extra requests returned the byte-identical cached body: the screen
+   * showed the same sentence it already had, and the bill for waking a
+   * serverless function was paid again. On a tab left open on this screen that
+   * is dozens of invocations an hour of pure, repeated cost — the exact profile
+   * that pushed Fluid Active CPU to its ceiling.
+   *
+   * Now each request is made when its ANSWER could change, which is also when
+   * the server would rebuild it:
+   *   · the brief: per language per 6-hour UTC block (the server's own key);
+   *   · the outlook: per asset per language per horizon per UTC day, and only
+   *     while the tab is actually visible.
+   * Nothing about what the reader sees changes — the panel still shows a brief
+   * and an outlook — but a tab that sits open no longer re-asks for text that
+   * cannot have changed. A manual pull-to-refresh still re-runs the poll, and
+   * the LOCAL narrator keeps the panel populated instantly in the meantime.
+   */
+  const briefBlock = Math.floor(Date.now() / (6 * 3600_000));
+  const briefKey = `${i18n.language}:${briefBlock}`;
+  const briefKeyRef = useRef('');
   useEffect(() => {
-    if (!global || !coins?.length) return;
-    getMarketBrief({ global, top: coins.slice(0, 8), lang: i18n.language }).then(setBrief).catch(() => {});
-  }, [global, coins, i18n.language]);
+    if (!global || !coins?.length) return undefined;
+    if (briefKeyRef.current === briefKey) return undefined;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return undefined;
+    briefKeyRef.current = briefKey;
+    let alive = true;
+    getMarketBrief({ global, top: coins.slice(0, 8), lang: i18n.language })
+      .then((row) => { if (alive) setBrief(row); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [briefKey, global, coins, i18n.language]);
+
+  /* The outlook's own key: asset + language + horizon + UTC day. `score` is
+     deliberately NOT in here — it is the number that changes every poll, and
+     the server's answer for this asset cannot change until tomorrow. */
+  const outlookDay = new Date().toISOString().slice(0, 10);
+  const outlookKey = `${coin?.id ?? 'none'}:${i18n.language}:${horizon.days}:${outlookDay}`;
+  const outlookReqRef = useRef('');
   useEffect(() => {
     if (!analysis || !coin) return undefined;
+    if (outlookReqRef.current === outlookKey) return undefined;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return undefined;
+    outlookReqRef.current = outlookKey;
     let alive = true;
     setAiLoading(true); setAiError(null); setOutlook(null);
     getOutlook({ id: coin.id, symbol: coin.symbol, name: coin.name, price: coin.price, indicators: analysis.indicators, change24h: coin.change24h, change7d: coin.change7d, lang: i18n.language, analysis, coin, days: horizon.days })
-      .then((r) => alive && (r ? setOutlook(r) : setAiError('AI_FAILED'))).catch((e) => alive && setAiError(e.code || 'AI_FAILED')).finally(() => alive && setAiLoading(false));
+      .then((r) => alive && (r ? setOutlook(r) : setAiError('AI_FAILED')))
+      .catch((e) => {
+        /* A failed key must not be remembered as "already fetched" — the next
+           visible tick is allowed to try again. */
+        if (outlookReqRef.current === outlookKey) outlookReqRef.current = '';
+        if (alive) setAiError(e?.code || 'AI_FAILED');
+      })
+      .finally(() => alive && setAiLoading(false));
     return () => { alive = false; };
-  }, [coin?.id, analysis?.score, i18n.language, horizon.days]);
+  }, [outlookKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setScanning(true); const id = setTimeout(() => setScanning(false), 850); return () => clearTimeout(id); }, [activeId]);
 
   /* A ticker is NOT an identity: several chains can mint the same symbol.
@@ -1855,18 +2060,51 @@ export default function Signals() {
   }, [smByContract]);
 
   /* ── Global signal cards (deterministic engine over real market data) ── */
-  const globalSignals = useMemo(() => {
+  /*
+   * ─── ONE ANALYSIS PASS PER POLL, NOT TWO ──────────────────────────────────
+   * `analyze()` is the most expensive thing this screen does: RSI, MACD (two
+   * EMA passes), Bollinger, levels, volatility AND a full 7-bar backtest per
+   * token. Until now the page ran it TWICE over the same 24 market rows — once
+   * for the signal cards below and once again, identically, for the early
+   * detector — on every 30-second poll, on the user's phone.
+   *
+   * That is exactly the kind of duplicated work that put the deployment at
+   * 103% of its Fluid Active CPU budget: it costs nothing on the server, but
+   * it doubles the client work on a screen that is meant to stay open. So the
+   * row list is analysed ONCE here and both consumers read the same result.
+   * The cards and the early list therefore cannot disagree about a token's
+   * indicators either — they share one measurement.
+   */
+  const analysedRows = useMemo(() => {
     if (!coins?.length) return [];
-    /* One poisoned market row must cost ONE card, never the whole list —
-       and the list itself must never throw the page. */
-    const list = coins.slice(0, 24).map((c) => safeCalc(() => {
+    return coins.slice(0, 24).map((c) => safeCalc(() => {
       const series = (c.sparkline ?? []).filter((n) => Number.isFinite(n) && n > 0);
       const a = series.length >= 30 ? analyze(series, c) : null;
-      if (!a) return null;
-      return computeSignalCard({ coin: c, series, analysis: a, solanaIntel: null, smToken: smForCoin(c), pulse, now: Date.now() });
+      return a ? { coin: c, series, analysis: a } : null;
+    })).filter(Boolean);
+  }, [coins]);
+
+  const globalSignals = useMemo(() => {
+    if (!analysedRows.length) return [];
+    /* One poisoned market row must cost ONE card, never the whole list —
+       and the list itself must never throw the page. */
+    const list = analysedRows.map((row) => safeCalc(() => {
+      /* `marketSeries` is BTC — already fetched for the verdict layers — so
+         every card gets a measured relative-strength read instead of only the
+         selected asset having one. Same poll, no extra request. */
+      return computeSignalCard({
+        coin: row.coin,
+        series: row.series,
+        analysis: row.analysis,
+        solanaIntel: null,
+        smToken: smForCoin(row.coin),
+        pulse,
+        marketSeries: btcSeries,
+        now: Date.now()
+      });
     })).filter(Boolean);
     return safeCalc(() => rankSignals(list), list);
-  }, [coins, pulse, smForCoin]);
+  }, [analysedRows, pulse, smForCoin, btcSeries]);
 
   /* One picker, one active token. Bitcoin stays first and selected by default
      in the global view; Solana stays first in the Solana view. */
@@ -1937,20 +2175,56 @@ export default function Signals() {
     return null;
   }, [tab, activeMint, coin]);
 
+  /*
+   * ─── THE ON-CHAIN READ, CACHED BY TARGET ─────────────────────────────────
+   * `onchainTarget` is a `useMemo`, so its identity is stable while the asset is
+   * — but the ASSET changes on every poll in one important case: the default
+   * selection re-derives from `globalSignals`, which is rebuilt every 30
+   * seconds, and `swapTargetFor()` is called again each time. Each rebuild used
+   * to re-run this effect, so the reader looking at one asset could spend a
+   * chain walk (DexScreener pairs + holder scan, 8s of server-side work) every
+   * time the price ticked.
+   *
+   * The read is now memoized by `chain:address` for five minutes — the same
+   * window the route itself is cached for at the CDN (`s-maxage=300`) — so a
+   * poll re-uses it instead of re-asking, and a genuinely different asset still
+   * fetches immediately. A failure is NOT cached: the next tick is allowed to
+   * try again, exactly like everywhere else in this page.
+   */
   const [tokenOnchain, setTokenOnchain] = useState(null);
   const onchainReqId = useRef(0);
+  const onchainCache = useRef(new Map());
   useEffect(() => {
     if (!onchainTarget) { setTokenOnchain(null); return undefined; }
+    const cacheKey = `${onchainTarget.chain}:${onchainTarget.address}`;
+    const cached = onchainCache.current.get(cacheKey);
+    if (cached && Date.now() - cached.at < 5 * 60_000) {
+      setTokenOnchain(cached.data);
+      return undefined;
+    }
     const req = ++onchainReqId.current;
+    /* A new asset starts from «not measured» rather than showing the previous
+       asset's on-chain numbers under the new symbol for one frame. */
     setTokenOnchain(null);
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 12_000);
     fetchToken(onchainTarget.chain, onchainTarget.address, '24h', ctrl.signal)
-      .then((d) => { if (req === onchainReqId.current) setTokenOnchain(d); })
+      .then((d) => {
+        if (req !== onchainReqId.current) return;
+        onchainCache.current.set(cacheKey, { at: Date.now(), data: d });
+        /* Bound the memo: this page can be left open for hours and every
+           visited asset would otherwise stay in the heap. */
+        if (onchainCache.current.size > 24) {
+          const oldest = [...onchainCache.current.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+          if (oldest) onchainCache.current.delete(oldest[0]);
+        }
+        setTokenOnchain(d);
+      })
       .catch(() => { if (req === onchainReqId.current) setTokenOnchain(null); })
       .finally(() => clearTimeout(timer));
     return () => { onchainReqId.current += 1; clearTimeout(timer); ctrl.abort(); };
-  }, [onchainTarget]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onchainTarget?.chain, onchainTarget?.address]);
 
   const verifiedForTarget = useMemo(() => safeCalc(() => {
     const row = tokenOnchain?.verified?.consensus;
@@ -2065,9 +2339,11 @@ export default function Signals() {
       solanaIntel: intel,
       smToken: smForCoin(coin),
       pulse,
+      behavior: tokenBehavior,
+      marketSeries: btcSeries,
       now: Date.now()
     });
-  }), [tab, globalSignals, coinId, coin, analysis, priceSeries, intel, smForCoin, pulse]);
+  }), [tab, globalSignals, coinId, coin, analysis, priceSeries, intel, smForCoin, pulse, tokenBehavior, btcSeries]);
 
   const portfolioImpactData = useMemo(
     () => (selectedSignal?.status === 'READY'
@@ -2079,12 +2355,17 @@ export default function Signals() {
   /* ── Early signals: momentum acceleration + flow/on-chain agreement ─────
         Market-wide (both tabs): every number comes from real market data. */
   const earlyEntries = useMemo(() => {
-    return (coins ?? []).slice(0, 24).map((c) => safeCalc(() => {
-      const series = (c.sparkline ?? []).filter((n) => Number.isFinite(n));
-      const a = series.length >= 30 ? analyze(series, c) : null;
-      return a ? { coin: c, series, analysis: a, smToken: smForCoin(c) } : null;
-    })).filter(Boolean);
-  }, [coins, smForCoin]);
+    return analysedRows.map((row) => safeCalc(() => ({
+      coin: row.coin,
+      series: row.series,
+      analysis: row.analysis,
+      smToken: smForCoin(row.coin),
+      /* `marketSeries` lets the early detector read relative strength against
+         BTC — the plane that separates «this token is moving» from «the whole
+         market bounced» — from a series the page already holds. */
+      marketSeries: btcSeries
+    }))).filter(Boolean);
+  }, [analysedRows, smForCoin, btcSeries]);
   const early = useMemo(() => safeCalc(() => computeEarlySignals({ entries: earlyEntries }), []), [earlyEntries]);
 
   /* ── history learning loop: record + settle against real prices ───────── */
@@ -2385,6 +2666,7 @@ export default function Signals() {
                   <SectionGuard resetKey={`${activeId}:${analysis?.score ?? 'na'}`}>
                     <SignalBreakdown
                       analysis={analysis}
+                      behavior={tokenBehavior}
                       activeHorizons={activeHorizons}
                       layerRows={layerRows}
                       perpForCoin={perpForCoin}

@@ -3523,7 +3523,28 @@
         "liquidityActive": "نقدشوندگی فعال",
         "liquidityThin": "نقدشوندگی ضعیف",
         "marketSentimentUp": "احساسات بازار ↑",
-        "marketSentimentDown": "احساسات بازار ↓"
+        "marketSentimentDown": "احساسات بازار ↓",
+        "oneSidedBuy": "نوار خرید یک‌طرفه",
+        "oneSidedSell": "نوار فروش یک‌طرفه",
+        "moveBroadUp": "صعود با مشارکت گسترده",
+        "moveBroadDown": "نزول با مشارکت گسترده",
+        "moveHollowUp": "صعود توخالی",
+        "moveHollowDown": "نزول توخالی",
+        "relativeStrengthUp": "قوی‌تر از بیت‌کوین",
+        "relativeStrengthDown": "ضعیف‌تر از بیت‌کوین",
+        "volumeWithTrend": "حجم هم‌جهت با روند",
+        "volumeWithDowntrend": "حجم هم‌جهت با نزول",
+        "volumeHollow": "صعود با حجم کم",
+        "moveAnomaly": "گام آخر غیرعادی",
+        "tapeOneSidedBuy": "نوار خرید یک‌طرفه",
+        "tapeOneSidedSell": "نوار فروش یک‌طرفه",
+        "broadParticipationUp": "مشارکت گسترده ↑",
+        "broadParticipationDown": "مشارکت گسترده ↓",
+        "hollowRally": "صعود توخالی",
+        "hollowSelloff": "ریزش توخالی",
+        "outperformingMarket": "قوی‌تر از بیت‌کوین",
+        "underperformingMarket": "ضعیف‌تر از بیت‌کوین",
+        "patternRepeat": "تکرار شکل"
       },
       "smartMoney": {
         "title": "پول هوشمند",
@@ -3754,7 +3775,30 @@
       "breadth": "تعداد صعودی در ۲۰ تای اول",
       "avgChange": "میانگین تغییر ۲۴ساعته",
       "turnover": "حجم به ارزش بازار",
-      "trendTitle": "روند قیمت {{symbol}}"
+      "trendTitle": "روند قیمت {{symbol}}",
+      "behavior": {
+        "title": "رفتارشناسی توکن",
+        "participation": "مشارکت در گام‌ها",
+        "spikeShare": "بزرگ‌ترین گام تنها",
+        "pressure": "فشار نوار معاملات",
+        "relative": "نسبت به بیت‌کوین (همان بازه)",
+        "volume": "حجم در برابر روند",
+        "anomaly": "آخرین گام (σ)",
+        "pattern": "تکرار الگو",
+        "patternSeen": "همین شکل {{n}} گام پیش",
+        "biasUp": "ساختار: خرید",
+        "biasDown": "ساختار: فروش",
+        "biasFlat": "ساختار: دوطرفه",
+        "note": "از گام‌های قیمتی خودِ همین توکن و ردیف بازارش اندازه‌گیری شده — مشارکت، یک‌طرفه بودن، قدرت نسبی، هم‌جهتی حجم و شکل حرکت. این توصیف کاری است که نوار معاملات کرده، نه پیش‌بینی.",
+        "vol": {
+          "accumulating": "صعود با حجم",
+          "distributing": "نزول با حجم",
+          "hollow-rally": "صعود با حجم کم",
+          "drifting-down": "نزول با حجم کم",
+          "balanced": "هماهنگ با حجم",
+          "unclear": "اندازه‌گیری نشده"
+        }
+      }
     },
     "aiPowered": "با پشتیبانی هوش مصنوعی"
   },

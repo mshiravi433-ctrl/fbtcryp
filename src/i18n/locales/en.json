@@ -3523,7 +3523,28 @@
         "liquidityActive": "Liquidity active",
         "liquidityThin": "Liquidity thin",
         "marketSentimentUp": "Sentiment bullish",
-        "marketSentimentDown": "Sentiment bearish"
+        "marketSentimentDown": "Sentiment bearish",
+        "oneSidedBuy": "one-sided buy tape",
+        "oneSidedSell": "one-sided sell tape",
+        "moveBroadUp": "broad up-move",
+        "moveBroadDown": "broad down-move",
+        "moveHollowUp": "hollow up-move",
+        "moveHollowDown": "hollow down-move",
+        "relativeStrengthUp": "outperforming BTC",
+        "relativeStrengthDown": "underperforming BTC",
+        "volumeWithTrend": "volume with trend",
+        "volumeWithDowntrend": "volume with downtrend",
+        "volumeHollow": "thin-volume rally",
+        "moveAnomaly": "unusual last step",
+        "tapeOneSidedBuy": "one-sided buy tape",
+        "tapeOneSidedSell": "one-sided sell tape",
+        "broadParticipationUp": "broad participation ↑",
+        "broadParticipationDown": "broad participation ↓",
+        "hollowRally": "hollow rally",
+        "hollowSelloff": "hollow sell-off",
+        "outperformingMarket": "outperforming BTC",
+        "underperformingMarket": "underperforming BTC",
+        "patternRepeat": "shape repeated"
       },
       "smartMoney": {
         "title": "SMART MONEY",
@@ -3754,7 +3775,30 @@
       "breadth": "Top-20 up today",
       "avgChange": "Avg 24h move",
       "turnover": "Volume / mcap",
-      "trendTitle": "{{symbol}} price trend"
+      "trendTitle": "{{symbol}} price trend",
+      "behavior": {
+        "title": "Token behaviour",
+        "participation": "Step participation",
+        "spikeShare": "Largest single step",
+        "pressure": "Tape pressure",
+        "relative": "vs BTC (same window)",
+        "volume": "Volume vs trend",
+        "anomaly": "Latest step (σ)",
+        "pattern": "Pattern repeat",
+        "patternSeen": "same shape {{n}} steps ago",
+        "biasUp": "structure: buying",
+        "biasDown": "structure: selling",
+        "biasFlat": "structure: mixed",
+        "note": "Measured from this token’s own price steps and its market row — participation, one-sidedness, relative strength, volume agreement and shape. It describes what the tape did; it is not a forecast.",
+        "vol": {
+          "accumulating": "rising with volume",
+          "distributing": "falling with volume",
+          "hollow-rally": "rising, thin volume",
+          "drifting-down": "falling, thin volume",
+          "balanced": "in line with volume",
+          "unclear": "unmeasured"
+        }
+      }
     },
     "aiPowered": "Powered by AI"
   },

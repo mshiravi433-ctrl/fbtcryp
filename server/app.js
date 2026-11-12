@@ -4905,8 +4905,37 @@ const aiTtlFor = (value) => (value?.degraded ? AI_DEGRADED_TTL : AI_TTL);
 
 app.get('/api/ai/status', (_req, res) => {
   const fleet = getFleetSummary();
+  /*
+   * ─── ONE CACHEABLE, TRUTHFUL ANSWER ABOUT WHETHER AI CAN ANSWER ───────────
+   * `offerings` is the machine-readable list of what this deployment can
+   * actually do, so a client can STOP ASKING for what it cannot: when no key is
+   * configured, `/api/ai/brief` and `/api/ai/outlook` answer 503 on every
+   * request — and each of those requests still pays for a serverless wake-up
+   * and a function invocation. A screen that knows the answer in advance does
+   * not spend it, the client's local narrator (lib/localOutlook.js) takes over
+   * instantly instead of showing a spinner that ends in «unavailable», and the
+   * day the key IS configured this payload changes (it is only cached for a
+   * minute) so the real path resumes by itself.
+   *
+   * `cache-control` is the fix here, not another field: this route had none, so
+   * Vercel had to invoke a function for every call. A minute of CDN cache keeps
+   * the answer correct (key changes propagate in under a minute) while making a
+   * fleet-wide status read essentially free.
+   */
+  const configured = aiConfigured();
+  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
   return res.json({
-    enabled: aiConfigured(),
+    enabled: configured,
+    offerings: {
+      /* What the client may call. A false value means «do not call, answer
+         locally» — it is a routing hint derived from THIS server's keys, never
+         a claim about the quality of the local fallback. */
+      brief: configured,
+      outlook: configured,
+      why: true,
+      news: newsConfigured(),
+      persistentCache: blobConfigured()
+    },
     news: newsConfigured(),
     persistentCache: blobConfigured(),
     /*

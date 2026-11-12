@@ -25,6 +25,7 @@
  */
 
 import { verifiedSignals } from './smartMoneyEvidence.js';
+import { readTokenBehavior } from './tokenBehavior.js';
 
 export const CLASS = Object.freeze({
   STRONG_BUY: 'STRONG_BUY',
@@ -239,11 +240,13 @@ export function buildEvidence({
   analysis = null,
   solanaIntel = null,
   smToken = null,
-  pulse = null
+  pulse = null,
+  behavior = null,
+  marketSeries = []
 } = {}) {
   const ev = [];
-  const push = (key, direction, pctVal = null, source = 'market', reason = key) => {
-    ev.push({ key, direction, pct: pctVal != null ? Math.round(pctVal * 100) / 100 : null, source, reason });
+  const push = (key, direction, pctVal = null, source = 'market', reason = key, weight = 1) => {
+    ev.push({ key, direction, pct: pctVal != null ? Math.round(pctVal * 100) / 100 : null, source, reason, weight });
   };
 
   const change24h = num(coin.change24h);
@@ -289,14 +292,61 @@ export function buildEvidence({
   if (pulse?.sentiment?.label === 'bullish') push('marketSentimentUp', 0.5, null, 'sentiment', 'marketSentimentUp');
   else if (pulse?.sentiment?.label === 'bearish') push('marketSentimentDown', -0.5, null, 'sentiment', 'marketSentimentDown');
 
+  /* ── G4 · BEHAVIOUR: how the token itself traded, not where it sits ──────
+     A separate plane from the indicators (which are all transforms of the
+     same closes) and from the market rows (which only say how far it moved).
+     Each finding enters with the weight of what was actually measured:
+     a one-sided tape is worth more than a coarse volume band, and a shape
+     repeat is worth least because a repeated shape proves nothing by itself.
+     Anything the read could not measure is simply absent — never a neutral 0
+     standing in for a missing fact. */
+  const beh = behavior ?? (Array.isArray(marketSeries) ? readTokenBehavior({ coin, series: marketSeries }) : null);
+  if (beh) {
+    if (beh.pressure && Math.abs(beh.pressure.score) >= 55) {
+      push(beh.pressure.score > 0 ? 'oneSidedBuy' : 'oneSidedSell', beh.pressure.score > 0 ? 1 : -1,
+        Math.abs(beh.pressure.score), 'behavior', beh.pressure.score > 0 ? 'tapeOneSidedBuy' : 'tapeOneSidedSell', 1.3);
+    }
+    /* Participation: a move carried by most steps is worth more than the same
+       percentage delivered by one spike — and a move that most steps FOUGHT
+       is a warning, so it enters against its own direction. */
+    if (beh.breadth && beh.breadth.direction !== 'flat' && beh.breadth.breadth != null) {
+      const strong = beh.breadth.breadth >= 0.62 && (beh.breadth.spikeShare ?? 1) <= 0.28;
+      const hollow = beh.breadth.breadth <= 0.4 || (beh.breadth.spikeShare ?? 0) >= 0.45;
+      const dir = beh.breadth.direction === 'up' ? 1 : -1;
+      if (strong) push(beh.breadth.direction === 'up' ? 'moveBroadUp' : 'moveBroadDown', dir, Math.abs(beh.breadth.movePct), 'behavior', beh.breadth.direction === 'up' ? 'broadParticipationUp' : 'broadParticipationDown', 1.1);
+      else if (hollow) push(beh.breadth.direction === 'up' ? 'moveHollowUp' : 'moveHollowDown', -dir, Math.abs(beh.breadth.movePct), 'behavior', beh.breadth.direction === 'up' ? 'hollowRally' : 'hollowSelloff', 1.1);
+    }
+    if (beh.relative && beh.relative.label !== 'inline') {
+      push(beh.relative.label === 'outperforming' ? 'relativeStrengthUp' : 'relativeStrengthDown',
+        beh.relative.label === 'outperforming' ? 1 : -1, Math.abs(beh.relative.diffPct), 'behavior',
+        beh.relative.label === 'outperforming' ? 'outperformingMarket' : 'underperformingMarket', 1.2);
+    }
+    if (beh.volume && beh.volume.label === 'accumulating') push('volumeAgreesUp', 1, beh.volume.turnoverPct, 'behavior', 'volumeWithTrend', 1);
+    else if (beh.volume && beh.volume.label === 'distributing') push('volumeAgreesDown', -1, beh.volume.turnoverPct, 'behavior', 'volumeWithDowntrend', 1);
+    else if (beh.volume && beh.volume.label === 'hollow-rally') push('volumeHollow', -1, beh.volume.turnoverPct, 'behavior', 'hollowRally', 0.8);
+    if (beh.pattern?.repeat) push('patternRepeat', 0, null, 'behavior', 'patternRepeat', 0.4);
+  }
+
   return ev;
 }
 
+/**
+ * Directional balance of the evidence, in −100…+100.
+ *
+ * Each item counts as `direction × weight`; the divisor is the sum of the
+ * weights that actually pointed somewhere, so a single one-sided-tape finding
+ * (weight 1.3) is not diluted by four weak neutral reads, and adding evidence
+ * of the OPPOSITE direction genuinely pulls the score back toward zero instead
+ * of merely failing to help.
+ */
 function evidenceScore(ev) {
-  const score = (ev || []).reduce((s, e) => s + (num(e.direction) || 0), 0);
-  const count = (ev || []).filter((e) => num(e.direction) !== 0).length;
-  const max = Math.max(count, 1) * 1.5;
-  return clampf((score / max) * 100, -100, 100);
+  const rows = (ev || []).filter((e) => num(e.direction) !== 0);
+  if (!rows.length) return 0;
+  const weighted = rows.reduce((s, e) => s + (num(e.direction) || 0) * (num(e.weight) ?? 1), 0);
+  const max = rows.reduce((s, e) => s + Math.abs(num(e.weight) ?? 1), 0) || 1;
+  /* Same calibration as before weights existed: unanimous evidence lands at
+     66.7, not 100, so the class thresholds (14 / 32) keep their meaning. */
+  return clampf((weighted / (max * 1.5)) * 100, -100, 100);
 }
 
 /** Weighted confidence from the seven measured factors. */
@@ -348,6 +398,8 @@ export function computeSignalCard({
   smToken = null,
   pulse = null,
   aiConsensus = null,
+  behavior = null,
+  marketSeries = [],
   now = Date.now()
 } = {}) {
   if (!coin || !num(coin.price) || !analysis || (series ?? []).length < 30) {
@@ -356,7 +408,11 @@ export function computeSignalCard({
 
   const horizonRisks = horizons || computeHorizonRisks({ series, analysis });
   const risk7 = horizonRisks.find((h) => h.days === 7) || horizonRisks[1];
-  const evidence = buildEvidence({ coin, analysis, solanaIntel, smToken, pulse });
+  /* The behaviour read is optional: when the caller already computed it for
+     the screen (the page does, once per poll) it is reused instead of being
+     recomputed for every card. Passed-through null means "not measured". */
+  const beh = behavior ?? readTokenBehavior({ series, marketSeries, coin });
+  const evidence = buildEvidence({ coin, analysis, solanaIntel, smToken, pulse, behavior: beh });
   const directional = evidence.filter((e) => num(e.direction) !== 0);
   if (directional.length < MIN_EVIDENCE) {
     return { status: 'INSUFFICIENT_DATA', coin, at: now, confidence: null, classification: null, evidence, horizonRisks };
@@ -426,7 +482,15 @@ export function computeSignalCard({
     stop = coin.price * (1 - (dir * stopPct) / 100);
   }
 
-  const reasons = [...new Set(evidence.filter((e) => num(e.direction) !== 0).map((e) => e.reason))].slice(0, 5);
+  /* Reasons lead with BEHAVIOUR when behaviour is the loudest measured thing:
+     «why did this card say this» should answer with what the tape did, not
+     only with the indicator it happened to list first. Measured items only —
+     the list can be shorter than five, and is never padded. */
+  const ordered = [...evidence]
+    .filter((e) => num(e.direction) !== 0)
+    .sort((a, b) => (Math.abs(num(b.weight) ?? 1) * Math.abs(num(b.direction) ?? 0))
+      - (Math.abs(num(a.weight) ?? 1) * Math.abs(num(a.direction) ?? 0)));
+  const reasons = [...new Set(ordered.map((e) => e.reason))].slice(0, 5);
 
   return {
     status: 'READY',
@@ -457,6 +521,9 @@ export function computeSignalCard({
     stopPct: stopPct != null ? Math.round(stopPct * 100) / 100 : null,
     reasons,
     evidence,
+    /* The measured behaviour read, so the detail panel can show WHY the tape
+       was read the way it was — every field nullable, nothing synthesised. */
+    behavior: beh,
     aiConsensus: aiConsensus ?? null
   };
 }
@@ -565,6 +632,48 @@ export function computeEarlySignals({ entries = [], now = Date.now() } = {}) {
     if (c7 != null && c7 >= 6) add('trend7dUp', 0.6, 'market');
     else if (c7 != null && c7 <= -6) add('trend7dDown', -0.6, 'market');
 
+    /* ── G4 · behaviour: HOW the token traded (src/lib/tokenBehavior.js) ───
+       This is the plane that makes an EARLY signal possible at all. The three
+       planes above all need the move to be big enough to register; behaviour
+       reads the structure underneath it, so a token can qualify while its
+       percentage move is still small:
+         · a one-sided tape and a broad, non-spiky move are what a real bid
+           looks like before the candle;
+         · relative strength vs BTC is the difference between «this token is
+           moving» and «the whole market bounced»;
+         · a hollow rally (price up, volume thin) and a one-spike move are
+           exactly the early signals a desk wants to avoid, and they carry
+           negative weight instead.
+       Only measured parts contribute; a token whose series is too short for
+       the read simply has no G4 flags and cannot qualify on this plane. */
+    const beh = e.behavior ?? readTokenBehavior({
+      series: prices,
+      marketSeries: e.marketSeries ?? [],
+      coin: e.coin,
+      turnoverPct: num(e.coin.mcap) > 0 ? (num(e.coin.volume) / num(e.coin.mcap)) * 100 : null
+    });
+    if (beh) {
+      if (beh.pressure && Math.abs(beh.pressure.score) >= 55) {
+        add(beh.pressure.score > 0 ? 'oneSidedBuy' : 'oneSidedSell', beh.pressure.score > 0 ? 1.1 : -1.1, 'behavior');
+      }
+      if (beh.breadth && beh.breadth.direction !== 'flat' && beh.breadth.breadth != null) {
+        const spike = beh.breadth.spikeShare ?? 0;
+        if (beh.breadth.breadth >= 0.62 && spike <= 0.28) {
+          add(beh.breadth.direction === 'up' ? 'moveBroadUp' : 'moveBroadDown', beh.breadth.direction === 'up' ? 0.9 : -0.9, 'behavior');
+        } else if (beh.breadth.breadth <= 0.4 || spike >= 0.45) {
+          add(beh.breadth.direction === 'up' ? 'moveHollowUp' : 'moveHollowDown', beh.breadth.direction === 'up' ? -0.9 : 0.9, 'behavior');
+        }
+      }
+      if (beh.relative && beh.relative.label !== 'inline' && Math.abs(beh.relative.diffPct) >= 2.5) {
+        add(beh.relative.label === 'outperforming' ? 'relativeStrengthUp' : 'relativeStrengthDown',
+          beh.relative.label === 'outperforming' ? 0.9 : -0.9, 'behavior');
+      }
+      if (beh.volume && beh.volume.label === 'accumulating') add('volumeWithTrend', 0.7, 'behavior');
+      else if (beh.volume && beh.volume.label === 'distributing') add('volumeWithDowntrend', -0.7, 'behavior');
+      else if (beh.volume && beh.volume.label === 'hollow-rally') add('volumeHollow', -0.7, 'behavior');
+      if (beh.anomaly?.unusual) add('moveAnomaly', beh.anomaly.sigma > 0 ? 0.6 : -0.6, 'behavior');
+    }
+
     /* Independence gate: ≥2 flags AND ≥2 different observation planes. */
     if (flags.length < 2 || groups.size < 2) continue;
     out.push({
@@ -572,9 +681,26 @@ export function computeEarlySignals({ entries = [], now = Date.now() } = {}) {
       symbol: e.coin.symbol,
       at: now,
       direction: strength > 0.3 ? 'earlyBullish' : strength < -0.3 ? 'earlyBearish' : 'earlyWatch',
-      confidence: Math.round(clampf(42 + Math.abs(strength) * 13 + flags.length * 5 + (groups.size > 2 ? 4 : 0), 25, 92)),
+      /* Confidence rises with the NUMBER of independent planes that agree,
+         not merely with how loud one of them is — two loud readings from the
+         same plane are still one observation. */
+      confidence: Math.round(clampf(42 + Math.abs(strength) * 13 + flags.length * 5 + (groups.size > 2 ? 4 : 0) + (groups.size >= 3 ? 4 : 0), 25, 92)),
       flags,
       momentumAccelPct: Math.round(accel * 100) / 100,
+      /* The behaviour read rides along so the section can show the STRUCTURE
+         behind an early flag (participation, relative strength) without a
+         second computation, and so the numbers it prints are the same ones
+         that produced the flag. */
+      behavior: beh
+        ? {
+          score: beh.score,
+          breadth: beh.breadth?.breadth ?? null,
+          spikeShare: beh.breadth?.spikeShare ?? null,
+          pressure: beh.pressure?.score ?? null,
+          relativeDiffPct: beh.relative?.diffPct ?? null,
+          volumeLabel: beh.volume?.label ?? null
+        }
+        : null,
       last,
       strength: Math.round(strength * 10) / 10
     });
