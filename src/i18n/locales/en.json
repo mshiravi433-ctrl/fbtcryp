@@ -13891,7 +13891,14 @@
     "freshReadCapital": "Verified capital",
     "freshReadDominant": "One actor holds {{pct}}% of it",
     "freshReadBroad": "Capital is spread across actors",
-    "freshReadUnverified": "{{n}} rows dropped for having no verifiable counter"
+    "freshReadUnverified": "{{n}} rows dropped for having no verifiable counter",
+    "solWalletsTitle": "Solana whale wallets",
+    "solWalletsMoved": "{{sol}} SOL moved",
+    "solWalletsNet": "net in this sample",
+    "solWalletsMovements": "{{n}} movements",
+    "solWalletsConcentrated": "{{pct}}% of the sample is one wallet",
+    "solWalletsSample": "Only wallets in this sampled block (slot {{n}}). The rank means “largest in this window”, not “largest on Solana”.",
+    "solWalletsEmpty": "No wallet in this sample crossed the threshold."
   },
   "crossChain": {
     "youReceive": "You receive",

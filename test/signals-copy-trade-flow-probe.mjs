@@ -30,7 +30,7 @@
 import { readFileSync } from 'node:fs';
 import { readSmartMoney, readForConsensus } from '../src/lib/smartMoneyRead.js';
 import { planCopyTrade, planLabel, MIN_MEASURED_GATES } from '../src/lib/copyTrade.js';
-import { readWhalesOnToken, readSolanaWhales, readWhaleEngine, venueOf } from '../src/lib/whaleEngine.js';
+import { readWhalesOnToken, readSolanaWhales, readSolanaWallets, readWhaleEngine, venueOf } from '../src/lib/whaleEngine.js';
 import { readFreshWallets } from '../src/lib/freshWallets.js';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
@@ -471,6 +471,79 @@ function run() {
       && getPath(fa, 'sm.solWhaleLeanConfident').includes('{{n}}')
       && getPath(fa, 'signals.copyTrade.blockedBy').includes('{{gates}}')
       && getPath(en, 'sm.freshReadDominant').includes('{{pct}}'));
+  }
+
+  /* ── 9b · the SOLANA WALLET read: gross vs net, venues, breadth ─────────── */
+  {
+    const now = NOW;
+    const watch = {
+      available: true,
+      floorSol: 500,
+      solPrice: 150,
+      coverage: { sources: ['rpc-block-sample'], lastSample: { slot: 321, at: '2026-11-12T10:00:00Z' }, sampleReused: true },
+      transfers: [
+        /* A WHALE round-tripping with Binance: 40 000 out, 39 000 back. */
+        { id: 'a1', sol: 40_000, from: 'WHALE1', to: 'CEX', toLabel: 'Binance', at: now - 60_000, signature: 's1' },
+        { id: 'a2', sol: 39_000, from: 'CEX', fromLabel: 'Binance', to: 'WHALE1', at: now - 50_000, signature: 's2' },
+        /* A wallet depositing to Kraken twice — a real sell lean. */
+        { id: 'b1', sol: 12_000, from: 'WHALE2', to: 'KRAK', toLabel: 'Kraken', at: now - 40_000, signature: 's3' },
+        { id: 'b2', sol: 9_000, from: 'WHALE2', to: 'KRAK', toLabel: 'Kraken', at: now - 30_000, signature: 's4' },
+        /* One withdrawal from Kraken, and a plain wallet-to-wallet hop. */
+        { id: 'c1', sol: 8_000, from: 'KRAK', fromLabel: 'Kraken', to: 'WHALE3', at: now - 20_000, signature: 's5' },
+        { id: 'd1', sol: 700, from: 'WHALE4', to: 'WHALE5', at: now - 10_000, signature: 's6' }
+      ]
+    };
+    const sol = readSolanaWallets({ watch, now });
+
+    /* Six movements, five non-venue wallets: WHALE1 twice, WHALE2 twice, then
+       WHALE3, WHALE4 and WHALE5 once each. */
+    t('the Solana wallet read builds one row per wallet from the sample', sol.count === 5);
+    t('the venue wallets are the counterparty, never a ranked whale',
+      !sol.wallets.some((x) => x.address === 'CEX' || x.address === 'KRAK'));
+    t('a wallet carries BOTH its gross and its observed net',
+      sol.wallets[0].movedSol === 79_000 && sol.wallets[0].netSol === -1_000);
+
+    /* The central honesty rule: a round trip that nets ~0 is not a lean, even
+       though the wallet moved the most money in the sample. */
+    const roundTripper = sol.wallets.find((x) => x.address === 'WHALE1');
+    t('a round trip through a venue produces NO lean', roundTripper.lean === null);
+    t('and it is not marked confident', roundTripper.confident === false);
+
+    /* The lean belongs to the wallet on the far side of the venue. */
+    const depositor = sol.wallets.find((x) => x.address === 'WHALE2');
+    t('depositing into a named venue leans DISTRIBUTION on the depositor',
+      depositor.lean === 'DISTRIBUTION' && depositor.confident === true);
+    t('the venue credit lands on the depositor, not on the exchange',
+      depositor.intoVenuesSol === 21_000 && depositor.outOfVenuesSol === 0);
+    const withdrawer = sol.wallets.find((x) => x.address === 'WHALE3');
+    t('a withdrawal FROM a venue leans ACCUMULATION on the receiver',
+      withdrawer.lean === 'ACCUMULATION');
+    t('one labelled movement is not enough to be confident', withdrawer.confident === false);
+
+    /* Wallet-to-wallet movement is flow, not intent. */
+    const hopper = sol.wallets.find((x) => x.address === 'WHALE4');
+    t('an unlabelled wallet-to-wallet movement has no direction', hopper.lean === null);
+
+    t('breadth is reported as a count next to the size',
+      sol.accumulating === 1 && sol.distributing === 1);
+    t('the read states how much of the sample one wallet is',
+      sol.topSharePct === 72.2);
+    t('the sample provenance travels with the list',
+      sol.sampled?.slot === 321 && sol.sampled.sources.includes('rpc-block-sample'));
+
+    /* Same payload, same rules: a quiet feed is quiet, an outage is an outage. */
+    t('an unavailable feed is not reported as "no whales"',
+      readSolanaWallets({ watch: { available: false, reason: 'UPSTREAM_UNAVAILABLE', transfers: [] } })
+        .reason === 'UPSTREAM_UNAVAILABLE');
+    t('no payload at all yields null, not an empty list that reads as measured',
+      readSolanaWallets({ watch: null }) === null);
+    t('rows below the floor are ignored rather than rounded up',
+      readSolanaWallets({ watch: { ...watch, floorSol: 50_000 } }).count === 0);
+
+    /* And the aggregation is PURE: it costs no request, timer or storage. */
+    const src = strip(read('../src/lib/whaleEngine.js'));
+    t('the wallet read costs no request, timer or storage',
+      !/\bfetch\(/.test(src) && !/setInterval|setTimeout/.test(src) && !/localStorage/.test(src));
   }
 
   /* ── 10 · the evidence scale: 0–100 on the wire, 0–100 on the screen ────── */

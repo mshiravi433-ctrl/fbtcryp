@@ -2172,6 +2172,191 @@
   color: var(--sm-ink-dim);
 }
 
+/* ─── Solana whale WALLETS ──────────────────────────────────────────────────
+   The second reading of the same sampled payload: where the SOL went is the
+   card above, WHICH wallet moved it is this list. Same plate, same tokens, and
+   no blur / filter / animation — these rows sit below an already-scrolling tab
+   and the compositor budget belongs to the hero, not to a list. */
+.smx-solwal {
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--sm-line);
+  border-radius: 14px;
+  background: var(--sm-surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.smx-solwal-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.smx-solwal-head b { font-weight: 850; }
+
+.smx-solwal-ico {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  color: #7fd8ff;
+  background: rgba(56, 225, 255, 0.1);
+  border: 1px solid rgba(56, 225, 255, 0.22);
+}
+
+.smx-solwal-meta {
+  margin-inline-start: auto;
+  font-size: 9.5px;
+  font-weight: 800;
+  color: var(--sm-ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.smx-solwal-head .smx-chip { margin: 0; }
+
+.smx-solwal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.smx-solwal-row { margin: 0; }
+
+/* One row, one hit target. The rank is decorative, so it stays outside the
+   button: a nested button is invalid HTML and swallows a tap on Android. */
+.smx-solwal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.smx-solwal-rank {
+  flex: 0 0 auto;
+  width: 16px;
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--sm-ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.smx-solwal-hit {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.smx-solwal-hit:hover { background: var(--sm-surface-3); }
+
+.smx-solwal-hit:focus-visible {
+  /* `--sm-mint` is the ring every other hit target on this desk uses; there is
+     no `--sm-accent` token, and a var() that resolves to nothing is an
+     invisible focus ring. */
+  outline: 2px solid var(--sm-mint);
+  outline-offset: 2px;
+}
+
+.smx-solwal-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.smx-solwal-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.smx-solwal-top > .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smx-solwal-lean {
+  flex: 0 0 auto;
+  font-size: 8.5px;
+  font-weight: 850;
+  font-style: normal;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--sm-surface-3);
+  color: var(--sm-ink-dim);
+}
+
+.smx-solwal-lean.is-up { color: #2ee6a8; }
+.smx-solwal-lean.is-down { color: #ff5c7a; }
+
+.smx-solwal-sub {
+  font-size: 9px;
+  color: var(--sm-ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.smx-solwal-end {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  text-align: end;
+}
+
+.smx-solwal-end b {
+  font-size: 11.5px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+
+.smx-solwal-end small {
+  font-size: 8px;
+  color: var(--sm-ink-dim);
+  white-space: nowrap;
+}
+
+.smx-solwal-thin { font-style: italic; }
+
+.smx-solwal-go {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--sm-ink-dim);
+}
+
+.smx-solwal-note {
+  font-size: 9px;
+  line-height: 1.7;
+  color: var(--sm-ink-dim);
+}
+
+/* The two coloured labels need a light-theme twin, or green-on-white at 2.4:1
+   is the same failure the desk's other accents already fixed. */
+:root[data-theme='light'] .smx-solwal-lean.is-up { color: #0a7f5f; }
+:root[data-theme='light'] .smx-solwal-lean.is-down { color: #a8244a; }
+
 .smx-empty {
   display: flex;
   flex-direction: column;

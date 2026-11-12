@@ -9183,7 +9183,14 @@
     "freshReadCapital": "رأس مال موثّق",
     "freshReadDominant": "لاعب واحد يملك {{pct}}٪ منه",
     "freshReadBroad": "رأس المال موزّع على عدة لاعبين",
-    "freshReadUnverified": "حُذف {{n}} صفًا لعدم وجود عدّاد قابل للتحقق"
+    "freshReadUnverified": "حُذف {{n}} صفًا لعدم وجود عدّاد قابل للتحقق",
+    "solWalletsTitle": "محافظ حيتان سولانا",
+    "solWalletsMoved": "تم نقل {{sol}} SOL",
+    "solWalletsNet": "الصافي في هذه العينة",
+    "solWalletsMovements": "{{n}} حركة",
+    "solWalletsConcentrated": "{{pct}}% من العينة في محفظة واحدة",
+    "solWalletsSample": "محافظ هذا الكتلة المأخوذة كعينة فقط (الفتحة {{n}}). الترتيب يعني «الأكبر في هذه النافذة» وليس «الأكبر على سولانا».",
+    "solWalletsEmpty": "لم تتجاوز أي محفظة في هذه العينة الحد الأدنى."
   },
   "iranBuy": {
     "unavailableBody": "This Wallex Toman checkout is not live on this server yet. The tab is here so Iranian users can find it; no payment is taken until settlement is actually configured."

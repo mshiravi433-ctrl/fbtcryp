@@ -127,6 +127,33 @@ const overview = (win) => ({
   }
 });
 
+/*
+ * The Solana whale feed, as the route answers it. Two readings are made from
+ * this ONE payload on the whales tab: `readSolanaWhales` (where the SOL went)
+ * and `readSolanaWallets` (which wallets moved it). The desk probe used to let
+ * this route fall through to `{}`, which is why the two Solana surfaces could
+ * mount with nothing to show and no assertion noticed.
+ */
+const solanaWhales = {
+  available: true,
+  floorSol: 500,
+  solPrice: 150,
+  vs: 'usd',
+  updatedAt: '2026-11-12T10:00:00.000Z',
+  coverage: {
+    sources: ['rpc-block-sample'],
+    sampleReused: true,
+    sampleMs: 20 * 60_000,
+    blocksPerRefresh: 1,
+    lastSample: { slot: 321, at: '2026-11-12T10:00:00.000Z' }
+  },
+  transfers: [
+    { id: 'a1', sol: 12_000, from: 'So1WhaleA11111111111111111111111111111111', to: 'Krak', toLabel: 'Kraken', at: Date.now() - 40_000, signature: 's1' },
+    { id: 'a2', sol: 9_000, from: 'So1WhaleA11111111111111111111111111111111', to: 'Krak', toLabel: 'Kraken', at: Date.now() - 30_000, signature: 's2' },
+    { id: 'b1', sol: 8_000, from: 'Bin', fromLabel: 'Binance', to: 'So1WhaleB22222222222222222222222222222222', at: Date.now() - 20_000, signature: 's3' }
+  ]
+};
+
 const whales = {
   wallets: [
     {
@@ -183,6 +210,7 @@ function installFetch() {
     const u = String(url);
     calls.push(u);
     if (u.includes('/overview?')) return json(overview(/window=([^&]+)/.exec(u)?.[1] || '24h'));
+    if (u.includes('/solana/track/whales')) return json(solanaWhales);
     if (u.includes('/whales?')) return json(whales);
     if (u.includes('/flows')) return json(overview('24h').flows);
     if (u.includes('/liquidity')) return json(overview('24h').liquidityEvents);
@@ -320,6 +348,27 @@ export async function run(container) {
     qa('.smx-chips .smx-risk').length === 3);
   t('a whale row prints the address, the chain and the band',
     /0x9f2c/.test(text()) && /BASE/.test(text()));
+
+  /* 8b · the SOLANA half of the whale tab: where the SOL went, and WHO moved it.
+     Both readings come from the one mocked payload above, which is the point —
+     the tab must not fetch the chain twice to show two views of it. */
+  t('the whales tab shows the Solana chain read',
+    !!q('[data-testid="sm-solana-whales"]'));
+  t('and the Solana WALLET list, from the same payload',
+    !!q('[data-testid="sm-solana-wallets"]'));
+  t('the wallet list ranks the wallets that moved, not the venues',
+    qa('.smx-solwal-row').length === 2,
+    'rows: ' + qa('.smx-solwal-row').length);
+  t('a Solana wallet row prints its moved amount and its lean',
+    /SOL/.test(q('[data-testid="sm-solana-wallets"]')?.textContent || '')
+    && !!q('.smx-solwal-lean'));
+  t('the sample is stated, so the rank reads as "in this window"',
+    /321/.test(q('[data-testid="sm-solana-wallets"]')?.textContent || ''));
+  const solCalls = calls.filter((u) => u.includes('/solana/track/whales'));
+  t('the Solana feed is fetched ONCE for both readings',
+    solCalls.length === 1, 'calls: ' + solCalls.length);
+  t('a Solana wallet row opens that wallet, not the EVM page',
+    !!q('.smx-solwal-hit'));
 
   /* 9 · the flows tab has its own rail, and it drives the same window */
   const flowsTab = dock.find((b) => b.textContent === fa.sm.tabs.flows);

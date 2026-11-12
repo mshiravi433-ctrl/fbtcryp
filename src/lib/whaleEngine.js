@@ -217,6 +217,169 @@ export function readSolanaWhales({ watch = null, priceUsd = null, minSol = null,
 }
 
 /**
+ * THE SOLANA WALLET READ — «کیف پول‌های سولانا», from the sample already in hand.
+ *
+ * The whale feed is a list of MOVEMENTS; a reader asking «which wallets are the
+ * whales?» used to have to add up `from`/`to` in their head. This aggregates the
+ * same rows into wallets and refuses the two claims the data cannot support:
+ *
+ *   · A WALLET'S TOTAL IS NOT ITS INTENT. `movedSol` is the gross sum of both
+ *     sides. A wallet that sent 40 000 SOL to Binance and received 39 000 back
+ *     moved 79 000 and netted −1 000 — printing "40 000" would call it a
+ *     whale seller when the observed net is noise. So `netSol` is always
+ *     carried next to the gross, and the lean needs a NAMED venue on exactly
+ *     one side (the same rule the token and chain reads use).
+ *   · ONE MOVEMENT IS NOT A PATTERN. `movements` travels with every row, and a
+ *     row whose entire net comes from a single unlabelled transfer is marked
+ *     `confident:false` rather than ranked as a lean.
+ *
+ * Aggregation is pure arithmetic over `watch.transfers` — no request, no timer.
+ * The feed is a SAMPLE, so every row carries the slot and time of the movement
+ * it came from: a wallet's rank is only ever «largest in the window we read».
+ *
+ * @param {object} input
+ * @param {object} input.watch     the `/api/solana/track/whales` payload
+ * @param {number} [input.minSol]  ignore wallets whose gross is below this
+ * @param {number} [input.limit]   how many wallets to return
+ * @param {number} [input.now]
+ */
+export function readSolanaWallets({ watch = null, minSol = null, limit = 12, now = Date.now() } = {}) {
+  if (!watch || typeof watch !== 'object') return null;
+  const rows = Array.isArray(watch.transfers) ? watch.transfers : [];
+  const floor = minSol ?? (num(watch.floorSol) ?? 0);
+
+  /* One pass: both sides of every movement land in the same table, because a
+     whale is defined by what it moved, in either direction. */
+  const byWallet = new Map();
+  const touch = (address, label, init) => {
+    if (!address) return null;
+    const key = String(address);
+    let w = byWallet.get(key);
+    if (!w) {
+      w = {
+        address: key,
+        label: label || null,
+        venue: venueOf(label),
+        sentSol: 0, receivedSol: 0,
+        intoVenuesSol: 0, outOfVenuesSol: 0,
+        movements: 0, labelledMovements: 0,
+        largestSol: 0,
+        firstAt: null, lastAt: null,
+        signature: null
+      };
+      byWallet.set(key, w);
+    }
+    if (!w.label && label) { w.label = label; w.venue = venueOf(label); }
+    init(w);
+    return w;
+  };
+
+  for (const row of rows) {
+    const sol = num(row.sol);
+    if (sol === null || sol < floor) continue;
+    const toName = row.toLabel ? venueOf(row.toLabel) : null;
+    const fromName = row.fromLabel ? venueOf(row.fromLabel) : null;
+    const at = num(row.at);
+    const stamp = (w) => {
+      w.movements += 1;
+      w.largestSol = Math.max(w.largestSol, sol);
+      if ((toName && !fromName) || (fromName && !toName)) w.labelledMovements += 1;
+      if (at !== null) {
+        w.firstAt = w.firstAt === null ? at : Math.min(w.firstAt, at);
+        w.lastAt = w.lastAt === null ? at : Math.max(w.lastAt, at);
+      }
+      if (!w.signature && row.signature) w.signature = row.signature;
+    };
+    /*
+     * The LEAN belongs to the wallet on the OTHER side of the venue, not to the
+     * venue: «sent 12 000 SOL to Kraken» is the sender's sell intent, and
+     * «received 8 000 SOL from Kraken» is the receiver's accumulation. Crediting
+     * the venue's own row would put the whole story on Binance's hot wallet and
+     * then filter it out as a counterparty — which is exactly what the first
+     * version of this function did.
+     */
+    touch(row.from, row.fromLabel, (w) => {
+      w.sentSol += sol;
+      if (toName && !fromName) w.intoVenuesSol += sol;
+      stamp(w);
+    });
+    touch(row.to, row.toLabel, (w) => {
+      w.receivedSol += sol;
+      if (fromName && !toName) w.outOfVenuesSol += sol;
+      stamp(w);
+    });
+  }
+
+  const wallets = [...byWallet.values()].map((w) => {
+    const movedSol = w.sentSol + w.receivedSol;
+    const netSol = w.receivedSol - w.sentSol;
+    /* The lean needs a NAMED venue, on exactly one side, and enough of them to
+       be more than a routing artefact. */
+    const directional = w.intoVenuesSol + w.outOfVenuesSol;
+    const lean = directional <= 0 ? null
+      : w.intoVenuesSol > w.outOfVenuesSol * 1.15 ? 'DISTRIBUTION'
+        : w.outOfVenuesSol > w.intoVenuesSol * 1.15 ? 'ACCUMULATION'
+          : null;
+    return {
+      address: w.address,
+      label: w.label,
+      venue: w.venue,
+      /* A venue wallet is a counterparty, not a whale: flagged so a caller can
+         keep Binance's hot wallet out of a "smart money" list. */
+      isVenue: !!w.venue,
+      movedSol,
+      sentSol: w.sentSol,
+      receivedSol: w.receivedSol,
+      netSol,
+      /* Share of everything this wallet moved that ended up in a venue — the
+         number behind the lean, printed so the lean is auditable. */
+      intoVenuesSol: w.intoVenuesSol,
+      outOfVenuesSol: w.outOfVenuesSol,
+      movements: w.movements,
+      labelledMovements: w.labelledMovements,
+      largestSol: w.largestSol,
+      lean,
+      confident: lean !== null && w.labelledMovements >= 2,
+      firstAt: w.firstAt,
+      lastAt: w.lastAt,
+      ageMs: w.lastAt === null ? null : Math.max(0, now - w.lastAt),
+      signature: w.signature
+    };
+  })
+    /* Venues are the counterparty side of the story, never a ranked whale. */
+    .filter((w) => !w.isVenue && w.movements > 0)
+    .sort((a, b) => (b.movedSol - a.movedSol) || (b.netSol - a.netSol));
+
+  const kept = wallets.slice(0, Math.max(1, limit));
+  const totalMoved = sum(wallets, (w) => w.movedSol);
+  const top = kept[0] || null;
+  const leanCount = (name) => wallets.filter((w) => w.lean === name).length;
+
+  return {
+    measured: kept.length > 0,
+    available: watch.available !== false,
+    reason: watch.reason || null,
+    wallets: kept,
+    /* Breadth, not size: one wallet that moved everything is said as such. */
+    count: wallets.length,
+    totalMovedSol: totalMoved,
+    topSharePct: top && totalMoved > 0 ? Math.round(clamp(top.movedSol / totalMoved, 0, 1) * 1000) / 10 : null,
+    accumulating: leanCount('ACCUMULATION'),
+    distributing: leanCount('DISTRIBUTION'),
+    /* Same coverage object the chain read publishes, so the two cards can
+       never disagree about how much chain the list represents. */
+    sampled: watch.coverage ? {
+      sources: watch.coverage.sources || [],
+      slot: num(watch.coverage.lastSample?.slot),
+      at: watch.coverage.lastSample?.at || null,
+      sampleReused: !!watch.coverage.sampleReused
+    } : null,
+    priceUsd: num(watch.solPrice),
+    floorSol: floor
+  };
+}
+
+/**
  * Both chains in one shape, so a screen does not have to know which feed it is
  * holding. `direction` follows each chain's own rules above; `comparable` is
  * false whenever the two halves measure different things (which they do).

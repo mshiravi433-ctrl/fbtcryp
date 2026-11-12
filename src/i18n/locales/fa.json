@@ -13891,7 +13891,14 @@
     "freshReadCapital": "سرمایهٔ تأییدشده",
     "freshReadDominant": "یک بازیگر {{pct}}٪ این سرمایه را دارد",
     "freshReadBroad": "سرمایه بین چند بازیگر پخش است",
-    "freshReadUnverified": "{{n}} ردیف بدون شمارندهٔ قابل‌بررسی حذف شد"
+    "freshReadUnverified": "{{n}} ردیف بدون شمارندهٔ قابل‌بررسی حذف شد",
+    "solWalletsTitle": "کیف پول‌های نهنگ سولانا",
+    "solWalletsMoved": "{{sol}} SOL جابه‌جا شد",
+    "solWalletsNet": "خالص در این نمونه",
+    "solWalletsMovements": "{{n}} حرکت",
+    "solWalletsConcentrated": "{{pct}}٪ از نمونه در یک کیف پول است",
+    "solWalletsSample": "فقط کیف پول‌های همین بلوکِ نمونه‌برداری‌شده (اسلات {{n}}). رتبه یعنی «بزرگ‌ترین در این پنجره»، نه بزرگ‌ترین در سولانا.",
+    "solWalletsEmpty": "هیچ کیف پولی در این نمونه از حد آستانه عبور نکرد."
   },
   "crossChain": {
     "youReceive": "دریافت می‌کنید",
