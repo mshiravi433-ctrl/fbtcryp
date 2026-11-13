@@ -78,6 +78,7 @@ import { DEFAULT_SORT, MARKET_SORTS, marketBreadth, sortMarketRows } from '../li
 import { mergeVisuals } from '../lib/marketVisuals';
 import { useAppStore } from '../store/useAppStore';
 import { runPriceAlerts, runTopMoverAlerts, syncPriceWatch } from '../lib/priceAlerts';
+import { MARKET_PAGE_ROWS } from '../lib/marketRoute';
 import { isSwappable, swapUrlFor } from '../lib/coinToSwap';
 import { venueRoute } from '../lib/coinVenue';
 import { rememberCoinVenues } from '../lib/coinVenues';
@@ -106,7 +107,7 @@ const FILTERS = ['all', 'gainers', 'losers', 'favorites', 'volume'];
  * — 250 on first paint, the rest on demand. Half the first-paint payload, one
  * upstream call instead of two, and a count that matches the data.
  */
-const MARKET_PAGE_SIZE = 250;
+const MARKET_PAGE_SIZE = MARKET_PAGE_ROWS;
 const FOLDED_ROWS = 12;
 
 /**
