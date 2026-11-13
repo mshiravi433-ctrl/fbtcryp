@@ -184,7 +184,7 @@ test('a turn with a missing field asks for it, in the reply', async () => {
   mountConversation({ calls });
   const out = await brain.handle({
     owner: 'session-runtime-1',
-    message: 'می‌خواهم سرمایه‌ام را رشد بدهم، چه برنامه‌ای داری؟',
+    message: 'برای رسیدن به هدفم چه برنامه‌ای داشته باشم؟',
     locale: 'fa'
   });
 
@@ -200,7 +200,7 @@ test('a turn with NO conversation machinery still answers', async () => {
 
   const out = await brain.handle({
     owner: 'session-runtime-2',
-    message: 'می‌خواهم سرمایه‌ام را رشد بدهم، چه برنامه‌ای داری؟',
+    message: 'برای رسیدن به هدفم چه برنامه‌ای داشته باشم؟',
     locale: 'fa'
   });
 
@@ -262,4 +262,68 @@ test('a why question with no decision says so, and asks for nothing', async () =
   assert.equal(calls.length, 0, 'the engine was not asked to explain a decision that does not exist');
   const text = String(out?.response?.text || '');
   assert.ok(text.length > 0, 'the turn still answered');
+});
+
+/* ─── the session machinery, in the reply ───────────────────────────────── */
+
+test('the machine\'s own question reaches the reply, in its own words', async () => {
+  /*
+   * The conversation machinery is not a module the user invokes — it is
+   * the layer UNDER every turn. So the proof is not that the provider
+   * was called; it is that the question the machine asked appears in
+   * the reply, in the machine's own words, and not in a generic
+   * «tell me more» that any layer could have produced.
+   */
+  const calls = [];
+  mountConversation({ calls });
+
+  const out = await brain.handle({
+    owner: 'session-runtime-3',
+    message: 'برای رسیدن به هدفم چه برنامه‌ای داشته باشم؟',
+    locale: 'fa'
+  });
+
+  assert.ok(calls.length >= 1, 'the conversation machinery was consulted');
+  const text = String(out?.response?.text || '');
+  /* The fake asks «این پول برای چیست — رشد، درآمد، یا حفظ سرمایه؟» —
+     the reply must carry that question, or the machinery is not
+     reaching the answer. */
+  assert.ok(
+    text.includes('این پول برای چیست') || text.includes('رشد، درآمد'),
+    `the machine's question must reach the reply → ${text.slice(0, 300)}`
+  );
+});
+
+test('the replan is announced only when it crossed a line', async () => {
+  /*
+   * A replan that changed nothing is not news. A replan that crossed a
+   * line is — and the brain says so WITHOUT treating the replan as
+   * permission to act.
+   */
+  const { setReplanReader } = await import('../../server/ci/sessionBridge.js');
+  setReplanReader(async () => ({
+    ok: true,
+    replan: {
+      id: 'replan_1',
+      notify: true,
+      changed: true,
+      trigger: 'RISK_CHANGED',
+      riskLevel: 'HIGH',
+      bestRoute: { tool: 'across', totalCostUsd: 3.5 },
+      why: ['the risk moved above the comfort band'],
+      falsifiers: ['the risk reading returns below the band'],
+      lines: ['the crossing was replaced with a slower route']
+    }
+  }));
+
+  const out = await brain.handle({
+    owner: 'session-runtime-4',
+    message: 'وضعیت پرتفوی من چیست؟',
+    locale: 'fa'
+  });
+
+  const finding = (out?.findings || []).find((f) => f?.id === 'event-replan');
+  assert.ok(finding, `the replan is in the reply → ${(out?.findings || []).map((f) => f?.id).join(',')}`);
+  assert.equal(finding.executionAuthorized, false, 'a replan is news, not permission to act');
+  setReplanReader(null);
 });

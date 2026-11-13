@@ -246,7 +246,49 @@ function stopText(policy, error, fa) {
 
 /** §20: a question names the field, never asks to "explain more". */
 function askFor(context, { fa, L }) {
+  /*
+   * THE MACHINE'S OWN QUESTION COMES FIRST.
+   *
+   * The conversation machinery (path 16) asks ONE specific question when
+   * it lacks one field, and it owns the wording of that question — it
+   * is the machine that knows which field it needs and how to ask for
+   * it.
+   *
+   * So when the machine has asked, the reply asks THAT. The generic
+   * «برای اینکه عدد دقیق بدهم، این لازم است: …» is the fallback for a
+   * turn that knows a field is missing but has no question of its own —
+   * and using it in place of the machine's question means the machinery
+   * is present, running, and its question never reaches the user.
+   */
   const missing = context?.missingInformation || [];
+  const machineQuestion = context?.conversationQuestion?.question || null;
+  const machineField = context?.conversationQuestion?.field || null;
+  const machineMissing = Array.isArray(context?.conversationQuestion?.missing)
+    ? context.conversationQuestion.missing
+    : [];
+  /*
+   * But NOT when the sentence did not match any route at all.
+   *
+   * In that case the honest reply names the paths that DO exist, and the
+   * conversation machinery's question — «what is this money for?» — would
+   * be an answer to a question the user did not ask. The machinery asks
+   * about the OWNER; the registry asks about the SENTENCE. When the
+   * sentence matched nothing, the registry's question is the one that
+   * belongs.
+   */
+  if (machineQuestion && !missing.includes('intent')) {
+    const text = typeof machineQuestion === 'string'
+      ? machineQuestion
+      : String(machineQuestion[fa ? 'fa' : 'en'] || machineQuestion.fa || machineQuestion.en || '');
+    if (text) {
+      return {
+        fields: machineMissing.length ? machineMissing : (machineField ? [machineField] : []),
+        text,
+        L,
+        source: 'conversation-machinery'
+      };
+    }
+  }
   if (!missing.length) return null;
   /* Nothing in the registry matched this sentence. That is a different kind of
      missing than an absent amount: the field list would be useless («منظورتان
