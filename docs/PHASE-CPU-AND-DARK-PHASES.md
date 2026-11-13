@@ -76,7 +76,7 @@ is that each one is a measurement before and after, not a promise.
 | «چرا این را گفتی؟» | `UNSUPPORTED` | **`WHY_DECISION`** → five reason lines and four named falsifiers (§5.19) |
 | the conversation's own shape | not modelled | **a state machine in the session layer**, asking ONE adaptive question (§5.20) |
 | a replan when the world moves | computed, never read | **read by the turn**, and announced only when something decision-relevant changed (§5.20) |
-| `server/fios/` engines the brain can reach | 0 of 50 | **all of them** — the dark-engine count is ZERO (§5.18–§5.20) |
+| `server/fios/` engines the brain can reach | 0 of 50 | **all of them** — and all three of the last ones turned out to be reachable AND still dark, so the count is now zero in the only sense that means something: an engine that does not reach the ANSWER is dark (§5.21) |
 
 ### The three root causes, and what each one was
 
@@ -854,6 +854,12 @@ left open on purpose, and it is worth naming:
    `server/fios/` is reachable from the brain, and each one was reached
    in the way its own nature demanded — a surface, a translation, or
    session machinery.
+
+   **But reachable was not enough, and §5.21 is the proof.** All three
+   of these turned out to be reachable AND still dark: the path existed
+   and the answer did not. The count above was honest about REACHABILITY
+   and silent about the answer, and the correction — three missing
+   inputs, three different shapes of the same failure — is in §5.21.
 
 ### 5.9 Path 7 — the yield surface (SHIPPED)
 
@@ -1703,6 +1709,102 @@ field.
 `test/intent-ai/session-machinery-integration.test.mjs` (6).
 
 ---
+
+### 5.21 The engines were reachable, and all three were still dark
+
+§5.18–§5.20 closed the dark-engine count, and the count was honest:
+every engine in `server/fios/` had a path from the brain. The path
+existed, the provider was mounted, the engine ran.
+
+**And all three of them still did not answer.**
+
+This is the third time this document has had to record the same shape
+of failure, and the shape is worth naming precisely, because it is
+invisible to the kind of test that gets written:
+
+> A capability can be **present in the code**, **wired in the graph**,
+> **mounted at runtime**, **proved by tests**, **documented as
+> shipped** — and still be **absent from the answer**. Every one of
+> those five claims was true of the route engine, the why engine and
+> the session machinery, at the same time, on the same deployment.
+
+The reason the tests missed it is the reason this section exists: the
+surface tests drove the engine **directly**. They proved the parts.
+They could not prove the whole, because the whole is a PATH — a path
+that has to carry a request the engine needs, at a moment when that
+request exists.
+
+**The three defects, and they were not the same defect.**
+
+| Engine | What was missing | Why the surface test could not see it |
+|---|---|---|
+| `routeIntelligence` | the TRANSFER — source chain, destination chain, both tokens, the amount | the engine was called with a transfer, so the test called it with a transfer |
+| `whyEngine` | the DECISION — and then the why-lines themselves, thrown away by the provider | the engine was handed a decision, so the test handed it one |
+| `conversationState` | the QUESTION — the machine's own wording, replaced by a generic sentence | the machine was asked, so the test saw it asked |
+
+Each one was a missing INPUT, and each one was supplied by the test
+rather than by the deployment.
+
+**The route engine.** The route module's read received `{ symbols,
+now }` and nothing else. The transfer never arrived, so every route
+question answered `ROUTE_REQUEST_INCOMPLETE` — the engine was
+reachable, the adapter was reachable, LI.FI was wired, and no route was
+ever ranked in a real turn. The transfer now travels as a PAGE CLAIM:
+the cross-chain panel publishes the transfer it is looking at, the page
+claim carries it, a PARTIAL transfer is dropped there, and the module
+reads it.
+
+**The why engine.** Three defects stood between the engine and the
+reply, and each one alone was enough to hide it:
+
+1. the why FINDING was built inside `buildFindings`, which runs BEFORE
+   the recommendation the engine explains — so it could only report a
+   read that had not happened yet;
+2. the reply preferred the failed section read over the successful one;
+3. the provider returned `out.why` — the INNER object — while the
+   reader expects the whole record and reads `why.why`. Every why-line
+   arrived as null.
+
+**And the fake was the reason the third one survived.** The test stood
+here used a fake provider that spoke a shape of its own, and that fake
+AGREED with the broken implementation. A fake that agrees with the
+implementation cannot catch a mismatch between the implementation and
+the engine it is supposed to read. The real engine is mounted now.
+
+**The session machinery.** The machinery asked ONE specific question
+and the reply asked a different one. `askFor()` composed its own
+sentence from the missing-field list, and the machine's question stayed
+in the context — visible to a developer, invisible to the user. The
+machine's question comes first now, with one exception: when the
+sentence matched no route at all, the registry's question is the honest
+one, because the machinery asks about the OWNER and the registry asks
+about the SENTENCE.
+
+**The rule this section leaves behind.**
+
+> A test that drives an engine directly proves the engine. Only a test
+> that drives a TURN proves the engine is REACHED.
+
+That is the whole difference between the surface tests and the runtime
+tests, and it is worth about ninety lines of test code:
+
+```
+test/intent-ai/route-intelligence-runtime.test.mjs   4/4
+test/intent-ai/dark-engines-runtime.test.mjs          8/8
+```
+
+The runtime tests run a REAL brain turn, with the real module path, the
+real bridge and the real provider — and they assert on the ANSWER, not
+on the fact that the provider was called. The route test asserts that
+the live source was asked with the right chains, tokens and amount,
+and that a question without a transfer spends no request at all. The
+why test mounts the REAL engine, so a fake cannot stand in for the
+thing under test. The session test asserts that the machine's own
+words appear in the reply.
+
+**The dark-engine count is now zero in the only sense that means
+anything: an engine that does not reach the answer is dark, however
+many paths lead to it.**
 
 ## §6 — The one-paragraph answer
 
