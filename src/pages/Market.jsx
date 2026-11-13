@@ -288,6 +288,35 @@ export default function Market() {
   const [smartIntent, setSmartIntent] = useState(null);
   const [sortKey, setSortKey] = useState(DEFAULT_SORT.key);
   const [sortDir, setSortDir] = useState(DEFAULT_SORT.dir);
+  /*
+   * ─── THE HORIZON (2026-11-12) ──────────────────────────────────────────────
+   * One control, three readings. It decides two things at once and they are the
+   * same thing: which column the list is ranked by when the sort is a change,
+   * and which move the row's pill prints. A horizon selector that changed the
+   * pill but not the order would let «۱ ساعت» rank a list by 24-hour moves.
+   *
+   * Choosing a horizon IS a sort of that horizon (descending, the way a move
+   * column is read) — that is what a trader expects from tapping «۷ روز», and
+   * it keeps `activeView` derived from the sort rather than adding a fourth
+   * piece of state that can disagree with it.
+   *
+   * Persisted per device: a reader who watches the 1h is not re-choosing it
+   * every visit.
+   */
+  const [horizon, setHorizonState] = useState(() => {
+    try {
+      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('fbt.market.horizon') : null;
+      return ['1h', '24h', '7d'].includes(saved || '') ? saved : '24h';
+    } catch { return '24h'; }
+  });
+  const setHorizon = useCallback((next) => {
+    if (!['1h', '24h', '7d'].includes(next)) return;
+    setHorizonState(next);
+    try { localStorage.setItem('fbt.market.horizon', next); } catch { /* private mode */ }
+    setSmartIntent(null);
+    setSortKey(next === '1h' ? 'change1h' : next === '7d' ? 'change7d' : 'change');
+    setSortDir('desc');
+  }, []);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
 
   /*
@@ -319,6 +348,11 @@ export default function Market() {
     setSmartIntent(null);
     setSortKey(key);
     setSortDir(key === 'rank' ? 'asc' : 'desc');
+    /* Picking a horizon from the SORT menu moves the selector too, so the pills
+       and the order can never describe different windows. */
+    if (key === 'change1h') setHorizonState('1h');
+    else if (key === 'change7d') setHorizonState('7d');
+    else if (key === 'change' || key === 'rank') setHorizonState('24h');
   }, []);
 
   const applySmartSearch = useCallback((value) => {
@@ -926,6 +960,67 @@ export default function Market() {
                   vs={vs}
                 />
 
+                {/*
+                    ─── THE HORIZON RAIL ────────────────────────────────────────
+                    Three readings the feed always carried and the screen never
+                    showed together: 1h, 24h, 7d. It sits ABOVE the chips
+                    because it governs them — the chips re-order, this decides
+                    WHAT is being ordered and what the pill on every row says.
+
+                    A radio group, not three buttons: it is one choice out of
+                    three, and a screen reader should hear that. Keyboard
+                    arrows move it, like every other segmented control in the
+                    app.
+                */}
+                <div
+                  className="mx-horizon"
+                  role="radiogroup"
+                  aria-label={t('market.horizonAria')}
+                  data-testid="market-horizon"
+                  onKeyDown={(event) => {
+                    const order = ['1h', '24h', '7d'];
+                    const i = order.indexOf(horizon);
+                    let next = null;
+                    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = order[(i + 1) % 3];
+                    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = order[(i + 2) % 3];
+                    if (next) { event.preventDefault(); setHorizon(next); }
+                  }}
+                >
+                  {['1h', '24h', '7d'].map((h) => (
+                    <button
+                      key={h}
+                      type="button"
+                      role="radio"
+                      aria-checked={horizon === h}
+                      tabIndex={horizon === h ? 0 : -1}
+                      className="mx-horizon-btn mono"
+                      data-horizon={h}
+                      data-active={horizon === h ? 'true' : undefined}
+                      onClick={() => setHorizon(h)}
+                      data-testid={`market-horizon-${h}`}
+                    >
+                      {t(`market.horizon.${h}`)}
+                    </button>
+                  ))}
+                  {/*
+                    AN HONEST NOTE, NOT A FOOTNOTE. The 1h and 7d columns do not
+                    exist on the CoinLore backup rows (that feed sends neither
+                    field), so a reader who switches to «۷ روز» while the
+                    primary feed is down would otherwise see a screen of «—»
+                    and conclude the market stopped moving. The sentence says
+                    which case this is.
+                  */}
+                  {horizon !== '24h' && (() => {
+                    const missing = list.filter((r) => (horizon === '1h' ? r.change1h : r.change7d) == null).length;
+                    if (!missing) return null;
+                    return (
+                      <span className="mx-horizon-note" data-testid="market-horizon-note">
+                        {t('market.horizonMissing', { count: fmtNum(missing) })}
+                      </span>
+                    );
+                  })()}
+                </div>
+
                 <div className="mx-controls">
                 <div className="market-views mx-views" role="group" aria-label={t('market.viewsAria')}>
                   {FILTERS.map((f) => (
@@ -1135,6 +1230,9 @@ export default function Market() {
                              * rendered either way.
                              */
                             deferSpark={i >= 8}
+                            /* The pill prints the window the rail selected —
+                               see the horizon state above. */
+                            horizon={horizon}
                             onClick={() => openCoin(c.id)}
                           />
                           <span className="mx-swap-slot" data-available={swapUrl ? 'true' : undefined}>

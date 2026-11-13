@@ -36,7 +36,23 @@ function CoinRow({
   metric = null,
   animate = true,
   logoPriority = false,
-  deferSpark = false
+  deferSpark = false,
+  /*
+   * WHICH HORIZON THE PILL SHOWS — 1h, 24h or 7d.
+   *
+   * The feed has always carried all three (`normalizeCoin` maps
+   * price_change_percentage_1h/24h/7d_in_currency) and this row printed one,
+   * fixed: 24h. So a coin up 30% on the week and a coin up 30% in a day were
+   * the same row, and the 1h move — the number a reader watching a dump
+   * actually wants — was nowhere on the screen.
+   *
+   * `horizon` selects the field; the COLOUR AND ARROW come from that same
+   * field through `pctTone`, so the pill can never point one way over a number
+   * that moved the other. A horizon the row does not carry (the CoinLore
+   * backup sends no 1h/7d) renders the same neutral «—» a missing 24h does,
+   * never a green zero.
+   */
+  horizon = '24h'
 }) {
   /*
    * «همیشه سبز»: the same rule the Bitcoin box follows (lib/format.js
@@ -44,7 +60,9 @@ function CoinRow({
    * so a +0.004% tick is a flat, grey, arrow-less «+0.00%» rather than a green
    * arrow pointing at a zero. A missing move gets no tone at all.
    */
-  const tone = pctTone(coin.change24h, 2);
+  const moveOf = (row, h) => (h === '1h' ? row?.change1h : h === '7d' ? row?.change7d : row?.change24h);
+  const move = moveOf(coin, horizon);
+  const tone = pctTone(move, 2);
   const up = tone === 'down' ? false : tone === 'up';
   const flat = tone == null || tone === 'flat';
   const [rowRef, near] = useNearViewport({ eager: !deferSpark, rootMargin: '400px' });
@@ -96,7 +114,7 @@ function CoinRow({
           {!flat && (up
             ? <GlyphTrendUp width={9} height={9} aria-hidden="true" />
             : <GlyphTrendDown width={9} height={9} aria-hidden="true" />)}
-          {fmtPct(coin.change24h, 2)}
+          {fmtPct(move, 2)}
         </div>
       </div>
     </button>
@@ -169,7 +187,10 @@ export default memo(CoinRow, (prev, next) => (
   && prev.deferSpark === next.deferSpark
   && prev.coin?.id === next.coin?.id
   && prev.coin?.price === next.coin?.price
+  && prev.horizon === next.horizon
+  && prev.coin?.change1h === next.coin?.change1h
   && prev.coin?.change24h === next.coin?.change24h
+  && prev.coin?.change7d === next.coin?.change7d
   && prev.coin?.symbol === next.coin?.symbol
   && prev.coin?.name === next.coin?.name
   && prev.coin?.image === next.coin?.image

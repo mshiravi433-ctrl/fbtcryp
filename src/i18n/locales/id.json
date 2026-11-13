@@ -283,6 +283,8 @@
       "rank": "Peringkat",
       "mcap": "Kapitalisasi pasar",
       "change": "Perubahan 24 jam",
+      "change1h": "Perubahan 1 jam",
+      "change7d": "Perubahan 7 hari",
       "volume": "Volume 24 jam",
       "price": "Harga"
     },
@@ -344,7 +346,14 @@
       "payment": "Pembayaran",
       "launchpad": "Launchpad"
     },
-    "showMore": "Tampilkan lagi ({{count}} tersisa)"
+    "showMore": "Tampilkan lagi ({{count}} tersisa)",
+    "horizon": {
+      "1h": "1j",
+      "24h": "24j",
+      "7d": "7h"
+    },
+    "horizonAria": "Horizon waktu perubahan harga",
+    "horizonMissing": "{{count}} koin tidak punya angka untuk jendela ini dan menampilkan «—»."
   },
   "coin": {
     "notFound": "Koin tidak ditemukan",

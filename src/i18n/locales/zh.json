@@ -283,6 +283,8 @@
       "rank": "排名",
       "mcap": "市值",
       "change": "24 小时涨跌",
+      "change1h": "1小时涨跌",
+      "change7d": "7天涨跌",
       "volume": "24 小时额",
       "price": "价格"
     },
@@ -344,7 +346,14 @@
       "payment": "支付",
       "launchpad": "Launchpad"
     },
-    "showMore": "显示更多（剩余 {{count}}）"
+    "showMore": "显示更多（剩余 {{count}}）",
+    "horizon": {
+      "1h": "1时",
+      "24h": "24时",
+      "7d": "7天"
+    },
+    "horizonAria": "价格变化时间范围",
+    "horizonMissing": "{{count}} 个币种没有该区间的数据，显示为「—」。"
   },
   "coin": {
     "notFound": "找不到该币种",
