@@ -3389,7 +3389,119 @@ meaningful on a branch whose diff contains a function that became async —
 and skips with a reason instead of failing on something it does not
 control.
 
+#### 5.24.9 A guard written over the whole sentence silenced a clause that never contained its trigger
+
+The classifier has two owner-guards, and both are right. A **distressed**
+owner — «همه پولمو بفروشم» — and a **discovering** owner — «چی خوبه
+بخرم؟» — are asking about themselves, not issuing an order, so
+`scoreClaim` skips the EXECUTE_SWAP rule for them and answers with the
+market view and the risk beside it. Suppressing an execution is also the
+safe direction for money, which is why this survived: nothing dangerous
+ever happened.
+
+Both flags were computed from the **whole sentence** and then applied to
+every part of it. A sentence can be two claims:
+
+```
+  «اتریوم را بفروش»                       → EXECUTE_SWAP      (perm EXECUTE)
+  «اتریوم را بفروش و ییلد خوب پیشنهاد بده»  → YIELD_OPPORTUNITY  (perm READ)
+                                             evidence: no EXECUTE_SWAP at all
+```
+
+The advice words live in the second clause. They set `isDiscovery` for
+the sentence, and the guard then silenced the order in the first clause —
+a clause that contains no advice word whatsoever. Measured across four
+order-plus-advice sentences: **one of four kept the money instruction**.
+The other three returned a read intent with `EXECUTE_SWAP` absent from
+`evidence`, from `compound` and from the plan, so the sell was not
+refused — it was never collected. There is no honest way to render that:
+a reply about yield is a correct answer to half a sentence.
+
+**The fix is one rule, placed where the evidence is.** The guard now asks
+whether *a clause* contains both an execution verb and a guard trigger.
+The verb list is the EXECUTE_SWAP rule's **own** pattern, read out of
+`RULES` at call time, because a second copy of a regex is a second
+opinion about Persian and the two will not stay in agreement. A
+single-clause sentence takes the old path unchanged, and a panic sell
+written across two clauses still fires, because the clause holding the
+verb («همه پولمو بفروشم») holds the panic words too.
+
+Two consequences were measured, not assumed:
+
+* **1 of 4 → 4 of 4.** All four order-plus-advice sentences keep the
+  instruction, as the turn's intent or as a leg, and `EXECUTE_SWAP` is in
+  the evidence trail so the reply can attribute it.
+* **A clause with digits no longer hides its sibling.** The discovery
+  flag also carries `&& !/[0-9]+/`, because an amount makes it an order
+  rather than a question. Applied to the sentence, that meant
+  «۱۰۰ دلار اتریوم بخر و بهترین ارز را معرفی کن» produced **no second
+  leg at all** — the advice clause scored nothing and was dropped by the
+  splitter. Per clause, the amount is where the amount is:
+  `[EXECUTE_SWAP, MARKET_OVERVIEW]`. Whether a clause names an amount is
+  a question only that clause can answer.
+
+**The other half of the gate is the reason the gate exists.** Every one of
+these assertions would also pass if the guard were simply deleted, which
+is the cheapest way to make a "the order survives" test green. So the
+file pins the sentences the guard is *for* — a panic sell in one clause,
+the same panic sell spread across two, «چی خوبه بخرم؟», «کدوم ارز رو
+بخرم» — and asserts none of them becomes an execution. Against the
+pre-fix classifier the gate fails **4 of 8**; the 4 that pass in both
+directions are exactly the ones that prove the win was not bought by
+weakening anything.
+
+The trigger loop is self-validating for the same reason. "The order
+survives when the advice phrase is in the other clause" is vacuous if the
+phrase is not actually a trigger — the guard would not have fired either
+way. So each phrase is first asserted to set `entities.isDiscovery` on
+its own, and only then paired with an order.
+
+**A wrong label that survived only because nobody trusted it.** While
+tracing where a leg reaches, `createIntent` turned up:
+
+```js
+confirmationRequired: (classification.definition?.permission || READ) === EXECUTE
+executionRequired:    …the same expression…
+verificationRequired: …the same expression…
+```
+
+`buildPlan` merges every compound leg's template into **one** plan, so a
+turn whose headline is a read and whose second leg is a swap has a money
+step in it — and all three flags said `false`. Nothing moved, because
+`pipeline` recomputes `confirmationRequired` from the plan and `policy`
+reads step permissions; but `brain` also reads the label to decide which
+step operations count as money steps, so a wrong label was being read
+somewhere. The flags are now the **strongest permission over the legs**,
+because the plan is that union and a label may only describe what the
+thing it labels contains.
+
+> **A guard that is computed over a sentence and applied to a clause is a
+> guard with a jurisdiction problem. Ask it where its own trigger words
+> are — and read the guarded rule's vocabulary rather than writing a
+> second copy of it, or the two will drift.**
+>
+> **The safe direction is not the free direction.** Suppressing an
+> execution protects the money and still loses the instruction, and it
+> loses it silently: nothing in the output distinguishes "the user did not
+> ask" from "the user asked and we did not collect it".
+>
+> **A gate that widens what a splitter can see must pin what it must not
+> cross.** Half of this file asserts the guard still fires, because the
+> other half would pass if the guard were deleted.
+>
+> **A label derived from one part of a thing must not describe the whole
+> of it.** The plan is a union; the permission that describes the plan is
+> the strongest in that union.
+
 #### What is still open
+
+The splitter still cuts on structure and scores each half on its own
+vocabulary, so a half that carries no subject of its own — «…و دلیلش را
+توضیح بده», «…و اتریوم چطور», «…و چقدر تغییر کرده» — scores nothing and
+is dropped. Measured: 1 of 10 such sentences produced two legs, while 3
+of 3 sentences whose halves are independent did. §5.24.9 stopped a clause
+from being *silenced* by its sibling; it did not give a clause its
+sibling's *subject*.
 
 Automatic tiering decides the **depth** of a turn, §5.24.6 stopped the
 ladder re-buying a model it has already proven dead, and §5.24.7 made

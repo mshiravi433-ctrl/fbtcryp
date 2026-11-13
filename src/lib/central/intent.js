@@ -746,7 +746,31 @@ function SERVE_UNAVAILABLE(context, section) {
 function scoreClaim(text, { context = {}, state = {}, isDistress = false, isDiscovery = false } = {}) {
   const hits = [];
   for (const rule of RULES) {
-    if (rule.intent === 'EXECUTE_SWAP' && (isDistress || isDiscovery)) continue;
+  /*
+   * ─── A GUARD FIRES IN THE CLAUSE THAT TRIGGERED IT ────────────────────────
+   *
+   * `isDistress` / `isDiscovery` are sentence-level, so on a two-claim sentence
+   * the trigger can live in one half and the order in the other. Suppressing the
+   * order then is not caution, it is a dropped instruction: the safe direction
+   * for money is still a wrong answer, and it is invisible — nothing in the
+   * output says a second question was asked.
+   *
+   * So the guard is asked per CLAUSE: it fires when some clause contains BOTH an
+   * execution verb and a guard trigger. A single clause behaves exactly as
+   * before, and a panic sell written across two clauses («همه پولمو بفروشم و
+   * حالم بده») still fires, because the first clause holds both. The verb list
+   * is the EXECUTE_SWAP rule's OWN pattern, read from `RULES`, so this cannot
+   * drift from the rule it guards.
+   */
+  const orderGuarded = (isDistress || isDiscovery) && (() => {
+    const clauses = String(text || '').split(HAS_CLAUSE_CONNECTOR);
+    if (clauses.length < 2) return true;
+    const exec = (RULES.find((r) => r.intent === 'EXECUTE_SWAP') || {}).patterns;
+    const verb = Array.isArray(exec) ? exec[0] : exec;
+    if (!verb) return true;
+    return clauses.some((c) => verb.test(c) && (distressFlagsOf(c) || discoveryFlagsOf(c)));
+  })();
+    if (rule.intent === 'EXECUTE_SWAP' && orderGuarded) continue;
     const patterns = Array.isArray(rule.patterns) ? rule.patterns : [rule.patterns];
     const hit = patterns.some((p) => p.test(text));
     if (!hit) continue;
@@ -804,15 +828,41 @@ function scoreClaim(text, { context = {}, state = {}, isDistress = false, isDisc
   return hits;
 }
 
+/*
+ * ─── THE TWO OWNER-GUARDS, AS FUNCTIONS OF ONE TEXT ─────────────────────────
+ *
+ * These were inline in `classify`, which made them functions of the WHOLE
+ * SENTENCE — and a sentence can be two claims. «اتریوم را بفروش و بهترین
+ * ییلد را پیشنهاد بده» asks for an order AND for advice; the advice words
+ * set `isDiscovery` for the sentence, and the guard that exists to stop a
+ * discovery question from being read as an order then silenced the order.
+ * Measured: the sentence classified as YIELD_OPPORTUNITY with permission READ
+ * and no EXECUTE_SWAP anywhere in its evidence, while the same words without
+ * the second clause classified as EXECUTE_SWAP. The user's sell instruction
+ * simply disappeared — not refused, not reported, never collected.
+ *
+ * They are lifted here unchanged, byte for byte, so that the same test can be
+ * asked of a CLAUSE. The vocabulary is the point: a guard and the rule it
+ * guards must agree on what the words are, and a second copy of a regex is a
+ * second opinion about Persian.
+ */
+function distressFlagsOf(t) {
+  return ((
+    /(?:حالم\s*بد|ناراحتم|ترسیدم|پریشونم|داغونم|خسته\s*شدم|panic|scared|terrified|lost\s+everything)/i.test(t)
+    && /(?:ضرر|باخت|بفروشم|خروج|همشو|همه\s*چیمو|همه\s*پولمو|sell|loss|lose)/i.test(t)
+  ) || /(?:همشو|همه\s*چیمو|همه\s*پولمو|کل\s*سرمایه.{0,12}بفروشم|sell\s*everything|liquidate\s*all)/i.test(t));
+}
+
+function discoveryFlagsOf(t) {
+  return (/(?:معرفی\s*کن|پیشنهاد\s*بده|چی\s*(?:خوبه|بخرم)|کدوم\s*(?:ارز|توکن|کوین)|چه\s*ارزی|بهترین\s*(?:گزینه|ارز).{0,20}(?:خرید|بخرم)|what\s+(?:should\s+i|to)\s+buy|which\s+(?:coin|token|asset)\s+(?:should\s+i|to)\s+buy|suggest\s+(?:a\s+)?(?:coin|token|asset)|recommend\s+(?:a\s+)?(?:coin|token|asset))/i.test(t)
+    && !/[0-9]+/.test(t));
+}
+
 export function classify(message = '', { context = {}, state = {}, suggestions = null } = {}) {
   const text = normalizeText(message);
   const follow = context.followUp || detectFollowUp(message, context.memory, context.page);
-  const isDistress = (
-    /(?:حالم\s*بد|ناراحتم|ترسیدم|پریشونم|داغونم|خسته\s*شدم|panic|scared|terrified|lost\s+everything)/i.test(text)
-    && /(?:ضرر|باخت|بفروشم|خروج|همشو|همه\s*چیمو|همه\s*پولمو|sell|loss|lose)/i.test(text)
-  ) || /(?:همشو|همه\s*چیمو|همه\s*پولمو|کل\s*سرمایه.{0,12}بفروشم|sell\s*everything|liquidate\s*all)/i.test(text);
-  const isDiscovery = /(?:معرفی\s*کن|پیشنهاد\s*بده|چی\s*(?:خوبه|بخرم)|کدوم\s*(?:ارز|توکن|کوین)|چه\s*ارزی|بهترین\s*(?:گزینه|ارز).{0,20}(?:خرید|بخرم)|what\s+(?:should\s+i|to)\s+buy|which\s+(?:coin|token|asset)\s+(?:should\s+i|to)\s+buy|suggest\s+(?:a\s+)?(?:coin|token|asset)|recommend\s+(?:a\s+)?(?:coin|token|asset))/i.test(text)
-    && !/[0-9]+/.test(text);
+  const isDistress = distressFlagsOf(text);
+  const isDiscovery = discoveryFlagsOf(text);
   const hits = scoreClaim(text, { context, state, isDistress, isDiscovery });
   /* A follow-up rewrites the intent, because in a conversation the referent IS
      the intent: «بفروشم؟» after a BTC analysis is a swap quote on BTC, not a
@@ -898,7 +948,15 @@ export function classify(message = '', { context = {}, state = {}, suggestions =
   if (claims.length > 1) {
     const legs = [];
     for (const claim of claims) {
-      const legHits = scoreClaim(claim, { context, state, isDistress, isDiscovery });
+      /* A leg is judged by its OWN words, for the same reason the sentence was
+         split at all: an advice question in one half must not silence an order
+         in the other, and a panic word in one half must not turn a plain price
+         question in the other into a market overview. */
+      const legHits = scoreClaim(claim, {
+        context, state,
+        isDistress: distressFlagsOf(claim),
+        isDiscovery: discoveryFlagsOf(claim)
+      });
       if (!legHits.length) continue;
       legs.push({ intent: legHits[0].intent, score: legHits[0].score, claim });
     }
@@ -1230,6 +1288,27 @@ export function extractEntities(message, { context = {}, state = {} } = {}) {
 
 /* ── the intent record ─────────────────────────────────────────────────── */
 export function createIntent({ message, classification, context, requestId, sessionId, owner, locale, now = Date.now() } = {}) {
+  /*
+   * ─── THE LABEL IS THE UNION, BECAUSE THE PLAN IS ──────────────────────────
+   *
+   * `buildPlan` merges every compound leg's template into ONE plan, and
+   * `recommend`/`policy`/`pipeline` then reason about steps. But these three
+   * flags were derived from the TOP intent's permission alone, so a turn whose
+   * headline is a read and whose second leg is a swap carried
+   * `confirmationRequired: false` while its own plan contained a money step.
+   * `pipeline` recomputes the flag from the plan and `brain` re-derives its
+   * money steps from step permissions, so the money itself stayed gated — the
+   * label was a lie that two other readers happened not to believe. A label
+   * that survives only because nobody trusts it is still a wrong label.
+   */
+  const PERMISSION_RANK = { READ: 0, PREPARE: 1, EXECUTE: 2 };
+  const legPermissions = (classification.compound || [])
+    .map((c) => INTENT_TYPES[c && c.intent] && INTENT_TYPES[c.intent].permission)
+    .filter((perm) => PERMISSION_RANK[perm] != null);
+  const turnPermission = legPermissions.reduce(
+    (strongest, perm) => (PERMISSION_RANK[perm] > PERMISSION_RANK[strongest] ? perm : strongest),
+    classification.definition?.permission || PERMISSION.READ
+  );
   const intentId = requestId ? `intent_${hashString(String(requestId))}` : `intent_${now.toString(36)}_${hashString(`${message}|${now}`)}`;
   return {
     schema: INTENT_SCHEMA,
@@ -1254,9 +1333,9 @@ export function createIntent({ message, classification, context, requestId, sess
     risk: null,
     policy: null,
     results: {},
-    confirmationRequired: (classification.definition?.permission || PERMISSION.READ) === PERMISSION.EXECUTE,
-    executionRequired: (classification.definition?.permission || PERMISSION.READ) === PERMISSION.EXECUTE,
-    verificationRequired: (classification.definition?.permission || PERMISSION.READ) === PERMISSION.EXECUTE,
+    confirmationRequired: turnPermission === PERMISSION.EXECUTE,
+    executionRequired: turnPermission === PERMISSION.EXECUTE,
+    verificationRequired: turnPermission === PERMISSION.EXECUTE,
     executable: classification.executable !== false,
     missingRequires: classification.missingRequires || [],
     status: 'RECEIVED',
