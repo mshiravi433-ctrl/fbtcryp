@@ -88,6 +88,7 @@ fixed, and the guarantee is now a gate rather than a claim.
 | `server/fios/` engines that reach an ANSWER | 0 of 50 | **47 of 47** — measured over each engine's OWN route, not by import (§5.21, §5.22) |
 | intents whose engine reaches the REPLY | — | **26 of 26**, in a real brain turn (§5.22) |
 | the owner's capital, when the debt was never read | `null`, and seven engines reasoned about nothing | **the gross assets**, through one shared helper — and the debt is still never guessed (§5.22) |
+| the first paint, after the route work | 1839.71 KB — over the budget | **1815.05 KB** — the crypto stack is out of the entry path, and a gate now reports the EDGE (§5.22) |
 
 ### The three root causes, and what each one was
 
@@ -1968,6 +1969,53 @@ Two of the call sites were also reading the wrong **shape**:
 `conditionalAllocation` and `council` read `financial.net.netWorthUsd`,
 which is a **provenance object** (`{ value, status, reason }`), not a
 number — and `num()` on an object is `null`.
+
+#### The build that was failing, and what it was actually about
+
+While the sweep was being written, the CI build was failing on every
+commit — and the failure was not in the AI code. It was the **first-paint
+byte budget**, and the cause was an import edge two hops from the thing
+that hurt.
+
+| | first paint | verdict |
+|---|---|---|
+| `b073f6f` (before the route work) | 1814.25 KB | ok |
+| with the route work | **1839.71 KB** | **over the 1825 KB budget** |
+
+The published-transfer store — three numbers and three strings — lived
+inside `src/lib/intentCrossChainClient.js`, because that is where the
+cross-chain browser client lives. The brain client reads the published
+transfer on every turn, and the brain client is on the entry path:
+
+```
+central/client.js  →  intentCrossChainClient.js
+                    →  @noble/ed25519, @noble/hashes, server/ethersLite.js
+```
+
+So one import edge put a signing library, a hash library and an ethers
+implementation into the **first-paint bundle** — **26 KB**, to say which
+chain, which token and how much.
+
+The store now lives in `src/lib/routeRequestStore.js`, which has **no
+imports at all**. The 26 KB stays where it belongs — in the chunk that
+actually signs things — and the feature costs **0.8 KB**:
+
+| | first paint |
+|---|---|
+| before | 1814.25 KB |
+| with the feature, as it was | 1839.71 KB |
+| with the feature, as it is now | **1815.05 KB** |
+
+**And the gate now reports the EDGE, not the bytes.**
+`test/intent-ai/first-paint-import-graph.test.mjs` walks the import
+graph from the entry point and fails if a heavy package or a heavy local
+module reaches it — **directly or transitively**, because the edge that
+hurt was two hops from the thing that hurt, and one hop is exactly where
+an import looks innocent. It also names the chain that reaches it.
+
+The gate is proven: with the old edge restored, three of its five tests
+fail. The byte ratchet is still there and still right — it caught this —
+but it reports a number, and the lesson here was a shape.
 
 #### The gate, and its speed
 
