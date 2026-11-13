@@ -520,7 +520,7 @@ function StoryStage({ item, gid, still, t, promo }) {
   );
 }
 
-export default function MarketStories({ coins = [], global = null }) {
+function MarketStories({ coins = [], global = null }) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const still = useStill();
@@ -1307,3 +1307,51 @@ export default function MarketStories({ coins = [], global = null }) {
     </section>
   );
 }
+
+/*
+ * ─── MEMOISED ON A CHEAP SIGNATURE, NOT ON OBJECT IDENTITY (2026-11-12) ──────
+ *
+ * This reel is ~1300 lines of hand-drawn SVG scene (a dozen illustrated cards)
+ * plus a story rail, and it sits on the market screen's first tab. It had no
+ * memo at all, so it rebuilt on EVERY parent render — including the 30-second
+ * market poll, which hands down a freshly built `coins` array whether or not a
+ * single price moved. That is a full reconciliation of every story scene six
+ * times a minute, on the home screen, for artwork that cannot change.
+ *
+ * Comparing `coins` by identity would memoise nothing (the array is rebuilt by
+ * mergeVisuals on every poll), and comparing it field by field would be worse
+ * than the render. So the signature is what the reel actually READS:
+ *
+ *   · the leading symbols (it labels the rail from the top of the market),
+ *   · the total market cap it prints,
+ *   · the BTC dominance it prints.
+ *
+ * If none of those moved, neither can its pixels, and the render is skipped.
+ * A story being open is INTERNAL state, so an open modal is unaffected.
+ */
+/*
+ * ─── DELIBERATELY NOT MEMOISED (2026-11-12) ────────────────────────────────
+ * A memo was added here and REMOVED again in the same pass, and the reason is
+ * worth keeping because the next pass will be tempted to add it back.
+ *
+ * The reel is ~1300 lines of illustrated SVG and it does re-render on every
+ * 30-second market poll (the parent hands down a freshly built `coins` array),
+ * so it looks like an obvious memo candidate. But:
+ *
+ *   · it reads the language from `useTranslation()` INTERNALLY, not from a
+ *     prop, so a parent-level comparator cannot see a language change;
+ *   · and a language change MUST re-render it — the Aparat story leaves the
+ *     rail, every label changes, and the popup's `dir`/`lang` flip. A memo on
+ *     market numbers alone passed all the market tests and broke exactly that
+ *     behaviour (test/market-stories-and-aparat.test.jsx caught it).
+ *
+ * A correct memo would compare i18n state too, which means the parent has to
+ * pass the language down and every consumer has to keep using it — a refactor,
+ * not a one-line perf win. The real waste here is smaller than it looks anyway:
+ * `topGainerCoins`/`topVolumeCoins` are `useMemo`'d on `coins`, so the 250-row
+ * sorts are the price and the scenes are static JSX the reconciler skips.
+ *
+ * If this is ever revisited: pass `lang` as a prop and include it in the
+ * comparator, then prove BOTH the fa→en switch and the poll-skip.
+ */
+export default MarketStories;

@@ -522,13 +522,35 @@ export default function Market() {
    * the volumes do — and prints nothing when the order is price or change,
    * because both of those numbers are already on the right of every row.
    */
+  /*
+   * ─── THE METRIC IS A VALUE, NOT AN ELEMENT (2026-11-12) ───────────────────
+   *
+   * This returned a fresh <>{text} <i>unit</i></> on every call. `CoinRow` is
+   * memoised on `prev.metric === next.metric`, and a JSX element is a NEW
+   * OBJECT each time it is created, so that comparison could never be true
+   * whenever the sort key is «ارزش بازار» or «حجم» — the two views where a
+   * row prints a second number.
+   *
+   * The effect was measurable and invisible: on those two views EVERY row in
+   * the visible list re-rendered on every 30-second poll, whether or not its
+   * price moved, which is exactly the work the comparator exists to skip
+   * ("60 rows reconcile, 4 repaint" — the comment in CoinRow.jsx). The default
+   * rank view returned null, so the screen was fast by default and quietly
+   * heavier in the two views a trader sorts by.
+   *
+   * A plain {text, unit} object fixes it at the source: two rows with the same
+   * number and the same unit now produce EQUAL (well, deep-equal) values and
+   * the memo holds. The markup is byte-identical — CoinRow renders the same
+   * <>{text} <i>{unit}</i></> it always did, and
+   * test/market-terminal.test.jsx still reads the same text.
+   */
   const rowMetric = useCallback(
     (coin) => {
       if (sortKey === 'volume') {
-        return <>{fmtCompact(coin.volume || 0)} <i>{t('market.volumeShort')}</i></>;
+        return { text: fmtCompact(coin.volume || 0), unit: t('market.volumeShort') };
       }
       if (sortKey === 'mcap') {
-        return <>{fmtCompact(coin.mcap || 0)} <i>{t('market.mcapShort')}</i></>;
+        return { text: fmtCompact(coin.mcap || 0), unit: t('market.mcapShort') };
       }
       return null;
     },

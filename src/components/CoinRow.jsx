@@ -63,7 +63,11 @@ function CoinRow({
         <div className="coin-sym">{coin.symbol}</div>
         <div className="coin-name">
           <span className="coin-name-text">{coin.name}</span>
-          {metric && <span className="coin-row-metric">{metric}</span>}
+          {metric && (
+            <span className="coin-row-metric">
+              {typeof metric === 'object' ? <>{metric.text} <i>{metric.unit}</i></> : metric}
+            </span>
+          )}
         </div>
       </div>
 
@@ -132,6 +136,20 @@ function CoinRow({
  * it is a new closure on every parent render, which would defeat the whole
  * thing.
  */
+/*
+ * `metric` is either null, a {text, unit} value (what Market.jsx passes now) or
+ * — for any caller that has not been converted — an arbitrary node, which is
+ * compared by identity exactly as before. The object form is compared by its
+ * two printed strings, so a poll that changes nothing keeps the memo; the old
+ * identity test on a freshly-created JSX element could never succeed, and that
+ * made every row on the «ارزش بازار» and «حجم» views re-render every 30 s.
+ */
+function sameMetric(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  return a.text === b.text && a.unit === b.unit;
+}
+
 function sameSparkline(a, b) {
   if (a === b) return true;
   if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
@@ -145,7 +163,7 @@ function sameSparkline(a, b) {
 export default memo(CoinRow, (prev, next) => (
   prev.showSpark === next.showSpark
   && prev.rank === next.rank
-  && prev.metric === next.metric
+  && sameMetric(prev.metric, next.metric)
   && prev.animate === next.animate
   && prev.logoPriority === next.logoPriority
   && prev.deferSpark === next.deferSpark

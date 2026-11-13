@@ -224,6 +224,44 @@
    transitions (only under a pointer), and the skeleton shimmer before the
    first feed arrives. Everything else on this route is now a static paint. */
 
+/* ══ 5 · THE HOVER TRANSITION MUST NOT REPAINT THE ROW (2026-11-12) ═════════
+   `.mx-coin-row > .coin-row` transitioned `background` and `box-shadow` for
+   180ms, and its hover state is a THREE-LAYER paint — two gradients plus a
+   radial bloom over a translucent base, with a four-layer inset shadow on top
+   (styles/market-obsidian-glass.css :562 and :574).
+
+   Neither property is compositor-friendly: `background` is not animatable by
+   the GPU at all, and `box-shadow` forces a re-raster of the element's whole
+   paint on every frame, including the translucent stack behind it. On a
+   60-row list that is up to 60 multi-layer gradients re-rasterised per frame
+   for a sixth of a second — for a decorative hover, on the app's home screen,
+   at exactly the moment the reader's finger is also scrolling it. `contain:
+   paint` above bounds each re-raster to its own row but does not make it free.
+
+   So the hover keeps every COLOUR it had and animates only what the compositor
+   can do alone: the border colour (cheap, and it is the affordance), plus the
+   existing 1px lift. The background and shadow swap instantly — a 0ms
+   difference on a state that only exists under a pointer, which is the trade
+   this whole sheet already makes for ambient motion.
+
+   This changes no colour, no radius and no layout: hover still reads as the
+   same lit card, it just arrives in one frame instead of sixty. */
+/* The base rule lives in market-obsidian-glass.css as
+   `.mx-market .mx-coin-row > .coin-row` (0,3,0) — specificity has to at least
+   match it, and matching the guard the rest of this sheet uses also keeps the
+   escape hatch above honest: `data-motion='full'` restores the original
+   transition along with every ambient loop. */
+.mx-market .mx-coin-row > .coin-row,
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-coin-row > .coin-row {
+  transition: transform .18s ease, border-color .18s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mx-market .mx-coin-row > .coin-row,
+  :root[data-theme]:not([data-motion='full']) .mx-market .mx-coin-row > .coin-row {
+    transition: border-color .18s ease;
+  }
+}
+
 /* ══ 5 · THE ESCAPE HATCH ══════════════════════════════════════════════════
    Every rule above is guarded with `:not([data-motion='full'])`, so a single
    attribute restores the full motion budget for A/B verification on a real
