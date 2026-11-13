@@ -177,6 +177,23 @@ async function main() {
   const stateStore = createCentralStateStore();
   const brain = createCentralBrain({ stateStore });
 
+  /*
+   * MOUNT THE REAL ENGINES, NOT FAKE PROVIDERS.
+   *
+   * The fit, macro-graph and scenario engines sit behind
+   * `server/ci/fitBridge.js` and are wired by the composition root
+   * (`server/fios/index.js`). Without that mount they answer
+   * `PROVIDER_NOT_WIRED`, and this probe — which counts a probe as reached
+   * when ONE finding is OK — accepted that: OPPORTUNITY_FIT came back with
+   * `ok: 3, failed: 2` and was reported as a success.
+   *
+   * So the root is mounted for real and only the EXTERNAL sources stay
+   * faked. A fake provider that mirrors the implementation would hide the
+   * mismatch between the implementation and the engine.
+   */
+  const { createFinancialIntelligence } = await import('../server/fios/index.js');
+  createFinancialIntelligence({ stateStore, brain, ownerFor: (o) => o, log: () => {} });
+
   const rows = [];
   for (const probe of PROBES) {
     const owner = `probe-${probe.intent}`;
@@ -211,6 +228,17 @@ async function main() {
       failed: failed.length,
       failedIds: failed.map((f) => f.id).join(','),
       reasons: failed.map((f) => `${f.id}: ${f.reason || ''}`.slice(0, 70)).join(' | '),
+      /*
+       * A REFUSAL IS AN ANSWER ONLY IF IT NAMES ITSELF.
+       *
+       * «the central registry records etf as UNAVAILABLE» tells the user what
+       * is missing and why. An empty reason tells them nothing, and a finding
+       * that failed silently is indistinguishable from a finding that was never
+       * attempted — which is exactly what a dark engine looks like from the
+       * outside. So the reason is carried per finding, and the gate counts the
+       * findings that failed without one.
+       */
+      failedReasons: failed.map((f) => ({ id: f.id, reason: String(f.reason || f.detail || '').trim() })),
       error
     });
   }
@@ -224,7 +252,11 @@ async function main() {
         probes: rows.length,
         classifiedAsAsked: rows.length - unmatched.length,
         withOkFinding: rows.length - allFailed.length,
-        withNoFinding: allFailed.length
+        withNoFinding: allFailed.length,
+        /* a finding that failed WITHOUT naming a reason is indistinguishable
+           from a finding that was never attempted */
+        silentRefusals: rows.reduce((a, r) => a + r.failedReasons.filter((f) => !f.reason).length, 0),
+        refusals: rows.reduce((a, r) => a + r.failedReasons.length, 0)
       }
     }, null, 2));
     return;

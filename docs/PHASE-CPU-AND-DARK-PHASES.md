@@ -119,6 +119,8 @@ is not a permission (§5.23).
 | an answered turn the machinery had a question about | **QUESTION** mode — the computed answer erased from `text` | **ANSWER**, with the machine's question after it; a money turn still asks (§5.23) |
 | English prose inside a Persian reply | 5 clauses over 2 of 6 questions — including the REASON for the risk level | **0** — and where the engine speaks only English, its own vocabulary is translated, never its prose (§5.23) |
 | the probe's own coverage number | **100%** — inflated, because it matched its own section labels | **100%** — honest: 83.3% once the labels stopped counting, then the real miss was fixed (§5.23) |
+| the goal-scenario engine, on a goal question | `NO_STARTING_CAPITAL` — the wiring said "the brain passes it in", and the brain passed neither | **the owner's own capital and goal**, read by the root and translated through the ONE goal reader (§5.23) |
+| a finding that failed without naming a reason | unmeasured — the gate counted a probe as reached when ONE finding answered | **0 silent refusals**, asserted per finding over one probe run (§5.23) |
 
 ### The three root causes, and what each one was
 
@@ -2585,6 +2587,89 @@ formatter: `fmtNum` and `fmtUsd` are exported from `recommend.js` and used by
 the brain's findings, so a single turn cannot quote the same total as
 «10k USD» in one section and «۱۰٬۰۰۰ دلار» in the next.
 
+#### The same lesson, one engine down
+
+Mounting the real composition root in the probe had a second effect: it made
+the goal-scenario engine reachable, and reachable turned out to mean
+**refusing on every goal question**.
+
+```
+  goal-scenarios: a scenario needs real capital; nothing was modelled
+                  and nothing was guessed
+```
+
+An honest refusal — and a refusal to a question the deployment could answer.
+The engine takes `{ goal, financial }` from its caller, and the comment at the
+wiring site said *"both of which the brain passes in"*. The brain passed
+**neither**: the plan step carries no goal and no financial state, so the
+provider was called with `startUsd: null` every time.
+
+The capital was not missing. `capitalUsdFor()` on the same owner's sections
+returns the gross assets correctly — 7,300 — through the fallback §5.22 added.
+What was missing was a caller that asked for it.
+
+So the root now fills in what the root can read itself:
+
+```js
+setScenarioProvider(async (owner, opts = {}) => {
+  const financial = opts.financial || await financialStateFor(owner).catch(() => null);
+  const goal = opts.goal || primaryGoalFor(owner);
+  return goalScenarios.scenariosFor(owner, { ...opts, financial, goal });
+});
+```
+
+A caller's explicit input still wins — this is a fallback, not an override —
+and the goal is translated through the **same** `readGoalInputs()` the brain
+and the goals module use, because the stored goal says `targetAmount` and
+`durationMonths` while the engine wants `targetUsd` and `months`. A third
+mapping written inline at the wiring site would have been a third reader of
+one schema, which is the exact defect §5.23 already paid for once.
+
+The engine then answered, and answering exposed one more English clause inside
+the Persian reply — «the recommended one is BALANCED with a 25% modelled
+drawdown» — because a finding nobody had ever seen rendered had never needed a
+Persian voice. It has one now, including the qualifier that matters most:
+*«یک مدل روی بازده انتخابی، نه پیش‌بینی»*. A finding that is dark cannot be
+wrong about its language, and a finding that starts answering has to be right
+about it.
+
+#### Refusing is allowed; refusing silently is not
+
+With the real engines mounted, three of the thirty-six intent probes answer
+with a **partial** refusal:
+
+| intent | what refused | why that is correct |
+|---|---|---|
+| `INSTRUMENT_QUERY` | `instrument-access` | the registry records `etf` as UNAVAILABLE, so the finding refuses rather than inventing a ticker |
+| `ROUTE_INTELLIGENCE` | `route-intelligence` | a route comparison needs a source chain, a destination and an amount, and the sentence carries no amount |
+| `SIGNAL_READING` | `asset-intelligence` | no asset was named, so nothing could be resolved |
+
+The gate counts a probe as reached when **one** finding is OK, which is the
+right floor — an intent whose every finding failed is dark — but it lets
+through a turn that answered only part of what it read. What makes those three
+acceptable is not that they answered; it is that each refusal **names itself**.
+
+That is now asserted, per finding:
+
+```
+  probes                 36
+  classified as asked    36
+  with an OK finding     36
+  with NO finding         0
+  refusals                4
+  SILENT refusals         0   ← the new gate
+```
+
+A finding that failed with a reason is an answer about a limit. A finding that
+failed with no reason is indistinguishable from a finding that was never
+attempted — and that is exactly what a dark engine looks like from the outside.
+It is §5.21's rule one level down: not *did it answer*, but *did it tell the
+truth about not answering*.
+
+The probe also runs **once** for the whole gate file now, with every assertion
+read from that single JSON. Thirty-six real brain turns is not a cheap thing to
+run three times, and a gate that is slow is a gate that gets skipped.
+
 #### The rule this leaves behind
 
 > **a brain that answers one question when asked two is silent data loss —
@@ -2599,6 +2684,13 @@ the brain's findings, so a single turn cannot quote the same total as
 >
 > **and the reason is the part the user most needs, so it is the part that
 > must not arrive in a second language.**
+>
+> **and a composition root must hand an engine what the root itself can read —
+> an engine that refuses for want of an input its own wiring could have
+> supplied is dark, and honestly dark, which is the hardest kind to find.**
+>
+> **and refusing is allowed; refusing SILENTLY is not — a failure with no named
+> reason is indistinguishable from an engine that was never called.**
 
 The classification can be perfect and the answer still incomplete. And
 the coverage number is not the work: it is the **instrument**. Every one

@@ -1807,6 +1807,14 @@ const FIT_VERDICT_FA = Object.freeze({
   NOT_FITTED: 'نامناسب',
   UNRANKED: 'رتبه‌بندی‌نشده'
 });
+/* The scenario engine's own three profiles, in Persian — its vocabulary, not a
+   paraphrase of a sentence it wrote. */
+const SCENARIO_PROFILE_FA = Object.freeze({
+  CONSERVATIVE: 'محافظه‌کار',
+  BALANCED: 'متعادل',
+  AGGRESSIVE: 'پرریسک',
+  GROWTH: 'رشد'
+});
 const FIT_TOLERANCE_FA = Object.freeze({
   conservative: 'محافظه‌کار',
   balanced: 'متعادل',
@@ -2026,6 +2034,14 @@ function buildFindings({ intent, classification, state, results, risk, readResul
           reason: recommended
             ? `${recommended.profile} is the recommended profile: ${recommended.expectedReturnPct ?? '—'}% modelled return with a ${recommended.probabilityOfLossPct ?? '—'}% modelled probability of loss — a model over a chosen return, not a forecast`
             : 'the profiles were built but the engine recommended none; the reason travels with the numbers',
+          /* The qualifier «a model over a chosen return, not a forecast» is the
+             honest half of this finding — it is what keeps a modelled 12%
+             reading as a promise. It has to survive translation, and the
+             numbers come from the same formatter the headline uses. */
+          detailFa: `${fmtNum(profiles.length, locale === 'fa')} پروفایل از ${fmtUsd(sc.startUsd, locale === 'fa')} در ${fmtNum(sc.months, locale === 'fa')} ماه به سمت ${fmtUsd(sc.targetUsd, locale === 'fa')}${recommended ? `؛ پیشنهادی ${SCENARIO_PROFILE_FA[String(recommended.profile || '').toUpperCase()] || recommended.profile} است` : ''}${recommended?.maxDrawdownPct != null ? ` با افت مدل‌شدهٔ ${fmtNum(recommended.maxDrawdownPct, locale === 'fa')}٪` : ''}`,
+          reasonFa: recommended
+            ? `${SCENARIO_PROFILE_FA[String(recommended.profile || '').toUpperCase()] || recommended.profile} پروفایل پیشنهادی است: بازده مدل‌شدهٔ ${fmtNum(recommended.expectedReturnPct, locale === 'fa')}٪ با احتمال زیان مدل‌شدهٔ ${fmtNum(recommended.probabilityOfLossPct, locale === 'fa')}٪ — یک مدل روی بازده انتخابی، نه پیش‌بینی`
+            : 'پروفایل‌ها ساخته شدند ولی موتور هیچ‌کدام را پیشنهاد نکرد؛ دلیل همراه همان عددها می‌آید',
           estimate: sc.estimate === true,
           source: 'goal-scenarios-engine',
           dataAt: sc.at || Date.now(),
@@ -2038,6 +2054,7 @@ function buildFindings({ intent, classification, state, results, risk, readResul
         status: 'UNAVAILABLE',
         detail: null,
         reason: 'a scenario needs real capital; nothing was modelled and nothing was guessed',
+        reasonFa: 'سناریو به سرمایهٔ واقعی نیاز دارد؛ هیچ چیزی مدل نشد و هیچ چیزی هم حدس زده نشد',
         source: 'goal-scenarios-engine',
         partial: true
       });

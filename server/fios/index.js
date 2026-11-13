@@ -36,6 +36,18 @@ import { runWhatIf } from './simulation.js';
 import { createCrossChainReasoner } from './crosschain.js';
 import { createDecisionEngine } from './decision.js';
 import { buildCanonicalFinancialState, snapshotRow, headline } from './financialState.js';
+/*
+ * The goal has ONE schema reader, and this is it.
+ *
+ * A stored goal arrives as `targetAmount`/`durationMonths`/`monthlyContribution`
+ * from the goal list, as `targetUsd`/`horizonMonths` from the central state, and
+ * the scenario engine wants `targetUsd`/`months`/`monthlyContributionUsd`. Three
+ * spellings of one record is how a goal ends up half-read: this round already
+ * found two readers that each knew one spelling, producing one answer and one
+ * silent GOAL_INPUTS_INCOMPLETE. A third mapping written inline here would be
+ * the third reader.
+ */
+import { readGoalInputs } from '../../src/lib/central/analysis.js';
 import { buildWorldModel, worldModelDigest } from './worldModel.js';
 import { createPolicyEngine } from './policy.js';
 import { createGuardian } from './guardian.js';
@@ -297,6 +309,27 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
   /** Canonical financial state straight from the state store, persisted as
    *  the guardian's baseline row. UNAVAILABLE is an honest result, not an
    *  error — the panel says "unread", it never says zero. */
+  /**
+   * The owner's own goal, translated into the ENGINE's spelling.
+   *
+   * The goal lives in a section of the same state store the root already reads,
+   * so an engine that needs it should not have to hope a caller remembered to
+   * pass it. Returns null when the owner has no goal — the engine then refuses
+   * honestly rather than modelling a target nobody set.
+   */
+  function primaryGoalFor(owner) {
+    const list = sectionsFor(owner)?.goals?.data?.goals;
+    const stored = Array.isArray(list) && list.length ? list[0] : null;
+    if (!stored) return null;
+    const g = readGoalInputs(stored);
+    return {
+      ...stored,
+      targetUsd: g.targetUsd ?? num(stored.targetUsd),
+      months: g.years !== null ? Math.max(1, Math.round(g.years * 12)) : num(stored.months),
+      monthlyContributionUsd: g.monthlyContributionUsd ?? num(stored.monthlyContributionUsd) ?? 0
+    };
+  }
+
   async function financialStateFor(owner) {
     const sections = sectionsFor(owner);
     const financial = buildCanonicalFinancialState({ owner, sections, now: now() });
@@ -887,9 +920,23 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
 
   /* The goal-scenario reader (path 13): three profiles for a target, each
      with its allocation, expected value, drawdown, probability of loss and
-     probability of halving. It needs the owner's goal and capital, both
-     of which the brain passes in. */
-  setScenarioProvider((owner, opts = {}) => goalScenarios.scenariosFor(owner, opts));
+     probability of halving.
+
+     It needs the owner's goal and capital — and the comment here used to say
+     «both of which the brain passes in». The brain passed NEITHER: the plan
+     step carries no `goal` and no `financial`, so the engine was called with
+     `startUsd: null` and answered NO_STARTING_CAPITAL on every goal question.
+     That is an honest refusal, but a refusal to a question the deployment
+     could answer — the root knows how to read this owner's financial state,
+     and the goal is a section of the same store.
+
+     So the root fills in what it can read itself. A caller's explicit input
+     still wins: this is a fallback, not an override. */
+  setScenarioProvider(async (owner, opts = {}) => {
+    const financial = opts.financial || await financialStateFor(owner).catch(() => null);
+    const goal = opts.goal || primaryGoalFor(owner);
+    return goalScenarios.scenariosFor(owner, { ...opts, financial, goal });
+  });
 
   /* The LIVE route source (path 14).
    *

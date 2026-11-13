@@ -10,7 +10,9 @@
  *   · an intent has NO finding at all — the engine is dark;
  *   · a sentence does not reach the intent it was written for — which is
  *     either a hole in the language or a misclassification, and both are
- *     worth a build failing over.
+ *     worth a build failing over;
+ *   · a finding FAILED WITHOUT NAMING A REASON — a silent refusal is
+ *     indistinguishable from an engine that was never called.
  *
  * The second one is the stricter half, and it is the half that matters:
  * the intent list grew to thirty-six when the EXECUTION intents were
@@ -35,7 +37,17 @@ import { spawnSync } from 'node:child_process';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-test('every intent reaches the answer, and every sentence reaches its intent', () => {
+/*
+ * ONE run of the probe, shared by every test in this file.
+ *
+ * The probe drives thirty-six real brain turns; running it once per assertion
+ * would multiply the cost of the gate for no extra information, and a gate
+ * that is slow is a gate that gets skipped. Everything below is asserted from
+ * this single JSON.
+ */
+let cached = null;
+function runReachProbe() {
+  if (cached) return cached;
   const out = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'probe-engine-reach.mjs'), '--json'], {
     cwd: ROOT,
     encoding: 'utf8',
@@ -43,15 +55,16 @@ test('every intent reaches the answer, and every sentence reaches its intent', (
     maxBuffer: 32 * 1024 * 1024
   });
   assert.equal(out.status, 0, `the probe failed:\n${out.stderr?.slice(0, 600)}`);
-
-  let parsed;
   try {
-    parsed = JSON.parse(out.stdout);
+    cached = JSON.parse(out.stdout);
   } catch {
     assert.fail(`the probe did not print JSON:\n${out.stdout?.slice(0, 600)}`);
   }
+  return cached;
+}
 
-  const { rows, summary } = parsed;
+test('every intent reaches the answer, and every sentence reaches its intent', () => {
+  const { rows, summary } = runReachProbe();
 
   const dark = rows.filter((r) => r.ok === 0);
   assert.equal(
@@ -70,6 +83,52 @@ test('every intent reaches the answer, and every sentence reaches its intent', (
 
   assert.ok(summary.probes >= 35, `expected the whole intent list, found ${summary.probes}`);
   assert.equal(summary.withNoFinding, 0);
+});
+
+test('every refusal NAMES itself — a silent failure is a dark engine', () => {
+  /*
+   * "Reached" was never enough, and neither is "answered".
+   *
+   * A probe counts an intent as reached when ONE of its findings is OK. That
+   * is the right floor — an intent whose every finding failed is dark — but it
+   * lets a turn through that answered half of what it read. Three of the
+   * thirty-six do exactly that, and all three are CORRECT:
+   *
+   *   · INSTRUMENT_QUERY — the registry records `etf` as UNAVAILABLE, so the
+   *     instrument finding refuses rather than inventing a ticker;
+   *   · ROUTE_INTELLIGENCE — a route comparison needs a source chain, a
+   *     destination and an amount, and the sentence carries no amount;
+   *   · SIGNAL_READING — no asset was named, so nothing could be resolved.
+   *
+   * What makes those refusals acceptable is that each one SAYS SO. A finding
+   * that failed with a named reason is an answer about a limit; a finding that
+   * failed with no reason is indistinguishable from a finding that was never
+   * attempted — and that is precisely what a dark engine looks like from the
+   * outside. This is the property §5.21 was about, one level down: not "did it
+   * answer" but "did it tell the truth about not answering".
+   *
+   * It is asserted per FINDING, not per probe, because one silent finding
+   * inside an otherwise-answered turn is exactly the failure this gate exists
+   * to make impossible.
+   */
+  const { rows, summary } = runReachProbe();
+  const silent = rows.flatMap((r) => (r.failedReasons || [])
+    .filter((f) => !f.reason)
+    .map((f) => `${r.intent} → ${f.id}`));
+  assert.deepEqual(
+    silent,
+    [],
+    'every finding that failed must name a reason; a silent failure is indistinguishable from a dark engine'
+  );
+  assert.equal(summary.silentRefusals, 0, 'no refusal may be silent');
+  assert.ok(summary.refusals >= 0, 'the probe must count its refusals');
+
+  /* The refusals are also a record: if this number ever jumps, an engine that
+     used to answer has started refusing, and the reason strings say which. */
+  const refusing = rows.filter((r) => (r.failedReasons || []).length);
+  for (const row of refusing) {
+    assert.ok(row.ok > 0, `${row.intent}: every finding refused, so the intent is dark`);
+  }
 });
 
 test('the intent list is covered — a new intent cannot be added without a probe', async () => {
