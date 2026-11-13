@@ -1453,3 +1453,13 @@
   }
   .mx-market .mx-col-btn { min-height: 20px; padding: 2px 3px; gap: 3px; }
 }
+
+/* The quote half of the pair — «BTC/USD» rather than a bare «BTC».
+   De-emphasised on purpose: the base asset is what a reader scans for, the
+   quote says what the number below it is denominated in. Same size, lower
+   weight, muted colour, so the pair still reads as one token. */
+.mx-market .mx-coin-row .coin-sym .coin-quote {
+  color: var(--mx-faint);
+  font-weight: 550;
+  font-size: .92em;
+}

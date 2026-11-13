@@ -147,3 +147,48 @@ describe('the 24h position bar', () => {
     expect(block).not.toContain('transition');
   });
 });
+
+/*
+ * ─── THE PAIR ──────────────────────────────────────────────────────────────
+ *
+ * A bare «BTC» above a bare number is ambiguous: the price is denominated in
+ * something the row never names, and the reader has to know from elsewhere
+ * that it is dollars. Every other market table writes «BTC/USD». The pair makes
+ * the quotation part of the reading.
+ */
+describe('the quote asset', () => {
+  const sym = () => document.querySelector('.mx-market .coin-sym, .coin-sym');
+
+  it('renders the pair when a quote is given', () => {
+    mount({ ...base }, { quote: 'USD' });
+    expect(sym().textContent).toBe('BTC/USD');
+    /* The quote is a separate span so it can be de-emphasised — the base asset
+       is what the reader is scanning for. */
+    expect(sym().querySelector('.coin-quote').textContent).toBe('/USD');
+  });
+
+  it('renders the bare symbol when there is no quote', () => {
+    /* A row drawn alone (a hero, a search hit) has no quotation to state, and
+       a bare ticker there is not a lie — it is simply not a pair. */
+    mount({ ...base });
+    expect(sym().textContent).toBe('BTC');
+    expect(sym().querySelector('.coin-quote')).toBeNull();
+  });
+
+  it('repaints when the quote changes', () => {
+    /* The comparator is hand-written; a prop that is missing from it means the
+       pair would keep the old quote until something else on the row moved. */
+    const src = require('node:fs').readFileSync('src/components/CoinRow.jsx', 'utf8');
+    expect(src).toMatch(/prev\.quote === next\.quote/);
+  });
+
+  it('takes the quote from the app, not from a hardcoded string in the row', () => {
+    /* Only USD is supported today (`vsOf` returns 'usd' unconditionally), so
+       the value is a constant — but it is passed as a VALUE, so the row follows
+       if the app ever quotes in something else. */
+    const row = require('node:fs').readFileSync('src/components/CoinRow.jsx', 'utf8');
+    expect(row).not.toMatch(/'USD'|"USD"/);
+    const page = require('node:fs').readFileSync('src/pages/Market.jsx', 'utf8');
+    expect(page).toMatch(/quote=\{vs\.toUpperCase\(\)\}/);
+  });
+});

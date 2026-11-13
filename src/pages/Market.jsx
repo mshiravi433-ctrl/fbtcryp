@@ -1306,6 +1306,12 @@ export default function Market() {
                             /* The pill prints the window the rail selected —
                                see the horizon state above. */
                             horizon={horizon}
+                            /* The quote asset part of the pair. Only USD is
+                               supported (lib/currency.js vsOf), so this is a
+                               constant today — written as a value, not a
+                               hardcoded string in the row, so it follows if
+                               the app ever quotes in something else. */
+                            quote={vs.toUpperCase()}
                             /* The list keeps a rhythm, so every row carries the
                                same three-line right column. One row drawn alone
                                (a hero, a search hit) does not. */

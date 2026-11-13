@@ -70,7 +70,21 @@ function CoinRow({
    * Off by default: callers that draw one row (a hero, a search hit) have no
    * list rhythm to keep.
    */
-  showRange = false
+  showRange = false,
+  /*
+   * THE QUOTE ASSET, DRAWN AS THE PAIR (2026-11-12).
+   *
+   * Every row said «BTC» where every other market table in the world says
+   * «BTC/USD». A bare ticker is ambiguous the moment there is more than one
+   * quote asset, and the price above it is denominated in something the row
+   * never named — the reader had to know, from elsewhere, that the number is
+   * dollars. The pair makes the quotation part of the reading.
+   *
+   * `null` renders the bare symbol, so a caller that draws one row without a
+   * quote (a hero, a search hit) is unchanged and the list is the only place
+   * that gains the suffix.
+   */
+  quote = null
 }) {
   /*
    * «همیشه سبز»: the same rule the Bitcoin box follows (lib/format.js
@@ -114,7 +128,12 @@ function CoinRow({
       <CoinLogo coin={coin} priority={logoPriority} />
 
       <div className="coin-meta">
-        <div className="coin-sym">{coin.symbol}</div>
+        <div className="coin-sym">
+          {coin.symbol}
+          {/* The quote is a SEPARATE span so it can be de-emphasised: the base
+              asset is what the reader is scanning for, the quote is context. */}
+          {quote && <span className="coin-quote">/{quote}</span>}
+        </div>
         <div className="coin-name">
           <span className="coin-name-text">{coin.name}</span>
           {metric && (
@@ -238,6 +257,7 @@ export default memo(CoinRow, (prev, next) => (
   && prev.coin?.id === next.coin?.id
   && prev.coin?.price === next.coin?.price
   && prev.horizon === next.horizon
+  && prev.quote === next.quote
   && prev.coin?.change1h === next.coin?.change1h
   && prev.coin?.change24h === next.coin?.change24h
   && prev.coin?.change7d === next.coin?.change7d
