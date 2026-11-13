@@ -52,7 +52,25 @@ function CoinRow({
    * backup sends no 1h/7d) renders the same neutral «—» a missing 24h does,
    * never a green zero.
    */
-  horizon = '24h'
+  horizon = '24h',
+  /*
+   * ─── WHERE THE PRICE SITS IN ITS OWN DAY (2026-11-12) ──────────────────────
+   * `high24h` and `low24h` have been on every row since the feed was written
+   * (`normalizeCoin`) and the market list never read them — the only place the
+   * pair appeared was the Bitcoin box in the Overview tab. So the list could
+   * say "up 4%" while the coin was sitting at the very bottom of its range —
+   * two screens that look identical (a green row) and mean opposite things: a
+   * bounce off the low versus a stall under the high.
+   *
+   * The bar is deliberately tiny and deliberately NOT a second sparkline: one
+   * line, one dot, no gradient, no gradient def, no animation. It answers a
+   * single question («کجای بازه‌ی امروز؟») that no other element on the row can
+   * answer, and it costs one `<span>` with a background and one 5px dot.
+   *
+   * Off by default: callers that draw one row (a hero, a search hit) have no
+   * list rhythm to keep.
+   */
+  showRange = false
 }) {
   /*
    * «همیشه سبز»: the same rule the Bitcoin box follows (lib/format.js
@@ -65,6 +83,24 @@ function CoinRow({
   const tone = pctTone(move, 2);
   const up = tone === 'down' ? false : tone === 'up';
   const flat = tone == null || tone === 'flat';
+  /*
+   * Position of the live price inside today's high/low, 0..1.
+   *
+   * Returns null rather than a guess when the bar would be meaningless: no
+   * high/low (the CoinLore backup sends neither), a non-positive low, or a
+   * high that is below the low (a feed glitch — drawing that would put the dot
+   * outside its own track). A row with no range simply renders no bar, which
+   * is the same honesty rule the pill follows for a missing move.
+   */
+  const rangePos = (() => {
+    if (!showRange) return null;
+    const low = Number(coin?.low24h);
+    const high = Number(coin?.high24h);
+    const price = Number(coin?.price);
+    if (!Number.isFinite(low) || !Number.isFinite(high) || !Number.isFinite(price)) return null;
+    if (low <= 0 || high <= low || price <= 0) return null;
+    return Math.min(1, Math.max(0, (price - low) / (high - low)));
+  })();
   const [rowRef, near] = useNearViewport({ eager: !deferSpark, rootMargin: '400px' });
 
   const content = (
@@ -116,6 +152,20 @@ function CoinRow({
             : <GlyphTrendDown width={9} height={9} aria-hidden="true" />)}
           {fmtPct(move, 2)}
         </div>
+        {rangePos != null && (
+          <span
+            className="coin-row-range"
+            data-testid="coin-row-range"
+            data-pos={rangePos < 0.25 ? 'low' : rangePos > 0.75 ? 'high' : 'mid'}
+            /* A bar is a picture of a number; the number is in the title, and
+               a screen reader already has the price and the move. Not a
+               second live region. */
+            aria-hidden="true"
+            title={`${fmtUsd(coin.low24h)} – ${fmtUsd(coin.high24h)}`}
+          >
+            <i style={{ insetInlineStart: `${(rangePos * 100).toFixed(1)}%` }} />
+          </span>
+        )}
       </div>
     </button>
   );

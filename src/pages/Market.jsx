@@ -1234,6 +1234,10 @@ export default function Market() {
                             /* The pill prints the window the rail selected —
                                see the horizon state above. */
                             horizon={horizon}
+                            /* The list keeps a rhythm, so every row carries the
+                               same three-line right column. One row drawn alone
+                               (a hero, a search hit) does not. */
+                            showRange
                             onClick={() => openCoin(c.id)}
                           />
                           <span className="mx-swap-slot" data-available={swapUrl ? 'true' : undefined}>

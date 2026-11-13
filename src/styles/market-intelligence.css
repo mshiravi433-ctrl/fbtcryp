@@ -1291,3 +1291,41 @@
 :root[data-native='true'] .mx-market :is(.mx-deck-gloss, .mx-btc-gloss, .mx-btc-scan),
 :root[data-lite='true'] .mx-market :is(.mx-deck-gloss, .mx-btc-gloss, .mx-btc-scan) { animation: none !important; opacity: 0; }
 :root[data-reduce-motion='true'] .mx-market *, :root[data-reduce-motion='true'] .mx-market *::before, :root[data-reduce-motion='true'] .mx-market *::after { animation: none !important; transition: none !important; }
+
+/* ══ THE 24 H POSITION BAR (2026-11-12) ══════════════════════════════════════
+   Where the live price sits between today's low and today's high. It exists
+   because the pair was already in the payload and nowhere on the list: "up 4%"
+   looks identical whether the coin bounced off the floor or stalled under the
+   ceiling, and those two are different trades.
+
+   One track, one 5px dot, a 3px height and NO transition — the dot only moves
+   when the price does, on the 30 s poll, and animating a 3px line that moves
+   once every 30 s would cost a compositor layer for nothing. The track uses
+   the same `--mx-line` the row border uses, so it reads as part of the row
+   rather than a chart dropped into it. */
+.mx-market .mx-coin-row .coin-row-range {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 76px;
+  height: 3px;
+  margin-top: 1px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--mx-down) 34%, transparent), var(--mx-line) 48%, color-mix(in srgb, var(--mx-up) 34%, transparent));
+  direction: ltr;
+}
+.mx-market .mx-coin-row .coin-row-range i {
+  position: absolute;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  margin-inline-start: -2.5px;
+  border-radius: 50%;
+  background: var(--mx-text);
+  box-shadow: 0 0 0 1px var(--mx-panel);
+}
+/* A coin pinned at either end has no room for a centred dot; nudge it inside
+   its own track so the dot never hangs over the row edge. */
+.mx-market .mx-coin-row .coin-row-range[data-pos='low'] i { margin-inline-start: 0; }
+.mx-market .mx-coin-row .coin-row-range[data-pos='high'] i { margin-inline-start: -5px; }
