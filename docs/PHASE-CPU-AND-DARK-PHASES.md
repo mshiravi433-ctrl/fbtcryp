@@ -48,6 +48,16 @@ use was being read as an instruction to move the money, and an owner whose
 debt had never been read had no capital for seven engines. Both are
 fixed, and the guarantee is now a gate rather than a claim.
 
+And the intent list was then grown to **all thirty-six**, which found
+**five more**. The ten that were missing were the **EXECUTION** ones —
+the ones where a misclassification is a transaction the user did not ask
+for — and asking about them found five holes in the language itself: a
+navigation pattern that read a bridge as a page, a frozen array sorted
+in place (which killed every cancellation turn), an intent with no rule
+at all, two verbs nobody had written down, and a possessive sitting
+between a noun and its verb. All five are fixed, and the sweep is now a
+gate over every intent (§5.22).
+
 | | before | after |
 |---|---|---|
 | phases the probe calls **live** | 142 / 165 | **165 / 165** |
@@ -86,7 +96,8 @@ fixed, and the guarantee is now a gate rather than a claim.
 | the conversation's own shape | not modelled | **a state machine in the session layer**, asking ONE adaptive question (§5.20) |
 | a replan when the world moves | computed, never read | **read by the turn**, and announced only when something decision-relevant changed (§5.20) |
 | `server/fios/` engines that reach an ANSWER | 0 of 50 | **47 of 47** — measured over each engine's OWN route, not by import (§5.21, §5.22) |
-| intents whose engine reaches the REPLY | — | **26 of 26**, in a real brain turn (§5.22) |
+| intents whose engine reaches the REPLY | — | **35 of 35**, in a real brain turn (§5.22) |
+| sentences that reach the intent they were written for | — | **35 of 35** — the ten EXECUTE intents found five holes in the language (§5.22) |
 | the owner's capital, when the debt was never read | `null`, and seven engines reasoned about nothing | **the gross assets**, through one shared helper — and the debt is still never guessed (§5.22) |
 | the first paint, after the route work | 1839.71 KB — over the budget | **1815.05 KB** — the crypto stack is out of the entry path, and a gate now reports the EDGE (§5.22) |
 
@@ -2017,6 +2028,96 @@ The gate is proven: with the old edge restored, three of its five tests
 fail. The byte ratchet is still there and still right — it caught this —
 but it reports a number, and the lesson here was a shape.
 
+#### The ten intents that were never spoken for
+
+The sweep asked about twenty-six intents. The list has **thirty-six** —
+and the ten it did not ask about were the **EXECUTION** ones, the ones
+with consequences. A misclassified `EXECUTE` is a transaction the user
+did not ask for, so the sweep grew to cover all of them, in the shapes
+that produce the most DANGEROUS confusion:
+
+- a QUOTE that reads like an ORDER («قیمت سواپ بیت‌کوین چقدر است؟»
+  wants a price; «ETH را به USDC سواپ کن» wants the trade);
+- a NAVIGATION that reads like a COMMAND («برو به شبکه پالیگان» is a
+  bridge, not a page);
+- a CONFIRMATION that only means something when there is an action
+  waiting — which is why those two probes carry a SETUP turn, because a
+  confirmation is a property of a conversation, not of a sentence.
+
+It found **five real holes**, and every one of them was in the language,
+not in an engine.
+
+**One — a destination on a chain is not a page.** The navigation pattern
+was `/برو به (صفحه )?/` — the page word was **optional**, so «برو به
+شبکه پالیگان» was a request to *see* a screen. It only surfaced when
+the wallet was unreadable, because the execute intent was then
+down-scored — but the sentence was wrong either way: a sentence whose
+meaning depends on an unrelated dependency being up is a sentence that is
+wrong. The navigation verbs now need their object.
+
+**Two — a frozen constant cannot be sorted in place.** `stateDigest`
+sorted its `keys` argument in place, and both defaults
+(`STATE_SECTION_IDS`, `ANALYSIS_MINIMUM`) are `Object.freeze`d. In
+strict mode — which ES modules are:
+
+```
+TypeError: Cannot assign to read only property '0' of object '[object Array]'
+```
+
+and it was not a rare path: `CANCEL_PENDING` has no entry in
+`SECTION_FOR_INTENT`, so its section list IS `ANALYSIS_MINIMUM`, and
+**every cancellation turn died on the way to its answer**.
+
+**Three — `QUOTE_BRIDGE` had no rule at all.** The intent was declared,
+given modules, given a priority and given a place in the plan, and
+nothing could ever produce it. Asking what a bridge *costs* could only
+be `EXECUTE_BRIDGE`: the user asking about a price was asking for a
+bridge to be taken.
+
+**Four — a lend is not a borrow, and the verb decides.** The patterns
+only knew «سپرده» and «بدهی» — the **bank's** words. The words people
+use are «وام بگذار» and «وام را برگردان», and both were `UNSUPPORTED`.
+The noun «وام» alone is ambiguous, so the verb decides, and the two verb
+lists are disjoint.
+
+**Five — a possessive sits between a noun and its verb.** «یک هدف برایم
+بساز» was `GOAL_PLAN`, because the pattern wanted «هدف» immediately
+followed by «بساز», and Persian puts «برایم» in between. The gap is now
+a fixed distance, because «هدف» and «هدفمن» are not the same word.
+
+#### And the probe was measuring the wrong thing
+
+The wallet source reads the chain over RPC. With no RPC the read fails,
+the wallet section goes `STALE`, the capability drops to `UNAVAILABLE`,
+and every `EXECUTE` intent is down-scored — **correct behaviour**, and a
+probe that was measuring a broken dependency instead of a broken engine.
+It also **hid** the first hole.
+
+So the sources are now faked **in-process**, the way the turn probes do
+it. The brain, the registry, the policy and the state store are all
+**real**. The measurement is about the brain's *wiring*, and the brain's
+wiring does not need a blockchain to be measured.
+
+#### The result, and the gate
+
+```
+  probes                35
+  classified as asked   35
+  with an OK finding    35
+  with NO finding at all 0
+```
+
+`test/intent-ai/intent-reach-gate.test.mjs` runs the probe and fails if
+any intent is dark, if any sentence does not reach the intent it was
+written for, or if a new intent is added without a probe. The second
+half is the stricter half: for an `EXECUTE` intent, being read as
+something else **is** a transaction the user did not ask for.
+
+`test/intent-ai/intent-language-runtime.test.mjs` pins the five holes
+and the distinctions that must not collapse: a lend is not a borrow, a
+quote is not an order, a destination is not a page, and «چقدر» alone is
+the question word for everything.
+
 #### The gate, and its speed
 
 `test/intent-ai/engine-reach-sweep.test.mjs` runs the sweep **once** and
@@ -2048,7 +2149,8 @@ ways and it is the same:
 | | before | after |
 |---|---|---|
 | engines that reach an ANSWER, over their own route | — | **47 of 47** |
-| intents whose engine reaches the REPLY | — | **26 of 26** |
+| intents whose engine reaches the REPLY | — | **35 of 35** |
+| sentences that reach the intent they were written for | — | **35 of 35** |
 | engines dark | — | **0** |
 
 The rule from §5.21 was the last three failures' lesson. It turns out to
