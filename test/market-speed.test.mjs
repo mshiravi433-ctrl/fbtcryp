@@ -98,9 +98,19 @@ test('a short hourly series reports the window it actually has', () => {
 test('MARKET_PAGE_SIZE never exceeds the server clamp', () => {
   const market = read('src/pages/Market.jsx');
   const app = read('server/app.js');
-  const pageSize = Number(market.match(/const MARKET_PAGE_SIZE = (\d+);/)?.[1]);
+  /*
+   * The page now takes its size from lib/marketRoute.js (`MARKET_PAGE_ROWS`),
+   * so that the header's poll on this route hits the same memo key instead of
+   * fetching the list a second time. Follow the alias rather than insisting on
+   * a literal: the property being pinned is the NUMBER, not where it is typed.
+   */
+  const literal = market.match(/const MARKET_PAGE_SIZE = (\d+);/)?.[1];
+  const aliased = market.includes('const MARKET_PAGE_SIZE = MARKET_PAGE_ROWS;')
+    ? read('src/lib/marketRoute.js').match(/export const MARKET_PAGE_ROWS = (\d+);/)?.[1]
+    : undefined;
+  const pageSize = Number(literal ?? aliased);
   const clamp = Number(app.match(/const perPage = Math\.min\((\d+), Math\.max\(1, Number\(req\.query\.per_page\)/)?.[1]);
-  assert.ok(Number.isFinite(pageSize) && Number.isFinite(clamp), 'both constants must be literal');
+  assert.ok(Number.isFinite(pageSize) && Number.isFinite(clamp), 'both constants must be resolvable');
   assert.ok(pageSize <= clamp, `page asks for ${pageSize} rows but the server answers ${clamp}`);
 });
 
@@ -180,7 +190,13 @@ test('the row metric is a VALUE, so the memoised row can actually skip work', ()
    * «حجم» sorts every visible row re-rendered on every 30-second poll. It now
    * returns {text, unit} and the comparator reads those two strings.
    */
-  const fn = page.slice(page.indexOf('const rowMetric = useCallback'), page.indexOf('const rowMetric = useCallback') + 900);
+  /* Slice to the END OF THE FUNCTION (its dependency array), not to a fixed
+     character count: the comment inside it grew when the second line was added
+     to the views that had none, and a 900-character window silently stopped
+     covering the returns it was written to inspect. */
+  const start = page.indexOf('const rowMetric = useCallback');
+  const end = page.indexOf('[sortKey, t]', start);
+  const fn = page.slice(start, end > start ? end : start + 2400);
   assert.ok(!/return\s*<>/.test(fn), 'rowMetric must not build JSX inline — that defeats the row memo');
   assert.match(fn, /return \{ text: .*unit: /);
   assert.match(row, /function sameMetric\(a, b\)/);

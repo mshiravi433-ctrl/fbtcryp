@@ -311,3 +311,112 @@
     animation: none !important;
   }
 }
+
+/* ══ 7 · THE HERO BANNER'S SEVEN LOOPS (2026-11-12) ═════════════════════════
+   The banner that sits at the top of this route ships seven `infinite`
+   animations of its own (market-hero-banner.css:104, 121, 207, 247, 500, 505,
+   563) and NONE of them were in this file. They are not inside `.mx-market`
+   either, which is why every rule above — all of them scoped `.mx-market
+   .something` — silently missed them: the banner is mounted beside the page,
+   not inside it, so the motion budget answered "what runs on this route" with
+   an incomplete list.
+
+   That matters more than the usual case because the banner sits directly
+   above the scrolling list: its rotations and drifts are compositor layers
+   the browser keeps alive while the reader scrolls 250 rows past them. The
+   sheet already parks every one of them under `[data-inview='false']` and
+   under `prefers-reduced-motion` — so, exactly like §1, this is that same
+   decision taken at the default setting: the frame the loops were stopped at
+   IS the design, and the artwork underneath is painted, not animated.
+
+   What each one was, and what it keeps:
+     .mhb-rim            9s border-light shift → steady at .6, the same value
+                         the sheet's own reduced-motion rule parks it at;
+     .mhb-aurora         18s drift of the ambient wash → holds its paint (CSS
+                         `opacity` and background stay, only the motion stops);
+     .mhb-sheen          11s 1px blade crossing the pod → hidden, exactly what
+                         `:root[data-lite]` already does with it;
+     .mhb-kicker-gem     4.8s breathing dot → a steady lit dot. It is a
+                         status pip; a pip does not need to breathe to be on;
+     .mhb-hud-ring--outer /
+     .mhb-hud-orbit      42s and 24s counter-rotations → frozen. The rings are
+                         drawn geometry; the rotation is decoration over them;
+     .mhb-art.is-active  7.2s float of the scene artwork → held at its rest
+                         transform.
+
+   The scene crossfade (`.mhb-art` opacity transitions) is NOT touched: it is
+   the reading — which of the three scenes you are looking at. Only loops go. */
+:root[data-theme]:not([data-motion='full']) .mhb .mhb-rim {
+  animation: none !important;
+  opacity: .6;
+}
+:root[data-theme]:not([data-motion='full']) .mhb .mhb-aurora { animation: none !important; }
+:root[data-theme]:not([data-motion='full']) .mhb .mhb-sheen {
+  animation: none !important;
+  opacity: 0;
+}
+:root[data-theme]:not([data-motion='full']) .mhb .mhb-kicker-gem {
+  animation: none !important;
+  opacity: .85;
+}
+:root[data-theme]:not([data-motion='full']) .mhb :is(.mhb-hud-ring--outer, .mhb-hud-orbit) {
+  animation: none !important;
+}
+:root[data-theme]:not([data-motion='full']) .mhb .mhb-art.is-active { animation: none !important; }
+
+/* ══ 8 · THE LOOPS A COUNT FOUND, NOT A REVIEW (2026-11-12) ════════════════
+   The rules above were written by reading the screen. `test/market-motion-
+   budget.test.mjs` counts `infinite` declarations across every market sheet
+   instead, and it found these — loops that run on this route and that no rule
+   in this file had ever named. Each one is decoration over painted geometry,
+   so the frame it stops at is the design:
+
+     .mx-p2-live-dot          7px "live" pip in the DeFi card, 2.4s pulse. The
+                              sheet already stops it for `[data-unavailable]`;
+                              this makes "still" the default, not the fallback.
+                              A lit pip does not have to breathe to be lit.
+     .market-glass-surface::after
+                              a 9s sheen crossing the glass card — the same
+                              specular band §1 already hides on the deck;
+     .market-hero-card::after  the same band on the legacy hero card;
+     .market-story-aurora-a/b  two 18s drifts at ~78vw and ~66vw. They are
+                              FULL-VIEWPORT radial gradients inside the story
+                              stage: the most expensive pair on this list, and
+                              they hold their paint exactly as before;
+     .ad-scan, .ad-art-blip    the promo banner's scan and blip. An advert does
+                              not get to animate on the market route when the
+                              page's own charts do not;
+     .st-blink                 the story scene's three dots (2.4s), held lit.
+
+   Deliberately NOT stopped, and why — these are state, not decoration:
+     .mx-icon-btn[data-busy]   a 1s spinner that exists ONLY while a request is
+                              in flight. Stopping it would leave a frozen
+                              半-turn as a permanent "busy" lie.
+     .st-eq / .market-story-radio-eq
+                              the audio equaliser, which runs only while a
+                              story clip is actually playing. It IS the reading
+                              ("sound is coming out").
+     .st-spin / .st-spin-slow  the loading glyph; only exists while data is
+                              arriving.
+   Each of those is conditional on something the reader did, and each stops on
+   its own when that something stops. A blanket `animation: none` here would
+   be the easy rule and the wrong one. */
+:root[data-theme]:not([data-motion='full']) .mx-market .mx-p2-live-dot {
+  animation: none !important;
+  opacity: .85;
+}
+:root[data-theme]:not([data-motion='full']) :is(.market-glass-surface, .market-hero-card)::after {
+  animation: none !important;
+  opacity: 0;
+}
+:root[data-theme]:not([data-motion='full']) :is(.market-story-aurora-a, .market-story-aurora-b) {
+  animation: none !important;
+}
+:root[data-theme]:not([data-motion='full']) :is(.ad-scan, .ad-art-blip) {
+  animation: none !important;
+  opacity: 0;
+}
+:root[data-theme]:not([data-motion='full']) .st-blink {
+  animation: none !important;
+  opacity: .8;
+}
