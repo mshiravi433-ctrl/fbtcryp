@@ -581,12 +581,49 @@ export default function Market() {
    */
   const rowMetric = useCallback(
     (coin) => {
+      /*
+       * ─── THE SECOND LINE, IN THE VIEWS THAT HAD NONE (2026-11-12) ──────────
+       * This returned a number only when the sort was by that same number —
+       * volume under a volume sort, market cap under a market-cap sort — and
+       * `null` in every other view. Under «رتبه», «صعودی‌ها» and «نزولی‌ها» a
+       * row showed a symbol, a name and a price, and threw away the market cap
+       * and the trading volume that were already in the payload. That is worse
+       * than it sounds: those are exactly the views where a reader is scanning
+       * 250 names for something worth opening, and liquidity is the number
+       * that answers it.
+       *
+       * The two existing behaviours are left ALONE — they are pinned by
+       * test/market-terminal.test.jsx and they earn their place (under a
+       * market-cap sort, market cap under each name is the absolute scale the
+       * ordering alone cannot give you). What changes is the default: the
+       * views that had no second line now get VOLUME, falling back to market
+       * cap for a row that has no volume.
+       *
+       * `{text, unit}` stays, and for the same reason as before: `CoinRow` is
+       * memoised on `prev.metric === next.metric`, and equal values must
+       * compare equal or every row re-renders on every poll.
+       */
       if (sortKey === 'volume') {
         return { text: fmtCompact(coin.volume || 0), unit: t('market.volumeShort') };
       }
       if (sortKey === 'mcap') {
         return { text: fmtCompact(coin.mcap || 0), unit: t('market.mcapShort') };
       }
+      /*
+       * «قیمت» stays clean, and deliberately. A price sort is a LOOKUP — the
+       * reader already knows what they are looking for and the price is the
+       * big number on every row — whereas rank, gainers, losers and the horizon
+       * views are SCANS, where "is this thing liquid enough to care about" is
+       * the question the second line exists to answer. This keeps the existing
+       * behaviour pinned by test/market-terminal.test.jsx («says nothing extra
+       * when the order is price») rather than rewriting a test whose reasoning
+       * still holds.
+       */
+      if (sortKey === 'price') return null;
+      /* A coin with no volume is a missing figure, not a zero — fall back to
+         market cap rather than printing «۰ B» beneath a real price. */
+      if (Number(coin.volume) > 0) return { text: fmtCompact(coin.volume), unit: t('market.volumeShort') };
+      if (Number(coin.mcap) > 0) return { text: fmtCompact(coin.mcap), unit: t('market.mcapShort') };
       return null;
     },
     [sortKey, t]

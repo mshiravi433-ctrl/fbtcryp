@@ -328,4 +328,30 @@ describe('the horizon rail', () => {
       expect(typeof dict?.market?.horizonMissing, `${file} is missing market.horizonMissing`).toBe('string');
     }
   });
+  it('gives the rank view the liquidity line it used to throw away', () => {
+    /* The default view printed NOTHING under a coin's name: symbol, name,
+       price, and the market cap and volume already in the payload went
+       unshown. These are the views a reader scans 250 names in, and liquidity
+       is the question that decides whether to open any of them. */
+    mount();
+    openTokensTab();
+    const metrics = [...document.querySelectorAll('.coin-row-metric')];
+    expect(metrics.length).toBeGreaterThan(0);
+    /* BTC's volume in the fixture is 1e9 → formatted with a unit label. */
+    expect(metrics[0].textContent).toMatch(/\d/);
+    expect(metrics[0].textContent).not.toMatch(/market\./);
+  });
+
+  it('still says nothing extra when the order is price', () => {
+    /* Pinned by market-terminal.test.jsx and kept for the reason stated
+       there: a price sort is a lookup, not a scan. Asserted here too so a
+       future change to rowMetric cannot quietly break it from this side. */
+    mount();
+    openTokensTab();
+    fireEvent.click(screen.getByTestId('market-sort'));
+    const option = screen.getAllByRole('menuitemradio')
+      .find((n) => n.textContent.trim() === fa.market.sort.price);
+    fireEvent.click(option);
+    expect(document.querySelectorAll('.coin-row-metric').length).toBe(0);
+  });
 });
