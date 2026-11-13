@@ -416,8 +416,56 @@ const SECTION_OWNER = Object.freeze({
    * the owner is `farming` too.
    */
   farming: 'farming', liquidity: 'liquidity', staking: 'farming',
-  globalIntel: 'global-intel', opportunityFit: 'opportunity-fit'
+  globalIntel: 'global-intel', opportunityFit: 'opportunity-fit',
+  /*
+   * The three surfaces added after the yield and global ones.
+   *
+   * `routeIntelligence`, `whyDecision`, `macroGraph` and `goalScenarios`
+   * are STATE SECTIONS, and their MODULES are `route-intelligence`,
+   * `why-decision`, `macro-graph` and `goal-scenarios`. A rule names
+   * the MODULE it needs («route-intelligence»), and the state has the
+   * SECTION — and without this mapping the two were never the same
+   * name, so the rule's requirement could never be found in either
+   * place.
+   *
+   * That silence is worse than an error. `SERVE_UNAVAILABLE` asks
+   * «can this intent still be served?» and got «yes, I have never
+   * heard of it» — so an intent whose source was DOWN kept its full
+   * score and could win a sentence it must not answer. And
+   * `needsFetch` asked «have we read it yet?» and got «no» forever,
+   * so the intent never got the warmth nudge that a warm section
+   * earns.
+   *
+   * The consequence was measured: with a wallet connected,
+   * «کدام پل برای انتقال بیت‌کوین به پالیگان بهتر است؟» classified as
+   * EXECUTE_BRIDGE — the loose pattern matched «به پالیگان» — because
+   * the route intent could never learn that its own section was
+   * already in memory. A comparison question was read as an
+   * instruction to move the money.
+   */
+  routeIntelligence: 'route-intelligence',
+  whyDecision: 'why-decision',
+  macroGraph: 'macro-graph',
+  goalScenarios: 'goal-scenarios',
+  profitPlan: 'profit-plan'
 });
+/*
+ * The reverse of SECTION_OWNER: from a MODULE name to the STATE SECTION
+ * that holds its data. `stateHas` is keyed by section, and a rule's
+ * `requires` is keyed by module.
+ */
+const STATE_SECTION_FOR_MODULE = Object.freeze({
+  'global-intel': 'globalIntel',
+  'opportunity-fit': 'opportunityFit',
+  'route-intelligence': 'routeIntelligence',
+  'why-decision': 'whyDecision',
+  'macro-graph': 'macroGraph',
+  'goal-scenarios': 'goalScenarios',
+  'profit-plan': 'profitPlan',
+  staking: 'staking',
+  crypto: 'crypto'
+});
+
 function SERVE_UNAVAILABLE(context, section) {
   const caps = context?.capabilities;
   if (!caps || typeof caps !== 'object') return false;
@@ -450,7 +498,17 @@ export function classify(message = '', { context = {}, state = {}, suggestions =
        It is downgraded only when the module that owns the data is genuinely
        UNAVAILABLE or INCOMPLETE, because then no amount of fetching helps. */
     const unavailable = (rule.requires || []).filter((k) => SERVE_UNAVAILABLE(context, k));
-    const needsFetch = (rule.requires || []).filter((k) => !context.stateHas?.[k]);
+    /*
+     * The state has SECTIONS and the capability matrix has MODULES, and
+     * they are named differently — `routeIntelligence` versus
+     * `route-intelligence`. A rule names the module it needs, so the
+     * lookup for «have we read it yet?» has to ask about the SECTION
+     * that owns it, or it asks a question the state cannot answer.
+     */
+    const needsFetch = (rule.requires || []).filter((k) => {
+      const section = STATE_SECTION_FOR_MODULE[k] || k;
+      return !context.stateHas?.[section];
+    });
     /* Three signals, added once, in the order that matters:
        - availability: an intent whose data source is UNAVAILABLE can never outrank
          one that is actionable, because we would promise what we cannot do;

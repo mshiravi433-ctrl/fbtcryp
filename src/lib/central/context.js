@@ -25,7 +25,7 @@
  *    borrow, asset USDC". That resolves references; it never authorises an
  *    action and never overrides state the server read itself.
  */
-import { CI_SCHEMA, hashString, round, usableNumber } from './schema.js';
+import { CI_SCHEMA, STATE_SECTION_IDS, hashString, round, usableNumber } from './schema.js';
 
 export const CONTEXT_SCHEMA = 'fbt.central-context.v1';
 
@@ -585,13 +585,31 @@ export function buildCentralContext({ message = '', memory, page, state, capabil
     },
     capabilities: capabilities || null,
     health: health || null,
-    stateHas: {
-      wallet: has('wallet'), portfolio: has('portfolio'), markets: has('markets'),
-      positions: has('positions'), lending: has('lending'), borrowing: has('borrowing'),
-      futures: has('futures'), dydx: has('dydx'), goals: has('goals'),
-      signals: has('signals'), news: has('news'), transactions: has('transactions'),
-      risk: has('risk'), alerts: has('alerts')
-    },
+    /*
+     * `stateHas` answers one question for the classifier: «have we READ
+     * this yet?»
+     *
+     * It used to be a fixed list, and the list was missing every section
+     * added after the first dozen — the global, fit, macro, scenario,
+     * route and why surfaces. So for those, the answer was always «no»,
+     * and the classifier never gave them the warmth nudge a section
+     * already in memory earns.
+     *
+     * The consequence was not a shrug. A rule that names a module
+     * («route-intelligence») could not find its section at all, so it
+     * never learned that its own data was already read — and a
+     * comparison question about a bridge, with a wallet connected,
+     * lost to the loose EXECUTE_BRIDGE pattern and was read as an
+     * instruction to move the money.
+     *
+     * So the list is derived from the STATE SECTIONS themselves now:
+     * a section that exists and holds data is there, whatever its
+     * name, and a section that was never read is not. Adding a surface
+     * can no longer be half-done.
+     */
+    stateHas: Object.fromEntries(
+      Object.keys(STATE_SECTION_IDS || {}).map((key) => [key, has(key)])
+    ),
     /** §5 rule: only ask when this list is non-empty, and then name these fields. */
     missingInformation: missing,
     unReadSections: unRead,

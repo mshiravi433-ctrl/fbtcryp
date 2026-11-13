@@ -327,3 +327,53 @@ test('the replan is announced only when it crossed a line', async () => {
   assert.equal(finding.executionAuthorized, false, 'a replan is news, not permission to act');
   setReplanReader(null);
 });
+
+/* ─── the comparison that must never become an instruction ─────────────── */
+
+test('a comparison question is never read as an instruction, wallet or not', async () => {
+  /*
+   * The most dangerous shape of the dark-engine failure.
+   *
+   * The EXECUTE_BRIDGE pattern is deliberately loose — «برو به شبکه»
+   * appears in the middle of an ordinary sentence — so it matches
+   * «انتقال بیت‌کوین به پالیگان» inside «کدام پل ... بهتر است؟».
+   *
+   * The route intent is supposed to win that sentence, and it does so
+   * by PRIORITY. But the priority only decided the winner once the two
+   * intents were both scored, and the route intent was never told
+   * that its own section was already in memory — because `stateHas`
+   * was a fixed list that did not contain it, and because the rule's
+   * `requires` name was a MODULE while the state is keyed by SECTION.
+   *
+   * So the route intent sat at 0.755 and the instruction at 0.76, and
+   * a QUESTION about which bridge is cheapest was read as an
+   * instruction to move the money.
+   *
+   * Both halves are checked here: with a wallet and without one, the
+   * answer is a ROAD RANKING and never an EXECUTE.
+   */
+  for (const [label, withWallet] of [['signed out', false], ['signed in', true]]) {
+    const owner = `route-compare-${label.replace(/\s+/g, '-')}`;
+    if (withWallet) await seedOwner(owner);
+    const out = await brain.handle({
+      owner,
+      message: 'کدام پل برای انتقال بیت‌کوین به پالیگان بهتر است؟',
+      locale: 'fa'
+    });
+    assert.equal(
+      out?.intent?.intentType,
+      'ROUTE_INTELLIGENCE',
+      `${label}: a comparison is a ranking, not an instruction → ${out?.intent?.intentType}`
+    );
+    assert.notEqual(out?.intent?.intentType, 'EXECUTE_BRIDGE', `${label}: never an instruction`);
+  }
+});
+
+test('the English comparison is never read as an instruction either', async () => {
+  const out = await brain.handle({
+    owner: 'route-compare-en',
+    message: 'which bridge is cheapest for this transfer?',
+    locale: 'en'
+  });
+  assert.equal(out?.intent?.intentType, 'ROUTE_INTELLIGENCE', `→ ${out?.intent?.intentType}`);
+});
