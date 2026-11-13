@@ -1093,7 +1093,31 @@ export function createModules(ctx = {}) {
       reason: 'a route ranking is advice; the execution path re-quotes with a real address and keeps its own gates'
     }),
     read: async (input = {}, readCtx = {}) => {
-      const request = input.request || input;
+      /*
+       * WHERE THE ROUTE REQUEST COMES FROM.
+       *
+       * A route ranking needs CANDIDATES, and the candidates need a
+       * transfer to plan: a source chain, a destination chain, both
+       * tokens and an amount. The engine cannot invent any of them —
+       * a route for a transfer nobody described is a route for nothing.
+       *
+       * So the request has to arrive from the surface that knows it.
+       * There are two ways it can, and both are read here:
+       *
+       *   · `input.request` — the direct call, used by the bridge and
+       *     by the tests that drive it;
+       *   · `context.routeRequest` — the TURN's context, which is where
+       *     the browser's cross-chain panel publishes the transfer the
+       *     user is actually looking at.
+       *
+       * The second one is what makes the engine reachable at runtime.
+       * Without it the module read always arrived with no request, and
+       * every route question answered ROUTE_REQUEST_INCOMPLETE — the
+       * capability present in the code and absent in the answer.
+       */
+      const request = input.request
+        || readCtx?.context?.routeRequest
+        || input;
       const out = await readRouteCandidates(readCtx.owner || owner, { request });
       if (!out.ok) return unavailable(out.code, { detail: out.detail, request: out.request || null });
       /*

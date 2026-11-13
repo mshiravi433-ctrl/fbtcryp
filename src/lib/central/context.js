@@ -114,6 +114,41 @@ const ROUTE_PREFIX_ALIASES = Object.freeze({
  * A wrong module is worse than no module: it makes the brain resolve «انجامش
  * بده» into an action on the wrong surface.
  */
+/**
+ * The transfer a route question is about.
+ *
+ * The route-intelligence engine ranks candidate routes, and candidates
+ * need a transfer to plan: a source chain, a destination chain, both
+ * tokens and an amount. The engine cannot invent any of them.
+ *
+ * So the cross-chain panel publishes the transfer the user is looking
+ * at, the client sends it with the turn, and it travels here as part of
+ * the page claim — because that is what it IS: a fact about what the
+ * user is looking at right now, in the same shape as the route, the
+ * tab and the selected asset.
+ *
+ * A PARTIAL transfer is not published and not carried: a missing chain,
+ * token or amount is not a transfer, and a half-transfer would make the
+ * engine quote for something nobody asked for.
+ */
+export function resolveRouteRequest(raw = null) {
+  const fromChain = Number(raw?.fromChain);
+  const toChain = Number(raw?.toChain);
+  const fromToken = String(raw?.fromToken ?? '').trim();
+  const toToken = String(raw?.toToken ?? '').trim();
+  const fromAmount = String(raw?.fromAmount ?? '').trim();
+  if (!Number.isFinite(fromChain) || !Number.isFinite(toChain)) return null;
+  if (!fromToken || !toToken || !fromAmount) return null;
+  if (Math.floor(fromChain) === Math.floor(toChain)) return null;
+  return {
+    fromChain: Math.floor(fromChain),
+    toChain: Math.floor(toChain),
+    fromToken,
+    toToken,
+    fromAmount
+  };
+}
+
 export function resolvePage(raw = {}) {
   const route = String(raw.route || raw.path || '/').split('?')[0].replace(/\/+$/, '') || '/';
   const alias = ROUTE_PREFIX_ALIASES[Object.keys(ROUTE_PREFIX_ALIASES).find((p) => route.startsWith(p)) || ''];
@@ -131,6 +166,8 @@ export function resolvePage(raw = {}) {
     selectedAsset: usableSymbol(raw.selectedAsset || raw.asset || null),
     selectedNetwork: usableSymbol(raw.selectedNetwork || raw.network || raw.chainId || null),
     walletConnected: raw.walletConnected === true,
+    /* The transfer a route question would be about, when there is one. */
+    routeRequest: resolveRouteRequest(raw.routeRequest || null),
     at: Number(raw.at) || 0
   };
 }
@@ -533,6 +570,10 @@ export function buildCentralContext({ message = '', memory, page, state, capabil
     page: resolvedPage,
     module: resolvedPage.module,
     tab: resolvedPage.tab,
+    /* The transfer the route engine ranks, when the turn has one. Absent
+       otherwise, and the route module says which transfer is missing
+       rather than inventing one. */
+    routeRequest: resolvedPage.routeRequest || null,
     entities: { ...(entities || {}), ...refs },
     followUp: follow,
     memory: {

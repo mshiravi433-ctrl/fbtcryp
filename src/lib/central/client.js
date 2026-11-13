@@ -15,6 +15,7 @@
  * retry can be deduplicated against the action record instead of being trusted.
  */
 import { apiBase } from '../apiBase.js';
+import { readPublishedRouteRequest } from '../intentCrossChainClient.js';
 
 const TIMEOUTS = { intent: 20000, read: 8000, action: 12000 };
 const DEVICE_KEY = 'fbt.central.device.v1';
@@ -113,9 +114,30 @@ async function call(path, { method = 'GET', body = null, timeout = TIMEOUTS.read
 /* ── the only path into the brain ───────────────────────────────────────── */
 
 export async function sendIntent(message, { page = null, locale = 'fa', confirm = false, actionId = null, planDigest = null, txHash = null, requestId = null, hints = null } = {}) {
+  /*
+   * THE TRANSFER THE TURN IS ABOUT.
+   *
+   * A route question — «which bridge is best for this transfer?» — can
+   * only be answered about a transfer somebody described, and the
+   * cross-chain panel is what knows it. The panel publishes it; this
+   * carries it.
+   *
+   * It travels INSIDE the page claim rather than beside it, because that
+   * is what it is: a fact about what the user is looking at right now,
+   * in the same shape as the route, the tab and the selected asset. And
+   * it is read HERE rather than at the call site, so every caller of the
+   * brain carries it without having to know that route questions need
+   * it.
+   *
+   * The server drops a partial transfer on the floor, so a half-written
+   * request can never make the engine quote for a transfer nobody asked
+   * for.
+   */
+  const routeRequest = readPublishedRouteRequest();
+  const pageWithRoute = routeRequest ? { ...(page || {}), routeRequest } : page;
   const body = {
     message: String(message || '').slice(0, 2000),
-    page,
+    page: pageWithRoute,
     locale: locale === 'en' ? 'en' : 'fa',
     confirm,
     ...(actionId ? { actionId } : {}),
