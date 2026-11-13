@@ -3203,15 +3203,90 @@ instructions in Latin script are blocked, 11 pleasantries stay pure with
 no false positives, and `smallTalkProtected` follows the social read on
 both — or the discount would exist for only half the audience.
 
+#### 5.24.6 The model that 404d was forgotten between turns
+
+Automatic tiering decides how much brain a turn buys. The next waste was
+one level down: which **model** that brain spends its calls on.
+
+`recordProviderCall` was handed the model id and the classified reason
+code on every single call — and the call window stored neither. It kept
+`ok`, `durationMs`, `qualityScore` and token counts, so the store could
+say "this provider answered badly" and could never say "this MODEL does
+not exist". Measured, not inferred:
+
+```
+  ladder, no evidence        [gemini-2.5-pro, gpt-4.1, gpt-4o-mini, gemini-2.5-flash]
+  record HTTP 404 five times for gemini-2.5-pro
+  ladder after that          [gemini-2.5-pro, gpt-4.1, gpt-4o-mini, gemini-2.5-flash]
+  still leads?               true
+  provider healthy?          false
+  fleet order                [groq, cloudflare, openrouter]
+```
+
+Two defects from one missing field. Every new turn re-bought the same
+dead call at full price — and on the `:free` tier a failed request counts
+against the daily allowance exactly like a successful one, so this was a
+recurring tax on every deep turn, not a latency quirk. And a fault whose
+scope was one model id parked the whole seat, pushing a gateway that
+fronts a hundred models behind two providers nobody had asked anything
+of.
+
+The second half is an inconsistency the same file had already named.
+`classifyAiError` draws the line explicitly — *「this MODEL is wrong
+(404 model_not_found, 403 tier_not_allowed — try the next model on the
+same provider, no reason to give up on a working key)」* versus *「this
+ACCOUNT/KEY is wrong (no model will help)」* — as `retryNextModel`, and
+nothing downstream honoured it.
+
+So: the window keeps the model and the reason code it was already given;
+`deadModelsFor` reports the ids a provider has **proven** dead, cooled by
+the same ten minutes the provider circuit used for that fault class, so a
+model and its provider are never punished on two clocks; and
+`getModelCandidates` **demotes** them behind the live ones. A model-scoped
+fault no longer parks the seat — but two consecutive failures still do,
+whichever models they happened to be on, because a key that has lost tier
+access answers 403 on every id and the second failure is the evidence
+that the fault stopped being one model's.
+
+Three properties hold it down, each of them a test. An explicitly
+requested id still leads, because that contract is pinned by the wiring
+probe and a caller who named a model is entitled to have it tried. Only
+deterministic faults demote — a timeout, a network error or a quota
+throttle is evidence about the network, not about the id, and demoting
+for those would punish the seat that is about to be allowed again. And a
+success **clears** the mark, because an id that answered after it 404d
+had a bad moment, not a bad model; the window is walked oldest-to-newest
+so the newest evidence wins. When every id in the chain is dead the order
+reverts to its untouched state rather than emptying out — a demotion that
+never ends is a deletion, and this is not a deletion.
+
+```
+  one 404     → ladder [gpt-4.1, gpt-4o-mini, gemini-2.5-flash, deepseek-chat]
+                provider still healthy, still in the fleet queue
+  explicit id → still leads, dead or not
+  all dead    → chain reverts to its untouched order, never empty
+  no evidence → byte-for-byte what it was before
+```
+
+The provider-wiring probe still passes 24/24, including the fleet summary
+that records a `MODEL_UNAVAILABLE` failure and asserts the verdict — the
+verdict follows `lastCallFailed`, which is a fact about evidence, not
+about the breaker.
+
 #### What is still open
 
-Automatic tiering decides the **depth** of a turn, not its **cost per
-model**: the ladder still walks flagship-first inside `max`, and the
-quota ceiling still governs turns per day. Nothing yet learns a tier
-preference from a user's own history — the behaviour model can now see
-that a user cancels at confirmation, and cannot yet conclude that this
-user should be shown one careful answer rather than three fast ones.
-Bare «ییلد» is fixed; «بازار و ییلد» still classifies its first leg only.
+Automatic tiering decides the **depth** of a turn and §5.24.6 stopped the
+ladder re-buying a model it has already proven dead, but neither learns:
+both act on the evidence of one process, and a serverless instance that
+recycles takes the dead-model memory and the health window with it. The
+quota ceiling still governs turns per day from the daily counter alone.
+Nothing yet learns a **tier** preference from a user's own history — the
+behaviour model can now see that a user cancels at confirmation, and
+cannot yet conclude that this user should be shown one careful answer
+rather than three fast ones. And the compound-question machinery splits
+«بازار و ییلد» and «ریسک و بازده» correctly now, but only because each
+leg happens to classify on its own; a leg whose subject is not a bare
+topic noun still has no such guarantee.
 
 #### The rule this leaves behind
 
@@ -3250,3 +3325,14 @@ Bare «ییلد» is fixed; «بازار و ییلد» still classifies its firs
 > **the cheapest intelligence is the tier you did not buy — but only the tier
 > the question demonstrably does not need, refused by name when it does, and
 > published when it is taken.**
+>
+> **a fault must be recorded at the scope it actually has — a model that does not
+> exist is not a provider that cannot answer, and punishing the wider scope takes
+> every healthy thing behind the broken one out of service.**
+>
+> **evidence that is passed to a function and then not stored is evidence that was
+> never collected: the window kept the outcome and threw away the subject, so the
+> same dead model was re-bought at full price on every turn that followed.**
+>
+> **a demotion must be able to end — a discount that never expires is a deletion,
+> and a chain that can empty out is a seat that can never be asked again.**

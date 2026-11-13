@@ -700,7 +700,20 @@ export function recordProviderCall(providerId, { ok = true, durationMs = 0, mode
     st.tokensOut += tOut;
     st.usageCalls += 1;
   }
-  st.calls.push({ ok: Boolean(ok), durationMs: Number(durationMs) || 0, qualityScore: qualityScore == null ? null : Number(qualityScore), tokensIn: tIn, tokensOut: tOut, at: Date.now() });
+  /*
+   * WHICH MODEL FAILED, KEPT WITH THE FAILURE (2026-11-13).
+   *
+   * `model` and `reasonCode` arrive as arguments and were being thrown away:
+   * the record kept only ok/duration/tokens, so the window could say "this
+   * provider answered badly" but never "this MODEL does not exist". The
+   * consequence was measured, not imagined — after `google/gemini-2.5-pro`
+   * returned HTTP 404 five turns running, the ladder it leads was byte-for-byte
+   * unchanged and the next turn paid for the same dead call again. On the `:free`
+   * tier a failed request counts against the daily allowance exactly like a
+   * successful one, so this was not a latency quirk: it was a recurring tax on
+   * every deep turn.
+   */
+  st.calls.push({ ok: Boolean(ok), durationMs: Number(durationMs) || 0, qualityScore: qualityScore == null ? null : Number(qualityScore), tokensIn: tIn, tokensOut: tOut, model: model || null, reasonCode: reasonCode || null, at: Date.now() });
   if (st.calls.length > HEALTH_WINDOW) st.calls.shift();
   if (ok) {
     st.consecutiveFailures = 0;
@@ -722,10 +735,81 @@ export function recordProviderCall(providerId, { ok = true, durationMs = 0, mode
      network, AUTH/BILLING/MODEL_UNAVAILABLE are deterministic — retrying them
      on the next request only buys latency. */
   const park = CIRCUIT_OPEN_MS[reasonCode] ?? CIRCUIT_OPEN_MS.UNKNOWN;
-  if (st.consecutiveFailures >= 2 || ['AUTH', 'BILLING', 'PERMISSION', 'MODEL_UNAVAILABLE', 'CF_ACCOUNT'].includes(reasonCode)) {
+  /*
+   * …UNLESS THE FAULT'S SCOPE IS ONE MODEL (2026-11-13).
+   *
+   * The justification above is that a deterministic fault would be retried on
+   * the next request. That is no longer true for a model-scoped one:
+   * `deadModelsFor` now demotes the offending id, so the next request does not
+   * retry it at all. Parking the provider as well punished every live id behind
+   * it — measured, one retired OpenRouter flagship pushed a gateway fronting a
+   * hundred models to LAST in the fleet order, behind two providers nobody had
+   * asked anything of.
+   *
+   * The account-wide case is still covered, and by the same rule that always
+   * covered it: two consecutive failures park the provider whichever models they
+   * happened to be on. So a key that has lost tier access — every id answering
+   * 403 — is parked on the second failure exactly as before, while one dead id
+   * costs one call instead of ten minutes of the whole seat.
+   */
+  const modelScoped = MODEL_SCOPED_FAULTS.has(reasonCode) && Boolean(model);
+  if (st.consecutiveFailures >= 2 || (!modelScoped && ['AUTH', 'BILLING', 'PERMISSION', 'MODEL_UNAVAILABLE', 'CF_ACCOUNT'].includes(reasonCode))) {
     st.openUntil = Date.now() + park;
     st.openReason = reasonCode;
   }
+}
+
+/*
+ * A FAULT WHOSE SCOPE IS THE MODEL, NOT THE KEY.
+ *
+ * `classifyAiError` already draws this line and names it `retryNextModel`:
+ * "this MODEL is wrong (404 model_not_found, 403 tier_not_allowed — try the
+ * next model on the same provider, no reason to give up on a working key)"
+ * versus "this ACCOUNT/KEY is wrong (no model will help)". The distinction was
+ * correct and nothing downstream used it: `recordProviderCall` parked the whole
+ * provider for a model-scoped fault, so one retired flagship id took a gateway
+ * fronting a hundred models out of the fleet order — measured, OpenRouter went
+ * to LAST behind two providers that had not been asked anything.
+ *
+ * These faults are deterministic, which is why one occurrence is enough to act
+ * on: a 404 for a model id does not heal by itself the way a timeout does.
+ */
+const MODEL_SCOPED_FAULTS = Object.freeze(new Set(['MODEL_UNAVAILABLE']));
+
+/**
+ * Model ids this provider has PROVEN dead, and for how much longer.
+ *
+ * Bounded by the health window, and cooled by the same duration the provider
+ * circuit uses for this fault class, so a model and its provider are never
+ * punished on two different clocks. Demotion, never deletion: the id stays in
+ * the chain behind the live ones, exactly as a stale pin does, because a
+ * vendor's 404 can be a bad morning rather than a retired model — and a list
+ * that only ever shrinks eventually has nothing left to try.
+ */
+export function deadModelsFor(providerId, { now = Date.now() } = {}) {
+  const st = healthState.get(providerId);
+  const out = new Map();
+  if (!st?.calls?.length) return out;
+  const cooldown = CIRCUIT_OPEN_MS.MODEL_UNAVAILABLE ?? CIRCUIT_OPEN_MS.UNKNOWN;
+  /*
+   * OLDEST TO NEWEST, SO THE NEWEST EVIDENCE WINS.
+   *
+   * A success clears the mark: if an id answered after it 404d, the 404 was a bad
+   * moment rather than a retired model, and holding that against it would
+   * demote the fleet's only proven-live seat. A fault that is not deterministic
+   * is not evidence about the id at all — it is evidence about the network — so
+   * it neither marks nor clears. And an expired failure is dropped rather than
+   * carried, because a demotion that never ends is a deletion, and this is not a
+   * deletion.
+   */
+  for (const c of st.calls) {
+    if (!c.model) continue;
+    if (now - (c.at || 0) > cooldown) { out.delete(c.model); continue; }
+    if (c.ok) { out.delete(c.model); continue; }
+    if (!MODEL_SCOPED_FAULTS.has(c.reasonCode)) continue;
+    out.set(c.model, (c.at || 0) + cooldown);
+  }
+  return out;
 }
 
 export function isProviderHealthy(providerId) {
@@ -1111,7 +1195,28 @@ export function getModelCandidates(providerId, requestedModel = null, { mode = n
   /* `max` is allowed one extra attempt: the first is the flagship, and paying
      for a stronger model is the point of the mode. It is still bounded. */
   const attempts = maxMode && !requestedModel ? MODEL_ATTEMPTS + 1 : MODEL_ATTEMPTS;
-  return ordered.slice(0, Math.max(ordered.length > 1 ? attempts : 1, 1));
+  /*
+   * ─── DEMOTE WHAT THIS PROVIDER HAS ALREADY PROVEN DEAD ────────────────────
+   * Within one turn the walk already drops models it has just seen fail, so this
+   * is the half that was missing: memory ACROSS turns. Without it every new turn
+   * re-discovered the same 404 at full price, and the discovery re-parked a
+   * provider that had three other live ids behind the dead one.
+   *
+   * Three properties hold it down. An explicitly requested model still leads,
+   * because that contract is pinned by the wiring probe and a caller who named an
+   * id is entitled to have it tried. Nothing is deleted, only ordered — the same
+   * philosophy the stale-pin rule above already follows. And if EVERY candidate
+   * is dead the order is left alone, because an empty chain would turn a bad
+   * morning into a provider that can never be asked again.
+   */
+  const dead = deadModelsFor(providerId);
+  let ranked = ordered;
+  if (dead.size > 0 && !requestedModel && ordered.length > 1) {
+    const live = ordered.filter((m) => !dead.has(m));
+    const gone = ordered.filter((m) => dead.has(m));
+    if (live.length > 0) ranked = [...live, ...gone];
+  }
+  return ranked.slice(0, Math.max(ranked.length > 1 ? attempts : 1, 1));
 }
 
 /**
