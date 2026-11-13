@@ -881,6 +881,14 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
           };
         }
       }
+      /*
+       * The finding that carries the explanation is built HERE, after the
+       * read — not inside `buildFindings`, which runs before the
+       * recommendation the read needs. This is the line that made the
+       * engine dark: the finding was built first and could only ever
+       * report a read that had not happened yet.
+       */
+      buildWhyFinding({ intent, results, readResults, findings });
     }
 
     const isConceptualOrAdvisory = Boolean(
@@ -1565,6 +1573,79 @@ function findingCopy(f) {
   }
 }
 
+/**
+ * THE WHY FINDING — built AFTER the why read, not before it.
+ *
+ * This block used to live inside `buildFindings`, and that was the
+ * ordering that made the why engine dark.
+ *
+ * The why engine explains the brain's RECOMMENDATION. The
+ * recommendation is built from the findings. So the why read has to
+ * happen after the recommendation exists — and the finding that carries
+ * the explanation has to be built after the read. Putting the finding
+ * inside `buildFindings` meant it was built BEFORE both, so it could
+ * only ever see a read that had not happened, and the reply carried
+ * NO_DECISION even when the engine was mounted and the owner had a
+ * decision.
+ *
+ * It is a separate function now, called after the read, and it is the
+ * read that counts: the one made with the recommendation in hand.
+ */
+function buildWhyFinding({ intent, results, readResults, findings }) {
+  if (intent.intentType !== 'WHY_DECISION') return null;
+  const whyRead = results['why.read'] || readResults.whyDecision || null;
+  if (whyRead?.status === 'OK' && whyRead.data?.why) {
+    const w = whyRead.data.why;
+    const lines = [];
+    for (const [key, value] of Object.entries(w.why || {})) {
+      if (Array.isArray(value) && value.length) lines.push(...value.map((v) => String(v)));
+    }
+    const falsifiers = (w.falsifiers || []).map((f) => ({
+      id: f.id ?? null,
+      question: f.question ?? null,
+      threshold: f.threshold ?? null,
+      modelledImpactUsd: f.modelledImpactUsd ?? null,
+      action: f.action ?? null,
+      invalidates: f.invalidates ?? null
+    }));
+    findings.push({
+      id: 'why-decision',
+      status: 'OK',
+      why: w.why || null,
+      lines: lines.slice(0, 10),
+      falsifiers,
+      invalidationConditions: w.invalidationConditions || [],
+      decisionId: w.decisionId ?? null,
+      confidence: w.confidence ?? null,
+      nextReviewAt: w.nextReviewAt ?? null,
+      reviewWindowDays: w.reviewWindowDays ?? null,
+      estimate: w.estimate === true,
+      detail: lines.length
+        ? `${lines.length} reason line(s) from the decision that was actually made; ${falsifiers.length} named falsifier(s) and ${(w.invalidationConditions || []).length} invalidation condition(s) travel with it`
+        : 'the engine produced the why block but no readable reason line — nothing is filled in',
+      reason: w.note || 'every because-line points at a number in the decision bundle; unread numbers are named, never invented',
+      source: 'why-engine',
+      dataAt: w.at || Date.now(),
+      partial: false
+    });
+    return findings[findings.length - 1];
+  }
+  if (whyRead?.status === 'UNAVAILABLE') {
+    findings.push({
+      id: 'why-decision',
+      status: 'UNAVAILABLE',
+      detail: null,
+      reason: whyRead.reason === 'NO_DECISION'
+        ? 'there is no decision to explain — the last turn produced no recommendation, so there is nothing to justify and nothing is invented'
+        : `the why engine could not be read (${whyRead.reason || 'NO_DATA'})`,
+      source: 'why-engine',
+      partial: true
+    });
+    return findings[findings.length - 1];
+  }
+  return null;
+}
+
 function buildFindings({ intent, classification, state, results, risk, readResults, stepResults, context, locale = 'en', lastReplan = null }) {
   const findings = [];
   const portfolio = state.sections.portfolio.data;
@@ -1789,56 +1870,6 @@ function buildFindings({ intent, classification, state, results, risk, readResul
    *     would prove this wrong» is a justification, not an explanation;
    *   · it is an EXPLANATION, not a new recommendation. It moves nothing.
    */
-  if (intent.intentType === 'WHY_DECISION') {
-    const whyRead = readResults.whyDecision || results['why.read'] || null;
-    if (whyRead?.status === 'OK' && whyRead.data?.why) {
-      const w = whyRead.data.why;
-      const lines = [];
-      for (const [key, value] of Object.entries(w.why || {})) {
-        if (Array.isArray(value) && value.length) lines.push(...value.map((v) => String(v)));
-      }
-      const falsifiers = (w.falsifiers || []).map((f) => ({
-        id: f.id ?? null,
-        question: f.question ?? null,
-        threshold: f.threshold ?? null,
-        modelledImpactUsd: f.modelledImpactUsd ?? null,
-        action: f.action ?? null,
-        invalidates: f.invalidates ?? null
-      }));
-      findings.push({
-        id: 'why-decision',
-        status: 'OK',
-        why: w.why || null,
-        lines: lines.slice(0, 10),
-        falsifiers,
-        invalidationConditions: w.invalidationConditions || [],
-        decisionId: w.decisionId ?? null,
-        confidence: w.confidence ?? null,
-        nextReviewAt: w.nextReviewAt ?? null,
-        reviewWindowDays: w.reviewWindowDays ?? null,
-        estimate: w.estimate === true,
-        detail: lines.length
-          ? `${lines.length} reason line(s) from the decision that was actually made; ${falsifiers.length} named falsifier(s) and ${(w.invalidationConditions || []).length} invalidation condition(s) travel with it`
-          : 'the engine produced the why block but no readable reason line — nothing is filled in',
-        reason: w.note || 'every because-line points at a number in the decision bundle; unread numbers are named, never invented',
-        source: 'why-engine',
-        dataAt: w.at || Date.now(),
-        partial: false
-      });
-    } else if (whyRead?.status === 'UNAVAILABLE') {
-      findings.push({
-        id: 'why-decision',
-        status: 'UNAVAILABLE',
-        detail: null,
-        reason: whyRead.reason === 'NO_DECISION'
-          ? 'there is no decision to explain — the last turn produced no recommendation, so there is nothing to justify and nothing is invented'
-          : `the why engine could not be read (${whyRead.reason || 'NO_DATA'})`,
-        source: 'why-engine',
-        partial: true
-      });
-    }
-  }
-
   /*
    * ── THE ROUTE SURFACE (path 14) ─────────────────────────────────────────
    *
@@ -2341,8 +2372,16 @@ const SECTION_FOR_INTENT = {
   /* The why surface (path 15): the brain's own decision, explained. It
      needs the portfolio and the risk view, because those are what the
      decision was sized and judged against — an explanation that omits
-     them is an explanation of a decision nobody made. */
-  WHY_DECISION: ['whyDecision', 'portfolio', 'risk']
+     them is an explanation of a decision nobody made.
+
+     `whyDecision` is NOT in this list, and that is deliberate. The why
+     engine explains the RECOMMENDATION, and the recommendation is built
+     AFTER these reads — so reading the why section here would ask the
+     engine to explain a decision that does not exist yet, and the
+     honest answer it would give is NO_DECISION. The why section is read
+     in its own step, once the recommendation stands (see the why read
+     below), and the read there is the one that counts. */
+  WHY_DECISION: ['portfolio', 'risk']
 };
 function sectionsForIntent(classification, { context, state }) {
   const base = SECTION_FOR_INTENT[classification.type] || ANALYSIS_MINIMUM;

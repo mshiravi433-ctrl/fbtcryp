@@ -1014,7 +1014,25 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
     if (!out?.ok) {
       return { ok: false, code: out?.code || 'WHY_FAILED', detail: out?.detail || null, why: null };
     }
-    return { ok: true, why: out.why };
+    /*
+     * The WHOLE record, not just its `why` field.
+     *
+     * `explainDecision` returns
+     *
+     *   { ok, schema, decisionId, at, why: { whyAsset, whyNetwork, … },
+     *     invalidationConditions, falsifiers, nextReviewAt,
+     *     reviewWindowDays, confidence, estimate, note }
+     *
+     * and the reader on the other side expects exactly that shape: the
+     * five why-lines under `why`, and the falsifiers and invalidation
+     * conditions beside them.
+     *
+     * Returning only `out.why` handed the reader a record with no `why`
+     * inside it, so every why-line arrived as null and the reply had
+     * nothing to say. The engine was running, the provider was mounted,
+     * and the explanation was still absent from the answer.
+     */
+    return { ok: true, why: out };
   });
 
   setRouteProvider(async (owner, opts = {}) => {
