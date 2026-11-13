@@ -1003,7 +1003,28 @@ export function classify(message = '', { context = {}, state = {}, suggestions =
      * a different answer, and collapsing it is how the second asset disappears.
      * So legs are distinct by (intent, subject), and a leg carries its subject.
      */
-    const legKey = (l) => `${l.intent}|${l.asset || ''}`;
+    /*
+     * ─── A SUBJECT DISTINGUISHES TWO READINGS, NEVER TWO SIDES OF ONE TRADE ──
+     *
+     * Keying legs by (intent, subject) is what made «بیت کوین چنده و اتریوم
+     * چطور» two answers. Applied to a money intent it produced the opposite of
+     * an answer: «۱۰۰ دلار بیت کوین بفروش و به تتر تبدیل کن» names TWO assets
+     * because a swap HAS two sides, and the split read them as two trades — two
+     * sections, `part:EXECUTE_SWAP:BTC` and `part:EXECUTE_SWAP:USDT`, carrying
+     * the SAME quote word for word. One trade rendered twice, each copy labelled
+     * as if it were about a different asset, which is the exact failure the
+     * subject rule was added to prevent.
+     *
+     * So the subject splits a READ and never a money intent. A quote, a prepare
+     * and an execute each have exactly one from/to pair, and two assets in the
+     * sentence are that pair.
+     */
+    const legKey = (l) => {
+      const perm = (INTENT_TYPES[l.intent] || {}).permission;
+      return (perm === PERMISSION.EXECUTE || perm === PERMISSION.PREPARE)
+        ? l.intent
+        : `${l.intent}|${l.asset || ''}`;
+    };
     const distinct = Array.from(new Set(legs.map(legKey)));
     if (legs.length > 1 && distinct.length > 1) {
       multiLegs = legs.map((l, i) => ({

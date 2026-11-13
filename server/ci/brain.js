@@ -735,7 +735,18 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
 
     if (missingInputs.length) {
       Object.assign(context, { missingInformation: Array.from(new Set([...(context.missingInformation || []), ...missingInputs])) });
-      intent = { ...intent, needsUserInput: true, missingInputs };
+      /*
+       * THE MONEY GAP NAMES ITSELF.
+       *
+       * The marker below distinguishes two needs that do not mean the same
+       * thing, and the comment there says so explicitly — but only the
+       * conversation machinery ever set it, so a turn blocked on an AMOUNT was
+       * indistinguishable from a turn that merely wanted one more field. That is
+       * how «بیت کوین را بفروش» came to answer with «این پول برای چیست — رشد،
+       * درآمد، یا حفظ سرمایه؟»: the machine's question won because it existed,
+       * and the user could not unblock their own sell order by answering it.
+       */
+      intent = { ...intent, needsUserInput: true, missingInputs, needsUserInputSource: 'money-step' };
     }
 
     /*
@@ -2685,6 +2696,29 @@ function buildFindings({ intent, classification, state, results, risk, readResul
         reason: impulse !== null && impulse !== undefined
           ? `the portfolio risk impulse is ${impulse} — a first-order model over the read domains, not a forecast`
           : 'no portfolio risk impulse was derivable: the graph is a model, and it says which domains it read',
+        /*
+         * THE PERSIAN PAIR THE FINDING NEXT DOOR ALREADY HAS.
+         *
+         * The liquidity finding twenty lines above carries `detailFa`/`reasonFa`
+         * with a comment explaining that an English-only qualifier inside a
+         * Persian reply is a qualifier the user will skim past. This finding had
+         * only the English pair, so `recommend` — which picks
+         * `(fa && f.reasonFa) ? f.reasonFa : f.reason` — rendered
+         * «the portfolio risk impulse is 0 — a first-order model over the read
+         * domains, not a forecast» inside a Persian `reason` section, in the same
+         * sentence as three Persian clauses. Measured on «وضعیت بازار چطوره».
+         *
+         * It is also the qualifier that keeps the number honest: an impulse of 0
+         * reads as "no risk" unless the sentence beside it says the graph is a
+         * first-order model and not a forecast. A qualifier the reader skips is a
+         * number presented as more than it is.
+         */
+        detailFa: domainsRead.length
+          ? `رژیم از ${domainsRead.join('، ')} خوانده شد؛ ${fmtNum(g.coverage?.nodes ?? 0, locale === 'fa')} گره و ${fmtNum(g.coverage?.edges ?? 0, locale === 'fa')} لبهٔ انتقال`
+          : 'گراف کلان در این پاس هیچ دامنه‌ای را نخواند',
+        reasonFa: impulse !== null && impulse !== undefined
+          ? `تکانهٔ ریسک پرتفوی ${fmtNum(impulse, locale === 'fa')} است — یک مدلِ مرتبهٔ اول روی دامنه‌های خوانده‌شده، نه یک پیش‌بینی`
+          : 'تکانهٔ ریسک پرتفوی قابل استخراج نبود: گراف یک مدل است و می‌گوید کدام دامنه‌ها را خوانده است',
         estimate: g.estimate === true,
         source: 'macro-graph-engine',
         dataAt: g.at || Date.now(),

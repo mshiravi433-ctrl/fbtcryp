@@ -263,7 +263,7 @@ export function composeResponse({
      field: the answer comes first because it is what was asked for, and the
      question after it because it is what the machine still needs. Dropping it
      would hide the gap; leading with it would hide the answer. */
-  const ask = (mode === 'QUESTION' || keepAnswer) ? askFor(context, { fa, L }) : null;
+  const ask = (mode === 'QUESTION' || keepAnswer) ? askFor(context, { fa, L, intent }) : null;
   if (ask) sections.push(section('question', fa ? 'برای ادامه لازم است' : 'Needed to continue', ask.text, { tone: 'ask' }));
 
   /* A partial failure must say so. Hiding «the price source did not answer» behind
@@ -387,7 +387,7 @@ function stopText(policy, error, fa) {
 }
 
 /** §20: a question names the field, never asks to "explain more". */
-function askFor(context, { fa, L }) {
+function askFor(context, { fa, L, intent = null } = {}) {
   /*
    * THE MACHINE'S OWN QUESTION COMES FIRST.
    *
@@ -418,7 +418,36 @@ function askFor(context, { fa, L }) {
    * sentence matched nothing, the registry's question is the one that
    * belongs.
    */
-  if (machineQuestion && !missing.includes('intent')) {
+  /*
+   * ─── THE QUESTION THAT UNBLOCKS THE TURN IS THE QUESTION TO ASK ───────────
+   *
+   * The machine's question wins whenever it exists, which is right for the case
+   * the comment below was written for: a turn that knows a field is missing and
+   * has no question of its own. It is wrong when the turn is blocked on money.
+   * «بیت کوین را بفروش» is missing an AMOUNT, and the reply asked
+   * «این پول برای چیست — رشد، درآمد، یا حفظ سرمایه؟» — a question about the
+   * owner that cannot unblock the trade, so the user was left with a sell order
+   * that could not be completed and no idea what was missing. The field list
+   * below already names «مبلغ (یا درصدی از دارایی)» and already ends with
+   * «بدون آن، حدس نمی‌زنم», which is the honest answer to an order with no size.
+   *
+   * The marker is what keeps this narrow: only a gap the money-step check found
+   * outranks the machinery, so a read-only turn whose only gap is the machine's
+   * own field still asks the machine's question, exactly as before.
+   */
+  const MONEY_FIELDS = ['fromAsset', 'toAsset', 'amount', 'recipient', 'pool', 'collateral', 'network'];
+  const moneyMissing = (Array.isArray(intent?.missingInputs) ? intent.missingInputs : [])
+    .filter((m) => MONEY_FIELDS.includes(m));
+  const blockedOnMoney = intent?.needsUserInputSource === 'money-step' && moneyMissing.length > 0;
+  /*
+   * And the FIELD LIST is the money list too. `context.missingInformation`
+   * accumulates every gap the turn found, so a sell order with no size also
+   * carried the machinery's missing `goal` field and the reply asked for
+   * «مبلغ هدف و افق زمانی» beside the amount — two questions, one of which
+   * cannot unblock the trade. A turn blocked on money asks for the money.
+   */
+  const asked = blockedOnMoney ? moneyMissing : missing;
+  if (machineQuestion && !missing.includes('intent') && !blockedOnMoney) {
     const text = typeof machineQuestion === 'string'
       ? machineQuestion
       : String(machineQuestion[fa ? 'fa' : 'en'] || machineQuestion.fa || machineQuestion.en || '');
@@ -431,7 +460,7 @@ function askFor(context, { fa, L }) {
       };
     }
   }
-  if (!missing.length) return null;
+  if (!asked.length) return null;
   /* Nothing in the registry matched this sentence. That is a different kind of
      missing than an absent amount: the field list would be useless («منظورتان
      intent» is not a question a person can answer), so the reply says what could
@@ -465,9 +494,9 @@ function askFor(context, { fa, L }) {
     goal: fa ? 'مبلغ هدف و افق زمانی' : 'a target amount and a horizon',
     condition: fa ? 'شرط هشدار' : 'the alert condition'
   };
-  const list = missing.map((m) => names[m] || m);
+  const list = asked.map((m) => names[m] || m);
   return {
-    fields: missing,
+    fields: asked,
     text: fa
       ? `برای اینکه عدد دقیق بدهم، این لازم است: ${list.join('، ')}. بدون آن، حدس نمی‌زنم.`
       : `To give you a real number I need: ${list.join(', ')}. I will not guess in its place.`,

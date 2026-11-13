@@ -3601,7 +3601,128 @@ the seed.
 > other three were the difference between a leg that exists and a leg that
 > is read.
 
+#### 5.24.11 Three defects a green suite let through
+
+The suite was **954/954 green** while all three of these were live. None was
+found by a test; all three were found by reading rendered replies, which is
+the only instrument that sees them. That is the finding behind the findings:
+*a green suite is a statement about its corpus*, and a corpus that never
+renders «بیت کوین را بفروش» never asks what that turn replies.
+
+**1. The question that unblocks the turn is the question to ask.**
+
+```
+  «بیت کوین را بفروش»      intent EXECUTE_SWAP, mode QUESTION
+     reply: «این پول برای چیست — رشد، درآمد، یا حفظ سرمایه؟»
+```
+
+An explicit sell order, answered with a question about the owner's life
+goals. The turn was blocked on the **amount** — the money-step check had
+found it, `missingInputs: ['amount']` — and the reply asked for something
+that cannot unblock a trade. The user could answer it and still have
+nowhere to go.
+
+`askFor()` let the conversation machinery's question win **whenever it
+existed**, which is right for the case its own comment describes (a turn
+that knows a field is missing and has no question of its own). The
+machinery's question is a preference; a money gap is a wall. `brain.js`
+already said so — *"the money-step check means «this turn is about to move
+money and does not know the amount» — that must stay a question"* — and
+already had the marker pattern to distinguish the two, but only the
+machinery ever set a marker. The money path now sets
+`needsUserInputSource: 'money-step'`, and when that is what blocks the
+turn the reply asks for the money **and only the money**: the accumulated
+`missingInformation` also carried the machinery's `goal` field, so the
+first version of the fix asked for «مبلغ هدف و افق زمانی» beside the
+amount — two questions, one of them noise.
+
+```
+  after: «برای اینکه عدد دقیق بدهم، این لازم است: مبلغ (یا درصدی از
+          دارایی). بدون آن، حدس نمی‌زنم.»
+```
+
+The field names and that last sentence already existed. Nothing new was
+written; a priority was corrected. A read-only turn whose only gap is the
+machinery's own field still asks the machinery's question, byte for byte.
+
+**2. One trade is rendered once.** This one was a regression from §5.24.10,
+committed one revision earlier and carried through 954 green tests:
+
+```
+  «۱۰۰ دلار بیت کوین بفروش و به تتر تبدیل کن»
+     part:EXECUTE_SWAP:BTC   «۰٫۱ BTC → ۳٬۵۸۵٫۲ USDC، حداقل دریافت …»
+     part:EXECUTE_SWAP:USDT  «۰٫۱ BTC → ۳٬۵۸۵٫۲ USDC، حداقل دریافت …»
+```
+
+Keying legs by (intent, subject) is what made two assets into two answers.
+A swap names two assets because a swap **has two sides**, and the split read
+them as two trades: the same quote twice, each copy labelled as if it were
+about a different asset. The rule needed its own boundary — *a subject
+distinguishes two readings, never two sides of one trade* — so legs keyed by
+subject are READ legs, and a money intent collapses by intent as it did
+before. The mixed case still works: «بیت کوین را بفروش و اتریوم چطور»
+keeps `[EXECUTE_SWAP, ASSET_ANALYSIS]`, because there the second clause
+really is a second question.
+
+**3. An English clause inside a Persian `reason`.**
+
+```
+  «…صعودی‌ها: BTC ۱٫۴٪ | نزولی‌ها: ETH −۰٫۶٪,
+    the portfolio risk impulse is 0 — a first-order model over the read
+    domains, not a forecast»
+```
+
+The macro-graph finding carried only `detail`/`reason`. The liquidity
+finding twenty lines above it carries `detailFa`/`reasonFa` **with a comment
+explaining why**: an English-only qualifier inside a Persian reply is a
+qualifier the user will skim past. And this is precisely a qualifier — an
+impulse of 0 reads as "no risk" unless the sentence beside it says the graph
+is a first-order model and not a forecast. `recommend` picks
+`(fa && f.reasonFa) ? f.reasonFa : f.reason`, so the Persian pair was the
+whole fix.
+
+The existing language gate reported `englishClausesInReply: 0` throughout,
+because it scans a probe corpus and no row in that corpus produced this
+finding. The new gate uses the probe's own matcher — one definition of what
+an English clause is — over turns that do.
+
+**What is gated now.** `reply-honesty-runtime` mounts the real brain with the
+real composition root and faked externals only, and asserts over the rendered
+reply: a money-blocked turn asks for the money and not for a goal; an order
+that named its size reaches the confirmation instead; no two `part:` sections
+carry the same answer and no money turn renders more than one; a money intent
+is never split by subject while a read still is; and no section of a Persian
+reply contains an English clause. Against the pre-fix product it fails **4 of
+5** — the fifth asserts that a fully specified order was *not* turned into a
+question, which is the guard against over-correcting.
+
+> **A green suite is a statement about its corpus.** Three live defects, one
+> of them a regression introduced by the previous commit, all invisible to
+> 954 passing tests, because no test rendered those replies. Read the reply.
+>
+> **The question a reply asks must be the question that unblocks the turn.** A
+> preference question in place of a blocking one leaves the user with an action
+> they cannot complete and no idea what is missing.
+>
+> **A marker that distinguishes two needs must be set by both of them.** The
+> code already documented that a money gap and a machinery gap mean different
+> things, and only one of the two paths said which it was.
+>
+> **A subject distinguishes two readings, never two sides of one trade.** The
+> same rule that made two assets into two answers made one swap into two, and
+> the boundary between them is whether the intent can move money.
+>
+> **The qualifier is the part that must not be in the reader's second
+> language.** A number in Persian with its caveat in English is a number
+> presented as more certain than it is.
+
 #### What is still open
+
+The LIQUIDITY_RISK headline still reports the shape of its own read —
+«۲ استخر خوانده شد؛ ۰ پرچم زیان ناپایدار دارند و ۲ ندارند» — to a user who
+asked «کم است یا نه». The depth figures are in the finding (`tvlUsd` per
+pool); answering the question needs a verdict, and a verdict needs a
+threshold somebody has to choose.
 
 §5.24.10 answered the clause that names its own subject. The clauses that
 name nothing are still dropped, and they are the majority: of nine
