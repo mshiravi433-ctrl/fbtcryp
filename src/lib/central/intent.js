@@ -266,7 +266,38 @@ const RULES = Object.freeze([
     requires: []
   },
   { intent: 'MARKET_OVERVIEW', patterns: [/بازار|market|قیمت (کلی|بازار)|وضعیت (کلی )?بازار|نهنگ|whale|اسمارت ?مانی|smart money|تورم|نرخ\s*بهره|فدرال|دارایی[‌\s]*های\s*کمیاب|سیاست\s*پولی|inflation|interest\s*rate|\bfed\b|monetary/i], requires: ['markets'] },
-  { intent: 'QUOTE_SWAP', patterns: /نرخ (تبدیل|سواپ)|چند می ?ده(?:د)?|quote|قیمت (تبدیل|خرید|فروش)/i, requires: ['markets'] },
+  /*
+   * A QUOTE IS A QUESTION, AND AN EXECUTION IS AN ORDER.
+   *
+   * The two were sharing the words «سواپ» and «قیمت», so «قیمت سواپ
+   * بیت‌کوین چقدر است؟» — a question about a price — was read as
+   * EXECUTE_SWAP, and the user got a trade instead of a number.
+   *
+   * So the quote patterns now carry the QUESTION MARKERS that make it a
+   * question: «چقدر», «چند», «قیمت», «نرخ», «چه قیمتی», and the English
+   * «how much» / «what is the price». The execution patterns keep the
+   * ORDER markers: «سواپ کن», «بخر», «بفروش», «convert X to Y».
+   *
+   * A question about a price and an order to trade use the same nouns and
+   * differ only in the words around them, so those words are the pattern.
+   */
+  { intent: 'QUOTE_SWAP', patterns: [
+    /نرخ (تبدیل|سواپ|تبدیلش)/i,
+    /چند می ?ده(?:د)?/i,
+    /\bquote\b/i,
+    /قیمت (تبدیل|خرید|فروش|سواپ)/i,
+    /چه قیمتی/i,
+    /*
+     * «چقدر» ALONE is not a swap question. It is the question word for
+     * everything: «موجودی من چقدر است؟», «تمرکز پرتفوی من چقدر
+     * است؟», «ریسک چقدر است؟». So it only counts when the SENTENCE
+     * is about converting something — the swap nouns have to be there
+     * too.
+     */
+    /(?:تبدیل|سواپ|swap|convert).{0,16}چقدر|چقدر.{0,16}(?:تبدیل|سواپ|swap|convert)/i,
+    /how much (would|does|is|for)/i,
+    /what (is|'s) the (price|rate|quote)/i
+  ], requires: ['markets'] },
   { intent: 'EXECUTE_SWAP', patterns: [/تبدیلش? (کن|کنید|بکن|بده|بدهید)|سواپ|\bswap\b|convert .* to|\bexchange .* for|(بفروشش|بفروشمش|بفروش|بفرست|بخرمش|بخرش|بخرم?|بخرید|فروش بزن|خرید بزن|\bsell\b|\bbuy\b|\bpurchase\b|قصد خرید|دنبال خرید)/i], requires: ['wallet'] },
   {
     /*
@@ -297,12 +328,48 @@ const RULES = Object.freeze([
     ],
     requires: ['route-intelligence']
   },
+  /*
+   * `QUOTE_BRIDGE` had NO RULE AT ALL.
+   *
+   * The intent was declared in `INTENT_TYPES`, given modules, given a
+   * priority and given a place in the plan — and there was no pattern
+   * that could ever produce it. So «قیمت پل زدن چقدر است؟» could only
+   * be EXECUTE_BRIDGE, which means the user asking what a bridge COSTS
+   * was asking for a bridge to be taken.
+   *
+   * The rule is the mirror of `EXECUTE_BRIDGE`: the question markers ask
+   * for a price, the order markers ask for the crossing.
+   */
+  { intent: 'QUOTE_BRIDGE', patterns: /قیمت (پل|انتقال|برید|رفتن به)|هزینه (پل|انتقال|برید)|نرخ (پل|انتقال)|چقدر (پل|انتقال|برید)|چه قیمتی.{0,12}(پل|انتقال)|کدام پل.{0,24}(ارزان|بهتر|کم ?هزینه|سریع)|how much.{0,20}(bridge|transfer|cross)|what.{0,20}(bridge|cross).{0,20}(cost|fee|price)/i, requires: ['markets'] },
   { intent: 'EXECUTE_BRIDGE', patterns: /به (آربیتروم|آربیتروm ?one|آربیتروم one|arbitrum|پالیگان|بیس|اپتیمیزم|اربیترم)|منتقل کن به|برو به شبکه|\bbridge\b|پل بزن|ببر (به|روی)|\bmove\b .{0,24}\bto\b|\btransfer\b .{0,24}\bto\b/i, requires: ['wallet'] },
   { intent: 'EXECUTE_BORROW', patterns: /وام.{0,16}(بگیر|گرفتن|دریافت کن)|borrow (me|some)?|بخوام بگیرم/i, requires: ['lending'] },
-  { intent: 'EXECUTE_LEND', patterns: /سپرده.{0,16}(گذاری|بگذار|کن|کنید|بذار|بذارید)|لند (کن|کنید)|\blend\b|\bsupply\b|\bdeposit\b/i, requires: ['lending'] },
-  { intent: 'EXECUTE_REPAY', patterns: /بدهی.{0,16}(را |رو )?بده|بازپرداخت (وام )?(کن|بکن)?|قسط (بده|ردیف)|repay (my |the )?(loan|debt|position)|\brepay\b/i, requires: ['lending'] },
+  /*
+   * LENDING AND REPAYING, IN THE WORDS PEOPLE USE.
+   *
+   * These two patterns only knew «سپرده» and «بدهی». Both are the
+   * BANK's word for the thing; neither is the word a person uses when
+   * they mean it. The words people use are «وام بگذار» and «وام را
+   * برگردان» — and both of those were UNSUPPORTED.
+   *
+   * The word «وام» alone is ambiguous: «وام بگیر» is a BORROW and
+   * «وام بگذار» is a LEND, so the VERB is what decides, not the noun.
+   * The verb lists below are disjoint, which is what keeps the two from
+   * stealing each other's sentences.
+   */
+  { intent: 'EXECUTE_LEND', patterns: /سپرده.{0,16}(گذاری|بگذار|کن|کنید|بذار|بذارید)|(?:وام|پول|دارایی).{0,12}(?:بگذار|بگذارید|بذار|بذارید|واریز کن|واریز کنید|استیک کن|استیک کنید|قفل کن|قفل کنید)|لند (کن|کنید)|\blend\b|\bsupply\b|\bdeposit\b|\bstake\b/i, requires: ['lending'] },
+  { intent: 'EXECUTE_REPAY', patterns: /بدهی.{0,16}(را |رو )?بده|بازپرداخت (وام )?(کن|بکن)?|قسط (بده|ردیف)|(?:وام|بدهی|قرض).{0,12}(?:برگردان|برگردانید|بپرداز|بپردازید|تسویه|تسویه کن|تسویه کنید|باز کن|باز کنید)|repay (my |the )?(loan|debt|position)|\brepay\b/i, requires: ['lending'] },
   { intent: 'EXECUTE_REBALANCE', patterns: /ری[\s\u200c]?بالانس|ریبالانس|متعادل (کردن|کن)|توزیع مجدد|rebalance/i, requires: ['portfolio'] },
-  { intent: 'CREATE_GOAL', patterns: /هدف (جدید|بساز|ثبت|-set)|create (a |new )?goal|هدفم رو ثبت/i, requires: [] },
+  /*
+   * «یک هدف برایم بساز» — the most natural way to ask for a goal — did
+   * not match, because the pattern wanted «هدف» IMMEDIATELY followed by
+   * «بساز». The word «برایم» sat between them.
+   *
+   * The gap between «هدف» and its verb is where Persian puts the
+   * possessives («هدفم»، «هدف من»، «هدف برایم»), so the pattern has to
+   * allow them. It is a fixed distance, not an open one: «هدف» and
+   * «هدفمن» are not the same word.
+   */
+  { intent: 'CREATE_GOAL', patterns: /هدف(?:م| من| برایم| برام)?[\s\u200c]{0,3}(?:جدید|بساز|بسازید|بذار|بذارید|ثبت|ثبت کن|ثبت کنید|-set)|create (a |new )?goal|set (a |new )?goal|هدفم رو ثبت/i, requires: [] },
   { intent: 'SET_ALERT', patterns: /هشدار|\bset (an )?alert\b|alert (set|کن|for|on|me)|به من خبر بده|وقتی رسید به|خبرم کن|یادم انداز|notify me when/i, requires: [] },
   { intent: 'BALANCE_QUERY', patterns: /مانده|بالانس|موجودی|\bbalance\b|چقدر (دارم|تومان|دلار)|how much (do i|have|i have|to i)/i, requires: ['wallet'] },
   /*
@@ -392,7 +459,34 @@ const RULES = Object.freeze([
      lexicon that misses them turns "36,000 USDT" into "please clarify". Ordered
      after QUOTE_SWAP / BALANCE_QUERY / LOAN_STATUS so those keep their ground. */
   { intent: 'ASSET_ANALYSIS', patterns: /قیمت|price|چنده|چقدره|چند است|چند شد|چند شده|رسید (به|چند)|رساند|rate (is|of)/i, requires: ['markets'] },
-  { intent: 'NAVIGATE', patterns: [/برو به (صفحه )?|نمایش بده|باز کن|open (the )?[\w\u0600-\u06FF]+ page|navigate|show me the/i], requires: [] }
+  /*
+   * NAVIGATION IS A PAGE, NOT A DESTINATION.
+   *
+   * The pattern used to be `/برو به (صفحه )?/` — «go to», with an
+   * OPTIONAL page word. That made every «برو به …» a navigation
+   * request, including «برو به شبکه پالیگان», which is a BRIDGE
+   * OPERATION: the user is not asking to see a screen, they are asking
+   * to move money to Polygon.
+   *
+   * It only showed up when the wallet was unreadable. With a live wallet
+   * the EXECUTE_BRIDGE pattern matched too and won on priority. With a
+   * broken wallet the execute intent was down-scored (0.45 instead of
+   * 0.7) and navigation won — so a sentence that MEANT a transfer was
+   * read as a page request, and a transfer that was meant was never
+   * planned.
+   *
+   * A destination that is a place on a chain is not a page. So the
+   * navigation verbs now need their OBJECT: a page, a tab, a menu, a
+   * section, or a screen. The bare «برو به» is not enough.
+   */
+  { intent: 'NAVIGATE', patterns: [
+    /برو به (صفحه|بخش|منو|تب|داشبورد|صفحهٔ)/i,
+    /باز کن (صفحه|بخش|منو|تب)/i,
+    /(?:open|show|navigate to)\s+(?:the\s+)?[\w\u0600-\u06FF]+\s+(?:page|tab|screen|section|menu)/i,
+    /نمایش بده/i,
+    /navigate to\b/i,
+    /show me the/i
+  ], requires: [] }
 ]);
 
 /**
