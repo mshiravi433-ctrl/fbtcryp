@@ -3493,15 +3493,124 @@ thing it labels contains.
 > of it.** The plan is a union; the permission that describes the plan is
 > the strongest in that union.
 
+#### 5.24.10 The half of the question that had no vocabulary of its own
+
+§5.24.9 stopped one clause from being silenced by its sibling. This is the
+other half of the same boundary: a clause that carries **no rule vocabulary
+at all**, and was therefore dropped.
+
+```
+  «قیمت بیت کوین چنده و اتریوم چطور»
+      measured over the RENDERED REPLY, real brain, real engines:
+        BTC price  answered      ETH price  MISSING
+        legs: []                 parts: 0
+      and on the same sentence, extractEntities already reported:
+        assets: [BTC, ETH]
+```
+
+The second clause matches nothing in the rule table — «چطور» on its own is
+not a question type — so `scoreClaim` returned no hits, the splitter's
+`if (!legHits.length) continue` dropped it, and one leg became no legs.
+The subject was in hand. **No decision read it.** Across ten sentences
+whose second half depends on the first, one produced two legs; across
+three whose halves are independent, all three did.
+
+The fix is four changes, and three of them exist only because the first
+would otherwise have been a dark value:
+
+**1. A clause that names its own subject inherits the question, never an
+order.** When a clause scores nothing but `findAssetsIn` finds an asset in
+it, it takes the question type from a readable sibling — else
+`ASSET_ANALYSIS`, because «و اتریوم چطور» is asking to be told about ETH.
+It may only inherit a **READ**: an execution is never inferred from an
+elliptical clause, and where the sibling moves money the fallback is the
+read anyway. Measured: «بیت کوین را بفروش و اتریوم چطور» produces
+`[EXECUTE_SWAP, ASSET_ANALYSIS]` — the order stays an order and the
+question stays a question. The inherited score sits below every real hit,
+so a leg can join the answer without becoming the headline.
+
+**2. Two legs are one question asked twice only when the question AND the
+subject match.** The collapse rule was the intent alone, which is right
+for «پورتفوی و موجودی من» and wrong for two assets. The same bug lived
+twice: once in the splitter's `distinct` set and again in the merge at the
+end of `classify`, which deduped by `c.intent` and would have folded the
+two legs back together after the splitter had correctly kept them apart.
+Legs now carry `asset` and `legKey`, and both dedupes read the key.
+
+**3. A leg's subject has to travel with the leg.** `buildFindings` picks
+the asset from `classification.entities.asset` — not from the intent it is
+handed — and the leg loop passed the sentence's own classification to
+every leg. Left like that, an ETH leg would have produced a **second copy
+of the BTC reading**: the right-looking section with the wrong number in
+it, which is worse than no section. Each leg now gets a classification
+whose subject is its own, and nothing else about it changes.
+
+**4. The part and its section are keyed by (question, subject).**
+`recommend` selected a part's findings with `Set`-deduped intents and
+`!f.leg`, so a second same-intent part rendered the PRIMARY half's
+findings; `human` built the section id as `part:${intent}`, so two answers
+claimed to be the same box and carried the same label — failing the
+requirement written in that block's own comment, that each half must say
+which half it is. The subject joins the id and the label **only when two
+parts share an intent**, so no reply that was already correct changes
+shape: the control probe still renders `part:ASSET_ANALYSIS` and
+`part:BALANCE_QUERY` exactly as before, while the new one renders
+`part:ASSET_ANALYSIS:BTC` and `part:ASSET_ANALYSIS:ETH`.
+
+Measured after, over the reply and not the classification:
+
+```
+  probes 7 · parts 14 · answered 14 · coverage 100%
+  legs [ASSET_ANALYSIS, ASSET_ANALYSIS] · subjects [BTC, ETH] · mode ANSWER
+  executionLegs 0 · moneyPlans 0 · englishClausesInReply 0
+  part BTC → «BTC اکنون ۳۶٬۰۰۰ دلار است؛ …»
+  part ETH → «ETH اکنون ۳٬۰۰۰ دلار است؛ …»
+```
+
+Against the pre-fix product the same probe reports **coverage 92.9%, one
+part missed, `badSubjects: 1`, `legs: []`** — which is the point of
+running it both ways: a probe that only ever passed proves nothing.
+
+The subject counter is the part that keeps the words check honest. A reply
+that quoted the ETH price twice and never mentioned BTC would satisfy a
+keyword matcher for one half; two legs about two *different* subjects is
+the property that makes them two answers.
+
+The numbers in the probe are the ones the machine says, not the ones the
+seed contains: ETH answers at **3000** from the engines' own source while
+the seeded portfolio says 3200. A matcher written from the seed measures
+the seed.
+
+> **A clause that carries its own subject is not an unsupported request —
+> it is the same question about another thing. What it lacks is
+> vocabulary, and vocabulary is the part a sibling can lend.**
+>
+> **Inherit a READ, never an order.** A money instruction has to be said;
+> an elliptical clause is exactly where inferring one would be invisible.
+>
+> **Two legs are one question twice only when the question AND the subject
+> match** — and a dedupe written twice is a bug written twice.
+>
+> **A leg's subject must travel with the leg**, because a finding picks its
+> asset from the classification it is handed, not from the intent it is
+> labelled with. A second copy of the first asset's reading is the wrong
+> answer wearing the right section's clothes.
+>
+> **A fix that only the classifier can see is a dark value.** The splitter
+> was one file; making the second answer reach the user took four, and the
+> other three were the difference between a leg that exists and a leg that
+> is read.
+
 #### What is still open
 
-The splitter still cuts on structure and scores each half on its own
-vocabulary, so a half that carries no subject of its own — «…و دلیلش را
-توضیح بده», «…و اتریوم چطور», «…و چقدر تغییر کرده» — scores nothing and
-is dropped. Measured: 1 of 10 such sentences produced two legs, while 3
-of 3 sentences whose halves are independent did. §5.24.9 stopped a clause
-from being *silenced* by its sibling; it did not give a clause its
-sibling's *subject*.
+§5.24.10 answered the clause that names its own subject. The clauses that
+name nothing are still dropped, and they are the majority: of nine
+dependent second halves measured, only «اتریوم چطور» carried an asset.
+«دلیلش را توضیح بده», «سودش را حساب کن», «چقدر تغییر کرده», «کدوم
+بهتره», «بگو کم است یا نه» refer back with a clitic or not at all, so
+there is no subject in the clause to inherit *from* — resolving them means
+binding the clitic to the sibling's subject, which is a claim about
+Persian rather than a claim about the rule table.
 
 Automatic tiering decides the **depth** of a turn, §5.24.6 stopped the
 ladder re-buying a model it has already proven dead, and §5.24.7 made

@@ -78,6 +78,32 @@ const PROBES = [
     ]
   },
   {
+    /*
+     * ─── THE HALF THAT HAS NO VOCABULARY OF ITS OWN ────────────────────────
+     *
+     * The six probes above are two DIFFERENT capabilities, so each half carries
+     * the words that name it. This one is the harder shape: the second clause
+     * («اتریوم چطور») matches no rule in the table at all. It carries only its
+     * SUBJECT, and the question it asks is the question the first clause asked.
+     *
+     * Measured before the fix: one leg, one answer. The BTC price arrived and
+     * the ETH price did not — while `extractEntities` on the same sentence
+     * already reported `assets: [BTC, ETH]`. The subject was in hand and no
+     * decision read it, so the user asked about two assets and was told about
+     * one, with nothing in the reply to say the second half had been heard.
+     *
+     * The numbers are the ones the MACHINE says, not the ones the seed contains:
+     * the engines answer ETH at 3000 from their own source.
+     */
+    intent: 'PRICE + ELLIPSIS',
+    message: 'قیمت بیت کوین چنده و اتریوم چطور',
+    expectSubjects: ['BTC', 'ETH'],
+    parts: [
+      { name: 'btc price', any: ['36000', '36,000', '۳۶٬۰۰۰'] },
+      { name: 'eth price', any: ['ETH 3000', '3000 USD', '۳٬۰۰۰'] }
+    ]
+  },
+  {
     intent: 'GOAL + PLAN',
     message: 'هدفت چیست و برای رسیدن به آن چه برنامه‌ای دارم',
     parts: [
@@ -210,6 +236,17 @@ for (const probe of PROBES) {
     'EXECUTE_REPAY', 'EXECUTE_REBALANCE'
   ]);
   const executionLegs = legIntents.filter((t) => EXECUTION_INTENTS.has(t));
+  /*
+   * WHO each leg is about. Two legs can ask the same question, and then the
+   * subject is the only thing that makes them two answers — so a probe that
+   * counts legs without counting subjects would pass on a reply that answered
+   * the same asset twice and dropped the other one.
+   */
+  const legSubjects = compound.map((c) => (c && c.asset) || null);
+  const expectedSubjects = probe.expectSubjects || null;
+  const subjectsOk = expectedSubjects
+    ? expectedSubjects.every((a) => legSubjects.includes(a))
+    : true;
   const planHasMoneyStep = (out?.intent?.plan || []).some(
     (s) => s && (s.operation === 'execute' || s.operation === 'quote' || s.operation === 'prepare')
   );
@@ -257,9 +294,11 @@ for (const probe of PROBES) {
     intent: probe.intent,
     classified: out?.intent?.intentType || null,
     legs: legIntents,
+    subjects: legSubjects,
     executionLegs,
     planHasMoneyStep,
     legsOk,
+    subjectsOk,
     answered: answered.filter((a) => a.ok).map((a) => a.name),
     missed: answered.filter((a) => !a.ok).map((a) => a.name),
     parts: answered.length,
@@ -290,6 +329,9 @@ if (AS_JSON) {
       executionLegs: rows.reduce((a, r) => a + r.executionLegs.length, 0),
       moneyPlans: rows.filter((r) => r.planHasMoneyStep).length,
       badLegs: rows.filter((r) => !r.legsOk).length,
+      /* a leg that is not about the subject the user named is a leg that
+         answers a question nobody asked */
+      badSubjects: rows.filter((r) => !r.subjectsOk).length,
       /* a turn that answered its own question must show the answer as a
          section, not only as words somewhere in the reply */
       answeredWithoutResultSection: rows.filter((r) => r.missed.length === 0 && !r.hasResultSection).length,
@@ -318,6 +360,7 @@ if (AS_JSON) {
   console.log(`  coverage                  ${totalParts ? ((answeredParts / totalParts) * 100).toFixed(1) : 0}%`);
   const execLegs = rows.reduce((a, r) => a + r.executionLegs.length, 0);
   const moneyPlans = rows.filter((r) => r.planHasMoneyStep).length;
+  console.log(`  legs about the wrong subject  ${rows.filter((r) => !r.subjectsOk).length}   (two legs, one asset, is one answer twice)`);
   console.log(`  execution legs            ${execLegs}   (a question is not a permission)`);
   console.log(`  plans with a money step   ${moneyPlans}`);
   console.log('');

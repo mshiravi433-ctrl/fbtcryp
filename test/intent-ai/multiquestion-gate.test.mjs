@@ -81,6 +81,38 @@ test('every two-part question gets BOTH parts answered', () => {
   assert.equal(summary.coveragePct, 100, `coverage must be 100%, got ${summary.coveragePct}%`);
 });
 
+test('a half with no vocabulary of its own is still answered, about its own subject', () => {
+  /*
+   * THE SHAPE THE OTHER SIX PROBES DO NOT COVER.
+   *
+   * Every other probe is two different capabilities, so each half carries the
+   * words that name it. «قیمت بیت کوین چنده و اتریوم چطور» is one question
+   * asked about two assets, and its second clause matches no rule in the table:
+   * it carries only its SUBJECT. Measured before the fix, that clause scored
+   * nothing, the splitter dropped it, and the reply answered BTC only —
+   * `legs: []`, coverage 92.9%, one part missed — while `extractEntities` on the
+   * same sentence already reported `assets: [BTC, ETH]`.
+   *
+   * The subject counter is what keeps the words check honest. A reply that
+   * mentioned the ETH price twice and the BTC price never would still satisfy a
+   * keyword matcher; two legs about two DIFFERENT subjects is the property that
+   * makes them two answers.
+   */
+  const { rows, summary } = probe;
+  assert.equal(summary.badSubjects, 0,
+    'every leg must be about the subject the user named, not the first one the sentence happened to mention');
+  const row = rows.find((r) => r.intent === 'PRICE + ELLIPSIS');
+  assert.ok(row, 'the elliptical two-part probe must be in the corpus');
+  assert.deepEqual(row.subjects, ['BTC', 'ETH'],
+    `the two halves are about two assets, got [${(row.subjects || []).join(', ')}]`);
+  assert.equal(row.legs.length, 2, `two questions, two legs, got ${row.legs.length}`);
+  assert.deepEqual(row.missed, [], `no half may be dropped, missed: ${row.missed.join(', ')}`);
+  assert.equal(row.mode, 'ANSWER', 'both halves answered means the turn is an answer, not a question');
+  assert.equal(row.hasResultSection, true, 'and the answer arrives as a section');
+  assert.deepEqual(row.executionLegs, [],
+    'an elliptical clause inherits a READ; a money instruction has to be said, never inferred');
+});
+
 test('a compound question NEVER becomes an execution', () => {
   /* The acceptance criterion that matters most: answering half the
      question is a defect; turning the question into a TRANSACTION is

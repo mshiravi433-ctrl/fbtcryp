@@ -902,16 +902,59 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
      * The legs that the user did NOT ask for are the ones that must not
      * appear here: a compound READ is two READS, never a transaction.
      */
-    const legIntents = (classification.compound || [])
-      .map((c) => c && c.intent)
-      .filter((t) => t && t !== intent.intentType);
+    /*
+     * ─── A LEG IS A (QUESTION, SUBJECT) PAIR, NOT A QUESTION ────────────────
+     *
+     * The filter used to be `intent !== the turn's intent`, on the reasoning that
+     * a leg scoring the same intent as the turn would read the same section
+     * twice. That is true when the SUBJECT is the same and false when it is not:
+     * «قیمت بیت کوین چنده و اتریوم چطور» is one intent twice, about two assets,
+     * and dropping the second leg is how the ETH half of the question went
+     * unanswered while the classification correctly reported two legs.
+     *
+     * So a leg is kept when it differs from the turn in EITHER the question or
+     * the subject. The one it must not produce is a copy of the turn itself —
+     * same question, same subject — because that reading already happened.
+     */
+    const mainAsset = classification.entities?.asset || null;
+    const legRows = (classification.compound || [])
+      .filter((c) => c && c.intent && c.intent !== 'UNSUPPORTED')
+      .filter((c) => c.intent !== intent.intentType || (c.asset || null) !== mainAsset);
     const findings = buildFindings({ intent, classification, state, results, risk, readResults, stepResults, context, locale, lastReplan });
     /* The per-leg findings ride ALONG with the main ones; the main ones
        stay first so the primary subject is still the headline. */
     const legFindings = [];
-    for (const legIntent of legIntents) {
-      const legView = { ...intent, intentType: legIntent, corpusAnswer: null, corpusMatch: null, modelAnswer: null };
-      const legOut = buildFindings({ intent: legView, classification, state, results, risk, readResults, stepResults, context, locale, lastReplan });
+    for (const legRow of legRows) {
+      const legIntent = legRow.intent;
+      const legAsset = legRow.asset || null;
+      /*
+       * THE LEG'S SUBJECT TRAVELS WITH THE LEG.
+       *
+       * `buildFindings` picks the asset out of `classification.entities.asset`,
+       * so handing it the sentence's own classification made EVERY leg answer
+       * about the first asset — an ETH leg would have produced a second copy of
+       * the BTC reading, which is the failure this codebase already names: a real
+       * number attached to the wrong question is worse than no number. The leg
+       * therefore gets a classification whose subject is its own, and nothing
+       * else about it changes.
+       */
+      const legClassification = (legAsset && legAsset !== mainAsset)
+        ? {
+          ...classification,
+          entities: {
+            ...classification.entities,
+            asset: legAsset,
+            assetOrigin: `${classification.entities?.assetOrigin || 'sentence'}+leg`
+          }
+        }
+        : classification;
+      const legView = {
+        ...intent,
+        intentType: legIntent,
+        entities: legClassification.entities,
+        corpusAnswer: null, corpusMatch: null, modelAnswer: null
+      };
+      const legOut = buildFindings({ intent: legView, classification: legClassification, state, results, risk, readResults, stepResults, context, locale, lastReplan });
       /*
        * A leg's findings are ITS OWN.
        *
@@ -932,7 +975,10 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
         const key = `${f.id}|${f.status}`;
         if (seenInThisLeg.has(key)) continue;
         seenInThisLeg.add(key);
-        legFindings.push({ ...f, leg: legIntent });
+        /* The marker is the leg's IDENTITY — question plus subject — because two
+           legs can now share a question. `legIntent`/`legAsset` ride along so a
+           reader can ask about either without parsing the key. */
+        legFindings.push({ ...f, leg: legRow.legKey || legIntent, legIntent, legAsset });
       }
     }
     findings.push(...legFindings);

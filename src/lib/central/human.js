@@ -180,11 +180,32 @@ export function composeResponse({
      * cosmetic bug, a missing section is a missing answer.
      */
     if (recommendation?.ok && Array.isArray(recommendation?.parts) && recommendation.parts.length) {
-      for (const part of recommendation.parts) {
-        if (!part || !part.headline) continue;
+      /*
+       * TWO HALVES CAN NOW ASK THE SAME QUESTION ABOUT TWO THINGS.
+       *
+       * «قیمت بیت کوین چنده و اتریوم چطور» is one intent twice, with a
+       * different subject each time. Both halves get a section — a missing
+       * section is a missing answer — but two sections with the same id are two
+       * boxes claiming to be the same box, and two sections with the same LABEL
+       * fail the requirement written above this block: each answer has to say
+       * WHICH half it is.
+       *
+       * So the subject joins the id and the label, and only when it has to: a
+       * part that is the only one of its intent keeps the id and the label it has
+       * always had, so no reply that was already correct changes shape.
+       */
+      const readableParts = recommendation.parts.filter((part) => part && part.headline);
+      const sameIntent = new Map();
+      for (const part of readableParts) {
+        sameIntent.set(part.intent, (sameIntent.get(part.intent) || 0) + 1);
+      }
+      for (const part of readableParts) {
+        const shared = (sameIntent.get(part.intent) || 0) > 1 && Boolean(part.asset);
         sections.push(section(
-          `part:${part.intent || 'leg'}`,
-          partLabel(part.intent, fa),
+          shared ? `part:${part.intent}:${part.asset}` : `part:${part.intent || 'leg'}`,
+          shared
+            ? (fa ? `${partLabel(part.intent, fa)} — ${part.asset}` : `${partLabel(part.intent, fa)} (${part.asset})`)
+            : partLabel(part.intent, fa),
           part.headline,
           { source: part.findings?.length ? 'central-registry + engines' : 'central-registry', sourceLabel: fa ? 'منبع' : 'source' }
         ));

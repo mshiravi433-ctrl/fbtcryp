@@ -105,17 +105,36 @@ export function buildRecommendation({ kind = 'ACTIONABLE', intent = null, risk =
    * first, and it is the one the main headline already carries — so it
    * gets a part too, and the two parts together are the whole answer.
    */
-  const compoundIntents = Array.from(new Set((intent?.compound || [])
-    .map((c) => c && c.intent)
-    .filter((t) => t && t !== 'UNSUPPORTED')));
-  const legIntents = compoundIntents.length ? compoundIntents : [];
+  /*
+   * A part is keyed by (question, subject), not by question.
+   *
+   * Two legs can now ask the same thing about two assets, and a `Set` of intents
+   * collapsed them back into one part — whose findings were then selected by
+   * `!f.leg`, i.e. the PRIMARY half's findings. The ETH part would have been
+   * rendered with the BTC number in it: the right-looking section, the wrong
+   * answer, which is the one failure this file's own comments forbid.
+   */
+  const primaryAsset = intent?.entities?.asset || null;
+  const compoundLegs = (() => {
+    const seen = new Set();
+    const out = [];
+    for (const c of (intent?.compound || [])) {
+      if (!c || !c.intent || c.intent === 'UNSUPPORTED') continue;
+      const key = c.legKey || c.intent;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ intent: c.intent, asset: c.asset || null, legKey: key });
+    }
+    return out;
+  })();
   const parts = [];
-  if (legIntents.length) {
-    for (const legIntent of legIntents) {
-      const isPrimary = legIntent === intent?.intentType;
+  if (compoundLegs.length) {
+    for (const leg of compoundLegs) {
+      const legIntent = leg.intent;
+      const isPrimary = legIntent === intent?.intentType && (leg.asset || null) === primaryAsset;
       const legFindings = isPrimary
         ? findings.filter((f) => f && !f.leg)
-        : findings.filter((f) => f && f.leg === legIntent);
+        : findings.filter((f) => f && (f.leg === leg.legKey || f.leg === legIntent));
       if (!legFindings.length) continue;
       const legHeadline = makeHeadline({
         kind,
@@ -125,7 +144,7 @@ export function buildRecommendation({ kind = 'ACTIONABLE', intent = null, risk =
         risk
       });
       if (!legHeadline) continue;
-      parts.push({ intent: legIntent, headline: legHeadline, findings: legFindings.map((f) => f.id) });
+      parts.push({ intent: legIntent, asset: leg.asset || null, headline: legHeadline, findings: legFindings.map((f) => f.id) });
     }
   }
   const derivedConfidence = round(Math.min(

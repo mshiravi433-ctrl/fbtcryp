@@ -957,12 +957,59 @@ export function classify(message = '', { context = {}, state = {}, suggestions =
         isDistress: distressFlagsOf(claim),
         isDiscovery: discoveryFlagsOf(claim)
       });
-      if (!legHits.length) continue;
-      legs.push({ intent: legHits[0].intent, score: legHits[0].score, claim });
+      /*
+       * ─── A CLAUSE THAT NAMES ITS OWN SUBJECT IS NOT AN UNSUPPORTED REQUEST ──
+       *
+       * «قیمت بیت کوین چنده و اتریوم چطور» is two questions. The second clause
+       * carries no vocabulary at all — no rule in the table matches «چطور» on its
+       * own — so it scored nothing, the splitter dropped it, and the reply
+       * answered one asset. Measured over the rendered reply with the real brain
+       * mounted: the BTC price arrived and the ETH price did not, while
+       * `extractEntities` on the very same sentence already reported
+       * `assets: [BTC, ETH]`. The subject was in hand; no decision read it.
+       *
+       * So a clause with no rule hit but WITH its own subject inherits the
+       * question type from the sentence it came from, and keeps its own subject.
+       * It inherits a READ, never an execution: if no readable sibling exists the
+       * fallback is ASSET_ANALYSIS, because «و اتریوم چطور» is asking to be told
+       * about ETH. Inferring an order from an elliptical clause is the one thing
+       * this must never do — a money instruction has to be said.
+       *
+       * The score is deliberately below every real hit, so an inherited leg can
+       * join the answer without ever becoming the headline.
+       */
+      const ownAssets = findAssetsIn(claim) || [];
+      if (legHits.length) {
+        legs.push({ intent: legHits[0].intent, score: legHits[0].score, claim, asset: ownAssets[0] || null });
+        continue;
+      }
+      if (!ownAssets.length) continue;
+      const readableSibling = legs.find((l) => ((INTENT_TYPES[l.intent] || {}).permission) === PERMISSION.READ);
+      legs.push({
+        intent: readableSibling ? readableSibling.intent : 'ASSET_ANALYSIS',
+        score: 0.62,
+        claim,
+        asset: ownAssets[0],
+        inherited: true
+      });
     }
-    const distinct = Array.from(new Set(legs.map((l) => l.intent)));
-    if (distinct.length > 1) {
-      multiLegs = legs.map((l, i) => ({ intent: l.intent, leg: i + 1, claim: l.claim }));
+    /*
+     * ONE QUESTION ASKED TWICE, OR TWO QUESTIONS ABOUT TWO THINGS.
+     *
+     * The collapse rule used to be the INTENT alone, on the reasoning that two
+     * halves scoring the same intent would read the same section twice. That is
+     * true of «پورتفوی و موجودی من» — one subject, one holding, one reading — and
+     * false of «بیت کوین و اتریوم»: the same question about a different asset is
+     * a different answer, and collapsing it is how the second asset disappears.
+     * So legs are distinct by (intent, subject), and a leg carries its subject.
+     */
+    const legKey = (l) => `${l.intent}|${l.asset || ''}`;
+    const distinct = Array.from(new Set(legs.map(legKey)));
+    if (legs.length > 1 && distinct.length > 1) {
+      multiLegs = legs.map((l, i) => ({
+        intent: l.intent, leg: i + 1, claim: l.claim,
+        asset: l.asset || null, legKey: legKey(l), inherited: Boolean(l.inherited)
+      }));
       /* The second half's own hit joins the evidence trail, so the reply
          can show WHICH words produced the second leg. */
       hits.push(...legs.slice(1).map((l) => ({ intent: l.intent, score: l.score, compound: true, leg: 2 })));
@@ -1008,8 +1055,13 @@ export function classify(message = '', { context = {}, state = {}, suggestions =
       const seen = new Set();
       const merged = [];
       for (const c of all) {
-        if (seen.has(c.intent)) continue;
-        seen.add(c.intent);
+        /* By (intent, subject) for the same reason as the split above: deduping
+           by intent alone merged the two asset legs back into one here, after
+           the splitter had correctly kept them apart. Legacy two-step compounds
+           carry no subject, so they still dedupe by intent. */
+        const dedupeKey = c.legKey || c.intent;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
         merged.push(c);
       }
       return merged;
