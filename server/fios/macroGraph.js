@@ -30,6 +30,8 @@
  * always separates «what was read» from «what the model assumes».
  */
 
+import { capitalUsdFor } from './financialState.js';
+
 export const MACRO_GRAPH_SCHEMA = 'fbt.fi.macro-graph.v1';
 
 /* Instrument symbols the macro desk publishes → graph node ids. */
@@ -179,7 +181,7 @@ export function buildMacroGraph({ globalIntel = null, world = null, financial = 
 
   /* ── the portfolio node: real exposure ───────────────────────────────── */
   const holdings = financial?.computed?.holdings || financial?.computed?.positions || null;
-  const netWorthUsd = num(financial?.computed?.netWorthUsd);
+  const netWorthUsd = capitalUsdFor(financial);
   const portfolioNode = {
     id: 'portfolio',
     label: 'Portfolio',

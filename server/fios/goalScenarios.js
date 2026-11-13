@@ -22,6 +22,7 @@
 import { runScenarios, monteCarlo, ALLOCATION_PRESETS } from '../../src/lib/central/scenario.js';
 import { goalProbability } from './simulation.js';
 import { requireFlag } from './flags.js';
+import { capitalUsdFor } from './financialState.js';
 
 export const GOAL_SCENARIOS_SCHEMA = 'fbt.fi.goal-scenarios.v1';
 
@@ -45,7 +46,7 @@ export const GOAL_PROFILES = Object.freeze([
  * @param {number} [p.liveYieldPct]  the best LIVE yield read this pass (optional override)
  */
 export function buildGoalScenarios({ startUsd = null, goal = null, financial = null, liveYieldPct = null, now = Date.now() } = {}) {
-  const start = num(startUsd) ?? num(financial?.computed?.netWorthUsd);
+  const start = num(startUsd) ?? capitalUsdFor(financial);
   if (start === null || start <= 0) {
     return { ok: false, code: 'NO_STARTING_CAPITAL', detail: 'a scenario needs real capital; nothing was modelled and nothing was guessed' };
   }
@@ -149,7 +150,7 @@ export function createGoalScenariosEngine({ collections = null, observability = 
   async function scenariosFor(owner, { goal = null, financial = null, liveYieldPct = null, correlationId = null } = {}) {
     const gate = requireFlag('GOAL_SCENARIOS_ENABLED');
     if (!gate.ok) return { ok: false, code: gate.code, flag: gate.flag };
-    const out = buildGoalScenarios({ startUsd: num(financial?.computed?.netWorthUsd) ?? num(goal?.startUsd), goal, financial, liveYieldPct, now: now() });
+    const out = buildGoalScenarios({ startUsd: capitalUsdFor(financial) ?? num(goal?.startUsd), goal, financial, liveYieldPct, now: now() });
     /* Phase 215 — the multi-class allocation (traditional sleeves alongside
        the crypto presets). Best-effort: a failure there must not take the
        crypto scenarios down; the field is simply absent then. */

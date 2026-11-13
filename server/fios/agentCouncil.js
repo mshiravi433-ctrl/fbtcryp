@@ -37,6 +37,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { requireFlag } from './flags.js';
+import { capitalUsdFor } from './financialState.js';
 
 export const AGENT_COUNCIL_SCHEMA = 'fbt.fi.agent-council.v1';
 
@@ -110,7 +111,7 @@ function agentVotes({ asset = 'BTC', market = null, risk = null, financial = nul
   /* PORTFOLIO — fit against the profile + goal. */
   const portfolioAgent = (() => {
     if (!financial || financial.status === 'UNAVAILABLE') return abstain('financial state unreadable');
-    const netWorth = num(financial.computed?.netWorthUsd);
+    const netWorth = capitalUsdFor(financial);
     const stable = num(financial.computed?.stableSharePct);
     const horizon = profile?.horizonMonths ?? num(goal?.months);
     if (netWorth === null) return abstain('net worth unreadable');
