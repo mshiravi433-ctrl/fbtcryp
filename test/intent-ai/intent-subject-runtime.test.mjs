@@ -180,3 +180,45 @@ test('no rule asserts a word boundary it can never satisfy', () => {
     'every \\b in this file must be satisfiable by something the pattern can actually match'
   );
 });
+
+test('a status verb beside the yield noun is still a yield question', () => {
+  /* The question-word list had every interrogative except the one that asks HOW
+     THINGS ARE, so a plain status question about yield fell through to
+     ASSET_ANALYSIS, which claims the status verbs for itself. What keeps this
+     from becoming an analysis rule is that the word must sit beside the yield
+     noun: the verb that makes an analysis turn is not in the list. */
+  for (const text of ['ییلد چطوره', 'بازده چگونه است', 'apy how is it']) {
+    assert.equal(typeOf(text), 'YIELD_OPPORTUNITY', `${JSON.stringify(text)} asks how the yield is`);
+  }
+});
+
+test('a bare risk noun is a request — and only when it is alone', () => {
+  /* Every other topic noun in the file classified on its own; the risk noun did
+     not. The consequence was bigger than the single word: «ریسک و بازده» could
+     not be split into two legs, because the first leg was UNSUPPORTED and a
+     split with an engine-less leg is rejected — so the compound question was
+     lost twice over. The rule is ANCHORED, because it is listed before the
+     specific risks and an unanchored noun would take all of them. */
+  assert.equal(typeOf('ریسک'), 'RISK_OVERVIEW', 'the topic noun alone is a request');
+  assert.equal(typeOf('risk'), 'RISK_OVERVIEW', 'on either keyboard');
+  assert.equal(typeOf('ریسک و بازده') !== 'UNSUPPORTED', true, 'and a compound whose legs both classify is a compound');
+});
+
+test('a compound question is only splittable if every leg classifies', () => {
+  /* THE REASON A BARE NOUN MATTERS BEYOND ITSELF. A split is rejected when one
+     leg has no engine, so a single missing bare-noun rule silently turned two
+     questions into one. Both of these were UNSUPPORTED-legged before this
+     round. */
+  for (const [text, wantLegs] of [
+    ['بازار و ییلد', ['MARKET_OVERVIEW', 'YIELD_OPPORTUNITY']],
+    ['ریسک و بازده', ['RISK_OVERVIEW', 'YIELD_OPPORTUNITY']],
+    ['بازار و ییلد چطوره', ['MARKET_OVERVIEW', 'YIELD_OPPORTUNITY']]
+  ]) {
+    const r = classify(text);
+    const legs = (r?.compound || []).map((c) => c.intent);
+    assert.deepEqual(legs, wantLegs,
+      `${JSON.stringify(text)} must split into ${wantLegs.join(' + ')}, got ${legs.join(' + ') || 'nothing'}`);
+    assert.ok(!legs.includes('UNSUPPORTED'),
+      `${JSON.stringify(text)} has an engine-less leg, so the split will be rejected and a question will be dropped`);
+  }
+});

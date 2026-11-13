@@ -281,6 +281,26 @@ const RULES = Object.freeze([
        * different subject and belongs to the liquidity intent.
        */
       /\b(?:how much|what(?:'s| is)?|whats)\s+(?:is\s+)?(?:my\s+)?risk\b/i,
+      /*
+       * THE TOPIC NOUN ALONE, ANCHORED ON PURPOSE (2026-11-13).
+       *
+       * Every other topic noun in this file is a request on its own: a bare
+       * staking noun, a bare liquidity noun, a bare concentration noun and -
+       * since this round - a bare yield noun all classify. The bare risk noun
+       * did not, which had a consequence beyond the single word: `risk and
+       * return` could not be split into two legs, because the first leg
+       * classified as UNSUPPORTED and a split with an engine-less leg is
+       * rejected. The compound question was therefore lost twice over.
+       *
+       * THE ANCHOR IS THE WHOLE SAFETY ARGUMENT. This rule is listed BEFORE
+       * FUTURES_RISK and LIQUIDITY_RISK, so an unanchored risk noun would take
+       * every specific risk question with it - `liquidity risk` included - and
+       * four intents would quietly become one. Anchored, it matches the noun
+       * and nothing but the noun, which is exactly the subject this rule was
+       * written for; anything that says WHICH risk keeps going to the intent
+       * that knows about it.
+       */
+      /^\s*(?:ریسک|risk)\s*[?.!؟]*\s*$/i,
       /\brisk\s+(score|level|of my|right now|now)\b/i,
       /how (much|risky) am i/i
     ], requires: ['portfolio'] },
@@ -565,7 +585,19 @@ const RULES = Object.freeze([
       /^(?![\s\S]*(?:تحلیل|بررسی|وضعیت|چطور|چه حالی|analyz|check))[\s\S]*?(?:ییلد|yield|بازده|کشت\u200c?سود|فارم|farming|farm|\bapr\b|\bapy\b)/i,
             /* The yield noun and the question word: «apy USDC چنده»,
          «سود استیکینگ چقدره», «ییلد چقدر است», «farm yield for ETH». */
-      /(ییلد|بازده|apr|apy|farm|فارم|pool|استخر|کشت‌?سود)\s*.{0,30}?(چند|چقدر|چقدره|چنده|چه ?مقدار|کدام|کدوم|کجا|بهترین|بیشترین|how much|how high|what|which|best|where|for\b)/i,
+      /*
+       * `how is the yield` ASKED THE PERSIAN WAY (2026-11-13).
+       *
+       * This list had every question word except the one that asks HOW THINGS
+       * ARE, so a plain yield-noun-plus-status question fell through to
+       * ASSET_ANALYSIS, which claims the status verbs for itself. Two things
+       * had to be true before adding it: the word must sit BESIDE the yield
+       * noun, which this pattern already requires, and it must not open the
+       * door to an analysis turn - which it does not, because what makes
+       * `analyze the ETH farm` an analysis is the analysis verb, and that verb
+       * is not in this list.
+       */
+      /(ییلد|بازده|apr|apy|farm|فارم|pool|استخر|کشت‌?سود)\s*.{0,30}?(چند|چقدر|چقدره|چنده|چه ?مقدار|چطور|چطوره|چگونه|چه خبر|کدام|کدوم|کجا|بهترین|بیشترین|how much|how high|how is|how'?s|what about|what|which|best|where|for\b)/i,
       /* A verb that only makes sense for a pool: «USDC فارم کنم»,
          «where can I farm USDC». */
       /(.{0,30}?)(فارم\s*(کن|کنم|کنید)|استخر\s*(بذار|بگذار|بگذارم)|ییلد\s*(بگیرم|بگیر)|درآمد\s*(داشته\s*باشم|داشته باشم|بگیرم))/i

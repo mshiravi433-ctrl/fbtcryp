@@ -208,6 +208,24 @@ check('the route hands the proposal the execution signal', /execution:\s*Boolean
 check('the route publishes the decision it made', /autoTier:\s*resolvedIntelligence\.auto/.test(route), /autoTier:\s*resolvedIntelligence\.auto/.test(route),
   'a tier chosen silently is indistinguishable from a tier nobody chose');
 
+/* ── 9. the endpoints that are deep BY DEFINITION must not inherit it ─────── */
+/*
+ * `/debate` is Bull vs Bear and then a Judge; `/collaborate` is an explicit
+ * multi-provider analysis. Both are the smartest tier as a product decision, not
+ * as a default, so the chat turn's tier proposal must not leak into them. Today
+ * they pass the caller's preference straight through, which is correct — and the
+ * check exists because a future refactor could "helpfully" route them through
+ * the same resolver and quietly make every debate cheap.
+ */
+const debateAt = route.indexOf("router.post('/debate'");
+const collabAt = route.indexOf("router.post('/collaborate'");
+const chatAt = route.indexOf('proposeIntelligenceMode(tierRead');
+check('the deep-by-definition endpoints exist and are separate routes', debateAt > 0 && collabAt > 0, debateAt > 0 && collabAt > 0, `debate@${debateAt} collaborate@${collabAt}`);
+check('the tier proposal lives in the chat turn, not in the debate route',
+  chatAt > collabAt && route.slice(debateAt, collabAt).indexOf('proposeIntelligenceMode') === -1,
+  route.slice(debateAt, collabAt).indexOf('proposeIntelligenceMode') === -1,
+  'a debate is the smartest tier by definition; discounting it would be a product change, not an optimisation');
+
 /* ── report ──────────────────────────────────────────────────────────────── */
 const summary = {
   messages: decided.length,
