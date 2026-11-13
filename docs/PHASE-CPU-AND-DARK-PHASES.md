@@ -116,6 +116,9 @@ is not a permission (§5.23).
 | a compound question that became a transaction | possible — the split could have produced an EXECUTE leg | **0 execution legs, 0 money steps** — a question is not a permission, and the gate checks the plan (§5.23) |
 | «ریسک چقدر است؟» | `UNSUPPORTED` — the risk engine had no intent to reach it | **`RISK_OVERVIEW`** → the full verdict, with its factors (§5.23) |
 | «موجودی من چقدره؟» | «wallet.read: 2 balances across 2 chain(s)» — a COUNT | **the total and every row** (§5.23) |
+| an answered turn the machinery had a question about | **QUESTION** mode — the computed answer erased from `text` | **ANSWER**, with the machine's question after it; a money turn still asks (§5.23) |
+| English prose inside a Persian reply | 5 clauses over 2 of 6 questions — including the REASON for the risk level | **0** — and where the engine speaks only English, its own vocabulary is translated, never its prose (§5.23) |
+| the probe's own coverage number | **100%** — inflated, because it matched its own section labels | **100%** — honest: 83.3% once the labels stopped counting, then the real miss was fixed (§5.23) |
 
 ### The three root causes, and what each one was
 
@@ -2471,10 +2474,131 @@ policy and the state store stay real, only the external sources are
 faked — and it reports the coverage, the legs, the execution legs and the
 money steps. `--json` emits JSON only, so the gate can read it.
 
+#### The coverage number was lying, too
+
+The 100% above was measured twice. The first measurement was wrong, and
+it was wrong in the direction that is hardest to notice: **it over-reported.**
+
+The matcher scanned `section.label` as well as `section.value`. The labels
+come from `PART_LABEL_FA`, and `PART_LABEL_FA.GOAL_PLAN` is «هدف و برنامه» —
+which contains the exact keywords the goal part was looking for. So a turn
+whose answer had been **replaced** by a question still counted as answered,
+because the probe was matching a word the probe itself had put into the
+section header.
+
+A keyword probe that can be satisfied by the label of its own box measures
+nothing. The scan is now over section VALUES and finding DETAILS only —
+what the machine produced, never the name of the container.
+
+The honest number was **10 of 12 (83.3%)**, and the miss was real: the goal
+turn was coming back in QUESTION mode with an empty analysis.
+
+Two more things the honest measurement exposed, neither of them visible
+while the labels were being counted:
+
+**The engines were not mounted.** The fit engine sits behind
+`server/ci/fitBridge.js` and is wired by the composition root
+(`server/fios/index.js`); without that mount it answers
+`PROVIDER_NOT_WIRED`. So the probe now mounts the **real** root and keeps
+only the external sources faked — the same rule §5.21 left behind, that a
+fake provider mirroring the implementation hides the mismatch between the
+implementation and the engine.
+
+**Every turn was a QUESTION.** The conversation machinery reports a field it
+would like on almost any turn («this money is for what — growth, income, or
+preservation?»), and `needsUserInput` was enough to put the whole reply in
+QUESTION mode — which renders the question **instead of** the analysis. So a
+goal the engine had already computed disappeared from `text`, and the reply
+led with a question about an objective the user had not been asked to state.
+
+The fix is that the two checks that can set `needsUserInput` **do not mean
+the same thing**, and the difference is now a field on the intent:
+
+| source | meaning | when the turn has already answered |
+|---|---|---|
+| the money-step check | this turn is about to move money and does not know the amount | **stays a QUESTION** — a button to approve an unspecified request is worse than a question |
+| `conversation-machinery` | I would like one more field to be more useful | **stays an ANSWER**, with the question rendered after it |
+
+One predicate decides all three places that have to agree — the mode, the
+analysis sections, and the question:
+
+```js
+const turnAnswered = Boolean(recommendation?.ok)
+  && Object.values(results || {}).some((v) => v && v.status !== 'UNAVAILABLE');
+const keepAnswer = turnAnswered
+  && intent?.needsUserInputSource === 'conversation-machinery';
+```
+
+It is narrow on purpose. It needs a recommendation the engine stood behind
+**and** at least one section that was really read; a turn that read nothing
+stays a pure question, because answering it anyway is a confident paragraph
+out of nothing. And the ordering is fixed by a test: `result` before
+`question`, because the answer is what was asked for and the question is
+what the machine still needs.
+
+#### One sentence, one language
+
+With the honest matcher in place, the reply itself became readable, and
+reading it found the last defect — the one a user would have noticed first:
+
+> نتیجه: ریسک کلی HIGH است — **BTC is 100% of risk capital (2 valued
+> holdings, HHI 1)** (4 عامل).
+
+One sentence, two languages. The risk engine computes **both** voices —
+`reasons` and `reasonsFa`, and every factor carries `detail` and `detailFa`
+— and the `RISK_OVERVIEW` headline read `riskFinding.reason` unconditionally.
+The clause that was lost is not decoration: it is the **reason** for the
+level, the part the user most needs in order to act on it.
+
+The same was true of two findings whose qualification is the whole point of
+them. «No pool carries an impermanent-loss flag, and the APRs are still
+trailing figures» is the sentence that stops a 40% APR reading as a free
+return; «the top one is NOT_FITTED» is the sentence that stops a ranked list
+reading as a recommendation. Both were English-only inside a Persian reply.
+
+The rule applied is not "translate the engine's prose". The fit engine speaks
+English only, so its Persian voice is built from its **own vocabulary** — the
+verdict enum and the score, three words that carry the meaning — and never by
+passing a sentence through. And when no Persian voice exists at all, the
+clause is **omitted** rather than injected in English: a headline that says
+less is better than a headline that says half of itself in a language the
+user did not ask in.
+
+The probe measures it, over section values, as a run of English words — a
+clause, not a token, so «BTC» and «wallet-service» and «APR» do not count:
+
+```
+  englishClausesInReply              0   (was 5, over two of the six questions)
+  answeredWithoutResultSection       0
+  answersErasedByQuestion            0
+```
+
+Two smaller things fell out of reading the reply honestly. A compound turn
+reads the same sources once per leg, so the source line came out as
+«wallet-service + portfolio-service + … + wallet-service +
+portfolio-service + …»; the sources are a **set**, not a sequence, and
+naming one twice buries the ones that matter. And the new `wallet-balances`
+finding — added this same round to stop «موجودی من چقدره؟» answering with a
+count — had been written with an English voice only, so the fix for one hole
+had opened another. Both are corrected, and the formatter is **one**
+formatter: `fmtNum` and `fmtUsd` are exported from `recommend.js` and used by
+the brain's findings, so a single turn cannot quote the same total as
+«10k USD» in one section and «۱۰٬۰۰۰ دلار» in the next.
+
 #### The rule this leaves behind
 
 > **a brain that answers one question when asked two is silent data loss —
 > measure coverage over the REPLY, not the classification.**
+>
+> **and a probe that can be satisfied by its own labels measures nothing —
+> scan what the machine SAID, never the name of the box it said it in.**
+>
+> **and a question from the machinery is a follow-up, not a replacement —
+> but a question about money is a precondition, and the two must be told
+> apart by their SOURCE.**
+>
+> **and the reason is the part the user most needs, so it is the part that
+> must not arrive in a second language.**
 
 The classification can be perfect and the answer still incomplete. And
 the coverage number is not the work: it is the **instrument**. Every one

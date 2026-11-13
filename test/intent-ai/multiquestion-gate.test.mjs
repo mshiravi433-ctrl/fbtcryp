@@ -18,7 +18,7 @@
  * Measured before the fix: **6 of 12 parts answered (41.7%)**.
  * After: **12 of 12 (100%)**.
  *
- * THREE PROPERTIES ARE GUARANTEED HERE, not just measured:
+ * SIX PROPERTIES ARE GUARANTEED HERE, not just measured:
  *
  *   1. EVERY PART IS ANSWERED. The reply must carry each half of the
  *      question, not one half plus a confident paragraph.
@@ -28,6 +28,15 @@
  *      failure of an intelligent system.
  *   3. NO PLAN CARRIES A MONEY STEP. The same guarantee at the plan
  *      level: a compound READ reads.
+ *   4. THE ANSWER IS A SECTION, IN ANSWER MODE. A part that is
+ *      "answered" must be answered in the reply's `result` section —
+ *      not merely mentioned somewhere in it.
+ *   5. A QUESTION NEVER ERASES AN ANSWER. The conversation machinery
+ *      may ask for one more field, and when it does the answer it sits
+ *      beside still arrives.
+ *   6. A PERSIAN REPLY SPEAKS PERSIAN. The reason and the qualifier are
+ *      the parts the user most needs, so they are the parts that must not
+ *      arrive in a second language.
  *
  * The gate runs the REAL brain with the in-process fakes — the brain,
  * the registry, the policy and the state store stay real, only the
@@ -84,6 +93,67 @@ test('a compound question NEVER becomes an execution', () => {
   );
   assert.equal(probe.summary.executionLegs, 0, 'no leg of a question may be an execution intent');
   assert.equal(probe.summary.moneyPlans, 0, 'no plan of a question may carry a money step');
+});
+
+test('the answer arrives as a SECTION, in ANSWER mode — not as words in a question', () => {
+  /*
+   * THE COVERAGE NUMBER WAS ONCE INFLATED BY THE PROBE'S OWN LABELS.
+   *
+   * The matcher used to scan `section.label` as well as `section.value`,
+   * and `PART_LABEL_FA.GOAL_PLAN` is «هدف و برنامه» — which contains the
+   * very keywords the goal part was looking for. So a turn whose answer
+   * had been REPLACED by a question still counted as answered, and the
+   * probe reported 100% over a reply that said
+   * «برای ادامه لازم است: این پول برای چیست».
+   *
+   * The matcher now scans only what the machine SAID — section values and
+   * finding details — never the name of the box it said it in. These two
+   * counters are what keep that honest: a part that is "answered" must be
+   * answered in a `result` section, and a question from the conversation
+   * machinery must never erase the answer it sits beside.
+   */
+  const { rows, summary } = probe;
+  assert.equal(
+    summary.answeredWithoutResultSection, 0,
+    'a fully answered turn must carry its answer in a `result` section, not only as words somewhere in the reply'
+  );
+  assert.equal(
+    summary.answersErasedByQuestion, 0,
+    'the conversation machinery\'s question must ride ALONGSIDE the answer, never instead of it'
+  );
+  const questioned = rows.filter((r) => r.mode === 'QUESTION');
+  assert.deepEqual(
+    questioned.map((r) => `${r.intent} (mode=${r.mode})`),
+    [],
+    'a two-part READ question that was answered must not come back in QUESTION mode'
+  );
+  for (const row of rows) {
+    assert.ok(row.hasResultSection, `${row.intent}: the reply has no result section`);
+  }
+});
+
+test('a Persian reply carries no English prose', () => {
+  /*
+   * THE REASON IS THE PART THE USER MOST NEEDS.
+   *
+   * A two-part answer used to read «ریسک کلی HIGH است — BTC is 100% of risk
+   * capital (2 valued holdings, HHI 1) (4 عامل).» One sentence, two languages,
+   * and the English clause was the qualification that keeps a number honest:
+   * «no pool carries an impermanent-loss flag, and the APRs are still trailing
+   * figures» is the sentence that stops a 40% APR reading as a free return.
+   *
+   * Tokens are fine — «BTC», «USDC», «wallet-service», «APR» are names, not
+   * prose. What is measured here is a RUN OF ENGLISH WORDS inside a section
+   * VALUE: a clause the user has to parse in a second language in the middle
+   * of a reply that is otherwise in theirs.
+   */
+  const offenders = probe.rows.filter((r) => r.englishInReply.length);
+  assert.deepEqual(
+    offenders.map((r) => `${r.intent}: ${r.englishInReply.slice(0, 2).join(' | ')}`),
+    [],
+    'every rendered clause of a Persian reply must be Persian'
+  );
+  assert.equal(probe.summary.englishClausesInReply, 0, 'no English clause may reach a Persian reply');
 });
 
 test('the two halves are two intents, not one', () => {

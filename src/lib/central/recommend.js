@@ -357,8 +357,27 @@ function makeHeadline({ kind, findings, intent, locale, risk }) {
   const riskFinding = by('risk');
   if (riskFinding && intentType === 'RISK_OVERVIEW') {
     const level = riskFinding.level || 'UNKNOWN';
-    const factor = riskFinding.reason || riskFinding.detail || '';
     const factors = Array.isArray(riskFinding.factors) ? riskFinding.factors : [];
+    /*
+     * THE REASON MUST BE IN THE LANGUAGE OF THE SENTENCE AROUND IT.
+     *
+     * The risk engine computes BOTH voices — `reasons` and `reasonsFa`, and
+     * every factor carries `detail` and `detailFa`. The headline used to read
+     * `riskFinding.reason` unconditionally, so a Persian reply said:
+     *
+     *     «ریسک کلی HIGH است — BTC is 100% of risk capital (2 valued holdings,
+     *       HHI 1) (4 عامل).»
+     *
+     * One sentence, two languages, and the English clause is the part the user
+     * most needed to understand. The Persian voice is preferred; if the engine
+     * produced none, the FIRST FACTOR's Persian voice is used; and if there is
+     * no Persian at all the clause is OMITTED rather than injected in English —
+     * a headline that says less is better than a headline that says half of
+     * itself in a language the user did not ask in.
+     */
+    const factor = fa
+      ? (riskFinding.reasonFa || factors.find((f) => f && f.detailFa)?.detailFa || '')
+      : (riskFinding.reason || riskFinding.detail || '');
     return fa
       ? `ریسک کلی ${level} است${factor ? ` — ${factor}` : ''}${factors.length ? ` (${factors.length} عامل)` : ''}.`
       : `Overall risk is ${level}${factor ? ` — ${factor}` : ''}${factors.length ? ` (${factors.length} factor(s))` : ''}.`;
@@ -396,7 +415,12 @@ function makeHeadline({ kind, findings, intent, locale, risk }) {
 
 const dirLabel = (d, fa) => ({ bullish: fa ? 'صعودی' : 'bullish', bearish: fa ? 'نزولی' : 'bearish', neutral: fa ? 'خنثی' : 'neutral' }[String(d || '').toLowerCase()] || String(d || '—'));
 
-function fmtNum(v, fa = false) {
+/*
+ * EXPORTED so the brain's findings and the recommendation engine format a
+ * number the SAME way. Two formatters for one language is how a reply ends
+ * up saying «10k USD» in one section and «۱۰٬۰۰۰ دلار» in the next.
+ */
+export function fmtNum(v, fa = false) {
   const n = usableNumber(v);
   if (n === null) return '—';
   try {
@@ -424,7 +448,7 @@ const pctStr = (v) => {
 
 const levelLabel = (level, fa) => ({ HIGH: fa ? 'بالا' : 'high', ELEVATED: fa ? 'افزایش‌یافته' : 'elevated', MODERATE: fa ? 'متوسط' : 'moderate', LOW: fa ? 'پایین' : 'low' }[String(level || '').toUpperCase()] || String(level || '—'));
 
-function fmtUsd(v, fa = false) {
+export function fmtUsd(v, fa = false) {
   const n = usableNumber(v);
   if (n === null) return '—';
   /* Abbreviations are English-shaped (`10k USD`); in a Persian sentence they read as

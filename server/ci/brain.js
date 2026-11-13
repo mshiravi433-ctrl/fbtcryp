@@ -71,7 +71,7 @@ import {
 import { searchKnowledge } from '../../src/lib/intent-ai/os/knowledgeCenter.js';
 import { evaluatePolicy, planDigest } from '../../src/lib/central/policy.js';
 import { assessRisk } from '../../src/lib/central/risk.js';
-import { buildRecommendation, possibleActionsFrom } from '../../src/lib/central/recommend.js';
+import { buildRecommendation, possibleActionsFrom, fmtNum, fmtUsd } from '../../src/lib/central/recommend.js';
 import { composeResponse } from '../../src/lib/central/human.js';
 import { classifyError, createErrorLedger, humanizeError, nextRecovery } from '../../src/lib/central/errors.js';
 import {
@@ -767,7 +767,26 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     const machineMissing = Array.isArray(context.conversationQuestion?.missing) ? context.conversationQuestion.missing : [];
     const turnWasAnswered = Boolean(intent?.answeredFromCorpus || intent?.answeredFromModel || intent?.corpusAnswer || intent?.modelAnswer);
     if (machineMissing.length && !intent.needsUserInput && !turnWasAnswered) {
-      intent = { ...intent, needsUserInput: true, missingInputs: machineMissing };
+      /*
+       * The SOURCE of the need is part of the fact.
+       *
+       * Two different checks can set `needsUserInput`, and they do not mean
+       * the same thing. The money-step check means «this turn is about to move
+       * money and does not know the amount» — that must stay a question, or the
+       * reply offers a button to approve a request nobody specified. The
+       * conversation machinery means «I would like one more field to be more
+       * useful» — and when the turn has ALREADY answered the question that was
+       * asked, that is a follow-up, not a replacement.
+       *
+       * Without the marker the two are indistinguishable downstream, and every
+       * read-only turn the machinery could find a field for became a QUESTION.
+       */
+      intent = {
+        ...intent,
+        needsUserInput: true,
+        missingInputs: machineMissing,
+        needsUserInputSource: 'conversation-machinery'
+      };
     }
 
     const results = {};
@@ -1775,6 +1794,27 @@ function buildWhyFinding({ intent, results, readResults, findings }) {
   return null;
 }
 
+/*
+ * The fit engine's own vocabulary, in Persian.
+ *
+ * These are the engine's WORDS, not a paraphrase: the verdict it returned and
+ * the tolerance it read. Translating a three-word enum is safe; translating a
+ * sentence the engine wrote is how a reason turns into a rumour.
+ */
+const FIT_VERDICT_FA = Object.freeze({
+  FITTED: 'مناسب',
+  CONDITIONAL: 'مشروط',
+  NOT_FITTED: 'نامناسب',
+  UNRANKED: 'رتبه‌بندی‌نشده'
+});
+const FIT_TOLERANCE_FA = Object.freeze({
+  conservative: 'محافظه‌کار',
+  balanced: 'متعادل',
+  moderate: 'متعادل',
+  aggressive: 'پرریسک',
+  growth: 'رشد'
+});
+
 function buildFindings({ intent, classification, state, results, risk, readResults, stepResults, context, locale = 'en', lastReplan = null }) {
   const findings = [];
   const portfolio = state.sections.portfolio.data;
@@ -1879,6 +1919,18 @@ function buildFindings({ intent, classification, state, results, risk, readResul
       reason: rows.length
         ? `the wallet returned ${rows.length} balance(s); the total is the sum of their USD values`
         : 'the wallet returned no priced balance to total',
+      /* A finding with no Persian voice is rendered in English inside a
+         Persian reply — the `reason` section showed «the wallet returned 2
+         balance(s)» next to «یک دارایی ۱۰۰٪ از بودجهٔ ریسک». The convention
+         in this codebase is `detailFa`/`reasonFa` beside the English pair,
+         and the numbers come from the SAME formatter the recommendation
+         engine uses, so one turn cannot quote the total two ways. */
+      detailFa: rows.length
+        ? `${fmtNum(rows.length, locale === 'fa')} دارایی در ${fmtNum(Array.isArray(walletRead.chainsRead) ? walletRead.chainsRead.length : null, locale === 'fa')} شبکه؛ مجموع ${fmtUsd(total, locale === 'fa')}`
+        : `موجودی قیمت‌گذاری‌شده‌ای نبود؛ مجموع ${fmtUsd(total, locale === 'fa')}`,
+      reasonFa: rows.length
+        ? `کیف پول ${fmtNum(rows.length, locale === 'fa')} موجودی برگرداند و مجموع، جمع ارزش دلاری همان‌هاست`
+        : 'کیف پول موجودی قیمت‌گذاری‌شده‌ای برای جمع زدن برنگرداند',
       source: 'wallet-service',
       dataAt: walletRead.at || Date.now(),
       status: rows.length || total ? 'OK' : 'PARTIAL'
@@ -2198,6 +2250,18 @@ function buildFindings({ intent, classification, state, results, risk, readResul
       reason: withIl.length
         ? `${withIl.length} of ${pools.length} pools carry an impermanent-loss flag — the APR on those is not a free return`
         : (pools.length ? 'no pool carries an impermanent-loss flag, and the APRs are still trailing figures' : 'no liquidity data to judge'),
+      /* The qualifier is the point of this finding — «the APR on those is not
+         a free return» is the sentence that keeps a 40% number honest — so it
+         has to survive translation. An English-only qualifier inside a Persian
+         reply is a qualifier the user will skim past. */
+      detailFa: pools.length
+        ? `${fmtNum(pools.length, locale === 'fa')} استخر خوانده شد؛ ${fmtNum(withIl.length, locale === 'fa')} پرچم زیان ناپایدار دارند و ${fmtNum(safe.length, locale === 'fa')} ندارند`
+        : `منبع نقدینگی پاسخ نداد: ${readResults.liquidity?.reason || 'NO_LIQUIDITY_DATA'}`,
+      reasonFa: withIl.length
+        ? `${fmtNum(withIl.length, locale === 'fa')} از ${fmtNum(pools.length, locale === 'fa')} استخر پرچم زیان ناپایدار دارند — APR آن‌ها بازدهی رایگان نیست`
+        : (pools.length
+          ? 'هیچ استخری پرچم زیان ناپایدار ندارد و APRها همچنان اعداد گذشته‌نگرند'
+          : 'دادهٔ نقدینگی برای قضاوت در دسترس نیست'),
       source: 'yields-engine',
       dataAt: state.sections.liquidity.data?.at || Date.now(),
       partial: pools.length === 0
@@ -2234,6 +2298,18 @@ function buildFindings({ intent, classification, state, results, risk, readResul
         capitalUsd: fitRead.data?.capitalUsd ?? null,
         detail: `${ranked.length} opportunit${ranked.length === 1 ? 'y' : 'ies'} scored against a ${fitRead.data?.riskTolerance || 'unreadable'} risk profile; the top one is ${best?.verdict || 'unranked'}${best?.score != null ? ` (score ${best.score})` : ''}`,
         reason: best?.reason || best?.reasons?.[0] || 'the fit engine gave no reason for its verdict',
+        /*
+         * The fit engine speaks English only, so the Persian voice is built
+         * HERE from the engine's own verdict and score — never by passing the
+         * English prose through. The words that carry the meaning are the
+         * engine's (FITTED / CONDITIONAL / NOT_FITTED, the score, the
+         * tolerance); only the sentence around them is translated.
+         *
+         * When the engine produced a Persian reason of its own, that wins.
+         */
+        detailFa: `${fmtNum(ranked.length, locale === 'fa')} گزینه با پروفایل ریسک ${FIT_TOLERANCE_FA[String(fitRead.data?.riskTolerance || '').toLowerCase()] || 'خوانده‌نشده'} سنجیده شد؛ گزینهٔ اول ${FIT_VERDICT_FA[String(best?.verdict || '').toUpperCase()] || 'رتبه‌بندی‌نشده'} است${best?.score != null ? ` (امتیاز ${fmtNum(best.score, locale === 'fa')})` : ''}`,
+        reasonFa: best?.reasonFa || best?.reasonsFa?.[0]
+          || `${FIT_VERDICT_FA[String(best?.verdict || '').toUpperCase()] || 'بی‌رتبه'}: ${fmtNum(best?.score ?? null, locale === 'fa')} امتیاز در برابر پروفایل ریسک ${FIT_TOLERANCE_FA[String(fitRead.data?.riskTolerance || '').toLowerCase()] || 'خوانده‌نشده'}`,
         source: 'fit-engine',
         dataAt: fitRead.data?.at || Date.now(),
         partial: false
@@ -2245,6 +2321,7 @@ function buildFindings({ intent, classification, state, results, risk, readResul
         ranked: [],
         detail: null,
         reason: `the fit engine did not rank anything: ${fitRead?.reason || fitRead?.data?.detail || 'NO_FIT_DATA'}`,
+        reasonFa: `موتور تناسب چیزی را رتبه‌بندی نکرد: ${fitRead?.reason || fitRead?.data?.detail || 'NO_FIT_DATA'}`,
         source: 'fit-engine',
         partial: true
       });

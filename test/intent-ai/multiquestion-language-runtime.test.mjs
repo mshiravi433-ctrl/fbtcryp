@@ -45,6 +45,8 @@ import { strict as assert } from 'node:assert';
 import test from 'node:test';
 import { classify } from '../../src/lib/central/intent.js';
 import { readGoalInputs } from '../../src/lib/central/analysis.js';
+import { buildRecommendation } from '../../src/lib/central/recommend.js';
+import { composeResponse } from '../../src/lib/central/human.js';
 
 const CAPS = {};
 for (const k of [
@@ -170,4 +172,175 @@ test('the splitter does not turn a question into an execution', () => {
       assert.ok(!EXECUTION.has(leg), `«${q}» produced the execution leg ${leg}`);
     }
   }
+});
+
+
+/* ─── ONE SENTENCE, ONE LANGUAGE ─────────────────────────────────────────── */
+
+/*
+ * The risk engine computes BOTH voices — `reasons` and `reasonsFa`, and
+ * every factor carries `detail` and `detailFa`. The headline used to read
+ * the English one unconditionally, so a Persian reply said:
+ *
+ *   «ریسک کلی HIGH است — BTC is 100% of risk capital (2 valued holdings,
+ *     HHI 1) (4 عامل).»
+ *
+ * One sentence, two languages — and the English clause was the part the
+ * user most needed to understand, because it is the REASON for the level.
+ */
+const headlineFor = (riskFinding, locale = 'fa') => {
+  const rec = buildRecommendation({
+    kind: 'INFORMATIVE',
+    intent: { intentType: 'RISK_OVERVIEW' },
+    findings: [riskFinding],
+    capabilities: { risk: 'AVAILABLE', portfolio: 'AVAILABLE' },
+    locale
+  });
+  return String(rec?.recommendation || '');
+};
+
+test('a Persian headline speaks Persian: the engine\'s own Persian reason wins', () => {
+  const fa = headlineFor({
+    id: 'risk', level: 'HIGH', status: 'OK',
+    reason: 'BTC is 100% of risk capital (2 valued holdings, HHI 1)',
+    reasonFa: 'تمرکز: مهم‌ترین دارایی ۱۰۰٪ از سرمایهٔ پرریسک، حد مجاز ۴۵',
+    factors: [{ id: 'concentration', level: 'HIGH' }]
+  });
+  assert.ok(fa.includes('ریسک کلی HIGH'), `the level must be named → ${fa}`);
+  assert.ok(fa.includes('تمرکز'), `the Persian reason must be the one rendered → ${fa}`);
+  assert.ok(
+    !/[A-Za-z]{3,}\s+[A-Za-z]{3,}\s+[A-Za-z]{3,}/.test(fa),
+    `a Persian sentence must not carry an English clause → ${fa}`
+  );
+});
+
+test('the English headline still speaks English', () => {
+  const en = headlineFor({
+    id: 'risk', level: 'HIGH', status: 'OK',
+    reason: 'BTC is 100% of risk capital (2 valued holdings, HHI 1)',
+    reasonFa: 'تمرکز: مهم‌ترین دارایی ۱۰۰٪ از سرمایهٔ پرریسک',
+    factors: [{ id: 'concentration', level: 'HIGH' }]
+  }, 'en');
+  assert.ok(en.includes('Overall risk is HIGH'), `→ ${en}`);
+  assert.ok(en.includes('BTC is 100%'), `the English reason belongs in the English sentence → ${en}`);
+});
+
+test('with no Persian reason at all, the clause is OMITTED — not injected in English', () => {
+  /*
+   * A headline that says less is better than a headline that says half of
+   * itself in a language the user did not ask in. Omission is visible;
+   * a mixed-language sentence reads as though the engine meant it.
+   */
+  const fa = headlineFor({
+    id: 'risk', level: 'HIGH', status: 'OK',
+    reason: 'BTC is 100% of risk capital (2 valued holdings, HHI 1)',
+    reasonFa: null,
+    factors: [{ id: 'concentration', level: 'HIGH', detail: 'BTC is 100% of risk capital' }]
+  });
+  assert.ok(fa.includes('ریسک کلی HIGH'), `the level must still be named → ${fa}`);
+  assert.ok(
+    !fa.includes('BTC is 100%'),
+    `the English reason must not be injected into the Persian sentence → ${fa}`
+  );
+});
+
+test('a factor\'s Persian voice is the fallback when the finding has none', () => {
+  const fa = headlineFor({
+    id: 'risk', level: 'HIGH', status: 'OK',
+    reason: 'BTC is 100% of risk capital',
+    reasonFa: null,
+    factors: [{ id: 'concentration', level: 'HIGH', detail: 'BTC is 100%', detailFa: 'تمرکز دارایی ۱۰۰٪' }]
+  });
+  assert.ok(fa.includes('تمرکز دارایی ۱۰۰٪'), `→ ${fa}`);
+  assert.ok(!fa.includes('BTC is 100%'), `→ ${fa}`);
+});
+
+/* ─── THE SAFETY NARROWING ───────────────────────────────────────────────── */
+
+/*
+ * `keepAnswer` lets an ANSWERED turn carry the conversation machinery's
+ * question beside it. That must NOT extend to a turn that is about to move
+ * money: an execution whose amount is unknown has to stay a question, or the
+ * reply offers a button to approve a request nobody specified.
+ *
+ * The distinction is the SOURCE of the need, and the source is a field on the
+ * intent — so both directions are pinned here.
+ */
+const READ_RESULTS = {
+  'goals.read': { status: 'OK', source: 'goals-service', summary: 'read', at: Date.now() }
+};
+const OK_RECOMMENDATION = {
+  ok: true,
+  recommendation: 'برای هدف ۱۰۰٬۰۰۰ دلار در ۲ سال: شانس برآوردی ۱۰۰٪.',
+  reason: ['هدف خوانده شد'],
+  data: [{ id: 'goal-feasibility', source: 'goals-service', detail: 'هدف خوانده شد' }],
+  confidence: 0.74,
+  alternatives: [],
+  actions: [],
+  risk: null
+};
+const MACHINE_CONTEXT = {
+  missingInformation: ['objective'],
+  conversationQuestion: {
+    question: 'این پول برای چیست — رشد، درآمد، یا حفظ سرمایه؟',
+    field: 'objective',
+    missing: ['objective'],
+    source: 'conversation-machinery'
+  }
+};
+
+test('the machinery\'s question rides ALONGSIDE an answer, and the answer leads', () => {
+  const out = composeResponse({
+    intent: {
+      intentType: 'GOAL_PLAN', needsUserInput: true, missingInputs: ['objective'],
+      needsUserInputSource: 'conversation-machinery'
+    },
+    context: MACHINE_CONTEXT,
+    results: READ_RESULTS,
+    recommendation: OK_RECOMMENDATION,
+    locale: 'fa'
+  });
+  assert.equal(out.mode, 'ANSWER', `an answered turn must not come back as a question → ${out.mode}`);
+  const ids = (out.sections || []).map((s) => s.id);
+  assert.ok(ids.includes('result'), `the answer must be a section → ${ids.join(',')}`);
+  assert.ok(ids.includes('question'), `the machine's question must still reach the reply → ${ids.join(',')}`);
+  assert.ok(
+    ids.indexOf('result') < ids.indexOf('question'),
+    `the answer comes first: it is what was asked for → ${ids.join(',')}`
+  );
+  const text = String(out.text || '');
+  assert.ok(text.includes('۱۰۰٬۰۰۰'), `the answer must be in the text → ${text.slice(0, 160)}`);
+  assert.ok(text.includes('این پول برای چیست'), `the question must be in the text → ${text.slice(0, 200)}`);
+});
+
+test('a MONEY turn with an unknown amount stays a QUESTION, whatever was read', () => {
+  /* No `needsUserInputSource`: this is the money-step check, not the
+     machinery. The narrowing must not touch it. */
+  const out = composeResponse({
+    intent: { intentType: 'EXECUTE_SWAP', needsUserInput: true, missingInputs: ['amount'] },
+    context: { missingInformation: ['amount'] },
+    results: READ_RESULTS,
+    recommendation: OK_RECOMMENDATION,
+    locale: 'fa'
+  });
+  assert.equal(out.mode, 'QUESTION', `an execution with an unknown amount must ask, not answer → ${out.mode}`);
+  const ids = (out.sections || []).map((s) => s.id);
+  assert.ok(!ids.includes('result'), `no answer section may be rendered for it → ${ids.join(',')}`);
+});
+
+test('a turn that read NOTHING stays a pure question', () => {
+  /* `keepAnswer` needs a recommendation the engine stood behind AND at least
+     one section that was really read. Without them, answering anyway would be
+     a confident paragraph out of nothing. */
+  const out = composeResponse({
+    intent: {
+      intentType: 'GOAL_PLAN', needsUserInput: true, missingInputs: ['objective'],
+      needsUserInputSource: 'conversation-machinery'
+    },
+    context: MACHINE_CONTEXT,
+    results: { 'goals.read': { status: 'UNAVAILABLE', source: 'goals-service', at: Date.now() } },
+    recommendation: { ok: false, refusal: 'چیزی خوانده نشد' },
+    locale: 'fa'
+  });
+  assert.equal(out.mode, 'QUESTION', `nothing was read, so nothing may be answered → ${out.mode}`);
 });

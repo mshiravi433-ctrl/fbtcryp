@@ -94,7 +94,31 @@ export function composeResponse({
   const L = LABELS[locale === 'fa' ? 'fa' : 'en'];
   const fa = L === LABELS.fa;
   const sections = [];
-  const mode = pickMode({ error, policy, execution, recommendation, results, intent });
+
+  /*
+   * ─── A MISSING FIELD MUST NOT ERASE AN ANSWER THAT WAS PRODUCED ────────
+   *
+   * ONE predicate, used in three places, because the three have to agree:
+   * the mode, the analysis sections, and the question.
+   *
+   * The conversation machinery can report a field it would like («this money
+   * is for what — growth, income, or preservation?») on a turn that has
+   * ALREADY answered what was asked: the goal engine computed a feasibility,
+   * the risk engine produced a verdict. Both are true at once. QUESTION mode
+   * used to render the question INSTEAD of the analysis, so the computed
+   * answer disappeared from `text` and a two-part question looked answered
+   * only because its own SECTION LABEL contained the keyword.
+   *
+   * It applies ONLY to a question from the conversation machinery. A question
+   * from the money-step check is not a follow-up: an execution whose amount is
+   * unknown must stay a question, or the reply offers a button to approve a
+   * request nobody specified.
+   */
+  const turnAnswered = Boolean(recommendation?.ok)
+    && Object.values(results || {}).some((v) => v && v.status !== 'UNAVAILABLE');
+  const keepAnswer = turnAnswered && intent?.needsUserInputSource === 'conversation-machinery';
+
+  const mode = pickMode({ error, policy, execution, recommendation, results, intent, keepAnswer });
 
   /* ---- a capability refusal replaces the analysis, it does not decorate it ---- */
   if (refusal) {
@@ -103,6 +127,25 @@ export function composeResponse({
     if (refusal.alternatives?.length) sections.push(section('alternatives', fa ? 'چیزی که در دسترس است' : 'What is available', refusal.alternatives, { source: 'capability-manager' }));
   }
 
+  /*
+   * ─── A MISSING FIELD MUST NOT ERASE AN ANSWER THAT WAS PRODUCED ────────
+   *
+   * The conversation machinery can report a field it still needs («this money
+   * is for what — growth, income, or preservation?») while the turn has
+   * ALREADY answered the question that was asked: the goal engine computed a
+   * feasibility, the risk engine produced a verdict. Both are true at once.
+   *
+   * QUESTION mode used to render the question INSTEAD of the analysis, so the
+   * computed answer disappeared and the reply asked for something the user had
+   * not asked to be asked. The question is now rendered ALONGSIDE the answer —
+   * `result` first, because the answer is what was asked for, and the machine's
+   * question after it, because it is what the machine still needs.
+   *
+   * The condition is narrow on purpose: it needs a recommendation the engine
+   * actually stood behind AND at least one section that was really read. A turn
+   * where nothing was read stays a pure question — answering it anyway would be
+   * a confident paragraph out of nothing.
+   */
   /* ---- analysis sections (§43 upper half) ---- */
   if (!refusal && (mode === 'ANSWER' || mode === 'ACTION')) {
     const readable = Object.entries(results).filter(([, v]) => v && v.status !== 'UNAVAILABLE');
@@ -112,7 +155,13 @@ export function composeResponse({
        question, which is harder to notice than an empty reply. */
     const headline = gapLead?.text || (recommendation?.ok ? recommendation.recommendation : summarizeResults(readable, { fa, L }));
     sections.push(section('result', L.result, headline, {
-      source: recommendation?.data?.map((d) => d.source).filter(Boolean).join(' + ') || readable.map(([k]) => results[k]?.source).filter(Boolean).join(' + ') || null,
+      /* A compound turn reads the same sources once per LEG, so the list came
+         out as «wallet-service + portfolio-service + … + wallet-service +
+         portfolio-service + …». The sources are a set, not a sequence: naming
+         one twice tells the user nothing and buries the ones that matter. */
+      source: Array.from(new Set(recommendation?.data?.map((d) => d.source).filter(Boolean))).join(' + ')
+        || Array.from(new Set(readable.map(([k]) => results[k]?.source).filter(Boolean))).join(' + ')
+        || null,
       sourceLabel: fa ? 'منبع' : 'source',
       dataAt: maxAt(readable.map(([, v]) => v.dataAt || v.at)),
       dataAtLabel: relative(maxAt(readable.map(([, v]) => v.dataAt || v.at)), fa)
@@ -188,8 +237,12 @@ export function composeResponse({
     if (policy?.reasons?.length) sections.push(section('impact', fa ? 'تأثیر روی پاسخ' : 'Effect on the answer', policy.reasons.slice(0, 2), { source: 'policy-engine' }));
   }
 
-  /* ---- a question, only when a field is genuinely missing (§5) ---- */
-  const ask = mode === 'QUESTION' ? askFor(context, { fa, L }) : null;
+  /* ---- a question, only when a field is genuinely missing (§5) ----
+     In ANSWER mode it is still rendered when the machinery asked for one more
+     field: the answer comes first because it is what was asked for, and the
+     question after it because it is what the machine still needs. Dropping it
+     would hide the gap; leading with it would hide the answer. */
+  const ask = (mode === 'QUESTION' || keepAnswer) ? askFor(context, { fa, L }) : null;
   if (ask) sections.push(section('question', fa ? 'برای ادامه لازم است' : 'Needed to continue', ask.text, { tone: 'ask' }));
 
   /* A partial failure must say so. Hiding «the price source did not answer» behind
@@ -250,19 +303,22 @@ export function composeResponse({
   };
 }
 
-function pickMode({ error, policy, execution, recommendation, results, intent }) {
+function pickMode({ error, policy, execution, recommendation, results, intent, keepAnswer = false }) {
   const usable = Object.values(results || {}).filter((v) => v && v.status !== 'UNAVAILABLE').length;
   if (policy?.verdict === 'SAFE_STOP') return 'SAFE_STOP';
   /* A missing field outranks a confirmation card: offering a user a button to
-     approve a request whose amount we do not know is worse than asking for it. */
-  if (intent?.needsUserInput) return 'QUESTION';
+     approve a request whose amount we do not know is worse than asking for it.
+     `keepAnswer` is the one exception, and it is narrow: the turn already
+     produced an answer the engine stood behind, and the field the machinery
+     wants is a follow-up rather than a precondition. */
+  if (intent?.needsUserInput && !keepAnswer) return 'QUESTION';
   /* "Some results exist" is not the same as "anything was read": a turn where every
      source failed still has result entries, all UNAVAILABLE. Treating that as an
      ANSWER is how a system produces a confident paragraph out of nothing. */
   if (error && !usable) return 'ERROR_AND_RECOVERY';
   if (policy?.requiresConfirmation && !execution) return 'ACTION';
   if (execution) return 'ACTION';
-  if (intent?.needsUserInput || (!Object.keys(results || {}).length && !recommendation?.ok)) return 'QUESTION';
+  if ((intent?.needsUserInput && !keepAnswer) || (!Object.keys(results || {}).length && !recommendation?.ok)) return 'QUESTION';
   return 'ANSWER';
 }
 
