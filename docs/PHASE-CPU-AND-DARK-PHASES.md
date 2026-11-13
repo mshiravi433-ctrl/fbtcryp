@@ -39,6 +39,15 @@ scenarios, in §5.16, the fourteenth, the quota and the route engine, in
 sixteenth, the session machinery, in §5.20). The point of this section
 is that each one is a measurement before and after, not a promise.
 
+And then the rule the last three failures left behind — *a test that
+drives an engine directly proves the engine; only a test that drives a
+TURN proves the engine is REACHED* — was applied to the **whole
+library**, as a sweep over every engine's own route (§5.21 and §5.22).
+It found two more bugs on the first run: a question about which bridge to
+use was being read as an instruction to move the money, and an owner whose
+debt had never been read had no capital for seven engines. Both are
+fixed, and the guarantee is now a gate rather than a claim.
+
 | | before | after |
 |---|---|---|
 | phases the probe calls **live** | 142 / 165 | **165 / 165** |
@@ -76,7 +85,9 @@ is that each one is a measurement before and after, not a promise.
 | «چرا این را گفتی؟» | `UNSUPPORTED` | **`WHY_DECISION`** → five reason lines and four named falsifiers (§5.19) |
 | the conversation's own shape | not modelled | **a state machine in the session layer**, asking ONE adaptive question (§5.20) |
 | a replan when the world moves | computed, never read | **read by the turn**, and announced only when something decision-relevant changed (§5.20) |
-| `server/fios/` engines the brain can reach | 0 of 50 | **all of them** — and all three of the last ones turned out to be reachable AND still dark, so the count is now zero in the only sense that means something: an engine that does not reach the ANSWER is dark (§5.21) |
+| `server/fios/` engines that reach an ANSWER | 0 of 50 | **47 of 47** — measured over each engine's OWN route, not by import (§5.21, §5.22) |
+| intents whose engine reaches the REPLY | — | **26 of 26**, in a real brain turn (§5.22) |
+| the owner's capital, when the debt was never read | `null`, and seven engines reasoned about nothing | **the gross assets**, through one shared helper — and the debt is still never guessed (§5.22) |
 
 ### The three root causes, and what each one was
 
@@ -860,6 +871,25 @@ left open on purpose, and it is worth naming:
    and the answer did not. The count above was honest about REACHABILITY
    and silent about the answer, and the correction — three missing
    inputs, three different shapes of the same failure — is in §5.21.
+
+   **And the rule was then applied to the WHOLE library — §5.22.**
+   §5.21's lesson turned out to be a general one, so it was turned into
+   a sweep: every engine in `server/fios/` is now asked, over its OWN
+   route, whether it reaches an answer. **47 of 47 do, 0 are dark, 0
+   have no caller.** The first run of that sweep found two more bugs
+   that no surface test could see — a comparison question about a bridge
+   classified as an instruction to move the money, and an owner whose
+   debt was never read having **no capital at all** for seven engines.
+   Both are fixed, and both are in §5.22.
+
+7. ~~**The engines are reachable, and that was the count.**~~ **The count
+   is now the answer.** Reachability was the wrong number, and it was
+   wrong for a third time in this document: first there were no engines
+   reachable, then all of them were, and now the number that means
+   something is how many of them **reach an ANSWER**. It is measured two
+   ways — 47 of 47 engines over their own route, 26 of 26 intents in a
+   real brain turn — and it is gated, so a future engine cannot join the
+   library dark.
 
 ### 5.9 Path 7 — the yield surface (SHIPPED)
 
@@ -1806,6 +1836,177 @@ words appear in the reply.
 anything: an engine that does not reach the answer is dark, however
 many paths lead to it.**
 
+### 5.22 The general guarantee, and the two bugs it found on the first run
+
+§5.21 ended with a rule:
+
+> a test that drives an engine directly proves the engine; only a test that
+> drives a TURN proves the engine is REACHED.
+
+That rule was written about three engines. It turned out to be a rule about
+**all** of them, and writing it down as a general rule is what found the
+next two bugs — both of which were invisible to every test that existed.
+
+#### The harness
+
+Two scripts, and the split between them is the split between the two ways
+an engine is reached.
+
+| script | what it asks | what it proves |
+|---|---|---|
+| `scripts/probe-engine-reach.mjs` | the BRAIN a sentence, for every INTENT | an intent's engine reaches the reply |
+| `scripts/probe-engine-sweep.mjs` | the FIOs ROUTER the call each engine's own page makes, for every ENGINE FILE | an engine reaches an answer at all |
+
+The two sets are not the same set. A module can host an engine; an engine
+can exist with no module at all. And the FI router reaches forty-one
+engines directly, with no brain turn in the picture — their bug is the
+opposite of a dark engine's: an engine that answers its own page perfectly
+and is invisible to the conversation.
+
+A guarantee that only covered the brain path would have left the FI path
+unmeasured, and the FI path is where the bulk of the intelligence lives.
+
+**The result of the sweep:**
+
+```
+  engine files            49
+  mounted in the root     44
+  reached over its route  47
+  NOT reached             0
+  no route in the sweep   0
+  not engines at all       2
+```
+
+The two that are not engines are **named**, so the gate does not cry wolf:
+`flags.js` is the feature-flag registry every engine asks before it runs,
+and `provenance.js` is the envelope module — the only way to build a
+financial value with a source and a timestamp. Neither has an output of
+its own, so there is nothing for either to reach.
+
+#### The rule the sweep obeys
+
+It calls **real routes with real bodies**. It does not reach into an
+engine and call a method, because that would prove the engine and nothing
+else — which is the mistake §5.21 was about.
+
+Two of those bodies had to be *built* before the call could be made, and
+that is the sweep earning its keep rather than merely measuring:
+
+- the **agent runtime** refuses an agent it does not know — the right
+  refusal — so the sweep **registers** one over its own route first;
+- the **why engine** explains a DECISION and a **trace** records it, and
+  the two have different ids, so one call makes both and the path says
+  which one it wants.
+
+#### The first run found two bugs. Neither was in the engines.
+
+**Bug one — a question about which bridge was read as an instruction to
+move the money.**
+
+The `EXECUTE_BRIDGE` pattern is deliberately loose — «برو به شبکه» appears
+in the middle of an ordinary sentence — so it matches «انتقال بیت‌کوین به
+پالیگان» inside «کدام پل برای انتقال بیت‌کوین به پالیگان بهتر است؟».
+
+The route intent was supposed to win that sentence, and it does so by
+PRIORITY: 0.055 against 0.04. But the priority only decided the winner
+once both intents were scored, and the route intent was never told that
+its own section was already in memory — so it sat at 0.755 while the
+instruction sat at 0.760, and **the instruction won by five thousandths**.
+
+The root cause was a name, in three parts:
+
+- `requires: ['route-intelligence']` names a **MODULE**; `stateHas` is
+  keyed by **STATE SECTION**, and the section is `routeIntelligence`. The
+  two names had never met.
+- so `needsFetch` asked «have we read it yet?» about a key the state does
+  not have, and the answer was «no» — forever. The route intent never got
+  the warmth nudge a section already in memory earns.
+- and `stateHas` was itself a **fixed list** that did not contain
+  `routeIntelligence`, `whyDecision`, `globalIntel`, `opportunityFit`,
+  `macroGraph` or `goalScenarios` — every surface added after the first
+  dozen.
+
+The fix: `stateHas` is derived from the state sections themselves now, so
+a surface can no longer be half-added; and the two lookups that were
+asking the wrong question ask the right one, with the mapping written down
+in both directions next to the code that uses it.
+
+**Bug two — the owner's capital was invisible to seven engines.**
+
+Net worth is `assets − debt`, and debt is only a NUMBER when the `lending`
+or the `borrowing` section was read. For an owner whose sections do not
+include them — which is most owners, most of the time, because the brain
+only reads `lending` for the intents that are about loans — `netWorthUsd`
+is `null`.
+
+That `null` is honest. The owner may have a loan.
+
+But it was read as «no capital», and seven call sites across five files
+took that reading:
+
+- the **fit** engine scored an opportunity against a null net worth, so it
+  could not say whether the opportunity was a sensible size;
+- the **scenario** engine refused to model a goal — `NO_STARTING_CAPITAL`;
+- the **decision** engine could not price a benefit;
+- the **macro graph** had no owner capital, so the regime had nothing to
+  be a regime FOR;
+- the **agent council** had nothing to weigh.
+
+The fallbacks now live in **one** place — `capitalUsdFor` — so the next
+engine cannot invent its own:
+
+1. net worth, when it is a number;
+2. the gross assets, when they are a number;
+3. the available capital, when it is a number.
+
+And what it never does is **invent a debt of zero**. `netWorthUsd` stays
+`null`, because it is `null`. The engines that must know whether the owner
+is in debt still read it from there. `capitalUsdFor` answers a different
+question: *how much capital can this engine reason about?*
+
+Two of the call sites were also reading the wrong **shape**:
+`conditionalAllocation` and `council` read `financial.net.netWorthUsd`,
+which is a **provenance object** (`{ value, status, reason }`), not a
+number — and `num()` on an object is `null`.
+
+#### The gate, and its speed
+
+`test/intent-ai/engine-reach-sweep.test.mjs` runs the sweep **once** and
+fails if any engine is dark, if any engine has no caller, or if the two
+helpers are counted as engines. The sweep is the source of truth and the
+gate *runs* it, rather than copying it — a copy is a thing that drifts.
+
+Sequential, the sweep took **6m32s**, which is a gate nobody runs. The
+calls are independent — each engine has its own route, and the owner state
+they read is the same seeded state — so they now run **concurrently**,
+with a cap of eight. An unbounded fan-out would open forty-nine connections
+at once, and a probe is not a licence to hammer the machine it is
+measuring.
+
+| | before | after |
+|---|---|---|
+| the sweep, sequential | 6m32s | — |
+| the sweep, concurrent (cap 8) | — | **56s** |
+
+Same answer, seven times faster.
+
+#### What this changes about the count
+
+The old row said «`server/fios/` engines the brain can reach: 0 of 50 → all
+of them». That was true and it was the wrong number, because *reachable*
+is not *answering*. The number that means something is now measured two
+ways and it is the same:
+
+| | before | after |
+|---|---|---|
+| engines that reach an ANSWER, over their own route | — | **47 of 47** |
+| intents whose engine reaches the REPLY | — | **26 of 26** |
+| engines dark | — | **0** |
+
+The rule from §5.21 was the last three failures' lesson. It turns out to
+be a rule about the whole library, and applying it as one found two bugs
+that no surface test could see.
+
 ## §6 — The one-paragraph answer
 
 Of 206 registered intent phases, **51 are actually connected to the AI**
@@ -1889,7 +2090,26 @@ message into the conversation, advances the state, and asks ONE adaptive
 question — the first missing field, not a questionnaire — while the
 event bus re-plans when the world moves and the turn says so only when
 something decision-relevant actually changed. **The dark-engine count
-is ZERO.** What remains is the honest ceiling: **more phases would not
+is ZERO** — and then that sentence was itself tested, because a count
+about REACHABILITY had already been wrong twice in this document, and
+§5.21 proved that all three of the last engines were reachable AND still
+dark. So the count became the **answer**: every engine in `server/fios/`
+is now asked, over its OWN route, whether it reaches an answer, and
+**47 of 47 do, with 0 dark and 0 without a caller** (§5.22). The first
+run of that sweep found two bugs no surface test could see: a comparison
+question about which bridge to use — «کدام پل برای انتقال بیت‌کوین به
+پالیگان بهتر است؟» — was classified as an **instruction to move the
+money**, because the rule named a MODULE and the state was keyed by
+SECTION and the two names had never met, so the route intent sat half a
+thousandth below the instruction and lost; and an owner whose `lending`
+section had never been read — which is most owners, most of the time —
+had **no capital at all**, so the fit engine, the scenario engine, the
+decision engine, the macro graph and the agent council were all
+reasoning about nothing. Both are fixed, the second through ONE shared
+helper (`capitalUsdFor`) that falls back to the gross assets without ever
+inventing a debt of zero, and the guarantee is now a **gate** — the
+sweep runs in the suite, so a future engine cannot join the library dark.
+What remains is the honest ceiling: **more phases would not
 make the AI smarter — making the existing ones reachable would.** That
 sentence is now the method, not a slogan: it is exactly what §5.9,
 §5.10 and §5.11 did, with four intents, four findings, no new phase and
