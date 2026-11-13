@@ -142,89 +142,33 @@ export function forgetStateKeys(stateId) {
 /* ── the transfer the user is looking at ─────────────────────────────────── */
 
 /*
- * THE ONE REQUEST THE ROUTE ENGINE NEEDS.
+ * THE STORE MOVED, AND THE REASON IS THE FIRST-PAINT BUDGET.
  *
- * The route-intelligence engine ranks CANDIDATE ROUTES, and candidates
- * need a transfer to plan: a source chain, a destination chain, both
- * tokens and an amount. The engine cannot invent any of them — a route
- * for a transfer nobody described is a route for nothing.
+ * These three functions used to live HERE, in the module that owns the
+ * cross-chain browser client — a module that imports `@noble/ed25519`,
+ * `@noble/hashes` and `server/ethersLite.js`.
  *
- * The cross-chain panel knows all four. The AI panel does not, because
- * they are different panels on different pages and the panel keeps no
- * wallet-library imports.
+ * The brain client (`src/lib/central/client.js`) needs to READ the
+ * published transfer on every turn, and the brain client is on the entry
+ * path. So the import edge
  *
- * So the panel PUBLISHES the transfer it is looking at, and the AI panel
- * reads it and sends it with the turn. That is the whole mechanism, and
- * it is device-local on purpose: the transfer is the user's own intent,
- * it is read by the same browser, and nothing is transmitted except in
- * the turn that asks about it.
+ *     central/client.js  →  intentCrossChainClient.js  →  noble/ed25519
  *
- * The store holds ONE transfer — the current one. An older transfer is
- * not a candidate for a question about «which bridge is best», because
- * ranking the wrong transfer is worse than saying which transfer is
- * missing.
+ * dragged a signing library, a hash library and an ethers implementation
+ * into the FIRST-PAINT bundle, for a transfer that is three numbers and
+ * three strings. That was **26 KB**, and it pushed the first paint over
+ * its budget — a build that was correct and shipped anyway, and then
+ * failed the byte gate that says so.
+ *
+ * The store now lives in `src/lib/routeRequestStore.js`, which has NO
+ * imports at all. These are re-exported here so that every existing
+ * import keeps working and the behaviour is byte-for-byte the same.
  */
-
-const ROUTE_REQUEST_STORAGE_KEY = 'fbt.routeRequest.v1';
-
-function readRouteRequestStore() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(ROUTE_REQUEST_STORAGE_KEY) || 'null');
-    return raw && typeof raw === 'object' ? raw : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeRouteRequestStore(value) {
-  try {
-    if (value == null) localStorage.removeItem(ROUTE_REQUEST_STORAGE_KEY);
-    else localStorage.setItem(ROUTE_REQUEST_STORAGE_KEY, JSON.stringify(value));
-  } catch { /* storage blocked — the turn simply has no transfer to rank */ }
-}
-
-/**
- * Publish the transfer the cross-chain panel is looking at.
- *
- * Only complete transfers are published: a missing chain, token or amount
- * is not a transfer, and publishing a partial one would make the engine
- * quote for something the user never asked for.
- */
-export function publishRouteRequest(request = null) {
-  const fromChain = Number(request?.fromChain);
-  const toChain = Number(request?.toChain);
-  const fromToken = String(request?.fromToken ?? request?.token ?? '').trim();
-  const toToken = String(request?.toToken ?? '').trim();
-  const fromAmount = String(request?.fromAmount ?? request?.amount ?? '').trim();
-
-  if (!Number.isFinite(fromChain) || !Number.isFinite(toChain) || !fromToken || !toToken || !fromAmount) {
-    writeRouteRequestStore(null);
-    return null;
-  }
-  const published = {
-    fromChain: Math.floor(fromChain),
-    toChain: Math.floor(toChain),
-    fromToken,
-    toToken,
-    fromAmount,
-    at: Date.now()
-  };
-  writeRouteRequestStore(published);
-  return published;
-}
-
-/** The published transfer, or null when there is none. */
-export function readPublishedRouteRequest() {
-  const row = readRouteRequestStore();
-  if (!row) return null;
-  if (!row.fromChain || !row.toChain || !row.fromToken || !row.toToken || !row.fromAmount) return null;
-  return row;
-}
-
-/** Forget the published transfer — the user moved on. */
-export function clearPublishedRouteRequest() {
-  writeRouteRequestStore(null);
-}
+export {
+  publishRouteRequest,
+  readPublishedRouteRequest,
+  clearPublishedRouteRequest
+} from './routeRequestStore.js';
 
 /* ── state plan builder — mirrors server normalization exactly ─────────────── */
 

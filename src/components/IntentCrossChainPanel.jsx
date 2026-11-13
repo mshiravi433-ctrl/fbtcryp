@@ -16,12 +16,19 @@ import {
   listLocalStateIds,
   loadStateKeys,
   planAtomicSwap,
-  publishRouteRequest,
   rememberLocalStateId,
   saveStateKeys,
   signLegReceipt,
   submitLegReceipt
 } from '../lib/intentCrossChainClient';
+/*
+ * The published transfer comes from the dependency-free store, not from
+ * the cross-chain client — that one imports the signing libraries, and
+ * this panel already needs them for `signLegReceipt`, so the choice here
+ * costs nothing. But the store has to be importable on its own, because
+ * the BRAIN CLIENT reads it on the entry path and cannot afford them.
+ */
+import { publishRouteRequest } from '../lib/routeRequestStore';
 import CrossChainDesk from './crosschain/CrossChainDesk';
 
 const TX_HASH_RE = /^0x[a-fA-F0-9]{64}$/;

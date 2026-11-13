@@ -15,7 +15,17 @@
  * retry can be deduplicated against the action record instead of being trusted.
  */
 import { apiBase } from '../apiBase.js';
-import { readPublishedRouteRequest } from '../intentCrossChainClient.js';
+/*
+ * The published transfer, read from the DEPENDENCY-FREE store.
+ *
+ * This import used to point at `../intentCrossChainClient.js`, which
+ * imports `@noble/ed25519`, `@noble/hashes` and `server/ethersLite.js`.
+ * This file is on the entry path, so that import put a signing library
+ * and an ethers implementation into the FIRST-PAINT bundle — 26 KB, for
+ * three numbers and three strings — and pushed the first paint over its
+ * byte budget. The store now lives in a module with no imports at all.
+ */
+import { readPublishedRouteRequest } from '../routeRequestStore.js';
 
 const TIMEOUTS = { intent: 20000, read: 8000, action: 12000 };
 const DEVICE_KEY = 'fbt.central.device.v1';
