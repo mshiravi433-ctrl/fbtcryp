@@ -2917,3 +2917,336 @@ money steps, and the gate is in the suite. The sentence is split, each
 half is classified on its own, and the merge machinery that was built
 for «convert, then bridge» finally gets used for the questions it was
 always able to answer.
+
+### 5.24 The system that could not learn who its user is, and the tier nobody chose
+
+§5.23 made the answer complete: two questions in one sentence both get
+answered, every intent gets its own headline, and every refusal names a
+code. That round was about the **reply**. This one is about the two
+things behind it that decide what a reply can be — **who the user is**,
+and **how much brain the question buys** — and both turned out to be
+machinery that existed, was wired, was tested, and never made a
+decision anybody could see.
+
+The instruction was seven axes wide: the interface between intent and
+the models, speed and active CPU, social knowledge, automatic switching
+between simple/medium/smart, understanding and correct conclusions,
+recognising user behaviour and classifying it correctly, and smarter
+performance. The method was the one that has worked every round:
+**measure first, then fix the layer that is actually limiting.** Not add
+code.
+
+#### 5.24.1 Fourteen signals, computed for nobody
+
+`server/fios/behavior.js` was finished. Fourteen signals, each needing
+three verified events, each carrying the preference it should write —
+`REJECTS_HIGH_RISK_PROTOCOLS` says *write `riskTolerance = CONSERVATIVE`*,
+`CANCELS_AT_CONFIRMATION` says the same about hesitation. It was
+reachable through exactly one door, `learning.learn`, which was called by
+an HTTP `POST /learning` that the UI never sends and by the evaluation
+engine. A user confirming or cancelling an execution through the brain —
+the single most informative thing a user does — fed nothing.
+
+And the second half was worse, because it was invisible even from inside
+the file:
+
+```
+  grep memoryKey|memoryValue, everything except behavior.js
+  → EMPTY
+```
+
+`MEMORY_PROVENANCE` reserves `USER_BEHAVIOR` — rank 2 below `USER_SAID`
+and `USER_PREFERRED`, confidence 0.7, a 180-day TTL — for precisely these
+records. Nothing ever wrote one. So even a signal that *was* computed
+was dropped on the floor, and the visible symptom was a headline:
+
+> «۵ گزینه با پروفایل ریسک **خوانده‌نشده** سنجیده شد»
+
+An engine scoring five opportunities against a profile it could not read.
+
+The fix is a bridge, in the shape every other cross-layer wire in this
+codebase has: `server/ci/learningBridge.js`, an optional provider that
+refuses by name (`BEHAVIOR_PROVIDER_NOT_WIRED`, `UNKNOWN_BEHAVIOR_EVENT`,
+`NO_OWNER`), per-owner, never throwing. `server/fios/index.js` mounts the
+reporter — ingest, then for every signal that carries a `memoryKey`,
+`memory.remember(provenance: 'USER_BEHAVIOR')`. `server/ci/brain.js`
+reports on `confirmAction` and `cancelAction`, including the latency
+between the card and the decision, which is what `CONFIRMS_QUICKLY`
+needs.
+
+The chain now closes, and the probe drives it with real turns:
+
+```
+  model mounted in the composition root            true
+  three rejections recorded as events              3
+  categorised                                      REJECTS_HIGH_RISK_PROTOCOLS,
+                                                   CANCELS_AT_CONFIRMATION (ratio 1.0)
+  a signal reached the preference model            CONSERVATIVE (USER_BEHAVIOR)
+  the fit engine can read a risk profile           CONSERVATIVE, ranked 5
+  USER_SAID outranks USER_BEHAVIOR                 AGGRESSIVE survived
+  a descriptive signal writes no preference        0
+  mean cost of a decision turn                     0–1 ms
+```
+
+and the same owner, asked the same question before and after:
+
+```
+  cold     «۵ گزینه با پروفایل ریسک خوانده‌نشده سنجیده شد»
+  trained  «۵ گزینه با پروفایل ریسک محافظه‌کار سنجیده شد»
+```
+
+Three properties matter more than the feature. **A cancelled action must
+be read before it is cancelled**, because cancelling removes it from the
+pending bucket and the event would be reported about nothing. **A
+descriptive signal must not become a claim** — `PREFERS_MAJOR_ASSETS`
+carries no `memoryKey` on purpose: it describes what a user trades, it
+does not assert a preference they never expressed, and asserting one
+would be an inference dressed as a setting. **And learning fills gaps, it
+does not overrule** — enforced in the store, not in the caller, by
+`WOULD_DOWNGRADE_MEMORY`: a user who said «I am aggressive» stays
+aggressive no matter what their clicks suggest.
+
+#### 5.24.2 The asset that was not the subject of its own sentence
+
+The behaviour loop needed an execution card, and the card came back
+empty: `input.from = null`, `input.to = null`, `quote = null`. Not a
+wiring failure — the classifier could not find the asset in
+«۱۰۰ دلار بیت کوین بخر». Three separate layer defects, plus one the code
+*claimed* to have handled:
+
+```
+  «بیت‌کوین»    → BTC          «بیت کوین»     → null   (a plain space)
+  «تتر»         → null         (the most-used stablecoin had no entry)
+  «بیت‌کوینمو بفروش» → null    (the comment said this worked)
+  «buy 100 USD of BTC» → USD   (a SWAP card for the wrong asset)
+```
+
+The space defect is the interesting one. Persian compounds are written
+three ways — with a ZWNJ, joined, with a plain space — and a dictionary
+entry per spelling always misses one. The fix canonicalises instead of
+enumerating: `canonAssetKey` strips ZWNJ and spaces, adjacent tokens are
+joined and tried as a pair, and the **position span covers both words**,
+because a span that ends at the first word attaches the amount to the
+wrong asset.
+
+The role defect is deeper than a vocabulary gap. «buy 100 USD of BTC»
+has two assets and the first one is not the subject: the number beside it
+and the direction word around it decide that. But the demotion has to be
+narrow — in «۰.۱ BTC به USDC» the amount *also* precedes an asset, and
+that asset **is** the source. So four conditions must all hold: two or
+more assets, the first adjacent to a number, the first an amount unit,
+and no direction word.
+
+And the clitic defect is a lesson in trusting comments. The code stripped
+`م` twice and never removed the colloquial `و`, while the comment above
+it named «بیت‌کوینمو» as a handled case. The way to check a claim like
+that is to `git stash` the file and run the case — not to read the
+comment. `cliticVariants` now peels `[مو]$` longest-first and tries the
+**original first**, because «اتریوم» legitimately ends in `م` and peeling
+it to «اتریو» loses the asset.
+
+#### 5.24.3 A marker word is not a question type
+
+Two intent-layer defects, both of the shape §5.23 already named — *the
+SUBJECT decides* — and both invisible because they produced an answer.
+
+`ASSET_ANALYSIS` carried bare `yield|farm|apy|فارم` alternatives. So
+every mention of yield became an asset-analysis turn: «yield»,
+«best yield now» and «فارم» all classified at 0.655 as a request to
+analyse an asset. Meanwhile `YIELD_OPPORTUNITY` — which needs a yield
+noun **and** a question word — missed the shortest way to ask. «ییلد»
+alone fell to `UNSUPPORTED`, an intent with no engine whose reply
+explains what the system cannot do, to a user who asked for something it
+can. `STAKING_REWARD` has matched a bare «استیکینگ» since it was written,
+so the file's own convention was already *a topic noun is a request*;
+the yield intent was the only one without that branch.
+
+Removing the markers opened two new holes — «farm ETH» and «best yield
+now» became `UNSUPPORTED`, worse than the misroute they came from,
+because a misroute at least answered something. The generalisation that
+closed them: **the yield noun is the head of its own sentence**, guarded
+by a negative lookahead over the analysis verbs, because
+`analyze the ETH farm` is about an asset and `ASSET_ANALYSIS` is listed
+*after* this rule and would simply lose.
+
+The plain risk question had the same shape from the other side. It was
+recognised as «ریسک چقدره» and as nothing else, so «چقدر ریسک دارم» and
+«how much risk do I have» — the same question with the words the other
+way round — were `UNSUPPORTED`. The fix shipped **broken the first
+time**, and the reason is worth more than the fix:
+
+```js
+/ریسک\s*کلّی?\b/i     // looks correct. matches nothing. ever.
+```
+
+JS computes word boundaries from `\w`, which is ASCII only. A `\b`
+asserted after a Persian letter can never be satisfied. It is not a
+stricter pattern; it is a dead branch that passes review, and the intent
+simply never fires. `intent-subject-runtime.test.mjs` now scans for it —
+narrowly, so that `(farm|فارم)\b` is *not* reported, because its ASCII
+branch can satisfy the boundary and a gate that cries wolf gets ignored.
+The scan was verified by injecting a dead boundary and watching it fail.
+
+#### 5.24.4 Three tiers, fully wired, and no decision
+
+`swift` / `balanced` / `max` — simple, medium, smart — were complete: a
+three-way UI selector, a persisted preference, request → route → gateway,
+model ladders, token budgets, reasoning knobs, latency deadlines, thirteen
+tests. And the tier came from exactly one input, the saved preference,
+defaulting to `max`. So a greeting bought:
+
+```
+  max      5 models · reasoning on · self-critique + repair · 1280 tokens · 45 000 ms window
+```
+
+on a deployment whose host kills a request at 60 seconds. A tier that
+plans for 45 seconds of thinking is a tier that can be killed mid-await
+and return nothing at all.
+
+No new classifier was written, because the file that would need one
+forbids it: *「A DEPTH request, not a second classifier」*.
+`planCollaboration` already reads every message — conversation kind,
+complexity, freshness, whether web research is needed, how complete the
+message is, how the user feels — purely, with no model call, in every
+mode. `proposeIntelligenceMode` only turns a read that already happens
+into a tier, and it is the single place that does so, the way
+`INTELLIGENCE_MODES` is the single definition of what a tier means.
+
+The shape of the answer matters as much as the answer. A wrong
+"cheaper" costs an answer; a wrong "keep the expensive tier" costs
+milliseconds. So the rules are written to be wrong in the expensive
+direction, and every refusal names itself — because a tier chosen
+silently is indistinguishable from a tier nobody chose:
+
+```
+  SOCIAL_TURN                       → swift     «سلام», «che khabar», «خسته نباشی»
+  SELF_CONTAINED_QUESTION           → balanced  «بلاکچین یعنی چه», «gas fee چیه»
+  MONEY_MOVING_TURN                 → keeps max «۱۰۰ دلار بیت کوین بخر», confirm
+  INCOMPLETE_MESSAGE_NEEDS_DEEP_READ→ keeps max «btc», «فروش»   (increment 23 RAISES these)
+  RESEARCH_TURN                     → keeps max «قیمت بیت کوین چقدره»
+  EMOTIONAL_TURN                    → keeps max distress (§25)
+  HIGH_STAKES_QUESTION              → keeps max COMPLEX / HIGH_STAKES
+  MULTI_PART_QUESTION               → keeps max two questions, two answers
+  ESCALATE_NOT_DEESCALATE           → keeps max a retry already failed once cheaply
+```
+
+Four invariants hold it down, and the resolver enforces all of them:
+the user's own choice is never overruled (`USER_CHOICE_WINS`), an
+operator's env pin is never overruled (`OPERATOR_PIN_WINS`), a proposal
+can never **raise** a tier (`AUTO_MAY_ONLY_LOWER` — escalation stays a
+decision somebody makes on purpose), and with no proposal the resolver
+behaves byte-for-byte as it did before.
+
+What it costs, measured: `planCollaboration` is 0.70 ms wall and 0.67 ms
+CPU per call over 10 000 runs; the whole decision is **1.46 ms warm**
+against an 8 000 ms floor — nine thousandths of one percent — with the
+cold JIT pass of 11.91 ms reported separately rather than averaged in,
+because a live server pays it once at boot and never per turn. What it
+buys back:
+
+```
+  «سلام»   5 models → 2 · reasoning off · critique off · 1280 → 640 tokens · 45 s → 8 s
+```
+
+The route reads the question twice rather than inferring a tier from a
+second, smaller read of its own, and `u5` remains the authoritative plan.
+The decision is published as `intelligence.mode.source = 'auto'` with the
+reason beside it, so "why was this answer shorter?" is answerable.
+
+#### 5.24.5 The same phrase on the other keyboard
+
+Teaching the tier to discount a greeting immediately exposed the next
+layer: half the audience types Persian on a Latin keyboard, and the
+social read only half knew it. `FINGLISH_PATTERNS` existed and was merged
+into the same act lists, but two of its patterns were **dead**, not
+merely incomplete:
+
+```js
+/(?:cha|che)\s*kha(v|b)r/i        // cannot match «khabar» — it needs kha + ONE letter + r
+/\b(?:khodaa?\s*hafez|…)\b/i      // demands an «h»; «khodafez» is the common spelling
+```
+
+So «che khabar» was read as an incomplete fragment needing web research —
+and paid for the flagship ladder — while «چه خبر» was answered as the
+pleasantry it is. The same sentence, two keyboards, two prices.
+
+Completing the vocabulary was the easy half. The hard half is that
+**recognising a new pleasantry without teaching the guard the matching
+verb opens a hole rather than closing one**:
+
+```
+  «damet garm, hala hame ro befroosh»   → PURE social turn, guard silent
+```
+
+The moment «damet garm» became recognisable, that message became a pure
+social turn routed away from the pipeline — because `ACTION_HINTS` covers
+twelve languages including Persian script, and **not** romanised Persian.
+Before the greeting fix the message was handled correctly, by accident:
+nothing in it was recognised at all. `ACTION_HINTS` now carries the
+Finglish verb row, written as verb forms on purpose so that «damet garm»
+alone stays a pleasantry — a guard that fired on it would make every
+thank-you a full-price turn and the tiering above would discount nothing.
+
+Two rules of the same family as the asset fix: `gh?arm`, not `g[gh]arm`,
+because a character class fills **one** position and is not an
+optional-letter marker — the first version demanded two consonants and
+matched the spelling nobody types. And the guard's own report was
+self-contradictory: the no-social-marker return chose its evidence from
+the real guard and then returned an empty one, so «kharid» came back as
+`evidence: ['guard:action']` beside `guard.blocks: false`. Nothing
+depended on it, which is exactly why it survived — a field that is wrong
+only where no decision reads it gets read for telemetry instead, and
+telemetry that contradicts itself is where a misdiagnosis starts.
+
+Measured across both keyboards, 21 phrase pairs now agree, 6 money
+instructions in Latin script are blocked, 11 pleasantries stay pure with
+no false positives, and `smallTalkProtected` follows the social read on
+both — or the discount would exist for only half the audience.
+
+#### What is still open
+
+Automatic tiering decides the **depth** of a turn, not its **cost per
+model**: the ladder still walks flagship-first inside `max`, and the
+quota ceiling still governs turns per day. Nothing yet learns a tier
+preference from a user's own history — the behaviour model can now see
+that a user cancels at confirmation, and cannot yet conclude that this
+user should be shown one careful answer rather than three fast ones.
+Bare «ییلد» is fixed; «بازار و ییلد» still classifies its first leg only.
+
+#### The rule this leaves behind
+
+> **an engine that computes a value nobody consumes is as dark as an engine
+> nobody calls — trace the WRITE, not just the read.**
+>
+> **a model fed nothing categorises a user who does not exist, so the first
+> question about any learning system is not "is it smart?" but "who reports?».**
+>
+> **learning fills gaps, it does not overrule — and that belongs in the store,
+> not in the caller, because a caller can be forgotten.**
+>
+> **a descriptive signal must not become a claim: no `memoryKey`, no preference
+> written.**
+>
+> **canonicalise spellings instead of enumerating them, or the most common way
+> of typing something is the one that breaks — for assets, for greetings, for
+> both keyboards at once.**
+>
+> **the first entity token is not the subject: the number beside it and the
+> direction word around it decide the role, and the demotion must be narrow
+> enough that «۰.۱ BTC به USDC» still sells BTC.**
+>
+> **a comment that claims a case works is a hypothesis — stash the file and run
+> the case.**
+>
+> **`\b` does not exist after Persian script, and a character class is not an
+> optional letter. A pattern that matches nothing does not fail loudly; it
+> quietly decides this user's spelling is not a greeting.**
+>
+> **a fix for one hole can open another, and the second hole is usually a
+> safety one — removing the yield markers made two questions unanswerable, and
+> recognising a pleasantry made a sell order decoration. Re-measure the whole
+> reply after every fix, and ask what the guard now fails to see.**
+>
+> **the cheapest intelligence is the tier you did not buy — but only the tier
+> the question demonstrably does not need, refused by name when it does, and
+> published when it is taken.**

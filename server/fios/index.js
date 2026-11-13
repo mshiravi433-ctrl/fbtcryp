@@ -99,6 +99,7 @@ import { setFitProvider, setMacroGraphProvider, setScenarioProvider } from '../c
 import { setRouteProvider, adaptRoutesForIntelligence } from '../ci/routeBridge.js';
 import { setWhyProvider } from '../ci/whyBridge.js';
 import { setConversationProvider, setReplanProvider, setReplanReader } from '../ci/sessionBridge.js';
+import { setBehaviorReporter, setBehaviorReader } from '../ci/learningBridge.js';
 
 export const FI_ROOT_SCHEMA = 'fbt.fi.composition-root.v1';
 
@@ -932,6 +933,52 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
 
      So the root fills in what it can read itself. A caller's explicit input
      still wins: this is a fallback, not an override. */
+  /*
+   * ── THE BEHAVIOUR MODEL (2026-11-13) ───────────────────────────────────
+   *
+   * `behavior.ingest` verifies the event, appends it to the owner's history and
+   * recomputes the fourteen signals. That is half the work. The other half is
+   * the part that had never been written anywhere in the codebase: each signal
+   * carries `memoryKey`/`memoryValue` — REJECTS_HIGH_RISK_PROTOCOLS says
+   * "write riskTolerance = CONSERVATIVE", PREFERS_LOW_FEE_ROUTES says "write
+   * feeSensitivity = HIGH" — and nothing ever wrote them.
+   *
+   * So the signals are applied HERE, through `memory.remember` with
+   * `USER_BEHAVIOR` provenance. Two properties come free from the memory store
+   * and are the reason this is safe:
+   *
+   *   · a behaviour record can never DOWNGRADE what the user said — `remember`
+   *     refuses with WOULD_DOWNGRADE_MEMORY, because USER_SAID (4) and
+   *     USER_PREFERRED (3) both outrank USER_BEHAVIOR (2). Learning fills gaps;
+   *     it does not overrule (§8);
+   *   · the write carries a TTL of 180 days, so a behaviour inferred from three
+   *     clicks in March does not still be describing the user in December.
+   *
+   * A refused write is REPORTED, not swallowed: `applied` carries the code, so
+   * "the model inferred conservative and the user had said aggressive" is
+   * visible rather than silent.
+   */
+  setBehaviorReporter(async (owner, event = {}) => {
+    const ing = await behavior.ingest(owner, event);
+    if (!ing.ok) return ing;
+    const applied = [];
+    for (const [name, sig] of Object.entries(ing.signals || {})) {
+      if (!sig || !sig.memoryKey || sig.memoryValue === undefined || sig.memoryValue === null) continue;
+      const wrote = await memory.remember(owner, {
+        key: sig.memoryKey,
+        value: sig.memoryValue,
+        provenance: 'USER_BEHAVIOR',
+        note: `behaviour signal ${name} over ${sig.samples} sample(s), ratio ${sig.ratio ?? '—'}`
+      }).catch((err) => ({ ok: false, code: 'MEMORY_WRITE_FAILED', detail: String(err?.message || err).slice(0, 120) }));
+      applied.push({
+        signal: name, key: sig.memoryKey, value: sig.memoryValue,
+        samples: sig.samples ?? null, ok: wrote?.ok === true, code: wrote?.code || null
+      });
+    }
+    return { ok: true, signals: ing.signals || {}, basis: ing.basis || null, events: ing.events ?? null, applied };
+  });
+  setBehaviorReader((owner) => behavior.signals(owner));
+
   setScenarioProvider(async (owner, opts = {}) => {
     const financial = opts.financial || await financialStateFor(owner).catch(() => null);
     const goal = opts.goal || primaryGoalFor(owner);

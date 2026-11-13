@@ -369,11 +369,75 @@ export function resolveReferences(message, memory = {}, page = {}) {
 /* ── entity extraction ─────────────────────────────────────────────────── */
 const ASSET_ALIASES = Object.freeze({
   btc: 'BTC', bitcoin: 'BTC', 'بیت‌کوین': 'BTC', 'بیتکوین': 'BTC',
-  eth: 'ETH', ether: 'ETH', ethereum: 'ETH', اتریوم: 'ETH',
+  eth: 'ETH', ether: 'ETH', ethereum: 'ETH', اتریوم: 'ETH', اتر: 'ETH',
   usdc: 'USDC', usdt: 'USDT', usd: 'USD', dai: 'DAI', wbtc: 'WBTC',
+  /* «تتر» is what a Persian speaker calls USDT, and it is the single most
+     common way to name a stablecoin in this language. It was missing, so
+     «۵۰۰ دلار تتر بخر» produced an execution card with NO asset on it. */
+  تتر: 'USDT',
   sol: 'SOL', solana: 'SOL', bnb: 'BNB', avax: 'AVAX', matic: 'POL', pol: 'POL',
   arb: 'ARB', op: 'OP', link: 'LINK', steth: 'stETH', cbtc: 'cbBTC', gold: 'XAU', xau: 'XAU'
 });
+
+/*
+ * ── ONE SPELLING, THREE WAYS OF TYPING IT ────────────────────────────────
+ *
+ * Persian compound words are written three ways and all three are correct:
+ * with a ZWNJ («بیت‌کوین»), joined («بیتکوین»), and with an ordinary space
+ * («بیت کوین»). The dictionary carried two of the three, so the most common
+ * keyboard spelling — the plain space — resolved to nothing:
+ *
+ *     «۱۰۰ دلار بیت کوین بخر»   → asset: null   → an EXECUTE_SWAP card with no
+ *                                                 asset on it
+ *     «۱۰۰ دلار بیت‌کوین بخر»   → asset: BTC
+ *
+ * The fix is not a third entry per word. It is a canonical form: ZWNJ and
+ * spaces are removed, so all three spellings of every name collapse onto one
+ * key, and a name added to the dictionary later inherits that for free.
+ *
+ * The canonical form also makes a MULTI-WORD name a single token («بیت کوین» →
+ * «بیتکوین»), which is why the scans below join adjacent words before looking
+ * up: tokenising on whitespace can never match a name that contains one.
+ */
+const canonAssetKey = (v) => String(normalizeText(v ?? '')).replace(/[\u200c\s]+/g, '').toLowerCase();
+const CANON_ASSET_ALIASES = Object.freeze(Object.fromEntries(
+  Object.entries(ASSET_ALIASES).map(([k, v]) => [canonAssetKey(k), v])
+));
+/**
+ * Every form of a word, with its trailing clitics peeled off — longest first.
+ *
+ * Persian attaches the possessive «-م» and, colloquially, an object marker «-و»
+ * straight onto the noun: «بیت‌کوینم» (my bitcoin), «بیت‌کوینمو» (my bitcoin,
+ * as the object). The code claimed to handle both and only ever stripped «م»,
+ * so a word ending in «و» was left untouched and resolved to nothing:
+ *
+ *     «بیت‌کوینم را بفروش»  → BTC   (the «را» form worked)
+ *     «بیت‌کوینمو بفروش»    → null  (the colloquial form did not)
+ *
+ * Peeling one character at a time and trying every length is what makes the
+ * order irrelevant — «مو», «وم» and a bare «م» all reduce to the noun. The
+ * ORIGINAL is always tried first, so a word that legitimately ends in one of
+ * these letters («اتریوم» ends in «م») still resolves as itself.
+ */
+const CLITIC_TAIL = /[مو]$/;
+function cliticVariants(word) {
+  const out = [String(word ?? '')];
+  let cur = out[0];
+  for (let i = 0; i < 2 && CLITIC_TAIL.test(cur); i += 1) {
+    cur = cur.slice(0, -1);
+    if (cur) out.push(cur);
+  }
+  return out;
+}
+
+/** Look one word up, tolerating every spacing of it and every clitic on it. */
+const lookupAsset = (word) => {
+  for (const variant of cliticVariants(word)) {
+    const hit = CANON_ASSET_ALIASES[canonAssetKey(variant)];
+    if (hit) return hit;
+  }
+  return null;
+};
 /* English words that the generic 3–5-letter fallback must never read as asset
    symbols. The quality corpus caught «buy BTC» extracting asset=BUY: a fake
    asset flows straight into the planner, so the floor is a wordlist. Real
@@ -400,29 +464,78 @@ const CHAIN_HINT = /(شبکه|به |روی |to |from |chain|network|arbitrum|bas
 export function usableSymbol(value) {
   const s = String(value ?? '').trim();
   if (!s || s.length > 16) return null;
-  if (ASSET_ALIASES[normalizeText(s)]) return ASSET_ALIASES[normalizeText(s)];
+  const aliased = lookupAsset(s);
+  if (aliased) return aliased;
   /* A bare number (or number-like token) is never a symbol — «به 70 هزار» is a
      price, not the asset «70». The generic branch needs at least one letter. */
   if (!/[A-Za-z]/.test(s)) return null;
   return /^[A-Za-z0-9$@._-]+$/.test(s) ? s.toUpperCase() : null;
 }
 
+/* Where an amount is denominated, as opposed to what is being bought:
+   «buy 100 USD of BTC» is a request for BTC priced in USD. */
+const AMOUNT_UNITS = new Set(['USD', 'USDT', 'USDC', 'DAI', 'TUSD', 'EUR']);
+/* A direction makes the asset BEFORE it the subject: «۰.۱ BTC به USDC» is a swap
+   FROM BTC, and demoting BTC there would invert the trade. */
+const DIRECTIONAL = /(\u200c|\s|^)(?:به|به\s*سمت|از|سوییچ|تبدیل|to|into|for|→|->)(\u200c|\s|$)/i;
+
 export function findAssetsIn(normalizedText) {
-  const out = [];
-  const tokens = String(normalizedText).replace(/[^\p{L}\p{N}$@.\s]/gu, ' ').split(/\s+/).filter(Boolean);
-  for (const tok of tokens) {
-    /* «بیت‌کوینمو» = بیت‌کوین + «-م» (mine) + the colloquial «و»; both clitics come off
-       so an asset named with a possessive resolves like the English «my BTC». */
-    const key = tok.replace(/م$/, '').replace(/م$/, '');
+  const text = String(normalizedText);
+  const tokens = text.replace(/[^\p{L}\p{N}$@.\s]/gu, ' ').split(/\s+/).filter(Boolean);
+  const hits = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const tok = tokens[i];
     /* The generic 3–5-letter fallback is gated by the stopword list: «buy BTC
        now» must resolve BTC, not BUY. Aliases are exempt (gold→XAU survives). */
     const upper = tok.toUpperCase();
     const genericOk = /^[A-Z]{2,6}$/.test(upper)
       && (Object.values(ASSET_ALIASES).includes(upper) || (/^[A-Z]{3,5}$/.test(upper) && !SYMBOL_STOPWORDS.has(upper)));
-    const sym = ASSET_ALIASES[key] || ASSET_ALIASES[tok] || (genericOk ? upper : null);
-    if (sym && !out.includes(sym)) out.push(sym);
+    let sym = lookupAsset(tok) || (genericOk ? upper : null);
+    /*
+     * A NAME WITH A SPACE IN IT IS TWO TOKENS.
+     *
+     * «بیت کوین» arrives here as «بیت» and «کوین», and neither is an alias — so
+     * the pair is canonicalised together. Only a pair that resolves is consumed,
+     * and only when neither half already resolved on its own, so no existing
+     * single-word match can be swallowed by this pass.
+     */
+    if (!sym && i + 1 < tokens.length) {
+      const tail = cliticVariants(tokens[i + 1]).pop() || tokens[i + 1];
+      const pair = lookupAsset(`${cliticVariants(tok).pop() || tok}${tail}`);
+      if (pair) { sym = pair; i += 1; }
+    }
+    if (!sym) continue;
+    /* Whether a NUMBER sits immediately before this token: that makes it the
+       unit an amount was spoken in, which is not the same role as the asset the
+       sentence is about. */
+    const prev = tokens[i - 1] || '';
+    const precededByNumber = /[\d۰-۹٠-٩]$/.test(prev) || /^(?:\d+(?:[.,]\d+)?|۰٫?\d*)$/.test(prev);
+    if (!hits.some((h) => h.sym === sym)) hits.push({ sym, precededByNumber });
   }
-  return out;
+  if (!hits.length) return [];
+  /*
+   * THE CURRENCY OF AN AMOUNT IS NOT THE SUBJECT OF THE SENTENCE.
+   *
+   * «buy 100 USD of BTC» used to resolve asset=USD, because USD is the first
+   * asset token and `[0]` was taken as the subject. On an EXECUTE_SWAP that is
+   * a card for the wrong asset — the exact failure this repo calls "a
+   * transaction the user did not ask for".
+   *
+   * The demotion is narrow, because the neighbouring case must NOT move: in a
+   * swap the amount precedes the SOURCE («۰.۱ BTC به USDC»), and there the
+   * number-adjacent asset is the subject. So a demotion needs all four:
+   * a second asset exists, the first is number-adjacent, the first is a unit
+   * amounts are denominated in, and the sentence names no direction.
+   */
+  const directional = DIRECTIONAL.test(text);
+  if (hits.length >= 2 && !directional && hits[0].precededByNumber && AMOUNT_UNITS.has(hits[0].sym)) {
+    const subject = hits.find((h) => !h.precededByNumber) || null;
+    if (subject && subject.sym !== hits[0].sym) {
+      const rest = hits.filter((h) => h.sym !== subject.sym);
+      return [subject.sym, ...rest.map((h) => h.sym)];
+    }
+  }
+  return hits.map((h) => h.sym);
 }
 
 export function findNetworksIn(normalizedText) {
@@ -453,13 +566,25 @@ export function findAssetsWithPositions(normalizedText) {
     index = match.index + match[0].length;
   }
   if (index < text.length) words.push({ at: index, text: text.slice(index) });
-  for (const w of words) {
+  for (let i = 0; i < words.length; i += 1) {
+    const w = words[i];
     /* «پرتفویم», «بیت‌کوینمو», «وامم»: the possessive clitic and the colloquial
        «-و» after it both have to come off, or a Persian possessive would fail to
-       resolve while the same sentence in English («my portfolio») resolves. */
-    const key = w.text.replace(/م$/, '').replace(/م$/, '');
-    const sym = ASSET_ALIASES[key] || ASSET_ALIASES[w.text] || (/^[A-Za-z]{3,5}$/.test(w.text) && Object.values(ASSET_ALIASES).includes(w.text.toUpperCase()) ? w.text.toUpperCase() : null);
-    if (sym && !out.some((o) => o.asset === sym)) out.push({ asset: sym, at: w.at, end: w.at + w.text.length });
+       resolve while the same sentence in English («my portfolio») resolves.
+       `lookupAsset` peels them in any order — see `cliticVariants`. */
+    const genericOk = /^[A-Za-z]{3,5}$/.test(w.text) && Object.values(ASSET_ALIASES).includes(w.text.toUpperCase());
+    let sym = lookupAsset(w.text) || (genericOk ? w.text.toUpperCase() : null);
+    let end = w.at + w.text.length;
+    /* The same spaced-name rule as `findAssetsIn`, and the position has to span
+       BOTH words — an amount attaches to the asset it was spoken next to, so a
+       match that reports the position of only the first half would attach the
+       number to the wrong thing. */
+    if (!sym && words[i + 1]) {
+      const next = words[i + 1];
+      const pair = lookupAsset(`${cliticVariants(w.text).pop() || w.text}${cliticVariants(next.text).pop() || next.text}`);
+      if (pair) { sym = pair; end = next.at + next.text.length; i += 1; }
+    }
+    if (sym && !out.some((o) => o.asset === sym)) out.push({ asset: sym, at: w.at, end });
   }
   return out;
 }

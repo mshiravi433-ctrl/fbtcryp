@@ -287,6 +287,106 @@ export function normalizeIntelligenceMode(value) {
   return MODE_ALIASES[id] || null;
 }
 
+/*
+ * THE COST ORDER OF THE THREE MODES.
+ *
+ * One list, because the proposal below is only allowed to move DOWN it and
+ * "down" has to mean the same thing everywhere. `swift` is the cheap seat with
+ * a capped 1200-token answer and an 8 s window; `max` is the flagship ladder
+ * with reasoning, verification and a repair pass.
+ */
+export const INTELLIGENCE_MODE_RANK = Object.freeze({ swift: 1, balanced: 2, max: 3 });
+
+/**
+ * WHICH TIER DOES THIS QUESTION ACTUALLY NEED?
+ *
+ * Until now the tier came from exactly one place: the user's saved preference,
+ * defaulting to `max`. So a greeting and a leveraged-liquidation scenario paid
+ * the same price — the flagship ladder, an 8-second window and the full
+ * collaboration budget — unless the user happened to open a panel and turn it
+ * down. On a deployment with a hard CPU and cost ceiling that is the single
+ * largest waste in the turn, and it is invisible: nothing reports that the
+ * smartest tier was spent on «سلام».
+ *
+ * This does NOT add a second classifier. `planCollaboration` already reads the
+ * message — conversation kind, complexity, freshness, whether web research is
+ * needed, how complete the message is, how the user feels — purely, with no
+ * model call, for every turn in every mode. This function only turns a read
+ * that already exists into a tier, and it is the single place that does so, the
+ * same way `INTELLIGENCE_MODES` is the single definition of what a tier means.
+ *
+ * THE SHAPE OF THE ANSWER MATTERS AS MUCH AS THE ANSWER. Returning
+ * `{ mode: null, reason }` is not a failure path: it is the proposal saying
+ * "this turn is worth what it already costs", and saying so out loud. Every
+ * branch names itself, because a tier chosen silently is indistinguishable from
+ * a tier that was never chosen — and the operator reading a slow-turn report
+ * needs to know which happened.
+ *
+ * THE ASYMMETRY IS THE SAFETY PROPERTY. A wrong "cheaper" is a worse answer; a
+ * wrong "keep the expensive tier" costs milliseconds. So the rules are written
+ * to be wrong in the expensive direction: anything incomplete, emotional,
+ * research-bound, high-stakes, money-moving, compound or retried keeps the tier
+ * it was given, and only two shapes are ever discounted.
+ */
+export function proposeIntelligenceMode(read = null, { intentType = null, execution = false, retry = false, parts = 1 } = {}) {
+  const kind = String(read?.conversationKind || '').toUpperCase();
+  const complexity = String(read?.complexity || '').toUpperCase();
+  const completeness = String(read?.partial?.completeness || '').toLowerCase();
+  const wantsWeb = Boolean(read?.needsWeb);
+  const level = Number.isFinite(Number(read?.baseLevel)) ? Number(read.baseLevel) : Number(read?.level ?? 0);
+  const intensity = Number(read?.emotion?.intensity ?? 0);
+  const smallTalk = Boolean(read?.intelligence?.smallTalkProtected ?? read?.social?.pure);
+  const intent = String(intentType || '').toUpperCase();
+
+  /* 1. A turn that can move money is not the place to save tokens. The router
+        calls this shape ACTION; the caller may also know an action card or a
+        pending confirmation was produced, which is the stronger signal. */
+  if (execution || kind === 'ACTION' || /^(EXECUTE_|CONFIRM_|CANCEL_|REBALANCE)/.test(intent)) {
+    return { mode: null, reason: 'MONEY_MOVING_TURN' };
+  }
+  /* 2. A retry means the cheap answer already failed once. Escalate, never
+        de-escalate: proposing a smaller tier on the second attempt is how a
+        turn fails twice and the user sees nothing. */
+  if (retry) return { mode: null, reason: 'ESCALATE_NOT_DEESCALATE' };
+  /* 3. Two questions in one message need the path that can answer both. A
+        single-part answer to a compound question is silent data loss. */
+  if (Number(parts) > 1) return { mode: null, reason: 'MULTI_PART_QUESTION' };
+  /* 4. The social turn goes cheap, and it goes cheap BEFORE the completeness
+        check below — deliberately, because the two disagree on «خسته نباشی»,
+        which the partial-input read calls a fragment. The router's own law is
+        that small talk outranks every mode, and a pleasantry answered by the
+        cheap seat is not a worse answer, it is the same answer sooner. */
+  if (smallTalk) return { mode: 'swift', reason: 'SOCIAL_TURN' };
+  /* 5. An incomplete message is exactly the turn that must NOT be discounted.
+        Increment 23 raised the depth floor for fragments on purpose: a
+        misread fragment is expensive in a way a cheap answer is not. */
+  if (['fragment', 'truncated', 'ambiguous', 'garbled', 'partial', 'unclear'].includes(completeness)) {
+    return { mode: null, reason: 'INCOMPLETE_MESSAGE_NEEDS_THE_DEEP_READ' };
+  }
+  /* 6. Distress gets the careful pass (§25). Saving tokens on a frightened
+        user is the wrong economy. */
+  if (intensity >= 2) return { mode: null, reason: 'EMOTIONAL_TURN' };
+  /* 7. Research needs the fleet: the cheap tier's two-model budget is what
+        makes it cheap, and a research turn spends it on retrieval. */
+  if (wantsWeb) return { mode: null, reason: 'RESEARCH_TURN' };
+  /* 8. The router already called it complex or high-stakes. Believe it. */
+  if (complexity === 'COMPLEX' || complexity === 'HIGH_STAKES') {
+    return { mode: null, reason: 'HIGH_STAKES_QUESTION' };
+  }
+  /* 9. THE MIDDLE TIER, AND IT IS NOT DEAD CODE: measured over 46 real
+        messages, a self-contained definitional question — «بلاکچین یعنی چه»,
+        «gas fee چیه», «صرافی چیست», «استیکینگ چیست» — reads as complete,
+        simple or medium, level <= 2 and needing no web research. `balanced` is
+        the historical behaviour for exactly that shape: the provider's own
+        default model and an 800-token answer. */
+  if (completeness === 'complete' && !wantsWeb && level <= 2
+      && (complexity === 'SIMPLE' || complexity === 'MEDIUM')) {
+    return { mode: 'balanced', reason: 'SELF_CONTAINED_QUESTION' };
+  }
+  /* 10. Nothing about this turn justifies paying less for it. */
+  return { mode: null, reason: 'NO_CHEAPER_TIER_JUSTIFIED' };
+}
+
 export function getIntelligenceProfile(mode) {
   return INTELLIGENCE_MODES[normalizeIntelligenceMode(mode)] || INTELLIGENCE_MODES.max;
 }
@@ -305,27 +405,49 @@ export function getIntelligenceProfile(mode) {
  * not quietly downgrade the assistant, so it is reported in `rejected` and the
  * deployment default applies.
  */
-export function resolveIntelligenceMode(requested = null, { env = process.env, defaultMode = 'max' } = {}) {
+export function resolveIntelligenceMode(requested = null, { env = process.env, defaultMode = 'max', auto = null } = {}) {
   const envMode = normalizeIntelligenceMode(env?.FBT_AI_INTELLIGENCE);
   const fallback = envMode || normalizeIntelligenceMode(defaultMode) || 'max';
+  let base;
   if (requested == null || String(requested).trim() === '') {
-    return { mode: fallback, requested: null, source: envMode ? 'env' : 'default', rejected: null };
+    base = { mode: fallback, requested: null, source: envMode ? 'env' : 'default', rejected: null };
+  } else {
+    const wanted = normalizeIntelligenceMode(requested);
+    base = wanted
+      ? { mode: wanted, requested: wanted, source: 'request', rejected: envMode && envMode !== wanted ? 'ENV_OVERRIDDEN' : null }
+      : { mode: fallback, requested: String(requested).slice(0, 32), source: envMode ? 'env' : 'default', rejected: 'UNKNOWN_MODE' };
   }
-  const wanted = normalizeIntelligenceMode(requested);
-  if (!wanted) {
-    return {
-      mode: fallback,
-      requested: String(requested).slice(0, 32),
-      source: envMode ? 'env' : 'default',
-      rejected: 'UNKNOWN_MODE'
-    };
-  }
-  return {
-    mode: wanted,
-    requested: wanted,
-    source: 'request',
-    rejected: envMode && envMode !== wanted ? 'ENV_OVERRIDDEN' : null
-  };
+  return applyAutoTier(base, auto);
+}
+
+/*
+ * A PROPOSAL MAY LOWER THE TIER AND MAY DO NOTHING ELSE.
+ *
+ * Three things outrank it, each reported rather than applied:
+ *   · the user's own choice — a person who picked a tier in the UI picked it,
+ *     and a heuristic that quietly overrules an explicit preference is the kind
+ *     of cleverness that makes a product feel unreliable;
+ *   · the operator's env pin — `FBT_AI_INTELLIGENCE` is a deployment decision;
+ *   · the rank — a proposal above the current tier is refused, so this function
+ *     can never be the reason a turn got MORE expensive. Escalation stays a
+ *     decision somebody makes on purpose.
+ *
+ * When it does apply, `source` becomes 'auto' and the reason travels with it, so
+ * the reply can say why the tier moved instead of leaving a cheaper answer
+ * unexplained.
+ */
+function applyAutoTier(base, auto) {
+  if (!auto || typeof auto !== 'object') return { ...base, auto: null };
+  const proposed = normalizeIntelligenceMode(auto.mode);
+  const reason = String(auto.reason || 'UNNAMED_REASON');
+  const report = { proposed: proposed || auto.mode || null, reason, applied: false, ignored: null };
+  if (base.source === 'request') return { ...base, auto: { ...report, ignored: 'USER_CHOICE_WINS' } };
+  if (base.source === 'env') return { ...base, auto: { ...report, ignored: 'OPERATOR_PIN_WINS' } };
+  if (!proposed) return { ...base, auto: { ...report, ignored: 'NO_PROPOSAL' } };
+  const rank = (m) => INTELLIGENCE_MODE_RANK[m] ?? INTELLIGENCE_MODE_RANK.max;
+  if (rank(proposed) > rank(base.mode)) return { ...base, auto: { ...report, ignored: 'AUTO_MAY_ONLY_LOWER' } };
+  if (rank(proposed) === rank(base.mode)) return { ...base, auto: { ...report, ignored: 'ALREADY_AT_THAT_TIER' } };
+  return { mode: proposed, requested: base.requested, source: 'auto', rejected: base.rejected, auto: { ...report, applied: true } };
 }
 
 /** The flagship-first model ids for one provider in one mode (may be empty). */

@@ -155,6 +155,7 @@ import { fetchCoinDetail } from './providers.js';
 import { runCollaborativeAnalysis, formatEmotionalAcknowledgement } from './aiCollaboration.js';
 import {
   resolveIntelligenceMode,
+  proposeIntelligenceMode,
   getIntelligenceProfile,
   intelligenceDeadlineMs,
   turnCeilingMs,
@@ -2270,7 +2271,47 @@ router.post('/chat', async (req, res) => {
    * deployment can change its default with `FBT_AI_INTELLIGENCE` without a
    * deploy of logic. Small talk stays small even in the smartest mode.
    */
-  const resolvedIntelligence = resolveIntelligenceMode(req.body?.intelligence ?? null);
+  /*
+   * ─── THE QUESTION NOW GETS A SAY IN ITS OWN TIER (2026-11-13) ────────────
+   * Until here the tier came from one place only: the saved preference,
+   * defaulting to `max`. A greeting and a liquidation scenario therefore cost
+   * the same — the flagship ladder, the reasoning pass and an 8-second window —
+   * unless the user opened a panel and turned it down by hand.
+   *
+   * THE EXTRA READ COSTS 0.7 ms. `planCollaboration` is pure and browser-safe:
+   * no model call, no I/O, measured at 0.70 ms wall / 0.67 ms CPU per call over
+   * 10 000 runs. The turn below it is planned with a deadline of up to 8000 ms,
+   * so reading the question twice costs nine thousandths of one percent of the
+   * budget, and what it buys is a cheap seat instead of a flagship ladder on
+   * every social and every self-contained turn. The alternative — inferring the
+   * tier from a second, smaller classifier of our own — would be exactly the
+   * thing the router's header forbids: "A DEPTH request, not a second
+   * classifier." So this reuses the read that already happens and moves it
+   * earlier, and `u5` below remains the authoritative plan.
+   *
+   * WHAT THIS CANNOT DO: it cannot raise a tier (the resolver refuses an upward
+   * proposal), it cannot overrule the user's choice or the operator's env pin,
+   * and it cannot touch execution authority — a money-moving turn is refused by
+   * name before any discount is considered.
+   */
+  const deepThinkOn = String(process.env.FBT_AI_DEEP_THINK ?? '1') !== '0';
+  const tierRead = planCollaboration({
+    message,
+    intentType: intent || 'GENERAL',
+    entities: u4.entities || {},
+    context: { currentPage: req.body?.surface || req.body?.currentPage || '/' },
+    priorIntent: prior?.intent || null,
+    locale: locale || 'fa',
+    deepThink: deepThinkOn
+  });
+  const autoTier = proposeIntelligenceMode(tierRead, {
+    intentType: intent || u4.type || 'GENERAL',
+    /* An action card or a pending confirmation is the strongest execution
+       signal this route has, and it is already computed above. */
+    execution: Boolean(human?.actionPlan || pendingIntent || human?.ui?.type === 'ACTION_CARD'),
+    retry: Boolean(req.body?.retry || req.body?.escalate || req.body?.retryOf)
+  });
+  const resolvedIntelligence = resolveIntelligenceMode(req.body?.intelligence ?? null, { auto: autoTier });
   const intelligenceProfile = getIntelligenceProfile(resolvedIntelligence.mode);
   /*
    * ─── ONE CLOCK FOR THE WHOLE TURN ─────────────────────────────────────────
@@ -2312,8 +2353,11 @@ router.post('/chat', async (req, res) => {
     intelligenceCeiling: intelligenceProfile.collaborationCeiling
 ,
     /* Increment 23 — deep thinking is the default; a deployment can turn it
-       off with FBT_AI_DEEP_THINK=0 and get the pre-increment behaviour. */
-    deepThink: String(process.env.FBT_AI_DEEP_THINK ?? '1') !== '0'
+       off with FBT_AI_DEEP_THINK=0 and get the pre-increment behaviour.
+       Read ONCE above (`deepThinkOn`), because the tier proposal and this plan
+       must be talking about the same setting: two copies of one env read is how
+       a turn ends up priced for a depth it did not run. */
+    deepThink: deepThinkOn
   });
   /*
    * ─── UPGRADE 13 — THE SOCIAL TURN IS ANSWERED BEFORE ANYTHING ELSE ──────
@@ -2704,6 +2748,25 @@ router.post('/chat', async (req, res) => {
       mode: {
         schema: 'fbt.ai-intelligence.v1',
         id: resolvedIntelligence.mode,
+        /*
+         * WHO CHOSE THIS TIER, AND WHY.
+         *
+         * `source` was already 'request' | 'env' | 'default'; 'auto' is new and
+         * means the question itself was read as not needing the smartest tier.
+         * A tier chosen silently is indistinguishable from a tier nobody chose,
+         * so the proposal is published either way — including when it was
+         * refused, with the reason it was refused. That is what makes "the
+         * answer was shorter this time" answerable instead of mysterious.
+         */
+        source: resolvedIntelligence.source,
+        requested: resolvedIntelligence.requested ?? null,
+        rejected: resolvedIntelligence.rejected ?? null,
+        autoTier: resolvedIntelligence.auto ? {
+          proposed: resolvedIntelligence.auto.proposed,
+          reason: resolvedIntelligence.auto.reason,
+          applied: resolvedIntelligence.auto.applied === true,
+          ignored: resolvedIntelligence.auto.ignored || null
+        } : null,
         /* The reasoning persona of this turn: in the smartest mode the
            specialists are held to an economist's lenses (mechanism, base rate,
            transmission, incentives, opportunity cost, time horizon,

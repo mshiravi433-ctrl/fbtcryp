@@ -80,6 +80,7 @@ import {
 } from '../../src/lib/central/analysis.js';
 import { buildCapabilityMatrix } from '../../src/lib/central/registry.js';
 import { ingestTurn, conversationNeedsInput, readLastReplan } from './sessionBridge.js';
+import { reportBehavior } from './learningBridge.js';
 import { createModules } from './modules.js';
 import { createActionEngine } from './actions.js';
 import { healthSnapshot } from './sources.js';
@@ -1399,6 +1400,75 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     return turn;
   }
 
+  /*
+   * ── WHAT THE BRAIN KNOWS ABOUT A DECISION, IN THE MODEL'S OWN SHAPE ─────
+   *
+   * A confirmed or cancelled action is the single most informative thing a user
+   * does, and `server/fios/behavior.js` was built to categorise exactly that:
+   * three verified samples produce REJECTS_LEVERAGE, CANCELS_AT_CONFIRMATION,
+   * PREFERS_MAJOR_ASSETS and the rest, each mapped to the preference it should
+   * write. Nothing ever told it.
+   *
+   * This reads only what the ACTION already carries — its module, its quote, the
+   * risk snapshot the turn assessed, and the moment it was created. Nothing is
+   * inferred and nothing is guessed: a field the action does not have is left
+   * absent, because a behaviour model fed invented facts categorises a user who
+   * does not exist.
+   */
+  const LEVERAGED_MODULES = new Set(['futures', 'dydx']);
+  function behaviorEventsFor(action, { accepted, latencyMs = null }) {
+    if (!action) return [];
+    const input = action.input || {};
+    const quote = action.quote || null;
+    const asset = quote?.toAsset || quote?.fromAsset || input.asset || input.symbol || input.token || null;
+    const leveraged = LEVERAGED_MODULES.has(String(action.module || '').toLowerCase())
+      || /LEVERAGE|MARGIN|PERP/i.test(String(action.actionType || ''));
+    const riskLevel = action.risk?.level || null;
+    const shared = {
+      verified: true,
+      module: action.module || null,
+      actionType: action.actionType || null,
+      asset,
+      riskLevel,
+      leveraged: leveraged === true,
+      strategyKind: input.strategyKind || input.style || null,
+      feesUsd: quote?.feeUsd ?? null
+    };
+    const events = [accepted ? { kind: 'PROPOSAL_ACCEPTED', ...shared } : { kind: 'PROPOSAL_REJECTED', ...shared }];
+    /* An accepted proposal that was executed is also a fill; a rejected one is a
+       cancellation. Both counters feed CANCELS_AT_CONFIRMATION, which is the
+       ratio between them — so reporting only one side would bias the signal. */
+    events.push(accepted ? { kind: 'EXECUTION_CONFIRMED', ...shared } : { kind: 'EXECUTION_CANCELLED', ...shared });
+    /* The hesitation between the card appearing and the user answering it. Only
+       reported when the card's creation time is known, and only on acceptance —
+       a cancellation's latency is already carried by the ratio above. */
+    if (accepted && Number.isFinite(latencyMs) && latencyMs >= 0) {
+      events.push({ kind: 'CONFIRMATION_LATENCY', latencyMs: Math.round(latencyMs), verified: true, module: action.module || null });
+    }
+    return events;
+  }
+
+  /**
+   * Report the decision to the behaviour model.
+   *
+   * Awaited, not fire-and-forget: a report that may or may not have happened is
+   * a model that silently stops learning, and the cost is one write to a local
+   * collection. `reportBehavior` never throws and never blocks on a provider —
+   * an unmounted model returns BEHAVIOR_PROVIDER_NOT_WIRED — so a confirmation
+   * cannot fail because its own history could not be recorded. The outcome
+   * travels back on the turn, so "the model recorded 3 signals" is observable
+   * rather than assumed.
+   */
+  async function reportDecision(owner, action, { accepted, latencyMs = null }) {
+    const events = behaviorEventsFor(action, { accepted, latencyMs });
+    const reported = [];
+    for (const event of events) {
+      const out = await reportBehavior(owner, event);
+      reported.push({ kind: event.kind, ok: out.ok === true, code: out.code || null, signals: Object.keys(out.signals || {}).length, applied: out.applied || [] });
+    }
+    return reported;
+  }
+
   /**
    * Confirmation → execution → verification, as its own entry point (§36's
    * `/api/intent/:id/confirm`). Going through `handle()` again would re-classify
@@ -1409,7 +1479,13 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     const result = registry.actions.confirm({ owner, actionId, planDigest: sentDigest, method: 'user-card' });
     if (!result.ok) return { ok: false, ...result };
     const action = result.action;
-    if (!execute) return { ok: true, action, executed: false };
+    /* The user said yes. That is a PROPOSAL_ACCEPTED, an EXECUTION_CONFIRMED and
+       — from the card's own `createdAt` — a CONFIRMATION_LATENCY sample. */
+    const behavior = await reportDecision(owner, action, {
+      accepted: true,
+      latencyMs: Number.isFinite(Number(action?.createdAt)) ? Date.now() - Number(action.createdAt) : null
+    });
+    if (!execute) return { ok: true, action, executed: false, behavior };
     const module = registry.map[action.module];
     if (!module) return { ok: false, code: 'MODULE_GONE', action };
     const out = await module.execute({ ...action.input, actionId, quote: action.quote }, { owner, intentId: action.intentId, actionId });
@@ -1423,14 +1499,22 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
        payload, the chain has not answered yet, and pretending otherwise is how a
        UI ends up showing a swap that did not happen. */
     events?.publish({ type: 'TRANSACTION_PENDING', owner, actionId, intentId: action.intentId, payload: { module: module.id, status: execution.status }, source: 'execution-controller' });
-    return { ok: true, action: registry.actions.find(owner, actionId), execution, executed: true };
+    return { ok: true, action: registry.actions.find(owner, actionId), execution, executed: true, behavior };
   }
 
   async function cancelAction({ owner, actionId, reason }) {
     const registry = registryFor(owner);
+    /* Read the action BEFORE cancelling: a cancelled action leaves the pending
+       bucket, and the report needs the module, the quote and the risk snapshot
+       that were attached to the decision the user just declined. */
+    const action = registry.actions.find(owner, actionId) || null;
     const out = registry.actions.cancel({ owner, actionId, reason });
     remember(owner, applyTurn(memoryFor(owner), { pendingConfirmation: null, at: Date.now() }));
-    return out;
+    /* The user said no. A rejection is as informative as an acceptance — the
+       leverage and high-risk signals are RATIOS, and a model that only ever
+       hears "yes" cannot compute one. */
+    const behavior = await reportDecision(owner, action, { accepted: false });
+    return { ...out, behavior };
   }
 
   /**

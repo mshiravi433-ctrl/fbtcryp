@@ -243,6 +243,44 @@ const RULES = Object.freeze([
          The possessive is allowed («ریسکش», «ریسکم») because it points
          back at the thing named in the first half of the sentence. */
       /ریسک(?:\s|\u200c)*(?:ش|من|م|ت|ی)?\s*(?:چقدر|چند|چه\s*طور|چقدره|زیاد|بالا|کم|چطوره)/i,
+      /*
+       * THE SAME QUESTION IN THE OTHER WORD ORDER (2026-11-13).
+       *
+       * Every pattern above demands the risk noun first and the question word
+       * immediately after it, which is one of the two ways Persian asks this.
+       * The other way puts the question word first, and it was falling through:
+       * a plain `how much risk do I have` classified as UNSUPPORTED, an intent
+       * with no engine, whose reply explains what the system cannot do.
+       *
+       * THE GAP AFTER THE NOUN IS THE WHOLE SAFETY ARGUMENT. Only a verb may
+       * follow, never another noun, because the specific risks are listed after
+       * this rule and lose to it on order: `how much liquidity risk do I have`
+       * must stay the liquidity intent's question, and it does, because the
+       * liquidity noun sits between the risk noun and the verb.
+       */
+      /(?:چقدر|چند|چه\s*اندازه|how much)\s*(?:ریسک|risk)(?:\s|‌)*(?:دارم|داریم|داره|دارید|دارند|هست|است|چقدره|چنده)(?:\s|‌)*(?:؟|\?)?\s*$/i,
+      /*
+       * `total risk`, asked as a noun phrase with no question word at all.
+       * The qualifier is allowed precisely because it is not another subject:
+       * `total` says how much of the risk, `liquidity` would say which risk.
+       */
+      /*
+       * NO `\b` AFTER PERSIAN SCRIPT. JS defines a word boundary in terms of
+       * `\w`, which is ASCII only, so a boundary asserted after a Persian
+       * letter can never be satisfied and the whole alternative silently dies.
+       * The first version of this rule had one, and `total risk` in Persian
+       * stayed UNSUPPORTED while its English twin worked - a pattern that looks
+       * correct and matches nothing is the hardest kind to see.
+       */
+      /(?:ریسک)(?:\s|‌)*(?:کلّ?ی?)(?:\s|‌)*(?:چقدر|چند|چطور|چطوره|چقدره|چنده|است|هست)?|(?:\brisk\b)(?:\s|‌)*(?:overall|total|in total)\b/i,
+      /*
+       * The English reverse order. `how much risk do I have` is the same
+       * question as the Persian one above, and the existing English rule only
+       * covered `how risky am I`. The gap between the question word and the
+       * risk noun stays empty on purpose: `how much liquidity risk` names a
+       * different subject and belongs to the liquidity intent.
+       */
+      /\b(?:how much|what(?:'s| is)?|whats)\s+(?:is\s+)?(?:my\s+)?risk\b/i,
       /\brisk\s+(score|level|of my|right now|now)\b/i,
       /how (much|risky) am i/i
     ], requires: ['portfolio'] },
@@ -487,7 +525,45 @@ const RULES = Object.freeze([
       /* The question word and the yield noun: «بهترین APY برای ETH»,
          «best apy on ETH», «کدام ییلد», «which pool pays most». */
       /(بهترین|بهتر|بیشترین|کدام|کدوم|کجا|چند|چقدر|what|which|best|highest|top)\s*.{0,24}?(ییلد|بازده|apr|apy|farm|فارم|pool|استخر|کشت‌?سود)/i,
-      /* The yield noun and the question word: «apy USDC چنده»,
+      /*
+       * THE TOPIC NOUN ALONE IS THE REQUEST.
+       *
+       * STAKING_REWARD has matched a bare staking noun since it was written and
+       * LIQUIDITY_RISK a bare liquidity noun: in this file a single topic noun
+       * means 'show me this'. YIELD_OPPORTUNITY was the one yield intent without
+       * that branch, so the shortest and most common way to ask fell through to
+       * UNSUPPORTED - an engine-less intent whose reply explains what the system
+       * cannot do, to a user who asked for something it can.
+       *
+       * DELIBERATELY NARROW: only nouns that mean yield and nothing else. The
+       * profit-plan words are left out, because a bare profit noun that became a
+       * yield ranking would answer a different question than the one asked; the
+       * pool noun is left out too, since a pool is a liquidity subject until a
+       * verb says otherwise.
+       */
+      /^\s*(?:the\s+|best\s+|top\s+)?(?:ییلد|yield|بازده|کشت\u200c?سود|فارم|farm|farming|apr|apy)(?:\s*(?:ها|های)?\s*)?[?.!؟]*\s*$/i,
+            /*
+       * THE YIELD NOUN IS THE HEAD OF THE SENTENCE.
+       *
+       * Removing the bare yield nouns from ASSET_ANALYSIS opened two new holes,
+       * and that is the point worth recording: a fix for one hole can open
+       * another, so the whole reply has to be re-measured after it. `farm ETH`
+       * and `best yield now` name an opportunity and nothing else, yet every
+       * pattern above demands a question WORD next to the yield noun - and
+       * neither sentence has one. They fell to UNSUPPORTED, which is worse than
+       * the misroute they came from: a misroute at least answered something.
+       *
+       * The noun is the head, so it carries the sentence on its own. What it may
+       * not do is overrule an analysis verb, because `analyze the ETH farm` is a
+       * request about an asset, and ASSET_ANALYSIS is listed after this rule -
+       * without the guard this one would simply take the message first.
+       *
+       * Every more specific intent is listed BEFORE this rule (risk, staking,
+       * liquidity, fit, market, news, swaps, goals, signals), so anything that
+       * belongs to them has already won by the time this is reached.
+       */
+      /^(?![\s\S]*(?:تحلیل|بررسی|وضعیت|چطور|چه حالی|analyz|check))[\s\S]*?(?:ییلد|yield|بازده|کشت\u200c?سود|فارم|farming|farm|\bapr\b|\bapy\b)/i,
+            /* The yield noun and the question word: «apy USDC چنده»,
          «سود استیکینگ چقدره», «ییلد چقدر است», «farm yield for ETH». */
       /(ییلد|بازده|apr|apy|farm|فارم|pool|استخر|کشت‌?سود)\s*.{0,30}?(چند|چقدر|چقدره|چنده|چه ?مقدار|کدام|کدوم|کجا|بهترین|بیشترین|how much|how high|what|which|best|where|for\b)/i,
       /* A verb that only makes sense for a pool: «USDC فارم کنم»,
@@ -496,7 +572,21 @@ const RULES = Object.freeze([
     ],
     requires: ['farming']
   },
-  { intent: 'ASSET_ANALYSIS', patterns: /(بررسی|تحلیل|وضعیت) ?(کن|ش)?|analyze|check .* out|چطور (است|ه)|چطوره|چه حالی|\bfarm\b|فارم|\bapy\b|\byield\b/i, requires: ['markets'] },
+  {
+    /*
+     * THE YIELD NOUNS CAME OUT OF THIS ALTERNATION (2026-11-13).
+     *
+     * A bare `farm`/`apy`/`yield` alternative sat here, so ANY mention of yield
+     * routed to ASSET_ANALYSIS: plain `yield`, `best yield now` and `farm` all
+     * became an asset-analysis turn at 0.655. A marker word is not a question
+     * type - the SUBJECT decides, and the subject of a yield question is
+     * opportunities, not an asset. The analysis markers stay, because what makes
+     * an analysis turn an analysis turn is the analysis verb.
+     */
+    intent: 'ASSET_ANALYSIS',
+    patterns: /(بررسی|تحلیل|وضعیت) ?(کن|ش)?|analyze|check .* out|چطور (است|ه)|چطوره|چه حالی/i,
+    requires: ['markets']
+  },
   /* Price questions are the single most common message in a trading app, and a
      lexicon that misses them turns "36,000 USDT" into "please clarify". Ordered
      after QUOTE_SWAP / BALANCE_QUERY / LOAN_STATUS so those keep their ground. */
