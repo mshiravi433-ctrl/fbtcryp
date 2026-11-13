@@ -1,5 +1,6 @@
-import { memo, useEffect, useState } from 'react';
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSharedClock } from '../../hooks/useSharedClock';
 import AnimatedNumber from '../AnimatedNumber.jsx';
 import CoinLogo from '../CoinLogo.jsx';
 import MarketSparkline from './MarketSparkline.jsx';
@@ -163,13 +164,9 @@ function TrioBox({ tone, label, value, note, children, testId }) {
  * it had when it was hidden.
  */
 function BtClock({ updatedAt }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 15000);
-    const onVisible = () => { if (document.visibilityState === 'visible') setNow(Date.now()); };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible); };
-  }, []);
+  /* Shared clock — see hooks/useSharedClock.js and the note in
+     MarketFreshness.jsx. The visibility correction lives there now. */
+  const now = useSharedClock(15000);
   const seconds = Math.max(0, Math.round((now - updatedAt) / 1000));
   const label = seconds < 60 ? `${seconds}s` : `${Math.round(seconds / 60)}m`;
   return <span className="mx-btc-age mono" aria-hidden="true">{label}</span>;
