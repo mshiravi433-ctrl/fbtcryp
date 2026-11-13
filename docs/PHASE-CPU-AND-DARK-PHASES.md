@@ -3273,13 +3273,131 @@ that records a `MODEL_UNAVAILABLE` failure and asserts the verdict — the
 verdict follows `lastCallFailed`, which is a fact about evidence, not
 about the breaker.
 
+#### 5.24.7 A memory that dies with the instance is a memory that never existed
+
+§5.24.6 stopped the gateway re-buying a model it had already proven dead.
+It stored that proof in a `Map` in the process — and this deploys to a
+platform that recycles the process every few minutes. So every new
+instance re-learned the same 404 **by paying for it again**, and the
+saving was real per instance and mostly theoretical per deployment. That
+is the same defect one layer down: a value computed and then not kept.
+
+The durable tier reuses the deployment's own store, the way
+`aiAnswerCache` does — one adapter, not a second one — and is opt-in by
+configuration for the same stated reason: *a cache that silently does not
+persist has no value on a serverless platform*. With no store configured
+the whole block is inert and the gateway behaves byte-for-byte as before,
+which is measured rather than assumed: importing `blobCache.js` costs
+2.4 ms wall and 2.4 ms CPU with no dependencies of its own, and with the
+tier off, `hydrating` stays `false`, so no I/O is attempted at all.
+
+**One record per provider, not one per model.** The store has neither a
+scan nor a delete, so per-model keys could never be hydrated without
+already knowing the ids — and knowing the ids is what the ladder is for.
+Clearing a mark is a read-modify-write, which can race another instance;
+the race is bounded and self-healing, because a mark expires in ten
+minutes and the worst outcome is one dead call that would have happened
+anywhere.
+
+Four properties are the design, and each is a test:
+
+* **nothing blocks.** `deadModelsFor` is called from the synchronous
+  candidate builder on the way to every provider call, so hydration and
+  persistence are fire-and-forget and every durable helper swallows its
+  own errors. A store that is down must cost the gateway nothing but the
+  memory.
+* **the interesting rules are pure.** `mergeModelMarks` is exported so
+  expiry, precedence and fault-class can be tested without a store: a
+  rule that can only be exercised through I/O is a rule that will not be
+  exercised.
+* **a recovery travels.** A success clears the tombstone durably, not
+  only locally — otherwise every other instance keeps a recovered model
+  out of its ladder for the rest of the cooldown, and the fleet's only
+  proven-live seat is the one nobody will call.
+* **a foreign tombstone yields to local evidence.** A success this
+  instance witnessed *after* the mark was written outranks it; a success
+  from *before* it does not, because then the tombstone is the newer
+  evidence. Both directions are asserted, since getting either one wrong
+  is a different bug.
+
+Hydration reads the fleet **in parallel** — one key per provider, no
+ordering between them, and a durable backend is a network round trip, so
+reading eleven of them sequentially means a cold instance knows nothing
+for eleven round trips. It is fire-and-forget either way, but a memory
+that arrives late is a memory the first few turns do not have, and the
+first few turns are exactly the ones that would re-buy a dead call.
+
+The recycle itself is tested without mocks and without a network:
+`store.js` keeps a process-local tier in front of the backend, so a
+simulated instance death is `resetProviderHealth()` followed by
+`hydrateModelMemory()`, and both are the real functions the gateway runs.
+
+```
+  fresh instance, hydrated   the dead id is still demoted
+  …and the fresh instance    would otherwise have re-bought the 404
+```
+
+#### 5.24.8 The lint whose scope inverted, found by an accident
+
+Diagnosing that recycle exposed something else. The suite went red with
+five failures, and one of them reported:
+
+```
+  1954 call site(s) may be missing an await
+    server/agentHub/httpSafe.js:152  jsonRequest  (defined in …)
+        return jsonRequest({ url: next, … })
+```
+
+`return jsonRequest(...)` inside an `async` function is correct, and so
+were 1951 of the others. `find-missing-awaits.mjs` tests "awaited" by
+looking for the word `await` in the forty characters to the left, so it
+is a candidate-finder by design — but it is scoped, and the scope comes
+from `git diff origin/main..HEAD`:
+
+```js
+if (CHANGED_TO_ASYNC.size && !CHANGED_TO_ASYNC.has(name)) continue;
+```
+
+`size &&` means an **empty diff switches the filter off**, and a lint
+about "call sites left behind when a function became async" silently
+becomes "every unawaited call to any exported async function in the
+tree". Its own header warns that a lint which cries wolf gets ignored;
+this is that failure, triggered by branch topology rather than by code.
+
+The diff is empty far more often than it looks. A commit touching only
+docs or tests leaves `server`/`src` untouched. A branch freshly cut from
+main has no commits at all. And a workspace whose branch pointer was
+reset to its base — which is precisely what had happened here, and is why
+`HEAD == origin/main` — reports no divergence whatsoever. In all three
+the suite fails on findings that are not about the change under review.
+
+So an empty diff now ends the run, with the narrowed scope **announced**:
+
+```
+  OK — every call to an exported async function is awaited.
+  (nothing to check: no exported function changed from sync to async
+   against HEAD; 1285 uniquely-named async exports were left unscanned
+   on purpose)
+```
+
+Announced rather than silent, because a lint that quietly narrowed its
+own scope is no better than one that cried wolf. The behaviour is pinned
+with `AWAIT_LINT_BASE=HEAD`, which the script already supported and which
+makes an empty diff deterministic on any checkout. The test that injects
+a deliberate missing await now states its own precondition — it is only
+meaningful on a branch whose diff contains a function that became async —
+and skips with a reason instead of failing on something it does not
+control.
+
 #### What is still open
 
-Automatic tiering decides the **depth** of a turn and §5.24.6 stopped the
-ladder re-buying a model it has already proven dead, but neither learns:
-both act on the evidence of one process, and a serverless instance that
-recycles takes the dead-model memory and the health window with it. The
-quota ceiling still governs turns per day from the daily counter alone.
+Automatic tiering decides the **depth** of a turn, §5.24.6 stopped the
+ladder re-buying a model it has already proven dead, and §5.24.7 made
+that proof outlive the instance. What still does not travel is the rest
+of the health window — call latencies, token counters, the circuit state
+itself — so a recycled instance still re-measures how slow a provider is
+before it can prefer a fast one. The quota ceiling still governs turns
+per day from the daily counter alone.
 Nothing yet learns a **tier** preference from a user's own history — the
 behaviour model can now see that a user cancels at confirmation, and
 cannot yet conclude that this user should be shown one careful answer
@@ -3336,3 +3454,14 @@ topic noun still has no such guarantee.
 >
 > **a demotion must be able to end — a discount that never expires is a deletion,
 > and a chain that can empty out is a seat that can never be asked again.**
+>
+> **a memory that dies with the process is a memory that never existed on a
+> platform that recycles it — and the proof is a test that kills the instance on
+> purpose, which needs no mock if the store already has a local tier.**
+>
+> **a recovery has to travel as far as the fault did, or every other instance
+> keeps avoiding the one seat that works.**
+>
+> **a scoped check whose scope comes from version control has a topology, and the
+> empty case is a case: `size &&` turns "nothing changed" into "check
+> everything", which is how a lint starts crying wolf about code nobody touched.**

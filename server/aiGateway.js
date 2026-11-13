@@ -107,6 +107,10 @@ import {
   DEFAULT_PROVIDER_FLEET
 } from './aiProviderFleet.js';
 import { spendQuota } from './aiQuotaBudget.js';
+/* The deployment's own durable store. Imported for the same reason
+   `aiAnswerCache` imports it: a memory that lives only in this process dies with
+   the instance, and on a serverless platform that is every few minutes. */
+import { blobConfigured as durableStoreConfigured } from './blobCache.js';
 import { aiAnswerCacheStats } from './aiAnswerCache.js';
 import { lastReasoningLedger } from './aiReasoningLedger.js';
 import { cortexBridgeStatus } from './aiCortexBridge.js';
@@ -721,9 +725,25 @@ export function recordProviderCall(providerId, { ok = true, durationMs = 0, mode
     st.openReason = null;
     st.lastError = null;
     st.lastSuccess = { at: Date.now(), model: model || null, durationMs: Number(durationMs) || 0 };
+    /* A recovery is evidence too, and it has to travel: another instance holding
+       a tombstone for this id would keep the recovered model out of its ladder
+       for the rest of the cooldown. Cheap because it only fires for a model that
+       was actually marked. */
+    if (model) forgetDeadModel(providerId, normalizeSecretValue(model));
     return;
   }
   st.consecutiveFailures += 1;
+  /*
+   * Mark the MODEL, at the scope the fault actually has. Written through to the
+   * durable tier when one is configured, fire-and-forget when it is not, and a
+   * no-op for any fault that is not deterministic — a timeout is evidence about
+   * the network and must not follow this id to the next instance.
+   */
+  if (model && MODEL_SCOPED_FAULTS.has(reasonCode)) {
+    const id = normalizeSecretValue(model);
+    const at = Date.now();
+    rememberDeadModel(providerId, id, at, at + (CIRCUIT_OPEN_MS[reasonCode] ?? CIRCUIT_OPEN_MS.UNKNOWN));
+  }
   st.lastError = {
     at: Date.now(),
     model: model || null,
@@ -786,31 +806,177 @@ const MODEL_SCOPED_FAULTS = Object.freeze(new Set(['MODEL_UNAVAILABLE']));
  * vendor's 404 can be a bad morning rather than a retired model — and a list
  * that only ever shrinks eventually has nothing left to try.
  */
-export function deadModelsFor(providerId, { now = Date.now() } = {}) {
-  const st = healthState.get(providerId);
+/*
+ * ─── A MEMORY THAT OUTLIVES THE INSTANCE (2026-11-13) ────────────────────────
+ *
+ * Demoting a proven-dead model saves a full-price call on a tier where failed
+ * requests count against the daily allowance. But `healthState` is a Map in this
+ * process, and a serverless instance is recycled every few minutes — so every
+ * new instance re-learned the same 404 by paying for it again. The saving was
+ * real and it was per-instance, which on the platform this deploys to means it
+ * was mostly theoretical.
+ *
+ * The durable tier is opt-in by configuration, exactly like the answer cache's,
+ * and for the same reason: a memory that silently does not persist has no value
+ * here, and pretending otherwise would be the second lie of the same shape. With
+ * no durable store configured this whole block is inert and the gateway behaves
+ * byte-for-byte as it did before.
+ *
+ * ONE RECORD PER PROVIDER, not one per model. The store has no scan and no
+ * delete, so per-model keys could never be hydrated without already knowing the
+ * ids — and knowing the ids is what the ladder is for. Clearing a mark is a
+ * read-modify-write, which can race another instance; the race is bounded and
+ * self-healing, because a mark expires in ten minutes and the worst outcome is
+ * one dead call that would have happened anyway.
+ *
+ * NOTHING HERE MAY BLOCK OR THROW. `deadModelsFor` is called from the
+ * synchronous candidate builder on the way to every provider call, so hydration
+ * and persistence are fire-and-forget, and every durable helper swallows its own
+ * errors. A store that is down must cost the gateway nothing but the memory.
+ */
+const MODEL_MEMORY_PREFIX = 'ai-model-memory/v1/';
+const durableMarks = new Map(); // providerId -> Map(model -> { at, until })
+let durableHydrated = false;
+let durableHydrating = null;
+
+function modelMemoryEnabled(env = process.env) {
+  const raw = String(env?.AI_MODEL_MEMORY_DURABLE ?? 'auto').trim().toLowerCase();
+  if (['0', 'off', 'false', 'no'].includes(raw)) return false;
+  if (['1', 'on', 'true', 'yes'].includes(raw)) return true;
+  return durableStoreConfigured();
+}
+
+/**
+ * Merge two sources of evidence about dead models into one map.
+ *
+ * Pure, and exported for that reason: the interesting rules live here and a rule
+ * that can only be tested through I/O is a rule that will not be tested.
+ *
+ *   · a mark that has expired is not a mark;
+ *   · a mark from ANOTHER instance yields to a success THIS instance has seen
+ *     since the mark was written — otherwise a stale tombstone would keep a
+ *     recovered model out of the ladder for ten minutes on every instance but
+ *     the one that witnessed the recovery;
+ *   · a non-deterministic fault is not evidence about the id, so it neither
+ *     marks nor clears.
+ */
+export function mergeModelMarks({ calls = [], durable = null, now = Date.now(), cooldown = 600_000 } = {}) {
   const out = new Map();
-  if (!st?.calls?.length) return out;
-  const cooldown = CIRCUIT_OPEN_MS.MODEL_UNAVAILABLE ?? CIRCUIT_OPEN_MS.UNKNOWN;
-  /*
-   * OLDEST TO NEWEST, SO THE NEWEST EVIDENCE WINS.
-   *
-   * A success clears the mark: if an id answered after it 404d, the 404 was a bad
-   * moment rather than a retired model, and holding that against it would
-   * demote the fleet's only proven-live seat. A fault that is not deterministic
-   * is not evidence about the id at all — it is evidence about the network — so
-   * it neither marks nor clears. And an expired failure is dropped rather than
-   * carried, because a demotion that never ends is a deletion, and this is not a
-   * deletion.
-   */
-  for (const c of st.calls) {
-    if (!c.model) continue;
+  for (const c of calls || []) {
+    if (!c?.model) continue;
     if (now - (c.at || 0) > cooldown) { out.delete(c.model); continue; }
     if (c.ok) { out.delete(c.model); continue; }
     if (!MODEL_SCOPED_FAULTS.has(c.reasonCode)) continue;
     out.set(c.model, (c.at || 0) + cooldown);
   }
+  for (const [model, mark] of durable || new Map()) {
+    const until = Number(mark?.until) || 0;
+    if (until <= now) continue;
+    const writtenAt = Number(mark?.at) || (until - cooldown);
+    /* This instance's own newer success outranks another instance's tombstone. */
+    const recoveredSince = (calls || []).some((c) => c?.model === model && c.ok && (c.at || 0) > writtenAt);
+    if (recoveredSince) continue;
+    if (!out.has(model) || until > out.get(model)) out.set(model, until);
+  }
   return out;
 }
+
+async function durableMarksRead(providerId) {
+  try {
+    const { storeGet } = await import('./store.js');
+    const row = await storeGet(`${MODEL_MEMORY_PREFIX}${providerId}`, null);
+    const marks = row && typeof row === 'object' ? row.marks : null;
+    if (!marks || typeof marks !== 'object') return new Map();
+    return new Map(Object.entries(marks).map(([model, m]) => [model, { at: Number(m?.at) || 0, until: Number(m?.until) || 0 }]));
+  } catch {
+    return new Map();
+  }
+}
+
+async function durableMarksWrite(providerId) {
+  if (!modelMemoryEnabled()) return false;
+  const marks = durableMarks.get(providerId);
+  const now = Date.now();
+  /* Only unexpired marks are written, so a record never carries its own rot. */
+  const live = {};
+  let longest = 0;
+  for (const [model, m] of marks || new Map()) {
+    if ((m?.until || 0) <= now) continue;
+    live[model] = { at: m.at || 0, until: m.until || 0 };
+    longest = Math.max(longest, m.until - now);
+  }
+  try {
+    const { storeSet } = await import('./store.js');
+    /* TTL is the longest remaining cooldown, with a floor so a write is never
+       born expired. */
+    await storeSet(`${MODEL_MEMORY_PREFIX}${providerId}`, { marks: live, at: now }, Math.max(longest, 60_000));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Load the durable marks. Idempotent, never throws, never awaited by a caller
+ * that needs an answer now: `deadModelsFor` kicks it off and returns what this
+ * process already knows, so the FIRST candidate list after a cold start can be
+ * built on local evidence alone and every one after it is better informed.
+ */
+export async function hydrateModelMemory({ env = process.env } = {}) {
+  if (!modelMemoryEnabled(env)) return { ok: false, reason: 'DURABLE_NOT_CONFIGURED', providers: 0 };
+  if (durableHydrated) return { ok: true, reason: 'ALREADY_HYDRATED', providers: durableMarks.size };
+  if (durableHydrating) return durableHydrating;
+  durableHydrating = (async () => {
+    const ids = Object.keys(PROVIDER_CONFIGS).filter((id) => PROVIDER_CONFIGS[id]?.type !== 'internal-engine');
+    /*
+     * IN PARALLEL, BECAUSE THESE READS SHARE NOTHING. One key per provider, no
+     * ordering between them, and a durable backend is a network round trip: read
+     * sequentially and a cold instance waits for eleven of them before it knows
+     * anything. It is fire-and-forget either way, so nothing blocks — but a
+     * memory that arrives late is a memory the first few turns do not have, and
+     * the first few turns are exactly the ones that would re-buy a dead call.
+     */
+    const results = await Promise.all(ids.map(async (id) => [id, await durableMarksRead(id)]));
+    let loaded = 0;
+    for (const [id, marks] of results) {
+      if (marks.size) { durableMarks.set(id, marks); loaded++; }
+    }
+    durableHydrated = true;
+    durableHydrating = null;
+    return { ok: true, reason: 'HYDRATED', providers: loaded, at: Date.now() };
+  })();
+  return durableHydrating;
+}
+
+export function deadModelsFor(providerId, { now = Date.now() } = {}) {
+  const st = healthState.get(providerId);
+  const cooldown = CIRCUIT_OPEN_MS.MODEL_UNAVAILABLE ?? CIRCUIT_OPEN_MS.UNKNOWN;
+  /* Fire-and-forget: the sync caller must never wait on the store. */
+  if (!durableHydrated && !durableHydrating && modelMemoryEnabled()) void hydrateModelMemory();
+  return mergeModelMarks({
+    calls: st?.calls || [],
+    durable: durableMarks.get(providerId) || null,
+    now,
+    cooldown
+  });
+}
+
+/* Marked/cleared by `recordProviderCall`; both are rare (a mark costs one failed
+   call, a clear costs one read-modify-write) so neither is on a hot path. */
+function rememberDeadModel(providerId, model, at, until) {
+  let marks = durableMarks.get(providerId);
+  if (!marks) { marks = new Map(); durableMarks.set(providerId, marks); }
+  marks.set(model, { at, until });
+  if (modelMemoryEnabled()) void durableMarksWrite(providerId);
+}
+
+function forgetDeadModel(providerId, model) {
+  const marks = durableMarks.get(providerId);
+  if (!marks?.has(model)) return;
+  marks.delete(model);
+  if (modelMemoryEnabled()) void durableMarksWrite(providerId);
+}
+
 
 export function isProviderHealthy(providerId) {
   const st = healthState.get(providerId);
@@ -872,6 +1038,29 @@ export function getProviderHealth() {
 
 export function resetProviderHealth() {
   healthState.clear();
+  /* The durable overlay and its hydration flag are process state too. Leaving
+     them behind would let one test's tombstones decide the next test's ladder,
+     which is how a gate starts passing for the wrong reason. */
+  durableMarks.clear();
+  durableHydrated = false;
+  durableHydrating = null;
+}
+
+/** What the durable model-memory tier is doing, for the fleet panel. */
+export function modelMemoryStatus({ env = process.env } = {}) {
+  const enabled = modelMemoryEnabled(env);
+  let marks = 0;
+  const now = Date.now();
+  for (const m of durableMarks.values()) for (const [, v] of m) if ((v?.until || 0) > now) marks++;
+  return {
+    schema: 'fbt.ai-model-memory.v1',
+    enabled,
+    backend: enabled ? (durableStoreConfigured() ? 'configured' : 'forced-on') : 'off',
+    hydrated: durableHydrated,
+    hydrating: Boolean(durableHydrating),
+    providers: durableMarks.size,
+    liveMarks: marks
+  };
 }
 
 /**

@@ -34,7 +34,10 @@ import {
   resetProviderHealth,
   deadModelsFor,
   isProviderHealthy,
-  orderByHealth
+  orderByHealth,
+  mergeModelMarks,
+  hydrateModelMemory,
+  modelMemoryStatus
 } from '../../server/aiGateway.js';
 
 const P = 'openrouter';
@@ -184,4 +187,133 @@ test('with no evidence the ladder is byte-for-byte what it was', () => {
   assert.equal(getModelCandidates(P, null, { mode: 'swift' })[0], getModelCandidates(P)[0], 'and so is swift');
   assert.ok(max.length >= 2, 'max still puts the flagships first');
   assert.equal(deadModelsFor(P).size, 0, 'nothing is dead until something fails');
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * THE MEMORY OUTLIVING THE INSTANCE
+ *
+ * `healthState` is a Map in this process, and a serverless instance is recycled
+ * every few minutes — so a demotion that only lives in memory was per-instance,
+ * and every new instance re-learned the same 404 by paying for it again. The
+ * durable tier exists for that, and it is tested here WITHOUT mocks and WITHOUT
+ * a network: `store.js` keeps a process-local tier in front of the backend, so a
+ * simulated recycle is `resetProviderHealth()` followed by `hydrateModelMemory()`,
+ * and both are the real functions the gateway runs.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+const DURABLE_ENV = 'AI_MODEL_MEMORY_DURABLE';
+
+/** Run one case with the durable tier forced on, then leave no trace behind. */
+async function withDurableTier(fn) {
+  const previous = process.env[DURABLE_ENV];
+  process.env[DURABLE_ENV] = '1';
+  try {
+    return await fn();
+  } finally {
+    if (previous === undefined) delete process.env[DURABLE_ENV];
+    else process.env[DURABLE_ENV] = previous;
+    resetProviderHealth();
+  }
+}
+
+test('with no durable store the tier is inert and the gateway is unchanged', () => {
+  /* The honest default: a memory that silently does not persist has no value, so
+     a deployment without a store must behave byte-for-byte as it did before —
+     and must not pretend otherwise in its own status. */
+  resetProviderHealth();
+  const status = modelMemoryStatus({ env: { [DURABLE_ENV]: 'off' } });
+  assert.equal(status.enabled, false);
+  assert.equal(status.backend, 'off');
+
+  const before = getModelCandidates(P, null, { mode: 'max' });
+  died(before[0]);
+  const after = getModelCandidates(P, null, { mode: 'max' });
+  assert.notEqual(after[0], before[0], 'the in-process demotion still works with the durable tier off');
+  assert.equal(status.schema, 'fbt.ai-model-memory.v1');
+});
+
+test('a tombstone survives an instance recycle', async () => {
+  await withDurableTier(async () => {
+    resetProviderHealth();
+    const before = getModelCandidates(P, null, { mode: 'max' });
+    died(before[0]);
+
+    /* The instance dies. Everything in `healthState` and in the local overlay is
+       gone — which is exactly what used to make the saving theoretical. */
+    resetProviderHealth();
+    assert.equal(deadModelsFor(P).size, 0, 'a fresh instance starts with no local evidence');
+    assert.equal(getModelCandidates(P, null, { mode: 'max' })[0], before[0],
+      'and would re-buy the dead call, if the memory had not been written down');
+
+    const hydrated = await hydrateModelMemory();
+    assert.equal(hydrated.ok, true, 'hydration must succeed against the store’s own local tier');
+    assert.deepEqual([...deadModelsFor(P).keys()], [before[0]],
+      'the mark came back with the instance');
+    assert.notEqual(getModelCandidates(P, null, { mode: 'max' })[0], before[0],
+      'so the new instance does not pay for a 404 the last one already proved');
+  });
+});
+
+test('a recovery travels back out, so no other instance keeps avoiding a live model', async () => {
+  await withDurableTier(async () => {
+    resetProviderHealth();
+    const ladder = getModelCandidates(P, null, { mode: 'max' });
+    died(ladder[0]);
+    await hydrateModelMemory();
+
+    lived(ladder[0]); // this instance watched it answer
+
+    resetProviderHealth();
+    await hydrateModelMemory();
+    assert.equal(deadModelsFor(P).has(ladder[0]), false,
+      'the tombstone must be withdrawn, not merely outvoted locally — otherwise every other instance keeps the recovered model out of its ladder for the rest of the cooldown');
+    assert.equal(getModelCandidates(P, null, { mode: 'max' })[0], ladder[0]);
+  });
+});
+
+test('hydration is idempotent and reports itself honestly', async () => {
+  await withDurableTier(async () => {
+    resetProviderHealth();
+    const first = await hydrateModelMemory();
+    const second = await hydrateModelMemory();
+    assert.equal(first.ok, true);
+    assert.equal(second.reason, 'ALREADY_HYDRATED', 'a second hydration must not redo the work');
+
+    const off = await hydrateModelMemory({ env: { [DURABLE_ENV]: 'off' } });
+    assert.equal(off.ok, false);
+    assert.equal(off.reason, 'DURABLE_NOT_CONFIGURED', 'and refusing must say why, not just return nothing');
+  });
+});
+
+test('the merge rules, as a pure function', () => {
+  /* The interesting logic lives in `mergeModelMarks` and is exported precisely so
+     it can be tested without a store: a rule that can only be exercised through
+     I/O is a rule that will not be exercised. */
+  const now = 1_000_000;
+  const cooldown = 600_000;
+
+  const expired = mergeModelMarks({ calls: [], durable: new Map([['m', { at: now - cooldown * 3, until: now - 1000 }]]), now, cooldown });
+  assert.equal(expired.size, 0, 'an expired mark is not a mark');
+
+  const live = mergeModelMarks({ calls: [], durable: new Map([['m', { at: now - 1000, until: now + 1000 }]]), now, cooldown });
+  assert.equal(live.get('m'), now + 1000, 'an unexpired mark demotes');
+
+  const recovered = mergeModelMarks({
+    calls: [{ model: 'm', ok: true, at: now - 500 }],
+    durable: new Map([['m', { at: now - 5000, until: now + 1000 }]]),
+    now, cooldown
+  });
+  assert.equal(recovered.has('m'), false,
+    'a success THIS instance saw after the tombstone was written outranks another instance’s stale evidence');
+
+  const staleRecovery = mergeModelMarks({
+    calls: [{ model: 'm', ok: true, at: now - 9000 }],
+    durable: new Map([['m', { at: now - 5000, until: now + 1000 }]]),
+    now, cooldown
+  });
+  assert.equal(staleRecovery.has('m'), true,
+    '…but a success from BEFORE the tombstone does not: the tombstone is the newer evidence');
+
+  const timeout = mergeModelMarks({ calls: [{ model: 'm', ok: false, reasonCode: 'TIMEOUT', at: now }], now, cooldown });
+  assert.equal(timeout.size, 0, 'a network fault is evidence about the network, never about the id');
 });

@@ -106,6 +106,38 @@ for (const [name, file] of asyncExports) {
   uniqueAsyncExports.set(name, file);
 }
 
+/*
+ * ─── AN EMPTY DIFF MEANS "NOTHING CHANGED", NOT "CHECK EVERYTHING" ───────────
+ *
+ * The scope filter below reads `CHANGED_TO_ASYNC.size &&`, so when the diff
+ * against the base is empty the filter silently switches OFF and this lint
+ * becomes "every unawaited call to any exported async function in the tree".
+ * That is a different and much larger lint, and the tree does not satisfy it:
+ * measured on a clean checkout it reports 1952 candidates, including
+ * `return jsonRequest({...})` inside an async function and `withDeadline(x)`
+ * inside a `Promise.all` — both correct, both flagged, because "awaited" is
+ * tested by looking for the word `await` in the forty characters to the left.
+ *
+ * The diff is empty more often than it looks. Any commit that touches only
+ * docs or tests leaves `server`/`src` untouched; a branch freshly cut from main
+ * has no commits at all; and a workspace whose branch pointer was reset to its
+ * base — which is what happened the round this was found — reports HEAD ==
+ * origin/main. In each of those the suite went red with 1952 findings that were
+ * not about the change under review, which is the exact failure this script's own
+ * header warns against: a lint that cries wolf gets ignored.
+ *
+ * So an empty diff now ends the run. This lint's question is "did a call site get
+ * left behind when a function BECAME async?", and with no function that became
+ * async there is nothing to answer. The count of unscanned exports is printed so
+ * the skip is visible rather than silent — a lint that quietly narrowed its own
+ * scope would be no better than one that cried wolf.
+ */
+if (!CHANGED_TO_ASYNC.size) {
+  console.log('OK — every call to an exported async function is awaited.');
+  console.log(`(nothing to check: no exported function changed from sync to async against ${BASE_REF}; ${uniqueAsyncExports.size} uniquely-named async exports were left unscanned on purpose)`);
+  process.exit(0);
+}
+
 /** Every file that might call one of them. */
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir)) {
