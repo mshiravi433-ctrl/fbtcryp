@@ -1369,3 +1369,87 @@
     margin-top: 10px;
   }
 }
+
+/* ══ THE COLUMN HEADER (2026-11-12) ═════════════════════════════════════════
+   The label row over the list. It mirrors the row's five-column grid EXACTLY —
+   `21px 32px minmax(0,1fr) 58px 92px` (market-intelligence.css:956) — because a
+   header that does not share the row's geometry drifts left of the numbers it
+   names, which is worse than having no header at all.
+
+   It is a plain grid, not sticky: `market-tabs.css` already pins the tab strip,
+   and a second pinned bar would take 34px from a 390px phone's list for a label
+   row that earns its space on the first screen and not after it.
+
+   No background, no border, no blur — the labels sit on the card the rows are
+   already on. The only material is the ACTIVE column's tint, because that is
+   the one fact on this row that changes as you use it. */
+.mx-market .mx-colhead {
+  display: grid;
+  grid-template-columns: 21px 32px minmax(0, 1fr) 58px 92px;
+  align-items: end;
+  gap: 9px;
+  padding: 0 12px 6px;
+  color: var(--mx-faint);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .01em;
+  direction: inherit;
+}
+
+/* The rank and logo columns are icons in the row, not data: they get no label. */
+.mx-market .mx-colhead-rank,
+.mx-market .mx-colhead-logo,
+.mx-market .mx-colhead-spark { min-width: 0; }
+
+.mx-market .mx-colhead-name,
+.mx-market .mx-colhead-right { min-width: 0; }
+
+/* The right cell stacks price over the horizon change, in the same order the
+   row stacks them. Both are sort buttons. */
+.mx-market .mx-colhead-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: end;
+}
+.mx-market .mx-colhead-change { min-width: 0; max-width: 100%; }
+
+.mx-market .mx-col-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 2px 4px;
+  margin-inline-start: -4px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  /* Only compositor properties: the same rule the rows follow (see
+     market-perf.css §5). */
+  transition: color .15s ease;
+  cursor: pointer;
+}
+.mx-market .mx-colhead-right .mx-col-btn { margin-inline-start: 0; margin-inline-end: -4px; }
+.mx-market .mx-col-btn:hover { color: var(--mx-text); }
+.mx-market .mx-col-btn:focus-visible { outline: 2px solid var(--mx-cyan); outline-offset: 1px; }
+
+/* The active column says so — colour and weight, not a background wash, because
+   a tinted chip on this row would read as a button you must press. */
+.mx-market .mx-col-btn[data-active='true'] { color: var(--mx-cyan); font-weight: 750; }
+.mx-market .mx-col-btn[data-active='true'] svg { flex: 0 0 auto; opacity: .9; }
+.mx-market .mx-col-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* On a phone the row's grid narrows to `16px 28px minmax(0,1fr) 38px 76px`
+   (:1095). The header follows, or the labels would sit over the wrong values. */
+@media (max-width: 619px) {
+  .mx-market .mx-colhead {
+    grid-template-columns: 16px 28px minmax(0, 1fr) 38px 76px;
+    gap: 6px;
+    padding: 0 9px 5px;
+    font-size: 8.5px;
+  }
+  .mx-market .mx-col-btn { min-height: 20px; padding: 2px 3px; gap: 3px; }
+}

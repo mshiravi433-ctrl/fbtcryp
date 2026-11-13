@@ -353,7 +353,14 @@
       "7d": "7h"
     },
     "horizonAria": "Horizon waktu perubahan harga",
-    "horizonMissing": "{{count}} koin tidak punya angka untuk jendela ini dan menampilkan «—»."
+    "horizonMissing": "{{count}} koin tidak punya angka untuk jendela ini dan menampilkan «—».",
+    "columnsAria": "Kolom tabel pasar",
+    "colName": "Nama",
+    "colPrice": "Harga",
+    "colVolume": "Volume",
+    "colPriceAria": "Urutkan menurut harga",
+    "colVolumeAria": "Urutkan menurut volume 24 jam",
+    "colChangeAria": "Urutkan menurut perubahan {{window}}"
   },
   "coin": {
     "notFound": "Koin tidak ditemukan",

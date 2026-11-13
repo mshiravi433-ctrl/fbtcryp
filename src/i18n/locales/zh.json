@@ -353,7 +353,14 @@
       "7d": "7天"
     },
     "horizonAria": "价格变化时间范围",
-    "horizonMissing": "{{count}} 个币种没有该区间的数据，显示为「—」。"
+    "horizonMissing": "{{count}} 个币种没有该区间的数据，显示为「—」。",
+    "columnsAria": "行情表列",
+    "colName": "名称",
+    "colPrice": "价格",
+    "colVolume": "成交量",
+    "colPriceAria": "按价格排序",
+    "colVolumeAria": "按24小时成交量排序",
+    "colChangeAria": "按{{window}}涨跌排序"
   },
   "coin": {
     "notFound": "找不到该币种",

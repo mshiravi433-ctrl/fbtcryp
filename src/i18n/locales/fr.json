@@ -353,7 +353,14 @@
       "7d": "7j"
     },
     "horizonAria": "Horizon temporel de variation du prix",
-    "horizonMissing": "{{count}} cryptos n’ont pas de donnée pour cette fenêtre et affichent «—»."
+    "horizonMissing": "{{count}} cryptos n’ont pas de donnée pour cette fenêtre et affichent «—».",
+    "columnsAria": "Colonnes du tableau de marché",
+    "colName": "Nom",
+    "colPrice": "Prix",
+    "colVolume": "Volume",
+    "colPriceAria": "Trier par prix",
+    "colVolumeAria": "Trier par volume 24 h",
+    "colChangeAria": "Trier par variation sur {{window}}"
   },
   "coin": {
     "notFound": "Crypto introuvable",

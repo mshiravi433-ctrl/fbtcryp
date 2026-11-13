@@ -353,7 +353,14 @@
       "7d": "7d"
     },
     "horizonAria": "Horizonte temporal da variação de preço",
-    "horizonMissing": "{{count}} moedas não têm dado para esta janela e mostram «—»."
+    "horizonMissing": "{{count}} moedas não têm dado para esta janela e mostram «—».",
+    "columnsAria": "Colunas da tabela de mercado",
+    "colName": "Nome",
+    "colPrice": "Preço",
+    "colVolume": "Volume",
+    "colPriceAria": "Ordenar por preço",
+    "colVolumeAria": "Ordenar por volume 24 h",
+    "colChangeAria": "Ordenar por variação em {{window}}"
   },
   "coin": {
     "notFound": "Moeda não encontrada",

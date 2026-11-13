@@ -245,7 +245,14 @@
       "7d": "7d"
     },
     "horizonAria": "Price change time horizon",
-    "horizonMissing": "{{count}} coins have no figure for this window and show «—»."
+    "horizonMissing": "{{count}} coins have no figure for this window and show «—».",
+    "columnsAria": "Market table columns",
+    "colName": "Name",
+    "colPrice": "Price",
+    "colVolume": "Volume",
+    "colPriceAria": "Sort by price",
+    "colVolumeAria": "Sort by 24h volume",
+    "colChangeAria": "Sort by change over {{window}}"
   },
   "coin": {
     "notFound": "Coin not found",

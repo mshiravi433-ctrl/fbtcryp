@@ -184,7 +184,14 @@
       "7d": "٧ أيام"
     },
     "horizonAria": "الإطار الزمني لتغير السعر",
-    "horizonMissing": "{{count}} عملة لا توفر رقمًا لهذه الفترة وتظهر بـ «—»."
+    "horizonMissing": "{{count}} عملة لا توفر رقمًا لهذه الفترة وتظهر بـ «—».",
+    "columnsAria": "أعمدة جدول السوق",
+    "colName": "الاسم",
+    "colPrice": "السعر",
+    "colVolume": "الحجم",
+    "colPriceAria": "الترتيب حسب السعر",
+    "colVolumeAria": "الترتيب حسب حجم ٢٤ ساعة",
+    "colChangeAria": "الترتيب حسب التغيّر خلال {{window}}"
   },
   "coin": {
     "notFound": "العملة غير موجودة",

@@ -353,7 +353,14 @@
       "7d": "7g"
     },
     "horizonAria": "Fiyat değişimi zaman aralığı",
-    "horizonMissing": "{{count}} coin için bu aralıkta veri yok ve «—» gösteriliyor."
+    "horizonMissing": "{{count}} coin için bu aralıkta veri yok ve «—» gösteriliyor.",
+    "columnsAria": "Piyasa tablosu sütunları",
+    "colName": "Ad",
+    "colPrice": "Fiyat",
+    "colVolume": "Hacim",
+    "colPriceAria": "Fiyata göre sırala",
+    "colVolumeAria": "24 saatlik hacme göre sırala",
+    "colChangeAria": "{{window}} değişimine göre sırala"
   },
   "coin": {
     "notFound": "Coin bulunamadı",

@@ -30,6 +30,7 @@ import SmartMoneyBanner from '../components/market/SmartMoneyBanner';
 import HotCoins from '../components/market/HotCoins';
 import MarketHeroBanner from '../components/market/MarketHeroBanner';
 import MarketTabStrip from '../components/market/MarketTabStrip';
+import MarketColumnHeader from '../components/market/MarketColumnHeader';
 import MarketHeatmap from '../components/market/MarketHeatmap';
 import MarketCapitalPulse from '../components/market/MarketCapitalPulse';
 import MarketDefiIntel from '../components/market/MarketDefiIntel';
@@ -355,6 +356,22 @@ export default function Market() {
     else if (key === 'change7d') setHorizonState('7d');
     else if (key === 'change' || key === 'rank') setHorizonState('24h');
   }, []);
+
+  /*
+   * ─── TAPPING A COLUMN HEADER ──────────────────────────────────────────────
+   * Every market table works this way: tap a column to sort by it, tap the same
+   * column again to reverse. Choosing a DIFFERENT column goes through
+   * `chooseSort`, so it keeps that function's rules (rank ascending, measures
+   * descending, and the horizon rail following a horizon sort) instead of
+   * growing a second, slightly different definition of "sorted by this".
+   */
+  const flipOrChoose = useCallback((key) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    chooseSort(key);
+  }, [chooseSort, sortKey]);
 
   const applySmartSearch = useCallback((value) => {
     const intent = interpretMarketQuery(value);
@@ -1236,6 +1253,24 @@ export default function Market() {
                         </button>
                       )}
                     </div>
+                  )}
+
+                  {/*
+                    THE COLUMN HEADER (2026-11-12). Every market table has one;
+                    this screen did not. It names the columns, carries the
+                    horizon on the change column so the label follows the rail,
+                    and makes price/change/volume tappable sorts so re-ordering
+                    does not require opening a popover. `aria-sort` sits on the
+                    active column only — `aria-sort="none"` on every header is
+                    noise a screen reader reads twelve times.
+                  */}
+                  {visibleList.length > 0 && (
+                    <MarketColumnHeader
+                      horizon={horizon}
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={flipOrChoose}
+                    />
                   )}
 
                   <div className="stack market-coin-grid mx-table" id="market-list-rows">

@@ -166,22 +166,16 @@ const INTEL_CSS = 'src/styles/market-intelligence.css';
 const intel = () => stripComments(readFileSync(INTEL_CSS, 'utf8'));
 
 test('the phone breakpoint hides the breadth haze and its footnote, nothing else', () => {
+  /*
+   * Scope by CLASS, not by "the last 619px block": this sheet grew a second
+   * `@media (max-width: 619px)` when the column header shipped
+   * (market-intelligence.css, the header's own phone geometry), and a test that
+   * assumed there was only one would start reading the wrong block while still
+   * passing. What the assertion is about is which breadth elements are hidden,
+   * so that is what it looks for — inside any phone block.
+   */
   const sheet = intel();
-  const start = sheet.lastIndexOf('@media (max-width: 619px)');
-  assert.ok(start > -1, 'the phone breakpoint must exist in the market sheet');
-  let depth = 0;
-  let i = sheet.indexOf('{', start);
-  for (; i < sheet.length; i += 1) {
-    if (sheet[i] === '{') depth += 1;
-    else if (sheet[i] === '}') {
-      depth -= 1;
-      if (depth === 0) break;
-    }
-  }
-  const block = sheet.slice(sheet.indexOf('{', start), i);
-
-  /* Exactly the two decorative blocks are hidden. */
-  const hidden = [...block.matchAll(/([^{}]+)\{([^{}]*display:\s*none[^{}]*)\}/g)]
+  const hidden = [...sheet.matchAll(/([^{}]+)\{([^{}]*display:\s*none[^{}]*)\}/g)]
     .map(([, sel]) => sel.trim())
     .filter((sel) => sel.includes('breadth'));
   assert.deepEqual(

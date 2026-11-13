@@ -355,3 +355,55 @@ describe('the horizon rail', () => {
     expect(document.querySelectorAll('.coin-row-metric').length).toBe(0);
   });
 });
+
+describe('the column header over the list', () => {
+  const colHeader = () => screen.queryByTestId('market-column-header');
+
+  it('is rendered above the rows, and only when there are rows', () => {
+    mount();
+    openTokensTab();
+    const head = colHeader();
+    expect(head).toBeTruthy();
+    const rows = document.querySelector('#market-list-rows');
+    expect(rows).toBeTruthy();
+    /* FOLLOWING means the rows come after the header in document order. */
+    expect(head.compareDocumentPosition(rows) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('sorts when a column is tapped, and reverses on the second tap', () => {
+    mount();
+    openTokensTab();
+    const clickCol = (key) => fireEvent.click(colHeader().querySelector(`[data-sort-key="${key}"]`));
+
+    /* First tap on a column uses `chooseSort`'s rule, which is the one the sort
+       menu already applies: a numeric measure opens DESCENDING, because the
+       reason to sort by price or volume is to see the top of it. So price
+       first shows BTC (92450), then ETH (3420), then SOL (198.4). */
+    clickCol('price');
+    expect(rowOrder()[0]).toBe('BTC');
+    expect(rowOrder()[1]).toBe('ETH');
+    expect(rowOrder()[2]).toBe('SOL');
+
+    /* Second tap on the SAME column reverses it — the interaction every market
+       table has, and the reason the header exists. Ascending puts the cheapest
+       REAL price first: NOH at 0.42. It also pins the honesty rule from the
+       other side — NOH has no 1h and no 7d figure, but it does have a price,
+       so a price sort must place it by that price rather than parking it with
+       the unknowns. */
+    clickCol('price');
+    expect(rowOrder()[0]).toBe('NOH');   // 0.42 — the only figure it is missing is a move
+    expect(rowOrder()).toContain('SOL'); // 198.4
+    expect(rowOrder().at(-1)).toBe('BTC');
+  });
+
+  it('moves the horizon rail when the header’s change column finds a new horizon', () => {
+    /* The header and the rail are two controls over one piece of state: picking
+       a horizon in the rail must relabel the column, and the column must never
+       be able to sort by a window the pills are not printing. */
+    mount();
+    openTokensTab();
+    fireEvent.click(cell('7d'));
+    expect(colHeader().querySelector('[data-sort-key="change7d"]')).toBeTruthy();
+    expect(colHeader().getAttribute('data-horizon')).toBe('7d');
+  });
+});
