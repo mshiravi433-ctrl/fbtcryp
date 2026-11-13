@@ -357,6 +357,42 @@ export function simulateShock({ portfolio, lending, futures, dydx, liquidity }, 
  * a fortune teller; with them it is arithmetic the user can disagree with, which
  * is the difference the spec's §26 demands.
  */
+/**
+ * Read a goal into the three numbers the arithmetic needs.
+ *
+ * The goal arrives from THREE places that each spell it differently:
+ *
+ *   · the fake/real goal list — `targetAmount`, `durationMonths`,
+ *     `monthlyContribution`, `currentAmount`;
+ *   · the central state section — `targetUsd`, `horizonMonths`;
+ *   · the engine's own record — `targetAmount`, `targetDate`.
+ *
+ * Two readers that each knew one spelling produced one answer and one
+ * silent `GOAL_INPUTS_INCOMPLETE`, with no clue which name was wrong.
+ * So the reading lives in ONE place, and both callers use it.
+ *
+ * @param {object|null} goal a goal record of any of the three shapes
+ * @param {object} opts
+ * @returns {{targetUsd:number|null, years:number|null, monthlyContributionUsd:number, currentUsd:number|null}}
+ */
+export function readGoalInputs(goal, { now = Date.now() } = {}) {
+  const g = goal || {};
+  const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+  const targetUsd = num(g.targetAmount ?? g.targetUsd ?? g.target ?? null);
+  const months = num(g.durationMonths ?? g.horizonMonths ?? null);
+  let years = num(g.years ?? null);
+  if (years === null && months !== null && months > 0) years = months / 12;
+  if (years === null && g.targetDate) {
+    const delta = Number(g.targetDate) - now;
+    if (Number.isFinite(delta) && delta > 0) years = delta / (365 * 24 * 3600_000);
+  }
+  if (years !== null && years > 0) years = Math.max(0.08, years);
+  else years = null;
+  const monthlyContributionUsd = num(g.monthlyContribution ?? g.contributionMonthly ?? g.contributionUsdMonthly ?? null) ?? 0;
+  const currentUsd = num(g.currentAmount ?? g.currentUsd ?? g.startingCapital ?? null);
+  return { targetUsd, years, monthlyContributionUsd, currentUsd };
+}
+
 export function goalFeasibility({ currentUsd, targetUsd, years, monthlyContributionUsd = 0, expectedReturnPct = 12, volatilityPct = 60, now = Date.now() }) {
   const cur = num(currentUsd);
   const target = num(targetUsd);

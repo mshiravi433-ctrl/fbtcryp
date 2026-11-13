@@ -58,6 +58,18 @@ at all, two verbs nobody had written down, and a possessive sitting
 between a noun and its verb. All five are fixed, and the sweep is now a
 gate over every intent (§5.22).
 
+And then the guarantee was pointed at the **sentence** rather than the
+engine, and the sentence failed in a way no engine test could see: a
+person asks two things when they say two things, and the brain answered
+ONE of them — cleanly, confidently, with a headline and a reason and a
+confidence — and dropped the other half without a word. **Five of twelve
+parts answered (41.7%).** The merge machinery already existed for
+«convert, then bridge»; only the DETECTION of a generic «X و Y» was
+missing. The sentence is now split, each half is classified on its own,
+and the plan reads both — **twelve of twelve** — with the guarantee that
+a compound **question** never gains an execution leg, because a question
+is not a permission (§5.23).
+
 | | before | after |
 |---|---|---|
 | phases the probe calls **live** | 142 / 165 | **165 / 165** |
@@ -100,6 +112,10 @@ gate over every intent (§5.22).
 | sentences that reach the intent they were written for | — | **35 of 35** — the ten EXECUTE intents found five holes in the language (§5.22) |
 | the owner's capital, when the debt was never read | `null`, and seven engines reasoned about nothing | **the gross assets**, through one shared helper — and the debt is still never guessed (§5.22) |
 | the first paint, after the route work | 1839.71 KB — over the budget | **1815.05 KB** — the crypto stack is out of the entry path, and a gate now reports the EDGE (§5.22) |
+| the halves of a TWO-PART question | one half, silently — 5 of 12 parts | **12 of 12** — the sentence is split, each half is classified, and the plan reads both (§5.23) |
+| a compound question that became a transaction | possible — the split could have produced an EXECUTE leg | **0 execution legs, 0 money steps** — a question is not a permission, and the gate checks the plan (§5.23) |
+| «ریسک چقدر است؟» | `UNSUPPORTED` — the risk engine had no intent to reach it | **`RISK_OVERVIEW`** → the full verdict, with its factors (§5.23) |
+| «موجودی من چقدره؟» | «wallet.read: 2 balances across 2 chain(s)» — a COUNT | **the total and every row** (§5.23) |
 
 ### The three root causes, and what each one was
 
@@ -2267,6 +2283,208 @@ no new provider call — and what §5.17 added on top, because the quota
 is spent on the **number of calls**: a turn now has a ceiling, the day
 has a counter, and the cache survives a cold start.
 
+### 5.23 The half of the question that was dropped
+
+§5.22 ended with a general guarantee: every engine is reachable, every
+intent reaches its answer, and the guarantee is a gate. That guarantee
+was about the **engine**. It said nothing about the **sentence**, and the
+sentence turned out to be where the next silent failure lived.
+
+A person asks two things when they say two things.
+
+> «قیمت بیت‌کوین چقدره و موجودی من چقدره»
+
+is a price question **and** a balance question. The brain answered one of
+them — cleanly, confidently, with a headline, a reason, a data section and
+a confidence — and the other half of the sentence vanished without a
+word. Nothing in the reply said a half was missing.
+
+**Measured, over the reply:**
+
+```
+  two-part questions        6
+  both parts answered       1
+  parts answered            5 / 12
+  coverage                  41.7%
+```
+
+The measurement had to be over the **reply**, not over the classification,
+and that distinction was the first thing that had to be learned. The
+classification was never wrong: classifying
+«قیمت بیت‌کوین چقدره و موجودی من چقدره» as a `BALANCE_QUERY` is a
+defensible reading of a two-part sentence. What was wrong is that **the
+other half of the answer never arrived**. A brain that answers one
+question when asked two is silent data loss, and the loss is invisible
+unless the measurement is taken over the text the user reads.
+
+#### Why the half was dropped
+
+The merge machinery already existed. `planner.js` merges the templates of
+every leg in `intent.compound` into ONE ordered plan with a single
+confirmation gate, `brain.js` widens the step budget by
+`6 × compound.length`, and `recommend.js` already says «یک تأییدیه برای
+هر دو مرحله کافی است». All of it was built for «convert, then bridge to
+Arbitrum».
+
+What was missing was the **detection**, and the detection lived in exactly
+one place: `COMPOUND_PATTERNS` in `src/lib/central/intent.js`, with **two**
+entries — bridge-to-network and lend-after-buy. A generic «X و Y» question
+matched neither, so `classification.compound` stayed `null`, so the
+planner built one leg, so half the sentence was dropped.
+
+The fix is therefore not a bigger classifier. It is **splitting the
+sentence and classifying each half**:
+
+| concern | where it lives | why |
+|---|---|---|
+| what a sentence is ABOUT | the rule table (`RULES`) | vocabulary |
+| how MANY things a sentence is about | `splitClaims()` | structure |
+
+Keeping them apart matters. A rule table that tried to match «X و Y»
+would need one rule per **pair** of intents — thirty-six intents, six
+hundred and thirty pairs. The splitter needs one rule: «a conjunction
+between two claims».
+
+```
+  قیمت بیت‌کوین چقدره و موجودی من چقدره
+    → ASSET_ANALYSIS + BALANCE_QUERY
+  پورتفوی من چیست و ریسکش چقدر است
+    → PORTFOLIO_ANALYSIS + RISK_OVERVIEW
+  وضعیت بازار چطوره و کدام گزینه مناسب منه
+    → MARKET_OVERVIEW + OPPORTUNITY_FIT
+  بهترین استخر ییلد کدام است و ریسک نقدینگی‌اش چقدره
+    → YIELD_OPPORTUNITY + LIQUIDITY_RISK
+  وضعیت وامم چیست و با پورتفویم چه نسبتی دارد
+    → LOAN_STATUS + PORTFOLIO_ANALYSIS
+```
+
+Three things are **not** a second part, and each of them was a bug first:
+
+- **a comparison** — «کدام پل بهتر است؟» asks for a choice, and a choice
+  is one question. The guard is about the WHOLE sentence: the comparison
+  words can sit inside ONE half of a two-part question
+  («وضعیت بازار چطوره **و کدام** گزینه مناسب منه»), and then the other
+  half is still a real second claim.
+- **the same intent twice** — two halves that classify to one intent are
+  one question asked twice, and two legs would read the same section
+  twice and answer it twice.
+- **an answer-form instruction** — «… و بگو» asks for the FORM of the
+  answer, not for a second claim.
+
+#### Four holes the coverage number was hiding
+
+Getting from 41.7% to 100% was not one change. The measurement exposed
+four **separate** holes, each of which a passing coverage number alone
+would have hidden, and each of which was a defect on its own.
+
+**1. «ریسک چقدر است؟» had no intent at all.** The `risk` module was
+registered, readable, and produced a full verdict — level, factors,
+confidence — and **nothing could reach it**, because every risk intent
+that existed was about a *specific* risk: concentration, liquidity,
+futures. The general one was a hole in the registry. It is now
+`RISK_OVERVIEW`, and it is in `EXPLICIT_INTENTS`, so «ریسک» is not
+stolen by the follow-up rewrite that assumes every «ریسک» means the risk
+of a loan. The specific risks keep their own intents: «ریسک نقدینگی» is
+`LIQUIDITY_RISK`, «ریسک پورتفوی» is `PORTFOLIO_ANALYSIS`.
+
+**2. «موجودی من چقدره؟» answered with a COUNT.** The wallet was read
+and the reply said «wallet.read: 2 balances across 2 chain(s)». The
+number was there — the total, every amount, every USD value — and none of
+it was shown. A count is not a balance. There is now a `wallet-balances`
+finding and a headline that names the total and the rows.
+
+**3. «هدفت چیست؟» was answered with a Solana PDA.** The marker «چیست»
+was enough on its own to make the turn "conceptual", so the internal
+synthesis ran, and the corpus matched the nearest definition — an
+article about program-derived addresses. The user asked about **their own
+goal** and got a glossary entry. The distinction is the SUBJECT: «بیت‌کوین
+چیست؟» asks what a *thing* is; «هدفت چیست؟» asks what the registry's
+`GOAL_PLAN` read. When the registry already knows what the sentence is
+about, its reading wins — the synthesis is a fallback for a sentence the
+registry could not place, not a competitor to a reading it already has.
+
+**4. «برای رسیدن به هدفم چه برنامه‌ای داشته باشم؟» asked for «ارز مبدأ،
+ارز مقصد، مبلغ»** — the SWAP question. `GOAL_PLAN` has a `goals.plan`
+`simulate` step, and the money-step check treated every `simulate` as a
+money operation, so a goal question demanded a trade's inputs. The bug
+was in the VERB: a simulation of a *goal* is arithmetic over the owner's
+own numbers, and a simulation of a *trade* is a swap quote. The rule is
+now about the INTENT, not the verb: a READ-only intent never asks for a
+trade's inputs, however it computes.
+
+That last one also uncovered a **test that passed because of a bug**. The
+conversation machinery's own question («این پول برای چیست؟») reached the
+reply only because the goal question was accidentally in QUESTION mode —
+asking for a swap's fields — and `askFor()` prefers the machine's
+question whenever the missing list does not contain `intent`. The fix
+reads the gap from the machine's own missing list
+(`context.conversationQuestion.missing`), so the reply asks for the field
+that is actually missing; and a turn that was **already answered** (a
+corpus answer, a model answer) is never turned back into a question,
+because the answer and the question would fight and the answer would
+lose.
+
+#### The goal is read through ONE reader
+
+The goal arrives from three places that each spell it differently:
+
+| source | target | horizon | contribution |
+|---|---|---|---|
+| the goal list | `targetAmount` | `durationMonths` | `monthlyContribution` |
+| the central state | `targetUsd` | `horizonMonths` | `contributionMonthly` |
+| the engine's record | `targetAmount` | `targetDate` | `monthlyContribution` |
+
+Two readers that each knew one spelling produced one answer and one
+silent `GOAL_INPUTS_INCOMPLETE`, with no clue which name was wrong. The
+reading lives in ONE place now (`readGoalInputs()` in
+`src/lib/central/analysis.js`), and the brain and the goals module both
+use it — so they cannot disagree about which shape the goal has.
+
+#### The guarantee
+
+```
+  two-part questions        6
+  both parts answered       6
+  parts answered            12 / 12
+  coverage                  100.0%
+  execution legs            0   (a question is not a permission)
+  plans with a money step   0
+```
+
+Two files make it a gate:
+
+| file | what it locks down |
+|---|---|
+| `test/intent-ai/multiquestion-gate.test.mjs` | every part answered; **no leg is an execution**; no plan carries a money step |
+| `test/intent-ai/multiquestion-language-runtime.test.mjs` | the four holes, and the distinctions that must not collapse |
+
+The second guarantee is the one that matters most. Answering half a
+question is a defect; turning the question into a **transaction** is a
+catastrophe. «قیمت بیت‌کوین چقدره و موجودی من چقدره» must never gain an
+`EXECUTE_SWAP` leg, and the gate checks the **plan** as well as the
+classification, because a plan is where a question would start moving
+money.
+
+`scripts/probe-multiquestion.mjs` drives the six questions through the
+real brain with the in-process fakes — the brain, the registry, the
+policy and the state store stay real, only the external sources are
+faked — and it reports the coverage, the legs, the execution legs and the
+money steps. `--json` emits JSON only, so the gate can read it.
+
+#### The rule this leaves behind
+
+> **a brain that answers one question when asked two is silent data loss —
+> measure coverage over the REPLY, not the classification.**
+
+The classification can be perfect and the answer still incomplete. And
+the coverage number is not the work: it is the **instrument**. Every one
+of the four holes above was found by asking a narrower question than
+"does it work?" — *does the reply carry the number?*, *does the corpus
+answer the question that was asked?*, *does the question ask for a
+trade's inputs?*, *does the machine's question reach the reply?*. A
+system that passes "it works" can still be silently losing half of
+what it was asked.
+
 The sharpest illustrations were not the hard ones. `server/fios/` is 50
 files and 980 KB of working global-intelligence engines that **zero**
 intents could reach, and the brain's own `signals` module is an SMA cross
@@ -2283,3 +2501,19 @@ that is indistinguishable from a measurement is a saving that hides a
 failure. A failure finally says *why* it failed, an unexpired proof is
 never re-issued with a fresh expiry, and an intent that reaches nothing
 now fails the contract test that says it must.
+
+The last one is the plainest of them. When the guarantee was pointed at
+the **sentence**, the sentence turned out to lose half of what it was
+asked — «قیمت بیت‌کوین چقدره و موجودی من چقدره» was answered with the
+balance and not with the price, and the reply looked complete. **Five of
+twelve parts answered.** Nothing in the answer said a half was missing,
+because a confidence and a reason and a data section are all present
+whether or not the answer is the answer to the question that was asked.
+So the measurement has to be over the **reply**, not over the
+classification — and it has to be over the **plan** as well, because the
+failure that matters most is not a missing half but a half that became a
+transaction. Twelve of twelve now, with zero execution legs and zero
+money steps, and the gate is in the suite. The sentence is split, each
+half is classified on its own, and the merge machinery that was built
+for «convert, then bridge» finally gets used for the questions it was
+always able to answer.

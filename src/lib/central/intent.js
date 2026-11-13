@@ -38,6 +38,23 @@ export const INTENT_TYPES = Object.freeze({
   CONDITIONAL_ALLOCATION: { modules: ['portfolio', 'risk', 'crypto', 'stocks', 'etf', 'funds', 'forex', 'commodities', 'rwa', 'goals'], permission: PERMISSION.PREPARE },
   CONCENTRATION_CHECK: { modules: ['portfolio', 'risk'], permission: PERMISSION.READ },
   /*
+   * ── THE PLAIN RISK QUESTION (2026-11-13) ──────────────────────────────
+   *
+   * «ریسک چقدره؟» is the most ordinary question a person can ask
+   * about a portfolio, and it had NO intent. The `risk` module was
+   * registered, readable, and produced a full verdict — level, factors,
+   * confidence — and nothing could reach it, because every risk intent
+   * that existed was about a SPECIFIC risk: concentration, liquidity,
+   * futures. The general one had no rule, so it fell through to
+   * UNSUPPORTED.
+   *
+   * It matters more than it looks: this is the second half of
+   * «پورتفوی من چیست و ریسکش چقدر است». A two-part question whose
+   * second part is «ریسک» cannot be answered in full while «ریسک» is
+   * a hole.
+   */
+  RISK_OVERVIEW: { modules: ['portfolio', 'risk'], permission: PERMISSION.READ },
+  /*
    * ── THE YIELD SURFACE (2026-11-12) ─────────────────────────────────────
    *
    * Three modules were REGISTERED and READABLE and NOTHING EVER ASKED THEM.
@@ -165,7 +182,7 @@ export const INTENT_TYPES = Object.freeze({
 const EXPLICIT_INTENTS = Object.freeze(new Set([
   'STAKING_REWARD', 'LIQUIDITY_RISK', 'YIELD_OPPORTUNITY', 'OPPORTUNITY_FIT',
   'ROUTE_INTELLIGENCE', 'WHY_DECISION',
-  'FUTURES_RISK', 'LOAN_STATUS', 'BORROW_CAPACITY',
+  'FUTURES_RISK', 'LOAN_STATUS', 'BORROW_CAPACITY', 'RISK_OVERVIEW',
   'EXECUTE_LEND', 'EXECUTE_BORROW', 'EXECUTE_REPAY', 'EXECUTE_REBALANCE',
   'CREATE_GOAL', 'SET_ALERT', 'INSTRUMENT_QUERY'
 ]));
@@ -202,8 +219,33 @@ const RULES = Object.freeze([
     ],
     requires: ['why-decision']
   },
-  { intent: 'PORTFOLIO_ANALYSIS', patterns: [/پرتفوی|پورتفوی|سبد (سرمایه|من)|portfolio|holdings|ارزش (کیف|سبد)|ریسک (من|پرتفوی|سبد)|ارزیابی ریسک|my risk|risk (assessment|check|level)/i], requires: ['portfolio'] },
+  /* The plain «ریسک من / my risk» is NOT here: it is the RISK_OVERVIEW
+     question, and a rule that claimed it made «ریسک من چقدر است؟»
+     answer about the portfolio's composition instead of its risk. The
+     portfolio reading keeps the forms that NAME the portfolio. */
+  { intent: 'PORTFOLIO_ANALYSIS', patterns: [/پرتفوی|پورتفوی|سبد (سرمایه|من)|portfolio|holdings|ارزش (کیف|سبد)|ریسک (پورتفوی|سبد)|ارزیابی ریسک|risk (assessment|check)/i], requires: ['portfolio'] },
   { intent: 'CONCENTRATION_CHECK', patterns: [/زیاد (دارم|است|داری)|تمرکز|concentration|too much|比重|تک‌دارایی|تک دارایی/i], requires: ['portfolio'] },
+  /*
+   * «ریسک چقدره» — the plain form of the question. The subject is
+   * «ریسک» alone, with no qualifier, so it must not steal the
+   * specific risks: «ریسک نقدینگی», «ریسک فیوچرز», «ریسک تمرکز».
+   * Those carry their own nouns and their own intents.
+   *
+   * The possessive suffix is the tell that this is the SECOND half of
+   * a question whose first half named the thing: «ریسکش چقدر است» —
+   * its «ش» points back at the portfolio. So «ریسکش» is read as a
+   * risk question about whatever was just named.
+   */
+  { intent: 'RISK_OVERVIEW', patterns: [
+      /* The subject is «ریسک» and NOTHING else — «ریسک پورتفوی» is the
+         portfolio reading and «ریسک نقدینگی» is the liquidity one, and
+         the plain risk question is the one that names no other thing.
+         The possessive is allowed («ریسکش», «ریسکم») because it points
+         back at the thing named in the first half of the sentence. */
+      /ریسک(?:\s|\u200c)*(?:ش|من|م|ت|ی)?\s*(?:چقدر|چند|چه\s*طور|چقدره|زیاد|بالا|کم|چطوره)/i,
+      /\brisk\s+(score|level|of my|right now|now)\b/i,
+      /how (much|risky) am i/i
+    ], requires: ['portfolio'] },
   { intent: 'LOAN_STATUS', patterns: /وامم|وام من|وام(?:م)? (چطور|چقدر|چنده|امن|سلامت)|وضعیت وام|loan status|بدهی ?م|my loan/i, requires: ['lending'] },
   /* Buying an instrument the app may not sell is the most dangerous place to be
      vague: a cheerful «بله، در حال خرید ETF…» would be a lie, and a «متوجه نشدم»
@@ -567,22 +609,22 @@ function SERVE_UNAVAILABLE(context, section) {
   return status === 'UNAVAILABLE' || status === 'INCOMPLETE';
 }
 
-export function classify(message = '', { context = {}, state = {}, suggestions = null } = {}) {
-  const text = normalizeText(message);
-  const follow = context.followUp || detectFollowUp(message, context.memory, context.page);
-  const isDistress = (
-    /(?:حالم\s*بد|ناراحتم|ترسیدم|پریشونم|داغونم|خسته\s*شدم|panic|scared|terrified|lost\s+everything)/i.test(text)
-    && /(?:ضرر|باخت|بفروشم|خروج|همشو|همه\s*چیمو|همه\s*پولمو|sell|loss|lose)/i.test(text)
-  ) || /(?:همشو|همه\s*چیمو|همه\s*پولمو|کل\s*سرمایه.{0,12}بفروشم|sell\s*everything|liquidate\s*all)/i.test(text);
-  const isDiscovery = /(?:معرفی\s*کن|پیشنهاد\s*بده|چی\s*(?:خوبه|بخرم)|کدوم\s*(?:ارز|توکن|کوین)|چه\s*ارزی|بهترین\s*(?:گزینه|ارز).{0,20}(?:خرید|بخرم)|what\s+(?:should\s+i|to)\s+buy|which\s+(?:coin|token|asset)\s+(?:should\s+i|to)\s+buy|suggest\s+(?:a\s+)?(?:coin|token|asset)|recommend\s+(?:a\s+)?(?:coin|token|asset))/i.test(text)
-    && !/[0-9]+/.test(text);
+/**
+ * Score one sentence (or one CLAIM of a sentence) against the rule table.
+ *
+ * The rule table is about VOCABULARY. Whether a sentence is one question
+ * or two is about STRUCTURE, and the two are kept apart: this function
+ * answers «what is this about», and `splitClaims` answers «how many
+ * things is this about».
+ *
+ * @param {string} text the normalized text to score
+ * @param {object} opts
+ * @returns {Array<object>} the hits, best first is decided by the caller
+ */
+function scoreClaim(text, { context = {}, state = {}, isDistress = false, isDiscovery = false } = {}) {
   const hits = [];
   for (const rule of RULES) {
     if (rule.intent === 'EXECUTE_SWAP' && (isDistress || isDiscovery)) continue;
-    /* Two shapes are allowed on purpose: one RegExp per rule, or an array of
-       alternatives. Normalising here (instead of demanding one style) is what
-       keeps a lexicon editable — and a lexicon that is painful to edit is a
-       lexicon where a missed phrasing becomes "I did not understand you". */
     const patterns = Array.isArray(rule.patterns) ? rule.patterns : [rule.patterns];
     const hit = patterns.some((p) => p.test(text));
     if (!hit) continue;
@@ -619,25 +661,42 @@ export function classify(message = '', { context = {}, state = {}, suggestions =
       score: round(Math.min(0.95, avail + priority + warm), 3)
     });
   }
+  /*
+   * A DISCOVERED OR DISTRESSED OWNER IS A MARKET QUESTION.
+   *
+   * «چی خوبه بخرم؟» and «همه پولمو بفروش» are not about an asset —
+   * they are about the owner, and the honest answer is the market view
+   * with the risk beside it. So they get their own hit, and they get it
+   * in this function so that a CLAIM of a two-part sentence is judged the
+   * same way a whole sentence is.
+   */
   if (isDistress || isDiscovery) {
     const unavailable = SERVE_UNAVAILABLE(context, 'markets') ? ['markets'] : [];
     hits.push({
       intent: 'MARKET_OVERVIEW',
       missingRequires: unavailable,
-      needsFetch: context.stateHas?.markets ? [] : ['markets'],
-      avail: unavailable.length ? 0.45 : 0.75,
-      priority: 0.08,
-      score: unavailable.length ? 0.48 : 0.85
+      score: unavailable.length ? round(0.45 * (0.45 / 0.7), 3) : 0.45,
+      distress: true
     });
   }
+  return hits;
+}
+
+export function classify(message = '', { context = {}, state = {}, suggestions = null } = {}) {
+  const text = normalizeText(message);
+  const follow = context.followUp || detectFollowUp(message, context.memory, context.page);
+  const isDistress = (
+    /(?:حالم\s*بد|ناراحتم|ترسیدم|پریشونم|داغونم|خسته\s*شدم|panic|scared|terrified|lost\s+everything)/i.test(text)
+    && /(?:ضرر|باخت|بفروشم|خروج|همشو|همه\s*چیمو|همه\s*پولمو|sell|loss|lose)/i.test(text)
+  ) || /(?:همشو|همه\s*چیمو|همه\s*پولمو|کل\s*سرمایه.{0,12}بفروشم|sell\s*everything|liquidate\s*all)/i.test(text);
+  const isDiscovery = /(?:معرفی\s*کن|پیشنهاد\s*بده|چی\s*(?:خوبه|بخرم)|کدوم\s*(?:ارز|توکن|کوین)|چه\s*ارزی|بهترین\s*(?:گزینه|ارز).{0,20}(?:خرید|بخرم)|what\s+(?:should\s+i|to)\s+buy|which\s+(?:coin|token|asset)\s+(?:should\s+i|to)\s+buy|suggest\s+(?:a\s+)?(?:coin|token|asset)|recommend\s+(?:a\s+)?(?:coin|token|asset))/i.test(text)
+    && !/[0-9]+/.test(text);
+  const hits = scoreClaim(text, { context, state, isDistress, isDiscovery });
   /* A follow-up rewrites the intent, because in a conversation the referent IS
      the intent: «بفروشم؟» after a BTC analysis is a swap quote on BTC, not a
      generic question about selling. */
   /*
    * ── AN EXPLICIT INTENT BEATS A FOLLOW-UP (2026-11-12) ─────────────────
-   *
-   * This is the second half of the yield-surface fix, and it is the half
-   * that does NOT show up in a unit test of the classifier.
    *
    * `RISK_QUERY` fires on «ریسک … چقدره؟» and rewrites the intent to
    * `LOAN_STATUS` — on the assumption that «ریسک» always means the risk of
@@ -665,8 +724,6 @@ export function classify(message = '', { context = {}, state = {}, suggestions =
     }
   }
 
-  /* Multi-step compound requests: «بعد از خرید به Arbitrum ببر» must become ONE
-     intent whose plan has both legs, not two turns that race each other. */
   const compound = detectCompound(text);
   /* A compound request is the whole sentence, so it is ranked with the same rule
      as everything else — its own score is a floor, not an automatic win. */
@@ -698,6 +755,40 @@ export function classify(message = '', { context = {}, state = {}, suggestions =
     }
   }
 
+  /*
+   * ─── TWO CLAIMS, TWO INTENTS, ONE PLAN ─────────────────────────────────
+   *
+   * The sentence may be two questions. If it is, each half is
+   * classified on its own and the halves become the compound legs.
+   *
+   * This is done HERE, at the end, rather than by making the rule
+   * table understand conjunctions — because the rule table is about
+   * VOCABULARY and this is about STRUCTURE, and a rule table that
+   * tried to match «X و Y» would need one rule per pair of intents.
+   *
+   * The halves must be DIFFERENT intents. Two halves that classify to
+   * the same intent are one question asked twice — «پورتفوی و موجودی
+   * من» — and two legs would read the same section twice and answer
+   * it twice.
+   */
+  const claims = splitClaims(text);
+  let multiLegs = null;
+  if (claims.length > 1) {
+    const legs = [];
+    for (const claim of claims) {
+      const legHits = scoreClaim(claim, { context, state, isDistress, isDiscovery });
+      if (!legHits.length) continue;
+      legs.push({ intent: legHits[0].intent, score: legHits[0].score, claim });
+    }
+    const distinct = Array.from(new Set(legs.map((l) => l.intent)));
+    if (distinct.length > 1) {
+      multiLegs = legs.map((l, i) => ({ intent: l.intent, leg: i + 1, claim: l.claim }));
+      /* The second half's own hit joins the evidence trail, so the reply
+         can show WHICH words produced the second leg. */
+      hits.push(...legs.slice(1).map((l) => ({ intent: l.intent, score: l.score, compound: true, leg: 2 })));
+    }
+  }
+
   hits.sort((a, b) => (b.score || 0) - (a.score || 0));
   const best = hits[0] || null;
   const definition = best ? INTENT_TYPES[best.intent] : null;
@@ -720,7 +811,29 @@ export function classify(message = '', { context = {}, state = {}, suggestions =
     definition: definition ? { modules: definition.modules, permission: definition.permission } : { modules: [], permission: PERMISSION.READ },
     /** A model may not upgrade an intent that needs data we cannot read (§3). */
     executable,
-    compound: compound.length ? compound.map((c) => ({ intent: c.intent, leg: c.leg })) : null,
+    /*
+     * The compound legs are the union of the two sources: the LEGACY
+     * two-step patterns («convert, then bridge») and the NEW claim
+     * split («price AND balance»). A sentence can have both — «ETH را
+     * بخر و بعدش ببر روی آربیتروم» is a claim split AND a bridge leg —
+     * and the intent is the same either way, so the union is by
+     * INTENT and not by source.
+     */
+    compound: (() => {
+      const all = [
+        ...compound.map((c) => ({ intent: c.intent, leg: c.leg })),
+        ...(multiLegs || [])
+      ];
+      if (!all.length) return null;
+      const seen = new Set();
+      const merged = [];
+      for (const c of all) {
+        if (seen.has(c.intent)) continue;
+        seen.add(c.intent);
+        merged.push(c);
+      }
+      return merged;
+    })(),
     needsState: (definition?.modules || []).slice()
   };
 }
@@ -756,6 +869,9 @@ const INTENT_PRIORITY = Object.freeze({
    */
   WHY_DECISION: 0.09,
   QUOTE_SWAP: 0.035, EXECUTE_REBALANCE: 0.035, CONCENTRATION_CHECK: 0.03, EXECUTE_SWAP: 0.03,
+  /* The plain risk question is specific: it names the subject and the
+     measurement, and the risk engine is the only module that answers it. */
+  RISK_OVERVIEW: 0.055,
   CREATE_GOAL: 0.04, GOAL_PLAN: 0.03, BALANCE_QUERY: 0.03, EXECUTE_LEND: 0.025, EXECUTE_BORROW: 0.025,
   PORTFOLIO_ANALYSIS: 0.0, MARKET_OVERVIEW: 0.0, ASSET_ANALYSIS: -0.045, NAVIGATE: -0.02,
   /*
@@ -839,6 +955,98 @@ function detectCompound(text) {
   /* A comparison asks for a choice; a choice is not an execution leg. */
   if (COMPARISON_QUESTION.test(text)) return [];
   return COMPOUND_PATTERNS.filter((p) => p.test.test(text)).map(({ leg, intent, score }) => ({ leg, intent, score }));
+}
+
+/*
+ * ─── THE HALF OF THE QUESTION THAT WAS DROPPED ───────────────────────────
+ *
+ * A person asks two things when they say two things. «قیمت بیت‌کوین
+ * چقدره و موجودی من چقدره» is a price question AND a balance
+ * question, and the reply has to answer both or admit it answered one.
+ *
+ * It used to answer one. The classifier picks ONE intent, the planner
+ * builds ONE template, and the other half of the sentence vanishes —
+ * silently, with a reply that has a headline, a reason, data and a
+ * confidence, so nothing in the answer says a half is missing.
+ *
+ * Measured over six two-part questions: **6 of 12 parts answered.**
+ *
+ * THE FIX IS NOT A BIGGER CLASSIFIER. It is splitting the SENTENCE and
+ * classifying each half, then letting the existing compound machinery
+ * merge the two plans.
+ *
+ * The merging already works — `planner.js` merges the leg templates
+ * into ONE plan, with one confirmation gate before the first
+ * money-moving step and `dependsOn` still resolving. That was built
+ * for «convert, then bridge to Arbitrum». This is the same machinery,
+ * reached from a different door.
+ *
+ * WHAT IS NOT A SECOND PART.
+ *
+ *   · a comparison — «کدام پل بهتر است؟» is one question about a
+ *     choice, not two questions;
+ *   · a sentence whose halves are the SAME intent — «پورتفوی و
+ *     موجودی من» is one thing asked twice, and two legs would read the
+ *     same section twice;
+ *   · a half that is not a question at all — «بگو» and «نشان بده»
+ *     are instructions about the answer, not parts of the subject.
+ */
+const CLAUSE_CONNECTOR = /\s+(?:و|همچنین|هم‌?ـ?|و\s+هم|plus|and)\s+/gi;
+/* The same connector WITHOUT the global flag, for the one check that only
+   asks «is there a conjunction at all». A `g` regex keeps a `lastIndex`
+   between calls, and a check whose answer depends on the previous call is
+   a check that will pass once and fail the next time. */
+const HAS_CLAUSE_CONNECTOR = /\s+(?:و|همچنین|هم‌?ـ?|و\s+هم|plus|and)\s+/i;
+
+/* A half that asks for the FORM of the answer rather than being one. */
+const ANSWER_FORM = /^(?:بگو|نشان\s*بده|بگوی|بگید|توضیح\s*بده|در\s*باره|درباره|about\s+the\s+answer|tell\s+me)\b/i;
+
+/**
+ * Split a sentence into its two claims, if it has two.
+ *
+ * @param {string} text the normalized sentence
+ * @returns {string[]} one part, or two
+ */
+function splitClaims(text) {
+  const t = String(text || '').trim();
+  if (!t) return [];
+  /* A comparison asks for a choice. A choice is one question.
+     *
+     * BUT the comparison words can be inside ONE HALF of a two-part
+     * question: «وضعیت بازار چطوره و کدام گزینه مناسب منه» — the second
+     * half asks WHICH option fits, and that is a real second claim. So
+     * the guard is about the WHOLE sentence: if the sentence has a
+     * conjunction, each half is judged on its own, and the comparison
+     * words in one half do not dissolve the other half.
+     */
+  if (COMPARISON_QUESTION.test(t) && !HAS_CLAUSE_CONNECTOR.test(t)) return [t];
+  /* Only the conjunction that joins two CLAIMS counts. A sentence with
+     no conjunction is one claim, whatever else it contains. */
+  const parts = [];
+  let rest = t;
+  for (;;) {
+    CLAUSE_CONNECTOR.lastIndex = 0;
+    let cut = null;
+    let m;
+    while ((m = CLAUSE_CONNECTOR.exec(rest)) !== null) {
+      const left = rest.slice(0, m.index).trim();
+      const right = rest.slice(m.index + m[0].length).trim();
+      /* The conjunction has to be BETWEEN two claims: both sides must
+         have content, and the right side must not be an answer-form
+         instruction («... و بگو» asks for the answer, it is not a
+         second claim). */
+      if (left && right && !ANSWER_FORM.test(right) && !ANSWER_FORM.test(left)) {
+        cut = { left, right };
+        break;
+      }
+    }
+    if (!cut) break;
+    parts.push(cut.left);
+    rest = cut.right;
+  }
+  if (!parts.length) return [t];
+  parts.push(rest.trim());
+  return parts.filter((p) => p && !ANSWER_FORM.test(p));
 }
 
 /** Entities are extracted from FOUR places, in priority order, and the origin of

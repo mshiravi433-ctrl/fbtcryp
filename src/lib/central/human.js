@@ -41,6 +41,47 @@ const section = (id, label, value, { source = null, dataAt = null, tone = null, 
 });
 
 /**
+ * The subject of one half of a two-part question, in the user's language.
+ *
+ * The label is what tells the reader which of their two questions the
+ * section answers. It is derived from the INTENT, not from the words of
+ * the sentence, because the intent is what the engine actually answered.
+ */
+const PART_LABEL_FA = {
+  ASSET_ANALYSIS: 'قیمت و تحلیل دارایی',
+  BALANCE_QUERY: 'موجودی',
+  PORTFOLIO_ANALYSIS: 'پرتفوی',
+  RISK_OVERVIEW: 'ریسک',
+  CONCENTRATION_CHECK: 'تمرکز',
+  MARKET_OVERVIEW: 'بازار',
+  OPPORTUNITY_FIT: 'تناسب با من',
+  YIELD_OPPORTUNITY: 'ییلد',
+  LIQUIDITY_RISK: 'ریسک نقدینگی',
+  STAKING_REWARD: 'استیکینگ',
+  LOAN_STATUS: 'وضعیت وام',
+  BORROW_CAPACITY: 'ظرفیت وام',
+  FUTURES_RISK: 'ریسک فیوچرز',
+  GOAL_PLAN: 'هدف و برنامه',
+  PROFIT_PLAN: 'برنامهٔ سود',
+  NEWS_SUMMARY: 'اخبار',
+  SIGNAL_READING: 'سیگنال',
+  SMART_MONEY_READ: 'پول هوشمند',
+  ROUTE_INTELLIGENCE: 'مسیر انتقال',
+  WHY_DECISION: 'چرایی تصمیم',
+  WHATIF_SIMULATION: 'شبیه‌سازی',
+  QUOTE_SWAP: 'نرخ سواپ',
+  QUOTE_BRIDGE: 'نرخ پل',
+  INSTRUMENT_QUERY: 'ابزار'
+};
+
+function partLabel(intentType, fa) {
+  if (!fa) {
+    return String(intentType || 'leg').replace(/_/g, ' ').toLowerCase();
+  }
+  return PART_LABEL_FA[intentType] || 'بخش دیگر سؤال';
+}
+
+/**
  * The main entry point. `results` is the map the brain filled from the modules
  * (keyed by plan step id); everything rendered here is either in that map, in
  * `risk`, in `policy`, or an explicit "could not read".
@@ -76,6 +117,30 @@ export function composeResponse({
       dataAt: maxAt(readable.map(([, v]) => v.dataAt || v.at)),
       dataAtLabel: relative(maxAt(readable.map(([, v]) => v.dataAt || v.at)), fa)
     }));
+    /*
+     * ─── ONE SECTION PER HALF OF THE QUESTION ────────────────────────────
+     *
+     * The user asked two things. The reply has to show two answers, and
+     * each answer has to say WHICH half it is — otherwise the second
+     * headline reads as a continuation of the first, and the user cannot
+     * tell which of their questions was answered.
+     *
+     * The label is the intent's own subject in the user's language, so
+     * «قیمت» and «موجودی» head their own sections. A part that has no
+     * label of its own still gets a section — a missing label is a
+     * cosmetic bug, a missing section is a missing answer.
+     */
+    if (recommendation?.ok && Array.isArray(recommendation?.parts) && recommendation.parts.length) {
+      for (const part of recommendation.parts) {
+        if (!part || !part.headline) continue;
+        sections.push(section(
+          `part:${part.intent || 'leg'}`,
+          partLabel(part.intent, fa),
+          part.headline,
+          { source: part.findings?.length ? 'central-registry + engines' : 'central-registry', sourceLabel: fa ? 'منبع' : 'source' }
+        ));
+      }
+    }
     /* A veto carries its own explanation, but it is an ENGINEERING reason, never
        something to show as «دلیل» under a Persian answer line. So declared reasons
        count only for an accepted recommendation; the refusal text is rendered

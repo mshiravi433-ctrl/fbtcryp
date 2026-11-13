@@ -67,6 +67,17 @@ export const PLAN_TEMPLATES = Object.freeze({
     step('risk.concentration', 'risk', 'read', { dependsOn: ['portfolio.read'], input: { factor: 'concentration' } }),
     step('present', 'session', 'read', { dependsOn: ['portfolio.read', 'risk.concentration'] })
   ],
+  /*
+   * The plain risk verdict: the portfolio, then the central risk engine,
+   * then the answer. `risk.analyze` is the SAME call every other risk
+   * intent makes — the difference is only WHICH factors it weighs, and
+   * the general question weighs them all.
+   */
+  RISK_OVERVIEW: () => [
+    step('portfolio.read', 'portfolio', 'read'),
+    step('risk.analyze', 'risk', 'read', { dependsOn: ['portfolio.read'], riskContext: 'portfolio', input: { scope: 'portfolio' } }),
+    step('present', 'session', 'read', { dependsOn: ['portfolio.read', 'risk.analyze'] })
+  ],
   ASSET_ANALYSIS: () => [
     step('markets.read', 'crypto', 'read', { input: { include: ['price', 'volume', 'volatility'] } }),
     step('signals.read', 'signals', 'read', { optional: true }),

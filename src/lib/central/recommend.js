@@ -79,6 +79,55 @@ export function buildRecommendation({ kind = 'ACTIONABLE', intent = null, risk =
     };
   }
   const headline = makeHeadline({ kind, findings, intent, locale, risk });
+  /*
+   * ─── THE SECOND HALF, AS A HEADLINE OF ITS OWN ─────────────────────────
+   *
+   * A two-part question gets ONE headline from this function, and the
+   * headline is the answer to the FIRST intent. The second half's
+   * findings were in the evidence list, but nobody wrote a sentence for
+   * them — so the reply showed the first half with the second half's
+   * numbers scattered underneath it, which reads as noise, not as an
+   * answer.
+   *
+   * A leg headline is a sentence that answers ONE half of the question,
+   * built from that half's own findings with that half's own intent. The
+   * leg list is what the reply renders as separate sections, so the user
+   * can see «the price» and «the balance» as two answers rather than one
+   * answer with extra rows.
+   */
+  /*
+   * EVERY intent of the compound gets a part — the primary one too.
+   *
+   * The primary intent's findings have no `leg` marker (they were built
+   * first, from the primary intent), so filtering on `f.leg` alone
+   * would silently drop the primary half and the reply would show only
+   * the SECOND question. The primary half is the one the user asked
+   * first, and it is the one the main headline already carries — so it
+   * gets a part too, and the two parts together are the whole answer.
+   */
+  const compoundIntents = Array.from(new Set((intent?.compound || [])
+    .map((c) => c && c.intent)
+    .filter((t) => t && t !== 'UNSUPPORTED')));
+  const legIntents = compoundIntents.length ? compoundIntents : [];
+  const parts = [];
+  if (legIntents.length) {
+    for (const legIntent of legIntents) {
+      const isPrimary = legIntent === intent?.intentType;
+      const legFindings = isPrimary
+        ? findings.filter((f) => f && !f.leg)
+        : findings.filter((f) => f && f.leg === legIntent);
+      if (!legFindings.length) continue;
+      const legHeadline = makeHeadline({
+        kind,
+        findings: legFindings,
+        intent: { ...(intent || {}), intentType: legIntent },
+        locale,
+        risk
+      });
+      if (!legHeadline) continue;
+      parts.push({ intent: legIntent, headline: legHeadline, findings: legFindings.map((f) => f.id) });
+    }
+  }
   const derivedConfidence = round(Math.min(
     0.9,
     0.34 + Math.min(0.3, evidence.length * 0.07) + (risk?.confidence ? Math.min(0.22, risk.confidence * 0.24) : 0) - (policy && policy.staleSections?.length ? 0.08 * policy.staleSections.length : 0)
@@ -86,6 +135,9 @@ export function buildRecommendation({ kind = 'ACTIONABLE', intent = null, risk =
   const confidence = derivedConfidence < (risk?.confidence ?? 1) ? derivedConfidence : Math.min(derivedConfidence, risk?.confidence ?? derivedConfidence);
   const candidate = {
     recommendation: headline,
+    /* The per-leg headlines. `parts` is empty for every single-intent
+       turn, so this is a no-op for everything that is not a compound. */
+    ...(parts.length ? { parts } : {}),
     reason: Array.from(new Set(reasons.length ? reasons : evidence.map((e) => e.detail).filter(Boolean))),
     data: evidence,
     risk: { level: risk?.level || 'UNKNOWN', factors: (risk?.factors || []).slice(0, 6).map((f) => ({ id: f.id, level: f.level, detail: f.detail, detailFa: f.detailFa || null })), confidence: risk?.confidence ?? null },
@@ -150,6 +202,7 @@ function makeHeadline({ kind, findings, intent, locale, risk }) {
   const by = (id) => findings.find((f) => f.id === id && f.status !== 'UNAVAILABLE') || null;
   const text = (f, field) => (fa && f[`${field}Fa`] ? f[`${field}Fa`] : f[field]);
   const concentration = by('concentration');
+  const balances = by('wallet-balances');
   const health = by('health-factor') || by('lending-safety');
   const capacity = by('borrow-capacity');
   const goal = by('goal-feasibility');
@@ -181,6 +234,26 @@ function makeHeadline({ kind, findings, intent, locale, risk }) {
     return fa
       ? `${asset.asset} اکنون ${fmtPrice(asset.price, fa)} دلار است؛ تغییر ۲۴ ساعت ${pctStr(asset.change24hPct)}${asset.volatilityPct != null ? `، نوسان روزانه ${pctStr(asset.volatilityPct)}` : ''}${asset.fundingAprPct != null ? `، funding سالانه ${pctStr(asset.fundingAprPct)}` : ''}${sig}${news}.`
       : `${asset.asset} is ${fmtPrice(asset.price, fa)} USD now; 24h ${pctStr(asset.change24hPct)}${asset.volatilityPct != null ? `, daily volatility ${pctStr(asset.volatilityPct)}` : ''}${asset.fundingAprPct != null ? `, ${pctStr(asset.fundingAprPct)}% annualised funding` : ''}${sig ? `, technical signal ${dirLabel(asset.signal.direction, fa)}` : ''}${news}.`;
+  }
+  /*
+   * The wallet balance.
+   *
+   * «موجودی من چقدره» used to produce no headline of its own: the
+   * wallet was read, the balance was counted, and the reply showed the
+   * COUNT. The total and the rows are the answer, and the rows are
+   * named so the user can see which asset the total is made of.
+   */
+  if (balances && intentType === 'BALANCE_QUERY') {
+    const rows = Array.isArray(balances.rows) ? balances.rows : [];
+    const top = rows.slice(0, 4).map((r) => {
+      const amt = r.amount != null ? `${fmtNum(r.amount, fa)} ${r.symbol || ''}`.trim() : (r.symbol || '—');
+      const val = r.valueUsd != null ? ` (${fmtUsd(r.valueUsd, fa)})` : '';
+      return `${amt}${val}`;
+    }).filter(Boolean);
+    const total = balances.totalUsd != null ? fmtUsd(balances.totalUsd, fa) : '—';
+    return fa
+      ? `موجودی کیف پول ${total} است${top.length ? ` — ${top.join('، ')}` : ''}.`
+      : `Your wallet holds ${total}${top.length ? ` — ${top.join(', ')}` : ''}.`;
   }
   /*
    * The route comparison (path 14).
@@ -272,6 +345,35 @@ function makeHeadline({ kind, findings, intent, locale, risk }) {
   return fa
       ? `${gave} → ${fmtNum(quote.received, fa)} ${quote.toAsset || ''}${min}؛ اثر قیمتی ${quote.priceImpactPct != null ? `${fmtNum(quote.priceImpactPct, fa)}٪` : 'ناخواند'}، هزینهٔ تقریبی ${quote.feeUsd != null ? `${fmtNum(quote.feeUsd, fa)} دلار` : 'ناخواند'}${quote.provider ? `، از ${quote.provider}` : ''}${exp !== null ? ` — این نرخ تا ${fmtNum(exp, fa)} ثانیه دیگر معتبر است و پس از آن اجرا نمی‌شود` : ''}.${nextLeg}${intent?.compound?.length ? ' یک تأییدیه برای هر دو مرحله کافی است؛ اگر مرحلهٔ دوم ناممکن شود، پیش از اجرا متوقف می‌شوم.' : ''}`
       : `${gave} → ${fmtNum(quote.received, fa)} ${quote.toAsset || ''}${min}; ${quote.priceImpactPct != null ? `${fmtNum(quote.priceImpactPct, fa)}% price impact` : 'impact unreadable'}, ${quote.feeUsd != null ? `~${fmtNum(quote.feeUsd, fa)} USD fee` : 'fee unreadable'}${quote.provider ? `, via ${quote.provider}` : ''}${exp !== null ? ` — this quote expires in ${exp}s and will not be executed after that` : ''}.${nextLeg}${intent?.compound?.length ? ' One confirmation covers both legs; if the second becomes impossible, this stops before executing.' : ''}`;
+  }
+  /*
+   * The plain risk verdict.
+   *
+   * «ریسک چقدره؟» — the answer is a LEVEL and the reason behind it.
+   * Without this branch the reply fell to the generic tail and printed
+   * «نتیجهٔ خواندن وضعیت: HIGH», which names a level without saying
+   * what it is about.
+   */
+  const riskFinding = by('risk');
+  if (riskFinding && intentType === 'RISK_OVERVIEW') {
+    const level = riskFinding.level || 'UNKNOWN';
+    const factor = riskFinding.reason || riskFinding.detail || '';
+    const factors = Array.isArray(riskFinding.factors) ? riskFinding.factors : [];
+    return fa
+      ? `ریسک کلی ${level} است${factor ? ` — ${factor}` : ''}${factors.length ? ` (${factors.length} عامل)` : ''}.`
+      : `Overall risk is ${level}${factor ? ` — ${factor}` : ''}${factors.length ? ` (${factors.length} factor(s))` : ''}.`;
+  }
+  /*
+   * The portfolio, in one sentence.
+   *
+   * The exposure and the concentration are the two numbers a person
+   * means by «پرتفوی من چیست؟». The exposure alone is the value; the
+   * concentration alone is the shape.
+   */
+  if (exposure && intentType === 'PORTFOLIO_ANALYSIS') {
+    return fa
+      ? `ارزش پرتفوی ${fmtUsd(exposure.equityUsd, fa)}${concentration ? `، تمرکز اصلی روی ${concentration.asset} (${fmtNum(concentration.sharePct, fa)}٪)` : ''}${exposure.leverage != null ? `، اهرم ترکیبی ${fmtNum(exposure.leverage, fa)}×` : ''}.`
+      : `Portfolio value ${fmtUsd(exposure.equityUsd, fa)}${concentration ? `, main concentration in ${concentration.asset} (${fmtNum(concentration.sharePct, fa)}%)` : ''}${exposure.leverage != null ? `, combined leverage ${fmtNum(exposure.leverage, fa)}×` : ''}.`;
   }
   if (exposure && concentration) {
     return fa

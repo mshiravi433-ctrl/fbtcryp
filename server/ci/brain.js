@@ -76,7 +76,7 @@ import { composeResponse } from '../../src/lib/central/human.js';
 import { classifyError, createErrorLedger, humanizeError, nextRecovery } from '../../src/lib/central/errors.js';
 import {
   analyzeConcentration, analyzeExposure, assessLendingSafety, assetIntelligence,
-  computeBorrowCapacity, goalFeasibility, scanOpportunities, simulateShock
+  computeBorrowCapacity, goalFeasibility, readGoalInputs, scanOpportunities, simulateShock
 } from '../../src/lib/central/analysis.js';
 import { buildCapabilityMatrix } from '../../src/lib/central/registry.js';
 import { ingestTurn, conversationNeedsInput, readLastReplan } from './sessionBridge.js';
@@ -700,7 +700,27 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
        steps use) so the question and the plan can never disagree about what is
        missing, and the quote/prepare/simulate steps are withheld instead of being
        sent a null asset and reporting an opaque provider error. */
-    const moneySteps = steps.filter((st) => st.operation === 'quote' || st.operation === 'prepare' || st.operation === 'simulate' || st.operation === 'execute');
+    /*
+     * A MONEY STEP IS A STEP THAT CAN MOVE MONEY.
+     *
+     * `simulate` was in this list, and `GOAL_PLAN` has a `goals.plan`
+     * simulate step. So «هدفت چیست؟» asked for «ارز مبدأ، ارز مقصد،
+     * مبلغ» — the swap question — and answered nothing.
+     *
+     * The bug is that `simulate` was treated as a money operation. A
+     * simulation of a GOAL or a PROFIT PLAN is arithmetic over the
+     * owner's own numbers: it moves nothing and needs no asset. A
+     * simulation of a TRADE quotes a swap: it needs the pair and the
+     * amount, and without them it must ask.
+     *
+     * So the rule is about the INTENT, not about the verb: a READ-only
+     * intent never asks for a trade's inputs, however it computes.
+     */
+    const intentPermission = intent?.permission || classification?.definition?.permission || 'READ';
+    const intentCanMoveMoney = intentPermission === 'EXECUTE' || intentPermission === 'PREPARE';
+    const moneySteps = intentCanMoveMoney
+      ? steps.filter((st) => st.operation === 'quote' || st.operation === 'prepare' || st.operation === 'simulate' || st.operation === 'execute')
+      : steps.filter((st) => st.operation === 'quote' || st.operation === 'prepare' || st.operation === 'execute');
     let missingInputs = [];
     let boundMoneyInput = null;
     if (moneySteps.length) {
@@ -717,7 +737,39 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
       intent = { ...intent, needsUserInput: true, missingInputs };
     }
 
-    /* Execute the READ/quote/simulate portion of the plan for real. */
+    /*
+     * A FIELD THE CONVERSATION MACHINE IS MISSING IS ALSO A HOLE.
+     *
+     * The conversation machinery asked «این پول برای چیست؟» and the
+     * goal field is missing. That is a hole in THIS turn, and the reply
+     * has to ask it — but `needsUserInput` was set only by the money-step
+     * check, so a turn whose only gap was the machine's own question
+     * answered it instead of asking.
+     *
+     * It used to work by accident: `GOAL_PLAN` has a `goals.plan`
+     * simulate step, the money-step check treated that simulate as a
+     * swap and demanded «fromAsset / toAsset / amount», and the reply
+     * happened to be in QUESTION mode — so the machine's question was
+     * rendered with a swap's field list attached. A test passed because
+     * of a bug, and the goal question asked for «ارز مبدأ» while the
+     * user had asked about a goal.
+     *
+     * The gap is read from the machine's own missing list, so the reply
+     * asks for the field that is actually missing.
+     *
+     * BUT NOT WHEN THE TURN WAS ANSWERED. A corpus answer and a model
+     * answer both carry their own completion: «بیت کوین چیست؟» was
+     * answered from the corpus, and the conversation machine's missing
+     * «goal» field must not turn that answered turn back into a
+     * question. The answer and the question would fight, and the
+     * answer would lose — the user would see an empty reply.
+     */
+    const machineMissing = Array.isArray(context.conversationQuestion?.missing) ? context.conversationQuestion.missing : [];
+    const turnWasAnswered = Boolean(intent?.answeredFromCorpus || intent?.answeredFromModel || intent?.corpusAnswer || intent?.modelAnswer);
+    if (machineMissing.length && !intent.needsUserInput && !turnWasAnswered) {
+      intent = { ...intent, needsUserInput: true, missingInputs: machineMissing };
+    }
+
     const results = {};
     if (planTruncated) results['plan.truncated'] = { status: 'PARTIAL', summary: `${planTruncated} later step(s) were held back to bound upstream calls`, source: 'central-planner' };
     for (const key of neededSections) {
@@ -813,7 +865,57 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
 
     /* Findings → recommendation (§26). Built from the same `results` the reply
        uses, so the advice and the numbers cannot diverge. */
+    /*
+     * ─── BOTH HALVES OF A TWO-PART QUESTION ──────────────────────────────
+     *
+     * The plan already merged the legs, so the DATA for both halves is in
+     * `results`. But the findings were built for ONE intent, so the second
+     * half's own numbers never became evidence and the reply showed the
+     * first half alone — with a complete-looking headline, a reason, data
+     * and a confidence.
+     *
+     * So the findings are built PER LEG: each leg gets its own intent
+     * view, its own findings, and its own headline. The user asked two
+     * questions and gets two answers, each attributable to the module
+     * that produced it.
+     *
+     * The legs that the user did NOT ask for are the ones that must not
+     * appear here: a compound READ is two READS, never a transaction.
+     */
+    const legIntents = (classification.compound || [])
+      .map((c) => c && c.intent)
+      .filter((t) => t && t !== intent.intentType);
     const findings = buildFindings({ intent, classification, state, results, risk, readResults, stepResults, context, locale, lastReplan });
+    /* The per-leg findings ride ALONG with the main ones; the main ones
+       stay first so the primary subject is still the headline. */
+    const legFindings = [];
+    for (const legIntent of legIntents) {
+      const legView = { ...intent, intentType: legIntent, corpusAnswer: null, corpusMatch: null, modelAnswer: null };
+      const legOut = buildFindings({ intent: legView, classification, state, results, risk, readResults, stepResults, context, locale, lastReplan });
+      /*
+       * A leg's findings are ITS OWN.
+       *
+       * The same reading can serve two legs — «ریسک» is read by the
+       * portfolio leg and by the risk leg — and each leg needs its own
+       * copy of it, because a leg's headline is built from that leg's
+       * findings and nothing else. If the risk leg had no copy of the
+       * risk finding, it would have no evidence and would fall back to
+       * the generic tail: «نتیجهٔ خواندن وضعیت: HIGH».
+       *
+       * The copy is NOT a second reading — the module was read ONCE and
+       * the `dataAt` is the same — it is the same fact attributed to
+       * the question it answers.
+       */
+      const seenInThisLeg = new Set();
+      for (const f of legOut) {
+        if (!f) continue;
+        const key = `${f.id}|${f.status}`;
+        if (seenInThisLeg.has(key)) continue;
+        seenInThisLeg.add(key);
+        legFindings.push({ ...f, leg: legIntent });
+      }
+    }
+    findings.push(...legFindings);
     const capabilitiesMap = capabilities.capabilities;
     const actions = possibleActionsFrom({ findings, capabilities: capabilitiesMap, risk, policy, walletConnected: Boolean(wallet?.connected) });
     /* When the answer is a refusal, the reply IS the refusal: the portfolio numbers
@@ -891,6 +993,32 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
       buildWhyFinding({ intent, results, readResults, findings });
     }
 
+    /*
+     * A CONCEPTUAL QUESTION IS A QUESTION ABOUT A CONCEPT.
+     *
+     * The marker «چیست» used to be enough on its own, so «هدفت چیست؟» —
+     * "what is YOUR goal?" — was read as a request for the DEFINITION of
+     * a goal, and the corpus answered with a Solana PDA. The user asked
+     * about their own goal and got a glossary entry about an address.
+     *
+     * The distinction is the SUBJECT. «بیت‌کوین چیست؟» asks what a
+     * thing is; «هدفت چیست؟» asks what the registry's GOAL_PLAN read.
+     * When the registry already knows what the sentence is about, its
+     * reading wins: the internal synthesis is a fallback for a sentence
+     * the registry could not place, not a competitor to a reading it
+     * already has.
+     *
+     * So the synthesis only runs when the registry matched nothing —
+     * the UNSUPPORTED case — or when the sentence is genuinely about a
+     * macro concept that no intent covers.
+     */
+    const registryPlacedTheSentence = Boolean(
+      classification.type
+      && classification.type !== 'UNSUPPORTED'
+      && classification.type !== 'CORPUS_LOOKUP'
+      && !/^(?:UNSUPPORTED|CORPUS_LOOKUP)$/.test(classification.type || '')
+    );
+    const macroConcept = /(?:تورم|نرخ\s*بهره|فدرال|دارایی[‌\s]*های\s*کمیاب|کارمزد|غیرامانی)/i.test(message);
     const isConceptualOrAdvisory = Boolean(
       !refusal
       && policy.verdict !== 'SAFE_STOP'
@@ -899,7 +1027,8 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
       && (
         classification.entities?.isDistress
         || classification.entities?.isDiscovery
-        || /(?:تورم|نرخ\s*بهره|فدرال|دارایی[‌\s]*های\s*کمیاب|کارمزد|غیرامانی|چیست|چیه)/i.test(message)
+        || macroConcept
+        || (!registryPlacedTheSentence && /(?:چیست|چیه)/i.test(message))
       )
     );
     let internalSynthesisUsed = false;
@@ -1709,6 +1838,53 @@ function buildFindings({ intent, classification, state, results, risk, readResul
     });
   }
 
+  /*
+   * ─── THE WALLET BALANCES (2026-11-13) ──────────────────────────────────
+   *
+   * «موجودی من چقدره؟» read the wallet and then said «wallet.read: 2
+   * balances across 2 chain(s)». The NUMBER was there — `totalValueUsd`,
+   * every `amount`, every `valueUsd` — and the reply showed none of it.
+   *
+   * A count is not a balance. The user asked how much they have, and
+   * the answer said how many rows were read.
+   *
+   * This matters beyond the one-part question: it is the second half of
+   * «قیمت بیت‌کوین چقدره و موجودی من چقدره», so while it was missing
+   * the compound question could not be answered in full either.
+   */
+  const walletRead = readResults?.wallet?.data || state.sections?.wallet?.data || null;
+  if (walletRead && (Array.isArray(walletRead.balances) || walletRead.totalValueUsd != null)) {
+    const balances = Array.isArray(walletRead.balances) ? walletRead.balances : [];
+    const total = walletRead.totalValueUsd != null
+      ? Number(walletRead.totalValueUsd)
+      : balances.reduce((sum, b) => sum + (Number(b?.valueUsd) || 0), 0);
+    const rows = balances
+      .filter((b) => b && (b.amount != null || b.valueUsd != null))
+      .map((b) => ({
+        symbol: b.symbol || null,
+        amount: b.amount != null ? Number(b.amount) : null,
+        valueUsd: b.valueUsd != null ? Number(b.valueUsd) : null,
+        chainId: b.chainId ?? null
+      }));
+    findings.push({
+      id: 'wallet-balances',
+      value: total,
+      totalUsd: total,
+      rows,
+      rowCount: rows.length,
+      chainCount: Array.isArray(walletRead.chainsRead) ? walletRead.chainsRead.length : null,
+      detail: rows.length
+        ? `${rows.length} asset(s) across ${Array.isArray(walletRead.chainsRead) ? walletRead.chainsRead.length : '?'} chain(s); total $${round(total, 2)}`
+        : `no priced balance; total $${round(total, 2)}`,
+      reason: rows.length
+        ? `the wallet returned ${rows.length} balance(s); the total is the sum of their USD values`
+        : 'the wallet returned no priced balance to total',
+      source: 'wallet-service',
+      dataAt: walletRead.at || Date.now(),
+      status: rows.length || total ? 'OK' : 'PARTIAL'
+    });
+  }
+
   const concentration = analyzeConcentration(portfolio);
   if (concentration.status === 'OK') {
     findings.push({
@@ -1744,13 +1920,16 @@ function buildFindings({ intent, classification, state, results, risk, readResul
 
   if (intent.intentType === 'GOAL_PLAN' || intent.intentType === 'PROFIT_PLAN') {
     const goal = state.sections.goals.data?.goals?.[0] || null;
-    const feasibility = goalFeasibility({
-      currentUsd: portfolio?.totalValueUsd ?? null,
-      targetUsd: classification.entities.targetUsd ?? goal?.targetAmount ?? null,
-      years: classification.entities.horizon?.years ?? (goal?.targetDate ? Math.max(0.1, (goal.targetDate - Date.now()) / (365 * 24 * 3600_000)) : null),
-      monthlyContributionUsd: goal?.monthlyContribution ?? 0,
-      volatilityPct: markets?.volatilityPct?.BTC ?? 60
-    });
+      /* The goal is read through ONE reader, so the brain and the goals
+         module cannot disagree about which shape the goal has. */
+      const goalInputs = readGoalInputs(goal);
+      const feasibility = goalFeasibility({
+        currentUsd: classification.entities.currentUsd ?? goalInputs.currentUsd ?? portfolio?.totalValueUsd ?? null,
+        targetUsd: classification.entities.targetUsd ?? goalInputs.targetUsd ?? null,
+        years: classification.entities.horizon?.years ?? goalInputs.years ?? null,
+        monthlyContributionUsd: goalInputs.monthlyContributionUsd,
+        volatilityPct: markets?.volatilityPct?.BTC ?? 60
+      });
     if (feasibility.status === 'OK') findings.push({ id: 'goal-feasibility', targetUsd: feasibility.targetUsd, years: feasibility.years, probabilityPct: feasibility.probabilityPct, contribution: feasibility.contributionUsdMonthly, requiredContribution: feasibility.requiredContributionUsdMonthly, detail: `${feasibility.probabilityPct}% odds at ${feasibility.contributionUsdMonthly} USD/month; median ${feasibility.projectedMedianUsd} USD`, reason: `required CAGR is ${feasibility.requiredCagrPct}% — ${feasibility.level.toLowerCase()} for this horizon, and it is a model output, not a forecast`, source: 'goals-engine + market-data', dataAt: feasibility.at, partial: feasibility.status === 'PARTIAL' });
     else findings.push({ id: 'goal-feasibility', status: 'UNAVAILABLE', reason: `goal arithmetic incomplete: ${feasibility.reason}`, detail: null });
     const opportunities = scanOpportunities({ yields: state.sections.farming.data, portfolio, risk, capabilities: {} });
@@ -2238,7 +2417,12 @@ function buildFindings({ intent, classification, state, results, risk, readResul
   }
 
   const riskIsInformative = risk?.level && risk.level !== 'MISSING';
-  const moneyTurn = ['EXECUTE_SWAP', 'EXECUTE_BRIDGE', 'EXECUTE_LEND', 'EXECUTE_BORROW', 'EXECUTE_REPAY', 'EXECUTE_REBALANCE', 'WHATIF_SIMULATION', 'CONCENTRATION_CHECK', 'FUTURES_RISK', 'LOAN_STATUS', 'BORROW_CAPACITY', 'PORTFOLIO_ANALYSIS', 'PROFIT_PLAN', 'GOAL_PLAN'].includes(intent.intentType);
+  /*
+   * `RISK_OVERVIEW` is in this list because the risk verdict IS its
+   * answer: without it the intent had no evidence and no headline, and
+   * «ریسک چقدره؟» fell back to the generic tail.
+   */
+  const moneyTurn = ['EXECUTE_SWAP', 'EXECUTE_BRIDGE', 'EXECUTE_LEND', 'EXECUTE_BORROW', 'EXECUTE_REPAY', 'EXECUTE_REBALANCE', 'WHATIF_SIMULATION', 'CONCENTRATION_CHECK', 'FUTURES_RISK', 'LOAN_STATUS', 'BORROW_CAPACITY', 'PORTFOLIO_ANALYSIS', 'PROFIT_PLAN', 'GOAL_PLAN', 'RISK_OVERVIEW'].includes(intent.intentType);
   if (risk?.factors?.length && (riskIsInformative || moneyTurn)) findings.push({ id: 'risk', level: risk.level, detail: `${risk.level} overall from ${risk.factors.length} computed factors`, reason: risk.reasons[0] || `risk level ${risk.level}`, reasonFa: risk.reasonsFa?.[0] || null, decision: risk.decision, source: 'central-risk-engine', dataAt: Date.now(), factors: risk.factors.slice(0, 5) });
 
   for (const [key, value] of Object.entries(results)) {
@@ -2307,6 +2491,9 @@ const SECTION_LABEL_FA = {
 const SECTION_FOR_INTENT = {
   PORTFOLIO_ANALYSIS: ['wallet', 'portfolio', 'markets', 'lending', 'risk'],
   CONCENTRATION_CHECK: ['wallet', 'portfolio', 'markets', 'risk'],
+  /* The plain risk verdict needs the portfolio it is judged against, and
+     the risk engine that judges it. */
+  RISK_OVERVIEW: ['wallet', 'portfolio', 'markets', 'risk'],
   ASSET_ANALYSIS: ['markets', 'signals', 'news', 'portfolio'],
   BALANCE_QUERY: ['wallet'],
   LOAN_STATUS: ['wallet', 'lending', 'portfolio', 'risk'],

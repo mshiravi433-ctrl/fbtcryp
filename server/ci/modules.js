@@ -23,7 +23,7 @@
 import { CAPABILITY, PERMISSION } from '../../src/lib/central/schema.js';
 import {
   analyzeConcentration, analyzeExposure, assessLendingSafety, computeBorrowCapacity,
-  goalFeasibility, scanOpportunities, simulateShock, realizedVolatilityPct, correlate
+  goalFeasibility, readGoalInputs, scanOpportunities, simulateShock, realizedVolatilityPct, correlate
 } from '../../src/lib/central/analysis.js';
 import { assessRisk } from '../../src/lib/central/risk.js';
 import { defineModule } from '../../src/lib/central/registry.js';
@@ -1321,11 +1321,29 @@ export function createModules(ctx = {}) {
     },
     simulate: async (input = {}) => {
       const portfolio = readState('portfolio');
+      /*
+       * «برای رسیدن به آن چه برنامه‌ای دارم» asks about the goal that
+       * ALREADY EXISTS, so the plan is computed from the stored goal
+       * when the caller named none.
+       *
+       * Before this, the simulate step received no input, so the target
+       * was null and the answer was `NO_GOAL_DATA` — the user had a
+       * goal, asked for the plan, and got nothing. The goal is in the
+       * state; the plan has to read it.
+       */
+      const goals = readState('goals');
+      const stored = Array.isArray(goals?.goals) ? goals.goals[0] : (goals?.goal || null);
+      const storedTarget = stored?.targetAmount ?? stored?.targetUsd ?? null;
+      const storedDate = stored?.targetDate ?? (stored?.durationMonths
+        ? Date.now() + Number(stored.durationMonths) * 30 * 24 * 3600_000
+        : null);
+      const storedContribution = stored?.monthlyContribution ?? stored?.contributionMonthly ?? null;
+      const goalInputs = readGoalInputs(stored);
       const feasibility = goalFeasibility({
-        currentUsd: input.startingCapital ?? portfolio?.totalValueUsd ?? null,
-        targetUsd: input.targetAmount ?? input.targetUsd ?? null,
-        years: input.years ?? horizonYears(input) ?? null,
-        monthlyContributionUsd: input.monthlyContribution ?? 0,
+        currentUsd: input.startingCapital ?? goalInputs.currentUsd ?? portfolio?.totalValueUsd ?? null,
+        targetUsd: input.targetAmount ?? input.targetUsd ?? goalInputs.targetUsd,
+        years: input.years ?? (input.months ? Number(input.months) / 12 : null) ?? goalInputs.years,
+        monthlyContributionUsd: input.monthlyContribution ?? input.contributionUsdMonthly ?? goalInputs.monthlyContributionUsd,
         expectedReturnPct: input.expectedReturnPct ?? 12,
         volatilityPct: input.volatilityPct ?? (readState('markets')?.volatilityPct?.BTC ?? 60)
       });

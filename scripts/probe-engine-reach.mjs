@@ -73,6 +73,10 @@ const PROBES = [
   { intent: 'INSTRUMENT_QUERY', message: 'کدام ETF را بخرم؟' },
   { intent: 'CONDITIONAL_ALLOCATION', message: 'اگر طلا ۵٪ اصلاح کرد و BTC بالای X بود، ۱۰٪ سرمایه را به طلا اختصاص بده' },
   { intent: 'CONCENTRATION_CHECK', message: 'تمرکز پرتفوی من چقدر است؟' },
+  /* The plain risk verdict (§5.23). It is the SECOND half of
+     «پورتفوی من چیست و ریسکش چقدر است», and it had no intent at all
+     until that gap was closed. */
+  { intent: 'RISK_OVERVIEW', message: 'ریسک من چقدر است؟' },
   { intent: 'YIELD_OPPORTUNITY', message: 'کدام استخر بیشترین APY را دارد؟' },
   { intent: 'SMART_MONEY_READ', message: 'پول هوشمند کجاست؟' },
   { intent: 'LIQUIDITY_RISK', message: 'نقدینگی استخر چقدر است؟' },
