@@ -209,3 +209,104 @@ test('the budget still neutralises the loops it already owned', () => {
     assert.ok(budget.includes(`.${cls}`), `the budget lost .${cls}`);
   }
 });
+
+/*
+ * ─── THE BLUR BUDGET ───────────────────────────────────────────────────────
+ *
+ * §15.6 of market-modern.css removed seven `backdrop-filter`s from this route
+ * with a stated reason: every one of those surfaces paints a 93–95% opaque
+ * gradient, so an opaque plate looks the same and costs nothing, while a
+ * blurred layer over a permanently animating fixed background is re-sampled
+ * on every scroll frame.
+ *
+ * A written policy with no test is a policy that the next edit silently
+ * reverses — so this counts the surfaces that STILL have a live blur, and
+ * fails if one appears that the budget has not named.
+ */
+
+/**
+ * Surfaces that live inside the STORY MODAL. The modal is not mounted until a
+ * story is tapped (`market-perf.css` §2 says the same for its ten loops), so a
+ * blur in there costs nothing while the reader is scrolling the list — and the
+ * backdrop blur is what separates a full-screen reader from the page under it.
+ * Exempt, named, and checked below so the list cannot quietly grow.
+ */
+const MODAL_SURFACES = new Set([
+  'market-story-backdrop',
+  'market-story-promo-flag',
+  'market-story-dialog',
+  'market-story-chip',
+  'market-story-ring',
+]);
+
+test('no live backdrop-filter survives on the market route without a decision', () => {
+  const budget = read('src/styles/market-perf.css');
+
+  /*
+   * A class is OFF if any sheet declares `backdrop-filter: none !important` for
+   * it. `!important` beats source order, so a later `blur()` in the cascade can
+   * never win against it — which is exactly how §15.6 removed the seven cards
+   * while leaving their earlier `blur(26px)` declarations in place.
+   */
+  const killed = new Set();
+  for (const file of [...SHEETS, 'src/styles/market-perf.css']) {
+    for (const [, selector, body] of read(file).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (!/-?webkit-?backdrop-filter:\s*none\s*!important/.test(body)) continue;
+      for (const cls of (selector.match(/\.[a-zA-Z0-9_-]+/g) ?? [])) killed.add(cls.slice(1));
+    }
+  }
+
+  const survivors = [];
+  for (const sheet of SHEETS) {
+    const css = read(sheet);
+    for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      /* The LAST declaration in the block is the one the browser applies, so
+         a rule that sets a blur and then `none` (the removal passes do exactly
+         that) is a removal, not a live blur. */
+      const declarations = [...body.matchAll(/-?webkit-?backdrop-filter:\s*([^;]+);/g)]
+        .map((m) => m[1].trim());
+      const last = declarations[declarations.length - 1];
+      if (!last || !/^blur/.test(last)) continue;
+      const classes = (selector.match(/\.[a-zA-Z0-9_-]+/g) ?? []).map((c) => c.slice(1));
+      if (!classes.length) continue;
+      if (classes.some((c) => MODAL_SURFACES.has(c))) continue;
+      survivors.push({ selector: selector.trim(), classes, sheet });
+    }
+  }
+  /* Every surviving declaration must be answered by a rule in the budget — by
+     the exact selector it applies to, not by a neighbouring class. */
+  const unaddressed = survivors.filter(({ classes }) =>
+    !classes.some((c) => killed.has(c) || budget.includes(`.${c}`)));
+  assert.deepEqual(unaddressed.map((s) => `${s.selector} (${s.sheet})`), [],
+    'a live backdrop-filter on the market route must be either removed or named in market-perf.css');
+});
+
+test('the story modal is the only exemption, and its blurs are all in there', () => {
+  /* An exemption is only honest if it is bounded: every exempt class must be
+     rendered by the stories component (i.e. genuinely inside the modal), and
+     none of them may appear on the list itself. */
+  const stories = readFileSync('src/components/MarketStories.jsx', 'utf8');
+  const page = readFileSync('src/pages/Market.jsx', 'utf8');
+  for (const cls of MODAL_SURFACES) {
+    assert.ok(stories.includes(cls), `${cls} is exempt as a modal surface but is not in MarketStories`);
+    assert.equal(page.includes(cls), false, `${cls} must not be rendered on the list surface`);
+  }
+});
+
+test('the search field is the surface that was missed, and it is now covered', () => {
+  const budget = read('src/styles/market-perf.css');
+  /* The field sits inside the list card, above the rows, and scrolls with
+     them — the worst place for a per-frame blur and the reason §15.6's
+     argument applies with more force here than to the cards it listed. */
+  assert.ok(budget.includes('.market-search'),
+    'the search field carries a live 12px blur and must be in the budget');
+  assert.match(
+    budget,
+    /:root\[data-theme\]:not\(\[data-motion='full'\]\) \.mx-market \.market-search\s*\{[^}]*backdrop-filter:\s*none/,
+    'and the rule must actually turn it off, guarded like the rest'
+  );
+  /* The visual identity survives: the field keeps its own gradient plate. */
+  const modern = read('src/styles/market-modern.css');
+  assert.match(modern, /\.market-search\s*\{[^}]*linear-gradient/,
+    'the field must still paint its own opaque plate, or removing the blur is a visual change');
+});

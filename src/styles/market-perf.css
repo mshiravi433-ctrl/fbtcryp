@@ -420,3 +420,27 @@
   animation: none !important;
   opacity: .8;
 }
+
+/* ══ 9 · THE ONE BLUR THE SCROLL PASS MISSED (2026-11-12) ══════════════════
+   §15.6 of market-modern.css turned every `backdrop-filter` off on this route
+   and wrote down why: each surface already paints a 93–95% opaque gradient, so
+   an opaque plate looks the same and costs nothing, while a blurred layer that
+   sits over a permanently animating fixed background is re-sampled on every
+   scroll frame.
+
+   `.market-search` was not in that list. It carries
+   `backdrop-filter: blur(12px) saturate(140%)` (market-modern.css:4096) and it
+   is the WORST possible place for one: the search field is inside the list
+   card, directly above the rows, and it scrolls with them — so its blur is
+   re-sampled continuously by exactly the gesture that was reported as stutter.
+   Its own background is `color-mix(… 92%, transparent)` over `--bg-panel`:
+   ~92% opaque, which is the same threshold §15.6 used to justify removing the
+   other seven.
+
+   This is that decision, applied to the eighth surface — not a new policy.
+   Guarded like everything else in this file: `[data-motion='full']` is the
+   opt-in escape hatch a reader has to ask for. */
+:root[data-theme]:not([data-motion='full']) .mx-market .market-search {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}

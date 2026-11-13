@@ -1253,3 +1253,54 @@
     height: 212px;
   }
 }
+
+/* ══ 10 · THE FIRST SCREEN BELONGS TO THE LIST (2026-11-12) ═════════════════
+   Measured on a 430×932 phone, the banner occupied ~470px before the reader
+   reached the tab strip, and another ~150px of controls after it — so the
+   first coin row began around 620–700px down, and on a 390×844 phone the
+   LIST ITSELF was below the fold. The page's whole purpose is that list.
+
+   The cost was not the title (18px) or the CTAs (42px each, and they are what
+   the banner is FOR). It was the description: three lines of 12.5px prose
+   (`-webkit-line-clamp: 3`, max-width 52ch) — around 66px of marketing copy
+   standing between a reader and the market. Nobody opened this screen to read
+   it, and it is the one element here with no number in it.
+
+   So on a narrow screen the description gets TWO lines instead of three, and
+   the three chips — which repeat what the description already says, in shorter
+   words, and which carry no reading either — step aside for it. The banner
+   keeps everything that answers a question: the title, the two CTAs, and the
+   three telemetry pods with the live figures.
+
+   This is a density decision, not a deletion: the copy, the chips and the
+   clamp all still exist at every width, and the full text remains in the DOM
+   for find-in-page and for a screen reader (it is clamped visually, never
+   truncated in markup). */
+@media (max-width: 679px) {
+  .mhb-desc {
+    -webkit-line-clamp: 2;
+    line-height: 1.5;
+  }
+  /* The chips repeat the line above them and carry no number: below 680px they
+     are the first thing to go, because the row below them is the answer. */
+  .mhb-chips {
+    display: none;
+  }
+  /* A tighter gap between the blocks: 11px of air × 4 gaps is 44px of the
+     first screen spent on spacing. */
+  .mhb {
+    gap: 9px;
+  }
+  .mhb-copy {
+    gap: 6px;
+  }
+}
+
+/* Between a phone and a tablet the description keeps its three lines but the
+   chips stay: there is room, and at that width the banner does not push the
+   list off the screen. */
+@media (min-width: 680px) and (max-width: 899px) {
+  .mhb-desc {
+    -webkit-line-clamp: 2;
+  }
+}

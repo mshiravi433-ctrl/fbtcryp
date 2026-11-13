@@ -1329,3 +1329,43 @@
    its own track so the dot never hangs over the row edge. */
 .mx-market .mx-coin-row .coin-row-range[data-pos='low'] i { margin-inline-start: 0; }
 .mx-market .mx-coin-row .coin-row-range[data-pos='high'] i { margin-inline-start: -5px; }
+
+/* ══ THE CONTROLS BLOCK ON A PHONE (2026-11-12) ═════════════════════════════
+   The «مرور»/«توکن» strip, the lens head, its action buttons, the breadth card
+   and then the horizon rail, the chips and the sort button all sit between the
+   banner and the first coin row. On a phone that stack is taller than the list
+   it introduces.
+
+   Two blocks here carry no number and no control, and they are the cheapest
+   thing to give back:
+
+     .mx-breadth-aurora   66px of decorative SVG haze above the breadth bar.
+                          The BAR directly under it is the reading (up/flat/down
+                          shares as a proportion); the haze is atmosphere over
+                          a card that already has its own gradient. It is
+                          already `aria-hidden` and pointer-events: none.
+     .mx-breadth-note     9px footnote under the same bar explaining how the
+                          count was derived. Honest, useful, and not the thing
+                          to read while scanning a 250-row list — it stays in
+                          the DOM and returns above the breakpoint.
+
+   The breadth TITLE, its average, the bar and the three legend counts all
+   stay: those are the reading. Nothing is removed from the markup; this is one
+   declaration per block, inside the phone breakpoint only.
+
+   Not touched: the lens head's refresh/compare buttons and the freshness chip.
+   They are controls, they are 32-44px tap targets, and removing them to win
+   60px would trade a reading for a scroll. */
+@media (max-width: 619px) {
+  .mx-market .mx-breadth-aurora {
+    display: none;
+  }
+  .mx-market .mx-breadth-note {
+    display: none;
+  }
+  /* The bar sits directly under the head once the haze is gone, so its top
+     margin only needs to separate the two, not to clear a removed block. */
+  .mx-market .mx-breadth-bar {
+    margin-top: 10px;
+  }
+}
