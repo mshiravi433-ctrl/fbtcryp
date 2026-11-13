@@ -224,6 +224,33 @@ async function main() {
       classified: out?.intent?.intentType || null,
       matched: out?.intent?.intentType === probe.intent,
       text: String(out?.response?.text || '').length,
+      /*
+       * THE HEADLINE, as its own field.
+       *
+       * "Reached with an OK finding" says the engine was asked and answered. It
+       * does not say the ANSWER WAS ABOUT THE QUESTION: ten intents were
+       * reaching their engines perfectly and then headlining
+       * «ارزش پرتفوی ۱۰٬۰۰۰ دلار، تمرکز اصلی روی BTC» — a true number,
+       * correctly sourced, attached to a question about yield, or fit, or why.
+       * A headline is the one line a user actually reads, so the probe carries
+       * it and the gate can say what it must not be.
+       */
+      headline: (() => {
+        /*
+         * THE LINE THE USER READS, NOT THE FIELD THE ENGINE WROTE.
+         *
+         * `recommendation.recommendation` is the headline the recommendation
+         * engine produced — but `composeResponse` leads with the GAP text when
+         * there is one, so a turn that could not read its subject renders
+         * ««BTC» خوانده نشد: … (ROUTE_REQUEST_INCOMPLETE)» while the
+         * recommendation field still holds the generic tail. Gating on the
+         * field would fail a reply that is correct, and gating on the rendered
+         * section is gating on what the user actually reads.
+         */
+        const rendered = (out?.response?.sections || []).find((x) => x && x.id === 'result');
+        return String(rendered?.value || out?.recommendation?.recommendation || '').slice(0, 160);
+      })(),
+      mode: out?.response?.mode || null,
       ok: ok.length,
       failed: failed.length,
       failedIds: failed.map((f) => f.id).join(','),

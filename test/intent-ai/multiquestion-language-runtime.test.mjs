@@ -206,7 +206,12 @@ test('a Persian headline speaks Persian: the engine\'s own Persian reason wins',
     reasonFa: 'تمرکز: مهم‌ترین دارایی ۱۰۰٪ از سرمایهٔ پرریسک، حد مجاز ۴۵',
     factors: [{ id: 'concentration', level: 'HIGH' }]
   });
-  assert.ok(fa.includes('ریسک کلی HIGH'), `the level must be named → ${fa}`);
+  /* The level is the answer to the question, so it is the one word in the
+     sentence that most has to be in the reader's language: `levelLabel` was
+     already in the file and every other branch used it, while this one printed
+     the engine's enum and said «ریسک کلی HIGH است». */
+  assert.ok(fa.includes('ریسک کلی بالا'), `the level must be named in Persian → ${fa}`);
+  assert.ok(!fa.includes('HIGH'), `the engine's enum must not survive into the Persian sentence → ${fa}`);
   assert.ok(fa.includes('تمرکز'), `the Persian reason must be the one rendered → ${fa}`);
   assert.ok(
     !/[A-Za-z]{3,}\s+[A-Za-z]{3,}\s+[A-Za-z]{3,}/.test(fa),
@@ -221,7 +226,7 @@ test('the English headline still speaks English', () => {
     reasonFa: 'تمرکز: مهم‌ترین دارایی ۱۰۰٪ از سرمایهٔ پرریسک',
     factors: [{ id: 'concentration', level: 'HIGH' }]
   }, 'en');
-  assert.ok(en.includes('Overall risk is HIGH'), `→ ${en}`);
+  assert.ok(/Overall risk is high/i.test(en), `the English sentence keeps its own level word → ${en}`);
   assert.ok(en.includes('BTC is 100%'), `the English reason belongs in the English sentence → ${en}`);
 });
 
@@ -237,7 +242,7 @@ test('with no Persian reason at all, the clause is OMITTED — not injected in E
     reasonFa: null,
     factors: [{ id: 'concentration', level: 'HIGH', detail: 'BTC is 100% of risk capital' }]
   });
-  assert.ok(fa.includes('ریسک کلی HIGH'), `the level must still be named → ${fa}`);
+  assert.ok(fa.includes('ریسک کلی بالا'), `the level must still be named → ${fa}`);
   assert.ok(
     !fa.includes('BTC is 100%'),
     `the English reason must not be injected into the Persian sentence → ${fa}`
@@ -252,6 +257,7 @@ test('a factor\'s Persian voice is the fallback when the finding has none', () =
     factors: [{ id: 'concentration', level: 'HIGH', detail: 'BTC is 100%', detailFa: 'تمرکز دارایی ۱۰۰٪' }]
   });
   assert.ok(fa.includes('تمرکز دارایی ۱۰۰٪'), `→ ${fa}`);
+  assert.ok(!fa.includes('BTC is 100%'), `the English detail must not be injected → ${fa}`);
   assert.ok(!fa.includes('BTC is 100%'), `→ ${fa}`);
 });
 

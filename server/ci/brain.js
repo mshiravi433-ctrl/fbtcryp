@@ -940,17 +940,22 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     /* When the answer is a refusal, the reply IS the refusal: the portfolio numbers
        that happen to be readable must not be dressed up as a response to a question
        we could not serve (§25 forbids filling the gap with whatever was at hand). */
-    const recommendation = refusal ? {
-      schema: 'fbt.central-recommendation.v1', brain: CI_SCHEMA, ok: false,
-      missing: ['capability'], reason: [], refusal: refusal.text, refusedModule: refusal.module
-    } : buildRecommendation({
+    /*
+     * The arguments are named so the recommendation can be built TWICE from
+     * exactly the same inputs — see the rebuild after the why read below.
+     */
+    const recommendationArgs = {
       kind: policy.requiresConfirmation ? 'ACTIONABLE' : 'ANALYSIS',
       intent, risk, findings, capabilities: capabilitiesMap, policy, plan, locale,
       alternatives: alternativesFor({ findings, state, capabilities: capabilitiesMap, locale }),
       actions: policy.requiresConfirmation && !policy.allowExecute ? [] : actions,
       refusalMode: Boolean(refusal),
       now: Date.now()
-    });
+    };
+    let recommendation = refusal ? {
+      schema: 'fbt.central-recommendation.v1', brain: CI_SCHEMA, ok: false,
+      missing: ['capability'], reason: [], refusal: refusal.text, refusedModule: refusal.module
+    } : buildRecommendation(recommendationArgs);
 
     /*
      * ── THE WHY READ (path 15) ────────────────────────────────────────────
@@ -1009,7 +1014,33 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
        * engine dark: the finding was built first and could only ever
        * report a read that had not happened yet.
        */
-      buildWhyFinding({ intent, results, readResults, findings });
+      buildWhyFinding({ intent, results, readResults, findings, locale });
+
+      /*
+       * ─── THE RECOMMENDATION IS BUILT TWICE, AND THAT IS NOT WASTE ───────
+       *
+       * Three facts, and they cannot all be satisfied by one build:
+       *
+       *   · the why engine explains THIS recommendation, so a recommendation
+       *     must exist before the read;
+       *   · the finding that carries the explanation can only be built after
+       *     the read (§5.19 — building it first is what made the engine dark);
+       *   · the headline for «چرا این را گفتی؟» IS the explanation, so the
+       *     reply's recommendation has to be built with the why finding in it.
+       *
+       * Without the second build the WHY_DECISION headline branch could never
+       * fire: it looked for a finding appended after the headline had already
+       * been written, so the reply fell through to «نتیجهٔ خواندن وضعیت: 100»
+       * — a number with no subject, for the one question whose whole point is
+       * the explanation.
+       *
+       * The expensive part is the why READ, and it still happens once.
+       * `buildRecommendation` is pure arithmetic over findings already in hand,
+       * and `findings` is the same array the read just pushed into.
+       */
+      if (!refusal && findings.some((f) => f && f.id === 'why-decision')) {
+        recommendation = buildRecommendation({ ...recommendationArgs, now: Date.now() });
+      }
     }
 
     /*
@@ -1649,9 +1680,32 @@ const faPct = (v) => (Number.isFinite(Number(v)) ? `${faNum(v)}٪` : 'ناخوا
 function findingCopy(f) {
   if (!f) return null;
   if (f.status === 'UNAVAILABLE' || f.status === 'PARTIAL_MISSING') {
-    const code = String(f.reason || '').split(/[^A-Z_]/)[0];
-    const human = f.code ? humanizeError({ code: f.code, module: f.id }, { locale: 'fa' }) : null;
-    return { detail: human?.userMessage || FA_CODE_FALLBACK[code] || `این بخش محاسبه نشد (${String(f.reason || 'NO_DATA').slice(0, 60)})`, reason: null };
+    /*
+     * A CODE IS VOCABULARY; A SENTENCE IS NOT.
+     *
+     * The reason used to be sliced straight into the Persian fallback, so a
+     * reply said «این بخش محاسبه نشد (the yields source returned nothing
+     * usable)» — an English clause inside a Persian sentence, which is exactly
+     * what a named refusal is supposed to avoid.
+     *
+     * So only an ALL-CAPS token is ever quoted: that is the machine's own
+     * vocabulary (NO_YIELD_DATA, ROUTE_REQUEST_INCOMPLETE) and it is the same
+     * token the logs carry, so it is useful rather than decorative. The old
+     * split only found a code at the START of the reason, and most reasons
+     * start with a lowercase word, so almost nothing matched. When there is no
+     * code at all, the sentence simply says the section was not computed —
+     * less text, and none of it in the wrong language.
+     */
+    const reasonText = String(f.reason || '');
+    const code = String(f.code || (reasonText.match(/\b[A-Z][A-Z0-9_]{2,}\b/) || [])[0] || '');
+    const human = code ? humanizeError({ code, module: f.id }, { locale: 'fa' }) : null;
+    const named = human?.userMessage || FA_CODE_FALLBACK[code] || null;
+    return {
+      detail: named
+        ? (code && !named.includes(code) ? `${named} (${code})` : named)
+        : (code ? `این بخش محاسبه نشد (${code})` : 'این بخش محاسبه نشد'),
+      reason: null
+    };
   }
   switch (f.id) {
     case 'concentration':
@@ -1739,7 +1793,7 @@ function findingCopy(f) {
  * It is a separate function now, called after the read, and it is the
  * read that counts: the one made with the recommendation in hand.
  */
-function buildWhyFinding({ intent, results, readResults, findings }) {
+function buildWhyFinding({ intent, results, readResults, findings, locale = 'en' }) {
   if (intent.intentType !== 'WHY_DECISION') return null;
   const whyRead = results['why.read'] || readResults.whyDecision || null;
   if (whyRead?.status === 'OK' && whyRead.data?.why) {
@@ -1772,6 +1826,16 @@ function buildWhyFinding({ intent, results, readResults, findings }) {
         ? `${lines.length} reason line(s) from the decision that was actually made; ${falsifiers.length} named falsifier(s) and ${(w.invalidationConditions || []).length} invalidation condition(s) travel with it`
         : 'the engine produced the why block but no readable reason line — nothing is filled in',
       reason: w.note || 'every because-line points at a number in the decision bundle; unread numbers are named, never invented',
+      /* The falsifiers are the point of a why block: an explanation that
+         cannot be contradicted is not an explanation. So the count travels in
+         both languages, and the first reason line — which the engine wrote for
+         the user — is quoted rather than paraphrased. */
+      detailFa: lines.length
+        ? `${fmtNum(lines.length, locale === 'fa')} خط دلیل از همان تصمیمی که واقعاً گرفته شد؛ ${fmtNum(falsifiers.length, locale === 'fa')} ابطال‌کنندهٔ نام‌دار و ${fmtNum((w.invalidationConditions || []).length, locale === 'fa')} شرط ابطال همراه آن می‌آید`
+        : 'موتور بلوک «چرا» را ساخت ولی هیچ خط دلیل خواندنی‌ای نبود — چیزی هم جای آن پر نشد',
+      reasonFa: lines.length && lines[0]?.text
+        ? String(lines[0].text)
+        : 'هر خط «چون» به یک عدد در همان بستهٔ تصمیم اشاره می‌کند؛ عددهای خوانده‌نشده نام برده می‌شوند، نه ساخته',
       source: 'why-engine',
       dataAt: w.at || Date.now(),
       partial: false
@@ -1809,6 +1873,12 @@ const FIT_VERDICT_FA = Object.freeze({
 });
 /* The scenario engine's own three profiles, in Persian — its vocabulary, not a
    paraphrase of a sentence it wrote. */
+/* The engines' risk vocabulary, in Persian. Same rule as the two maps below:
+   these are the ENGINE's words, so translating them is safe. */
+const RISK_LEVEL_FA = Object.freeze({
+  LOW: 'پایین', MODERATE: 'متوسط', MEDIUM: 'متوسط',
+  ELEVATED: 'افزایش‌یافته', HIGH: 'بالا', CRITICAL: 'بحرانی'
+});
 const SCENARIO_PROFILE_FA = Object.freeze({
   CONSERVATIVE: 'محافظه‌کار',
   BALANCED: 'متعادل',
@@ -2237,12 +2307,22 @@ function buildFindings({ intent, classification, state, results, risk, readResul
         reason: pick
           ? `the top eligible pool pays ${pick.aprPct}% with ${pick.riskLevel} protocol risk; APR is a trailing figure, not a promise`
           : `nothing met the eligibility floor out of ${opportunities.considered} considered`,
+        /* The qualifier «APR is a trailing figure, not a promise» is the whole
+           honesty of a yield answer, so it travels in both languages. The
+           project, symbol and chain are NAMES and stay as the venue wrote
+           them; only the sentence around them is Persian. */
+        detailFa: pick
+          ? `${pick.project || pick.id} ${pick.symbol || ''} با APR ${fmtNum(pick.aprPct, locale === 'fa')}٪ روی ${pick.chain || 'همان شبکه'}${pick.depthUsd ? ` و عمق ${fmtUsd(pick.depthUsd, locale === 'fa')}` : ''}`
+          : `از میان ${fmtNum(opportunities.considered, locale === 'fa')} گزینه، هیچ استخری از کفِ صلاحیت عبور نکرد`,
+        reasonFa: pick
+          ? `بالاترین استخر واجد شرایط ${fmtNum(pick.aprPct, locale === 'fa')}٪ با ریسک پروتکل ${RISK_LEVEL_FA[String(pick.riskLevel || '').toUpperCase()] || pick.riskLevel || 'ناخواند'} می‌دهد؛ APR یک عدد گذشته‌نگر است، نه وعده`
+          : `از میان ${fmtNum(opportunities.considered, locale === 'fa')} گزینهٔ بررسی‌شده، هیچ‌کدام به کفِ صلاحیت نرسید`,
         source: 'yields-engine',
         dataAt: opportunities.at,
         partial: false
       });
     } else {
-      findings.push({ id: 'yield-opportunity', status: 'UNAVAILABLE', reason: `the yields source did not answer: ${opportunities.reason || readResults.farming?.reason || 'NO_YIELD_DATA'}`, detail: null, source: 'yields-engine' });
+      findings.push({ id: 'yield-opportunity', status: 'UNAVAILABLE', reason: `the yields source did not answer: ${opportunities.reason || readResults.farming?.reason || 'NO_YIELD_DATA'}`, reasonFa: `منبع ییلد پاسخ نداد: ${opportunities.reason || readResults.farming?.reason || 'NO_YIELD_DATA'}`, detail: null, source: 'yields-engine' });
     }
   }
 
@@ -2391,6 +2471,17 @@ function buildFindings({ intent, classification, state, results, risk, readResul
         reason: d.dataStatus === 'insufficient-evidence' || d.verifiedStatus === 'insufficient-evidence'
           ? 'the smart-money engine has no verified paired-swap consensus for this window, so the whale transfers below are PROXIES, not trades'
           : `read from the ${smart?.source || 'global-intelligence engine'}; the window is ${d.window || '24h'} and it moves`,
+        /* «the whale transfers below are PROXIES, not trades» is the qualifier
+           that keeps a whale number from reading as a fact about paired
+           trades — §5.9 called a claim without it «a fabrication dressed as a
+           fact». It must survive translation, or the Persian reply is the one
+           that overstates. */
+        detailFa: d.netFlowUsd !== null && d.netFlowUsd !== undefined
+          ? `جریان خالص ${fmtUsd(d.netFlowUsd, locale === 'fa')} در بازهٔ ${d.window || '۲۴ ساعت'}، اطمینان ${fmtNum(smart?.confidence, locale === 'fa')}`
+          : `${fmtNum(Object.keys(domains).length, locale === 'fa')} دامنهٔ جهانی خوانده شد؛ پول هوشمند هنوز جریان تأییدشده‌ای ندارد`,
+        reasonFa: d.dataStatus === 'insufficient-evidence' || d.verifiedStatus === 'insufficient-evidence'
+          ? 'موتور پول هوشمند برای این بازه اجماع تأییدشدهٔ جفت‌معامله ندارد، پس انتقال‌های نهنگ که در ادامه می‌آید PROXY است، نه معامله'
+          : `از ${smart?.source || 'موتور هوش جهانی'} خوانده شد؛ بازه ${d.window || '۲۴ ساعت'} است و تغییر می‌کند`,
         source: smart?.source || 'global-intelligence-engine',
         dataAt: smart?.at || Date.now(),
         partial: Boolean(smart?.partial)

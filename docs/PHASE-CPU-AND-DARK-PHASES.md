@@ -121,6 +121,9 @@ is not a permission (§5.23).
 | the probe's own coverage number | **100%** — inflated, because it matched its own section labels | **100%** — honest: 83.3% once the labels stopped counting, then the real miss was fixed (§5.23) |
 | the goal-scenario engine, on a goal question | `NO_STARTING_CAPITAL` — the wiring said "the brain passes it in", and the brain passed neither | **the owner's own capital and goal**, read by the root and translated through the ONE goal reader (§5.23) |
 | a finding that failed without naming a reason | unmeasured — the gate counted a probe as reached when ONE finding answered | **0 silent refusals**, asserted per finding over one probe run (§5.23) |
+| the headline for 10 of 36 intents | «ارزش پرتفوی ۱۰٬۰۰۰ دلار، تمرکز اصلی روی BTC» — a true number answering a question about yield, fit, smart money or *why* | **the subject's own finding**, in its own voice; a refusal to substitute a number from another question (§5.23) |
+| «چرا این را گفتی؟» | «نتیجهٔ خواندن وضعیت: 100» — the why finding was appended AFTER the headline was built | **۶ خط دلیل … و ۴ شرطِ نقض‌کننده**, from a second build of the same arguments (§5.23) |
+| digits and level words in a Persian sentence | «+1.4٪», «1.82», «سطح ریسک LOW», «ریسک کلی HIGH» | **one formatter, one locale** — and a refusal quotes a CODE, never a sentence (§5.23) |
 
 ### The three root causes, and what each one was
 
@@ -2670,6 +2673,173 @@ The probe also runs **once** for the whole gate file now, with every assertion
 read from that single JSON. Thirty-six real brain turns is not a cheap thing to
 run three times, and a gate that is slow is a gate that gets skipped.
 
+#### Ten intents that reached their engine and answered about the portfolio
+
+The honest matcher was worth building for one more reason: reading thirty-six
+replies instead of six showed that **ten of the thirty-six intents** were
+answering with the same sentence.
+
+```
+  YIELD_OPPORTUNITY      «بهترین فارم USDC کدام است»
+  STAKING_REWARD         «سود استیکینگ ETH چقدره»
+  LIQUIDITY_RISK         «ریسک نقدینگی استخرها چقدره»
+  OPPORTUNITY_FIT        «کدام گزینه مناسب من است؟»
+  SMART_MONEY_READ       «پول هوشمند چه می‌کند»
+  WHY_DECISION           «چرا این را گفتی؟»
+  FUTURES_RISK           «ریسک فیوچرز من چقدره»
+  SIGNAL_READING         «سیگنال‌های بازار چه می‌گویند؟»
+  CONDITIONAL_ALLOCATION «اگر BTC بریزد چه تخصیصی داشته باشم»
+  CONFIRM_PENDING        «بله، انجام بده»
+
+     → all ten: «ارزش پرتفوی ۱۰٬۰۰۰ دلار، تمرکز اصلی روی BTC (۱۰۰٪)،
+                 اهرم ترکیبی ۱×.»
+```
+
+Every one of those turns had **read its own engine**. The yield engine had
+found «aave-v3 USDC pays 4.1% APR on Ethereum with 1200M USD depth»; the fit
+engine had ranked five opportunities against the owner's profile; the
+smart-money engine had read five global domains; the why engine had produced
+six reason lines and four named falsifiers. The findings were in the reply's
+`data` section. The **headline** just was not looking at any of them.
+
+The cause was one line in `makeHeadline`:
+
+```js
+if (exposure && concentration) { /* the portfolio sentence */ }
+```
+
+It sits above the generic tail, so it caught every intent that had no branch of
+its own. It had already been moved below the specific branches once — §5.23's
+own `RISK_OVERVIEW` work did that, because it was swallowing the risk question.
+But *below the specific branches* only helps the intents that **have** one. The
+branch was not wrong about the portfolio; it was wrong about everything else.
+
+This is the failure `human.js` warns about in a comment written earlier, about
+a different bug:
+
+> a real number attached to the wrong question … is harder to notice than an
+> empty reply.
+
+The gate said "reached with an OK finding", the reply had a headline, a reason,
+a data section and a confidence — and the user who asked which pool pays best
+was told what their portfolio is worth. Nothing in the turn looked broken.
+
+**The fix is a map, not eight more branches.** `SUBJECT_FINDING_FOR_INTENT`
+says which finding IS the subject of each intent's question, and one branch
+above the portfolio sentence renders that finding in its own Persian voice.
+Three cases, and the order is the point:
+
+| the subject finding… | the headline… |
+|---|---|
+| was READ | quotes its own voice (`detailFa`) — the engine's numbers, never a paraphrase |
+| was ATTEMPTED and could not be read | says so, naming the reason — and refuses to substitute a number from a different question |
+| does not exist at all | falls through, and the portfolio sentence or the generic tail says what was actually read |
+
+And the portfolio sentence is now restricted to the intents whose subject
+really is the portfolio's shape — `PORTFOLIO_ANALYSIS`, `CONCENTRATION_CHECK`,
+`CONDITIONAL_ALLOCATION` and the two follow-ups. It is the right answer for
+those, and a substitute for the rest.
+
+The result, over the same thirty-six probes:
+
+```
+  YIELD_OPPORTUNITY   → aave-v3 USDC با APR ۴٫۱٪ روی Ethereum و عمق ۱٬۲۰۰٬۰۰۰٬۰۰۰ دلار
+  STAKING_REWARD      → lido stETH با APR ۳٫۳٪ روی Ethereum …
+  LIQUIDITY_RISK      → ۲ استخر خوانده شد؛ ۰ پرچم زیان ناپایدار دارند و ۲ ندارند
+  OPPORTUNITY_FIT     → ۵ گزینه با پروفایل ریسک … سنجیده شد؛ گزینهٔ اول نامناسب است
+  SMART_MONEY_READ    → ۵ دامنهٔ جهانی خوانده شد؛ پول هوشمند هنوز جریان تأییدشده‌ای ندارد
+  FUTURES_RISK        → سطح بالا از ۴ عامل محاسبه‌شده
+  SIGNAL_READING      → برای این پرسش چیزی خوانده نشد: … عددی از پرسشی دیگر جای آن
+                        نمایش داده نمی‌شود.
+```
+
+#### The why block was built one step too late to be quoted
+
+`WHY_DECISION` needed a second fix, and it was an ordering bug that no test
+could see because the engine was demonstrably working.
+
+Three facts that cannot all be satisfied by one build of the recommendation:
+
+1. the why engine explains **this** recommendation, so a recommendation must
+   exist before the read (§5.19);
+2. the finding that carries the explanation can only be built **after** the
+   read — building it first is what made the engine dark in the first place;
+3. the headline for «چرا این را گفتی؟» **is** the explanation, so the reply's
+   recommendation has to be built with the why finding in it.
+
+The code satisfied (1) and (2) and therefore broke (3): the recommendation was
+built at line 946, the why finding appended at line 1012, and the
+`WHY_DECISION` headline branch looked for a finding that did not exist yet. The
+branch was correct, the engine was correct, the read was correct — and the
+reply said «نتیجهٔ خواندن وضعیت: 100».
+
+So the recommendation is built **twice**, and that is not waste: the expensive
+part is the why READ, which still happens once, and `buildRecommendation` is
+pure arithmetic over findings already in hand. The arguments are named once and
+used for both builds, so the two cannot drift.
+
+The headline it now produces quotes the engine's **counts**, not its prose:
+
+> ۶ خط دلیل از همان تصمیمی که واقعاً گرفته شد — و ۴ شرطِ نقض‌کننده نام برده
+> شده‌اند: «اگر BTC ۱۰٪ سقوط کند چه می‌شود؟».
+
+The because-lines themselves are English prose the engine wrote about a
+specific bundle — «no asset-level evidence was readable, the recommendation
+rests on ranking alone and must be treated as weak». Translating that sentence
+would produce a *different* claim in a language the engine never checked, which
+is the same error as inventing a number. So the Persian headline uses what the
+bundle already localises — the falsifier question — and the count of lines, and
+the English line travels with the finding for anyone who reads it. If the
+engine ever ships a Persian line, that wins: the fallback is not a ceiling.
+
+#### The digits, the level words, and a code inside a sentence
+
+Reading thirty-six Persian replies closely found the last layer, all of it the
+same defect in three costumes: **one sentence, two conventions.**
+
+| the reply said | why | now |
+|---|---|---|
+| «تغییر ۲۴ ساعت +1.4٪» beside «۳۶٬۰۰۰ دلار» | `pctStr` had no locale, `fmtUsd` did | `pctStr(v, fa)` — digits and sign character both follow the locale |
+| «سلامت بدهی 1.82 … سطح ریسک LOW» | the branch printed the raw field | `fmtNum` and the `levelLabel` that already existed in the file |
+| «ریسک کلی HIGH است» | the same, in the branch written this round | `levelLabel(level, fa)` — the level is the answer to the question, so it is the one word that most has to be translated |
+| «این بخش محاسبه نشد (the yields source returned nothing usable)» | `findingCopy` sliced the reason into the Persian fallback | a refusal quotes a **code**, never a sentence: «این بخش محاسبه نشد (NO_YIELD_DATA)» |
+
+The last row is the general rule. A code is the machine's own vocabulary —
+`NO_YIELD_DATA`, `ROUTE_REQUEST_INCOMPLETE` — and it is the same token the logs
+carry, so quoting it is useful. A sentence is prose about a particular bundle,
+and quoting it in another language is how a refusal turns into noise. The old
+code extraction only matched a code at the START of the reason, and almost every
+reason starts with a lowercase word, so the fallback fired constantly and
+dragged English in with it.
+
+Three findings also had no Persian voice at all, because nothing had ever
+rendered them: `yield-opportunity`, `why-decision` and `global-intelligence`.
+Each now carries `detailFa`/`reasonFa` built from the engine's own numbers and
+enums. The qualifier travels with them, because the qualifier is the honest
+half: «APR یک عدد گذشته‌نگر است، نه وعده», and «انتقال‌های نهنگ که در ادامه
+می‌آید PROXY است، نه معامله» — §5.9 called a whale claim without that second
+one «a fabrication dressed as a fact», and a qualifier that survives only in
+English qualifies nothing for a Persian reader.
+
+The gate for all of it is one measurement over section **values**: a run of
+English words. Tokens do not count — «BTC», «USDC», «APR», «wallet-service» are
+names. Clauses do.
+
+```
+  englishClausesInReply            0
+  portfolio-sentence headlines
+    outside the portfolio intents  0
+  generic-tail headlines           0
+  ANSWER turns with no headline    0
+```
+
+And the probe reports the **rendered** headline — the `result` section's value —
+rather than `recommendation.recommendation`, because `composeResponse` leads
+with the gap text when there is a gap. Gating on the field would have failed
+`ROUTE_INTELLIGENCE`, whose reply is correct (««BTC» خوانده نشد …
+ROUTE_REQUEST_INCOMPLETE») while the field still holds the generic tail. The
+same rule as the matcher: **measure what the user reads.**
+
 #### The rule this leaves behind
 
 > **a brain that answers one question when asked two is silent data loss —
@@ -2691,6 +2861,20 @@ run three times, and a gate that is slow is a gate that gets skipped.
 >
 > **and refusing is allowed; refusing SILENTLY is not — a failure with no named
 > reason is indistinguishable from an engine that was never called.**
+>
+> **and "reached with an OK finding" is not "answered the question" — the
+> headline is the one line a user reads, so gate the SUBJECT of the headline,
+> over the rendered section, not the field the engine wrote.**
+>
+> **and a branch that is right about its own subject can be wrong about every
+> other one — a fallback placed above the generic tail becomes the answer for
+> everything that has no answer.**
+>
+> **and three ordering constraints that cannot all be met by one build are met
+> by two builds — the expensive part is the READ, not the arithmetic.**
+>
+> **and a code is vocabulary, so it can be quoted; a sentence is prose about a
+> particular bundle, so quoting it in another language invents a claim.**
 
 The classification can be perfect and the answer still incomplete. And
 the coverage number is not the work: it is the **instrument**. Every one

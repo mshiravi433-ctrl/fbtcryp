@@ -194,6 +194,56 @@ function dedupe(list) {
  * contain a figure that was not present in `findings`, which is why the template
  * interpolates `f.value` fields rather than describing them in prose.
  */
+/*
+ * WHICH FINDING IS THE SUBJECT OF THE QUESTION.
+ *
+ * Ten of the thirty-six intents were being answered with
+ * «ارزش پرتفوی ۱۰٬۰۰۰ دلار، تمرکز اصلی روی BTC (۱۰۰٪)، اهرم ترکیبی ۱×» —
+ * including YIELD_OPPORTUNITY, OPPORTUNITY_FIT, SMART_MONEY_READ,
+ * LIQUIDITY_RISK, STAKING_REWARD, WHY_DECISION, FUTURES_RISK and
+ * SIGNAL_READING. Each of those turns had READ its own engine: the yield
+ * engine had found «aave-v3 USDC pays 4.1% APR», the fit engine had ranked
+ * five opportunities, the why engine had produced six reason lines and four
+ * falsifiers. The headline just was not looking at any of them.
+ *
+ * The cause was the `exposure && concentration` branch below: it sits above
+ * the generic tail, so it caught every intent that had no branch of its own.
+ * It was moved under the specific branches once already, when it swallowed
+ * RISK_OVERVIEW — but "under the specific branches" only helps the intents
+ * that HAVE one.
+ *
+ * This is the failure `human.js` warns about in its own comment: a real number
+ * attached to the WRONG question, which is harder to notice than an empty
+ * reply. The user asked which pool pays best and was told what their portfolio
+ * is worth — true, sourced, confident, and not an answer.
+ */
+const SUBJECT_FINDING_FOR_INTENT = Object.freeze({
+  YIELD_OPPORTUNITY: ['yield-opportunity', 'opportunities'],
+  STAKING_REWARD: ['yield-opportunity', 'staking'],
+  LIQUIDITY_RISK: ['liquidity-risk'],
+  OPPORTUNITY_FIT: ['opportunity-fit'],
+  SMART_MONEY_READ: ['global-intelligence'],
+  WHY_DECISION: ['why-decision'],
+  FUTURES_RISK: ['futures-risk', 'futures', 'risk'],
+  SIGNAL_READING: ['asset-intelligence', 'signals'],
+  GOAL_PLAN: ['goal-scenarios', 'goal-feasibility'],
+  PROFIT_PLAN: ['goal-scenarios', 'goal-feasibility'],
+  WHATIF_SIMULATION: ['whatif'],
+  CONDITIONAL_ALLOCATION: ['whatif']
+});
+
+/* The intents whose SUBJECT really is the portfolio's shape. For these — and
+   only these — the exposure + concentration sentence is the answer rather than
+   a substitute for one. */
+const PORTFOLIO_IS_THE_SUBJECT = Object.freeze(new Set([
+  'PORTFOLIO_ANALYSIS', 'CONCENTRATION_CHECK', 'CONFIRM_PENDING',
+  'CANCEL_PENDING', 'EXECUTE_REBALANCE',
+  /* «اگر BTC بریزد چه تخصیصی داشته باشم» — when no shock was modelled, the
+     portfolio's current shape is the honest thing to show, and it is the
+     subject the question is about. */
+  'CONDITIONAL_ALLOCATION'
+]));
+
 function makeHeadline({ kind, findings, intent, locale, risk }) {
   const fa = locale === 'fa';
   /* A finding that says "I could not read this" is evidence of a gap, never a
@@ -217,8 +267,8 @@ function makeHeadline({ kind, findings, intent, locale, risk }) {
   }
   if (health && intentType.includes('LOAN')) {
     return fa
-      ? `وام شما فعال است: سلامت بدهی ${health.healthFactor ?? '—'}، ${health.distancePct != null ? `فاصله تا لیکوئیداسیون ${health.distancePct}٪` : 'فاصله تا لیکوئیداسیون خوانده نشد'}، سطح ریسک ${health.level || '—'}.`
-      : `Your loan is live: health factor ${health.healthFactor ?? '—'}, ${health.distancePct != null ? `${health.distancePct}% from liquidation` : 'liquidation distance unreadable'}, risk level ${health.level || '—'}.`;
+      ? `وام شما فعال است: سلامت بدهی ${fmtNum(health.healthFactor, fa)}، ${health.distancePct != null ? `فاصله تا لیکوئیداسیون ${pctStr(health.distancePct, fa)}` : 'فاصله تا لیکوئیداسیون خوانده نشد'}، سطح ریسک ${levelLabel(health.level, fa)}.`
+      : `Your loan is live: health factor ${fmtNum(health.healthFactor, fa)}, ${health.distancePct != null ? `${pctStr(health.distancePct, fa)} from liquidation` : 'liquidation distance unreadable'}, risk level ${levelLabel(health.level, fa)}.`;
   }
   if (capacity) {
     const raw = capacity.capacityUsdByLtv ?? capacity.capacityUsd;
@@ -230,10 +280,10 @@ function makeHeadline({ kind, findings, intent, locale, risk }) {
   const asset = by('asset-intelligence');
   if (asset && ['ASSET_ANALYSIS', 'SIGNAL_READING', 'CONCENTRATION_CHECK', 'QUOTE_SWAP'].includes(intentType)) {
     const sig = asset.signal ? `، سیگنال فنی ${dirLabel(asset.signal.direction, fa)}${asset.signal.strength != null ? ` با قدرت ${round(Number(asset.signal.strength) * 100, 0)}٪` : ''}` : '';
-    const news = asset.newsCount ? `، ${asset.newsCount} خبر مرتبط` : '';
+    const news = asset.newsCount ? `، ${fmtNum(asset.newsCount, fa)} خبر مرتبط` : '';
     return fa
-      ? `${asset.asset} اکنون ${fmtPrice(asset.price, fa)} دلار است؛ تغییر ۲۴ ساعت ${pctStr(asset.change24hPct)}${asset.volatilityPct != null ? `، نوسان روزانه ${pctStr(asset.volatilityPct)}` : ''}${asset.fundingAprPct != null ? `، funding سالانه ${pctStr(asset.fundingAprPct)}` : ''}${sig}${news}.`
-      : `${asset.asset} is ${fmtPrice(asset.price, fa)} USD now; 24h ${pctStr(asset.change24hPct)}${asset.volatilityPct != null ? `, daily volatility ${pctStr(asset.volatilityPct)}` : ''}${asset.fundingAprPct != null ? `, ${pctStr(asset.fundingAprPct)}% annualised funding` : ''}${sig ? `, technical signal ${dirLabel(asset.signal.direction, fa)}` : ''}${news}.`;
+      ? `${asset.asset} اکنون ${fmtPrice(asset.price, fa)} دلار است؛ تغییر ۲۴ ساعت ${pctStr(asset.change24hPct, fa)}${asset.volatilityPct != null ? `، نوسان روزانه ${pctStr(asset.volatilityPct, fa)}` : ''}${asset.fundingAprPct != null ? `، funding سالانه ${pctStr(asset.fundingAprPct, fa)}` : ''}${sig}${news}.`
+      : `${asset.asset} is ${fmtPrice(asset.price, fa)} USD now; 24h ${pctStr(asset.change24hPct, fa)}${asset.volatilityPct != null ? `, daily volatility ${pctStr(asset.volatilityPct, fa)}` : ''}${asset.fundingAprPct != null ? `, ${pctStr(asset.fundingAprPct, fa)} annualised funding` : ''}${sig ? `, technical signal ${dirLabel(asset.signal.direction, fa)}` : ''}${news}.`;
   }
   /*
    * The wallet balance.
@@ -278,15 +328,37 @@ function makeHeadline({ kind, findings, intent, locale, risk }) {
     const lines = Array.isArray(why.lines) ? why.lines.filter(Boolean) : [];
     const falsifiers = Array.isArray(why.falsifiers) ? why.falsifiers : [];
     const first = lines[0] || null;
+    /* The count is formatted like every other number in the sentence: a
+       Persian sentence with a Latin digit in it reads as a half-translated
+       string, and this one sits right next to «۶ خط دلیل». */
     const tail = falsifiers.length
       ? (fa
-          ? ` — و ${falsifiers.length} شرطِ نقض‌کننده نام برده شده‌اند: «${falsifiers[0].question || ''}».`
+          ? ` — و ${fmtNum(falsifiers.length, fa)} شرطِ نقض‌کننده نام برده شده‌اند: «${falsifiers[0].question || ''}».`
           : ` — and ${falsifiers.length} named falsifier(s), the first being “${falsifiers[0].question || ''}”.`)
       : (fa ? ' — اما شرطِ نقض‌کننده‌ای خوانده نشد.' : ' — but no falsifier was readable.');
     if (first) {
-      return fa
-        ? `${first}${tail}`
-        : `${first}${tail}`;
+      /*
+       * THE ENGINE'S BECAUSE-LINES ARE ENGLISH PROSE, AND THEY STAY THAT WAY.
+       *
+       * Translating a sentence an engine wrote is how a reason turns into a
+       * rumour: the words «no asset-level evidence was readable — the
+       * recommendation rests on ranking alone» are a specific claim about a
+       * specific bundle, and a paraphrase of them in another language is a
+       * different claim. So the Persian headline uses what the engine itself
+       * localises — the COUNT of reason lines, and the falsifier question,
+       * which the decision bundle already writes in the user's language — and
+       * the English line is quoted only in an English reply.
+       *
+       * If the engine ever ships a Persian line of its own, that wins: this is
+       * a fallback, not a ceiling.
+       */
+      const firstFa = Array.isArray(why.linesFa) && why.linesFa.length
+        ? why.linesFa[0]
+        : (first && typeof first === 'object' ? (first.textFa || null) : null);
+      const lead = fa
+        ? (firstFa || `${fmtNum(lines.length, fa)} خط دلیل از همان تصمیمی که واقعاً گرفته شد`)
+        : (typeof first === 'string' ? first : (first?.text || String(first)));
+      return `${lead}${tail}`;
     }
     return fa
       ? 'دلیلی خوانده نشد؛ چیزی ساخته نمی‌شود.'
@@ -312,21 +384,21 @@ function makeHeadline({ kind, findings, intent, locale, risk }) {
   const overview = by('market-overview');
   if (overview && intentType === 'MARKET_OVERVIEW') {
     const b = overview.breadth || {};
-    const movers = (list) => (list || []).map((r) => `${r.symbol} ${pctStr(r.change24hPct ?? r.change24h)}`).filter((x) => x !== ' ').join('، ');
+    const movers = (list) => (list || []).map((r) => `${r.symbol} ${pctStr(r.change24hPct ?? r.change24h, fa)}`).filter((x) => x !== ' ').join('، ');
     return fa
-      ? `بازار: ارزش کل ${fmtUsd(b.totalMarketCapUsd, fa)}، تغییر ۲۴ ساعته ${pctStr(b.marketCapChange24hPct)}، دامنهٔ بیت‌کوین ${pctStr(b.btcDominancePct)}${movers(overview.gainers) ? `؛ صعودی‌ها ${movers(overview.gainers)}` : ''}${movers(overview.losers) ? `، نزولی‌ها ${movers(overview.losers)}` : ''}.`
+      ? `بازار: ارزش کل ${fmtUsd(b.totalMarketCapUsd, fa)}، تغییر ۲۴ ساعته ${pctStr(b.marketCapChange24hPct, fa)}، دامنهٔ بیت‌کوین ${pctStr(b.btcDominancePct, fa)}${movers(overview.gainers) ? `؛ صعودی‌ها ${movers(overview.gainers)}` : ''}${movers(overview.losers) ? `، نزولی‌ها ${movers(overview.losers)}` : ''}.`
       : `Market: total cap ${fmtUsd(b.totalMarketCapUsd, fa)}, 24h change ${b.marketCapChange24hPct ?? '—'}%, BTC dominance ${b.btcDominancePct ?? '—'}%${movers(overview.gainers) ? `; leading ${movers(overview.gainers)}` : ''}${movers(overview.losers) ? `, lagging ${movers(overview.losers)}` : ''}.`;
   }
   const digest = by('news-digest');
   if (digest && intentType === 'NEWS_SUMMARY') {
     const lines = (digest.items || []).slice(0, 3).map((n) => `«${n.title}»`).join(' و ');
     return fa
-      ? `${digest.count} خبر خوانده شد${lines ? `؛ تازه‌ترین‌ها: ${lines}` : ''}. فقط تیتر و زمان انتشار نقل می‌شود، تفسیری افزوده نشده.`
-      : `Read ${digest.count} headline(s)${lines ? `: ${lines}` : ''}. Titles and timestamps only — no interpretation was added.`;
+      ? `${fmtNum(digest.count, fa)} خبر خوانده شد${lines ? `؛ تازه‌ترین‌ها: ${lines}` : ''}. فقط تیتر و زمان انتشار نقل می‌شود، تفسیری افزوده نشده.`
+      : `Read ${fmtNum(digest.count, fa)} headline(s)${lines ? `: ${lines}` : ''}. Titles and timestamps only — no interpretation was added.`;
   }
   if (concentration && intentType === 'CONCENTRATION_CHECK') {
     return fa
-      ? `${concentration.asset} حدود ${concentration.sharePct}٪ از سرمایهٔ پرریسک شماست — سطح ${levelLabel(concentration.level, fa)}.`
+      ? `${concentration.asset} حدود ${fmtNum(concentration.sharePct, fa)}٪ از سرمایهٔ پرریسک شماست — سطح ${levelLabel(concentration.level, fa)}.`
       : `${concentration.asset} is about ${concentration.sharePct}% of your risk capital — ${concentration.level || 'WATCH'} level.`;
   }
   if (goal) {
@@ -378,9 +450,13 @@ function makeHeadline({ kind, findings, intent, locale, risk }) {
     const factor = fa
       ? (riskFinding.reasonFa || factors.find((f) => f && f.detailFa)?.detailFa || '')
       : (riskFinding.reason || riskFinding.detail || '');
+    /* `levelLabel` already exists in this file and every other branch uses it;
+       this one printed the engine's enum, so a Persian sentence said «ریسک کلی
+       HIGH است». The level is the answer to the question, so it is the one word
+       in the sentence that most has to be in the reader's language. */
     return fa
-      ? `ریسک کلی ${level} است${factor ? ` — ${factor}` : ''}${factors.length ? ` (${factors.length} عامل)` : ''}.`
-      : `Overall risk is ${level}${factor ? ` — ${factor}` : ''}${factors.length ? ` (${factors.length} factor(s))` : ''}.`;
+      ? `ریسک کلی ${levelLabel(level, fa)} است${factor ? ` — ${factor}` : ''}${factors.length ? ` (${fmtNum(factors.length, fa)} عامل)` : ''}.`
+      : `Overall risk is ${levelLabel(level, fa)}${factor ? ` — ${factor}` : ''}${factors.length ? ` (${factors.length} factor(s))` : ''}.`;
   }
   /*
    * The portfolio, in one sentence.
@@ -394,7 +470,50 @@ function makeHeadline({ kind, findings, intent, locale, risk }) {
       ? `ارزش پرتفوی ${fmtUsd(exposure.equityUsd, fa)}${concentration ? `، تمرکز اصلی روی ${concentration.asset} (${fmtNum(concentration.sharePct, fa)}٪)` : ''}${exposure.leverage != null ? `، اهرم ترکیبی ${fmtNum(exposure.leverage, fa)}×` : ''}.`
       : `Portfolio value ${fmtUsd(exposure.equityUsd, fa)}${concentration ? `, main concentration in ${concentration.asset} (${fmtNum(concentration.sharePct, fa)}%)` : ''}${exposure.leverage != null ? `, combined leverage ${fmtNum(exposure.leverage, fa)}×` : ''}.`;
   }
-  if (exposure && concentration) {
+  /*
+   * THE SUBJECT OF THE QUESTION, IN THE ENGINE'S OWN WORDS.
+   *
+   * Placed above the portfolio sentence so an intent that read its own engine
+   * is answered from it. Three cases, and the order matters:
+   *
+   *   · the subject finding was READ — quote its own Persian voice, which the
+   *     brain built from the engine's numbers (`detailFa`), never a paraphrase;
+   *   · the subject finding was ATTEMPTED and could not be read — say that,
+   *     naming the reason. This is the case that used to produce a portfolio
+   *     sentence: substituting a real number from a DIFFERENT question is
+   *     worse than admitting the gap, because it looks like an answer;
+   *   · the subject finding does not exist at all — fall through, and let the
+   *     portfolio sentence or the generic tail say what was actually read.
+   */
+  const subjectIds = SUBJECT_FINDING_FOR_INTENT[intentType];
+  if (Array.isArray(subjectIds)) {
+    const raw = subjectIds.map((id) => findings.find((f) => f && f.id === id)).find(Boolean) || null;
+    const subject = raw && raw.status !== 'UNAVAILABLE' ? raw : null;
+    if (subject) {
+      const line = text(subject, 'detail') || text(subject, 'reason');
+      if (line) return String(line);
+    }
+    if (raw) {
+      /*
+       * DETAIL FIRST, THEN REASON — the opposite of the reading branch.
+       *
+       * For an UNAVAILABLE finding the brain's Persian copy lands in `detail`
+       * («این بخش محاسبه نشد (…)») while `reason` stays the engine's raw code
+       * (NO_ASSET_RESOLVED). Reading the reason first put that code into the
+       * middle of a Persian sentence, which is the one thing a named refusal is
+       * supposed to avoid: the user is told something failed in a vocabulary
+       * only the source has.
+       */
+      const why = text(raw, 'detail') || text(raw, 'reason');
+      return fa
+        ? `برای این پرسش چیزی خوانده نشد${why ? `: ${why}` : ''}. عددی از پرسشی دیگر جای آن نمایش داده نمی‌شود.`
+        : `Nothing was readable for this question${why ? `: ${why}` : ''}. No number from a different question is substituted for it.`;
+    }
+  }
+  /* The portfolio sentence — only for the intents whose subject IS the
+     portfolio. For any other intent this is a true number answering a
+     question that was not asked. */
+  if (exposure && concentration && (!intentType || PORTFOLIO_IS_THE_SUBJECT.has(intentType))) {
     return fa
       ? `ارزش پرتفوی ${fmtUsd(exposure.equityUsd, fa)}، تمرکز اصلی روی ${concentration.asset} (${fmtNum(concentration.sharePct, fa)}٪)، اهرم ترکیبی ${exposure.leverage != null ? `${fmtNum(exposure.leverage, fa)}×` : 'ناخواند'}.`
       : `Portfolio ${fmtUsd(exposure.equityUsd, fa)}, main concentration in ${concentration.asset} (${concentration.sharePct}%), combined leverage ${exposure.leverage ?? '—'}×.`;
@@ -440,10 +559,18 @@ function fmtPrice(v, fa = false) {
   }
 }
 
-const pctStr = (v) => {
+/*
+ * ONE percent formatter, in the sentence's own digits and sign.
+ *
+ * A Persian sentence that reads «تغییر ۲۴ ساعت +1.4٪» next to «۳۶٬۰۰۰ دلار»
+ * is a half-translated string: the currency was formatted and the percentage
+ * was not. The sign character belongs to the locale too — '٪' in Persian, '%'
+ * in English — so an English sentence cannot end up wearing the Persian one.
+ */
+const pctStr = (v, fa = false) => {
   const n = usableNumber(v);
   if (n === null) return '—';
-  return `${n > 0 ? '+' : ''}${round(n, 2)}٪`;
+  return `${n > 0 ? '+' : ''}${fmtNum(n, fa)}${fa ? '٪' : '%'}`;
 };
 
 const levelLabel = (level, fa) => ({ HIGH: fa ? 'بالا' : 'high', ELEVATED: fa ? 'افزایش‌یافته' : 'elevated', MODERATE: fa ? 'متوسط' : 'moderate', LOW: fa ? 'پایین' : 'low' }[String(level || '').toUpperCase()] || String(level || '—'));

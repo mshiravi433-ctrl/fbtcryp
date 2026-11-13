@@ -12,7 +12,11 @@
  *     either a hole in the language or a misclassification, and both are
  *     worth a build failing over;
  *   · a finding FAILED WITHOUT NAMING A REASON — a silent refusal is
- *     indistinguishable from an engine that was never called.
+ *     indistinguishable from an engine that was never called;
+ *   · the HEADLINE is about a different question than the one asked — ten
+ *     intents were reaching their engines and then answering with the
+ *     portfolio's value, because a branch above the generic tail caught
+ *     every intent that had no branch of its own.
  *
  * The second one is the stricter half, and it is the half that matters:
  * the intent list grew to thirty-six when the EXECUTION intents were
@@ -129,6 +133,87 @@ test('every refusal NAMES itself — a silent failure is a dark engine', () => {
   for (const row of refusing) {
     assert.ok(row.ok > 0, `${row.intent}: every finding refused, so the intent is dark`);
   }
+});
+
+test('the headline is about the question that was actually asked', () => {
+  /*
+   * "REACHED WITH AN OK FINDING" IS NOT THE SAME AS "ANSWERED THE QUESTION".
+   *
+   * Ten of the thirty-six intents were reaching their engines perfectly — the
+   * yield engine had found «aave-v3 USDC pays 4.1% APR», the fit engine had
+   * ranked five opportunities, the smart-money engine had read five global
+   * domains, the why engine had produced six reason lines and four falsifiers —
+   * and every one of them then headlined:
+   *
+   *     «ارزش پرتفوی ۱۰٬۰۰۰ دلار، تمرکز اصلی روی BTC (۱۰۰٪)، اهرم ترکیبی ۱×»
+   *
+   * A true number, correctly sourced, confidently rendered, and not an answer
+   * to the question. The cause was a branch in `makeHeadline` that fired on
+   * `exposure && concentration` and sat above the generic tail, so it caught
+   * every intent that had no branch of its own. It had already been moved below
+   * the specific branches once, when it swallowed RISK_OVERVIEW — but "below the
+   * specific branches" only helps the intents that HAVE one.
+   *
+   * This is the failure `human.js` warns about in its own comment: a real number
+   * attached to the WRONG question is harder to notice than an empty reply,
+   * because it looks like the system worked.
+   */
+  const all = runReachProbe().rows;
+  /*
+   * ONLY THE ROWS THE USER ACTUALLY READS.
+   *
+   * A headline is computed on every turn, including the ones that end in
+   * QUESTION mode — where the reply leads with the question and the headline is
+   * never rendered. Asserting over those would fail the gate on text nobody
+   * sees, and a gate that cries wolf gets deleted. So the subject assertions
+   * cover the ANSWER turns, and the QUESTION turns are held to the weaker and
+   * still real rule below: the reply must say something.
+   */
+  const rows = all.filter((r) => r.mode === 'ANSWER');
+  assert.ok(rows.length >= 20, `expected most of the intent list to answer, got ${rows.length} of ${all.length}`);
+
+  /* The intents whose subject genuinely IS the portfolio's shape. For these the
+     exposure + concentration sentence is the answer, not a substitute for one. */
+  const PORTFOLIO_IS_THE_SUBJECT = new Set([
+    'PORTFOLIO_ANALYSIS', 'CONCENTRATION_CHECK', 'CONFIRM_PENDING',
+    'CANCEL_PENDING', 'EXECUTE_REBALANCE', 'CONDITIONAL_ALLOCATION'
+  ]);
+
+  const wrongSubject = rows.filter(
+    (r) => String(r.headline || '').includes('ارزش پرتفوی') && !PORTFOLIO_IS_THE_SUBJECT.has(r.intent)
+  );
+  assert.deepEqual(
+    wrongSubject.map((r) => `${r.intent} → ${r.headline.slice(0, 70)}`),
+    [],
+    'an intent that read its own engine must be answered from it, not from the portfolio'
+  );
+
+  /* The generic tail names a value with no subject. It is the last resort for a
+     turn that read something the intent map does not know about — not an answer
+     for an intent that has an engine behind it. */
+  const generic = rows.filter((r) => String(r.headline || '').startsWith('نتیجهٔ خواندن وضعیت'));
+  assert.deepEqual(
+    generic.map((r) => `${r.intent} → ${r.headline.slice(0, 70)}`),
+    [],
+    'no intent may fall through to the generic tail; every one has a subject'
+  );
+
+  /* And the reply must say SOMETHING. An empty headline is legitimate for a turn
+     in QUESTION mode — the question is the reply — but not for a turn that
+     claims to have answered. */
+  const silent = all.filter((r) => !String(r.headline || '').trim() && !r.text);
+  assert.deepEqual(
+    silent.map((r) => r.intent),
+    [],
+    'every turn must produce a headline or a question; silence is not an answer'
+  );
+  /* An ANSWER turn with no headline has nothing to lead with. */
+  const headless = rows.filter((r) => !String(r.headline || '').trim());
+  assert.deepEqual(
+    headless.map((r) => r.intent),
+    [],
+    'a turn in ANSWER mode must have a headline'
+  );
 });
 
 test('the intent list is covered — a new intent cannot be added without a probe', async () => {
