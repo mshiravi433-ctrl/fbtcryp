@@ -34,9 +34,27 @@ import { GlyphSortAsc, GlyphSortDesc } from './MarketGlyphs.jsx';
  * ─── WHY ARIA ROLES AND NOT A <table> ──────────────────────────────────────
  * The rows below are `<button>`s inside `<div>`s — a whole row has to be one tap
  * target. A native table would be a lie about the structure, so the roles
- * describe what is actually there: a rowgroup with header cells, and
- * `aria-sort` on the ONE active column (never `"none"` on the rest — that is a
- * word a screen reader repeats on every header it passes).
+ * describe what is actually there, and `aria-sort` sits on the ONE active
+ * column (never `"none"` on the rest — that is a word a screen reader repeats
+ * on every header it passes).
+ *
+ * ─── AND WHY THE STRUCTURE WAS REBUILT (2026-11-12) ────────────────────────
+ * The roles above were PRESENT AND BROKEN, which is the worst of both: a
+ * `role="row"` and `role="columnheader"` are only meaningful inside
+ * `role="table"` / `role="rowgroup"`, and nothing on the screen declared
+ * either — so the tree carried table roles the browser could not resolve, and
+ * a five-cell header was announced as five unrelated items. The change cell
+ * was also a `columnheader` NESTED inside another `columnheader`, which is
+ * invalid outright.
+ *
+ * The fix is not "delete the semantics", it is "make the ancestors real": the
+ * page now wraps this row in `role="rowgroup"` inside a `role="table"` (see
+ * `Market.jsx`), so the row and its column headers are where they claim to be
+ * and `aria-sort` reaches the reader. The nesting was flattened — one
+ * columnheader per cell, the price and change cells SIBLINGS rather than one
+ * inside the other — and every button also carries `aria-pressed` plus its
+ * state in the accessible name, so a reader who never hears `aria-sort`
+ * (some mobile screen readers do not) still hears «قیمت — نزولی».
  */
 function MarketColumnHeader({
   horizon = '24h',
@@ -48,6 +66,14 @@ function MarketColumnHeader({
   const horizonLabel = t(`market.horizon.${horizon}`);
   const changeSortKey = changeKey(horizon);
 
+  /*
+   * `aria-sort` is the ONE piece of table semantics that earns its place here,
+   * and only because `Market.jsx` gives this row a real `role="rowgroup"`
+   * ancestor — a columnheader outside a table is the orphan the note above
+   * describes. It sits on the cell, never on the button inside it (a button
+   * with aria-sort is ignored), and only on the ACTIVE one: `aria-sort="none"`
+   * on the rest is a word a screen reader repeats at every header it passes.
+   */
   const ariaSort = (key) => {
     if (sortKey !== key) return undefined;
     return sortDir === 'asc' ? 'ascending' : 'descending';
@@ -57,14 +83,23 @@ function MarketColumnHeader({
     ? <GlyphSortAsc width={11} height={11} aria-hidden="true" />
     : <GlyphSortDesc width={11} height={11} aria-hidden="true" />);
 
-  const ColButton = ({ sortAs, label, ariaLabel }) => (
+  /*
+   * The state lives in the accessible NAME as well as in `aria-pressed`,
+   * because a name is the only thing some assistive tech reads when a button
+   * enters the tree: «قیمت» beside an arrow nobody can see is a button that
+   * does nothing, while «قیمت — نزولی» is the same button with its state.
+   */
+  const ColButton = ({ sortAs, label, ariaLabel, sorted }) => (
     <button
       type="button"
       className="mx-col-btn"
       onClick={() => onSort?.(sortAs)}
       /* The visible label is short because a 92px column cannot hold
          «تغییر ۲۴ ساعت»; the accessible name carries the whole sentence. */
-      aria-label={ariaLabel}
+      aria-label={sorted
+        ? `${ariaLabel} — ${t(sorted === 'asc' ? 'market.criteriaAsc' : 'market.criteriaDesc')}`
+        : ariaLabel}
+      aria-pressed={sorted ? true : false}
       data-sort-key={sortAs}
       data-active={sortKey === sortAs ? 'true' : undefined}
     >
@@ -77,40 +112,41 @@ function MarketColumnHeader({
     <div
       className="mx-colhead"
       role="row"
-      aria-label={t('market.columnsAria')}
       data-testid="market-column-header"
       data-horizon={horizon}
+      aria-label={t('market.columnsAria')}
     >
       <span className="mx-colhead-rank" aria-hidden="true" />
       <span className="mx-colhead-logo" aria-hidden="true" />
 
-      <span
-        className="mx-colhead-name"
-        role="columnheader"
-        aria-sort={ariaSort('volume')}
-      >
+      <span className="mx-colhead-name" role="columnheader" aria-sort={ariaSort('volume')}>
         <ColButton
           sortAs="volume"
           label={t('market.colName')}
           ariaLabel={t('market.colVolumeAria')}
+          sorted={sortKey === 'volume' ? sortDir : null}
         />
       </span>
 
       <span className="mx-colhead-spark" aria-hidden="true" />
 
-      <span className="mx-colhead-right" role="columnheader" aria-sort={ariaSort('price')}>
-        <ColButton
-          sortAs="price"
-          label={t('market.colPrice')}
-          ariaLabel={t('market.colPriceAria')}
-        />
-        <span className="mx-colhead-change" aria-sort={ariaSort(changeSortKey)} role="columnheader">
+      <span className="mx-colhead-right">
+        <span role="columnheader" aria-sort={ariaSort('price')}>
+          <ColButton
+            sortAs="price"
+            label={t('market.colPrice')}
+            ariaLabel={t('market.colPriceAria')}
+            sorted={sortKey === 'price' ? sortDir : null}
+          />
+        </span>
+        <span className="mx-colhead-change" role="columnheader" aria-sort={ariaSort(changeSortKey)}>
           <ColButton
             sortAs={changeSortKey}
             /* The change label IS the horizon: «۲۴ ساعت» becomes «۷ روز» when
                the rail moves, which is the point of having a rail. */
             label={horizonLabel}
             ariaLabel={t('market.colChangeAria', { window: horizonLabel })}
+            sorted={sortKey === changeSortKey ? sortDir : null}
           />
         </span>
       </span>

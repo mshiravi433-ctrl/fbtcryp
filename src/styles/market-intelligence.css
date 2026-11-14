@@ -1452,6 +1452,10 @@
     font-size: 8.5px;
   }
   .mx-market .mx-col-btn { min-height: 20px; padding: 2px 3px; gap: 3px; }
+  /* The criteria row on a phone: 8px padding and a 9px caption, because at
+     390px the caption shares its line with the rail and wraps at 9.5px. */
+  .mx-market .mx-criteria { padding: 8px 9px 9px; }
+  .mx-market .mx-criteria-caption { font-size: 9px; }
 }
 
 /* The quote half of the pair — «BTC/USD» rather than a bare «BTC».
@@ -1462,4 +1466,168 @@
   color: var(--mx-faint);
   font-weight: 550;
   font-size: .92em;
+}
+
+/* ─── 9 · THE CRITERIA ROW: WHAT THIS LIST IS, ABOVE THE LIST ───────────────
+   Requested shape: «وقتی فیلتر می‌کنم باید ببینم چی فیلتر شده و چطور برش گردونم».
+
+   Three bands, top to bottom, in the order a reader asks the question:
+     headline  — one sentence naming the set (the sector, the query, «همه»)
+     chips     — every active constraint as a removable token
+     scope     — how much of the feed is on screen, with a caption that knows
+                 whether the rest is in memory or costs a request
+
+   No blur, no shadow, no entrance animation: this row is redrawn on every 30s
+   poll, and market-perf.css §9 already records what a composited layer in the
+   scroll region costs. The only transition is the rail's width, and `width` is
+   the one property a 2px bar can animate without a repaint storm on a phone. */
+.mx-market .mx-criteria {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0 0 8px;
+  padding: 9px 11px 10px;
+  border: 1px solid var(--mx-line);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--mx-panel-2) 88%, transparent);
+}
+.mx-market .mx-criteria-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.mx-market .mx-criteria-headline {
+  margin: 0;
+  min-width: 0;
+  color: var(--mx-text);
+  font: 600 11.5px/1.35 var(--font-display);
+  /* A sector name and a long query both have to fit; clipping one line of a
+     two-line sentence is worse than letting it wrap. */
+  overflow-wrap: anywhere;
+}
+.mx-market .mx-criteria-reset {
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--mx-line);
+  border-radius: 8px;
+  background: none;
+  color: var(--mx-cyan);
+  font: 600 10px/1 var(--font-display);
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.mx-market .mx-criteria-reset:hover { background: color-mix(in srgb, var(--mx-cyan) 9%, transparent); }
+.mx-market .mx-criteria-reset:focus-visible { outline: 2px solid var(--mx-cyan); outline-offset: 1px; }
+
+/* The chips wrap rather than scroll: a horizontal scroller hides the constraint
+   that caused the unexpected row count, which is the one thing this row exists
+   to prevent. Four constraints is the realistic maximum. */
+.mx-market .mx-criteria-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+.mx-market .mx-criteria-chip {
+  --crit: var(--mx-cyan);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 0 4px 0 8px;
+  border: 1px solid color-mix(in srgb, var(--crit) 22%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--crit) 8%, transparent);
+  color: var(--crit);
+  font: 600 10px/1 var(--font-display);
+}
+.mx-market .mx-criteria-chip[data-tone='order'] { --crit: var(--mx-violet); }
+.mx-market .mx-criteria-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mx-market .mx-criteria-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 18px of drawn ✕ inside a 24px chip: the hit target is the button's own
+     24×24 box, not the glyph, because a 9px path is not a tap target. */
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color .15s ease;
+}
+.mx-market .mx-criteria-chip-x:hover { background: color-mix(in srgb, var(--crit) 18%, transparent); }
+.mx-market .mx-criteria-chip-x:focus-visible { outline: 2px solid var(--crit); outline-offset: 1px; }
+
+.mx-market .mx-criteria-scope {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.mx-market .mx-criteria-rail {
+  flex: 1 1 auto;
+  min-width: 40px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--mx-line);
+}
+.mx-market .mx-criteria-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--mx-cyan), var(--mx-violet));
+  transition: width .2s ease;
+}
+.mx-market .mx-criteria-caption {
+  flex: 0 0 auto;
+  color: var(--mx-muted);
+  font: 500 9.5px/1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A live region that is read but not seen. Defined here rather than reusing a
+   page-scoped `.sr-only` from another stylesheet, because this file must not
+   depend on which of the twelve are loaded. */
+.mx-market .mx-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+
+/* ─── 10 · THE TABLE'S ARIA SKELETON MUST NOT DRAW ──────────────────────────
+   `role="table"` / `role="rowgroup"` are wrapped around the column header and
+   the rows so those roles stop being orphans (see Market.jsx). They are
+   semantics, not layout: `display: contents` keeps the wrapper out of the grid
+   flow entirely, so the header and the row stack lay out exactly as they did
+   before the wrapper existed.
+
+   NOT `display: block` — that would make the wrapper a block box and collapse
+   the `stack` gap the rows use. `contents` is the one value that adds a role
+   without adding a box. */
+.mx-market .mx-table-semantics,
+.mx-market .mx-table-semantics > [role='rowgroup'] {
+  display: contents;
 }
