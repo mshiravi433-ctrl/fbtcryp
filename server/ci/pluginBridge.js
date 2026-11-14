@@ -267,7 +267,18 @@ export async function consultPlugins({ message = '', locale = 'fa', owner = null
       title: String(out.title || out.slug || 'plugin'),
       dataStatus: String(out.dataStatus || 'live'),
       citations: Array.isArray(out.citations) ? out.citations.slice(0, 8) : [],
-      matched: Array.isArray(out.matched) ? out.matched.slice(0, 6).map((m) => String(m)) : []
+      matched: Array.isArray(out.matched) ? out.matched.slice(0, 6).map((m) => String(m)) : [],
+      /* WHAT MAKES THIS ANSWER WATCHABLE. `watch` is the plugin's own catalog
+         declaration (which subject it re-reads, which datum it compares, what is
+         allowed to trigger) and `subject` is what this run actually read, taken
+         from the parsed request rather than from the prose. The two travel as
+         data, not as a `watchable: true` flag: a flag would say "an offer is
+         possible" while the client still had nothing to arm it with, and an
+         offer the user cannot act on is the same darkness as no offer.
+         The verdict itself deliberately does NOT travel — a `complete:false`
+         verdict must never be rendered as a fact about the subject. */
+      watch: out.watch || null,
+      subject: out.subject || null
     };
   } catch (err) {
     return {

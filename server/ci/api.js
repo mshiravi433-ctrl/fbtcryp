@@ -360,6 +360,66 @@ export function createCentralIntelligence({ ioOverride = null, log = () => {}, e
     return { ok: true, attached: null, durable: out.durable ?? null, code: out.ok ? null : (out.code || null) };
   }));
 
+  /* ── the plugin that speaks first (§5.24.16) ──────────────────────────────
+     A watch is armed on the plugin the user already chose: `agentId` is
+     optional, and when it is absent the owner's durable attachment decides, so
+     the same order of authority the chat turn uses decides here too.
+
+     The module is imported LAZILY. `app.js` loads it statically for the cron, so
+     in production this is already warm; in a gate that only mounts the brain, a
+     route nobody calls must not pull the push transport and the order watcher
+     into the graph. */
+  const watchModule = () => import('../agentHub/pluginWatch.js');
+  /* A plugin that is not ours and a plugin we cannot watch are different facts
+     and get different statuses, so a client can say which one happened. */
+  const watchStatus = (code) => (code === 'PLUGIN_NOT_IN_CATALOG' || code === 'PLUGIN_NOT_WATCHABLE' ? 404
+    : code === 'PLUGIN_WATCH_DISABLED' || code === 'PLUGIN_ATTACH_DISABLED' ? 503
+      : code === 'NO_OWNER' ? 401 : 400);
+
+  router.post('/plugins/watch', route(async (req, res) => {
+    const owner = ownerFor(req);
+    const mod = await watchModule();
+    const agentId = req.body?.agentId == null ? null : String(req.body.agentId).trim().slice(0, 64) || null;
+    const endpoint = String(req.body?.endpoint ?? '').trim().slice(0, 512);
+    const subject = req.body?.subject && typeof req.body.subject === 'object'
+      ? { kind: String(req.body.subject.kind ?? '').slice(0, 12), value: String(req.body.subject.value ?? '').slice(0, 64), chain: req.body.subject.chain == null ? null : String(req.body.subject.chain).slice(0, 12) }
+      : null;
+    const out = await mod.putPluginWatch({
+      owner,
+      identity: endpoint,
+      agentId,
+      subject,
+      lang: String(req.body?.lang || 'fa').slice(0, 5),
+      thresholdPct: req.body?.thresholdPct == null ? null : Number(req.body.thresholdPct)
+    });
+    if (!out.ok) {
+      return res.status(watchStatus(out.code)).json({ ok: false, code: out.code, wants: out.wants || null, cap: out.cap ?? null, detail: out.message || null });
+    }
+    return { ok: true, watch: out.watch, durable: out.durable };
+  }));
+
+  router.get('/plugins/watches', route(async (req) => {
+    const owner = ownerFor(req);
+    const mod = await watchModule();
+    const out = await mod.listPluginWatches({ owner });
+    if (!out.ok) return { ok: false, code: out.code, watches: [] };
+    return { ok: true, watches: out.watches, durable: out.durable, status: await mod.pluginWatchStatus().catch(() => null) };
+  }));
+
+  router.post('/plugins/watch/stop', route(async (req) => {
+    const owner = ownerFor(req);
+    const mod = await watchModule();
+    /* Idempotent, like detaching: stopping a watch that is not armed is the same
+       state as stopping one that was, and an error here would make the UI's
+       toggle lie about what happened. */
+    const out = await mod.stopPluginWatch({
+      owner,
+      id: req.body?.id == null ? null : String(req.body.id).trim().slice(0, 160) || null,
+      slug: req.body?.slug == null ? null : String(req.body.slug).trim().slice(0, 48) || null
+    });
+    return { ok: true, removed: out.ok ? out.removed : 0, durable: out.durable ?? null, code: out.ok ? null : (out.code || null) };
+  }));
+
   mountKernelRoutes({ router, kernel, ownerFor, log });
 
   return { router, stateStore, events, brain, kernel, ownerFor, schema: CI_ROUTES_SCHEMA };

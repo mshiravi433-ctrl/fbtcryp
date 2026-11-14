@@ -4141,6 +4141,200 @@ non-vacuity proven by reverting the nine product files (12 of 13 fail; the
 survivor is the pure passport test, which needs only the new module). Full
 suite **994/994 in 182 s** — 9 s *faster* than with the attach unguarded.
 
+#### 5.24.16 The plugins started watching
+
+§5.24.15 let a user choose a plugin and made that choice reach a turn. What it
+left open was the part that separates an agent from a router: **nothing was
+proactive**. `runNativeAgent` still had no caller outside a question, so the
+token risk scanner that already reads GoPlus could not tell its own user that a
+honeypot flag had appeared since the day they asked about it.
+
+**Measured first**, as always:
+
+```
+  import(pluginWatch.js), incremental to app.js       2.95 ms   +0.31 MB
+  import(native/agents.js) — lazy, inside a cycle      3.48 ms   +0.44 MB
+  putPluginWatch (arm)                              0.37–1.15 ms
+  putPluginWatch (same subject again)                  0.45 ms
+  listPluginWatches / stopPluginWatch                  0.01 ms
+  pluginWatchStatus                                    0.02 ms
+  buildPluginWatchAlert                                0.09 ms
+  runPluginWatchCycle, 0 rows / 2 rows (injected)      0.02 ms
+  runPluginWatchCycle, 2 REAL runs, no egress         107.35 ms
+  the eleven plugin runs with the verdict computed     25.4 ms  (0.38 ms warm)
+```
+
+So the watcher itself is free; the only real cost is the plugin run, which is a
+network read. That single number shaped the design more than any other.
+
+**A watch cannot diff prose.** Every report ends with a footer that stamps the
+read time, so the same verdict reads differently a minute later, and wording
+drifts for cosmetic reasons. A background alerter that fires on drift teaches a
+user to swipe the next card away unread, which is worse than no alerter. So each
+watchable plugin now returns one machine-readable datum beside its text:
+
+```
+  verdict: { level, key, metric, unit, complete, noteFa, noteEn }
+```
+
+and the key is built from **codes**, never from labels. The gate proves the
+reason: the same scan asked in Persian and in English returns the same key while
+the prose differs, because the flags are named `honeypot`/`mintable` internally
+and «هانی‌پات»/«قابل ضرب» only in the report. Arming a watch in one language and
+reading it back in the other must not announce a change in the token.
+
+**`complete:false` is silence.** This is the rule the whole feature rests on, and
+it came from a measurement rather than from a principle. With no egress:
+
+```
+  token-risk-scanner   ok:true   dataStatus:'partial'
+  lead: «اسکن ریسک · 0x11111111 — وضعیت: پرچم پرخطرِ قطعی دیده نشد»
+```
+
+The plugin answered, and its answer said that no definite danger flag was seen —
+which is true about the sources that answered and says nothing about the token.
+A watcher that armed THAT as a baseline would treat the first successful read as
+a change in the token, when the only thing that changed was our own network. A
+notification about our egress, delivered to a user as a fact about their asset,
+is a lie with a push sound. So an incomplete read never arms a baseline, never
+fires, and records why (`lastSkip:'INCOMPLETE_READ'`) where the status endpoint
+can see it. A whole cycle with two real runs and no egress reports
+`ran:2, fired:0, delivered:0, incomplete:2`.
+
+The same measurement found a published contradiction: `protocol-security-brief`
+returned `dataStatus:'live'` while its own body said «فید حادثه‌ها خوانده نشد؛ این
+بخش نامشخص است» — one object holding two truths. It is `partial` now.
+
+**Five of the eleven plugins are watchable**, declared in the catalog rather than
+implied by whichever branch happened to run:
+
+```
+  token-risk-scanner        address   contract-risk-flags   fires=key
+  protocol-security-brief   protocol  incident-record       fires=key
+  smart-money-tracker       address   flow-risk-level       fires=key
+  wallet-exposure-auditor   address   wallet-exposure       fires=key|metric  (10–90 %, default 25)
+  lending-risk-agent        protocol  supply-apy            fires=metric     (1–50 %, default 10)
+```
+
+The other six are refused at arm time with `PLUGIN_NOT_WATCHABLE`, which is a
+different fact from `PLUGIN_NOT_IN_CATALOG`: the first says "we cannot watch
+this", the second says "this is not ours". A bridge quote has nothing stable to
+watch at all. Refusing is the honest half of the design — a watch that is armed
+and can never fire is the same darkness as a plugin nobody calls.
+
+**Four rules were inherited from `server/priceWatch.js` rather than reinvented**,
+because that module already paid for them: silence is never a trigger and never a
+baseline; the first complete read arms and says nothing; a baseline older than
+seven days re-arms silently; and a baseline and a cooldown move only on a
+DELIVERED notice. The last one needed a fifth rule of its own. A failed push was
+originally retried at the next recheck window, which is six hours later — the
+fact was already known and the phone was the only thing that failed, so making it
+wait was a second failure the user could not see. A row that could not be
+delivered is now due on the next cycle, bounded at three attempts, after which
+the baseline moves and the row records `DELIVERY_FAILED` — because a subscription
+whose app was uninstalled fails forever, and paying for a plugin read every cycle
+to reach a dead device is not a retry policy, it is a leak.
+
+**The subject must survive the trip back through the parser.** A cycle re-runs a
+watch by rendering its stored subject into a sentence and handing it to the
+plugin by id. `subjectToMessage` therefore has to be the exact inverse of
+`extractRequest`, and arming refuses a subject that does not round-trip. This is
+not a theoretical guard: a 32-character base58-looking string passes the shape
+check, renders into a sentence, and comes back with `address: null` because it is
+not a valid Solana address. Armed anyway, it would have announced changes in a
+token nobody named — with a real number, in the plugin's own name. The chain word
+is the parser's own key (`base`), never the display label («بیس»), for the same
+reason: a label would silently re-read the default chain.
+
+**The budget.** One plugin run measured 15–125 ms with no egress and carries an
+8-second ceiling when sources answer. `/api/cron/watch` is hit every twenty
+minutes by `.github/workflows/order-watch-tick.yml` and once a day by
+`/api/cron/daily`, and the whole API is ONE Vercel function with `maxDuration:
+60` that it shares with the order cycle and the price cycle. So a cycle runs at
+most two plugins at six seconds each: twelve seconds worst case, and the cap is
+reported (`remainingDue`) instead of hidden. The watcher deliberately does NOT
+ride `/api/cron/tick`, which a foreground tab calls — charging the person using
+the site for a background read is the wrong trade. The datum sets the cadence
+instead: a contract flag or a recorded incident is a six-hour fact, not a
+four-minute one. With every row due and the cap binding, one row's real waiting
+time is published by `pluginWatchStatus()` as `worstCaseRecheckMs` rather than
+left for anyone to assume.
+
+**The notice.** Tone comes from the plugin's own level through
+`toneForVerdict()` in `src/lib/notificationDesign.js`, the module that already
+owns every presentation decision, so a danger verdict earns the alarm colour and
+a rate move does not borrow it — an APY is a number, not a judgement, and its
+level is `info`. The sentence owns the direction («از ۴٫۲۰٪ به ۶٫۹۰٪ بالا رفت»،
+never a bare «۶۴٪»), and a metric move with no finite move to quote falls back to
+the level sentence rather than printing «NaN٪» on a lock screen. The plugin's own
+caveat is fitted BEFORE the body is cut, not after: when both do not fit, the
+metric clause goes and the caveat stays, because a card that drops «نبودِ رکورد،
+اثباتِ نبودِ حادثه نیست» publishes the fact and loses the limit of the fact. And
+a missing translation falls back to the machine slug, never to the other language
+— an English card carrying «مواجهه و تمرکز کیف‌پول» was the first thing the copy
+measurement produced, and one sentence in two languages is worse than an
+identifier.
+
+Three more defects were found by measuring rather than by reading:
+
+1. **`withDeadline` owns the `{ ok, value }` envelope.** The readers return raw
+   payloads and report failure by throwing, so a test fake wrapped in
+   `{ok:true, value:…}` is double-wrapped and every agent sees a source that
+   answered with nothing. Five tests failed at once, which is the useful part: a
+   gate about incomplete reads was accidentally testing nothing else.
+2. **The verdict key must be rounded where the datum is a share.** A 71.04 % and
+   a 71.00 % concentration are the same wallet; announcing the difference would
+   have fired on a four-dollar move in a ten-thousand-dollar portfolio.
+3. **`mod.nativeEnabled` is called, not read.** A fake that sets it to `true`
+   throws outside `attachPluginAnswer`'s own try, and the cycle reports a crash
+   where the truth was a source that did not answer.
+
+The wire is real and gated: `/api/cron/watch` runs the cycle through
+`deliverStagePush` (web push and FCM, routed by the device), `DAILY_JOBS` has a
+`plugin-watch` entry so its cost is visible beside the other eleven jobs,
+`/api/cron/status` reports `pluginWatchStatus()` instead of `Boolean(engine)`,
+three owner routes sit with §5.24.15's (`POST /plugins/watch`,
+`GET /plugins/watches`, `POST /plugins/watch/stop`), the client arms a watch with
+a lazily imported `pushIdentity()` so the notification layer stays off the
+first-paint graph, and the dock renders «پاییدنِ …» under an answer only when the
+plugin declared a watch AND that run held a subject — so the offer cannot appear
+where there is nothing to arm. A browser without notification permission is told
+`NO_PUSH_IDENTITY` rather than shown a watch that can never arrive.
+
+Gate: `test/intent-ai/plugin-watch-runtime.test.mjs`, **22 tests, 410 ms, no
+egress** — the real agents are driven through injected readers and the cycle
+through an injected run. Non-vacuity proven by reverting the ten product files:
+**19 of 22 fail**. The three survivors are the kill switches, the caveat fitting
+and the language purity check, all of which exercise only the new module.
+
+Three things the shipping run itself had to say.
+
+**Adding a named job changes a published contract.**
+`test/intent-ai/phase-status-summary-and-cron-jobs.test.mjs` pins the daily job
+count and the sorted name list, because a schedule depends on both. It went
+from eleven to twelve and gained `plugin-watch` — the first job added since
+§5.6 built the registry. That gate turning red was the change working, not a
+regression, but it is exactly why the count is asserted: the next job added
+will trip it too, and it should.
+
+**The lazy `notify.js` import in `client.js` is graph hygiene, not a size win.**
+Vite reports that `src/lib/notify.js` is *already* statically imported by
+`App.jsx`, so a dynamic import "will not move module into another chunk".
+Keeping the edge lazy stops `client.js` — which half the app imports — from
+growing a static dependency on the notification layer; it does not shrink
+anything. First paint moved 1818.27 → **1818.78 KB** against the 1825 KB
+budget, so the entire client half of this round cost roughly half a kilobyte.
+
+**One full-suite run failed `every shape of question in the corpus lands on the
+tier it justifies`, and it was not this round.** That gate shells out to
+`scripts/probe-autotier.mjs`, whose line 188 asserts `perMessageMs < 2` — a
+wall-clock number measured inside a child process while the rest of the suite
+runs in parallel beside it. The same file passed 9/9 standalone three times
+running, and the next full run was **1016/1016**. Recorded rather than quietly
+re-run, because a timing threshold inside a load-sensitive suite will do this
+again, and the honest repair is to measure the probe against an idle process —
+not to widen the number until the flake stops complaining.
+
 #### What is still open
 
 §5.24.10 answered the clause that names its own subject. The clauses that
@@ -4258,20 +4452,31 @@ green while doing so.
 > empty case is a case: `size &&` turns "nothing changed" into "check
 > everything", which is how a lint starts crying wolf about code nobody touched.**
 
-§5.24.15 closed two of the three gaps this list carried: the registry is now
-fed by the plugin catalog (eleven verified first-party rows, `canExecute:
-false`, trust earned from recorded interactions), and a user's choice reaches a
-turn — per browser and per owner. What is still open is the third, and it is
-the part that would make this an agent rather than a router: **nothing is
-proactive**. A plugin answers when asked; it never watches and speaks first.
-There is no schedule on an attachment, no threshold that would make the token
-risk scanner tell its owner something changed, and the event bus that already
-drives `eventReplanning` (with `agentCouncil.convene` and `guardian.check`
-wired into it) has no plugin-shaped subscriber. Also unchanged: the attach
-fires only on a turn the registry could not route, so a routed turn whose own
-engine has no data still cannot borrow a plugin that has it — and that needs a
-conflict rule (which of the two speaks, and how the reply says so), not a
-wider trigger. Beside it, the
+§5.24.15 closed the registry and the user's choice; §5.24.16 closed the
+proactivity gap behind them — five of the eleven plugins can now be watched, and
+a watched plugin announces its own verdict change through the push transport the
+order and price watchers already use. What is still open:
+
+* **Six plugins hold no datum to watch** (`ai-trading-analyst`,
+  `token-research-agent`, `strategy-backtesting-agent`, `yield-optimizer`,
+  `liquidity-pool-analyzer`, and `cross-chain-swap-assistant`, which is a quote
+  and never will be). Each is refused at arm time rather than armed and mute, but
+  a refusal is a smaller feature than a verdict: each of the five that work needed
+  one honest machine-readable datum, and the same work remains for the others.
+* **The notice has no in-app surface.** It is push-only, so a person who never
+  granted notification permission can arm nothing at all — `NO_PUSH_IDENTITY` is
+  honest, but it means the feature does not exist for them. There is no inbox the
+  dock could read, and no list of armed watches anywhere in the UI except the
+  toggle under the answer that armed one.
+* **The rows live in the global store**, because a cycle has to enumerate every
+  owner's watches in one pass and FI collections are keyed per owner. Without
+  `BLOB_READ_WRITE_TOKEN` that store is a per-instance Map, so on serverless a
+  watch armed on one instance is invisible to the next — reported as
+  `durable:false` everywhere, which is the truth and not a fix.
+* The attach still fires only on a turn the registry could not route, so a routed
+  turn whose own engine has no data still cannot borrow a plugin that has it —
+  and that needs a conflict rule (which of the two speaks, and how the reply says
+  so), not a wider trigger. Beside it, the
 status payload still reports `agentCouncil` and `agentRuntime` as
 `Boolean(...)` and `lastResults.council` / `lastResults.decision` are
 hard-coded `null` while `globalIntelligence` and `briefing` carry real last

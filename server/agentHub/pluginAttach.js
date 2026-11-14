@@ -348,7 +348,8 @@ async function load() {
     nativeEnabled: native.nativeEnabled,
     runNativeAgent: agents.runNativeAgent,
     catalog: agents.NATIVE_AGENTS,
-    data: dataMod.createDataAccess()
+    data: dataMod.createDataAccess(),
+    dataAccess: dataMod
   };
   return cached;
 }
@@ -462,7 +463,22 @@ export async function attachPluginAnswer({ message = '', locale = 'fa', owner = 
       title,
       dataStatus,
       citations: Array.isArray(out.citations) ? out.citations : [],
-      matched: match.matched
+      matched: match.matched,
+      /* ── what makes this answer watchable ────────────────────────────────
+         `verdict` is the plugin's own machine-readable datum (null when it has
+         nothing stable to compare); `watch` is the catalog's declaration of what
+         may trigger; `subject` is the thing this run actually read, taken from
+         the parsed request rather than from the prose. The three together are
+         what lets a user say «this — keep watching it» on an answer they can
+         already see, with no new vocabulary to invent. The subject is only
+         derived for a plugin that declares a watch, so the eleven other answers
+         pay nothing for it. */
+      verdict: out.verdict || null,
+      watch: out.data?.watch || null,
+      /* Taken from the run, not re-derived here: the plugin parsed the request
+         once, and a second parse in a second place is how two surfaces end up
+         offering to watch different things. */
+      subject: out.data?.subject || null
     };
   } catch (err) {
     return { ok: false, code: 'PLUGIN_RUN_FAILED', detail: String(err?.message || err).slice(0, 160) };

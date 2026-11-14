@@ -205,6 +205,40 @@ export const attachPlugin = (agentId) => call('/plugins/attach', {
 
 export const detachPlugin = () => call('/plugins/detach', { method: 'POST', body: {}, timeout: TIMEOUTS.action });
 
+/* ── the plugin that speaks first ──────────────────────────────────────────────
+ *
+ * Arming a watch needs a push identity, because the whole point is that the
+ * plugin talks when the app is closed. `pushIdentity()` lives in the
+ * notification layer and is imported LAZILY: it drags in service-worker
+ * registration and the push subscription, and none of that belongs in the
+ * first-paint graph just because a chat client can ask a plugin to keep watch.
+ *
+ * A browser with no notification permission has no identity, and that is
+ * reported instead of papered over: the server would answer BAD_IDENTITY anyway,
+ * so the caller learns which half failed and can say so, rather than showing a
+ * watch that can never arrive.
+ */
+export async function armPluginWatch(subject, { agentId = null, lang = 'fa', thresholdPct = null } = {}) {
+  const { pushIdentity } = await import('../notify.js');
+  const identity = await pushIdentity().catch(() => null);
+  if (!identity?.endpoint) return { ok: false, code: 'NO_PUSH_IDENTITY' };
+  return call('/plugins/watch', {
+    method: 'POST',
+    body: { agentId, subject, endpoint: String(identity.endpoint), lang, thresholdPct },
+    timeout: TIMEOUTS.action
+  });
+}
+
+export const listPluginWatches = () => call('/plugins/watches', { timeout: TIMEOUTS.read });
+
+/* Idempotent, like detaching: stopping a watch that is not armed is the same
+   state, so the toggle in the UI never has to lie about what happened. */
+export const stopPluginWatch = (id = null) => call('/plugins/watch/stop', {
+  method: 'POST',
+  body: { id },
+  timeout: TIMEOUTS.action
+});
+
 /**
  * `method` is what the user actually did (§33's "explicit confirmation"): the
  * server refuses a confirm that arrives without it, so a stray 200 from a

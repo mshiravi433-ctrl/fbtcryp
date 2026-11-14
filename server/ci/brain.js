@@ -641,6 +641,8 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
         let pluginDataStatus = null;
         let pluginMatched = null;
         let pluginAttachedBy = null;
+        let pluginSubject = null;
+        let pluginWatch = null;
         let pluginCode = null;
         try {
           /* `agentId` is the agent this person is talking to — sent by the chat
@@ -656,6 +658,12 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
             pluginDataStatus = hit.dataStatus;
             pluginMatched = hit.matched;
             pluginAttachedBy = hit.attachedBy || null;
+            /* The subject this answer read and the plugin's watch declaration,
+               so the reply can offer «keep watching this» with something real
+               to arm. Null for a plugin that answers but holds nothing
+               re-readable, which is most of them and is not a defect. */
+            pluginSubject = hit.subject || null;
+            pluginWatch = hit.watch || null;
           } else {
             pluginCode = hit?.code || 'PLUGIN_NO_ANSWER';
           }
@@ -725,6 +733,8 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
             pluginTitle,
             pluginDataStatus,
             pluginAttachedBy,
+            pluginSubject,
+            pluginWatch,
             intentType: 'PLUGIN_ANSWER'
           };
           Object.assign(context, {
@@ -1080,7 +1090,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
         entities: legClassification.entities,
         corpusAnswer: null, corpusMatch: null, modelAnswer: null,
         pluginAnswer: null, pluginSlug: null, pluginTitle: null, answeredFromPlugin: false,
-        pluginAttachedBy: null
+        pluginAttachedBy: null, pluginSubject: null, pluginWatch: null
       };
       const legOut = buildFindings({ intent: legView, classification: legClassification, state, results, risk, readResults, stepResults, context, locale, lastReplan });
       /*
@@ -3320,6 +3330,12 @@ function publicIntent(intent) {
        attachment, 'match' when the vocabulary matcher picked it. A reply that
        cannot say which is a reply that cannot be audited. */
     pluginAttachedBy: intent.pluginAttachedBy || (intent.pluginSlug ? 'match' : null),
+    /* The offer, as data: which plugin could keep watching, and what it would
+       watch. Both null unless a plugin answered AND that plugin declares a watch
+       AND this run held a subject that survives the round trip back through the
+       parser. */
+    pluginSubject: intent.pluginSubject || null,
+    pluginWatch: intent.pluginWatch || null,
     turnAgentId: intent.turnAgentId || null,
     pluginAttachWired: hasPluginProvider()
   };

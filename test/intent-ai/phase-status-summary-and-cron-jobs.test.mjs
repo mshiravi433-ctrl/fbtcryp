@@ -125,7 +125,7 @@ test('the summary route works under its own name', async () => {
   }
 });
 
-test('the daily cron runs eleven named jobs, each with its own cost', async () => {
+test('the daily cron runs twelve named jobs, each with its own cost', async () => {
   const { get, close } = await boot();
   try {
     const res = await get('/api/cron/daily', { authorization: `Bearer ${CRON_SECRET}` });
@@ -133,7 +133,10 @@ test('the daily cron runs eleven named jobs, each with its own cost', async () =
     const body = JSON.parse(await res.text());
 
     assert.ok(Array.isArray(body.jobs), 'the daily route must report the jobs it ran');
-    assert.equal(body.jobs.length, 11, 'there are eleven daily jobs');
+    /* Twelve since §5.24.16: the plugin watcher is a job in the registry, so
+       its own cost is visible beside the others instead of hiding inside the
+       route that used to run everything in one Promise.allSettled. */
+    assert.equal(body.jobs.length, 12, 'there are twelve daily jobs');
     for (const job of body.jobs) {
       assert.equal(typeof job.name, 'string');
       assert.equal(typeof job.ms, 'number');
@@ -142,8 +145,9 @@ test('the daily cron runs eleven named jobs, each with its own cost', async () =
     /* The names are stable — a schedule depends on them. */
     const names = body.jobs.map((j) => j.name).sort();
     assert.deepEqual(names, [
-      'certifications', 'fcm-promo', 'monitors', 'ops-probe', 'price-watch',
-      'reputation', 'self-probe', 'smart-money', 'stage3-probe', 'watch', 'web-promo'
+      'certifications', 'fcm-promo', 'monitors', 'ops-probe', 'plugin-watch',
+      'price-watch', 'reputation', 'self-probe', 'smart-money', 'stage3-probe',
+      'watch', 'web-promo'
     ]);
   } finally {
     await close();
@@ -170,7 +174,7 @@ test('an unknown daily job is a 404 that says what is available', async () => {
     assert.equal(res.status, 404);
     const body = JSON.parse(await res.text());
     assert.equal(body.error, 'UNKNOWN_JOB');
-    assert.ok(Array.isArray(body.available) && body.available.length === 11);
+    assert.ok(Array.isArray(body.available) && body.available.length === 12);
   } finally {
     await close();
   }

@@ -306,6 +306,15 @@ import {
   priceWatchTickStatus,
   putPriceWatch
 } from './priceWatch.js';
+/* The first-party plugins as background alerters: a watched token's contract
+   flags, a protocol's incident record, a wallet's concentration. Same wire,
+   same transport, same four rules as the price watcher above — see its header
+   for why it does NOT ride /api/cron/tick. */
+import {
+  maybePluginWatchTick,
+  pluginWatchStatus,
+  pluginWatchTickStatus
+} from './agentHub/pluginWatch.js';
 import { evaluateAllMonitors, monitorEngineStatus } from './intentMonitoring.js';
 import { runSmartMoneyCadence } from './smartMoney/cadence.js';
 import {
@@ -8031,7 +8040,15 @@ app.get('/api/cron/watch', async (req, res) => {
      maybePriceWatchTick keeps it to one run per window. */
   const price = await maybePriceWatchTick({ send: deliverStagePush })
     .catch((e) => ({ error: String(e?.message || e).slice(0, 120) }));
-  return res.json({ ...out, price });
+  /* The plugin watch rides THIS route and not /api/cron/tick. The tick is called
+     by a foreground tab, and one plugin run is a network read that measured
+     15-125 ms with no egress and up to its 6 s budget with it — charging the
+     person using the site for a background read is the wrong trade. The cycle is
+     bounded to two runs, so its worst case is 12 s of the 60 s this function
+     has, and it shares that with the two cycles above. */
+  const plugin = await maybePluginWatchTick({ send: deliverStagePush })
+    .catch((e) => ({ error: String(e?.message || e).slice(0, 120) }));
+  return res.json({ ...out, price, plugin });
 });
 
 /**
@@ -8734,6 +8751,12 @@ app.get('/api/cron/status', async (_req, res) => {
        alerts. Listed here so «چرا نوتیفیکیشن نمیاد؟» can tell "no device ever
        synced a watchlist" apart from "the sender is down". */
     priceWatch: await priceWatchStatus().catch(() => ({ identities: 0, coins: 0, topMovers: 0 })),
+    /* Which plugin watches exist, how many are armed, how many could never be
+       read completely, and what the run cap makes one row's real cadence. A
+       status that reported the alerter as Boolean(engine) would be the same
+       darkness in costume: «چرا نوتیفیکیشن نمیاد؟» has to be answerable. */
+    pluginWatch: await pluginWatchStatus().catch(() => ({ enabled: false, rows: 0, armed: 0 })),
+    pluginWatchTick: await pluginWatchTickStatus().catch(() => ({ lastTickAt: null })),
     learning: {
       configured: learningConfigured(),
       snapshot: (() => {
@@ -8867,6 +8890,13 @@ const DAILY_JOBS = [
   {
     name: 'price-watch',
     run: () => maybePriceWatchTick({ send: deliverStagePush, force: true }),
+    shape: (value) => value
+  },
+  {
+    /* Forced, like the price watch: the daily cron is the floor for a quiet
+       site, and the job registry reports this job's own cost beside the others. */
+    name: 'plugin-watch',
+    run: () => maybePluginWatchTick({ send: deliverStagePush, force: true }),
     shape: (value) => value
   },
   {
@@ -9012,6 +9042,7 @@ app.get('/api/cron/daily', async (req, res) => {
     fcm: byName['fcm-promo'],
     watch: byName.watch,
     priceWatch: byName['price-watch'],
+    pluginWatch: byName['plugin-watch'],
     monitors: byName.monitors,
     smartMoneyAlerts: byName['smart-money'],
     certifications: byName.certifications,
