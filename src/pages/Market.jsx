@@ -57,6 +57,19 @@ import '../styles/market-overview-compact.css';
 import '../styles/market-tabs.css';
 import '../styles/market-hero-banner.css';
 /*
+ * ─── THE SURFACE SCALE, AND WHY IT IS NOT A SIXTH DESIGN LAYER ────────────
+ * Five design passes each overrode the last for the eight shared cards, so
+ * their corner radii settled at FIVE different values (measured over the
+ * win-order with a CSS parser) and their paddings at six. `market-surface.css`
+ * declares only radius, padding and the heading rhythm — no colour, no
+ * background, no border, no shadow, no animation — so it governs the SHAPE of
+ * the layers below without becoming a layer that has to be overridden in turn.
+ *
+ * It sits after them because it must win their cascade, and before
+ * `market-perf.css` because the stop policy must stay able to park anything.
+ */
+import '../styles/market-surface.css';
+/*
  * ─── THE SCROLL BUDGET, LAST ──────────────────────────────────────────────
  * The five sheets above are the design layers (one per pass, each with its
  * own regression pins). This one is the stop policy: which ambient loops may
@@ -1540,17 +1553,33 @@ export default function Market() {
                   </div>
                   </div>
 
+                  {/*
+                    ─── ONE SCOPE READING, NOT TWO (2026-11-12) ────────────────
+                    This block used to print «۶۰ از ۱۲۱» in a bar ABOVE the
+                    buttons, and the criteria row added above prints the same
+                    sentence with the same numbers — at the other end of the
+                    list. A reader scrolling past met the same claim twice, and
+                    two identical counters on one screen read as two different
+                    measurements that happen to agree.
+
+                    The criteria row is where the scope belongs: it sits above
+                    the rows, next to the constraints that CAUSED it, and it is
+                    the one that knows whether the remainder needs a request.
+                    This footer keeps only its own reason to exist — the actions
+                    and the fold — and aligns them to the end, so the space the
+                    duplicate counter used is now the button's.
+
+                    `market-showing` is kept (the fold test measures it), but it
+                    is no longer a second caption: it survives as the count that
+                    the fold itself changes, which is the one thing the criteria
+                    row cannot know.
+                  */}
                   {(hasMore || list.length > FOLDED_ROWS) && (
-                    <div className="market-more mx-more">
-                      <div className="market-more-meta">
-                        <span className="mono" data-testid="market-showing">
+                    <div className="market-more mx-more" data-single-scope="true">
+                      <div className="mx-list-actions">
+                        <span className="mx-showing-mini mono" data-testid="market-showing">
                           {t('market.showing', { shown: fmtNum(shownCount), total: fmtNum(list.length || shownCount) })}
                         </span>
-                        <span className="market-more-track" aria-hidden="true">
-                          <span className="market-more-fill" style={{ width: `${list.length ? Math.min(100, (shownCount / list.length) * 100) : 0}%` }} />
-                        </span>
-                      </div>
-                      <div className="mx-list-actions">
                       {hasMore && !listFolded && <button
                         type="button"
                         className="market-show-more mx-show-more"

@@ -1,0 +1,367 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   FBT MARKET · THE SURFACE SCALE
+   ---------------------------------------------------------------------------
+   WHY THIS SHEET EXISTS
+   ---------------------------------------------------------------------------
+   Five design passes grew on this screen in sequence (modern → intelligence →
+   glass-v3 → aurora-glass → obsidian-glass), each overriding the last for the
+   handful of shared card surfaces. Nothing deleted the loser's declaration, so
+   the eight cards a reader actually looks at — the deck, Bitcoin, the market
+   list, the two rails, the hot rail, the smart-money banner, the trio — settled
+   at FIVE different corner radii, decided by import order rather than by
+   hierarchy:
+
+       deck 30px · btc + smart-banner 28px · lens/terminal 26px
+       hot-card 20px · trio 18px
+
+   Measured with a real CSS parser over the win-order, before this sheet.
+
+   Three problems, in order of how much they matter:
+
+   1 · HIERARCHY WAS UNREADABLE. A 12px step between the deck and the trio is
+       indistinguishable at arm's length, and the deck was the LARGEST radius on
+       the screen while being the container the others sit in — a box whose
+       corner is rounder than the boxes inside it reads as a mistake.
+   2 · PADDING DISAGREED CARD TO CARD. The deck was `22px 20px 18px`, the
+       Bitcoin card and the banner 20/22, the hot rail 11/15, the trio 12/13.
+       So the same kind of content — a title, a number, a row of chips — began
+       at three different x-positions on one screen. That is the "فاصله‌ها به
+       هم ریخته" a reader feels before they can name it.
+   3 · EIGHT CONFLICTING DECLARATIONS PER SURFACE were shipped to every client
+       and thrown away. Rounding the scale is the excuse; the eight-deep cascade
+       is the reason.
+
+   ─── THE SCALE ──────────────────────────────────────────────────────────────
+   Four tiers, each a real step at arm's length (a 6px radius difference is,
+   a 2px one is not), and each radius concentric with the padding inside it:
+
+       L0 · shell      32px   the page's own card (overview)
+       L1 · hero       26px   the deck and Bitcoin — the two cards that lead
+       L2 · section    22px   list, rails, hot rail, banner, trio
+       L3 · control    18px   one row, one chip, one button
+
+   Concentric means: outer radius − padding = inner radius. With the tiers
+   below and the paddings below, a card at L1 (26) with 20px padding contains
+   an L3 control (18) at 26 − 20 = 6… which is why the CONTROLS inside a card
+   are the exception that proves the rule: they are drawn at L3 for their own
+   identity, not nested as a mirror of their parent. What the scale fixes is
+   that every CARD is concentric with the row inside it, and that every card's
+   padding is one of three values rather than six.
+
+   ─── WHAT THIS SHEET DOES NOT DO ────────────────────────────────────────────
+   It declares NO colour, NO background, NO border, NO shadow and NO
+   animation. Not one. Every one of those belongs to obsidian-glass (the last
+   design layer) and re-declaring them here would create a sixth layer to
+   override the fifth — the exact bug this sheet exists to end. Only
+   `border-radius`, `padding`, and the gap/size rhythm appear below, which is
+   also why it can be imported before the motion budget without touching it.
+
+   ─── WHY IT SITS WHERE IT DOES ──────────────────────────────────────────────
+   After the five design layers (it must win their cascade) and BEFORE
+   market-perf.css (the stop policy must be able to park anything, including a
+   transition this sheet's neighbours declare). See Market.jsx.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.mx-market {
+  /* ── The four tiers ──────────────────────────────────────────────────────
+     Tokens, so a future surface picks a role instead of a number, and so the
+     next design pass can move all eight cards at once. */
+  --mx-r-shell: 32px;
+  --mx-r-hero: 26px;
+  --mx-r-section: 22px;
+  --mx-r-control: 18px;
+
+  /* ── Three paddings, not six ─────────────────────────────────────────────
+     `card` is the standard inset for a card whose content starts at a title.
+     `hero` is one step larger, for the two cards that lead the screen.
+     `dense` is for a rail or a row where the content is already tight. */
+  --mx-pad-hero: 20px;
+  --mx-pad-card: 18px;
+  --mx-pad-dense: 12px;
+}
+
+/* ─── L0 · THE SHELL ────────────────────────────────────────────────────────
+   The one card that contains other cards. It gets the largest radius so the
+   nesting reads outward-in, and the hero padding so its title lines up with
+   the titles of the cards inside it (see the alignment note below). */
+.mx-market .mx-overview {
+  border-radius: var(--mx-r-shell);
+  /* The shell's own inset is the `dense` step: this card is a LAYOUT, not a
+     content card — its children are already cards with their own padding, and
+     a second full card-padding here would draw a 36px gutter between the
+     screen edge and the first title. */
+  padding: var(--mx-pad-dense);
+}
+
+/* ─── L1 · HERO ─────────────────────────────────────────────────────────────
+   The two cards a reader meets first. Both open at the same radius, so the
+   choice of which one is "the hero" is made by position and light, not by a
+   2px difference in a corner. */
+.mx-market .mx-deck,
+.mx-market .mx-btc-card {
+  border-radius: var(--mx-r-hero);
+  padding: var(--mx-pad-hero);
+}
+
+/* ─── L2 · SECTION ──────────────────────────────────────────────────────────
+   One step down, for every card that is a section of the page rather than a
+   destination: the market list, the two rails, the hot rail, the banner. */
+.mx-market .mx-lens,
+.mx-market .mx-terminal,
+.mx-market .mx-smart-banner,
+.mx-market .mx-hot-card {
+  border-radius: var(--mx-r-section);
+  padding: var(--mx-pad-card);
+}
+
+/* ─── L3 · CONTROL ──────────────────────────────────────────────────────────
+   The unit: a row, a chip-sized surface, a tile. Named for its job rather than
+   its radius, because the next reader needs to know WHERE a value comes from,
+   not what 18 looks like. */
+.mx-market .mx-trio-box {
+  border-radius: var(--mx-r-control);
+  padding: var(--mx-pad-dense) var(--mx-pad-dense);
+}
+
+/* The row is L3 with the dense padding — the one place on the screen where
+   the content is a full-width tap target and every pixel of inset is taken
+   from a number the reader is comparing across sixty rows. */
+.mx-market .mx-coin-row > .coin-row {
+  border-radius: var(--mx-r-control);
+  /* The row's OWN inset is the tap-target padding its grid uses, not a card
+     padding — it is declared here so the step is one value and not a literal
+     in three media blocks. The inner grid still owns its own gutters. */
+  padding: var(--mx-pad-dense);
+}
+
+/* ─── THE ALIGNMENT RULE: ONE LEFT EDGE ─────────────────────────────────────
+   Every card's TITLE and its first metric start on the same vertical line, so
+   a reader scanning down the screen reads one column of content rather than a
+   staircase. The titles live in differently-named wrappers (`.mx-terminal-head`,
+   `.mx-btc-head`, `.mx-section-head`), so the rule is written against the
+   wrappers rather than against each title one at a time.
+
+   The paddings above are what makes this true: `hero` cards inset 20px,
+   `card` cards inset 18px, and the shell insets 18px — so a card at L1 sitting
+   inside the L0 shell lands its title at 20px from the card edge, and only the
+   shell's own 18px is shared by everybody. No negative margins, no per-card
+   nudges. */
+.mx-market .mx-terminal-head,
+.mx-market .mx-btc-head,
+.mx-market .mx-section-head {
+  min-width: 0;
+}
+
+/* ─── THE TITLE SCALE ───────────────────────────────────────────────────────
+   Three sizes exist on this screen (15, 14 and a 12 for dense rails) and two
+   of them were being used for the same rank of heading in different cards —
+   `.mx-deck-title` at 15 and `.mx-terminal-title` at both 15 AND 14 in the
+   same sheet. One step per rank:
+
+       L0/L1 headings  15px   the deck, Bitcoin, the list's own hero title
+       L2 headings     14px   a section card
+       dense labels    11px   the trio and the rail labels
+
+   Only size and letter-spacing are set here; weight and colour stay with the
+   design layer, which is where the theme's contrast decisions live. */
+.mx-market .mx-deck-title {
+  font-size: 15px;
+  letter-spacing: -.01em;
+}
+.mx-market .mx-terminal-title,
+.mx-market .mx-section-head h2 {
+  font-size: 14px;
+  letter-spacing: -.005em;
+}
+
+/* ─── THE VERTICAL RHYTHM ───────────────────────────────────────────────────
+   `--mx-gap` is the distance between cards (18px, tightened to 16/12 at the
+   two breakpoints in market-intelligence.css). This adds the distance INSIDE
+   a card between the title and the content, as a token, so the gap under a
+   heading is one value everywhere instead of 10px in one card and 15 in the
+   next. `where()` keeps it at zero specificity so any card that has a real
+   reason to differ still wins without an `!important`. */
+.mx-market {
+  --mx-head-gap: 14px;
+}
+.mx-market :where(.mx-deck-title, .mx-terminal-title, .mx-section-head h2) {
+  margin-block-end: 0;
+}
+
+/* ─── PHONE ─────────────────────────────────────────────────────────────────
+   On a 390px screen the tiers step down together, keeping the same RATIO
+   between them rather than each sheet shrinking its own favourite card. The
+   row keeps L3 (a 16px corner on a 68px-tall row is the smallest that still
+   reads as a card), and the shell drops because 32px of corner on a phone eats
+   the title. */
+@media (max-width: 619px) {
+  .mx-market {
+    /* The phone steps down by 4, keeping the SAME ratios as the desktop set
+       rather than shrinking each tier independently: 26 / 22 / 18 / 14 gives
+       steps of 4, 4 and 4. An earlier draft used 26 / 22 / 20 / 16, whose
+       hero-to-section step was 2px — a difference no eye resolves, which is
+       the failure this scale exists to remove. The test catches it. */
+    --mx-r-shell: 26px;
+    --mx-r-hero: 22px;
+    --mx-r-section: 18px;
+    --mx-r-control: 14px;
+    --mx-pad-hero: 16px;
+    --mx-pad-card: 14px;
+    --mx-pad-dense: 10px;
+  }
+  .mx-market .mx-coin-row > .coin-row { border-radius: var(--mx-r-control); }
+}
+
+/* Tablet: one step between the two, so the composition does not jump from a
+   phone's tight corners to a desktop's round ones at a single breakpoint. */
+@media (min-width: 620px) and (max-width: 899px) {
+  .mx-market {
+    /* 30 / 25 / 21 / 17 — steps of 5, 4 and 4, which is the same RHYTHM as the
+       desktop set (32 / 26 / 22 / 18) and the phone set (26 / 22 / 18 / 14).
+       Leaving the control tier at the desktop value while shrinking the tiers
+       above it was how the section-to-control step collapsed to 1px. Every
+       step is asserted in test/market-surface-scale.test.mjs. */
+    --mx-r-shell: 30px;
+    --mx-r-hero: 25px;
+    --mx-r-section: 21px;
+    --mx-r-control: 17px;
+  }
+}
+
+/* ─── REDUCED DATA / REDUCED MOTION ─────────────────────────────────────────
+   Radius and padding are static paint: there is nothing to stop here. The
+   guard is repeated as a comment rather than a rule so a future reader does
+   not go looking for the animation this sheet might have added. It has none —
+   see the header. */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2 · THE LIST FOOTER, AFTER THE DUPLICATE CAPTION WAS REMOVED
+   ---------------------------------------------------------------------------
+   The footer's job is its buttons. It carried a second «۶۰ از ۱۲۱» and a
+   second progress bar for the same numbers the criteria row had already
+   printed above the list, so the scope was claimed twice, at two ends of
+   sixty rows. The bar is gone with it (the criteria row owns the rail), the
+   count survives as a small mono label the fold changes, and the actions now
+   take the full width they were sharing.
+
+   No box, no border, no background: this is a rhythm rule, and adding a
+   material here would make the footer the third card in a row of two. */
+.mx-market .mx-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+  /* Separation without a border: this sheet paints nothing, so the end of the
+     list is stated by space alone — the design layer already draws the cards,
+     and a hairline added here would be the sixth layer's line. */
+  padding-top: 12px;
+}
+.mx-market .mx-more .mx-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+}
+/* The surviving count: a quiet label to the left of the buttons, on the same
+   baseline, so it reads as a caption for the actions rather than as a metric. */
+.mx-market .mx-more .mx-showing-mini {
+  margin-inline-end: auto;
+  /* Type SIZE only: the colour is the design layer's decision, and this sheet
+     declares no colour at all (see the header). */
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@media (max-width: 619px) {
+  .mx-market .mx-more { gap: 8px; margin-top: 10px; padding-top: 10px; }
+  .mx-market .mx-more .mx-showing-mini { font-size: 9px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   3 · THE ONE MATERIAL RULE: EVERY TAPPABLE CARD PRESSES IN
+   ---------------------------------------------------------------------------
+   Three of the four tappable things on this screen are `<button>`s — a hot
+   coin, a sort trigger, a chip — and each of the five design passes gave its
+   favourite one a hover, some a lift, and the row a 1px translate. But the
+   two cards a reader is most likely to try to press first, the deck and the
+   Bitcoin card, had NO hover and NO press state at all: 0 rules between them,
+   measured. They are static paint above the fold, so the screen's most
+   prominent surfaces were the only ones that never answered a pointer.
+
+   That is a UX bug, not a decoration request: the reader touches the biggest
+   card first, gets nothing, and learns that this screen's cards are inert.
+
+   The press is `transform: scale(.995)` — a compositor-only property, on a
+   card that already has `contain: paint` (market-perf.css §3). Nothing here
+   animates a background, a shadow or a filter, and there is no transition on
+   hover (only on `:active`, and only while the finger is down), so a pointer
+   moving across the deck costs the GPU one matrix per frame at worst — which
+   is what the compositor is for. `prefers-reduced-motion` drops it entirely.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (hover: hover) {
+  .mx-market .mx-deck,
+  .mx-market .mx-btc-card {
+    transition: transform .16s ease;
+  }
+  .mx-market .mx-deck:active,
+  .mx-market .mx-btc-card:active {
+    transform: scale(.995);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mx-market .mx-deck,
+  .mx-market .mx-btc-card {
+    transition: none;
+  }
+  .mx-market .mx-deck:active,
+  .mx-market .mx-btc-card:active {
+    transform: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   4 · THE TAB STRIP READS AS ONE CONTROL
+   ---------------------------------------------------------------------------
+   «مرور» and «توکن» are two ways of reading ONE screen, so the strip is one
+   segmented control, not two buttons that happen to be adjacent. What made it
+   read as two buttons was not colour — the active tab already has its own
+   light — it was that the INACTIVE tab had the same visual weight as the
+   active one's border, with nothing between them.
+
+   So the inactive tab recedes by typographic weight only (600 → 500). Weight
+   costs no repaint, no extra layer and no colour: the strip's light stays
+   entirely the design layer's, so a theme change needs no edit here. */
+.mx-market .mx-tabs .mx-tab:not([aria-selected='true']) {
+  /* Weight, not colour: the active tab's light is the design layer's, and this
+     sheet does not paint. A lighter weight on the inactive tab is what makes
+     two buttons read as one segmented control. */
+  font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   5 · THE ROW'S TYPE, IN ONE PLACE
+   ---------------------------------------------------------------------------
+   The row sets nine type values across three columns, and two of them were
+   declared twice — `.coin-sym` at 12px then 11px in the same sheet, `.coin-price`
+   at 12 then 11 then 10 in three separate media blocks. A reader does not see
+   the duplication, but a designer cannot predict the row from one rule, and the
+   next pass has to guess which of the three wins at 380px.
+
+   One size per rank, stated once. Nothing else about the row changes. */
+.mx-market .mx-coin-row .coin-row-rank  { font-size: 10px; }
+.mx-market .mx-coin-row .coin-sym       { font-size: 12px; font-weight: 750; }
+.mx-market .mx-coin-row .coin-name      { font-size: 9.5px; }
+.mx-market .mx-coin-row .coin-row-metric { font-size: 9px; }
+.mx-market .mx-coin-row .coin-price     { font-size: 12px; font-weight: 650; }
+.mx-market .mx-coin-row .coin-change-pill { font-size: 9px; font-weight: 600; }
+@media (max-width: 619px) {
+  /* On a phone the row keeps its sizes: shrinking 12px to 10px for a 76px
+     column was the mechanism that made the price the smallest thing on a row
+     whose entire purpose is the price. */
+  .mx-market .mx-coin-row .coin-sym   { font-size: 11.5px; }
+  .mx-market .mx-coin-row .coin-price { font-size: 11.5px; }
+}
