@@ -66,6 +66,7 @@
 
 import { withCache } from './cache.js';
 import { fetchSimplePrices } from './providers.js';
+import { storeGet, storeSet, storeDurable } from './store.js';
 import { relaySolanaRpc, relayUpstreams, redactUpstream } from './solanaRpcRelay.js';
 import { fetchSolanaWhales, solscanConfigured } from './solanaIntel.js';
 
@@ -101,6 +102,26 @@ const blockTimeoutMs = () => num('SOLANA_TRACK_BLOCK_TIMEOUT_MS', 14_000);
 const blockMaxBytes = () => num('SOLANA_TRACK_BLOCK_MAX_BYTES', 24_000_000);
 /** How far back from the head to sample: a slot that is certainly rooted. */
 const blockSampleLag = () => num('SOLANA_WHALE_SLOT_LAG', 64);
+/**
+ * HOW LONG A SAMPLE STAYS THE SAMPLE — «مصرف RPC را کم کن».
+ *
+ * The block read was already capped at one per five-minute cache window, but
+ * that window was an IN-PROCESS Map: on Vercel every cold start began with an
+ * empty Map and every new instance paid for its own `getBlock` — up to 24 MB
+ * of JSON and a 14 s timeout, for a feed whose own ledger ages gracefully. The
+ * durable sample below makes the read a SITE-WIDE budget instead of a
+ * per-instance one: one block per `SOLANA_WHALE_SAMPLE_MS` (default 20 min),
+ * whoever asks first, and every other instance reuses that exact slot.
+ *
+ * The ledger is unaffected in spirit: it is still a rolling list of observed
+ * movements with an honest `coverage`, only now it is shared, so a second
+ * instance stops re-reading a block the first one already folded in.
+ */
+const whaleSampleMs = () => num('SOLANA_WHALE_SAMPLE_MS', 20 * 60_000);
+/** The durable key the sampled slot and its movements live under. */
+const WHALE_SAMPLE_KEY = 'solana:whale-sample:v2';
+/** A sample older than this is not offered to the client at all. */
+const whaleLedgerMaxAgeMs = () => num('SOLANA_WHALE_LEDGER_AGE_MS', 6 * 3600_000);
 
 /* A base-58 public key: 32–44 characters, no 0, O, I or l. The same shape the
    rest of the server uses (server/solanaChainReads.js `isSolanaPubkey`). */
@@ -131,6 +152,7 @@ export function __setSolanaTrackFetchForTests(fn) {
 export function __resetWhaleLedger() {
   ledger.length = 0;
   lastSample = null;
+  durableSampleCache = null;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -444,8 +466,89 @@ function foldIntoLedger(rows) {
     if (at === -1) ledger.push(row);
     else ledger[at] = row;
   }
-  ledger.sort((a, b) => (b.at ?? 0) - (a.at ?? 0) || b.lamports - a.lamports);
+  capLedger();
+}
+
+/** Newest first, largest first at the same instant, and never over the cap. */
+function capLedger() {
+  ledger.sort((a, b) => (b.at ?? 0) - (a.at ?? 0) || (b.lamports ?? 0) - (a.lamports ?? 0));
   if (ledger.length > ledgerSize()) ledger.length = ledgerSize();
+}
+
+/*
+ * ─── THE DURABLE SAMPLE ─────────────────────────────────────────────────────
+ * «مصرف RPC سولانا را بهینه کن»
+ *
+ * Everything the whale feed needs from a block fits in a few hundred bytes:
+ * which slot was read, when, and the movements found in it. That is what is
+ * stored — NOT the block. A cold instance therefore answers the same question
+ * the warm one did without a 24 MB read, and the whole deployment spends one
+ * `getBlock` per sampling window instead of one per instance per window.
+ *
+ * The write is fire-and-forget: a store that is not configured (or a failed
+ * write) must never delay or break a feed that already has real movements in
+ * hand. Reading is cached in-process for a minute so a page polling every five
+ * minutes does not hit the store on every request either.
+ */
+const DURABLE_READ_TTL_MS = 60_000;
+let durableSampleCache = null; // { at, value }
+
+/** The last durable sample, or null when nothing has ever been stored. */
+async function readDurableSample() {
+  const now = Date.now();
+  if (durableSampleCache && now - durableSampleCache.at < DURABLE_READ_TTL_MS) {
+    return durableSampleCache.value;
+  }
+  let value = null;
+  try {
+    const raw = await storeGet(WHALE_SAMPLE_KEY, null);
+    if (raw && Number.isFinite(Number(raw.slot)) && Number.isFinite(Number(raw.at))) {
+      value = {
+        slot: Number(raw.slot),
+        at: Number(raw.at),
+        rows: Array.isArray(raw.rows) ? raw.rows.filter((r) => r && r.id) : [],
+        coverage: raw.coverage && typeof raw.coverage === 'object' ? raw.coverage : null
+      };
+    }
+  } catch { value = null; }
+  durableSampleCache = { at: now, value };
+  return value;
+}
+
+/** Persist one sample. Never awaited by the caller's critical path. */
+function writeDurableSample(sample) {
+  durableSampleCache = { at: Date.now(), value: sample };
+  try {
+    Promise.resolve(storeSet(WHALE_SAMPLE_KEY, {
+      slot: sample.slot,
+      at: sample.at,
+      rows: sample.rows,
+      coverage: sample.coverage
+    }, whaleLedgerMaxAgeMs())).catch(() => { /* the ledger in memory still serves */ });
+  } catch { /* a store that throws on call is not an outage */ }
+}
+
+/** Fold a durable sample's dated rows into the in-memory ledger. */
+function adoptDurableSample(sample) {
+  if (!sample) return false;
+  const fresh = sample.rows.filter((r) => Number.isFinite(Number(r.at)) || Number.isFinite(Number(r.slot)));
+  foldIntoLedger(fresh);
+  capLedger();
+  return true;
+}
+
+/**
+ * Is the durable sample still inside the sampling window?
+ *
+ * `at` is a millisecond timestamp and is the ONLY clock used: two instances
+ * disagreeing about the chain head is normal, two instances disagreeing about
+ * how old a stored sample is would duplicate the read the store exists to
+ * prevent.
+ */
+export function sampleIsFresh(sample, { now = Date.now(), windowMs = whaleSampleMs() } = {}) {
+  if (!sample || !Number.isFinite(Number(sample.at))) return false;
+  const age = now - Number(sample.at);
+  return age >= -60_000 && age < windowMs;
 }
 
 /** Solscan's indexed transfers, reshaped into the same vocabulary. */
@@ -472,16 +575,50 @@ function fromSolscan(payload) {
  * GET /api/solana/track/whales
  *
  * One payload, both sources, and an explicit statement of what was seen:
- * `coverage` carries the sampled slot, how many blocks that is (one per
- * refresh), the floor a movement had to clear, and which sources answered.
- * A feed with no key and no reachable node answers `available:false` and an
- * empty list — never a list of plausible-looking numbers.
+ * `coverage` carries the sampled slot, the floor a movement had to clear, how
+ * long a sample is reused for, and which sources answered. A feed with no key
+ * and no reachable node answers `available:false` and an empty list — never a
+ * list of plausible-looking numbers.
+ *
+ * ─── ONE BLOCK PER SAMPLING WINDOW, NOT PER INSTANCE ───────────────────────
+ * The block read is the single most expensive thing this deployment does on
+ * Solana (a `getBlock` with full transactions is routinely 5-24 MB of JSON and
+ * can take the whole 14 s timeout to arrive), and it is also the least urgent:
+ * the feed is a SAMPLE of chain activity, sampled again every few minutes.
+ *
+ * It used to be one read per five-minute cache entry, and that cache is a
+ * process-local Map — so on a serverless deployment with N warm instances the
+ * spend was N blocks per five minutes, plus one more for every cold start.
+ * That is the Fluid Active CPU this module was paying for nothing: every one
+ * of those instances was producing the same answer.
+ *
+ * Now the sample lives in the durable store (a few hundred bytes of slot +
+ * movements, never the block) and is reused for `SOLANA_WHALE_SAMPLE_MS`
+ * (default 20 minutes) by every instance. Three consequences, all intended:
+ *
+ *   · the deployment reads 1 block per 20 min instead of 1 per instance per
+ *     5 min — up to a 12× cut in bytes and wall-clock on this route;
+ *   · a cold instance no longer pays for a block just to answer;
+ *   · the LEDGER is shared, so the feed reads as one accumulated list instead
+ *     of each instance showing its own private slice of the chain.
+ *
+ * What did NOT change: the floor, the byte cap, the upstream failover, the
+ * `coverage` statement, and the rule that a failed read leaves the previous
+ * movements in place rather than emptying the list. The response says how many
+ * blocks it sampled and when — a 20-minute-old sample is labelled as one.
  */
-export async function solanaWhaleWatch({ vs = 'usd' } = {}) {
-  const { value } = await withCache(`solana-track:whales:${whaleFloorSol()}`, WHALE_TTL_MS, async () => {
+export async function solanaWhaleWatch({ vs = 'usd', force = false } = {}) {
+  const floor = whaleFloorSol();
+  const { value } = await withCache(`solana-track:whales:${floor}`, WHALE_TTL_MS, async () => {
     const sources = [];
     const errors = [];
     let sampled = null;
+    let sampleReused = false;
+    const now = Date.now();
+
+    const durable = await readDurableSample();
+    if (durable) adoptDurableSample(durable);
+    if (durable?.coverage) lastSample = durable.coverage;
 
     /* Solscan first: it is indexed, it carries labels, and it covers token
        movements the block sample cannot see. When the key is absent the
@@ -499,27 +636,52 @@ export async function solanaWhaleWatch({ vs = 'usd' } = {}) {
       }
     }
 
-    if (blockScanEnabled()) {
+    const fresh = !force && sampleIsFresh(durable, { now });
+    if (blockScanEnabled() && fresh) {
+      /* Someone (this instance a minute ago, or another one any time inside
+         the window) already paid for a block. Reuse it. */
+      sampled = durable.coverage;
+      sampleReused = true;
+      sources.push('rpc-block-sample');
+    } else if (blockScanEnabled()) {
       try {
         const head = await rpc('getSlot', []);
         const slot = Math.max(0, Number(head) - blockSampleLag());
         const { block, upstream } = await readBlock(slot);
         const rows = whaleMovementsFromBlock(block, { slot });
         foldIntoLedger(rows);
+        const found = ledger.filter((r) => r.slot === slot);
         sampled = {
           slot,
           head: Number(head),
           transactions: Array.isArray(block?.transactions) ? block.transactions.length : null,
-          found: rows.length,
+          found: found.length,
           upstream,
           at: new Date().toISOString()
         };
         lastSample = sampled;
         sources.push('rpc-block-sample');
+        /* Persist the movements OF THIS BLOCK plus the slot they came from.
+           Only dated rows travel: a movement with no time cannot be aged by
+           the next reader and would sit at the top of the list forever. */
+        writeDurableSample({
+          slot,
+          at: now,
+          rows: found.filter((r) => Number.isFinite(Number(r.at))).slice(0, ledgerSize()),
+          coverage: sampled
+        });
       } catch (err) {
         errors.push({ source: 'rpc-block-sample', detail: String(err?.detail || err?.message || err).slice(0, 160) });
       }
     }
+
+    /* A sample older than the retention window is not offered at all: a feed
+       silent for six hours must read as unavailable, not as live. */
+    const maxAge = whaleLedgerMaxAgeMs();
+    const kept = ledger.filter((r) => r.at == null || now - Number(r.at) <= maxAge);
+    ledger.length = 0;
+    ledger.push(...kept);
+    capLedger();
 
     /* SOL's price, so a movement can be read in the reader's own currency and
        not only as a count of coins. A failed price read leaves `price` null and
@@ -545,12 +707,15 @@ export async function solanaWhaleWatch({ vs = 'usd' } = {}) {
       vs: vsCode,
       solPrice: price,
       updatedAt: new Date().toISOString(),
-      floorSol: whaleFloorSol(),
+      floorSol: floor,
       transfers,
       coverage: {
-        /* ONE block per refresh, and the ledger says how far back it reaches.
-           This is the sentence that keeps a sample from reading as a census. */
+        /* How much chain this list represents, said out loud. `sampleMs` and
+           `reused` are what tell a reader that a quiet list is not an outage. */
         blocksPerRefresh: blockScanEnabled() ? 1 : 0,
+        sampleMs: whaleSampleMs(),
+        sampleReused,
+        durable: storeDurable(),
         lastSample: sampled || lastSample,
         ledgerSize: transfers.length,
         oldestAt: transfers.length ? Math.min(...transfers.map((t) => t.at ?? Infinity)) : null,

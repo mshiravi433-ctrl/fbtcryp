@@ -137,6 +137,11 @@ export function backtest(series, horizon = 7) {
     buy: { hits: 0, total: 0 },
     sell: { hits: 0, total: 0 }
   };
+  /* Tape buckets, filled in the SAME walk — see TAPE_MIN_BUCKET below. */
+  const tape = {
+    broad: { hits: 0, total: 0, up: 0, buys: 0 },
+    spiky: { hits: 0, total: 0, up: 0, buys: 0 }
+  };
 
   let upDays = 0;
   let allDays = 0;
@@ -158,7 +163,19 @@ export function backtest(series, horizon = 7) {
     tally[sig].total += 1;
     // A "sell" is correct when price FELL. Judging both directions by "did it
     // go up" would score every sell signal backwards.
-    if (sig === 'buy' ? later > now : later < now) tally[sig].hits += 1;
+    const hit = sig === 'buy' ? later > now : later < now;
+    if (hit) tally[sig].hits += 1;
+
+    /* ── the same occurrence, bucketed by the shape of the tape ──────────
+       Classified from bars that are ALREADY in the past at this point —
+       nothing here looks forward except the outcome being judged. */
+    const kind = tapeKindAt(v, i);
+    if (!kind) continue;
+    const b = tape[kind];
+    b.total += 1;
+    if (sig === 'buy') b.buys += 1;
+    if (later > now) b.up += 1;
+    if (hit) b.hits += 1;
   }
 
   const baseRate = allDays ? (upDays / allDays) * 100 : null;
@@ -191,8 +208,91 @@ export function backtest(series, horizon = 7) {
     baseRate,
     edge: weighted,
     samples,
-    horizon
+    horizon,
+    /* The same replay, split by the tape — computed in the loop above, so it
+       costs one extra divisor and no extra pass over the prices. */
+    tape: tapeSummary(tape, horizon)
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* tape-conditioned split (2026-11-12)                                        */
+/* -------------------------------------------------------------------------- */
+
+/** Six occurrences is the floor for reporting a bucket — see `tapeSummary`. */
+const TAPE_MIN_BUCKET = 6;
+
+/**
+ * Which kind of tape were the twenty bars ENDING AT `i`?
+ *
+ * ─── WHY THIS EXISTS, AND WHY IT IS NOT A FITTED PARAMETER ─────────────────
+ * The behaviour plane (src/lib/tokenBehavior.js) already tells the live card
+ * how a token traded: whether the move was carried by most steps or delivered
+ * by one candle. Until now that read had no history behind it — it shaped the
+ * score on the strength of a plausible argument.
+ *
+ * This is the historical answer, and it is deliberately dumb: participation
+ * (net move over total travel) and the share of the biggest single step,
+ * measured on bars that are already in the past whenever it is used. Two plain
+ * cuts, no weights, no fitting, no look-ahead:
+ *
+ *     broad  : participation ≥ 45% and no step owns more than 45% of travel
+ *     spiky  : participation < 25%, or one step owns more than 60% of travel
+ *     else   : unclassified — the honest middle, and it is NOT reported
+ *
+ * @returns {'broad'|'spiky'|null}
+ */
+export function tapeKindAt(v, i) {
+  const from = Math.max(1, i - 19);
+  if (i - from < 8) return null;
+  let upTravel = 0;
+  let downTravel = 0;
+  let biggest = 0;
+  let net = 0;
+  for (let k = from + 1; k <= i; k += 1) {
+    const d = v[k] - v[k - 1];
+    net += d;
+    if (d >= 0) upTravel += d;
+    else downTravel -= d;
+    if (Math.abs(d) > biggest) biggest = Math.abs(d);
+  }
+  const travel = upTravel + downTravel;
+  if (!(travel > 0)) return null;
+  const participation = Math.abs(net) / travel;
+  const spikeShare = biggest / travel;
+  if (participation >= 0.45 && spikeShare <= 0.45) return 'broad';
+  if (participation < 0.25 || spikeShare > 0.6) return 'spiky';
+  return null;
+}
+
+/**
+ * Turn the per-bucket tallies into the report the card shows.
+ *
+ * Each bucket is judged against ITS OWN base rate and per direction: a buy
+ * against «how often did price rise in this bucket», a sell against the down
+ * rate. Comparing a bucket's hit rate to one pooled number would let a bucket
+ * full of sells look skilled in a rally.
+ *
+ * A bucket below TAPE_MIN_BUCKET is reported as `null`, never as a small
+ * number: two lucky trades are not evidence, and an unmeasurable claim is
+ * exactly what this app must not print.
+ */
+function tapeSummary(tape, horizon) {
+  const summarise = (b) => {
+    if (b.total < TAPE_MIN_BUCKET) return null;
+    const rate = (b.hits / b.total) * 100;
+    const upRate = (b.up / b.total) * 100;
+    const expected = (b.buys * upRate + (b.total - b.buys) * (100 - upRate)) / b.total;
+    return {
+      n: b.total,
+      rate: Math.round(rate * 10) / 10,
+      edge: Math.round((rate - expected) * 10) / 10
+    };
+  };
+  const broad = summarise(tape.broad);
+  const spiky = summarise(tape.spiky);
+  if (!broad && !spiky) return null;
+  return { broad, spiky, minBucket: TAPE_MIN_BUCKET, horizon };
 }
 
 /**

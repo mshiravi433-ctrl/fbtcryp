@@ -25,8 +25,17 @@
  * filter, because that one is defined by the user's own list.
  */
 
-/** Sort keys the UI offers. Order is the order of the <select>. */
-export const MARKET_SORTS = Object.freeze(['rank', 'mcap', 'change', 'volume', 'price']);
+/**
+ * Sort keys the UI offers. Order is the order of the <select>.
+ *
+ * `change1h` / `change7d` were added because the feed has always carried both
+ * (`normalizeCoin` maps price_change_percentage_1h_in_currency and
+ * …_7d_in_currency) and the screen showed NEITHER: a row printed one number,
+ * the 24-hour move, so a coin up 30% on the week and a coin up 30% in a day
+ * were the same row. Sorting and filtering by the horizon is what turns those
+ * two fields from unused payload into a reading.
+ */
+export const MARKET_SORTS = Object.freeze(['rank', 'mcap', 'change', 'change1h', 'change7d', 'volume', 'price']);
 
 /** Default view: the market as it is usually read — rank 1, 2, 3 … */
 export const DEFAULT_SORT = Object.freeze({ key: 'rank', dir: 'asc' });
@@ -103,6 +112,20 @@ function sortReader(key) {
       return (row) => num(row?.price);
     case 'change':
       return (row) => num(row?.change24h) ?? num(row?.change24);
+    /*
+     * THE HORIZONS THE FEED ALWAYS SENT.
+     *
+     * Both have lived on every row since the CoinGecko normaliser was written
+     * and neither was ever sorted by, filtered on, or printed. `null` (not 0)
+     * when the upstream omitted it — the sort parks unknowns last in both
+     * directions, so « بیشترین رشد ۷ روزه » never opens with rows that have no
+     * 7-day figure at all. The CoinLore backup row does not carry either field,
+     * which is exactly why that distinction has to be preserved.
+     */
+    case 'change1h':
+      return (row) => num(row?.change1h);
+    case 'change7d':
+      return (row) => num(row?.change7d);
     case 'rank':
     default:
       /* Rank 0 / null means "no rank from the feed"; it must sort last, not

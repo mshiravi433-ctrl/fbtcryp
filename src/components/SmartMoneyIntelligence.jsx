@@ -8,6 +8,7 @@ import TokenIcon from '../lib/tokenIcon';
 import ModernSelect from './ModernSelect';
 import CopyTradeButton from './smart-money/CopyTradeButton';
 import { pollWhileVisible } from '../lib/visibilityPoll';
+import { readBoardQuality, readQualificationGaps, EVIDENCE_MIN_DAYS, EVIDENCE_MIN_CLOSES } from '../lib/verifiedEvidence';
 import {
   SmSignalGlyph, SmWavesGlyph, SmCoinGlyph, SmPulseGlyph, SmSparkGlyph,
   SmVerifiedGlyph, SmBankGlyph
@@ -149,16 +150,44 @@ export function VerifiedWallets() {
     };
   }, []);
 
+  /*
+   * THE BOARD IS NOW WEIGHED BEFORE IT IS SORTED.
+   *
+   * It used to sort by the raw score, which put a wallet with five closes and a
+   * lucky 91 above a wallet with forty closes and a measured 78 — the same
+   * number meaning two different things, ordered as if they were one. Every row
+   * is now read by lib/verifiedEvidence.js first (pure arithmetic over fields
+   * already on the payload: closes, fills, observed days, coverage) so the card
+   * can state its sample verdict and the board can LEAD with evidence rather
+   * than luck.
+   *
+   * The reader's chosen sort still wins: picking «نرخ برد» is an explicit
+   * request to rank by win rate, and a board that quietly overrode it would be
+   * the same disrespect for intent this page keeps fixing. The evidence order
+   * IS the default `score` sort, with the shrunk score beside the raw one.
+   */
+  /*
+   * ─── COST (Fluid Active CPU, measured 2026-11-12) ─────────────────────────
+   * readBoardQuality 36.1 µs over 20 rows, once per fetched payload, in a memo
+   * keyed on `data` — the board's own poll cadence (30 s empty / 120 s
+   * populated, and no reads at all from a hidden tab) is unchanged. Zero added
+   * requests: every input was already on the payload. The only wire change is
+   * the seven-number `factors` object on each indexed profile — 151 bytes,
+   * rounded to 3 dp — which is less than one already-sampled swap row.
+   */
+  const board = useMemo(() => readBoardQuality({ wallets: data?.wallets || [] }), [data]);
   const sortedWallets = useMemo(() => {
-    const rows = [...(data?.wallets || [])];
+    const rows = walletSort === 'score' ? [...(board.rows || [])] : [...(data?.wallets || [])];
     const by = {
-      score: (a, b) => (b.score ?? -1) - (a.score ?? -1),
+      /* `board.rows` is already ordered by shrunk score, and each row carries
+         `evidence`; the other sorts fall back to the raw payload order. */
+      score: (a, b) => (b.evidence?.adjustedScore ?? b.score ?? -1) - (a.evidence?.adjustedScore ?? a.score ?? -1),
       winRate: (a, b) => (b.winRate ?? -1) - (a.winRate ?? -1),
       realized: (a, b) => (b.realizedUsd ?? -Infinity) - (a.realizedUsd ?? -Infinity),
       closes: (a, b) => (b.closedTrades ?? 0) - (a.closedTrades ?? 0)
     }[walletSort] || (() => 0);
-    return rows.sort(by);
-  }, [data, walletSort]);
+    return [...rows].sort(by);
+  }, [data, walletSort, board]);
 
   return (
     <section className="sm-section smi-board" aria-label={t('sm.engine.verifiedBoard')}>
@@ -182,6 +211,36 @@ export function VerifiedWallets() {
           </label>
         )}
       </div>
+
+      {/*
+        * THE BOARD SAYS HOW MUCH ITS OWN NUMBER IS WORTH. A list of scores with
+        * no statement about the sample behind them invites the reader to rank
+        * wallets by luck; this line reports the board's mean evidence
+        * confidence, how many rows rest on an established sample, and — when it
+        * is true — that the whole board's evidence sits in one wallet.
+        */}
+      {board.measured && board.count > 0 && (
+        <div className="smi-ev-summary" data-testid="sm-evidence-board">
+          <span className="smi-chip">
+            {t('sm.engine.evidenceBoard', { n: board.boardConfidence ?? '—' })}
+          </span>
+          {board.established > 0 && (
+            <span className="smi-chip is-ok">
+              {t('sm.engine.evidenceEstablished', { n: board.established, total: board.count })}
+            </span>
+          )}
+          {board.thin > 0 && (
+            <span className="smi-chip is-thin">
+              {t('sm.engine.evidenceThin', { n: board.thin })}
+            </span>
+          )}
+          {board.concentratedIn && (
+            <span className="smi-chip is-warn">
+              {t('sm.engine.evidenceConcentrated', { pct: board.concentratedIn.sharePct })}
+            </span>
+          )}
+        </div>
+      )}
 
       {error && <p className="smi-sub">{t('sm.engine.unavailable')}</p>}
       {!error && !data && <div className="sm-skel" />}
@@ -225,6 +284,23 @@ export function VerifiedWallets() {
                   <div className="smi-wcard-title">
                     <strong className="mono" title={w.address}>{w.label || shortAddr(w.address)}</strong>
                     <span className="smi-wcard-badge">✓ {t('sm.engine.qualifiedShort', { defaultValue: 'تایید شده' })}</span>
+                    {/*
+                      * «تأییدشده» on its own answers "did it clear the gate?" and
+                      * not "how much is this worth believing?" — the question a
+                      * reader asked to see answered. The badge names the SAMPLE,
+                      * and `thin` is deliberately not `weak`: a small sample is
+                      * a reason to wait, not a verdict on the trader.
+                      */}
+                    {w.evidence && (
+                      <span
+                        className={`smi-wcard-badge smi-ev smi-ev--${w.evidence.verdict}`}
+                        title={w.evidence.note || w.evidence.factorsNote || undefined}
+                        data-testid="sm-evidence-badge"
+                      >
+                        {t(`sm.engine.evidenceVerdict.${w.evidence.verdict}`)}
+                        {w.evidence.confidence != null ? ` · ${w.evidence.confidence}` : ''}
+                      </span>
+                    )}
                   </div>
                   <div className="smi-wcard-sub">
                     <span className="smi-chain-pill">{chainName(w.chain)}</span>
@@ -232,8 +308,26 @@ export function VerifiedWallets() {
                   </div>
                 </div>
                 <div className="smi-wcard-score-box">
-                  <span className="smi-wcard-score-val">{w.score}</span>
-                  <span className="smi-wcard-score-lab">{t('sm.engine.score')}</span>
+                  {/*
+                    * When the evidence is thinner than the score deserves, the
+                    * shrunk value leads and the raw one is printed under it —
+                    * neither number is hidden, so the adjustment is auditable.
+                    * With an established sample they are the same figure and the
+                    * card looks exactly as it did before.
+                    */}
+                  <span className="smi-wcard-score-val">
+                    {w.evidence?.adjustedScore != null && Math.round(w.evidence.adjustedScore) !== w.score
+                      ? Math.round(w.evidence.adjustedScore) : w.score}
+                  </span>
+                  <span className="smi-wcard-score-lab">
+                    {t('sm.engine.score')}
+                    {w.evidence?.adjustedScore != null
+                      && Math.round(w.evidence.adjustedScore) !== w.score ? (
+                        <i className="smi-wcard-score-raw" title={t('sm.engine.evidenceAdjustedNote')}>
+                          {' '}{t('sm.engine.evidenceRaw', { n: w.score })}
+                        </i>
+                      ) : null}
+                  </span>
                 </div>
               </div>
 
@@ -337,7 +431,26 @@ function CandidateRows({ rows }) {
               </div>
               <div className="smi-cand-score">
                 <b>{w.score ?? '—'}</b>
-                <small>{w.qualified ? t('sm.engine.qualifiedShort') : t(`sm.engine.status.${w.status}`, { defaultValue: w.status })}</small>
+                {/*
+                  * «INSUFFICIENT_EVIDENCE» was the same word for four
+                  * different situations. The first binding gate is the honest
+                  * one: «۴ معامله از ۵» tells the reader to come back, while
+                  * «نرخ برد ۳۰٪» tells them to move on — and the label used to
+                  * be identical for both.
+                  */}
+                <small>
+                  {w.qualified
+                    ? t('sm.engine.qualifiedShort')
+                    : (() => {
+                      const gap = readQualificationGaps(w);
+                      if (!gap.primary) return t(`sm.engine.status.${w.status}`, { defaultValue: w.status });
+                      const g = gap.gaps[0];
+                      return t(`sm.engine.gap.${g.gate}`, {
+                        have: g.have, need: g.need,
+                        defaultValue: t(`sm.engine.status.${w.status}`, { defaultValue: w.status })
+                      });
+                    })()}
+                </small>
               </div>
             </div>
             <div className="smi-cand-meta">
@@ -1016,6 +1129,13 @@ export default function SmartMoneyIntelligence() {
                     chain={chosen.chain}
                     token={chosen.token}
                     side={chosen.signal === 'DISTRIBUTION' ? 'SELL' : 'BUY'}
+                    /* The consensus row IS the verified evidence, so the
+                       engine reads it directly: no second source is invented
+                       and the verdict under the button is the same read the
+                       signal card would get. Liquidity and concentration come
+                       from the same payload this card already renders. */
+                    verified={chosen}
+                    window={win}
                     className="sm-copy--tight"
                   />
                   <button className="smi-link" type="button" onClick={() => navigate(`/smart-money/token/${chosen.chain}/${chosen.token}`)}>

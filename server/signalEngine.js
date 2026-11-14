@@ -148,7 +148,34 @@ const WHY_TTL_MS = Number(process.env.AI_CACHE_TTL_MS || 6 * 3600_000);
  * top-20 market breadth, smart-money net flow). Never a fixed number.
  */
 export async function buildMarketPulse() {
-  const { value } = await withCache('sig:pulse', PULSE_TTL_MS, () => computePulse(), { swr: true });
+  /*
+   * ─── DURABLE, NOT JUST WARM ──────────────────────────────────────────────
+   * `withCache` is per-INSTANCE. On a serverless host every cold start began
+   * with an empty Map, so the first visitor after a sleep paid for the whole
+   * `computePulse()` — a 40-row CoinGecko market walk plus the Smart Money
+   * overview (which itself fans out over seven chains, budgeted at 14s). That
+   * is the single most expensive read behind this screen, and it used to be
+   * re-paid on every scale-to-zero.
+   *
+   * `withPersistentCache` (Upstash/Blob, already used for AI answers) keeps the
+   * answer across cold starts, so a quiet night costs ONE rebuild per TTL
+   * rather than one per wake-up. The memory tier is still checked first, so a
+   * warm instance is unchanged and pays nothing extra.
+   *
+   * Slow-moving aggregates only: the pulse is sentiment/risk/breadth over 24h
+   * windows, so a 60-second-old copy is the same truth. If no durable store is
+   * configured the helper degrades silently to the in-memory behaviour it
+   * replaces — no branch, no failure mode.
+   */
+  const { value } = await withPersistentCache(
+    'sig:pulse',
+    PULSE_TTL_MS,
+    async () => {
+      const { value: fresh } = await withCache('sig:pulse', PULSE_TTL_MS, () => computePulse(), { swr: true });
+      return fresh;
+    },
+    memoryStore
+  );
   return value;
 }
 
@@ -664,7 +691,19 @@ export function localReasonFromEvidence(safe) {
  * UI renders them only when a source provides them, never as a guess.
  */
 export async function buildSolanaRadar({ limit = 10 } = {}) {
-  const { value } = await withCache(`sig:radar:solana:${limit}`, RADAR_TTL_MS, () => computeSolanaRadar(limit), { swr: true });
+  /* Same durable tier as the pulse, and for a stronger reason: building the
+     radar reads DexScreener pairs AND enriches up to sixteen tokens through
+     Solscan — metered APIs whose answers the route already caches for five
+     minutes. A cold start used to redo that work from scratch. */
+  const { value } = await withPersistentCache(
+    `sig:radar:solana:${limit}`,
+    RADAR_TTL_MS,
+    async () => {
+      const { value: fresh } = await withCache(`sig:radar:solana:${limit}`, RADAR_TTL_MS, () => computeSolanaRadar(limit), { swr: true });
+      return fresh;
+    },
+    memoryStore
+  );
   return value;
 }
 

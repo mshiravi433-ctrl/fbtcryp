@@ -154,7 +154,7 @@ export function explainConstitution(result, locale = 'fa') {
   const fa = String(locale || 'fa').startsWith('fa');
   const c = CONSTITUTION;
   const text = {
-    LEVERAGE_CEILING: fa ? `اهرم بیشتر از ${c.maxLeverage} برابر از طریق دستیار هوشمند مجاز نیست.` : `Leverage above ${c.maxLeverage}x is not allowed through the assistant.`,
+    LEVERAGE_CEILING: fa ? `ضریب بیشتر از ${c.maxLeverage} برابر از طریق دستیار هوشمند مجاز نیست.` : `Leverage above ${c.maxLeverage}x is not allowed through the assistant.`,
     SLIPPAGE_CEILING: fa ? `لغزش قیمت بیش از ${c.maxSlippagePct}٪ پذیرفته نمی‌شود؛ ممکن است بخش بزرگی از مبلغ از دست برود.` : `Slippage above ${c.maxSlippagePct}% is refused — it can cost a large part of the amount.`,
     TRANSACTION_CEILING: fa ? 'مبلغ این تراکنش از سقف ثابت محصول بیشتر است.' : 'This transaction is above the product\'s fixed ceiling.',
     TOO_MANY_LEGS: fa ? 'این برنامه مراحل بیش از حد دارد؛ آن را به چند درخواست کوچک‌تر تقسیم کنید.' : 'This plan has too many steps; split it into smaller requests.',

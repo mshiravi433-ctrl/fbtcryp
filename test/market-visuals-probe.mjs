@@ -38,13 +38,39 @@ const jsonResponse = (body) => new Response(JSON.stringify(body), {
   headers: { 'content-type': 'application/json' }
 });
 
+/*
+ * Run `run` with `fetch` stubbed — and RESTORE only when the outermost
+ * `withFetch` on this mock finishes.
+ *
+ * The naive version (save, set, finally restore) leaks when two calls overlap,
+ * which is exactly what the single-flight check does:
+ *
+ *     const [a, b] = await Promise.all([run(), run()]);
+ *
+ * `a` finishes first, its `finally` restores the REAL fetch, and `b` completes
+ * against the network instead of the mock. Worse, whichever call restores last
+ * decides what the NEXT probe in the process sees — and in a full
+ * `test/run.mjs` this file left a stubbed `fetch` behind for every suite after
+ * it, which is why the execution-observation probe (the next one that makes
+ * real HTTP calls) failed fourteen assertions it passes standalone.
+ *
+ * A depth counter makes nesting safe: the original is captured on the way in
+ * and only put back when the last holder leaves.
+ */
+let fetchDepth = 0;
+let fetchOriginal = null;
+
 async function withFetch(mock, run) {
-  const original = globalThis.fetch;
-  globalThis.fetch = mock;
+  if (fetchDepth === 0) {
+    fetchOriginal = globalThis.fetch;
+    globalThis.fetch = mock;
+  }
+  fetchDepth += 1;
   try {
     return await run();
   } finally {
-    globalThis.fetch = original;
+    fetchDepth -= 1;
+    if (fetchDepth === 0) globalThis.fetch = fetchOriginal;
   }
 }
 

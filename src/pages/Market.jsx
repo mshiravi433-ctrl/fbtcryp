@@ -30,6 +30,8 @@ import SmartMoneyBanner from '../components/market/SmartMoneyBanner';
 import HotCoins from '../components/market/HotCoins';
 import MarketHeroBanner from '../components/market/MarketHeroBanner';
 import MarketTabStrip from '../components/market/MarketTabStrip';
+import MarketColumnHeader from '../components/market/MarketColumnHeader';
+import MarketCriteriaRow from '../components/market/MarketCriteriaRow';
 import MarketHeatmap from '../components/market/MarketHeatmap';
 import MarketCapitalPulse from '../components/market/MarketCapitalPulse';
 import MarketDefiIntel from '../components/market/MarketDefiIntel';
@@ -55,6 +57,31 @@ import '../styles/market-overview-compact.css';
 import '../styles/market-tabs.css';
 import '../styles/market-hero-banner.css';
 /*
+ * ─── THE SURFACE SCALE, AND WHY IT IS NOT A SIXTH DESIGN LAYER ────────────
+ * Five design passes each overrode the last for the eight shared cards, so
+ * their corner radii settled at FIVE different values (measured over the
+ * win-order with a CSS parser) and their paddings at six. `market-surface.css`
+ * declares only radius, padding and the heading rhythm — no colour, no
+ * background, no border, no shadow, no animation — so it governs the SHAPE of
+ * the layers below without becoming a layer that has to be overridden in turn.
+ *
+ * It sits after them because it must win their cascade, and before
+ * `market-perf.css` because the stop policy must stay able to park anything.
+ */
+import '../styles/market-surface.css';
+/*
+ * ─── THE BENCHMARK PASS, BETWEEN THE SCALE AND THE BUDGET ─────────────────
+ * «از بهترین های این ام است از صفحات مهم مثل باینس الهام بگیر» — three
+ * behaviours a mature market table has and this one did not: a row that is one
+ * pointer target including its action cell, column labels that follow the
+ * scroll on a wide screen, and a phone hero that gives its width to the copy
+ * instead of to a drawn sculpture. `market-benchmark.css` owns all three and
+ * the reason for each; it is imported here because it must win `market-surface`
+ * (it moves the banner onto that scale) and must still lose to the stop policy
+ * below it.
+ */
+import '../styles/market-benchmark.css';
+/*
  * ─── THE SCROLL BUDGET, LAST ──────────────────────────────────────────────
  * The five sheets above are the design layers (one per pass, each with its
  * own regression pins). This one is the stop policy: which ambient loops may
@@ -75,9 +102,11 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { getCoin, getMarkets, onMarketVisualsReady } from '../lib/api';
 import { VISIBLE_SECTORS, isBinanceRiskSector, sectorFromRows } from '../lib/marketSectors';
 import { DEFAULT_SORT, MARKET_SORTS, marketBreadth, sortMarketRows } from '../lib/marketList';
+import { joinMarketAnnouncement, marketAnnouncement } from '../lib/marketAnnounce';
 import { mergeVisuals } from '../lib/marketVisuals';
 import { useAppStore } from '../store/useAppStore';
 import { runPriceAlerts, runTopMoverAlerts, syncPriceWatch } from '../lib/priceAlerts';
+import { MARKET_PAGE_ROWS } from '../lib/marketRoute';
 import { isSwappable, swapUrlFor } from '../lib/coinToSwap';
 import { venueRoute } from '../lib/coinVenue';
 import { rememberCoinVenues } from '../lib/coinVenues';
@@ -106,7 +135,7 @@ const FILTERS = ['all', 'gainers', 'losers', 'favorites', 'volume'];
  * — 250 on first paint, the rest on demand. Half the first-paint payload, one
  * upstream call instead of two, and a count that matches the data.
  */
-const MARKET_PAGE_SIZE = 250;
+const MARKET_PAGE_SIZE = MARKET_PAGE_ROWS;
 const FOLDED_ROWS = 12;
 
 /**
@@ -288,6 +317,35 @@ export default function Market() {
   const [smartIntent, setSmartIntent] = useState(null);
   const [sortKey, setSortKey] = useState(DEFAULT_SORT.key);
   const [sortDir, setSortDir] = useState(DEFAULT_SORT.dir);
+  /*
+   * ─── THE HORIZON (2026-11-12) ──────────────────────────────────────────────
+   * One control, three readings. It decides two things at once and they are the
+   * same thing: which column the list is ranked by when the sort is a change,
+   * and which move the row's pill prints. A horizon selector that changed the
+   * pill but not the order would let «۱ ساعت» rank a list by 24-hour moves.
+   *
+   * Choosing a horizon IS a sort of that horizon (descending, the way a move
+   * column is read) — that is what a trader expects from tapping «۷ روز», and
+   * it keeps `activeView` derived from the sort rather than adding a fourth
+   * piece of state that can disagree with it.
+   *
+   * Persisted per device: a reader who watches the 1h is not re-choosing it
+   * every visit.
+   */
+  const [horizon, setHorizonState] = useState(() => {
+    try {
+      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('fbt.market.horizon') : null;
+      return ['1h', '24h', '7d'].includes(saved || '') ? saved : '24h';
+    } catch { return '24h'; }
+  });
+  const setHorizon = useCallback((next) => {
+    if (!['1h', '24h', '7d'].includes(next)) return;
+    setHorizonState(next);
+    try { localStorage.setItem('fbt.market.horizon', next); } catch { /* private mode */ }
+    setSmartIntent(null);
+    setSortKey(next === '1h' ? 'change1h' : next === '7d' ? 'change7d' : 'change');
+    setSortDir('desc');
+  }, []);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
 
   /*
@@ -319,7 +377,28 @@ export default function Market() {
     setSmartIntent(null);
     setSortKey(key);
     setSortDir(key === 'rank' ? 'asc' : 'desc');
+    /* Picking a horizon from the SORT menu moves the selector too, so the pills
+       and the order can never describe different windows. */
+    if (key === 'change1h') setHorizonState('1h');
+    else if (key === 'change7d') setHorizonState('7d');
+    else if (key === 'change' || key === 'rank') setHorizonState('24h');
   }, []);
+
+  /*
+   * ─── TAPPING A COLUMN HEADER ──────────────────────────────────────────────
+   * Every market table works this way: tap a column to sort by it, tap the same
+   * column again to reverse. Choosing a DIFFERENT column goes through
+   * `chooseSort`, so it keeps that function's rules (rank ascending, measures
+   * descending, and the horizon rail following a horizon sort) instead of
+   * growing a second, slightly different definition of "sorted by this".
+   */
+  const flipOrChoose = useCallback((key) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    chooseSort(key);
+  }, [chooseSort, sortKey]);
 
   const applySmartSearch = useCallback((value) => {
     const intent = interpretMarketQuery(value);
@@ -522,14 +601,73 @@ export default function Market() {
    * the volumes do — and prints nothing when the order is price or change,
    * because both of those numbers are already on the right of every row.
    */
+  /*
+   * ─── THE METRIC IS A VALUE, NOT AN ELEMENT (2026-11-12) ───────────────────
+   *
+   * This returned a fresh <>{text} <i>unit</i></> on every call. `CoinRow` is
+   * memoised on `prev.metric === next.metric`, and a JSX element is a NEW
+   * OBJECT each time it is created, so that comparison could never be true
+   * whenever the sort key is «ارزش بازار» or «حجم» — the two views where a
+   * row prints a second number.
+   *
+   * The effect was measurable and invisible: on those two views EVERY row in
+   * the visible list re-rendered on every 30-second poll, whether or not its
+   * price moved, which is exactly the work the comparator exists to skip
+   * ("60 rows reconcile, 4 repaint" — the comment in CoinRow.jsx). The default
+   * rank view returned null, so the screen was fast by default and quietly
+   * heavier in the two views a trader sorts by.
+   *
+   * A plain {text, unit} object fixes it at the source: two rows with the same
+   * number and the same unit now produce EQUAL (well, deep-equal) values and
+   * the memo holds. The markup is byte-identical — CoinRow renders the same
+   * <>{text} <i>{unit}</i></> it always did, and
+   * test/market-terminal.test.jsx still reads the same text.
+   */
   const rowMetric = useCallback(
     (coin) => {
+      /*
+       * ─── THE SECOND LINE, IN THE VIEWS THAT HAD NONE (2026-11-12) ──────────
+       * This returned a number only when the sort was by that same number —
+       * volume under a volume sort, market cap under a market-cap sort — and
+       * `null` in every other view. Under «رتبه», «صعودی‌ها» and «نزولی‌ها» a
+       * row showed a symbol, a name and a price, and threw away the market cap
+       * and the trading volume that were already in the payload. That is worse
+       * than it sounds: those are exactly the views where a reader is scanning
+       * 250 names for something worth opening, and liquidity is the number
+       * that answers it.
+       *
+       * The two existing behaviours are left ALONE — they are pinned by
+       * test/market-terminal.test.jsx and they earn their place (under a
+       * market-cap sort, market cap under each name is the absolute scale the
+       * ordering alone cannot give you). What changes is the default: the
+       * views that had no second line now get VOLUME, falling back to market
+       * cap for a row that has no volume.
+       *
+       * `{text, unit}` stays, and for the same reason as before: `CoinRow` is
+       * memoised on `prev.metric === next.metric`, and equal values must
+       * compare equal or every row re-renders on every poll.
+       */
       if (sortKey === 'volume') {
-        return <>{fmtCompact(coin.volume || 0)} <i>{t('market.volumeShort')}</i></>;
+        return { text: fmtCompact(coin.volume || 0), unit: t('market.volumeShort') };
       }
       if (sortKey === 'mcap') {
-        return <>{fmtCompact(coin.mcap || 0)} <i>{t('market.mcapShort')}</i></>;
+        return { text: fmtCompact(coin.mcap || 0), unit: t('market.mcapShort') };
       }
+      /*
+       * «قیمت» stays clean, and deliberately. A price sort is a LOOKUP — the
+       * reader already knows what they are looking for and the price is the
+       * big number on every row — whereas rank, gainers, losers and the horizon
+       * views are SCANS, where "is this thing liquid enough to care about" is
+       * the question the second line exists to answer. This keeps the existing
+       * behaviour pinned by test/market-terminal.test.jsx («says nothing extra
+       * when the order is price») rather than rewriting a test whose reasoning
+       * still holds.
+       */
+      if (sortKey === 'price') return null;
+      /* A coin with no volume is a missing figure, not a zero — fall back to
+         market cap rather than printing «۰ B» beneath a real price. */
+      if (Number(coin.volume) > 0) return { text: fmtCompact(coin.volume), unit: t('market.volumeShort') };
+      if (Number(coin.mcap) > 0) return { text: fmtCompact(coin.mcap), unit: t('market.mcapShort') };
       return null;
     },
     [sortKey, t]
@@ -656,6 +794,103 @@ export default function Market() {
   const hasMore = list.length > visibleCount || canLoadNext || canLoadCategory;
   const visibleList = list.slice(0, rowCap);
   const shownCount = visibleList.length;
+
+  /*
+   * ─── WHAT THIS LIST IS, SAID OUT LOUD (2026-11-12) ────────────────────────
+   * The table is the product of four controls — search, sector, chip view and
+   * sort popover — and three of them are invisible from where the rows are
+   * read: the sort popover is closed, the sector chip is above the fold, and
+   * the footer printed the same «۶۰ از ۲۵۰» whether the next sixty were
+   * already in memory or cost a request. So the reading is stated once, above
+   * the rows, as (a) a sentence naming the list, (b) removable tokens for each
+   * constraint and (c) a scope rail whose caption knows where the rest is.
+   *
+   * The sentence itself comes from lib/marketAnnounce.js, which is also what
+   * feeds the live region: one vocabulary, so what a sighted reader reads and
+   * what a screen reader hears can never describe two different lists.
+   */
+  const listHeadline = sector
+    ? t('market.criteriaSectorHeadline', { sector: t(`market.sector.${sector}`) })
+    : smartIntent
+      ? t('market.criteriaIntentHeadline', { query: query.trim() })
+      : query.trim()
+        ? t('market.criteriaSearchHeadline', { query: query.trim() })
+        : onlyFavorites
+          ? t('market.criteriaFavoritesHeadline')
+          : t('market.criteriaAllHeadline');
+
+  const activeCriteria = useMemo(() => {
+    const out = [];
+    if (query.trim()) {
+      out.push({
+        id: 'query',
+        label: `«${query.trim()}»`,
+        onRemove: () => setQuery('')
+      });
+    }
+    if (sector) {
+      out.push({
+        id: 'sector',
+        label: t(`market.sector.${sector}`),
+        onRemove: () => setSector(null)
+      });
+    }
+    if (onlyFavorites) {
+      out.push({
+        id: 'favorites',
+        label: t('market.filter.favorites'),
+        onRemove: () => setOnlyFavorites(false)
+      });
+    }
+    if (sortKey !== DEFAULT_SORT.key || sortDir !== DEFAULT_SORT.dir) {
+      out.push({
+        id: 'order',
+        /* The order is a constraint too, and the one a reader is most likely
+           to have set and forgotten: it lives in a popover that is closed. */
+        label: t('market.criteriaOrderChip', {
+          column: t(`market.sort.${sortKey}`),
+          dir: t(sortDir === 'asc' ? 'market.criteriaAsc' : 'market.criteriaDesc')
+        }),
+        onRemove: () => { setSortKey(DEFAULT_SORT.key); setSortDir(DEFAULT_SORT.dir); }
+      });
+    }
+    return out;
+  }, [query, sector, onlyFavorites, sortKey, sortDir, t]);
+
+  const resetAllCriteria = useCallback(() => {
+    setQuery('');
+    setSector(null);
+    setOnlyFavorites(false);
+    setSortKey(DEFAULT_SORT.key);
+    setSortDir(DEFAULT_SORT.dir);
+    setSmartIntent(null);
+  }, []);
+
+  /*
+   * Where the NEXT rows live — the distinction the old footer collapsed. Rows
+   * already in memory are instant; a page 2 or the next category page is a
+   * request. `null` when there is nothing left to reveal.
+   */
+  const nextKind = list.length > visibleCount
+    ? 'memory'
+    : (canLoadNext || canLoadCategory ? 'request' : null);
+
+  /*
+   * ─── THE ONE ANNOUNCEMENT ────────────────────────────────────────────────
+   * The row count used to be `aria-live` on the heading, printing the TOTAL
+   * (`list.length`, up to 750) beside sixty rendered rows. One live region now
+   * says all three things — how many, which set, in what order — because three
+   * regions firing for one tap is a screen reader reading three sentences.
+   *
+   * `joinMarketAnnouncement` is called with `t` at render time and the RESULT
+   * is a string, so React only touches the DOM when the sentence actually
+   * changed: a 30 s poll that moves a price but no row count leaves the
+   * region untouched.
+   */
+  const announcement = joinMarketAnnouncement(
+    marketAnnouncement({ shown: shownCount, total: list.length, sector, onlyFavorites, sortKey, sortDir }),
+    t
+  );
 
   const swapRouteFor = (coin) => {
     const curated = isSwappable(coin.id);
@@ -884,7 +1119,23 @@ export default function Market() {
                 <div className="mx-list-hero-head">
                   <h2 className="mx-list-title" id="market-list-title">
                     <span className="market-terminal-title-text">{sector ? t(`market.sector.${sector}`) : t('marketIntel.allCoinsTitle')}</span>
-                    <span className="market-count mono" aria-live="polite" data-testid="market-count">{fmtNum(list.length)}</span>
+                    {/*
+                      THE COUNT IS THE VIEW, AND IT IS NO LONGER `aria-live`.
+                      `list.length` is the size of the RESULT SET, and it is
+                      pinned that way by test/market-terminal.test.jsx: after
+                      tapping «صعودی‌ها» the chips must not have shrunk the
+                      view, and this number is the evidence. That is a real
+                      distinction from the 60 rows a budget renders, and it is
+                      now stated where the rows are — the criteria row below
+                      prints «۶۰ از ۱۲۱» and says whether the rest is already
+                      in memory or costs a request.
+
+                      What was wrong here was the live region: `aria-live` on
+                      this span made a screen reader announce the result-set
+                      size as if it were the rows that had just changed. The
+                      one announcement now lives below and says all of it.
+                    */}
+                    <span className="market-count mono" data-testid="market-count">{fmtNum(list.length)}</span>
                   </h2>
                 </div>
 
@@ -903,6 +1154,67 @@ export default function Market() {
                   smartIntent={smartIntent}
                   vs={vs}
                 />
+
+                {/*
+                    ─── THE HORIZON RAIL ────────────────────────────────────────
+                    Three readings the feed always carried and the screen never
+                    showed together: 1h, 24h, 7d. It sits ABOVE the chips
+                    because it governs them — the chips re-order, this decides
+                    WHAT is being ordered and what the pill on every row says.
+
+                    A radio group, not three buttons: it is one choice out of
+                    three, and a screen reader should hear that. Keyboard
+                    arrows move it, like every other segmented control in the
+                    app.
+                */}
+                <div
+                  className="mx-horizon"
+                  role="radiogroup"
+                  aria-label={t('market.horizonAria')}
+                  data-testid="market-horizon"
+                  onKeyDown={(event) => {
+                    const order = ['1h', '24h', '7d'];
+                    const i = order.indexOf(horizon);
+                    let next = null;
+                    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = order[(i + 1) % 3];
+                    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = order[(i + 2) % 3];
+                    if (next) { event.preventDefault(); setHorizon(next); }
+                  }}
+                >
+                  {['1h', '24h', '7d'].map((h) => (
+                    <button
+                      key={h}
+                      type="button"
+                      role="radio"
+                      aria-checked={horizon === h}
+                      tabIndex={horizon === h ? 0 : -1}
+                      className="mx-horizon-btn mono"
+                      data-horizon={h}
+                      data-active={horizon === h ? 'true' : undefined}
+                      onClick={() => setHorizon(h)}
+                      data-testid={`market-horizon-${h}`}
+                    >
+                      {t(`market.horizon.${h}`)}
+                    </button>
+                  ))}
+                  {/*
+                    AN HONEST NOTE, NOT A FOOTNOTE. The 1h and 7d columns do not
+                    exist on the CoinLore backup rows (that feed sends neither
+                    field), so a reader who switches to «۷ روز» while the
+                    primary feed is down would otherwise see a screen of «—»
+                    and conclude the market stopped moving. The sentence says
+                    which case this is.
+                  */}
+                  {horizon !== '24h' && (() => {
+                    const missing = list.filter((r) => (horizon === '1h' ? r.change1h : r.change7d) == null).length;
+                    if (!missing) return null;
+                    return (
+                      <span className="mx-horizon-note" data-testid="market-horizon-note">
+                        {t('market.horizonMissing', { count: fmtNum(missing) })}
+                      </span>
+                    );
+                  })()}
+                </div>
 
                 <div className="mx-controls">
                 <div className="market-views mx-views" role="group" aria-label={t('market.viewsAria')}>
@@ -940,7 +1252,7 @@ export default function Market() {
                     }}
                     data-testid="market-sort"
                   >
-                    <span>{t(`market.sort.${sortKey}`)}</span>
+                    <span id="market-sort-current">{t(`market.sort.${sortKey}`)}</span>
                     <GlyphCaretDown className="mx-sort-caret" width={13} height={13} />
                   </button>
                   {sortOpen && (
@@ -975,13 +1287,37 @@ export default function Market() {
                       ))}
                     </div>
                   )}
+                  {/*
+                    ─── THE DIRECTION BUTTON, WHICH HAD NO STATE OF ITS OWN ──
+                    Three problems, all of them accessibility bugs a sighted
+                    reader never sees because the arrow drawn inside the button
+                    was the entire signal:
+
+                      · its accessible name was the CURRENT direction
+                        («نزولی — بیش‌ترین اول»), not the ACTION, and a toggle
+                        whose name is a state is a coin toss for anyone using
+                        voice control: "click descending" could either mean
+                        "you are descending" or "make it descending";
+                      · it carried no `aria-pressed`, so the state existed only
+                        in the arrow's path data;
+                      · the direction is only half the answer — the other half
+                        is WHICH COLUMN, and that lives in the closed popover.
+
+                    So: the name now states the action, `aria-pressed` carries
+                    "descending is on", and `aria-describedby` points at the
+                    sort trigger's own text so the pair reads as «قیمت · نزولی»
+                    instead of as an arrow. `title` is removed rather than kept
+                    beside an identical accessible name — a title that repeats
+                    the label is a tooltip that says nothing.
+                  */}
                   <button
                     type="button"
                     className="market-dir mx-icon-btn"
                     data-dir={sortDir}
+                    aria-pressed={sortDir === 'desc'}
+                    aria-label={sortDir === 'desc' ? t('market.dirToAsc') : t('market.dirToDesc')}
+                    aria-describedby="market-sort-current"
                     onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
-                    aria-label={sortDir === 'desc' ? t('market.dirDesc') : t('market.dirAsc')}
-                    title={sortDir === 'desc' ? t('market.dirDesc') : t('market.dirAsc')}
                     data-testid="market-sort-dir"
                   >
                     {/* A drawn arrow, not a typed one: the down/up text glyphs arrive as artwork
@@ -1083,7 +1419,86 @@ export default function Market() {
                     </div>
                   )}
 
-                  <div className="stack market-coin-grid mx-table" id="market-list-rows">
+                  {/*
+                    THE COLUMN HEADER (2026-11-12). Every market table has one;
+                    this screen did not. It names the columns, carries the
+                    horizon on the change column so the label follows the rail,
+                    and makes price/change/volume tappable sorts so re-ordering
+                    does not require opening a popover. `aria-sort` sits on the
+                    active column only — `aria-sort="none"` on every header is
+                    noise a screen reader reads twelve times.
+                  */}
+                  {/*
+                    THE READING, ABOVE THE ROWS IT DESCRIBES. It is mounted even
+                    when `list` is empty (the empty-state card below explains
+                    why), because "0 of 250" is itself the answer to "why is this
+                    blank".
+                  */}
+                  {!listFolded && (
+                    <MarketCriteriaRow
+                      headline={listHeadline}
+                      criteria={activeCriteria}
+                      shown={shownCount}
+                      total={list.length}
+                      nextKind={nextKind}
+                      onReset={resetAllCriteria}
+                    />
+                  )}
+
+                  {/*
+                    ONE LIVE REGION FOR THE WHOLE TABLE STATE. `role="status"`
+                    is polite by default; `aria-atomic` makes the reader say the
+                    finished sentence rather than the fragment that changed.
+                    Visually hidden because the criteria row above shows the
+                    same three facts in a form that is readable by eye.
+                  */}
+                  <p
+                    className="mx-sr-only"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                    data-testid="market-live"
+                  >
+                    {announcement}
+                  </p>
+
+                  {/*
+                    ─── THE TABLE ANCESTORS THAT WERE MISSING (2026-11-12) ──────
+                    `MarketColumnHeader` has carried `role="row"` and three
+                    `role="columnheader"` cells since it was written, and every
+                    one of them was an ORPHAN: a row inside nothing, headers
+                    outside a table. ARIA allows those roles only inside
+                    table, then rowgroup, then row, so the tree described a
+                    structure the browser could not resolve and a screen reader
+                    read a five-cell header as five unrelated items.
+
+                    Wrapping both the header and the rows in that structure
+                    makes the existing roles true instead of deleting them, and
+                    it is what lets `aria-sort` reach the reader at all. The
+                    rows stay `<button>`s inside `<div>`s — each row is ONE tap
+                    target — so `role="row"` on a row wrapper is a description
+                    of position, not a claim that this is a real table element.
+
+                    `aria-label` names the table once, so a reader entering it
+                    hears «جدول بازار» rather than a run of cells.
+                  */}
+                  <div
+                    role="table"
+                    aria-label={t('market.columnsAria')}
+                    aria-rowcount={visibleList.length + (visibleList.length > 0 ? 1 : 0)}
+                    className="mx-table-semantics"
+                  >
+                  <div role="rowgroup">
+                  {visibleList.length > 0 && (
+                    <MarketColumnHeader
+                      horizon={horizon}
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={flipOrChoose}
+                    />
+                  )}
+
+                  <div className="stack market-coin-grid mx-table" id="market-list-rows" role="rowgroup">
                     {visibleList.map((c, i) => {
                       const swapUrl = swapRouteFor(c);
                       return (
@@ -1113,6 +1528,19 @@ export default function Market() {
                              * rendered either way.
                              */
                             deferSpark={i >= 8}
+                            /* The pill prints the window the rail selected —
+                               see the horizon state above. */
+                            horizon={horizon}
+                            /* The quote asset part of the pair. Only USD is
+                               supported (lib/currency.js vsOf), so this is a
+                               constant today — written as a value, not a
+                               hardcoded string in the row, so it follows if
+                               the app ever quotes in something else. */
+                            quote={vs.toUpperCase()}
+                            /* The list keeps a rhythm, so every row carries the
+                               same three-line right column. One row drawn alone
+                               (a hero, a search hit) does not. */
+                            showRange
                             onClick={() => openCoin(c.id)}
                           />
                           <span className="mx-swap-slot" data-available={swapUrl ? 'true' : undefined}>
@@ -1134,18 +1562,36 @@ export default function Market() {
                       );
                     })}
                   </div>
+                  </div>
+                  </div>
 
+                  {/*
+                    ─── ONE SCOPE READING, NOT TWO (2026-11-12) ────────────────
+                    This block used to print «۶۰ از ۱۲۱» in a bar ABOVE the
+                    buttons, and the criteria row added above prints the same
+                    sentence with the same numbers — at the other end of the
+                    list. A reader scrolling past met the same claim twice, and
+                    two identical counters on one screen read as two different
+                    measurements that happen to agree.
+
+                    The criteria row is where the scope belongs: it sits above
+                    the rows, next to the constraints that CAUSED it, and it is
+                    the one that knows whether the remainder needs a request.
+                    This footer keeps only its own reason to exist — the actions
+                    and the fold — and aligns them to the end, so the space the
+                    duplicate counter used is now the button's.
+
+                    `market-showing` is kept (the fold test measures it), but it
+                    is no longer a second caption: it survives as the count that
+                    the fold itself changes, which is the one thing the criteria
+                    row cannot know.
+                  */}
                   {(hasMore || list.length > FOLDED_ROWS) && (
-                    <div className="market-more mx-more">
-                      <div className="market-more-meta">
-                        <span className="mono" data-testid="market-showing">
+                    <div className="market-more mx-more" data-single-scope="true">
+                      <div className="mx-list-actions">
+                        <span className="mx-showing-mini mono" data-testid="market-showing">
                           {t('market.showing', { shown: fmtNum(shownCount), total: fmtNum(list.length || shownCount) })}
                         </span>
-                        <span className="market-more-track" aria-hidden="true">
-                          <span className="market-more-fill" style={{ width: `${list.length ? Math.min(100, (shownCount / list.length) * 100) : 0}%` }} />
-                        </span>
-                      </div>
-                      <div className="mx-list-actions">
                       {hasMore && !listFolded && <button
                         type="button"
                         className="market-show-more mx-show-more"

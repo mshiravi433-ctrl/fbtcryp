@@ -13,6 +13,9 @@ import AdBanner from '../components/AdBanner';
 import AnimatedNumber from '../components/AnimatedNumber';
 import Sparkline from '../components/Sparkline';
 import { useChart, useCoin, useGlobalStats, useMarkets, usePoll } from '../hooks/useMarket';
+import { lastForecastRead } from '../lib/kronosLocal/client.js';
+import { createScoreTracker } from '../lib/signalMomentum.js';
+import { scenarioFan } from '../lib/scenarioFan.js';
 import { analyze, projectRange } from '../lib/ai';
 import { fmtPct, fmtPrice, fmtCompact, timeAgo } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
@@ -39,6 +42,10 @@ import { useLearningTelemetry } from '../hooks/telemetry';
 import useLearningParams from '../hooks/useLearningParams';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { fetchOverview, fetchToken } from '../lib/smartMoneyClient';
+import { readSmartMoney, readForConsensus } from '../lib/smartMoneyRead';
+import { readWhalesOnToken } from '../lib/whaleEngine';
+import { planCopyTrade, planLabel } from '../lib/copyTrade';
+import { READ_BASIS_LABEL } from '../lib/smartMoneyRead';
 import { verifiedSignals } from '../lib/smartMoneyEvidence';
 import { getSignalPulse, getSignalWhy } from '../lib/signalApi';
 import { swapUrlFor, swapTargetFor } from '../lib/coinToSwap';
@@ -46,6 +53,7 @@ import {
   computeHorizonRisks, computeSignalCard, computeEarlySignals,
   computePulseLocal, portfolioImpact, rankSignals, classKey
 } from '../lib/signalEngine';
+import { readTokenBehavior } from '../lib/tokenBehavior';
 import {
   readWatchlist, toggleWatch, createAlert, readAlerts, deleteAlert, saveAlerts,
   evaluateSignalAlerts, recordSignal, settleHistory, readHistory, ALERT_KINDS
@@ -66,6 +74,21 @@ const HORIZONS = [
   { days: 30, key: '30D' }
 ];
 
+/*
+ * POLL CLOCKS, named so the reasoning above the hooks reads as a contract
+ * rather than a magic number. Each is at or above the server route's own
+ * cache TTL — polling a cache faster than it rebuilds buys nothing and, on a
+ * serverless host, costs a function invocation every time.
+ */
+/** `/api/signals/pulse` — server cache 60s. */
+const PULSE_POLL_MS = 90_000;
+/** `/api/v1/smart-money/overview` — server cache 60s, SWR 300s. */
+const SM_POLL_MS = 180_000;
+/** `/api/chart/:id` — server cache 60s, CDN SWR 240s. 30d closes move slowly. */
+const CHART_POLL_MS = 120_000;
+/** BTC series for the verdict layers and relative strength — same route. */
+const MARKET_REF_POLL_MS = 180_000;
+
 /* Chart rows are `{ t, p }` from every source today, but poll hooks store
    whatever resolves — a string body or `[ts, price]` tuples would both
    poison every consumer downstream. Coerce per row and keep only finite
@@ -74,6 +97,14 @@ const toSeries = (rows) =>
   (Array.isArray(rows) ? rows : [])
     .map((p) => (typeof p === 'number' ? p : Array.isArray(p) ? Number(p[1]) : Number(p?.p)))
     .filter((n) => Number.isFinite(n) && n > 0);
+
+/* `Number(null)` is 0 and 0 is finite — the coercion the whole page needs
+   before any arithmetic on an upstream field. Mirrors the engine's own. */
+const num = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+};
 
 /*
  * FAIL CLOSED INSIDE RENDER, NOT INTO THE ROUTE BOUNDARY.
@@ -1189,6 +1220,49 @@ function PortfolioCard({ impact, embedded = false }) {
             <div className="sic-stat"><div className="k">{t('signals.intel.portfolio.concentration')}</div><div className="v">{impact.concentrationPct}%</div></div>
             <div className="sic-stat"><div className="k">{t('signals.intel.portfolio.position')}</div><div className="v">{t(`signals.intel.portfolio.${impact.hasPosition ? 'yes' : 'no'}`)}</div></div>
           </div>
+          {/*
+            * THE PRECISE PART: what this signal can actually cost, in the
+            * reader's own book. Every figure is null when the input it needs
+            * was not measured, and the block simply does not render then — an
+            * em-dash row is worse than an absent one.
+            */}
+          {(impact.riskUsd != null || impact.scenarioLossPct != null) && (
+            <div className="sic-key-value-list sic-onchain-list">
+              {impact.valueUsd != null && (
+                <div><span>{t('signals.intel.portfolio.valueUsd')}</span><b className="mono">${fmtCompact(impact.valueUsd)}</b></div>
+              )}
+              {impact.riskUsd != null && (
+                <div>
+                  <span>{t('signals.intel.portfolio.riskUsd')}</span>
+                  <b className="mono down">${fmtCompact(impact.riskUsd)}</b>
+                </div>
+              )}
+              {impact.riskPctOfBook != null && (
+                <div>
+                  <span>{t('signals.intel.portfolio.riskOfBook')}</span>
+                  <b className={`mono ${impact.riskPctOfBook >= 3 ? 'down' : ''}`}>{impact.riskPctOfBook}%</b>
+                </div>
+              )}
+              {impact.scenarioLossPct != null && (
+                <div>
+                  <span>{t('signals.intel.portfolio.scenarioLoss')}</span>
+                  <b className="mono down">−{impact.scenarioLossPct}%</b>
+                </div>
+              )}
+              {impact.stopLossUsd != null && (
+                <div>
+                  <span>{t('signals.intel.portfolio.stopCost')}</span>
+                  <b className="mono down">${fmtCompact(impact.stopLossUsd)}</b>
+                </div>
+              )}
+              {impact.bookAfterRiskUsd != null && (
+                <div>
+                  <span>{t('signals.intel.portfolio.bookAfterRisk')}</span>
+                  <b className="mono">${fmtCompact(impact.bookAfterRiskUsd)}</b>
+                </div>
+              )}
+            </div>
+          )}
           <div className="sic-note">
             {impact.notes.map((n) => t(`signals.intel.portfolio.notes.${n}`)).join(' ')}
           </div>
@@ -1355,8 +1429,24 @@ function SelectedSignalCard({ coin, signal, analysis, series, scanning, watched,
                     tone={risk === 'high' ? 'down' : risk === 'low' ? 'up' : 'warn'}
                   />
                   <MetricTile k={t('signals.intel.card.timeframe')} v={t('signals.intel.card.timeframeLabel', { d: signal.timeframe })} />
-                  <MetricTile k={t('signals.intel.card.target')} v={signal.targetPct != null ? `+${signal.targetPct}%` : '—'} tone="up" />
-                  <MetricTile k={t('signals.intel.card.stop')} v={signal.stopPct != null ? `-${signal.stopPct}%` : '—'} tone="down" />
+                  {/*
+                    * THE SIGN COMES FROM THE CALL, NOT FROM THE TEMPLATE.
+                    * Both tiles used to hardcode one direction (`+target`,
+                    * `-stop`), so a SELL or a HIGH_RISK call read «+1.2%» for
+                    * a target it measured downward — a level that pointed the
+                    * opposite way from its own sign. `tradeDirection` is the
+                    * direction the engine actually used.
+                    */}
+                  <MetricTile
+                    k={t('signals.intel.card.target')}
+                    v={signal.targetPct != null ? `${signal.tradeDirection === 'down' ? '−' : '+'}${signal.targetPct}%` : '—'}
+                    tone={signal.tradeDirection === 'down' ? 'down' : 'up'}
+                  />
+                  <MetricTile
+                    k={t('signals.intel.card.stop')}
+                    v={signal.stopPct != null ? `${signal.tradeDirection === 'down' ? '+' : '−'}${signal.stopPct}%` : '—'}
+                    tone={signal.tradeDirection === 'down' ? 'up' : 'down'}
+                  />
                 </div>
               ) : (
                 <div className="sic-insufficient">
@@ -1387,6 +1477,203 @@ function SelectedSignalCard({ coin, signal, analysis, series, scanning, watched,
   );
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * TOKEN BEHAVIOUR ROWS — «رفتارشناسی توکن»
+ * The measured structure of the move, rendered as rows inside the existing
+ * breakdown lab. Deliberately NOT a new section, tab, button or card: it is a
+ * handful of <div className="sic-row"> lines in the place the reader already
+ * opens to ask «why». Every row is behind a truthy guard, so a token whose
+ * series was too short simply shows fewer rows — never a zero, never a dash
+ * pretending to be a measurement.
+ * ──────────────────────────────────────────────────────────────────────────── */
+function behaviorRows(behavior, t, tapeEdge = null, consensus = null, acceleration = null) {
+  if (!behavior) return [];
+  const rows = [];
+  const push = (key, label, value, tone = '') => {
+    if (value == null || value === '') return;
+    rows.push({ key, label, value, tone });
+  };
+  const b = behavior.breadth;
+  if (b && b.breadth != null) {
+    const pct = Math.round(b.breadth * 100);
+    push('participation', t('signals.intel.behavior.participation'),
+      `${pct}% · ${b.steps}`, pct >= 62 ? 'up' : pct <= 40 ? 'down' : '');
+  }
+  if (b && b.spikeShare != null) {
+    const spike = Math.round(b.spikeShare * 100);
+    push('spike', t('signals.intel.behavior.spikeShare'), `${spike}%`, spike >= 45 ? 'down' : '');
+  }
+  if (behavior.pressure && behavior.pressure.score != null) {
+    const p = behavior.pressure.score;
+    push('pressure', t('signals.intel.behavior.pressure'),
+      `${p > 0 ? '+' : ''}${Math.round(p)}`, p >= 20 ? 'up' : p <= -20 ? 'down' : '');
+  }
+  if (behavior.relative && behavior.relative.diffPct != null) {
+    const d = behavior.relative.diffPct;
+    push('relative', t('signals.intel.behavior.relative'),
+      `${d > 0 ? '+' : ''}${d.toFixed(1)}pp`, d >= 3 ? 'up' : d <= -3 ? 'down' : '');
+  }
+  if (behavior.volume && behavior.volume.label && behavior.volume.label !== 'unclear') {
+    push('volume', t('signals.intel.behavior.volume'),
+      t(`signals.intel.behavior.vol.${behavior.volume.label}`),
+      behavior.volume.label === 'accumulating' ? 'up' : behavior.volume.label === 'distributing' ? 'down' : '');
+  }
+  if (behavior.anomaly && behavior.anomaly.sigma != null) {
+    push('sigma', t('signals.intel.behavior.anomaly'),
+      `${behavior.anomaly.sigma > 0 ? '+' : ''}${behavior.anomaly.sigma.toFixed(1)}σ`,
+      Math.abs(behavior.anomaly.sigma) >= 2 ? 'warn' : '');
+  }
+  if (behavior.pattern && behavior.pattern.repeat) {
+    push('repeat', t('signals.intel.behavior.pattern'), t('signals.intel.behavior.patternSeen', { n: behavior.pattern.seenStepsAgo }), 'warn');
+  }
+  /*
+   * HAS THE TAPE ACTUALLY MATTERED? The rows above describe what the tape is
+   * doing; a row here says whether the same rule historically did better when
+   * the tape looked that way (`behaviorEdge` in src/lib/backtest.js). It is
+   * EVIDENCE for the argument the panel already makes, not a new claim: it is
+   * printed only when one of the two buckets has enough occurrences to be
+   * measurable, and it is stated against that bucket's own base rate so a
+   * drifting market cannot flatter it.
+   *
+   * Cost: zero. `analyze()` already computed it from the series in hand, so
+   * this reads one field of an object the page already had — no request, no
+   * timer, no second pass over the prices.
+   */
+  if (tapeEdge && tapeEdge.broad) {
+    push('edge-broad', t('signals.intel.behavior.edgeWhen', { kind: t('signals.intel.behavior.edgeBroad') }),
+      `${tapeEdge.broad.edge >= 0 ? '+' : ''}${tapeEdge.broad.edge}pp · n=${tapeEdge.broad.n}`,
+      tapeEdge.broad.edge >= 0 ? 'up' : 'down');
+  } else if (tapeEdge && tapeEdge.spiky) {
+    push('edge-spiky', t('signals.intel.behavior.edgeWhen', { kind: t('signals.intel.behavior.edgeSpiky') }),
+      `${tapeEdge.spiky.edge >= 0 ? '+' : ''}${tapeEdge.spiky.edge}pp · n=${tapeEdge.spiky.n}`,
+      tapeEdge.spiky.edge >= 0 ? 'up' : 'down');
+  }
+  /*
+   * «چند منبع مستقل همین را می‌گویند؟» — the four-plane reconciliation, shown
+   * as one more row in the SAME list. It is the answer to «آیا سیگنال دقیق
+   * است؟»: a number plus WHICH planes agree, and, when they do not, which two
+   * are fighting. Nothing is rendered for a plane that was not measured.
+   */
+  if (consensus && consensus.measured >= 2) {
+    const agreeing = (consensus.bias === 'up'
+      ? consensus.signals.filter((x) => x.dir > 0)
+      : consensus.signals.filter((x) => x.dir < 0)).map((x) => t(`signals.consensus.plane.${x.plane}`));
+    const fighting = consensus.conflict
+      ? consensus.conflict[consensus.bias === 'down' ? 'up' : 'down'].map((p) => t(`signals.consensus.plane.${p}`))
+      : [];
+    if (consensus.bias !== 'flat' && agreeing.length >= 2) {
+      push('consensus', t('signals.consensus.title'), `${agreeing.join(' · ')}${fighting.length ? ` ⚔ ${fighting.join(' · ')}` : ''}`,
+        fighting.length ? 'warn' : consensus.bias === 'up' ? 'up' : 'down');
+    } else if (consensus.conflict) {
+      push('consensus', t('signals.consensus.title'),
+        t('signals.consensus.split', { a: consensus.conflict.up.map((p) => t(`signals.consensus.plane.${p}`)).join(' · '), b: consensus.conflict.down.map((p) => t(`signals.consensus.plane.${p}`)).join(' · ') }),
+        'warn');
+    }
+  }
+  /*
+   * «شتاب سیگنال» — same list, one more row, and only when there is a real
+   * delta to report (a single sample is not an acceleration). The arrow is the
+   * direction of the MOVE of the score, not of the score itself: «the case is
+   * being built» and «the case is bullish» are different statements and the
+   * wording says which one this is.
+   */
+  if (acceleration && acceleration.state !== 'new' && acceleration.delta != null) {
+    const stateKey = acceleration.state;
+    const tone = stateKey === 'reversing' ? 'warn' : stateKey === 'fading' ? 'down' : stateKey === 'accelerating' ? 'up' : '';
+    push('accel', t('signals.accel.title'),
+      `${t(`signals.accel.state.${stateKey}`)} ${acceleration.delta > 0 ? '+' : ''}${acceleration.delta}`, tone);
+  }
+  return rows;
+}
+
+/*
+ * ─── «کپی تراکنش» INSIDE THE PANEL THAT ALREADY EXISTS ──────────────────────
+ * The plan this renders comes from `planCopyTrade`, built from the SAME read
+ * the card was scored with. What is shown is the read and its gates — never an
+ * instruction:
+ *
+ *   · the side and the conviction the evidence earned (or the gate that blocks
+ *     it, named);
+ *   · the size, the stop and the dollar risk, but ONLY from a measured
+ *     volatility and a real position size — otherwise the row is not rendered
+ *     at all rather than printed as «—» three times;
+ *   · the provenance note, because a plan built on the unqualified tape must
+ *     read differently from one built on verified wallets.
+ *
+ * No button: the copy-trade action already lives on the smart-money surfaces,
+ * and the user asked for no new controls. This is the explanation the engine
+ * owes for that action.
+ */
+function CopyTradeRead({ plan }) {
+  const { t } = useTranslation();
+  if (!plan) return null;
+  const label = planLabel(plan);
+  const tone = label.tone === 'warn' ? 'down' : label.tone === 'up' ? 'up' : '';
+  const side = plan.action === 'BUY' ? t('sm.buying') : plan.action === 'SELL' ? t('sm.selling') : null;
+  const s = plan.sizing || {};
+  return (
+    <div className="sic-copyread" data-testid="sic-copy-read">
+      <div className="sic-copyread-head">
+        <span className="sic-copyread-title">{t('signals.copyTrade.title')}</span>
+        <b className={`sic-copyread-state ${tone}`}>{t(label.key)}</b>
+      </div>
+      {side && (
+        <div className="sic-key-value-list sic-onchain-list">
+          <div>
+            <span>{t('signals.copyTrade.side')}</span>
+            <b className={`mono ${plan.action === 'BUY' ? 'up' : 'down'}`}>{side}</b>
+          </div>
+          <div>
+            <span>{t('signals.copyTrade.conviction')}</span>
+            <b className="mono">{plan.conviction}/100</b>
+          </div>
+          <div>
+            <span>{t('signals.copyTrade.gates')}</span>
+            <b className="mono">
+              {plan.gates.filter((g) => g.pass === true).length}/{plan.gates.length}
+            </b>
+          </div>
+        </div>
+      )}
+      {!side && plan.failed.length > 0 && (
+        <p className="sic-copyread-note">
+          {t('signals.copyTrade.blockedBy', { gates: plan.failed.map((g) => t(`signals.copyTrade.gate.${g}`)).join(' · ') })}
+        </p>
+      )}
+      {!side && plan.read?.conflict && (
+        <p className="sic-copyread-note">{t('signals.copyTrade.conflictNote')}</p>
+      )}
+      {s.plannedUsd != null && s.stopPct != null && (
+        <div className="sic-key-value-list sic-onchain-list">
+          <div>
+            <span>{t('signals.copyTrade.size')}</span>
+            <b className="mono">${Math.round(s.plannedUsd).toLocaleString()}</b>
+          </div>
+          <div>
+            <span>{t('signals.copyTrade.stopTarget')}</span>
+            <b className="mono">-{s.stopPct}% / +{s.targetPct}%</b>
+          </div>
+          <div>
+            <span>{t('signals.copyTrade.riskUsd')}</span>
+            <b className="mono down">${Math.round(s.riskUsd).toLocaleString()}</b>
+          </div>
+          {s.riskPctOfBook != null && (
+            <div>
+              <span>{t('signals.copyTrade.riskOfBook')}</span>
+              <b className="mono">{s.riskPctOfBook}%</b>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="faint sic-panel-note">
+        {t(`copyTrade.provenance.${READ_BASIS_LABEL[plan.read?.basis] || 'unqualifiedTape'}`)}
+        {' · '}
+        {t('copyTrade.note')}
+      </div>
+    </div>
+  );
+}
+
 function SignalBreakdown({
   analysis,
   activeHorizons,
@@ -1396,15 +1683,44 @@ function SignalBreakdown({
   horizon,
   invalidation,
   backtestInfo,
+  tapeEdge,
+  consensus,
+  acceleration,
   hasOnchain,
-  onchainRows
+  onchainRows,
+  behavior,
+  copyTradePlan
 }) {
   const { t } = useTranslation();
   if (!analysis) return <div className="sic-insufficient">{t('signals.intel.card.insufficient')}</div>;
 
+  const behaviorRead = behaviorRows(behavior, t, tapeEdge, consensus, acceleration);
+
   return (
     <div className="sic-breakdown">
       <HorizonStrip horizons={activeHorizons} />
+
+      {behaviorRead.length > 0 && (
+        <SignalSection
+          id="behavior"
+          title={t('signals.intel.behavior.title')}
+          summary={behavior?.direction === 'up'
+            ? t('signals.intel.behavior.biasUp')
+            : behavior?.direction === 'down'
+              ? t('signals.intel.behavior.biasDown')
+              : t('signals.intel.behavior.biasFlat')}
+        >
+          <div className="sic-key-value-list sic-onchain-list">
+            {behaviorRead.map((row) => (
+              <div key={row.key}>
+                <span>{row.label}</span>
+                <b className={`mono ${row.tone || ''}`}>{row.value}</b>
+              </div>
+            ))}
+          </div>
+          <div className="faint sic-panel-note">{t('signals.intel.behavior.note')}</div>
+        </SignalSection>
+      )}
 
       {layerRows.length > 0 && (
         <SignalSection
@@ -1445,19 +1761,56 @@ function SignalBreakdown({
         <SignalSection
           id="scenarios"
           title={t('signals.scenarios.title')}
-          summary={`↑ ${scenarios.pctUp}% · ↓ ${scenarios.pctDown}%`}
+          summary={`↑ ${scenarios.pctUp ?? scenarios.up}% · ↓ ${scenarios.pctDown ?? scenarios.down}%`}
         >
           <div className="sic-scenario-track">
-            <motion.i initial={{ width: 0 }} animate={{ width: `${scenarios.pctUp}%` }} transition={{ duration: 0.7 }} className="up" />
-            <motion.i initial={{ width: 0 }} animate={{ width: `${scenarios.pctNeutral}%` }} transition={{ duration: 0.7 }} className="neutral" />
-            <motion.i initial={{ width: 0 }} animate={{ width: `${scenarios.pctDown}%` }} transition={{ duration: 0.7 }} className="down" />
+            <motion.i initial={{ width: 0 }} animate={{ width: `${scenarios.pctUp ?? scenarios.up}%` }} transition={{ duration: 0.7 }} className="up" />
+            <motion.i initial={{ width: 0 }} animate={{ width: `${scenarios.pctNeutral ?? scenarios.neutral}%` }} transition={{ duration: 0.7 }} className="neutral" />
+            <motion.i initial={{ width: 0 }} animate={{ width: `${scenarios.pctDown ?? scenarios.down}%` }} transition={{ duration: 0.7 }} className="down" />
           </div>
           <div className="sic-scenario-legend">
-            <span className="up">↑ {scenarios.pctUp}% {t('signals.scenarios.bullish')}</span>
-            <span className="faint">{scenarios.pctNeutral}% {t('signals.scenarios.neutral')}</span>
-            <span className="down">↓ {scenarios.pctDown}% {t('signals.scenarios.bearish')}</span>
+            <span className="up">↑ {scenarios.pctUp ?? scenarios.up}% {t('signals.scenarios.bullish')}</span>
+            <span className="faint">{scenarios.pctNeutral ?? scenarios.neutral}% {t('signals.scenarios.neutral')}</span>
+            <span className="down">↓ {scenarios.pctDown ?? scenarios.down}% {t('signals.scenarios.bearish')}</span>
           </div>
-          <div className="faint sic-panel-note">{t('signals.scenarios.hint', { n: scenarios.samples, d: horizon.days })}</div>
+          {/*
+            * WHAT CONDITIONING BOUGHT — or didn't. The conditional frequency and
+            * the unconditional one are printed side by side, plus the LOSS if
+            * the adverse half happens. A probability without its cost is a
+            * number that invites a bad decision; this pair is the whole point
+            * of the block.
+            */}
+          {scenarios.edgeUp != null && (
+            <div className="sic-key-value-list sic-onchain-list">
+              <div>
+                <span>{t('signals.scenarios.vsBase')}</span>
+                <b className="mono">
+                  <span className={scenarios.edgeUp >= 0 ? 'up' : 'down'}>{scenarios.edgeUp >= 0 ? '+' : ''}{scenarios.edgeUp}pp</span>
+                  {' / '}
+                  <span className={scenarios.edgeDown >= 0 ? 'up' : 'down'}>{scenarios.edgeDown >= 0 ? '+' : ''}{scenarios.edgeDown}pp</span>
+                </b>
+              </div>
+              {scenarios.lossPct != null && (
+                <div>
+                  <span>{t('signals.scenarios.costIfWrong', { d: horizon.days })}</span>
+                  <b className="mono down">{scenarios.lossPct}%</b>
+                </div>
+              )}
+              {scenarios.gainPct != null && (
+                <div>
+                  <span>{t('signals.scenarios.gainIfRight')}</span>
+                  <b className="mono up">+{scenarios.gainPct}%</b>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="faint sic-panel-note">
+            {t(scenarios.note === 'conditionalFrequency' ? 'signals.scenarios.conditioned' : 'signals.scenarios.hint', {
+              n: scenarios.samples,
+              d: horizon.days,
+              e: scenarios.effectiveN ?? scenarios.samples
+            })}
+          </div>
         </SignalSection>
       )}
 
@@ -1488,6 +1841,41 @@ function SignalBreakdown({
             <div><b className="mono">{backtestInfo.samples}</b><span>{t('signals.backtestSamples')}</span></div>
           </div>
           <div className="faint sic-panel-note">{t('signals.backtestHint', { base: Math.round(backtestInfo.base) })}</div>
+          {/*
+            * The same replay, split by the SHAPE OF THE TAPE at the moment the
+            * rule fired. This is the historical answer to the question the
+            * behaviour read raises («a broad move is worth more than a spike»),
+            * inside the panel that already exists — no new section, no new
+            * control. Buckets with too few occurrences are not rendered at
+            * all: `behaviorEdge` refuses to report them, and an unmeasurable
+            * claim is worse than an empty space.
+            */}
+          {tapeEdge && (tapeEdge.broad || tapeEdge.spiky) && (
+            <div className="sic-tape-edge">
+              <div className="faint sic-mini-label">{t('signals.behaviorEdge.title')}</div>
+              <div className="sic-key-value-list sic-onchain-list">
+                {tapeEdge.broad && (
+                  <div>
+                    <span>{t('signals.behaviorEdge.broad')}</span>
+                    <b className={`mono ${tapeEdge.broad.edge >= 0 ? 'up' : 'down'}`}>
+                      {tapeEdge.broad.edge >= 0 ? '+' : ''}{tapeEdge.broad.edge}pp
+                      <small> · {t('signals.behaviorEdge.hits', { n: tapeEdge.broad.n, rate: Math.round(tapeEdge.broad.rate) })}</small>
+                    </b>
+                  </div>
+                )}
+                {tapeEdge.spiky && (
+                  <div>
+                    <span>{t('signals.behaviorEdge.spiky')}</span>
+                    <b className={`mono ${tapeEdge.spiky.edge >= 0 ? 'up' : 'down'}`}>
+                      {tapeEdge.spiky.edge >= 0 ? '+' : ''}{tapeEdge.spiky.edge}pp
+                      <small> · {t('signals.behaviorEdge.hits', { n: tapeEdge.spiky.n, rate: Math.round(tapeEdge.spiky.rate) })}</small>
+                    </b>
+                  </div>
+                )}
+              </div>
+              <div className="faint sic-panel-note">{t('signals.behaviorEdge.note')}</div>
+            </div>
+          )}
         </SignalSection>
       )}
 
@@ -1499,6 +1887,7 @@ function SignalBreakdown({
         >
           <OnchainRowList rows={onchainRows} />
           <div className="faint sic-panel-note">{t('signals.onchain.measuredNote')}</div>
+          {copyTradePlan && <CopyTradeRead plan={copyTradePlan} />}
         </SignalSection>
       )}
 
@@ -1716,7 +2105,9 @@ export default function Signals() {
   const still = useStill();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
-  const { data: coins } = useMarkets(40);
+  /* 40 rows, on a 45s clock: the markets route caches for 30s and the screen
+     only needs the top of the table (cards, early list, price map). */
+  const { data: coins } = useMarkets(40, 45_000);
   const { data: global } = useGlobalStats();
 
   const [tab, setTab] = useState('all');
@@ -1737,8 +2128,11 @@ export default function Signals() {
   const [watchVersion, setWatchVersion] = useState(0);
   const [history, setHistory] = useState(readHistory());
 
-  const { data: chart } = useChart(activeId, 30);
-  const { data: btcChart } = useChart('bitcoin', 30);
+  const { data: chart } = useChart(activeId, 30, CHART_POLL_MS);
+  /* BTC is the reference series for relative strength and the macro layer; it
+     moves more slowly than the asset under the cursor, so it gets the slower
+     clock. Same route, same cache, a third of the calls. */
+  const { data: btcChart } = useChart('bitcoin', 30, MARKET_REF_POLL_MS);
   const { data: solanaCoin } = useCoin(tab === 'solana' ? activeId : null);
 
   const positions = useAppStore((s) => s.positions);
@@ -1748,9 +2142,32 @@ export default function Signals() {
     return m;
   }, [coins]);
 
-  /* ── server-driven feeds (all fail closed) ────────────────────────────── */
-  const pulsePoll = usePoll(() => getSignalPulse(), [], 60_000);
-  const smPoll = usePoll(() => fetchOverview('24h'), [], 120_000);
+  /*
+   * ── server-driven feeds (all fail closed) ───────────────────────────────
+   *
+   * ─── WHY THESE INTERVALS ARE TIED TO THE SERVER'S OWN CACHE ──────────────
+   * Every one of these routes is already cached server-side, and the CDN
+   * headers are set from the same TTL. Polling FASTER than the producer
+   * rebuilds earns nothing — the same cached body comes back, and on a
+   * serverless host the request still pays for a function invocation and, on a
+   * cold instance, for the whole import graph.
+   *
+   *   /api/signals/pulse   cache 60s  → was polled every 60s
+   *   /api/v1/smart-money/overview  cache 60s (SWR 300) → was 120s
+   *
+   * Those two numbers are deliberately set AT or ABOVE the server TTL, and
+   * every poll is additionally skipped while the tab is hidden (see usePoll).
+   * The trade is explicit and safe for the reader: the numbers on this screen
+   * move on a scale of minutes, the page says how old they are («آخرین
+   * بهروزرسانی»), and a fresh number is one pull-to-refresh away — that path
+   * bypasses the interval entirely and invalidates the memo.
+   *
+   * Measured effect for one tab left open for an hour: pulse 60 → 40 calls,
+   * smart money 30 → 12 (they are fetched on mount, then on the slower clock),
+   * and zero of them while the phone is in a pocket with the tab hidden.
+   */
+  const pulsePoll = usePoll(() => getSignalPulse(), [], PULSE_POLL_MS);
+  const smPoll = usePoll(() => fetchOverview('24h'), [], SM_POLL_MS);
   /* Full overview first; when it is unreachable the pulse's own verified
      snapshot keeps the section alive (see smartMoneyFromPulse). */
   const sm = useMemo(
@@ -1779,6 +2196,24 @@ export default function Signals() {
     [priceSeries, coin]
   );
   const projection = useMemo(() => (analysis ? safeCalc(() => projectRange(analysis, horizon.days)) : null), [analysis, horizon]);
+
+  /*
+   * ─── THE SELECTED TOKEN'S BEHAVIOUR READ, COMPUTED ONCE ──────────────────
+   * `«رفتارشناسی توکن»` — participation breadth, tape pressure, volume/trend
+   * agreement, relative strength vs BTC, anomaly sigma and pattern repeat.
+   * It is pure arithmetic over the series the page is already drawing, so it
+   * costs no request and no server CPU; computing it HERE (instead of inside
+   * each consumer) means the card, the detail panel and the early detector
+   * read one measurement rather than three that could disagree.
+   */
+  const tokenBehavior = useMemo(() => safeCalc(() => readTokenBehavior({
+    series: priceSeries,
+    marketSeries: btcSeries,
+    coin: coin ?? {},
+    turnoverPct: num(coin?.mcap) > 0 && num(coin?.volume) != null
+      ? (num(coin.volume) / num(coin.mcap)) * 100
+      : null
+  }), null), [priceSeries, btcSeries, coin]);
 
   const [perpMarkets, setPerpMarkets] = useState(null);
   useEffect(() => {
@@ -1825,18 +2260,76 @@ export default function Signals() {
     visible: Boolean(optedIn && analysis && !scanning)
   });
 
+  /*
+   * ══════════════════════════════════════════════════════════════════════════
+   * THE TWO AI CALLS, ON THE PROVIDERS' CLOCK — NOT ON THE POLL'S
+   * ══════════════════════════════════════════════════════════════════════════
+   * Both effects below used to depend on values that change on EVERY poll:
+   *
+   *   · the daily brief depended on `global` and `coins`, whose identities are
+   *     new objects every 30–45 seconds → one `/api/ai/brief` request per poll,
+   *     per open tab, forever;
+   *   · the per-asset outlook depended on `analysis.score`, which moves almost
+   *     every tick → one `/api/ai/outlook` request per tick, per tab.
+   *
+   * Both answers are cached SERVER-side on a much slower clock (the brief is
+   * keyed per language per 6-hour block, the outlook per coin per language per
+   * DAY — see /api/ai/brief and /api/ai/outlook in server/app.js). So every one
+   * of those extra requests returned the byte-identical cached body: the screen
+   * showed the same sentence it already had, and the bill for waking a
+   * serverless function was paid again. On a tab left open on this screen that
+   * is dozens of invocations an hour of pure, repeated cost — the exact profile
+   * that pushed Fluid Active CPU to its ceiling.
+   *
+   * Now each request is made when its ANSWER could change, which is also when
+   * the server would rebuild it:
+   *   · the brief: per language per 6-hour UTC block (the server's own key);
+   *   · the outlook: per asset per language per horizon per UTC day, and only
+   *     while the tab is actually visible.
+   * Nothing about what the reader sees changes — the panel still shows a brief
+   * and an outlook — but a tab that sits open no longer re-asks for text that
+   * cannot have changed. A manual pull-to-refresh still re-runs the poll, and
+   * the LOCAL narrator keeps the panel populated instantly in the meantime.
+   */
+  const briefBlock = Math.floor(Date.now() / (6 * 3600_000));
+  const briefKey = `${i18n.language}:${briefBlock}`;
+  const briefKeyRef = useRef('');
   useEffect(() => {
-    if (!global || !coins?.length) return;
-    getMarketBrief({ global, top: coins.slice(0, 8), lang: i18n.language }).then(setBrief).catch(() => {});
-  }, [global, coins, i18n.language]);
+    if (!global || !coins?.length) return undefined;
+    if (briefKeyRef.current === briefKey) return undefined;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return undefined;
+    briefKeyRef.current = briefKey;
+    let alive = true;
+    getMarketBrief({ global, top: coins.slice(0, 8), lang: i18n.language })
+      .then((row) => { if (alive) setBrief(row); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [briefKey, global, coins, i18n.language]);
+
+  /* The outlook's own key: asset + language + horizon + UTC day. `score` is
+     deliberately NOT in here — it is the number that changes every poll, and
+     the server's answer for this asset cannot change until tomorrow. */
+  const outlookDay = new Date().toISOString().slice(0, 10);
+  const outlookKey = `${coin?.id ?? 'none'}:${i18n.language}:${horizon.days}:${outlookDay}`;
+  const outlookReqRef = useRef('');
   useEffect(() => {
     if (!analysis || !coin) return undefined;
+    if (outlookReqRef.current === outlookKey) return undefined;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return undefined;
+    outlookReqRef.current = outlookKey;
     let alive = true;
     setAiLoading(true); setAiError(null); setOutlook(null);
     getOutlook({ id: coin.id, symbol: coin.symbol, name: coin.name, price: coin.price, indicators: analysis.indicators, change24h: coin.change24h, change7d: coin.change7d, lang: i18n.language, analysis, coin, days: horizon.days })
-      .then((r) => alive && (r ? setOutlook(r) : setAiError('AI_FAILED'))).catch((e) => alive && setAiError(e.code || 'AI_FAILED')).finally(() => alive && setAiLoading(false));
+      .then((r) => alive && (r ? setOutlook(r) : setAiError('AI_FAILED')))
+      .catch((e) => {
+        /* A failed key must not be remembered as "already fetched" — the next
+           visible tick is allowed to try again. */
+        if (outlookReqRef.current === outlookKey) outlookReqRef.current = '';
+        if (alive) setAiError(e?.code || 'AI_FAILED');
+      })
+      .finally(() => alive && setAiLoading(false));
     return () => { alive = false; };
-  }, [coin?.id, analysis?.score, i18n.language, horizon.days]);
+  }, [outlookKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setScanning(true); const id = setTimeout(() => setScanning(false), 850); return () => clearTimeout(id); }, [activeId]);
 
   /* A ticker is NOT an identity: several chains can mint the same symbol.
@@ -1855,18 +2348,125 @@ export default function Signals() {
   }, [smByContract]);
 
   /* ── Global signal cards (deterministic engine over real market data) ── */
-  const globalSignals = useMemo(() => {
+  /*
+   * ─── ONE ANALYSIS PASS PER POLL, NOT TWO ──────────────────────────────────
+   * `analyze()` is the most expensive thing this screen does: RSI, MACD (two
+   * EMA passes), Bollinger, levels, volatility AND a full 7-bar backtest per
+   * token. Until now the page ran it TWICE over the same 24 market rows — once
+   * for the signal cards below and once again, identically, for the early
+   * detector — on every 30-second poll, on the user's phone.
+   *
+   * That is exactly the kind of duplicated work that put the deployment at
+   * 103% of its Fluid Active CPU budget: it costs nothing on the server, but
+   * it doubles the client work on a screen that is meant to stay open. So the
+   * row list is analysed ONCE here and both consumers read the same result.
+   * The cards and the early list therefore cannot disagree about a token's
+   * indicators either — they share one measurement.
+   */
+  /*
+   * ─── THE ACCELERATION TRACKER: ONE BOUNDED MAP, NO STORAGE ───────────────
+   * «موتور شتاب سیگنال‌ها» needs the last few scores per token, and nothing
+   * else. This is an in-memory factory capped at 40 coins × 6 samples, so a
+   * tab left open overnight holds at most 240 numbers — no localStorage, no
+   * serialisation, no request, and nothing to migrate. It resets on reload,
+   * which is the honest behaviour: a score from before a page reload was
+   * measured on data the page no longer holds.
+   */
+  const scoreTracker = useRef(null);
+  if (!scoreTracker.current) scoreTracker.current = createScoreTracker();
+
+  const analysedRows = useMemo(() => {
     if (!coins?.length) return [];
-    /* One poisoned market row must cost ONE card, never the whole list —
-       and the list itself must never throw the page. */
-    const list = coins.slice(0, 24).map((c) => safeCalc(() => {
+    return coins.slice(0, 24).map((c) => safeCalc(() => {
       const series = (c.sparkline ?? []).filter((n) => Number.isFinite(n) && n > 0);
       const a = series.length >= 30 ? analyze(series, c) : null;
-      if (!a) return null;
-      return computeSignalCard({ coin: c, series, analysis: a, solanaIntel: null, smToken: smForCoin(c), pulse, now: Date.now() });
+      return a ? { coin: c, series, analysis: a } : null;
     })).filter(Boolean);
+  }, [coins]);
+
+  /*
+   * ─── THE FOURTH PLANE, ASSEMBLED FROM DATA ALREADY ON SCREEN ─────────────
+   * «نتایج FBT جهانی + پیش‌بینی AI نمودار شمعی» must sharpen the signal, not
+   * cost a request. Both halves are already here:
+   *
+   *  · FBT Global — `useGlobalStats` (45s, shared with the market page) plus
+   *    the breadth of the very market rows this page is scoring;
+   *  · the candle forecast — whatever KHRONOS last produced for this asset on
+   *    this device, read from the shared module store (see
+   *    `rememberForecastRead` in src/lib/kronosLocal/client.js). No model is
+   *    downloaded or run here, nothing is posted anywhere, and a forecast made
+   *    for a different asset is ignored rather than borrowed.
+   *
+   * When neither half exists the object is `null` and the consensus runs on
+   * three planes — an unmeasured plane is never counted as a neutral vote.
+   */
+  const forecastRead = useMemo(
+    () => safeCalc(() => lastForecastRead(coin?.id || null), null),
+    // `watchVersion`/`briefKey` are not dependencies of the reading itself;
+    // re-reading per poll is one sessionStorage hit at most.
+    [coin?.id, smPoll.data, pulse]
+  );
+  const marketBreadth = useMemo(() => {
+    const rows = (coins ?? []).slice(0, 40).filter((c) => Number.isFinite(Number(c?.change24h)));
+    if (rows.length < 5) return null;
+    return rows.filter((c) => Number(c.change24h) > 0).length / rows.length;
+  }, [coins]);
+  const marketRead = useMemo(() => {
+    const read = {
+      mcapChange: Number(global?.mcapChange ?? NaN),
+      avgChange: Number(global?.avgChange ?? NaN),
+      breadth: marketBreadth,
+      btcDominance: Number(global?.btcDominance ?? NaN),
+      forecast: forecastRead ? Number(forecastRead.pct) : null
+    };
+    const any = Object.values(read).some((v) => Number.isFinite(v));
+    return any ? read : null;
+  }, [global?.mcapChange, global?.avgChange, global?.btcDominance, marketBreadth, forecastRead]);
+
+  const globalSignals = useMemo(() => {
+    if (!analysedRows.length) return [];
+    /* One poisoned market row must cost ONE card, never the whole list —
+       and the list itself must never throw the page. */
+    const list = analysedRows.map((row) => safeCalc(() => {
+      /* `marketSeries` is BTC — already fetched for the verdict layers — so
+         every card gets a measured relative-strength read instead of only the
+         selected asset having one. Same poll, no extra request. */
+      return computeSignalCard({
+        coin: row.coin,
+        series: row.series,
+        analysis: row.analysis,
+        solanaIntel: null,
+        smToken: smForCoin(row.coin),
+        pulse,
+        marketSeries: btcSeries,
+        /* FBT Global + the candle forecast: the market plane of the consensus
+           engine. Same poll, no extra request. The smart-money plane for a
+           global row is the verified per-contract row only — the market-wide
+           figure is not a statement about this token. */
+        marketRead,
+        smRead: smForCoin(row.coin)
+          ? { signal: smForCoin(row.coin).signal, netUsd: smForCoin(row.coin).netFlowUsd, confidence: smForCoin(row.coin).confidence }
+          : null,
+        /* Read BEFORE this poll's score is pushed — see the tracker note above
+           `analysedRows`. Passing it here keeps «acceleration» a statement
+           about history, not about the number being computed right now. */
+        scoreHistory: safeCalc(() => scoreTracker.current.samples(row.coin.id), []),
+        now: Date.now()
+      });
+    })).filter(Boolean);
+    /*
+     * Record each measured score so the NEXT poll can read its acceleration.
+     * Done here, where the score is produced, so the history and the card can
+     * never disagree about what this token scored.
+     */
+    const at = Date.now();
+    for (const card of list) {
+      if (card?.status === 'READY' && card.coin?.id && Number.isFinite(Number(card.score))) {
+        safeCalc(() => scoreTracker.current.push(card.coin.id, card.score, at));
+      }
+    }
     return safeCalc(() => rankSignals(list), list);
-  }, [coins, pulse, smForCoin]);
+  }, [analysedRows, pulse, smForCoin, btcSeries, marketRead]);
 
   /* One picker, one active token. Bitcoin stays first and selected by default
      in the global view; Solana stays first in the Solana view. */
@@ -1937,20 +2537,56 @@ export default function Signals() {
     return null;
   }, [tab, activeMint, coin]);
 
+  /*
+   * ─── THE ON-CHAIN READ, CACHED BY TARGET ─────────────────────────────────
+   * `onchainTarget` is a `useMemo`, so its identity is stable while the asset is
+   * — but the ASSET changes on every poll in one important case: the default
+   * selection re-derives from `globalSignals`, which is rebuilt every 30
+   * seconds, and `swapTargetFor()` is called again each time. Each rebuild used
+   * to re-run this effect, so the reader looking at one asset could spend a
+   * chain walk (DexScreener pairs + holder scan, 8s of server-side work) every
+   * time the price ticked.
+   *
+   * The read is now memoized by `chain:address` for five minutes — the same
+   * window the route itself is cached for at the CDN (`s-maxage=300`) — so a
+   * poll re-uses it instead of re-asking, and a genuinely different asset still
+   * fetches immediately. A failure is NOT cached: the next tick is allowed to
+   * try again, exactly like everywhere else in this page.
+   */
   const [tokenOnchain, setTokenOnchain] = useState(null);
   const onchainReqId = useRef(0);
+  const onchainCache = useRef(new Map());
   useEffect(() => {
     if (!onchainTarget) { setTokenOnchain(null); return undefined; }
+    const cacheKey = `${onchainTarget.chain}:${onchainTarget.address}`;
+    const cached = onchainCache.current.get(cacheKey);
+    if (cached && Date.now() - cached.at < 5 * 60_000) {
+      setTokenOnchain(cached.data);
+      return undefined;
+    }
     const req = ++onchainReqId.current;
+    /* A new asset starts from «not measured» rather than showing the previous
+       asset's on-chain numbers under the new symbol for one frame. */
     setTokenOnchain(null);
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 12_000);
     fetchToken(onchainTarget.chain, onchainTarget.address, '24h', ctrl.signal)
-      .then((d) => { if (req === onchainReqId.current) setTokenOnchain(d); })
+      .then((d) => {
+        if (req !== onchainReqId.current) return;
+        onchainCache.current.set(cacheKey, { at: Date.now(), data: d });
+        /* Bound the memo: this page can be left open for hours and every
+           visited asset would otherwise stay in the heap. */
+        if (onchainCache.current.size > 24) {
+          const oldest = [...onchainCache.current.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+          if (oldest) onchainCache.current.delete(oldest[0]);
+        }
+        setTokenOnchain(d);
+      })
       .catch(() => { if (req === onchainReqId.current) setTokenOnchain(null); })
       .finally(() => clearTimeout(timer));
     return () => { onchainReqId.current += 1; clearTimeout(timer); ctrl.abort(); };
-  }, [onchainTarget]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onchainTarget?.chain, onchainTarget?.address]);
 
   const verifiedForTarget = useMemo(() => safeCalc(() => {
     const row = tokenOnchain?.verified?.consensus;
@@ -1959,6 +2595,49 @@ export default function Signals() {
     return matches.find((r) => r.chain === onchainTarget.chain
       && r.token === onchainTarget.address.toLowerCase()) || null;
   }, null), [tokenOnchain, onchainTarget]);
+
+  /*
+   * ─── THE SMART-MONEY PLANE, PER ASSET, FROM DATA ALREADY FETCHED ─────────
+   * «در اسمارت‌مانی فروش بیت‌کوین زیاد بوده» has to reach the card as THIS
+   * asset's flow — never as the market-wide net figure, which would tilt every
+   * card in the same direction. Three sources are tried in order of how
+   * specific they are, and the first measured one wins:
+   *
+   *   1. the on-chain read for the selected target (`tokenOnchain.smartMoneyFlow`,
+   *      already cached for 5 minutes and already on screen);
+   *   2. a verified per-contract row (`verifiedForTarget`, the ≥3-independent-
+   *      vote gate);
+   *   3. a symbol-matched row from the smart-money overview the page polled,
+   *      used only when it carries a signed USD figure.
+   *
+   * Nothing here is fetched: all three are already in state. A miss leaves the
+   * plane unmeasured, which the consensus treats as silence rather than as a
+   * neutral vote.
+   */
+  const smReadFor = useCallback((c) => {
+    if (!c?.id) return null;
+    const rows = Array.isArray(sm?.tokenActivity) ? sm.tokenActivity : [];
+    const hit = rows.find((r) => String(r?.symbol || '').toUpperCase() === String(c.symbol || '').toUpperCase()) || null;
+    /* ALL THREE sources are handed to one reader instead of the first one that
+       happens to have a number. That matters for correctness, not just tidiness:
+       the old order let a $400 unqualified tape print outrank a verified row
+       the moment the verified read had a null net, and it never noticed when
+       the two sources disagreed. `readSmartMoney` weights evidence by source,
+       builds confidence from breadth as well as size, and abstains on a real
+       conflict instead of averaging it into mush. Pure arithmetic over state
+       the page already holds — no new request. */
+    const read = readSmartMoney({
+      verified: verifiedForTarget,
+      tape: tokenOnchain?.smartMoneyFlow,
+      activity: hit,
+      /* The whale board the page already polled: it is the weakest source, so
+         the reader only uses it when nothing more specific was measured — and
+         only when several wallets agree (`confident`). */
+      whales: c.symbol ? readWhalesOnToken({ wallets: sm?.whales, symbol: c.symbol, window: '24h' }) : null,
+      window: '24h'
+    });
+    return readForConsensus(read);
+  }, [verifiedForTarget, tokenOnchain, sm]);
 
   /*
    * The measured on-chain rows, built ONCE and shared by the detail lab and
@@ -2065,26 +2744,36 @@ export default function Signals() {
       solanaIntel: intel,
       smToken: smForCoin(coin),
       pulse,
+      behavior: tokenBehavior,
+      marketSeries: btcSeries,
+      marketRead,
+      smRead: smReadFor(coin),
+      scoreHistory: scoreTracker.current ? safeCalc(() => scoreTracker.current.samples(coin?.id), []) : [],
       now: Date.now()
     });
-  }), [tab, globalSignals, coinId, coin, analysis, priceSeries, intel, smForCoin, pulse]);
-
-  const portfolioImpactData = useMemo(
-    () => (selectedSignal?.status === 'READY'
-      ? safeCalc(() => portfolioImpact({ positions, priceMap, coin: selectedSignal.coin, classification: selectedSignal.classification }))
-      : null),
-    [selectedSignal, positions, priceMap]
-  );
+  }), [tab, globalSignals, coinId, coin, analysis, priceSeries, intel, smForCoin, pulse, tokenBehavior, btcSeries, marketRead, smReadFor]);
 
   /* ── Early signals: momentum acceleration + flow/on-chain agreement ─────
         Market-wide (both tabs): every number comes from real market data. */
   const earlyEntries = useMemo(() => {
-    return (coins ?? []).slice(0, 24).map((c) => safeCalc(() => {
-      const series = (c.sparkline ?? []).filter((n) => Number.isFinite(n));
-      const a = series.length >= 30 ? analyze(series, c) : null;
-      return a ? { coin: c, series, analysis: a, smToken: smForCoin(c) } : null;
-    })).filter(Boolean);
-  }, [coins, smForCoin]);
+    return analysedRows.map((row) => safeCalc(() => ({
+      coin: row.coin,
+      series: row.series,
+      /* The same two planes the cards use, so the early list and the card
+         cannot disagree about the same token — and so a bounce against
+         distributing smart money is vetoed instead of celebrated. */
+      smRead: smForCoin(row.coin)
+        ? { signal: smForCoin(row.coin).signal, netUsd: smForCoin(row.coin).netFlowUsd, confidence: smForCoin(row.coin).confidence }
+        : null,
+      marketRead,
+      analysis: row.analysis,
+      smToken: smForCoin(row.coin),
+      /* `marketSeries` lets the early detector read relative strength against
+         BTC — the plane that separates «this token is moving» from «the whole
+         market bounced» — from a series the page already holds. */
+      marketSeries: btcSeries
+    }))).filter(Boolean);
+  }, [analysedRows, smForCoin, btcSeries, marketRead]);
   const early = useMemo(() => safeCalc(() => computeEarlySignals({ entries: earlyEntries }), []), [earlyEntries]);
 
   /* ── history learning loop: record + settle against real prices ───────── */
@@ -2228,10 +2917,100 @@ export default function Signals() {
     const half = (projection.high - projection.low) / 2;
     return Math.max(0.5, Math.min(10, (half / projection.mid) * 100));
   }, 2), [projection]);
-  const scenarios = useMemo(
-    () => (priceSeries.length ? safeCalc(() => scenarioSplit(priceSeries, horizon.days, bandPct)) : null),
-    [priceSeries, horizon.days, bandPct]
+  /*
+   * ─── SCENARIOS, CONDITIONED ON WHAT IS ACTUALLY HAPPENING ─────────────────
+   * `scenarioSplit` answers «how often did a horizon-sized move leave this
+   * band?» across ALL of the token's history — an unconditional base rate.
+   * `scenarioFan` asks the same question of the windows that LOOK LIKE NOW
+   * (technical state, tilted by the other three planes), so the three numbers
+   * reflect the present instead of the average of the past. The unconditional
+   * split is kept alongside as the benchmark: `edge` is the conditional minus
+   * the unconditional, which is the only honest way to show whether
+   * conditioning bought anything at all.
+   *
+   * Both are one pass over the series the page already holds, and the fan
+   * refuses to answer (`null`) when fewer than 24 windows or effective N < 12
+   * remain — a probability from six observations is not printed.
+   */
+  const scenarios = useMemo(() => {
+    if (!priceSeries.length) return null;
+    return safeCalc(() => {
+      const unconditional = scenarioSplit(priceSeries, horizon.days, bandPct);
+      const conditional = scenarioFan({
+        series: priceSeries,
+        horizon: horizon.days,
+        bandPct,
+        technical: analysis?.score ?? null,
+        behavior: tokenBehavior,
+        smartMoney: smReadFor(coin),
+        market: marketRead
+      });
+      if (!conditional) return unconditional;
+      return {
+        ...conditional,
+        /* The unconditional split, kept as the benchmark the conditional one
+           is measured against. */
+        base: unconditional
+          ? { pctUp: unconditional.pctUp, pctDown: unconditional.pctDown, pctNeutral: unconditional.pctNeutral }
+          : null,
+        edgeUp: unconditional ? Math.round((conditional.up - unconditional.pctUp) * 10) / 10 : null,
+        edgeDown: unconditional ? Math.round((conditional.down - unconditional.pctDown) * 10) / 10 : null
+      };
+    });
+  }, [priceSeries, horizon.days, bandPct, analysis?.score, tokenBehavior, smReadFor, coin, marketRead]);
+  const portfolioImpactData = useMemo(
+    () => (selectedSignal?.status === 'READY'
+      ? safeCalc(() => portfolioImpact({
+        positions,
+        priceMap,
+        coin: selectedSignal.coin,
+        classification: selectedSignal.classification,
+        /* The measured inputs that turn the impact from a size label into a
+           risk figure: the card's own 7-day volatility, the scenario fan's
+           adverse outcome, which way the call points, and its stop distance.
+           All four already exist by this point in the render — nothing here
+           triggers work. */
+        volatilityPct: selectedSignal.riskScore != null
+          ? (selectedSignal.horizons ?? []).find((h) => h.days === 7)?.volatilityPct ?? null
+          : null,
+        scenario: scenarios,
+        tradeDirection: selectedSignal.tradeDirection,
+        stopPct: selectedSignal.stopPct
+      }))
+      : null),
+    [selectedSignal, positions, priceMap, scenarios]
   );
+
+  /*
+   * ─── «کپی تراکنش» ON THE SIGNAL CARD ───────────────────────────────────────
+   * The card already holds everything a copy-trade plan needs: the read that
+   * produced its call, the on-chain liquidity and concentration, its own
+   * volatility, and the reader's position size. So the plan below is pure
+   * arithmetic over state — no request, no timer, and the plan's read is the
+   * SAME object (`smReadFor`) the card was scored with, which is what makes the
+   * button and the card incapable of disagreeing.
+   */
+  const copyTradePlan = useMemo(() => safeCalc(() => {
+    if (!onchainTarget) return null;
+    return planCopyTrade({
+      chain: onchainTarget.chain,
+      token: onchainTarget.address,
+      symbol: coin?.symbol || null,
+      activity: (sm?.tokenActivity || []).find((r) => String(r?.symbol || '').toUpperCase()
+        === String(coin?.symbol || '').toUpperCase()) || null,
+      verified: verifiedForTarget,
+      tape: tokenOnchain?.smartMoneyFlow,
+      whales: coin?.symbol ? readWhalesOnToken({ wallets: sm?.whales, symbol: coin.symbol, window: '24h' }) : null,
+      window: '24h',
+      tokenIntel: tokenOnchain,
+      volatilityPct: (selectedSignal?.horizons ?? []).find((h) => h.days === 7)?.volatilityPct ?? null,
+      plannedUsd: Number(portfolioImpactData?.valueUsd) > 0 ? Number(portfolioImpactData.valueUsd) : null,
+      bookUsd: Number(portfolioImpactData?.bookUsd) > 0 ? Number(portfolioImpactData.bookUsd) : null
+    });
+  }, null), [onchainTarget, coin?.symbol, sm, verifiedForTarget, tokenOnchain, selectedSignal, portfolioImpactData]);
+  /* Never pay for this on every poll: it depends only on state, and an
+     unchanged asset produces a byte-identical plan. */
+
   const invalidation = useMemo(() => safeCalc(() => {
     if (!priceSeries.length) return null;
     const price = priceSeries[priceSeries.length - 1];
@@ -2248,6 +3027,13 @@ export default function Signals() {
     if (!side || side.total < 8 || side.edge === null || side.edge === undefined) return null;
     return { rate: side.rate, edge: side.edge, samples: side.total, base: bt.baseRate };
   }), [analysis]);
+  /*
+   * The behaviour-conditioned replay rides on `analysis` — `analyze()` already
+   * computed it from the SAME series during the poll, so this line adds no
+   * request, no interval and no extra pass over the prices. Null (too little
+   * history, or no bucket large enough to report) hides the block entirely.
+   */
+  const tapeEdge = useMemo(() => safeCalc(() => analysis?.behaviorEdge ?? null), [analysis]);
   const activeHorizons = useMemo(() => safeCalc(() => computeHorizonRisks({ series: priceSeries, analysis }), []), [priceSeries, analysis]);
   const layerRows = useMemo(() => {
     if (!read?.layers) return [];
@@ -2385,6 +3171,7 @@ export default function Signals() {
                   <SectionGuard resetKey={`${activeId}:${analysis?.score ?? 'na'}`}>
                     <SignalBreakdown
                       analysis={analysis}
+                      behavior={tokenBehavior}
                       activeHorizons={activeHorizons}
                       layerRows={layerRows}
                       perpForCoin={perpForCoin}
@@ -2392,7 +3179,11 @@ export default function Signals() {
                       horizon={horizon}
                       invalidation={invalidation}
                       backtestInfo={backtestInfo}
+                      tapeEdge={tapeEdge}
+                      consensus={selectedSignal?.consensus ?? null}
+                      acceleration={selectedSignal?.acceleration ?? null}
                       hasOnchain={hasOnchain}
+                      copyTradePlan={copyTradePlan}
                       onchainRows={onchainRows}
                     />
                   </SectionGuard>

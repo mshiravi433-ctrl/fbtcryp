@@ -1291,3 +1291,343 @@
 :root[data-native='true'] .mx-market :is(.mx-deck-gloss, .mx-btc-gloss, .mx-btc-scan),
 :root[data-lite='true'] .mx-market :is(.mx-deck-gloss, .mx-btc-gloss, .mx-btc-scan) { animation: none !important; opacity: 0; }
 :root[data-reduce-motion='true'] .mx-market *, :root[data-reduce-motion='true'] .mx-market *::before, :root[data-reduce-motion='true'] .mx-market *::after { animation: none !important; transition: none !important; }
+
+/* ══ THE 24 H POSITION BAR (2026-11-12) ══════════════════════════════════════
+   Where the live price sits between today's low and today's high. It exists
+   because the pair was already in the payload and nowhere on the list: "up 4%"
+   looks identical whether the coin bounced off the floor or stalled under the
+   ceiling, and those two are different trades.
+
+   One track, one 5px dot, a 3px height and NO transition — the dot only moves
+   when the price does, on the 30 s poll, and animating a 3px line that moves
+   once every 30 s would cost a compositor layer for nothing. The track uses
+   the same `--mx-line` the row border uses, so it reads as part of the row
+   rather than a chart dropped into it. */
+.mx-market .mx-coin-row .coin-row-range {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 76px;
+  height: 3px;
+  margin-top: 1px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--mx-down) 34%, transparent), var(--mx-line) 48%, color-mix(in srgb, var(--mx-up) 34%, transparent));
+  direction: ltr;
+}
+.mx-market .mx-coin-row .coin-row-range i {
+  position: absolute;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  margin-inline-start: -2.5px;
+  border-radius: 50%;
+  background: var(--mx-text);
+  box-shadow: 0 0 0 1px var(--mx-panel);
+}
+/* A coin pinned at either end has no room for a centred dot; nudge it inside
+   its own track so the dot never hangs over the row edge. */
+.mx-market .mx-coin-row .coin-row-range[data-pos='low'] i { margin-inline-start: 0; }
+.mx-market .mx-coin-row .coin-row-range[data-pos='high'] i { margin-inline-start: -5px; }
+
+/* ══ THE CONTROLS BLOCK ON A PHONE (2026-11-12) ═════════════════════════════
+   The «مرور»/«توکن» strip, the lens head, its action buttons, the breadth card
+   and then the horizon rail, the chips and the sort button all sit between the
+   banner and the first coin row. On a phone that stack is taller than the list
+   it introduces.
+
+   Two blocks here carry no number and no control, and they are the cheapest
+   thing to give back:
+
+     .mx-breadth-aurora   66px of decorative SVG haze above the breadth bar.
+                          The BAR directly under it is the reading (up/flat/down
+                          shares as a proportion); the haze is atmosphere over
+                          a card that already has its own gradient. It is
+                          already `aria-hidden` and pointer-events: none.
+     .mx-breadth-note     9px footnote under the same bar explaining how the
+                          count was derived. Honest, useful, and not the thing
+                          to read while scanning a 250-row list — it stays in
+                          the DOM and returns above the breakpoint.
+
+   The breadth TITLE, its average, the bar and the three legend counts all
+   stay: those are the reading. Nothing is removed from the markup; this is one
+   declaration per block, inside the phone breakpoint only.
+
+   Not touched: the lens head's refresh/compare buttons and the freshness chip.
+   They are controls, they are 32-44px tap targets, and removing them to win
+   60px would trade a reading for a scroll. */
+@media (max-width: 619px) {
+  .mx-market .mx-breadth-aurora {
+    display: none;
+  }
+  .mx-market .mx-breadth-note {
+    display: none;
+  }
+  /* The bar sits directly under the head once the haze is gone, so its top
+     margin only needs to separate the two, not to clear a removed block. */
+  .mx-market .mx-breadth-bar {
+    margin-top: 10px;
+  }
+}
+
+/* ══ THE COLUMN HEADER (2026-11-12) ═════════════════════════════════════════
+   The label row over the list. It mirrors the row's five-column grid EXACTLY —
+   `21px 32px minmax(0,1fr) 58px 92px` (market-intelligence.css:956) — because a
+   header that does not share the row's geometry drifts left of the numbers it
+   names, which is worse than having no header at all.
+
+   It is a plain grid, not sticky: `market-tabs.css` already pins the tab strip,
+   and a second pinned bar would take 34px from a 390px phone's list for a label
+   row that earns its space on the first screen and not after it.
+
+   No background, no border, no blur — the labels sit on the card the rows are
+   already on. The only material is the ACTIVE column's tint, because that is
+   the one fact on this row that changes as you use it. */
+.mx-market .mx-colhead {
+  display: grid;
+  grid-template-columns: 21px 32px minmax(0, 1fr) 58px 92px;
+  align-items: end;
+  gap: 9px;
+  padding: 0 12px 6px;
+  color: var(--mx-faint);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .01em;
+  direction: inherit;
+}
+
+/* The rank and logo columns are icons in the row, not data: they get no label. */
+.mx-market .mx-colhead-rank,
+.mx-market .mx-colhead-logo,
+.mx-market .mx-colhead-spark { min-width: 0; }
+
+.mx-market .mx-colhead-name,
+.mx-market .mx-colhead-right { min-width: 0; }
+
+/* The right cell stacks price over the horizon change, in the same order the
+   row stacks them. Both are sort buttons. */
+.mx-market .mx-colhead-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: end;
+}
+.mx-market .mx-colhead-change { min-width: 0; max-width: 100%; }
+
+.mx-market .mx-col-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 2px 4px;
+  margin-inline-start: -4px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  /* Only compositor properties: the same rule the rows follow (see
+     market-perf.css §5). */
+  transition: color .15s ease;
+  cursor: pointer;
+}
+.mx-market .mx-colhead-right .mx-col-btn { margin-inline-start: 0; margin-inline-end: -4px; }
+.mx-market .mx-col-btn:hover { color: var(--mx-text); }
+.mx-market .mx-col-btn:focus-visible { outline: 2px solid var(--mx-cyan); outline-offset: 1px; }
+
+/* The active column says so — colour and weight, not a background wash, because
+   a tinted chip on this row would read as a button you must press. */
+.mx-market .mx-col-btn[data-active='true'] { color: var(--mx-cyan); font-weight: 750; }
+.mx-market .mx-col-btn[data-active='true'] svg { flex: 0 0 auto; opacity: .9; }
+.mx-market .mx-col-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* On a phone the row's grid narrows to `16px 28px minmax(0,1fr) 38px 76px`
+   (:1095). The header follows, or the labels would sit over the wrong values. */
+@media (max-width: 619px) {
+  .mx-market .mx-colhead {
+    grid-template-columns: 16px 28px minmax(0, 1fr) 38px 76px;
+    gap: 6px;
+    padding: 0 9px 5px;
+    font-size: 8.5px;
+  }
+  .mx-market .mx-col-btn { min-height: 20px; padding: 2px 3px; gap: 3px; }
+  /* The criteria row on a phone: 8px padding and a 9px caption, because at
+     390px the caption shares its line with the rail and wraps at 9.5px. */
+  .mx-market .mx-criteria { padding: 8px 9px 9px; }
+  .mx-market .mx-criteria-caption { font-size: 9px; }
+}
+
+/* The quote half of the pair — «BTC/USD» rather than a bare «BTC».
+   De-emphasised on purpose: the base asset is what a reader scans for, the
+   quote says what the number below it is denominated in. Same size, lower
+   weight, muted colour, so the pair still reads as one token. */
+.mx-market .mx-coin-row .coin-sym .coin-quote {
+  color: var(--mx-faint);
+  font-weight: 550;
+  font-size: .92em;
+}
+
+/* ─── 9 · THE CRITERIA ROW: WHAT THIS LIST IS, ABOVE THE LIST ───────────────
+   Requested shape: «وقتی فیلتر می‌کنم باید ببینم چی فیلتر شده و چطور برش گردونم».
+
+   Three bands, top to bottom, in the order a reader asks the question:
+     headline  — one sentence naming the set (the sector, the query, «همه»)
+     chips     — every active constraint as a removable token
+     scope     — how much of the feed is on screen, with a caption that knows
+                 whether the rest is in memory or costs a request
+
+   No blur, no shadow, no entrance animation: this row is redrawn on every 30s
+   poll, and market-perf.css §9 already records what a composited layer in the
+   scroll region costs. The only transition is the rail's width, and `width` is
+   the one property a 2px bar can animate without a repaint storm on a phone. */
+.mx-market .mx-criteria {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0 0 8px;
+  padding: 9px 11px 10px;
+  border: 1px solid var(--mx-line);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--mx-panel-2) 88%, transparent);
+}
+.mx-market .mx-criteria-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.mx-market .mx-criteria-headline {
+  margin: 0;
+  min-width: 0;
+  color: var(--mx-text);
+  font: 600 11.5px/1.35 var(--font-display);
+  /* A sector name and a long query both have to fit; clipping one line of a
+     two-line sentence is worse than letting it wrap. */
+  overflow-wrap: anywhere;
+}
+.mx-market .mx-criteria-reset {
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--mx-line);
+  border-radius: 8px;
+  background: none;
+  color: var(--mx-cyan);
+  font: 600 10px/1 var(--font-display);
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.mx-market .mx-criteria-reset:hover { background: color-mix(in srgb, var(--mx-cyan) 9%, transparent); }
+.mx-market .mx-criteria-reset:focus-visible { outline: 2px solid var(--mx-cyan); outline-offset: 1px; }
+
+/* The chips wrap rather than scroll: a horizontal scroller hides the constraint
+   that caused the unexpected row count, which is the one thing this row exists
+   to prevent. Four constraints is the realistic maximum. */
+.mx-market .mx-criteria-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+.mx-market .mx-criteria-chip {
+  --crit: var(--mx-cyan);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 0 4px 0 8px;
+  border: 1px solid color-mix(in srgb, var(--crit) 22%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--crit) 8%, transparent);
+  color: var(--crit);
+  font: 600 10px/1 var(--font-display);
+}
+.mx-market .mx-criteria-chip[data-tone='order'] { --crit: var(--mx-violet); }
+.mx-market .mx-criteria-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mx-market .mx-criteria-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 18px of drawn ✕ inside a 24px chip: the hit target is the button's own
+     24×24 box, not the glyph, because a 9px path is not a tap target. */
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color .15s ease;
+}
+.mx-market .mx-criteria-chip-x:hover { background: color-mix(in srgb, var(--crit) 18%, transparent); }
+.mx-market .mx-criteria-chip-x:focus-visible { outline: 2px solid var(--crit); outline-offset: 1px; }
+
+.mx-market .mx-criteria-scope {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.mx-market .mx-criteria-rail {
+  flex: 1 1 auto;
+  min-width: 40px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--mx-line);
+}
+.mx-market .mx-criteria-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--mx-cyan), var(--mx-violet));
+  transition: width .2s ease;
+}
+.mx-market .mx-criteria-caption {
+  flex: 0 0 auto;
+  color: var(--mx-muted);
+  font: 500 9.5px/1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A live region that is read but not seen. Defined here rather than reusing a
+   page-scoped `.sr-only` from another stylesheet, because this file must not
+   depend on which of the twelve are loaded. */
+.mx-market .mx-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+
+/* ─── 10 · THE TABLE'S ARIA SKELETON MUST NOT DRAW ──────────────────────────
+   `role="table"` / `role="rowgroup"` are wrapped around the column header and
+   the rows so those roles stop being orphans (see Market.jsx). They are
+   semantics, not layout: `display: contents` keeps the wrapper out of the grid
+   flow entirely, so the header and the row stack lay out exactly as they did
+   before the wrapper existed.
+
+   NOT `display: block` — that would make the wrapper a block box and collapse
+   the `stack` gap the rows use. `contents` is the one value that adds a role
+   without adding a box. */
+.mx-market .mx-table-semantics,
+.mx-market .mx-table-semantics > [role='rowgroup'] {
+  display: contents;
+}

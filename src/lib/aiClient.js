@@ -67,8 +67,61 @@ import { localBrief, localOutlook } from './localOutlook';
 
 let cachedStatus = null;
 
+/* Session cache of the status probe, so a reload inside the same tab does not
+   re-ask. The server now marks the payload cacheable for a minute, so even the
+   uncached path is a CDN hit. */
+const STATUS_KEY = 'fbt-ai-status-v1';
+
+function readStatusCache() {
+  try {
+    const raw = sessionStorage.getItem(STATUS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    /* Five minutes: long enough that opening five screens is one probe, short
+       enough that a key added by an operator reaches the app without a reload
+       the user cannot perform. */
+    if (!Number.isFinite(Number(parsed.at)) || Date.now() - Number(parsed.at) > 5 * 60_000) return null;
+    return parsed.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStatusCache(data) {
+  try {
+    sessionStorage.setItem(STATUS_KEY, JSON.stringify({ at: Date.now(), data }));
+  } catch { /* private mode — the in-memory copy still holds for this load */ }
+}
+
+/**
+ * Whether this deployment can actually answer an AI request for `kind`.
+ *
+ * `offerings` is produced by /api/ai/status from the server's own keys. When it
+ * says `brief:false` / `outlook:false`, calling those routes can only ever
+ * return 503 — after paying for a function invocation. Screens use this to go
+ * straight to the local narrator, which is the same text the user would have
+ * seen anyway, only instantly and at no cost.
+ *
+ * Unknown (no status yet, or an older server that does not send `offerings`)
+ * means **true**: never silently disable a feature because a payload changed.
+ */
+export function aiOffering(kind) {
+  const data = cachedStatus ?? readStatusCache();
+  if (!data?.offerings || typeof data.offerings !== 'object') return true;
+  const value = data.offerings[kind];
+  return value === undefined ? true : Boolean(value);
+}
+
 export async function aiStatus(force = false) {
   if (cachedStatus && !force) return cachedStatus;
+  if (!force) {
+    const stored = readStatusCache();
+    if (stored) {
+      cachedStatus = stored;
+      return cachedStatus;
+    }
+  }
 
   // Probe the backend, but don't hang the UI on it.
   try {
@@ -80,8 +133,18 @@ export async function aiStatus(force = false) {
       const data = await res.json();
       if (data?.enabled) {
         cachedStatus = { ...data, mode: 'server' };
+        writeStatusCache(cachedStatus);
         return cachedStatus;
       }
+      /*
+       * The server answered and said it has no AI key. That is an ANSWER, not a
+       * failure: remember it (so no screen pays for the probe again) and let
+       * every caller fall through to the local narrator instead of POSTing to
+       * /api/ai/brief for a 503.
+       */
+      cachedStatus = { enabled: false, mode: 'off', offerings: data?.offerings ?? { brief: false, outlook: false }, fleet: data?.fleet ?? null };
+      writeStatusCache(cachedStatus);
+      return cachedStatus;
     }
   } catch {
     /* no backend reachable — fall through to the direct path */
@@ -98,6 +161,8 @@ export async function aiStatus(force = false) {
 
 async function viaServerOr(directFn, path, payload) {
   const status = await aiStatus();
+  /* `mode:'off'` — the server is reachable and has no key. Skip the POST that
+     could only 503 and go straight to the local narrator. */
   if (status.mode === 'server') {
     try {
       return await post(path, payload);
@@ -149,6 +214,16 @@ const labelEngine = (res) => {
 
 export async function getOutlook(payload) {
   try {
+    /* No key on the server and no packaged key: the local narrator IS the
+       answer, so do not spend a function invocation discovering that. */
+    if (!aiOffering('outlook') && !directGeminiAvailable()) {
+      return localOutlook({
+        analysis: payload?.analysis,
+        coin: { symbol: payload?.symbol, name: payload?.name, ...payload?.coin },
+        lang: payload?.lang,
+        days: payload?.days ?? 7
+      });
+    }
     const res = await viaServerOr(directOutlook, '/ai/outlook', payload);
     if (res?.summary) return labelEngine(res);
   } catch {
@@ -164,6 +239,9 @@ export async function getOutlook(payload) {
 
 export async function getMarketBrief(payload) {
   try {
+    if (!aiOffering('brief') && !directGeminiAvailable()) {
+      return localBrief({ global: payload?.global, top: payload?.top, lang: payload?.lang });
+    }
     const res = await viaServerOr(directBrief, '/ai/brief', payload);
     if (res?.summary) return labelEngine(res);
   } catch {

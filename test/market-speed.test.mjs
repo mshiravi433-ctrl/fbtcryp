@@ -98,9 +98,19 @@ test('a short hourly series reports the window it actually has', () => {
 test('MARKET_PAGE_SIZE never exceeds the server clamp', () => {
   const market = read('src/pages/Market.jsx');
   const app = read('server/app.js');
-  const pageSize = Number(market.match(/const MARKET_PAGE_SIZE = (\d+);/)?.[1]);
+  /*
+   * The page now takes its size from lib/marketRoute.js (`MARKET_PAGE_ROWS`),
+   * so that the header's poll on this route hits the same memo key instead of
+   * fetching the list a second time. Follow the alias rather than insisting on
+   * a literal: the property being pinned is the NUMBER, not where it is typed.
+   */
+  const literal = market.match(/const MARKET_PAGE_SIZE = (\d+);/)?.[1];
+  const aliased = market.includes('const MARKET_PAGE_SIZE = MARKET_PAGE_ROWS;')
+    ? read('src/lib/marketRoute.js').match(/export const MARKET_PAGE_ROWS = (\d+);/)?.[1]
+    : undefined;
+  const pageSize = Number(literal ?? aliased);
   const clamp = Number(app.match(/const perPage = Math\.min\((\d+), Math\.max\(1, Number\(req\.query\.per_page\)/)?.[1]);
-  assert.ok(Number.isFinite(pageSize) && Number.isFinite(clamp), 'both constants must be literal');
+  assert.ok(Number.isFinite(pageSize) && Number.isFinite(clamp), 'both constants must be resolvable');
   assert.ok(pageSize <= clamp, `page asks for ${pageSize} rows but the server answers ${clamp}`);
 });
 
@@ -164,4 +174,60 @@ test('the banner glow and float are CSS, not a rAF loop', () => {
   assert.match(css, /@keyframes ad-glow-pulse/);
   assert.match(css, /@keyframes ad-art-float/);
   assert.match(css, /\.ad-banner\[data-still='true'\] \.ad-art-glow/);
+});
+
+/* ── 7 · THE THREE CPU LEAKS FOUND ON 2026-11-12 ─────────────────────────────
+   Audited against the screen a visitor lands on. Each one was reproduced
+   before it was fixed, and each pin below fails if the work comes back.
+   ────────────────────────────────────────────────────────────────────────── */
+
+test('the row metric is a VALUE, so the memoised row can actually skip work', () => {
+  const page = read('src/pages/Market.jsx');
+  const row = read('src/components/CoinRow.jsx');
+  /*
+   * rowMetric used to RETURN JSX. CoinRow compares `prev.metric === next.metric`,
+   * and a JSX element is a new object per call — so on the «ارزش بازار» and
+   * «حجم» sorts every visible row re-rendered on every 30-second poll. It now
+   * returns {text, unit} and the comparator reads those two strings.
+   */
+  /* Slice to the END OF THE FUNCTION (its dependency array), not to a fixed
+     character count: the comment inside it grew when the second line was added
+     to the views that had none, and a 900-character window silently stopped
+     covering the returns it was written to inspect. */
+  const start = page.indexOf('const rowMetric = useCallback');
+  const end = page.indexOf('[sortKey, t]', start);
+  const fn = page.slice(start, end > start ? end : start + 2400);
+  assert.ok(!/return\s*<>/.test(fn), 'rowMetric must not build JSX inline — that defeats the row memo');
+  assert.match(fn, /return \{ text: .*unit: /);
+  assert.match(row, /function sameMetric\(a, b\)/);
+  assert.match(row, /prev\.metric === next\.metric|sameMetric\(prev\.metric, next\.metric\)/);
+  assert.ok(!/metric === next\.metric/.test(row), 'the identity-only metric comparison is the bug');
+});
+
+test('the story reel stays un-memoised, and the reason stays written down', () => {
+  /*
+   * A memo was tried here on 2026-11-12 and reverted: the reel reads the
+   * language from useTranslation() internally, so a parent-level comparator
+   * cannot see a language change — and a change MUST re-render it (the Aparat
+   * story leaves the rail, labels and the popup's dir/lang flip). This pin
+   * exists so the next pass finds the note before it finds the temptation.
+   */
+  const src = read('src/components/MarketStories.jsx');
+  assert.match(src, /DELIBERATELY NOT MEMOISED/);
+  assert.ok(!/export default memo\(MarketStories/.test(src),
+    'memoising this without passing lang as a prop breaks the fa→en switch');
+});
+
+test('a row hover animates the compositor, never a multi-layer repaint', () => {
+  const perf = stripComments(read('src/styles/market-perf.css'));
+  /* The hover state is two gradients + a radial bloom + a four-layer inset
+     shadow. Transitioning `background`/`box-shadow` re-rasterises all of it
+     for 180ms, per row. Only transform + border-color may animate. */
+  const rule = /\.mx-coin-row > \.coin-row\s*\{[^}]*transition:([^;]+);/.exec(perf);
+  assert.ok(rule, 'the row transition override is missing');
+  assert.ok(!/background/.test(rule[1]), 'background must not be animated on a row');
+  assert.ok(!/box-shadow/.test(rule[1]), 'box-shadow must not be animated on a row');
+  assert.match(rule[1], /border-color/);
+  /* ...and the override must outrank the sheet that declares the old one. */
+  assert.match(perf, /:root\[data-theme\]:not\(\[data-motion='full'\]\) \.mx-market \.mx-coin-row > \.coin-row\s*\{[^}]*transition:/);
 });

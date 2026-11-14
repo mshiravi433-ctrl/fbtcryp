@@ -208,6 +208,19 @@ function profileFor(wallet, registry = null, now = Date.now(), discovery = null)
     closedTrades: wallet.performance?.closedTrades || 0, realizedUsd: wallet.performance?.realizedPnlUsd ?? null,
     winRate: wallet.performance?.winRate ?? null,
     status: sm.status || 'UNAVAILABLE',
+    /* THE FACTORS TRAVEL WITH THE PROFILE.
+     *
+     * `performance.js` has always computed the seven factor values and then
+     * thrown them away at the index boundary, so every screen could show the
+     * score but none could say WHICH of the seven it was built from — and two
+     * of the seven (exit timing, early-entry accuracy) are frequently
+     * unmeasurable, which means the same 82 can rest on five factors or on
+     * seven. Rounded to 3dp: the extra bytes are nothing against a payload
+     * that already carries the swap sample, and the alternative was the client
+     * guessing. `missingFactors` stays derivable as the nulls. */
+    factors: sm.factors && typeof sm.factors === 'object'
+      ? Object.fromEntries(Object.entries(sm.factors).map(([k, v]) => [k, Number.isFinite(v) ? Math.round(v * 1000) / 1000 : null]))
+      : null,
     sample: sm.sample || null, discovery: registry ? 'operator-registry' : discovery, updatedAt: now
   };
 }

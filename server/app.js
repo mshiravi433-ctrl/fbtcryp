@@ -2734,8 +2734,31 @@ const observationHits = new Map();
 const OBSERVATION_MAX_PER_WINDOW = Number(process.env.INTENT_OBSERVATION_RATE_LIMIT || 30);
 
 app.post('/api/intents/v1/observations', async (req, res) => {
-  const key = req.tgUser?.id ?? req.ip;
+  /*
+   * CONSENT BEFORE BUDGET.
+   *
+   * The rate limiter used to run first and spend a shared `req.ip` bucket on
+   * every request — including the ones that were about to be refused for
+   * having no opt-in token. Two consequences, both real:
+   *
+   *   · a client that does not consent could exhaust the whole IP's budget by
+   *     retrying, and then a consenting client behind the same NAT got 429
+   *     for requests it was entitled to make;
+   *   · a test or a user could never observe a clean 401 after thirty
+   *     requests, because the limiter answered 429 before the consent check
+   *     ever ran. That is what this probe hit, in order, in one process.
+   *
+   * Refusing an unauthenticated write costs nothing and should not be
+   * counted against anyone's quota. The budget now applies to requests that
+   * would actually be stored.
+   */
   const nowMs = Date.now();
+  const consent = req.get('x-telemetry-consent') ?? '';
+  if (!OBSERVATION_CONSENT_RE.test(String(consent))) {
+    return res.status(401).json({ error: 'OPT_IN_REQUIRED' });
+  }
+
+  const key = req.tgUser?.id ?? req.ip;
   const bucket = observationHits.get(key);
   if (!bucket || nowMs > bucket.reset) {
     observationHits.set(key, { count: 1, reset: nowMs + WINDOW_MS });
@@ -2745,11 +2768,6 @@ app.post('/api/intents/v1/observations', async (req, res) => {
       res.set('retry-after', String(Math.ceil((bucket.reset - nowMs) / 1000)));
       return res.status(429).json({ error: 'OBSERVATION_RATE_LIMITED' });
     }
-  }
-
-  const consent = req.get('x-telemetry-consent') ?? '';
-  if (!OBSERVATION_CONSENT_RE.test(String(consent))) {
-    return res.status(401).json({ error: 'OPT_IN_REQUIRED' });
   }
 
   const checked = validateObservation(req.body, nowMs);
@@ -4479,6 +4497,9 @@ app.get('/api/v1/smart-money/wallets/verified', async (_req, res) => {
     const out = await smartMoney.getVerifiedIntelligence({ window: '7d' });
     return smJson(res, { schema: 'fbt.smart-money-leaderboard.v1', dataStatus: out.dataStatus,
       at: out.at, indexedAt: out.indexedAt, refresh: out.refresh, coverage: out.coverage, wallets: out.leaderboard,
+      // Display order is decided by the client from each row's SAMPLE, not by
+      // the raw score this array is sorted on (see lib/verifiedEvidence.js).
+      leaderboardBasis: out.leaderboardBasis,
       // Every analysed wallet with its MEASURED stats, qualified or not —
       // "under evaluation", never promoted into the leaderboard above.
       candidates: (out.observed?.candidates || []).filter((c) => !c.qualified).slice(0, 12) }, { sMax: 60 });
@@ -4905,8 +4926,37 @@ const aiTtlFor = (value) => (value?.degraded ? AI_DEGRADED_TTL : AI_TTL);
 
 app.get('/api/ai/status', (_req, res) => {
   const fleet = getFleetSummary();
+  /*
+   * ─── ONE CACHEABLE, TRUTHFUL ANSWER ABOUT WHETHER AI CAN ANSWER ───────────
+   * `offerings` is the machine-readable list of what this deployment can
+   * actually do, so a client can STOP ASKING for what it cannot: when no key is
+   * configured, `/api/ai/brief` and `/api/ai/outlook` answer 503 on every
+   * request — and each of those requests still pays for a serverless wake-up
+   * and a function invocation. A screen that knows the answer in advance does
+   * not spend it, the client's local narrator (lib/localOutlook.js) takes over
+   * instantly instead of showing a spinner that ends in «unavailable», and the
+   * day the key IS configured this payload changes (it is only cached for a
+   * minute) so the real path resumes by itself.
+   *
+   * `cache-control` is the fix here, not another field: this route had none, so
+   * Vercel had to invoke a function for every call. A minute of CDN cache keeps
+   * the answer correct (key changes propagate in under a minute) while making a
+   * fleet-wide status read essentially free.
+   */
+  const configured = aiConfigured();
+  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
   return res.json({
-    enabled: aiConfigured(),
+    enabled: configured,
+    offerings: {
+      /* What the client may call. A false value means «do not call, answer
+         locally» — it is a routing hint derived from THIS server's keys, never
+         a claim about the quality of the local fallback. */
+      brief: configured,
+      outlook: configured,
+      why: true,
+      news: newsConfigured(),
+      persistentCache: blobConfigured()
+    },
     news: newsConfigured(),
     persistentCache: blobConfigured(),
     /*
@@ -6032,9 +6082,12 @@ app.get('/api/solana/track/wallet', async (req, res) => {
 
 app.get('/api/solana/track/whales', async (req, res) => {
   const vs = String(req.query.vs || 'usd').toLowerCase();
+  /* A sample is reused for SOLANA_WHALE_SAMPLE_MS (20 min by default), so the
+     CDN window is aligned with it instead of expiring long before the sample
+     does — every extra revalidation was a lambda start for the same bytes. */
   try {
     const out = await solanaWhaleWatch({ vs });
-    res.set('cache-control', 'public, max-age=120, s-maxage=300, stale-while-revalidate=900');
+    res.set('cache-control', 'public, max-age=300, s-maxage=900, stale-while-revalidate=1800');
     return res.json(out);
   } catch (err) {
     res.set('cache-control', 'no-store');

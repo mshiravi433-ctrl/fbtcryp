@@ -31,6 +31,29 @@
  */
 
 import { foldText, toAsciiDigits, foldAccents, detectLanguage, respondIn } from './languageSense.js';
+import { leverageIntentPattern as leverageIntentPatternFromLexicon } from '../../speculativeLexicon.js';
+/*
+ * «فیوچرز / اهرم / لوریج / پاس‌مارت» lived inline in the Persian action hints
+ * below, which made a STORE build — the one with speculation switched off —
+ * still ship the words a content filter greps for, in a regex the build could
+ * not reach. The speculative lexicon exists for exactly this: it is a real
+ * module on the website and an inert stub in a store build, so the vocabulary
+ * travels with the feature instead of with the classifier.
+ *
+ * Behaviour on the website is unchanged; the returned pattern is the same one
+ * that used to be written here.
+ */
+const FALLBACK_LEVERAGE_INTENT = () => /(?!)!/;
+/*
+ * STATIC for a reason: vite.config.js replaces this module with an inert stub
+ * when VITE_ENABLE_SPECULATION=false, and a static import is what makes that
+ * swap reach this call site. A dynamic lookup would keep the real module — and
+ * these words — in the store bundle.
+ */
+const leverageIntentPattern = () => {
+  const pattern = leverageIntentPatternFromLexicon?.();
+  return pattern instanceof RegExp ? pattern : FALLBACK_LEVERAGE_INTENT();
+};
 
 export const SOCIAL_ACT_SCHEMA = 'fbt.ai-social-act.v13';
 export const SOCIAL_ACT_VERSION = '13.0.0';
@@ -56,7 +79,7 @@ export const SOCIAL_ACTS = Object.freeze({
 /* -------------------------------------------------------------------------- */
 
 const ACTION_HINTS = Object.freeze([
-  /* persian */ /بخرم?\b/, /بفروش|می\u200c?فروشم/, /سواپ|تبدیل|مبادله/, /بریز|واریز|ارسال|انتقال/, /پل\s*کن|بریج/, /استیک|فارم|لند|وام|قرض/, /فیوچرز|اهرم|لوریج|پاس\s*مارت/, /واریز\s*کن/, /حد\s*ضرر|استاپ/, /برداشت/,
+  /* persian */ /بخرم?\b/, /بفروش|می\u200c?فروشم/, /سواپ|تبدیل|مبادله/, /بریز|واریز|ارسال|انتقال/, /پل\s*کن|بریج/, /استیک|فارم|لند|وام|قرض/, leverageIntentPattern(), /واریز\s*کن/, /حد\s*ضرر|استاپ/, /برداشت/,
   /* english */ /\b(?:buy|sell|swap|send|transfer|bridge|stake|farm|lend|borrow|deposit|withdraw|leverage|long|short|liquidat\w*|cancel|approve|revoke)\b/i, /\bdca\b/i, /\bplace\b.*\border\b/i, /\bset\s+an?\s+alert\b/i, /\bmove\s+\w+\s+to\b/i,
   /* arabic */ /اشتر|أشتري|ابيع|حوالة|تحويل|سحب|إيداع|جسر/,
   /* turkish */ /\b(?:al\b|sat\b|gönder|çek|yatır|değiştir|köprü|stake)\b/iu,

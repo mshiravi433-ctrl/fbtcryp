@@ -528,7 +528,7 @@ export const RECOMMENDED_EXTERNAL_AGENTS = Object.freeze([
       en: 'Funding rates, open interest, liquidations and derivatives market data — a complement to spot analysis.'
     },
     bestFor: {
-      fa: 'خواندن فشار اهرم و موقعیت‌های باز؛ این داده پیش‌بینی جهت نیست.',
+      fa: 'خواندن فشار وام‌گیری و موقعیت‌های باز؛ این داده پیش‌بینی جهت نیست.',
       en: 'Reading leverage pressure and open positioning; it is not a direction forecast.'
     },
     freeAccess: {

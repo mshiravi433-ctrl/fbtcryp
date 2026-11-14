@@ -707,6 +707,25 @@ export async function run(container) {
         /* src/lib/signalEngine.js computeEarlySignals → EarlySection */
         ['signals.intel.early', ['momentumAccel', 'momentumDecel', 'holderGrowth', 'whaleInflow', 'whaleOutflow', 'dexBuy', 'dexSell', 'smartMoneyAccum', 'smartMoneyDistrib', 'volumeTurnover']],
         ['signals.intel.early.direction', ['earlyBullish', 'earlyBearish', 'earlyWatch']],
+        /* src/lib/tokenBehavior.js → the behaviour plane in buildEvidence and
+           computeEarlySignals, plus the rows the detail lab renders. Added with
+           the behaviour change: these keys are built at RENDER time from values
+           the engine produces, so a grep of the source cannot find them. */
+        ['signals.intel.early', ['oneSidedBuy', 'oneSidedSell', 'moveBroadUp', 'moveBroadDown',
+          'moveHollowUp', 'moveHollowDown', 'relativeStrengthUp', 'relativeStrengthDown',
+          'volumeWithTrend', 'volumeWithDowntrend', 'volumeHollow', 'moveAnomaly']],
+        ['signals.intel.behavior', ['title', 'participation', 'spikeShare', 'pressure', 'relative',
+          'volume', 'anomaly', 'pattern', 'patternSeen', 'biasUp', 'biasDown', 'biasFlat', 'note']],
+        ['signals.intel.behavior.vol', ['accumulating', 'distributing', 'hollow-rally', 'drifting-down', 'balanced', 'unclear']],
+        /* The four-plane reconciliation row (src/lib/signalConsensus.js). */
+        ['signals.consensus', ['title', 'split']],
+        ['signals.consensus.plane', ['technical', 'behavior', 'smartMoney', 'market']],
+        ['signals.intel.early', ['sourcesAgree', 'sourcesConflict']],
+        /* «موتور شتاب سیگنال‌ها» + the conditioned scenario block. Both build
+           their keys at render time from values the engines produce. */
+        ['signals.accel', ['title']],
+        ['signals.accel.state', ['accelerating', 'fading', 'steady', 'reversing']],
+        ['signals.scenarios', ['vsBase', 'costIfWrong', 'gainIfRight', 'conditioned']],
         /* src/lib/signalEngine.js buildEvidence → EvidenceChips */
         ['signals.intel.early', ['momentum24Up', 'momentum24Down', 'trend7dUp', 'trend7dDown', 'rsiOversold', 'rsiOverbought', 'rsiNeutral', 'macdUp', 'macdDown', 'maBullish', 'maBearish', 'aboveMa20', 'belowMa20', 'bollingerLow', 'bollingerHigh', 'bollingerMid', 'liquidityActive', 'liquidityThin', 'holderSpread', 'marketSentimentUp', 'marketSentimentDown']],
         /* server/signalEngine.js scoreSolanaToken → RadarSection */
@@ -830,6 +849,62 @@ export async function run(container) {
         check('expanded signal center has five vertical tabs', verticalRail?.querySelectorAll('[role="tab"]').length === 5);
         check('only one intelligence panel is shown at a time', container.querySelectorAll('.sic-hub-panel[role="tabpanel"]').length === 1);
         check('removed performance and portfolio-AI panels stay absent', !/AI SIGNAL PERFORMANCE|Portfolio-aware AI|عملکرد سیگنال هوش مصنوعی|هوش مصنوعی آگاه از پرتفوی/.test(container.textContent || ''));
+
+        /*
+         * TOKEN BEHAVIOUR — «رفتارشناسی توکن».
+         * The read is rendered as collapsing rows INSIDE the existing breakdown
+         * lab: no new tab, button, card or page. It must be present (the case
+         * supplies 60 real points, so every field is measurable), must carry
+         * real numbers rather than placeholders, and must never appear as a
+         * raw i18n key. A page that quietly dropped the section would fail
+         * here while still painting everything else.
+         */
+        const behaviorToggle = container.querySelector('button[aria-controls="sig-acc-behavior"]');
+        check('the behaviour read renders as a row group in the existing breakdown lab', Boolean(behaviorToggle));
+        if (behaviorToggle) {
+          await act(async () => { behaviorToggle.click(); });
+          await settle(40);
+        }
+        const behaviorBody = container.querySelector('#sig-acc-behavior');
+        const behaviorRows = behaviorBody ? [...behaviorBody.querySelectorAll('.sic-key-value-list > div')] : [];
+        /* Most rows are numbers (participation %, spike share, pressure,
+           relative pp, σ); the volume row is a LABEL by design, so the rule is
+           «at least four numeric rows, nothing empty» rather than «a digit in
+           every row» — an assertion strictly stronger than the product's own
+           contract would fail on correct output. */
+        check('the behaviour rows carry measured numbers, not placeholders',
+          behaviorRows.length >= 4
+          && behaviorRows.every((row) => (row.textContent || '').trim().length > 3)
+          && behaviorRows.filter((row) => /[\d]/.test(row.textContent || '')).length >= 4);
+        check('the behaviour section leaks no raw i18n key',
+          !/\bsignals\.intel\.behavior\b/.test(container.textContent || ''));
+
+        /*
+         * «یکسان‌ساز نتایج»: the four-plane row must appear in the SAME list as
+         * the behaviour rows — inside the existing breakdown lab, never as a
+         * new section — and must name the planes that agree. A card computed
+         * without the consensus (the pre-change shape) renders none of this,
+         * so the assertion fails exactly when the wiring is dropped.
+         */
+        const consensusRow = behaviorBody
+          ? [...behaviorBody.querySelectorAll('.sic-key-value-list > div')].find((row) => /consensus|هم‌صدایی|توافق/i.test(row.textContent || ''))
+          : null;
+        check('the four-plane consensus renders inside the existing breakdown list', Boolean(consensusRow));
+        check('the consensus row names the planes that agree',
+          Boolean(consensusRow) && /technical|تکنیکال|فني|behaviour|رفتار|سلوك/i.test(consensusRow.textContent || ''));
+        check('the consensus row leaks no raw i18n key',
+          !/\bsignals\.consensus\b/.test(container.textContent || ''));
+
+        /*
+         * «شتاب سیگنال» and «سناریوهای احتمالی» must land in the surfaces that
+         * already exist. The acceleration row is deliberately absent on a
+         * first paint (one sample is not an acceleration) — what is asserted
+         * is that its absence is a MISSING ROW, not a raw key or a crash, and
+         * that the scenario block still renders its three-way split.
+         */
+        check('no raw acceleration or scenario key leaks',
+          !/\bsignals\.accel\b/.test(container.textContent || '')
+          && !/\bsignals\.scenarios\.(vsBase|costIfWrong|gainIfRight|conditioned)\b/.test(container.textContent || ''));
 
         /* AI analysis is a sibling tab inside the one selected-token box. */
         const detailTabs = [...container.querySelectorAll('.sic-detail-tabs button')];

@@ -60,11 +60,31 @@ try {
   /* ── §5: network registry with feature flags ────────────────────────── */
   const networks = await get('/api/lending/networks');
   const nets = networks.json?.data || [];
+  /*
+   * TWO POOL FAMILIES, NOT ONE.
+   *
+   * Every row here was an Aave v3 pool on a numeric chain until Solana/Kamino
+   * was wired (chain 900001), whose pool is a base58 mint authority — a
+   * perfectly valid address that `^0x…{40}$` rejects. The registry is right and
+   * the check was written when only EVM existed.
+   *
+   * Each row must still PROVE its identity: an EVM row a 0x pool on a numeric
+   * chain, an SVM row base58 on the Solana chain id. Nothing is loosened to
+   * "pool is a string".
+   */
+  const EVM_POOL = /^0x[0-9a-fA-F]{40}$/;
+  const BASE58_POOL = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+  const SOON_SVM_CHAIN = 900001;
   t('GET /networks lists the wired chains with feature flags and pool addresses',
     networks.status === 200 && nets.length >= 5
-    && nets.every((n) => n.enabled === true && /^0x[0-9a-fA-F]{40}$/.test(n.pool) && n.chainId > 0));
+    && nets.every((n) => {
+      if (n.enabled !== true) return false;
+      if (n.chainId === SOON_SVM_CHAIN) return BASE58_POOL.test(n.pool) && n.family === 'SVM';
+      return EVM_POOL.test(n.pool) && n.chainId > 0;
+    }));
   t('the response says which protocol and oracle feed each chain uses',
-    nets.every((n) => n.protocols.includes('aave-v3') && n.oracle === 'aave-oracle'));
+    nets.every((n) => (n.protocols.includes('aave-v3') && n.oracle === 'aave-oracle')
+      || (n.protocols.includes('kamino-klend') && n.oracle === 'kamino-oracle')));
 
   /* ── offline validation paths (§31 allowlist, §17 idempotency) ───────── */
   const badNet = await get('/api/lending/markets?network=999999');

@@ -1,13 +1,14 @@
 import { motion } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatedSocial, useStill } from './AnimatedIcon';
 import { IconBuilding, IconClock, IconTrend } from './Icons';
 import { coinImage } from '../lib/coinImage';
 import BrandMark from './BrandMark.jsx';
 import { usePoints } from '../hooks/usePoints';
 import { usePoll } from '../hooks/useMarket';
+import { isMarketRoute, MARKET_PAGE_ROWS } from '../lib/marketRoute';
 import { getMarkets } from '../lib/api';
 import { useTelegram } from '../context/TelegramContext';
 import { vsOf } from '../lib/currency';
@@ -96,12 +97,35 @@ export default function Header() {
 
   const currency = useSettingsStore((state) => state.currency);
   const vs = vsOf(currency);
+  /*
+   * ─── ONE LIST, NOT TWO (2026-11-12) ────────────────────────────────────────
+   * The header polls the market list on EVERY route, for the one-minute
+   * spotlight. It asked for 60 rows, and `getMarkets` keys its memo on the row
+   * count — so on `/market`, where the page itself polls 250 rows, the two
+   * calls were never the same cache entry. Every 30 s the page fetched 250
+   * rows and every 180 s the header fetched 60 more that it could have read
+   * for free, on the route where market data is most definitely already on
+   * screen.
+   *
+   * On the market route the header now asks for the SAME size the page does,
+   * so `markets:usd:1:250` is already warm and the header costs no request at
+   * all. Elsewhere the three-minute, 60-row poll is unchanged: those routes
+   * have no other copy of this list and a 250-row payload for a single
+   * spotlight would be the wasteful choice.
+   *
+   * `deriveMarketInsights` picks leaders by scanning for a maximum, so a
+   * larger list can only find a better leader — never a worse one.
+   */
+  /* React-router is the source of truth for the route: reading the global
+     `location` would miss a client-side navigation entirely. */
+  const onMarketRoute = isMarketRoute(useLocation().pathname);
+  const headerPerPage = onMarketRoute ? MARKET_PAGE_ROWS : 60;
   // Header data changes on the scale of minutes, not seconds. A three-minute
   // poll is enough for the one-minute spotlight while avoiding a global
   // 30-second request on every route.
   const { data: markets } = usePoll(
-    () => getMarkets({ perPage: 60, vs }),
-    [vs],
+    () => getMarkets({ perPage: headerPerPage, vs }),
+    [vs, headerPerPage],
     3 * 60 * 1000
   );
   const equities = useInsightEquities();

@@ -224,7 +224,21 @@ try {
   t('the panel no longer renders nothing on an empty list', !/if \(!items\.length\) return null/.test(panel));
   t('the error state exists and offers Retry', /calm\.error/.test(panel) && /common\.retry/.test(panel));
   t('the empty state is distinct and honest', /calm\.empty/.test(panel));
-  t('the panel re-fetches on soft refresh (force)', /onSoftRefresh/.test(panel) && /force: true/.test(panel));
+  /*
+   * The claim is "a soft refresh asks for the network, bypassing the cache".
+   * This asserted the literal `force: true` and therefore failed on the ES2015
+   * shorthand `getCalm({ force })` — which passes `force: true` just as well,
+   * because the callback it sits in is `() => loadRef.current(true)`.
+   *
+   * So the check now pins the BEHAVIOUR: onSoftRefresh is wired, its handler
+   * calls load with `true`, and that argument reaches getCalm as a force. All
+   * three links, in either spelling.
+   */
+  const softRefreshForces =
+    /onSoftRefresh\(/.test(panel)
+    && /loadRef\.current\(\s*true\s*\)/.test(panel)
+    && /getCalm\(\{\s*force(?:\s*:\s*true)?\s*\}\)/.test(panel);
+  t('the panel re-fetches on soft refresh (force)', softRefreshForces);
 
   /*
    * AND THE REAL TARGET: getCalm must never resolve against a localhost

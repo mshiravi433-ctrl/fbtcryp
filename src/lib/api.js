@@ -651,8 +651,21 @@ export function getCoin(id, vs = 'usd') {
           high24h: md.high_24h?.[vs] ?? 0,
           low24h: md.low_24h?.[vs] ?? 0,
           ath: md.ath?.[vs] ?? 0,
+          /* The all-time LOW was already in the payload the detail endpoint
+             returns and was the one history figure this client dropped — so a
+             token's identity panel could say how far it is from its high and
+             not how far it has come from its low. Null, not 0: a missing low
+             must not be drawn as "$0.00", which reads as a real measurement. */
+          atl: md.atl?.[vs] ?? null,
           athChange: md.ath_change_percentage?.[vs] ?? 0,
+          atlChange: md.atl_change_percentage?.[vs] ?? null,
           supply: md.circulating_supply ?? 0,
+          maxSupply: md.max_supply ?? null,
+          totalSupply: md.total_supply ?? null,
+          /* When the price readings above were last updated upstream. A panel
+             that shows "24h high/low" without saying how old the reading is
+             invites the reader to trust a stale number. */
+          lastUpdated: md.last_updated ?? null,
           description: raw.description?.en?.slice(0, 700) || '',
           homepage: raw.links?.homepage?.[0] || null,
           sparkline: md.sparkline_7d?.price ?? [],

@@ -261,8 +261,26 @@ export async function run(container) {
     !/whileTap=\{still \? undefined : \{/.test(centreFn));
   t('the press scales the inner drop instead', /variants=\{\{ rest:/.test(centreFn));
 
+  /*
+   * RTL-SAFE CENTRING, NOT A PHYSICAL OFFSET.
+   *
+   * This pinned `transform: translateX(-50%)` — the technique the stylesheet
+   * deliberately REPLACED, because a physical half-width offset pulls the drop
+   * to the wrong side on RTL pages (the comment in src/index.css spells it
+   * out). The rule is now `left: 0; right: 0; margin-inline: auto`, which
+   * centres in both directions and still leaves `transform` free for the
+   * press animation.
+   *
+   * What the check is actually for: the button must be centred by CSS the
+   * button owns, and nothing may animate its transform. Both are asserted,
+   * in whichever mechanism the stylesheet uses.
+   */
   const centreRule = rule('.nav-centre {');
-  t('the button keeps its CSS centring', /transform: translateX\(-50%\)/.test(centreRule));
+  const centredByCss = (/transform:\s*translateX\(-50%\)/.test(centreRule)
+    || (/margin-inline:\s*auto/.test(centreRule) && /inset-inline:\s*0/.test(centreRule)));
+  t('the button keeps its CSS centring', centredByCss);
+  t('...and it does not depend on a physical left/right pair (RTL-safe)',
+    !/(?:^|[;{\s])left:\s*50%/.test(centreRule));
   /*
    * The active state must not use a transform either — it would be wiped by
    * the first tap and never reapplied, which is the same bug wearing a

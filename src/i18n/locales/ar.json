@@ -114,6 +114,8 @@
       "rank": "الترتيب",
       "mcap": "القيمة السوقية",
       "change": "تغير ٢٤س",
+      "change1h": "تغيّر ساعة واحدة",
+      "change7d": "تغيّر ٧ أيام",
       "volume": "حجم ٢٤س",
       "price": "السعر"
     },
@@ -175,7 +177,48 @@
       "payment": "الدفع",
       "launchpad": "لانش باد"
     },
-    "showMore": "عرض المزيد ({{count}} متبقٍ)"
+    "showMore": "عرض المزيد ({{count}} متبقٍ)",
+    "horizon": {
+      "1h": "ساعة",
+      "24h": "٢٤ ساعة",
+      "7d": "٧ أيام"
+    },
+    "horizonAria": "الإطار الزمني لتغير السعر",
+    "horizonMissing": "{{count}} عملة لا توفر رقمًا لهذه الفترة وتظهر بـ «—».",
+    "columnsAria": "أعمدة جدول السوق",
+    "colName": "الاسم",
+    "colPrice": "السعر",
+    "colVolume": "الحجم",
+    "colPriceAria": "الترتيب حسب السعر",
+    "colVolumeAria": "الترتيب حسب حجم ٢٤ ساعة",
+    "colChangeAria": "الترتيب حسب التغيّر خلال {{window}}",
+    "dirToAsc": "تصاعدي — الأصغر والأضعف أولاً",
+    "dirToDesc": "تنازلي — الأكبر والأقوى أولاً",
+    "criteriaAllHeadline": "كل الرموز، بالترتيب الذي اخترته",
+    "criteriaSectorHeadline": "القطاع: {{sector}}",
+    "criteriaSearchHeadline": "نتائج «{{query}}»",
+    "criteriaIntentHeadline": "مرتب لـ: «{{query}}»",
+    "criteriaFavoritesHeadline": "رموزك المفضلة",
+    "criteriaOrderChip": "{{column}} · {{dir}}",
+    "criteriaAsc": "تصاعدي",
+    "criteriaDesc": "تنازلي",
+    "criteriaRemove": "إزالة الفلتر: {{item}}",
+    "criteriaReset": "إعادة ضبط الكل",
+    "criteriaAllShown": "تم عرض كل الصفوف البالغة {{count}}",
+    "criteriaInMemory": "{{shown}} من {{total}} — الباقي محمّل سابقاً",
+    "criteriaNeedsRequest": "{{shown}} من {{total}} — الصفحة التالية تحتاج طلباً",
+    "criteriaOfTotal": "{{shown}} من {{total}}",
+    "liveCount": "{{count}} صف",
+    "liveCountOf": "{{shown}} من {{total}} صف",
+    "liveNone": "لا صفوف مطابقة",
+    "liveViewAll": "كل الرموز",
+    "liveViewGainers": "الرابحون",
+    "liveViewLosers": "الخاسرون",
+    "liveViewVolume": "حسب الحجم",
+    "liveViewFavorites": "مفضلاتك",
+    "liveViewSector": "القطاع: {{sector}}",
+    "liveOrderAsc": "{{column}}، تصاعدي",
+    "liveOrderDesc": "{{column}}، تنازلي"
   },
   "coin": {
     "notFound": "العملة غير موجودة",
@@ -194,6 +237,7 @@
     "swapDockAria": "شراء {{symbol}}",
     "detailTabs": {
       "aria": "تفاصيل الرمز",
+      "identity": "التعريف",
       "trade": "شراء وبيع",
       "history": "ماذا يقول الماضي",
       "compare": "مقارنة",
@@ -299,7 +343,43 @@
     "chartCandle": "شموع",
     "chartLine": "خط",
     "noCandles": "لا توجد بيانات شموع لهذه العملة الآن. الخط أدناه هو سعر الإغلاق، فيبقى الاتجاه مقروءًا.",
-    "candleNote": "كل شمعة هي افتتاح وإغلاق وأعلى وأدنى سعر لفترة واحدة. اضغط بإصبعين للتكبير."
+    "candleNote": "كل شمعة هي افتتاح وإغلاق وأعلى وأدنى سعر لفترة واحدة. اضغط بإصبعين للتكبير.",
+    "identity": {
+      "identity": "التعريف",
+      "aboutTitle": "ما هو هذا الرمز",
+      "noDescription": "لم يُرسل المصدر وصفاً لهذا الرمز.",
+      "officialSite": "الموقع الرسمي",
+      "source": "الأرقام من {{provider}}",
+      "historyTitle": "تاريخه بالكامل",
+      "fromAth": "من أعلى سعر",
+      "fromAtl": "من أدنى سعر",
+      "dayLow": "أدنى ٢٤ ساعة",
+      "dayHigh": "أعلى ٢٤ ساعة",
+      "dayPosition": "الموضع في نطاق اليوم",
+      "dayPositionValue": "{{pct}}٪ نحو الأعلى",
+      "supplyTitle": "المعروض والسيولة",
+      "circulating": "المتداول",
+      "maxSupply": "الحد الأقصى",
+      "uncapped": "بلا سقف",
+      "turnover": "الدوران اليومي",
+      "turnoverHint": "الحجم ÷ القيمة السوقية",
+      "marketShare": "الحصة من السوق",
+      "unlocked": "متداول بالفعل",
+      "unlockedValue": "{{pct}}٪ من السقف",
+      "globalTitle": "ما يفعله السوق الأوسع به",
+      "globalNote": "مقاس خلال ٢٤ ساعة مقابل متوسط حركة السوق كله — وليس توقعاً.",
+      "marketMove": "السوق ٢٤ ساعة",
+      "tokenMove": "هذا الرمز ٢٤ ساعة",
+      "agreement": "الاتجاه",
+      "agreement_with": "مع السوق",
+      "agreement_against": "ضد السوق",
+      "agreement_flat": "شبه ساكن",
+      "amplification": "المدى مقابل السوق",
+      "versusBtc": "مقابل بيتكوين",
+      "versusBtcHint": "نقطة مئوية",
+      "unavailable": "—",
+      "missingData": "بعض الأرقام غائبة لأن المصدر لم يرسلها؛ تُعرض «—» بدل الصفر."
+    }
   },
   "trade": {
     "title": "تداول",
@@ -2094,7 +2174,11 @@
       "bullish": "صاعد",
       "neutral": "محايد",
       "bearish": "هابط",
-      "hint": "بناءً على {{n}} عينة مشابهة من سلوك هذا الأصل في فترات {{d}} يومًا"
+      "hint": "بناءً على {{n}} عينة مشابهة من سلوك هذا الأصل في فترات {{d}} يومًا",
+      "vsBase": "الاحتمال الشرطي مقابل معدل الأساس",
+      "costIfWrong": "الخسارة إذا حدث النصف غير المواتي ({d} يوم)",
+      "gainIfRight": "المكسب إذا حدث النصف المواتي",
+      "conditioned": "مرجّح على {n} نافذة تاريخية؛ عملياً {e} نافذة شبيهة باليوم. تردد شرطي، وليس تنبؤاً."
     },
     "invalidationBelow": "أقل من السعر الحالي",
     "backtestHistory": "أداء هذا النمط سابقًا",
@@ -2256,7 +2340,30 @@
         "liquidityActive": "سيولة نشطة",
         "liquidityThin": "سيولة ضعيفة",
         "marketSentimentUp": "مزاج السوق صاعد",
-        "marketSentimentDown": "مزاج السوق هابط"
+        "marketSentimentDown": "مزاج السوق هابط",
+        "oneSidedBuy": "شريط شراء أحادي",
+        "oneSidedSell": "شريط بيع أحادي",
+        "moveBroadUp": "صعود بمشاركة واسعة",
+        "moveBroadDown": "هبوط بمشاركة واسعة",
+        "moveHollowUp": "صعود أجوف",
+        "moveHollowDown": "هبوط أجوف",
+        "relativeStrengthUp": "أقوى من بيتكوين",
+        "relativeStrengthDown": "أضعف من بيتكوين",
+        "volumeWithTrend": "حجم مع الاتجاه",
+        "volumeWithDowntrend": "حجم مع الهبوط",
+        "volumeHollow": "صعود بحجم ضعيف",
+        "moveAnomaly": "الخطوة الأخيرة غير معتادة",
+        "tapeOneSidedBuy": "شريط شراء أحادي",
+        "tapeOneSidedSell": "شريط بيع أحادي",
+        "broadParticipationUp": "مشاركة واسعة ↑",
+        "broadParticipationDown": "مشاركة واسعة ↓",
+        "hollowRally": "صعود أجوف",
+        "hollowSelloff": "هبوط أجوف",
+        "outperformingMarket": "أقوى من بيتكوين",
+        "underperformingMarket": "أضعف من بيتكوين",
+        "patternRepeat": "تكرار الشكل",
+        "sourcesAgree": "المصادر متوافقة",
+        "sourcesConflict": "المصادر متعارضة"
       },
       "smartMoney": {
         "title": "الأموال الذكية",
@@ -2400,10 +2507,20 @@
           "highConcentration": "محفظتك مركزة جداً.",
           "existingPositionUp": "تملك هذا الأصل بالفعل.",
           "noExistingPosition": "لا مركز حالياً — تضيف الإشارة تنويعاً.",
-          "balanced": "أثر المحفظة متوازن."
+          "balanced": "أثر المحفظة متوازن.",
+          "riskLargeShare": "هذه الإشارة قد تكلف جزءاً كبيراً من المحفظة.",
+          "signalAgainstHolding": "الإشارة تعاكس مركزاً تملكه.",
+          "signalAgainstEntry": "الإشارة تعاكس الدخول هنا.",
+          "stopCostly": "مسافة وقف الخسارة وحدها كلفة معتبرة لهذا المركز."
         },
         "local": "حُسب محلياً من مراكز التطبيق. لم يُرسل شيء.",
-        "subtitle": "تأثير الإشارة المحددة في مزيج أصول محفظتك الحالي."
+        "subtitle": "تأثير الإشارة المحددة في مزيج أصول محفظتك الحالي.",
+        "valueUsd": "قيمة المركز",
+        "riskUsd": "الخسارة المقاسة",
+        "riskOfBook": "الخسارة / المحفظة",
+        "scenarioLoss": "الخسارة إذا حدث السيناريو غير المواتي",
+        "stopCost": "الخسارة إذا لامس وقف الخسارة",
+        "bookAfterRisk": "المحفظة بعد تلك الخسارة"
       },
       "history": {
         "title": "سجل الإشارات",
@@ -2487,9 +2604,86 @@
       "breadth": "Top-20 up today",
       "avgChange": "Avg 24h move",
       "turnover": "Volume / mcap",
-      "trendTitle": "اتجاه سعر {{symbol}}"
+      "trendTitle": "اتجاه سعر {{symbol}}",
+      "behavior": {
+        "title": "سلوك الرمز",
+        "participation": "مشاركة الخطوات",
+        "spikeShare": "أكبر خطوة منفردة",
+        "pressure": "ضغط الشريط",
+        "relative": "مقابل بيتكوين (النافذة نفسها)",
+        "volume": "الحجم مقابل الاتجاه",
+        "anomaly": "آخر خطوة (σ)",
+        "pattern": "تكرار النمط",
+        "patternSeen": "النمط نفسه قبل {{n}} خطوة",
+        "biasUp": "البنية: شراء",
+        "biasDown": "البنية: بيع",
+        "biasFlat": "البنية: مختلطة",
+        "note": "مقيسة من خطوات سعر هذا الرمز ومن صف السوق الخاص به — المشاركة، أحادية الاتجاه، القوة النسبية، توافق الحجم والشكل. تصف ما فعله الشريط وليست تنبؤًا.",
+        "vol": {
+          "accumulating": "صعود مع حجم",
+          "distributing": "هبوط مع حجم",
+          "hollow-rally": "صعود بحجم ضعيف",
+          "drifting-down": "هبوط بحجم ضعيف",
+          "balanced": "متوافق مع الحجم",
+          "unclear": "غير مقيس"
+        },
+        "edgeWhen": "الحافة عندما {kind}",
+        "edgeBroad": "كانت المشاركة واسعة",
+        "edgeSpiky": "كانت الحركة بشمعة واحدة"
+      }
     },
-    "aiPowered": "مدعوم بالذكاء الاصطناعي"
+    "aiPowered": "مدعوم بالذكاء الاصطناعي",
+    "behaviorEdge": {
+      "title": "إعادة اختبار مشروطة بالشريط",
+      "summary": "{n} حالة · الحافة {edge}",
+      "broad": "مشاركة واسعة",
+      "spiky": "حركة بشمعة واحدة",
+      "edge": "الحافة مقابل معدل الأساس لنفس الفئة",
+      "hits": "{n} حالة · {rate}٪ إصابة",
+      "note": "القاعدة نفسها، أُعيد تشغيلها وقُسّمت حسب شكل الشريط لحظة الإطلاق. لا شيء مُلاءم: تُعرض لأن التقسيم قابل للقياس، والفئة التي لا تحتوي حالات كافية لا تُعرض إطلاقاً.",
+      "none": "التاريخ غير كافٍ لتقسيم هذه القاعدة حسب الشريط."
+    },
+    "consensus": {
+      "title": "توافق المصادر",
+      "split": "انقسام: {a} مقابل {b}",
+      "plane": {
+        "technical": "فني",
+        "behavior": "سلوك الشريط",
+        "smartMoney": "الأموال الذكية",
+        "market": "FBT العالمي + التوقع"
+      }
+    },
+    "accel": {
+      "title": "تسارع الإشارة",
+      "state": {
+        "accelerating": "يتعزز ↑",
+        "fading": "يتراجع ↓",
+        "steady": "مستقر ·",
+        "reversing": "انعكس"
+      }
+    },
+    "copyTrade": {
+      "title": "نسخ الصفقة لهذه الإشارة",
+      "side": "الاتجاه الذي تشير إليه الأدلة",
+      "conviction": "قوة الأدلة",
+      "gates": "الشروط المجتازة",
+      "blockedBy": "لا يُنصح بالنسخ — فشلت هذه الشروط: {{gates}}",
+      "conflictNote": "الأدلة متعارضة؛ لا يُنصح بالنسخ حتى تتضح.",
+      "size": "الحجم المخطط",
+      "stopTarget": "وقف / هدف",
+      "riskUsd": "المخاطرة بالدولار",
+      "riskOfBook": "المخاطرة من المحفظة",
+      "gate": {
+        "identity": "هوية العقد",
+        "evidence": "الأدلة",
+        "direction": "الاتجاه",
+        "agreement": "توافق المصادر",
+        "freshness": "حداثة الأدلة",
+        "liquidity": "عمق السيولة",
+        "concentration": "تركز الحائزين",
+        "sizing": "الحجم"
+      }
+    }
   },
   "stocks": {
     "held": {
@@ -9050,7 +9244,33 @@
     "pods": {
       "reading": "جارٍ قراءة المحرك الموثّق",
       "stale": "آخر قراءة ناجحة للمحرك"
-    }
+    },
+    "whalesScope": "هذه القائمة تغطي سلاسل EVM فقط",
+    "solWhalesTitle": "حيتان سولانا",
+    "solWhaleMoved": "تم نقل {{n}} SOL",
+    "solWhaleToVenues": "SOL إلى المنصات (نية بيع)",
+    "solWhaleFromVenues": "SOL خارج المنصات (تجميع)",
+    "solWhaleWalletToWallet": "محفظة إلى محفظة",
+    "solWhaleNoLean": "لم تلمس أي حركة منصة مسماة، لذلك لا يُقرأ اتجاه. النقل بين المحافظ ليس شراءً ولا بيعًا.",
+    "solWhaleLeanConfident": "الاتجاه من {{n}} حركات موسومة: {{side}}",
+    "solWhaleLeanThin": "الاتجاه من {{n}} حركات موسومة: {{side}} — الأدلة ضعيفة",
+    "solWhaleAccumulating": "تجميع (خروج من المنصات)",
+    "solWhaleDistributing": "توزيع (دخول إلى المنصات)",
+    "solWhaleCoverage": "هذه عينة وليست إحصاءً: يُقرأ بلوك واحد لكل نافذة ويُعاد استخدامه حتى {{reused}} دقيقة ({{n}} بلوك لكل تحديث). الأرقام تصف هذه العينة فقط.",
+    "solWhaleEmpty": "لا توجد حركة كبيرة في البلوك المُقتبس.",
+    "solWhaleUnavailable": "خلاصة حيتان سولانا غير متاحة الآن — لم يُقدَّر أي رقم.",
+    "freshReadCount": "{{n}} محفظة جديدة موثّقة",
+    "freshReadCapital": "رأس مال موثّق",
+    "freshReadDominant": "لاعب واحد يملك {{pct}}٪ منه",
+    "freshReadBroad": "رأس المال موزّع على عدة لاعبين",
+    "freshReadUnverified": "حُذف {{n}} صفًا لعدم وجود عدّاد قابل للتحقق",
+    "solWalletsTitle": "محافظ حيتان سولانا",
+    "solWalletsMoved": "تم نقل {{sol}} SOL",
+    "solWalletsNet": "الصافي في هذه العينة",
+    "solWalletsMovements": "{{n}} حركة",
+    "solWalletsConcentrated": "{{pct}}% من العينة في محفظة واحدة",
+    "solWalletsSample": "محافظ هذا الكتلة المأخوذة كعينة فقط (الفتحة {{n}}). الترتيب يعني «الأكبر في هذه النافذة» وليس «الأكبر على سولانا».",
+    "solWalletsEmpty": "لم تتجاوز أي محفظة في هذه العينة الحد الأدنى."
   },
   "iranBuy": {
     "unavailableBody": "This Wallex Toman checkout is not live on this server yet. The tab is here so Iranian users can find it; no payment is taken until settlement is actually configured."
@@ -10084,6 +10304,22 @@
       "shortSub": "ربح مع الهبوط",
       "summaryTitle": "ملخص الأمر والتصفية",
       "usdUnit": "USD"
+    }
+  },
+  "copyTrade": {
+    "none": "لا توجد خطة للنسخ",
+    "noEvidence": "لا توجد أدلة كافية لهذه النسخة",
+    "conflict": "الأدلة متعارضة — لا يُنصح بالنسخ حتى تتضح",
+    "blocked": "فشل أحد الشروط — التفاصيل في بطاقة الرمز",
+    "thin": "أدلة ضعيفة — بحجم صغير فقط",
+    "fair": "الأدلة تتفق مع الإشارة",
+    "strong": "أدلة قوية ومتوافقة مع الإشارة",
+    "note": "هذه القراءة من بيانات موجودة على الشاشة بالفعل. ليست توصية شراء أو بيع ولا توقّع أي أمر.",
+    "provenance": {
+      "verified": "محافظ موثّقة",
+      "labelledActivity": "نشاط الموسوم من الماسح",
+      "unqualifiedTape": "صفقات كبيرة بدون تحقق من الهوية",
+      "whaleBoard": "لوحة الحيتان"
     }
   }
 }

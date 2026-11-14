@@ -743,6 +743,42 @@
 .sic-triple-grid > div { min-width: 0; padding: 8px 4px; border-radius: 12px; background: var(--sic-surface-3); text-align: center; }
 .sic-triple-grid b { display: block; overflow: hidden; font-size: 14px; font-weight: 900; font-variant-numeric: tabular-nums; text-overflow: ellipsis; }
 .sic-triple-grid span { display: block; margin-top: 3px; color: var(--sic-dim); font-size: 9px; }
+/* ─── the copy-trade read, inside the on-chain panel ────────────────────────
+   Same grid, same type scale, one hairline to separate it from the measured
+   rows above. It is not a new section: it is the last block of a panel that
+   already exists, so it inherits the panel's padding and only draws a divider. */
+.sic-copyread {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--sic-line-faint);
+  display: grid;
+  gap: 8px;
+}
+
+.sic-copyread-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sic-copyread-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+}
+
+.sic-copyread-state { font-size: 10.5px; font-weight: 850; }
+.sic-copyread-state.up { color: var(--up, #2ee6a8); }
+.sic-copyread-state.down { color: var(--warn, #ffc24b); }
+
+.sic-copyread-note {
+  font-size: 9.8px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+
 .sic-key-value-list { display: grid; gap: 9px; }
 .sic-key-value-list > div {
   display: flex;

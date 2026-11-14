@@ -77,10 +77,16 @@ const overview = (win) => ({
       }
     }
   },
+  /*
+   * 940 ADMITTED, 2 VOTING. That gap is the round-9 bug: the hero pod used to
+   * print «940 واجد شرایط» beside «2 اجماع» with nothing to explain it. The pod
+   * now prints the voting count and names the wider admission number under it.
+   */
   verified: {
     dataStatus: 'live',
     indexedAt: NOW,
     coverage: { analyzedWallets: 1840, classifiedWallets: 940, swapsInWindow: 5210 },
+    counts: { qualified: 2, voting: 2, admitted: 940, analysed: 1840, consensusActive: 2, consensusRows: 2 },
     consensus: [
       { symbol: 'LINK', chain: 1, token: '0x514910771af9ca656af840dff83e8264ecf986ca', confidence: 82, swaps: 64 },
       { symbol: 'ARB', chain: 42161, token: '0x912ce59144191c1204e64559fe8253a0e49e6548', confidence: 71, swaps: 41 }
@@ -110,13 +116,38 @@ const overview = (win) => ({
       risk: 'MEDIUM'
     }]
   },
+  /*
+   * THREE rows, deliberately, because the read and the grid used to disagree:
+   *   · `0x9f2c` — 37 activity, OVER the server ceiling (25), so it is NOT
+   *     verified-fresh and must not get a card;
+   *   · `0x4a7e` — young, funded, movement seen an hour ago → must score and
+   *     must read «early»;
+   *   · `0xb31d` — young-looking on the wire but NO `firstSeen`, so the
+   *     earlyness engine has no timing evidence and must refuse a score rather
+   *     than invent one.
+   */
   freshWallets: {
-    wallets: [{
-      short: '0x9f2c…41ab', address: '0x9f2c1a2b3c4d5e6f708192a3b4c5d6e7f80941ab',
-      chainId: 8453, chainShort: 'BASE', chainColor: '#0052ff',
-      capitalUsd: 1_240_000, txCount: 37, interesting: true
-    }],
-    note: 'Wallets first observed in the last 48 hours.'
+    wallets: [
+      {
+        short: '0x9f2c…41ab', address: '0x9f2c1a2b3c4d5e6f708192a3b4c5d6e7f80941ab',
+        chainId: 8453, chainShort: 'BASE', chainColor: '#0052ff',
+        capitalUsd: 1_240_000, receivedUsd: 1_200_000, txCount: 31, tokenTransfersCount: 6,
+        firstSeen: Date.now() - 3 * 3600_000, interesting: true
+      },
+      {
+        short: '0x4a7e…9c22', address: '0x4a7e55aa11bb22cc33dd44ee55ff66aa77bb9c22',
+        chainId: 1, chainShort: 'ETH', chainColor: '#627eea',
+        capitalUsd: 860_000, receivedUsd: 860_000, txCount: 4, tokenTransfersCount: 1,
+        firstSeen: Date.now() - 1 * 3600_000, interesting: true
+      },
+      {
+        short: '0xb31d…7f05', address: '0xb31d09ff88ee77dd66cc55bb44aa33ff22117f05',
+        chainId: 1, chainShort: 'ETH', chainColor: '#627eea',
+        capitalUsd: 410_000, receivedUsd: 380_000, txCount: 7, tokenTransfersCount: 2,
+        firstSeen: null, interesting: false
+      }
+    ],
+    note: 'Wallets first observed in the last 24 hours.'
   },
   liquidityEvents: {
     events: [{
@@ -126,6 +157,33 @@ const overview = (win) => ({
     }]
   }
 });
+
+/*
+ * The Solana whale feed, as the route answers it. Two readings are made from
+ * this ONE payload on the whales tab: `readSolanaWhales` (where the SOL went)
+ * and `readSolanaWallets` (which wallets moved it). The desk probe used to let
+ * this route fall through to `{}`, which is why the two Solana surfaces could
+ * mount with nothing to show and no assertion noticed.
+ */
+const solanaWhales = {
+  available: true,
+  floorSol: 500,
+  solPrice: 150,
+  vs: 'usd',
+  updatedAt: '2026-11-12T10:00:00.000Z',
+  coverage: {
+    sources: ['rpc-block-sample'],
+    sampleReused: true,
+    sampleMs: 20 * 60_000,
+    blocksPerRefresh: 1,
+    lastSample: { slot: 321, at: '2026-11-12T10:00:00.000Z' }
+  },
+  transfers: [
+    { id: 'a1', sol: 12_000, from: 'So1WhaleA11111111111111111111111111111111', to: 'Krak', toLabel: 'Kraken', at: Date.now() - 40_000, signature: 's1' },
+    { id: 'a2', sol: 9_000, from: 'So1WhaleA11111111111111111111111111111111', to: 'Krak', toLabel: 'Kraken', at: Date.now() - 30_000, signature: 's2' },
+    { id: 'b1', sol: 8_000, from: 'Bin', fromLabel: 'Binance', to: 'So1WhaleB22222222222222222222222222222222', at: Date.now() - 20_000, signature: 's3' }
+  ]
+};
 
 const whales = {
   wallets: [
@@ -162,7 +220,41 @@ const intelligence = {
   graph: { nodes: [], edges: [] }
 };
 
-const verifiedWallets = { wallets: [], coverage: { analyzedWallets: 10 } };
+/*
+ * TWO VERIFIED WALLETS, deliberately different in EVIDENCE and not in outcome:
+ *   · `0x1111…` scored 95 off FIVE closes in a single session — the lucky-but-
+ *     thin row the board used to print first;
+ *   · `0x2222…` scored 78 off FORTY closes over six months — the measured row.
+ * If the board ever sorts on the raw score again, the thin wallet comes first
+ * and the probe says so.
+ */
+const verifiedWallets = {
+  dataStatus: 'observed',
+  indexedAt: Date.now() - 120_000,
+  leaderboardBasis: 'raw-verified-score; clients must re-rank by sample evidence before display',
+  wallets: [
+    {
+      chain: 1, address: `0x${'1'.repeat(40)}`, label: 'thin-lucky', score: 95,
+      coverage: 0.63, measuredCoverage: 0.7, closedTrades: 5, realizedUsd: 40_000, winRate: 80,
+      qualified: true, updatedAt: Date.now() - 60_000,
+      sample: { swaps: 10, closedTrades: 5, observedDays: 0.4, historyTruncated: false },
+      factors: { profitability: 0.9, winRate: 0.8, earlyEntryAccuracy: null, exitTiming: null,
+        consistency: 0.5, capitalEfficiency: 0.6, riskAdjustedPerformance: null }
+    },
+    {
+      chain: 1, address: `0x${'2'.repeat(40)}`, label: 'deep-measured', score: 78,
+      coverage: 1, measuredCoverage: 1, closedTrades: 40, realizedUsd: 900_000, winRate: 62,
+      qualified: true, updatedAt: Date.now() - 60_000,
+      sample: { swaps: 120, closedTrades: 40, observedDays: 180, historyTruncated: false },
+      factors: { profitability: 0.7, winRate: 0.62, earlyEntryAccuracy: 0.5, exitTiming: 0.4,
+        consistency: 0.8, capitalEfficiency: 0.75, riskAdjustedPerformance: 0.6 }
+    }
+  ],
+  candidates: [{ chain: 1, address: `0x${'3'.repeat(40)}`, label: 'not-yet', score: 40,
+    closedTrades: 2, winRate: 30, swaps: 3, status: 'INSUFFICIENT_EVIDENCE', qualified: false,
+    sample: { swaps: 3, closedTrades: 2, observedDays: 0.5 } }],
+  coverage: { analyzedWallets: 10, classifiedWallets: 2, observedSwaps: 130 }
+};
 
 const alerts = {
   alerts: [{
@@ -183,6 +275,7 @@ function installFetch() {
     const u = String(url);
     calls.push(u);
     if (u.includes('/overview?')) return json(overview(/window=([^&]+)/.exec(u)?.[1] || '24h'));
+    if (u.includes('/solana/track/whales')) return json(solanaWhales);
     if (u.includes('/whales?')) return json(whales);
     if (u.includes('/flows')) return json(overview('24h').flows);
     if (u.includes('/liquidity')) return json(overview('24h').liquidityEvents);
@@ -321,6 +414,27 @@ export async function run(container) {
   t('a whale row prints the address, the chain and the band',
     /0x9f2c/.test(text()) && /BASE/.test(text()));
 
+  /* 8b · the SOLANA half of the whale tab: where the SOL went, and WHO moved it.
+     Both readings come from the one mocked payload above, which is the point —
+     the tab must not fetch the chain twice to show two views of it. */
+  t('the whales tab shows the Solana chain read',
+    !!q('[data-testid="sm-solana-whales"]'));
+  t('and the Solana WALLET list, from the same payload',
+    !!q('[data-testid="sm-solana-wallets"]'));
+  t('the wallet list ranks the wallets that moved, not the venues',
+    qa('.smx-solwal-row').length === 2,
+    'rows: ' + qa('.smx-solwal-row').length);
+  t('a Solana wallet row prints its moved amount and its lean',
+    /SOL/.test(q('[data-testid="sm-solana-wallets"]')?.textContent || '')
+    && !!q('.smx-solwal-lean'));
+  t('the sample is stated, so the rank reads as "in this window"',
+    /321/.test(q('[data-testid="sm-solana-wallets"]')?.textContent || ''));
+  const solCalls = calls.filter((u) => u.includes('/solana/track/whales'));
+  t('the Solana feed is fetched ONCE for both readings',
+    solCalls.length === 1, 'calls: ' + solCalls.length);
+  t('a Solana wallet row opens that wallet, not the EVM page',
+    !!q('.smx-solwal-hit'));
+
   /* 9 · the flows tab has its own rail, and it drives the same window */
   const flowsTab = dock.find((b) => b.textContent === fa.sm.tabs.flows);
   t('the flows tab is reachable by its Persian name', await click(flowsTab, 70));
@@ -357,7 +471,107 @@ export async function run(container) {
     !!q('.smi-workspace') && !!q('.smi-hero'));
   t('its section heads carry glyph tiles', qa('.smi-head-ico').length >= 3);
 
-  /* 13 · no runtime noise */
+  /* 13 · the fresh-wallet READ drives the grid (round 7)
+     The whole point: `freshRead` used to be computed and then ignored, so the
+     grid rendered rows the read had thrown out. These assertions fail loudly if
+     that ever comes back. */
+  const tokensTab2 = dock.find((b) => b.textContent === fa.sm.tabs.tokens);
+  await click(tokensTab2, 90);
+  const freshCards = [...qa('.smx-fresh')];
+  t('the fresh grid renders the read\'s rows, not the raw payload',
+    freshCards.length === 2, `cards=${freshCards.length} (expected 2 of 3: 37-activity row is over the ceiling)`);
+  t('the over-ceiling wallet gets no card at all',
+    !freshCards.some((c) => /9f2c/.test(c.textContent)));
+  t('the verified-fresh count in the summary equals the number of cards',
+    (q('[data-testid="sm-fresh-read"]')?.textContent || '').includes(String(freshCards.length)),
+    q('[data-testid="sm-fresh-read"]')?.textContent || '(no summary)');
+  t('the summary states how many are still EARLY',
+    !!q('[data-testid="sm-fresh-early"]'));
+  t('an early card prints a measured score, not the old "Smart" badge',
+    freshCards.some((c) => /۹?\d+/.test(c.textContent) && !/Smart/.test(c.textContent)));
+  t('a card with no timing evidence says «not measured» instead of scoring',
+    (() => {
+      const c = freshCards.find((x) => /b31d/.test(x.textContent));
+      return !!c && new RegExp(fa.sm.earlyLabelUnmeasured).test(c.textContent);
+    })(), freshCards.map((c) => c.textContent).join(' | '));
+
+  /* 14 · the watchlist digest says something, and says «not read» honestly */
+  const alertsTab2 = dock.find((b) => b.textContent === fa.sm.tabs.alerts);
+  await click(alertsTab2, 90);
+  t('with no tracked wallets the digest renders nothing (no empty chrome)',
+    !q('[data-testid="sm-watch-digest"]'));
+  act(() => {
+    localStorage.setItem('fbt-smart-money-watch-v1', JSON.stringify([
+      { id: '1:0xaaa', chain: 1, address: '0xaaa', label: 'eth-a', target: 'wallet', createdAt: Date.now() - 7200_000, baseline: null },
+      { id: '1:0xbbb', chain: 1, address: '0xbbb', label: 'eth-b', target: 'wallet', createdAt: Date.now() - 3600_000, baseline: { at: Date.now() - 3600_000, portfolioUsd: 100_000 } }
+    ]));
+  });
+  await click(dock.find((b) => b.textContent === fa.sm.tabs.overview), 40);
+  await click(alertsTab2, 120);
+  const digest = q('[data-testid="sm-watch-digest"]');
+  t('tracked wallets surface as a digest on the alerts tab', !!digest);
+  /* Built from the locale itself: a hand-copied Persian string with the wrong
+     zero-width-joiner silently never matches, and a probe that can't fail on
+     the thing it tests is worse than no probe. */
+  t('the digest counts rows it has never read as «not read», never as «۰ تغییر»',
+    (digest?.textContent || '').includes(fa.sm.watchDigestPending.replace('{{n}}', '2')),
+    digest?.textContent);
+  t('a row with no baseline is never reported as «unchanged»',
+    !/بدون تغییر/.test(digest?.textContent || ''));
+  t('the digest offers exactly one way to read them, capped, not eight fetches on mount',
+    qa('[data-testid="sm-watch-digest"] .smx-chip--act').length === 1);
+
+  /* 15 · the verified board weighs each score (round 8)
+     The board that carries `SmartMoneyIntelligence` is the WALLETS tab, not the
+     intelligence tab — the probe went to the wrong one first and reported
+     «cards=0», which is exactly the sort of assertion that fails for the right
+     reason and gets «fixed» for the wrong one. */
+  const walletsTab = dock.find((b) => b.textContent === fa.sm.tabs.wallets);
+  await click(walletsTab, 160);
+  const cards = qa('.smi-wallet-card');
+  t('the verified board renders the wallets the index actually holds',
+    cards.length === 2, `cards=${cards.length}`);
+  t('the board leads with MEASURED evidence, not with the highest raw score',
+    /deep-measured/.test(cards[0]?.textContent || ''),
+    cards.map((c) => (c.textContent || '').slice(0, 40)).join(' | '));
+  const badges = qa('[data-testid="sm-evidence-badge"]');
+  /* Asserted as a SET, not by index: the point is that both verdicts appear,
+     and pinning them to positions would re-break the moment the sort changes —
+     which is the very thing the assertion above is meant to protect. */
+  t('every card states the strength of its own sample',
+    badges.length === 2
+    && badges.some((b) => new RegExp(fa.sm.engine.evidenceVerdict.thin).test(b.textContent))
+    && badges.some((b) => new RegExp(fa.sm.engine.evidenceVerdict.strong).test(b.textContent)),
+    badges.map((b) => b.textContent).join(' | '));
+  t('the thin card prints its ADJUSTED score, with the raw one still visible',
+    /(raw|خام)/.test(cards[1]?.textContent || '') || /(raw|خام)/.test(cards[0]?.textContent || ''),
+    cards[1]?.textContent?.slice(0, 80));
+  const boardLine = q('[data-testid="sm-evidence-board"]');
+  t('the board states its mean evidence above the cards', !!boardLine);
+  t('and how many of its wallets rest on an established sample',
+    new RegExp(fa.sm.engine.evidenceEstablished.replace('{{n}}', '1').replace('{{total}}', '2')).test(boardLine?.textContent || ''),
+    boardLine?.textContent);
+  t('and that one of them is too thin to judge yet',
+    new RegExp(fa.sm.engine.evidenceThin.replace('{{n}}', '1')).test(boardLine?.textContent || ''));
+  const cands = qa('.smi-candidate-box');
+  t('an unqualified wallet names its FIRST binding gate, not a generic status',
+    cands.length === 1 && new RegExp(fa.sm.engine.gap.closes.replace('{{have}}', '2').replace('{{need}}', '5'))
+      .test(cands[0].textContent || ''), cands[0]?.textContent);
+
+  /* 16 · the two hero pods can no longer contradict each other (round 9) */
+  const overviewTab = dock.find((b) => b.textContent === fa.sm.tabs.overview);
+  await click(overviewTab, 120);
+  const qPod = q('[data-testid="sm-pod-qualified"]');
+  const cPod = q('[data-testid="sm-pod-consensus"]');
+  t('the «qualified» pod counts the wallets whose evidence earns a VOTE',
+    /۲|2/.test(qPod?.querySelector('b')?.textContent || ''), qPod?.textContent);
+  t('and it says how many merely cleared admission, so the gap is explained',
+    !!q('[data-testid="sm-pod-admitted"]'), qPod?.textContent);
+  t('the consensus pod is consistent with that count, not contradicted by it',
+    (cPod?.querySelector('b')?.textContent || '') === (qPod?.querySelector('b')?.textContent || ''),
+    `${qPod?.querySelector('b')?.textContent} vs ${cPod?.querySelector('b')?.textContent}`);
+
+  /* 17 · no runtime noise */
   const realErrors = errors.filter((e) => !/not wrapped in act|React Router Future Flag|ReactDOMTestUtils\.act/.test(e));
   t('no React error was logged during any of that',
     realErrors.length === 0, realErrors.slice(0, 3).join(' | '));

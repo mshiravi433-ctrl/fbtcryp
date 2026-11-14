@@ -244,6 +244,18 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
                 <span className="warn">{t('sm.flow.coveragePct', { pct: coveredPct })}</span>
               )}
             </div>
+            {/*
+              NO SECOND WINDOW SENTENCE HERE.
+
+              A footnote was added to this block in round 10 saying «این اعداد
+              فقط بازهٔ ۲۴ ساعت را توصیف می‌کنند». It was removed again: the
+              badge in the header already states the window, and the
+              2026-10-28 single-window decision is explicit that this card
+              carries ONE window label and no second explanatory line — the
+              duplicate pushed the three tiles down for no new information.
+              `sm-token-window-badge` is the one place the window is stated, and
+              wiring.mjs pins it.
+            */}
             {basis === 'none' && <p className="smi-footnote" data-testid="sm-token-no-flow-data">{t('sm.flow.noData')}</p>}
           </div>
 

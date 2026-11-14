@@ -5,7 +5,15 @@ import { onSoftRefresh } from '../lib/refresh';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { vsOf } from '../lib/currency';
 
-/** Generic polling hook — pauses while the tab is hidden to save battery/quota. */
+/**
+ * Generic polling hook — pauses while the tab is hidden to save battery/quota.
+ *
+ * The interval is a CONTRACT with the endpoint it calls, not a taste: polling
+ * faster than the server route's own cache TTL returns the identical cached
+ * body while still paying for a function invocation (and, on a cold instance,
+ * for the whole import graph). Screens that need a specific cadence pass a
+ * named constant documenting the TTL it is matched to.
+ */
 export function usePoll(fn, deps = [], intervalMs = 30000) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -71,7 +79,16 @@ export function usePoll(fn, deps = [], intervalMs = 30000) {
   return { data, loading, error, updatedAt, refresh: run };
 }
 
-export const useGlobalStats = () => usePoll(() => getGlobal(), [], 45000);
+/**
+ * Market-wide totals. `enabled: false` mounts the poll in its "not yet" state —
+ * the same `null` convention `useMarkets(null)` uses — so a screen that has a
+ * use for these numbers only after the reader opens one tab can hold the
+ * request until then instead of paying for it on mount.
+ */
+export const useGlobalStats = (enabled = true) => {
+  const on = enabled !== false;
+  return usePoll(() => (on ? getGlobal() : Promise.resolve(null)), [on], 45000);
+};
 /*
  * Market data is fetched in the user's DISPLAY CURRENCY.
  *
@@ -83,7 +100,7 @@ export const useGlobalStats = () => usePoll(() => getGlobal(), [], 45000);
  * `vs` is part of the poll key, so switching currency refetches immediately
  * instead of showing converted symbols over stale figures until the next tick.
  */
-export const useMarkets = (perPage = 50) => {
+export const useMarkets = (perPage = 50, intervalMs = 30000) => {
   const vs = vsOf(useSettingsStore((s) => s.currency));
   /*
     ─── `null` / `0` MEANS "NOT YET", NOT "ZERO ROWS" ──────────────────────
@@ -101,7 +118,7 @@ export const useMarkets = (perPage = 50) => {
   return usePoll(
     () => (enabled ? getMarkets({ perPage, vs }) : Promise.resolve(null)),
     [perPage, vs],
-    30000
+    intervalMs
   );
 };
 export const useTrending = () => usePoll(() => getTrending(), [], 120000);
@@ -111,7 +128,17 @@ export const useTrending = () => usePoll(() => getTrending(), [], 120000);
  */
 export const useOhlc = (id, days) =>
   usePoll(() => (id ? getOhlc(id, days) : Promise.resolve([])), [id, days], 60000);
-export const useChart = (id, days) => usePoll(() => (id ? getChart(id, days) : Promise.resolve([])), [id, days], 60000);
+/**
+ * Closing prices.
+ *
+ * `intervalMs` is overridable because the right clock depends on the WINDOW:
+ * a 1-day series is worth refreshing every minute, while a 30-day chart — which
+ * is what the Signals screen draws — is cached server-side for 60s (CDN SWR
+ * 240s) and its closes genuinely move on the scale of minutes. The Signals page
+ * passes 120s (`CHART_POLL_MS`) and pays half the calls for the same picture.
+ */
+export const useChart = (id, days, intervalMs = 60000) =>
+  usePoll(() => (id ? getChart(id, days) : Promise.resolve([])), [id, days], intervalMs);
 /**
  * 24h volume for the expanded chart. `id` is null until the reader actually
  * opens the terminal with the volume pane on, so the coin page pays nothing

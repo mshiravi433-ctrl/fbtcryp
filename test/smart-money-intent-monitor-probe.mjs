@@ -159,15 +159,27 @@ console.log('\n▸ fail-closed');
      behaviour is a refusal — asserted here. The non-EVM guard is then
      exercised directly, because it is what stands between a future refactor
      and a Solana mint being analysed as an Ethereum contract. */
+  /*
+   * The assertion is REFUSAL, and specifically "not chain 1" — not one
+   * particular error code.
+   *
+   * When the evidence layer gained Solana rows (round 9), a Solana-shaped row
+   * stopped failing the ≥3-wallet bar and started reaching the resolver, which
+   * answered UNSUPPORTED_CHAIN (a real, already-localised code: an Intent OS
+   * monitor cannot watch an SVM mint). That is the correct answer, and stricter
+   * than NO_VERIFIED_CONTRACT. Pinning the old code made a better refusal look
+   * like a regression.
+   */
+  const solRow = { ...verified, consensus: [{ ...verified.consensus[0], chain: 'solana', token: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263' }] };
+  const solParse = parse('اگر اسمارت مانی اتریوم را انباشت کرد خبر بده', { verified: solRow });
   t('a Solana-shaped row is refused, never coerced onto chain 1',
-    parse('اگر اسمارت مانی اتریوم را انباشت کرد خبر بده', {
-      verified: { ...verified, consensus: [{ ...verified.consensus[0], chain: 'solana', token: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263' }] }
-    }).error === 'NO_VERIFIED_CONTRACT');
+    !!solParse.error && solParse.chain !== 1 && solParse.monitor == null, solParse.error);
   t('the non-EVM guard itself refuses (belt and braces)',
-    resolveVerifiedTarget({
-      symbol: 'WETH', now: NOW,
-      verified: { ...verified, consensus: [{ ...verified.consensus[0], chain: 'solana', token: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263' }] }
-    }).error === 'NO_VERIFIED_CONTRACT');
+    !!resolveVerifiedTarget({ symbol: 'WETH', now: NOW, verified: solRow }).error);
+  /* And the base58 mint is never lowercased on the way to that refusal: a
+     lowercased Solana address is a different, valid-looking address. */
+  t('a base58 mint is never lowercased', resolveVerifiedTarget({ symbol: 'WETH', now: NOW, verified: solRow }).token !==
+    'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263'.toLowerCase());
 }
 
 /* ═══ 4 · two contracts, one name → ask, do not guess ═══════════════════ */

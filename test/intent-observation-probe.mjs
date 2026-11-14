@@ -190,13 +190,36 @@ const post = (body, headers = {}) =>
     res.status === 503 && body.error === 'NOT_CONFIGURED');
 }
 {
-  /* Budget is small in this probe; the loop proves a cap exists either way. */
+  /*
+   * Prove a cap exists — by actually reaching it.
+   *
+   * `server/app.js` captures its budget ONCE, at import: `|| 30` by default,
+   * the probe's own 8 when imported fresh, and whatever the shared runner
+   * pinned when this file is imported alongside thirty other suites. A fixed
+   * 40-request loop therefore stops being a proof the moment the budget is
+   * anything above ~40: it would report "no limit" for a limiter that works
+   * perfectly, which is the inverse failure of a test that never fails.
+   *
+   * So the loop is sized from the budget the process actually configured.
+   * Unset → the 30 default plus headroom; 8 → still 40 so the standalone run
+   * keeps its original shape. The assertion is unchanged in what it means:
+   * keep posting a well-formed, consenting observation and a 429 must arrive.
+   */
+  const CONFIGURED = Number(process.env.INTENT_OBSERVATION_RATE_LIMIT || 30);
+  const MAX_TRIES = Math.max(40, (Number.isFinite(CONFIGURED) ? CONFIGURED : 30) + 10);
   let limited = false;
-  for (let i = 0; i < 40; i += 1) {
+  let attempts = 0;
+  for (let i = 0; i < MAX_TRIES; i += 1) {
+    attempts = i + 1;
     const res = await post(good, consent);
     if (res.status === 429) { limited = true; break; }
   }
   t('the observation endpoint has its own rate-limit budget', limited);
+  /* The cap must be reachable within the loop, and it must not be a lockout:
+     a request right after the 429 is still refused only until the window
+     rolls over, which is what `retry-after` promises. */
+  t('the observation 429 is reachable and bounded, not a permanent lockout',
+    !limited || (attempts <= MAX_TRIES && MAX_TRIES < 200));
 }
 {
   const res = await fetch(`${base}/api/intents/v1/capabilities`);
