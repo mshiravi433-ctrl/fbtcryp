@@ -81,6 +81,7 @@ import {
 import { buildCapabilityMatrix } from '../../src/lib/central/registry.js';
 import { ingestTurn, conversationNeedsInput, readLastReplan } from './sessionBridge.js';
 import { reportBehavior } from './learningBridge.js';
+import { consultPlugins, hasPluginProvider } from './pluginBridge.js';
 import { createModules } from './modules.js';
 import { createActionEngine } from './actions.js';
 import { healthSnapshot } from './sources.js';
@@ -603,10 +604,60 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
          * If no seat produces text, the brain falls through to the old honest
          * refusal. A refusal is a better answer than a fabrication.
          */
+        /*
+         * ─── THE PLUGIN ATTACH (2026-11-11) ──────────────────────────────────────────────
+         *
+         * Eleven first-party plugins existed — a yield optimizer over
+         * DefiLlama pools, a token risk scanner over GoPlus, a wallet exposure
+         * auditor, a strategy backtester, a smart-money tracker — and a chat
+         * turn could not reach ONE of them: `runNativeAgent` had no call site
+         * outside the Agent Hub dock. So «بهترین بازده استیبل‌کوین روی
+         * آربیتروم چیه» arrived here as UNSUPPORTED and the turn either spent
+         * one of its 50 daily provider calls on a generic model answer or
+         * refused, while a local plugin that reads the live source sat dark.
+         *
+         * The order is the argument: the CORPUS is free, the PLUGIN is local
+         * (measured 0.4 ms warm, zero provider calls, and it does not even
+         * import until a rule matches), and the MODEL costs quota. So the
+         * plugin is tried after the corpus and BEFORE the model, and when it
+         * answers, the model fallback is skipped entirely.
+         *
+         * And the same rule as everywhere else in this branch: A FAILURE NEVER
+         * BECOMES AN ANSWER. No match, a dead source, a timeout or a
+         * wrong-language body all fall through to the model, then to the
+         * honest refusal below.
+         */
+        let pluginAnswer = null;
+        let pluginLead = null;
+        let pluginSlug = null;
+        let pluginTitle = null;
+        let pluginDataStatus = null;
+        let pluginMatched = null;
+        let pluginCode = null;
+        try {
+          const hit = await consultPlugins({ message: context.message || '', locale, owner });
+          if (hit?.ok === true) {
+            pluginLead = hit.lead;
+            pluginAnswer = hit.text;
+            pluginSlug = hit.slug;
+            pluginTitle = hit.title;
+            pluginDataStatus = hit.dataStatus;
+            pluginMatched = hit.matched;
+          } else {
+            pluginCode = hit?.code || 'PLUGIN_NO_ANSWER';
+          }
+        } catch {
+          pluginAnswer = null;
+          pluginCode = 'PLUGIN_ATTACH_THREW';
+        }
+
         let modelAnswer = null;
         let modelProvider = null;
         let modelId = null;
-        try {
+        /* Skipped when a plugin answered: a local read beats one of the 50
+           free provider calls a day. `if (...) try {} catch {}` keeps the
+           existing block unindented and unchanged. */
+        if (!pluginAnswer) try {
           const turnBudget = beginAiTurnBudget();
           /* `getPreferredProvidersForTask` returns provider IDS, and
              `executeProviderChat` takes an id. The `internal` seat is the
@@ -644,7 +695,37 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
           modelAnswer = null;
         }
 
-        if (modelAnswer) {
+        /* WHY no plugin answered travels on the turn even when the model or
+           the refusal answers instead: `NO_PLUGIN_MATCH`, `PLUGIN_TIMEOUT` and
+           `PLUGIN_ANSWER_WRONG_LANGUAGE` are different facts, and a code can
+           be quoted in a report where a sentence cannot. Set before the branch
+           so every branch below spreads it forward. */
+        if (pluginCode) intent.pluginCode = pluginCode;
+
+        if (pluginAnswer) {
+          intent = {
+            ...intent,
+            unsupported: false,
+            needsUserInput: false,
+            answeredFromPlugin: true,
+            pluginSlug,
+            pluginTitle,
+            pluginDataStatus,
+            intentType: 'PLUGIN_ANSWER'
+          };
+          Object.assign(context, {
+            missingInformation: Array.from(new Set((context.missingInformation || []).filter((m) => m !== 'intent'))),
+            nearMisses: []
+          });
+          /* The recommendation is BUILT later from this intent, so the intent
+             carries the answer, the plugin that produced it and the data
+             status that plugin reported — including 'unavailable', because a
+             plugin whose source did not answer says exactly that in its own
+             text, and that text IS the honest answer. */
+          intent.pluginAnswer = pluginAnswer;
+          intent.pluginLead = pluginLead;
+          intent.pluginMatched = pluginMatched;
+        } else if (modelAnswer) {
           intent = {
             ...intent,
             unsupported: false,
@@ -797,7 +878,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
      * answer would lose — the user would see an empty reply.
      */
     const machineMissing = Array.isArray(context.conversationQuestion?.missing) ? context.conversationQuestion.missing : [];
-    const turnWasAnswered = Boolean(intent?.answeredFromCorpus || intent?.answeredFromModel || intent?.corpusAnswer || intent?.modelAnswer);
+    const turnWasAnswered = Boolean(intent?.answeredFromCorpus || intent?.answeredFromModel || intent?.answeredFromPlugin || intent?.corpusAnswer || intent?.modelAnswer || intent?.pluginAnswer);
     if (machineMissing.length && !intent.needsUserInput && !turnWasAnswered) {
       /*
        * The SOURCE of the need is part of the fact.
@@ -983,7 +1064,8 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
         ...intent,
         intentType: legIntent,
         entities: legClassification.entities,
-        corpusAnswer: null, corpusMatch: null, modelAnswer: null
+        corpusAnswer: null, corpusMatch: null, modelAnswer: null,
+        pluginAnswer: null, pluginSlug: null, pluginTitle: null, answeredFromPlugin: false
       };
       const legOut = buildFindings({ intent: legView, classification: legClassification, state, results, risk, readResults, stepResults, context, locale, lastReplan });
       /*
@@ -2088,6 +2170,39 @@ function buildFindings({ intent, classification, state, results, risk, readResul
    * cannot drift, a generated one can. The user must always be able to tell
    * which they received.
    */
+  /*
+   * A PLUGIN answer: produced locally by a first-party plugin that read its
+   * OWN named source. It sits before the model finding because it is the
+   * better provenance — retrieved from a live domain source with no model call
+   * — and only one of the two can ever be set on a turn.
+   */
+  if (intent?.pluginAnswer) {
+    const pluginRead = intent.pluginDataStatus !== 'unavailable';
+    const pluginName = intent.pluginTitle || intent.pluginSlug || 'plugin';
+    const reasonFa = pluginRead
+      ? `پلاگینِ ${pluginName} از منبعِ دادهٔ خودش خواند — محلی، بدون فراخوانیِ مدل`
+      : `پلاگینِ ${pluginName} اجرا شد ولی منبعش پاسخ نداد — همین متن، گزارشِ نبودِ داده است نه یک عدد`;
+    findings.push({
+      id: `plugin.${intent.pluginSlug || 'native'}`,
+      /* The VALUE is the plugin's own verdict line \u2014 the sentence that answers
+         the question. The report behind it travels in `detail`, already cut at
+         a segment boundary by the plugin layer so the publisher's 220-character
+         window cannot slice it mid-word. */
+      value: intent.pluginLead || intent.pluginAnswer,
+      detail: intent.pluginAnswer,
+      detailFa: intent.pluginAnswer,
+      reason: locale === 'fa' ? reasonFa
+        : (pluginRead
+          ? `plugin ${pluginName} read its own data source — local, no model call`
+          : `plugin ${pluginName} ran but its source did not answer — this text reports the missing data, not a number`),
+      reasonFa,
+      source: `plugin:${intent.pluginSlug || 'native'}`,
+      label: intent.pluginTitle || null,
+      dataAt: Date.now(),
+      status: 'OK'
+    });
+  }
+
   if (intent?.modelAnswer) {
     findings.push({
       id: 'model-answer',
@@ -3177,7 +3292,15 @@ function publicIntent(intent) {
     /* And the same for a generated answer: which provider produced it. */
     answeredFromModel: intent.answeredFromModel === true,
     modelProvider: intent.modelProvider || null,
-    modelId: intent.modelId || null
+    modelId: intent.modelId || null,
+    /* And the same for a plugin answer: WHICH plugin answered, what it read,
+       and why it did not — the code is quotable, the sentence is not. */
+    answeredFromPlugin: intent.answeredFromPlugin === true,
+    pluginSlug: intent.pluginSlug || null,
+    pluginTitle: intent.pluginTitle || null,
+    pluginDataStatus: intent.pluginDataStatus || null,
+    pluginCode: intent.pluginCode || null,
+    pluginAttachWired: hasPluginProvider()
   };
 }
 

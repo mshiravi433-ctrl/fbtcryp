@@ -285,6 +285,27 @@ function makeHeadline({ kind, findings, intent, locale, risk, confidence = null 
   const exposure = by('exposure');
   const intentType = intent?.intentType || '';
   /*
+   * \u2500\u2500\u2500 A PLUGIN ANSWER HEADLINES ITSELF (2026-11-11) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+   *
+   * The eleven first-party plugins became reachable from a chat turn
+   * (`server/ci/pluginBridge.js`), and their answer arrived as a finding like
+   * any other \u2014 so it fell through to the generic tail and the user read
+   * \u00ab\u0646\u062a\u06cc\u062c\u0647\u0654 \u062e\u0648\u0627\u0646\u062f\u0646 \u0648\u0636\u0639\u06cc\u062a: # \u0627\u0633\u06a9\u0646 \u0631\u06cc\u0633\u06a9 \u00b7 0x1111 \u2026\u00bb: a report of the ACT of
+   * reading, in front of a markdown report, cut at 220 characters mid-word.
+   *
+   * The plugin already wrote the verdict \u2014 that is the whole reason to run it
+   * \u2014 so the finding's own value IS the headline. This branch is first among
+   * the content branches because a plugin only answers a turn the registry
+   * could not route, which means every other finding on that turn is context,
+   * not the answer: the portfolio sentence would be a true number answering a
+   * question that was not asked.
+   */
+  const pluginFinding = findings.find((f) => String(f.id || '').startsWith('plugin.') && f.status !== 'UNAVAILABLE') || null;
+  if (pluginFinding) {
+    const lead = String(pluginFinding.value ?? pluginFinding.detail ?? '').trim();
+    if (lead) return lead;
+  }
+  /*
    * THIS BRANCH COULD NEVER FIRE.
    *
    * It was guarded by `Number.isFinite(Number(shock.value))`, and `value` is the

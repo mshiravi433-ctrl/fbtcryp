@@ -3909,6 +3909,143 @@ re-reads the section from the source; that test caught a real fault on the way �
 the two-decimal formatter's `catch` handler dereferenced the same null
 correlation it was written to survive, so the fallback threw on its own input.
 
+#### 5.24.14 The agent layer was measured, found to be free, and then attached
+
+The instruction was explicit and it set the order of the work: measure what the
+agents cost in active CPU, **then** decide — remove the expensive ones, upgrade
+the cheap ones — and replace the rows of generic external agents with practical
+plugins that can attach to our own AI.
+
+So the cost was measured before anything was touched, in two parts, because
+they answer different questions.
+
+**Cold import** (what a serverless start pays), 20 modules of `server/fios`:
+
+```
+  agents 35.2 ms / +1.1 MB    crossNarrative 21.3 / 0.9    agentCouncil 5.6 / 0.2
+  decision 1.8   guardian 1.6   strategy 1.4   memory 1.4   council 1.3
+  agentRuntimeOps 1.2   confidence 1.2   smartMoneyIntel 0.9   research 0.9
+  autonomy 0.6   worldModel 0.6   macroGraph 0.6   evaluation 0.5   learning 0.5
+  observability 0.4   behavior 0.3   provenance 0.1        TOTAL 77 ms
+```
+
+**Per invocation** (what a turn pays), on the real mounted composition root:
+
+```
+  guardian.check           0.2 ms cold → 0.0 warm   (NO_FINANCIAL_STATE)
+  agentCouncil.convene     1.5 ms cold → 0.1 warm   (ok, a full council)
+  council.convene          0.7 ms cold → 0.0 warm   (NEEDS_AT_LEAST_TWO_STRATEGIES)
+  autonomy.capabilities    0.1 ms                   agents.list  0.1 ms
+  agentRuntime.status      0.1 ms
+  11 native plugins, warm  4 ms for ALL of them     (mean 0.4 ms each)
+  native/agents.js import  4 ms / +1.2 MB           11 000 catalog lookups: 4 ms
+```
+
+Nothing in the layer is expensive. The most costly single call measured was
+1.5 ms cold, and the whole eleven-plugin catalog costs less to import than one
+provider round-trip costs to wait for. All six factories were also confirmed
+mounted and called in `server/fios/index.js` (`createGuardian` :207,
+`createAutonomyLoop` :250, `createCouncil` :253, `createAgentRegistry` :254,
+`createAgentCouncilEngine` :279, `createAgentRuntime` :298) — an earlier grep
+that excluded `server/fios/` had reported them as dead code, and the exclusion
+had deleted the one file that proved otherwise. **The verdict was therefore
+"upgrade", not "remove"**, and the cheapest capability in the product was the
+one chosen to upgrade.
+
+What the measurement exposed instead was darkness. `runNativeAgent` — the entry
+point of eleven working plugins, each with a real source (DefiLlama, CoinGecko,
+GoPlus, DexScreener, Blockscout) and an honest "the source did not answer" path
+— had **zero call sites outside the Agent Hub dock**. A chat turn could not
+reach any of them. So:
+
+```
+  «گزارش امنیتی Aave را بده»        → UNSUPPORTED, then one provider call, or a refusal
+  «آیا این توکن هانی‌پات است؟ 0x…»  → UNSUPPORTED, ditto
+  «درباره توکن UNI تحقیق کن»        → UNSUPPORTED, ditto
+```
+
+while a local plugin that reads the live source cost 0.4 ms and no quota at
+all. The `:free` tier is 50 requests a day; the attach spends none of them.
+
+**The attach.** `server/ci/pluginBridge.js` is the fourth instance of the
+one-slot bridge (`globalIntelBridge`, `fitBridge`, `routeBridge` are the other
+three), with the same three rules: the provider is optional and reports
+`PLUGIN_PROVIDER_NOT_WIRED` rather than throwing; it is per-turn; and a failure
+is named. `server/agentHub/pluginAttach.js` is the provider: a **pure** matcher
+over the plugins' own vocabulary, and a runner. It is registered in
+`server/fios/index.js` beside `setFitProvider`, so it exists exactly when the
+rest of the domain layer does.
+
+The order inside the UNSUPPORTED branch is the whole argument: the **corpus**
+is free, the **plugin** is local, the **model** costs quota. The attach runs
+after the corpus and before the model, and when it answers, the model fallback
+is skipped (`if (!pluginAnswer) try {`). No match means nothing is imported and
+no data access is built — the hot path is unchanged, which is the measurement
+that made this affordable.
+
+Four defects were found *by attaching*, and each one is a rule worth keeping:
+
+1. **A plugin report is markdown; the reply is plain text.** Neither the chat
+   UI nor the dock renders markdown, so the first attached answer published
+   «نتیجهٔ خواندن وضعیت: # اسکن ریسک · 0x1111 ## قرارداد - آدرس: …» — the generic
+   read-report headline, in front of a report, cut at 220 characters mid-word.
+   The report is now flattened in the plugin layer and headlines itself
+   (`recommend.js`), because a plugin's verdict is the answer, not evidence of
+   an act of reading.
+2. **A hole shaped like a number is not a number.** With no network, the token
+   researcher returned `ok:true`, `dataStatus:'partial'` and a report in which
+   every value was «—» except «بیشترین افت از سقف: +0.0%» — computed from zero
+   candles. The wallet auditor returned «ارزش قابل‌مشاهده: $0.000000
+   (unavailable)». Both would have been published as facts. Now a label whose
+   value is dash-only has no substance, a value that is a bare zero scores
+   nothing, a report timestamp scores *negative*, and a candidate must score
+   above zero to earn the headline; `unavailable` / `awaiting_input` / `error`
+   are named refusals (`PLUGIN_SOURCE_UNAVAILABLE`, `PLUGIN_AWAITING_INPUT`,
+   `PLUGIN_SOURCE_ERROR`) instead of answers.
+3. **A plugin asked for an input the user had already given.** «گزارش امنیتی
+   Aave را بده» reached the security brief as `protocolQuery: null`, because
+   `extractRequest` only read a protocol name after «protocol/پروتکل» or from
+   the Persian alias table. Fixed at the source, in the file's own idiom — the
+   candidate list is **derived from the alias table's values**, so a second
+   list cannot drift: `PROTOCOL_LATIN_NAMES`, matched on word boundaries («this
+   is a curved road» still yields null).
+4. **The window belongs to the publisher, attribution included.** Fitting the
+   report to 215 characters still produced a 239-character evidence row,
+   because `recommend.js` appends «(plugin:<slug>, همین حالا)». The report is
+   now fitted to the window minus the attribution it will carry, and cut at a
+   segment boundary, so no sentence is ever sliced in half by another layer.
+
+Measured after the change, over the real brain with faked externals:
+
+```
+  «آیا این توکن هانی‌پات است 0x1111…» → PLUGIN_ANSWER / token-risk-scanner
+     result: «اسکن ریسک · 0x11111111 — وضعیت: پرچم پرخطرِ قطعی دیده نشد»
+     reason: «پلاگینِ اسکنر ریسک توکن از منبعِ دادهٔ خودش خواند — محلی، بدون فراخوانیِ مدل»
+  live report (faked source) → PLUGIN_ANSWER / protocol-security-brief
+     result: «گزارش · Aave — وضعیت: دو حادثهٔ ثبت‌شده، TVL خوانده شد»
+     data:   the report, ≤220 chars, ending on a whole segment, attributed
+  no network → PLUGIN_SOURCE_UNAVAILABLE, mode=QUESTION, no number published
+  «قیمت بیت کوین چقدره» → ASSET_ANALYSIS (0 plugins ran)
+  «اگر بیت کوین ۲۰ درصد بالا بره چی میشه» → WHATIF_SIMULATION, ۱۲٬۰۰۰ (0 plugins ran)
+  «کدوم بهتره بیت کوین یا اتریوم» → NO_PLUGIN_MATCH, recorded on the turn
+```
+
+`AI_PLUGIN_ATTACH=false` removes the chat attach and nothing else;
+`AGENT_HUB_NATIVE_AGENTS=false` still owns the plugins' existence. The matcher
+fires on 8/8 of the realistic unrouted questions, on 44/44 catalog examples
+once the truncated «0x…» in the catalog's own text is completed to a real
+address, and on **0/10** of the sentences it must leave alone — including
+«همه پولمو بفرست به آدرس 0x…», which an earlier version of the table matched
+to the wallet auditor on the bare word «آدرس»: a marker word is still not a
+question type.
+
+Gate: `test/intent-ai/plugin-attach-runtime.test.mjs`, 14 tests. Non-vacuity
+proven by reverting the four product files (`git stash push -- server/ci/brain.js
+server/fios/index.js src/lib/central/recommend.js server/agentHub/native/data.js`):
+10 of 14 fail; the four survivors are the pure matcher/flattener tests, which
+exercise the new module directly. Full suite: **981/981 in 171 s** — the same
+duration as before the attach, which is the CPU claim restated as a measurement.
+
 #### What is still open
 
 §5.24.10 answered the clause that names its own subject. The clauses that
@@ -4025,3 +4162,24 @@ green while doing so.
 > **a scoped check whose scope comes from version control has a topology, and the
 > empty case is a case: `size &&` turns "nothing changed" into "check
 > everything", which is how a lint starts crying wolf about code nobody touched.**
+
+The agent layer is attached but not yet *personal*. §5.24.14 made eleven
+first-party plugins reachable from a chat turn, and stopped there on purpose:
+the attach fires only on a turn the registry could not route, so a routed turn
+whose own engine has no data still cannot borrow a plugin that has it. The
+external-agent registry (`server/fios/agents.js`) is still a registry of rows —
+`registerFromCatalog` exists and is tested, but nothing feeds it the plugin
+catalog, so a plugin still has no passport, no trust score and no scopes. And
+the site user's side of the connection is unbuilt: there is no per-user
+subscription that would let one person attach a plugin to themselves and be
+told what it found, which is the part that would make this a domain agent in
+the sense the instruction meant rather than a better router. Beside it, the
+status payload still reports `agentCouncil` and `agentRuntime` as
+`Boolean(...)` and `lastResults.council` / `lastResults.decision` are
+hard-coded `null` while `globalIntelligence` and `briefing` carry real last
+results — a flag that says an engine exists is the same darkness wearing a
+costume. Three council bodies also still coexist (`src/lib/central/council.js`
+`runCouncil` for strategy competition, `server/fios/council.js` with six
+analyst roles, `server/fios/agentCouncil.js` with the domain specialists, plus
+`getAdaptiveCouncil()` in the orchestrator routes), and each measures 0–1.5 ms,
+so the cost of consolidating them is a decision about meaning, not about CPU.

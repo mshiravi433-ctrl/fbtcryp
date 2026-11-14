@@ -96,6 +96,8 @@ import { fiFlags } from './flags.js';
 import { createFiRouter, setLendingProvider } from './router.js';
 import { setGlobalIntelProvider } from '../ci/globalIntelBridge.js';
 import { setFitProvider, setMacroGraphProvider, setScenarioProvider } from '../ci/fitBridge.js';
+import { setPluginProvider } from '../ci/pluginBridge.js';
+import { attachPluginAnswer } from '../agentHub/pluginAttach.js';
 import { setRouteProvider, adaptRoutesForIntelligence } from '../ci/routeBridge.js';
 import { setWhyProvider } from '../ci/whyBridge.js';
 import { setConversationProvider, setReplanProvider, setReplanReader } from '../ci/sessionBridge.js';
@@ -913,6 +915,23 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
      "which of these suits me" answer. It takes an owner, so the brain
      gets its own ranking, never a shared one. */
   setFitProvider(fitFor);
+
+  /* The plugin attach (2026-11-11): the ELEVEN first-party plugins in
+     `server/agentHub/native/agents.js` — yield optimizer, token risk scanner,
+     wallet exposure auditor, strategy backtester, smart-money tracker and six
+     more — were reachable only from the Agent Hub dock. `runNativeAgent` had
+     no call site in the brain, so a chat turn that the registry could not
+     route spent a provider call on a generic model answer while a local
+     plugin that reads the live source sat dark.
+
+     This slot is the attach. It costs nothing on the hot path: the matcher is
+     pure and runs only on an UNSUPPORTED turn the corpus already declined,
+     and `pluginAttach.js` does not import the catalog or build a data access
+     until a rule actually fires (measured: 4 ms / 1.2 MB for all eleven, and
+     0.4 ms for a warm run). `AI_PLUGIN_ATTACH=false` turns the chat attach off
+     without touching the dock; `AGENT_HUB_NATIVE_AGENTS=false` turns the
+     plugins off everywhere. */
+  setPluginProvider(attachPluginAnswer);
 
   /* The regime reader (path 12): the macro graph over the global
      snapshot, the world model and the portfolio. It takes an owner, so
