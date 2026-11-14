@@ -179,13 +179,52 @@ test('the headline is about the question that was actually asked', () => {
     'CANCEL_PENDING', 'EXECUTE_REBALANCE', 'CONDITIONAL_ALLOCATION'
   ]);
 
+  /*
+   * MATCH THE GENERIC SENTENCE, NOT THE WORDS "PORTFOLIO VALUE".
+   *
+   * This filter used to be `.includes('ارزش پرتفوی')`, and that is too blunt the
+   * moment an intent has a headline of its own that is legitimately ABOUT the
+   * portfolio's value. A scenario is exactly that: «با افت ۲۰٪، ارزش پرتفوی شما
+   * از ۱۰٬۰۰۰ دلار به ۸٬۰۰۰ دلار می‌رسد» states a direction and two figures —
+   * it is the answer to a what-if, while the generic sentence («ارزش پرتفوی …،
+   * تمرکز اصلی روی …، اهرم ترکیبی …») is a substitute for an answer. Both
+   * branches that produce the generic sentence start with «ارزش پرتفوی» and both
+   * name the concentration and the leverage, so the narrower matcher loses no
+   * coverage of the defect it was written for — and the positive assertion below
+   * pins the row that this narrowing let through, so a regression back to the
+   * generic sentence under a what-if still fails here.
+   */
+  const GENERIC_PORTFOLIO_HEADLINE = /^ارزش پرتفوی|تمرکز اصلی روی.*اهرم ترکیبی/;
   const wrongSubject = rows.filter(
-    (r) => String(r.headline || '').includes('ارزش پرتفوی') && !PORTFOLIO_IS_THE_SUBJECT.has(r.intent)
+    (r) => GENERIC_PORTFOLIO_HEADLINE.test(String(r.headline || '')) && !PORTFOLIO_IS_THE_SUBJECT.has(r.intent)
   );
   assert.deepEqual(
     wrongSubject.map((r) => `${r.intent} → ${r.headline.slice(0, 70)}`),
     [],
     'an intent that read its own engine must be answered from it, not from the portfolio'
+  );
+
+  /*
+   * A SCENARIO MUST READ AS A SCENARIO.
+   *
+   * The what-if row only reaches this gate now: the turn used to end in QUESTION
+   * mode (its own `lab.simulate` step was withheld as a money step that was
+   * missing a destination asset), and the gate only asserts over ANSWER turns.
+   * So the headline it produces is newly visible here, and it is pinned by shape
+   * — a direction, and the value it moves FROM and TO — rather than by one
+   * exact string, so the sentence can be reworded without the gate going blind.
+   */
+  const scenario = rows.find((r) => r.intent === 'WHATIF_SIMULATION');
+  assert.ok(scenario, 'the what-if probe row must answer; a scenario that ends in a question was the defect');
+  assert.match(
+    String(scenario.headline || ''),
+    /(رشد|افت)\s*[۰-۹٬٫]+٪.*از\s*[۰-۹٬٫]+\s*دلار\s*به\s*[۰-۹٬٫]+\s*دلار/,
+    `a scenario headline must carry its direction and both figures: «${scenario.headline}»`
+  );
+  assert.match(
+    String(scenario.headline || ''),
+    /سناریو|پیش‌بینی/,
+    `and it must say it is a scenario, not a forecast: «${scenario.headline}»`
   );
 
   /* The generic tail names a value with no subject. It is the last resort for a

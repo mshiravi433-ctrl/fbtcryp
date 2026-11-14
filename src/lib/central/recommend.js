@@ -78,7 +78,16 @@ export function buildRecommendation({ kind = 'ACTIONABLE', intent = null, risk =
         : 'No recommendation is produced: no trustworthy data was readable to support one.'
     };
   }
-  const headline = makeHeadline({ kind, findings, intent, locale, risk });
+  const derivedConfidence = round(Math.min(
+    0.9,
+    0.34 + Math.min(0.3, evidence.length * 0.07) + (risk?.confidence ? Math.min(0.22, risk.confidence * 0.24) : 0) - (policy && policy.staleSections?.length ? 0.08 * policy.staleSections.length : 0)
+  ), 3);
+  const confidence = derivedConfidence < (risk?.confidence ?? 1) ? derivedConfidence : Math.min(derivedConfidence, risk?.confidence ?? derivedConfidence);
+  /* The headline is built AFTER the confidence is derived, and receives it: a
+     reply that states its own certainty in one section must not state a
+     different certainty in the sentence above it. Two numbers for one idea in
+     one reply is the same defect as one number under the wrong question. */
+  const headline = makeHeadline({ kind, findings, intent, locale, risk, confidence });
   /*
    * ─── THE SECOND HALF, AS A HEADLINE OF ITS OWN ─────────────────────────
    *
@@ -141,17 +150,13 @@ export function buildRecommendation({ kind = 'ACTIONABLE', intent = null, risk =
         findings: legFindings,
         intent: { ...(intent || {}), intentType: legIntent },
         locale,
-        risk
+        risk,
+        confidence
       });
       if (!legHeadline) continue;
       parts.push({ intent: legIntent, asset: leg.asset || null, headline: legHeadline, findings: legFindings.map((f) => f.id) });
     }
   }
-  const derivedConfidence = round(Math.min(
-    0.9,
-    0.34 + Math.min(0.3, evidence.length * 0.07) + (risk?.confidence ? Math.min(0.22, risk.confidence * 0.24) : 0) - (policy && policy.staleSections?.length ? 0.08 * policy.staleSections.length : 0)
-  ), 3);
-  const confidence = derivedConfidence < (risk?.confidence ?? 1) ? derivedConfidence : Math.min(derivedConfidence, risk?.confidence ?? derivedConfidence);
   const candidate = {
     recommendation: headline,
     /* The per-leg headlines. `parts` is empty for every single-intent
@@ -263,7 +268,7 @@ const PORTFOLIO_IS_THE_SUBJECT = Object.freeze(new Set([
   'CONDITIONAL_ALLOCATION'
 ]));
 
-function makeHeadline({ kind, findings, intent, locale, risk }) {
+function makeHeadline({ kind, findings, intent, locale, risk, confidence = null }) {
   const fa = locale === 'fa';
   /* A finding that says "I could not read this" is evidence of a gap, never a
      fact to quote. Every branch below therefore looks only at usable findings, so a
@@ -279,10 +284,26 @@ function makeHeadline({ kind, findings, intent, locale, risk }) {
   const quote = by('quote');
   const exposure = by('exposure');
   const intentType = intent?.intentType || '';
-  if (shock && Number.isFinite(Number(shock.value))) {
+  /*
+   * THIS BRANCH COULD NEVER FIRE.
+   *
+   * It was guarded by `Number.isFinite(Number(shock.value))`, and `value` is the
+   * display string `-20% ⇒ 8000 USD` — a sentence, not a number — so the guard
+   * was false on every turn and the what-if reply fell back to quoting the
+   * finding's own detail. The scenario therefore never had a headline of its
+   * own, and the word «افت» was hardcoded into a sentence that a RISE also
+   * reaches: «اگر ۲۰٪ بالا بره» was going to read as a drop the moment this
+   * branch woke up. The guard now tests the two figures the sentence is built
+   * from, and the direction comes from the scenario's own sign.
+   */
+  if (shock && Number.isFinite(Number(shock.beforeUsd)) && Number.isFinite(Number(shock.afterUsd))) {
+    const shockPct = Number(shock.shockPct);
+    const readablePct = Number.isFinite(shockPct) && shockPct !== 0 ? shockPct : -30;
+    const rise = readablePct > 0;
+    const liquidations = Number(shock.liquidations ?? 0);
     return fa
-      ? `با افت ${fmtNum(Math.abs(Number(shock.shockPct ?? 30)), fa)}٪، ارزش پرتفوی شما از ${fmtUsd(shock.beforeUsd, fa)} به ${fmtUsd(shock.afterUsd, fa)} می‌رسد${shock.liquidations ? ` و ${fmtNum(shock.liquidations, fa)} موقعیت در محدودهٔ لیکوئیداسیون قرار می‌گیرد` : ''}.`
-      : `A ${Math.abs(Number(shock.shockPct ?? 30))}% move takes your portfolio from ${fmtUsd(shock.beforeUsd, fa)} to ${fmtUsd(shock.afterUsd, fa)}${shock.liquidations ? `, with ${shock.liquidations} position(s) inside the liquidation band` : ''}.`;
+      ? `با ${rise ? 'رشد' : 'افت'} ${fmtNum(Math.abs(readablePct), fa)}٪، ارزش پرتفوی شما از ${fmtUsd(shock.beforeUsd, fa)} به ${fmtUsd(shock.afterUsd, fa)} می‌رسد${liquidations ? ` و ${fmtNum(liquidations, fa)} موقعیت در محدودهٔ لیکوئیداسیون قرار می‌گیرد` : ''}. این یک سناریوی خطی روی داراییِ خوانده‌شده است، نه پیش‌بینی قیمت.`
+      : `A ${rise ? '+' : '-'}${Math.abs(readablePct)}% move takes your portfolio from ${fmtUsd(shock.beforeUsd, fa)} to ${fmtUsd(shock.afterUsd, fa)}${liquidations ? `, with ${liquidations} position(s) inside the liquidation band` : ''}. This is a linear scenario over the holdings that were read, not a price forecast.`;
   }
   if (health && intentType.includes('LOAN')) {
     return fa
@@ -377,7 +398,28 @@ function makeHeadline({ kind, findings, intent, locale, risk }) {
       const lead = fa
         ? (firstFa || `${fmtNum(lines.length, fa)} خط دلیل از همان تصمیمی که واقعاً گرفته شد`)
         : (typeof first === 'string' ? first : (first?.text || String(first)));
-      return `${lead}${tail}`;
+      /*
+       * THE WEIGHT OF THE ANSWER IS PART OF THE ANSWER.
+       *
+       * "How sure are you about this?" reached this block and was answered with
+       * the SHAPE of the explanation — how many reason lines, how many
+       * falsifiers — while the figure that actually answers it travelled on the
+       * finding as `why.confidence` (the same number the confidence section
+       * shows) and was never spoken. The counts are the warrant for a
+       * confidence, not a substitute for one, so the number leads and the
+       * warrant follows. When the engine published no confidence, nothing is
+       * said and nothing is invented.
+       */
+      /* The reply's OWN derived confidence, not the copy the decision bundle
+         carried: the bundle's figure is rounded on its way through the engine and
+         came out one point below the number the confidence section prints, so the
+         same reply said 73% in its sentence and 74% beside it. */
+      const whyConf = Number(confidence ?? why.confidence);
+      const whyPct = Number.isFinite(whyConf) && whyConf > 0 ? round(whyConf * 100, 0) : null;
+      const confLead = whyPct === null
+        ? ''
+        : (fa ? `اطمینانِ این پاسخ ${fmtNum(whyPct, fa)}٪ است — ` : `at ${whyPct}% confidence — `);
+      return `${confLead}${lead}${tail}`;
     }
     return fa
       ? 'دلیلی خوانده نشد؛ چیزی ساخته نمی‌شود.'

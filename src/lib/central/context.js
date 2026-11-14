@@ -608,7 +608,7 @@ const FRACTIONS = [
 
 export function extractAmounts(text) {
   const s = normalizeText(text);
-  const out = { amountUsd: null, amountRaw: null, percent: null, targetUsd: null };
+  const out = { amountUsd: null, amountRaw: null, percent: null, percentDirection: null, targetUsd: null };
   const money = s.match(/(\d+(?:[.,]\d+)?)\s*(?:usd|دلار\$?|\$)\s*([a-z]{2,6})?/i) || s.match(/\$\s*(\d+(?:[.,]\d+)?)/i);
   if (money) out.amountUsd = usableNumber(String(money[1]).replace(',', '.'));
   const qty = s.match(/(\d+(?:[.,]\d+)?)\s*(btc|eth|usdc|usdt|sol|bnb|dai|avax|link|arb|op|pol)/i)
@@ -626,6 +626,44 @@ export function extractAmounts(text) {
   if (pctOf) out.sharePct = usableNumber(Number(pctOf[1].replace(',', '.')));
   const pct = s.match(/(\d+(?:[.,]\d+)?)\s*(?:درصد|٪|%|percent)/i);
   if (pct) out.percent = usableNumber(String(pct[1]).replace(',', '.'));
+  /*
+   * A MULTIPLIER WORD IS A PERCENT TOO.
+   *
+   * «فرض کن بیت کوین دو برابر بشه» and «اگر نصف بشه» were routed to
+   * WHATIF_SIMULATION — the classifier's own pattern list names both — and
+   * then produced `percent: null`, so the simulation fell back to its default
+   * −30% and answered a question nobody asked. A doubling is +100% and a
+   * halving is −50%; the arithmetic is the app's job, not the user's.
+   */
+  if (out.percent === null) {
+    const times = s.match(/(دو|سه|چهار|\btwo|\bthree|\bfour)\s*[\u200c\s]*(برابر|\btimes\b|x\b)/i);
+    if (times) {
+      const word = String(times[1]);
+      out.percent = /سه|three/i.test(word) ? 200 : /چهار|four/i.test(word) ? 300 : 100;
+      out.percentDirection = 'up';
+    } else if (/(نصف|نیم)\s*[\u200c\s]*(بشه|شود|شود|کند|کنه)|\bhalve[sd]?\b/i.test(s)) {
+      out.percent = 50;
+      out.percentDirection = 'down';
+    }
+  }
+  /*
+   * THE DIRECTION IS PART OF THE SCENARIO, AND ONLY THE SENTENCE KNOWS IT.
+   *
+   * «اگر بیت کوین ۲۰٪ بالا بره» and «اگر بیت کوین ۲۰٪ بریزه» carry the SAME
+   * magnitude and are opposite questions; every consumer of `percent` forced the
+   * sign negative, so an upward scenario was answered with a downward number —
+   * measured: `10000 → 8000` for both. The movement verb decides; the outcome
+   * noun (ضرر / سود) is only a weak fallback, because «چقدر ضرر می‌کنم» describes
+   * what the user wants to know, not which way the market moved.
+   */
+  const MOVE_UP = /(بالا\s*[\u200c\s]*(بر(?:ه|ود|و|یم|ید)|رفتن)|بره\s*[\u200c\s]*بالا|افزایش|رشد\s*[\u200c\s]*(کند|کنه|پیدا|بکند)|صعود|\bdouble[sd]?\b|\btriple[sd]?\b|\brise[s]?\b|\bgain[s]?\b|\bpump[s]?\b|\brally\b|\bmoon\b|\bup\b|\bhigher\b)/i;
+  const MOVE_DOWN = /(بریز(?:ه|د|یم|ید)|ریخت|سقوط|بیفت(?:ه|د)|بیافته|پایین\s*[\u200c\s]*(بیاد|بیاید|بره|رفتن)|کم\s*[\u200c\s]*بشه|افت\s*[\u200c\s]*(کند|کنه|پیدا)?|\bhalve[sd]?\b|\bdrop[s]?\b|\bfall[s]?\b|\bcrash(?:es)?\b|\bdecline[s]?\b|\bdump[s]?\b|\bdown\b|\blower\b|\bcorrection\b)/i;
+  if (out.percentDirection === null) {
+    if (MOVE_UP.test(s)) out.percentDirection = 'up';
+    else if (MOVE_DOWN.test(s)) out.percentDirection = 'down';
+    else if (/ضرر|زیان|خسارت|\bloss(?:es)?\b/i.test(s)) out.percentDirection = 'down';
+    else if (/سود|بازده|\bprofit\b/i.test(s)) out.percentDirection = 'up';
+  }
   const target = s.match(/(?:به|to)\s*(\d{1,3}(?:[,.]\d{3})*)\s*(?:هزار|k|thousand)?\s*(?:دلار|usd|\$)?/i);
   if (target) {
     const raw = Number(String(target[1]).replace(/[,.]/g, ''));
@@ -636,6 +674,7 @@ export function extractAmounts(text) {
     amountUsd: usableNumber(out.amountUsd),
     amountRaw: out.amountRaw && usableNumber(out.amountRaw.value) !== null ? out.amountRaw : null,
     percent: usableNumber(out.percent),
+    percentDirection: out.percentDirection || null,
     sharePct: usableNumber(out.sharePct),
     targetUsd: usableNumber(out.targetUsd),
     numbers: numberPositions(s)

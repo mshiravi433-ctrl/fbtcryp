@@ -3788,6 +3788,127 @@ exactly the part that must not be skimmed.
 > right behaviour for at least one release while the code printed a row
 > count.
 
+#### 5.24.13 The machine computed the answer and then asked a question instead
+
+This came from an audit rather than a bug report: twenty-seven hard domain
+sentences over the real brain, each tagged with the faculty it needs, printing
+the rendered reply. Eleven axes looked healthy. One was dark in three places at
+once, and it is the faculty the whole product is about — reasoning about a
+world that has not happened yet.
+
+```
+  «اگر بیت کوین ۲۰ درصد بالا بره چی میشه»   → QUESTION, no result section
+  «اگر بیت کوین ۲۰ درصد بریزه چی میشه»     → QUESTION, no result section
+  «فرض کن بیت کوین دو برابر بشه»           → QUESTION, no result section
+  «اگر بیت کوین نصف بشه چقدر ضرر میکنم»    → QUESTION, no result section
+  «اگر بازار ۵۰ درصد سقوط کنه …»          → QUESTION, no result section
+
+  after
+  «با رشد ۲۰٪، ارزش پرتفوی شما از ۱۰٬۰۰۰ دلار به ۱۲٬۰۰۰ دلار می‌رسد.
+   این یک سناریوی خطی روی داراییِ خوانده‌شده است، نه پیش‌بینی قیمت.»
+  «با رشد ۱۰۰٪، … به ۲۰٬۰۰۰ دلار می‌رسد.»
+  «با افت ۵۰٪، … به ۵٬۰۰۰ دلار می‌رسد و ۱ موقعیت در محدودهٔ لیکوئیداسیون
+   قرار می‌گیرد.»
+```
+
+Every one of those turns had **already computed its answer**. The `whatif`
+finding carried `10000 → 8000 USD, 0 position(s) liquidated` while the reply
+rendered a single question section and dropped it. Three independent causes:
+
+**1. A scenario was probed as if it were a trade.** `WHATIF_SIMULATION` is
+PREPARE, and the money-step check treated *every* `simulate` step of a
+money-capable intent as a trade probe, so the shock was asked for a pair and
+found none: «برای اینکه عدد دقیق بدهم، این لازم است: ارز مقصد». A destination
+asset for a question about a price move — the same shape as §5.24.11's
+sell-order defect, where the question asked could not unblock the turn. And a
+missing money input does not merely ask, it **withholds the step**, so `lab` was
+never even called; the brain's own fallback recomputed the shock, and QUESTION
+mode threw that away too. The distinction is now read from the step's own input
+— `lab.simulate` declares `{ scenario: 'shock', shockPct }`, while
+`swap.simulate` / `bridge.simulate` / `lending.simulate` declare no scenario and
+each depends on a `prepare` step that already needs the pair. The rule is about
+what the step computes, not about the name of its intent.
+
+**2. The sign was hardcoded negative.** `-(Math.abs(percent))` in the binding
+and `Math.abs(percent) * -1` in the fallback. «۲۰٪ بالا بره» and «۲۰٪ بریزه»
+both produced `10000 → 8000`: an upward scenario answered with a downward
+number, which is worse than no answer because it is confident. The classifier's
+own WHATIF pattern list already recognises «بالا برود / افزایش / دو برابر»; the
+arithmetic ignored what the lexicon had seen. Direction now comes from the
+sentence's movement verb, with the outcome noun (ضرر / سود) only as a weak
+fallback, because «چقدر ضرر می‌کنم» says what the user wants to know, not which
+way the market moved.
+
+**3. A multiplier word was not a percentage.** «دو برابر بشه» and «نصف بشه»
+routed correctly and extracted `percent: null`, so the −30% default answered a
+question nobody asked: a doubling rendered as a crash. They are +100% and −50%,
+and doing that arithmetic is the app's job — the same argument the code already
+makes for «نصف پرتفویم رو بفروش».
+
+**A headline branch that could never fire.** `makeHeadline` has had a dedicated
+scenario sentence all along, guarded by
+`Number.isFinite(Number(shock.value))` — and `value` is the display string
+`-20% ⇒ 8000 USD`. The guard was false on every turn, so the branch was dead
+and the reply fell back to quoting the finding's detail. Waking it up needed one
+more fix: the sentence began «با **افت** …», so a rise would have been described
+as a drop the moment it woke. The guard now tests the two figures the sentence
+is built from, and the direction comes from the scenario's sign.
+
+**The lab was computing something nobody read.** `lab.simulate` returns a BTC/ETH
+correlation beside the shock. No consumer existed. On a concentrated book the
+question behind a shock is *«does the rest of my book move with it?»*, so it is
+now rendered when it is readable — «همبستگیِ BTC/ETH ۱٫۰۰ (۳۳ نمونه): هر دو با
+هم می‌روند و پراکندگی بین این دو سپر نیست» — and says nothing when it is not.
+It doubles as the gate's reachability marker: the brain's fallback cannot
+produce a coefficient, so a reply that carries one proves the module ran.
+Two details mattered: a coefficient reads as `۱٫۰۰`, not `۱` (`faNum` drops
+trailing zeros, and a bare «۱» reads as a count), and the clause had to be short
+enough to survive `recommend.js`'s 220-character evidence window — the first
+version was cut mid-sentence, and a Persian clause with its verb missing reads
+as a broken string, not as a shorter fact.
+
+**Half of introspection.** «چرا این را گفتی؟» was routed to the why engine and
+answered from the brain's own decision bundle; «چقدر مطمئنی این پیشنهاد
+درسته؟» fell through to the registry paragraph listing what the machine can do.
+The bundle that same engine receives already carries `confidence.overall` and the
+evidence count, so the machine could explain its answer and could not say how
+much weight it carries. It now leads with the number:
+
+```
+  «اطمینانِ این پاسخ ۷۴٪ است — ۶ خط دلیل از همان تصمیمی که واقعاً گرفته شد —
+   و ۴ شرطِ نقض‌کننده نام برده شده‌اند: «اگر BTC ۱۰٪ سقوط کند چه می‌شود؟».»
+```
+
+Which exposed a smaller version of the same defect: the headline said **73%**
+while the reply's own `confidence` section said **74%**. The bundle's copy of the
+figure is rounded on its way through the engine; two numbers for one idea in one
+reply teaches the reader to trust neither. The derived confidence is now computed
+before the headline is built and passed into it, so the sentence and the section
+agree by construction rather than by luck. The patterns claim only questions
+about the ANSWER — a certainty word, or a referent to our own output — so
+«قیمت بیت کوین چقدر دقیقه» keeps its market route, and a gate pins that.
+
+**The gate that flagged the fix was right, and was tightened rather than
+exempted.** `intent-reach-gate` asserts that no intent is headlined with the
+generic portfolio sentence, and it matched on `.includes('ارزش پرتفوی')` — which
+the new scenario headline legitimately contains, because a scenario *is* about
+the portfolio's value. Adding `WHATIF_SIMULATION` to the exemption set would
+have made the gate blind to exactly the regression it was written for. Instead
+the matcher now recognises the generic sentence's own shape (`^ارزش پرتفوی`, or
+«تمرکز اصلی روی … اهرم ترکیبی»), and a positive assertion pins the newly visible
+row: a scenario headline must carry a direction and both figures, and must say it
+is a scenario.
+
+Gated by `test/intent-ai/counterfactual-runtime.test.mjs` (7 tests, real brain,
+real composition root, faked externals), wired into the suite at **74 gate
+files**. Against the pre-fix product **6 of the 7 fail**; the seventh — that the
+new patterns must not steal a question about an asset — passes in both, and is
+the guard against over-correcting. The unreadable-correlation case is built at
+the source seam, not by seeding state, because the plan's own `markets.read`
+re-reads the section from the source; that test caught a real fault on the way —
+the two-decimal formatter's `catch` handler dereferenced the same null
+correlation it was written to survive, so the fallback threw on its own input.
+
 #### What is still open
 
 §5.24.10 answered the clause that names its own subject. The clauses that
@@ -3813,6 +3934,37 @@ rather than three fast ones. And the compound-question machinery splits
 «بازار و ییلد» and «ریسک و بازده» correctly now, but only because each
 leg happens to classify on its own; a leg whose subject is not a bare
 topic noun still has no such guarantee.
+
+The same audit measured seven more gaps that are diagnosed but deliberately not
+fixed yet, because each needs a decision rather than a patch. «منبع این عدد
+چیه» is still unrouted: the why engine's decision bundle carries no `source`
+field, so routing it there would answer a different question — while the `data`
+section of every reply already publishes provenance beside each figure
+(«wallet-service, همین حالا»). «چطور تا یک سال دیگه به ۵۰ هزار دلار برسم»
+misses `GOAL_PLAN` because the pattern's window is `تا .{0,24}(برسم)` and the
+sentence needs 28 characters — but widening it alone would route more sentences
+into an answer that currently headlines the generic portfolio sentence instead of
+the solved variable, so the answer has to lead before the route does. «کدوم
+بهتره بیت کوین یا اتریوم» is `UNSUPPORTED` even though `OPPORTUNITY_FIT`'s own
+comment claims `YIELD_OPPORTUNITY` owns «کدام بهتر است» — its patterns need a
+yield noun, so the comment describes a behaviour the code does not have.
+«همه پولمو بفرست به آدرس 0x…» has no transfer intent and answers with an essay
+about what a wallet is, which is neither a refusal nor a confirmation. «سود قطعی
+و تضمینی میدی» gets the routing paragraph instead of the domain's own truth
+(«APR یک عدد گذشته‌نگر است، نه وعده»), which the yield finding already says
+elsewhere. «اگر ۱۰۰ دلار بیت کوین بفروشم چی میشه» still becomes
+`EXECUTE_SWAP`/ACTION: the quote is the right number for that question, so the
+defect is the framing, and changing the permission of a sized sell needs the
+counterfactual marker scoped at the clause level first — the lesson of §5.24.9.
+And the conversation's goal question rides along on 26 of 27 turns, including
+turns where the goals section already holds the answer it is asking for.
+
+`runSteps` also still skips a step whose module is not registered with a bare
+`continue` — no ledger entry, no plan problem, no capability mark. Nothing bit
+on it this round (`lab` was registered and was withheld instead), but it is the
+hole that would let a future plan name a module that does not exist and stay
+green while doing so.
+
 
 #### The rule this leaves behind
 

@@ -719,8 +719,28 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
      */
     const intentPermission = intent?.permission || classification?.definition?.permission || 'READ';
     const intentCanMoveMoney = intentPermission === 'EXECUTE' || intentPermission === 'PREPARE';
+    /*
+     * A SIMULATION THAT DECLARES ITS OWN SCENARIO IS NOT A TRADE.
+     *
+     * WHATIF_SIMULATION is PREPARE, so every `simulate` step of it was probed
+     * for a pair and an amount. Its own plan says otherwise:
+     * `lab.simulate` carries `{ scenario: 'shock', shockPct }` — arithmetic over
+     * the owner's OWN numbers, with no pair in it anywhere. The probe therefore
+     * asked «ارز مقصد» for a price shock, and because a missing money input
+     * withholds the step (below), `lab` was never even read: the turn computed a
+     * shock answer through the fallback, then rendered a QUESTION and dropped it.
+     * Measured: five what-if sentences, five `mode=QUESTION`, zero results.
+     *
+     * `swap.simulate` / `bridge.simulate` / `lending.simulate` keep the probe:
+     * they declare no scenario and each depends on a `prepare` step that already
+     * needs the pair. The distinction is read from the step's own input, not from
+     * the intent's name.
+     */
+    const isScenarioSimulation = (st) => st.operation === 'simulate'
+      && Boolean(st.input && (st.input.scenario !== undefined || 'shockPct' in st.input));
     const moneySteps = intentCanMoveMoney
-      ? steps.filter((st) => st.operation === 'quote' || st.operation === 'prepare' || st.operation === 'simulate' || st.operation === 'execute')
+      ? steps.filter((st) => st.operation === 'quote' || st.operation === 'prepare' || st.operation === 'execute'
+        || (st.operation === 'simulate' && !isScenarioSimulation(st)))
       : steps.filter((st) => st.operation === 'quote' || st.operation === 'prepare' || st.operation === 'execute');
     let missingInputs = [];
     let boundMoneyInput = null;
@@ -1767,7 +1787,15 @@ function bindStepInput(input = {}, entities, state, context, owner) {
   if (!out.asset) out.asset = entities.asset || context?.page?.selectedAsset || null;
   if (!out.network && entities.network) out.network = entities.network;
   if (!out.amountBasis && out.amountUsd !== null && usableNumber(entities.amountUsd) === null) out.amountBasis = entities.amount?.value != null ? 'token-quantity × live price' : entities.sharePct != null ? `${entities.sharePct}% of read value` : null;
-  if (out.shockPct === undefined && entities.percent) out.shockPct = -(Math.abs(Number(entities.percent)) || 30);
+  /* THE MAGNITUDE IS NOT THE MOVE.
+     `$percent` binds to the number the sentence said, and a number has no
+     direction. Forcing the sign negative answered «۲۰٪ بالا بره» with a 20%
+     drop, so the sign comes from the sentence's own movement verb; with no
+     magnitude at all, the scenario the interface itself offers (−30%) stands. */
+  if (out.shockPct !== undefined || entities.percent) {
+    const shockMagnitude = Math.abs(Number(out.shockPct ?? entities.percent)) || 30;
+    out.shockPct = entities.percentDirection === 'up' ? shockMagnitude : -shockMagnitude;
+  }
   if (!out.owner) out.owner = owner;
   return out;
 }
@@ -2185,8 +2213,70 @@ function buildFindings({ intent, classification, state, results, risk, readResul
   }
 
   if (intent.intentType === 'WHATIF_SIMULATION' || context.followUp.kind === 'QUERY_LAST_ASSET') {
-    const shock = stepResults.simulation?.deltaUsd !== undefined ? stepResults.simulation : simulateShock({ portfolio, lending: lendingSection, futures: state.sections.futures.data, dydx: state.sections.dydx.data }, Math.abs(Number(classification.entities.percent) || 30) * -1);
-    if (shock.status === 'OK') findings.push({ id: 'whatif', value: `−${Math.abs(shock.shockPct)}% ⇒ ${shock.valueAfterUsd} USD`, shockPct: shock.shockPct, beforeUsd: shock.valueBeforeUsd, afterUsd: shock.valueAfterUsd, liquidations: shock.liquidation.count, detail: `${shock.valueBeforeUsd} → ${shock.valueAfterUsd} USD, ${shock.liquidation.count} position(s) liquidated, ${shock.nearLiquidation.count} near it`, reason: shock.liquidation.count ? `${shock.liquidation.count} position(s) would be liquidated at this move — the deleverage decision is now, not then` : 'no position liquidates at this move', source: 'lab + portfolio-service', dataAt: shock.at });
+    /* Same rule as the binding above: the fallback must not answer a different
+       scenario than the one asked, or the two paths disagree about the sign. */
+    const scenarioUp = classification.entities.percentDirection === 'up';
+    const scenarioMagnitude = Math.abs(Number(classification.entities.percent) || 30);
+    const shock = stepResults.simulation?.deltaUsd !== undefined ? stepResults.simulation : simulateShock({ portfolio, lending: lendingSection, futures: state.sections.futures.data, dydx: state.sections.dydx.data }, scenarioUp ? scenarioMagnitude : -scenarioMagnitude);
+    if (shock.status === 'OK') {
+      /* The finding is the answer to the question that was asked, so it is
+         published in BOTH languages like every other finding: `recommend.js`
+         renders `detailFa`/`reasonFa` for a Persian reply and falls back to
+         English silently when they are missing — which is how a Persian
+         reply came to carry an English clause nobody gated. */
+      const shockPctNum = Number(shock.shockPct);
+      const shockUp = shockPctNum >= 0;
+      /*
+       * THE LAB ALREADY COMPUTED THIS AND NOBODY READ IT.
+       *
+       * `lab.simulate` returns a BTC/ETH correlation beside the shock, and no
+       * consumer existed — the value was computed every turn and dropped, which
+       * is the same darkness as an engine nobody calls. It matters exactly here:
+       * on a concentrated book the question behind a shock is «does the rest of
+       * my book move with it?», and a coefficient over the history that was
+       * actually read is the honest answer to that. It is rendered only when the
+       * lab produced a usable coefficient over enough samples; when it did not,
+       * nothing is said and nothing is guessed.
+       */
+      const corr = shock.correlation && Number.isFinite(Number(shock.correlation.btcEth))
+        && Number(shock.correlation.samples) >= 5
+        ? { c: Number(shock.correlation.btcEth), n: Number(shock.correlation.samples) }
+        : null;
+      /* A coefficient is read to two decimals everywhere else in finance; `faNum`
+         drops the trailing zeros, so 1.00 rendered as "1" and the sentence lost
+         the fact that this is a measured ratio rather than a count. */
+      /* Guarded on `corr` itself: an unreadable correlation is the common case
+         (a market read with no history behind it), and the fallback inside this
+         catch read `corr.c` again — so the handler threw on the very input it
+         was written for. A gate that builds the unreadable case at the source
+         seam caught it; a gate that only seeded the readable one would not. */
+      const corrDigits = !corr ? null : (() => {
+        try { return new Intl.NumberFormat('fa-IR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(corr.c); } catch { return faNum(corr.c, 2); }
+      })();
+      const correlationFa = corr
+        /* Kept short on purpose: `recommend.js` publishes an evidence detail
+           through a 220-character window, and a clause that overruns it is cut
+           mid-sentence — a Persian sentence with its verb missing reads as a
+           broken string, not as a shorter fact. */
+        ? `. همبستگیِ BTC/ETH ${corrDigits} (${faNum(corr.n, 0)} نمونه): ${Math.abs(corr.c) >= 0.7 ? 'هر دو با هم می‌روند و پراکندگی بین این دو سپر نیست' : 'این دو هم‌راستا نیستند'}`
+        : '';
+      const correlationEn = corr
+        ? `; BTC/ETH correlation over the read history is ${corr.c.toFixed(2)} (${corr.n} samples)`
+        : '';
+      findings.push({
+        id: 'whatif',
+        value: `${shockUp ? '+' : '-'}${Math.abs(shockPctNum)}% ⇒ ${shock.valueAfterUsd} USD`,
+        shockPct: shock.shockPct, beforeUsd: shock.valueBeforeUsd, afterUsd: shock.valueAfterUsd,
+        liquidations: shock.liquidation.count,
+        detail: `${shock.valueBeforeUsd} → ${shock.valueAfterUsd} USD at ${shockUp ? '+' : '-'}${Math.abs(shockPctNum)}%, ${shock.liquidation.count} position(s) liquidated, ${shock.nearLiquidation.count} near it${correlationEn}`,
+        detailFa: `${faUsd(shock.valueBeforeUsd)} → ${faUsd(shock.valueAfterUsd)} در سناریوی ${shockUp ? '+' : ''}${faPct(shockPctNum)}؛ ${faNum(shock.liquidation.count, 0)} موقعیت لیکوئید می‌شود و ${faNum(shock.nearLiquidation.count, 0)} موقعیت به آستانهٔ لیکوئیداسیون می‌رسد${correlationFa}`,
+        reason: shock.liquidation.count ? `${shock.liquidation.count} position(s) would be liquidated at this move — the deleverage decision is now, not then` : 'no position liquidates at this move',
+        reasonFa: shock.liquidation.count
+          ? `${faNum(shock.liquidation.count, 0)} موقعیت در همین حرکت لیکوئید می‌شود — تصمیمِ کاهش اهرم همین حالا است، نه بعد از حرکت`
+          : 'در این حرکت هیچ موقعیتی لیکوئید نمی‌شود. این یک سناریوی محاسبه‌شده روی داراییِ خوانده‌شده است، نه پیش‌بینی قیمت',
+        source: 'lab + portfolio-service', dataAt: shock.at
+      });
+    }
   }
 
   if (intent.intentType === 'GOAL_PLAN' || intent.intentType === 'PROFIT_PLAN') {

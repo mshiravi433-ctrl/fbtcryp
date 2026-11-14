@@ -215,7 +215,26 @@ const RULES = Object.freeze([
       /\bwhy\s+(this|that|it)\s+(recommendation|suggestion|answer|choice|path|route)/i,
       /\bwhy\s+did\s+you\s+(say|recommend|choose|pick)\b/i,
       /\b(reason|reasoning|rationale|justify)\b.{0,26}\b(recommendation|suggestion|answer|decision|choice)\b/i,
-      /\bwhy\b.{0,26}\b(recommend|suggest|choose|pick)\b/i
+      /\bwhy\b.{0,26}\b(recommend|suggest|choose|pick)\b/i,
+      /*
+       * THE SECOND HALF OF INTROSPECTION.
+       *
+       * «چرا این را گفتی؟» was routed here and answered from the brain's own
+       * decision bundle, but «چقدر مطمئنی این پیشنهاد درسته؟» fell through to
+       * the registry paragraph that lists what the machine can do — while the
+       * bundle the same engine receives already carries `confidence.overall`
+       * and the evidence count. A machine that can explain its answer but
+       * cannot say how much weight that answer carries is missing half of the
+       * same faculty. These patterns claim only questions about the ANSWER
+       * (its certainty, its reliability); a question about an asset's price or
+       * about the market keeps its own route, and nothing here names an asset.
+       */
+      /(چقدر|تا[\s\u200c]چه[\s\u200c]حد|میزان|چه[\s\u200c]قدر)[\s\u200c]*(مطمئن|مطمین|مطمئنی|مطمینی|یقین|اعتماد|اطمینان|معتبر)/i,
+      /(این[\s\u200c]*(پیشنهاد|عدد|حرف|جواب|جمله|تحلیل|توصیه|نتیجه)|پیشنهادت|تحلیلت|جوابت|حرفت|عددت)[\s\u200c]*(را[\s\u200c]*)?(چقدر|تا[\s\u200c]چه[\s\u200c]حد)?[\s\u200c]*(مطمئنی|مطمینی|دقیق|دقیقه|درست|معتبر|قابل[\s\u200c]اتکا|اعتبار)/i,
+      /\bhow\s+(confident|sure|certain)\b/i,
+      /\bare\s+you\s+(sure|certain|confident)\b/i,
+      /\b(confidence|certainty|reliability)\s+(level|score|rating)\b/i,
+      /\bhow\s+(much|well)\s+.{0,16}\b(trust|rely)\b/i
     ],
     requires: ['why-decision']
   },
@@ -1347,6 +1366,7 @@ export function extractEntities(message, { context = {}, state = {} } = {}) {
     amountUsd: amounts.amountUsd,
     amount: amounts.amountRaw,
     percent: amounts.percent,
+    percentDirection: amounts.percentDirection ?? null,
     sharePct: amounts.sharePct ?? null,
     assetPositions: assetsWithPositions,
     targetUsd: amounts.targetUsd,
