@@ -25,11 +25,22 @@ import { GlyphSortAsc, GlyphSortDesc } from './MarketGlyphs.jsx';
  *   • The right cell — two stacked buttons: PRICE over the horizon change, in
  *     the same order the price and the pill are stacked in the row.
  *
- * ─── WHY IT IS NOT STICKY ──────────────────────────────────────────────────
+ * ─── WHY IT IS NOT STICKY *IN ITS OWN RULE* (2026-11-12, REVISED) ─────────
  * `market-tabs.css` already has a sticky tab strip. A second sticky bar under
  * it would take 34px from a 390px-wide phone's list for a label row that is
  * useful on the first screen and noise after it. A header that scrolls away is
- * the honest trade at this width.
+ * the honest trade AT THAT WIDTH.
+ *
+ * It is the wrong trade at 1440px, where a reader forty rows into a five-column
+ * table is looking at two stacked numbers in the right cell with nothing left
+ * on screen to say which is the price and which is the change. So the row now
+ * carries `data-sticky="true"`, and `market-benchmark.css` §2 turns that into
+ * `position: sticky` ABOVE 620px only — the phone keeps exactly the decision
+ * described above, and this rule stays true where it was made.
+ *
+ * The flag is an explicit attribute rather than a bare class so the behaviour
+ * cannot arrive by accident: a component that renders this header without
+ * asking for stickiness gets none.
  *
  * ─── WHY ARIA ROLES AND NOT A <table> ──────────────────────────────────────
  * The rows below are `<button>`s inside `<div>`s — a whole row has to be one tap
@@ -61,6 +72,7 @@ function MarketColumnHeader({
   sortKey,
   sortDir,
   onSort,
+  sticky = true,
 }) {
   const { t } = useTranslation();
   const horizonLabel = t(`market.horizon.${horizon}`);
@@ -113,6 +125,10 @@ function MarketColumnHeader({
       className="mx-colhead"
       role="row"
       data-testid="market-column-header"
+      /* `market-benchmark.css` §2 reads this and makes the row sticky above
+         620px. Defaulted true above; see the note there for why the phone
+         keeps a non-sticky header. */
+      data-sticky={sticky ? 'true' : undefined}
       data-horizon={horizon}
       aria-label={t('market.columnsAria')}
     >
@@ -160,5 +176,14 @@ export function changeKey(horizon) {
   if (horizon === '7d') return 'change7d';
   return 'change';
 }
+
+/*
+ * The sticky flag is opt-OUT, not opt-in at the call site: this is the market
+ * table's header and the market table is the only thing that renders it, so
+ * requiring `Market.jsx` to pass a boolean would be a second place to keep the
+ * same decision. A future table that must NOT stick passes `sticky={false}`.
+ * The default lives in the destructuring above — `defaultProps` is deprecated
+ * on function components and warns at runtime in React 19.
+ */
 
 export default memo(MarketColumnHeader);

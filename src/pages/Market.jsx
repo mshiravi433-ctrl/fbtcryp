@@ -70,6 +70,18 @@ import '../styles/market-hero-banner.css';
  */
 import '../styles/market-surface.css';
 /*
+ * ─── THE BENCHMARK PASS, BETWEEN THE SCALE AND THE BUDGET ─────────────────
+ * «از بهترین های این ام است از صفحات مهم مثل باینس الهام بگیر» — three
+ * behaviours a mature market table has and this one did not: a row that is one
+ * pointer target including its action cell, column labels that follow the
+ * scroll on a wide screen, and a phone hero that gives its width to the copy
+ * instead of to a drawn sculpture. `market-benchmark.css` owns all three and
+ * the reason for each; it is imported here because it must win `market-surface`
+ * (it moves the banner onto that scale) and must still lose to the stop policy
+ * below it.
+ */
+import '../styles/market-benchmark.css';
+/*
  * ─── THE SCROLL BUDGET, LAST ──────────────────────────────────────────────
  * The five sheets above are the design layers (one per pass, each with its
  * own regression pins). This one is the stop policy: which ambient loops may
