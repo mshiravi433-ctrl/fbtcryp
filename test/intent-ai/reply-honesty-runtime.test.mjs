@@ -189,3 +189,54 @@ test('a Persian reply carries no English clause — the reason section included'
     }
   }
 });
+
+test('«is it low?» is answered with the binding depth, not with the shape of the read', async () => {
+  /*
+   * The headline of a LIQUIDITY_RISK turn used to be
+   * «۲ استخر خوانده شد؛ ۰ پرچم زیان ناپایدار دارند و ۲ ندارند» — a
+   * bookkeeping sentence whose second half is arithmetic on the first, and
+   * from which nobody can tell whether liquidity is low. The code's own comment
+   * above that finding already said it "leads with the impermanent-loss flag and
+   * the depth"; it did neither. The depth was in the data all along (`tvlUsd`
+   * per pool) and the shallowest pool is the one a position would have to exit
+   * through.
+   */
+  const { section } = await ask('نقدینگی را بررسی کن و بگو کم است یا نه');
+  const headline = String(section('result')?.value ?? '');
+  assert.ok(headline, 'the turn produced no headline at all');
+  assert.match(headline, /کمترین عمق/,
+    `the binding statistic must be named, got «${headline}»`);
+  assert.match(headline, /دلار/, `and it must carry a figure, got «${headline}»`);
+  assert.doesNotMatch(headline, /استخر خوانده شد/,
+    `reporting how many rows arrived is not an answer: «${headline}»`);
+
+  /* The qualifier is the reason the number is safe to read, so it is gated too —
+     with a pool that actually carries the flag, injected through the same source
+     seam the deployment uses. */
+  const saved = { pools: null };
+  try {
+    setCiSource('yields', async () => ({
+      ok: true,
+      pools: [
+        { id: 'il', project: 'uniswap-v3', chain: 'Arbitrum', symbol: 'ETH/USDC', apy: 41, tvlUsd: 9000000, risk: 'MEDIUM', ilRisk: true },
+        { id: 'clean', project: 'aave-v3', chain: 'Ethereum', symbol: 'USDC', apy: 4.1, tvlUsd: 1200000000, risk: 'LOW', ilRisk: false }
+      ],
+      considered: 2,
+      at: Date.now(),
+      source: 'gate:yields'
+    }));
+    const flagged = await ask('نقدینگی کم است یا نه');
+    const text = String(flagged.section('result')?.value ?? '');
+    assert.match(text, /پرچم زیان ناپایدار دارد/,
+      `a flagged pool must be named, got «${text}»`);
+    assert.match(text, /بازدهی رایگان نیست/,
+      `the qualifier that keeps a 41% APR honest must survive, got «${text}»`);
+    assert.match(text, /۹٬۰۰۰٬۰۰۰|9,000,000/,
+      `the shallowest pool is the flagged one, and it is the binding depth: «${text}»`);
+  } finally {
+    /* Put the shared fake back, or the next test in this file measures the
+       injection instead of the product. */
+    for (const [name, fn] of Object.entries(installFakes())) setCiSource(name, fn);
+    void saved;
+  }
+});

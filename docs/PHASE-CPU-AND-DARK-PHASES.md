@@ -3716,13 +3716,79 @@ question, which is the guard against over-correcting.
 > language.** A number in Persian with its caveat in English is a number
 > presented as more certain than it is.
 
-#### What is still open
+#### 5.24.12 A headline that reported the shape of its own read
 
-The LIQUIDITY_RISK headline still reports the shape of its own read —
-«۲ استخر خوانده شد؛ ۰ پرچم زیان ناپایدار دارند و ۲ ندارند» — to a user who
-asked «کم است یا نه». The depth figures are in the finding (`tvlUsd` per
-pool); answering the question needs a verdict, and a verdict needs a
-threshold somebody has to choose.
+§5.24.11 listed this as open and named the reason it needed a decision. It
+did not need one — the number was already in the data.
+
+```
+  «نقدینگی را بررسی کن و بگو کم است یا نه»
+
+  before  «۲ استخر خوانده شد؛ ۰ پرچم زیان ناپایدار دارند و ۲ ندارند»
+  after   «کمترین عمقِ ۲ استخرِ خوانده‌شده ۱٬۲۰۰٬۰۰۰٬۰۰۰ دلار است؛
+           هیچ استخری پرچم زیان ناپایدار ندارد»
+```
+
+The question behind LIQUIDITY_RISK is *«is there enough to get out?»*, and
+the headline answered with bookkeeping: how many rows arrived, plus a
+second half that is arithmetic on the first. Nobody can tell from it
+whether liquidity is low, which was the only thing asked.
+
+The comment **directly above that finding** already said what it should
+do — *"the finding therefore leads with the impermanent-loss flag and the
+depth, and the APR comes after"* — and the code led with neither. Another
+instance of a comment claiming a behaviour the code does not have, and the
+reason this survived: the sentence was true about itself, so it read like
+an answer.
+
+**No threshold was invented, and none was imported.** The binding number
+is the *shallowest* depth, because that is the pool a position would have
+to exit through, and `tvlUsd` is already on every pool the section
+carries. The engine's own floor (`MIN_TVL`, $5m in `server/yields.js`)
+stays inside the engine: `brain` reads state sections, `sources.js` reads
+engines, and a brain that imported an engine's constant to phrase a
+sentence would be a second owner of a first-owner's rule. The floor is
+mentioned only when the data shows filtering happened — `considered`
+greater than the pools that arrived — because that is the only case where
+the sentence is a fact the brain can see:
+
+```
+  considered 7, one pool arrived →
+  «کمترین عمقِ ۱ استخرِ خوانده‌شده ۱٬۲۰۰٬۰۰۰٬۰۰۰ دلار است — از ۷ استخرِ
+    بررسی‌شده ۱ از کفِ عمقِ موتور گذشت»
+```
+
+The qualifier rides along and is gated with it. When a pool carries an
+impermanent-loss flag the headline says «۱ استخر پرچم زیان ناپایدار دارد —
+APR آن بازدهی رایگان نیست», and the shallowest depth in that case *is* the
+flagged pool's, which is the honest pairing: the number that binds and the
+reason it is not a free return, in one sentence. With no pools at all the
+old branch is untouched — «منبع نقدینگی پاسخ نداد» — and the reply still
+says no number from another question will be shown in its place.
+
+Both languages are gated, and the Persian verb agrees with its counted
+noun («۱ استخر … دارد», not «دارند»): a sentence about money that reads
+like machine output is a sentence a reader skims, and the qualifier is
+exactly the part that must not be skimmed.
+
+> **A headline that describes its own read is not an answer.** «N rows
+> arrived» is a fact about the machine; the user asked a question about
+> their money.
+>
+> **The binding number is usually already in the data.** This needed no new
+> fetch and no new threshold — the shallowest of a list the section already
+> carried.
+>
+> **A threshold belongs to the engine that owns it.** The brain may report
+> that a floor filtered something when the counts show it; it may not borrow
+> the constant to phrase a sentence, or two owners will disagree about what
+> "deep enough" means.
+>
+> **A comment above a finding is not the finding.** This one documented the
+> right behaviour for at least one release while the code printed a row
+> count.
+
+#### What is still open
 
 §5.24.10 answered the clause that names its own subject. The clauses that
 name nothing are still dropped, and they are the majority: of nine

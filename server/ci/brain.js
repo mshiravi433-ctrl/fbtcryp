@@ -2469,6 +2469,21 @@ function buildFindings({ intent, classification, state, results, risk, readResul
 
   if (intent.intentType === 'LIQUIDITY_RISK') {
     const pools = Array.isArray(state.sections.liquidity.data?.pools) ? state.sections.liquidity.data.pools : [];
+    /* The shallowest pool is the one a position would have to exit through, so
+       it is the number that answers «is it low». `considered` is the engine's
+       own count of what it looked at before its floor; naming the floor is only
+       honest when the data shows something was filtered out. */
+    const depths = pools.map((pool) => Number(pool?.tvlUsd)).filter((n) => Number.isFinite(n) && n > 0);
+    const minDepth = depths.length ? Math.min(...depths) : null;
+    const consideredPools = Number(state.sections.liquidity.data?.considered);
+    const floorVisible = Number.isFinite(consideredPools) && consideredPools > pools.length;
+    const depthOf = (n) => (Number.isFinite(Number(n)) ? `$${Math.round(Number(n)).toLocaleString('en-US')}` : 'unreadable');
+    const filteredNote = floorVisible
+      ? ` — ${pools.length} of ${consideredPools} considered cleared the engine's depth floor`
+      : '';
+    const filteredNoteFa = floorVisible
+      ? ` — از ${fmtNum(consideredPools, locale === 'fa')} استخرِ بررسی‌شده ${fmtNum(pools.length, locale === 'fa')} از کفِ عمقِ موتور گذشت`
+      : '';
     /* An LP is a DIRECTIONAL position wearing a yield costume. The finding
        therefore leads with the impermanent-loss flag and the depth, and the
        APR comes after — not before. */
@@ -2482,8 +2497,29 @@ function buildFindings({ intent, classification, state, results, risk, readResul
       cleanPools: safe.length,
       ilPools: withIl.slice(0, 3).map((p) => ({ id: p.id, project: p.project, symbol: p.symbol, apy: p.apy, tvlUsd: p.tvlUsd, risk: p.risk })),
       cleanPoolsSample: safe.slice(0, 3).map((p) => ({ id: p.id, project: p.project, symbol: p.symbol, apy: p.apy, tvlUsd: p.tvlUsd, risk: p.risk })),
+      /*
+       * ─── ANSWER THE QUESTION THAT WAS ASKED ──────────────────────────────
+       *
+       * The question behind LIQUIDITY_RISK is «is there enough to get out?», and
+       * the headline answered it with the shape of its own read: «۲ استخر خوانده
+       * شد؛ ۰ پرچم زیان ناپایدار دارند و ۲ ندارند». That is a bookkeeping
+       * sentence — it reports how many rows arrived, and its second half is
+       * arithmetic on the first. Nobody can tell from it whether liquidity is
+       * low, which is the only thing they asked.
+       *
+       * The binding number is the SHALLOWEST depth the read found, because that
+       * is the pool a position would have to exit through. It is already in the
+       * data (`tvlUsd` per pool); nothing new is fetched and no threshold is
+       * invented — the depth floor belongs to the yields engine, and the sentence
+       * only mentions it when the data itself shows filtering happened
+       * (`considered` greater than the pools that arrived).
+       */
       detail: pools.length
-        ? `${pools.length} pools read; ${withIl.length} carry an impermanent-loss flag and ${safe.length} do not`
+        ? `${minDepth === null
+          ? `the depth of ${pools.length} pool(s) read was not readable`
+          : `shallowest depth of ${pools.length} pool(s) read is ${depthOf(minDepth)}`}${filteredNote}; ${withIl.length
+          ? `${withIl.length} of ${pools.length} carry an impermanent-loss flag — the APR on those is not a free return`
+          : 'no pool carries an impermanent-loss flag'}`
         : `the liquidity source did not answer: ${readResults.liquidity?.reason || 'NO_LIQUIDITY_DATA'}`,
       reason: withIl.length
         ? `${withIl.length} of ${pools.length} pools carry an impermanent-loss flag — the APR on those is not a free return`
@@ -2493,7 +2529,11 @@ function buildFindings({ intent, classification, state, results, risk, readResul
          has to survive translation. An English-only qualifier inside a Persian
          reply is a qualifier the user will skim past. */
       detailFa: pools.length
-        ? `${fmtNum(pools.length, locale === 'fa')} استخر خوانده شد؛ ${fmtNum(withIl.length, locale === 'fa')} پرچم زیان ناپایدار دارند و ${fmtNum(safe.length, locale === 'fa')} ندارند`
+        ? `${minDepth === null
+          ? `عمقِ ${fmtNum(pools.length, locale === 'fa')} استخرِ خوانده‌شده خوانا نبود`
+          : `کمترین عمقِ ${fmtNum(pools.length, locale === 'fa')} استخرِ خوانده‌شده ${fmtUsd(minDepth, locale === 'fa')} است`}${filteredNoteFa}؛ ${withIl.length
+          ? `${fmtNum(withIl.length, locale === 'fa')} استخر پرچم زیان ناپایدار دارد — APR ${withIl.length === 1 ? 'آن' : 'آن‌ها'} بازدهی رایگان نیست`
+          : 'هیچ استخری پرچم زیان ناپایدار ندارد'}`
         : `منبع نقدینگی پاسخ نداد: ${readResults.liquidity?.reason || 'NO_LIQUIDITY_DATA'}`,
       reasonFa: withIl.length
         ? `${fmtNum(withIl.length, locale === 'fa')} از ${fmtNum(pools.length, locale === 'fa')} استخر پرچم زیان ناپایدار دارند — APR آن‌ها بازدهی رایگان نیست`
