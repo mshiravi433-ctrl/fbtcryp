@@ -18,6 +18,7 @@
 import { createServer } from 'node:http';
 import { installFakes } from './ci-fakes.mjs';
 import { setCiSource } from '../../server/ci/sources.js';
+import { MODULE_IDS } from '../../src/lib/central/schema.js';
 
 /* Budgets and limits are read at module load, so they are pinned before the
    import below. The brain's own write budget is deliberately tiny here: this probe
@@ -63,13 +64,16 @@ async function req(path, { method = 'GET', body = null, device = DEVICE } = {}) 
 
 /* ── the mount exists and answers in JSON ─────────────────────────────────── */
 const caps = await req('/system/capabilities');
-t('the gateway is mounted and answers the capability matrix', caps.status === 200 && Object.keys(caps.body?.capabilities || {}).length === 30, JSON.stringify({ status: caps.status, modules: Object.keys(caps.body?.capabilities || {}).length }));
+/* The count comes from the SPEC, not from a literal. A hard-coded number
+   is a tripwire that fires on every legitimate module addition, and the
+   people who fix it by editing the number stop reading the assertion. */
+t('the gateway is mounted and answers the capability matrix', caps.status === 200 && Object.keys(caps.body?.capabilities || {}).length === MODULE_IDS.length, JSON.stringify({ status: caps.status, modules: Object.keys(caps.body?.capabilities || {}).length, spec: MODULE_IDS.length }));
 /* ETF is READ_ONLY only when ALPHA_VANTAGE_API_KEY is set; funds/prediction
    stay hard-UNAVAILABLE in this phase regardless. */
 t('funds stay unavailable over HTTP (no fake activation)', caps.body?.capabilities?.funds === 'UNAVAILABLE', JSON.stringify(caps.body?.capabilities || null).slice(0, 120));
 t('prediction stays unavailable over HTTP', caps.body?.capabilities?.prediction === 'UNAVAILABLE', JSON.stringify({ prediction: caps.body?.capabilities?.prediction }).slice(0, 80));
 t('etf is UNAVAILABLE without key or READ_ONLY/DEGRADED with key', ['UNAVAILABLE', 'READ_ONLY', 'DEGRADED'].includes(caps.body?.capabilities?.etf), JSON.stringify({ etf: caps.body?.capabilities?.etf }).slice(0, 80));
-t('the §40 audit travels with the matrix', caps.body?.definitionOfDone?.verdict === 'COMPLETE' && caps.body?.definitionOfDone?.modules === 30, JSON.stringify(caps.body?.definitionOfDone || null).slice(0, 140));
+t('the §40 audit travels with the matrix', caps.body?.definitionOfDone?.verdict === 'COMPLETE' && caps.body?.definitionOfDone?.modules === MODULE_IDS.length, JSON.stringify(caps.body?.definitionOfDone || null).slice(0, 140));
 t('the capability contract is published for module owners to diff against', Array.isArray(caps.body?.contract) ? caps.body.contract.length > 0 : Boolean(caps.body?.contract), JSON.stringify(Object.keys(caps.body || {})));
 
 const health = await req('/system/health');

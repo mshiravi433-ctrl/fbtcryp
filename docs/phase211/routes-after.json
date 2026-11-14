@@ -1,16 +1,12 @@
 {
   "schema": "fbt.phase211.route-inventory.v1",
   "label": "after",
-  "generatedAt": "2026-10-07T13:32:08.365Z",
+  "generatedAt": "2026-11-12T20:29:58.726Z",
   "frontend": {
-    "routeCount": 69,
+    "routeCount": 85,
     "routes": [
       {
         "path": "*",
-        "component": "Market"
-      },
-      {
-        "path": "/",
         "component": "Market"
       },
       {
@@ -22,12 +18,28 @@
         "component": "About"
       },
       {
+        "path": "/ai-analysis",
+        "component": "AiAnalysis"
+      },
+      {
         "path": "/ai-control",
         "component": "AiControlCenter"
       },
       {
         "path": "/ai-global",
         "component": "Navigate"
+      },
+      {
+        "path": "/ai-trade",
+        "component": "AiTradePanel"
+      },
+      {
+        "path": "/ai-trade",
+        "component": "Navigate"
+      },
+      {
+        "path": "/aparat",
+        "component": "AparatVideos"
       },
       {
         "path": "/audit",
@@ -46,8 +58,16 @@
         "component": "Buy"
       },
       {
+        "path": "/changelog",
+        "component": "WhatsNew"
+      },
+      {
         "path": "/coin/:id",
         "component": "CoinDetail"
+      },
+      {
+        "path": "/collective",
+        "component": "Collective"
       },
       {
         "path": "/compare",
@@ -130,6 +150,10 @@
         "component": "Lab"
       },
       {
+        "path": "/lab/chart-guide",
+        "component": "LabChartGuide"
+      },
+      {
         "path": "/launch",
         "component": "Launch"
       },
@@ -150,6 +174,10 @@
         "component": "Loan"
       },
       {
+        "path": "/missions",
+        "component": "Navigate"
+      },
+      {
         "path": "/news",
         "component": "News"
       },
@@ -158,12 +186,24 @@
         "component": "Nft"
       },
       {
+        "path": "/opportunities",
+        "component": "Opportunities"
+      },
+      {
+        "path": "/opportunities/:opportunityId",
+        "component": "OpportunityDetail"
+      },
+      {
         "path": "/order/result/:orderId",
         "component": "Buy"
       },
       {
         "path": "/orders",
         "component": "Orders"
+      },
+      {
+        "path": "/orders/history",
+        "component": "OrderHistory"
       },
       {
         "path": "/ostium",
@@ -182,6 +222,14 @@
         "component": "Perp"
       },
       {
+        "path": "/perp",
+        "component": "SpotPage"
+      },
+      {
+        "path": "/perp/terminal",
+        "component": "PerpTerminal"
+      },
+      {
         "path": "/portfolio",
         "component": "Portfolio"
       },
@@ -192,6 +240,10 @@
       {
         "path": "/rewards",
         "component": "Rewards"
+      },
+      {
+        "path": "/risk",
+        "component": "AiRiskEngine"
       },
       {
         "path": "/security",
@@ -226,6 +278,10 @@
         "component": "SmartWallet"
       },
       {
+        "path": "/social",
+        "component": "Social"
+      },
+      {
         "path": "/solana",
         "component": "SolanaSwap"
       },
@@ -239,6 +295,10 @@
       },
       {
         "path": "/trade",
+        "component": "Navigate"
+      },
+      {
+        "path": "/trade",
         "component": "Trade"
       },
       {
@@ -248,6 +308,10 @@
       {
         "path": "/wallet",
         "component": "Wallet"
+      },
+      {
+        "path": "/whats-new",
+        "component": "WhatsNew"
       },
       {
         "path": "claims",
@@ -282,7 +346,7 @@
         "component": "InsuranceSettings"
       }
     ],
-    "lazyImportCount": 65,
+    "lazyImportCount": 87,
     "lazyImportsMissing": [],
     "lazyImports": [
       {
@@ -290,11 +354,55 @@
         "exists": true
       },
       {
+        "spec": "./components/AiTrade/AiTradePanel.jsx",
+        "exists": true
+      },
+      {
+        "spec": "./components/FbtRadioPill",
+        "exists": true
+      },
+      {
+        "spec": "./components/InstallPrompt",
+        "exists": true
+      },
+      {
         "spec": "./components/IntentAIUnified",
         "exists": true
       },
       {
+        "spec": "./components/Lab/ChartGuide",
+        "exists": true
+      },
+      {
+        "spec": "./components/NotificationBar",
+        "exists": true
+      },
+      {
+        "spec": "./components/QuickAccess.jsx",
+        "exists": true
+      },
+      {
+        "spec": "./components/RadioDock",
+        "exists": true
+      },
+      {
+        "spec": "./components/ScreenshotSharePrompt.jsx",
+        "exists": true
+      },
+      {
         "spec": "./pages/About",
+        "exists": true
+      },
+      {
+        "spec": "./pages/AiAnalysis",
+        "exists": true
+      },
+      {
+        "spec": "./pages/AiRiskEngine",
+        "exists": true
+      },
+      {
+        "spec": "./pages/AparatVideos",
         "exists": true
       },
       {
@@ -311,6 +419,10 @@
       },
       {
         "spec": "./pages/CoinDetail",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Collective",
         "exists": true
       },
       {
@@ -367,6 +479,10 @@
       },
       {
         "spec": "./pages/GlobalWorld",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Guide",
         "exists": true
       },
       {
@@ -458,6 +574,22 @@
         "exists": true
       },
       {
+        "spec": "./pages/Onboarding",
+        "exists": true
+      },
+      {
+        "spec": "./pages/Opportunities",
+        "exists": true
+      },
+      {
+        "spec": "./pages/OpportunityDetail",
+        "exists": true
+      },
+      {
+        "spec": "./pages/OrderHistory",
+        "exists": true
+      },
+      {
         "spec": "./pages/Orders",
         "exists": true
       },
@@ -475,6 +607,10 @@
       },
       {
         "spec": "./pages/Perp",
+        "exists": true
+      },
+      {
+        "spec": "./pages/PerpTerminal",
         "exists": true
       },
       {
@@ -522,7 +658,15 @@
         "exists": true
       },
       {
+        "spec": "./pages/Social",
+        "exists": true
+      },
+      {
         "spec": "./pages/SolanaSwap",
+        "exists": true
+      },
+      {
+        "spec": "./pages/SpotPage",
         "exists": true
       },
       {
@@ -544,19 +688,32 @@
       {
         "spec": "./pages/Wallet",
         "exists": true
+      },
+      {
+        "spec": "./pages/Welcome",
+        "exists": true
+      },
+      {
+        "spec": "./pages/WhatsNew",
+        "exists": true
       }
     ]
   },
   "chatNavigation": [
     "/",
     "/about",
+    "/ai-analysis",
     "/ai-control",
     "/ai-global",
+    "/ai-trade",
+    "/aparat",
     "/audit",
     "/bridge",
     "/business",
     "/buy",
+    "/changelog",
     "/coin/:id",
+    "/collective",
     "/compare",
     "/contact",
     "/derivatives",
@@ -586,22 +743,29 @@
     "/intent?tab=ops",
     "/invest",
     "/lab",
+    "/lab/chart-guide",
     "/launch",
     "/leaderboard",
     "/learn",
     "/legal/:doc",
     "/loan",
+    "/missions",
     "/news",
     "/nft",
+    "/opportunities",
+    "/opportunities/:opportunityId",
     "/order/result/:orderId",
     "/orders",
+    "/orders/history",
     "/ostium",
     "/p2p",
     "/pay/:code",
     "/perp",
+    "/perp/terminal",
     "/portfolio",
     "/predict",
     "/rewards",
+    "/risk",
     "/security",
     "/settings",
     "/shop",
@@ -610,12 +774,14 @@
     "/smart-money/token/:chain/:address",
     "/smart-money/wallet/:chain/:address",
     "/smart-wallet",
+    "/social",
     "/solana",
     "/stocks",
     "/swap",
     "/trade",
     "/vault",
-    "/wallet"
+    "/wallet",
+    "/whats-new"
   ],
   "backend": {
     "mounts": [
@@ -625,12 +791,15 @@
       "/api/ai",
       "/api/ai",
       "/api/ai",
+      "/api/ai",
+      "/api/ai/agent-hub",
       "/api/brain",
       "/api/brain",
       "/api/brain",
       "/api/business",
       "/api/credit",
       "/api/ecosystem",
+      "/api/forecast",
       "/api/insurance",
       "/api/intents/v1",
       "/api/intents/v1/auctions",
@@ -648,12 +817,45 @@
       "/api/v1/ai",
       "/api/v1/ai",
       "/api/v1/ai",
+      "/api/v1/ai",
+      "/api/v1/ai",
       "/api/v1/ai/os",
       "/api/v1/financial-goals",
       "/api/v1/futures",
+      "/api/v1/missions",
       "/api/v1/rewards"
     ],
     "routers": {
+      "server/agentHub/router.js": [
+        "DELETE /connections/:connectionId",
+        "DELETE /sources/:sourceId",
+        "DELETE /sources/:sourceId/credential",
+        "GET /agents/:agentId",
+        "GET /catalog",
+        "GET /connections",
+        "GET /provider-health",
+        "GET /providers/:providerId/connections/callback",
+        "GET /sources",
+        "GET /tasks",
+        "GET /tasks/:taskId",
+        "POST /agents/:agentId/tasks",
+        "POST /provider-health/kill",
+        "POST /providers/:providerId/connections/callback",
+        "POST /providers/:providerId/connections/start",
+        "POST /providers/:providerId/webhook",
+        "POST /sources",
+        "POST /sources/:sourceId/credential",
+        "POST /tasks/:taskId/cancel"
+      ],
+      "server/aiBenchmarkRoutes.js": [
+        "GET /benchmark/status",
+        "GET /benchmark/suite",
+        "GET /intelligence/status",
+        "GET /lab/status",
+        "GET /lab/tests",
+        "POST /benchmark/run",
+        "POST /lab/run"
+      ],
       "server/aiCommand.js": [
         "DELETE /automations/:id",
         "GET /agents",
@@ -678,6 +880,7 @@
         "GET /gateway/health",
         "GET /gateway/providers",
         "GET /gateway/selftest",
+        "GET /intelligence",
         "GET /knowledge",
         "GET /learning/stats",
         "GET /memory",
@@ -688,6 +891,7 @@
         "GET /questions/analytics",
         "GET /questions/faq-candidates",
         "GET /questions/gaps",
+        "GET /research/agenda",
         "GET /system-prompt",
         "GET /tools",
         "POST /approval/verify",
@@ -726,21 +930,62 @@
         "POST /retrieve",
         "POST /suggestions"
       ],
+      "server/aiNeuromorphicRoutes.js": [
+        "GET /neuromorphic/adaptive",
+        "GET /neuromorphic/brain",
+        "GET /neuromorphic/genome",
+        "GET /neuromorphic/science",
+        "GET /neuromorphic/status",
+        "GET /neuromorphic/universes",
+        "POST /neuromorphic/delta",
+        "POST /neuromorphic/infer",
+        "POST /neuromorphic/science/prior"
+      ],
       "server/aiOrchestratorRoutes.js": [
+        "GET /central-brain/status",
+        "GET /central-brain/traces",
+        "GET /council/specialists",
+        "GET /learning/metrics",
+        "GET /learning/policies",
         "GET /memory/stats",
         "GET /orchestrator/decisions",
         "GET /orchestrator/graph",
         "GET /orchestrator/health",
         "GET /orchestrator/learning",
+        "GET /smart-memory/agent/:agentId",
+        "GET /smart-memory/conversations",
+        "GET /smart-memory/experiences",
+        "GET /smart-memory/profile",
+        "GET /smart-memory/shared",
+        "GET /smart-memory/stats",
+        "POST /central-brain/run",
+        "POST /central-brain/understand",
+        "POST /council/convene",
+        "POST /council/select",
+        "POST /learning/evaluate",
+        "POST /learning/freeze",
+        "POST /learning/predictions",
+        "POST /learning/resolve",
+        "POST /learning/rollback",
         "POST /memory/index",
         "POST /memory/recall",
         "POST /memory/remember",
         "POST /orchestrator/judge",
         "POST /orchestrator/plan",
-        "POST /orchestrator/run"
+        "POST /orchestrator/run",
+        "POST /smart-memory/agent/:agentId",
+        "POST /smart-memory/contextual",
+        "POST /smart-memory/conversation",
+        "POST /smart-memory/experience",
+        "POST /smart-memory/profile",
+        "POST /smart-memory/qdrant/test",
+        "POST /smart-memory/search",
+        "POST /smart-memory/shared",
+        "USE /api/v1/ai"
       ],
       "server/app.js": [
         "ALL /api/cron/tick",
+        "DELETE /api/orders/cow/cancel",
         "DELETE /api/v1/smart-money/registry/:chain/:address",
         "DELETE /api/v1/smart-money/watchlist/:id",
         "GET /api/ai/diagnose",
@@ -762,7 +1007,9 @@
         "GET /api/coin/:id",
         "GET /api/community",
         "GET /api/cron/daily",
+        "GET /api/cron/daily/:job",
         "GET /api/cron/monitors",
+        "GET /api/cron/scenario-evidence",
         "GET /api/cron/smart-money",
         "GET /api/cron/status",
         "GET /api/cron/train",
@@ -782,8 +1029,13 @@
         "GET /api/dln/tx",
         "GET /api/dydx/account/:address/:number",
         "GET /api/dydx/candles",
+        "GET /api/dydx/fills/:address/:number",
+        "GET /api/dydx/funding-history/:ticker",
         "GET /api/dydx/markets",
         "GET /api/dydx/orderbook/:ticker",
+        "GET /api/dydx/orders/:address/:number",
+        "GET /api/dydx/range/:ticker",
+        "GET /api/dydx/trades/:ticker",
         "GET /api/ecosystem/agents",
         "GET /api/ecosystem/certifications",
         "GET /api/ecosystem/certifier",
@@ -800,6 +1052,8 @@
         "GET /api/etf/status",
         "GET /api/fees/router-status",
         "GET /api/flash-liquidity/v1/capabilities",
+        "GET /api/forecast/:id",
+        "GET /api/forecast/status",
         "GET /api/gasless/price",
         "GET /api/gasless/quote",
         "GET /api/gasless/status",
@@ -858,6 +1112,7 @@
         "GET /api/intents/v1/outcome/log/:intentHash",
         "GET /api/intents/v1/output-locales",
         "GET /api/intents/v1/phase-status",
+        "GET /api/intents/v1/phase-status/summary",
         "GET /api/intents/v1/plane-attestations",
         "GET /api/intents/v1/public-status",
         "GET /api/intents/v1/scheduler-status",
@@ -878,6 +1133,7 @@
         "GET /api/launch/records/:chainId",
         "GET /api/launch/verify",
         "GET /api/learning/params",
+        "GET /api/market/overview-intel",
         "GET /api/markets",
         "GET /api/me",
         "GET /api/monitors/status",
@@ -887,8 +1143,11 @@
         "GET /api/nft/:chainId/:owner",
         "GET /api/nft/chains",
         "GET /api/nft/diagnose",
+        "GET /api/notif/banner.png",
+        "GET /api/notif/tones",
         "GET /api/ohlc/:id",
         "GET /api/openapi.json",
+        "GET /api/orders/cow/:chainId/:uid",
         "GET /api/orders/watch/status",
         "GET /api/ostium/prices",
         "GET /api/p2p/countries",
@@ -898,25 +1157,44 @@
         "GET /api/p2p/status",
         "GET /api/perp/markets",
         "GET /api/portfolio/agent",
+        "GET /api/price-alerts/watch/status",
         "GET /api/prices",
         "GET /api/providers/status",
         "GET /api/push/selftest",
         "GET /api/push/status",
         "GET /api/reputation/:id",
         "GET /api/revenue/readiness",
+        "GET /api/scenario/context",
+        "GET /api/scenario/daily/:id",
+        "GET /api/scenario/history",
         "GET /api/search",
         "GET /api/shop/catalogue",
         "GET /api/shop/countries",
         "GET /api/shop/products",
+        "GET /api/shop/readiness",
+        "GET /api/shop/trending",
         "GET /api/signals/pulse",
         "GET /api/signals/solana/radar",
+        "GET /api/social",
+        "GET /api/social/compose",
+        "GET /api/social/profile/:actor",
+        "GET /api/social/search",
+        "GET /api/social/status",
+        "GET /api/social/thread",
+        "GET /api/social/trending",
         "GET /api/solana/assets",
         "GET /api/solana/balances",
         "GET /api/solana/intel/:mint",
+        "GET /api/solana/jupfee/quote",
+        "GET /api/solana/jupfee/status",
+        "GET /api/solana/lifi/quote",
+        "GET /api/solana/lifi/status",
         "GET /api/solana/oo/quote",
         "GET /api/solana/oo/status",
         "GET /api/solana/oo/swap",
         "GET /api/solana/order",
+        "GET /api/solana/orders/open",
+        "GET /api/solana/routes",
         "GET /api/solana/rpc/status",
         "GET /api/solana/signal-mints",
         "GET /api/solana/status",
@@ -924,7 +1202,11 @@
         "GET /api/solana/token-search",
         "GET /api/solana/token-sentiment",
         "GET /api/solana/tokens",
+        "GET /api/solana/track/wallet",
+        "GET /api/solana/track/whales",
         "GET /api/solana/whales",
+        "GET /api/stock-charts",
+        "GET /api/stock-prices",
         "GET /api/swap/kyber/routes",
         "GET /api/swap/lifi/quote",
         "GET /api/swap/oo/quote",
@@ -939,6 +1221,7 @@
         "GET /api/thor/tx/:hash",
         "GET /api/token-risk",
         "GET /api/trending",
+        "GET /api/usage/cpu",
         "GET /api/v1/buy-sell/assets",
         "GET /api/v1/buy-sell/networks",
         "GET /api/v1/buy-sell/order/:id",
@@ -967,6 +1250,7 @@
         "GET /api/v1/smart-money/watchlist",
         "GET /api/v1/smart-money/whales",
         "GET /api/version",
+        "GET /api/volume/:id",
         "GET /api/xchain/probe",
         "GET /api/xchain/quotes",
         "GET /api/xchain/status",
@@ -1005,6 +1289,7 @@
         "POST /api/flash-liquidity/v1/plan",
         "POST /api/flash-liquidity/v1/scan",
         "POST /api/flash-liquidity/v1/simulate",
+        "POST /api/forecast",
         "POST /api/gasless/submit",
         "POST /api/intents/v1/atomic-swap/plan",
         "POST /api/intents/v1/atomic-swap/verify",
@@ -1050,18 +1335,26 @@
         "POST /api/iran/buy/wallet-verify",
         "POST /api/launch/record",
         "POST /api/learning/event",
+        "POST /api/orders/cow/create",
         "POST /api/orders/unwatch",
         "POST /api/orders/watch",
         "POST /api/ostium/subgraph",
         "POST /api/portfolio/agent",
+        "POST /api/price-alerts/watch",
         "POST /api/providers/probe",
         "POST /api/push/event",
         "POST /api/push/fcm",
         "POST /api/push/fcm/remove",
         "POST /api/push/subscribe",
         "POST /api/push/unsubscribe",
+        "POST /api/shop/track",
+        "POST /api/shop/whitelabel/precheck",
         "POST /api/signals/why",
         "POST /api/solana/execute",
+        "POST /api/solana/jupfee/swap",
+        "POST /api/solana/orders/cancel",
+        "POST /api/solana/orders/create",
+        "POST /api/solana/orders/submit",
         "POST /api/solana/rpc",
         "POST /api/swap/kyber/build",
         "POST /api/swap/oo/decode",
@@ -1089,10 +1382,12 @@
         "POST /api/v1/smart-money/watchlist",
         "USE /api",
         "USE /api/ai",
+        "USE /api/ai/agent-hub",
         "USE /api/brain",
         "USE /api/business",
         "USE /api/credit",
         "USE /api/ecosystem",
+        "USE /api/forecast",
         "USE /api/insurance",
         "USE /api/intents/v1",
         "USE /api/intents/v1/auctions",
@@ -1108,15 +1403,21 @@
         "USE /api/v1/ai/os",
         "USE /api/v1/financial-goals",
         "USE /api/v1/futures",
+        "USE /api/v1/missions",
         "USE /api/v1/rewards"
       ],
       "server/brain/index.js": [
+        "GET /central-brain/status",
         "GET /daily-brief",
         "GET /guardian",
         "GET /knowledge",
+        "GET /learning/summary",
         "GET /opportunities",
         "GET /predictive/risk",
+        "GET /smart-memory/profile",
         "GET /workflow/:id",
+        "POST /adaptive-council/convene",
+        "POST /central-brain/run",
         "POST /guardian/event",
         "POST /predictive/twin",
         "POST /route",
@@ -1174,6 +1475,16 @@
         "POST /permissions",
         "POST /permissions/check",
         "POST /permissions/mode"
+      ],
+      "server/collective/routes.js": [
+        "GET /activation",
+        "GET /status",
+        "GET /vault/:address",
+        "GET /vault/:address/events",
+        "GET /vault/:address/position/:wallet",
+        "GET /vault/:address/proposals",
+        "GET /vaults",
+        "USE /api/collective"
       ],
       "server/credit.js": [
         "GET /score/:address"
@@ -1333,6 +1644,9 @@
         "POST /tasks",
         "POST /tool-runs"
       ],
+      "server/lazyModules.js": [
+        "GET /api/buysell/capabilities"
+      ],
       "server/lending.js": [
         "DELETE /alerts/:id",
         "GET /alerts/:wallet",
@@ -1351,6 +1665,27 @@
         "POST /transaction/repay",
         "POST /transaction/supply",
         "POST /transaction/withdraw"
+      ],
+      "server/missionControl/router.js": [
+        "GET /events",
+        "GET /evidence/:id",
+        "GET /learning",
+        "GET /missions",
+        "GET /missions/:id",
+        "GET /opportunities",
+        "GET /status",
+        "POST /admin/emergency-stop",
+        "POST /agents/:id/stop",
+        "POST /emergency-stop",
+        "POST /emergency-stop/release",
+        "POST /learning/rollback",
+        "POST /missions",
+        "POST /missions/:id/:action",
+        "POST /tick"
+      ],
+      "server/missionControl/worker.js": [
+        "GET /healthz",
+        "USE /api/v1/missions"
       ],
       "server/options.js": [
         "GET /chain",

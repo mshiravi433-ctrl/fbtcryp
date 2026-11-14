@@ -362,7 +362,25 @@ export function stateSnapshot(state, now = Date.now()) {
 /** A stable digest of the sections a reply is built from (anti-duplicate, §34). */
 export function stateDigest(state, keys = STATE_SECTION_IDS, now = Date.now()) {
   const parts = [];
-  for (const key of keys.sort()) {
+  /*
+   * The sort is on a COPY.
+   *
+   * `keys` defaults to `STATE_SECTION_IDS` and is otherwise
+   * `ANALYSIS_MINIMUM` — and BOTH are `Object.freeze`d. `Array.prototype.sort`
+   * sorts IN PLACE, so sorting either of them threw
+   *
+   *     TypeError: Cannot assign to read only property '0' of object '[object Array]'
+   *
+   * in strict mode, which is what ES modules are. And the crash was not
+   * rare: `CANCEL_PENDING` has no entry in `SECTION_FOR_INTENT`, so its
+   * section list IS `ANALYSIS_MINIMUM` — and every cancellation turn died
+   * on the way to its answer.
+   *
+   * A frozen constant is a promise that a caller cannot corrupt by using
+   * it. Sorting it broke that promise in the caller's favour, which is
+   * exactly the kind of kindness that becomes a crash.
+   */
+  for (const key of [...keys].sort()) {
     const s = getSection(state, key);
     parts.push(`${key}:${s.revision}:${fingerprint(s.data)}`);
   }

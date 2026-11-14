@@ -16,6 +16,7 @@
  */
 
 import { requireFlag } from './flags.js';
+import { capitalUsdFor } from './financialState.js';
 import { requiredAnnualizedPct } from './goalReasoning.js';
 
 export const OPPORTUNITY_FIT_SCHEMA = 'fbt.fi.opportunity-fit.v1';
@@ -90,7 +91,7 @@ export function scoreOpportunityFit(opportunity = {}, profile = null, { financia
      comparison: the goal's REQUIRED annualized return vs what this
      opportunity actually nets. */
   if (goal?.targetUsd != null && netApy !== null) {
-    const netWorth = num(financial?.computed?.netWorthUsd);
+    const netWorth = capitalUsdFor(financial);
     const startUsd = num(goal.startUsd) ?? netWorth;
     const monthsAvailable = userHorizon ?? num(goal.months) ?? 12;
     const targetReturnPct = startUsd && startUsd > 0 ? round(((num(goal.targetUsd) - startUsd) / startUsd) * 100, 2) : null;
@@ -106,7 +107,7 @@ export function scoreOpportunityFit(opportunity = {}, profile = null, { financia
   /* portfolio impact — concentration */
   const asset = String(opportunity.asset || '').toUpperCase();
   const existingExposure = num(financial?.computed?.assetExposureUsd?.[asset]);
-  const netWorth = num(financial?.computed?.netWorthUsd);
+  const netWorth = capitalUsdFor(financial);
   if (existingExposure !== null && netWorth && capitalRequired !== null) {
     const sharePct = round(((existingExposure + capitalRequired) / netWorth) * 100, 2);
     add('portfolio-impact', sharePct <= 40, sharePct, `${asset} would be ${sharePct}% of net worth after this position`, 1.1);

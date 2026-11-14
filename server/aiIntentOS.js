@@ -155,6 +155,7 @@ import { fetchCoinDetail } from './providers.js';
 import { runCollaborativeAnalysis, formatEmotionalAcknowledgement } from './aiCollaboration.js';
 import {
   resolveIntelligenceMode,
+  proposeIntelligenceMode,
   getIntelligenceProfile,
   intelligenceDeadlineMs,
   turnCeilingMs,
@@ -171,6 +172,7 @@ import {
   getQualityDashboard
 } from './aiQuestionIntel.js';
 import { searchKnowledge, listKnowledge, knowledgeStats } from '../src/lib/intent-ai/os/knowledgeCenter.js';
+import { hybridKnowledgeSearch, semanticKnowledgeReport } from '../src/lib/intent-ai/os/semanticKnowledge.js';
 /* Upgrade 13 — conversational depth. The social layer answers a pleasantry in
    the language it was written in, turns «چخبر» into an economic brief, and the
    escalation ladder spends the REST of the fleet when the deterministic reply
@@ -190,6 +192,7 @@ import { orchestratorEnabled, ORCHESTRATOR_SCHEMA } from './aiOrchestrator.js';
    where `_setOrchestrator` lets a probe or an operator swap it). */
 import { getOrchestrator } from './aiOrchestratorRoutes.js';
 import { getNeuromorphicSwarm } from './aiNeuromorphic.js';
+import { cortexBridgeStatus } from './aiCortexBridge.js';
 
 const router = Router();
 
@@ -1168,25 +1171,60 @@ router.get('/gateway/providers', (_req, res) => res.json({
  * provider, which costs tokens and seconds; this returns what the gateway
  * already knows from the traffic it has served, so a panel can poll it.
  */
-router.get('/gateway/health', (_req, res) => res.json({
-  ok: true,
-  schema: 'fbt.ai-gateway-health.v1',
-  summary: getFleetSummary(),
-  fleet: describeProviderFleet(),
-  health: getProviderHealth(),
-  providers: getAvailableProviders().map((p) => ({
-    id: p.id,
-    name: p.name,
-    configured: p.configured,
-    verdict: p.verdict,
-    model: p.defaultModel,
-    reasonCode: p.health?.lastError?.reasonCode || null,
-    lastError: p.health?.lastError?.message || null,
-    fix: p.health?.lastError?.fix || null,
-    lastSuccessAt: p.health?.lastSuccess?.at || null
-  })),
-  at: nowMs()
-}));
+router.get('/gateway/health', async (_req, res) => {
+  /*
+   * THE DAY'S ALLOWANCE IS PART OF THE HEALTH.
+   *
+   * Before this, the only way to learn that the free tier was spent
+   * was to spend it: the next request came back 429 and the operator
+   * saw a failure instead of a number. The quota counter makes the
+   * day's spending visible BEFORE it runs out — «32 of 50 left, about
+   * six deep turns still affordable» — which is the difference between
+   * a budget and a surprise.
+   */
+  let quota = null;
+  try {
+    const { readQuotaForFleet, turnsRemaining, quotaExhausted } = await import('./aiQuotaBudget.js');
+    const ids = getAvailableProviders().map((p) => p.id);
+    quota = await readQuotaForFleet(ids);
+    quota.turnsRemaining = turnsRemaining(quota, 5);
+    quota.turnCostAssumption = 5;
+    /*
+     * Whether the day is SPENT is a different question from how much of
+     * it is left, and the operator needs both. «3 of 50 left» is a
+     * warning; «the day's provider allowance is spent» is a fact, and
+     * it is the fact that explains why the turns have gone thin.
+     *
+     * The check reads the same counter the turns read, so the health
+     * route and the turns cannot disagree about the day.
+     */
+    const exhausted = await quotaExhausted(ids);
+    quota.exhausted = exhausted.exhausted === true;
+    quota.exhaustedReason = exhausted.exhausted ? exhausted.reason : null;
+  } catch {
+    quota = null;
+  }
+  return res.json({
+    ok: true,
+    schema: 'fbt.ai-gateway-health.v1',
+    summary: getFleetSummary(),
+    fleet: describeProviderFleet(),
+    health: getProviderHealth(),
+    quota,
+    providers: getAvailableProviders().map((p) => ({
+      id: p.id,
+      name: p.name,
+      configured: p.configured,
+      verdict: p.verdict,
+      model: p.defaultModel,
+      reasonCode: p.health?.lastError?.reasonCode || null,
+      lastError: p.health?.lastError?.message || null,
+      fix: p.health?.lastError?.fix || null,
+      lastSuccessAt: p.health?.lastSuccess?.at || null
+    })),
+    at: nowMs()
+  });
+});
 
 router.get('/gateway/selftest', async (_req, res) => {
   const report = await gatewaySelfTest();
@@ -1498,7 +1536,12 @@ router.get('/quality', async (req, res) => {
 
 /* Knowledge center — the internal knowledge layer the AI retrieves from (§55-57). */
 router.get('/knowledge', (_req, res) => {
-  return res.json({ ok: true, stats: knowledgeStats(), items: listKnowledge() });
+  /* The semantic index is reported alongside the corpus so the layer is
+     observable: an operator can see that it is built, how many items it
+     holds and that it costs no network calls. */
+  let semantic = null;
+  try { semantic = semanticKnowledgeReport(); } catch { semantic = null; }
+  return res.json({ ok: true, stats: knowledgeStats(), items: listKnowledge(), semantic });
 });
 
 router.post('/knowledge/search', (req, res) => {
@@ -1506,7 +1549,16 @@ router.post('/knowledge/search', (req, res) => {
   if (!query.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_QUERY' });
   const locale = safe(req.body?.locale, 5) || 'fa';
   const limit = Math.min(5, Math.max(1, Number(req.body?.limit) || 3));
-  const results = searchKnowledge(query, { locale, limit });
+  /*
+   * The search endpoint now answers by MEANING as well as by wording. The
+   * hybrid retriever is used here, so the public search finds the item even
+   * when the caller used their own words for it.
+   */
+  let results = [];
+  try {
+    results = hybridKnowledgeSearch(query, { locale, limit, lexicalSearch: searchKnowledge });
+  } catch { results = []; }
+  if (!results.length) results = searchKnowledge(query, { locale, limit });
   return res.json({ ok: true, results });
 });
 
@@ -2219,7 +2271,47 @@ router.post('/chat', async (req, res) => {
    * deployment can change its default with `FBT_AI_INTELLIGENCE` without a
    * deploy of logic. Small talk stays small even in the smartest mode.
    */
-  const resolvedIntelligence = resolveIntelligenceMode(req.body?.intelligence ?? null);
+  /*
+   * ─── THE QUESTION NOW GETS A SAY IN ITS OWN TIER (2026-11-13) ────────────
+   * Until here the tier came from one place only: the saved preference,
+   * defaulting to `max`. A greeting and a liquidation scenario therefore cost
+   * the same — the flagship ladder, the reasoning pass and an 8-second window —
+   * unless the user opened a panel and turned it down by hand.
+   *
+   * THE EXTRA READ COSTS 0.7 ms. `planCollaboration` is pure and browser-safe:
+   * no model call, no I/O, measured at 0.70 ms wall / 0.67 ms CPU per call over
+   * 10 000 runs. The turn below it is planned with a deadline of up to 8000 ms,
+   * so reading the question twice costs nine thousandths of one percent of the
+   * budget, and what it buys is a cheap seat instead of a flagship ladder on
+   * every social and every self-contained turn. The alternative — inferring the
+   * tier from a second, smaller classifier of our own — would be exactly the
+   * thing the router's header forbids: "A DEPTH request, not a second
+   * classifier." So this reuses the read that already happens and moves it
+   * earlier, and `u5` below remains the authoritative plan.
+   *
+   * WHAT THIS CANNOT DO: it cannot raise a tier (the resolver refuses an upward
+   * proposal), it cannot overrule the user's choice or the operator's env pin,
+   * and it cannot touch execution authority — a money-moving turn is refused by
+   * name before any discount is considered.
+   */
+  const deepThinkOn = String(process.env.FBT_AI_DEEP_THINK ?? '1') !== '0';
+  const tierRead = planCollaboration({
+    message,
+    intentType: intent || 'GENERAL',
+    entities: u4.entities || {},
+    context: { currentPage: req.body?.surface || req.body?.currentPage || '/' },
+    priorIntent: prior?.intent || null,
+    locale: locale || 'fa',
+    deepThink: deepThinkOn
+  });
+  const autoTier = proposeIntelligenceMode(tierRead, {
+    intentType: intent || u4.type || 'GENERAL',
+    /* An action card or a pending confirmation is the strongest execution
+       signal this route has, and it is already computed above. */
+    execution: Boolean(human?.actionPlan || pendingIntent || human?.ui?.type === 'ACTION_CARD'),
+    retry: Boolean(req.body?.retry || req.body?.escalate || req.body?.retryOf)
+  });
+  const resolvedIntelligence = resolveIntelligenceMode(req.body?.intelligence ?? null, { auto: autoTier });
   const intelligenceProfile = getIntelligenceProfile(resolvedIntelligence.mode);
   /*
    * ─── ONE CLOCK FOR THE WHOLE TURN ─────────────────────────────────────────
@@ -2261,8 +2353,11 @@ router.post('/chat', async (req, res) => {
     intelligenceCeiling: intelligenceProfile.collaborationCeiling
 ,
     /* Increment 23 — deep thinking is the default; a deployment can turn it
-       off with FBT_AI_DEEP_THINK=0 and get the pre-increment behaviour. */
-    deepThink: String(process.env.FBT_AI_DEEP_THINK ?? '1') !== '0'
+       off with FBT_AI_DEEP_THINK=0 and get the pre-increment behaviour.
+       Read ONCE above (`deepThinkOn`), because the tier proposal and this plan
+       must be talking about the same setting: two copies of one env read is how
+       a turn ends up priced for a depth it did not run. */
+    deepThink: deepThinkOn
   });
   /*
    * ─── UPGRADE 13 — THE SOCIAL TURN IS ANSWERED BEFORE ANYTHING ELSE ──────
@@ -2653,6 +2748,25 @@ router.post('/chat', async (req, res) => {
       mode: {
         schema: 'fbt.ai-intelligence.v1',
         id: resolvedIntelligence.mode,
+        /*
+         * WHO CHOSE THIS TIER, AND WHY.
+         *
+         * `source` was already 'request' | 'env' | 'default'; 'auto' is new and
+         * means the question itself was read as not needing the smartest tier.
+         * A tier chosen silently is indistinguishable from a tier nobody chose,
+         * so the proposal is published either way — including when it was
+         * refused, with the reason it was refused. That is what makes "the
+         * answer was shorter this time" answerable instead of mysterious.
+         */
+        source: resolvedIntelligence.source,
+        requested: resolvedIntelligence.requested ?? null,
+        rejected: resolvedIntelligence.rejected ?? null,
+        autoTier: resolvedIntelligence.auto ? {
+          proposed: resolvedIntelligence.auto.proposed,
+          reason: resolvedIntelligence.auto.reason,
+          applied: resolvedIntelligence.auto.applied === true,
+          ignored: resolvedIntelligence.auto.ignored || null
+        } : null,
         /* The reasoning persona of this turn: in the smartest mode the
            specialists are held to an economist's lenses (mechanism, base rate,
            transmission, incentives, opportunity cost, time horizon,
@@ -2872,6 +2986,21 @@ router.post('/chat', async (req, res) => {
         latencyMs: orchestration.latencyMs || 0,
         executionAuthorized: false
       } : null,
+      /*
+       * The neuromorphic layer (§8 — LEVER #5).
+       *
+       * This block used to publish SWARM METADATA ONLY: the generation
+       * counter, the node count and the fact that it costs no server GPU.
+       * It never fed the answer, so the cortex was a spectator.
+       *
+       * It now carries the CORTEX BRIDGE STATUS: whether the cortex is
+       * available, whether its readout was TRAINED, and the measured
+       * discrimination between a rising and a falling market state. The
+       * untrained readout measured 0.07 — the cortex could not tell an
+       * uptrend from a downtrend, and wiring THAT to an answer would have
+       * made the assistant confidently wrong. The trained readout measures
+       * 0.96.
+       */
       neuromorphic: await (async () => {
         try {
           const st = await getNeuromorphicSwarm().getStatus({ owner: ownerFor(req) });
@@ -2879,7 +3008,8 @@ router.post('/chat', async (req, res) => {
             globalGeneration: st.globalGeneration,
             activeNodes24h: st.activeNodes24h,
             zeroServerGpu: true,
-            executionAuthorized: false
+            executionAuthorized: false,
+            cortex: cortexBridgeStatus()
           };
         } catch {
           return null;

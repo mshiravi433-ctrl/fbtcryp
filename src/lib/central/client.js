@@ -15,6 +15,22 @@
  * retry can be deduplicated against the action record instead of being trusted.
  */
 import { apiBase } from '../apiBase.js';
+/*
+ * The published transfer, read from the DEPENDENCY-FREE store.
+ *
+ * This import used to point at `../intentCrossChainClient.js`, which
+ * imports `@noble/ed25519`, `@noble/hashes` and `server/ethersLite.js`.
+ * This file is on the entry path, so that import put a signing library
+ * and an ethers implementation into the FIRST-PAINT bundle — 26 KB, for
+ * three numbers and three strings — and pushed the first paint over its
+ * byte budget. The store now lives in a module with no imports at all.
+ */
+import { readPublishedRouteRequest } from '../routeRequestStore.js';
+import { readActiveAgent } from '../intent-ai/agentHub/activeAgent.js';
+
+/* `NATIVE_PROVIDER_ID` in `server/agentHub/native/index.js`, restated here
+   because the browser must not import a server module. */
+const NATIVE_PROVIDER_ID = 'fbt-native';
 
 const TIMEOUTS = { intent: 20000, read: 8000, action: 12000 };
 const DEVICE_KEY = 'fbt.central.device.v1';
@@ -113,15 +129,53 @@ async function call(path, { method = 'GET', body = null, timeout = TIMEOUTS.read
 /* ── the only path into the brain ───────────────────────────────────────── */
 
 export async function sendIntent(message, { page = null, locale = 'fa', confirm = false, actionId = null, planDigest = null, txHash = null, requestId = null, hints = null } = {}) {
+  /*
+   * THE TRANSFER THE TURN IS ABOUT.
+   *
+   * A route question — «which bridge is best for this transfer?» — can
+   * only be answered about a transfer somebody described, and the
+   * cross-chain panel is what knows it. The panel publishes it; this
+   * carries it.
+   *
+   * It travels INSIDE the page claim rather than beside it, because that
+   * is what it is: a fact about what the user is looking at right now,
+   * in the same shape as the route, the tab and the selected asset. And
+   * it is read HERE rather than at the call site, so every caller of the
+   * brain carries it without having to know that route questions need
+   * it.
+   *
+   * The server drops a partial transfer on the floor, so a half-written
+   * request can never make the engine quote for a transfer nobody asked
+   * for.
+   */
+  const routeRequest = readPublishedRouteRequest();
+  const pageWithRoute = routeRequest ? { ...(page || {}), routeRequest } : page;
+  /*
+   * THE AGENT THE USER IS TALKING TO.
+   *
+   * The hub stores one active agent per browser, and until now that choice only
+   * re-ordered the suggestion chips: the person picked the token risk scanner,
+   * typed in the main chat, and the generic brain answered. It travels the same
+   * way the published transfer does — read HERE, not at the call site, so every
+   * caller of the brain carries it without having to know that plugins exist.
+   *
+   * Only a FIRST-PARTY id is sent: the server accepts nothing else, and sending
+   * a third-party id would only produce a field the turn has to drop.
+   */
+  const active = readActiveAgent();
+  const agentId = active && (active.providerId === NATIVE_PROVIDER_ID || active.native === true)
+    ? String(active.id || '').slice(0, 64)
+    : null;
   const body = {
     message: String(message || '').slice(0, 2000),
-    page,
+    page: pageWithRoute,
     locale: locale === 'en' ? 'en' : 'fa',
     confirm,
     ...(actionId ? { actionId } : {}),
     ...(planDigest ? { planDigest } : {}),
     ...(txHash ? { txHash } : {}),
-    ...(hints ? { hints } : {})
+    ...(hints ? { hints } : {}),
+    ...(agentId ? { agentId } : {})
   };
   /* An explicit key (a retry of the same turn) wins; otherwise it is derived, so
      the caller cannot accidentally turn a retry into a fresh request. */
@@ -131,6 +185,59 @@ export async function sendIntent(message, { page = null, locale = 'fa', confirm 
 }
 
 export const intentStatus = (id) => call(`/intent/${encodeURIComponent(String(id || ''))}`);
+
+/* ── the plugins a person attaches to themselves ──────────────────────────────────────────────────
+ *
+ * `sendIntent` carries the browser's choice; these make it the OWNER's, so a
+ * turn that starts somewhere else (Telegram, a cron, another device) still
+ * knows which plugin this person is talking to. The catalog comes back with the
+ * registry's own verdicts beside each card — passport verified, trust score,
+ * `canExecute: false` — which is what makes the list a list of plugins we run
+ * rather than a listing of agents somebody else does.
+ */
+export const listPlugins = () => call('/plugins', { timeout: TIMEOUTS.read });
+
+export const attachPlugin = (agentId) => call('/plugins/attach', {
+  method: 'POST',
+  body: { agentId: String(agentId || '') },
+  timeout: TIMEOUTS.action
+});
+
+export const detachPlugin = () => call('/plugins/detach', { method: 'POST', body: {}, timeout: TIMEOUTS.action });
+
+/* ── the plugin that speaks first ──────────────────────────────────────────────
+ *
+ * Arming a watch needs a push identity, because the whole point is that the
+ * plugin talks when the app is closed. `pushIdentity()` lives in the
+ * notification layer and is imported LAZILY: it drags in service-worker
+ * registration and the push subscription, and none of that belongs in the
+ * first-paint graph just because a chat client can ask a plugin to keep watch.
+ *
+ * A browser with no notification permission has no identity, and that is
+ * reported instead of papered over: the server would answer BAD_IDENTITY anyway,
+ * so the caller learns which half failed and can say so, rather than showing a
+ * watch that can never arrive.
+ */
+export async function armPluginWatch(subject, { agentId = null, lang = 'fa', thresholdPct = null } = {}) {
+  const { pushIdentity } = await import('../notify.js');
+  const identity = await pushIdentity().catch(() => null);
+  if (!identity?.endpoint) return { ok: false, code: 'NO_PUSH_IDENTITY' };
+  return call('/plugins/watch', {
+    method: 'POST',
+    body: { agentId, subject, endpoint: String(identity.endpoint), lang, thresholdPct },
+    timeout: TIMEOUTS.action
+  });
+}
+
+export const listPluginWatches = () => call('/plugins/watches', { timeout: TIMEOUTS.read });
+
+/* Idempotent, like detaching: stopping a watch that is not armed is the same
+   state, so the toggle in the UI never has to lie about what happened. */
+export const stopPluginWatch = (id = null) => call('/plugins/watch/stop', {
+  method: 'POST',
+  body: { id },
+  timeout: TIMEOUTS.action
+});
 
 /**
  * `method` is what the user actually did (§33's "explicit confirmation"): the

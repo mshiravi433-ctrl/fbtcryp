@@ -95,12 +95,12 @@
  *     failed read is a thrown typed error, never a plausible default.
  */
 
-import { EVM_CHAINS, ERC20_ABI, getToken } from '../chains';
-import { NATIVE_GAS_FLOOR } from '../swap';
-import { decodeRevertReason } from '../preSignSimulation';
+import { EVM_CHAINS, ERC20_ABI, getToken } from '../chains.js';
+import { NATIVE_GAS_FLOOR } from '../swap.js';
+import { decodeRevertReason } from '../preSignSimulation.js';
 import {
   assertProviderChain, assertSuccessfulReceipt, parseReceiptLogs, ExecutionGuardError, sameAddress
-} from './executionGuards';
+} from './executionGuards.js';
 import { verifyRoutedDeposit } from './splitRouter.js';
 const loadEthers = () => import('ethers');
 

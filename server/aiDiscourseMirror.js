@@ -1,3 +1,5 @@
+import { matchTerm, countMatchingTerms } from '../src/lib/intent-ai/os/regexCache.js';
+
 /**
  * DISCOURSE MIRROR — answer in the register the person is actually using.
  * ---------------------------------------------------------------------------
@@ -54,15 +56,15 @@ function fold(text) {
 }
 
 function has(text, term) {
-  const t = String(term);
-  const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '[\\s\u200c]*');
-  const persianLetters = t.replace(/[^\u0600-\u06FF]/g, '').length;
-  const tail = persianLetters >= 4 ? '' : '(?![\\p{L}])';
-  return new RegExp(`(?<![\\p{L}])${escaped}${tail}`, 'iu').test(String(text || ''));
+  /* The pattern is built once and reused: the vocabulary is fixed, so
+     compiling it per call was pure waste (see src/lib/intent-ai/os/regexCache.js). */
+  return matchTerm(text, term, { inner: '[\\s\u200c]*', unicode: false });
 }
 
 function countHits(text, list) {
-  return list.reduce((n, term) => n + (has(text, term) ? 1 : 0), 0);
+  /* ONE regex execution for the whole vocabulary. `matchTerm` treats a long
+     Persian term as a PREFIX, so `prefixMatch` keeps that rule. */
+  return countMatchingTerms(text, list, { prefixMatch: true });
 }
 
 /* ── lexicons ─────────────────────────────────────────────────────────────── */

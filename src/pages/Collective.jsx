@@ -243,7 +243,7 @@ export default function Collective() {
     event.preventDefault();
     if (!vault || !asset || !depositsOpen) return;
     let amountRaw;
-    try { amountRaw = parseCollectiveAmount(depositInput, asset.decimals); }
+    try { amountRaw = await parseCollectiveAmount(depositInput, asset.decimals); }
     catch { setActionError(t('collective.actionError.INVALID_AMOUNT', { defaultValue: 'Enter a valid amount greater than zero.' })); return; }
     await runAction(() => depositIntoCollective({
       wallet,
@@ -262,7 +262,7 @@ export default function Collective() {
     setWithdrawalQuote(null);
     try {
       await ensureCollectiveChain();
-      const assetsRaw = parseCollectiveAmount(withdrawInput, asset.decimals);
+      const assetsRaw = await parseCollectiveAmount(withdrawInput, asset.decimals);
       const quote = await previewCollectiveWithdrawal({ wallet, chainId: collectiveChainId, vaultAddress: vault.address, assetsRaw });
       if (BigInt(quote.sharesRaw) > shares) throw new Error('INSUFFICIENT_SHARES');
       setWithdrawalQuote(quote);

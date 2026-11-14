@@ -29,8 +29,30 @@
 
 export const PROVIDER_FLEET_SCHEMA = 'fbt.ai-provider-fleet.v1';
 
-/** The providers this deployment holds working keys for. */
-export const DEFAULT_PROVIDER_FLEET = Object.freeze(['openrouter', 'groq', 'workersai']);
+/**
+ * The providers this deployment holds working keys for.
+ *
+ * ─── WHY THE FREE SEAT IS HERE AND THE PAID ONE IS NOT ──────────────────────
+ * The three seats below are the ones that actually answer on this
+ * deployment:
+ *
+ *   · `openrouterfree` — the OpenRouter free catalogue (`:free` Nemotron /
+ *     Gemma / Cohere ids), on the SAME key as the paid seat;
+ *   · `groq`         — the free tier: gpt-oss-120b / 20b, qwen3.8-27b;
+ *   · `workersai`    — Cloudflare's free tier: the R1 distill and the 70B.
+ *
+ * The paid `openrouter` seat is deliberately NOT in the default fleet. Its
+ * key is on the free tier, and every id that seat knows is a paid id, so a
+ * call to it answers HTTP 402 "Insufficient Balance" — an ACCOUNT-level
+ * failure that stops the model walk immediately. Leaving it in the default
+ * meant every request paid for a round-trip that could never succeed.
+ *
+ * An operator who funds the account puts `openrouter` back into
+ * `FBT_AI_PROVIDERS` and the paid catalogue returns to the front. The free
+ * seat stays declared either way, because a funded account can still call
+ * `:free` ids.
+ */
+export const DEFAULT_PROVIDER_FLEET = Object.freeze(['openrouterfree', 'groq', 'workersai']);
 
 /**
  * Every provider the gateway registers, plus the spellings an operator is
@@ -42,6 +64,18 @@ export const PROVIDER_ALIASES = Object.freeze({
   'open-router': 'openrouter',
   'open_router': 'openrouter',
   or: 'openrouter',
+  /*
+   * The free seat of OpenRouter. A separate id because it serves a different
+   * catalogue (the `:free` models) with the SAME key — so an operator picks
+   * the paid catalogue or the free one by naming it, and a free key never
+   * spends a round-trip on a paid id that answers 402.
+   */
+  openrouterfree: 'openrouterfree',
+  'openrouter-free': 'openrouterfree',
+  'openrouter_free': 'openrouterfree',
+  'free-router': 'openrouterfree',
+  freerouter: 'openrouterfree',
+  orf: 'openrouterfree',
   groq: 'groq',
   workersai: 'workersai',
   'workers-ai': 'workersai',

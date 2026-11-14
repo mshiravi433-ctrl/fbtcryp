@@ -160,7 +160,7 @@ export async function futuresPrepare(input = {}, ctx = {}) {
   if (q.account.balanceUsd != null && q.account.balanceUsd + 1e-9 < q.order.collateralUsd) return refuse('POLICY', 'INSUFFICIENT_BALANCE', `balance ${q.account.balanceUsd} USDC`);
   let unsigned;
   try {
-    unsigned = ostium.buildOpenTrade({
+    unsigned = await ostium.buildOpenTrade({
       trader: wallet, pairId: q.market.marketId, buy: q.order.side === 'long', price: String(q.market.mid), collateralUsd: q.order.collateralUsd, leverage: q.order.leverage,
       takeProfit: num(input.takeProfit) > 0 ? String(input.takeProfit) : '0', stopLoss: num(input.stopLoss) > 0 ? String(input.stopLoss) : '0',
       slippageBps: 25, builder: fbtFeeRecipient(), builderFeeBps: q.fee.fbt.bps
@@ -169,7 +169,7 @@ export async function futuresPrepare(input = {}, ctx = {}) {
     return refuse(err?.code === 'CONTRACT_MISMATCH' ? 'SAFE_STOP' : 'POLICY', err?.code || 'INVALID_INPUT', String(err?.message || '').slice(0, 80), { securityStop: err?.code === 'CONTRACT_MISMATCH' });
   }
   const needsApproval = q.account.allowanceUsd != null && q.account.allowanceUsd + 1e-9 < q.order.collateralUsd;
-  const approval = needsApproval ? ostium.buildApprove({ amountUsd: q.order.collateralUsd }) : null;
+  const approval = needsApproval ? await ostium.buildApprove({ amountUsd: q.order.collateralUsd }) : null;
   return live({
     prepared: true, signer: 'user-wallet', provider: q.provider, market: q.market, order: q.order, fee: q.fee, risk: q.risk, route: q.route,
     unsignedTx: { ...unsigned, signed: false, broadcast: false },

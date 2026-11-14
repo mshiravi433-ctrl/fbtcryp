@@ -537,6 +537,30 @@ export function formatValue({ pnlPct, rate, value } = {}) {
   return '';
 }
 
+/**
+ * The verdict levels a first-party plugin may report, and the tone each earns.
+ *
+ * Same doctrine as `resolveTone` above, applied to a plugin's own datum instead
+ * of an order: the claim decides the colour, and the surfaces do not each keep a
+ * copy of the mapping. `unknown` has no colour of its own on purpose — a run
+ * that could not read makes no claim, and the watcher never sends one, so
+ * nothing should ever have to render it. It falls back to `info` only so that a
+ * caller which ignored that rule cannot paint a silence as an alarm.
+ */
+export const VERDICT_LEVELS = Object.freeze(['danger', 'warn', 'info', 'clear', 'unknown']);
+
+export const VERDICT_TONE = Object.freeze({
+  danger: 'alert', warn: 'pending', info: 'info', clear: 'info', unknown: 'info'
+});
+
+export function normalizeVerdictLevel(level) {
+  return VERDICT_LEVELS.includes(String(level)) ? String(level) : 'unknown';
+}
+
+export function toneForVerdict(level) {
+  return VERDICT_TONE[normalizeVerdictLevel(level)] || 'info';
+}
+
 /** Progress from whatever the caller has: percent, rung/ofRungs, runsLeft. */
 export function progressFrom({ progress, rung, ofRungs, runsLeft, totalRuns } = {}) {
   const explicit = normalizeProgress(progress);

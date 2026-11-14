@@ -5,24 +5,41 @@
   "total": 13,
   "removedRoutes": [],
   "addedRoutes": [
+    "/ai-analysis → AiAnalysis",
     "/ai-global → Navigate",
+    "/ai-trade → AiTradePanel",
+    "/ai-trade → Navigate",
+    "/aparat → AparatVideos",
+    "/changelog → WhatsNew",
+    "/collective → Collective",
     "/global → GlobalWorld",
+    "/lab/chart-guide → LabChartGuide",
     "/launch → Launch",
-    "/pay/:code → PayLanding"
+    "/missions → Navigate",
+    "/opportunities → Opportunities",
+    "/opportunities/:opportunityId → OpportunityDetail",
+    "/orders/history → OrderHistory",
+    "/pay/:code → PayLanding",
+    "/perp → SpotPage",
+    "/perp/terminal → PerpTerminal",
+    "/risk → AiRiskEngine",
+    "/social → Social",
+    "/trade → Navigate",
+    "/whats-new → WhatsNew"
   ],
   "removedBackendRoutes": [],
   "counts": {
     "frontend": {
       "before": 64,
-      "after": 69
+      "after": 85
     },
     "chatNav": {
       "before": 64,
-      "after": 68
+      "after": 82
     },
     "mounts": {
       "before": 30,
-      "after": 33
+      "after": 39
     },
     "fiRoutes": {
       "before": 44,
@@ -42,20 +59,54 @@
       "name": "FRONTEND: Phase 211 only ADDED routes (later phases may add, never remove)",
       "ok": true,
       "extra": [
+        "/ai-analysis → AiAnalysis",
         "/ai-global → Navigate",
+        "/ai-trade → AiTradePanel",
+        "/ai-trade → Navigate",
+        "/aparat → AparatVideos",
+        "/changelog → WhatsNew",
+        "/collective → Collective",
         "/global → GlobalWorld",
+        "/lab/chart-guide → LabChartGuide",
         "/launch → Launch",
-        "/pay/:code → PayLanding"
+        "/missions → Navigate",
+        "/opportunities → Opportunities",
+        "/opportunities/:opportunityId → OpportunityDetail",
+        "/orders/history → OrderHistory",
+        "/pay/:code → PayLanding",
+        "/perp → SpotPage",
+        "/perp/terminal → PerpTerminal",
+        "/risk → AiRiskEngine",
+        "/social → Social",
+        "/trade → Navigate",
+        "/whats-new → WhatsNew"
       ]
     },
     {
       "name": "FRONTEND: the console is its own page — /global is mounted, and /ai-global forwards to it",
       "ok": true,
       "extra": [
+        "/ai-analysis → AiAnalysis",
         "/ai-global → Navigate",
+        "/ai-trade → AiTradePanel",
+        "/ai-trade → Navigate",
+        "/aparat → AparatVideos",
+        "/changelog → WhatsNew",
+        "/collective → Collective",
         "/global → GlobalWorld",
+        "/lab/chart-guide → LabChartGuide",
         "/launch → Launch",
-        "/pay/:code → PayLanding"
+        "/missions → Navigate",
+        "/opportunities → Opportunities",
+        "/opportunities/:opportunityId → OpportunityDetail",
+        "/orders/history → OrderHistory",
+        "/pay/:code → PayLanding",
+        "/perp → SpotPage",
+        "/perp/terminal → PerpTerminal",
+        "/risk → AiRiskEngine",
+        "/social → Social",
+        "/trade → Navigate",
+        "/whats-new → WhatsNew"
       ]
     },
     {
@@ -69,7 +120,7 @@
     {
       "name": "PAGES: the route count only grew",
       "ok": true,
-      "extra": "64 → 69"
+      "extra": "64 → 85"
     },
     {
       "name": "CHAT NAV: no navigable path was removed",

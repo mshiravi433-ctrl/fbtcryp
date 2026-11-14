@@ -5,7 +5,8 @@
  * across frontend, backend, solver, smart contracts, and verification services.
  */
 
-import { keccak256, toUtf8Bytes, AbiCoder } from 'ethers';
+import { keccak256, toUtf8Bytes } from '../../../server/ethersLite.js';
+import { abiEncodeStatic } from '../defi/abiLite.js';
 import {
   EIP712_DOMAIN_NAME,
   EIP712_DOMAIN_VERSION,
@@ -13,7 +14,16 @@ import {
   PROTOCOL_VERSION
 } from './types.js';
 
-const abiCoder = AbiCoder.defaultAbiCoder();
+/*
+ * The ABI coder here is SYNCHRONOUS.
+ *
+ * `AbiCoder` is behind the lazy boundary in `server/ethersLite.js` — it
+ * arrives as a PROMISE — and both EIP-712 hashes below are synchronous
+ * functions whose result is a digest. Making them async would have changed
+ * every caller and every test, so the encoding is done by `abiEncodeStatic`
+ * instead: every type in these two tuples is static, and the test suite
+ * compares the result against `ethers`'s own `AbiCoder`.
+ */
 
 /**
  * Deterministic JSON stringifier (recursive key-sorted).
@@ -58,7 +68,7 @@ export function computeDomainSeparator(chainId, verifyingContract = '0x000000000
     toUtf8Bytes('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)')
   );
   return keccak256(
-    abiCoder.encode(
+    abiEncodeStatic(
       ['bytes32', 'bytes32', 'bytes32', 'uint256', 'address'],
       [
         typeHash,
@@ -88,7 +98,7 @@ export function computeEIP712IntentStructHash(intent) {
   const constraintsHash = intent.constraintsHash || computeConstraintsHash(intent.constraints);
 
   return keccak256(
-    abiCoder.encode(
+    abiEncodeStatic(
       [
         'bytes32',
         'bytes32',

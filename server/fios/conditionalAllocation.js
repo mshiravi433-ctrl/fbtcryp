@@ -35,6 +35,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { requireFlag } from './flags.js';
+import { capitalUsdFor } from './financialState.js';
 import { executionStatus, TRADITIONAL_CLASSES, ALL_CLASSES } from './traditionalAssets.js';
 import { readCrossAssetPrices, canRead } from '../crossAssetPrice.js';
 import {
@@ -401,7 +402,7 @@ export function createConditionalAllocationEngine({ collections = null, observab
     };
 
     if (combined.state === 'TRIGGERED' && frame.action?.target) {
-      const capital = capitalUsd ?? num(financial?.net?.netWorthUsd) ?? num(financial?.computed?.netWorthUsd);
+      const capital = capitalUsd ?? capitalUsdFor(financial);
       const plan = buildAllocationPlan(frame, { capitalUsd: capital, reads, allowAboveRail, now: now() });
       record.plan = plan;
     }

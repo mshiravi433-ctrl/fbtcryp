@@ -112,7 +112,7 @@ try {
        to read "live / 21-21" on a server that had never been given a single
        evidence record, which is exactly the behaviour that made the dashboard
        unable to report "not ready". */
-    const phaseStatus = await get('/api/intents/v1/phase-status');
+    const phaseStatus = await get('/api/intents/v1/phase-status?detail=1');
     const publicStatus = await get('/api/intents/v1/public-status');
     check('phase-status reports phase 21 implemented but not live without evidence', phaseStatus.body.phases.some((row) => row.phase === 21 && row.implementation === 'implemented' && row.operational === false && row.live === false));
     check('phase-status names the missing evidence instead of going quiet', phaseStatus.body.phases.some((row) => row.phase === 21 && Array.isArray(row.blockers) && row.blockers.length > 0));
@@ -126,9 +126,21 @@ try {
        single later read, which made this row flip between runs on identical
        code. The route's number must sit inside that bracket and its launch
        flag must agree with the number it reported. */
-    const beforeCount = evidenceStoreStatus().storedCount;
+    /*
+     * The count the route reports is the REVIEWED count — the evidence that
+     * actually counts towards launch — while `storedCount` is every record
+     * the store holds, including the sandbox ones this probe deliberately
+     * disables. Bracketing the reviewed count against the raw count made
+     * this row flip whenever an earlier suite had left a raw record behind:
+     * the store held 4, the reviewed set held 0, and 0 sat outside [4, 4].
+     *
+     * So the bracket uses `reviewedCount` — the SAME measure the route uses.
+     * It is read on both sides of the fetch because a pending async write
+     * from an earlier suite can land in between.
+     */
+    const beforeCount = evidenceStoreStatus().reviewedCount;
     const activation = await get('/api/intents/v1/activation');
-    const afterCount = evidenceStoreStatus().storedCount;
+    const afterCount = evidenceStoreStatus().reviewedCount;
     const reportedCount = Number(String(activation.body.product.storedEvidence ?? '').split('/')[0]);
     check('activation reports the real stored-evidence count',
       activation.body.product.specificationImplementedThrough === 200

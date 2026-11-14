@@ -1,10 +1,5 @@
-import {
-  Contract,
-  JsonRpcProvider,
-  formatUnits,
-  getAddress,
-  isAddress
-} from 'ethers';
+import { JsonRpcProvider, formatUnits, getAddress, isAddress } from '../ethersLite.js';
+import { Contract } from 'ethers/contract';
 import {
   ACCESS_ABI,
   ADAPTER_ABI,
@@ -70,9 +65,9 @@ export function createCollectiveReader({ config = readCollectiveConfig(), provid
     if (injectedProvider) return injectedProvider;
     if (!config.configured) throw error('COLLECTIVE_NOT_CONFIGURED');
     if (!providerPromise) {
-      providerPromise = Promise.resolve().then(() => providerFactory
+      providerPromise = Promise.resolve().then(async () => providerFactory
         ? providerFactory(config)
-        : new JsonRpcProvider(config.rpcUrl, config.chainId));
+        : await JsonRpcProvider(config.rpcUrl, config.chainId));
     }
     try {
       return await providerPromise;
@@ -225,7 +220,7 @@ export function createCollectiveReader({ config = readCollectiveConfig(), provid
         decimals: Number(assetDecimals)
       },
       accounting: {
-        totalAssetsRaw: s(totalAssets), totalAssets: formatUnits(totalAssets, Number(assetDecimals)),
+        totalAssetsRaw: s(totalAssets), totalAssets: await formatUnits(totalAssets, Number(assetDecimals)),
         totalSupplyRaw: s(totalSupply), grossAssetsRaw: s(grossAssets), liabilitiesRaw: s(liabilities),
         incomeLiabilityRaw: s(incomeLiability), withdrawalLiabilityRaw: s(withdrawalLiability),
         riskReserveRaw: s(riskReserve), realizedIncomeAccruedRaw: s(realizedIncomeAccrued),
@@ -371,7 +366,7 @@ export function createCollectiveReader({ config = readCollectiveConfig(), provid
   async function getProposals(vaultAddress) {
     const { buildCollectiveProposals } = await import('./strategyPolicy.js');
     const snapshot = await getVault(vaultAddress);
-    return buildCollectiveProposals(snapshot, { chainId: config.chainId });
+    return await buildCollectiveProposals(snapshot, { chainId: config.chainId });
   }
 
   async function isKeeper(account) {

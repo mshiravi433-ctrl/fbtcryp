@@ -106,6 +106,14 @@ import {
   resolveProviderFleet,
   DEFAULT_PROVIDER_FLEET
 } from './aiProviderFleet.js';
+import { spendQuota } from './aiQuotaBudget.js';
+/* The deployment's own durable store. Imported for the same reason
+   `aiAnswerCache` imports it: a memory that lives only in this process dies with
+   the instance, and on a serverless platform that is every few minutes. */
+import { blobConfigured as durableStoreConfigured } from './blobCache.js';
+import { aiAnswerCacheStats } from './aiAnswerCache.js';
+import { lastReasoningLedger } from './aiReasoningLedger.js';
+import { cortexBridgeStatus } from './aiCortexBridge.js';
 
 /* Re-exported so every consumer of the gateway can describe the mode it used
    without importing a second module. */
@@ -155,6 +163,103 @@ export const PROVIDER_CONFIGS = Object.freeze({
     // models, so it is the honest home for both once those keys are absent.
     specialty: 'Multi-Model Routing, Market Intelligence & Live Search-Grounded Synthesis',
     costTier: 'medium',
+    latencyTier: 'medium'
+  },
+  /*
+   * ═══ THE FREE SEAT OF OPENROUTER ═════════════════════════════════════════
+   *
+   * WHY THIS IS A SEPARATE PROVIDER AND NOT A FLAG ON `openrouter`
+   * ---------------------------------------------------------------------
+   * The deployment's OpenRouter key is on the FREE tier. Every model id the
+   * `openrouter` seat knows — `openai/gpt-4o-mini`, `google/gemini-2.5-pro`,
+   * `anthropic/claude-sonnet-4-6`, `x-ai/grok-4` — is a PAID id. A free key
+   * calling a paid id answers HTTP 402 "Insufficient Balance", which the
+   * gateway classifies as BILLING: an ACCOUNT-level failure that stops the
+   * model walk immediately instead of stepping to the next id. So the paid
+   * seat spent a round-trip on every request, burned CPU, and produced
+   * nothing — the free capacity the key actually has was never reachable,
+   * because the registry contained no `:free` id at all.
+   *
+   * Making it a flag on `openrouter` would have been worse: the same key
+   * would then have to be trusted to serve a PAID id, so a key that was
+   * topped up would silently change which model answered. Two seats, one
+   * key, two honest model lists: the operator chooses by declaring the
+   * fleet (`FBT_AI_PROVIDERS`), not by hoping a request lands on the right
+   * id.
+   *
+   * WHY THESE SPECIFIC IDS
+   * ---------------------------------------------------------------------
+   * The free catalog churns — ids appear and disappear, and a withdrawn id
+   * answers 404 forever. So this list is deliberately short, and every id
+   * in it was verified to answer on the free tier in November 2026:
+   *
+   *   · nvidia/nemotron-3.5-super-vl:free — the strongest all-rounder in the
+   *     free catalog: 1M context, and the only one that passed JSON
+   *     extraction, a tool call and a small coding task on every attempt
+   *     across a 10-day benchmark. It is the default because "it answered
+   *     correctly" beats "it is the biggest".
+   *   · nvidia/nemotron-3-ultra-550b-a55b:free — the flagship: a 550B MoE
+   *     built for reasoning and orchestration, also 1M context. Slower
+   *     (29 tok/s) but the deepest answer available for free.
+   *   · nvidia/nemotron-3.5-lightning:free — the fast, high-volume seat.
+   *   · nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free — a
+   *     reasoning-labelled id; the one whose uptime is least reliable, so it
+   *     is tried and skipped rather than trusted first.
+   *   · cohere/north-mini-code:free — the code specialist.
+   *   · google/gemma-4-31b-it:free — the only free id that does NOT train
+   *     on prompts, which is why it is here at all.
+   *   · openrouter/free — OpenRouter's own router over the free catalog.
+   *     The safety net: when a named id is withdrawn, this still answers.
+   *
+   * The free tier allows 20 requests/minute and 50/day (1,000/day once
+   * $10 has been bought on the account). The daily cap is why the answer
+   * cache exists and why this seat is not the one a busy screen polls.
+   */
+  openrouterfree: {
+    name: 'OpenRouter Free',
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    envKey: 'OPENROUTER_API_KEY',
+    /* The SAME key as the paid seat. This is a second model list, not a
+       second account — no new key, no new secret to store. */
+    envKeys: ['OPENROUTER_API_KEY', 'OPENROUTER_KEY', 'OPEN_ROUTER_API_KEY'],
+    modelEnv: 'OPENROUTER_FREE_MODEL',
+    baseModel: 'nvidia/nemotron-3.5-super-vl:free',
+    defaultModel: process.env.OPENROUTER_FREE_MODEL || 'nvidia/nemotron-3.5-super-vl:free',
+    fallbackModels: [
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'nvidia/nemotron-3.5-lightning:free',
+      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+      'cohere/north-mini-code:free',
+      'google/gemma-4-31b-it:free',
+      /* OpenRouter's own free router: it picks a live free model for us, so
+         a withdrawn id above costs one round-trip, not an outage. */
+      'openrouter/free'
+    ],
+    retiredModels: [
+      /* Ids that were in the free catalog and are gone now. They answer 404,
+         so they must never be chosen automatically — but an explicit request
+         for one is still honoured (a paid account may own the paid id). */
+      'poolside/laguna-s-2.1:free',
+      'poolside/laguna-xs-2.1:free',
+      'poolside/laguna-m.1:free',
+      'poolside/laguna-xs.2:free',
+      'nvidia/nemotron-3.5-content-safety:free',
+      'nvidia/nemotron-3-super-120b-a12b:free',
+      'nvidia/nemotron-nano-12b-v2-vl:free',
+      'nvidia/nemotron-nano-9b-v2:free',
+      'openai/gpt-oss-120b:free',
+      'qwen/qwen3-coder:free',
+      'deepseek/deepseek-r1:free',
+      'mistralai/mistral-7b-instruct:free',
+      'nousresearch/hermes-3-llama-3.1-405b:free',
+      'arcee-ai/trinity-large-thinking:free',
+      'google/gemma-3-27b-it:free',
+      'z-ai/glm-4.5-air:free',
+      'deepseek/deepseek-chat-v3-0324:free'
+    ],
+    type: 'openai-compatible',
+    specialty: 'Free Tier Reasoning & Orchestration — 1M-Context Nemotron/Gemma Seats at Zero Cost',
+    costTier: 'free',
     latencyTier: 'medium'
   },
   openai: {
@@ -322,12 +427,51 @@ export const PROVIDER_CONFIGS = Object.freeze({
     envKeys: ['CLOUDFLARE_API_TOKEN', 'CF_API_TOKEN', 'CLOUDFLARE_AI_TOKEN'],
     accountEnvKeys: ['CLOUDFLARE_ACCOUNT_ID', 'CF_ACCOUNT_ID'],
     modelEnv: 'WORKERSAI_MODEL',
+    /*
+     * ─── TWO SEATS IN ONE PROVIDER: FAST AND DEEP ──────────────────────────
+     * The old default was `@cf/meta/llama-3.1-8b-instruct` — an 8B model.
+     * It answers quickly and says almost nothing useful. The free tier of
+     * Workers AI also serves a genuine reasoning model:
+     * `@cf/qwen/qwen3.8-27b` (27B, reasoning low|medium|xhigh, 262K context)
+     * and `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b` (R1 distilled into a
+     * 32B Qwen). Putting the deep ones first costs latency, so the mode
+     * decides:
+     *
+     *   · `swift`      — the 8B model: it exists to classify and greet;
+     *   · `balanced`   — the 70B fp8 model;
+     *   · `max`        — Qwen 3.8 27B, because "smartest" should mean the
+     *                    model that actually reasons.
+     *
+     * ─── TWO IDS THAT WERE WRONG ─────────────────────────────────────────────
+     * The R1 distill was configured as `@cf/deepseek/deepseek-r1-distill-qwen-32b`
+     * but Cloudflare's catalogue spells the publisher `deepseek-ai`:
+     * `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`. The wrong id 404s, and
+     * because the gateway walks the model ladder on a 404, EVERY Cloudflare
+     * seat burned its whole ladder before the router moved on — which is what
+     * made one `max` turn cost 13-16 provider calls.
+     *
+     * The same model is also scheduled for deprecation on 2026-11-20, so it
+     * cannot be the flagship. `@cf/qwen/qwen3.8-27b` is the live replacement:
+     * it reasons, it takes `reasoning_effort`, and it is not going away.
+     *
+     * `intelligenceModelLadder` (aiIntelligence.js) carries that order, and
+     * `getModelCandidates` puts the ladder in front of the default in `max`
+     * while leaving `balanced`/`swift` exactly as they were. The default
+     * stays the fast model so an unconfigured mode never inherits the
+     * slowest seat on the fleet.
+     */
     baseModel: '@cf/meta/llama-3.1-8b-instruct',
     defaultModel: process.env.WORKERSAI_MODEL || '@cf/meta/llama-3.1-8b-instruct',
-    fallbackModels: ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/mistral/mistral-7b-instruct-v0.2', '@cf/deepseek/deepseek-r1-distill-qwen-32b', '@cf/meta/llama-3.2-3b-instruct'],
+    fallbackModels: [
+      '@cf/qwen/qwen3.8-27b',
+      '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
+      '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+      '@cf/mistral/mistral-7b-instruct-v0.2',
+      '@cf/meta/llama-3.2-3b-instruct'
+    ],
     retiredModels: [],
     type: 'workersai-native',
-    specialty: 'Free Serverless Open Models (Llama/Mistral/DeepSeek) — Private Edge Inference',
+    specialty: 'Free Serverless Open Models (Llama/DeepSeek-R1/Mistral) — Private Edge Inference',
     costTier: 'free',
     latencyTier: 'fast'
   },
@@ -560,7 +704,20 @@ export function recordProviderCall(providerId, { ok = true, durationMs = 0, mode
     st.tokensOut += tOut;
     st.usageCalls += 1;
   }
-  st.calls.push({ ok: Boolean(ok), durationMs: Number(durationMs) || 0, qualityScore: qualityScore == null ? null : Number(qualityScore), tokensIn: tIn, tokensOut: tOut, at: Date.now() });
+  /*
+   * WHICH MODEL FAILED, KEPT WITH THE FAILURE (2026-11-13).
+   *
+   * `model` and `reasonCode` arrive as arguments and were being thrown away:
+   * the record kept only ok/duration/tokens, so the window could say "this
+   * provider answered badly" but never "this MODEL does not exist". The
+   * consequence was measured, not imagined — after `google/gemini-2.5-pro`
+   * returned HTTP 404 five turns running, the ladder it leads was byte-for-byte
+   * unchanged and the next turn paid for the same dead call again. On the `:free`
+   * tier a failed request counts against the daily allowance exactly like a
+   * successful one, so this was not a latency quirk: it was a recurring tax on
+   * every deep turn.
+   */
+  st.calls.push({ ok: Boolean(ok), durationMs: Number(durationMs) || 0, qualityScore: qualityScore == null ? null : Number(qualityScore), tokensIn: tIn, tokensOut: tOut, model: model || null, reasonCode: reasonCode || null, at: Date.now() });
   if (st.calls.length > HEALTH_WINDOW) st.calls.shift();
   if (ok) {
     st.consecutiveFailures = 0;
@@ -568,9 +725,25 @@ export function recordProviderCall(providerId, { ok = true, durationMs = 0, mode
     st.openReason = null;
     st.lastError = null;
     st.lastSuccess = { at: Date.now(), model: model || null, durationMs: Number(durationMs) || 0 };
+    /* A recovery is evidence too, and it has to travel: another instance holding
+       a tombstone for this id would keep the recovered model out of its ladder
+       for the rest of the cooldown. Cheap because it only fires for a model that
+       was actually marked. */
+    if (model) forgetDeadModel(providerId, normalizeSecretValue(model));
     return;
   }
   st.consecutiveFailures += 1;
+  /*
+   * Mark the MODEL, at the scope the fault actually has. Written through to the
+   * durable tier when one is configured, fire-and-forget when it is not, and a
+   * no-op for any fault that is not deterministic — a timeout is evidence about
+   * the network and must not follow this id to the next instance.
+   */
+  if (model && MODEL_SCOPED_FAULTS.has(reasonCode)) {
+    const id = normalizeSecretValue(model);
+    const at = Date.now();
+    rememberDeadModel(providerId, id, at, at + (CIRCUIT_OPEN_MS[reasonCode] ?? CIRCUIT_OPEN_MS.UNKNOWN));
+  }
   st.lastError = {
     at: Date.now(),
     model: model || null,
@@ -582,11 +755,228 @@ export function recordProviderCall(providerId, { ok = true, durationMs = 0, mode
      network, AUTH/BILLING/MODEL_UNAVAILABLE are deterministic — retrying them
      on the next request only buys latency. */
   const park = CIRCUIT_OPEN_MS[reasonCode] ?? CIRCUIT_OPEN_MS.UNKNOWN;
-  if (st.consecutiveFailures >= 2 || ['AUTH', 'BILLING', 'PERMISSION', 'MODEL_UNAVAILABLE', 'CF_ACCOUNT'].includes(reasonCode)) {
+  /*
+   * …UNLESS THE FAULT'S SCOPE IS ONE MODEL (2026-11-13).
+   *
+   * The justification above is that a deterministic fault would be retried on
+   * the next request. That is no longer true for a model-scoped one:
+   * `deadModelsFor` now demotes the offending id, so the next request does not
+   * retry it at all. Parking the provider as well punished every live id behind
+   * it — measured, one retired OpenRouter flagship pushed a gateway fronting a
+   * hundred models to LAST in the fleet order, behind two providers nobody had
+   * asked anything of.
+   *
+   * The account-wide case is still covered, and by the same rule that always
+   * covered it: two consecutive failures park the provider whichever models they
+   * happened to be on. So a key that has lost tier access — every id answering
+   * 403 — is parked on the second failure exactly as before, while one dead id
+   * costs one call instead of ten minutes of the whole seat.
+   */
+  const modelScoped = MODEL_SCOPED_FAULTS.has(reasonCode) && Boolean(model);
+  if (st.consecutiveFailures >= 2 || (!modelScoped && ['AUTH', 'BILLING', 'PERMISSION', 'MODEL_UNAVAILABLE', 'CF_ACCOUNT'].includes(reasonCode))) {
     st.openUntil = Date.now() + park;
     st.openReason = reasonCode;
   }
 }
+
+/*
+ * A FAULT WHOSE SCOPE IS THE MODEL, NOT THE KEY.
+ *
+ * `classifyAiError` already draws this line and names it `retryNextModel`:
+ * "this MODEL is wrong (404 model_not_found, 403 tier_not_allowed — try the
+ * next model on the same provider, no reason to give up on a working key)"
+ * versus "this ACCOUNT/KEY is wrong (no model will help)". The distinction was
+ * correct and nothing downstream used it: `recordProviderCall` parked the whole
+ * provider for a model-scoped fault, so one retired flagship id took a gateway
+ * fronting a hundred models out of the fleet order — measured, OpenRouter went
+ * to LAST behind two providers that had not been asked anything.
+ *
+ * These faults are deterministic, which is why one occurrence is enough to act
+ * on: a 404 for a model id does not heal by itself the way a timeout does.
+ */
+const MODEL_SCOPED_FAULTS = Object.freeze(new Set(['MODEL_UNAVAILABLE']));
+
+/**
+ * Model ids this provider has PROVEN dead, and for how much longer.
+ *
+ * Bounded by the health window, and cooled by the same duration the provider
+ * circuit uses for this fault class, so a model and its provider are never
+ * punished on two different clocks. Demotion, never deletion: the id stays in
+ * the chain behind the live ones, exactly as a stale pin does, because a
+ * vendor's 404 can be a bad morning rather than a retired model — and a list
+ * that only ever shrinks eventually has nothing left to try.
+ */
+/*
+ * ─── A MEMORY THAT OUTLIVES THE INSTANCE (2026-11-13) ────────────────────────
+ *
+ * Demoting a proven-dead model saves a full-price call on a tier where failed
+ * requests count against the daily allowance. But `healthState` is a Map in this
+ * process, and a serverless instance is recycled every few minutes — so every
+ * new instance re-learned the same 404 by paying for it again. The saving was
+ * real and it was per-instance, which on the platform this deploys to means it
+ * was mostly theoretical.
+ *
+ * The durable tier is opt-in by configuration, exactly like the answer cache's,
+ * and for the same reason: a memory that silently does not persist has no value
+ * here, and pretending otherwise would be the second lie of the same shape. With
+ * no durable store configured this whole block is inert and the gateway behaves
+ * byte-for-byte as it did before.
+ *
+ * ONE RECORD PER PROVIDER, not one per model. The store has no scan and no
+ * delete, so per-model keys could never be hydrated without already knowing the
+ * ids — and knowing the ids is what the ladder is for. Clearing a mark is a
+ * read-modify-write, which can race another instance; the race is bounded and
+ * self-healing, because a mark expires in ten minutes and the worst outcome is
+ * one dead call that would have happened anyway.
+ *
+ * NOTHING HERE MAY BLOCK OR THROW. `deadModelsFor` is called from the
+ * synchronous candidate builder on the way to every provider call, so hydration
+ * and persistence are fire-and-forget, and every durable helper swallows its own
+ * errors. A store that is down must cost the gateway nothing but the memory.
+ */
+const MODEL_MEMORY_PREFIX = 'ai-model-memory/v1/';
+const durableMarks = new Map(); // providerId -> Map(model -> { at, until })
+let durableHydrated = false;
+let durableHydrating = null;
+
+function modelMemoryEnabled(env = process.env) {
+  const raw = String(env?.AI_MODEL_MEMORY_DURABLE ?? 'auto').trim().toLowerCase();
+  if (['0', 'off', 'false', 'no'].includes(raw)) return false;
+  if (['1', 'on', 'true', 'yes'].includes(raw)) return true;
+  return durableStoreConfigured();
+}
+
+/**
+ * Merge two sources of evidence about dead models into one map.
+ *
+ * Pure, and exported for that reason: the interesting rules live here and a rule
+ * that can only be tested through I/O is a rule that will not be tested.
+ *
+ *   · a mark that has expired is not a mark;
+ *   · a mark from ANOTHER instance yields to a success THIS instance has seen
+ *     since the mark was written — otherwise a stale tombstone would keep a
+ *     recovered model out of the ladder for ten minutes on every instance but
+ *     the one that witnessed the recovery;
+ *   · a non-deterministic fault is not evidence about the id, so it neither
+ *     marks nor clears.
+ */
+export function mergeModelMarks({ calls = [], durable = null, now = Date.now(), cooldown = 600_000 } = {}) {
+  const out = new Map();
+  for (const c of calls || []) {
+    if (!c?.model) continue;
+    if (now - (c.at || 0) > cooldown) { out.delete(c.model); continue; }
+    if (c.ok) { out.delete(c.model); continue; }
+    if (!MODEL_SCOPED_FAULTS.has(c.reasonCode)) continue;
+    out.set(c.model, (c.at || 0) + cooldown);
+  }
+  for (const [model, mark] of durable || new Map()) {
+    const until = Number(mark?.until) || 0;
+    if (until <= now) continue;
+    const writtenAt = Number(mark?.at) || (until - cooldown);
+    /* This instance's own newer success outranks another instance's tombstone. */
+    const recoveredSince = (calls || []).some((c) => c?.model === model && c.ok && (c.at || 0) > writtenAt);
+    if (recoveredSince) continue;
+    if (!out.has(model) || until > out.get(model)) out.set(model, until);
+  }
+  return out;
+}
+
+async function durableMarksRead(providerId) {
+  try {
+    const { storeGet } = await import('./store.js');
+    const row = await storeGet(`${MODEL_MEMORY_PREFIX}${providerId}`, null);
+    const marks = row && typeof row === 'object' ? row.marks : null;
+    if (!marks || typeof marks !== 'object') return new Map();
+    return new Map(Object.entries(marks).map(([model, m]) => [model, { at: Number(m?.at) || 0, until: Number(m?.until) || 0 }]));
+  } catch {
+    return new Map();
+  }
+}
+
+async function durableMarksWrite(providerId) {
+  if (!modelMemoryEnabled()) return false;
+  const marks = durableMarks.get(providerId);
+  const now = Date.now();
+  /* Only unexpired marks are written, so a record never carries its own rot. */
+  const live = {};
+  let longest = 0;
+  for (const [model, m] of marks || new Map()) {
+    if ((m?.until || 0) <= now) continue;
+    live[model] = { at: m.at || 0, until: m.until || 0 };
+    longest = Math.max(longest, m.until - now);
+  }
+  try {
+    const { storeSet } = await import('./store.js');
+    /* TTL is the longest remaining cooldown, with a floor so a write is never
+       born expired. */
+    await storeSet(`${MODEL_MEMORY_PREFIX}${providerId}`, { marks: live, at: now }, Math.max(longest, 60_000));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Load the durable marks. Idempotent, never throws, never awaited by a caller
+ * that needs an answer now: `deadModelsFor` kicks it off and returns what this
+ * process already knows, so the FIRST candidate list after a cold start can be
+ * built on local evidence alone and every one after it is better informed.
+ */
+export async function hydrateModelMemory({ env = process.env } = {}) {
+  if (!modelMemoryEnabled(env)) return { ok: false, reason: 'DURABLE_NOT_CONFIGURED', providers: 0 };
+  if (durableHydrated) return { ok: true, reason: 'ALREADY_HYDRATED', providers: durableMarks.size };
+  if (durableHydrating) return durableHydrating;
+  durableHydrating = (async () => {
+    const ids = Object.keys(PROVIDER_CONFIGS).filter((id) => PROVIDER_CONFIGS[id]?.type !== 'internal-engine');
+    /*
+     * IN PARALLEL, BECAUSE THESE READS SHARE NOTHING. One key per provider, no
+     * ordering between them, and a durable backend is a network round trip: read
+     * sequentially and a cold instance waits for eleven of them before it knows
+     * anything. It is fire-and-forget either way, so nothing blocks — but a
+     * memory that arrives late is a memory the first few turns do not have, and
+     * the first few turns are exactly the ones that would re-buy a dead call.
+     */
+    const results = await Promise.all(ids.map(async (id) => [id, await durableMarksRead(id)]));
+    let loaded = 0;
+    for (const [id, marks] of results) {
+      if (marks.size) { durableMarks.set(id, marks); loaded++; }
+    }
+    durableHydrated = true;
+    durableHydrating = null;
+    return { ok: true, reason: 'HYDRATED', providers: loaded, at: Date.now() };
+  })();
+  return durableHydrating;
+}
+
+export function deadModelsFor(providerId, { now = Date.now() } = {}) {
+  const st = healthState.get(providerId);
+  const cooldown = CIRCUIT_OPEN_MS.MODEL_UNAVAILABLE ?? CIRCUIT_OPEN_MS.UNKNOWN;
+  /* Fire-and-forget: the sync caller must never wait on the store. */
+  if (!durableHydrated && !durableHydrating && modelMemoryEnabled()) void hydrateModelMemory();
+  return mergeModelMarks({
+    calls: st?.calls || [],
+    durable: durableMarks.get(providerId) || null,
+    now,
+    cooldown
+  });
+}
+
+/* Marked/cleared by `recordProviderCall`; both are rare (a mark costs one failed
+   call, a clear costs one read-modify-write) so neither is on a hot path. */
+function rememberDeadModel(providerId, model, at, until) {
+  let marks = durableMarks.get(providerId);
+  if (!marks) { marks = new Map(); durableMarks.set(providerId, marks); }
+  marks.set(model, { at, until });
+  if (modelMemoryEnabled()) void durableMarksWrite(providerId);
+}
+
+function forgetDeadModel(providerId, model) {
+  const marks = durableMarks.get(providerId);
+  if (!marks?.has(model)) return;
+  marks.delete(model);
+  if (modelMemoryEnabled()) void durableMarksWrite(providerId);
+}
+
 
 export function isProviderHealthy(providerId) {
   const st = healthState.get(providerId);
@@ -648,6 +1038,29 @@ export function getProviderHealth() {
 
 export function resetProviderHealth() {
   healthState.clear();
+  /* The durable overlay and its hydration flag are process state too. Leaving
+     them behind would let one test's tombstones decide the next test's ladder,
+     which is how a gate starts passing for the wrong reason. */
+  durableMarks.clear();
+  durableHydrated = false;
+  durableHydrating = null;
+}
+
+/** What the durable model-memory tier is doing, for the fleet panel. */
+export function modelMemoryStatus({ env = process.env } = {}) {
+  const enabled = modelMemoryEnabled(env);
+  let marks = 0;
+  const now = Date.now();
+  for (const m of durableMarks.values()) for (const [, v] of m) if ((v?.until || 0) > now) marks++;
+  return {
+    schema: 'fbt.ai-model-memory.v1',
+    enabled,
+    backend: enabled ? (durableStoreConfigured() ? 'configured' : 'forced-on') : 'off',
+    hydrated: durableHydrated,
+    hydrating: Boolean(durableHydrating),
+    providers: durableMarks.size,
+    liveMarks: marks
+  };
 }
 
 /**
@@ -733,6 +1146,160 @@ export function classifyAiError(err, providerId = null) {
 
 const MODEL_ATTEMPTS = Math.max(1, Number(process.env.AI_MODEL_ATTEMPTS || 3));
 
+/*
+ * ─── THE TURN BUDGET (§7) ──────────────────────────────────────────────────
+ * The gateway had TWO retry loops and they multiplied:
+ *
+ *   runRole tries up to 3 PROVIDERS
+ *     └─ each provider call walks up to 4 MODEL candidates
+ *
+ * One `max` turn could therefore spend 3 × 4 = 12 provider calls for ONE
+ * role, and a turn runs five roles — measured at 13-16 calls per question.
+ * On the free tier that is the whole daily quota: OpenRouter's `:free`
+ * seat allows 50 requests a day, so a single deep question could consume a
+ * quarter of the budget, and a bad provider id could consume it entirely.
+ *
+ * The fix is not "retry less" — failover is what makes a free tier usable
+ * at all. The fix is that a MODEL id is tried ONCE per turn. Walking the
+ * same ladder again for the next provider is pure waste: the ladder is a
+ * property of the provider, not of the attempt, and every id in it has
+ * already proved itself dead or alive in this very turn.
+ *
+ * So the budget is a per-turn ledger:
+ *   · a model id that already FAILED in this turn is not tried again;
+ *   · a provider that already failed on every candidate is not re-walked.
+ *
+ * The ledger is request-scoped, so two concurrent turns never see each
+ * other's failures, and it expires with the request.
+ */
+/** Start a fresh turn ledger. Returns the token that scopes this turn. */
+export function beginAiTurnBudget() {
+  return {
+    failedModels: new Map(),
+    exhaustedProviders: new Set(),
+    /* The CALL CAP — the third half of the budget, and the one that
+       protects the DAILY allowance rather than the turn.
+       ·
+       · `calls` counts the provider requests this turn has actually
+       ·   spent. `maxCalls` is the ceiling.
+       ·
+       · The ceiling is not "be lazy". It is the answer to a question the
+       ·   old budget could not ask: WHEN should a turn stop asking? The
+       ·   time budget answers "when the turn is late"; the model ledger
+       ·   answers "when this model is known dead". Neither knows that
+       ·   the daily allowance is nearly spent, and on the `:free` tier
+       ·   that allowance IS the product.
+       ·
+       · The cap is deliberately a CAP ON SPEND, not a cap on quality:
+       ·   the stages that carry the answer (the analyses, the
+       ·   synthesiser) run first, and the stages that refine it (the
+       ·   verifier, the critic) are the ones that get dropped. A turn
+       ·   that hits the cap answers with what it has, and says so.
+       */
+    calls: 0,
+    maxCalls: maxProviderCallsPerTurn(),
+    capHits: 0
+  };
+}
+
+/**
+ * How many provider requests ONE turn may spend.
+ *
+ * The default is 6 — the measured cost of a full `max` turn (three
+ * analyses, a verifier, a final answer and a critic). Lowering it does
+ * not make the turn cheaper in tokens; it makes it cheaper in QUOTA,
+ * which on the free tier is the scarce thing.
+ *
+ * `0` means "no cap", which is the pre-budget behaviour and is safe
+ * only on a paid tier.
+ */
+export function maxProviderCallsPerTurn(env = process.env) {
+  /*
+   * The default is SIX, and the ceiling is on the TURN — the whole
+   * collaboration, not one request.
+   *
+   * A deep turn spends five provider calls on the free tier: the two
+   * analyses, the crypto research, the verification and the final
+   * answer. The sixth is the critic's REPAIR PASS — the stage that
+   * sends a draft back to the reviewer when it invents a number or
+   * drops a part of the question.
+   *
+   * So the sixth call is not a luxury: the existing suites pin the
+   * repair behaviour, and a ceiling that silently removes it would
+   * make the product's «max» mode quietly weaker than it claims to be.
+   * That is the same failure this repo keeps fixing — a capability
+   * that is present in the code and absent in the answer.
+   *
+   * The QUOTA is handled where the quota is known, not here:
+   *
+   *   · the day's headroom lowers this cap (server/aiQuotaBudget.js),
+   *     so the last requests of the day are spread over several
+   *     questions rather than spent on the first one;
+   *   · the durable answer cache means a repeated question costs one
+   *     collaboration rather than two;
+   *   · and a deployment that WANTS the shallower shape can set
+   *     `AI_MAX_PROVIDER_CALLS=5` — ten questions a day instead of
+   *     eight, with the repair pass dropped.
+   *
+   * The trade is measurable and it is the operator's to make:
+   *
+   *   cap 6 → 6 calls, nothing dropped → 8 turns a day
+   *   cap 5 → 5 calls, the critic dropped → 10 turns a day
+   *   cap 4 → 4 calls, verifier and critic dropped → 12 turns a day
+   */
+  const raw = env?.AI_MAX_PROVIDER_CALLS;
+  if (raw === undefined || raw === null || String(raw).trim() === '') return 6;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return 6;
+  return Math.floor(n);
+}
+
+/** Spend one unit of the turn's call cap. Returns false when it is spent. */
+export function spendProviderCall(budget) {
+  if (!budget || typeof budget !== 'object') return true;
+  const cap = Number(budget.maxCalls);
+  if (!Number.isFinite(cap) || cap <= 0) {
+    budget.calls = (budget.calls || 0) + 1;
+    return true;
+  }
+  if ((budget.calls || 0) >= cap) {
+    budget.capHits = (budget.capHits || 0) + 1;
+    return false;
+  }
+  budget.calls = (budget.calls || 0) + 1;
+  return true;
+}
+
+/** How much of the turn's call cap is left. */
+export function providerCallBudgetLeft(budget) {
+  if (!budget || typeof budget !== 'object') return Infinity;
+  const cap = Number(budget.maxCalls);
+  if (!Number.isFinite(cap) || cap <= 0) return Infinity;
+  return Math.max(0, cap - (budget.calls || 0));
+}
+
+/**
+ * A budget is an object with the ledger's shape, or null for "no budget"
+ * (the legacy behaviour, used by single direct calls).
+ */
+function normalizeBudget(budget) {
+  if (!budget || typeof budget !== 'object') return null;
+  if (!budget.failedModels || typeof budget.failedModels.set !== 'function') return null;
+  if (!budget.exhaustedProviders || typeof budget.exhaustedProviders.add !== 'function') return null;
+  return budget;
+}
+
+/** Models of this provider that already failed in this turn. */
+function failedModelsFor(budget, providerId) {
+  if (!budget) return new Set();
+  let set = budget.failedModels.get(providerId);
+  if (!set) {
+    set = new Set();
+    budget.failedModels.set(providerId, set);
+  }
+  return set;
+}
+
 /**
  * Ordered model candidates for one call.
  *
@@ -817,7 +1384,28 @@ export function getModelCandidates(providerId, requestedModel = null, { mode = n
   /* `max` is allowed one extra attempt: the first is the flagship, and paying
      for a stronger model is the point of the mode. It is still bounded. */
   const attempts = maxMode && !requestedModel ? MODEL_ATTEMPTS + 1 : MODEL_ATTEMPTS;
-  return ordered.slice(0, Math.max(ordered.length > 1 ? attempts : 1, 1));
+  /*
+   * ─── DEMOTE WHAT THIS PROVIDER HAS ALREADY PROVEN DEAD ────────────────────
+   * Within one turn the walk already drops models it has just seen fail, so this
+   * is the half that was missing: memory ACROSS turns. Without it every new turn
+   * re-discovered the same 404 at full price, and the discovery re-parked a
+   * provider that had three other live ids behind the dead one.
+   *
+   * Three properties hold it down. An explicitly requested model still leads,
+   * because that contract is pinned by the wiring probe and a caller who named an
+   * id is entitled to have it tried. Nothing is deleted, only ordered — the same
+   * philosophy the stale-pin rule above already follows. And if EVERY candidate
+   * is dead the order is left alone, because an empty chain would turn a bad
+   * morning into a provider that can never be asked again.
+   */
+  const dead = deadModelsFor(providerId);
+  let ranked = ordered;
+  if (dead.size > 0 && !requestedModel && ordered.length > 1) {
+    const live = ordered.filter((m) => !dead.has(m));
+    const gone = ordered.filter((m) => dead.has(m));
+    if (live.length > 0) ranked = [...live, ...gone];
+  }
+  return ranked.slice(0, Math.max(ranked.length > 1 ? attempts : 1, 1));
 }
 
 /**
@@ -1023,7 +1611,37 @@ export function getFleetSummary() {
        had been made. */
     servingFrom: healthy.length
       ? healthy.map((p) => p.id)
-      : (failing.length ? ['degraded:internal-rules'] : ['internal-rules'])
+      : (failing.length ? ['degraded:internal-rules'] : ['internal-rules']),
+    /*
+     * The answer cache's own report.
+     *
+     * It is here, and not on a separate endpoint, because the question it
+     * answers is the same one this whole summary answers: «چرا هوش مصنوعی
+     * کار نمی‌کند؟» — and on a free fleet the answer is often «the daily
+     * allowance is already spent». `hitRate` is the fraction of turns the
+     * fleet did not have to answer, so it is the number that says whether the
+     * cache is doing its job.
+     *
+     * A cached answer is NOT a different answer: the stored verdict carries
+     * the original providers, models, claims and uncertainty, so a client
+     * cannot be misled by one. See server/aiAnswerCache.js.
+     */
+    answerCache: aiAnswerCacheStats(),
+    /*
+     * The reasoning ledger of the last turn (§8 — LEVER #4). It makes the
+     * layer observable: an operator can see how many roles actually
+     * produced a reasoning path, and how many conclusions did not carry
+     * their own reasoning forward.
+     */
+    reasoningLedger: lastReasoningLedger(),
+    /*
+     * The cortex bridge (§8 — LEVER #5). It reports whether the cortex is
+     * available, whether its readout was TRAINED (it used not to be — the
+     * weights were hand-set once and never fitted, which is why the cortex
+     * could not tell an uptrend from a downtrend), and the measured
+     * discrimination between a rising and a falling state.
+     */
+    cortexBridge: cortexBridgeStatus()
   };
 }
 
@@ -1204,7 +1822,7 @@ async function callAnthropic({ apiKey, model, system, user, temperature = 0.3, m
 }
 
 /** Cloudflare Workers AI (serverless open models via REST run endpoint) */
-async function callWorkersAI({ accountId, apiToken, model, system, user, temperature = 0.3, maxTokens = 800, timeout = TIMEOUT_MS, withUsage = false, signal = null }) {
+async function callWorkersAI({ accountId, apiToken, model, system, user, temperature = 0.3, maxTokens = 800, timeout = TIMEOUT_MS, withUsage = false, signal = null, extraBody = {} }) {
   assertNoSecretsInPayload({ system, user });
   const sanitizedSystem = sanitizePrompt(system);
   const sanitizedUser = sanitizePrompt(user);
@@ -1233,7 +1851,19 @@ async function callWorkersAI({ accountId, apiToken, model, system, user, tempera
       { role: 'user', content: sanitizedUser }
     ],
     temperature,
-    max_tokens: maxTokens
+    max_tokens: maxTokens,
+    /*
+     * ─── THE REASONING KNOB ON CLOUDFLARE'S FREE SEAT ───────────────────────
+     * `@cf/qwen/qwen3.8-27b` and `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`
+     * are reasoning models on Cloudflare's free tier. Without this field they
+     * were being called like plain chat models — the reasoning existed in the
+     * weights but was never asked for, so the smartest mode got the same
+     * answer from them as from the 8B model it used to default to.
+     *
+     * `extraBody` is empty for every other Workers AI model, so their
+     * request bodies stay byte-identical to before this change.
+     */
+    ...(extraBody && typeof extraBody === 'object' ? extraBody : {})
   };
 
   const raw = await httpReq(url, {
@@ -1359,11 +1989,17 @@ async function runProviderModel(providerId, cfg, apiKey, model, { system, user, 
   if (cfg.type === 'workersai-native') {
     const accountId = getCloudflareAccountId();
     if (!accountId) throw new Error('NO_CLOUDFLARE_ACCOUNT_ID');
-    return callWorkersAI({ accountId, apiToken: apiKey, model, system, user, temperature, maxTokens, timeout, withUsage, signal });
+    /* Workers AI accepts `reasoning_effort` on its reasoning models (the R1
+       distill). Empty for every other model, so their bodies are unchanged. */
+    const workersExtraBody = intelligenceReasoningFields(providerId, mode, model);
+    return callWorkersAI({ accountId, apiToken: apiKey, model, system, user, temperature, maxTokens, timeout, withUsage, signal, extraBody: workersExtraBody });
   }
   // OpenAI Compatible (OpenRouter, Groq, DeepSeek, Mistral, AIMLAPI)
   const extraHeaders = {};
-  if (providerId === 'openrouter') {
+  /* Both OpenRouter seats get the attribution headers. OpenRouter uses them
+     for its leaderboard and rate-limits harder on requests that omit them, so
+     the free seat needs them exactly as much as the paid one. */
+  if (providerId === 'openrouter' || providerId === 'openrouterfree') {
     extraHeaders['HTTP-Referer'] = SITE_URL;
     extraHeaders['X-Title'] = 'FBT Smart Intent OS';
   }
@@ -1399,10 +2035,32 @@ export async function executeProviderChat(providerId, {
   intelligence = null,
   timeout = TIMEOUT_MS,
   withUsage = false,
-  signal = null
+  signal = null,
+  /* The per-turn ledger. See "THE TURN BUDGET" above: without it the gateway
+     re-walks a provider's whole model ladder every time the caller retries
+     with the next provider, and one question spends 13-16 provider calls. */
+  budget = null
 } = {}) {
   const cfg = PROVIDER_CONFIGS[providerId];
   if (!cfg) throw new Error(`UNKNOWN_PROVIDER:${providerId}`);
+
+  /*
+   * A provider this turn has already PROVED dead is not asked again.
+   *
+   * This is the single most valuable line in the budget. On the free tier a
+   * 429 means the daily cap is reached — the next request is certain to
+   * fail too, so asking again spends quota to learn nothing. Before the
+   * ledger, one question could ask the capped provider three times.
+   */
+  const turnBudget = normalizeBudget(budget);
+  if (turnBudget?.exhaustedProviders?.has?.(providerId)) {
+    const err = new Error(`PROVIDER_EXHAUSTED_THIS_TURN:${providerId}`);
+    err.reasonCode = 'PROVIDER_EXHAUSTED';
+    err.provider = providerId;
+    err.attempts = [];
+    err.fix = 'This provider already failed in this turn; try the next seat.';
+    throw err;
+  }
 
   /*
    * Every path that reaches a provider lands here, so this is where a mode
@@ -1424,12 +2082,54 @@ export async function executeProviderChat(providerId, {
       throw err;
     }
 
-    const candidates = getModelCandidates(providerId, model, { mode });
+    const allCandidates = getModelCandidates(providerId, model, { mode });
+    /*
+     * ─── THE BUDGET CUT ────────────────────────────────────────────────────
+     * Candidates this turn has already PROVED dead are dropped before the
+     * first request goes out. That is the whole point: the ladder is a
+     * property of the provider, so a second walk of it in the same turn
+     * costs real requests and can only re-discover the same failures.
+     */
+    const alreadyFailed = failedModelsFor(turnBudget, providerId);
+    const candidates = turnBudget
+      ? allCandidates.filter((c) => !alreadyFailed.has(c))
+      : allCandidates;
+    /* Every candidate was already tried in this turn — do not spend another
+       request to learn that. */
+    if (turnBudget && !candidates.length && allCandidates.length) {
+      const out = new Error(`ALL_MODELS_ALREADY_TRIED:${providerId}`);
+      out.reasonCode = 'MODEL_UNAVAILABLE';
+      out.provider = providerId;
+      out.attempts = [];
+      out.fix = 'Every model for this provider already failed in this turn.';
+      throw out;
+    }
     let lastErr = null;
     let lastClass = null;
 
     for (const candidate of candidates) {
       try {
+        /*
+         * ─── THE CALL CAP (the daily allowance's share) ───────────────────
+         * Spend one unit of the turn's cap BEFORE the request goes out.
+         *
+         * This is the line that protects the DAILY quota, not the turn's
+         * latency. On the `:free` tier the whole allowance is fifty
+         * requests a day, and a `max` turn costs six of them — so a
+         * handful of deep questions exhausts the day.
+         *
+         * When the cap is spent the turn does NOT fail: it answers with
+         * what it already has, and the caller can say so. A turn that
+         * refused to answer would be worse than a shallower answer.
+         */
+        if (!spendProviderCall(turnBudget)) {
+          const out = new Error(`PROVIDER_CALL_CAP_SPENT:${providerId}`);
+          out.reasonCode = 'QUOTA';
+          out.provider = providerId;
+          out.attempts = attempts.slice();
+          out.fix = 'This turn has spent its provider-call cap; the answer is built from what it already read.';
+          throw out;
+        }
         /* Usage is requested on EVERY call, not only when a caller asked for
            it. The provider already returns it in the same response body, so
            the only cost is a few bytes — and without it the dashboard's token
@@ -1439,6 +2139,21 @@ export async function executeProviderChat(providerId, {
         const usage = typeof response === 'string' ? null : response.usage;
         const durationMs = Date.now() - startedAt;
         recordProviderCall(providerId, { ok: true, durationMs, model: candidate, usage });
+        /*
+         * Count it against the day's allowance.
+         *
+         * This is the project's own accounting, not the provider's: the
+         * provider remains the authority on when the cap is reached, and
+         * it says so with a 429. But a deployment that can COUNT its own
+         * spending can decide to spend it deliberately — and can publish
+         * «18 of 50 used today» instead of discovering the cap by
+         * failing against it.
+         *
+         * It is counted on success only. A request the provider rejected
+         * for an auth error did not consume the daily allowance there,
+         * and counting it would make the deployment too pessimistic.
+         */
+        spendQuota(providerId).catch(() => {});
         return {
           ok: true,
           provider: providerId,
@@ -1458,6 +2173,20 @@ export async function executeProviderChat(providerId, {
       } catch (err) {
         const cls = classifyAiError(err, providerId);
         attempts.push({ model: candidate, reasonCode: cls.kind, status: cls.status || null, error: cls.message.slice(0, 200) });
+        /* Mark the id dead for the rest of THIS turn. */
+        if (turnBudget) alreadyFailed.add(candidate);
+        /*
+         * And if the failure says "another model of this provider cannot
+         * help" — a 429 on the free tier, an auth error, a billing refusal —
+         * then this PROVIDER is done for the turn. The caller's next
+         * provider retry must not spend another request to learn the same
+         * thing.
+         *
+         * This is the case that mattered most: OpenRouter's `:free` seat
+         * answers 429 as soon as the daily cap is hit, and the gateway used
+         * to ask it three times per role before giving up.
+         */
+        if (turnBudget && !cls.retryNextModel) turnBudget.exhaustedProviders.add(providerId);
         lastErr = err;
         lastClass = cls;
         console.warn(`[ai-gateway] ${providerId}/${candidate} failed (${cls.kind}${cls.status ? ` HTTP ${cls.status}` : ''}): ${cls.message.slice(0, 180)}`);
@@ -1465,6 +2194,9 @@ export async function executeProviderChat(providerId, {
       }
     }
 
+    /* The provider's ladder is done for this turn: the next provider retry
+       must not walk it again. */
+    if (turnBudget && !candidates.length) turnBudget.exhaustedProviders.add(providerId);
     const durationMs = Date.now() - startedAt;
     recordProviderCall(providerId, {
       ok: false,
@@ -1524,13 +2256,29 @@ export function getPreferredProvidersForTask(taskType = 'general', { configuredO
   const type = String(taskType).toLowerCase();
   let candidateOrder = [];
 
+  /*
+   * `openrouterfree` sits NEXT TO `openrouter` in every order, and that is the
+   * point of it: it is the SAME KEY with a different model list. A free key
+   * on the PAID seat answers 402 on every paid model, so a route that names
+   * only `openrouter` is a route that fails with a free deployment — and the
+   * deployment's default fleet is `['openrouterfree','groq','workersai']`.
+   *
+   * Before this fix the free seat was reachable ONLY in `max` mode (via
+   * `MAX_PROVIDER_ORDER`), so `balanced` — the mode the central brain and
+   * most direct callers use — could not see it at all. The seat existed,
+   * the fleet named it, and no route ever asked it.
+   *
+   * Position: immediately after `openrouter`, so the PAID seat still leads a
+   * deployment that has paid access, and the historical order (which the
+   * mode test pins by index 0) does not move.
+   */
   switch (type) {
     case 'market':
     case 'market_intelligence':
     case 'crypto_trend':
       // OpenRouter leads (its online-capable models are the general route),
       // then the DIRECT Grok seat for real-time narrative, then Gemini/Groq.
-      candidateOrder = ['openrouter', 'xai', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
+      candidateOrder = ['openrouter', 'openrouterfree', 'xai', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
       break;
     case 'research':
     case 'news':
@@ -1539,27 +2287,27 @@ export function getPreferredProvidersForTask(taskType = 'general', { configuredO
       // Perplexity's old job: sourced, web-grounded answers. OpenRouter's
       // online-capable models lead; Grok's direct real-time seat and Gemini
       // back it up.
-      candidateOrder = ['openrouter', 'xai', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
+      candidateOrder = ['openrouter', 'openrouterfree', 'xai', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
       break;
     case 'reasoning':
     case 'complex_plan':
     case 'portfolio_optimization':
       // High-precision logic: OpenRouter's multi-model route first, then the
       // DIRECT GPT and Claude seats, then DeepSeek.
-      candidateOrder = ['openrouter', 'openai', 'anthropic', 'deepseek', 'gemini', 'aimlapi', 'workersai', 'internal'];
+      candidateOrder = ['openrouter', 'openrouterfree', 'openai', 'anthropic', 'deepseek', 'gemini', 'aimlapi', 'workersai', 'internal'];
       break;
     case 'risk':
     case 'guardian':
     case 'verification':
-      candidateOrder = ['anthropic', 'openai', 'deepseek', 'openrouter', 'aimlapi', 'gemini', 'groq', 'workersai', 'internal'];
+      candidateOrder = ['anthropic', 'openai', 'deepseek', 'openrouter', 'openrouterfree', 'aimlapi', 'gemini', 'groq', 'workersai', 'internal'];
       break;
     case 'intent':
     case 'fast':
     case 'classification':
-      candidateOrder = ['workersai', 'groq', 'gemini', 'mistral', 'aimlapi', 'openrouter', 'internal'];
+      candidateOrder = ['workersai', 'groq', 'gemini', 'mistral', 'aimlapi', 'openrouter', 'openrouterfree', 'internal'];
       break;
     default:
-      candidateOrder = ['openrouter', 'openai', 'groq', 'gemini', 'xai', 'workersai', 'aimlapi', 'deepseek', 'anthropic', 'mistral', 'internal'];
+      candidateOrder = ['openrouter', 'openrouterfree', 'openai', 'groq', 'gemini', 'xai', 'workersai', 'aimlapi', 'deepseek', 'anthropic', 'mistral', 'internal'];
       break;
   }
 

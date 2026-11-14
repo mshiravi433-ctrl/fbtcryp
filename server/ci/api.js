@@ -39,13 +39,14 @@ import { createCentralBrain } from './brain.js';
 import { createKernel } from './kernel.js';
 import { mountKernelRoutes } from './kernelRoutes.js';
 import { setCiSource, resetCiSources, healthSnapshot } from './sources.js';
+import { listPluginsForOwner, attachPluginForOwner } from './pluginBridge.js';
 
 export const CI_ROUTES_SCHEMA = 'fbt.central-api.v1';
 const DEVICE_HEADER = 'x-fbt-device';
 const DEVICE_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const MAX_MESSAGE = 1200;
 
-export function createCentralIntelligence({ ioOverride = null, log = () => {} } = {}) {
+export function createCentralIntelligence({ ioOverride = null, log = () => {}, ensureProviders = null } = {}) {
   const stateStore = createCentralStateStore({ log });
   const events = createEventBus({ stateStore, log });
   const brain = createCentralBrain({ stateStore, events, io: ioOverride || {}, log });
@@ -94,6 +95,24 @@ export function createCentralIntelligence({ ioOverride = null, log = () => {} } 
     const owner = ownerFor(req);
     const message = String(req.body?.message ?? '').slice(0, MAX_MESSAGE);
     if (!message.trim() && !req.body?.txHash) return res.status(400).json({ ok: false, error: 'EMPTY_MESSAGE', hint: 'a message, or a txHash to verify an executed action' });
+    /*
+     * The optional-domain providers (the Financial Intelligence OS) are
+     * wired HERE, on the first real turn, and not at boot.
+     *
+     * Why here: `fios` is 50 files and 980 KB, and importing it eagerly
+     * would put it on the boot path of every serverless cold start — the
+     * exact cost §5 of `docs/PHASE-CPU-AND-DARK-PHASES.md` was written to
+     * avoid. But the brain CANNOT read the global or fit domains without
+     * it, and those modules report `PROVIDER_NOT_WIRED` until it exists.
+     *
+     * So: the import is still lazy, but it is triggered by a TURN rather
+     * than by a boot, and it happens exactly once (the promise is cached).
+     * A failure here must NOT take the turn down — the domain reports its
+     * own named reason instead.
+     */
+    if (typeof ensureProviders === 'function') {
+      try { await ensureProviders(); } catch (err) { log(`ci:provider-bootstrap-failed:${String(err?.message || err).slice(0, 80)}`); }
+    }
     const out = await brain.handle({
       owner,
       message,
@@ -106,7 +125,17 @@ export function createCentralIntelligence({ ioOverride = null, log = () => {} } 
       executionId: req.body?.executionId || null,
       txHash: req.body?.txHash || null,
       chainId: req.body?.chainId ?? null,
-      hints: req.body?.hints || null
+      hints: req.body?.hints || null,
+      /* The agent the user is talking to, published by the hub's active-agent
+         store and carried by `sendIntent` like the page claim: a fact about
+         what the user has open, not something each caller must remember to
+         pass. Only these two shapes are accepted, and only a first-party
+         plugin id can resolve — anything else is dropped here rather than
+         reaching the matcher. */
+      agentId: (() => {
+        const raw = String(req.body?.agentId ?? '').trim().slice(0, 64);
+        return /^fbt-native[:-][a-z0-9][a-z0-9-]{1,40}$/i.test(raw) ? raw : null;
+      })()
     });
     return res.json(out);
   }));
@@ -285,6 +314,112 @@ export function createCentralIntelligence({ ioOverride = null, log = () => {} } 
 
   /* Upgrade 10's financial surface, mounted on the SAME gateway (see the note
      in kernelRoutes.js): one origin, one budget, one owner derivation. */
+  /* \u2500\u2500 the plugins a user attaches to THEMSELVES (\u00a75.24.15) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+   *
+   * The hub dock lets a person pick an agent, and until now that pick lived in
+   * their browser's localStorage and changed nothing but the suggestion chips.
+   * These three routes make it a server-side fact about the OWNER: the catalog
+   * with its registry rows (passport, trust, `canExecute: false`), the
+   * attachment, and its removal. A turn from Telegram or a cron carries no
+   * `agentId`, and now it does not need to \u2014 the bridge reads the attachment.
+   */
+  router.get('/plugins', route(async (req, res) => {
+    const owner = ownerFor(req);
+    const out = await listPluginsForOwner(owner);
+    if (!out.ok) {
+      /* 503, not 500: the plugins exist, the composition root that mounts them
+         has not been wired yet \u2014 a cold instance answers this before `fios`
+         loads, and the client should retry rather than report a defect. */
+      return res.status(503).json({ ok: false, code: out.code || 'PLUGIN_LIST_FAILED', detail: out.detail || null, plugins: [] });
+    }
+    return { ok: true, plugins: out.plugins, attached: out.attached, durable: out.durable, registered: out.registered };
+  }));
+
+  router.post('/plugins/attach', route(async (req, res) => {
+    const owner = ownerFor(req);
+    const agentId = String(req.body?.agentId ?? '').trim().slice(0, 64);
+    /* Only a first-party id shape is accepted, and only a slug that is in the
+       catalog can be written \u2014 the store checks that, and answers 404 for a
+       plugin that does not exist rather than storing a choice nobody can run. */
+    if (!/^fbt-native[:-][a-z0-9][a-z0-9-]{1,40}$/i.test(agentId)) {
+      return res.status(400).json({ ok: false, code: 'INVALID_AGENT_ID', hint: 'an agentId of the form fbt-native:<slug>' });
+    }
+    const out = await attachPluginForOwner(owner, agentId);
+    if (!out.ok) {
+      return res.status(out.code === 'PLUGIN_NOT_IN_CATALOG' ? 404 : 503).json({ ok: false, code: out.code, detail: out.detail || null });
+    }
+    return { ok: true, attached: out.slug, durable: out.durable };
+  }));
+
+  router.post('/plugins/detach', route(async (req) => {
+    const owner = ownerFor(req);
+    const out = await attachPluginForOwner(owner, null);
+    /* Detaching is idempotent: having nothing attached and removing nothing are
+       the same state, and reporting an error for it would make the UI's toggle
+       lie about what happened. */
+    return { ok: true, attached: null, durable: out.durable ?? null, code: out.ok ? null : (out.code || null) };
+  }));
+
+  /* ── the plugin that speaks first (§5.24.16) ──────────────────────────────
+     A watch is armed on the plugin the user already chose: `agentId` is
+     optional, and when it is absent the owner's durable attachment decides, so
+     the same order of authority the chat turn uses decides here too.
+
+     The module is imported LAZILY. `app.js` loads it statically for the cron, so
+     in production this is already warm; in a gate that only mounts the brain, a
+     route nobody calls must not pull the push transport and the order watcher
+     into the graph. */
+  const watchModule = () => import('../agentHub/pluginWatch.js');
+  /* A plugin that is not ours and a plugin we cannot watch are different facts
+     and get different statuses, so a client can say which one happened. */
+  const watchStatus = (code) => (code === 'PLUGIN_NOT_IN_CATALOG' || code === 'PLUGIN_NOT_WATCHABLE' ? 404
+    : code === 'PLUGIN_WATCH_DISABLED' || code === 'PLUGIN_ATTACH_DISABLED' ? 503
+      : code === 'NO_OWNER' ? 401 : 400);
+
+  router.post('/plugins/watch', route(async (req, res) => {
+    const owner = ownerFor(req);
+    const mod = await watchModule();
+    const agentId = req.body?.agentId == null ? null : String(req.body.agentId).trim().slice(0, 64) || null;
+    const endpoint = String(req.body?.endpoint ?? '').trim().slice(0, 512);
+    const subject = req.body?.subject && typeof req.body.subject === 'object'
+      ? { kind: String(req.body.subject.kind ?? '').slice(0, 12), value: String(req.body.subject.value ?? '').slice(0, 64), chain: req.body.subject.chain == null ? null : String(req.body.subject.chain).slice(0, 12) }
+      : null;
+    const out = await mod.putPluginWatch({
+      owner,
+      identity: endpoint,
+      agentId,
+      subject,
+      lang: String(req.body?.lang || 'fa').slice(0, 5),
+      thresholdPct: req.body?.thresholdPct == null ? null : Number(req.body.thresholdPct)
+    });
+    if (!out.ok) {
+      return res.status(watchStatus(out.code)).json({ ok: false, code: out.code, wants: out.wants || null, cap: out.cap ?? null, detail: out.message || null });
+    }
+    return { ok: true, watch: out.watch, durable: out.durable };
+  }));
+
+  router.get('/plugins/watches', route(async (req) => {
+    const owner = ownerFor(req);
+    const mod = await watchModule();
+    const out = await mod.listPluginWatches({ owner });
+    if (!out.ok) return { ok: false, code: out.code, watches: [] };
+    return { ok: true, watches: out.watches, durable: out.durable, status: await mod.pluginWatchStatus().catch(() => null) };
+  }));
+
+  router.post('/plugins/watch/stop', route(async (req) => {
+    const owner = ownerFor(req);
+    const mod = await watchModule();
+    /* Idempotent, like detaching: stopping a watch that is not armed is the same
+       state as stopping one that was, and an error here would make the UI's
+       toggle lie about what happened. */
+    const out = await mod.stopPluginWatch({
+      owner,
+      id: req.body?.id == null ? null : String(req.body.id).trim().slice(0, 160) || null,
+      slug: req.body?.slug == null ? null : String(req.body.slug).trim().slice(0, 48) || null
+    });
+    return { ok: true, removed: out.ok ? out.removed : 0, durable: out.durable ?? null, code: out.ok ? null : (out.code || null) };
+  }));
+
   mountKernelRoutes({ router, kernel, ownerFor, log });
 
   return { router, stateStore, events, brain, kernel, ownerFor, schema: CI_ROUTES_SCHEMA };

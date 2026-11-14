@@ -6,7 +6,7 @@
  *   Which chain? What block? What amount? What fee? Was the constraint satisfied?
  */
 
-import { keccak256, toUtf8Bytes } from 'ethers';
+import { keccak256, toUtf8Bytes } from '../../../server/ethersLite.js';
 import { RECEIPT_SCHEMA_VERSION, EVIDENCE_TIERS } from './types.js';
 import { canonicalJson } from './intentHashing.js';
 

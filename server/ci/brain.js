@@ -44,16 +44,44 @@ import { buildCentralContext, emptyMemory, applyTurn, resolvePage, FOLLOWUP_KIND
 import { classify, createIntent, transition } from '../../src/lib/central/intent.js';
 import { buildPlan, validatePlan, templateFor } from '../../src/lib/central/planner.js';
 import { synthesizeInternalAnswer } from '../aiInternalReasoner.js';
+/*
+ * The brain asks the SHARED gate, not its own copy of the rule. Two copies of
+ * one rule is one copy too many: the brain's inline version drifted from the
+ * gate within a day — the gate refused «ریسک X چیست؟» while the brain
+ * answered it from a glossary. One rule, one place to be wrong.
+ */
+import { evaluateLocalFirst } from '../aiLocalFirstGate.js';
+/*
+ * The MODEL FALLBACK (step 5.2). The corpus answers what the corpus holds; the
+ * chat path, one endpoint away, answers the rest with a model. The central
+ * brain had NO provider path at all — so for a judgement, a scenario, or a
+ * question the 36-rule registry does not cover, it refused, while the chat
+ * beside it answered.
+ *
+ * Same gateway as the chat path, same turn budget, same free ladder. Not a
+ * second, cheaper, private pipeline: one pipeline, so there is one place
+ * where the quota is spent and one place where a failure can be observed.
+ */
+import {
+  executeProviderChat,
+  getPreferredProvidersForTask,
+  isProviderConfigured,
+  beginAiTurnBudget
+} from '../aiGateway.js';
+import { searchKnowledge } from '../../src/lib/intent-ai/os/knowledgeCenter.js';
 import { evaluatePolicy, planDigest } from '../../src/lib/central/policy.js';
 import { assessRisk } from '../../src/lib/central/risk.js';
-import { buildRecommendation, possibleActionsFrom } from '../../src/lib/central/recommend.js';
+import { buildRecommendation, possibleActionsFrom, fmtNum, fmtUsd } from '../../src/lib/central/recommend.js';
 import { composeResponse } from '../../src/lib/central/human.js';
 import { classifyError, createErrorLedger, humanizeError, nextRecovery } from '../../src/lib/central/errors.js';
 import {
   analyzeConcentration, analyzeExposure, assessLendingSafety, assetIntelligence,
-  computeBorrowCapacity, goalFeasibility, scanOpportunities, simulateShock
+  computeBorrowCapacity, goalFeasibility, readGoalInputs, scanOpportunities, simulateShock
 } from '../../src/lib/central/analysis.js';
 import { buildCapabilityMatrix } from '../../src/lib/central/registry.js';
+import { ingestTurn, conversationNeedsInput, readLastReplan } from './sessionBridge.js';
+import { reportBehavior } from './learningBridge.js';
+import { consultPlugins, hasPluginProvider } from './pluginBridge.js';
 import { createModules } from './modules.js';
 import { createActionEngine } from './actions.js';
 import { healthSnapshot } from './sources.js';
@@ -152,6 +180,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     borrowing: 'borrowing', farming: 'farming', liquidity: 'liquidity', futures: 'futures',
     dydx: 'dydx', signals: 'signals', news: 'news', goals: 'goals', alerts: 'alerts',
     transactions: 'transactions', events: 'events', risk: 'risk', profitPlan: 'profit-plan',
+    globalIntel: 'global-intel', opportunityFit: 'opportunity-fit', macroGraph: 'macro-graph', goalScenarios: 'goal-scenarios', routeIntelligence: 'route-intelligence', whyDecision: 'why-decision',
     positions: 'lending', recentActions: 'transactions', pendingActions: 'transactions',
     errors: 'risk', eventsList: 'events'
   };
@@ -249,7 +278,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
   async function handle({
     owner, message = '', page = null, confirm = false, actionId = null, planDigestSent = null,
     requestId = null, executionId = null, txHash = null, chainId = null, locale = 'en',
-    hints = null, suggestions = null
+    hints = null, suggestions = null, agentId = null
   } = {}) {
     turns.total += 1;
     const registry = registryFor(owner);
@@ -274,6 +303,13 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
       classification: { type: 'UNSUPPORTED', confidence: 0, definition: { modules: [], permission: PERMISSION.READ }, entities: {} },
       context: { page: pageClaim }, requestId, sessionId: null, owner, locale, now: startedAt
     });
+    /* The agent this person is talking to, when the client says so. Stamped
+       BEFORE any routing so it survives every later `intent = { ...intent }`
+       and reaches the turn record even on a turn no plugin answered: "which
+       agent was I talking to?" is an audit question about every turn, not only
+       about the ones a plugin happened to answer. The slug is validated by the
+       plugin layer, which owns the catalog; this only carries the string. */
+    if (agentId) intent = { ...intent, turnAgentId: String(agentId).slice(0, 64) };
     state = writeSection(state, 'session', { data: { memory: compactMemory(memory), at: startedAt }, source: 'client-context', status: 'OK', now: startedAt }).state;
     await stateStore.replace(owner, state);
 
@@ -356,6 +392,79 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     };
     turns.byIntent[intent.intentType] = (turns.byIntent[intent.intentType] || 0) + 1;
 
+    /*
+     * ── THE CONVERSATION MACHINERY (path 16) ──────────────────────────────
+     *
+     * This is the session layer's half of the last dark engine.
+     *
+     * The conversation-state machine is NOT a capability and it is NOT a
+     * module — it is the layer UNDER them. It knows which state the
+     * conversation is in, which edges are legal, and which field the
+     * current state still lacks. So it is read HERE, once per turn, and
+     * its answer goes into two places:
+     *
+     *   · `context.missingInformation` — so the reply asks for the ONE
+     *     field the conversation needs, instead of a questionnaire, and
+     *     instead of pretending it had enough to answer;
+     *   · the `session` section — so the conversation's own shape is
+     *     durable and the NEXT turn starts where this one left off.
+     *
+     * The turn does not die if the machine is not mounted. A missing
+     * conversation engine means no adaptive question — not a failed
+     * turn.
+     */
+    let conversation = null;
+    let conversationSuggestion = null;
+    let adaptiveQuestion = null;
+    let lastReplan = null;
+    /*
+     * The replan's own half. The event-replanning engine already listens
+     * on the central bus, so it has already run when the world moved; the
+     * turn's job here is to READ what it decided and to let the owner
+     * know that the plan was reconsidered.
+     *
+     * It is read, not triggered: triggering belongs to the bus. A turn
+     * that triggered its own replan would re-plan on every message, and
+     * the machine's cooldowns exist precisely to prevent that.
+     */
+    try {
+      const replanRead = await readLastReplan(owner, { limit: 3 });
+      if (replanRead.ok) lastReplan = replanRead.replan || null;
+    } catch {
+      /* No replan to report is the common case, not a failure. */
+    }
+    try {
+      const ingested = await ingestTurn(owner, { message, locale });
+      if (ingested.ok) {
+        conversation = ingested.conversation;
+        conversationSuggestion = ingested.suggestion;
+        adaptiveQuestion = ingested.question;
+        const needed = conversationNeedsInput(conversation, adaptiveQuestion);
+        if (needed) {
+          /*
+           * The missing field joins the turn's own missing-information
+           * list, so the reply asks for it in the same voice as every
+           * other missing field — and the machine's own question text
+           * travels with it, because it is the machine's question and
+           * the machine owns it.
+           */
+          context.missingInformation = Array.from(new Set([
+            ...(context.missingInformation || []),
+            needed.field || 'goal'
+          ]));
+          context.conversationQuestion = {
+            state: needed.state,
+            field: needed.field,
+            missing: needed.missing,
+            question: needed.question
+          };
+        }
+      }
+    } catch {
+      /* The conversation machinery is best-effort; a turn without it is
+         a shallower turn, not a broken one. */
+    }
+
     /* 3. CONTEXT_RESOLUTION — including "resolve the pending action" paths. */
     intent = transition(intent, 'CONTEXT_RESOLUTION', { reason: classification.followUp });
     let followupHandled = null;
@@ -402,6 +511,262 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
        failure the brief forbids. Instead: no findings, no recommendation, and a
        question that names the closest things this brain can actually do. */
     if (intent.intentType === 'UNSUPPORTED' && !plan.steps.length) {
+      /*
+       * ─── THE CORPUS SHORT-CIRCUIT (2026-11-12) ──────────────────────────
+       *
+       * This branch used to answer «به هیچ مسیر ثبت‌شده‌ای نرساندم» for EVERY
+       * question the 36-rule registry did not cover. That included questions
+       * the repository already answers correctly — «کارمزد پلتفرم FBT چقدر
+       * است؟», «بیت کوین چیست؟», «کیف پول من کجا ذخیره می شود؟».
+       *
+       * Measured before this change: 0 of 7 corpus-answerable questions got
+       * an answer from this brain. The chat path answered all 7 with zero
+       * provider calls.
+       *
+       * The brain asked "which of my 36 registered intents is this?" BEFORE
+       * it asked "can I answer?". A question outside the registry therefore
+       * never reached the part that could have answered it. This block puts
+       * the corpus check FIRST, for the UNSUPPORTED case only.
+       *
+       * Three properties make this safe:
+       *
+       *   1. It runs ONLY when the registry found nothing and the plan has no
+       *      steps — so it can never override a real read, a quote, a policy
+       *      verdict or a safety refusal. Every one of those happens earlier
+       *      in the chain and returns before this point.
+       *   2. The gate's own safety floor applies (SAFETY_PRECHECK_RE), so a
+       *      distressed person is never answered from a glossary.
+       *   3. It costs ZERO provider calls, which is the whole point: the
+       *      `:free` quota is 50 requests a day and a `max` turn is 6 calls.
+       */
+      let corpusAnswer = null;
+      let corpusMatch = null;
+      try {
+        const rows = searchKnowledge(context.message || '', { locale, limit: 3 });
+        const gate = evaluateLocalFirst({
+          message: context.message || '',
+          locale,
+          knowledge: rows,
+          context: {
+            market: state.sections?.markets?.data
+              ? { dataStatus: 'live', priceMap: state.sections.markets.data.prices || {} }
+              : { dataStatus: 'unavailable' },
+            portfolio: state.sections?.portfolio?.data || null
+          },
+          socialRead: classification.entities?.isDistress ? { distress: true } : null,
+          emotionRead: null,
+          env: process.env
+        });
+        if (gate?.used && gate.answer) {
+          corpusAnswer = String(gate.answer).trim();
+          corpusMatch = gate.evidence?.matched ? { id: gate.evidence.matched } : null;
+        }
+      } catch {
+        corpusAnswer = null;
+      }
+
+      if (corpusAnswer) {
+        /* Answered from the verified corpus: this is NOT an unsupported turn
+           any more, and it is not a refusal. It is a grounded answer with a
+           citation, and it says where it came from. */
+        intent = {
+          ...intent,
+          unsupported: false,
+          needsUserInput: false,
+          answeredFromCorpus: true,
+          corpusMatch: corpusMatch?.id || null,
+          intentType: 'CORPUS_LOOKUP'
+        };
+        Object.assign(context, {
+          missingInformation: Array.from(new Set((context.missingInformation || []).filter((m) => m !== 'intent'))),
+          nearMisses: []
+        });
+        /* The recommendation is BUILT later from this intent (the brain's
+           chain builds it after the reads), so the intent carries the answer
+           and the citation, and the recommendation inherits both. */
+        intent.corpusAnswer = corpusAnswer;
+        intent.corpusSource = corpusMatch?.source || 'verified-knowledge';
+        intent.corpusTitle = corpusMatch?.titleFa || corpusMatch?.titleEn || corpusMatch?.id || null;
+      } else {
+        /*
+         * ─── THE MODEL FALLBACK (2026-11-12) ─────────────────────────────────
+         *
+         * The corpus declined. That leaves two honest options: refuse, or ask
+         * a model. Refusing was the old behaviour and it was wrong here — the
+         * chat path answers these questions, and the user cannot tell which
+         * door they walked through.
+         *
+         * The budget shape is deliberate:
+         *
+         *   · ONE call. The brain has no six-role fan-out to pay for; the
+         *     `:free` quota is 50 requests a day and a `max` turn costs 6.
+         *     A question here costs 1, not 6.
+         *   · `beginAiTurnBudget()` — the SAME ledger the chat path uses, so
+         *     a provider that just failed in this turn is not asked again.
+         *   · At most 3 seats, tried in the registry's health order.
+         *   · `intelligence: 'balanced'` — a free tier's answer, not a
+         *     flagship's, because the free tier IS the product here.
+         *
+         * And the rule that matters most: A FAILURE NEVER BECOMES AN ANSWER.
+         * If no seat produces text, the brain falls through to the old honest
+         * refusal. A refusal is a better answer than a fabrication.
+         */
+        /*
+         * ─── THE PLUGIN ATTACH (2026-11-11) ──────────────────────────────────────────────
+         *
+         * Eleven first-party plugins existed — a yield optimizer over
+         * DefiLlama pools, a token risk scanner over GoPlus, a wallet exposure
+         * auditor, a strategy backtester, a smart-money tracker — and a chat
+         * turn could not reach ONE of them: `runNativeAgent` had no call site
+         * outside the Agent Hub dock. So «بهترین بازده استیبل‌کوین روی
+         * آربیتروم چیه» arrived here as UNSUPPORTED and the turn either spent
+         * one of its 50 daily provider calls on a generic model answer or
+         * refused, while a local plugin that reads the live source sat dark.
+         *
+         * The order is the argument: the CORPUS is free, the PLUGIN is local
+         * (measured 0.4 ms warm, zero provider calls, and it does not even
+         * import until a rule matches), and the MODEL costs quota. So the
+         * plugin is tried after the corpus and BEFORE the model, and when it
+         * answers, the model fallback is skipped entirely.
+         *
+         * And the same rule as everywhere else in this branch: A FAILURE NEVER
+         * BECOMES AN ANSWER. No match, a dead source, a timeout or a
+         * wrong-language body all fall through to the model, then to the
+         * honest refusal below.
+         */
+        let pluginAnswer = null;
+        let pluginLead = null;
+        let pluginSlug = null;
+        let pluginTitle = null;
+        let pluginDataStatus = null;
+        let pluginMatched = null;
+        let pluginAttachedBy = null;
+        let pluginSubject = null;
+        let pluginWatch = null;
+        let pluginCode = null;
+        try {
+          /* `agentId` is the agent this person is talking to — sent by the chat
+             client from the hub's active-agent store. The bridge resolves it
+             against the owner's durable attachment when the turn carries none,
+             so a turn from Telegram or a cron still knows. */
+          const hit = await consultPlugins({ message: context.message || '', locale, owner, agentId });
+          if (hit?.ok === true) {
+            pluginLead = hit.lead;
+            pluginAnswer = hit.text;
+            pluginSlug = hit.slug;
+            pluginTitle = hit.title;
+            pluginDataStatus = hit.dataStatus;
+            pluginMatched = hit.matched;
+            pluginAttachedBy = hit.attachedBy || null;
+            /* The subject this answer read and the plugin's watch declaration,
+               so the reply can offer «keep watching this» with something real
+               to arm. Null for a plugin that answers but holds nothing
+               re-readable, which is most of them and is not a defect. */
+            pluginSubject = hit.subject || null;
+            pluginWatch = hit.watch || null;
+          } else {
+            pluginCode = hit?.code || 'PLUGIN_NO_ANSWER';
+          }
+        } catch {
+          pluginAnswer = null;
+          pluginCode = 'PLUGIN_ATTACH_THREW';
+        }
+
+        let modelAnswer = null;
+        let modelProvider = null;
+        let modelId = null;
+        /* Skipped when a plugin answered: a local read beats one of the 50
+           free provider calls a day. `if (...) try {} catch {}` keeps the
+           existing block unindented and unchanged. */
+        if (!pluginAnswer) try {
+          const turnBudget = beginAiTurnBudget();
+          /* `getPreferredProvidersForTask` returns provider IDS, and
+             `executeProviderChat` takes an id. The `internal` seat is the
+             deterministic local reasoner, not a model — asking it for a
+             market answer would produce a template, so it is excluded. */
+          const seats = (getPreferredProvidersForTask('general', { configuredOnly: true }) || [])
+            .filter((id) => typeof id === 'string' && id !== 'internal' && isProviderConfigured(id))
+            .slice(0, 3);
+          const question = String(context.message || '').trim();
+          for (const seat of seats) {
+            try {
+              const reply = await executeProviderChat(seat, {
+                system: locale === 'fa'
+                  ? 'تو دستیار صریح FBT هستی. به پرسش کاربر کوتاه و دقیق پاسخ بده. اگر چیزی را نمی‌دانی، صریح بگو که نمی‌دانی. عددی از خودت نساز.'
+                  : 'You are FBT, an honest assistant. Answer the user briefly and precisely. If you do not know something, say so plainly. Never invent a number.',
+                user: question,
+                temperature: 0.3,
+                maxTokens: 700,
+                json: false,
+                intelligence: 'balanced',
+                budget: turnBudget
+              });
+              const text = String(reply?.text || reply?.content || reply?.answer || '').trim();
+              if (text.length >= 20) {
+                modelAnswer = text;
+                modelProvider = seat;
+                modelId = reply?.model || null;
+                break;
+              }
+            } catch {
+              /* try the next seat */
+            }
+          }
+        } catch {
+          modelAnswer = null;
+        }
+
+        /* WHY no plugin answered travels on the turn even when the model or
+           the refusal answers instead: `NO_PLUGIN_MATCH`, `PLUGIN_TIMEOUT` and
+           `PLUGIN_ANSWER_WRONG_LANGUAGE` are different facts, and a code can
+           be quoted in a report where a sentence cannot. Set before the branch
+           so every branch below spreads it forward. */
+        if (pluginCode) intent.pluginCode = pluginCode;
+
+        if (pluginAnswer) {
+          intent = {
+            ...intent,
+            unsupported: false,
+            needsUserInput: false,
+            answeredFromPlugin: true,
+            pluginSlug,
+            pluginTitle,
+            pluginDataStatus,
+            pluginAttachedBy,
+            pluginSubject,
+            pluginWatch,
+            intentType: 'PLUGIN_ANSWER'
+          };
+          Object.assign(context, {
+            missingInformation: Array.from(new Set((context.missingInformation || []).filter((m) => m !== 'intent'))),
+            nearMisses: []
+          });
+          /* The recommendation is BUILT later from this intent, so the intent
+             carries the answer, the plugin that produced it and the data
+             status that plugin reported — including 'unavailable', because a
+             plugin whose source did not answer says exactly that in its own
+             text, and that text IS the honest answer. */
+          intent.pluginAnswer = pluginAnswer;
+          intent.pluginLead = pluginLead;
+          intent.pluginMatched = pluginMatched;
+        } else if (modelAnswer) {
+          intent = {
+            ...intent,
+            unsupported: false,
+            needsUserInput: false,
+            answeredFromModel: true,
+            modelProvider,
+            modelId,
+            intentType: 'MODEL_ANSWER'
+          };
+          Object.assign(context, {
+            missingInformation: Array.from(new Set((context.missingInformation || []).filter((m) => m !== 'intent'))),
+            nearMisses: []
+          });
+          intent.modelAnswer = modelAnswer;
+          intent.modelProvider = modelProvider;
+          intent.modelId = modelId;
+        } else {
       const near = (classification.evidence || []).map((e) => e.rule || e.pattern || null).filter(Boolean);
       const assetName = classification.entities.asset || classification.entities.fromAsset || null;
       /* The matrix's `capabilities` map holds a STATUS STRING per module, so the
@@ -432,6 +797,8 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
           ? `«${String(context.message || '').trim().slice(0, 60)}» را به هیچ برنامه‌ای در رجیستری نرساندم، پس هیچ عددی از این مسیر عرض نمی‌شود. اگر منظورت کاری با ${assetName} است، بگو کدام: ${offered.slice(0, 3).join('، ')}.`
           : `«${String(context.message || '').trim().slice(0, 60)}» را به هیچ برنامه‌ای در رجیستری نرساندم، پس هیچ عددی از این مسیر عرض نمی‌شود. مسیرهای آمادهٔ همین نشست: ${offered.slice(0, 4).join('، ')}.`
       };
+        }
+      }
     }
 
     /* §5/§20 — a money request with a hole in it is answered with a NAMED question,
@@ -439,7 +806,47 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
        steps use) so the question and the plan can never disagree about what is
        missing, and the quote/prepare/simulate steps are withheld instead of being
        sent a null asset and reporting an opaque provider error. */
-    const moneySteps = steps.filter((st) => st.operation === 'quote' || st.operation === 'prepare' || st.operation === 'simulate' || st.operation === 'execute');
+    /*
+     * A MONEY STEP IS A STEP THAT CAN MOVE MONEY.
+     *
+     * `simulate` was in this list, and `GOAL_PLAN` has a `goals.plan`
+     * simulate step. So «هدفت چیست؟» asked for «ارز مبدأ، ارز مقصد،
+     * مبلغ» — the swap question — and answered nothing.
+     *
+     * The bug is that `simulate` was treated as a money operation. A
+     * simulation of a GOAL or a PROFIT PLAN is arithmetic over the
+     * owner's own numbers: it moves nothing and needs no asset. A
+     * simulation of a TRADE quotes a swap: it needs the pair and the
+     * amount, and without them it must ask.
+     *
+     * So the rule is about the INTENT, not about the verb: a READ-only
+     * intent never asks for a trade's inputs, however it computes.
+     */
+    const intentPermission = intent?.permission || classification?.definition?.permission || 'READ';
+    const intentCanMoveMoney = intentPermission === 'EXECUTE' || intentPermission === 'PREPARE';
+    /*
+     * A SIMULATION THAT DECLARES ITS OWN SCENARIO IS NOT A TRADE.
+     *
+     * WHATIF_SIMULATION is PREPARE, so every `simulate` step of it was probed
+     * for a pair and an amount. Its own plan says otherwise:
+     * `lab.simulate` carries `{ scenario: 'shock', shockPct }` — arithmetic over
+     * the owner's OWN numbers, with no pair in it anywhere. The probe therefore
+     * asked «ارز مقصد» for a price shock, and because a missing money input
+     * withholds the step (below), `lab` was never even read: the turn computed a
+     * shock answer through the fallback, then rendered a QUESTION and dropped it.
+     * Measured: five what-if sentences, five `mode=QUESTION`, zero results.
+     *
+     * `swap.simulate` / `bridge.simulate` / `lending.simulate` keep the probe:
+     * they declare no scenario and each depends on a `prepare` step that already
+     * needs the pair. The distinction is read from the step's own input, not from
+     * the intent's name.
+     */
+    const isScenarioSimulation = (st) => st.operation === 'simulate'
+      && Boolean(st.input && (st.input.scenario !== undefined || 'shockPct' in st.input));
+    const moneySteps = intentCanMoveMoney
+      ? steps.filter((st) => st.operation === 'quote' || st.operation === 'prepare' || st.operation === 'execute'
+        || (st.operation === 'simulate' && !isScenarioSimulation(st)))
+      : steps.filter((st) => st.operation === 'quote' || st.operation === 'prepare' || st.operation === 'execute');
     let missingInputs = [];
     let boundMoneyInput = null;
     if (moneySteps.length) {
@@ -453,10 +860,72 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
 
     if (missingInputs.length) {
       Object.assign(context, { missingInformation: Array.from(new Set([...(context.missingInformation || []), ...missingInputs])) });
-      intent = { ...intent, needsUserInput: true, missingInputs };
+      /*
+       * THE MONEY GAP NAMES ITSELF.
+       *
+       * The marker below distinguishes two needs that do not mean the same
+       * thing, and the comment there says so explicitly — but only the
+       * conversation machinery ever set it, so a turn blocked on an AMOUNT was
+       * indistinguishable from a turn that merely wanted one more field. That is
+       * how «بیت کوین را بفروش» came to answer with «این پول برای چیست — رشد،
+       * درآمد، یا حفظ سرمایه؟»: the machine's question won because it existed,
+       * and the user could not unblock their own sell order by answering it.
+       */
+      intent = { ...intent, needsUserInput: true, missingInputs, needsUserInputSource: 'money-step' };
     }
 
-    /* Execute the READ/quote/simulate portion of the plan for real. */
+    /*
+     * A FIELD THE CONVERSATION MACHINE IS MISSING IS ALSO A HOLE.
+     *
+     * The conversation machinery asked «این پول برای چیست؟» and the
+     * goal field is missing. That is a hole in THIS turn, and the reply
+     * has to ask it — but `needsUserInput` was set only by the money-step
+     * check, so a turn whose only gap was the machine's own question
+     * answered it instead of asking.
+     *
+     * It used to work by accident: `GOAL_PLAN` has a `goals.plan`
+     * simulate step, the money-step check treated that simulate as a
+     * swap and demanded «fromAsset / toAsset / amount», and the reply
+     * happened to be in QUESTION mode — so the machine's question was
+     * rendered with a swap's field list attached. A test passed because
+     * of a bug, and the goal question asked for «ارز مبدأ» while the
+     * user had asked about a goal.
+     *
+     * The gap is read from the machine's own missing list, so the reply
+     * asks for the field that is actually missing.
+     *
+     * BUT NOT WHEN THE TURN WAS ANSWERED. A corpus answer and a model
+     * answer both carry their own completion: «بیت کوین چیست؟» was
+     * answered from the corpus, and the conversation machine's missing
+     * «goal» field must not turn that answered turn back into a
+     * question. The answer and the question would fight, and the
+     * answer would lose — the user would see an empty reply.
+     */
+    const machineMissing = Array.isArray(context.conversationQuestion?.missing) ? context.conversationQuestion.missing : [];
+    const turnWasAnswered = Boolean(intent?.answeredFromCorpus || intent?.answeredFromModel || intent?.answeredFromPlugin || intent?.corpusAnswer || intent?.modelAnswer || intent?.pluginAnswer);
+    if (machineMissing.length && !intent.needsUserInput && !turnWasAnswered) {
+      /*
+       * The SOURCE of the need is part of the fact.
+       *
+       * Two different checks can set `needsUserInput`, and they do not mean
+       * the same thing. The money-step check means «this turn is about to move
+       * money and does not know the amount» — that must stay a question, or the
+       * reply offers a button to approve a request nobody specified. The
+       * conversation machinery means «I would like one more field to be more
+       * useful» — and when the turn has ALREADY answered the question that was
+       * asked, that is a follow-up, not a replacement.
+       *
+       * Without the marker the two are indistinguishable downstream, and every
+       * read-only turn the machinery could find a field for became a QUESTION.
+       */
+      intent = {
+        ...intent,
+        needsUserInput: true,
+        missingInputs: machineMissing,
+        needsUserInputSource: 'conversation-machinery'
+      };
+    }
+
     const results = {};
     if (planTruncated) results['plan.truncated'] = { status: 'PARTIAL', summary: `${planTruncated} later step(s) were held back to bound upstream calls`, source: 'central-planner' };
     for (const key of neededSections) {
@@ -552,24 +1021,239 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
 
     /* Findings → recommendation (§26). Built from the same `results` the reply
        uses, so the advice and the numbers cannot diverge. */
-    const findings = buildFindings({ intent, classification, state, results, risk, readResults, stepResults, context });
+    /*
+     * ─── BOTH HALVES OF A TWO-PART QUESTION ──────────────────────────────
+     *
+     * The plan already merged the legs, so the DATA for both halves is in
+     * `results`. But the findings were built for ONE intent, so the second
+     * half's own numbers never became evidence and the reply showed the
+     * first half alone — with a complete-looking headline, a reason, data
+     * and a confidence.
+     *
+     * So the findings are built PER LEG: each leg gets its own intent
+     * view, its own findings, and its own headline. The user asked two
+     * questions and gets two answers, each attributable to the module
+     * that produced it.
+     *
+     * The legs that the user did NOT ask for are the ones that must not
+     * appear here: a compound READ is two READS, never a transaction.
+     */
+    /*
+     * ─── A LEG IS A (QUESTION, SUBJECT) PAIR, NOT A QUESTION ────────────────
+     *
+     * The filter used to be `intent !== the turn's intent`, on the reasoning that
+     * a leg scoring the same intent as the turn would read the same section
+     * twice. That is true when the SUBJECT is the same and false when it is not:
+     * «قیمت بیت کوین چنده و اتریوم چطور» is one intent twice, about two assets,
+     * and dropping the second leg is how the ETH half of the question went
+     * unanswered while the classification correctly reported two legs.
+     *
+     * So a leg is kept when it differs from the turn in EITHER the question or
+     * the subject. The one it must not produce is a copy of the turn itself —
+     * same question, same subject — because that reading already happened.
+     */
+    const mainAsset = classification.entities?.asset || null;
+    const legRows = (classification.compound || [])
+      .filter((c) => c && c.intent && c.intent !== 'UNSUPPORTED')
+      .filter((c) => c.intent !== intent.intentType || (c.asset || null) !== mainAsset);
+    const findings = buildFindings({ intent, classification, state, results, risk, readResults, stepResults, context, locale, lastReplan });
+    /* The per-leg findings ride ALONG with the main ones; the main ones
+       stay first so the primary subject is still the headline. */
+    const legFindings = [];
+    for (const legRow of legRows) {
+      const legIntent = legRow.intent;
+      const legAsset = legRow.asset || null;
+      /*
+       * THE LEG'S SUBJECT TRAVELS WITH THE LEG.
+       *
+       * `buildFindings` picks the asset out of `classification.entities.asset`,
+       * so handing it the sentence's own classification made EVERY leg answer
+       * about the first asset — an ETH leg would have produced a second copy of
+       * the BTC reading, which is the failure this codebase already names: a real
+       * number attached to the wrong question is worse than no number. The leg
+       * therefore gets a classification whose subject is its own, and nothing
+       * else about it changes.
+       */
+      const legClassification = (legAsset && legAsset !== mainAsset)
+        ? {
+          ...classification,
+          entities: {
+            ...classification.entities,
+            asset: legAsset,
+            assetOrigin: `${classification.entities?.assetOrigin || 'sentence'}+leg`
+          }
+        }
+        : classification;
+      const legView = {
+        ...intent,
+        intentType: legIntent,
+        entities: legClassification.entities,
+        corpusAnswer: null, corpusMatch: null, modelAnswer: null,
+        pluginAnswer: null, pluginSlug: null, pluginTitle: null, answeredFromPlugin: false,
+        pluginAttachedBy: null, pluginSubject: null, pluginWatch: null
+      };
+      const legOut = buildFindings({ intent: legView, classification: legClassification, state, results, risk, readResults, stepResults, context, locale, lastReplan });
+      /*
+       * A leg's findings are ITS OWN.
+       *
+       * The same reading can serve two legs — «ریسک» is read by the
+       * portfolio leg and by the risk leg — and each leg needs its own
+       * copy of it, because a leg's headline is built from that leg's
+       * findings and nothing else. If the risk leg had no copy of the
+       * risk finding, it would have no evidence and would fall back to
+       * the generic tail: «نتیجهٔ خواندن وضعیت: HIGH».
+       *
+       * The copy is NOT a second reading — the module was read ONCE and
+       * the `dataAt` is the same — it is the same fact attributed to
+       * the question it answers.
+       */
+      const seenInThisLeg = new Set();
+      for (const f of legOut) {
+        if (!f) continue;
+        const key = `${f.id}|${f.status}`;
+        if (seenInThisLeg.has(key)) continue;
+        seenInThisLeg.add(key);
+        /* The marker is the leg's IDENTITY — question plus subject — because two
+           legs can now share a question. `legIntent`/`legAsset` ride along so a
+           reader can ask about either without parsing the key. */
+        legFindings.push({ ...f, leg: legRow.legKey || legIntent, legIntent, legAsset });
+      }
+    }
+    findings.push(...legFindings);
     const capabilitiesMap = capabilities.capabilities;
     const actions = possibleActionsFrom({ findings, capabilities: capabilitiesMap, risk, policy, walletConnected: Boolean(wallet?.connected) });
     /* When the answer is a refusal, the reply IS the refusal: the portfolio numbers
        that happen to be readable must not be dressed up as a response to a question
        we could not serve (§25 forbids filling the gap with whatever was at hand). */
-    const recommendation = refusal ? {
-      schema: 'fbt.central-recommendation.v1', brain: CI_SCHEMA, ok: false,
-      missing: ['capability'], reason: [], refusal: refusal.text, refusedModule: refusal.module
-    } : buildRecommendation({
+    /*
+     * The arguments are named so the recommendation can be built TWICE from
+     * exactly the same inputs — see the rebuild after the why read below.
+     */
+    const recommendationArgs = {
       kind: policy.requiresConfirmation ? 'ACTIONABLE' : 'ANALYSIS',
       intent, risk, findings, capabilities: capabilitiesMap, policy, plan, locale,
       alternatives: alternativesFor({ findings, state, capabilities: capabilitiesMap, locale }),
       actions: policy.requiresConfirmation && !policy.allowExecute ? [] : actions,
       refusalMode: Boolean(refusal),
       now: Date.now()
-    });
+    };
+    let recommendation = refusal ? {
+      schema: 'fbt.central-recommendation.v1', brain: CI_SCHEMA, ok: false,
+      missing: ['capability'], reason: [], refusal: refusal.text, refusedModule: refusal.module
+    } : buildRecommendation(recommendationArgs);
 
+    /*
+     * ── THE WHY READ (path 15) ────────────────────────────────────────────
+     *
+     * The why module is read AFTER the recommendation, because it
+     * explains THAT recommendation. Reading it earlier would explain the
+     * previous turn's decision — which is a different, and wrong, thing.
+     *
+     * The bundle it receives is the brain's OWN artefacts: the
+     * recommendation, the findings it was built from, the risk view it
+     * was judged against and the owner's own state. So the explanation
+     * and the answer are made of the same numbers, and they cannot
+     * disagree.
+     *
+     * It is a READ, like every other step, and it is OPTIONAL: a turn
+     * with no recommendation has nothing to explain, and the reply says
+     * so rather than inventing a reason.
+     */
+    if (intent.intentType === 'WHY_DECISION') {
+      const whyModule = registry.map['why-decision'];
+      if (whyModule && typeof whyModule.read === 'function') {
+        try {
+          const res = await whyModule.read({
+            recommendation,
+            findings,
+            risk,
+            state,
+            routeIntelligence: readResults.routeIntelligence?.data || null,
+            macroGraph: readResults.macroGraph?.data || null
+          }, { owner, intentId: intent.intentId, context });
+          results['why.read'] = {
+            status: res.status,
+            summary: summariseModuleRead('whyDecision', res),
+            data: res.data,
+            source: res.source || 'why-decision',
+            dataAt: res.at || Date.now(),
+            reason: res.reason || null,
+            stale: res.status === 'PARTIAL'
+          };
+        } catch (err) {
+          results['why.read'] = {
+            status: 'UNAVAILABLE',
+            summary: 'the why engine could not be read',
+            data: null,
+            source: 'why-decision',
+            dataAt: Date.now(),
+            reason: String(err?.message || err).slice(0, 160) || null,
+            stale: true
+          };
+        }
+      }
+      /*
+       * The finding that carries the explanation is built HERE, after the
+       * read — not inside `buildFindings`, which runs before the
+       * recommendation the read needs. This is the line that made the
+       * engine dark: the finding was built first and could only ever
+       * report a read that had not happened yet.
+       */
+      buildWhyFinding({ intent, results, readResults, findings, locale });
+
+      /*
+       * ─── THE RECOMMENDATION IS BUILT TWICE, AND THAT IS NOT WASTE ───────
+       *
+       * Three facts, and they cannot all be satisfied by one build:
+       *
+       *   · the why engine explains THIS recommendation, so a recommendation
+       *     must exist before the read;
+       *   · the finding that carries the explanation can only be built after
+       *     the read (§5.19 — building it first is what made the engine dark);
+       *   · the headline for «چرا این را گفتی؟» IS the explanation, so the
+       *     reply's recommendation has to be built with the why finding in it.
+       *
+       * Without the second build the WHY_DECISION headline branch could never
+       * fire: it looked for a finding appended after the headline had already
+       * been written, so the reply fell through to «نتیجهٔ خواندن وضعیت: 100»
+       * — a number with no subject, for the one question whose whole point is
+       * the explanation.
+       *
+       * The expensive part is the why READ, and it still happens once.
+       * `buildRecommendation` is pure arithmetic over findings already in hand,
+       * and `findings` is the same array the read just pushed into.
+       */
+      if (!refusal && findings.some((f) => f && f.id === 'why-decision')) {
+        recommendation = buildRecommendation({ ...recommendationArgs, now: Date.now() });
+      }
+    }
+
+    /*
+     * A CONCEPTUAL QUESTION IS A QUESTION ABOUT A CONCEPT.
+     *
+     * The marker «چیست» used to be enough on its own, so «هدفت چیست؟» —
+     * "what is YOUR goal?" — was read as a request for the DEFINITION of
+     * a goal, and the corpus answered with a Solana PDA. The user asked
+     * about their own goal and got a glossary entry about an address.
+     *
+     * The distinction is the SUBJECT. «بیت‌کوین چیست؟» asks what a
+     * thing is; «هدفت چیست؟» asks what the registry's GOAL_PLAN read.
+     * When the registry already knows what the sentence is about, its
+     * reading wins: the internal synthesis is a fallback for a sentence
+     * the registry could not place, not a competitor to a reading it
+     * already has.
+     *
+     * So the synthesis only runs when the registry matched nothing —
+     * the UNSUPPORTED case — or when the sentence is genuinely about a
+     * macro concept that no intent covers.
+     */
+    const registryPlacedTheSentence = Boolean(
+      classification.type
+      && classification.type !== 'UNSUPPORTED'
+      && classification.type !== 'CORPUS_LOOKUP'
+      && !/^(?:UNSUPPORTED|CORPUS_LOOKUP)$/.test(classification.type || '')
+    );
+    const macroConcept = /(?:تورم|نرخ\s*بهره|فدرال|دارایی[‌\s]*های\s*کمیاب|کارمزد|غیرامانی)/i.test(message);
     const isConceptualOrAdvisory = Boolean(
       !refusal
       && policy.verdict !== 'SAFE_STOP'
@@ -578,7 +1262,8 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
       && (
         classification.entities?.isDistress
         || classification.entities?.isDiscovery
-        || /(?:تورم|نرخ\s*بهره|فدرال|دارایی[‌\s]*های\s*کمیاب|کارمزد|غیرامانی|چیست|چیه)/i.test(message)
+        || macroConcept
+        || (!registryPlacedTheSentence && /(?:چیست|چیه)/i.test(message))
       )
     );
     let internalSynthesisUsed = false;
@@ -748,6 +1433,52 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     await stateStore.write(owner, 'pendingActions', { data: registry.actions.pending(owner), source: 'action-engine', status: 'OK', now: Date.now() });
     await stateStore.write(owner, 'errors', { data: errorLedger.recent(), source: 'error-engine', status: 'OK', now: Date.now() });
     await stateStore.write(owner, 'capabilities', { data: capabilities.capabilities, source: 'capability-manager', status: 'OK', now: Date.now() });
+    /*
+     * The conversation's own row goes into the SESSION section, beside the
+     * compacted memory. The two are the same thing seen from two sides:
+     * the memory is what the brain REMEMBERS, and the conversation row is
+     * where the conversation IS.
+     *
+     * It is written here — after the turn resolved — because that is when
+     * the conversation's state is known. The `session` section has a
+     * fifteen-minute TTL, so a conversation that the user walks away from
+     * ages out on its own instead of lingering as a stale state machine.
+     */
+    if (conversation) {
+      await stateStore.write(owner, 'session', {
+        data: {
+          memory: compactMemory(memory),
+          conversation: {
+            id: conversation.id,
+            state: conversation.state,
+            turns: conversation.turns ?? null,
+            locale: conversation.locale ?? null,
+            suggested: conversationSuggestion?.to ?? null,
+            because: conversationSuggestion?.because ?? null,
+            missing: Array.isArray(adaptiveQuestion?.missing) ? adaptiveQuestion.missing : [],
+            asked: context.conversationQuestion?.question ?? null
+          },
+          /*
+           * The last replan, when the world moved. It is kept beside the
+           * conversation because a replan IS a conversation event: the
+           * plan was reconsidered, and the conversation has to know it.
+           */
+          replan: lastReplan
+            ? {
+                trigger: lastReplan.trigger ?? null,
+                label: lastReplan.label ?? null,
+                at: lastReplan.at ?? null,
+                changed: lastReplan.changed ?? null,
+                notify: lastReplan.notify === true
+              }
+            : null,
+          at: Date.now()
+        },
+        source: 'conversation-state-engine',
+        status: 'OK',
+        now: Date.now()
+      });
+    }
     await stateStore.write(owner, 'health', { data: cachedHealth, source: 'capability-manager', status: 'OK', now: Date.now() });
     state = stateStore.peek(owner);
     const persist = await stateStore.persist(owner, state);
@@ -771,10 +1502,60 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
       brain: CI_SCHEMA,
       intent: publicIntent(intent),
       context: { page: context.page, followUp: context.followUp.kind, entities: context.entities, missing: context.missingInformation, digest: context.contextDigest },
+      /*
+       * The conversation's own state travels with the turn. It is not a
+       * user-facing capability — it is the machinery's own bookkeeping —
+       * and it is here so an operator can see WHICH state the
+       * conversation is in and which field it was asked for.
+       */
+      conversation: conversation
+        ? {
+            id: conversation.id,
+            state: conversation.state,
+            turns: conversation.turns ?? null,
+            suggested: conversationSuggestion?.to ?? null,
+            because: conversationSuggestion?.because ?? null,
+            asked: context.conversationQuestion?.question ?? null,
+            missing: Array.isArray(adaptiveQuestion?.missing) ? adaptiveQuestion.missing : []
+          }
+        : null,
       plan: { steps: plan.steps.map((s) => ({ id: s.id, module: s.module, operation: s.operation, permission: s.permission, degraded: s.degraded === true })), skipped: plan.skipped, problems: plan.problems, digest: plan.digest },
       policy: { verdict: policy.verdict, reasons: policy.reasons, gates: policy.gates, requiresConfirmation: policy.requiresConfirmation, safeStop: policy.safeStop, allowExecute: policy.allowExecute, planDigest: policy.planDigest },
       risk,
       recommendation,
+      /*
+       * The findings the recommendation was built from. They travel with
+       * the turn because they ARE the evidence: the recommendation's
+       * reasons point at them, and a reader who cannot see them cannot
+       * check it. This is also how the new surfaces — the route
+       * ranking, the why block, the replan — become observable without
+       * each of them inventing a new field.
+       */
+      findings: findings.map((f) => ({
+        id: f.id ?? null,
+        status: f.status ?? null,
+        source: f.source ?? null,
+        detail: f.detail ?? null,
+        reason: f.reason ?? null,
+        dataAt: f.dataAt ?? null,
+        partial: f.partial === true,
+        /*
+         * The surfaces carry their own numbers — the replan's risk level,
+         * the route's cost, the why block's falsifiers — and those
+         * numbers ARE the finding. A summary that dropped them would
+         * report that something happened without saying what, which is
+         * the «it was recorded» failure this repo keeps fixing. So the
+         * known fields are carried through rather than re-invented here.
+         */
+        ...(f.riskLevel !== undefined ? { riskLevel: f.riskLevel } : {}),
+        ...(f.trigger !== undefined ? { trigger: f.trigger } : {}),
+        ...(f.changed !== undefined ? { changed: f.changed } : {}),
+        ...(f.executionAuthorized !== undefined ? { executionAuthorized: f.executionAuthorized } : {}),
+        ...(f.bestRoute !== undefined ? { bestRoute: f.bestRoute } : {}),
+        ...(f.why !== undefined ? { why: f.why } : {}),
+        ...(f.falsifiers !== undefined ? { falsifiers: f.falsifiers } : {}),
+        ...(f.lines !== undefined ? { lines: f.lines } : {})
+      })),
       execution,
       createdAction: created?.action || null,
       response,
@@ -803,6 +1584,75 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     return turn;
   }
 
+  /*
+   * ── WHAT THE BRAIN KNOWS ABOUT A DECISION, IN THE MODEL'S OWN SHAPE ─────
+   *
+   * A confirmed or cancelled action is the single most informative thing a user
+   * does, and `server/fios/behavior.js` was built to categorise exactly that:
+   * three verified samples produce REJECTS_LEVERAGE, CANCELS_AT_CONFIRMATION,
+   * PREFERS_MAJOR_ASSETS and the rest, each mapped to the preference it should
+   * write. Nothing ever told it.
+   *
+   * This reads only what the ACTION already carries — its module, its quote, the
+   * risk snapshot the turn assessed, and the moment it was created. Nothing is
+   * inferred and nothing is guessed: a field the action does not have is left
+   * absent, because a behaviour model fed invented facts categorises a user who
+   * does not exist.
+   */
+  const LEVERAGED_MODULES = new Set(['futures', 'dydx']);
+  function behaviorEventsFor(action, { accepted, latencyMs = null }) {
+    if (!action) return [];
+    const input = action.input || {};
+    const quote = action.quote || null;
+    const asset = quote?.toAsset || quote?.fromAsset || input.asset || input.symbol || input.token || null;
+    const leveraged = LEVERAGED_MODULES.has(String(action.module || '').toLowerCase())
+      || /LEVERAGE|MARGIN|PERP/i.test(String(action.actionType || ''));
+    const riskLevel = action.risk?.level || null;
+    const shared = {
+      verified: true,
+      module: action.module || null,
+      actionType: action.actionType || null,
+      asset,
+      riskLevel,
+      leveraged: leveraged === true,
+      strategyKind: input.strategyKind || input.style || null,
+      feesUsd: quote?.feeUsd ?? null
+    };
+    const events = [accepted ? { kind: 'PROPOSAL_ACCEPTED', ...shared } : { kind: 'PROPOSAL_REJECTED', ...shared }];
+    /* An accepted proposal that was executed is also a fill; a rejected one is a
+       cancellation. Both counters feed CANCELS_AT_CONFIRMATION, which is the
+       ratio between them — so reporting only one side would bias the signal. */
+    events.push(accepted ? { kind: 'EXECUTION_CONFIRMED', ...shared } : { kind: 'EXECUTION_CANCELLED', ...shared });
+    /* The hesitation between the card appearing and the user answering it. Only
+       reported when the card's creation time is known, and only on acceptance —
+       a cancellation's latency is already carried by the ratio above. */
+    if (accepted && Number.isFinite(latencyMs) && latencyMs >= 0) {
+      events.push({ kind: 'CONFIRMATION_LATENCY', latencyMs: Math.round(latencyMs), verified: true, module: action.module || null });
+    }
+    return events;
+  }
+
+  /**
+   * Report the decision to the behaviour model.
+   *
+   * Awaited, not fire-and-forget: a report that may or may not have happened is
+   * a model that silently stops learning, and the cost is one write to a local
+   * collection. `reportBehavior` never throws and never blocks on a provider —
+   * an unmounted model returns BEHAVIOR_PROVIDER_NOT_WIRED — so a confirmation
+   * cannot fail because its own history could not be recorded. The outcome
+   * travels back on the turn, so "the model recorded 3 signals" is observable
+   * rather than assumed.
+   */
+  async function reportDecision(owner, action, { accepted, latencyMs = null }) {
+    const events = behaviorEventsFor(action, { accepted, latencyMs });
+    const reported = [];
+    for (const event of events) {
+      const out = await reportBehavior(owner, event);
+      reported.push({ kind: event.kind, ok: out.ok === true, code: out.code || null, signals: Object.keys(out.signals || {}).length, applied: out.applied || [] });
+    }
+    return reported;
+  }
+
   /**
    * Confirmation → execution → verification, as its own entry point (§36's
    * `/api/intent/:id/confirm`). Going through `handle()` again would re-classify
@@ -813,7 +1663,13 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
     const result = registry.actions.confirm({ owner, actionId, planDigest: sentDigest, method: 'user-card' });
     if (!result.ok) return { ok: false, ...result };
     const action = result.action;
-    if (!execute) return { ok: true, action, executed: false };
+    /* The user said yes. That is a PROPOSAL_ACCEPTED, an EXECUTION_CONFIRMED and
+       — from the card's own `createdAt` — a CONFIRMATION_LATENCY sample. */
+    const behavior = await reportDecision(owner, action, {
+      accepted: true,
+      latencyMs: Number.isFinite(Number(action?.createdAt)) ? Date.now() - Number(action.createdAt) : null
+    });
+    if (!execute) return { ok: true, action, executed: false, behavior };
     const module = registry.map[action.module];
     if (!module) return { ok: false, code: 'MODULE_GONE', action };
     const out = await module.execute({ ...action.input, actionId, quote: action.quote }, { owner, intentId: action.intentId, actionId });
@@ -827,14 +1683,22 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
        payload, the chain has not answered yet, and pretending otherwise is how a
        UI ends up showing a swap that did not happen. */
     events?.publish({ type: 'TRANSACTION_PENDING', owner, actionId, intentId: action.intentId, payload: { module: module.id, status: execution.status }, source: 'execution-controller' });
-    return { ok: true, action: registry.actions.find(owner, actionId), execution, executed: true };
+    return { ok: true, action: registry.actions.find(owner, actionId), execution, executed: true, behavior };
   }
 
   async function cancelAction({ owner, actionId, reason }) {
     const registry = registryFor(owner);
+    /* Read the action BEFORE cancelling: a cancelled action leaves the pending
+       bucket, and the report needs the module, the quote and the risk snapshot
+       that were attached to the decision the user just declined. */
+    const action = registry.actions.find(owner, actionId) || null;
     const out = registry.actions.cancel({ owner, actionId, reason });
     remember(owner, applyTurn(memoryFor(owner), { pendingConfirmation: null, at: Date.now() }));
-    return out;
+    /* The user said no. A rejection is as informative as an acceptance — the
+       leverage and high-risk signals are RATIOS, and a model that only ever
+       hears "yes" cannot compute one. */
+    const behavior = await reportDecision(owner, action, { accepted: false });
+    return { ...out, behavior };
   }
 
   /**
@@ -1030,7 +1894,15 @@ function bindStepInput(input = {}, entities, state, context, owner) {
   if (!out.asset) out.asset = entities.asset || context?.page?.selectedAsset || null;
   if (!out.network && entities.network) out.network = entities.network;
   if (!out.amountBasis && out.amountUsd !== null && usableNumber(entities.amountUsd) === null) out.amountBasis = entities.amount?.value != null ? 'token-quantity × live price' : entities.sharePct != null ? `${entities.sharePct}% of read value` : null;
-  if (out.shockPct === undefined && entities.percent) out.shockPct = -(Math.abs(Number(entities.percent)) || 30);
+  /* THE MAGNITUDE IS NOT THE MOVE.
+     `$percent` binds to the number the sentence said, and a number has no
+     direction. Forcing the sign negative answered «۲۰٪ بالا بره» with a 20%
+     drop, so the sign comes from the sentence's own movement verb; with no
+     magnitude at all, the scenario the interface itself offers (−30%) stands. */
+  if (out.shockPct !== undefined || entities.percent) {
+    const shockMagnitude = Math.abs(Number(out.shockPct ?? entities.percent)) || 30;
+    out.shockPct = entities.percentDirection === 'up' ? shockMagnitude : -shockMagnitude;
+  }
   if (!out.owner) out.owner = owner;
   return out;
 }
@@ -1084,9 +1956,32 @@ const faPct = (v) => (Number.isFinite(Number(v)) ? `${faNum(v)}٪` : 'ناخوا
 function findingCopy(f) {
   if (!f) return null;
   if (f.status === 'UNAVAILABLE' || f.status === 'PARTIAL_MISSING') {
-    const code = String(f.reason || '').split(/[^A-Z_]/)[0];
-    const human = f.code ? humanizeError({ code: f.code, module: f.id }, { locale: 'fa' }) : null;
-    return { detail: human?.userMessage || FA_CODE_FALLBACK[code] || `این بخش محاسبه نشد (${String(f.reason || 'NO_DATA').slice(0, 60)})`, reason: null };
+    /*
+     * A CODE IS VOCABULARY; A SENTENCE IS NOT.
+     *
+     * The reason used to be sliced straight into the Persian fallback, so a
+     * reply said «این بخش محاسبه نشد (the yields source returned nothing
+     * usable)» — an English clause inside a Persian sentence, which is exactly
+     * what a named refusal is supposed to avoid.
+     *
+     * So only an ALL-CAPS token is ever quoted: that is the machine's own
+     * vocabulary (NO_YIELD_DATA, ROUTE_REQUEST_INCOMPLETE) and it is the same
+     * token the logs carry, so it is useful rather than decorative. The old
+     * split only found a code at the START of the reason, and most reasons
+     * start with a lowercase word, so almost nothing matched. When there is no
+     * code at all, the sentence simply says the section was not computed —
+     * less text, and none of it in the wrong language.
+     */
+    const reasonText = String(f.reason || '');
+    const code = String(f.code || (reasonText.match(/\b[A-Z][A-Z0-9_]{2,}\b/) || [])[0] || '');
+    const human = code ? humanizeError({ code, module: f.id }, { locale: 'fa' }) : null;
+    const named = human?.userMessage || FA_CODE_FALLBACK[code] || null;
+    return {
+      detail: named
+        ? (code && !named.includes(code) ? `${named} (${code})` : named)
+        : (code ? `این بخش محاسبه نشد (${code})` : 'این بخش محاسبه نشد'),
+      reason: null
+    };
   }
   switch (f.id) {
     case 'concentration':
@@ -1156,11 +2051,278 @@ function findingCopy(f) {
   }
 }
 
-function buildFindings({ intent, classification, state, results, risk, readResults, stepResults, context }) {
+/**
+ * THE WHY FINDING — built AFTER the why read, not before it.
+ *
+ * This block used to live inside `buildFindings`, and that was the
+ * ordering that made the why engine dark.
+ *
+ * The why engine explains the brain's RECOMMENDATION. The
+ * recommendation is built from the findings. So the why read has to
+ * happen after the recommendation exists — and the finding that carries
+ * the explanation has to be built after the read. Putting the finding
+ * inside `buildFindings` meant it was built BEFORE both, so it could
+ * only ever see a read that had not happened, and the reply carried
+ * NO_DECISION even when the engine was mounted and the owner had a
+ * decision.
+ *
+ * It is a separate function now, called after the read, and it is the
+ * read that counts: the one made with the recommendation in hand.
+ */
+function buildWhyFinding({ intent, results, readResults, findings, locale = 'en' }) {
+  if (intent.intentType !== 'WHY_DECISION') return null;
+  const whyRead = results['why.read'] || readResults.whyDecision || null;
+  if (whyRead?.status === 'OK' && whyRead.data?.why) {
+    const w = whyRead.data.why;
+    const lines = [];
+    for (const [key, value] of Object.entries(w.why || {})) {
+      if (Array.isArray(value) && value.length) lines.push(...value.map((v) => String(v)));
+    }
+    const falsifiers = (w.falsifiers || []).map((f) => ({
+      id: f.id ?? null,
+      question: f.question ?? null,
+      threshold: f.threshold ?? null,
+      modelledImpactUsd: f.modelledImpactUsd ?? null,
+      action: f.action ?? null,
+      invalidates: f.invalidates ?? null
+    }));
+    findings.push({
+      id: 'why-decision',
+      status: 'OK',
+      why: w.why || null,
+      lines: lines.slice(0, 10),
+      falsifiers,
+      invalidationConditions: w.invalidationConditions || [],
+      decisionId: w.decisionId ?? null,
+      confidence: w.confidence ?? null,
+      nextReviewAt: w.nextReviewAt ?? null,
+      reviewWindowDays: w.reviewWindowDays ?? null,
+      estimate: w.estimate === true,
+      detail: lines.length
+        ? `${lines.length} reason line(s) from the decision that was actually made; ${falsifiers.length} named falsifier(s) and ${(w.invalidationConditions || []).length} invalidation condition(s) travel with it`
+        : 'the engine produced the why block but no readable reason line — nothing is filled in',
+      reason: w.note || 'every because-line points at a number in the decision bundle; unread numbers are named, never invented',
+      /* The falsifiers are the point of a why block: an explanation that
+         cannot be contradicted is not an explanation. So the count travels in
+         both languages, and the first reason line — which the engine wrote for
+         the user — is quoted rather than paraphrased. */
+      detailFa: lines.length
+        ? `${fmtNum(lines.length, locale === 'fa')} خط دلیل از همان تصمیمی که واقعاً گرفته شد؛ ${fmtNum(falsifiers.length, locale === 'fa')} ابطال‌کنندهٔ نام‌دار و ${fmtNum((w.invalidationConditions || []).length, locale === 'fa')} شرط ابطال همراه آن می‌آید`
+        : 'موتور بلوک «چرا» را ساخت ولی هیچ خط دلیل خواندنی‌ای نبود — چیزی هم جای آن پر نشد',
+      reasonFa: lines.length && lines[0]?.text
+        ? String(lines[0].text)
+        : 'هر خط «چون» به یک عدد در همان بستهٔ تصمیم اشاره می‌کند؛ عددهای خوانده‌نشده نام برده می‌شوند، نه ساخته',
+      source: 'why-engine',
+      dataAt: w.at || Date.now(),
+      partial: false
+    });
+    return findings[findings.length - 1];
+  }
+  if (whyRead?.status === 'UNAVAILABLE') {
+    findings.push({
+      id: 'why-decision',
+      status: 'UNAVAILABLE',
+      detail: null,
+      reason: whyRead.reason === 'NO_DECISION'
+        ? 'there is no decision to explain — the last turn produced no recommendation, so there is nothing to justify and nothing is invented'
+        : `the why engine could not be read (${whyRead.reason || 'NO_DATA'})`,
+      source: 'why-engine',
+      partial: true
+    });
+    return findings[findings.length - 1];
+  }
+  return null;
+}
+
+/*
+ * The fit engine's own vocabulary, in Persian.
+ *
+ * These are the engine's WORDS, not a paraphrase: the verdict it returned and
+ * the tolerance it read. Translating a three-word enum is safe; translating a
+ * sentence the engine wrote is how a reason turns into a rumour.
+ */
+const FIT_VERDICT_FA = Object.freeze({
+  FITTED: 'مناسب',
+  CONDITIONAL: 'مشروط',
+  NOT_FITTED: 'نامناسب',
+  UNRANKED: 'رتبه‌بندی‌نشده'
+});
+/* The scenario engine's own three profiles, in Persian — its vocabulary, not a
+   paraphrase of a sentence it wrote. */
+/* The engines' risk vocabulary, in Persian. Same rule as the two maps below:
+   these are the ENGINE's words, so translating them is safe. */
+const RISK_LEVEL_FA = Object.freeze({
+  LOW: 'پایین', MODERATE: 'متوسط', MEDIUM: 'متوسط',
+  ELEVATED: 'افزایش‌یافته', HIGH: 'بالا', CRITICAL: 'بحرانی'
+});
+const SCENARIO_PROFILE_FA = Object.freeze({
+  CONSERVATIVE: 'محافظه‌کار',
+  BALANCED: 'متعادل',
+  AGGRESSIVE: 'پرریسک',
+  GROWTH: 'رشد'
+});
+const FIT_TOLERANCE_FA = Object.freeze({
+  conservative: 'محافظه‌کار',
+  balanced: 'متعادل',
+  moderate: 'متعادل',
+  aggressive: 'پرریسک',
+  growth: 'رشد'
+});
+
+function buildFindings({ intent, classification, state, results, risk, readResults, stepResults, context, locale = 'en', lastReplan = null }) {
   const findings = [];
   const portfolio = state.sections.portfolio.data;
   const markets = state.sections.markets.data;
   const lendingSection = state.sections.lending.data;
+
+  /*
+   * ─── THE CORPUS FINDING (2026-11-12) ───────────────────────────────────
+   *
+   * When the registry did not match but the verified corpus could answer,
+   * the brain already holds the answer on the intent (`intent.corpusAnswer`).
+   * The recommendation is built from FINDINGS, so without this the answer
+   * would be carried by the intent and never reach the reply.
+   *
+   * It is a finding like any other: it carries its source and its reason, so
+   * the composer attributes it and the user can see that it was RETRIEVED
+   * rather than generated. The section it produces is a `result` — the
+   * headline — because that is what it is: the answer to the question.
+   */
+  /*
+   * A GENERATED answer, labelled as one. The corpus finding above says
+   * «retrieved, not generated»; this one says the opposite, because the
+   * difference is the whole point: a retrieved fact carries a citation and
+   * cannot drift, a generated one can. The user must always be able to tell
+   * which they received.
+   */
+  /*
+   * A PLUGIN answer: produced locally by a first-party plugin that read its
+   * OWN named source. It sits before the model finding because it is the
+   * better provenance — retrieved from a live domain source with no model call
+   * — and only one of the two can ever be set on a turn.
+   */
+  if (intent?.pluginAnswer) {
+    const pluginRead = intent.pluginDataStatus !== 'unavailable';
+    const pluginName = intent.pluginTitle || intent.pluginSlug || 'plugin';
+    const reasonFa = pluginRead
+      ? `پلاگینِ ${pluginName} از منبعِ دادهٔ خودش خواند — محلی، بدون فراخوانیِ مدل`
+      : `پلاگینِ ${pluginName} اجرا شد ولی منبعش پاسخ نداد — همین متن، گزارشِ نبودِ داده است نه یک عدد`;
+    findings.push({
+      id: `plugin.${intent.pluginSlug || 'native'}`,
+      /* The VALUE is the plugin's own verdict line \u2014 the sentence that answers
+         the question. The report behind it travels in `detail`, already cut at
+         a segment boundary by the plugin layer so the publisher's 220-character
+         window cannot slice it mid-word. */
+      value: intent.pluginLead || intent.pluginAnswer,
+      detail: intent.pluginAnswer,
+      detailFa: intent.pluginAnswer,
+      reason: locale === 'fa' ? reasonFa
+        : (pluginRead
+          ? `plugin ${pluginName} read its own data source — local, no model call`
+          : `plugin ${pluginName} ran but its source did not answer — this text reports the missing data, not a number`),
+      reasonFa,
+      source: `plugin:${intent.pluginSlug || 'native'}`,
+      label: intent.pluginTitle || null,
+      dataAt: Date.now(),
+      status: 'OK'
+    });
+  }
+
+  if (intent?.modelAnswer) {
+    findings.push({
+      id: 'model-answer',
+      value: intent.modelAnswer,
+      detail: intent.modelAnswer,
+      detailFa: intent.modelAnswer,
+      reason: locale === 'fa'
+        ? `تولیدشده توسط ${intent.modelProvider || 'مدل'} — تولید، نه بازیابی`
+        : `generated by ${intent.modelProvider || 'the model'} — generated, not retrieved`,
+      reasonFa: locale === 'fa'
+        ? `تولیدشده توسط ${intent.modelProvider || 'مدل'} — تولید، نه بازیابی`
+        : `generated by ${intent.modelProvider || 'the model'} — generated, not retrieved`,
+      source: intent.modelProvider || 'model',
+      dataAt: Date.now(),
+      status: 'OK'
+    });
+  }
+
+  if (intent?.corpusAnswer) {
+    findings.push({
+      id: intent.corpusMatch || 'kb.verified',
+      value: intent.corpusAnswer,
+      detail: intent.corpusAnswer,
+      detailFa: intent.corpusAnswer,
+      reason: locale === 'fa'
+        ? `از دانش تاییدشدهٔ محصول بازیابی شد (${intent.corpusMatch || 'kb'}) — بازیابی، نه تولید`
+        : `retrieved from the verified product corpus (${intent.corpusMatch || 'kb'}) — retrieved, not generated`,
+      reasonFa: locale === 'fa'
+        ? `از دانش تاییدشدهٔ محصول بازیابی شد (${intent.corpusMatch || 'kb'}) — بازیابی، نه تولید`
+        : `retrieved from the verified product corpus (${intent.corpusMatch || 'kb'}) — retrieved, not generated`,
+      source: intent.corpusSource || 'verified-knowledge',
+      label: intent.corpusTitle || null,
+      dataAt: Date.now(),
+      status: 'OK'
+    });
+  }
+
+  /*
+   * ─── THE WALLET BALANCES (2026-11-13) ──────────────────────────────────
+   *
+   * «موجودی من چقدره؟» read the wallet and then said «wallet.read: 2
+   * balances across 2 chain(s)». The NUMBER was there — `totalValueUsd`,
+   * every `amount`, every `valueUsd` — and the reply showed none of it.
+   *
+   * A count is not a balance. The user asked how much they have, and
+   * the answer said how many rows were read.
+   *
+   * This matters beyond the one-part question: it is the second half of
+   * «قیمت بیت‌کوین چقدره و موجودی من چقدره», so while it was missing
+   * the compound question could not be answered in full either.
+   */
+  const walletRead = readResults?.wallet?.data || state.sections?.wallet?.data || null;
+  if (walletRead && (Array.isArray(walletRead.balances) || walletRead.totalValueUsd != null)) {
+    const balances = Array.isArray(walletRead.balances) ? walletRead.balances : [];
+    const total = walletRead.totalValueUsd != null
+      ? Number(walletRead.totalValueUsd)
+      : balances.reduce((sum, b) => sum + (Number(b?.valueUsd) || 0), 0);
+    const rows = balances
+      .filter((b) => b && (b.amount != null || b.valueUsd != null))
+      .map((b) => ({
+        symbol: b.symbol || null,
+        amount: b.amount != null ? Number(b.amount) : null,
+        valueUsd: b.valueUsd != null ? Number(b.valueUsd) : null,
+        chainId: b.chainId ?? null
+      }));
+    findings.push({
+      id: 'wallet-balances',
+      value: total,
+      totalUsd: total,
+      rows,
+      rowCount: rows.length,
+      chainCount: Array.isArray(walletRead.chainsRead) ? walletRead.chainsRead.length : null,
+      detail: rows.length
+        ? `${rows.length} asset(s) across ${Array.isArray(walletRead.chainsRead) ? walletRead.chainsRead.length : '?'} chain(s); total $${round(total, 2)}`
+        : `no priced balance; total $${round(total, 2)}`,
+      reason: rows.length
+        ? `the wallet returned ${rows.length} balance(s); the total is the sum of their USD values`
+        : 'the wallet returned no priced balance to total',
+      /* A finding with no Persian voice is rendered in English inside a
+         Persian reply — the `reason` section showed «the wallet returned 2
+         balance(s)» next to «یک دارایی ۱۰۰٪ از بودجهٔ ریسک». The convention
+         in this codebase is `detailFa`/`reasonFa` beside the English pair,
+         and the numbers come from the SAME formatter the recommendation
+         engine uses, so one turn cannot quote the total two ways. */
+      detailFa: rows.length
+        ? `${fmtNum(rows.length, locale === 'fa')} دارایی در ${fmtNum(Array.isArray(walletRead.chainsRead) ? walletRead.chainsRead.length : null, locale === 'fa')} شبکه؛ مجموع ${fmtUsd(total, locale === 'fa')}`
+        : `موجودی قیمت‌گذاری‌شده‌ای نبود؛ مجموع ${fmtUsd(total, locale === 'fa')}`,
+      reasonFa: rows.length
+        ? `کیف پول ${fmtNum(rows.length, locale === 'fa')} موجودی برگرداند و مجموع، جمع ارزش دلاری همان‌هاست`
+        : 'کیف پول موجودی قیمت‌گذاری‌شده‌ای برای جمع زدن برنگرداند',
+      source: 'wallet-service',
+      dataAt: walletRead.at || Date.now(),
+      status: rows.length || total ? 'OK' : 'PARTIAL'
+    });
+  }
 
   const concentration = analyzeConcentration(portfolio);
   if (concentration.status === 'OK') {
@@ -1191,23 +2353,564 @@ function buildFindings({ intent, classification, state, results, risk, readResul
   }
 
   if (intent.intentType === 'WHATIF_SIMULATION' || context.followUp.kind === 'QUERY_LAST_ASSET') {
-    const shock = stepResults.simulation?.deltaUsd !== undefined ? stepResults.simulation : simulateShock({ portfolio, lending: lendingSection, futures: state.sections.futures.data, dydx: state.sections.dydx.data }, Math.abs(Number(classification.entities.percent) || 30) * -1);
-    if (shock.status === 'OK') findings.push({ id: 'whatif', value: `−${Math.abs(shock.shockPct)}% ⇒ ${shock.valueAfterUsd} USD`, shockPct: shock.shockPct, beforeUsd: shock.valueBeforeUsd, afterUsd: shock.valueAfterUsd, liquidations: shock.liquidation.count, detail: `${shock.valueBeforeUsd} → ${shock.valueAfterUsd} USD, ${shock.liquidation.count} position(s) liquidated, ${shock.nearLiquidation.count} near it`, reason: shock.liquidation.count ? `${shock.liquidation.count} position(s) would be liquidated at this move — the deleverage decision is now, not then` : 'no position liquidates at this move', source: 'lab + portfolio-service', dataAt: shock.at });
+    /* Same rule as the binding above: the fallback must not answer a different
+       scenario than the one asked, or the two paths disagree about the sign. */
+    const scenarioUp = classification.entities.percentDirection === 'up';
+    const scenarioMagnitude = Math.abs(Number(classification.entities.percent) || 30);
+    const shock = stepResults.simulation?.deltaUsd !== undefined ? stepResults.simulation : simulateShock({ portfolio, lending: lendingSection, futures: state.sections.futures.data, dydx: state.sections.dydx.data }, scenarioUp ? scenarioMagnitude : -scenarioMagnitude);
+    if (shock.status === 'OK') {
+      /* The finding is the answer to the question that was asked, so it is
+         published in BOTH languages like every other finding: `recommend.js`
+         renders `detailFa`/`reasonFa` for a Persian reply and falls back to
+         English silently when they are missing — which is how a Persian
+         reply came to carry an English clause nobody gated. */
+      const shockPctNum = Number(shock.shockPct);
+      const shockUp = shockPctNum >= 0;
+      /*
+       * THE LAB ALREADY COMPUTED THIS AND NOBODY READ IT.
+       *
+       * `lab.simulate` returns a BTC/ETH correlation beside the shock, and no
+       * consumer existed — the value was computed every turn and dropped, which
+       * is the same darkness as an engine nobody calls. It matters exactly here:
+       * on a concentrated book the question behind a shock is «does the rest of
+       * my book move with it?», and a coefficient over the history that was
+       * actually read is the honest answer to that. It is rendered only when the
+       * lab produced a usable coefficient over enough samples; when it did not,
+       * nothing is said and nothing is guessed.
+       */
+      const corr = shock.correlation && Number.isFinite(Number(shock.correlation.btcEth))
+        && Number(shock.correlation.samples) >= 5
+        ? { c: Number(shock.correlation.btcEth), n: Number(shock.correlation.samples) }
+        : null;
+      /* A coefficient is read to two decimals everywhere else in finance; `faNum`
+         drops the trailing zeros, so 1.00 rendered as "1" and the sentence lost
+         the fact that this is a measured ratio rather than a count. */
+      /* Guarded on `corr` itself: an unreadable correlation is the common case
+         (a market read with no history behind it), and the fallback inside this
+         catch read `corr.c` again — so the handler threw on the very input it
+         was written for. A gate that builds the unreadable case at the source
+         seam caught it; a gate that only seeded the readable one would not. */
+      const corrDigits = !corr ? null : (() => {
+        try { return new Intl.NumberFormat('fa-IR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(corr.c); } catch { return faNum(corr.c, 2); }
+      })();
+      const correlationFa = corr
+        /* Kept short on purpose: `recommend.js` publishes an evidence detail
+           through a 220-character window, and a clause that overruns it is cut
+           mid-sentence — a Persian sentence with its verb missing reads as a
+           broken string, not as a shorter fact. */
+        ? `. همبستگیِ BTC/ETH ${corrDigits} (${faNum(corr.n, 0)} نمونه): ${Math.abs(corr.c) >= 0.7 ? 'هر دو با هم می‌روند و پراکندگی بین این دو سپر نیست' : 'این دو هم‌راستا نیستند'}`
+        : '';
+      const correlationEn = corr
+        ? `; BTC/ETH correlation over the read history is ${corr.c.toFixed(2)} (${corr.n} samples)`
+        : '';
+      findings.push({
+        id: 'whatif',
+        value: `${shockUp ? '+' : '-'}${Math.abs(shockPctNum)}% ⇒ ${shock.valueAfterUsd} USD`,
+        shockPct: shock.shockPct, beforeUsd: shock.valueBeforeUsd, afterUsd: shock.valueAfterUsd,
+        liquidations: shock.liquidation.count,
+        detail: `${shock.valueBeforeUsd} → ${shock.valueAfterUsd} USD at ${shockUp ? '+' : '-'}${Math.abs(shockPctNum)}%, ${shock.liquidation.count} position(s) liquidated, ${shock.nearLiquidation.count} near it${correlationEn}`,
+        detailFa: `${faUsd(shock.valueBeforeUsd)} → ${faUsd(shock.valueAfterUsd)} در سناریوی ${shockUp ? '+' : ''}${faPct(shockPctNum)}؛ ${faNum(shock.liquidation.count, 0)} موقعیت لیکوئید می‌شود و ${faNum(shock.nearLiquidation.count, 0)} موقعیت به آستانهٔ لیکوئیداسیون می‌رسد${correlationFa}`,
+        reason: shock.liquidation.count ? `${shock.liquidation.count} position(s) would be liquidated at this move — the deleverage decision is now, not then` : 'no position liquidates at this move',
+        reasonFa: shock.liquidation.count
+          ? `${faNum(shock.liquidation.count, 0)} موقعیت در همین حرکت لیکوئید می‌شود — تصمیمِ کاهش اهرم همین حالا است، نه بعد از حرکت`
+          : 'در این حرکت هیچ موقعیتی لیکوئید نمی‌شود. این یک سناریوی محاسبه‌شده روی داراییِ خوانده‌شده است، نه پیش‌بینی قیمت',
+        source: 'lab + portfolio-service', dataAt: shock.at
+      });
+    }
   }
 
   if (intent.intentType === 'GOAL_PLAN' || intent.intentType === 'PROFIT_PLAN') {
     const goal = state.sections.goals.data?.goals?.[0] || null;
-    const feasibility = goalFeasibility({
-      currentUsd: portfolio?.totalValueUsd ?? null,
-      targetUsd: classification.entities.targetUsd ?? goal?.targetAmount ?? null,
-      years: classification.entities.horizon?.years ?? (goal?.targetDate ? Math.max(0.1, (goal.targetDate - Date.now()) / (365 * 24 * 3600_000)) : null),
-      monthlyContributionUsd: goal?.monthlyContribution ?? 0,
-      volatilityPct: markets?.volatilityPct?.BTC ?? 60
-    });
+      /* The goal is read through ONE reader, so the brain and the goals
+         module cannot disagree about which shape the goal has. */
+      const goalInputs = readGoalInputs(goal);
+      const feasibility = goalFeasibility({
+        currentUsd: classification.entities.currentUsd ?? goalInputs.currentUsd ?? portfolio?.totalValueUsd ?? null,
+        targetUsd: classification.entities.targetUsd ?? goalInputs.targetUsd ?? null,
+        years: classification.entities.horizon?.years ?? goalInputs.years ?? null,
+        monthlyContributionUsd: goalInputs.monthlyContributionUsd,
+        volatilityPct: markets?.volatilityPct?.BTC ?? 60
+      });
     if (feasibility.status === 'OK') findings.push({ id: 'goal-feasibility', targetUsd: feasibility.targetUsd, years: feasibility.years, probabilityPct: feasibility.probabilityPct, contribution: feasibility.contributionUsdMonthly, requiredContribution: feasibility.requiredContributionUsdMonthly, detail: `${feasibility.probabilityPct}% odds at ${feasibility.contributionUsdMonthly} USD/month; median ${feasibility.projectedMedianUsd} USD`, reason: `required CAGR is ${feasibility.requiredCagrPct}% — ${feasibility.level.toLowerCase()} for this horizon, and it is a model output, not a forecast`, source: 'goals-engine + market-data', dataAt: feasibility.at, partial: feasibility.status === 'PARTIAL' });
     else findings.push({ id: 'goal-feasibility', status: 'UNAVAILABLE', reason: `goal arithmetic incomplete: ${feasibility.reason}`, detail: null });
     const opportunities = scanOpportunities({ yields: state.sections.farming.data, portfolio, risk, capabilities: {} });
     if (opportunities.status === 'OK') findings.push({ id: 'opportunities', candidates: opportunities.rows, detail: `${opportunities.rows.length} eligible pools, best ${opportunities.rows[0]?.aprPct ?? '—'}% APR`, reason: opportunities.rows[0] ? `the top eligible pool pays ${opportunities.rows[0].aprPct}% with ${opportunities.rows[0].riskLevel} protocol risk` : 'nothing met the eligibility floor', source: 'yields-engine', dataAt: opportunities.at });
+
+    /*
+     * The three profiles (path 13). The feasibility figure above answers
+     * "can this target be reached"; the scenarios answer "what does the
+     * road look like, and how likely is each version of it to arrive".
+     *
+     * Each profile carries its drawdown and its probability of loss, and
+     * the engine says `estimate: true` — a modelled distribution over a
+     * chosen return, not a promise. The finding carries the flag, so the
+     * answer cannot be read as a forecast.
+     */
+    const scenarioRead = readResults.goalScenarios;
+    if (scenarioRead?.status === 'OK' && scenarioRead.data) {
+      const sc = scenarioRead.data;
+      const profiles = Array.isArray(sc.scenarios) ? sc.scenarios : [];
+      if (profiles.length) {
+        const recommended = profiles.find((r) => r.profile === (sc.recommended?.profile || sc.recommended)) || sc.recommended || null;
+        findings.push({
+          id: 'goal-scenarios',
+          status: 'OK',
+          profiles: profiles.map((r) => ({
+            profile: r.profile,
+            expectedReturnPct: r.expectedReturnPct ?? null,
+            expectedValueUsd: r.expectedValueUsd ?? null,
+            maxDrawdownPct: r.maxDrawdownPct ?? null,
+            probabilityOfLossPct: r.probabilityOfLossPct ?? null,
+            probabilityOfHalvingPct: r.probabilityOfHalvingPct ?? null,
+            allocation: r.allocation ?? null,
+            p10: r.percentiles?.p10 ?? null,
+            p50: r.percentiles?.p50 ?? null,
+            p90: r.percentiles?.p90 ?? null
+          })),
+          recommended: recommended?.profile || null,
+          targetUsd: sc.targetUsd ?? null,
+          startUsd: sc.startUsd ?? null,
+          months: sc.months ?? null,
+          detail: `${profiles.length} profiles from ${sc.startUsd ?? '—'} USD over ${sc.months ?? '—'} month(s) toward ${sc.targetUsd ?? '—'} USD; the recommended one is ${recommended?.profile || 'none'}${recommended?.maxDrawdownPct != null ? ` with a ${recommended.maxDrawdownPct}% modelled drawdown` : ''}`,
+          reason: recommended
+            ? `${recommended.profile} is the recommended profile: ${recommended.expectedReturnPct ?? '—'}% modelled return with a ${recommended.probabilityOfLossPct ?? '—'}% modelled probability of loss — a model over a chosen return, not a forecast`
+            : 'the profiles were built but the engine recommended none; the reason travels with the numbers',
+          /* The qualifier «a model over a chosen return, not a forecast» is the
+             honest half of this finding — it is what keeps a modelled 12%
+             reading as a promise. It has to survive translation, and the
+             numbers come from the same formatter the headline uses. */
+          detailFa: `${fmtNum(profiles.length, locale === 'fa')} پروفایل از ${fmtUsd(sc.startUsd, locale === 'fa')} در ${fmtNum(sc.months, locale === 'fa')} ماه به سمت ${fmtUsd(sc.targetUsd, locale === 'fa')}${recommended ? `؛ پیشنهادی ${SCENARIO_PROFILE_FA[String(recommended.profile || '').toUpperCase()] || recommended.profile} است` : ''}${recommended?.maxDrawdownPct != null ? ` با افت مدل‌شدهٔ ${fmtNum(recommended.maxDrawdownPct, locale === 'fa')}٪` : ''}`,
+          reasonFa: recommended
+            ? `${SCENARIO_PROFILE_FA[String(recommended.profile || '').toUpperCase()] || recommended.profile} پروفایل پیشنهادی است: بازده مدل‌شدهٔ ${fmtNum(recommended.expectedReturnPct, locale === 'fa')}٪ با احتمال زیان مدل‌شدهٔ ${fmtNum(recommended.probabilityOfLossPct, locale === 'fa')}٪ — یک مدل روی بازده انتخابی، نه پیش‌بینی`
+            : 'پروفایل‌ها ساخته شدند ولی موتور هیچ‌کدام را پیشنهاد نکرد؛ دلیل همراه همان عددها می‌آید',
+          estimate: sc.estimate === true,
+          source: 'goal-scenarios-engine',
+          dataAt: sc.at || Date.now(),
+          partial: false
+        });
+      }
+    } else if (scenarioRead?.status === 'UNAVAILABLE' && scenarioRead.reason === 'NO_STARTING_CAPITAL') {
+      findings.push({
+        id: 'goal-scenarios',
+        status: 'UNAVAILABLE',
+        detail: null,
+        reason: 'a scenario needs real capital; nothing was modelled and nothing was guessed',
+        reasonFa: 'سناریو به سرمایهٔ واقعی نیاز دارد؛ هیچ چیزی مدل نشد و هیچ چیزی هم حدس زده نشد',
+        source: 'goal-scenarios-engine',
+        partial: true
+      });
+    }
+  }
+
+  /*
+   * ── THE REPLAN SURFACE (path 16) ─────────────────────────────────────────
+   *
+   * The event-replanning engine listens on the central bus and re-plans
+   * when the world moves under a plan: a price changed, a balance
+   * changed, the risk level moved, a module degraded. It has cooldowns
+   * per trigger family, so a busy market does not produce a replan
+   * storm.
+   *
+   * The finding is what makes the machine's decision VISIBLE. It carries:
+   *
+   *   · what CHANGED — the macro impulse, the risk level, the council's
+   *     decision, whether a guardian line was crossed;
+   *   · whether the owner should be TOLD. A replan that changed nothing
+   *     decision-relevant is recorded and not announced: a notification
+   *     for every price tick is how an alert stream becomes noise.
+   *   · the fact that NO execution was authorised by the replan. The
+   *     machine reconsiders; it never acts.
+   */
+  if (lastReplan && lastReplan.notify === true) {
+    const changed = lastReplan.changed || {};
+    findings.push({
+      id: 'event-replan',
+      status: 'OK',
+      trigger: lastReplan.trigger ?? null,
+      family: lastReplan.family ?? null,
+      label: lastReplan.label ?? null,
+      changed,
+      impulse: lastReplan.impulse ?? null,
+      riskLevel: lastReplan.riskLevel ?? null,
+      council: lastReplan.council ?? null,
+      recommendation: lastReplan.recommendation ?? null,
+      executionAuthorized: false,
+      at: lastReplan.at ?? null,
+      detail: `${lastReplan.label || lastReplan.trigger || 'an event'} — ${lastReplan.recommendation || 'the plan was reconsidered'}${changed.riskLevel ? `; risk is now ${lastReplan.riskLevel}` : ''}${changed.macroImpulse ? `; the macro impulse moved to ${lastReplan.impulse}` : ''}${changed.guardianAlert ? '; a guardian line was crossed' : ''}`,
+      reason: 'the world moved under the plan and the decision engine was re-read; nothing was executed and no permission was granted by the replan',
+      source: 'event-replanning-engine',
+      dataAt: lastReplan.at || Date.now(),
+      partial: false
+    });
+  }
+
+  /*
+   * ── THE WHY SURFACE (path 15) ───────────────────────────────────────────
+   *
+   * «چرا این را گفتی؟» used to be UNSUPPORTED. The product had a why
+   * engine — five why-lines, four named falsifiers, invalidation
+   * conditions — and no way to reach it.
+   *
+   * The finding carries the engine's own content, and its discipline:
+   *
+   *   · the five why-lines travel as they were written, so the answer
+   *     and the explanation are the same words;
+   *   · the FALSIFIERS travel with them, because «why» without «what
+   *     would prove this wrong» is a justification, not an explanation;
+   *   · it is an EXPLANATION, not a new recommendation. It moves nothing.
+   */
+  /*
+   * ── THE ROUTE SURFACE (path 14) ─────────────────────────────────────────
+   *
+   * The route-intelligence engine was complete and dark. It ranked
+   * candidates across five honest dimensions and had no customers,
+   * because it waits for candidates and nothing ever asked it for any.
+   *
+   * This finding is what makes it visible. It carries the same discipline
+   * the engine has:
+   *
+   *   · the best route is named WITH its cost, its time and its risk, so
+   *     «this one» is never a bare opinion;
+   *   · the UNREAD dimensions travel with it, because a ranking that
+   *     silently drops half its dimensions is a ranking the reader
+   *     cannot audit;
+   *   · it is ADVISORY. The finding says so, and the execution path
+   *     re-quotes with a real address and keeps its own gates.
+   */
+  if (intent.intentType === 'ROUTE_INTELLIGENCE') {
+    const routeRead = readResults.routeIntelligence;
+    if (routeRead?.status === 'OK' && routeRead.data) {
+      const ri = routeRead.data;
+      const best = ri.bestRoute || null;
+      const ranked = Array.isArray(ri.ranked) ? ri.ranked : [];
+      const runnerUp = ranked.find((r) => r.routeId !== best?.routeId) || null;
+      const cost = best?.totalCostUsd ?? null;
+      const seconds = best?.dimensions?.time?.value ?? null;
+      const unknown = Array.isArray(best?.unknownDimensions) ? best.unknownDimensions : [];
+      findings.push({
+        id: 'route-intelligence',
+        status: best ? 'OK' : 'PARTIAL',
+        source: ri.source || 'route-intelligence-engine',
+        dataAt: ri.at || Date.now(),
+        estimate: true,
+        executionPermission: false,
+        bestRoute: best
+          ? {
+              routeId: best.routeId ?? null,
+              tool: best.tool ?? null,
+              score: best.score ?? null,
+              totalCostUsd: cost,
+              estimatedSeconds: seconds,
+              failureProbabilityPct: best.failureProbabilityPct ?? null,
+              riskLevel: best.riskLevel ?? null,
+              unknownDimensions: unknown
+            }
+          : null,
+        ranked: ranked.slice(0, 5).map((r) => ({
+          routeId: r.routeId ?? null,
+          tool: r.tool ?? null,
+          score: r.score ?? null,
+          totalCostUsd: r.totalCostUsd ?? null,
+          estimatedSeconds: r.dimensions?.time?.value ?? null,
+          failureProbabilityPct: r.failureProbabilityPct ?? null,
+          unknownDimensions: Array.isArray(r.unknownDimensions) ? r.unknownDimensions : []
+        })),
+        rejected: (ri.rejected || []).slice(0, 5),
+        unranked: (ri.unranked || []).slice(0, 5),
+        routeCount: ri.routeCount ?? 0,
+        detail: best
+          ? `${ranked.length} live candidate route(s); the best is ${best.tool || best.routeId}${cost != null ? ` at ${cost} USD` : ''}${seconds != null ? ` in ~${seconds}s` : ''}${runnerUp?.totalCostUsd != null && cost != null ? ` against ${runnerUp.totalCostUsd} USD for the runner-up` : ''}`
+          : `${ri.routeCount ?? 0} candidate route(s) were read but none could be ranked — none of them had a readable dimension`,
+        reason: best
+          ? (unknown.length
+              ? `chosen over ${runnerUp?.tool || runnerUp?.routeId || 'the other candidates'}; ${unknown.length} of the dimensions were unread (${unknown.join(', ')}) and the margin over the runner-up is therefore unverified — advisory only, the execution path re-quotes`
+              : `chosen over ${runnerUp?.tool || runnerUp?.routeId || 'the other candidates'} on the dimensions the provider actually priced — advisory only, the execution path re-quotes`)
+          : 'no candidate route had a single readable dimension — nothing is recommended and nothing is faked',
+        partial: !best
+      });
+    } else if (routeRead?.status === 'UNAVAILABLE') {
+      findings.push({
+        id: 'route-intelligence',
+        status: 'UNAVAILABLE',
+        detail: null,
+        reason: routeRead.reason === 'ROUTE_REQUEST_INCOMPLETE'
+          ? 'a route comparison needs a source chain, a destination chain, both tokens and an amount — none of them was specified, so no route was quoted'
+          : `the live route source could not be read (${routeRead.reason || 'NO_DATA'})`,
+        source: 'route-intelligence-engine',
+        partial: true
+      });
+    }
+  }
+
+  /*
+   * ── THE YIELD SURFACE (2026-11-12) ─────────────────────────────────────
+   *
+   * Three capabilities were readable and never asked for. These findings
+   * are what makes them visible.
+   *
+   * The important property is that a yield is NEVER quoted alone. A pool
+   * with 24 % APR and a one-sided pool is a loss waiting to happen, so the
+   * finding carries the risk level, the depth and the impermanent-loss
+   * flag beside the number — and the REASON says which of them made the
+   * row a candidate and which made it a review.
+   */
+  if (intent.intentType === 'YIELD_OPPORTUNITY' || intent.intentType === 'STAKING_REWARD') {
+    const opportunities = scanOpportunities({
+      yields: state.sections.farming.data,
+      portfolio,
+      risk,
+      capabilities: {}
+    });
+    if (opportunities.status === 'OK') {
+      const rows = opportunities.rows;
+      const best = rows[0] || null;
+      /* For a STAKING question, the honest answer is the liquid-staking
+         row — not the highest APR, which on a DEX pool is usually an
+         impermanent-loss trap rather than a return. */
+      const stakingRows = rows.filter((r) => /lido|rocket|etherfi|jito|marinade|coinbase|binance|stak/i.test(`${r.project || ''} ${r.id || ''}`));
+      const pick = intent.intentType === 'STAKING_REWARD' ? (stakingRows[0] || best) : best;
+      findings.push({
+        id: 'yield-opportunity',
+        status: 'OK',
+        pools: rows,
+        best: pick,
+        detail: pick ? `${pick.project || pick.id} ${pick.symbol || ''} pays ${pick.aprPct}% APR on ${pick.chain || 'its chain'}${pick.depthUsd ? ` with ${Math.round(pick.depthUsd / 1_000_000)}M USD depth` : ''}` : `no pool passed the eligibility floor out of ${opportunities.considered}`,
+        reason: pick
+          ? `the top eligible pool pays ${pick.aprPct}% with ${pick.riskLevel} protocol risk; APR is a trailing figure, not a promise`
+          : `nothing met the eligibility floor out of ${opportunities.considered} considered`,
+        /* The qualifier «APR is a trailing figure, not a promise» is the whole
+           honesty of a yield answer, so it travels in both languages. The
+           project, symbol and chain are NAMES and stay as the venue wrote
+           them; only the sentence around them is Persian. */
+        detailFa: pick
+          ? `${pick.project || pick.id} ${pick.symbol || ''} با APR ${fmtNum(pick.aprPct, locale === 'fa')}٪ روی ${pick.chain || 'همان شبکه'}${pick.depthUsd ? ` و عمق ${fmtUsd(pick.depthUsd, locale === 'fa')}` : ''}`
+          : `از میان ${fmtNum(opportunities.considered, locale === 'fa')} گزینه، هیچ استخری از کفِ صلاحیت عبور نکرد`,
+        reasonFa: pick
+          ? `بالاترین استخر واجد شرایط ${fmtNum(pick.aprPct, locale === 'fa')}٪ با ریسک پروتکل ${RISK_LEVEL_FA[String(pick.riskLevel || '').toUpperCase()] || pick.riskLevel || 'ناخواند'} می‌دهد؛ APR یک عدد گذشته‌نگر است، نه وعده`
+          : `از میان ${fmtNum(opportunities.considered, locale === 'fa')} گزینهٔ بررسی‌شده، هیچ‌کدام به کفِ صلاحیت نرسید`,
+        source: 'yields-engine',
+        dataAt: opportunities.at,
+        partial: false
+      });
+    } else {
+      findings.push({ id: 'yield-opportunity', status: 'UNAVAILABLE', reason: `the yields source did not answer: ${opportunities.reason || readResults.farming?.reason || 'NO_YIELD_DATA'}`, reasonFa: `منبع ییلد پاسخ نداد: ${opportunities.reason || readResults.farming?.reason || 'NO_YIELD_DATA'}`, detail: null, source: 'yields-engine' });
+    }
+  }
+
+  if (intent.intentType === 'LIQUIDITY_RISK') {
+    const pools = Array.isArray(state.sections.liquidity.data?.pools) ? state.sections.liquidity.data.pools : [];
+    /* The shallowest pool is the one a position would have to exit through, so
+       it is the number that answers «is it low». `considered` is the engine's
+       own count of what it looked at before its floor; naming the floor is only
+       honest when the data shows something was filtered out. */
+    const depths = pools.map((pool) => Number(pool?.tvlUsd)).filter((n) => Number.isFinite(n) && n > 0);
+    const minDepth = depths.length ? Math.min(...depths) : null;
+    const consideredPools = Number(state.sections.liquidity.data?.considered);
+    const floorVisible = Number.isFinite(consideredPools) && consideredPools > pools.length;
+    const depthOf = (n) => (Number.isFinite(Number(n)) ? `$${Math.round(Number(n)).toLocaleString('en-US')}` : 'unreadable');
+    const filteredNote = floorVisible
+      ? ` — ${pools.length} of ${consideredPools} considered cleared the engine's depth floor`
+      : '';
+    const filteredNoteFa = floorVisible
+      ? ` — از ${fmtNum(consideredPools, locale === 'fa')} استخرِ بررسی‌شده ${fmtNum(pools.length, locale === 'fa')} از کفِ عمقِ موتور گذشت`
+      : '';
+    /* An LP is a DIRECTIONAL position wearing a yield costume. The finding
+       therefore leads with the impermanent-loss flag and the depth, and the
+       APR comes after — not before. */
+    const withIl = pools.filter((p) => p.ilRisk === true);
+    const safe = pools.filter((p) => p.ilRisk !== true);
+    findings.push({
+      id: 'liquidity-risk',
+      status: pools.length ? 'OK' : 'UNAVAILABLE',
+      totalPools: pools.length,
+      impermanentLossPools: withIl.length,
+      cleanPools: safe.length,
+      ilPools: withIl.slice(0, 3).map((p) => ({ id: p.id, project: p.project, symbol: p.symbol, apy: p.apy, tvlUsd: p.tvlUsd, risk: p.risk })),
+      cleanPoolsSample: safe.slice(0, 3).map((p) => ({ id: p.id, project: p.project, symbol: p.symbol, apy: p.apy, tvlUsd: p.tvlUsd, risk: p.risk })),
+      /*
+       * ─── ANSWER THE QUESTION THAT WAS ASKED ──────────────────────────────
+       *
+       * The question behind LIQUIDITY_RISK is «is there enough to get out?», and
+       * the headline answered it with the shape of its own read: «۲ استخر خوانده
+       * شد؛ ۰ پرچم زیان ناپایدار دارند و ۲ ندارند». That is a bookkeeping
+       * sentence — it reports how many rows arrived, and its second half is
+       * arithmetic on the first. Nobody can tell from it whether liquidity is
+       * low, which is the only thing they asked.
+       *
+       * The binding number is the SHALLOWEST depth the read found, because that
+       * is the pool a position would have to exit through. It is already in the
+       * data (`tvlUsd` per pool); nothing new is fetched and no threshold is
+       * invented — the depth floor belongs to the yields engine, and the sentence
+       * only mentions it when the data itself shows filtering happened
+       * (`considered` greater than the pools that arrived).
+       */
+      detail: pools.length
+        ? `${minDepth === null
+          ? `the depth of ${pools.length} pool(s) read was not readable`
+          : `shallowest depth of ${pools.length} pool(s) read is ${depthOf(minDepth)}`}${filteredNote}; ${withIl.length
+          ? `${withIl.length} of ${pools.length} carry an impermanent-loss flag — the APR on those is not a free return`
+          : 'no pool carries an impermanent-loss flag'}`
+        : `the liquidity source did not answer: ${readResults.liquidity?.reason || 'NO_LIQUIDITY_DATA'}`,
+      reason: withIl.length
+        ? `${withIl.length} of ${pools.length} pools carry an impermanent-loss flag — the APR on those is not a free return`
+        : (pools.length ? 'no pool carries an impermanent-loss flag, and the APRs are still trailing figures' : 'no liquidity data to judge'),
+      /* The qualifier is the point of this finding — «the APR on those is not
+         a free return» is the sentence that keeps a 40% number honest — so it
+         has to survive translation. An English-only qualifier inside a Persian
+         reply is a qualifier the user will skim past. */
+      detailFa: pools.length
+        ? `${minDepth === null
+          ? `عمقِ ${fmtNum(pools.length, locale === 'fa')} استخرِ خوانده‌شده خوانا نبود`
+          : `کمترین عمقِ ${fmtNum(pools.length, locale === 'fa')} استخرِ خوانده‌شده ${fmtUsd(minDepth, locale === 'fa')} است`}${filteredNoteFa}؛ ${withIl.length
+          ? `${fmtNum(withIl.length, locale === 'fa')} استخر پرچم زیان ناپایدار دارد — APR ${withIl.length === 1 ? 'آن' : 'آن‌ها'} بازدهی رایگان نیست`
+          : 'هیچ استخری پرچم زیان ناپایدار ندارد'}`
+        : `منبع نقدینگی پاسخ نداد: ${readResults.liquidity?.reason || 'NO_LIQUIDITY_DATA'}`,
+      reasonFa: withIl.length
+        ? `${fmtNum(withIl.length, locale === 'fa')} از ${fmtNum(pools.length, locale === 'fa')} استخر پرچم زیان ناپایدار دارند — APR آن‌ها بازدهی رایگان نیست`
+        : (pools.length
+          ? 'هیچ استخری پرچم زیان ناپایدار ندارد و APRها همچنان اعداد گذشته‌نگرند'
+          : 'دادهٔ نقدینگی برای قضاوت در دسترس نیست'),
+      source: 'yields-engine',
+      dataAt: state.sections.liquidity.data?.at || Date.now(),
+      partial: pools.length === 0
+    });
+  }
+
+  /*
+   * ── THE FIT SURFACE (2026-11-12) ───────────────────────────────────────
+   *
+   * "Which of these suits me?" is answered by the fit engine: each
+   * opportunity is scored against the OWNER's risk tolerance, capital,
+   * liquidity need and goal, and comes back FITTED / CONDITIONAL /
+   * NOT_FITTED with a reason for every dimension.
+   *
+   * The finding carries the verdict AND the reason it failed, because a
+   * verdict without a reason is not an answer — «NOT_FITTED because your
+   * capital does not cover the minimum» is a decision, «NOT_FITTED» is
+   * a shrug. It also carries the profile the score was made against, so
+   * the answer says WHOSE fit.
+   */
+  if (intent.intentType === 'OPPORTUNITY_FIT') {
+    const fitRead = readResults.opportunityFit;
+    const ranked = Array.isArray(fitRead?.data?.ranked) ? fitRead.data.ranked : [];
+    if (fitRead?.status === 'OK' && ranked.length) {
+      const best = ranked[0];
+      findings.push({
+        id: 'opportunity-fit',
+        status: 'OK',
+        ranked: ranked.slice(0, 5),
+        best,
+        verdict: best?.verdict || null,
+        score: best?.score ?? null,
+        riskTolerance: fitRead.data?.riskTolerance || null,
+        capitalUsd: fitRead.data?.capitalUsd ?? null,
+        detail: `${ranked.length} opportunit${ranked.length === 1 ? 'y' : 'ies'} scored against a ${fitRead.data?.riskTolerance || 'unreadable'} risk profile; the top one is ${best?.verdict || 'unranked'}${best?.score != null ? ` (score ${best.score})` : ''}`,
+        reason: best?.reason || best?.reasons?.[0] || 'the fit engine gave no reason for its verdict',
+        /*
+         * The fit engine speaks English only, so the Persian voice is built
+         * HERE from the engine's own verdict and score — never by passing the
+         * English prose through. The words that carry the meaning are the
+         * engine's (FITTED / CONDITIONAL / NOT_FITTED, the score, the
+         * tolerance); only the sentence around them is translated.
+         *
+         * When the engine produced a Persian reason of its own, that wins.
+         */
+        detailFa: `${fmtNum(ranked.length, locale === 'fa')} گزینه با پروفایل ریسک ${FIT_TOLERANCE_FA[String(fitRead.data?.riskTolerance || '').toLowerCase()] || 'خوانده‌نشده'} سنجیده شد؛ گزینهٔ اول ${FIT_VERDICT_FA[String(best?.verdict || '').toUpperCase()] || 'رتبه‌بندی‌نشده'} است${best?.score != null ? ` (امتیاز ${fmtNum(best.score, locale === 'fa')})` : ''}`,
+        reasonFa: best?.reasonFa || best?.reasonsFa?.[0]
+          || `${FIT_VERDICT_FA[String(best?.verdict || '').toUpperCase()] || 'بی‌رتبه'}: ${fmtNum(best?.score ?? null, locale === 'fa')} امتیاز در برابر پروفایل ریسک ${FIT_TOLERANCE_FA[String(fitRead.data?.riskTolerance || '').toLowerCase()] || 'خوانده‌نشده'}`,
+        source: 'fit-engine',
+        dataAt: fitRead.data?.at || Date.now(),
+        partial: false
+      });
+    } else {
+      findings.push({
+        id: 'opportunity-fit',
+        status: 'UNAVAILABLE',
+        ranked: [],
+        detail: null,
+        reason: `the fit engine did not rank anything: ${fitRead?.reason || fitRead?.data?.detail || 'NO_FIT_DATA'}`,
+        reasonFa: `موتور تناسب چیزی را رتبه‌بندی نکرد: ${fitRead?.reason || fitRead?.data?.detail || 'NO_FIT_DATA'}`,
+        source: 'fit-engine',
+        partial: true
+      });
+    }
+  }
+
+  /*
+   * ── THE GLOBAL SURFACE (2026-11-12) ───────────────────────────────────
+   *
+   * The brain could not reach the global engines, so a question about
+   * smart money was answered with a price summary.
+   *
+   * The finding carries the flows AND what they are NOT: a whale
+   * transfer is a proxy, not a paired trade, and the smart-money engine
+   * says so in its own data (`whaleTransferProxy.note`). An answer that
+   * quoted «nنهنگ‌ها ۱۲ میلیون دلار خریدند» without that qualifier would
+   * be a fabrication dressed as a fact, so the qualifier travels with the
+   * number.
+   */
+  if (intent.intentType === 'SMART_MONEY_READ') {
+    const global = readResults.globalIntel;
+    const domains = global?.data?.domains || {};
+    const smart = domains.smart_money || null;
+    const whales = domains.whales || null;
+    const onchain = domains.onchain || null;
+    const failed = global?.data?.failed || {};
+    if (smart || whales || onchain) {
+      const d = smart?.data || {};
+      const proxy = d.whaleTransferProxy || {};
+      findings.push({
+        id: 'global-intelligence',
+        status: 'OK',
+        domains: Object.keys(domains),
+        netFlowUsd: d.netFlowUsd ?? null,
+        accumulationUsd: d.accumulationUsd ?? null,
+        distributionUsd: d.distributionUsd ?? null,
+        topTokens: (d.topTokens || []).slice(0, 5),
+        whaleTransferProxy: {
+          count: proxy.whaleActivity?.count ?? null,
+          netFlowUsd: proxy.netFlowUsd ?? null,
+          exchangeInflowUsd: proxy.exchangeInflowUsd ?? null,
+          exchangeOutflowUsd: proxy.exchangeOutflowUsd ?? null,
+          note: proxy.note || 'transfer aggregates and exchange labels are proxies, not paired trades'
+        },
+        whaleEvents: (whales?.data?.events || []).slice(0, 5),
+        onchainActivity: onchain?.data || null,
+        detail: d.netFlowUsd !== null && d.netFlowUsd !== undefined
+          ? `net flow ${d.netFlowUsd} USD over ${d.window || '24h'}, confidence ${smart?.confidence ?? '—'}`
+          : `${Object.keys(domains).length} global domain(s) read; smart money has no verified flow yet`,
+        reason: d.dataStatus === 'insufficient-evidence' || d.verifiedStatus === 'insufficient-evidence'
+          ? 'the smart-money engine has no verified paired-swap consensus for this window, so the whale transfers below are PROXIES, not trades'
+          : `read from the ${smart?.source || 'global-intelligence engine'}; the window is ${d.window || '24h'} and it moves`,
+        /* «the whale transfers below are PROXIES, not trades» is the qualifier
+           that keeps a whale number from reading as a fact about paired
+           trades — §5.9 called a claim without it «a fabrication dressed as a
+           fact». It must survive translation, or the Persian reply is the one
+           that overstates. */
+        detailFa: d.netFlowUsd !== null && d.netFlowUsd !== undefined
+          ? `جریان خالص ${fmtUsd(d.netFlowUsd, locale === 'fa')} در بازهٔ ${d.window || '۲۴ ساعت'}، اطمینان ${fmtNum(smart?.confidence, locale === 'fa')}`
+          : `${fmtNum(Object.keys(domains).length, locale === 'fa')} دامنهٔ جهانی خوانده شد؛ پول هوشمند هنوز جریان تأییدشده‌ای ندارد`,
+        reasonFa: d.dataStatus === 'insufficient-evidence' || d.verifiedStatus === 'insufficient-evidence'
+          ? 'موتور پول هوشمند برای این بازه اجماع تأییدشدهٔ جفت‌معامله ندارد، پس انتقال‌های نهنگ که در ادامه می‌آید PROXY است، نه معامله'
+          : `از ${smart?.source || 'موتور هوش جهانی'} خوانده شد؛ بازه ${d.window || '۲۴ ساعت'} است و تغییر می‌کند`,
+        source: smart?.source || 'global-intelligence-engine',
+        dataAt: smart?.at || Date.now(),
+        partial: Boolean(smart?.partial)
+      });
+    } else {
+      const named = Object.entries(failed).map(([k, v]) => `${k}: ${v}`).slice(0, 6);
+      findings.push({
+        id: 'global-intelligence',
+        status: 'UNAVAILABLE',
+        domains: [],
+        failed,
+        detail: named.length ? `no global domain answered — ${named.join('; ')}` : `the global engine answered with nothing (${global?.reason || 'NO_GLOBAL_SNAPSHOT'})`,
+        reason: global?.reason ? `the global engine could not be read: ${global.reason}` : 'no global domain answered in this pass',
+        source: 'global-intelligence-engine',
+        dataAt: Date.now(),
+        partial: true
+      });
+    }
   }
 
   if (['ASSET_ANALYSIS', 'SIGNAL_READING', 'QUOTE_SWAP'].includes(intent.intentType) || (classification.entities.asset && intent.intentType === 'CONCENTRATION_CHECK')) {
@@ -1229,6 +2932,69 @@ function buildFindings({ intent, classification, state, results, risk, readResul
         source: markets?.source || 'market-data', dataAt: markets?.at || Date.now(), partial: !b
       });
     } else findings.push({ id: 'market-overview', status: 'UNAVAILABLE', reason: readResults.markets?.reason || 'the market-data source returned nothing', detail: null });
+  }
+
+  /*
+   * The regime (path 12). A market overview that quotes breadth and the
+   * top movers answers "what is moving" — not "what kind of market is
+   * this". The macro graph is the second half: the global snapshot, the
+   * world model and the portfolio read TOGETHER, with the transmission
+   * edges between them.
+   *
+   * It is an ENRICHMENT, not the source: when the graph is unreadable
+   * the overview still stands on the prices it did read. And the graph
+   * says what it is — `estimate: true` — so the finding says it too.
+   */
+  if (intent.intentType === 'MARKET_OVERVIEW') {
+    const graphRead = readResults.macroGraph;
+    if (graphRead?.status === 'OK' && graphRead.data) {
+      const g = graphRead.data;
+      const domainsRead = Array.isArray(g.coverage?.domainsRead) ? g.coverage.domainsRead : [];
+      const impulse = g.portfolioRiskImpulse ?? null;
+      findings.push({
+        id: 'market-regime',
+        status: domainsRead.length ? 'OK' : 'PARTIAL',
+        domainsRead,
+        nodeCount: Array.isArray(g.nodes) ? g.nodes.length : 0,
+        edgeCount: Array.isArray(g.edges) ? g.edges.length : 0,
+        portfolioRiskImpulse: impulse,
+        impulse: g.impulse ?? null,
+        pressure: g.pressure ?? null,
+        detail: domainsRead.length
+          ? `the regime is read from ${domainsRead.join(', ')}; ${g.coverage?.nodes ?? 0} node(s) and ${g.coverage?.edges ?? 0} transmission edge(s)`
+          : 'the macro graph read no domain this pass',
+        reason: impulse !== null && impulse !== undefined
+          ? `the portfolio risk impulse is ${impulse} — a first-order model over the read domains, not a forecast`
+          : 'no portfolio risk impulse was derivable: the graph is a model, and it says which domains it read',
+        /*
+         * THE PERSIAN PAIR THE FINDING NEXT DOOR ALREADY HAS.
+         *
+         * The liquidity finding twenty lines above carries `detailFa`/`reasonFa`
+         * with a comment explaining that an English-only qualifier inside a
+         * Persian reply is a qualifier the user will skim past. This finding had
+         * only the English pair, so `recommend` — which picks
+         * `(fa && f.reasonFa) ? f.reasonFa : f.reason` — rendered
+         * «the portfolio risk impulse is 0 — a first-order model over the read
+         * domains, not a forecast» inside a Persian `reason` section, in the same
+         * sentence as three Persian clauses. Measured on «وضعیت بازار چطوره».
+         *
+         * It is also the qualifier that keeps the number honest: an impulse of 0
+         * reads as "no risk" unless the sentence beside it says the graph is a
+         * first-order model and not a forecast. A qualifier the reader skips is a
+         * number presented as more than it is.
+         */
+        detailFa: domainsRead.length
+          ? `رژیم از ${domainsRead.join('، ')} خوانده شد؛ ${fmtNum(g.coverage?.nodes ?? 0, locale === 'fa')} گره و ${fmtNum(g.coverage?.edges ?? 0, locale === 'fa')} لبهٔ انتقال`
+          : 'گراف کلان در این پاس هیچ دامنه‌ای را نخواند',
+        reasonFa: impulse !== null && impulse !== undefined
+          ? `تکانهٔ ریسک پرتفوی ${fmtNum(impulse, locale === 'fa')} است — یک مدلِ مرتبهٔ اول روی دامنه‌های خوانده‌شده، نه یک پیش‌بینی`
+          : 'تکانهٔ ریسک پرتفوی قابل استخراج نبود: گراف یک مدل است و می‌گوید کدام دامنه‌ها را خوانده است',
+        estimate: g.estimate === true,
+        source: 'macro-graph-engine',
+        dataAt: g.at || Date.now(),
+        partial: domainsRead.length === 0
+      });
+    }
   }
 
   if (intent.intentType === 'NEWS_SUMMARY') {
@@ -1270,7 +3036,12 @@ function buildFindings({ intent, classification, state, results, risk, readResul
   }
 
   const riskIsInformative = risk?.level && risk.level !== 'MISSING';
-  const moneyTurn = ['EXECUTE_SWAP', 'EXECUTE_BRIDGE', 'EXECUTE_LEND', 'EXECUTE_BORROW', 'EXECUTE_REPAY', 'EXECUTE_REBALANCE', 'WHATIF_SIMULATION', 'CONCENTRATION_CHECK', 'FUTURES_RISK', 'LOAN_STATUS', 'BORROW_CAPACITY', 'PORTFOLIO_ANALYSIS', 'PROFIT_PLAN', 'GOAL_PLAN'].includes(intent.intentType);
+  /*
+   * `RISK_OVERVIEW` is in this list because the risk verdict IS its
+   * answer: without it the intent had no evidence and no headline, and
+   * «ریسک چقدره؟» fell back to the generic tail.
+   */
+  const moneyTurn = ['EXECUTE_SWAP', 'EXECUTE_BRIDGE', 'EXECUTE_LEND', 'EXECUTE_BORROW', 'EXECUTE_REPAY', 'EXECUTE_REBALANCE', 'WHATIF_SIMULATION', 'CONCENTRATION_CHECK', 'FUTURES_RISK', 'LOAN_STATUS', 'BORROW_CAPACITY', 'PORTFOLIO_ANALYSIS', 'PROFIT_PLAN', 'GOAL_PLAN', 'RISK_OVERVIEW'].includes(intent.intentType);
   if (risk?.factors?.length && (riskIsInformative || moneyTurn)) findings.push({ id: 'risk', level: risk.level, detail: `${risk.level} overall from ${risk.factors.length} computed factors`, reason: risk.reasons[0] || `risk level ${risk.level}`, reasonFa: risk.reasonsFa?.[0] || null, decision: risk.decision, source: 'central-risk-engine', dataAt: Date.now(), factors: risk.factors.slice(0, 5) });
 
   for (const [key, value] of Object.entries(results)) {
@@ -1339,15 +3110,26 @@ const SECTION_LABEL_FA = {
 const SECTION_FOR_INTENT = {
   PORTFOLIO_ANALYSIS: ['wallet', 'portfolio', 'markets', 'lending', 'risk'],
   CONCENTRATION_CHECK: ['wallet', 'portfolio', 'markets', 'risk'],
+  /* The plain risk verdict needs the portfolio it is judged against, and
+     the risk engine that judges it. */
+  RISK_OVERVIEW: ['wallet', 'portfolio', 'markets', 'risk'],
   ASSET_ANALYSIS: ['markets', 'signals', 'news', 'portfolio'],
   BALANCE_QUERY: ['wallet'],
   LOAN_STATUS: ['wallet', 'lending', 'portfolio', 'risk'],
   BORROW_CAPACITY: ['wallet', 'lending', 'borrowing', 'portfolio', 'risk'],
   FUTURES_RISK: ['futures', 'dydx', 'portfolio', 'markets', 'risk'],
-  MARKET_OVERVIEW: ['markets', 'signals', 'news'],
+  /* The market overview also reads the global section (path 12): the
+     regime is not a price list, it is what the global snapshot, the
+     world model and the portfolio say TOGETHER. `globalIntel` is a state
+     section, and a module with no section is a module nothing ever asks. */
+  MARKET_OVERVIEW: ['markets', 'signals', 'news', 'globalIntel', 'macroGraph'],
   NEWS_SUMMARY: ['news', 'signals', 'markets'],
   SIGNAL_READING: ['signals', 'markets', 'news'],
-  GOAL_PLAN: ['wallet', 'portfolio', 'markets', 'goals', 'farming', 'risk'],
+  /* The goal scenarios travel with the goal plan (path 13): the three
+     profiles for the target, each with its drawdown and its probability
+     of loss. The feasibility figure answers "can it be reached"; the
+     scenarios answer "what does the road look like". */
+  GOAL_PLAN: ['wallet', 'portfolio', 'markets', 'goals', 'farming', 'risk', 'goalScenarios'],
   PROFIT_PLAN: ['wallet', 'portfolio', 'markets', 'farming', 'goals', 'signals', 'risk'],
   WHATIF_SIMULATION: ['wallet', 'portfolio', 'markets', 'lending', 'futures', 'risk'],
   QUOTE_SWAP: ['wallet', 'markets', 'portfolio', 'risk'],
@@ -1361,7 +3143,51 @@ const SECTION_FOR_INTENT = {
   CREATE_GOAL: ['wallet', 'portfolio', 'goals', 'markets'],
   SET_ALERT: ['markets', 'alerts'],
   CONFIRM_PENDING: ['wallet', 'markets', 'portfolio'],
-  CANCEL_PENDING: []
+  CANCEL_PENDING: [],
+  /*
+   * The yield surface. These three sections were READABLE and NEVER ASKED
+   * FOR — `farming` and `liquidity` are state sections, and `staking` reads
+   * `farming`. The words `yield`, `farm` and `apy` belonged to
+   * ASSET_ANALYSIS, whose modules are the crypto ones, so the yields
+   * engine was never consulted for a question about a pool.
+   */
+  YIELD_OPPORTUNITY: ['farming', 'portfolio', 'risk'],
+  LIQUIDITY_RISK: ['liquidity', 'portfolio', 'risk'],
+  STAKING_REWARD: ['farming', 'portfolio', 'risk'],
+  /*
+   * `globalIntel` IS a state section, and it has to be: the brain reads
+   * modules THROUGH the state store, so a module with no section is a
+   * module nothing ever asks. The snapshot is per-owner — the state store
+   * is per-owner — so two users cannot see each other's flows.
+   */
+  SMART_MONEY_READ: ['globalIntel', 'markets', 'risk'],
+  /*
+   * The fit question needs the ranking AND the risk view beside it: a
+   * ranking that says «FITTED» is meaningless without the risk number it
+   * was scored against. `opportunityFit` is a state section for the same
+   * reason `globalIntel` is — the brain reads modules THROUGH the state
+   * store, so a module with no section is a module nothing ever asks.
+   */
+  OPPORTUNITY_FIT: ['opportunityFit', 'portfolio', 'risk'],
+  /* The route ranking (path 14): the live candidates for the transfer,
+     the market they are crossing, and the risk of the crossing. The
+     markets read is optional in effect but declared here, because a
+     route priced without any market context is a price and not an
+     answer. */
+  ROUTE_INTELLIGENCE: ['routeIntelligence', 'markets', 'risk'],
+  /* The why surface (path 15): the brain's own decision, explained. It
+     needs the portfolio and the risk view, because those are what the
+     decision was sized and judged against — an explanation that omits
+     them is an explanation of a decision nobody made.
+
+     `whyDecision` is NOT in this list, and that is deliberate. The why
+     engine explains the RECOMMENDATION, and the recommendation is built
+     AFTER these reads — so reading the why section here would ask the
+     engine to explain a decision that does not exist yet, and the
+     honest answer it would give is NO_DECISION. The why section is read
+     in its own step, once the recommendation stands (see the why read
+     below), and the read there is the one that counts. */
+  WHY_DECISION: ['portfolio', 'risk']
 };
 function sectionsForIntent(classification, { context, state }) {
   const base = SECTION_FOR_INTENT[classification.type] || ANALYSIS_MINIMUM;
@@ -1482,7 +3308,36 @@ function publicIntent(intent) {
     plan: intent.plan, risk: intent.risk, policy: intent.policy, compound: intent.compound || null,
     confirmationRequired: intent.confirmationRequired, executionRequired: intent.executionRequired, verificationRequired: intent.verificationRequired,
     history: intent.history, followUp: intent.classification?.followUp || null, classificationSource: intent.classification?.source || null,
-    error: intent.error, attempts: intent.attempts
+    error: intent.error, attempts: intent.attempts,
+    /* The corpus citation. A retrieved answer must say WHERE it was
+       retrieved from — that is the difference between a lookup and a
+       generation, and it is the thing the user can check. */
+    answeredFromCorpus: intent.answeredFromCorpus === true,
+    corpusMatch: intent.corpusMatch || null,
+    /* And the same for a generated answer: which provider produced it. */
+    answeredFromModel: intent.answeredFromModel === true,
+    modelProvider: intent.modelProvider || null,
+    modelId: intent.modelId || null,
+    /* And the same for a plugin answer: WHICH plugin answered, what it read,
+       and why it did not — the code is quotable, the sentence is not. */
+    answeredFromPlugin: intent.answeredFromPlugin === true,
+    pluginSlug: intent.pluginSlug || null,
+    pluginTitle: intent.pluginTitle || null,
+    pluginDataStatus: intent.pluginDataStatus || null,
+    pluginCode: intent.pluginCode || null,
+    /* WHOSE choice produced this answer: 'turn' when the client sent the agent
+       the user is talking to, 'owner' when it came from their durable
+       attachment, 'match' when the vocabulary matcher picked it. A reply that
+       cannot say which is a reply that cannot be audited. */
+    pluginAttachedBy: intent.pluginAttachedBy || (intent.pluginSlug ? 'match' : null),
+    /* The offer, as data: which plugin could keep watching, and what it would
+       watch. Both null unless a plugin answered AND that plugin declares a watch
+       AND this run held a subject that survives the round trip back through the
+       parser. */
+    pluginSubject: intent.pluginSubject || null,
+    pluginWatch: intent.pluginWatch || null,
+    turnAgentId: intent.turnAgentId || null,
+    pluginAttachWired: hasPluginProvider()
   };
 }
 

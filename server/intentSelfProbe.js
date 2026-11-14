@@ -290,16 +290,69 @@ export async function runSelfProbe({
   now = Date.now(),
   ttlHours = 6,
   certTtlHours = 24,
-  store = true
+  store = true,
+  reuse = true
 } = {}) {
   const target = origin || resolveOrigin(req);
 
-  const cert = target
+  /*
+   * ── REUSE WHAT IS STILL VALID (2026-11-12) ────────────────────────────
+   *
+   * The four probes cost real network I/O: `venue-health` fetches three
+   * exchange endpoints, `certificate-authority` opens a TLS handshake. In
+   * the daily cron that was 125 ms of the 621 ms — 20 % of the whole
+   * daily route — to re-measure things whose evidence is valid for SIX
+   * HOURS.
+   *
+   * The evidence itself carries `expiresAt`, and `readPersisted` already
+   * filters on it. So the honest reuse is: a kind whose stored evidence
+   * has not expired is REPORTED, not re-probed.
+   *
+   * Three rules keep this from becoming a way to fake a green board:
+   *
+   *   1. **Only unexpired evidence is reused.** The TTL is the same one
+   *      the probe would have used, so a reused record expires exactly
+   *      when a fresh one would have.
+   *   2. **A reused kind is labelled.** The report says which kinds were
+   *      measured now and which were carried, so a reader can tell.
+   *   3. **`reuse:false` forces a fresh pass.** The HTTP route and any
+   *      caller that wants a measurement rather than a summary asks for
+   *      it explicitly.
+   *
+   * A reused record is only ever the record this deployment itself
+   * earned, stored under its own key with its own digest — so this is
+   * "the answer from six hours ago", not "someone else's answer".
+   */
+  const reused = new Map();
+  if (reuse) {
+    for (const record of await readPersisted({ now })) reused.set(record.kind, record);
+  }
+  const carried = (kind) => {
+    const record = reused.get(kind);
+    if (!record) return null;
+    return {
+      ok: true,
+      reused: true,
+      checkedAt: record.checkedAt ?? null,
+      evidence: {
+        kind: record.kind,
+        providerId: record.providerId,
+        digest: record.digest,
+        checkedAt: record.checkedAt ?? null,
+        expiresAt: record.expiresAt,
+        status: 'verified',
+        health: 'healthy',
+        attested: true
+      }
+    };
+  };
+
+  const cert = carried('certificate-authority') || (target
     ? await probeCertificateAuthority(target, { ttlHours: certTtlHours, now })
-    : { ok: false, code: 'ORIGIN_UNKNOWN', detail: { hint: 'set PUBLIC_ORIGIN to the public https origin' } };
-  const venue = await probeVenueHealth({ ttlHours, now });
-  const slo = sloEvidenceFromMeter({ now, ttlHours });
-  const audit = await auditEvidence({ now, ttlHours });
+    : { ok: false, code: 'ORIGIN_UNKNOWN', detail: { hint: 'set PUBLIC_ORIGIN to the public https origin' } });
+  const venue = carried('venue-health') || await probeVenueHealth({ ttlHours, now });
+  const slo = carried('slo-measurement') || sloEvidenceFromMeter({ now, ttlHours });
+  const audit = carried('durable-immutable-audit') || await auditEvidence({ now, ttlHours });
 
   const byKind = {
     'certificate-authority': cert,
@@ -310,13 +363,38 @@ export async function runSelfProbe({
 
   const earned = Object.values(byKind).filter((r) => r.ok).map((r) => r.evidence);
 
+  /*
+   * A CARRIED record must NOT be re-persisted with a fresh expiry.
+   *
+   * This is the failure mode the reuse introduces, and it is a real one:
+   * `persistEarned` merges by kind, so writing a carried record back would
+   * give it a NEW `expiresAt` and the evidence would never expire. The
+   * probe would then "reuse" a measurement forever, and a venue that went
+   * down six hours ago would still be reported as verified.
+   *
+   * So only FRESHLY measured kinds are persisted. A carried record keeps
+   * the expiry it was earned with, and it disappears on schedule.
+   */
+  const freshlyMeasured = Object.entries(byKind)
+    .filter(([, r]) => r.ok && !r.reused)
+    .map(([, r]) => r.evidence);
+  const carriedRecords = Object.entries(byKind)
+    .filter(([, r]) => r.ok && r.reused)
+    .map(([, r]) => r.evidence);
+
   let persistence = { persisted: false, code: 'NOT_ATTEMPTED' };
   if (store && earned.length > 0) {
     try {
       const { autoStoreEvidence } = await import('./intentOperatorEvidence.js');
       for (const record of earned) autoStoreEvidence(record);
     } catch { /* store unavailable — the report is still accurate */ }
-    persistence = await persistEarned(earned, { now });
+    persistence = await persistEarned(freshlyMeasured, { now });
+    /* Nothing fresh was measured, but the carried records are still stored
+       and still valid — so the report is durable, not empty. Saying
+       `NOTHING_EARNED` here would be a lie: the evidence exists. */
+    if (!freshlyMeasured.length && carriedRecords.length) {
+      persistence = { persisted: true, count: carriedRecords.length, carried: true };
+    }
   }
 
   /* Public report: verdicts, digests and measurements only. No secrets exist
@@ -331,18 +409,28 @@ export async function runSelfProbe({
     earnedCount: earned.length,
     totalKinds: SELF_PROBE_KINDS.length,
     earned: earned.map((e) => ({ kind: e.kind, providerId: e.providerId, digest: e.digest, expiresAt: e.expiresAt })),
+    /* Which kinds were MEASURED in this pass and which were CARRIED from
+       evidence this deployment earned earlier and has not expired. A reader
+       that cannot tell the two apart cannot judge the report — and a report
+       that hides the difference would let an expired measurement look
+       fresh. */
+    measuredKinds: Object.entries(byKind).filter(([, r]) => r.ok && !r.reused).map(([kind]) => kind),
+    carriedKinds: Object.entries(byKind).filter(([, r]) => r.ok && r.reused).map(([kind]) => kind),
+    /* How many kinds were carried rather than measured — the number a
+       reader needs to judge how much of this report is fresh. */
+    carriedCount: carriedRecords.length,
     missing: Object.entries(byKind)
       .filter(([, r]) => !r.ok)
       .map(([kind, r]) => ({ kind, code: r.code || 'UNKNOWN' })),
     detail: {
       certificate: cert.ok
-        ? { issuer: cert.detail.issuerIdentity, validTo: cert.detail.validTo }
+        ? { issuer: cert.detail?.issuerIdentity ?? null, validTo: cert.detail?.validTo ?? null, reused: cert.reused === true, measuredAt: cert.checkedAt ?? now }
         : { code: cert.code, host: cert.detail?.host ?? null },
-      venue: venue.ok ? { chosen: venue.detail.chosen } : { code: venue.code },
+      venue: venue.ok ? { chosen: venue.detail?.chosen ?? null, reused: venue.reused === true, measuredAt: venue.checkedAt ?? now } : { code: venue.code },
       slo: slo.ok
-        ? { uptime: slo.detail.uptime, p95LatencyMs: slo.detail.p95LatencyMs, samples: slo.detail.samples }
+        ? { uptime: slo.detail?.uptime ?? null, p95LatencyMs: slo.detail?.p95LatencyMs ?? null, samples: slo.detail?.samples ?? 0, reused: slo.reused === true, measuredAt: slo.checkedAt ?? now }
         : { code: slo.code, samples: slo.detail?.samples ?? 0, reason: slo.detail?.reason ?? null },
-      audit: audit.ok ? { entryCount: audit.detail.entryCount } : { code: audit.code }
+      audit: audit.ok ? { entryCount: audit.detail?.entryCount ?? null, reused: audit.reused === true, measuredAt: audit.checkedAt ?? now } : { code: audit.code }
     }
   };
 }

@@ -245,11 +245,19 @@ await safely('retrieval', () => {
   const stats = retrievalStats();
   t('index covers knowledge + FAQ', stats.documents >= 40 && faqCorpus().length >= 30);
   const top = (q, locale) => retrieve(q, { locale })[0]?.id || null;
-  t('fa: slippage → faq.slippage', top('اسلیپیج چیه؟', 'fa') === 'faq.slippage');
+  /*
+   * The corpus holds BOTH a FAQ stub and a full knowledge item for
+   * slippage. Either is a correct answer — what is asserted is that the
+   * TOP hit is a slippage answer, not which of the two it is. (The
+   * knowledge item is the better answer; the FAQ entry is the older one.)
+   */
+  t('fa: slippage → a slippage answer', /slippage/i.test(top('اسلیپیج چیه؟', 'fa') || ''));
   t('fa: bridge how-to → kb.bridge.howto', top('بریج چطوری کار میکنه', 'fa') === 'kb.bridge.howto');
   t('fa: seed request → seed / never-asks', ['faq.seed', 'kb.wallet.never-asks'].includes(top('عبارت بازیابی کیف پولم رو کسی خواست', 'fa')));
   t('fa: failed swap → faq.failed', top('چرا سواپم ناموفق شد', 'fa') === 'faq.failed');
-  t('fa: wallet will not connect → connect', ['faq.connect', 'faq.wcReconnect'].includes(top('کیف پولم وصل نمیشه', 'fa')));
+  /* Same reasoning: both the FAQ stub and the full knowledge item answer
+     this correctly, so the assertion is about the TOPIC, not the id. */
+  t('fa: wallet will not connect → a connect answer', ['faq.connect', 'faq.wcReconnect', 'kb.wallet.connect'].includes(top('کیف پولم وصل نمیشه', 'fa')));
   t('en: why did my swap fail → faq.failed', top('why did my swap fail', 'en') === 'faq.failed');
   t('en: fee → a fee answer', /fee|bridge|gas/.test(top('how much is the fee', 'en') || ''));
   t('en: is my money safe → custody', top('is my money safe', 'en') === 'faq.custody');
@@ -354,7 +362,7 @@ await safely('http', async () => {
     t('execute refuses spending more USDC than held (OVERSPEND)', over.status === 409 && over.json?.constitution?.violations?.some((x) => x.article === 'OVERSPEND'));
 
     const r = await call('POST', '/api/v1/ai/retrieve', { query: 'اسلیپیج چیه؟', locale: 'fa' });
-    t('POST /retrieve returns passages', r.status === 200 && r.json.results?.[0]?.id === 'faq.slippage');
+    t('POST /retrieve returns passages', r.status === 200 && /slippage/i.test(r.json.results?.[0]?.id || ''));
     const p = await call('POST', '/api/v1/ai/point-in-time', { asOf: '2025-06-01', context: { news: [{ title: 'f', publishedAt: '2025-07-01' }] } });
     t('POST /point-in-time strips the future', p.status === 200 && p.json.context.news.length === 0);
     const d = await call('POST', '/api/v1/ai/debate', { message: 'should I buy BTC?', asset: 'BTC', locale: 'en', rounds: 1 });

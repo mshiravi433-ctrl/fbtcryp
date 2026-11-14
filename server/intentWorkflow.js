@@ -19,7 +19,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { Interface, ZeroAddress, isAddress } from 'ethers';
+import { Interface, ZeroAddress, isAddress } from './ethersLite.js';
 import { canonicalValue } from './intentSignatures.js';
 import { atomicSwapProtocolStatus } from './intentAtomicSwap.js';
 
@@ -81,7 +81,12 @@ export const WORKFLOW_BATCH_ABI = Object.freeze([
   { type: 'error', name: 'CallDeadlinePassed' }
 ]);
 
-const workflowInterface = new Interface(WORKFLOW_BATCH_ABI);
+/* The ABI machinery is loaded ON DEMAND — see server/ethersLite.js. */
+let workflowInterfaceP = null;
+const workflowInterfaceReady = async () => {
+  if (!workflowInterfaceP) workflowInterfaceP = await Interface(WORKFLOW_BATCH_ABI);
+  return workflowInterfaceP;
+};
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,31}$/;
 const SYMBOL_RE = /^[A-Za-z0-9.$₮_-]{1,16}$/;
 const AMOUNT_RE = /^(0|[1-9][0-9]{0,77})(\.[0-9]{1,18})?$/;
@@ -343,7 +348,7 @@ function plannedCalldataFor(node) {
  * hash of each node — not a live router payload. `to` is null until
  * INTENT_WORKFLOW_BATCH_ADDRESS is a real public contract address.
  */
-export function buildWorkflowBatchCalldata(input) {
+export async function buildWorkflowBatchCalldata(input) {
   const checked = validateWorkflow(input);
   if (!checked.ok) return checked;
   if (!isSingleChainWorkflow(checked.workflow)) {
@@ -361,7 +366,7 @@ export function buildWorkflowBatchCalldata(input) {
       deadline: node.deadline
     };
   });
-  const data = workflowInterface.encodeFunctionData('execute', [workflowId, calls, policyCode(policy)]);
+  const data = (await workflowInterfaceReady()).encodeFunctionData('execute', [workflowId, calls, policyCode(policy)]);
   const configured = configuredWorkflowBatchAddress();
   return {
     ok: true,
@@ -431,4 +436,7 @@ export function workflowProtocolStatus({ address = configuredWorkflowBatchAddres
   };
 }
 
-export { workflowInterface };
+/* The interface itself is now loaded on demand — the accessor is exported
+   instead of the eagerly-built object, because an eager build would pull the
+   whole ABI machinery onto the cold-start path. */
+export { workflowInterfaceReady as workflowInterface };

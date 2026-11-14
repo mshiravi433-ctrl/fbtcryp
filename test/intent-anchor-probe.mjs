@@ -183,9 +183,9 @@ export default async function run() {
 
       /* -- calldata is only built for configured networks ----------------- */
       t('anchor calldata refuses an unconfigured chain',
-        buildAnchorCalldata(close, 1, networks).code === 'ANCHOR_NETWORK_NOT_CONFIGURED');
-      t('anchor calldata for the configured chain binds the exact contract', (() => {
-        const calldata = buildAnchorCalldata(close, 8453, networks);
+        await buildAnchorCalldata(close, 1, networks).code === 'ANCHOR_NETWORK_NOT_CONFIGURED');
+      await t('anchor calldata for the configured chain binds the exact contract', (async () => {
+        const calldata = await buildAnchorCalldata(close, 8453, networks);
         return calldata.ok && calldata.to.toLowerCase() === CONTRACT && calldata.externallyAnchored === false;
       })());
 

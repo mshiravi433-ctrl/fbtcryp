@@ -101,7 +101,7 @@ export default async function run() {
   /* --------------------------- 3. plan compile ---------------------------- */
   const now = Math.floor(Date.now() / 1000);
   process.env.INTENT_ATOMIC_SWAP_ADDRESSES = `{"56":"${ADDR_BNB}","42161":"${ADDR_ARB}"}`;
-  const plan = buildAtomicSwapPlan({
+  const plan = await buildAtomicSwapPlan({
     schema: ATOMIC_SWAP_SCHEMA,
     hashlock: HASHLOCK,
     source: { chainId: 56, sender: USER, recipient: SOLVER, token: { native: true }, amount: '1000000000', timeout: now + 7200 },
@@ -135,7 +135,7 @@ export default async function run() {
     plan.sequentialCrossChainPathUnchanged === 'ATOMIC_CROSS_CHAIN_UNAVAILABLE');
 
   /* ----------------------- 4. the refusals that matter -------------------- */
-  const misOrdered = buildAtomicSwapPlan({
+  const misOrdered = await buildAtomicSwapPlan({
     hashlock: HASHLOCK,
     source: { chainId: 56, sender: USER, recipient: SOLVER, token: { native: true }, amount: '1', timeout: now + 4000 },
     destination: { chainId: 42161, sender: SOLVER, recipient: USER, token: { native: true }, amount: '1', timeout: now + 3600 }
@@ -143,29 +143,29 @@ export default async function run() {
   t('a mis-ordered HTLC pair is refused (claim-here-refund-there)',
     misOrdered.ok === false && misOrdered.code === 'ATOMIC_SWAP_TIMELOCK_ORDER_UNSAFE');
   t('the margin equals the published safety margin', MIN_TIMELOCK_MARGIN_SECONDS === 3600);
-  const sameChain = buildAtomicSwapPlan({
+  const sameChain = await buildAtomicSwapPlan({
     hashlock: HASHLOCK,
     source: { chainId: 56, sender: USER, recipient: SOLVER, token: { native: true }, amount: '1', timeout: now + 7200 },
     destination: { chainId: 56, sender: SOLVER, recipient: USER, token: { native: true }, amount: '1', timeout: now + 3600 }
   }, now);
   t('same-chain pairs are refused (that is the workflow batch, not an HTLC)',
     sameChain.ok === false && sameChain.code === 'ATOMIC_SWAP_SAME_CHAIN');
-  const solanaLeg = buildAtomicSwapPlan({
+  const solanaLeg = await buildAtomicSwapPlan({
     hashlock: HASHLOCK,
     source: { chainId: 56, sender: USER, recipient: SOLVER, token: { native: true }, amount: '1', timeout: now + 7200 },
     destination: { chainId: 1151111081099710, sender: SOLVER, recipient: USER, token: { native: true }, amount: '1', timeout: now + 3600 }
   }, now);
   t('Solana legs are refused — no program exists and "soon" is never atomic',
     solanaLeg.ok === false && solanaLeg.code === 'ATOMIC_SWAP_UNSUPPORTED_CHAIN');
-  const badHash = buildAtomicSwapPlan({ hashlock: '0x00' }, now);
+  const badHash = await buildAtomicSwapPlan({ hashlock: '0x00' }, now);
   t('a non-32-byte hashlock is refused', badHash.ok === false && badHash.code === 'ATOMIC_SWAP_HASHLOCK_REQUIRED');
-  const decimalAmount = buildAtomicSwapPlan({
+  const decimalAmount = await buildAtomicSwapPlan({
     hashlock: HASHLOCK,
     source: { chainId: 56, sender: USER, recipient: SOLVER, token: { native: true }, amount: '1.5', timeout: now + 7200 },
     destination: { chainId: 42161, sender: SOLVER, recipient: USER, token: { native: true }, amount: '1', timeout: now + 3600 }
   }, now);
   t('decimal amounts never reach uint256 calldata', decimalAmount.ok === false && decimalAmount.code === 'ATOMIC_SWAP_BAD_AMOUNT');
-  const zeroAmount = buildAtomicSwapPlan({
+  const zeroAmount = await buildAtomicSwapPlan({
     hashlock: HASHLOCK,
     source: { chainId: 56, sender: USER, recipient: SOLVER, token: { native: true }, amount: '0', timeout: now + 7200 },
     destination: { chainId: 42161, sender: SOLVER, recipient: USER, token: { native: true }, amount: '1', timeout: now + 3600 }
@@ -176,7 +176,7 @@ export default async function run() {
   delete process.env.INTENT_ATOMIC_SWAP_ADDRESSES;
   delete process.env.INTENT_ATOMIC_SWAP_ADDRESS;
   delete process.env.INTENT_ATOMIC_SWAP_CHAIN_IDS;
-  const unconfiguredPlan = buildAtomicSwapPlan({ 
+  const unconfiguredPlan = await buildAtomicSwapPlan({ 
     hashlock: HASHLOCK,
     source: { chainId: 56, sender: USER, recipient: SOLVER, token: { native: true }, amount: '1', timeout: now + 7200 },
     destination: { chainId: 42161, sender: SOLVER, recipient: USER, token: { native: true }, amount: '1', timeout: now + 3600 }

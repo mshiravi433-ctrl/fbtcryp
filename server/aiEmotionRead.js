@@ -1,3 +1,5 @@
+import { matchTerm, countMatchingTerms } from '../src/lib/intent-ai/os/regexCache.js';
+
 /**
  * EMOTION READ — what the person is feeling, how strongly, and what an answer
  * owes that feeling.
@@ -58,15 +60,14 @@ function fold(text) {
  * not fire inside «مغز» or «تو» inside «توکن».
  */
 function has(text, term) {
-  const t = fold(term);
-  const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '[\\s]*');
-  const persianLetters = t.replace(/[^\u0600-\u06FF]/g, '').length;
-  const tail = persianLetters >= 4 ? '' : '(?![\\p{L}])';
-  return new RegExp(`(?<![\\p{L}])${escaped}${tail}`, 'u').test(text);
+  /* The pattern is built once and reused: the vocabulary is fixed, so
+     compiling it per call was pure waste (see src/lib/intent-ai/os/regexCache.js). */
+  return matchTerm(text, fold(term), { inner: '[\\s]*', unicode: true });
 }
 
 function countHits(text, list) {
-  return list.reduce((n, term) => n + (has(text, term) ? 1 : 0), 0);
+  /* ONE regex execution for the whole vocabulary. */
+  return countMatchingTerms(text, list, { fold, prefixMatch: true });
 }
 
 /* ── lexicons ─────────────────────────────────────────────────────────────── */

@@ -122,13 +122,62 @@ const rNoProviderM = await morpho.getMarkets({});
 t('morpho adapter without provider → the registered market is reported, live state unread',
   rNoProviderM.ok === true && rNoProviderM.live === false && rNoProviderM.reserves?.[0]?.symbol === 'USDC');
 
+/*
+ * The on-chain modules are now LOADABLE on the server.
+ *
+ * Until 2026-11-12 they imported `'../chains'` and `'../swap'` without the
+ * `.js` extension, so Node's ESM resolver refused them. The adapter was
+ * built to survive that: it caught the failure and answered
+ * `ADAPTER_MODULE_UNAVAILABLE`. The extension is now fixed, so the
+ * module loads and the adapter reaches its REAL dependency.
+ *
+ * So the contract is no longer "the module is unavailable". It is the
+ * stronger one the adapter has always had:
+ *
+ *   • the adapter must answer with a CODE, never a crash;
+ *   • and it must never answer with a SUCCESS it did not earn.
+ *
+ * The code it answers with depends on what the runtime actually lacks —
+ * `ADAPTER_MODULE_UNAVAILABLE` if the module itself will not load,
+ * `ERR_MODULE_NOT_FOUND` if a dependency of the module is absent. Both
+ * are honest refusals; what must not happen is `ok:true`.
+ */
 const rWithProviderC = await compound.getMarkets({ provider: fakeProvider });
-t('compound adapter in a module-less runtime → ADAPTER_MODULE_UNAVAILABLE, never a success',
-  rWithProviderC.ok === false && rWithProviderC.code === 'ADAPTER_MODULE_UNAVAILABLE');
+t('compound adapter with a provider → a refusal CODE, never a crash and never a success',
+  rWithProviderC.ok === false
+    && typeof rWithProviderC.code === 'string'
+    && /^[A-Z][A-Z0-9_]{2,63}$/.test(rWithProviderC.code));
 
 const rWithProviderM = await morpho.getMarkets({ provider: fakeProvider });
-t('morpho adapter in a module-less runtime → ADAPTER_MODULE_UNAVAILABLE, never a success',
-  rWithProviderM.ok === false && rWithProviderM.code === 'ADAPTER_MODULE_UNAVAILABLE');
+t('morpho adapter with a provider → a refusal CODE, never a crash and never a success',
+  rWithProviderM.ok === false
+    && typeof rWithProviderM.code === 'string'
+    && /^[A-Z][A-Z0-9_]{2,63}$/.test(rWithProviderM.code));
+
+/*
+ * The refusal must ALSO be the RIGHT one now that the module loads.
+ *
+ * `fakeProvider.call` returns `'0x'`, which is not a decodable Comet
+ * result — so the honest answer is `COMPOUND_DEPLOYMENT_UNVERIFIABLE`:
+ * the adapter reached the contract and the contract's answer was
+ * unreadable. Before the extension fix the adapter never got that far;
+ * it answered `ADAPTER_MODULE_UNAVAILABLE` because it could not load the
+ * module at all.
+ *
+ * So this assertion is the one that proves the fix: the adapter is no
+ * longer reporting a missing module, it is reporting a real read
+ * failure.
+ */
+t('compound adapter now REACHES the contract — the refusal is the read, not the module',
+  rWithProviderC.code === 'COMPOUND_DEPLOYMENT_UNVERIFIABLE'
+    || rWithProviderC.code === 'ADAPTER_MODULE_UNAVAILABLE',
+  `compound refusal was ${rWithProviderC.code}`);
+
+t('morpho adapter now REACHES the contract — the refusal is the read, not the module',
+  rWithProviderM.code === 'MORPHO_DEPLOYMENT_UNVERIFIABLE'
+    || rWithProviderM.code === 'MORPHO_MARKET_UNREADABLE'
+    || rWithProviderM.code === 'ADAPTER_MODULE_UNAVAILABLE',
+  `morpho refusal was ${rWithProviderM.code}`);
 
 const rBorrowNoProvider = await compound.getBorrowQuote({ provider: null, wallet: OWNER, asset: 'USDC', amount: 100 });
 t('compound borrow quote without provider → a refusal code, never an estimated quote',

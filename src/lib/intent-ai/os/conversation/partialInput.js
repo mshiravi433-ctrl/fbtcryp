@@ -33,6 +33,7 @@ import {
   SLANG_ASSET_MAP
 } from '../intentUnderstandingEngine.js';
 import { classifySocialAct } from './socialIntent.js';
+import { cachedRegExp, matchAnyTerm } from '../regexCache.js';
 
 export const PARTIAL_INPUT_SCHEMA = 'fbt.ai-partial-input.v1';
 export const PARTIAL_INPUT_VERSION = '1.0.0';
@@ -65,7 +66,9 @@ function termRe(term) {
   /* Persian inflects by suffix (بخر → بخرم/بخرد/بخرید), so a 4+ letter Persian
      term matches as a prefix; short terms and Latin tickers stay strict. */
   const tail = persian && letters >= 4 ? '' : '(?![\\p{L}])';
-  return new RegExp(`(?<![\\p{L}])${escaped}${tail}`, 'iu');
+  /* The pattern is built once and reused: the vocabulary is fixed, so
+     compiling it per call was pure waste (see src/lib/intent-ai/os/regexCache.js). */
+  return cachedRegExp(`(?<![\\p{L}])${escaped}${tail}`, 'iu');
 }
 
 const has = (text, term) => termRe(term).test(text);
@@ -278,7 +281,8 @@ function assetsIn(text, { message, context = {} } = {}) {
 
 function actOf(text) {
   for (const [act, terms] of ACT_TERMS) {
-    if (terms.some((t) => has(text, t))) return act;
+    /* ONE regex execution for the whole vocabulary instead of one per term. */
+    if (matchAnyTerm(text, terms, { fold: foldInput, prefixMatch: true })) return act;
   }
   return 'unknown';
 }
@@ -327,7 +331,7 @@ export function readPartialInput({ message = '', locale = 'fa', context = {}, pr
     return null;
   })();
   const fuzzyAmount = FUZZY_AMOUNT_RE.test(text) || entities.isFuzzyAmount === true;
-  const verbish = VERBISH.some((t) => has(text, t));
+  const verbish = matchAnyTerm(text, VERBISH, { fold: foldInput, prefixMatch: true });
   const question = /[؟?]/.test(String(message));
 
   const signals = {

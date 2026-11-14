@@ -32,7 +32,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { Interface, getAddress, isAddress } from 'ethers';
+import { Interface, getAddress, isAddress } from './ethersLite.js';
 
 export const ATOMIC_SWAP_SCHEMA = 'fbt.atomic-swap.v1';
 export const ATOMIC_SWAP_ID_DOMAIN = 'fbt.atomic-swap.v1/id';
@@ -68,7 +68,12 @@ export const ATOMIC_SWAP_ABI = Object.freeze([
   'event SwapRefunded(bytes32 indexed swapId, address indexed sender)'
 ]);
 
-const swapInterface = new Interface(ATOMIC_SWAP_ABI);
+/* The ABI machinery is loaded ON DEMAND — see server/ethersLite.js. */
+let swapInterfaceP = null;
+const swapInterfaceReady = async () => {
+  if (!swapInterfaceP) swapInterfaceP = await Interface(ATOMIC_SWAP_ABI);
+  return swapInterfaceP;
+};
 const TX_RE_64 = /^0x[a-fA-F0-9]{64}$/;
 const HASHLOCK_RE = /^0x[a-fA-F0-9]{64}$/;
 /* Amounts are integer wei strings (uint256). Human units are converted by
@@ -250,7 +255,7 @@ function isEvmAddress(value) {
  * these are the exact bytes that lock each leg. The server still never sends
  * them; `executableByServer` stays false and every leg needs a signature.
  */
-export function buildAtomicSwapPlan(input, now = Math.floor(Date.now() / 1000)) {
+export async function buildAtomicSwapPlan(input, now = Math.floor(Date.now() / 1000)) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return { ok: false, code: 'BAD_BODY' };
   if (input.schema !== undefined && input.schema !== ATOMIC_SWAP_SCHEMA) return { ok: false, code: 'BAD_SCHEMA' };
   const hashlock = String(input.hashlock || '').toLowerCase();
@@ -278,6 +283,9 @@ export function buildAtomicSwapPlan(input, now = Math.floor(Date.now() / 1000)) 
   const swapId = atomicSwapIdFor(plan);
   if (!TX_RE_64.test(swapId)) return { ok: false, code: 'ATOMIC_SWAP_BAD_ID' };
 
+  /* The ABI machinery is loaded once, BEFORE the map — the map callback is
+     synchronous, so the interface is awaited here and handed to it. */
+  const swapInterface = await swapInterfaceReady();
   const legs = [source.leg, destination.leg].map((leg) => {
     const to = addresses.get(leg.chainId) || null;
     const tokenAddress = leg.token.native ? ZERO_ADDRESS : leg.token.address;
@@ -365,7 +373,7 @@ export async function verifyAtomicSwapLeg({ chainId, swapId, rpcUrls = [], provi
   const contract = addresses.get(chain) || null;
   if (!contract) return { ok: false, code: 'ATOMIC_SWAP_CONTRACT_NOT_CONFIGURED' };
 
-  const callData = swapInterface.encodeFunctionData('swaps', [swapId]);
+  const callData = (await swapInterfaceReady()).encodeFunctionData('swaps', [swapId]);
   const results = [];
   await Promise.all(urls.map(async (url) => {
     try {
@@ -373,7 +381,7 @@ export async function verifyAtomicSwapLeg({ chainId, swapId, rpcUrls = [], provi
         ? providerFactory(url, chain)
         : await import('ethers').then(({ JsonRpcProvider }) => new JsonRpcProvider(url, chain, { staticNetwork: true }));
       const raw = await provider.call({ to: contract, data: callData });
-      const decoded = swapInterface.decodeFunctionResult('swaps', raw);
+      const decoded = (await swapInterfaceReady()).decodeFunctionResult('swaps', raw);
       results.push({
         url,
         ok: true,

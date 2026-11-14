@@ -1224,7 +1224,7 @@ export default function Swap() {
          * writing for it too.
          */
         if (fromToken?.symbol === 'USDC' && toToken?.symbol) {
-          recordStrategyReceiptHint({
+          await recordStrategyReceiptHint({
             strategyId: searchParams.get('strategyId'),
             stageId: searchParams.get('stageId'),
             actionIndex: searchParams.get('actionIndex'),

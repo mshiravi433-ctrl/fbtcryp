@@ -33,7 +33,7 @@
  * app display a fee the contract does not charge, or vice versa.
  */
 
-import { Interface } from 'ethers';
+import { buildCoder } from './abiLite.js';
 import { parseReceiptLogs } from './executionGuards.js';
 
 const env = (k) => (typeof import.meta !== 'undefined' ? import.meta.env?.[k] : undefined) || '';
@@ -59,7 +59,31 @@ const ROUTER_ABI = Object.freeze([
   'function supplyMorpho(uint256 amount)',
   'function stakeLido() payable'
 ]);
-const ROUTER_IFACE = new Interface(ROUTER_ABI);
+/*
+ * The router coder is SYNCHRONOUS.
+ *
+ * `routeSupplyPlan()`, `splitRouterStep()` and `parseRoutedEvent()` are
+ * called from five React panels and from the receipt parser — all
+ * synchronous. When the cold-start work made `Interface` lazy (it returns a
+ * PROMISE now), those three functions could not use it without becoming
+ * async, which would have changed every call site and every test.
+ *
+ * `abiLite.js` encodes these four ABI entries synchronously with no
+ * dependency, and the test suite proves its selectors and its decoding are
+ * byte-identical to ethers'. So the chain receives exactly what it would
+ * have received before, and the plan builder stays synchronous.
+ */
+const ROUTER_CODER = buildCoder({
+  functions: [
+    { signature: 'feeBps()', outputs: ['uint256'] },
+    { signature: 'quoteFee(uint256)', outputs: ['uint256', 'uint256'] },
+    { signature: 'supplyAave(uint256)', outputs: [] },
+    { signature: 'supplyCompound(uint256)', outputs: [] },
+    { signature: 'supplyMorpho(uint256)', outputs: [] },
+    { signature: 'stakeLido()', outputs: [] },
+    { signature: 'approve(address,uint256)', outputs: [] }
+  ]
+});
 
 /** adapter id → router method. These are the five ids FarmPositionHub pins. */
 export const SPLIT_ROUTER_METHODS = Object.freeze({
@@ -107,9 +131,9 @@ export async function loadSplitRouterInfo(provider, chainId) {
   try {
     /* provider.call + manual codec rather than a Contract, so any object with
      * a .call() can stand in for a provider (tests do exactly that). */
-    const data = ROUTER_IFACE.encodeFunctionData('feeBps', []);
+    const data = ROUTER_CODER.encodeFunctionData('feeBps', []);
     const result = await provider.call({ to: address, data });
-    const feeBps = BigInt(ROUTER_IFACE.decodeFunctionResult('feeBps', result)[0]);
+    const feeBps = BigInt(ROUTER_CODER.decodeFunctionResult('feeBps', result)[0]);
     if (feeBps > BigInt(SPLIT_ROUTER_MAX_FEE_BPS)) {
       // eslint-disable-next-line no-console
       console.warn(`[split-router] router ${address} reports feeBps=${feeBps} > ${SPLIT_ROUTER_MAX_FEE_BPS}; refusing to route`);
@@ -136,7 +160,9 @@ export function quoteSplit(amount, feeBps) {
   return { feeAmount, netAmount: amount - feeAmount };
 }
 
-const ERC20_IFACE = new Interface(['function approve(address spender, uint256 amount)']);
+const ERC20_CODER = buildCoder({
+  functions: [{ signature: 'approve(address,uint256)', outputs: [] }]
+});
 
 /* ─── routed-deposit receipts ────────────────────────────────────────────────
  *
@@ -153,7 +179,20 @@ const ERC20_IFACE = new Interface(['function approve(address spender, uint256 am
 export const SPLIT_ROUTER_EVENT_ABI = [
   'event Routed(address indexed target, address indexed user, address indexed asset, uint256 amountIn, uint256 feeTaken, uint256 netAmount)'
 ];
-const ROUTER_EVENT_IFACE = new Interface(SPLIT_ROUTER_EVENT_ABI);
+const ROUTER_EVENT_CODER = buildCoder({
+  functions: [],
+  events: [{
+    signature: 'Routed(address indexed target, address indexed user, address indexed asset, uint256 amountIn, uint256 feeTaken, uint256 netAmount)',
+    inputs: [
+      { name: 'target', type: 'address', indexed: true },
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'asset', type: 'address', indexed: true },
+      { name: 'amountIn', type: 'uint256', indexed: false },
+      { name: 'feeTaken', type: 'uint256', indexed: false },
+      { name: 'netAmount', type: 'uint256', indexed: false }
+    ]
+  }]
+});
 
 export class SplitRouterProofError extends Error {
   constructor(detail) {
@@ -174,7 +213,7 @@ const sameAddr = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
  * caller thinks it is.
  */
 export function parseRoutedEvent(receipt, routerAddress) {
-  const events = parseReceiptLogs(receipt, ROUTER_EVENT_IFACE, routerAddress, 'Routed');
+  const events = parseReceiptLogs(receipt, ROUTER_EVENT_CODER, routerAddress, 'Routed');
   if (!events.length) {
     throw new SplitRouterProofError({ reason: 'ROUTED_EVENT_MISSING', router: routerAddress });
   }
@@ -227,10 +266,10 @@ export function splitRouterStep(protocolId, amountOrValue) {
   const method = SPLIT_ROUTER_METHODS[protocolId];
   if (!method) return null;
   if (method === 'stakeLido') {
-    return { to: null, data: ROUTER_IFACE.encodeFunctionData('stakeLido', []) };
+    return { to: null, data: ROUTER_CODER.encodeFunctionData('stakeLido', []) };
   }
   if (typeof amountOrValue !== 'bigint' || amountOrValue <= 0n) return null;
-  return { to: null, data: ROUTER_IFACE.encodeFunctionData(method, [amountOrValue]) };
+  return { to: null, data: ROUTER_CODER.encodeFunctionData(method, [amountOrValue]) };
 }
 
 /**
@@ -300,7 +339,7 @@ export function routeSupplyPlan(plan, {
   } else {
     if (approveStep && supplyStep) {
       try {
-        const [spender, value] = ERC20_IFACE.decodeFunctionData('approve', approveStep.data);
+        const [spender, value] = ERC20_CODER.decodeFunctionData('approve', approveStep.data);
         amount = BigInt(value);
         if (!spender || typeof spender !== 'string') throw new Error('bad spender');
       } catch (err) {
@@ -337,7 +376,7 @@ export function routeSupplyPlan(plan, {
         approveStep = {
           kind: 'approve',
           to: asset,
-          data: ERC20_IFACE.encodeFunctionData('approve', [address, amount]),
+          data: ERC20_CODER.encodeFunctionData('approve', [address, amount]),
           value: 0n,
           description: { key: 'farm.splitRouter.step.approve', amount: plan.checks?.amountUsdc ?? null }
         };
@@ -358,8 +397,8 @@ export function routeSupplyPlan(plan, {
 
   const fee = quoteSplit(amount, typeof feeBps === 'bigint' ? feeBps : 0n);
   const routedStep = method === 'stakeLido'
-    ? { ...supplyStep, to: address, data: ROUTER_IFACE.encodeFunctionData('stakeLido', []) }
-    : { ...supplyStep, to: address, data: ROUTER_IFACE.encodeFunctionData(method, [amount]) };
+    ? { ...supplyStep, to: address, data: ROUTER_CODER.encodeFunctionData('stakeLido', []) }
+    : { ...supplyStep, to: address, data: ROUTER_CODER.encodeFunctionData(method, [amount]) };
   const steps = plan.steps.map((step) => {
     if (step === approveStep) {
       /* The adapter's approve re-points from the protocol to the router for
@@ -369,7 +408,7 @@ export function routeSupplyPlan(plan, {
        * ever sees adapter steps.) */
       return {
         ...step,
-        data: ERC20_IFACE.encodeFunctionData('approve', [address, amount]),
+        data: ERC20_CODER.encodeFunctionData('approve', [address, amount]),
         description: {
           key: 'farm.splitRouter.step.approve',
           amount: step.description?.amount ?? plan.checks?.amountUsdc ?? null

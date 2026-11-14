@@ -1285,6 +1285,22 @@ export function createCentralBrain({
      server runtime; the brain never imports a provider table it cannot honour. */
   intelligenceMode = null,
   modelLadders = null,
+  /*
+   * ─── THE CORTEX (lever #5) ───────────────────────────────────────────────
+   * An optional reader for the neuromorphic cortex: a trained spiking
+   * reservoir that reads the SHAPE of a market state and reports a regime
+   * and a directional bias.
+   *
+   * It is optional, and the brain works without it. That is deliberate:
+   * the cortex is a SENSOR, and a brain that cannot consult one must still
+   * answer. The brain asks the cortex only when the request is a MARKET
+   * request, and it publishes whatever the cortex says — including "the
+   * cortex had nothing trustworthy to say".
+   *
+   * The cortex never overrides the evidence. Its read is published alongside
+   * the evidence, not above it, so a caller can see when the two disagree.
+   */
+  cortexReader = null,
   maxTracesPerOwner = 60,
   now = () => Date.now()
 } = {}) {
@@ -1345,6 +1361,40 @@ export function createCentralBrain({
      would keep naming a provider whose circuit opened ten minutes ago. */
   const providersNow = () => (typeof availableProviders === 'function' ? availableProviders() : availableProviders);
   const laddersNow = () => (typeof modelLadders === 'function' ? modelLadders() : modelLadders);
+
+  /*
+   * Ask the cortex about the market, if there is a cortex and if the
+   * request is about the market.
+   *
+   * It returns null when there is no cortex, when the request is not a
+   * market request, or when the cortex itself declined to answer — and the
+   * three are distinguishable, because "the cortex was not consulted" and
+   * "the cortex was consulted and had nothing to say" are different facts.
+   */
+  const consultCortex = async (message, classification = null) => {
+    if (typeof cortexReader !== 'function') return { consulted: false, reason: 'no cortex is attached' };
+    const isMarket = classification?.category === 'market'
+      || /\b(analy[sz]e|market|trend|outlook|setup|chart|forecast|روند|بازار|تحلیل|نوسان)\b/i.test(String(message || ''));
+    if (!isMarket) return { consulted: false, reason: 'the request is not about the market' };
+    try {
+      const read = await cortexReader({ message });
+      if (!read) return { consulted: true, read: null, reason: 'the cortex had no read' };
+      return {
+        consulted: true,
+        read: {
+          usable: read.usable === true,
+          directional: read.directional || null,
+          regime: read.regime || null,
+          discrimination: read.discrimination ?? null,
+          reason: read.reason || null
+        },
+        reason: read.reason || null
+      };
+    } catch (err) {
+      /* A cortex that fails must never take the answer down with it. */
+      return { consulted: true, read: null, reason: `the cortex failed: ${String(err?.message || err).slice(0, 80)}` };
+    }
+  };
 
   return {
     schema: CENTRAL_BRAIN_SCHEMA,
@@ -1940,6 +1990,18 @@ export function createCentralBrain({
         recordedPredictionId
       });
 
+      /*
+       * The cortex is consulted AFTER the evidence has been gathered, and
+       * before the trace is sealed — so the trace carries the read next to
+       * the evidence it is a second opinion on.
+       */
+      const cortexConsult = await consultCortex(message, classification);
+      recordStage('11_CORTEX_READ', t0, {
+        consulted: cortexConsult.consulted === true,
+        usable: cortexConsult.read?.usable === true,
+        regime: cortexConsult.read?.regime || null
+      });
+
       const decisionTrace = {
         runId,
         owner,
@@ -1994,6 +2056,15 @@ export function createCentralBrain({
         seatPolicy: modelPlan.seatPolicy,
         arbitration,
         decisionTrace,
+        /*
+         * The cortex read, published next to the evidence — never above it.
+         *
+         * It is on the trace whether or not the cortex answered, because
+         * "the cortex was not consulted" and "the cortex was consulted and
+         * had nothing to say" are different facts about the turn, and an
+         * operator needs to be able to tell them apart.
+         */
+        cortex: cortexConsult,
         // Mandatory non-custodial safety flags
         executionAuthorized: false,
         canExecute: false,

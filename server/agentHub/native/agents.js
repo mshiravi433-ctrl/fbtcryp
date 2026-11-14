@@ -38,6 +38,7 @@ import {
   resolveCoin,
   withDeadline
 } from './data.js';
+import { VERDICT_LEVELS, VERDICT_TONE } from '../../../src/lib/notificationDesign.js';
 
 export const NATIVE_AGENT_SCHEMA = 'fbt.agent-hub.native-agent.v1';
 
@@ -269,6 +270,159 @@ function needInput(fa, { title, need, examples }) {
   };
 }
 
+/* ─────────────────────── one machine-readable datum ────────────────────────
+ * A proactive watch cannot diff prose. The footer stamps the read time, so the
+ * same verdict reads differently a minute later, and a sentence cannot be
+ * quoted as a fact the way a code can: wording drifts for cosmetic reasons and
+ * every drift would become a notification about nothing — the most expensive
+ * failure a background alerter has. So an agent that can be watched returns
+ * `verdict` beside its text: a level, a stable key, and the number behind it.
+ *
+ * `complete:false` means a source THIS datum depends on did not answer, and the
+ * level collapses to 'unknown'. For a chat turn the plugin still speaks and
+ * says which source was unread; for a watch it is silence — an incomplete read
+ * never arms a baseline and never fires. Measured, not assumed: with no egress
+ * `token-risk-scanner` answers `ok:true, dataStatus:'partial'` and its lead
+ * reads «پرچم پرخطرِ قطعی دیده نشد». Arming THAT as a baseline would make the
+ * first real read look like a change in the token, when the only thing that
+ * changed was our own network.
+ */
+/* The level vocabulary and its colours live in the notification design system —
+   one source of truth for every surface, re-exported here so a plugin author
+   reads them beside `verdictOf` without the mapping existing twice. */
+export { VERDICT_LEVELS, VERDICT_TONE };
+
+export function verdictOf(level, key, { metric = null, unit = null, complete = true, noteFa = null, noteEn = null } = {}) {
+  const done = complete === true;
+  const num = Number(metric);
+  return Object.freeze({
+    /* An incomplete read makes no claim, so it has no level to compare. */
+    level: done && VERDICT_LEVELS.includes(level) ? level : 'unknown',
+    key: done ? String(key == null ? '' : key).slice(0, 120) : null,
+    metric: done && Number.isFinite(num) && metric !== null && metric !== '' ? num : null,
+    unit: done && unit ? String(unit).slice(0, 12) : null,
+    complete: done,
+    noteFa: noteFa ? String(noteFa).slice(0, 200) : null,
+    noteEn: noteEn ? String(noteEn).slice(0, 200) : null
+  });
+}
+
+/**
+ * What a plugin can be watched ON, declared in the catalog rather than implied
+ * by the code path that happens to run.
+ *
+ * `subject` is what must be re-readable unattended, `datum` names the fact, and
+ * `fires` says what is allowed to trigger: a changed `key` (a verdict flipped),
+ * a moved `metric` (a number crossed the owner's threshold), or both. A plugin
+ * with no entry here is NOT watchable and says so — a watch that can never fire
+ * must be refused at arm time, not armed and then silent.
+ */
+export const WATCH_SPECS = Object.freeze({
+  contractRiskFlags: Object.freeze({
+    subject: 'address', datum: 'contract-risk-flags', fires: 'key',
+    datumFa: 'پرچم‌های ریسک قرارداد', datumEn: 'contract risk flags', thresholdPct: null
+  }),
+  incidentRecord: Object.freeze({
+    subject: 'protocol', datum: 'incident-record', fires: 'key',
+    datumFa: 'سابقهٔ حادثه', datumEn: 'incident record', thresholdPct: null
+  }),
+  flowRiskLevel: Object.freeze({
+    subject: 'address', datum: 'flow-risk-level', fires: 'key',
+    datumFa: 'سطح ریسک جریان و تمرکز', datumEn: 'flow and concentration risk', thresholdPct: null
+  }),
+  walletExposure: Object.freeze({
+    subject: 'address', datum: 'wallet-exposure', fires: 'key|metric',
+    datumFa: 'مواجهه و تمرکز کیف‌پول', datumEn: 'wallet exposure', thresholdPct: Object.freeze({ min: 10, max: 90, default: 25 })
+  }),
+  supplyApy: Object.freeze({
+    subject: 'protocol', datum: 'supply-apy', fires: 'metric',
+    datumFa: 'نرخ تأمین', datumEn: 'supply rate', thresholdPct: Object.freeze({ min: 1, max: 50, default: 10 })
+  })
+});
+
+/* ───────────────────── the subject a watch re-reads ────────────────────────
+ * A watch is armed on a subject the plugin ALREADY parsed — an address or a
+ * protocol name taken from the request, never from a guess and never from the
+ * prose of the answer. `subjectToMessage` is the inverse: the sentence a stored
+ * subject becomes when a cycle re-runs it, deliberately minimal because the
+ * plugin is chosen by id, so the message only has to carry the subject.
+ *
+ * The pair MUST round-trip through `extractRequest`, and arming refuses one that
+ * does not. The failure it prevents is not theoretical: a watch that re-reads a
+ * different token than the one the user asked about would announce a change in
+ * something nobody asked about, with a real number, in the plugin's own name.
+ */
+export const WATCH_SUBJECT_KINDS = Object.freeze(['address', 'protocol']);
+
+/* A protocol name has to survive being put back into a sentence, so it is
+   Latin, bounded and free of the separators `extractRequest` parses as pairs. */
+const PROTOCOL_VALUE_RE = /^[A-Za-z0-9][A-Za-z0-9 ._]{1,29}$/;
+
+/**
+ * The chain WORD that parses back to this chain id, ascii-only. `CHAIN_LABELS`
+ * holds the display names («بیس», «Solana») and those are what a human reads,
+ * but a rendered sentence is parsed by `chainFromText`, so the word has to be
+ * one of the parser's own keys — a display label would silently re-read the
+ * default chain instead of the one that was watched.
+ */
+export function chainNameFor(chain) {
+  if (chain === null || chain === undefined || chain === '') return null;
+  const want = String(chain);
+  const names = Object.keys(CHAINS).filter((k) => /^[a-z][a-z0-9]{1,12}$/.test(k));
+  return names.find((k) => String(CHAINS[k]) === want) || null;
+}
+
+/** The subject this run holds, or null when it holds nothing re-readable. */
+export function subjectOf(watchSpec, request) {
+  const kind = watchSpec && WATCH_SUBJECT_KINDS.includes(String(watchSpec.subject))
+    ? String(watchSpec.subject) : null;
+  if (!kind || !request) return null;
+  if (kind === 'address') {
+    const value = String(request.address || '').trim();
+    if (!value) return null;
+    const chain = request.chainId === null || request.chainId === undefined ? null : String(request.chainId);
+    /* A chain we cannot name back is a chain we cannot re-read on purpose. */
+    if (chain !== null && !chainNameFor(chain)) return null;
+    return Object.freeze({ kind, value, chain });
+  }
+  const value = String(request.protocolQuery || '').trim();
+  if (!value || !PROTOCOL_VALUE_RE.test(value)) return null;
+  return Object.freeze({ kind, value, chain: null });
+}
+
+/** The sentence a stored subject becomes. Null means it cannot be re-read. */
+export function subjectToMessage(subject, locale = 'fa') {
+  if (!subject || typeof subject !== 'object') return null;
+  const fa = String(locale || 'fa') === 'fa';
+  const value = String(subject.value || '').trim();
+  if (!value) return null;
+  const kind = String(subject.kind || '');
+  if (kind === 'address') {
+    const chainName = chainNameFor(subject.chain);
+    if (subject.chain != null && subject.chain !== '' && !chainName) return null;
+    if (chainName) return fa ? `بررسی آدرس ${value} روی ${chainName}` : `check address ${value} on ${chainName}`;
+    return fa ? `بررسی آدرس ${value}` : `check address ${value}`;
+  }
+  if (kind === 'protocol') {
+    if (!PROTOCOL_VALUE_RE.test(value)) return null;
+    return fa ? `پروتکل ${value}` : `protocol ${value}`;
+  }
+  return null;
+}
+
+/** Did the subject survive the trip back through the parser, exactly? */
+export function subjectRoundTrips(subject, request) {
+  if (!subject || !request) return false;
+  if (String(subject.kind) === 'address') {
+    return String(request.address || '') === String(subject.value)
+      && String(request.chainId ?? '') === String(subject.chain ?? '');
+  }
+  if (String(subject.kind) === 'protocol') {
+    return String(request.protocolQuery || '').trim().toLowerCase() === String(subject.value).trim().toLowerCase();
+  }
+  return false;
+}
+
 function csv(values) {
   return values.map((v) => String(v).replace(/[,|]/g, ' ')).join(' | ');
 }
@@ -384,6 +538,8 @@ const aiTradingAnalyst = {
 
 const smartMoneyTracker = {
   slug: 'smart-money-tracker',
+  /* Watchable: see WATCH_SPECS for what may trigger and on which subject. */
+  watch: WATCH_SPECS.flowRiskLevel,
   name: 'Smart Money Tracker',
   nameFa: 'ردیاب پول هوشمند',
   summary: 'Observed large-transfer flow, per-token accumulation and holder concentration — measured, not narrated.',
@@ -443,11 +599,28 @@ const smartMoneyTracker = {
         '',
         footer(fa, [['DEX pairs', v.dataStatus === 'live' ? 'live' : v.dataStatus || 'unavailable'], [fa ? 'هولدرها' : 'Holders', holders.dataStatus || 'unavailable']], at)
       ];
+      /* `earlyRisk` in server/smartMoney/moneyFlow.js returns HIGH/MEDIUM/LOW
+         from liquidity depth and market age. The verdict quotes that scale as a
+         code instead of re-deriving a level from the sentence that renders it. */
+      const flowLevel = String(v.risk || '').toUpperCase();
+      const flowStatus = v.dataStatus || 'live';
+      const netFlow = Number(v.netFlowUsd);
       return {
         title: `${v.symbol || 'Token'} · ${this.name}`,
         text: lines.join('\n'),
         citations: chainId === 'solana' ? [] : [`https://dexscreener.com/`],
-        dataStatus: v.dataStatus || 'live'
+        dataStatus: flowStatus,
+        verdict: verdictOf(
+          flowLevel === 'HIGH' ? 'danger' : flowLevel === 'MEDIUM' ? 'warn' : flowLevel === 'LOW' ? 'clear' : 'unknown',
+          `${flowLevel || 'unknown'}|acc:${v.accumulation?.detected ? 1 : 0}|dist:${v.distribution?.detected ? 1 : 0}`,
+          {
+            metric: Number.isFinite(netFlow) ? netFlow : null,
+            unit: 'usd',
+            complete: flowStatus === 'live',
+            noteFa: 'این اعداد از انتقال‌های بزرگِ مشاهده‌شده می‌آیند، نه از تاریخِ کاملِ زنجیره؛ «مشاهده‌نشده» با «صفر» یکی نیست.',
+            noteEn: 'These numbers come from observed large transfers, not full chain history; “not observed” is not “zero”.'
+          }
+        )
       };
     }
 
@@ -861,6 +1034,8 @@ const liquidityPoolAnalyzer = {
 
 const lendingRiskAgent = {
   slug: 'lending-risk-agent',
+  /* Watchable: see WATCH_SPECS for what may trigger and on which subject. */
+  watch: WATCH_SPECS.supplyApy,
   name: 'Lending Risk Agent',
   nameFa: 'ایجنت ریسک وام‌دهی',
   summary: 'Compares lending supply rates on allow-listed protocols and adds protocol TVL and incident facts.',
@@ -937,11 +1112,28 @@ const lendingRiskAgent = {
         ['DefiLlama hacks', incidentsOut.ok ? `${incidents.length} records` : 'unavailable']
       ], at)
     );
+    const bestPool = rows[0] || null;
+    const bestApy = Number(bestPool?.apy);
     return {
       title: this.name,
       text: lines.join('\n'),
       citations: rows.slice(0, 3).map((p) => p.url),
-      dataStatus: 'live'
+      dataStatus: 'live',
+      /* A rate is a number, not a judgement, so the level is 'info' and the
+         card must not borrow the colour of a safety verdict. What is worth
+         announcing is a MOVE, and the owner's threshold decides how big one has
+         to be — which is why this spec's `fires` is 'metric', not 'key'. */
+      verdict: verdictOf(
+        bestPool ? 'info' : 'unknown',
+        bestPool ? `${bestPool.project}|${bestPool.symbol}|${bestPool.chain}` : 'no-pool',
+        {
+          metric: Number.isFinite(bestApy) ? bestApy : null,
+          unit: '%',
+          complete: yieldsOut.ok === true && rows.length > 0,
+          noteFa: 'APY یک عددِ گذشته‌نگر است و نرخ متغیر است؛ وعدهٔ فردا نیست.',
+          noteEn: 'APY is backward-looking and the rate is variable; it is not a promise about tomorrow.'
+        }
+      )
     };
   }
 };
@@ -1016,6 +1208,8 @@ const crossChainSwapAssistant = {
 
 const tokenRiskScanner = {
   slug: 'token-risk-scanner',
+  /* Watchable: see WATCH_SPECS for what may trigger and on which subject. */
+  watch: WATCH_SPECS.contractRiskFlags,
   name: 'Token Risk Scanner',
   nameFa: 'اسکنر ریسک توکن',
   summary: 'Checks honeypot, taxes, mintability, proxy, holder concentration and liquidity for a contract — with UNKNOWN kept as UNKNOWN.',
@@ -1059,26 +1253,33 @@ const tokenRiskScanner = {
     /* `isBad` is the risk direction, so a TRUE here is always a flag and a
        FALSE is always a clean check. Passing truthiness instead of direction
        is what produced a green "open source" line labelled HIGH. */
-    const add = (label, isBad) => {
-      if (isBad === null || isBad === undefined) flags.push({ label, state: 'UNKNOWN' });
-      else flags.push({ label, state: isBad ? 'HIGH' : 'LOW' });
+    /* `code` is the locale-independent identity of a flag. The label is what
+       the user reads and changes with the language; the VERDICT KEY a watch
+       compares must not, or arming a watch in Persian and reading it back in
+       English would look like the token had changed. */
+    const add = (code, label, isBad) => {
+      if (isBad === null || isBad === undefined) flags.push({ code, label, state: 'UNKNOWN' });
+      else flags.push({ code, label, state: isBad ? 'HIGH' : 'LOW' });
     };
     if (report) {
-      add(fa ? 'هانی‌پات' : 'Honeypot', report.honeypot);
-      add(fa ? 'امکان فروش' : 'Can sell', report.cannotSell == null ? null : report.cannotSell);
-      add(fa ? 'قابلیت ضرب' : 'Mintable', report.mintable);
-      add(fa ? 'قابل توقف (Pausable)' : 'Pausable', report.pausable);
-      add(fa ? 'لیست سیاه' : 'Blacklist', report.blacklist);
-      add(fa ? 'قرارداد پروکسی' : 'Proxy contract', report.proxy);
-      add(fa ? 'مالک پنهان' : 'Hidden owner', report.hiddenOwner);
-      add(fa ? 'تغییر مالکیت' : 'Take-back ownership', report.ownerChangeBalance);
-      add(fa ? 'سورس‌باز' : 'Open source', report.openSource == null ? null : !report.openSource);
-      add(fa ? 'مالیات خرید > ۱۰٪' : 'Buy tax > 10%', report.buyTax == null ? null : report.buyTax > 10);
-      add(fa ? 'مالیات فروش > ۱۰٪' : 'Sell tax > 10%', report.sellTax == null ? null : report.sellTax > 10);
-      add(fa ? 'قفل نقدینگی' : 'LP locked', report.lpLocked == null ? null : !report.lpLocked);
+      add('honeypot', fa ? 'هانی‌پات' : 'Honeypot', report.honeypot);
+      add('cannot-sell', fa ? 'امکان فروش' : 'Can sell', report.cannotSell == null ? null : report.cannotSell);
+      add('mintable', fa ? 'قابلیت ضرب' : 'Mintable', report.mintable);
+      add('pausable', fa ? 'قابل توقف (Pausable)' : 'Pausable', report.pausable);
+      add('blacklist', fa ? 'لیست سیاه' : 'Blacklist', report.blacklist);
+      add('proxy', fa ? 'قرارداد پروکسی' : 'Proxy contract', report.proxy);
+      add('hidden-owner', fa ? 'مالک پنهان' : 'Hidden owner', report.hiddenOwner);
+      add('ownership-takeback', fa ? 'تغییر مالکیت' : 'Take-back ownership', report.ownerChangeBalance);
+      add('closed-source', fa ? 'سورس‌باز' : 'Open source', report.openSource == null ? null : !report.openSource);
+      add('buy-tax-high', fa ? 'مالیات خرید > ۱۰٪' : 'Buy tax > 10%', report.buyTax == null ? null : report.buyTax > 10);
+      add('sell-tax-high', fa ? 'مالیات فروش > ۱۰٪' : 'Sell tax > 10%', report.sellTax == null ? null : report.sellTax > 10);
+      add('lp-unlocked', fa ? 'قفل نقدینگی' : 'LP locked', report.lpLocked == null ? null : !report.lpLocked);
     }
     const highs = flags.filter((f) => f.state === 'HIGH').length;
     const unknowns = flags.filter((f) => f.state === 'UNKNOWN').length;
+    /* Sorted, so the key is the SET of flags and not the order the checks ran
+       in — a re-read that answers in a different order is not a change. */
+    const highCodes = flags.filter((f) => f.state === 'HIGH').map((f) => f.code).sort();
     const lines = [
       `# ${fa ? 'اسکن ریسک' : 'Risk scan'} · ${intel?.symbol || request.address.slice(0, 10)}`,
       '',
@@ -1124,13 +1325,31 @@ const tokenRiskScanner = {
       title: `${intel?.symbol || 'Token'} · ${this.name}`,
       text: lines.join('\n'),
       citations: isSol ? [] : [`https://gopluslabs.io/`],
-      dataStatus: report && intel ? 'live' : 'partial'
+      dataStatus: report && intel ? 'live' : 'partial',
+      /* `complete` needs BOTH reads: GoPlus for the flags and the market source
+         for the identity. With one of them missing the report still says
+         something true about the part it read, but it has no verdict to compare
+         against — this is the run measured at `dataStatus:'partial'` on a
+         machine with no egress, whose lead reads «پرچم پرخطرِ قطعی دیده نشد». */
+      verdict: verdictOf(
+        highCodes.length ? 'danger' : 'clear',
+        highCodes.length ? highCodes.join('|') : 'no-high-flag',
+        {
+          metric: highCodes.length,
+          unit: 'flags',
+          complete: Boolean(report && intel),
+          noteFa: highCodes.length ? null : 'پرچم پرخطرِ قطعی دیده نشد؛ یعنی اسکنرها چیزی پیدا نکردند، نه این‌که توکن امن است.',
+          noteEn: highCodes.length ? null : 'No confirmed high-risk flag was seen: the scanners found nothing, which is not the same as the token being safe.'
+        }
+      )
     };
   }
 };
 
 const walletExposureAuditor = {
   slug: 'wallet-exposure-auditor',
+  /* Watchable: see WATCH_SPECS for what may trigger and on which subject. */
+  watch: WATCH_SPECS.walletExposure,
   name: 'Wallet Exposure Auditor',
   nameFa: 'ممیزی مواجههٔ کیف‌پول',
   summary: 'Prices a wallet’s visible holdings, measures concentration and lists observed risk flags — no signing, no connection.',
@@ -1185,6 +1404,16 @@ const walletExposureAuditor = {
     } else {
       lines.push(`## ${fa ? 'دارایی' : 'Holdings'}`, fa ? '- دارایی قیمت‌خورده‌ای در این زنجیره دیده نشد.' : '- No priced holding was visible on this chain.');
     }
+    /* The watch datum, computed here rather than reused from inside the
+       holdings branch so the verdict and the sentence are about the SAME
+       number. The share is rounded: a 60.04 % ↔ 59.96 % wobble between two
+       reads is a rounding artefact, not a change in anybody's wallet, and
+       announcing it would teach the user to ignore the next notification. */
+    const topHolding = holdings[0] || null;
+    const topValueUsd = Number(topHolding?.valueUsd);
+    const topSharePct = topHolding && Number(total) > 0 && Number.isFinite(topValueUsd) && topValueUsd > 0
+      ? (topValueUsd / Number(total)) * 100
+      : null;
     const risk = v.risk || null;
     lines.push('', `## ${fa ? 'پرچم‌های ریسک مشاهده‌شده' : 'Observed risk flags'}`);
     if (risk && typeof risk === 'object' && Object.keys(risk).length) {
@@ -1211,13 +1440,26 @@ const walletExposureAuditor = {
       title: `${String(request.address).slice(0, 10)}… · ${this.name}`,
       text: lines.join('\n'),
       citations: [],
-      dataStatus: v.dataStatus || 'partial'
+      dataStatus: v.dataStatus || 'partial',
+      verdict: verdictOf(
+        topSharePct != null && topSharePct > 60 ? 'warn' : 'clear',
+        `${topHolding?.symbol || 'none'}|${topSharePct != null ? Math.round(topSharePct) : 'na'}`,
+        {
+          metric: Number(total) > 0 ? Number(total) : null,
+          unit: 'usd',
+          complete: (v.dataStatus || 'partial') === 'live',
+          noteFa: 'ارزشِ دیده‌شده فقط دارایی‌های قیمت‌خوردهٔ همین زنجیره است؛ «دیده‌نشده» با «صفر» یکی نیست.',
+          noteEn: 'Visible value covers only the priced holdings on this chain; “not observed” is not “zero”.'
+        }
+      )
     };
   }
 };
 
 const protocolSecurityBrief = {
   slug: 'protocol-security-brief',
+  /* Watchable: see WATCH_SPECS for what may trigger and on which subject. */
+  watch: WATCH_SPECS.incidentRecord,
   name: 'Protocol Security Brief',
   nameFa: 'گزارش امنیتی پروتکل',
   summary: 'Gathers TVL, chain spread, recorded audits, age and incident history for a DeFi protocol.',
@@ -1300,11 +1542,30 @@ const protocolSecurityBrief = {
         ['DefiLlama hacks', incidentsOut.ok ? `${incidents.length} matching` : 'unavailable']
       ], at)
     );
+    /* Sorted, so the key is the SET of recorded incidents and not the order the
+       feed happened to return them in. */
+    const incidentKey = incidents
+      .map((i) => String(i?.dateLabel || i?.link || '').trim())
+      .filter(Boolean).sort().join(',');
     return {
       title: `${match.name} · ${this.name}`,
       text: lines.join('\n'),
       citations: [detail?.url || match.url || 'https://defillama.com/'].filter(Boolean),
-      dataStatus: 'live'
+      /* This used to say 'live' even when the incident feed was unread, while
+         the body said «فید حادثه‌ها خوانده نشد؛ این بخش نامشخص است» — one object
+         holding two truths. The section that is unknown makes the read partial. */
+      dataStatus: incidentsOut.ok ? 'live' : 'partial',
+      verdict: verdictOf(
+        incidents.length ? 'warn' : 'clear',
+        `${incidents.length}|${incidentKey}`,
+        {
+          metric: incidents.length,
+          unit: 'incidents',
+          complete: incidentsOut.ok === true,
+          noteFa: incidents.length ? null : 'حادثه‌ای با این نام در فید DefiLlama ثبت نشده است؛ نبودِ رکورد، اثباتِ نبودِ حادثه نیست.',
+          noteEn: incidents.length ? null : 'No incident under this name is in the DefiLlama feed; absence of a record is not proof of absence.'
+        }
+      )
     };
   }
 };
@@ -1375,10 +1636,22 @@ export async function runNativeAgent(slug, { text = '', context = null } = {}, d
       text: localizedText,
       citations: Array.isArray(out.citations) ? out.citations.filter((u) => /^https:\/\//i.test(String(u))).slice(0, 8) : [],
       dataStatus,
+      /* The watch datum when this plugin has one. `null` is the honest value for
+         a plugin that answers but holds nothing stable to compare, and it is why
+         a watch on one is refused at arm time rather than armed and silent. */
+      verdict: out.verdict || null,
       data: {
         agent: agent.slug,
         lang: fa ? 'fa' : 'en',
         dataStatus,
+        verdict: out.verdict || null,
+        watch: agent.watch || null,
+        /* The subject this run actually read, derived once here so that BOTH
+           surfaces that can offer a watch — the hub dock, which runs agents as
+           tasks, and the chat brain, which reaches them through the attach —
+           arm the same thing. `request.hasAddress` is a boolean and cannot be
+           turned back into an address, so the value itself has to travel. */
+        subject: agent.watch ? subjectOf(agent.watch, request) : null,
         /* `awaiting_input` is a completed run that needs a better question.
            Saying so explicitly stops the UI from painting it as a failure. */
         needsInput: dataStatus === 'awaiting_input',

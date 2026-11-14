@@ -8,7 +8,7 @@
  * settlement contract first. No value in this module is sent to the browser
  * except the tiny object returned by publicIranBuyCapability().
  */
-import { getAddress, isAddress } from 'ethers';
+import { getAddress, isAddress } from './ethersLite.js';
 import { EVM_CHAINS } from './chainsLite.js';
 import { upstashConfigured } from './blobCache.js';
 

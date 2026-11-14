@@ -1,4 +1,5 @@
-import { Contract, getAddress, parseUnits } from 'ethers';
+import { getAddress, parseUnits } from '../../../server/ethersLite.js';
+import { Contract } from 'ethers/contract';
 import { COLLECTIVE_ERC20_ABI, COLLECTIVE_VAULT_ABI } from './abi.js';
 
 const isAddress = (value) => typeof value === 'string' && /^0x[a-fA-F0-9]{40}$/.test(value);
@@ -21,10 +22,10 @@ async function waitConfirmed(tx) {
   return { hash: tx.hash, blockNumber: Number(receipt.blockNumber) };
 }
 
-export function parseCollectiveAmount(value, decimals) {
+export async function parseCollectiveAmount(value, decimals) {
   const input = String(value ?? '').trim();
   if (!/^(?:\d+)(?:\.\d*)?$/.test(input)) throw new Error('INVALID_AMOUNT');
-  const parsed = parseUnits(input, Number(decimals));
+  const parsed = await parseUnits(input, Number(decimals));
   if (parsed <= 0n) throw new Error('INVALID_AMOUNT');
   return parsed;
 }

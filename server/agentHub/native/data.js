@@ -136,6 +136,15 @@ export const PERSIAN_PROTOCOL_ALIASES = Object.freeze({
   'استارگیت': 'stargate', 'آکالا': 'acala', 'کامینو': 'kamino'
 });
 
+/* A protocol name typed in LATIN letters — «گزارش امنیتی Aave را بده»,
+ * «How risky is Curve?» — is neither preceded by «protocol/پروتکل» nor written in
+ * Persian, so it reached every agent as `protocolQuery: null` and the security
+ * brief answered «ورودی لازم است» to a question that HAD named its input. The
+ * candidate list is DERIVED from the alias table's own values — the names the
+ * product already knows how to look up — so a second list cannot drift out of
+ * sync with the first, and a name that is not known still yields null. */
+export const PROTOCOL_LATIN_NAMES = Object.freeze(Array.from(new Set(Object.values(PERSIAN_PROTOCOL_ALIASES))));
+
 const ARABIC_TO_PERSIAN = { 'ي': 'ی', 'ك': 'ک', 'ة': 'ه', 'ى': 'ی', 'ۀ': 'ه' };
 
 /**
@@ -272,7 +281,12 @@ export function extractRequest(text = '') {
   /* English «protocol X» and the Persian equivalents (`پروتکل آوه`, `آوه`). */
   const protocolEn = normalized.match(/(?:protocol|پروتکل)\s+([A-Za-z][A-Za-z0-9 ._-]{1,30})/i)?.[1]?.trim() || null;
   const protocolFa = persianAliases(normalized, PERSIAN_PROTOCOL_ALIASES)[0]?.value || null;
-  const protocol = protocolEn || protocolFa;
+  /* Third form: the bare Latin name, matched on word boundaries so 'curve' is
+     not found inside another word. Last in the chain, so an explicit
+     «پروتکل X» and a Persian alias still win. */
+  const protocolLatin = PROTOCOL_LATIN_NAMES
+    .find((name) => new RegExp(`(?:^|[^a-z0-9])${name}(?:[^a-z0-9]|$)`, 'i').test(normalized)) || null;
+  const protocol = protocolEn || protocolFa || protocolLatin;
 
   const AMOUNT_STOP = new Set(['ON', 'IN', 'AT', 'TO', 'FROM', 'PER', 'FOR', 'AND', 'OF', 'WITH', 'BY', 'THE', 'A', 'AN']);
   const rawAmountText = amountMatch ? amountMatch[1].replace(/,/g, '') : null;

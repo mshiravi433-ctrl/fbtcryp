@@ -275,12 +275,40 @@ export function classifyConversationKind(rawText, { priorIntent = null, locale =
 const BREAKING_RE = /(همین\s*الان|همین\s*لحظه|الان\s*الان|این\s*خبر\s*همین|breaking|just\s+(?:happened|now|announced)|right\s+now|همین\s*تازه|خبر\s*فوری)/i;
 /* LIVE = about today/now. Bare "news/خبر" is NOT automatically live — news is
    fresh by default and lands in RECENT; a live call needs a now-marker. */
-const LIVE_RE = /(امروز|امشب|الان|کنون|تو\s*این\s*لحظه|today|tonight|last\s+hour|ساعت\s*اخیر|همین\s*روزها|(?:چرا|why)[\s\S]{0,30}(?:ریخت|افت|ریزش|drop|fall|dump|بالا|up|pump)|price\s+now|قیمت\s*(?:الان|لحظه)|لحظه\s*ای|outlook|چشم\s*انداز)/i;
+const LIVE_RE = /(امروز|امشب|الان|کنون|تو\s*این\s*لحظه|today|tonight|last\s+hour|ساعت\s*اخیر|همین\s*روزها|(?:چرا|why)[\s\S]{0,30}(?:ریخت|افت|ریزش|drop|fall|dump|بالا|up|pump)|price\s+now|قیمت\s*(?:الان|لحظه)|لحظه\s*ای|outlook|چشم\s*انداز|(?:قیمت|price|ارزش\s*بیت\s*کوین|btc|بیت\s*کوین|eth|اتریوم|sol|سولانا)[\s\S]{0,18}(?:چنده|چند\s*است|چقدر\s*است|how\s+much|what\s*(?:'s|is)\s+the\s+price))/i;
 const RECENT_RE = /(این\s*هفته|هفته\s*گذشته|اخیرا|این\s*روزها|recently|this\s+week|last\s+(?:week|days)|past\s+few\s+days|latest|خبر|news|اخبار|اعلامیه|announcement|لیست\s*شد|هک)/i;
 const STATIC_RE = /(چیست|چیه|یعنی\s*چ|کار\s*می\s*کن[هد]|چطور\s*کار|what\s+(?:is|are)\b|how\s+(?:does|do)\s+.{0,30}\s+work|define|tokenomics|توکنومیکس|whitepaper|وایت\s*پیپر|history|تاریخچه)/i;
 /* Product how-to questions are answered from the FBT Knowledge Center, not
    from the web (§14, §55): «چطور USDT بخرم؟» / «how do I bridge». */
 const PRODUCT_HOWTO_RE = /((چطور|چگونه|how)[\s\S]{0,28}(usdt|تتر|swap|سواپ|bridge|بریج|buy|بخر|stake|استیک|recover|بازیابی|send|ارسال|dca|farm|کیف\s*پول|wallet))|((usdt|تتر|swap|سواپ|bridge|بریج|استیک|stake)[\s\S]{0,28}(چطور|چگونه|how))/i;
+/*
+ * A FEE / LIMIT / POLICY question is about a number the product FIXED, not
+ * about a number the market moved.
+ *
+ * «کارمزد پلتفرم FBT چقدر است» / «چه سقفی دارد» / «چند درصد است» are
+ * answered from the verified Knowledge Center, and the Knowledge Center is
+ * static — the fee schedule does not change with the market. Before this
+ * pattern existed they fell through to the default RECENT, which put them
+ * on the web path and spent a full model turn to paraphrase
+ * `kb.product.fee`.
+ *
+ * The distinction that matters: a question about the SIZE of a price or a
+ * POSITION is live; a question about the SIZE of a FEE, a LIMIT, a THRESHOLD
+ * or a POLICY is static.
+ */
+const STATIC_FIGURE_RE = /((?:کارمزد|هزینه|سقف|سقفِ|حد|حداکثر|حداقل|درصد|نرخ|کمیسیون|fee|fees|cost|limit|cap|threshold|rate|percentage)[\s\S]{0,34}(?:چقدر|چند|چه\s*مقدار|چقدر\s*است|how\s+much|what\s+is|what\s+are))|((?:چقدر|چند|how\s+much)[\s\S]{0,24}(?:کارمزد|هزینه|سقف|حد|درصد|نرخ|fee|cost|limit|cap|rate))|(?:چند\s*درصد|چه\s*سقفی)/i;
+/*
+ * A POLICY question — how the product HANDLES something — is also static.
+ * Custody, keys, non-custodial design, who built it, what it will not do:
+ * these are verified product facts that do not move with the market, and
+ * the Knowledge Center holds them (kb.wallet.custody, kb.product.team,
+ * kb.product.non-custodial).
+ *
+ * The guard is the same as for the fee pattern: no live marker, no recent
+ * marker. «کیف پول من کجا نگهداری می شود» is static; «کیف پول من الان چقدر
+ * ارزش دارد» is not.
+ */
+const STATIC_POLICY_RE = /((?:کلید|کلید\s*خصوصی|private\s*key|seed\s*phrase|عبارت\s*بازیابی|recovery\s*phrase|کیف\s*پول|wallet)[\s\S]{0,34}(?:کجا|نگهداری|ذخیره|نگه‌داری|where|kept|stored))|((?:غیرامانی|non[\s-]?custodial|امن\s*بودن|سازندگان|سازنده|تیم|توسعه\s*دهنده|who\s+(?:built|made)|developer|team)[\s\S]{0,30}(?:هستند|است|چیست|چه\s*کسانی|who\s+are|are\s+they))/i;
 
 /**
  * STATIC  → stable knowledge («BTC چیست؟») — no web needed.
@@ -295,6 +323,14 @@ export function classifyFreshness(rawText) {
   if (LIVE_RE.test(text)) return 'LIVE';
   if (RECENT_RE.test(text)) return 'RECENT';
   if (STATIC_RE.test(text) || PRODUCT_HOWTO_RE.test(text)) return 'STATIC';
+  /*
+   * A fee/limit/threshold figure is a fixed product fact, so it is STATIC —
+   * but only when the question carries NO live marker. «کارمزد امروز چقدر
+   * است» is still STATIC (the fee did not change overnight), while
+   * «قیمت امروز چقدر است» is not, because a price is not a fee.
+   */
+  if (STATIC_FIGURE_RE.test(text) && !LIVE_RE.test(text) && !RECENT_RE.test(text)) return 'STATIC';
+  if (STATIC_POLICY_RE.test(text) && !LIVE_RE.test(text) && !RECENT_RE.test(text)) return 'STATIC';
   /* Default: a bare market question («بیت کوین چطوره؟») needs current data to
      be honest; a bare definition lands in STATIC above. */
   return 'RECENT';

@@ -29,6 +29,9 @@ import { internalHash, ResultView } from './AgentHubPanel.jsx';
 import NativeDataDisclosure from './NativeDataDisclosure.jsx';
 import CrossChainDesk from '../crosschain/CrossChainDesk.jsx';
 import '../../styles/agent-hub.css';
+/* Clearing the agent in the browser must also clear the OWNER's attachment, or a
+   turn from Telegram would keep talking to a plugin the user just dismissed. */
+import { armPluginWatch, detachPlugin, stopPluginWatch } from '../../lib/central/client.js';
 
 /* Results live for this tab only. Not localStorage: a provider answer is
    session content, not a preference, and it can be long. */
@@ -102,6 +105,88 @@ const timeLabel = (at, fa) => {
     return '';
   }
 };
+
+/**
+ * «پاییدنِ این» — the offer that turns an answer into an alerter.
+ *
+ * It renders only when the plugin declared a watch AND this run held a subject
+ * that survives the trip back through the parser, so the button never appears on
+ * an answer that could not be re-read. What gets armed is the plugin the person
+ * is already talking to and the subject it just read — no new vocabulary, and no
+ * way to arm a watch on something else by accident.
+ *
+ * The copy after arming says why nothing arrives immediately: the first complete
+ * read records the state, and only a CHANGE is announced. A button that promised
+ * a notification on the spot would be promising the one thing the watcher is
+ * built never to do.
+ */
+function WatchOffer({ data = null, fa = false, agentId = null }) {
+  const [busy, setBusy] = useState(false);
+  const [armed, setArmed] = useState(null);
+  const [note, setNote] = useState(null);
+  const watch = data?.watch || null;
+  const subject = data?.subject || null;
+  if (!watch || !subject) return null;
+  const datum = String((fa ? watch.datumFa : watch.datumEn) || watch.datum || '');
+
+  const onClick = async () => {
+    if (busy) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      if (armed) {
+        const out = await stopPluginWatch(armed.id);
+        if (out?.ok) {
+          setArmed(null);
+          setNote({ kind: 'stopped', text: fa ? 'پایندگی برداشته شد.' : 'The watch was removed.' });
+        } else {
+          setNote({ kind: 'error', text: fa ? `برداشته نشد (${out?.code || 'UNKNOWN'}).` : `Not removed (${out?.code || 'UNKNOWN'}).` });
+        }
+        return;
+      }
+      const out = await armPluginWatch(subject, { agentId, lang: fa ? 'fa' : 'en' });
+      if (out?.ok && out.watch?.id) {
+        setArmed({ id: String(out.watch.id) });
+        setNote({
+          kind: 'armed',
+          text: (fa
+            ? 'ثبت شد. اولین خوانشِ کامل، وضعیتِ امروز را ثبت می‌کند و از آن پس اگر عوض شود خبر می‌دهیم.'
+            : 'Armed. The first complete read records today’s state, and a change is announced after that.')
+            + (out.durable === false
+              ? (fa ? ' (ذخیرهٔ پایدار در این نمونه فعال نیست)' : ' (durable storage is off on this instance)')
+              : '')
+        });
+      } else if (out?.code === 'NO_PUSH_IDENTITY') {
+        setNote({ kind: 'error', text: fa ? 'برای خبر دادن، اجازهٔ نوتیفیکیشن لازم است؛ بدون آن هشداری نمی‌رسد.' : 'Notification permission is needed to announce anything; without it no alert can arrive.' });
+      } else if (out?.code === 'TOO_MANY_WATCHES') {
+        setNote({ kind: 'error', text: fa ? `سقفِ ${out.cap ?? 3} پایندگی پر است؛ یکی را بردارید تا این ثبت شود.` : `The cap of ${out.cap ?? 3} watches is full; remove one to arm this.` });
+      } else {
+        /* A code can be quoted, a sentence cannot be invented: the server named
+           the reason, so the reason is shown. */
+        setNote({ kind: 'error', text: fa ? `ثبت نشد (${out?.code || 'UNKNOWN'}).` : `Not armed (${out?.code || 'UNKNOWN'}).` });
+      }
+    } catch {
+      setNote({ kind: 'error', text: fa ? 'ثبت نشد (خطای شبکه).' : 'Not armed (network error).' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="agentchat-watch" data-testid="agent-chat-watch" data-armed={armed ? 'true' : 'false'}>
+      <button type="button" className="agentchat-watch-button" onClick={onClick} disabled={busy} data-testid="agent-chat-watch-toggle">
+        {busy
+          ? (fa ? 'در حال ثبت…' : 'Working…')
+          : armed
+            ? (fa ? 'برداشتنِ پایندگی' : 'Remove the watch')
+            : (fa ? `پاییدنِ ${datum}` : `Watch ${datum}`)}
+      </button>
+      {note ? (
+        <p className="agentchat-watch-note" data-kind={note.kind} data-testid="agent-chat-watch-note">{note.text}</p>
+      ) : null}
+    </div>
+  );
+}
 
 export default function AgentChatDock({ fa = false, onOpenHub = null }) {
   const active = useActiveAgent();
@@ -226,7 +311,7 @@ export default function AgentChatDock({ fa = false, onOpenHub = null }) {
         <button
           type="button"
           className="agentchat-ghost"
-          onClick={() => { clearActiveAgent(); setConsented(false); }}
+          onClick={() => { clearActiveAgent(); detachPlugin().catch(() => {}); setConsented(false); }}
           data-testid="agent-chat-deactivate"
         >
           {fa ? 'پایان' : 'Done'}
@@ -272,6 +357,9 @@ export default function AgentChatDock({ fa = false, onOpenHub = null }) {
                       >
                         {fa ? 'بازکردن پیش‌نویس در Bridge/Swap' : 'Open draft in Bridge/Swap'}
                       </button>
+                    ) : null}
+                    {message.task.result ? (
+                      <WatchOffer data={message.task.result.data} fa={fa} agentId={active.id} />
                     ) : null}
                     {message.task.errorCode ? (
                       <p className="agentchat-error">{message.task.safeErrorMessage || message.task.errorCode}</p>

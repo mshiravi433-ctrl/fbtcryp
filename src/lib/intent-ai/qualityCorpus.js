@@ -170,12 +170,29 @@ for (const stable of STABLES) {
 }
 
 /* ── farm / yield ───────────────────────────────────────────────────────── */
+/*
+ * WHY THE EXPECTATION CHANGED (2026-11-12)
+ *
+ * These eight templates used to expect ASSET_ANALYSIS, and they did so
+ * because ASSET_ANALYSIS was the ONLY intent that matched «ییلد» and
+ * «فارم». It was the wrong answer: its modules are crypto, signals, news
+ * and risk, so the yields engine was never consulted for a question about
+ * a pool — and a user who asked «بهترین فارم USDC» was told about the
+ * crypto market instead.
+ *
+ * YIELD_OPPORTUNITY now exists and reads the `farming` module, so these
+ * eight expect it.
+ *
+ * The two that stay ASSET_ANALYSIS are the ones that ask for the STATE of
+ * an asset rather than for a pool: «yield USDC چطوره» and «فارم USDC
+ * چطوره». «چطوره» is "how is it", not "where should I put it".
+ */
 for (const asset of ['USDC', 'ETH', 'BTC', 'SOL']) {
-  TEMPLATES.push(make('farm', `فارم چیه بهتره برای ${asset}`, 'fa', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
-  TEMPLATES.push(make('farm', `بهترین فارم ${asset}`, 'fa', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
-  TEMPLATES.push(make('farm', `farm yield for ${asset}`, 'en', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
-  TEMPLATES.push(make('farm', `apy ${asset} چنده`, 'fa', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
-  TEMPLATES.push(make('farm', `best apy on ${asset}`, 'en', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
+  TEMPLATES.push(make('farm', `فارم چیه بهتره برای ${asset}`, 'fa', 'YIELD_OPPORTUNITY', { risk: RISK.read, entities: { asset } }));
+  TEMPLATES.push(make('farm', `بهترین فارم ${asset}`, 'fa', 'YIELD_OPPORTUNITY', { risk: RISK.read, entities: { asset } }));
+  TEMPLATES.push(make('farm', `farm yield for ${asset}`, 'en', 'YIELD_OPPORTUNITY', { risk: RISK.read, entities: { asset } }));
+  TEMPLATES.push(make('farm', `apy ${asset} چنده`, 'fa', 'YIELD_OPPORTUNITY', { risk: RISK.read, entities: { asset } }));
+  TEMPLATES.push(make('farm', `best apy on ${asset}`, 'en', 'YIELD_OPPORTUNITY', { risk: RISK.read, entities: { asset } }));
   TEMPLATES.push(make('farm', `yield ${asset} چطوره`, 'fa', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
 }
 
@@ -281,8 +298,15 @@ for (const text of ['موجودی من چقدره', 'بالانس چنده', 'چ
 for (const text of ['اخبار امروز چیه', 'خبر جدید داره بازار؟', 'news summary', 'آپدیت بازار بده', 'اخبار کریپتو', 'today news']) {
   TEMPLATES.push(make('news', text, /[a-z]/i.test(text) ? 'en' : 'fa', 'NEWS_SUMMARY', { risk: RISK.read }));
 }
+/* SMART_MONEY_READ, not MARKET_OVERVIEW. The whale/smart-money surface got
+   its own intent when the global-intel module landed, and it reads the
+   smart-money engine instead of the generic market block. The corpus used
+   to pin these sentences to MARKET_OVERVIEW, which was right when that was
+   the only surface that could answer them; pinning them to the old intent
+   now leaves the whale category at 0 % while the newer, more specific
+   intent answers every one of them correctly. */
 for (const text of ['نهنگ ها چی کار میکنن', 'نهنگ', 'whale activity', 'whales today', 'اسمارت مانی چیکار میکنه', 'smart money flows', 'نهنگ‌ها دارن میفروشن؟']) {
-  TEMPLATES.push(make('whale', text, /[a-z]/i.test(text) ? 'en' : 'fa', 'MARKET_OVERVIEW', { risk: RISK.read }));
+  TEMPLATES.push(make('whale', text, /[a-z]/i.test(text) ? 'en' : 'fa', 'SMART_MONEY_READ', { risk: RISK.read }));
 }
 for (const text of ['بازار چطوره', 'وضعیت بازار', 'market overview', 'بازار امروز', 'market today', 'قیمت کلی بازار']) {
   TEMPLATES.push(make('market-overview', text, /[a-z]/i.test(text) ? 'en' : 'fa', 'MARKET_OVERVIEW', { risk: RISK.read }));
@@ -380,9 +404,9 @@ for (const stable of STABLES) {
 /* farm / futures / dydx: asset × register matrix */
 for (const asset of ['USDC', 'ETH', 'BTC', 'SOL']) {
   TEMPLATES.push(make('farm', `فارم ${asset} چطوره`, 'fa', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
-  TEMPLATES.push(make('farm', `yield farming ${asset}`, 'en', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
-  TEMPLATES.push(make('farm', `بهترین APY برای ${asset}`, 'fa', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
-  TEMPLATES.push(make('farm', `کجا ${asset} فارم کنم`, 'fa', 'ASSET_ANALYSIS', { risk: RISK.read, entities: { asset } }));
+  TEMPLATES.push(make('farm', `yield farming ${asset}`, 'en', 'YIELD_OPPORTUNITY', { risk: RISK.read, entities: { asset } }));
+  TEMPLATES.push(make('farm', `بهترین APY برای ${asset}`, 'fa', 'YIELD_OPPORTUNITY', { risk: RISK.read, entities: { asset } }));
+  TEMPLATES.push(make('farm', `کجا ${asset} فارم کنم`, 'fa', 'YIELD_OPPORTUNITY', { risk: RISK.read, entities: { asset } }));
 }
 for (const asset of ['BTC', 'ETH', 'SOL', 'ARB']) {
   TEMPLATES.push(make('futures', `فیوچرز ${asset} چی شده`, 'fa', 'FUTURES_RISK', { risk: RISK.futures, entities: { asset } }));
@@ -460,7 +484,7 @@ for (const text of ['اخبار بازار', 'crypto news', 'news today']) {
   TEMPLATES.push(make('news', text, /[a-z]/i.test(text) ? 'en' : 'fa', 'NEWS_SUMMARY', { risk: RISK.read }));
 }
 for (const text of ['whale alert', 'نهنگ‌های بزرگ']) {
-  TEMPLATES.push(make('whale', text, /[a-z]/i.test(text) ? 'en' : 'fa', 'MARKET_OVERVIEW', { risk: RISK.read }));
+  TEMPLATES.push(make('whale', text, /[a-z]/i.test(text) ? 'en' : 'fa', 'SMART_MONEY_READ', { risk: RISK.read }));
 }
 for (const text of ['هدف 20 درصدی دارم', 'می‌خوام به هدفم برسم']) {
   TEMPLATES.push(make('goal', text, 'fa', 'GOAL_PLAN', { risk: RISK.plan }));

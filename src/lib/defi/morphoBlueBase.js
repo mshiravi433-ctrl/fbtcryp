@@ -13,12 +13,12 @@
  * transfers or liquidates COLLATERAL itself.
  */
 
-import { ERC20_ABI, EVM_CHAINS, getToken } from '../chains';
-import { NATIVE_GAS_FLOOR } from '../swap';
-import { decodeRevertReason } from '../preSignSimulation';
+import { ERC20_ABI, EVM_CHAINS, getToken } from '../chains.js';
+import { NATIVE_GAS_FLOOR } from '../swap.js';
+import { decodeRevertReason } from '../preSignSimulation.js';
 import {
   assertProviderChain, assertSuccessfulReceipt, parseReceiptLogs, ExecutionGuardError, sameAddress
-} from './executionGuards';
+} from './executionGuards.js';
 import { verifyRoutedDeposit } from './splitRouter.js';
 const loadEthers = () => import('ethers');
 const ADDRESS = /^0x[a-fA-F0-9]{40}$/;

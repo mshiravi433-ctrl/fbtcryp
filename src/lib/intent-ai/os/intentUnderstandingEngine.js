@@ -9,6 +9,7 @@
 
 import { aliasChainId, aliasToken } from './moduleRouter.js';
 import { getSessionOperationalSlots } from './intentSession.js';
+import { findAllTerms } from './regexCache.js';
 
 export const INTENT_ENGINE_VERSION = '4.0.0';
 export const USER_INTENT_SCHEMA = 'fbt.user-intent.v4';
@@ -400,16 +401,19 @@ export function extractEntitiesUpgrade4(rawText, context = {}) {
   }
 
   // 2. Asset Extraction (including Slang & Typos)
+  /*
+   * ONE regex execution for the whole 52-entry slang map, instead of 52.
+   * The vocabulary ORDER is preserved by `findAllTerms`, which matters:
+   * «تتر» must be seen before «دلار», or the wrong symbol wins.
+   */
   const foundTokens = [];
-  for (const [slang, sym] of Object.entries(SLANG_ASSET_MAP)) {
-    const reg = new RegExp(`(^|[^\\p{L}\\p{N}])${slang}($|[^\\p{L}\\p{N}])`, 'u');
-    if (reg.test(norm)) {
-      if (sym === 'USD' && (norm.includes('تتر') || norm.includes('usdt'))) {
-        // If "تتر" also appears, ignore generic "دلار"
-        continue;
-      }
-      foundTokens.push({ symbol: sym, word: slang, index: norm.indexOf(slang) });
+  for (const { term: slang, index: slangIndex } of findAllTerms(norm, Object.keys(SLANG_ASSET_MAP))) {
+    const sym = SLANG_ASSET_MAP[slang];
+    if (sym === 'USD' && (norm.includes('تتر') || norm.includes('usdt'))) {
+      // If "تتر" also appears, ignore generic "دلار"
+      continue;
     }
+    foundTokens.push({ symbol: sym, word: slang, index: slangIndex });
   }
 
   foundTokens.sort((a, b) => a.index - b.index);

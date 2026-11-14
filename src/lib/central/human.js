@@ -41,6 +41,47 @@ const section = (id, label, value, { source = null, dataAt = null, tone = null, 
 });
 
 /**
+ * The subject of one half of a two-part question, in the user's language.
+ *
+ * The label is what tells the reader which of their two questions the
+ * section answers. It is derived from the INTENT, not from the words of
+ * the sentence, because the intent is what the engine actually answered.
+ */
+const PART_LABEL_FA = {
+  ASSET_ANALYSIS: 'قیمت و تحلیل دارایی',
+  BALANCE_QUERY: 'موجودی',
+  PORTFOLIO_ANALYSIS: 'پرتفوی',
+  RISK_OVERVIEW: 'ریسک',
+  CONCENTRATION_CHECK: 'تمرکز',
+  MARKET_OVERVIEW: 'بازار',
+  OPPORTUNITY_FIT: 'تناسب با من',
+  YIELD_OPPORTUNITY: 'ییلد',
+  LIQUIDITY_RISK: 'ریسک نقدینگی',
+  STAKING_REWARD: 'استیکینگ',
+  LOAN_STATUS: 'وضعیت وام',
+  BORROW_CAPACITY: 'ظرفیت وام',
+  FUTURES_RISK: 'ریسک فیوچرز',
+  GOAL_PLAN: 'هدف و برنامه',
+  PROFIT_PLAN: 'برنامهٔ سود',
+  NEWS_SUMMARY: 'اخبار',
+  SIGNAL_READING: 'سیگنال',
+  SMART_MONEY_READ: 'پول هوشمند',
+  ROUTE_INTELLIGENCE: 'مسیر انتقال',
+  WHY_DECISION: 'چرایی تصمیم',
+  WHATIF_SIMULATION: 'شبیه‌سازی',
+  QUOTE_SWAP: 'نرخ سواپ',
+  QUOTE_BRIDGE: 'نرخ پل',
+  INSTRUMENT_QUERY: 'ابزار'
+};
+
+function partLabel(intentType, fa) {
+  if (!fa) {
+    return String(intentType || 'leg').replace(/_/g, ' ').toLowerCase();
+  }
+  return PART_LABEL_FA[intentType] || 'بخش دیگر سؤال';
+}
+
+/**
  * The main entry point. `results` is the map the brain filled from the modules
  * (keyed by plan step id); everything rendered here is either in that map, in
  * `risk`, in `policy`, or an explicit "could not read".
@@ -53,7 +94,31 @@ export function composeResponse({
   const L = LABELS[locale === 'fa' ? 'fa' : 'en'];
   const fa = L === LABELS.fa;
   const sections = [];
-  const mode = pickMode({ error, policy, execution, recommendation, results, intent });
+
+  /*
+   * ─── A MISSING FIELD MUST NOT ERASE AN ANSWER THAT WAS PRODUCED ────────
+   *
+   * ONE predicate, used in three places, because the three have to agree:
+   * the mode, the analysis sections, and the question.
+   *
+   * The conversation machinery can report a field it would like («this money
+   * is for what — growth, income, or preservation?») on a turn that has
+   * ALREADY answered what was asked: the goal engine computed a feasibility,
+   * the risk engine produced a verdict. Both are true at once. QUESTION mode
+   * used to render the question INSTEAD of the analysis, so the computed
+   * answer disappeared from `text` and a two-part question looked answered
+   * only because its own SECTION LABEL contained the keyword.
+   *
+   * It applies ONLY to a question from the conversation machinery. A question
+   * from the money-step check is not a follow-up: an execution whose amount is
+   * unknown must stay a question, or the reply offers a button to approve a
+   * request nobody specified.
+   */
+  const turnAnswered = Boolean(recommendation?.ok)
+    && Object.values(results || {}).some((v) => v && v.status !== 'UNAVAILABLE');
+  const keepAnswer = turnAnswered && intent?.needsUserInputSource === 'conversation-machinery';
+
+  const mode = pickMode({ error, policy, execution, recommendation, results, intent, keepAnswer });
 
   /* ---- a capability refusal replaces the analysis, it does not decorate it ---- */
   if (refusal) {
@@ -62,6 +127,25 @@ export function composeResponse({
     if (refusal.alternatives?.length) sections.push(section('alternatives', fa ? 'چیزی که در دسترس است' : 'What is available', refusal.alternatives, { source: 'capability-manager' }));
   }
 
+  /*
+   * ─── A MISSING FIELD MUST NOT ERASE AN ANSWER THAT WAS PRODUCED ────────
+   *
+   * The conversation machinery can report a field it still needs («this money
+   * is for what — growth, income, or preservation?») while the turn has
+   * ALREADY answered the question that was asked: the goal engine computed a
+   * feasibility, the risk engine produced a verdict. Both are true at once.
+   *
+   * QUESTION mode used to render the question INSTEAD of the analysis, so the
+   * computed answer disappeared and the reply asked for something the user had
+   * not asked to be asked. The question is now rendered ALONGSIDE the answer —
+   * `result` first, because the answer is what was asked for, and the machine's
+   * question after it, because it is what the machine still needs.
+   *
+   * The condition is narrow on purpose: it needs a recommendation the engine
+   * actually stood behind AND at least one section that was really read. A turn
+   * where nothing was read stays a pure question — answering it anyway would be
+   * a confident paragraph out of nothing.
+   */
   /* ---- analysis sections (§43 upper half) ---- */
   if (!refusal && (mode === 'ANSWER' || mode === 'ACTION')) {
     const readable = Object.entries(results).filter(([, v]) => v && v.status !== 'UNAVAILABLE');
@@ -71,11 +155,62 @@ export function composeResponse({
        question, which is harder to notice than an empty reply. */
     const headline = gapLead?.text || (recommendation?.ok ? recommendation.recommendation : summarizeResults(readable, { fa, L }));
     sections.push(section('result', L.result, headline, {
-      source: recommendation?.data?.map((d) => d.source).filter(Boolean).join(' + ') || readable.map(([k]) => results[k]?.source).filter(Boolean).join(' + ') || null,
+      /* A compound turn reads the same sources once per LEG, so the list came
+         out as «wallet-service + portfolio-service + … + wallet-service +
+         portfolio-service + …». The sources are a set, not a sequence: naming
+         one twice tells the user nothing and buries the ones that matter. */
+      source: Array.from(new Set(recommendation?.data?.map((d) => d.source).filter(Boolean))).join(' + ')
+        || Array.from(new Set(readable.map(([k]) => results[k]?.source).filter(Boolean))).join(' + ')
+        || null,
       sourceLabel: fa ? 'منبع' : 'source',
       dataAt: maxAt(readable.map(([, v]) => v.dataAt || v.at)),
       dataAtLabel: relative(maxAt(readable.map(([, v]) => v.dataAt || v.at)), fa)
     }));
+    /*
+     * ─── ONE SECTION PER HALF OF THE QUESTION ────────────────────────────
+     *
+     * The user asked two things. The reply has to show two answers, and
+     * each answer has to say WHICH half it is — otherwise the second
+     * headline reads as a continuation of the first, and the user cannot
+     * tell which of their questions was answered.
+     *
+     * The label is the intent's own subject in the user's language, so
+     * «قیمت» and «موجودی» head their own sections. A part that has no
+     * label of its own still gets a section — a missing label is a
+     * cosmetic bug, a missing section is a missing answer.
+     */
+    if (recommendation?.ok && Array.isArray(recommendation?.parts) && recommendation.parts.length) {
+      /*
+       * TWO HALVES CAN NOW ASK THE SAME QUESTION ABOUT TWO THINGS.
+       *
+       * «قیمت بیت کوین چنده و اتریوم چطور» is one intent twice, with a
+       * different subject each time. Both halves get a section — a missing
+       * section is a missing answer — but two sections with the same id are two
+       * boxes claiming to be the same box, and two sections with the same LABEL
+       * fail the requirement written above this block: each answer has to say
+       * WHICH half it is.
+       *
+       * So the subject joins the id and the label, and only when it has to: a
+       * part that is the only one of its intent keeps the id and the label it has
+       * always had, so no reply that was already correct changes shape.
+       */
+      const readableParts = recommendation.parts.filter((part) => part && part.headline);
+      const sameIntent = new Map();
+      for (const part of readableParts) {
+        sameIntent.set(part.intent, (sameIntent.get(part.intent) || 0) + 1);
+      }
+      for (const part of readableParts) {
+        const shared = (sameIntent.get(part.intent) || 0) > 1 && Boolean(part.asset);
+        sections.push(section(
+          shared ? `part:${part.intent}:${part.asset}` : `part:${part.intent || 'leg'}`,
+          shared
+            ? (fa ? `${partLabel(part.intent, fa)} — ${part.asset}` : `${partLabel(part.intent, fa)} (${part.asset})`)
+            : partLabel(part.intent, fa),
+          part.headline,
+          { source: part.findings?.length ? 'central-registry + engines' : 'central-registry', sourceLabel: fa ? 'منبع' : 'source' }
+        ));
+      }
+    }
     /* A veto carries its own explanation, but it is an ENGINEERING reason, never
        something to show as «دلیل» under a Persian answer line. So declared reasons
        count only for an accepted recommendation; the refusal text is rendered
@@ -123,8 +258,12 @@ export function composeResponse({
     if (policy?.reasons?.length) sections.push(section('impact', fa ? 'تأثیر روی پاسخ' : 'Effect on the answer', policy.reasons.slice(0, 2), { source: 'policy-engine' }));
   }
 
-  /* ---- a question, only when a field is genuinely missing (§5) ---- */
-  const ask = mode === 'QUESTION' ? askFor(context, { fa, L }) : null;
+  /* ---- a question, only when a field is genuinely missing (§5) ----
+     In ANSWER mode it is still rendered when the machinery asked for one more
+     field: the answer comes first because it is what was asked for, and the
+     question after it because it is what the machine still needs. Dropping it
+     would hide the gap; leading with it would hide the answer. */
+  const ask = (mode === 'QUESTION' || keepAnswer) ? askFor(context, { fa, L, intent }) : null;
   if (ask) sections.push(section('question', fa ? 'برای ادامه لازم است' : 'Needed to continue', ask.text, { tone: 'ask' }));
 
   /* A partial failure must say so. Hiding «the price source did not answer» behind
@@ -185,19 +324,22 @@ export function composeResponse({
   };
 }
 
-function pickMode({ error, policy, execution, recommendation, results, intent }) {
+function pickMode({ error, policy, execution, recommendation, results, intent, keepAnswer = false }) {
   const usable = Object.values(results || {}).filter((v) => v && v.status !== 'UNAVAILABLE').length;
   if (policy?.verdict === 'SAFE_STOP') return 'SAFE_STOP';
   /* A missing field outranks a confirmation card: offering a user a button to
-     approve a request whose amount we do not know is worse than asking for it. */
-  if (intent?.needsUserInput) return 'QUESTION';
+     approve a request whose amount we do not know is worse than asking for it.
+     `keepAnswer` is the one exception, and it is narrow: the turn already
+     produced an answer the engine stood behind, and the field the machinery
+     wants is a follow-up rather than a precondition. */
+  if (intent?.needsUserInput && !keepAnswer) return 'QUESTION';
   /* "Some results exist" is not the same as "anything was read": a turn where every
      source failed still has result entries, all UNAVAILABLE. Treating that as an
      ANSWER is how a system produces a confident paragraph out of nothing. */
   if (error && !usable) return 'ERROR_AND_RECOVERY';
   if (policy?.requiresConfirmation && !execution) return 'ACTION';
   if (execution) return 'ACTION';
-  if (intent?.needsUserInput || (!Object.keys(results || {}).length && !recommendation?.ok)) return 'QUESTION';
+  if ((intent?.needsUserInput && !keepAnswer) || (!Object.keys(results || {}).length && !recommendation?.ok)) return 'QUESTION';
   return 'ANSWER';
 }
 
@@ -245,9 +387,80 @@ function stopText(policy, error, fa) {
 }
 
 /** §20: a question names the field, never asks to "explain more". */
-function askFor(context, { fa, L }) {
+function askFor(context, { fa, L, intent = null } = {}) {
+  /*
+   * THE MACHINE'S OWN QUESTION COMES FIRST.
+   *
+   * The conversation machinery (path 16) asks ONE specific question when
+   * it lacks one field, and it owns the wording of that question — it
+   * is the machine that knows which field it needs and how to ask for
+   * it.
+   *
+   * So when the machine has asked, the reply asks THAT. The generic
+   * «برای اینکه عدد دقیق بدهم، این لازم است: …» is the fallback for a
+   * turn that knows a field is missing but has no question of its own —
+   * and using it in place of the machine's question means the machinery
+   * is present, running, and its question never reaches the user.
+   */
   const missing = context?.missingInformation || [];
-  if (!missing.length) return null;
+  const machineQuestion = context?.conversationQuestion?.question || null;
+  const machineField = context?.conversationQuestion?.field || null;
+  const machineMissing = Array.isArray(context?.conversationQuestion?.missing)
+    ? context.conversationQuestion.missing
+    : [];
+  /*
+   * But NOT when the sentence did not match any route at all.
+   *
+   * In that case the honest reply names the paths that DO exist, and the
+   * conversation machinery's question — «what is this money for?» — would
+   * be an answer to a question the user did not ask. The machinery asks
+   * about the OWNER; the registry asks about the SENTENCE. When the
+   * sentence matched nothing, the registry's question is the one that
+   * belongs.
+   */
+  /*
+   * ─── THE QUESTION THAT UNBLOCKS THE TURN IS THE QUESTION TO ASK ───────────
+   *
+   * The machine's question wins whenever it exists, which is right for the case
+   * the comment below was written for: a turn that knows a field is missing and
+   * has no question of its own. It is wrong when the turn is blocked on money.
+   * «بیت کوین را بفروش» is missing an AMOUNT, and the reply asked
+   * «این پول برای چیست — رشد، درآمد، یا حفظ سرمایه؟» — a question about the
+   * owner that cannot unblock the trade, so the user was left with a sell order
+   * that could not be completed and no idea what was missing. The field list
+   * below already names «مبلغ (یا درصدی از دارایی)» and already ends with
+   * «بدون آن، حدس نمی‌زنم», which is the honest answer to an order with no size.
+   *
+   * The marker is what keeps this narrow: only a gap the money-step check found
+   * outranks the machinery, so a read-only turn whose only gap is the machine's
+   * own field still asks the machine's question, exactly as before.
+   */
+  const MONEY_FIELDS = ['fromAsset', 'toAsset', 'amount', 'recipient', 'pool', 'collateral', 'network'];
+  const moneyMissing = (Array.isArray(intent?.missingInputs) ? intent.missingInputs : [])
+    .filter((m) => MONEY_FIELDS.includes(m));
+  const blockedOnMoney = intent?.needsUserInputSource === 'money-step' && moneyMissing.length > 0;
+  /*
+   * And the FIELD LIST is the money list too. `context.missingInformation`
+   * accumulates every gap the turn found, so a sell order with no size also
+   * carried the machinery's missing `goal` field and the reply asked for
+   * «مبلغ هدف و افق زمانی» beside the amount — two questions, one of which
+   * cannot unblock the trade. A turn blocked on money asks for the money.
+   */
+  const asked = blockedOnMoney ? moneyMissing : missing;
+  if (machineQuestion && !missing.includes('intent') && !blockedOnMoney) {
+    const text = typeof machineQuestion === 'string'
+      ? machineQuestion
+      : String(machineQuestion[fa ? 'fa' : 'en'] || machineQuestion.fa || machineQuestion.en || '');
+    if (text) {
+      return {
+        fields: machineMissing.length ? machineMissing : (machineField ? [machineField] : []),
+        text,
+        L,
+        source: 'conversation-machinery'
+      };
+    }
+  }
+  if (!asked.length) return null;
   /* Nothing in the registry matched this sentence. That is a different kind of
      missing than an absent amount: the field list would be useless («منظورتان
      intent» is not a question a person can answer), so the reply says what could
@@ -281,9 +494,9 @@ function askFor(context, { fa, L }) {
     goal: fa ? 'مبلغ هدف و افق زمانی' : 'a target amount and a horizon',
     condition: fa ? 'شرط هشدار' : 'the alert condition'
   };
-  const list = missing.map((m) => names[m] || m);
+  const list = asked.map((m) => names[m] || m);
   return {
-    fields: missing,
+    fields: asked,
     text: fa
       ? `برای اینکه عدد دقیق بدهم، این لازم است: ${list.join('، ')}. بدون آن، حدس نمی‌زنم.`
       : `To give you a real number I need: ${list.join(', ')}. I will not guess in its place.`,
