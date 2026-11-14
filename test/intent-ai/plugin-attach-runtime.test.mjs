@@ -42,6 +42,12 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/* This gate tests the attach, so it says so: the suite runs with the plugin
+   attach off (an unset flag under NODE_ENV=test means off, so no test reaches
+   CoinGecko/DefiLlama/GoPlus), and every plugin run below goes through a
+   catalog this file installs itself. */
+process.env.AI_PLUGIN_ATTACH = 'true';
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /* ── the real brain, the real composition root, faked externals ──────────── */

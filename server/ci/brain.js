@@ -278,7 +278,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
   async function handle({
     owner, message = '', page = null, confirm = false, actionId = null, planDigestSent = null,
     requestId = null, executionId = null, txHash = null, chainId = null, locale = 'en',
-    hints = null, suggestions = null
+    hints = null, suggestions = null, agentId = null
   } = {}) {
     turns.total += 1;
     const registry = registryFor(owner);
@@ -303,6 +303,13 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
       classification: { type: 'UNSUPPORTED', confidence: 0, definition: { modules: [], permission: PERMISSION.READ }, entities: {} },
       context: { page: pageClaim }, requestId, sessionId: null, owner, locale, now: startedAt
     });
+    /* The agent this person is talking to, when the client says so. Stamped
+       BEFORE any routing so it survives every later `intent = { ...intent }`
+       and reaches the turn record even on a turn no plugin answered: "which
+       agent was I talking to?" is an audit question about every turn, not only
+       about the ones a plugin happened to answer. The slug is validated by the
+       plugin layer, which owns the catalog; this only carries the string. */
+    if (agentId) intent = { ...intent, turnAgentId: String(agentId).slice(0, 64) };
     state = writeSection(state, 'session', { data: { memory: compactMemory(memory), at: startedAt }, source: 'client-context', status: 'OK', now: startedAt }).state;
     await stateStore.replace(owner, state);
 
@@ -633,9 +640,14 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
         let pluginTitle = null;
         let pluginDataStatus = null;
         let pluginMatched = null;
+        let pluginAttachedBy = null;
         let pluginCode = null;
         try {
-          const hit = await consultPlugins({ message: context.message || '', locale, owner });
+          /* `agentId` is the agent this person is talking to — sent by the chat
+             client from the hub's active-agent store. The bridge resolves it
+             against the owner's durable attachment when the turn carries none,
+             so a turn from Telegram or a cron still knows. */
+          const hit = await consultPlugins({ message: context.message || '', locale, owner, agentId });
           if (hit?.ok === true) {
             pluginLead = hit.lead;
             pluginAnswer = hit.text;
@@ -643,6 +655,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
             pluginTitle = hit.title;
             pluginDataStatus = hit.dataStatus;
             pluginMatched = hit.matched;
+            pluginAttachedBy = hit.attachedBy || null;
           } else {
             pluginCode = hit?.code || 'PLUGIN_NO_ANSWER';
           }
@@ -711,6 +724,7 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
             pluginSlug,
             pluginTitle,
             pluginDataStatus,
+            pluginAttachedBy,
             intentType: 'PLUGIN_ANSWER'
           };
           Object.assign(context, {
@@ -1065,7 +1079,8 @@ export function createCentralBrain({ stateStore, events = null, io = {}, log = (
         intentType: legIntent,
         entities: legClassification.entities,
         corpusAnswer: null, corpusMatch: null, modelAnswer: null,
-        pluginAnswer: null, pluginSlug: null, pluginTitle: null, answeredFromPlugin: false
+        pluginAnswer: null, pluginSlug: null, pluginTitle: null, answeredFromPlugin: false,
+        pluginAttachedBy: null
       };
       const legOut = buildFindings({ intent: legView, classification: legClassification, state, results, risk, readResults, stepResults, context, locale, lastReplan });
       /*
@@ -3300,6 +3315,12 @@ function publicIntent(intent) {
     pluginTitle: intent.pluginTitle || null,
     pluginDataStatus: intent.pluginDataStatus || null,
     pluginCode: intent.pluginCode || null,
+    /* WHOSE choice produced this answer: 'turn' when the client sent the agent
+       the user is talking to, 'owner' when it came from their durable
+       attachment, 'match' when the vocabulary matcher picked it. A reply that
+       cannot say which is a reply that cannot be audited. */
+    pluginAttachedBy: intent.pluginAttachedBy || (intent.pluginSlug ? 'match' : null),
+    turnAgentId: intent.turnAgentId || null,
     pluginAttachWired: hasPluginProvider()
   };
 }

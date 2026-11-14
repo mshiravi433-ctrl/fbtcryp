@@ -4046,6 +4046,101 @@ server/fios/index.js src/lib/central/recommend.js server/agentHub/native/data.js
 exercise the new module directly. Full suite: **981/981 in 171 s** — the same
 duration as before the attach, which is the CPU claim restated as a measurement.
 
+#### 5.24.15 The plugins became registry rows, and the user's choice reached a turn
+
+§5.24.14 attached the plugins to a sentence. Two halves of the instruction were
+still open: the registry of external agents was still a registry of *nobody*,
+and the person using the product had no say in which plugin answered.
+
+**Measured first**, as before:
+
+```
+  11 plugin passports sanitized                 3.1–4.9 ms
+  listPluginsForOwner, first call (registers)      15.4 ms
+  listPluginsForOwner, second call (idempotent)     0.4 ms
+  attachPluginForOwner                              0.9–1.5 ms
+  readAttachedPlugin, cold / cached                 0.1 / 0.0 ms
+  detach                                            0.2 ms
+```
+
+So the owner side is free as well, and the only cost that matters is the one
+that would have been paid *per turn* — which is why the attachment read lives
+inside a consult (already off the hot path) behind a 30-second cache, and why
+the suite runs with the attach off by default.
+
+**The registry.** `registerFromCatalog` had never been fed anything: the
+reviewed third-party registry is deliberately empty until an operator writes a
+decision record, so a user's agent list was empty while eleven first-party
+plugins sat outside the registry with no passport and no trust score.
+`server/agentHub/pluginRegistry.js` is that feed. Each plugin becomes a row
+with `securityStatus: 'verified'`, `method: 'reviewer_certified'`, the issuer
+named, `canExecute: false`, `trust 55/LIMITED` — below the 70-point
+authorization floor, because a fresh plugin has no recorded interactions and
+trust here is earned, not declared. Two rules the sanitizer taught:
+
+* **`finite(null)` is 0.** An explicit `expiresAt: null` came back as
+  `expiresAt: 0`, which is both "expired in 1970" and "not null", so all eleven
+  rows were `AGENT_NOT_VERIFIED` *and* `AGENT_VERIFICATION_EXPIRED`. The key
+  has to be omitted. A guard written against the wrong type of null is dead
+  code that looks alive — here it was a live row that looked dead.
+* **No invented evidence.** `normalizeEvidence` drops any item without an https
+  URI or a sha256, and verification also accepts `reviewer_certified`. So the
+  claim made is the claim that is true — we reviewed our own code, in this
+  repository — and `evidence` stays empty rather than carrying a fabricated URI
+  for an audit that never happened.
+
+**The user's choice.** `activeAgent.js` stored one active agent per browser and
+the chat used it for suggestion chips only: `readActiveAgent()` had no path to a
+turn. Now `sendIntent` reads it the same way it already read the published
+transfer — inside the one function every caller goes through, so no caller has
+to know plugins exist — and carries `agentId` for a first-party agent only.
+`server/ci/api.js` accepts that shape and nothing else, and three routes make
+the choice the OWNER's rather than the browser's: `GET /api/brain/plugins`
+(the catalog with each registry verdict beside it), `POST …/attach`,
+`POST …/detach`. Activating an agent in the hub panel writes the owner record;
+clearing it in the dock removes it, so a turn from Telegram or a cron does not
+keep talking to a plugin the user dismissed.
+
+The order of authority is the design, and each step is measured:
+
+```
+  the registry   >  the user's choice  >  the owner's attachment  >  the matcher
+```
+
+* a **routed** turn never reaches the plugin layer at all, active agent or not
+  (0 plugins run on «قیمت بیت کوین چقدره» with an agent attached);
+* an explicit `agentId` runs **that** plugin even when the vocabulary prefers
+  another — «گزارش امنیتی Aave را بده» with `fbt-native:token-risk-scanner`
+  runs the risk scanner and records `pluginAttachedBy: 'turn'`;
+* with no `agentId` the owner's attachment decides (`pluginAttachedBy: 'owner'`);
+* with neither, the matcher decides (`'match'`);
+* a chosen plugin that does not exist is `PLUGIN_NOT_IN_CATALOG` and **nothing
+  runs** — a user who asked for one agent must never be answered by another.
+
+Two defects found by measuring rather than by reading:
+
+1. **Idempotency by the wrong key.** `registerFromCatalog` mints its own
+   `agt_<uuid>` row id and keeps `fbt-native-<slug>` on the passport, so
+   matching existing rows on the row id never matched: every call re-registered
+   all eleven, and `list` showed `registryId: null` for all of them. Keyed on
+   the passport id, the second listing is 0.4 ms with `added: 0, existing: 11`.
+   A registration that silently resets the interaction history would have reset
+   the trust score the registry exists to compute.
+2. **The suite was making outbound calls.** With the attach live, gates whose
+   turns are unrouted ran real plugins against CoinGecko/DefiLlama/GoPlus —
+   ~9 s of the suite here, and up to 8 s of budget per turn on a machine with
+   egress, with a different answer than on one without. The flag is now off by
+   default under `NODE_ENV=test` (the convention `intentOperatorEvidence.js`,
+   `intentPlaneAttestations.js` and `intentSandboxEvidence.js` already follow),
+   the suite states it explicitly, and the two gates that test the attach opt in
+   and install a catalog of their own — so they exercise the whole path with no
+   network at all.
+
+Gate: `test/intent-ai/plugin-owner-attach-runtime.test.mjs`, 13 tests,
+non-vacuity proven by reverting the nine product files (12 of 13 fail; the
+survivor is the pure passport test, which needs only the new module). Full
+suite **994/994 in 182 s** — 9 s *faster* than with the attach unguarded.
+
 #### What is still open
 
 §5.24.10 answered the clause that names its own subject. The clauses that
@@ -4163,17 +4258,20 @@ green while doing so.
 > empty case is a case: `size &&` turns "nothing changed" into "check
 > everything", which is how a lint starts crying wolf about code nobody touched.**
 
-The agent layer is attached but not yet *personal*. §5.24.14 made eleven
-first-party plugins reachable from a chat turn, and stopped there on purpose:
-the attach fires only on a turn the registry could not route, so a routed turn
-whose own engine has no data still cannot borrow a plugin that has it. The
-external-agent registry (`server/fios/agents.js`) is still a registry of rows —
-`registerFromCatalog` exists and is tested, but nothing feeds it the plugin
-catalog, so a plugin still has no passport, no trust score and no scopes. And
-the site user's side of the connection is unbuilt: there is no per-user
-subscription that would let one person attach a plugin to themselves and be
-told what it found, which is the part that would make this a domain agent in
-the sense the instruction meant rather than a better router. Beside it, the
+§5.24.15 closed two of the three gaps this list carried: the registry is now
+fed by the plugin catalog (eleven verified first-party rows, `canExecute:
+false`, trust earned from recorded interactions), and a user's choice reaches a
+turn — per browser and per owner. What is still open is the third, and it is
+the part that would make this an agent rather than a router: **nothing is
+proactive**. A plugin answers when asked; it never watches and speaks first.
+There is no schedule on an attachment, no threshold that would make the token
+risk scanner tell its owner something changed, and the event bus that already
+drives `eventReplanning` (with `agentCouncil.convene` and `guardian.check`
+wired into it) has no plugin-shaped subscriber. Also unchanged: the attach
+fires only on a turn the registry could not route, so a routed turn whose own
+engine has no data still cannot borrow a plugin that has it — and that needs a
+conflict rule (which of the two speaks, and how the reply says so), not a
+wider trigger. Beside it, the
 status payload still reports `agentCouncil` and `agentRuntime` as
 `Boolean(...)` and `lastResults.council` / `lastResults.decision` are
 hard-coded `null` while `globalIntelligence` and `briefing` carry real last

@@ -26,6 +26,11 @@ import { apiBase } from '../apiBase.js';
  * byte budget. The store now lives in a module with no imports at all.
  */
 import { readPublishedRouteRequest } from '../routeRequestStore.js';
+import { readActiveAgent } from '../intent-ai/agentHub/activeAgent.js';
+
+/* `NATIVE_PROVIDER_ID` in `server/agentHub/native/index.js`, restated here
+   because the browser must not import a server module. */
+const NATIVE_PROVIDER_ID = 'fbt-native';
 
 const TIMEOUTS = { intent: 20000, read: 8000, action: 12000 };
 const DEVICE_KEY = 'fbt.central.device.v1';
@@ -145,6 +150,22 @@ export async function sendIntent(message, { page = null, locale = 'fa', confirm 
    */
   const routeRequest = readPublishedRouteRequest();
   const pageWithRoute = routeRequest ? { ...(page || {}), routeRequest } : page;
+  /*
+   * THE AGENT THE USER IS TALKING TO.
+   *
+   * The hub stores one active agent per browser, and until now that choice only
+   * re-ordered the suggestion chips: the person picked the token risk scanner,
+   * typed in the main chat, and the generic brain answered. It travels the same
+   * way the published transfer does — read HERE, not at the call site, so every
+   * caller of the brain carries it without having to know that plugins exist.
+   *
+   * Only a FIRST-PARTY id is sent: the server accepts nothing else, and sending
+   * a third-party id would only produce a field the turn has to drop.
+   */
+  const active = readActiveAgent();
+  const agentId = active && (active.providerId === NATIVE_PROVIDER_ID || active.native === true)
+    ? String(active.id || '').slice(0, 64)
+    : null;
   const body = {
     message: String(message || '').slice(0, 2000),
     page: pageWithRoute,
@@ -153,7 +174,8 @@ export async function sendIntent(message, { page = null, locale = 'fa', confirm 
     ...(actionId ? { actionId } : {}),
     ...(planDigest ? { planDigest } : {}),
     ...(txHash ? { txHash } : {}),
-    ...(hints ? { hints } : {})
+    ...(hints ? { hints } : {}),
+    ...(agentId ? { agentId } : {})
   };
   /* An explicit key (a retry of the same turn) wins; otherwise it is derived, so
      the caller cannot accidentally turn a retry into a fresh request. */
@@ -163,6 +185,25 @@ export async function sendIntent(message, { page = null, locale = 'fa', confirm 
 }
 
 export const intentStatus = (id) => call(`/intent/${encodeURIComponent(String(id || ''))}`);
+
+/* ── the plugins a person attaches to themselves ──────────────────────────────────────────────────
+ *
+ * `sendIntent` carries the browser's choice; these make it the OWNER's, so a
+ * turn that starts somewhere else (Telegram, a cron, another device) still
+ * knows which plugin this person is talking to. The catalog comes back with the
+ * registry's own verdicts beside each card — passport verified, trust score,
+ * `canExecute: false` — which is what makes the list a list of plugins we run
+ * rather than a listing of agents somebody else does.
+ */
+export const listPlugins = () => call('/plugins', { timeout: TIMEOUTS.read });
+
+export const attachPlugin = (agentId) => call('/plugins/attach', {
+  method: 'POST',
+  body: { agentId: String(agentId || '') },
+  timeout: TIMEOUTS.action
+});
+
+export const detachPlugin = () => call('/plugins/detach', { method: 'POST', body: {}, timeout: TIMEOUTS.action });
 
 /**
  * `method` is what the user actually did (§33's "explicit confirmation"): the

@@ -29,6 +29,9 @@ import { internalHash, ResultView } from './AgentHubPanel.jsx';
 import NativeDataDisclosure from './NativeDataDisclosure.jsx';
 import CrossChainDesk from '../crosschain/CrossChainDesk.jsx';
 import '../../styles/agent-hub.css';
+/* Clearing the agent in the browser must also clear the OWNER's attachment, or a
+   turn from Telegram would keep talking to a plugin the user just dismissed. */
+import { detachPlugin } from '../../lib/central/client.js';
 
 /* Results live for this tab only. Not localStorage: a provider answer is
    session content, not a preference, and it can be long. */
@@ -226,7 +229,7 @@ export default function AgentChatDock({ fa = false, onOpenHub = null }) {
         <button
           type="button"
           className="agentchat-ghost"
-          onClick={() => { clearActiveAgent(); setConsented(false); }}
+          onClick={() => { clearActiveAgent(); detachPlugin().catch(() => {}); setConsented(false); }}
           data-testid="agent-chat-deactivate"
         >
           {fa ? 'پایان' : 'Done'}

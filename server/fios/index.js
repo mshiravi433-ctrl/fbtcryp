@@ -96,8 +96,9 @@ import { fiFlags } from './flags.js';
 import { createFiRouter, setLendingProvider } from './router.js';
 import { setGlobalIntelProvider } from '../ci/globalIntelBridge.js';
 import { setFitProvider, setMacroGraphProvider, setScenarioProvider } from '../ci/fitBridge.js';
-import { setPluginProvider } from '../ci/pluginBridge.js';
-import { attachPluginAnswer } from '../agentHub/pluginAttach.js';
+import { setPluginProvider, setPluginAttachStore } from '../ci/pluginBridge.js';
+import { attachPluginAnswer, pluginCatalog } from '../agentHub/pluginAttach.js';
+import { ensurePluginAgents, readAttachment, writeAttachment, slugFromAgentId } from '../agentHub/pluginRegistry.js';
 import { setRouteProvider, adaptRoutesForIntelligence } from '../ci/routeBridge.js';
 import { setWhyProvider } from '../ci/whyBridge.js';
 import { setConversationProvider, setReplanProvider, setReplanReader } from '../ci/sessionBridge.js';
@@ -932,6 +933,83 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
      without touching the dock; `AGENT_HUB_NATIVE_AGENTS=false` turns the
      plugins off everywhere. */
   setPluginProvider(attachPluginAnswer);
+
+  /* The owner side of the attach (§5.24.15): WHICH plugin this person chose,
+     and the plugin catalog registered as real agent rows.
+
+     Both closures are lazy on purpose. `pluginCatalog()` imports the catalog on
+     first use (4 ms / 1.2 MB, measured) and `ensurePluginAgents` writes eleven
+     passports (3–5 ms, measured) — neither belongs on a boot path or on a
+     turn, so they run when a user opens the plugin list or attaches one, and
+     `readAttachment` runs only inside a consult, which is already off the hot
+     path. Registration is idempotent by id: re-registering would replace the
+     row and reset the interaction history the trust score is built from. */
+  setPluginAttachStore({
+    read: (owner) => readAttachment({ collections, owner }),
+    write: async (owner, agentId) => {
+      const slug = slugFromAgentId(agentId);
+      if (agentId && !slug) return { ok: false, code: 'INVALID_AGENT_ID', durable: collections.durable() };
+      let catalog = [];
+      try {
+        catalog = await pluginCatalog();
+      } catch (err) {
+        log?.(`plugin-registry:catalog-failed:${String(err?.message || err).slice(0, 80)}`);
+        return { ok: false, code: 'PLUGIN_CATALOG_UNAVAILABLE', durable: collections.durable() };
+      }
+      if (slug) {
+        /* Attaching is the moment the passport rows earn their place: the
+           plugin the user picked must exist in the registry with a trust score,
+           not only in the catalog. */
+        await ensurePluginAgents({ agents, owner, catalog, log });
+      }
+      const res = await writeAttachment({ collections, owner, slug, catalog });
+      return { ...res, slug: res.ok ? slug : null };
+    },
+    list: async (owner) => {
+      let catalog = [];
+      try {
+        catalog = await pluginCatalog();
+      } catch (err) {
+        return { ok: false, plugins: [], code: 'PLUGIN_CATALOG_UNAVAILABLE', detail: String(err?.message || err).slice(0, 120) };
+      }
+      const ensured = await ensurePluginAgents({ agents, owner, catalog, log });
+      const attached = await readAttachment({ collections, owner });
+      const listed = await agents.list(owner);
+      /* Keyed by the PASSPORT id: the registry mints its own `agt_<uuid>` row id,
+         so the row id cannot identify a plugin across registrations. */
+      const rows = new Map((listed?.agents || []).map((r) => [String(r?.passport?.id || r?.id || ''), r]));
+      const plugins = catalog.map((agent) => {
+        const row = rows.get(`fbt-native-${agent.slug}`) || null;
+        return {
+          slug: agent.slug,
+          agentId: `fbt-native:${agent.slug}`,
+          registryId: row?.id || null,
+          name: agent.name,
+          nameFa: agent.nameFa || agent.name,
+          summary: agent.summary || null,
+          summaryFa: agent.summaryFa || agent.summary || null,
+          category: agent.category || null,
+          capabilities: agent.capabilities || [],
+          dataSources: agent.dataSources || [],
+          examplesFa: agent.examplesFa || [],
+          attached: attached.slug === agent.slug,
+          /* The registry's own verdicts, not a restatement of them: trust is
+             earned from recorded interactions, and `canExecute` is always false. */
+          registered: Boolean(row),
+          verified: row?.passport?.verified === true,
+          trust: row?.trust ? { score: row.trust.score, tier: row.trust.tier, basis: row.trust.basis } : null,
+          canExecute: row ? row.canExecute === true : false
+        };
+      });
+      return {
+        ok: true,
+        plugins,
+        attached: attached.slug || null,
+        durable: listed?.durable ?? collections.durable(),
+        registered: { added: ensured.registered.length, existing: ensured.existing.length, failed: ensured.failed }
+      };
+    }
+  });
 
   /* The regime reader (path 12): the macro graph over the global
      snapshot, the world model and the portfolio. It takes an owner, so

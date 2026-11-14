@@ -39,6 +39,8 @@
  * appear in almost every market question and must not steal a plugin turn.
  */
 
+import { slugFromAgentId } from './pluginRegistry.js';
+
 const ZW = '[\\u200c\\s]*';
 const ADDRESS_RE = /(?:0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{40,44})/;
 const PAIR_RE = /([A-Za-z0-9]{2,10})\s*\/\s*([A-Za-z0-9]{2,10})/;
@@ -90,11 +92,24 @@ export const PLUGIN_MATCH_RULES = Object.freeze([
 
 const truthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value ?? '').trim().toLowerCase());
 
-/** `AI_PLUGIN_ATTACH=false` removes the chat attach and nothing else. */
+/**
+ * `AI_PLUGIN_ATTACH=false` removes the chat attach and nothing else.
+ *
+ * An UNSET flag under `NODE_ENV=test` also means off, following the convention
+ * this repository already uses (`server/intentOperatorEvidence.js`,
+ * `server/intentPlaneAttestations.js`, `server/intentSandboxEvidence.js`). The
+ * reason is not style: a plugin run reads CoinGecko, DefiLlama, GoPlus or
+ * DexScreener, so a test suite that reached the attach would make outbound
+ * calls whose latency and failures are outside its control — 8 s of budget per
+ * unrouted turn, and a different answer on a machine with egress than on one
+ * without. The gates that test the attach say so explicitly and install a
+ * catalog of their own, so they exercise the whole path with no network.
+ */
 export function attachEnabled(env = process.env) {
   const raw = env?.[PLUGIN_ATTACH_ENV];
-  if (raw === undefined || raw === null || String(raw).trim() === '') return true;
-  return truthy(raw);
+  const flag = raw === undefined || raw === null ? '' : String(raw).trim();
+  if (flag === '') return String(env?.NODE_ENV || '').trim().toLowerCase() !== 'test';
+  return truthy(flag);
 }
 
 function entitiesOf(text) {
@@ -338,6 +353,16 @@ async function load() {
   return cached;
 }
 
+/**
+ * The plugin catalog, loaded lazily and cached. The composition root uses it to
+ * register the plugins as agent rows and to check that an attach names a plugin
+ * that exists — neither of which may import the catalog at boot.
+ */
+export async function pluginCatalog() {
+  const mod = await load();
+  return mod.catalog || [];
+}
+
 /** Test seam: drop the cached module/data so a harness can install a fake. */
 export function resetPluginAttachCache() { cached = null; }
 export function setPluginAttachCache(value) { cached = value || null; }
@@ -348,19 +373,46 @@ export function setPluginAttachCache(value) { cached = value || null; }
  * @returns {Promise<{ ok: true, text: string, slug: string, title: string, dataStatus: string, citations: any[], matched: string[] }
  *   | { ok: false, code: string, detail: string|null }>}
  */
-export async function attachPluginAnswer({ message = '', locale = 'fa', owner = null, timeoutMs = 8_000 } = {}) {
+export async function attachPluginAnswer({ message = '', locale = 'fa', owner = null, timeoutMs = 8_000, agentId = null } = {}) {
   if (!attachEnabled()) {
     return { ok: false, code: 'PLUGIN_ATTACH_DISABLED', detail: `${PLUGIN_ATTACH_ENV} is off` };
   }
-  const match = matchPlugin(message);
-  if (!match.slug) {
-    return { ok: false, code: 'NO_PLUGIN_MATCH', detail: 'no first-party plugin claims this question' };
-  }
-  let mod;
-  try {
-    mod = await load();
-  } catch (err) {
-    return { ok: false, code: 'PLUGIN_CATALOG_UNAVAILABLE', detail: String(err?.message || err).slice(0, 160) };
+  /*
+   * WHOSE CHOICE IS THIS?
+   *
+   * A user can attach a plugin to themselves — in the hub for this browser, or
+   * durably per owner — and that choice outranks the matcher, because the
+   * matcher is guessing from vocabulary and the user is stating a fact. It does
+   * NOT outrank the registry: the brain only asks here on a turn it could not
+   * route, so a routed turn still belongs to its own engine.
+   *
+   * A chosen plugin that is not in the catalog is a named failure, not a
+   * silent fallthrough to the matcher: the user asked for a specific agent and
+   * must be told that agent does not exist rather than be answered by another.
+   */
+  const chosen = slugFromAgentId(agentId);
+  let match = null;
+  let mod = null;
+  if (chosen) {
+    try {
+      mod = await load();
+    } catch (err) {
+      return { ok: false, code: 'PLUGIN_CATALOG_UNAVAILABLE', detail: String(err?.message || err).slice(0, 160) };
+    }
+    if (!(mod.catalog || []).some((a) => a.slug === chosen)) {
+      return { ok: false, code: 'PLUGIN_NOT_IN_CATALOG', detail: `${chosen} is not a first-party plugin` };
+    }
+    match = { slug: chosen, score: 0, matched: ['user-choice'] };
+  } else {
+    match = matchPlugin(message);
+    if (!match.slug) {
+      return { ok: false, code: 'NO_PLUGIN_MATCH', detail: 'no first-party plugin claims this question' };
+    }
+    try {
+      mod = await load();
+    } catch (err) {
+      return { ok: false, code: 'PLUGIN_CATALOG_UNAVAILABLE', detail: String(err?.message || err).slice(0, 160) };
+    }
   }
   if (mod.nativeEnabled && mod.nativeEnabled() !== true) {
     return { ok: false, code: 'NATIVE_AGENTS_DISABLED', detail: 'AGENT_HUB_NATIVE_AGENTS is off' };

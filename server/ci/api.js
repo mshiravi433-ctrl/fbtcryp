@@ -39,6 +39,7 @@ import { createCentralBrain } from './brain.js';
 import { createKernel } from './kernel.js';
 import { mountKernelRoutes } from './kernelRoutes.js';
 import { setCiSource, resetCiSources, healthSnapshot } from './sources.js';
+import { listPluginsForOwner, attachPluginForOwner } from './pluginBridge.js';
 
 export const CI_ROUTES_SCHEMA = 'fbt.central-api.v1';
 const DEVICE_HEADER = 'x-fbt-device';
@@ -124,7 +125,17 @@ export function createCentralIntelligence({ ioOverride = null, log = () => {}, e
       executionId: req.body?.executionId || null,
       txHash: req.body?.txHash || null,
       chainId: req.body?.chainId ?? null,
-      hints: req.body?.hints || null
+      hints: req.body?.hints || null,
+      /* The agent the user is talking to, published by the hub's active-agent
+         store and carried by `sendIntent` like the page claim: a fact about
+         what the user has open, not something each caller must remember to
+         pass. Only these two shapes are accepted, and only a first-party
+         plugin id can resolve — anything else is dropped here rather than
+         reaching the matcher. */
+      agentId: (() => {
+        const raw = String(req.body?.agentId ?? '').trim().slice(0, 64);
+        return /^fbt-native[:-][a-z0-9][a-z0-9-]{1,40}$/i.test(raw) ? raw : null;
+      })()
     });
     return res.json(out);
   }));
@@ -303,6 +314,52 @@ export function createCentralIntelligence({ ioOverride = null, log = () => {}, e
 
   /* Upgrade 10's financial surface, mounted on the SAME gateway (see the note
      in kernelRoutes.js): one origin, one budget, one owner derivation. */
+  /* \u2500\u2500 the plugins a user attaches to THEMSELVES (\u00a75.24.15) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+   *
+   * The hub dock lets a person pick an agent, and until now that pick lived in
+   * their browser's localStorage and changed nothing but the suggestion chips.
+   * These three routes make it a server-side fact about the OWNER: the catalog
+   * with its registry rows (passport, trust, `canExecute: false`), the
+   * attachment, and its removal. A turn from Telegram or a cron carries no
+   * `agentId`, and now it does not need to \u2014 the bridge reads the attachment.
+   */
+  router.get('/plugins', route(async (req, res) => {
+    const owner = ownerFor(req);
+    const out = await listPluginsForOwner(owner);
+    if (!out.ok) {
+      /* 503, not 500: the plugins exist, the composition root that mounts them
+         has not been wired yet \u2014 a cold instance answers this before `fios`
+         loads, and the client should retry rather than report a defect. */
+      return res.status(503).json({ ok: false, code: out.code || 'PLUGIN_LIST_FAILED', detail: out.detail || null, plugins: [] });
+    }
+    return { ok: true, plugins: out.plugins, attached: out.attached, durable: out.durable, registered: out.registered };
+  }));
+
+  router.post('/plugins/attach', route(async (req, res) => {
+    const owner = ownerFor(req);
+    const agentId = String(req.body?.agentId ?? '').trim().slice(0, 64);
+    /* Only a first-party id shape is accepted, and only a slug that is in the
+       catalog can be written \u2014 the store checks that, and answers 404 for a
+       plugin that does not exist rather than storing a choice nobody can run. */
+    if (!/^fbt-native[:-][a-z0-9][a-z0-9-]{1,40}$/i.test(agentId)) {
+      return res.status(400).json({ ok: false, code: 'INVALID_AGENT_ID', hint: 'an agentId of the form fbt-native:<slug>' });
+    }
+    const out = await attachPluginForOwner(owner, agentId);
+    if (!out.ok) {
+      return res.status(out.code === 'PLUGIN_NOT_IN_CATALOG' ? 404 : 503).json({ ok: false, code: out.code, detail: out.detail || null });
+    }
+    return { ok: true, attached: out.slug, durable: out.durable };
+  }));
+
+  router.post('/plugins/detach', route(async (req) => {
+    const owner = ownerFor(req);
+    const out = await attachPluginForOwner(owner, null);
+    /* Detaching is idempotent: having nothing attached and removing nothing are
+       the same state, and reporting an error for it would make the UI's toggle
+       lie about what happened. */
+    return { ok: true, attached: null, durable: out.durable ?? null, code: out.ok ? null : (out.code || null) };
+  }));
+
   mountKernelRoutes({ router, kernel, ownerFor, log });
 
   return { router, stateStore, events, brain, kernel, ownerFor, schema: CI_ROUTES_SCHEMA };

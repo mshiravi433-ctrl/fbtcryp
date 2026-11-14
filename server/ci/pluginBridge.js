@@ -67,6 +67,38 @@ export const PLUGIN_ATTACH_TIMEOUT_MS = 8_000;
 const PERSIAN_RE = /[\u0600-\u06FF]/;
 
 let provider = null;
+let store = null;
+
+/*
+ * THE USER'S OWN CHOICE, AND WHAT IT COSTS
+ *
+ * A plugin can be attached to a person, not just matched to a sentence. That
+ * attachment lives in the FI key-value store (Vercel Blob when
+ * `BLOB_READ_WRITE_TOKEN` is set, an in-process Map when it is not), so
+ * reading it is a storage read — which is why it happens ONLY here, inside a
+ * consult, and never on a turn the registry could route. The cached slot keeps
+ * a conversation from paying it per message; the TTL is short because the
+ * choice is the user's to change at any moment, and a stale "you are talking
+ * to the risk scanner" is worse than one extra read.
+ */
+const ATTACH_CACHE_TTL_MS = 30_000;
+const ATTACH_CACHE_MAX = 200;
+const attachCache = new Map();
+
+function cacheGet(owner) {
+  const hit = attachCache.get(String(owner || ''));
+  if (!hit) return undefined;
+  if (hit.expires < Date.now()) { attachCache.delete(String(owner || '')); return undefined; }
+  return hit;
+}
+
+function cacheSet(owner, value) {
+  if (attachCache.size >= ATTACH_CACHE_MAX) attachCache.clear();
+  attachCache.set(String(owner || ''), { ...value, expires: Date.now() + ATTACH_CACHE_TTL_MS });
+}
+
+/** Test seam. */
+export function clearAttachCache() { attachCache.clear(); }
 
 /**
  * Register the plugin attach provider.
@@ -91,6 +123,81 @@ export function hasPluginProvider() {
 }
 
 /**
+ * Register the per-owner attachment store.
+ *
+ * The composition root owns the storage and the agent registry, so it supplies
+ * all three operations; this module only sequences them. A missing store is not
+ * an error — the matcher still works, and every owner-facing call reports
+ * `PLUGIN_STORE_NOT_WIRED` instead of throwing.
+ *
+ * @param {{ read: (owner: string) => Promise<any>, write: (owner: string, agentId: string|null) => Promise<any>, list: (owner: string) => Promise<any> }} impl
+ * @returns {() => void} a disposer.
+ */
+export function setPluginAttachStore(impl) {
+  const previous = store;
+  store = impl && typeof impl.read === 'function' && typeof impl.write === 'function' ? impl : null;
+  attachCache.clear();
+  return () => { store = previous; attachCache.clear(); };
+}
+
+export function hasPluginAttachStore() {
+  return Boolean(store);
+}
+
+const NOT_WIRED = { ok: false, slug: null, at: null, durable: null, code: 'PLUGIN_STORE_NOT_WIRED' };
+
+/** The plugin this owner attached, or null. Cached for the length of a chat. */
+export async function readAttachedPlugin(owner) {
+  if (!store) return { ...NOT_WIRED };
+  if (!owner) return { ok: true, slug: null, at: null, durable: null };
+  const hit = cacheGet(owner);
+  if (hit) return { ok: true, slug: hit.slug, at: hit.at ?? null, durable: hit.durable ?? null, cached: true };
+  try {
+    const out = await store.read(String(owner));
+    const slug = out?.ok ? (out.slug || null) : null;
+    cacheSet(owner, { slug, at: out?.at ?? null, durable: out?.durable ?? null });
+    return { ok: Boolean(out?.ok), slug, at: out?.at ?? null, durable: out?.durable ?? null, code: out?.ok ? null : (out?.code || 'ATTACHMENT_READ_FAILED') };
+  } catch (err) {
+    return { ok: false, slug: null, at: null, durable: null, code: 'ATTACHMENT_READ_THREW', detail: String(err?.message || err).slice(0, 160) };
+  }
+}
+
+/**
+ * Attach a plugin to this owner, or detach with `agentId: null`.
+ *
+ * The write is the store's business (it validates the plugin against the
+ * catalog and registers the passport rows); this function's job is to keep the
+ * cache from serving the previous choice after the user changed it.
+ */
+export async function attachPluginForOwner(owner, agentId = null) {
+  if (!store) return { ok: false, code: 'PLUGIN_STORE_NOT_WIRED', durable: null };
+  if (!owner) return { ok: false, code: 'NO_OWNER', durable: null };
+  try {
+    const out = await store.write(String(owner), agentId ? String(agentId) : null);
+    attachCache.delete(String(owner));
+    if (out?.ok) cacheSet(owner, { slug: out.slug || null, at: Date.now(), durable: out.durable ?? null });
+    return { ok: Boolean(out?.ok), slug: out?.slug ?? null, durable: out?.durable ?? null, code: out?.ok ? null : (out?.code || 'ATTACHMENT_WRITE_FAILED'), detail: out?.detail ?? null };
+  } catch (err) {
+    attachCache.delete(String(owner));
+    return { ok: false, code: 'ATTACHMENT_WRITE_THREW', durable: null, detail: String(err?.message || err).slice(0, 160) };
+  }
+}
+
+/** The catalog with this owner's own state beside it: attached, trusted, real. */
+export async function listPluginsForOwner(owner) {
+  if (!store || typeof store.list !== 'function') return { ok: false, plugins: [], code: 'PLUGIN_STORE_NOT_WIRED' };
+  try {
+    const out = await store.list(owner ? String(owner) : null);
+    if (!out?.ok) return { ok: false, plugins: [], code: out?.code || 'PLUGIN_LIST_FAILED', durable: out?.durable ?? null };
+    attachCache.delete(String(owner || ''));
+    if (out.attached !== undefined) cacheSet(owner, { slug: out.attached || null, at: Date.now(), durable: out.durable ?? null });
+    return { ok: true, plugins: Array.isArray(out.plugins) ? out.plugins : [], attached: out.attached || null, durable: out.durable ?? null, registered: out.registered ?? null };
+  } catch (err) {
+    return { ok: false, plugins: [], code: 'PLUGIN_LIST_THREW', detail: String(err?.message || err).slice(0, 160) };
+  }
+}
+
+/**
  * Ask the first-party plugins whether one of them can answer this question.
  *
  * The contract is deliberately narrow: the bridge returns TEXT that is safe
@@ -102,7 +209,7 @@ export function hasPluginProvider() {
  * @returns {Promise<{ ok: true, text: string, slug: string, title: string, dataStatus: string, citations: any[], matched: string[] }
  *   | { ok: false, code: string, detail: string|null }>}
  */
-export async function consultPlugins({ message = '', locale = 'fa', owner = null, timeoutMs = PLUGIN_ATTACH_TIMEOUT_MS } = {}) {
+export async function consultPlugins({ message = '', locale = 'fa', owner = null, timeoutMs = PLUGIN_ATTACH_TIMEOUT_MS, agentId = null } = {}) {
   if (typeof provider !== 'function') {
     return {
       ok: false,
@@ -113,8 +220,17 @@ export async function consultPlugins({ message = '', locale = 'fa', owner = null
   const text = String(message || '').trim();
   if (!text) return { ok: false, code: 'EMPTY_QUESTION', detail: 'there is no question to attach a plugin to' };
   const budgetMs = Math.max(500, Math.min(PLUGIN_ATTACH_TIMEOUT_MS, Number(timeoutMs) || PLUGIN_ATTACH_TIMEOUT_MS));
+  /* Whose choice: this turn's explicit agent, else the one this owner attached
+     to themselves, else the matcher's guess. The order is the point — a stated
+     preference outranks a vocabulary match, and neither outranks the registry. */
+  let chosen = agentId ? String(agentId) : null;
+  let attachedBy = chosen ? 'turn' : null;
+  if (!chosen && owner && store) {
+    const attached = await readAttachedPlugin(owner);
+    if (attached?.slug) { chosen = attached.slug; attachedBy = 'owner'; }
+  }
   try {
-    const out = await provider({ message: text.slice(0, 400), locale, owner, timeoutMs: budgetMs });
+    const out = await provider({ message: text.slice(0, 400), locale, owner, timeoutMs: budgetMs, agentId: chosen });
     if (!out || typeof out !== 'object') {
       return { ok: false, code: 'PLUGIN_NO_ANSWER', detail: 'the plugin layer answered with nothing' };
     }
@@ -145,6 +261,7 @@ export async function consultPlugins({ message = '', locale = 'fa', owner = null
     return {
       ok: true,
       lead,
+      attachedBy,
       text: answer,
       slug: String(out.slug || 'plugin'),
       title: String(out.title || out.slug || 'plugin'),
@@ -161,4 +278,9 @@ export async function consultPlugins({ message = '', locale = 'fa', owner = null
   }
 }
 
-export default { PLUGIN_BRIDGE_SCHEMA, PLUGIN_ATTACH_TIMEOUT_MS, setPluginProvider, clearPluginProvider, hasPluginProvider, consultPlugins };
+export default {
+  PLUGIN_BRIDGE_SCHEMA, PLUGIN_ATTACH_TIMEOUT_MS,
+  setPluginProvider, clearPluginProvider, hasPluginProvider, consultPlugins,
+  setPluginAttachStore, hasPluginAttachStore, readAttachedPlugin, attachPluginForOwner,
+  listPluginsForOwner, clearAttachCache
+};
