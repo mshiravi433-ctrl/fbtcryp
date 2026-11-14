@@ -79,7 +79,16 @@ export function usePoll(fn, deps = [], intervalMs = 30000) {
   return { data, loading, error, updatedAt, refresh: run };
 }
 
-export const useGlobalStats = () => usePoll(() => getGlobal(), [], 45000);
+/**
+ * Market-wide totals. `enabled: false` mounts the poll in its "not yet" state —
+ * the same `null` convention `useMarkets(null)` uses — so a screen that has a
+ * use for these numbers only after the reader opens one tab can hold the
+ * request until then instead of paying for it on mount.
+ */
+export const useGlobalStats = (enabled = true) => {
+  const on = enabled !== false;
+  return usePoll(() => (on ? getGlobal() : Promise.resolve(null)), [on], 45000);
+};
 /*
  * Market data is fetched in the user's DISPLAY CURRENCY.
  *

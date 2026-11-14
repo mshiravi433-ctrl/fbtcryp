@@ -6,7 +6,7 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'rec
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import AnimatedNumber from '../components/AnimatedNumber';
-import { useChart, useCoin, useMarkets } from '../hooks/useMarket';
+import { useChart, useCoin, useGlobalStats, useMarkets } from '../hooks/useMarket';
 import { EVM_CHAINS } from '../lib/chains';
 import { swapTargetFor, swapUrlFor } from '../lib/coinToSwap';
 import { getCoinVenue, venueRoute } from '../lib/coinVenue';
@@ -37,7 +37,29 @@ const LazyCompare = lazyRetry(() => import('./Compare'));
  * other route chunk: one cache-busting retry, then the honest boundary.
  */
 const LazyTokenSmartMoney = lazyRetry(() => import('../components/TokenSmartMoney'));
-const DETAIL_TABS = ['trade', 'history', 'compare', 'smartMoney'];
+/*
+ * «دربارهٔ این توکن» — the identity panel. Lazy for the same reason as the two
+ * above, and for one more: its arithmetic is pure and cheap, so the ONLY cost
+ * this tab can ever add to a reader who does not open it is the bytes of a
+ * chunk that must never be downloaded. Behind `lazyRetry` it is not even a
+ * request until the tab is tapped.
+ */
+const LazyTokenIdentity = lazyRetry(() => import('../components/TokenIdentity'));
+/*
+ * ─── THE FIFTH TAB, AND WHY IT IS FIRST ────────────────────────────────────
+ * «چیست» comes before «چقدر»: a reader who has just found a token wants to know
+ * what it is before they want to trade it. So «شناسنامه» leads and the four
+ * existing tabs keep their order and their ids — every deep link, every stored
+ * selection and every test that names a tab still resolves to the same tab.
+ *
+ * ORDER IS NOT DEFAULT, and the difference is deliberate. The screen still
+ * LANDS on «خرید/فروش» (`useState('trade')` below), because landing on the
+ * identity tab would mount it on every visit and pull its chunk and its global
+ * poll for a reader who came to buy. First place in the strip is discoverable;
+ * first place in the landing state would cost every visitor the one thing this
+ * tab is designed not to cost. The tab is one tap away and free until tapped.
+ */
+const DETAIL_TABS = ['identity', 'trade', 'history', 'compare', 'smartMoney'];
 
 /**
  * Chain names for the resolved-venue line.
@@ -75,6 +97,7 @@ function DetailTabIcon({ name }) {
     stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round',
     'aria-hidden': true
   };
+  if (name === 'identity') return <svg {...common}><path d="M12 3.5c4.7 0 8.5 3.8 8.5 8.5s-3.8 8.5-8.5 8.5S3.5 16.7 3.5 12 7.3 3.5 12 3.5Z" /><path d="M12 11v6M12 7.6h.01" /></svg>;
   if (name === 'trade') return <svg {...common}><path d="M5 8h14l-3-3M19 8l-3 3" /><path d="M19 16H5l3 3m-3-3 3-3" /></svg>;
   if (name === 'history') return <svg {...common}><path d="M3.5 18.5 9 13l3.5 3.5L20.5 7" /><path d="M16 7h4.5v4.5M3.5 21h17" /></svg>;
   if (name === 'compare') return <svg {...common}><rect x="3.5" y="4.5" width="7" height="15" rx="2" /><rect x="13.5" y="4.5" width="7" height="15" rx="2" /><path d="M7 9h.01M17 15h.01" /></svg>;
@@ -164,6 +187,35 @@ export default function CoinDetail() {
    */
   const [chartMode, setChartMode] = useState('candle');
   const { data: ohlc, loading: ohlcLoading } = useOhlc(detailTab === 'trade' && chartMode === 'candle' ? id : null, range.days);
+  /*
+   * ─── THE ONLY REQUEST THE IDENTITY TAB ADDS, AND ONLY WHEN IT IS OPEN ─────
+   * Every other figure on that tab is arithmetic over the coin this page has
+   * already fetched. "How does the wider market move this token" needs the
+   * market's own numbers, which is `useGlobalStats` — the SAME 45 s poll the
+   * market screen runs, served from the same `resilient` memo when that screen
+   * is warm on another route.
+   *
+   * It is enabled by `mounted` state rather than by `detailTab`, and the two
+   * differ on purpose: a reader who has opened this tab once keeps its numbers
+   * when they switch to another tab and come back, instead of watching a
+   * spinner for a value they looked at a second ago. Nothing is polled before
+   * the tab has ever been opened — see `identitySeen` below.
+   */
+  const [identitySeen, setIdentitySeen] = useState(false);
+  useEffect(() => {
+    if (detailTab === 'identity') setIdentitySeen(true);
+  }, [detailTab]);
+  /* `enabled` is expressed through the project's own convention: a poll whose
+     argument is null resolves to null and never touches the network. */
+  const { data: globalStats } = useGlobalStats(identitySeen);
+  /* Bitcoin is the benchmark every reader already holds in their head, and it
+     is the token this identity panel compares against. It comes from the coin
+     fetch this page already runs when the page IS bitcoin, and otherwise from
+     the same memoised markets read the fallback uses. */
+  const bitcoin = useMemo(
+    () => (coins ?? []).find((c) => c?.id === 'bitcoin') ?? (String(id) === 'bitcoin' ? fetched ?? null : null),
+    [coins, fetched, id]
+  );
 
   const coinGeckoId = id;
   const realSwap = useMemo(() => swapTargetFor(coinGeckoId), [coinGeckoId]);
@@ -722,6 +774,26 @@ export default function CoinDetail() {
             <h2 className="coin-detail-pane-title">{t('coin.detailTabs.compare')}</h2>
             <Suspense fallback={<div className="card" style={{ minHeight: 220, display: 'grid', placeItems: 'center' }}><div className="spinner" /></div>}>
               <LazyCompare embedded initialA={id} initialB="ethereum" />
+            </Suspense>
+          </div>
+        )}
+
+        {detailTab === 'identity' && (
+          <div className="coin-identity-tab">
+            {/*
+              A card-height reserve so the tab does not jump when the chunk
+              lands — the same shape the Compare and Smart Money tabs use.
+              `global` and `bitcoin` are already on this page (the header reads
+              both); passing them here costs no request.
+            */}
+            <Suspense
+              fallback={(
+                <div className="card" data-testid="identity-lazy-fallback" style={{ minHeight: 240, display: 'grid', placeItems: 'center' }}>
+                  <div className="spinner" />
+                </div>
+              )}
+            >
+              <LazyTokenIdentity coin={coin} global={globalStats} bitcoin={bitcoin} />
             </Suspense>
           </div>
         )}
