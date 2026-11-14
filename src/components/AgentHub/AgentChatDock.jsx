@@ -29,9 +29,14 @@ import { internalHash, ResultView } from './AgentHubPanel.jsx';
 import NativeDataDisclosure from './NativeDataDisclosure.jsx';
 import CrossChainDesk from '../crosschain/CrossChainDesk.jsx';
 import '../../styles/agent-hub.css';
+import '../../styles/agent-hub-ai-trade.css';
 /* Clearing the agent in the browser must also clear the OWNER's attachment, or a
    turn from Telegram would keep talking to a plugin the user just dismissed. */
 import { armPluginWatch, detachPlugin, stopPluginWatch } from '../../lib/central/client.js';
+import {
+  queueTradeResearchForAiTrade,
+  tradeResearchFromTask
+} from '../../lib/hyperliquid/tradeResearch.js';
 
 /* Results live for this tab only. Not localStorage: a provider answer is
    session content, not a preference, and it can be long. */
@@ -183,6 +188,31 @@ function WatchOffer({ data = null, fa = false, agentId = null }) {
       </button>
       {note ? (
         <p className="agentchat-watch-note" data-kind={note.kind} data-testid="agent-chat-watch-note">{note.text}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function UseInAiTrade({ task, active, fa }) {
+  const [queued, setQueued] = useState(false);
+  const evidence = tradeResearchFromTask(task, active);
+  if (!evidence) return null;
+  return (
+    <div className="agentchat-use-ai-trade-wrap">
+      <button
+        type="button"
+        className="agentchat-swap-open agentchat-use-ai-trade"
+        data-testid="agent-chat-use-ai-trade"
+        onClick={() => setQueued(queueTradeResearchForAiTrade(evidence))}
+      >
+        {queued
+          ? (fa ? 'گزارش در نشست برای AI ترید آماده شد' : 'Report queued for AI Trade in this session')
+          : (fa ? 'افزودن گزارش زنده به تحلیل AI ترید' : 'Use this live report in AI Trade')}
+      </button>
+      {queued ? (
+        <p className="agentchat-watch-note" role="status" data-testid="agent-chat-ai-trade-queued">
+          {fa ? 'این گزارش فقط در حافظهٔ همین نشست می‌ماند؛ پیش از ارسال، باید انتخاب کنی در تحلیل استفاده شود.' : 'This report stays in this session only; choose whether to include it before analysis.'}
+        </p>
       ) : null}
     </div>
   );
@@ -359,7 +389,10 @@ export default function AgentChatDock({ fa = false, onOpenHub = null }) {
                       </button>
                     ) : null}
                     {message.task.result ? (
-                      <WatchOffer data={message.task.result.data} fa={fa} agentId={active.id} />
+                      <>
+                        <WatchOffer data={message.task.result.data} fa={fa} agentId={active.id} />
+                        <UseInAiTrade task={message.task} active={active} fa={fa} />
+                      </>
                     ) : null}
                     {message.task.errorCode ? (
                       <p className="agentchat-error">{message.task.safeErrorMessage || message.task.errorCode}</p>

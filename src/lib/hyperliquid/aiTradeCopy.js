@@ -146,6 +146,7 @@ export const AI_TRADE_COPY = Object.freeze({
     dropped: 'بعضی پیشنهادها به‌خاطر قوانین یا فرمت نامعتبر کنار گذاشته شدند.',
     errors: Object.freeze({
       AI_NOT_HTTPS: 'نشانی ارائه‌دهنده باید https باشد.',
+      AI_INVALID_ENDPOINT: 'نشانی ارائه‌دهنده نباید نام‌کاربری، گذرواژه، پارامتر نشانی یا بخش hash داشته باشد.',
       AI_NO_KEY: 'کلید AI وارد نشده است.',
       AI_NETWORK: 'اتصال به ارائه‌دهندهٔ AI برقرار نشد.',
       AI_HTTP_ERROR: 'ارائه‌دهندهٔ AI خطا برگرداند. کلید یا نام مدل را بررسی کن.',

@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { StrictMode } from 'react';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); takeQueuedTradeResearch(); });
 import AiTradePanel, { HoldButton } from '../src/components/AiTrade/AiTradePanel.jsx';
+import {
+  queueTradeResearchForAiTrade,
+  takeQueuedTradeResearch
+} from '../src/lib/hyperliquid/tradeResearch.js';
 
 describe('AI ترید tab: renders and navigates without errors', () => {
   it('shows six steps, one visible at a time, starting locked', () => {
@@ -60,6 +65,41 @@ describe('AI ترید tab: renders and navigates without errors', () => {
     expect(screen.getByText(/اول در مرحلهٔ «اتصال»/)).toBeTruthy();
     const analyze = screen.getByRole('button', { name: /تحلیل بازار/ });
     expect(analyze.disabled).toBe(true);
+  });
+
+  it('switches to Grok at the xAI endpoint and clears provider-scoped credentials', () => {
+    render(<AiTradePanel />);
+    fireEvent.click(screen.getByRole('tab', { name: /تحلیل و قوانین/ }));
+    fireEvent.change(screen.getByTestId('ai-trade-ai-key'), { target: { value: 'openai-key' } });
+    fireEvent.change(screen.getByTestId('ai-trade-model'), { target: { value: 'openai-model' } });
+    fireEvent.change(screen.getByTestId('ai-trade-provider'), { target: { value: 'grok' } });
+    expect(screen.getByTestId('ai-trade-ai-key').value).toBe('');
+    expect(screen.getByTestId('ai-trade-model').value).toBe('');
+    expect(screen.getByTestId('ai-trade-endpoint-preset').textContent).toContain('https://api.x.ai/v1/chat/completions');
+    expect(screen.getByRole('button', { name: /تحلیل بازار/ }).disabled).toBe(true);
+  });
+
+  it('receives queued first-party research and requires a per-run opt-in', () => {
+    const now = Date.now();
+    expect(queueTradeResearchForAiTrade({
+      schema: 'fbt.ai-trade.first-party-research.v1',
+      slug: 'smart-money-tracker',
+      title: 'گزارش جریان پول',
+      text: 'گزارش آزمایشی دادهٔ زنده',
+      citations: ['https://example.test/source'],
+      readAt: now,
+      dataStatus: 'live'
+    }, { now })).toBe(true);
+    render(<StrictMode><AiTradePanel /></StrictMode>);
+    fireEvent.click(screen.getByRole('tab', { name: /تحلیل و قوانین/ }));
+    expect(screen.getByTestId('ai-trade-research').textContent).toContain('گزارش آزمایشی دادهٔ زنده');
+    const include = screen.getByTestId('ai-trade-include-research');
+    expect(include.checked).toBe(false);
+    fireEvent.click(include);
+    expect(include.checked).toBe(true);
+    fireEvent.click(screen.getByTestId('ai-trade-clear-research'));
+    expect(screen.queryByTestId('ai-trade-research')).toBeNull();
+    expect(screen.getByTestId('ai-trade-research-empty')).toBeTruthy();
   });
 
   it('a quick tap on a hold button does not confirm', () => {

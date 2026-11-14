@@ -243,6 +243,17 @@ test('a plugin whose source did not answer is a named gap, not a headline', asyn
   } finally { restore(); }
 });
 
+test('a partial plugin read is a named gap, not an answer', async () => {
+  const report = '# تحلیل نیمه‌کاره\n- عدد: 42 (یک منبع از دسترس خارج شد)';
+  fakeAttach(report, { slug: 'token-research-agent', nameFa: 'پژوهشگر توکن', name: 'Token Research Agent', dataStatus: 'partial' });
+  try {
+    const r = await ask('درباره توکن UNI تحقیق کن');
+    assert.notEqual(r.intentType, 'PLUGIN_ANSWER', 'partial is not a publishable answer');
+    assert.equal(r.intent.pluginCode, 'PLUGIN_SOURCE_INCOMPLETE');
+    assert.ok(!r.allValues.includes('42'), 'a partial result must not publish its number');
+  } finally { restore(); }
+});
+
 test('a report of empty labels yields no headline at all, even when the plugin says it ran', async () => {
   /* The real token-research report in a network-less run: every value is «—»
      except one the plugin defaulted to +0.0% from ZERO candles. Both are

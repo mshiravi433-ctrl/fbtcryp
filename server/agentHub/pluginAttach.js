@@ -330,6 +330,7 @@ export function flattenPluginText(raw = '', { textWindow = PLUGIN_TEXT_WINDOW } 
    fact \u2014 so these statuses are named refusals instead. */
 const NOT_AN_ANSWER = Object.freeze({
   unavailable: 'PLUGIN_SOURCE_UNAVAILABLE',
+  partial: 'PLUGIN_SOURCE_INCOMPLETE',
   awaiting_input: 'PLUGIN_AWAITING_INPUT',
   error: 'PLUGIN_SOURCE_ERROR'
 });

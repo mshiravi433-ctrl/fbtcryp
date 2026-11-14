@@ -4486,3 +4486,137 @@ costume. Three council bodies also still coexist (`src/lib/central/council.js`
 analyst roles, `server/fios/agentCouncil.js` with the domain specialists, plus
 `getAdaptiveCouncil()` in the orchestrator routes), and each measures 0–1.5 ms,
 so the cost of consolidating them is a decision about meaning, not about CPU.
+
+#### 5.24.17 A first-party report can inform the AI desk, but cannot authorize it
+
+§5.24.14 made the eleven first-party agents callable from an otherwise-unrouted
+chat turn; §5.24.15 gave the user an active-agent choice; §5.24.16 made five of
+them watchable. None of those facts meant that an agent's report reached the
+separate AI Trade analyst. The user asked for the AI desk to connect to those
+capabilities and for a Grok connection. The measured code still had two
+separate holes: `AgentChatDock` kept its result only in the chat, and
+`aiClient.js` had one OpenAI-compatible endpoint with no named xAI provider.
+Neither gap was a reason to grant an agent order authority.
+
+**Measure first.** On the supported Node **24.22.3**, at `327e381` before this
+change:
+
+```
+  measure-boot-cost.mjs     194 ms wall / 218 ms CPU; 19 MB heap / 79 MB RSS
+                            36 modules, 36 module IDs
+  measure-turn-cost.mjs    344 ms wall; 2 mocked provider calls, 2 roles,
+                            2,397 prompt characters; ~300 estimated tokens
+```
+
+The turn probe is balanced and mocked; it made no real provider request. After
+the change, the same probes read **270 ms / 226 ms CPU; 19 MB / 78 MB RSS; the
+same 36 modules**, and **311 ms; the same two mocked calls, two roles, 2,397
+characters and ~300-token estimate**. Those one-shot wall/CPU differences are
+noise-sized and are not a production latency claim. The new research probe
+(`node scripts/measure-ai-trade-research.mjs`) makes no egress and measured a
+10,000-build batch at **1.40 µs CPU/build without a report** and **15.17 µs
+with the maximum report**. It caps the report at 2,200 characters and the
+citations at three HTTPS URLs of 200 characters each. In the max-size fixture,
+the user prompt grows by **3,010 characters**, about **377 tokens at the probe's
+8-characters/token estimate**. That is a bounded, model-dependent prompt cost,
+not a dollar quote; the selected model's tariff and a real account were not
+available to test.
+
+The pre-change full-build first-paint probe was **1,818.78 KB** of an **1,825 KB**
+budget. The build with this feature was **1,818.83 KB**: **+43 bytes**, still
+6.17 KB below the gate. The decision was upgrade, not remove: the server's
+mocked call count and normal turn input did not grow, the report projection is
+bounded, and the accepted added first-paint cost is far below a kilobyte.
+
+**The bridge is evidence, not an agent action.** A result gets a button only
+when all of these facts agree: the selected agent is native; the broker task is
+completed and names provider `fbt-native`; the task's own `agentId` names that
+same native slug; the result names the same slug; the result is `live`, is not
+waiting for input, and carries a real read timestamp no more than fifteen
+minutes old. An A2A/user agent, a partial read, an unavailable read, a failed
+run, an input question, a mismatched slug or a stale report produces no button.
+Citations are allow-listed to short HTTPS links, with credentials, query
+strings, fragments, private hosts, unsafe schemes and overlong links dropped.
+
+Choosing the button queues at most one small report in **module memory only**;
+it is not written to local storage or the server. The AI Trade page consumes
+that hand-off, shows the report and read time, and starts with its inclusion
+checkbox **off**. Checking it authorizes one analysis attempt only. The prompt
+boundary checks the schema and freshness again immediately before constructing
+the request; if it expired while account/market reads were in flight, no AI
+request is sent. A new result resets the checkbox. A lock clears both the report
+and the choice.
+
+The report is data inside the analyst's JSON context, not a system instruction.
+The system message labels notes and reports untrusted, restricts this desk to
+Hyperliquid perpetuals and tells the analyst it cannot execute. The existing
+proposal validator still allow-lists live, liquid Hyperliquid markets and the
+user's caps; the existing approval docket still requires the user to hold the
+specific order before the isolated Hyperliquid executor can sign it. There is
+no automatic order or stock-buy path added here.
+
+**Grok is a provider preset, not a pretend bot connection.** The analyst now
+offers OpenAI, xAI/Grok at `https://api.x.ai/v1/chat/completions`, and an
+explicit custom OpenAI-compatible endpoint. The API key remains BYOK in page
+memory and goes directly from the browser to the selected HTTPS endpoint; a
+provider switch clears the key and model so an OpenAI key cannot silently follow
+to Grok. The custom option says which endpoint receives the key; its URL rejects
+embedded credentials, query strings and fragments, and fetch rejects redirects.
+The model name is still chosen by the user. Offline contract tests prove the
+xAI request shape and endpoint, **not** that an xAI key, current model name,
+account entitlement, provider CORS policy or live response works. An external
+Grok/A2A bot is a different integration and is not what this preset claims to
+connect.
+
+**A partial answer stopped wearing a live badge.** The shared plugin attach used
+to publish only `unavailable`, `awaiting_input` and `error` as named gaps. A
+first-party source can return `partial`; the attach now reports
+`PLUGIN_SOURCE_INCOMPLETE` and publishes none of that report's figures. Its
+runtime gate includes a concrete partial report containing `42`, asserts the
+named code, and asserts that `42` is absent from every reply value.
+
+A second, related budget gate exposed an old leftover request: the Solana
+balance reader made four bounded RPCs (signatures, native SOL, legacy SPL and
+Token-2022), but `Promise.all` returned on the first failed SPL read while its
+sibling RPC was still pending. The timeout test had also still asserted the
+pre–Token-2022 count of three. The code now awaits `Promise.allSettled` for both
+SPL reads before returning; the corrected gate asserts all four signals abort.
+This preserves the 250 ms per-read floor and avoids returning while a sibling
+request is still alive.
+
+**Gates and non-vacuity.**
+
+* `npm run test:ai-trade`: **96 + 48 + 52 existing units, 11 new offline
+  bridge/provider gates, and 21 UI tests**, all green. The new cases reject
+  non-native identity, mismatched agent, non-live/partial/unavailable/input
+  states, stale/future timestamps, invalid citations, malformed research,
+  unstated opt-in and expired prompt input; they also exercise provider-key
+  clearing and a mocked xAI request.
+* `npm run test:agent-hub`: **125 Node tests + 129 API checks + 41 UI tests**, all
+  green, including the actual first-party task-result → chat button → in-memory
+  hand-off. `node --test test/intent-ai/plugin-attach-runtime.test.mjs`: **15/15**,
+  including the partial-read reply check.
+* Non-vacuity was checked by temporarily reverting the `partial` product status
+  mapping: the partial plugin gate failed as intended. Temporarily removing the
+  live-status check from the research projector likewise made its partial-result
+  gate fail. Product code was restored after each red run; both gates passed
+  again. The full Node 24 build and first-paint gate passed after restoration.
+
+`npm run build` completed on Node 24.22.3 (57.36 s), including
+`scripts/check-first-paint.mjs`; 6,622 modules transformed. The build still
+warns that `assetlinks.json` cannot be generated without `FBT_ANDROID_SHA256`;
+that pre-existing Android signing input is unrelated and the build remains
+successful. The build log also contains the repository's existing large-chunk
+and Vite dynamic/static import warnings.
+
+**What remains unclaimed.** The local fake-fetch xAI gate is not a live provider
+smoke test. The stock code inspected in this stage still routes tokenized
+Robinhood Chain/Solana xStocks buys through swaps; no conventional broker
+adapter was found, so nothing here places listed-stock orders. The AI Trade
+executor remains Hyperliquid-only and human-approved. The user has not yet
+clarified whether “Grok bot” means xAI as a model or an external A2A bot, or
+what “مل و وان” names. Nor does this slice wire every Smart Money, signal, swap,
+lending, insurance, wallet, launch and security surface into the trading prompt;
+it only lets a completed, fresh first-party agent report be offered as optional
+research. Those broader connectors need their own live-source, cost and
+execution gates before they can be called operational.
