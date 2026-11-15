@@ -82,6 +82,22 @@ import '../styles/market-surface.css';
  */
 import '../styles/market-benchmark.css';
 /*
+ * ─── THE REFINE PASS — REPORTS, THEN COLOUR ───────────────────────────────
+ * Three things a reader can see and one they feel, all measured before they
+ * were touched (see styles/market-refine.css):
+ *   · the white bar around every heatmap tile — a 1.5px frame that the light
+ *     theme turned 92% white, plus a white `outline` on hover;
+ *   · the sticky tab strip, whose z-index had no local stacking context to
+ *     resolve against;
+ *   · a colour system that had grown to SIX competing accents across five
+ *     passes, which is why the screen read busy rather than professional.
+ *
+ * It is imported here — after the benchmark pass, before the budget — because
+ * a token re-grade must be able to win the five design layers below it, and
+ * must still lose to the stop policy that decides what may move.
+ */
+import '../styles/market-refine.css';
+/*
  * ─── THE SCROLL BUDGET, LAST ──────────────────────────────────────────────
  * The five sheets above are the design layers (one per pass, each with its
  * own regression pins). This one is the stop policy: which ambient loops may
