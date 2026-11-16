@@ -321,3 +321,213 @@ test('the refine pass is imported once, after every design layer and before the 
   assert.ok(i > IMPORT_ORDER.indexOf('market-benchmark.css'), 'and the benchmark pass');
   assert.ok(i < IMPORT_ORDER.indexOf('market-perf.css'), 'and still lose to the stop policy');
 });
+
+/* ══ 4 · THE HEAT SCALE ═══════════════════════════════════════════════════ */
+
+/*
+ * MEASURED across the fourteen market sheets: 43 distinct greens and 32
+ * distinct reds. "Up" was 43 different colours depending on which design pass
+ * painted the element, which is why the screen never taught a reader what the
+ * colour MEANT.
+ *
+ * The scale is now defined once as eleven tokens per theme, and every consumer
+ * — tile, legend swatch, inspector — reads the same definition. These tests
+ * re-derive the properties that make it a scale rather than a palette, so a
+ * future re-grade fails here instead of shipping.
+ */
+const HEAT_TONES = ['flat', 'up-1', 'up-2', 'up-3', 'up-4', 'up-5', 'down-1', 'down-2', 'down-3', 'down-4', 'down-5'];
+const tokenKey = (tone) => (tone === 'flat' ? 'flat' : tone.startsWith('down') ? tone.replace('down-', 'dn') : tone.replace('up-', 'up'));
+
+const tokensFor = (tone, light) => {
+  const key = tokenKey(tone);
+  return {
+    a: resolve('.mx-market', `--hm-${key}-a`, { light })?.value,
+    b: resolve('.mx-market', `--hm-${key}-b`, { light })?.value,
+    ink: resolve('.mx-market', `--hm-${key}-ink`, { light })?.value
+  };
+};
+
+test('§4 · every one of the eleven stops is defined in BOTH themes', () => {
+  for (const light of [false, true]) {
+    for (const tone of HEAT_TONES) {
+      const { a, b, ink } = tokensFor(tone, light);
+      const where = `${tone} in the ${light ? 'light' : 'dark'} theme`;
+      assert.match(a ?? '', /^#[0-9a-f]{6}$/i, `${where}: start colour missing`);
+      assert.match(b ?? '', /^#[0-9a-f]{6}$/i, `${where}: end colour missing`);
+      assert.match(ink ?? '', /^#[0-9a-f]{6}$/i, `${where}: ink missing`);
+    }
+  }
+});
+
+test('§4 · the ink on every stop clears 4.5:1 against the WORST point of its own gradient', () => {
+  /* Worst point = whichever end of the two-stop gradient is closer to the ink.
+     In the dark theme that is the lighter end; in the light theme, the darker.
+     Measuring both and taking the minimum is the only way this cannot be
+     fooled by a gradient that is fine at one end. */
+  for (const light of [false, true]) {
+    for (const tone of HEAT_TONES) {
+      const { a, b, ink } = tokensFor(tone, light);
+      const worst = Math.min(contrast(ink, a), contrast(ink, b));
+      assert.ok(worst >= 4.5,
+        `${tone} (${light ? 'light' : 'dark'}): ink ${ink} on ${a}/${b} is ${worst.toFixed(2)}:1`);
+    }
+  }
+});
+
+test('§4 · each direction is a monotonic ramp with even steps', () => {
+  /*
+   * A ramp whose steps differ (1.06 then 1.19) reads as a change of hue
+   * halfway down rather than a change of intensity. The steps are compared as
+   * ratios of relative luminance so the check is perceptual, not arithmetic on
+   * hex digits.
+   *
+   * The direction of the ramp differs by theme on purpose: a dark tile gets
+   * LIGHTER as the move gets stronger, and a light tint gets DEEPER — both read
+   * as "more", which is the only reading a scale can carry.
+   */
+  for (const [light, expectRising] of [[false, true], [true, false]]) {
+    for (const dir of ['up', 'down']) {
+      const levels = [1, 2, 3, 4, 5].map((i) => luminance(tokensFor(`${dir}-${i}`, light).a));
+      const rising = levels.every((v, i) => i === 0 || v > levels[i - 1]);
+      const falling = levels.every((v, i) => i === 0 || v < levels[i - 1]);
+      assert.equal(rising || falling, true,
+        `${dir} in the ${light ? 'light' : 'dark'} theme is not monotonic: ${levels.map((v) => v.toFixed(3)).join(' -> ')}`);
+      if (expectRising) {
+        assert.equal(rising, true, `${dir} on a dark tile must get LIGHTER with magnitude`);
+      } else {
+        assert.equal(falling, true, `${dir} as a light tint must get DEEPER with magnitude`);
+      }
+
+      /* Every step must be big enough to see: a ratio under 1.06 is a ramp
+         nobody can read. */
+      const steps = levels.slice(1).map((v, i) => (levels[i] > v ? levels[i] / v : v / levels[i]));
+      for (const step of steps) {
+        assert.ok(step >= 1.06, `${dir}: a ramp step of ${step.toFixed(2)} is too small to read`);
+      }
+      /* And even enough that no step is more than double its neighbour's
+         magnitude — that is what makes it a scale instead of a gradient. */
+      const [lo, hi] = [Math.min(...steps), Math.max(...steps)];
+      assert.ok(hi / lo <= 1.5, `${dir}: uneven steps ${steps.map((s) => s.toFixed(2)).join(', ')}`);
+    }
+  }
+});
+
+test('§4 · a tile and its legend swatch read the SAME definition', () => {
+  /*
+   * They used to be separate rules with separate literals, so the legend could
+   * show a colour the grid never used. Both selectors now name the same token,
+   * which is the only arrangement where they cannot drift.
+   */
+  const css = strip(sheet());
+  for (const tone of HEAT_TONES) {
+    const key = tokenKey(tone);
+    const pattern = new RegExp(
+      `\\.mx-hm-tile\\[data-tone='${tone}'\\][^{]*\\{[^}]*var\\(--hm-${key}-a\\)`,
+      'm'
+    );
+    assert.match(css, pattern, `the tile for ${tone} must read --hm-${key}-a`);
+
+    /* And the swatch is in the same selector list, so it shares the rule. */
+    const block = css.slice(css.indexOf(`data-tone='${tone}'`));
+    assert.match(block.slice(0, 200), /mx-hm-scale-stops/,
+      `${tone}: the legend swatch must share the tile's rule, not restate it`);
+  }
+});
+
+test('§4 · the heat scale is the LAST word, in both themes', () => {
+  /* market-overview-phase2.css still declares its eleven literals; they must
+     lose, in both themes, or the old palette is still on screen. */
+  for (const light of [false, true]) {
+    for (const tone of ['up-5', 'down-5', 'flat']) {
+      const bg = resolve(`.mx-hm-tile[data-tone='${tone}']`, 'background', { light });
+      assert.equal(bg?.sheet, 'market-refine.css',
+        `${tone} (${light ? 'light' : 'dark'}): ${bg?.sheet} still wins the tile background`);
+      assert.match(bg.value, /var\(--hm-/, 'and it must be the token, not a literal');
+    }
+  }
+});
+
+test('§4 · the inline tokens are read by the sheet, so the gap and the tone agree', () => {
+  /* The gap in §1 is derived from --hm-*; the tone colours come from the
+     token scale. Both live on the same element, so a tile cannot have one
+     without the other. */
+  const jsx = readFileSync('src/components/market/MarketHeatmap.jsx', 'utf8');
+  assert.ok(jsx.includes('data-tone={tone}'), 'the tile must publish its tone');
+  for (const name of ['--hm-left', '--hm-top', '--hm-w', '--hm-h']) {
+    assert.ok(jsx.includes(`'${name}'`), `${name} must be published`);
+  }
+});
+
+/* ══ 5 · ONE UP, ONE DOWN ═════════════════════════════════════════════════ */
+
+/*
+ * MEASURED: fifteen readouts printed an "up" or "down" colour as a hard-coded
+ * literal, in six different greens — and two of them were applied in only ONE
+ * theme, so the same number changed colour when the reader switched theme.
+ * That, not an ugly hue, is what "the colours are not professional" means at
+ * the level a reader experiences it: the same fact in six inks.
+ */
+const READOUTS = [
+  // [selector inside .mx-market, property, direction]
+  [".mhb-pod-delta[data-tone='up']", 'color', 'up'],
+  [".mhb-pod-val [data-tone='up']", 'color', 'up'],
+  [".mhb-pod-delta[data-tone='down']", 'color', 'down'],
+  [".mx-hm-ins-delta[data-dir='up']", 'color', 'up'],
+  [".mx-hm-ins-delta[data-dir='down']", 'color', 'down'],
+  [".mx-net-status[data-status='online']", 'color', 'up'],
+  [".mx-p2-chip-toggle.is-on", 'color', 'up'],
+  ['.coin-change-pill.is-up', 'color', 'up'],
+  ['.coin-change-pill.is-down', 'color', 'down'],
+  ['.mhb-mini-bar .is-up', 'background', 'up'],
+  ['.mx-breadth-bar .is-up', 'background', 'up'],
+  ['.mx-breadth-bar .is-down', 'background', 'down']
+];
+
+test('§5 · every up/down readout reads the token, in BOTH themes', () => {
+  for (const light of [false, true]) {
+    for (const [selector, prop, dir] of READOUTS) {
+      const found = resolve(`.mx-market ${selector}`, prop, { light });
+      assert.ok(found, `${selector} ${prop} (${light ? 'light' : 'dark'}): nothing declares it`);
+      assert.equal(found.value, `var(--mx-${dir})`,
+        `${selector} ${prop} (${light ? 'light' : 'dark'}) is ${found.value} from ${found.sheet} — ` +
+        `a readout must read --mx-${dir}, not carry its own colour`);
+    }
+  }
+});
+
+test('§5 · the two directions are readable as text on every panel either theme uses', () => {
+  /*
+   * These are NUMBERS on a card — the most-read type on the screen. A token
+   * that is a beautiful green but 3:1 on its panel is a token that made the
+   * price harder to read, which is the opposite of the job.
+   */
+  for (const light of [false, true]) {
+    for (const panelToken of ['--mx-panel', '--mx-panel-2']) {
+      const panel = resolve('.mx-market', panelToken, { light }).value;
+      for (const dir of ['--mx-up', '--mx-down']) {
+        const value = resolve('.mx-market', dir, { light }).value;
+        const ratio = contrast(value, panel);
+        assert.ok(ratio >= 4.5,
+          `${dir} (${value}) on ${panelToken} (${panel}) in the ${light ? 'light' : 'dark'} theme is ${ratio.toFixed(2)}:1`);
+      }
+    }
+  }
+});
+
+test('§5 · the readout palette is three states, not eleven', () => {
+  /*
+   * The heat scale has eleven tones because a heatmap's job is magnitude. A
+   * readout has three states — up, down, unchanged — so it has exactly three
+   * colours. Keeping the two systems separate is what stops the next pass
+   * `"reusing" heat tones for text and re-introducing the problem.
+   */
+  const up = resolve('.mx-market', '--mx-up').value;
+  const down = resolve('.mx-market', '--mx-down').value;
+  assert.notEqual(up, down);
+  /* And neither is a heat-scale tone, or the two systems would have merged. */
+  for (const tone of HEAT_TONES) {
+    const { a } = tokensFor(tone, false);
+    assert.ok(a.toLowerCase() !== up.toLowerCase() && a.toLowerCase() !== down.toLowerCase(),
+      `${tone} reuses the readout colour ${a} — the two scales must stay separate`);
+  }
+});

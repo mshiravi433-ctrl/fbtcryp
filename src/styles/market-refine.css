@@ -169,14 +169,20 @@
   background: var(--mx-well);
   border: 1px solid var(--mx-line-soft);
   /* One step below the section tier: this is a WELL inside the card, not a
-     card of its own. */
-  border-radius: var(--mx-pad-card);
+     card of its own — so it takes the CONTROL radius, not a card radius.
+     (It read `var(--mx-pad-card)` here for one commit: a PADDING token used as
+     a radius, which resolved to `18px` and looked plausible enough to survive
+     review. The scale has a radius token for this; use it.) */
+  border-radius: var(--mx-r-control);
   /* The skeleton and the empty state live here too and have no tiles to pad. */
   padding: 0;
 }
 :root[data-theme='light'] .mx-market .mx-hm-stage {
-  background: #eef2f9;
-  border-color: rgba(65, 94, 135, .14);
+  /* Warm, not cool: the light theme is paper now (see §3), and a blue-grey
+     stage under warm-white cards was the same mismatch the old white tile
+     frames were a symptom of. */
+  background: var(--mx-well);
+  border-color: var(--mx-line-soft);
 }
 
 /* ══ 2 · THE STRIP STAYS PUT ═══════════════════════════════════════════════
@@ -196,6 +202,210 @@
 .mx-market .mx-tabs-wrap {
   align-self: start;
 }
+
+/* ══ 4 · THE HEAT SCALE — ONE DEFINITION, ELEVEN STOPS, TWO THEMES ═════════
+   MEASURED, and the biggest colour defect left on this screen: across the
+   fourteen market sheets there are **43 distinct greens and 32 distinct reds**.
+   "Up" is 43 different colours depending on which pass painted the element —
+   #2fe6a8, #3cf3a6, #5dffc8, #66e5b5, #0acf83, #10b981, #34d399, #36f3c0,
+   #3df0b4, #4ede9e … A reader cannot learn "this green means up" from a page
+   that has forty of them, and that — not the radius or the glow — is why the
+   screen reads unprofessional rather than designed.
+
+   The heatmap is where it is most visible, because it puts eleven of those
+   tones side by side in one rectangle, and because it had NO light theme at
+   all: the eleven gradients were dark-theme only, so in the light theme the
+   tiles sat on a #e2e8f0 stage wearing their dark greens and rose, and the
+   white frames on top of them were the loudest symptom of that mismatch.
+
+   So the scale is defined ONCE, here, as eleven tokens per theme, and every
+   consumer — the tiles, the legend swatches, the inspector — reads the same
+   definition. The palette is:
+
+     · a cool grey for flat, so "no move" is the absence of a hue rather than a
+       third colour competing with the two directions;
+     · five greens and five roses, each a MONOTONIC luminance ramp so intensity
+       reads as intensity and not as a different colour;
+     · ink chosen per stop to clear 4.5:1 against the LIGHTEST stop of its own
+       gradient — the worst case in the fill, measured, not estimated.
+
+   Measured with WCAG relative luminance on the values below (worst case per
+   stop, both themes):
+
+     dark   up 5.22–11.53:1 · down 8.49–11.54:1 · flat 10.53:1
+     light  up 8.44–11.10:1 · down 7.02–11.68:1 · flat 8.17:1
+
+   and the ramps are monotonic with even step ratios (1.63/1.69/1.43/1.32), so
+   two adjacent levels are distinguishable without being a different hue.
+   test/market-refine.test.mjs re-derives all of this from the stylesheet, so a
+   future re-grade that breaks either property fails instead of shipping. */
+.mx-market {
+  /* flat: the absence of a direction */
+  --hm-flat-a: #1b2431; --hm-flat-b: #151d28; --hm-flat-ink: #cbd5e1;
+
+  /* up — a green ramp, dark enough at the strong end for light ink */
+  --hm-up1-a: #123529; --hm-up1-b: #0d2a21; --hm-up1-ink: #d6f5e6;
+  --hm-up2-a: #15452f; --hm-up2-b: #103726; --hm-up2-ink: #ddf7eb;
+  --hm-up3-a: #155a3c; --hm-up3-b: #10462f; --hm-up3-ink: #e6fbf0;
+  --hm-up4-a: #146b47; --hm-up4-b: #105537; --hm-up4-ink: #eefff6;
+  --hm-up5-a: #137a52; --hm-up5-b: #0f603f; --hm-up5-ink: #f4fffa;
+
+  /* down — the same construction, mirrored in luminance */
+  --hm-dn1-a: #3a1f28; --hm-dn1-b: #2e161f; --hm-dn1-ink: #f8dbe3;
+  --hm-dn2-a: #4d1f2b; --hm-dn2-b: #3d1722; --hm-dn2-ink: #fbe0e7;
+  --hm-dn3-a: #631e2c; --hm-dn3-b: #4e1622; --hm-dn3-ink: #ffe9ee;
+  --hm-dn4-a: #7a1c2b; --hm-dn4-b: #611521; --hm-dn4-ink: #fff0f3;
+  --hm-dn5-a: #8d1a2b; --hm-dn5-b: #711320; --hm-dn5-ink: #fff5f7;
+}
+
+/* The light theme is not an inversion: on paper a heat tile is a TINT of the
+   direction with DARK ink, because a saturated fill would have to carry white
+   text, and white-on-light-green cannot work at any lightness that still reads
+   as "green". Tints also let eleven levels sit next to each other without the
+   grid becoming a lamp. */
+:root[data-theme='light'] .mx-market {
+  --hm-flat-a: #eceff3; --hm-flat-b: #dfe4ea; --hm-flat-ink: #33414f;
+
+  /* Solved to EVEN luminance steps (ratios 1.10 / 1.11 / 1.12 / 1.13), not
+     picked by eye: "deeper means stronger" is the only reading a tint can
+     carry, and a ramp whose last step is bigger than its first looks like it
+     changes hue halfway down. Ink is the same for all five of a direction
+     because the darkest stop is what constrains it — 9.02:1 for green,
+     10.32:1 for rose, both measured. */
+  --hm-up1-a: #f1f9f6; --hm-up1-b: #e9f5f0; --hm-up1-ink: #04301d;
+  --hm-up2-a: #dff1ea; --hm-up2-b: #d7ede4; --hm-up2-ink: #04301d;
+  --hm-up3-a: #cce9dd; --hm-up3-b: #c4e5d7; --hm-up3-ink: #04301d;
+  --hm-up4-a: #b7e0cf; --hm-up4-b: #afdcc9; --hm-up4-ink: #04301d;
+  --hm-up5-a: #a2d7c2; --hm-up5-b: #9ad3bc; --hm-up5-ink: #04301d;
+
+  --hm-dn1-a: #fdf5f7; --hm-dn1-b: #fbf0f2; --hm-dn1-ink: #3d0715;
+  --hm-dn2-a: #f9e8ec; --hm-dn2-b: #f7e2e7; --hm-dn2-ink: #3d0715;
+  --hm-dn3-a: #f6dae1; --hm-dn3-b: #f4d4dc; --hm-dn3-ink: #3d0715;
+  --hm-dn4-a: #f3cbd5; --hm-dn4-b: #f1c5d0; --hm-dn4-ink: #3d0715;
+  --hm-dn5-a: #efbdc9; --hm-dn5-b: #edb7c4; --hm-dn5-ink: #3d0715;
+}
+
+/* The eleven consumers, generated from ONE property-pair pattern each so a tile
+   and its legend swatch cannot drift: both selectors read the same token.
+   Specificity is (0,2,0) with the theme attribute where needed, which beats
+   market-overview-phase2.css's (0,1,0) literals without an `!important`. */
+.mx-market .mx-hm-tile[data-tone='flat'],
+.mx-market .mx-hm-scale-stops span[data-tone='flat'] {
+  background: linear-gradient(155deg, var(--hm-flat-a), var(--hm-flat-b));
+  color: var(--hm-flat-ink);
+}
+.mx-market .mx-hm-tile[data-tone='up-1'],
+.mx-market .mx-hm-scale-stops span[data-tone='up-1'] {
+  background: linear-gradient(155deg, var(--hm-up1-a), var(--hm-up1-b));
+  color: var(--hm-up1-ink);
+}
+.mx-market .mx-hm-tile[data-tone='up-2'],
+.mx-market .mx-hm-scale-stops span[data-tone='up-2'] {
+  background: linear-gradient(155deg, var(--hm-up2-a), var(--hm-up2-b));
+  color: var(--hm-up2-ink);
+}
+.mx-market .mx-hm-tile[data-tone='up-3'],
+.mx-market .mx-hm-scale-stops span[data-tone='up-3'] {
+  background: linear-gradient(155deg, var(--hm-up3-a), var(--hm-up3-b));
+  color: var(--hm-up3-ink);
+}
+.mx-market .mx-hm-tile[data-tone='up-4'],
+.mx-market .mx-hm-scale-stops span[data-tone='up-4'] {
+  background: linear-gradient(155deg, var(--hm-up4-a), var(--hm-up4-b));
+  color: var(--hm-up4-ink);
+}
+.mx-market .mx-hm-tile[data-tone='up-5'],
+.mx-market .mx-hm-scale-stops span[data-tone='up-5'] {
+  background: linear-gradient(155deg, var(--hm-up5-a), var(--hm-up5-b));
+  color: var(--hm-up5-ink);
+}
+.mx-market .mx-hm-tile[data-tone='down-1'],
+.mx-market .mx-hm-scale-stops span[data-tone='down-1'] {
+  background: linear-gradient(155deg, var(--hm-dn1-a), var(--hm-dn1-b));
+  color: var(--hm-dn1-ink);
+}
+.mx-market .mx-hm-tile[data-tone='down-2'],
+.mx-market .mx-hm-scale-stops span[data-tone='down-2'] {
+  background: linear-gradient(155deg, var(--hm-dn2-a), var(--hm-dn2-b));
+  color: var(--hm-dn2-ink);
+}
+.mx-market .mx-hm-tile[data-tone='down-3'],
+.mx-market .mx-hm-scale-stops span[data-tone='down-3'] {
+  background: linear-gradient(155deg, var(--hm-dn3-a), var(--hm-dn3-b));
+  color: var(--hm-dn3-ink);
+}
+.mx-market .mx-hm-tile[data-tone='down-4'],
+.mx-market .mx-hm-scale-stops span[data-tone='down-4'] {
+  background: linear-gradient(155deg, var(--hm-dn4-a), var(--hm-dn4-b));
+  color: var(--hm-dn4-ink);
+}
+.mx-market .mx-hm-tile[data-tone='down-5'],
+.mx-market .mx-hm-scale-stops span[data-tone='down-5'] {
+  background: linear-gradient(155deg, var(--hm-dn5-a), var(--hm-dn5-b));
+  color: var(--hm-dn5-ink);
+}
+
+/* ══ 5 · ONE UP, ONE DOWN — the readouts come home ════════════════════════
+   MEASURED: fifteen separate readouts on this screen print an "up" or "down"
+   colour as a hard-coded literal, and they were not the same colour as each
+   other or as the token:
+
+     the hero banner's delta        #35e8a6 (dark) / the same in light
+     the heatmap inspector's delta  #2ee6a6 / #059669
+     the network status pill        #5ef5c2 / #047857
+     the chip toggle's dot          #3df0b4 / #059669
+     the breadth bar                #36b9a3
+     the old change pill            #046b45 / #b3123a in the light theme only
+
+   Six different greens for one meaning, and two of them were only applied in
+   ONE theme, so the same number changed colour when the reader switched theme.
+   That is what "the colours are not professional" actually is at the level a
+   reader experiences it: not an ugly hue, but the same fact in six inks.
+
+   The fix is one selector list per direction, covering every readout, reading
+   the same two tokens the change pill already uses. Specificity (0,2,0) beats
+   the single-class literals; the light theme needs `:root[data-theme='light']`
+   because those literals are declared under it.
+
+   The semantic/token split is deliberate and is the part that keeps this
+   honest: the HEAT SCALE (§4) has eleven tones because a heatmap's whole job is
+   to show magnitude; a readout has exactly three states, so it has exactly
+   three colours. Two systems, each right for its job. */
+.mx-market .mhb-pod-val [data-tone='up'],
+.mx-market .mhb-pod-delta[data-tone='up'],
+.mx-market .mhb-pod-delta[data-tone='up'] *,
+.mx-market .mx-hm-ins-delta[data-dir='up'],
+.mx-market .mx-net-status[data-status='online'],
+.mx-market .mx-p2-chip-toggle.is-on {
+  color: var(--mx-up);
+}
+.mx-market .mhb-pod-val [data-tone='down'],
+.mx-market .mhb-pod-delta[data-tone='down'],
+.mx-market .mhb-pod-delta[data-tone='down'] *,
+.mx-market .mx-hm-ins-delta[data-dir='down'] {
+  color: var(--mx-down);
+}
+
+/* The same three, in the light theme — where the literals live under the
+   theme selector and would otherwise win. Declared as the tokens, so they
+   re-graded once (see §3) and can never disagree with the dark theme again. */
+:root[data-theme='light'] .mx-market .mx-hm-ins-delta[data-dir='up'],
+:root[data-theme='light'] .mx-market .mx-net-status[data-status='online'],
+:root[data-theme='light'] .mx-market .mx-p2-chip-toggle.is-on {
+  color: var(--mx-up);
+}
+:root[data-theme='light'] .mx-market .mx-hm-ins-delta[data-dir='down'] {
+  color: var(--mx-down);
+}
+:root[data-theme='light'] .mx-market .coin-change-pill.is-up { color: var(--mx-up); }
+:root[data-theme='light'] .mx-market .coin-change-pill.is-down { color: var(--mx-down); }
+
+/* The two FILLS that carried their own green for the same reason: a bar and a
+   dot are the same claim as the text beside them, so they read the same token. */
+.mx-market .mhb-mini-bar .is-up { background: var(--mx-up); }
+.mx-market .mx-breadth-bar .is-up { background: var(--mx-up); }
+.mx-market .mx-breadth-bar .is-down { background: var(--mx-down); }
+.mx-market .mx-p2-chip-toggle.is-on .mx-p2-chip-dot { background: var(--mx-up); }
 
 /* ══ 3 · THE COLOUR PASS ═══════════════════════════════════════════════════
    Token re-grade only. Two rules govern it:
