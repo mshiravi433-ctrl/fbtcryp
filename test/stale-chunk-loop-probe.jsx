@@ -437,6 +437,120 @@ export async function run(container) {
     );
   }
 
+  /* ───── 10. the in-document budget: how many downloads one route gets ───── */
+  /*
+   * «فقط صفحهٔ هوش مصنوعی ارور میده… برنامه خودش یک‌بار رفرش شد تا نسخهٔ جدید را
+   * بگیرد، ولی فایل‌های این صفحه دوباره دانلود نشد».
+   *
+   * /intent is the heaviest route chunk in the build, so a link that drops for
+   * a second costs the route its FIRST download — and the first failure of a
+   * document is answered by a whole-document reload. These assertions pin the
+   * cheap layer that has to come first: more than one in-document attempt, each
+   * on a specifier the module map has never seen, and every attempt counted
+   * rather than assumed.
+   */
+  {
+    const loadFailure = () => Object.assign(new Error(CHUNK_MESSAGE), { name: 'ChunkLoadError' });
+
+    const neverImports = async () => {
+      throw loadFailure();
+    };
+
+    const tried = [];
+    const flaky = (failures) => async (url) => {
+      tried.push(url);
+      if (tried.length <= failures) throw loadFailure();
+      return { default: 'module' };
+    };
+
+    const recovered = await retryImport(neverImports, { load: flaky(1), delay: 0 })();
+    t('a dropped chunk download is retried inside the same document', recovered?.default === 'module');
+    /*
+     * TWO loads, one failed and one that answered: the point is that the second
+     * one was a REAL request rather than a replay of the module map's cached
+     * rejection, which is only true when the specifier is new.
+     */
+    t('...on a specifier the module map has never seen',
+      tried.length === 2 && tried.every((u) => /[?&]t=\d+/.test(u)) && tried[0] !== tried[1]);
+
+    const used = [];
+    const doomed = async (url) => {
+      used.push(url);
+      throw loadFailure();
+    };
+    let gaveUp = null;
+    try {
+      await retryImport(neverImports, { load: doomed, delay: 0 })();
+    } catch (error) {
+      gaveUp = error;
+    }
+    t('a route gets THREE downloads before the boundary reloads', used.length === 2);
+    t('...each with its own cache-buster, never a replayed rejection',
+      used.length === 2 && used[0] !== used[1] && used.every((u) => /[?&]t=\d+/.test(u)));
+    t('...and the failure that reaches the boundary is the load failure itself',
+      gaveUp?.name === 'ChunkLoadError');
+
+    /*
+     * save-data is a promise to the user about their data bundle, not a hint.
+     * Re-downloading a megabyte three times over a link they asked us to be
+     * careful with is the wrong place to spend resilience.
+     */
+    let saved = null;
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(navigator, 'connection');
+      Object.defineProperty(navigator, 'connection', { value: { saveData: true }, configurable: true });
+      const throttled = [];
+      const budgeted = async (url) => {
+        throttled.push(url);
+        throw loadFailure();
+      };
+      try {
+        await retryImport(neverImports, { load: budgeted, delay: 0 })();
+      } catch { /* the assertion is the count, not the rejection */ }
+      saved = throttled.length;
+      if (descriptor) Object.defineProperty(navigator, 'connection', descriptor);
+      else delete navigator.connection;
+    } catch {
+      /* a runtime without `navigator`: the default budget above is the answer */
+    }
+    t('save-data gets the short budget, not the full one', saved === 1);
+  }
+
+  /* ───────── 11. the reload itself cannot be answered by a cache ─────────── */
+  {
+    const boundary = readFileSync('src/components/RouteBoundary.jsx', 'utf8');
+    /*
+     * `location.reload()` asks for the address the tab is already on, and our
+     * own service worker is allowed to answer a navigation from its cached
+     * shell when the network request dies — which is precisely how a reload
+     * lands back in the document whose chunk names were deleted by the deploy.
+     * A timestamped URL is the only reload no cache can serve.
+     */
+    t('the automatic reload is a cache-busted URL, not a bare reload',
+      /searchParams\.set\(RELOAD_PARAM/.test(boundary) && /fbt_reload/.test(boundary));
+    t('...that keeps the hash, so the app lands on the route that failed',
+      /url\.hash = ''/.test(boundary) && /\+ hash/.test(boundary));
+    t('...and replaces rather than pushes, so Back cannot return to the crash',
+      /location\.replace\(reloadHref\(\)\)/.test(boundary));
+    t('...with the marker stripped once the new document boots',
+      /stripReloadMarker/.test(boundary) && /replaceState/.test(boundary));
+
+    /*
+     * The 33 MB on-device model is not part of the document being replaced.
+     * public/sw.js has its own rule for this; the boundary must not undo it.
+     */
+    t('the shell eviction leaves the on-device model buckets alone',
+      /fbt-kronos-/.test(boundary) && !/keys\.map\(\(k\) => caches\.delete\(k\)\)/.test(boundary));
+
+    const sw = readFileSync('public/sw.js', 'utf8');
+    t('the shell cache name moved on, so a pinned device evicts the old one',
+      /const SHELL = 'fbt-shell-v34'/.test(sw));
+    t('...a navigation is fetched past the HTTP cache',
+      /fetch\(request, \{ cache: 'reload' \}\)/.test(sw));
+    t('...and the install-time shell is fetched the same way, not `addAll`',
+      /cache: 'reload'/.test(sw) && !/c\.addAll\(\['\/', '\/index\.html'\]\)/.test(sw));
+  }
+
   window.sessionStorage?.removeItem('fbt:chunk-reload');
   console.error = realError;
   return out;
