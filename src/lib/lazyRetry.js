@@ -59,8 +59,44 @@ import { lazy } from 'react';
  * Order matters: retry here first, reload only if retrying also fails.
  */
 
-/** Delay between attempts. Short, because a person is waiting on this. */
+/**
+ * Delay between attempts. Short, because a person is waiting on this.
+ *
+ * It MULTIPLIES by the attempt number, so the second retry waits 700ms rather
+ * than 350: a chunk that failed twice in a row is not failing for a reason a
+ * third immediate request can beat, and two attempts 350ms apart are close
+ * enough together to sit inside the same five-second hole in a mobile link.
+ */
 const RETRY_DELAY_MS = 350;
+
+/**
+ * How many times the import is attempted IN TOTAL, for one route.
+ *
+ * This used to be two (the import, then one cache-busted retry), and the report
+ * that ended that is «فقط صفحهٔ هوش مصنوعی ارور میده… برنامه خودش یک‌بار رفرش
+ * شد تا نسخهٔ جدید را بگیرد، ولی فایل‌های این صفحه دوباره دانلود نشد». /intent is
+ * the heaviest route chunk in the build (≈1.4 MB of JS plus its own stylesheet),
+ * which makes it the first page to lose a download to a link that drops for a
+ * second — and the FIRST failure of a document is what RouteBoundary answers
+ * with a whole-document reload. One more attempt inside the document is far
+ * cheaper than that reload, and it is the only attempt a tab with no
+ * connectivity can make without losing its state.
+ */
+const ATTEMPTS = 3;
+
+/**
+ * Attempts, unthrottled. On `saveData` the page is opened over a link the user
+ * has already told us to be careful with, and re-downloading a megabyte three
+ * times is somebody's data bundle; two attempts still covers the single drop
+ * that causes most of these.
+ */
+function attemptsFor() {
+  try {
+    return navigator?.connection?.saveData ? 2 : ATTEMPTS;
+  } catch {
+    return ATTEMPTS;
+  }
+}
 
 /**
  * Is this the "module did not load" family, as opposed to a genuine crash
@@ -119,7 +155,11 @@ function urlFromError(error) {
  * @param {number} [opts.delay]
  */
 export function retryImport(importer, opts = {}) {
-  const { load = (u) => import(/* @vite-ignore */ u), delay = RETRY_DELAY_MS } = opts;
+  const {
+    load = (u) => import(/* @vite-ignore */ u),
+    delay = RETRY_DELAY_MS,
+    attempts = attemptsFor()
+  } = opts;
 
   return async () => {
     try {
@@ -133,21 +173,42 @@ export function retryImport(importer, opts = {}) {
       if (!isLoadFailure(error)) throw error;
 
       const url = urlFromError(error);
-      if (!url) {
-        await new Promise((r) => setTimeout(r, delay));
-        return importer();
-      }
 
       /*
-       * A timestamp, not a fixed marker. A fixed `?retry=1` would itself be
-       * cached after its first failure, so the second incident in the same
-       * session would replay a cached rejection again — reintroducing the
-       * exact bug one layer down.
+       * Every attempt gets a DIFFERENT specifier, for the reason in the header:
+       * the module map replays a rejection per URL, so a retry that reuses the
+       * last attempt's URL is a guaranteed instant failure. That includes a
+       * retry whose own URL carries an older timestamp — hence a fresh
+       * `Date.now()` per attempt rather than once before the loop.
+       *
+       * A timestamp, not a fixed marker: `?retry=1` would itself be cached
+       * after its first failure, so the second incident in the same session
+       * would replay a cached rejection again — the exact bug, one layer down.
        */
-      url.searchParams.set('t', String(Date.now()));
+      const total = Math.max(1, Number(attempts) || 1);
+      let lastError = error;
 
-      await new Promise((r) => setTimeout(r, delay));
-      return load(url.href);
+      for (let attempt = 1; attempt < total; attempt += 1) {
+        await new Promise((r) => setTimeout(r, delay * attempt));
+        try {
+          /*
+           * Safari's wording sometimes has no URL to rewrite, and then the only
+           * thing left to try is the original importer. It will usually hit the
+           * poisoned entry and reject fast, which is not useless: the loop
+           * still gives RouteBoundary a clean rejection instead of hanging.
+           */
+          if (!url) return await importer();
+          const busted = new URL(url.href);
+          busted.searchParams.set('t', String(Date.now()));
+          return await load(busted.href);
+        } catch (next) {
+          /* A real crash stays a real crash, on the first attempt or the third. */
+          if (!isLoadFailure(next)) throw next;
+          lastError = next;
+        }
+      }
+
+      throw lastError;
     }
   };
 }

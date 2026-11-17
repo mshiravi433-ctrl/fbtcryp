@@ -586,6 +586,26 @@ function isWorkersAIReasoningModel(model) {
   return /deepseek-r1/i.test(id) || /qwen3\.8-27b/i.test(id);
 }
 
+/**
+ * Workers AI's reasoning enum, and the one member this module may send.
+ *
+ * Cloudflare documents `low | medium | xhigh` for its reasoning models — and
+ * its API rejects anything else outright:
+ *
+ *   HTTP 400 "Unexpected reasoning effort high. Supported types are xhigh
+ *   (default), medium, and low."
+ *
+ * `high` is not a member. The module used to send it, because every other
+ * vendor spells the deepest effort `high`, so the field that was supposed to
+ * make the free seat smarter took that seat down on EVERY call — the exact
+ * failure the narrow matcher above was written to prevent, hiding one spelling
+ * mistake further down. `xhigh` is the vendor's own name for the deepest
+ * setting and is also its default, so asking for it adds no risk: it is the
+ * maximum, never an unsupported value.
+ */
+const WORKERS_AI_REASONING_EFFORT = 'xhigh';
+export const WORKERS_AI_REASONING_EFFORTS = Object.freeze(['low', 'medium', 'xhigh']);
+
 function isAnthropicThinkingModel(model) {
   /* Claude 4.x and later run extended thinking; the 3.x family does not. */
   return /claude-(sonnet|opus|haiku)-(?:[4-9]|\d{2,})/i.test(String(model || '')) && !/claude-3/i.test(String(model || ''));
@@ -632,7 +652,10 @@ export function intelligenceReasoningFields(providerId, mode, model) {
   if (id === 'openrouterfree' && (isGatewayReasoningModel(m) || isFreeTierReasoningModel(m))) {
     return { reasoning: { effort: 'high' } };
   }
-  if (id === 'workersai' && isWorkersAIReasoningModel(m)) return { reasoning_effort: 'high' };
+  /* `xhigh`, never `high`: see WORKERS_AI_REASONING_EFFORT. */
+  if (id === 'workersai' && isWorkersAIReasoningModel(m)) {
+    return { reasoning_effort: WORKERS_AI_REASONING_EFFORT };
+  }
   return {};
 }
 

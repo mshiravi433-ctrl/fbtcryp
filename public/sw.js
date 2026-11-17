@@ -282,7 +282,26 @@
  * buckets themselves (`fbt-kronos-*`) are NOT part of the shell and must
  * survive this eviction — wiping a 33 MB verified download on every shell
  * bump would make the next forecast look like a failed download. */
-const SHELL = 'fbt-shell-v33';
+/* v33 -> v34 (2026-11-11): «فقط صفحهٔ هوش مصنوعی ارور میده… برنامه خودش یک‌بار
+ * رفرش شد تا نسخهٔ جدید را بگیرد، ولی فایل‌های این صفحه دوباره دانلود نشد»
+ * (/intent, «بعد از یک بار تازه‌سازی هم بالا نیامد»).
+ *
+ * Two separate holes in THIS file produced that sentence, and both are about
+ * the document a reload is answered with:
+ *   1. the install-time shell was stored with a plain `fetch`, so a shell that
+ *      the HTTP cache still held could be written into a BRAND NEW cache name —
+ *      the version bump looked done while the bytes underneath it were the old
+ *      index.html, whose chunk names the current deployment no longer serves.
+ *      It is now fetched with `cache: 'reload'`, i.e. from the network;
+ *   2. a navigation was answered by `fetch(request)` with the default cache
+ *      mode, so a revalidation the browser was entitled to satisfy locally
+ *      could hand back the same document the failed tab was already running.
+ *      Navigations now go out with `cache: 'reload'` too: one real request per
+ *      navigation is the price of never reloading INTO the stale shell.
+ * The recovery code that triggers that reload lives in the shell bundle, so a
+ * device pinned to the v33 shell keeps the old one; renaming evicts it. The
+ * model buckets (`fbt-kronos-*`) stay untouched, as above. */
+const SHELL = 'fbt-shell-v34';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────
@@ -310,9 +329,30 @@ function cachePolicyFor(route) {
   };
 }
 
+/*
+ * ─── THE SHELL MUST BE THE SHELL THIS WORKER BELONGS TO ──────────────────────
+ * `cache.addAll(['/', '/index.html'])` looks like "store the current shell" and
+ * is not: `addAll` fetches with the default cache mode, and `/` is served with
+ * `must-revalidate`, so a browser that had the file locally was free to
+ * revalidate it with the request it already had. A bump then creates a fresh
+ * cache name and fills it with the OLD document — the version moved, the bytes
+ * did not, and the tab that reloads into it asks for chunk names the current
+ * deployment no longer serves. That is the «فایل‌های این صفحه دوباره دانلود
+ * نشد» screen on /intent, with the fix already deployed.
+ *
+ * `cache: 'reload'` forces the round trip and still updates the HTTP cache, so
+ * this is one network document per worker install — the only moment where the
+ * answer has to be current.
+ */
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(SHELL).then((c) => c.addAll(['/', '/index.html']).catch(() => {}))
+    Promise.all(['/', '/index.html'].map((path) =>
+      fetch(new Request(path, { cache: 'reload' }))
+        .then((res) => (res && res.ok && res.type === 'basic' && !res.redirected
+          ? caches.open(SHELL).then((c) => c.put(path, res))
+          : null))
+        .catch(() => {})
+    ))
   );
   self.skipWaiting();
 });
@@ -359,8 +399,17 @@ self.addEventListener('fetch', (event) => {
    */
   const policy = cachePolicyFor(url.pathname);
 
+  /*
+   * ─── ONE REAL REQUEST PER NAVIGATION ────────────────────────────────────────
+   * `fetch(request)` inherits the request's cache mode, which for a reload is
+   * "may revalidate" — a 304 is a valid answer and the bytes are the ones the
+   * broken tab already had. The whole point of this handler is to give a
+   * reloading client the CURRENT document, so the one thing it may not do is
+   * answer with the one the client asked to leave behind. `cache: 'reload'`
+   * makes the browser go to the network and refresh its own copy on the way.
+   */
   event.respondWith(
-    fetch(request)
+    fetch(request, { cache: 'reload' })
       .then((res) => {
         if (policy.cacheable && res && res.ok && res.type === 'basic' && !res.redirected) {
           const copy = res.clone();

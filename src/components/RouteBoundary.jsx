@@ -106,13 +106,65 @@ import { releaseAllScrollLocks } from '../lib/scrollLock';
  * is a prop with a real default. Production passes nothing and gets a genuine
  * reload; the probe passes a counter and can assert it fires exactly once.
  */
+/**
+ * The query key that makes a reload a DIFFERENT URL.
+ *
+ * `location.reload()` is a request for the address the tab is already on, and
+ * every cache between here and the server is entitled to answer it with what it
+ * already has: the HTTP cache (the document is `must-revalidate`, so its answer
+ * may be "not modified"), and — the one that matters on a phone — our own
+ * service worker, whose navigation handler falls back to the cached shell when
+ * the network request dies. That fallback is correct on its own terms, and it
+ * is exactly what makes an automatic reload land back in the document whose
+ * chunk names no longer exist.
+ *
+ * A reload therefore carries a timestamp: a URL no cache has ever seen, which
+ * obliges a real round trip and a CURRENT index.html. It is removed from the
+ * address bar on the next boot (see stripReloadMarker), so the marker is never
+ * a URL the user has to look at or share.
+ */
+const RELOAD_PARAM = 'fbt_reload';
+
+/** This document's address, hash intact, with a fresh reload marker on it. */
+function reloadHref() {
+  const url = new URL(window.location.href);
+  const { hash } = url;
+  url.hash = '';
+  url.searchParams.set(RELOAD_PARAM, String(Date.now()));
+  return url.href + hash;
+}
+
 const defaultReload = () => {
   try {
-    window.location.reload();
+    /*
+     * `replace`, not `assign`: the failed document must not stay in the history
+     * stack, or Back walks the user into the crash they just escaped.
+     */
+    window.location.replace(reloadHref());
   } catch {
-    /* nothing further we can do */
+    try {
+      window.location.reload();
+    } catch {
+      /* nothing further we can do */
+    }
   }
 };
+
+/*
+ * Put the address bar back the moment the reloaded document boots. Runs at
+ * module scope because it has to be earlier than any route work: the marker is
+ * a transport detail, and a user who copies the URL must not copy it.
+ */
+(function stripReloadMarker() {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(RELOAD_PARAM)) return;
+    url.searchParams.delete(RELOAD_PARAM);
+    window.history.replaceState(window.history.state, '', url.href);
+  } catch {
+    /* no history API (or an opaque origin): the marker is harmless, keep going */
+  }
+})();
 
 /**
  * Recognise the "chunk did not load" family across browsers.
@@ -288,7 +340,21 @@ function currentRoute() {
  */
 function evictStaleShell() {
   try {
-    caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))).catch(() => {});
+    /*
+     * Everything EXCEPT the on-device model buckets. `fbt-kronos-*` holds a
+     * verified multi-megabyte download that has nothing to do with the document
+     * being replaced — the rule public/sw.js states for its own evictions — and
+     * dropping it here would turn one stale chunk into a re-download of the
+     * forecast model.
+     */
+    caches
+      .keys()
+      .then((keys) => Promise.all(
+        keys
+          .filter((k) => !String(k).startsWith('fbt-kronos-'))
+          .map((k) => caches.delete(k))
+      ))
+      .catch(() => {});
   } catch {
     /* no Cache Storage (older WebKit, some WebViews); the reload is still worth doing */
   }
@@ -495,7 +561,12 @@ export default class RouteBoundary extends React.Component {
                  * the old boot error unrecoverable.
                  */
                 window.location.hash = '#/';
-                window.location.reload();
+                /*
+                 * The same cache-busted reload the automatic path uses: a
+                 * plain one can be answered by the very shell that produced
+                 * this screen, and then the way out is the way back in.
+                 */
+                defaultReload();
               }}
             >
               {t('crash.goHome')}
