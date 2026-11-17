@@ -91,7 +91,13 @@ test('unconfigured Collective reports run-deployment and never claims a live cha
   assert.equal(payload.schema, COLLECTIVE_ACTIVATION_SCHEMA);
   assert.equal(payload.deployment.configured, false);
   assert.equal(payload.deployment.nextStep, 'run-deployment');
-  assert.equal(payload.deployment.command.includes('phase=deploy'), true);
+  /* The deployment phase carries the NETWORK it deploys to: a testnet config
+     runs `testnet-deploy`, mainnet runs `deploy`. The assertion is about the
+     payload handing the operator a runnable command at all, and about that
+     command being honest that the deploy spends gas — hard-coding the mainnet
+     spelling made this test red the moment the default chain became a testnet. */
+  assert.match(payload.deployment.command, /-f phase=(?:testnet-)?deploy\b/);
+  assert.match(payload.deployment.command, /acknowledge_gas=yes/);
   assert.equal(payload.deployment.liveDeployment, null);
   assert.equal(payload.pipeline.state, 'never-run');
   assert.equal(payload.pipeline.workflow, 'collective-activation.yml');
