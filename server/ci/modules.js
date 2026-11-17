@@ -23,14 +23,79 @@
 import { CAPABILITY, PERMISSION } from '../../src/lib/central/schema.js';
 import {
   analyzeConcentration, analyzeExposure, assessLendingSafety, computeBorrowCapacity,
-  goalFeasibility, scanOpportunities, simulateShock, realizedVolatilityPct, correlate
+  goalFeasibility, readGoalInputs, scanOpportunities, simulateShock, realizedVolatilityPct, correlate
 } from '../../src/lib/central/analysis.js';
 import { assessRisk } from '../../src/lib/central/risk.js';
 import { defineModule } from '../../src/lib/central/registry.js';
 import { ciSource, healthSnapshot, chainIdFor } from './sources.js';
+import { hasGlobalIntelProvider, readGlobalIntel } from './globalIntelBridge.js';
+import { hasFitProvider, readFit } from './fitBridge.js';
+import { hasMacroGraphProvider, readMacroGraph } from './fitBridge.js';
+import { hasScenarioProvider, readScenarios } from './fitBridge.js';
+import { hasRouteProvider, readRouteCandidates } from './routeBridge.js';
+import { hasWhyProvider, explainWhy, buildBrainDecisionBundle } from './whyBridge.js';
 import { storeGet, storeSet, storeDurable, EPHEMERAL_TTL_MS } from '../store.js';
 import { createGoal, getGoal, validateGoalInput, FINANCIAL_GOAL_LIMITATIONS } from '../financialGoals.js';
 import { randomUUID, createHash } from 'node:crypto';
+
+/*
+ * ─── THE MULTI-VENUE ENGINE, LAZILY (2026-11-12) ────────────────────────
+ *
+ * The brain's `PROFIT_PLAN` intent answered from the brain's OWN state:
+ * the portfolio, the goals and the risk section. Sixteen multi-venue
+ * phases (101–116) sat in the boot path, dark, and were never consulted
+ * by anything the user can reach — `server/multiVenue.js` was imported by
+ * `server/app.js` and `server/financialGoals.js` and by nothing else.
+ *
+ * So the user could ask «برنامه سودم چیه؟» and get a derivation from
+ * local state while a real venue engine — dYdX, perps, yields, Avantis
+ * equities — sat idle, already paid for.
+ *
+ * The engine is now reachable from the brain. It is imported LAZILY, on
+ * the first call, because:
+ *
+ *   • the adapters make NETWORK calls, so an eager import would pay the
+ *     connection setup on every cold start for a question nobody asked;
+ *   • the module graph is already loaded by the boot path, so the import
+ *     itself costs nothing — only the call does.
+ *
+ * The planner is a SYNTHESIS, never a replacement: the brain's own
+ * concentration/exposure/opportunity numbers stay authoritative, and the
+ * venue allocation is added as the thing the brain could not compute —
+ * where to put the money across venues that the user can actually reach.
+ */
+let multiVenueEngine = null;
+const loadMultiVenueEngine = async () => {
+  if (!multiVenueEngine) {
+    multiVenueEngine = await import('../multiVenue.js');
+  }
+  return multiVenueEngine;
+};
+
+/**
+ * The venues this deployment can actually reach.
+ *
+ * This is the engine's own answer, taken verbatim — the brain does not
+ * re-derive it, because the engine knows which feeds answered and which
+ * did not, and that distinction is the whole point.
+ */
+const multiVenueStatus = async () => {
+  try {
+    const engine = await loadMultiVenueEngine();
+    const feeds = await engine.collectVenueFeeds();
+    return {
+      venues: {
+        health: feeds.health,
+        reasons: feeds.reasons,
+        sources: feeds.sources
+      },
+      generatedAt: feeds.generatedAt
+    };
+  } catch {
+    /* An unavailable engine is an honest answer, not a failure. */
+    return null;
+  }
+};
 
 const NA = (reason) => ({ na: true, reason });
 const ok = (status, data, extra = {}) => ({ status, data, at: Date.now(), source: data?.source || extra.source || null, ...extra });
@@ -757,6 +822,422 @@ export function createModules(ctx = {}) {
     recover: async () => ({ status: 'RECOVERED', data: { strategy: 'SERVE_STALE_WITH_FLAG: one dead desk must not empty the feed' } })
   });
 
+  /* ── global intelligence (the bridge to the Financial Intelligence OS) ── */
+  /*
+   * The brain's own `signals` module is a price computation: an SMA cross
+   * and a realized volatility over 30 days of closes. It is NOT smart
+   * money.
+   *
+   * Smart money — paired-swap consensus, whale transfers, net flow,
+   * accumulation vs distribution, the macro graph, the cross-asset view —
+   * lives in `server/fios/` (50 files, 980 KB) and the brain could not
+   * reach any of it. A user who asked «پول هوشمند کجاست؟» got
+   * UNSUPPORTED while a working engine sat there.
+   *
+   * The module has NO state section: the global snapshot is per-owner and
+   * is read through the bridge, not stored in the state store. That is
+   * deliberate — a shared snapshot across two users would be a privacy
+   * bug, and the state store is exactly the place that gets shared.
+   */
+  const globalIntel = defineModule({
+    id: 'global-intel', name: 'Global intelligence', capability: CAPABILITY.AVAILABLE,
+    state: ['globalIntel'], tools: ['global.read'], events: ['GLOBAL_SNAPSHOT_READ'],
+    errors: ['PROVIDER_NOT_WIRED', 'NO_GLOBAL_SNAPSHOT', 'GLOBAL_INTEL_FAILED'],
+    permissions: { max: PERMISSION.READ },
+    fallback: ['the last snapshot this owner read, labelled stale'],
+    getState: async () => ok('OK', null),
+    healthCheck: async () => (hasGlobalIntelProvider()
+      ? { status: 'HEALTHY', detail: 'the financial intelligence OS is mounted and can read the global domains' }
+      : { status: 'UNKNOWN', detail: 'the financial intelligence OS is not mounted in this process' }),
+    capabilities: async () => ({
+      operations: ['read'],
+      executes: false,
+      reason: 'global intelligence is read-only; every money move still goes through the wallet'
+    }),
+    read: async (input = {}, readCtx = {}) => {
+      const out = await readGlobalIntel(readCtx.owner || owner, { refresh: input.refresh === true });
+      if (!out.ok) return unavailable(out.code, { detail: out.detail });
+      const snapshot = out.snapshot;
+      const domains = snapshot.domains || {};
+      /* Only the domains that actually answered are carried forward, each
+         with its own status. A domain that could not be read is named as
+         such — the brain must be able to say WHICH one failed. */
+      const readable = {};
+      const failed = {};
+      for (const [name, row] of Object.entries(domains)) {
+        if (row && row.status === 'OK') readable[name] = row;
+        else failed[name] = row?.reason || row?.status || 'UNAVAILABLE';
+      }
+      return ok(Object.keys(readable).length ? 'OK' : 'PARTIAL', {
+        status: snapshot.status || 'PARTIAL',
+        at: snapshot.at || null,
+        domains: readable,
+        failed,
+        coverage: snapshot.coverage ?? null,
+        providers: snapshot.providers ?? null
+      }, { source: 'global-intelligence-engine' });
+    },
+    quote: NA('a global snapshot has no price'), prepare: NA('a global snapshot is not a transaction'), simulate: NA('the global engines simulate their own scenarios'), execute: NA('the brain never acts on a global snapshot'), verify: NA('verifying a global snapshot means reading it again'),
+    recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the global domains are re-read on demand; there is nothing to recover' } })
+  });
+
+
+  /* ── opportunity fit (the bridge to the Financial Intelligence OS) ──── */
+  /*
+   * The brain could answer "which of these pays the most" (the yield
+   * surface) but not "which of these suits ME" — and the second question
+   * is the one a person actually asks about their own money.
+   *
+   * The fit engine lives in `server/fios/opportunityFit.js`: it scores an
+   * opportunity against the owner's risk profile, capital, liquidity need
+   * and goal, and answers FITTED / CONDITIONAL / NOT_FITTED with a reason
+   * for every dimension. It existed and was unreachable.
+   *
+   * Like `global-intel`, it has NO state section: the ranking is built
+   * per-owner from the owner's own profile and capital, so it must never
+   * sit in a shared state store.
+   */
+  const opportunityFit = defineModule({
+    id: 'opportunity-fit', name: 'Opportunity fit', capability: CAPABILITY.AVAILABLE,
+    state: ['opportunityFit'], tools: ['fit.read'], events: ['FIT_RANKING_READ'],
+    errors: ['PROVIDER_NOT_WIRED', 'NO_FIT', 'FIT_FAILED', 'NO_TRADITIONAL_OPPORTUNITIES'],
+    permissions: { max: PERMISSION.READ },
+    fallback: ['the last ranking this owner read, labelled stale'],
+    getState: async () => ok('OK', null),
+    healthCheck: async () => (hasFitProvider()
+      ? { status: 'HEALTHY', detail: 'the fit engine is mounted and can rank opportunities for this owner' }
+      : { status: 'UNKNOWN', detail: 'the fit engine is not mounted in this process' }),
+    capabilities: async () => ({
+      operations: ['read'],
+      executes: false,
+      reason: 'a fit ranking is advice, not a transaction; every money move still goes through the wallet'
+    }),
+    read: async (input = {}, readCtx = {}) => {
+      const out = await readFit(readCtx.owner || owner, {
+        goal: input.goal || null,
+        financial: input.financial || null
+      });
+      if (!out.ok) return unavailable(out.code, { detail: out.detail });
+      const fit = out.fit;
+      /* The engine reports its own failure with `ok:false` and a code. That
+         is a real answer — "no readable cross-asset feed this pass" — and
+         it is passed through with its code so the brain can say WHY
+         there is no ranking instead of inventing one. */
+      if (fit && fit.ok === false) {
+        return unavailable(fit.code || 'NO_FIT', { detail: fit.detail || null });
+      }
+      const ranked = Array.isArray(fit?.result?.ranked) ? fit.result.ranked : [];
+      return ok(ranked.length ? 'OK' : 'PARTIAL', {
+        status: fit?.status || (ranked.length ? 'OK' : 'PARTIAL'),
+        ranked: ranked.slice(0, 10),
+        count: ranked.length,
+        coverage: fit?.result?.coverage ?? null,
+        riskTolerance: fit?.result?.riskTolerance ?? null,
+        capitalUsd: fit?.result?.capitalUsd ?? null
+      }, { source: 'fit-engine' });
+    },
+    quote: NA('a fit ranking has no price'), prepare: NA('a fit ranking is not a transaction'), simulate: NA('the fit engine allocates its own scenarios'), execute: NA('the brain never acts on a fit ranking'), verify: NA('verifying a fit ranking means reading it again'),
+    recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the ranking is rebuilt on demand from the owner profile and the live feed' } })
+  });
+
+  /* ── macro graph (the regime) ─────────────────────────────────────────── */
+  /*
+   * The macro graph is not a price list. It is the REGIME: the global
+   * snapshot, the world model and the portfolio read together, with the
+   * transmission edges between them — which is what a market overview
+   * is missing when it only quotes breadth and the top movers.
+   *
+   * The engine (server/fios/macroGraph.js) existed and was unreachable.
+   *
+   * Like the other two bridges, it has no state section of its own — the
+   * graph is built per-owner from that owner's portfolio — and it is
+   * reached through the same lazy one-slot bridge, so `fios` stays off
+   * the boot path.
+   */
+  const macroGraph = defineModule({
+    id: 'macro-graph', name: 'Macro graph', capability: CAPABILITY.AVAILABLE,
+    state: ['macroGraph'], tools: ['macro.read'], events: ['MACRO_GRAPH_READ'],
+    errors: ['PROVIDER_NOT_WIRED', 'NO_MACRO_GRAPH', 'MACRO_GRAPH_FAILED'],
+    permissions: { max: PERMISSION.READ },
+    fallback: ['the last graph this owner read, labelled stale'],
+    getState: async () => ok('OK', null),
+    healthCheck: async () => (hasMacroGraphProvider()
+      ? { status: 'HEALTHY', detail: 'the macro graph is mounted and can build the regime for this owner' }
+      : { status: 'UNKNOWN', detail: 'the macro graph is not mounted in this process' }),
+    capabilities: async () => ({
+      operations: ['read'],
+      executes: false,
+      reason: 'the macro graph describes the regime; it never moves money'
+    }),
+    read: async (input = {}, readCtx = {}) => {
+      const out = await readMacroGraph(readCtx.owner || owner, { refresh: input.refresh === true });
+      if (!out.ok) return unavailable(out.code, { detail: out.detail });
+      const graph = out.graph?.graph || out.graph || null;
+      if (!graph || typeof graph !== 'object') {
+        return unavailable('NO_MACRO_GRAPH', { detail: 'the macro graph answered with no graph' });
+      }
+      return ok('OK', {
+        at: graph.at ?? null,
+        nodes: Array.isArray(graph.nodes) ? graph.nodes.slice(0, 12) : [],
+        edges: Array.isArray(graph.edges) ? graph.edges.slice(0, 12) : [],
+        coverage: graph.coverage ?? null,
+        portfolioRiskImpulse: graph.portfolioRiskImpulse ?? null,
+        impulse: graph.impulse ?? null,
+        pressure: graph.pressure ?? null,
+        whyRiskier: out.graph?.whyRiskier ?? null,
+        whyPortfolioRiskier: out.graph?.whyPortfolioRiskier ?? null,
+        estimate: graph.estimate === true
+      }, { source: 'macro-graph-engine' });
+    },
+    quote: NA('a macro graph has no price'), prepare: NA('a macro graph is not a transaction'), simulate: NA('the macro graph models its own scenarios'), execute: NA('the brain never acts on a macro graph'), verify: NA('verifying a macro graph means building it again'),
+    recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the graph is rebuilt on demand from the global snapshot, the world model and the portfolio' } })
+  });
+
+  /* ── goal scenarios (the three profiles for a target) ────────────────── */
+  /*
+   * The brain's `goals.simulate` computes a feasibility figure: can this
+   * target be reached? The scenario engine is the other half — what the
+   * path LOOKS like, and how likely each version of it is to arrive.
+   *
+   * It builds three profiles (conservative, balanced, aggressive), each
+   * with its allocation, expected value, max drawdown, probability of
+   * loss and probability of halving, plus the percentiles of a modelled
+   * distribution. When the capital is unreadable it refuses to model
+   * anything: "a scenario needs real capital; nothing was modelled and
+   * nothing was guessed".
+   *
+   * That refusal is the most valuable thing about it, and it travels
+   * with the answer.
+   */
+  const goalScenarios = defineModule({
+    id: 'goal-scenarios', name: 'Goal scenarios', capability: CAPABILITY.AVAILABLE,
+    state: ['goalScenarios'], tools: ['scenarios.read'], events: ['GOAL_SCENARIOS_READ'],
+    errors: ['PROVIDER_NOT_WIRED', 'NO_SCENARIOS', 'SCENARIOS_FAILED', 'NO_STARTING_CAPITAL'],
+    permissions: { max: PERMISSION.READ },
+    fallback: ['the last scenarios this owner read, labelled stale'],
+    getState: async () => ok('OK', null),
+    healthCheck: async () => (hasScenarioProvider()
+      ? { status: 'HEALTHY', detail: 'the scenario engine is mounted and can build the profiles for this owner' }
+      : { status: 'UNKNOWN', detail: 'the scenario engine is not mounted in this process' }),
+    capabilities: async () => ({
+      operations: ['read'],
+      executes: false,
+      reason: 'a scenario is a model, not a transaction; it moves nothing'
+    }),
+    read: async (input = {}, readCtx = {}) => {
+      const out = await readScenarios(readCtx.owner || owner, {
+        goal: input.goal || null,
+        financial: input.financial || null,
+        liveYieldPct: input.liveYieldPct ?? null
+      });
+      if (!out.ok) return unavailable(out.code, { detail: out.detail });
+      const sc = out.scenarios;
+      const scenarios = Array.isArray(sc.scenarios) ? sc.scenarios : [];
+      return ok(scenarios.length ? 'OK' : 'PARTIAL', {
+        at: sc.at ?? null,
+        startUsd: sc.startUsd ?? null,
+        months: sc.months ?? null,
+        targetUsd: sc.targetUsd ?? null,
+        monthlyContributionUsd: sc.monthlyContributionUsd ?? null,
+        scenarios: scenarios.slice(0, 5),
+        recommended: sc.recommended ?? null,
+        whatIfs: Array.isArray(sc.whatIfs) ? sc.whatIfs.slice(0, 5) : [],
+        multiClass: sc.multiClass ?? null,
+        estimate: sc.estimate === true,
+        note: sc.note ?? null
+      }, { source: 'goal-scenarios-engine' });
+    },
+    quote: NA('a scenario has no price'), prepare: NA('a scenario is not a transaction'), simulate: NA('the scenario engine models its own profiles'), execute: NA('the brain never acts on a scenario'), verify: NA('verifying a scenario means building it again'),
+    recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the profiles are rebuilt on demand from the goal and the real capital' } })
+  });
+
+  /*
+   * THE ROUTE INTELLIGENCE MODULE (path 14).
+   *
+   * The engine in `server/fios/routeIntelligence.js` was complete and dark.
+   * It ranks candidate routes across five dimensions — cost, liquidity
+   * impact, time in flight, historical success and bridge risk — and it
+   * refuses to invent a dimension it could not read. But it had no
+   * customers, because it deliberately does not dial providers itself: it
+   * waits for candidate routes.
+   *
+   * This module supplies the candidates from the deployment's LIVE route
+   * provider — the same LI.FI endpoint the wallet's own route list uses —
+   * and then ranks them in the engine.
+   *
+   * Two things it refuses to do, and both matter:
+   *
+   *   · it does NOT rank an empty candidate list. With no routes there is
+   *     no ranking, and the module says the transfer was never specified
+   *     rather than inventing a «best route»;
+   *   · it does NOT execute. The ranking is advisory; the execution path
+   *     re-quotes with a real address and keeps its own gates.
+   */
+  const routeIntelligence = defineModule({
+    id: 'route-intelligence', name: 'Route intelligence', capability: CAPABILITY.AVAILABLE,
+    state: ['routeIntelligence'], tools: ['routes.read'], events: ['ROUTE_INTELLIGENCE_READ'],
+    errors: [
+      'ROUTE_PROVIDER_NOT_WIRED', 'ROUTE_PROVIDER_BAD_RESULT', 'ROUTE_SOURCE_FAILED',
+      'ROUTE_SOURCE_UNAVAILABLE', 'ROUTE_REQUEST_INCOMPLETE', 'ROUTE_QUOTE_FAILED',
+      'NO_ROUTE', 'NO_CANDIDATE_ROUTES'
+    ],
+    permissions: { max: PERMISSION.READ },
+    fallback: ['the last route ranking this owner read, labelled stale'],
+    getState: async () => ok('OK', null),
+    healthCheck: async () => (hasRouteProvider()
+      ? { status: 'HEALTHY', detail: 'the live route source is mounted and the ranking engine can rank its candidates' }
+      : { status: 'UNKNOWN', detail: 'the live route source is not mounted in this process' }),
+    capabilities: async () => ({
+      operations: ['read'],
+      executes: false,
+      reason: 'a route ranking is advice; the execution path re-quotes with a real address and keeps its own gates'
+    }),
+    read: async (input = {}, readCtx = {}) => {
+      /*
+       * WHERE THE ROUTE REQUEST COMES FROM.
+       *
+       * A route ranking needs CANDIDATES, and the candidates need a
+       * transfer to plan: a source chain, a destination chain, both
+       * tokens and an amount. The engine cannot invent any of them —
+       * a route for a transfer nobody described is a route for nothing.
+       *
+       * So the request has to arrive from the surface that knows it.
+       * There are two ways it can, and both are read here:
+       *
+       *   · `input.request` — the direct call, used by the bridge and
+       *     by the tests that drive it;
+       *   · `context.routeRequest` — the TURN's context, which is where
+       *     the browser's cross-chain panel publishes the transfer the
+       *     user is actually looking at.
+       *
+       * The second one is what makes the engine reachable at runtime.
+       * Without it the module read always arrived with no request, and
+       * every route question answered ROUTE_REQUEST_INCOMPLETE — the
+       * capability present in the code and absent in the answer.
+       */
+      const request = input.request
+        || readCtx?.context?.routeRequest
+        || input;
+      const out = await readRouteCandidates(readCtx.owner || owner, { request });
+      if (!out.ok) return unavailable(out.code, { detail: out.detail, request: out.request || null });
+      /*
+       * The ranking itself lives in the engine, and the engine is reached
+       * through the FIOs bridge — the brain never imports `server/fios/*`
+       * directly, because that file is on the cold-start path of every
+       * serverless instance.
+       */
+      let ranked = null;
+      try {
+        const { routeIntelligenceFor } = await import('./routeBridge.js');
+        ranked = await routeIntelligenceFor(readCtx.owner || owner, {
+          request: out.request || request,
+          routes: out.routes
+        });
+      } catch (err) {
+        return unavailable('ROUTE_RANKING_FAILED', {
+          detail: String(err?.message || err).slice(0, 200) || null,
+          routeCount: out.routes.length
+        });
+      }
+      if (!ranked?.ok) {
+        return unavailable(ranked?.code || 'ROUTE_RANKING_FAILED', {
+          detail: ranked?.detail || null,
+          routeCount: out.routes.length
+        });
+      }
+      const ri = ranked.result;
+      return ok(ri.bestRoute ? 'OK' : 'PARTIAL', {
+        at: ri.at ?? null,
+        source: out.source || null,
+        request: ri.request || null,
+        routeCount: ri.routeCount ?? out.routes.length,
+        bestRoute: ri.bestRoute || null,
+        bestRouteReasons: ri.bestRouteReasons || [],
+        ranked: (ri.ranked || []).slice(0, 6),
+        rejected: (ri.rejected || []).slice(0, 6),
+        unranked: (ri.unranked || []).slice(0, 6),
+        executionPermission: false,
+        estimate: true,
+        note: ri.note || null
+      }, { source: 'route-intelligence-engine' });
+    },
+    quote: NA('the route ranking is built on a quote, not a price for one'),
+    prepare: NA('a route ranking moves nothing'),
+    simulate: NA('the provider already priced the crossing; simulating it would be a second estimate'),
+    execute: NA('the brain never executes a route ranking; the execution path re-quotes with a real address'),
+    verify: NA('verifying a route ranking means re-quoting it'),
+    recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the candidates are re-quoted from the live provider on the next turn' } })
+  });
+
+  /*
+   * THE WHY-DECISION MODULE (path 15).
+   *
+   * The why engine answers the question every assistant is eventually
+   * asked — «چرا این را گفتی؟» — with five why-lines (asset, network,
+   * now, amount, strategy), four named falsifiers and the invalidation
+   * conditions. It was dark because it expected a decision record from
+   * the FIOs decision engine, and the central brain does not use that
+   * engine: the brain has its OWN decision, built from its own findings.
+   *
+   * So this module builds the bundle in the engine's vocabulary from the
+   * brain's own artefacts, and the rule is absolute — every number in
+   * the bundle came from a finding the brain actually read. A finding
+   * that could not be read leaves the corresponding line absent, and the
+   * engine renders it as «unread» rather than as a zero.
+   *
+   * It refuses to explain a decision that does not exist. That refusal
+   * is the valuable part: an explanation of nothing is a plausible
+   * sentence with no number in it, which is exactly what §25 forbids.
+   */
+  const whyDecision = defineModule({
+    id: 'why-decision', name: 'Why decision', capability: CAPABILITY.AVAILABLE,
+    state: ['whyDecision'], tools: ['why.read'], events: ['WHY_DECISION_READ'],
+    errors: ['WHY_PROVIDER_NOT_WIRED', 'WHY_PROVIDER_BAD_RESULT', 'WHY_FAILED', 'NO_DECISION'],
+    permissions: { max: PERMISSION.READ },
+    fallback: ['the last why block this owner read, labelled stale'],
+    getState: async () => ok('OK', null),
+    healthCheck: async () => (hasWhyProvider()
+      ? { status: 'HEALTHY', detail: 'the why engine is mounted and can explain this owner’s own decision' }
+      : { status: 'UNKNOWN', detail: 'the why engine is not mounted in this process' }),
+    capabilities: async () => ({
+      operations: ['read'],
+      executes: false,
+      reason: 'an explanation executes nothing; it only says why'
+    }),
+    read: async (input = {}, readCtx = {}) => {
+      const built = buildBrainDecisionBundle({
+        recommendation: input.recommendation || null,
+        findings: Array.isArray(input.findings) ? input.findings : [],
+        risk: input.risk || null,
+        state: input.state || null,
+        routeIntelligence: input.routeIntelligence || null,
+        macroGraph: input.macroGraph || null,
+        simulation: input.simulation || null,
+        preferences: input.preferences || null,
+        goal: input.goal || null
+      });
+      if (!built.ok) return unavailable(built.code, { detail: built.detail });
+      const out = await explainWhy(readCtx.owner || owner, built.bundle);
+      if (!out.ok) return unavailable(out.code, { detail: out.detail });
+      const why = out.why || {};
+      return ok('OK', {
+        at: why.at ?? null,
+        decisionId: why.decisionId ?? null,
+        why: why.why || null,
+        invalidationConditions: why.invalidationConditions || [],
+        falsifiers: why.falsifiers || [],
+        nextReviewAt: why.nextReviewAt ?? null,
+        reviewWindowDays: why.reviewWindowDays ?? null,
+        confidence: why.confidence ?? null,
+        estimate: why.estimate === true,
+        note: why.note || null
+      }, { source: 'why-engine' });
+    },
+    quote: NA('an explanation has no price'), prepare: NA('an explanation is not prepared'), simulate: NA('the engine models the falsifiers itself'),
+    execute: NA('an explanation executes nothing'), verify: NA('verifying an explanation means rebuilding the decision'),
+    recover: async () => ({ status: 'NOT_RECOVERABLE', data: { strategy: 'the explanation is rebuilt from the decision that stands now' } })
+  });
+
   const events = defineModule({
     id: 'events', name: 'Event bus', capability: CAPABILITY.AVAILABLE,
     state: ['events'], tools: ['events.recent', 'events.subscribe'], events: [],
@@ -840,11 +1321,29 @@ export function createModules(ctx = {}) {
     },
     simulate: async (input = {}) => {
       const portfolio = readState('portfolio');
+      /*
+       * «برای رسیدن به آن چه برنامه‌ای دارم» asks about the goal that
+       * ALREADY EXISTS, so the plan is computed from the stored goal
+       * when the caller named none.
+       *
+       * Before this, the simulate step received no input, so the target
+       * was null and the answer was `NO_GOAL_DATA` — the user had a
+       * goal, asked for the plan, and got nothing. The goal is in the
+       * state; the plan has to read it.
+       */
+      const goals = readState('goals');
+      const stored = Array.isArray(goals?.goals) ? goals.goals[0] : (goals?.goal || null);
+      const storedTarget = stored?.targetAmount ?? stored?.targetUsd ?? null;
+      const storedDate = stored?.targetDate ?? (stored?.durationMonths
+        ? Date.now() + Number(stored.durationMonths) * 30 * 24 * 3600_000
+        : null);
+      const storedContribution = stored?.monthlyContribution ?? stored?.contributionMonthly ?? null;
+      const goalInputs = readGoalInputs(stored);
       const feasibility = goalFeasibility({
-        currentUsd: input.startingCapital ?? portfolio?.totalValueUsd ?? null,
-        targetUsd: input.targetAmount ?? input.targetUsd ?? null,
-        years: input.years ?? horizonYears(input) ?? null,
-        monthlyContributionUsd: input.monthlyContribution ?? 0,
+        currentUsd: input.startingCapital ?? goalInputs.currentUsd ?? portfolio?.totalValueUsd ?? null,
+        targetUsd: input.targetAmount ?? input.targetUsd ?? goalInputs.targetUsd,
+        years: input.years ?? (input.months ? Number(input.months) / 12 : null) ?? goalInputs.years,
+        monthlyContributionUsd: input.monthlyContribution ?? input.contributionUsdMonthly ?? goalInputs.monthlyContributionUsd,
         expectedReturnPct: input.expectedReturnPct ?? 12,
         volatilityPct: input.volatilityPct ?? (readState('markets')?.volatilityPct?.BTC ?? 60)
       });
@@ -879,6 +1378,18 @@ export function createModules(ctx = {}) {
       const exposure = analyzeExposure({ portfolio, lending: readState('lending'), futures: readState('futures'), dydx: readState('dydx'), farming: readState('farming'), liquidity: readState('liquidity') });
       const opportunities = scanOpportunities({ yields: readState('farming'), portfolio, risk, capabilities: { lending: CAPABILITY.AVAILABLE } });
       const goal = Array.isArray(goalsSection?.goals) ? goalsSection.goals[0] : null;
+      /*
+       * THE VENUE VIEW — the one thing the brain could not compute.
+       *
+       * The engine is loaded lazily and its network calls are made
+       * concurrently with the rest of the read, so the added latency is
+       * the slowest venue feed, not the sum of them. If the engine cannot
+       * answer, the plan is still returned, with `venues: null` — a plan
+       * without a venue view is incomplete but HONEST, and an error would
+       * throw away the concentration and exposure figures the brain
+       * already computed correctly.
+       */
+      const venues = await multiVenueStatus();
       return ok('OK', {
         generatedAt: Date.now(),
         goal: goal ? { name: goal.name, targetAmount: goal.targetAmount, targetDate: goal.targetDate, monthlyContribution: goal.monthlyContribution } : null,
@@ -886,10 +1397,14 @@ export function createModules(ctx = {}) {
         exposure: exposure.status === 'OK' ? { equityUsd: exposure.equityUsd, grossUsd: exposure.grossExposureUsd, debtUsd: exposure.debtUsd, leverage: exposure.leverageRatio } : { unavailable: exposure.reason },
         riskLevel: risk?.level || 'UNKNOWN',
         opportunities: opportunities.status === 'OK' ? opportunities.rows : [],
-        dataSources: ['portfolio-service', 'market-data', 'yields-engine', 'risk-engine', 'goals-engine'],
+        /* Which venues the user can actually reach, and which could not
+           answer. `reasons` says why — an unreachable venue is not the same
+           as a venue with no yield. */
+        venues: venues ? venues.venues : null,
+        dataSources: ['portfolio-service', 'market-data', 'yields-engine', 'risk-engine', 'goals-engine', 'multi-venue-engine'],
         method: 'derived from live sections; every figure below the header comes from a tool result, none from the model',
         notIncluded: ['price forecasts presented as certainties', 'venues this app cannot trade']
-      }, { source: 'profit-plan (derived)' });
+      }, { source: 'profit-plan (derived + multi-venue engine)' });
     },
     quote: NA('a plan has no price to quote; its numbers come from the sections it reads'), 
     prepare: async (input = {}) => {
@@ -1047,7 +1562,7 @@ export function createModules(ctx = {}) {
     recover: async () => ({ status: 'RECOVERED', data: { strategy: 'recompute after the underlying sections are refreshed' } })
   });
 
-  return [wallet, portfolio, swap, bridge, lending, borrowing, farming, liquidity, staking, futures, dydx, stocks, etf, funds, forex, commodities, rwa, crypto, signals, news, events, alerts, goals, profitPlan, prediction, lab, risk, forecast, transactions, notifications];
+  return [wallet, portfolio, swap, bridge, lending, borrowing, farming, liquidity, staking, futures, dydx, stocks, etf, funds, forex, commodities, rwa, crypto, signals, news, globalIntel, opportunityFit, macroGraph, goalScenarios, routeIntelligence, whyDecision, events, alerts, goals, profitPlan, prediction, lab, risk, forecast, transactions, notifications];
 }
 
 /* ── helpers ───────────────────────────────────────────────────────────── */

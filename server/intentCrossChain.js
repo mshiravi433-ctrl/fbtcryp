@@ -14,7 +14,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { getAddress, isAddress } from 'ethers';
+import { getAddress, isAddress } from './ethersLite.js';
 import { blobConfigured } from './blobCache.js';
 import {
   canonicalValue,

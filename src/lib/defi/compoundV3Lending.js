@@ -39,7 +39,7 @@
  * Every code is a machine code; the UI mapping lives with the consumer.
  */
 
-import { NATIVE_GAS_FLOOR } from '../swap';
+import { NATIVE_GAS_FLOOR } from '../swap.js';
 import {
   COMPOUND_V3_BASE,
   CompoundAdapterError,

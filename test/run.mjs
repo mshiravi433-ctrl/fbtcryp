@@ -265,6 +265,7 @@ import './intent-ai/strategy-brain-probe.mjs';
 import './intent-ai/autonomy-execution-probe.mjs';
 import './intent-ai/autonomy-engine-probe.mjs';
 import './intent-ai/chat-route-contract-probe.mjs';
+import './intent-ai/chat-capability-handoff-probe.mjs';
 /* The pipeline seam the unit probes above cannot see: the goal compiler
    refuses rather than guesses, so a wiring gap UPSTREAM of it surfaces as
    "every goal card refuses". This drives the real chain — understandIntent →

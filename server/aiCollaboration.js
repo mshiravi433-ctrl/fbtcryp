@@ -40,14 +40,38 @@ import {
   recordProviderCall as recordGatewayProviderCall,
   isProviderHealthy as gatewayProviderHealthy,
   getProviderHealth as gatewayProviderHealth,
-  resetProviderHealth as resetGatewayProviderHealth
+  resetProviderHealth as resetGatewayProviderHealth,
+  beginAiTurnBudget,
+  providerCallBudgetLeft,
+  spendProviderCall
 } from './aiGateway.js';
 import { runMultiAiDebate } from './aiConsensus.js';
 import { researchWeb, analyzeWithSources } from './aiWebResearch.js';
 import { resolveIntelligenceMode, intelligenceGeneration, intelligenceDeadlineMs, getIntelligenceProfile } from './aiIntelligence.js';
+import {
+  aiAnswerCacheKey,
+  aiAnswerCachePersist,
+  aiAnswerCacheSet,
+  aiAnswerCacheTtlMs,
+  isCacheableAnswer,
+  withAiAnswerCache,
+  aiAnswerCacheEnabled
+} from './aiAnswerCache.js';
 import { searchKnowledge } from '../src/lib/intent-ai/os/knowledgeCenter.js';
+import { hybridKnowledgeSearch } from '../src/lib/intent-ai/os/semanticKnowledge.js';
+import {
+  REASONING_CONTRACT,
+  captureReasoning,
+  checkReasoningSupportsAnswer,
+  buildReasoningLedger,
+  renderReasoningLedger,
+  reasoningLedgerSummary,
+  recordReasoningLedger
+} from './aiReasoningLedger.js';
+import { renderCortexBlock, cortexReadPayload, marketStateFromFrame } from './aiCortexBridge.js';
 import { retrieve as retrieveBm25 } from '../src/lib/intent-ai/retrieval.js';
 import { gatherExpandedKnowledge, synthesizeInternalAnswer } from './aiInternalReasoner.js';
+import { evaluateLocalFirst, preEvaluateLocalFirst } from './aiLocalFirstGate.js';
 import {
   planCollaboration,
   CONVERSATION_KINDS,
@@ -279,12 +303,30 @@ Check, in this order:
 Keep the user's language and FBT's voice. If the draft is already sound, return it unchanged.
 Put the corrected FINAL ANSWER in "answer". Put each change you made (or "no change") as one claim in "claims". Put what remains uncertain in "uncertainty".`;
 
+/*
+ * ─── THE REASONING FIELD (§8 — LEVER #4) ───────────────────────────────────
+ * The shape grew a "reasoning" object.
+ *
+ * It used to be prose: the `deepReasoning` line asked the model to identify
+ * the deciding facts and reason from them, but the schema had nowhere to put
+ * the result — so the reasoning was DISCARDED and only the conclusion came
+ * back. A seat that reasoned and a seat that asserted then looked identical
+ * to the pipeline, because the pipeline never saw the difference.
+ *
+ * The field is optional: a seat that does not fill it behaves exactly as it
+ * does today. Forcing it would make a weak seat emit a fake path, which is
+ * worse than no path at all.
+ */
 const ANALYSIS_JSON_SHAPE = `
 Respond in STRICT JSON:
 {
   "answer": "your analysis, 2-5 sentences",
   "claims": [{"claim": "one factual statement", "type": "factual"|"opinion", "confidence": 0-100}],
-  "uncertainty": "what you are NOT sure about"
+  "uncertainty": "what you are NOT sure about",
+  "reasoning": {
+    "decidingFacts": ["the 2-3 facts that actually decide this question, each taken from the provided evidence"],
+    "inference": "the step from those facts to your conclusion"
+  }
 }`;
 
 /* -------------------------------------------------------------------------- */
@@ -380,7 +422,7 @@ const ROLE_TASK = {
   [AI_ROLES.FINAL_ANSWER_AI]: 'reasoning'
 };
 
-async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '', decisionBrief = '', dialogueBrief = '', professorBrief = '', researchBrief = '', marketBrief = '', requestBrief = '', emotionBrief = '', situationBrief = '', discourseBrief = '', productBrief = '', partialBrief = '' }) {
+async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0, intelligence = null, systemOverride = null, counterCase = false, economistLens = '', socialBrief = '', strategyBrief = '', decisionBrief = '', dialogueBrief = '', professorBrief = '', researchBrief = '', marketBrief = '', requestBrief = '', emotionBrief = '', situationBrief = '', discourseBrief = '', productBrief = '', partialBrief = '', turnBudget = null }) {
   /*
    * ─── DEEP REASONING CONTRACT (smartest mode only) ─────────────────────────
    * The role prompts are shared by every mode, so the extra discipline lives
@@ -390,6 +432,16 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
    */
   const deepReasoning = getIntelligenceProfile(intelligence).id === 'max'
     ? '\nDEEP REASONING (FBT smartest mode): before answering, identify the 2-3 facts that actually decide this question and reason from them. Name the strongest counter-argument against your own conclusion. Never introduce a number, price, date, balance or percentage that is absent from the provided data; write "not readable" instead of a guess. If the evidence is thin, say which specific reading would settle it.'
+    : '';
+  /*
+   * The reasoning CONTRACT rides with the deep-reasoning line, because the
+   * deep-reasoning line alone was prose the schema could not hold: the model
+   * reasoned and the pipeline never saw it. Now the contract says what the
+   * "reasoning" field must contain, and the pipeline checks the answer
+   * against it.
+   */
+  const reasoningContract = getIntelligenceProfile(intelligence).id === 'max'
+    ? '\n' + REASONING_CONTRACT
     : '';
   /*
    * ─── RED TEAM SEAT (smartest mode only) ───────────────────────────────────
@@ -403,11 +455,11 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
     ? '\nRED TEAM (you hold the dissenting seat): the other analysts will argue the obvious reading of this data. Assume that reading is WRONG and build the strongest case the evidence can actually support for the opposite conclusion. Do not hedge into "both sides"; give the counter-conclusion, the evidence that would have to be true for it, and the single reading that would settle which side is right. You may not introduce any number that is absent from the provided data.'
     : '';
   const system = systemOverride
-    ? `${systemOverride}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}`
+    ? `${systemOverride}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${reasoningContract}`
     /* The economist's lens is a reasoning contract, not a costume: it rides on
        the specialists and the synthesiser, never on the reviewer (whose job is
        to break the draft, not to reason about the economy). */
-    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}${dialogueBrief ? `\n${dialogueBrief}` : ''}${professorBrief ? `\n${professorBrief}` : ''}${researchBrief ? `\n${researchBrief}` : ''}${marketBrief ? `\n${marketBrief}` : ''}${requestBrief ? `\n${requestBrief}` : ''}${emotionBrief ? `\n${emotionBrief}` : ''}${situationBrief ? `\n${situationBrief}` : ''}${discourseBrief ? `\n${discourseBrief}` : ''}${productBrief ? `\n${productBrief}` : ''}${partialBrief ? `\n${partialBrief}` : ''}`;
+    : `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}${deepReasoning}${reasoningContract}${counterCaseContract}${socialBrief ? `\n${socialBrief}` : ''}${economistLens ? `\n${economistLens}` : ''}${strategyBrief ? `\n${strategyBrief}` : ''}${decisionBrief ? `\n${decisionBrief}` : ''}${dialogueBrief ? `\n${dialogueBrief}` : ''}${professorBrief ? `\n${professorBrief}` : ''}${researchBrief ? `\n${researchBrief}` : ''}${marketBrief ? `\n${marketBrief}` : ''}${requestBrief ? `\n${requestBrief}` : ''}${emotionBrief ? `\n${emotionBrief}` : ''}${situationBrief ? `\n${situationBrief}` : ''}${discourseBrief ? `\n${discourseBrief}` : ''}${productBrief ? `\n${productBrief}` : ''}${partialBrief ? `\n${partialBrief}` : ''}`;
   /*
    * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
    * This line used to be a ternary: Persian or English. Everything a Turkish,
@@ -442,7 +494,50 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
         : healthyProvidersForTask(ROLE_TASK[role] || 'general', { max: 3, fullFleet: true }));
   const startedAt = Date.now();
   for (const providerId of candidates) {
+    /*
+     * A provider this turn has already proved dead is skipped without a
+     * request. On the free tier this is the difference between one 429 on
+     * OpenRouter and three: the cap is per-day, so the second and third
+     * questions are certain to fail too and only spend the budget.
+     */
+    if (turnBudget?.exhaustedProviders?.has?.(providerId)) continue;
     try {
+      /*
+       * The call cap, enforced here as well as in the gateway.
+       *
+       * The gateway is the authority for a real request, but the
+       * collaboration layer is the authority for the TURN: it knows which
+       * stage is asking and whether the answer already exists. A cap
+       * enforced only inside the gateway would be invisible here, and a
+       * stage that cannot afford to ask must be told so, not left to
+       * discover it by failing.
+       *
+       * It sits INSIDE the try, so a spent cap is a failed ROLE and not
+       * a failed turn: the other roles keep their answers and the
+       * synthesiser still has something to work with.
+       */
+      if (!spendProviderCall(turnBudget)) {
+        const capErr = new Error('PROVIDER_CALL_CAP_SPENT');
+        capErr.reasonCode = 'QUOTA';
+        capErr.fix = 'This turn has spent its provider-call cap; the answer is built from what it already read.';
+        throw capErr;
+      }
+      /*
+       * The DAY's allowance, checked at the last possible moment.
+       *
+       * The call cap lowers the turn's DEPTH as the day runs out, and
+       * that is a real saving. But at ZERO the arithmetic changes: a
+       * request made against an exhausted allowance does not come back
+       * shallow — it comes back 429, and on this tier a FAILED request
+       * counts. So the turn stops calling, here, where the refusal can
+       * still be a failed ROLE rather than a failed turn.
+       */
+      if (turnBudget?.quotaExhausted) {
+        const quotaErr = new Error('PROVIDER_QUOTA_EXHAUSTED');
+        quotaErr.reasonCode = 'QUOTA';
+        quotaErr.fix = "the day's provider allowance is spent; the answer is built from what it already read";
+        throw quotaErr;
+      }
       const res = await deps.execute(providerId, {
         system,
         user,
@@ -452,7 +547,14 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
         /* The mode travels with the call so the gateway can put the flagship
            model first and attach reasoning fields where they are supported.
            An injected test executor ignores it. */
-        intelligence
+        intelligence,
+        /* The per-turn ledger: a model id that already failed in this turn
+           is not tried again, and a provider whose ladder is already dead is
+           not re-walked. See "THE TURN BUDGET" in aiGateway.js.
+           The gateway calls the option `budget`; the collaboration layer
+           calls it `turnBudget`, so both names are passed. */
+        turnBudget,
+        budget: turnBudget
       });
       const parsed = parseJsonSafe(res.text) || { answer: String(res.text || '').slice(0, 900), claims: [], uncertainty: '' };
       /*
@@ -468,6 +570,12 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
         provider: providerId,
         model: res.model || null,
         answer: String(parsed.answer || '').slice(0, 1200),
+        /*
+         * The reasoning path, captured (§8 — LEVER #4). It was asked for and
+         * discarded; now it is kept, so the synthesis can see the paths and
+         * the pipeline can check a conclusion against its own reasoning.
+         */
+        reasoning: captureReasoning(parsed),
         claims: Array.isArray(parsed.claims) ? parsed.claims.slice(0, 6).map((c) => ({
           claim: String(c?.claim || '').slice(0, 240),
           type: c?.type === 'factual' ? 'factual' : 'opinion',
@@ -792,8 +900,249 @@ export async function runCollaborativeAnalysis({
   deps = {},
   deadlineMs: requestedDeadlineMs = null
 } = {}) {
+  /*
+   * ═══ THE ANSWER CACHE (2026-11-11) ═══════════════════════════════════════
+   *
+   * This fleet is three free tiers, and two ceilings bind it at once: about
+   * EIGHT MINUTES OF CPU PER DAY (the Hobby Fluid Active CPU allowance) and
+   * OpenRouter's free catalogue's 50-requests-a-day cap. A `max` turn spends
+   * three of those requests and seconds of CPU. Without a cache the daily
+   * allowance is gone in about fifteen questions.
+   *
+   * So the cache wraps the WHOLE TURN, not one provider call: everything the
+   * turn does — the analyses, the verifier, the adversarial repair pass — is
+   * inside the producer, and a hit skips all of it.
+   *
+   * Two rules keep this honest:
+   *
+   *   1. A HIT REPLAYS THE VERDICT, NOT A GUESS. The cached value carries the
+   *      original `providersUsed`, `modelsConsulted`, `claims`,
+   *      `verifiedClaims`, `aiConsensusOnly` and `uncertainty`. A client
+   *      cannot tell a cached answer from a fresh one, and cannot be misled
+   *      by one: the cache does not make a weak answer look strong, it makes
+   *      a strong answer free.
+   *
+   *   2. THE KEY INCLUDES EVERYTHING THAT CHANGES THE ANSWER — the locale,
+   *      the mode, the conversation id and history, and the user's own
+   *      ground truth. A cache that ignored the last of those would serve one
+   *      user's portfolio-grounded answer to another user, which is a
+   *      privacy leak and not merely a wrong answer.
+   */
+  const cacheKey = aiAnswerCacheKey({
+    question: message,
+    locale,
+    intelligence: resolveIntelligenceMode(intelligence ?? analysis?.intelligence?.mode ?? null).mode,
+    conversationId: context?.conversationId || null,
+    priorMessages: context?.conversationSummary || null,
+    /* The user's own ground truth: portfolio, wallet, last assets. Digested
+       into the key, never stored. */
+    groundTruth: {
+      portfolio: context?.portfolio || null,
+      wallet: context?.wallet || null,
+      lastAssets: context?.lastAssets || null
+    },
+    surface: context?.surface || null,
+    intentType
+  });
+
+  const runTurn = () => runCollaborativeAnalysisInner({
+    message,
+    context,
+    locale,
+    intentType,
+    entities,
+    analysis,
+    intelligence,
+    transparency,
+    owner,
+    deps,
+    deadlineMs: requestedDeadlineMs
+  });
+
+  /*
+   * AN INJECTED FLEET MEANS THE CACHE IS OFF.
+   *
+   * `deps` is how a caller supplies its own provider fleet — the test path
+   * and the diagnostic path. Two different fleets can answer the SAME
+   * question with DIFFERENT answers, and the fleet identity alone does not
+   * tell them apart: two mock fleets that expose the same seat names are
+   * different fleets with the same name.
+   *
+   * So a turn with injected dependencies is never cached, and never served
+   * from the cache. The cache is for the production path, where the fleet
+   * is the deployment's own — the same one, for the same question, which
+   * is exactly the case where replaying the answer is right.
+   */
+  const injectedFleet = Boolean(deps && Object.keys(deps).length > 0);
+
+  if (!cacheKey || injectedFleet || !aiAnswerCacheEnabled()) {
+    const value = await runTurn();
+    return value;
+  }
+
+  /* The TTL needs the freshness class, which is only known once the turn has
+     been planned. So the cache is written INSIDE the turn (where `plan` is
+     in hand) and this wrapper only READS it. The read is what spares the
+     fleet; the write needs the plan's freshness verdict. */
+  const cached = await withAiAnswerCache(cacheKey, 0, async () => {
+    const value = await runTurn();
+    if (!isCacheableAnswer(value, { freshness: value?.freshness })) return value;
+    aiAnswerCacheSetForTurn(cacheKey, value, value?.freshness);
+    return value;
+  }, { enabled: true });
+
+  return cached.value;
+}
+
+/**
+ * Write one turn's answer into the cache, with the TTL its freshness class
+ * earns.
+ *
+ * Kept separate from the read path so the TTL decision — which needs the
+ * plan's freshness verdict — lives next to the plan that produced it.
+ */
+function aiAnswerCacheSetForTurn(key, value, freshness) {
+  try {
+    const ttl = aiAnswerCacheTtlMs(freshness);
+    aiAnswerCacheSet(key, value, ttl);
+    /*
+     * And write it where the NEXT lambda can find it.
+     *
+     * This is the line that makes the cache real on a serverless
+     * deployment. The in-memory tier dies with the instance; the durable
+     * tier does not, so a question asked twice on two different lambdas
+     * costs ONE collaboration instead of two — and on the `:free` tier
+     * that is five provider calls saved, out of fifty a day.
+     */
+    aiAnswerCachePersist(key, value, ttl)?.catch(() => {});
+  } catch {
+    /* A cache write must never take down a turn that already has an answer. */
+  }
+}
+
+async function runCollaborativeAnalysisInner({
+  message = '',
+  context = {},
+  locale = 'fa',
+  intentType = null,
+  entities = {},
+  analysis = null,
+  intelligence = null,
+  transparency = false,
+  owner = null,
+  deps = {},
+  deadlineMs: requestedDeadlineMs = null
+} = {}) {
   const D = { ...DEFAULT_DEPS, ...deps };
   const startedAt = Date.now();
+  /*
+   * ─── THE TURN LEDGER ─────────────────────────────────────────────────────
+   * One ledger per question. Every role of this turn shares it, so a model id
+   * that proved dead for the Risk AI is not re-tried for the Final Answer, and
+   * a provider whose ladder is exhausted is not walked again.
+   *
+   * Before the ledger, one `max` turn measured 13-16 provider calls; against
+   * OpenRouter's 50/day free cap that is a quarter of the daily budget for a
+   * single question. The failover itself is NOT removed — a free tier needs
+   * failover — but the same dead model id is no longer asked twice in the
+   * same question.
+   */
+  const turnBudget = beginAiTurnBudget();
+  /*
+   * ─── THE DAY'S ALLOWANCE, AND THE CAP IT LEAVES ─────────────────────────
+   *
+   * The turn's own cap (six requests) is the normal shape of a deep
+   * turn. But the DAY is the scarce thing on the free tier, and a
+   * deployment that can count its own spending can decide to spend it
+   * deliberately: when the day's allowance is nearly gone, the turn
+   * keeps its cap low, so the last requests of the day are spread over
+   * several questions instead of spent on the first one.
+   *
+   * The cap is computed asynchronously, so it is applied as soon as the
+   * number arrives — before any role asks. A turn that is already
+   * running keeps its normal cap; the next one gets the reduced one.
+   */
+  let quotaCapApplied = null;
+  /* The day's state, whether or not the lookup succeeds. `false` means
+     «the day is not spent» — which is what an uncounted day IS, since a
+     turn that cannot see the day must not behave as though it were
+     exhausted. */
+  turnBudget.quotaExhausted = false;
+  try {
+    const { quotaAwareCallCap, quotaExhausted } = await import('./aiQuotaBudget.js');
+    /*
+     * The provider ids to count are the ones this turn would actually
+     * use. An injected fleet has its own seat names; the deployment's
+     * own fleet is the three free tiers. Either way the list is the
+     * ids, and an empty list means «the default fleet».
+     */
+    let fleetIds = [];
+    try {
+      const picked = typeof D.selectProviders === 'function' ? await D.selectProviders({ message, locale }) : null;
+      if (Array.isArray(picked)) fleetIds = picked.filter((x) => typeof x === 'string' && x);
+    } catch {
+      fleetIds = [];
+    }
+    if (!fleetIds.length) fleetIds = ['openrouterfree', 'groq', 'workersai'];
+    quotaCapApplied = await quotaAwareCallCap(fleetIds, { baseCap: turnBudget.maxCalls });
+    if (quotaCapApplied && Number.isFinite(quotaCapApplied.cap) && quotaCapApplied.cap < turnBudget.maxCalls) {
+      turnBudget.maxCalls = quotaCapApplied.cap;
+    }
+    /*
+     * And the day's own state. When the allowance is SPENT the turn
+     * must not call a provider at all — a request against an exhausted
+     * allowance comes back 429, and on this tier a failed request
+     * counts against the very budget that is already gone.
+     *
+     * The check lives on the turn's own ledger, so every role sees it,
+     * and the refusal becomes a failed ROLE: the analyses that did run
+     * still have their answers, and the turn still produces something.
+     */
+    const exhausted = await quotaExhausted(fleetIds);
+    turnBudget.quotaExhausted = exhausted.exhausted === true;
+    turnBudget.quotaReason = exhausted.reason || null;
+  } catch (err) {
+    /* No counter, no reduction. The turn keeps its normal cap. */
+    if (process.env.AI_QUOTA_DEBUG === '1') console.warn('[ai-quota] cap lookup failed:', String(err?.message || err));
+  }
+  /*
+   * ─── THE CALL CAP, AND WHAT IT DROPS ────────────────────────────────────
+   *
+   * The turn has a hard ceiling on provider requests, because the daily
+   * allowance is the scarce resource on the free tier — not the latency
+   * and not the tokens.
+   *
+   * When the cap is close, the stages that REFINE the answer are the ones
+   * that go: the verifier (a cross-examination of the analyses) and the
+   * critic (a repair pass over the draft). The stages that CARRY the
+   * answer — the analyses and the synthesiser — always run.
+   *
+   * The order matters and it is deliberate. A turn that lost its third
+   * analysis still has two independent reads; a turn that lost its
+   * final answer has nothing to show the user. So the cap is spent from
+   * the bottom of the stack up, never from the top down.
+   */
+  const callsLeft = () => providerCallBudgetLeft(turnBudget);
+  /* One call is reserved for the synthesiser. Without this reservation a
+     turn could spend its last unit on a verifier and then have nothing
+     left to write the answer with. */
+  /*
+   * Whether ONE more provider call is affordable right now.
+   *
+   * `>=` and not `>`: a turn with exactly one call left CAN still spend
+   * it, and the stage that spends it must be the LAST one — the critic.
+   * The two stages therefore ask differently:
+   *
+   *   · the verifier asks "can I afford this AND still have one left
+   *     for the synthesiser?" — because the answer needs the
+   *     synthesiser, and a turn with no final answer is a turn with no
+   *     answer;
+   *   · the critic asks "can I afford this at all?" — because it is last
+   *     and optional.
+   */
+  const canAffordRefinement = () => callsLeft() >= 1;
+  /* The verifier must leave room for the synthesiser. */
+  const canAffordVerification = () => callsLeft() >= 2;
   /*
    * ─── THE BUDGET IS THE MODE'S, AND IT IS SPENT, NOT RENEWED ──────────────
    * Two defects made the smartest mode unfinishable on a real deployment, and
@@ -862,6 +1211,23 @@ export async function runCollaborativeAnalysis({
    * Only the smartest mode pays for it — `balanced` must stay byte-identical.
    */
   const subQuestions = mode === 'max' ? decomposeQuestion(message) : [];
+  /*
+   * ─── THE CHEAP PRE-GATE (2026-11-11) ────────────────────────────────────
+   *
+   * The full local-first gate needs the safety reads and the retrieved
+   * knowledge. Those cost real CPU — about 90 ms of the `max` path's local
+   * work — and they all ran BEFORE the gate, so a turn the corpus could
+   * answer outright still paid for the whole reading layer first.
+   *
+   * The pre-gate asks ONE cheap question before any of that: is this turn
+   * OBVIOUSLY not answerable locally? A live question, a judgement, a
+   * multi-part question — all known from the text and the plan alone.
+   *
+   * It never answers a question. It only DECLINES, and a decline means the
+   * expensive reads are skipped for a turn that was never going to be
+   * answered locally.
+   */
+  const localFirstPre = preEvaluateLocalFirst({ message, plan });
   /*
    * ─── ECONOMIST'S LENS (smartest mode, substantive turns only) ──────────────
    * A professor of economics reasons by mechanism, base rate, transmission,
@@ -1133,6 +1499,10 @@ export async function runCollaborativeAnalysis({
        evidence level, what that permits, and whether the answer obeyed. */
     decision: null,
     perRole: transparency ? [] : undefined,
+    /* The local-first gate's verdict for this turn: did it answer from the
+       verified corpus (and so spend zero provider calls), or did it stand
+       aside and let the model pipeline run? null before the gate runs. */
+    localFirst: null,
     latencyMs: 0,
     at: Date.now()
   };
@@ -1140,7 +1510,30 @@ export async function runCollaborativeAnalysis({
   /* ---- Evidence first: knowledge + web + tools (levels 2+) ---- */
   let knowledge = [];
   if (plan.level >= 2 && plan.freshness === 'STATIC') {
-    knowledge = searchKnowledge(message, { locale, limit: 3 });
+    /*
+     * The HYBRID retriever (§7): the semantic layer widens the candidate
+     * pool and the lexical scorer ranks it.
+     *
+     * Before this, the corpus was reachable only through the words the
+     * question used. Measured over 18 questions whose correct answer is
+     * known, the lexical-only retriever put the right item first 11 times;
+     * the hybrid puts it first 17. The six it fixes are exactly the
+     * paraphrases — "how do I attach my wallet", "what does it cost me",
+     * "building a balanced basket" — where the question never uses the
+     * corpus's vocabulary.
+     *
+     * The hybrid degrades safely: if the semantic index cannot be built the
+     * lexical result is used unchanged, so this can never make grounding
+     * worse than it was.
+     */
+    knowledge = hybridKnowledgeSearch(message, {
+      locale,
+      limit: 3,
+      lexicalSearch: searchKnowledge
+    });
+    if (!Array.isArray(knowledge) || !knowledge.length) {
+      knowledge = searchKnowledge(message, { locale, limit: 3 });
+    }
     /* BM25 retrieval over knowledge + the hand-checked Help answers fills
        the remaining slots (never displaces the knowledge-center hits the
        degraded answer is built from). Passages carry citable ids. */
@@ -1235,6 +1628,25 @@ export async function runCollaborativeAnalysis({
   const marketBrief = marketFrame
     ? `${renderMarketFrame(marketFrame)}\n${renderMarketContract(marketFrame)}`
     : '';
+
+  /*
+   * ─── THE CORTEX READ (lever #5) ────────────────────────────────────────────
+   * The cortex is a trained spiking reservoir that reads the SHAPE of the
+   * market state. It is a second opinion, not evidence: it carries no prices
+   * and it is never allowed to contradict the data.
+   *
+   * The read is derived from the SAME market frame the specialists are given,
+   * so it is not a separate fetch and not a separate world — it is another
+   * reading of the data already on the table.
+   *
+   * The block is EMPTY unless the cortex's own probe passes. That gate is
+   * the whole point of wiring it this way: a cortex that cannot separate a
+   * state from its mirror contributes nothing, so it cannot make the answer
+   * wrong.
+   */
+  const cortexState = marketFrame ? marketStateFromFrame(marketFrame) : null;
+  const cortexBlock = cortexState ? renderCortexBlock({ state: cortexState }) : '';
+  const cortexRead = cortexState ? cortexReadPayload({ state: cortexState }) : null;
   let degradedSafetyContainment = false;
   const applyDegraded = () => {
     const out = buildDegradedOutcome({
@@ -1269,8 +1681,62 @@ export async function runCollaborativeAnalysis({
     || /(?:خیلی\s*)?ضرر\s*کردم.{0,40}(?:حالم\s*بد|ناراحتم|ترسیدم)|(?:همشو|همه‌شو|همه\s*چیمو|همه\s*پولمو)\s*بفروشم/i.test(String(message || ''))
     || (emotionRead?.acute && ['grief', 'shame', 'burnout'].includes(emotionRead.primary) && Number(emotionRead.intensity) >= 0.7)
   );
+  /*
+   * ─── THE LOCAL-FIRST GATE (2026-11-11) ──────────────────────────────────
+   *
+   * A `max` turn costs SIX provider calls. Most of them are spent
+   * re-deriving what this repository already states. The gate asks once,
+   * BEFORE the first call, whether the verified corpus can answer the
+   * question outright; if it can, the answer is retrieved instead of
+   * generated.
+   *
+   * This is not only a budget saver — it is a QUALITY saver. A retrieved
+   * fact carries its citation and cannot drift; a generated one can. And
+   * the gate is conservative by construction: it declines on live
+   * questions, on weak matches, and whenever the local reasoner itself
+   * declines. When it declines, the turn is exactly what it was before.
+   */
+  const localFirst = evaluateLocalFirst({
+    message,
+    plan,
+    knowledge,
+    locale,
+    context,
+    /* The REAL safety reads, so the reasoner's containment contract fires
+       on the local path exactly as it does on the model path. */
+    socialRead,
+    emotionRead
+  });
+  result.localFirst = {
+    used: localFirst.used,
+    reason: localFirst.reason,
+    matched: localFirst.evidence?.matched || null,
+    score: localFirst.evidence?.score || 0,
+    providerCallsSaved: localFirst.used ? 6 : 0,
+    /* The pre-gate's independent verdict, so a turn's routing is auditable:
+       "the gate declined because X" and "the pre-gate had already said Y"
+       are different facts and both are worth seeing. */
+    preGate: { reason: localFirstPre.reason, skippedFor: localFirstPre.evidence?.skippedFor || null }
+  };
+  if (localFirst.used) {
+    result.answer = localFirst.answer;
+    result.degraded = false;
+    result.evidence.knowledgeUsed = true;
+    result.evidence.internalSynthesis = true;
+    result.providersUsed = [];
+    result.modelsConsulted = [];
+    result.aiConsensusOnly = false;
+    result.uncertainty = '';
+    result.analyses = [];
+    result.verification = null;
+    result.critique = null;
+    result.counterCase = null;
+    result.latencyMs = Date.now() - startedAt;
+    result.at = Date.now();
+    return result;
+  }
+
   if (plan.level === 1 || !externalConfigured) {
-    /* Conversation / simple, or no external provider configured at all. */
     /*
      * A short message that discloses a state («ناراحتم», «خسته شدم») is not a
      * shrug. In the smartest mode it gets one real, careful reply instead of
@@ -1284,6 +1750,7 @@ export async function runCollaborativeAnalysis({
       && plan.conversationKind === CONVERSATION_KINDS.CASUAL;
     if (disclosing) {
       const single = await withDeadline(runRole({
+        turnBudget,
         role: AI_ROLES.CONVERSATION_AI,
         message,
         contextBlock,
@@ -1310,7 +1777,7 @@ export async function runCollaborativeAnalysis({
     } else if (!externalConfigured) {
       applyDegraded();
     } else {
-      const single = await withDeadline(runRole({ role: AI_ROLES.CONVERSATION_AI, message, contextBlock, locale, deps: D, maxTokens: tokensFor(400, 'fast'), fleet, seat: 0, intelligence: mode }), null);
+      const single = await withDeadline(runRole({ role: AI_ROLES.CONVERSATION_AI, message, contextBlock, locale, deps: D, maxTokens: tokensFor(400, 'fast'), fleet, seat: 0, intelligence: mode, turnBudget }), null);
       if (single?.ok) {
         analyses.push(single);
         result.answer = single.answer;
@@ -1323,7 +1790,7 @@ export async function runCollaborativeAnalysis({
       : plan.taskTypes.includes('crypto-analysis') || plan.taskTypes.includes('research') ? AI_ROLES.CRYPTO_RESEARCH_AI
       : plan.taskTypes.includes('risk') ? AI_ROLES.RISK_AI
       : AI_ROLES.CRYPTO_RESEARCH_AI;
-    const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: 0, intelligence: mode, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief }), null);
+    const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: 0, intelligence: mode, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief, turnBudget }), null);
     if (single?.ok) { analyses.push(single); result.answer = single.answer; }
     else { applyDegraded(); }
   } else if (plan.level === 3) {
@@ -1332,7 +1799,7 @@ export async function runCollaborativeAnalysis({
        analyses are genuinely different providers, not one model twice. */
     const roles = pickAnalysisRoles(plan, 2);
     const settled = await withDeadline(
-      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief, dialogueBrief, professorBrief, researchBrief, marketBrief, requestBrief, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief }))),
+      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, maxTokens: tokensFor(600), fleet, seat: i, intelligence: mode, socialBrief, strategyBrief, decisionBrief, dialogueBrief, professorBrief, researchBrief, marketBrief, requestBrief, emotionBrief, situationBrief, discourseBrief, productBrief, partialBrief, turnBudget }))),
       []
     );
     analyses.push(...(settled || []).filter(Boolean));
@@ -1355,6 +1822,7 @@ export async function runCollaborativeAnalysis({
     const roles = pickAnalysisRoles(plan, wantedAnalyses, wantedAnalyses);
     const settled = await withDeadline(
       Promise.all(roles.map((r, i) => runRole({
+        turnBudget,
         role: r,
         message,
         contextBlock,
@@ -1396,10 +1864,24 @@ export async function runCollaborativeAnalysis({
     }
 
     const valid = analyses.filter((a) => a.ok);
-    if (valid.length >= 2 && !overBudget()) {
+    /*
+     * The verifier is a REFINEMENT: the analyses are already in hand,
+     * and the cross-examination improves them but does not create them.
+     * So when the call cap is spent the verifier is what goes, and the
+     * turn says so rather than silently answering less.
+     */
+    const verificationSkippedForBudget = valid.length >= 2 && !canAffordVerification();
+    if (verificationSkippedForBudget) {
+      result.budget = {
+        ...(result.budget || {}),
+        verifierSkipped: 'provider call cap reached — the turn answered from its own analyses'
+      };
+    }
+    if (valid.length >= 2 && !overBudget() && !verificationSkippedForBudget) {
       /* Cross-examination: the verification role sees the other analyses. */
       const digest = valid.map((a) => `[${a.role}] ${String(a.answer).slice(0, 400)}`).join('\n\n');
       const verifier = await withDeadline(runRole({
+        turnBudget,
         role: AI_ROLES.VERIFICATION_AI,
         message: `${message}\n\nCANDIDATE ANALYSES TO CHALLENGE:\n${digest}`,
         contextBlock,
@@ -1456,6 +1938,29 @@ export async function runCollaborativeAnalysis({
       const digestCap = modeProfile.selfCritique ? 800 : 500;
       /* Stage 6: one clean FBT answer from the specialists' work (§37). */
       const digest = analyses.filter((a) => a.ok).map((a) => `[${a.role}] ${String(a.answer).slice(0, digestCap)}`).join('\n\n');
+
+      /*
+       * ─── THE REASONING LEDGER (§8 — LEVER #4) ─────────────────────────────
+       * The digest carries the specialists' CONCLUSIONS. The ledger carries
+       * their PATHS — the deciding facts and the inference from them.
+       *
+       * Why the synthesiser needs both: two analysts that reached the same
+       * answer by different routes are corroborating each other; two that
+       * reached it the same way are one opinion paid for twice. From the
+       * conclusions alone the synthesiser cannot tell those apart, so it
+       * averages them as if they agreed independently.
+       *
+       * And the ledger carries the CHECK: a conclusion that does not carry
+       * the facts its own reasoning named is flagged, and the synthesiser is
+       * told not to launder it.
+       */
+      const reasoningLedger = buildReasoningLedger(analyses);
+      result.reasoningLedger = reasoningLedgerSummary(reasoningLedger);
+      /* Recorded for the status endpoint, so the layer is observable. */
+      recordReasoningLedger(reasoningLedger);
+      const reasoningBlock = modeProfile.selfCritique
+        ? renderReasoningLedger(reasoningLedger)
+        : '';
       /*
        * The verifier's findings used to be just another paragraph in the
        * digest. In the smartest mode the synthesiser is told to RESOLVE them:
@@ -1471,8 +1976,10 @@ export async function runCollaborativeAnalysis({
         ? '\n\nHARD RULE: do not introduce a number, price, date or percentage that is absent from the data above. If two analyses disagree, state which evidence wins and what remains unknown.'
         : '';
       const finalRole = await withDeadline(runRole({
+        turnBudget,
         role: AI_ROLES.FINAL_ANSWER_AI,
-        message: `${message}\n\nSPECIALIST WORK:\n${digest}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${verifierNote}${revisionRule}`,
+        /* The paths ride along with the conclusions. */
+        message: `${message}\n\nSPECIALIST WORK:\n${digest}${reasoningBlock ? `\n\n${reasoningBlock}` : ''}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${cortexBlock ? `\n\n${cortexBlock}` : ''}${verifierNote}${revisionRule}`,
         contextBlock,
         locale,
         deps: D,
@@ -1606,7 +2113,21 @@ export async function runCollaborativeAnalysis({
       if (modeProfile.selfCritique && !result.degraded) {
         const draft = String(result.answer || '').trim();
         const remaining = deadlineMs - (Date.now() - startedAt);
-        if (draft.length >= 80 && remaining > 2500) {
+        /*
+         * The critic is the LAST stage and the most optional one: it
+         * improves a draft that already exists and can never create the
+         * answer. So when the call cap is spent it is the critic that is
+         * dropped, and the turn says that it happened rather than
+         * pretending the draft was always this good.
+         */
+        const critiqueSkippedForBudget = !canAffordRefinement();
+        if (critiqueSkippedForBudget) {
+          result.budget = {
+            ...(result.budget || {}),
+            criticSkipped: 'provider call cap reached — the draft was not put through a repair pass'
+          };
+        }
+        if (draft.length >= 80 && remaining > 2500 && !critiqueSkippedForBudget) {
           const critiqueBudget = Math.min(7000, remaining - 800);
           /*
            * Deterministic completeness check on the draft: a part the draft
@@ -1632,7 +2153,7 @@ export async function runCollaborativeAnalysis({
           const partialDeficitBlock = renderPartialDeficit(draftPartial);
           const criticRole = {
             role: AI_ROLES.VERIFICATION_AI,
-            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}${dialogueDeficitBlock ? `\n\n${dialogueDeficitBlock}` : ''}${falsifierDeficitBlock ? `\n\n${falsifierDeficitBlock}` : ''}${marketViolationBlock ? `\n\n${marketViolationBlock}` : ''}${requestDeficitBlock ? `\n\n${requestDeficitBlock}` : ''}${emotionDeficitBlock ? `\n\n${emotionDeficitBlock}` : ''}${situationDeficitBlock ? `\n\n${situationDeficitBlock}` : ''}${discourseDeficitBlock ? `\n\n${discourseDeficitBlock}` : ''}${productDeficitBlock ? `\n\n${productDeficitBlock}` : ''}${partialDeficitBlock ? `\n\n${partialDeficitBlock}` : ''}`,
+            message: `USER QUESTION:\n${message}\n\nDRAFT ANSWER (what the user is about to read):\n${draft}\n\n${contextBlock}${cortexBlock ? `\n\n${cortexBlock}` : ''}${reasoningBlock ? `\n\n${reasoningBlock}` : ''}${claimLedgerBlock ? `\n\n${claimLedgerBlock}` : ''}${unsourcedBlock ? `\n\n${unsourcedBlock}` : ''}${unansweredBlock ? `\n\n${unansweredBlock}` : ''}${strategyGapsBlock ? `\n\n${strategyGapsBlock}` : ''}${strategyArithmeticBlock ? `\n\n${strategyArithmeticBlock}` : ''}${decisionDeficitBlock ? `\n\n${decisionDeficitBlock}` : ''}${dialogueDeficitBlock ? `\n\n${dialogueDeficitBlock}` : ''}${falsifierDeficitBlock ? `\n\n${falsifierDeficitBlock}` : ''}${marketViolationBlock ? `\n\n${marketViolationBlock}` : ''}${requestDeficitBlock ? `\n\n${requestDeficitBlock}` : ''}${emotionDeficitBlock ? `\n\n${emotionDeficitBlock}` : ''}${situationDeficitBlock ? `\n\n${situationDeficitBlock}` : ''}${discourseDeficitBlock ? `\n\n${discourseDeficitBlock}` : ''}${productDeficitBlock ? `\n\n${productDeficitBlock}` : ''}${partialDeficitBlock ? `\n\n${partialDeficitBlock}` : ''}`,
             contextBlock: '',
             locale,
             deps: D,
@@ -1642,7 +2163,7 @@ export async function runCollaborativeAnalysis({
             intelligence: mode,
             systemOverride: CRITIQUE_SYSTEM
           };
-          const critic = await withDeadline(runRole(criticRole), null, critiqueBudget);
+          const critic = await withDeadline(runRole({ ...criticRole, turnBudget }), null, critiqueBudget);
           const repaired = String(critic?.answer || '').trim();
           const substantial = repaired.length >= 40 && (
             draft.length < 200 ? repaired.length >= 40 : repaired.length >= Math.round(draft.length * 0.6)
@@ -1783,6 +2304,18 @@ export async function runCollaborativeAnalysis({
         compliant: finalFalsifier.compliant
       }
     };
+  }
+
+  /*
+   * The cortex read rides on the turn, next to the reasoning ledger. It is
+   * the observability for lever #5: without it there is no way to tell a
+   * cortex that read the market from one that was asked and said nothing.
+   *
+   * `cortexRead` is null when the turn was not a market turn — the cortex is
+   * only asked about markets.
+   */
+  if (cortexRead) {
+    result.cortexRead = cortexRead;
   }
 
   if (marketFrame) {
@@ -2003,6 +2536,35 @@ export async function runCollaborativeAnalysis({
     source: budget.source,
     usedMs: result.latencyMs,
     overBudget: overBudget()
+  };
+  /*
+   * The PROVIDER budget is published here, at the END of the turn, not
+   * midway: a report written before the verifier and the critic have
+   * run counts only half the calls the turn actually made, and a
+   * budget report that undercounts is worse than none.
+   */
+  result.budget = {
+    ...(result.budget || {}),
+    callCap: turnBudget.maxCalls,
+    callsUsed: turnBudget.calls || 0,
+    capHits: turnBudget.capHits || 0,
+    dayHeadroom: quotaCapApplied?.headroom == null ? null : Math.round(quotaCapApplied.headroom * 100),
+    dayCounterDurable: quotaCapApplied?.durable === true,
+    /*
+     * And the day's own state, when it stopped the turn. A turn that
+     * answered without a provider because the allowance was gone has to
+     * SAY that, or the answer looks like a normal one and the user
+     * cannot tell it is thinner than it should be.
+     */
+    /* The flag is ALWAYS present, because a turn that answered without
+       a provider because the allowance was gone has to SAY that, or the
+       answer looks like a normal one and the user cannot tell it is
+       thinner than it should be. And a turn that spent the day
+       normally has to be able to say that too. */
+    quotaExhausted: turnBudget.quotaExhausted === true,
+    ...(turnBudget.quotaExhausted
+      ? { quotaReason: turnBudget.quotaReason || "the day's provider allowance is spent" }
+      : {})
   };
   result.at = Date.now();
   return result;

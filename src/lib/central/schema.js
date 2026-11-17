@@ -56,6 +56,74 @@ export const STATE_SECTIONS = Object.freeze({
   profitPlan: { owner: 'profit-plan', ttlMs: 10 * 60_000, authoritative: true, required: false },
   signals: { owner: 'signals', ttlMs: 5 * 60_000, authoritative: true, required: false },
   news: { owner: 'news', ttlMs: 15 * 60_000, authoritative: true, required: false },
+  /*
+   * The global intelligence snapshot: smart money, whales, on-chain
+   * activity, macro. It is a state section because the brain reads
+   * modules through the state store, and a module with NO section is a
+   * module nothing ever asks.
+   *
+   * The snapshot is PER OWNER — the state store is per owner, so two users
+   * can never see each other's flows. The TTL is 5 minutes: flows move
+   * quickly, and a stale flow quoted as current is worse than no flow.
+   */
+  globalIntel: { owner: 'global-intel', ttlMs: 5 * 60_000, authoritative: true, required: false },
+  /*
+   * The fit ranking: which opportunities suit THIS owner. It is a state
+   * section for the same reason `globalIntel` is — the brain reads modules
+   * through the state store, and a module with NO section is a module
+   * nothing ever asks.
+   *
+   * The ranking is PER OWNER (it is scored against the owner's profile,
+   * capital and goal) and it is short-lived: the cross-asset feed moves,
+   * and a fit quoted from yesterday is a different fit. 5 minutes.
+   */
+  opportunityFit: { owner: 'opportunity-fit', ttlMs: 5 * 60_000, authoritative: true, required: false },
+  /*
+   * The macro graph: the REGIME, read over the global snapshot, the world
+   * model and the portfolio together. It is a state section for the same
+   * reason the other two are — the brain reads modules through the state
+   * store, and a module with NO section is a module nothing ever asks.
+   *
+   * The graph is per-owner (it carries that owner's portfolio risk
+   * impulse) and short-lived: a regime quoted from an hour ago is a
+   * different regime.
+   */
+  macroGraph: { owner: 'macro-graph', ttlMs: 5 * 60_000, authoritative: true, required: false },
+  /*
+   * The goal scenarios: three profiles for a target, each with its
+   * allocation, expected value, drawdown, probability of loss and
+   * probability of halving. It is a state section for the same reason
+   * the others are — a module with NO section is a module nothing ever
+   * asks.
+   *
+   * The scenarios are per-owner (they are built from that owner's
+   * capital and that owner's goal) and short-lived: a plan for a target
+   * is rebuilt from the capital as it stands now.
+   */
+  goalScenarios: { owner: 'goal-scenarios', ttlMs: 5 * 60_000, authoritative: true, required: false },
+  /*
+   * The route intelligence: the ranked cross-chain candidates for ONE
+   * transfer, with the cost, the time, the impact and the risk of each,
+   * and the reasons the best one won.
+   *
+   * It is a state section for the same reason the others are — a module
+   * with NO section is a module nothing ever asks — and it is
+   * SHORT-LIVED on purpose: a route quote is the cheapest thing in the
+   * product to go stale. The provider's own quote expires in minutes,
+   * and a ranking built on an expired quote is a ranking of nothing.
+   */
+  routeIntelligence: { owner: 'route-intelligence', ttlMs: 2 * 60_000, authoritative: true, required: false },
+  /*
+   * The why block: the brain's OWN decision, explained — why this asset,
+   * why this network, why now, why this amount, why this strategy, plus
+   * the four named falsifiers.
+   *
+   * It is SHORT-LIVED, and the reason matters: an explanation of a
+   * decision is only true while the decision is. The prices, the risk
+   * view and the capital move, so a why block quoted from an hour ago
+   * would be explaining a decision nobody made.
+   */
+  whyDecision: { owner: 'why-decision', ttlMs: 5 * 60_000, authoritative: true, required: false },
   events: { owner: 'events', ttlMs: 60_000, authoritative: true, required: false },
   alerts: { owner: 'alerts', ttlMs: 60_000, authoritative: true, required: false },
   capabilities: { owner: 'registry', ttlMs: 60_000, authoritative: true, required: true },
@@ -195,7 +263,34 @@ export const EVENT_TYPES = Object.freeze([
      that exists (nothing has moved, so nothing may be invalidated — only the UI
      needs to show it) and a signature that has been broadcast but not yet
      confirmed on-chain (the transaction list must stop showing it as absent). */
-  'ACTION_PROPOSED', 'TRANSACTION_PENDING'
+  'ACTION_PROPOSED', 'TRANSACTION_PENDING',
+  /* The global snapshot was read (2026-11-12). It invalidates itself and
+     the risk view, because a flow that says the market is accumulating is
+     a risk input, and a stale flow next to a fresh risk number would
+     read as current. */
+  'GLOBAL_SNAPSHOT_READ',
+  /* The fit ranking was read (2026-11-12). It invalidates itself and the
+     risk view: a ranking that says "this suits a conservative owner" is a
+     risk input, and a stale ranking next to a fresh risk number would read
+     as current. */
+  'FIT_RANKING_READ',
+  /* The macro graph was read (2026-11-12). It invalidates itself and the
+     risk view: a portfolio risk impulse is a risk input, and a stale
+     impulse next to a fresh risk number would read as current. */
+  'MACRO_GRAPH_READ',
+  /* The goal scenarios were read (2026-11-12). They invalidate themselves
+     and the risk view: a profile with a drawdown estimate is a risk
+     input, and a stale profile next to a fresh risk number would read as
+     current. */
+  'GOAL_SCENARIOS_READ',
+  /* The route ranking was read (2026-11-12). It invalidates itself and
+     nothing else: a new quote changes WHICH route is best, not what the
+     portfolio holds. */
+  'ROUTE_INTELLIGENCE_READ',
+  /* The why block was read (2026-11-12). It invalidates itself: a new
+     decision needs a new explanation, and an explanation of a decision
+     that was never made is a plausible-sounding fiction. */
+  'WHY_DECISION_READ'
 ]);
 
 /*
@@ -228,7 +323,15 @@ export const REFRESH_CASCADE = Object.freeze({
   TRANSACTION_PENDING: { invalidate: ['transactions'], cascade: false },
   ALERT_FIRED: { invalidate: ['alerts'], cascade: false },
   MODULE_DEGRADED: { invalidate: ['capabilities', 'health'], cascade: false },
-  MODULE_RECOVERED: { invalidate: ['capabilities', 'health'], cascade: false }
+  MODULE_RECOVERED: { invalidate: ['capabilities', 'health'], cascade: false },
+  GLOBAL_SNAPSHOT_READ: { invalidate: ['globalIntel'], cascade: false },
+  FIT_RANKING_READ: { invalidate: ['opportunityFit'], cascade: false },
+  MACRO_GRAPH_READ: { invalidate: ['macroGraph'], cascade: false },
+  GOAL_SCENARIOS_READ: { invalidate: ['goalScenarios'], cascade: false },
+  /* The route read invalidates the route ranking and nothing else: a new
+     quote changes WHICH route is best, not what the portfolio holds. */
+  ROUTE_INTELLIGENCE_READ: { invalidate: ['routeIntelligence'], cascade: false },
+  WHY_DECISION_READ: { invalidate: ['whyDecision'], cascade: false }
 });
 
 /** §10 Module registry — the ids the brain must be able to discover. */
@@ -236,7 +339,35 @@ export const MODULE_IDS = Object.freeze([
   'wallet', 'portfolio', 'swap', 'bridge', 'lending', 'borrowing', 'farming',
   'liquidity', 'staking', 'futures', 'dydx', 'stocks', 'etf', 'funds', 'forex',
   'commodities', 'rwa', 'crypto', 'signals', 'news', 'events', 'alerts', 'goals',
-  'profit-plan', 'prediction', 'lab', 'risk', 'forecast', 'transactions', 'notifications'
+  'profit-plan', 'prediction', 'lab', 'risk', 'forecast', 'transactions', 'notifications',
+  /* The global-intelligence module (2026-11-12) — the bridge to
+     `server/fios/`, which holds the smart-money, whale, on-chain and macro
+     engines. A module that is not in this list is reported as
+     `NOT_IN_SPEC_MODULE_LIST` by the registry, which is exactly the
+     warning that catches a module added by accident. */
+  'global-intel',
+  /* The fit module (2026-11-12) — the bridge to the opportunity-fit engine
+     in `server/fios/`, which answers «کدام گزینه مناسب من است؟» by scoring
+     each opportunity against the owner's own profile, capital and goal. */
+  'opportunity-fit',
+  /* The macro-graph module (2026-11-12) — the bridge to the regime engine
+     in `server/fios/macroGraph.js`, which reads the global snapshot, the
+     world model and the portfolio TOGETHER. */
+  'macro-graph',
+  /* The goal-scenarios module (2026-11-12) — the bridge to the scenario
+     engine in `server/fios/goalScenarios.js`, which builds three profiles
+     for a target and refuses to model anything without real capital. */
+  'goal-scenarios',
+  /* The route-intelligence module (2026-11-12) — the bridge to the route
+     ranking engine in `server/fios/routeIntelligence.js`, fed by the
+     deployment's LIVE route provider. It answers «which bridge should I
+     use to move my money?» with a ranked, priced, timed comparison. */
+  'route-intelligence',
+  /* The why-decision module (2026-11-12) — the bridge to the why engine
+     in `server/fios/whyEngine.js`, fed with the brain's OWN decision:
+     its findings, its confidence, its risk view and the owner's own
+     state. It answers «چرا این را گفتی؟». */
+  'why-decision'
 ]);
 
 /**

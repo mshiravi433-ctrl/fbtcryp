@@ -324,7 +324,7 @@ export function createIntentOS({
           // analysis and reads — the assistant has the data
           'PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'BRIDGE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN',
           'RISK_ANALYSIS', 'MARKET_ANALYSIS', 'MARKET_CONTEXT', 'ANALYZE_TOKEN', 'SIGNALS',
-          'NEWS_SEARCH', 'SMART_MONEY', 'WHALE', 'FARM', 'LEND', 'BORROW', 'ORDERS', 'STOCKS',
+          'NEWS_SEARCH', 'SMART_MONEY', 'WHALE', 'FARM', 'LEND', 'BORROW', 'ORDERS', 'STOCKS', 'INSURANCE',
           // conversation control
           'CONTINUE', 'DETAILS', 'CANCEL', 'GENERAL', 'EXECUTE_CURRENT', 'REBALANCE', 'GOAL',
           // "what can you do" is a chat answer by definition
@@ -338,6 +338,16 @@ export function createIntentOS({
         let workingIntent = intent;
         const stayInChat = ANSWER_IN_CHAT.includes(workingIntent.type);
         let openPage = wantsPageOpen(workingIntent.raw) || !stayInChat;
+        /* STOCKS and BORROW are chat-answer intents unless the user explicitly
+           asks to open their venue page. Their navigation agent otherwise
+           turns a request such as “buy Tesla stock” or “borrow 100 USDC” into
+           an automatic page change, bypassing the user-chosen hand-off chip. */
+        if (['STOCKS', 'BORROW'].includes(workingIntent.type) && !openPage) {
+          plan = {
+            ...plan,
+            agents: (plan.agents || []).filter((agentId) => agentId !== 'navigation-agent')
+          };
+        }
 
         /*
          * CONTINUE / «اره» / «بله تایید شد» must resume the last offer
@@ -443,7 +453,11 @@ export function createIntentOS({
             code: 'BRIDGE_EXECUTE_UNAVAILABLE',
             requiresConfirmation: false,
             executed: false,
-            broadcasts: false
+            broadcasts: false,
+            // A route to the bridge form is only an inspection hand-off. It is
+            // deliberately not `route`/`handoff`, which would claim navigation
+            // or imply that a quote/execution took place.
+            inspectionRoute: handoffRoute || '/bridge'
           };
         } else if (routing.unavailable) {
           // The module exists in the spec but not in this build — say so,
@@ -541,11 +555,21 @@ export function createIntentOS({
           context,
           results: executionResult || {},
           plan,
-          locale: currentLocale
+          locale: currentLocale,
+          handoffRoute
         });
         
         // 8. SUGGESTIONS — dynamic contextual
-        const suggestions = getSuggestionsForIntent(workingIntent.type, { ...context, lastIntentType: workingIntent.type }, workingIntent.entities);
+        const suggestions = getSuggestionsForIntent(
+          workingIntent.type,
+          { ...context, lastIntentType: workingIntent.type },
+          workingIntent.entities,
+          currentLocale,
+          {
+            missingInformation: workingIntent.missingInformation,
+            minimalQuestion: workingIntent.minimalQuestion
+          }
+        );
         
         // 9. TASK CONTINUITY — a finished read/navigation is COMPLETED, not
         // an “unfinished HORIZON” nag the next time the chat remounts.

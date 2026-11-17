@@ -1,6 +1,8 @@
 /** Deterministic, evidence-cited AI Command Center answer. The LLM may help
  * translate/explain elsewhere; it cannot manufacture wallets or confidence. */
 
+import { smartMoneyEvidenceFresh } from '../aiEvidenceFallback.js';
+
 /** An alert instruction is not a research question. Return a route to the
  * *reviewable* Intent monitor draft ONLY for an unambiguous chain + contract;
  * a ticker alone must never become a contract-scoped alert. */
@@ -43,12 +45,36 @@ export function narrateIntelligence(intel, { message = '', lang = 'fa' } = {}) {
   const cadence = fa
     ? 'اسکن در استقرار فعلی زمان‌بندی‌شده و نمونه‌ای است، نه پوشش ۲۴ساعتهٔ بلادرنگ.'
     : 'Indexing on this deployment is scheduled and sampled, not 24/7 real-time coverage.';
+  /* Freshness gate: an index built BEFORE the claimed window cannot support a
+     claim about that window. `at` is when this request read the snapshot, not
+     when the data was indexed — only `indexedAt` proves the data is current.
+     A stale index downgrades to an explicit abstention that names its age,
+     instead of presenting days-old consensus as the observed window. */
+  const nowMs = Number(intel?.at) || Date.now();
+  const evidenceBase = { at: intel?.at || null, indexedAt: intel?.indexedAt || null,
+    window: intel?.window || '24h', coverage: intel?.coverage || null };
+  const fresh = smartMoneyEvidenceFresh(evidenceBase, { now: nowMs });
+  if (!fresh) {
+    const ageMs = intel?.indexedAt ? nowMs - Number(intel.indexedAt) : null;
+    const ageText = ageMs == null
+      ? (fa ? 'زمان ایندکس مشخص نیست' : 'the index time is unknown')
+      : (fa
+        ? `آخرین ایندکس ${Math.max(1, Math.round(ageMs / 3_600_000))} ساعت پیش ساخته شده`
+        : `the index was last built ${Math.max(1, Math.round(ageMs / 3_600_000))} hours ago`);
+    return {
+      text: fa
+        ? `اجماع پول هوشمندِ قابل‌تأیید برای بازهٔ ${intel?.window || '24h'} ندارم: ${ageText} و بیرون از بازهٔ ادعاشده است؛ دادهٔ کهنه را به‌جای تازه ارائه نمی‌کنم. ${basis} ${cadence}`
+        : `No verified smart-money consensus for the ${intel?.window || '24h'} window: ${ageText}, outside the claimed window — I will not present stale data as current. ${basis} ${cadence}`,
+      evidence: { ...evidenceBase, rows: selected.slice(0, 5), stale: true, ageMs },
+      dataStatus: 'insufficient-evidence'
+    };
+  }
   if (!active.length) {
     return {
       text: fa
         ? `در دادهٔ قابل‌دسترسی فعلاً اجماع پول هوشمندِ قابل‌تأیید${address ? ' برای این قرارداد' : ''} ندارم؛ «دادهٔ ناکافی» معادل «هیچ‌کس نخریده» نیست. ${selected.length ? `${selected.length} توکن دارای معاملهٔ جفت‌شده دیده شد، اما حداقل ۳ گروه مستقلِ واجد امتیاز لازم فراهم نبود. ` : ''}${basis} ${cadence}`
         : `No independently verified smart-money consensus${address ? ' for that contract' : ''} is available in the sampled window. Missing data is not proof nobody bought. ${selected.length ? `${selected.length} token(s) have paired swaps but fewer than three independent qualified groups. ` : ''}${basis} ${cadence}`,
-      evidence: { at: intel?.at || null, indexedAt: intel?.indexedAt || null, coverage: intel?.coverage || null, rows: selected.slice(0, 5) },
+      evidence: { ...evidenceBase, rows: selected.slice(0, 5) },
       dataStatus: 'insufficient-evidence'
     };
   }
@@ -66,7 +92,7 @@ export function narrateIntelligence(intel, { message = '', lang = 'fa' } = {}) {
   });
   return {
     text: `${fa ? 'از معاملات جفت‌شدهٔ تأییدشده در بازهٔ مشاهده‌شده:' : 'From verified paired swaps in the observed window:'}\n${lines.join('\n')}\n${basis} ${cadence}`,
-    evidence: { at: intel?.at || null, indexedAt: intel?.indexedAt || null, coverage: intel?.coverage || null, rows: active.slice(0, 5) },
+    evidence: { ...evidenceBase, rows: active.slice(0, 5) },
     dataStatus: 'observed'
   };
 }

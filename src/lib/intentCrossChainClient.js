@@ -27,7 +27,7 @@
 
 import * as ed from '@noble/ed25519';
 import { sha512 } from '@noble/hashes/sha2.js';
-import { getAddress } from 'ethers';
+import { getAddress } from '../../server/ethersLite.js';
 import { apiBase } from './apiBase.js';
 
 /* noble/ed25519 v2 needs its sha512 wired to a concrete implementation. */
@@ -138,6 +138,37 @@ export function forgetStateKeys(stateId) {
   delete store[stateId];
   writeKeyStore(store);
 }
+
+/* ── the transfer the user is looking at ─────────────────────────────────── */
+
+/*
+ * THE STORE MOVED, AND THE REASON IS THE FIRST-PAINT BUDGET.
+ *
+ * These three functions used to live HERE, in the module that owns the
+ * cross-chain browser client — a module that imports `@noble/ed25519`,
+ * `@noble/hashes` and `server/ethersLite.js`.
+ *
+ * The brain client (`src/lib/central/client.js`) needs to READ the
+ * published transfer on every turn, and the brain client is on the entry
+ * path. So the import edge
+ *
+ *     central/client.js  →  intentCrossChainClient.js  →  noble/ed25519
+ *
+ * dragged a signing library, a hash library and an ethers implementation
+ * into the FIRST-PAINT bundle, for a transfer that is three numbers and
+ * three strings. That was **26 KB**, and it pushed the first paint over
+ * its budget — a build that was correct and shipped anyway, and then
+ * failed the byte gate that says so.
+ *
+ * The store now lives in `src/lib/routeRequestStore.js`, which has NO
+ * imports at all. These are re-exported here so that every existing
+ * import keeps working and the behaviour is byte-for-byte the same.
+ */
+export {
+  publishRouteRequest,
+  readPublishedRouteRequest,
+  clearPublishedRouteRequest
+} from './routeRequestStore.js';
 
 /* ── state plan builder — mirrors server normalization exactly ─────────────── */
 

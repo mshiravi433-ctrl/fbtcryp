@@ -49,9 +49,10 @@ import {
 import { planCollaboration } from '../../src/lib/intent-ai/os/collaborationRouter.js';
 import {
   INTELLIGENCE_MODES as CLIENT_MODES,
+  AUTO_INTELLIGENCE_MODE,
   DEFAULT_INTELLIGENCE_MODE,
   normalizeIntelligenceMode as normalizeClientMode,
-  getIntelligenceMode as getClientMode,
+  intelligenceTurnBudgetMs,
   intelligenceModeLabel
 } from '../../src/lib/aiIntelligenceMode.js';
 
@@ -82,6 +83,31 @@ test('an unknown mode is reported and never obeyed', () => {
   assert.equal(out.rejected, 'UNKNOWN_MODE');
   assert.equal(out.requested, 'ultra-mega');
   assert.equal(normalizeIntelligenceMode('nonsense'), null);
+});
+
+test('an Auto-aware request ignores client tiers, accepts deeper proposals, and respects the operator pin', () => {
+  const social = { mode: 'swift', reason: 'SOCIAL_TURN' };
+  const requestedMax = resolveIntelligenceMode('max', { env: {}, auto: social });
+  assert.equal(requestedMax.mode, 'swift');
+  assert.equal(requestedMax.source, 'auto');
+  assert.equal(requestedMax.rejected, 'CLIENT_MODE_IGNORED');
+  assert.equal(requestedMax.auto.applied, true);
+
+  const unknown = resolveIntelligenceMode('mxa', { env: {}, auto: social });
+  assert.equal(unknown.mode, 'swift');
+  assert.equal(unknown.rejected, 'UNKNOWN_MODE');
+
+  const deep = resolveIntelligenceMode('swift', { env: {}, auto: { mode: 'max', reason: 'LIVE_RESEARCH' } });
+  assert.equal(deep.mode, 'max');
+  assert.equal(deep.source, 'auto');
+  assert.equal(deep.rejected, 'CLIENT_MODE_IGNORED');
+
+  const pinned = resolveIntelligenceMode('swift', {
+    env: { FBT_AI_INTELLIGENCE: 'balanced' }, auto: { mode: 'max', reason: 'LIVE_RESEARCH' }
+  });
+  assert.equal(pinned.mode, 'balanced');
+  assert.equal(pinned.source, 'env');
+  assert.equal(pinned.auto.ignored, 'OPERATOR_PIN_WINS');
 });
 
 test('all three modes are described with a fa/en label and an explicit authority boundary', () => {
@@ -450,20 +476,26 @@ test('the profile of max is honest about what it does and does not do', () => {
 
 /* ── 8. the browser half ─────────────────────────────────────────────────── */
 
-test('the client defaults to the smartest mode and accepts the same aliases', () => {
-  assert.equal(DEFAULT_INTELLIGENCE_MODE, 'max');
-  assert.equal(getClientMode(), 'max', 'no window / empty storage resolves to max, never to a weaker mode');
+test('the browser defaults to Auto and normalizes legacy tiers only for reporting', () => {
+  assert.equal(DEFAULT_INTELLIGENCE_MODE, 'auto');
+  assert.equal(AUTO_INTELLIGENCE_MODE, 'auto');
+  assert.equal(normalizeClientMode(null), null, 'no stored or supplied tier is read by the browser');
+  assert.equal(normalizeClientMode('auto'), 'auto');
   assert.equal(normalizeClientMode('smartest'), 'max');
-  assert.equal(normalizeClientMode('باهوش‌ترین'), 'max', 'the old label still resolves — a saved preference must not silently downgrade');
-  assert.equal(normalizeClientMode('هوش عمیق'), 'max', 'the label the UI shows now resolves too');
+  assert.equal(normalizeClientMode('باهوش‌ترین'), 'max');
+  assert.equal(normalizeClientMode('هوش عمیق'), 'max');
   assert.equal(normalizeClientMode('fast'), 'swift');
   assert.equal(normalizeClientMode('nonsense'), null);
   assert.equal(CLIENT_MODES.length, 3);
   assert.ok(CLIENT_MODES.every((m) => m.label.fa && m.label.en && m.hint.fa && m.hint.en));
+  assert.equal(intelligenceTurnBudgetMs('auto'), intelligenceTurnBudgetMs('max'),
+    'the client waits for the longest server-selected tier, not a saved preference');
 });
 
-test('the mode label is localised in both languages', () => {
+test('the Auto and tier labels are localised in both languages', () => {
+  assert.equal(intelligenceModeLabel('auto', 'fa'), 'خودکار');
+  assert.equal(intelligenceModeLabel('auto', 'en-US'), 'Automatic');
   assert.equal(intelligenceModeLabel('max', 'fa'), 'هوش عمیق');
-  assert.equal(intelligenceModeLabel('max', 'en-US'), 'Smartest');
+  assert.equal(intelligenceModeLabel('max', 'en-US'), 'Deep');
   assert.equal(intelligenceModeLabel('swift', 'fa-IR'), 'سریع');
 });

@@ -21,7 +21,7 @@
  * chip that visibly does nothing when tapped.
  */
 
-export const SUGGESTION_SCHEMA = 'fbt.suggestion.v2';
+export const SUGGESTION_SCHEMA = 'fbt.suggestion.v3';
 
 /** 'fa-IR' → 'fa'; anything unrecognised reads as English. */
 function langOf(locale) {
@@ -168,6 +168,93 @@ function chips(ids, locale) {
     .filter(Boolean);
 }
 
+const SLOT_ALIASES = Object.freeze({
+  asset: 'asset', token: 'asset', tokenin: 'asset', fromtoken: 'asset',
+  destination_asset: 'destination_asset', destinationasset: 'destination_asset', tokenout: 'destination_asset', totoken: 'destination_asset',
+  amount: 'amount', capital: 'amount', capitalusd: 'amount',
+  timeframe: 'timeframe', horizon: 'timeframe', horizondays: 'timeframe',
+  riskpreference: 'riskPreference', risk_tolerance: 'riskPreference', risklevel: 'riskPreference',
+  network: 'network', chain: 'network', sourcechain: 'network', destinationnetwork: 'network',
+  recipient: 'recipient'
+});
+
+function clarificationSlot(options = {}) {
+  const values = [
+    options.minimalQuestion?.slot,
+    ...(Array.isArray(options.missingInformation) ? options.missingInformation : []),
+    ...(Array.isArray(options.missingFields) ? options.missingFields : []),
+    ...(Array.isArray(options.partial?.missing) ? options.partial.missing : [])
+  ];
+  for (const value of values) {
+    const raw = typeof value === 'string' ? value : (value?.slot || value?.field || '');
+    const key = String(raw).replace(/[\s-]/g, '').toLowerCase();
+    const canonical = SLOT_ALIASES[key] || SLOT_ALIASES[String(raw).toLowerCase()];
+    if (canonical) return canonical;
+  }
+  return null;
+}
+
+function clarificationChips(slot, locale) {
+  const lang = langOf(locale);
+  const definitions = {
+    asset: [
+      { id: 'clarify_asset_btc', label: 'BTC', prompt: 'BTC' },
+      { id: 'clarify_asset_eth', label: 'ETH', prompt: 'ETH' },
+      { id: 'clarify_asset_sol', label: 'SOL', prompt: 'SOL' }
+    ],
+    destination_asset: [
+      { id: 'clarify_destination_usdt', label: 'USDT', prompt: 'USDT' },
+      { id: 'clarify_destination_eth', label: 'ETH', prompt: 'ETH' },
+      { id: 'clarify_destination_sol', label: 'SOL', prompt: 'SOL' }
+    ],
+    timeframe: lang === 'fa'
+      ? [
+          { id: 'clarify_horizon_3m', label: '۳ ماه', prompt: '۳ ماه' },
+          { id: 'clarify_horizon_6m', label: '۶ ماه', prompt: '۶ ماه' },
+          { id: 'clarify_horizon_1y', label: '۱ سال', prompt: '۱ سال' }
+        ]
+      : [
+          { id: 'clarify_horizon_3m', label: '3 months', prompt: '3 months' },
+          { id: 'clarify_horizon_6m', label: '6 months', prompt: '6 months' },
+          { id: 'clarify_horizon_1y', label: '1 year', prompt: '1 year' }
+        ],
+    riskPreference: lang === 'fa'
+      ? [
+          { id: 'clarify_risk_low', label: 'کم', prompt: 'ریسک کم' },
+          { id: 'clarify_risk_medium', label: 'متعادل', prompt: 'ریسک متعادل' },
+          { id: 'clarify_risk_high', label: 'بالا', prompt: 'ریسک بالا' }
+        ]
+      : [
+          { id: 'clarify_risk_low', label: 'Low', prompt: 'low risk' },
+          { id: 'clarify_risk_medium', label: 'Moderate', prompt: 'moderate risk' },
+          { id: 'clarify_risk_high', label: 'High', prompt: 'high risk' }
+        ],
+    amount: lang === 'fa'
+      ? [
+          { id: 'clarify_amount_10pct', label: '۱۰٪ از موجودی', prompt: '۱۰٪ از موجودی کیف پول' },
+          { id: 'clarify_amount_25pct', label: '۲۵٪ از موجودی', prompt: '۲۵٪ از موجودی کیف پول' },
+          { id: 'clarify_amount_50pct', label: '۵۰٪ از موجودی', prompt: '۵۰٪ از موجودی کیف پول' }
+        ]
+      : [
+          { id: 'clarify_amount_10pct', label: '10% of balance', prompt: '10% of my available wallet balance' },
+          { id: 'clarify_amount_25pct', label: '25% of balance', prompt: '25% of my available wallet balance' },
+          { id: 'clarify_amount_50pct', label: '50% of balance', prompt: '50% of my available wallet balance' }
+        ],
+    network: lang === 'fa'
+      ? [
+          { id: 'clarify_network_ethereum', label: 'اتریوم', prompt: 'شبکه Ethereum' },
+          { id: 'clarify_network_arbitrum', label: 'آربیتروم', prompt: 'شبکه Arbitrum' },
+          { id: 'clarify_network_solana', label: 'سولانا', prompt: 'شبکه Solana' }
+        ]
+      : [
+          { id: 'clarify_network_ethereum', label: 'Ethereum', prompt: 'Ethereum network' },
+          { id: 'clarify_network_arbitrum', label: 'Arbitrum', prompt: 'Arbitrum network' },
+          { id: 'clarify_network_solana', label: 'Solana', prompt: 'Solana network' }
+        ]
+  };
+  return definitions[slot] || [];
+}
+
 /** Per-intent chip sets, by id only — the text lives in CHIPS. */
 const BY_INTENT = Object.freeze({
   // YIELD/INVESTMENT chips: افق جهانی → /stocks, plus /perp and /stocks
@@ -189,9 +276,24 @@ const BY_INTENT = Object.freeze({
  * so existing callers that only pass a context keep working and get localized
  * chips without a change at the call site.
  */
-export function getSuggestionsForIntent(intentType, context = {}, entities = {}, locale = null) {
+export function getSuggestionsForIntent(intentType, context = {}, entities = {}, locale = null, options = {}) {
   const type = String(intentType || 'GENERAL').toUpperCase();
   const lang = locale || context.locale || 'fa';
+  const missingSlot = clarificationSlot(options);
+  const hasClarification = Boolean(
+    missingSlot
+    || options.minimalQuestion
+    || options.partial?.question
+    || options.partial?.missing?.length
+    || options.missingInformation?.length
+    || options.missingFields?.length
+    || ['empty', 'fragment', 'truncated', 'ambiguous', 'garbled'].includes(options.partial?.completeness)
+  );
+  if (missingSlot) return clarificationChips(missingSlot, lang);
+  /* Do not fall through to generic intent/page chips while a required field is
+     open. The minimal question is already shown; unrelated actions would only
+     distract from the information needed to answer. */
+  if (hasClarification) return [];
 
   if (['YIELD_DISCOVERY', 'FARM', 'LEND', 'BORROW', 'STAKING', 'INVESTMENT_PLAN'].includes(type)) {
     return chips(BY_INTENT.YIELD, lang);

@@ -52,6 +52,18 @@ export const LIQUID_SIZE = 32;         // ارتقا از ۲۴ به ۳۲ (دقت
 export const READOUT_DIM = 12;         // ارتقا از ۷ به ۱۲ (افزودن هوش جهانی/کلان/کلونی)
 
 /** Canonical Swarm Parameter Count (shared across all devices regardless of local neurogenesis). */
+/*
+ * The SIZES of each block of the genome, in floats.
+ *
+ * These are SIZES, not OFFSETS. The offsets are derived from them further
+ * down (OFF_TAU / OFF_SENS / OFF_REC / OFF_OUT / OFF_BIAS) and are exported
+ * separately as SWARM_PARAM_OFFSETS, because conflating the two is a silent,
+ * catastrophic bug: writing a trained readout at "offset 384" (the SIZE of
+ * the readout block) lands in the middle of the RECURRENT weights and
+ * corrupts the reservoir instead of the readout — and the readout then keeps
+ * its untrained values, so the cortex still cannot read direction and
+ * nothing looks broken.
+ */
 export const SWARM_PARAM_LAYOUT = Object.freeze({
   ltcTauBase: LIQUID_SIZE,                           // ۳۲
   ltcSensoryW: LIQUID_SIZE * SENSORY_CHANNELS,       // ۵۱۲
@@ -59,6 +71,43 @@ export const SWARM_PARAM_LAYOUT = Object.freeze({
   readoutW: READOUT_DIM * LIQUID_SIZE,               // ۳۸۴
   readoutBias: READOUT_DIM                           // ۱۲
 });
+
+/**
+ * The OFFSET of each block of the genome, in floats.
+ *
+ * This is what any code that writes into the genome must use. The sizes live
+ * in SWARM_PARAM_LAYOUT; the offsets live here.
+ */
+export const SWARM_PARAM_OFFSETS = Object.freeze({
+  ltcTauBase: 0,
+  ltcSensoryW: LIQUID_SIZE,
+  ltcRecW: LIQUID_SIZE + LIQUID_SIZE * SENSORY_CHANNELS,
+  readoutW: LIQUID_SIZE + LIQUID_SIZE * SENSORY_CHANNELS + LIQUID_SIZE * LIQUID_SIZE,
+  readoutBias: LIQUID_SIZE + LIQUID_SIZE * SENSORY_CHANNELS + LIQUID_SIZE * LIQUID_SIZE + READOUT_DIM * LIQUID_SIZE
+});
+/*
+ * The offsets above must agree with the ones the cortex itself uses — the
+ * OFF_TAU / OFF_SENS / OFF_REC / OFF_OUT / OFF_BIAS chain.
+ *
+ * The check is written as a DERIVATION, not as a list of literals, so it
+ * keeps working if LIQUID_SIZE or SENSORY_CHANNELS ever change: the
+ * exported offsets are recomputed from the same sizes the cortex uses, and
+ * the two are compared. A hard-coded list of numbers would have silently
+ * gone stale the first time a size changed, and the failure would again be
+ * a trained readout that never reaches the cortex.
+ */
+const EXPECTED_OFFSETS = Object.freeze({
+  ltcTauBase: 0,
+  ltcSensoryW: SWARM_PARAM_LAYOUT.ltcTauBase,
+  ltcRecW: SWARM_PARAM_LAYOUT.ltcTauBase + SWARM_PARAM_LAYOUT.ltcSensoryW,
+  readoutW: SWARM_PARAM_LAYOUT.ltcTauBase + SWARM_PARAM_LAYOUT.ltcSensoryW + SWARM_PARAM_LAYOUT.ltcRecW,
+  readoutBias: SWARM_PARAM_LAYOUT.ltcTauBase + SWARM_PARAM_LAYOUT.ltcSensoryW + SWARM_PARAM_LAYOUT.ltcRecW + SWARM_PARAM_LAYOUT.readoutW
+});
+for (const key of Object.keys(EXPECTED_OFFSETS)) {
+  if (SWARM_PARAM_OFFSETS[key] !== EXPECTED_OFFSETS[key]) {
+    throw new Error(`SWARM_PARAM_OFFSETS_MISMATCH:${key}`);
+  }
+}
 export const SWARM_PARAM_COUNT =
   SWARM_PARAM_LAYOUT.ltcTauBase +
   SWARM_PARAM_LAYOUT.ltcSensoryW +

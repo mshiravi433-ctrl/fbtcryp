@@ -21,7 +21,7 @@
  *   getCoverPremiumV2 → confirmCoverPremiumV2 → (user reviews premium/terms)
  *   → wallet approval if ERC20 → wallet signs buyCoverV3 → receipt verified.
  */
-import { Interface, isAddress, getAddress } from 'ethers';
+import { Interface, isAddress, getAddress } from '../../ethersLite.js';
 import { InsuranceProviderAdapter } from '../adapter.js';
 import { httpPost } from '../http.js';
 import * as store from '../store.js';
@@ -300,8 +300,8 @@ export class InsurAceAdapter extends InsuranceProviderAdapter {
 
     // buyParams (per docs) = [products, durations, amounts, addresses, premium, referral, helper, security, freeText, v, r, s]
     const [products, durations, amounts, addresses, premiumAmount, referralCode, helperParameters, securityParameters, freeText, vs, rs, ss] = buyParams;
-    const iface = new Interface(BUY_COVER_V3_ABI);
-    const data = iface.encodeFunctionData('buyCoverV3', [products, durations, amounts, addresses, premiumAmount, referralCode, helperParameters, securityParameters, freeText, vs, rs, ss]);
+    const iface = await Interface(BUY_COVER_V3_ABI);
+    const data = (await ifaceReady()).encodeFunctionData('buyCoverV3', [products, durations, amounts, addresses, premiumAmount, referralCode, helperParameters, securityParameters, freeText, vs, rs, ss]);
 
     const value = BigInt(helperParameters?.[0] ?? 0); // helperParameters[0] carries msgValue per integration docs
     const isNative = value > 0n;

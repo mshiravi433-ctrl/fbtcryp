@@ -386,7 +386,19 @@ class CompoundV3LendingAdapter extends LendingProtocolAdapter {
          codes (COMPOUND_MARKET_UNREADABLE, COMPOUND_WRONG_CHAIN, …) surface
          as-is; anything else is ADAPTER_ERROR with the message sanitized. */
       const code = String(err?.code || 'ADAPTER_ERROR').slice(0, 64);
-      return { __ok: false, __error: { code, detail: String(err?.detail?.reason || err?.message || err).slice(0, 160) } };
+      /*
+       * The error carries `ok:false` ON PURPOSE.
+       *
+       * Every adapter answer has the same shape: `ok` says whether it
+       * succeeded, and a caller that reads `result.ok` must never get
+       * `undefined` and treat it as truthy. The failure path used to
+       * return `{ code, detail }` with no `ok` at all, so a caller asking
+       * "did this work?" had to know that the absence of `ok` meant no.
+       *
+       * The shape is set here, in the one place that builds a failure,
+       * so every call site inherits it.
+       */
+      return { __ok: false, __error: { ok: false, code, detail: String(err?.detail?.reason || err?.message || err).slice(0, 160) } };
     }
   }
 
@@ -617,7 +629,19 @@ class MorphoLendingAdapter extends LendingProtocolAdapter {
     try { return { __ok: true, __value: await fn() }; }
     catch (err) {
       const code = String(err?.code || 'ADAPTER_ERROR').slice(0, 64);
-      return { __ok: false, __error: { code, detail: String(err?.detail?.reason || err?.message || err).slice(0, 160) } };
+      /*
+       * The error carries `ok:false` ON PURPOSE.
+       *
+       * Every adapter answer has the same shape: `ok` says whether it
+       * succeeded, and a caller that reads `result.ok` must never get
+       * `undefined` and treat it as truthy. The failure path used to
+       * return `{ code, detail }` with no `ok` at all, so a caller asking
+       * "did this work?" had to know that the absence of `ok` meant no.
+       *
+       * The shape is set here, in the one place that builds a failure,
+       * so every call site inherits it.
+       */
+      return { __ok: false, __error: { ok: false, code, detail: String(err?.detail?.reason || err?.message || err).slice(0, 160) } };
     }
   }
 

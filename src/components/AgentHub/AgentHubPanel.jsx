@@ -38,6 +38,7 @@ import {
 import RecommendedAgents from './RecommendedAgents.jsx';
 import NativeDataDisclosure from './NativeDataDisclosure.jsx';
 import { setActiveAgent } from '../../lib/intent-ai/agentHub/activeAgent.js';
+import { attachPlugin } from '../../lib/central/client.js';
 import '../../styles/agent-hub.css';
 import { pollWhileVisible } from '../../lib/visibilityPoll';
 
@@ -618,6 +619,25 @@ export default function AgentHubPanel({ fa = false, onClose = null, onActivateIn
           ? `«${selected.nameFa || selected.name}» در چت فعال شد. حالا در تب گفتگو پیشنهادها و نتایج همین ایجنت را می‌بینید.`
           : `“${selected.name}” is active in the chat. Its suggestions and results now appear in the chat tab.`
       });
+      /* The browser snapshot makes the choice visible HERE; the owner record
+         makes it visible to a turn that starts somewhere else (Telegram, a
+         cron, another device). Best effort, and only for a first-party plugin:
+         the chat already carries the agent on every turn from this browser, so
+         a failed sync costs durability, not the choice — and the notice says
+         which half worked instead of leaving a silent half-failure. */
+      if (selected.source === 'native') {
+        attachPlugin(selected.id)
+          .then((out) => {
+            if (out?.ok === true) return;
+            setNotice({
+              tone: 'warn',
+              text: fa
+                ? `«${selected.nameFa || selected.name}» در همین مرورگر فعال است ولی به حساب شما ذخیره نشد (${out?.code || 'ATTACH_FAILED'}) — در دستگاه دیگر یا ربات شناخته نمی‌شود.`
+                : `“${selected.name}” is active in this browser but was not stored on your account (${out?.code || 'ATTACH_FAILED'}) — another device or the bot will not know about it.`
+            });
+          })
+          .catch(() => {});
+      }
       onActivateInChat?.(selected);
     } catch {
       setNotice({ tone: 'warn', text: fa ? 'فعال‌سازی در چت انجام نشد.' : 'The agent could not be activated for the chat.' });

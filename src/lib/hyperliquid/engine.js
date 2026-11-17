@@ -21,6 +21,7 @@ export const ENGINE_CODES = Object.freeze({
   COIN_NOT_ALLOWED: 'ENG_COIN_NOT_ALLOWED',
   SIDE_INVALID: 'ENG_SIDE_INVALID',
   NOTIONAL_INVALID: 'ENG_NOTIONAL_INVALID',
+  ORDER_TOO_LARGE: 'ENG_ORDER_TOO_LARGE',
   LEVERAGE_INVALID: 'ENG_LEVERAGE_INVALID',
   STOP_INVALID: 'ENG_STOP_INVALID',
   RULE_DAILY_LIMIT: 'ENG_RULE_DAILY_LIMIT',
@@ -41,18 +42,30 @@ const RATIONALE_MAX = 280;
 const NOTES_MAX = 300;
 
 /** Validates ONE proposal from the AI. Anything unclear is dropped, not repaired. */
-export function validateProposal(raw, { allowedCoins, maxLeverage, maxStopLossPct }) {
+export function validateProposal(raw, { allowedCoins, maxLeverage, maxStopLossPct, maxOrderUsd = null }) {
   if (!raw || typeof raw !== 'object') return { ok: false, code: ENGINE_CODES.BAD_PROPOSAL };
-  if (!allowedCoins.includes(raw.coin)) return { ok: false, code: ENGINE_CODES.COIN_NOT_ALLOWED };
+  if (!Array.isArray(allowedCoins) || !allowedCoins.includes(raw.coin)) {
+    return { ok: false, code: ENGINE_CODES.COIN_NOT_ALLOWED };
+  }
   if (raw.side !== 'long' && raw.side !== 'short') return { ok: false, code: ENGINE_CODES.SIDE_INVALID };
   const notional = Number(raw.notionalUsd);
   if (!Number.isFinite(notional) || notional <= 0) return { ok: false, code: ENGINE_CODES.NOTIONAL_INVALID };
+  if (maxOrderUsd !== null && maxOrderUsd !== undefined) {
+    const orderLimit = Number(maxOrderUsd);
+    if (!Number.isFinite(orderLimit) || orderLimit < 0) return { ok: false, code: ENGINE_CODES.NOTIONAL_INVALID };
+    if (notional > orderLimit) return { ok: false, code: ENGINE_CODES.ORDER_TOO_LARGE };
+  }
+  const leverageLimit = Number(maxLeverage);
   const leverage = Number(raw.leverage);
-  if (!Number.isInteger(leverage) || leverage < 1 || leverage > maxLeverage) {
+  if (!Number.isInteger(leverageLimit) || leverageLimit < 1
+      || !Number.isInteger(leverage) || leverage < 1 || leverage > leverageLimit) {
     return { ok: false, code: ENGINE_CODES.LEVERAGE_INVALID };
   }
+  const stopLimit = Number(maxStopLossPct);
   const stop = Number(raw.stopLossPct);
-  if (!Number.isFinite(stop) || stop <= 0 || stop > maxStopLossPct) return { ok: false, code: ENGINE_CODES.STOP_INVALID };
+  if (!Number.isFinite(stopLimit) || stopLimit <= 0 || !Number.isFinite(stop) || stop <= 0 || stop > stopLimit) {
+    return { ok: false, code: ENGINE_CODES.STOP_INVALID };
+  }
   return {
     ok: true,
     intent: {
@@ -67,6 +80,38 @@ export function validateProposal(raw, { allowedCoins, maxLeverage, maxStopLossPc
 }
 
 /** Rules are the user's own limits on how often the AI may act. */
+/**
+ * Conservative order ceiling for an analysis request. It reserves enough of the
+ * daily loss budget for the widest allowed stop, as well as total exposure and
+ * the market's 1% of 24h volume limit. Approval still recalculates every gate
+ * from live data and the exact proposed stop.
+ */
+export function conservativeMaxOrderUsd({ caps = {}, state = {}, market = {} } = {}) {
+  const c = { ...HL_CAP_DEFAULTS, ...caps };
+  if (c.killSwitch === true) return 0;
+  const isNum = (value) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+  const maxOrder = isNum(c.maxOrderUsd) ? Number(c.maxOrderUsd) : NaN;
+  const exposureCap = isNum(c.totalExposureUsd) ? Number(c.totalExposureUsd) : NaN;
+  const dailyLimit = isNum(c.dailyLossUsd) ? Math.abs(Number(c.dailyLossUsd)) : NaN;
+  const widestStop = isNum(c.maxStopLossPct) ? Number(c.maxStopLossPct) : NaN;
+  const exposure = isNum(state.currentExposureUsd) ? Number(state.currentExposureUsd) : NaN;
+  const realised = isNum(state.dailyRealisedPnlUsd) ? Number(state.dailyRealisedPnlUsd) : NaN;
+  const unrealised = isNum(state.dailyUnrealisedPnlUsd) ? Number(state.dailyUnrealisedPnlUsd) : NaN;
+  const volume = isNum(market.dayNtlVlm) ? Number(market.dayNtlVlm) : NaN;
+  if (!(maxOrder > 0) || !(exposureCap > 0) || !(dailyLimit > 0) || !(widestStop > 0)
+      || !(exposure >= 0) || !Number.isFinite(realised) || !Number.isFinite(unrealised)
+      || !(volume >= 0)) return null;
+  const lossUsed = Math.max(0, -(realised + Math.min(0, unrealised)));
+  const remainingDailyLoss = Math.max(0, dailyLimit - lossUsed);
+  const remainingExposure = Math.max(0, exposureCap - exposure);
+  return Math.max(0, Math.min(
+    maxOrder,
+    remainingExposure,
+    remainingDailyLoss / widestStop,
+    volume * MAX_ORDER_SHARE_OF_VOLUME
+  ));
+}
+
 export function normalizeRules(input = {}) {
   const strategy = STRATEGIES.includes(input.strategy) ? input.strategy : RULE_DEFAULTS.strategy;
   const maxTrades = Math.round(Number(input.maxTradesPerDay));

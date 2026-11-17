@@ -34,6 +34,7 @@
  * (`grantsPermission: false` on every record).
  */
 import { randomUUID } from 'node:crypto';
+import { capitalUsdFor } from './financialState.js';
 import { financialGuardian } from '../../src/lib/central/council.js';
 import { round } from '../../src/lib/central/schema.js';
 
@@ -155,7 +156,7 @@ export function createCouncil({ collections, competition = null, observability =
       profile: { riskProfile: { value: String(preferences?.riskTolerance || '').toUpperCase() || null } },
       financialState: {
         availableCapitalUsd: financial ? num(readEnv(financial.net?.availableCapitalUsd)) : null,
-        netWorthUsd: financial ? num(readEnv(financial.net?.netWorthUsd)) : null
+        netWorthUsd: financial ? (num(readEnv(financial.net?.netWorthUsd)) ?? capitalUsdFor(financial)) : null
       },
       freshnessReport: financial ? { stale: (financial.provenance?.stale || []).map((s) => ({ key: s })), unavailable: (financial.provenance?.unavailable || []).map((s) => ({ key: s })) } : null,
       reversible: decision?.reversible ?? null,

@@ -61,6 +61,7 @@ export const INTENT_TYPES = Object.freeze([
   'SMART_MONEY',
   'WHALE',
   'ORDERS',
+  'INSURANCE',
   'REBALANCE',
   'ANALYZE_TOKEN',
   'SIGNALS',
@@ -157,7 +158,7 @@ const KEYWORD_LEXICON = Object.freeze([
   { type: 'SWAP', words: ['سواپ', 'تبدیل', 'معاوضه', 'swap', 'convert', 'exchange'] },
   { type: 'BRIDGE', words: ['بریج', 'بریدج', 'پل', 'bridge', 'کراس‌چین', 'کراس چین', 'کراسچین', 'بین‌زنجیره‌ای', 'cross-chain', 'cross chain', 'crosschain'] },
   { type: 'FARM', words: ['فارم', 'استخر', 'ال پی', 'farm', 'farming', 'pool', 'liquidity'] },
-  { type: 'LEND', words: ['وام دادن', 'لند', 'lend', 'lending', 'supply', 'aave'] },
+  { type: 'LEND', words: ['وام دادن', 'لند', 'lend', 'lending', 'supply', 'deposit', 'aave'] },
   { type: 'BORROW', words: ['وام', 'قرض', 'borrow', 'loan'] },
   { type: 'ORDERS', words: ['سفارش', 'سفارشها', 'سفارشات', 'order', 'orders', 'limit'] },
   /* Transaction history is a wallet read — the wallet page owns the ledger. */
@@ -172,6 +173,7 @@ const KEYWORD_LEXICON = Object.freeze([
   /* Monitors are the Ops Center's own surface, not a settings screen. */
   { type: 'OPS_CENTER', words: ['پایش', 'پایشها', 'مانیتور', 'مانیتورها', 'monitor', 'monitors', 'monitoring'] },
   { type: 'STOCKS', words: ['سهام', 'سهم', 'بورس', 'stock', 'stocks', 'xstock', 'equities'] },
+  { type: 'INSURANCE', words: ['بیمه', 'بیمه نامه', 'پوشش بیمه', 'insurance', 'insurance marketplace'] },
   /* Tokenized real-world assets — the Stocks/RWA surface owns these. */
   { type: 'RWA', words: ['توکن شده', 'توکنیزه', 'دارایی واقعی', 'rwa', 'tokenized', 'tokenized assets', 'real world asset'] },
   { type: 'P2P', words: ['p2p', 'پی تو پی', 'همتا به همتا'] },
@@ -721,6 +723,7 @@ const NAV_TARGETS = [
   { route: '/signals', keywords: ['سیگنال', 'signals'], type: 'SIGNALS' },
   { route: '/smart-money', keywords: ['smart money', 'هوشمند', 'اسمارت'], type: 'SMART_MONEY' },
   { route: '/loan', keywords: ['وام', 'lending', 'loan'], type: 'LEND' },
+  { route: '/insurance', keywords: ['بیمه', 'insurance'], type: 'INSURANCE' },
   { route: '/earn', keywords: ['earn', 'yield'], type: 'YIELD_DISCOVERY' },
   { route: '/explore', keywords: ['explore', 'کاوش'], type: 'MARKET_CONTEXT' },
   { route: '/nft', keywords: ['nft', 'ان اف تی'], type: 'NAVIGATION' },
@@ -1115,7 +1118,12 @@ export function understandIntent(message, context = {}) {
 
   const clarification = calculateClarificationPriority({ intentType: selectedType, entities, context });
   const breakdown = calculateConfidenceBreakdown({ intentType: selectedType, entities, context, questionType });
-  const nextPredictedActions = predictNextActions({ intentType: selectedType, entities, context });
+  const nextPredictedActions = predictNextActions({
+    intentType: selectedType,
+    entities,
+    context,
+    missingInformation: clarification.missingFields
+  });
   const positiveAmount = Number(entities.amount ?? entities.amountUsd);
   const hasPositiveAmount = Number.isFinite(positiveAmount) && positiveAmount > 0;
   const explicitSupplyVerb = /(\bsupply\b|\blend\b|\bdeposit\b|سپرده[‌\s]*(?:کن|بگذار|بذار)|وام[‌\s]*بده|لند[‌\s]*کن|واریز[‌\s]*کن)/i.test(text);
@@ -1182,7 +1190,7 @@ export function understandIntent(message, context = {}) {
     readOnly: [
       'PORTFOLIO_ANALYSIS', 'MARKET_ANALYSIS', 'NEWS_SEARCH', 'MARKET_CONTEXT', 'OPEN_CALM', 'PLAY_MUSIC',
       'NAVIGATION', 'WALLET_BALANCE', 'SMART_MONEY', 'WHALE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN',
-      'FARM', 'LEND', 'BORROW', 'ANALYZE_TOKEN', 'RISK_ANALYSIS', 'SIGNALS', 'STOCKS', 'HORIZON', 'FOREX', 'RWA',
+      'FARM', 'LEND', 'BORROW', 'ANALYZE_TOKEN', 'RISK_ANALYSIS', 'SIGNALS', 'STOCKS', 'INSURANCE', 'HORIZON', 'FOREX', 'RWA',
       'P2P', 'DYDX', 'FUTURES', 'ORDERS', 'BTC_WALLET', 'NOTIFICATIONS', 'SETTINGS', 'REWARDS',
       'STRATEGY_PLAN',
       'INTENT_OS', 'ADD_TOKEN', 'SWITCH_NETWORK', 'WALLET_CONNECT', 'WALLET_DISCONNECT',
@@ -1190,7 +1198,7 @@ export function understandIntent(message, context = {}) {
       'OPS_CENTER', 'AGENTS', 'STRATEGY', 'SYSTEM_STATUS', 'SECURITY', 'NFT', 'SHOP',
       'EXPLORE', 'LEARN', 'DOCS', 'LEADERBOARD', 'VAULT', 'CAPABILITIES', 'GOAL', 'REBALANCE'
     ].includes(selectedType),
-    handoff: !['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN', 'RISK_ANALYSIS', 'FARM', 'LEND', 'BORROW', 'GENERAL', 'CANCEL', 'CONTINUE', 'DETAILS', 'CAPABILITIES', 'SYSTEM_STATUS', 'AGENTS', 'STRATEGY'].includes(selectedType)
+    handoff: !['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN', 'RISK_ANALYSIS', 'FARM', 'LEND', 'BORROW', 'INSURANCE', 'GENERAL', 'CANCEL', 'CONTINUE', 'DETAILS', 'CAPABILITIES', 'SYSTEM_STATUS', 'AGENTS', 'STRATEGY'].includes(selectedType)
   };
 }
 
@@ -1236,20 +1244,16 @@ function extractEntities(text, context = {}) {
     }
   }
 
-  const dollarMatch = raw.match(/(?:\$|usd|dollars?|دلار)\s*(\d+(?:,\d+)*(?:\.\d+)?)|(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:dollars?|دلار|usd)/i);
+  const dollarMatch = raw.match(/(?:\$|usd\b|dollars?|دلار)\s*(\d+(?:,\d+)*(?:\.\d+)?)|(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:dollars?|دلار|usd\b)/i);
   if (dollarMatch && !deep.amountUsd) {
     deep.amountUsd = (dollarMatch[1] || dollarMatch[2]).replace(/,/g, '');
     if (!deep.amount) deep.amount = deep.amountUsd;
   }
 
+  // Upgrade 4 already resolves the complete natural-language asset lexicon.
+  // A second substring pass here used to re-add ETH/SOL/BNB when those same
+  // words named a chain (for example, "bridge USDC from Ethereum …").
   const tokens = [...(deep.tokens || [])];
-  const aliasHits = ['تتر', 'اتریوم', 'اتر', 'بیت‌کوین', 'بیت کوین', 'بیتکوین', 'سولانا', 'بایننس'];
-  for (const a of aliasHits) {
-    if (raw.includes(a)) {
-      const t = aliasToken(a);
-      if (t && !tokens.includes(t)) tokens.push(t);
-    }
-  }
   const tokenRegex = /\b(ETH|BTC|SOL|USDC|USDT|BNB|ARB|MATIC|AVAX|OP|DAI)\b/gi;
   for (const m of raw.matchAll(tokenRegex)) {
     const sym = m[1].toUpperCase();
@@ -1276,27 +1280,9 @@ function extractEntities(text, context = {}) {
     }
   }
 
-  const chainWords = ['ethereum', 'arbitrum', 'آربیتروم', 'اربیتروم', 'اریتروم', 'base', 'بیس', 'optimism', 'آپتیمیزم', 'bsc', 'bnb', 'بایننس', 'polygon', 'پالیگان', 'avalanche', 'solana', 'سولانا', 'اتریوم'];
-  const foundChains = [];
-  for (const w of chainWords) {
-    const lower = raw.toLowerCase();
-    const j = raw.indexOf(w) >= 0 ? raw.indexOf(w) : lower.indexOf(w.toLowerCase());
-    if (j >= 0) foundChains.push({ w, j, id: aliasChainId(w) });
-  }
-  foundChains.sort((a, b) => a.j - b.j);
-  const chains = foundChains.map((c) => c.w.toLowerCase());
-  const chainIds = foundChains.map((c) => c.id).filter(Boolean);
-  if (chains.length) deep.chains = [...new Set(chains)];
-  if (chainIds.length) {
-    const uniqueIds = [...new Set(chainIds)];
-    deep.chainIds = uniqueIds;
-    deep.network = uniqueIds[0];
-    if (uniqueIds.length > 1) {
-      deep.fromChain = uniqueIds[0];
-      deep.toChain = uniqueIds[1];
-      deep.destinationNetwork = uniqueIds[1];
-    }
-  }
+  // Chain mentions (including their disambiguation from token aliases) are
+  // owned by extractEntitiesUpgrade4. Do not scan raw substrings again here:
+  // that second pass used to turn an ETH token into chainId 1.
 
   const evmAddr = raw.match(/0x[a-fA-F0-9]{40}/);
   if (evmAddr && !deep.toAddress) deep.toAddress = evmAddr[0];

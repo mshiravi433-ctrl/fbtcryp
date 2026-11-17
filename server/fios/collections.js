@@ -41,7 +41,10 @@ export const COLLECTIONS = Object.freeze([
   /* Phase 215 — Traditional assets in the decision engine (additive). */
   'traditional_opportunities',
   /* Phase 216 — lending adapter quote attempts (additive). */
-  'lending_adapter_audit'
+  'lending_adapter_audit',
+  /* §5.24.15 — the plugin a user attached to themselves (additive). One row
+     per owner, so the choice survives a reload and a device. */
+  'plugin_attachments'
 ]);
 
 /** Per-collection row caps. Small on purpose: these are decision records,
@@ -62,7 +65,9 @@ const CAPS = Object.freeze({
   /* Phase 215 — discovered traditional opportunities (latest pin + history). */
   traditional_opportunities: 120,
   /* Phase 216 — adapter quote attempts (audit rows, newest first). */
-  lending_adapter_audit: 300
+  lending_adapter_audit: 300,
+  /* §5.24.15 — one 'active' row per owner; the cap only bounds a stale key. */
+  plugin_attachments: 4
 });
 
 const isCollection = (name) => COLLECTIONS.includes(String(name));

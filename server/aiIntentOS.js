@@ -100,6 +100,12 @@ import { aiConfigured, classifyIntentWithModel } from './ai.js';
 import { fetchSimplePrices } from './providers.js';
 import { narrateIntelligence, smartMoneyMonitorHandoff } from './smartMoney/narration.js';
 import { getVerifiedIntelligence } from './smartMoney/intelligence.js';
+import {
+  assessAnswerEvidence,
+  answerRequiresEvidence,
+  buildEvidenceLimitationReply,
+  isFreshConditionalRead
+} from './aiEvidenceFallback.js';
 import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { ownerFromRequest, listGoals, createGoal, parseGoalFromText } from './financialGoals.js';
@@ -115,6 +121,7 @@ import {
 import { understandIntent, updateIntentSession } from '../src/lib/intent-ai/os/index.js';
 import { resolveGoalTurn } from '../src/lib/strategyBrain/goalTurn.js';
 import { resolveChatRoute } from '../src/lib/intent-ai/autonomy/chatRoutes.js';
+import { getSuggestionsForIntent } from '../src/lib/intent-ai/os/suggestionEngine.js';
 import {
   getAvailableProviders,
   getActiveProviderIds,
@@ -155,6 +162,7 @@ import { fetchCoinDetail } from './providers.js';
 import { runCollaborativeAnalysis, formatEmotionalAcknowledgement } from './aiCollaboration.js';
 import {
   resolveIntelligenceMode,
+  proposeIntelligenceMode,
   getIntelligenceProfile,
   intelligenceDeadlineMs,
   turnCeilingMs,
@@ -171,6 +179,7 @@ import {
   getQualityDashboard
 } from './aiQuestionIntel.js';
 import { searchKnowledge, listKnowledge, knowledgeStats } from '../src/lib/intent-ai/os/knowledgeCenter.js';
+import { hybridKnowledgeSearch, semanticKnowledgeReport } from '../src/lib/intent-ai/os/semanticKnowledge.js';
 /* Upgrade 13 — conversational depth. The social layer answers a pleasantry in
    the language it was written in, turns «چخبر» into an economic brief, and the
    escalation ladder spends the REST of the fleet when the deterministic reply
@@ -190,6 +199,7 @@ import { orchestratorEnabled, ORCHESTRATOR_SCHEMA } from './aiOrchestrator.js';
    where `_setOrchestrator` lets a probe or an operator swap it). */
 import { getOrchestrator } from './aiOrchestratorRoutes.js';
 import { getNeuromorphicSwarm } from './aiNeuromorphic.js';
+import { cortexBridgeStatus } from './aiCortexBridge.js';
 
 const router = Router();
 
@@ -248,11 +258,13 @@ async function marketContext() {
   try {
     /* swr: a warm cache answers instantly and refreshes in the background —
        a chat turn never waits on CoinGecko when a recent read exists. */
-    const { value } = await withCache('ai-os:market', 60_000, () => fetchSimplePrices(['bitcoin', 'ethereum', 'solana'], 'usd'), { swr: true });
+    const { value, stale = false } = await withCache('ai-os:market', 60_000, () => fetchSimplePrices(['bitcoin', 'ethereum', 'solana'], 'usd'), { swr: true });
     const g = value || {};
     const price = (row) => (Number.isFinite(Number(row?.usd)) ? Number(row.usd) : null);
     return {
-      dataStatus: 'live',
+      dataStatus: stale ? 'stale' : 'live',
+      source: 'coingecko',
+      at: Date.now(),
       change24hPct: Number.isFinite(Number(g.bitcoin?.usd_24h_change)) ? Number(g.bitcoin.usd_24h_change) : null,
       priceMap: { BTC: price(g.bitcoin), ETH: price(g.ethereum), SOL: price(g.solana) }
     };
@@ -263,14 +275,17 @@ async function marketContext() {
 
 async function yieldContext() {
   try {
-    const { value } = await withCache('ai-os:yields', 5 * 60_000, fetchYields, { swr: true });
+    const { value, stale = false } = await withCache('ai-os:yields', 5 * 60_000, fetchYields, { swr: true });
     const pools = Array.isArray(value?.pools) ? value.pools : (Array.isArray(value) ? value : []);
     return pools.slice(0, 40).map((p) => ({
       protocol: p?.protocol || p?.project || null,
       symbol: p?.symbol || p?.token || null,
       apy: Number.isFinite(Number(p?.apy)) ? Number(p.apy) : null,
       riskBand: p?.riskBand || p?.risk || null,
-      tvlUsd: Number.isFinite(Number(p?.tvlUsd)) ? Number(p.tvlUsd) : null
+      tvlUsd: Number.isFinite(Number(p?.tvlUsd)) ? Number(p.tvlUsd) : null,
+      dataStatus: stale ? 'stale' : 'live',
+      source: p?.source || p?.protocol || p?.project || 'yield-feed',
+      at: Date.now()
     })).filter((r) => r.apy != null);
   } catch {
     return null;
@@ -317,7 +332,7 @@ async function buildTokenCard(symbolRaw) {
       p,
       new Promise((resolve) => { const t = setTimeout(() => resolve(null), ms); t.unref?.(); })
     ]);
-    const { value: coin } = await withCache(
+    const { value: coin, stale = false } = await withCache(
       `ai-os:tokencard:${asset.coinId}`,
       TOKEN_CARD_TTL,
       async () => {
@@ -330,6 +345,9 @@ async function buildTokenCard(symbolRaw) {
     if (!coin) return null;
     return {
       kind: 'TOKEN',
+      dataStatus: stale ? 'stale' : 'live',
+      source: 'coingecko',
+      at: Date.now(),
       symbol: String(coin.symbol || asset.symbol || sym).toUpperCase(),
       coinId: coin.id || asset.coinId,
       name: coin.name || null,
@@ -346,9 +364,7 @@ async function buildTokenCard(symbolRaw) {
       sparkline: Array.isArray(coin.sparkline) ? coin.sparkline.slice(-168) : [],
       signal: null,
       rsi: null,
-      confidence: null,
-      at: Date.now(),
-      source: 'api'
+      confidence: null
     };
   } catch {
     return null;
@@ -409,7 +425,10 @@ function sanitizePortfolio(value) {
       amount: Number.isFinite(Number(h?.amount)) ? Number(h.amount) : null
     };
   });
-  const totalValueUsd = Number.isFinite(Number(value?.totalValueUsd ?? value?.totalValue)) ? Number(value.totalValueUsd ?? value.totalValue) : null;
+  const rawTotalValue = value?.totalValueUsd ?? value?.totalValue;
+  const totalValueUsd = rawTotalValue != null && rawTotalValue !== '' && Number.isFinite(Number(rawTotalValue))
+    ? Number(rawTotalValue)
+    : null;
   /*
    * Aggregate profit/loss, when the client has it. These are the numbers the
    * situation layer (§۵٫۲۳) reads to tell a loss from a gain — and the reason
@@ -1069,17 +1088,19 @@ router.get('/tools', (_req, res) => res.json({ ok: true, schema: AI_TOOL_SCHEMA,
 
 /* FBT AI Gateway Endpoints (Spec Phase 3) */
 /*
- * The intelligence-mode contract, readable without spending a token.
+ * The response-depth contract, readable without spending a token.
  *
- *   GET /api/v1/ai/intelligence            → the active mode + all modes
- *   GET /api/v1/ai/intelligence?mode=swift → what *that* mode would do
+ *   GET /api/v1/ai/intelligence              → Auto, selected per question
+ *   GET /api/v1/ai/intelligence?mode=swift   → a preview of that tier
  *
- * It exists so the UI (and an operator debugging «چرا جواب کوتاه است؟») can
- * show the real default instead of hard-coding one, and so `max` is
- * inspectable: the model ladders and token budgets are in the payload.
+ * Auto cannot know the exact tier until a message arrives. The default report
+ * therefore says `mode: auto` and has no fabricated per-request deadline; a
+ * query parameter explicitly asks for a preview only.
  */
 router.get('/intelligence', (req, res) => {
-  const requested = typeof req.query?.mode === 'string' && req.query.mode.trim() ? req.query.mode.trim() : null;
+  const rawMode = typeof req.query?.mode === 'string' && req.query.mode.trim() ? req.query.mode.trim() : null;
+  const autoSelection = !rawMode || rawMode.toLowerCase() === 'auto';
+  const requested = autoSelection ? null : rawMode;
   const report = describeIntelligence({ requested });
   /* One read of the fleet for the whole payload: the per-provider rows and the
      keyed-but-out-of-fleet note are the same nine objects, and walking the
@@ -1088,6 +1109,21 @@ router.get('/intelligence', (req, res) => {
   return res.json({
     ok: true,
     ...report,
+    ...(autoSelection ? {
+      mode: 'auto',
+      label: { fa: 'خودکار', en: 'Automatic' },
+      description: {
+        fa: 'عمق هر پاسخ از هدف، پیچیدگی، تازگی، کامل‌بودن و ریسک همان پیام انتخاب می‌شود.',
+        en: 'Each answer depth is selected from that message’s purpose, complexity, freshness, completeness and risk.'
+      },
+      source: 'auto',
+      requested: null,
+      rejected: null,
+      defaultMode: 'auto',
+      selection: 'per-question',
+      features: { selection: 'per-question', availableModes: ['swift', 'balanced', 'max'], turnCeilingMs: turnSafeCeilingMs() },
+      modes: report.modes.map((mode) => ({ ...mode, default: false, autoEligible: true }))
+    } : { selection: 'preview' }),
     /* Which providers this deployment may call at all, and on whose say-so. */
     fleet: describeProviderFleet(),
     /* What the gateway would actually try, provider by provider. */
@@ -1106,7 +1142,9 @@ router.get('/intelligence', (req, res) => {
     /* The latency budget the mode will actually run under, and the ceiling the
        turn is clamped to. A mode that cannot finish is indistinguishable from a
        mode that never ran, so the numbers are published, not assumed. */
-    budget: intelligenceDeadlineMs(report.mode),
+    budget: autoSelection
+      ? { mode: 'auto', selection: 'per-question', ceilingMs: turnSafeCeilingMs(), deadlineMs: null }
+      : intelligenceDeadlineMs(report.mode),
     /* Keyed providers the declared fleet will not call — the answer to
        «کلید را گذاشتیم ولی استفاده نمی‌شود». */
     keyedButOutOfFleet: fleetRows
@@ -1168,35 +1206,419 @@ router.get('/gateway/providers', (_req, res) => res.json({
  * provider, which costs tokens and seconds; this returns what the gateway
  * already knows from the traffic it has served, so a panel can poll it.
  */
-router.get('/gateway/health', (_req, res) => res.json({
-  ok: true,
-  schema: 'fbt.ai-gateway-health.v1',
-  summary: getFleetSummary(),
-  fleet: describeProviderFleet(),
-  health: getProviderHealth(),
-  providers: getAvailableProviders().map((p) => ({
-    id: p.id,
-    name: p.name,
-    configured: p.configured,
-    verdict: p.verdict,
-    model: p.defaultModel,
-    reasonCode: p.health?.lastError?.reasonCode || null,
-    lastError: p.health?.lastError?.message || null,
-    fix: p.health?.lastError?.fix || null,
-    lastSuccessAt: p.health?.lastSuccess?.at || null
-  })),
-  at: nowMs()
-}));
+router.get('/gateway/health', async (_req, res) => {
+  /*
+   * THE DAY'S ALLOWANCE IS PART OF THE HEALTH.
+   *
+   * Before this, the only way to learn that the free tier was spent
+   * was to spend it: the next request came back 429 and the operator
+   * saw a failure instead of a number. The quota counter makes the
+   * day's spending visible BEFORE it runs out — «32 of 50 left, about
+   * six deep turns still affordable» — which is the difference between
+   * a budget and a surprise.
+   */
+  let quota = null;
+  try {
+    const { readQuotaForFleet, turnsRemaining, quotaExhausted } = await import('./aiQuotaBudget.js');
+    const ids = getAvailableProviders().map((p) => p.id);
+    quota = await readQuotaForFleet(ids);
+    quota.turnsRemaining = turnsRemaining(quota, 5);
+    quota.turnCostAssumption = 5;
+    /*
+     * Whether the day is SPENT is a different question from how much of
+     * it is left, and the operator needs both. «3 of 50 left» is a
+     * warning; «the day's provider allowance is spent» is a fact, and
+     * it is the fact that explains why the turns have gone thin.
+     *
+     * The check reads the same counter the turns read, so the health
+     * route and the turns cannot disagree about the day.
+     */
+    const exhausted = await quotaExhausted(ids);
+    quota.exhausted = exhausted.exhausted === true;
+    quota.exhaustedReason = exhausted.exhausted ? exhausted.reason : null;
+  } catch {
+    quota = null;
+  }
+  return res.json({
+    ok: true,
+    schema: 'fbt.ai-gateway-health.v1',
+    summary: getFleetSummary(),
+    fleet: describeProviderFleet(),
+    health: getProviderHealth(),
+    quota,
+    providers: getAvailableProviders().map((p) => ({
+      id: p.id,
+      name: p.name,
+      configured: p.configured,
+      verdict: p.verdict,
+      model: p.defaultModel,
+      reasonCode: p.health?.lastError?.reasonCode || null,
+      lastError: p.health?.lastError?.message || null,
+      fix: p.health?.lastError?.fix || null,
+      lastSuccessAt: p.health?.lastSuccess?.at || null
+    })),
+    at: nowMs()
+  });
+});
 
 router.get('/gateway/selftest', async (_req, res) => {
   const report = await gatewaySelfTest();
   return res.json(report);
 });
 
+const GATEWAY_TASK_INTENTS = Object.freeze({
+  market: 'MARKET_ANALYSIS',
+  market_intelligence: 'MARKET_ANALYSIS',
+  crypto_trend: 'MARKET_ANALYSIS',
+  research: 'NEWS_SEARCH',
+  news: 'NEWS_SEARCH',
+  web_research: 'NEWS_SEARCH',
+  portfolio: 'PORTFOLIO_ANALYSIS',
+  portfolio_optimization: 'PORTFOLIO_ANALYSIS',
+  risk: 'RISK_ANALYSIS',
+  guardian: 'RISK_ANALYSIS',
+  complex_plan: 'STRATEGY',
+  strategy: 'STRATEGY',
+  verification: 'RISK_ANALYSIS'
+});
+
+function gatewayAutoDecision(body = {}, { message = '', taskType = 'general' } = {}) {
+  const context = body.context && typeof body.context === 'object' ? body.context : {};
+  const locale = safe(body.locale, 8) || 'fa';
+  let understanding = null;
+  try { understanding = understandIntent(message, { locale }); } catch { understanding = null; }
+  const mappedIntent = GATEWAY_TASK_INTENTS[String(taskType || '').toLowerCase()] || null;
+  const intentType = String(body.intentType || mappedIntent
+    || (understanding?.type && understanding.type !== 'GENERAL' ? understanding.type : 'GENERAL')).toUpperCase();
+  const entities = {
+    ...(understanding?.entities && typeof understanding.entities === 'object' ? understanding.entities : {}),
+    ...(body.entities && typeof body.entities === 'object' ? body.entities : {})
+  };
+  const read = planCollaboration({
+    message,
+    intentType,
+    entities,
+    context: {
+      ...context,
+      currentPage: context.currentPage || context.currentRoute || body.surface || '/'
+    },
+    locale,
+    deepThink: String(process.env.FBT_AI_DEEP_THINK ?? '1') !== '0'
+  });
+  const proposal = proposeIntelligenceMode(read, {
+    intentType,
+    retry: body.retry === true,
+    execution: Boolean(body.actionPlan || body.pendingIntent)
+  });
+  const resolved = resolveIntelligenceMode(body.intelligence ?? null, { auto: proposal });
+  return { read, proposal, resolved, understanding, entities, intentType, context };
+}
+
+function autoModeMetadata(resolved = {}) {
+  return {
+    mode: resolved.mode,
+    source: resolved.source,
+    requested: resolved.requested ?? null,
+    rejected: resolved.rejected ?? null,
+    autoTier: resolved.auto ? {
+      proposed: resolved.auto.proposed,
+      reason: resolved.auto.reason,
+      applied: resolved.auto.applied === true,
+      ignored: resolved.auto.ignored || null
+    } : null
+  };
+}
+
+function publicIntelligenceMode(resolved = {}) {
+  return {
+    schema: 'fbt.ai-intelligence.v1',
+    id: resolved.mode || null,
+    source: resolved.source || null,
+    requested: resolved.requested ?? null,
+    rejected: resolved.rejected ?? null,
+    autoTier: resolved.auto ? {
+      proposed: resolved.auto.proposed,
+      reason: resolved.auto.reason,
+      applied: resolved.auto.applied === true,
+      ignored: resolved.auto.ignored || null
+    } : null
+  };
+}
+
+function chatIntelligenceEnvelope(read, resolved) {
+  const profile = getIntelligenceProfile(resolved?.mode);
+  return {
+    schema: 'fbt.intelligence-meta.v1',
+    level: read?.level ?? null,
+    conversationKind: read?.conversationKind ?? null,
+    complexity: read?.complexity ?? null,
+    freshness: read?.freshness ?? null,
+    reasoning: Boolean(profile.reasoning),
+    plan: read?.intelligence || null,
+    partial: read?.partial || null,
+    deepThink: read?.deepThink || null,
+    mode: publicIntelligenceMode(resolved),
+    authority: { canExecute: false, canSign: false, canMoveFunds: false }
+  };
+}
+
+function applyAnswerEvidencePolicy({
+  text = '', context = {}, collaboration = null, orchestration = null,
+  productRead = null, tokenCard = null, smartMoneyEvidence = null, conditionalEvidence = null, entities = {},
+  intentType = 'GENERAL', freshness = null, answerPath = null, conversationKind = null,
+  socialHandled = false, pendingIntent = false, actionPlan = false, uiType = null,
+  nonFactualResponse = false, minimalQuestion = null, clarificationOnly = false, locale = 'fa', providerAnswered = null
+} = {}) {
+  const assessment = assessAnswerEvidence({
+    context, collaboration, orchestration, productRead, tokenCard, smartMoneyEvidence, conditionalEvidence,
+    entities, intentType, freshness
+  });
+  const required = answerRequiresEvidence({
+    answerPath, freshness, intentType, conversationKind, socialHandled,
+    pendingIntent, actionPlan, uiType,
+    productVerified: productRead?.confidence === 'verified',
+    nonFactualResponse
+  });
+  const fallbackApplied = Boolean(required && !assessment.available);
+  const liveProviderAnswered = providerAnswered === true;
+  return {
+    text: fallbackApplied
+      ? buildEvidenceLimitationReply({
+          locale, intentType, freshness, minimalQuestion, clarificationOnly,
+          providerAnswered
+        })
+      : String(text || ''),
+    evidence: {
+      schema: assessment.schema,
+      required,
+      available: assessment.available,
+      sources: assessment.sources,
+      reason: assessment.reason,
+      fallbackApplied,
+      liveProviderAnswered
+    }
+  };
+}
+
+const GATEWAY_CONTEXT_READ_INTENTS = new Set([
+  'MARKET_ANALYSIS', 'MARKET_CONTEXT', 'ANALYZE_TOKEN', 'SIGNALS', 'STOCKS',
+  'RISK_ANALYSIS', 'PORTFOLIO_ANALYSIS', 'INVESTMENT_PLAN', 'GOAL_PLAN',
+  'STRATEGY', 'STRATEGY_PLAN', 'REBALANCE', 'WALLET_BALANCE', 'ORDERS',
+  'YIELD_DISCOVERY', 'FARM', 'LEND', 'BORROW', 'STAKING'
+]);
+const isGatewayContextEnvelope = (value) => Boolean(value && typeof value === 'object'
+  && ['fbt.ai-context.v1', 'fbt.gateway-context.v1'].includes(String(value.schema || '')));
+
+function verifiedGatewayKnowledge(message, locale, freshness) {
+  if (String(freshness || '').toUpperCase() !== 'STATIC') return [];
+  try {
+    return hybridKnowledgeSearch(message, { locale, limit: 3, lexicalSearch: searchKnowledge })
+      .filter((item) => item?.status === 'verified' && Number(item.score) >= 100
+        && String(item.body || '').trim().length > 20)
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
+function gatewayEvidenceExcerpt({ context = {}, knowledge = [], research = null } = {}) {
+  const lines = [];
+  const market = context.market || {};
+  if (market.dataStatus === 'live' || market.dataStatus === 'observed') {
+    const snapshot = {
+      dataStatus: market.dataStatus,
+      source: market.source || null,
+      at: market.at || market.asOf || null,
+      symbol: market.symbol || null,
+      priceMap: market.priceMap || null,
+      metrics: market.metrics || null
+    };
+    lines.push(`OBSERVED MARKET SNAPSHOT (as-of ${snapshot.at || 'unknown'}): ${JSON.stringify(snapshot)}`);
+  }
+  const portfolio = context.portfolio;
+  if (portfolio && ['live', 'observed', 'client'].includes(String(portfolio.dataStatus || '').toLowerCase())) {
+    lines.push(`OBSERVED PORTFOLIO (status ${portfolio.dataStatus}): ${JSON.stringify({
+      totalValueUsd: portfolio.totalValueUsd ?? null,
+      holdings: (Array.isArray(portfolio.holdings) ? portfolio.holdings : []).slice(0, 12)
+        .map((row) => ({ symbol: row.symbol, amount: row.amount, valueUsd: row.valueUsd })),
+      partial: portfolio.partial === true
+    })}`);
+  }
+  if (Array.isArray(context.yields) && context.yields.length) {
+    lines.push(`OBSERVED YIELD READS: ${JSON.stringify(context.yields.slice(0, 12)
+      .map((row) => ({ protocol: row.protocol, symbol: row.symbol, apy: row.apy, tvlUsd: row.tvlUsd, dataStatus: row.dataStatus })))}`);
+  }
+  const sources = Array.isArray(research?.sources) ? research.sources.filter((row) => row?.url).slice(0, 5) : [];
+  if (sources.length) {
+    lines.push('SOURCED WEB MATERIAL (social-tier items are leads, not verified facts):');
+    for (const [index, source] of sources.entries()) {
+      lines.push(`[${index + 1}] [tier ${source.tier ?? 'unknown'}] ${source.title || 'Untitled'} — ${source.snippet || ''} (${source.url})`);
+    }
+    if (String(research?.freshness || '').toUpperCase() === 'BREAKING' && research?.corroborated !== true) {
+      lines.push('BREAKING-EVENT CHECK: sources are not corroborated; do not state the event as confirmed.');
+    }
+  }
+  if (knowledge.length) {
+    lines.push('VERIFIED STATIC KNOWLEDGE (cite the item id if used; it cannot prove a live fact):');
+    for (const item of knowledge) lines.push(`[${item.id}] ${item.title}: ${item.body}`);
+  }
+  return lines.join('\n').slice(0, 5200);
+}
+
+async function gatewayEvidencePack(req, body, { message, read, entities, intentType, locale } = {}) {
+  const rawContext = body.context && typeof body.context === 'object' ? body.context : {};
+  const productRead = detectProductQuestion(message) ? answerProduct({ message, locale }) : null;
+  const knowledge = verifiedGatewayKnowledge(message, locale, read?.freshness);
+  let research = null;
+  if (read?.needsWeb) {
+    research = await Promise.race([
+      researchWeb({ query: message, locale, freshness: read.freshness, limit: 5 }).catch(() => null),
+      new Promise((resolve) => { const timer = setTimeout(() => resolve(null), 9000); timer.unref?.(); })
+    ]).catch(() => null);
+  }
+  const collaboration = {
+    evidence: {
+      knowledgeUsed: knowledge.length > 0,
+      webUsed: Boolean(research?.sources?.length),
+      corroborated: research?.corroborated === true
+    },
+    sources: Array.isArray(research?.sources) ? research.sources : []
+  };
+  const initialAssessment = assessAnswerEvidence({
+    context: rawContext, collaboration, productRead, entities, intentType, freshness: read?.freshness
+  });
+  const required = answerRequiresEvidence({
+    answerPath: read?.answerPath,
+    freshness: read?.freshness,
+    intentType,
+    conversationKind: read?.conversationKind,
+    productVerified: productRead?.confidence === 'verified'
+  });
+  let context = rawContext;
+  if (required && !initialAssessment.available && GATEWAY_CONTEXT_READ_INTENTS.has(intentType)) {
+    try {
+      const serverContext = await buildAIContext(req, { context: rawContext });
+      const rawMarketIsEvidence = initialAssessment.sources.includes('market-tool');
+      context = {
+        ...serverContext,
+        ...(rawMarketIsEvidence ? { market: rawContext.market } : {}),
+        ...(rawContext.preferences != null ? { preferences: rawContext.preferences } : {})
+      };
+    } catch {
+      context = isGatewayContextEnvelope(rawContext) ? rawContext : {};
+    }
+  }
+  const orchestration = knowledge.length ? {
+    ok: true,
+    answer: 'Verified static knowledge passages were retrieved for this request.',
+    passages: knowledge.map((item) => ({
+      cite: item.id, id: item.id, status: item.status, title: item.title, text: item.body
+    }))
+  } : null;
+  const evidence = applyAnswerEvidencePolicy({
+    text: '', context, collaboration, orchestration, productRead, entities,
+    intentType, freshness: read?.freshness, answerPath: read?.answerPath,
+    conversationKind: read?.conversationKind, locale, providerAnswered: null
+  });
+  return { context, productRead, knowledge, research, collaboration, orchestration, evidence };
+}
+
+function gatewaySocialReply(message, locale) {
+  const isFa = String(locale || 'fa').toLowerCase().startsWith('fa') || /[آ-ی]/.test(message);
+  return isFa ? 'سلام! خوشحالم که اینجایی. چطور می‌تونم کمک کنم؟' : 'Hello! Glad you’re here. How can I help?';
+}
+
+function gatewayEvidenceBlockedResponse(evidencePack, { locale, intentType, resolved }) {
+  const evidence = evidencePack.evidence;
+  return {
+    ok: true,
+    text: evidence.text,
+    provider: 'evidence-policy',
+    providerName: 'FBT evidence policy',
+    model: 'abstention',
+    degraded: true,
+    degradedReason: 'NO_TRUSTED_EVIDENCE',
+    notice: { fa: evidence.text, en: evidence.text },
+    evidence: evidence.evidence,
+    intelligence: autoModeMetadata(resolved)
+  };
+}
+
 router.post('/gateway/chat', async (req, res) => {
   try {
-    const result = await routedChat(req.body || {});
-    return res.json({ ok: true, ...result });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const taskType = String(body.taskType || 'general');
+    const message = String(body.message || body.query || body.user || '').slice(0, MAX_MESSAGE);
+    const userPrompt = String(body.user || body.message || body.query || '').slice(0, 7000);
+    const locale = safe(body.locale, 8) || 'fa';
+    const decision = gatewayAutoDecision(body, { message, taskType });
+    const { resolved, read, entities, intentType } = decision;
+    const evidencePack = await gatewayEvidencePack(req, body, { message, read, entities, intentType, locale });
+
+    if (evidencePack.productRead?.confidence === 'verified') {
+      const gated = applyAnswerEvidencePolicy({
+        text: evidencePack.productRead.answer,
+        context: evidencePack.context,
+        productRead: evidencePack.productRead,
+        entities,
+        intentType,
+        freshness: read.freshness,
+        answerPath: read.answerPath,
+        conversationKind: read.conversationKind,
+        locale
+      });
+      return res.json({
+        ok: true,
+        text: gated.text,
+        provider: 'verified-knowledge',
+        providerName: 'FBT verified product brain',
+        model: 'product-brain',
+        degraded: false,
+        evidence: gated.evidence,
+        intelligence: autoModeMetadata(resolved)
+      });
+    }
+
+    if (evidencePack.evidence.evidence.required && !evidencePack.evidence.evidence.available) {
+      return res.json(gatewayEvidenceBlockedResponse(evidencePack, { locale, intentType, resolved }));
+    }
+
+    const evidenceExcerpt = gatewayEvidenceExcerpt(evidencePack);
+    const system = [
+      String(body.system || ''),
+      evidenceExcerpt
+        ? 'Evidence rule: the appended verified evidence block is the factual source for this turn. Do not add unsupported facts, dates, numbers, prices or conclusions; state gaps plainly.'
+        : ''
+    ].filter(Boolean).join('\n\n').slice(0, 6000);
+    const user = evidenceExcerpt
+      ? `${userPrompt}\n\nVERIFIED EVIDENCE FOR THIS TURN:\n${evidenceExcerpt}`.slice(0, 12000)
+      : userPrompt;
+    const result = await routedChat({ ...body, system, user, intelligence: resolved.mode });
+    const providerAnswered = Boolean(
+      String(result?.provider || '').toLowerCase() !== 'internal'
+      && String(result?.text || '').trim()
+    );
+    const gated = applyAnswerEvidencePolicy({
+      text: String(result?.text || ''),
+      context: evidencePack.context,
+      collaboration: evidencePack.collaboration,
+      orchestration: evidencePack.orchestration,
+      productRead: evidencePack.productRead,
+      entities,
+      intentType,
+      freshness: read.freshness,
+      answerPath: read.answerPath,
+      conversationKind: read.conversationKind,
+      locale,
+      providerAnswered
+    });
+    return res.json({
+      ok: true,
+      ...result,
+      text: gated.text,
+      evidence: gated.evidence,
+      intelligence: { ...(result.intelligence || {}), ...autoModeMetadata(resolved) }
+    });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
@@ -1204,18 +1626,99 @@ router.post('/gateway/chat', async (req, res) => {
 
 router.post('/gateway/consensus', async (req, res) => {
   try {
-    const { message, context, locale, preferredProviders, intelligence } = req.body || {};
-    /* The mode rides along. A debate that ignores it is a debate where three
-       seats decide their own depth — which is how «همه‌جا روی هوش عمیق» can be
-       true for the chat answer and false for the consensus card under it. */
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const message = String(body.message || body.query || '').slice(0, MAX_MESSAGE);
+    const locale = safe(body.locale, 8) || 'fa';
+    const preferredProviders = Array.isArray(body.preferredProviders) ? body.preferredProviders : [];
+    const decision = gatewayAutoDecision(body, { message, taskType: 'market' });
+    const { resolved, read, entities, intentType } = decision;
+    const evidencePack = await gatewayEvidencePack(req, body, { message, read, entities, intentType, locale });
+    const base = {
+      ok: true,
+      consensusReached: false,
+      agreementRatio: null,
+      dominantBias: 'neutral',
+      confidenceScore: null,
+      riskScore: 'UNKNOWN',
+      divergenceDetected: false,
+      lowConfidence: true,
+      reasons: [],
+      risks: [],
+      conflictingOpinions: [],
+      modelsConsulted: [],
+      timestamp: Date.now(),
+      evidence: evidencePack.evidence.evidence,
+      intelligence: autoModeMetadata(resolved)
+    };
+
+    if (['GREETING', 'THANKS', 'CASUAL'].includes(String(read.conversationKind || '').toUpperCase())) {
+      const socialText = gatewaySocialReply(message, locale);
+      const gated = applyAnswerEvidencePolicy({
+        text: socialText, context: evidencePack.context, entities, intentType,
+        freshness: read.freshness, answerPath: read.answerPath,
+        conversationKind: read.conversationKind, socialHandled: true, locale
+      });
+      return res.json({ ...base, reason: 'SOCIAL_TURN_NOT_ANALYZED', lowConfidence: false,
+        consensusSummary: gated.text, evidence: gated.evidence, intelligence: autoModeMetadata(resolved) });
+    }
+
+    if (evidencePack.productRead?.confidence === 'verified') {
+      const gated = applyAnswerEvidencePolicy({
+        text: evidencePack.productRead.answer,
+        context: evidencePack.context,
+        productRead: evidencePack.productRead,
+        entities,
+        intentType,
+        freshness: read.freshness,
+        answerPath: read.answerPath,
+        conversationKind: read.conversationKind,
+        locale
+      });
+      return res.json({ ...base, reason: 'VERIFIED_PRODUCT_KNOWLEDGE', lowConfidence: false,
+        consensusSummary: gated.text, evidence: gated.evidence, intelligence: autoModeMetadata(resolved) });
+    }
+
+    if (evidencePack.evidence.evidence.required && !evidencePack.evidence.evidence.available) {
+      return res.json({ ...base, reason: 'NO_TRUSTED_EVIDENCE',
+        consensusSummary: evidencePack.evidence.text,
+        evidence: evidencePack.evidence.evidence,
+        intelligence: autoModeMetadata(resolved) });
+    }
+
+    const evidenceExcerpt = gatewayEvidenceExcerpt(evidencePack);
+    const priorPreferences = evidencePack.context?.preferences;
+    const context = {
+      ...(evidencePack.context || {}),
+      ...(evidenceExcerpt ? {
+        preferences: [priorPreferences == null ? '' : String(typeof priorPreferences === 'string' ? priorPreferences : JSON.stringify(priorPreferences)),
+          `Verified evidence supplied for this turn:\n${evidenceExcerpt}`].filter(Boolean).join('\n\n')
+      } : {})
+    };
     const consensus = await runMultiAiDebate({
       message,
       context,
       locale,
       preferredProviders,
-      intelligence: intelligence ?? null
+      intelligence: resolved.mode
     });
-    return res.json({ ok: true, ...consensus });
+    const providerAnswered = Boolean((consensus.modelsConsulted || []).some((model) =>
+      model?.provider && String(model.provider).toLowerCase() !== 'internal'));
+    const gated = applyAnswerEvidencePolicy({
+      text: consensus.consensusSummary || '',
+      context: evidencePack.context,
+      collaboration: evidencePack.collaboration,
+      orchestration: evidencePack.orchestration,
+      productRead: evidencePack.productRead,
+      entities,
+      intentType,
+      freshness: read.freshness,
+      answerPath: read.answerPath,
+      conversationKind: read.conversationKind,
+      locale,
+      providerAnswered
+    });
+    return res.json({ ok: true, ...consensus, consensusSummary: gated.text,
+      evidence: gated.evidence, intelligence: autoModeMetadata(resolved) });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
@@ -1498,7 +2001,12 @@ router.get('/quality', async (req, res) => {
 
 /* Knowledge center — the internal knowledge layer the AI retrieves from (§55-57). */
 router.get('/knowledge', (_req, res) => {
-  return res.json({ ok: true, stats: knowledgeStats(), items: listKnowledge() });
+  /* The semantic index is reported alongside the corpus so the layer is
+     observable: an operator can see that it is built, how many items it
+     holds and that it costs no network calls. */
+  let semantic = null;
+  try { semantic = semanticKnowledgeReport(); } catch { semantic = null; }
+  return res.json({ ok: true, stats: knowledgeStats(), items: listKnowledge(), semantic });
 });
 
 router.post('/knowledge/search', (req, res) => {
@@ -1506,7 +2014,16 @@ router.post('/knowledge/search', (req, res) => {
   if (!query.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_QUERY' });
   const locale = safe(req.body?.locale, 5) || 'fa';
   const limit = Math.min(5, Math.max(1, Number(req.body?.limit) || 3));
-  const results = searchKnowledge(query, { locale, limit });
+  /*
+   * The search endpoint now answers by MEANING as well as by wording. The
+   * hybrid retriever is used here, so the public search finds the item even
+   * when the caller used their own words for it.
+   */
+  let results = [];
+  try {
+    results = hybridKnowledgeSearch(query, { locale, limit, lexicalSearch: searchKnowledge });
+  } catch { results = []; }
+  if (!results.length) results = searchKnowledge(query, { locale, limit });
   return res.json({ ok: true, results });
 });
 
@@ -1728,6 +2245,10 @@ export async function conditionalAllocationReply({ message, context, locale = 'f
         : `${summary}\n\nTo finish it: ${ask.join(' ')}`,
       intent: { type: 'CONDITIONAL_ALLOCATION', entities: { classes, conditions: frame.conditions.length } },
       ui: { type: 'CONDITIONAL_ALLOCATION', state: 'NEEDS_INPUT', conditions: frame.conditions, missing: frame.missing },
+      /* A clarification makes no factual claim; the evidence record says so
+         explicitly so the route gate can keep the question as-is. */
+      evidence: { schema: 'fbt.conditional-allocation-evidence.v1', dataStatus: 'needs-input',
+        reads: [], capital: { dataStatus: context?.portfolio?.dataStatus || null } },
       actions: []
     };
   }
@@ -1749,15 +2270,32 @@ export async function conditionalAllocationReply({ message, context, locale = 'f
   const readFn = typeof readPrices === 'function'
     ? (syms) => readPrices(syms)
     : (syms) => withDeadline(readCrossAssetPrices(syms, { now: Date.now() }), 4000);
-  const reads = await Promise.resolve()
+  const rawReads = await Promise.resolve()
     .then(() => readFn(symbols))
     .catch(() => null) || Object.fromEntries(symbols.map((s) => [s, { ok: false, code: 'READ_TIMEOUT' }]));
+  /* Freshness gate: a read whose own timestamp is ancient is not a current
+     observation — it is a dead feed or a stale carry-over. Mark it failed so
+     the instruction becomes UNREADABLE (honest abstention) instead of being
+     evaluated on a week-old quote presented as now. */
+  const readNow = Date.now();
+  const reads = Object.fromEntries(Object.entries(rawReads).map(([symbol, read]) => [
+    symbol,
+    read?.ok === true && !isFreshConditionalRead(read, { now: readNow })
+      ? { ...read, ok: false, code: 'STALE_READ' }
+      : read
+  ]));
 
   const baselines = {};
   const evaluations = frame.conditions.map((c) => evaluateOneCondition(c, reads[c.asset] || null, { baseline: baselines[c.asset] ?? null }));
   const combined = combineEvaluations(evaluations, frame.logic);
 
-  const capitalUsd = Number(context?.portfolio?.totalValueUsd) || null;
+  /* Capital is only real when the portfolio read itself is trustworthy. An
+     unavailable/stale read must size nothing — buildAllocationPlan then
+     answers NO_CAPITAL_READ instead of a percentage of a guess. */
+  const portfolioStatus = String(context?.portfolio?.dataStatus || '').toLowerCase();
+  const capitalUsd = ['live', 'observed', 'client'].includes(portfolioStatus)
+    ? (Number(context?.portfolio?.totalValueUsd) || null)
+    : null;
   const plan = combined.state === 'TRIGGERED'
     ? buildAllocationPlan(frame, { capitalUsd, reads, now: Date.now() })
     : null;
@@ -1808,11 +2346,25 @@ export async function conditionalAllocationReply({ message, context, locale = 'f
   }
 
   const watch = monitorDraftFor(frame, { lang: fa ? 'fa' : 'en' });
+  /* Provenance record: every number in the text above traces to one of these
+     reads (source + timestamp) or to the capital read below. The route gate
+     re-checks this record before the factual text is allowed to ship. */
+  const evidence = {
+    schema: 'fbt.conditional-allocation-evidence.v1',
+    dataStatus: state === 'UNREADABLE' ? 'unreadable' : 'observed',
+    reads: symbols.map((symbol) => {
+      const read = reads[symbol] || {};
+      return { symbol, ok: read.ok === true, source: read.source || null,
+        at: read.at ?? null, code: read.code || null };
+    }),
+    capital: { dataStatus: portfolioStatus || null, totalValueUsd: capitalUsd }
+  };
   return {
     ok: true,
     schema: CONDITIONAL_ALLOCATION_SCHEMA,
     text: stripInternalLeaks(lines.join('\n')),
     intent: { type: 'CONDITIONAL_ALLOCATION', entities: { classes, conditions: frame.conditions.length, logic: frame.logic } },
+    evidence,
     ui: {
       type: 'CONDITIONAL_ALLOCATION',
       state,
@@ -1867,6 +2419,57 @@ router.post('/chat', async (req, res) => {
     wallet: context.wallet,
     portfolio: context.portfolio
   });
+  const surface = req.body?.surface || req.body?.currentPage || '/';
+  const deepThinkOn = String(process.env.FBT_AI_DEEP_THINK ?? '1') !== '0';
+  const partialRead = readPartialInput({
+    message,
+    locale: locale || 'fa',
+    context: {
+      currentPage: surface,
+      lastAssets: Array.isArray(context?.lastAssets) ? context.lastAssets : []
+    },
+    priorIntent: u4?.type || null
+  });
+  /* The router read exists before any branch can return. Rich objective,
+     conditional, Smart Money and ordinary chat replies all receive the same
+     per-message decision rather than quietly bypassing auto-tier. */
+  const tierContext = {
+    currentPage: surface,
+    lastAssets: Array.isArray(context?.lastAssets) ? context.lastAssets : []
+  };
+  const tierRead = planCollaboration({
+    message,
+    intentType: u4.type || 'GENERAL',
+    entities: u4.entities || {},
+    context: tierContext,
+    priorIntent: prior?.intent || null,
+    locale: locale || 'fa',
+    deepThink: deepThinkOn
+  });
+  const earlyAutoTier = proposeIntelligenceMode(tierRead, {
+    intentType: u4.type || 'GENERAL',
+    execution: Boolean(req.body?.actionPlan || req.body?.pendingIntent || u4?.executionRequested || u4?.requiresConfirmation),
+    retry: Boolean(req.body?.retry || req.body?.escalate || req.body?.retryOf)
+  });
+  const earlyResolvedIntelligence = resolveIntelligenceMode(req.body?.intelligence ?? null, { auto: earlyAutoTier });
+  const hasOpenClarification = Boolean(
+    u4?.missingInformation?.length
+    || partialRead?.question
+    || ['empty', 'fragment', 'truncated', 'ambiguous', 'garbled'].includes(partialRead?.completeness)
+  );
+  const contextualSuggestions = (intentType = u4?.type, entities = u4?.entities || {}, extra = {}) =>
+    getSuggestionsForIntent(
+      intentType || 'GENERAL',
+      { ...context, currentPage: surface, locale },
+      entities || {},
+      locale,
+      {
+        missingInformation: u4?.missingInformation,
+        minimalQuestion: u4?.minimalQuestion,
+        partial: partialRead,
+        ...extra
+      }
+    );
 
   if (conversationId) {
     updateIntentSession(conversationId, {
@@ -1881,7 +2484,6 @@ router.post('/chat', async (req, res) => {
 
   /* Rich objective / in-place turns are answered here (see above): the V1
      renderer below cannot express them and would fall back to a generic line. */
-  const surface = req.body?.surface || req.body?.currentPage || '/';
   const rich = richObjectiveReply({ message, u4, context, locale: locale || 'fa', surface,
     messages: Array.isArray(req.body?.messages) ? req.body.messages.slice(-8)
       .filter((row) => row && (row.role === 'ai' || row.role === 'assistant' || row.role === 'user'))
@@ -1894,16 +2496,47 @@ router.post('/chat', async (req, res) => {
       })) : [] });
   if (rich?.ok) {
     const intentId = `int_${nowMs().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const richMissing = rich.intent?.missingInformation || u4?.missingInformation || [];
+    const richQuestion = rich.intent?.minimalQuestion || u4?.minimalQuestion || null;
+    const richHasClarification = Boolean(hasOpenClarification || richMissing.length || richQuestion);
+    const richSuggestions = richHasClarification
+      ? contextualSuggestions(rich.intent?.type || u4.type, rich.intent?.entities || u4.entities, {
+          missingInformation: richMissing,
+          minimalQuestion: richQuestion
+        })
+      : (Array.isArray(rich.suggestions) && rich.suggestions.length
+        ? rich.suggestions
+        : contextualSuggestions(rich.intent?.type || u4.type, rich.intent?.entities || u4.entities));
+    const richProductRead = detectProductQuestion(message)
+      ? answerProduct({ message, locale: locale || 'fa' })
+      : null;
+    const richEvidenceGate = applyAnswerEvidencePolicy({
+      text: rich.text,
+      context,
+      productRead: richProductRead,
+      entities: rich.intent?.entities || u4.entities || {},
+      intentType: rich.intent?.type || u4.type || 'GENERAL',
+      freshness: tierRead.freshness,
+      answerPath: tierRead.answerPath,
+      conversationKind: tierRead.conversationKind,
+      uiType: rich.ui?.type,
+      minimalQuestion: richQuestion || u4?.minimalQuestion || partialRead?.question || null,
+      clarificationOnly: false,
+      locale: locale || 'fa'
+    });
+    const richFinalText = stripInternalLeaks(richEvidenceGate.text);
     const reply = {
-      text: stripInternalLeaks(rich.text),
-      message: stripInternalLeaks(rich.text),
+      text: richFinalText,
+      message: richFinalText,
+      evidence: richEvidenceGate.evidence,
       contract: { version: INTENT_OS_PROMPT_VERSION, executionChain: EXECUTION_CHAIN },
       intent: rich.intent || { type: u4.type, entities: u4.entities || {} },
       confidence: u4.confidence ?? 0.8,
+      intelligence: chatIntelligenceEnvelope(tierRead, earlyResolvedIntelligence),
       ui: rich.ui || { type: 'TEXT' },
       card: null,
       actions: Array.isArray(rich.actions) ? rich.actions : [],
-      suggestions: Array.isArray(rich.suggestions) ? rich.suggestions : suggestionsFor({ message, intent: rich.intent?.type || u4.type, context }),
+      suggestions: richSuggestions,
       pendingIntent: null,
       intentId,
       actionPlan: null,
@@ -1967,6 +2600,13 @@ router.post('/chat', async (req, res) => {
   }
   if (conditional?.ok) {
     const intentId = `int_${nowMs().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const conditionalMissing = conditional.ui?.missing || u4?.missingInformation || [];
+    const conditionalSuggestions = (conditional.ui?.state === 'NEEDS_INPUT' || hasOpenClarification)
+      ? contextualSuggestions(conditional.intent?.type || 'CONDITIONAL_ALLOCATION', conditional.intent?.entities || {}, {
+          missingInformation: conditionalMissing,
+          minimalQuestion: u4?.minimalQuestion
+        })
+      : contextualSuggestions(conditional.intent?.type || 'CONDITIONAL_ALLOCATION', conditional.intent?.entities || {});
     recordIntentOutcome({
       intentId,
       intentType: 'CONDITIONAL_ALLOCATION',
@@ -1977,19 +2617,35 @@ router.post('/chat', async (req, res) => {
       durationMs: 0,
       locale: locale || 'fa'
     }).catch(() => {});
+    /* Final evidence gate: the factual states (ARMING / WAITING / TRIGGERED)
+       may ship only on fresh, successful price reads. UNREADABLE and
+       NEEDS_INPUT are honest abstentions/clarifications — they make no
+       factual claim, so their exact wording is kept. */
+    const conditionalGate = applyAnswerEvidencePolicy({
+      text: conditional.text,
+      conditionalEvidence: conditional.evidence,
+      intentType: 'CONDITIONAL_ALLOCATION',
+      answerPath: 'TOOL',
+      nonFactualResponse: ['UNREADABLE', 'NEEDS_INPUT'].includes(conditional.ui?.state),
+      minimalQuestion: u4?.minimalQuestion || null,
+      locale: locale || 'fa'
+    });
+    const conditionalText = stripInternalLeaks(conditionalGate.text);
     return res.json({
       ok: true,
       schema: 'fbt.ai-chat.v1',
       reply: {
-        text: conditional.text,
-        message: conditional.text,
+        text: conditionalText,
+        message: conditionalText,
+        evidence: conditionalGate.evidence,
         contract: { version: INTENT_OS_PROMPT_VERSION, executionChain: EXECUTION_CHAIN },
         intent: conditional.intent,
         confidence: u4.confidence ?? 0.8,
+        intelligence: chatIntelligenceEnvelope(tierRead, earlyResolvedIntelligence),
         ui: conditional.ui,
         card: null,
         actions: conditional.actions || [],
-        suggestions: suggestionsFor({ message, intent: 'CONDITIONAL_ALLOCATION', context }),
+        suggestions: conditionalSuggestions,
         pendingIntent: null,
         intentId,
         actionPlan: null,
@@ -2020,6 +2676,9 @@ router.post('/chat', async (req, res) => {
     const handoff = smartMoneyMonitorHandoff(message);
     if (handoff) {
       const fa = String(locale || 'fa').startsWith('fa');
+      const handoffSuggestions = handoff.ready
+        ? []
+        : contextualSuggestions('SMART_MONEY_MONITOR_DRAFT', u4?.entities || {}, { missingInformation: ['network'] });
       const text = handoff.ready
         ? fa ? 'پیش‌نویس هشدار برای همین شبکه و آدرس قرارداد آماده است. شرط و پنجرهٔ نمونه‌برداری را در فرم بررسی و تأیید کنید؛ هیچ معامله‌ای اجرا نمی‌شود.'
           : 'A draft alert is ready for this exact chain and contract. Review and confirm its sampled-window condition; no trade is executed.'
@@ -2028,10 +2687,11 @@ router.post('/chat', async (req, res) => {
       return res.json({ ok: true, schema: 'fbt.ai-chat.v1', reply: {
         text, message: text, intent: { type: 'SMART_MONEY_MONITOR_DRAFT', entities: { chain: handoff.chain, token: handoff.address } },
         confidence: null, contract: { version: INTENT_OS_PROMPT_VERSION, executionChain: EXECUTION_CHAIN },
+        intelligence: chatIntelligenceEnvelope(tierRead, earlyResolvedIntelligence),
         ui: { type: 'TEXT' }, card: null, pendingIntent: null,
         actions: [{ id: 'smart-money-monitor-draft', route: handoff.route || '/smart-money?tab=intelligence',
           label: fa ? 'بررسی شرط پایش' : 'Review monitor condition' }],
-        suggestions: [], executed: false, broadcasts: false, requiresUserSignature: false
+        suggestions: handoffSuggestions, executed: false, broadcasts: false, requiresUserSignature: false
       }, context, at: nowMs() });
     }
     const wantsEarly = /early|entry|before|زود|قبل|ورود/i.test(message);
@@ -2039,14 +2699,29 @@ router.post('/chat', async (req, res) => {
       .catch(() => ({ dataStatus: 'unavailable', consensus: [], coverage: null }));
     const narrated = narrateIntelligence(intel, { message, lang: locale || 'fa' });
     const fa = String(locale || 'fa').startsWith('fa');
-    const text = stripInternalLeaks(narrated.text);
+    /* Final evidence gate: an `observed` narration may ship only on a fresh
+       index (indexedAt inside the claimed window). The insufficient-evidence
+       narration is already an honest abstention — its exact wording (which
+       names the index age when stale) is kept, and the gate record is
+       attached for audit. */
+    const smartMoneyGate = applyAnswerEvidencePolicy({
+      text: narrated.text,
+      smartMoneyEvidence: narrated.evidence,
+      intentType: 'SMART_MONEY',
+      answerPath: 'TOOL',
+      nonFactualResponse: narrated.dataStatus !== 'observed',
+      locale: locale || 'fa'
+    });
+    const text = stripInternalLeaks(smartMoneyGate.text);
     return res.json({
       ok: true, schema: 'fbt.ai-chat.v1',
       reply: {
         text, message: text,
+        evidence: smartMoneyGate.evidence,
         intent: { type: 'SMART_MONEY', entities: u4.entities || {} },
         confidence: narrated.dataStatus === 'observed' ? 0.8 : null,
         contract: { version: INTENT_OS_PROMPT_VERSION, executionChain: EXECUTION_CHAIN },
+        intelligence: chatIntelligenceEnvelope(tierRead, earlyResolvedIntelligence),
         ui: { type: 'TEXT' },
         card: null, pendingIntent: null,
         actions: [{ id: 'smart-money-evidence', route: '/smart-money?tab=intelligence',
@@ -2085,7 +2760,6 @@ router.post('/chat', async (req, res) => {
   const intentId = `int_${nowMs().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const goalDetected = /goal|هدف|دو برابر|double|triple|دوبل/i.test(message) && (context.portfolio?.totalValueUsd != null || /goal|هدف|دو برابر|double/i.test(message));
   const resumed = req.body?.resume === true;
-  const suggestions = suggestionsFor({ message, intent: out.plan.intent, context });
   /*
    * The deterministic renderer (`humanResponse.js`) speaks two languages and
    * treats anything that is not English as Persian — so a Portuguese, Turkish
@@ -2095,22 +2769,10 @@ router.post('/chat', async (req, res) => {
    * nothing that carries a language while the interface is Persian. Never
    * Persian by default for somebody who cannot read it.
    */
-  /*
-   * ─── PARTIAL INPUT, BEFORE THE DETERMINISTIC REPLY ────────────────────────
-   * This route answers most short messages with the rule engine, and a fragment
-   * used to leave it through one generic sentence. Read the message first, so
-   * the reply can say what it understood (and ask the one question) instead.
-   * Deterministic, no model call, and '' for a complete message.
-   */
-  const partialRead = readPartialInput({
-    message,
-    locale: locale || 'fa',
-    context: {
-      currentPage: req.body?.surface || req.body?.currentPage || '/',
-      lastAssets: Array.isArray(context?.lastAssets) ? context.lastAssets : []
-    },
-    priorIntent: u4?.type || null
-  });
+  /* A complete intent and an incomplete one use the same suggestion contract;
+     the latter receives only choices for its open slot, never generic actions. */
+  const suggestionIntent = u4?.type && u4.type !== 'GENERAL' ? u4.type : (out.plan.intent || intent || 'GENERAL');
+  const suggestions = contextualSuggestions(suggestionIntent, u4?.entities || {});
   /* A question about FBT itself gets the verified answer from the repository —
      deterministically, in every mode, without a wallet and without a model. */
   const productRead = detectProductQuestion(message)
@@ -2212,14 +2874,26 @@ router.post('/chat', async (req, res) => {
     'RESEARCH', 'WHY_ECONOMICS', 'DISCOVERY_RECOMMENDATION', 'RECOMMENDATION', 'WHY_MARKET_MOVE'
   ];
   /*
-   * ─── INTELLIGENCE MODE — THE ANSWER TO «باهوش‌ترین حالت» ────────────────
-   * Resolved once per turn, before the plan: the mode sets both the DEPTH
-   * floor of the collaboration plan and the model ladder the gateway will
-   * walk. An unknown value is reported, never silently obeyed, and a
-   * deployment can change its default with `FBT_AI_INTELLIGENCE` without a
-   * deploy of logic. Small talk stays small even in the smartest mode.
+   * ─── AUTOMATIC RESPONSE DEPTH ────────────────────────────────────────────
+   * `planCollaboration` reads the request without a model call. Its purpose,
+   * complexity, freshness, emotion and completeness select `swift`, `balanced`
+   * or `max`; incomplete, compound, current-data and high-stakes requests use
+   * the deepest tier. Any legacy mode in the request body is ignored. Only an
+   * explicit deployment pin remains available to the operator. The decision
+   * cannot grant execution authority.
    */
-  const resolvedIntelligence = resolveIntelligenceMode(req.body?.intelligence ?? null);
+  const autoTier = proposeIntelligenceMode(tierRead, {
+    intentType: intent || u4.type || 'GENERAL',
+    /* An action card or pending confirmation discovered by the renderer is the
+       strongest execution signal; it can only keep/raise the tier, never lower it. */
+    execution: Boolean(
+      req.body?.actionPlan || req.body?.pendingIntent
+      || u4?.executionRequested || u4?.requiresConfirmation
+      || human?.actionPlan || pendingIntent || human?.ui?.type === 'ACTION_CARD'
+    ),
+    retry: Boolean(req.body?.retry || req.body?.escalate || req.body?.retryOf)
+  });
+  const resolvedIntelligence = resolveIntelligenceMode(req.body?.intelligence ?? null, { auto: autoTier });
   const intelligenceProfile = getIntelligenceProfile(resolvedIntelligence.mode);
   /*
    * ─── ONE CLOCK FOR THE WHOLE TURN ─────────────────────────────────────────
@@ -2253,16 +2927,18 @@ router.post('/chat', async (req, res) => {
     message,
     intentType: intent || 'GENERAL',
     entities: u4.entities || {},
-    context: { currentPage: req.body?.surface || req.body?.currentPage || '/' },
+    context: tierContext,
     priorIntent: prior?.intent || null,
     locale: locale || 'fa',
     intelligence: resolvedIntelligence.mode,
     intelligenceFloor: intelligenceProfile.collaborationFloor,
-    intelligenceCeiling: intelligenceProfile.collaborationCeiling
-,
+    intelligenceCeiling: intelligenceProfile.collaborationCeiling,
     /* Increment 23 — deep thinking is the default; a deployment can turn it
-       off with FBT_AI_DEEP_THINK=0 and get the pre-increment behaviour. */
-    deepThink: String(process.env.FBT_AI_DEEP_THINK ?? '1') !== '0'
+       off with FBT_AI_DEEP_THINK=0 and get the pre-increment behaviour.
+       Read ONCE above (`deepThinkOn`), because the tier proposal and this plan
+       must be talking about the same setting: two copies of one env read is how
+       a turn ends up priced for a depth it did not run. */
+    deepThink: deepThinkOn
   });
   /*
    * ─── UPGRADE 13 — THE SOCIAL TURN IS ANSWERED BEFORE ANYTHING ELSE ──────
@@ -2394,10 +3070,18 @@ router.post('/chat', async (req, res) => {
   /* Only replace the reply when the collaboration produced a real, grounded
      answer — a degraded no-evidence answer never overwrites the existing
      deterministic reply. */
+  const collaborationGrounded = Boolean(
+    collaboration?.evidence?.knowledgeUsed
+    || collaboration?.evidence?.toolDataUsed
+    || collaboration?.evidence?.webUsed
+  );
   const collaborationUsable = Boolean(
     collaboration?.ok
     && String(collaboration.answer || '').trim().length > 20
-    && (!collaboration.degraded || collaboration.evidence.knowledgeUsed || collaboration.evidence.toolDataUsed || collaboration.evidence.webUsed || collaboration.evidence.internalSynthesis)
+    /* A fluent model completion or an `internalSynthesis` flag is not a source.
+       Only retrieved knowledge, real tool data or cited web evidence lets a
+       factual collaboration answer replace the deterministic one. */
+    && collaborationGrounded
   );
   let finalText = socialTurn.handled ? socialTurn.text : human.message;
   if (socialTurn.handled) {
@@ -2567,6 +3251,62 @@ router.post('/chat', async (req, res) => {
     }
   }
 
+  /*
+   * FINAL EVIDENCE GATE. Model agreement, a fluent completion and the internal
+   * reasoner's own `internalSynthesis` marker are not independent evidence.
+   * Factual, current-data and tool-truth answers may ship only when this turn
+   * actually has a verified passage, relevant tool output, citable web source,
+   * verified product fact or observed orchestrator result. Otherwise answer
+   * with a localized limitation and the one already-budgeted clarification.
+   * Staged actions and confirmation cards stay on their existing safety path.
+   */
+  const finalIntentType = String(human.intent?.type || intent || 'GENERAL').toUpperCase();
+  const answerEvidence = assessAnswerEvidence({
+    context,
+    collaboration,
+    orchestration,
+    productRead: productAnswered && !hasNonProductSubQuestions ? productRead : null,
+    tokenCard,
+    entities: u4?.entities || {},
+    intentType: finalIntentType,
+    freshness: u5.freshness
+  });
+  const evidenceRequired = answerRequiresEvidence({
+    answerPath: u5.answerPath,
+    freshness: u5.freshness,
+    intentType: finalIntentType,
+    conversationKind: u5.conversationKind,
+    /* «چخبر؟» is a live brief, not a pleasantry; its data sources are assessed
+       above like any other current-data response. */
+    socialHandled: Boolean(socialTurn.handled && u5.conversationKind !== 'WHATS_UP'),
+    pendingIntent: Boolean(pendingIntent),
+    actionPlan: Boolean(human.actionPlan),
+    uiType: human.ui?.type,
+    productVerified: Boolean(productAnswered && !hasNonProductSubQuestions)
+  });
+  const liveProviderAnswered = Boolean(
+    (collaboration?.providersUsed?.length && String(collaboration?.answer || '').trim())
+    || (escalation?.ok && String(escalation?.answer || '').trim())
+    || orchestration?.seats?.some((seat) => seat?.ok === true)
+  );
+  const evidenceFallbackApplied = Boolean(evidenceRequired && !answerEvidence.available);
+  if (evidenceFallbackApplied) {
+    finalText = buildEvidenceLimitationReply({
+      locale: deterministicLocale,
+      intentType: finalIntentType,
+      freshness: u5.freshness,
+      minimalQuestion: partialRead?.question ? null : (u4?.minimalQuestion || null),
+      clarificationOnly: Boolean(partialRead?.question),
+      providerAnswered: liveProviderAnswered
+    });
+    /* The no-evidence path must retain the same honest read-back and single
+       clarifier as every other branch; it may not replace it with a guess. */
+    finalText = withPartialReading(finalText, partialRead, {
+      lang: deterministicLocale,
+      skip: (productAnswered && !hasNonProductSubQuestions) || socialTurn.handled || isDistressContainment
+    });
+  }
+
   const reply = {
     text: stripInternalLeaks(finalText),
     message: stripInternalLeaks(finalText),
@@ -2597,6 +3337,15 @@ router.post('/chat', async (req, res) => {
       riskScore: confidenceMetrics.riskScore,
       dataFreshness: confidenceMetrics.dataFreshness
     },
+    evidence: {
+      schema: answerEvidence.schema,
+      required: evidenceRequired,
+      available: answerEvidence.available,
+      sources: answerEvidence.sources,
+      reason: answerEvidence.reason,
+      fallbackApplied: evidenceFallbackApplied,
+      liveProviderAnswered
+    },
     /* AI Upgrade 5 intelligence metadata — the UI renders only what is useful
        to the user (sources, uncertainty, feedback); the rest stays internal. */
     intelligence: {
@@ -2605,6 +3354,23 @@ router.post('/chat', async (req, res) => {
       conversationKind: u5.conversationKind,
       complexity: u5.complexity,
       freshness: u5.freshness,
+      /*
+       * WHAT THE TURN UNDERSTOOD, AND WHAT IT ASKED BACK (Increment 23).
+       *
+       * Published at the envelope ROOT because that is the contract every
+       * early-return path already honours (`chatIntelligenceEnvelope`, used by
+       * the rich-objective, conditional and Smart Money replies) and the one
+       * the docs promise. This path used to publish the same read only one
+       * level down, inside `mode.partial` — so `intelligence.partial` existed
+       * on a clarification answered early and silently vanished on an ordinary
+       * turn, which made "the assistant asked one question and said what it
+       * assumed" unverifiable exactly where it was most likely to happen.
+       * Both copies are kept on purpose: `mode` is the deep contract, while
+       * `partial`/`deepThink` are the flat answer to "did you understand me,
+       * or did you guess, and how many questions did you spend asking?".
+       */
+      partial: u5.partial || null,
+      deepThink: u5.deepThink || null,
       emotion: u5.emotion.state,
       fomo: u5.fomo.detected,
       providersUsed: collaboration?.providersUsed || [],
@@ -2653,6 +3419,25 @@ router.post('/chat', async (req, res) => {
       mode: {
         schema: 'fbt.ai-intelligence.v1',
         id: resolvedIntelligence.mode,
+        /*
+         * WHO CHOSE THIS TIER, AND WHY.
+         *
+         * `source` was already 'request' | 'env' | 'default'; 'auto' is new and
+         * means the question itself was read as not needing the smartest tier.
+         * A tier chosen silently is indistinguishable from a tier nobody chose,
+         * so the proposal is published either way — including when it was
+         * refused, with the reason it was refused. That is what makes "the
+         * answer was shorter this time" answerable instead of mysterious.
+         */
+        source: resolvedIntelligence.source,
+        requested: resolvedIntelligence.requested ?? null,
+        rejected: resolvedIntelligence.rejected ?? null,
+        autoTier: resolvedIntelligence.auto ? {
+          proposed: resolvedIntelligence.auto.proposed,
+          reason: resolvedIntelligence.auto.reason,
+          applied: resolvedIntelligence.auto.applied === true,
+          ignored: resolvedIntelligence.auto.ignored || null
+        } : null,
         /* The reasoning persona of this turn: in the smartest mode the
            specialists are held to an economist's lenses (mechanism, base rate,
            transmission, incentives, opportunity cost, time horizon,
@@ -2872,6 +3657,21 @@ router.post('/chat', async (req, res) => {
         latencyMs: orchestration.latencyMs || 0,
         executionAuthorized: false
       } : null,
+      /*
+       * The neuromorphic layer (§8 — LEVER #5).
+       *
+       * This block used to publish SWARM METADATA ONLY: the generation
+       * counter, the node count and the fact that it costs no server GPU.
+       * It never fed the answer, so the cortex was a spectator.
+       *
+       * It now carries the CORTEX BRIDGE STATUS: whether the cortex is
+       * available, whether its readout was TRAINED, and the measured
+       * discrimination between a rising and a falling market state. The
+       * untrained readout measured 0.07 — the cortex could not tell an
+       * uptrend from a downtrend, and wiring THAT to an answer would have
+       * made the assistant confidently wrong. The trained readout measures
+       * 0.96.
+       */
       neuromorphic: await (async () => {
         try {
           const st = await getNeuromorphicSwarm().getStatus({ owner: ownerFor(req) });
@@ -2879,7 +3679,8 @@ router.post('/chat', async (req, res) => {
             globalGeneration: st.globalGeneration,
             activeNodes24h: st.activeNodes24h,
             zeroServerGpu: true,
-            executionAuthorized: false
+            executionAuthorized: false,
+            cortex: cortexBridgeStatus()
           };
         } catch {
           return null;

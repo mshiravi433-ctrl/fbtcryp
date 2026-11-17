@@ -8,7 +8,20 @@
  */
 import { parseGoalSpec, readHorizonDays } from '../../strategyBrain/goalSpec.js';
 import { resolveMonitorAsset } from '../os/monitorClient.js';
-import { NEGOTIATION_CHAT_SCHEMA, runChatNegotiation, negotiationToChatMessage, negotiationQuestion } from './negotiationChat.js';
+import {
+  NEGOTIATION_CHAT_SCHEMA,
+  runChatNegotiation,
+  negotiationToChatMessage,
+  negotiationQuestion,
+  collaborationActionChips
+} from './negotiationChat.js';
+import {
+  consentToCollaboration,
+  recordCounterpartyReport,
+  recordLocalCollaborationResult,
+  recordPlanDraftRequest,
+  reviewCollaboration
+} from './collaborationLifecycle.js';
 import { parseValueForSlot } from './multiSlotCollector.js';
 import { foldText } from './questionLedger.js';
 
@@ -20,6 +33,44 @@ const plainMessage = (content) => ({
   id: `continuation_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
   role: 'ai', kind: 'assistant', content, ui: { type: 'TEXT' }, actions: []
 });
+
+function collaborationMessage(payload, session, locale, text = null) {
+  const fa = faOf(locale);
+  const outcome = session.review?.status === 'REJECTED' ? 'CONFLICT'
+    : session.review?.status === 'NEEDS_REVISION' ? 'ESCALATION'
+      : session.mode === 'human-human' ? 'AWAITING_COUNTERPARTY' : 'AWAITING_USER';
+  const defaultText = session.review?.status === 'REVIEWED'
+    ? (session.consent?.local?.status === 'LOCAL_ACCEPTANCE_ONLY'
+      ? (fa ? 'بازبینی و پذیرشِ سمت تو ثبت شد؛ طرف مقابل هنوز مستقل تأیید نشده و تماسی هم انجام نشد.' : 'Your review and local-only acceptance are recorded; the counterparty is still unverified and nobody was contacted.')
+      : session.consent?.local?.status === 'RECORDED_LOCAL'
+        ? (fa ? 'بازبینی و رضایتِ محدود به برنامه‌ریزی ثبت شد؛ هیچ اجرا یا تماس خارجی مجاز نیست.' : 'Review and planning-only consent are recorded; no execution or external contact is authorized.')
+        : (fa ? 'بازبینی ثبت شد؛ برای ادامه باید رضایتِ جداگانه و محدود به همین دامنه را ثبت کنی.' : 'Review is recorded; a separate consent scoped to this action is required to continue.'))
+    : session.review?.status === 'NEEDS_REVISION'
+      ? (fa ? 'بازبین اصلاح خواست؛ این پیش‌نویس هنوز تأیید یا اجرا نشده است.' : 'The reviewer requested changes; this draft is not approved or executed.')
+      : session.review?.status === 'REJECTED'
+        ? (fa ? 'پیش‌نویس رد شد و ادامهٔ آن بسته است.' : 'The draft was rejected and this workflow is closed.')
+        : (fa ? 'شرکت‌کنندگان، وظایف و نتایج ثبت شدند؛ حالا پیش‌نویس را بازبینی کن.' : 'Participants, assignments and results are recorded; review the draft before continuing.');
+  return negotiationToChatMessage({
+    mode: session.mode,
+    outcome,
+    subject: payload.subject,
+    proposal: payload.proposal,
+    goal: payload.goal,
+    terms: payload.terms,
+    collaboration: session,
+    chips: collaborationActionChips(session, locale),
+    transcript: [{ from: 'fbt-ai', text: text || defaultText }],
+    notes: [],
+    at: Date.now()
+  }, { locale });
+}
+
+function lifecycleFailure(locale, code) {
+  const fa = faOf(locale);
+  return plainMessage(fa
+    ? `این گام ثبت نشد (${code}). پیش‌نویس یا نشست همکاری منقضی/نامعتبر است؛ مذاکره را دوباره باز کن.`
+    : `This step was not recorded (${code}). The collaboration draft is invalid or expired; open a fresh negotiation.`);
+}
 
 /** The most recent negotiation only; never revive an older, superseded offer. */
 export function latestNegotiationEvent(messages = []) {
@@ -99,17 +150,46 @@ export function resolveNegotiationAction({ text = '', event = null, chipId = nul
   const goal = goalFrom(payload, context);
   const profile = chip?.id?.startsWith('pick_') ? chip.id.slice(5) : null;
   if (PROFILES.includes(profile)) {
-    return { handled: true, command: 'NEGOTIATION_CHOICE', selection,
-      ...strategyContinuation({ ...goal, riskProfile: profile, riskSource: 'user-choice' }, locale,
-        fa ? `ریسک ${riskFa[profile]}` : `${profile} risk`) };
+    const collaboration = payload.collaboration;
+    if (!collaboration) return { handled: true, message: lifecycleFailure(locale, 'COLLABORATION_SESSION_REQUIRED') };
+    const recorded = recordLocalCollaborationResult(collaboration, {
+      taskId: 'risk-choice', text: profile, now
+    });
+    if (!recorded.ok) return { handled: true, message: lifecycleFailure(locale, recorded.code) };
+    const selectedGoal = { ...goal, riskProfile: profile, riskSource: 'user-choice' };
+    const message = collaborationMessage({ ...payload, goal: selectedGoal }, recorded.session, locale,
+      fa ? `انتخاب ریسک «${riskFa[profile]}» به‌عنوان نتیجهٔ وظیفهٔ تو ثبت شد. پیش از ساخت پلن، پیش‌نویس را بازبینی کن.`
+        : `${profile} risk was recorded as your task result. Review the collaboration draft before building a plan.`);
+    return { handled: true, command: 'NEGOTIATION_CHOICE', selection, message, selectedGoal };
   }
 
-  if (['a2a-plan', 'a2a-revise', 'a2a-risk', 'a2a-subject-goal'].includes(chip?.id)) {
+  if (chip?.id === 'collab-build-plan') {
+    const session = payload.collaboration;
+    const requested = recordPlanDraftRequest(session, { now });
+    if (!requested.ok) return { handled: true, message: lifecycleFailure(locale, requested.code) };
+    const selectedRisk = requested.session.tasks?.find((task) => task.id === 'risk-choice')?.result?.text;
+    const riskProfile = PROFILES.includes(selectedRisk) ? selectedRisk : goal.riskProfile;
+    const continuation = strategyContinuation({ ...goal, riskProfile, riskSource: selectedRisk ? 'user-choice' : goal.riskSource }, locale,
+      fa ? 'بازبینی و رضایت محدود به برنامه‌ریزی ثبت شد' : 'Reviewed, planning-only collaboration');
+    const status = collaborationMessage(payload, requested.session, locale,
+      fa ? 'درخواست ساخت پیش‌نویس پلن به موتور استراتژی تحویل شد؛ نتیجهٔ پلن جداگانه نمایش داده می‌شود. اجرا یا امضا انجام نمی‌شود.'
+        : 'The strategy engine received a plan-draft request; its result is shown separately. Nothing is executed or signed.');
+    return { handled: true, command: 'NEGOTIATION_PLAN', selection, ...continuation, additionalMessages: [status] };
+  }
+  if (['a2a-plan', 'a2a-revise', 'a2a-risk'].includes(chip?.id)) {
+    const requested = recordPlanDraftRequest(payload.collaboration, { now });
+    if (!requested.ok) return { handled: true, message: lifecycleFailure(locale, requested.code) };
     const current = PROFILES.indexOf(goal.riskProfile);
     const riskProfile = chip.id === 'a2a-risk' ? PROFILES[Math.max(0, current - 1)] : goal.riskProfile;
+    const continuation = strategyContinuation({ ...goal, riskProfile }, locale,
+      fa ? (chip.id === 'a2a-risk' ? `ریسک ${riskFa[riskProfile]}` : 'درخواست بازبینی پلن') : 'Plan review request');
+    const status = collaborationMessage(payload, requested.session, locale,
+      fa ? 'درخواست پیش‌نویس پلن ثبت شد؛ هیچ اجرا یا امضایی انجام نمی‌شود.' : 'Plan-draft request recorded; nothing is executed or signed.');
+    return { handled: true, command: 'NEGOTIATION_PLAN', selection, ...continuation, additionalMessages: [status] };
+  }
+  if (chip?.id === 'a2a-subject-goal') {
     return { handled: true, command: 'NEGOTIATION_PLAN', selection,
-      ...strategyContinuation({ ...goal, riskProfile }, locale,
-        fa ? (chip.id === 'a2a-risk' ? `ریسک ${riskFa[riskProfile]}` : 'درخواست بازبینی پلن') : 'Plan review request') };
+      ...strategyContinuation(goal, locale, fa ? 'درخواست پلن برای هدف مالی' : 'Plan request for financial goal') };
   }
   if (chip?.id === 'external-setup') {
     return { handled: true, command: 'NEGOTIATION_GUIDE', selection, panel: 'agents',
@@ -117,18 +197,48 @@ export function resolveNegotiationAction({ text = '', event = null, chipId = nul
         ? 'فهرست ایجنت‌ها را باز می‌کنم. نظر خارجی فقط بعد از ثبت هویت و بررسی پیام امضاشده قابل استفاده است؛ افزودن ایجنت یا دیدن راهنما اجازهٔ اجرای مالی نمی‌دهد.'
         : 'Opening the agent catalog. External opinions require a registered identity and verified signed messages; setup never grants financial execution authority.') };
   }
-  if (chip?.id === 'h2h-confirm') {
+  if (['collab-review-accept', 'collab-review-changes', 'collab-review-reject'].includes(chip?.id)) {
+    const session = payload.collaboration;
+    const decision = chip.id === 'collab-review-accept' ? 'ACCEPT_DRAFT'
+      : chip.id === 'collab-review-changes' ? 'REQUEST_CHANGES' : 'REJECT_DRAFT';
+    const reviewed = reviewCollaboration(session, { decision, now });
+    if (!reviewed.ok) return { handled: true, message: lifecycleFailure(locale, reviewed.code) };
+    const textForReview = decision === 'ACCEPT_DRAFT'
+      ? (fa ? 'بازبینی پیش‌نویس ثبت شد؛ این تأیید، رضایت جداگانه یا اجازهٔ اجرا نیست.' : 'Draft review is recorded; this is not separate consent or execution authority.')
+      : decision === 'REQUEST_CHANGES'
+        ? (fa ? 'درخواست اصلاح ثبت شد؛ تا ایجاد پیش‌نویس تازه، رضایت و اجرا غیرفعال‌اند.' : 'A change request is recorded; consent and execution stay off until a fresh draft is reviewed.')
+        : (fa ? 'رد پیش‌نویس ثبت شد؛ ادامهٔ این همکاری بسته است.' : 'The draft was rejected; this collaboration is closed.');
+    return { handled: true, command: 'COLLABORATION_REVIEW', selection,
+      message: collaborationMessage(payload, reviewed.session, locale, textForReview) };
+  }
+  if (chip?.id === 'collab-consent' || chip?.id === 'h2h-confirm') {
+    const session = payload.collaboration;
+    const consent = consentToCollaboration(session, { now });
+    if (!consent.ok) return { handled: true, message: lifecycleFailure(locale, consent.code) };
+    const textForConsent = consent.session.mode === 'human-human'
+      ? (fa ? 'پذیرشِ سمت تو فقط به‌صورت محلی ثبت شد؛ این قرارداد یا امضای معتبر نیست و طرف مقابل هنوز تأیید نشده است.' : 'Your side-only acceptance is stored locally; this is not a contract or signature, and the counterparty is not verified.')
+      : (fa ? 'رضایت تو فقط برای برنامه‌ریزی همین کار ثبت شد؛ اجرای مالی، تماس خارجی و اختیار اجرایی وجود ندارد.' : 'Your consent is limited to planning this task; there is no financial execution, external contact or execution authority.');
+    return { handled: true, command: 'COLLABORATION_CONSENT', selection,
+      message: collaborationMessage(payload, consent.session, locale, textForConsent) };
+  }
+  if (chip?.id === 'collab-counterparty-report') {
+    const session = payload.collaboration;
+    if (session?.mode !== 'human-human' || session.review?.status !== 'REVIEWED'
+      || session.consent?.local?.status !== 'LOCAL_ACCEPTANCE_ONLY') {
+      return { handled: true, message: lifecycleFailure(locale, 'LOCAL_ACCEPTANCE_REQUIRED') };
+    }
+    const question = fa
+      ? 'پاسخی را که از طرف مقابل دریافت کردی بنویس. این فقط گزارش توست؛ هویت یا رضایت او تأیید نخواهد شد.'
+      : 'Enter the reply you received from the counterparty. This is only your report; their identity or consent will not be verified.';
     const message = negotiationToChatMessage({
-      mode: 'human-human', outcome: 'AWAITING_COUNTERPARTY', terms: payload.terms,
-      proposal: payload.proposal, subject: payload.subject,
-      transcript: [{ from: 'fbt-ai', text: fa
-        ? 'پذیرشِ طرف شما فقط روی این دستگاه ثبت شد؛ این ثبت، امضای قرارداد نیست. هنوز تأیید طرف مقابل نداریم و هیچ پیامی برای او ارسال نشده است.'
-        : 'Your side’s acceptance was recorded on this device only; it is not a contract signature. The other party has not confirmed and no message was sent to them.' }],
-      notes: [], chips: []
+      mode: session.mode, outcome: 'NEEDS_SUBJECT', question,
+      collaboration: session, collaborationStep: 'counterparty-report',
+      proposal: payload.proposal, subject: payload.subject, terms: payload.terms,
+      transcript: [{ from: 'fbt-ai', text: fa ? 'ثبت پاسخ گزارش‌شده، تماس با طرف مقابل انجام نمی‌دهد.' : 'Recording a reported reply does not contact the counterparty.' }],
+      notes: [], chips: [], at: now
     }, { locale });
-    message.osEvent.payload.localAcceptance = true;
-    message.osEvent.payload.counterpartyConfirmed = false;
-    return { handled: true, command: 'NEGOTIATION_ACCEPT', selection, message };
+    return { handled: true, command: 'COLLABORATION_COUNTERPARTY_REPORT', selection, message,
+      question: { text: question, slot: 'counterparty-report', expectedType: 'text', options: [], source: 'negotiation' } };
   }
   if (chip?.id === 'h2h-edit') {
     const question = fa
@@ -148,6 +258,16 @@ export function resolveNegotiationAction({ text = '', event = null, chipId = nul
   if (chip?.id === 'emergency-cancel') {
     return { handled: true, command: 'NEGOTIATION_CANCEL', selection,
       message: plainMessage(fa ? 'پلن توقف لغو شد؛ هیچ پایش یا خودکارسازی تغییر نکرد.' : 'Stop plan cancelled; no monitor or automation changed.') };
+  }
+
+  if (payload.collaborationStep === 'counterparty-report' && !chip && text.trim() && context.answerToNegotiation === true) {
+    const reported = recordCounterpartyReport(payload.collaboration, { text, now });
+    if (!reported.ok) return { handled: true, message: lifecycleFailure(locale, reported.code) };
+    const message = collaborationMessage(payload, reported.session, locale,
+      fa ? 'گزارش ثبت شد، اما پاسخ، هویت و رضایتِ طرف مقابل تأییدنشده باقی می‌مانند؛ بازبینی پیش‌نویس از نو لازم است.'
+        : 'The report is recorded, but the reply, identity and consent remain unverified; review the draft again.');
+    return { handled: true, command: 'COLLABORATION_COUNTERPARTY_REPORT',
+      selection: { eventAt: event.at, eventId: event.id || null, chipId: null }, message };
   }
 
   // A missing subject or a terms edit is a continuation, not a GENERAL turn.

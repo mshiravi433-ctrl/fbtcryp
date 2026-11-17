@@ -147,7 +147,9 @@ try {
     const traces = await api('/api/v1/ai/central-brain/traces', { device: 'device_owner_alpha_999' });
     assert.equal(traces.json.ok, true);
     assert.ok(traces.json.traces.length >= 1);
-    assert.equal(traces.json.traces[0].stageCount, 10);
+    /* Eleven stages: the tenth is the memory commit and the eleventh is the
+       cortex read. The trace is sealed after both. */
+    assert.equal(traces.json.traces[0].stageCount, 11);
   });
 
   await test('Performance Learning HTTP API: record prediction, evaluate outcome, inspect metrics & rollback policy', async () => {

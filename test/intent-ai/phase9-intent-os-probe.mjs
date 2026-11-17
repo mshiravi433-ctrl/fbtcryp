@@ -40,9 +40,19 @@ export default async function run() {
   t('unknown mode is blocked instead of silently falling back',
     modes.createModeSession({ mode: 'future-mode' }).code === 'UNKNOWN_PRIMARY_MODE'
     && modes.assertModeBoundary({ mode: 'future-mode', stage: 'analysis' }).ok === false);
-  t('external mode requires verification and rejects raw credentials',
+  const externalPermission = modes.buildPermissionBoundary({
+    mode: 'fbt-external-ai', request: { stage: 'analysis' },
+    externalVerified: true, externalConsent: true, runtime: { attested: true }
+  });
+  t('external mode caller flags cannot satisfy identity, consent, or runtime gates',
     modes.assertModeBoundary({ mode: 'fbt-external-ai', stage: 'analysis' }).code === 'EXTERNAL_AGENT_NOT_VERIFIED'
-    && modes.assertModeBoundary({ mode: 'fbt-external-ai', stage: 'analysis', externalVerified: true, rawCredential: true }).code === 'RAW_CREDENTIAL_FORBIDDEN');
+    && modes.assertModeBoundary({ mode: 'fbt-external-ai', stage: 'analysis', externalVerified: true }).code === 'EXTERNAL_AGENT_NOT_VERIFIED'
+    && externalPermission.externalVerified === false
+    && externalPermission.analysisAllowed === false
+    && externalPermission.preparationAllowed === false
+    && externalPermission.financialExecutionAllowed === false);
+  t('raw credentials still take precedence at the external boundary',
+    modes.assertModeBoundary({ mode: 'fbt-external-ai', stage: 'analysis', externalVerified: true, rawCredential: true }).code === 'RAW_CREDENTIAL_FORBIDDEN');
 
   const scoreMissing = caps.capabilityScore({ usefulness: 80 });
   t('capability score is withheld without all seven metrics', scoreMissing.score === null && scoreMissing.status === 'insufficient-evidence');

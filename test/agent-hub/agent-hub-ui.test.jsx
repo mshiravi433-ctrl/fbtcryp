@@ -20,8 +20,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import AgentHubPanel from '../../src/components/AgentHub/AgentHubPanel.jsx';
 import AgentChatDock from '../../src/components/AgentHub/AgentChatDock.jsx';
+import AiTradePanel from '../../src/components/AiTrade/AiTradePanel.jsx';
 import { defaultAgentsView } from '../../src/lib/intent-ai/agentHub/availability.js';
 import { RECOMMENDED_EXTERNAL_AGENTS } from '../../src/lib/intent-ai/agentHub/recommendations.js';
+import { clearQueuedTradeResearch, takeQueuedTradeResearch } from '../../src/lib/hyperliquid/tradeResearch.js';
 
 const AGENT = {
   id: 'conformance-free:token-research',
@@ -85,6 +87,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  clearQueuedTradeResearch();
   vi.restoreAllMocks();
 });
 
@@ -831,6 +834,35 @@ describe('the active agent inside the chat', () => {
     expect(posted.consent).toEqual({ approved: true, categories: ['task_text'], nativeDataApproved: false, termsVersion: null, privacyVersion: null });
     /* Rendered as text nodes: a markdown heading, not raw HTML. */
     expect(log.querySelector('h4').textContent).toContain('ETH');
+  });
+
+  it('offers only a completed live native report for the AI Trade hand-off', async () => {
+    const readAt = Date.now();
+    routes['POST /ai/agent-hub/agents/fbt-native%3Aai-trading-analyst/tasks'] = () => respond({
+      ok: true,
+      task: {
+        id: 'trade-research-task', agentId: 'fbt-native:ai-trading-analyst', providerId: 'fbt-native',
+        state: 'completed', terminal: true, active: false,
+        result: {
+          text: 'Live report: price context read.',
+          citations: ['https://example.test/market'],
+          data: {
+            agent: 'ai-trading-analyst', title: 'Live market report',
+            dataStatus: 'live', readAt, citations: ['https://example.test/market']
+          }
+        }
+      }
+    });
+    try { window.localStorage.setItem('fbt.agentHub.active.v1', JSON.stringify(SNAPSHOT)); } catch { /* ignore */ }
+    render(<><AgentChatDock fa /><AiTradePanel /></>);
+    fireEvent.change(screen.getByTestId('agent-chat-input'), { target: { value: 'اتریوم را تحلیل کن' } });
+    fireEvent.click(screen.getByTestId('agent-chat-send'));
+    fireEvent.click(await screen.findByTestId('agent-chat-use-ai-trade'));
+    expect(screen.getByTestId('agent-chat-ai-trade-queued').textContent).toContain('فقط در حافظهٔ همین نشست');
+    fireEvent.click(screen.getByRole('tab', { name: /تحلیل و قوانین/ }));
+    expect(screen.getByTestId('ai-trade-research').textContent).toContain('Live report: price context read.');
+    expect(screen.getByTestId('ai-trade-include-research').checked).toBe(false);
+    expect(takeQueuedTradeResearch()).toBeNull();
   });
 
   it('requires approval before native agents read from disclosed public-data providers', async () => {

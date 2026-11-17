@@ -122,9 +122,22 @@ try {
   const externalSession = startSession({ mode: 'fbt-external-ai', level: 1, defaultChainId: 42161 });
   const externalTurn = chatTurn(externalSession, 'analyze 1 ETH to USDC on Arbitrum', {
     externalAgents: [passportInput],
-    externalAgentsSource: 'server-catalog'
+    externalAgentsSource: 'server-catalog',
+    externalVerified: true,
+    externalConsent: true,
+    runtime: { attested: true, operational: true },
+    externalView: 'caller-claimed analysis'
   });
-  check('Human session admits only the runtime-discovered verified external candidate for analysis', externalTurn.reply?.type === 'analysis' && externalTurn.reply.payload.externalAgentDiscovery?.candidates?.[0]?.eligibleForAnalysis === true && externalTurn.reply.payload.financialExecutionAuthorized === false);
+  check('caller-supplied catalog, identity, consent, and runtime flags cannot admit external analysis',
+    externalTurn.reply?.type === 'mode-boundary-blocked'
+      && externalTurn.reply.payload.code === 'EXTERNAL_AGENT_NOT_VERIFIED'
+      && externalTurn.reply.payload.externalAgentDiscovery?.candidates?.[0]?.eligibleForAnalysis === false
+      && externalTurn.reply.payload.externalAgentGate?.identity?.ok === false
+      && externalTurn.reply.payload.externalAgentGate?.consent?.ok === false
+      && externalTurn.reply.payload.externalAgentGate?.runtime?.ok === false
+      && externalTurn.reply.payload.externalAgentGate?.contacted === false
+      && externalTurn.session.authorization.financialExecution === false
+      && !externalTurn.session.messages.some((message) => message.payload?.externalView === 'caller-claimed analysis'));
 
   const analysisSecurity = evaluateExternalAgentSecurity(trusted.passport, {
     stage: 'analysis',

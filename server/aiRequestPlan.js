@@ -1,3 +1,4 @@
+import { matchWord, matchAnyTerm } from '../src/lib/intent-ai/os/regexCache.js';
 /**
  * REQUEST PLAN — read the request, then build the answer it actually asked for.
  * ---------------------------------------------------------------------------
@@ -58,13 +59,14 @@ export function normalizeText(value = '') {
 /* Persian word boundary: `\b` is ASCII-only, so it never matches at «بخر» /
    «بخرم». Every keyword below is matched with explicit letter lookarounds. */
 function word(text, term) {
-  const escaped = String(term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const loose = escaped.replace(/\s+/g, '[\\s\u200c]*');
-  return new RegExp(`(?<![\\p{L}])${loose}(?![\\p{L}])`, 'iu').test(text);
+  /* The pattern is built once and reused: the vocabulary is fixed, so
+     compiling it per call was pure waste (see src/lib/intent-ai/os/regexCache.js). */
+  return matchWord(text, term);
 }
 
 function anyWord(text, list) {
-  return list.some((term) => word(text, term));
+  /* ONE regex execution for the whole vocabulary instead of one per term. */
+  return matchAnyTerm(text, list);
 }
 
 function sentencesOf(text = '') {

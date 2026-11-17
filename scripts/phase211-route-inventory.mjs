@@ -68,10 +68,40 @@ function walk(dir, out = []) {
 function frontendRoutes() {
   const src = read('src/App.jsx');
   const routes = [];
-  const routeRe = /<Route\s+path="([^"]+)"\s+element=\{<([A-Za-z0-9_]+)[^>]*\/?>\}/g;
+  /*
+   * A route element may be CONDITIONAL:
+   *
+   *   element={SPOT_TRADE_ENABLED ? <Navigate … /> : <Trade />}
+   *   element={AiTradePanel ? <AiTradePanel /> : <Navigate … />}
+   *
+   * The old pattern only matched a direct `<Component`, so a conditional
+   * route was invisible and the inventory reported it as REMOVED — a false
+   * positive that failed the phase for a route that is still mounted.
+   *
+   * So the extractor now reads the WHOLE element expression and records
+   * every component it mounts. A route is "removed" only when it really is
+   * gone, not when its rendering became conditional.
+   */
+  const routeRe = /<Route\s+path="([^"]+)"\s+element=\{([^}]*(?:\{[^}]*\}[^}]*)*)\}/g;
   let m;
   while ((m = routeRe.exec(src)) !== null) {
-    routes.push({ path: m[1], component: m[2] });
+    const path = m[1];
+    const expression = m[2] || '';
+    /* Every component mounted by this element, in source order. */
+    const components = [...expression.matchAll(/<([A-Za-z0-9_]+)(?=[\s/>])/g)]
+      .map((hit) => hit[1]);
+    if (!components.length) {
+      /* A route whose element is a bare variable (`element={TradePage}`)
+         still mounts something — record it by name so it is not lost. */
+      const bare = expression.trim();
+      if (/^[A-Za-z0-9_]+$/.test(bare)) components.push(bare);
+    }
+    if (!components.length) continue;
+    for (const component of components) {
+      if (!routes.some((r) => r.path === path && r.component === component)) {
+        routes.push({ path, component });
+      }
+    }
   }
   /* Nested routes (<Route path="marketplace" …> inside a shell) have no
      leading slash; keep them as-is — they are still routes that must survive. */

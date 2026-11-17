@@ -36,6 +36,18 @@ import { runWhatIf } from './simulation.js';
 import { createCrossChainReasoner } from './crosschain.js';
 import { createDecisionEngine } from './decision.js';
 import { buildCanonicalFinancialState, snapshotRow, headline } from './financialState.js';
+/*
+ * The goal has ONE schema reader, and this is it.
+ *
+ * A stored goal arrives as `targetAmount`/`durationMonths`/`monthlyContribution`
+ * from the goal list, as `targetUsd`/`horizonMonths` from the central state, and
+ * the scenario engine wants `targetUsd`/`months`/`monthlyContributionUsd`. Three
+ * spellings of one record is how a goal ends up half-read: this round already
+ * found two readers that each knew one spelling, producing one answer and one
+ * silent GOAL_INPUTS_INCOMPLETE. A third mapping written inline here would be
+ * the third reader.
+ */
+import { readGoalInputs } from '../../src/lib/central/analysis.js';
 import { buildWorldModel, worldModelDigest } from './worldModel.js';
 import { createPolicyEngine } from './policy.js';
 import { createGuardian } from './guardian.js';
@@ -82,6 +94,15 @@ import { createEventReplanningEngine } from './eventReplanning.js';
 import { reasonAboutGoal, requiredAnnualizedPct } from './goalReasoning.js';
 import { fiFlags } from './flags.js';
 import { createFiRouter, setLendingProvider } from './router.js';
+import { setGlobalIntelProvider } from '../ci/globalIntelBridge.js';
+import { setFitProvider, setMacroGraphProvider, setScenarioProvider } from '../ci/fitBridge.js';
+import { setPluginProvider, setPluginAttachStore } from '../ci/pluginBridge.js';
+import { attachPluginAnswer, pluginCatalog } from '../agentHub/pluginAttach.js';
+import { ensurePluginAgents, readAttachment, writeAttachment, slugFromAgentId } from '../agentHub/pluginRegistry.js';
+import { setRouteProvider, adaptRoutesForIntelligence } from '../ci/routeBridge.js';
+import { setWhyProvider } from '../ci/whyBridge.js';
+import { setConversationProvider, setReplanProvider, setReplanReader } from '../ci/sessionBridge.js';
+import { setBehaviorReporter, setBehaviorReader } from '../ci/learningBridge.js';
 
 export const FI_ROOT_SCHEMA = 'fbt.fi.composition-root.v1';
 
@@ -292,6 +313,27 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
   /** Canonical financial state straight from the state store, persisted as
    *  the guardian's baseline row. UNAVAILABLE is an honest result, not an
    *  error — the panel says "unread", it never says zero. */
+  /**
+   * The owner's own goal, translated into the ENGINE's spelling.
+   *
+   * The goal lives in a section of the same state store the root already reads,
+   * so an engine that needs it should not have to hope a caller remembered to
+   * pass it. Returns null when the owner has no goal — the engine then refuses
+   * honestly rather than modelling a target nobody set.
+   */
+  function primaryGoalFor(owner) {
+    const list = sectionsFor(owner)?.goals?.data?.goals;
+    const stored = Array.isArray(list) && list.length ? list[0] : null;
+    if (!stored) return null;
+    const g = readGoalInputs(stored);
+    return {
+      ...stored,
+      targetUsd: g.targetUsd ?? num(stored.targetUsd),
+      months: g.years !== null ? Math.max(1, Math.round(g.years * 12)) : num(stored.months),
+      monthlyContributionUsd: g.monthlyContributionUsd ?? num(stored.monthlyContributionUsd) ?? 0
+    };
+  }
+
   async function financialStateFor(owner) {
     const sections = sectionsFor(owner);
     const financial = buildCanonicalFinancialState({ owner, sections, now: now() });
@@ -544,6 +586,114 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
     }
   }
 
+  /* ── THE FIT READER (2026-11-12) ─────────────────────────────────────
+   *
+   * "Which of these suits me?" needs a SET of opportunities and the
+   * OWNER's profile, and it needs both before it can answer.
+   *
+   * The opportunities come from two places, and the second is the one
+   * that matters: the CRYPTO ones (the yield pools, the LP positions)
+   * and the TRADITIONAL ones (the cross-asset feeds). A user asking
+   * «کدام گزینه مناسب من است؟» is asking about both — and an engine
+   * that only saw the traditional feed would answer a quarter of the
+   * question.
+   *
+   * The crypto opportunities are read from the SAME state sections the
+   * brain reads (`farming`, `liquidity`) — they are already there, they
+   * were just never scored against a profile.
+   *
+   * The profile comes from the personal-profile engine, and the capital
+   * from the canonical financial state. Both are per-owner.
+   *
+   * Every failure is named. There is no path here that returns a ranking
+   * it did not earn.
+   */
+  async function fitFor(owner, { refresh = false } = {}) {
+    const sections = sectionsFor(owner) || {};
+    const [profileRow, financial, goalRow] = await Promise.all([
+      personalProfile?.profileFor ? personalProfile.profileFor(owner).catch(() => null) : Promise.resolve(null),
+      financialStateFor(owner).catch(() => null),
+      Promise.resolve(null)
+    ]);
+    const profile = profileRow?.ok === false ? null : (profileRow?.profile || profileRow?.result || profileRow || null);
+    if (!profile) {
+      return { ok: false, code: 'NO_PROFILE', detail: 'the owner profile is not readable yet — a fit needs to know who it is fitting' };
+    }
+
+    /* The crypto opportunities: the pools the brain already read. */
+    const cryptoOpportunities = [];
+    const farmingPools = Array.isArray(sections.farming?.data?.pools) ? sections.farming.data.pools : [];
+    for (const pool of farmingPools.slice(0, 20)) {
+      cryptoOpportunities.push({
+        id: `pool:${pool.id || pool.symbol || pool.project}`,
+        kind: 'yield-pool',
+        asset: pool.symbol || pool.asset || null,
+        protocol: pool.project || null,
+        chain: pool.chain || null,
+        apyPct: num(pool.apy ?? pool.aprPct ?? pool.apr),
+        riskPct: num(pool.riskPct ?? pool.ilPct),
+        liquidity: num(pool.depthUsd ?? pool.tvlUsd ?? pool.liquidity),
+        capitalRequiredUsd: null,
+        horizonMonths: null,
+        probabilityPct: null,
+        feeUsd: null,
+        slippagePct: null,
+        /* The impermanent-loss flag travels with the opportunity, because an
+           LP is a directional position wearing a yield costume and a fit
+           that ignored that would be a fit against a lie. */
+        ilRisk: pool.ilRisk === true,
+        riskLevel: pool.riskLevel || (pool.ilRisk === true ? 'IL_RISK' : null)
+      });
+    }
+
+    /* The traditional opportunities: the cross-asset feeds. */
+    let traditionalOpportunities = [];
+    const globalSnapshot = await globalIntelFor(owner, { refresh }).catch(() => null);
+    const disc = await traditionalAssets.discover(owner, {
+      globalSnapshot: globalSnapshot && globalSnapshot.status !== 'UNAVAILABLE' ? globalSnapshot : null,
+      persist: false
+    }).catch(() => null);
+    if (disc?.ok && Array.isArray(disc.result?.opportunities)) {
+      traditionalOpportunities = disc.result.opportunities;
+    }
+
+    const opportunities = [...cryptoOpportunities, ...traditionalOpportunities];
+    if (!opportunities.length) {
+      return {
+        ok: false,
+        code: 'NO_OPPORTUNITIES',
+        detail: `nothing to rank: ${cryptoOpportunities.length} crypto pool(s) and ${traditionalOpportunities.length} traditional opportunity(ies) were readable`
+      };
+    }
+
+    const capital = num(financial?.net?.netWorthUsd);
+    const ranked = await opportunityFit.rankFor(owner, {
+      opportunities,
+      profile,
+      financial: financial && financial.status !== 'UNAVAILABLE' ? financial : null,
+      goal: goalRow || null,
+      limit: 10
+    });
+    if (!ranked?.ok) return { ok: false, code: ranked?.code || 'FIT_FAILED', detail: ranked?.detail || null };
+    return {
+      ok: true,
+      status: 'OK',
+      at: Date.now(),
+      result: {
+        ranked: ranked.ranked,
+        count: ranked.count,
+        capitalUsd: capital,
+        riskTolerance: profile?.riskTolerance || null,
+        coverage: {
+          crypto: cryptoOpportunities.length,
+          traditional: traditionalOpportunities.length,
+          profileReadable: true,
+          capitalReadable: capital !== null
+        }
+      }
+    };
+  }
+
   /** Phase 211 — cross-asset analysis over the world + global snapshot.
    *  Phase 211.2 — ACTIVE: reads the market through the brain when the state
    *  store is empty, stands the macro desk in for dead class feeds, and
@@ -729,6 +879,7 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
     routeIntelligence,
     traditionalAssets,
     multiClassFor,
+    fitFor,
     conditionalAllocation
   };
 
@@ -739,7 +890,441 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
 
   const router = createFiRouter({ fi, ownerFor, stateStore, brain, events, log });
   fi.router = router;
+
+  /* ── the bridge to the central brain (2026-11-12) ─────────────────────
+   *
+   * The central brain could not reach any of this. It holds the modules the
+   * chat answers from; this holds the global intelligence engines — smart
+   * money, whales, on-chain activity, the macro graph, the briefing. A
+   * user could ask «پول هوشمند کجاست؟» and get UNSUPPORTED while a
+   * working smart-money engine sat in this directory.
+   *
+   * The wiring is here, at the END of construction, because this is the
+   * only point where `globalIntelFor` exists — and it takes an owner, so
+   * the brain gets its OWN snapshot, never a shared one.
+   *
+   * See `server/ci/globalIntelBridge.js` for why a bridge is needed at
+   * all: `fios` is built AFTER the brain (it calls `brain.directToolCall`)
+   * and the brain is built BEFORE `fios`, so neither can hold the other at
+   * construction time.
+   */
+  setGlobalIntelProvider(globalIntelFor);
+
+  /* The fit surface (2026-11-12): the same bridge, a second slot.
+     `multiClassFor` discovers the cross-asset opportunities, then allocates
+     them against the OWNER's risk tolerance, capital and goal — the
+     "which of these suits me" answer. It takes an owner, so the brain
+     gets its own ranking, never a shared one. */
+  setFitProvider(fitFor);
+
+  /* The plugin attach (2026-11-11): the ELEVEN first-party plugins in
+     `server/agentHub/native/agents.js` — yield optimizer, token risk scanner,
+     wallet exposure auditor, strategy backtester, smart-money tracker and six
+     more — were reachable only from the Agent Hub dock. `runNativeAgent` had
+     no call site in the brain, so a chat turn that the registry could not
+     route spent a provider call on a generic model answer while a local
+     plugin that reads the live source sat dark.
+
+     This slot is the attach. It costs nothing on the hot path: the matcher is
+     pure and runs only on an UNSUPPORTED turn the corpus already declined,
+     and `pluginAttach.js` does not import the catalog or build a data access
+     until a rule actually fires (measured: 4 ms / 1.2 MB for all eleven, and
+     0.4 ms for a warm run). `AI_PLUGIN_ATTACH=false` turns the chat attach off
+     without touching the dock; `AGENT_HUB_NATIVE_AGENTS=false` turns the
+     plugins off everywhere. */
+  setPluginProvider(attachPluginAnswer);
+
+  /* The owner side of the attach (§5.24.15): WHICH plugin this person chose,
+     and the plugin catalog registered as real agent rows.
+
+     Both closures are lazy on purpose. `pluginCatalog()` imports the catalog on
+     first use (4 ms / 1.2 MB, measured) and `ensurePluginAgents` writes eleven
+     passports (3–5 ms, measured) — neither belongs on a boot path or on a
+     turn, so they run when a user opens the plugin list or attaches one, and
+     `readAttachment` runs only inside a consult, which is already off the hot
+     path. Registration is idempotent by id: re-registering would replace the
+     row and reset the interaction history the trust score is built from. */
+  setPluginAttachStore({
+    read: (owner) => readAttachment({ collections, owner }),
+    write: async (owner, agentId) => {
+      const slug = slugFromAgentId(agentId);
+      if (agentId && !slug) return { ok: false, code: 'INVALID_AGENT_ID', durable: collections.durable() };
+      let catalog = [];
+      try {
+        catalog = await pluginCatalog();
+      } catch (err) {
+        log?.(`plugin-registry:catalog-failed:${String(err?.message || err).slice(0, 80)}`);
+        return { ok: false, code: 'PLUGIN_CATALOG_UNAVAILABLE', durable: collections.durable() };
+      }
+      if (slug) {
+        /* Attaching is the moment the passport rows earn their place: the
+           plugin the user picked must exist in the registry with a trust score,
+           not only in the catalog. */
+        await ensurePluginAgents({ agents, owner, catalog, log });
+      }
+      const res = await writeAttachment({ collections, owner, slug, catalog });
+      return { ...res, slug: res.ok ? slug : null };
+    },
+    list: async (owner) => {
+      let catalog = [];
+      try {
+        catalog = await pluginCatalog();
+      } catch (err) {
+        return { ok: false, plugins: [], code: 'PLUGIN_CATALOG_UNAVAILABLE', detail: String(err?.message || err).slice(0, 120) };
+      }
+      const ensured = await ensurePluginAgents({ agents, owner, catalog, log });
+      const attached = await readAttachment({ collections, owner });
+      const listed = await agents.list(owner);
+      /* Keyed by the PASSPORT id: the registry mints its own `agt_<uuid>` row id,
+         so the row id cannot identify a plugin across registrations. */
+      const rows = new Map((listed?.agents || []).map((r) => [String(r?.passport?.id || r?.id || ''), r]));
+      const plugins = catalog.map((agent) => {
+        const row = rows.get(`fbt-native-${agent.slug}`) || null;
+        return {
+          slug: agent.slug,
+          agentId: `fbt-native:${agent.slug}`,
+          registryId: row?.id || null,
+          name: agent.name,
+          nameFa: agent.nameFa || agent.name,
+          summary: agent.summary || null,
+          summaryFa: agent.summaryFa || agent.summary || null,
+          category: agent.category || null,
+          capabilities: agent.capabilities || [],
+          dataSources: agent.dataSources || [],
+          examplesFa: agent.examplesFa || [],
+          attached: attached.slug === agent.slug,
+          /* The registry's own verdicts, not a restatement of them: trust is
+             earned from recorded interactions, and `canExecute` is always false. */
+          registered: Boolean(row),
+          verified: row?.passport?.verified === true,
+          trust: row?.trust ? { score: row.trust.score, tier: row.trust.tier, basis: row.trust.basis } : null,
+          canExecute: row ? row.canExecute === true : false
+        };
+      });
+      return {
+        ok: true,
+        plugins,
+        attached: attached.slug || null,
+        durable: listed?.durable ?? collections.durable(),
+        registered: { added: ensured.registered.length, existing: ensured.existing.length, failed: ensured.failed }
+      };
+    }
+  });
+
+  /* The regime reader (path 12): the macro graph over the global
+     snapshot, the world model and the portfolio. It takes an owner, so
+     the brain gets its own graph. */
+  setMacroGraphProvider(macroGraphFor);
+
+  /* The goal-scenario reader (path 13): three profiles for a target, each
+     with its allocation, expected value, drawdown, probability of loss and
+     probability of halving.
+
+     It needs the owner's goal and capital — and the comment here used to say
+     «both of which the brain passes in». The brain passed NEITHER: the plan
+     step carries no `goal` and no `financial`, so the engine was called with
+     `startUsd: null` and answered NO_STARTING_CAPITAL on every goal question.
+     That is an honest refusal, but a refusal to a question the deployment
+     could answer — the root knows how to read this owner's financial state,
+     and the goal is a section of the same store.
+
+     So the root fills in what it can read itself. A caller's explicit input
+     still wins: this is a fallback, not an override. */
+  /*
+   * ── THE BEHAVIOUR MODEL (2026-11-13) ───────────────────────────────────
+   *
+   * `behavior.ingest` verifies the event, appends it to the owner's history and
+   * recomputes the fourteen signals. That is half the work. The other half is
+   * the part that had never been written anywhere in the codebase: each signal
+   * carries `memoryKey`/`memoryValue` — REJECTS_HIGH_RISK_PROTOCOLS says
+   * "write riskTolerance = CONSERVATIVE", PREFERS_LOW_FEE_ROUTES says "write
+   * feeSensitivity = HIGH" — and nothing ever wrote them.
+   *
+   * So the signals are applied HERE, through `memory.remember` with
+   * `USER_BEHAVIOR` provenance. Two properties come free from the memory store
+   * and are the reason this is safe:
+   *
+   *   · a behaviour record can never DOWNGRADE what the user said — `remember`
+   *     refuses with WOULD_DOWNGRADE_MEMORY, because USER_SAID (4) and
+   *     USER_PREFERRED (3) both outrank USER_BEHAVIOR (2). Learning fills gaps;
+   *     it does not overrule (§8);
+   *   · the write carries a TTL of 180 days, so a behaviour inferred from three
+   *     clicks in March does not still be describing the user in December.
+   *
+   * A refused write is REPORTED, not swallowed: `applied` carries the code, so
+   * "the model inferred conservative and the user had said aggressive" is
+   * visible rather than silent.
+   */
+  setBehaviorReporter(async (owner, event = {}) => {
+    const ing = await behavior.ingest(owner, event);
+    if (!ing.ok) return ing;
+    const applied = [];
+    for (const [name, sig] of Object.entries(ing.signals || {})) {
+      if (!sig || !sig.memoryKey || sig.memoryValue === undefined || sig.memoryValue === null) continue;
+      const wrote = await memory.remember(owner, {
+        key: sig.memoryKey,
+        value: sig.memoryValue,
+        provenance: 'USER_BEHAVIOR',
+        note: `behaviour signal ${name} over ${sig.samples} sample(s), ratio ${sig.ratio ?? '—'}`
+      }).catch((err) => ({ ok: false, code: 'MEMORY_WRITE_FAILED', detail: String(err?.message || err).slice(0, 120) }));
+      applied.push({
+        signal: name, key: sig.memoryKey, value: sig.memoryValue,
+        samples: sig.samples ?? null, ok: wrote?.ok === true, code: wrote?.code || null
+      });
+    }
+    return { ok: true, signals: ing.signals || {}, basis: ing.basis || null, events: ing.events ?? null, applied };
+  });
+  setBehaviorReader((owner) => behavior.signals(owner));
+
+  setScenarioProvider(async (owner, opts = {}) => {
+    const financial = opts.financial || await financialStateFor(owner).catch(() => null);
+    const goal = opts.goal || primaryGoalFor(owner);
+    return goalScenarios.scenariosFor(owner, { ...opts, financial, goal });
+  });
+
+  /* The LIVE route source (path 14).
+   *
+   * The route-intelligence engine was complete and dark: it ranked
+   * candidate routes across five honest dimensions, and it had no
+   * customers because it refused to dial providers itself. This is the
+   * missing half — one call to the deployment's existing route provider
+   * (the same LI.FI endpoint the wallet's own route list already uses),
+   * adapted into the engine's dimension vocabulary.
+   *
+   * The import is DYNAMIC on purpose. `server/crossChain.js` reaches the
+   * quote/record layer, and importing it eagerly would put it on the
+   * cold-start path of every serverless instance for a feature that is
+   * asked for rarely. It is loaded the first time a route is actually
+   * needed, and then cached by the module system.
+   */
+  /*
+   * The CONVERSATION reader (path 16).
+   *
+   * The conversation-state machine is not a capability — it is the layer
+   * UNDER them. It knows which state the conversation is in, which edges
+   * are legal, and which field the current state is still missing. The
+   * TURN uses it to ask ONE adaptive question instead of a
+   * questionnaire, and to refuse an illegal edge with the legal edges
+   * named.
+   */
+  setConversationProvider(async (owner, opts = {}) => {
+    /*
+     * The goal reasoning is READ HERE, from the turn's own message, by
+     * the same deterministic reasoner the financial engines use.
+     *
+     * It is deliberately not passed in from the brain: the brain extracts
+     * ENTITIES (an asset, an amount, a horizon) for its own routing, and
+     * the reasoner reads a different thing — the goal KIND, the drawdown
+     * ceiling, the liquidity need, and, most importantly, the list of
+     * fields it could NOT read. That list is the adaptive question's
+     * fuel, and it belongs to the reasoner.
+     */
+    const message = String(opts.message ?? '');
+    const goalReasoning = opts.goalReasoning
+      || (message.trim() ? reasonAboutGoal(message, { preferences: opts.preferences ?? null }) : null);
+    const out = await conversationState.ingest(owner, {
+      message,
+      locale: opts.locale ?? 'fa',
+      goalReasoning,
+      patch: opts.patch ?? {}
+    });
+    if (!out?.ok) {
+      return { ok: false, code: out?.code || 'CONVERSATION_FAILED', detail: out?.detail || null, conversation: out?.conversation || null };
+    }
+    return {
+      ok: true,
+      conversation: out.conversation,
+      suggestion: out.suggestion,
+      question: out.question,
+      durable: out.durable ?? null
+    };
+  });
+
+  /*
+   * The REPLAN trigger (path 16).
+   *
+   * The event-replanning engine is already subscribed to the central bus
+   * and already knows which events mean «reconsider the plan». This slot
+   * lets the session layer ask the same question directly — for the
+   * events that arrive as part of a turn rather than as bus traffic.
+   */
+  setReplanProvider(async (owner, opts = {}) => {
+    const out = await eventReplanning.replan(owner, {
+      trigger: opts.trigger || 'PRICE_CHANGED',
+      payload: opts.payload || {},
+      correlationId: opts.correlationId || null
+    });
+    if (!out?.ok) {
+      return { ok: false, code: out?.code || 'REPLAN_FAILED', detail: out?.detail || null };
+    }
+    return {
+      ok: true,
+      changed: out.changed === true,
+      notify: out.notify === true,
+      skipped: out.skipped === true,
+      reason: out.reason || null,
+      retryInMs: out.retryInMs ?? null,
+      summary: out.summary || null,
+      trigger: out.trigger || opts.trigger
+    };
+  });
+
+  /*
+   * The REPLAN READER (path 16).
+   *
+   * The replanning engine writes its attempt; the session layer reads the
+   * last one so the turn can say the world moved and the plan was
+   * reconsidered. A missing attempt is not an error — most turns have no
+   * event to react to.
+   */
+  setReplanReader(async (owner, opts = {}) => {
+    const out = await eventReplanning.recent(owner, { limit: opts.limit ?? 5 });
+    if (!out?.ok) {
+      return { ok: false, code: out?.code || 'REPLAN_READ_FAILED', replan: null, attempts: [] };
+    }
+    const attempts = Array.isArray(out.attempts) ? out.attempts : [];
+    return { ok: true, replan: attempts[0] || null, attempts };
+  });
+
+  /*
+   * The WHY reader (path 15).
+   *
+   * The why engine answers «چرا این را گفتی؟» — why this asset, why this
+   * network, why now, why this amount, why this strategy — and it answers
+   * it with four named falsifiers. It was dark because it expected a
+   * decision record from the FIOs decision engine, and the central brain
+   * does not use that engine: the brain has its own decision, with its
+   * own findings, its own confidence and its own risk view.
+   *
+   * The bridge translates the brain's artefacts into the engine's
+   * vocabulary, and the rule is absolute — every number in the bundle
+   * came from a finding the brain actually read.
+   */
+  setWhyProvider(async (owner, bundle = {}) => {
+    const out = await whyEngine.explain(owner, bundle, { persist: true });
+    if (!out?.ok) {
+      return { ok: false, code: out?.code || 'WHY_FAILED', detail: out?.detail || null, why: null };
+    }
+    /*
+     * The WHOLE record, not just its `why` field.
+     *
+     * `explainDecision` returns
+     *
+     *   { ok, schema, decisionId, at, why: { whyAsset, whyNetwork, … },
+     *     invalidationConditions, falsifiers, nextReviewAt,
+     *     reviewWindowDays, confidence, estimate, note }
+     *
+     * and the reader on the other side expects exactly that shape: the
+     * five why-lines under `why`, and the falsifiers and invalidation
+     * conditions beside them.
+     *
+     * Returning only `out.why` handed the reader a record with no `why`
+     * inside it, so every why-line arrived as null and the reply had
+     * nothing to say. The engine was running, the provider was mounted,
+     * and the explanation was still absent from the answer.
+     */
+    return { ok: true, why: out };
+  });
+
+  setRouteProvider(async (owner, opts = {}) => {
+    const request = opts?.request || {};
+    const fromChain = request.fromChain ?? request.fromChainId ?? null;
+    const toChain = request.toChain ?? request.toChainId ?? null;
+    const fromToken = request.fromToken ?? request.fromTokenAddress ?? null;
+    const toToken = request.toToken ?? request.toTokenAddress ?? null;
+    const fromAmount = request.fromAmount ?? request.amount ?? null;
+    /* A route plan without a transfer to plan is not a failed plan — it
+       is a question that was never asked. The brain turns this into an
+       honest sentence («which transfer?») rather than an error. */
+    if (fromChain == null || toChain == null || !fromToken || !toToken || !fromAmount) {
+      return {
+        ok: false,
+        code: 'ROUTE_REQUEST_INCOMPLETE',
+        detail: 'a route plan needs a source chain, a destination chain, both tokens and an amount',
+        routes: [],
+        request: null,
+        source: null
+      };
+    }
+    let getRoutes;
+    try {
+      ({ getRoutes } = await import('../crossChain.js'));
+    } catch (err) {
+      return {
+        ok: false,
+        code: 'ROUTE_SOURCE_UNAVAILABLE',
+        detail: String(err?.message || err).slice(0, 160) || null,
+        routes: [],
+        request: null,
+        source: null
+      };
+    }
+    const quoted = await getRoutes({
+      fromChain,
+      toChain,
+      fromToken,
+      toToken,
+      fromAmount: String(fromAmount),
+      fromAddress: request.fromAddress || undefined,
+      toAddress: request.toAddress || undefined,
+      slippage: request.slippage ?? undefined
+    }, { record: false });
+    if (!quoted?.ok) {
+      return {
+        ok: false,
+        code: quoted?.code || 'ROUTE_QUOTE_FAILED',
+        detail: quoted?.detail || null,
+        routes: [],
+        request: null,
+        source: 'lifi'
+      };
+    }
+    return {
+      ok: true,
+      routes: adaptRoutesForIntelligence(quoted.routes || [], { request }),
+      request: {
+        fromChain: String(fromChain),
+        toChain: String(toChain),
+        fromToken: String(fromToken),
+        toToken: String(toToken),
+        amountUsd: num(request.amountUsd)
+      },
+      source: quoted.provider || 'lifi',
+      at: Date.now()
+    };
+  });
+
+  mountedRoot = fi;
+
   return fi;
+}
+
+/**
+ * Rank live route candidates for one owner.
+ *
+ * This is the FIOs-side entry point the brain's route bridge calls. It is
+ * a module-level function rather than a method on `fi` because the bridge
+ * holds a lazy reference to the ROOT, not to an instance — the ordering
+ * constraint (the brain is built before `fios`) means it cannot hold an
+ * instance at construction time.
+ *
+ * The last mounted root wins. That is the same rule every provider slot
+ * in this file follows, and it is what makes the root swappable in a
+ * test without a global mutable instance.
+ */
+let mountedRoot = null;
+
+/** Rank the candidates with the mounted engine, or say why it cannot. */
+export async function routeIntelligenceForOwner(owner, { request = {}, routes = [], correlationId = null } = {}) {
+  const root = mountedRoot;
+  if (!root?.routeIntelligence?.plan) {
+    return {
+      ok: false,
+      code: 'ROUTE_ENGINE_NOT_MOUNTED',
+      detail: 'the route-intelligence engine is not mounted in this process'
+    };
+  }
+  return root.routeIntelligence.plan(owner, { request, routes, correlationId, persist: true });
 }
 
 /** The honest one-liner for /health: which financial inputs are readable

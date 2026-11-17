@@ -171,22 +171,22 @@ test('dashboard integration is additive, same-origin, and available in every shi
   }
 });
 
-test('policy planner proposes only bounded fixed actions and fails closed for stale policy data', () => {
-  const plan = buildCollectiveProposals(activeSnapshot(), { nowSeconds: 1_800_500_000 });
+test('policy planner proposes only bounded fixed actions and fails closed for stale policy data', async () => {
+  const plan = await buildCollectiveProposals(activeSnapshot(), { nowSeconds: 1_800_500_000 });
   assert.equal(plan.status, 'action-ready');
   assert.equal(plan.proposals.length, 1);
   assert.equal(plan.chainId, 4663);
   assert.equal(plan.proposals[0].chainId, 4663);
   assert.equal(plan.proposals[0].action, 'invest');
   assert.equal(plan.proposals[0].args[0], '25000000'); // 25% of NAV, below idle balance
-  const testnetPlan = buildCollectiveProposals(activeSnapshot(), { nowSeconds: 1_800_500_000, chainId: 46630 });
+  const testnetPlan = await buildCollectiveProposals(activeSnapshot(), { nowSeconds: 1_800_500_000, chainId: 46630 });
   assert.equal(testnetPlan.chainId, 46630);
   assert.equal(testnetPlan.proposals[0].chainId, 46630);
-  const unsupportedPlan = buildCollectiveProposals(activeSnapshot(), { nowSeconds: 1_800_500_000, chainId: 46631 });
+  const unsupportedPlan = await buildCollectiveProposals(activeSnapshot(), { nowSeconds: 1_800_500_000, chainId: 46631 });
   assert.equal(unsupportedPlan.status, 'unavailable');
   assert.equal(unsupportedPlan.reason, 'UNSUPPORTED_CHAIN');
   assert.deepEqual(unsupportedPlan.proposals, []);
-  const allocationBound = buildCollectiveProposals(activeSnapshot({
+  const allocationBound = await buildCollectiveProposals(activeSnapshot({
     strategy: { ...activeSnapshot().strategy, totalAssetsRaw: '20000000' }
   }), { nowSeconds: 1_800_500_000 });
   assert.equal(allocationBound.proposals[0].args[0], '5000000'); // remaining room to target allocation, not a per-call cap
@@ -198,32 +198,32 @@ test('policy planner proposes only bounded fixed actions and fails closed for st
   assert.equal(isAllowedKeeperAction('executeSwap'), false);
   assert.equal(isAllowedKeeperAction('arbitraryCall'), false);
 
-  const stale = buildCollectiveProposals(activeSnapshot({
+  const stale = await buildCollectiveProposals(activeSnapshot({
     risk: { ...activeSnapshot().risk, assetOracleFresh: false }
   }), { nowSeconds: 1_800_500_000 });
   assert.equal(stale.status, 'risk-blocked');
   assert.equal(stale.proposals.length, 0);
 
-  const lowLiquidity = buildCollectiveProposals(activeSnapshot({
+  const lowLiquidity = await buildCollectiveProposals(activeSnapshot({
     risk: { ...activeSnapshot().risk, limits: { ...activeSnapshot().risk.limits, minLiquidityUsdE8: '10000000000' } }
   }), { nowSeconds: 1_800_500_000 });
   assert.equal(lowLiquidity.status, 'risk-blocked');
   assert.equal(lowLiquidity.reason, 'TARGET_LIQUIDITY_BELOW_POLICY_MINIMUM');
 
-  const ended = buildCollectiveProposals(activeSnapshot({
+  const ended = await buildCollectiveProposals(activeSnapshot({
     epoch: { number: 2, started: true, start: 1, end: 10, subscriptionDeadline: 0 },
     strategy: { target: TARGET, protocol: TARGET, totalAssetsRaw: '50000000', positionSharesRaw: '50000000', maxWithdrawRaw: '50000000', principalBasisRaw: '40000000' }
   }), { nowSeconds: 20 });
   assert.equal(ended.proposals[0].action, 'withdrawFromStrategy');
   assert.equal(ended.proposals[0].args[0], '50000000');
-  const lockedStrategy = buildCollectiveProposals(activeSnapshot({
+  const lockedStrategy = await buildCollectiveProposals(activeSnapshot({
     epoch: { number: 2, started: true, start: 1, end: 10, subscriptionDeadline: 0 },
     strategy: { target: TARGET, protocol: TARGET, totalAssetsRaw: '50000000', positionSharesRaw: '50000000', maxWithdrawRaw: '0' }
   }), { nowSeconds: 20 });
   assert.equal(lockedStrategy.status, 'liquidity-blocked');
   assert.equal(lockedStrategy.reason, 'TARGET_REPORTS_NO_WITHDRAWABLE_LIQUIDITY');
 
-  const blocked = buildCollectiveProposals(activeSnapshot({ emergency: { paused: true } }), { nowSeconds: 1_800_500_000 });
+  const blocked = await buildCollectiveProposals(activeSnapshot({ emergency: { paused: true } }), { nowSeconds: 1_800_500_000 });
   assert.equal(blocked.status, 'paused');
   assert.equal(blocked.proposals.length, 0);
 });

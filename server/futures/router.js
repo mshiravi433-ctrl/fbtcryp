@@ -26,7 +26,7 @@
  * Every value the UI shows comes from here. Nothing here holds a key.
  */
 import express from 'express';
-import { getAddress, isAddress } from 'ethers';
+import { getAddress, isAddress } from '../ethersLite.js';
 import { fetchSimplePrices } from '../providers.js';
 import { publish } from '../central/eventBus.js';
 import {
@@ -497,7 +497,7 @@ export function futuresRouter() {
       if (!est.ok && mode === 'execute') return fail(res, 422, 'SIMULATION_FAILED', { requestId, detail: est.detail || null });
     }
     const fee = feeFor({ providerId: o.providerId, market: o.market, collateralUsd: o.collateralUsd, leverage: o.leverage, networkFee: simulation.networkFeeUsd, policyId: o.policyId });
-    const approval = needsApproval ? o.adapter.buildApprove({ amountUsd: o.collateralUsd }) : null;
+    const approval = needsApproval ? await o.adapter.buildApprove({ amountUsd: o.collateralUsd }) : null;
 
     const execution = await createExecution({
       requestId, intentId, idempotencyKey: idemKey, owner, wallet, providerId: o.providerId, marketId: o.market.marketId, symbol: o.market.symbol,
@@ -702,12 +702,12 @@ export function futuresRouter() {
         if (market.isMarketOpen === false) return fail(res, 409, 'MARKET_CLOSED', { requestId });
         const closePercent = Math.max(1, Math.min(100, num(req.body?.closePercent) ?? 100));
         const price = position.side === 'long' ? market.bid : market.ask;
-        txs.push({ kind: 'close', ...adapter.buildCloseTrade({ pairId, index, closePercent, price, slippageBps: Math.max(1, Math.min(500, num(req.body?.slippageBps) ?? 25)) }) });
+        txs.push({ kind: 'close', ...await adapter.buildCloseTrade({ pairId, index, closePercent, price, slippageBps: Math.max(1, Math.min(500, num(req.body?.slippageBps) ?? 25)) }) });
         summary = { closePercent, price };
       } else if (action === 'decrease') {
         const closePercent = Math.max(1, Math.min(99, num(req.body?.closePercent) ?? 50));
         const price = position.side === 'long' ? market.bid : market.ask;
-        txs.push({ kind: 'decrease', ...adapter.buildCloseTrade({ pairId, index, closePercent, price, slippageBps: Math.max(1, Math.min(500, num(req.body?.slippageBps) ?? 25)) }) });
+        txs.push({ kind: 'decrease', ...await adapter.buildCloseTrade({ pairId, index, closePercent, price, slippageBps: Math.max(1, Math.min(500, num(req.body?.slippageBps) ?? 25)) }) });
         summary = { closePercent, price };
       } else if (action === 'tp' || action === 'sl') {
         const value = num(req.body?.value);
@@ -715,7 +715,7 @@ export function futuresRouter() {
         const px = market.mid;
         if (value > 0 && action === 'tp' && ((position.side === 'long' && value <= px) || (position.side === 'short' && value >= px))) return fail(res, 400, 'INVALID_INPUT', { requestId, detail: 'TAKE_PROFIT_WRONG_SIDE' });
         if (value > 0 && action === 'sl' && ((position.side === 'long' && value >= px) || (position.side === 'short' && value <= px))) return fail(res, 400, 'INVALID_INPUT', { requestId, detail: 'STOP_LOSS_WRONG_SIDE' });
-        txs.push({ kind: action, ...(action === 'tp' ? adapter.buildUpdateTp({ pairId, index, takeProfit: value }) : adapter.buildUpdateSl({ pairId, index, stopLoss: value })) });
+        txs.push({ kind: action, ...(action === 'tp' ? await adapter.buildUpdateTp({ pairId, index, takeProfit: value }) : await adapter.buildUpdateSl({ pairId, index, stopLoss: value })) });
         summary = { value };
       } else if (action === 'increase') {
         const amountUsd = num(req.body?.amountUsd);
@@ -723,7 +723,7 @@ export function futuresRouter() {
         const account = await adapter.readAccount(wallet);
         if (!account.ok) return fail(res, 503, 'PROVIDER_UNAVAILABLE', { requestId });
         if (account.balanceUsd != null && account.balanceUsd + 1e-9 < amountUsd) return fail(res, 400, 'INSUFFICIENT_BALANCE', { requestId });
-        if (account.allowanceUsd != null && account.allowanceUsd + 1e-9 < amountUsd) txs.push({ kind: 'approve', ...adapter.buildApprove({ amountUsd }) });
+        if (account.allowanceUsd != null && account.allowanceUsd + 1e-9 < amountUsd) txs.push({ kind: 'approve', ...await adapter.buildApprove({ amountUsd }) });
         txs.push({ kind: 'increase', ...adapter.buildUpdateCollateral({ pairId, index, amountUsd }) });
         const newLeverage = (position.collateralUsd * position.leverage) / (position.collateralUsd + amountUsd);
         summary = { amountUsd, newLeverage, note: 'adds collateral; notional unchanged, leverage falls' };

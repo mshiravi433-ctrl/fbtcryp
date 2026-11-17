@@ -179,8 +179,14 @@ export async function run(container) {
   const landingRe = landing ? new RegExp(landing[1].slice(1, -2)) : null;
   check('cold start: #/global is a deliberate address — it is not reset to the market',
     !!landingRe && !landingRe.test('#/global') && !landingRe.test('#/global?x=1'));
+  /*
+   * `/global` is one of the WIDE routes, not the only one. The risk engine
+   * (a 7-column heat table) and the futures terminal (a fixed full-height
+   * desk) earned the same wide shell later, so this probe now asserts that
+   * `/global` is wide rather than that it is the only wide route.
+   */
   check('width: AppChrome tags the shell «app-shell--wide» on /global',
-    /const wide = pathname === '\/global' \|\| pathname\.startsWith\('\/global\/'\);/.test(appSource)
+    /const wide = pathname === '\/global' \|\| pathname\.startsWith\('\/global\/'\)/.test(appSource)
     && /\$\{wide \? ' app-shell--wide' : ''\}/.test(appSource));
   check('width: the shell opens to ~1360px from 900px and 820px on tablets; the page frame adds no gutter',
     /@media \(min-width: 900px\) \{\s*\.app-shell\.app-shell--wide,\s*\.app-shell\.app-shell--wide \.top-bar \{\s*max-width: min\(1360px, 100%\);/.test(cssSource)

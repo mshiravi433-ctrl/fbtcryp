@@ -88,6 +88,10 @@ for (const word of FORBIDDEN) {
 }
 check('main-key warning present', AI_TRADE_COPY.connect.mainKeyWarning.includes('کلید اصلی'));
 check('risk notice says loss is possible', AI_TRADE_COPY.riskNotice.includes('از دست'));
+check('the analysis discloses provider-bound account data and separate research opt-in',
+  AI_TRADE_COPY.ai.dataDisclosure.includes('ارائه‌دهنده')
+  && AI_TRADE_COPY.ai.dataDisclosure.includes('انتخابی')
+  && AI_TRADE_COPY.ai.dataDisclosure.includes('انتخاب جداگانه'));
 check('every key error code has copy',
   Object.values(AGENT_KEY_CODES).every((c) => typeof AI_TRADE_COPY.connect.errors[c] === 'string'));
 check('every settings error code has copy',

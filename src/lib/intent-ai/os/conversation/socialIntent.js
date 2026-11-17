@@ -63,7 +63,27 @@ const ACTION_HINTS = Object.freeze([
   /* russian */ /(?:купить|продать|обмен|отправить|вывести|внести|стейкинг)/i,
   /* chinese */ /买|卖|兑换|转账|提币|充币|质押/,
   /* hindi/urdu */ /खरीद|बेच|भेजें|लेن|خریدنا|بیچنا|بھیج/,
-  /* es/pt/fr/id */ /\b(?:comprar|vender|enviar|cambiar|retirar|depo|transferir|mandar)\b/i, /\b(?:acheter|vendre|envoyer|échanger|retirer)\b/iu, /\b(?:beli|jual|kirim|tukar|tarik|setor)\b/i
+  /* es/pt/fr/id */ /\b(?:comprar|vender|enviar|cambiar|retirar|depo|transferir|mandar)\b/i, /\b(?:acheter|vendre|envoyer|échanger|retirer)\b/iu, /\b(?:beli|jual|kirim|tukar|tarik|setor)\b/i,
+  /*
+   * ROMANISED PERSIAN VERBS (2026-11-13) — AND WHY THIS ROW HAD TO ARRIVE
+   * IN THE SAME CHANGE AS THE GREETINGS ABOVE.
+   *
+   * This guard is the only thing standing between a pleasantry and a money
+   * instruction: its whole job is that a social act may sit BESIDE an action
+   * word (so the reply can greet first) but must never steer the turn to small
+   * talk. Teaching the classifier the romanised spelling of «دمت گرم»
+   * without teaching the guard the romanised spelling of «بفروش» therefore
+   * OPENED a hole rather than closing one: «damet garm, hala hame ro
+   * befroosh» became a pure social turn, and the sell-everything instruction
+   * inside it was decoration. Before the greeting fix that message was
+   * NOT_SOCIAL and was handled correctly, by accident.
+   *
+   * Every row above is one language; this one is the same Persian verbs the
+   * first row already knows, typed on the other keyboard. They are verb forms
+   * on purpose — «damet garm» on its own must stay a pleasantry, and a
+   * guard that fired on it would make every thank-you a full-price turn.
+   */
+  /\b(?:be+khar(?:am|id|im)?|kharid(?:an)?|befroosh(?:am|id|im)?|foroosh|tabdil|mobadele|s(v|w)ap\s*kon|bereez|beriz|variz|ersal|enteghal|pol\s*kon|bridge\s*kon|estik(?:ing)?\s*kon|farm\s*kon|vam|gharz|bardasht|ahrom|l(e|o)verage|had\s*zarar|stop\s*loss|position\s*baz|baz\s*kon)\b/i
 ]);
 
 /** A concrete asset name or a quantity makes it a task, not chatter. */
@@ -71,7 +91,11 @@ const SPECIFICITY = Object.freeze([
   /\$?\s*\d[\d.,]*\s*(?:\$|usd|usdt?|dollar|toman|tooman|تومان|دلار|درهم|euro|eur|ریال)?/i,
   /\b(btc|xbt|eth|sol|bnb|xrp|ada|doge|trx|ton|avax|dot|link|uni|ltc|bch|matic|pol|arb|op|base|tron|polygon)\b/i,
   /بیت\s*کوین|اتریوم|اتر|تتر|سولانا|بایننس|دوج|شیبا|ریپل|کاردانو/,
-  /\b(usdc|dai|stable|stablecoin)\b/i
+  /\b(usdc|dai|stable|stablecoin)\b/i,
+  /* The Persian row lists بیت‌کوین/اتریوم/تتر; the tickers row lists BTC/ETH.
+     The spelled-out Latin names were in neither, so a Finglish message naming
+     an asset in full was read as chatter. */
+  /\b(bitcoin|ethereum|tether|solana|dogecoin|litecoin|ripple|cardano|binance|shiba)\b/i
 ]);
 
 /* -------------------------------------------------------------------------- */
@@ -229,12 +253,57 @@ function mergeActLists(...groups) {
   return Object.freeze(out);
 }
 
+/*
+ * THE SAME PHRASE ON THE OTHER KEYBOARD (2026-11-13).
+ *
+ * A phrase the script-side vocabulary already recognises must be recognised in
+ * its romanised spelling too, because half this audience types Persian on a
+ * Latin phone keyboard. This is the same rule the asset extractor had to learn:
+ * canonicalise the spellings instead of enumerating them, or the most common
+ * way of typing something is the one that breaks.
+ *
+ * TWO OF THESE PATTERNS WERE BROKEN, NOT MERELY INCOMPLETE, and both were
+ * invisible in review:
+ *
+ *   · `kha(v|b)r` cannot match «khabar» — it demands `kha`, one letter, then
+ *     `r`, so it matched the nonsense «khar» and missed the word every speaker
+ *     actually types. «che khabar» was read as a fragment needing web research
+ *     and paid for the flagship ladder, while «چه خبر» was answered as the
+ *     pleasantry it is.
+ *   · `khodaa?\s*hafez` demands a `h`, so the common romanisation «khodafez»
+ *     missed and «خداحافظ» did not.
+ *
+ * Neither is a stricter pattern. They are dead branches that look correct, which
+ * is the failure mode worth naming: a regex that matches nothing does not fail
+ * loudly, it just quietly decides that this user's spelling is not a greeting.
+ */
 const FINGLISH_PATTERNS = Object.freeze({
-  [SOCIAL_ACTS.GREETING]: [/(?:^|\s)(?:salam|salaa+m|salaam|drud|dorood|sobh\s*be\s*kheir|shab\s*be\s*kheir)(?:\s|$|[,?.!])/i],
-  [SOCIAL_ACTS.HOW_ARE_YOU]: [/\b(?:chetor(i|e|am)?|kh+o+b+i|khobi|khubi|khowbi|haalet\s*chetore|aat\s*chetore|xobi)\b/i],
-  [SOCIAL_ACTS.WHATS_UP]: [/(?:cha|che)\s*kha(v|b)r/i, /\bkhabar\s*(?:chie|nist|نیس)/i, /\bchekhbar\b/i, /\bbazar\s*chi\s*mige?\b/i],
-  [SOCIAL_ACTS.THANKS]: [/(?:mamnoon|merci|dastet\s*dard\s*nakone|ghorbanat|damet\s*gharm)/i],
-  [SOCIAL_ACTS.GOODBYE]: [/\b(?:khodaa?\s*hafez|khodahafez|bia\s*raftan|khosh\s*bash)\b/i]
+  [SOCIAL_ACTS.GREETING]: [
+    /(?:^|\s)(?:salam|salaa+m|salaam|drud|dorood|sobh\s*be\s*kheir|shab\s*be\s*kheir|khosh\s*(?:oomadi|amadid)|salam\s*(?:dadash|rafigh|aziz))(?:\s|$|[,?.!])/i
+  ],
+  [SOCIAL_ACTS.HOW_ARE_YOU]: [
+    /\b(?:chetor(i|e|am)?|kh+o+b+i|khobi|khubi|khowbi|khoobin|khubin|haalet\s*chetore|aat\s*chetore|khoob\s*hasti|xobi)\b/i
+  ],
+  [SOCIAL_ACTS.WHATS_UP]: [
+    /* `a?` is the fix: «khabar» has the vowel the old pattern dropped. */
+    /(?:cha|che|ch)\s*kha(?:v|b)a?r/i,
+    /\bkhabar\s*(?:chie|chist|nist|نیس)/i,
+    /\bchekh?abar\b/i,
+    /\bbazar\s*chi\s*mige?\b/i,
+    /\btaze\s*chi\b/i
+  ],
+  [SOCIAL_ACTS.THANKS]: [
+    /* `gh?arm` because گ romanises as both `g` and `gh` depending on the
+       typist's convention, and دمت گرم is one phrase either way. The first
+       version of this was `g[gh]arm`, which is not "an optional h": a character
+       class fills ONE position, so it demanded two consonants and matched the
+       one spelling nobody types. */
+    /(?:mamnoon|mamnun|merci|sepas|sopas|dastet\s*dard\s*nakone|ghorbanat|damet\s*gh?arm|lotf\s*kardi|zahmat\s*keshidi|kheili\s*khoo?b\s*bud|aali\s*bud|ale\s*bud|eyval)/i
+  ],
+  [SOCIAL_ACTS.GOODBYE]: [
+    /* `khoda(a)?(h)?fez` covers khodafez, khodaafez, khodahafez and khodaafez. */
+    /\b(?:khod[ah\s]*afez|khodafiz|khoda+a?\s*h?afez|bia\s*raftan|khosh\s*bash|shab\s*khosh)\b/i
+  ]
 });
 
 /* Romanised Urdu — the same argument as Finglish, one keyboard shortcut away
@@ -355,7 +424,21 @@ export function classifySocialAct(raw, { locale = null, prior = null } = {}) {
         executionAuthorized: false
       };
     }
-    return { ...empty, evidence: guard.blocks ? ['guard:action'] : ['no-social-marker'] };
+    /*
+     * RETURN THE GUARD THAT WAS ACTUALLY COMPUTED (2026-11-13).
+     *
+     * This line chose its evidence string from the real guard and then returned
+     * the empty one, so a message with no social marker but a clear action verb
+     * came back self-contradictory: `evidence: ['guard:action']` beside
+     * `guard.blocks: false`. Nothing downstream broke, because the act was
+     * already NOT_SOCIAL — which is exactly why it survived: the field was wrong
+     * only where no behaviour depended on it, so every consumer that read it was
+     * reading telemetry, and telemetry that contradicts itself is how a
+     * misdiagnosis starts. The other two `...empty` returns are fine: the
+     * punctuation-only path cannot match a hint (it has no letters), and the
+     * guard-dominates path already spreads the real object.
+     */
+    return { ...empty, guard, evidence: guard.blocks ? ['guard:action'] : ['no-social-marker'] };
   }
 
   /* Ranking: the act that carries a request outranks politeness, because that
@@ -391,9 +474,25 @@ export function classifySocialAct(raw, { locale = null, prior = null } = {}) {
     };
   }
 
-  /* A bare «خوبی؟» immediately after a real answer is a follow-up tick, not a
-     new greeting — flagged so the router can lean on the previous turn. */
-  const followUpLike = Boolean(prior?.intent) && text.length <= 18 && (act === SOCIAL_ACTS.HOW_ARE_YOU || act === SOCIAL_ACTS.SMALL_TALK);
+  /*
+   * A bare «خوبی؟» immediately after a real answer is a follow-up tick, not a
+   * new greeting — flagged so the router can lean on the previous turn.
+   *
+   * But «حالت چطوره» / «چطوری» are a COMPLETE question on their own, not a
+   * tick. They used to be flagged as follow-up-like whenever any prior
+   * intent existed, so a pleasantry typed after an earlier turn was handed
+   * back to the pipeline instead of being answered — and the pipeline read
+   * it as a request to connect a wallet, producing «برای انجام این کار باید
+   * ابتدا کیف پولتان را متصل کنید» as the answer to «حالت چطوره».
+   *
+   * So the tick shapes are listed explicitly: the short «خوبی؟» forms.
+   */
+  const TICK_SHAPES = /^(?:\s*(?:خوبی|خوبین|خوبی\?|خوبی؟|چطوری|چطوری\?|چطوری؟|خوبیَ|ok\?|okay\?|you\s*ok\?|how\s*are\s*you\?|how's\s*it\s*going\?)\s*)$/iu;
+  const isTickShape = TICK_SHAPES.test(String(text || '').trim());
+  const followUpLike = Boolean(prior?.intent)
+    && text.length <= 18
+    && isTickShape
+    && (act === SOCIAL_ACTS.HOW_ARE_YOU || act === SOCIAL_ACTS.SMALL_TALK);
 
   /* `needsData` is the whole point of the split: one act asks for the market,
      the others ask for nothing. `pure` says "nothing besides politeness was

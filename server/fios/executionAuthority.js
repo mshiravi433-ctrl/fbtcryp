@@ -31,6 +31,7 @@
  * A missing gate returns executionPermission:false and lists why.
  */
 import { assertFinancialExecution } from '../../src/lib/intent-ai/phaseBoundary.js';
+import { capitalUsdFor } from './financialState.js';
 
 export const EXECUTION_AUTHORITY_SCHEMA = 'fbt.fi.execution-authority.v1';
 
@@ -181,7 +182,7 @@ export function resolveExecutionAuthority({
  */
 export function limitsFromContext({ chosen = null, financial = null, preferences = null, policyVerdict = null } = {}) {
   const fs = financial?.computed || financial || {};
-  const capital = num(fs.netWorthUsd ?? fs.availableCapitalUsd);
+  const capital = capitalUsdFor(financial) ?? num(fs.availableCapitalUsd);
   const fee = num(chosen?.feesUsd ?? chosen?.amountUsd ?? chosen?.capitalRequiredUsd);
   const riskPct = num(chosen?.riskPct);
   const slip = num(chosen?.slippagePct ?? preferences?.maxSlippagePct);

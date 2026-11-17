@@ -21,6 +21,7 @@ import { freezeStateReport } from './intentFreezeControl.js';
 export const PHASE_STATUS_SCHEMA = 'fbt.intent-ai-phase-status.v1';
 
 import { SPEC_PHASES, sourceExists } from './intentSpecPhases.js';
+import { getProductArcProbe, refreshProductArcProbe } from './intentPhaseRuntimeProbeCache.js';
 
 /* Re-exported for status consumers. The registry lives in the leaf module. */
 export { SPEC_PHASES };
@@ -28,7 +29,7 @@ export { SPEC_PHASES };
 function laterInactiveStatus() {
   return {
     configuration: 'not-configured',
-    operational: 'unavailable',
+    operational: false,
     ready: false,
     live: false,
     dataStatus: 'unavailable',
@@ -41,7 +42,11 @@ function phase10Status() {
   const certifier = certificationsConfigured();
   return {
     configuration: registry && certifier ? 'partially-configured' : 'not-configured',
-    operational: 'unavailable',
+    /* `operational` is a BOOLEAN on every phase row. It used to be the
+       string 'unavailable' here and in `laterInactiveStatus()`, which broke
+       the invariant that `operational === live` — and the public status
+       route checks exactly that. */
+    operational: false,
     ready: false,
     live: false,
     dataStatus: registry ? 'partial' : 'unavailable',
@@ -59,11 +64,46 @@ function phase10Status() {
 function inactiveStatus(phase) {
   return {
     configuration: 'not-configured',
-    operational: 'unavailable',
+    operational: false,
     ready: false,
     live: false,
     dataStatus: 'unavailable',
     blockers: phase.requiredEvidence.map((item) => `${item.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_REQUIRED`)
+  };
+}
+
+/*
+ * A product-arc phase (51–216) is judged on its OWN merits.
+ *
+ * It used to be published live only when the whole control plane was live,
+ * so a missing production signer — something this deployment genuinely does
+ * not have — marked all 165 product arcs "not live", even though 159 of
+ * them are pure deterministic logic with no provider at all.
+ *
+ * Now each phase is probed directly: its modules must load, its API must
+ * exist, its probe must be a real test, and if it needs a provider, that
+ * provider must really be configured.
+ */
+function productArcStatus(phase) {
+  const probe = getProductArcProbe();
+  const row = probe?.byPhase?.[phase.phase];
+  if (!row) {
+    return {
+      configuration: 'not-configured',
+      operational: false,
+      ready: false,
+      live: false,
+      dataStatus: 'unavailable',
+      blockers: ['RUNTIME_PROBE_NOT_COMPLETED']
+    };
+  }
+  return {
+    configuration: row.configuration,
+    operational: row.live === true,
+    ready: row.live === true,
+    live: row.live === true,
+    dataStatus: row.live === true ? 'live' : 'unavailable',
+    blockers: row.blockers || []
   };
 }
 
@@ -75,6 +115,65 @@ function activeStatus() {
     live: true,
     dataStatus: 'live',
     blockers: []
+  };
+}
+
+/**
+ * The SUMMARY of the phase report.
+ *
+ * ─── WHY THIS EXISTS ─────────────────────────────────────────────────────
+ *
+ * The full report is **148 KB**, and it is paid for on every call:
+ * 116 KB of the 206 phase rows, plus a 30 KB `phase21` readiness block.
+ * A dashboard that renders a status badge does not read any of it.
+ *
+ * So the report has two forms:
+ *
+ *   • the SUMMARY — the counts, the status, the gate, the blockers, and a
+ *     per-phase line of just `phase`, `id`, `live` and `blockers`;
+ *   • the DETAIL — everything, for the caller that really wants it.
+ *
+ * The summary is what a monitoring client polls, and it is roughly an
+ * order of magnitude smaller. The detail is unchanged, and still available.
+ *
+ * @param {object} report the full report
+ * @returns {object} the summary
+ */
+export function phaseStatusSummary(report) {
+  const { phases = [], phase21 = null, ...rest } = report || {};
+  return {
+    ...rest,
+    phaseCount: phases.length,
+    operationalPhaseCount: phases.filter((p) => p.live === true).length,
+    blockedPhaseCount: phases.filter((p) => p.live !== true).length,
+    /* The per-phase LINE, not the per-phase record. A client that wants to
+       know WHICH phase is blocked needs the blocker codes; it does not need
+       the source list, the test list and the claims block of all 206. */
+    phases: phases.map((p) => ({
+      phase: p.phase,
+      id: p.id,
+      live: p.live === true,
+      operational: p.operational === true,
+      blockers: p.blockers || []
+    })),
+    /* The readiness block is 30 KB and is only meaningful to a client that
+       is about to act on it. The summary carries its verdict. */
+    phase21: phase21 ? {
+      phase: phase21.phase,
+      id: phase21.id,
+      live: phase21.live === true,
+      operational: phase21.operational === true,
+      /* The activation MODE — 'sandbox-operator-self-attested' and friends —
+         is what the activation board reads to label the release. It is one
+         string and it is in the summary for that reason. */
+      mode: phase21.mode ?? null,
+      readiness: phase21.readiness ? {
+        status: phase21.readiness.status,
+        launchAllowed: phase21.readiness.launchAllowed === true,
+        operational: phase21.readiness.operational,
+        blockers: phase21.readiness.blockers || []
+      } : null
+    } : null
   };
 }
 
@@ -102,8 +201,8 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
           ? operationalPhase21Row(scan)
           : phase.phase >= 22 && phase.phase <= 50
             ? controlPlaneRow(phase.phase, scan.controlPlane)
-            : phase.phase > 50 && !live
-              ? laterInactiveStatus()
+            : phase.phase > 50
+              ? productArcStatus(phase)
               : live
                 ? activeStatus()
                 : inactiveStatus(phase);

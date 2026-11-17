@@ -17,6 +17,7 @@
  */
 
 import { searchKnowledge } from '../src/lib/intent-ai/os/knowledgeCenter.js';
+import { hybridKnowledgeSearch } from '../src/lib/intent-ai/os/semanticKnowledge.js';
 import { retrieve as retrieveBm25 } from '../src/lib/intent-ai/retrieval.js';
 import { checkFalsifier } from './aiProfessor.js';
 import { FEE_BPS, feePercentString } from '../src/lib/feeBps.js';
@@ -33,15 +34,40 @@ const ASSET_ALIASES_IN_TEXT = [
   ['GOLD', /(?:xau|gold|طلا)/i]
 ];
 
+function hasCombinedRank(item) {
+  return item?.combined !== null && item?.combined !== undefined && Number.isFinite(Number(item.combined));
+}
+
+function knowledgeRank(item) {
+  return hasCombinedRank(item) ? Number(item.combined) : (Number(item?.score) || 0);
+}
+
 function uniqById(items = []) {
-  const seen = new Set();
-  const out = [];
-  for (const it of items) {
-    if (!it || !it.id || seen.has(it.id)) continue;
-    seen.add(it.id);
-    out.push(it);
+  const byId = new Map();
+  for (const item of items) {
+    if (!item?.id) continue;
+    const previous = byId.get(item.id);
+    if (!previous) {
+      byId.set(item.id, item);
+      continue;
+    }
+
+    /* A hybrid-ranked row carries the retriever's calibrated lexical +
+       semantic order. Keep it over a duplicate raw-BM25/lexical row; otherwise
+       the reasoner silently undoes the hybrid ranking by sorting on raw score. */
+    const itemHasCombined = hasCombinedRank(item);
+    const previousHasCombined = hasCombinedRank(previous);
+    const preferItem = (itemHasCombined && !previousHasCombined)
+      || (itemHasCombined === previousHasCombined && knowledgeRank(item) > knowledgeRank(previous));
+    const primary = preferItem ? item : previous;
+    const secondary = preferItem ? previous : item;
+    const merged = { ...secondary, ...primary };
+    for (const key of ['title', 'titleFa', 'titleEn', 'body', 'bodyFa', 'bodyEn', 'source']) {
+      if ((merged[key] == null || merged[key] === '') && secondary[key]) merged[key] = secondary[key];
+    }
+    byId.set(item.id, merged);
   }
-  return out;
+  return Array.from(byId.values());
 }
 
 /**
@@ -64,7 +90,14 @@ export function gatherExpandedKnowledge({
   ].filter((q) => typeof q === 'string' && q.trim().length >= 2);
 
   for (const q of queries) {
-    for (const k of searchKnowledge(q, { locale, limit: 3 })) {
+    /* The hybrid retriever: a SUB-QUESTION is usually a paraphrase, so this
+       is where the semantic layer earns its keep. */
+    let hits = [];
+    try {
+      hits = hybridKnowledgeSearch(q, { locale, limit: 3, lexicalSearch: searchKnowledge });
+    } catch { hits = []; }
+    if (!hits.length) hits = searchKnowledge(q, { locale, limit: 3 });
+    for (const k of hits) {
       pool.push(k);
     }
     try {
@@ -75,7 +108,7 @@ export function gatherExpandedKnowledge({
   }
 
   return uniqById(pool)
-    .sort((a, b) => (Number(b.score || 0) - Number(a.score || 0)) || String(a.id).localeCompare(String(b.id)))
+    .sort((a, b) => (knowledgeRank(b) - knowledgeRank(a)) || String(a.id).localeCompare(String(b.id)))
     .slice(0, Math.max(2, limit));
 }
 
@@ -368,7 +401,14 @@ export function synthesizeInternalAnswer({
   /* Avoid duplicating an inflation KB item if macroWhy already speaks directly,
      and do not let weak secondary matches hijack macro explanations. */
   const selectedKb = [];
+  const leadKnowledgeRank = expandedKb.length ? knowledgeRank(expandedKb[0]) : 0;
   for (const k of expandedKb) {
+    /* A second passage is useful when it is a near-peer (e.g. platform fee +
+       swap-fee components), not merely because it shares a broad word like
+       "wallet". The earlier unbounded second hit appended dusting advice to a
+       wallet-connect answer. Keep only evidence within 80% of the leader. */
+    if (selectedKb.length && leadKnowledgeRank > 0
+        && knowledgeRank(k) < leadKnowledgeRank * 0.8) continue;
     if (k.id === 'kb.economics.inflation-scarce-assets' && macroWhy.length > 0) continue;
     if (k.id === 'kb.economics.rates-liquidity' && macroWhy.length > 0 && /نرخ\s*بهره|فدرال|interest\s*rate|fed/i.test(repairedMsg) && !/تورم|inflation/i.test(repairedMsg)) continue;
     if (k.id === 'kb.analytics.tokenomics-valuation' && !asksTokenomics && macroWhy.length > 0) continue;

@@ -31,6 +31,19 @@ describe('real Intent OS option clicks', () => {
     expect(container.querySelectorAll('[data-testid="intent-os-card"]')).toHaveLength(1);
     expect(container.textContent.split('سه گزینه روی میز است').length - 1).toBe(1);
   });
+  it('renders module hand-off actions as route buttons and forwards the full prefill URL', () => {
+    const onOpenRoute = vi.fn();
+    const route = '/bridge?token=USDC&amount=50&fromChain=1&toChain=42161';
+    render(<ConversationRow
+      m={{ id: 'bridge-inspection', role: 'ai', content: 'Inspect bridge options.', actions: [{ id: 'open-bridge', route, label: 'Inspect bridge options' }] }}
+      locale="en"
+      t={(s) => s}
+      onOpenRoute={onOpenRoute}
+    />);
+    const actions = screen.getByTestId('intent-ai-msg-actions');
+    fireEvent.click(within(actions).getByRole('button', { name: /Inspect bridge options/ }));
+    expect(onOpenRoute).toHaveBeenCalledExactlyOnceWith(route);
+  });
   it('busy/resolved cards cannot submit twice and retain the selected option', () => {
     const message = offer(); const onChip = vi.fn();
     const ui = render(<OsEventCard event={message.osEvent} busy onChip={onChip} />);

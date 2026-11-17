@@ -26,6 +26,7 @@ import {
   intelligenceModelLadder
 } from './aiGateway.js';
 import { storeGet, storeSet } from './store.js';
+import { readCortex, marketStateFromFrame } from './aiCortexBridge.js';
 
 const SMART_MEM_KV_KEY = 'ai:smart-memory:v1';
 const PERF_LEARN_KV_KEY = 'ai:perf-learning:v1';
@@ -40,6 +41,66 @@ const TOOL_TO_FACET = Object.freeze({
   fbt_get_wallet_state: 'wallet_state',
   fbt_get_quote_preview: 'venue_quote'
 });
+
+/**
+ * Build a market frame for the brain's cortex consultation.
+ *
+ * It uses the SAME live tool the rest of the pipeline uses — the market
+ * snapshot broker — so the cortex reads the same data the specialists read.
+ * That is the point: a second opinion on the same evidence, not a second
+ * world with its own fetch.
+ *
+ * Returns null when the market read is unavailable. The cortex is then not
+ * asked, and the brain carries no cortex input at all — an absent signal is
+ * never turned into a fabricated one.
+ *
+ * @returns {Promise<object|null>} a market frame, or null
+ */
+async function buildBrainMarketFrame() {
+  try {
+    const run = await executeToolRequests(
+      [{ tool: 'fbt_get_market_snapshot', facetId: 'market_prices', priority: 1 }],
+      { deadlineMs: 3200 }
+    );
+    const rows = run.rows?.find((r) => r?.summary?.rows?.length)?.summary?.rows;
+    if (!Array.isArray(rows) || !rows.length) return null;
+
+    const instruments = rows.map((r) => ({
+      symbol: String(r.symbol || '').toUpperCase(),
+      change24hPct: Number.isFinite(Number(r.change24hPct)) ? Number(r.change24hPct) : null
+    })).filter((i) => i.change24hPct != null);
+    if (!instruments.length) return null;
+
+    const benchmark = instruments.find((i) => i.symbol === 'BTC') || null;
+    const changes = instruments.map((i) => i.change24hPct);
+    const dispersion = changes.length > 1
+      ? Math.max(...changes) - Math.min(...changes)
+      : Math.abs(changes[0]);
+
+    /*
+     * The frame's regime is the brain's own read of the market's state, on
+     * the same three-level scale the market frame uses. It is derived from
+     * the numbers above, not asserted.
+     */
+    const anchor = Math.abs(benchmark?.change24hPct ?? changes[0]);
+    const regime = (anchor >= 6 || dispersion >= 12) ? 'turbulent'
+      : (anchor >= 2 || dispersion >= 5) ? 'normal'
+        : 'calm';
+
+    return {
+      regime,
+      benchmark: benchmark ? { symbol: 'BTC', change24hPct: benchmark.change24hPct } : null,
+      instruments,
+      breadth: {
+        tracked: changes.length,
+        advancers: changes.filter((v) => v > 0).length,
+        decliners: changes.filter((v) => v < 0).length
+      }
+    };
+  } catch {
+    return null;
+  }
+}
 
 let sharedVectorStore = null;
 let sharedSmartMemory = null;
@@ -138,6 +199,41 @@ export function getCentralBrain() {
       adaptiveCouncil: getAdaptiveCouncil(),
       availableProviders: () => reachable(),
       internalSynthesizer: synthesizeInternalAnswer,
+      /*
+       * ─── THE CORTEX (lever #5) ───────────────────────────────────────────
+       * The central brain can consult the trained cortex for a MARKET
+       * question. The read is a second opinion on the SHAPE of the state, and
+       * it is published on the trace next to the evidence — never above it.
+       *
+       * The brain asks for the market state it already has, so the cortex
+       * reads the same data the specialists read. And the cortex's own gate
+       * still applies: if it cannot separate the state from its mirror, it
+       * returns nothing and the brain carries no cortex input at all.
+       *
+       * This is what closes the loop the audit found: before this, the
+       * central brain had NO neuromorphic input at all — the cortex was a
+       * spectator to the whole pipeline.
+       */
+      cortexReader: async ({ message } = {}) => {
+        try {
+          const frame = await buildBrainMarketFrame();
+          if (!frame) return null;
+          const state = marketStateFromFrame(frame);
+          if (!state) return null;
+          const read = readCortex(state);
+          if (!read) return null;
+          return {
+            usable: read.usable === true,
+            directional: read.directional || null,
+            regime: read.regime || null,
+            discrimination: read.discrimination ?? null,
+            reason: read.reason || null
+          };
+        } catch {
+          /* A cortex that fails must never take the brain down with it. */
+          return null;
+        }
+      },
       toolRunner: async (toolName, args = {}, ctx = {}) => {
         const facetId = TOOL_TO_FACET[toolName] || 'market_prices';
         const primaryToken = Array.isArray(args.symbols) && args.symbols[0] ? args.symbols[0] : null;

@@ -132,7 +132,7 @@ if (command === 'bind-account') {
   const privateKey = process.env.INTENT_CROSS_CHAIN_PRIVATE_KEY || '';
   if (!privateKey) fail('INTENT_CROSS_CHAIN_PRIVATE_KEY is required and must stay in the party secrets manager.');
   const walletSignature = option('--wallet-signature');
-  const result = buildAccountBinding({
+  const result = await buildAccountBinding({
     state: readJson(stateFile, 'cross-chain state'),
     partyId: option('--party'),
     chainId: Number(option('--chain')),
@@ -155,7 +155,7 @@ if (command === 'verify-binding') {
   if (!stateFile || !bindingFile) {
     fail('Usage: intent-cross-chain.mjs verify-binding <state.json> <binding.json>');
   }
-  const result = verifyAccountBinding(readJson(bindingFile, 'account binding'), {
+  const result = await verifyAccountBinding(readJson(bindingFile, 'account binding'), {
     state: readJson(stateFile, 'cross-chain state')
   });
   if (!result.ok) fail(result.code, 1);
@@ -242,7 +242,7 @@ if (command === 'verify-report') {
   const registry = new Map(report?.verifier?.id && expectedKey
     ? [[report.verifier.id, { id: report.verifier.id, publicKey: expectedKey, active: true }]]
     : []);
-  const result = verifyTxVerificationReport(report, {
+  const result = await verifyTxVerificationReport(report, {
     state: readJson(stateFile, 'cross-chain state'),
     receipt: readJson(option('--receipt'), 'leg receipt'),
     previousReceipts: priorFile ? [readJson(priorFile, 'prior receipt')] : [],

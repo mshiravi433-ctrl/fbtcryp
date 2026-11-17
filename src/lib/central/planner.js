@@ -67,6 +67,17 @@ export const PLAN_TEMPLATES = Object.freeze({
     step('risk.concentration', 'risk', 'read', { dependsOn: ['portfolio.read'], input: { factor: 'concentration' } }),
     step('present', 'session', 'read', { dependsOn: ['portfolio.read', 'risk.concentration'] })
   ],
+  /*
+   * The plain risk verdict: the portfolio, then the central risk engine,
+   * then the answer. `risk.analyze` is the SAME call every other risk
+   * intent makes — the difference is only WHICH factors it weighs, and
+   * the general question weighs them all.
+   */
+  RISK_OVERVIEW: () => [
+    step('portfolio.read', 'portfolio', 'read'),
+    step('risk.analyze', 'risk', 'read', { dependsOn: ['portfolio.read'], riskContext: 'portfolio', input: { scope: 'portfolio' } }),
+    step('present', 'session', 'read', { dependsOn: ['portfolio.read', 'risk.analyze'] })
+  ],
   ASSET_ANALYSIS: () => [
     step('markets.read', 'crypto', 'read', { input: { include: ['price', 'volume', 'volatility'] } }),
     step('signals.read', 'signals', 'read', { optional: true }),
@@ -104,6 +115,11 @@ export const PLAN_TEMPLATES = Object.freeze({
     step('markets.read', 'crypto', 'read', { input: { include: ['price', 'volume', 'funding', 'openInterest'] } }),
     step('signals.read', 'signals', 'read', { optional: true }),
     step('news.read', 'news', 'read', { optional: true }),
+    /* The regime (path 12): the macro graph over the global snapshot, the
+       world model and the portfolio. Optional, because the graph is an
+       ENRICHMENT of the overview, not its source — an unreadable graph
+       must not cost the user the market prices. */
+    step('global.read', 'global-intel', 'read', { optional: true }),
     step('present', 'session', 'read', { dependsOn: ['markets.read', 'signals.read', 'news.read'] })
   ],
   NEWS_SUMMARY: () => [
@@ -149,6 +165,91 @@ export const PLAN_TEMPLATES = Object.freeze({
     step('risk.analyze', 'risk', 'read', { dependsOn: ['lab.simulate'], input: { scope: 'post-shock' } }),
     step('present', 'session', 'read', { dependsOn: ['lab.simulate', 'risk.analyze'] })
   ],
+  /*
+   * ── THE YIELD SURFACE AND THE GLOBAL SURFACE (2026-11-12) ─────────────
+   *
+   * These four intents had NO plan template, which means their plan was
+   * EMPTY — the modules were named in `INTENT_TYPES` but nothing ever
+   * asked them for anything. A template is what turns "this intent needs
+   * the farming module" into an actual read.
+   *
+   * The reads are marked `optional` where a dead feed should prune itself
+   * and be REPORTED rather than take the whole answer down: a dead price
+   * feed must not stop the brain from quoting a yield, and a dead global
+   * feed must not stop it from quoting the portfolio.
+   */
+  YIELD_OPPORTUNITY: () => [
+    step('farming.read', 'farming', 'read', { optional: true }),
+    step('portfolio.read', 'portfolio', 'read', { optional: true }),
+    step('risk.analyze', 'risk', 'read', { optional: true, riskContext: 'farming' }),
+    step('present', 'session', 'read', { dependsOn: ['farming.read'] })
+  ],
+  STAKING_REWARD: () => [
+    step('farming.read', 'farming', 'read', { optional: true }),
+    step('portfolio.read', 'portfolio', 'read', { optional: true }),
+    step('risk.analyze', 'risk', 'read', { optional: true, riskContext: 'farming' }),
+    step('present', 'session', 'read', { dependsOn: ['farming.read'] })
+  ],
+  LIQUIDITY_RISK: () => [
+    step('liquidity.read', 'liquidity', 'read', { optional: true }),
+    step('portfolio.read', 'portfolio', 'read', { optional: true }),
+    step('risk.analyze', 'risk', 'read', { optional: true, riskContext: 'liquidity' }),
+    step('present', 'session', 'read', { dependsOn: ['liquidity.read'] })
+  ],
+  /*
+   * `global-intel` has no state section — the snapshot is per-owner and is
+   * read through the bridge — so it is a PLAN step, not a section read.
+   */
+  SMART_MONEY_READ: () => [
+    step('global.read', 'global-intel', 'read', { optional: true }),
+    step('markets.read', 'crypto', 'read', { optional: true }),
+    step('risk.analyze', 'risk', 'read', { optional: true, riskContext: 'portfolio' }),
+    step('present', 'session', 'read', { dependsOn: ['global.read'] })
+  ],
+  /*
+   * The fit question: rank the cross-asset opportunities against THIS
+   * owner's profile, capital and goal. The ranking is the answer; the
+   * risk view travels with it, because a «FITTED» verdict scored against
+   * a stale risk number is a verdict against nothing.
+   */
+  OPPORTUNITY_FIT: () => [
+    step('portfolio.read', 'portfolio', 'read', { optional: true }),
+    step('fit.read', 'opportunity-fit', 'read', { optional: true }),
+    step('risk.analyze', 'risk', 'read', { optional: true, riskContext: 'portfolio' }),
+    step('present', 'session', 'read', { dependsOn: ['fit.read'] })
+  ],
+  /*
+   * The route plan (path 14): quote the live candidates, rank them in
+   * the engine, and present the best one WITH the reasons.
+   *
+   * The route step is OPTIONAL, because a route question without a
+   * transfer to plan is a question that was never fully asked — and the
+   * plan must still return a usable answer («which transfer?») instead
+   * of failing the whole turn. The market context is optional too: the
+   * ranking is over the provider's own numbers, and the market view only
+   * adds the conditions the crossing happens in.
+   */
+  ROUTE_INTELLIGENCE: () => [
+    step('routes.read', 'route-intelligence', 'read', { optional: true }),
+    step('markets.read', 'crypto', 'read', { optional: true }),
+    step('risk.analyze', 'risk', 'read', { optional: true }),
+    step('present', 'session', 'read', { dependsOn: ['routes.read'] })
+  ],
+  /*
+   * The why plan (path 15): explain the brain's own decision.
+   *
+   * The decision is what the brain ALREADY produced, so the plan does not
+   * build anything new — it reads the owner's own state and the risk view
+   * the decision was judged against, and hands them to the why engine.
+   * The why step is OPTIONAL, because a turn with no recommendation has
+   * nothing to explain and the reply must say so rather than fail.
+   */
+  WHY_DECISION: () => [
+    step('portfolio.read', 'portfolio', 'read', { optional: true }),
+    step('risk.analyze', 'risk', 'read', { optional: true }),
+    step('why.read', 'why-decision', 'read', { optional: true, dependsOn: ['portfolio.read', 'risk.analyze'] }),
+    step('present', 'session', 'read', { dependsOn: ['why.read'] })
+  ],
   GOAL_PLAN: () => [
     step('goals.read', 'goals', 'read', { optional: true }),
     step('portfolio.read', 'portfolio', 'read'),
@@ -156,6 +257,11 @@ export const PLAN_TEMPLATES = Object.freeze({
     step('forecast.read', 'forecast', 'read', { optional: true }),
     step('risk.analyze', 'risk', 'read', { dependsOn: ['portfolio.read'], riskContext: 'goals' }),
     step('goals.plan', 'goals', 'simulate', { dependsOn: ['goals.read', 'portfolio.read', 'forecast.read', 'risk.analyze'] }),
+    /* The three profiles for the target (path 13): allocation, expected
+       value, drawdown, probability of loss and probability of halving.
+       Optional, because the engine refuses without real capital and a
+       refusal must not cost the user the feasibility figure. */
+    step('scenarios.read', 'goal-scenarios', 'read', { optional: true, dependsOn: ['goals.read', 'portfolio.read'] }),
     step('profitPlan.read', 'profit-plan', 'read', { optional: true }),
     step('present', 'session', 'read', { dependsOn: ['goals.plan', 'risk.analyze'] })
   ],

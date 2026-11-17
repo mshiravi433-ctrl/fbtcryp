@@ -73,11 +73,38 @@ const MAX_MODEL_LADDERS = Object.freeze({
   groq: Object.freeze(['openai/gpt-oss-120b', 'openai/gpt-oss-20b']),
   mistral: Object.freeze(['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest']),
   workersai: Object.freeze([
+    '@cf/qwen/qwen3.8-27b',
+    '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
     '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
-    '@cf/deepseek/deepseek-r1-distill-qwen-32b',
     '@cf/meta/llama-3.1-8b-instruct'
   ]),
-  aimlapi: Object.freeze(['gpt-4o', 'meta-llama/Llama-3.3-70B-Instruct', 'gpt-4o-mini'])
+  aimlapi: Object.freeze(['gpt-4o', 'meta-llama/Llama-3.3-70B-Instruct', 'gpt-4o-mini']),
+  /*
+   * ─── THE FREE SEAT'S LADDER ────────────────────────────────────────────────
+   * `openrouterfree` is a SEPARATE seat from `openrouter` because it serves a
+   * different catalogue: the `:free` ids. The paid ladder's flagships
+   * (`gemini-2.5-pro`, `gpt-4.1`, `claude-sonnet-4-6`, `grok-4`) are all paid
+   * ids, and a free key calling one answers 402 — an account-level failure
+   * that stops the model walk. So the free seat gets its own ladder, drawn
+   * only from ids that were verified to answer on the free tier:
+   *
+   *   · nvidia/nemotron-3.5-super-vl:free — the default: 1M context, the
+   *     only free id that answered JSON extraction, a tool call and a coding
+   *     task on every attempt across a 10-day benchmark;
+   *   · nvidia/nemotron-3-ultra-550b-a55b:free — the deepest free answer
+   *     (a 550B MoE built for reasoning and orchestration);
+   *   · nvidia/nemotron-3.5-lightning:free — fast, high-volume.
+   *
+   * The remaining free ids (the nano reasoning one, North Mini Code, Gemma 4
+   * and OpenRouter's own free router) stay behind them in the provider's
+   * fallback list, so a withdrawn flagship costs one round-trip rather than
+   * an outage — the ladder is an ORDERING, never a whitelist.
+   */
+  openrouterfree: Object.freeze([
+    'nvidia/nemotron-3.5-super-vl:free',
+    'nvidia/nemotron-3-ultra-550b-a55b:free',
+    'nvidia/nemotron-3.5-lightning:free'
+  ])
 });
 
 /**
@@ -87,11 +114,11 @@ const MAX_MODEL_LADDERS = Object.freeze({
  * nothing that pinned a route silently moves.
  */
 const MAX_PROVIDER_ORDER = Object.freeze({
-  general: ['openai', 'anthropic', 'openrouter', 'xai', 'gemini', 'deepseek', 'groq', 'aimlapi', 'mistral', 'workersai', 'internal'],
-  market: ['xai', 'openrouter', 'openai', 'gemini', 'anthropic', 'deepseek', 'groq', 'aimlapi', 'workersai', 'internal'],
-  research: ['xai', 'openrouter', 'openai', 'gemini', 'anthropic', 'deepseek', 'groq', 'aimlapi', 'workersai', 'internal'],
-  reasoning: ['openai', 'anthropic', 'openrouter', 'deepseek', 'gemini', 'xai', 'aimlapi', 'groq', 'workersai', 'internal'],
-  risk: ['anthropic', 'openai', 'deepseek', 'openrouter', 'gemini', 'xai', 'aimlapi', 'groq', 'workersai', 'internal']
+  general: ['openai', 'anthropic', 'openrouter', 'openrouterfree', 'xai', 'gemini', 'deepseek', 'groq', 'aimlapi', 'mistral', 'workersai', 'internal'],
+  market: ['xai', 'openrouter', 'openrouterfree', 'openai', 'gemini', 'anthropic', 'deepseek', 'groq', 'aimlapi', 'workersai', 'internal'],
+  research: ['xai', 'openrouter', 'openrouterfree', 'openai', 'gemini', 'anthropic', 'deepseek', 'groq', 'aimlapi', 'workersai', 'internal'],
+  reasoning: ['openai', 'anthropic', 'openrouter', 'openrouterfree', 'deepseek', 'gemini', 'xai', 'aimlapi', 'groq', 'workersai', 'internal'],
+  risk: ['anthropic', 'openai', 'deepseek', 'openrouter', 'openrouterfree', 'gemini', 'xai', 'aimlapi', 'groq', 'workersai', 'internal']
 });
 
 const TASK_ALIASES = Object.freeze({
@@ -260,6 +287,108 @@ export function normalizeIntelligenceMode(value) {
   return MODE_ALIASES[id] || null;
 }
 
+/*
+ * THE COST ORDER OF THE THREE MODES.
+ *
+ * One list keeps the automatic choice and its reporting consistent. `swift` is
+ * the fast seat with a capped 1200-token answer and an 8 s window; `max` is the
+ * flagship ladder with reasoning, verification and a repair pass.
+ */
+export const INTELLIGENCE_MODE_RANK = Object.freeze({ swift: 1, balanced: 2, max: 3 });
+
+/**
+ * WHICH TIER DOES THIS QUESTION ACTUALLY NEED?
+ *
+ * Until now the tier came from exactly one place: the user's saved preference,
+ * defaulting to `max`. So a greeting and a leveraged-liquidation scenario paid
+ * the same price — the flagship ladder, an 8-second window and the full
+ * collaboration budget — unless the user happened to open a panel and turn it
+ * down. On a deployment with a hard CPU and cost ceiling that is the single
+ * largest waste in the turn, and it is invisible: nothing reports that the
+ * smartest tier was spent on «سلام».
+ *
+ * This does NOT add a second classifier. `planCollaboration` already reads the
+ * message — conversation kind, complexity, freshness, whether web research is
+ * needed, how complete the message is, how the user feels — purely, with no
+ * model call, for every turn in every mode. This function only turns a read
+ * that already exists into a tier, and it is the single place that does so, the
+ * same way `INTELLIGENCE_MODES` is the single definition of what a tier means.
+ *
+ * THE SHAPE OF THE ANSWER MATTERS AS MUCH AS THE ANSWER. Returning
+ * `{ mode: null, reason }` is not a failure path: it is the proposal saying
+ * "this turn is worth what it already costs", and saying so out loud. Every
+ * branch names itself, because a tier chosen silently is indistinguishable from
+ * a tier that was never chosen — and the operator reading a slow-turn report
+ * needs to know which happened.
+ *
+ * THE SAFETY PROPERTY IS TO SELECT BOTH UP AND DOWN AUTOMATICALLY. A social
+ * turn uses `swift`, a complete self-contained question uses `balanced`, and
+ * incomplete, emotional, research-bound, high-stakes, money-moving, compound
+ * or unclear turns use `max`. When unsure, spend more reasoning rather than
+ * silently guessing at a shallower answer.
+ */
+export function proposeIntelligenceMode(read = null, { intentType = null, execution = false, retry = false, parts = 1 } = {}) {
+  const kind = String(read?.conversationKind || '').toUpperCase();
+  const complexity = String(read?.complexity || '').toUpperCase();
+  const completeness = String(read?.partial?.completeness || '').toLowerCase();
+  const freshness = String(read?.freshness || '').toUpperCase();
+  const answerPath = String(read?.answerPath || '').toUpperCase();
+  const wantsWeb = Boolean(read?.needsWeb);
+  const level = Number.isFinite(Number(read?.baseLevel)) ? Number(read.baseLevel) : Number(read?.level ?? 0);
+  const intensity = Number(read?.emotion?.intensity ?? 0);
+  const smallTalk = Boolean(read?.intelligence?.smallTalkProtected ?? read?.social?.pure);
+  const intent = String(intentType || '').toUpperCase();
+
+  /* 1. A turn that can move money is never the place to guess at a shallower
+        answer. The action kind, a staged card or a pending confirmation all
+        route to the deepest tier. */
+  if (execution || kind === 'ACTION'
+      || /^(EXECUTE_|CONFIRM_|CANCEL_|REBALANCE)/.test(intent)
+      || ['BUY', 'SELL', 'SWAP', 'SEND', 'BRIDGE', 'DCA', 'LEND', 'BORROW', 'FARM', 'STAKING', 'FUTURES'].includes(intent)) {
+    return { mode: 'max', reason: 'MONEY_MOVING_TURN' };
+  }
+  /* 2. Social turns have a reliable, low-cost answer. Keep this ahead of the
+        retry guard so a repeated greeting does not become a flagship run. */
+  if (smallTalk) return { mode: 'swift', reason: 'SOCIAL_TURN' };
+  /* 3. Safety signals and tool-truth tasks never take the short path. The
+        purpose matters: a portfolio/risk/strategy read can be high-stakes even
+        when its sentence is short and does not ask for a live quote. */
+  if (read?.requiresExecutionGuard || read?.fomo?.detected || intensity >= 2
+      || answerPath === 'TOOL'
+      || ['RISK_ANALYSIS', 'PORTFOLIO_ANALYSIS', 'INVESTMENT_PLAN', 'GOAL', 'STRATEGY', 'STRATEGY_PLAN', 'REBALANCE'].includes(intent)) {
+    return { mode: 'max', reason: 'SAFETY_OR_TOOL_TRUTH_REQUIRES_FULL_READ' };
+  }
+  /* 4. A retry gets the full read: the previous attempt did not satisfy the
+        request, so the automatic choice must not get shallower. */
+  if (retry) return { mode: 'max', reason: 'RETRY_REQUIRES_FULL_READ' };
+  /* 5. A single-part answer to a compound question silently drops work. */
+  if (Number(parts) > 1) return { mode: 'max', reason: 'MULTI_PART_QUESTION' };
+  /* 6. Fragments and unclear input are exactly where a shallow guess can be
+        harmful; select the deepest read and let the clarification layer ask
+        the one question that changes the answer. */
+  if (['empty', 'fragment', 'truncated', 'ambiguous', 'garbled', 'partial', 'unclear'].includes(completeness)) {
+    return { mode: 'max', reason: 'INCOMPLETE_MESSAGE_NEEDS_THE_DEEP_READ' };
+  }
+  /* 7. Current or recent information needs retrieval and verification. */
+  if (wantsWeb || answerPath === 'WEB' || ['LIVE', 'BREAKING'].includes(freshness)) {
+    return { mode: 'max', reason: 'RESEARCH_TURN' };
+  }
+  /* 8. Complex and high-stakes questions need multi-model reasoning. */
+  if (complexity === 'COMPLEX' || complexity === 'HIGH_STAKES' || answerPath === 'MULTI_AI') {
+    return { mode: 'max', reason: 'HIGH_STAKES_QUESTION' };
+  }
+  /* 9. A complete, self-contained simple or medium question is appropriately
+        answered with the middle tier (for example, a definition or short
+        explanation that needs neither live data nor multiple perspectives). */
+  if (completeness === 'complete' && level <= 2
+      && (complexity === 'SIMPLE' || complexity === 'MEDIUM')
+      && !['WEB', 'TOOL', 'MULTI_AI'].includes(answerPath)) {
+    return { mode: 'balanced', reason: 'SELF_CONTAINED_QUESTION' };
+  }
+  /* 10. Unclassified or uncertain turns default deep rather than guessing. */
+  return { mode: 'max', reason: 'COMPLEX_OR_UNCERTAIN_QUESTION' };
+}
+
 export function getIntelligenceProfile(mode) {
   return INTELLIGENCE_MODES[normalizeIntelligenceMode(mode)] || INTELLIGENCE_MODES.max;
 }
@@ -267,37 +396,59 @@ export function getIntelligenceProfile(mode) {
 /**
  * Resolve the mode for one request.
  *
- * Order, and why:
- *   1. the request — a user who picked "swift" in the UI gets swift;
- *   2. `FBT_AI_INTELLIGENCE` — the deployment-wide default;
- *   3. `max` — because this deployment's explicit product decision is that the
- *      assistant answers with its strongest available brain unless told
- *      otherwise.
- *
- * An UNKNOWN request value never overrides anything: a typo in a URL should
- * not quietly downgrade the assistant, so it is reported in `rejected` and the
- * deployment default applies.
+ * Ordinary internal callers may still supply an explicit mode. Auto-aware
+ * public chat and gateway routes instead use the message-level proposal; only
+ * the deployment operator's `FBT_AI_INTELLIGENCE` pin outranks that decision.
+ * With neither an auto proposal nor an explicit request, the deployment
+ * default is `max`. Unknown values are reported and never silently downgraded.
  */
-export function resolveIntelligenceMode(requested = null, { env = process.env, defaultMode = 'max' } = {}) {
+export function resolveIntelligenceMode(requested = null, { env = process.env, defaultMode = 'max', auto = null } = {}) {
   const envMode = normalizeIntelligenceMode(env?.FBT_AI_INTELLIGENCE);
   const fallback = envMode || normalizeIntelligenceMode(defaultMode) || 'max';
-  if (requested == null || String(requested).trim() === '') {
-    return { mode: fallback, requested: null, source: envMode ? 'env' : 'default', rejected: null };
-  }
-  const wanted = normalizeIntelligenceMode(requested);
-  if (!wanted) {
-    return {
+  const hasAutoDecision = Boolean(auto && typeof auto === 'object');
+  let base;
+
+  if (hasAutoDecision) {
+    /* Public chat and gateway routes make the decision from the message. A
+       legacy/client-supplied mode is diagnostic only and cannot steer it; the
+       deployment env pin remains the operator's explicit override. */
+    const raw = requested == null ? '' : String(requested).trim();
+    const wanted = raw ? normalizeIntelligenceMode(raw) : null;
+    base = {
       mode: fallback,
-      requested: String(requested).slice(0, 32),
+      requested: raw ? (wanted || raw.slice(0, 32)) : null,
       source: envMode ? 'env' : 'default',
-      rejected: 'UNKNOWN_MODE'
+      rejected: raw ? (wanted ? 'CLIENT_MODE_IGNORED' : 'UNKNOWN_MODE') : null
     };
+  } else if (requested == null || String(requested).trim() === '') {
+    base = { mode: fallback, requested: null, source: envMode ? 'env' : 'default', rejected: null };
+  } else {
+    const wanted = normalizeIntelligenceMode(requested);
+    base = wanted
+      ? { mode: wanted, requested: wanted, source: 'request', rejected: envMode && envMode !== wanted ? 'ENV_OVERRIDDEN' : null }
+      : { mode: fallback, requested: String(requested).slice(0, 32), source: envMode ? 'env' : 'default', rejected: 'UNKNOWN_MODE' };
   }
+  return applyAutoTier(base, auto);
+}
+
+/*
+ * A question-level decision selects any of the three tiers, including a deeper
+ * one when the message warrants it. Only an operator's explicit
+ * `FBT_AI_INTELLIGENCE` pin outranks that automatic decision. User/client mode
+ * values are ignored on auto-aware chat and gateway routes.
+ */
+function applyAutoTier(base, auto) {
+  if (!auto || typeof auto !== 'object') return { ...base, auto: null };
+  const proposed = normalizeIntelligenceMode(auto.mode);
+  const reason = String(auto.reason || 'UNNAMED_REASON');
+  const report = { proposed: proposed || auto.mode || null, reason, applied: false, ignored: null };
+  if (base.source === 'env') return { ...base, auto: { ...report, ignored: 'OPERATOR_PIN_WINS' } };
+  if (!proposed) return { ...base, auto: { ...report, ignored: 'NO_PROPOSAL' } };
   return {
-    mode: wanted,
-    requested: wanted,
-    source: 'request',
-    rejected: envMode && envMode !== wanted ? 'ENV_OVERRIDDEN' : null
+    ...base,
+    mode: proposed,
+    source: 'auto',
+    auto: { ...report, applied: true }
   };
 }
 
@@ -369,6 +520,72 @@ function isGroqReasoningModel(model) {
   return /gpt-oss/i.test(String(model || ''));
 }
 
+/**
+ * ─── THE FREE-TIER REASONING MODELS ────────────────────────────────────────
+ *
+ * The original matcher (`isGatewayReasoningModel`) only recognised ids that
+ * literally spell a reasoning family: `gpt-5`, `o1`..`o9`, `deepseek-r1`,
+ * `deepseek-reasoner`, `qwq`, `thinking`. That regex was written when the
+ * gateway only ever spoke to paid catalogues.
+ *
+ * The free catalogues are different, and they were silently losing their
+ * reasoning knob:
+ *
+ *   · OpenRouter's free tier serves NVIDIA's Nemotron family. The flagship
+ *     `nvidia/nemotron-3-ultra-550b-a55b:free` is a reasoning AND
+ *     orchestration model — it thinks by default — but no substring of its id
+ *     matched, so the gateway sent it a plain request with no reasoning
+ *     budget. The model still reasoned (it reasons by default), but the
+ *     gateway could not ask for MORE of it, which is the whole point of the
+ *     smartest mode. `nemotron-3.5-lightning` and
+ *     `nemotron-3-nano-omni-...-reasoning` are the same story.
+ *
+ *   · Cloudflare's free tier serves `@cf/deepseek/deepseek-r1-distill-qwen-32b`
+ *     — an R1 distill, i.e. a reasoning model — under a `@cf/` prefix that
+ *     the matcher never saw, because `workersai` had no reasoning branch at
+ *     all.
+ *
+ * So this matcher names the free reasoning families explicitly. It is
+ * deliberately narrow: a false positive would send a `reasoning` field to a
+ * model that does not accept it, and that is how a "smarter" switch becomes a
+ * 400 on every request — the exact failure the original comment warns about.
+ */
+function isFreeTierReasoningModel(model) {
+  /*
+   * ONLY the Nemotron family, and only the members that were verified to
+   * expose a reasoning knob on the free tier in November 2026:
+   *
+   *   · nvidia/nemotron-3-ultra-550b-a55b:free — reasoning + orchestration;
+   *   · nvidia/nemotron-3.5-super-vl:free — tools + reasoning;
+   *   · nvidia/nemotron-3.5-lightning:free — tools + reasoning;
+   *   · nvidia/nemotron-3-nano-omni-...-reasoning:free — reasoning.
+   *
+   * `google/gemma-4-*` is deliberately NOT here: Gemma 4's thinking is
+   * optional rather than a documented effort knob, and `cohere/north-mini-code`
+   * has none at all. A false positive sends a field the model rejects, and
+   * that is how a "smarter" switch becomes a 400 on every request — so the
+   * matcher names only what was actually verified.
+   */
+  return /nemotron-3(\.5)?-(ultra|super-vl|lightning|nano)|nemotron-3.*reasoning/i.test(String(model || ''));
+}
+
+/**
+ * Cloudflare Workers AI reasoning models. The `@cf/` prefix hides the family
+ * name from the shared matcher, so it gets its own branch.
+ *
+ * Two families qualify:
+ *   · `qwen3.8-27b`   — Cloudflare documents Reasoning: low | medium | xhigh
+ *   · `deepseek-r1-*` — the R1 distill, which reasons by construction
+ *
+ * The matcher is deliberately narrow. A false positive sends a `reasoning`
+ * field to a model that does not accept it, and that is how a "smarter"
+ * switch becomes a 400 on every request.
+ */
+function isWorkersAIReasoningModel(model) {
+  const id = String(model || '');
+  return /deepseek-r1/i.test(id) || /qwen3\.8-27b/i.test(id);
+}
+
 function isAnthropicThinkingModel(model) {
   /* Claude 4.x and later run extended thinking; the 3.x family does not. */
   return /claude-(sonnet|opus|haiku)-(?:[4-9]|\d{2,})/i.test(String(model || '')) && !/claude-3/i.test(String(model || ''));
@@ -386,6 +603,23 @@ function isGeminiThinkingModel(model) {
  *   · Groq         — `reasoning_effort` on gpt-oss.
  * Everything else returns `{}` and the request body is byte-identical to
  * before this module existed.
+ *
+ * ─── AND THE FREE SEATS ────────────────────────────────────────────────────
+ * Two additions, both about models the gateway was calling WITHOUT their
+ * reasoning knob:
+ *
+ *   · `openrouterfree` — the free `:free` Nemotron ids reason by default,
+ *     but the gateway never sent a reasoning budget, so the smartest mode
+ *     could not ask for more depth from the deepest free model there is.
+ *     OpenRouter documents `reasoning: { effort }` for reasoning-capable ids
+ *     on both the paid and the free catalogue, so the same field applies.
+ *   · `workersai` — Cloudflare's `@cf/deepseek/deepseek-r1-distill-qwen-32b`
+ *     is an R1 distill and had NO branch at all. Workers AI accepts
+ *     `reasoning_effort` on its reasoning models.
+ *
+ * `isFreeTierReasoningModel` is narrow on purpose: a false positive sends a
+ * field the model rejects, and that is how a "smarter" switch becomes a 400
+ * on every request.
  */
 export function intelligenceReasoningFields(providerId, mode, model) {
   if (!getIntelligenceProfile(mode).reasoning) return {};
@@ -395,6 +629,10 @@ export function intelligenceReasoningFields(providerId, mode, model) {
   if (id === 'groq' && isGroqReasoningModel(m)) return { reasoning_effort: 'high' };
   if (id === 'openrouter' && isGatewayReasoningModel(m)) return { reasoning: { effort: 'high' } };
   if (id === 'aimlapi' && isGatewayReasoningModel(m)) return { reasoning_effort: 'high' };
+  if (id === 'openrouterfree' && (isGatewayReasoningModel(m) || isFreeTierReasoningModel(m))) {
+    return { reasoning: { effort: 'high' } };
+  }
+  if (id === 'workersai' && isWorkersAIReasoningModel(m)) return { reasoning_effort: 'high' };
   return {};
 }
 

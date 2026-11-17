@@ -7,7 +7,7 @@
  * independent verifiers; other venues (and native-coin outputs) remain pending
  * until they have equally specific reconciliation. A hash is not sufficient.
  */
-import { Interface, parseUnits } from 'ethers';
+import { Interface, parseUnitsSync } from '../../../server/ethersLite.js';
 import { AAVE_V3_POOLS, lendingAssetsFor } from '../lending.js';
 import { TOKENS } from '../chains.js';
 import { defaultStorage, loadStrategyPlan } from './strategyStore.js';
@@ -16,15 +16,27 @@ export const STRATEGY_RECEIPT_HINTS_KEY = 'fbt.strategy-brain.receipt-hints.v1';
 const HASH = /^0x[0-9a-f]{64}$/i;
 const ADDRESS = /^0x[0-9a-f]{40}$/i;
 const SUPPORTED_VENUES = Object.freeze({ 'aave-base': 8453, 'aave-arbitrum': 42161 });
-const AAVE_EVENTS = new Interface([
+let AAVE_EVENTSP = null;
+const AAVE_EVENTSReady = async () => {
+  if (!AAVE_EVENTSP) AAVE_EVENTSP = await Interface([
   'event Supply(address indexed reserve, address user, address indexed onBehalfOf, uint256 amount, uint16 indexed referralCode)'
 ]);
-const AAVE_SUPPLY = new Interface([
+  return AAVE_EVENTSP;
+};
+let AAVE_SUPPLYP = null;
+const AAVE_SUPPLYReady = async () => {
+  if (!AAVE_SUPPLYP) AAVE_SUPPLYP = await Interface([
   'function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode)'
 ]);
-const ERC20_EVENTS = new Interface([
+  return AAVE_SUPPLYP;
+};
+let ERC20_EVENTSP = null;
+const ERC20_EVENTSReady = async () => {
+  if (!ERC20_EVENTSP) ERC20_EVENTSP = await Interface([
   'event Transfer(address indexed from,address indexed to,uint256 value)'
 ]);
+  return ERC20_EVENTSP;
+};
 const same = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
 
 function findAction(record, stageId, actionIndex) {
@@ -194,7 +206,7 @@ async function checkStageBlock(provider, receipt, startedAt) {
 function matchingAmount(actual, usd, decimals) {
   try {
     if (!Number.isFinite(Number(usd)) || Number(usd) <= 0) return false;
-    const expected = parseUnits(String(usd), decimals);
+    const expected = parseUnitsSync(String(usd), decimals);
     const value = BigInt(actual);
     // USDC is close to $1 but not a promise of a peg. A very small tolerance
     // permits a user's quoted input to differ by up to 0.5%; unrelated dust or
@@ -226,6 +238,12 @@ export async function verifyAaveStrategySupply({ action, txHash, owner, provider
       || (receipt.from && !same(receipt.from, owner)) || (receipt.to && !same(receipt.to, pool))) {
       return { ok: false, code: 'RECEIPT_MISMATCH' };
     }
+    /* `Interface` is LAZY in `server/ethersLite.js`: it loads `ethers/abi`
+       on demand and returns a PROMISE. So the coder is AWAITED here. Without
+       the await, `AAVE_SUPPLY.parseTransaction` is not a function, and the
+       reconciliation failed with "ok: false" on a valid receipt. */
+    const AAVE_SUPPLY = await AAVE_SUPPLYReady();
+    const AAVE_EVENTS = await AAVE_EVENTSReady();
     const call = AAVE_SUPPLY.parseTransaction({ data: tx.data ?? tx.input, value: tx.value ?? 0 });
     if (call?.name !== 'supply' || !same(call.args[0], usdc.address)
       || !same(call.args[2], owner) || !matchingAmount(call.args[1], action.params.amountUsd, usdc.decimals)) {
@@ -276,6 +294,7 @@ export async function verifyStrategySwap({ action, txHash, owner, provider, star
     }
     let paidWei = 0n;
     let acquiredWei = 0n;
+    const ERC20_EVENTS = await ERC20_EVENTSReady();
     for (const log of receipt.logs || []) {
       if (!same(log.address, spec.usdc.address) && !same(log.address, spec.bought.address)) continue;
       try {

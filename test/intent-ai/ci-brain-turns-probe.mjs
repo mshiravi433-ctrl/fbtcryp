@@ -27,7 +27,7 @@ import { setCiSource, resetCiSources, CI_SOURCE_NAMES } from '../../server/ci/so
 import { createCentralIntelligence } from '../../server/ci/api.js';
 import { auditRegistry } from '../../src/lib/central/registry.js';
 import { containsForbidden } from '../../src/lib/central/human.js';
-import { ACTION_STATUS, INTENT_STATES, MUTATING_OPERATIONS } from '../../src/lib/central/schema.js';
+import { ACTION_STATUS, INTENT_STATES, MUTATING_OPERATIONS, MODULE_IDS } from '../../src/lib/central/schema.js';
 
 /* Persian and Arabic digits are the product, not a bug: assertions normalize them
    so a test can still check that the NUMBER is the one the source returned. */
@@ -180,7 +180,9 @@ const replyOf = (out) => String(out?.response?.text || '');
 {
   const registry = ci.brain.registry('dev:ci-probe-read0001');
   const audit = auditRegistry(registry.list);
-  t('All thirty modules are registered', registry.list.length === 30 && audit.specModules === 30 && audit.unregisteredSpecModules.length === 0, JSON.stringify({ listed: registry.list.length, spec: audit.specModules, missing: audit.unregisteredSpecModules }));
+  /* The count comes from the SPEC, not from a literal — see the note in
+     ci-brain-http-probe.mjs. */
+  t('every module in the spec is registered', registry.list.length === MODULE_IDS.length && audit.specModules === MODULE_IDS.length && audit.unregisteredSpecModules.length === 0, JSON.stringify({ listed: registry.list.length, spec: audit.specModules, missing: audit.unregisteredSpecModules }));
   t('Every module declares the §40 fields it owes', audit.verdict === 'COMPLETE' && audit.coveragePct === 100, JSON.stringify({ complete: audit.complete, coveragePct: audit.coveragePct, incomplete: audit.incomplete }));
   const caps = ci.brain.capabilities('dev:ci-probe-read0001').capabilities;
   t('A module with no trading route is UNAVAILABLE, not quietly DEGRADED', caps.etf === 'UNAVAILABLE' && caps.funds === 'UNAVAILABLE', JSON.stringify({ etf: caps.etf, funds: caps.funds }));

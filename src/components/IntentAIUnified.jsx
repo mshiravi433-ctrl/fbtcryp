@@ -298,7 +298,6 @@ import {
 import { getYields } from '../lib/yields.js';
 import { loadOrders } from '../lib/orders.js';
 import { fetchAiProviders, fetchGatewaySelfTest, fetchLearningStats, fetchAiTools } from '../lib/aiGatewayClient.js';
-import { getIntelligenceMode, intelligenceModeLabel, setIntelligenceMode } from '../lib/aiIntelligenceMode.js';
 import {
   OperationsPanel,
   HistoryPanel,
@@ -684,6 +683,12 @@ export const ConversationRow = memo(function ConversationRow({
 }) {
   const fa = locale.startsWith('fa');
   const intel = m.intelligence || null;
+  const selectedMode = intel?.mode?.id || (typeof intel?.mode === 'string' ? intel.mode : null);
+  const depthLabels = {
+    swift: fa ? 'ساده' : 'Simple',
+    balanced: fa ? 'متوسط' : 'Medium',
+    max: fa ? 'عمیق' : 'Deep'
+  };
   const sources = Array.isArray(intel?.sources) ? intel.sources.filter((s) => s?.url && /^https:/i.test(String(s.url))) : [];
   /* Only the actions that actually name a destination can be chips. Keeping
      the filter here (rather than trusting every payload to be uniform) is
@@ -908,6 +913,13 @@ export const ConversationRow = memo(function ConversationRow({
                 ⚠ {m.missingInfo}
               </span>
             ) : null}
+          </div>
+        ) : null}
+        {selectedMode && depthLabels[selectedMode] ? (
+          <div className="iaos-multi-ai-badge" data-testid="intent-ai-auto-depth">
+            <span className="iaos-model-pill">
+              {fa ? `عمق پاسخ انتخاب‌شده: ${depthLabels[selectedMode]}` : `Selected answer depth: ${depthLabels[selectedMode]}`}
+            </span>
           </div>
         ) : null}
         {m.multiAi && (m.multiAi.riskScore || m.multiAi.dataFreshness) ? (
@@ -1223,16 +1235,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const [serverReachable, setServerReachable] = useState(null);
   const [activeContext, setActiveContext] = useState(null);
   const [aiProviders, setAiProviders] = useState([]);
-  /* The mode the next turn will ask for. Stored in one place (the helper), so
-     the chip here and the selector in the intelligence panel cannot disagree.
-     Both the header chip and the composer pill OPEN that panel — they are
-     shortcuts to the one control, never a second, divergent switch. */
-  const [intelligenceMode, setIntelligenceModeState] = useState(() => getIntelligenceMode());
-  useEffect(() => {
-    const onMode = (e) => setIntelligenceModeState(getIntelligenceMode() || e?.detail?.mode || 'max');
-    window.addEventListener('fbt:ai-intelligence', onMode);
-    return () => window.removeEventListener('fbt:ai-intelligence', onMode);
-  }, []);
+  /* Response depth is selected per request on the server; no client-side mode
+     preference is stored or sent. The header and composer label this behavior. */
   /*
    * The fleet summary and the live self-test.
    *
@@ -2279,7 +2283,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       clearForm({ conversationId });
       setTimeout(() => {
         if (sendRef.current) {
-          void sendRef.current(combinedMessage, { skipUserBubble: true, skipFormIntercept: true, deepThinking: true });
+          void sendRef.current(combinedMessage, { skipUserBubble: true, skipFormIntercept: true });
         }
       }, 500);
       return;
@@ -2540,9 +2544,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             openPanel(surfaceOut.panel);
           }
 
-          setMessages((prev) => [...prev, row]);
-          setConvState((prev) => appendConvMessage(prev, row));
-          addL1Message(row);
+          const additionalRows = Array.isArray(surfaceOut.additionalMessages)
+            ? surfaceOut.additionalMessages.filter((item) => item && typeof item === 'object')
+            : [];
+          const emittedRows = [row, ...additionalRows];
+          setMessages((prev) => [...prev, ...emittedRows]);
+          setConvState((prev) => emittedRows.reduce((state, item) => appendConvMessage(state, item), prev));
+          for (const item of emittedRows) addL1Message(item);
           if (surfaceOut.question) {
             const registered = askQuestion({
               text: surfaceOut.question.text,
@@ -2947,13 +2955,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
        * runtime → venue-executor path as every other financial action. Nothing
        * is signed until the user confirms AND the wallet signs.
        */
+      const lendingReviewActions = Array.isArray(osResult.human?.actions)
+        ? osResult.human.actions.filter((action) => action?.parameters?.requireLiveRateReview === true
+          && ['LEND', 'BORROW'].includes(String(action?.type || '').toUpperCase()))
+        : [];
       const lendingReviewAction = osResult.ok === true
         && osResult.human?.card?.kind === 'LENDING_REVIEW'
         && osResult.human?.requiresConfirmation === true
-        && Array.isArray(osResult.human.actions) && osResult.human.actions.length === 1
-        && osResult.human.actions[0]?.parameters?.requireLiveRateReview === true
-        && ['LEND', 'BORROW'].includes(String(osResult.human.actions[0]?.type || '').toUpperCase())
-        ? osResult.human.actions[0]
+        && lendingReviewActions.length === 1
+        ? lendingReviewActions[0]
         : null;
       if (lendingReviewAction) {
         setActivitySteps((prev) => prev.map((s) => s.id === 'analyze' ? { ...s, status: 'completed' } : s.id === 'response' ? { ...s, status: 'active' } : s));
@@ -2966,7 +2976,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           kind: 'assistant',
           ui: reviewHuman.ui || { type: 'ACTION_CARD' },
           card: reviewHuman.card,
-          actions: null,
+          actions: Array.isArray(reviewHuman.actions)
+            ? reviewHuman.actions.filter((action) => typeof action?.route === 'string' && action.route.trim())
+            : null,
           statusCode: reviewHuman.code || null,
           intentType: osResult.intent?.type || lendingReviewAction.type,
           detectedIntent: osResult.intent?.primaryIntent || osResult.intent?.type || lendingReviewAction.type,
@@ -3136,7 +3148,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           missingInfo: (osResult.intent?.minimalQuestion ? (locale.startsWith('fa') ? osResult.intent.minimalQuestion.fa : osResult.intent.minimalQuestion.en) : null) || u7qText,
           suggestions: (osResult.intent?.nextPredictedActions?.length
             ? osResult.intent.nextPredictedActions.map((a) => ({ id: a.intent, label: locale.startsWith('fa') ? a.labelFa : a.labelEn, prompt: a.prompt }))
-            : (osResult.suggestions || getSuggestionsForIntent(osResult.intent?.type, aiContext, osResult.intent?.entities, locale))),
+            : (osResult.suggestions || getSuggestionsForIntent(osResult.intent?.type, aiContext, osResult.intent?.entities, locale, {
+              missingInformation: osResult.intent?.missingInformation,
+              minimalQuestion: osResult.intent?.minimalQuestion
+            }))),
           debug: osResult.debug || null,
           intentId: convStateRef.current.intentId,
           confidence: osResult.confidence || null,
@@ -3269,15 +3284,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       const bindingHint = answerBindingHint({ verdict: ledgerVerdict?.ok ? ledgerVerdict : null, locale });
       const res = await aiChat({
         message: effectiveMessage,
-        /* «تفکر عمیق» (the multi-slot form completion) is an explicit request
-           for the top mode; every other turn carries the user's stored
-           preference, which the server resolves against its own default. */
-        /* A retried turn asks for a LIGHTER budget on purpose: the deep pass
-           already ran out of the platform's clock once (see the retry branch
-           below), so asking for it again would spend another minute to fail the
-           same way. */
-        intelligence: opts.intelligenceOverride
-          || (opts.deepThinking === true ? 'max' : undefined),
+        /* A retry is context for the server's automatic depth decision, not a
+           request to choose a particular mode. */
+        retry: Number(opts.attempt || 0) > 0,
         // The server fallback uses the SAME unfinished goal as the local chat.
         // Send a bounded, plain-text history, never entire UI/plan/wallet blobs.
         messages: (messagesRef.current || []).filter((row) => row?.role === 'user' || row?.role === 'ai')
@@ -3309,20 +3318,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         if (connect) rememberPending(res?.pendingIntent || message, res?.intent?.type || 'GENERAL');
 
         /*
-         * ─── A FAILED TURN IS RETRIED ONCE, LIGHTER, AND THEN IT STOPS ──────
-         * The retry below used to pass `attempt: 0` every time, so a turn the
-         * server could not finish — a deep answer the platform killed at its own
-         * timeout — retried itself forever: the orb kept spinning, «Service
-         * temporarily unavailable. Retrying...» came back in English inside a
-         * Persian chat, and then the offline OS line («مطمئن نشدم…») was stapled
-         * underneath it because that is what this surface now carries.
-         *
-         * Three rules now:
-         *   · at most ONE automatic retry (`attempt` travels in opts);
-         *   · a timeout retries at `balanced`, not at the depth that just ran
-         *     out of clock — a 20 s answer beats a second 60 s failure;
-         *   · a non-transient failure (a 4xx/5xx the server actually returned)
-         *     is never retried, because it would fail identically forever.
+         * ─── A FAILED TURN IS RETRIED ONCE, THEN IT STOPS ─────────────────
+         * The retry below carries the same question and a retry signal. The
+         * server re-evaluates the depth automatically; the browser never asks
+         * for a shallower or deeper mode. At most one automatic retry is made,
+         * and a non-transient 4xx/5xx response is not retried.
          */
         const status = Number(res?.status || 0);
         const timedOut = status === 504 || status === 408 || res?.error === 'TIMEOUT' || status === 0;
@@ -3332,7 +3332,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         const canRetry = attempt < 1 && (timedOut || (retryStrategy.recoverable && retryStrategy.action === 'RETRY'));
         const fa = String(locale || 'fa').toLowerCase().startsWith('fa');
         const recoveryMsg = canRetry
-          ? (fa ? 'پاسخ در مهلت نرسید؛ یک‌بار دیگر — این بار سبک‌تر — می‌پرسم.' : 'The answer did not arrive in time; asking once more with a lighter budget.')
+          ? (fa ? 'پاسخ در مهلت نرسید؛ یک‌بار دیگر می‌پرسم و عمق پاسخ را بر اساس خود پرسش انتخاب می‌کنم.' : 'The answer did not arrive in time; I will retry once and choose depth from the question again.')
           : `${toolChecker.getRecoveryMessage({ message: code }, { toolId: res?.intent?.type })}`;
 
         /*
@@ -3366,10 +3366,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             void sendMessage(message, {
               ...opts,
               skipUserBubble: true,
-              attempt: attempt + 1,
-              /* A timeout is a budget problem, not a reasoning problem. */
-              intelligenceOverride: timedOut ? 'balanced' : opts.intelligenceOverride,
-              deepThinking: timedOut ? false : opts.deepThinking
+              attempt: attempt + 1
             });
           }, 800);
           obsRef.current.log({ intentId: convStateRef.current.intentId, type: 'RETRY', payload: { ...retryStrategy, status, timedOut, attempt: attempt + 1 } });
@@ -3458,7 +3455,16 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         intentType: reply.intent?.type || osResult.intent?.type || null,
         detectedIntent: reply.intent?.primaryIntent || reply.intent?.type || osResult.intent?.type || null,
         missingInfo: reply.intent?.minimalQuestion ? (locale.startsWith('fa') ? reply.intent.minimalQuestion.fa : reply.intent.minimalQuestion.en) : null,
-        suggestions: Array.isArray(reply.suggestions) ? reply.suggestions : (osResult.suggestions || getSuggestionsForIntent(reply.intent?.type, aiContext, {}, locale)),
+        suggestions: Array.isArray(reply.suggestions) ? reply.suggestions : (osResult.suggestions || getSuggestionsForIntent(
+          reply.intent?.type,
+          aiContext,
+          reply.intent?.entities || {},
+          locale,
+          {
+            missingInformation: reply.intent?.missingInformation || osResult.intent?.missingInformation,
+            minimalQuestion: reply.intent?.minimalQuestion || osResult.intent?.minimalQuestion
+          }
+        )),
         multiAi: reply.multiAi || null,
         intelligence: reply.intelligence || null,
         debug: osResult.debug || null,
@@ -7656,31 +7662,20 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             </span>
             {/* Real system availability: fleet read + wallet link. Nothing invented. */}
             <span className="fbt-head-meta" aria-live="polite">
-              {/*
-               * THE ONE CONTROL THAT MUST NEVER BE HIDDEN. Everything else in
-               * this cluster (fleet, wallet, cortex) is decoration; this chip is
-               * the only handle on how hard the assistant thinks. It used to
-               * carry `fbt-chip-hide-sm` — a rule that drops `display: none`
-               * below 560px — so on a phone the mode existed, was defaulted to
-               * the smartest seat, and could not be seen or touched. A feature
-               * you cannot reach is a feature you cannot trust, which is exactly
-               * the report: «هیچ‌جایی برای عوض کردنش نیست». The hiding class
-               * stays on the decorative chips and is deliberately NOT here.
-               */}
-              <button
-                type="button"
+              {/* Response depth is chosen automatically for each question. This
+                  is an informational badge, not a mode control. */}
+              <span
                 className="fbt-chip"
-                data-tone={intelligenceMode === 'max' ? 'ok' : intelligenceMode === 'swift' ? 'idle' : 'warn'}
+                data-tone="ok"
                 data-testid="neural-intelligence-chip"
-                onClick={() => openPanel('intelligence')}
                 title={locale.startsWith('fa')
-                  ? 'حالت هوش مصنوعی — باز کردن پنل هوش: سریعالجواب، متعادل یا هوش عمیق'
-                  : 'AI intelligence mode — open the intelligence panel: swift, balanced or deep'}
+                  ? 'عمق پاسخ برای هر پرسش، بر اساس هدف و پیچیدگی آن، خودکار انتخاب می‌شود.'
+                  : 'Response depth is selected automatically for each question, based on its purpose and complexity.'}
+                role="status"
               >
                 <i aria-hidden="true" />
-                {locale.startsWith('fa') ? 'هوش: ' : 'AI: '}
-                {intelligenceModeLabel(intelligenceMode, locale)}
-              </button>
+                {locale.startsWith('fa') ? 'عمق پاسخ: خودکار' : 'Answer depth: Auto'}
+              </span>
               {fleetChip ? (
                 <span className="fbt-chip fbt-chip-hide-sm" data-tone={fleetChip.tone} data-testid="neural-fleet-chip">
                   <i aria-hidden="true" />{fleetChip.text}
@@ -8063,33 +8058,20 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             dir="auto"
             disabled={Boolean(multiSlot.slot)}
           />
-          {/*
-           * THE MODE, WHERE YOU ACTUALLY TYPE.
-           *
-           * A header chip can be scrolled past, and on a narrow phone the
-           * header is the first thing the keyboard pushes out of the way. The
-           * question this answers is «حالا چی؟ همون مدل ارزون؟» — so the answer
-           * sits next to the send button: which brain the NEXT message goes to,
-           * and one tap to the panel that changes it. It is a shortcut to
-           * `IntelligencePanel`, not a second switch, so the two can never
-           * disagree about the mode the turn will run under.
-           */}
-          <button
-            type="button"
+          {/* Status only: the server chooses depth after reading each message. */}
+          <span
             className="iaos-mode-pill"
-            data-tone={intelligenceMode === 'max' ? 'ok' : intelligenceMode === 'swift' ? 'idle' : 'warn'}
+            data-tone="ok"
             data-testid="neural-intelligence-composer"
-            onClick={() => openPanel('intelligence')}
-            aria-label={fa
-              ? `حالت هوش مصنوعی برای پیام بعدی: ${intelligenceModeLabel(intelligenceMode, locale)}`
-              : `AI mode for the next message: ${intelligenceModeLabel(intelligenceMode, locale)}`}
+            role="status"
+            aria-label={fa ? 'عمق پاسخ برای هر پرسش خودکار انتخاب می‌شود' : 'Response depth is selected automatically for each question'}
             title={fa
-              ? 'مدل‌هایی که پیام بعدی به آن‌ها می‌رود را ببین و عوض کن'
-              : 'See — and change — the models the next message goes to'}
+              ? 'هدف و پیچیدگی پرسش، شواهد لازم و کامل‌بودن پیام تعیین می‌کنند.'
+              : 'Purpose, complexity, required evidence and completeness determine the depth.'}
           >
             <span className="iaos-mode-dot" aria-hidden="true" />
-            <span className="iaos-mode-text">{intelligenceModeLabel(intelligenceMode, locale)}</span>
-          </button>
+            <span className="iaos-mode-text">{fa ? 'عمق خودکار' : 'Auto depth'}</span>
+          </span>
           <button
             type="submit"
             className="iaos-send"
@@ -8450,8 +8432,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
               onPanel={(name) => openPanel(name)}
               onChatAction={handleNeuralChatAction}
               onEcosystem={(kind) => openEcosystem(kind || 'agent')}
-              intelligenceMode={intelligenceMode}
-              onIntelligenceMode={(id) => setIntelligenceModeState(setIntelligenceMode(id))}
             />
           </section>
         ) : null}

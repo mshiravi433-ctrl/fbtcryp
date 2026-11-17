@@ -63,6 +63,7 @@ export const PAGE_CATALOG = Object.freeze([
   { route: '/bridge', names: { fa: 'بریج', en: 'Bridge' }, keywords: ['بریج', 'پل', 'bridge'] },
   { route: '/farm', names: { fa: 'فارم', en: 'Farm' }, keywords: ['فارم', 'farm', 'استخر'] },
   { route: '/loan', names: { fa: 'وام', en: 'Lending' }, keywords: ['وام', 'لندینگ', 'lending', 'borrow'] },
+  { route: '/insurance', names: { fa: 'بیمه', en: 'Insurance' }, keywords: ['بیمه', 'insurance'] },
   { route: '/earn', names: { fa: 'سود', en: 'Earn' }, keywords: ['سود', 'earn', 'yield'] },
   { route: '/wallet', names: { fa: 'کیف پول', en: 'Wallet' }, keywords: ['کیف پول', 'والت', 'wallet'] },
   { route: '/portfolio', names: { fa: 'پرتفوی', en: 'Portfolio' }, keywords: ['پرتفوی', 'سبد', 'portfolio'] },
@@ -174,6 +175,8 @@ export function routeForIntent(intent = {}, { openPage = false } = {}) {
       return `/loan${q({ tab: 'supply', asset: token, amount, chain: fromChain })}`;
     case 'BORROW':
       return `/loan${q({ tab: 'borrow', asset: token, amount, chain: fromChain })}`;
+    case 'INSURANCE':
+      return '/insurance';
     case 'YIELD_DISCOVERY':
     case 'INVESTMENT_PLAN':
     case 'GOAL':

@@ -1019,13 +1019,13 @@ try {
   /* ------- Phase 4c: signed account bindings + derived verification view ------- */
   const crossStateId = createdCross.body.state.stateId;
   const bindingAddress = `0x${'a1'.repeat(20)}`;
-  const goodBinding = buildAccountBinding({
+  const goodBinding = (await buildAccountBinding({
     state: createdCross.body.state,
     partyId: 'api-cross-initiator',
     chainId: 42161,
     address: bindingAddress,
     expiresAt: crossNow + 86400
-  }, initiatorKeys.privateKey).binding;
+  }, initiatorKeys.privateKey)).binding;
   const unsignedBindingAttempt = await request(`/cross-chain/states/${crossStateId}/account-bindings`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -1051,7 +1051,7 @@ try {
   });
   t('replaying the same binding is idempotent, not a second record',
     replayedBinding.response.status === 200 && replayedBinding.body.alreadyStored === true);
-  const conflictingBinding = buildAccountBinding({
+  const conflictingBinding = await buildAccountBinding({
     state: createdCross.body.state,
     partyId: 'api-cross-initiator',
     chainId: 42161,
@@ -1098,7 +1098,7 @@ try {
    * (echo the challenge back verbatim), and using it here also removes the
    * intermittent failure this probe hit when the machine was loaded.
    */
-  const provenBuild = buildAccountBinding({
+  const provenBuild = await buildAccountBinding({
     state: createdCross.body.state,
     partyId: 'api-cross-counterparty',
     chainId: 42161,

@@ -516,17 +516,109 @@ export function buildSandboxPlaneFacts({ now = Date.now() } = {}) {
  * activateControlPlane() expects. Planes without facts get empty inputs and
  * stay blocked — partial bundles degrade gracefully, never silently.
  */
+/**
+ * Merge a MEASURED fact over an ATTESTED one.
+ *
+ * The rule that makes this honest is not "the measurement always wins" — it
+ * is "the measurement wins wherever it says something, and stays silent
+ * where it cannot speak".
+ *
+ * A measurement is a statement about THIS deployment at THIS moment. It can
+ * be:
+ *
+ *   • a POSITIVE measurement — `isolated: true`, `rollbackReady: true` —
+ *     and it replaces the assertion, always;
+ *   • a NEGATIVE measurement — the thing was tried and it was absent — and
+ *     it replaces the assertion, always, because pretending it is there
+ *     would be the whole defect this work is removing;
+ *   • an ABSENCE OF KNOWLEDGE — `review: null` for the independent security
+ *     review, or `certificate: null` for the registry certificate.
+ *
+ * That last case is the one that matters. Plane 29's independent review is
+ * a HUMAN or EXTERNAL review: this process cannot produce one and cannot
+ * prove one is absent either. Writing `review: null` and letting it
+ * overwrite an operator's attested review would be inventing a negative
+ * measurement — a claim of absence the process never made.
+ *
+ * So `null` and `undefined` mean "not measured", and the attested value
+ * survives. Everything else — including `false`, `0` and `''`, which ARE
+ * measurements — replaces the attested value.
+ */
+function mergeMeasured(attestedValue, measuredValue) {
+  if (measuredValue === null || measuredValue === undefined) {
+    return measuredValue === undefined ? attestedValue : measuredValue;
+  }
+  if (measuredValue === null) return attestedValue;
+  if (typeof measuredValue !== 'object' || Array.isArray(measuredValue)) {
+    return measuredValue;
+  }
+  /* Both sides are objects: merge field by field, one level deep. */
+  const base = (attestedValue && typeof attestedValue === 'object' && !Array.isArray(attestedValue))
+    ? attestedValue
+    : {};
+  const out = { ...base };
+  for (const [key, value] of Object.entries(measuredValue)) {
+    if (value === null || value === undefined) continue; /* not measured */
+    out[key] = value;
+  }
+  return out;
+}
+
 export function collectPlaneInputs({
   mode = 'off',
   facts = null,
+  realFacts = null,
   launchAllowed = false,
   now = Date.now()
 } = {}) {
   if (mode !== 'owner' && mode !== 'sandbox') {
     return { inputs: {}, meta: { schema: ACTIVATION_INPUTS_SCHEMA, mode: 'off', provenance: 'none', planes: [] } };
   }
-  const active = facts && typeof facts === 'object' ? facts : buildSandboxPlaneFacts({ now });
-  const provenance = mode === 'owner' ? 'owner-attested' : 'sandbox-operator-self-attested';
+  /*
+   * The REAL facts are the ones measured by `buildRealPlaneFacts()`. They
+   * take precedence over any attested bundle: a measurement outranks an
+   * assertion, and a plane with no measurement is a plane with no fact.
+   *
+   * When no real facts are supplied (an explicit attestation bundle was
+   * injected), the historic behaviour is kept so the operator-evidence path
+   * still works exactly as it did.
+   */
+  const useReal = realFacts && typeof realFacts === 'object';
+  const attested = facts && typeof facts === 'object' ? facts : null;
+  /*
+   * The MEASURED facts and the ATTESTED facts are merged, and a measurement
+   * always wins over an assertion.
+   *
+   * The attested bundle is what an operator signed. The measured facts are
+   * what this process can do right now. Where they disagree, the truth about
+   * this deployment is the measurement.
+   *
+   * BUT the bundle also contains facts for planes that this process cannot
+   * measure — and those facts are the self-attesting ones (`rpc: {
+   * available: true, attested: true }` with a zero address, for example).
+   * When a measurement exists, an UNMEASURED plane may not inherit its
+   * self-attested fact: it would be exactly the false claim this work is
+   * removing.
+   *
+   * So, when real facts are supplied:
+   *   • a measured plane takes the measurement, always;
+   *   • an unmeasured plane takes the attested fact ONLY when the attested
+   *     bundle was explicitly injected by an operator (facts !== null), and
+   *     NOT when it is the built-in default bundle.
+   */
+  let active;
+  const attestedWasInjected = facts !== null && facts !== undefined;
+  if (useReal) {
+    active = attestedWasInjected ? { ...(attested || {}) } : {};
+    for (const [plane, value] of Object.entries(realFacts)) {
+      active[plane] = mergeMeasured(attested ? attested[plane] : null, value);
+    }
+  } else {
+    active = attested || buildSandboxPlaneFacts({ now });
+  }
+  const provenance = useReal
+    ? 'measured-in-process'
+    : mode === 'owner' ? 'owner-attested' : 'sandbox-operator-self-attested';
   const overlaid = [];
   const get = (plane) => (active[String(plane)] && typeof active[String(plane)] === 'object' ? active[String(plane)] : null);
 

@@ -4851,6 +4851,77 @@ body:has(.iaos-page-v6) {
   margin-inline-end: 6px;
 }
 
+.iaos-os-collaboration {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 9px;
+  padding: 9px;
+  border: 1px solid rgba(129, 140, 248, .25);
+  border-radius: 11px;
+  background: rgba(30, 41, 59, .34);
+  color: rgba(226, 232, 240, .94);
+  font-size: 11.5px;
+}
+
+.iaos-os-collab-head,
+.iaos-os-collab-task-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.iaos-os-collab-head > span,
+.iaos-os-collab-task-head > span {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border: 1px solid rgba(148, 163, 184, .22);
+  border-radius: 999px;
+  color: rgba(203, 213, 225, .92);
+  font-size: 10px;
+}
+
+.iaos-os-collab-group { min-width: 0; }
+.iaos-os-collab-group > b { display: block; margin-bottom: 5px; color: #c7d2fe; }
+.iaos-os-collab-people,
+.iaos-os-collab-tasks { list-style: none; margin: 0; padding: 0; }
+.iaos-os-collab-people { display: flex; flex-wrap: wrap; gap: 5px; }
+.iaos-os-collab-people li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 7px;
+  border: 1px solid rgba(148, 163, 184, .2);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .3);
+}
+.iaos-os-collab-people li > span,
+.iaos-os-collab-people li > small,
+.iaos-os-collab-tasks li > small { color: rgba(148, 163, 184, .95); font-size: 10px; }
+.iaos-os-collab-people li[data-identity-status='unverified'] > small { color: #fbbf24; }
+.iaos-os-collab-tasks { display: flex; flex-direction: column; gap: 5px; }
+.iaos-os-collab-tasks li {
+  padding: 6px 7px;
+  border-inline-start: 2px solid rgba(129, 140, 248, .52);
+  border-radius: 5px;
+  background: rgba(15, 23, 42, .23);
+}
+.iaos-os-collab-tasks li[data-task-status='BLOCKED'],
+.iaos-os-collab-tasks li[data-task-status='REPORTED_UNVERIFIED'] { border-inline-start-color: #fbbf24; }
+.iaos-os-collab-tasks li > p { margin: 4px 0; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.iaos-os-collab-gates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin: 0; }
+.iaos-os-collab-gates > div { padding: 5px 6px; border-radius: 6px; background: rgba(15, 23, 42, .25); }
+.iaos-os-collab-gates dt { color: rgba(148, 163, 184, .95); font-size: 10px; }
+.iaos-os-collab-gates dd { margin: 2px 0 0; font-weight: 700; }
+.iaos-os-collab-boundary { margin: 0; color: #fbbf24; font-size: 10.5px; }
+.iaos-os-collab-external { display: flex; flex-direction: column; gap: 5px; }
+.iaos-os-collab-external > b { color: #fbbf24; }
+.iaos-os-collab-external > div { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; }
+.iaos-os-collab-external small { color: rgba(148, 163, 184, .95); }
+
 .iaos-os-note {
   margin-top: 7px;
   font-size: 11.5px;
@@ -4922,7 +4993,21 @@ body:has(.iaos-page-v6) {
 }
 
 :root[data-theme='light'] .iaos-os-head,
-:root[data-theme='light'] .iaos-os-line { color: #0f172a; }
+:root[data-theme='light'] .iaos-os-line,
+:root[data-theme='light'] .iaos-os-collaboration { color: #0f172a; }
+
+:root[data-theme='light'] .iaos-os-collaboration { background: rgba(238, 242, 255, .72); border-color: rgba(100, 116, 139, .24); }
+:root[data-theme='light'] .iaos-os-collab-head > span,
+:root[data-theme='light'] .iaos-os-collab-task-head > span { color: #334155; border-color: rgba(100, 116, 139, .24); }
+:root[data-theme='light'] .iaos-os-collab-group > b { color: #4338ca; }
+:root[data-theme='light'] .iaos-os-collab-people li,
+:root[data-theme='light'] .iaos-os-collab-tasks li,
+:root[data-theme='light'] .iaos-os-collab-gates > div { background: rgba(255, 255, 255, .72); }
+:root[data-theme='light'] .iaos-os-collab-people li > span,
+:root[data-theme='light'] .iaos-os-collab-people li > small,
+:root[data-theme='light'] .iaos-os-collab-tasks li > small,
+:root[data-theme='light'] .iaos-os-collab-gates dt,
+:root[data-theme='light'] .iaos-os-collab-external small { color: #64748b; }
 
 :root[data-theme='light'] .iaos-qbar {
   background: rgba(99, 102, 241, .08);

@@ -23,7 +23,7 @@
  * pulls the Vite chain registry (import.meta.env) into Node.
  */
 import express from 'express';
-import { Interface, AbiCoder, getAddress } from 'ethers';
+import { Interface, AbiCoder, getAddress } from './ethersLite.js';
 import { EVM_CHAINS, TOKENS } from './chainsLite.js';
 import { withCache } from './cache.js';
 import { fetchSimplePrices } from './providers.js';
@@ -131,14 +131,35 @@ const SECONDS_PER_YEAR = 31536000;
 const BASE_DECIMALS = 8;
 const ZERO = '0x0000000000000000000000000000000000000000';
 
-const poolIface = new Interface(POOL_ABI);
-const providerIface = new Interface(PROVIDER_ABI);
+let poolIfaceP = null;
+const poolIfaceReady = async () => {
+  if (!poolIfaceP) poolIfaceP = await Interface(POOL_ABI);
+  return poolIfaceP;
+};
+let providerIfaceP = null;
+const providerIfaceReady = async () => {
+  if (!providerIfaceP) providerIfaceP = await Interface(PROVIDER_ABI);
+  return providerIfaceP;
+};
 /* Exported for the same reason poolIface is: a probe must be able to compare the
    server's ABI against the client's instead of trusting that two hand-copied
    lists still agree. */
-export const erc20Iface = new Interface(ERC20_ABI);
-const oracleIface = new Interface(ORACLE_ABI);
-const coder = AbiCoder.defaultAbiCoder();
+let erc20IfaceP = null;
+const erc20IfaceReady = async () => {
+  if (!erc20IfaceP) erc20IfaceP = await Interface(ERC20_ABI);
+  return erc20IfaceP;
+};
+export { erc20IfaceReady as erc20Iface };
+let oracleIfaceP = null;
+const oracleIfaceReady = async () => {
+  if (!oracleIfaceP) oracleIfaceP = await Interface(ORACLE_ABI);
+  return oracleIfaceP;
+};
+let coderP = null;
+const coderReady = async () => {
+  if (!coderP) coderP = await AbiCoder();
+  return coderP;
+};
 
 const isAddress = (v) => typeof v === 'string' && /^0x[0-9a-fA-F]{40}$/.test(v);
 const safeJson = (res, payload, status = 200) => res.status(status).json(payload);
@@ -334,11 +355,11 @@ export async function readReserve(chainId, token) {
   const pool = poolFor(chainId);
   if (!pool || !token) return { ok: false, code: 'UNSUPPORTED_CHAIN' };
   const [res, decimalsCall] = await Promise.all([
-    ethCall(chainId, pool, poolIface.encodeFunctionData('getReserveData', [token.address])),
-    ethCall(chainId, token.address, erc20Iface.encodeFunctionData('decimals', []))
+    ethCall(chainId, pool, (await poolIfaceReady()).encodeFunctionData('getReserveData', [token.address])),
+    ethCall(chainId, token.address, (await erc20IfaceReady()).encodeFunctionData('decimals', []))
   ]);
   if (!res.ok) return res;
-  const decoded = poolIface.decodeFunctionResult('getReserveData', res.result);
+  const decoded = (await poolIfaceReady()).decodeFunctionResult('getReserveData', res.result);
   const data = decoded[0];
   const aToken = String(data.aTokenAddress || '');
   const listed = isAddress(aToken) && aToken !== ZERO;
@@ -349,7 +370,7 @@ export async function readReserve(chainId, token) {
   let verifiedDecimals = null;
   if (decimalsCall.ok) {
     try {
-      verifiedDecimals = Number(erc20Iface.decodeFunctionResult('decimals', decimalsCall.result)[0]);
+      verifiedDecimals = Number((await erc20IfaceReady()).decodeFunctionResult('decimals', decimalsCall.result)[0]);
       if (!Number.isInteger(verifiedDecimals) || verifiedDecimals < 0 || verifiedDecimals > 36) verifiedDecimals = null;
     } catch { verifiedDecimals = null; }
   }
@@ -376,9 +397,9 @@ export async function readReserve(chainId, token) {
 export async function readUserAccount(chainId, wallet) {
   const pool = poolFor(chainId);
   if (!pool || !isAddress(wallet)) return { ok: false, code: 'BAD_REQUEST' };
-  const res = await ethCall(chainId, pool, poolIface.encodeFunctionData('getUserAccountData', [wallet]));
+  const res = await ethCall(chainId, pool, (await poolIfaceReady()).encodeFunctionData('getUserAccountData', [wallet]));
   if (!res.ok) return res;
-  const data = poolIface.decodeFunctionResult('getUserAccountData', res.result);
+  const data = (await poolIfaceReady()).decodeFunctionResult('getUserAccountData', res.result);
   return {
     ok: true,
     totalCollateralUsd: baseToUsd(data[0]),
@@ -392,12 +413,12 @@ export async function readUserAccount(chainId, wallet) {
 
 async function readTokenBalances(chainId, wallet, token, reserve) {
   const [walletBal, suppliedBal, debtBal] = await Promise.all([
-    ethCall(chainId, token.address, erc20Iface.encodeFunctionData('balanceOf', [wallet])),
+    ethCall(chainId, token.address, (await erc20IfaceReady()).encodeFunctionData('balanceOf', [wallet])),
     reserve?.aTokenAddress
-      ? ethCall(chainId, reserve.aTokenAddress, erc20Iface.encodeFunctionData('balanceOf', [wallet]))
+      ? ethCall(chainId, reserve.aTokenAddress, (await erc20IfaceReady()).encodeFunctionData('balanceOf', [wallet]))
       : Promise.resolve({ ok: true, result: '0x0' }),
     reserve?.variableDebtTokenAddress
-      ? ethCall(chainId, reserve.variableDebtTokenAddress, erc20Iface.encodeFunctionData('balanceOf', [wallet]))
+      ? ethCall(chainId, reserve.variableDebtTokenAddress, (await erc20IfaceReady()).encodeFunctionData('balanceOf', [wallet]))
       : Promise.resolve({ ok: true, result: '0x0' })
   ]);
   return {
@@ -465,13 +486,13 @@ export async function readProtocolOracle(chainId) {
       providerVia = attempt.via;
       break;
     }
-    const providerCall = await ethCall(chainId, pool, poolIface.encodeFunctionData(attempt.fn, []));
+    const providerCall = await ethCall(chainId, pool, (await poolIfaceReady()).encodeFunctionData(attempt.fn, []));
     if (!providerCall.ok) {
       stageOneCode = providerCall.code || 'ORACLE_READ_FAILED';
       continue;
     }
     try {
-      const decoded = poolIface.decodeFunctionResult(attempt.fn, providerCall.result);
+      const decoded = (await poolIfaceReady()).decodeFunctionResult(attempt.fn, providerCall.result);
       providerAddress = String(decoded[0] || '');
     } catch { providerAddress = ''; }
     if (isAddress(providerAddress) && providerAddress !== ZERO) {
@@ -487,14 +508,14 @@ export async function readProtocolOracle(chainId) {
   }
 
   /* Stage 2 — the provider names the oracle. */
-  const oracleCall = await ethCall(chainId, providerAddress, providerIface.encodeFunctionData('getPriceOracle', []));
+  const oracleCall = await ethCall(chainId, providerAddress, (await providerIfaceReady()).encodeFunctionData('getPriceOracle', []));
   if (!oracleCall.ok) {
     breaker.report('oracle', false, oracleCall.code || 'ORACLE_READ_FAILED');
     return { ok: false, code: oracleCall.code || 'ORACLE_READ_FAILED' };
   }
   let oracleAddress = null;
   try {
-    const decoded = providerIface.decodeFunctionResult('getPriceOracle', oracleCall.result);
+    const decoded = (await providerIfaceReady()).decodeFunctionResult('getPriceOracle', oracleCall.result);
     oracleAddress = String(decoded[0] || '');
   } catch { oracleAddress = ''; }
   /* An RPC that answers every call with empty data (a captive portal, a
@@ -509,10 +530,10 @@ export async function readProtocolOracle(chainId) {
      but the oracle is the authority on its own unit. */
   let baseUnit = 10n ** BigInt(BASE_DECIMALS);
   let baseUnitRead = false;
-  const unitCall = await ethCall(chainId, oracleAddress, oracleIface.encodeFunctionData('BASE_CURRENCY_UNIT', []));
+  const unitCall = await ethCall(chainId, oracleAddress, (await oracleIfaceReady()).encodeFunctionData('BASE_CURRENCY_UNIT', []));
   if (unitCall.ok) {
     try {
-      const decoded = oracleIface.decodeFunctionResult('BASE_CURRENCY_UNIT', unitCall.result);
+      const decoded = (await oracleIfaceReady()).decodeFunctionResult('BASE_CURRENCY_UNIT', unitCall.result);
       const value = BigInt(decoded[0] ?? 0);
       if (value > 0n) { baseUnit = value; baseUnitRead = true; }
     } catch { /* keep the documented default, flagged as unread below */ }
@@ -525,10 +546,10 @@ export async function readProtocolOracle(chainId) {
   /* One batched call first; some deployments do not expose it, so fall back to
      per-asset reads rather than reporting the whole oracle as down. */
   let batched = false;
-  const batchCall = await ethCall(chainId, oracleAddress, oracleIface.encodeFunctionData('getAssetsPrices', [addresses]));
+  const batchCall = await ethCall(chainId, oracleAddress, (await oracleIfaceReady()).encodeFunctionData('getAssetsPrices', [addresses]));
   if (batchCall.ok) {
     try {
-      const decoded = oracleIface.decodeFunctionResult('getAssetsPrices', batchCall.result);
+      const decoded = (await oracleIfaceReady()).decodeFunctionResult('getAssetsPrices', batchCall.result);
       const values = decoded[0];
       if (Array.isArray(values) && values.length === addresses.length) {
         tokens.forEach((token, i) => {
@@ -541,10 +562,10 @@ export async function readProtocolOracle(chainId) {
   }
   if (!batched) {
     const singles = await Promise.all(tokens.map(async (token) => {
-      const call = await ethCall(chainId, oracleAddress, oracleIface.encodeFunctionData('getAssetPrice', [token.address]));
+      const call = await ethCall(chainId, oracleAddress, (await oracleIfaceReady()).encodeFunctionData('getAssetPrice', [token.address]));
       if (!call.ok) return null;
       try {
-        const decoded = oracleIface.decodeFunctionResult('getAssetPrice', call.result);
+        const decoded = (await oracleIfaceReady()).decodeFunctionResult('getAssetPrice', call.result);
         const value = BigInt(decoded[0] ?? 0);
         return value > 0n ? value : null;
       } catch { return null; }
@@ -667,22 +688,22 @@ const APPROVE_SELECTOR = 'approve(address,uint256)';
 const VARIABLE_RATE_MODE = 2;
 const REFERRAL = 0;
 
-function buildActionTx({ action, chainId, token, amountWei, wallet, plan }) {
+async function buildActionTx({ action, chainId, token, amountWei, wallet, plan }) {
   const pool = poolFor(chainId);
   const txs = [];
   if (plan.approve) {
     txs.push({
       kind: 'approve',
       to: token.address,
-      data: erc20Iface.encodeFunctionData(APPROVE_SELECTOR, [pool, plan.approve]),
+      data: (await erc20IfaceReady()).encodeFunctionData(APPROVE_SELECTOR, [pool, plan.approve]),
       value: '0x0'
     });
   }
   let data;
-  if (action === 'supply') data = poolIface.encodeFunctionData(SUPPLY_SELECTOR, [token.address, amountWei, wallet, REFERRAL]);
-  else if (action === 'borrow') data = poolIface.encodeFunctionData(BORROW_SELECTOR, [token.address, amountWei, VARIABLE_RATE_MODE, REFERRAL, wallet]);
-  else if (action === 'repay') data = poolIface.encodeFunctionData(REPAY_SELECTOR, [token.address, amountWei, VARIABLE_RATE_MODE, wallet]);
-  else if (action === 'withdraw') data = poolIface.encodeFunctionData(WITHDRAW_SELECTOR, [token.address, amountWei, wallet]);
+  if (action === 'supply') data = (await poolIfaceReady()).encodeFunctionData(SUPPLY_SELECTOR, [token.address, amountWei, wallet, REFERRAL]);
+  else if (action === 'borrow') data = (await poolIfaceReady()).encodeFunctionData(BORROW_SELECTOR, [token.address, amountWei, VARIABLE_RATE_MODE, REFERRAL, wallet]);
+  else if (action === 'repay') data = (await poolIfaceReady()).encodeFunctionData(REPAY_SELECTOR, [token.address, amountWei, VARIABLE_RATE_MODE, wallet]);
+  else if (action === 'withdraw') data = (await poolIfaceReady()).encodeFunctionData(WITHDRAW_SELECTOR, [token.address, amountWei, wallet]);
   else return { ok: false, code: 'BAD_ACTION' };
   txs.push({ kind: action, to: pool, data, value: '0x0' });
   return { ok: true, txs };
@@ -984,14 +1005,14 @@ export function lendingRouter() {
 
     const [account, allowanceRes] = await Promise.all([
       readUserAccount(chainId, w),
-      ethCall(chainId, token.address, erc20Iface.encodeFunctionData('allowance', [w, poolFor(chainId)]))
+      ethCall(chainId, token.address, (await erc20IfaceReady()).encodeFunctionData('allowance', [w, poolFor(chainId)]))
     ]);
     if (!account.ok) return safeJson(res, { error: { code: 'PROTOCOL_UNAVAILABLE', message: 'The lending protocol is not answering right now' } }, 503);
     const allowance = allowanceRes.ok ? BigInt(allowanceRes.result) : null;
 
     let validation = { ok: true };
     if (action === 'supply' || action === 'repay') {
-      const walletBal = await ethCall(chainId, token.address, erc20Iface.encodeFunctionData('balanceOf', [w]));
+      const walletBal = await ethCall(chainId, token.address, (await erc20IfaceReady()).encodeFunctionData('balanceOf', [w]));
       if (!walletBal.ok) return safeJson(res, { error: { code: 'RPC_ERROR', message: 'The network connection failed. Try again.' } }, 503);
       if (BigInt(walletBal.result) < units) {
         return safeJson(res, { error: { code: 'INSUFFICIENT_BALANCE', message: 'Your wallet balance is too low for this amount' } }, 400);
@@ -1001,7 +1022,7 @@ export function lendingRouter() {
     }
     if (action === 'withdraw') {
       const reserveWithdraw = reserve;
-      const suppliedBal = await ethCall(chainId, reserveWithdraw.aTokenAddress, erc20Iface.encodeFunctionData('balanceOf', [w]));
+      const suppliedBal = await ethCall(chainId, reserveWithdraw.aTokenAddress, (await erc20IfaceReady()).encodeFunctionData('balanceOf', [w]));
       if (!suppliedBal.ok) return safeJson(res, { error: { code: 'RPC_ERROR', message: 'The network connection failed. Try again.' } }, 503);
       if (BigInt(suppliedBal.result) < units) {
         return safeJson(res, { error: { code: 'INSUFFICIENT_BALANCE', message: 'Your supplied balance is lower than this amount' } }, 400);
@@ -1024,7 +1045,7 @@ export function lendingRouter() {
     }
 
     const plan = { approve: action === 'supply' || action === 'repay' ? (validation.needsApproval ? units : null) : null };
-    const built = buildActionTx({ action, chainId, token, amountWei: units.toString(), wallet: w, plan });
+    const built = await buildActionTx({ action, chainId, token, amountWei: units.toString(), wallet: w, plan });
     if (!built.ok) return safeJson(res, { error: { code: built.code, message: 'Unknown action' } }, 400);
 
     /* Simulate: gas estimate over the FINAL action tx — never the approval. */

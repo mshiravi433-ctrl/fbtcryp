@@ -21,6 +21,14 @@ import {
   signLegReceipt,
   submitLegReceipt
 } from '../lib/intentCrossChainClient';
+/*
+ * The published transfer comes from the dependency-free store, not from
+ * the cross-chain client — that one imports the signing libraries, and
+ * this panel already needs them for `signLegReceipt`, so the choice here
+ * costs nothing. But the store has to be importable on its own, because
+ * the BRAIN CLIENT reads it on the entry path and cannot afford them.
+ */
+import { publishRouteRequest } from '../lib/routeRequestStore';
 import CrossChainDesk from './crosschain/CrossChainDesk';
 
 const TX_HASH_RE = /^0x[a-fA-F0-9]{64}$/;
@@ -117,6 +125,34 @@ export default function IntentCrossChainPanel({ networkStatus }) {
       .catch(() => { if (alive) { setHtlcStatus(null); setHtlcStatusError(true); } });
     return () => { alive = false; };
   }, []);
+
+  /*
+   * PUBLISH THE TRANSFER THIS PANEL IS LOOKING AT.
+   *
+   * The route-intelligence engine ranks candidate routes, and candidates
+   * need a transfer to plan. This panel has one — the source chain, the
+   * destination chain, the token and the amount the user just typed — and
+   * the AI panel on another page does not.
+   *
+   * So the panel publishes it, and the AI panel reads it and sends it with
+   * the turn. Before this, every route question answered
+   * ROUTE_REQUEST_INCOMPLETE: the engine was reachable, the adapter was
+   * reachable, and the transfer never arrived.
+   *
+   * The publication is by VALUE and not by identity: when the user changes
+   * the chain or the amount, the published transfer changes with it, so a
+   * question about «which bridge is best» is always answered about the
+   * transfer on screen and never about the one that used to be.
+   */
+  useEffect(() => {
+    publishRouteRequest({
+      fromChain,
+      toChain,
+      fromToken: fromTokens.find((tk) => tk.symbol === tokenSymbol)?.address || tokenSymbol,
+      toToken: tokensFor(toChain).find((tk) => tk.symbol === tokenSymbol)?.address || tokenSymbol,
+      fromAmount: amountHuman
+    });
+  }, [fromChain, toChain, tokenSymbol, amountHuman, fromTokens]);
 
   /**
    * HTLC readiness, computed rather than claimed (spec §21).

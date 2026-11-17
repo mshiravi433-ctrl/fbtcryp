@@ -97,6 +97,20 @@ export function permissionRequirement({ mode = 'human-ai', action, intent, userA
     ? stage
     : classifyPermissionRequest(action || intent);
   const required = kind === REQUEST_CLASSES.EXECUTION;
+  if (definition.externalAgent) {
+    return {
+      ok: false,
+      code: 'EXTERNAL_AGENT_NOT_VERIFIED',
+      mode: definition.id,
+      permission: required ? 'financial-execution' : 'analysis',
+      kind,
+      required,
+      userAuthorized: userAuthorized === true,
+      canProceed: false,
+      missingGates: ['trusted-identity', 'per-task-consent', 'attested-runtime'],
+      reason: 'External participation remains blocked until trusted identity, per-task consent, and an attested runtime are independently verified.'
+    };
+  }
   return {
     ok: true,
     mode: definition.id,
@@ -111,49 +125,66 @@ export function permissionRequirement({ mode = 'human-ai', action, intent, userA
   };
 }
 
-export function buildPermissionBoundary({ mode = 'human-ai', request = null, userAuthorized = false, externalVerified = false } = {}) {
+export function buildPermissionBoundary({ mode = 'human-ai', request = null, userAuthorized = false } = {}) {
   const requestedStage = Object.values(REQUEST_CLASSES).includes(request?.stage)
     ? request.stage
     : classifyPermissionRequest(request);
   const requirement = permissionRequirement({ mode, intent: request, userAuthorized, stage: requestedStage });
+  const externalMode = modeDefinition(mode)?.externalAgent === true;
   return {
     schema: SESSION_MODE_SCHEMA,
     mode: normalizePrimaryMode(mode),
     requestClass: requestedStage,
-    analysisAllowed: true,
-    preparationAllowed: true,
-    financialExecutionAllowed: Boolean(requirement.ok && requirement.canProceed && requestedStage === REQUEST_CLASSES.EXECUTION),
-    externalVerified: externalVerified === true,
+    analysisAllowed: !externalMode,
+    preparationAllowed: !externalMode,
+    financialExecutionAllowed: !externalMode && Boolean(requirement.ok && requirement.canProceed && requestedStage === REQUEST_CLASSES.EXECUTION),
+    externalVerified: false,
+    externalGates: externalMode ? ['trusted-identity', 'per-task-consent', 'attested-runtime'] : [],
     authorizationRequired: requestedStage === REQUEST_CLASSES.EXECUTION,
     boundary: 'analysis-and-preparation-never-imply-execution'
   };
 }
 
-export const canAnalyze = (mode = 'human-ai') => Boolean(modeDefinition(mode)?.analysis);
-export const canPrepare = (mode = 'human-ai') => Boolean(modeDefinition(mode));
-export const canExecute = ({ mode = 'human-ai', userAuthorized = false, guardianApproved = false } = {}) => (
-  Boolean(modeDefinition(mode) && userAuthorized === true && guardianApproved === true)
-);
+export const canAnalyze = (mode = 'human-ai') => {
+  const definition = modeDefinition(mode);
+  return Boolean(definition?.analysis && !definition.externalAgent);
+};
+export const canPrepare = (mode = 'human-ai') => {
+  const definition = modeDefinition(mode);
+  return Boolean(definition && !definition.externalAgent);
+};
+export const canExecute = ({ mode = 'human-ai', userAuthorized = false, guardianApproved = false } = {}) => {
+  const definition = modeDefinition(mode);
+  return Boolean(definition && !definition.externalAgent && userAuthorized === true && guardianApproved === true);
+};
 
 /**
- * Enforce mode-specific boundaries before orchestration. External analysis can
- * be admitted only as a verified, scoped participant; neither mode nor a
- * social message grants execution.
+ * Enforce mode-specific boundaries before orchestration. External analysis
+ * stays blocked until trusted identity, per-task consent, and an attested
+ * runtime are independently verified; caller flags and social messages cannot
+ * satisfy those gates or grant execution.
  */
 export function assertModeBoundary({
   mode = 'human-ai',
   action,
   intent,
   userAuthorized = false,
-  externalVerified = false,
   rawCredential = false,
   stage = null
 } = {}) {
   const definition = modeDefinition(mode);
   if (!definition) return { ok: false, code: 'UNKNOWN_PRIMARY_MODE' };
   if (rawCredential === true) return { ok: false, code: 'RAW_CREDENTIAL_FORBIDDEN' };
-  if (definition.externalAgent && externalVerified !== true) {
-    return { ok: false, code: 'EXTERNAL_AGENT_NOT_VERIFIED' };
+  // `externalVerified` used to be a caller-controlled boolean. There is no
+  // trusted external identity + per-request consent + attested runtime proof
+  // object wired into this boundary, so an external participant cannot enter
+  // analysis merely by setting a flag.
+  if (definition.externalAgent) {
+    return {
+      ok: false,
+      code: 'EXTERNAL_AGENT_NOT_VERIFIED',
+      missingGates: ['trusted-identity', 'per-task-consent', 'attested-runtime']
+    };
   }
   const requirement = permissionRequirement({ mode, action, intent, userAuthorized, stage });
   if (!requirement.ok) return requirement;
@@ -164,6 +195,10 @@ export function assertModeBoundary({
 export function createModeSession({ mode = 'human-ai', userId = null } = {}) {
   const normalized = normalizePrimaryMode(mode);
   if (!normalized) return { ok: false, code: 'UNKNOWN_PRIMARY_MODE' };
+  const definition = modeDefinition(normalized);
+  const externalGates = definition.externalAgent
+    ? ['trusted-identity', 'per-task-consent', 'attested-runtime']
+    : [];
   return {
     ok: true,
     schema: SESSION_MODE_SCHEMA,
@@ -172,10 +207,12 @@ export function createModeSession({ mode = 'human-ai', userId = null } = {}) {
     label: MODE_LABELS[normalized],
     userId: typeof userId === 'string' ? userId.slice(0, 128) : null,
     authorization: {
-      analysis: true,
+      analysis: !definition.externalAgent,
+      preparation: !definition.externalAgent,
       financialExecution: false,
       requiresExplicitUserScreen: true,
-      guardianCanBlock: true
+      guardianCanBlock: true,
+      externalGates
     },
     createdAt: new Date().toISOString()
   };
@@ -189,11 +226,12 @@ export function modeCapabilitySummary(mode = 'human-ai') {
     mode: definition.id,
     label: definition.label,
     participants: [...definition.participants],
-    analysis: definition.analysis,
-    preparation: true,
+    analysis: definition.analysis && !definition.externalAgent,
+    preparation: !definition.externalAgent,
     execution: false,
     executionRequiresAuthorization: true,
     externalAgent: definition.externalAgent,
+    externalGates: definition.externalAgent ? ['trusted-identity', 'per-task-consent', 'attested-runtime'] : [],
     rawCredentialsAllowed: false
   };
 }
