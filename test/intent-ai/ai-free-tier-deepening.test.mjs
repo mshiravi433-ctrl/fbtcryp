@@ -44,6 +44,7 @@ import {
 import {
   intelligenceReasoningFields,
   intelligenceModelLadder,
+  WORKERS_AI_REASONING_EFFORTS,
   INTELLIGENCE_MODES
 } from '../../server/aiIntelligence.js';
 import { resolveProviderFleet, PROVIDER_ALIASES } from '../../server/aiProviderFleet.js';
@@ -200,18 +201,32 @@ test('swift and balanced send no reasoning fields at all', () => {
   }
 });
 
-test('Cloudflare\'s reasoning models get a reasoning effort', () => {
-  assert.deepEqual(
-    intelligenceReasoningFields('workersai', 'max', '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b'),
-    { reasoning_effort: 'high' }
+test('Cloudflare\'s reasoning models get a reasoning effort the vendor accepts', () => {
+  /* 2026-11-11 — Qwen 3.8 27B is the new Cloudflare flagship, and its
+     reasoning enum is `low | medium | xhigh`. `high` is NOT in that enum: the
+     live seat answered HTTP 400 "Unexpected reasoning effort high" on every
+     call while this test asserted the invalid value, which is how a test can
+     pin a bug instead of catching one. The assertion is now derived from the
+     vendor's set rather than typed next to a comment that already knew it. */
+  const qwen = intelligenceReasoningFields('workersai', 'max', '@cf/qwen/qwen3.8-27b');
+  assert.ok(
+    WORKERS_AI_REASONING_EFFORTS.includes(qwen.reasoning_effort),
+    `Workers AI rejects "${qwen.reasoning_effort}" — accepted: ${WORKERS_AI_REASONING_EFFORTS.join(', ')}`
   );
-  /* 2026-11-11 — Qwen 3.8 27B is the new Cloudflare flagship. Cloudflare
-     documents Reasoning: low | medium | xhigh for it, and it accepts
-     `reasoning_effort` exactly as the R1 distill does. */
-  assert.deepEqual(
-    intelligenceReasoningFields('workersai', 'max', '@cf/qwen/qwen3.8-27b'),
-    { reasoning_effort: 'high' }
-  );
+  assert.equal(qwen.reasoning_effort, 'xhigh', 'the deepest effort the vendor names');
+
+  const r1 = intelligenceReasoningFields('workersai', 'max', '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b');
+  assert.ok(WORKERS_AI_REASONING_EFFORTS.includes(r1.reasoning_effort));
+
+  /* Never the spelling every other vendor uses. */
+  for (const model of ['@cf/qwen/qwen3.8-27b', '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b']) {
+    assert.notEqual(
+      intelligenceReasoningFields('workersai', 'max', model).reasoning_effort,
+      'high',
+      'the Workers AI enum has no "high" member'
+    );
+  }
+
   /* And its other models stay untouched. */
   assert.deepEqual(
     intelligenceReasoningFields('workersai', 'max', '@cf/meta/llama-3.3-70b-instruct-fp8-fast'),
