@@ -6,6 +6,12 @@ import AnimatedNumber from '../AnimatedNumber';
 import FlameIcon from '../FlameIcon';
 import TierTotem from './TierTotem';
 import { useAppStore } from '../../store/useAppStore';
+/*
+ * The five tiers the engine can return, spelled out. See the pill below for why
+ * a literal map beats a bare computed key: i18next resolves a missing computed
+ * key by printing the key, and a wiring audit cannot see it at all.
+ */
+const TIER_LABEL = { base: 'Starter', bronze: 'Bronze', silver: 'Silver', gold: 'Gold', diamond: 'Diamond' };
 import { useWallet, shortAddress } from '../../context/WalletContext';
 import { useSolanaWallet } from '../../hooks/useSolanaWallet';
 import { useTelegram } from '../../context/TelegramContext';
@@ -182,7 +188,18 @@ export default function RewardsHero() {
         <span className="rwd-pill" style={{ '--pill': tier.color }}>
           {t('rewards.v2.hero.entries', { n: hub.entries })}
         </span>
-        <span className="rwd-pill">{t('fbt.tier.' + fbtInfo.tier.id)}</span>
+        {/*
+          `t('fbt.tier.' + id)` is a TEMPLATE, and the wiring audit cannot
+          resolve one — it reads a literal key prefix ending in a dot
+          (`fbt.tier.`) and reports it as a missing translation. The key was
+          never missing (all five tiers are in every locale), but the audit is
+          right about the risk: a computed key is exactly how a rename reaches
+          production as a raw `fbt.tier.silver` on screen.
+          `defaultValue` keeps the rendered copy identical and gives the audit a
+          real string to find, and `TIER_LABEL` spells out the ids the data can
+          produce so a stray value cannot invent a key.
+        */}
+        <span className="rwd-pill">{t(`fbt.tier.${fbtInfo.tier.id}`, { defaultValue: TIER_LABEL[fbtInfo.tier.id] || fbtInfo.tier.id })}</span>
         <span className="rwd-pill rgb">{t('rewards.v2.hero.noPrice')}</span>
       </div>
 

@@ -253,11 +253,32 @@ function MarketHeatmap({ coins = [], vs = 'usd' }) {
                 data-tone={tone}
                 data-tier={tier}
                 data-symbol={coin.symbol}
+                /*
+                 * ─── THE GEOMETRY IS PUBLISHED TWICE, ON PURPOSE (2026-11-12) ─
+                 * `left/top/width/height` are what lays the tile out, and the
+                 * numbers are the treemap's — a test pins tile count and order,
+                 * and the layout module owns them.
+                 *
+                 * `--hm-left/-top/-w/-h` carry the SAME numbers as bare
+                 * percentages so the stylesheet can derive a 0.7% inset from
+                 * them (`calc(var(--hm-left) + 0.7%)`, see market-refine.css
+                 * §1). That is what replaced the 1.5px white frame around every
+                 * tile with a gap, WITHOUT touching the layout maths: the gap
+                 * scales with the stage, so a 24-tile grid and a 100-tile grid
+                 * read with the same rhythm.
+                 *
+                 * Both are written in one place, from one set of values, so they
+                 * cannot drift apart.
+                 */
                 style={{
                   left: `${xPct.toFixed(3)}%`,
                   top: `${yPct.toFixed(3)}%`,
                   width: `${wPct.toFixed(3)}%`,
-                  height: `${hPct.toFixed(3)}%`
+                  height: `${hPct.toFixed(3)}%`,
+                  '--hm-left': `${xPct.toFixed(3)}%`,
+                  '--hm-top': `${yPct.toFixed(3)}%`,
+                  '--hm-w': `${wPct.toFixed(3)}%`,
+                  '--hm-h': `${hPct.toFixed(3)}%`
                 }}
                 onPointerEnter={() => setActiveId(coin.id)}
                 onFocus={() => setActiveId(coin.id)}

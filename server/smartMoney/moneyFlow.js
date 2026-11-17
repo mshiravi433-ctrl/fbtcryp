@@ -53,6 +53,34 @@ function boundedReadBudget(timeoutMs = READ_DEADLINE_MS) {
     Number.isFinite(candidate) && candidate > 0 ? candidate : READ_DEADLINE_MS));
 }
 
+/**
+ * ─── A CACHE KEY MAY NOT CONTAIN A CLOCK ────────────────────────────────────
+ * «CPU را کم کن»
+ *
+ * The read budget used to be interpolated into every cache key below
+ * (`sm:scan:<floor>:13891`). That looked harmless — it was meant to keep a
+ * short-budget answer from being reused by a patient caller — but the budget
+ * is derived from what is LEFT of the request's deadline, so it is a different
+ * number on essentially every request. Every entry therefore missed, every
+ * miss produced its own single-flight producer, and the Map quietly filled with
+ * hundreds of near-identical entries that could never be hit again. The cache
+ * was paying for itself twice: once in CPU to build an answer nobody reused,
+ * and once in the eviction sweep that kept the map bounded.
+ *
+ * The budget is NOT part of an answer's identity — the answer is the chain and
+ * the window. It is now bucketed into a small number of coarse tiers, which
+ * keeps the one behaviour that mattered (a caller who can only wait 2 s does
+ * not donate its truncated result to everyone else) while letting the normal
+ * 14 s path hit the same key every time.
+ */
+const BUDGET_TIERS_MS = [1_000, 3_000, 7_000, READ_DEADLINE_MS];
+function budgetTier(readBudgetMs) {
+  const budget = Number(readBudgetMs);
+  if (!Number.isFinite(budget)) return READ_DEADLINE_MS;
+  for (const tier of BUDGET_TIERS_MS) if (budget <= tier) return tier;
+  return READ_DEADLINE_MS;
+}
+
 function timeoutWithin(deadlineAt, capMs = READ_DEADLINE_MS) {
   const remainingMs = Math.min(Number(deadlineAt) - Date.now(), READ_DEADLINE_MS);
   const headroomMs = Math.min(100, Math.max(10, Math.floor(remainingMs * 0.1)));
@@ -166,7 +194,7 @@ export function labelEvent(e) {
 async function scanOnce({ timeoutMs = READ_DEADLINE_MS } = {}) {
   const readBudgetMs = boundedReadBudget(timeoutMs);
   const deadlineAt = Date.now() + readBudgetMs;
-  return withCache(`sm:scan:${SCAN_FLOOR}:${readBudgetMs}`, SCAN_TTL_MS, async () => {
+  return withCache(`sm:scan:${SCAN_FLOOR}:${budgetTier(readBudgetMs)}`, SCAN_TTL_MS, async () => {
     const scan = await fetchWhales({ minUsd: SCAN_FLOOR, limit: 400, timeoutMs: readBudgetMs });
     const buffer = await mergeEvents(scan.events || []);
     await learnTags(buffer.events, { deadlineAt });
@@ -667,7 +695,7 @@ async function pairToken(rpc, pair, selector, deadlineAt) {
 export async function earlyTokens({ limit = 12, timeoutMs = READ_DEADLINE_MS } = {}) {
   const readBudgetMs = boundedReadBudget(timeoutMs);
   const deadlineAt = Date.now() + readBudgetMs;
-  const { value } = await withCache(`sm:early-tokens:${readBudgetMs}:${limit}`, TTL.earlyTokens, async () => {
+  const { value } = await withCache(`sm:early-tokens:${budgetTier(readBudgetMs)}:${limit}`, TTL.earlyTokens, async () => {
     /*
      * Two independent keyless seeds instead of one: the token-profiles feed
      * alone goes quiet for stretches, which used to blank the whole Early
@@ -833,7 +861,7 @@ export async function freshWallets({
   const readBudgetMs = boundedReadBudget(timeoutMs);
   const deadlineAt = Date.now() + readBudgetMs;
   const thresholdKey = Math.max(0, Math.round(Number(minCapitalUsd) || 0));
-  const { value } = await withCache(`sm:fresh-wallets:${readBudgetMs}:${thresholdKey}`, TTL.freshWallets, async () => {
+  const { value } = await withCache(`sm:fresh-wallets:${budgetTier(readBudgetMs)}:${thresholdKey}`, TTL.freshWallets, async () => {
     const since = Date.now() - WINDOWS.H24;
     const remainingMs = deadlineAt - Date.now();
     const source = stream || (remainingMs >= MIN_UPSTREAM_TIMEOUT_MS
@@ -1014,4 +1042,4 @@ export async function tokenSignals(tokenAddress, chainId, windowKey = '24h', opt
   };
 }
 
-export { pctChange, SCAN_FLOOR };
+export { pctChange, SCAN_FLOOR, budgetTier };

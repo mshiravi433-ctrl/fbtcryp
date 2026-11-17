@@ -240,4 +240,16 @@ if (physical.length) fail(`css uses physical ${physical.length} physical directi
 else ok('css: logical properties only (RTL-safe)');
 
 console.log(failures ? `\n${failures} failure(s)` : '\nBusiness locale probe: PASS');
-process.exit(failures ? 1 : 0);
+/*
+ * EXIT ONLY ON FAILURE — the convention test/learn-hub-locales-probe.mjs and
+ * test/about-locales-probe.mjs already follow.
+ *
+ * This ended with an unconditional `process.exit(failures ? 1 : 0)`, which on
+ * SUCCESS kills the whole process at import time. Every suite imported after it
+ * in test/run.mjs therefore never ran: the file's own output was the last line
+ * of a "passing" run, and roughly forty probes below it were being skipped
+ * silently for as long as this has been here. A passing probe must not be able
+ * to end the run.
+ */
+if (failures) process.exit(1);
+export {};

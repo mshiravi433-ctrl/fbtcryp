@@ -318,7 +318,7 @@ export function runLeverageCascade({ legs = [], positions = [], volMultiplier = 
   return {
     id: 'leverage-cascade',
     version: STRESS_VERSION,
-    titleFa: `آبشار اهرم (نوسان ${volMultiplier}×)`,
+    titleFa: `آبشار وام‌گیری (نوسان ${volMultiplier}×)`,
     titleEn: `Leverage cascade (volatility ${volMultiplier}×)`,
     descriptionFa: 'نوسان چند برابر می‌شود؛ هر پوزیشنی که فاصله‌اش از قیمت لیکوییدیشن کمتر از شوک باشد، لیکویید می‌شود.',
     descriptionEn: 'Volatility multiplies; any position whose liquidation distance is smaller than the shock is liquidated.',

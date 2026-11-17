@@ -10,7 +10,12 @@ function installDom(html = '<!doctype html><html><body><div id="r"></div></body>
   const w = dom.window;
   global.window = w;
   global.document = w.document;
-  for (const k of ['HTMLElement', 'Element', 'localStorage', 'CustomEvent', 'Node', 'SVGElement', 'Event', 'MutationObserver']) {
+  /* jsdom exposes the event constructors on the window only; a probe that
+     dispatches a real click (the Smart Money desk does) needs them in scope —
+     the same list test/run.mjs installs, so one probe behaves identically
+     whichever runner drives it. */
+  for (const k of ['HTMLElement', 'Element', 'localStorage', 'CustomEvent', 'Node', 'SVGElement', 'Event', 'MutationObserver',
+    'MouseEvent', 'KeyboardEvent', 'PointerEvent']) {
     if (w[k]) global[k] = w[k];
   }
   for (const k of ['requestAnimationFrame', 'cancelAnimationFrame', 'getComputedStyle']) {

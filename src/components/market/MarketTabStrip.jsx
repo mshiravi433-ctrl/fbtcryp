@@ -58,11 +58,32 @@ export default function MarketTabStrip({ active, onChange, overviewId, tokensId 
     const apply = () => {
       const height = Math.round(header.getBoundingClientRect().height);
       if (height > 0) wrap.style.setProperty('--market-tabs-top', `${height + 4}px`);
+      /*
+       * ─── AND THE STRIP'S OWN HEIGHT (2026-11-12) ─────────────────────────
+       * The market table's column header sticks BELOW this strip, so it needs
+       * to know where the strip ends. That number is not a constant either:
+       * `.mx-tab` is 42px at desktop, 44px on a phone (the touch target), and
+       * 38px under `[data-compact]` — three values decided in CSS, one of them
+       * by the reader's own display settings.
+       *
+       * Measured from the PILL, not from `wrap`: the wrapper is a full-width
+       * sticky box with `pointer-events: none` whose height includes the gap
+       * the strip floats in, while the pill is the visible edge a label row
+       * should tuck under. Falls back in CSS to 52px, which is what this
+       * resolves to on a phone-sized bar — see market-benchmark.css §2.
+       */
+      const pill = wrap.querySelector('.mx-tabs');
+      const pillHeight = Math.round(pill?.getBoundingClientRect().height ?? 0);
+      if (pillHeight > 0) wrap.style.setProperty('--market-tabs-h', `${pillHeight}px`);
     };
 
     apply();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(apply);
     observer?.observe(header);
+    /* The pill is observed too: it changes height on rotation (the 44px phone
+       target) and under `[data-compact]`, neither of which resizes the header. */
+    const pill = wrap.querySelector('.mx-tabs');
+    if (pill) observer?.observe(pill);
     window.addEventListener('resize', apply);
     return () => {
       observer?.disconnect();

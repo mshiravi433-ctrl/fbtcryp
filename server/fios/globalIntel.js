@@ -190,7 +190,30 @@ export function normalizeSmartMoney(overview, at = Date.now()) {
     },
     coverage: overview.coverage && typeof overview.coverage === 'object' ? {
       events: num(overview.coverage.events), windowCoverage: num(overview.coverage.windowCoverage), comparable: overview.coverage.comparable === true
-    } : null
+    } : null,
+    /*
+     * HOW MANY WALLETS ARE ACTUALLY BEHIND THIS NODE (round 9).
+     *
+     * The domain's own `confidence` is a coarse 0.8/0.3 — a stream-level figure.
+     * The verified node that inherits it is built from a handful of consensus
+     * ROWS, and a node resting on two wallets is a different object from one
+     * resting on twelve even when both print 0.8. `voting` counts the wallets
+     * whose evidence earns a vote (the same gate `buildConsensus` applies);
+     * `admitted` is the wider admission count, so a reader can see the gap
+     * rather than infer it. Both are counts over an object already in hand —
+     * no extra read, no extra request.
+     */
+    voters: {
+      /* null (not 0) when the payload carries no leaderboard to count: an
+         uncountable set is unmeasured, never empty. */
+      voting: Array.isArray(overview.verified?.leaderboard)
+        ? overview.verified.leaderboard.filter((p) => p?.qualified === true
+          && Number.isFinite(p.score) && p.score >= 70 && p.coverage >= 0.6
+          && p.closedTrades >= 5 && Number(p.realizedUsd) > 0 && p.winRate >= 55).length
+        : null,
+      admitted: num(overview.verified?.coverage?.classifiedWallets),
+      analysed: num(overview.coverage?.analyzedWallets ?? overview.verified?.coverage?.analyzedWallets)
+    }
   }, verified.rows.length ? 'smartMoney:verified-index' : 'smartMoney:overview',
   verified.rows.length ? 0.8 : 0.3,
   { at, partial: overview.partial === true || !live || !verified.rows.length });

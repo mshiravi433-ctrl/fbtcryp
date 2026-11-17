@@ -444,6 +444,50 @@ export function clearForm({ conversationId = null } = {}) {
 }
 
 /** بررسی اینکه آیا پیام شروع‌کننده‌ی یک فرم هدف‌دار است. */
+/**
+ * Is this message an ANSWER to the open form, or a different request?
+ *
+ * The form collector used to treat every message as an answer while a form was
+ * pending, so an unrelated request typed in the same conversation was silently
+ * stored as a slot value and never answered. This is the test that separates
+ * the two, and it is deliberately generous about what counts as an answer:
+ * short replies, numbers with a unit, and bare values are answers.
+ *
+ * The rule that decides it: an answer is SHORT and carries no verb of its own.
+ * A sentence with a verb and no relation to the pending question is a new
+ * request, and a new request must not be eaten by an old form.
+ *
+ * An explicit interruption («توقف», «لغو») is NOT an answer — the caller
+ * handles that case first, with isFormInterruption().
+ */
+export function messageLooksLikeSlotAnswer(text = '') {
+  const raw = String(text || '').trim();
+  if (!raw) return false;
+  /* Questions to the assistant are never slot values. */
+  if (/[?؟]\s*$/.test(raw)) return false;
+  const folded = foldText(raw);
+  const words = folded.split(/\s+/).filter(Boolean);
+  /* A bare number, a percentage, a duration, or a risk word. */
+  const bareValue = /^(?:\d[\d.,]*\s*(?:k|هزار|دلار|تومان|درصد|٪|%|روز|ماه|هفته|سال)?|low|medium|high|کم|متوسط|زیاد)$/i.test(folded);
+  if (bareValue) return true;
+  /* Short and numeric: «۱۰۰۰ دلار», «۹۰ روز», «۱۵٪ در ۴ ماه». */
+  const mostlyNumeric = /\d/.test(folded) && words.length <= 6
+    && !/(?:میخوام|می‌خوام|بساز|شروع|باز\s*کن|نشان|تحلیل|اتوماسیون|automat|launch|build|start|show|analy[sz]e)/i.test(folded)
+    /* A GOAL SENTENCE is not a slot value, even when it is short and numeric:
+       «سودم ۲ برابر شود» states an objective, it does not answer «چه سرمایه‌ای
+       داری؟». Feeding it into the capital slot is how a plan request used to
+       disappear. */
+    && !/(?:سود|برابر|هدف|بازده|profit|return|double|target)/i.test(folded);
+  if (mostlyNumeric) return true;
+  /* A short affirmation or a risk profile on its own. */
+  if (words.length <= 3 && /^(?:بله|آره|خیر|نه|باشه|ok|yes|no|sure)$/i.test(folded)) return true;
+  /*
+   * Everything else — a full sentence with its own verb — is a new request.
+   * Answering it into a slot is the bug this function exists to prevent.
+   */
+  return false;
+}
+
 export function detectFormTrigger(text) {
   const t = foldText(String(text || ''));
   if (!t) return null;

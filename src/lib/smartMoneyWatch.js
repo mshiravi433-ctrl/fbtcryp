@@ -37,7 +37,14 @@ export function isTracked(chain, address, target = 'wallet') {
   return read().some((r) => r.target === target && String(r.chain) === String(chain) && canonical(chain, r.address) === a);
 }
 
-export function trackWallet({ chain, address, label = null, target = 'wallet', types = null, condition = null }) {
+/**
+ * @param {object} input
+ * @param {object} [input.baseline] the figures on screen when the reader tapped
+ *        «Track» — `snapshotWallet()` from lib/walletTracking. Stored so a later
+ *        read can say what CHANGED; without it every comparison is «unmeasured»
+ *        rather than a fabricated «۰ تغییر».
+ */
+export function trackWallet({ chain, address, label = null, target = 'wallet', types = null, condition = null, baseline = null }) {
   const rows = read();
   const addr = canonical(chain, address);
   const existing = rows.findIndex((r) => String(r.chain) === String(chain) && r.address === addr && r.target === target);
@@ -51,12 +58,31 @@ export function trackWallet({ chain, address, label = null, target = 'wallet', t
       ? ['CONSENSUS_BUY', 'CONSENSUS_SELL', 'NETFLOW_REVERSAL', 'MOMENTUM_REVERSAL']
       : ['LARGE_BUY', 'LARGE_SELL', 'EXCHANGE_DEPOSIT', 'EXCHANGE_WITHDRAWAL', 'LIQUIDITY_MOVEMENT', 'ACCUMULATION', 'DISTRIBUTION']),
     condition,
+    /* A re-track keeps the FIRST baseline: re-tapping the button must not
+       silently reset the comparison to «nothing has changed since a second
+       ago», which is exactly how a watchlist stops noticing anything. */
+    baseline: existing >= 0 ? (rows[existing].baseline ?? baseline ?? null) : (baseline ?? null),
+    lastReadAt: existing >= 0 ? (rows[existing].lastReadAt ?? null) : null,
     createdAt: existing >= 0 ? rows[existing].createdAt : Date.now()
   };
   if (existing >= 0) rows[existing] = next;
   else rows.push(next);
   write(rows);
   void syncTracked().catch(() => {});
+  return rows;
+}
+
+/**
+ * Record that a wallet was actually READ, so `nextToRead()` can spread the
+ * reads instead of re-opening the same first row on every visit.
+ */
+export function stampRead(chain, address, target = 'wallet', at = Date.now()) {
+  const rows = read();
+  const addr = canonical(chain, address);
+  const at_ = rows.findIndex((r) => String(r.chain) === String(chain) && r.address === addr && r.target === target);
+  if (at_ < 0) return rows;
+  rows[at_] = { ...rows[at_], lastReadAt: at };
+  write(rows);
   return rows;
 }
 

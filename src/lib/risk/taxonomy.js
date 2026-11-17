@@ -133,13 +133,13 @@ export const RISK_FAMILIES = Object.freeze([
   {
     id: 'leverage',
     weight: 1.2,
-    fa: 'اهرم و احتمال لیکوییدیشن',
+    fa: 'وام‌گیری و احتمال لیکوییدیشن',
     en: 'Leverage & liquidation',
-    shortFa: 'اهرم',
+    shortFa: 'وام‌گیری',
     shortEn: 'Leverage',
     hue: 'var(--rgb-6)',
     needs: ['open-leveraged-positions'],
-    questionFa: 'اهرم باز چقدر است و تا قیمت لیکوییدیشن چند درصد فاصله دارد؟',
+    questionFa: 'وام‌گیری باز چقدر است و تا قیمت لیکوییدیشن چند درصد فاصله دارد؟',
     questionEn: 'How much leverage is open, and how far is the liquidation price?'
   },
   {

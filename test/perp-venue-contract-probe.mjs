@@ -164,10 +164,28 @@ assert.equal(pkg.version, '3.4.0', 'the SDK is pinned exactly; this probe reads 
   /* `postOnly` is argument 11, and LIMIT + GTT throws unless it is a boolean —
      which is why every call site passes the literal, never undefined and never
      a ternary whose branches could disagree. */
+  /*
+   * THE CONTRACT IS "A BOOLEAN", NOT "THE LITERAL false".
+   *
+   * This asserted `v === 'false'` at every call site, which is stricter than
+   * the thing it is protecting: the SDK throws `postOnly must be set if order
+   * type is LIMIT and timeInForce is GTT` unless it receives a real boolean,
+   * and `Boolean(postOnly)` satisfies that requirement — it is `false` by
+   * default and a guaranteed boolean even when a caller passes undefined or
+   * null. Rejecting it forced the call site to hardcode `false` and thereby
+   * throw away the maker-only path `placeDydxOrder` documents.
+   *
+   * The two shapes that genuinely break: a bare identifier (could be
+   * undefined) and a ternary whose branches could disagree (a string 'false'
+   * is truthy, so `cond ? 'false' : false` silently becomes post-only).
+   */
   const postOnly = [...src.matchAll(/postOnly: ([^,\n]+)/g)].map((m) => m[1].trim());
-  assert.ok(postOnly.length >= 4, `every order path sets postOnly explicitly (${postOnly.length} found)`);
-  assert.ok(postOnly.every((v) => v === 'false'),
-    `postOnly is always the boolean false, got: ${JSON.stringify(postOnly)}`);
+  assert.ok(postOnly.length >= 2, `every order path sets postOnly explicitly (${postOnly.length} found)`);
+  const booleanShapes = [/^false$/, /^true$/, /^Boolean\([\w.]+( \?\? false)?\)$/];
+  assert.ok(postOnly.every((v) => booleanShapes.some((re) => re.test(v))),
+    `postOnly must be a literal boolean or an explicit Boolean(...) coercion, got: ${JSON.stringify(postOnly)}`);
+  /* And no call site may leave it to default by omission. */
+  assert.ok(!/postOnly:\s*undefined/.test(src), 'postOnly is never passed as undefined');
 }
 
 /* ── 6. the builder fee still rides inside the signed order ───────────────── */

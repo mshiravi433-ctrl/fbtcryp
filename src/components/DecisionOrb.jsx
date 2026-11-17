@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { isRtl } from '../i18n/languages';
 import { marketDecision } from '../lib/marketDecision';
+import { useSharedClock } from '../hooks/useSharedClock';
 import { GlyphRisk, GlyphTrendUp, GlyphTrendDown, GlyphInfo } from './market/MarketGlyphs.jsx';
 import '../styles/decision-orb.css';
 
@@ -78,20 +79,22 @@ export default function DecisionOrb({ coins = [], updatedAt = 0, unavailable = f
   const [open, setOpen] = useState(false);
   /* 'live' to 'leaving' (fade out) to 'gone' (unmounted). */
   const [phase, setPhase] = useState('live');
-  const [now, setNow] = useState(() => Date.now());
   const toggleRef = useRef(null);
   const exitTimer = useRef(null);
 
   const metrics = useMemo(() => marketDecision(coins), [coins]);
-  const stale = unavailable || !updatedAt || now - updatedAt > 120000;
   const gone = phase !== 'live';
 
-  /* One 15 s clock for freshness only — it never touches the layout. */
-  useEffect(() => {
-    if (gone) return undefined;
-    const timer = setInterval(() => setNow(Date.now()), 15000);
-    return () => clearInterval(timer);
-  }, [gone]);
+  /*
+   * One 15 s clock for freshness only — it never touches the layout. It comes
+   * from the SHARED ticker (hooks/useSharedClock.js) so it is the same clock
+   * BtClock and MarketFreshness read: one interval on the screen, not three.
+   * `enabled` keeps the old behaviour exactly — a dismissed orb holds no timer,
+   * and `freshnessNow` therefore stops advancing, which is what the `!gone`
+   * guard on the interval used to do.
+   */
+  const freshnessNow = useSharedClock(15000, !gone);
+  const stale = unavailable || !updatedAt || freshnessNow - updatedAt > 120000;
 
   /* Report the open state so the page can reserve room beside the rail. */
   useEffect(() => {

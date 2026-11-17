@@ -9,10 +9,12 @@ import {
   abortForecast,
   deviceSupport,
   downloadEstimate,
+  forecastChangePct,
   forgetModel,
   modelState,
   prepareModel,
-  runForecast
+  runForecast,
+  rememberForecastRead
 } from '../../lib/kronosLocal/client.js';
 import { MIN_CANDLES } from '../../lib/kronosLocal/infer.js';
 import {
@@ -700,6 +702,22 @@ export default function TokenChart({
       setForecastResult({ key, data });
       setForecastPhase('ready');
       setForecastError('');
+      /*
+       * Publish the direction so the Signals page can use this forecast as one
+       * of its four planes — no request, no storage of candles, no model run
+       * on that screen. The record is cleared it is for another asset (see
+       * lastForecastRead), so a stale BTC reading can never colour an ETH
+       * signal. `lastBar?.close` is the last REAL close, which is what the
+       * forecast is judged against.
+       */
+      try {
+        rememberForecastRead({
+          assetId: coinId || null,
+          pct: forecastChangePct(data, lastBar?.close),
+          horizon: predLen,
+          backend: data?.backend ?? null
+        });
+      } catch { /* a forecast record must never take the chart down */ }
     } catch (error) {
       if (!controller.signal.aborted) failForecast(error);
     }

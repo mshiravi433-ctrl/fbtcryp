@@ -41,6 +41,19 @@ export const SPECULATE_RISK_STEMS = Object.freeze([
 ]);
 
 /** Matches a margin setting in any of the languages the UI ships. */
+/**
+ * The Persian/English words that mean "this turn is about a margin venue".
+ *
+ * Used by the chat's action guard (os/conversation/socialIntent.js) to decide
+ * that a sentence is a TASK rather than small talk. It lives here, not inline
+ * in the classifier, because a store build stubs this module: a build that
+ * cannot open a margin venue has no business recognising a request for one,
+ * and no business shipping the words either.
+ */
+export function leverageIntentPattern() {
+  return /فیوچرز|اهرم|لوریج|پاس\s*مارت|futures|perpetual/i;
+}
+
 export function leveragePattern() {
   return /اهرم|leverage|lev\b|margin|kaldıraç|معامله اهرمی/i;
 }

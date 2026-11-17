@@ -14,7 +14,7 @@ import { isVerifiedPairedSwap } from './performance.js';
  * could ever be "fresh" at once — too few for three independent votes on any
  * token. Profiles now count for the same seven days the index retains them;
  * `updatedAt` is still shown so every reader sees how old the measurement is. */
-const MAX_PROFILE_AGE = 7 * WINDOWS.H24;
+export const MAX_PROFILE_AGE = 7 * WINDOWS.H24;
 const RECENT_SWAPS = 30;
 const LIMIT = 24;
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
@@ -341,7 +341,15 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
       observedSwapsInWindow: observed.swapsInWindow,
       completeness: 'sampled-indexer-pages',
       note: 'Only verified paired swaps from performance-qualified wallets: allowlisted stablecoin fills, promoted hourly-priced native-quote fills and Solana fills that pass the full replay, corroboration and balance-reconciliation gates. Cron/indexer coverage is sampled, not a real-time or full-chain view.' },
-    consensus, breadth, leaderboard: validProfiles.sort((a, b) => b.score - a.score).slice(0, 20), earlyEntries,
+    consensus, breadth,
+    /* The rows arrive in raw-score order, which is NOT the order the board is
+       displayed in: the client weighs each row's sample (lib/verifiedEvidence.js)
+       and leads with evidence, because a 91 from five closes must not outrank a
+       78 from forty closes. `leaderboardBasis` says so on the wire so nobody
+       downstream mistakes this array for a ranked answer. */
+    leaderboard: validProfiles.sort((a, b) => b.score - a.score).slice(0, 20),
+    leaderboardBasis: 'raw-verified-score; clients must re-rank by sample evidence before display',
+    earlyEntries,
     observed: { flow: observed.flow, recentSwaps: observed.recentSwaps, windowSwaps: observed.windowSwaps, candidates: observed.candidates,
       note: 'Paired stablecoin swaps, phase-4-promoted hourly-priced native swaps and observed Solana swaps reconstructed from each analysed wallet\'s own chain history, qualified or not. Observed flow is NOT consensus and NOT a recommendation; only fully verified, qualified wallets vote above.' },
     graph: { nodes, edges: graphEdges.filter((e) => allowedNodes.has(e.from) && allowedNodes.has(e.to)).slice(0, 100),

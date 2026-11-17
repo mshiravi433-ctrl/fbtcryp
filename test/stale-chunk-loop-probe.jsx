@@ -393,9 +393,23 @@ export async function run(container) {
    */
   {
     const app = readFileSync('src/App.jsx', 'utf8');
-    const open = app.indexOf('<Suspense fallback={<Loader />}>');
+    /*
+     * FIND THE BOUNDARY THAT ACTUALLY CONTAINS THE PROBE.
+     *
+     * This compared indices from three independent `indexOf`s: the first
+     * `<Suspense fallback={<Loader />}>`, the probe, and the first
+     * `</Suspense>` in the file. App.jsx has SEVERAL such boundaries, and the
+     * first closing tag belongs to an earlier one — so `probe < close` was
+     * false even though the probe is correctly nested, and the check reported
+     * a regression that was not there.
+     *
+     * The right question is "is the probe between the opening tag that precedes
+     * it and that tag's OWN closing tag". Taking the last opening tag before
+     * the probe gives exactly that boundary.
+     */
     const probe = app.indexOf('<RoutePaintProbe route={location.pathname}>');
-    const close = app.indexOf('</Suspense>');
+    const open = app.lastIndexOf('<Suspense fallback={<Loader />}>', probe);
+    const close = open === -1 ? -1 : app.indexOf('</Suspense>', open);
     t('App renders a paint probe', probe !== -1);
     t('...inside the Suspense boundary, after it opens', open !== -1 && probe > open);
     t('...and before it closes', close !== -1 && probe < close);

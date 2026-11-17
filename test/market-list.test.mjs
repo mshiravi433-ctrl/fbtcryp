@@ -29,9 +29,9 @@ const row = (id, extra = {}) => ({
 });
 
 test('every offered sort key is one the comparator understands', () => {
-  assert.deepEqual([...MARKET_SORTS], ['rank', 'mcap', 'change', 'volume', 'price']);
+  assert.deepEqual([...MARKET_SORTS], ['rank', 'mcap', 'change', 'change1h', 'change7d', 'volume', 'price']);
   assert.deepEqual({ ...DEFAULT_SORT }, { key: 'rank', dir: 'asc' });
-  const rows = [row('a', { rank: 3, mcap: 30, volume: 3, price: 3, change24h: -2 })];
+  const rows = [row('a', { rank: 3, mcap: 30, volume: 3, price: 3, change24h: -2, change1h: 1, change7d: -9 })];
   for (const key of MARKET_SORTS) {
     for (const dir of ['asc', 'desc']) {
       assert.equal(sortMarketRows(rows, key, dir).length, rows.length, `${key}/${dir} kept its rows`);

@@ -2,18 +2,40 @@
   position: sticky;
   top: calc(50px + env(safe-area-inset-top, 0px));
   z-index: 25;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /*
+   * ─── FIVE TABS ON A PHONE, WITHOUT SHRINKING THE LABELS (2026-11-12) ──────
+   * This was `repeat(4, minmax(0, 1fr))` with a `backdrop-filter`. The fifth
+   * tab («شناسنامه») does not fit a 4-up grid on a 390px screen without
+   * breaking «پول هوشمند» across two lines, and a tab whose label wraps is a
+   * tab a reader has to decode.
+   *
+   * So the strip scrolls horizontally instead, which is what every finance app
+   * does with five or more top-level tabs: every label keeps its full width and
+   * the row stays one line. `scroll-snap` makes a flick land on a tab rather
+   * than between two.
+   *
+   * The `backdrop-filter` is gone with it — this strip is STICKY, so it is
+   * composited over the page for the whole scroll, which is the exact case
+   * market-perf.css §9 removed from the market search field: a blurred layer
+   * re-sampled on every frame. Its plate below is already 94% opaque, so an
+   * opaque background looks the same and costs nothing.
+   */
+  display: flex;
   gap: 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
   width: 100%;
   padding: 5px;
   border: 1px solid var(--line);
   border-radius: 17px;
   background: color-mix(in srgb, var(--bg-raised) 94%, transparent);
   box-shadow: 0 8px 24px -19px rgba(0, 0, 0, .72);
-  backdrop-filter: blur(16px) saturate(1.35);
-  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  background: color-mix(in srgb, var(--bg-raised) 97%, transparent);
 }
+.coin-detail-tabs::-webkit-scrollbar { display: none; }
 
 .coin-detail-tab {
   position: relative;
@@ -22,9 +44,11 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  min-width: 0;
+  flex: 1 0 auto;
+  scroll-snap-align: center;
+  min-width: 76px;
   min-height: 54px;
-  padding: 6px 3px;
+  padding: 6px 8px;
   border: 1px solid transparent;
   border-radius: 12px;
   background: transparent;
@@ -321,4 +345,153 @@
   .token-risk-dial { width: 78px; height: 78px; }
   .token-risk-dial-core b { font-size: 22px; }
   .token-risk-advice { font-size: 10.5px; }
+}
+
+/* ══ «دربارهٔ این توکن» — THE IDENTITY PANEL (2026-11-12) ═══════════════════
+   The only tab on this page that is not a chart, a form or a table. It is a
+   stack of cards over the tokens this file already uses (`--bg-panel-solid`,
+   `--line`, `--rgb-1`, `--text-1/2`), so it adds no material and no colour.
+
+   Nothing here animates and nothing here is blurred: the panel is a reading,
+   and every value on it changes at most once per 30 s poll. A transition on a
+   static number is a layer the compositor keeps alive for nothing. */
+.coin-identity { display: flex; flex-direction: column; gap: 12px; }
+
+.coin-id-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 15px 15px 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--bg-panel-solid);
+  min-width: 0;
+}
+
+.coin-id-title {
+  margin: 0;
+  color: var(--text-1);
+  font: 750 13px/1.3 var(--font-display);
+  letter-spacing: -.005em;
+}
+
+/* The publisher's own description. Clamped visually to keep the first screen
+   readable, with the whole string still in the DOM for find-in-page. */
+.coin-id-copy {
+  margin: 0;
+  color: var(--text-2);
+  font: 400 12px/1.7 var(--font-sans, inherit);
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.coin-id-note {
+  margin: 0;
+  color: var(--text-2);
+  font: 400 11px/1.6 var(--font-sans, inherit);
+}
+.coin-id-missing { color: var(--text-3, var(--text-2)); font-size: 10px; }
+
+.coin-id-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.coin-id-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 11px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 34%, var(--line));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--rgb-1) 9%, transparent);
+  color: var(--text-1);
+  font: 650 11px/1 var(--font-display);
+  text-decoration: none;
+}
+.coin-id-link:hover { border-color: color-mix(in srgb, var(--rgb-1) 58%, var(--line)); }
+.coin-id-link:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
+.coin-id-source { color: var(--text-2); font-size: 10px; }
+
+/* Metric tiles — two up on a phone, four up from 620px. */
+.coin-id-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (min-width: 620px) {
+  .coin-id-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.coin-id-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text-1) 3%, transparent);
+}
+.coin-id-metric-label {
+  color: var(--text-2);
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.coin-id-metric-value {
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  direction: ltr;
+  text-align: start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.coin-id-metric-hint { color: var(--text-2); font-size: 9px; direction: ltr; text-align: start; }
+
+/* A down tone is a measurement, not an alarm: the colour is the same one the
+   rest of the app uses for a negative move, at a weight that does not shout. */
+.coin-id-metric[data-tone='down'] .coin-id-metric-value { color: var(--rgb-down, #ff6b8a); }
+.coin-id-metric[data-tone='up'] .coin-id-metric-value { color: var(--rgb-up, #2fe6a8); }
+.coin-id-metric[data-tone='muted'] .coin-id-metric-value { color: var(--text-2); }
+
+/* The two tracks (day position, supply unlocked). One rail, one dot, no
+   transition — the same decision as the market row's range bar. */
+.coin-id-track { display: flex; flex-direction: column; gap: 5px; }
+.coin-id-track-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 9.5px;
+}
+.coin-id-track-caption { color: var(--text-1); font-weight: 650; }
+.coin-id-track-rail {
+  position: relative;
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--rgb-down, #ff6b8a) 40%, transparent),
+    var(--line) 50%,
+    color-mix(in srgb, var(--rgb-up, #2fe6a8) 40%, transparent));
+  direction: ltr;
+}
+.coin-id-track-rail i {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin-top: -3.5px;
+  margin-inline-start: -3.5px;
+  border-radius: 50%;
+  background: var(--text-1);
+  box-shadow: 0 0 0 1.5px var(--bg-panel-solid);
 }

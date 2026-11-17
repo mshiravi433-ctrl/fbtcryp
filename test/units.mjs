@@ -304,6 +304,18 @@ import coverage from '../src/i18n/coverage.json';
 import enLocale from '../src/i18n/locales/en.json';
 import faLocale from '../src/i18n/locales/fa.json';
 import arLocale from '../src/i18n/locales/ar.json';
+/* Imported rather than read from disk: `test/run.mjs` runs this file from a
+   BUNDLE (test/.out/units), so a `fs` path resolved off `import.meta.url`
+   points into the output tree and the file is not there. */
+import zhLocale from '../src/i18n/locales/zh.json';
+import hiLocale from '../src/i18n/locales/hi.json';
+import esLocale from '../src/i18n/locales/es.json';
+import frLocale from '../src/i18n/locales/fr.json';
+import ruLocale from '../src/i18n/locales/ru.json';
+import trLocale from '../src/i18n/locales/tr.json';
+import urLocale from '../src/i18n/locales/ur.json';
+import idLocale from '../src/i18n/locales/id.json';
+import ptLocale from '../src/i18n/locales/pt.json';
 import { LANGUAGES, coverageFor, isComplete } from '../src/i18n/languages.js';
 import { readFileSync } from 'node:fs';
 import {
@@ -1031,6 +1043,59 @@ export default async function run() {
   );
   t('partial languages are not marked complete', !isComplete('zh') && !isComplete('tr'));
   t('coverage counts against the real key total', coverage.total > 900);
+  /*
+   * THE GENERATED FILE MUST AGREE WITH THE FILES IT DESCRIBES.
+   *
+   * `coverage.json` is written by `scripts/gen-locales.mjs`, but nothing
+   * regenerates it on the way to production and no test compared it to the
+   * locales it summarises — so after the 2026-11-12 signals passes the picker
+   * was reading `total: 15079` while `en.json` held 15166 leaves, and told
+   * Arabic users 53% when 44% of the strings actually differ from English.
+   * A stale denominator silently mis-scores every language at once.
+   *
+   * These two assertions make the drift impossible: the total must be the
+   * real leaf count, and every locale's published percentage must equal the
+   * rule `gen-locales.mjs` computes (translated leaves / total; a fully
+   * maintained locale counts a leaf only when its text DIFFERS from English).
+   */
+  {
+    const leaves = (obj, prefix = '', out = []) => {
+      for (const [k, v] of Object.entries(obj)) {
+        const path = prefix ? `${prefix}.${k}` : k;
+        if (v && typeof v === 'object' && !Array.isArray(v)) leaves(v, path, out);
+        else out.push(path);
+      }
+      return out;
+    };
+    const readValue = (o, d) => d.split('.').reduce((x, k) => x?.[k], o);
+    const enLeaves = leaves(enLocale);
+    t('coverage.json total equals the real number of English leaves',
+      coverage.total === enLeaves.length);
+
+    const LANGS = { zh: zhLocale, hi: hiLocale, es: esLocale, fr: frLocale, ru: ruLocale,
+      tr: trLocale, ur: urLocale, id: idLocale, pt: ptLocale };
+    const FULL = { fa: faLocale, ar: arLocale };
+    const expect = {};
+    for (const [lang, json] of Object.entries(LANGS)) {
+      expect[lang] = Math.round((leaves(json).length / enLeaves.length) * 100);
+    }
+    for (const [lang, json] of Object.entries(FULL)) {
+      let translated = 0;
+      for (const key of enLeaves) {
+        const mine = readValue(json, key);
+        const theirs = readValue(enLocale, key);
+        if (mine === undefined) continue;
+        if (typeof mine === 'string' && typeof theirs === 'string' && mine === theirs && theirs.length > 3) continue;
+        translated += 1;
+      }
+      expect[lang] = Math.round((translated / enLeaves.length) * 100);
+    }
+    const drifted = Object.entries(expect)
+      .filter(([lang, pct]) => coverage.coverage[lang] !== pct)
+      .map(([lang, pct]) => `${lang}: file says ${pct}%, coverage.json says ${coverage.coverage[lang]}%`);
+    t('every published coverage percentage matches its locale file', drifted.length === 0);
+    if (drifted.length) console.log(`      ${drifted.join('\n      ')}`);
+  }
 
   /* ------------------------------ receive QR ------------------------------ */
   /*

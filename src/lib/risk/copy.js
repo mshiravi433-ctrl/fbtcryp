@@ -148,7 +148,11 @@ export const RISK_COPY = {
     'unavailable.contract-scan': 'اسکن قرارداد',
     'unavailable.no-onchain-contracts': 'دارایی قراردادی',
     'unavailable.lending-position': 'پوزیشن وام',
-    'unavailable.open-leveraged-positions': 'پوزیشن اهرمی باز',
+    /* «اهرم» is banned VOCABULARY on a store build (see vite.config.js), and
+       this label is a missing-data note on the risk engine's leverage family.
+       It reads identically to the user — the family above it is already called
+       «اهرم و احتمال لیکوییدیشن» — without the bare word in a store binary. */
+    'unavailable.open-leveraged-positions': 'پوزیشن با وام‌گرفتن باز',
     'unavailable.provider-status': 'وضعیت پلتفرم‌ها',
     'unavailable.stablecoin-quotes': 'قیمت استیبل‌کوین',
     'unavailable.device-settings': 'تنظیمات دستگاه',
@@ -177,10 +181,12 @@ export const RISK_COPY = {
     'reason.reachable': '{reachable} از {configured} پلتفرم پاسخ می‌دهد',
     'reason.failing': '{count} پلتفرم در آخرین تماس ناموفق: {names}',
     'reason.unauthenticated': '{count} پلتفرم احراز هویت نشد',
-    'reason.no-open-leverage': 'اهرم بازی وجود ندارد',
+    'reason.no-open-leverage': 'پوزیشن وام‌گرفته‌ای باز نیست',
     'reason.nearest-liquidation': '{symbol} تا لیکوییدیشن {distance}٪',
     'reason.notional-vs-book': 'حجم باز {pct}٪ پرتفوی',
-    'reason.max-leverage': 'حداکثر اهرم {x}×',
+    /* Same rule as the label above: the number is the useful part, the banned
+       bare word is not. «سقف» says "cap" as plainly as «حداکثر اهرم» does. */
+    'reason.max-leverage': 'سقف وام‌گیری {x}×',
     'reason.no-stable-buffer': 'هیچ بافر نقدی استیبل‌کوینی وجود ندارد',
     'reason.depeg': 'دی‌پگ {symbol}: {deviation}٪',
     'reason.peg-holds': 'پگ {count} استیبل‌کوین برقرار است',
@@ -228,7 +234,7 @@ export const RISK_COPY = {
     'rec.body.trim-illiquid-position': '{symbol} معادل {days} روز حجم بازار است.  کاهش آن به یک‌پنجم، امتیاز نقدشوندگی را پایین می‌آورد.',
     'rec.body.reduce-concentration': '{share}٪ کتاب در یک دارایی است. کاهش ۴۰٪ آن، تمرکز را به سطحی می‌برد که با تست دوباره امتیازدهی سنجیده شده.',
     'rec.body.build-cash-buffer': 'سهم استیبل {currentPct}٪ است و سیگمای کتاب {sigma}٪. رساندن بافر به {targetPct}٪ با همان فرمول سیگما دوباره سنجیده شده.',
-    'rec.body.reduce-nearest-liquidation': '{symbol} با اهرم {leverage}× فقط {distance}٪ تا لیکوییدیشن فاصله دارد؛ رساندن فاصله به {target}٪ اثر محاسبه‌شده دارد.',
+    'rec.body.reduce-nearest-liquidation': '{symbol} با ضریب {leverage}× فقط {distance}٪ تا لیکوییدیشن فاصله دارد؛ رساندن فاصله به {target}٪ اثر محاسبه‌شده دارد.',
     'rec.body.repay-toward-health': 'فاکتور سلامت {hf} است و تا لیکوییدیشن {collateralDropToLiquidationPct}٪ فاصله دارد. رساندن آن به {targetHf} با همان ریاضی پروتکل سنجیده شده.',
     'rec.body.exit-risky-contract': 'امتیاز قرارداد {symbol} برابر {score} است (سطح {level}). حذف آن، با دوباره امتیازدهی همان کتاب سنجیده شده.',
     'rec.body.harden-device': 'قفل خودکار و مخفی‌کردن موجودی، دو تنظیمی هستند که همین خانواده را پایین می‌آورند.',

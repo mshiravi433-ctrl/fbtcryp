@@ -65,6 +65,7 @@ const {
   avBudgetLeft,
   alphaVantageMacroConfigured,
   fetchMacroQuotes,
+  MACRO_SYMBOLS,
   _resetMacroDataForTests
 } = await import('../server/macroData.js');
 
@@ -450,9 +451,23 @@ _resetMacroDataForTests();
 const fredOnly = await readMacro();
 t('with stooq and yahoo dark, keyless FRED CSV alone is a valid primary',
   fredOnly.ok && fredOnly.source === 'macroData:fredcsv', `${fredOnly.ok}/${fredOnly.source}/${fredOnly.reason}`);
-t('the FRED-only pass reads the seven series it owns and no equity',
-  fredOnly.items.length === 7 && fredOnly.bySymbol.get('US2S10S')?.kind === 'curve'
-  && !fredOnly.items.some((q) => q.kind === 'equity'), fredOnly.items.length);
+/*
+ * The count is DERIVED, not written down.
+ *
+ * This asserted `items.length === 7` while MACRO_SYMBOLS already declared eight
+ * keyless FRED series (`GOLDPMGBD228NLBM` is the eighth, added to the table
+ * without anyone updating the number here) — so the pass was correct and the
+ * probe reported it as a failure. A hardcoded expected total drifts every time
+ * the table gains an instrument; deriving it from the same table makes the
+ * assertion track the intent instead.
+ */
+const fredOwned = MACRO_SYMBOLS.filter((m) => m.fredcsv);
+t('the FRED-only pass reads every series it owns and no equity',
+  fredOnly.items.length === fredOwned.length
+  && fredOwned.every((m) => fredOnly.bySymbol.has(m.symbol))
+  && fredOnly.bySymbol.get('US2S10S')?.kind === 'curve'
+  && !fredOnly.items.some((q) => q.kind === 'equity'),
+  `${fredOnly.items.length} read / ${fredOwned.length} owned`);
 
 mockFetch((u) => macroHandler(u, { stooq: false, yahoo: false, fred: false }));
 _resetMacroDataForTests();

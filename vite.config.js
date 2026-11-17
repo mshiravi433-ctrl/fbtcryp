@@ -50,7 +50,20 @@ function stripDisabledLocaleCopy() {
   /* Top-level namespaces to drop, and the nav labels that point at them. */
   /* `futures` is the Futures Engine v3 namespace (the On-Chain tab); it is
      gated by the same flag as `perp`/`dydx`/`ostium` and stripped with them. */
-  const drop = speculation ? [] : ['predict', 'perp', 'invest', 'ostium', 'dydx', 'derivatives', 'futures'];
+  /*
+   * NESTED PATHS TOO, not just top-level namespaces.
+   *
+   * Two more surfaces carry perp copy but cannot be dropped wholesale:
+   * `lab2`. The Lab hub guide keeps its stocks/defi sections, so only its
+   * perp and ostium areas can go; and `perpTerminal` is the perp terminal's own
+   * copy. Both were still shipping «اهرم» into a store build after the
+   * top-level namespaces had been removed — the built-output check found them
+   * because it reads strings the way a store filter does.
+   */
+  const drop = speculation ? []
+    : ['predict', 'perp', 'invest', 'ostium', 'dydx', 'derivatives', 'futures', 'perpTerminal'];
+  const dropNested = speculation ? []
+    : ['lab2.guide.areas.perp', 'lab2.guide.areas.stocks.sections.ostium'];
   const navDrop = speculation ? [] : ['predict', 'perp', 'invest', 'ostium', 'dydx', 'derivatives', 'futures'];
 
   return {
@@ -59,7 +72,7 @@ function stripDisabledLocaleCopy() {
     // an ES module; at that point it is still plain text we can parse.
     enforce: 'pre',
     transform(code, id) {
-      if (!drop.length && !navDrop.length) return null;
+      if (!drop.length && !navDrop.length && !dropNested.length) return null;
       if (!/\/src\/i18n\/locales\/[a-z-]+\.json$/.test(id)) return null;
 
       let data;
@@ -73,6 +86,17 @@ function stripDisabledLocaleCopy() {
 
       for (const key of drop) delete data[key];
       if (data.nav) for (const key of navDrop) delete data.nav[key];
+      /* Nested deletions last: each path walks from the root, so a parent that
+         was just deleted leaves nothing to walk into (and that is fine). */
+      for (const path of dropNested) {
+        const parts = path.split('.');
+        let node = data;
+        for (const part of parts.slice(0, -1)) {
+          node = node?.[part];
+          if (!node || typeof node !== 'object') { node = null; break; }
+        }
+        if (node && typeof node === 'object') delete node[parts[parts.length - 1]];
+      }
 
       /*
        * Quest copy referencing removed screens. These are dead keys — no code
@@ -112,6 +136,7 @@ export const SPECULATIVE_SCHEMA = 'fbt.speculative-lexicon.v1';
 export const FUTURES_ACTION_STEMS = Object.freeze([]);
 export const SPECULATE_RISK_STEMS = Object.freeze([]);
 export function leveragePattern() { return /(?!)/; }
+export function leverageIntentPattern() { return /(?!)/; }
 export function detectLeverageText() { return null; }
 export const PERPS_LABELS = Object.freeze({});
 export const SPECULATIVE_VOCABULARY_PRESENT = false;

@@ -221,9 +221,26 @@ export function resolveVerifiedTarget({ symbol, verified, now = Date.now(), wind
     };
   }
   const r = rows[0];
+  /*
+   * ─── NON-EVM ROWS ARE REFUSED HERE, NOT COERCED ────────────────────────
+   *
+   * The evidence layer accepts two row families now: numeric EVM chains with a
+   * 0x address, and `chain: 'solana'` with a base58 mint (round 9, so verified
+   * intelligence can describe Solana at all). This resolver predates that and
+   * still only knew about EVM — which is why it silently coerced a Solana row
+   * through `Number('solana')` and produced a monitor pointing at chain 1.
+   *
+   * An Intent OS monitor cannot watch an SVM mint today: the monitor engine's
+   * chain set is numeric and its transfer reader is EVM. So the honest answer
+   * is a refusal, and BASE58 MUST NEVER BE LOWERCASED — a Solana address is
+   * case-sensitive, and `Dez…` lowercased is a different, valid-looking, wrong
+   * address. That is what the explicit guard below prevents.
+   */
+  const isSolanaRow = String(r.chain ?? '').toLowerCase() === 'solana';
+  if (isSolanaRow) return { error: 'UNSUPPORTED_CHAIN', reason: 'SVM_MONITOR_UNSUPPORTED', chain: 'solana' };
   if (!SM_CHAINS.has(Number(r.chain)) || !SM_ADDRESS.test(String(r.token || '').toLowerCase())) {
-    /* Verified rows are EVM-only by construction; anything else is refused
-       rather than coerced onto chain 1. */
+    /* Anything else that is not a numeric EVM chain we can actually read is
+       refused rather than coerced onto chain 1. */
     return { error: 'UNSUPPORTED_CHAIN' };
   }
   return { row: r, chain: Number(r.chain), token: String(r.token).toLowerCase(), symbol: r.symbol, signal: r.signal };

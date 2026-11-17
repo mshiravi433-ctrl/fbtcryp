@@ -49,6 +49,7 @@ import {
   classifyWallet
 } from './engines.js';
 import { TTL, WINDOWS, FRESH, DEX_SLUGS, CLASSIFY } from './config.js';
+import { budgetTier } from './moneyFlow.js';
 
 const EVM_ADDR = /^0x[a-fA-F0-9]{40}$/;
 const SOL_ADDR = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -843,7 +844,22 @@ export async function analyzeWallet(rawAddress, chainHint = null, opts = {}) {
   const readOpts = { ...opts, timeoutMs, windowMs };
 
   const cacheAddress = isSol ? address : address.toLowerCase();
-  const cacheKey = `sm:wallet:${isSol ? 'solana' : chainId}:${cacheAddress}:${timeoutMs}:${windowMs}`;
+  /*
+   * A CLOCK MAY NOT BE PART OF AN ANSWER'S IDENTITY.
+   *
+   * This key used to embed the live `timeoutMs` — the bounded read budget, which
+   * differs on every request by however long the caller had left. Two visits to
+   * the same wallet within the 120 s TTL therefore produced two different keys,
+   * the cache never hit, and every open of a tracked wallet re-read five
+   * upstream sources. It is the same fault this round fixed in the scan, the
+   * overview and the liquidity feed; this one survived because the wallet page
+   * is the only caller and nobody watched its miss rate.
+   *
+   * `budgetTier` collapses the remaining milliseconds into the four tiers the
+   * rest of the module keys on, so the identity of the answer is the wallet and
+   * the window — not the clock.
+   */
+  const cacheKey = `sm:wallet:${isSol ? 'solana' : chainId}:${cacheAddress}:${budgetTier(timeoutMs)}:${windowMs}`;
   const { value } = await withCache(cacheKey, TTL.wallet, () =>
     isSol ? analyzeSolana(address, readOpts) : analyzeEvm(chainId, address, readOpts)
   );

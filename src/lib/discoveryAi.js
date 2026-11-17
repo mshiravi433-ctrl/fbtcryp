@@ -1,4 +1,5 @@
 import { normalizeText } from './discoveryText.js';
+import { apiBase } from './apiBase.js';
 
 /**
  * DISCOVERY AI — rule-based natural-language interpreter for Web3 discovery.
@@ -160,9 +161,19 @@ export function aiExamplesFor(lang) {
  * rule-based parsing above.
  */
 export async function callDiscoveryAi(query, { signal } = {}) {
-  const base = (() => {
-    try { return (import.meta.env?.VITE_API_BASE || '/api').replace(/\/+$/, ''); } catch { return '/api'; }
-  })();
+  /*
+   * Through apiBase(), never a local re-implementation of it.
+   *
+   * This open-coded `import.meta.env?.VITE_API_BASE || '/api'`, and inside the
+   * packaged app that resolves to https://localhost/api — the phone's OWN
+   * asset server, not our backend. The fallback also could not be reached in
+   * the browser at all: `/api/v1/ai/discovery` is not one of the rewritten
+   * routes, so the graceful "return null, fall back to the rule parser" path
+   * was the ONLY path, and the AI discovery call never worked on the web
+   * either. apiBase() gives the canonical origin in the shell and same-origin
+   * in the browser, which is what this wanted in the first place.
+   */
+  const base = apiBase();
   const url = `${base}/v1/ai/discovery?q=${encodeURIComponent(query)}`;
   try {
     const res = await fetch(url, { signal, headers: { accept: 'application/json' } });

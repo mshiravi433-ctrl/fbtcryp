@@ -184,6 +184,8 @@
       "rank": "Rank",
       "mcap": "Market cap",
       "change": "24h change",
+      "change1h": "1h change",
+      "change7d": "7d change",
       "volume": "24h volume",
       "price": "Price"
     },
@@ -236,7 +238,48 @@
       "aria": "Market screen tabs",
       "overview": "Overview",
       "tokens": "Tokens"
-    }
+    },
+    "horizon": {
+      "1h": "1h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "horizonAria": "Price change time horizon",
+    "horizonMissing": "{{count}} coins have no figure for this window and show «—».",
+    "columnsAria": "Market table columns",
+    "colName": "Name",
+    "colPrice": "Price",
+    "colVolume": "Volume",
+    "colPriceAria": "Sort by price",
+    "colVolumeAria": "Sort by 24h volume",
+    "colChangeAria": "Sort by change over {{window}}",
+    "dirToAsc": "Ascending — smallest and worst first",
+    "dirToDesc": "Descending — largest and best first",
+    "criteriaAllHeadline": "All coins, in the order you chose",
+    "criteriaSectorHeadline": "The sector: {{sector}}",
+    "criteriaSearchHeadline": "Results for «{{query}}»",
+    "criteriaIntentHeadline": "Ranked for: «{{query}}»",
+    "criteriaFavoritesHeadline": "Your starred coins",
+    "criteriaOrderChip": "{{column}} · {{dir}}",
+    "criteriaAsc": "ascending",
+    "criteriaDesc": "descending",
+    "criteriaRemove": "Remove filter: {{item}}",
+    "criteriaReset": "Reset all",
+    "criteriaAllShown": "All {{count}} rows shown",
+    "criteriaInMemory": "{{shown}} of {{total}} — the rest is already loaded",
+    "criteriaNeedsRequest": "{{shown}} of {{total}} — the next page is a request",
+    "criteriaOfTotal": "{{shown}} of {{total}}",
+    "liveCount": "{{count}} rows",
+    "liveCountOf": "{{shown}} of {{total}} rows",
+    "liveNone": "No rows match",
+    "liveViewAll": "all coins",
+    "liveViewGainers": "gainers",
+    "liveViewLosers": "losers",
+    "liveViewVolume": "by volume",
+    "liveViewFavorites": "your stars",
+    "liveViewSector": "sector: {{sector}}",
+    "liveOrderAsc": "{{column}}, ascending",
+    "liveOrderDesc": "{{column}}, descending"
   },
   "coin": {
     "notFound": "Coin not found",
@@ -366,12 +409,49 @@
     "swapDockAria": "Buy {{symbol}}",
     "detailTabs": {
       "aria": "Token details",
+      "identity": "Overview",
       "trade": "Buy / sell",
       "history": "What the past says",
       "compare": "Compare",
       "smartMoney": "Smart money"
     },
-    "smartMoneyUnavailable": "On-chain smart-money data is not available for this asset."
+    "smartMoneyUnavailable": "On-chain smart-money data is not available for this asset.",
+    "identity": {
+      "identity": "Overview",
+      "aboutTitle": "What this token is",
+      "noDescription": "The feed did not send a description for this token.",
+      "officialSite": "Official site",
+      "source": "Figures from {{provider}}",
+      "historyTitle": "Its whole history",
+      "fromAth": "From all-time high",
+      "fromAtl": "From all-time low",
+      "dayLow": "24h low",
+      "dayHigh": "24h high",
+      "dayPosition": "Position in today’s range",
+      "dayPositionValue": "{{pct}}% of the way up",
+      "supplyTitle": "Supply and liquidity",
+      "circulating": "Circulating",
+      "maxSupply": "Maximum",
+      "uncapped": "No cap",
+      "turnover": "Daily turnover",
+      "turnoverHint": "volume ÷ market cap",
+      "marketShare": "Share of market",
+      "unlocked": "Already circulating",
+      "unlockedValue": "{{pct}}% of the cap",
+      "globalTitle": "What the wider market does to it",
+      "globalNote": "Measured over the last 24 hours against the average move of the whole market — not a forecast.",
+      "marketMove": "Market 24h",
+      "tokenMove": "This token 24h",
+      "agreement": "Direction",
+      "agreement_with": "With the market",
+      "agreement_against": "Against the market",
+      "agreement_flat": "Barely moving",
+      "amplification": "Range vs market",
+      "versusBtc": "Vs Bitcoin",
+      "versusBtcHint": "percentage points",
+      "unavailable": "—",
+      "missingData": "Some figures are missing because the feed that answered did not send them; they are shown as «—» rather than as zero."
+    }
   },
   "trade": {
     "title": "Trade",
@@ -3360,7 +3440,11 @@
       "bullish": "up",
       "neutral": "flat",
       "bearish": "down",
-      "hint": "From {{n}} similar {{d}}-day windows in this coin’s own history"
+      "hint": "From {{n}} similar {{d}}-day windows in this coin’s own history",
+      "vsBase": "Conditional vs base rate",
+      "costIfWrong": "Loss if the adverse half happens ({d}d)",
+      "gainIfRight": "Gain if the favourable half happens",
+      "conditioned": "Weighted over {n} historical windows; {e} look-alike windows effectively. A conditional frequency, not a forecast."
     },
     "invalidationBelow": "below now",
     "backtestHistory": "How this setup did before",
@@ -3523,7 +3607,30 @@
         "liquidityActive": "Liquidity active",
         "liquidityThin": "Liquidity thin",
         "marketSentimentUp": "Sentiment bullish",
-        "marketSentimentDown": "Sentiment bearish"
+        "marketSentimentDown": "Sentiment bearish",
+        "oneSidedBuy": "one-sided buy tape",
+        "oneSidedSell": "one-sided sell tape",
+        "moveBroadUp": "broad up-move",
+        "moveBroadDown": "broad down-move",
+        "moveHollowUp": "hollow up-move",
+        "moveHollowDown": "hollow down-move",
+        "relativeStrengthUp": "outperforming BTC",
+        "relativeStrengthDown": "underperforming BTC",
+        "volumeWithTrend": "volume with trend",
+        "volumeWithDowntrend": "volume with downtrend",
+        "volumeHollow": "thin-volume rally",
+        "moveAnomaly": "unusual last step",
+        "tapeOneSidedBuy": "one-sided buy tape",
+        "tapeOneSidedSell": "one-sided sell tape",
+        "broadParticipationUp": "broad participation ↑",
+        "broadParticipationDown": "broad participation ↓",
+        "hollowRally": "hollow rally",
+        "hollowSelloff": "hollow sell-off",
+        "outperformingMarket": "outperforming BTC",
+        "underperformingMarket": "underperforming BTC",
+        "patternRepeat": "shape repeated",
+        "sourcesAgree": "Sources agree",
+        "sourcesConflict": "Sources conflict"
       },
       "smartMoney": {
         "title": "SMART MONEY",
@@ -3667,10 +3774,20 @@
           "highConcentration": "Portfolio is highly concentrated.",
           "existingPositionUp": "You already hold this asset.",
           "noExistingPosition": "No existing position — signal adds diversification.",
-          "balanced": "Portfolio impact is balanced."
+          "balanced": "Portfolio impact is balanced.",
+          "riskLargeShare": "This signal can cost a large share of the book.",
+          "signalAgainstHolding": "The call points against a position you hold.",
+          "signalAgainstEntry": "The call is against entering here.",
+          "stopCostly": "The stop distance alone is a material cost for this position."
         },
         "local": "Computed locally from your app positions. Nothing was sent anywhere.",
-        "subtitle": "How the selected signal affects your current asset mix."
+        "subtitle": "How the selected signal affects your current asset mix.",
+        "valueUsd": "Position value",
+        "riskUsd": "Measured downside",
+        "riskOfBook": "Downside / book",
+        "scenarioLoss": "Loss if the adverse scenario happens",
+        "stopCost": "Loss if the stop is hit",
+        "bookAfterRisk": "Book after that downside"
       },
       "history": {
         "title": "SIGNAL HISTORY",
@@ -3754,9 +3871,86 @@
       "breadth": "Top-20 up today",
       "avgChange": "Avg 24h move",
       "turnover": "Volume / mcap",
-      "trendTitle": "{{symbol}} price trend"
+      "trendTitle": "{{symbol}} price trend",
+      "behavior": {
+        "title": "Token behaviour",
+        "participation": "Step participation",
+        "spikeShare": "Largest single step",
+        "pressure": "Tape pressure",
+        "relative": "vs BTC (same window)",
+        "volume": "Volume vs trend",
+        "anomaly": "Latest step (σ)",
+        "pattern": "Pattern repeat",
+        "patternSeen": "same shape {{n}} steps ago",
+        "biasUp": "structure: buying",
+        "biasDown": "structure: selling",
+        "biasFlat": "structure: mixed",
+        "note": "Measured from this token’s own price steps and its market row — participation, one-sidedness, relative strength, volume agreement and shape. It describes what the tape did; it is not a forecast.",
+        "vol": {
+          "accumulating": "rising with volume",
+          "distributing": "falling with volume",
+          "hollow-rally": "rising, thin volume",
+          "drifting-down": "falling, thin volume",
+          "balanced": "in line with volume",
+          "unclear": "unmeasured"
+        },
+        "edgeWhen": "Edge when {kind}",
+        "edgeBroad": "participation was broad",
+        "edgeSpiky": "the move was spiky"
+      }
     },
-    "aiPowered": "Powered by AI"
+    "aiPowered": "Powered by AI",
+    "behaviorEdge": {
+      "title": "Tape-conditioned replay",
+      "summary": "{n} setups · edge {edge}",
+      "broad": "Broad participation",
+      "spiky": "Spiked move",
+      "edge": "edge vs its own base rate",
+      "hits": "{n} setups · {rate}% hit",
+      "note": "The same rule, replayed and split by the tape at the moment it fired. Nothing is fitted: it is reported because the split is measurable, and a bucket with too few occurrences is not shown at all.",
+      "none": "Not enough history to split this rule by tape yet."
+    },
+    "consensus": {
+      "title": "Source consensus",
+      "split": "Split: {a} vs {b}",
+      "plane": {
+        "technical": "Technical",
+        "behavior": "Tape behaviour",
+        "smartMoney": "Smart money",
+        "market": "FBT Global + forecast"
+      }
+    },
+    "accel": {
+      "title": "Signal acceleration",
+      "state": {
+        "accelerating": "building ↑",
+        "fading": "fading ↓",
+        "steady": "steady ·",
+        "reversing": "reversed"
+      }
+    },
+    "copyTrade": {
+      "title": "Copy-trade for this signal",
+      "side": "Side the evidence implies",
+      "conviction": "Evidence conviction",
+      "gates": "Gates passed",
+      "blockedBy": "Copying is not advised — these gates failed: {{gates}}",
+      "conflictNote": "The evidence conflicts; until it clears, copying is not advised.",
+      "size": "Planned size",
+      "stopTarget": "Stop / target",
+      "riskUsd": "Risk in dollars",
+      "riskOfBook": "Risk of portfolio",
+      "gate": {
+        "identity": "Contract identity",
+        "evidence": "Evidence",
+        "direction": "Direction",
+        "agreement": "Sources agree",
+        "freshness": "Evidence freshness",
+        "liquidity": "Liquidity depth",
+        "concentration": "Holder concentration",
+        "sizing": "Size"
+      }
+    }
   },
   "stocks": {
     "held": {
@@ -13391,7 +13585,8 @@
       "window6h": "6 hours",
       "noData": "No trade data for this contract reached the server in this window. Nothing is shown as zero — an absent reading is not a flat market.",
       "source": "Source",
-      "walletsTraded": "Wallets trading · not verified"
+      "walletsTraded": "Wallets trading · not verified",
+      "windowCovered": "These figures describe the {{window}} window only, nothing longer."
     },
     "engine": {
       "label": "VERIFIED ON-CHAIN INTELLIGENCE",
@@ -13565,7 +13760,28 @@
       "statusScored": "Scored",
       "copyTradeNote": "Copy trade opens the swap screen with the same token and side; amount, fees and final confirmation stay yours.",
       "liquidityShort": "Liquidity",
-      "noPrice": "Price unavailable"
+      "noPrice": "Price unavailable",
+      "evidenceBoard": "Mean evidence: {{n}}/100",
+      "evidenceEstablished": "{{n}} of {{total}} wallets rest on an established sample",
+      "evidenceThin": "{{n}} wallets have too small a sample to judge yet",
+      "evidenceConcentrated": "{{pct}}% of this board's evidence sits in one wallet",
+      "evidenceRaw": "(raw {{n}})",
+      "evidenceAdjustedNote": "The score is weighted by its evidence: a small sample pulls it toward the midpoint and never lifts it.",
+      "evidenceVerdict": {
+        "strong": "Strong evidence",
+        "fair": "Fair evidence",
+        "thin": "Thin sample",
+        "weak": "Weak result",
+        "unmeasured": "Unmeasured"
+      },
+      "gap": {
+        "closes": "{{have}} of {{need}} closes",
+        "days": "{{have}} of {{need}} days",
+        "coverage": "coverage {{have}} of {{need}}",
+        "score": "score {{have}} of {{need}}",
+        "winRate": "win rate {{have}}% of {{need}}%",
+        "realized": "no realized profit yet"
+      }
     },
     "title": "Smart Money",
     "windowAria": "Time window",
@@ -13757,8 +13973,67 @@
     "copyTradeShort": "Copy",
     "pods": {
       "reading": "reading the verified engine",
-      "stale": "last successful engine read"
-    }
+      "stale": "last successful engine read",
+      "admitted": "{{n}} admitted, not voting",
+      "admittedButNotVoting": "{{admitted}} wallets cleared admission but only {{voting}} can vote: voting needs a 70+ score, 60%+ coverage, 5+ closes, positive realized P&L and a 55%+ win rate."
+    },
+    "whalesScope": "This board covers EVM chains only",
+    "solWhalesTitle": "Solana whales",
+    "solWhaleMoved": "{{n}} SOL moved",
+    "solWhaleToVenues": "SOL into exchanges (sell intent)",
+    "solWhaleFromVenues": "SOL out of exchanges (accumulation)",
+    "solWhaleWalletToWallet": "Wallet to wallet",
+    "solWhaleNoLean": "No movement touched a named venue, so no direction is read. Wallet-to-wallet flow is not a buy or a sell.",
+    "solWhaleLeanConfident": "Direction from {{n}} labelled movements: {{side}}",
+    "solWhaleLeanThin": "Direction from {{n}} labelled movements: {{side}} — thin evidence",
+    "solWhaleAccumulating": "accumulating (leaving exchanges)",
+    "solWhaleDistributing": "distributing (into exchanges)",
+    "solWhaleCoverage": "This is a sample, not a census: one block is read per window and reused for up to {{reused}} minutes ({{n}} block per refresh). The figures describe that sample only.",
+    "solWhaleEmpty": "No large movement in the sampled block.",
+    "solWhaleUnavailable": "The Solana whale feed is unavailable right now — no figure was guessed.",
+    "freshReadCount": "{{n}} verified fresh wallets",
+    "freshReadCapital": "Verified capital",
+    "freshReadDominant": "One actor holds {{pct}}% of it",
+    "freshReadBroad": "Capital is spread across actors",
+    "freshReadUnverified": "{{n}} rows dropped for having no verifiable counter",
+    "solWalletsTitle": "Solana whale wallets",
+    "solWalletsMoved": "{{sol}} SOL moved",
+    "solWalletsNet": "net in this sample",
+    "solWalletsMovements": "{{n}} movements",
+    "solWalletsConcentrated": "{{pct}}% of the sample is one wallet",
+    "solWalletsSample": "Only wallets in this sampled block (slot {{n}}). The rank means “largest in this window”, not “largest on Solana”.",
+    "solWalletsEmpty": "No wallet in this sample crossed the threshold.",
+    "freshReadEarly": "{{n}} of them are still «early»",
+    "freshReadEarlyLive": "{{n}} still actionable",
+    "freshReadRoundTrips": "{{n}} took the money out again",
+    "freshReadLate": "{{n}} no longer fresh — the window closed",
+    "freshSinceWindow": "counters from the last movement, ceiling 25 tx",
+    "earlyScore": "Earlyness score",
+    "earlyLabel": "Earlyness",
+    "earlyLabelEarly": "Early",
+    "earlyLabelWatch": "Early and held",
+    "earlyLabelLate": "Too late",
+    "earlyLabelRoundTrip": "Round trip",
+    "earlyLabelStale": "Stale",
+    "earlyLabelUnmeasured": "Not measured",
+    "earlyRefused": "Not enough timing evidence",
+    "earlyNoteQuality": "Being early is a fact about timing, not skill: a wallet this young has no track record.",
+    "watchDigest": "Tracking digest",
+    "watchDigestActive": "{{n}} wallets changed since you tracked them",
+    "watchDigestQuiet": "{{n}} wallets unchanged",
+    "watchDigestPending": "{{n}} wallets never read",
+    "watchDigestUnavailable": "{{n}} wallets: the source did not answer",
+    "watchDigestStillEarly": "{{n}} still young",
+    "watchTrackedSince": "since tracking",
+    "watchNoBaseline": "no baseline recorded",
+    "watchStatusActive": "changed",
+    "watchStatusQuiet": "unchanged",
+    "watchStatusStale": "quiet a while",
+    "watchStatusPending": "not read",
+    "watchStatusUnavailable": "source offline",
+    "watchStatusUnmeasured": "not comparable",
+    "watchReadNow": "Read these wallets",
+    "watchBaselineNote": "Change is measured against the figures at the moment you tracked it, never against zero."
   },
   "crossChain": {
     "youReceive": "You receive",
@@ -18881,5 +19156,21 @@
     "pairModalSub": "Search by ticker or filter by settlement venue",
     "pairModalClose": "Close",
     "pairModalCount": "{{n}} markets"
+  },
+  "copyTrade": {
+    "none": "No plan to copy",
+    "noEvidence": "Not enough evidence read for this copy",
+    "conflict": "Evidence conflicts — copying is not advised until it clears",
+    "blocked": "A gate failed — see the token card",
+    "thin": "Thin evidence — small size only",
+    "fair": "Evidence agrees with the signal",
+    "strong": "Strong evidence, agrees with the signal",
+    "note": "This reading comes from data already on screen. It is not a buy or sell recommendation and it signs nothing.",
+    "provenance": {
+      "verified": "Verified wallets",
+      "labelledActivity": "Labelled scanner activity",
+      "unqualifiedTape": "Large swaps, identity unverified",
+      "whaleBoard": "Whale board"
+    }
   }
 }

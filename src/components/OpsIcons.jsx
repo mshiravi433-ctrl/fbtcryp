@@ -40,9 +40,21 @@ import {
 import {
   IconBridge, IconLeaf, IconDroplet, IconBolt, IconTarget, IconScale, IconPie,
   IconEye, IconBars, IconWhale, IconRobot, IconCalendar, IconArrowUp,
-  IconMinus, IconRepeat, IconStar, IconUsers, IconRadar, IconSwords,
+  IconMinus, IconRepeat, IconUsers, IconRadar, IconSwords,
   IconLayers, IconReceipt, IconChip, IconCrystal, IconCalculator, IconMedal
 } from './OpsIconSet.jsx';
+/*
+ * `IconStar` comes from the FIRST-PAINT set, not the ops set.
+ *
+ * It was defined twice — once here and once in OpsIconSet.jsx — and the ops
+ * copy is the one that tripped the ratchet in test/intent-ai/ops-i18n-probe.mjs:
+ * an ops-only icon must not also exist in Icons.jsx, because that module is
+ * imported by the nav and lands in the first-paint chunk. The star genuinely
+ * belongs there (Discover, Market and Shop all draw it), so the DUPLICATE is
+ * what had to go. One component, one home, and the first-paint chunk does not
+ * grow by re-exporting it from a second file.
+ */
+import { IconStar } from './Icons.jsx';
 
 /** Category id → icon component. */
 export const CATEGORY_ICONS = Object.freeze({

@@ -13,7 +13,24 @@ import lazyRetry from '../lib/lazyRetry';
  * so a failed fetch retries instead of poisoning the module map for the
  * lifetime of the document.
  */
-const PerpAutoOrders = lazyRetry(() => import('../components/orders/PerpAutoOrders.jsx'));
+const PerpAutoOrders = lazyRetry(() =>
+  /*
+   * THE FLAG IS INSIDE THE IMPORT, NOT AROUND THE COMPONENT.
+   *
+   * `lazy(() => import('…'))` is a static dependency: Rollup emits the chunk
+   * whether or not a caller ever renders it. Wrapping <PerpAutoOrders/> in
+   * `{PERP_TERMINAL_ENABLED && …}` therefore hid the CARD but kept shipping
+   * the perp-venue bundle — the store-safe build check caught exactly that,
+   * still finding PerpAutoOrders-*.js in a build with speculation disabled.
+   *
+   * With the flag guarding the dynamic import itself, the constant folds to
+   * false in a store build and Rollup drops the module (and the dYdX/Ostium
+   * SDK surface behind it) entirely. In a full build nothing changes.
+   */
+  PERP_TERMINAL_ENABLED
+    ? import('../components/orders/PerpAutoOrders.jsx')
+    : Promise.resolve({ default: () => null })
+);
 import Sheet from '../components/Sheet';
 import { useWallet } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
@@ -89,6 +106,7 @@ import AutopilotPanel from '../components/AutopilotPanel';
 import AutopilotGuideSheet from '../components/AutopilotGuideSheet';
 import OrdersHero from '../components/OrdersHero';
 import '../styles/orders-hero.css';
+import { PERP_TERMINAL_ENABLED } from '../lib/features.js';
 
 /**
  * ORDERS — limit orders and DCA plans.
@@ -836,9 +854,21 @@ export default function Orders() {
           Suspense fallback stays null — the card appears when its chunk does,
           and a spinner in the rail would shift the other seven under a thumb.
         */}
-        <Suspense fallback={null}>
-          <PerpAutoOrders lang={i18n?.language} />
-        </Suspense>
+        {/*
+          GATED BY THE SAME FLAG AS THE ROUTE.
+          The card was mounted unconditionally, so a store build with
+          VITE_ENABLE_SPECULATION=false still shipped ~60 KB of perp-venue UI
+          (PerpAutoOrders + the dYdX/Ostium SDK surface) and the Persian words
+          «پیش‌بینی قیمت»/«اهرم» that the store-safe build check scans for.
+          A card that can only act on perp venues must not exist in a build
+          where perp venues are switched off — that is the whole contract of
+          the store build, and this is the one place that was ignoring it.
+        */}
+        {PERP_TERMINAL_ENABLED && (
+          <Suspense fallback={null}>
+            <PerpAutoOrders lang={i18n?.language} />
+          </Suspense>
+        )}
       </div>
 
       {/*

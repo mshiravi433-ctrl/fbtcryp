@@ -1,0 +1,216 @@
+/* FBT MARKET · THE BENCHMARK PASS («از بهترین‌های این حوزه»)
+   ===========================================================================
+   Requested: «صفحه بازار باید از بهترین های این ام باشد از صفحات مهم مثل باینس
+   الهام بگیر تا بهترین شکل و دیزاین صفحه و بنر را داشته باشیم».
+
+   ─── WHAT WAS ACTUALLY COPIED, AND WHAT WAS NOT ────────────────────────────
+   A market page is not imitated by its colours — Binance's yellow on #0b0e11
+   is branding, and copying it would make this app a knock-off. What the good
+   ones share is BEHAVIOUR, and this sheet takes exactly three of those habits
+   and leaves the brand alone:
+
+     1 · ONE ROW IS ONE TARGET. Every mature market table lights the whole row
+         when the pointer is anywhere on it, including its action cell. Here the
+         row and its swap button are two grid cells of one `.mx-coin-row`, so
+         hovering the swap button left the row beside it unlit — the two halves
+         of a row disagreed about whether they were the same row.
+
+     2 · THE COLUMN LABELS FOLLOW THE SCROLL. A 250-row table whose header
+         scrolls away is a table you have to re-identify every screenful. This
+         screen has had a header since 2026-11-12 and it deliberately did not
+         stick (see the note in MarketColumnHeader.jsx) — a defensible trade at
+         390px, and the wrong one at 1440px, where the header costs nothing and
+         the reader is 40 rows deep in a list of five numbers they can no longer
+         name.
+
+     3 · ON A PHONE, THE COPY GETS THE WIDTH, NOT THE ORNAMENT. A phone hero is
+         a headline, one sentence and two buttons across the full measure. This
+         banner put a 126px drawn sculpture beside a 227px text column, which is
+         what makes a 390px screen read as a shrunken desktop page instead of a
+         phone page.
+
+   ─── THE BUDGET THIS SHEET IS NOT ALLOWED TO BREAK ─────────────────────────
+   `market-perf.css` is the scroll budget and it is imported last, on purpose.
+   Nothing here may add a per-frame raster, so:
+
+     · NO `animation` at all, and no `@keyframes` — this sheet is static;
+     · NO `backdrop-filter`, `mask`, `filter` or `will-change`;
+     · every `transition` names `border-color` or `transform` only — the two
+       properties `market-perf.css` §5 left legal, because both are compositor
+       work on a row that already carries `contain: paint`;
+     · the sticky header paints ONE opaque rectangle, not a blur: a blur that
+       samples the 60 rows sliding under it is the exact per-frame cost this
+       route spent three passes removing.
+
+   ─── WHY A NEW SHEET AND NOT AN EDIT TO THE FIVE BEFORE IT ─────────────────
+   Same reason `market-surface.css` is its own sheet: every earlier layer is
+   pinned by its own regression suite, and those pins describe DECISIONS that
+   are still right at the width they were made for. This file overrides the
+   three shapes above and owns the reason; the earlier sheets keep owning
+   theirs.
+   ========================================================================== */
+
+/* ══ 1 · ONE ROW IS ONE TARGET ═════════════════════════════════════════════
+   MEASURED BEFORE: `.mx-coin-row` is a two-cell grid — the card
+   (`> .coin-row`, 1fr) and the swap satellite (`> .mx-swap-slot`, 62px). Each
+   had its own hover paint and neither knew about the other, so moving the
+   pointer eight pixels to the right dropped the row's light entirely while the
+   button lit up on its own. On the 60-row list that reads as a flicker between
+   two unrelated objects.
+
+   NOW: while the pointer is anywhere in the row, the CARD also shows its hover
+   border — but only when the card itself is not the thing being hovered, so
+   this never competes with (or delays) the card's own hover state. The colour
+   is the card's existing hover border, not a new one: `rgba(102, 229, 225, …)`
+   is the cyan this screen already uses for "this row is live" (see
+   market-intelligence.css §8, the row's own `:hover`).
+
+   `border-color` only — the property market-perf.css §5 proved is free. A
+   background or shadow on this state would re-rasterise a four-layer inset
+   paint on every row the pointer crosses. */
+@media (hover: hover) {
+  .mx-market .mx-coin-row:hover > .coin-row:not(:hover) {
+    border-color: rgba(102, 229, 225, .35);
+  }
+}
+
+/* The same rule for the keyboard: focusing either control in the row marks the
+   row. `:focus-within` is on the wrapper, so a reader tabbing to «سواپ» sees
+   the whole row they are standing in, which is the pointer user's experience
+   reproduced for the keyboard. No transition: focus is instant by design. */
+.mx-market .mx-coin-row:focus-within > .coin-row {
+  border-color: rgba(102, 229, 225, .35);
+}
+
+/* ══ 2 · THE COLUMN LABELS FOLLOW THE SCROLL (≥620px only) ═════════════════
+   WHY NOT ON A PHONE. The sticky tab strip above this table is 52px, and the
+   app bar above THAT is 59px — 111px of a 844px screen, 13%, before the first
+   row. A third band would be the fourth thing competing for the top of a
+   phone. It is also unnecessary there: the phone row prints FOUR values
+   (rank, logo, name, price over the pill) against the desktop's five, and the
+   horizon pill on every row already says what the percentage is measured over.
+
+   WHY ≥620px. The desktop row is a five-column scan and the header is the only
+   place that says which of the two stacked numbers in the right cell is the
+   price and which is the change. Forty rows into a list that is exactly the
+   question a reader has.
+
+   THE OFFSET IS MEASURED, NOT GUESSED. `--market-tabs-top` is published by
+   MarketTabStrip from the real app bar height (it carries
+   `env(safe-area-inset-top)`, so it is not a constant), and `--market-tabs-h`
+   is that strip's own height, published in the same effect. The header tucks
+   one pixel under it, so the two bands read as one edge instead of two.
+
+   THE FALLBACKS ARE REAL VALUES. `calc(63px + 52px)` is what the two measured
+   properties resolve to on a phone-sized bar, so a first paint or a test DOM
+   with no layout engine puts the header where it belongs rather than at the
+   top of the page. */
+@media (min-width: 620px) {
+  .mx-market .mx-colhead[data-sticky='true'] {
+    position: sticky;
+    top: calc(var(--market-tabs-top, 63px) + var(--market-tabs-h, 52px) - 1px);
+    z-index: 11;
+    /* Opaque, and painted from the same token as the cards it labels — a
+       gradient plate here would be a sixth material, and a BLUR here would
+       sample the rows sliding beneath it on every frame. */
+    background: var(--mx-panel);
+    /* The band's own lower edge. Drawn as a border on the band rather than as
+       a line in the list, so it scrolls with the header it belongs to. */
+    border-block-end: 1px solid var(--mx-line);
+    /* The labels sit on their own plate now, so they regain the inset the
+       no-material version did not need: without it the first label touches the
+       card's left edge and the band looks like a mistake. */
+    padding-block: 6px 7px;
+    padding-inline: 12px;
+    /* A plate cannot have square corners in a design where every other surface
+       has a radius; the bottom two only, because the top edge is a seam. */
+    border-end-start-radius: 12px;
+    border-end-end-radius: 12px;
+  }
+
+  /* The pill above it is centred and 420px wide; the band beneath is full
+     width. Without this the band's rounded ends float over nothing, so the
+     list's own top padding collapses into a gap that reads as a broken card.
+     Giving the header the same horizontal inset as a row aligns the labels to
+     the values they name — which is the entire point of a header. */
+  .mx-market .mx-colhead[data-sticky='true'] .mx-col-btn {
+    /* The sort buttons are the tappable part; the plate is already inset. */
+    margin-inline: 0;
+  }
+}
+
+/* ══ 3 · ON A PHONE THE COPY GETS THE WIDTH ════════════════════════════════
+   MEASURED BEFORE, at 390px: the banner's body is
+   `grid-template-columns: minmax(0, 1fr) 126px` with an 11px gap inside 26px
+   of padding, so the copy column is 390 − 26 − 126 − 11 = 227px. A headline in
+   227px at 16.5px is three lines; the sentence under it is four; and the whole
+   thing sits beside a DRAWN SCULPTURE that carries no reading at all — it is
+   `aria-hidden` in the component and its every element is decoration.
+
+   That is the single most "desktop page squeezed into a phone" thing on this
+   screen, and it is the opposite of the phone hero on every market app worth
+   copying: full measure, or nothing.
+
+   So below 680px the sculpture steps aside — CSS only. The element stays in
+   the markup (its `is-active` artwork swap is driven by state, and removing it
+   from the tree would make the component's own scene logic a special case) and
+   it is `display: none`, so it also stops being a compositor layer. The copy
+   then takes the full 364px: the title drops from three lines to two, the
+   sentence from four to three, and the banner gets SHORTER while getting more
+   legible — it does not push the list down, it pulls it up.
+
+   Nothing is deleted: no locale key, no element, no state. Above 680px the
+   sculpture keeps its column, because there it is the thing that makes the
+   banner look like a flagship rather than a text block. */
+@media (max-width: 679px) {
+  .mx-market .mhb-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .mx-market .mhb-stage {
+    display: none;
+  }
+}
+
+/* ══ 4 · THE BANNER JOINTS THE SAME SURFACE SCALE ══════════════════════════
+   The banner was the one flagship surface on this route that did not answer to
+   `market-surface.css`: it carried a literal 26px radius (and 22px on a phone,
+   and 22px again under `[data-compact]`), a 14px CTA and a 13px pod — four
+   numbers, three of them invented in this file, on the one card a reader meets
+   first.
+
+   They now read from the same four tiers as every other card, so the crown of
+   the page cannot drift from the page again:
+
+     the banner      = hero     (32 / 26 / 22 … 26 / 22 / 18 … 22/21/20)
+     the CTAs        = control  (18 / 17 / 14)
+     the three pods  = control  (18 / 17 / 14)
+
+   A pod 42px tall with an 18px radius is a soft rounded tile rather than the
+   stadium it becomes at 21px — the shape Binance, Coinbase and every dense
+   market table converge on for a metric tile, and the shape that lets three of
+   them sit shoulder to shoulder without reading as three buttons.
+
+   No colour, shadow or size changes here: only the corner. The tier values
+   live in market-surface.css and move together. */
+.mx-market .mhb {
+  border-radius: var(--mx-r-hero);
+}
+.mx-market .mhb-cta,
+.mx-market .mhb-pod {
+  border-radius: var(--mx-r-control);
+}
+
+/* The phone rules in market-hero-banner.css hardcode 22px for the banner and
+   14px for the CTA. They are earlier in the cascade, but a literal beats
+   nothing only while nobody overrides it — this states the intent for the
+   width where the tier is 22/14 anyway, so the two agree by construction and a
+   token change cannot leave the phone behind. */
+@media (max-width: 679px) {
+  .mx-market .mhb {
+    border-radius: var(--mx-r-hero);
+  }
+  .mx-market .mhb-cta,
+  .mx-market .mhb-pod {
+    border-radius: var(--mx-r-control);
+  }
+}

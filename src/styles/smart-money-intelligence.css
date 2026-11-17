@@ -1312,6 +1312,87 @@
 
 .smi-wcard-score-val { font-size: 19px; font-weight: 900; color: #5df2c0; }
 
+/* ─── round 8 · sample evidence on the verified board ────────────────────────
+   A badge, a shrunk score and one row of chips — no new card, panel or tab.
+   The verdict colours say what the number is worth, not how good the wallet is:
+   `thin` is amber (wait), NOT red (bad), because a small sample is not a fault
+   of the trader. Only `weak` reports a poor measured result. */
+.smi-wcard-badge.smi-ev {
+  border-color: rgba(148, 170, 205, 0.28);
+  background: rgba(148, 170, 205, 0.1);
+  color: var(--sm-ink-dim, #9fb0c9);
+  font-weight: 800;
+}
+
+.smi-wcard-badge.smi-ev--strong {
+  border-color: rgba(46, 230, 168, 0.4);
+  background: rgba(46, 230, 168, 0.14);
+  color: #8ff7d8;
+}
+
+.smi-wcard-badge.smi-ev--fair {
+  border-color: rgba(120, 190, 255, 0.32);
+  background: rgba(120, 190, 255, 0.1);
+  color: #a9d6ff;
+}
+
+.smi-wcard-badge.smi-ev--thin {
+  border-color: rgba(255, 194, 75, 0.36);
+  background: rgba(255, 194, 75, 0.1);
+  color: var(--sm-amber, #ffc24b);
+}
+
+.smi-wcard-badge.smi-ev--weak {
+  border-color: rgba(255, 120, 120, 0.34);
+  background: rgba(255, 120, 120, 0.1);
+  color: #ff9a9a;
+}
+
+/* The raw score, beside the adjusted one: small and quiet, because the point
+   is provenance, not a second headline. */
+.smi-wcard-score-raw {
+  display: block;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 700;
+  opacity: 0.72;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The board's own evidence line, above the grid. */
+.smi-ev-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.smi-ev-summary .smi-chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--sm-line, rgba(148, 170, 205, 0.16));
+  background: var(--sm-surface-2, rgba(255, 255, 255, 0.045));
+  color: var(--sm-ink-dim, #9fb0c9);
+  font-size: 9px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.smi-ev-summary .smi-chip.is-ok { color: #8ff7d8; border-color: rgba(46, 230, 168, 0.3); }
+.smi-ev-summary .smi-chip.is-thin { color: var(--sm-amber, #ffc24b); border-color: rgba(255, 194, 75, 0.3); }
+.smi-ev-summary .smi-chip.is-warn { color: var(--sm-amber, #ffc24b); border-color: rgba(255, 194, 75, 0.36); }
+
+/* Light theme twins: every one of these has to stay readable on white. */
+:root[data-theme='light'] .smi-wcard-badge.smi-ev { color: #4a5a70; border-color: rgba(15, 23, 42, 0.18); }
+:root[data-theme='light'] .smi-wcard-badge.smi-ev--strong { color: #00704f; border-color: rgba(0, 150, 111, 0.28); }
+:root[data-theme='light'] .smi-wcard-badge.smi-ev--fair { color: #14568a; border-color: rgba(20, 86, 138, 0.26); }
+:root[data-theme='light'] .smi-wcard-badge.smi-ev--thin { color: #8a5a00; border-color: rgba(160, 106, 0, 0.32); }
+:root[data-theme='light'] .smi-wcard-badge.smi-ev--weak { color: #a32626; border-color: rgba(163, 38, 38, 0.28); }
+:root[data-theme='light'] .smi-ev-summary .smi-chip { color: #4a5a70; }
+:root[data-theme='light'] .smi-ev-summary .smi-chip.is-ok { color: #00704f; }
+:root[data-theme='light'] .smi-ev-summary .smi-chip.is-thin,
+:root[data-theme='light'] .smi-ev-summary .smi-chip.is-warn { color: #8a5a00; }
+
 .smi-wcard-metrics { gap: 6px; }
 
 .smi-wcard-m-item {

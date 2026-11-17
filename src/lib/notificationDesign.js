@@ -59,6 +59,8 @@
  * component writes the live values from here, and the design probe asserts the
  * CSS defaults still match this table so the two can never drift.
  */
+import { apiBase } from './apiBase.js';
+
 export const TONES = {
   /* Money made. Mint → cyan: the same family as the app's "up" colour. */
   profit: {
@@ -294,8 +296,19 @@ export function parseBannerParams(input) {
   };
 }
 
-/** Where the server renders it. Absolute on Vercel; relative works in the SW. */
-export const BANNER_PATH = '/api/notif/banner.png';
+/**
+ * Where the server renders it.
+ *
+ * Built from `apiBase()` rather than a bare '/api/…' literal. In the browser
+ * the two are identical, and in the service worker the relative form is still
+ * what it wants — but a hardcoded '/api/…' constant is, inside the packaged
+ * app, a request to https://localhost (Capacitor's own asset server). The
+ * device and Firebase's image loader both fetch this URL, so it must resolve
+ * the same way every other API call does. `bannerUrl()` still prefixes an
+ * explicit origin when the caller has one (the server always does), so that
+ * parameter is unaffected.
+ */
+export const BANNER_PATH = `${apiBase()}/notif/banner.png`;
 /* Bump when the artwork changes: the CDN caches each image URL for a year. */
 export const BANNER_DESIGN_VERSION = '2';
 

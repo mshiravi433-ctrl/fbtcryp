@@ -25,6 +25,9 @@
  */
 
 import { verifiedSignals } from './smartMoneyEvidence.js';
+import { readTokenBehavior } from './tokenBehavior.js';
+import { readConsensus } from './signalConsensus.js';
+import { readAcceleration } from './signalMomentum.js';
 
 export const CLASS = Object.freeze({
   STRONG_BUY: 'STRONG_BUY',
@@ -239,11 +242,13 @@ export function buildEvidence({
   analysis = null,
   solanaIntel = null,
   smToken = null,
-  pulse = null
+  pulse = null,
+  behavior = null,
+  marketSeries = []
 } = {}) {
   const ev = [];
-  const push = (key, direction, pctVal = null, source = 'market', reason = key) => {
-    ev.push({ key, direction, pct: pctVal != null ? Math.round(pctVal * 100) / 100 : null, source, reason });
+  const push = (key, direction, pctVal = null, source = 'market', reason = key, weight = 1) => {
+    ev.push({ key, direction, pct: pctVal != null ? Math.round(pctVal * 100) / 100 : null, source, reason, weight });
   };
 
   const change24h = num(coin.change24h);
@@ -289,14 +294,93 @@ export function buildEvidence({
   if (pulse?.sentiment?.label === 'bullish') push('marketSentimentUp', 0.5, null, 'sentiment', 'marketSentimentUp');
   else if (pulse?.sentiment?.label === 'bearish') push('marketSentimentDown', -0.5, null, 'sentiment', 'marketSentimentDown');
 
+  /* ── G4 · BEHAVIOUR: how the token itself traded, not where it sits ──────
+     A separate plane from the indicators (which are all transforms of the
+     same closes) and from the market rows (which only say how far it moved).
+     Each finding enters with the weight of what was actually measured:
+     a one-sided tape is worth more than a coarse volume band, and a shape
+     repeat is worth least because a repeated shape proves nothing by itself.
+     Anything the read could not measure is simply absent — never a neutral 0
+     standing in for a missing fact. */
+  const beh = behavior ?? (Array.isArray(marketSeries) ? readTokenBehavior({ coin, series: marketSeries }) : null);
+  if (beh) {
+    if (beh.pressure && Math.abs(beh.pressure.score) >= 55) {
+      push(beh.pressure.score > 0 ? 'oneSidedBuy' : 'oneSidedSell', beh.pressure.score > 0 ? 1 : -1,
+        Math.abs(beh.pressure.score), 'behavior', beh.pressure.score > 0 ? 'tapeOneSidedBuy' : 'tapeOneSidedSell', 1.3);
+    }
+    /* Participation: a move carried by most steps is worth more than the same
+       percentage delivered by one spike — and a move that most steps FOUGHT
+       is a warning, so it enters against its own direction. */
+    if (beh.breadth && beh.breadth.direction !== 'flat' && beh.breadth.breadth != null) {
+      const strong = beh.breadth.breadth >= 0.62 && (beh.breadth.spikeShare ?? 1) <= 0.28;
+      const hollow = beh.breadth.breadth <= 0.4 || (beh.breadth.spikeShare ?? 0) >= 0.45;
+      const dir = beh.breadth.direction === 'up' ? 1 : -1;
+      if (strong) push(beh.breadth.direction === 'up' ? 'moveBroadUp' : 'moveBroadDown', dir, Math.abs(beh.breadth.movePct), 'behavior', beh.breadth.direction === 'up' ? 'broadParticipationUp' : 'broadParticipationDown', 1.1);
+      else if (hollow) push(beh.breadth.direction === 'up' ? 'moveHollowUp' : 'moveHollowDown', -dir, Math.abs(beh.breadth.movePct), 'behavior', beh.breadth.direction === 'up' ? 'hollowRally' : 'hollowSelloff', 1.1);
+    }
+    if (beh.relative && beh.relative.label !== 'inline') {
+      push(beh.relative.label === 'outperforming' ? 'relativeStrengthUp' : 'relativeStrengthDown',
+        beh.relative.label === 'outperforming' ? 1 : -1, Math.abs(beh.relative.diffPct), 'behavior',
+        beh.relative.label === 'outperforming' ? 'outperformingMarket' : 'underperformingMarket', 1.2);
+    }
+    if (beh.volume && beh.volume.label === 'accumulating') push('volumeAgreesUp', 1, beh.volume.turnoverPct, 'behavior', 'volumeWithTrend', 1);
+    else if (beh.volume && beh.volume.label === 'distributing') push('volumeAgreesDown', -1, beh.volume.turnoverPct, 'behavior', 'volumeWithDowntrend', 1);
+    else if (beh.volume && beh.volume.label === 'hollow-rally') push('volumeHollow', -1, beh.volume.turnoverPct, 'behavior', 'hollowRally', 0.8);
+    if (beh.pattern?.repeat) push('patternRepeat', 0, null, 'behavior', 'patternRepeat', 0.4);
+  }
+
   return ev;
 }
 
+/**
+ * Directional balance of the evidence, in −100…+100.
+ *
+ * Each item counts as `direction × weight`; the divisor is the sum of the
+ * weights that actually pointed somewhere, so a single one-sided-tape finding
+ * (weight 1.3) is not diluted by four weak neutral reads, and adding evidence
+ * of the OPPOSITE direction genuinely pulls the score back toward zero instead
+ * of merely failing to help.
+ */
 function evidenceScore(ev) {
-  const score = (ev || []).reduce((s, e) => s + (num(e.direction) || 0), 0);
-  const count = (ev || []).filter((e) => num(e.direction) !== 0).length;
-  const max = Math.max(count, 1) * 1.5;
-  return clampf((score / max) * 100, -100, 100);
+  const rows = (ev || []).filter((e) => num(e.direction) !== 0);
+  if (!rows.length) return 0;
+  const weighted = rows.reduce((s, e) => s + (num(e.direction) || 0) * (num(e.weight) ?? 1), 0);
+  const max = rows.reduce((s, e) => s + Math.abs(num(e.weight) ?? 1), 0) || 1;
+  /* Same calibration as before weights existed: unanimous evidence lands at
+     66.7, not 100, so the class thresholds (14 / 32) keep their meaning. */
+  return clampf((weighted / (max * 1.5)) * 100, -100, 100);
+}
+
+/**
+ * The weighted score of ONE evidence plane.
+ *
+ * `evidenceScore` collapses every source into one number, which is exactly
+ * what the consensus module must not do — it needs «what did the technical
+ * plane say on its own», so it can compare planes rather than average them.
+ * Same weighting, same denominator, restricted to the requested sources.
+ */
+function planeScore(ev, sources) {
+  const rows = (ev || []).filter((e) => num(e.direction) !== 0 && sources.includes(e.source));
+  if (!rows.length) return null;
+  const weighted = rows.reduce((s2, e) => s2 + (num(e.direction) || 0) * (num(e.weight) ?? 1), 0);
+  const max = rows.reduce((s2, e) => s2 + Math.abs(num(e.weight) ?? 1), 0) || 1;
+  return (weighted / (max * 1.5)) * 100;
+}
+
+/**
+ * Map the weighted evidence score to one of the six classes.
+ *
+ * Symmetric by construction: the band at ±14 and the band at ±32 are the same
+ * two cuts on both sides. Anything between the cuts is WATCH — the honest
+ * «the evidence does not agree yet» answer, not a coin flip dressed up as a
+ * call. Exported so the ladder itself is testable in isolation.
+ */
+export function classify(score) {
+  const v = num(score) ?? 0;
+  if (v >= 32) return CLASS.STRONG_BUY;
+  if (v >= 14) return CLASS.BUY;
+  if (v <= -14) return CLASS.SELL;
+  return CLASS.WATCH;
 }
 
 /** Weighted confidence from the seven measured factors. */
@@ -310,9 +394,49 @@ export function confidenceEngine({
   turnoverPct = null,
   volatilityScore = 50,
   signalScore = 0,
-  consensusAgreement = 100
+  consensusAgreement = 100,
+  consensusMultiplier = 1,
+  consensusBias = 'flat',
+  consensusConflict = false
 } = {}) {
   const dirEvidence = evidence.filter((e) => num(e.direction) !== 0);
+  /*
+   * ─── THE ONE THING A CONFIDENCE NUMBER MUST NEVER DO ─────────────────────
+   * Report high confidence on a card whose own evidence points the other way.
+   * That was reachable: `liquidity`, `volatility` and `strength` are all
+   * direction-BLIND (a violent collapse scores as «strong»), and `agreement`
+   * counts how loudly the indicators speak, not whether they agree with the
+   * class. So a card driven by behaviour and flow — two planes the technical
+   * `agreement` figure does not see — could show «WATCH at 71%» while its own
+   * evidence ran net negative.
+   *
+   * The fix is a CEILING, not a new term: when the evidence net is at least
+   * `OPPOSED` points away from the claimed direction, confidence is capped
+   * below the level that would read as conviction. A cap can only ever lower
+   * the number, so nothing here can inflate a signal, and a missing/neutral
+   * score leaves the existing calculus untouched.
+   */
+  const OPPOSED = 8;
+  const scoreNum = num(signalScore) ?? 0;
+  /*
+   * Measured on the SAME scale the score uses (net direction × weight, over
+   * the total weight actually present, ×100/1.5) so the comparison is
+   * like-for-like: «the evidence nets at least 8 points against the direction
+   * this card is being scored in».
+   */
+  const netW = dirEvidence.reduce((s2, e) => s2 + (num(e.direction) || 0) * (num(e.weight) ?? 1), 0);
+  const totalW = dirEvidence.reduce((s2, e) => s2 + Math.abs(num(e.weight) ?? 1), 0) || 1;
+  const netScale = (netW / (totalW * 1.5)) * 100;
+  /* Two ways a card can be contested: the evidence runs AGAINST the direction
+     being scored, or it is genuinely split (both sides carry weight and the net
+     is inside the 8-point noise band) — «WATCH at 73%» reads as conviction the
+     engine does not have. */
+  const opposed = Math.abs(scoreNum) >= 5
+    && Math.sign(netScale) !== Math.sign(scoreNum) && Math.abs(netScale) >= OPPOSED;
+  const split = dirEvidence.some((e) => num(e.direction) > 0) && dirEvidence.some((e) => num(e.direction) < 0)
+    && Math.abs(netScale) < OPPOSED;
+  const contradicts = opposed || split;
+
   const techAgreement = num(agreement) ?? 50;
   const fresh = clampf(freshness, 0.4, 1);
   const liquidity = turnoverPct != null ? clampf(15 + turnoverPct * 12, 40, 96) : 55;
@@ -331,7 +455,18 @@ export function confidenceEngine({
     (0.4 * volFit + 0.6 * strength) * 0.15
   );
   const min = dirEvidence.length >= MIN_EVIDENCE ? 15 : 5;
-  return Math.round(clampf(weighted, min, 95));
+  const out = clampf(weighted, min, 95);
+  /*
+   * A CONTESTED CARD CANNOT SHOW CONVICTION — and «contested» now has two
+   * independent definitions that both only ever LOWER the number:
+   *   • the evidence runs against the direction being scored, or is split
+   *     (the local check above), or
+   *   • the four independent planes disagree (`consensusConflict`).
+   * 55 is the same «moderate» line the card already uses for its momentum
+   * label, so a softer card still says how much was measured.
+   */
+  const capped = contradicts || consensusConflict ? Math.min(out, 55) : out;
+  return Math.round(capped);
 }
 
 /**
@@ -348,6 +483,20 @@ export function computeSignalCard({
   smToken = null,
   pulse = null,
   aiConsensus = null,
+  behavior = null,
+  marketSeries = [],
+  /* FBT Global + the AI candle forecast's own direction, as one measured
+     market read: { mcapChange, avgChange, breadth, btcDominance, forecast }.
+     Optional — a page that has none of it simply contributes three planes. */
+  marketRead = null,
+  /* Smart money for THIS asset only: a verified per-contract row, or a
+     symbol-matched consensus row. Deliberately NOT the market-wide net flow:
+     «wallets sold $40M of something» is not a statement about this token, and
+     feeding it in would tilt every card in the same direction. */
+  smRead = null,
+  /* The last few measured scores for this asset, oldest → newest, from the
+     page's bounded tracker. Optional: no history means «new», never a guess. */
+  scoreHistory = [],
   now = Date.now()
 } = {}) {
   if (!coin || !num(coin.price) || !analysis || (series ?? []).length < 30) {
@@ -356,19 +505,73 @@ export function computeSignalCard({
 
   const horizonRisks = horizons || computeHorizonRisks({ series, analysis });
   const risk7 = horizonRisks.find((h) => h.days === 7) || horizonRisks[1];
-  const evidence = buildEvidence({ coin, analysis, solanaIntel, smToken, pulse });
+  /* The behaviour read is optional: when the caller already computed it for
+     the screen (the page does, once per poll) it is reused instead of being
+     recomputed for every card. Passed-through null means "not measured". */
+  const beh = behavior ?? readTokenBehavior({ series, marketSeries, coin });
+  const evidence = buildEvidence({ coin, analysis, solanaIntel, smToken, pulse, behavior: beh });
   const directional = evidence.filter((e) => num(e.direction) !== 0);
   if (directional.length < MIN_EVIDENCE) {
     return { status: 'INSUFFICIENT_DATA', coin, at: now, confidence: null, classification: null, evidence, horizonRisks };
   }
 
-  const score = evidenceScore(evidence);
-  let classification =
-    score >= 32 ? CLASS.STRONG_BUY
-      : score >= 14 ? CLASS.BUY
-        : score <= -32 ? CLASS.SELL
-          : score <= -14 ? CLASS.SELL
-            : CLASS.WATCH;
+  const rawScore = evidenceScore(evidence);
+
+  /*
+   * ─── «موتور یکسان‌ساز نتایج» ────────────────────────────────────────────
+   * The same four observations the evidence list already carries, read as four
+   * PLANES rather than as one flat bag of votes. Two things come out of it:
+   *
+   *  1. CONFLICT IS STATED. If behaviour and smart money point opposite ways,
+   *     the card says so (`consensus.conflict`) instead of averaging them into
+   *     a bland WATCH that hides a real disagreement.
+   *  2. AGREEMENT IS WORTH SOMETHING. When independent planes agree, the same
+   *     evidence counts for more (up to ×1.25); when they fight, the card is
+   *     softer (down to ×0.8) rather than louder. The multiplier is bounded,
+   *     so this sharpens a call and can never manufacture one — «فروش زیاد
+   *     بیت‌کوین در اسمارت‌مانی» moves the call only when the other planes do
+   *     not contradict it.
+   *
+   * Cost: pure arithmetic over values already in this function's hands. No
+   * fetch, no timer, no storage — see the header of signalConsensus.js.
+   */
+  const consensus = readConsensus({
+    technical: planeScore(evidence, ['technical']),
+    behavior: beh,
+    smartMoney: smRead,
+    market: marketRead,
+    strength: rawScore
+  });
+  /*
+   * The consensus may only AMPLIFY or DAMP what the weighted evidence already
+   * said: it multiplies the measured score, it never adds to it. That keeps
+   * the class thresholds meaningful (a card that was WATCH stays WATCH unless
+   * the agreement pushes it past a cut it was already near) and keeps this
+   * module from being a hidden fifth indicator.
+   */
+  const score = clampf(rawScore * consensus.multiplier, -100, 100);
+
+  /*
+   * ─── «موتور شتاب سیگنال‌ها» ─────────────────────────────────────────────
+   * The same score, one tick earlier, is information the card can use: a case
+   * being built is not the same as a case being dismantled, even at the same
+   * level. `readAcceleration` normalises the delta across uneven polls, calls
+   * a sign flip a REVERSAL (which outranks any slope), and bounds what it may
+   * do to confidence to ±4 points. With no history it reports «new» and moves
+   * nothing. Pure arithmetic over a handful of numbers the page already had.
+   */
+  const acceleration = readAcceleration(scoreHistory);
+  /*
+   * ─── FOUR BANDS, NOT THREE AND A BROKEN SYMMETRY ─────────────────────────
+   * The downside read used to be `score <= -32 ? SELL : score <= -14 ? SELL`,
+   * so «strong sell» and «sell» rendered as the same word while «strong buy»
+   * and «buy» did not. Two different amounts of evidence produced one label,
+   * which makes the class useless for ranking the sell side and hides exactly
+   * how convinced the engine is. The mirror of the buy ladder is now explicit
+   * and it is a `classify()` export, so the asymmetry cannot come back by
+   * accident and can be asserted without constructing an entire card.
+   */
+  let classification = classify(score);
 
   /* Risk override: the six classes include risk-aware categories. A strong
      risk read can only downgrade a call, never upgrade it. */
@@ -408,8 +611,28 @@ export function computeSignalCard({
     freshness: coin.dataProvenance === 'live' ? 1 : 0.45,
     turnoverPct,
     volatilityScore: risk7?.riskScore ?? 50,
-    signalScore: score
+    signalScore: score,
+    /*
+     * THE FOUR-PLANE READ FEEDS CONFIDENCE TOO — DOWNWARD ONLY.
+     * A card whose technicals agree but whose smart money and tape are
+     * fighting is less certain than its indicator count suggests; the cap in
+     * `confidenceEngine` reflects that. Amplification of the SCORE is handled
+     * by the multiplier above; confidence is about whether the picture is
+     * coherent, which is the same question the consensus answers. Passing it
+     * can only lower the number, so a plane that was not measured (a WATCH on
+     * three planes) is never treated as a reason to doubt or to believe.
+     */
+    consensusMultiplier: consensus.multiplier,
+    consensusBias: consensus.bias,
+    consensusConflict: Boolean(consensus.conflict)
   });
+  /*
+   * The acceleration nudge is applied AFTER the engine's own ceilings, and it
+   * is the only place it is applied — so «the case is being built» can lift a
+   * card by at most four points and «the case just flipped» can lower it by at
+   * most four, never overriding the contested-card cap in the other direction.
+   */
+  const confidenceFinal = Math.round(clampf(confidence + acceleration.confidenceNudge, 5, 95));
 
   /* ── target / stop: volatility-scaled, direction of the measured score.
         WATCH carries no directional target — an honest neutral. ─────────── */
@@ -417,16 +640,39 @@ export function computeSignalCard({
   let stop = null;
   let targetPct = null;
   let stopPct = null;
+  let tradeDir = null;
   if (classification === CLASS.BUY || classification === CLASS.STRONG_BUY || classification === CLASS.SELL || classification === CLASS.HIGH_RISK) {
     const volH = risk7?.volatilityPct ?? 3;
-    const dir = score >= 0 ? 1 : -1;
+    /*
+     * ─── THE DIRECTION MUST BE THE CLASS'S, NOT THE SIGN OF A ROUNDED SCORE ─
+     * `score >= 0 ? 1 : -1` looked harmless until the risk override landed: a
+     * card downgraded to HIGH_RISK while the evidence sat just under zero got
+     * a DOWNWARD target and stop, plus a positive `targetPct`, and the panel
+     * renders that number behind a literal «+» (`+${signal.targetPct}%`). The
+     * screen then said «target +1.2%» for a call whose own numbers pointed
+     * down — a fabricated level, which is the one thing this engine does not
+     * do. The direction now comes from the class, and for HIGH_RISK from the
+     * sign of the evidence, so the two can never disagree.
+     */
+    const dir = classification === CLASS.BUY || classification === CLASS.STRONG_BUY ? 1
+      : classification === CLASS.SELL ? -1
+        : score >= 0 ? 1 : -1;
     targetPct = clampf(volH * (classification === CLASS.STRONG_BUY ? 0.7 : 0.55), 0.8, 26);
     stopPct = clampf(targetPct * 0.5, 0.6, 14);
     target = coin.price * (1 + (dir * targetPct) / 100);
     stop = coin.price * (1 - (dir * stopPct) / 100);
+    tradeDir = dir > 0 ? 'up' : 'down';
   }
 
-  const reasons = [...new Set(evidence.filter((e) => num(e.direction) !== 0).map((e) => e.reason))].slice(0, 5);
+  /* Reasons lead with BEHAVIOUR when behaviour is the loudest measured thing:
+     «why did this card say this» should answer with what the tape did, not
+     only with the indicator it happened to list first. Measured items only —
+     the list can be shorter than five, and is never padded. */
+  const ordered = [...evidence]
+    .filter((e) => num(e.direction) !== 0)
+    .sort((a, b) => (Math.abs(num(b.weight) ?? 1) * Math.abs(num(b.direction) ?? 0))
+      - (Math.abs(num(a.weight) ?? 1) * Math.abs(num(a.direction) ?? 0)));
+  const reasons = [...new Set(ordered.map((e) => e.reason))].slice(0, 5);
 
   return {
     status: 'READY',
@@ -435,7 +681,7 @@ export function computeSignalCard({
     /* Offline-snapshot data is never relabeled as a live fact. */
     offline: coin.dataProvenance === 'offline',
     classification,
-    confidence,
+    confidence: confidenceFinal,
     risk: riskLevel,
     riskScore: risk7?.riskScore ?? null,
     timeframe: 7,
@@ -455,8 +701,23 @@ export function computeSignalCard({
     stop,
     targetPct: targetPct != null ? Math.round(targetPct * 100) / 100 : null,
     stopPct: stopPct != null ? Math.round(stopPct * 100) / 100 : null,
+    /* WHICH WAY the target points, so the panel stops assuming «up». */
+    tradeDirection: tradeDir,
     reasons,
     evidence,
+    /* The measured behaviour read, so the detail panel can show WHY the tape
+       was read the way it was — every field nullable, nothing synthesised. */
+    behavior: beh,
+    /* The four-plane reconciliation, so the panel can show WHY the call is
+       confident or contested — and so nothing here is a number the reader has
+       to take on faith. */
+    consensus,
+    /* The pre-consensus score, for the panel to show what amplification did
+       (and to prove amplification happened rather than invention). */
+    rawScore: Math.round(rawScore),
+    /* How fast the measured case is being built or dismantled, and what that
+       was allowed to change. */
+    acceleration,
     aiConsensus: aiConsensus ?? null
   };
 }
@@ -565,16 +826,124 @@ export function computeEarlySignals({ entries = [], now = Date.now() } = {}) {
     if (c7 != null && c7 >= 6) add('trend7dUp', 0.6, 'market');
     else if (c7 != null && c7 <= -6) add('trend7dDown', -0.6, 'market');
 
+    /* ── G4 · behaviour: HOW the token traded (src/lib/tokenBehavior.js) ───
+       This is the plane that makes an EARLY signal possible at all. The three
+       planes above all need the move to be big enough to register; behaviour
+       reads the structure underneath it, so a token can qualify while its
+       percentage move is still small:
+         · a one-sided tape and a broad, non-spiky move are what a real bid
+           looks like before the candle;
+         · relative strength vs BTC is the difference between «this token is
+           moving» and «the whole market bounced»;
+         · a hollow rally (price up, volume thin) and a one-spike move are
+           exactly the early signals a desk wants to avoid, and they carry
+           negative weight instead.
+       Only measured parts contribute; a token whose series is too short for
+       the read simply has no G4 flags and cannot qualify on this plane. */
+    const beh = e.behavior ?? readTokenBehavior({
+      series: prices,
+      marketSeries: e.marketSeries ?? [],
+      coin: e.coin,
+      turnoverPct: num(e.coin.mcap) > 0 ? (num(e.coin.volume) / num(e.coin.mcap)) * 100 : null
+    });
+    if (beh) {
+      if (beh.pressure && Math.abs(beh.pressure.score) >= 55) {
+        add(beh.pressure.score > 0 ? 'oneSidedBuy' : 'oneSidedSell', beh.pressure.score > 0 ? 1.1 : -1.1, 'behavior');
+      }
+      if (beh.breadth && beh.breadth.direction !== 'flat' && beh.breadth.breadth != null) {
+        const spike = beh.breadth.spikeShare ?? 0;
+        if (beh.breadth.breadth >= 0.62 && spike <= 0.28) {
+          add(beh.breadth.direction === 'up' ? 'moveBroadUp' : 'moveBroadDown', beh.breadth.direction === 'up' ? 0.9 : -0.9, 'behavior');
+        } else if (beh.breadth.breadth <= 0.4 || spike >= 0.45) {
+          add(beh.breadth.direction === 'up' ? 'moveHollowUp' : 'moveHollowDown', beh.breadth.direction === 'up' ? -0.9 : 0.9, 'behavior');
+        }
+      }
+      if (beh.relative && beh.relative.label !== 'inline' && Math.abs(beh.relative.diffPct) >= 2.5) {
+        add(beh.relative.label === 'outperforming' ? 'relativeStrengthUp' : 'relativeStrengthDown',
+          beh.relative.label === 'outperforming' ? 0.9 : -0.9, 'behavior');
+      }
+      if (beh.volume && beh.volume.label === 'accumulating') add('volumeWithTrend', 0.7, 'behavior');
+      else if (beh.volume && beh.volume.label === 'distributing') add('volumeWithDowntrend', -0.7, 'behavior');
+      else if (beh.volume && beh.volume.label === 'hollow-rally') add('volumeHollow', -0.7, 'behavior');
+      if (beh.anomaly?.unusual) add('moveAnomaly', beh.anomaly.sigma > 0 ? 0.6 : -0.6, 'behavior');
+    }
+
     /* Independence gate: ≥2 flags AND ≥2 different observation planes. */
     if (flags.length < 2 || groups.size < 2) continue;
+
+    /*
+     * ─── THE SAME RECONCILIATION AS THE CARD, APPLIED AS A VETO ─────────────
+     * An early flag set is a THIN observation by definition — that is what
+     * «early» means — so it is exactly where a loud single plane can mislead.
+     * The consensus runs on the same four planes and has three effects here,
+     * all of them aimed at precision rather than at producing more signals:
+     *
+     *   • if the planes point the OTHER way with real agreement (≥2 planes,
+     *     none agreeing with this entry), the entry is dropped — a bounce
+     *     while smart money distributes is not an early buy, it is the exit;
+     *   • if the planes disagree with each other, the entry is downgraded to
+     *     «watch» rather than claiming a direction the evidence does not have;
+     *   • confidence is nudged by how many planes actually agree, and a
+     *     conflict can only lower it.
+     *
+     * It can never ADD an entry: every candidate still has to pass the two-
+     * flag / two-group gate above first.
+     */
+    const consensus = readConsensus({
+      technical: strength * 22,
+      behavior: beh,
+      smartMoney: e.smRead ?? null,
+      market: e.marketRead ?? null,
+      strength: Math.abs(strength) * 20
+    });
+    const entryDir = strength > 0.3 ? 'up' : strength < -0.3 ? 'down' : 'flat';
+    const consensusOpposes = entryDir !== 'flat' && consensus.bias !== 'flat' && consensus.bias !== entryDir
+      && consensus.agreement >= 0.5;
+    if (consensusOpposes) continue;
+
+    const directionOut = entryDir !== 'flat' && consensus.bias !== entryDir && consensus.conflict
+      ? 'earlyWatch'
+      : (strength > 0.3 ? 'earlyBullish' : strength < -0.3 ? 'earlyBearish' : 'earlyWatch');
+
     out.push({
       coin: e.coin,
       symbol: e.coin.symbol,
       at: now,
-      direction: strength > 0.3 ? 'earlyBullish' : strength < -0.3 ? 'earlyBearish' : 'earlyWatch',
-      confidence: Math.round(clampf(42 + Math.abs(strength) * 13 + flags.length * 5 + (groups.size > 2 ? 4 : 0), 25, 92)),
-      flags,
+      direction: directionOut,
+      /* Confidence rises with the NUMBER of independent planes that agree,
+         not merely with how loud one of them is — two loud readings from the
+         same plane are still one observation. */
+      confidence: Math.round(clampf(
+        42 + Math.abs(strength) * 13 + flags.length * 5 + (groups.size > 2 ? 4 : 0) + (groups.size >= 3 ? 4 : 0)
+        + (consensus.bias === entryDir ? 6 : 0)
+        - (consensus.conflict ? 8 : 0),
+        25,
+        consensus.conflict ? 62 : 92
+      )),
+      /* The reconciliation rides along so the row can say WHICH sources agree
+         — the same object shape the card carries, so both surfaces speak the
+         same language about the same token. */
+      consensus,
+      flags: [
+        ...flags,
+        ...(consensus.bias === entryDir && consensus.measured >= 2 ? ['sourcesAgree'] : []),
+        ...(consensus.conflict ? ['sourcesConflict'] : [])
+      ],
       momentumAccelPct: Math.round(accel * 100) / 100,
+      /* The behaviour read rides along so the section can show the STRUCTURE
+         behind an early flag (participation, relative strength) without a
+         second computation, and so the numbers it prints are the same ones
+         that produced the flag. */
+      behavior: beh
+        ? {
+          score: beh.score,
+          breadth: beh.breadth?.breadth ?? null,
+          spikeShare: beh.breadth?.spikeShare ?? null,
+          pressure: beh.pressure?.score ?? null,
+          relativeDiffPct: beh.relative?.diffPct ?? null,
+          volumeLabel: beh.volume?.label ?? null
+        }
+        : null,
       last,
       strength: Math.round(strength * 10) / 10
     });
@@ -589,7 +958,20 @@ export function computeEarlySignals({ entries = [], now = Date.now() } = {}) {
  * is NEVER sent to an AI by this module; the UI additionally gates the
  * AI "why" call behind an explicit user consent.
  */
-export function portfolioImpact({ positions = [], priceMap = {}, coin = null, classification = 'WATCH' } = {}) {
+export function portfolioImpact({
+  positions = [],
+  priceMap = {},
+  coin = null,
+  classification = 'WATCH',
+  /* ── what makes the impact PRECISE rather than a percentage label ────────
+     `volatilityPct` is the 7-day horizon volatility the card already computed;
+     `scenario` is `scenarioFan()`'s output; `tradeDirection` is which way the
+     card points; `stopPct` is the card's own stop distance. */
+  volatilityPct = null,
+  scenario = null,
+  tradeDirection = null,
+  stopPct = null
+} = {}) {
   const rows = (positions ?? [])
     .map((p) => ({
       ...p,
@@ -606,14 +988,87 @@ export function portfolioImpact({ positions = [], priceMap = {}, coin = null, cl
   const top3 = sorted.slice(0, 3).reduce((s, p) => s + p.value, 0);
   const concentrationPct = (top3 / total) * 100;
 
-  const impact = exposurePct >= 40 ? 'HIGH' : exposurePct >= 15 ? 'MEDIUM' : 'LOW';
+  /*
+   * ─── THE IMPACT IS A RISK-DOLLAR FIGURE, NOT A LABEL ──────────────────────
+   * «HIGH exposure» used to mean only «this asset is ≥40% of the book», which
+   * is a SIZE statement, not a risk one: 40% of a book in a token that moves 2%
+   * a week is quieter than 12% in one that moves 25% a day. The figures below
+   * convert the same signal into what it can actually cost, so the answer is
+   * specific to this position and this reading:
+   *
+   *   · dollar exposure        — position value, the denominator everything else
+   *   · risk-at-volatility     — value × the horizon volatility the card measured
+   *   · loss-if-adverse        — value × the scenario fan's adverse outcome,
+   *                              i.e. what the measured conditional downside is
+   *   · breach-if-stopped      — the same quantity when the card's own stop is
+   *                              hit, so the reader sees the worst case the
+   *                              signal itself defines
+   *   · impactPct of book      — loss as a share of the WHOLE portfolio, which
+   *                              is the number that decides whether a position
+   *                              is survivable
+   *
+   * Everything is null when the input it needs was not measured. Nothing is
+   * assumed: no volatility figure, no cost estimate.
+   */
+  const value = pos?.value ?? null;
+  const vol = num(volatilityPct);
+  const sigRiskUsd = value != null && vol != null ? Math.round((value * Math.abs(vol)) / 100) : null;
+
+  /* Downside is taken from whichever side the card points: a SELL call is a
+     risk to a LONG holder, and a BUY call is a risk to a short. */
+  const adverseSide = tradeDirection === 'down' ? 'up' : 'down';
+  const scenarioLossPct = scenario && num(scenario.lossPct) !== null && adverseSide === 'down'
+    ? Math.abs(num(scenario.lossPct))
+    : scenario && num(scenario.gainPct) !== null && adverseSide === 'up'
+      ? Math.abs(num(scenario.gainPct))
+      : null;
+  const scenarioLossUsd = value != null && scenarioLossPct != null
+    ? Math.round((value * scenarioLossPct) / 100)
+    : null;
+
+  const stopLossUsd = value != null && num(stopPct) != null
+    ? Math.round((value * Math.abs(num(stopPct))) / 100)
+    : null;
+
+  /*
+   * Risk that actually matters: the worst of the measured downside PATHS.
+   * The volatility figure is a ±1σ envelope, not a loss — it is reported as
+   * `riskAtVolatilityUsd` and used only as a fallback when neither a scenario
+   * nor a stop distance was measured, because putting an envelope and an
+   * outcome into the same `max()` would overstate the cost of the signal.
+   */
+  const pathLosses = [scenarioLossUsd, stopLossUsd].filter((x) => x != null);
+  const riskUsd = pathLosses.length ? Math.max(...pathLosses) : sigRiskUsd;
+  const impactPctOfBook = riskUsd != null && total > 0 ? Math.round((riskUsd / total) * 1000) / 10 : null;
+
+  /*
+   * The label now combines SIZE with RISK. Size alone can never produce HIGH,
+   * and a small position in a violently-moving asset can no longer pass as
+   * LOW — which is exactly the case a percentage-only rule got wrong.
+   */
+  /* A share of the book that is a quarter of a percent is small by any
+     standard, and the label must say so even when the asset is violent — the
+     point of the risk figures is precision, not permanent alarm. */
+  const riskShare = riskUsd != null && total > 0 ? riskUsd / total : null;
+  const loud = (riskShare != null && riskShare >= 0.03)
+    || (classification === CLASS.AVOID || classification === CLASS.HIGH_RISK);
+  const impact = exposurePct >= 40 && loud ? 'HIGH'
+    : riskShare != null && riskShare < 0.005 ? 'LOW'
+      : exposurePct >= 15 || (riskShare != null && riskShare >= 0.015) ? 'MEDIUM'
+        : 'LOW';
+
   const notes = [];
   if (exposurePct >= 30) notes.push('highExposure');
   if (concentrationPct >= 70) notes.push('highConcentration');
+  if (impactPctOfBook != null && impactPctOfBook >= 3) notes.push('riskLargeShare');
   if (classification === CLASS.BUY || classification === CLASS.STRONG_BUY) {
     if (pos) notes.push('existingPositionUp');
     else notes.push('noExistingPosition');
   }
+  if (classification === CLASS.SELL || classification === CLASS.AVOID) {
+    notes.push(pos ? 'signalAgainstHolding' : 'signalAgainstEntry');
+  }
+  if (stopLossUsd != null && value != null && total > 0 && stopLossUsd / total >= 0.02) notes.push('stopCostly');
   if (notes.length === 0) notes.push('balanced');
 
   return {
@@ -621,6 +1076,21 @@ export function portfolioImpact({ positions = [], priceMap = {}, coin = null, cl
     concentrationPct: Math.round(concentrationPct * 10) / 10,
     impact,
     hasPosition: Boolean(pos),
+    /* The dollar figures, all nullable. */
+    valueUsd: value != null ? Math.round(value) : null,
+    bookUsd: Math.round(total),
+    riskUsd,
+    riskAtVolatilityUsd: sigRiskUsd,
+    riskPctOfBook: impactPctOfBook,
+    volatilityPct: vol != null ? Math.round(vol * 10) / 10 : null,
+    scenarioLossPct: scenarioLossPct != null ? Math.round(scenarioLossPct * 100) / 100 : null,
+    scenarioLossUsd,
+    stopLossUsd,
+    /* If the worst measured path happens, this is what the book looks like. */
+    bookAfterRiskUsd: riskUsd != null ? Math.round(total - riskUsd) : null,
+    /* Which way the card points, so the panel can say «a SELL call against a
+       holding» instead of a generic warning. */
+    againstHolding: Boolean(pos) && (classification === CLASS.SELL || classification === CLASS.AVOID),
     notes
   };
 }
@@ -691,11 +1161,17 @@ export function filterSignals(signals = [], filters = {}, marketOf = () => null)
     }
     if (risk !== 'all' && String(s?.risk || '').toLowerCase() !== risk) return false;
     if (conf > 0 && (s?.confidence ?? 0) < conf) return false;
-    if (timeframe !== 'all' && s?.timeframe !== Number(timeframe.replace('D', '')) && s?.timeframe !== Number(timeframe.replace('H', ''))) {
-      // 24H is the 1-day horizon; accept either representation.
-      const days = timeframe === '24H' ? 1 : Number(timeframe.replace('D', ''));
-      const key = timeframe === '24H' ? '24H' : `${days}D`;
-      if (!(s.horizons || []).some((h) => h.key === key)) return false;
+    if (timeframe !== 'all') {
+      /*
+       * The timeframe filter asks one question: does this card carry a measured
+       * horizon for the window the reader picked? It used to answer a second,
+       * broken one first — `Number('24H'.replace('D',''))` is NaN, so the 24H
+       * comparison could never be true and the whole filter fell through to a
+       * fallback that only looked right by accident. One mapping, one check,
+       * and a card with no horizons is filtered out rather than silently kept.
+       */
+      const key = timeframe === '24H' ? '24H' : `${Number(timeframe.replace('D', ''))}D`;
+      if (!(s.horizons || []).some((h) => h && h.key === key)) return false;
     }
     if (asset !== 'all') {
       const sym = String(c.symbol || '').toUpperCase();

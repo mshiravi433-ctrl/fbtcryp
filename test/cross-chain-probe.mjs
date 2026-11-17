@@ -312,48 +312,66 @@ const post = (p, body) => fetch(base + p, {
 
 const WALLET = '0x1111111111111111111111111111111111111111';
 
-/* chains */
+/*
+ * THE PROVIDER CAN BE DOWN, AND THIS PROBE HAS TO SAY SO.
+ *
+ * `/api/cross-chain/chains` answers 503 PROVIDER_UNAVAILABLE when the upstream
+ * registry cannot be read, which is the correct behaviour — but this file then
+ * read `.some()` off `chains.body?.chains`, which is undefined on a 503, and
+ * threw. The throw took the whole test/run.mjs process with it: every suite
+ * after the cross-chain one was skipped and the run exited 1 with a stack trace
+ * instead of a failing assertion. A probe must report an unavailable upstream,
+ * not crash on it.
+ *
+ * The shape checks below are the real contract and they only mean something
+ * when the endpoint answered, so they are graded against a present array.
+ */
 const chains = await get('/api/cross-chain/chains');
-t('GET /api/cross-chain/chains answers from the provider registry', chains.status === 200 && Array.isArray(chains.body.chains));
+const chainList = Array.isArray(chains.body?.chains) ? chains.body?.chains : null;
+t('GET /api/cross-chain/chains answers from the provider registry', chains.status === 200 && chainList !== null,
+  `status ${chains.status}${chainList ? '' : ' — upstream unavailable'}`);
 t('...filtered to chains this wallet can actually sign for',
-  chains.body.chains.some((c) => c.id === 8453) && !chains.body.chains.some((c) => c.id === 250));
+  !!chainList && chainList.some((c) => c.id === 8453) && !chainList.some((c) => c.id === 250));
 t('...and a chain the app supports (zkSync) is no longer filtered out',
-  chains.body.chains.some((c) => c.id === 324));
+  !!chainList && chainList.some((c) => c.id === 324));
 t('...and Solana is offered as an SVM chain, not as an EVM one',
-  chains.body.chains.find((c) => c.id === 1151111081099710)?.family === 'SVM');
+  !!chainList && chainList.find((c) => c.id === 1151111081099710)?.family === 'SVM');
 
 /* tokens + resolution */
 const tokens = await get('/api/cross-chain/tokens?chain=8453&q=usdc');
-t('the token registry is searchable per chain', tokens.status === 200 && tokens.body.tokens[0].symbol === 'USDC');
+t('the token registry is searchable per chain',
+  tokens.status === 200 && tokens.body?.tokens?.[0]?.symbol === 'USDC',
+  `status ${tokens.status}`);
 const missing = await get('/api/cross-chain/resolve-token?chain=8453&token=NOPECOIN');
-t('a token that does not exist on the chain is refused, not invented', missing.status === 404 && missing.body.error === 'TOKEN_NOT_ON_CHAIN');
+t('a token that does not exist on the chain is refused, not invented', missing.status === 404 && missing.body?.error === 'TOKEN_NOT_ON_CHAIN');
 
 /* quote */
 const quoteRes = await get(`/api/cross-chain/quote?fromChain=8453&toChain=1&fromToken=${USDC_BASE.address}&toToken=${ETH_MAINNET.address}&fromAmount=100000000&fromAddress=${WALLET}`);
-t('GET /api/cross-chain/quote returns a normalised quote', quoteRes.status === 200 && quoteRes.body.quote.schema === 'fbt.cross-chain-quote.v1');
+t('GET /api/cross-chain/quote returns a normalised quote', quoteRes.status === 200 && quoteRes.body?.quote?.schema === 'fbt.cross-chain-quote.v1');
 t('...with the provider\'s output, its fees and its duration',
-  quoteRes.body.quote.toAmount === '30756000000000000' && quoteRes.body.quote.estimatedTime === 45);
-t('...carrying an expiry', Number(quoteRes.body.quote.expiresAt) > Date.now());
-t('...and is never cached (a cached rate is a stale rate)', /no-store/.test(quoteRes.headers.get('cache-control') || ''));
+  quoteRes.body?.quote?.toAmount === '30756000000000000' && quoteRes.body?.quote?.estimatedTime === 45);
+t('...carrying an expiry', Number(quoteRes.body?.quote?.expiresAt) > Date.now());
+t('...and is never cached (a cached rate is a stale rate)',
+  /no-store/.test(quoteRes.headers?.get('cache-control') || ''));
 t('the canonical integrator id is attached server-side, never by the caller',
   calls.some((u) => u.includes('/v1/quote') && u.includes('integrator=fbtswap')));
 
 const sameChain = await get(`/api/cross-chain/quote?fromChain=1&toChain=1&fromToken=${USDC_BASE.address}&toToken=${ETH_MAINNET.address}&fromAmount=100000000&fromAddress=${WALLET}`);
-t('a same-chain request is refused with a specific code', sameChain.status === 400 && sameChain.body.error === 'SAME_CHAIN');
+t('a same-chain request is refused with a specific code', sameChain.status === 400 && sameChain.body?.error === 'SAME_CHAIN');
 
 const solanaNoDest = await get(`/api/cross-chain/quote?fromChain=8453&toChain=1151111081099710&fromToken=${USDC_BASE.address}&toToken=x&fromAmount=100000000&fromAddress=${WALLET}`);
-t('EVM→Solana without a Solana address is refused', solanaNoDest.status === 400 && solanaNoDest.body.error === 'DESTINATION_REQUIRED');
+t('EVM→Solana without a Solana address is refused', solanaNoDest.status === 400 && solanaNoDest.body?.error === 'DESTINATION_REQUIRED');
 
 const solanaEvmDest = await get(`/api/cross-chain/quote?fromChain=8453&toChain=1151111081099710&fromToken=${USDC_BASE.address}&toToken=x&fromAmount=100000000&fromAddress=${WALLET}&toAddress=${WALLET}`);
 t('...and an EVM address as a Solana destination is refused by name',
-  solanaEvmDest.status === 400 && solanaEvmDest.body.error === 'EVM_ADDRESS_ON_SOLANA');
+  solanaEvmDest.status === 400 && solanaEvmDest.body?.error === 'EVM_ADDRESS_ON_SOLANA');
 
 /* routes */
 const routesRes = await get(`/api/cross-chain/routes?fromChain=8453&toChain=1&fromToken=${USDC_BASE.address}&toToken=${ETH_MAINNET.address}&fromAmount=100000000&fromAddress=${WALLET}`);
 t('GET /api/cross-chain/routes ranks every route it was given',
-  routesRes.status === 200 && routesRes.body.routes.length === 2 && routesRes.body.routes[0].rank === 1);
+  routesRes.status === 200 && routesRes.body?.routes?.length === 2 && routesRes.body?.routes?.[0]?.rank === 1);
 t('...and the best is chosen by score, not by provider order',
-  routesRes.body.best.tool === 'across' && routesRes.body.routes[0].tool === 'across');
+  routesRes.body?.best?.tool === 'across' && routesRes.body?.routes?.[0]?.tool === 'across');
 
 /* the ledger: create → track → complete */
 const created = await post('/api/cross-chain/transactions', {
@@ -370,7 +388,7 @@ const created = await post('/api/cross-chain/transactions', {
   expectedAmount: '30756000000000000',
   provider: 'lifi',
   tool: 'across',
-  quoteId: quoteRes.body.quote.quoteId,
+  quoteId: quoteRes.body?.quote?.quoteId,
   source: 'intent-os',
   sourceTxHash: '0x' + 'a'.repeat(64),
   gasCostUsd: 0.37,
@@ -378,50 +396,51 @@ const created = await post('/api/cross-chain/transactions', {
   protocolFeeUsd: 0.25,
   totalCostUsd: 1.21
 });
-t('a transfer is recorded once a real source hash exists', created.status === 201 && created.body.transaction.executionStatus === 'SUBMITTED');
-const txId = created.body.transaction.id;
+t('a transfer is recorded once a real source hash exists', created.status === 201 && created.body?.transaction?.executionStatus === 'SUBMITTED');
+const txId = created.body?.transaction?.id;
 
 const pending = await get(`/api/cross-chain/transactions/${txId}/status`);
 t('a pending transfer waiting on the destination is DESTINATION_PENDING',
-  pending.body.transaction.executionStatus === 'DESTINATION_PENDING' && pending.body.transaction.status === 'BRIDGING');
+  pending.body?.transaction?.executionStatus === 'DESTINATION_PENDING' && pending.body?.transaction?.status === 'BRIDGING');
 
 statusPhase = 'done-no-dest';
 const doneNoDest = await get(`/api/cross-chain/transactions/${txId}/status`);
 t('NO FAKE SUCCESS: provider DONE with no destination hash is still not completed',
-  doneNoDest.body.transaction.executionStatus === 'DESTINATION_PENDING'
-  && doneNoDest.body.transaction.status !== 'COMPLETED'
-  && doneNoDest.body.transaction.completedAt == null);
+  doneNoDest.body?.transaction?.executionStatus === 'DESTINATION_PENDING'
+  && doneNoDest.body?.transaction?.status !== 'COMPLETED'
+  && doneNoDest.body?.transaction?.completedAt == null);
 
 statusPhase = 'done';
 const done = await get(`/api/cross-chain/transactions/${txId}/status`);
 t('a real destination hash completes the transfer',
-  done.body.transaction.executionStatus === 'COMPLETED'
-  && done.body.transaction.destinationTxHash === '0x' + 'b'.repeat(64));
+  done.body?.transaction?.executionStatus === 'COMPLETED'
+  && done.body?.transaction?.destinationTxHash === '0x' + 'b'.repeat(64));
 t('...and records what actually arrived, not what was quoted',
-  done.body.transaction.actualAmount === '30700000000000000');
-t('...with a completion timestamp for the history row', Number(done.body.transaction.completedAt) > 0);
-t('the transition history is kept', done.body.transaction.history.length >= 2);
+  done.body?.transaction?.actualAmount === '30700000000000000');
+t('...with a completion timestamp for the history row', Number(done.body?.transaction?.completedAt) > 0);
+t('the transition history is kept', (done.body?.transaction?.history?.length ?? 0) >= 2);
 
 const late = await get(`/api/cross-chain/transactions/${txId}/status`);
-t('a late poll on a terminal row is a no-op, not a downgrade', late.body.transaction.executionStatus === 'COMPLETED');
+t('a late poll on a terminal row is a no-op, not a downgrade', late.body?.transaction?.executionStatus === 'COMPLETED');
 
 const cancelBroadcast = await post(`/api/cross-chain/transactions/${txId}/cancel`);
-t('a broadcast transfer cannot be "cancelled" — the honest 409', cancelBroadcast.status === 409 && cancelBroadcast.body.error === 'ALREADY_BROADCAST');
+t('a broadcast transfer cannot be "cancelled" — the honest 409', cancelBroadcast.status === 409 && cancelBroadcast.body?.error === 'ALREADY_BROADCAST');
 
 const preSign = await post('/api/cross-chain/transactions', {
   walletAddress: WALLET, fromChain: '8453', toChain: '1', fromAmount: '1', provider: 'lifi'
 });
-const cancelled = await post(`/api/cross-chain/transactions/${preSign.body.transaction.id}/cancel`);
+const cancelled = await post(`/api/cross-chain/transactions/${preSign.body?.transaction?.id}/cancel`);
 t('cancelling before broadcast is allowed and recorded as such',
-  cancelled.status === 200 && cancelled.body.transaction.executionStatus === 'FAILED' && cancelled.body.transaction.cancelled === true);
+  cancelled.status === 200 && cancelled.body?.transaction?.executionStatus === 'FAILED' && cancelled.body?.transaction?.cancelled === true);
 
 /* history */
 const history = await get(`/api/cross-chain/history?wallet=${WALLET}`);
 t('history is per wallet and includes the completed transfer',
-  history.status === 200 && history.body.transactions.some((r) => r.id === txId && r.status === 'COMPLETED'));
+  history.status === 200 && history.body?.transactions?.some((r) => r.id === txId && r.status === 'COMPLETED'));
 t('...and each row carries route, provider, both hashes, fees and timing',
   (() => {
-    const row = history.body.transactions.find((r) => r.id === txId);
+    const row = history.body?.transactions?.find((r) => r.id === txId);
+    if (!row) return false;
     return row.tool === 'across' && row.provider === 'lifi' && row.sourceTxHash && row.destinationTxHash
       && row.feesUsd.total === 1.21 && row.createdAt && row.completedAt;
   })());
@@ -430,11 +449,11 @@ t('a history request without a wallet is refused', (await get('/api/cross-chain/
 /* the Intent OS endpoint that used to be a mock */
 const intentQuote = await get('/api/intents/v1/bridge-quote?fromChain=8453&toChain=1&token=USDC&amount=100000000');
 t('/api/intents/v1/bridge-quote now answers from the real engine',
-  intentQuote.status === 200 && intentQuote.body.quote?.provider === 'lifi');
+  intentQuote.status === 200 && intentQuote.body?.quote?.provider === 'lifi');
 t('...and no longer returns the mock 999000 / fee 1000 shape',
-  intentQuote.body.estimatedOutput === undefined && intentQuote.body.fee === undefined);
+  intentQuote.body?.estimatedOutput === undefined && intentQuote.body?.fee === undefined);
 t('...resolving symbols to real contracts per chain',
-  intentQuote.body.fromToken?.address === USDC_BASE.address);
+  intentQuote.body?.fromToken?.address === USDC_BASE.address);
 t('...and refusing a symbol the destination chain does not have',
   (await get('/api/intents/v1/bridge-quote?fromChain=8453&toChain=1&token=NOPECOIN&amount=1000')).status === 404);
 
@@ -442,20 +461,20 @@ t('...and refusing a symbol the destination chain does not have',
 const health = await get('/api/health/cross-chain');
 t('GET /api/health/cross-chain reports every component',
   health.status === 200 && ['lifi', 'bridges', 'integrator', 'database', 'wallet', 'indexer']
-    .every((c) => health.body.components.some((x) => x.component === c)));
+    .every((c) => health.body?.components?.some((x) => x.component === c)));
 t('...including whether history is actually durable',
-  health.body.components.find((c) => c.component === 'database')?.durable === false);
+  health.body?.components?.find((c) => c.component === 'database')?.durable === false);
 
 /* provider down: an error, never a rate */
 providerDown = true;
 const downQuote = await get(`/api/cross-chain/quote?fromChain=8453&toChain=1&fromToken=${USDC_BASE.address}&toToken=${ETH_MAINNET.address}&fromAmount=100000000&fromAddress=${WALLET}`);
 t('with the provider down a quote is an ERROR, never an invented number',
-  downQuote.status >= 400 && downQuote.body.quote === undefined);
+  downQuote.status >= 400 && downQuote.body?.quote === undefined);
 const { _resetLifiCache } = await import('../server/lifi.js');
 _resetLifiCache();
 const downHealth = await get('/api/health/cross-chain');
 t('...and health says degraded with 503 so the UI can hide rates',
-  downHealth.status === 503 && downHealth.body.degraded === true);
+  downHealth.status === 503 && downHealth.body?.degraded === true);
 providerDown = false;
 _resetLifiCache();
 

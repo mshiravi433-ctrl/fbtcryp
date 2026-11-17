@@ -256,6 +256,14 @@ export function analyze(prices, coinArg = {}) {
    */
   const bt = backtest(values, 7);
   const confidence = confidenceFrom(bt, label, agreement);
+  /*
+   * Does the behaviour read actually pay? `backtest()` now buckets the SAME
+   * replay by the shape of the tape at each occurrence (`bt.tape`) inside the
+   * walk it already makes — so the answer costs an extra divisor, not a
+   * second pass over the prices. It is EVIDENCE, not a knob: nothing feeds it
+   * back into the class thresholds, so no weight is fitted to the past.
+   */
+  const behEdge = bt?.tape ?? null;
 
   return {
     score: Math.round(raw),
@@ -264,6 +272,7 @@ export function analyze(prices, coinArg = {}) {
     /* The evidence behind the number. A confidence figure you cannot inspect
        is just a bigger assertion. */
     backtest: bt,
+    behaviorEdge: behEdge,
     agreement: Math.round(agreement),
     price,
     indicators: {

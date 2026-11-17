@@ -289,3 +289,81 @@
   .mx-tab { gap: 5px; padding: 8px 6px; font-size: 11.5px; }
   .mx-tab-glyph { display: none; }
 }
+
+/* ══ THE HORIZON RAIL (2026-11-12) ═══════════════════════════════════════════
+   One segmented control: 1h · 24h · 7d. It governs the list (what is being
+   ranked) and every row's pill (which window is printed), so it sits ABOVE the
+   view chips rather than inside the sort popover — a reader has to be able to
+   see which window they are reading without opening a menu.
+
+   Built from the same tokens as the tab strip below it and the chips beside
+   it: no new colour, no new radius, no new light. The active cell is the
+   `--mx-cyan` wash the sort trigger already uses for its own selected state,
+   so the screen gains a control without gaining a material. */
+.mx-market .mx-horizon {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 9px;
+  min-width: 0;
+}
+
+.mx-market .mx-horizon-btn {
+  flex: 0 0 auto;
+  padding: 6px 11px;
+  border: 1px solid rgba(196, 222, 255, .14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .03);
+  color: var(--mx-muted);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+  cursor: pointer;
+  /* Only what the compositor can do — see market-perf.css §5 for why the rows
+     stopped animating background/shadow, same rule applies here. */
+  transition: color .15s ease, border-color .15s ease;
+}
+
+.mx-market .mx-horizon-btn:hover {
+  color: var(--mx-text);
+  border-color: rgba(196, 222, 255, .3);
+}
+
+.mx-market .mx-horizon-btn[data-active='true'] {
+  color: var(--mx-cyan);
+  border-color: color-mix(in srgb, var(--mx-cyan) 46%, transparent);
+  background: color-mix(in srgb, var(--mx-cyan) 12%, transparent);
+}
+
+.mx-market .mx-horizon-btn:focus-visible {
+  outline: 2px solid var(--mx-cyan);
+  outline-offset: 2px;
+}
+
+/* The light theme cannot read the cyan wash on white, so the active cell gets
+   the same treatment every other selected control in this sheet uses there:
+   a deeper ink on a tinted plate. */
+:root[data-theme='light'] .mx-market .mx-horizon-btn {
+  border-color: rgba(46, 67, 123, .16);
+  background: rgba(46, 67, 123, .04);
+  color: #4a5a7a;
+}
+:root[data-theme='light'] .mx-market .mx-horizon-btn[data-active='true'] {
+  color: #0d6d78;
+  border-color: rgba(13, 109, 120, .45);
+  background: rgba(13, 109, 120, .1);
+}
+
+/* The honesty note sits on the same line and wraps under on a phone. */
+.mx-market .mx-horizon-note {
+  min-width: 0;
+  color: var(--mx-faint);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+@media (max-width: 420px) {
+  .mx-market .mx-horizon-btn { padding: 6px 9px; font-size: 9.5px; }
+  .mx-market .mx-horizon-note { flex: 1 1 100%; }
+}

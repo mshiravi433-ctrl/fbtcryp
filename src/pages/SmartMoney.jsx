@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -15,12 +15,16 @@ import {
 } from '../components/smart-money/SmGlyphs';
 import {
   fetchOverview, fetchWhales, fetchFlows, fetchLiquidity,
-  fetchEarlyTokens, fetchFreshWallets, fetchExchanges,
-  fmtUsd, fmtPct, timeAgo, classifyQuery, chainIdForSlug
+  fetchEarlyTokens, fetchFreshWallets, fetchExchanges, fetchWallet,
+  fmtUsd, fmtPct, timeAgo, classifyQuery, chainIdForSlug, shortAddr
 } from '../lib/smartMoneyClient';
 import { openUrl } from '../lib/browser';
 import { useTelegram } from '../context/TelegramContext';
 import SmartMoneyIntelligence, { IntelligenceTeaser, VerifiedWallets } from '../components/SmartMoneyIntelligence';
+import { readWhalesOnToken, readSolanaWhales, readSolanaWallets } from '../lib/whaleEngine';
+import { readFreshWallets } from '../lib/freshWallets';
+import { readWatchlist, nextToRead } from '../lib/walletTracking';
+import { getSolanaWhales } from '../lib/solTrack';
 import CopyTradeButton from '../components/smart-money/CopyTradeButton';
 import TokenIcon from '../lib/tokenIcon';
 
@@ -285,9 +289,33 @@ function FreshCard({ wallet, navigate, t }) {
     >
       <span className="smx-fresh-top">
         <ChainPill color={wallet.chainColor}>{wallet.chainShort}</ChainPill>
-        <span className="smx-fresh-tag">FRESH &lt;48h</span>
-        {wallet.interesting && (
-          <span className="smx-fresh-star"><SmSparkGlyph width={11} height={11} /> Smart</span>
+        {/*
+          * This said «FRESH <48h» while `FRESH.maxAgeMs` — the window the
+          * endpoint actually filters on — is 24 hours. The badge promised a
+          * cohort the list could not contain. It now states the real window.
+          */}
+        <span className="smx-fresh-tag">FRESH &lt;24h</span>
+        {/*
+          * «Smart» came straight off the wire (`interesting`, i.e. «received a
+          * lot»). That is a fact about money, not skill, and a wallet born an
+          * hour ago cannot have a track record. The badge now names what was
+          * actually measured, and stays silent when nothing was.
+          */}
+        {wallet.early?.score != null ? (
+          <span
+            className={`smx-fresh-star ${wallet.early.label === 'roundTrip' ? 'is-warn' : ''}`}
+            title={t(`sm.earlyLabel${wallet.early.label.charAt(0).toUpperCase()}${wallet.early.label.slice(1)}`)}
+          >
+            {wallet.early.label === 'roundTrip' || wallet.early.label === 'late'
+              ? null
+              : <SmSparkGlyph width={11} height={11} />}
+            {t(`sm.earlyLabel${wallet.early.label.charAt(0).toUpperCase()}${wallet.early.label.slice(1)}`)}
+            {' '}<b className="mono">{wallet.early.score}</b>
+          </span>
+        ) : (
+          <span className="smx-fresh-star is-muted" title={t('sm.earlyRefused')}>
+            {t('sm.earlyLabelUnmeasured')}
+          </span>
         )}
       </span>
       <span className="smx-fresh-addr mono">{wallet.short}</span>
@@ -303,6 +331,55 @@ function FreshCard({ wallet, navigate, t }) {
         <span className="smx-fresh-go" aria-hidden="true"><IconArrowUpRight width={13} height={13} /></span>
       </span>
     </button>
+  );
+}
+
+/*
+ * The fresh-wallet summary line. Reuses the chip language the whale tab already
+ * uses, because it is the same kind of statement: a count, a concentration and
+ * a caveat. Renders nothing when the read measured nothing — an empty feed is
+ * already stated by the tab's own empty state.
+ */
+function FreshSummary({ read, t }) {
+  if (!read?.measured || !read.count) return null;
+  return (
+    <div className="smx-chips" data-testid="sm-fresh-read">
+      <span className="smx-chip">
+        <SmFreshGlyph width={11} height={11} />
+        {t('sm.freshReadCount', { n: read.count })}
+      </span>
+      {read.capitalUsd != null && (
+        <span className="smx-chip">
+          {t('sm.freshReadCapital')}
+          <b className="mono">{fmtUsd(read.capitalUsd)}</b>
+        </span>
+      )}
+      <span className={`smx-chip ${read.dominant ? 'is-warn' : ''}`}>
+        {read.dominant
+          ? t('sm.freshReadDominant', { pct: read.dominant.sharePct })
+          : t('sm.freshReadBroad')}
+      </span>
+      {/*
+        * «Still early» and «still actionable» are different claims and both are
+        * printed: a wallet can be young and the news already 26 hours old, and
+        * a list that printed only the first would be recommending a closed
+        * window. `earlyLive` is the number the reader can act on.
+        */}
+      {read.early > 0 && (
+        <span className="smx-chip" data-testid="sm-fresh-early">
+          • {t('sm.freshReadEarly', { n: read.early })}
+        </span>
+      )}
+      {read.earlyLive > 0 && (
+        <span className="smx-chip">{t('sm.freshReadEarlyLive', { n: read.earlyLive })}</span>
+      )}
+      {read.roundTrips > 0 && (
+        <span className="smx-chip is-warn">{t('sm.freshReadRoundTrips', { n: read.roundTrips })}</span>
+      )}
+      {read.unverified > 0 && (
+        <span className="smx-chip smx-chip--note">{t('sm.freshReadUnverified', { n: read.unverified })}</span>
+      )}
+    </div>
   );
 }
 
@@ -476,10 +553,15 @@ function TokenActivityRows({ rows, navigate, t }) {
               </span>
             </button>
             <span className="smx-row-action">
+              {/* The row's own activity IS the evidence, so the button's
+                  verdict and the row's signal are one reading — the same
+                  `readSmartMoney` call the Signals cards make. */}
               <CopyTradeButton
                 chain={r.chainId}
                 token={r.address}
                 side={neutral ? 'BUY' : r.signal === 'DISTRIBUTION' ? 'SELL' : 'BUY'}
+                activity={r}
+                window="24h"
                 className="sm-copy--tight"
               />
             </span>
@@ -663,13 +745,32 @@ export default function SmartMoney() {
     && verified.dataStatus !== 'unavailable';
   const consensusActive = verified?.counts?.consensusActive
     ?? (verified?.consensus || []).filter((r) => r.confidence != null).length;
+  /*
+   * «واجد شرایط» HAS TO MEAN THE WALLETS THAT ACTUALLY VOTE.
+   *
+   * This pod used to read `coverage.classifiedWallets` — wallets that cleared
+   * the ADMISSION gate — while the pod beside it counted consensus rows, which
+   * only exist for wallets that cleared a STRICTER gate (score ≥ 70, coverage
+   * ≥ 0.6, ≥ 5 closes, realized > 0, win rate ≥ 55, fresh profile). An index of
+   * twelve admitted wallets could therefore print «۱۲ واجد شرایط» beside
+   * «۰ اجماع» with nothing explaining the contradiction.
+   *
+   * `counts.qualified` is now the voting count (server/smartMoney/index.js →
+   * summariseVerified) and `counts.admitted` keeps the wider number, which the
+   * pod's tooltip names whenever the two disagree.
+   */
   const qualifiedWallets = verified?.counts?.qualified ?? vCov?.classifiedWallets ?? null;
+  const admittedWallets = verified?.counts?.admitted ?? null;
+  const votingShortfall = verifiedRead && admittedWallets != null && qualifiedWallets != null
+    && admittedWallets > qualifiedWallets;
   const analysedWallets = verified?.counts?.analysed ?? vCov?.analyzedWallets ?? null;
   const verifiedNote = !verifiedRead
     ? t('sm.pods.reading', { defaultValue: 'در حال خواندن موتور تأییدشده' })
     : verified?.stale
       ? t('sm.pods.stale', { defaultValue: 'آخرین خواندن موفق موتور' })
-      : undefined;
+      : votingShortfall
+        ? t('sm.pods.admittedButNotVoting', { admitted: admittedWallets, voting: qualifiedWallets })
+        : undefined;
   const liveLabel = t(data?.dataStatus === 'live' ? 'sm.live' : data?.dataStatus === 'unavailable' ? 'sm.offlineShort' : 'sm.checking');
 
   const metricFoot = (metric) => {
@@ -754,6 +855,13 @@ export default function SmartMoney() {
               <span className="smx-pod-ico is-mint" aria-hidden="true"><SmVerifiedGlyph width={15} height={15} /></span>
               <b className="mono">{verifiedRead ? (qualifiedWallets ?? '—') : '—'}</b>
               <small>{t('sm.engine.qualified')}</small>
+              {/* Only when the two gates disagree: the wider admission count,
+                  so a reader is never left wondering why the next pod is 0. */}
+              {votingShortfall && (
+                <em className="smx-pod-sub" data-testid="sm-pod-admitted">
+                  {t('sm.pods.admitted', { n: admittedWallets })}
+                </em>
+              )}
             </div>
             <div className="smx-pod" data-testid="sm-pod-consensus" title={verifiedNote}>
               <span className="smx-pod-ico is-violet" aria-hidden="true"><SmSignalGlyph width={15} height={15} /></span>
@@ -1025,6 +1133,9 @@ export default function SmartMoney() {
 
         {/* Verified, profitability-backed registry first. Keep the historical
             whale-transfer ranking as explicitly separate context below. */}
+        {/* The verified registry is EVM-indexed. The Solana whale list below it
+            comes from the SAME sampled payload the whales tab already paid for,
+            so this tab costs one chain read, not a second one. */}
         {tab === 'wallets' && <><VerifiedWallets /><WhalesTab navigate={navigate} t={t} smart /></>}
 
         {/* TOKEN INTELLIGENCE */}
@@ -1092,13 +1203,50 @@ function WhalesTab({ navigate, t, smart }) {
   const [rows, setRows] = useState(null);
   const [note, setNote] = useState(null);
   const [err, setErr] = useState(null);
+  /*
+   * ─── THE SOLANA FEED IS FETCHED HERE, ONCE ────────────────────────────────
+   *
+   * «نهنگ‌های سولانا و کیف پول‌های سولانا را در هوشمند مانی اضافه کن.»
+   *
+   * The two Solana surfaces — where the SOL went (the chain read) and who moved
+   * it (the wallet read) — are two readings of ONE payload. They used to be
+   * fetched inside the card that showed them, which was fine while there was
+   * only one card; adding the wallet list would have made the same five-minute
+   * cached read twice per view, and in the `wallets` tab (where two WhalesTabs
+   * mount) four times.
+   *
+   * So the fetch moved up, next to the EVM board. `readSolanaWhales` and
+   * `readSolanaWallets` are both pure functions over these bytes — no request,
+   * no timer — and `getSolanaWhales` already de-duplicates inside 120 s on the
+   * client and 15 min at the CDN. One payload, two readings.
+   *
+   * COST, because Fluid Active CPU is the budget this page lives on:
+   *   · the wallet read is 8.8 µs over the full 40-row ledger (measured), and
+   *     it runs once per payload change, not per render or per poll;
+   *   · the request is the SAME one the card already made, so adding the wallet
+   *     list adds ZERO invocations — the number of Solana reads per view is 1;
+   *   · both readings happen inside a `useMemo` on `solWatch`, so a window
+   *     change or an unrelated re-render does not re-aggregate anything.
+   */
+  const [solWatch, setSolWatch] = useState(null);
+  const [solState, setSolState] = useState('idle');
   useEffect(() => {
     let on = true;
     fetchWhales(smart ? 1_000_000 : 250_000)
       .then((d) => { if (!on) return; setRows(d.wallets || []); setNote(d.note || null); })
       .catch((e) => on && setErr(e.message));
+    setSolState('loading');
+    getSolanaWhales('usd')
+      .then((out) => {
+        if (!on) return;
+        setSolWatch(out?.ok ? out.data : null);
+        setSolState(out?.ok ? 'done' : (out?.code || 'NETWORK'));
+      })
+      .catch(() => { if (on) { setSolWatch(null); setSolState('NETWORK'); } });
     return () => { on = false; };
   }, [smart]);
+
+  const solWallets = useMemo(() => (solWatch ? readSolanaWallets({ watch: solWatch }) : null), [solWatch]);
 
   if (err) {
     return (
@@ -1138,6 +1286,12 @@ function WhalesTab({ navigate, t, smart }) {
             <b className="mono">{bandCount[b]}</b>
           </span>
         ))}
+        {/* Which chain the board actually covers. Everything below is EVM
+            scanner output; saying so is what keeps the Solana card below from
+            reading as "Solana has no whales". */}
+        <span className="smx-chip smx-chip--note">
+          {t('sm.whalesScope')}
+        </span>
       </div>
       <div className="smx-whale-grid">
         {rows.map((w, i) => (
@@ -1150,8 +1304,210 @@ function WhalesTab({ navigate, t, smart }) {
           />
         ))}
       </div>
+      <SolanaWhaleCard t={t} watch={solWatch} state={solState} />
+      <SolanaWallets
+        t={t}
+        read={solWallets}
+        state={solState}
+        onOpen={(address) => navigate(`/smart-money/wallet/solana/${address}`)}
+      />
       <p className="smx-disclaimer">{note || t('sm.whaleDisclaimer')}</p>
     </section>
+  );
+}
+
+/*
+ * ─── SOLANA WHALES, ON THE WHALE TAB ─────────────────────────────────────────
+ * «نهنگ‌های سولانا هم نشان داده شوند»
+ *
+ * They were already READ — the Smart Wallet panel has shown them for a while —
+ * but a reader looking at whales had no reason to open the wallet screen to
+ * find out that a whole other chain exists. So the same payload is rendered
+ * here, through `readSolanaWhales`, which is what turns raw movements into a
+ * reading: which side of each movement is a NAMED venue (that is the only thing
+ * that makes it sell intent vs accumulation), how much moved wallet-to-wallet
+ * (which is flow, not intent), and how much of the chain the sample actually
+ * saw.
+ *
+ * It costs NOTHING: the payload arrives as a prop from `WhalesTab`, which
+ * already fetches it once for the wallet list below. This card and
+ * `readSolanaWallets` are two readings of those same bytes. A blocked or empty
+ * feed renders its REASON — an empty whale list is not the same claim as "the
+ * node did not answer".
+ */
+function SolanaWhaleCard({ t, watch, state }) {
+  const read = useMemo(() => (watch ? readSolanaWhales({ watch }) : null), [watch]);
+  if (state === 'loading' && !read) return null;
+  /* Nothing to say and nothing measured: stay silent rather than print an
+     empty card that looks like a measured zero. */
+  if (!read && !watch) return null;
+
+  const lean = read?.direction === 'ACCUMULATION' ? 'up' : read?.direction === 'DISTRIBUTION' ? 'down' : null;
+  const coverage = watch?.coverage || null;
+
+  return (
+    <div className="smx-solwhale" data-testid="sm-solana-whales">
+      <div className="smx-solwhale-head">
+        <span className="smx-solwhale-ico" aria-hidden="true"><SmWavesGlyph width={14} height={14} /></span>
+        <b>{t('sm.solWhalesTitle')}</b>
+        {read?.movements > 0 && (
+          <span className="smx-solwhale-meta mono">
+            {t('sm.solWhaleMoved', { n: Math.round(read.solMoved).toLocaleString() })}
+          </span>
+        )}
+      </div>
+
+      {read?.measured ? (
+        <>
+          <div className="smx-solwhale-stats">
+            <div>
+              <small>{t('sm.solWhaleToVenues')}</small>
+              <b className="mono sm-down">{read.intoVenuesSol ? Math.round(read.intoVenuesSol).toLocaleString() : '—'}</b>
+            </div>
+            <div>
+              <small>{t('sm.solWhaleFromVenues')}</small>
+              <b className="mono sm-up">{read.outOfVenuesSol ? Math.round(read.outOfVenuesSol).toLocaleString() : '—'}</b>
+            </div>
+            <div>
+              <small>{t('sm.solWhaleWalletToWallet')}</small>
+              <b className="mono">{read.walletToWalletSol ? Math.round(read.walletToWalletSol).toLocaleString() : '—'}</b>
+            </div>
+          </div>
+          {/* The lean needs breadth, not just size: `confident` is false when a
+              single labelled movement carries the whole direction. */}
+          <p className={`smx-solwhale-lean ${lean ? `is-${lean}` : ''}`}>
+            {!lean
+              ? t('sm.solWhaleNoLean')
+              : t(read.confident ? 'sm.solWhaleLeanConfident' : 'sm.solWhaleLeanThin', {
+                side: t(lean === 'up' ? 'sm.solWhaleAccumulating' : 'sm.solWhaleDistributing'),
+                n: read.labelledMovements
+              })}
+          </p>
+          <ul className="smx-solwhale-list">
+            {(watch?.transfers || []).slice(0, 5).map((row) => (
+              <li key={row.id}>
+                <span className="mono" dir="ltr">{(Math.round(Number(row.sol) || 0)).toLocaleString()} SOL</span>
+                <span className="smx-solwhale-path">
+                  {row.fromLabel || (row.from ? shortAddr(row.from, 'solana') : '—')}
+                  <i aria-hidden="true">→</i>
+                  {row.toLabel || (row.to ? shortAddr(row.to, 'solana') : '—')}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="smx-solwhale-note">
+            {t('sm.solWhaleCoverage', {
+              n: coverage?.blocksPerRefresh ?? 0,
+              reused: coverage?.sampleMs ? Math.round(coverage.sampleMs / 60_000) : 20
+            })}
+          </p>
+        </>
+      ) : (
+        /* `available:false` means the node/Solscan did not answer. That is a
+           different sentence from "no whale moved in the block we read". */
+        <p className="smx-solwhale-note">
+          {watch?.available === false
+            ? (watch?.reason === 'UPSTREAM_UNAVAILABLE'
+              ? t('sm.solWhaleUnavailable')
+              : t('sm.solWhaleEmpty'))
+            : t('sm.solWhaleUnavailable')}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/*
+ * ─── SOLANA WALLETS — «کیف پول‌های سولانا» ──────────────────────────────────
+ * The chain read above answers «where is SOL going?». It does not answer the
+ * question a reader asks next: «کدام کیف پول‌ها؟» — which wallets are the ones
+ * doing it. That list used to be something you assembled in your head from the
+ * five movement rows.
+ *
+ * It is built from the SAME payload the card above already paid for
+ * (`readSolanaWallets`), so this section costs no request, no timer and no
+ * state. Each row states the gross it moved, the observed net, and — only when
+ * a venue is named on exactly one side — the lean, with its own sample count.
+ *
+ * A venue wallet (Binance, Kraken, …) is the counterparty, never a whale, and
+ * the engine filters it out before it reaches here.
+ */
+function SolanaWallets({ t, read, state, onOpen }) {
+  if (state === 'loading' && !read) return null;
+  if (!read) return null;
+
+  if (!read.measured) {
+    return (
+      <div className="smx-solwal" data-testid="sm-solana-wallets">
+        <div className="smx-solwal-head">
+          <b>{t('sm.solWalletsTitle')}</b>
+        </div>
+        <p className="smx-solwal-note">
+          {read.available === false && read.reason === 'UPSTREAM_UNAVAILABLE'
+            ? t('sm.solWhaleUnavailable')
+            : t('sm.solWalletsEmpty')}
+        </p>
+      </div>
+    );
+  }
+
+  const leanCls = (lean) => (lean === 'ACCUMULATION' ? 'is-up' : lean === 'DISTRIBUTION' ? 'is-down' : '');
+
+  return (
+    <div className="smx-solwal" data-testid="sm-solana-wallets">
+      <div className="smx-solwal-head">
+        <span className="smx-solwal-ico" aria-hidden="true"><SmWalletGlyph width={14} height={14} /></span>
+        <b>{t('sm.solWalletsTitle')}</b>
+        <span className="smx-solwal-meta mono">{read.count}</span>
+        {/* Breadth before size: one wallet carrying most of the sample is a
+            concentration, and saying it is cheaper than being misread. */}
+        {read.topSharePct != null && read.topSharePct >= 50 && (
+          <span className="smx-chip smx-chip--note">{t('sm.solWalletsConcentrated', { pct: read.topSharePct })}</span>
+        )}
+      </div>
+
+      <ul className="smx-solwal-list">
+        {read.wallets.map((w, i) => (
+          <li key={w.address} className="smx-solwal-row">
+            <span className="smx-solwal-rank mono">{String(i + 1).padStart(2, '0')}</span>
+            <button
+              type="button"
+              className="smx-solwal-hit"
+              onClick={() => onOpen(w.address)}
+            >
+              <span className="smx-solwal-body">
+                <span className="smx-solwal-top">
+                  <span className="mono" dir="ltr">{w.label || shortAddr(w.address, 'solana')}</span>
+                  {w.lean && <i className={`smx-solwal-lean ${leanCls(w.lean)}`}>{t(`sm.solWhale${w.lean === 'ACCUMULATION' ? 'Accumulating' : 'Distributing'}`)}</i>}
+                </span>
+                <span className="smx-solwal-sub">
+                  {t('sm.solWalletsMoved', { sol: Math.round(w.movedSol).toLocaleString() })}
+                  {w.movements > 1 ? ` · ${t('sm.solWalletsMovements', { n: w.movements })}` : ''}
+                </span>
+              </span>
+              <span className="smx-solwal-end">
+                <b className={`mono ${w.netSol > 0 ? 'sm-up' : w.netSol < 0 ? 'sm-down' : ''}`} dir="ltr">
+                  {w.netSol > 0 ? '+' : ''}{Math.round(w.netSol).toLocaleString()}
+                </b>
+                <small>{t('sm.solWalletsNet')}</small>
+                {/* The lean is only printed when the sample behind it is wide
+                    enough; otherwise the row says so instead of implying one. */}
+                {w.lean && !w.confident && (
+                  <small className="smx-solwal-thin">{t('sm.solWhaleLeanThin', { side: '', n: w.labelledMovements })}</small>
+                )}
+              </span>
+              <span className="smx-solwal-go" aria-hidden="true"><IconArrowUpRight width={13} height={13} /></span>
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      <p className="smx-solwal-note">
+        {t('sm.solWalletsSample', {
+          n: read.sampled?.slot ? Math.round(read.sampled.slot) : 0
+        })}
+      </p>
+    </div>
   );
 }
 
@@ -1198,6 +1554,34 @@ function TokensTab({ navigate, t, query, setQuery, winKey, activity }) {
   const activityRows = (activity || []).filter(hits);
   const earlyRows = (early || []).filter(hits);
   const freshRows = (fresh?.wallets || []).filter(hits);
+  /* One read over the whole (unfiltered) feed: concentration and breadth are
+     properties of the feed, not of the reader's search box. */
+  const freshRead = useMemo(() => readFreshWallets({ wallets: fresh?.wallets || [] }), [fresh]);
+  /* The cards below render `fresh.wallets` (the raw payload, filtered by the
+     search box), but the earlyness lives on the READ rows. One map, built once
+     per payload, joins them — cheaper than re-running the engine per card and
+     impossible for a card to show a different score than the summary chips. */
+  const earlyByAddr = useMemo(() => {
+    const m = new Map();
+    for (const w of freshRead.rows || []) m.set(String(w.address).toLowerCase(), w.early);
+    return m;
+  }, [freshRead]);
+  /*
+   * THE READ WAS COMPUTED AND THEN IGNORED.
+   *
+   * `freshRead` decided which rows were verified-fresh, and the grid below
+   * rendered `fresh.wallets` — the raw payload — so a row the read had thrown
+   * out as unverifiable still got a card, with a «Smart» star and a capital
+   * figure, while the summary chips above it counted a different set. Two
+   * numbers about one payload, disagreeing on the same screen.
+   *
+   * The grid now renders the read's own rows (search-filtered), so the count in
+   * the chips and the cards underneath it are the same list by construction.
+   */
+  const verifiedRows = useMemo(() => {
+    const keep = new Set((freshRead.rows || []).map((w) => String(w.address).toLowerCase()));
+    return freshRows.filter((w) => keep.has(String(w.address).toLowerCase()));
+  }, [freshRows, freshRead]);
   const nothing = early !== null && !activityRows.length && !earlyRows.length && !freshRows.length;
 
   return (
@@ -1279,12 +1663,26 @@ function TokensTab({ navigate, t, query, setQuery, winKey, activity }) {
         <p className="smx-disclaimer">{t('sm.earlyNote')}</p>
       </section>
 
-      {freshRows.length > 0 && (
+      {verifiedRows.length > 0 && (
         <section className="sm-section">
-          <SectionHead icon={<SmFreshGlyph width={16} height={16} />} title={t('sm.freshWallets')} meta={String(freshRows.length)} />
+          <SectionHead icon={<SmFreshGlyph width={16} height={16} />} title={t('sm.freshWallets')} meta={String(verifiedRows.length)} />
+          {/*
+            * «کیف پول‌های تازه» as a READING, not a row of cards. Three things
+            * the list could not say: whether the feed is one actor or many
+            * (`dominant`), whether the money ARRIVED and stayed or passed
+            * through (`watch` vs `passThrough`), and how many rows were thrown
+            * out for having no verifiable counter (`unverified`). All three are
+            * computed from the same payload the grid below already renders.
+            */}
+          <FreshSummary read={freshRead} t={t} />
           <div className="smx-fresh-grid">
-            {freshRows.slice(0, 6).map((w) => (
-              <FreshCard key={`${w.chainId}:${w.address}`} wallet={w} navigate={navigate} t={t} />
+            {verifiedRows.slice(0, 6).map((w) => (
+              <FreshCard
+                key={`${w.chainId}:${w.address}`}
+                wallet={{ ...w, early: earlyByAddr.get(String(w.address).toLowerCase()) || null }}
+                navigate={navigate}
+                t={t}
+              />
             ))}
           </div>
         </section>
@@ -1426,6 +1824,136 @@ function FlowsTab({ t, win = '24h', onWindow }) {
   );
 }
 
+/*
+ * THE WATCHLIST DIGEST — «پیگیری کیف پول» finally says something.
+ *
+ * The tracking layer has always written rows to localStorage and posted them to
+ * the server, and the reader has never been told anything about them: no count,
+ * no status, no sign that a tracked wallet had moved. This is the read, and it
+ * is deliberately CHEAP — it never fetches. Every tracked wallet's status is
+ * `pending` until a wallet page has actually been opened, and a `pending` row
+ * is rendered as «خوانده‌نشده», never as «۰ تغییر»:
+ *
+ *   · `readWatchlist` compares each row against the snapshot taken when the
+ *     reader tapped «Track» (see lib/walletTracking.js);
+ *   · `nextToRead` names which rows are worth opening, capped at 8, and this
+ *     panel offers ONE button that opens them — the same wallet endpoint the
+ *     wallet page already calls, at 120 s CDN / 30 s browser cache, so a full
+ *     digest of eight wallets is at most eight cached reads per visit, and the
+ *     server-side cache key is now per-wallet instead of per-clock (see
+ *     `analyzeWallet`).
+ *
+ * No new page, no new route, no polling: the digest renders on the tab that
+ * already exists and re-reads only when the reader taps.
+ *
+ * ─── COST (Fluid Active CPU, measured 2026-11-12) ───────────────────────────
+ * RENDER  `readWatchlist` 12.9 µs / 24 rows, `nextToRead` 2.8 µs, both in a
+ *         `useMemo` on [rows, wallets] — they run when the tab mounts or the
+ *         reader taps, never on a timer. The digest renders nothing at all when
+ *         no wallet is tracked, which is the default state.
+ * READS   Zero on mount. One tap opens at most 8 wallets, SEQUENTIALLY, through
+ *         the endpoint the wallet page already calls (30 s browser / 120 s CDN
+ *         cache). Eight parallel reads would be eight simultaneous five-source
+ *         fan-outs; sequential keeps the burst a burst.
+ * CACHE   The real saving is in `analyzeWallet`: its cache key used to embed
+ *         the live read budget, so it never hit and every open of a tracked
+ *         wallet re-read five upstream sources. It now keys on `budgetTier`, so
+ *         re-opening the same wallet inside the 120 s TTL costs no upstream
+ *         call at all — a strict reduction against the previous build.
+ * CLIENT  `readFreshWallets` grew from 8.8 µs to 41.4 µs over 40 rows (it now
+ *         runs the earlyness ladder per row), still in the memo that only fires
+ *         when the payload changes. 41 µs once per fetched payload is not a
+ *         CPU line item; a second network round-trip would have been.
+ */
+function WatchDigest({ navigate, t }) {
+  const [rows, setRows] = useState([]);
+  const [wallets, setWallets] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+
+  const reload = useCallback(() => {
+    import('../lib/smartMoneyWatch').then(({ getTracked }) => setRows(getTracked() || []));
+  }, []);
+  useEffect(() => { reload(); }, [reload]);
+
+  const read = useMemo(() => readWatchlist({ rows, wallets }), [rows, wallets]);
+  const queue = useMemo(() => nextToRead({ rows }), [rows]);
+
+  const readNow = useCallback(() => {
+    if (busy || !queue.length) return;
+    setBusy(true);
+    setNote(null);
+    // Sequential, not parallel: eight concurrent wallet reads is eight upstream
+    // fan-outs at once, and the point of the cap is to spend the budget slowly.
+    (async () => {
+      const next = { ...wallets };
+      let failures = 0;
+      for (const item of queue) {
+        try {
+          const w = await fetchWallet(item.chain, item.address);
+          next[item.key] = w;
+          const { stampRead } = await import('../lib/smartMoneyWatch');
+          stampRead(item.chain, item.address);
+        } catch {
+          failures += 1;
+          next[item.key] = { dataStatus: 'unavailable' };
+        }
+      }
+      setWallets(next);
+      reload();
+      setNote(failures ? 'partial' : 'ok');
+      setBusy(false);
+    })();
+  }, [busy, queue, wallets, reload]);
+
+  if (!read.count) return null;
+
+  return (
+    <div className="smx-chips smx-watchdigest" data-testid="sm-watch-digest">
+      <span className="smx-chip">
+        <SmBellGlyph width={11} height={11} />
+        {t('sm.watchDigest')} · {read.count}
+      </span>
+      {read.active > 0 && (
+        <span className="smx-chip is-mint">{t('sm.watchDigestActive', { n: read.active })}</span>
+      )}
+      {read.stillEarly > 0 && (
+        <span className="smx-chip">{t('sm.watchDigestStillEarly', { n: read.stillEarly })}</span>
+      )}
+      {read.pending > 0 && (
+        <span className="smx-chip smx-chip--note">{t('sm.watchDigestPending', { n: read.pending })}</span>
+      )}
+      {read.unavailable > 0 && (
+        <span className="smx-chip is-warn">{t('sm.watchDigestUnavailable', { n: read.unavailable })}</span>
+      )}
+      {read.quiet > 0 && (
+        <span className="smx-chip">{t('sm.watchDigestQuiet', { n: read.quiet })}</span>
+      )}
+      {queue.length > 0 && (
+        <button
+          type="button"
+          className={`smx-chip smx-chip--act ${busy ? 'is-busy' : ''}`}
+          onClick={readNow}
+          disabled={busy}
+        >
+          {busy ? <Spinner /> : null}
+          {t('sm.watchReadNow')} · {queue.length}
+        </button>
+      )}
+      {note === 'partial' && <span className="smx-chip is-warn">{t('sm.watchStatusUnavailable')}</span>}
+      {read.rows.length > 0 && (
+        <button
+          type="button"
+          className="smx-chip smx-chip--nav"
+          onClick={() => navigate(`/smart-money/wallet/${read.rows[0].chain}/${read.rows[0].address}`)}
+        >
+          {read.rows[0].label || read.rows[0].address?.slice(0, 8)}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function AlertsTab({ navigate, t }) {
   const [alerts, setAlerts] = useState(null);
   useEffect(() => {
@@ -1442,6 +1970,7 @@ function AlertsTab({ navigate, t }) {
         title={t('sm.whaleAlerts')}
         meta={alerts ? String(alerts.length) : null}
       />
+      <WatchDigest navigate={navigate} t={t} />
       {!alerts ? <Spinner /> : alerts.length === 0 ? (
         <EmptyArt
           icon={<SmBellGlyph width={22} height={22} />}

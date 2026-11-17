@@ -1,6 +1,7 @@
-import { memo, useEffect, useState } from 'react';
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { freshness } from '../../lib/marketList';
+import { useSharedClock } from '../../hooks/useSharedClock';
 
 /**
  * «قیمت‌های زنده» — HOW OLD THE FEED IS, IN ITS OWN COMPONENT.
@@ -25,25 +26,16 @@ const TICK_MS = 10_000;
 
 function MarketFreshness({ updatedAt }) {
   const { t } = useTranslation();
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), TICK_MS);
-    /*
-     * A background tab throttles `setInterval` to a minute or pauses it, so the
-     * chip would come back to a foregrounded screen still claiming the age it
-     * had when the tab was hidden. One read on visibility is enough to correct
-     * it, and it costs nothing while the tab is open.
-     */
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') setNow(Date.now());
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      clearInterval(id);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, []);
+  /*
+   * THE CLOCK IS SHARED (2026-11-12). This component, BtClock and DecisionOrb
+   * each used to own a `setInterval` — three timers, unaligned, on the same
+   * screen. `useSharedClock` keeps ONE interval per period, fans it out to
+   * every subscriber, pauses it in a hidden tab and corrects on return (the
+   * visibility handling that used to live here, now in one place). Each
+   * component still re-renders only itself, which was the point of owning the
+   * state here in the first place.
+   */
+  const now = useSharedClock(TICK_MS);
 
   const fresh = freshness(updatedAt, now);
   if (!fresh) return null;
