@@ -16,7 +16,7 @@
  * execution stays gated. Fail-closed by design.
  */
 
-import { JsonRpcProvider, Network, isAddress } from 'ethers';
+import { JsonRpcProvider, Network, isAddress } from './ethersLite.js';
 
 const MAX_DATA_BYTES = 24 * 1024;
 
@@ -52,9 +52,9 @@ export function createFlashSimulator({ rpcUrl = null, chainId = 0, provider = nu
       if (from != null && !isAddress(from)) return { ok: false, code: 'BAD_FROM' };
 
       if (!eth) {
-        eth = new JsonRpcProvider(
+        eth = await JsonRpcProvider(
           rpcUrl,
-          new Network('fbt-flash-sim', Number(chainId) || 1),
+          await Network('fbt-flash-sim', Number(chainId) || 1),
           { staticNetwork: true }
         );
       }

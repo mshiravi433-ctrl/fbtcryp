@@ -48,7 +48,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { Interface, getAddress, isAddress, verifyMessage } from 'ethers';
+import { Interface, getAddress, isAddress, verifyMessage } from './ethersLite.js';
 import { blobConfigured } from './blobCache.js';
 import {
   canonicalValue,
@@ -113,10 +113,27 @@ const WALLET_SIG_RE = /^0x[0-9a-fA-F]{128,132}$/;
 const CHAINS = new Set([1, 10, 56, 137, 146, 8453, 42161, 43114, 59144]);
 const MAX_BINDING_SECONDS = 366 * 86400;
 const MAX_CLOCK_SKEW_SECONDS = 300;
-const TRANSFER_IFACE = new Interface([
+let TRANSFER_IFACEP = null;
+const TRANSFER_IFACEReady = async () => {
+  if (!TRANSFER_IFACEP) TRANSFER_IFACEP = await Interface([
   'event Transfer(address indexed from, address indexed to, uint256 value)'
 ]);
-const TRANSFER_TOPIC = TRANSFER_IFACE.getEvent('Transfer').topicHash;
+  return TRANSFER_IFACEP;
+};
+/*
+ * The Transfer topic hash is derived from the ABI, so it is computed ON
+ * DEMAND rather than at module scope.
+ *
+ * A top-level `await` here would force the whole ABI machinery to load while
+ * the module is being imported — which is exactly the eager cost this work
+ * removed. The cost was measured: 93 ms of CPU on every cold start, for a
+ * topic hash that one log-filtering path needs.
+ */
+let TRANSFER_TOPICP = null;
+const transferTopic = async () => {
+  if (!TRANSFER_TOPICP) TRANSFER_TOPICP = (await TRANSFER_IFACEReady()).getEvent('Transfer').topicHash;
+  return TRANSFER_TOPICP;
+};
 
 const BINDING_FIELDS = new Set([
   'schema', 'stateId', 'partyId', 'chainId', 'address', 'partyPublicKey',
@@ -394,7 +411,15 @@ function challengeMessageFor(core, walletProof) {
  * The wallet private key is never requested or received — only the public
  * signature over the public challenge is checked.
  */
-function verifyWalletProof(core, walletProof, address) {
+/*
+ * The EIP-191 signature check.
+ *
+ * It is ASYNC because the signature verification lives behind a lazy
+ * `ethers/hash` import (see server/ethersLite.js) — the cryptography is not
+ * something to be written from scratch, and loading it on every cold start
+ * would cost more than the whole dashboard poll.
+ */
+async function verifyWalletProof(core, walletProof, address) {
   if (!walletProof || typeof walletProof !== 'object' || Array.isArray(walletProof)) {
     return { ok: false, code: 'BAD_WALLET_PROOF' };
   }
@@ -415,7 +440,7 @@ function verifyWalletProof(core, walletProof, address) {
   }
   let recovered;
   try {
-    recovered = verifyMessage(challengeMessageFor(core, walletProof), walletProof.signature);
+    recovered = await verifyMessage(challengeMessageFor(core, walletProof), walletProof.signature);
   } catch {
     return { ok: false, code: 'WALLET_PROOF_INVALID' };
   }
@@ -428,7 +453,7 @@ function verifyWalletProof(core, walletProof, address) {
  * plan. The binding MUST be signed by the exact Ed25519 key the state pins
  * for that party — an address arriving in an API request body proves nothing.
  */
-export function verifyAccountBinding(input, { state, now = Date.now() } = {}) {
+export async function verifyAccountBinding(input, { state, now = Date.now() } = {}) {
   const checkedState = validateCrossChainState(state);
   if (!checkedState.ok) return checkedState;
   const plan = checkedState.state;
@@ -479,7 +504,7 @@ export function verifyAccountBinding(input, { state, now = Date.now() } = {}) {
       return { ok: false, code: 'BAD_ACCOUNT_BINDING_CLAIMS' };
     }
   } else {
-    const proof = verifyWalletProof({
+    const proof = await verifyWalletProof({
       schema: input.schema,
       stateId: input.stateId,
       partyId: input.partyId,
@@ -508,7 +533,7 @@ export function verifyAccountBinding(input, { state, now = Date.now() } = {}) {
 /** Build a binding in the party's own environment. Key stays CLI-side. The
  *  optional walletProof is the EIP-191 signature over the deterministic
  *  challenge from buildAccountBindingChallenge. */
-export function buildAccountBinding({
+export async function buildAccountBinding({
   state,
   partyId,
   chainId,
@@ -558,7 +583,7 @@ export function buildAccountBinding({
       nonce: String(walletProof?.nonce ?? ''),
       signature: String(walletProof?.signature || '')
     };
-    checkedProof = verifyWalletProof({
+    checkedProof = await verifyWalletProof({
       schema: core.schema,
       stateId: core.stateId,
       partyId: core.partyId,
@@ -581,7 +606,7 @@ export function buildAccountBinding({
   } catch {
     return { ok: false, code: 'BAD_PRIVATE_KEY' };
   }
-  return verifyAccountBinding(binding, { state: checkedState.state, now });
+  return await verifyAccountBinding(binding, { state: checkedState.state, now });
 }
 
 /* ------------------------- multi-RPC observation -------------------------- */
@@ -624,13 +649,13 @@ const hexInt = (value) => {
   }
 };
 
-function decodeTransferLog(log) {
+async function decodeTransferLog(log) {
   try {
-    if (!Array.isArray(log?.topics) || log.topics.length !== 3 || !same(log.topics[0], TRANSFER_TOPIC)) {
+    if (!Array.isArray(log?.topics) || log.topics.length !== 3 || !same(log.topics[0], await transferTopic())) {
       return null;
     }
     if (typeof log.data !== 'string' || log.data.length > MAX_LOG_DATA_CHARS) return null;
-    const parsed = TRANSFER_IFACE.parseLog({ topics: log.topics, data: log.data });
+    const parsed = (await TRANSFER_IFACEReady()).parseLog({ topics: log.topics, data: log.data });
     if (!parsed) return null;
     return {
       from: getAddress(parsed.args.from),
@@ -732,7 +757,9 @@ async function observeEndpoint({ url, index, expected, rpc }) {
      never verified without an explicit policy, and ambiguous duplicate
      events are rejected rather than guessed. */
   const tokenLogs = checked.logs.filter((log) => !log?.removed && same(log?.address, expected.tokenAddress));
-  const transfers = tokenLogs.map(decodeTransferLog).filter(Boolean);
+  /* The log decoder is async (the ABI machinery is loaded on demand), so the
+     map is awaited rather than left as a promise array. */
+  const transfers = (await Promise.all(tokenLogs.map((log) => decodeTransferLog(log)))).filter(Boolean);
   /* A Transfer-shaped event from any OTHER contract is never accepted, and
      a log at the right contract that does not decode as a standard Transfer
      is malformed evidence — fail closed, never guessed. */
@@ -872,9 +899,9 @@ export async function verifyLegOnChain({
   const checkedReceipt = verifyCrossChainReceipt(receipt, { state: plan, previousReceipts });
   if (!checkedReceipt.ok) return checkedReceipt;
   const leg = checkedReceipt.receipt;
-  const checkedFrom = verifyAccountBinding(fromBinding, { state: plan, now });
+  const checkedFrom = await verifyAccountBinding(fromBinding, { state: plan, now });
   if (!checkedFrom.ok) return checkedFrom;
-  const checkedTo = verifyAccountBinding(toBinding, { state: plan, now });
+  const checkedTo = await verifyAccountBinding(toBinding, { state: plan, now });
   if (!checkedTo.ok) return checkedTo;
   if (checkedFrom.binding.partyId !== leg.fromPartyId
     || checkedTo.binding.partyId !== leg.toPartyId
@@ -955,7 +982,7 @@ function expectedClaimsFor(verdict) {
  * state, receipt and bindings. This does NOT touch the network; recomputation
  * against live RPC happens separately so the two failure classes stay apart.
  */
-export function verifyTxVerificationReport(input, {
+export async function verifyTxVerificationReport(input, {
   state,
   receipt,
   previousReceipts = [],
@@ -970,9 +997,9 @@ export function verifyTxVerificationReport(input, {
   const checkedReceipt = verifyCrossChainReceipt(receipt, { state: plan, previousReceipts });
   if (!checkedReceipt.ok) return checkedReceipt;
   const leg = checkedReceipt.receipt;
-  const checkedFrom = verifyAccountBinding(fromBinding, { state: plan, now });
+  const checkedFrom = await verifyAccountBinding(fromBinding, { state: plan, now });
   if (!checkedFrom.ok) return checkedFrom;
-  const checkedTo = verifyAccountBinding(toBinding, { state: plan, now });
+  const checkedTo = await verifyAccountBinding(toBinding, { state: plan, now });
   if (!checkedTo.ok) return checkedTo;
   if (!bindingsHaveWalletProof(checkedFrom.binding, checkedTo.binding)) {
     return { ok: false, code: 'WALLET_PROOF_REQUIRED' };
@@ -1166,7 +1193,7 @@ export async function buildTxVerificationReport({
   } catch {
     return { ok: false, code: 'BAD_PRIVATE_KEY' };
   }
-  const checked = verifyTxVerificationReport(report, {
+  const checked = await verifyTxVerificationReport(report, {
     state, receipt, previousReceipts, fromBinding, toBinding,
     registry: registry.size ? registry : new Map([[verifierId, { id: verifierId, publicKey, active: true }]]),
     now
@@ -1193,7 +1220,7 @@ export async function recomputeTxVerificationReport(report, {
   rpc = defaultRpc,
   now = Date.now()
 } = {}) {
-  const checked = verifyTxVerificationReport(report, {
+  const checked = await verifyTxVerificationReport(report, {
     state, receipt, previousReceipts, fromBinding, toBinding, registry, now
   });
   if (!checked.ok) return checked;
@@ -1422,7 +1449,7 @@ function normalizeLegacyReport(record) {
 export async function storeAccountBinding(stateId, binding, { now = Date.now() } = {}) {
   const current = await readCrossChainState(stateId, { now });
   if (current.error) return { ok: false, code: current.error };
-  const checked = verifyAccountBinding(binding, { state: current.state, now });
+  const checked = await verifyAccountBinding(binding, { state: current.state, now });
   if (!checked.ok) return checked;
   const path = bindingPath(current.state.stateId, checked.binding.partyId, checked.binding.chainId);
   try {

@@ -27,11 +27,25 @@
 import { routeForIntent, aliasChainId, aliasToken, isSolanaIntent } from './moduleRouter.js';
 import { SPECULATION_ENABLED } from '../../features.js';
 
-const PERSIAN_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
+const DIGIT_VALUES = Object.freeze({
+  '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4', '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9',
+  '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'
+});
+const PERSIAN_AMOUNT_WORDS = Object.freeze({
+  نیم: '0.5', یه: '1', یک: '1', دو: '2', سه: '3', چهار: '4', پنج: '5',
+  شش: '6', هفت: '7', هشت: '8', نه: '9', ده: '10'
+});
 
-/** Persian digits arrive in the chat all the time; the parser's \d does not. */
+/** Persian/Arabic digits and common Persian number words need the same route value. */
 export function toAsciiDigits(value) {
-  return String(value ?? '').replace(/[۰-۹]/g, (d) => String(PERSIAN_DIGITS.indexOf(d)));
+  return String(value ?? '').replace(/[۰-۹٠-٩]/g, (digit) => DIGIT_VALUES[digit] || digit);
+}
+
+function parseAmountValue(value) {
+  const text = String(value ?? '').trim().toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(PERSIAN_AMOUNT_WORDS, text)) return PERSIAN_AMOUNT_WORDS[text];
+  const ascii = toAsciiDigits(text).replace(/,/g, '');
+  return /^\d+(?:\.\d+)?$/.test(ascii) ? ascii : null;
 }
 
 function q(params) {
@@ -47,12 +61,16 @@ function q(params) {
 /** Amount from entities first (already parsed), else from the raw sentence. */
 function extractAmount(intent) {
   const e = intent?.entities || {};
-  let m = e.amount != null ? toAsciiDigits(e.amount) : null;
-  if (!m && e.amountUsd != null) m = toAsciiDigits(e.amountUsd);
+  let m = parseAmountValue(e.amount) || parseAmountValue(e.amountUsd);
   if (!m) {
     const raw = toAsciiDigits(String(intent?.raw || ''));
-    const match = raw.match(/(\d+(?:[.,]\d+)?)/);
-    if (match) m = match[1];
+    const numeric = raw.match(/(\d+(?:[.,]\d+)?)/);
+    if (numeric) {
+      m = numeric[1];
+    } else {
+      const word = raw.match(/(?:^|[^\p{L}\p{N}])(نیم|یه|یک|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده)(?=\s*(?:USDC|USDT|USD|ETH|BTC|SOL|BNB|ARB|MATIC|AVAX|OP|DAI|تتر|اتریوم|اتر|بیت\s*کوین|بیتکوین))[^\p{L}\p{N}]?/iu);
+      if (word) m = PERSIAN_AMOUNT_WORDS[word[1]] || null;
+    }
   }
   return m ? String(m).replace(/,/g, '') : null;
 }

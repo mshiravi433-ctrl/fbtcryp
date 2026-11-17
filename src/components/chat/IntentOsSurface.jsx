@@ -42,6 +42,113 @@ function renderLine(line, index) {
   );
 }
 
+const COLLAB_STATUS_EN = {
+  AWAITING_REVIEW: 'Awaiting review', IN_PROGRESS: 'In progress', PLAN_REQUESTED: 'Plan requested', CONSENT_RECORDED: 'Planning consent recorded',
+  AWAITING_CONSENT: 'Awaiting consent', AWAITING_COUNTERPARTY: 'Awaiting counterparty',
+  PARTIAL_REVIEW: 'Partial review', REVISION_REQUIRED: 'Revision required', REJECTED: 'Rejected',
+  OFFERED: 'Offered', AWAITING_USER: 'Awaiting your input', AWAITING_USER_SEND: 'Awaiting your send',
+  AWAITING_PROVIDER: 'Awaiting provider', AWAITING_INPUT: 'Needs input', AWAITING_PARTICIPANT: 'Awaiting participant',
+  COMPLETED: 'Completed', REPORTED_UNVERIFIED: 'Reported — unverified', BLOCKED: 'Blocked', UNAVAILABLE: 'Unavailable',
+  PENDING: 'Pending', REVIEWED: 'Reviewed', NEEDS_REVISION: 'Needs revision',
+  NOT_RECORDED: 'Not recorded', RECORDED_LOCAL: 'Planning only', LOCAL_ACCEPTANCE_ONLY: 'Local acceptance only',
+  NOT_VERIFIED: 'Not verified', NOT_REQUIRED: 'Not required'
+};
+const COLLAB_STATUS_FA = {
+  AWAITING_REVIEW: 'در انتظار بازبینی', IN_PROGRESS: 'در حال انجام', PLAN_REQUESTED: 'درخواست پلن ثبت شد', CONSENT_RECORDED: 'رضایت برنامه‌ریزی ثبت شد',
+  AWAITING_CONSENT: 'در انتظار رضایت', AWAITING_COUNTERPARTY: 'در انتظار طرف مقابل',
+  PARTIAL_REVIEW: 'بازبینی ناقص', REVISION_REQUIRED: 'نیاز به اصلاح', REJECTED: 'ردشده',
+  OFFERED: 'پیشنهادشده', AWAITING_USER: 'در انتظار پاسخ تو', AWAITING_USER_SEND: 'در انتظار ارسال تو',
+  AWAITING_PROVIDER: 'در انتظار ارائه‌دهنده', AWAITING_INPUT: 'نیازمند ورودی', AWAITING_PARTICIPANT: 'در انتظار شرکت‌کننده',
+  COMPLETED: 'تکمیل‌شده', REPORTED_UNVERIFIED: 'گزارش‌شده — تأییدنشده', BLOCKED: 'مسدود', UNAVAILABLE: 'در دسترس نیست',
+  PENDING: 'در انتظار', REVIEWED: 'بازبینی‌شده', NEEDS_REVISION: 'نیاز به اصلاح',
+  NOT_RECORDED: 'ثبت‌نشده', RECORDED_LOCAL: 'فقط برنامه‌ریزی', LOCAL_ACCEPTANCE_ONLY: 'پذیرش محلیِ سمت تو',
+  NOT_VERIFIED: 'تأییدنشده', NOT_REQUIRED: 'لازم نیست'
+};
+const collabStatus = (value, fa) => (fa ? COLLAB_STATUS_FA : COLLAB_STATUS_EN)[String(value || '')] || String(value || '—').slice(0, 40);
+const short = (value, max = 240) => String(value ?? '').slice(0, max);
+
+function CollaborationPanel({ session, externalGate, fa }) {
+  const participants = Array.isArray(session?.participants) ? session.participants.slice(0, 8) : [];
+  const tasks = Array.isArray(session?.tasks) ? session.tasks.slice(0, 8) : [];
+  const labels = fa ? {
+    title: 'گردش همکاری', participants: 'شرکت‌کنندگان', tasks: 'وظایف و نتایج', review: 'بازبینی',
+    localConsent: 'رضایت تو', counterparty: 'طرف مقابل', execution: 'اجرا', noExecution: 'هیچ اجرا یا تماس خارجی مجاز نیست.',
+    identity: 'هویت', consent: 'رضایت کاربر', runtime: 'runtime دارای attestation',
+    local: 'محلی', unverified: 'تأییدنشده', verified: 'ثبتِ سروری/مورد اعتماد', source: 'منبع'
+  } : {
+    title: 'Collaboration workflow', participants: 'Participants', tasks: 'Assignments and results', review: 'Review',
+    localConsent: 'Your consent', counterparty: 'Counterparty', execution: 'Execution', noExecution: 'No execution or external contact is authorized.',
+    identity: 'Identity', consent: 'User consent', runtime: 'Attested runtime',
+    local: 'Local', unverified: 'Unverified', verified: 'Server-receipted', source: 'Source'
+  };
+  if (!session && !externalGate) return null;
+  return (
+    <section className="iaos-os-collaboration" data-testid="intent-os-collaboration" aria-label={labels.title}>
+      {session ? (
+        <>
+          <div className="iaos-os-collab-head">
+            <b>{labels.title}</b>
+            <span data-testid="intent-os-collaboration-state">{collabStatus(session.state, fa)}</span>
+          </div>
+          <div className="iaos-os-collab-group">
+            <b>{labels.participants}</b>
+            <ul className="iaos-os-collab-people">
+              {participants.map((person) => (
+                <li key={person.id} data-identity-status={person.identityStatus || 'unverified'}>
+                  <strong>{short(person.label || person.id, 80)}</strong>
+                  <span>{short(person.kind, 32)}</span>
+                  {person.kind === 'counterparty' || person.kind === 'external-agent'
+                    ? <small>{labels.unverified}</small>
+                    : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="iaos-os-collab-group">
+            <b>{labels.tasks}</b>
+            <ul className="iaos-os-collab-tasks">
+              {tasks.map((task) => {
+                const assignee = participants.find((person) => person.id === task.assigneeId);
+                return (
+                  <li key={task.id} data-task-status={task.status}>
+                    <div className="iaos-os-collab-task-head">
+                      <strong>{short(task.title || task.id, 120)}</strong>
+                      <span>{collabStatus(task.status, fa)}</span>
+                    </div>
+                    <small>{short(assignee?.label || task.assigneeId, 80)}</small>
+                    {task.result?.text ? <p>{short(task.result.text, 360)}</p> : null}
+                    {task.result ? (
+                      <small>{labels.source}: {short(task.result.source || labels.local, 48)} · {task.result.verified === true ? labels.verified : labels.unverified}</small>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+          <dl className="iaos-os-collab-gates">
+            <div><dt>{labels.review}</dt><dd>{collabStatus(session.review?.status, fa)}</dd></div>
+            <div><dt>{labels.localConsent}</dt><dd>{collabStatus(session.consent?.local?.status, fa)}</dd></div>
+            <div><dt>{labels.counterparty}</dt><dd>{collabStatus(session.consent?.counterparty?.status, fa)}</dd></div>
+            <div><dt>{labels.execution}</dt><dd>{session.executionAuthorized === true ? (fa ? 'فعال' : 'Authorized') : (fa ? 'غیرفعال' : 'Not authorized')}</dd></div>
+          </dl>
+          <p className="iaos-os-collab-boundary">{labels.noExecution}</p>
+        </>
+      ) : null}
+      {externalGate ? (
+        <div className="iaos-os-collab-external" data-testid="intent-os-external-gate">
+          <b>{fa ? 'دروازهٔ ایجنت خارجی' : 'External-agent gates'}</b>
+          {[['identity', externalGate.identity], ['consent', externalGate.consent], ['runtime', externalGate.runtime]].map(([key, gate]) => (
+            <div key={key} data-gate-status={gate?.ok === true ? 'passed' : 'blocked'}>
+              <span>{labels[key]}: {gate?.ok === true ? (fa ? 'تأیید شد' : 'Passed') : (fa ? 'مسدود' : 'Blocked')}</span>
+              <small>{short(gate?.code || gate?.status || 'NOT_VERIFIED', 64)}</small>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export const OsEventCard = memo(function OsEventCard({ event, locale = 'fa', onChip, onOpenRoute, busy = false }) {
   if (!event) return null;
   const fa = String(locale || 'fa').startsWith('fa');
@@ -63,6 +170,9 @@ export const OsEventCard = memo(function OsEventCard({ event, locale = 'fa', onC
         <div className="iaos-os-head"><span className="iaos-os-badge">{event.badge}</span></div>
       ) : null}
       {lines.length ? <div className="iaos-os-lines">{lines.map(renderLine)}</div> : null}
+      {(payload?.collaboration || payload?.externalGate) ? (
+        <CollaborationPanel session={payload.collaboration || null} externalGate={payload.externalGate || null} fa={fa} />
+      ) : null}
       {payload?.outcome === 'CONFLICT' && payload?.conflicts?.length ? (
         <div className="iaos-os-note iaos-os-bad-note">
           {fa ? `تضادهای پیدا‌شده: ${payload.conflicts.length}` : `Conflicts found: ${payload.conflicts.length}`}

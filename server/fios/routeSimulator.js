@@ -22,6 +22,7 @@
  *   { ok, status:'passed'|'failed', output, fee, slippagePct, providerId, evidence }
  */
 import { createHash } from 'node:crypto';
+import { capitalUsdFor } from './financialState.js';
 import { round } from '../../src/lib/central/schema.js';
 
 export const ROUTE_SIMULATOR_SCHEMA = 'fbt.fi.route-simulator.v1';
@@ -71,7 +72,7 @@ export function createRouteSimulator({
   return async function routeSimulator({ strategyId, route = [], context = {} } = {}) {
     const at = typeof now === 'function' ? now() : now;
     const fs = financial?.computed || financial || {};
-    const capital = num(fs.netWorthUsd ?? fs.availableCapitalUsd ?? context.capitalUsd);
+    const capital = capitalUsdFor(financial) ?? num(fs.availableCapitalUsd) ?? num(context.capitalUsd);
     const strategy = (strategiesById && strategiesById.get?.(strategyId))
       || (strategiesById && strategiesById[strategyId])
       || context.strategy

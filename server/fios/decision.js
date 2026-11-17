@@ -23,6 +23,7 @@
 import { randomUUID } from 'node:crypto';
 import { rankDecisions, weightsFor } from '../../src/lib/central/decision.js';
 import { confidenceFromEvidence } from './evidence.js';
+import { capitalUsdFor } from './financialState.js';
 import { resolveExecutionAuthority, limitsFromContext } from './executionAuthority.js';
 
 export const DECISION_RECORD_SCHEMA = 'fbt.fi.decision.v1';
@@ -108,8 +109,8 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
         name: s.name,
         type: mapKindToDecisionType(s.kind),
         expectedReturnPct: num(s.expectedReturnPct),
-        expectedBenefitUsd: num(s.expectedReturnPct) !== null && num(financial.computed?.netWorthUsd) !== null
-          ? Number(((num(s.expectedReturnPct) / 100) * num(financial.computed.netWorthUsd)).toFixed(2))
+        expectedBenefitUsd: num(s.expectedReturnPct) !== null && capitalUsdFor(financial) !== null
+          ? Number(((num(s.expectedReturnPct) / 100) * capitalUsdFor(financial)).toFixed(2))
           : null,
         capitalRequiredUsd: num(s.feesUsd) !== null ? num(s.feesUsd) : null,
         riskLevel: riskLevelFrom(s.riskPct),
@@ -232,8 +233,9 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
     if (chosenStrategy?.expectedReturnPct !== null && chosenStrategy?.expectedReturnPct !== undefined) {
       evidenceInputs.push({ type: 'research', source: `decision:${chosenStrategy.kind}`, value: { decisionId, strategyId: chosenStrategy.id, expectedReturnPct: chosenStrategy.expectedReturnPct, riskPct: chosenStrategy.riskPct }, at, ttlMs: 15 * 60_000 });
     }
-    if (financial.computed?.netWorthUsd !== null && financial.computed?.netWorthUsd !== undefined) {
-      evidenceInputs.push({ type: 'balance', source: 'financial-state', value: financial.computed.netWorthUsd, at, ttlMs: 60_000 });
+    const capitalForEvidence = capitalUsdFor(financial);
+    if (capitalForEvidence !== null && capitalForEvidence !== undefined) {
+      evidenceInputs.push({ type: 'balance', source: 'financial-state', value: capitalForEvidence, at, ttlMs: 60_000 });
     }
     const recorded = await evidence.record(owner, evidenceInputs, { correlationId });
     const evidenceIds = [...new Set([...(recorded.evidence.map((e) => e.id)), ...(research?.evidenceIds || []), ...(simulation?.evidenceIds || [])])];
@@ -292,7 +294,7 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
       status: chosen ? 'RECOMMENDED' : 'NO_RECOMMENDATION',
       /* Phase 212 — the why engine's falsifier math reads this: the worst
          modelled case as a SHARE of net worth vs the user's drawdown ceiling. */
-      netWorthUsd: num(financial.computed?.netWorthUsd),
+      netWorthUsd: capitalUsdFor(financial),
       reason,
       confidence,
       alternatives: ranked.slice(1, 5).map((r) => ({ strategyId: r.id, name: r.name, type: r.type, score: r.score?.score ?? null, expectedReturnPct: r.expectedReturnPct })),

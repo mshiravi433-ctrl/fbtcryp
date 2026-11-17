@@ -80,7 +80,7 @@ export const PAGE_OPEN_INTENTS = Object.freeze([
   'MARKET_ANALYSIS', 'STOCKS', 'RWA', 'FUTURES', 'DYDX', 'P2P', 'FARM', 'LEND',
   'YIELD_DISCOVERY', 'INVESTMENT_PLAN', 'OPS_CENTER', 'AGENTS', 'STRATEGY',
   'SYSTEM_STATUS', 'SETTINGS', 'REWARDS', 'NFT', 'SHOP', 'EXPLORE', 'INTENT_OS',
-  'BTC_WALLET', 'ORDERS', 'SMART_MONEY', 'WHALE', 'PORTFOLIO_ANALYSIS'
+  'BTC_WALLET', 'ORDERS', 'SMART_MONEY', 'WHALE', 'INSURANCE', 'PORTFOLIO_ANALYSIS'
 ]);
 
 export const INTENT_DEFAULT_ROUTE = Object.freeze({
@@ -95,6 +95,7 @@ export const INTENT_DEFAULT_ROUTE = Object.freeze({
   GOAL: '/invest',
   FARM: '/farm',
   LEND: '/loan',
+  INSURANCE: '/insurance',
   STOCKS: '/stocks',
   RWA: '/stocks',
   FUTURES: '/perp',

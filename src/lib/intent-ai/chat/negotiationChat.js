@@ -33,6 +33,11 @@ import { DEFAULT_POLICY_CAPS } from '../permissions.js';
 import { MAX_ESCROW_USD } from '../agentEscrow.js';
 import { APPEAL_WINDOW_MS } from '../agentDispute.js';
 import { RISK_PROFILES } from '../../strategyBrain/strategyEngine.js';
+import {
+  COLLABORATION_LOCAL_USER_ID,
+  createCollaborationSession
+} from './collaborationLifecycle.js';
+import { createExternalAgentRuntime } from '../externalAgentRuntime.js';
 
 export const NEGOTIATION_CHAT_SCHEMA = 'fbt.chat-negotiation.v1';
 
@@ -181,7 +186,7 @@ function line(from, type, text, params = null) {
   return { from, type, text, params };
 }
 
-function baseResult({ mode, intent, locale }) {
+function baseResult({ mode, intent, locale, now }) {
   return {
     ok: true,
     schema: NEGOTIATION_CHAT_SCHEMA,
@@ -196,18 +201,68 @@ function baseResult({ mode, intent, locale }) {
     question: null,
     chips: [],
     notes: [],
+    collaboration: null,
     requiresUserAuthorization: true,
     executed: false,
     broadcast: false,
-    at: Date.now()
+    at: Number(now)
   };
+}
+
+function localParticipant(locale) {
+  return { id: COLLABORATION_LOCAL_USER_ID, kind: 'human', label: isFa(locale) ? 'تو' : 'You' };
+}
+
+function internalParticipant(id, label, status = 'available') {
+  return { id: `fbt:${id}`, kind: 'internal-agent', label, status };
+}
+
+function attachCollaboration(result, { participants, tasks, now, subject = '' } = {}) {
+  const opened = createCollaborationSession({
+    mode: result.mode,
+    subject,
+    participants: [localParticipant(result.locale), ...(participants || [])],
+    tasks: tasks || [],
+    now
+  });
+  result.collaboration = opened.ok ? opened.session : null;
+  return result.collaboration;
+}
+
+export function collaborationActionChips(session, locale = 'fa') {
+  if (!session) return [];
+  const fa = isFa(locale);
+  const mode = session.mode;
+  if (session.review?.status === 'PENDING') {
+    const hasBlockers = (session.tasks || []).some((task) => task.status === 'BLOCKED');
+    return [
+      ...(!hasBlockers ? [{ id: 'collab-review-accept', label: fa ? 'پیش‌نویس را بازبینی کردم' : 'Review draft', prompt: fa ? 'پیش‌نویس همکاری را تأیید می‌کنم' : 'I reviewed the collaboration draft' }] : []),
+      { id: 'collab-review-changes', label: fa ? 'اصلاح لازم است' : 'Request changes', prompt: fa ? 'این پیش‌نویس نیاز به اصلاح دارد' : 'This draft needs changes' },
+      { id: 'collab-review-reject', label: fa ? 'رد پیش‌نویس' : 'Reject draft', prompt: fa ? 'این پیش‌نویس همکاری را رد می‌کنم' : 'I reject this collaboration draft' }
+    ];
+  }
+  if (session.review?.status === 'REVIEWED' && session.consent?.local?.status === 'NOT_RECORDED') {
+    return mode === NEGOTIATION_MODES.HUMAN_HUMAN
+      ? [{ id: 'h2h-confirm', label: fa ? 'فقط از طرف خودم می‌پذیرم' : 'Accept for my side only', prompt: fa ? 'فقط از طرف خودم شرایط را می‌پذیرم' : 'I accept these terms for my side only' }]
+      : [{ id: 'collab-consent', label: fa ? 'موافقت با برنامه‌ریزی' : 'Consent to planning', prompt: fa ? 'برای برنامه‌ریزی همکاری رضایت می‌دهم' : 'I consent to planning-only collaboration' }];
+  }
+  if (mode === NEGOTIATION_MODES.HUMAN_HUMAN && session.consent?.local?.status === 'LOCAL_ACCEPTANCE_ONLY'
+    && session.consent?.counterparty?.status === 'NOT_VERIFIED') {
+    return [{ id: 'collab-counterparty-report', label: fa ? 'ثبت پاسخ گزارش‌شدهٔ طرف مقابل' : 'Record a reported reply', prompt: fa ? 'پاسخ گزارش‌شدهٔ طرف مقابل را ثبت کن — تأییدنشده' : 'Record a reported counterparty reply — unverified' }];
+  }
+  if ([NEGOTIATION_MODES.HUMAN_AGENT, NEGOTIATION_MODES.AGENT_AGENT].includes(mode)
+    && session.consent?.local?.status === 'RECORDED_LOCAL'
+    && session.planDraftState !== 'REQUESTED') {
+    return [{ id: 'collab-build-plan', label: fa ? 'ساخت پیش‌نویس پلن' : 'Build plan draft', prompt: fa ? 'پیش‌نویس پلن را بساز' : 'Build the plan draft' }];
+  }
+  return [];
 }
 
 /**
  * Run one negotiation in chat. Deterministic: same context → same transcript.
  */
 export function runChatNegotiation({ mode, intent = 'NEGOTIATE', subject = '', context = {}, locale = 'fa', now = Date.now() } = {}) {
-  const result = baseResult({ mode, intent, locale });
+  const result = baseResult({ mode, intent, locale, now });
   const fa = isFa(locale);
   const proposal = proposalFromContext({ ...context, goal: subject || context.goal });
   result.subject = subject || null;
@@ -241,40 +296,45 @@ export function runChatNegotiation({ mode, intent = 'NEGOTIATE', subject = '', c
     return result;
   }
 
-  /* ── external agent: verified or nothing ──────────────────────────────── */
+  /* ── external agent: trusted identity, scoped consent and an attested
+       runtime are all mandatory. Chat context is user-controlled, so no
+       boolean, passport-shaped object, identity label, or pasted view can
+       satisfy any of these gates. No trusted external transport is wired to
+       this synchronous surface today; remain unavailable instead of guessing. */
   if (mode === NEGOTIATION_MODES.EXTERNAL_AGENT) {
-    const verified = context.externalVerified === true && context.externalAgent;
-    if (!verified) {
-      result.outcome = NEGOTIATION_OUTCOMES.UNAVAILABLE;
-      result.transcript = [
-        line('fbt-ai', 'refuse', fa
-          ? 'هیچ ایجنت خارجیِ تأییدشده‌ای برای این حساب ثبت نشده است.'
-          : 'No verified external agent is registered for this account.'),
-        line('fbt-guardian', 'constraint', fa
-          ? 'پیام امضانشده رد می‌شود؛ بدون تأیید هویت، نظر دومی ساخته نمی‌شود.'
-          : 'Unsigned messages are rejected; without identity verification no second opinion is invented.')
-      ];
-      result.notes.push(fa
-        ? 'می‌توانی یک ایجنت خارجی اضافه کنی؛ تا آن زمان این گزینه واقعاً در دسترس نیست.'
-        : 'You can add an external agent; until then this option is honestly unavailable.');
-      result.chips = [
-        { id: 'external-setup', label: fa ? 'راهنمای افزودن ایجنت خارجی' : 'How to add an external agent', prompt: fa ? 'راهنمای ایجنت خارجی را نشان بده' : 'show the external agent guide' }
-      ];
-      return result;
-    }
-    result.outcome = NEGOTIATION_OUTCOMES.AGREEMENT;
+    const runtimeStatus = createExternalAgentRuntime().status();
+    result.externalGate = {
+      identity: { ok: false, code: 'TRUSTED_EXTERNAL_IDENTITY_REQUIRED' },
+      consent: { ok: false, code: 'EXPLICIT_PER_TASK_CONSENT_REQUIRED' },
+      runtime: {
+        ok: false,
+        status: runtimeStatus.status,
+        code: runtimeStatus.blocker || 'ATTESTED_RUNTIME_REQUIRED',
+        attested: runtimeStatus.attested === true
+      },
+      contacted: false,
+      agreementReached: false,
+      executionAuthorized: false
+    };
+    result.outcome = NEGOTIATION_OUTCOMES.UNAVAILABLE;
+    result.agreement = false;
     result.transcript = [
-      line('fbt-ai', 'request', fa
-        ? `نظر ثبت‌شدهٔ ایجنت خارجی «${context.externalAgent.label || context.externalAgent.id}» بررسی شد؛ اینجا پیامی ارسال نشده است.`
-        : `Recorded analysis from external agent "${context.externalAgent.label || context.externalAgent.id}".`),
-      line('external-agent', 'analysis', fa
-        ? (context.externalView || 'نظر مستقل: فقط تحلیل، بدون هیچ اختیار اجرایی.')
-        : (context.externalView || 'Independent view: analysis only, with no execution authority.')),
+      line('fbt-ai', 'refuse', fa
+        ? 'نظر ایجنت خارجی در دسترس نیست: هویت باید از ثبتِ مورداعتماد تأیید شود؛ پرچم یا متنِ همین پیام مدرک نیست.'
+        : 'External-agent analysis is unavailable: identity must come from a trusted registry; a flag or text in this message is not evidence.'),
       line('fbt-guardian', 'constraint', fa
-        ? 'نظر خارجی در تصمیم دخالت می‌کند اما هرگز اجازه اجرا نمی‌دهد.'
-        : 'The external view informs the decision and never grants execution.')
+        ? 'رضایت صریح و محدود به همین کار لازم است؛ فعلاً مسیر گفت‌وگوی خارجی به runtime سالم و دارای attestation وصل نیست.'
+        : 'Explicit consent scoped to this task is required; this chat is not connected to a healthy, attested external runtime.'),
+      line('fbt-execution', 'await', fa
+        ? 'هیچ پیام یا قراردادی تأیید نشد؛ تماس، توافق و اختیار اجرا همگی خاموش‌اند.'
+        : 'No message or deal was confirmed; contact, agreement and execution authority all remain off.')
     ];
-    result.agreement = true;
+    result.notes.push(fa
+      ? 'شناسه، رضایت یا runtime را نمی‌توان از context فرستاده‌شدهٔ کاربر نتیجه گرفت؛ تا اتصال واقعی همهٔ کنترل‌ها، این مسیر بسته می‌ماند.'
+      : 'Identity, consent and runtime health cannot be inferred from caller-supplied context; this path stays blocked until real trusted gates are connected.');
+    result.chips = [
+      { id: 'external-setup', label: fa ? 'راهنمای ایجنت خارجی' : 'External-agent setup guide', prompt: fa ? 'راهنمای ایجنت خارجی را نشان بده' : 'show the external agent guide' }
+    ];
     return result;
   }
 
@@ -351,12 +411,43 @@ export function runChatNegotiation({ mode, intent = 'NEGOTIATE', subject = '', c
     result.notes.push(fa
       ? 'مذاکره اجازه اجرا نمی‌دهد؛ هر اجرایی بعد از این، مسیر تأیید و امضای خودت را دارد.'
       : 'A negotiation grants no execution; anything that runs afterwards goes through your own confirmation and signature.');
-    result.chips = result.outcome === NEGOTIATION_OUTCOMES.AGREEMENT
-      ? [{ id: 'a2a-plan', label: fa ? 'پلن اجرایی‌اش را بساز' : 'Build the execution plan', prompt: fa ? 'پلن اجرایی این پیشنهاد را بساز' : 'build the execution plan for this proposal' }]
-      : [
-        { id: 'a2a-revise', label: fa ? 'بازمحاسبه کن' : 'Recalculate', prompt: fa ? 'پیشنهاد را با ملاحظات شورا بازمحاسبه کن' : 'recalculate the proposal with the council notes' },
-        { id: 'a2a-risk', label: fa ? 'ریسکش را کمتر کن' : 'Reduce the risk', prompt: fa ? 'نسخه کم‌ریسک‌تر را پیشنهاد بده' : 'propose a lower-risk version' }
-      ];
+    const roleSummary = council.votes.map((vote) => `${vote.role}: ${vote.decision}`).join('; ');
+    const conflictSummary = conflicts.length
+      ? `Detected ${conflicts.length} plan conflict(s): ${conflicts.slice(0, 4).map((item) => item.code || item.type || 'conflict').join(', ')}.`
+      : 'No conflict was found in the supplied plan set.';
+    const collaboration = attachCollaboration(result, {
+      now,
+      subject: subject || proposal.action,
+      participants: [
+        internalParticipant('execution', fa ? 'موتور اجرای FBT' : 'FBT execution engine'),
+        internalParticipant('council', fa ? 'شورای قاعده‌محور FBT' : 'FBT rule-based council')
+      ],
+      tasks: [
+        {
+          id: 'proposal-challenge', title: 'Independent proposal challenge', assigneeId: 'fbt:execution', kind: 'internal-check',
+          status: challenge.decision === 'APPROVE' ? 'COMPLETED' : 'BLOCKED', result: {
+            text: challenge.disagreements.length
+              ? challenge.disagreements.slice(0, 4).map((row) => `${row.code}: ${row.message}`).join(' | ')
+              : 'No deterministic challenge was found.',
+            source: 'internal-rule-check', dataStatus: challenge.decision, verified: false
+          }, reason: challenge.decision === 'APPROVE' ? null : 'CHALLENGE_REQUIRES_REVISION'
+        },
+        {
+          id: 'bounded-council', title: 'Bounded internal council', assigneeId: 'fbt:council', kind: 'internal-check',
+          status: council.decision === 'APPROVE' ? 'COMPLETED' : 'BLOCKED', result: {
+            text: `Internal deterministic roles only; ${roleSummary}. Aggregate decision: ${council.decision}.`,
+            source: 'internal-rule-check', dataStatus: council.decision, verified: false
+          }, reason: council.decision === 'APPROVE' ? null : 'COUNCIL_REQUIRES_REVISION'
+        },
+        {
+          id: 'plan-conflicts', title: 'Plan conflict scan', assigneeId: 'fbt:council', kind: 'internal-check',
+          status: conflicts.length ? 'BLOCKED' : 'COMPLETED', result: {
+            text: conflictSummary, source: 'internal-rule-check', dataStatus: conflicts.length ? 'conflicts-found' : 'clear', verified: false
+          }, reason: conflicts.length ? 'PLAN_CONFLICTS_FOUND' : null
+        }
+      ]
+    });
+    result.chips = collaborationActionChips(collaboration, locale);
     return result;
   }
 
@@ -407,8 +498,26 @@ export function runChatNegotiation({ mode, intent = 'NEGOTIATE', subject = '', c
     result.notes.push(fa
       ? 'من نه پیامی از طرف تو فرستادم و نه جای کسی را تأیید کردم. تأیید طرف مقابل باید جداگانه راستی‌آزمایی شود؛ این برگه خودش اجرای مالی نمی‌کند.'
       : 'I neither sent a message on your behalf nor confirmed for anybody else. Counterparty confirmation must be separately verified; this sheet cannot execute a financial action.');
+    const collaboration = attachCollaboration(result, {
+      now,
+      subject: rows.find((row) => row.key === 'subject')?.value || subject,
+      participants: [
+        { id: 'human:counterparty', kind: 'counterparty', label: party || (fa ? 'طرف مقابل' : 'Counterparty') },
+        internalParticipant('terms', fa ? 'دستیار تدوین شرایط FBT' : 'FBT terms assistant')
+      ],
+      tasks: [
+        {
+          id: 'terms-draft', title: 'Prepare terms draft', assigneeId: 'fbt:terms', kind: 'draft', status: 'COMPLETED',
+          result: { text: rows.map((row) => `${row.key}: ${row.value}`).join(' | '), source: 'local-terms-draft', dataStatus: 'draft', verified: false }
+        },
+        {
+          id: 'counterparty-review', title: 'Counterparty review', assigneeId: 'human:counterparty', kind: 'counterparty-review',
+          status: 'AWAITING_PARTICIPANT'
+        }
+      ]
+    });
     result.chips = [
-      { id: 'h2h-confirm', label: fa ? 'از طرف خودم تأیید می‌کنم' : 'I confirm for my side', prompt: fa ? 'از طرف خودم این شرایط را تأیید می‌کنم' : 'I confirm these terms for my side' },
+      ...collaborationActionChips(collaboration, locale),
       { id: 'h2h-edit', label: fa ? 'بندها را اصلاح کن' : 'Edit the clauses', prompt: fa ? 'بندهای برگه شرایط را اصلاح کن' : 'edit the clauses of the terms sheet' }
     ];
     return result;
@@ -436,6 +545,18 @@ export function runChatNegotiation({ mode, intent = 'NEGOTIATE', subject = '', c
   result.notes.push(fa
     ? 'هیچ‌کدام از این گزینه‌ها اجرا نشده است؛ با انتخاب تو، فقط پلن پیشنهادی ساخته می‌شود.'
     : 'None of these options ran; your choice only builds a proposed plan.');
+  attachCollaboration(result, {
+    now,
+    subject: subject || proposal?.action || 'risk choice',
+    participants: [internalParticipant('strategy', fa ? 'موتور استراتژی FBT' : 'FBT strategy engine')],
+    tasks: [
+      {
+        id: 'risk-options', title: 'Generate bounded risk options', assigneeId: 'fbt:strategy', kind: 'internal-options', status: 'COMPLETED',
+        result: { text: options.map((option) => `${option.id}: ${option.label}`).join(' | '), source: 'local-strategy-rules', dataStatus: 'options', verified: false }
+      },
+      { id: 'risk-choice', title: 'Choose a risk band', assigneeId: COLLABORATION_LOCAL_USER_ID, kind: 'user-choice', status: 'AWAITING_USER' }
+    ]
+  });
   result.chips = options.map((o) => ({ id: `pick_${o.id}`, label: o.label, prompt: o.label, action: 'SELECT_RISK', value: o.riskProfile || o.id }));
   return result;
 }
@@ -558,11 +679,14 @@ export function negotiationToChatMessage(result, { locale = 'fa' } = {}) {
         conflicts: result?.conflicts || [],
         terms: result?.terms || null,
         options: result?.options || null,
+        collaboration: result?.collaboration || null,
+        collaborationStep: result?.collaborationStep || null,
+        externalGate: result?.externalGate || null,
         requiresUserAuthorization: true,
         executed: false,
         laws: NEGOTIATION_LAWS
       },
-      at: Date.now()
+      at: Number(result?.at || Date.now())
     },
     actions: []
   };

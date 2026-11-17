@@ -1,17 +1,20 @@
 /* Units for signing, formatting, executor, engine, AI parsing, market parsing.
  * No network: every request goes through an injected fake fetch. */
 import { readFileSync } from 'node:fs';
-import { actionHash, signL1Action, agentAddress } from '../src/lib/hyperliquid/signing.js';
+import { actionHash, signL1Action, agentAddressAsync } from '../src/lib/hyperliquid/signing.js';
 import {
   toWire, roundPrice, roundSize, orderAction, stopAction, parseOrderStatuses,
   makeNonceSource, executeIntent, HL_EXEC_CODES
 } from '../src/lib/hyperliquid/exchangeOps.js';
 import {
-  validateProposal, normalizeRules, evaluateRules, buildPreview, createPending,
+  validateProposal, conservativeMaxOrderUsd, normalizeRules, evaluateRules, buildPreview, createPending,
   approvePending, createLedger, recordEntry, tradesSince, lastTradeTimes, ENGINE_CODES
 } from '../src/lib/hyperliquid/engine.js';
 import { extractJson, parseProposals, requestProposals, buildAnalystMessages, AI_CLIENT_CODES } from '../src/lib/hyperliquid/aiClient.js';
-import { parseMarkets, eligibleMarkets, fetchRealisedSince, fetchCandles } from '../src/lib/hyperliquid/market.js';
+import {
+  parseMarkets, eligibleMarkets, fetchRealisedSince, fetchCandles,
+  summarizeCandles, usableMarketPrice, AI_ANALYSIS_MIN_CLOSED_BARS
+} from '../src/lib/hyperliquid/market.js';
 import { verifyTypedData } from 'ethers';
 import { MIN_MARKET_VOLUME_USD, MAX_ORDER_SHARE_OF_VOLUME, marketVerdict } from '../src/lib/hyperliquid/engine.js';
 import { HL_CAP_DEFAULTS } from '../src/lib/hyperliquid/caps.js';
@@ -26,7 +29,7 @@ for (const [name, c] of Object.entries(vec.cases)) {
   check(`sdk vector ${name}: hash, r, s, v match`,
     actionHash(c.action, c.nonce) === c.hash && s.r === c.signature.r && s.s === c.signature.s && s.v === c.signature.v);
 }
-check('agent address derived from key matches SDK', agentAddress(vec.keyForVectors) === vec.address);
+check('agent address derived from key matches SDK', (await agentAddressAsync(vec.keyForVectors)) === vec.address);
 check('testnet signature differs from mainnet (source a vs b)',
   (await signL1Action(vec.keyForVectors, vec.cases.update_leverage.action, vec.cases.update_leverage.nonce, { isMainnet: false })).r
   !== vec.cases.update_leverage.signature.r);
@@ -150,16 +153,29 @@ const baseArgs = (ex, extra = {}) => ({
 }
 
 // ── engine ─────────────────────────────────────────────────────────────────
-const lim = { allowedCoins: ['BTC', 'ETH'], maxLeverage: 2, maxStopLossPct: 0.05 };
+const lim = { allowedCoins: ['BTC', 'ETH'], maxOrderUsd: 20000, maxLeverage: 2, maxStopLossPct: 0.05 };
 const good = { coin: 'BTC', side: 'long', notionalUsd: 500, leverage: 2, stopLossPct: 0.02, rationale: 'x' };
 check('valid proposal accepted', validateProposal(good, lim).ok === true);
 check('DOGE refused', validateProposal({ ...good, coin: 'DOGE' }, lim).code === ENGINE_CODES.COIN_NOT_ALLOWED);
 check('side "buy" refused', validateProposal({ ...good, side: 'buy' }, lim).code === ENGINE_CODES.SIDE_INVALID);
 check('notional string "abc" refused', validateProposal({ ...good, notionalUsd: 'abc' }, lim).code === ENGINE_CODES.NOTIONAL_INVALID);
+check('notional above the explicit per-order limit is dropped before preview', validateProposal({ ...good, notionalUsd: 501 }, { ...lim, maxOrderUsd: 500 }).code === ENGINE_CODES.ORDER_TOO_LARGE);
 check('leverage 3 refused when max is 2', validateProposal({ ...good, leverage: 3 }, lim).code === ENGINE_CODES.LEVERAGE_INVALID);
 check('leverage 1.5 refused (integers only)', validateProposal({ ...good, leverage: 1.5 }, lim).code === ENGINE_CODES.LEVERAGE_INVALID);
 check('stop 0 refused', validateProposal({ ...good, stopLossPct: 0 }, lim).code === ENGINE_CODES.STOP_INVALID);
 check('stop 0.06 refused when max is 5%', validateProposal({ ...good, stopLossPct: 0.06 }, lim).code === ENGINE_CODES.STOP_INVALID);
+check('conservative AI order ceiling respects exposure, remaining daily loss and market volume',
+  conservativeMaxOrderUsd({
+    caps: { maxOrderUsd: 500, totalExposureUsd: 1000, dailyLossUsd: 100, maxStopLossPct: 0.05 },
+    state: { currentExposureUsd: 200, dailyRealisedPnlUsd: -40, dailyUnrealisedPnlUsd: -10 },
+    market: { dayNtlVlm: 10000 }
+  }) === 100);
+check('conservative AI order ceiling is unknown when a risk input is missing',
+  conservativeMaxOrderUsd({
+    caps: { maxOrderUsd: 500, totalExposureUsd: 1000, dailyLossUsd: 100, maxStopLossPct: 0.05 },
+    state: { currentExposureUsd: 200, dailyRealisedPnlUsd: -40, dailyUnrealisedPnlUsd: null },
+    market: { dayNtlVlm: 10000 }
+  }) === null);
 check('rationale is cut to 280 characters', validateProposal({ ...good, rationale: 'ا'.repeat(400) }, lim).intent.rationale.length === 280);
 
 const rules = normalizeRules({ strategy: 'trend', maxTradesPerDay: 99, cooldownMinutes: -5, notes: 'n' });
@@ -197,6 +213,31 @@ check('extractJson returns null for prose', extractJson('I think you should buy'
 const parsed = parseProposals('{"proposals":[{"coin":"BTC","side":"long","notionalUsd":100,"leverage":2,"stopLossPct":0.02,"rationale":"ok"},{"coin":"SOL","side":"long","notionalUsd":100,"leverage":2,"stopLossPct":0.02}]}', lim);
 check('parseProposals keeps the valid one and reports the dropped one',
   parsed.ok && parsed.proposals.length === 1 && parsed.dropped[0] === ENGINE_CODES.COIN_NOT_ALLOWED);
+const oversizedForMarket = parseProposals(JSON.stringify({ proposals: [{ ...good, notionalUsd: 500 }] }), {
+  ...lim, maxOrderUsd: 1000, maxOrderByCoin: { BTC: 300 }
+});
+check('parseProposals drops a ticket above the derived per-market risk budget',
+  oversizedForMarket.proposals.length === 0 && oversizedForMarket.dropped[0] === ENGINE_CODES.ORDER_TOO_LARGE);
+const overMarketLeverage = parseProposals(JSON.stringify({ proposals: [{ ...good, leverage: 4 }] }), {
+  ...lim, maxLeverage: 10, maxLeverageByCoin: { BTC: 3 }
+});
+check('parseProposals applies each market leverage ceiling, not only the global cap',
+  overMarketLeverage.proposals.length === 0 && overMarketLeverage.dropped[0] === ENGINE_CODES.LEVERAGE_INVALID);
+const overGlobalLeverage = parseProposals(JSON.stringify({ proposals: [{ ...good, leverage: 3 }] }), {
+  ...lim, maxLeverageByCoin: { BTC: 5 }
+});
+check('parseProposals keeps the global leverage ceiling even when a market allows more',
+  overGlobalLeverage.proposals.length === 0 && overGlobalLeverage.dropped[0] === ENGINE_CODES.LEVERAGE_INVALID);
+const missingRiskLimit = parseProposals(JSON.stringify({ proposals: [good] }), {
+  allowedCoins: ['BTC'], maxLeverage: 2, maxStopLossPct: 0.05
+});
+check('parseProposals fails closed when no usable order limit is supplied',
+  missingRiskLimit.proposals.length === 0 && missingRiskLimit.dropped[0] === ENGINE_CODES.ORDER_TOO_LARGE);
+const unknownMarketRiskLimit = parseProposals(JSON.stringify({ proposals: [good] }), {
+  ...lim, maxOrderByCoin: { BTC: null }
+});
+check('parseProposals fails closed when an explicit per-market order limit is unknown',
+  unknownMarketRiskLimit.proposals.length === 0 && unknownMarketRiskLimit.dropped[0] === ENGINE_CODES.ORDER_TOO_LARGE);
 check('parseProposals rejects a non-JSON reply as BAD_OUTPUT', parseProposals('buy now!!', lim).code === AI_CLIENT_CODES.BAD_OUTPUT);
 
 {
@@ -235,9 +276,79 @@ check('parseMarkets rejects a missing universe', parseMarkets({}).ok === false);
   check('a fill with a missing PnL makes the total unknown', bad.ok === false);
 }
 {
-  const fetchImpl = async () => ({ ok: true, status: 200, json: async () => [{ t: 1, o: '1', h: '2', l: '0.5', c: '1.5', v: '3' }, { t: 2, c: null }] });
+  const hour = 3600000;
+  const fetchImpl = async () => ({ ok: true, status: 200, json: async () => [
+    { t: NOW - 2 * hour, o: '1', h: '2', l: '0.5', c: '1.5', v: '3' },
+    { t: NOW - 30 * 60000, o: '1.5', h: '1.8', l: '1.4', c: '1.6', v: '2' }, // still-forming bar
+    { t: NOW - 3 * hour, o: '1', h: null, l: '0.5', c: '1.5', v: '3' }
+  ] });
   const r = await fetchCandles('BTC', { now: NOW }, { fetchImpl });
-  check('candles drop rows without a close price', r.ok && r.candles.length === 1 && r.candles[0].c === 1.5);
+  check('candles keep valid completed OHLC rows and drop partial or malformed bars',
+    r.ok && r.candles.length === 1 && r.candles[0].c === 1.5);
+}
+{
+  const hour = 3600000;
+  const start = NOW - 51 * hour;
+  const candles = Array.from({ length: 50 }, (_, i) => ({
+    t: start + i * hour,
+    o: 99 + i,
+    h: 101 + i,
+    l: 98 + i,
+    c: 100 + i,
+    v: 10
+  }));
+  candles.push({ t: NOW - 30 * 60000, o: 149, h: 151, l: 148, c: 150, v: 11 }); // unclosed
+  const summary = summarizeCandles(candles, { interval: '1h', now: NOW, midPrice: 150.5 });
+  check('market snapshot uses only closed bars and requires enough history',
+    summary.dataStatus === 'live' && summary.completedBars === 50 && AI_ANALYSIS_MIN_CLOSED_BARS === 26);
+  check('market snapshot computes close-to-close return, EMA spread, RSI and ATR without signals',
+    Math.abs(summary.returnsPct.oneBar - ((149 / 148 - 1) * 100)) < 1e-9
+    && Math.abs(summary.returnsPct.twentyFourHours - ((149 / 125 - 1) * 100)) < 1e-9
+    && summary.ema.period12 > summary.ema.period26 && summary.rsi14 === 100
+    && Math.abs(summary.atr14Pct - (3 / 149 * 100)) < 1e-9);
+  const withGap = [...candles.slice(0, 30), ...candles.slice(31, 50)];
+  check('short, stale or gapped candle history stays partial, and market price prefers a valid mid',
+    summarizeCandles(candles.slice(0, 25), { interval: '1h', now: NOW }).dataStatus === 'partial'
+    && summarizeCandles(candles.slice(0, 50), { interval: '1h', now: NOW + 5 * hour }).dataStatus === 'partial'
+    && summarizeCandles(withGap, { interval: '1h', now: NOW }).contiguous === false
+    && summarizeCandles(withGap, { interval: '1h', now: NOW }).dataStatus === 'partial'
+    && usableMarketPrice({ midPx: 0, markPx: 2 }) === 2
+    && usableMarketPrice({ midPx: null, markPx: 0 }) === null);
+  const prompt = buildAnalystMessages({
+    rules: normalizeRules({ strategy: 'trend' }),
+    caps: { ...HL_CAP_DEFAULTS, allowedCoins: ['BTC'] },
+    account: { exposureUsd: 200, dailyRealisedPnlUsd: -40, dailyUnrealisedPnlUsd: -10 },
+    mids: { BTC: 150.5 }, candles: { BTC: candles.slice(0, 50) },
+    marketAnalysis: { BTC: summary },
+    marketConstraints: { BTC: { dayNtlVlmUsd: 1_000_000, maxLeverage: 40, onlyIsolated: true } },
+    now: NOW
+  });
+  const context = JSON.parse(prompt[1].content);
+  check('AI prompt receives only bounded, fresh analysis plus each market’s real risk constraints',
+    context.marketAnalysis.BTC.completedBars === 50
+    && context.marketAnalysis.BTC.rsi14 === 100
+    && context.marketConstraints.BTC.maxLeverage === 40
+    && context.marketConstraints.BTC.maxOrderUsd === 10000
+    && context.riskBudget.maxAdditionalOrderUsd === 19000
+    && context.limits.totalExposureUsd === HL_CAP_DEFAULTS.totalExposureUsd
+    && context.limits.dailyLossUsd === HL_CAP_DEFAULTS.dailyLossUsd);
+  const partialPrompt = buildAnalystMessages({
+    rules: normalizeRules({ strategy: 'trend' }),
+    caps: { ...HL_CAP_DEFAULTS, allowedCoins: ['BTC'] },
+    account: { exposureUsd: 200, dailyRealisedPnlUsd: -40, dailyUnrealisedPnlUsd: -10 },
+    mids: { BTC: 150.5 }, candles: { BTC: candles.slice(0, 50) },
+    marketAnalysis: { BTC: { ...summary, dataStatus: 'partial' } }, now: NOW
+  });
+  const missingPricePrompt = buildAnalystMessages({
+    rules: normalizeRules({ strategy: 'trend' }),
+    caps: { ...HL_CAP_DEFAULTS, allowedCoins: ['BTC'] },
+    account: { exposureUsd: 200, dailyRealisedPnlUsd: -40, dailyUnrealisedPnlUsd: -10 },
+    mids: {}, candles: { BTC: candles.slice(0, 50) },
+    marketAnalysis: { BTC: { ...summary, currentMid: null } }, now: NOW
+  });
+  check('the analyst prompt excludes partial candle analysis and any summary without a usable current price',
+    !JSON.parse(partialPrompt[1].content).marketAnalysis.BTC
+    && !JSON.parse(missingPricePrompt[1].content).marketAnalysis.BTC);
 }
 
 // ── many markets: varied decimals, leverage ceilings, isolated-only, thin books ──
@@ -287,7 +398,7 @@ for (const m of live) {
       { Agent: [{ name: 'source', type: 'string' }, { name: 'connectionId', type: 'bytes32' }] },
       { source: 'a', connectionId: actionHash(c.action, c.nonce) }, c.signature
     );
-    if (sig.toLowerCase() !== agentAddress(KEY).toLowerCase()) good = false;
+    if (sig.toLowerCase() !== (await agentAddressAsync(KEY)).toLowerCase()) good = false;
     manySigned += 1;
   }
   for (const order of calls.filter((c) => c.action.type === 'order').flatMap((c) => c.action.orders)) {

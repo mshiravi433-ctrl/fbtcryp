@@ -151,7 +151,9 @@ export function createProtocolRouter() {
 
       // 3. Verify signature if supplied
       if (intent.signature) {
-        const sigCheck = verifyIntentSignature(intent);
+        /* `verifyIntentSignature` is asynchronous: recovering the signer
+           needs secp256k1, which is loaded on demand. */
+        const sigCheck = await verifyIntentSignature(intent);
         if (!sigCheck.valid) {
           return res.status(401).json({
             error: 'INVALID_SIGNATURE',

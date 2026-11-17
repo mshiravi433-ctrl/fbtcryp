@@ -18,7 +18,7 @@
  * reads `import.meta.env` (Vite) and cannot load in Node; a mirror-sync test
  * pins the two encoders to identical output.
  */
-import { Interface, getAddress, isAddress, parseUnits, formatUnits } from 'ethers';
+import { Interface, getAddress, isAddress, parseUnits, formatUnits } from '../../ethersLite.js';
 import { fetchOstiumPrices, fetchOstiumSubgraph, fetchOstiumOhlc, OSTIUM_OHLC_RESOLUTIONS } from '../../ostium.js';
 import { EVM_CHAINS } from '../../chainsLite.js';
 import { withCache } from '../../cache.js';
@@ -52,10 +52,26 @@ const ERC20_ABI = [
   'function balanceOf(address owner) view returns (uint256)',
   'function allowance(address owner,address spender) view returns (uint256)'
 ];
-const openIface = new Interface(OPEN_TRADE_ABI);
-const manageIface = new Interface(MANAGE_ABI);
-const cancelIface = new Interface(CANCEL_ABI);
-const erc20Iface = new Interface(ERC20_ABI);
+let openIfaceP = null;
+const openIfaceReady = async () => {
+  if (!openIfaceP) openIfaceP = await Interface(OPEN_TRADE_ABI);
+  return openIfaceP;
+};
+let manageIfaceP = null;
+const manageIfaceReady = async () => {
+  if (!manageIfaceP) manageIfaceP = await Interface(MANAGE_ABI);
+  return manageIfaceP;
+};
+let cancelIfaceP = null;
+const cancelIfaceReady = async () => {
+  if (!cancelIfaceP) cancelIfaceP = await Interface(CANCEL_ABI);
+  return cancelIfaceP;
+};
+let erc20IfaceP = null;
+const erc20IfaceReady = async () => {
+  if (!erc20IfaceP) erc20IfaceP = await Interface(ERC20_ABI);
+  return erc20IfaceP;
+};
 
 export const ORDER_TYPE = Object.freeze({ market: 0, limit: 1, stop: 2 });
 
@@ -253,12 +269,14 @@ export async function readAccount(wallet) {
   if (!isAddress(wallet)) return { ok: false, code: 'INVALID_INPUT' };
   const owner = getAddress(wallet);
   const [bal, allow] = await Promise.all([
-    rpcWithFailover('eth_call', [{ to: OSTIUM_COLLATERAL, data: erc20Iface.encodeFunctionData('balanceOf', [owner]) }, 'latest']),
-    rpcWithFailover('eth_call', [{ to: OSTIUM_COLLATERAL, data: erc20Iface.encodeFunctionData('allowance', [owner, OSTIUM_SPENDER]) }, 'latest'])
+    rpcWithFailover('eth_call', [{ to: OSTIUM_COLLATERAL, data: (await erc20IfaceReady()).encodeFunctionData('balanceOf', [owner]) }, 'latest']),
+    rpcWithFailover('eth_call', [{ to: OSTIUM_COLLATERAL, data: (await erc20IfaceReady()).encodeFunctionData('allowance', [owner, OSTIUM_SPENDER]) }, 'latest'])
   ]);
   if (!bal.ok || !allow.ok) return { ok: false, code: 'PROVIDER_UNAVAILABLE', detail: bal.detail || allow.detail };
-  const decode = (hex) => { try { return Number(formatUnits(BigInt(hex || '0x0'), 6)); } catch { return null; } };
-  return { ok: true, chainId: OSTIUM_CHAIN_ID, collateral: 'USDC', balanceUsd: decode(bal.result), allowanceUsd: decode(allow.result), readAt: Date.now() };
+  /* The unit formatting is awaited BEFORE the decoder is defined, because
+     the decoder is a plain (synchronous) function. */
+  const decode = async (hex) => { try { return Number(await formatUnits(BigInt(hex || '0x0'), 6)); } catch { return null; } };
+  return { ok: true, chainId: OSTIUM_CHAIN_ID, collateral: 'USDC', balanceUsd: await decode(bal.result), allowanceUsd: await decode(allow.result), readAt: Date.now() };
 }
 
 export async function estimateGas({ from, to, data }) {
@@ -333,9 +351,9 @@ export async function readPositions(wallet) {
 
 /* ── unsigned transaction builders ───────────────────────────────────────── */
 
-const px18 = (v) => parseUnits(String(v ?? '0'), 18);
+const px18 = async (v) => parseUnits(String(v ?? '0'), 18);
 
-export function buildOpenTrade({ trader, pairId, buy, price, collateralUsd, leverage, takeProfit = '0', stopLoss = '0', orderType = 'market', slippageBps = 25, isDayTrade = false, builder, builderFeeBps }) {
+export async function buildOpenTrade({ trader, pairId, buy, price, collateralUsd, leverage, takeProfit = '0', stopLoss = '0', orderType = 'market', slippageBps = 25, isDayTrade = false, builder, builderFeeBps }) {
   if (!isAddress(trader)) throw Object.assign(new Error('INVALID_INPUT'), { code: 'INVALID_INPUT', detail: 'trader' });
   if (!isAddress(builder)) throw Object.assign(new Error('CONTRACT_MISMATCH'), { code: 'CONTRACT_MISMATCH', detail: 'builder' });
   const type = ORDER_TYPE[orderType];
@@ -344,12 +362,12 @@ export function buildOpenTrade({ trader, pairId, buy, price, collateralUsd, leve
   if (!Number.isFinite(lev) || lev <= 0) throw Object.assign(new Error('INVALID_INPUT'), { code: 'INVALID_INPUT', detail: 'leverage' });
   const col = Number(collateralUsd);
   if (!Number.isFinite(col) || col < OSTIUM_MIN_COLLATERAL_USD) throw Object.assign(new Error('BELOW_MIN'), { code: 'BELOW_MIN' });
-  const data = openIface.encodeFunctionData('openTrade', [
+  const data = (await openIfaceReady()).encodeFunctionData('openTrade', [
     {
-      collateral: parseUnits(String(collateralUsd), 6),
-      openPrice: px18(price),
-      tp: px18(takeProfit || '0'),
-      sl: px18(stopLoss || '0'),
+      collateral: await parseUnits(String(collateralUsd), 6),
+      openPrice: await px18(price),
+      tp: await px18(takeProfit || '0'),
+      sl: await px18(stopLoss || '0'),
       trader: getAddress(trader),
       leverage: Math.round(lev * 100),
       pairIndex: Number(pairId),
@@ -376,55 +394,55 @@ export function buildOpenTrade({ trader, pairId, buy, price, collateralUsd, leve
  * `index` is the on-chain limit slot from the subgraph row's id, not the global
  * order counter. Mirrors src/lib/ostium.js buildCancelLimitOrder.
  */
-export function buildCancelLimitOrder({ pairId, index }) {
+export async function buildCancelLimitOrder({ pairId, index }) {
   const pair = Number(pairId);
   const idx = Number(index);
   if (!Number.isInteger(pair) || pair < 0 || pair > 65535) throw Object.assign(new Error('INVALID_INPUT'), { code: 'INVALID_INPUT', detail: 'pairId' });
   if (!Number.isInteger(idx) || idx < 0 || idx > 255) throw Object.assign(new Error('INVALID_INPUT'), { code: 'INVALID_INPUT', detail: 'index' });
   return {
     to: OSTIUM_TRADING,
-    data: cancelIface.encodeFunctionData('cancelOpenLimitOrder', [pair, idx]),
+    data: (await cancelIfaceReady()).encodeFunctionData('cancelOpenLimitOrder', [pair, idx]),
     value: '0x0', chainId: OSTIUM_CHAIN_ID
   };
 }
 
-export function buildCloseTrade({ pairId, index, closePercent = 100, price, slippageBps = 25 }) {
+export async function buildCloseTrade({ pairId, index, closePercent = 100, price, slippageBps = 25 }) {
   const pct = Number(closePercent);
   if (!Number.isFinite(pct) || pct <= 0 || pct > 100) throw Object.assign(new Error('INVALID_INPUT'), { code: 'INVALID_INPUT', detail: 'closePercent' });
   if (!Number.isFinite(Number(price)) || Number(price) <= 0) throw Object.assign(new Error('INVALID_INPUT'), { code: 'INVALID_INPUT', detail: 'price' });
   return {
     to: OSTIUM_TRADING,
-    data: manageIface.encodeFunctionData('closeTradeMarket', [Number(pairId), Number(index), Math.round(pct * 100), px18(price), Math.round(Number(slippageBps))]),
+    data: (await manageIfaceReady()).encodeFunctionData('closeTradeMarket', [Number(pairId), Number(index), Math.round(pct * 100), await px18(price), Math.round(Number(slippageBps))]),
     value: '0x0', chainId: OSTIUM_CHAIN_ID
   };
 }
 
-export function buildUpdateTp({ pairId, index, takeProfit }) {
+export async function buildUpdateTp({ pairId, index, takeProfit }) {
   if (!Number.isFinite(Number(takeProfit)) || Number(takeProfit) < 0) throw Object.assign(new Error('INVALID_INPUT'), { code: 'INVALID_INPUT', detail: 'takeProfit' });
-  return { to: OSTIUM_TRADING, data: manageIface.encodeFunctionData('updateTp', [Number(pairId), Number(index), px18(takeProfit)]), value: '0x0', chainId: OSTIUM_CHAIN_ID };
+  return { to: OSTIUM_TRADING, data: (await manageIfaceReady()).encodeFunctionData('updateTp', [Number(pairId), Number(index), await px18(takeProfit)]), value: '0x0', chainId: OSTIUM_CHAIN_ID };
 }
 
-export function buildUpdateSl({ pairId, index, stopLoss }) {
+export async function buildUpdateSl({ pairId, index, stopLoss }) {
   if (!Number.isFinite(Number(stopLoss)) || Number(stopLoss) < 0) throw Object.assign(new Error('INVALID_INPUT'), { code: 'INVALID_INPUT', detail: 'stopLoss' });
-  return { to: OSTIUM_TRADING, data: manageIface.encodeFunctionData('updateSl', [Number(pairId), Number(index), px18(stopLoss)]), value: '0x0', chainId: OSTIUM_CHAIN_ID };
+  return { to: OSTIUM_TRADING, data: (await manageIfaceReady()).encodeFunctionData('updateSl', [Number(pairId), Number(index), await px18(stopLoss)]), value: '0x0', chainId: OSTIUM_CHAIN_ID };
 }
 
-export function buildUpdateCollateral({ pairId, index, amountUsd }) {
+export async function buildUpdateCollateral({ pairId, index, amountUsd }) {
   const amount = Number(amountUsd);
   if (!Number.isFinite(amount) || amount === 0) throw Object.assign(new Error('INVALID_INPUT'), { code: 'INVALID_INPUT', detail: 'amountUsd' });
   const name = amount > 0 ? 'topUpCollateral' : 'removeCollateral';
   return {
     to: OSTIUM_TRADING,
-    data: manageIface.encodeFunctionData(name, [Number(pairId), Number(index), parseUnits(String(Math.abs(amount)), 6)]),
+    data: (await manageIfaceReady()).encodeFunctionData(name, [Number(pairId), Number(index), await parseUnits(String(Math.abs(amount)), 6)]),
     value: '0x0', chainId: OSTIUM_CHAIN_ID, needsApproval: amount > 0
   };
 }
 
 /** Exact-amount approval to TradingStorage (the spender), never MaxUint256. */
-export function buildApprove({ amountUsd }) {
+export async function buildApprove({ amountUsd }) {
   const amt = Number(amountUsd);
   if (!Number.isFinite(amt) || amt <= 0) throw Object.assign(new Error('INVALID_INPUT'), { code: 'INVALID_INPUT', detail: 'amountUsd' });
-  return { to: OSTIUM_COLLATERAL, data: erc20Iface.encodeFunctionData('approve', [OSTIUM_SPENDER, parseUnits(String(amountUsd), 6)]), value: '0x0', chainId: OSTIUM_CHAIN_ID };
+  return { to: OSTIUM_COLLATERAL, data: (await erc20IfaceReady()).encodeFunctionData('approve', [OSTIUM_SPENDER, await parseUnits(String(amountUsd), 6)]), value: '0x0', chainId: OSTIUM_CHAIN_ID };
 }
 
 /** Receipt lookup for verify(); status only, never a fabricated success. */

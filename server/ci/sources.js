@@ -26,7 +26,7 @@
  * this comment exists to make visible.
  */
 import { createHash } from 'node:crypto';
-import { Interface, isAddress, formatUnits } from 'ethers';
+import { Interface, isAddress, formatUnits } from '../ethersLite.js';
 import { withCache } from '../cache.js';
 import { fetchSimplePrices, fetchGlobal, fetchChart, fetchMarkets } from '../providers.js';
 import { fetchYields } from '../yields.js';
@@ -129,7 +129,31 @@ export async function guarded(source, fn, { maxAttempts = 3, staleKey = null, tt
   }
   const stale = staleKey ? await getStale(staleKey) : null;
   if (stale !== null) return { ok: true, value: stale, stale: true, staleReason: lastError?.code || 'SOURCE_FAILED', attempts, at: Date.now() };
-  return { ok: false, error: lastError, code: lastError?.code || 'SOURCE_UNAVAILABLE', attempts, at: Date.now() };
+  return {
+    ok: false,
+    error: lastError,
+    code: lastError?.code || 'SOURCE_UNAVAILABLE',
+    /*
+     * WHY THIS IS HERE, AND WHY IT MATTERS.
+     *
+     * The classified error carries a `technical` field with the real
+     * message — "fetch failed", "ECONNREFUSED", "HTTP 503". It was
+     * dropped on the way out, so every upstream failure reached the user
+     * as `UNCLASSIFIED_ERROR` with an EMPTY detail.
+     *
+     * An empty detail is worse than an ugly one: it tells the operator
+     * that the module "did not answer" and nothing about WHY. The
+     * difference between "DefiLlama is unreachable" and "the pool list
+     * was empty" is the difference between a retry and a bug report.
+     *
+     * The detail is sanitised (control characters out, length bounded)
+     * and it is technical, so it is for the operator trail — the user
+     * still sees the humanised code.
+     */
+    detail: String(lastError?.technical || '').replace(/[\u0000-\u001f]/g, ' ').slice(0, 160),
+    attempts,
+    at: Date.now()
+  };
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -213,20 +237,20 @@ async function walletBalances({ addresses = {}, chainIds = null } = {}) {
     const address = evm[0];
     const nativeRes = await rpcWithFailover(chainId, 'eth_getBalance', [address, 'latest']);
     const tokens = (TOKENS[chainId] || []).filter((t) => !t.native).slice(0, 8);
-    const iface = new Interface(['function balanceOf(address) view returns (uint256)']);
+    const iface = await Interface(['function balanceOf(address) view returns (uint256)']);
     const tokenRes = tokens.length
       ? await Promise.all(tokens.map(async (t) => {
-        const r = await rpcWithFailover(chainId, 'eth_call', [{ to: t.address, data: iface.encodeFunctionData('balanceOf', [address]) }, 'latest']);
+        const r = await rpcWithFailover(chainId, 'eth_call', [{ to: t.address, data: (await ifaceReady()).encodeFunctionData('balanceOf', [address]) }, 'latest']);
         if (!r.ok) return { token: t, error: r.code };
         try {
           const raw = BigInt(r.result || '0x0');
-          return { token: t, amount: Number(formatUnits(raw, t.decimals)) };
+          return { token: t, amount: Number(await formatUnits(raw, t.decimals)) };
         } catch (error) {
           return { token: t, error: String(error.message).slice(0, 60) };
         }
       }))
       : [];
-    const native = nativeRes.ok ? Number(formatUnits(BigInt(nativeRes.result || '0x0'), chain.native.decimals)) : null;
+    const native = nativeRes.ok ? Number(await formatUnits(BigInt(nativeRes.result || '0x0'), chain.native.decimals)) : null;
     return { chainId, address, native, nativeError: nativeRes.ok ? null : nativeRes.code, tokens: tokenRes };
   }));
 
@@ -568,7 +592,9 @@ function extractDydxPositions(raw) {
 /* ── yields / news / goals ─────────────────────────────────────────────── */
 async function yields() {
   const res = await guarded('yields-engine', () => fetchYields(), { staleKey: 'ci:yields' });
-  if (!res.ok) return { ok: false, code: res.code };
+  /* The detail rides along, so the failure says WHY rather than only
+     that something failed. */
+  if (!res.ok) return { ok: false, code: res.code, detail: res.detail || '' };
   const pools = Array.isArray(res.value?.pools) ? res.value.pools : [];
   return {
     ok: pools.length > 0,
@@ -644,7 +670,7 @@ async function swapQuote({ chainId = 1, from = 'ETH', to = 'USDC', amountUsd = n
       }
       return out.body;
     }, { providers: candidates });
-    const parsed = provider === 'kyber' ? parseKyberQuote(res.value, fromToken, toToken) : parseOoQuote(res.value, fromToken, toToken);
+    const parsed = provider === 'kyber' ? await parseKyberQuote(res.value, fromToken, toToken) : await parseOoQuote(res.value, fromToken, toToken);
     if (res.ok && parsed) {
       return {
         ok: true, provider, chainId,
@@ -667,14 +693,14 @@ async function swapQuote({ chainId = 1, from = 'ETH', to = 'USDC', amountUsd = n
   return { ok: false, code: 'NO_QUOTE_FROM_ANY_PROVIDER', detail: `tried ${tried.join(', ')}`, tried };
 }
 
-function parseKyberQuote(body, fromToken, toToken) {
+async function parseKyberQuote(body, fromToken, toToken) {
   const route = Array.isArray(body?.routes) ? body.routes[0] : body?.data;
   const out = Number(route?.routeSummary?.amountOut ?? route?.amountOut);
   if (!Number.isFinite(out) || out <= 0) return null;
   return {
-    expectedOut: round(Number(formatUnits(BigInt(Math.round(out)), toToken.decimals)), 8),
+    expectedOut: round(Number(await formatUnits(BigInt(Math.round(out)), toToken.decimals)), 8),
     minOut: null,
-    price: round(out / 10 ** toToken.decimals / Math.max(1e-9, Number(formatUnits(BigInt(1), fromToken.decimals))), 8),
+    price: round(out / 10 ** toToken.decimals / Math.max(1e-9, Number(await formatUnits(BigInt(1), fromToken.decimals))), 8),
     priceImpactPct: numOr(route?.routeSummary?.priceImpactPct) !== null ? round(numOr(route.routeSummary.priceImpactPct) * 100, 4) : (numOr(route?.routeSummary?.percentageGasFeeUsd) !== null ? null : null),
     feeUsd: numOr(route?.routeSummary?.gasPriceUSD) !== null ? round(Number(route.routeSummary.gasPriceUSD) * numOr(route?.routeSummary?.gasCostUSD) , 3) : null,
     gasUsd: numOr(route?.routeSummary?.gasCostUSD),
@@ -683,13 +709,13 @@ function parseKyberQuote(body, fromToken, toToken) {
   };
 }
 
-function parseOoQuote(body, fromToken, toToken) {
+async function parseOoQuote(body, fromToken, toToken) {
   const out = Number(body?.toAmount ?? body?.data?.toAmount);
   if (!Number.isFinite(out) || out <= 0) return null;
   const extra = body?.extra || body?.data?.extra || {};
   return {
-    expectedOut: round(Number(formatUnits(BigInt(Math.round(out)), toToken.decimals)), 8),
-    minOut: body?.toAmountMin ? round(Number(formatUnits(BigInt(Math.round(Number(body.toAmountMin))), toToken.decimals)), 8) : null,
+    expectedOut: round(Number(await formatUnits(BigInt(Math.round(out)), toToken.decimals)), 8),
+    minOut: body?.toAmountMin ? round(Number(await formatUnits(BigInt(Math.round(Number(body.toAmountMin))), toToken.decimals)), 8) : null,
     price: null,
     priceImpactPct: numOr(extra.priceImpact) !== null ? round(Math.abs(Number(extra.priceImpact)) * (Math.abs(Number(extra.priceImpact)) < 1 ? 100 : 1), 4) : null,
     feeUsd: null,
@@ -722,8 +748,8 @@ async function bridgeQuoteSource({ fromChain, toChain, asset, amountUsd = null, 
     code: Number.isFinite(toAmount) && toAmount > 0 ? null : 'QUOTE_SHAPE_UNUSABLE',
     provider: res.value?.tool || 'lifi', fromChain, toChain, asset: fromToken.symbol,
     amountIn: amount, amountUsd: round(Number(amountUsd), 2),
-    expectedOut: Number.isFinite(toAmount) ? round(Number(formatUnits(BigInt(Math.round(toAmount)), toToken.decimals)), 8) : null,
-    minOut: q?.toAmountMin ? round(Number(formatUnits(BigInt(Math.round(Number(q.toAmountMin))), toToken.decimals)), 8) : null,
+    expectedOut: Number.isFinite(toAmount) ? round(Number(await formatUnits(BigInt(Math.round(toAmount)), toToken.decimals)), 8) : null,
+    minOut: q?.toAmountMin ? round(Number(await formatUnits(BigInt(Math.round(Number(q.toAmountMin))), toToken.decimals)), 8) : null,
     feeUsd: fee > 0 ? round(fee, 3) : null,
     estimatedSeconds: numOr(q?.estimate?.executionDuration) !== null ? Math.round(numOr(q.estimate.executionDuration)) : null,
     destinationLiquidityUsd: null,
@@ -994,7 +1020,7 @@ async function transactionReceipt({ chainId = 1, hash } = {}) {
     blockNumber: blockNumberHex,
     confirmations: blockNumberHex !== null && latestBlock !== null ? Math.max(0, latestBlock - blockNumberHex + 1) : null,
     gasUsed: r.gasUsed ? Number(BigInt(r.gasUsed)) : null,
-    effectiveGasPriceGwei: r.effectiveGasPrice ? Number(formatUnits(BigInt(r.effectiveGasPrice), 9)) : null,
+    effectiveGasPriceGwei: r.effectiveGasPrice ? Number(await formatUnits(BigInt(r.effectiveGasPrice), 9)) : null,
     from: r.from || null, to: r.to || null,
     logs: Array.isArray(r.logs) ? r.logs.length : 0,
     at: Date.now(), source: 'blockchain'

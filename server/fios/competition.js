@@ -26,6 +26,7 @@
  * merely the best proposal text.
  */
 import { compareStrategies, competeStrategies, explainStrategyComparison } from '../../src/lib/intent-ai/strategyCompetition.js';
+import { capitalUsdFor } from './financialState.js';
 import { round } from '../../src/lib/central/schema.js';
 import { riskAdjustedScore } from './routeSimulator.js';
 import { smartMoneyKindBias } from './smartMoneyIntel.js';
@@ -82,7 +83,7 @@ export function createStrategyCompetition({ collections, evidence = null, agents
 
     const profile = String(preferences?.riskTolerance || 'MODERATE').toUpperCase();
     const ceiling = RISK_CEILING[profile] ?? RISK_CEILING.MODERATE;
-    const capitalUsd = num(financial?.computed?.netWorthUsd ?? financial?.netWorthUsd ?? financial?.computed?.availableCapitalUsd);
+    const capitalUsd = capitalUsdFor(financial);
     const regime = crossAsset?.regime?.regime || rows.find((s) => s?.globalContext?.regime)?.globalContext?.regime || null;
     // Never recover direction from a proposal's unverified smartMoney field.
     // The measured digest is the sole authority for competition bias.

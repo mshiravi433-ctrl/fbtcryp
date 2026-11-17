@@ -7,7 +7,7 @@
  * balance or a price.
  */
 import { apiBase } from './apiBase.js';
-import { getIntelligenceMode, intelligenceTurnBudgetMs } from './aiIntelligenceMode.js';
+import { intelligenceTurnBudgetMs } from './aiIntelligenceMode.js';
 
 const TIMEOUT_MS = 12000;
 const DEVICE_KEY = 'fbt.ai.device.v1';
@@ -75,18 +75,13 @@ export const aiSuggest = ({ message, conversationId, context, prior } = {}) =>
 /* AI Upgrade 5: complex turns can coordinate several models + web research,
    so the chat turn gets a longer budget than the default 12s. The server
    enforces its own deadline and always answers with what it has. */
-export const aiChat = ({ message, messages, surface, conversationId, aiControl, prior, context, resume, hints, transparency, intelligence } = {}) => {
-  /* One resolution, used twice: the mode decides both what the server runs and
-     how long the browser waits for it. Deriving them separately is how a `max`
-     turn got aborted by a `balanced` timeout. */
-  const mode = normalizeRequestedIntelligence(intelligence);
+export const aiChat = ({ message, messages, surface, conversationId, aiControl, prior, context, resume, hints, transparency, retry } = {}) => {
+  /* The server must read the question before choosing a depth. The browser
+     cannot know whether a short-looking request needs live evidence or whether
+     a fragment needs clarification, so it sends no user-selected mode and
+     keeps the longest supported timeout. */
   return call('/v1/ai/chat', {
     method: 'POST',
-    /* The mode travels with every turn, not only the ones that look deep: the
-       answer to «این را عمیق توضیح بده» is decided server-side, and a
-       shallow-looking question can still need the fleet. `deepThinking` on a
-       caller is an explicit request for the top mode and outranks the stored
-       preference. */
     body: payload({
       message,
       messages,
@@ -98,18 +93,11 @@ export const aiChat = ({ message, messages, surface, conversationId, aiControl, 
       resume,
       hints,
       transparency,
-      intelligence: mode
+      retry: retry === true
     }),
-    timeout: intelligenceTurnBudgetMs(mode)
+    timeout: intelligenceTurnBudgetMs('max')
   });
 };
-
-function normalizeRequestedIntelligence(intelligence) {
-  if (intelligence === true) return 'max';
-  const explicit = typeof intelligence === 'string' ? intelligence.trim() : '';
-  if (explicit) return explicit.slice(0, 24);
-  return getIntelligenceMode();
-}
 /** 👍/👎 feedback for one AI answer (Upgrade 5 §64). */
 export const aiFeedback = ({ intentId, rating, reason = '', comment = '' } = {}) =>
   call('/v1/ai/feedback', { method: 'POST', body: payload({ intentId, rating, reason, comment }) });

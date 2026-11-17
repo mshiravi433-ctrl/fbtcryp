@@ -53,10 +53,10 @@ const account = (over = {}) => ({
 });
 const wallet = { connected: true, address: '0x1111111111111111111111111111111111111111', chainId: 8453 };
 
-const respond = (message, results, { locale = 'en', ctx = { wallet } } = {}) => {
+const respond = (message, results, { locale = 'en', ctx = { wallet }, handoffRoute = null } = {}) => {
   const understood = understandIntent(message, { locale });
   const intent = understood.intent || understood;
-  return buildHumanResponse({ intent, context: { ...ctx, lastMessage: message }, results, locale });
+  return buildHumanResponse({ intent, context: { ...ctx, lastMessage: message }, results, locale, handoffRoute });
 };
 const noCard = (r) => r.card == null && (r.actions || []).length === 0 && r.requiresConfirmation !== true && r.ui?.type !== 'ACTION_CARD';
 
@@ -85,6 +85,18 @@ const noCard = (r) => r.card == null && (r.actions || []).length === 0 && r.requ
   t('the message states APY is variable, not guaranteed, and nothing is signed without confirmation',
     /not guaranteed/i.test(r.message) && /nothing is signed or sent without your confirmation/i.test(r.message), r.message);
   t('a review is never a transaction (no hash, no execution claim)', !r.execution && r.executed !== true && !a.txHash);
+
+  const withPageHandoff = respond('supply 100 USDC on Base', {
+    yieldOpportunities: scan(), lendingAssetPosition: assetPosition()
+  }, { handoffRoute: '/loan?tab=supply&asset=USDC&amount=100&chain=8453' });
+  const reviewedActions = withPageHandoff.actions.filter((action) => action.parameters?.requireLiveRateReview === true);
+  t('an optional loan-page chip stays separate from exactly one live reviewed action',
+    withPageHandoff.card?.kind === 'LENDING_REVIEW' && withPageHandoff.requiresConfirmation === true
+      && reviewedActions.length === 1 && withPageHandoff.actions.length === 2
+      && withPageHandoff.actions.some((action) => action.route === '/loan?tab=supply&asset=USDC&amount=100&chain=8453'));
+  t('the optional hand-off chip cannot change or duplicate the reviewed loan terms',
+    reviewedActions[0]?.amount === a.amount && reviewedActions[0]?.parameters?.reviewedPriceUsd === a.parameters?.reviewedPriceUsd
+      && reviewedActions[0]?.parameters?.reviewedSupplyApyPct === a.parameters?.reviewedSupplyApyPct);
 }
 
 /* ── 3. a supply is refused — with a named reason — on any unproven input ── */

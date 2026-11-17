@@ -66,7 +66,7 @@ assert.throws(
 
 // Attack 2: Cross-chain replay attack (submitting Arbitrum signed intent on Base)
 // When verifying on Arbitrum (42161) with Base signature, domain separator mismatch rejects it
-const crossChainResult = verifyIntentSignature(signedIntent, validSignature, { chainId: 42161 });
+const crossChainResult = await verifyIntentSignature(signedIntent, validSignature, { chainId: 42161 });
 assert.equal(crossChainResult.valid, false, 'Security Stop: Cross-chain signature replay must fail');
 
 // Attack 3: Altered intent (Attacker tries to increase spend or change destination asset)
@@ -74,12 +74,12 @@ const alteredIntent = {
   ...signedIntent,
   amount: '500000000' // Attacker alters spend to 500 USDC
 };
-const alteredSigCheck = verifyIntentSignature(alteredIntent, validSignature, { chainId: 8453 });
+const alteredSigCheck = await verifyIntentSignature(alteredIntent, validSignature, { chainId: 8453 });
 assert.equal(alteredSigCheck.valid, false, 'Security Stop: Altering intent parameters invalidates user signature');
 
 // Attack 4: Wrong signer impersonation
 const fakeSig = await attacker.signTypedData(domain, types, message);
-const impersonationCheck = verifyIntentSignature(signedIntent, fakeSig, { chainId: 8453 });
+const impersonationCheck = await verifyIntentSignature(signedIntent, fakeSig, { chainId: 8453 });
 assert.equal(impersonationCheck.valid, false, 'Security Stop: Signature from unauthorized account must fail');
 
 // Attack 5: Expired intent execution

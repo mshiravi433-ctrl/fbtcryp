@@ -26,7 +26,7 @@ import { readWalletRegistry } from './walletRegistry.js';
 import { MAX_PROFILE_AGE } from './consensus.js';
 import { getVerifiedIntelligence } from './intelligence.js';
 export { readWalletRegistry, putWalletIdentity, removeWalletIdentity, publicRegistry } from './walletRegistry.js';
-export { getVerifiedIntelligence, runIntelligenceCycle } from './intelligence.js';
+export { getVerifiedIntelligence, runIntelligenceCycle, readVerifiedIndex } from './intelligence.js';
 import {
   readWatchlist, putWatchlist, deleteWatch, readAlerts, runAlertCycle, markAlertsRead
 } from './watchlist.js';

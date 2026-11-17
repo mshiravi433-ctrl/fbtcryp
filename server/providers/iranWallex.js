@@ -7,7 +7,7 @@
  * No browser imports this module. Every request uses the server-held
  * X-API-Key and the base origin is pinned by iranBuyConfig before it is used.
  */
-import { getAddress } from 'ethers';
+import { getAddress } from '../ethersLite.js';
 import { IRAN_BUY_ASSET, IRAN_BUY_SYMBOL } from '../iranBuyConfig.js';
 
 const API_TIMEOUT_MS = 15_000;

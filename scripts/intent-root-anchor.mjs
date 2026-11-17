@@ -50,7 +50,7 @@ if (command === 'calldata') {
     explorerBaseUrl: null,
     minConfirmations: 1
   }]]);
-  const result = buildMerkleRootAnchorCalldata(built.manifest, chainId, networks);
+  const result = await buildMerkleRootAnchorCalldata(built.manifest, chainId, networks);
   if (!result.ok) fail(result.code, 1);
   output(result);
   process.exit(0);

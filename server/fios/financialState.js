@@ -32,6 +32,13 @@ export const FINANCIAL_SECTIONS = Object.freeze([
  * `stateStore.peek(owner)` returns) or a plain `{ portfolio: {...} }` map
  * (what the probes and the twin use) and normalise both.
  */
+/* A finite number, or null. The same rule everywhere: a string that is not a
+ * number is not a number, and a null is not a zero. */
+const num = (v) => {
+  if (v === null || v === undefined || v === '' || !Number.isFinite(Number(v))) return null;
+  return Number(v);
+};
+
 export function normalizeSections(input = {}) {
   const raw = input && input.sections && typeof input.sections === 'object' ? input.sections : input;
   const meta = {};
@@ -213,6 +220,59 @@ export function snapshotRow(state) {
     confidence: state.confidence,
     missing: state.missing || []
   };
+}
+
+/**
+ * THE CAPITAL AN ENGINE MAY USE, WHEN THE DEBT WAS NEVER READ.
+ *
+ * Net worth is `assets − debt`, and debt is only a number when the LENDING
+ * or the BORROWING section was read. For an owner whose sections do not
+ * include them — which is most owners, most of the time — the brain never
+ * asks for a lending read, so `netWorthUsd` is `null`.
+ *
+ * That `null` is HONEST. The owner may have a loan. But it was read as
+ * "no capital", and seven engines across five files took that reading:
+ * the fit engine scored an opportunity against a null net worth, the
+ * scenario engine refused to model a goal because it had no starting
+ * capital, the decision engine could not price a benefit, the macro graph
+ * had no owner capital, and the agent council had nothing to weigh.
+ *
+ * So the fallbacks were added here — ONE place, so the next engine cannot
+ * invent its own:
+ *
+ *   1. net worth, when it is a number;
+ *   2. the gross assets, when they are a number — the assets are what a
+ *      debt-free reading of the owner looks like, and a capital-sized
+ *      decision on a possibly-indebted owner is still a SIZING, not a
+ *      transfer;
+ *   3. the available capital, when it is a number.
+ *
+ * What it never does is INVENT a debt of zero. `netWorthUsd` stays null,
+ * because it is null, and the engines that must know whether the owner is
+ * in debt still read it from there. This function answers a different
+ * question: «how much capital can this engine reason about?»
+ *
+ * @param {object|null} financial the canonical financial state
+ * @returns {number|null} a capital figure, or null when nothing was read
+ */
+export function capitalUsdFor(financial) {
+  const computed = financial?.computed || null;
+  const nw = num(computed?.netWorthUsd);
+  if (nw !== null) return nw;
+  const gross = num(computed?.grossAssetsUsd);
+  if (gross !== null) return gross;
+  const avail = num(computed?.availableCapitalUsd);
+  if (avail !== null) return avail;
+  /* The provenance shape, for a state built by `buildCanonicalFinancialState`. */
+  const read = (v) => {
+    const x = readValue(v);
+    return num(x);
+  };
+  const nw2 = read(financial?.net?.netWorthUsd);
+  if (nw2 !== null) return nw2;
+  const gross2 = read(financial?.net?.grossAssetsUsd);
+  if (gross2 !== null) return gross2;
+  return read(financial?.net?.availableCapitalUsd);
 }
 
 /** Human line for the chat: never a number we did not read. */

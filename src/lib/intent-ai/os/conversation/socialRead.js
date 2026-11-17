@@ -1,3 +1,5 @@
+import { matchFoldedPhrase, matchAnyTerm } from '../regexCache.js';
+
 /**
  * FBT INTENT OS — SOCIAL READ (the person behind the question)
  * ---------------------------------------------------------------------------
@@ -51,15 +53,16 @@ function fold(text) {
  * prefix; short ones («تو») stay strict so «توکن» is not read as «تو».
  */
 function phrase(text, p) {
-  const term = fold(p);
-  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const persian = /[\u0600-\u06FF]/.test(term);
-  const tail = persian && term.replace(/[^\u0600-\u06FF]/g, '').length >= 4 ? '' : '(?![\\p{L}])';
-  return new RegExp(`(?<![\\p{L}])${escaped}${tail}`, 'u').test(text);
+  /* The pattern is built once and reused: the vocabulary is fixed, so
+     compiling it per call was pure waste (see src/lib/intent-ai/os/regexCache.js). */
+  return matchFoldedPhrase(text, fold(p));
 }
 
 function anyPhrase(text, list) {
-  return list.some((p) => phrase(text, p));
+  /* ONE regex execution for the whole vocabulary instead of one per term.
+     `phrase` matches a long Persian term as a PREFIX («نگرانم» matches
+     «نگران»), so this vocabulary keeps that rule. */
+  return matchAnyTerm(text, list, { fold, prefixMatch: true });
 }
 
 /* -------------------------------------------------------------------------- */

@@ -247,15 +247,18 @@ test('the mode default reaches a direct caller that passes no deadline', async (
 
 /* ── 3. the client waits as long as the mode needs ───────────────────────── */
 
-test('the browser timeout follows the mode instead of truncating it', () => {
+test('the browser leaves depth selection to the server and waits for Auto', () => {
   const client = src('src/lib/aiIntentClient.js');
-  assert.match(client, /timeout: intelligenceTurnBudgetMs\(mode\)/,
-    'aiChat must not keep a fixed window while the mode decides the depth');
-  assert.match(client, /intelligence: mode\b/);
+  assert.match(client, /timeout: intelligenceTurnBudgetMs\('max'\)/,
+    'aiChat must wait for the deepest tier it cannot predict before sending');
+  assert.doesNotMatch(client, /intelligence\s*:\s*mode\b/,
+    'the browser may not send a locally selected tier');
+  assert.doesNotMatch(client, /getIntelligenceMode/,
+    'the browser must not read a saved mode preference');
   const shared = src('src/lib/aiIntelligenceMode.js');
-  assert.match(shared, /max: 58000/, 'the smartest mode needs a wait above the server ceiling');
-  /* Cross-layer contract: the client never gives up before the server would. */
-  const clientMax = Number(shared.match(/max: (\d+)/)[1]);
+  assert.match(shared, /max: 58000/, 'Auto needs a wait above the server ceiling');
+  assert.match(shared, /auto: 58000/, 'Auto and max share the longest safe client wait');
+  const clientMax = Number(shared.match(/auto: (\d+)/)[1]);
   assert.ok(clientMax >= turnCeilingMs({}) + 5000,
     'a client timeout below the server ceiling discards the answer it paid for');
   assert.ok(clientMax <= 60000, 'and it must stay inside the function the request runs in');
@@ -344,59 +347,46 @@ test('the fleet payload and the panel tell the same retired story', () => {
   assert.match(panel, /بازنشسته/);
 });
 
-/* ── 6. the setting has to be REACHABLE to be real ─────────────────────────── */
+/* ── 6. Auto is status, not a local control ───────────────────────────────── */
 
-test('the mode control survives both breakpoints — a control is not decoration', () => {
+test('the visible depth badges are informational and no local selector remains', () => {
   const unified = src('src/components/IntentAIUnified.jsx');
-  const chipAt = unified.indexOf('data-testid="neural-intelligence-chip"');
-  assert.ok(chipAt > 0, 'the header chip must exist');
-  const chipTag = unified.slice(unified.lastIndexOf('<button', chipAt), unified.indexOf('>', chipAt));
-  assert.ok(chipTag.includes('className="fbt-chip"'), 'the chip keeps its styling…');
-  assert.ok(!chipTag.includes('fbt-chip-hide-sm'),
-    '…but must NEVER be inside the class the ≤560px rule hides. That rule is how «کجا باید روشنش کنم؟» happened on a phone.');
-  /* A second handle, at the point of asking: the header can be scrolled away
-     and the keyboard covers it while typing. */
+  assert.match(unified, /data-testid="neural-intelligence-chip"/);
   assert.match(unified, /data-testid="neural-intelligence-composer"/);
-  /* Both go through `openPanel`, which loads the fleet read — a raw `setPanel`
-     opens the panel on yesterday's data. */
-  const chipCalls = [...unified.matchAll(/data-testid="neural-intelligence-(?:chip|composer)"[\s\S]{0,220}?onClick=\{\(\) => (\w+)\('intelligence'\)\}/g)].map((m) => m[1]);
-  assert.deepEqual(chipCalls, ['openPanel', 'openPanel'], 'both entry points must call openPanel');
-  /* And the mobile menu owns the picker rather than only linking out of it. */
+  assert.match(unified, /Answer depth: Auto/);
+  assert.match(unified, /عمق پاسخ: خودکار/);
+  assert.doesNotMatch(unified, /setIntelligenceMode|onIntelligenceMode/);
+  const chipAt = unified.indexOf('data-testid="neural-intelligence-chip"');
+  assert.ok(chipAt > 0 && unified.slice(chipAt, chipAt + 500).includes('role="status"'),
+    'the visible badge is status, not a control');
+  const panel = src('src/components/IntentOpsPanels.jsx');
+  assert.match(panel, /data-testid="intel-intelligence-auto"/);
+  assert.doesNotMatch(panel, /intel-mode-\$\{m\.id\}|setIntelligenceMode/);
   const more = src('src/components/intent-neural/NeuralMoreMenu.jsx');
-  assert.match(more, /neural-more-mode-\$\{m\.id\}/);
-  assert.match(more, /INTELLIGENCE_MODES/);
-  const host = src('src/components/IntentAIUnified.jsx');
-  assert.match(host, /onIntelligenceMode=\{\(id\) => setIntelligenceModeState\(setIntelligenceMode\(id\)\)\}/,
-    'the picker must write the shared preference the transport reads');
-  /* The header row now shows a chip it did not show before — it has to wrap. */
+  assert.doesNotMatch(more, /INTELLIGENCE_MODES|onIntelligenceMode/);
   const css = src('src/styles/fbt-neural-command.css');
-  assert.match(css, /\.fbt-head-meta\s*\{[^}]*flex-wrap:\s*wrap/);
   assert.match(css, /\.iaos-mode-pill\s*\{/);
-  assert.match(css, /\.fbt-more-modebtn\s*\{/);
 });
 
-test('the smartest mode answers to the name the user gave it, and to the old one', () => {
-  /* The label is the only way the setting can be recognised on screen, so it
-     says «هوش عمیق» — the words of the request that created the mode. A rename
-     is only safe if BOTH spellings keep resolving, on the server and in the
-     client store: a preference saved under the old label, or an old bookmarked
-     request, must land on the deep mode and not on `rejected` → default. */
+test('Auto is the public default while the three server tiers remain reportable', () => {
   const payload = describeIntelligence({ env: {} });
   const maxMode = payload.modes.find((m) => m.id === 'max');
   assert.equal(maxMode.label.fa, 'هوش عمیق');
-  assert.equal(maxMode.default, true, 'the deep mode is the deployment default');
-  assert.match(maxMode.description.fa, /^پیش‌فرض/, 'and the description leads with that fact');
+  assert.equal(maxMode.default, true, 'legacy internal callers retain a safe max fallback');
+  assert.equal(DEFAULT_INTELLIGENCE_MODE, 'auto', 'public browser and chat default to per-question Auto');
   for (const phrase of ['هوش عمیق', 'باهوش‌ترین', 'عمیق', 'smartest', 'max', 'MAX']) {
     assert.equal(serverNormalize(phrase), 'max', `server lost «${phrase}»`);
-    assert.equal(clientNormalize(phrase), 'max', `client lost «${phrase}»`);
+    assert.equal(clientNormalize(phrase), 'max', `client lost legacy tier label «${phrase}»`);
   }
+  assert.equal(clientNormalize('auto'), 'auto');
   assert.equal(clientNormalize('سریع'), 'swift');
   assert.equal(clientNormalize('متعادل'), 'balanced');
-  /* An unknown word is still unknown — neither layer guesses it deeper. */
   assert.equal(serverNormalize('bahosh-tarin'), null);
   assert.equal(clientNormalize('bahosh-tarin'), null);
+  assert.equal(intelligenceModeLabel('auto', 'fa'), 'خودکار');
+  assert.equal(intelligenceModeLabel('auto', 'en'), 'Automatic');
   assert.equal(intelligenceModeLabel('max', 'fa'), 'هوش عمیق');
-  assert.equal(intelligenceModeLabel('max', 'en'), 'Smartest');
+  assert.equal(intelligenceModeLabel('max', 'en'), 'Deep');
 });
 
 /* ── 7. the debate follows the mode too ──────────────────────────────────── */
@@ -447,36 +437,35 @@ test('a debate seat is never named by the deployment’s stale model pin', async
   }
 });
 
-test('the gateway client waits as long as the mode needs — and names the mode', () => {
-  /*
-   * `aiGatewayClient.js` is the transport behind the consensus card and the
-   * gateway chat surface. It carried a 15 s window written for a health read,
-   * while a deep debate legitimately needs tens of seconds: the request was
-   * aborted mid-answer and the panel fell back to its local text, which reads
-   * exactly like «هیچ تغییری نکرده».
-   */
+test('Gateway clients wait for Auto and send no local tier preference', () => {
   const gw = src('src/lib/aiGatewayClient.js');
-  assert.match(gw, /import \{ getIntelligenceMode, intelligenceTurnBudgetMs \} from '.\/aiIntelligenceMode\.js'/,
-    'the client must read the same shared preference the chat uses');
-  assert.match(gw, /const modeWindow = \(floor = 15000\) => Math\.max\(floor, intelligenceTurnBudgetMs\(getIntelligenceMode\(\)\)\)/);
+  assert.match(gw, /import \{ intelligenceTurnBudgetMs \} from '.\/aiIntelligenceMode\.js'/);
+  assert.match(gw, /const modeWindow = \(floor = 15000\) => Math\.max\(floor, intelligenceTurnBudgetMs\('max'\)\)/);
   const chat = gw.slice(gw.indexOf('export async function executeAiGatewayChat'), gw.indexOf('export async function runAiConsensus'));
-  assert.match(chat, /intelligence: mode/);
+  assert.match(chat, /body: \{ taskType, system, user, preferredProvider, model, temperature, maxTokens, json \}/);
+  assert.doesNotMatch(chat, /intelligence\s*:/, 'chat must not carry a chosen mode');
   assert.match(chat, /timeout: modeWindow\(\)/);
   const consensus = gw.slice(gw.indexOf('export async function runAiConsensus'), gw.indexOf('export async function evaluateConfidence'));
-  assert.match(consensus, /intelligence: mode/);
-  assert.match(consensus, /timeout: modeWindow\(\)/, 'a debate is the slowest call in this file, not the fastest');
+  assert.match(consensus, /body: \{ message, context, locale, preferredProviders \}/);
+  assert.doesNotMatch(consensus, /intelligence\s*:/, 'consensus must not carry a local mode preference');
+  assert.match(consensus, /timeout: modeWindow\(\)/);
 });
 
-test('the consensus and debate routes carry the caller’s mode to the seats', () => {
+test('public Gateway chat and consensus resolve depth from the question', () => {
   const route = src('server/aiIntentOS.js');
+  const autoHelper = route.slice(route.indexOf('function gatewayAutoDecision'), route.indexOf('function autoModeMetadata'));
+  assert.match(autoHelper, /proposeIntelligenceMode\(read/);
+  assert.match(autoHelper, /resolveIntelligenceMode\(body\.intelligence \?\? null, \{ auto: proposal \}\)/,
+    'legacy body values are diagnostic only on an Auto-aware route');
+  const chat = route.slice(route.indexOf("router.post('/gateway/chat'"), route.indexOf("router.post('/gateway/consensus'"));
+  assert.match(chat, /gatewayAutoDecision\(body/);
+  /* The route forwards the gateway's own `system`/`user` prompt alongside the
+     resolved tier; what this test guards is that the TIER comes from
+     `resolved.mode` and not from the request body. */
+  assert.match(chat, /routedChat\(\{ \.\.\.body, system, user, intelligence: resolved\.mode \}\)/);
+  assert.match(chat, /autoModeMetadata\(resolved\)/);
   const consensus = route.slice(route.indexOf("router.post('/gateway/consensus'"), route.indexOf("router.post('/gateway/confidence'"));
-  /* The mode must reach the call, whether the route destructures it first or
-     reads it inline — both spellings are fine, an absent one is not. */
-  assert.match(consensus, /const \{ message, context, locale, preferredProviders, intelligence \} = req\.body \|\| \{\};/);
-  assert.match(consensus, /intelligence: intelligence \?\? null/);
-  const debate = route.slice(route.indexOf("router.post('/debate'"), route.indexOf("router.post('/debate'") + 2200);
-  assert.match(debate, /intelligence: body\.intelligence \?\? null/);
-  const consensusSrc = src('server/aiConsensus.js');
-  assert.match(consensusSrc, /const mode = resolveIntelligenceMode\(intelligence\)\.mode;/);
-  assert.match(consensusSrc, /intelligence: mode\n      \}\);/, 'each seat must be asked at the resolved depth');
+  assert.match(consensus, /gatewayAutoDecision\(body/);
+  assert.match(consensus, /intelligence: resolved\.mode/);
+  assert.match(consensus, /autoModeMetadata\(resolved\)/);
 });

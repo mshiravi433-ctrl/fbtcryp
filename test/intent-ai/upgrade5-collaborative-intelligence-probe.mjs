@@ -435,11 +435,32 @@ async function runAll() {
   });
 
   await atest('no external AI configured → knowledge-grounded answer, no fabrication', async () => {
-    // No deps injected and no provider keys in this environment → internal only
+    /*
+     * No deps injected and no provider keys in this environment → internal only.
+     *
+     * The ASSERTION is about the answer's provenance, not about which
+     * internal path produced it: the answer must come from the verified
+     * knowledge item, and nothing may be invented. Both the local-first
+     * gate (the corpus answers it outright) and the degraded fallback (the
+     * internal reasoner answers it) satisfy that; which one ran is
+     * reported separately in `localFirst`.
+     */
     const r = await runCollaborativeAnalysis({ message: 'بیت کوین چیست؟', locale: 'fa' });
-    assert.equal(r.degraded, true);
     assert.equal(r.evidence.knowledgeUsed, true);
     assert.ok(r.answer.includes('غیرمتمرکز'), 'answer must come from the verified knowledge item');
+    /*
+     * Either the local-first gate answered it (and the turn is NOT
+     * degraded — nothing failed) or the degraded fallback answered it
+     * (and the turn IS degraded). Both are honest; a turn that is
+     * neither, or that invented something, is not.
+     */
+    const answeredLocally = r.localFirst?.used === true;
+    if (answeredLocally) {
+      assert.equal(r.degraded, false, 'a locally answered turn is not a degraded turn');
+      assert.equal(r.localFirst.matched, 'kb.general.btc');
+    } else {
+      assert.equal(r.degraded, true);
+    }
   });
 
   await atest('greeting costs zero provider calls (§4)', async () => {

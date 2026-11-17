@@ -5,7 +5,7 @@
  *   OBSERVED -> OPERATOR_REPORTED -> CRYPTOGRAPHICALLY_VERIFIED -> ON_CHAIN_VERIFIED
  */
 
-import { keccak256, toUtf8Bytes } from 'ethers';
+import { keccak256, toUtf8Bytes } from '../../../server/ethersLite.js';
 import { EVIDENCE_TIERS } from './types.js';
 import { canonicalJson } from './intentHashing.js';
 

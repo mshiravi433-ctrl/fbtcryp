@@ -43,18 +43,31 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconLock, IconSparkle, IconCheck, IconShield, IconKey, IconWallet, IconChart, IconDoc, IconAlertTriangle } from '../Icons';
 import { validateAgentKeyFormat } from '../../lib/hyperliquid/agentKey';
-import { agentAddress } from '../../lib/hyperliquid/signing';
+import { agentAddressAsync } from '../../lib/hyperliquid/signing';
 import { isValidHlAddress, readAccountSummary } from '../../lib/hyperliquid/readonly';
 import { defaultCapsSettings, validateCapsSettings } from '../../lib/hyperliquid/capsSettings';
-import { fetchMarkets, eligibleMarkets, fetchCandles, fetchRealisedSince } from '../../lib/hyperliquid/market';
+import {
+  fetchMarkets, eligibleMarkets, fetchCandles, fetchRealisedSince,
+  summarizeCandles, usableMarketPrice
+} from '../../lib/hyperliquid/market';
 import { executeIntent, makeNonceSource } from '../../lib/hyperliquid/exchangeOps';
 import {
-  normalizeRules, buildPreview, createPending, approvePending, createLedger, recordEntry,
+  normalizeRules, buildPreview, createPending, approvePending, conservativeMaxOrderUsd, createLedger, recordEntry,
   tradesSince, lastTradeTimes, startOfLocalDay, STRATEGIES, RULE_DEFAULTS, MIN_MARKET_VOLUME_USD
 } from '../../lib/hyperliquid/engine';
-import { requestProposals, buildAnalystMessages, AI_DEFAULT_ENDPOINT } from '../../lib/hyperliquid/aiClient';
+import {
+  requestProposals, buildAnalystMessages, AI_DEFAULT_ENDPOINT, AI_PROVIDER_PRESETS,
+  selectAIProvider
+} from '../../lib/hyperliquid/aiClient';
+import {
+  clearQueuedTradeResearch,
+  normalizeTradeResearch,
+  subscribeTradeResearch,
+  takeQueuedTradeResearch
+} from '../../lib/hyperliquid/tradeResearch.js';
 import { AI_TRADE_COPY as C, AI_TRADE_TAB_LABEL } from '../../lib/hyperliquid/aiTradeCopy';
 import '../../styles/ai-trade.css';
+import '../../styles/ai-trade-research.css';
 import { pollWhileVisible } from '../../lib/visibilityPoll';
 
 const STEPS = ['connect', 'account', 'limits', 'ai', 'approve', 'report'];
@@ -79,7 +92,7 @@ const STEP_ICONS = {
 const volText = (v) => (!Number.isFinite(v) ? '–'
   : v >= 1e9 ? `${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : `${(v / 1e3).toFixed(0)}K`);
 
-const EMPTY_SESSION = Object.freeze({ address: '', agentKey: '', aiKey: '', aiEndpoint: AI_DEFAULT_ENDPOINT, aiModel: '', connected: false });
+const EMPTY_SESSION = Object.freeze({ address: '', agentKey: '', aiKey: '', aiProvider: 'openai', aiEndpoint: AI_DEFAULT_ENDPOINT, aiModel: '', connected: false });
 
 const num = (v) => (Number.isFinite(v) ? v.toLocaleString('en-US', { maximumFractionDigits: 2 }) : C.account.unknown);
 const signed = (v) => (Number.isFinite(v) ? `${v >= 0 ? '+' : ''}${v.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : C.account.unknown);
@@ -261,8 +274,21 @@ function ConnectStep({ session, setSession, onConnect, busy, error }) {
   const addressOk = isValidHlAddress(session.address.trim());
   const keyCheck = session.agentKey ? validateAgentKeyFormat(session.agentKey) : null;
   const keyOk = keyCheck?.ok === true;
-  let shown = null;
-  if (keyOk) { try { const a = agentAddress(session.agentKey.trim()); shown = `${a.slice(0, 6)}…${a.slice(-4)}`; } catch { shown = null; } }
+  /*
+   * The agent address needs secp256k1, which is loaded on demand — so it is
+   * derived in an effect, not during render. Rendering used to call a
+   * synchronous `agentAddress()` that no longer exists, and the masked
+   * address silently showed nothing.
+   */
+  const [shown, setShown] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    if (!keyOk) { setShown(null); return () => { alive = false; }; }
+    agentAddressAsync(session.agentKey.trim())
+      .then((a) => { if (alive) setShown(`${a.slice(0, 6)}…${a.slice(-4)}`); })
+      .catch(() => { if (alive) setShown(null); });
+    return () => { alive = false; };
+  }, [keyOk, session.agentKey]);
   const keyError = keyCheck && !keyCheck.ok ? C.connect.errors[keyCheck.code] || C.connect.errors.AGENT_KEY_BAD_FORMAT : null;
   const ready = addressOk && keyOk && !busy;
 
@@ -531,28 +557,55 @@ function LimitsStep({ form, setForm, result, markets, marketsError, marketsLoadi
 }
 
 /* ── step 4: AI and rules ───────────────────────────────────────────────── */
-function AiStep({ session, setSession, rules, setRules, onAnalyze, analyzing, gate, lastRun }) {
+function AiStep({
+  session, setSession, rules, setRules, onAnalyze, analyzing, gate, lastRun,
+  researchReport, includeResearch, onToggleResearch, onClearResearch
+}) {
   const setS = (key) => (e) => setSession((s) => ({ ...s, [key]: e.target.value }));
   const setR = (key) => (e) => setRules((r) => normalizeRules({ ...r, [key]: e.target.value }));
+  const research = normalizeTradeResearch(researchReport);
   return (
     <div className="ai-trade-bento">
       <Card title={C.ai.title} kicker="ANALYST · BYOK" icon={<IconSparkle width={18} height={18} />} span="ai-trade-span-2" accent="violet">
         <div className="ai-trade-form">
+          <label className="ai-trade-field ai-trade-field-wide"><span className="ai-trade-field-label">ارائه‌دهندهٔ تحلیل</span>
+            <span className="ai-trade-input-shell">
+              <select
+                value={session.aiProvider || 'openai'}
+                data-testid="ai-trade-provider"
+                onChange={(event) => setSession((current) => selectAIProvider(current, event.target.value))}
+              >
+                {Object.values(AI_PROVIDER_PRESETS).map((provider) => (
+                  <option key={provider.id} value={provider.id}>{provider.label}</option>
+                ))}
+              </select>
+            </span>
+          </label>
           <label className="ai-trade-field ai-trade-field-wide"><span className="ai-trade-field-label">{C.ai.keyLabel}</span>
             <span className="ai-trade-input-shell">
               <span className="ai-trade-input-ico" aria-hidden="true"><IconKey width={16} height={16} /></span>
-              <input type="password" dir="ltr" autoComplete="off" spellCheck={false} data-lpignore="true" value={session.aiKey} onChange={setS('aiKey')} placeholder="sk-…" />
+              <input type="password" dir="ltr" autoComplete="off" spellCheck={false} data-lpignore="true" value={session.aiKey} onChange={setS('aiKey')} placeholder="API key" data-testid="ai-trade-ai-key" />
             </span>
           </label>
           <label className="ai-trade-field"><span className="ai-trade-field-label">{C.ai.modelLabel}</span>
-            <span className="ai-trade-input-shell"><input type="text" dir="ltr" autoComplete="off" value={session.aiModel} onChange={setS('aiModel')} placeholder="model-name" /></span></label>
+            <span className="ai-trade-input-shell"><input type="text" dir="ltr" autoComplete="off" value={session.aiModel} onChange={setS('aiModel')} placeholder="model-name" data-testid="ai-trade-model" /></span></label>
         </div>
         <p className="ai-trade-small ai-trade-muted">{C.ai.keyHelp}</p>
-        <details className="ai-trade-adv">
-          <summary>تنظیمات پیشرفته</summary>
-          <label className="ai-trade-field" style={{ marginTop: 10 }}><span className="ai-trade-field-label">{C.ai.endpointLabel}</span>
-            <span className="ai-trade-input-shell"><input type="url" dir="ltr" value={session.aiEndpoint} onChange={setS('aiEndpoint')} /></span></label>
-        </details>
+        <p className="ai-trade-small ai-trade-muted" data-testid="ai-trade-data-disclosure">{C.ai.dataDisclosure}</p>
+        {session.aiProvider === 'custom' ? (
+          <p className="ai-trade-small ai-trade-custom-endpoint-warning" data-testid="ai-trade-custom-endpoint-warning">
+            کلید در درخواست مستقیم به نشانی سفارشی می‌رود؛ فقط نشانی‌ای را وارد کن که به آن اعتماد داری.
+          </p>
+        ) : null}
+        {session.aiProvider === 'custom' ? (
+          <details className="ai-trade-adv" open>
+            <summary>تنظیمات ارائه‌دهندهٔ سفارشی</summary>
+            <label className="ai-trade-field" style={{ marginTop: 10 }}><span className="ai-trade-field-label">{C.ai.endpointLabel}</span>
+              <span className="ai-trade-input-shell"><input type="url" dir="ltr" value={session.aiEndpoint} onChange={(event) => setSession((current) => ({ ...current, aiEndpoint: event.target.value, aiKey: '', aiModel: '' }))} placeholder="https://…" data-testid="ai-trade-endpoint" /></span></label>
+          </details>
+        ) : (
+          <p className="ai-trade-small ai-trade-muted" data-testid="ai-trade-endpoint-preset">نشانی امنِ ارائه‌دهنده: {session.aiEndpoint}</p>
+        )}
         <div className="ai-trade-actions">
           <button type="button" className="ai-trade-btn ai-trade-btn-primary" onClick={onAnalyze} disabled={analyzing || !!gate}>
             {analyzing
@@ -562,6 +615,38 @@ function AiStep({ session, setSession, rules, setRules, onAnalyze, analyzing, ga
           {gate && <span className="ai-trade-small ai-trade-muted">{gate}</span>}
         </div>
         {lastRun && <p className={lastRun.tone === 'error' ? 'ai-trade-error' : 'ai-trade-ok'} role="status">{lastRun.text}</p>}
+      </Card>
+
+      <Card title="پژوهش زندهٔ ایجنت‌های FBT" kicker="FIRST-PARTY EVIDENCE" icon={<IconDoc width={18} height={18} />} span="ai-trade-span-4" accent="cyan">
+        {research ? (
+          <div data-testid="ai-trade-research">
+            <div className="ai-trade-research-head">
+              <strong>{research.title}</strong>
+              <span className="ai-trade-tag" data-tone="up">خوانش زنده</span>
+            </div>
+            <p className="ai-trade-small ai-trade-muted">{research.slug} · خوانده‌شده در {new Date(research.readAt).toLocaleString('fa-IR')}</p>
+            <p className="ai-trade-research-text" dir="auto">{research.text.slice(0, 900)}{research.text.length > 900 ? '…' : ''}</p>
+            {research.citations.length ? (
+              <ul className="ai-trade-research-citations" aria-label="منابع گزارش">
+                {research.citations.map((url) => <li key={url}><a href={url} target="_blank" rel="noopener noreferrer nofollow">{url}</a></li>)}
+              </ul>
+            ) : <p className="ai-trade-small ai-trade-muted">این گزارش پیوند منبع قابل‌نمایش ندارد.</p>}
+            <label className="ai-trade-research-include">
+              <input
+                type="checkbox"
+                checked={includeResearch}
+                onChange={(event) => onToggleResearch(event.target.checked)}
+                data-testid="ai-trade-include-research"
+              />
+              <span>این گزارش را به متن درخواست تحلیل بعدی اضافه کن.</span>
+            </label>
+            <button type="button" className="ai-trade-btn ai-trade-btn-ghost ai-trade-btn-sm" onClick={onClearResearch} data-testid="ai-trade-clear-research">پاک‌کردن گزارش</button>
+          </div>
+        ) : (
+          <p className="ai-trade-small ai-trade-muted" data-testid="ai-trade-research-empty">
+            از گفت‌وگوی ایجنت‌های FBT، فقط گزارش کامل و زندهٔ یک افزونهٔ داخلی را انتخاب کن. دادهٔ ناقص یا خارجی وارد این تحلیل نمی‌شود.
+          </p>
+        )}
       </Card>
 
       <Card title={C.ai.strategyTitle} kicker="PLAYBOOK" icon={<IconChart width={18} height={18} />} span="ai-trade-span-2" accent="cyan">
@@ -586,7 +671,7 @@ function AiStep({ session, setSession, rules, setRules, onAnalyze, analyzing, ga
 }
 
 /* ── step 5: approve ────────────────────────────────────────────────────── */
-function PendingCard({ item, onApprove, onReject, now }) {
+function PendingCard({ item, onApprove, onReject, now, approvalBusy }) {
   const { intent, preview } = item;
   const expired = item.status === 'pending' && now > item.expiresAt;
   const status = expired ? 'expired' : item.status;
@@ -595,7 +680,7 @@ function PendingCard({ item, onApprove, onReject, now }) {
   const blockers = [];
   if (!preview.capsOk && preview.capsCode) blockers.push(C.approve.errors[preview.capsCode] || preview.capsCode);
   if (!preview.rulesOk && preview.rulesCode) blockers.push(C.approve.errors[preview.rulesCode] || preview.rulesCode);
-  const canHold = status === 'pending' && preview.canApprove && !expired;
+  const canHold = status === 'pending' && preview.canApprove && !expired && !approvalBusy;
   /* worst-case loss as a share of the notional, so the dial means the same
      thing on a 20$ ticket and a 2,000$ one. */
   const risk = Number.isFinite(preview.worstCaseLossUsd) && intent.notionalUsd > 0
@@ -667,7 +752,7 @@ function PendingCard({ item, onApprove, onReject, now }) {
   );
 }
 
-function ApproveStep({ pending, onApprove, onReject }) {
+function ApproveStep({ pending, onApprove, onReject, approvalBusy }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     /* A hold-timer display. Gated like every other ticker in the app: a hidden
@@ -688,7 +773,7 @@ function ApproveStep({ pending, onApprove, onReject }) {
     <div className="ai-trade-bento">
       {pending.map((item) => (
         <div key={item.id} className="ai-trade-span-2">
-          <PendingCard item={item} onApprove={onApprove} onReject={onReject} now={now} />
+          <PendingCard item={item} onApprove={onApprove} onReject={onReject} now={now} approvalBusy={approvalBusy} />
         </div>
       ))}
     </div>
@@ -788,7 +873,11 @@ export default function AiTradePanel() {
   const [refreshing, setRefreshing] = useState(false);
   const [connectError, setConnectError] = useState(null);
   const [ledger, setLedger] = useState(createLedger);
+  const [researchReport, setResearchReport] = useState(null);
+  const [includeResearch, setIncludeResearch] = useState(false);
   const [pending, setPending] = useState([]);
+  const [approvalBusy, setApprovalBusy] = useState(false);
+  const approvalInFlight = useRef(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [lastRun, setLastRun] = useState(null);
   const nextNonce = useRef(makeNonceSource());
@@ -796,6 +885,18 @@ export default function AiTradePanel() {
   const [marketsError, setMarketsError] = useState(null);
   const [marketsLoading, setMarketsLoading] = useState(false);
   const analysisRound = useRef(0);
+
+  useEffect(() => {
+    const acceptResearch = (value) => {
+      const safe = normalizeTradeResearch(value);
+      setResearchReport(safe);
+      setIncludeResearch(false);
+    };
+    const unsubscribe = subscribeTradeResearch(acceptResearch);
+    const queued = takeQueuedTradeResearch();
+    if (queued) acceptResearch(queued);
+    return unsubscribe;
+  }, []);
 
   const loadMarkets = async () => {
     setMarketsLoading(true);
@@ -814,9 +915,16 @@ export default function AiTradePanel() {
 
   const hasSecrets = !!(session.agentKey || session.aiKey);
   const lock = (notice = '') => {
-    setSession((s) => ({ ...EMPTY_SESSION, aiEndpoint: s.aiEndpoint || AI_DEFAULT_ENDPOINT }));
+    setSession((s) => ({
+      ...EMPTY_SESSION,
+      aiProvider: s.aiProvider || 'openai',
+      aiEndpoint: s.aiProvider === 'custom' ? s.aiEndpoint : (AI_PROVIDER_PRESETS[s.aiProvider]?.endpoint || AI_DEFAULT_ENDPOINT)
+    }));
     setAccount(null);
     setPending([]);
+    clearQueuedTradeResearch();
+    setResearchReport(null);
+    setIncludeResearch(false);
     setLockNotice(notice);
   };
 
@@ -847,7 +955,7 @@ export default function AiTradePanel() {
   }, [hasSecrets]);
 
   const killed = capsResult.ok && capsResult.value.killSwitch;
-  const aiReady = !!session.aiKey && !!session.aiModel.trim();
+  const aiReady = !!session.aiKey && !!session.aiEndpoint.trim() && !!session.aiModel.trim();
   const status = !session.connected && !hasSecrets ? 'locked'
     : killed ? 'stopped'
       : session.connected && capsResult.ok && aiReady ? 'ready'
@@ -879,49 +987,67 @@ export default function AiTradePanel() {
   const setPendingItem = (id, patch) => setPending((list) => list.map((p) => (p.id === id ? { ...p, ...patch } : p)));
 
   const approve = async (id) => {
+    if (approvalInFlight.current) return;
     const item = pending.find((p) => p.id === id);
     const gate = item && approvePending(item, { now: Date.now() });
     if (!item || !gate.ok) { setPendingItem(id, { status: 'expired' }); return; }
+    approvalInFlight.current = true;
+    setApprovalBusy(true);
     setPendingItem(id, { status: 'executing', resultText: null });
     const now = Date.now();
     const coin = item.intent.coin;
+    let resultRecorded = false;
     const fail = (message, code) => {
       setPendingItem(id, { status: 'failed', failed: true, resultText: message });
       setLedger((l) => recordEntry(l, { id, at: now, coin, side: item.intent.side, notionalUsd: item.intent.notionalUsd, status: 'failed', message, code }));
     };
-    // Everything the decision needs is read again right now, not taken from the analysis time.
-    const fresh = await readFresh(session.address.trim(), now);
-    if (!fresh.ok) { fail(C.account.errors[fresh.code] || C.exec.HL_EXEC_NETWORK, fresh.code); return; }
-    setAccount(fresh);
-    const mk = await loadMarkets();
-    if (!mk.ok) { fail(C.markets.errors[mk.code] || C.exec.HL_EXEC_NETWORK, mk.code); return; }
-    const market = mk.markets[coin];
-    const mid = market ? (market.midPx ?? market.markPx ?? 0) : 0;
-    const preview = buildPreview(item.intent, {
-      mid, caps: capsResult.value, state: fresh.state, rules,
-      tradesToday: tradesSince(ledger, startOfLocalDay(now)), lastTradeAtByCoin: lastTradeTimes(ledger), now, market
-    });
-    if (!preview.canApprove) {
-      const code = !preview.capsOk ? preview.capsCode : !preview.rulesOk ? preview.rulesCode : !preview.marketOk ? preview.marketCode : 'NO_PRICE';
-      fail(C.approve.errors[code] || C.exec.HL_EXEC_NO_PRICE, code);
-      return;
+    try {
+      if (!capsResult.ok) {
+        const code = capsResult.errors[0] || 'CAPS_INVALID';
+        fail(C.limits.errors[code] || C.ai.needFresh, code);
+        return;
+      }
+      // Serialize approvals and read again at execution time so two held tickets
+      // cannot both pass the exposure and daily-loss checks against one snapshot.
+      const fresh = await readFresh(session.address.trim(), now);
+      if (!fresh.ok) { fail(C.account.errors[fresh.code] || C.exec.HL_EXEC_NETWORK, fresh.code); return; }
+      setAccount(fresh);
+      const mk = await loadMarkets();
+      if (!mk.ok) { fail(C.markets.errors[mk.code] || C.exec.HL_EXEC_NETWORK, mk.code); return; }
+      const market = mk.markets[coin];
+      const mid = usableMarketPrice(market) ?? 0;
+      const preview = buildPreview(item.intent, {
+        mid, caps: capsResult.value, state: fresh.state, rules,
+        tradesToday: tradesSince(ledger, startOfLocalDay(now)), lastTradeAtByCoin: lastTradeTimes(ledger), now, market
+      });
+      if (!preview.canApprove) {
+        const code = !preview.capsOk ? preview.capsCode : !preview.rulesOk ? preview.rulesCode : !preview.marketOk ? preview.marketCode : 'NO_PRICE';
+        fail(C.approve.errors[code] || C.exec.HL_EXEC_NO_PRICE, code);
+        return;
+      }
+      const report = await executeIntent({
+        privateKey: session.agentKey.trim(), intent: item.intent, market, mid,
+        caps: capsResult.value, state: fresh.state, nextNonce: nextNonce.current
+      });
+      const filled = !!report.entry;
+      const entryPx = report.entry?.avgPx ?? null;
+      const stopPx = report.stop?.triggerPx ?? null;
+      const message = report.ok ? null : (C.exec[report.code] || C.exec.HL_EXEC_REJECTED);
+      setLedger((l) => recordEntry(l, {
+        id, at: now, coin, side: item.intent.side, notionalUsd: item.intent.notionalUsd,
+        status: filled ? 'executed' : 'failed', code: report.code, message, entryPx, stopPx
+      }));
+      setPendingItem(id, report.ok
+        ? { status: 'executed', resultText: `اجرا شد. ورود ${num(entryPx)} · حد ضرر ${num(stopPx)}` }
+        : { status: filled ? 'executed' : 'failed', failed: !filled || !report.stop, resultText: message });
+      resultRecorded = true;
+      try { await refresh(); } catch { /* the execution result remains authoritative */ }
+    } catch {
+      if (!resultRecorded) fail(C.exec.HL_EXEC_NETWORK, 'APPROVAL_FAILED');
+    } finally {
+      approvalInFlight.current = false;
+      setApprovalBusy(false);
     }
-    const report = await executeIntent({
-      privateKey: session.agentKey.trim(), intent: item.intent, market, mid,
-      caps: capsResult.value, state: fresh.state, nextNonce: nextNonce.current
-    });
-    const filled = !!report.entry;
-    const entryPx = report.entry?.avgPx ?? null;
-    const stopPx = report.stop?.triggerPx ?? null;
-    const message = report.ok ? null : (C.exec[report.code] || C.exec.HL_EXEC_REJECTED);
-    setLedger((l) => recordEntry(l, {
-      id, at: now, coin, side: item.intent.side, notionalUsd: item.intent.notionalUsd,
-      status: filled ? 'executed' : 'failed', code: report.code, message, entryPx, stopPx
-    }));
-    setPendingItem(id, report.ok
-      ? { status: 'executed', resultText: `اجرا شد. ورود ${num(entryPx)} · حد ضرر ${num(stopPx)}` }
-      : { status: filled ? 'executed' : 'failed', failed: !filled || !report.stop, resultText: message });
-    refresh();
   };
 
   const reject = (id) => {
@@ -933,6 +1059,12 @@ export default function AiTradePanel() {
   const analyze = async () => {
     if (!aiReady) { setLastRun({ tone: 'error', text: C.ai.needAi }); return; }
     if (!capsResult.ok) { setLastRun({ tone: 'error', text: C.limits.errors[capsResult.errors[0]] || C.ai.needFresh }); return; }
+    const selectedResearch = includeResearch ? normalizeTradeResearch(researchReport) : null;
+    if (includeResearch) setIncludeResearch(false); // consent applies to this analysis attempt only
+    if (includeResearch && !selectedResearch) {
+      setLastRun({ tone: 'error', text: 'گزارش انتخاب‌شده تازه نیست؛ از ایجنت داخلی دوباره گزارش زنده بگیر.' });
+      return;
+    }
     setAnalyzing(true);
     const now = Date.now();
     const fresh = await readFresh(session.address.trim(), now);
@@ -949,30 +1081,77 @@ export default function AiTradePanel() {
     analysisRound.current += 1;
     const batch = [...pool.slice(offset), ...pool.slice(0, offset)].slice(0, TOP_ANALYSIS_COINS);
     const candleSets = await Promise.all(batch.map((c) => fetchCandles(c, { interval: '1h', count: 48, now })));
-    const candles = Object.fromEntries(batch.map((c, i) => [c, candleSets[i].ok ? candleSets[i].candles : []]));
-    const mids = Object.fromEntries(batch.map((c) => [c, mk.markets[c].midPx ?? mk.markets[c].markPx ?? null]));
-    const aiCaps = { ...caps, allowedCoins: batch };
+    const marketAnalysis = Object.fromEntries(batch.map((coin, index) => [
+      coin,
+      summarizeCandles(candleSets[index].ok ? candleSets[index].candles : [], {
+        interval: '1h', now, midPrice: usableMarketPrice(mk.markets[coin])
+      })
+    ]));
+    const analysisCoins = batch.filter((coin) => marketAnalysis[coin].dataStatus === 'live'
+      && usableMarketPrice(mk.markets[coin]) !== null
+      && Number.isInteger(mk.markets[coin]?.maxLeverage)
+      && mk.markets[coin].maxLeverage > 0);
+    if (analysisCoins.length === 0) {
+      setAnalyzing(false);
+      setLastRun({ tone: 'error', text: C.ai.insufficientMarketHistory });
+      return;
+    }
+    const candles = Object.fromEntries(analysisCoins.map((coin) => [
+      coin, candleSets[batch.indexOf(coin)].candles
+    ]));
+    const mids = Object.fromEntries(analysisCoins.map((coin) => [coin, usableMarketPrice(mk.markets[coin])]));
+    const marketConstraints = Object.fromEntries(analysisCoins.map((coin) => [coin, {
+      dayNtlVlmUsd: mk.markets[coin].dayNtlVlm,
+      maxLeverage: mk.markets[coin].maxLeverage,
+      onlyIsolated: mk.markets[coin].onlyIsolated
+    }]));
+    const analysisContext = Object.fromEntries(analysisCoins.map((coin) => [coin, marketAnalysis[coin]]));
+    const aiCaps = { ...caps, allowedCoins: analysisCoins };
+    const promptAt = Date.now();
+    const promptResearch = selectedResearch ? normalizeTradeResearch(selectedResearch, { now: promptAt }) : null;
+    if (selectedResearch && !promptResearch) {
+      setAnalyzing(false);
+      setLastRun({ tone: 'error', text: 'گزارش پیش از ساخت درخواست منقضی شد؛ تحلیل ارسال نشد.' });
+      return;
+    }
     const messages = buildAnalystMessages({
       rules, caps: aiCaps,
       account: { accountValueUsd: fresh.summary.accountValueUsd, exposureUsd: fresh.state.currentExposureUsd, dailyRealisedPnlUsd: fresh.state.dailyRealisedPnlUsd, dailyUnrealisedPnlUsd: fresh.state.dailyUnrealisedPnlUsd, positions: fresh.summary.positions.map((p) => ({ coin: p.coin, size: p.size, entryPx: p.entryPx, unrealizedPnl: p.unrealizedPnl })) },
-      mids, candles
+      mids, candles, marketAnalysis: analysisContext, marketConstraints,
+      firstPartyResearch: promptResearch, now: promptAt
     });
     const res = await requestProposals({
       apiKey: session.aiKey.trim(), endpoint: session.aiEndpoint.trim(), model: session.aiModel.trim(), messages,
-      limits: { allowedCoins: batch, maxLeverage: caps.maxLeverage, maxStopLossPct: caps.maxStopLossPct }
+      limits: {
+        allowedCoins: analysisCoins,
+        maxOrderUsd: caps.maxOrderUsd,
+        maxOrderByCoin: Object.fromEntries(analysisCoins.map((coin) => [
+          coin,
+          conservativeMaxOrderUsd({ caps, state: fresh.state, market: mk.markets[coin] }) ?? 0
+        ])),
+        maxLeverageByCoin: Object.fromEntries(analysisCoins.map((coin) => [coin, mk.markets[coin].maxLeverage])),
+        maxLeverage: caps.maxLeverage,
+        maxStopLossPct: caps.maxStopLossPct
+      }
     });
     setAnalyzing(false);
     if (!res.ok) { setLastRun({ tone: 'error', text: C.ai.errors[res.code] || C.ai.errors.AI_NETWORK }); return; }
-    if (res.proposals.length === 0) { setLastRun({ tone: 'ok', text: C.ai.none }); return; }
-    const tradesToday = tradesSince(ledger, startOfLocalDay(now));
+    if (res.proposals.length === 0) {
+      setLastRun({ tone: 'ok', text: res.dropped.length ? C.ai.dropped : C.ai.none });
+      return;
+    }
+    /* The approval clock starts when the proposal reaches the user, not when
+       market reads began; an AI request can take most of the 60-second TTL. */
+    const proposalAt = Date.now();
+    const tradesToday = tradesSince(ledger, startOfLocalDay(proposalAt));
     const lastAt = lastTradeTimes(ledger);
     const items = res.proposals.map((intent, i) => {
       const market = mk.markets[intent.coin];
       const preview = buildPreview(intent, {
-        mid: market ? (market.midPx ?? market.markPx ?? 0) : 0, caps, state: fresh.state, rules,
-        tradesToday, lastTradeAtByCoin: lastAt, now, market
+        mid: usableMarketPrice(market) ?? 0, caps, state: fresh.state, rules,
+        tradesToday, lastTradeAtByCoin: lastAt, now: proposalAt, market
       });
-      return createPending(intent, preview, { id: `${now}-${i}`, now });
+      return createPending(intent, preview, { id: `${proposalAt}-${i}`, now: proposalAt });
     });
     setPending((list) => [...items, ...list].slice(0, 20));
     setLastRun({ tone: 'ok', text: `${C.ai.done}${res.dropped.length ? ` ${C.ai.dropped}` : ''}` });
@@ -1084,9 +1263,12 @@ export default function AiTradePanel() {
         )}
         {step === 'ai' && (
           <AiStep session={session} setSession={setSession} rules={rules} setRules={setRules}
-            onAnalyze={analyze} analyzing={analyzing} gate={analyzeGate} lastRun={lastRun} />
+            onAnalyze={analyze} analyzing={analyzing} gate={analyzeGate} lastRun={lastRun}
+            researchReport={researchReport} includeResearch={includeResearch}
+            onToggleResearch={setIncludeResearch}
+            onClearResearch={() => { clearQueuedTradeResearch(); setResearchReport(null); setIncludeResearch(false); }} />
         )}
-        {step === 'approve' && <ApproveStep pending={pending} onApprove={approve} onReject={reject} />}
+        {step === 'approve' && <ApproveStep pending={pending} onApprove={approve} onReject={reject} approvalBusy={approvalBusy} />}
         {step === 'report' && (
           <ReportStep ledger={ledger} account={account} onRefresh={refresh} refreshing={refreshing} />
         )}

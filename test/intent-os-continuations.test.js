@@ -35,14 +35,23 @@ describe('context-bound negotiation choices', () => {
     expect(parseNegotiationRequest('مذاکره ایجنت به انسان').mode).toBe('human-agent');
     expect(parseNegotiationRequest('agent-to-human negotiation').mode).toBe('human-agent');
   });
-  it.each(['conservative', 'balanced', 'aggressive'])('clicking %s keeps capital, target, floor and horizon', (riskProfile) => {
+  it.each(['conservative', 'balanced', 'aggressive'])('clicking %s records the user task before review and consent', (riskProfile) => {
     const event = offer();
-    const out = resolveNegotiationAction({ event, chipId: `pick_${riskProfile}`, text: 'not a parser command' });
-    expect(out.handled).toBe(true);
-    expect(out.selectedGoal).toMatchObject({ capitalUsd: 1000, targetPct: 20, floorPct: 20, horizonDays: 20, riskProfile });
+    const chosen = resolveNegotiationAction({ event, chipId: `pick_${riskProfile}`, text: 'not a parser command' });
+    expect(chosen.handled).toBe(true);
+    expect(chosen.selectedGoal).toMatchObject({ capitalUsd: 1000, targetPct: 20, floorPct: 20, horizonDays: 20, riskProfile });
+    expect(chosen.message.osEvent.payload.collaboration.tasks.find((task) => task.id === 'risk-choice').result.text).toBe(riskProfile);
+    expect(chosen.message.strategyRequest).toBeUndefined();
+    expect(chosen.selection.eventId).toBe(event.id);
+
+    const reviewed = resolveNegotiationAction({ event: chosen.message.osEvent, chipId: 'collab-review-accept' });
+    expect(reviewed.message.osEvent.payload.collaboration.review.status).toBe('REVIEWED');
+    const consented = resolveNegotiationAction({ event: reviewed.message.osEvent, chipId: 'collab-consent' });
+    expect(consented.message.osEvent.payload.collaboration.consent.local.scope).toBe('planning-only');
+    const out = resolveNegotiationAction({ event: consented.message.osEvent, chipId: 'collab-build-plan' });
     expect(parseGoalSpec({ text: out.message.strategyRequest.text })).toMatchObject({ capitalUsd: 1000, targetPct: 20, floorPct: 20, horizonDays: 20, riskProfile, riskSource: 'sentence' });
-    expect(out.selection.eventId).toBe(event.id);
     expect(out.message).not.toHaveProperty('executionAuthorized', true);
+    expect(out.additionalMessages[0].osEvent.payload.collaboration.planDraftState).toBe('REQUESTED');
   });
   it.each(['متعادل', '۲', 'option 2', '🟡 متوسط / متعادل'])('a short typed %s selects balanced, never the first slash label', (text) => {
     expect(resolveNegotiationAction({ event: offer(), text }).selectedGoal.riskProfile).toBe('balanced');
@@ -51,9 +60,12 @@ describe('context-bound negotiation choices', () => {
     const event = offer();
     for (const text of ['متعادل نیست', 'کم‌ریسک یا متعادل', 'خبر بازار را نشان بده']) expect(resolveNegotiationAction({ event, text })).toBeNull();
   });
-  it('collects only missing fields and preserves a picked risk/minimum', () => {
+  it('collects only missing fields after the selected risk has been reviewed and consented', () => {
     const event = offer('human-agent', { goal: { riskProfile: 'balanced', targetPct: 20, floorPct: 20 } });
-    const out = resolveNegotiationAction({ event, chipId: 'pick_balanced' });
+    const chosen = resolveNegotiationAction({ event, chipId: 'pick_balanced' });
+    const reviewed = resolveNegotiationAction({ event: chosen.message.osEvent, chipId: 'collab-review-accept' });
+    const consented = resolveNegotiationAction({ event: reviewed.message.osEvent, chipId: 'collab-consent' });
+    const out = resolveNegotiationAction({ event: consented.message.osEvent, chipId: 'collab-build-plan' });
     expect(out.intake.initialValues).toMatchObject({ riskProfile: 'balanced', targetPct: 20, floorPct: 20 });
     startForm({ ...out.intake, conversationId: cid });
     expect(getCurrentSlot({ conversationId: cid }).key).toBe('capitalUsd');
@@ -73,25 +85,42 @@ describe('context-bound negotiation choices', () => {
     expect(stale.message.osEvent.payload.executed).toBe(false);
     expect(stale.message.strategyRequest).toBeUndefined();
   });
-  it.each(['a2a-plan', 'a2a-revise', 'a2a-risk'])('council button %s continues into a plan, not GENERAL', (chipId) => {
-    const ctx = context();
-    if (chipId === 'a2a-plan') ctx.proposal.evidenceComplete = true;
-    const out = resolveNegotiationAction({ event: offer('agent-agent', ctx), chipId });
-    expect(out.handled).toBe(true);
+  it('council results require review and planning consent before a single plan request', () => {
+    const event = negotiationToChatMessage(runChatNegotiation({
+      mode: 'agent-agent', locale: 'fa', context: {
+        proposal: { id: 'p-consent', action: 'risk-review', asset: 'BTC', amountUsd: 1000, evidenceComplete: true },
+        goal: { ...goal, riskProfile: 'balanced' }
+      }
+    }), { locale: 'fa' }).osEvent;
+    expect(event.chips.map((chip) => chip.id)).toContain('collab-review-accept');
+    expect(event.chips.map((chip) => chip.id)).not.toContain('a2a-plan');
+    for (const chipId of ['a2a-plan', 'a2a-revise', 'a2a-risk']) {
+      expect(resolveNegotiationAction({ event, chipId }).message.strategyRequest).toBeUndefined();
+    }
+    const reviewed = resolveNegotiationAction({ event, chipId: 'collab-review-accept' });
+    const consented = resolveNegotiationAction({ event: reviewed.message.osEvent, chipId: 'collab-consent' });
+    const out = resolveNegotiationAction({ event: consented.message.osEvent, chipId: 'collab-build-plan' });
     expect(out.message.strategyRequest).toBeDefined();
-    expect(out.selectedGoal.capitalUsd).toBe(1000);
-    if (chipId === 'a2a-risk') expect(out.selectedGoal.riskProfile).toBe('conservative');
+    expect(out.message.strategyRequest.goal).toMatchObject({ capitalUsd: 1000, targetPct: 20, riskProfile: 'balanced' });
+    expect(out.additionalMessages[0].osEvent.payload.collaboration.planDraftState).toBe('REQUESTED');
+    expect(resolveNegotiationAction({ event: out.additionalMessages[0].osEvent, chipId: 'collab-build-plan' }).message.strategyRequest).toBeUndefined();
   });
-  it('human confirmation is local only; editing terms really resumes and resets acceptance', () => {
+  it('human confirmation is local-only and requires a recorded review; editing terms resumes with no acceptance', () => {
     const event = offer('human-human');
-    const accepted = resolveNegotiationAction({ event, chipId: 'h2h-confirm' });
-    expect(accepted.message.osEvent.payload).toMatchObject({ localAcceptance: true, counterpartyConfirmed: false, executed: false });
+    const premature = resolveNegotiationAction({ event, chipId: 'h2h-confirm' });
+    expect(premature.message.osEvent).toBeUndefined();
+    const reviewed = resolveNegotiationAction({ event, chipId: 'collab-review-accept' });
+    const accepted = resolveNegotiationAction({ event: reviewed.message.osEvent, chipId: 'h2h-confirm' });
+    expect(accepted.message.osEvent.payload.collaboration).toMatchObject({
+      consent: { local: { status: 'LOCAL_ACCEPTANCE_ONLY' }, counterparty: { status: 'NOT_VERIFIED' }, mutual: false },
+      executed: false, executionAuthorized: false, agreementReached: false, contactedCounterparty: false
+    });
     const edit = resolveNegotiationAction({ event, chipId: 'h2h-edit' });
     const updated = resolveNegotiationAction({ event: edit.message.osEvent, text: 'مهلت ۷ روز و مبلغ ۲۰۰۰ دلار', context: { answerToNegotiation: true } });
     expect(updated.message.osEvent.payload.proposal.amountUsd).toBe(2000);
     expect(updated.message.osEvent.payload.terms.find((t) => t.key === 'deadline').value).toBe('7 روز');
     expect(updated.message.osEvent.payload.terms.find((t) => t.key === 'additional').value).toContain('مهلت');
-    expect(updated.message.osEvent.payload.localAcceptance).not.toBe(true);
+    expect(updated.message.osEvent.payload.collaboration.consent.local.status).toBe('NOT_RECORDED');
   });
   it('opening the operations panel does not need a navigation provider', async () => {
     expect((await runSurfaceCommand('مرکز عملیات را باز کن')).panel).toBe('operations');

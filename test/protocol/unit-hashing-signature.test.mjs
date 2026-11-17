@@ -45,14 +45,14 @@ const signedEVMIntent = {
   signature: evmSignature
 };
 
-const evmSigResult = verifyIntentSignature(signedEVMIntent, evmSignature, { chainId: 8453 });
+const evmSigResult = await verifyIntentSignature(signedEVMIntent, evmSignature, { chainId: 8453 });
 assert.equal(evmSigResult.valid, true, 'Valid EVM signature must verify successfully');
 assert.equal(evmSigResult.chainType, 'evm', 'Chain type must be evm');
 
 // 2. Reject EVM signature from wrong signer
 const wrongWallet = Wallet.createRandom();
 const wrongSig = await wrongWallet.signTypedData(domain, types, message);
-const wrongSigResult = verifyIntentSignature(signedEVMIntent, wrongSig, { chainId: 8453 });
+const wrongSigResult = await verifyIntentSignature(signedEVMIntent, wrongSig, { chainId: 8453 });
 assert.equal(wrongSigResult.valid, false, 'Signature from wrong wallet must fail');
 
 // 3. Reject tampered intent parameters with original signature
@@ -60,7 +60,7 @@ const tamperedIntent = {
   ...signedEVMIntent,
   amount: '999999999' // attacker attempts to drain more funds
 };
-const tamperedResult = verifyIntentSignature(tamperedIntent, evmSignature, { chainId: 8453 });
+const tamperedResult = await verifyIntentSignature(tamperedIntent, evmSignature, { chainId: 8453 });
 assert.equal(tamperedResult.valid, false, 'Tampered intent fields must fail signature verification');
 
 // 4. Solana Ed25519 Signing and Verification
@@ -88,7 +88,7 @@ const signedSolanaIntent = {
   signature: solanaSigBase58
 };
 
-const solanaSigResult = verifyIntentSignature(signedSolanaIntent, solanaSigBase58);
+const solanaSigResult = await verifyIntentSignature(signedSolanaIntent, solanaSigBase58);
 assert.equal(solanaSigResult.valid, true, 'Valid Solana signature must verify successfully');
 assert.equal(solanaSigResult.chainType, 'solana', 'Chain type must be solana');
 

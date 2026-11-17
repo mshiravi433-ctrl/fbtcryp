@@ -233,21 +233,26 @@ t('the FUTURES_* vocabulary covers the lifecycle the spec names',
   const golden = JSON.parse(readFileSync(new URL('./ostium-golden.json', import.meta.url), 'utf8'));
   const srv = await import('../server/futures/adapters/ostium.js');
   for (const c of golden.openTrade) {
-    const built = srv.buildOpenTrade({
+    const built = await srv.buildOpenTrade({
       trader: c.trader, pairId: c.pairId, buy: c.buy, price: c.price, collateralUsd: c.collateralUsd, leverage: c.leverage,
       takeProfit: c.takeProfit ?? '0', stopLoss: c.stopLoss ?? '0', isDayTrade: c.isDayTrade ?? false, slippageBps: c.slippageBps ?? 25,
       builder: golden.builder, builderFeeBps: c.bps
     });
     t(`server openTrade calldata matches the SDK — ${c.n}`, built.data.toLowerCase() === c.data && built.to.toLowerCase() === c.to.toLowerCase() && built.chainId === 42161);
   }
-  const approve = srv.buildApprove({ amountUsd: golden.approve.amountUsd });
+  const approve = await srv.buildApprove({ amountUsd: golden.approve.amountUsd });
   t('server approve calldata matches the SDK (spender = TradingStorage, exact amount)', approve.data.toLowerCase() === golden.approve.data && approve.to.toLowerCase() === golden.approve.to.toLowerCase());
   t('server builders refuse a collateral below the venue minimum before encoding',
-    (() => { try { srv.buildOpenTrade({ trader: golden.openTrade[0].trader, pairId: 0, buy: true, price: '1', collateralUsd: '4.99', leverage: '2', builder: golden.builder, builderFeeBps: 5 }); return false; } catch (e) { return e.code === 'BELOW_MIN'; } })());
+    await (async () => { try { await srv.buildOpenTrade({ trader: golden.openTrade[0].trader, pairId: 0, buy: true, price: '1', collateralUsd: '4.99', leverage: '2', builder: golden.builder, builderFeeBps: 5 }); return false; } catch (e) { return e.code === 'BELOW_MIN'; } })());
   t('server builders refuse an invalid builder address as CONTRACT_MISMATCH',
-    (() => { try { srv.buildOpenTrade({ trader: golden.openTrade[0].trader, pairId: 0, buy: true, price: '1', collateralUsd: '10', leverage: '2', builder: '0xnope', builderFeeBps: 5 }); return false; } catch (e) { return e.code === 'CONTRACT_MISMATCH'; } })());
+    await (async () => { try { await srv.buildOpenTrade({ trader: golden.openTrade[0].trader, pairId: 0, buy: true, price: '1', collateralUsd: '10', leverage: '2', builder: '0xnope', builderFeeBps: 5 }); return false; } catch (e) { return e.code === 'CONTRACT_MISMATCH'; } })());
   t('every server-built target is on the allowlist',
-    [srv.buildCloseTrade({ pairId: 0, index: 0, closePercent: 50, price: '100' }), srv.buildUpdateTp({ pairId: 0, index: 0, takeProfit: 110 }), srv.buildUpdateSl({ pairId: 0, index: 0, stopLoss: 90 }), srv.buildUpdateCollateral({ pairId: 0, index: 0, amountUsd: 10 }), approve]
+    (await Promise.all([
+      srv.buildCloseTrade({ pairId: 0, index: 0, closePercent: 50, price: '100' }),
+      srv.buildUpdateTp({ pairId: 0, index: 0, takeProfit: 110 }),
+      srv.buildUpdateSl({ pairId: 0, index: 0, stopLoss: 90 }),
+      srv.buildUpdateCollateral({ pairId: 0, index: 0, amountUsd: 10 })
+    ])).concat([approve])
       .every((tx) => srv.OSTIUM_ALLOWED_TARGETS.includes(tx.to.toLowerCase())));
   t('fee bps → contract units is ×10,000 (10 bps = 100000), the factor-of-100 trap', srv.feeBpsToContractUnits(10) === 100_000 && srv.feeBpsToContractUnits(5) === 50_000 && srv.feeBpsToContractUnits(0) === 0);
 }

@@ -979,11 +979,16 @@ export async function solTokenBalances(address, { limit = 40, timeoutMs = 10_000
     // Token-2022 balances are invisible to the legacy program filter. A
     // reconciliation that silently omitted that whole token family would
     // call an incomplete balance read "independent" when it is not.
-    const responses = await Promise.all(tokenPrograms.map((programId) => solRpc('getTokenAccountsByOwner', [
+    const settled = await Promise.allSettled(tokenPrograms.map((programId) => solRpc('getTokenAccountsByOwner', [
       address,
       { programId },
       { encoding: 'jsonParsed' }
     ], { timeoutMs })));
+    /* Promise.all returned on the first timeout and left the sibling RPC
+       running after this read had already reported unavailable. Wait for both
+       bounded reads to settle so no request outlives the wallet-read budget. */
+    if (settled.some((row) => row.status !== 'fulfilled')) throw new Error('SPL_BALANCE_READ_FAILED');
+    const responses = settled.map((row) => row.value);
     const byMint = new Map();
     let accounts = 0;
     let invalidAccounts = 0;

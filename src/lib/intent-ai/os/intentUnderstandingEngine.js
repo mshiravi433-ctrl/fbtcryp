@@ -9,6 +9,7 @@
 
 import { aliasChainId, aliasToken } from './moduleRouter.js';
 import { getSessionOperationalSlots } from './intentSession.js';
+import { findAllTerms } from './regexCache.js';
 
 export const INTENT_ENGINE_VERSION = '4.0.0';
 export const USER_INTENT_SCHEMA = 'fbt.user-intent.v4';
@@ -148,6 +149,58 @@ export const IRANIAN_CURRENCY_PATTERNS = Object.freeze([
   { pattern: /(?:پنج|۵)\s*میلیون/i, value: 5_000_000, unit: 'TOMAN' },
   { pattern: /(?:ده|۱۰)\s*میلیون/i, value: 10_000_000, unit: 'TOMAN' }
 ]);
+
+const EXACT_AMOUNT_WORDS = Object.freeze({
+  نیم: '0.5',
+  یه: '1',
+  یک: '1',
+  دو: '2',
+  سه: '3',
+  چهار: '4',
+  پنج: '5',
+  شش: '6',
+  هفت: '7',
+  هشت: '8',
+  نه: '9',
+  ده: '10'
+});
+
+const CHAIN_WORDS = Object.freeze([
+  'ethereum', 'arbitrum', 'آربیتروم', 'اربیتروم', 'اریتروم', 'base', 'بیس',
+  'optimism', 'آپتیمیزم', 'bsc', 'bnb', 'بایننس', 'polygon', 'پالیگان',
+  'avalanche', 'آوالانچ', 'solana', 'سولانا', 'اتریوم'
+]);
+
+function exactAmount(value) {
+  const text = String(value ?? '').trim().toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(EXACT_AMOUNT_WORDS, text)) {
+    return EXACT_AMOUNT_WORDS[text];
+  }
+  const normalized = text.replace(/[۰-۹٠-٩]/g, (digit) => DIGIT_MAP[digit] || digit).replace(/,/g, '');
+  // Keep the decimal as text: converting through Number would round large
+  // amounts and switch very small token quantities to scientific notation.
+  return /^\d+(?:\.\d+)?$/.test(normalized) ? normalized : null;
+}
+
+function termStart(text, term, approximateIndex = 0) {
+  const at = String(text || '').indexOf(String(term || ''), Math.max(0, approximateIndex));
+  return at >= 0 ? at : approximateIndex;
+}
+
+/** A word shared by the token and chain vocabularies is a chain only when
+ * the sentence supplies chain context. This keeps "on Arbitrum" from becoming
+ * an ARB output token, and "0.5 Ethereum" from becoming Ethereum mainnet. */
+function isChainContext(text, term, approximateIndex, bridgeLike) {
+  const start = termStart(text, term, approximateIndex);
+  const before = text.slice(Math.max(0, start - 48), start);
+  const after = text.slice(start + String(term).length, start + String(term).length + 20);
+  if (/(?:^|\s)(?:on|in|via|across)\s+(?:the\s+)?$/i.test(before)) return true;
+  if (/(?:^|\s)(?:روی|در|بر\s+روی)\s*$/i.test(before)) return true;
+  if (/^\s*(?:chain|network|شبکه|زنجیره)(?:\b|\s|$)/i.test(after)) return true;
+  if (bridgeLike && /(?:^|\s)(?:from|to)\s+(?:the\s+)?$/i.test(before)) return true;
+  if (bridgeLike && /(?:^|\s)(?:از|به)\s*$/i.test(before)) return true;
+  return false;
+}
 
 /* -------------------------------------------------------------------------- */
 /*  QUESTION & INTENT CLASSIFICATION TAXONOMY                                  */
@@ -400,16 +453,25 @@ export function extractEntitiesUpgrade4(rawText, context = {}) {
   }
 
   // 2. Asset Extraction (including Slang & Typos)
+  /*
+   * ONE regex execution for the whole 52-entry slang map, instead of 52.
+   * The vocabulary ORDER is preserved by `findAllTerms`, which matters:
+   * «تتر» must be seen before «دلار», or the wrong symbol wins.
+   */
+  const bridgeLike = /\bbridge\b|cross[\s-]*chain|بریج|بریدج|کراس\s*چین|بین\s*زنجیره/i.test(norm);
   const foundTokens = [];
-  for (const [slang, sym] of Object.entries(SLANG_ASSET_MAP)) {
-    const reg = new RegExp(`(^|[^\\p{L}\\p{N}])${slang}($|[^\\p{L}\\p{N}])`, 'u');
-    if (reg.test(norm)) {
-      if (sym === 'USD' && (norm.includes('تتر') || norm.includes('usdt'))) {
-        // If "تتر" also appears, ignore generic "دلار"
-        continue;
-      }
-      foundTokens.push({ symbol: sym, word: slang, index: norm.indexOf(slang) });
+  for (const { term: slang, index: slangIndex } of findAllTerms(norm, Object.keys(SLANG_ASSET_MAP))) {
+    const sym = SLANG_ASSET_MAP[slang];
+    if (sym === 'USD' && (norm.includes('تتر') || norm.includes('usdt'))) {
+      // If "تتر" also appears, ignore generic "دلار"
+      continue;
     }
+    if (aliasChainId(slang) != null && isChainContext(norm, slang, slangIndex, bridgeLike)) {
+      // Several natural names are dual-use (Ethereum/ETH, Arbitrum/ARB,
+      // Solana/SOL). A chain-qualified occurrence is not also an asset.
+      continue;
+    }
+    foundTokens.push({ symbol: sym, word: slang, index: slangIndex });
   }
 
   foundTokens.sort((a, b) => a.index - b.index);
@@ -452,16 +514,23 @@ export function extractEntitiesUpgrade4(rawText, context = {}) {
     }
   }
 
-  // Exact amount with currency ($500, 500 دلار, 500 USDT, 0.5 ETH)
-  const amountMatch = norm.match(/(\d+(?:,\d+)*(?:\.\d+)?)\s*(USDC|USDT|ETH|BTC|SOL|USD|\$|دلار|تتر)/i);
+  // Exact amount with a currency or token unit ($500, 500 دلار, 0.5 ETH,
+  // «دو اتریوم»). Upgrade 4's normalizer has already folded Persian/Arabic
+  // digits and preserved decimal points before this expression runs.
+  const amountMatch = norm.match(/(\d+(?:,\d+)*(?:\.\d+)?|نیم|یه|یک|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده)\s*(USDC|USDT|USD\b|\$|ETH\b|BTC\b|SOL\b|BNB\b|ARB\b|MATIC\b|AVAX\b|OP\b|DAI\b|ethereum|arbitrum|bitcoin|tether|solana|دلار|تتر|اتریوم|اتر|بیت\s*کوین|بیتکوین|سولانا|بایننس)/i);
   if (amountMatch && !entities.amount) {
-    entities.amount = amountMatch[1].replace(/,/g, '');
-    const sym = aliasToken(amountMatch[2]) || SLANG_ASSET_MAP[amountMatch[2].toLowerCase()] || amountMatch[2];
-    entities.amountSymbol = sym;
-    entities.amountUnit = sym;
+    const parsedAmount = exactAmount(amountMatch[1]);
+    if (parsedAmount != null) {
+      entities.amount = String(parsedAmount);
+      const sym = aliasToken(amountMatch[2]) || SLANG_ASSET_MAP[amountMatch[2].toLowerCase()] || amountMatch[2];
+      entities.amountSymbol = sym;
+      entities.amountUnit = sym;
+    }
   }
 
-  const dollarMatch = norm.match(/(?:\$|usd|dollars?|دلار)\s*(\d+(?:,\d+)*(?:\.\d+)?)|(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:dollars?|دلار|usd)/i);
+  // `USD` needs a word boundary: without it, `100 USDC` was misread as
+  // `100 USD`, changing the unit of a token amount and the bridge prefill.
+  const dollarMatch = norm.match(/(?:\$|usd\b|dollars?|دلار)\s*(\d+(?:,\d+)*(?:\.\d+)?)|(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:dollars?|دلار|usd\b)/i);
   if (dollarMatch && !entities.amountUsd) {
     entities.amountUsd = (dollarMatch[1] || dollarMatch[2]).replace(/,/g, '');
     if (!entities.amount) entities.amount = entities.amountUsd;
@@ -581,17 +650,29 @@ export function extractEntitiesUpgrade4(rawText, context = {}) {
     entities.riskPreference = 'aggressive';
   }
 
-  // 7. Network / Chain Resolution
-  const chainWords = ['ethereum', 'arbitrum', 'آربیتروم', 'اربیتروم', 'اریتروم', 'base', 'بیس', 'optimism', 'آپتیمیزم', 'bsc', 'bnb', 'بایننس', 'polygon', 'پالیگان', 'avalanche', 'solana', 'سولانا', 'اتریوم'];
-  const foundChains = [];
-  for (const w of chainWords) {
-    const idx = norm.indexOf(w);
-    if (idx >= 0) foundChains.push({ word: w, id: aliasChainId(w) });
-  }
-  const chainIds = foundChains.map((c) => c.id).filter(Boolean);
+  // 7. Network / Chain Resolution. Chain names are accepted only in an
+  // explicit chain position («on Arbitrum», «روی آربیتروم», or bridge
+  // endpoints «from Ethereum to Arbitrum»). A token name such as «اتریوم»
+  // after an amount must not create a phantom Ethereum→Arbitrum bridge route.
+  const foundChains = findAllTerms(norm, CHAIN_WORDS)
+    .map(({ term, index }) => ({
+      word: term,
+      index: termStart(norm, term, index),
+      id: aliasChainId(term)
+    }))
+    .filter((chain) => chain.id != null && isChainContext(norm, chain.word, chain.index, bridgeLike))
+    .sort((a, b) => a.index - b.index);
+  const chainIds = foundChains.map((chain) => chain.id);
   if (chainIds.length) {
-    entities.chainIds = [...new Set(chainIds)];
-    entities.network = entities.chainIds[0];
+    const uniqueIds = [...new Set(chainIds)];
+    entities.chains = [...new Set(foundChains.map((chain) => chain.word))];
+    entities.chainIds = uniqueIds;
+    entities.network = uniqueIds[0];
+    if (uniqueIds.length > 1) {
+      entities.fromChain = uniqueIds[0];
+      entities.toChain = uniqueIds[1];
+      entities.destinationNetwork = uniqueIds[1];
+    }
   }
 
   // 8. EVM / Solana Address
@@ -739,15 +820,74 @@ export function predictNextActions(intentOrParams = {}, contextParam = {}) {
   let intentType = 'GENERAL';
   let entities = {};
   let context = {};
+  let missingInformation = [];
 
   if (intentOrParams && (intentOrParams.primaryIntent || intentOrParams.type || intentOrParams.entities)) {
     intentType = intentOrParams.primaryIntent || intentOrParams.type || 'GENERAL';
     entities = intentOrParams.entities || {};
     context = contextParam || {};
+    missingInformation = intentOrParams.missingInformation || intentOrParams.missingFields || [];
   } else if (intentOrParams && typeof intentOrParams === 'object') {
     intentType = intentOrParams.intentType || intentOrParams.type || 'GENERAL';
     entities = intentOrParams.entities || {};
     context = intentOrParams.context || {};
+    missingInformation = intentOrParams.missingInformation || intentOrParams.missingFields || [];
+  }
+
+  const slotOf = (value) => {
+    const raw = typeof value === 'string' ? value : value?.slot || value?.field || '';
+    const key = String(raw).replace(/[\s-]/g, '').toLowerCase();
+    if (['asset', 'token', 'tokenin', 'fromtoken'].includes(key)) return 'asset';
+    if (['destination_asset', 'destinationasset', 'tokenout', 'totoken'].includes(key)) return 'destination_asset';
+    if (['amount', 'capital', 'capitalusd'].includes(key)) return 'amount';
+    if (['timeframe', 'horizon', 'horizondays'].includes(key)) return 'timeframe';
+    if (['riskpreference', 'risk_preference', 'risklevel', 'risk_tolerance'].includes(key)) return 'riskPreference';
+    if (['network', 'chain', 'sourcechain', 'destinationnetwork'].includes(key)) return 'network';
+    return key || null;
+  };
+  const missingSlots = (Array.isArray(missingInformation) ? missingInformation : []).map(slotOf).filter(Boolean);
+  if (missingSlots.length) {
+    const slot = missingSlots[0];
+    const fa = String(context?.locale || intentOrParams?.locale || 'fa').toLowerCase().startsWith('fa');
+    const choices = (rows) => rows.map(([labelFa, labelEn, promptFa, promptEn]) => ({
+      labelFa, labelEn, prompt: fa ? promptFa : promptEn, intent: 'ANSWER_CLARIFICATION'
+    }));
+    const options = {
+      asset: choices([
+        ['BTC', 'BTC', 'BTC', 'BTC'],
+        ['ETH', 'ETH', 'ETH', 'ETH'],
+        ['SOL', 'SOL', 'SOL', 'SOL']
+      ]),
+      destination_asset: choices([
+        ['USDT', 'USDT', 'USDT', 'USDT'],
+        ['ETH', 'ETH', 'ETH', 'ETH'],
+        ['SOL', 'SOL', 'SOL', 'SOL']
+      ]),
+      amount: choices([
+        ['۱۰٪ از موجودی', '10% of balance', '۱۰٪ از موجودی کیف پول', '10% of my available wallet balance'],
+        ['۲۵٪ از موجودی', '25% of balance', '۲۵٪ از موجودی کیف پول', '25% of my available wallet balance'],
+        ['۵۰٪ از موجودی', '50% of balance', '۵۰٪ از موجودی کیف پول', '50% of my available wallet balance']
+      ]),
+      timeframe: choices([
+        ['۳ ماه', '3 months', '۳ ماه', '3 months'],
+        ['۶ ماه', '6 months', '۶ ماه', '6 months'],
+        ['۱ سال', '1 year', '۱ سال', '1 year']
+      ]),
+      riskPreference: choices([
+        ['کم', 'Low', 'ریسک کم', 'low risk'],
+        ['متعادل', 'Moderate', 'ریسک متعادل', 'moderate risk'],
+        ['بالا', 'High', 'ریسک بالا', 'high risk']
+      ]),
+      network: choices([
+        ['اتریوم', 'Ethereum', 'شبکه Ethereum', 'Ethereum network'],
+        ['آربیتروم', 'Arbitrum', 'شبکه Arbitrum', 'Arbitrum network'],
+        ['سولانا', 'Solana', 'شبکه Solana', 'Solana network']
+      ])
+    };
+    /* These are explicit user choices, not auto-filled values. A tap only
+       supplies the selected clarification; the existing confirmation gates
+       still control any later money-moving action. */
+    return options[slot] || [];
   }
 
   const token = entities.token || entities.toToken || entities.tokenOut || entities.fromToken || entities.tokenIn || 'BTC';

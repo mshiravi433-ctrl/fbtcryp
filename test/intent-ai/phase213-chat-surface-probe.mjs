@@ -343,12 +343,24 @@ globalThis.localStorage = {
 
   const external = runChatNegotiation({ mode: NEGOTIATION_MODES.EXTERNAL_AGENT, locale: 'fa' });
   t('7.15 an unverified external agent is refused with a reason', external.outcome === NEGOTIATION_OUTCOMES.UNAVAILABLE && /تأیید/.test(external.transcript.map((l) => l.text).join(' ')));
-  const externalVerified = runChatNegotiation({
+  const callerFlagsCannotVerifyExternal = runChatNegotiation({
     mode: NEGOTIATION_MODES.EXTERNAL_AGENT,
-    context: { externalVerified: true, externalAgent: { id: 'fbt.market-analyst', label: 'تحلیل‌گر بازار' }, externalView: 'روند صعودی ضعیف' },
+    context: {
+      externalVerified: true,
+      externalConsent: true,
+      externalAgent: { id: 'fbt.market-analyst', label: 'تحلیل‌گر بازار', securityStatus: 'verified' },
+      externalView: 'روند صعودی ضعیف',
+      runtime: { attested: true, operational: true }
+    },
     locale: 'fa'
   });
-  t('7.16 a verified external agent gives analysis only', externalVerified.outcome === NEGOTIATION_OUTCOMES.AGREEMENT && externalVerified.transcript.some((l) => l.from === 'external-agent'));
+  t('7.16 caller-supplied identity, consent and runtime flags are fail-closed',
+    callerFlagsCannotVerifyExternal.outcome === NEGOTIATION_OUTCOMES.UNAVAILABLE
+      && callerFlagsCannotVerifyExternal.agreement === false
+      && callerFlagsCannotVerifyExternal.externalGate?.identity?.ok === false
+      && callerFlagsCannotVerifyExternal.externalGate?.consent?.ok === false
+      && callerFlagsCannotVerifyExternal.externalGate?.runtime?.ok === false
+      && callerFlagsCannotVerifyExternal.transcript.every((l) => l.from !== 'external-agent'));
 
   const h2h = runChatNegotiation({
     mode: NEGOTIATION_MODES.HUMAN_HUMAN,

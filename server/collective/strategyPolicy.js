@@ -1,10 +1,14 @@
-import { Interface } from 'ethers';
+import { Interface } from '../ethersLite.js';
 import { VAULT_ABI } from './abi.js';
 import { COLLECTIVE_CHAINS } from './config.js';
 
 const DEFAULT_COLLECTIVE_CHAIN_ID = 4663;
 
-const vaultInterface = new Interface(VAULT_ABI);
+let vaultInterfaceP = null;
+const vaultInterfaceReady = async () => {
+  if (!vaultInterfaceP) vaultInterfaceP = await Interface(VAULT_ABI);
+  return vaultInterfaceP;
+};
 const BPS = 10_000n;
 const text = (value) => String(value ?? '0');
 const bigint = (value) => {
@@ -12,8 +16,8 @@ const bigint = (value) => {
 };
 const min = (...values) => values.reduce((a, b) => a < b ? a : b);
 
-function makeProposal(snapshot, action, args, reason, constraints) {
-  const encoded = vaultInterface.encodeFunctionData(action, args);
+async function makeProposal(snapshot, action, args, reason, constraints) {
+  const encoded = (await vaultInterfaceReady()).encodeFunctionData(action, args);
   const epoch = Number(snapshot.epoch?.number || 0);
   const amount = args.length ? args[0] : '';
   return {
@@ -53,7 +57,7 @@ function empty(snapshot, status, reason) {
  * yield. The on-chain roles, oracle checks, timelocked policy, and pause remain
  * the actual execution boundary.
  */
-export function buildCollectiveProposals(snapshot, {
+export async function buildCollectiveProposals(snapshot, {
   nowSeconds = Math.floor(Date.now() / 1000),
   chainId: requestedChainId = undefined
 } = {}) {
@@ -89,7 +93,7 @@ export function buildCollectiveProposals(snapshot, {
 
   if (epoch.started && Number(epoch.end) > 0 && nowSeconds >= Number(epoch.end)) {
     if (withdrawalLiability > 0n && queueAvailable > 0n) {
-      proposals.push(makeProposal(
+      proposals.push(await makeProposal(
         plannerSnapshot,
         'processWithdrawals',
         [20],
@@ -99,7 +103,7 @@ export function buildCollectiveProposals(snapshot, {
       status = 'action-ready';
       reason = 'FUNDED_WITHDRAWAL_QUEUE';
     } else if (hasStrategyPosition && strategyExitAmount > 0n) {
-      proposals.push(makeProposal(
+      proposals.push(await makeProposal(
         plannerSnapshot,
         'withdrawFromStrategy',
         [strategyExitAmount],
@@ -112,7 +116,7 @@ export function buildCollectiveProposals(snapshot, {
       status = 'liquidity-blocked';
       reason = 'TARGET_REPORTS_NO_WITHDRAWABLE_LIQUIDITY';
     } else {
-      proposals.push(makeProposal(
+      proposals.push(await makeProposal(
         plannerSnapshot,
         'settleEpoch',
         [],
@@ -124,7 +128,7 @@ export function buildCollectiveProposals(snapshot, {
     }
   } else if (withdrawalLiability > 0n) {
     if (queueAvailable > 0n) {
-      proposals.push(makeProposal(
+      proposals.push(await makeProposal(
         plannerSnapshot,
         'processWithdrawals',
         [20],
@@ -134,7 +138,7 @@ export function buildCollectiveProposals(snapshot, {
       status = 'action-ready';
       reason = 'FUNDED_WITHDRAWAL_QUEUE';
     } else if (hasStrategyPosition && strategyExitAmount > 0n) {
-      proposals.push(makeProposal(
+      proposals.push(await makeProposal(
         plannerSnapshot,
         'withdrawFromStrategy',
         [strategyExitAmount],
@@ -156,7 +160,7 @@ export function buildCollectiveProposals(snapshot, {
       status = 'empty-vault';
       reason = 'NO_SHARES_TO_START_AN_EPOCH';
     } else {
-      proposals.push(makeProposal(
+      proposals.push(await makeProposal(
         plannerSnapshot,
         'startFirstEpoch',
         [],
@@ -195,7 +199,7 @@ export function buildCollectiveProposals(snapshot, {
         status = 'risk-blocked';
         reason = 'TARGET_LIQUIDITY_BELOW_POLICY_MINIMUM';
       } else {
-        proposals.push(makeProposal(
+        proposals.push(await makeProposal(
           plannerSnapshot,
           'invest',
           [amount],

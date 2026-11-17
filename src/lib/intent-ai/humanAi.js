@@ -54,6 +54,7 @@ import { createMemoryStore } from './agentMemory.js';
 import { createControlState, applyControl } from './policyGuard.js';
 import { discoverExternalAgents } from './externalAgentTrust.js';
 import { selectExternalAgent } from './externalAgentVoice.js';
+import { createExternalAgentRuntime } from './externalAgentRuntime.js';
 
 const SESSION_SCHEMA = 'fbt.intent-session.v2';
 
@@ -138,10 +139,14 @@ export function startSession({
   const externalAgentDiscovery = normalizedMode === 'fbt-external-ai'
     ? discoverExternalAgents({
       agents: Array.isArray(externalAgents) ? externalAgents : [],
-      source: externalAgentsSource === 'unavailable' && Array.isArray(externalAgents) && externalAgents.length ? 'runtime-input' : externalAgentsSource,
-      trustedRegistry: externalAgentsSource === 'server-catalog',
+      source: externalAgentsSource === 'server-catalog' ? 'client-catalog-untrusted'
+        : externalAgentsSource === 'unavailable' && Array.isArray(externalAgents) && externalAgents.length ? 'runtime-input' : externalAgentsSource,
+      trustedRegistry: false,
       now
     })
+    : null;
+  const externalAgentRuntimeStatus = normalizedMode === 'fbt-external-ai'
+    ? createExternalAgentRuntime().status()
     : null;
   const definition = modeDefinition(normalizedMode);
   return {
@@ -158,15 +163,17 @@ export function startSession({
     policy,
     policyErrors,
     permissions: {
-      analysis: true,
-      preparation: lvl >= 2,
-      financialExecution: lvl >= 3,
+      analysis: !definition.externalAgent,
+      preparation: !definition.externalAgent && lvl >= 2,
+      financialExecution: !definition.externalAgent && lvl >= 3,
       executionAuthorized: false,
-      explanation: 'Analysis and preparation do not authorize financial execution.'
+      explanation: definition.externalAgent
+        ? 'External participation is blocked until trusted identity, per-task consent, and an attested runtime are verified.'
+        : 'Analysis and preparation do not authorize financial execution.'
     },
     authorization: {
-      analysis: true,
-      preparation: lvl >= 2,
+      analysis: !definition.externalAgent,
+      preparation: !definition.externalAgent && lvl >= 2,
       financialExecution: false,
       screenRequired: true,
       userConfirmed: false,
@@ -175,6 +182,19 @@ export function startSession({
     capabilityScan,
     capabilities: capabilityScan,
     externalAgentDiscovery,
+    externalAgentGate: normalizedMode === 'fbt-external-ai' ? {
+      identity: { ok: false, code: 'TRUSTED_EXTERNAL_IDENTITY_REQUIRED' },
+      consent: { ok: false, code: 'PER_TASK_CONSENT_NOT_COLLECTED' },
+      runtime: {
+        ok: externalAgentRuntimeStatus?.attested === true && externalAgentRuntimeStatus?.status === 'configured',
+        status: externalAgentRuntimeStatus?.status || 'unavailable',
+        code: externalAgentRuntimeStatus?.blocker || 'ATTESTED_RUNTIME_REQUIRED',
+        attested: externalAgentRuntimeStatus?.attested === true
+      },
+      contacted: false,
+      analysisAuthorized: false,
+      executionAuthorized: false
+    } : null,
     targetReality: null,
     council: null,
     challenge: null,
@@ -386,8 +406,9 @@ function respondToParsed(session, parsed, ctx = {}) {
     ? discoverExternalAgents({
       agents: externalInputs,
       intent: parsed.intent || {},
-      source: ctx.externalAgentsSource || (externalInputs.length ? 'runtime-input' : 'unavailable'),
-      trustedRegistry: ctx.externalAgentsSource === 'server-catalog',
+      source: ctx.externalAgentsSource === 'server-catalog' ? 'client-catalog-untrusted'
+        : ctx.externalAgentsSource || (externalInputs.length ? 'runtime-input' : 'unavailable'),
+      trustedRegistry: false,
       now: Date.now()
     })
     : session.externalAgentDiscovery;
@@ -396,6 +417,24 @@ function respondToParsed(session, parsed, ctx = {}) {
     candidate.passport.id === String(ctx.externalAgentId || ctx.externalAgentPassport?.id || '')
   )) || (externalAgentDiscovery?.candidates?.length === 1 ? externalAgentDiscovery.candidates[0] : null);
   const discoveredExternalVerified = selectedExternal?.eligibleForAnalysis === true;
+  const externalRuntimeStatus = session.mode === 'fbt-external-ai' ? createExternalAgentRuntime().status() : null;
+  const externalGate = session.mode === 'fbt-external-ai' ? {
+    identity: {
+      ok: discoveredExternalVerified && selectedExternal?.passport?.verification?.independentlyVerified === true,
+      code: discoveredExternalVerified ? null : 'TRUSTED_EXTERNAL_IDENTITY_REQUIRED'
+    },
+    consent: { ok: false, code: 'PER_TASK_CONSENT_NOT_COLLECTED' },
+    runtime: {
+      ok: externalRuntimeStatus?.attested === true && externalRuntimeStatus?.status === 'configured',
+      status: externalRuntimeStatus?.status || 'unavailable',
+      code: externalRuntimeStatus?.blocker || 'ATTESTED_RUNTIME_REQUIRED',
+      attested: externalRuntimeStatus?.attested === true
+    },
+    contacted: false,
+    analysisAuthorized: false,
+    executionAuthorized: false
+  } : null;
+  if (externalGate) session.externalAgentGate = externalGate;
 
   // The external mode cannot silently admit an unverified participant. For
   // analysis/preparation we pass an explicit stage so a swap request is not
@@ -417,7 +456,6 @@ function respondToParsed(session, parsed, ctx = {}) {
     intent: parsed.intent,
     stage,
     userAuthorized: false,
-    externalVerified: ctx.externalVerified === true || discoveredExternalVerified,
     rawCredential
   });
   session.authorization = {
@@ -434,8 +472,9 @@ function respondToParsed(session, parsed, ctx = {}) {
       analysisPermission: false,
       financialExecutionPermission: false,
       externalAgentDiscovery,
+      externalAgentGate: externalGate,
       message: boundary.code === 'EXTERNAL_AGENT_NOT_VERIFIED'
-        ? 'External Agent mode requires a verified, scoped participant before analysis is admitted.'
+        ? 'External Agent mode remains unavailable until trusted identity, per-task consent, and an attested runtime are verified. The agent was not contacted.'
         : 'This request is blocked at the mode boundary; no credential or execution permission was granted.'
     });
     session = push(session, reply);

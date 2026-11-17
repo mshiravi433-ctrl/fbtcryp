@@ -5,11 +5,9 @@
  */
 
 import { apiBase } from './apiBase.js';
-/* The mode the user's chat already obeys, read from the one store that owns it.
-   A client that never sends it is not "using the default" — it is using the
-   DEFAULT and hanging up early, because the wait below is a property of the
-   mode too. */
-import { getIntelligenceMode, intelligenceTurnBudgetMs } from './aiIntelligenceMode.js';
+/* The server selects the mode per request. The browser only uses the deepest
+   supported window because it cannot know the decision before sending text. */
+import { intelligenceTurnBudgetMs } from './aiIntelligenceMode.js';
 
 const base = () => {
   try { return (typeof apiBase === 'function' ? apiBase() : '') || '/api'; } catch { return '/api'; }
@@ -19,17 +17,11 @@ const base = () => {
 const TIMEOUT_MS = 15000;
 
 /*
- * ─── WHY THE WINDOW IS NOT ONE NUMBER ────────────────────────────────────
- * 15 000 ms was tuned when every seat was a ~600-token cheap call. A
- * multi-AI debate is three flagship seats plus a judge, and the smartest mode
- * legitimately needs tens of seconds; the server clamps a turn to
- * `AI_TURN_CEILING_MS` (52 s). A 15 s abort therefore killed
- * `runAiConsensus` and `executeAiGatewayChat` WHILE THE ANSWER WAS STILL BEING
- * WRITTEN — the surface showed its local fallback and the operator read that
- * as «هوش مصنوعی تغییر نکرده». So the wait follows the mode here exactly as it
- * does in `aiIntentClient.js`, and never precedes the server's own deadline.
+ * The Gateway selects a response depth after reading the request, which the
+ * browser cannot predict. Wait for the maximum server-side turn budget so an
+ * automatically deep request is not discarded by a stale local preference.
  */
-const modeWindow = (floor = 15000) => Math.max(floor, intelligenceTurnBudgetMs(getIntelligenceMode()));
+const modeWindow = (floor = 15000) => Math.max(floor, intelligenceTurnBudgetMs('max'));
 
 async function request(path, { method = 'GET', body = null, timeout = TIMEOUT_MS } = {}) {
   const ctrl = new AbortController();
@@ -91,24 +83,18 @@ export async function fetchGatewaySelfTest() {
   return request('/v1/ai/gateway/selftest', { timeout: SELFTEST_TIMEOUT_MS });
 }
 
-export async function executeAiGatewayChat({ taskType = 'general', system, user, preferredProvider, model, temperature, maxTokens, json = true, intelligence = undefined } = {}) {
-  /* The mode is sent explicitly. `undefined` means "whatever the user's chat is
-     set to", which is what every surface in this app should mean by default — a
-     panel that silently asks for a shallower turn than the chat is the panel
-     that gets reported as «اینجا فرق نمی‌کند». */
-  const mode = intelligence ?? getIntelligenceMode();
+export async function executeAiGatewayChat({ taskType = 'general', system, user, preferredProvider, model, temperature, maxTokens, json = true } = {}) {
   return request('/v1/ai/gateway/chat', {
     method: 'POST',
-    body: { taskType, system, user, preferredProvider, model, temperature, maxTokens, json, intelligence: mode },
+    body: { taskType, system, user, preferredProvider, model, temperature, maxTokens, json },
     timeout: modeWindow()
   });
 }
 
-export async function runAiConsensus({ message, context = {}, locale = 'fa', preferredProviders = [], intelligence = undefined } = {}) {
-  const mode = intelligence ?? getIntelligenceMode();
+export async function runAiConsensus({ message, context = {}, locale = 'fa', preferredProviders = [] } = {}) {
   return request('/v1/ai/gateway/consensus', {
     method: 'POST',
-    body: { message, context, locale, preferredProviders, intelligence: mode },
+    body: { message, context, locale, preferredProviders },
     timeout: modeWindow()
   });
 }

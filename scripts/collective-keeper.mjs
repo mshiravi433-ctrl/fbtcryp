@@ -43,7 +43,7 @@ async function run() {
 
   output.mode = executeRequested ? 'execute' : 'dry-run';
   for (const snapshot of snapshots) {
-    const plan = buildCollectiveProposals(snapshot);
+    const plan = await buildCollectiveProposals(snapshot);
     const entry = { vault: snapshot.address, status: plan.status, reason: plan.reason, proposals: plan.proposals };
     if (executeRequested && plan.proposals.length) {
       const proposal = plan.proposals[0];

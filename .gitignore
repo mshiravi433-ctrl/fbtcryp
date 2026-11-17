@@ -95,3 +95,9 @@ public/onnxruntime/
 
 # AI benchmark reports are generated artifacts, not source.
 /reports/ai-benchmark/
+
+# The cold-import graph is a MEASUREMENT ARTIFACT, written by
+# scripts/measure-cold-import-graph.mjs on every run. It is a record of
+# one boot on one machine at one moment — not source, and not portable.
+# Tracked would mean every run produces a diff.
+.import-graph.jsonl

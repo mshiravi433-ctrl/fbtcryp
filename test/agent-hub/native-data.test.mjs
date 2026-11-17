@@ -263,7 +263,9 @@ describe('native provider data access', () => {
     try {
       const result = await analyzeWallet('11111111111111111111111111111111', 'solana', { timeoutMs: 300 });
       assert.equal(result.chain, 'solana');
-      assert.equal(signals.length, 3);
+      /* Signature history + SOL balance + the legacy SPL and Token-2022
+         balance reads. The fourth RPC was added with Token-2022 coverage. */
+      assert.equal(signals.length, 4);
       assert.ok(signals.every((signal) => signal.aborted));
     } finally {
       setSmartMoneyFetchForTests(null);

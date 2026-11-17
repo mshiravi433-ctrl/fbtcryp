@@ -85,6 +85,16 @@ export async function run(container) {
     check('human/agent negotiation actually offers balanced with one in-card explanation', !!negotiation && negotiation.textContent.split('بودجه افت برآوردی 18').length - 1 === 1);
     check('no duplicate transcript outside the negotiation box', !!negotiation && !negotiation.closest('.iaos-bubble').querySelector('.iaos-msg-text'));
     await click(negotiation?.querySelector('[data-chip-id="pick_balanced"]'));
+    await wait(() => qa('[data-testid="intent-os-card"]').some((card) => card.querySelector('[data-chip-id="collab-review-accept"]')));
+    let workflowCard = qa('[data-testid="intent-os-card"]').find((card) => card.querySelector('[data-chip-id="collab-review-accept"]'));
+    check('risk selection is recorded as a task result before review', !!workflowCard && workflowCard.textContent.includes('balanced') && workflowCard.textContent.includes('Choose a risk band'));
+    await click(workflowCard?.querySelector('[data-chip-id="collab-review-accept"]'));
+    await wait(() => qa('[data-testid="intent-os-card"]').some((card) => card.querySelector('[data-chip-id="collab-consent"]')));
+    workflowCard = qa('[data-testid="intent-os-card"]').find((card) => card.querySelector('[data-chip-id="collab-consent"]'));
+    await click(workflowCard?.querySelector('[data-chip-id="collab-consent"]'));
+    await wait(() => qa('[data-testid="intent-os-card"]').some((card) => card.querySelector('[data-chip-id="collab-build-plan"]')));
+    workflowCard = qa('[data-testid="intent-os-card"]').find((card) => card.querySelector('[data-chip-id="collab-build-plan"]'));
+    await click(workflowCard?.querySelector('[data-chip-id="collab-build-plan"]'));
     await wait(() => q('[data-testid="strategy-plan-card"]'));
     const stored = () => JSON.parse(localStorage.getItem(STRATEGY_STORE_KEY) || '{}').plans || [];
     const first = stored()[0];

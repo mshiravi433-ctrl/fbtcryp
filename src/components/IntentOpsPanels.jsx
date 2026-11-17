@@ -26,11 +26,6 @@ import NeuromorphicCortexPanel from './ai/NeuromorphicCortexPanel.jsx';
 import { opsText, opsPhrase, intlLocale } from '../lib/intent-ai/os/opsPanelStrings.js';
 import { opsActionLabel } from '../lib/intent-ai/os/opsDispatch.js';
 import { CHAIN_OPTIONS } from '../lib/smartMoneyClient.js';
-import {
-  INTELLIGENCE_MODES as AI_INTELLIGENCE_MODES,
-  getIntelligenceMode,
-  setIntelligenceMode
-} from '../lib/aiIntelligenceMode.js';
 
 /* ------------------------------------------------------------------------- */
 /* helpers                                                                    */
@@ -751,16 +746,8 @@ export function IntelligencePanel({
   onRunSelfTest = null
 }) {
   const [tab, setTab] = useState('models');
-  /*
-   * The one control that answers «هوش مصنوعی را باهوش‌ترین حالت کن».
-   *
-   * It writes the shared preference the chat transport already reads, so this
-   * is a real switch and not a badge: the very next turn is sent with the
-   * chosen mode. Default is `max`, matching the server. The hint under the row
-   * says what the SELECTED mode does, because three unlabelled segmented
-   * buttons are a guess.
-   */
-  const [intelligenceMode, setIntelligenceModeState] = useState(() => getIntelligenceMode());
+  /* The panel reports the server's fleet; response depth is selected
+     automatically per question and is not configurable here. */
   const isEn = locale?.startsWith?.('en');
 
   if (!open) return null;
@@ -836,14 +823,9 @@ export function IntelligencePanel({
           <button type="button" className="iaos-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
-        {/*
-          * `is-on` is the class the stylesheet actually styles — these four
-          * used `active`, which matches no rule, so the open tab looked
-          * identical to the closed ones.
-          */}
         <div
-          data-testid="intel-intelligence-mode"
-          data-mode={intelligenceMode}
+          data-testid="intel-intelligence-auto"
+          data-mode="auto"
           style={{
             display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8,
             padding: '10px 12px', margin: '0 0 10px',
@@ -853,37 +835,15 @@ export function IntelligencePanel({
           }}
         >
           <span style={{ fontSize: 12, color: 'rgba(226,232,240,0.72)', fontWeight: 600 }}>
-            {isEn ? 'Intelligence mode' : 'حالت هوش مصنوعی'}
+            {isEn ? 'Answer depth' : 'عمق پاسخ'}
           </span>
-          <div role="group" aria-label={isEn ? 'Intelligence mode' : 'حالت هوش مصنوعی'} style={{ display: 'flex', gap: 6 }}>
-            {AI_INTELLIGENCE_MODES.map((m) => {
-              const on = intelligenceMode === m.id;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  aria-pressed={on}
-                  data-testid={`intel-mode-${m.id}`}
-                  onClick={() => setIntelligenceModeState(setIntelligenceMode(m.id))}
-                  style={{
-                    fontSize: 12, fontWeight: on ? 700 : 500,
-                    padding: '5px 10px', borderRadius: 10, cursor: 'pointer',
-                    color: on ? '#c4b5fd' : 'rgba(226,232,240,0.65)',
-                    background: on ? 'rgba(99,102,241,0.16)' : 'rgba(255,255,255,0.03)',
-                    border: `1px solid ${on ? 'rgba(99,102,241,0.42)' : 'rgba(255,255,255,0.07)'}`
-                  }}
-                >
-                  {isEn ? m.label.en : m.label.fa}
-                </button>
-              );
-            })}
-          </div>
+          <strong style={{ fontSize: 12, color: '#c4b5fd' }}>
+            {isEn ? 'Selected automatically for every question' : 'برای هر پرسش به‌صورت خودکار انتخاب می‌شود'}
+          </strong>
           <small style={{ flexBasis: '100%', fontSize: 11, color: 'rgba(148,163,184,0.9)' }}>
-            {AI_INTELLIGENCE_MODES.find((m) => m.id === intelligenceMode)?.hint?.[isEn ? 'en' : 'fa']}
-            {' · '}
             {isEn
-              ? 'Applied to the next message; the server still owns the model ladder.'
-              : 'روی پیام بعدی اعمال می‌شود؛ انتخاب مدل نهایی همچنان با سرور است.'}
+              ? 'Simple conversation → quick; clear self-contained questions → medium; complex, current, incomplete or high-stakes requests → deep. If evidence is missing, the assistant states the limitation and asks a relevant follow-up.'
+              : 'گفت‌وگوی ساده ← سریع؛ پرسش روشن و خودبسنده ← متوسط؛ درخواست پیچیده، تازه، ناقص یا پرریسک ← عمیق. اگر شاهد کافی نباشد، دستیار محدودیت را می‌گوید و پرسش مرتبط می‌پرسد.'}
           </small>
         </div>
         <div className="iaos-history-tabs" role="tablist">

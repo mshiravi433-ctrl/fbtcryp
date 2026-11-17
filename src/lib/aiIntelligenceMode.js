@@ -1,54 +1,41 @@
 /**
- * FBT AI — INTELLIGENCE MODE (browser half)
+ * FBT AI — browser-side response-depth contract.
  * ---------------------------------------------------------------------------
- * The server owns the contract (`server/aiIntelligence.js`): model ladders,
- * token budgets, collaboration floors. This file owns only one thing — the
- * user's CHOICE, persisted locally and attached to every chat request.
+ * The browser does not choose a response mode or remember a user preference.
+ * Each chat/gateway request is classified on the server from its purpose,
+ * complexity, freshness, completeness and safety context. This module only
+ * names the three modes the server may report and gives browser requests a
+ * timeout long enough for the deepest automatic turn.
  *
- * Why a localStorage key instead of component state:
- *   · the composer, the intelligence panel and the client transport are three
- *     different components; threading a prop through all of them is how a
- *     setting starts disagreeing with itself;
- *   · a mode that resets on refresh is not a setting, it is a default;
- *   · the server still has the final say — if the stored value is garbage it
- *     resolves to the deployment default and reports `rejected`, so a corrupt
- *     key can never downgrade the assistant silently.
- *
- * Default is `max` ("هوش عمیق"), matching the server. The value is sent as
- * `intelligence` on the chat body; the server accepts ids and the Persian
- * spellings through its alias table, so an old client cannot ask for a mode
- * that does not exist.
+ * `auto` is the client default. Legacy callers may still send a stored mode,
+ * but auto-aware server routes ignore it; no local setting can override the
+ * question-level decision.
  */
 
 export const INTELLIGENCE_MODES = Object.freeze([
   {
     id: 'swift',
     label: { fa: 'سریع', en: 'Swift' },
-    hint: { fa: 'ارزان و فوری', en: 'Fast & cheap' }
+    hint: { fa: 'برای گفت‌وگوی ساده و پاسخ فوری', en: 'For simple conversation and quick replies' }
   },
   {
     id: 'balanced',
     label: { fa: 'متعادل', en: 'Balanced' },
-    hint: { fa: 'رفتار قبلی', en: 'Previous behaviour' }
+    hint: { fa: 'برای پرسش روشن و خودبسنده', en: 'For clear, self-contained questions' }
   },
   {
     id: 'max',
-    /*
-     * The label is the user's own words. «عمیق‌ترین حالت» was asked for as
-     * «هوش عمیق» («set it on deep intelligence by default»), and a control
-     * named «باهوش‌ترین» is not something they can point at. The old phrase
-     * stays resolvable below in `ALIASES`, so a request — or a stored
-     * preference — that still says it keeps working.
-     */
-    label: { fa: 'هوش عمیق', en: 'Smartest' },
-    hint: { fa: 'پرچم‌دار + سه تحلیل + بازبینی + لنز اقتصاددان', en: 'Flagships + 3 analyses + review + economist lens' }
+    label: { fa: 'هوش عمیق', en: 'Deep' },
+    hint: { fa: 'برای پرسش پیچیده، تازه، ناقص یا پرریسک', en: 'For complex, current, incomplete or high-stakes questions' }
   }
 ]);
 
-export const INTELLIGENCE_STORAGE_KEY = 'fbt.ai.intelligence.v1';
-export const DEFAULT_INTELLIGENCE_MODE = 'max';
+export const AUTO_INTELLIGENCE_MODE = 'auto';
+export const DEFAULT_INTELLIGENCE_MODE = AUTO_INTELLIGENCE_MODE;
 
 const ALIASES = Object.freeze({
+  auto: 'auto',
+  automatic: 'auto',
   swift: 'swift',
   fast: 'swift',
   eco: 'swift',
@@ -79,50 +66,26 @@ export function normalizeIntelligenceMode(value) {
   return hit ? hit.id : null;
 }
 
-export function getIntelligenceMode() {
-  try {
-    const saved = window.localStorage.getItem(INTELLIGENCE_STORAGE_KEY);
-    return normalizeIntelligenceMode(saved) || DEFAULT_INTELLIGENCE_MODE;
-  } catch {
-    return DEFAULT_INTELLIGENCE_MODE;
-  }
-}
-
-export function setIntelligenceMode(mode) {
-  const id = normalizeIntelligenceMode(mode);
-  if (!id) return DEFAULT_INTELLIGENCE_MODE;
-  try {
-    window.localStorage.setItem(INTELLIGENCE_STORAGE_KEY, id);
-    /* Same-tab listeners: the `storage` event only fires in OTHER tabs, so a
-       custom event is what keeps the composer badge in sync with the panel. */
-    window.dispatchEvent(new CustomEvent('fbt:ai-intelligence', { detail: { mode: id } }));
-  } catch { /* private mode: the choice lasts for this page, nothing breaks */ }
-  return id;
-}
-
-/**
- * How long the browser waits for one turn, per mode.
- *
- * The server clamps a turn to `AI_TURN_CEILING_MS` (52 s by default) and the
- * Vercel function that runs it is killed at 60 s. A client that hangs up at
- * 30 s — the number written when an answer meant one cheap 600-token call —
- * throws away the deep reply before it lands and shows its own cache instead.
- * That is indistinguishable, from the user's chair, from a feature that was
- * never deployed. So the wait is a property of the mode: swift stays snappy,
- * `max` waits as long as its budget and no longer.
- */
+/* The server chooses the exact budget per question. The client waits long
+   enough for the maximum server turn because it cannot know the selected tier
+   before the request is analyzed. */
 export const INTELLIGENCE_TURN_MS = Object.freeze({
   swift: 15000,
   balanced: 30000,
-  max: 58000
+  max: 58000,
+  auto: 58000
 });
 
-export function intelligenceTurnBudgetMs(mode) {
-  const id = normalizeIntelligenceMode(mode) || DEFAULT_INTELLIGENCE_MODE;
-  return INTELLIGENCE_TURN_MS[id] || INTELLIGENCE_TURN_MS.balanced;
+export function intelligenceTurnBudgetMs(mode = AUTO_INTELLIGENCE_MODE) {
+  const id = normalizeIntelligenceMode(mode) || AUTO_INTELLIGENCE_MODE;
+  return INTELLIGENCE_TURN_MS[id] || INTELLIGENCE_TURN_MS.auto;
 }
 
 export function intelligenceModeLabel(mode, locale = 'fa') {
-  const hit = INTELLIGENCE_MODES.find((m) => m.id === normalizeIntelligenceMode(mode)) || INTELLIGENCE_MODES[2];
+  const id = normalizeIntelligenceMode(mode) || AUTO_INTELLIGENCE_MODE;
+  if (id === AUTO_INTELLIGENCE_MODE) {
+    return String(locale || '').toLowerCase().startsWith('en') ? 'Automatic' : 'خودکار';
+  }
+  const hit = INTELLIGENCE_MODES.find((m) => m.id === id) || INTELLIGENCE_MODES[2];
   return String(locale || '').toLowerCase().startsWith('en') ? hit.label.en : hit.label.fa;
 }

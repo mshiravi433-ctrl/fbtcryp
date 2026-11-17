@@ -933,7 +933,7 @@ function marketChatCard({ room = 'overview', lang = 'fa' } = {}) {
   };
 }
 
-export function buildHumanResponse({ intent, context = {}, results = {}, plan = null, locale = 'fa' } = {}) {
+export function buildHumanResponse({ intent, context = {}, results = {}, plan = null, locale = 'fa', handoffRoute = null } = {}) {
   const lang = langOf(locale);
   const type = intent?.type || 'GENERAL';
   const connected = isConnected(context, results);
@@ -963,7 +963,23 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
   }
 
   if (['FARM', 'LEND', 'BORROW'].includes(type)) {
-    return lendingReviewResponse({ type, intent, context, results, lang });
+    const response = lendingReviewResponse({ type, intent, context, results, lang });
+    /* A lending review may be completed inline, but the chat also offers the
+       venue page as a separate, optional hand-off. It never adds a transaction
+       or bypasses the review/signature gate; unit probes of the pure review
+       layer omit `handoffRoute` and keep their no-action contract unchanged. */
+    if (['LEND', 'BORROW'].includes(type) && typeof handoffRoute === 'string'
+      && handoffRoute.startsWith('/loan') && !results.route) {
+      const actions = Array.isArray(response.actions) ? response.actions : [];
+      if (!actions.some((action) => action?.route === handoffRoute)) {
+        response.actions = [...actions, {
+          id: 'open-lending-page',
+          route: handoffRoute,
+          label: lang === 'fa' ? 'باز کردن صفحهٔ وام' : 'Open lending page'
+        }];
+      }
+    }
+    return response;
   }
 
   /*
@@ -1170,7 +1186,9 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
       requiresConfirmation: false,
       actions: [{
         id: 'open-bridge-page',
-        route: '/bridge',
+        route: typeof results.inspectionRoute === 'string' && results.inspectionRoute.startsWith('/bridge')
+          ? results.inspectionRoute
+          : '/bridge',
         label: lang === 'fa' ? 'بررسی صفحهٔ بریج' : 'Inspect bridge options'
       }]
     };
@@ -1216,6 +1234,28 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         navigated: route
       };
     }
+  }
+
+  if (type === 'INSURANCE') {
+    return {
+      message: lang === 'fa'
+        ? 'بخش بیمه برای مرور بازار، شرایط پوشش و وضعیت بیمه‌نامه‌هاست. این پیام هیچ قیمت، بیمه‌نامه یا تراکنشی ایجاد نکرده است؛ پیش از هر خرید، شرایط و استثناها را در صفحه بررسی کن.'
+        : 'The Insurance section is for reviewing available cover, terms and policy status. This message created no quote, policy or transaction; review the terms and exclusions on the page before considering a purchase.',
+      ui: { type: 'TEXT' },
+      requiresConfirmation: false,
+      actions: [{ id: 'open-insurance', route: '/insurance', label: lang === 'fa' ? 'باز کردن بیمه' : 'Open insurance' }]
+    };
+  }
+
+  if (type === 'STOCKS') {
+    return {
+      message: lang === 'fa'
+        ? 'در این چت سفارش سهام نمی‌گذارم یا خرید را تأیید نمی‌کنم. صفحهٔ سهام را باز کن تا ابزارهای موجود و فرایند بررسی همان‌جا را ببینی؛ هیچ سفارش یا امضایی از این پیام انجام نشده است.'
+        : 'I will not place or imply a stock order in chat. Open the Stocks page to review the available instruments and its own order-review flow; this message submitted nothing and requested no signature.',
+      ui: { type: 'TEXT' },
+      requiresConfirmation: false,
+      actions: [{ id: 'open-stocks', route: '/stocks', label: lang === 'fa' ? 'بررسی صفحهٔ سهام' : 'Inspect stocks' }]
+    };
   }
 
   /*
@@ -2185,16 +2225,18 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
       ? [
           ['پرتفوی و کیف پول', 'موجودی چند-زنجیره‌ای، تحلیل تخصیص و تمرکز، ریسک'],
           ['بازار و تحلیل', 'قیمت زنده، تحلیل تکنیکال بک‌تست‌شده، سیگنال، اخبار'],
-          ['سواپ و بریج', 'نقل‌قول زنده؛ امضا همیشه روی صفحه خودش'],
-          ['سود', 'فارم، وام، استخرها با APY واقعی از منبع'],
+          ['سواپ و بریج', 'پیش‌پرکردن فرم در صورت پشتیبانی؛ بریج فقط برای بررسی در صفحه، نه اجرا از چت'],
+          ['سود', 'خواندن نرخ‌های قابل‌دسترسی و گزینه‌های فارم؛ سپرده یا وام فقط پس از بررسی و تأیید'],
+          ['سهام و بیمه', 'مرور ابزارهای موجود و شرایط پوشش؛ بدون ثبت سفارش یا بیمه از داخل چت'],
           ['هوش زنجیره', 'اسمارت مانی، نهنگ‌ها، جریان صرافی‌ها'],
           ['عملیات', 'مرکز عملیات، ایجنت‌ها، استراتژی‌ها، مانیتورها و سفارش‌های شرطی']
         ]
       : [
           ['Portfolio & wallet', 'multi-chain balances, allocation and concentration, risk'],
           ['Market & analysis', 'live prices, backtested technicals, signals, news'],
-          ['Swap & bridge', 'live quotes; signing always happens on its own page'],
-          ['Yield', 'farms, lending, pools with real upstream APY'],
+          ['Swap & bridge', 'prefill where supported; bridge is an inspection hand-off, never chat execution'],
+          ['Yield', 'read available rates and farm options; supply or borrow only after review and confirmation'],
+          ['Stocks & insurance', 'review listed instruments and cover terms; no chat order or policy purchase'],
           ['On-chain intelligence', 'smart money, whales, exchange flows'],
           ['Operations', 'ops center, agents, strategies, monitors and conditional orders']
         ];
@@ -2205,6 +2247,12 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         : `Here is what I can do from the app's live data:\n\n${body}\n\nJust name what you want — a single word is enough. Nothing that moves money runs without your explicit confirmation.`,
       ui: { type: 'TEXT' },
       actions: [
+        { id: 'open-swap', route: '/swap', label: lang === 'fa' ? 'سواپ' : 'Swap' },
+        { id: 'open-bridge', route: '/bridge', label: lang === 'fa' ? 'بررسی بریج' : 'Inspect bridge' },
+        { id: 'open-lending', route: '/loan', label: lang === 'fa' ? 'وام' : 'Lending' },
+        { id: 'open-farm', route: '/farm', label: lang === 'fa' ? 'فارم' : 'Farm' },
+        { id: 'open-stocks', route: '/stocks', label: lang === 'fa' ? 'سهام' : 'Stocks' },
+        { id: 'open-insurance', route: '/insurance', label: lang === 'fa' ? 'بیمه' : 'Insurance' },
         { id: 'open-ops', route: '/intent?tab=ops', label: lang === 'fa' ? 'مرکز عملیات' : 'Ops Center' },
         { id: 'open-portfolio', route: '/portfolio', label: lang === 'fa' ? 'پرتفوی' : 'Portfolio' }
       ]

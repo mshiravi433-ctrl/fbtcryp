@@ -1,3 +1,4 @@
+import { matchFoldedPhrase, matchAnyTerm } from '../regexCache.js';
 /**
  * FBT INTENT OS — DIALOGUE READ (what this turn is DOING, and what it depends on)
  * ---------------------------------------------------------------------------
@@ -44,14 +45,11 @@ function fold(text) {
 
 /** 4+ Persian letters match as a prefix (Persian inflects by suffix); short ones stay strict. */
 function phrase(text, p) {
-  const term = fold(p);
-  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const persian = /[\u0600-\u06FF]/.test(term);
-  const tail = persian && term.replace(/[^\u0600-\u06FF]/g, '').length >= 4 ? '' : '(?![\\p{L}])';
-  return new RegExp(`(?<![\\p{L}])${escaped}${tail}`, 'u').test(text);
+  /* The pattern is built once and reused (see src/lib/intent-ai/os/regexCache.js). */
+  return matchFoldedPhrase(text, fold(p));
 }
 
-const anyPhrase = (text, list) => list.some((p) => phrase(text, p));
+const anyPhrase = (text, list) => matchAnyTerm(text, list, { fold, prefixMatch: true });
 
 /* ── vocabulary ───────────────────────────────────────────────────────────── */
 

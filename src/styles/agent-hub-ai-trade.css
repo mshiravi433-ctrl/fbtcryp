@@ -1,0 +1,13 @@
+.agentchat-use-ai-trade-wrap {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  margin-block: 8px;
+}
+.agentchat-use-ai-trade {
+  max-width: 100%;
+  min-height: 42px;
+  white-space: normal;
+  text-align: start;
+}
+.agentchat-use-ai-trade-wrap .agentchat-watch-note { margin: 0; }
