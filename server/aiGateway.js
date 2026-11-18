@@ -749,7 +749,7 @@ export function recordProviderCall(providerId, { ok = true, durationMs = 0, mode
     at: Date.now(),
     model: model || null,
     reasonCode: reasonCode || 'UNKNOWN',
-    message: String(error || '').slice(0, 240),
+    message: String(error || '').slice(0, 420),
     fix: fix || null
   };
   /* One classified failure is enough to park a provider: unlike a flaky
@@ -1098,7 +1098,10 @@ export function classifyAiError(err, providerId = null) {
   const msg = raw.toLowerCase();
   const status = Number(err?.status) || Number((raw.match(/HTTP\s+(\d{3})/i) || [])[1]) || 0;
 
-  const out = (kind, retryNextModel, fix) => ({ kind, retryNextModel, status, message: raw.slice(0, 300), fix });
+  /* 420, not 300: the interesting part of a guardrail 404 begins AFTER the
+     colon that lists its reasons (measured — «ZDR violation» was the answer and
+     it lived past the cut). This string is diagnostic text, never a key. */
+  const out = (kind, retryNextModel, fix) => ({ kind, retryNextModel, status, message: raw.slice(0, 420), fix });
 
   // Billing first: Anthropic reports an empty credit balance as HTTP 400, and
   // DeepSeek/AIMLAPI as 402/403 — status alone would misclassify all three.
@@ -1124,6 +1127,20 @@ export function classifyAiError(err, providerId = null) {
    * the first refusal and the provider is parked with the reason named.
    */
   if (/guardrail restrictions|matching your data policy|enable prompt training|no endpoints found matching your data policy/i.test(raw)) {
+    /*
+     * AND THE REASON IS PRINTED AFTER THE COLON — READ IT.
+     *
+     * The live body continues «… for the following reasons (an endpoint may have
+     * matched multiple reasons): ZDR violation (account …» — Zero Data
+     * Retention. That is a DIFFERENT toggle from «allow free endpoints», and
+     * telling the operator the wrong one costs them a round of guessing (it did,
+     * once). So the fix line is chosen from the body, not from the status:
+     * free endpoints cannot honour a zero-retention commitment, so an account
+     * enforcing ZDR filters every `:free` id out before the call is even made.
+     */
+    if (/zdr|zero[\s_-]*data[\s_-]*retention/i.test(raw)) {
+      return out('DATA_POLICY', false, 'The account enforces ZERO DATA RETENTION, and free endpoints cannot honour it — every `:free` id is filtered out before the call, so no model id can answer. Turn the ZDR / zero-retention enforcement off for this key in the provider console (OpenRouter → Settings → Privacy), then re-run the self-test. The model ids are fine.');
+    }
     return out('DATA_POLICY', false, 'The account\'s privacy settings refuse every free endpoint, so no model id on this provider can answer. In the provider console allow the free/training endpoints (OpenRouter → Settings → Privacy → prompt training), then re-run the self-test. The model ids are fine.');
   }
   if (/tier_not_allowed|not available in your subscription|subscription tier|upgrade your (plan|tier)|requires a paid (plan|tier)|free tier (does not|limit)/i.test(raw)) {
