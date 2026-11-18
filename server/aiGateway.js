@@ -669,6 +669,7 @@ const HEALTH_WINDOW = 50;
 const CIRCUIT_OPEN_MS = {
   AUTH: 30 * 60_000,
   BILLING: 30 * 60_000,
+  DATA_POLICY: 15 * 60_000,
   PERMISSION: 30 * 60_000,
   CF_ACCOUNT: 30 * 60_000,
   MODEL_UNAVAILABLE: 10 * 60_000,
@@ -773,7 +774,7 @@ export function recordProviderCall(providerId, { ok = true, durationMs = 0, mode
    * costs one call instead of ten minutes of the whole seat.
    */
   const modelScoped = MODEL_SCOPED_FAULTS.has(reasonCode) && Boolean(model);
-  if (st.consecutiveFailures >= 2 || (!modelScoped && ['AUTH', 'BILLING', 'PERMISSION', 'MODEL_UNAVAILABLE', 'CF_ACCOUNT'].includes(reasonCode))) {
+  if (st.consecutiveFailures >= 2 || (!modelScoped && ['AUTH', 'BILLING', 'DATA_POLICY', 'PERMISSION', 'MODEL_UNAVAILABLE', 'CF_ACCOUNT'].includes(reasonCode))) {
     st.openUntil = Date.now() + park;
     st.openReason = reasonCode;
   }
@@ -1103,6 +1104,27 @@ export function classifyAiError(err, providerId = null) {
   // DeepSeek/AIMLAPI as 402/403 — status alone would misclassify all three.
   if (/credit balance is too low|insufficient balance|insufficient_balance|out of funds|run out of funds|exceeded your current credits|billing|payment required|arrears|top up your balance|no remaining credits/i.test(raw) || status === 402) {
     return out('BILLING', false, 'This provider account has no credit. Top it up in the provider console, or leave it parked — the gateway routes around it.');
+  }
+  /*
+   * ─── AN ACCOUNT-LEVEL REFUSAL THAT ARRIVES AS A 404 ───────────────────────
+   * 2026-11-18, live: every OpenRouter `:free` id answered
+   *
+   *   HTTP 404 {"error":{"message":"0 endpoints out of 1 requested are
+   *   available matching your guardrail restrictions and data policy …"}}
+   *
+   * The status says 404, so the old rule called it MODEL_UNAVAILABLE and set
+   * `retryNextModel`. The gateway then walked all four `:free` candidates —
+   * four requests, four identical account-level refusals — and, because
+   * MODEL_UNAVAILABLE is model-scoped, MARKED FOUR INNOCENT MODEL IDS DEAD for
+   * ten minutes. Nothing about the models was wrong: the account's privacy
+   * settings refuse free endpoints (OpenRouter requires allowing prompt
+   * training for them) until the operator flips that toggle.
+   *
+   * This is the same shape as BILLING: no model can help, so the walk stops on
+   * the first refusal and the provider is parked with the reason named.
+   */
+  if (/guardrail restrictions|matching your data policy|enable prompt training|no endpoints found matching your data policy/i.test(raw)) {
+    return out('DATA_POLICY', false, 'The account\'s privacy settings refuse every free endpoint, so no model id on this provider can answer. In the provider console allow the free/training endpoints (OpenRouter → Settings → Privacy → prompt training), then re-run the self-test. The model ids are fine.');
   }
   if (/tier_not_allowed|not available in your subscription|subscription tier|upgrade your (plan|tier)|requires a paid (plan|tier)|free tier (does not|limit)/i.test(raw)) {
     return out('MODEL_TIER', true, 'The model is above this account\'s tier. The gateway retries with a cheaper model on the same key.');

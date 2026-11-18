@@ -704,6 +704,7 @@ const VERDICT_COPY = {
   MODEL_TIER: { fa: 'مدل بالاتر از سطح اشتراک', en: 'Model above plan tier' },
   AUTH: { fa: 'کلید رد شد', en: 'Key rejected' },
   BILLING: { fa: 'اعتبار حساب تمام شده', en: 'Account has no credit' },
+  DATA_POLICY: { fa: 'سیاست حریم خصوصی حساب، مدل رایگان را رد می‌کند', en: 'Account data policy refuses free models' },
   PERMISSION: { fa: 'اجازهٔ این درخواست را ندارد', en: 'Not permitted' },
   QUOTA: { fa: 'سهمیه یا نرخ محدود شده', en: 'Rate limited / quota' },
   CF_ACCOUNT: { fa: 'شناسهٔ حساب کلادفلر اشتباه است', en: 'Bad Cloudflare account id' },
