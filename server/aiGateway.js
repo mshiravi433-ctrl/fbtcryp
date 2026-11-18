@@ -114,6 +114,7 @@ import { blobConfigured as durableStoreConfigured } from './blobCache.js';
 import { aiAnswerCacheStats } from './aiAnswerCache.js';
 import { lastReasoningLedger } from './aiReasoningLedger.js';
 import { cortexBridgeStatus } from './aiCortexBridge.js';
+import { logProviderCallTrace } from './opikTrace.js';
 
 /* Re-exported so every consumer of the gateway can describe the mode it used
    without importing a second module. */
@@ -1214,6 +1215,9 @@ const MODEL_ATTEMPTS = Math.max(1, Number(process.env.AI_MODEL_ATTEMPTS || 3));
 /** Start a fresh turn ledger. Returns the token that scopes this turn. */
 export function beginAiTurnBudget() {
   return {
+    /* The turn's identity, for the trace exporter: the up-to-six provider calls
+       of one answer become one Opik thread instead of six unrelated rows. */
+    turnId: globalThis.crypto?.randomUUID?.() || null,
     failedModels: new Map(),
     exhaustedProviders: new Set(),
     /* The CALL CAP — the third half of the budget, and the one that
@@ -2193,6 +2197,30 @@ export async function executeProviderChat(providerId, {
          * and counting it would make the deployment too pessimistic.
          */
         spendQuota(providerId).catch(() => {});
+        /*
+         * And it is OUTSIDE the answer: fire-and-forget, never awaited. The
+         * exporter owns its own timeout and swallows its own failures, because a
+         * trace that cannot be sent must not become a turn that cannot be
+         * answered. See server/opikTrace.js.
+         */
+        void logProviderCallTrace({
+          provider: providerId,
+          model: candidate,
+          ok: true,
+          startedAt: startedAt,
+          durationMs,
+          attemptsOnProvider: attempts,
+          mode,
+          engine: 'external-model',
+          tokensIn: usage?.promptTokens ?? usage?.inputTokens ?? 0,
+          tokensOut: usage?.completionTokens ?? usage?.outputTokens ?? 0,
+          questionChars: String(user || '').length,
+          answerChars: String(text || '').length,
+          question: user,
+          answer: text,
+          turnId: turnBudget?.turnId || null,
+          turnCalls: turnBudget?.calls ?? null
+        });
         return {
           ok: true,
           provider: providerId,
@@ -2244,6 +2272,23 @@ export async function executeProviderChat(providerId, {
       error: lastClass?.message || String(lastErr?.message || lastErr),
       reasonCode: lastClass?.kind || 'UNKNOWN',
       fix: lastClass?.fix || null
+    });
+
+    void logProviderCallTrace({
+      provider: providerId,
+      model: attempts.length ? attempts[attempts.length - 1].model : (model || cfg.defaultModel),
+      ok: false,
+      startedAt,
+      durationMs,
+      attemptsOnProvider: attempts.length,
+      mode,
+      reasonCode: lastClass?.kind || 'UNKNOWN',
+      status: lastClass?.status || lastErr?.status || 0,
+      error: lastClass?.message || String(lastErr?.message || lastErr),
+      questionChars: String(user || '').length,
+      question: user,
+      turnId: turnBudget?.turnId || null,
+      turnCalls: turnBudget?.calls ?? null
     });
 
     const out = new Error(lastClass?.message || String(lastErr?.message || lastErr));

@@ -200,6 +200,7 @@ import { orchestratorEnabled, ORCHESTRATOR_SCHEMA } from './aiOrchestrator.js';
 import { getOrchestrator } from './aiOrchestratorRoutes.js';
 import { getNeuromorphicSwarm } from './aiNeuromorphic.js';
 import { cortexBridgeStatus } from './aiCortexBridge.js';
+import { opikStatus, resetOpikStats } from './opikTrace.js';
 
 const router = Router();
 
@@ -1264,6 +1265,24 @@ router.get('/gateway/health', async (_req, res) => {
 router.get('/gateway/selftest', async (_req, res) => {
   const report = await gatewaySelfTest();
   return res.json(report);
+});
+
+/**
+ * Whether the traces are actually LEAVING — not merely configured.
+ *
+ * The failure mode this route exists for: an operator pastes a key, assumes the
+ * dashboard is filling up, and finds an empty project a week later because the
+ * workspace header was missing or the key belonged to another workspace. The
+ * counters here are the ones the exporter increments, so «enabled but never
+ * exported» is visible instead of assumed.
+ *
+ * GET, no key, no payload: the same contract as `/gateway/health`.
+ */
+router.get('/telemetry/opik', (req, res) => {
+  /* `?reset=1` clears the counters after a manual check, so the next turn's
+     numbers are its own. Read-only otherwise. */
+  if (String(req.query?.reset || '') === '1') resetOpikStats();
+  return res.json({ ok: true, ...opikStatus() });
 });
 
 const GATEWAY_TASK_INTENTS = Object.freeze({
