@@ -51,10 +51,35 @@ import { storeGet, storeSet, storeDurable } from './store.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** The per-provider daily limits this project plans for. */
+/**
+ * The per-provider daily limits this project plans for.
+ *
+ * ─── GROQ'S FIFTY WAS NEVER GROQ'S ────────────────────────────────────────
+ * This table used to read `groq: 50`, and the number was not Groq's: it was
+ * the OpenRouter `:free` seat's daily allowance (50 requests per day PER
+ * MODEL) copied onto a provider that has a different, much larger one. The
+ * consequence was a deployment that answered «the daily cap is reached»
+ * after fifty questions while the seat behind it was still serving, and an
+ * operator who reasonably concluded the provider was the bottleneck and
+ * started shopping for a second one. The binding limit was this line.
+ *
+ * Groq's free tier is ~1,000 requests per day per model (rate-limited per
+ * minute, not per day, in practice). A thousand is the conservative planning
+ * figure for ONE model served through ONE seat: it leaves headroom for the
+ * gateway's own model walk (a turn may try two ids on the same provider),
+ * and it is still a number this project can watch being spent instead of
+ * discovered through a 429.
+ *
+ * The other rows keep their meaning: `openrouterfree` really is 50/day per
+ * model (and per-account data-policy guarded); `workersai` is generous but
+ * metered in neurons; `openrouter` is a paid seat whose limit is a spending
+ * decision, not a quota.
+ *
+ * Any of them can be set per provider — see `dailyLimitFor()` below.
+ */
 export const DEFAULT_DAILY_LIMITS = Object.freeze({
   openrouterfree: 50,
-  groq: 50,
+  groq: 1000,
   workersai: 10000,
   openrouter: 1000,
   default: 1000
@@ -70,12 +95,63 @@ export function quotaDay(now = Date.now()) {
   return new Date(now).toISOString().slice(0, 10);
 }
 
-/** The configured limit for one provider. */
+/** A positive whole number from an env value, or `null` for "not set". */
+function positiveInt(raw) {
+  if (raw === null || raw === undefined) return null;
+  const text = String(raw).trim();
+  if (!text) return null;
+  const n = Number(text);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.floor(n);
+}
+
+/**
+ * The env var that sets ONE provider's allowance.
+ *
+ * `groq` → `AI_DAILY_LIMIT_GROQ`
+ * `openrouterfree` → `AI_DAILY_LIMIT_OPENROUTERFREE`
+ *
+ * The provider id is upper-cased with every run of punctuation collapsed to
+ * one underscore, so an id spelled `workers-ai` and one spelled `workers_ai`
+ * cannot end up with two different knobs.
+ */
+export function dailyLimitEnvKey(providerId) {
+  const token = String(providerId ?? '')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase();
+  return token ? `AI_DAILY_LIMIT_${token}` : null;
+}
+
+/**
+ * The configured limit for one provider.
+ *
+ * Precedence, and why in this order:
+ *
+ *   1. `AI_DAILY_LIMIT_OVERRIDE` — ONE number for the whole fleet. It stays
+ *      on top because it is the operator's emergency brake: whoever sets it
+ *      means EVERY seat, and a per-seat key quietly outranking it would make
+ *      the brake miss the seat it was aimed at.
+ *   2. `AI_DAILY_LIMIT_<PROVIDER>` — this seat's own allowance. This is the
+ *      knob that matters in practice, because the free tiers differ by an
+ *      order of magnitude: Groq's day is ~1,000 requests per model while the
+ *      OpenRouter `:free` day is 50. A single fleet-wide number cannot be
+ *      right for both, and until this existed the only way to raise one seat
+ *      was to raise every seat and lose the warning the tight one gives.
+ *   3. the table above.
+ *
+ * A value that is not a positive number (empty, `0`, `abc`) is treated as
+ * UNSET rather than as a limit of zero: a typo in an env var must not take
+ * the whole fleet's allowance to nothing, which would look exactly like a
+ * dead provider.
+ */
 export function dailyLimitFor(providerId, env = process.env) {
-  const raw = env?.AI_DAILY_LIMIT_OVERRIDE;
-  if (raw) {
-    const n = Number(raw);
-    if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  const override = positiveInt(env?.AI_DAILY_LIMIT_OVERRIDE);
+  if (override !== null) return override;
+  const key = dailyLimitEnvKey(providerId);
+  if (key) {
+    const perProvider = positiveInt(env?.[key]);
+    if (perProvider !== null) return perProvider;
   }
   return DEFAULT_DAILY_LIMITS[providerId] ?? DEFAULT_DAILY_LIMITS.default;
 }
@@ -97,6 +173,7 @@ export function quotaBudgetDurable(env = process.env) {
 export async function readQuota(providerId, { now = Date.now(), env = process.env } = {}) {
   const day = quotaDay(now);
   const limit = dailyLimitFor(providerId, env);
+  const limitEnv = dailyLimitEnvKey(providerId);
   let used = 0;
   let durable = false;
   try {
@@ -118,7 +195,11 @@ export async function readQuota(providerId, { now = Date.now(), env = process.en
     used: Math.max(0, used),
     limit,
     left: Math.max(0, limit - Math.max(0, used)),
-    durable
+    durable,
+    /* The env var that would change THIS seat's limit, so the operator who
+       reads «48 of 50 used» is told the knob's name instead of looking for
+       it. `null` only for an id with no usable characters. */
+    limitEnv
   };
 }
 
