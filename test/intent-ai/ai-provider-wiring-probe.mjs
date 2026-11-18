@@ -240,6 +240,16 @@ async function runAll() {
     assert.equal(cls.retryNextModel, false, 'no model id can satisfy an account-level policy');
     assert.match(cls.fix, /privacy|training/i, 'the fix names the toggle, not the model');
 
+    /* The body names its own reason after the colon, and the reason decides
+       WHICH toggle to name: «ZDR violation» (zero data retention) is a
+       different switch from «allow free endpoints», and naming the wrong one
+       costs the operator a round of guessing. */
+    const zdrBody = `${guardrail.body.error.message}\nZDR violation (account enforces zero data retention)`;
+    const zdr = classifyAiError(Object.assign(new Error(zdrBody), { status: 404 }), 'openrouterfree');
+    assert.equal(zdr.kind, 'DATA_POLICY');
+    assert.match(zdr.fix, /zero data retention/i, 'a ZDR refusal must name ZDR, not prompt training');
+    assert.match(zdr.message, /ZDR violation/, 'the reason after the colon survives the message cut');
+
     resetProviderHealth();
     let failure = null;
     try {
