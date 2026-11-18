@@ -30,6 +30,7 @@ import {
 import {
   quotaDay,
   dailyLimitFor,
+  dailyLimitEnvKey,
   readQuota,
   spendQuota,
   readQuotaForFleet,
@@ -173,6 +174,69 @@ test('the free tier knows its own daily limit', () => {
   assert.equal(dailyLimitFor('openrouterfree', {}), 50);
   assert.equal(DEFAULT_DAILY_LIMITS.openrouterfree, 50);
   assert.equal(dailyLimitFor('openrouterfree', { AI_DAILY_LIMIT_OVERRIDE: '12' }), 12);
+});
+
+test('the Groq day is a thousand requests, not the OpenRouter fifty', () => {
+  /*
+   * `groq: 50` was never Groq's number. It was OpenRouter's `:free` seat —
+   * 50 requests per day PER MODEL — copied onto a provider whose free tier
+   * allows about a thousand per day per model. The deployment then answered
+   * «the daily cap is reached» after fifty questions while the seat behind it
+   * was still serving, so the operator went looking for a second provider to
+   * solve a limit this project had written itself.
+   *
+   * The test states the number in both places a future edit could quietly
+   * revert it: the table and the resolver.
+   */
+  assert.equal(DEFAULT_DAILY_LIMITS.groq, 1000);
+  assert.equal(dailyLimitFor('groq', {}), 1000);
+  /* The tight seat keeps its own — a bigger neighbour must not loosen it. */
+  assert.equal(dailyLimitFor('openrouterfree', {}), 50);
+});
+
+test('one provider’s allowance can be set without moving every other', () => {
+  /*
+   * The free tiers differ by an order of magnitude, so a single fleet-wide
+   * number cannot be right for all of them: `AI_DAILY_LIMIT_OVERRIDE` raises
+   * Groq and OpenRouter `:free` together and throws away the warning the tight
+   * seat gives. The per-provider key is the knob the deployment actually
+   * needed, and its name is derived from the provider id.
+   */
+  assert.equal(dailyLimitEnvKey('groq'), 'AI_DAILY_LIMIT_GROQ');
+  assert.equal(dailyLimitEnvKey('openrouterfree'), 'AI_DAILY_LIMIT_OPENROUTERFREE');
+  assert.equal(dailyLimitEnvKey('workers-ai'), dailyLimitEnvKey('workers_ai'), 'two spellings, one knob');
+  assert.equal(dailyLimitEnvKey(''), null);
+
+  assert.equal(dailyLimitFor('groq', { AI_DAILY_LIMIT_GROQ: '2500' }), 2500);
+  /* The other seats do not move. */
+  assert.equal(dailyLimitFor('openrouterfree', { AI_DAILY_LIMIT_GROQ: '2500' }), 50);
+  assert.equal(dailyLimitFor('workersai', { AI_DAILY_LIMIT_GROQ: '2500' }), 10000);
+});
+
+test('the fleet-wide override still outranks a per-provider allowance', () => {
+  /* The global override is the operator's emergency brake: whoever sets it
+     means EVERY seat, so a per-seat key must not hide one from it. */
+  assert.equal(
+    dailyLimitFor('groq', { AI_DAILY_LIMIT_OVERRIDE: '12', AI_DAILY_LIMIT_GROQ: '2500' }),
+    12
+  );
+});
+
+test('a nonsense allowance falls back to the table instead of to zero', () => {
+  /* `0`, `-5`, `abc` and an empty string are TYPOS, not instructions. Reading
+     them as a limit of zero would exhaust the day on the first turn and look
+     exactly like a dead provider. */
+  assert.equal(dailyLimitFor('groq', { AI_DAILY_LIMIT_GROQ: '0' }), 1000);
+  assert.equal(dailyLimitFor('groq', { AI_DAILY_LIMIT_GROQ: '-5' }), 1000);
+  assert.equal(dailyLimitFor('groq', { AI_DAILY_LIMIT_GROQ: 'abc' }), 1000);
+  assert.equal(dailyLimitFor('groq', { AI_DAILY_LIMIT_GROQ: '' }), 1000);
+  assert.equal(dailyLimitFor('groq', { AI_DAILY_LIMIT_OVERRIDE: 'abc', AI_DAILY_LIMIT_GROQ: '7' }), 7);
+});
+
+test('the quota row names the knob that changes it', async () => {
+  const quota = await readQuota('groq', { env: { AI_QUOTA_DURABLE: '0' } });
+  assert.equal(quota.limitEnv, 'AI_DAILY_LIMIT_GROQ');
+  assert.equal(quota.limit, 1000);
 });
 
 test('a fresh day starts with nothing spent', async () => {
