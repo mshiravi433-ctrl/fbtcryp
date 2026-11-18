@@ -204,6 +204,67 @@ async function runAll() {
     assert.equal(res.attempts[0].reasonCode, 'MODEL_UNAVAILABLE');
   });
 
+  await atest('an account-level data-policy refusal is ONE call, not four — and it is not four dead models', async () => {
+    /*
+     * Live 2026-11-18: `/gateway/selftest` reported the OpenRouter Free seat as
+     *
+     *   HTTP 404 "0 endpoints out of 1 requested are available matching your
+     *   guardrail restrictions and data policy …"
+     *
+     * for all four `:free` candidates. That sentence is about the ACCOUNT
+     * (OpenRouter refuses free endpoints until prompt training is allowed), but
+     * it arrives with a 404, so the classifier called it MODEL_UNAVAILABLE and
+     * asked for the next model. Two consequences, both measured:
+     *
+     *   · four requests per turn to learn one account fact, and
+     *   · because MODEL_UNAVAILABLE is model-scoped, four innocent ids marked
+     *     dead for ten minutes.
+     *
+     * Now the refusal is its own class: `retryNextModel: false` stops the walk
+     * after the first 404, the provider is parked (an account toggle, not a
+     * flaky model), and no model id is blamed.
+     */
+    const guardrail = {
+      status: 404,
+      body: {
+        error: {
+          message: '0 endpoints out of 1 requested are available matching your guardrail restrictions and data policy. We removed them for the following reasons (an endpoint may have matched multiple reasons): - No endpoints found matching your data policy. Enable prompt training here: https://openrouter.ai/settings/privacy',
+          code: 404
+        }
+      }
+    };
+    stubFetch(() => guardrail);
+
+    const cls = classifyAiError(Object.assign(new Error(guardrail.body.error.message), { status: 404 }), 'openrouterfree');
+    assert.equal(cls.kind, 'DATA_POLICY');
+    assert.equal(cls.retryNextModel, false, 'no model id can satisfy an account-level policy');
+    assert.match(cls.fix, /privacy|training/i, 'the fix names the toggle, not the model');
+
+    resetProviderHealth();
+    let failure = null;
+    try {
+      await executeProviderChat('openrouterfree', { system: 's', user: 'u', json: false });
+    } catch (err) {
+      failure = err;
+    }
+    assert.ok(failure, 'the seat must fail loudly, not answer from nowhere');
+    assert.equal(failure.reasonCode, 'DATA_POLICY');
+    assert.equal(failure.attempts.length, 1, 'one refusal is the whole story — the other three ids cannot differ');
+    assert.equal(calls.length, 1, 'exactly one HTTP request reached the wire');
+
+    /* The provider is parked with the reason named… */
+    const health = getProviderHealth().openrouterfree;
+    assert.equal(health.openReason, 'DATA_POLICY');
+    assert.equal(health.circuitOpen, true);
+
+    /* …and the four `:free` ids are NOT on the dead-model list: they were never
+       given a chance to answer, so blaming them would hide a fixed account for
+       ten minutes after the operator flips the toggle. */
+    const { deadModelsFor } = await import('../../server/aiGateway.js');
+    assert.equal(deadModelsFor('openrouterfree').size, 0, 'an account refusal must not mark model ids dead');
+    resetProviderHealth();
+  });
+
   await atest('a paid model on a free tier falls back to the free model on the same key', async () => {
     /* The live Mistral failure: HTTP 403 "not available in your subscription
        tier" for mistral-large-latest. That is a model problem, not a key
