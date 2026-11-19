@@ -156,6 +156,20 @@ describe('connect a third-party key', () => {
     expect(screen.getByTestId('agent-hub-key-status').textContent).toContain('کلید ذخیره نشده');
   });
 
+  it('does not offer a key field when the server cannot seal one', async () => {
+    stubFetch({
+      list: {
+        ok: true,
+        status: 200,
+        providers: providersPayload().providers,
+        capability: { supported: true, sealingConfigured: false, durable: true }
+      }
+    });
+    render(<ConnectKeyDialog fa target={{ id: 'chatgpt', name: 'ChatGPT', vendor: 'OpenAI', bridgeId: 'openai' }} />);
+    expect(await screen.findByTestId('agent-hub-key-not-configured')).toBeTruthy();
+    expect(screen.queryByTestId('agent-hub-key-input')).toBeNull();
+  });
+
   it('does not ask for a key on a vendor with no bridge, and says why', async () => {
     stubFetch();
     render(
