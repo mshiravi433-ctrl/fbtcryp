@@ -119,7 +119,7 @@
     "test:memory-wiring": "node test/intent-ai/walrus-memory-wiring-probe.mjs",
     "mission:test": "node --test test/mission-control/*.test.mjs",
     "mission:worker": "node server/missionControl/worker.js",
-    "test:agent-hub": "node --test test/agent-hub/a2a-adapter.test.mjs test/agent-hub/hub-security.test.mjs test/agent-hub/user-sources.test.mjs test/agent-hub/source-credentials.test.mjs test/agent-hub/task-credentials.test.mjs test/agent-hub/native-data.test.mjs test/agent-hub/native-persian.test.mjs test/agent-hub/native-wiring.test.mjs && node test/agent-hub/hub-api-probe.mjs && vitest run test/agent-hub/agent-hub-ui.test.jsx",
+    "test:agent-hub": "node --test test/agent-hub/a2a-adapter.test.mjs test/agent-hub/hub-security.test.mjs test/agent-hub/user-sources.test.mjs test/agent-hub/source-credentials.test.mjs test/agent-hub/task-credentials.test.mjs test/agent-hub/native-data.test.mjs test/agent-hub/native-persian.test.mjs test/agent-hub/native-wiring.test.mjs test/agent-hub/provider-keys.test.mjs && node test/agent-hub/hub-api-probe.mjs && vitest run test/agent-hub/agent-hub-ui.test.jsx test/agent-hub/connect-key-dialog.test.jsx --maxWorkers=2 --no-file-parallelism",
     "test:memory": "npm run test:memory-bridge && npm run test:memory-continuity && npm run test:memory-wiring && npm run test:memory-activation && npm run test:memory-account && npm run test:memory-local",
     "test:understanding": "node test/intent-ai/intent-understanding-probe.mjs",
     "test:upgrade4": "node test/intent-ai/phase204-upgrade4-intent-intelligence-probe.mjs",

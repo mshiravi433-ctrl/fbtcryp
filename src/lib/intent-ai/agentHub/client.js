@@ -144,3 +144,24 @@ export const removeSourceCredential = (sourceId) =>
   call(`/sources/${encodeURIComponent(sourceId)}/credential`, { method: 'DELETE' });
 export const startConnection = (providerId) => call(`/providers/${encodeURIComponent(providerId)}/connections/start`, { method: 'POST', body: {} });
 export const revokeConnection = (connectionId) => call(`/connections/${encodeURIComponent(connectionId)}`, { method: 'DELETE' });
+
+/* ── third-party seats (BYO key bridges) ────────────────────────────────────
+   The directory's external providers have their own API. A key the user pastes
+   is verified against the vendor's own host on the server, sealed there, and
+   never sent back to this file. `askProviderKey` is the two-way half: one
+   domain question, one answer, with the provider named. */
+export const listProviderKeys = () => call('/provider-keys');
+export const connectProviderKey = (providerId, secret) =>
+  call(`/provider-keys/${encodeURIComponent(providerId)}/connect`, {
+    method: 'POST',
+    body: { secret },
+    timeout: 25_000
+  });
+export const removeProviderKey = (providerId) =>
+  call(`/provider-keys/${encodeURIComponent(providerId)}`, { method: 'DELETE' });
+export const askProviderKey = (providerId, { question, context = '' } = {}) =>
+  call(`/provider-keys/${encodeURIComponent(providerId)}/ask`, {
+    method: 'POST',
+    body: { question, context },
+    timeout: 35_000
+  });

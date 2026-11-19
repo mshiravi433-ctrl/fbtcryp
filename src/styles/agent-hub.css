@@ -1200,3 +1200,165 @@
   .agentchat-log { max-height: 300px; }
   .agentchat-foot span { display: none; }
 }
+
+/* ── external agent: key & connection dialog ────────────────────────────────
+   The popup that turns a directory card into a working seat. One overlay, one
+   card, three sections (why this key → key → ask). Tokens come from the panel
+   so light and dark surfaces both read; every state is labelled in text, never
+   by colour alone. */
+.ah-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(4, 12, 18, .72);
+  backdrop-filter: blur(3px);
+}
+
+.ah-dialog {
+  width: min(560px, 100%);
+  max-height: min(86vh, 760px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--tag-line, rgba(136, 207, 220, .22));
+  background: linear-gradient(180deg, rgba(12, 27, 39, .98), rgba(8, 19, 28, .99));
+  color: var(--nc-ink, #eef8fc);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .55);
+}
+
+.ah-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ah-dialog-mark {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #041018;
+  background: var(--nc-cyan, #60e4eb);
+}
+
+.ah-dialog-id { flex: 1 1 150px; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ah-dialog-vendor { font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--nc-dim, #829eae); }
+.ah-dialog-id h4 { margin: 0; font-size: 15px; line-height: 1.35; }
+.ah-dialog-sub { font-size: 11px; color: var(--nc-cyan, #60e4eb); }
+
+.ah-dialog-close {
+  padding: 4px 9px;
+  line-height: 1;
+}
+
+.ah-dialog-intro {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--nc-muted, #a3bac9);
+}
+
+.ah-dialog-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px;
+  border-radius: 13px;
+  border: 1px solid rgba(136, 207, 220, .16);
+  background: rgba(7, 18, 28, .55);
+}
+
+.ah-dialog-block h5 {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: .02em;
+  color: var(--nc-cyan, #60e4eb);
+}
+
+.ah-dialog-block p { margin: 0; font-size: 12.5px; line-height: 1.75; color: var(--nc-muted, #a3bac9); }
+
+.ah-dialog-key-box { gap: 9px; }
+
+.ah-dialog-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.ah-dialog-facts > div { display: flex; flex-direction: column; gap: 2px; }
+.ah-dialog-facts dt { font-size: 10.5px; color: var(--nc-dim, #829eae); }
+.ah-dialog-facts dd { margin: 0; font-size: 12px; overflow-wrap: anywhere; }
+
+.ah-dialog-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ah-dialog-actions a.ah-ghost { text-decoration: none; display: inline-flex; align-items: center; }
+
+.ah-ghost-danger { color: #ff9cae; border-color: rgba(255, 156, 174, .35); }
+
+.ah-dialog-verified {
+  font-size: 12px;
+  line-height: 1.7;
+  padding: 8px 10px;
+  border-radius: 10px;
+  color: #6ef3c6;
+  background: rgba(110, 243, 198, .08);
+  border: 1px solid rgba(110, 243, 198, .28);
+}
+
+.ah-dialog-detail { color: var(--nc-dim, #829eae); }
+
+.ah-dialog-textarea {
+  resize: vertical;
+  min-height: 74px;
+  font-family: inherit;
+  line-height: 1.7;
+}
+
+.ah-dialog-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 11px;
+  background: rgba(96, 228, 235, .07);
+  border: 1px solid rgba(96, 228, 235, .22);
+}
+
+.ah-dialog-answer p { margin: 0; font-size: 12.5px; line-height: 1.85; color: var(--nc-ink, #eef8fc); white-space: pre-wrap; }
+.ah-dialog-answer footer { font-size: 10.5px; color: var(--nc-dim, #829eae); }
+
+.ah-dialog-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  font-size: 11.5px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(136, 207, 220, .18);
+}
+
+.ah-dialog-links a { color: var(--nc-cyan, #60e4eb); text-decoration: none; }
+.ah-dialog-links a:hover { text-decoration: underline; }
+
+/* A card whose seat is live: the button says so and keeps the panel's language. */
+.ah-rec-key-btn-live {
+  box-shadow: 0 0 0 1px rgba(110, 243, 198, .5) inset;
+}
+
+@media (max-width: 520px) {
+  .ah-dialog { padding: 13px; border-radius: 15px; }
+  .ah-dialog-facts { grid-template-columns: minmax(0, 1fr); }
+}
