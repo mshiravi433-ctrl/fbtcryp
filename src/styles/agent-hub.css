@@ -1362,3 +1362,24 @@
   .ah-dialog { padding: 13px; border-radius: 15px; }
   .ah-dialog-facts { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ── connectable directory: one card, one action ────────────────────────────
+   This rail contains only providers the server can actually reach with a key,
+   so there is exactly one button per card and no outbound links at all — the
+   official site, docs and pricing live inside the popup. */
+.ah-connectable {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--tag-line, rgba(136, 207, 220, .16));
+  padding-top: 14px;
+}
+
+.ah-connectable-head { display: flex; flex-direction: column; gap: 4px; }
+.ah-connectable-head h4 { margin: 0; font-size: 15px; }
+.ah-connectable-head p { margin: 0; }
+
+.ah-connectable .ah-rec-grid { margin-top: 2px; }
+
+/* A card in this rail carries no link text; keep the action row tight. */
+.ah-rec-key-btn { justify-content: center; }

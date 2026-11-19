@@ -21,7 +21,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ConnectKeyDialog from '../../src/components/AgentHub/ConnectKeyDialog.jsx';
 import RecommendedAgents from '../../src/components/AgentHub/RecommendedAgents.jsx';
-import { RECOMMENDED_EXTERNAL_AGENTS } from '../../src/lib/intent-ai/agentHub/recommendations.js';
+
 
 const KEY = 'sk-test-key-abcdef123456';
 
@@ -101,23 +101,44 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('every external card has a key entry point', () => {
-  it('renders a key/connection button on each directory card and hands the card to the dialog', () => {
+const DIRECTORY = [
+  { id: 'openai', name: 'OpenAI', vendor: 'OpenAI', mark: 'AI', kind: 'ai', category: 'ai', requiresModel: true, siteUrl: 'https://openai.com', docsUrl: 'https://platform.openai.com/docs', keyUrl: 'https://platform.openai.com/api-keys', pricingUrl: 'https://openai.com/api/pricing/', authLabel: 'authorization: …', domainUse: { fa: 'پرسش تحلیلی بازار', en: 'Market analysis' } },
+  { id: 'coingecko', name: 'CoinGecko', vendor: 'CoinGecko', mark: 'CG', kind: 'data', category: 'data', requiresModel: false, siteUrl: 'https://www.coingecko.com', docsUrl: 'https://docs.coingecko.com', keyUrl: 'https://www.coingecko.com/en/developers/dashboard', pricingUrl: 'https://www.coingecko.com/en/api/pricing', authLabel: 'x-cg-pro-api-key: …', domainUse: { fa: 'قیمت', en: 'Prices' } },
+  { id: '1inch', name: '1inch', vendor: '1inch Network', mark: '1IN', kind: 'data', category: 'swap', requiresModel: false, siteUrl: 'https://1inch.io', docsUrl: 'https://portal.1inch.dev/documentation', keyUrl: 'https://portal.1inch.dev/dashboard', pricingUrl: 'https://business.1inch.dev', authLabel: 'authorization: …', domainUse: { fa: 'مسیریابی سواپ', en: 'Swap routing' } }
+];
+
+describe('the connectable directory', () => {
+  it('renders one card per connectable provider, each with exactly one action and no outbound link', () => {
     stubFetch();
     const onOpenKey = vi.fn();
-    render(<RecommendedAgents fa onOpenKey={onOpenKey} nativeAgents={[]} />);
-    const first = RECOMMENDED_EXTERNAL_AGENTS[0];
-    const id = String(first.id).replace(/[^A-Za-z0-9_-]+/g, '-');
-    const button = screen.getByTestId(`agent-hub-recommendation-key-${id}`);
-    expect(button).toBeTruthy();
-    fireEvent.click(button);
-    expect(onOpenKey).toHaveBeenCalledTimes(1);
-    expect(onOpenKey.mock.calls[0][0].id).toBe(first.id);
-    /* Every rendered card must have one — a card with only an outbound link is
-       the regression this feature exists to prevent. */
-    for (const agent of RECOMMENDED_EXTERNAL_AGENTS.slice(0, 8)) {
-      expect(screen.getByTestId(`agent-hub-recommendation-key-${String(agent.id).replace(/[^A-Za-z0-9_-]+/g, '-')}`)).toBeTruthy();
+    render(<RecommendedAgents fa onOpenKey={onOpenKey} connectable={DIRECTORY} nativeAgents={[]} />);
+
+    for (const provider of DIRECTORY) {
+      const card = screen.getByTestId(`agent-hub-recommendation-${provider.id}`);
+      expect(card).toBeTruthy();
+      /* One action, and it is the connection check. */
+      const buttons = card.querySelectorAll('button');
+      expect(buttons).toHaveLength(1);
+      expect(buttons[0].getAttribute('data-testid')).toBe(`agent-hub-recommendation-key-${provider.id}`);
+      /* Website, docs and pricing are NOT on the page; they live in the popup. */
+      expect(card.querySelectorAll('a')).toHaveLength(0);
     }
+
+    fireEvent.click(screen.getByTestId('agent-hub-recommendation-key-1inch'));
+    expect(onOpenKey).toHaveBeenCalledTimes(1);
+    expect(onOpenKey.mock.calls[0][0].id).toBe('1inch');
+  });
+
+  it('never invents a card for a provider the server did not list', () => {
+    stubFetch();
+    render(<RecommendedAgents fa connectable={[]} nativeAgents={[]} />);
+    /* With nothing connectable, the section says so and the old editorial
+       cards (chatgpt, n8n, zapier…) do not exist at all. */
+    return screen.findByTestId('agent-hub-connectable-empty').then(() => {
+      expect(screen.queryByTestId('agent-hub-recommendation-chatgpt')).toBeNull();
+      expect(screen.queryByTestId('agent-hub-recommendation-n8n')).toBeNull();
+      expect(screen.queryByTestId('agent-hub-recommendation-list')).toBeNull();
+    });
   });
 });
 

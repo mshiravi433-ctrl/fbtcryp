@@ -295,9 +295,171 @@ const BRIDGES = [
       en: 'Transaction, balance and contract-event reads on your key, for the on-chain analysis FBT already does.'
     }
   },
+
+  /* ── domain bridges: swap, routing and on-chain reads ──────────────────────
+     Same rule as everywhere else in this file: these are constants. The key is
+     proven with one cheap read the vendor documents, and the probe runs with the
+     method the vendor uses (JSON-RPC is a POST). */
+  {
+    id: '1inch',
+    name: '1inch',
+    vendor: '1inch Network',
+    kind: 'data',
+    baseUrl: 'https://api.1inch.dev',
+    auth: { header: 'authorization', scheme: 'bearer' },
+    probePath: '/gas-price/v1.4/1',
+    check: (json) => (json && (json.result || json.gasPrice || json.instant) ? { ok: true } : { ok: false, detail: 'unexpected gas-price payload' }),
+    proofLabel: { fa: 'گس زندهٔ 1inch روی زنجیرهٔ ۱', en: 'Live 1inch gas on chain 1' },
+    siteUrl: 'https://1inch.io',
+    docsUrl: 'https://portal.1inch.dev/documentation',
+    keyUrl: 'https://portal.1inch.dev/dashboard',
+    domainUse: {
+      fa: 'مسیریابی و قیمت سواپ با کلید خودتان؛ همان مسیرهایی که FBT برای ساخت تراکنش استفاده می‌کند، ولی با سهمیه و حساب خودتان.',
+      en: 'Swap routing and pricing on your own key — the same routes FBT builds transactions from, on your account and quota.'
+    }
+  },
+  {
+    id: 'jupiter',
+    name: 'Jupiter',
+    vendor: 'Jupiter',
+    kind: 'data',
+    baseUrl: 'https://api.jup.ag',
+    auth: { header: 'x-api-key', scheme: 'raw' },
+    probePath: '/price/v3?ids=So11111111111111111111111111111111111111112',
+    check: (json) => (json && typeof json === 'object' && Object.keys(json).length > 0 ? { ok: true } : { ok: false, detail: 'no price returned' }),
+    proofLabel: { fa: 'قیمت زندهٔ SOL از Jupiter', en: 'Live SOL price from Jupiter' },
+    siteUrl: 'https://jup.ag',
+    docsUrl: 'https://dev.jup.ag/docs',
+    keyUrl: 'https://station.jup.ag/portal',
+    domainUse: {
+      fa: 'قیمت و مسیر سواپ روی سولانا با کلید پورتال خودتان، برای همان تحلیل‌های کیف‌پول سولانا در FBT.',
+      en: 'Solana prices and swap routes on your portal key, for the Solana wallet analysis FBT already does.'
+    }
+  },
+  {
+    id: 'alchemy',
+    name: 'Alchemy',
+    vendor: 'Alchemy',
+    kind: 'data',
+    baseUrl: 'https://eth-mainnet.g.alchemy.com',
+    auth: { path: true },
+    probe: {
+      method: 'POST',
+      path: '/v2/{key}',
+      body: { jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] },
+      contentType: 'application/json'
+    },
+    check: (json) => (typeof json?.result === 'string' ? { ok: true } : { ok: false, detail: String(json?.error?.message || 'no block number') }),
+    proofLabel: { fa: 'شمارهٔ زندهٔ بلاک اتریوم', en: 'Live Ethereum block number' },
+    siteUrl: 'https://www.alchemy.com',
+    docsUrl: 'https://docs.alchemy.com',
+    keyUrl: 'https://dashboard.alchemy.com',
+    domainUse: {
+      fa: 'خواندن موجودی، تراکنش و لاگ قرارداد روی EVM با کلید خودتان؛ بدون سهمیهٔ مشترک.',
+      en: 'Balance, transaction and contract-log reads on EVM with your own key, off the shared quota.'
+    }
+  },
+  {
+    id: 'helius',
+    name: 'Helius',
+    vendor: 'Helius',
+    kind: 'data',
+    baseUrl: 'https://mainnet.helius-rpc.com',
+    auth: { query: 'api-key' },
+    probe: {
+      method: 'POST',
+      path: '/',
+      body: { jsonrpc: '2.0', id: 1, method: 'getSlot', params: [] },
+      contentType: 'application/json'
+    },
+    check: (json) => (typeof json?.result === 'number' ? { ok: true } : { ok: false, detail: String(json?.error?.message || 'no slot returned') }),
+    proofLabel: { fa: 'اسلات زندهٔ سولانا', en: 'Live Solana slot' },
+    siteUrl: 'https://www.helius.dev',
+    docsUrl: 'https://docs.helius.dev',
+    keyUrl: 'https://dashboard.helius.dev/api-keys',
+    domainUse: {
+      fa: 'خواندن حساب‌ها، دارایی‌های توکن و تراکنش‌های سولانا با کلید خودتان.',
+      en: 'Solana account, token-holdings and transaction reads on your own key.'
+    }
+  },
+  {
+    id: 'birdeye',
+    name: 'Birdeye',
+    vendor: 'Birdeye',
+    kind: 'data',
+    baseUrl: 'https://public-api.birdeye.so',
+    auth: { header: 'x-api-key', scheme: 'raw', extraHeaders: { 'x-chain': 'solana' } },
+    probePath: '/defi/price?address=So11111111111111111111111111111111111111112',
+    check: (json) => (json?.success === true || json?.data?.value ? { ok: true } : { ok: false, detail: String(json?.message || 'no price returned') }),
+    proofLabel: { fa: 'قیمت زندهٔ SOL از Birdeye', en: 'Live SOL price from Birdeye' },
+    siteUrl: 'https://birdeye.so',
+    docsUrl: 'https://docs.birdeye.so',
+    keyUrl: 'https://bds.birdeye.so',
+    domainUse: {
+      fa: 'قیمت و نقدینگی توکن‌های سولانا با کلید خودتان، برای پایش جفت‌های تازه.',
+      en: 'Solana token prices and liquidity on your own key, for watching new pairs.'
+    }
+  },
+  {
+    id: 'moralis',
+    name: 'Moralis',
+    vendor: 'Moralis',
+    kind: 'data',
+    baseUrl: 'https://deep-index.moralis.io/api/v2.2',
+    auth: { header: 'x-api-key', scheme: 'raw' },
+    probePath: '/web3/version',
+    check: (json) => (json && typeof json === 'object' && Object.keys(json).length > 0 ? { ok: true } : { ok: false, detail: 'empty version payload' }),
+    proofLabel: { fa: 'نسخهٔ زندهٔ API', en: 'Live API version' },
+    siteUrl: 'https://moralis.io',
+    docsUrl: 'https://docs.moralis.io',
+    keyUrl: 'https://admin.moralis.io/web3apis',
+    domainUse: {
+      fa: 'پرتفوی چندزنجیره‌ای، تاریخچهٔ تراکنش و موجودی توکن با کلید خودتان.',
+      en: 'Multi-chain portfolio, transaction history and token balances on your own key.'
+    }
+  },
 ];
 
-const BY_ID = new Map(BRIDGES.map((b) => [b.id, Object.freeze(b)]));
+/* Category, mark and pricing page for the directory card. Kept in one table so
+   a card cannot exist without the fields the UI needs to render it honestly. */
+const DIRECTORY_META = {
+  openai: { category: 'ai', mark: 'AI', pricingUrl: 'https://openai.com/api/pricing/' },
+  anthropic: { category: 'ai', mark: 'A', pricingUrl: 'https://www.anthropic.com/pricing' },
+  gemini: { category: 'ai', mark: 'G', pricingUrl: 'https://ai.google.dev/pricing' },
+  groq: { category: 'ai', mark: 'GQ', pricingUrl: 'https://groq.com/pricing' },
+  mistral: { category: 'ai', mark: 'M', pricingUrl: 'https://mistral.ai/pricing' },
+  deepseek: { category: 'ai', mark: 'DS', pricingUrl: 'https://api-docs.deepseek.com/quick_start/pricing' },
+  openrouter: { category: 'ai', mark: 'OR', pricingUrl: 'https://openrouter.ai/models' },
+  xai: { category: 'ai', mark: 'X', pricingUrl: 'https://docs.x.ai/docs/models' },
+  cerebras: { category: 'ai', mark: 'CB', pricingUrl: 'https://www.cerebras.ai/pricing' },
+  together: { category: 'ai', mark: 'T', pricingUrl: 'https://www.together.ai/pricing' },
+  fireworks: { category: 'ai', mark: 'FW', pricingUrl: 'https://fireworks.ai/pricing' },
+  sambanova: { category: 'ai', mark: 'SN', pricingUrl: 'https://cloud.sambanova.ai/pricing' },
+  coingecko: { category: 'data', mark: 'CG', pricingUrl: 'https://www.coingecko.com/en/api/pricing' },
+  etherscan: { category: 'onchain', mark: 'ES', pricingUrl: 'https://etherscan.io/apis' },
+  alchemy: { category: 'onchain', mark: 'AL', pricingUrl: 'https://www.alchemy.com/pricing' },
+  helius: { category: 'onchain', mark: 'HL', pricingUrl: 'https://www.helius.dev/pricing' },
+  moralis: { category: 'onchain', mark: 'MO', pricingUrl: 'https://moralis.io/pricing' },
+  birdeye: { category: 'data', mark: 'BE', pricingUrl: 'https://docs.birdeye.so' },
+  '1inch': { category: 'swap', mark: '1IN', pricingUrl: 'https://business.1inch.dev' },
+  jupiter: { category: 'swap', mark: 'JUP', pricingUrl: 'https://station.jup.ag/portal' }
+};
+
+for (const bridge of BRIDGES) {
+  Object.assign(bridge, DIRECTORY_META[bridge.id] || { category: bridge.kind === 'data' ? 'data' : 'ai', mark: '◎' });
+  Object.freeze(bridge);
+}
+
+/** Category labels for the directory chips (order is the render order). */
+export const BRIDGE_CATEGORIES = Object.freeze([
+  { id: 'all', fa: 'همه', en: 'All' },
+  { id: 'ai', fa: 'صندلی هوش مصنوعی', en: 'AI seats' },
+  { id: 'data', fa: 'قیمت و دادهٔ بازار', en: 'Market data' },
+  { id: 'onchain', fa: 'آنچین و قرارداد', en: 'On-chain' },
+  { id: 'swap', fa: 'سواپ و مسیریابی', en: 'Swap & routing' }
+]);
+
+const BY_ID = new Map(BRIDGES.map((b) => [b.id, b]));
 
 /** Public, secret-free description of one bridge. */
 export function publicBridge(bridge) {
@@ -307,6 +469,9 @@ export function publicBridge(bridge) {
     name: bridge.name,
     vendor: bridge.vendor,
     kind: bridge.kind || 'ai',
+    category: bridge.category || 'ai',
+    mark: bridge.mark || '◎',
+    pricingUrl: bridge.pricingUrl || null,
     protocol: bridge.protocol || null,
     proofLabel: bridge.proofLabel || null,
     siteUrl: bridge.siteUrl,
@@ -318,6 +483,7 @@ export function publicBridge(bridge) {
       const auths = Array.isArray(bridge.variants) && bridge.variants.length
         ? bridge.variants.map((v) => v.auth || {})
         : [bridge.auth || {}];
+      if (auths.some((a) => a.path)) return '/{key} در آدرس';
       if (auths.some((a) => a.query)) return `?${auths.find((a) => a.query).query}=…`;
       const headers = [...new Set(auths.map((a) => String(a.header || 'authorization')))];
       return `${headers.join(' / ')}: …`;

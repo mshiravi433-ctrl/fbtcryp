@@ -22,7 +22,6 @@ import AgentHubPanel from '../../src/components/AgentHub/AgentHubPanel.jsx';
 import AgentChatDock from '../../src/components/AgentHub/AgentChatDock.jsx';
 import AiTradePanel from '../../src/components/AiTrade/AiTradePanel.jsx';
 import { defaultAgentsView } from '../../src/lib/intent-ai/agentHub/availability.js';
-import { RECOMMENDED_EXTERNAL_AGENTS } from '../../src/lib/intent-ai/agentHub/recommendations.js';
 import { clearQueuedTradeResearch, takeQueuedTradeResearch } from '../../src/lib/hyperliquid/tradeResearch.js';
 
 const AGENT = {
@@ -98,117 +97,119 @@ const renderDiscoverPanel = (props = {}) => {
   return view;
 };
 
-const OFFICIAL_DOMAINS_BY_AGENT = {
-  '1inch': ['1inch.io', '1inch.dev'],
-  lifi: ['li.fi'],
-  jupiter: ['jup.ag'],
-  odos: ['odos.xyz'],
-  kyberswap: ['kyberswap.com'],
-  zerion: ['zerion.io'],
-  debank: ['debank.com'],
-  rotki: ['rotki.com'],
-  'yield-xyz': ['yield.xyz'],
-  beefy: ['beefy.com', 'beefy.finance'],
-  pendle: ['pendle.finance'],
-  'defillama-yields': ['defillama.com'],
-  coingecko: ['coingecko.com'],
-  defillama: ['defillama.com'],
-  dune: ['dune.com'],
-  nansen: ['nansen.ai'],
-  arkham: ['arkhamintelligence.com'],
-  coinglass: ['coinglass.com'],
-  quantconnect: ['quantconnect.com'],
-  tradingview: ['tradingview.com'],
-  hummingbot: ['hummingbot.org'],
-  freqtrade: ['freqtrade.io'],
-  composer: ['composer.trade'],
-  goplus: ['gopluslabs.io'],
-  'token-sniffer': ['tokensniffer.com'],
-  rugcheck: ['rugcheck.xyz'],
-  honeypot: ['honeypot.is'],
-  blockaid: ['blockaid.io'],
-  santiment: ['santiment.net'],
-  chatgpt: ['chatgpt.com'],
-  perplexity: ['perplexity.ai'],
-  claude: ['claude.ai', 'claude.com'],
-  gemini: ['gemini.google'],
-  'microsoft-copilot': ['microsoft.com'],
-  'github-copilot': ['github.com'],
-  cursor: ['cursor.com'],
-  n8n: ['n8n.io'],
-  'zapier-agents': ['zapier.com']
-};
+/* The connectable directory, exactly as the server publishes it in
+   `providerKeys.providers` of the catalogue. */
+const CONNECTABLE = [
+  {
+    id: 'openai', name: 'OpenAI', vendor: 'OpenAI', mark: 'AI', kind: 'ai', category: 'ai',
+    requiresModel: true, authLabel: 'authorization: …',
+    siteUrl: 'https://openai.com', docsUrl: 'https://platform.openai.com/docs',
+    keyUrl: 'https://platform.openai.com/api-keys', pricingUrl: 'https://openai.com/api/pricing/',
+    domainUse: { fa: 'پرسش تحلیلی بازار', en: 'Market analysis questions' }
+  },
+  {
+    id: 'coingecko', name: 'CoinGecko', vendor: 'CoinGecko', mark: 'CG', kind: 'data', category: 'data',
+    requiresModel: false, authLabel: 'x-cg-pro-api-key: …',
+    siteUrl: 'https://www.coingecko.com', docsUrl: 'https://docs.coingecko.com',
+    keyUrl: 'https://www.coingecko.com/en/developers/dashboard', pricingUrl: 'https://www.coingecko.com/en/api/pricing',
+    domainUse: { fa: 'قیمت و عمق بازار', en: 'Prices and market depth' }
+  },
+  {
+    id: '1inch', name: '1inch', vendor: '1inch Network', mark: '1IN', kind: 'data', category: 'swap',
+    requiresModel: false, authLabel: 'authorization: …',
+    siteUrl: 'https://1inch.io', docsUrl: 'https://portal.1inch.dev/documentation',
+    keyUrl: 'https://portal.1inch.dev/dashboard', pricingUrl: 'https://business.1inch.dev',
+    domainUse: { fa: 'مسیریابی سواپ', en: 'Swap routing' }
+  }
+];
 
-describe('editorial recommendations', () => {
-  it('opens on official recommendations even when the reviewed registry is disabled', async () => {
-    routes['GET /ai/agent-hub/catalog'] = () => respond({
-      ok: true, enabled: false, status: 'DISABLED', agents: [], providers: [],
-      detail: 'AGENT_HUB_ENABLED is off'
-    });
+const catalogWithConnectable = (extra = {}) => ({
+  ok: true,
+  enabled: true,
+  status: 'EMPTY',
+  agents: [],
+  providers: [],
+  providerKeys: { supported: true, sealingConfigured: true, durable: true, providers: CONNECTABLE },
+  ...extra
+});
+
+describe('the connectable directory', () => {
+  it('opens on the connectable providers and gives each card exactly one action', async () => {
+    routes['GET /ai/agent-hub/catalog'] = () => respond(catalogWithConnectable());
+    routes['GET /ai/agent-hub/provider-keys'] = () => respond({ ok: true, providers: [], capability: { sealingConfigured: true, durable: true } });
     renderPanel();
 
     const panel = await screen.findByTestId('agent-hub-recommended');
     expect(screen.getByTestId('agent-hub-tab-recommended').getAttribute('aria-selected')).toBe('true');
-    expect(panel.textContent).toMatch(/not reviewed or connected/i);
-    expect(panel.textContent).toMatch(/free access/i);
-    expect(panel.textContent).toMatch(/paid option/i);
-    expect(RECOMMENDED_EXTERNAL_AGENTS).toHaveLength(38);
-    expect(screen.getByTestId('agent-hub-recommendation-perplexity')).toBeTruthy();
-    expect(screen.getByTestId('agent-hub-recommendation-github-copilot')).toBeTruthy();
-    expect(screen.getByTestId('agent-hub-recommendation-n8n')).toBeTruthy();
-    /* The crypto-first order is part of the contract, not decoration: the five
-       categories the user asked for are on screen before the general tools. */
-    for (const id of ['1inch', 'zerion', 'yield-xyz', 'coingecko', 'quantconnect']) {
-      expect(screen.getByTestId(`agent-hub-recommendation-${id}`)).toBeTruthy();
-    }
-    expect(document.querySelector('[data-testid^="agent-hub-card-"]')).toBeNull();
-    /* With no catalogue agents, the native rail must say so rather than
-       invent cards it cannot run. */
-    expect(screen.getByTestId('agent-hub-native-empty')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('agent-hub-connectable-count').textContent).toContain('3'));
 
-    for (const agent of RECOMMENDED_EXTERNAL_AGENTS) {
-      expect(agent.productUrl).toMatch(/^https:\/\//);
-      expect(agent.pricingUrl).toMatch(/^https:\/\//);
-      for (const url of [agent.productUrl, agent.pricingUrl]) {
-        const host = new URL(url).hostname;
-        expect(OFFICIAL_DOMAINS_BY_AGENT[agent.id].some((domain) => host === domain || host.endsWith(`.${domain}`))).toBe(true);
-      }
-      const officialLink = screen.getByTestId(`agent-hub-recommendation-site-${agent.id}`);
-      const pricingLink = screen.getByTestId(`agent-hub-recommendation-pricing-${agent.id}`);
-      expect(officialLink.getAttribute('href')).toBe(agent.productUrl);
-      expect(pricingLink.getAttribute('href')).toBe(agent.pricingUrl);
-      expect(officialLink.getAttribute('rel')).toMatch(/noopener/);
-      expect(pricingLink.getAttribute('rel')).toMatch(/noopener/);
+    for (const provider of CONNECTABLE) {
+      const card = screen.getByTestId(`agent-hub-recommendation-${provider.id}`);
+      const buttons = card.querySelectorAll('button');
+      /* One button: the connection check. Nothing else to press. */
+      expect(buttons).toHaveLength(1);
+      expect(buttons[0].getAttribute('data-testid')).toBe(`agent-hub-recommendation-key-${provider.id}`);
+      /* Site, docs and pricing are not on the page — they belong to the popup. */
+      expect(card.querySelectorAll('a')).toHaveLength(0);
+      expect(card.textContent).toContain(provider.name);
     }
+
+    /* The old editorial cards (which only linked out) are gone. */
+    expect(screen.queryByTestId('agent-hub-recommendation-chatgpt')).toBeNull();
+    expect(screen.queryByTestId('agent-hub-recommendation-n8n')).toBeNull();
+    expect(panel.textContent).not.toMatch(/free access/i);
+    /* With no catalogue agents, the native rail says so rather than inventing. */
+    expect(screen.getByTestId('agent-hub-native-empty')).toBeTruthy();
   });
 
-  it('filters the list by use case and by product name', async () => {
+  it('shows no card at all when the server lists nothing connectable', async () => {
     routes['GET /ai/agent-hub/catalog'] = () => respond({ ok: true, enabled: true, status: 'EMPTY', agents: [], providers: [] });
+    routes['GET /ai/agent-hub/provider-keys'] = () => respond({ ok: true, providers: [] });
     renderPanel();
 
-    await screen.findByTestId('agent-hub-recommendation-perplexity');
-    fireEvent.click(screen.getByTestId('agent-hub-recommendation-filter-coding'));
-    expect(screen.getByTestId('agent-hub-recommendation-github-copilot')).toBeTruthy();
-    expect(screen.getByTestId('agent-hub-recommendation-cursor')).toBeTruthy();
-    expect(screen.queryByTestId('agent-hub-recommendation-chatgpt')).toBeNull();
+    await screen.findByTestId('agent-hub-connectable-empty');
+    expect(screen.queryByTestId('agent-hub-recommendation-list')).toBeNull();
+    expect(document.querySelector('[data-testid^="agent-hub-recommendation-0"]')).toBeNull();
+  });
 
+  it('opens the key popup from a card without leaving the panel', async () => {
+    routes['GET /ai/agent-hub/catalog'] = () => respond(catalogWithConnectable());
+    routes['GET /ai/agent-hub/provider-keys'] = () =>
+      respond({ ok: true, providers: CONNECTABLE.map((provider) => ({ ...provider, connected: false, status: 'UNCONNECTED' })), capability: { sealingConfigured: true, durable: true } });
+    renderPanel();
+
+    fireEvent.click(await screen.findByTestId('agent-hub-recommendation-key-openai'));
+    const dialog = await screen.findByTestId('agent-hub-key-dialog-openai');
+    expect(dialog).toBeTruthy();
+    expect(within(dialog).getByTestId('agent-hub-key-input')).toBeTruthy();
+    /* The official pages live here, inside the popup, and nowhere else. */
+    const pricing = within(dialog).getByTestId('agent-hub-key-pricing');
+    expect(pricing.getAttribute('href')).toBe('https://openai.com/api/pricing/');
+    expect(pricing.getAttribute('rel')).toMatch(/noopener/);
+  });
+
+  it('filters the connectable list by category and by name', async () => {
+    routes['GET /ai/agent-hub/catalog'] = () => respond(catalogWithConnectable());
+    routes['GET /ai/agent-hub/provider-keys'] = () => respond({ ok: true, providers: [] });
+    renderPanel();
+
+    await screen.findByTestId('agent-hub-recommendation-openai');
     fireEvent.click(screen.getByTestId('agent-hub-recommendation-filter-swap'));
     expect(screen.getByTestId('agent-hub-recommendation-1inch')).toBeTruthy();
-    expect(screen.getByTestId('agent-hub-recommendation-lifi')).toBeTruthy();
-    expect(screen.queryByTestId('agent-hub-recommendation-zerion')).toBeNull();
+    expect(screen.queryByTestId('agent-hub-recommendation-openai')).toBeNull();
 
     fireEvent.click(screen.getByTestId('agent-hub-recommendation-filter-all'));
-    fireEvent.change(screen.getByTestId('agent-hub-recommendation-search'), { target: { value: 'n8n' } });
-    expect(screen.getByTestId('agent-hub-recommendation-n8n')).toBeTruthy();
-    expect(screen.queryByTestId('agent-hub-recommendation-chatgpt')).toBeNull();
-
-    fireEvent.change(screen.getByTestId('agent-hub-recommendation-search'), { target: { value: 'zerion' } });
-    expect(screen.getByTestId('agent-hub-recommendation-zerion')).toBeTruthy();
+    fireEvent.change(screen.getByTestId('agent-hub-recommendation-search'), { target: { value: 'coingecko' } });
+    expect(screen.getByTestId('agent-hub-recommendation-coingecko')).toBeTruthy();
     expect(screen.queryByTestId('agent-hub-recommendation-1inch')).toBeNull();
+
+    fireEvent.change(screen.getByTestId('agent-hub-recommendation-search'), { target: { value: 'zzz-nothing' } });
+    expect(screen.getByTestId('agent-hub-recommendation-empty')).toBeTruthy();
   });
 
   it('offers an explicit route to add a compatible A2A card to FBT', async () => {
-    routes['GET /ai/agent-hub/catalog'] = () => respond({ ok: true, enabled: true, status: 'EMPTY', agents: [], providers: [] });
+    routes['GET /ai/agent-hub/catalog'] = () => respond(catalogWithConnectable());
+    routes['GET /ai/agent-hub/provider-keys'] = () => respond({ ok: true, providers: [] });
     renderPanel();
 
     fireEvent.click(await screen.findByTestId('agent-hub-recommended-add'));
@@ -216,14 +217,16 @@ describe('editorial recommendations', () => {
     expect(await screen.findByTestId('agent-hub-source-url')).toBeTruthy();
   });
 
-  it('localizes the recommendations and sets right-to-left direction for Persian', async () => {
-    routes['GET /ai/agent-hub/catalog'] = () => respond({ ok: true, enabled: true, status: 'EMPTY', agents: [], providers: [] });
+  it('localizes the directory and sets right-to-left direction for Persian', async () => {
+    routes['GET /ai/agent-hub/catalog'] = () => respond(catalogWithConnectable());
+    routes['GET /ai/agent-hub/provider-keys'] = () => respond({ ok: true, providers: [] });
     render(<AgentHubPanel fa />);
     const panel = await screen.findByTestId('agent-hub-recommended');
     expect(panel.getAttribute('dir')).toBe('rtl');
     expect(panel.textContent).toContain('ایجنت‌های پیشنهادی');
-    expect(panel.textContent).toContain('تعرفه و دسترسی');
+    expect(panel.textContent).toContain('ارائه‌دهندگان قابل اتصال');
     expect(panel.textContent).toContain('ایجنت‌های بومی FBT');
+    expect(screen.getByTestId('agent-hub-recommendation-key-openai').textContent).toContain('بررسی اتصال');
   });
 });
 

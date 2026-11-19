@@ -38,7 +38,7 @@ import {
 } from '../../lib/intent-ai/agentHub/client.js';
 import RecommendedAgents from './RecommendedAgents.jsx';
 import ConnectKeyDialog from './ConnectKeyDialog.jsx';
-import { BRIDGE_BY_RECOMMENDATION_ID, bridgeIdForRecommendation } from '../../lib/intent-ai/agentHub/keyBridges.js';
+
 import NativeDataDisclosure from './NativeDataDisclosure.jsx';
 import { setActiveAgent } from '../../lib/intent-ai/agentHub/activeAgent.js';
 import { attachPlugin } from '../../lib/central/client.js';
@@ -380,11 +380,16 @@ export default function AgentHubPanel({ fa = false, onClose = null, onActivateIn
   const reloadProviderKeys = useCallback(async () => {
     const out = await listProviderKeys();
     if (!out?.ok) return;
-    const byBridge = new Map((out.providers || []).map((provider) => [provider.id, provider]));
+    /* Keyed by provider id: a directory card IS the provider, so there is no
+       second id space to drift out of sync. */
     const next = {};
-    for (const [cardId, bridgeId] of Object.entries(BRIDGE_BY_RECOMMENDATION_ID)) {
-      const provider = byBridge.get(bridgeId);
-      if (provider) next[cardId] = { connected: Boolean(provider.connected), status: provider.status || 'UNCONNECTED', hint: provider.hint || null, model: provider.model || null };
+    for (const provider of out.providers || []) {
+      next[provider.id] = {
+        connected: Boolean(provider.connected),
+        status: provider.status || 'UNCONNECTED',
+        hint: provider.hint || null,
+        model: provider.model || null
+      };
     }
     setKeyStatus(next);
   }, []);
@@ -1093,15 +1098,17 @@ export default function AgentHubPanel({ fa = false, onClose = null, onActivateIn
           nativeAgents={agents}
           onRunAgent={(agent) => { setTab('discover'); void openAgent(agent); }}
           keyStatus={keyStatus}
-          onOpenKey={(agent) =>
+          connectable={catalog.data?.providerKeys?.providers || null}
+          onOpenKey={(provider) =>
             setKeyTarget({
-              id: agent.id,
-              name: agent.name,
-              vendor: agent.vendor,
-              mark: agent.mark,
-              productUrl: agent.productUrl,
-              docsUrl: agent.docsUrl,
-              bridgeId: bridgeIdForRecommendation(agent.id)
+              id: provider.id,
+              name: provider.name,
+              vendor: provider.vendor,
+              mark: provider.mark,
+              productUrl: provider.siteUrl,
+              docsUrl: provider.docsUrl,
+              pricingUrl: provider.pricingUrl,
+              bridgeId: provider.id
             })
           }
         />

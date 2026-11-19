@@ -235,7 +235,7 @@ export function createAgentHubRouter({ hub, ownerFor, env = process.env, log = (
   const providerKeyStatus = (code) =>
     code === 'PROVIDER_NOT_CONNECTABLE' || code === 'CREDENTIAL_NOT_FOUND' ? 404
       : code === 'AGENT_HUB_SECRET_KEY_REQUIRED' || code === 'CREDENTIAL_STORE_REQUIRED' || code === 'CREDENTIAL_STORE_UNAVAILABLE' ? 503
-        : code === 'PROVIDER_REJECTED_KEY' || code === 'PROVIDER_TIMEOUT' || code === 'PROVIDER_UNREACHABLE' || code === 'PROVIDER_RATE_LIMITED' ? 502
+        : code === 'PROVIDER_REJECTED_KEY' || ['PROVIDER_TIMEOUT', 'PROVIDER_UNREACHABLE', 'PROVIDER_RATE_LIMITED', 'PROVIDER_ENDPOINT_MISSING', 'PROVIDER_ERROR', 'PROVIDER_ASK_UNSUPPORTED'].includes(code) ? 502
           : code === 'RATE_LIMITED' ? 429
             : 400;
 
