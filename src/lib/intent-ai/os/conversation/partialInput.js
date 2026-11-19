@@ -315,6 +315,13 @@ export function readPartialInput({ message = '', locale = 'fa', context = {}, pr
     && !pureSocial
     && /^[a-z0-9_.-]{6,}$/i.test(text.trim())
     && !/^(btc|eth|sol|usdt|usdc|bnb|xrp|ada|doge|avax|link|uni|aave|matic|pol|ton|sui|arb|op|pepe|shib|fbt|swap|buy|sell|price|help|hi|hello)$/i.test(text.trim());
+  /*
+   * A carried-over asset is carried only as CONTEXT — the renderer refuses to
+   * read it back to the user as if it had been in their words (see
+   * `partialReadingMessage`). So one earlier «تحلیل بیت کوین» can no longer
+   * make every later turn open with «اگر درست خوانده باشم، منظورت BTC است»,
+   * which is what happened before the provenance below was recorded.
+   */
   const contextAsset = !opaqueAsciiGibberish && !assets.length && priorAssets.length ? String(priorAssets[0]).toUpperCase() : null;
   if (contextAsset) assets.push(contextAsset);
   const amount = (() => {
@@ -454,6 +461,10 @@ export function readPartialInput({ message = '', locale = 'fa', context = {}, pr
     schema: PARTIAL_INPUT_SCHEMA,
     version: PARTIAL_INPUT_VERSION,
     completeness,
+    /* Which assets came from the message and which were carried over. The
+       renderer refuses to announce a carried asset as a reading. */
+    ownAssets: [...rawAssets],
+    carriedAsset: contextAsset || null,
     original: repair.original,
     repaired: repair.text,
     repairs: repair.repairs,

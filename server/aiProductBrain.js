@@ -283,6 +283,17 @@ const PRODUCT_WORDS = [
 
 const INTENTS = [
   {
+    /* «چرا جواب نمی‌دی؟» is a question about THIS assistant, and answering it
+       with «I have no live price source» is the exact non-answer that made a
+       working system read as broken. It gets its own verified answer. */
+    id: 'self_status',
+    re: /(?:چرا|واسه چی|برای چی).{0,24}(?:جواب|پاسخ|پاسخگو|کار)\s*نمی|جواب\s*نمی\s*(?:دی|ده|دید)|پاسخ\s*نمی\s*(?:دی|ده)|(?:کار|درست)\s*نمی\s*کنی|خراب(?:ی|ه|ید|\s*شد(?:ه|ی)?)|(?:قطع|داون) هستی|why\s+(?:don'?t|do)\s+you\s+(?:answer|respond)|not\s+(?:answering|working)|are\s+you\s+(?:broken|down)/i
+  },
+  {
+    id: 'help',
+    re: /^(?:کمک|راهنما|راهنمایی|help|راهنما(?:یی)?\s*لطفا)\s*[؟?!.\u061F]*$/i
+  },
+  {
     id: 'creators',
     re: /سازنده|سازندگان|بنیان\s*گذار|بنیانگذار|موسس|مؤسس|چه کسی (?:ساخته|درست کرده)|تیم شما|تیم fbt|who (?:built|made|founded)|founder|team/i
   },
@@ -326,6 +337,7 @@ export function detectProductQuestion(message = '') {
   if (product) return true;
   const intent = INTENTS.find((i) => i.re.test(text))?.id || null;
   if (intent === 'page' || intent === 'pages') return true;
+  if (intent === 'self_status' || intent === 'help') return true;
   /* «چه کارهایی می‌تونی بکنی؟» is about this assistant, so it is about FBT —
      but only in the second person. «چه کار کنم؟» is a market question. */
   const secondPerson = /می\s*[‌]?تونی|می\s*[‌]?کنی|می\s*[‌]?شه\s*برام|you\s+(?:do|help)|your\s+(?:app|ai|assistant)/iu.test(text);
@@ -401,7 +413,14 @@ export function answerProduct({ message = '', locale = 'fa', limit = 6 } = {}) {
       ? 'کیف پول غیرامانی است: کلید و عبارت بازیابی فقط روی دستگاه شما می‌ماند. FBT هیچ‌وقت عبارت بازیابی/کلید خصوصی/رمز/کد دو مرحله‌ای نمی‌پرسد و هیچ تراکنشی بدون امضای شما اجرا نمی‌شود.'
       : 'Custody is non-custodial: the key and recovery phrase stay on your device. FBT never asks for the phrase, private key, password or 2FA code, and nothing runs without your signature.';
     confidence = 'verified';
-  } else if (intent === 'capabilities') {
+  } else if (intent === 'self_status') {
+    /* The truthful list, in the order the user will hit them. Nothing here is
+       invented: it is the three states this repo can actually be in. */
+    answer = fa
+      ? 'اگر پاسخی نگرفته‌اید، یکی از این سه است: ۱) سهمیهٔ پیام‌های هوش مصنوعی در همان دقیقه پر شده بود — حدود یک دقیقه صبر کنید و همان پیام را دوباره بفرستید؛ ۲) هیچ‌کدام از مدل‌های زبانی در آن لحظه پاسخ نداده‌اند — چند دقیقه بعد دوباره بفرستید؛ ۳) برای پرسش قیمت یا خبر، منبع زندهٔ تأییدشده در دسترس نبوده و من قیمت را حدس نمی‌زنم. در هیچ‌کدام دارایی‌ای جابه‌جا نمی‌شود و امضا لازم نیست.'
+      : 'If you got no answer, it is one of three things: 1) the per-minute AI allowance was used up — wait about a minute and send the same message again; 2) no language model returned an answer in that moment — send it again in a few minutes; 3) for a price or news question there was no verified live source, and I will not guess a price. In none of these does anything move, and no signature is needed.';
+    confidence = 'verified';
+  } else if (intent === 'capabilities' || intent === 'help') {
     answer = fa
       ? `قابلیت‌های امروز: ${PRODUCT_CAPABILITIES.slice(0, 6).map((c) => c.fa).join(' ')}`
       : `What ships today: ${PRODUCT_CAPABILITIES.slice(0, 6).map((c) => c.en).join(' ')}`;

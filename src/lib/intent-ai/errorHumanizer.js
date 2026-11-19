@@ -57,6 +57,24 @@ const COPY = Object.freeze({
     fa: 'اجرای بریج در گفت‌وگو پشتیبانی نمی‌شود؛ مسیر عمومی سواپ برای بریج استفاده نشد و هیچ تراکنشی ساخته یا ارسال نشد. می‌توانید فقط صفحهٔ بریج را برای بررسی جداگانه باز کنید.',
     en: 'Bridge execution is not available in chat. The generic swap route was not used, and no transaction was built or sent. You can open the bridge page for a separate review.'
   },
+  /*
+   * The bucket was full — say so, and say what to do.
+   *
+   * This code had no copy at all, so a throttled turn fell through to UNKNOWN
+   * («نتوانستم این کار را کامل کنم») and the client then stapled an English
+   * operator line under it. Nothing was wrong with the request; the caller had
+   * simply spent the per-minute allowance.
+   */
+  RATE_LIMITED: {
+    fa: 'در این دقیقه سهمیهٔ پیام‌های هوش مصنوعی پر شده است. پیام شما از دست نرفته — حدود یک دقیقه دیگر همان را بفرستید و کامل پاسخ می‌دهم.',
+    en: 'The per-minute AI allowance is used up. Your message is not lost — send it again in about a minute and I will answer it in full.'
+  },
+  /* The model fleet answered nothing this turn. Honest, and it says the one
+     thing that is actionable — the question was not the problem. */
+  AI_UNAVAILABLE: {
+    fa: 'همین حالا هیچ‌کدام از مدل‌های زبانی پاسخ ندادند. مشکل از پرسش شما نیست؛ چند دقیقهٔ دیگر دوباره بفرستید.',
+    en: 'No language model answered just now. The problem is not your question; send it again in a few minutes.'
+  },
   NETWORK_FAILED: {
     fa: 'ارتباط با شبکه برقرار نشد. لطفاً اتصال را بررسی کنید و دوباره تلاش کنیم.',
     en: 'The network could not be reached. Check the connection and we can try again.'
@@ -209,6 +227,17 @@ const CODE_ALIASES = Object.freeze({
   PROVIDER_ERROR: 'PROVIDER_FAILED',
   NO_QUOTE: 'PROVIDER_FAILED',
   NO_PROVIDER: 'PROVIDER_FAILED',
+  /* The client sometimes only has a number (it falls back to `res.status` as the
+     code), so the HTTP status is an alias too. */
+  429: 'RATE_LIMITED',
+  503: 'AI_UNAVAILABLE',
+  RATE_LIMITED: 'RATE_LIMITED',
+  AI_RATE_LIMITED: 'RATE_LIMITED',
+  RATE_LIMIT: 'RATE_LIMITED',
+  TOO_MANY_REQUESTS: 'RATE_LIMITED',
+  AI_UNAVAILABLE: 'AI_UNAVAILABLE',
+  NO_PROVIDER_ANSWERED: 'AI_UNAVAILABLE',
+  ALL_PROVIDERS_FAILED: 'AI_UNAVAILABLE',
   NETWORK_FAILED: 'NETWORK_FAILED',
   NETWORK_UNAVAILABLE: 'NETWORK_FAILED',
   QUOTE_NETWORK: 'NETWORK_FAILED',
@@ -312,7 +341,9 @@ export function humanizeError(code, { locale = 'fa', haveUsd = null, needUsd = n
     schema: ERROR_HUMANIZER_SCHEMA,
     code: key,
     message,
-    retry: retry !== false && !['VALIDATION_FAILED', 'EMPTY_PORTFOLIO'].includes(key),
+    /* A 429 will be a 429 again half a second later: retrying it burns another
+       slot of the same allowance and shows the user a second failure. */
+    retry: retry !== false && !['VALIDATION_FAILED', 'EMPTY_PORTFOLIO', 'RATE_LIMITED'].includes(key),
     ui: key === 'WALLET_REQUIRED' ? 'CONNECT_WALLET' : 'TEXT'
   };
 }
