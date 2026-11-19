@@ -140,7 +140,7 @@ const STATUS_COPY = {
 export default function ConnectKeyDialog({ fa = false, target = null, onClose = null, onChanged = null }) {
   const t = COPY[fa ? 'fa' : 'en'];
   const c = STATUS_COPY[fa ? 'fa' : 'en'];
-  const [list, setList] = useState({ state: 'loading', providers: [], error: null });
+  const [list, setList] = useState({ state: 'loading', providers: [], error: null, capability: null });
   const [secret, setSecret] = useState('');
   const [state, setState] = useState('idle');
   const [error, setError] = useState(null);
@@ -162,9 +162,9 @@ export default function ConnectKeyDialog({ fa = false, target = null, onClose = 
     setList((prev) => ({ ...prev, state: prev.providers.length ? prev.state : 'loading' }));
     const out = await listProviderKeys();
     if (out?.ok) {
-      setList({ state: 'ready', providers: Array.isArray(out.providers) ? out.providers : [], error: null });
+      setList({ state: 'ready', providers: Array.isArray(out.providers) ? out.providers : [], error: null, capability: out.capability || null });
     } else {
-      setList({ state: 'error', providers: [], error: out?.code || 'NETWORK_UNAVAILABLE' });
+      setList({ state: 'error', providers: [], error: out?.code || 'NETWORK_UNAVAILABLE', capability: null });
     }
   }, []);
 
@@ -280,9 +280,20 @@ export default function ConnectKeyDialog({ fa = false, target = null, onClose = 
         )}
 
         {list.state === 'error' ? (
-          <p className="ah-error ah-small" role="alert">
-            {fa ? 'وضعیت کلیدها خوانده نشد: ' : 'Key status could not be read: '}
+          <p className="ah-error ah-small" role="alert" data-testid="agent-hub-key-list-error">
+            {textFor(ERROR_COPY[list.error], fa) || (fa ? 'وضعیت کلیدها خوانده نشد.' : 'Key status could not be read.')}{' '}
             <code className="ah-code">{list.error}</code>
+          </p>
+        ) : null}
+
+        {/* A key that cannot be sealed must not be requested: the honest answer
+            is to say the server is not configured yet, before the user pastes
+            anything. */}
+        {list.capability && (list.capability.sealingConfigured === false || list.capability.durable === false) ? (
+          <p className="ah-note ah-small" role="status" data-testid="agent-hub-key-not-configured">
+            {fa
+              ? 'ذخیرهٔ امن کلید روی سرور هنوز فعال نیست، پس هیچ کلیدی از شما گرفته نمی‌شود. پس از فعال‌شدن، همین پنجره کلید را می‌پذیرد.'
+              : 'Sealed key storage is not enabled on the server yet, so no key is requested. Once it is enabled this same dialog accepts the key.'}
           </p>
         ) : null}
 
@@ -293,7 +304,7 @@ export default function ConnectKeyDialog({ fa = false, target = null, onClose = 
           </section>
         ) : null}
 
-        {bridgeId ? (
+        {bridgeId && !(list.capability && (list.capability.sealingConfigured === false || list.capability.durable === false)) ? (
           <section className="ah-dialog-block ah-dialog-key-box">
             {connected ? (
               <>

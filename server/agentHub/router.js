@@ -97,6 +97,10 @@ export function createAgentHubRouter({ hub, ownerFor, env = process.env, log = (
          repeated here so the add form can warn about a lost row without the
          caller having to join two fields. */
       sources: out.sources || null,
+      /* Whether the server can actually seal a key a user pastes for a
+         third-party seat. Public on purpose: the UI must know before it offers
+         a key field, and this is a capability flag, not a secret. */
+      providerKeys: hub.providerKeys ? hub.providerKeys.capability() : { supported: false },
       registryErrors: out.registryErrors || [],
       at: out.at
     });
