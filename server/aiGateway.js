@@ -331,14 +331,28 @@ export const PROVIDER_CONFIGS = Object.freeze({
     altEnvKey: 'VITE_GEMINI_API_KEY',
     envKeys: ['GEMINI_API_KEY', 'GOOGLE_AI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_KEY', 'VITE_GEMINI_API_KEY'],
     modelEnv: 'GEMINI_MODEL',
-    /* Was `gemini-2.0-flash`, which Google has shut down ("This model … is no
-       longer available") → HTTP 404 on every call. 2.5-flash is the current
-       stable workhorse; `gemini-flash-latest` is Google's own always-current
-       alias and sits right behind it. */
-    baseModel: 'gemini-2.5-flash',
-    defaultModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
-    fallbackModels: ['gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-2.5-pro'],
+    /*
+     * ─── THE PINNED ID WAS THE ONE THAT 404s ────────────────────────────────
+     * `gemini-2.5-flash` was the default because it used to be the stable
+     * workhorse. The live self-test on this deployment answers otherwise:
+     *
+     *   gemini-2.5-pro      → HTTP 404 (retired)
+     *   gemini-2.5-flash    → HTTP 404 (retired)
+     *   gemini-flash-latest → HTTP 503 «high demand» (ALIVE, just busy)
+     *
+     * So the seat spent its whole ladder on two dead ids and then reported the
+     * provider as broken, while the one id that answers sat third. The
+     * always-current alias now leads, the retired 2.5 ids are marked so they
+     * are never chosen automatically, and a 503 is classified as transient
+     * rather than "unclassified" (see classifyAiError).
+     */
+    baseModel: 'gemini-flash-latest',
+    defaultModel: process.env.GEMINI_MODEL || 'gemini-flash-latest',
+    fallbackModels: ['gemini-flash-latest'],
     retiredModels: [
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
       'gemini-2.0-flash',
       'gemini-2.0-flash-lite',
       'gemini-1.5-pro',
@@ -1161,6 +1175,16 @@ export function classifyAiError(err, providerId = null) {
   }
   if (status === 404 || /model_not_found|does not exist|no longer available|is not available|not found|unknown model|unsupported model|decommissioned|shut ?down|10000/i.test(raw)) {
     return out('MODEL_UNAVAILABLE', true, 'The model id is retired or not on this account. The gateway retries with the next current model for this provider.');
+  }
+  /*
+   * A 503 IS NOT «UNCLASSIFIED». Google answers «503 … This model is currently
+   * experiencing high demand» for a perfectly valid model id, and the old code
+   * fell through to UNKNOWN — which reads as a broken integration, parks the
+   * seat and tells the operator nothing. It is a transient capacity signal:
+   * retry shortly, the id is fine.
+   */
+  if (status === 503 || /high demand|overloaded|service unavailable|temporarily unavailable|currently experiencing/i.test(raw)) {
+    return out('QUOTA', false, 'The provider is temporarily overloaded (HTTP 503) — the model id is valid. The gateway retries on the next turn.');
   }
   if (status === 429 || /rate limit|resource_exhausted|too many requests|quota|tpm|rpm/i.test(raw)) {
     return out('QUOTA', false, 'Rate limit or free-tier quota exhausted. Wait for the window to reset or enable billing.');

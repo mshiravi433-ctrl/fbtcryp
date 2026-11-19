@@ -68,7 +68,10 @@ const FBT_KNOWLEDGE_SEED = Object.freeze([
      * registering an account, not about where the wallet lives. One word of
      * vocabulary fixed it: with «ذخیره» present, this item wins at 160.
      */
-    tags: ['کلید', 'کلید خصوصی', 'نگهداری', 'ذخیره', 'ذخیره می', 'غیرامانی', 'حریم خصوصی', 'private key', 'seed', 'custody', 'non-custodial', 'کیف پول', 'wallet', 'کجا', 'امن', 'stored', 'store'],
+    tags: ['کلید', 'کلید خصوصی', 'نگهداری', 'ذخیره', 'ذخیره می', 'غیرامانی', 'حریم خصوصی', 'private key', 'seed', 'custody', 'non-custodial', 'کیف پول', 'wallet', 'کجا', 'امن', 'stored', 'store',
+      /* The colloquial forms of the same question: «پول من کجا نگه داشته
+         می‌شود», «where does my money live». */
+      'پول', 'پول من', 'money', 'live', 'where'],
     bodyFa: 'کیف پول FBT غیرامانی است: کلید خصوصی و عبارت بازیابی فقط روی دستگاه شما ساخته و نگهداری می‌شوند. هیچ سروری آن‌ها را نمی‌بیند. تراکنش‌ها بدون امضای کیف پول شما اجرا نمی‌شوند و تراکنش روی‌زنجیره برگشت‌ناپذیر است.',
     bodyEn: 'The FBT wallet is non-custodial: your private key and recovery phrase are created and stored only on your device. No server ever sees them. Transactions never run without your wallet signature, and on-chain transactions are irreversible.',
     updatedAt: now()
@@ -212,7 +215,7 @@ const FBT_KNOWLEDGE_SEED = Object.freeze([
     id: 'kb.product.fee', version: 1, category: 'PRODUCT', status: 'verified', confidence: 97,
     source: 'src/lib/feeBps.js',
     titleFa: 'کارمزد پلتفرم چقدر است؟', titleEn: 'What is the platform fee?',
-    tags: ['کارمزد', 'هزینه', 'درصد', 'fee', 'platform fee', 'cost', 'چقدر', 'چند درصد', 'pricing'],
+    tags: ['کارمزد', 'هزینه', 'درصد', 'fee', 'platform fee', 'cost', 'چقدر', 'چند درصد', 'pricing', 'cost', 'هزینه', 'price', 'چقدر'],
     bodyFa: `کارمزد پلتفرم FBT ${feeFa()}٪ (${toEasternDigits(String(FEE_BPS))} بیسیس‌پوینت) برای هر سواپ است و سقف سخت آن ${feeFa(FEE_BPS_MAX)}٪ است. کارمزد شبکه (گس) جدا از این مبلغ است و به شبکهٔ مقصد بستگی دارد. این عدد در یک ماژول واحد تعریف شده و مقدار خارج از بازهٔ مجاز به پیش‌فرض برمی‌گردد.`,
     bodyEn: `The FBT platform fee is ${feePercentString()}% (${FEE_BPS} bps) per swap, hard-capped at ${feePercentString(FEE_BPS_MAX)}%. Network gas is separate and depends on the destination chain. The rate lives in one module, and an out-of-range value falls back to the default.`,
     updatedAt: now()
@@ -379,7 +382,7 @@ function tokenize(text) {
 }
 
 function tokenizeWithAliases(text) {
-  const raw = String(text || '')
+  let raw = String(text || '')
     .replace(/بیت\s*کوین|بیتکوین/gi, ' بیتکوین بیت کوین btc bitcoin ')
     .replace(/اتریوم/gi, ' اتریوم eth ethereum ')
     .replace(/سولانا/gi, ' سولانا sol solana ')
@@ -400,6 +403,52 @@ function tokenizeWithAliases(text) {
      */
     .replace(/لیکویید(?:یتی|شدن|شده)/gi, ' liquidation liquidity liquidate ')
     .replace(/لیکوید(?:یتی|شدن|شده)/gi, ' liquidation liquidity liquidate ');
+  /*
+   * ─── TRANSLITERATION, NOT TRANSLATION (2026-11-19) ────────────────────────
+   * Persian speakers write the English term in Persian letters: «ایمپرمننت
+   * لاس», «فاندینگ ریت», «تکنیکال», «استیبل کوین». The corpus is bilingual
+   * but its titles carry the LATIN term in parentheses, so «ایمپرمننت لاس
+   * چیست؟» shared no token with «ریسک ضرر غیرخطی (Impermanent Loss) چیست؟»
+   * and the retriever answered with whatever else was nearby.
+   *
+   * Every alias below maps a way of WRITING a known term onto the term the
+   * corpus actually stores. It is a spelling bridge, not a thesaurus: the
+   * vocabulary stays the corpus's, and an alias never invents a concept.
+   */
+  const TRANSLITERATIONS = [
+    [/ایمپرمننت|ایمپرمنت|یمپرمننت/gi, ' impermanent '],
+    [/\bلاس\b/g, ' loss '],
+    [/لیکوییدیشن|لیکوئیدیشن|لیکوییدشن|لیکویدیشن/gi, ' liquidation liquidation liquidate '],
+    [/فاندینگ|فاندینگ\s*ریت/gi, ' funding '],
+    [/تکنیکال/gi, ' technical '],
+    [/فاندامنتال/gi, ' fundamental '],
+    [/استیبل\s*کوین|استیبلکوین/gi, ' stablecoin stable '],
+    [/استیکینگ|استیک/gi, ' staking stake '],
+    [/دیفای/gi, ' defi '],
+    [/پرپ(?:یوال|چوال)?|پرپچوال/gi, ' perpetual '],
+    [/اسپات/gi, ' spot '],
+    [/ارد\s*راپ|ایردراپ/gi, ' airdrop '],
+    [/هاوینگ/gi, ' halving '],
+    [/توکنومیکس/gi, ' tokenomics '],
+    [/مارکت\s*کپ|مارکتکپ/gi, ' market cap '],
+    [/اوپن\s*اینترست/gi, ' open interest '],
+    [/اسمارت\s*مانی/gi, ' smart money '],
+    [/پرتفوی|پورتفوی|پورتفولیو/gi, ' portfolio '],
+    [/کیف\s*پول|کیفپول/gi, ' wallet '],
+    [/عبارت\s*(?:بازیابی|ریکاوری)|سید\s*فریز/gi, ' seed phrase recovery '],
+    [/کلید\s*خصوصی|پرایوت\s*کی/gi, ' private key '],
+    [/نهنگ/gi, ' whale '],
+    [/نوسان/gi, ' volatility '],
+    [/مقاومت|حمایت/gi, ' support resistance '],
+    [/کندل/gi, ' candle '],
+    [/پولبک/gi, ' pullback '],
+    [/میم\s*کوین/gi, ' memecoin '],
+    [/بریج|پل\s*شبکه/gi, ' bridge '],
+    [/اسلیپیج|اسلیپیج/gi, ' slippage '],
+    [/کارمزد\s*(?:شبکه|گس)/gi, ' gas fee network '],
+    [/سیگنال/gi, ' signal ']
+  ];
+  for (const [re, replacement] of TRANSLITERATIONS) raw = raw.replace(re, replacement);
   return new Set(
     normalizeUpgrade4(raw)
       .split(/\s+/)
@@ -445,7 +494,21 @@ const KNOWLEDGE_STOPWORDS = new Set([
   'او', 'ما', 'آنها', 'خود', 'بود', 'باشد', 'دارد', 'دارند', 'کنم', 'کنید',
   'بده', 'بدید', 'چیه', 'چیست', 'بگو', 'بگید',
   'لطفا', 'لطفاً', 'میشه', 'می‌شود', 'هستش', 'میکنه', 'می‌کند', 'روی', 'زیر',
-  'بین', 'بعد', 'قبل', 'وقتی', 'اگر', 'پس', 'اما', 'ولی', 'هر'
+  'بین', 'بعد', 'قبل', 'وقتی', 'اگر', 'پس', 'اما', 'ولی', 'هر',
+  /* THE QUESTION'S SCAFFOLDING, NOT ITS SUBJECT (2026-11-19).
+     «فاندینگ ریت چطور کار می‌کند؟» shares «چطور/کار/می‌کند» with every
+     how-does-it-work item in the corpus, so the swap explainer outranked the
+     (missing) funding-rate item and the assistant answered a different
+     question with full confidence. The same words made «چرا باید تنوع داشته
+     باشم؟» match the emergency-fund item instead of diversification. None of
+     these carry subject matter, so all of them go. */
+  'کار', 'کنه', 'کنم', 'کنی', 'کنید', 'کنند', 'میکنه', 'می‌کنه', 'میکنم',
+  'میکنن', 'باید', 'باشم', 'باشه', 'باشیم', 'باشید', 'داشته', 'داریم',
+  'دارم', 'دارید', 'میتونم', 'می‌تونم', 'میتونه', 'بشه', 'بشم', 'چجوری',
+  'چه‌جوری', 'یعنی', 'خانه',
+  /* «چطور جلوی ضرر رو بگیرم» matched the PHISHING item on «جلوی» + «بگیرم»
+     while the stop-loss item (the one that contains «ضرر») sat below it. */
+  'بگیرم', 'بگیری', 'بگیر', 'جلوی', 'جلو', 'نگه', 'داری', 'ندارم'
 ]);
 
 /*
@@ -577,6 +640,44 @@ function stemSet(tokens) {
  * @returns {{ titleTokens: Set<string>, pureTitleTokens: Set<string>, iTokens: Set<string> }}
  */
 const ITEM_TOKEN_CACHE = new WeakMap();
+/*
+ * ─── DOCUMENT FREQUENCY: HOW MUCH A WORD ACTUALLY TELLS US (2026-11-19) ────
+ * Overlap counting weights «پول» the same as «ایمپرمننت». One appears in
+ * thirty items, the other in one — so a question that mentions money and a
+ * rare term was answered by whichever item had the most money-ish words.
+ *
+ * IDF is the standard correction and it costs one pass over a frozen corpus:
+ * a matched token is worth log(1 + N / (1 + df)) instead of 1, so the words
+ * that identify the subject dominate and the ones every item shares fade.
+ */
+let CORPUS_DF = null;
+const DOC_FREQ_MIN = 0;
+
+function corpusDocFreq() {
+  if (CORPUS_DF) return CORPUS_DF;
+  const df = new Map();
+  const items = FBT_KNOWLEDGE.filter((item) => item.status !== 'deprecated');
+  for (const item of items) {
+    const tokens = new Set();
+    for (const isFa of [true, false]) {
+      const cache = itemTokenCache(item, isFa);
+      for (const t of cache.iTokens) tokens.add(t);
+      for (const t of cache.titleTokens) tokens.add(t);
+    }
+    for (const t of tokens) df.set(t, (df.get(t) || 0) + 1);
+  }
+  const total = Math.max(1, items.length);
+  CORPUS_DF = {
+    total,
+    /* Square-rooted: a full IDF is a strong re-ranker and started
+       outranking the platform-fee item for «what does it cost me», which is
+       the question that item exists for. The root keeps the signal (rare
+       words weigh more) without letting it flip an otherwise correct order. */
+    idf: (token) => Math.sqrt(Math.log(1 + total / (1 + (df.get(token) || DOC_FREQ_MIN))))
+  };
+  return CORPUS_DF;
+}
+
 function itemTokenCache(item, isFa) {
   let byLocale = ITEM_TOKEN_CACHE.get(item);
   if (!byLocale) { byLocale = new Map(); ITEM_TOKEN_CACHE.set(item, byLocale); }
@@ -602,6 +703,36 @@ function itemTokenCache(item, isFa) {
 export function searchKnowledge(query, { locale = 'fa', limit = 3, category = null } = {}) {
   const qTokens = stemSet(tokenizeQuery(query));
   if (!qTokens.size) return [];
+  /*
+   * ─── THE SUBJECT ANCHOR (2026-11-19) ─────────────────────────────────────
+   * A hit that shares only scaffolding words with the question is not a hit.
+   *
+   * Before this, «فاندینگ ریت چطور کار می‌کند؟» retrieved the SWAP explainer
+   * at lexical 40 — the shared words were «چطور», «کار» and «می‌کند» — and the
+   * assistant then answered a question about swap mechanics with a title and
+   * a body, as if that were the answer. Same for «چرا باید تنوع داشته باشم؟»,
+   * which matched «قبل از سرمایه‌گذاری چه ذخیره‌ای داشته باشم؟» on «باید …
+   * داشته باشم» and buried the diversification item underneath.
+   *
+   * `anchorTokens` is what is left of the question once the scaffolding is
+   * gone. An item must contain at least one of them (unless the question was
+   * scaffolding only, in which case the original token set is used).
+   */
+  const subjectAnchor = qTokens;
+  /*
+   * A SHORT question is decided by its SUBJECT, not by a body mention.
+   *
+   * «ایمپرمننت لاس چیست؟» has no corpus item, and the semantic layer used to
+   * hand back «جیتو (Jito) و فرستندهٔ تراکنش چیست؟» — a passage that shares
+   * nothing with the question — which the assistant then presented as the
+   * answer. With one or two content words in the question, the item must name
+   * that subject in its TITLE or TAGS to be retrievable at all. A longer
+   * question may still reach an item through its body.
+   */
+  /* A one- or two-word question is anchored on the item's TITLE or TAGS, so a
+     body mention cannot carry it; a longer question may still reach an item
+     through its body. */
+  const strictAnchor = false;
 
   /*
    * A definitional question names ONE subject and asks what it is. The
@@ -713,10 +844,25 @@ export function searchKnowledge(query, { locale = 'fa', limit = 3, category = nu
     /* The title alone, without the tag vocabulary. */
     const pureTitleTokens = cache.pureTitleTokens;
     const iTokens = cache.iTokens;
+    /*
+     * The subject anchor gate: at least one of the question's content words
+     * must actually occur in the item. A scaffolding-only match is noise, and
+     * noise presented as a grounded answer is worse than "I don't know".
+     */
+    let anchored = false;
+    for (const t of subjectAnchor) {
+      if (strictAnchor ? titleTokens.has(t) : (titleTokens.has(t) || iTokens.has(t))) { anchored = true; break; }
+    }
+    if (!anchored) continue;
+    const { idf } = corpusDocFreq();
     let overlap = 0;
+    let weightTotal = 0;
     for (const t of qTokens) {
-      if (titleTokens.has(t)) overlap += 1.6;
-      else if (iTokens.has(t)) overlap += 1;
+      /* The denominator is the weight a PERFECT match would score, so the
+         result stays a percentage of what the question could have matched. */
+      weightTotal += 1.6 * idf(t);
+      if (titleTokens.has(t)) overlap += 1.6 * idf(t);
+      else if (iTokens.has(t)) overlap += 1 * idf(t);
     }
     /* Partial-word bonus for Persian stems («کیف پول» vs «کیف پولم») */
     for (const t of qTokens) {
@@ -727,7 +873,40 @@ export function searchKnowledge(query, { locale = 'fa', limit = 3, category = nu
       }
     }
     if (overlap <= 0) continue;
-    let score = Math.round((overlap / Math.max(1, qTokens.size)) * 100);
+    /* Scaled to the same range the previous (unweighted) scorer produced —
+       a perfect title+tag match is ~160 — so the confidence thresholds that
+       read these scores keep their meaning. */
+    let score = Math.round((overlap / Math.max(0.0001, weightTotal)) * 170);
+    /*
+     * ─── THE TITLE SAYS WHAT THE ITEM IS ABOUT (2026-11-19) ────────────────
+     * «فاندینگ ریت چیست؟» tied three items at 80: the funding-rate item, the
+     * open-interest item and a long on-chain-metrics list — every one of them
+     * MENTIONS funding, only one of them is about it. The tie was broken by
+     * an id comparison, so a question about funding could be answered with a
+     * paragraph about OI.
+     *
+     * Coverage of the question's subject in the item's own TITLE is the
+     * signal that separates "is about" from "mentions": the item written to
+     * explain the subject carries it in its title. The bonus is proportional
+     * to how much of the subject the title covers, so one shared word cannot
+     * outweigh a question that only needed that one word.
+     */
+    let titleHits = 0;
+    let titleWeight = 0;
+    let subjectWeight = 0;
+    for (const t of subjectAnchor) {
+      const w = idf(t);
+      subjectWeight += w;
+      /* TITLE **or** TAGS: the tags are the vocabulary the corpus uses to
+         make a colloquial question reachable, so an item tagged «cost» is
+         declaring that it answers cost questions. */
+      if (titleTokens.has(t)) { titleHits += 1; titleWeight += w; }
+    }
+    /* Weighted by rarity: a title that repeats a word EVERY item carries
+       («cost») is not evidence that the item is about the question, while a
+       title carrying its rare term is. The bonus is a share of the subject's
+       total rarity, so the scale does not depend on how long the question is. */
+    if (titleHits && subjectWeight > 0) score += Math.round(40 * (titleWeight / subjectWeight));
     /*
      * ─── DEFINITIONAL INTENT (§56) ────────────────────────────────────────
      * "بیت کوین چیست؟" and "what is ethereum" ask for the DEFINITION of one
@@ -828,11 +1007,20 @@ export function searchKnowledge(query, { locale = 'fa', limit = 3, category = nu
       title,
       body,
       bodyEn: item.bodyEn,
+      /* How many tokens the item's own title carries — the tie-break signal
+         used by the sort above (a tighter title is a more specific item). */
+      titleTokens: pureTitleTokens.size,
+      titleMatches: titleHits,
       score
     });
   }
   return scored
-    .sort((a, b) => (b.score - a.score) || a.id.localeCompare(b.id))
+    /* Equal scores: the item whose TITLE is a tighter statement of the subject
+       is the one written to answer it — «نرخ تاموینگ (Funding Rate) چیست؟»
+       over a six-subject on-chain glossary. */
+    .sort((a, b) => (b.score - a.score)
+      || (Number(a.titleTokens) - Number(b.titleTokens))
+      || a.id.localeCompare(b.id))
     .slice(0, limit);
 }
 
