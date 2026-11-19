@@ -1,11 +1,6 @@
-import { useMemo, useState } from 'react';
-import {
-  RECOMMENDATION_CATEGORIES,
-  RECOMMENDATION_COUNTS,
-  RECOMMENDATIONS_REVIEWED_ON,
-  RECOMMENDED_EXTERNAL_AGENTS
-} from '../../lib/intent-ai/agentHub/recommendations.js';
-import { bridgeIdForRecommendation } from '../../lib/intent-ai/agentHub/keyBridges.js';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getCatalog } from '../../lib/intent-ai/agentHub/client.js';
+import { BRIDGE_CATEGORIES } from '../../lib/intent-ai/agentHub/keyBridges.js';
 
 const textFor = (value, fa) => value?.[fa ? 'fa' : 'en'] || '';
 const testIdPart = (value) => String(value || '').replace(/[^A-Za-z0-9_-]+/g, '-');
@@ -48,23 +43,6 @@ const NATIVE_MARKS = {
   custom: '✳'
 };
 
-function matchesRecommendation(agent, query, category, fa) {
-  if (category !== 'all' && agent.category !== category) return false;
-  if (!query.trim()) return true;
-
-  const needle = query.trim().toLocaleLowerCase(fa ? 'fa-IR' : 'en');
-  const haystack = [
-    agent.name,
-    agent.vendor,
-    textFor(agent.kind, fa),
-    textFor(agent.summary, fa),
-    textFor(agent.bestFor, fa),
-    textFor(agent.freeAccess, fa),
-    textFor(agent.paidAccess, fa)
-  ].join(' ').toLocaleLowerCase(fa ? 'fa-IR' : 'en');
-  return haystack.includes(needle);
-}
-
 function matchesNative(agent, query, fa) {
   if (!query.trim()) return true;
   const needle = query.trim().toLocaleLowerCase(fa ? 'fa-IR' : 'en');
@@ -79,32 +57,103 @@ function matchesNative(agent, query, fa) {
   ].filter(Boolean).join(' ').toLocaleLowerCase(fa ? 'fa-IR' : 'en').includes(needle);
 }
 
+/* A directory entry is a provider the server can actually connect. The only
+   reason it appears here is that `providerKeys.providers` listed it — there is
+   no local list to drift, and no card can exist without a working key path. */
+function matchesBridge(provider, query, category, fa) {
+  if (category !== 'all' && provider.category !== category) return false;
+  if (!query.trim()) return true;
+  const needle = query.trim().toLocaleLowerCase(fa ? 'fa-IR' : 'en');
+  return [
+    provider.name,
+    provider.vendor,
+    provider.id,
+    textFor(provider.domainUse, fa),
+    textFor(provider.domainUse, !fa),
+    provider.kind === 'ai' ? 'ai model' : 'data'
+  ].join(' ').toLocaleLowerCase(fa ? 'fa-IR' : 'en').includes(needle);
+}
+
+const KIND_LABEL = {
+  ai: { fa: 'صندلی هوش مصنوعی', en: 'AI seat' },
+  data: { fa: 'دادهٔ واقعی', en: 'Live data' }
+};
+
 /**
- * The landing view: what can run HERE, then what exists OUT THERE.
+ * The landing view: what can run HERE, then what we can CONNECT.
  *
- * The order matters. A directory of links is a blog post; an agent a user can
- * press and get a real answer from is the product. The native rail is printed
- * first, labelled `FBT native`, and carries only agents the server actually
- * listed — never a placeholder card while the catalogue is loading.
+ * The second rail used to be a link directory, which is why most cards said
+ * "this service has no public key API". That was honest but useless. Now the
+ * rail only contains providers the server can genuinely reach with a key the
+ * user owns: every card opens a real verification, and a provider that cannot
+ * be connected simply has no card. Its website, docs and pricing live inside
+ * the popup instead of on the page, so the page shows capability, not links.
  */
-export default function RecommendedAgents({ fa = false, onAddOwnAgent = null, nativeAgents = [], onRunAgent = null, onOpenKey = null, keyStatus = {} }) {
+export default function RecommendedAgents({
+  fa = false,
+  onAddOwnAgent = null,
+  nativeAgents = [],
+  onRunAgent = null,
+  onOpenKey = null,
+  keyStatus = {},
+  connectable = null
+}) {
   const [category, setCategory] = useState('all');
   const [query, setQuery] = useState('');
+  const [directory, setDirectory] = useState(() => ({
+    state: Array.isArray(connectable) && connectable.length ? 'ready' : 'idle',
+    providers: Array.isArray(connectable) ? connectable : [],
+    error: null
+  }));
   const locale = fa ? 'fa' : 'en';
-  const filtered = useMemo(
-    () => RECOMMENDED_EXTERNAL_AGENTS.filter((agent) => matchesRecommendation(agent, query, category, fa)),
-    [category, fa, query]
-  );
+
+  /* The panel already holds the catalogue; when it does not (standalone render,
+     or a panel that opened before the catalogue loaded) read it here. */
+  useEffect(() => {
+    if (Array.isArray(connectable) && connectable.length) {
+      setDirectory({ state: 'ready', providers: connectable, error: null });
+      return;
+    }
+    let alive = true;
+    setDirectory((prev) => ({ ...prev, state: prev.providers.length ? prev.state : 'loading' }));
+    void (async () => {
+      const out = await getCatalog();
+      if (!alive) return;
+      const providers = Array.isArray(out?.providerKeys?.providers) ? out.providerKeys.providers : [];
+      setDirectory({
+        state: providers.length ? 'ready' : 'empty',
+        providers,
+        error: out?.ok ? null : out?.code || 'NETWORK_UNAVAILABLE'
+      });
+    })();
+    return () => { alive = false; };
+  }, [connectable]);
+
   const native = useMemo(
     // Only agents the server returned get a card. No local copy of the list:
     // a native agent that is switched off server-side must disappear here too.
     () => (nativeAgents || []).filter((agent) => agent && agent.source === 'native' && matchesNative(agent, query, fa)),
     [nativeAgents, query, fa]
   );
-  const reviewedDate = new Date(`${RECOMMENDATIONS_REVIEWED_ON}T00:00:00.000Z`);
-  const formattedReviewDate = reviewedDate.toLocaleDateString(
-    fa ? 'fa-IR-u-ca-persian' : 'en-GB',
-    { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }
+
+  const filtered = useMemo(
+    () => directory.providers.filter((provider) => matchesBridge(provider, query, category, fa)),
+    [category, directory.providers, fa, query]
+  );
+
+  const chips = useMemo(() => {
+    const counts = {};
+    for (const provider of directory.providers) {
+      counts[provider.category] = (counts[provider.category] || 0) + 1;
+    }
+    return BRIDGE_CATEGORIES
+      .filter((item) => item.id === 'all' || counts[item.id])
+      .map((item) => ({ ...item, count: item.id === 'all' ? directory.providers.length : counts[item.id] }));
+  }, [directory.providers]);
+
+  const connectedCount = useMemo(
+    () => directory.providers.filter((provider) => keyStatus[provider.id]?.connected).length,
+    [directory.providers, keyStatus]
   );
 
   return (
@@ -113,17 +162,18 @@ export default function RecommendedAgents({ fa = false, onAddOwnAgent = null, na
         <div className="ah-rec-hero-copy">
           <span className="ah-rec-kicker">
             <span className="ah-rec-kicker-dot" aria-hidden="true" />
-            {fa ? 'مِش ایجنت کریپتو · اجرا داخل FBT' : 'CRYPTO AGENT MESH · RUNS INSIDE FBT'}
+            {fa ? 'مِش ایجنت کریپتو · اتصال واقعی با کلید خودتان' : 'CRYPTO AGENT MESH · REAL KEY CONNECTIONS'}
           </span>
-          <h3>{fa ? 'ایجنت‌های پیشنهادی کریپتو' : 'Crypto agents, ready or one link away'}</h3>
+          <h3>{fa ? 'ایجنت‌های پیشنهادی کریپتو' : 'Crypto agents you can actually connect'}</h3>
           <p className="ah-muted ah-small">
             {fa
-              ? 'دو لایهٔ جدا: ایجنت‌های خودِ FBT که همین‌جا و بدون حساب اجرا می‌شوند، و فهرست راهنمای سرویس‌های کریپتو (سواپ، پورتفوی، بازده، داده، استراتژی و امنیت) با پیوند سایت و تعرفهٔ رسمی خودشان. هیچ‌کدام از فهرست دوم به حساب شما وصل نمی‌شود و FBT اجرایش نمی‌کند.'
-              : 'Two separate layers: FBT’s own agents, which run here with no account, and an editorial crypto directory (swap, portfolio, yield, data, strategy, security) linking to each vendor’s official site and pricing. Nothing in the second layer is connected to your account or executed by FBT.'}
+              ? 'دو لایهٔ جدا: ایجنت‌های خودِ FBT که همین‌جا و بدون حساب اجرا می‌شوند، و ارائه‌دهندگانی که FBT مسیر کلید واقعی‌شان را می‌شناسد. هر کارتِ لایهٔ دوم یک دکمه دارد: کلید خودتان را می‌گذارید، سرور پیش از ذخیره آن را روی میزبان رسمی همان ارائه‌دهنده امتحان می‌کند و بعد پرسش‌های کریپتو/DeFi از همان صندلی پرسیده می‌شود. سرویسی که مسیر کلید ندارد در این فهرست کارت ندارد — سایت، مستندات و تعرفه هم داخل همان پاپ‌اپ است، نه روی صفحه.'
+              : 'Two separate layers: FBT’s own agents, which run here with no account, and providers whose key path FBT actually knows. Every card in the second layer has one action: paste your key, the server proves it against that provider’s own host before storing it, and your crypto/DeFi questions are then asked through that seat. A service with no key path has no card here — and its website, docs and pricing live inside the popup, not on the page.'}
           </p>
-          <span className="ah-rec-updated">
-            {fa ? 'بازبینی پیوندها و طرح‌ها: ' : 'Official pages checked: '}
-            <time dateTime={RECOMMENDATIONS_REVIEWED_ON}>{formattedReviewDate}</time>
+          <span className="ah-rec-updated" data-testid="agent-hub-connectable-count">
+            {fa ? 'قابل اتصال: ' : 'Connectable: '}
+            <strong>{directory.providers.length}</strong>
+            {connectedCount ? (fa ? ` · متصل: ${connectedCount}` : ` · connected: ${connectedCount}`) : ''}
           </span>
         </div>
         {onAddOwnAgent ? (
@@ -213,143 +263,113 @@ export default function RecommendedAgents({ fa = false, onAddOwnAgent = null, na
         )}
       </section>
 
-      <aside className="ah-rec-disclaimer" role="note" data-testid="agent-hub-recommendation-note">
-        <strong>{fa ? 'فهرست زیر «پیشنهادی» است، نه «تأییدشده» یا «متصل».' : 'The directory below is suggested, not reviewed or connected.'}</strong>
-        <p>
-          {fa
-            ? 'این سرویس‌ها خودبه‌خود اجرا نمی‌شوند و بی‌کلید به حساب شما وصل نیستند. روی هر کارتی که کلید API دارد، دکمهٔ «کلید و اتصال» باز می‌شود: کلید خودتان را می‌گذارید، سرور پیش از ذخیره آن را روی میزبان رسمی همان ارائه‌دهنده امتحان می‌کند و بعد پرسش‌های کریپتو/DeFi از همان صندلی پرسیده می‌شود. سرویسی که کلید عمومی برای اجرا ندارد، همان‌جا صادقانه همین را می‌گوید. برای اجرای ایجنت‌های خودتان هم کارت عمومی A2A لازم است (تب «کشف / افزودن»).'
-            : 'These services do not run by themselves and are not connected to your account without a key. On any card that has an API key, “Key & connection” opens a real flow: you paste your key, the server proves it against that vendor’s own host before storing it, and your crypto/DeFi questions are then asked through that seat. A service with no public key API says so plainly instead. Running your own agents still needs a public A2A card (Discover / Add).'}
-        </p>
-      </aside>
+      <section className="ah-connectable" data-testid="agent-hub-connectable">
+        <header className="ah-connectable-head">
+          <div>
+            <span className="ah-native-kicker">{fa ? 'اتصال با کلید خودتان · بررسی روی میزبان رسمی' : 'YOUR KEY · PROVEN AGAINST THE VENDOR'}</span>
+            <h4>{fa ? 'ارائه‌دهندگان قابل اتصال' : 'Providers you can connect'}</h4>
+            <p className="ah-muted ah-small">
+              {fa
+                ? 'فقط سرویس‌هایی اینجا هستند که مسیر کلیدشان واقعاً کار می‌کند. دکمهٔ هر کارت همان یک کار را می‌کند: کلید را می‌گیرد، روی همان میزبان امتحان می‌کند و اگر جواب داد رمزنگاری‌شده ذخیره می‌کند. سایت، مستندات و تعرفه داخل پاپ‌اپ همان کارت است.'
+                : 'Only services whose key path genuinely works are listed. A card has exactly one action: take the key, prove it on the vendor’s own host, and store it sealed if it answers. Website, docs and pricing live inside that card’s popup.'}
+            </p>
+          </div>
+        </header>
 
-      <div className="ah-rec-tools">
+        {chips.length > 1 ? (
+          <div className="ah-filters" role="group" aria-label={fa ? 'دسته‌بندی ارائه‌دهنده' : 'Provider category'}>
+            {chips.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="ah-chip"
+                aria-pressed={category === item.id}
+                data-active={category === item.id}
+                onClick={() => setCategory(item.id)}
+                data-testid={`agent-hub-recommendation-filter-${item.id}`}
+              >
+                {item[locale]}
+                <span className="ah-chip-count">{item.count}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         <input
           className="ah-input"
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder={fa ? 'جستجوی نام، کاربرد یا منبع داده…' : 'Search by name, use case or data source…'}
-          aria-label={fa ? 'جستجوی ایجنت‌های پیشنهادی' : 'Search recommended agents'}
+          placeholder={fa ? 'جستجوی نام ارائه‌دهنده یا کاربرد دامنه…' : 'Search a provider or what it does…'}
+          aria-label={fa ? 'جستجوی ارائه‌دهندهٔ قابل اتصال' : 'Search a connectable provider'}
           data-testid="agent-hub-recommendation-search"
         />
-        <div className="ah-filters" role="group" aria-label={fa ? 'دسته‌بندی ایجنت پیشنهادی' : 'Recommended agent category'}>
-          {RECOMMENDATION_CATEGORIES.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="ah-chip"
-              aria-pressed={category === item.id}
-              data-active={category === item.id}
-              onClick={() => setCategory(item.id)}
-              data-testid={`agent-hub-recommendation-filter-${item.id}`}
-            >
-              {item[locale]}
-              <span className="ah-chip-count">{RECOMMENDATION_COUNTS[item.id] || 0}</span>
-            </button>
-          ))}
-        </div>
-      </div>
 
-      {filtered.length ? (
-        <ul className="ah-rec-grid" data-testid="agent-hub-recommendation-list">
-          {filtered.map((agent) => (
-            <li
-              key={agent.id}
-              className="ah-rec-card"
-              data-testid={`agent-hub-recommendation-${testIdPart(agent.id)}`}
-            >
-              <div className="ah-rec-card-head">
-                <span className="ah-rec-brand" aria-hidden="true">{agent.mark}</span>
-                <div className="ah-rec-name-wrap">
-                  <span className="ah-rec-vendor">{agent.vendor}</span>
-                  <h4 className="ah-rec-name">{agent.name}</h4>
-                </div>
-                <span className="ah-rec-recommended">
-                  {keyStatus[agent.id]?.connected
-                    ? (fa ? 'کلید شما وصل است' : 'Your key is live')
-                    : (fa ? 'پیشنهادی' : 'Suggested')}
-                </span>
-              </div>
+        {directory.state === 'loading' || directory.state === 'idle' ? (
+          <p className="ah-muted" role="status">{fa ? 'در حال خواندن فهرست قابل اتصال…' : 'Reading the connectable list…'}</p>
+        ) : null}
 
-              <div className="ah-rec-tags">
-                <span className="ah-rec-tag ah-rec-tag-category">{textFor(agent.kind, fa)}</span>
-                <span className="ah-rec-tag ah-rec-tag-free">{fa ? 'دسترسی رایگان دارد' : 'Free access'}</span>
-                <span className="ah-rec-tag ah-rec-tag-paid">{fa ? 'گزینهٔ پولی دارد' : 'Paid option'}</span>
-              </div>
+        {directory.state === 'empty' ? (
+          <p className="ah-note ah-small" role="status" data-testid="agent-hub-connectable-empty">
+            {fa
+              ? 'در این لحظه سرور هیچ ارائه‌دهندهٔ قابل اتصالی برنگرداند؛ پس هیچ کارتی نمایش داده نمی‌شود. (اگر کلید رمزنگاری سرور تنظیم نشده باشد، همین اتفاق می‌افتد.)'
+              : 'The server returned no connectable provider right now, so no card is shown. (A server without a sealing key produces exactly this.)'}
+          </p>
+        ) : null}
 
-              <p className="ah-rec-summary">{textFor(agent.summary, fa)}</p>
+        {directory.state === 'ready' && !filtered.length ? (
+          <p className="ah-note" role="status" data-testid="agent-hub-recommendation-empty">
+            {fa ? 'ارائه‌دهنده‌ای با این جستجو پیدا نشد.' : 'No connectable provider matches that search.'}
+          </p>
+        ) : null}
 
-              <dl className="ah-rec-facts">
-                <div>
-                  <dt>{fa ? 'مناسب برای' : 'Best for'}</dt>
-                  <dd>{textFor(agent.bestFor, fa)}</dd>
-                </div>
-                <div>
-                  <dt>{fa ? 'دسترسی رایگان' : 'Free access'}</dt>
-                  <dd>{textFor(agent.freeAccess, fa)}</dd>
-                </div>
-                <div>
-                  <dt>{fa ? 'طرح‌های پولی' : 'Paid plans'}</dt>
-                  <dd>{textFor(agent.paidAccess, fa)}</dd>
-                </div>
-              </dl>
+        {filtered.length ? (
+          <ul className="ah-rec-grid" data-testid="agent-hub-recommendation-list">
+            {filtered.map((provider) => {
+              const id = testIdPart(provider.id);
+              const status = keyStatus[provider.id] || { connected: Boolean(provider.connected), status: provider.status };
+              const connected = Boolean(status.connected);
+              return (
+                <li key={provider.id} className="ah-rec-card" data-testid={`agent-hub-recommendation-${id}`}>
+                  <div className="ah-rec-card-head">
+                    <span className="ah-rec-brand" aria-hidden="true">{provider.mark || '◎'}</span>
+                    <div className="ah-rec-name-wrap">
+                      <span className="ah-rec-vendor">{provider.vendor}</span>
+                      <h4 className="ah-rec-name">{provider.name}</h4>
+                    </div>
+                    <span className="ah-badge" data-tone={connected ? 'ok' : 'muted'} data-testid={`agent-hub-recommendation-status-${id}`}>
+                      {connected ? (fa ? 'کلید شما وصل است' : 'Your key is live') : status.status === 'INVALID' ? (fa ? 'کلید نامعتبر' : 'Key invalid') : (fa ? 'آمادهٔ اتصال' : 'Ready to connect')}
+                    </span>
+                  </div>
 
-              <div className="ah-rec-actions">
-                {onOpenKey ? (
-                  <button
-                    type="button"
-                    className={`ah-primary ah-primary-sm ah-rec-key-btn${keyStatus[agent.id]?.connected ? ' ah-rec-key-btn-live' : ''}`}
-                    onClick={() => onOpenKey(agent)}
-                    data-testid={`agent-hub-recommendation-key-${testIdPart(agent.id)}`}
-                  >
-                    {bridgeIdForRecommendation(agent.id)
-                      ? (keyStatus[agent.id]?.connected
-                        ? (fa ? 'کلید و اتصال · متصل' : 'Key & connection · live')
-                        : (fa ? 'کلید و اتصال' : 'Key & connection'))
-                      : (fa ? 'وضعیت اتصال' : 'Connection status')}
-                  </button>
-                ) : null}
-                <a
-                  className="ah-ghost ah-rec-link"
-                  href={agent.productUrl}
-                  target="_blank"
-                  rel="noopener noreferrer nofollow"
-                  data-testid={`agent-hub-recommendation-site-${agent.id}`}
-                >
-                  {fa ? 'سایت رسمی' : 'Official site'}
-                  <span className="ah-rec-external-mark" aria-hidden="true">↗</span>
-                </a>
-                {agent.docsUrl ? (
-                  <a
-                    className="ah-ghost ah-rec-link"
-                    href={agent.docsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer nofollow"
-                    data-testid={`agent-hub-recommendation-docs-${agent.id}`}
-                  >
-                    {fa ? 'مستندات' : 'Docs'}
-                    <span className="ah-rec-external-mark" aria-hidden="true">↗</span>
-                  </a>
-                ) : null}
-                <a
-                  className="ah-ghost ah-rec-link"
-                  href={agent.pricingUrl}
-                  target="_blank"
-                  rel="noopener noreferrer nofollow"
-                  data-testid={`agent-hub-recommendation-pricing-${agent.id}`}
-                >
-                  {fa ? 'تعرفه و دسترسی' : 'Plans & access'}
-                  <span className="ah-rec-external-mark" aria-hidden="true">↗</span>
-                </a>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="ah-note" role="status" data-testid="agent-hub-recommendation-empty">
-          {fa ? 'ایجنت پیشنهادی‌ای با این جستجو پیدا نشد.' : 'No recommended agents match that search.'}
-        </p>
-      )}
+                  <div className="ah-rec-tags">
+                    <span className="ah-rec-tag ah-rec-tag-category">{textFor(KIND_LABEL[provider.kind] || KIND_LABEL.data, fa)}</span>
+                    <span className="ah-rec-tag">{provider.requiresModel === false ? (fa ? 'فقط خواندن داده' : 'Data only') : (fa ? 'پرسش متنی' : 'Text questions')}</span>
+                    <span className="ah-rec-tag">{provider.authLabel}</span>
+                  </div>
+
+                  <p className="ah-rec-summary">{textFor(provider.domainUse, fa)}</p>
+
+                  <div className="ah-rec-actions">
+                    {onOpenKey ? (
+                      <button
+                        type="button"
+                        className={`ah-primary ah-primary-sm ah-rec-key-btn${connected ? ' ah-rec-key-btn-live' : ''}`}
+                        onClick={() => onOpenKey(provider)}
+                        data-testid={`agent-hub-recommendation-key-${id}`}
+                      >
+                        {connected
+                          ? (fa ? 'کلید و بررسی اتصال · متصل' : 'Key & connection · live')
+                          : (fa ? 'بررسی اتصال' : 'Check connection')}
+                      </button>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+      </section>
     </section>
   );
 }

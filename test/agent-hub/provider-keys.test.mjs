@@ -12,7 +12,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createProviderKeys } from '../../server/agentHub/providerKeys.js';
-import { KEY_BRIDGE_IDS, BRIDGES_INTERNAL_FOR_TESTS } from '../../server/agentHub/keyBridges.js';
+import { BRIDGE_CATEGORIES, BRIDGES_INTERNAL_FOR_TESTS, KEY_BRIDGE_IDS } from '../../server/agentHub/keyBridges.js';
 
 const OWNER = 'dev:provider-key-test';
 const OTHER = 'dev:someone-else';
@@ -209,10 +209,18 @@ describe('BYO-key bridges — catalog shape', () => {
         assert.equal(typeof bridge.protocol, 'string');
       } else {
         assert.equal(bridge.kind, 'data');
-        assert.equal(typeof bridge.probePath, 'string', `${bridge.id} needs its own proof read`);
+        const proofPath = bridge.probePath || bridge.probe?.path;
+        assert.equal(typeof proofPath, 'string', `${bridge.id} needs its own proof read`);
         assert.equal(typeof bridge.proofLabel.fa, 'string');
         assert.equal(typeof bridge.check, 'function');
       }
+      /* Every bridge is a card in the directory, so it must carry what a card
+         renders: a category that exists in the chip list and a mark. */
+      assert.ok(
+        BRIDGE_CATEGORIES.some((category) => category.id === bridge.category && category.id !== 'all'),
+        `${bridge.id} has an unknown category`
+      );
+      assert.equal(typeof bridge.mark, 'string');
     }
   });
 });
@@ -254,5 +262,63 @@ describe('BYO-key bridges — data providers', () => {
     const out = await keys.connect({ owner: OWNER, providerId: 'etherscan', secret: 'BADKEY123456' });
     assert.equal(out.ok, false);
     assert.equal(out.code, 'PROVIDER_REJECTED_KEY');
+  });
+});
+
+describe('BYO-key bridges — JSON-RPC and URL-key providers', () => {
+  it('sends a POST JSON-RPC probe with the key in the path, and never in a header', async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({ url: String(url), method: init.method, headers: init.headers || {}, body: init.body || null });
+      return { ok: true, status: 200, async text() { return JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x14a2b3c' }); } };
+    };
+    const keys = createProviderKeys({ env: ENV, storage: memoryStore(), fetchImpl, now: () => 1_700_000_000_000 });
+    const out = await keys.connect({ owner: OWNER, providerId: 'alchemy', secret: 'alch_key_ABC123xyz' });
+    assert.equal(out.ok, true);
+    assert.equal(out.provider.proof, '0x14a2b3c');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, 'POST');
+    assert.match(calls[0].url, /^https:\/\/eth-mainnet\.g\.alchemy\.com\/v2\/alch_key_ABC123xyz$/);
+    assert.equal(JSON.stringify(calls[0].headers).includes('alch_key_ABC123xyz'), false, 'a path key must not also be sent as a header');
+    assert.equal(JSON.parse(calls[0].body).method, 'eth_blockNumber');
+    assert.equal(JSON.stringify(out).includes('alch_key_ABC123xyz'), false);
+  });
+
+  it('treats a JSON-RPC error inside HTTP 200 as a rejected key', async () => {
+    const fetchImpl = async () => ({
+      ok: true,
+      status: 200,
+      async text() { return JSON.stringify({ jsonrpc: '2.0', id: 1, error: { code: -32600, message: 'invalid api key' } }); }
+    });
+    const keys = createProviderKeys({ env: ENV, storage: memoryStore(), fetchImpl, now: () => 1_700_000_000_000 });
+    const out = await keys.connect({ owner: OWNER, providerId: 'helius', secret: 'helius-key-123456' });
+    assert.equal(out.ok, false);
+    assert.equal(out.code, 'PROVIDER_REJECTED_KEY');
+  });
+
+  it('puts a query-key provider\'s key in the URL, once', async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({ url: String(url), method: init.method, headers: init.headers || {} });
+      return { ok: true, status: 200, async text() { return JSON.stringify({ jsonrpc: '2.0', id: 1, result: 355000000 }); } };
+    };
+    const keys = createProviderKeys({ env: ENV, storage: memoryStore(), fetchImpl, now: () => 1_700_000_000_000 });
+    const out = await keys.connect({ owner: OWNER, providerId: 'helius', secret: 'helius-key-123456' });
+    assert.equal(out.ok, true);
+    assert.equal(out.provider.proof, '355000000');
+    assert.match(calls[0].url, /\?api-key=helius-key-123456$/);
+    assert.equal(JSON.stringify(calls[0].headers).includes('helius-key'), false);
+  });
+});
+
+describe('BYO-key bridges — a moved probe path is not a bad key', () => {
+  it('reports PROVIDER_ENDPOINT_MISSING on 404 instead of blaming the key', async () => {
+    const fetchImpl = async () => ({ ok: false, status: 404, async text() { return '{"error":"not found"}'; } });
+    const storage = memoryStore();
+    const keys = createProviderKeys({ env: ENV, storage, fetchImpl, now: () => 1_700_000_000_000 });
+    const out = await keys.connect({ owner: OWNER, providerId: 'moralis', secret: 'moralis-key-123456' });
+    assert.equal(out.ok, false);
+    assert.equal(out.code, 'PROVIDER_ENDPOINT_MISSING');
+    assert.equal(storage.rows.size, 0);
   });
 });

@@ -37,6 +37,7 @@ const COPY = {
     getKey: 'دریافت کلید از ارائه‌دهنده',
     site: 'سایت رسمی',
     docs: 'مستندات',
+    pricing: 'تعرفه و دسترسی',
     connect: 'بررسی و اتصال',
     connecting: 'در حال بررسی کلید روی سرور…',
     replace: 'جایگزینی کلید',
@@ -75,6 +76,7 @@ const COPY = {
     getKey: 'Get a key from the provider',
     site: 'Official site',
     docs: 'Docs',
+    pricing: 'Pricing',
     connect: 'Verify and connect',
     connecting: 'Verifying the key on the server…',
     replace: 'Replace key',
@@ -110,6 +112,10 @@ const ERROR_COPY = {
   PROVIDER_TIMEOUT: { fa: 'پاسخ ارائه‌دهنده دیر شد و درخواست لغو شد.', en: 'The provider did not answer in time; the request was cancelled.' },
   PROVIDER_UNREACHABLE: { fa: 'ارتباط با میزبان ارائه‌دهنده برقرار نشد.', en: 'The provider host could not be reached.' },
   PROVIDER_ERROR: { fa: 'ارائه‌دهنده خطا برگرداند.', en: 'The provider returned an error.' },
+  PROVIDER_ENDPOINT_MISSING: {
+    fa: 'مسیر بررسی این ارائه‌دهنده در دسترس نیست (نه کلید شما). کلید ذخیره نشد؛ این مسیر از سمت FBT باید به‌روز شود.',
+    en: 'The verification path for this provider is not available (this is not your key). Nothing was stored; FBT has to update this path.'
+  },
   AGENT_HUB_SECRET_KEY_REQUIRED: {
     fa: 'کلید رمزنگاری سرور (AGENT_HUB_SECRET_KEY) تنظیم نشده است؛ تا آن موقع هیچ کلیدی ذخیره نمی‌شود.',
     en: 'The server sealing key (AGENT_HUB_SECRET_KEY) is not configured, so no key can be stored yet.'
@@ -450,6 +456,11 @@ export default function ConnectKeyDialog({ fa = false, target = null, onClose = 
           ) : null}
           {entry?.docsUrl || target?.docsUrl ? (
             <a href={entry?.docsUrl || target.docsUrl} target="_blank" rel="noopener noreferrer nofollow">{t.docs} ↗</a>
+          ) : null}
+          {entry?.pricingUrl || target?.pricingUrl ? (
+            <a href={entry?.pricingUrl || target.pricingUrl} target="_blank" rel="noopener noreferrer nofollow" data-testid="agent-hub-key-pricing">
+              {t.pricing} ↗
+            </a>
           ) : null}
           {!bridgeId && target?.productUrl ? (
             <span className="ah-muted ah-small">

@@ -107,8 +107,11 @@ export function createProviderKeys({
   function authHeaders(bridge, secret) {
     const headers = { accept: 'application/json', 'user-agent': 'fbt-agent-hub/1.0' };
     const auth = bridge.auth || {};
-    if (auth.query) {
-      /* Query-key providers (Gemini) take the secret in the URL. */
+    if (auth.query || auth.path) {
+      /* Query-key (Gemini, Helius) and path-key (Alchemy) providers take the
+         secret in the URL; a header here would be ignored *and* would leak the
+         key into a log line that expects headers only. */
+      Object.assign(headers, auth.extraHeaders || {});
       return headers;
     }
     const header = String(auth.header || 'authorization').toLowerCase();
@@ -124,8 +127,10 @@ export function createProviderKeys({
   }
 
   function urlFor(bridge, path, secret) {
-    const url = new URL(`${bridge.baseUrl}${path}`);
-    if (bridge.auth?.query) url.searchParams.set(bridge.auth.query, secret);
+    const auth = bridge.auth || {};
+    const resolved = auth.path ? String(path).split('{key}').join(encodeURIComponent(secret)) : path;
+    const url = new URL(`${bridge.baseUrl}${resolved}`);
+    if (auth.query) url.searchParams.set(auth.query, secret);
     return url.toString();
   }
 
@@ -200,15 +205,21 @@ export function createProviderKeys({
       const variant = variants[index];
       const scoped = { ...bridge, baseUrl: variant.baseUrl || bridge.baseUrl, auth: variant.auth || bridge.auth || {} };
       const proto = protocolFor(scoped);
-      const probePath = variant.probePath || bridge.probePath || proto.probePath;
+      const probeSpec = variant.probe || bridge.probe || null;
+      const probePath = variant.probePath || bridge.probePath || probeSpec?.path || proto.probePath;
+      const probeMethod = probeSpec?.method || 'GET';
+      const probeBody = probeSpec?.body ? JSON.stringify(probeSpec.body) : undefined;
       const check = variant.check || bridge.check || null;
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), VERIFY_TIMEOUT_MS);
       const started = now();
       try {
+        const headers = authHeaders(scoped, secret);
+        if (probeBody) headers['content-type'] = probeSpec.contentType || 'application/json';
         const res = await fetchImpl(urlFor(scoped, probePath, secret), {
-          method: 'GET',
-          headers: authHeaders(scoped, secret),
+          method: probeMethod,
+          headers,
+          ...(probeBody ? { body: probeBody } : {}),
           signal: signal || controller.signal,
           redirect: 'error'
         });
@@ -226,7 +237,11 @@ export function createProviderKeys({
               ? 'PROVIDER_REJECTED_KEY'
               : res.status === 429
                 ? 'PROVIDER_RATE_LIMITED'
-                : 'PROVIDER_ERROR';
+                : res.status === 404 || res.status === 405 || res.status === 410
+                  /* Our probe path moved — the key is not to blame, and saying
+                     "invalid key" here would be a lie the user cannot debug. */
+                  ? 'PROVIDER_ENDPOINT_MISSING'
+                  : 'PROVIDER_ERROR';
           attempts.push({ ok: false, code, status: res.status, latencyMs, detail: scrub(json?.error?.message || json?.message || text, secret) });
           /* A key can be valid on a vendor's other host (a CoinGecko demo key is
              rejected by the pro host), so a rejection only ends the search when
