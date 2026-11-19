@@ -67,7 +67,9 @@ const MAX_MODEL_LADDERS = Object.freeze({
   ]),
   openai: Object.freeze(['gpt-4.1', 'gpt-4o']),
   xai: Object.freeze(['grok-4', 'grok-4-fast']),
-  gemini: Object.freeze(['gemini-2.5-pro', 'gemini-2.5-flash']),
+  /* The alias is the only id this deployment's key serves (the 2.5 ids answer
+     404 — see PROVIDER_CONFIGS.gemini). */
+  gemini: Object.freeze(['gemini-flash-latest']),
   anthropic: Object.freeze(['claude-sonnet-4-6', 'claude-sonnet-4-5', 'claude-haiku-4-5']),
   deepseek: Object.freeze(['deepseek-reasoner', 'deepseek-chat']),
   groq: Object.freeze(['openai/gpt-oss-120b', 'openai/gpt-oss-20b']),

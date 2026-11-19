@@ -413,9 +413,18 @@ test('max sends gemini thinking only on the 2.5 family', async () => {
   resetProviderHealth();
   const stub = stubFetch((rec) => (rec.url.includes('generativelanguage') ? okGemini('gem') : okOpenAI('x')));
   try {
+    /*
+     * The SEAT's default is now `gemini-flash-latest` — the only id this
+     * deployment's key serves; the 2.5 ids it used to lead with answer 404
+     * (live self-test, 2026-11-19). The alias has no pinned thinking budget,
+     * so the request carries no thinkingConfig — but the key must still stay
+     * out of the URL, and an explicitly requested 2.5 id keeps its config
+     * (asserted above).
+     */
     await executeProviderChat('gemini', { system: 's', user: 'u', intelligence: 'max' });
     const cfg = stub.calls[0].body.generationConfig;
-    assert.ok(cfg.thinkingConfig, 'the pro seat should carry a thinking config');
+    assert.equal(cfg.thinkingConfig === undefined, true,
+      'the always-current alias carries no pinned thinking budget');
     assert.ok(!stub.calls[0].url.includes('key='), 'key must stay out of the URL');
   } finally {
     stub.restore();

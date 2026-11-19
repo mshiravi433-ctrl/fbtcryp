@@ -174,7 +174,9 @@ async function runAll() {
       }
     }
     assert.equal(PROVIDER_CONFIGS.groq.defaultModel, 'openai/gpt-oss-20b');
-    assert.equal(PROVIDER_CONFIGS.gemini.defaultModel, 'gemini-2.5-flash');
+    assert.equal(PROVIDER_CONFIGS.gemini.defaultModel, 'gemini-flash-latest');
+    /* The retired ids must not be chosen automatically any more. */
+    assert.ok(PROVIDER_CONFIGS.gemini.retiredModels.includes('gemini-2.5-flash'));
     assert.equal(PROVIDER_CONFIGS.mistral.defaultModel, 'mistral-small-latest');
     assert.ok(isRetiredModel('llama-3.3-70b-versatile'), 'the retired Groq id must stay on the retired list');
     assert.ok(isRetiredModel('gemini-2.0-flash'), 'the retired Gemini id must stay on the retired list');
@@ -625,6 +627,25 @@ async function runAll() {
     const aiModule = read('server/ai.js').replace(/\/\*[\s\S]*?\*\//g, '');
     assert.ok(!aiModule.includes("'gemini-2.0-flash'"), 'server/ai.js must not carry its own stale model constant');
     assert.ok(!/const GROQ_MODEL =/.test(aiModule), 'server/ai.js must not duplicate the gateway’s model defaults');
+  });
+
+  /* ------------------------------------ 10b. a 503 is capacity, not a mystery */
+  await atest('overload is classified as transient, not “unclassified”', () => {
+    /*
+     * Live self-test, 2026-11-19: `gemini-flash-latest` answered
+     * HTTP 503 «This model is currently experiencing high demand» — a valid
+     * id, a busy minute. The classifier fell through every rule to UNKNOWN,
+     * so the seat was described as a broken integration and parked.
+     */
+    const busy = classifyAiError(Object.assign(
+      new Error('HTTP 503: {"error":{"code":503,"message":"This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.","status":"UNAVAILABLE"}}'),
+      { status: 503 }
+    ), 'gemini');
+    assert.equal(busy.kind, 'QUOTA');
+    assert.equal(busy.retryNextModel, false, 'the id is fine — retrying the same one later is correct');
+    assert.match(busy.fix, /overloaded|503/i);
+    /* A retired id still reads as a retired id. */
+    assert.equal(classifyAiError(Object.assign(new Error('HTTP 404: not found'), { status: 404 }), 'gemini').kind, 'MODEL_UNAVAILABLE');
   });
 
   /* --------------------------------------------------- 11. route-level wiring */
