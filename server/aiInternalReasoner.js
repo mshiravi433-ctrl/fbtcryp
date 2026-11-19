@@ -107,8 +107,19 @@ export function gatherExpandedKnowledge({
     } catch { /* retrieval is additive */ }
   }
 
+  /*
+   * Ties are decided by evidence SHAPE, not by the alphabet. «فاندینگ ریت
+   * چطور کار می‌کند؟» tied the funding-rate, open-interest and on-chain items
+   * at 90, and the id sort picked `kb.analytics.onchain-metrics` — so the
+   * answer explained on-chain indicators instead of funding. An item whose
+   * TITLE carries more of the question's anchors, and that needs fewer title
+   * words to say it, is the more specific passage.
+   */
   return uniqById(pool)
-    .sort((a, b) => (knowledgeRank(b) - knowledgeRank(a)) || String(a.id).localeCompare(String(b.id)))
+    .sort((a, b) => (knowledgeRank(b) - knowledgeRank(a))
+      || ((b.titleMatches || 0) - (a.titleMatches || 0))
+      || ((a.titleTokens ?? 99) - (b.titleTokens ?? 99))
+      || String(a.id).localeCompare(String(b.id)))
     .slice(0, Math.max(2, limit));
 }
 

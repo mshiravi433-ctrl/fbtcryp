@@ -62,6 +62,7 @@
  */
 
 import { synthesizeInternalAnswer } from './aiInternalReasoner.js';
+import { classifyQuestionShape } from './aiQuestionShape.js';
 
 /** The environment switch. `0` turns the gate off entirely. */
 export function localFirstGateEnabled(env = process.env) {
@@ -408,6 +409,22 @@ export function evaluateLocalFirst({
     return { answer: null, reason: evidence.reason, used: false, evidence };
   }
 
+  /*
+   * A PLAN REQUEST is work, not a lookup. «استراتژی سرمایه‌گذاری ۲۰٪ سود در
+   * ۶ ماه با این سبد چیست؟» ends in «چیست» and once cleared the gate at 110
+   * on the Earn explainer — a perfectly good answer to a question nobody
+   * asked. Planning belongs to the council.
+   */
+  const shape = classifyQuestionShape(text, { intentType: plan?.intentType || null });
+  if (shape.reason === 'PLAN_REQUEST') {
+    evidence.reason = 'plan-request';
+    evidence.skippedFor = 'plan';
+    return { answer: null, reason: evidence.reason, used: false, evidence };
+  }
+  /* The semantic rescue exists for paraphrased EXPLANATIONS («how do I attach
+     my wallet»), not for any question that happens to score well. */
+  evidence.conceptual = shape.conceptual === true;
+
   /* RULE 2 — a live question is never answered locally. */
   const freshness = evidence.freshness;
   if (freshness === 'LIVE' || freshness === 'BREAKING' || freshness === 'RECENT') {
@@ -429,6 +446,17 @@ export function evaluateLocalFirst({
        but never mistake that query-relative rank for a confidence threshold. */
     .map((k) => ({ row: k, score: knowledgeRelevanceScore(k) }))
     .sort((a, b) => b.score - a.score)[0];
+
+  if (best && evidence.conceptual === false) {
+    /* Non-explanation questions must clear the absolute bar on their own
+       lexical evidence; the hybrid/semantic lift may not carry them. */
+    const lexical = Number(best.row?.lexicalScore ?? best.row?.score) || 0;
+    if (lexical < minScore) {
+      evidence.reason = 'no-strong-match';
+      evidence.row = best.row.id;
+      return { answer: null, reason: evidence.reason, used: false, evidence };
+    }
+  }
 
   evidence.score = best?.score || 0;
   evidence.matched = best?.row?.id || null;

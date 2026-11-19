@@ -765,5 +765,71 @@ export const FBT_KNOWLEDGE_WIDE = Object.freeze([
     bodyFa: 'سناریوها مجموعه‌ای از شرایط ممکن در یک بازهٔ زمانی مشخص‌اند، نه پیش‌بینی نقطهٔ دقیق. هر سناریو شرط‌هایی دارد که اگر برقرار بمانند، آن مسیر محتمل می‌شود؛ و اگر بشکنند، سناریو ضعیف می‌شود. به همین دلیل سناریو را باید به‌عنوان چارچوب تصمیم خواند (چه چیزی را زیر نظر بگیرم) نه به‌عنوان عددی که در آینده ثبت می‌شود.',
     bodyEn: 'Scenarios are sets of conditions that could hold over a defined horizon, not predictions of an exact price. Each scenario carries conditions that, if they remain in place, make that path plausible; if they break, the scenario weakens. Read a scenario as a decision framework — what to watch — rather than as a number that will be recorded in the future.',
     updatedAt: now()
+  },
+  /* ─── THE FOUR CONCEPTS PEOPLE ASK FOR AND THE CORPUS DID NOT HAVE ──────
+     «تحلیل تکنیکال چیه؟» had no item of its own, so the retriever answered
+     with the MVRV glossary or the Intent OS overview — a confident answer to
+     a different question. These are the everyday explanations the assistant
+     was missing, written to the same truth rules: stable knowledge only, no
+     numbers, no promises. */
+  {
+    id: 'kb.trading.technical-analysis', version: 1, category: 'TRADING', status: 'verified', confidence: 92,
+    source: 'fbt-education',
+    tags: ['تحلیل تکنیکال', 'تکنیکال', 'چارت', 'نمودار', 'کندل', 'حمایت', 'مقاومت', 'روند', 'technical analysis', 'ta', 'chart', 'pattern'],
+    titleFa: 'تحلیل تکنیکال چیست و چه محدودیتی دارد؟', titleEn: 'What is technical analysis, and what are its limits?',
+    bodyFa: 'تحلیل تکنیکال یعنی خواندن الگوهای قیمت و حجم برای فهم ساختار بازار: روند، سطوحی که قیمت قبلاً به آن‌ها واکنش داده (حمایت و مقاومت)، و رفتار حجم. این روش به گذشته نگاه می‌کند، پس برای «چه چیزی در حال شکل گرفتن است» خوب است و برای «قیمت فردا چند می‌شود» نه. الگوها احتمالی‌اند و اغلب شکست می‌خورند؛ به همین دلیل تحلیل تکنیکال با حد ضرر، اندازهٔ موقعیت و آگاهی از خبرهای کلان معنا پیدا می‌کند، نه به‌تنهایی. هیچ الگوی تکنیکالی سود را تضمین نمی‌کند.',
+    bodyEn: 'Technical analysis reads price and volume structure: trend, the levels the market has previously reacted to (support and resistance), and what volume did while price moved. It studies the past, so it answers «what is forming now» well and «what will the price be tomorrow» not at all. Patterns are probabilistic and fail often, which is why technicals only make sense together with a stop, position sizing and awareness of macro news — never alone. No chart pattern guarantees a profit.',
+    updatedAt: now()
+  },
+  {
+    id: 'kb.trading.fundamental-analysis', version: 1, category: 'TRADING', status: 'verified', confidence: 92,
+    source: 'fbt-education',
+    tags: ['تحلیل فاندامنتال', 'فاندامنتال', 'ارزش‌گذاری', 'توکنومیکس', 'آزادسازی', 'تیم', 'fundamental', 'valuation', 'dilution'],
+    titleFa: 'تحلیل فاندامنتال یک توکن یعنی چه؟', titleEn: 'What does fundamental analysis of a token mean?',
+    bodyFa: 'تحلیل فاندامنتال دربارهٔ این است که آن توکن چه کاری انجام می‌دهد و ارزشش از کجا می‌آید: کاربرد واقعی، درآمد یا کارمزدی که به دارندگان می‌رسد، عرضهٔ در گردش در برابر عرضهٔ کل (و زمان‌بندی آزادسازی‌ها)، تمرکز دارندگان، و کیفیت تیم و مخزن قرارداد. در کریپتو، عرضهٔ کل و آزادسازی‌ها مهم‌اند چون یک توکن با کاربرد خوب هم می‌تواند با ورود عرضهٔ جدید تحت فشار باشد. فاندامنتال پاسخ بلندمدت می‌دهد؛ زمان‌بندی ورود و خروج را تعیین نمی‌کند.',
+    bodyEn: 'Fundamental analysis asks what the token does and where its value comes from: real usage, fees or revenue that reach holders, circulating versus total supply (and the vesting schedule), holder concentration, and the quality of the team and the contract repository. In crypto, total supply and unlocks matter, because a useful token can still be pressured by new supply. Fundamentals answer the long-horizon question; they do not time entries and exits.',
+    updatedAt: now()
+  },
+  {
+    id: 'kb.general.token-research', version: 1, category: 'GENERAL_CRYPTO', status: 'verified', confidence: 93,
+    source: 'fbt-safety',
+    tags: ['تحقیق توکن', 'بررسی توکن', 'تقلبی', 'rug', 'اسکم', 'نقدینگی', 'قفل', 'research', 'due diligence', 'honeypot', 'scam'],
+    titleFa: 'قبل از خریدن یک توکن ناشناس چه چیزهایی را بررسی کنم؟', titleEn: 'What should I check before buying an unknown token?',
+    bodyFa: 'چهار بررسی حداقلی: ۱) نقدینگی استخر — توکنی با نقدینگی نازک را نمی‌توان فروخت حتی اگر قیمتش بالا برود؛ ۲) اینکه فروش برای همه باز است (توکن‌هایی وجود دارند که فقط خرید می‌شوند)؛ ۳) مالکیت و مجوزها — قراردادی که مالکش می‌تواند عرضه یا کارمزد را تغییر دهد ریسک اضافه دارد؛ ۴) منبع و تبلیغ — اگر تنها منبع معرفی، پیام خصوصی یا گروهی است که سود تضمین می‌کند، همان جواب است. FBT این بررسی‌ها را نشان می‌دهد اما تصمیم و امضا مال شماست و هیچ‌کدام سود را تضمین نمی‌کند.',
+    bodyEn: 'Four minimum checks: (1) pool liquidity — a token with thin liquidity cannot be sold even if the price rises; (2) whether selling is open to everyone (tokens exist that only let you buy); (3) ownership and permissions — a contract whose owner can mint or change fees carries extra risk; (4) provenance — if the only source is a private message or a group promising returns, that is the answer. FBT surfaces these checks, but the decision and the signature are yours, and none of it guarantees a profit.',
+    updatedAt: now()
+  },
+  {
+    id: 'kb.intentos.how-to-ask', version: 1, category: 'INTENT_OS', status: 'verified', confidence: 94,
+    source: 'fbt-app',
+    tags: ['چطور سؤال بپرسم', 'سؤال درست', 'دقیق بپرس', 'راهنمای دستیار', 'how to ask', 'prompt', 'ask better'],
+    titleFa: 'چطور از دستیار سؤال بپرسم تا دقیق‌ترین جواب را بگیرم؟', titleEn: 'How do I ask the assistant to get the most precise answer?',
+    bodyFa: 'سه چیز جواب را دقیق می‌کند: ۱) موضوع را نام ببرید (کدام دارایی، کدام بازار، کدام صفحه)؛ ۲) کاری که می‌خواهید را بگویید — «توضیح بده»، «مقایسه کن»، «ریسکش چیه»، یا «آمادهٔ اجرا کن»؛ ۳) اگر عدد لازم است، خودتان بدهید (مبلغ، بازهٔ زمانی). مثلاً «ریسک سواپ مقدار مشخصی SOL به USDC روی سولانا با اسلیپیج تعیین‌شده چیه؟» دقیق‌تر از «سواپ کن» است. برای قیمت و خبر، دستیار فقط از منبع زندهٔ تأییدشده استفاده می‌کند؛ اگر منبع نباشد، می‌گوید ندارد و حدس نمی‌زند.',
+    bodyEn: 'Three things make an answer precise: (1) name the subject (which asset, which market, which page); (2) say the action you want — explain, compare, assess the risk, or prepare it for execution; (3) give the numbers only you have (amount, time window). «What is the risk of swapping a given amount of SOL to USDC on Solana with an explicit slippage?» gets a sharper answer than «swap». For prices and news the assistant only uses a verified live source; when there is none it says so instead of guessing.',
+    updatedAt: now()
+  },
+  /* ─── TWO QUESTIONS THE CORPUS COULD NOT ANSWER ──────────────────────────
+     «استیکینگ چیه؟» had no staking item at all, so the retriever offered
+     «سود DeFi و ریسک آن» and the Earn page — answers about yield, not about
+     what staking is. «چطور ریسک پرتفوی‌ام را کم کنم؟» was answered with the
+     FBT risk-score explainer, which says how a number is computed rather than
+     how a person reduces exposure. */
+  {
+    id: 'kb.defi.staking', version: 1, category: 'DEFI', status: 'verified', confidence: 92,
+    source: 'fbt-education',
+    tags: ['استیکینگ', 'استیک', 'stake', 'staking', 'staked', 'اعتبارسنج', 'ولیدیتور', 'validator', 'قفل', 'unbonding', 'پاداش شبکه'],
+    titleFa: 'استیکینگ چیست و چطور کار می‌کند؟', titleEn: 'What is staking, and how does it work?',
+    bodyFa: 'استیکینگ یعنی دارایی‌تان را در یک شبکهٔ اثبات سهام قفل می‌کنید تا آن شبکه امن بماند، و در برابر آن پاداش می‌گیرید. دو راه دارد: خودتان اعتبارسنج (validator) بشوید که زیرساخت و مسئولیت می‌خواهد، یا دارایی را به یک اعتبارسنج یا استخر بسپارید که ساده‌تر است اما به آن‌ها اعتماد می‌کنید. سه چیز را از قبل بدانید: ۱) دورهٔ قفل و زمان خارج کردن (unbonding) — پول فوری در دسترس نیست؛ ۲) پاداش نرخ ثابت نیست و با تعداد استیکرها و تورم شبکه تغییر می‌کند؛ ۳) اگر اعتبارسنج خطا کند یا بدرفتاری کند، بخشی از دارایی جریمه می‌شود. قرار دادن دارایی در استخر نقدینگی هم «استیکینگ» نامیده می‌شود ولی چیز دیگری است: آنجا ضرر ناپایدار (impermanent loss) ریسک اصلی است، نه جریمهٔ اعتبارسنج.',
+    bodyEn: 'Staking locks your asset in a proof-of-stake network so the network stays secure, and pays you a reward for it. There are two routes: run a validator yourself, which takes infrastructure and responsibility, or delegate to a validator or a pool, which is simpler but means trusting them. Know three things first: (1) the lock and unbonding period — the money is not instantly available; (2) the reward rate is not fixed, it moves with how much is staked and with network inflation; (3) if a validator misbehaves, part of the stake can be slashed. Putting an asset into a liquidity pool is also called «staking» in some apps, but it is a different thing: there the main risk is impermanent loss, not slashing.',
+    updatedAt: now()
+  },
+  {
+    id: 'kb.risk.reduce-risk', version: 1, category: 'RISK', status: 'verified', confidence: 93,
+    source: 'fbt-education',
+    tags: ['کم کردن ریسک', 'ریسک پرتفوی', 'کاهش ریسک', 'مدیریت ریسک', 'اندازه موقعیت', 'position size', 'reduce risk', 'risk management', 'drawdown', 'حد ضرر'],
+    titleFa: 'چطور ریسک پرتفوی‌ام را کم کنم؟', titleEn: 'How do I reduce the risk in my portfolio?',
+    bodyFa: 'ریسک با پنج کار قابل کم کردن است و هیچ‌کدام نیاز به پیش‌بینی بازار ندارد: ۱) اندازهٔ موقعیت — طوری وارد شوید که یک حد ضرر بدترین حالت، فقط درصدی از کل سرمایه را ببرد که با آن راحت هستید؛ ۲) تنوع واقعی — چند دارایی که به یک عامل واحد وابسته‌اند (مثلاً همهٔ میم‌کوین‌ها) تنوع نیست؛ ۳) حد ضرر از پیش تعیین‌شده، نه در لحظهٔ هیجان؛ ۴) کم کردن اهرم — اهرم هم سود و هم ضرر را چند برابر می‌کند و ریسک لیکوییدشدن اضافه می‌کند؛ ۵) نقدینگی — بخشی از سرمایه را نقد یا در دارایی پایدار نگه دارید تا مجبور نشوید در بدترین زمان بفروشید. برای دیدن اثر واقعی، همان پنج مورد را روی سبد فعلی‌تان حساب کنید، نه روی یک سبد فرضی.',
+    bodyEn: 'Risk comes down with five moves, none of which needs a market forecast: (1) position size — size each entry so that a stop-out at the worst case costs only a share of total capital you are comfortable losing; (2) real diversification — several assets that depend on the same factor (e.g. all memecoins) are not diversification; (3) a stop decided in advance, not in the moment of excitement; (4) less leverage — leverage multiplies both sides and adds liquidation risk; (5) liquidity — keep part of the capital in cash or a stable asset so you never have to sell at the worst time. To see the real effect, run those five against your actual book, not a hypothetical one.',
+    updatedAt: now()
   }
 ]);

@@ -421,9 +421,20 @@ export function hybridKnowledgeSearch(query, {
       : 'semantic-only';
   }
 
+  /*
+   * Ties are common once two items match the same words. The old last resort
+   * was the id alphabetically, which is arbitrary: «فاندینگ ریت چطور کار
+   * می‌کند؟» tied the funding-rate, open-interest and on-chain items at 90 and
+   * answered with `kb.analytics.onchain-metrics` because `kb.analytics…`
+   * sorts before `kb.trading…`. The lexical scorer already knows which item
+   * has the question's anchors in its TITLE — use that before falling back
+   * to the id.
+   */
   pool.sort((a, b) => (b.combined - a.combined)
     || (b.lexicalScore - a.lexicalScore)
     || (b.similarity - a.similarity)
+    || ((b.titleMatches || 0) - (a.titleMatches || 0))
+    || ((a.titleTokens ?? 99) - (b.titleTokens ?? 99))
     || String(a.id).localeCompare(String(b.id)));
 
   /*

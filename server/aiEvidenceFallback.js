@@ -292,9 +292,19 @@ export function answerRequiresEvidence({
   actionPlan = false,
   uiType = null,
   productVerified = false,
-  nonFactualResponse = false
+  nonFactualResponse = false,
+  /* ─── EXPLANATION, NOT OBSERVATION (2026-11-19) ──────────────────────────
+   * A question that asks what something IS, how it works, or what to do is
+   * answered from stable knowledge and reasoning; it does not need a live
+   * quote, and demanding one turned «ایمپرمننت لاس چیه؟» into «منبع
+   * تأییدشده‌ای ندارم». This flag comes from server/aiQuestionShape.js, which
+   * refuses to set it the moment the question names a price, today's news or
+   * the user's own balance — those still require verified data.
+   */
+  conceptual = false
 } = {}) {
   if (socialHandled || pendingIntent || actionPlan || productVerified || nonFactualResponse) return false;
+  if (conceptual && !['LIVE', 'BREAKING', 'RECENT'].includes(String(freshness || '').toUpperCase())) return false;
   if (['ACTION_CARD', 'CHOICE', 'CONNECT_WALLET'].includes(String(uiType || '').toUpperCase())) return false;
   if (NON_ANSWER_INTENTS.has(String(intentType || '').toUpperCase())) return false;
   const kind = String(conversationKind || '').toUpperCase();

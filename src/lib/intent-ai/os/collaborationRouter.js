@@ -38,6 +38,7 @@ import { classifySocialAct, socialCostOf, SOCIAL_ACTS } from './conversation/soc
    layout is not small talk: it is where a wrong reading costs the most, so it
    gets a depth floor of its own (see `deepThinkFloor` in that module). */
 import { readPartialInput, deepThinkFloor } from './conversation/partialInput.js';
+import { isConceptualQuestion } from '../../../../server/aiQuestionShape.js';
 
 export const COLLABORATION_ROUTER_SCHEMA = 'fbt.collaboration-router.v5';
 export const COLLABORATION_ROUTER_VERSION = '5.0.0';
@@ -331,6 +332,14 @@ export function classifyFreshness(rawText) {
    */
   if (STATIC_FIGURE_RE.test(text) && !LIVE_RE.test(text) && !RECENT_RE.test(text)) return 'STATIC';
   if (STATIC_POLICY_RE.test(text) && !LIVE_RE.test(text) && !RECENT_RE.test(text)) return 'STATIC';
+  /*
+   * An EXPLANATION is not a live question. «چرا باید تنوع داشته باشم؟» carries
+   * no time marker at all, so it used to fall through to the RECENT default —
+   * and the evidence policy then demanded a live source for a question about
+   * a principle. The classifier refuses the moment a price, today's news or
+   * the user's own balance is named, so real data questions are unaffected.
+   */
+  if (isConceptualQuestion(rawText)) return 'STATIC';
   /* Default: a bare market question («بیت کوین چطوره؟») needs current data to
      be honest; a bare definition lands in STATIC above. */
   return 'RECENT';

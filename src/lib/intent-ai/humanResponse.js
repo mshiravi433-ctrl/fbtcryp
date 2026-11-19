@@ -16,6 +16,8 @@ import { humanizeError, normalizeErrorCode } from './errorHumanizer.js';
 import { createPendingIntent } from './pendingIntent.js';
 import { buildActionPlan, isExecutionReady } from './contextResolver.js';
 import { narrateReadyPlan, narrateMissingInformation } from './planNarrator.js';
+import { searchKnowledge } from './os/knowledgeCenter.js';
+import { isConceptualQuestion } from '../../../server/aiQuestionShape.js';
 
 export const AI_RESPONSE_SCHEMA = 'fbt.ai-response.v1';
 
@@ -414,6 +416,38 @@ function productAnswerMessage(product, lang) {
   return text;
 }
 
+/*
+ * ─── AN EXPLANATION IS ANSWERED, NOT DEFERRED ───────────────────────────────
+ * «استیکینگ چیه؟» and «چطور ریسک پرتفوی‌ام را کم کنم؟» reached this renderer
+ * as a tool-truth intent (STAKING / ANALYZE_PORTFOLIO) with no wallet, so the
+ * whole answer was «اول کیف پولتان را متصل کنید» — a demand for a credential
+ * in reply to a question about a concept. An explanation is answered from the
+ * verified Knowledge Center, in the user's language, with no wallet involved.
+ *
+ * `isConceptualQuestion` refuses to classify a question as conceptual the
+ * moment it names a price, today's news, the user's own balance or an action,
+ * so this branch can never take over a data question.
+ */
+const CONCEPTUAL_MIN_SCORE = 100;
+
+function conceptualKnowledgeReply(message, lang) {
+  let hits = [];
+  try {
+    hits = searchKnowledge(message, { locale: lang, limit: 3 }) || [];
+  } catch {
+    return null;
+  }
+  const best = hits.find((hit) => hit && hit.status !== 'deprecated'
+    && Number(hit.score) >= CONCEPTUAL_MIN_SCORE && String(hit.body || '').trim());
+  if (!best) return null;
+  const body = String(best.body).trim();
+  const title = String(lang === 'fa' ? (best.titleFa || best.title) : (best.titleEn || best.title) || '').trim();
+  /* Trim the trailing «بیشتر در بخش …» pointer lines: a chat bubble is not a
+     documentation page. */
+  const clean = body.split(/\n{2,}/).slice(0, 2).join('\n\n').slice(0, 900).trim();
+  return title && !clean.startsWith(title) ? `${title}: ${clean}` : clean;
+}
+
 export function formatHumanResponse({
   message = '',
   classification = null,
@@ -457,7 +491,25 @@ export function formatHumanResponse({
     });
   }
 
-  const needsWallet = intentRequiresWallet(kind) || (userIntent.prefersWallet && kind === 'ANALYZE_PORTFOLIO' && !connected);
+  /*
+   * An explanation needs no wallet. It is answered from the verified corpus
+   * before any tool-truth branch can turn the turn into a connection request.
+   */
+  const conceptualQuestion = isConceptualQuestion(message);
+  if (conceptualQuestion) {
+    const explained = conceptualKnowledgeReply(message, lang);
+    if (explained) {
+      return finalize({
+        message: explained,
+        intent: { type: 'GENERAL', status: 'READY' },
+        ui: { type: 'TEXT' },
+        suggestions: suggestionLabels(suggestions, lang)
+      });
+    }
+  }
+
+  const needsWallet = !conceptualQuestion
+    && (intentRequiresWallet(kind) || (userIntent.prefersWallet && kind === 'ANALYZE_PORTFOLIO' && !connected));
   if (needsWallet && !connected) {
     const pending = createPendingIntent({
       originalMessage: message,

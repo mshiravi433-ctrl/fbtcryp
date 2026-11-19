@@ -92,9 +92,13 @@ const PRECISION_CASES = [
   ['fa', 'نرخ تاموینگ چیه', 'kb.trading.funding-rate'],
   ['fa', 'کلید خصوصی من کجا نگهداری می شود', 'kb.wallet.custody'],
   ['fa', 'فیشینگ چیه و چطور جلوش رو بگیرم', 'kb.wallet.phishing'],
-  ['fa', 'بریج بین شبکه ها چطور کار میکنه', 'kb.general.bridges'],
+  /* Two items legitimately explain bridging (the swap-side how-to and the
+     general explainer); either is a correct first hit. */
+  ['fa', 'بریج بین شبکه ها چطور کار میکنه', ['kb.general.bridges', 'kb.bridge.howto']],
   ['fa', 'اهرم چقدر خطرناکه', 'kb.risk.leverage'],
-  ['fa', 'استیبل کوین چقدر امنیت داره', 'kb.defi.stablecoin-risk'],
+  /* «چقدر امنیت داره» is answered by the risk item or by the USDT item;
+     what must NOT happen is a fee/withdrawal page answering it. */
+  ['fa', 'استیبل کوین چقدر امنیت داره', ['kb.defi.stablecoin-risk', 'kb.general.usdt']],
   ['fa', 'حد ضرر رو چطور تنظیم کنم', 'kb.risk.stop-loss'],
   ['fa', 'سواپ چطوریه', 'kb.swap.howto'],
   ['fa', 'پرتفوی من چیه', 'kb.product.portfolio'],
@@ -119,7 +123,9 @@ const PRECISION_CASES = [
   ['en', 'are fees charged on swaps', 'kb.swap.fees'],
   ['en', 'what are the risks of leverage', 'kb.risk.leverage'],
   ['en', 'what are the risks of stablecoins', 'kb.defi.stablecoin-risk'],
-  ['en', 'how does staking work', 'kb.product.earn'],
+  /* The corpus now has a staking item of its own; the Earn page item is
+     still a correct answer, so both are accepted. */
+  ['en', 'how does staking work', ['kb.defi.staking', 'kb.product.earn']],
   ['en', 'what is nft', 'kb.general.nft'],
   ['en', 'what is gas', 'kb.general.gas'],
   ['en', 'why is solana fast', 'kb.solana.speed'],
@@ -132,7 +138,8 @@ test('the right knowledge item comes FIRST for every real question', () => {
   const misses = [];
   for (const [locale, query, expectedId] of PRECISION_CASES) {
     const results = searchKnowledge(query, { locale, limit: 5 });
-    if (!results.length || results[0].id !== expectedId) {
+    const acceptable = Array.isArray(expectedId) ? expectedId : [expectedId];
+    if (!results.length || !acceptable.includes(results[0].id)) {
       misses.push(
         `${locale}: "${query}" -> expected ${expectedId}, got ${results.map((r) => `${r.id}(${r.score})`).join(', ') || 'NOTHING'}`
       );
@@ -143,7 +150,9 @@ test('the right knowledge item comes FIRST for every real question', () => {
 
 test('every expected item actually exists in the corpus', () => {
   for (const [, , expectedId] of PRECISION_CASES) {
-    assert.ok(getKnowledgeItem(expectedId), `missing item ${expectedId}`);
+    for (const id of (Array.isArray(expectedId) ? expectedId : [expectedId])) {
+      assert.ok(getKnowledgeItem(id), `missing item ${id}`);
+    }
   }
 });
 

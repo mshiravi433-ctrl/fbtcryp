@@ -49,6 +49,7 @@ import {
 } from '../src/lib/intent-ai/commandCenter.js';
 import { listAiTools, AI_TOOL_SCHEMA } from '../src/lib/intent-ai/aiToolRegistry.js';
 import { formatHumanResponse, formatExecutionResult, stripInternalLeaks, withPartialReading } from '../src/lib/intent-ai/humanResponse.js';
+import { isConceptualQuestion } from './aiQuestionShape.js';
 import { classifyUserIntent } from '../src/lib/intent-ai/intentKinds.js';
 /* Phase 217 — cross-asset conditional intents. «اگر طلا ۵٪ اصلاح کرد و BTC
    بالای X بود، ۱۰٪ سرمایه را به طلا اختصاص بده» is answered HERE instead of
@@ -1386,8 +1387,19 @@ function applyAnswerEvidencePolicy({
   productRead = null, tokenCard = null, smartMoneyEvidence = null, conditionalEvidence = null, entities = {},
   intentType = 'GENERAL', freshness = null, answerPath = null, conversationKind = null,
   socialHandled = false, pendingIntent = false, actionPlan = false, uiType = null,
-  nonFactualResponse = false, minimalQuestion = null, clarificationOnly = false, locale = 'fa', providerAnswered = null
+  nonFactualResponse = false, minimalQuestion = null, clarificationOnly = false, locale = 'fa', providerAnswered = null,
+  message = '', conceptual = null
 } = {}) {
+  /*
+   * An EXPLANATION question is not an observation. «ایمپرمننت لاس چیه؟»
+   * must be answerable from stable knowledge; «قیمت بیت‌کوین چنده؟» must
+   * still have a verified source. server/aiQuestionShape.js draws that line
+   * and refuses the conceptual flag the moment a price, today's news or the
+   * user's own balance is named.
+   */
+  const conceptualQuestion = conceptual === null
+    ? isConceptualQuestion(message || context?.message || '', { intentType })
+    : conceptual === true;
   const assessment = assessAnswerEvidence({
     context, collaboration, orchestration, productRead, tokenCard, smartMoneyEvidence, conditionalEvidence,
     entities, intentType, freshness
@@ -1396,7 +1408,8 @@ function applyAnswerEvidencePolicy({
     answerPath, freshness, intentType, conversationKind, socialHandled,
     pendingIntent, actionPlan, uiType,
     productVerified: productRead?.confidence === 'verified',
-    nonFactualResponse
+    nonFactualResponse,
+    conceptual: conceptualQuestion
   });
   const fallbackApplied = Boolean(required && !assessment.available);
   const liveProviderAnswered = providerAnswered === true;
@@ -1511,7 +1524,8 @@ async function gatewayEvidencePack(req, body, { message, read, entities, intentT
     freshness: read?.freshness,
     intentType,
     conversationKind: read?.conversationKind,
-    productVerified: productRead?.confidence === 'verified'
+    productVerified: productRead?.confidence === 'verified',
+    conceptual: isConceptualQuestion(message, { intentType })
   });
   let context = rawContext;
   if (required && !initialAssessment.available && GATEWAY_CONTEXT_READ_INTENTS.has(intentType)) {
@@ -1535,6 +1549,7 @@ async function gatewayEvidencePack(req, body, { message, read, entities, intentT
     }))
   } : null;
   const evidence = applyAnswerEvidencePolicy({
+    message,
     text: '', context, collaboration, orchestration, productRead, entities,
     intentType, freshness: read?.freshness, answerPath: read?.answerPath,
     conversationKind: read?.conversationKind, locale, providerAnswered: null
@@ -1576,6 +1591,7 @@ router.post('/gateway/chat', async (req, res) => {
 
     if (evidencePack.productRead?.confidence === 'verified') {
       const gated = applyAnswerEvidencePolicy({
+        message,
         text: evidencePack.productRead.answer,
         context: evidencePack.context,
         productRead: evidencePack.productRead,
@@ -1618,6 +1634,7 @@ router.post('/gateway/chat', async (req, res) => {
       && String(result?.text || '').trim()
     );
     const gated = applyAnswerEvidencePolicy({
+      message,
       text: String(result?.text || ''),
       context: evidencePack.context,
       collaboration: evidencePack.collaboration,
@@ -1673,6 +1690,7 @@ router.post('/gateway/consensus', async (req, res) => {
     if (['GREETING', 'THANKS', 'CASUAL'].includes(String(read.conversationKind || '').toUpperCase())) {
       const socialText = gatewaySocialReply(message, locale);
       const gated = applyAnswerEvidencePolicy({
+        message,
         text: socialText, context: evidencePack.context, entities, intentType,
         freshness: read.freshness, answerPath: read.answerPath,
         conversationKind: read.conversationKind, socialHandled: true, locale
@@ -1683,6 +1701,7 @@ router.post('/gateway/consensus', async (req, res) => {
 
     if (evidencePack.productRead?.confidence === 'verified') {
       const gated = applyAnswerEvidencePolicy({
+        message,
         text: evidencePack.productRead.answer,
         context: evidencePack.context,
         productRead: evidencePack.productRead,
@@ -1723,6 +1742,7 @@ router.post('/gateway/consensus', async (req, res) => {
     const providerAnswered = Boolean((consensus.modelsConsulted || []).some((model) =>
       model?.provider && String(model.provider).toLowerCase() !== 'internal'));
     const gated = applyAnswerEvidencePolicy({
+      message,
       text: consensus.consensusSummary || '',
       context: evidencePack.context,
       collaboration: evidencePack.collaboration,
@@ -2530,6 +2550,7 @@ router.post('/chat', async (req, res) => {
       ? answerProduct({ message, locale: locale || 'fa' })
       : null;
     const richEvidenceGate = applyAnswerEvidencePolicy({
+      message,
       text: rich.text,
       context,
       productRead: richProductRead,
@@ -2641,6 +2662,7 @@ router.post('/chat', async (req, res) => {
        NEEDS_INPUT are honest abstentions/clarifications — they make no
        factual claim, so their exact wording is kept. */
     const conditionalGate = applyAnswerEvidencePolicy({
+      message,
       text: conditional.text,
       conditionalEvidence: conditional.evidence,
       intentType: 'CONDITIONAL_ALLOCATION',
@@ -2724,6 +2746,7 @@ router.post('/chat', async (req, res) => {
        names the index age when stale) is kept, and the gate record is
        attached for audit. */
     const smartMoneyGate = applyAnswerEvidencePolicy({
+      message,
       text: narrated.text,
       smartMoneyEvidence: narrated.evidence,
       intentType: 'SMART_MONEY',
@@ -3301,7 +3324,8 @@ router.post('/chat', async (req, res) => {
     pendingIntent: Boolean(pendingIntent),
     actionPlan: Boolean(human.actionPlan),
     uiType: human.ui?.type,
-    productVerified: Boolean(productAnswered && !hasNonProductSubQuestions)
+    productVerified: Boolean(productAnswered && !hasNonProductSubQuestions),
+    conceptual: isConceptualQuestion(message, { intentType: finalIntentType })
   });
   const liveProviderAnswered = Boolean(
     (collaboration?.providersUsed?.length && String(collaboration?.answer || '').trim())
