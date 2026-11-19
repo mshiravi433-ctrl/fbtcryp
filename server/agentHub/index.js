@@ -28,6 +28,7 @@ import { createTaskBroker } from './tasks.js';
 import { createUserAgentSources } from './userAgents.js';
 import { createNativeRuntime } from './native/index.js';
 import { createSourceCredentials } from './sourceCredentials.js';
+import { createProviderKeys } from './providerKeys.js';
 import { createAgentHubRouter } from './router.js';
 
 export const AGENT_HUB_VERSION = '1.0.0';
@@ -41,9 +42,14 @@ export function createAgentHub({ ownerFor, env = process.env, log = () => {}, no
   const adapters = createAdapterFactory({ env, now, native });
   const userSources = createUserAgentSources({ store, env, now, log });
   const sourceCredentials = createSourceCredentials({ userSources, env, now, log });
+  /* Third-party seats: the user's own key for a provider in the directory, sealed
+     with the same primitive as a source credential and verified against the
+     vendor before it is stored. Not a reviewed provider; never executable as an
+     agent task from this alone. */
+  const providerKeys = createProviderKeys({ env, now, log });
   const connections = createConnectionManager({ store, registry, env, now, log });
   const broker = createTaskBroker({ registry, adapters, store, connections, userSources, sourceCredentials, native, env, now, log });
-  const hub = { version: AGENT_HUB_VERSION, store, registry, adapters, userSources, sourceCredentials, connections, native, broker };
+  const hub = { version: AGENT_HUB_VERSION, store, registry, adapters, userSources, sourceCredentials, providerKeys, connections, native, broker };
   hub.router = createAgentHubRouter({ hub, ownerFor, env, log });
   return hub;
 }

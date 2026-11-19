@@ -5,6 +5,7 @@ import {
   RECOMMENDATIONS_REVIEWED_ON,
   RECOMMENDED_EXTERNAL_AGENTS
 } from '../../lib/intent-ai/agentHub/recommendations.js';
+import { bridgeIdForRecommendation } from '../../lib/intent-ai/agentHub/keyBridges.js';
 
 const textFor = (value, fa) => value?.[fa ? 'fa' : 'en'] || '';
 const testIdPart = (value) => String(value || '').replace(/[^A-Za-z0-9_-]+/g, '-');
@@ -86,7 +87,7 @@ function matchesNative(agent, query, fa) {
  * first, labelled `FBT native`, and carries only agents the server actually
  * listed — never a placeholder card while the catalogue is loading.
  */
-export default function RecommendedAgents({ fa = false, onAddOwnAgent = null, nativeAgents = [], onRunAgent = null }) {
+export default function RecommendedAgents({ fa = false, onAddOwnAgent = null, nativeAgents = [], onRunAgent = null, onOpenKey = null, keyStatus = {} }) {
   const [category, setCategory] = useState('all');
   const [query, setQuery] = useState('');
   const locale = fa ? 'fa' : 'en';
@@ -216,8 +217,8 @@ export default function RecommendedAgents({ fa = false, onAddOwnAgent = null, na
         <strong>{fa ? 'فهرست زیر «پیشنهادی» است، نه «تأییدشده» یا «متصل».' : 'The directory below is suggested, not reviewed or connected.'}</strong>
         <p>
           {fa
-            ? 'این سرویس‌ها از اینجا اجرا نمی‌شوند و به حساب شما وصل نیستند؛ پیوندها به سایت رسمی می‌روند. برای اجرای ایجنت‌های خودتان از داخل FBT باید کارت عمومی A2A سازگار داشته باشند (تب «کشف / افزودن»). پیش از اشتراک‌گذاری اطلاعات، شرایط، حریم خصوصی، دسترسی‌ها و قیمتِ قابل‌اعمال در منطقه‌تان را در سایت ارائه‌دهنده بررسی کنید.'
-            : 'These services do not run here and are not connected to your account; links go to their official sites. Running your own agent inside FBT requires a compatible public A2A card (Discover / Add). Before sharing information, review the provider’s terms, privacy policy, permissions and local pricing.'}
+            ? 'این سرویس‌ها خودبه‌خود اجرا نمی‌شوند و بی‌کلید به حساب شما وصل نیستند. روی هر کارتی که کلید API دارد، دکمهٔ «کلید و اتصال» باز می‌شود: کلید خودتان را می‌گذارید، سرور پیش از ذخیره آن را روی میزبان رسمی همان ارائه‌دهنده امتحان می‌کند و بعد پرسش‌های کریپتو/DeFi از همان صندلی پرسیده می‌شود. سرویسی که کلید عمومی برای اجرا ندارد، همان‌جا صادقانه همین را می‌گوید. برای اجرای ایجنت‌های خودتان هم کارت عمومی A2A لازم است (تب «کشف / افزودن»).'
+            : 'These services do not run by themselves and are not connected to your account without a key. On any card that has an API key, “Key & connection” opens a real flow: you paste your key, the server proves it against that vendor’s own host before storing it, and your crypto/DeFi questions are then asked through that seat. A service with no public key API says so plainly instead. Running your own agents still needs a public A2A card (Discover / Add).'}
         </p>
       </aside>
 
@@ -264,7 +265,9 @@ export default function RecommendedAgents({ fa = false, onAddOwnAgent = null, na
                   <h4 className="ah-rec-name">{agent.name}</h4>
                 </div>
                 <span className="ah-rec-recommended">
-                  {fa ? 'پیشنهادی' : 'Suggested'}
+                  {keyStatus[agent.id]?.connected
+                    ? (fa ? 'کلید شما وصل است' : 'Your key is live')
+                    : (fa ? 'پیشنهادی' : 'Suggested')}
                 </span>
               </div>
 
@@ -292,8 +295,22 @@ export default function RecommendedAgents({ fa = false, onAddOwnAgent = null, na
               </dl>
 
               <div className="ah-rec-actions">
+                {onOpenKey ? (
+                  <button
+                    type="button"
+                    className={`ah-primary ah-primary-sm ah-rec-key-btn${keyStatus[agent.id]?.connected ? ' ah-rec-key-btn-live' : ''}`}
+                    onClick={() => onOpenKey(agent)}
+                    data-testid={`agent-hub-recommendation-key-${testIdPart(agent.id)}`}
+                  >
+                    {bridgeIdForRecommendation(agent.id)
+                      ? (keyStatus[agent.id]?.connected
+                        ? (fa ? 'کلید و اتصال · متصل' : 'Key & connection · live')
+                        : (fa ? 'کلید و اتصال' : 'Key & connection'))
+                      : (fa ? 'وضعیت اتصال' : 'Connection status')}
+                  </button>
+                ) : null}
                 <a
-                  className="ah-primary ah-primary-sm ah-rec-link-primary"
+                  className="ah-ghost ah-rec-link"
                   href={agent.productUrl}
                   target="_blank"
                   rel="noopener noreferrer nofollow"

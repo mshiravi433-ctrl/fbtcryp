@@ -28,6 +28,7 @@ import {
   primeCatalogCache,
   getTask,
   listConnections,
+  listProviderKeys,
   listTasks,
   newIdempotencyKey,
   removeSource,
@@ -36,6 +37,8 @@ import {
   saveSourceCredential
 } from '../../lib/intent-ai/agentHub/client.js';
 import RecommendedAgents from './RecommendedAgents.jsx';
+import ConnectKeyDialog from './ConnectKeyDialog.jsx';
+import { BRIDGE_BY_RECOMMENDATION_ID, bridgeIdForRecommendation } from '../../lib/intent-ai/agentHub/keyBridges.js';
 import NativeDataDisclosure from './NativeDataDisclosure.jsx';
 import { setActiveAgent } from '../../lib/intent-ai/agentHub/activeAgent.js';
 import { attachPlugin } from '../../lib/central/client.js';
@@ -369,6 +372,23 @@ export default function AgentHubPanel({ fa = false, onClose = null, onActivateIn
     sourceId: null, open: false, secret: '', headerName: 'authorization', scheme: 'bearer',
     state: 'idle', error: null, detail: null, message: null
   });
+  /* External seats: the user's OWN key for a directory provider. The map is
+     keyed by CARD id so a connected OpenAI seat lights the ChatGPT card, while
+     the dialog talks to the server by bridge id. */
+  const [keyTarget, setKeyTarget] = useState(null);
+  const [keyStatus, setKeyStatus] = useState({});
+  const reloadProviderKeys = useCallback(async () => {
+    const out = await listProviderKeys();
+    if (!out?.ok) return;
+    const byBridge = new Map((out.providers || []).map((provider) => [provider.id, provider]));
+    const next = {};
+    for (const [cardId, bridgeId] of Object.entries(BRIDGE_BY_RECOMMENDATION_ID)) {
+      const provider = byBridge.get(bridgeId);
+      if (provider) next[cardId] = { connected: Boolean(provider.connected), status: provider.status || 'UNCONNECTED', hint: provider.hint || null, model: provider.model || null };
+    }
+    setKeyStatus(next);
+  }, []);
+  useEffect(() => { void reloadProviderKeys(); }, [reloadProviderKeys]);
   const keyRef = useRef(newIdempotencyKey('hub'));
   const inflightRef = useRef(false);
 
@@ -1072,6 +1092,18 @@ export default function AgentHubPanel({ fa = false, onClose = null, onActivateIn
           onAddOwnAgent={() => setTab('discover')}
           nativeAgents={agents}
           onRunAgent={(agent) => { setTab('discover'); void openAgent(agent); }}
+          keyStatus={keyStatus}
+          onOpenKey={(agent) =>
+            setKeyTarget({
+              id: agent.id,
+              name: agent.name,
+              vendor: agent.vendor,
+              mark: agent.mark,
+              productUrl: agent.productUrl,
+              docsUrl: agent.docsUrl,
+              bridgeId: bridgeIdForRecommendation(agent.id)
+            })
+          }
         />
       ) : null}
 
@@ -1501,6 +1533,15 @@ export default function AgentHubPanel({ fa = false, onClose = null, onActivateIn
             ))}
           </ul>
         </div>
+      ) : null}
+
+      {keyTarget ? (
+        <ConnectKeyDialog
+          fa={fa}
+          target={keyTarget}
+          onClose={() => setKeyTarget(null)}
+          onChanged={reloadProviderKeys}
+        />
       ) : null}
     </div>
   );

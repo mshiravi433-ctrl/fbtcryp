@@ -222,6 +222,88 @@ export function createAgentHubRouter({ hub, ownerFor, env = process.env, log = (
     });
   }));
 
+  /* ══════════════════════ provider keys (BYO key bridges) ══════════════════════
+     The directory's external providers, made usable with the user's OWN key.
+     A saved key here is not a reviewed provider and not a user-supplied source:
+     it is a third-party seat our assistant can legitimately call, and the only
+     proof of that is the authenticated round-trip inside `connect`. */
+
+  const providerKeyStatus = (code) =>
+    code === 'PROVIDER_NOT_CONNECTABLE' || code === 'CREDENTIAL_NOT_FOUND' ? 404
+      : code === 'AGENT_HUB_SECRET_KEY_REQUIRED' || code === 'CREDENTIAL_STORE_REQUIRED' || code === 'CREDENTIAL_STORE_UNAVAILABLE' ? 503
+        : code === 'PROVIDER_REJECTED_KEY' || code === 'PROVIDER_TIMEOUT' || code === 'PROVIDER_UNREACHABLE' || code === 'PROVIDER_RATE_LIMITED' ? 502
+          : code === 'RATE_LIMITED' ? 429
+            : 400;
+
+  router.get('/provider-keys', handle(async (req, res) => {
+    const owner = ownerOf(req);
+    if (!isStrongOwner(owner)) return fail(res, 401, 'STRONG_OWNER_REQUIRED');
+    if (!hub.providerKeys) return fail(res, 503, 'CREDENTIAL_STORE_UNCONFIGURED');
+    const out = await hub.providerKeys.list({ owner });
+    if (!out.ok) return fail(res, providerKeyStatus(out.code), out.code);
+    return ok(res, { providers: out.providers, durable: out.durable, capability: hub.providerKeys.capability() });
+  }));
+
+  router.post('/provider-keys/:providerId/connect', handle(async (req, res) => {
+    const owner = ownerOf(req);
+    if (!isStrongOwner(owner)) return fail(res, 401, 'STRONG_OWNER_REQUIRED');
+    if (!hub.providerKeys) return fail(res, 503, 'CREDENTIAL_STORE_UNCONFIGURED');
+    const body = req.body || {};
+    const out = await hub.providerKeys.connect({
+      owner,
+      providerId: req.params.providerId,
+      secret: body.secret || body.key || ''
+    });
+    if (!out.ok) {
+      return fail(res, providerKeyStatus(out.code), out.code, {
+        field: out.field || null,
+        status: out.status || null,
+        detail: out.detail || null,
+        provider: out.provider || null
+      });
+    }
+    return ok(res, { provider: out.provider, verified: out.verified || null });
+  }));
+
+  router.post('/provider-keys/:providerId/ask', handle(async (req, res) => {
+    const owner = ownerOf(req);
+    if (!isStrongOwner(owner)) return fail(res, 401, 'STRONG_OWNER_REQUIRED');
+    if (!hub.providerKeys) return fail(res, 503, 'CREDENTIAL_STORE_UNCONFIGURED');
+    const body = req.body || {};
+    const out = await hub.providerKeys.ask({
+      owner,
+      providerId: req.params.providerId,
+      question: body.question || body.q || '',
+      context: body.context || ''
+    });
+    if (!out.ok) {
+      return fail(res, providerKeyStatus(out.code), out.code, {
+        field: out.field || null,
+        status: out.status || null,
+        detail: out.detail || null,
+        retryAfterMs: out.retryAfterMs || null
+      });
+    }
+    return ok(res, {
+      answer: out.answer,
+      model: out.model,
+      provider: out.provider,
+      attribution: out.attribution,
+      domain: out.domain,
+      latencyMs: out.latencyMs,
+      asksRemaining: out.asksRemaining
+    });
+  }));
+
+  router.delete('/provider-keys/:providerId', handle(async (req, res) => {
+    const owner = ownerOf(req);
+    if (!isStrongOwner(owner)) return fail(res, 401, 'STRONG_OWNER_REQUIRED');
+    if (!hub.providerKeys) return fail(res, 503, 'CREDENTIAL_STORE_UNCONFIGURED');
+    const out = await hub.providerKeys.remove({ owner, providerId: req.params.providerId });
+    if (!out.ok) return fail(res, providerKeyStatus(out.code), out.code);
+    return ok(res, { provider: out.provider });
+  }));
+
   router.post('/providers/:providerId/connections/start', handle(async (req, res) => {
     const owner = ownerOf(req);
     if (!isStrongOwner(owner)) return fail(res, 401, 'STRONG_OWNER_REQUIRED');
