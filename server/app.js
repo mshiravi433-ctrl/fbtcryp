@@ -1113,19 +1113,42 @@ setInterval(() => {
  * looping the documented example. Cheap-to-serve and expensive-to-serve
  * endpoints should not share a budget.
  *
- * 10/min per caller is far above what the UI generates (the client answers
- * common questions from its local FAQ and only escalates when unsure) and far
- * below what a loop costs.
+ * THE BUCKET IS THE PERSON, NOT THE WIRE.
+ *
+ * This used to key on `req.ip`, which on a proxied deployment is not a user:
+ * one bucket covered a household, an office, or in the worst case a whole
+ * egress range, and the assistant answered «Service temporarily unavailable»
+ * to people who had sent nothing. The device header the AI surface already
+ * uses (`x-fbt-device`, set by the client on every call) is the identity the
+ * rest of the AI routes derive their owner from, so it is the identity here
+ * too — with the IP kept as the last resort for a caller that sends none.
+ *
+ * 30/min per caller is far above what the UI generates (one POST per turn, and
+ * turns are human-paced) and far below what a loop costs.
  */
+const aiLimitFromEnv = (fallback) => {
+  const first = String(process.env.AI_RATE_LIMIT || '').split(',')[0].trim();
+  const n = Number(first);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+const AI_MAX_PER_WINDOW = aiLimitFromEnv(30);
+
+/** The person behind a request: telegram id, then the AI device header, then IP. */
+const aiCallerKey = (req) => {
+  if (req.tgUser?.id) return `tg:${req.tgUser.id}`;
+  const device = String(req.get?.('x-fbt-device') || '').trim();
+  if (device) return `dev:${device.slice(0, 64)}`;
+  return `ip:${req.ip}`;
+};
+
 const aiHits = new Map();
-const AI_MAX_PER_WINDOW = Number(process.env.AI_RATE_LIMIT || 10);
 
 app.use('/api/ai', (req, res, next) => {
   // Reading status must never be throttled: the client polls it to decide
   // whether to show the feature at all, and a 429 there looks like an outage.
   if (req.method === 'GET') return next();
 
-  const key = req.tgUser?.id ?? req.ip;
+  const key = aiCallerKey(req);
   const now = Date.now();
   const rec = aiHits.get(key);
   if (!rec || now > rec.reset) {
@@ -1134,8 +1157,9 @@ app.use('/api/ai', (req, res, next) => {
   }
   rec.count += 1;
   if (rec.count > AI_MAX_PER_WINDOW) {
-    res.set('retry-after', String(Math.ceil((rec.reset - now) / 1000)));
-    return res.status(429).json({ error: 'AI_RATE_LIMITED' });
+    const retryAfter = Math.max(1, Math.ceil((rec.reset - now) / 1000));
+    res.set('retry-after', String(retryAfter));
+    return res.status(429).json({ error: 'AI_RATE_LIMITED', retryAfter });
   }
   return next();
 });
@@ -1149,10 +1173,10 @@ setInterval(() => {
    older command-center routes: AI calls spend real provider quota, so a cheap
    script must not be able to take the assistant down for everyone. */
 const aiV1Hits = new Map();
-const AI_V1_MAX_PER_WINDOW = Number(process.env.AI_RATE_LIMIT || 10);
+const AI_V1_MAX_PER_WINDOW = aiLimitFromEnv(30);
 app.use('/api/v1/ai', (req, res, next) => {
   if (req.method === 'GET') return next();
-  const key = req.tgUser?.id ?? req.ip;
+  const key = aiCallerKey(req);
   const now = Date.now();
   const rec = aiV1Hits.get(key);
   if (!rec || now > rec.reset) {
@@ -1161,8 +1185,9 @@ app.use('/api/v1/ai', (req, res, next) => {
   }
   rec.count += 1;
   if (rec.count > AI_V1_MAX_PER_WINDOW) {
-    res.set('retry-after', String(Math.ceil((rec.reset - now) / 1000)));
-    return res.status(429).json({ error: 'AI_RATE_LIMITED' });
+    const retryAfter = Math.max(1, Math.ceil((rec.reset - now) / 1000));
+    res.set('retry-after', String(retryAfter));
+    return res.status(429).json({ error: 'AI_RATE_LIMITED', retryAfter });
   }
   return next();
 });

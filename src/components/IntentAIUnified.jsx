@@ -3370,11 +3370,26 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         const attempt = Number(opts.attempt || 0);
         const toolChecker = toolCheckerRef.current;
         const retryStrategy = toolChecker.getRetryStrategy({ message: code }, { attempt });
-        const canRetry = attempt < 1 && (timedOut || (retryStrategy.recoverable && retryStrategy.action === 'RETRY'));
+        /* A 429 is not a transient glitch: the same bucket answers the same way
+           half a second later, so the automatic retry would only spend a second
+           slot of the allowance and print a second failure. */
+        const rateLimited = status === 429 || human.code === 'RATE_LIMITED';
+        const canRetry = !rateLimited && attempt < 1 && (timedOut || (retryStrategy.recoverable && retryStrategy.action === 'RETRY'));
         const fa = String(locale || 'fa').toLowerCase().startsWith('fa');
+        /*
+         * ─── NO OPERATOR ENGLISH IN THE BUBBLE ───────────────────────────────
+         * `getRecoveryMessage()` speaks to an operator ("<tool> temporarily
+         * unavailable. Retrying..." — and "Retrying" was often untrue). The
+         * user-facing line is the humanized one, and for a throttle it carries
+         * the wait the server actually published.
+         */
+        const retryAfter = Number(res?.retryAfter || res?.retryAfterSec || 0);
+        const waitNote = rateLimited && retryAfter > 0
+          ? (fa ? `\n\nحدود ${retryAfter} ثانیه صبر کنید و دوباره بفرستید.` : `\n\nWait about ${retryAfter}s and send it again.`)
+          : '';
         const recoveryMsg = canRetry
           ? (fa ? 'پاسخ در مهلت نرسید؛ یک‌بار دیگر می‌پرسم و عمق پاسخ را بر اساس خود پرسش انتخاب می‌کنم.' : 'The answer did not arrive in time; I will retry once and choose depth from the question again.')
-          : `${toolChecker.getRecoveryMessage({ message: code }, { toolId: res?.intent?.type })}`;
+          : waitNote;
 
         /*
          * ─── THE SERVER FAILED, NOT THE QUESTION ────────────────────────────
@@ -3387,7 +3402,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         /* The offline OS reading is shown when the turn ENDS here. While a
            retry is still coming, stapling «مطمئن نشدم…» under an in-flight
            retry is noise — and it is what made one failure read as three. */
-        const localReading = !canRetry && osResult?.understood === false
+        /* A throttle or a transport failure says nothing about whether the
+           question was understood, so the OS reading is not stapled under it —
+           that pairing is what made one failure read like a deaf assistant. */
+        const localReading = !canRetry && !rateLimited && !timedOut && osResult?.understood === false
           ? String(osResult?.human?.message || '').trim()
           : '';
 
@@ -3395,7 +3413,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           id: makeId(),
           role: 'ai',
           content: visibleText(res, human.message)
-            + (canRetry || retryStrategy.recoverable ? `\n\n${recoveryMsg}` : '')
+            + (recoveryMsg ? `\n\n${recoveryMsg}` : '')
             + (localReading ? `\n\n${localReading}` : ''),
           kind: connect ? 'connect' : 'error',
           statusCode: status || null,

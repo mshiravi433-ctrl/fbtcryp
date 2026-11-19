@@ -326,6 +326,19 @@ function partialReadingMessage(partial, lang) {
   const actKey = inferred.act && inferred.act !== 'unknown' ? inferred.act : (assumedAct || 'unknown');
   const act = ACT_LABELS[actKey] || ACT_LABELS.unknown;
   const assets = Array.isArray(inferred.assets) ? inferred.assets.filter(Boolean).slice(0, 2) : [];
+  /*
+   * NEVER ANNOUNCE A CARRIED-OVER ASSET AS A READING.
+   *
+   * If the message named no asset of its own and the only one in `assets` was
+   * carried from a previous turn, then «منظورت BTC است» is not what the user
+   * said — it is what we guessed, and saying it back turns every later
+   * question («اخبار بازار امروز», «هدف مالی بساز») into a wrong restatement.
+   * Such a turn still gets whatever answer the rest of the renderer can give;
+   * it just does not get a fake reading in front of it.
+   */
+  const ownAssets = Array.isArray(partial.ownAssets) ? partial.ownAssets.filter(Boolean) : [];
+  if (!ownAssets.length && partial.carriedAsset) return '';
+  if (!ownAssets.length && !assets.length && actKey === 'unknown') return '';
   const reading = [assets.join('/'), lang === 'fa' ? act.fa : act.en].filter(Boolean).join(' — ');
 
   const lines = [];
