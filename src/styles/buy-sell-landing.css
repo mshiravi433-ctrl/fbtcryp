@@ -172,10 +172,51 @@
 .bsland-pay-copy { display: grid; gap: 4px; min-width: 0; }
 .bsland-pay-copy .mono { color: var(--desk-muted); overflow-wrap: anywhere; }
 .bsland-pay-p2p { margin-top: 18px; }
-.bsland-screen :is(.iran-buy-ticket,.buy-sell-watch) { border: 0; padding: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
-.bsland-screen .iran-buy-panel { max-width: none; }
 .buy-sell-result { display: grid; gap: 14px; padding: 18px 20px 26px; }
 .buy-sell-order-result { border-radius: 16px; }
 .bsland-asset-logo { display: block; flex: none; object-fit: contain; border-radius: 50%; }
 .app-shell:has(.buy-sell-page--desk) { max-width: none; padding-bottom: 0; }
 .page.buy-sell-page.buy-sell-page--desk { padding: 0; }
+
+/* Bare toolbar marks; the flag uses the actual emblem, not a font glyph. */
+.bsland-iran-flag { display: block; flex: none; border-radius: 5px; box-shadow: 0 0 0 1px var(--desk-edge); }
+.bsland-transfer-pulse { display: block; color: #79edd7; }
+:root[data-theme='light'] .bsland-transfer-pulse { color: #007762; }
+
+/* The dialog is already the surface. Keep the report and referral in the
+   document flow, using whitespace and dividers instead of nested shells. */
+.bsland-screen .iran-buy-panel--flat,
+.bsland-screen .buy-sell-watch--flat { width: 100%; max-width: none; margin: 0; padding: 0; }
+.bsland-screen .iran-buy-panel--flat .iran-buy-referral-flow { margin: 0; }
+.bsland-screen .iran-buy-panel--flat :is(.iran-buy-referral, .iran-buy-referral-guide, .iran-buy-address, .iran-buy-referral-steps),
+.bsland-screen .buy-sell-watch--flat .buy-sell-watch-events li {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.bsland-screen .iran-buy-panel--flat .iran-buy-referral { gap: 14px; margin: 0; overflow: visible; }
+.bsland-screen .iran-buy-panel--flat .iran-buy-referral-copy { gap: 8px; }
+.bsland-screen .iran-buy-panel--flat h3 { margin: 0; font-size: clamp(22px, 5vw, 34px); line-height: 1.35; }
+.bsland-screen .iran-buy-panel--flat :is(.iran-buy-referral-copy p, .iran-buy-referral-disclosure, .iran-buy-referral-steps small, .iran-buy-address-empty p),
+.bsland-screen .buy-sell-watch--flat :is(.faint, .buy-sell-watch-hint, .buy-sell-watch-honesty, .buy-sell-watch-events small) {
+  color: var(--desk-muted);
+  font-size: 13px;
+  line-height: 1.75;
+}
+.bsland-screen .iran-buy-panel--flat .iran-buy-referral-btn { min-height: 46px; font-size: 14px; }
+.bsland-screen .iran-buy-panel--flat .iran-buy-referral-guide { margin-block-start: 24px; border-block-start: 1px solid var(--desk-edge); }
+.bsland-screen .iran-buy-panel--flat .iran-buy-referral-guide summary { padding: 14px 0; font-size: 15px; color: var(--desk-fg); }
+.bsland-screen .iran-buy-panel--flat .iran-buy-referral-guide-body { padding: 0; gap: 18px; }
+.bsland-screen .iran-buy-panel--flat .iran-buy-referral-note { padding: 0; font-size: 12px; color: var(--desk-muted); }
+.bsland-screen .buy-sell-watch--flat .buy-sell-watch-head { flex-wrap: wrap; gap: 14px; padding-block-end: 16px; border-block-end: 1px solid var(--desk-edge); }
+.bsland-screen .buy-sell-watch--flat .buy-sell-watch-head > div { flex: 1 1 220px; }
+.bsland-screen .buy-sell-watch--flat .section-label { color: var(--desk-fg); font-size: clamp(18px, 3vw, 26px); letter-spacing: normal; }
+.bsland-screen .buy-sell-watch--flat .buy-sell-watch-toggle { min-height: 44px; }
+.bsland-screen .buy-sell-watch--flat :is(.buy-sell-watch-meta,.buy-sell-watch-status) { flex-wrap: wrap; font-size: 13px; }
+.bsland-screen .buy-sell-watch--flat .buy-sell-watch-events li { padding-block: 12px; border-block-end: 1px solid var(--desk-edge); }
+.bsland-screen .buy-sell-watch--flat .buy-sell-watch-pulse { background: currentColor; }
+@media (prefers-reduced-motion: reduce) {
+  .bsland-screen .buy-sell-watch--flat .buy-sell-watch-pulse { animation: none; }
+}

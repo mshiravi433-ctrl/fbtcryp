@@ -19,12 +19,26 @@ import {
   normalizeDigits
 } from '../lib/guidedCheckout';
 import {
-  IconActivity, IconArrowDown, IconArrowUpRight, IconBuilding, IconChevronLeft,
-  IconChevronRight, IconCheck, IconIran
+  IconArrowDown, IconArrowUpRight, IconBuilding, IconChevronLeft,
+  IconChevronRight, IconCheck
 } from './Icons';
 
 /* The keypad: 1-9, then . 0 ⌫. Three columns, four rows. */
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'del'];
+
+function IranFlag() {
+  return <img className="bsland-iran-flag" src="/images/ramp/ir.svg" width={28} height={21} alt="" />;
+}
+
+function TransferPulse() {
+  return (
+    <svg className="bsland-transfer-pulse" viewBox="0 0 28 24" width="28" height="24" fill="none" aria-hidden="true">
+      <path d="M2 12h24" stroke="currentColor" strokeOpacity=".22" />
+      <path d="M2 12h5l3-5 4 12 4-14 3 7h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="26" cy="12" r="1.6" fill="currentColor" />
+    </svg>
+  );
+}
 
 // Checked-in marks for curated guided assets not in the shared SVG catalogue.
 const DESK_LOGOS = { stETH: 'png', wstETH: 'png', weETH: 'png', rETH: 'svg', cbETH: 'svg' };
@@ -199,7 +213,7 @@ export default function BuySellLanding() {
             aria-label={t('buySell.landing.report')}
             data-testid="bsland-report"
           >
-            <IconActivity width={20} height={20} />
+            <TransferPulse />
           </button>
           {iranLanguageAllowed && <button
             type="button"
@@ -208,7 +222,7 @@ export default function BuySellLanding() {
             aria-label={t('buySell.landing.iran')}
             data-testid="bsland-iran"
           >
-            <IconIran width={22} height={22} />
+            <IranFlag />
           </button>}
         </span>
       </header>
@@ -377,8 +391,9 @@ export default function BuySellLanding() {
       {/* ── THE POPUPS ───────────────────────────────────────────────── */}
 
       {/* On-chain tracking report: the deposit receipt, as a card. */}
-      <BuySellScreen {...screenProps} open={reportOpen} onClose={() => setReportOpen(false)} title={t('buySell.landing.reportTitle')} icon={<IconActivity width={22} height={22} />} testId="bsland-report-sheet">
+      <BuySellScreen {...screenProps} open={reportOpen} onClose={() => setReportOpen(false)} title={t('buySell.landing.reportTitle')} icon={<TransferPulse />} testId="bsland-report-sheet">
         <WalletWatchReport
+          flat
           side={side}
           walletAddress={walletAddress}
           asset={asset}
@@ -393,13 +408,12 @@ export default function BuySellLanding() {
         open={iranOpen && iranLanguageAllowed}
         onClose={() => setIranOpen(false)}
         title={t('buySell.landing.iranTitle')}
-        subtitle={t('buySell.landing.iranSub')}
-        icon={<IconIran width={20} height={20} />}
+        icon={<IranFlag />}
         testId="bsland-iran-sheet"
       >
         {iranLanguageAllowed ? (
           <div dir="rtl" lang="fa">
-            <IranianBuyPanel capability={null} />
+            <IranianBuyPanel capability={null} flat />
           </div>
         ) : null}
       </BuySellScreen>

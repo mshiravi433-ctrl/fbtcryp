@@ -524,14 +524,16 @@ function ReferralGuide({ onConnect, onSwitch, onSelectNetwork, referral, selecte
  * the server approved a link; the disclosure line is not optional copy — it is
  * the affiliate disclosure, and it ships with the card unconditionally.
  */
-function ReferralCard({ manualFallback, onOpen, referral, t }) {
+function ReferralCard({ manualFallback, onOpen, referral, t, flat }) {
   return (
     <section className="iran-buy-referral" data-testid="iran-buy-referral">
       <div className="iran-buy-referral-copy">
-        <b>
-          <span className="iran-buy-brand-mark" aria-hidden="true"><IconCoins width={14} height={14} /></span>
-          {t('iranBuy.referral.cardTitle')}
-        </b>
+        {flat ? <h3>{t('iranBuy.referral.cardTitle')}</h3> : (
+          <b>
+            <span className="iran-buy-brand-mark" aria-hidden="true"><IconCoins width={14} height={14} /></span>
+            {t('iranBuy.referral.cardTitle')}
+          </b>
+        )}
         <p>{t('iranBuy.referral.cardBody')}</p>
         {referral?.discountNote && (
           <small className="iran-buy-referral-perk" data-testid="iran-buy-referral-perk">
@@ -553,7 +555,7 @@ function ReferralCard({ manualFallback, onOpen, referral, t }) {
   );
 }
 
-export default function IranianBuyPanel({ capability }) {
+export default function IranianBuyPanel({ capability, flat = false }) {
   const { t } = useTranslation();
   const wallet = useWallet();
   const notify = useAppStore((state) => state.notify);
@@ -825,13 +827,13 @@ export default function IranianBuyPanel({ capability }) {
    */
   if (!enabled) {
     return (
-      <section className="iran-buy-panel" dir="rtl" lang="fa" data-testid="iran-buy-panel">
-        <motion.section className="lab-card iran-buy-ticket" variants={riseIn} initial="hidden" animate="show">
-          {header}
-          {subTabs}
+      <section className={`iran-buy-panel${flat ? " iran-buy-panel--flat" : ""}`} dir="rtl" lang="fa" data-testid="iran-buy-panel">
+        <motion.section className={flat ? "iran-buy-flat-content" : "lab-card iran-buy-ticket"} variants={riseIn} initial="hidden" animate="show">
+          {!flat && header}
+          {!flat && subTabs}
           {error && <div className="notice notice-danger iran-buy-error" role="alert">{errorText}</div>}
           <div className="iran-buy-referral-flow" data-testid="iran-buy-referral-flow">
-            <ReferralCard referral={referral} t={t} onOpen={openReferral} manualFallback={referralManualFallback} />
+            <ReferralCard flat={flat} referral={referral} t={t} onOpen={openReferral} manualFallback={referralManualFallback} />
             <ReferralGuide
               referral={referral}
               selectedNetwork={selectedNetwork}

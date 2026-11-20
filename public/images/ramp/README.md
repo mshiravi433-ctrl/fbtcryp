@@ -4,3 +4,4 @@
 - rETH and cbETH: [Optimism Superchain Token List](https://github.com/ethereum-optimism/ethereum-optimism.github.io/tree/master/data), `data/{rETH,cbETH}/logo.svg`.
 
 These marks identify the listed assets and are loaded locally; the remaining desk marks are in the shared asset icon catalogue.
+- `ir.svg`: [flag-icons, Iran 4:3](https://github.com/lipis/flag-icons/blob/main/flags/4x3/ir.svg) (MIT).

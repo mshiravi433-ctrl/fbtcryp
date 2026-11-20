@@ -19,7 +19,7 @@ import { IconActivity, IconCheck, IconChevronRight, IconShield } from './Icons';
  * copy says "a deposit matching your order was detected", never "payment
  * confirmed" — the strings in i18n keep that wording rule.
  */
-export default function WalletWatchReport({ side, walletAddress, asset, network, autoStart = 0 }) {
+export default function WalletWatchReport({ side, walletAddress, asset, network, autoStart = 0, flat = false }) {
   const { t, i18n } = useTranslation();
   const wallet = useWallet();
   const [watching, setWatching] = useState(false);
@@ -101,12 +101,12 @@ export default function WalletWatchReport({ side, walletAddress, asset, network,
   const matches = (event) => (sell ? event.direction === 'out' : event.direction === 'in');
 
   return (
-    <motion.section className="lab-card buy-sell-watch" variants={riseIn} initial="hidden" animate="show">
+    <motion.section className={flat ? "buy-sell-watch buy-sell-watch--flat" : "lab-card buy-sell-watch"} variants={riseIn} initial="hidden" animate="show">
       <div className="buy-sell-watch-head">
-        <span className={`buy-sell-watch-dot ${watching ? 'live' : ''}`} aria-hidden="true"><IconActivity width={15} height={15} /></span>
+        {!flat && <span className={`buy-sell-watch-dot ${watching ? 'live' : ''}`} aria-hidden="true"><IconActivity width={15} height={15} /></span>}
         <div>
           <p className="section-label" style={{ margin: 0 }}>{sell ? t('buySell.watch.titleSell') : t('buySell.watch.titleBuy')}</p>
-          <p className="faint" style={{ marginTop: 3, fontSize: 11 }}>{t('buySell.watch.subtitle')}</p>
+          <p className="faint" style={flat ? { marginTop: 3 } : { marginTop: 3, fontSize: 11 }}>{t('buySell.watch.subtitle')}</p>
         </div>
         {watching
           ? <button type="button" className="btn btn-ghost btn-sm buy-sell-watch-toggle" onClick={stop}>{t('buySell.watch.stop')}</button>
