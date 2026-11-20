@@ -178,4 +178,4 @@
 .buy-sell-order-result { border-radius: 16px; }
 .bsland-asset-logo { display: block; flex: none; object-fit: contain; border-radius: 50%; }
 .app-shell:has(.buy-sell-page--desk) { max-width: none; padding-bottom: 0; }
-.page.buy-sell-page--desk { padding: 0; }
+.page.buy-sell-page.buy-sell-page--desk { padding: 0; }
