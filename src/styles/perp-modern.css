@@ -1631,40 +1631,40 @@
 }
 
 /* ==========================================================================
-   2026-11-09 · THE GOLD REFRESH — modern layer for the futures desk
-   Overrides the list → sheet → explainer stack with the new molten-gold
+   GLACIER GLASS — modern layer for the futures desk
+   Overrides the list → sheet → explainer stack with the cool glass
    identity. Kept as an additive layer so every pre-existing contract keeps
    holding.
    ========================================================================== */
 
-/* ── the page itself: deeper canvas, faint gold aura ────────────────────── */
+/* ── the page itself: deeper canvas, faint blue aura ────────────────────── */
 .perp-modern {
   position: relative;
   border-radius: 22px;
 }
 
-/* ── the explainer toggle: gold filament identity ───────────────────────── */
+/* ── the explainer toggle: blue filament identity ───────────────────────── */
 .perp-how {
   border-radius: 18px !important;
-  border: 1px solid rgba(245, 158, 11, 0.32) !important;
+  border: 1px solid rgba(80, 160, 229, 0.32) !important;
   background:
-    radial-gradient(150% 170% at 12% -30%, rgba(245, 158, 11, 0.22), transparent 52%),
-    linear-gradient(150deg, rgba(30, 24, 12, 0.82), rgba(12, 10, 6, 0.88)) !important;
-  box-shadow: 0 16px 40px -20px rgba(245, 158, 11, 0.35), inset 0 1px 0 rgba(253, 230, 138, 0.14) !important;
+    radial-gradient(150% 170% at 12% -30%, rgba(80, 160, 229, 0.22), transparent 52%),
+    linear-gradient(150deg, rgba(13, 28, 49, 0.82), rgba(9, 17, 29, 0.88)) !important;
+  box-shadow: 0 16px 40px -20px rgba(80, 160, 229, 0.35), inset 0 1px 0 rgba(174, 220, 255, 0.14) !important;
   transition: transform 0.2s ease, box-shadow 0.25s ease, border-color 0.25s ease !important;
 }
-.perp-how:hover { transform: translateY(-1px); border-color: rgba(245, 158, 11, 0.5) !important; }
+.perp-how:hover { transform: translateY(-1px); border-color: rgba(80, 160, 229, 0.5) !important; }
 .perp-how-ico {
-  color: #fbbf24 !important;
-  background: rgba(245, 158, 11, 0.14);
-  border: 1px solid rgba(245, 158, 11, 0.32);
+  color: #96d5ff !important;
+  background: rgba(80, 160, 229, 0.14);
+  border: 1px solid rgba(80, 160, 229, 0.32);
   width: 34px; height: 34px; border-radius: 11px;
 }
-.perp-how[aria-expanded='true'] { border-color: rgba(245, 158, 11, 0.55) !important; box-shadow: 0 18px 46px -18px rgba(245, 158, 11, 0.45), inset 0 1px 0 rgba(253, 230, 138, 0.2) !important; }
+.perp-how[aria-expanded='true'] { border-color: rgba(80, 160, 229, 0.55) !important; box-shadow: 0 18px 46px -18px rgba(80, 160, 229, 0.45), inset 0 1px 0 rgba(174, 220, 255, 0.2) !important; }
 .perp-how-body {
   border-radius: 18px !important;
-  border: 1px solid rgba(245, 158, 11, 0.2) !important;
-  background: rgba(12, 10, 6, 0.55) !important;
+  border: 1px solid rgba(80, 160, 229, 0.2) !important;
+  background: rgba(9, 17, 29, 0.55) !important;
   padding: 12px !important;
   margin: -6px 0 14px !important;
 }
@@ -1672,18 +1672,18 @@
 /* ── search: command-bar pill ────────────────────────────────────────────── */
 .perp-pair-search input {
   border-radius: 999px !important;
-  border: 1px solid rgba(245, 158, 11, 0.18) !important;
+  border: 1px solid rgba(80, 160, 229, 0.18) !important;
   background: rgba(2, 6, 23, 0.5) !important;
   padding-block: 10px !important;
   transition: border-color 0.2s ease, box-shadow 0.25s ease, background 0.2s ease !important;
 }
 .perp-pair-search input:focus {
-  border-color: rgba(245, 158, 11, 0.55) !important;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12), 0 0 24px -8px rgba(245, 158, 11, 0.4) !important;
+  border-color: rgba(80, 160, 229, 0.55) !important;
+  box-shadow: 0 0 0 3px rgba(80, 160, 229, 0.12), 0 0 24px -8px rgba(80, 160, 229, 0.4) !important;
   background: rgba(2, 6, 23, 0.75) !important;
 }
 
-/* ── pair rows: glass cards with a gold live seam ───────────────────────── */
+/* ── pair rows: glass cards with a blue live seam ───────────────────────── */
 .perp-rows { gap: 10px !important; }
 .perp-rows .perp-row {
   position: relative;
@@ -1697,62 +1697,62 @@
 }
 .perp-rows .perp-row:hover {
   transform: translateY(-2px);
-  border-color: rgba(245, 158, 11, 0.38) !important;
-  box-shadow: 0 18px 38px -16px rgba(245, 158, 11, 0.28), inset 0 1px 0 rgba(253, 230, 138, 0.1) !important;
+  border-color: rgba(80, 160, 229, 0.38) !important;
+  box-shadow: 0 18px 38px -16px rgba(80, 160, 229, 0.28), inset 0 1px 0 rgba(174, 220, 255, 0.1) !important;
 }
-.perp-rows .perp-row:hover .perp-row-sym { color: #fde68a; }
+.perp-rows .perp-row:hover .perp-row-sym { color: #b9e4ff; }
 .perp-row-sym { transition: color 0.2s ease; }
 .perp-pair-live {
-  background: #f59e0b !important;
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.9) !important;
+  background: #72b9ef !important;
+  box-shadow: 0 0 8px rgba(80, 160, 229, 0.9) !important;
 }
 
-/* the trade button: molten gold */
+/* the trade button: frosted blue */
 .perp-row-go {
   border-radius: 13px !important;
-  border: 1px solid rgba(253, 230, 138, 0.4) !important;
-  background: linear-gradient(150deg, #fde68a 0%, #f59e0b 48%, #d97706 100%) !important;
-  color: #451a03 !important;
-  box-shadow: 0 8px 22px -10px rgba(245, 158, 11, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.65) !important;
+  border: 1px solid rgba(174, 220, 255, 0.4) !important;
+  background: linear-gradient(150deg, #b9e4ff 0%, #72b9ef 48%, #5686d8 100%) !important;
+  color: #10223b !important;
+  box-shadow: 0 8px 22px -10px rgba(80, 160, 229, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.65) !important;
 }
 .perp-row-go:hover {
-  box-shadow: 0 12px 28px -10px rgba(245, 158, 11, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+  box-shadow: 0 12px 28px -10px rgba(80, 160, 229, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
   filter: brightness(1.05);
 }
 
-/* ── rail tabs: gold active cell ─────────────────────────────────────────── */
+/* ── rail tabs: blue active cell ─────────────────────────────────────────── */
 .perp-rail-tab.is-active {
-  border-color: rgba(245, 158, 11, 0.45) !important;
+  border-color: rgba(80, 160, 229, 0.45) !important;
   background:
-    radial-gradient(130% 160% at 50% -40%, rgba(245, 158, 11, 0.32), transparent 60%),
-    rgba(30, 24, 12, 0.6) !important;
-  box-shadow: 0 10px 30px -14px rgba(245, 158, 11, 0.5), inset 0 1px 0 rgba(253, 230, 138, 0.18) !important;
+    radial-gradient(130% 160% at 50% -40%, rgba(80, 160, 229, 0.32), transparent 60%),
+    rgba(13, 28, 49, 0.6) !important;
+  box-shadow: 0 10px 30px -14px rgba(80, 160, 229, 0.5), inset 0 1px 0 rgba(174, 220, 255, 0.18) !important;
 }
-.perp-rail-tab.is-active .perp-rail-label { color: #fde68a !important; }
-.perp-rail-tab.is-active .perp-rail-ico { color: #fbbf24 !important; }
+.perp-rail-tab.is-active .perp-rail-label { color: #b9e4ff !important; }
+.perp-rail-tab.is-active .perp-rail-ico { color: #96d5ff !important; }
 
-/* ── sub-tabs: two rooms, gold active ───────────────────────────────────── */
+/* ── sub-tabs: two rooms, blue active ───────────────────────────────────── */
 .perp-subtab.is-on {
-  border-color: rgba(245, 158, 11, 0.45) !important;
+  border-color: rgba(80, 160, 229, 0.45) !important;
   background:
-    radial-gradient(130% 170% at 18% -40%, rgba(245, 158, 11, 0.26), transparent 55%),
-    rgba(30, 24, 12, 0.55) !important;
-  box-shadow: 0 8px 26px -12px rgba(245, 158, 11, 0.4) !important;
+    radial-gradient(130% 170% at 18% -40%, rgba(80, 160, 229, 0.26), transparent 55%),
+    rgba(13, 28, 49, 0.55) !important;
+  box-shadow: 0 8px 26px -12px rgba(80, 160, 229, 0.4) !important;
 }
-.perp-subtab.is-on .perp-subtab-title { color: #fde68a !important; }
-.perp-subtab.is-on .perp-subtab-ico { color: #fbbf24 !important; }
+.perp-subtab.is-on .perp-subtab-title { color: #b9e4ff !important; }
+.perp-subtab.is-on .perp-subtab-ico { color: #96d5ff !important; }
 
-/* ── the sheet: deeper glass + gold hairline ─────────────────────────────── */
+/* ── the sheet: deeper glass + blue hairline ─────────────────────────────── */
 .perp-sheet-full .sheet, .perp-sheet {
   background:
-    radial-gradient(160% 120% at 50% -20%, rgba(245, 158, 11, 0.1), transparent 55%),
+    radial-gradient(160% 120% at 50% -20%, rgba(80, 160, 229, 0.1), transparent 55%),
     linear-gradient(170deg, rgba(15, 17, 28, 0.97), rgba(6, 8, 16, 0.99)) !important;
 }
 .perp-sheet-sym { letter-spacing: 0.01em; }
 .perp-sheet-tag {
-  border-color: rgba(245, 158, 11, 0.4) !important;
-  color: #fde68a !important;
-  background: rgba(245, 158, 11, 0.12) !important;
+  border-color: rgba(80, 160, 229, 0.4) !important;
+  color: #b9e4ff !important;
+  background: rgba(80, 160, 229, 0.12) !important;
 }
 .perp-sheet-price .perp-row-chg { vertical-align: middle; }
 
@@ -1768,12 +1768,12 @@
   box-shadow: 0 10px 26px -12px rgba(244, 63, 94, 0.5), inset 0 1px 0 rgba(254, 205, 211, 0.22) !important;
 }
 
-/* leverage chips — gold active */
+/* leverage chips — blue active */
 .lev-chip.active {
-  border-color: rgba(245, 158, 11, 0.6) !important;
-  background: linear-gradient(150deg, #fde68a, #f59e0b 70%, #d97706) !important;
-  color: #451a03 !important;
-  box-shadow: 0 6px 18px -8px rgba(245, 158, 11, 0.7) !important;
+  border-color: rgba(80, 160, 229, 0.6) !important;
+  background: linear-gradient(150deg, #b9e4ff, #72b9ef 70%, #5686d8) !important;
+  color: #10223b !important;
+  box-shadow: 0 6px 18px -8px rgba(80, 160, 229, 0.7) !important;
   font-weight: 800 !important;
 }
 

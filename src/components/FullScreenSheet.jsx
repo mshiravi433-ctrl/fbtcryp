@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useContext, useEffect } from 'react';
+import { useContext, useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { lockBodyScroll } from '../lib/scrollLock';
 import { OverlayDepthContext } from './OverlayDepthContext';
@@ -44,6 +44,8 @@ export default function FullScreenSheet({
   subtitle,
   icon,
   hero,
+  headerAction,
+  manageFocus = false,
   footer,
   footerVisible = true,
   children,
@@ -51,6 +53,9 @@ export default function FullScreenSheet({
   testId,
   closeLabel = 'close'
 }) {
+  const titleId = useId();
+  const panelRef = useRef(null);
+  const closeRef = useRef(null);
   const still = useStill();
   const overlayDepth = useContext(OverlayDepthContext) + 1;
 
@@ -64,6 +69,30 @@ export default function FullScreenSheet({
       window.removeEventListener('keydown', onKey);
     };
   }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open || !manageFocus) return;
+    const panel = panelRef.current;
+    const trigger = document.activeElement;
+    closeRef.current?.focus({ preventScroll: true });
+    const onTab = (event) => {
+      if (event.key !== 'Tab' || !panel) return;
+      const controls = Array.from(panel.querySelectorAll('button, a[href], input, select, textarea, [tabindex]'))
+        .filter((el) => !el.disabled && el.tabIndex >= 0 && el.getClientRects().length);
+      if (!controls.length) return;
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (!panel.contains(document.activeElement) || document.activeElement === (event.shiftKey ? first : last)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      }
+    };
+    window.addEventListener('keydown', onTab);
+    return () => {
+      window.removeEventListener('keydown', onTab);
+      if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+    };
+  }, [open, manageFocus]);
 
   // SSR / test harnesses have no document until mount.
   if (typeof document === 'undefined') return null;
@@ -84,8 +113,10 @@ export default function FullScreenSheet({
           />
           <motion.div
             className={`fsh-panel ${className}`.trim()}
+            ref={panelRef}
             role="dialog"
             aria-modal="true"
+            aria-labelledby={title ? titleId : undefined}
             data-testid={testId}
             initial={still ? { opacity: 0 } : { opacity: 0, y: 26 }}
             animate={still ? { opacity: 1 } : { opacity: 1, y: 0 }}
@@ -98,11 +129,13 @@ export default function FullScreenSheet({
               {icon ? <span className="fsh-head-icon" aria-hidden="true">{icon}</span> : null}
               <div className="fsh-head-copy">
                 {kicker ? <p className="fsh-kicker">{kicker}</p> : null}
-                {title ? <h2 className="fsh-title" dir="auto">{title}</h2> : null}
+                {title ? <h2 id={titleId} className="fsh-title" dir="auto">{title}</h2> : null}
                 {subtitle ? <p className="fsh-sub" dir="auto">{subtitle}</p> : null}
               </div>
+              {headerAction}
               <button
                 type="button"
+                ref={closeRef}
                 className="fsh-close"
                 onClick={onClose}
                 aria-label={closeLabel}

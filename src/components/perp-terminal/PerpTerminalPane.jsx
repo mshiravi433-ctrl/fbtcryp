@@ -35,6 +35,8 @@
  * route → «فعال‌سازی نشست dYdX» — one signature, not a reconnect. The session
  * is derived in memory; FBT never sees a key.
  */
+import FullScreenSheet from '../FullScreenSheet';
+import '../../styles/futures-surface.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -88,7 +90,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
   const [serverState, setServerState] = useState('connecting');
   const [serverNonce, setServerNonce] = useState(0);
   const [side, setSide] = useState('long');
-  const [tab, setTab] = useState('book');
+  const [tab, setTab] = useState(null);
   const [book, setBook] = useState(null);
   const [bookState, setBookState] = useState({ loading: false, reason: null });
   const [tape, setTape] = useState({ trades: [], live: false, reason: null, loading: false });
@@ -196,8 +198,9 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
 
   /* ── the tape ──────────────────────────────────────────────────────── */
   useEffect(() => {
-    if (!isDydx) return undefined;
+    if (!isDydx || tab !== 'tape') return undefined;
     let stopped = false;
+    setTape({ trades: [], live: false, reason: null, loading: true });
     const load = async () => {
       setTape((s) => ({ ...s, loading: true }));
       const r = await getDydxTrades(ticker, 40);
@@ -207,7 +210,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
     const off = pollWhileVisible(load, TAPE_POLL_MS);
     load();
     return () => { stopped = true; off(); };
-  }, [ticker, isDydx]);
+  }, [ticker, isDydx, tab]);
 
   /* ── 24h high/low (one server read; the venue has no range field) ───── */
   useEffect(() => {
@@ -727,13 +730,12 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
 
       {/* ── bottom stack: book / tape / risk / funding ──────────────────── */}
       <section className="ptx-bottom panel" data-testid="perp-terminal-bottom">
-        <div className="pt-tabs" role="tablist">
+        <div className="pt-tabs futures-panel-links" role="group">
           {TABS.map((k) => (
             <button
               key={k}
               type="button"
-              role="tab"
-              aria-selected={tab === k}
+              aria-haspopup="dialog"
               className={`pt-tab ${tab === k ? 'is-on' : ''}`}
               onClick={() => setTab(k)}
               data-testid={`perp-terminal-tab-${k}`}
@@ -742,10 +744,13 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
               <span>{t(`perpTerminal.tabs.${k}`, { defaultValue: k })}</span>
             </button>
           ))}
-          {tab === 'risk' && account.loading && <span className="pt-muted pt-small pt-loading-note">{t('common.loading', { defaultValue: 'Loading…' })}</span>}
         </div>
-
-        <div className="pt-tabpanel">
+      </section>
+      <FullScreenSheet manageFocus open={Boolean(tab)} onClose={() => setTab(null)} className="futures-full-sheet"
+        title={tab ? t(`perpTerminal.tabs.${tab}`) : ''} subtitle={selectedBase}
+        icon={TAB_ICON[tab]} closeLabel={t('common.close')} testId="perp-terminal-info-sheet">
+        <div className="ptx ptx--info">
+          {tab === 'risk' && account.loading && <span className="pt-muted pt-small">{t('common.loading')}</span>}
           {tab === 'book' && (
             isDydx
               ? <DepthChart book={book} testId="perp-terminal-depth" />
@@ -822,7 +827,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
             </div>
           )}
         </div>
-      </section>
+      </FullScreenSheet>
 
       <footer className="ptx-foot">
         <p className="pt-note">

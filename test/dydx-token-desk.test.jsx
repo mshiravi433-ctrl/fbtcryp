@@ -110,8 +110,7 @@ let EQUITY = 1000;
 let CANDLES = [];
 let CANDLE_LIVE = true;
 const ORDERS = [];
-let AI_ANSWER = { ok: true, text: 'این یک پاسخ آزمایشی است.', provider: 'openrouter', providerName: 'OpenRouter', model: 'test/model' };
-const AI_CALLS = [];
+let CANDLE_READS = 0;
 
 const mkCandles = (n = 60) => {
   const out = [];
@@ -158,18 +157,12 @@ vi.mock('../src/lib/dydx', async () => {
     ...actual,
     getDydxMarkets: async () => ({ markets: [marketRow('BTC'), marketRow('ETH')], live: true }),
     getDydxSubaccount: async () => ({ account: { subaccount: { equity: String(EQUITY) } }, live: true }),
-    getDydxCandles: async () => ({ candles: CANDLES, live: CANDLE_LIVE, ticker: 'BTC-USD', resolution: '1HOUR' }),
+    getDydxCandles: async () => { CANDLE_READS++; return { candles: CANDLES, live: CANDLE_LIVE, ticker: 'BTC-USD', resolution: '1HOUR' }; },
     connectDydx: async () => ({ address: 'dydx1testderivedaddress00000000000000000000000' }),
     disconnectDydx: () => {},
     placeDydxOrder: async (o) => { ORDERS.push(o); return { hash: 'DYDXHASH1', clientId: 1 }; }
   };
 });
-
-/* The AI gateway: the desk imports it dynamically on the first question. */
-vi.mock('../src/lib/aiGatewayClient.js', () => ({
-  executeAiGatewayChat: async (params) => { AI_CALLS.push(params); return AI_ANSWER; },
-  getIntelligenceMode: () => 'max'
-}));
 
 import Dydx from '../src/pages/Dydx';
 
@@ -201,8 +194,7 @@ beforeEach(() => {
   CANDLES = mkCandles();
   CANDLE_LIVE = true;
   ORDERS.length = 0;
-  AI_CALLS.length = 0;
-  AI_ANSWER = { ok: true, text: 'این یک پاسخ آزمایشی است.', provider: 'openrouter', providerName: 'OpenRouter', model: 'test/model' };
+  CANDLE_READS = 0;
   WALLET = { isConnected: true, address: '0xabc', mode: 'wc' };
 });
 
@@ -303,17 +295,19 @@ describe('dYdX tab — the token desk', () => {
     render(<Dydx embedded />);
     const box = await screen.findByTestId('dydx-token-desk');
     const toggle = screen.getByTestId('dydx-token-desk-toggle');
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(CANDLE_READS).toBe(0);
     /* Folded: no room, no question box, and no candle request has been made. */
     expect(screen.queryByTestId('dydx-desk-ai')).toBeNull();
     expect(box.textContent).toContain(fa.dydx.desk.title.replace('{{ticker}}', 'BTC'));
 
     await openDesk();
     expect(await screen.findByTestId('dydx-desk-ai')).toBeTruthy();
-    expect(screen.getByTestId('dydx-desk-ask')).toBeTruthy();
+    expect(screen.queryByTestId('dydx-desk-ask')).toBeNull();
+    expect(screen.getByTestId('dydx-desk-ai').closest('[role=dialog]')).toBe(screen.getByTestId('dydx-token-desk-screen'));
   });
 
-  it('holds the three rooms and the AI question box, all i18n-rendered', async () => {
+  it('holds the three analysis rooms, all i18n-rendered', async () => {
     render(<Dydx embedded />);
     await openDesk();
     await screen.findByTestId('dydx-desk-ai');
@@ -345,32 +339,17 @@ describe('dYdX tab — the token desk', () => {
     expect(screen.queryByTestId('dydx-desk-ai')).toBeNull();
   });
 
-  it('asks the AI with the market’s numbers and prints the model that answered', async () => {
+  it('refreshes candles using the icon in the dialog header', async () => {
     render(<Dydx embedded />);
     await openDesk();
     await screen.findByTestId('dydx-desk-ai');
-
-    fireEvent.click(screen.getByTestId('dydx-desk-ask-quick-risk'));
-    await waitFor(() => expect(AI_CALLS.length).toBe(1));
-    const [call] = AI_CALLS;
-    expect(call.taskType).toBe('market_intelligence');
-    expect(String(call.user)).toContain(fa.dydx.desk.ask.quick.risk);
-    expect(String(call.user)).toContain('BTC-USD');
-    expect(String(call.system)).toMatch(/Persian|فارسی/);
-
-    const answer = await screen.findByTestId('dydx-desk-answer');
-    expect(answer.textContent).toContain('این یک پاسخ آزمایشی است.');
-    expect(answer.textContent).toContain('OpenRouter');
-  });
-
-  it('reports an unanswered question honestly rather than as a blank box', async () => {
-    AI_ANSWER = { ok: false, error: 'TIMEOUT' };
-    render(<Dydx embedded />);
-    await openDesk();
-    await screen.findByTestId('dydx-desk-ai');
-    fireEvent.click(screen.getByTestId('dydx-desk-ask-quick-why'));
-    const err = await screen.findByTestId('dydx-desk-ask-error');
-    expect(err.textContent).toContain(fa.dydx.desk.ask.err.TIMEOUT);
+    const refresh = screen.getByTestId('dydx-token-desk-refresh');
+    expect(refresh.closest('.fsh-head')).toBeTruthy();
+    const reads = CANDLE_READS;
+    fireEvent.click(refresh);
+    await waitFor(() => expect(CANDLE_READS).toBe(reads + 1));
+    fireEvent.click(screen.getByTestId('dydx-token-desk-screen-close'));
+    await waitFor(() => expect(screen.queryByTestId('dydx-token-desk-screen')).toBeNull());
   });
 });
 

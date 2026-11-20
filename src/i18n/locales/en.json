@@ -16900,6 +16900,7 @@
       "selfCustody": "Self-custody",
       "curveLabel": "Futures curve from spot to expiry",
       "curveNote": "Futures curve · spot to expiry",
+      "nextMetric": "Next market metric",
       "statMarkets": "Futures markets",
       "statBtc": "BTC benchmark",
       "statMaxLev": "Max leverage",

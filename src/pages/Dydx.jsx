@@ -11,6 +11,7 @@ import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { fmtPrice, fmtUsd } from '../lib/format';
 import '../styles/derivatives-glass.css';
+import '../styles/futures-surface.css';
 import {
   DYDX_BUILDER_ADDRESS,
   DYDX_BUILDER_FEE_PPM,
@@ -381,7 +382,7 @@ export default function Dydx({ embedded = false } = {}) {
 
   return (
     <PageTransition embedded={embedded}>
-      <div className="derivatives-hall">
+      <div className="derivatives-hall futures-venue">
         <div className="derivatives-aurora" aria-hidden="true" />
         <motion.section className="derivatives-hero" variants={riseIn} initial="hidden" animate="show">
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>

@@ -1,0 +1,37 @@
+/* Glacier glass. Use a separate cool accent for navigation; long/short and
+   warning colors still carry their semantic meaning. */
+:is(.app-shell--futures,.futures-venue,.futures-full-sheet) { --futures-accent:#a9dbff; --futures-line:#7bbcf74d; --futures-glass:linear-gradient(145deg,#77bef426,#8d77fd12); --futures-bg:#0b1221; }
+:root[data-theme='light'] :is(.app-shell--futures,.futures-venue,.futures-full-sheet) { --futures-accent:#245590; --futures-line:#4776ac52; --futures-glass:linear-gradient(145deg,#c0e5fc99,#dce2ff80); --futures-bg:#f6f9ff; }
+.app-shell.app-shell--futures { padding-bottom:calc(76px + env(safe-area-inset-bottom)); }
+.app-shell--futures > .top-bar { position:sticky; inset-block-start:0; background:color-mix(in srgb,var(--futures-bg) 94%,transparent); border-bottom:1px solid var(--line); width:100%; }
+.app-shell--futures :is(.perp-rail-tab.is-active,.perp-subtab.is-on,.perp-row-go),
+.futures-venue :is(.lev-chip.active,.btn-primary),
+.futures-full-sheet .dtd-tabs > button.active { background:var(--futures-glass) !important; color:var(--futures-accent) !important; border-color:var(--futures-line) !important; box-shadow:inset 0 1px #fff2 !important; }
+.app-shell--futures :is(.perp-rail-tab.is-active,.perp-subtab.is-on) :is(.perp-rail-label,.perp-rail-ico,.perp-subtab-title,.perp-subtab-ico) { color:var(--futures-accent) !important; }
+.app-shell--futures .perp-rail-tab .seg-indicator { background:none; box-shadow:none; border-block-end:2px solid var(--futures-accent); }
+.futures-venue .derivatives-hero { padding:14px 16px; min-height:0; border:1px solid var(--futures-line); background:var(--futures-glass); box-shadow:none; }
+.futures-venue .derivatives-hero::before,.futures-venue .derivatives-hero::after { display:none; }
+.futures-venue .derivatives-title-glow { background:none; color:var(--futures-accent); -webkit-text-fill-color:currentColor; text-shadow:none; font-size:clamp(17px,3vw,24px); }
+.futures-venue .derivatives-subtitle { margin-top:4px; font-size:12px; }
+.futures-venue .segmented .seg-indicator { background:var(--futures-glass); box-shadow:inset 0 -2px var(--futures-accent); }
+.fsh-panel.futures-full-sheet { width:100%; max-width:none; margin:0; height:100%; border:0; background:radial-gradient(ellipse at 90% 0%,#4895ef24,transparent 55%),var(--futures-bg); }
+.futures-full-sheet .fsh-aurora { display:none; }
+.futures-full-sheet .fsh-head { border-bottom:1px solid var(--futures-line); }
+.futures-full-sheet .fsh-body { width:100%; max-width:none; }
+.futures-full-sheet .ptx--info { max-width:none; padding:0; }
+.futures-full-sheet .dtd-body { padding:0; }
+.futures-full-sheet .dtd-tabs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+.futures-full-sheet .dtd-tabs > button { min-height:44px; border-radius:10px; white-space:normal; }
+.futures-full-sheet .dtd-refresh-icon { color:var(--futures-accent); }
+.futures-full-sheet .dtd-refresh-icon:disabled { opacity:.5; }
+.pt-tabs.futures-panel-links { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; border:0; margin:0; overflow:visible; }
+.futures-panel-links .pt-tab { justify-content:space-between; min-height:44px; border:1px solid var(--pt-line); border-radius:12px; background:var(--pt-pod-bg); }
+.futures-panel-links .pt-tab::after { content:'↗'; color:var(--pt-accent); margin-inline-start:auto; }
+@media(min-width:1200px) {
+  .ptx.ptx--route, .ptx.ptx--embedded { grid-template-rows:auto minmax(0,1fr) auto auto; }
+}
+.futures-venue.derivatives-hall { background:radial-gradient(ellipse 95% 380px at 50% 0%,color-mix(in srgb,var(--futures-accent) 8%,transparent),transparent); }
+:root[data-theme='light'] .futures-venue .derivatives-hero { background:var(--futures-glass); border-color:var(--futures-line); box-shadow:none; }
+.futures-venue .derivatives-title-glow { filter:none; }
+.futures-venue .derivatives-subtitle { max-width:66ch; }
+.futures-panel-links .pt-tab { white-space:normal; text-align:start; }

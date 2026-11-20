@@ -264,16 +264,18 @@ describe('the desk', () => {
     expect(document.body.textContent).not.toMatch(/perpTerminal\.[a-zA-Z]+\./);
   });
 
-  it('renders the book, the tape and the risk panel in the bottom stack', async () => {
+  it('opens each bottom-stack item in a named full-screen dialog', async () => {
     await renderDesk();
-    expect(screen.getByTestId('perp-terminal-depth')).toBeTruthy();
-    fireEvent.click(screen.getByTestId('perp-terminal-tab-tape'));
-    await waitFor(() => expect(screen.getByTestId('perp-terminal-tape')).toBeTruthy());
-    expect(screen.getAllByTestId('perp-tape-row-buy').length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByTestId('perp-terminal-tab-risk'));
-    await waitFor(() => expect(screen.getByTestId('perp-terminal-risk')).toBeTruthy());
-    /* No wallet → the panel says so instead of inventing a healthy account. */
-    expect(screen.getByTestId('perp-risk-unavailable')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    for (const [tab, panel] of Object.entries({ book: 'depth', tape: 'tape', risk: 'risk', funding: 'funding' })) {
+      fireEvent.click(screen.getByTestId(`perp-terminal-tab-${tab}`));
+      const body = await screen.findByTestId(`perp-terminal-${panel}`);
+      expect(body.closest('[role="dialog"]')).toBe(screen.getByTestId('perp-terminal-info-sheet'));
+      if (tab === 'tape') expect((await screen.findAllByTestId('perp-tape-row-buy')).length).toBeGreaterThan(0);
+      if (tab === 'risk') expect(screen.getByTestId('perp-risk-unavailable')).toBeTruthy();
+      fireEvent.click(screen.getByTestId('perp-terminal-info-sheet-close'));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    }
   });
 
   it('shows BOTH risk vocabularies for a real account, with one as the translation', async () => {
