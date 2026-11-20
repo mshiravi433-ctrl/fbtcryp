@@ -425,8 +425,15 @@ function AppChrome() {
    * one. It ships its own menu, its own tabs and its own exit — the drawer's
    * «back to the app» row and the settings tab — so nothing is lost by
    * dropping the shell's chrome, exactly as /intent already does.
+   *
+   * `/buy` (and its order-result return target) is the LANDING DESK
+   * (2026-11-20): the owner asked for «منو فوتر و هیدر حذف بسه مثل یک صفحه
+   * لندینگ» — a full-screen landing with its own top bar (back · counter ·
+   * Iran icon) and its own bottom keyboard / buy/sell switch. The app's
+   * Header and BottomNav would compete with both, so the shell drops them.
    */
-  const headerless = pathname === '/intent' || pathname.startsWith('/pay') || pathname.startsWith('/social');
+  const headerless = pathname === '/intent' || pathname.startsWith('/pay') || pathname.startsWith('/social')
+    || pathname === '/buy' || pathname.startsWith('/order/result');
   /* «نه جمع شده» — the world console is a dashboard, not a phone column, so it
      gets the widest shell. All routes keep their phone layout on mobile and
      gain a wider, centred shell from tablet/desktop breakpoints. */

@@ -1,118 +1,90 @@
-import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
-import PageTransition, { riseIn } from '../components/PageTransition';
-import BuySellPanel from '../components/BuySellPanel';
-import AssetIcon from '../components/AssetIcon';
-import { IconChevronLeft, IconFingerprint, IconShield, IconSwap, IconWallet } from '../components/Icons';
-import '../styles/lab-modern.css';
+import PageTransition from '../components/PageTransition';
+import BuySellLanding from '../components/BuySellLanding';
+import { getBuySellOrder, storedOrderAccessToken } from '../lib/buySell';
+import { useAppStore } from '../store/useAppStore';
+import { useEffect, useState } from 'react';
+
+const errorKey = (error) => error?.code || error?.message || 'REQUEST_FAILED';
 import '../styles/buy-sell.css';
 import '../styles/iran-buy.css';
-import '../styles/buy-sell-modern.css';
-/* Loaded LAST: the Spectrum skin (2026-10-31) re-skins the Prism Desk material
-   without touching its structure. It only redefines the token pairs, so it must
-   come after every earlier layer or the navy palette would win. */
-import '../styles/buy-sell-spectrum.css';
+import '../styles/lab-modern.css';
+import '../styles/buy-sell-landing.css';
 
 /**
- * One hosted-checkout surface for fiat on/off-ramp activity.
+ * ONE hosted-checkout surface for fiat on/off-ramp activity — THE LANDING
+ * DESK (2026-11-20).
  * ---------------------------------------------------------------------------
- * There are deliberately no wallet-type tabs here. A connected wallet merely
- * supplies a real destination address; a manually entered address receives
- * the same network validation on the server before a payment can be created.
+ * The page is a full-screen landing, not an app screen: no header, no
+ * bottom nav, no menu (the shell drops its chrome on this route). The
+ * surface itself is `BuySellLanding`:
+ *
+ *   · a numeric KEYBOARD at the bottom of the amount step;
+ *   · two small buttons ABOVE the keyboard — payment methods (the same
+ *     pistnaadi sites the hand-off goes to, plus the on-chain follow-up)
+ *     and the buy/sell popup;
+ *   · a back button, the step COUNTER and the Iran icon at the TOP;
+ *   · the Iran icon opens a popup ONLY for Iranians and ONLY in Persian;
+ *   · step two picks network + token, and its bottom button is a buy/sell
+ *     switch that swaps mode with the user's selection.
  *
  * This page also serves /order/result/:orderId — Ramp's finalUrl return
  * target. Returning from checkout never implies success; the panel re-reads
  * the verified order state from the server.
- *
- * ─── PRISM DESK (2026-10-31) ──────────────────────────────────────────────
- * A compact exchange counter, not another glowing settings card. The asset
- * constellation is decorative (and hidden from assistive technology); the
- * title, explanation and three factual trust statements remain real text.
- * The final, page-scoped stylesheet resolves the shared tab fallback without
- * changing any other screen. Every offset is logical, so fa/ar mirror safely.
- * No prices, availability claims, payment logic or wallet permissions live here.
  */
 export default function Buy() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { orderId } = useParams();
+  const upsertOrder = useAppStore((state) => state.upsertBuySellOrder);
+  const [order, setOrder] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!orderId) return;
+    if (!storedOrderAccessToken(orderId)) { setError('ORDER_ACCESS_UNAVAILABLE'); return; }
+    let live = true;
+    getBuySellOrder(orderId, { verify: true })
+      .then((response) => {
+        if (!live || !response?.order) return;
+        setOrder(response.order);
+        upsertOrder(response.order);
+      })
+      .catch((requestError) => live && setError(errorKey(requestError)));
+    return () => { live = false; };
+  }, [orderId, upsertOrder]);
 
   return (
     <PageTransition className="page buy-sell-page">
-      <motion.section
-        className="buy-sell-hero"
-        variants={riseIn}
-        initial="hidden"
-        animate="show"
-        aria-labelledby="buy-sell-page-title"
-      >
-        <span className="buy-sell-hero-field" aria-hidden="true">
-          <i className="buy-sell-hero-grid" />
-          <i className="buy-sell-hero-sheen" />
-        </span>
-
-        <div className="buy-sell-hero-top">
-          <button
-            className="icon-btn buy-sell-hero-back"
-            onClick={() => navigate(-1)}
-            aria-label={t('common.back')}
-          >
-            <IconChevronLeft width={18} height={18} />
+      {orderId ? (
+        <div className="buy-sell-result" dir="rtl">
+          <button type="button" className="icon-btn buy-sell-hero-back" onClick={() => navigate('/')} aria-label={t('common.back')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
           </button>
-          <span className="buy-sell-hero-kicker" dir="ltr">FBT <i /> EXCHANGE</span>
-          <span className="buy-sell-hero-edition" aria-hidden="true">01 / DESK</span>
+          <h1 className="buy-sell-hero-title">{t('buySell.resultTitle')}</h1>
+          <p className="buy-sell-page-intro">{t('buySell.resultIntro')}</p>
+          {error === 'ORDER_ACCESS_UNAVAILABLE' && (
+            <section className="lab-card buy-sell-unavailable">
+              <p className="section-label" style={{ margin: 0 }}>{t('buySell.orderAccessLostTitle')}</p>
+              <p className="prose-sm" style={{ marginTop: 6 }}>{t('buySell.orderAccessLostBody')}</p>
+            </section>
+          )}
+          {order && (
+            <section className="lab-card buy-sell-order-result">
+              <p className="section-label" style={{ margin: 0 }}>{t('buySell.reviewTitle')}</p>
+              <dl className="buy-sell-order-details">
+                <div><dt>{t('buySell.orderId')}</dt><dd className="mono">{order.orderId}</dd></div>
+                <div><dt>{t('buySell.asset')}</dt><dd>{order.asset} · {order.network}</dd></div>
+                <div><dt>{t('buySell.destinationWallet')}</dt><dd className="mono">{order.walletAddress}</dd></div>
+                <div><dt>{t('buySell.paymentStatus')}</dt><dd>{t(`buySell.orderState.${order.status}`, { defaultValue: order.status })}</dd></div>
+              </dl>
+            </section>
+          )}
         </div>
-
-        <div className="buy-sell-hero-main">
-          <div className="buy-sell-hero-text">
-            <h1 className="buy-sell-hero-title" id="buy-sell-page-title">
-              {orderId ? t('buySell.resultTitle') : t('buySell.title')}
-            </h1>
-            <p className="buy-sell-page-intro">
-              {orderId ? t('buySell.resultIntro') : t('buySell.pageIntro')}
-            </p>
-          </div>
-          <div className="buy-sell-constellation" aria-hidden="true">
-            <span className="buy-sell-orbit buy-sell-orbit--outer" />
-            <span className="buy-sell-orbit buy-sell-orbit--inner" />
-            <span className="buy-sell-asset buy-sell-asset--btc"><AssetIcon symbol="BTC" size={38} radius={19} /></span>
-            <span className="buy-sell-asset buy-sell-asset--eth"><AssetIcon symbol="ETH" size={30} radius={15} /></span>
-            <span className="buy-sell-asset buy-sell-asset--usdt"><AssetIcon symbol="USDT" size={28} radius={14} /></span>
-            <span className="buy-sell-page-mark"><IconSwap width={27} height={27} /></span>
-            <span className="buy-sell-orbit-dot" />
-          </div>
-        </div>
-
-        <div className="buy-sell-hero-trust">
-          <span className="buy-sell-hero-chip">
-            <IconShield width={15} height={15} aria-hidden="true" />
-            <span>{t('buySell.nonCustodial')}</span>
-          </span>
-          <span className="buy-sell-hero-chip">
-            <IconFingerprint width={15} height={15} aria-hidden="true" />
-            <span>{t('buySell.verifiedLink')}</span>
-          </span>
-          <span className="buy-sell-hero-chip">
-            <IconWallet width={15} height={15} aria-hidden="true" />
-            <span>{t('buySell.directSettlement')}</span>
-          </span>
-        </div>
-      </motion.section>
-
-      <BuySellPanel initialOrderId={orderId || null} />
-
-      <motion.section className="lab-card buy-sell-safety" variants={riseIn} initial="hidden" animate="show">
-        <div className="row" style={{ gap: 8, marginBottom: 8 }}>
-          <span className="buy-sell-safety-mark" style={{ display: 'grid', placeItems: 'center' }}><IconShield width={17} height={17} /></span>
-          <p className="section-label" style={{ margin: 0 }}>{t('buySell.safetyTitle')}</p>
-        </div>
-        <ul className="prose-list">
-          <li>{t('buySell.safetyAddress')}</li>
-          <li>{t('buySell.safetyProvider')}</li>
-          <li>{t('buySell.safetyVerification')}</li>
-        </ul>
-      </motion.section>
+      ) : (
+        <BuySellLanding />
+      )}
     </PageTransition>
   );
 }

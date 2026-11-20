@@ -16484,6 +16484,30 @@
       "noneYet": "No movement detected yet. Card payments typically settle on-chain within a few minutes.",
       "viewOnExplorer": "View this wallet on the block explorer",
       "honestNote": "This report proves on-chain transfers only. It can confirm that funds arrived in or left your wallet — it cannot see the provider’s payment status, and it will never claim a payment was confirmed."
+    },
+    "landing": {
+      "counter": "Step {{current}} of {{total}}",
+      "iran": "Iran",
+      "amountTitle": "Enter the amount",
+      "amountHint": "Enter the amount with the numeric keypad.",
+      "paymentMethods": "Payment methods",
+      "side": "Buy / Sell",
+      "next": "Next step",
+      "networkTitle": "Network",
+      "tokenTitle": "Token",
+      "confirm": "Confirm & continue",
+      "swap": "Swap",
+      "paymentTitle": "Payment sites",
+      "paymentBody": "Your details are pre-filled on the destination's official page. After payment, the transaction is tracked on-chain.",
+      "sideTitle": "Transaction direction",
+      "iranTitle": "Only for Iranians",
+      "needAmount": "Enter an amount to continue.",
+      "needNetwork": "Select a network to continue.",
+      "needToken": "Select a token to continue.",
+      "needWallet": "Connect a wallet to continue.",
+      "open": "Go to {{name}}",
+      "choosePayment": "Choose a payment method",
+      "chooseSide": "Choose the transaction direction"
     }
   },
   "futures": {

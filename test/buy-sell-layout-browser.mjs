@@ -1,4 +1,4 @@
-/** Real Chromium regression for the Buy/Sell Prism desk.
+/** Real Chromium regression for the Buy/Sell LANDING desk (2026-11-20).
  * Start `npm run dev:web`, then `node test/buy-sell-layout-browser.mjs`.
  * Optional: PUPPETEER_EXECUTABLE_PATH, UI_TEST_BASE_URL, BUY_SELL_SHOTS_DIR.
  * The fixture stubs API responses and the injected wallet. No payment,
@@ -24,45 +24,68 @@ await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduc
 const settle = () => page.evaluate(() => document.fonts.ready.then(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))));
 const shot = (name) => shots ? page.screenshot({ path: resolve(shots, `${name.replaceAll('/', '-')}.png`), fullPage: true }) : Promise.resolve();
 
+/* Audit the new landing DOM: no horizontal overflow of the root, no card
+   overflow, no text spilling outside a card, and the network/token chip rows
+   keep a consistent gap between them (the owner's spacing requirement). */
 async function audit(label) {
   const result = await page.evaluate(() => {
+    const roots = ['.buy-sell-landing', '.bsland-amount', '.bsland-keypad', '.bsland-actions', '.bsland-chips'];
     const overflow = [];
     const outside = [];
-    for (const root of document.querySelectorAll('.buy-sell-hero, .buy-sell-ticket, .iran-buy-ticket')) {
-      if (root.scrollWidth > root.clientWidth + 2) overflow.push({ class: root.className, client: root.clientWidth, scroll: root.scrollWidth });
-      const box = root.getBoundingClientRect();
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      while (walker.nextNode()) {
-        const node = walker.currentNode;
-        if (!node.textContent.trim() || node.parentElement.closest('[aria-hidden="true"]')) continue;
-        const range = document.createRange();
-        range.selectNodeContents(node);
-        for (const rect of range.getClientRects()) {
-          if (rect.width && (rect.left < box.left - 2 || rect.right > box.right + 2)) {
-            outside.push({ class: root.className, text: node.textContent.trim().slice(0, 70), left: rect.left, right: rect.right, box: { left: box.left, right: box.right } });
+    for (const sel of roots) {
+      for (const root of document.querySelectorAll(sel)) {
+        if (root.scrollWidth > root.clientWidth + 2) overflow.push({ class: root.className, client: root.clientWidth, scroll: root.scrollWidth });
+        const box = root.getBoundingClientRect();
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+          const node = walker.currentNode;
+          if (!node.textContent.trim() || node.parentElement.closest('[aria-hidden="true"]')) continue;
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          for (const rect of range.getClientRects()) {
+            if (rect.width && (rect.left < box.left - 2 || rect.right > box.right + 2)) {
+              outside.push({ class: root.className, text: node.textContent.trim().slice(0, 70), left: rect.left, right: rect.right, box: { left: box.left, right: box.right } });
+            }
           }
         }
       }
     }
-    const tabs = [...document.querySelectorAll('.buy-sell-page .segmented button.active')].map((button) => {
-      const style = getComputedStyle(button);
-      const indicator = button.querySelector('.seg-indicator');
-      return { text: button.textContent.trim(), background: style.backgroundColor, image: style.backgroundImage, indicator: indicator ? getComputedStyle(indicator).backgroundImage : null };
-    });
-    const intro = document.querySelector('.buy-sell-page-intro').getBoundingClientRect();
-    const art = document.querySelector('.buy-sell-constellation').getBoundingClientRect();
-    return { width: innerWidth, documentWidth: document.documentElement.scrollWidth, overflow, outside, tabs, artOverlapsIntro: art.bottom > intro.top + 1 && art.top < intro.bottom - 1 && art.right > intro.left && art.left < intro.right };
+    /* Network chips and token chips: each row is its own flex container. The
+       gap between the two rows (token top − network bottom) must be a sane
+       positive spacer — i.e. the two chip groups do not collide or merge. */
+    const net = document.querySelector('.bsland-networks');
+    const tok = document.querySelector('.bsland-tokens');
+    let chipGap = null;
+    if (net && tok) {
+      const nb = net.getBoundingClientRect();
+      const tb = tok.getBoundingClientRect();
+      chipGap = Math.round((tb.top - nb.bottom) * 100) / 100;
+    }
+    /* Chip spacing inside each row: neighbouring chips keep a real gap. */
+    let chipInnerGap = null;
+    const chips = [...document.querySelectorAll('.bsland-networks .bsland-chip')];
+    if (chips.length >= 2) chipInnerGap = Math.round((chips[1].getBoundingClientRect().left - chips[0].getBoundingClientRect().right) * 100) / 100;
+    const counter = document.querySelector('.bsland-counter');
+    const counterText = counter ? counter.textContent.trim() : null;
+    return {
+      width: innerWidth, documentWidth: document.documentElement.scrollWidth,
+      overflow, outside, chipGap, chipInnerGap, counterText,
+      hasIranIcon: Boolean(document.querySelector('.bsland-iran')),
+      hasBack: Boolean(document.querySelector('.bsland-back'))
+    };
   });
   assert.ok(result.documentWidth <= result.width + 1, `${label}: page overflow ${JSON.stringify(result)}`);
   assert.deepEqual(result.overflow, [], `${label}: card overflow`);
   assert.deepEqual(result.outside, [], `${label}: text outside card`);
-  assert.equal(result.artOverlapsIntro, false, `${label}: hero artwork covers introduction`);
-  for (const tab of result.tabs) {
-    assert.equal(tab.background, 'rgba(0, 0, 0, 0)', `${label}: gray active plate ${tab.text}`);
-    assert.equal(tab.image, 'none', `${label}: active plate image ${tab.text}`);
-    assert.match(tab.indicator || '', /gradient/, `${label}: missing colored indicator ${tab.text}`);
-  }
+  assert.ok(result.hasIranIcon, `${label}: missing Iran icon`);
+  assert.ok(result.hasBack, `${label}: missing back button`);
   return result;
+}
+
+async function openSheet(testId) {
+  await page.click(`[data-testid="${testId}"]`);
+  await page.waitForSelector(`[data-testid="${testId}"]`, { timeout: 5000 });
+  await settle();
 }
 
 try {
@@ -70,78 +93,89 @@ try {
     for (const theme of ['dark', 'light']) {
       await page.setViewport({ width, height: 950, deviceScaleFactor: 1 });
       await page.goto(`${base}/test/fixtures/buy-sell.html?lang=fa&theme=${theme}&wallet=1`, { waitUntil: 'networkidle0', timeout: 90000 });
-      await page.waitForSelector('.buy-sell-surface-switch');
+      await page.waitForSelector('.bsland-amount');
       await settle();
       const label = `${width}/${theme}`;
-      await audit(`${label} buy`);
-      await shot(`${label}-buy`);
 
-      // RTL: left arrow advances from the first (rightmost) tab to the next.
-      await page.focus('.buy-sell-surface-switch [aria-selected="true"]');
-      await page.keyboard.press('ArrowLeft');
-      await page.waitForSelector('.iran-buy-ticket');
-      await settle();
-      assert.equal(await page.$eval('[data-testid="iran-buy-top-tab"]', (el) => el.getAttribute('aria-selected')), 'true');
-      await audit(`${label} Iran`);
-      await page.click('.iran-buy-referral-guide summary');
-      await settle();
-      await audit(`${label} Iran guide`);
+      /* Step 1: counter, amount field, keypad, two quick buttons. */
+      const step1 = await audit(`${label} step1`);
+      assert.equal(step1.counterText, '1 / 2', `${label}: counter should start at 1 / 2`);
+      await shot(`${label}-step1`);
 
-      // A full receiving address and all seven network choices must fit. The
-      // injected lease survives a reload, so a later pass may already be live.
-      if (await page.$('[data-testid="iran-buy-address-connect"]')) {
-        await page.click('[data-testid="iran-buy-address-connect"]');
-        await page.waitForSelector('.wc-card');
-        const cards = await page.$$('.wc-card');
-        let connected = false;
-        for (const card of cards) {
-          const text = await card.evaluate((el) => el.textContent);
-          if (text.includes('MetaMask')) { await card.click(); connected = true; break; }
-        }
-        assert.equal(connected, true, `${label}: injected fixture available`);
-        /* The sheet animates shut over the card; wait it out so the network
-           click cannot land on a dismiss overlay still on top. */
-        await page.waitForFunction(() => !document.querySelector('.wc-card'), { timeout: 15000 });
-        await settle();
-      }
-      await page.waitForSelector('[data-testid="iran-buy-address-value"]');
-      assert.equal(await page.$eval('[data-testid="iran-buy-address-value"]', (el) => el.textContent), '0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B');
-      await page.click('[data-testid="iran-buy-network-TRC20"]');
-      await page.waitForSelector('[data-testid="iran-buy-address-tron-note"]');
+      /* Type an amount through the numeric keypad: 5 0 0 . 0 0 */
+      const amountBefore = await page.$eval('.bsland-amount-value', (el) => el.textContent);
+      await page.evaluate(() => {
+        const keys = [...document.querySelectorAll('.bsland-key')];
+        for (const k of ['5', '0', '0', '.', '0', '0']) { const b = keys.find((x) => x.textContent.trim() === k); if (b) b.click(); }
+      });
       await settle();
-      await audit(`${label} TRC20 address`);
-      await shot(`${label}-iran-guide`);
+      const amountAfter = await page.$eval('.bsland-amount-value', (el) => el.textContent);
+      assert.notEqual(amountAfter, amountBefore, `${label}: keypad did not change amount`);
 
-      // Blocked partner popup: the long URL must wrap rather than widen the card.
-      await page.evaluate(() => { window.open = () => null; });
-      await page.click('[data-testid="iran-buy-referral-cta"]');
-      await page.waitForSelector('[data-testid="iran-buy-referral-manual"]');
-      await audit(`${label} manual link`);
+      /* The two small buttons above the keyboard open their popups. */
+      await openSheet('bsland-payment-methods');
+      assert.ok(await page.$('[data-testid="bsland-payment-sheet"]'), `${label}: payment popup did not open`);
+      await page.click('[data-testid="bsland-payment-sheet-close"]');
+      await page.waitForFunction(() => !document.querySelector('[data-testid="bsland-payment-sheet"]'), { timeout: 5000 });
 
-      await page.click('.buy-sell-surface-switch > button:first-child');
-      await page.waitForSelector('.buy-sell-switch');
-      await page.click('.buy-sell-switch > button:nth-child(2)');
+      await openSheet('bsland-side');
+      assert.ok(await page.$('[data-testid="bsland-side-sheet"]'), `${label}: side popup did not open`);
+      /* Choose SELL from the popup → landing becomes sell-mode. */
+      const sellBtn = await page.$$('.bsland-side-option');
+      assert.equal(sellBtn.length, 2, `${label}: side popup must offer buy + sell`);
+      await sellBtn[1].click();
       await settle();
-      assert.equal(await page.$eval('.buy-sell-panel', (el) => el.classList.contains('is-sell')), true);
-      await audit(`${label} sell`);
-      await shot(`${label}-sell`);
-      console.log(`✓ ${label}: buy, sell, Iran, guide, full TRC20 address, manual link; no gray active plate or overflow`);
+      assert.equal(await page.$eval('.buy-sell-landing', (el) => el.classList.contains('is-sell')), true, `${label}: landing not in sell mode`);
+      await shot(`${label}-side-sell`);
+
+      /* Switch back to buy via the bottom swap button, then go to step 2. */
+      await page.click('[data-testid="bsland-swap"]');
+      await settle();
+      assert.equal(await page.$eval('.buy-sell-landing', (el) => el.classList.contains('is-sell')), false, `${label}: swap did not return to buy`);
+
+      /* Next step: step 2 shows network + token chip rows at the top. */
+      await page.click('.bsland-next');
+      await page.waitForSelector('.bsland-networks', { timeout: 5000 });
+      await settle();
+      const step2 = await audit(`${label} step2`);
+      assert.ok(step2.chipGap > 0, `${label}: network/token chip rows collide (gap ${step2.chipGap})`);
+      assert.ok(step2.chipInnerGap > 0, `${label}: chips inside a row have no gap`);
+      await shot(`${label}-step2`);
+
+      /* Iran icon opens a popup ONLY in Persian — this matrix is fa. */
+      await page.click('[data-testid="bsland-iran"]');
+      await page.waitForSelector('[data-testid="bsland-iran-sheet"]', { timeout: 5000 });
+      const iranDir = await page.$eval('[data-testid="bsland-iran-sheet"]', (el) => {
+        const fd = el.querySelector('div[dir]');
+        return fd ? fd.getAttribute('dir') : null;
+      });
+      assert.equal(iranDir, 'rtl', `${label}: Iran popup must be Persian RTL`);
+      await page.click('[data-testid="bsland-iran-sheet-close"]');
+      await page.waitForFunction(() => !document.querySelector('[data-testid="bsland-iran-sheet"]'), { timeout: 5000 });
+
+      console.log(`✓ ${label}: step1/step2, keypad, both quick popups, swap mode, network/token chip spacing, Iran RTL popup; no overflow`);
     }
   }
+
+  /* English matrix: the Iran popup stays shut (Persian-only, Iranians-only). */
   for (const theme of ['dark', 'light']) {
-    await page.setViewport({ width: 320, height: 900, deviceScaleFactor: 1 });
+    await page.setViewport({ width: 390, height: 900, deviceScaleFactor: 1 });
     await page.goto(`${base}/test/fixtures/buy-sell.html?lang=en&theme=${theme}`, { waitUntil: 'networkidle0', timeout: 90000 });
-    await page.waitForSelector('.buy-sell-switch');
+    await page.waitForSelector('.bsland-amount');
     await settle();
-    assert.equal(await page.$('[data-testid="iran-buy-top-tab"]'), null);
-    await audit(`320/${theme}/en`);
-    await page.focus('.buy-sell-switch [aria-selected="true"]');
-    await page.keyboard.press('ArrowRight');
-    assert.equal(await page.$eval('.buy-sell-switch > button:nth-child(2)', (el) => el.getAttribute('aria-selected')), 'true');
-    await audit(`320/${theme}/en sell`);
+    await audit(`390/${theme}/en step1`);
+    await page.click('[data-testid="bsland-iran"]');
+    await new Promise((done) => setTimeout(done, 400));
+    assert.equal(await page.$('[data-testid="bsland-iran-sheet"]'), null, `390/${theme}/en: Iran popup must NOT open outside Persian`);
+    await page.click('.bsland-next');
+    await page.waitForSelector('.bsland-networks', { timeout: 5000 });
+    await settle();
+    await audit(`390/${theme}/en step2`);
+    console.log(`✓ 390/${theme}/en: landing renders; Iran popup correctly stays closed`);
   }
+
   assert.deepEqual(errors, [], 'No browser runtime errors');
-  console.log('PASS: 8 responsive/theme matrices + 2 English layouts; keyboard RTL/LTR; reduced motion; zero runtime errors.');
+  console.log('PASS: 8 responsive/theme matrices + 2 English layouts; keypad, popups, swap, chip spacing, Iran RTL gating; zero runtime errors.');
 } finally {
   await browser.close();
 }

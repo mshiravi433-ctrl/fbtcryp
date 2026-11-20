@@ -1,0 +1,407 @@
+/* ═══════════════════════════════════════════════════════════════════
+   BUY / SELL — THE LANDING DESK (2026-11-20)
+   A full-screen, headerless landing surface. Modelled on the reference
+   screenshot: a clean phone-style desk with a top bar (back · counter ·
+   Iran icon), a central amount / network / token field, and a fixed
+   bottom keyboard or buy/sell switch.
+
+   Colour flows from the same directional palette as the Prism Desk:
+   mint→cyan for خرید (BUY), rose→violet for فروش (SELL).
+   ═══════════════════════════════════════════════════════════════════ */
+
+.buy-sell-landing {
+  --bsw-accent: var(--rgb-4);
+  --bsw-accent-2: var(--rgb-1);
+  --bsw-ink: #04140d;
+  --bsw-accent-soft: color-mix(in srgb, var(--bsw-accent) 12%, transparent);
+  --bsw-accent-line: color-mix(in srgb, var(--bsw-accent) 34%, transparent);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
+  padding: 0;
+  gap: 0;
+  isolation: isolate;
+}
+.buy-sell-landing.is-sell {
+  --bsw-accent: var(--rgb-3);
+  --bsw-accent-2: var(--rgb-2);
+  --bsw-ink: #2a0011;
+}
+
+/* a soft directional wash behind the whole desk — decorative only */
+.buy-sell-landing::before {
+  content: '';
+  position: absolute;
+  inset: -40px -24px auto;
+  height: 320px;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 100% at 50% 0%, var(--bsw-accent-soft), transparent 72%);
+}
+
+/* ── TOP BAR ─────────────────────────────────────────────────────────── */
+.bsland-top {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--bsd-surface, #101c2e) 82%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.bsland-back,
+.bsland-iran {
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-1);
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, transform 120ms ease;
+}
+.bsland-back:hover,
+.bsland-iran:hover {
+  border-color: var(--bsw-accent);
+  background: var(--bsw-accent-soft);
+}
+.bsland-back:active,
+.bsland-iran:active { transform: scale(0.94); }
+.bsland-iran svg { color: #c9b6ff; }
+
+.bsland-counter {
+  flex: 1;
+  text-align: center;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* ── CONTENT ──────────────────────────────────────────────────────────── */
+.bsland-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 20px 26px;
+  min-height: 0;
+}
+.bsland-step { display: flex; flex-direction: column; gap: 16px; }
+
+.bsland-kicker {
+  margin: 0;
+  color: var(--bsw-accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+.bsland-amount-title {
+  margin: 0;
+  color: var(--text-1);
+  font-size: clamp(20px, 4vw, 26px);
+  font-weight: 850;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+}
+.bsland-section-title {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.bsland-hint {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+/* the amount field */
+.bsland-amount {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid var(--bsw-accent-line);
+  border-radius: 20px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, var(--bsw-accent-soft), transparent 60%),
+    rgba(255, 255, 255, 0.02);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.bsland-amount-value {
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: clamp(34px, 8vw, 48px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  min-width: 0;
+  word-break: break-all;
+}
+.bsland-amount-unit {
+  flex: 0 0 auto;
+  color: var(--bsw-accent);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+/* the two small buttons ABOVE the keyboard */
+.bsland-quick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.bsland-quick-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-1);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, transform 120ms ease;
+}
+.bsland-quick-btn:hover { border-color: var(--bsw-accent); background: var(--bsw-accent-soft); }
+.bsland-quick-btn:active { transform: scale(0.97); }
+.bsland-quick-btn svg { color: var(--bsw-accent); flex: 0 0 auto; }
+
+/* ── network & token chips (even, consistent sizing) ─────────────────── */
+.bsland-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.bsland-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, transform 120ms ease;
+}
+.bsland-chip:hover { border-color: var(--bsw-accent); color: var(--text-1); }
+.bsland-chip:active { transform: scale(0.96); }
+.bsland-chip.is-active {
+  border-color: transparent;
+  color: var(--bsw-ink);
+  background: linear-gradient(140deg, var(--bsw-accent), var(--bsw-accent-2));
+  box-shadow: 0 8px 18px -10px color-mix(in srgb, var(--bsw-accent) 65%, transparent);
+}
+.bsland-chip svg { flex: 0 0 auto; }
+
+/* ── BOTTOM: keyboard / actions ─────────────────────────────────────── */
+.bsland-bottom {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in srgb, var(--bsd-surface, #101c2e) 92%, transparent);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--line);
+}
+
+.bsland-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.bsland-key {
+  display: grid;
+  place-items: center;
+  height: 56px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 120ms ease, border-color 120ms ease, transform 100ms ease;
+}
+.bsland-key:hover { background: rgba(255, 255, 255, 0.1); }
+.bsland-key:active { transform: scale(0.95); background: var(--bsw-accent-soft); }
+.bsland-key.is-del { color: var(--text-2); font-size: 20px; }
+
+.bsland-actions { display: flex; flex-direction: column; gap: 8px; }
+.bsland-blocked {
+  margin: 0;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.bsland-next,
+.bsland-confirm { width: 100%; justify-content: center; }
+.bsland-next.is-ready,
+.bsland-confirm {
+  background: linear-gradient(140deg, var(--bsw-accent), var(--bsw-accent-2));
+  color: var(--bsw-ink);
+  border: 0;
+  font-weight: 800;
+}
+
+/* step-2 confirm bar: the buy/sell switch + confirm */
+.bsland-confirm-bar {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 10px;
+}
+.bsland-swap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 96px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, transform 120ms ease;
+}
+.bsland-swap:hover { border-color: var(--bsw-accent); background: var(--bsw-accent-soft); }
+.bsland-swap:active { transform: scale(0.96); }
+.bsland-swap svg { color: var(--bsw-accent); flex: 0 0 auto; }
+.bsland-confirm { flex: 1; }
+
+/* ── errors ───────────────────────────────────────────────────────────── */
+.bsland-error { margin: 0; }
+
+/* ── POPUP CONTENT ───────────────────────────────────────────────────── */
+.bsland-sheet-note {
+  margin: 0 0 16px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.8;
+}
+.bsland-pay-list { display: flex; flex-direction: column; gap: 10px; }
+.bsland-pay-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.bsland-pay-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.bsland-pay-copy b { color: var(--text-1); font-size: 14px; }
+.bsland-pay-copy .mono { color: var(--text-3); font-size: 11px; overflow-wrap: anywhere; }
+
+.bsland-pay-p2p { margin-top: 18px; }
+.bsland-pay-p2p-rows { display: flex; flex-direction: column; gap: 8px; }
+.bsland-pay-p2p-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.bsland-pay-p2p-row svg { color: var(--text-3); }
+
+.bsland-side-options { display: flex; flex-direction: column; gap: 10px; }
+.bsland-side-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-1);
+  cursor: pointer;
+  text-align: start;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+.bsland-side-option:hover { border-color: var(--bsw-accent); }
+.bsland-side-option.is-active {
+  border-color: transparent;
+  background: linear-gradient(140deg, var(--bsw-accent-soft), transparent 70%);
+  box-shadow: inset 0 0 0 1px var(--bsw-accent-line);
+}
+.bsland-side-option span:nth-child(2) { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.bsland-side-option b { font-size: 15px; }
+.bsland-side-option small { color: var(--text-3); font-size: 11.5px; }
+.bsland-side-option svg:last-child { color: var(--bsw-accent); flex: 0 0 auto; }
+.bsland-side-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  color: var(--bsw-ink);
+}
+.bsland-side-icon.is-buy { background: linear-gradient(140deg, var(--rgb-4), var(--rgb-1)); }
+.bsland-side-icon.is-sell { background: linear-gradient(140deg, var(--rgb-3), var(--rgb-2)); }
+
+/* ── light theme ────────────────────────────────────────────────────── */
+:root[data-theme='light'] .bsland-top,
+:root[data-theme='light'] .bsland-bottom {
+  background: color-mix(in srgb, #ffffff 88%, transparent);
+}
+:root[data-theme='light'] .bsland-amount { background: rgba(0, 0, 0, 0.02); }
+:root[data-theme='light'] .bsland-key,
+:root[data-theme='light'] .bsland-quick-btn,
+:root[data-theme='light'] .bsland-chip,
+:root[data-theme='light'] .bsland-pay-row,
+:root[data-theme='light'] .bsland-pay-p2p-row,
+:root[data-theme='light'] .bsland-side-option { background: rgba(0, 0, 0, 0.03); }
+:root[data-theme='light'] .bsland-back,
+:root[data-theme='light'] .bsland-iran { background: rgba(0, 0, 0, 0.04); }
+
+/* ── the order-result return target (/order/result/:orderId) ───────── */
+.buy-sell-result {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px 26px;
+}
+.buy-sell-order-result { border-radius: 16px; }
