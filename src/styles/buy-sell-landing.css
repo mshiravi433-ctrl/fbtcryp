@@ -1,467 +1,181 @@
-/* ═══════════════════════════════════════════════════════════════════
-   BUY / SELL — THE LANDING DESK (2026-11-20, polished v3)
-   A full-screen, headerless landing surface. Modelled on the reference
-   screenshot: a BARE top bar (back · tracking · Iran — no box, no
-   counter), a central modern price box, and a fixed glassy keyboard or
-   confirm bar. The page NEVER scrolls. Step two picks network + token
-   inside openable, modern, icon-led boxes.
-
-   Colour flows from the same directional palette as the Prism Desk:
-   mint→cyan for خرید (BUY), rose→violet for فروش (SELL).
-   ═══════════════════════════════════════════════════════════════════ */
-
+/* Obsidian / Pearl — scoped to the fiat desk and its portaled screens. */
+.buy-sell-landing,
+.bsland-screen {
+  --desk-bg: #0a0b10;
+  --desk-fg: #f6f7fb;
+  --desk-muted: #a9afbf;
+  --desk-edge: #ffffff20;
+  --desk-glass: linear-gradient(155deg, #ffffff12, #ffffff04);
+  --desk-accent: #a3efde;
+  --desk-accent-end: #9bb9ff;
+  --desk-ink: #102523;
+  --desk-gutter: clamp(16px, 5vw, 36px);
+  color: var(--desk-fg);
+  background: radial-gradient(ellipse at 75% 0%, color-mix(in srgb, var(--desk-accent) 15%, transparent), transparent 57%), var(--desk-bg);
+}
+:is(.buy-sell-landing,.bsland-screen).is-sell {
+  --desk-accent: #ffc1d5;
+  --desk-accent-end: #c6b6ff;
+  --desk-ink: #381626;
+}
+:root[data-theme='light'] :is(.buy-sell-landing,.bsland-screen) {
+  --desk-bg: #f6f7fb;
+  --desk-fg: #171c29;
+  --desk-muted: #535e71;
+  --desk-edge: #253b602d;
+  --desk-glass: linear-gradient(155deg, #fffffff0, #ffffff40);
+}
 .buy-sell-landing {
-  --bsw-accent: var(--rgb-4);
-  --bsw-accent-2: var(--rgb-1);
-  --bsw-ink: #04140d;
-  --bsw-accent-soft: color-mix(in srgb, var(--bsw-accent) 12%, transparent);
-  --bsw-accent-line: color-mix(in srgb, var(--bsw-accent) 34%, transparent);
-  --bsw-key: color-mix(in srgb, var(--bg-raised, #16223a) 46%, transparent);
-
-  position: relative;
   display: flex;
   flex-direction: column;
-  /* the whole desk is exactly the viewport: nothing scrolls */
-  height: 100dvh;
   width: 100%;
-  max-width: 560px;
+  height: 100dvh;
+  overflow: auto;
+}
+.bsland-top, .bsland-content, .bsland-bottom {
+  width: min(100%, 570px);
   margin-inline: auto;
-  overflow: hidden;
-  isolation: isolate;
-}
-.buy-sell-landing.is-sell {
-  --bsw-accent: var(--rgb-3);
-  --bsw-accent-2: var(--rgb-2);
-  --bsw-ink: #2a0011;
-}
-
-/* a soft directional wash behind the whole desk — decorative only */
-.buy-sell-landing::before {
-  content: '';
-  position: absolute;
-  inset: -40px -24px auto;
-  height: 340px;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(60% 100% at 50% 0%, var(--bsw-accent-soft), transparent 72%);
-}
-
-/* ── TOP BAR: three bare icons, no box ─────────────────────────────── */
-.bsland-top {
-  position: relative;
-  z-index: 5;
+  padding-inline: var(--desk-gutter);
   flex: none;
+}
+.bsland-top {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: calc(env(safe-area-inset-top) + 14px) 14px 10px;
-  /* deliberately transparent: no background, no border — just the icons */
-  background: transparent;
+  justify-content: space-between;
+  padding-block: calc(8px + env(safe-area-inset-top)) 8px;
 }
-.bsland-top-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-inline-start: auto;
-}
-
-/* bare icon buttons — no border, no fill, just a touch target */
+.bsland-top-actions { display: flex; gap: 6px; }
 .bsland-icon {
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
-  flex: 0 0 40px;
-  width: 40px;
-  height: 40px;
-  border: 0;
-  border-radius: 12px;
+  flex: none;
+  color: var(--desk-fg);
   background: transparent;
-  color: var(--text-2);
+  border: 0;
+  border-radius: 50%;
   cursor: pointer;
-  transition: color 160ms ease, background-color 160ms ease, transform 120ms ease;
 }
-.bsland-icon:hover { color: var(--text-1); background: rgba(255, 255, 255, 0.06); }
-.bsland-icon:active { transform: scale(0.92); }
-.bsland-back svg { color: var(--text-1); }
-.bsland-report { color: var(--bsw-accent); }
-.bsland-iran { color: #c9b6ff; }
-.bsland-iran svg { color: #c9b6ff; }
-
-/* ── CONTENT ──────────────────────────────────────────────────────────── */
-.bsland-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 22px 20px 14px;
-  min-height: 0;
-  overflow: hidden;
-}
-.bsland-step { display: flex; flex-direction: column; gap: 14px; }
-
-.bsland-kicker {
-  margin: 0;
-  color: var(--bsw-accent);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-}
-.bsland-amount-title {
-  margin: 0;
-  color: var(--text-1);
-  font-size: clamp(18px, 3.6vw, 23px);
-  font-weight: 850;
-  line-height: 1.35;
-  letter-spacing: -0.02em;
-}
-.bsland-section-title {
-  margin: 0;
-  color: var(--text-2);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-.bsland-hint {
-  margin: 0;
-  color: var(--text-3);
-  font-size: 11.5px;
-  line-height: 1.7;
-}
-
-/* the modern PRICE box */
+.bsland-icon:hover { background: var(--desk-glass); }
+.bsland-icon svg, .bsland-picker-chev { flex: none; }
+[dir='rtl'] :is(.bsland-back,.bsland-next,.bsland-confirm) svg,
+[dir='rtl'] .bsland-picker-chev { transform: scaleX(-1); }
+.bsland-content { padding-block: clamp(8px, 3vh, 32px) 16px; }
+.bsland-step { display: grid; gap: 10px; }
+.bsland-kicker { margin: 0; font-size: 12px; color: var(--desk-muted); font-weight: 700; }
+.bsland-amount-title { margin: 0; font-size: clamp(25px, 5vw, 38px); line-height: 1.2; }
+.bsland-hint, .bsland-blocked, .bsland-sheet-note { margin: 0; color: var(--desk-muted); font-size: 13px; line-height: 1.65; }
 .bsland-amount {
   display: flex;
-  align-items: baseline;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 18px 22px;
-  border: 1px solid var(--bsw-accent-line);
-  border-radius: 22px;
-  background:
-    radial-gradient(140% 160% at 0% 0%, var(--bsw-accent-soft), transparent 58%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 18px 40px -28px color-mix(in srgb, var(--bsw-accent) 70%, transparent);
-  backdrop-filter: blur(6px);
+  gap: 8px 16px;
+  min-height: clamp(78px, 14vh, 140px);
+  padding: clamp(12px, 4vw, 26px);
+  border: 1px solid var(--desk-edge);
+  border-radius: 26px;
+  background: radial-gradient(ellipse at 0 0, color-mix(in srgb, var(--desk-accent) 24%, transparent), transparent 76%), var(--desk-glass);
+  box-shadow: inset 0 1px #ffffff30, 0 20px 40px -30px #0008;
 }
 .bsland-amount-value {
-  color: var(--text-1);
-  font-family: var(--font-mono);
-  font-size: clamp(34px, 8vw, 48px);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1;
   min-width: 0;
-  word-break: break-all;
-  text-shadow: 0 0 24px color-mix(in srgb, var(--bsw-accent) 22%, transparent);
+  overflow-wrap: anywhere;
+  font: 650 clamp(26px, 7vw, 52px)/1.05 var(--font-mono, monospace);
+  letter-spacing: -.055em;
 }
-.bsland-amount-unit {
-  flex: 0 0 auto;
-  padding: 5px 12px;
-  border-radius: 999px;
-  color: var(--bsw-ink);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  background: linear-gradient(140deg, var(--bsw-accent), var(--bsw-accent-2));
-}
-
-/* ── openable pickers: network & token ─────────────────────────────── */
-.bsland-picker {
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01));
-  overflow: hidden;
-}
-.bsland-picker-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 13px 14px;
-  border: 0;
-  background: transparent;
-  color: var(--text-1);
-  cursor: pointer;
-  transition: background-color 140ms ease;
-}
-.bsland-picker-head:hover { background: rgba(255, 255, 255, 0.04); }
-.bsland-picker-icon {
-  display: grid;
-  place-items: center;
-  flex: 0 0 30px;
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
-  color: var(--bsw-accent);
-  background: var(--bsw-accent-soft);
-}
-.bsland-picker-label {
-  flex: 1;
-  text-align: start;
-  font-size: 13px;
-  font-weight: 800;
-}
-.bsland-picker-chev {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  color: var(--text-3);
-  transition: transform 0.22s ease, color 0.2s ease;
-}
-.bsland-picker-head.is-open .bsland-picker-chev { transform: rotate(90deg); color: var(--bsw-accent); }
-.bsland-picker-body {
-  overflow: hidden;
-  padding: 0 12px 12px;
-}
-
-/* ── chips inside the pickers ───────────────────────────────────────── */
-.bsland-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-.bsland-chip {
+.bsland-amount-unit, .bsland-summary {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 9px 13px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-2);
-  font-size: 12.5px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, transform 120ms ease;
-}
-.bsland-chip:hover { border-color: var(--bsw-accent); color: var(--text-1); }
-.bsland-chip:active { transform: scale(0.96); }
-.bsland-chip.is-active {
-  border-color: transparent;
-  color: var(--bsw-ink);
-  background: linear-gradient(140deg, var(--bsw-accent), var(--bsw-accent-2));
-  box-shadow: 0 8px 18px -10px color-mix(in srgb, var(--bsw-accent) 65%, transparent);
-}
-.bsland-chip svg { flex: 0 0 auto; }
-
-/* ── BOTTOM: glassy keyboard / actions ──────────────────────────────── */
-.bsland-bottom {
-  position: relative;
-  z-index: 5;
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px calc(14px + env(safe-area-inset-bottom, 0px));
-  background:
-    linear-gradient(180deg, transparent, color-mix(in srgb, var(--bsd-surface, #0b1422) 55%, transparent) 32%),
-    color-mix(in srgb, var(--bsd-surface, #0b1422) 88%, transparent);
-  backdrop-filter: blur(18px);
-  border-top: 1px solid var(--line);
-}
-
-/* the glassy KEYBOARD */
-.bsland-keypad {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
   gap: 7px;
-}
-.bsland-key {
-  display: grid;
-  place-items: center;
-  height: 50px;
-  border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
-  border-radius: 16px;
-  background: var(--bsw-key);
-  backdrop-filter: blur(8px);
-  color: var(--text-1);
-  font-family: var(--font-mono);
-  font-size: 21px;
-  font-weight: 600;
-  cursor: pointer;
-  user-select: none;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  transition: background-color 120ms ease, border-color 120ms ease, transform 100ms ease, box-shadow 120ms ease;
-}
-.bsland-key:hover {
-  background: color-mix(in srgb, var(--bg-raised, #16223a) 64%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 20px -14px rgba(0, 0, 0, 0.6);
-}
-.bsland-key:active { transform: scale(0.95); background: var(--bsw-accent-soft); }
-.bsland-key.is-del { color: var(--text-2); font-size: 19px; }
-
-/* the payment-methods button IS a key of the keyboard */
-.bsland-pay-key {
-  grid-column: 1 / -1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 44px;
-  border: 1px solid var(--bsw-accent-line);
-  border-radius: 16px;
-  background: var(--bsw-accent-soft);
-  color: var(--text-1);
-  font-size: 12.5px;
-  font-weight: 700;
-  cursor: pointer;
-  backdrop-filter: blur(6px);
-  transition: background-color 120ms ease, transform 100ms ease;
-}
-.bsland-pay-key:hover { background: color-mix(in srgb, var(--bsw-accent) 20%, transparent); }
-.bsland-pay-key:active { transform: scale(0.97); }
-.bsland-pay-key svg { color: var(--bsw-accent); flex: 0 0 auto; }
-
-.bsland-actions { display: flex; flex-direction: column; gap: 8px; }
-.bsland-blocked {
+  width: fit-content;
   margin: 0;
-  text-align: center;
-  color: var(--text-3);
-  font-size: 11px;
+  padding: 6px 10px;
+  border: 1px solid var(--desk-edge);
+  border-radius: 99px;
+  background: var(--desk-glass);
+  font: 700 13px var(--font-mono, monospace);
 }
-
-/* step-1 actions row: the buy/sell toggle + next */
-.bsland-step1-actions {
-  display: flex;
-  align-items: stretch;
-  gap: 10px;
+.bsland-bottom { margin-block-start: auto; padding-block: 0 calc(12px + env(safe-area-inset-bottom)); }
+.bsland-keypad { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
+.bsland-key, .bsland-pay-key, .bsland-picker, .bsland-choice, .bsland-wallet input, .bsland-side-toggle {
+  color: var(--desk-fg);
+  background: var(--desk-glass);
+  border: 1px solid var(--desk-edge);
+  border-radius: 16px;
 }
-
-/* the buy/sell toggle — a glass segmented control on STEP ONE */
-.bsland-side-toggle {
-  display: flex;
-  flex: 0 0 auto;
-  padding: 3px;
-  border-radius: 15px;
-  background: color-mix(in srgb, var(--bg-raised, #16223a) 42%, transparent);
-  border: 1px solid var(--line);
-  backdrop-filter: blur(6px);
-}
-.bsland-side-seg {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 10px 13px;
+.bsland-key, .bsland-pay-key, .bsland-side-seg, .bsland-picker, .bsland-choice { cursor: pointer; }
+.bsland-key { min-height: clamp(38px, 6vh, 55px); font: 600 21px var(--font-mono, monospace); touch-action: manipulation; }
+.bsland-key:active, .bsland-pay-key:active { transform: scale(.97); }
+.bsland-key.is-del { color: var(--desk-muted); }
+.bsland-pay-key { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; font-weight: 700; }
+.bsland-actions { display: grid; gap: 6px; }
+.bsland-blocked { text-align: center; }
+.bsland-step1-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.bsland-side-toggle { display: flex; padding: 3px; flex: 1; }
+.bsland-side-seg { flex: 1; padding: 6px 9px; min-height: 38px; display: flex; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 12px; background: transparent; color: var(--desk-muted); font-weight: 750; }
+.bsland-next, .bsland-confirm { min-height: 46px; justify-content: center; border-radius: 15px; font-weight: 800; }
+.bsland-next { flex: 1; }
+.bsland-confirm { width: 100%; }
+.bsland-next.is-ready, .bsland-confirm, .bsland-side-seg.is-active {
+  background: linear-gradient(125deg, var(--desk-accent), var(--desk-accent-end));
+  color: var(--desk-ink);
   border: 0;
-  border-radius: 12px;
-  background: transparent;
-  color: var(--text-2);
-  font-size: 12.5px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
-  white-space: nowrap;
 }
-.bsland-side-seg.is-active {
-  color: var(--bsw-ink);
-  background: linear-gradient(140deg, var(--bsw-accent), var(--bsw-accent-2));
-  box-shadow: 0 8px 18px -10px color-mix(in srgb, var(--bsw-accent) 70%, transparent);
-}
-
-.bsland-next,
-.bsland-confirm {
-  width: 100%;
-  justify-content: center;
-}
-.bsland-step1-actions .bsland-next { flex: 1; }
-.bsland-next.is-ready,
-.bsland-confirm {
-  background: linear-gradient(140deg, var(--bsw-accent), var(--bsw-accent-2));
-  color: var(--bsw-ink);
-  border: 0;
-  font-weight: 800;
-  box-shadow: 0 12px 26px -14px color-mix(in srgb, var(--bsw-accent) 80%, transparent);
-}
-
-/* step-2 confirm bar */
-.bsland-confirm-bar { flex-direction: row; align-items: stretch; }
-
-/* ── errors ───────────────────────────────────────────────────────────── */
+.bsland-picker, .bsland-choice { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 62px; padding: 10px 14px; text-align: start; }
+.bsland-picker-label, .bsland-choice strong { flex: 1; min-width: 0; text-align: match-parent; }
+.bsland-picker-label { display: grid; justify-items: start; gap: 3px; }
+.bsland-picker-label small { color: var(--desk-muted); }
+.bsland-picker-label strong, .bsland-choice strong { font-size: 16px; }
+.bsland-choice strong { text-align: start; }
+.bsland-screen[dir='rtl'] .bsland-choice strong { text-align: right; }
+.bsland-choice[aria-pressed='true'], .bsland-picker:hover, .bsland-choice:hover, .bsland-key:hover { border-color: color-mix(in srgb, var(--desk-fg) 44%, transparent); }
+.bsland-choice[aria-pressed='true'] { background: color-mix(in srgb, var(--desk-accent) 18%, var(--desk-bg)); }
+.bsland-wallet { display: grid; gap: 6px; color: var(--desk-muted); font-size: 13px; }
+.bsland-wallet input { width: 100%; min-height: 44px; padding: 9px 12px; font: 500 16px var(--font-mono, monospace); }
+.bsland-wallet input[aria-invalid='true'] { border-color: #ce5470; }
 .bsland-error { margin: 0; }
+:is(.buy-sell-landing,.bsland-screen) :focus-visible { outline: 2px solid var(--desk-fg); outline-offset: 2px; }
 
-/* ── POPUP CONTENT ───────────────────────────────────────────────────── */
-.bsland-sheet-note {
-  margin: 0 0 14px;
-  color: var(--text-2);
-  font-size: 12px;
-  line-height: 1.7;
+/* Viewport-sized top-layer dialogs, not nested cards. Only the body scrolls. */
+.bsland-screen {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
 }
-.bsland-pay-list { display: flex; flex-direction: column; gap: 9px; }
-.bsland-pay-row {
+.bsland-screen[open] { display: flex; flex-direction: column; }
+.bsland-screen-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 11px 13px;
-  border: 1px solid var(--line);
-  border-radius: 15px;
-  background: rgba(255, 255, 255, 0.03);
+  padding: calc(10px + env(safe-area-inset-top)) var(--desk-gutter) 10px;
+  border-bottom: 1px solid var(--desk-edge);
+  background: var(--desk-glass);
 }
-.bsland-pay-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.bsland-pay-copy b { color: var(--text-1); font-size: 13.5px; }
-.bsland-pay-copy .mono { color: var(--text-3); font-size: 11px; overflow-wrap: anywhere; }
-
-.bsland-pay-p2p { margin-top: 16px; }
-.bsland-pay-p2p-rows { display: flex; flex-direction: column; gap: 7px; }
-.bsland-pay-p2p-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 13px;
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text-1);
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.bsland-pay-p2p-row svg { color: var(--text-3); }
-
-/* ── Iran popup: full screen, de-boxed, readable ───────────────────── */
-.bsland-iran-full {
-  width: 100% !important;
-  margin: 0 !important;
-  border-inline: 0 !important;
-}
-.bsland-iran-full .fsh-aurora { display: none; }
-.bsland-iran-full .fsh-panel {
-  background:
-    radial-gradient(120% 50% at 50% 0%, color-mix(in srgb, var(--bsw-accent, var(--rgb-4)) 10%, transparent), transparent 60%),
-    var(--bg-panel-solid, #080b12);
-}
-.bsland-iran-full .fsh-head {
-  background: color-mix(in srgb, var(--bg-panel-solid, #080b12) 70%, transparent);
-}
-.bsland-iran-full .fsh-body {
-  padding: 18px 16px calc(22px + env(safe-area-inset-bottom));
-}
-
-/* ── light theme ────────────────────────────────────────────────────── */
-:root[data-theme='light'] .bsland-amount { background: rgba(0, 0, 0, 0.02); }
-:root[data-theme='light'] .bsland-key,
-:root[data-theme='light'] .bsland-pay-key,
-:root[data-theme='light'] .bsland-chip,
-:root[data-theme='light'] .bsland-picker,
-:root[data-theme='light'] .bsland-pay-row,
-:root[data-theme='light'] .bsland-pay-p2p-row,
-:root[data-theme='light'] .bsland-side-toggle { background: rgba(0, 0, 0, 0.04); }
-:root[data-theme='light'] .bsland-icon:hover { background: rgba(0, 0, 0, 0.05); }
-:root[data-theme='light'] .bsland-picker-head:hover { background: rgba(0, 0, 0, 0.03); }
-:root[data-theme='light'] .bsland-iran-full .fsh-panel { background: #f7f8fc; }
-:root[data-theme='light'] .bsland-iran-full .fsh-head { background: rgba(255, 255, 255, 0.8); }
-
-/* ── the order-result return target (/order/result/:orderId) ───────── */
-.buy-sell-result {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 18px 20px 26px;
-}
+.bsland-screen-head > div { display: flex; align-items: center; gap: 10px; }
+.bsland-screen-head h2 { margin: 0; font-size: clamp(20px, 4vw, 30px); }
+.bsland-screen-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 18px var(--desk-gutter) calc(24px + env(safe-area-inset-bottom)); }
+.bsland-screen-body > .bsland-sheet-note { margin-bottom: 16px; }
+.bsland-choice-list, .bsland-pay-list, .bsland-pay-p2p-rows { display: grid; gap: 8px; }
+@media (min-width: 750px) { .bsland-choice-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.bsland-pay-row, .bsland-pay-p2p-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; border: 1px solid var(--desk-edge); border-radius: 16px; background: var(--desk-glass); color: var(--desk-fg); }
+.bsland-pay-p2p-row { cursor: pointer; }
+.bsland-pay-copy { display: grid; gap: 4px; min-width: 0; }
+.bsland-pay-copy .mono { color: var(--desk-muted); overflow-wrap: anywhere; }
+.bsland-pay-p2p { margin-top: 18px; }
+.bsland-screen :is(.iran-buy-ticket,.buy-sell-watch) { border: 0; padding: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
+.bsland-screen .iran-buy-panel { max-width: none; }
+.buy-sell-result { display: grid; gap: 14px; padding: 18px 20px 26px; }
 .buy-sell-order-result { border-radius: 16px; }
+.bsland-asset-logo { display: block; flex: none; object-fit: contain; border-radius: 50%; }
+.app-shell:has(.buy-sell-page--desk) { max-width: none; padding-bottom: 0; }
+.page.buy-sell-page.buy-sell-page--desk { padding: 0; }

@@ -1,36 +1,9 @@
-/**
- * BUY / SELL — THE LANDING DESK (2026-11-20, polished v3)
- * ---------------------------------------------------------------------------
- * A full-screen, headerless landing surface for fiat on/off-ramp — modelled
- * on the reference screenshot (a MetaMask-style buy desk) and refined to the
- * best modern UI/UX:
- *
- *   · no app header, no bottom nav, no menu — the page IS the screen;
- *   · the TOP bar is BARE: just three icons — back, the on-chain tracking
- *     icon and the Iran icon — no box, no counter;
- *   · a glassy numeric KEYBOARD at the bottom; the payment-methods button
- *     is a KEY of it; the price (amount) box is modern;
- *   · the buy/sell toggle lives on STEP ONE;
- *   · step two picks network + token inside OPENABLE, modern boxes with
- *     icons (accordion headers), from an expanded catalogue;
- *   · the Iran icon opens a FULL-SCREEN, de-boxed, readable popup — only
- *     for Iranians, only in Persian; the tracking icon opens the on-chain
- *     report card;
- *   · the page never scrolls: top bar + content + keyboard fit the viewport.
- *
- * The rail underneath is the same honest one the wizard used: the user's
- * answers are pre-filled into the destination provider's OWN public page,
- * the user confirms and pays there, and the only post-handoff signal is the
- * public blockchain — reported by WalletWatchReport, never as a payment
- * status.
- */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
-import Sheet from './Sheet';
-import FullScreenSheet from './FullScreenSheet';
+import BuySellScreen from './BuySellScreen';
 import AssetIcon from './AssetIcon';
 import WalletWatchReport from './WalletWatchReport';
 import IranianBuyPanel from './IranianBuyPanel';
@@ -47,11 +20,21 @@ import {
 } from '../lib/guidedCheckout';
 import {
   IconActivity, IconArrowDown, IconArrowUpRight, IconBuilding, IconChevronLeft,
-  IconChevronRight, IconCoins, IconGlobe, IconIran
+  IconChevronRight, IconCheck, IconIran
 } from './Icons';
 
 /* The keypad: 1-9, then . 0 ⌫. Three columns, four rows. */
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'del'];
+
+// Checked-in marks for curated guided assets not in the shared SVG catalogue.
+const DESK_LOGOS = { stETH: 'png', wstETH: 'png', weETH: 'png', rETH: 'svg', cbETH: 'svg' };
+
+function DeskAssetLogo({ symbol, chain, size }) {
+  const ext = DESK_LOGOS[symbol];
+  return ext ? (
+    <img className="bsland-asset-logo" src={`/images/ramp/${symbol}.${ext}`} alt="" width={size} height={size} />
+  ) : <AssetIcon symbol={symbol} chain={chain} size={size} />;
+}
 
 /* Persian/Arabic digits the keypad never produces, but pasted text might. */
 function toAsciiDigits(text) {
@@ -62,7 +45,7 @@ function errorKey(error) {
   return error?.code || error?.message || 'REQUEST_FAILED';
 }
 
-export default function BuySellLanding({ initialOrderId = null }) {
+export default function BuySellLanding() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const wallet = useWallet();
@@ -70,13 +53,13 @@ export default function BuySellLanding({ initialOrderId = null }) {
   const [step, setStep] = useState(1);
   const [side, setSide] = useState('BUY');
   const [amount, setAmount] = useState('');
-  const [fiatCurrency, setFiatCurrency] = useState('USD');
+  const fiatCurrency = 'USD';
   const [network, setNetwork] = useState('arbitrum');
   const [asset, setAsset] = useState('USDT');
-  const [walletAddress, setWalletAddress] = useState('');
+  const [walletOverride, setWalletAddress] = useState(null);
+  const walletAddress = (walletOverride ?? wallet.address ?? '').trim();
 
-  const [netOpen, setNetOpen] = useState(true);
-  const [tokOpen, setTokOpen] = useState(true);
+  const [picker, setPicker] = useState(null);
 
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [iranOpen, setIranOpen] = useState(false);
@@ -84,7 +67,6 @@ export default function BuySellLanding({ initialOrderId = null }) {
 
   const [loading, setLoading] = useState('');
   const [error, setError] = useState(null);
-  const [watchKick, setWatchKick] = useState(0);
   const [reportKick, setReportKick] = useState(0);
 
   const rtl = i18n.dir ? i18n.dir() === 'rtl' : false;
@@ -106,10 +88,6 @@ export default function BuySellLanding({ initialOrderId = null }) {
     []
   );
 
-  useEffect(() => {
-    if (wallet.address && !walletAddress) setWalletAddress(wallet.address);
-  }, [wallet.address, walletAddress]);
-
   const chooseAsset = (nextAsset) => {
     const rows = catalog.filter((row) => row.asset === nextAsset);
     setAsset(nextAsset);
@@ -129,11 +107,10 @@ export default function BuySellLanding({ initialOrderId = null }) {
         if (ascii.includes('.')) return ascii;
         return ascii === '' ? '0.' : `${ascii}.`;
       }
-      if (ascii === '0' && key !== '.') return key;
-      if (ascii === '0.' && key !== '.') return `0${key}`;
-      const [whole, frac = ''] = ascii.split('.');
-      if (frac.length >= 8) return ascii;
-      return `${whole}${frac}${key}`;
+      if (ascii === '0') return key;
+      const [whole, fraction] = ascii.split('.');
+      if (fraction === undefined ? whole.length >= 12 : fraction.length >= 8) return ascii;
+      return `${ascii}${key}`;
     });
   };
 
@@ -162,7 +139,6 @@ export default function BuySellLanding({ initialOrderId = null }) {
       });
       const opened = await openUrl(built.url);
       if (!opened) throw Object.assign(new Error('CHECKOUT_OPEN_FAILED'), { code: 'CHECKOUT_OPEN_FAILED' });
-      setWatchKick((n) => n + 1);
       emitEvent('buySell.guidedHandoff', { provider: built.provider, asset, network, side }, 'buy-sell');
     } catch (requestError) {
       setError(errorKey(requestError));
@@ -185,7 +161,6 @@ export default function BuySellLanding({ initialOrderId = null }) {
     try {
       const opened = await openUrl(option.url);
       if (!opened) { setError('CHECKOUT_OPEN_FAILED'); return; }
-      setWatchKick((n) => n + 1);
       setPaymentOpen(false);
       emitEvent('buySell.guidedHandoff', { provider: option.id, asset, network, side }, 'buy-sell');
     } finally {
@@ -200,6 +175,8 @@ export default function BuySellLanding({ initialOrderId = null }) {
     if (step === 2 && (!network || !asset)) return t('buySell.landing.needNetwork');
     return '';
   }, [amountValid, asset, network, step, t]);
+
+  const screenProps = { dir: rtl ? 'rtl' : 'ltr', closeLabel: t('common.close'), sell };
 
   return (
     <div className={`buy-sell-landing ${sell ? 'is-sell' : 'is-buy'}`} dir={rtl ? 'rtl' : 'ltr'}>
@@ -224,7 +201,7 @@ export default function BuySellLanding({ initialOrderId = null }) {
           >
             <IconActivity width={20} height={20} />
           </button>
-          <button
+          {iranLanguageAllowed && <button
             type="button"
             className="bsland-icon bsland-iran"
             onClick={() => setIranOpen(true)}
@@ -232,12 +209,12 @@ export default function BuySellLanding({ initialOrderId = null }) {
             data-testid="bsland-iran"
           >
             <IconIran width={22} height={22} />
-          </button>
+          </button>}
         </span>
       </header>
 
       {/* ── STEP CONTENT ─────────────────────────────────────────────── */}
-      <main className="bsland-content">
+      <div className="bsland-content">
         <AnimatePresence mode="wait">
           {step === 1 && (
             <motion.section
@@ -252,8 +229,8 @@ export default function BuySellLanding({ initialOrderId = null }) {
               <h1 className="bsland-amount-title">{t('buySell.landing.amountTitle')}</h1>
 
               <div className="bsland-amount" dir="ltr">
-                <span className="bsland-amount-value">{amount || '۰'}</span>
-                <span className="bsland-amount-unit">{sell ? asset : fiatCurrency}</span>
+                <span className="bsland-amount-value" aria-live="polite">{amount || '0'}</span>
+                <span className="bsland-amount-unit"><DeskAssetLogo symbol={sell ? asset : fiatCurrency} size={19} />{sell ? asset : fiatCurrency}</span>
               </div>
               <p className="bsland-hint">{t('buySell.landing.amountHint')}</p>
 
@@ -272,109 +249,55 @@ export default function BuySellLanding({ initialOrderId = null }) {
             >
               <p className="bsland-kicker">{t('buySell.title')}</p>
 
-              {/* Network: an openable, modern box with an icon */}
-              <div className="bsland-picker" data-testid="bsland-networks-picker">
-                <button
-                  type="button"
-                  className={`bsland-picker-head${netOpen ? ' is-open' : ''}`}
-                  onClick={() => setNetOpen((o) => !o)}
-                  aria-expanded={netOpen}
-                >
-                  <span className="bsland-picker-icon"><IconGlobe width={17} height={17} /></span>
-                  <span className="bsland-picker-label">{t('buySell.landing.networkTitle')}</span>
-                  <span className="bsland-picker-chev"><IconChevronRight width={16} height={16} /></span>
+              <h1 className="bsland-amount-title">{t('buySell.landing.tokenTitle')}</h1>
+              <p className="bsland-summary" dir="ltr">{amount} {sell ? asset : fiatCurrency}</p>
+              {[['token', asset, <DeskAssetLogo symbol={asset} size={36} />],
+                ['network', networkLabel(network), <DeskAssetLogo chain={networkChainById[network]} size={36} />]
+              ].map(([kind, label, logo]) => (
+                <button key={kind} type="button" className="bsland-picker bsland-picker-head"
+                  data-testid={kind === 'token' ? 'bsland-tokens-picker' : 'bsland-networks-picker'}
+                  aria-haspopup="dialog" onClick={() => setPicker(kind)}>
+                  {logo}
+                  <span className="bsland-picker-label">
+                    <small>{t(`buySell.landing.${kind}Title`)}</small>
+                    <strong dir="ltr">{label}</strong>
+                  </span>
+                  <IconChevronRight className="bsland-picker-chev" width={20} height={20} />
                 </button>
-                <AnimatePresence initial={false}>
-                  {netOpen && (
-                    <motion.div
-                      className="bsland-picker-body"
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                    >
-                      <div className="bsland-chips bsland-networks" role="group" aria-label={t('buySell.landing.networkTitle')}>
-                        {(assetNetworks.length ? assetNetworks : [network]).map((code) => (
-                          <button
-                            key={code}
-                            type="button"
-                            className={`bsland-chip ${code === network ? 'is-active' : ''}`}
-                            onClick={() => setNetwork(code)}
-                          >
-                            <AssetIcon chain={networkChainById[code] ?? code} size={18} />
-                            <span dir="ltr">{networkLabel(code)}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Token: an openable, modern box with an icon */}
-              <div className="bsland-picker" data-testid="bsland-tokens-picker">
-                <button
-                  type="button"
-                  className={`bsland-picker-head${tokOpen ? ' is-open' : ''}`}
-                  onClick={() => setTokOpen((o) => !o)}
-                  aria-expanded={tokOpen}
-                >
-                  <span className="bsland-picker-icon"><IconCoins width={17} height={17} /></span>
-                  <span className="bsland-picker-label">{t('buySell.landing.tokenTitle')}</span>
-                  <span className="bsland-picker-chev"><IconChevronRight width={16} height={16} /></span>
-                </button>
-                <AnimatePresence initial={false}>
-                  {tokOpen && (
-                    <motion.div
-                      className="bsland-picker-body"
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                    >
-                      <div className="bsland-chips bsland-tokens" role="group" aria-label={t('buySell.landing.tokenTitle')}>
-                        {assetSymbols.map((symbol) => (
-                          <button
-                            key={symbol}
-                            type="button"
-                            className={`bsland-chip ${symbol === asset ? 'is-active' : ''}`}
-                            onClick={() => chooseAsset(symbol)}
-                          >
-                            <AssetIcon symbol={symbol} size={18} />
-                            <span dir="ltr">{symbol}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+              ))}
+              <label className="bsland-wallet">
+                {t('buySell.destinationWallet')}
+                <input dir="ltr" value={walletOverride ?? wallet.address ?? ''} placeholder="0x…"
+                  spellCheck={false} autoCapitalize="none" autoComplete="off"
+                  aria-invalid={Boolean(walletAddress) && !walletValid}
+                  onChange={(event) => setWalletAddress(event.target.value)} />
+              </label>
 
               {error && <div className="notice notice-danger bsland-error" role="alert">{t(`buySell.errors.${error}`, { defaultValue: t('buySell.errors.REQUEST_FAILED') })}</div>}
             </motion.section>
           )}
         </AnimatePresence>
-      </main>
+      </div>
 
       {/* ── BOTTOM: glassy keyboard (step 1) · confirm (step 2) ─────── */}
       <footer className="bsland-bottom">
         {step === 1 ? (
           <>
-            <div className="bsland-keypad" role="group" aria-label={t('buySell.landing.amountTitle')}>
+            <div className="bsland-keypad" dir="ltr" role="group" aria-label={t('buySell.landing.amountTitle')}>
               {KEYS.map((key) => (
                 <button
                   key={key}
                   type="button"
                   className={`bsland-key ${key === 'del' ? 'is-del' : ''}`}
                   onClick={() => pressKey(key)}
-                  aria-label={key === 'del' ? t('buySell.landing.amountTitle') : key}
+                  aria-label={key === 'del' ? t('buySell.landing.backspace', { defaultValue: rtl ? 'پاک کردن رقم آخر' : 'Delete last digit' }) : key}
                 >
                   {key === 'del' ? '⌫' : key}
                 </button>
               ))}
               <button
                 type="button"
-                className="bsland-pay-key"
+                className="bsland-pay-key" dir={screenProps.dir}
                 onClick={() => setPaymentOpen(true)}
                 data-testid="bsland-payment-methods"
               >
@@ -433,10 +356,28 @@ export default function BuySellLanding({ initialOrderId = null }) {
         )}
       </footer>
 
+      <BuySellScreen {...screenProps} open={Boolean(picker)} onClose={() => setPicker(null)}
+        title={t(`buySell.landing.${picker === 'network' ? 'network' : 'token'}Title`)} testId="bsland-asset-sheet">
+        <div className="bsland-choice-list">
+          {(picker === 'network' ? assetNetworks : assetSymbols).map((code) => {
+            const isNetwork = picker === 'network';
+            const selected = code === (isNetwork ? network : asset);
+            return (
+              <button type="button" key={code} className="bsland-choice" aria-pressed={selected}
+                onClick={() => { if (isNetwork) setNetwork(code); else chooseAsset(code); setPicker(null); }}>
+                <DeskAssetLogo chain={isNetwork ? networkChainById[code] : undefined} symbol={isNetwork ? undefined : code} size={36} />
+                <strong dir="ltr">{isNetwork ? networkLabel(code) : code}</strong>
+                {selected && <IconCheck width={20} height={20} />}
+              </button>
+            );
+          })}
+        </div>
+      </BuySellScreen>
+
       {/* ── THE POPUPS ───────────────────────────────────────────────── */}
 
       {/* On-chain tracking report: the deposit receipt, as a card. */}
-      <Sheet open={reportOpen} onClose={() => setReportOpen(false)} title={t('buySell.landing.reportTitle')} size="lg" testId="bsland-report-sheet">
+      <BuySellScreen {...screenProps} open={reportOpen} onClose={() => setReportOpen(false)} title={t('buySell.landing.reportTitle')} icon={<IconActivity width={22} height={22} />} testId="bsland-report-sheet">
         <WalletWatchReport
           side={side}
           walletAddress={walletAddress}
@@ -444,30 +385,29 @@ export default function BuySellLanding({ initialOrderId = null }) {
           network={network}
           autoStart={reportKick}
         />
-      </Sheet>
+      </BuySellScreen>
 
       {/* Iran: ONLY for Iranians, ONLY in Persian — FULL SCREEN, de-boxed. */}
-      <FullScreenSheet
+      <BuySellScreen
+        {...screenProps}
         open={iranOpen && iranLanguageAllowed}
         onClose={() => setIranOpen(false)}
-        kicker={t('buySell.landing.iranKicker')}
         title={t('buySell.landing.iranTitle')}
         subtitle={t('buySell.landing.iranSub')}
         icon={<IconIran width={20} height={20} />}
-        className="bsland-iran-full"
         testId="bsland-iran-sheet"
-        closeLabel={t('common.close')}
       >
         {iranLanguageAllowed ? (
           <div dir="rtl" lang="fa">
             <IranianBuyPanel capability={null} />
           </div>
         ) : null}
-      </FullScreenSheet>
+      </BuySellScreen>
 
       {/* Payment methods: the same pistnaadi sites + the follow-up note. */}
-      <Sheet open={paymentOpen} onClose={() => setPaymentOpen(false)} title={t('buySell.landing.paymentTitle')} size="lg" testId="bsland-payment-sheet">
+      <BuySellScreen {...screenProps} open={paymentOpen} onClose={() => setPaymentOpen(false)} title={t('buySell.landing.paymentTitle')} icon={<IconBuilding width={22} height={22} />} testId="bsland-payment-sheet">
         <p className="bsland-sheet-note">{t('buySell.landing.paymentBody')}</p>
+        {error && <div className="notice notice-danger bsland-error" role="alert">{t(`buySell.errors.${error}`, { defaultValue: t('buySell.errors.REQUEST_FAILED') })}</div>}
         {paymentResult.options.length > 0 ? (
           <div className="bsland-pay-list" role="list">
             {paymentResult.options.map((option) => (
@@ -511,7 +451,7 @@ export default function BuySellLanding({ initialOrderId = null }) {
             ))}
           </div>
         </div>
-      </Sheet>
+      </BuySellScreen>
     </div>
   );
 }
