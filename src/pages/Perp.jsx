@@ -43,6 +43,7 @@ import '../styles/perp-modern.css';
 import '../styles/perp-terminal.css';
 import '../styles/futures-positions.css';
 import '../styles/derivatives-glass.css';
+import '../styles/futures-surface.css';
 
 const LazyDydx = SPECULATION_ENABLED ? lazyRetry(() => import('./Dydx')) : null;
 /*
@@ -1149,10 +1150,10 @@ export default function Perp() {
         <FuturesHeroBanner
           activeTab={perpTab}
           marketCount={listPairs.length}
-          btcPrice={heroBtcLive ? heroBtc.current_price : null}
-          btcChange={heroBtcLive ? heroBtc.price_change_percentage_24h : null}
-          ethPrice={heroEthLive ? heroEth.current_price : null}
-          ethChange={heroEthLive ? heroEth.price_change_percentage_24h : null}
+          btcPrice={heroBtcLive ? (heroBtc.current_price ?? heroBtc.price) : null}
+          btcChange={heroBtcLive ? (heroBtc.price_change_percentage_24h ?? heroBtc.change24h) : null}
+          ethPrice={heroEthLive ? (heroEth.current_price ?? heroEth.price) : null}
+          ethChange={heroEthLive ? (heroEth.price_change_percentage_24h ?? heroEth.change24h) : null}
           liveReady={heroBtcLive || routeIndex.size > 0}
         />
       </motion.div>

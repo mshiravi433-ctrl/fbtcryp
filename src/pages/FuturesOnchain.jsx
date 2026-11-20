@@ -36,6 +36,7 @@ import { useTelegram } from '../context/TelegramContext';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import '../styles/derivatives-glass.css';
+import '../styles/futures-surface.css';
 import {
   getFuturesProviders, getFuturesMarkets, getFuturesPositions, getFuturesAccount,
   quoteFutures, prepareFutures, verifyFutures, manageFuturesPosition
@@ -720,7 +721,7 @@ export default function FuturesOnchain({ embedded = false } = {}) {
 
   return (
     <PageTransition embedded={embedded}>
-      <div className="derivatives-hall">
+      <div className="derivatives-hall futures-venue">
         <div className="derivatives-aurora" aria-hidden="true" />
 
         <motion.section className="derivatives-hero" variants={riseIn} initial="hidden" animate="show">

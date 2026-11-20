@@ -56,7 +56,7 @@ function SpotlightMark({ spotlight }) {
  * Neither content can participate in layout, so a long event title cannot
  * move the rank/settings controls or alter the header's width/height.
  */
-export default function Header() {
+export default function Header({ onOpenMore, moreOpen } = {}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const still = useStill();
@@ -235,8 +235,12 @@ export default function Header() {
           action row — so replacing the header mark costs no route.
         */}
         <motion.button
+          type="button"
           className="icon-btn"
+          aria-expanded={onOpenMore ? moreOpen : undefined}
+          aria-haspopup={onOpenMore ? "dialog" : undefined}
           onClick={() => {
+            if (onOpenMore) { onOpenMore(); return; }
             setSocialPulse(true);
             navigate('/social');
           }}
@@ -246,10 +250,10 @@ export default function Header() {
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.14 }}
-          aria-label={t('nav.social')}
-          title={t('nav.social')}
+          aria-label={t(onOpenMore ? 'nav.more' : 'nav.social')}
+          title={t(onOpenMore ? 'nav.more' : 'nav.social')}
         >
-          <AnimatedSocial active={socialPulse} still={still} width={16} height={16} />
+          {onOpenMore ? <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg> : <AnimatedSocial active={socialPulse} still={still} width={16} height={16} />}
         </motion.button>
       </div>
     </header>

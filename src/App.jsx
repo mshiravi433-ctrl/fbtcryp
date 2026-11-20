@@ -1,3 +1,4 @@
+import MoreSheet from './components/MoreSheet';
 import PageTabSwipe from './components/PageTabSwipe.jsx';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
@@ -432,6 +433,9 @@ function AppChrome() {
    * Iran icon) and its own bottom keyboard / buy/sell switch. The app's
    * Header and BottomNav would compete with both, so the shell drops them.
    */
+  const futuresChrome = (pathname === '/perp' && SPECULATION_ENABLED) || pathname === '/perp/terminal';
+  const [futuresMore, setFuturesMore] = useState(false);
+  useEffect(() => { setFuturesMore(false); }, [pathname]);
   const headerless = pathname === '/intent' || pathname.startsWith('/pay') || pathname.startsWith('/social')
     || pathname === '/buy' || pathname.startsWith('/order/result');
   /* «نه جمع شده» — the world console is a dashboard, not a phone column, so it
@@ -464,8 +468,8 @@ function AppChrome() {
   }, [pathname]);
 
   return (
-    <div className={`app-shell${headerless ? ' app-shell--headerless' : ''}${wide ? ' app-shell--wide' : ''}${pathname === '/shop' ? ' app-shell--shop' : ''}${dockActive ? ' app-shell--dock-active' : ''}`}>
-      {!headerless && <Header />}
+    <div className={`app-shell${futuresChrome ? ' app-shell--futures' : ''}${headerless ? ' app-shell--headerless' : ''}${wide ? ' app-shell--wide' : ''}${pathname === '/shop' ? ' app-shell--shop' : ''}${dockActive ? ' app-shell--dock-active' : ''}`}>
+      {!headerless && <Header moreOpen={futuresMore} onOpenMore={futuresChrome ? () => setFuturesMore((open) => !open) : undefined} />}
       <PullToRefresh>
         <SwipeTabRoutes />
       </PullToRefresh>
@@ -478,10 +482,11 @@ function AppChrome() {
         own tab bar owns the bottom.
       */}
       <Suspense fallback={null}>
-        <ScreenshotSharePrompt placement={pathname === '/intent' ? 'top' : headerless ? 'bare' : 'nav'} />
+        <ScreenshotSharePrompt placement={pathname === '/intent' ? 'top' : headerless || futuresChrome ? 'bare' : 'nav'} />
       </Suspense>
-      {!headerless && <Suspense fallback={null}><QuickAccess /></Suspense>}
-      {!headerless && <BottomNav />}
+      {!headerless && <Suspense fallback={null}><QuickAccess centered={futuresChrome} /></Suspense>}
+      {!headerless && !futuresChrome && <BottomNav />}
+      {futuresChrome && <MoreSheet open={futuresMore} onClose={() => setFuturesMore(false)} />}
     </div>
   );
 }

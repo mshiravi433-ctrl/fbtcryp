@@ -66,7 +66,7 @@ function matches(item, pathname) {
   );
 }
 
-export default function QuickAccess() {
+export default function QuickAccess({ centered = false }) {
   const { pathname } = useLocation();
   const { t, i18n } = useTranslation();
   const rtl = isRtl(String(i18n.resolvedLanguage || i18n.language || 'fa').split('-')[0]);
@@ -76,6 +76,9 @@ export default function QuickAccess() {
   const group = groups.find((items) => items.some((item) => matches(item, pathname)));
 
   useEffect(() => { setOpen(false); }, [pathname]);
+  useEffect(() => {
+    if (open && centered) rootRef.current?.querySelector('nav a')?.focus({ preventScroll: true });
+  }, [open, centered]);
   useEffect(() => {
     if (!open) return undefined;
     const outside = (event) => {
@@ -97,7 +100,7 @@ export default function QuickAccess() {
 
   if (!group || typeof document === 'undefined') return null;
   return createPortal(
-    <aside ref={rootRef} className={`quick-access${open ? ' is-open' : ''}`} dir={rtl ? 'rtl' : 'ltr'} aria-label={t('quickAccess.title')}>
+    <aside ref={rootRef} className={`quick-access${centered ? ' quick-access--centered' : ''}${open ? ' is-open' : ''}`} dir={rtl ? 'rtl' : 'ltr'} aria-label={t('quickAccess.title')}>
       <div id="quick-access-rail" className="quick-access__rail" aria-hidden={!open}>
         <span className="quick-access__caption">{t('quickAccess.title')}</span>
         <nav aria-label={t('quickAccess.title')}>
