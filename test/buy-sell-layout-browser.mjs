@@ -100,9 +100,8 @@ try {
       await settle();
       const label = `${width}/${theme}`;
 
-      /* Step 1: counter, amount field, glassy keypad + payment key, report/Iran icons. */
+      /* Step 1: amount field, glassy keypad + payment key, report/Iran icons. */
       const step1 = await audit(`${label} step1`);
-      assert.equal(step1.counterText, '1 / 2', `${label}: counter should start at 1 / 2`);
       await shot(`${label}-step1`);
 
       /* Type an amount through the numeric keypad: 5 0 0 . 0 0 */
@@ -139,8 +138,15 @@ try {
       await page.click('[data-testid="bsland-report-sheet-close"]');
       await page.waitForFunction(() => !document.querySelector('[data-testid="bsland-report-sheet"]'), { timeout: 5000 });
 
-      /* Next step: step 2 shows network + token chip rows at the top. */
+      /* Next step: step 2 shows openable network + token boxes. */
       await page.click('.bsland-next');
+      await page.waitForSelector('.bsland-picker', { timeout: 5000 });
+      /* ensure both pickers are expanded before measuring the chips */
+      await page.evaluate(() => {
+        document.querySelectorAll('.bsland-picker-head').forEach((h) => {
+          if (h.getAttribute('aria-expanded') === 'false') h.click();
+        });
+      });
       await page.waitForSelector('.bsland-networks', { timeout: 5000 });
       await settle();
       const step2 = await audit(`${label} step2`);
@@ -179,6 +185,12 @@ try {
     await new Promise((done) => setTimeout(done, 400));
     assert.equal(await page.$('[data-testid="bsland-iran-sheet"]'), null, `390/${theme}/en: Iran popup must NOT open outside Persian`);
     await page.click('.bsland-next');
+    await page.waitForSelector('.bsland-picker', { timeout: 5000 });
+    await page.evaluate(() => {
+      document.querySelectorAll('.bsland-picker-head').forEach((h) => {
+        if (h.getAttribute('aria-expanded') === 'false') h.click();
+      });
+    });
     await page.waitForSelector('.bsland-networks', { timeout: 5000 });
     await settle();
     await audit(`390/${theme}/en step2`);

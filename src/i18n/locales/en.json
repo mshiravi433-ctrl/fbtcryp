@@ -16508,7 +16508,7 @@
       "open": "Go to {{name}}",
       "choosePayment": "Choose a payment method",
       "chooseSide": "Choose the transaction direction",
-      "report": "Deposit report",
+      "report": "Tracking",
       "reportTitle": "On-chain transfer report",
       "iranKicker": "Iran",
       "iranSub": "Only for Iranian users — your details are pre-filled on the destination's official page and the transaction is tracked on-chain."

@@ -1,9 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════
-   BUY / SELL — THE LANDING DESK (2026-11-20, polished)
+   BUY / SELL — THE LANDING DESK (2026-11-20, polished v3)
    A full-screen, headerless landing surface. Modelled on the reference
-   screenshot: a clean phone-style desk with a bare top bar (back · counter ·
-   report · Iran), a central amount / network / token field, and a fixed
-   bottom glassy keyboard or confirm bar. The page NEVER scrolls.
+   screenshot: a BARE top bar (back · tracking · Iran — no box, no
+   counter), a central modern price box, and a fixed glassy keyboard or
+   confirm bar. The page NEVER scrolls. Step two picks network + token
+   inside openable, modern, icon-led boxes.
 
    Colour flows from the same directional palette as the Prism Desk:
    mint→cyan for خرید (BUY), rose→violet for فروش (SELL).
@@ -15,6 +16,7 @@
   --bsw-ink: #04140d;
   --bsw-accent-soft: color-mix(in srgb, var(--bsw-accent) 12%, transparent);
   --bsw-accent-line: color-mix(in srgb, var(--bsw-accent) 34%, transparent);
+  --bsw-key: color-mix(in srgb, var(--bg-raised, #16223a) 46%, transparent);
 
   position: relative;
   display: flex;
@@ -38,14 +40,14 @@
   content: '';
   position: absolute;
   inset: -40px -24px auto;
-  height: 320px;
+  height: 340px;
   z-index: -1;
   pointer-events: none;
   background:
     radial-gradient(60% 100% at 50% 0%, var(--bsw-accent-soft), transparent 72%);
 }
 
-/* ── TOP BAR: bare icons, no boxes ──────────────────────────────────── */
+/* ── TOP BAR: three bare icons, no box ─────────────────────────────── */
 .bsland-top {
   position: relative;
   z-index: 5;
@@ -53,9 +55,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: calc(env(safe-area-inset-top) + 12px) 14px 12px;
-  background: color-mix(in srgb, var(--bsd-surface, #101c2e) 68%, transparent);
-  backdrop-filter: blur(12px);
+  padding: calc(env(safe-area-inset-top) + 14px) 14px 10px;
+  /* deliberately transparent: no background, no border — just the icons */
+  background: transparent;
 }
 .bsland-top-actions {
   display: flex;
@@ -85,27 +87,17 @@
 .bsland-iran { color: #c9b6ff; }
 .bsland-iran svg { color: #c9b6ff; }
 
-.bsland-counter {
-  flex: 1;
-  text-align: center;
-  color: var(--text-3);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
 /* ── CONTENT ──────────────────────────────────────────────────────────── */
 .bsland-content {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 18px 20px 14px;
+  gap: 16px;
+  padding: 22px 20px 14px;
   min-height: 0;
   overflow: hidden;
 }
-.bsland-step { display: flex; flex-direction: column; gap: 12px; }
+.bsland-step { display: flex; flex-direction: column; gap: 14px; }
 
 .bsland-kicker {
   margin: 0;
@@ -138,40 +130,96 @@
   line-height: 1.7;
 }
 
-/* the amount field */
+/* the modern PRICE box */
 .bsland-amount {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
-  padding: 14px 18px;
+  gap: 14px;
+  padding: 18px 22px;
   border: 1px solid var(--bsw-accent-line);
-  border-radius: 18px;
+  border-radius: 22px;
   background:
-    radial-gradient(120% 140% at 0% 0%, var(--bsw-accent-soft), transparent 60%),
-    rgba(255, 255, 255, 0.02);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    radial-gradient(140% 160% at 0% 0%, var(--bsw-accent-soft), transparent 58%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 18px 40px -28px color-mix(in srgb, var(--bsw-accent) 70%, transparent);
+  backdrop-filter: blur(6px);
 }
 .bsland-amount-value {
   color: var(--text-1);
   font-family: var(--font-mono);
-  font-size: clamp(30px, 7vw, 42px);
+  font-size: clamp(34px, 8vw, 48px);
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1;
   min-width: 0;
   word-break: break-all;
+  text-shadow: 0 0 24px color-mix(in srgb, var(--bsw-accent) 22%, transparent);
 }
 .bsland-amount-unit {
   flex: 0 0 auto;
-  color: var(--bsw-accent);
+  padding: 5px 12px;
+  border-radius: 999px;
+  color: var(--bsw-ink);
   font-family: var(--font-mono);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.06em;
+  background: linear-gradient(140deg, var(--bsw-accent), var(--bsw-accent-2));
 }
 
-/* ── network & token chips (even, consistent sizing) ─────────────────── */
+/* ── openable pickers: network & token ─────────────────────────────── */
+.bsland-picker {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01));
+  overflow: hidden;
+}
+.bsland-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+.bsland-picker-head:hover { background: rgba(255, 255, 255, 0.04); }
+.bsland-picker-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  color: var(--bsw-accent);
+  background: var(--bsw-accent-soft);
+}
+.bsland-picker-label {
+  flex: 1;
+  text-align: start;
+  font-size: 13px;
+  font-weight: 800;
+}
+.bsland-picker-chev {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--text-3);
+  transition: transform 0.22s ease, color 0.2s ease;
+}
+.bsland-picker-head.is-open .bsland-picker-chev { transform: rotate(90deg); color: var(--bsw-accent); }
+.bsland-picker-body {
+  overflow: hidden;
+  padding: 0 12px 12px;
+}
+
+/* ── chips inside the pickers ───────────────────────────────────────── */
 .bsland-chips {
   display: flex;
   flex-wrap: wrap;
@@ -181,7 +229,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 9px 13px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.04);
@@ -211,13 +259,13 @@
   gap: 10px;
   padding: 12px 14px calc(14px + env(safe-area-inset-bottom, 0px));
   background:
-    linear-gradient(180deg, transparent, color-mix(in srgb, var(--bsd-surface, #0b1422) 55%, transparent) 30%),
+    linear-gradient(180deg, transparent, color-mix(in srgb, var(--bsd-surface, #0b1422) 55%, transparent) 32%),
     color-mix(in srgb, var(--bsd-surface, #0b1422) 88%, transparent);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(18px);
   border-top: 1px solid var(--line);
 }
 
-/* the KEYBOARD is glassy */
+/* the glassy KEYBOARD */
 .bsland-keypad {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -226,22 +274,26 @@
 .bsland-key {
   display: grid;
   place-items: center;
-  height: 48px;
-  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--bg-raised, #16223a) 42%, transparent);
-  backdrop-filter: blur(6px);
+  height: 50px;
+  border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  border-radius: 16px;
+  background: var(--bsw-key);
+  backdrop-filter: blur(8px);
   color: var(--text-1);
   font-family: var(--font-mono);
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 600;
   cursor: pointer;
   user-select: none;
-  transition: background-color 120ms ease, border-color 120ms ease, transform 100ms ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: background-color 120ms ease, border-color 120ms ease, transform 100ms ease, box-shadow 120ms ease;
 }
-.bsland-key:hover { background: color-mix(in srgb, var(--bg-raised, #16223a) 62%, transparent); }
+.bsland-key:hover {
+  background: color-mix(in srgb, var(--bg-raised, #16223a) 64%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 20px -14px rgba(0, 0, 0, 0.6);
+}
 .bsland-key:active { transform: scale(0.95); background: var(--bsw-accent-soft); }
-.bsland-key.is-del { color: var(--text-2); font-size: 18px; }
+.bsland-key.is-del { color: var(--text-2); font-size: 19px; }
 
 /* the payment-methods button IS a key of the keyboard */
 .bsland-pay-key {
@@ -250,14 +302,15 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 42px;
+  height: 44px;
   border: 1px solid var(--bsw-accent-line);
-  border-radius: 14px;
+  border-radius: 16px;
   background: var(--bsw-accent-soft);
   color: var(--text-1);
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
+  backdrop-filter: blur(6px);
   transition: background-color 120ms ease, transform 100ms ease;
 }
 .bsland-pay-key:hover { background: color-mix(in srgb, var(--bsw-accent) 20%, transparent); }
@@ -284,30 +337,31 @@
   display: flex;
   flex: 0 0 auto;
   padding: 3px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--bg-raised, #16223a) 40%, transparent);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--bg-raised, #16223a) 42%, transparent);
   border: 1px solid var(--line);
+  backdrop-filter: blur(6px);
 }
 .bsland-side-seg {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 9px 12px;
+  padding: 10px 13px;
   border: 0;
-  border-radius: 11px;
+  border-radius: 12px;
   background: transparent;
   color: var(--text-2);
   font-size: 12.5px;
   font-weight: 800;
   cursor: pointer;
-  transition: color 140ms ease, background-color 140ms ease;
+  transition: color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
   white-space: nowrap;
 }
 .bsland-side-seg.is-active {
   color: var(--bsw-ink);
   background: linear-gradient(140deg, var(--bsw-accent), var(--bsw-accent-2));
-  box-shadow: 0 6px 14px -8px color-mix(in srgb, var(--bsw-accent) 70%, transparent);
+  box-shadow: 0 8px 18px -10px color-mix(in srgb, var(--bsw-accent) 70%, transparent);
 }
 
 .bsland-next,
@@ -322,6 +376,7 @@
   color: var(--bsw-ink);
   border: 0;
   font-weight: 800;
+  box-shadow: 0 12px 26px -14px color-mix(in srgb, var(--bsw-accent) 80%, transparent);
 }
 
 /* step-2 confirm bar */
@@ -329,14 +384,6 @@
 
 /* ── errors ───────────────────────────────────────────────────────────── */
 .bsland-error { margin: 0; }
-
-/* The Iran popup is FULL SCREEN at every width — it overrides the shared
-   FullScreenSheet's desktop centering so the whole page is covered. */
-.bsland-iran-full {
-  width: 100% !important;
-  margin: 0 !important;
-  border-inline: 0 !important;
-}
 
 /* ── POPUP CONTENT ───────────────────────────────────────────────────── */
 .bsland-sheet-note {
@@ -377,19 +424,38 @@
 }
 .bsland-pay-p2p-row svg { color: var(--text-3); }
 
-/* ── light theme ────────────────────────────────────────────────────── */
-:root[data-theme='light'] .bsland-top,
-:root[data-theme='light'] .bsland-bottom {
-  background: color-mix(in srgb, #ffffff 88%, transparent);
+/* ── Iran popup: full screen, de-boxed, readable ───────────────────── */
+.bsland-iran-full {
+  width: 100% !important;
+  margin: 0 !important;
+  border-inline: 0 !important;
 }
+.bsland-iran-full .fsh-aurora { display: none; }
+.bsland-iran-full .fsh-panel {
+  background:
+    radial-gradient(120% 50% at 50% 0%, color-mix(in srgb, var(--bsw-accent, var(--rgb-4)) 10%, transparent), transparent 60%),
+    var(--bg-panel-solid, #080b12);
+}
+.bsland-iran-full .fsh-head {
+  background: color-mix(in srgb, var(--bg-panel-solid, #080b12) 70%, transparent);
+}
+.bsland-iran-full .fsh-body {
+  padding: 18px 16px calc(22px + env(safe-area-inset-bottom));
+}
+
+/* ── light theme ────────────────────────────────────────────────────── */
 :root[data-theme='light'] .bsland-amount { background: rgba(0, 0, 0, 0.02); }
 :root[data-theme='light'] .bsland-key,
 :root[data-theme='light'] .bsland-pay-key,
 :root[data-theme='light'] .bsland-chip,
+:root[data-theme='light'] .bsland-picker,
 :root[data-theme='light'] .bsland-pay-row,
 :root[data-theme='light'] .bsland-pay-p2p-row,
 :root[data-theme='light'] .bsland-side-toggle { background: rgba(0, 0, 0, 0.04); }
 :root[data-theme='light'] .bsland-icon:hover { background: rgba(0, 0, 0, 0.05); }
+:root[data-theme='light'] .bsland-picker-head:hover { background: rgba(0, 0, 0, 0.03); }
+:root[data-theme='light'] .bsland-iran-full .fsh-panel { background: #f7f8fc; }
+:root[data-theme='light'] .bsland-iran-full .fsh-head { background: rgba(255, 255, 255, 0.8); }
 
 /* ── the order-result return target (/order/result/:orderId) ───────── */
 .buy-sell-result {
