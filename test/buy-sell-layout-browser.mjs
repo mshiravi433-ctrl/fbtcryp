@@ -128,7 +128,13 @@ try {
 
       /* The on-chain report icon (next to Iran) opens the report card. */
       await openSheet('bsland-report');
-      assert.ok(await page.$('[data-testid="bsland-report-sheet"]'), `${label}: report popup did not open`);
+      assert.ok(await page.$('[data-testid="bsland-report-sheet"] .bsland-transfer-pulse'));
+      assert.equal(await page.$('[data-testid="bsland-report-sheet"] .lab-card'), null);
+      assert.ok(await page.$eval('.buy-sell-watch--flat', (el) => {
+        const body = el.parentElement;
+        const css = getComputedStyle(body);
+        return Math.abs(el.offsetWidth - (body.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight))) <= 1;
+      }));
       await page.click('[data-testid="bsland-report-sheet-close"]');
       await page.waitForFunction(() => !document.querySelector('[data-testid="bsland-report-sheet"]'), { timeout: 5000 });
 
@@ -149,6 +155,11 @@ try {
       /* Iran icon opens a FULL-SCREEN popup ONLY in Persian. */
       await page.click('[data-testid="bsland-iran"]');
       await page.waitForSelector('[data-testid="bsland-iran-sheet"]', { timeout: 5000 });
+      await page.waitForFunction(() => document.querySelector('dialog[open] img.bsland-iran-flag')?.naturalWidth > 0);
+      assert.equal(await page.$('[data-testid="bsland-iran-sheet"] .lab-card'), null);
+      assert.ok(await page.$('[data-testid="iran-buy-referral"] h3'));
+      assert.equal(await page.$eval('[data-testid="iran-buy-referral"]', (el) => getComputedStyle(el).borderTopWidth), '0px');
+      assert.ok(await page.$('[data-testid="iran-buy-referral-disclosure"]'));
       const iranBox = await page.$eval('[data-testid="bsland-iran-sheet"]', (el) => {
         const r = el.getBoundingClientRect();
         return { w: Math.round(r.width), h: Math.round(r.height), vw: innerWidth, vh: innerHeight };
