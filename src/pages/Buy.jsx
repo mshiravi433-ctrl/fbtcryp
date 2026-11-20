@@ -20,14 +20,8 @@ import '../styles/buy-sell-landing.css';
  * bottom nav, no menu (the shell drops its chrome on this route). The
  * surface itself is `BuySellLanding`:
  *
- *   · a numeric KEYBOARD at the bottom of the amount step;
- *   · two small buttons ABOVE the keyboard — payment methods (the same
- *     pistnaadi sites the hand-off goes to, plus the on-chain follow-up)
- *     and the buy/sell popup;
- *   · a back button, the step COUNTER and the Iran icon at the TOP;
- *   · the Iran icon opens a popup ONLY for Iranians and ONLY in Persian;
- *   · step two picks network + token, and its bottom button is a buy/sell
- *     switch that swaps mode with the user's selection.
+ * The amount, token and network controls are in BuySellLanding. Checkout
+ * and order verification remain separate from the visual shell.
  *
  * This page also serves /order/result/:orderId — Ramp's finalUrl return
  * target. Returning from checkout never implies success; the panel re-reads
@@ -56,7 +50,7 @@ export default function Buy() {
   }, [orderId, upsertOrder]);
 
   return (
-    <PageTransition className="page buy-sell-page">
+    <PageTransition className={`page buy-sell-page${orderId ? "" : " buy-sell-page--desk"}`}>
       {orderId ? (
         <div className="buy-sell-result" dir="rtl">
           <button type="button" className="icon-btn buy-sell-hero-back" onClick={() => navigate('/')} aria-label={t('common.back')}>

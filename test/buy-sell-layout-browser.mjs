@@ -26,10 +26,10 @@ const shot = (name) => shots ? page.screenshot({ path: resolve(shots, `${name.re
 
 /* Audit the landing DOM: no horizontal OR vertical overflow (the desk must
    fit the viewport and never scroll), no card overflow, no text spilling
-   outside a card, and the network/token chip rows keep a consistent gap. */
+   outside a card, and selection screens are tested separately. */
 async function audit(label) {
   const result = await page.evaluate(() => {
-    const roots = ['.buy-sell-landing', '.bsland-amount', '.bsland-keypad', '.bsland-actions', '.bsland-chips'];
+    const roots = ['.buy-sell-landing', '.bsland-amount', '.bsland-keypad', '.bsland-actions', '.bsland-picker'];
     const overflow = [];
     const outside = [];
     for (const sel of roots) {
@@ -50,26 +50,12 @@ async function audit(label) {
         }
       }
     }
-    /* Network chips and token chips: the two chip groups must not collide. */
-    const net = document.querySelector('.bsland-networks');
-    const tok = document.querySelector('.bsland-tokens');
-    let chipGap = null;
-    if (net && tok) {
-      const nb = net.getBoundingClientRect();
-      const tb = tok.getBoundingClientRect();
-      chipGap = Math.round((tb.top - nb.bottom) * 100) / 100;
-    }
-    let chipInnerGap = null;
-    const chips = [...document.querySelectorAll('.bsland-networks .bsland-chip')];
-    if (chips.length >= 2) chipInnerGap = Math.round((chips[1].getBoundingClientRect().left - chips[0].getBoundingClientRect().right) * 100) / 100;
-    const counter = document.querySelector('.bsland-counter');
     return {
       width: innerWidth,
       height: innerHeight,
       documentWidth: document.documentElement.scrollWidth,
       documentHeight: document.documentElement.scrollHeight,
-      overflow, outside, chipGap, chipInnerGap,
-      counterText: counter ? counter.textContent.trim() : null,
+      overflow, outside,
       hasIranIcon: Boolean(document.querySelector('.bsland-iran')),
       hasReportIcon: Boolean(document.querySelector('.bsland-report')),
       hasBack: Boolean(document.querySelector('.bsland-back'))
@@ -79,7 +65,7 @@ async function audit(label) {
   assert.ok(result.documentHeight <= result.height + 1, `${label}: vertical page overflow (page must not scroll) ${JSON.stringify(result)}`);
   assert.deepEqual(result.overflow, [], `${label}: card overflow`);
   assert.deepEqual(result.outside, [], `${label}: text outside card`);
-  assert.ok(result.hasIranIcon, `${label}: missing Iran icon`);
+  assert.equal(result.hasIranIcon, !label.endsWith('en step1') && !label.endsWith('en step2'));
   assert.ok(result.hasReportIcon, `${label}: missing on-chain report icon`);
   assert.ok(result.hasBack, `${label}: missing back button`);
   return result;
@@ -89,6 +75,13 @@ async function openSheet(testId) {
   await page.click(`[data-testid="${testId}"]`);
   await page.waitForSelector(`[data-testid="${testId}"]`, { timeout: 5000 });
   await settle();
+  const screen = await page.$eval('dialog[open]', (el) => ({
+    modal: el.matches(':modal'), width: el.offsetWidth, height: el.offsetHeight,
+    viewportWidth: innerWidth, viewportHeight: innerHeight
+  }));
+  assert.ok(screen.modal);
+  assert.equal(screen.width, screen.viewportWidth);
+  assert.equal(screen.height, screen.viewportHeight);
 }
 
 try {
@@ -112,7 +105,8 @@ try {
       });
       await settle();
       const amountAfter = await page.$eval('.bsland-amount-value', (el) => el.textContent);
-      assert.notEqual(amountAfter, amountBefore, `${label}: keypad did not change amount`);
+      assert.notEqual(amountAfter, amountBefore);
+      assert.equal(amountAfter, '500.00', `${label}: decimal keypad must preserve the decimal`);
 
       /* The payment-methods button is a KEY of the keyboard. */
       assert.ok(await page.$('[data-testid="bsland-payment-methods"]'), `${label}: payment key missing from keyboard`);
@@ -141,17 +135,15 @@ try {
       /* Next step: step 2 shows openable network + token boxes. */
       await page.click('.bsland-next');
       await page.waitForSelector('.bsland-picker', { timeout: 5000 });
-      /* ensure both pickers are expanded before measuring the chips */
-      await page.evaluate(() => {
-        document.querySelectorAll('.bsland-picker-head').forEach((h) => {
-          if (h.getAttribute('aria-expanded') === 'false') h.click();
-        });
-      });
-      await page.waitForSelector('.bsland-networks', { timeout: 5000 });
-      await settle();
-      const step2 = await audit(`${label} step2`);
-      assert.ok(step2.chipGap > 0, `${label}: network/token chip rows collide (gap ${step2.chipGap})`);
-      assert.ok(step2.chipInnerGap > 0, `${label}: chips inside a row have no gap`);
+      await audit(`${label} step2`);
+      await openSheet('bsland-tokens-picker');
+      assert.ok(await page.$('.bsland-choice[aria-pressed="true"] .asset-icon'));
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => !document.querySelector('dialog[open]'));
+      assert.equal(await page.evaluate(() => document.activeElement?.dataset.testid), 'bsland-tokens-picker');
+      await openSheet('bsland-networks-picker');
+      await page.click('.bsland-choice[aria-pressed="false"]');
+      await page.waitForFunction(() => !document.querySelector('dialog[open]'));
       await shot(`${label}-step2`);
 
       /* Iran icon opens a FULL-SCREEN popup ONLY in Persian. */
@@ -170,7 +162,7 @@ try {
       await page.click('[data-testid="bsland-iran-sheet-close"]');
       await page.waitForFunction(() => !document.querySelector('[data-testid="bsland-iran-sheet"]'), { timeout: 5000 });
 
-      console.log(`✓ ${label}: step1/step2, keypad + payment key, buy/sell toggle, report icon, network/token chip spacing, full-screen Iran RTL; no scroll`);
+      console.log(`✓ ${label}: step1/step2, keypad + payment key, buy/sell toggle, report icon, full-screen asset selection, full-screen Iran RTL; no scroll`);
     }
   }
 
@@ -181,24 +173,17 @@ try {
     await page.waitForSelector('.bsland-amount');
     await settle();
     await audit(`390/${theme}/en step1`);
-    await page.click('[data-testid="bsland-iran"]');
-    await new Promise((done) => setTimeout(done, 400));
-    assert.equal(await page.$('[data-testid="bsland-iran-sheet"]'), null, `390/${theme}/en: Iran popup must NOT open outside Persian`);
+    assert.equal(await page.$('[data-testid="bsland-iran"]'), null);
+    await page.click('.bsland-key');
     await page.click('.bsland-next');
     await page.waitForSelector('.bsland-picker', { timeout: 5000 });
-    await page.evaluate(() => {
-      document.querySelectorAll('.bsland-picker-head').forEach((h) => {
-        if (h.getAttribute('aria-expanded') === 'false') h.click();
-      });
-    });
-    await page.waitForSelector('.bsland-networks', { timeout: 5000 });
     await settle();
     await audit(`390/${theme}/en step2`);
     console.log(`✓ 390/${theme}/en: landing renders; Iran popup correctly stays closed`);
   }
 
   assert.deepEqual(errors, [], 'No browser runtime errors');
-  console.log('PASS: 8 responsive/theme matrices + 2 English layouts; keypad, payment key, buy/sell toggle, report icon, chip spacing, full-screen Iran gating; zero runtime errors, zero scroll.');
+  console.log('PASS: 8 responsive/theme matrices + 2 English layouts; keypad, payment key, buy/sell toggle, report icon, asset selection, full-screen Iran gating; zero runtime errors, zero scroll.');
 } finally {
   await browser.close();
 }
