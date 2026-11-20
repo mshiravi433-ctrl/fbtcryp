@@ -325,6 +325,20 @@ export const IconBuilding = (p) => (
   </svg>
 );
 
+/* The Iranian rail's entry point: a tricolour flag (green / white / red)
+   with a small emblem in the centre. Drawn as line art so it inherits
+   `currentColor` for the outline while the stripes stay the flag's own
+   colours — it reads as "Iran" at any size without an emoji. */
+export const IconIran = (p) => (
+  <svg {...base} {...p} viewBox="0 0 24 24">
+    <rect x="3" y="3" width="18" height="18" rx="3.2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M3 8.4h18" stroke="#2e9e4f" strokeWidth="2.4" strokeLinecap="round" />
+    <path d="M3 15.6h18" stroke="#d81e1e" strokeWidth="2.4" strokeLinecap="round" />
+    <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
+    <path d="M12 9.8v4.4M10.9 11l2.2 1.8M13.1 11l-2.2 1.8" stroke="#fff" strokeWidth="0.85" strokeLinecap="round" />
+  </svg>
+);
+
 export const IconKey = (p) => (
   <svg {...base} {...p}>
     <circle cx="7.5" cy="15.5" r="4.5" />
