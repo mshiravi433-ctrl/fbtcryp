@@ -140,7 +140,7 @@ describe('the tokenized-stock card', () => {
     expect(box().querySelector('.stk-chart-slot')).toBe(slot, 'the reserved slot is not remounted when data arrives');
     expect(slot.textContent).toContain(fa.stocks.rhChartUnavailable);
     const css = readFileSync('src/styles/stock-tokens.css', 'utf8');
-    expect(css).toMatch(/\.stk-chart-slot\s*\{[^}]*flex:\s*0 0 48px/s);
+    expect(css).toMatch(/\.stk-chart-slot\s*\{[^}]*flex:\s*0 0 54px/s);
   });
 
   it('opens the swap from the tile and from its Buy button, once each', () => {

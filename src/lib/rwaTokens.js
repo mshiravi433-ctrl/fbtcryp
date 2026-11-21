@@ -514,28 +514,28 @@ const RWA_FACTS = {
     issuer: 'Hashnote International Short Duration Yield Fund',
     standard: 'ERC-20',
     backingType: 'direct_custody',
-    logoURI: twLogo('0x136471a34f6ef19fe571effc1ca711fdb8e49f2b')
+    logoURI: 'https://assets.coingecko.com/coins/images/34827/small/usyc.png'
   },
   'theo-short-duration-us-treasury-fund': {
     address: '0x5fa487bca6158c64046b2813623e20755091da0b',
     issuer: 'Theo (theo.xyz)',
     standard: 'ERC-20',
     backingType: 'direct_custody',
-    logoURI: twLogo('0x5fa487bca6158c64046b2813623e20755091da0b')
+    logoURI: 'https://assets.coingecko.com/coins/images/39535/small/thbill.png'
   },
   'vaneck-treasury-fund': {
     address: '0x2255718832bc9fd3be1caf75084f4803da14ff01',
     issuer: 'VanEck / Securitize',
     standard: 'ERC-20',
     backingType: 'direct_custody',
-    logoURI: twLogo('0x2255718832bc9fd3be1caf75084f4803da14ff01')
+    logoURI: 'https://assets.coingecko.com/coins/images/39023/small/vbill.png'
   },
   'janus-henderson-anemoy-treasury-fund': {
     address: '0x8c213ee79581ff4984583c6a801e5263418c4b86',
     issuer: 'Janus Henderson / Anemoy (Centrifuge)',
     standard: 'ERC-20',
     backingType: 'direct_custody',
-    logoURI: twLogo('0x8c213ee79581ff4984583c6a801e5263418c4b86')
+    logoURI: 'https://assets.coingecko.com/coins/images/39110/small/jtrsy.png'
   },
 
 };
