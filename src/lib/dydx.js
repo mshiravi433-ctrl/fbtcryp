@@ -352,10 +352,11 @@ export async function getDydxTrades(ticker, limit = 50) {
   const count = Math.min(100, Math.max(1, Math.trunc(Number(limit) || 50)));
   try {
     const body = await timeoutFetch(`${API_BASE}/dydx/trades/${encodeURIComponent(safe)}?limit=${count}`);
-    const rows = Array.isArray(body?.trades) ? body.trades : [];
-    const trades = rows.map((t) => {
-      const price = Number(t.price);
-      const size = Number(t.size);
+    if (!Array.isArray(body?.trades)) return { trades: [], live: false, reason: 'INDEXER_UNAVAILABLE', ticker: safe };
+    const rows = body.trades;
+    const trades = rows.filter(Boolean).map((t) => {
+      const price = num(t?.price);
+      const size = num(t?.size);
       return {
         id: String(t.id || `${t.createdAt}-${price}-${size}`),
         price: Number.isFinite(price) ? price : null,
@@ -366,8 +367,8 @@ export async function getDydxTrades(ticker, limit = 50) {
         atMs: t.createdAt ? Date.parse(t.createdAt) : null,
         type: t.type || null
       };
-    }).filter((t) => t.price != null && t.size != null);
-    return { trades, live: trades.length > 0, ticker: safe };
+    }).filter((t) => t.price > 0 && t.size > 0);
+    return { trades, live: true, ticker: safe };
   } catch {
     return { trades: [], live: false, reason: 'INDEXER_UNAVAILABLE', ticker: safe };
   }
@@ -393,16 +394,16 @@ export async function getDydxFundingHistory(ticker, limit = 48) {
        uses. The row's `price` is the oracle at settlement, not a rate, so it is
        carried through only for reference — deriving an APR from it would
        multiply a price by a year. */
-    const rows = raw.map((r) => {
-      const hourly = Number(r.rate);
+    const rows = raw.filter(Boolean).map((r) => {
+      const hourly = num(r.rate);
       return {
         at: r.effectiveAt || null,
         atMs: r.effectiveAt ? Date.parse(r.effectiveAt) : null,
         rateHourlyPct: Number.isFinite(hourly) ? hourly * 100 : null,
         aprPct: Number.isFinite(hourly) ? hourly * 100 * 24 * 365 : null,
-        oracleAtSettlement: Number.isFinite(Number(r.price)) ? Number(r.price) : null
+        oracleAtSettlement: num(r.price)
       };
-    }).filter((r) => Number.isFinite(r.atMs)).sort((a, b) => a.atMs - b.atMs);
+    }).filter((r) => Number.isFinite(r.atMs) && r.rateHourlyPct != null).sort((a, b) => a.atMs - b.atMs);
     const paid = rows.reduce((n, r) => n + (r.rateHourlyPct || 0), 0);
     return {
       rows,
