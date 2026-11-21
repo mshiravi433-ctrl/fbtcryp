@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { setLanguage } from '../src/i18n';
 import OstiumHeroSlider from '../src/components/ostium/OstiumHeroSlider';
@@ -26,32 +26,24 @@ beforeAll(async () => {
 afterEach(cleanup);
 
 describe('Ostium Hero Slider and Risk Notice', () => {
-  it('renders OstiumHeroSlider with rotating segments and interactive controls', async () => {
-    const onSelect = vi.fn();
-    const { container } = render(
+  it('renders minimal and compact OstiumHeroSlider without manual link or arrow buttons', () => {
+    render(
       <MemoryRouter>
-        <OstiumHeroSlider feedLive={true} onSelectCategory={onSelect} />
+        <OstiumHeroSlider feedLive={true} />
       </MemoryRouter>
     );
 
     // Shows live status pill
     expect(screen.getByText('زنده')).toBeTruthy();
 
-    // Shows the active slide title
-    expect(screen.getByText(/طلا و نفت جهانی روی آربیتروم/i)).toBeTruthy();
+    // Shows the active slide title and badge
+    expect(screen.getByText('طلا و نفت جهانی روی آربیتروم')).toBeTruthy();
+    expect(screen.getByText('طلا و نفت جهانی')).toBeTruthy();
 
-    // Clicking category jump button invokes callback
-    const ctaBtn = screen.getByRole('button', { name: /مشاهده کالاها/i });
-    expect(ctaBtn).toBeTruthy();
-    fireEvent.click(ctaBtn);
-    expect(onSelect).toHaveBeenCalledWith('commodities');
-
-    // Next slide button changes slide
-    const nextBtn = screen.getByRole('button', { name: /Next slide/i });
-    fireEvent.click(nextBtn);
-    await waitFor(() => {
-      expect(screen.getByText(/بزرگ‌ترین بازار مالی جهان در کیف پول شما/i)).toBeTruthy();
-    });
+    // Verifies no manual link or arrow buttons exist (compact, auto-play only)
+    expect(screen.queryByRole('button', { name: /مشاهده کالاها/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Next slide/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Previous slide/i })).toBeNull();
   });
 
   it('renders collapsible risk notice defaulting to closed on Ostium desk', () => {

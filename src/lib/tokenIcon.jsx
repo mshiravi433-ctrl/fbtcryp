@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { rwaSymbolSvg } from './rwaAssetSvg';
+import { symbolSvg } from '../components/AssetIcon';
 
 /**
  * TOKEN ICONS.
@@ -124,7 +125,30 @@ const SYMBOL_FALLBACK_LOGOS = {
   BNB: 'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png',
   AVAX: 'https://assets.coingecko.com/coins/images/12559/small/Avalanche_Circle_RedWhite_Trans.png',
   SHIB: 'https://assets.coingecko.com/coins/images/11939/small/shiba.png',
-  DOGE: 'https://assets.coingecko.com/coins/images/5/small/dogecoin.png'
+  DOGE: 'https://assets.coingecko.com/coins/images/5/small/dogecoin.png',
+  /* Real-World Assets (RWA) & Tokenized Securities */
+  USDY: 'https://assets.coingecko.com/coins/images/32204/small/usdy.png',
+  USDG: 'https://assets.coingecko.com/coins/images/51351/small/usdg.png',
+  PAXG: 'https://assets.coingecko.com/coins/images/9519/small/paxg.png',
+  XAUT: 'https://assets.coingecko.com/coins/images/10481/small/Tether_Gold.png',
+  MKR: 'https://assets.coingecko.com/coins/images/1364/small/Mark_Maker.png',
+  CFG: 'https://assets.coingecko.com/coins/images/15857/small/CFG.png',
+  MPL: 'https://assets.coingecko.com/coins/images/15132/small/Maple.png',
+  CPOOL: 'https://assets.coingecko.com/coins/images/19223/small/Clearpool.png',
+  POLYX: 'https://assets.coingecko.com/coins/images/22212/small/polymesh.png',
+  GFI: 'https://assets.coingecko.com/coins/images/22421/small/Goldfinch.png',
+  TRUF: 'https://assets.coingecko.com/coins/images/36208/small/truflation.png',
+  FACTR: 'https://assets.coingecko.com/coins/images/15413/small/defactor.png',
+  USYC: 'https://assets.coingecko.com/coins/images/34827/small/usyc.png',
+  THBILL: 'https://assets.coingecko.com/coins/images/39535/small/thbill.png',
+  VBILL: 'https://assets.coingecko.com/coins/images/39023/small/vbill.png',
+  JTRSY: 'https://assets.coingecko.com/coins/images/39110/small/jtrsy.png',
+  XDC: 'https://assets.coingecko.com/coins/images/2912/small/xdc-icon.png',
+  XRP: 'https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png',
+  XLM: 'https://assets.coingecko.com/coins/images/100/small/Stellar_symbol_black_RGB.png',
+  HBAR: 'https://assets.coingecko.com/coins/images/3688/small/hbar.png',
+  FIL: 'https://assets.coingecko.com/coins/images/12817/small/filecoin.png',
+  SEI: 'https://assets.coingecko.com/coins/images/28205/small/Sei_Logo_-_Transparent.png'
 };
 
 /**
@@ -199,9 +223,9 @@ export default function TokenIcon({ token, chainId, size = 34 }) {
   const src = candidates[idx];
 
   if (!src) {
-    const svg = rwaSymbolSvg(symbol);
+    const svg = rwaSymbolSvg(symbol) || symbolSvg(symbol);
     if (svg) {
-      /* Known RWA marks stay available when both
+      /* Known RWA & market marks stay available when both
          the venue logo and remote catalog are missing or unreachable. */
       const filled = /^<svg(?![^>]*\swidth=)/.test(svg)
         ? svg.replace('<svg ', '<svg width="100%" height="100%" ')

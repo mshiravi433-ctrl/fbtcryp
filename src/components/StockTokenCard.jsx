@@ -21,16 +21,22 @@ function TokenTrend({ points }) {
     const range = hi - lo;
     const coords = points.map((p, i) => {
       const x = (i * 100) / (points.length - 1);
-      const y = range ? 29 - ((p - lo) / range) * 26 : 16;
+      const y = range ? 31 - ((p - lo) / range) * 24 : 18;
       return `${i ? 'L' : 'M'}${x.toFixed(2)},${y.toFixed(2)}`;
     }).join(' ');
-    return { line: coords, area: `${coords} L100,34 L0,34 Z` };
+    return { line: coords, area: `${coords} L100,38 L0,38 Z` };
   }, [points]);
 
   return (
-    <svg className="stk-trend" viewBox="0 0 100 36" preserveAspectRatio="none" aria-hidden="true">
-      <path className="stk-trend-guide" d="M0,34 H100" />
-      <path className="stk-trend-area" d={area} />
+    <svg className="stk-trend" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="stkTrendGlow" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="currentColor" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="currentColor" stopOpacity="0.0" />
+        </linearGradient>
+      </defs>
+      <path className="stk-trend-guide" d="M0,38 H100" />
+      <path className="stk-trend-area" d={area} fill="url(#stkTrendGlow)" />
       <path className="stk-trend-line" d={line} />
     </svg>
   );
