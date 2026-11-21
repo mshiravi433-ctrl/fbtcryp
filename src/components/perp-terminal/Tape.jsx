@@ -22,7 +22,7 @@ const fmtUsd = (v) => {
   return n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(1)}K` : `$${n.toFixed(0)}`;
 };
 const fmtClock = (ms, locale) => {
-  const t = Number(ms);
+  const t = ms == null ? NaN : Number(ms);
   if (!Number.isFinite(t)) return '—';
   try {
     return new Date(t).toLocaleTimeString(locale === 'fa' ? 'fa-IR' : 'en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });

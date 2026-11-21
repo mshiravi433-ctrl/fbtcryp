@@ -47,9 +47,10 @@ import Tape from './Tape';
 import RiskPanel from './RiskPanel';
 import Ticket from './Ticket';
 import PairSelect from './PairSelect';
+import useTerminalFeed from './useTerminalFeed';
 import WalletConnectSheet from '../WalletConnectSheet';
 import { topBar } from './desk.js';
-import { pollWhileVisible } from '../../lib/visibilityPoll';
+import { isPollHidden, pollWhileVisible } from '../../lib/visibilityPoll';
 import { fmtCompact, fmtPct, fmtPrice } from '../../lib/format';
 import { useWallet } from '../../context/WalletContext';
 import { useSolanaWallet } from '../../hooks/useSolanaWallet';
@@ -60,12 +61,38 @@ import {
 } from '../../lib/perpRoutes';
 import {
   dydxSessionAddress, getDydxMarkets, getDydxSubaccount, placeDydxOrder,
-  getDydxOrderbook, getDydxTrades, getDydx24hRange, connectDydx, disconnectDydx, classifyDydxError
+  getDydxOrderbook, getDydxTrades, getDydx24hRange, getDydxFundingHistory, connectDydx, disconnectDydx, classifyDydxError
 } from '../../lib/dydx';
 
 const MARKET_POLL_MS = 30_000;
 const BOOK_POLL_MS = 5_000;
-const TAPE_POLL_MS = 4_000;
+const TAPE_POLL_MS = 5_000;
+const readTape = (ticker) => getDydxTrades(ticker, 40);
+const readFunding = (ticker) => getDydxFundingHistory(ticker, 12);
+
+function startTerminalPoll(read, interval) {
+  let busy = false;
+  const load = async () => {
+    if (busy || isPollHidden()) return;
+    busy = true;
+    try { await read(); } catch { /* A later tick can recover. */ } finally { busy = false; }
+  };
+  const stop = pollWhileVisible(load, interval);
+  load();
+  return stop;
+}
+
+function fundingQuote(row, isDydx) {
+  if (!row) return {};
+  return {
+    fundingAprPct: row.fundingAprPct,
+    nextFundingRate: isDydx ? row.nextFundingRate : null,
+    nextFundingAtMs: row.nextFundingAtMs ?? (row.nextFundingAt ? Date.parse(row.nextFundingAt) : null),
+    openInterestUsd: row.openInterestUsd ?? (isDydx && row.openInterest != null && row.oraclePrice > 0
+      ? row.openInterest * row.oraclePrice : null),
+    volume24hUsd: row.volume24hUsd ?? row.volume24H
+  };
+}
 const ACCOUNT_POLL_MS = 15_000;
 
 /** Tabs in the full-screen market details. */
@@ -83,7 +110,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
   const solana = useSolanaWallet();
   const { haptic } = useTelegram();
 
-  const [venues, setVenues] = useState({ velocity: [], ostium: [], dydx: [], stale: false });
+  const [venues, setVenues] = useState({ velocity: [], ostium: [], dydx: [], stale: {}, dydxUnavailable: false });
   /* Same rule as before: never route on a static fallback before the first
      real read has landed — a flash of the wrong market is worse than a
      skeleton. */
@@ -95,9 +122,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
   const [tab, setTab] = useState(null);
   const infoId = useId();
   const infoTitle = t('perpTerminal.detailsTitle');
-  const [book, setBook] = useState(null);
-  const [tape, setTape] = useState({ trades: [], live: false, reason: null, loading: false });
-  const [range, setRange] = useState(null);
+  const [feedRevision, setFeedRevision] = useState(0);
   const [account, setAccount] = useState({ positions: [], equityUsd: null, maintenanceMarginUsd: null, availableBalanceUsd: null, loading: false, reason: null });
   const [placing, setPlacing] = useState(false);
   const [execError, setExecError] = useState(null);
@@ -141,9 +166,19 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
   const venueId = route.meta?.providerId || null;
   const isDydx = route.route === ROUTE.DYDX;
   const ticker = isDydx ? route.entry[ROUTE.DYDX].marketId : null;
-  const currentBook = ticker && book?.ticker === ticker ? book.data : null;
-  const currentRange = ticker && range?.ticker === ticker ? range.data : null;
-  const currentTape = ticker && tape.ticker === ticker ? tape : { trades: [], loading: true, live: false };
+  // Public analytics may use a separately labelled dYdX feed for the same
+  // asset; neither the chart nor the execution route changes as a result.
+  const publicMarket = route.entry?.[ROUTE.DYDX];
+  const publicTicker = publicMarket?.marketId ?? null;
+  const executionRow = route.entry?.[route.route]?.row;
+  const detailFundingVenue = !isDydx && publicTicker && reportedNumber(executionRow?.fundingAprPct) == null
+    ? ROUTE.DYDX : route.route;
+  const bookFeed = useTerminalFeed(tab === 'book' ? publicTicker : null, getDydxOrderbook, BOOK_POLL_MS, feedRevision);
+  const tapeFeed = useTerminalFeed(tab === 'tape' ? publicTicker : null, readTape, TAPE_POLL_MS, feedRevision);
+  const fundingFeed = useTerminalFeed(tab === 'funding' && detailFundingVenue === ROUTE.DYDX ? publicTicker : null, readFunding, 60_000, feedRevision);
+  const rangeFeed = useTerminalFeed(ticker, getDydx24hRange, 60_000, serverNonce);
+  const currentRange = rangeFeed?.value?.live ? rangeFeed.value : null;
+  const activeFeed = { book: bookFeed, tape: tapeFeed, funding: fundingFeed }[tab];
 
   /* ── market list (visibility-gated; the raw material of the desk) ───── */
   useEffect(() => {
@@ -167,57 +202,17 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
         velocity: bff(v) ?? cur.velocity,
         ostium: bff(o) ?? cur.ostium,
         dydx: dydxRows ?? cur.dydx,
-        stale: (cur.velocity.length || cur.ostium.length || cur.dydx.length)
-          ? !gotAny : false
+        dydxUnavailable: !dydxRows,
+        stale: {
+          velocity: !bff(v) && cur.velocity.length > 0,
+          ostium: !bff(o) && cur.ostium.length > 0,
+          dydx: !dydxRows && cur.dydx.length > 0
+        }
       }));
     };
-    const off = pollWhileVisible(load, MARKET_POLL_MS);
-    load();
+    const off = startTerminalPoll(load, MARKET_POLL_MS);
     return () => { stopped = true; alive.current = false; off(); };
   }, [serverNonce]);
-
-  /* ── dYdX order book (the only venue with a public book) ───────────── */
-  useEffect(() => {
-    if (!isDydx) return undefined;
-    let stopped = false;
-    const load = async () => {
-      const r = await getDydxOrderbook(ticker).catch(() => null);
-      if (!stopped) setBook(r?.live ? { ticker, data: r } : null);
-    };
-    const off = pollWhileVisible(load, BOOK_POLL_MS);
-    load();
-    return () => { stopped = true; off(); };
-  }, [ticker, isDydx]);
-
-  /* ── the tape ──────────────────────────────────────────────────────── */
-  useEffect(() => {
-    if (!isDydx || tab !== 'tape') return undefined;
-    let stopped = false;
-    setTape({ ticker, trades: [], live: false, reason: null, loading: true });
-    const load = async () => {
-      setTape((s) => ({ ...s, loading: true }));
-      const r = await getDydxTrades(ticker, 40).catch(() => null);
-      if (stopped) return;
-      setTape({ ticker, trades: r?.trades || [], live: Boolean(r?.live), reason: r?.reason || null, loading: false });
-    };
-    const off = pollWhileVisible(load, TAPE_POLL_MS);
-    load();
-    return () => { stopped = true; off(); };
-  }, [ticker, isDydx, tab]);
-
-  /* ── 24h high/low (one server read; the venue has no range field) ───── */
-  useEffect(() => {
-    if (!isDydx) { setRange(null); return undefined; }
-    let stopped = false;
-    const load = async () => {
-      const r = await getDydx24hRange(ticker).catch(() => null);
-      if (stopped) return;
-      setRange(r?.live ? { ticker, data: r } : null);
-    };
-    const off = pollWhileVisible(load, 60_000);
-    load();
-    return () => { stopped = true; off(); };
-  }, [ticker, isDydx]);
 
   /* ── THE ACCOUNT, FOR EVERY VENUE ─────────────────────────────────────
      dYdX (client session) · Ostium (BFF positions + balance) · Velocity
@@ -229,11 +224,11 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
     if (!route.route) { setAccount({ equityUsd: null, maintenanceMarginUsd: null, availableBalanceUsd: null, loading: false, reason: 'NO_ROUTE', positions: [] }); return undefined; }
     let stopped = false;
     const base = { positions: [], equityUsd: null, maintenanceMarginUsd: null, availableBalanceUsd: null };
+    setAccount({ ...base, loading: true, reason: null });
 
     if (route.route === ROUTE.DYDX) {
-      if (!dydxAddress) { setAccount({ ...base, loading: false, reason: 'NO_WALLET' }); return undefined; }
+      if (!dydxAddress) { setAccount({ ...base, loading: false, reason: evmAddress ? 'NO_DYDX_SESSION' : 'NO_WALLET' }); return undefined; }
       const load = async () => {
-        setAccount((s) => ({ ...s, loading: true }));
         const r = await getDydxSubaccount(dydxAddress).catch(() => null);
         if (stopped) return;
         const sub = r?.account?.subaccount || null;
@@ -264,15 +259,13 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
           reason: !r?.live ? 'ACCOUNT_UNREADABLE' : null
         });
       };
-      const off = pollWhileVisible(load, ACCOUNT_POLL_MS);
-      load();
+      const off = startTerminalPoll(load, ACCOUNT_POLL_MS);
       return () => { stopped = true; off(); };
     }
 
     if (route.route === ROUTE.OSTIUM) {
       if (!evmAddress) { setAccount({ ...base, loading: false, reason: 'NO_WALLET' }); return undefined; }
       const load = async () => {
-        setAccount((s) => ({ ...s, loading: true }));
         const [posRes, acctRes] = await Promise.allSettled([
           getFuturesPositions(evmAddress, 'ostium'),
           getFuturesAccount(evmAddress, 'ostium')
@@ -303,8 +296,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
           reason: posOk ? null : 'ACCOUNT_UNREADABLE'
         });
       };
-      const off = pollWhileVisible(load, ACCOUNT_POLL_MS);
-      load();
+      const off = startTerminalPoll(load, ACCOUNT_POLL_MS);
       return () => { stopped = true; off(); };
     }
 
@@ -312,7 +304,6 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
        them. There is no server path, and inventing one would double-count. */
     if (!solAddress) { setAccount({ ...base, loading: false, reason: 'NO_WALLET' }); return undefined; }
     const load = async () => {
-      setAccount((s) => ({ ...s, loading: true }));
       try {
         const { getVelocityPositions } = await import('../../lib/velocityTrade.js');
         const [result, markets] = await Promise.all([
@@ -353,8 +344,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
         if (!stopped) setAccount({ ...base, loading: false, reason: 'ACCOUNT_UNREADABLE' });
       }
     };
-    const off = pollWhileVisible(load, ACCOUNT_POLL_MS);
-    load();
+    const off = startTerminalPoll(load, ACCOUNT_POLL_MS);
     return () => { stopped = true; off(); };
   }, [route.route, dydxAddress, evmAddress, solAddress]);
 
@@ -377,21 +367,21 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
       mark: fromRoute.mid ?? fromRoute.mark ?? fromRoute.oraclePrice,
       oraclePrice: fromRoute.oraclePrice,
       priceChange24H: fromRoute.priceChange24H ?? fromRoute.priceChange24hPct,
-      volume24H: fromRoute.volume24H ?? fromRoute.volume24hUsd,
-      openInterest: fromRoute.openInterestUsd ?? (isDydx
-        ? fromRoute.openInterest != null && fromRoute.oraclePrice > 0 ? fromRoute.openInterest * fromRoute.oraclePrice : null
-        : fromRoute.openInterest),
-      fundingAprPct: fromRoute.fundingAprPct,
-      nextFundingRate: fromRoute.nextFundingRate,
-      nextFundingAtMs: fromRoute.nextFundingAtMs ?? (fromRoute.nextFundingAt ? Date.parse(fromRoute.nextFundingAt) : null),
-      maxLeverage: route.route && route.entry ? leverageCeiling(route.entry[route.route]) : null,
-      spreadBps: currentBook?.spreadBps ?? fromRoute.spreadBps ?? null,
+      ...fundingQuote(fromRoute, isDydx),
+      maxLeverage: leverageCeiling(route.entry[route.route]),
+      spreadBps: fromRoute.spreadBps ?? null,
       high24h: currentRange?.high24h ?? fromRoute.high24h ?? null,
       low24h: currentRange?.low24h ?? fromRoute.low24h ?? null
     };
-  }, [route.route, route.entry, currentBook, currentRange, isDydx]);
+  }, [route.route, route.entry, currentRange, isDydx]);
 
   const bar = useMemo(() => topBar(quote || {}), [quote]);
+
+  const fundingRow = route.entry?.[detailFundingVenue]?.row;
+  const fundingBar = detailFundingVenue === route.route ? bar : topBar(fundingQuote(fundingRow, true));
+  const details = (tab === 'book' || tab === 'tape') && publicTicker ? ROUTE.DYDX
+    : tab === 'funding' ? detailFundingVenue : route.route;
+  const sourceLabel = details ? t(`perpTerminal.venue.${details}`, { defaultValue: details }) : null;
 
   /* ── the venue-settled markets behind the dropdown ───────────────────── */
   const marketOptions = useMemo(() => {
@@ -606,7 +596,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
               <circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8v.1"/>
             </svg>
           </button>
-          {venues.stale && <span className="ptx-tag ptx-tag-warn" data-testid="perp-terminal-stale">{t('perpTerminal.stale', { defaultValue: 'stale read' })}</span>}
+          {venues.stale[route.route] && <span className="ptx-tag ptx-tag-warn" data-testid="perp-terminal-stale">{t('perpTerminal.stale', { defaultValue: 'stale read' })}</span>}
         </div>
 
         <dl className="ptx-stats pt-mono" data-testid="perp-terminal-topbar">
@@ -725,7 +715,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
       </div>
 
       <FullScreenSheet manageFocus open={Boolean(tab)} onClose={() => setTab(null)} className="futures-full-sheet"
-        title={infoTitle} subtitle={[selectedBase, route.meta?.id].filter(Boolean).join(" · ")} icon={TAB_ICON.book}
+        title={infoTitle} subtitle={selectedBase} icon={TAB_ICON.book}
         closeLabel={t('common.close')} testId="perp-terminal-info-sheet">
         <div className="ptx ptx--info futures-info-layout">
           <div className="futures-info-tabs" role="tablist" aria-label={infoTitle} aria-orientation="vertical"
@@ -748,10 +738,29 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
           </div>
           <div className="futures-info-content" role="tabpanel" id={`${infoId}-panel`}
             aria-labelledby={`${infoId}-${tab}`} tabIndex={0}>
-          {tab === 'risk' && account.loading && <span className="pt-muted pt-small">{t('common.loading')}</span>}
+          {sourceLabel && <p className="pt-detail-source" data-testid="perp-detail-source">
+            {t('perpTerminal.detailsSource', { venue: sourceLabel, market: (details === ROUTE.DYDX && tab !== 'risk' ? publicTicker : selectedBase) || selectedBase })}
+            {details !== route.route && <small>{t('perpTerminal.detailsReference')}</small>}
+          </p>}
+          {!publicTicker && (!venuesReady || venues.dydxUnavailable) && (tab === 'book' || tab === 'tape') && (
+            <div className="pt-detail-status" role="status">
+              {serverState === 'connecting' ? t('common.loading') : t('perpTerminal.detailsUnavailable')}
+              {serverState !== 'connecting' && <button type="button" className="pt-detail-retry" onClick={() => setServerNonce((n) => n + 1)}>{t('common.retry', { defaultValue: 'Retry' })}</button>}
+            </div>
+          )}
+          {venues.stale[details] && (tab === 'risk' || tab === 'funding') && (
+            <p className="pt-note" role="status">{t('perpTerminal.detailsStale')}</p>
+          )}
+          {activeFeed?.failed && (tab !== 'tape' || activeFeed.value?.reason || !activeFeed.value) && (
+            <div className="pt-detail-status" role="status">
+              {t(activeFeed.lastGood ? 'perpTerminal.detailsStale' : 'perpTerminal.detailsUnavailable')}
+              <button type="button" className="pt-detail-retry" onClick={() => setFeedRevision((n) => n + 1)}>{t('common.retry', { defaultValue: 'Retry' })}</button>
+            </div>
+          )}
           {tab === 'book' && (
-            isDydx
-              ? <DepthChart book={currentBook} testId="perp-terminal-depth" />
+            publicTicker
+              ? bookFeed ? <DepthChart book={bookFeed.lastGood} testId="perp-terminal-depth" />
+                : <p className="pt-note" role="status">{t('common.loading')}</p>
               : (
                 <div className="pt-empty-box">
                   <span className="pt-empty-ico" aria-hidden="true">
@@ -759,6 +768,9 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
                       <path d="M4 6h7M4 12h10M4 18h6M16 6h4M17 12h3M14 18h6" />
                     </svg>
                   </span>
+                  {executionRow?.bid > 0 && executionRow?.ask > 0 && <p className="pt-note">
+                    {t('perpTerminal.oracleQuote', { bid: fmtPrice(executionRow.bid), ask: fmtPrice(executionRow.ask) })}
+                  </p>}
                   <p className="pt-empty" data-testid="perp-book-unavailable">
                     {!route.route ? t('perpTerminal.chart.noVenue') : route.route === ROUTE.OSTIUM
                       ? t('perpTerminal.book.ostium', { defaultValue: 'Ostium is a peer-to-pool venue: it publishes no order book. Slippage is priced from the oracle instead.' })
@@ -768,8 +780,9 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
               )
           )}
           {tab === 'tape' && (
-            isDydx
-              ? <Tape trades={currentTape.trades} live={currentTape.live} loading={currentTape.loading} reason={currentTape.reason} testId="perp-terminal-tape" />
+            publicTicker
+              ? <Tape trades={tapeFeed?.lastGood?.trades ?? tapeFeed?.value?.trades} live={!tapeFeed?.failed && tapeFeed?.value?.live}
+                  loading={!tapeFeed} reason={tapeFeed?.value?.reason} testId="perp-terminal-tape" />
               : (
                 <div className="pt-empty-box">
                   <span className="pt-empty-ico" aria-hidden="true">
@@ -778,12 +791,23 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
                     </svg>
                   </span>
                   <p className="pt-empty" data-testid="perp-tape-unavailable">
-                    {t('perpTerminal.tape.unavailable', { defaultValue: 'The prints feed is dYdX-only. The 24h stats above are the venue’s own.' })}
+                    {t('perpTerminal.noPublicTape')}
                   </p>
                 </div>
               )
           )}
           {tab === 'risk' && (
+            <>
+            {executionRow && <div className="pt-funding-grid pt-mono" data-testid="perp-market-risk">
+              {[
+                [t('perpTerminal.marketMark'), bar.mark != null ? fmtPrice(bar.mark) : null],
+                [t('perpTerminal.marketLeverage'), executionRow.maxLeverage > 0 ? `${executionRow.maxLeverage}×` : null],
+                [t('perpTerminal.marketSpread'), bar.spreadBps != null ? fmtPct(bar.spreadBps / 100) : null],
+                [t('perpTerminal.marketMaintenance'), executionRow.maintenanceMarginFraction > 0 ? fmtPct(executionRow.maintenanceMarginFraction * 100) : null]
+              ].map(([label, value]) => value != null && <div className="pt-funding-card" key={label}>
+                <span className="pt-funding-label">{label}</span><strong className="pt-funding-val">{value}</strong>
+              </div>)}
+            </div>}
             <RiskPanel
               positions={account.positions}
               equityUsd={account.equityUsd}
@@ -795,35 +819,45 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
               reason={account.reason}
               testId="perp-terminal-risk"
             />
+            </>
           )}
           {tab === 'funding' && (
             <div className="pt-funding" data-testid="perp-terminal-funding">
               <div className="pt-funding-grid pt-mono">
                 <div className="pt-funding-card">
                   <span className="pt-funding-label">{t('perpTerminal.funding.apr', { defaultValue: 'Funding APR' })}</span>
-                  <strong className={`pt-funding-val ${bar.fundingAprPct > 0 ? 'pt-up' : bar.fundingAprPct < 0 ? 'pt-down' : ''}`}>
-                    {bar.fundingAprPct != null ? fmtPct(bar.fundingAprPct) : '—'}
+                  <strong className={`pt-funding-val ${fundingBar.fundingAprPct > 0 ? 'pt-up' : fundingBar.fundingAprPct < 0 ? 'pt-down' : ''}`}>
+                    {fundingBar.fundingAprPct != null ? fmtPct(fundingBar.fundingAprPct) : '—'}
                   </strong>
                 </div>
                 <div className="pt-funding-card">
                   <span className="pt-funding-label">{t('perpTerminal.funding.next', { defaultValue: 'Next settlement in' })}</span>
-                  <strong className="pt-funding-val">{bar.fundingInHours != null ? `${bar.fundingInHours.toFixed(1)}h` : '—'}</strong>
+                  <strong className="pt-funding-val">{fundingBar.fundingInHours != null ? `${fundingBar.fundingInHours.toFixed(1)}h` : '—'}</strong>
                 </div>
                 <div className="pt-funding-card">
                   <span className="pt-funding-label">{t('perpTerminal.funding.oi', { defaultValue: 'Open interest' })}</span>
-                  <strong className="pt-funding-val">{bar.openInterestUsd != null ? fmtCompact(bar.openInterestUsd) : '—'}</strong>
+                  <strong className="pt-funding-val">{fundingBar.openInterestUsd != null ? fmtCompact(fundingBar.openInterestUsd) : '—'}</strong>
                 </div>
                 <div className="pt-funding-card">
                   <span className="pt-funding-label">{t('perpTerminal.funding.volume', { defaultValue: '24h volume' })}</span>
-                  <strong className="pt-funding-val">{bar.volume24hUsd != null ? fmtCompact(bar.volume24hUsd) : '—'}</strong>
+                  <strong className="pt-funding-val">{fundingBar.volume24hUsd != null ? fmtCompact(fundingBar.volume24hUsd) : '—'}</strong>
                 </div>
               </div>
-              {[bar.fundingAprPct, bar.fundingInHours, bar.openInterestUsd, bar.volume24hUsd].some((value) => value == null) && (
+              {[fundingBar.fundingAprPct, fundingBar.fundingInHours, fundingBar.openInterestUsd, fundingBar.volume24hUsd].some((value) => value == null) && (
                 <p className="pt-note">{t('perpTerminal.funding.missing')}</p>
               )}
-              {bar.nextFundingAtMs != null && (
+              {fundingRow?.rolloverAprPct != null && <p className="pt-note">{t('perpTerminal.rolloverApr', { value: fmtPct(fundingRow.rolloverAprPct) })}</p>}
+              {detailFundingVenue === ROUTE.DYDX && publicTicker && !fundingFeed && <p className="pt-note" role="status">{t('common.loading')}</p>}
+              {!!fundingFeed?.lastGood?.rows?.length && <div className="pt-funding-history">
+                <h4>{t('perpTerminal.fundingHistory')}</h4>
+                {fundingFeed.lastGood.rows.slice(-6).reverse().map((row) => <div key={row.atMs}>
+                  <time dateTime={row.at}>{new Date(row.atMs).toLocaleString(i18n.language)}</time>
+                  <strong dir="ltr">{row.rateHourlyPct != null ? fmtPct(row.rateHourlyPct, 5) : '—'}</strong>
+                </div>)}
+              </div>}
+              {fundingBar.nextFundingAtMs != null && (
                 <p className="pt-funding-banner">
-                  {t('perpTerminal.funding.settlesAt', { defaultValue: 'Next reported settlement: {{at}}', at: new Date(bar.nextFundingAtMs).toLocaleString(i18n.language) })}
+                  {t('perpTerminal.funding.settlesAt', { defaultValue: 'Next reported settlement: {{at}}', at: new Date(fundingBar.nextFundingAtMs).toLocaleString(i18n.language) })}
                 </p>
               )}
             </div>

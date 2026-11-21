@@ -58,7 +58,7 @@ export default function DepthChart({ book, rows = 14, testId = 'perp-depth-chart
   }, [depth]);
 
   const empty = depth.empty;
-  const spreadBps = Number(book?.spreadBps);
+  const spreadBps = book?.spreadBps == null ? NaN : Number(book.spreadBps);
   const imbalance = depth.imbalancePct;
 
   return (

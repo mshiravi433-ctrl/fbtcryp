@@ -111,6 +111,7 @@ let CONNECT_CALLS = [];
 vi.mock('../src/lib/dydx', () => ({
   getDydxMarkets: async () => ({ markets: DYDX_MARKETS, live: DYDX_MARKETS.length > 0 }),
   getDydxOrderbook: async () => BOOK,
+  getDydxFundingHistory: async () => ({ live: true, rows: [{ at: '2026-11-08T20:00:00.000Z', atMs: Date.parse('2026-11-08T20:00:00.000Z'), rateHourlyPct: 0.00125 }] }),
   getDydxTrades: async () => ({ trades: TRADES, live: TRADES.length > 0 }),
   getDydx24hRange: async () => RANGE,
   getDydxSubaccount: async () => SUBACCOUNT,
@@ -311,6 +312,25 @@ describe('the desk', () => {
     const funding = screen.getByTestId('perp-terminal-funding');
     expect(funding.textContent).toContain('$50.00M');
     expect(funding.textContent).toContain('did not report this field');
+  });
+
+  it('labels same-asset dYdX analytics on an Ostium execution route and still shows public risk', async () => {
+    FUTURES_MARKETS.ostium = [{ marketId: '7', base: 'BTC', symbol: 'BTC/USD', category: 'crypto', mid: 102, maxLeverage: 25 }];
+    await renderDesk();
+    await waitFor(() => expect(CHART_PROPS.some((props) => props.provider === 'ostium')).toBe(true));
+    fireEvent.click(screen.getByTestId('perp-terminal-info-open'));
+    await screen.findByTestId('perp-terminal-depth');
+    expect(screen.getByTestId('perp-detail-source').textContent).toContain('BTC-USD');
+    expect(screen.getByTestId('perp-detail-source').textContent).toContain('Reference market only');
+    fireEvent.click(screen.getByTestId('perp-terminal-tab-tape'));
+    expect((await screen.findAllByTestId('perp-tape-row-buy')).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByTestId('perp-terminal-tab-funding'));
+    await screen.findByText('+0.00125%');
+    expect(screen.getByTestId('perp-terminal-funding').textContent).toContain('$50.00M');
+    fireEvent.click(screen.getByTestId('perp-terminal-tab-risk'));
+    expect(screen.getByTestId('perp-market-risk').textContent).toContain('25×');
+    expect(screen.getByTestId('perp-detail-source').textContent).toMatch(/ostium/i);
+    expect(CHART_PROPS.every((props) => props.provider === 'ostium')).toBe(true);
   });
 
   it('does not use dYdX depth, prints or range for a different venue', async () => {
