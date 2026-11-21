@@ -264,18 +264,26 @@ describe('the desk', () => {
     expect(document.body.textContent).not.toMatch(/perpTerminal\.[a-zA-Z]+\./);
   });
 
-  it('opens each bottom-stack item in a named full-screen dialog', async () => {
+  it('opens the additional-information dialog and switches between vertical tabs', async () => {
     await renderDesk();
     expect(screen.queryByRole('dialog')).toBeNull();
-    for (const [tab, panel] of Object.entries({ book: 'depth', tape: 'tape', risk: 'risk', funding: 'funding' })) {
+    expect(screen.queryByTestId('perp-terminal-tab-book')).toBeNull();
+    fireEvent.click(screen.getByTestId('perp-terminal-info-open'));
+    const dialog = screen.getByTestId('perp-terminal-info-sheet');
+    expect(screen.getByRole('tablist').getAttribute('aria-orientation')).toBe('vertical');
+    const book = screen.getByTestId('perp-terminal-tab-book');
+    expect(book.getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(book, { key: 'ArrowDown' });
+    expect(screen.getByTestId('perp-terminal-tab-funding').getAttribute('aria-selected')).toBe('true');
+    for (const [tab, panel] of Object.entries({ book: 'depth', funding: 'funding', tape: 'tape', risk: 'risk' })) {
       fireEvent.click(screen.getByTestId(`perp-terminal-tab-${tab}`));
       const body = await screen.findByTestId(`perp-terminal-${panel}`);
-      expect(body.closest('[role="dialog"]')).toBe(screen.getByTestId('perp-terminal-info-sheet'));
+      expect(body.closest('[role="dialog"]')).toBe(dialog);
       if (tab === 'tape') expect((await screen.findAllByTestId('perp-tape-row-buy')).length).toBeGreaterThan(0);
       if (tab === 'risk') expect(screen.getByTestId('perp-risk-unavailable')).toBeTruthy();
-      fireEvent.click(screen.getByTestId('perp-terminal-info-sheet-close'));
-      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     }
+    fireEvent.click(screen.getByTestId('perp-terminal-info-sheet-close'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('shows BOTH risk vocabularies for a real account, with one as the translation', async () => {
@@ -297,6 +305,7 @@ describe('the desk', () => {
       }
     };
     await renderDesk();
+    fireEvent.click(screen.getByTestId('perp-terminal-info-open'));
     fireEvent.click(screen.getByTestId('perp-terminal-tab-risk'));
     await waitFor(() => expect(screen.getByTestId('perp-risk-level')).toBeTruthy());
     const badge = screen.getByTestId('perp-risk-level');

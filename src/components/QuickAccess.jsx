@@ -8,12 +8,13 @@ import {
   IconActivity, IconBriefcase, IconBuilding, IconClock, IconDoc, IconGlobe,
   IconInfo, IconKey, IconMail, IconMarket, IconNews, IconPools, IconRocket,
   IconSearch, IconSettings, IconShield, IconSmartMoney, IconSwap, IconTrend,
-  IconTrophy, IconWallet, IconWorld
+  IconTrophy, IconWallet, IconWorld, IconX
 } from './Icons';
 import '../styles/quick-access.css';
 
 // The first destination in each family is its home. On a related page it
 // replaces that page in the rail, so there is always a way back to the hub.
+const SWAP_LINK = { to: '/swap', key: 'nav.swap', Icon: IconSwap };
 const groups = [
   [
     { to: '/', key: 'nav.market', Icon: IconMarket },
@@ -24,7 +25,7 @@ const groups = [
     { to: '/buy', key: 'nav.buy', Icon: IconSwap }
   ],
   [
-    { to: '/swap', key: 'nav.swap', Icon: IconSwap },
+    SWAP_LINK,
     { to: '/bridge', key: 'nav.bridge', Icon: IconGlobe },
     { to: '/launch', key: 'nav.launch', Icon: IconRocket },
     { to: '/p2p', key: 'nav.p2p', Icon: IconSwap }
@@ -99,12 +100,19 @@ export default function QuickAccess({ centered = false }) {
   }, [open]);
 
   if (!group || typeof document === 'undefined') return null;
+  const links = centered ? [SWAP_LINK, ...group.filter((item) => item.to !== SWAP_LINK.to)] : group;
   return createPortal(
     <aside ref={rootRef} className={`quick-access${centered ? ' quick-access--centered' : ''}${open ? ' is-open' : ''}`} dir={rtl ? 'rtl' : 'ltr'} aria-label={t('quickAccess.title')}>
-      <div id="quick-access-rail" className="quick-access__rail" aria-hidden={!open}>
-        <span className="quick-access__caption">{t('quickAccess.title')}</span>
+      <div id="quick-access-rail" className="quick-access__rail" aria-hidden={!open} inert={!open ? '' : undefined}>
+        <div className="quick-access__rail-head">
+          <span className="quick-access__caption">{t('quickAccess.title')}</span>
+          {centered && <button type="button" className="quick-access__close" tabIndex={open ? 0 : -1}
+            aria-label={t('quickAccess.close')} onClick={() => { setOpen(false); toggleRef.current?.focus(); }}>
+            <IconX width={18} height={18} />
+          </button>}
+        </div>
         <nav aria-label={t('quickAccess.title')}>
-          {group.filter((item) => !matches(item, pathname)).map(({ to, key, Icon }) => (
+          {links.filter((item) => !matches(item, pathname)).map(({ to, key, Icon }) => (
             <Link key={to} className="quick-access__item" to={to} tabIndex={open ? undefined : -1} onClick={() => setOpen(false)}>
               <span className="quick-access__icon"><Icon width={19} height={19} aria-hidden="true" /></span>
               <span>{t(key)}</span>

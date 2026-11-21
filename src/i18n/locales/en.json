@@ -18959,6 +18959,7 @@
     "controlsShowLess": "Show less"
   },
   "perpTerminal": {
+    "detailsTitle": "Additional information",
     "back": "Markets",
     "stale": "stale read",
     "live": "live",
