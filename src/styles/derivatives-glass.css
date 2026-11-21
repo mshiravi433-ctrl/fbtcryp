@@ -131,16 +131,17 @@
   position: relative;
   width: 100%;
   box-sizing: border-box;
-  padding: 20px 18px 18px;
-  border-radius: 22px;
-  background: linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
-  border: 1px solid rgba(255,255,255,0.10);
-  backdrop-filter: blur(18px) saturate(1.5);
-  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  padding: 22px 20px 20px;
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(14, 23, 42, 0.82), rgba(8, 12, 24, 0.92));
+  border: 1px solid rgba(0, 229, 255, 0.20);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
   box-shadow:
-    0 16px 48px rgba(0,0,0,0.35),
-    0 0 0 1px rgba(255,255,255,0.06) inset,
-    0 1px 0 rgba(255,255,255,0.10) inset;
+    0 20px 50px -10px rgba(0, 0, 0, 0.65),
+    0 0 35px -8px rgba(0, 229, 255, 0.14),
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+    0 1px 0 rgba(255, 255, 255, 0.15) inset;
   overflow: hidden;
 }
 .derivatives-hero::before {
@@ -1404,4 +1405,280 @@
   background: rgba(16, 185, 129, 0.08);
   border: 1px solid rgba(16, 185, 129, 0.24);
 }
+
+/* ==========================================================================
+   MODERN DERIVATIVES ACTION BUTTONS (خرید / معامله & کسب درآمد)
+   ========================================================================== */
+
+.deriv-action-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 48px;
+  padding: 10px 18px;
+  border-radius: 14px;
+  font-family: var(--font-display, inherit);
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease, background 0.18s ease;
+  overflow: hidden;
+  isolation: isolate;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.deriv-action-btn:active {
+  transform: scale(0.98);
+}
+
+/* Trade button: electric cyan-to-indigo gradient with neon cyan bloom */
+.deriv-action-trade {
+  background: linear-gradient(135deg, #00d2ff 0%, #0284c7 48%, #4f46e5 100%);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow:
+    0 8px 24px -4px rgba(0, 210, 255, 0.45),
+    0 2px 6px rgba(0, 0, 0, 0.3),
+    0 1px 0 rgba(255, 255, 255, 0.35) inset;
+}
+
+.deriv-action-trade:hover {
+  filter: brightness(1.08);
+  box-shadow:
+    0 10px 28px -4px rgba(0, 210, 255, 0.6),
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    0 1px 0 rgba(255, 255, 255, 0.45) inset;
+  transform: translateY(-1px);
+}
+
+/* Earn button: sleek cyber-violet glass with neon sheen */
+.deriv-action-earn {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.22), rgba(217, 70, 239, 0.14));
+  color: #f3e8ff;
+  border-color: rgba(168, 85, 247, 0.36);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow:
+    0 8px 24px -6px rgba(139, 92, 246, 0.30),
+    0 2px 6px rgba(0, 0, 0, 0.25),
+    0 1px 0 rgba(255, 255, 255, 0.10) inset;
+}
+
+.deriv-action-earn:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.32), rgba(217, 70, 239, 0.22));
+  border-color: rgba(168, 85, 247, 0.55);
+  color: #ffffff;
+  box-shadow:
+    0 10px 28px -4px rgba(139, 92, 246, 0.45),
+    0 2px 8px rgba(0, 0, 0, 0.35),
+    0 1px 0 rgba(255, 255, 255, 0.20) inset;
+  transform: translateY(-1px);
+}
+
+:root[data-theme='light'] .deriv-action-earn {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(217, 70, 239, 0.08));
+  border-color: rgba(139, 92, 246, 0.28);
+  color: #6b21a8;
+  box-shadow:
+    0 6px 20px -6px rgba(139, 92, 246, 0.22),
+    0 1px 0 rgba(255, 255, 255, 0.8) inset;
+}
+
+:root[data-theme='light'] .deriv-action-earn:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.18), rgba(217, 70, 239, 0.14));
+  color: #581c87;
+}
+
+/* ==========================================================================
+   COMPACT TOKEN TRIGGER & POPUP SELECTOR FOR dYdX MARKETS
+   فضا زیاد اشغال نشود — انتخاب توکن در پاپ‌آپ
+   ========================================================================== */
+
+.deriv-selector-card {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 16px 16px 14px;
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.025));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+:root[data-theme='light'] .deriv-selector-card {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(245, 248, 254, 0.9));
+  border-color: rgba(16, 24, 40, 0.08);
+  box-shadow: 0 12px 32px -8px rgba(16, 24, 40, 0.08);
+}
+
+.deriv-selector-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.deriv-selector-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 0;
+  text-align: inherit;
+  font: inherit;
+  color: inherit;
+}
+
+.deriv-selector-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.deriv-selector-ticker {
+  font-family: var(--font-mono, monospace);
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--text-1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deriv-selector-badge {
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(0, 229, 255, 0.12);
+  color: var(--rgb-1);
+  border: 1px solid rgba(0, 229, 255, 0.22);
+}
+
+.deriv-selector-px {
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+/* Big trigger button to open token popup */
+.deriv-open-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-1);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.deriv-open-picker-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: var(--rgb-1);
+  transform: translateY(-1px);
+}
+
+:root[data-theme='light'] .deriv-open-picker-btn {
+  background: rgba(16, 24, 40, 0.05);
+  border-color: rgba(16, 24, 40, 0.12);
+}
+
+:root[data-theme='light'] .deriv-open-picker-btn:hover {
+  background: rgba(16, 24, 40, 0.10);
+  border-color: #0284c7;
+}
+
+/* Quick-pick token chips row */
+.deriv-quick-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.deriv-quick-chips::-webkit-scrollbar { display: none; }
+
+.deriv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.deriv-chip:hover {
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--text-1);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.deriv-chip.is-active {
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.16), rgba(139, 92, 246, 0.14));
+  border-color: rgba(0, 229, 255, 0.38);
+  color: var(--text-1);
+  box-shadow: 0 2px 8px -2px rgba(0, 229, 255, 0.3);
+}
+
+:root[data-theme='light'] .deriv-chip {
+  background: rgba(16, 24, 40, 0.035);
+  border-color: rgba(16, 24, 40, 0.08);
+}
+:root[data-theme='light'] .deriv-chip.is-active {
+  background: linear-gradient(135deg, rgba(0, 180, 216, 0.15), rgba(139, 92, 246, 0.10));
+  border-color: #0284c7;
+  color: #0f172a;
+}
+
+/* Modal Popup Sheet styling for Market List */
+.deriv-picker-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0 16px;
+  max-height: 70vh;
+}
+
+.deriv-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding-right: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
 

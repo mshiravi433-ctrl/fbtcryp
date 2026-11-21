@@ -17,6 +17,7 @@ import { assetKnowledgeFor } from '../lib/assetKnowledge';
 import ModernSelect from '../components/ModernSelect';
 import FuturesMarketChart from '../components/FuturesMarketChart';
 import AssetIcon from '../components/AssetIcon';
+import OstiumHeroSlider from '../components/ostium/OstiumHeroSlider';
 import {
   MIN_COLLATERAL_USD,
   OSTIUM_CHAIN_ID,
@@ -478,23 +479,24 @@ export default function Ostium({ embedded = false }) {
     <PageTransition embedded={embedded}>
       <div className="derivatives-hall">
         <div className="derivatives-aurora" aria-hidden="true" />
-        <motion.section className="derivatives-hero" variants={riseIn} initial="hidden" animate="show">
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-            <div>
-              <div className="derivatives-title">
-                <span className="derivatives-title-glow">{t('ostium.title')}</span>
-                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', letterSpacing: 1 }}>• OSTIUM</span>
-              </div>
-              <p className="derivatives-subtitle">{t('ostium.subtitle')}</p>
-            </div>
-            <span className={`pill ${feedLive ? 'pill-up' : 'pill-down'}`} style={{ alignSelf: 'flex-start' }}>
-              {feedLive ? t('ostium.live') : t('ostium.offline')}
-            </span>
-          </div>
-        </motion.section>
 
-        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
-          <div className="glass-notice" style={{ borderColor: 'rgba(255,59,107,0.16)', background: 'rgba(255,59,107,0.08)' }}>{t('ostium.risk')}</div>
+        {/* ─── OSTIUM MODERN SLIDING HERO CAROUSEL ─────────────────────────── */}
+        <motion.div variants={riseIn} initial="hidden" animate="show">
+          <OstiumHeroSlider feedLive={feedLive} onSelectCategory={setCategory} />
+        </motion.div>
+
+        {/* ─── MODERN COLLAPSIBLE RISK NOTICE (DEFAULT CLOSED) ─────────────── */}
+        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
+          <InfoBox
+            title={t('ostium.riskTitle', { defaultValue: 'هشدار ریسک: مشتقهٔ دائمی اهرمی' })}
+            tone="danger"
+            id="ostium-risk-box"
+            defaultOpen={false}
+          >
+            <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.8 }}>
+              {t('ostium.risk')}
+            </p>
+          </InfoBox>
         </motion.div>
 
         <button

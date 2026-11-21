@@ -58,16 +58,42 @@ function widthsFor(css, selector) {
     if (!selectors.split(',').some((one) => one.trim().endsWith(selector))) continue;
     const width = /max-width:\s*(\d+)px/.exec(body);
     if (!width) continue;
-    /* Which @media block, if any, encloses this rule: count the braces before
-       it and walk back to the nearest unmatched `@media`. */
-    const before = css.slice(0, match.index);
-    let depth = 0;
-    let range = null;
-    for (const chunk of before.split(/(@media[^{]*)\{/)) {
-      if (chunk.startsWith('@media')) { if (depth === 0) range = chunk.trim(); depth += 1; continue; }
-      depth -= (chunk.match(/\}/g) || []).length;
-      if (depth < 0) { depth = 0; range = null; }
+
+    // Correctly track enclosing @media block
+    const mediaStack = [];
+    let i = 0;
+    let inComment = false;
+    const targetIdx = match.index;
+    while (i < targetIdx) {
+      if (inComment) {
+        if (css[i] === '*' && css[i + 1] === '/') { inComment = false; i += 2; continue; }
+        i++;
+        continue;
+      }
+      if (css[i] === '/' && css[i + 1] === '*') {
+        inComment = true;
+        i += 2;
+        continue;
+      }
+      if (css.slice(i, i + 6) === '@media') {
+        const brace = css.indexOf('{', i);
+        if (brace !== -1 && brace < targetIdx) {
+          mediaStack.push({ query: css.slice(i, brace).trim(), depth: 0 });
+          i = brace + 1;
+          continue;
+        }
+      }
+      if (css[i] === '{') {
+        if (mediaStack.length > 0) mediaStack[mediaStack.length - 1].depth++;
+      } else if (css[i] === '}') {
+        if (mediaStack.length > 0) {
+          mediaStack[mediaStack.length - 1].depth--;
+          if (mediaStack[mediaStack.length - 1].depth < 0) mediaStack.pop();
+        }
+      }
+      i++;
     }
+    const range = mediaStack.length > 0 ? mediaStack[mediaStack.length - 1].query : null;
     out.push({ px: Number(width[1]), range });
   }
   return out;

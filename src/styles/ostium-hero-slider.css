@@ -1,0 +1,387 @@
+/* ==========================================================================
+   OSTIUM HERO SLIDER — Modern Advertising Carousel for Global Horizon
+   طلا، نفت، فارکس، سهام و شاخص‌ها — بازارهای واقعی روی آربیتروم
+   ========================================================================== */
+
+.ost-slider {
+  --ost-gold: #f59e0b;
+  --ost-gold-2: #d97706;
+  --ost-forex: #10b981;
+  --ost-forex-2: #06b6d4;
+  --ost-stocks: #8b5cf6;
+  --ost-stocks-2: #6366f1;
+  --ost-arb: #38bdf8;
+  --ost-arb-2: #2563eb;
+
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 2px 0 16px;
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  box-shadow:
+    0 20px 50px -10px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  overflow: hidden;
+  isolation: isolate;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:root[data-theme='light'] .ost-slider {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(246, 248, 252, 0.88));
+  border-color: rgba(16, 24, 40, 0.10);
+  box-shadow:
+    0 16px 40px -8px rgba(16, 24, 40, 0.10),
+    0 0 0 1px rgba(255, 255, 255, 0.8) inset;
+}
+
+/* Ambient dynamic aura glowing according to current slide theme */
+.ost-aurora {
+  position: absolute;
+  inset: -20% -10%;
+  pointer-events: none;
+  opacity: 0.35;
+  filter: blur(40px);
+  transition: background 0.8s ease, opacity 0.8s ease;
+  z-index: 0;
+}
+
+.ost-slider[data-slide="0"] .ost-aurora {
+  background: radial-gradient(circle at 80% 20%, var(--ost-gold) 0%, transparent 60%),
+              radial-gradient(circle at 20% 80%, var(--ost-gold-2) 0%, transparent 55%);
+}
+
+.ost-slider[data-slide="1"] .ost-aurora {
+  background: radial-gradient(circle at 80% 20%, var(--ost-forex) 0%, transparent 60%),
+              radial-gradient(circle at 20% 80%, var(--ost-forex-2) 0%, transparent 55%);
+}
+
+.ost-slider[data-slide="2"] .ost-aurora {
+  background: radial-gradient(circle at 80% 20%, var(--ost-stocks) 0%, transparent 60%),
+              radial-gradient(circle at 20% 80%, var(--ost-stocks-2) 0%, transparent 55%);
+}
+
+.ost-slider[data-slide="3"] .ost-aurora {
+  background: radial-gradient(circle at 80% 20%, var(--ost-arb) 0%, transparent 60%),
+              radial-gradient(circle at 20% 80%, var(--ost-arb-2) 0%, transparent 55%);
+}
+
+:root[data-theme='light'] .ost-aurora {
+  opacity: 0.22;
+}
+
+/* Travelling rim highlight */
+.ost-slider::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 20%, rgba(255, 255, 255, 0.08) 45%, transparent 65%);
+  transform: translateX(-100%);
+  animation: ost-sheen 8s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes ost-sheen {
+  0%, 75% { transform: translateX(-100%); }
+  90%, 100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ost-slider::after { display: none; }
+}
+
+/* Header bar inside slider: badge + live pill */
+.ost-header {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 0;
+}
+
+.ost-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ost-brand {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+
+.ost-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-1);
+  transition: border-color 0.4s ease, background 0.4s ease;
+}
+
+.ost-tag-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.ost-slider[data-slide="0"] .ost-tag-dot { background: var(--ost-gold); box-shadow: 0 0 8px var(--ost-gold); }
+.ost-slider[data-slide="1"] .ost-tag-dot { background: var(--ost-forex); box-shadow: 0 0 8px var(--ost-forex); }
+.ost-slider[data-slide="2"] .ost-tag-dot { background: var(--ost-stocks); box-shadow: 0 0 8px var(--ost-stocks); }
+.ost-slider[data-slide="3"] .ost-tag-dot { background: var(--ost-arb); box-shadow: 0 0 8px var(--ost-arb); }
+
+/* Main slide track viewport */
+.ost-viewport {
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+  min-height: 160px;
+}
+
+.ost-slide {
+  padding: 14px 18px 18px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 16px;
+}
+
+@media (max-width: 480px) {
+  .ost-slide {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.ost-content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ost-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 900;
+  line-height: 1.35;
+  letter-spacing: -0.4px;
+  color: var(--text-1);
+}
+
+.ost-slider[data-slide="0"] .ost-title-accent {
+  background: linear-gradient(90deg, #fbbf24, #f59e0b 60%, #d97706);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.ost-slider[data-slide="1"] .ost-title-accent {
+  background: linear-gradient(90deg, #34d399, #10b981 60%, #06b6d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.ost-slider[data-slide="2"] .ost-title-accent {
+  background: linear-gradient(90deg, #c084fc, #8b5cf6 60%, #6366f1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.ost-slider[data-slide="3"] .ost-title-accent {
+  background: linear-gradient(90deg, #38bdf8, #0ea5e9 60%, #2563eb);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.ost-desc {
+  margin: 0;
+  font-size: 12.3px;
+  line-height: 1.8;
+  color: var(--text-2);
+}
+
+.ost-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.ost-cta-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-1);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ost-cta-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+:root[data-theme='light'] .ost-cta-btn {
+  background: rgba(16, 24, 40, 0.05);
+  border-color: rgba(16, 24, 40, 0.12);
+  color: var(--text-1);
+}
+
+:root[data-theme='light'] .ost-cta-btn:hover {
+  background: rgba(16, 24, 40, 0.10);
+}
+
+/* Advertising Graphic Artwork Box */
+.ost-graphic {
+  position: relative;
+  width: 105px;
+  height: 105px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 20px;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.01) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+@media (max-width: 480px) {
+  .ost-graphic {
+    display: none; /* Hide vector illustration on narrow screens to keep text spacious */
+  }
+}
+
+:root[data-theme='light'] .ost-graphic {
+  background: radial-gradient(circle at 50% 50%, rgba(16, 24, 40, 0.04) 0%, transparent 100%);
+  border-color: rgba(16, 24, 40, 0.08);
+  box-shadow: 0 6px 18px -4px rgba(16, 24, 40, 0.08);
+}
+
+.ost-vector {
+  width: 82px;
+  height: 82px;
+  object-fit: contain;
+}
+
+/* Footer: pagination segments & navigation */
+.ost-footer {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px 14px;
+}
+
+.ost-segments {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.ost-seg {
+  position: relative;
+  height: 3.5px;
+  flex: 1;
+  max-width: 48px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+:root[data-theme='light'] .ost-seg {
+  background: rgba(16, 24, 40, 0.12);
+}
+
+.ost-seg.is-active {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+:root[data-theme='light'] .ost-seg.is-active {
+  background: rgba(16, 24, 40, 0.22);
+}
+
+.ost-seg-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--text-1);
+  transform-origin: 0% 50%;
+  animation: ost-fill linear forwards;
+}
+
+.ost-slider[data-slide="0"] .ost-seg-fill { background: var(--ost-gold); }
+.ost-slider[data-slide="1"] .ost-seg-fill { background: var(--ost-forex); }
+.ost-slider[data-slide="2"] .ost-seg-fill { background: var(--ost-stocks); }
+.ost-slider[data-slide="3"] .ost-seg-fill { background: var(--ost-arb); }
+
+@keyframes ost-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.ost-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ost-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.ost-arrow:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-1);
+}
+
+:root[data-theme='light'] .ost-arrow {
+  background: rgba(16, 24, 40, 0.04);
+  border-color: rgba(16, 24, 40, 0.1);
+  color: var(--text-2);
+}
+
+:root[data-theme='light'] .ost-arrow:hover {
+  background: rgba(16, 24, 40, 0.08);
+  color: var(--text-1);
+}

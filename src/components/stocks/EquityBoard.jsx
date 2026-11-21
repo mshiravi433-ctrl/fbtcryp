@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import InfoBox from '../InfoBox';
 import EquityRow from '../EquityRow';
 import EquityHoldings from '../EquityHoldings';
@@ -10,7 +11,7 @@ import { fmtCompact, fmtPct, fmtUsd } from '../../lib/format';
 import StockStatMini from './StockStatMini';
 
 export default function EquityBoard({
-  t,
+  t: propT,
   isRTL,
   lang,
   haptic,
@@ -44,13 +45,20 @@ export default function EquityBoard({
   setEqShowAll,
   THIN_ASSETS
 }) {
+  const { t: i18nT } = useTranslation();
+  const t = propT || i18nT;
   return (
     <>
-      <motion.section className="card card-rgb card-glow-cyan" variants={riseIn} initial="hidden" animate="show">
-        <div className="sheen" />
-        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 5 }}>{t('stocks.realTitle')}</div>
-        <p className="muted" style={{ fontSize: 12.3, margin: 0 }}>{t('stocks.realBody')}</p>
-      </motion.section>
+      <motion.div variants={riseIn} initial="hidden" animate="show">
+        <InfoBox
+          title={t('stocks.realTitle')}
+          tone="info"
+          id="stocks-real-info"
+          defaultOpen={false}
+        >
+          <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.8 }}>{t('stocks.realBody')}</p>
+        </InfoBox>
+      </motion.div>
 
       {/*
         ─── THE WARNING GOES HERE, ABOVE EVERYTHING ──────────────────────
