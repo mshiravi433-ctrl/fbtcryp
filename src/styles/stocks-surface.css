@@ -1,26 +1,26 @@
-/* Stocks surface — sticky header, custom shell padding, desk layout */
+/* Stocks surface — non-sticky top-bar, sticky subtabs, custom shell padding, desk layout */
 .app-shell.app-shell--stocks {
   padding-bottom: calc(76px + env(safe-area-inset-bottom));
 }
 
 /*
- * STOCKS HEADER — sticks firmly to the top and does not scroll with page content.
- * Keeps an opaque/frosted glass surface and border both at rest and when scrolled,
- * preventing stocks text/cards from bleeding into header elements.
+ * STOCKS HEADER — stays at the top of the page naturally (does NOT stick on scroll)
+ * so vertical screen space is preserved when browsing markets.
+ * When scrolling down, the header scrolls away rather than following the user down.
  */
 .app-shell--stocks > .top-bar,
 .app-shell--stocks > .top-bar:not(.is-scrolled),
 .app-shell--stocks > .top-bar.is-scrolled {
-  position: sticky !important;
-  top: 0 !important;
-  inset-block-start: 0 !important;
-  z-index: 30 !important;
+  position: relative !important;
+  top: auto !important;
+  inset-block-start: auto !important;
+  z-index: 10 !important;
   width: 100% !important;
   background: color-mix(in srgb, var(--bg-void, #070b12) 94%, transparent) !important;
   backdrop-filter: blur(14px) !important;
   -webkit-backdrop-filter: blur(14px) !important;
   border-bottom: 1px solid var(--line) !important;
-  box-shadow: 0 4px 20px -8px rgba(0, 0, 0, 0.45) !important;
+  box-shadow: none !important;
 }
 
 :root[data-theme='light'] .app-shell--stocks > .top-bar,
@@ -28,5 +28,26 @@
 :root[data-theme='light'] .app-shell--stocks > .top-bar.is-scrolled {
   background: color-mix(in srgb, #f6f8fc 94%, transparent) !important;
   border-bottom: 1px solid var(--line) !important;
-  box-shadow: 0 4px 20px -8px rgba(16, 24, 40, 0.08) !important;
+  box-shadow: none !important;
+}
+
+/*
+ * STOCKS SUBTABS — sticks to the top of the viewport on scroll so vertical space
+ * is not wasted and tabs remain directly accessible at top: 0.
+ */
+.app-shell--stocks .stock-subtabs {
+  position: sticky !important;
+  top: calc(env(safe-area-inset-top, 0px) + 2px) !important;
+  z-index: 28 !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  background: color-mix(in srgb, var(--bg-raised, #101524) 88%, transparent) !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.45) !important;
+}
+
+:root[data-theme='light'] .app-shell--stocks .stock-subtabs {
+  background: color-mix(in srgb, #ffffff 92%, rgba(16, 20, 40, .05)) !important;
+  border-color: color-mix(in srgb, var(--line) 80%, transparent) !important;
+  box-shadow: 0 6px 20px -8px rgba(16, 24, 40, 0.12) !important;
 }

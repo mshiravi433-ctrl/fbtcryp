@@ -5,15 +5,19 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import AssetIcon from '../components/AssetIcon';
 import FundingPanel from '../components/FundingPanel';
+import Sheet from '../components/Sheet';
 import {
   IconActivity,
+  IconChevronRight,
   IconClock,
   IconCoins,
   IconMarket,
   IconSearch,
   IconSparkle,
+  IconSwap,
   IconTrend
 } from '../components/Icons';
+import { useTelegram } from '../context/TelegramContext';
 import { useMarkets } from '../hooks/useMarket';
 import { fmtCompact, fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { getDydxMarkets, getDydxOrderbook } from '../lib/dydx';
@@ -120,9 +124,12 @@ function Tile({ icon: Icon, label, value, note, tone = 'flat', ltr = true }) {
   );
 }
 
+const TOP_MARKETS = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'SUI-USD', 'DOGE-USD', 'AVAX-USD', 'LINK-USD'];
+
 export default function DerivativesDashboard({ embedded = false }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const { haptic } = useTelegram();
   const { data: spot } = useMarkets(100);
 
   const [markets, setMarkets] = useState([]);
@@ -131,6 +138,7 @@ export default function DerivativesDashboard({ embedded = false }) {
   const [loadedAt, setLoadedAt] = useState(null);
   const [ticker, setTicker] = useState('BTC-USD');
   const [book, setBook] = useState(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   /*
    * ── THE COLUMN THIS PAGE IS ALLOWED ──────────────────────────────────────
@@ -223,7 +231,6 @@ export default function DerivativesDashboard({ embedded = false }) {
   /* ── rows: derived figures + search + sort ─────────────────────────────── */
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState('oi');
-  const [showAll, setShowAll] = useState(false);
 
   const rows = useMemo(() => markets.map((m) => {
     const base = baseOf(m.ticker);
@@ -254,8 +261,6 @@ export default function DerivativesDashboard({ embedded = false }) {
     return base.slice().sort(cmp[sortKey] || cmp.oi);
   }, [rows, query, sortKey]);
 
-  const visible = showAll ? filtered : filtered.slice(0, 30);
-
   /* ── venue-wide figures for the hero strip ─────────────────────────────── */
   const stats = useMemo(() => {
     if (!rows.length) return null;
@@ -278,13 +283,12 @@ export default function DerivativesDashboard({ embedded = false }) {
     };
   }, [rows]);
 
-  /* Widest OI on screen → the denominator for the row bars, so the bars rank
-     markets against each other instead of against themselves. */
+  /* Widest OI in filtered list → denominator for relative bars */
   const maxOi = useMemo(() => {
     let max = 0;
-    for (const r of visible) max = Math.max(max, Number(r.oiUsd || 0));
+    for (const r of filtered) max = Math.max(max, Number(r.oiUsd || 0));
     return max > 0 ? max : 1;
-  }, [visible]);
+  }, [filtered]);
 
   const selected = rows.find((r) => r.ticker === ticker) || rows[0] || null;
   const depthMax = Math.max(Number(book?.bidDepth1Pct || 0), Number(book?.askDepth1Pct || 0), 1);
@@ -352,149 +356,224 @@ export default function DerivativesDashboard({ embedded = false }) {
           <FundingPanel />
         </motion.div>
 
-        {/* Buy & earn relay — internal, no external link. The hall is venue data;
-            trading lives on the app's own futures (Ostium / on-chain) and earning
-            on the Earn pools. Both are internal routes, so the hall can relay
-            without ever opening an outside domain. */}
+        {/* Buy & earn relay — modern, attractive action buttons */}
         <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
-          <div className="deriv-relay" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <button type="button" className="btn btn-primary" style={{ minHeight: 42, borderRadius: 12, fontWeight: 700 }} onClick={() => navigate('/trade')}>{t('derivatives.tradeCta', { defaultValue: 'خرید / معامله' })}</button>
-            <button type="button" className="btn btn-ghost" style={{ minHeight: 42, borderRadius: 12, fontWeight: 700 }} onClick={() => navigate('/earn')}>{t('derivatives.earnCta', { defaultValue: 'کسب درآمد' })}</button>
+          <div className="deriv-relay" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <button
+              type="button"
+              className="deriv-action-btn deriv-action-trade"
+              onClick={() => {
+                haptic?.('impactMedium');
+                navigate('/trade');
+              }}
+            >
+              <IconSwap size={18} />
+              <span>{t('derivatives.tradeCta', { defaultValue: 'خرید / معامله' })}</span>
+            </button>
+            <button
+              type="button"
+              className="deriv-action-btn deriv-action-earn"
+              onClick={() => {
+                haptic?.('impactMedium');
+                navigate('/earn');
+              }}
+            >
+              <IconCoins size={18} />
+              <span>{t('derivatives.earnCta', { defaultValue: 'کسب درآمد' })}</span>
+            </button>
           </div>
-          <p className="faint" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.7, textAlign: 'center' }}>{t('derivatives.relayNote', { defaultValue: 'معامله و کسب درآمد در همین برنامه — بدون لینک بیرونی' })}</p>
+          <p className="faint" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.7, textAlign: 'center' }}>
+            {t('derivatives.relayNote', { defaultValue: 'معامله و کسب درآمد در همین برنامه — بدون لینک بیرونی' })}
+          </p>
         </motion.div>
 
-        {/* ─── the board ─────────────────────────────────────────────────── */}
-        <motion.section className="glass-board" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18 }}>
-          <div className="glass-head">
-            <div>
-              <div className="glass-eyebrow">{t('derivatives.marketTable')}</div>
-              <div className="glass-title" dir="ltr">dYdX</div>
-            </div>
-            {loadedAt ? (
-              <div className="glass-stamp" dir="ltr" title={new Date(loadedAt).toLocaleString()}>
-                {new Date(loadedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="deriv-controls">
-            <label className="deriv-search">
-              <IconSearch size={13} />
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t('derivatives.searchPh')}
-                aria-label={t('derivatives.searchPh')}
-              />
-            </label>
-            <div className="deriv-sorts" role="group" aria-label={t('derivatives.sortLabel')}>
-              {[['oi', 'sortOi'], ['basis', 'sortBasis'], ['funding', 'sortFunding']].map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`deriv-sort${sortKey === key ? ' is-on' : ''}`}
-                  onClick={() => setSortKey(key)}
-                  aria-pressed={sortKey === key}
-                >
-                  {t(`derivatives.${label}`)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="stack" style={{ gap: 8 }}>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <motion.div
-                  key={i}
-                  className="skel"
-                  style={{ height: 74, borderRadius: 15 }}
-                  animate={{ opacity: [0.45, 0.85, 0.45] }}
-                  transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.08 }}
-                />
-              ))}
-            </div>
-          ) : unavailable ? (
-            <div className="glass-error">{t('derivatives.feedDown')}</div>
-          ) : !filtered.length ? (
-            <div className="empty" style={{ padding: '20px 0' }}>
-              <span className="empty-icon">◎</span>
-              <span className="muted" style={{ fontSize: 12.5 }}>{t('derivatives.noMatch')}</span>
-            </div>
-          ) : (
-            <>
-              <div className="glass-table">
-                <div className="glass-thead" aria-hidden="true">
-                  <span>{t('derivatives.basis')}</span>
-                  <span className="deriv-th-cells">
-                    <span>{t('derivatives.perpShort')}</span>
-                    <span>{t('derivatives.spotShort')}</span>
-                    <span>{t('derivatives.oiShort')}</span>
-                    <span>{t('derivatives.fundShort')}</span>
-                  </span>
+        {/* ─── compact market selector card (popup trigger) ─────────────── */}
+        <motion.section className="deriv-selector-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18 }}>
+          <div className="deriv-selector-top">
+            <button
+              type="button"
+              className="deriv-selector-main"
+              onClick={() => {
+                haptic?.('select');
+                setPickerOpen(true);
+              }}
+              aria-label={t('derivatives.selectMarket', { defaultValue: 'انتخاب بازار dYdX' })}
+            >
+              <AssetIcon symbol={selected?.base || 'BTC'} size={40} radius={14} />
+              <div className="deriv-selector-info">
+                <div className="deriv-selector-ticker" dir="ltr">
+                  <span>{selected?.ticker || 'BTC-USD'}</span>
+                  <span className="deriv-selector-badge">dYdX</span>
                 </div>
+                <div className="deriv-selector-px" dir="ltr">
+                  {selected ? fmtUsd(selected.oraclePrice) : '—'}
+                  {selected?.changePct != null ? (
+                    <span style={{ marginInlineStart: 8, color: Number(selected.changePct) >= 0 ? 'var(--up)' : 'var(--down)', fontSize: 11.5, fontWeight: 700 }}>
+                      {fmtPct(selected.changePct, 2)}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </button>
 
-                {visible.map((r) => {
-                  const active = selected?.ticker === r.ticker;
-                  return (
-                    <button
-                      key={r.ticker}
-                      type="button"
-                      className={`glass-row${active ? ' is-active' : ''}`}
-                      onClick={() => setTicker(r.ticker)}
-                      aria-pressed={active}
-                    >
-                      <span className="deriv-rail" aria-hidden="true" />
-                      <span className="deriv-icon">
-                        <AssetIcon symbol={r.base} size={32} radius={11} />
-                      </span>
-                      <span className="deriv-sym">
-                        <span className="deriv-sym-b" dir="ltr">{r.base}</span>
-                        <span className="deriv-sym-q" dir="ltr">{r.quote}</span>
-                      </span>
-                      <span className="deriv-basis" dir="ltr">
-                        {r.basisBps == null ? '—' : <Signed value={r.basisBps} text={`${fmtBps(r.basisBps)} bps`} />}
-                      </span>
+            <button
+              type="button"
+              className="deriv-open-picker-btn"
+              onClick={() => {
+                haptic?.('select');
+                setPickerOpen(true);
+              }}
+            >
+              <IconSearch size={13} />
+              <span>{t('derivatives.changeToken', { defaultValue: 'تغییر توکن' })}</span>
+              <IconChevronRight size={13} style={{ transform: i18n.language === 'fa' ? 'scaleX(-1)' : 'none' }} />
+            </button>
+          </div>
 
-                      {/* four labelled cells rather than a bare run of numbers */}
-                      <span className="deriv-meta">
-                        <span className="deriv-cell">
-                          <i>{t('derivatives.perpShort')}</i>
-                          <b dir="ltr">{fmtPrice(r.oraclePrice)}</b>
+          <div className="deriv-quick-chips" role="group" aria-label="Quick market select">
+            {TOP_MARKETS.map((tId) => {
+              const base = tId.split('-')[0];
+              const isAct = selected?.ticker === tId;
+              return (
+                <button
+                  key={tId}
+                  type="button"
+                  className={`deriv-chip${isAct ? ' is-active' : ''}`}
+                  onClick={() => {
+                    haptic?.('select');
+                    setTicker(tId);
+                  }}
+                  aria-pressed={isAct}
+                >
+                  <AssetIcon symbol={base} size={15} radius={5} />
+                  <span dir="ltr">{base}</span>
+                </button>
+              );
+            })}
+          </div>
+        </motion.section>
+
+        {/* ─── dYdX market selector popup modal ───────────────────────────── */}
+        <Sheet
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          title={t('derivatives.selectMarket', { defaultValue: 'انتخاب بازار dYdX' })}
+          size="lg"
+        >
+          <div className="deriv-picker-sheet">
+            <div className="deriv-controls" style={{ marginTop: 0 }}>
+              <label className="deriv-search">
+                <IconSearch size={13} />
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t('derivatives.searchPh')}
+                  aria-label={t('derivatives.searchPh')}
+                />
+              </label>
+              <div className="deriv-sorts" role="group" aria-label={t('derivatives.sortLabel')}>
+                {[['oi', 'sortOi'], ['basis', 'sortBasis'], ['funding', 'sortFunding']].map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`deriv-sort${sortKey === key ? ' is-on' : ''}`}
+                    onClick={() => setSortKey(key)}
+                    aria-pressed={sortKey === key}
+                  >
+                    {t(`derivatives.${label}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="stack" style={{ gap: 8, padding: '12px 0' }}>
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <motion.div
+                    key={i}
+                    className="skel"
+                    style={{ height: 64, borderRadius: 14 }}
+                    animate={{ opacity: [0.45, 0.85, 0.45] }}
+                    transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.08 }}
+                  />
+                ))}
+              </div>
+            ) : unavailable ? (
+              <div className="glass-error">{t('derivatives.feedDown')}</div>
+            ) : !filtered.length ? (
+              <div className="empty" style={{ padding: '24px 0' }}>
+                <span className="empty-icon">◎</span>
+                <span className="muted" style={{ fontSize: 12.5 }}>{t('derivatives.noMatch')}</span>
+              </div>
+            ) : (
+              <div className="deriv-picker-list">
+                <div className="glass-table">
+                  <div className="glass-thead" aria-hidden="true">
+                    <span>{t('derivatives.basis')}</span>
+                    <span className="deriv-th-cells">
+                      <span>{t('derivatives.perpShort')}</span>
+                      <span>{t('derivatives.spotShort')}</span>
+                      <span>{t('derivatives.oiShort')}</span>
+                      <span>{t('derivatives.fundShort')}</span>
+                    </span>
+                  </div>
+
+                  {filtered.map((r) => {
+                    const active = selected?.ticker === r.ticker;
+                    return (
+                      <button
+                        key={r.ticker}
+                        type="button"
+                        className={`glass-row${active ? ' is-active' : ''}`}
+                        onClick={() => {
+                          haptic?.('select');
+                          setTicker(r.ticker);
+                          setPickerOpen(false);
+                        }}
+                        aria-pressed={active}
+                      >
+                        <span className="deriv-rail" aria-hidden="true" />
+                        <span className="deriv-icon">
+                          <AssetIcon symbol={r.base} size={32} radius={11} />
                         </span>
-                        <span className="deriv-cell">
-                          <i>{t('derivatives.spotShort')}</i>
-                          <b dir="ltr" className="is-muted">{r.spotPx ? fmtPrice(r.spotPx) : '—'}</b>
+                        <span className="deriv-sym">
+                          <span className="deriv-sym-b" dir="ltr">{r.base}</span>
+                          <span className="deriv-sym-q" dir="ltr">{r.quote}</span>
                         </span>
-                        <span className="deriv-cell">
-                          <i>{t('derivatives.oiShort')}</i>
-                          <b dir="ltr">{r.oiUsd == null ? '—' : fmtCompact(r.oiUsd)}</b>
-                          <span className="deriv-oi-bar" aria-hidden="true">
-                            <span style={{ width: `${Math.min(100, Math.max(2, (Number(r.oiUsd || 0) / maxOi) * 100))}%` }} />
+                        <span className="deriv-basis" dir="ltr">
+                          {r.basisBps == null ? '—' : <Signed value={r.basisBps} text={`${fmtBps(r.basisBps)} bps`} />}
+                        </span>
+
+                        <span className="deriv-meta">
+                          <span className="deriv-cell">
+                            <i>{t('derivatives.perpShort')}</i>
+                            <b dir="ltr">{fmtPrice(r.oraclePrice)}</b>
+                          </span>
+                          <span className="deriv-cell">
+                            <i>{t('derivatives.spotShort')}</i>
+                            <b dir="ltr" className="is-muted">{r.spotPx ? fmtPrice(r.spotPx) : '—'}</b>
+                          </span>
+                          <span className="deriv-cell">
+                            <i>{t('derivatives.oiShort')}</i>
+                            <b dir="ltr">{r.oiUsd == null ? '—' : fmtCompact(r.oiUsd)}</b>
+                            <span className="deriv-oi-bar" aria-hidden="true">
+                              <span style={{ width: `${Math.min(100, Math.max(2, (Number(r.oiUsd || 0) / maxOi) * 100))}%` }} />
+                            </span>
+                          </span>
+                          <span className="deriv-cell">
+                            <i>{t('derivatives.fundShort')}</i>
+                            <Signed value={r.nextFundingRate} text={fmtFunding(r.nextFundingRate)} />
                           </span>
                         </span>
-                        <span className="deriv-cell">
-                          <i>{t('derivatives.fundShort')}</i>
-                          <Signed value={r.nextFundingRate} text={fmtFunding(r.nextFundingRate)} />
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-
-              {filtered.length > 30 ? (
-                <button type="button" className="deriv-more" onClick={() => setShowAll((v) => !v)}>
-                  {showAll
-                    ? t('derivatives.showFewer')
-                    : `${t('derivatives.showAll')} (${filtered.length.toLocaleString('en-US')})`}
-                </button>
-              ) : null}
-            </>
-          )}
-        </motion.section>
+            )}
+          </div>
+        </Sheet>
 
         {/* ─── the selected market ───────────────────────────────────────── */}
         {selected ? (
@@ -505,7 +584,20 @@ export default function DerivativesDashboard({ embedded = false }) {
               </span>
               <div>
                 <div className="glass-eyebrow" dir="ltr">dYdX • PERP</div>
-                <div className="glass-title" dir="ltr">{selected.ticker}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div className="glass-title" dir="ltr">{selected.ticker}</div>
+                  <button
+                    type="button"
+                    className="deriv-chip"
+                    style={{ fontSize: 11, padding: '3px 8px' }}
+                    onClick={() => {
+                      haptic?.('select');
+                      setPickerOpen(true);
+                    }}
+                  >
+                    {t('derivatives.changeToken', { defaultValue: 'تغییر' })}
+                  </button>
+                </div>
               </div>
               {selected.basisBps != null ? (
                 <span className={`glass-basis${selected.basisBps >= 0 ? ' is-up' : ' is-down'}`} dir="ltr">

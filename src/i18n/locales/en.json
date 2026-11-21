@@ -8713,6 +8713,7 @@
     "subtitle": "Gold, oil, forex, stocks & indices — real-world markets on Arbitrum.",
     "live": "Live",
     "offline": "Unavailable",
+    "riskTitle": "Risk Warning: Leveraged Perpetual Derivatives",
     "risk": "These are leveraged perpetual derivatives, not the underlying gold, oil or shares. Leverage can liquidate all your collateral. Most retail leveraged traders lose money.",
     "nonCustodialTitle": "Your wallet signs; FBT never holds your funds",
     "nonCustodialBody": "Ostium's audited contracts lock USDC on Arbitrum. The transaction includes our disclosed builder fee and is signed directly by your wallet.",
@@ -9115,6 +9116,8 @@
   "derivatives": {
     "tradeCta": "Buy / Trade",
     "earnCta": "Earn",
+    "selectMarket": "Select dYdX Market",
+    "changeToken": "Change Token",
     "relayNote": "Trading and earning both happen inside this app — no external link.",
     "title": "Derivatives Hall",
     "subtitle": "Live funding, basis & depth — everything in one board, at a glance.",
