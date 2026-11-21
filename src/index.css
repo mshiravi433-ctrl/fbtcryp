@@ -12466,7 +12466,7 @@ button.farm-protocol-toggle {
 }
 
 /* ==========================================================================
-   P2P MARKET — live offer cards, filters, sticky summary (components/P2PMarket)
+   P2P MARKET — live offer cards, filters, inline summary (components/P2PMarket)
    --------------------------------------------------------------------------
    Deliberately backdrop-filter-free on the list cards: a long list of blurred
    glass is the slowest thing a low-end phone renders. The glass effect is
@@ -12798,16 +12798,8 @@ button.farm-protocol-toggle {
   border-radius: var(--radius); border: 1px dashed var(--line-strong);
 }
 
-/* --------------------------- sticky summary bar -------------------------- */
-
-/*
- * Always the last thing on the page and always in reach of the thumb: the
- * amount the user typed, priced by the best card, plus the single action the
- * funnel exists for.
- */
+/* Quote and action stay in the offer flow; only Quick Access owns the footer. */
 .p2pm-bar {
-  position: sticky; bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-  z-index: 12;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 10px 12px;
   border-radius: var(--radius);

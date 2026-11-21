@@ -469,7 +469,7 @@ export default function P2PMarket({ side: controlledSide, onSideChange }) {
     [offers.list, selectedId]
   );
 
-  /* The offer the sticky bar quotes: best-priced card that accepts the
+  /* The offer the inline summary quotes: best-priced card that accepts the
      amount. With no amount entered, simply the top card. */
   const bestOffer = useMemo(() => {
     if (!offers.list.length) return null;
@@ -805,7 +805,7 @@ export default function P2PMarket({ side: controlledSide, onSideChange }) {
         </div>
       </motion.section>
 
-      {/* --------------------------- sticky summary -------------------------- */}
+      {/* --------------------------- inline summary -------------------------- */}
       <div className="p2pm-bar" role="region" aria-label={t('p2pMarket.summary.label')}>
         <div className="p2pm-bar-figures" dir="ltr">
           {summaryQuote ? (
