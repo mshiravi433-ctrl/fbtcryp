@@ -177,7 +177,8 @@ describe('the desk', () => {
     expect(screen.getByTestId('pair-select-button')).toBeTruthy();
     expect(screen.getByTestId('perp-terminal-chart')).toBeTruthy();
     expect(screen.getByTestId('perp-ticket')).toBeTruthy();
-    expect(screen.getByTestId('perp-terminal-bottom')).toBeTruthy();
+    expect(screen.queryByTestId('perp-terminal-bottom')).toBeNull();
+    expect(screen.getByTestId('perp-terminal-info-open').closest('.ptx-picker')).toBeTruthy();
     await waitFor(() => expect(CHART_PROPS.length).toBeGreaterThan(0));
     /* dYdX lists BTC, so the dYdX market id (its ticker) is what the chart is
        asked to draw — not a base symbol invented by this page. */
@@ -185,19 +186,18 @@ describe('the desk', () => {
     expect(CHART_PROPS[0].market).toBe('BTC-USD');
   });
 
-  it('reveals inline market search without moving keyboard focus', async () => {
+  it('opens full-screen market search without focusing the input', async () => {
     await renderDesk();
     const trigger = screen.getByTestId('pair-select-button');
     trigger.focus();
     fireEvent.click(trigger);
     const input = screen.getByTestId('pair-select-search');
-    expect(input.closest('[data-testid="pair-select"]')).toBeTruthy();
-    expect(document.activeElement).toBe(trigger);
-    expect(document.querySelector('.ps-backdrop')).toBeNull();
+    expect(input.closest('[role="dialog"]')).toBe(screen.getByTestId('pair-select-sheet'));
+    expect(document.activeElement).toBe(screen.getByTestId('pair-select-sheet-close'));
     fireEvent.change(input, { target: { value: 'NONEXISTENT-ASSET' } });
     expect(screen.getByTestId('pair-select-empty')).toBeTruthy();
     fireEvent.keyDown(input, { key: 'Escape' });
-    expect(screen.queryByTestId('pair-select-search')).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId('pair-select-search')).toBeNull());
     expect(document.activeElement).toBe(trigger);
   });
 
@@ -302,6 +302,27 @@ describe('the desk', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('converts dYdX open interest to USD and explains absent funding data', async () => {
+    DYDX_MARKETS = [dydxMarket({ nextFundingAt: null, nextFundingRate: null })];
+    await renderDesk();
+    await waitFor(() => expect(CHART_PROPS.some((props) => props.market === 'BTC-USD')).toBe(true));
+    fireEvent.click(screen.getByTestId('perp-terminal-info-open'));
+    fireEvent.click(screen.getByTestId('perp-terminal-tab-funding'));
+    const funding = screen.getByTestId('perp-terminal-funding');
+    expect(funding.textContent).toContain('$50.00M');
+    expect(funding.textContent).toContain('did not report this field');
+  });
+
+  it('does not use dYdX depth, prints or range for a different venue', async () => {
+    await renderDesk('/perp/terminal?market=ETH');
+    await waitFor(() => expect(CHART_PROPS.some((props) => props.market === '1')).toBe(true));
+    fireEvent.click(screen.getByTestId('perp-terminal-info-open'));
+    expect(screen.getByTestId('perp-book-unavailable')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('perp-terminal-tab-tape'));
+    expect(screen.queryByTestId('perp-terminal-tape')).toBeNull();
+    expect(screen.getByTestId('perp-top-high').textContent).toBe('—');
+  });
+
   it('shows BOTH risk vocabularies for a real account, with one as the translation', async () => {
     /* 2000 notional on 1000 equity, 720 held as maintenance = 72% margin ratio:
        the engine calls this MEDIUM, the Intent OS scale has no MEDIUM, and the
@@ -390,7 +411,7 @@ describe('the desk', () => {
     /* desktop: fixed full-height grid with explicit rows */
     expect(css).toMatch(/@media \(min-width: 1200px\)/);
     expect(css).toMatch(/height:\s*calc\(100dvh/);
-    expect(css).toMatch(/grid-template-rows:\s*auto auto minmax\(0, 1fr\) 252px auto/);
+    expect(css).toMatch(/grid-template-rows:\s*auto minmax\(0, 1fr\) auto/);
     /* the desk itself: chart + 340px ticket */
     expect(css).toMatch(/\.ptx-main\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 340px/s);
     /* NOTHING inside the desk is sticky any more — especially not the ticket */

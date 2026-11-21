@@ -78,21 +78,19 @@
     height: calc(100dvh - var(--topbar-h, 64px) - 8px);
     min-height: 700px;
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr) 252px auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     overflow: hidden;
   }
   .ptx--embedded {
     height: calc(100dvh - var(--topbar-h, 64px) - 124px);
     min-height: 680px;
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr) 252px auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     overflow: hidden;
   }
   .ptx-main { min-height: 0; }
-  .ptx-chart, .ptx-ticket, .ptx-bottom { min-height: 0; overflow: hidden; }
+  .ptx-chart, .ptx-ticket { min-height: 0; overflow: hidden; }
   .ptx-ticket { overflow-y: auto; scrollbar-width: thin; }
-  .ptx-bottom { display: flex; flex-direction: column; }
-  .ptx-bottom .pt-tabpanel { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
 }
 
 /* ── Tabular-numeral rule ───────────────────────────────────────────────── */

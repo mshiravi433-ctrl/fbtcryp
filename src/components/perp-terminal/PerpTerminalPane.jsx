@@ -50,7 +50,7 @@ import PairSelect from './PairSelect';
 import WalletConnectSheet from '../WalletConnectSheet';
 import { topBar } from './desk.js';
 import { pollWhileVisible } from '../../lib/visibilityPoll';
-import { fmtPct, fmtPrice, fmtUsd } from '../../lib/format';
+import { fmtCompact, fmtPct, fmtPrice } from '../../lib/format';
 import { useWallet } from '../../context/WalletContext';
 import { useSolanaWallet } from '../../hooks/useSolanaWallet';
 import { useTelegram } from '../../context/TelegramContext';
@@ -68,20 +68,22 @@ const BOOK_POLL_MS = 5_000;
 const TAPE_POLL_MS = 4_000;
 const ACCOUNT_POLL_MS = 15_000;
 
-/** Third-column tabs: the panels under the chart. */
+/** Tabs in the full-screen market details. */
 const TABS = ['book', 'funding', 'tape', 'risk'];
+
+const reportedNumber = (value) => value != null && value !== '' && Number.isFinite(Number(value)) ? Number(value) : null;
 
 const errCode = (err) => String(err?.code || err?.message || 'UNKNOWN');
 
 export default function PerpTerminalPane({ embedded = false, images = null, testId = 'perp-terminal' }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const wallet = useWallet();
   const solana = useSolanaWallet();
   const { haptic } = useTelegram();
 
-  const [venues, setVenues] = useState({ velocity: [], ostium: [], dydx: [], dydxLoaded: false, stale: false });
+  const [venues, setVenues] = useState({ velocity: [], ostium: [], dydx: [], stale: false });
   /* Same rule as before: never route on a static fallback before the first
      real read has landed — a flash of the wrong market is worse than a
      skeleton. */
@@ -94,7 +96,6 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
   const infoId = useId();
   const infoTitle = t('perpTerminal.detailsTitle');
   const [book, setBook] = useState(null);
-  const [bookState, setBookState] = useState({ loading: false, reason: null });
   const [tape, setTape] = useState({ trades: [], live: false, reason: null, loading: false });
   const [range, setRange] = useState(null);
   const [account, setAccount] = useState({ positions: [], equityUsd: null, maintenanceMarginUsd: null, availableBalanceUsd: null, loading: false, reason: null });
@@ -114,13 +115,6 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
     next.set('market', base);
     setParams(next, { replace: true });
   }, [params, setParams]);
-
-  const dydxMarket = useMemo(
-    () => venues.dydx.find((m) => String(m.ticker || '').toUpperCase().startsWith(`${selectedBase}-`)) || null,
-    [venues.dydx, selectedBase]
-  );
-  const ticker = dydxMarket?.ticker || `${selectedBase}-USD`;
-  const isDydx = Boolean(dydxMarket) || venues.dydxLoaded;
 
   /* ── wallets ───────────────────────────────────────────────────────── */
   const wallets = useMemo(() => ({
@@ -145,6 +139,11 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
   }, [routeIndex, selectedBase, solReady, evmReady]);
 
   const venueId = route.meta?.providerId || null;
+  const isDydx = route.route === ROUTE.DYDX;
+  const ticker = isDydx ? route.entry[ROUTE.DYDX].marketId : null;
+  const currentBook = ticker && book?.ticker === ticker ? book.data : null;
+  const currentRange = ticker && range?.ticker === ticker ? range.data : null;
+  const currentTape = ticker && tape.ticker === ticker ? tape : { trades: [], loading: true, live: false };
 
   /* ── market list (visibility-gated; the raw material of the desk) ───── */
   useEffect(() => {
@@ -168,7 +167,6 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
         velocity: bff(v) ?? cur.velocity,
         ostium: bff(o) ?? cur.ostium,
         dydx: dydxRows ?? cur.dydx,
-        dydxLoaded: cur.dydxLoaded || Boolean(dydxRows),
         stale: (cur.velocity.length || cur.ostium.length || cur.dydx.length)
           ? !gotAny : false
       }));
@@ -183,15 +181,8 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
     if (!isDydx) return undefined;
     let stopped = false;
     const load = async () => {
-      setBookState((s) => ({ ...s, loading: true }));
-      const r = await getDydxOrderbook(ticker);
-      if (stopped) return;
-      if (r?.live) {
-        setBook(r);
-        setBookState({ loading: false, reason: null });
-      } else {
-        setBookState({ loading: false, reason: 'BOOK_UNAVAILABLE' });
-      }
+      const r = await getDydxOrderbook(ticker).catch(() => null);
+      if (!stopped) setBook(r?.live ? { ticker, data: r } : null);
     };
     const off = pollWhileVisible(load, BOOK_POLL_MS);
     load();
@@ -202,12 +193,12 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
   useEffect(() => {
     if (!isDydx || tab !== 'tape') return undefined;
     let stopped = false;
-    setTape({ trades: [], live: false, reason: null, loading: true });
+    setTape({ ticker, trades: [], live: false, reason: null, loading: true });
     const load = async () => {
       setTape((s) => ({ ...s, loading: true }));
-      const r = await getDydxTrades(ticker, 40);
+      const r = await getDydxTrades(ticker, 40).catch(() => null);
       if (stopped) return;
-      setTape({ trades: r?.trades || [], live: Boolean(r?.live), reason: r?.reason || null, loading: false });
+      setTape({ ticker, trades: r?.trades || [], live: Boolean(r?.live), reason: r?.reason || null, loading: false });
     };
     const off = pollWhileVisible(load, TAPE_POLL_MS);
     load();
@@ -219,9 +210,9 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
     if (!isDydx) { setRange(null); return undefined; }
     let stopped = false;
     const load = async () => {
-      const r = await getDydx24hRange(ticker);
+      const r = await getDydx24hRange(ticker).catch(() => null);
       if (stopped) return;
-      setRange(r?.live ? r : null);
+      setRange(r?.live ? { ticker, data: r } : null);
     };
     const off = pollWhileVisible(load, 60_000);
     load();
@@ -235,7 +226,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
   const evmAddress = evmReady ? wallet.address : null;
   const solAddress = solReady ? solana.address : null;
   useEffect(() => {
-    if (!route.route) { setAccount((s) => ({ ...s, loading: false, reason: 'NO_ROUTE', positions: [] })); return undefined; }
+    if (!route.route) { setAccount({ equityUsd: null, maintenanceMarginUsd: null, availableBalanceUsd: null, loading: false, reason: 'NO_ROUTE', positions: [] }); return undefined; }
     let stopped = false;
     const base = { positions: [], equityUsd: null, maintenanceMarginUsd: null, availableBalanceUsd: null };
 
@@ -243,7 +234,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
       if (!dydxAddress) { setAccount({ ...base, loading: false, reason: 'NO_WALLET' }); return undefined; }
       const load = async () => {
         setAccount((s) => ({ ...s, loading: true }));
-        const r = await getDydxSubaccount(dydxAddress);
+        const r = await getDydxSubaccount(dydxAddress).catch(() => null);
         if (stopped) return;
         const sub = r?.account?.subaccount || null;
         const rawPositions = sub?.openPerpetualPositions;
@@ -254,23 +245,23 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
           .filter(Boolean)
           .map((p) => ({
             symbol: p.market,
-            side: Number(p.size) < 0 ? 'short' : 'long',
+            side: p.side === 'SHORT' || Number(p.size) < 0 ? 'short' : 'long',
             notionalUsd: Math.abs(Number(p.size)) * Number(p.entryPrice || 0) || null,
             entryPrice: Number(p.entryPrice),
-            unrealizedPnlUsd: Number(p.unrealizedPnl),
+            unrealizedPnlUsd: reportedNumber(p.unrealizedPnl),
             leverage: (() => {
               const n = Math.abs(Number(p.size)) * Number(p.entryPrice || 0);
-              return Number.isFinite(n) && n > 0 ? n / Math.max(1e-9, Number(sub?.equity) || 0) : null;
+              return Number.isFinite(n) && n > 0 && Number(sub?.equity) > 0 ? n / Number(sub.equity) : null;
             })()
           }))
           .filter((p) => Number.isFinite(p.notionalUsd) && p.notionalUsd > 0);
         setAccount({
           positions,
-          equityUsd: Number(sub?.equity) >= 0 ? Number(sub.equity) : null,
-          maintenanceMarginUsd: Number(sub?.maintenanceMargin) >= 0 ? Number(sub.maintenanceMargin) : null,
-          availableBalanceUsd: Number(sub?.freeCollateral) >= 0 ? Number(sub.freeCollateral) : null,
+          equityUsd: reportedNumber(sub?.equity),
+          maintenanceMarginUsd: reportedNumber(sub?.maintenanceMargin),
+          availableBalanceUsd: reportedNumber(sub?.freeCollateral),
           loading: false,
-          reason: r?.live === false ? 'ACCOUNT_UNREADABLE' : null
+          reason: !r?.live ? 'ACCOUNT_UNREADABLE' : null
         });
       };
       const off = pollWhileVisible(load, ACCOUNT_POLL_MS);
@@ -296,24 +287,20 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
             notionalUsd: Number(p.notionalUsd) > 0 ? Number(p.notionalUsd) : null,
             entryPrice: Number(p.entryPrice) > 0 ? Number(p.entryPrice) : null,
             markPrice: Number(p.markPrice) > 0 ? Number(p.markPrice) : null,
-            unrealizedPnlUsd: Number.isFinite(Number(p.grossPnlUsd)) ? Number(p.grossPnlUsd) : null,
+            unrealizedPnlUsd: reportedNumber(p.grossPnlUsd),
             leverage: Number(p.leverage) > 0 ? Number(p.leverage) : null
           }))
           .filter((p) => p.notionalUsd != null);
         const acctData = acctRes.status === 'fulfilled' && acctRes.value?.ok ? acctRes.value.data : null;
-        const balance = acctData && Number(acctData.balanceUsd) >= 0 ? Number(acctData.balanceUsd) : null;
-        /* Equity ≈ posted collateral + unrealized PnL — the venue settles both
-           in USDC, so the sum is meaningful; when either side is unknown, the
-           equity cell renders «—» rather than a guess. */
-        const pnlSum = positions.reduce((n, p) => n + (Number.isFinite(p.unrealizedPnlUsd) ? p.unrealizedPnlUsd : 0), 0);
-        const equityUsd = balance != null ? balance + pnlSum : null;
+        // This endpoint reads spendable wallet USDC, not posted account equity.
+        const balance = reportedNumber(acctData?.balanceUsd);
         setAccount({
           positions,
-          equityUsd,
+          equityUsd: null,
           maintenanceMarginUsd: null,
           availableBalanceUsd: balance,
           loading: false,
-          reason: posOk || acctData ? null : 'ACCOUNT_UNREADABLE'
+          reason: posOk ? null : 'ACCOUNT_UNREADABLE'
         });
       };
       const off = pollWhileVisible(load, ACCOUNT_POLL_MS);
@@ -391,16 +378,18 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
       oraclePrice: fromRoute.oraclePrice,
       priceChange24H: fromRoute.priceChange24H ?? fromRoute.priceChange24hPct,
       volume24H: fromRoute.volume24H ?? fromRoute.volume24hUsd,
-      openInterest: fromRoute.openInterest ?? fromRoute.openInterestUsd,
+      openInterest: fromRoute.openInterestUsd ?? (isDydx
+        ? fromRoute.openInterest != null && fromRoute.oraclePrice > 0 ? fromRoute.openInterest * fromRoute.oraclePrice : null
+        : fromRoute.openInterest),
       fundingAprPct: fromRoute.fundingAprPct,
       nextFundingRate: fromRoute.nextFundingRate,
-      nextFundingAtMs: fromRoute.nextFundingAtMs ?? null,
+      nextFundingAtMs: fromRoute.nextFundingAtMs ?? (fromRoute.nextFundingAt ? Date.parse(fromRoute.nextFundingAt) : null),
       maxLeverage: route.route && route.entry ? leverageCeiling(route.entry[route.route]) : null,
-      spreadBps: book?.spreadBps ?? null,
-      high24h: range?.high24h ?? fromRoute.high24h ?? null,
-      low24h: range?.low24h ?? fromRoute.low24h ?? null
+      spreadBps: currentBook?.spreadBps ?? fromRoute.spreadBps ?? null,
+      high24h: currentRange?.high24h ?? fromRoute.high24h ?? null,
+      low24h: currentRange?.low24h ?? fromRoute.low24h ?? null
     };
-  }, [route.route, route.entry, book, range]);
+  }, [route.route, route.entry, currentBook, currentRange, isDydx]);
 
   const bar = useMemo(() => topBar(quote || {}), [quote]);
 
@@ -611,7 +600,12 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
             images={images}
             loading={!venuesReady}
           />
-          {route.meta && <span className="ptx-tag" data-testid="perp-terminal-venue">{route.meta.id}</span>}
+          <button type="button" className="ptx-info-icon" aria-haspopup="dialog" aria-label={infoTitle}
+            title={infoTitle} onClick={() => setTab('book')} data-testid="perp-terminal-info-open">
+            <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+              <circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8v.1"/>
+            </svg>
+          </button>
           {venues.stale && <span className="ptx-tag ptx-tag-warn" data-testid="perp-terminal-stale">{t('perpTerminal.stale', { defaultValue: 'stale read' })}</span>}
         </div>
 
@@ -730,18 +724,8 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
         </aside>
       </div>
 
-      <section className="ptx-bottom" data-testid="perp-terminal-bottom">
-        <button type="button" className="futures-info-trigger" aria-haspopup="dialog"
-          onClick={() => setTab('book')} data-testid="perp-terminal-info-open">
-          <span className="futures-info-mark" aria-hidden="true">{TAB_ICON.book}</span>
-          <span className="futures-info-copy"><strong>{infoTitle}</strong>
-            <small>{TABS.map((key) => t(`perpTerminal.tabs.${key}`)).join(' · ')}</small>
-          </span>
-          <span aria-hidden="true">↗</span>
-        </button>
-      </section>
       <FullScreenSheet manageFocus open={Boolean(tab)} onClose={() => setTab(null)} className="futures-full-sheet"
-        title={infoTitle} subtitle={selectedBase} icon={TAB_ICON.book}
+        title={infoTitle} subtitle={[selectedBase, route.meta?.id].filter(Boolean).join(" · ")} icon={TAB_ICON.book}
         closeLabel={t('common.close')} testId="perp-terminal-info-sheet">
         <div className="ptx ptx--info futures-info-layout">
           <div className="futures-info-tabs" role="tablist" aria-label={infoTitle} aria-orientation="vertical"
@@ -767,7 +751,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
           {tab === 'risk' && account.loading && <span className="pt-muted pt-small">{t('common.loading')}</span>}
           {tab === 'book' && (
             isDydx
-              ? <DepthChart book={book} testId="perp-terminal-depth" />
+              ? <DepthChart book={currentBook} testId="perp-terminal-depth" />
               : (
                 <div className="pt-empty-box">
                   <span className="pt-empty-ico" aria-hidden="true">
@@ -776,7 +760,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
                     </svg>
                   </span>
                   <p className="pt-empty" data-testid="perp-book-unavailable">
-                    {route.route === ROUTE.OSTIUM
+                    {!route.route ? t('perpTerminal.chart.noVenue') : route.route === ROUTE.OSTIUM
                       ? t('perpTerminal.book.ostium', { defaultValue: 'Ostium is a peer-to-pool venue: it publishes no order book. Slippage is priced from the oracle instead.' })
                       : t('perpTerminal.book.velocity', { defaultValue: 'The Velocity book is not exposed to this screen yet. The price above is the venue’s own mid.' })}
                   </p>
@@ -785,7 +769,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
           )}
           {tab === 'tape' && (
             isDydx
-              ? <Tape trades={tape.trades} live={tape.live} loading={tape.loading} reason={tape.reason} testId="perp-terminal-tape" />
+              ? <Tape trades={currentTape.trades} live={currentTape.live} loading={currentTape.loading} reason={currentTape.reason} testId="perp-terminal-tape" />
               : (
                 <div className="pt-empty-box">
                   <span className="pt-empty-ico" aria-hidden="true">
@@ -805,7 +789,8 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
               equityUsd={account.equityUsd}
               maintenanceMarginUsd={account.maintenanceMarginUsd}
               availableBalanceUsd={account.availableBalanceUsd}
-              fundingAprPct={bar.fundingAprPct}
+              fundingAprPct={account.positions.length && account.positions.every((position) =>
+                String(position.symbol).split(/[-/]/)[0].toUpperCase() === selectedBase) ? bar.fundingAprPct : null}
               loading={account.loading}
               reason={account.reason}
               testId="perp-terminal-risk"
@@ -826,16 +811,19 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
                 </div>
                 <div className="pt-funding-card">
                   <span className="pt-funding-label">{t('perpTerminal.funding.oi', { defaultValue: 'Open interest' })}</span>
-                  <strong className="pt-funding-val">{bar.openInterestUsd != null ? fmtUsd(bar.openInterestUsd) : '—'}</strong>
+                  <strong className="pt-funding-val">{bar.openInterestUsd != null ? fmtCompact(bar.openInterestUsd) : '—'}</strong>
                 </div>
                 <div className="pt-funding-card">
                   <span className="pt-funding-label">{t('perpTerminal.funding.volume', { defaultValue: '24h volume' })}</span>
-                  <strong className="pt-funding-val">{bar.volume24hUsd != null ? fmtUsd(bar.volume24hUsd) : '—'}</strong>
+                  <strong className="pt-funding-val">{bar.volume24hUsd != null ? fmtCompact(bar.volume24hUsd) : '—'}</strong>
                 </div>
               </div>
+              {[bar.fundingAprPct, bar.fundingInHours, bar.openInterestUsd, bar.volume24hUsd].some((value) => value == null) && (
+                <p className="pt-note">{t('perpTerminal.funding.missing')}</p>
+              )}
               {bar.nextFundingAtMs != null && (
                 <p className="pt-funding-banner">
-                  {t('perpTerminal.funding.settlesAt', { defaultValue: 'Settles at {{at}} — the next hourly funding on this venue.', at: new Date(bar.nextFundingAtMs).toLocaleString() })}
+                  {t('perpTerminal.funding.settlesAt', { defaultValue: 'Next reported settlement: {{at}}', at: new Date(bar.nextFundingAtMs).toLocaleString(i18n.language) })}
                 </p>
               )}
             </div>

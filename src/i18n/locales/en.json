@@ -19162,7 +19162,8 @@
       "next": "Next settlement in",
       "oi": "Open interest",
       "volume": "24h volume",
-      "settlesAt": "Settles at {{at}} — the next hourly funding on this venue."
+      "settlesAt": "Next reported settlement: {{at}}",
+      "missing": "A dash means the selected venue did not report this field for the market."
     },
     "venue": {
       "status": {

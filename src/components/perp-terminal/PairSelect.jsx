@@ -1,5 +1,6 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import FullScreenSheet from '../FullScreenSheet';
 import TokenIcon from '../../lib/tokenIcon';
 import { fmtCompact, fmtPct, fmtPrice } from '../../lib/format';
 
@@ -11,21 +12,11 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [venue, setVenue] = useState('all');
-  const rootRef = useRef(null);
+  const close = useCallback(() => setOpen(false), []);
   const panelId = useId();
   const searchRef = useRef(null);
-  const buttonRef = useRef(null);
 
   const rows = useMemo(() => (Array.isArray(options) ? options : []), [options]);
-
-  useEffect(() => {
-    if (!open) return;
-    const outside = (event) => {
-      if (!rootRef.current?.contains(event.target)) setOpen(false);
-    };
-    document.addEventListener('pointerdown', outside);
-    return () => document.removeEventListener('pointerdown', outside);
-  }, [open]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toUpperCase();
@@ -37,18 +28,16 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
     });
   }, [rows, query, venue, images]);
 
-  const current = rows.find((m) => m.base === selected) || null;
   const currentImage = images?.[selected]?.image || null;
 
   const pick = (base) => {
     onSelect?.(base);
     setOpen(false);
     setQuery('');
-    buttonRef.current?.focus();
   };
 
-  const searchPanel = open && (
-        <div className="ps-inline" id={panelId} data-testid="pair-select-panel">
+  const searchPanel = (
+        <div className="ptx ps-sheet-panel" id={panelId} data-testid="pair-select-panel">
           <div className="ps-search">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" aria-hidden="true">
               <circle cx="11" cy="11" r="7" />
@@ -146,19 +135,12 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
   );
 
   return (
-    <div className="ps-root" ref={rootRef} data-testid={testId} onKeyDown={(event) => {
-      if (open && event.key === 'Escape') {
-        event.stopPropagation();
-        setOpen(false);
-        buttonRef.current?.focus();
-      }
-    }}>
+    <div className="ps-root" data-testid={testId}>
       <button
         type="button"
-        ref={buttonRef}
         className={`ps-trigger ${open ? 'is-open' : ''}`}
         onClick={() => setOpen((v) => !v)}
-        aria-controls={open ? panelId : undefined}
+        aria-haspopup="dialog"
         aria-expanded={open}
         data-testid="pair-select-button"
       >
@@ -169,11 +151,6 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
           <span className="ps-trigger-sym pt-mono" dir="ltr">
             {selected || '—'}<span className="ps-trigger-quote">-PERP</span>
           </span>
-          <span className="ps-trigger-sub">
-            {current?.venues?.length
-              ? current.venues.map((v) => t(`perpTerminal.venue.${v}`, { defaultValue: v })).join(' · ')
-              : t('perpTerminal.pairSelectVenue', { defaultValue: 'venue-settled markets' })}
-          </span>
         </span>
         <span className="ps-trigger-chev-box" aria-hidden="true">
           <svg className="ps-trigger-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -181,7 +158,10 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
           </svg>
         </span>
       </button>
-      {searchPanel}
+      <FullScreenSheet manageFocus open={open} onClose={close} className="futures-full-sheet ps-market-sheet"
+        title={t('perpTerminal.pairSelectLabel')} closeLabel={t('common.close')} testId={`${testId}-sheet`}>
+        {searchPanel}
+      </FullScreenSheet>
     </div>
   );
 }
