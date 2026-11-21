@@ -378,7 +378,14 @@
    Icon + symbol on the leading edge, basis pill opposite it, and a strip of
    four labelled cells underneath. A row has to answer the question it is asked
    — how wide is this market, and how deep — without a header to consult. */
-.glass-table { display: flex; flex-direction: column; gap: 7px; }
+.glass-table {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
 
 .glass-thead {
   display: flex;
@@ -404,24 +411,26 @@
 .glass-row {
   position: relative;
   display: grid;
-  grid-template-columns: 3px 34px minmax(0, 1fr) auto;
+  grid-template-columns: 4px 36px minmax(0, 1fr) auto;
   grid-template-areas:
     'rail icon sym   basis'
     'rail icon meta  meta';
-  column-gap: 10px;
-  row-gap: 9px;
+  column-gap: 12px;
+  row-gap: 10px;
   align-items: center;
   width: 100%;
+  max-width: 100%;
   box-sizing: border-box;
-  padding: 11px 13px 12px;
-  border-radius: 15px;
-  border: 1px solid rgba(255,255,255,0.07);
+  padding: 12px 14px 13px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
   background: linear-gradient(145deg, rgba(255,255,255,0.055), rgba(255,255,255,0.022));
   font-family: inherit;
   color: inherit;
   text-align: start;
   cursor: pointer;
   transition: border-color 0.22s ease, transform 0.18s ease, background 0.22s ease, box-shadow 0.22s ease;
+  overflow-x: hidden;
 }
 .glass-row:hover {
   border-color: color-mix(in srgb, var(--rgb-1) 28%, rgba(255,255,255,0.09));
@@ -491,14 +500,18 @@
   grid-area: meta;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 7px;
+  gap: 8px;
   align-items: start;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 .deriv-cell {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  overflow: hidden;
 }
 .deriv-cell > i {
   font-style: normal;
@@ -514,13 +527,14 @@
 }
 .deriv-cell > b {
   font-family: var(--font-mono);
-  font-size: 11.6px;
+  font-size: 11.8px;
   font-weight: 800;
   letter-spacing: -0.2px;
   color: var(--text-1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
 }
 .deriv-cell > b.is-muted { color: var(--text-2); font-weight: 700; }
 
@@ -1662,23 +1676,57 @@
   color: #0f172a;
 }
 
-/* Modal Popup Sheet styling for Market List */
+/* Full-Screen Popup Sheet styling for Market Picker */
+.fsh-panel.deriv-fullscreen-picker {
+  background:
+    radial-gradient(120% 60% at 100% 0%, color-mix(in srgb, var(--rgb-2) 14%, transparent), transparent 60%),
+    radial-gradient(120% 55% at 0% 0%, color-mix(in srgb, var(--rgb-1) 14%, transparent), transparent 62%),
+    var(--bg-panel-solid, #06070c);
+}
+
+.deriv-fullscreen-picker .fsh-body {
+  padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
+  overflow-x: hidden;
+}
+
 .deriv-picker-sheet {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 4px 0 16px;
-  max-height: 70vh;
+  gap: 14px;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .deriv-picker-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 52vh;
-  overflow-y: auto;
-  padding-right: 4px;
-  -webkit-overflow-scrolling: touch;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  overflow-x: hidden;
+  max-height: none;
 }
+
+@media (max-width: 520px) {
+  .glass-row {
+    padding: 11px 12px 12px;
+    column-gap: 10px;
+    row-gap: 10px;
+  }
+  .deriv-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  .glass-thead {
+    display: none;
+  }
+}
+
 
 

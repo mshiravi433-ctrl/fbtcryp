@@ -23,6 +23,26 @@ vi.mock('../src/lib/dydx', () => ({
   })
 }));
 
+vi.mock('../src/lib/perp', () => ({
+  getPerpMarkets: async () => ({
+    assets: [
+      {
+        symbol: 'BTC',
+        venues: [
+          { venue: 'Hyperliquid', fundingApr: 11.2, openInterestUsd: 120000000, custody: 'nonCustodial', intervalHours: 1 },
+          { venue: 'dYdX v4', fundingApr: 14.5, openInterestUsd: 85000000, custody: 'nonCustodial', intervalHours: 1 },
+          { venue: 'GMX v2', fundingApr: 9.8, openInterestUsd: 45000000, custody: 'nonCustodial', intervalHours: 1 }
+        ]
+      }
+    ]
+  }),
+  bestVenue: (asset, side = 'long') => {
+    const venues = asset?.venues ?? [];
+    return venues[0] || null;
+  },
+  fundingCost: () => ({ notional: 2500, cost: 23, pctOfCollateral: 4.6 })
+}));
+
 vi.mock('../src/hooks/useMarket', () => ({
   useMarkets: () => ({ data: [] })
 }));
@@ -79,17 +99,43 @@ describe('DerivativesDashboard action buttons and popup token picker', () => {
     const changeBtn = screen.getAllByRole('button', { name: /تغییر توکن/i })[0];
     fireEvent.click(changeBtn);
 
-    // Sheet title should appear
+    // FullScreenSheet title and panel should appear
     expect(await screen.findByText('انتخاب بازار dYdX')).toBeTruthy();
+    const popupPanel = document.querySelector('.deriv-fullscreen-picker');
+    expect(popupPanel).toBeTruthy();
+    expect(popupPanel.classList.contains('fsh-panel')).toBe(true);
 
     // Selecting SOL-USD from the popup sheet
     const solRow = screen.getByRole('button', { name: /SOL.*USD/i });
     expect(solRow).toBeTruthy();
+    expect(solRow.classList.contains('glass-row')).toBe(true);
     fireEvent.click(solRow);
 
     // Selected market is now SOL-USD
     await waitFor(() => {
       expect(screen.getAllByText('SOL-USD').length).toBeGreaterThan(0);
     });
+  });
+
+  it('renders stretched exchanges table in FundingPanel with full venue details and unclipped numbers', async () => {
+    render(
+      <MemoryRouter>
+        <DerivativesDashboard embedded />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/هزینهٔ نگه‌داشتن پوزیشن/i)).toBeTruthy();
+    });
+
+    const tableWrap = document.querySelector('.fnd-table-wrap');
+    expect(tableWrap).toBeTruthy();
+    const table = document.querySelector('.fnd-table');
+    expect(table).toBeTruthy();
+
+    // Verify column headers exist
+    expect(screen.getByText('صرافی')).toBeTruthy();
+    expect(document.querySelectorAll('.fnd-apr').length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('.fnd-oi').length).toBeGreaterThan(0);
   });
 });
