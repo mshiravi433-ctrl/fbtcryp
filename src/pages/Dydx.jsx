@@ -382,7 +382,7 @@ export default function Dydx({ embedded = false } = {}) {
 
   return (
     <PageTransition embedded={embedded}>
-      <div className="derivatives-hall futures-venue">
+      <div className="derivatives-hall futures-venue futures-venue--dydx">
         <div className="derivatives-aurora" aria-hidden="true" />
         <motion.section className="derivatives-hero" variants={riseIn} initial="hidden" animate="show">
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>

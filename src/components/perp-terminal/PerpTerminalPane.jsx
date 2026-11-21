@@ -37,7 +37,7 @@
  */
 import FullScreenSheet from '../FullScreenSheet';
 import '../../styles/futures-surface.css';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -69,7 +69,7 @@ const TAPE_POLL_MS = 4_000;
 const ACCOUNT_POLL_MS = 15_000;
 
 /** Third-column tabs: the panels under the chart. */
-const TABS = ['book', 'tape', 'risk', 'funding'];
+const TABS = ['book', 'funding', 'tape', 'risk'];
 
 const errCode = (err) => String(err?.code || err?.message || 'UNKNOWN');
 
@@ -91,6 +91,8 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
   const [serverNonce, setServerNonce] = useState(0);
   const [side, setSide] = useState('long');
   const [tab, setTab] = useState(null);
+  const infoId = useId();
+  const infoTitle = t('perpTerminal.detailsTitle');
   const [book, setBook] = useState(null);
   const [bookState, setBookState] = useState({ loading: false, reason: null });
   const [tape, setTape] = useState({ trades: [], live: false, reason: null, loading: false });
@@ -728,28 +730,40 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
         </aside>
       </div>
 
-      {/* ── bottom stack: book / tape / risk / funding ──────────────────── */}
-      <section className="ptx-bottom panel" data-testid="perp-terminal-bottom">
-        <div className="pt-tabs futures-panel-links" role="group">
-          {TABS.map((k) => (
-            <button
-              key={k}
-              type="button"
-              aria-haspopup="dialog"
-              className={`pt-tab ${tab === k ? 'is-on' : ''}`}
-              onClick={() => setTab(k)}
-              data-testid={`perp-terminal-tab-${k}`}
-            >
-              <span className="pt-tab-ico">{TAB_ICON[k]}</span>
-              <span>{t(`perpTerminal.tabs.${k}`, { defaultValue: k })}</span>
-            </button>
-          ))}
-        </div>
+      <section className="ptx-bottom" data-testid="perp-terminal-bottom">
+        <button type="button" className="futures-info-trigger" aria-haspopup="dialog"
+          onClick={() => setTab('book')} data-testid="perp-terminal-info-open">
+          <span className="futures-info-mark" aria-hidden="true">{TAB_ICON.book}</span>
+          <span className="futures-info-copy"><strong>{infoTitle}</strong>
+            <small>{TABS.map((key) => t(`perpTerminal.tabs.${key}`)).join(' · ')}</small>
+          </span>
+          <span aria-hidden="true">↗</span>
+        </button>
       </section>
       <FullScreenSheet manageFocus open={Boolean(tab)} onClose={() => setTab(null)} className="futures-full-sheet"
-        title={tab ? t(`perpTerminal.tabs.${tab}`) : ''} subtitle={selectedBase}
-        icon={TAB_ICON[tab]} closeLabel={t('common.close')} testId="perp-terminal-info-sheet">
-        <div className="ptx ptx--info">
+        title={infoTitle} subtitle={selectedBase} icon={TAB_ICON.book}
+        closeLabel={t('common.close')} testId="perp-terminal-info-sheet">
+        <div className="ptx ptx--info futures-info-layout">
+          <div className="futures-info-tabs" role="tablist" aria-label={infoTitle} aria-orientation="vertical"
+            onKeyDown={(event) => {
+              const index = TABS.indexOf(tab);
+              const next = { ArrowDown: (index + 1) % TABS.length, ArrowUp: (index + TABS.length - 1) % TABS.length, Home: 0, End: TABS.length - 1 }[event.key];
+              if (next === undefined) return;
+              event.preventDefault();
+              setTab(TABS[next]);
+              event.currentTarget.querySelectorAll('[role="tab"]')[next]?.focus();
+            }}>
+            {TABS.map((key) => (
+              <button key={key} type="button" role="tab" id={`${infoId}-${key}`}
+                aria-selected={tab === key} aria-controls={`${infoId}-panel`} tabIndex={tab === key ? 0 : -1}
+                onClick={() => setTab(key)} data-testid={`perp-terminal-tab-${key}`}>
+                <span className="pt-tab-ico" aria-hidden="true">{TAB_ICON[key]}</span>
+                {t(`perpTerminal.tabs.${key}`)}
+              </button>
+            ))}
+          </div>
+          <div className="futures-info-content" role="tabpanel" id={`${infoId}-panel`}
+            aria-labelledby={`${infoId}-${tab}`} tabIndex={0}>
           {tab === 'risk' && account.loading && <span className="pt-muted pt-small">{t('common.loading')}</span>}
           {tab === 'book' && (
             isDydx
@@ -826,6 +840,7 @@ export default function PerpTerminalPane({ embedded = false, images = null, test
               )}
             </div>
           )}
+          </div>
         </div>
       </FullScreenSheet>
 

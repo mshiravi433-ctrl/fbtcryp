@@ -95,3 +95,19 @@
 .quick-access.quick-access--centered .quick-access__rail { position:absolute; bottom:62px; left:50%; transform:translate(-50%,8px); width:min(340px,calc(100vw - 28px)); max-height:60dvh; border-radius:22px; border-inline-end-width:1px; padding:12px; }
 .quick-access.quick-access--centered.is-open .quick-access__rail { transform:translate(-50%,0); }
 .quick-access--centered .quick-access__rail nav { grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+
+/* A compact launch panel for the centered Futures shortcut. */
+.quick-access.quick-access--centered .quick-access__rail {
+  width:min(380px,calc(100vw - 24px)); border-radius:22px; padding:14px;
+  background:linear-gradient(155deg,#17263d,#0c1423 70%);
+  box-shadow:0 20px 48px -15px #020610bb, inset 0 1px #ffffff12;
+}
+.quick-access--centered .quick-access__rail-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; text-align:start; }
+.quick-access--centered .quick-access__caption { color:inherit; font-size:14px; font-weight:800; margin:0; }
+.quick-access__close { display:grid; place-items:center; flex:none; width:44px; height:44px; border:1px solid #91b3dd40; border-radius:13px; color:inherit; background:transparent; cursor:pointer; }
+.quick-access--centered .quick-access__item { min-height:74px; align-content:center; gap:6px; padding:8px 4px; border:1px solid #91b3dd29; background:#a7ccff0b; font-size:11px; }
+.quick-access--centered .quick-access__item[href$='/swap'] { border-color:#6dd8e66b; background:#50c7dd20; font-weight:800; }
+:root[data-theme='light'] .quick-access.quick-access--centered .quick-access__rail { background:#f8fbff; box-shadow:0 18px 44px -18px #15325950; }
+:root[data-theme='light'] .quick-access--centered .quick-access__item { background:#eaf2fc; border-color:#345e8d2e; }
+:root[data-theme='light'] .quick-access--centered .quick-access__item[href$='/swap'] { background:#d9f1f6; border-color:#13859e55; }
+@media (prefers-reduced-motion:reduce) { .quick-access--centered :is(.quick-access__rail,.quick-access__toggle,.quick-access__toggle svg) { transition:none; } }

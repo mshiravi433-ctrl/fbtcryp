@@ -11,8 +11,8 @@ function LocationControls() {
   const location = useLocation();
   return <><button onClick={() => navigate('/wallet')}>Go wallet</button><span data-testid="location">{location.pathname}</span></>;
 }
-function mount(path) {
-  render(<MemoryRouter initialEntries={[path]}><QuickAccess /><LocationControls /></MemoryRouter>);
+function mount(path, centered = false) {
+  render(<MemoryRouter initialEntries={[path]}><QuickAccess centered={centered} /><LocationControls /></MemoryRouter>);
 }
 function openRail() { fireEvent.click(screen.getByRole('button', { name: 'باز کردن دسترسی سریع' })); }
 function labels() { return [...document.querySelectorAll('.quick-access__item')].map((item) => item.textContent); }
@@ -31,6 +31,18 @@ describe('quick access', () => {
     expect(screen.getByRole('button', { name: 'باز کردن دسترسی سریع' }).getAttribute('aria-expanded')).toBe('false');
     openRail();
     expect(labels()).toEqual(['بازار', 'سهام', 'آزمایشگاه', 'فروشگاه', 'خرید و فروش']);
+  });
+
+  it('puts Swap first in the centered Futures panel and navigates to it', () => {
+    mount('/perp/terminal', true);
+    openRail();
+    const nav = screen.getByRole('navigation', { name: 'دسترسی سریع' });
+    const swap = within(nav).getAllByRole('link')[0];
+    expect(swap.getAttribute('href')).toBe('/swap');
+    expect(swap.querySelector('svg')).toBeTruthy();
+    expect(document.activeElement).toBe(swap);
+    fireEvent.click(swap);
+    expect(screen.getByTestId('location').textContent).toBe('/swap');
   });
 
   it.each([
