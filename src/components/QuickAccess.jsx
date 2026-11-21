@@ -18,7 +18,7 @@ const SWAP_LINK = { to: '/swap', key: 'nav.swap', Icon: IconSwap };
 const groups = [
   [
     { to: '/', key: 'nav.market', Icon: IconMarket },
-    ...(SPECULATION_ENABLED ? [{ to: '/perp', key: 'nav.perp', Icon: IconTrend }] : []),
+    ...(SPECULATION_ENABLED ? [{ to: '/perp', key: 'nav.perp', Icon: IconTrend, aliases: ['/dydx', '/ostium', '/derivatives'] }] : []),
     { to: '/stocks', key: 'nav.stocks', Icon: IconBuilding },
     ...(SPECULATION_ENABLED ? [{ to: '/lab', key: 'lab.title', Icon: IconActivity }] : []),
     { to: '/shop', key: 'nav.shop', Icon: IconBriefcase },

@@ -2,8 +2,6 @@
    warning colors still carry their semantic meaning. */
 :is(.app-shell--futures,.futures-venue,.futures-full-sheet) { --futures-accent:#a9dbff; --futures-line:#7bbcf74d; --futures-glass:linear-gradient(145deg,#77bef426,#8d77fd12); --futures-bg:#0b1221; }
 :root[data-theme='light'] :is(.app-shell--futures,.futures-venue,.futures-full-sheet) { --futures-accent:#245590; --futures-line:#4776ac52; --futures-glass:linear-gradient(145deg,#c0e5fc99,#dce2ff80); --futures-bg:#f6f9ff; }
-.app-shell.app-shell--futures { padding-bottom:calc(76px + env(safe-area-inset-bottom)); }
-.app-shell--futures > .top-bar { position:sticky; inset-block-start:0; background:color-mix(in srgb,var(--futures-bg) 94%,transparent); border-bottom:1px solid var(--line); width:100%; }
 .app-shell--futures :is(.perp-rail-tab.is-active,.perp-subtab.is-on,.perp-row-go),
 .futures-venue :is(.lev-chip.active,.btn-primary),
 .futures-full-sheet .dtd-tabs > button.active { background:var(--futures-glass) !important; color:var(--futures-accent) !important; border-color:var(--futures-line) !important; box-shadow:inset 0 1px #fff2 !important; }
@@ -79,6 +77,19 @@
 :root[data-theme='light'] .futures-venue .futures-venue-banner[data-venue] {
   border-color:color-mix(in srgb,var(--slide-glow) 76%,#7e83a2);
 }
+/* Dark mode uses low-luminance indigo/teal surfaces, not a pastel card. */
+:root:not([data-theme='light']) .futures-venue .futures-venue-banner[data-venue='dydx'] {
+  --slide-ink:#e6e3f5; --slide-copy:#bbb6cf;
+  --slide-base:#141423; --slide-glow:#242039; --slide-wash:#1d192c;
+}
+:root:not([data-theme='light']) .futures-venue .futures-venue-banner[data-venue='onchain'] {
+  --slide-ink:#e0efec; --slide-copy:#abc6c1;
+  --slide-base:#101c20; --slide-glow:#193432; --slide-wash:#15292d;
+}
+:root:not([data-theme='light']) .futures-venue .futures-venue-banner[data-venue][data-slide='1'] { --slide-glow:#1e2c42; }
+:root:not([data-theme='light']) .futures-venue .futures-venue-banner[data-venue='dydx'][data-slide='2'] { --slide-glow:#332239; }
+:root:not([data-theme='light']) .futures-venue .futures-venue-banner[data-venue='onchain'][data-slide='2'] { --slide-glow:#23372d; }
+:root:not([data-theme='light']) .futures-venue-banner .futures-venue-art img { filter:brightness(.56) saturate(.83); }
 .futures-venue-art {
   grid-area:art; display:grid; place-items:center;
   inline-size:clamp(52px,10vw,84px); aspect-ratio:104/100;

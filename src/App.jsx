@@ -11,6 +11,7 @@ import { CentralBrainProvider } from './context/CentralBrainContext';
 import RgbBackground from './components/RgbBackground';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
+import './styles/market-desk-chrome.css';
 import PullToRefresh from './components/PullToRefresh';
 import Toasts from './components/Toasts';
 
@@ -433,9 +434,13 @@ export function AppChrome() {
    * Iran icon) and its own bottom keyboard / buy/sell switch. The app's
    * Header and BottomNav would compete with both, so the shell drops them.
    */
-  const futuresChrome = (pathname === '/perp' && SPECULATION_ENABLED) || pathname === '/perp/terminal';
-  const stocksChrome = pathname === '/stocks' || pathname.startsWith('/stocks/');
-  const deskChrome = futuresChrome || stocksChrome;
+  const section = pathname.split('/')[1];
+  const futuresChrome = (SPECULATION_ENABLED && ['perp', 'dydx', 'ostium', 'derivatives'].includes(section))
+    || pathname === '/perp/terminal';
+  const stocksChrome = section === 'stocks';
+  // The Market landing and Buy/Sell keep their own navigation; only desks
+  // listed under Market share the scroll-away header and centered launcher.
+  const deskChrome = futuresChrome || stocksChrome || ['lab', 'launch', 'bridge', 'p2p'].includes(section);
   const [deskMore, setDeskMore] = useState(false);
   useEffect(() => { setDeskMore(false); }, [pathname]);
   const headerless = pathname === '/intent' || pathname.startsWith('/pay') || pathname.startsWith('/social')
@@ -470,7 +475,7 @@ export function AppChrome() {
   }, [pathname]);
 
   return (
-    <div className={`app-shell${futuresChrome ? ' app-shell--futures' : ''}${stocksChrome ? ' app-shell--stocks' : ''}${headerless ? ' app-shell--headerless' : ''}${wide ? ' app-shell--wide' : ''}${pathname === '/shop' ? ' app-shell--shop' : ''}${dockActive ? ' app-shell--dock-active' : ''}`}>
+    <div className={`app-shell${deskChrome ? ' app-shell--market-desk' : ''}${futuresChrome ? ' app-shell--futures' : ''}${stocksChrome ? ' app-shell--stocks' : ''}${headerless ? ' app-shell--headerless' : ''}${wide ? ' app-shell--wide' : ''}${pathname === '/shop' ? ' app-shell--shop' : ''}${dockActive ? ' app-shell--dock-active' : ''}`}>
       {!headerless && <Header moreOpen={deskMore} onOpenMore={deskChrome ? () => setDeskMore((open) => !open) : undefined} />}
       <PullToRefresh>
         <SwipeTabRoutes />
