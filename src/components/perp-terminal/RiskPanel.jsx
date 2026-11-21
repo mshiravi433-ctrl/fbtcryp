@@ -61,7 +61,9 @@ export default function RiskPanel({
           <p className="pt-empty" data-testid="perp-risk-unavailable">
             {reason === 'NO_WALLET'
               ? t('perpTerminal.risk.noWallet', { defaultValue: 'Connect a wallet to see margin, exposure and shocks for this account.' })
-              : reason === 'ACCOUNT_UNREADABLE'
+              : reason === 'NO_ROUTE'
+                ? t('perpTerminal.chart.noVenue')
+                : reason === 'ACCOUNT_UNREADABLE'
                 ? t('perpTerminal.risk.unreadable', { defaultValue: 'The venue did not return this account. Nothing is shown rather than a guess.' })
                 : t('perpTerminal.risk.empty', { defaultValue: 'This account has no open positions.' })}
           </p>

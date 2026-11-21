@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStill } from '../AnimatedIcon';
 
+const ART = { dydx: ['prism', 'globe', 'vault'], onchain: ['globe', 'vault', 'prism'] };
+
 export default function VenueBanner({ venue, title, subtitle, status }) {
   const { t } = useTranslation();
   const still = useStill();
@@ -15,7 +17,10 @@ export default function VenueBanner({ venue, title, subtitle, status }) {
   }, [still, paused, hovered]);
   const index = still ? 0 : slide;
   return (
-    <section className="derivatives-hero futures-venue-banner" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+    <section className="derivatives-hero futures-venue-banner" data-venue={venue} data-slide={index} data-still={still || paused} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      <div className="futures-venue-art" key={`art-${index}`} aria-hidden="true">
+        <img src={`/images/market-banner/${ART[venue][index]}.webp`} alt="" draggable="false" />
+      </div>
       <div className="futures-venue-slide" key={index}>
         <h2>{index === 0 ? title : t(`futures.venueSlides.${venue}.${index}.title`)}</h2>
         <p>{index === 0 ? subtitle : t(`futures.venueSlides.${venue}.${index}.body`)}</p>

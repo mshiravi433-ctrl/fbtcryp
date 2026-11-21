@@ -55,6 +55,7 @@ const pos = (v) => (num(v) > 0 ? num(v) : null);
  * trade), because on a terminal "the price" is three different numbers.
  */
 export function topBar(quote = {}) {
+  const nonNegative = (v) => { const n = num(v); return n != null && n >= 0 ? n : null; };
   const mark = pos(quote.mark) ?? pos(quote.oraclePrice) ?? pos(quote.price);
   const high = pos(quote.high24h);
   const low = pos(quote.low24h);
@@ -70,8 +71,8 @@ export function topBar(quote = {}) {
     high24h: high,
     low24h: low,
     rangePositionPct,
-    volume24hUsd: pos(quote.volume24hUsd ?? quote.volume24H),
-    openInterestUsd: pos(quote.openInterestUsd ?? quote.openInterest),
+    volume24hUsd: nonNegative(quote.volume24hUsd ?? quote.volume24H),
+    openInterestUsd: nonNegative(quote.openInterestUsd ?? quote.openInterest),
     fundingAprPct: num(quote.fundingAprPct ?? (num(quote.nextFundingRate) != null ? num(quote.nextFundingRate) * 100 * 24 * 365 : null)),
     nextFundingAtMs: num(quote.nextFundingAtMs),
     /* Hours to the next settlement, which is what a funding cell means. */

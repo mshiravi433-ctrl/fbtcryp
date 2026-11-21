@@ -24,24 +24,12 @@
 .futures-full-sheet .dtd-tabs > button { min-height:44px; border-radius:10px; white-space:normal; }
 .futures-full-sheet .dtd-refresh-icon { color:var(--futures-accent); }
 .futures-full-sheet .dtd-refresh-icon:disabled { opacity:.5; }
-@media(min-width:1200px) {
-  .ptx.ptx--route, .ptx.ptx--embedded { grid-template-rows:auto minmax(0,1fr) auto auto; }
-}
 .futures-venue.derivatives-hall { background:radial-gradient(ellipse 95% 380px at 50% 0%,color-mix(in srgb,var(--futures-accent) 8%,transparent),transparent); }
 :root[data-theme='light'] .futures-venue .derivatives-hero { background:var(--futures-glass); border-color:var(--futures-line); box-shadow:none; }
 .futures-venue .derivatives-title-glow { filter:none; }
 .futures-venue .derivatives-subtitle { max-width:66ch; }
 
 /* One entry point, one dialog and a vertical selector for market details. */
-.futures-info-trigger {
-  display:flex; align-items:center; gap:12px; width:100%; min-height:64px;
-  padding:10px 14px; text-align:start; cursor:pointer;
-  color:var(--pt-ink-1); background:var(--pt-bg-card); border:1px solid var(--pt-line-strong); border-radius:16px;
-}
-.futures-info-trigger:hover { border-color:var(--pt-accent); }
-.futures-info-mark { display:grid; place-items:center; width:36px; height:36px; flex:none; border-radius:11px; background:var(--pt-pod-bg); color:var(--pt-accent); }
-.futures-info-copy { display:grid; gap:4px; flex:1; min-width:0; }
-.futures-info-copy small { color:var(--pt-ink-3); }
 .futures-full-sheet .futures-info-layout { display:grid; gap:16px; align-items:start; }
 .futures-info-tabs { display:grid; gap:6px; }
 .futures-info-tabs [role='tab'] {
@@ -70,21 +58,48 @@
 .fsh-panel.futures-full-sheet.dtd-screen { background:var(--futures-bg); }
 
 /* Venue stories: one calm surface, no background inside the slide itself. */
-.futures-venue .futures-venue-banner {
-  display:flex; align-items:center; justify-content:space-between; gap:14px;
-  min-height:108px; background:var(--futures-glass); border-color:var(--futures-line);
-  backdrop-filter:none; -webkit-backdrop-filter:none;
+/* Artwork is decorative; the gradient veil keeps slide text readable in both themes. */
+.futures-venue .futures-venue-banner[data-venue] {
+  --slide-ink:#f5f6ff; --slide-copy:#e3e8fb;
+  --slide-base:#151439; --slide-glow:#623fcd;
+  position:relative; isolation:isolate; overflow:hidden;
+  display:grid; justify-items:start; align-content:center; gap:10px;
+  min-height:172px; padding:18px clamp(14px,3vw,28px);
+  border:1px solid color-mix(in srgb,var(--slide-glow) 58%,var(--line));
+  background:radial-gradient(ellipse at 75% 10%,var(--slide-glow),transparent 75%),var(--slide-base);
+  box-shadow:0 10px 28px -21px var(--slide-glow);
 }
-.futures-venue-slide { min-width:0; animation:venue-slide-enter .24s ease-out; }
-.futures-venue-slide h2 { margin:0; font-size:clamp(17px,3vw,23px); color:var(--futures-accent); }
-.futures-venue-slide p { margin:5px 0 0; max-width:65ch; line-height:1.65; color:var(--text-2); font-size:13px; }
-.futures-venue-meta { display:grid; justify-items:end; gap:3px; flex:none; }
-.futures-slide-pause { display:flex; align-items:center; justify-content:center; gap:4px; min-height:44px; min-width:44px; border:0; background:none; cursor:pointer; }
-.futures-slide-pause i { width:5px; height:5px; border-radius:10px; background:var(--futures-line); }
-.futures-slide-pause i.is-current { width:13px; background:var(--futures-accent); }
-.futures-slide-pause[aria-pressed='true'] { outline:1px solid var(--futures-line); border-radius:10px; }
-@keyframes venue-slide-enter { from { opacity:0; transform:translateY(5px); } }
-@media(prefers-reduced-motion:reduce) { .futures-venue-slide { animation:none; } }
+.futures-venue .futures-venue-banner[data-venue='onchain'] { --slide-base:#082c34; --slide-glow:#008a80; }
+.futures-venue .futures-venue-banner[data-slide='1'][data-venue] { --slide-glow:#206ac1; }
+.futures-venue .futures-venue-banner[data-slide='2'][data-venue='dydx'] { --slide-glow:#a847ac; }
+.futures-venue .futures-venue-banner[data-slide='2'][data-venue='onchain'] { --slide-glow:#357650; }
+:root[data-theme='light'] .futures-venue .futures-venue-banner[data-venue] {
+  --slide-ink:#171b3e; --slide-copy:#2f3a5d; --slide-base:#f2f1ff;
+  background:radial-gradient(ellipse at 85% 25%,color-mix(in srgb,var(--slide-glow) 32%,white),transparent 78%),var(--slide-base);
+}
+:root[data-theme='light'] .futures-venue .futures-venue-banner[data-venue='onchain'] { --slide-base:#eaf9f7; }
+.futures-venue-art {
+  position:absolute; z-index:-1; inset-block:0; inset-inline-end:0; width:58%; overflow:hidden;
+  mask-image:linear-gradient(to right,transparent,#000 62%);
+  animation:venue-art-enter .65s cubic-bezier(.2,.75,.2,1) both;
+}
+[dir='rtl'] .futures-venue-art { mask-image:linear-gradient(to left,transparent,#000 62%); }
+.futures-venue-art img { width:100%; height:100%; object-fit:cover; opacity:.62; animation:venue-art-drift 8s ease-in-out infinite alternate; }
+:root[data-theme='light'] .futures-venue-art img { opacity:.41; }
+.futures-venue-slide { min-width:0; width:min(66ch,73%); animation:venue-slide-enter .45s ease-out both; }
+.futures-venue-slide h2 { margin:0; font-size:clamp(17px,3vw,26px); color:var(--slide-ink); }
+.futures-venue-slide p { margin:5px 0 0; line-height:1.65; color:var(--slide-copy); font-size:clamp(12px,2vw,14px); }
+.futures-venue-meta { display:flex; align-items:center; gap:8px; }
+.futures-slide-pause { display:flex; align-items:center; justify-content:center; gap:4px; min-height:44px; min-width:44px; border:1px solid transparent; border-radius:10px; background:none; cursor:pointer; color:var(--slide-ink); }
+.futures-slide-pause i { width:5px; height:5px; border-radius:10px; background:currentColor; opacity:.5; transition:width .25s,opacity .25s; }
+.futures-slide-pause i.is-current { width:13px; opacity:1; }
+.futures-slide-pause[aria-pressed='true'] { border-color:currentColor; }
+@keyframes venue-slide-enter { from { opacity:0; transform:translateY(9px); } }
+@keyframes venue-art-enter { from { opacity:0; } }
+@keyframes venue-art-drift { to { transform:scale(1.095); } }
+.futures-venue-banner[data-still='true'] :is(.futures-venue-art,.futures-venue-art img,.futures-venue-slide,.futures-slide-pause i) { animation:none; transition:none; }
+@media(max-width:480px) { .futures-venue-slide { width:80%; } .futures-venue-art { width:54%; } .futures-venue-art img { opacity:.42; } }
+@media(prefers-reduced-motion:reduce) { .futures-venue-banner * { animation:none !important; transition:none !important; } }
 .futures-warning { margin-block-start:10px; }
 .futures-warning .infobox { margin-block:0; }
 .futures-venue .dydx-account-panel {
@@ -95,12 +110,16 @@
 .dydx-account-note { margin:9px 0 0; padding-block-start:9px; border-block-start:1px solid var(--line); color:var(--text-2); font-size:12px; line-height:1.65; }
 
 /* In-flow market search; opening never locks scroll or opens the keyboard. */
-.ptx-picker:has(.ps-inline) { flex-wrap:wrap; }
-.ptx-picker:has(.ps-inline) .ps-root { flex:1 0 100%; min-width:0; }
-.ps-inline { display:grid; gap:8px; padding:10px; margin-top:8px; border:1px solid var(--pt-line-strong); border-radius:14px; background:var(--pt-bg-card); }
-.ps-inline :is(.ps-search,.ps-venues,.ps-list,.ps-foot) { margin:0; }
-.ps-inline .ps-list { max-height:min(42dvh,330px); overflow:auto; }
-@media(min-width:1200px) { .ptx:is(.ptx--route,.ptx--embedded):has(.ps-inline) { height:auto; grid-template-rows:auto minmax(430px,1fr) auto auto; } }
+.ptx-info-icon {
+  display:grid; place-items:center; flex:0 0 44px; width:44px; height:44px;
+  color:var(--futures-accent,var(--text)); border:1px solid var(--pt-line-strong);
+  border-radius:12px; background:var(--pt-bg-card); cursor:pointer;
+}
+.ptx-info-icon:hover,.ptx-info-icon:focus-visible { border-color:currentColor; }
+.ps-sheet-panel { display:grid; gap:12px; }
+.ps-sheet-panel .ps-list { max-height:none; margin:0; }
+.ps-sheet-panel .ps-option { width:100%; }
+
 
 /* Numeric controls share a single quiet fill and strong keyboard focus. */
 .perp-field--collateral .perp-collateral-row,
