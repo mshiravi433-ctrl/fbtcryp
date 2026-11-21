@@ -50,7 +50,7 @@ describe('Market desk chrome behavior', () => {
     fireEvent.click(closeBtn);
   });
 
-  it.each(['/perp', '/perp/terminal', '/dydx', '/ostium', '/derivatives', '/lab', '/lab/chart-guide', '/launch', '/bridge', '/p2p'])(
+  it.each(['/perp', '/perp/terminal', '/dydx', '/ostium', '/derivatives', '/lab', '/lab/chart-guide', '/shop', '/launch', '/bridge', '/p2p'])(
     'uses the shared Market desk chrome on %s', async (path) => {
       const { container } = render(<MemoryRouter initialEntries={[path]}><AppChrome /></MemoryRouter>);
       expect(container.querySelector('.app-shell--market-desk > .top-bar')).toBeTruthy();

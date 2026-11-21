@@ -15,21 +15,23 @@ import '../styles/quick-access.css';
 // The first destination in each family is its home. On a related page it
 // replaces that page in the rail, so there is always a way back to the hub.
 const SWAP_LINK = { to: '/swap', key: 'nav.swap', Icon: IconSwap };
+const MARKET_LINKS = [
+  { to: '/', key: 'nav.market', Icon: IconMarket },
+  ...(SPECULATION_ENABLED ? [{ to: '/perp', key: 'nav.perp', Icon: IconTrend, aliases: ['/dydx', '/ostium', '/derivatives'] }] : []),
+  { to: '/stocks', key: 'nav.stocks', Icon: IconBuilding },
+  ...(SPECULATION_ENABLED ? [{ to: '/lab', key: 'lab.title', Icon: IconActivity }] : []),
+  { to: '/shop', key: 'nav.shop', Icon: IconBriefcase },
+  { to: '/buy', key: 'nav.buy', Icon: IconSwap }
+];
+const SWAP_LINKS = [
+  SWAP_LINK,
+  { to: '/bridge', key: 'nav.bridge', Icon: IconGlobe },
+  { to: '/launch', key: 'nav.launch', Icon: IconRocket },
+  { to: '/p2p', key: 'nav.p2p', Icon: IconSwap }
+];
 const groups = [
-  [
-    { to: '/', key: 'nav.market', Icon: IconMarket },
-    ...(SPECULATION_ENABLED ? [{ to: '/perp', key: 'nav.perp', Icon: IconTrend, aliases: ['/dydx', '/ostium', '/derivatives'] }] : []),
-    { to: '/stocks', key: 'nav.stocks', Icon: IconBuilding },
-    ...(SPECULATION_ENABLED ? [{ to: '/lab', key: 'lab.title', Icon: IconActivity }] : []),
-    { to: '/shop', key: 'nav.shop', Icon: IconBriefcase },
-    { to: '/buy', key: 'nav.buy', Icon: IconSwap }
-  ],
-  [
-    SWAP_LINK,
-    { to: '/bridge', key: 'nav.bridge', Icon: IconGlobe },
-    { to: '/launch', key: 'nav.launch', Icon: IconRocket },
-    { to: '/p2p', key: 'nav.p2p', Icon: IconSwap }
-  ],
+  MARKET_LINKS,
+  SWAP_LINKS,
   [
     { to: '/wallet', key: 'nav.wallet', Icon: IconWallet },
     { to: '/farm', key: 'nav.farm', Icon: IconPools },
@@ -60,6 +62,10 @@ const groups = [
     { to: '/business', key: 'nav.business', Icon: IconBuilding }
   ]
 ];
+
+// Desk launchers share the Market and Swap destinations even when opened
+// from a route in the second group (Bridge, Launch, or P2P).
+const marketDeskLinks = [SWAP_LINK, ...MARKET_LINKS, ...SWAP_LINKS.filter((item) => item !== SWAP_LINK)];
 
 function matches(item, pathname) {
   return [item.to, ...(item.aliases || [])].some((path) =>
@@ -99,8 +105,8 @@ export default function QuickAccess({ centered = false }) {
     };
   }, [open]);
 
-  if (!group || typeof document === 'undefined') return null;
-  const links = centered ? [SWAP_LINK, ...group.filter((item) => item.to !== SWAP_LINK.to)] : group;
+  if ((!centered && !group) || typeof document === 'undefined') return null;
+  const links = centered ? marketDeskLinks : group;
   return createPortal(
     <aside ref={rootRef} className={`quick-access${centered ? ' quick-access--centered' : ''}${open ? ' is-open' : ''}`} dir={rtl ? 'rtl' : 'ltr'} aria-label={t('quickAccess.title')}>
       <div id="quick-access-rail" className="quick-access__rail" aria-hidden={!open} inert={!open ? '' : undefined}>

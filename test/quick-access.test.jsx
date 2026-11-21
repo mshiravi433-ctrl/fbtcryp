@@ -45,6 +45,17 @@ describe('quick access', () => {
     expect(screen.getByTestId('location').textContent).toBe('/swap');
   });
 
+  it.each(['/shop', '/perp', '/stocks', '/lab', '/bridge', '/launch', '/p2p'])(
+    'keeps the centered %s panel in the Market/Swap family', (path) => {
+      mount(path, true);
+      openRail();
+      const links = within(screen.getByRole('navigation', { name: 'دسترسی سریع' })).getAllByRole('link');
+      expect(links.map((link) => link.getAttribute('href'))).toEqual(
+        ['/swap', '/', '/perp', '/stocks', '/lab', '/shop', '/buy', '/bridge', '/launch', '/p2p'].filter((route) => route !== path)
+      );
+    }
+  );
+
   it.each([
     ['/swap', ['/bridge', '/launch', '/p2p']],
     ['/wallet', ['/farm', '/loan', '/insurance', '/orders', '/rewards']],

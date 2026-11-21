@@ -440,7 +440,7 @@ export function AppChrome() {
   const stocksChrome = section === 'stocks';
   // The Market landing and Buy/Sell keep their own navigation; only desks
   // listed under Market share the scroll-away header and centered launcher.
-  const deskChrome = futuresChrome || stocksChrome || ['lab', 'launch', 'bridge', 'p2p'].includes(section);
+  const deskChrome = futuresChrome || stocksChrome || ['lab', 'shop', 'launch', 'bridge', 'p2p'].includes(section);
   const [deskMore, setDeskMore] = useState(false);
   useEffect(() => { setDeskMore(false); }, [pathname]);
   const headerless = pathname === '/intent' || pathname.startsWith('/pay') || pathname.startsWith('/social')
