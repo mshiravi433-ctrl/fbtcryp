@@ -26,7 +26,7 @@ export default function FuturesHeroBanner({ activeTab, marketCount, btcPrice, bt
   return (
     <section className={`futures-ticker${still ? ' is-still' : ''}`} data-testid="futures-hero-banner" data-mode={activeTab}>
       <IconTrend width={16} height={16} aria-hidden="true" />
-      <h1>{t('futures.banner.wordmark')}</h1>
+      <h1 className="derivatives-title">{activeTab === 'onchain' ? t('futures.onchainTitle', { defaultValue: 'فیوچرز آن‌چین' }) : t('futures.banner.wordmark')}</h1>
       <span className="futures-ticker-mode">{t(`futures.banner.${MODE[activeTab] || MODE.overview}`)}</span>
       <button type="button" className="futures-ticker-slide" onClick={() => { setPaused(true); setSlot((n) => (n + 1) % 3); }}
         aria-label={t('futures.banner.nextMetric', { defaultValue: 'Next market metric' })}>

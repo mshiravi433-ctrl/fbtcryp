@@ -40,6 +40,7 @@ import { SPECULATION_ENABLED } from '../lib/features';
 import lazyRetry from '../lib/lazyRetry';
 import RwaSectionBanner from '../components/RwaSectionBanner';
 import StockSubtabs from '../components/StockSubtabs';
+import '../styles/stocks-surface.css';
 import StocksHeadingTabs from '../components/stocks/StocksHeadingTabs';
 import EquityBoard from '../components/stocks/EquityBoard';
 import RobinhoodStockBoard from '../components/stocks/RobinhoodStockBoard';

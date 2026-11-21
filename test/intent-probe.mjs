@@ -351,7 +351,7 @@ export default async function run() {
   t('E2E: it is recognised as a same-chain atomic candidate',
     wfServer.isSingleChainWorkflow(workflow) === true);
 
-  const envelope = wfServer.buildWorkflowBatchCalldata(workflow);
+  const envelope = await wfServer.buildWorkflowBatchCalldata(workflow);
   t('E2E: the batch envelope builds', envelope.ok === true);
   t('E2E: it carries both nodes', envelope.callCount === 2);
   /*
@@ -367,7 +367,8 @@ export default async function run() {
   t('E2E: abort-all is the policy on the envelope', envelope.policy === 'abort-all');
   t('E2E: abort-all encodes as the abort code, not a continue',
     envelope.policyCode === wfServer.POLICY_ABORT_ALL && wfServer.POLICY_ABORT_ALL === 0);
-  const decoded = wfServer.workflowInterface.decodeFunctionData('execute', envelope.data);
+  const iface = typeof wfServer.workflowInterface === 'function' ? await wfServer.workflowInterface() : wfServer.workflowInterface;
+  const decoded = iface.decodeFunctionData('execute', envelope.data);
   t('E2E: the abort code is what the contract will actually read',
     Number(decoded[2]) === wfServer.POLICY_ABORT_ALL);
   /*
@@ -378,7 +379,7 @@ export default async function run() {
     TARGET_STEPS.map((s) => ({ ...s, revertPolicy: 'continue' })),
     { chainId: 42161, deadline: workflow.nodes[0].deadline }
   );
-  const continueEnvelope = wfServer.buildWorkflowBatchCalldata(continueWorkflow);
+  const continueEnvelope = await wfServer.buildWorkflowBatchCalldata(continueWorkflow);
   t('E2E: a continue policy encodes differently from abort-all',
     continueEnvelope.ok === true
     && continueEnvelope.data !== envelope.data
@@ -396,7 +397,7 @@ export default async function run() {
   );
   t('E2E: a mixed policy falls back to abort-all, never to continue',
     wfServer.dominantRevertPolicy(wfServer.validateWorkflow(mixed).workflow.nodes) === 'abort-all'
-    && wfServer.buildWorkflowBatchCalldata(mixed).policyCode === wfServer.POLICY_ABORT_ALL);
+    && (await wfServer.buildWorkflowBatchCalldata(mixed)).policyCode === wfServer.POLICY_ABORT_ALL);
   /* An unknown policy must not silently become "keep going" either. */
   t('E2E: an unrecognised policy encodes as abort',
     wfServer.policyCode('carry-on-anyway') === wfServer.POLICY_ABORT_ALL);

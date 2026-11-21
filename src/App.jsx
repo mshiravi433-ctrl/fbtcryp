@@ -416,7 +416,7 @@ function SwipeTabRoutes() {
   return <PageTabSwipe routeKey={location.pathname}><AnimatedRoutes /></PageTabSwipe>;
 }
 
-function AppChrome() {
+export function AppChrome() {
   const { pathname } = useLocation();
   /*
    * `/social` is the third headerless room, and the instruction was explicit
@@ -434,8 +434,10 @@ function AppChrome() {
    * Header and BottomNav would compete with both, so the shell drops them.
    */
   const futuresChrome = (pathname === '/perp' && SPECULATION_ENABLED) || pathname === '/perp/terminal';
-  const [futuresMore, setFuturesMore] = useState(false);
-  useEffect(() => { setFuturesMore(false); }, [pathname]);
+  const stocksChrome = pathname === '/stocks' || pathname.startsWith('/stocks/');
+  const deskChrome = futuresChrome || stocksChrome;
+  const [deskMore, setDeskMore] = useState(false);
+  useEffect(() => { setDeskMore(false); }, [pathname]);
   const headerless = pathname === '/intent' || pathname.startsWith('/pay') || pathname.startsWith('/social')
     || pathname === '/buy' || pathname.startsWith('/order/result');
   /* «نه جمع شده» — the world console is a dashboard, not a phone column, so it
@@ -468,8 +470,8 @@ function AppChrome() {
   }, [pathname]);
 
   return (
-    <div className={`app-shell${futuresChrome ? ' app-shell--futures' : ''}${headerless ? ' app-shell--headerless' : ''}${wide ? ' app-shell--wide' : ''}${pathname === '/shop' ? ' app-shell--shop' : ''}${dockActive ? ' app-shell--dock-active' : ''}`}>
-      {!headerless && <Header moreOpen={futuresMore} onOpenMore={futuresChrome ? () => setFuturesMore((open) => !open) : undefined} />}
+    <div className={`app-shell${futuresChrome ? ' app-shell--futures' : ''}${stocksChrome ? ' app-shell--stocks' : ''}${headerless ? ' app-shell--headerless' : ''}${wide ? ' app-shell--wide' : ''}${pathname === '/shop' ? ' app-shell--shop' : ''}${dockActive ? ' app-shell--dock-active' : ''}`}>
+      {!headerless && <Header moreOpen={deskMore} onOpenMore={deskChrome ? () => setDeskMore((open) => !open) : undefined} />}
       <PullToRefresh>
         <SwipeTabRoutes />
       </PullToRefresh>
@@ -482,11 +484,11 @@ function AppChrome() {
         own tab bar owns the bottom.
       */}
       <Suspense fallback={null}>
-        <ScreenshotSharePrompt placement={pathname === '/intent' ? 'top' : headerless || futuresChrome ? 'bare' : 'nav'} />
+        <ScreenshotSharePrompt placement={pathname === '/intent' ? 'top' : headerless || deskChrome ? 'bare' : 'nav'} />
       </Suspense>
-      {!headerless && <Suspense fallback={null}><QuickAccess centered={futuresChrome} /></Suspense>}
-      {!headerless && !futuresChrome && <BottomNav />}
-      {futuresChrome && <MoreSheet open={futuresMore} onClose={() => setFuturesMore(false)} />}
+      {!headerless && <Suspense fallback={null}><QuickAccess centered={deskChrome} /></Suspense>}
+      {!headerless && !deskChrome && <BottomNav />}
+      {deskChrome && <MoreSheet open={deskMore} onClose={() => setDeskMore(false)} />}
     </div>
   );
 }
