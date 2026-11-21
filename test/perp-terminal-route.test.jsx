@@ -185,6 +185,22 @@ describe('the desk', () => {
     expect(CHART_PROPS[0].market).toBe('BTC-USD');
   });
 
+  it('reveals inline market search without moving keyboard focus', async () => {
+    await renderDesk();
+    const trigger = screen.getByTestId('pair-select-button');
+    trigger.focus();
+    fireEvent.click(trigger);
+    const input = screen.getByTestId('pair-select-search');
+    expect(input.closest('[data-testid="pair-select"]')).toBeTruthy();
+    expect(document.activeElement).toBe(trigger);
+    expect(document.querySelector('.ps-backdrop')).toBeNull();
+    fireEvent.change(input, { target: { value: 'NONEXISTENT-ASSET' } });
+    expect(screen.getByTestId('pair-select-empty')).toBeTruthy();
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(screen.queryByTestId('pair-select-search')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('shows the 24h high/low the venue does not publish, from its own candles', async () => {
     await renderDesk();
     await waitFor(() => expect(screen.getByTestId('perp-top-high').textContent).not.toBe('—'));

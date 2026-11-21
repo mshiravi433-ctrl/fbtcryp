@@ -871,7 +871,7 @@ export default function SpotTrade() {
             </div>
 
             {/* slippage */}
-            <div className="spot-field">
+            <div className="spot-field spot-slippage">
               <span className="spot-label" id="spot-slip-label">{t('swap.slippage')}</span>
               <div className="spot-pct" role="group" aria-labelledby="spot-slip-label">
                 {SLIPPAGE_PRESETS.map((p) => (

@@ -68,3 +68,64 @@
 .futures-venue--dydx .dtd-head-title { font-size:14px; }
 .futures-venue--dydx .dtd-head-price { color:var(--futures-accent); }
 .fsh-panel.futures-full-sheet.dtd-screen { background:var(--futures-bg); }
+
+/* Venue stories: one calm surface, no background inside the slide itself. */
+.futures-venue .futures-venue-banner {
+  display:flex; align-items:center; justify-content:space-between; gap:14px;
+  min-height:108px; background:var(--futures-glass); border-color:var(--futures-line);
+  backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+.futures-venue-slide { min-width:0; animation:venue-slide-enter .24s ease-out; }
+.futures-venue-slide h2 { margin:0; font-size:clamp(17px,3vw,23px); color:var(--futures-accent); }
+.futures-venue-slide p { margin:5px 0 0; max-width:65ch; line-height:1.65; color:var(--text-2); font-size:13px; }
+.futures-venue-meta { display:grid; justify-items:end; gap:3px; flex:none; }
+.futures-slide-pause { display:flex; align-items:center; justify-content:center; gap:4px; min-height:44px; min-width:44px; border:0; background:none; cursor:pointer; }
+.futures-slide-pause i { width:5px; height:5px; border-radius:10px; background:var(--futures-line); }
+.futures-slide-pause i.is-current { width:13px; background:var(--futures-accent); }
+.futures-slide-pause[aria-pressed='true'] { outline:1px solid var(--futures-line); border-radius:10px; }
+@keyframes venue-slide-enter { from { opacity:0; transform:translateY(5px); } }
+@media(prefers-reduced-motion:reduce) { .futures-venue-slide { animation:none; } }
+.futures-warning { margin-block-start:10px; }
+.futures-warning .infobox { margin-block:0; }
+.futures-venue .dydx-account-panel {
+  margin-block-start:12px; padding:12px 14px; border:1px solid var(--futures-line);
+  border-radius:16px; background:var(--futures-glass); box-shadow:none;
+}
+.futures-venue .dydx-account-panel .row-between { flex-wrap:wrap; gap:8px; }
+.dydx-account-note { margin:9px 0 0; padding-block-start:9px; border-block-start:1px solid var(--line); color:var(--text-2); font-size:12px; line-height:1.65; }
+
+/* In-flow market search; opening never locks scroll or opens the keyboard. */
+.ptx-picker:has(.ps-inline) { flex-wrap:wrap; }
+.ptx-picker:has(.ps-inline) .ps-root { flex:1 0 100%; min-width:0; }
+.ps-inline { display:grid; gap:8px; padding:10px; margin-top:8px; border:1px solid var(--pt-line-strong); border-radius:14px; background:var(--pt-bg-card); }
+.ps-inline :is(.ps-search,.ps-venues,.ps-list,.ps-foot) { margin:0; }
+.ps-inline .ps-list { max-height:min(42dvh,330px); overflow:auto; }
+@media(min-width:1200px) { .ptx:is(.ptx--route,.ptx--embedded):has(.ps-inline) { height:auto; grid-template-rows:auto minmax(430px,1fr) auto auto; } }
+
+/* Numeric controls share a single quiet fill and strong keyboard focus. */
+.perp-field--collateral .perp-collateral-row,
+.futures-venue :is(.futures-margin-grid .deriv-field-card,.futures-margin-presets) {
+  padding:12px; border:1px solid var(--line-strong); border-radius:15px;
+  background:color-mix(in srgb,var(--bg-raised) 80%,var(--bg-panel));
+}
+.perp-field--collateral .perp-collateral-row:focus-within,
+.futures-venue .futures-margin-grid .deriv-field-card:focus-within { border-color:var(--futures-accent,#5591cf); }
+.perp-field--collateral .perp-collateral-row input,
+.futures-venue .futures-margin-grid input { min-width:0; min-height:44px; font-size:clamp(17px,4vw,23px); font-variant-numeric:tabular-nums; }
+.perp-field--collateral .perp-asset-chip { border-radius:9px; }
+.futures-margin-presets { margin-block-start:8px; }
+.futures-margin-presets .lev-row { display:flex; flex-wrap:wrap; gap:6px; }
+.futures-margin-presets input[type='range'] { min-height:32px; }
+
+/* Override the dark-only legacy finish at its actual specificity, including
+   the portalled trade ticket which is not a child of the Futures shell. */
+:root[data-theme='light'] :is(.perp-rows .perp-row,.perp-how,.perp-how-body,.perp-pair-search input) {
+  background:linear-gradient(155deg,#fff,#f0f6ff) !important;
+  border-color:#becfe3 !important; box-shadow:0 8px 22px -19px #31547d !important;
+}
+:root[data-theme='light'] .perp-rows .perp-row:hover .perp-row-sym { color:#245590; }
+:root[data-theme='light'] .perp-how-ico { color:#245590 !important; }
+:root[data-theme='light'] :is(.perp-sheet-full.sheet,.perp-sheet-full .sheet,.perp-sheet) { background:#f5f8fd !important; color:var(--text-1); }
+:root[data-theme='light'] .perp-sheet :is(.perp-summary,.dir-btn,.perp-sheet-tag) { background:#eaf2fd !important; border-color:#bfcee2 !important; color:#243e62 !important; }
+:root[data-theme='light'] .perp-sheet .dir-btn.long.active { background:#d8f3e7 !important; color:#135848 !important; }
+:root[data-theme='light'] .perp-sheet .dir-btn.short.active { background:#fce3ea !important; color:#862148 !important; }

@@ -21,6 +21,7 @@
  * .card / .brg-quote / .dir-switch / .lev-row / .segmented) so it reads as the
  * same product. Copy is entirely i18n (`futures.*`).
  */
+import VenueBanner from '../components/futures/VenueBanner';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -724,16 +725,12 @@ export default function FuturesOnchain({ embedded = false } = {}) {
       <div className="derivatives-hall futures-venue">
         <div className="derivatives-aurora" aria-hidden="true" />
 
-        <motion.section className="derivatives-hero" variants={riseIn} initial="hidden" animate="show">
-          <div>
-            <div className="derivatives-title"><span className="derivatives-title-glow">{t('futures.onchain.title')}</span></div>
-            <p className="derivatives-subtitle">{t('futures.onchain.subtitle')}</p>
-          </div>
-        </motion.section>
-
-        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
-          <div className="glass-notice" style={{ borderColor: 'rgba(255,59,107,0.16)', background: 'rgba(255,59,107,0.08)' }}>{t('futures.riskNotice')}</div>
-        </motion.div>
+        <VenueBanner venue="onchain" title={t('futures.onchain.title')} subtitle={t('futures.onchain.subtitle')} />
+        <div className="futures-warning">
+          <InfoBox title={t('futures.venueSlides.riskTitle')} tone="warn" id="onchain-venue-risk">
+            <p>{t('dydx.risk')}</p>
+          </InfoBox>
+        </div>
 
         <button
           type="button"
@@ -872,7 +869,7 @@ export default function FuturesOnchain({ embedded = false } = {}) {
                 </button>
               </div>
 
-              <div className="deriv-field-grid">
+              <div className="deriv-field-grid futures-margin-grid">
                 <label className="deriv-field-card" style={{ marginBottom: 0 }}>
                   <span className="field-label">{t('futures.collateral', { asset: provider?.collateral || 'USDC' })}</span>
                   <input type="number" min="5" inputMode="decimal" value={collateral} onChange={(e) => setCollateral(e.target.value)} data-testid="futures-collateral" />
@@ -882,7 +879,7 @@ export default function FuturesOnchain({ embedded = false } = {}) {
                   <input type="number" min="1" max={effectiveMax || 50} step="0.25" inputMode="decimal" value={leverage} onChange={(e) => setLeverage(e.target.value)} data-testid="futures-leverage" />
                 </label>
               </div>
-              <div className="deriv-field-card" style={{ marginTop: 10 }}>
+              <div className="deriv-field-card futures-margin-presets">
                 <div className="lev-row">
                   {LEVERAGE_PRESETS.filter((n) => n <= (effectiveMax || 50)).map((n) => (
                     <button key={n} type="button" className={`lev-chip ${Number(leverage) === n ? 'active' : ''}`} onClick={() => setLeverage(String(n))}>{n}×</button>

@@ -1,14 +1,4 @@
-/**
- * PAIR SELECT — Portalled Perpetual Market Picker Modal.
- * ---------------------------------------------------------------------------
- * «انتخاب توکن باید پاپ اپ با اندازه و فاصله درست باشد الان نیمی صفحه در موبایل نمیاد»
- *
- * Portals `.ps-panel` into `document.body` inside a centered/responsive
- * viewport-safe modal backdrop (`.ps-backdrop`) so it never clips or slides
- * half off-screen on mobile phones or inside overflow-clipped containers.
- */
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import TokenIcon from '../../lib/tokenIcon';
 import { fmtCompact, fmtPct, fmtPrice } from '../../lib/format';
@@ -22,45 +12,19 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
   const [query, setQuery] = useState('');
   const [venue, setVenue] = useState('all');
   const rootRef = useRef(null);
-  const panelRef = useRef(null);
+  const panelId = useId();
   const searchRef = useRef(null);
   const buttonRef = useRef(null);
 
   const rows = useMemo(() => (Array.isArray(options) ? options : []), [options]);
 
-  /* Outside tap or Escape closes; body scroll locks while modal is open. */
   useEffect(() => {
-    if (!open) return undefined;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    const onDoc = (e) => {
-      if (rootRef.current?.contains(e.target)) return;
-      if (panelRef.current?.contains(e.target)) return;
-      setOpen(false);
+    if (!open) return;
+    const outside = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
     };
-    const onKey = (e) => {
-      if (e.key === 'Escape') {
-        setOpen(false);
-        buttonRef.current?.focus();
-      }
-    };
-    document.addEventListener('pointerdown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      document.removeEventListener('pointerdown', onDoc);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  /* Focus lands on the search field, ready to type. */
-  useEffect(() => {
-    if (open) {
-      const id = setTimeout(() => searchRef.current?.focus(), 40);
-      return () => clearTimeout(id);
-    }
-    return undefined;
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
   }, [open]);
 
   const filtered = useMemo(() => {
@@ -80,49 +44,11 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
     onSelect?.(base);
     setOpen(false);
     setQuery('');
+    buttonRef.current?.focus();
   };
 
-  const modal = open && typeof document !== 'undefined'
-    ? createPortal(
-      <div
-        className="ps-backdrop"
-        onMouseDown={(e) => {
-          if (e.target === e.currentTarget) setOpen(false);
-        }}
-      >
-        <div
-          ref={panelRef}
-          className="ps-panel"
-          role="listbox"
-          aria-label={t('perpTerminal.pairSelectLabel', { defaultValue: 'Select a perpetual market' })}
-          data-testid="pair-select-panel"
-        >
-          <div className="ps-modal-head">
-            <div className="ps-modal-titles">
-              <div className="ps-modal-title-row">
-                <strong className="ps-modal-title">
-                  {t('perpTerminal.pairModalTitle', { defaultValue: 'Select Perpetual Market' })}
-                </strong>
-                <span className="ps-count pt-mono">
-                  {t('perpTerminal.pairModalCount', { n: filtered.length, defaultValue: `${filtered.length} markets` })}
-                </span>
-              </div>
-              <span className="ps-modal-sub">
-                {t('perpTerminal.pairModalSub', { defaultValue: 'Search by ticker or filter by settlement venue' })}
-              </span>
-            </div>
-            <button
-              type="button"
-              className="ps-close-btn"
-              onClick={() => { setOpen(false); buttonRef.current?.focus(); }}
-              aria-label={t('perpTerminal.pairModalClose', { defaultValue: 'Close' })}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
+  const searchPanel = open && (
+        <div className="ps-inline" id={panelId} data-testid="pair-select-panel">
           <div className="ps-search">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" aria-hidden="true">
               <circle cx="11" cy="11" r="7" />
@@ -166,7 +92,7 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
             ))}
           </div>
 
-          <ul className="ps-list">
+          <ul className="ps-list" aria-label={t('perpTerminal.pairSelectLabel')}>
             {filtered.map((m) => {
               const img = images?.[m.base]?.image || null;
               const active = m.base === selected;
@@ -174,8 +100,7 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
                 <li key={m.base}>
                   <button
                     type="button"
-                    role="option"
-                    aria-selected={active}
+                    aria-pressed={active}
                     className={`ps-option ${active ? 'is-on' : ''}`}
                     onClick={() => pick(m.base)}
                     data-testid={`pair-select-option-${m.base}`}
@@ -218,19 +143,22 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
 
           <p className="ps-foot">{t('perpTerminal.pairSelectFoot', { defaultValue: 'Only markets settled by an in-app venue are listed here.' })}</p>
         </div>
-      </div>,
-      document.body
-    )
-    : null;
+  );
 
   return (
-    <div className="ps-root" ref={rootRef} data-testid={testId}>
+    <div className="ps-root" ref={rootRef} data-testid={testId} onKeyDown={(event) => {
+      if (open && event.key === 'Escape') {
+        event.stopPropagation();
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
+    }}>
       <button
         type="button"
         ref={buttonRef}
         className={`ps-trigger ${open ? 'is-open' : ''}`}
         onClick={() => setOpen((v) => !v)}
-        aria-haspopup="listbox"
+        aria-controls={open ? panelId : undefined}
         aria-expanded={open}
         data-testid="pair-select-button"
       >
@@ -253,7 +181,7 @@ export default function PairSelect({ options = [], selected, onSelect, images = 
           </svg>
         </span>
       </button>
-      {modal}
+      {searchPanel}
     </div>
   );
 }

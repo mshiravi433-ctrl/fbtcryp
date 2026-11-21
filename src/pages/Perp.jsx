@@ -1261,26 +1261,6 @@ export default function Perp() {
         <div className="perp-modern">
 
       {/*
-        ─── THE ANSWER TO «هیچ جا نشون نمیده پوزیشن باز داری» ────────────────
-        Reported: a user opens a leveraged position from this tab, the sheet
-        closes, and afterwards there is nowhere that lists it, nothing that
-        sells it and nothing that exits it. That was exactly true — the ticket
-        wrote to the venue and the page forgot.
-
-        It is a LIST of what is open, with a close on every row, and it sits
-        ABOVE the pair list because the question "what am I already in?"
-        outranks "what else could I open?" for anybody who has a position. It
-        renders only when a wallet is actually connected (there is no account
-        to read otherwise, and an empty box that says «connect a wallet» in the
-        middle of a trading screen is noise, not information).
-
-        Both families are read from the card itself: Velocity through the
-        Solana SDK in this tab, Ostium through our BFF as unsigned calldata.
-        Nothing here holds a key, and every close is signed by the user.
-      */}
-      {(solReady || evmReady) && <FuturesPositionsCard />}
-
-      {/*
         ─── THE PAGE IS A LIST. THAT IS THE WHOLE REDESIGN ──────────────────
         «الان باید فقط توکن را نشان دهد و نمودار را با دکمه معامله، وقتی روی آن
         زدی یک پاپ‌آپ که کل صفحه را بگیرد … صفحه را شلوغ نکن»
@@ -1458,6 +1438,11 @@ export default function Perp() {
         <p>{t('perp.honestBody')}</p>
       </InfoBox>
 
+      {(solReady || evmReady) && (
+        <InfoBox title={t('perp.positions.title')} tone="info" id="perp-open-positions">
+          <FuturesPositionsCard />
+        </InfoBox>
+      )}
         </div>
       )}
 
@@ -1622,7 +1607,7 @@ export default function Perp() {
           </div>
 
           {/* ---- the amount ---- */}
-          <div className="perp-field">
+          <div className="perp-field perp-field--collateral">
             <span className="field-label">{t('perp.terminal.collateral')}</span>
             <div className="perp-collateral-row">
               <input
