@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStill } from '../AnimatedIcon';
 
-const ART = { dydx: ['prism', 'globe', 'vault'], onchain: ['globe', 'vault', 'prism'] };
+const ART = {
+  dydx: ['dydx-markets', 'dydx-depth', 'dydx-funding'],
+  onchain: ['onchain-network', 'onchain-assets', 'onchain-settlement']
+};
 
 export default function VenueBanner({ venue, title, subtitle, status }) {
   const { t } = useTranslation();
@@ -19,7 +22,7 @@ export default function VenueBanner({ venue, title, subtitle, status }) {
   return (
     <section className="derivatives-hero futures-venue-banner" data-venue={venue} data-slide={index} data-still={still || paused} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
       <div className="futures-venue-art" key={`art-${index}`} aria-hidden="true">
-        <img src={`/images/market-banner/${ART[venue][index]}.webp`} alt="" draggable="false" />
+        <img src={`/images/venue-banner/${ART[venue][index]}.svg`} alt="" draggable="false" />
       </div>
       <div className="futures-venue-slide" key={index}>
         <h2>{index === 0 ? title : t(`futures.venueSlides.${venue}.${index}.title`)}</h2>
