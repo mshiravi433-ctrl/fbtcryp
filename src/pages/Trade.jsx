@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -24,6 +24,10 @@ const PERCENTS = [25, 50, 75, 100];
  * header, its market tabs and the URL sync, because the host screen owns
  * those. Nothing about the paper maths changes.
  */
+function TradePanelStack({ children }) {
+  return <div className="spot-paper-stack">{children}</div>;
+}
+
 export default function Trade({ embedded = false } = {}) {
   // Subscribe so the figures re-render the moment the switch moves;
   // the masking itself lives in the formatters.
@@ -104,8 +108,8 @@ export default function Trade({ embedded = false } = {}) {
 
   const coinUp = (coin?.change24h ?? 0) >= 0;
 
-  // A plain fragment when embedded: the host page already provides the shell.
-  const Frame = embedded ? Fragment : PageTransition;
+  // Embedded mode shares the host shell and owns spacing between its panels.
+  const Frame = embedded ? TradePanelStack : PageTransition;
   return (
     <Frame>
       {!embedded && (

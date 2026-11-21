@@ -107,6 +107,8 @@
 
 /* Paper mode is labelled so it can never be mistaken for real funds. */
 .spot-root .spot-paper-badge {
+  margin: 0;
+  justify-self: start;
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
@@ -120,6 +122,13 @@
   font-size: var(--fs-xs);
   font-weight: 600;
 }
+
+.spot-root :is(.spot-paper,.spot-paper-stack) {
+  display: grid;
+  gap: clamp(12px, 2.5vw, 16px);
+  min-width: 0;
+}
+.spot-root .spot-paper-stack > :is(.notice,.lab-hero,.trade-ticket,section) { margin-block: 0; }
 
 .spot-root .spot-paper {
   padding: var(--sp-3) var(--sp-4);

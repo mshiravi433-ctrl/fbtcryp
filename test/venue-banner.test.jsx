@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import VenueBanner from '../src/components/futures/VenueBanner';
@@ -32,4 +33,30 @@ it('keeps the introduction static with reduced motion', () => {
   const { container } = render(<VenueBanner venue="dydx" title="Introduction" />);
   expect(container.querySelector('[data-still="true"]')).toBeTruthy();
   expect(screen.queryByRole('button')).toBeNull();
+});
+
+
+it('uses six distinct local illustrations across both venues', () => {
+  vi.useFakeTimers();
+  vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+  try {
+    const { container } = render(<>
+      <VenueBanner venue="dydx" title="dYdX" />
+      <VenueBanner venue="onchain" title="Onchain" />
+    </>);
+    const paths = new Set();
+    const artwork = new Set();
+    for (let i = 0; i < 3; i += 1) {
+      container.querySelectorAll('img').forEach((img) => {
+        const path = img.getAttribute('src');
+        expect(path).toMatch(/^\/images\/venue-banner\/[a-z-]+\.svg$/);
+        expect(img.alt).toBe('');
+        paths.add(path);
+        artwork.add(readFileSync(`public${path}`, 'utf8'));
+      });
+      act(() => vi.advanceTimersByTime(6500));
+    }
+    expect(paths.size).toBe(6);
+    expect(artwork.size).toBe(6);
+  } finally { vi.restoreAllMocks(); }
 });
