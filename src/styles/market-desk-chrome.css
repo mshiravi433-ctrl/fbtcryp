@@ -1,0 +1,32 @@
+/* Shared navigation for the desks in the Market menu. */
+.app-shell.app-shell--market-desk {
+  padding-bottom: calc(76px + env(safe-area-inset-bottom));
+}
+
+/*
+ * MARKET DESK HEADER — stays at the top of the page naturally (does NOT stick on scroll)
+ * so vertical screen space is preserved when browsing markets.
+ * When scrolling down, the header scrolls away rather than following the user down.
+ */
+.app-shell--market-desk > .top-bar,
+.app-shell--market-desk > .top-bar:not(.is-scrolled),
+.app-shell--market-desk > .top-bar.is-scrolled {
+  position: relative !important;
+  top: auto !important;
+  inset-block-start: auto !important;
+  z-index: 10 !important;
+  width: 100% !important;
+  background: color-mix(in srgb, var(--bg-void, #070b12) 94%, transparent) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  border-bottom: 1px solid var(--line) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme='light'] .app-shell--market-desk > .top-bar,
+:root[data-theme='light'] .app-shell--market-desk > .top-bar:not(.is-scrolled),
+:root[data-theme='light'] .app-shell--market-desk > .top-bar.is-scrolled {
+  background: color-mix(in srgb, #f6f8fc 94%, transparent) !important;
+  border-bottom: 1px solid var(--line) !important;
+  box-shadow: none !important;
+}

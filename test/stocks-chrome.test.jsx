@@ -12,8 +12,8 @@ beforeAll(async () => {
 
 afterEach(cleanup);
 
-describe('Stocks page chrome behavior', () => {
-  it('applies stocks chrome on /stocks: sticky shell, More button in header, removes BottomNav, centers QuickAccess', async () => {
+describe('Market desk chrome behavior', () => {
+  it('applies stocks chrome on /stocks: scroll-away shell, More button in header, removes BottomNav, centers QuickAccess', async () => {
     const { container } = render(
       <MemoryRouter initialEntries={['/stocks']}>
         <AppChrome />
@@ -50,6 +50,25 @@ describe('Stocks page chrome behavior', () => {
     fireEvent.click(closeBtn);
   });
 
+  it.each(['/perp', '/perp/terminal', '/dydx', '/ostium', '/derivatives', '/lab', '/lab/chart-guide', '/launch', '/bridge', '/p2p'])(
+    'uses the shared Market desk chrome on %s', async (path) => {
+      const { container } = render(<MemoryRouter initialEntries={[path]}><AppChrome /></MemoryRouter>);
+      expect(container.querySelector('.app-shell--market-desk > .top-bar')).toBeTruthy();
+      const header = container.querySelector('.top-bar');
+      expect(within(header).getByRole('button', { name: 'بیشتر' })).toBeTruthy();
+      expect(within(header).queryByRole('button', { name: 'شبکهٔ اجتماعی' })).toBeNull();
+      expect(container.querySelector('.bottom-nav')).toBeNull();
+      await waitFor(() => expect(document.querySelector('.quick-access--centered')).toBeTruthy());
+    }
+  );
+
+  it('leaves the Buy/Sell landing headerless with no desk launcher', () => {
+    const { container } = render(<MemoryRouter initialEntries={['/buy']}><AppChrome /></MemoryRouter>);
+    expect(container.querySelector('.app-shell--headerless')).toBeTruthy();
+    expect(container.querySelector('.app-shell--market-desk, .top-bar, .bottom-nav')).toBeNull();
+    expect(document.querySelector('.quick-access--centered')).toBeNull();
+  });
+
   it('keeps normal layout and footer on other routes like /', async () => {
     const { container } = render(
       <MemoryRouter initialEntries={['/']}>
@@ -60,6 +79,7 @@ describe('Stocks page chrome behavior', () => {
     const shell = container.querySelector('.app-shell');
     expect(shell).toBeTruthy();
     expect(shell.classList.contains('app-shell--stocks')).toBe(false);
+    expect(shell.classList.contains('app-shell--market-desk')).toBe(false);
 
     // Header has social button, not More button
     const header = container.querySelector('.top-bar');
