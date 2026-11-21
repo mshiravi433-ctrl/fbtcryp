@@ -1,3 +1,4 @@
+import VenueBanner from '../components/futures/VenueBanner';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -383,23 +384,14 @@ export default function Dydx({ embedded = false } = {}) {
   return (
     <PageTransition embedded={embedded}>
       <div className="derivatives-hall futures-venue futures-venue--dydx">
-        <div className="derivatives-aurora" aria-hidden="true" />
-        <motion.section className="derivatives-hero" variants={riseIn} initial="hidden" animate="show">
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-            <div>
-              <div className="derivatives-title">
-                <span className="derivatives-title-glow">{t('dydx.title')}</span>
-                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', letterSpacing: 1 }}>• dYdX</span>
-              </div>
-              <p className="derivatives-subtitle">{t('dydx.subtitle')}</p>
-            </div>
-            <span className={`pill ${live ? 'pill-up' : 'pill-down'}`} style={{ alignSelf: 'flex-start' }}>{live ? t('dydx.live') : t('dydx.offline')}</span>
-          </div>
-        </motion.section>
 
-        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
-          <div className="glass-notice" style={{ borderColor: 'rgba(255,59,107,0.16)', background: 'rgba(255,59,107,0.08)' }}>{t('dydx.risk')}</div>
-        </motion.div>
+        <VenueBanner venue="dydx" title={t('dydx.title')} subtitle={t('dydx.subtitle')}
+          status={<span className={`pill ${live ? 'pill-up' : 'pill-down'}`}>{live ? t('dydx.live') : t('dydx.offline')}</span>} />
+        <div className="futures-warning">
+          <InfoBox title={t('futures.venueSlides.riskTitle')} tone="warn" id="dydx-venue-risk">
+            <p>{t('dydx.risk')}</p>
+          </InfoBox>
+        </div>
 
         {/* Dismissible workflow guidance that reflects connection state. */}
         <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
@@ -422,8 +414,7 @@ export default function Dydx({ embedded = false } = {}) {
           </InfoBox>
         </motion.div>
 
-      <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18 }}>
-        <div className="sheen" />
+      <motion.section className="card dydx-account-panel" variants={riseIn} initial="hidden" animate="show">
         <div className="row-between">
           <div>
             <div className="faint">{t('dydx.tradingAccount')}</div>
@@ -441,7 +432,7 @@ export default function Dydx({ embedded = false } = {}) {
             <span className="mono">{account?.subaccount?.equity ? fmtUsd(account.subaccount.equity) : '0 USDC'}</span>
           </div>
         )}
-        <p className="faint" style={{ marginTop: 9 }}>{t('dydx.connectNote')}</p>
+        <p className="dydx-account-note">{t('dydx.connectNote')}</p>
       </motion.section>
 
       {!markets.length ? <p className="notice" style={{ marginTop: 16 }}>{t('dydx.marketUnavailable')}</p> : (

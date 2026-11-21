@@ -16515,6 +16515,30 @@
     }
   },
   "futures": {
+    "venueSlides": {
+      "riskTitle": "Leveraged trading warning",
+      "pause": "Pause automatic banner rotation",
+      "dydx": {
+        "1": {
+          "title": "The dYdX order book",
+          "body": "Explore market depth and recent trades in the terminal."
+        },
+        "2": {
+          "title": "The cost of holding a position",
+          "body": "Review funding and estimated risk before placing a trade."
+        }
+      },
+      "onchain": {
+        "1": {
+          "title": "Trade from your own wallet",
+          "body": "Check the settlement route; you approve and sign the order."
+        },
+        "2": {
+          "title": "Collateral and leverage",
+          "body": "Review order size and route costs before you sign."
+        }
+      }
+    },
     "onchain": {
       "title": "On-chain futures",
       "subtitle": "Crypto perpetual contracts on Solana, settled in USDT. Funding, open interest and liquidation distance stay on this desk. Gold, forex and stocks are on Global Horizon. Your wallet signs every order.",
