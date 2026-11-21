@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import AssetIcon from '../components/AssetIcon';
 import FundingPanel from '../components/FundingPanel';
-import Sheet from '../components/Sheet';
+import FullScreenSheet from '../components/FullScreenSheet';
 import {
   IconActivity,
   IconChevronRight,
@@ -453,12 +453,15 @@ export default function DerivativesDashboard({ embedded = false }) {
           </div>
         </motion.section>
 
-        {/* ─── dYdX market selector popup modal ───────────────────────────── */}
-        <Sheet
+        {/* ─── dYdX market selector popup modal (full-screen) ──────────── */}
+        <FullScreenSheet
           open={pickerOpen}
           onClose={() => setPickerOpen(false)}
           title={t('derivatives.selectMarket', { defaultValue: 'انتخاب بازار dYdX' })}
-          size="lg"
+          className="deriv-fullscreen-picker"
+          closeLabel={t('common.close', { defaultValue: 'بستن' })}
+          testId="deriv-market-picker"
+          manageFocus
         >
           <div className="deriv-picker-sheet">
             <div className="deriv-controls" style={{ marginTop: 0 }}>
@@ -573,7 +576,7 @@ export default function DerivativesDashboard({ embedded = false }) {
               </div>
             )}
           </div>
-        </Sheet>
+        </FullScreenSheet>
 
         {/* ─── the selected market ───────────────────────────────────────── */}
         {selected ? (

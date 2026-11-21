@@ -38,19 +38,38 @@
 .fnd-table-wrap {
   border: 1px solid var(--line);
   border-radius: 16px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
   background: var(--bg-panel);
+  width: 100%;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--rgb-1) 25%, transparent) transparent;
 }
+.fnd-table-wrap::-webkit-scrollbar {
+  height: 4px;
+}
+.fnd-table-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+.fnd-table-wrap::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--rgb-1) 25%, transparent);
+  border-radius: 4px;
+}
+
 .fnd-table {
   width: 100%;
+  min-width: 440px;
   border-collapse: collapse;
   margin: 0;
+  table-layout: auto;
 }
 .fnd-table th {
-  padding: 10px 14px;
+  padding: 12px 16px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   text-align: start;
@@ -59,13 +78,25 @@
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
+.fnd-table th:first-child,
+.fnd-table td:first-child {
+  padding-inline-start: 18px;
+  min-width: 180px;
+}
+.fnd-table th:last-child,
+.fnd-table td:last-child {
+  padding-inline-end: 18px;
+  min-width: 120px;
+}
 .fnd-table th.fnd-num,
 .fnd-table td.fnd-num {
   text-align: end;
+  min-width: 110px;
+  padding-inline: 12px;
 }
 .fnd-table td {
-  padding: 12px 14px;
-  font-size: 12.5px;
+  padding: 14px 16px;
+  font-size: 13px;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
 }
@@ -81,34 +112,40 @@
 }
 
 .fnd-venue-name {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
+  flex-wrap: wrap;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 13.5px;
   color: var(--text-1);
+  line-height: 1.4;
 }
 .fnd-venue-sub {
   display: block;
-  margin-top: 3px;
-  font-size: 10.5px;
+  margin-top: 4px;
+  font-size: 11px;
   font-weight: 500;
   line-height: 1.6;
   color: var(--text-3);
+  white-space: normal;
 }
 .fnd-apr {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  text-align: end;
 }
 .fnd-oi {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 12px;
+  font-weight: 700;
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  text-align: end;
 }
 
 /* The cheapest row: accent tint that survives zebra + hover, and a badge. */
@@ -232,6 +269,32 @@
       transparent 60%
     ),
     var(--bg-panel);
+}
+
+/* ─────────────────────────── MOBILE BREAKPOINT ─────────────────────────── */
+@media (max-width: 520px) {
+  .fnd-panel {
+    padding: 16px 12px;
+  }
+  .fnd-table-wrap {
+    margin-inline: -4px;
+    width: calc(100% + 8px);
+    border-radius: 14px;
+  }
+  .fnd-table th,
+  .fnd-table td {
+    padding: 11px 12px;
+  }
+  .fnd-table th:first-child,
+  .fnd-table td:first-child {
+    padding-inline-start: 14px;
+    min-width: 160px;
+  }
+  .fnd-table th:last-child,
+  .fnd-table td:last-child {
+    padding-inline-end: 14px;
+    min-width: 100px;
+  }
 }
 
 /* Reduced motion: the row hover fade is decoration, not signal. */
