@@ -1,0 +1,32 @@
+/* Stocks surface — sticky header, custom shell padding, desk layout */
+.app-shell.app-shell--stocks {
+  padding-bottom: calc(76px + env(safe-area-inset-bottom));
+}
+
+/*
+ * STOCKS HEADER — sticks firmly to the top and does not scroll with page content.
+ * Keeps an opaque/frosted glass surface and border both at rest and when scrolled,
+ * preventing stocks text/cards from bleeding into header elements.
+ */
+.app-shell--stocks > .top-bar,
+.app-shell--stocks > .top-bar:not(.is-scrolled),
+.app-shell--stocks > .top-bar.is-scrolled {
+  position: sticky !important;
+  top: 0 !important;
+  inset-block-start: 0 !important;
+  z-index: 30 !important;
+  width: 100% !important;
+  background: color-mix(in srgb, var(--bg-void, #070b12) 94%, transparent) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  border-bottom: 1px solid var(--line) !important;
+  box-shadow: 0 4px 20px -8px rgba(0, 0, 0, 0.45) !important;
+}
+
+:root[data-theme='light'] .app-shell--stocks > .top-bar,
+:root[data-theme='light'] .app-shell--stocks > .top-bar:not(.is-scrolled),
+:root[data-theme='light'] .app-shell--stocks > .top-bar.is-scrolled {
+  background: color-mix(in srgb, #f6f8fc 94%, transparent) !important;
+  border-bottom: 1px solid var(--line) !important;
+  box-shadow: 0 4px 20px -8px rgba(16, 24, 40, 0.08) !important;
+}
