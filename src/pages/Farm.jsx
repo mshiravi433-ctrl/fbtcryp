@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -41,12 +41,31 @@ import {
   AUTOCOMPOUND_PROJECTS, buildYieldStrategies, chainIconKey, emitFarmEvent, fbtFeeEngine, FARM_PROTOCOL,
   farmPoolResearch, farmProtocolSummary, normalizeFarmOpportunity, projectDisplayName, VAULT_PROJECTS
 } from '../lib/farmDeFi';
-import FarmPositionHub, { FARM_EXECUTION_ADAPTERS, farmExecutionAdapterFor } from '../components/Farm/FarmPositionHub';
+/*
+ * THE POSITION HUB IS CODE-SPLIT — and it is also the crash guard.
+ *
+ * It statically pulls FIVE adapter panels (Aave Base/Arbitrum, Compound,
+ * Lido, Morpho), each of which imports its own pinned-contract module. All of
+ * that used to be part of Farm's own chunk, so ANY throw inside any panel —
+ * or inside anything they import at module scope — took the whole Farm screen
+ * down with «این صفحه به مشکل خورد» before a single row rendered. A page
+ * whose feed loaded fine should never be lost to one optional adapter.
+ *
+ * As a lazy chunk it fails where it can be contained: the import is retried
+ * by lazyRetry (a deploy that renamed the chunk is recovered), and the hub
+ * renders inside its own <Suspense> with a RouteBoundary-style guard below,
+ * so a broken adapter costs the adapter section and nothing else.
+ */
+const FarmPositionHub = lazyRetry(() => import('../components/Farm/FarmPositionHub'));
+/* The ids/matchers stay eager: they are what a live feed row uses to decide
+   whether an action is offered, and a stale answer there is a lie. */
+import { FARM_EXECUTION_ADAPTERS, farmExecutionAdapterFor } from '../components/Farm/FarmPositionHub';
 import InvestButton from '../components/Farm/InvestButton';
 import VenueRail from '../components/Farm/VenueRail';
 import { feedErrorLabel } from '../lib/defi/farmErrors';
 import TrendChart from '../components/TrendChart';
 import FarmOrbMark from '../components/farm/FarmOrbMark';
+import lazyRetry from '../lib/lazyRetry';
 
 const FARM_TABS = ['inapp', 'recommended', 'market', 'strategies', 'pools', 'watchlist'];
 const EXECUTION_LIVE = FARM_EXECUTION_ADAPTERS.some((adapter) => adapter.openToPublic);
@@ -62,6 +81,26 @@ function detectLowFarmHardware() {
     const memory = Number(nav.deviceMemory);
     return (Number.isFinite(cores) && cores > 0 && cores <= 4)
       || (Number.isFinite(memory) && memory > 0 && memory <= 4);
+  } catch {
+    return false;
+  }
+}
+
+/** Scroll a node into view if the engine actually has the method.
+ *
+ * `el?.scrollIntoView(...)` guards the ELEMENT, not the METHOD: on any engine
+ * (or webview) that does not implement it — and in a test harness — the call
+ * throws TypeError. Because these calls sit in useEffect bodies and event
+ * handlers, a throw there is NOT swallowed by <Suspense>: it unwinds to the
+ * nearest error boundary and replaces the whole Farm screen with
+ * «این صفحه به مشکل خورد» — the reported bug — on a page whose data had
+ * loaded perfectly. Optional, always.
+ */
+function scrollIntoViewSafe(node, options) {
+  if (!node || typeof node.scrollIntoView !== 'function') return false;
+  try {
+    node.scrollIntoView(options);
+    return true;
   } catch {
     return false;
   }
@@ -1412,7 +1451,9 @@ function PositionPanel({ wallet, t, navigate }) {
           <button className="btn btn-ghost" onClick={() => navigate('/wallet')}>{t('wallet.connect')}</button>
         </>
       )}
-      <FarmPositionHub />
+      <Suspense fallback={null}>
+        <FarmPositionHub />
+      </Suspense>
       <p className="notice">{t('farm.positionsUnavailable')}</p>
     </section>
   );
@@ -1514,7 +1555,7 @@ export default function Farm() {
   const previousTabRef = useRef(tab);
 
   useEffect(() => {
-    tabsRef.current?.querySelector('button.active')?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    scrollIntoViewSafe(tabsRef.current?.querySelector('button.active'), { behavior: 'smooth', block: 'nearest', inline: 'center' });
   }, [tab]);
 
   useEffect(() => {
@@ -1541,7 +1582,7 @@ export default function Farm() {
   useEffect(() => {
     if (tab !== 'inapp' || !focus) return undefined;
     const timer = setTimeout(() => {
-      document.getElementById(`farm-inapp-${focus}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      scrollIntoViewSafe(document.getElementById(`farm-inapp-${focus}`), { behavior: 'smooth', block: 'start' });
     }, 80);
     return () => clearTimeout(timer);
   }, [tab, focus]);
@@ -1612,7 +1653,7 @@ export default function Farm() {
       setSelected(hit);
       setExpandedId(hit.id);
       setTimeout(() => {
-        document.getElementById(`farm-pool-${hit.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        scrollIntoViewSafe(document.getElementById(`farm-pool-${hit.id}`), { behavior: 'smooth', block: 'center' });
       }, 120);
     }
   }, [params, opportunities, venueOpportunities, setParams]);
@@ -1881,7 +1922,7 @@ export default function Farm() {
     next.set('tab', 'inapp');
     setParams(next, { replace: true });
     setTimeout(() => {
-      document.querySelector(`[data-testid="farm-hub-row-${venueId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      scrollIntoViewSafe(document.querySelector(`[data-testid="farm-hub-row-${venueId}"]`), { behavior: 'smooth', block: 'center' });
     }, 140);
   };
 
