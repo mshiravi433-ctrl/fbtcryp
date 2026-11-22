@@ -544,7 +544,7 @@ export async function run(container) {
 
     const sw = readFileSync('public/sw.js', 'utf8');
     t('the shell cache name moved on, so a pinned device evicts the old one',
-      /const SHELL = 'fbt-shell-v35'/.test(sw));
+      /const SHELL = 'fbt-shell-v36'/.test(sw));
     t('...a navigation is fetched past the HTTP cache',
       /fetch\(request, \{ cache: 'reload' \}\)/.test(sw));
     t('...and the install-time shell is fetched the same way, not `addAll`',
