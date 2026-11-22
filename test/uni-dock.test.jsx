@@ -13,10 +13,12 @@
  *
  *   1. SCOPE — the dock appears on exactly those four sections (and their
  *      children), the global BottomNav is gone there, nothing else changed.
- *   2. THREE + ONE — the pill holds three section buttons, and the AI is a
- *      SEPARATE surface outside that pill, never the fourth slot in it.
- *   3. THE THREE ARE THE SIBLINGS — the page you are on is not one of them,
- *      so all four screens are always one tap apart.
+ *   2. FOUR + ONE — the pill holds the group's four sections (Farm, Loan,
+ *      INSURANCE, Auto Orders — the owner replaced «محافظت» with «بیمه»),
+ *      and the AI is a SEPARATE surface outside that pill, never a fifth
+ *      slot in it.
+ *   3. THE ACTIVE ONE HAS THE NOTCH — exactly one button carries the notch,
+ *      and it is the section you are on.
  *   4. MOTION + CHROME — scroll down hides header and dock, scroll up
  *      brings both back, reduced motion cancels it, and the side QuickAccess
  *      rail is not mounted on these screens.
@@ -98,53 +100,67 @@ describe('the section dock', () => {
     expect(container.querySelector('.app-shell').classList.contains('app-shell--uni-dock')).toBe(false);
   });
 
-  it('puts exactly three section buttons in the pill', async () => {
+  it('puts exactly four section buttons in the pill, one per screen', async () => {
     const { container } = await renderAt('/farm');
-    const group = container.querySelector('.uni-dock__group');
-    expect(group).toBeTruthy();
-    expect(group.querySelectorAll(':scope > button').length).toBe(3);
-    for (const btn of group.querySelectorAll(':scope > button')) {
+    const pill = container.querySelector('.uni-dock__pill');
+    expect(pill).toBeTruthy();
+    expect(pill.querySelectorAll(':scope > button').length).toBe(4);
+    expect(labelsOf(pill)).toEqual(['فارم', 'وام', 'بیمه', 'سفارش خودکار']);
+    for (const btn of pill.querySelectorAll(':scope > button')) {
       expect(btn.getAttribute('aria-label')).toBeTruthy();
       expect(btn.querySelector('svg')).toBeTruthy();
     }
   });
 
-  it('stands the AI OUTSIDE the pill, not as a fourth slot in it', async () => {
+  it('names the third slot «بیمه», not «محافظت»', async () => {
+    const { container } = await renderAt('/loan');
+    const labels = labelsOf(container.querySelector('.uni-dock__pill'));
+    expect(labels[2]).toBe('بیمه');
+    expect(labels.join(' ')).not.toContain('محافظت');
+  });
+
+  it('stands the AI OUTSIDE the pill, not as a fifth slot in it', async () => {
     const { container } = await renderAt('/farm');
     const ai = container.querySelector('.uni-dock__ai');
-    const group = container.querySelector('.uni-dock__group');
+    const pill = container.querySelector('.uni-dock__pill');
     expect(ai).toBeTruthy();
     // The structural rule this whole layout is for.
-    expect(group.contains(ai)).toBe(false);
-    expect(group.querySelectorAll(':scope > button').length).toBe(3);
+    expect(pill.contains(ai)).toBe(false);
+    expect(pill.querySelectorAll(':scope > button').length).toBe(4);
     // …and it is still a real, named destination.
     expect(ai.getAttribute('aria-label')).toBe('سیستم Intent');
   });
 
-  it('shows the three SIBLING sections, never the page you are on', async () => {
-    const cases = {
-      '/farm': ['وام', 'محافظت / بیمه', 'سفارش خودکار'],
-      '/loan': ['فارم', 'محافظت / بیمه', 'سفارش خودکار'],
-      '/insurance': ['فارم', 'وام', 'سفارش خودکار'],
-      '/orders': ['فارم', 'وام', 'محافظت / بیمه']
-    };
-    for (const [path, expected] of Object.entries(cases)) {
+  it('marks the section you are on as active, and only that one', async () => {
+    const cases = { '/farm': 'farm', '/loan': 'loan', '/insurance': 'insurance', '/orders': 'orders', '/orders/history': 'orders' };
+    for (const [path, id] of Object.entries(cases)) {
       const { container } = await renderAt(path);
-      const group = container.querySelector('.uni-dock__group');
-      expect(labelsOf(group), path).toEqual(expected);
-      // Nothing in the pill claims to be the current page.
-      expect(container.querySelector('.uni-dock__group [aria-current="page"]'), path).toBeNull();
+      const active = [...container.querySelectorAll('.uni-dock__pill > button.is-active')];
+      expect(active.length, path).toBe(1);
+      expect(active[0].dataset.section, path).toBe(id);
+      expect(container.querySelectorAll('.uni-dock__pill [aria-current="page"]').length, path).toBe(1);
       cleanup();
+    }
+  });
+
+  it('gives the active button the notch, and nobody else', async () => {
+    const { container } = await renderAt('/insurance');
+    const active = container.querySelector('.uni-dock__pill > button.is-active');
+    expect(active.querySelector('.uni-dock__notch')).toBeTruthy();
+    // Exactly one notch is rendered in the whole bar.
+    expect(container.querySelectorAll('.uni-dock__notch').length).toBe(1);
+    for (const btn of container.querySelectorAll('.uni-dock__pill > button:not(.is-active)')) {
+      expect(btn.querySelector('.uni-dock__notch')).toBeNull();
     }
   });
 
   it('lists the AI as separate from the section buttons', async () => {
     const { container } = await renderAt('/orders');
-    const groupLabels = labelsOf(container.querySelector('.uni-dock__group'));
+    const pillLabels = labelsOf(container.querySelector('.uni-dock__pill'));
     const ai = container.querySelector('.uni-dock__ai');
-    expect(groupLabels).not.toContain(ai.getAttribute('aria-label'));
-    // Three section slots + the AI button, and no more.
-    expect(container.querySelectorAll('.uni-dock button').length).toBe(4);
+    expect(pillLabels).not.toContain(ai.getAttribute('aria-label'));
+    // Four section slots + the AI button, and no more.
+    expect(container.querySelectorAll('.uni-dock button').length).toBe(5);
   });
 
   it('is icon-only: no visible label text inside either surface', async () => {
@@ -156,19 +172,20 @@ describe('the section dock', () => {
         .join('');
       expect(visible).toBe('');
     }
-    expect(container.querySelectorAll('.uni-dock__sr').length).toBe(4);
+    expect(container.querySelectorAll('.uni-dock__sr').length).toBe(5);
   });
 
-  it('navigates to the sibling section that was tapped', async () => {
+  it('moves the notch to the section that was tapped', async () => {
     const { container } = await renderAt('/farm');
-    const group = container.querySelector('.uni-dock__group');
-    fireEvent.click(group.querySelectorAll(':scope > button')[0]);
-    // Nothing in a jsdom MemoryRouter can prove the route rendered here, but
-    // /loan becoming the current section would empty it of that label.
+    const pill = container.querySelector('.uni-dock__pill');
+    // Farm is active on /farm; tap Orders (the fourth slot).
+    fireEvent.click(pill.querySelectorAll(':scope > button')[3]);
     await waitFor(() => {
-      const labels = labelsOf(container.querySelector('.uni-dock__group'));
-      expect(labels[0]).toBe('فارم');
+      const active = container.querySelector('.uni-dock__pill > button.is-active');
+      expect(active).toBeTruthy();
+      expect(active.dataset.section).toBe('orders');
     });
+    expect(container.querySelectorAll('.uni-dock__notch').length).toBe(1);
   });
 
   it('does not mount the side QuickAccess rail on these screens', async () => {
