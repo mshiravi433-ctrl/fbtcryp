@@ -86,6 +86,24 @@ const BRIDGES = [
     }
   },
   {
+    id: 'kilo',
+    name: 'Kilo AI Gateway',
+    vendor: 'Kilo',
+    kind: 'ai',
+    protocol: 'openai',
+    baseUrl: 'https://ai-gateway.kilo.ai/api/v1',
+    auth: { header: 'authorization', scheme: 'bearer' },
+    modelPreference: ['kilo-auto/efficient', 'kilo-auto/frontier', 'deepseek-v4.1-flash', 'glm-5.3-flash', 'kilo-auto/free'],
+    defaultModel: 'kilo-auto/efficient',
+    siteUrl: 'https://kilo.ai',
+    docsUrl: 'https://kilo.ai/docs/gateway/quickstart',
+    keyUrl: 'https://app.kilo.ai',
+    domainUse: {
+      fa: 'درگاه یکپارچهٔ ۵۰۰+ مدل بدون کارمزد اضافه (Zero-Markup) برای استدلال عمیق، ارکستریشن چندمدلی و تحلیل ریسک و بازار.',
+      en: 'Zero-markup universal gateway across 500+ models for deep reasoning, multi-model orchestration, and market/risk analysis.'
+    }
+  },
+  {
     id: 'groq',
     name: 'Groq',
     vendor: 'Groq',

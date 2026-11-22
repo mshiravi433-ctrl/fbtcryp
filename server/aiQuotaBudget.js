@@ -79,6 +79,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  */
 export const DEFAULT_DAILY_LIMITS = Object.freeze({
   openrouterfree: 50,
+  kilofree: 500,
+  kilo: 1000,
   groq: 1000,
   workersai: 10000,
   openrouter: 1000,

@@ -716,7 +716,7 @@ export function createIntentOS({
              * Perplexity are no longer registered providers, so they must not
              * be advertised to the user as part of the fleet.
              */
-            activeProviders: ['openrouter', 'groq', 'gemini', 'anthropic', 'deepseek', 'mistral', 'workersai', 'aimlapi', 'internal'],
+            activeProviders: ['openrouter', 'openrouterfree', 'kilo', 'kilofree', 'groq', 'gemini', 'anthropic', 'deepseek', 'mistral', 'workersai', 'aimlapi', 'internal'],
             confidenceScore: confidence.confidenceScore,
             riskScore: confidence.riskScore,
             dataFreshness: confidence.dataFreshness

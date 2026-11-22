@@ -35,6 +35,7 @@ import { PROVIDER_CONFIGS } from '../../server/aiGateway.js';
 
 const ALL_KEYS = {
   OPENROUTER_API_KEY: 'sk-or-test',
+  KILO_API_KEY: 'kilo-test',
   GROQ_API_KEY: 'gsk-test',
   OPENAI_API_KEY: 'sk-test',
   ANTHROPIC_API_KEY: 'ant-test',
@@ -89,17 +90,16 @@ function withFleet(value, fn) {
 /*  A. THE DECLARATION                                                        */
 /* -------------------------------------------------------------------------- */
 
-test('the default fleet is exactly the three providers whose keys work', () => {
+test('the default fleet is the four free-tier seats that answer', () => {
   const fleet = resolveProviderFleet();
   assert.equal(fleet.schema, PROVIDER_FLEET_SCHEMA);
   /*
-   * The three seats that answer on this deployment. `openrouterfree` is the
-   * OpenRouter free catalogue (`:free` ids) on the SAME key as the paid
-   * `openrouter` seat; the paid seat is out because every id it knows is a
-   * paid id and a free key answers 402 on all of them.
+   * The four seats that answer on this deployment: `openrouterfree`, `kilofree`,
+   * `groq`, and `workersai`. Paid `openrouter` and `kilo` stay out of the
+   * default fleet so zero-balance deployments never burn round-trips on 402s.
    */
-  assert.deepEqual(fleet.providers, ['openrouterfree', 'groq', 'workersai']);
-  assert.deepEqual([...DEFAULT_PROVIDER_FLEET], ['openrouterfree', 'groq', 'workersai']);
+  assert.deepEqual(fleet.providers, ['openrouterfree', 'kilofree', 'groq', 'workersai']);
+  assert.deepEqual([...DEFAULT_PROVIDER_FLEET], ['openrouterfree', 'kilofree', 'groq', 'workersai']);
   assert.equal(fleet.source, 'default');
   assert.equal(fleet.restricted, true);
 });
@@ -143,7 +143,7 @@ test('aliases an operator would actually type resolve, junk is reported', () => 
 test('an unusable value neither widens nor empties the fleet', () => {
   for (const raw of ['   ', 'giberish', ',,,']) {
     const fleet = resolveProviderFleet(raw);
-    assert.deepEqual(fleet.providers, ['openrouterfree', 'groq', 'workersai'], `raw=${JSON.stringify(raw)}`);
+    assert.deepEqual(fleet.providers, ['openrouterfree', 'kilofree', 'groq', 'workersai'], `raw=${JSON.stringify(raw)}`);
     assert.equal(fleet.source, 'default');
     assert.equal(fleet.restricted, true);
   }
@@ -169,21 +169,18 @@ test('`internal` is never excluded: the assistant always keeps a keyless seat', 
 /*  B. THE GATEWAY OBEYS IT                                                  */
 /* -------------------------------------------------------------------------- */
 
-test('with every key present, the active fleet is still the three (+internal)', () => {
+test('with every key present, the active fleet is still the four free seats (+internal)', () => {
   resetProviderHealth();
   withFleet(undefined, () => {
     const active = getActiveProviderIds();
-    for (const id of ['openrouterfree', 'groq', 'workersai', 'internal']) {
+    for (const id of ['openrouterfree', 'kilofree', 'groq', 'workersai', 'internal']) {
       assert.ok(active.includes(id), `expected ${id} active, got ${active.join(',')}`);
     }
     /*
-     * The PAID `openrouter` seat is deliberately not active even though its
-     * key is present: every id it knows is a paid id, and this deployment's
-     * key is on the free tier, so a call to it answers 402 on every
-     * candidate. Naming the free seat is how the operator avoids paying for
-     * a round-trip that cannot succeed.
+     * The PAID `openrouter` and `kilo` seats are deliberately not active even
+     * though their keys are present: every id they know is a paid id.
      */
-    for (const id of ['openrouter', 'openai', 'anthropic', 'gemini', 'xai', 'deepseek', 'mistral', 'aimlapi']) {
+    for (const id of ['openrouter', 'kilo', 'openai', 'anthropic', 'gemini', 'xai', 'deepseek', 'mistral', 'aimlapi']) {
       assert.equal(active.includes(id), false, `${id} must not be active`);
     }
   });
@@ -215,12 +212,12 @@ test('a keyed but out-of-fleet provider is OUT_OF_FLEET, never «needs key»', (
     assert.equal(openrouter.status, 'OUT_OF_FLEET');
 
     const summary = getFleetSummary();
-    assert.equal(summary.fleet.providers.join(','), 'openrouterfree,groq,workersai');
+    assert.equal(summary.fleet.providers.join(','), 'openrouterfree,kilofree,groq,workersai');
     assert.deepEqual(
       summary.outOfFleetWithKey.sort(),
-      ['aimlapi', 'anthropic', 'deepseek', 'gemini', 'mistral', 'openai', 'openrouter', 'xai']
+      ['aimlapi', 'anthropic', 'deepseek', 'gemini', 'kilo', 'mistral', 'openai', 'openrouter', 'xai']
     );
-    /* The three in-fleet providers have keys, so nothing is "missing a key". */
+    /* The four in-fleet providers have keys, so nothing is "missing a key". */
     assert.deepEqual(summary.needsKey, []);
   });
 });

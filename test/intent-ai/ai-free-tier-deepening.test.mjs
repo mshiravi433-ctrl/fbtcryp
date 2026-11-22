@@ -253,10 +253,11 @@ test('the paid seats are unchanged — this work is additive', () => {
 test('the Cloudflare max seat is the reasoning model, not the 8B model', () => {
   const ladder = intelligenceModelLadder('workersai', 'max');
   /* 2026-11-11 — Qwen 3.8 27B took the flagship seat. The R1 distill it
-     replaced is scheduled for deprecation on 2026-11-20, so it cannot be the
-     seat the smartest mode depends on. */
+     replaced reached its scheduled deprecation on 2026-11-20 (HTTP 410 Gone)
+     and now lives in `retiredModels` so it can never be auto-picked. */
   assert.equal(ladder[0], '@cf/qwen/qwen3.8-27b');
-  assert.ok(ladder.includes('@cf/deepseek-ai/deepseek-r1-distill-qwen-32b'));
+  assert.equal(ladder.includes('@cf/deepseek-ai/deepseek-r1-distill-qwen-32b'), false);
+  assert.equal(isRetiredModel('@cf/deepseek-ai/deepseek-r1-distill-qwen-32b'), true);
   assert.ok(ladder.includes('@cf/meta/llama-3.3-70b-instruct-fp8-fast'));
 });
 
@@ -299,12 +300,13 @@ test('the Cloudflare model path keeps its literal @ and slashes', () => {
 /*  E. THE FLEET DECLARES THE FREE SEATS                                       */
 /* -------------------------------------------------------------------------- */
 
-test('the default fleet is the three seats that answer', () => {
+test('the default fleet is the four free-tier seats that answer', () => {
   const fleet = resolveProviderFleet();
-  assert.deepEqual(fleet.providers, ['openrouterfree', 'groq', 'workersai']);
-  /* The paid seat is out: every id it knows costs money and a free key
-     answers 402 on all of them. */
+  assert.deepEqual(fleet.providers, ['openrouterfree', 'kilofree', 'groq', 'workersai']);
+  /* The paid seats are out: every id they know costs money and a zero-balance
+     account answers 401/402 on all of them. */
   assert.equal(fleet.providers.includes('openrouter'), false);
+  assert.equal(fleet.providers.includes('kilo'), false);
 });
 
 test('the free seat is nameable by the spellings an operator would type', () => {

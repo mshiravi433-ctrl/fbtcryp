@@ -45,6 +45,7 @@ import {
   providerCallBudgetLeft,
   spendProviderCall
 } from './aiGateway.js';
+import { DEFAULT_PROVIDER_FLEET } from './aiProviderFleet.js';
 import { runMultiAiDebate } from './aiConsensus.js';
 import { researchWeb, analyzeWithSources } from './aiWebResearch.js';
 import { resolveIntelligenceMode, intelligenceGeneration, intelligenceDeadlineMs, getIntelligenceProfile } from './aiIntelligence.js';
@@ -1083,7 +1084,7 @@ async function runCollaborativeAnalysisInner({
     } catch {
       fleetIds = [];
     }
-    if (!fleetIds.length) fleetIds = ['openrouterfree', 'groq', 'workersai'];
+    if (!fleetIds.length) fleetIds = DEFAULT_PROVIDER_FLEET.slice();
     quotaCapApplied = await quotaAwareCallCap(fleetIds, { baseCap: turnBudget.maxCalls });
     if (quotaCapApplied && Number.isFinite(quotaCapApplied.cap) && quotaCapApplied.cap < turnBudget.maxCalls) {
       turnBudget.maxCalls = quotaCapApplied.cap;

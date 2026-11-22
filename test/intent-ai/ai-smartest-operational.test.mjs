@@ -352,12 +352,12 @@ test('the fleet payload and the panel tell the same retired story', () => {
 test('the visible depth badges are informational and no local selector remains', () => {
   const unified = src('src/components/IntentAIUnified.jsx');
   assert.match(unified, /data-testid="neural-intelligence-chip"/);
-  assert.match(unified, /data-testid="neural-intelligence-composer"/);
+  assert.doesNotMatch(unified, /data-testid="neural-intelligence-composer"/);
   assert.match(unified, /Answer depth: Auto/);
   assert.match(unified, /عمق پاسخ: خودکار/);
   assert.doesNotMatch(unified, /setIntelligenceMode|onIntelligenceMode/);
   const chipAt = unified.indexOf('data-testid="neural-intelligence-chip"');
-  assert.ok(chipAt > 0 && unified.slice(chipAt, chipAt + 500).includes('role="status"'),
+  assert.ok(chipAt > 0 && unified.slice(chipAt - 500, chipAt + 500).includes('role="status"'),
     'the visible badge is status, not a control');
   const panel = src('src/components/IntentOpsPanels.jsx');
   assert.match(panel, /data-testid="intel-intelligence-auto"/);

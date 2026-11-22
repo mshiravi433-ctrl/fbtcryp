@@ -228,13 +228,19 @@ export const PROVIDER_CONFIGS = Object.freeze({
     defaultModel: process.env.OPENROUTER_FREE_MODEL || 'nvidia/nemotron-3.5-super-vl:free',
     fallbackModels: [
       'nvidia/nemotron-3-ultra-550b-a55b:free',
+      /* Keep non-NVIDIA (`Does not train` / ZDR-capable router) ids inside the
+         4-candidate attempt window so an account whose privacy settings block
+         NVIDIA's training endpoints never locks onto NVIDIA-only ids. */
+      'google/gemma-4-31b-it:free',
+      /* OpenRouter's own free router: filters across all live `:free` endpoints
+         matching the account's ZDR / prompt-training / guardrail settings
+         (including zero-retention Particle AI / Perplexity and Google Gemma 4). */
+      'openrouter/free',
+      'particle-ai/particle-1:free',
+      'baidu/ernie-5.5-flash-preview:free',
       'nvidia/nemotron-3.5-lightning:free',
       'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
-      'cohere/north-mini-code:free',
-      'google/gemma-4-31b-it:free',
-      /* OpenRouter's own free router: it picks a live free model for us, so
-         a withdrawn id above costs one round-trip, not an outage. */
-      'openrouter/free'
+      'cohere/north-mini-code:free'
     ],
     retiredModels: [
       /* Ids that were in the free catalog and are gone now. They answer 404,
@@ -262,6 +268,65 @@ export const PROVIDER_CONFIGS = Object.freeze({
     specialty: 'Free Tier Reasoning & Orchestration — 1M-Context Nemotron/Gemma Seats at Zero Cost',
     costTier: 'free',
     latencyTier: 'medium'
+  },
+  /*
+   * ─── KILO AI GATEWAY (`ai-gateway.kilo.ai`) — PAID & FREE SEATS ──────────
+   * Same two-seat split as OpenRouter (`kilo` vs `kilofree`):
+   *   1. `kilo` — universal OpenAI-compatible inference gateway across 500+
+   *      models (`kilo-auto/frontier`, `kilo-auto/efficient`, Claude Opus 5.5,
+   *      GPT-6.2 Sol, DeepSeek V4.1, GLM 5.3) with zero markup on `KILO_API_KEY`.
+   *      Kept out of `DEFAULT_PROVIDER_FLEET` until an operator funds a Kilo
+   *      account and adds `kilo` to `FBT_AI_PROVIDERS`.
+   *   2. `kilofree` — Kilo's zero-cost `:free` catalogue + `kilo-auto/free`
+   *      router. Works with `KILO_API_KEY` AND supports Kilo's documented
+   *      anonymous unauthenticated access for free models (200 requests/hour
+   *      per IP) on live server/Vercel deployments (`KILO_FREE_ANONYMOUS`).
+   */
+  kilo: {
+    name: 'Kilo Gateway',
+    url: 'https://ai-gateway.kilo.ai/api/v1/chat/completions',
+    envKey: 'KILO_API_KEY',
+    envKeys: ['KILO_API_KEY', 'KILOCODE_API_KEY', 'KILO_KEY'],
+    modelEnv: 'KILO_MODEL',
+    baseModel: 'kilo-auto/efficient',
+    defaultModel: process.env.KILO_MODEL || 'kilo-auto/efficient',
+    fallbackModels: [
+      'z-ai/glm-5.3-flash',
+      'deepseek/deepseek-v4.1-flash-1017',
+      'openai/gpt-6.2-sol',
+      'anthropic/claude-opus-5.5',
+      'kilo-auto/frontier'
+    ],
+    retiredModels: [],
+    type: 'openai-compatible',
+    specialty: 'Universal AI Inference Gateway — Zero-Markup Multi-Provider Routing (Claude, GPT, DeepSeek, GLM)',
+    costTier: 'medium',
+    latencyTier: 'fast'
+  },
+  kilofree: {
+    name: 'Kilo Gateway Free',
+    url: 'https://ai-gateway.kilo.ai/api/v1/chat/completions',
+    envKey: 'KILO_API_KEY',
+    envKeys: ['KILO_API_KEY', 'KILOCODE_API_KEY', 'KILO_KEY'],
+    allowAnonymous: true,
+    anonymousEnv: 'KILO_FREE_ANONYMOUS',
+    modelEnv: 'KILO_FREE_MODEL',
+    baseModel: 'nvidia/nemotron-3.5-super-vl:free',
+    defaultModel: process.env.KILO_FREE_MODEL || 'nvidia/nemotron-3.5-super-vl:free',
+    fallbackModels: [
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'baidu/ernie-5.5-flash-preview:free',
+      /* `kilo-auto/free` sits inside the default attempt window so Kilo's own
+         curated free router catches any churn in named `:free` IDs on the same turn. */
+      'kilo-auto/free',
+      'reflection/beam-free',
+      'kilo-auto/small'
+    ],
+    retiredModels: [],
+    type: 'openai-compatible',
+    specialty: 'Zero-Cost Free Gateway — 1M-Context Nemotron & Auto-Free Router (Keyless or Keyed, 200 req/hr)',
+    costTier: 'free',
+    latencyTier: 'fast'
   },
   openai: {
     name: 'OpenAI GPT',
@@ -479,12 +544,15 @@ export const PROVIDER_CONFIGS = Object.freeze({
     defaultModel: process.env.WORKERSAI_MODEL || '@cf/meta/llama-3.1-8b-instruct',
     fallbackModels: [
       '@cf/qwen/qwen3.8-27b',
-      '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
       '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
       '@cf/mistral/mistral-7b-instruct-v0.2',
       '@cf/meta/llama-3.2-3b-instruct'
     ],
-    retiredModels: [],
+    retiredModels: [
+      /* Deprecated by Cloudflare on 2026-11-20 (answers HTTP 410 Gone). */
+      '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
+      '@cf/deepseek/deepseek-r1-distill-qwen-32b'
+    ],
     type: 'workersai-native',
     specialty: 'Free Serverless Open Models (Llama/DeepSeek-R1/Mistral) — Private Edge Inference',
     costTier: 'free',
@@ -600,6 +668,28 @@ function readEnvAny(names) {
 
 const envNamesFor = (cfg) => (Array.isArray(cfg?.envKeys) && cfg.envKeys.length ? cfg.envKeys : [cfg?.envKey, cfg?.altEnvKey].filter(Boolean));
 
+export const ANONYMOUS_FREE_SENTINEL = 'ANONYMOUS_FREE';
+
+/**
+ * Whether an anonymous-capable free seat (`kilofree`) may send unauthenticated
+ * requests when no API key is present in the environment.
+ *
+ *   · `KILO_FREE_ANONYMOUS=0|false|off|no` → explicitly disabled
+ *   · `KILO_FREE_ANONYMOUS=1|true|on|yes`  → explicitly enabled anywhere
+ *   · unset / `auto`                       → enabled automatically on live
+ *     server runtimes (`VERCEL`, `VERCEL_ENV`, or `FBT_SERVER_BOOTED=1`), and
+ *     off in bare offline CLI/test scripts so keyless unit tests stay offline
+ *     and deterministic.
+ */
+export function isAnonymousProviderEnabled(providerId, env = process.env) {
+  const cfg = PROVIDER_CONFIGS[providerId];
+  if (!cfg?.allowAnonymous) return false;
+  const knob = String(env?.[cfg.anonymousEnv || 'KILO_FREE_ANONYMOUS'] ?? '').trim().toLowerCase();
+  if (knob === '0' || knob === 'false' || knob === 'off' || knob === 'no') return false;
+  if (knob === '1' || knob === 'true' || knob === 'on' || knob === 'yes') return true;
+  return Boolean(env?.VERCEL || env?.VERCEL_ENV || env?.FBT_SERVER_BOOTED === '1');
+}
+
 // ---------------------------------------------------------------------------
 // Provider Key Resolution & Status
 // ---------------------------------------------------------------------------
@@ -608,7 +698,10 @@ export function getProviderKey(providerId) {
   const cfg = PROVIDER_CONFIGS[providerId];
   if (!cfg) return null;
   if (!cfg.envKey) return 'INTERNAL_ACTIVE'; // internal always active
-  return readEnvAny(envNamesFor(cfg)).value;
+  const keyed = readEnvAny(envNamesFor(cfg)).value;
+  if (keyed) return keyed;
+  if (isAnonymousProviderEnabled(providerId)) return ANONYMOUS_FREE_SENTINEL;
+  return '';
 }
 
 /**
@@ -1173,7 +1266,7 @@ export function classifyAiError(err, providerId = null) {
   if (status === 403 || /permission_denied|service_disabled|access denied|forbidden|ip restriction|referer/i.test(raw)) {
     return out('PERMISSION', false, 'The key is valid but not allowed to make this call — check permissions, enabled APIs and IP/referrer restrictions in the provider console.');
   }
-  if (status === 404 || /model_not_found|does not exist|no longer available|is not available|not found|unknown model|unsupported model|decommissioned|shut ?down|10000/i.test(raw)) {
+  if (status === 404 || status === 410 || /model_not_found|does not exist|no longer available|is not available|has been deprecated|\bdeprecated\b|not found|unknown model|unsupported model|decommissioned|shut ?down|10000/i.test(raw)) {
     return out('MODEL_UNAVAILABLE', true, 'The model id is retired or not on this account. The gateway retries with the next current model for this provider.');
   }
   /*
@@ -1548,6 +1641,7 @@ export function getAvailableProviders() {
        declared fleet. */
     const fleetExclusion = providerFleetExclusion(id);
     const keyPresent = id === 'internal' ? true : Boolean(keyInfo.present);
+    const anonymousFree = Boolean(cfg.allowAnonymous && !keyInfo.present && isAnonymousProviderEnabled(id));
     const h = health[id] || null;
     /*
      * ─── WHY STATUS AND THE ENV VAR NAME ARE PART OF THE PAYLOAD ─────────
@@ -1582,6 +1676,7 @@ export function getAvailableProviders() {
       inFleet: fleetExclusion === null,
       excludedBy: fleetExclusion,
       keyPresent,
+      anonymousFree,
       status: configured
         ? 'ACTIVE'
         : (id === 'internal'
@@ -1589,7 +1684,7 @@ export function getAvailableProviders() {
             : (fleetExclusion === 'NOT_IN_FLEET' ? 'OUT_OF_FLEET' : 'NEEDS_KEY')),
       envVar: id === 'internal' ? null : (cfg.altEnvKey ? `${cfg.envKey} (or ${cfg.altEnvKey})` : cfg.envKey),
       acceptedEnvVars: id === 'internal' ? [] : envNamesFor(cfg),
-      keySourceEnv: keyInfo.sourceEnv,
+      keySourceEnv: keyInfo.sourceEnv || (anonymousFree ? 'anonymous-free' : null),
       keyDirtyInEnv: Boolean(keyInfo.dirtyInEnv),
       defaultModel: getModelCandidates(id)[0] || cfg.defaultModel,
       modelCandidates: getModelCandidates(id),
@@ -1751,15 +1846,16 @@ export function normalizeUsage(raw) {
 // Provider Specific Chat Implementations
 // ---------------------------------------------------------------------------
 
-/** OpenAI Compatible Chat (OpenRouter, Groq, DeepSeek, Mistral, AIMLAPI) */
+/** OpenAI Compatible Chat (OpenRouter, Kilo, Groq, DeepSeek, Mistral, AIMLAPI) */
 async function callOpenAICompatible({ url, apiKey, model, system, user, temperature = 0.3, maxTokens = 800, json = false, extraHeaders = {}, extraBody = {}, timeout = TIMEOUT_MS, withUsage = false, signal = null }) {
   assertNoSecretsInPayload({ system, user });
   const sanitizedSystem = sanitizePrompt(system);
   const sanitizedUser = sanitizePrompt(user);
 
+  const hasBearerKey = Boolean(apiKey && apiKey !== ANONYMOUS_FREE_SENTINEL);
   const headers = {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${apiKey}`,
+    ...(hasBearerKey ? { Authorization: `Bearer ${apiKey}` } : {}),
     ...extraHeaders
   };
 
@@ -1912,20 +2008,26 @@ async function callWorkersAI({ accountId, apiToken, model, system, user, tempera
     throw new Error(`BAD_WORKERSAI_MODEL:${safeModel.slice(0, 60)}`);
   }
   const url = `${PROVIDER_CONFIGS.workersai.url}/${encodeURIComponent(accountId)}/ai/run/${safeModel}`;
+  const hasReasoningEffort = Boolean(extraBody && typeof extraBody === 'object' && extraBody.reasoning_effort);
+  /* Reasoning models (`@cf/qwen/qwen3.8-27b` with `reasoning_effort: 'xhigh'`)
+     share `max_tokens` between internal reasoning tokens and final output.
+     A tiny caller ceiling (such as a 10-token ping) starves `message.content`
+     into an empty string (`finish_reason: "length"`), so reasoning calls get
+     enough headroom to emit their answer. */
+  const effectiveMaxTokens = hasReasoningEffort ? Math.max(Number(maxTokens) || 256, 256) : maxTokens;
   const body = {
     messages: [
       ...(sanitizedSystem ? [{ role: 'system', content: sanitizedSystem }] : []),
       { role: 'user', content: sanitizedUser }
     ],
     temperature,
-    max_tokens: maxTokens,
+    max_tokens: effectiveMaxTokens,
     /*
      * ─── THE REASONING KNOB ON CLOUDFLARE'S FREE SEAT ───────────────────────
-     * `@cf/qwen/qwen3.8-27b` and `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`
-     * are reasoning models on Cloudflare's free tier. Without this field they
-     * were being called like plain chat models — the reasoning existed in the
-     * weights but was never asked for, so the smartest mode got the same
-     * answer from them as from the 8B model it used to default to.
+     * `@cf/qwen/qwen3.8-27b` is Cloudflare's live free-tier reasoning flagship.
+     * Without this field it was called like a plain chat model — the reasoning
+     * existed in the weights but was never asked for, so the smartest mode got
+     * the same answer as from the 8B default.
      *
      * `extraBody` is empty for every other Workers AI model, so their
      * request bodies stay byte-identical to before this change.
@@ -1942,9 +2044,27 @@ async function callWorkersAI({ accountId, apiToken, model, system, user, tempera
     body: JSON.stringify(body)
   }, timeout, signal);
 
-  const text = raw?.result?.response;
-  if (!text) throw new Error('EMPTY_WORKERSAI_RESPONSE');
-  return withUsage ? { text: String(text).trim(), usage: normalizeUsage(raw?.usage || raw?.usageMetadata) } : String(text).trim();
+  /* Legacy Workers AI models (`@cf/meta/llama-*`, `@cf/mistral/*`) wrap text in
+     `raw.result.response`, whereas newer v2 / OpenAI-compatible Workers AI
+     models (`@cf/qwen/qwen3.8-27b`, `@cf/openai/gpt-oss-*`) return standard
+     chat completions inside `raw.result.choices[0].message.content`. */
+  const extractMessageContent = (content) => {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      return content
+        .map((part) => (typeof part === 'string' ? part : (part?.text ?? '')))
+        .join('');
+    }
+    return '';
+  };
+  const choiceMsg = raw?.result?.choices?.[0]?.message || raw?.choices?.[0]?.message || null;
+  const text = (typeof raw?.result?.response === 'string' && raw.result.response.trim())
+    ? raw.result.response
+    : (extractMessageContent(choiceMsg?.content) || (typeof raw?.result?.output_text === 'string' ? raw.result.output_text : ''));
+  if (!String(text || '').trim()) throw new Error('EMPTY_WORKERSAI_RESPONSE');
+  const trimmed = String(text).trim();
+  const usage = normalizeUsage(raw?.result?.usage || raw?.usage || raw?.usageMetadata);
+  return withUsage ? { text: trimmed, usage } : trimmed;
 }
 
 /** Internal Deterministic AI Intelligence (Zero External Key Fallback) */
@@ -2070,6 +2190,11 @@ async function runProviderModel(providerId, cfg, apiKey, model, { system, user, 
     extraHeaders['HTTP-Referer'] = SITE_URL;
     extraHeaders['X-Title'] = 'FBT Smart Intent OS';
   }
+  /* Kilo's `kilo-auto/*` virtual routers inspect `x-kilocode-mode` to choose
+     between deep planning/architect flagships and conversational models. */
+  if ((providerId === 'kilo' || providerId === 'kilofree') && String(model || '').startsWith('kilo-auto/')) {
+    extraHeaders['x-kilocode-mode'] = normalizeIntelligenceMode(mode) === 'max' ? 'plan' : 'ask';
+  }
   const extraBody = intelligenceReasoningFields(providerId, mode, model);
   return callOpenAICompatible({ url: cfg.url, apiKey, model, system, user, temperature, maxTokens, json, extraHeaders, extraBody, timeout, withUsage, signal });
 }
@@ -2174,7 +2299,8 @@ export async function executeProviderChat(providerId, {
     let lastErr = null;
     let lastClass = null;
 
-    for (const candidate of candidates) {
+    for (let idx = 0; idx < candidates.length; idx += 1) {
+      const candidate = candidates[idx];
       try {
         /*
          * ─── THE CALL CAP (the daily allowance's share) ───────────────────
@@ -2277,6 +2403,35 @@ export async function executeProviderChat(providerId, {
          * answers 429 as soon as the daily cap is hit, and the gateway used
          * to ask it three times per role before giving up.
          */
+        /*
+         * OpenRouter `:free` models do NOT all share one upstream privacy
+         * policy: `nvidia/*:free` requires allowing prompt training and is
+         * non-ZDR, whereas `google/gemma-4-31b-it:free` does not train on
+         * prompts and `openrouter/free` dynamically routes across every live
+         * free endpoint matching the account's active ZDR / training /
+         * guardrail switches (including zero-retention Particle AI and
+         * Perplexity endpoints).
+         *
+         * So when a specific `:free` id is filtered by `DATA_POLICY`, do not
+         * lock onto NVIDIA and do not walk three more NVIDIA ids either: make
+         * ONE targeted hop straight to `openrouter/free` unless it was already
+         * tried. If `openrouter/free` is also refused, every free endpoint is
+         * genuinely blocked for this account and we stop immediately.
+         */
+        const canHopToPolicyRouter = (
+          providerId === 'openrouterfree'
+          && cls.kind === 'DATA_POLICY'
+          && candidate !== 'openrouter/free'
+          && !attempts.some((a) => a.model === 'openrouter/free')
+          && !(turnBudget && alreadyFailed.has('openrouter/free'))
+        );
+        if (canHopToPolicyRouter) {
+          candidates.splice(idx + 1, candidates.length, 'openrouter/free');
+          lastErr = err;
+          lastClass = cls;
+          console.warn(`[ai-gateway] ${providerId}/${candidate} filtered by DATA_POLICY — hopping once to openrouter/free`);
+          continue;
+        }
         if (turnBudget && !cls.retryNextModel) turnBudget.exhaustedProviders.add(providerId);
         lastErr = err;
         lastClass = cls;
@@ -2385,37 +2540,37 @@ export function getPreferredProvidersForTask(taskType = 'general', { configuredO
     case 'market_intelligence':
     case 'crypto_trend':
       // OpenRouter leads (its online-capable models are the general route),
-      // then the DIRECT Grok seat for real-time narrative, then Gemini/Groq.
-      candidateOrder = ['openrouter', 'openrouterfree', 'xai', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
+      // then Kilo Gateway (paid + free), then the DIRECT Grok seat, Gemini/Groq.
+      candidateOrder = ['openrouter', 'openrouterfree', 'kilo', 'kilofree', 'xai', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
       break;
     case 'research':
     case 'news':
     case 'web_research':
     case 'crypto-analysis':
       // Perplexity's old job: sourced, web-grounded answers. OpenRouter's
-      // online-capable models lead; Grok's direct real-time seat and Gemini
-      // back it up.
-      candidateOrder = ['openrouter', 'openrouterfree', 'xai', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
+      // online-capable models lead; Kilo, Grok's direct real-time seat and
+      // Gemini back it up.
+      candidateOrder = ['openrouter', 'openrouterfree', 'kilo', 'kilofree', 'xai', 'gemini', 'groq', 'deepseek', 'aimlapi', 'workersai', 'internal'];
       break;
     case 'reasoning':
     case 'complex_plan':
     case 'portfolio_optimization':
-      // High-precision logic: OpenRouter's multi-model route first, then the
-      // DIRECT GPT and Claude seats, then DeepSeek.
-      candidateOrder = ['openrouter', 'openrouterfree', 'openai', 'anthropic', 'deepseek', 'gemini', 'aimlapi', 'workersai', 'internal'];
+      // High-precision logic: OpenRouter & Kilo multi-model routes first, then
+      // the DIRECT GPT and Claude seats, then DeepSeek.
+      candidateOrder = ['openrouter', 'openrouterfree', 'kilo', 'kilofree', 'openai', 'anthropic', 'deepseek', 'gemini', 'aimlapi', 'workersai', 'internal'];
       break;
     case 'risk':
     case 'guardian':
     case 'verification':
-      candidateOrder = ['anthropic', 'openai', 'deepseek', 'openrouter', 'openrouterfree', 'aimlapi', 'gemini', 'groq', 'workersai', 'internal'];
+      candidateOrder = ['anthropic', 'openai', 'deepseek', 'openrouter', 'openrouterfree', 'kilo', 'kilofree', 'aimlapi', 'gemini', 'groq', 'workersai', 'internal'];
       break;
     case 'intent':
     case 'fast':
     case 'classification':
-      candidateOrder = ['workersai', 'groq', 'gemini', 'mistral', 'aimlapi', 'openrouter', 'openrouterfree', 'internal'];
+      candidateOrder = ['workersai', 'groq', 'kilofree', 'kilo', 'gemini', 'mistral', 'aimlapi', 'openrouter', 'openrouterfree', 'internal'];
       break;
     default:
-      candidateOrder = ['openrouter', 'openrouterfree', 'openai', 'groq', 'gemini', 'xai', 'workersai', 'aimlapi', 'deepseek', 'anthropic', 'mistral', 'internal'];
+      candidateOrder = ['openrouter', 'openrouterfree', 'kilo', 'kilofree', 'openai', 'groq', 'gemini', 'xai', 'workersai', 'aimlapi', 'deepseek', 'anthropic', 'mistral', 'internal'];
       break;
   }
 
@@ -2678,10 +2833,13 @@ export async function gatewaySelfTest() {
       const res = await executeProviderChat(p.id, {
         system: 'Reply with the single word: OK',
         user: 'ping',
-        maxTokens: 10,
+        /* Reasoning flagships (`max` mode on Groq, Cloudflare Workers AI,
+           OpenRouter, Kilo) spend 30–120 internal thinking tokens before
+           emitting `OK`; 10 tokens starved `message.content` into EMPTY. */
+        maxTokens: probeMode === 'max' ? 256 : 16,
         temperature: 0,
         json: false,
-        mode: probeMode,
+        intelligence: probeMode,
         timeout: Math.min(TIMEOUT_MS, Math.max(5000, SELFTEST_DEADLINE_MS - (Date.now() - started)))
       });
       return {
@@ -2708,7 +2866,7 @@ export async function gatewaySelfTest() {
         name: p.name,
         status: 'ERROR',
         reasonCode: err?.reasonCode || cls.kind,
-        error: String(err.message || err).slice(0, 220),
+        error: String(cls.message || err?.message || err).slice(0, 320),
         fix: err?.fix || cls.fix,
         /* Which models were tried, so "the key is fine but every id is stale"
            is distinguishable from "the key is rejected" at a glance. */

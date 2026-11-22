@@ -38,21 +38,26 @@ export const PROVIDER_FLEET_SCHEMA = 'fbt.ai-provider-fleet.v1';
  *
  *   · `openrouterfree` — the OpenRouter free catalogue (`:free` Nemotron /
  *     Gemma / Cohere ids), on the SAME key as the paid seat;
+ *   · `kilofree`       — Kilo AI Gateway's zero-cost free catalogue
+ *     (`nvidia/nemotron-3.5-super-vl:free`, `nvidia/nemotron-3-ultra-550b-a55b:free`,
+ *     `baidu/ernie-5.5-flash-preview:free`, `reflection/beam-free`, `kilo-auto/free`),
+ *     serving both keyed (`KILO_API_KEY`) and documented anonymous free access
+ *     (200 requests/hour per IP);
  *   · `groq`         — the free tier: gpt-oss-120b / 20b, qwen3.8-27b;
  *   · `workersai`    — Cloudflare's free tier: the R1 distill and the 70B.
  *
- * The paid `openrouter` seat is deliberately NOT in the default fleet. Its
- * key is on the free tier, and every id that seat knows is a paid id, so a
- * call to it answers HTTP 402 "Insufficient Balance" — an ACCOUNT-level
- * failure that stops the model walk immediately. Leaving it in the default
- * meant every request paid for a round-trip that could never succeed.
+ * The paid `openrouter` and `kilo` seats are deliberately NOT in the default
+ * fleet. Calling paid catalogue ids without funded account credit answers
+ * HTTP 401/402 — an ACCOUNT-level failure that stops the model walk
+ * immediately. Leaving paid seats out of the default prevents wasted
+ * round-trips on free-tier deployments.
  *
- * An operator who funds the account puts `openrouter` back into
+ * An operator who funds OpenRouter or Kilo puts `openrouter` or `kilo` back into
  * `FBT_AI_PROVIDERS` and the paid catalogue returns to the front. The free
- * seat stays declared either way, because a funded account can still call
+ * seats stay declared either way, because a funded account can still call
  * `:free` ids.
  */
-export const DEFAULT_PROVIDER_FLEET = Object.freeze(['openrouterfree', 'groq', 'workersai']);
+export const DEFAULT_PROVIDER_FLEET = Object.freeze(['openrouterfree', 'kilofree', 'groq', 'workersai']);
 
 /**
  * Every provider the gateway registers, plus the spellings an operator is
@@ -76,6 +81,24 @@ export const PROVIDER_ALIASES = Object.freeze({
   'free-router': 'openrouterfree',
   freerouter: 'openrouterfree',
   orf: 'openrouterfree',
+  /*
+   * Kilo AI Gateway (`https://ai-gateway.kilo.ai/api/v1`) — two seats matching
+   * OpenRouter's paid/free split:
+   *   · `kilo`     — zero-markup universal gateway (frontier/efficient/Claude/GPT)
+   *   · `kilofree` — free `:free` models + `kilo-auto/free` (keyed or anonymous)
+   */
+  kilo: 'kilo',
+  'kilo-ai': 'kilo',
+  kilo_ai: 'kilo',
+  'kilo-gateway': 'kilo',
+  kilo_gateway: 'kilo',
+  kilocode: 'kilo',
+  'kilo-code': 'kilo',
+  kilofree: 'kilofree',
+  'kilo-free': 'kilofree',
+  kilo_free: 'kilofree',
+  'kilo-auto-free': 'kilofree',
+  kf: 'kilofree',
   groq: 'groq',
   workersai: 'workersai',
   'workers-ai': 'workersai',
