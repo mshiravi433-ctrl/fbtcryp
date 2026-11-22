@@ -45,7 +45,7 @@ ok('the More menu has no obsolete mode picker');
 const helper = read('src/lib/aiIntelligenceMode.js');
 assert.ok(helper.includes('DEFAULT_INTELLIGENCE_MODE = AUTO_INTELLIGENCE_MODE'), 'client default is Auto');
 assert.ok(helper.includes("AUTO_INTELLIGENCE_MODE = 'auto'"), 'Auto is an explicit response-depth state');
-assert.ok(helper.includes("auto: 58000"), 'the browser waits for the deepest automatically selected turn');
+assert.ok(helper.includes("auto: 70000"), 'the browser waits for the deepest automatically selected turn');
 assert.ok(helper.includes('purpose,') && helper.includes('freshness, completeness and safety context'),
   'the client contract documents message-specific depth selection');
 ok('the shared client contract defaults to Auto and keeps a safe timeout');

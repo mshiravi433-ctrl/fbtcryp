@@ -100,7 +100,8 @@ test('the chat component no longer prints the operator recovery line', () => {
 
 test('the component refuses to auto-retry a throttle', () => {
   assert.match(componentSource, /const rateLimited =/);
-  assert.match(componentSource, /canRetry = !rateLimited/);
+  const retrySource = readFileSync(join(ROOT, 'src/lib/aiChatRetry.js'), 'utf8');
+  assert.match(retrySource, /status !== 429/);
   /* And it publishes the wait the server sent, when there is one. */
   assert.match(componentSource, /res\?\.retryAfter/);
 });

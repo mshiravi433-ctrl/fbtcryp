@@ -1652,3 +1652,32 @@ button.fbt-neural .tag-row, .fbt-neural button.tag-row { font-family: inherit; f
 @media (prefers-reduced-motion: reduce) { .iaos-thinking-indicator span, .iaos-nav-drawer { animation: none; } }
 :root[data-theme='light'] .iaos-nav-drawer { background: #fff; color: #1e293b; }
 :root[data-theme='light'] .iaos-nav-info { color: #475569; }
+
+/* Floating glass controls, kept close to the safe-area edge on every viewport. */
+.iaos-page.fbt-neural.tag-page .iaos-shell { padding-top: max(2px, env(safe-area-inset-top)); gap: 4px; }
+.fbt-neural.tag-page .iaos-header, :root[data-theme='light'] .fbt-neural.tag-page .iaos-header {
+  top: 0; background: transparent; border: 0; box-shadow: none;
+  padding: 2px 4px; min-height: 50px; border-radius: 0;
+  transition: opacity .2s ease, transform .2s ease;
+}
+.fbt-neural.tag-page .iaos-header[data-hidden='true'] { opacity: 0; transform: translateY(-100%); pointer-events: none; }
+.fbt-neural.tag-page .iaos-title { opacity: 1; }
+/* The emblem changes with connection status, but never pulses in the header. */
+.iaos-header .fbt-core, .iaos-header .fbt-core-orbit, .iaos-header .fbt-core-nucleus-glow { animation: none !important; }
+.iaos-header-actions { display: flex; align-items: center; gap: 4px; margin-inline-start: auto; }
+.iaos-nav-toggle { display: grid; place-items: center; min-width: 42px; min-height: 42px; }
+.iaos-composer-row { display: flex; gap: 8px; align-items: center; flex: none; }
+.fbt-neural.tag-page .iaos-composer-row .iaos-composer { flex: 1 1 auto; min-width: 0; width: auto; margin: 0; }
+.iaos-trade-shortcut { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid rgba(110,231,249,.22); border-radius: 16px; color: #67e8f9; background: rgba(34,211,238,.08); cursor: pointer; }
+.iaos-trade-shortcut:hover { background: rgba(34,211,238,.18); }
+.iaos-nav-overlay { backdrop-filter: blur(4px); }
+.iaos-nav-drawer { width: min(360px, 90vw); padding: max(24px, env(safe-area-inset-top)) 20px 28px; background: linear-gradient(150deg,rgba(16,26,46,.98),rgba(7,12,25,.98)); border-inline-start: 1px solid rgba(148,197,255,.18); }
+.iaos-nav-head { padding: 5px 7px 18px; border-bottom: 1px solid rgba(148,197,255,.12); }
+.iaos-nav-head strong { letter-spacing: .13em; font-size: 14px; }
+.iaos-nav-links { gap: 6px; }
+.iaos-nav-links button { min-height: 48px; border: 1px solid transparent; transition: background .18s, border-color .18s; }
+.iaos-nav-links button[aria-current='page'] { border-color: rgba(103,232,249,.2); color: #a5f3fc; }
+:root[data-theme='light'] .iaos-nav-drawer { background: linear-gradient(145deg,rgba(255,255,255,.98),rgba(237,246,255,.98)); }
+:root[data-theme='light'] .iaos-nav-links button[aria-current='page'] { color: #075985; }
+@media (min-width: 768px) { .iaos-page.fbt-neural.tag-page .iaos-shell { width: min(840px, calc(100% - 48px)); } }
+@media (prefers-reduced-motion: reduce) { .fbt-neural.tag-page .iaos-header, .iaos-nav-links button { transition: none; } }

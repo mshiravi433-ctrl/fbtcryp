@@ -72,8 +72,8 @@ export function normalizeIntelligenceMode(value) {
 export const INTELLIGENCE_TURN_MS = Object.freeze({
   swift: 15000,
   balanced: 30000,
-  max: 58000,
-  auto: 58000
+  max: 70000,
+  auto: 70000
 });
 
 export function intelligenceTurnBudgetMs(mode = AUTO_INTELLIGENCE_MODE) {
