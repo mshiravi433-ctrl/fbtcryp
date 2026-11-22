@@ -301,7 +301,21 @@
  * The recovery code that triggers that reload lives in the shell bundle, so a
  * device pinned to the v33 shell keeps the old one; renaming evicts it. The
  * model buckets (`fbt-kronos-*`) stay untouched, as above. */
-const SHELL = 'fbt-shell-v34';
+/* v34 -> v35 (2026-11-22): «صفحه فارم می‌زنه به مشکل برخورده و بالا نمیاد».
+ * The crash itself was fixed in the shell bundle (PR #781 — the active-tab
+ * scroll call that threw in effects, and the position hub moved out of Farm's
+ * own chunk so one adapter can no longer take the screen down). That fix went
+ * live in this document's chunk names — but the rename it needed never happened:
+ * an install still holding the v34-cached document asks for the PRE-#781 Farm
+ * chunk, which the deployment no longer serves (deployments here keep their
+ * files for a day), the three cache-busted fetches all 404, the boundary's one
+ * reload is answered by this same cached shell on a flaky link, and the Farm
+ * screen is unreachable forever — byte for byte the failure every entry above
+ * describes, with the fix already deployed.
+ *
+ * Renaming evicts that shell on the site and on an in-place APK update alike;
+ * the model buckets (`fbt-kronos-*`) stay untouched, as always. */
+const SHELL = 'fbt-shell-v35';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────
