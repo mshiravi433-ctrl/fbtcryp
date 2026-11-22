@@ -195,10 +195,15 @@ export default function run() {
     /* Behind PERP_TERMINAL_ENABLED: the flag is what decides whether the route
        exists at all, and the perp screen links to it when it is on. */
     '/perp/terminal',
-    /* «تغییرات» has TWO urls: /whats-new is the menu row, /changelog is the
-       same page for every link, doc and support message that already names it.
-       A second entry point is not an orphan. */
-    '/changelog',
+    /*
+     * «تغییرات» has TWO urls, and NEITHER is a menu row any more: on the
+     * owner's instruction («در منو بیشتر قسمت صفحه تغییرات محو بشه») the
+     * More-sheet tile was removed. Both routes stay mounted so every link,
+     * doc and support message that already names them keeps resolving —
+     * the same contract as /solana and /portfolio above. A route with no
+     * menu entry but a live URL is not an orphan.
+     */
+    '/whats-new', '/changelog',
     /* A redirect to /intent, kept so the old mission URL still resolves. A
        route that forwards has nothing to link to it. */
     '/missions',

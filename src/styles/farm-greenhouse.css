@@ -57,8 +57,12 @@
   padding-bottom: 30px;
   position: relative;
   background-color: transparent;
-  /* survey contour field — 320px tile, drawn at 1px and 7% opacity */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' viewBox='0 0 320 320'%3E%3Cg fill='none' stroke='%2300ff9d' stroke-opacity='.16' stroke-width='1'%3E%3Cpath d='M0 34C56 8 104 62 160 34S264 8 320 34'/%3E%3Cpath d='M0 96C52 68 108 124 160 96S268 68 320 96'/%3E%3Cpath d='M0 158C60 132 100 184 160 158S260 132 320 158'/%3E%3Cpath d='M0 220C50 194 110 246 160 220S270 194 320 220'/%3E%3Cpath d='M0 282C58 256 102 308 160 282S262 256 320 282'/%3E%3C/g%3E%3C/svg%3E");
+  /* survey contour field — 320px tile, drawn at 1px and ~4% opacity.
+     «پشت‌زمینه فارم که خط‌های سبز رنگ هستند خیلی رنگش کمتر شود الان در
+     چشم می‌زنه» — the lines were at 16% and glaring across the whole page;
+     they now sit at 4.5% (dark) / 4% (light), a texture you feel rather
+     than see. The hero contour and seed grid were quieted with it. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' viewBox='0 0 320 320'%3E%3Cg fill='none' stroke='%2300ff9d' stroke-opacity='.045' stroke-width='1'%3E%3Cpath d='M0 34C56 8 104 62 160 34S264 8 320 34'/%3E%3Cpath d='M0 96C52 68 108 124 160 96S268 68 320 96'/%3E%3Cpath d='M0 158C60 132 100 184 160 158S260 132 320 158'/%3E%3Cpath d='M0 220C50 194 110 246 160 220S270 194 320 220'/%3E%3Cpath d='M0 282C58 256 102 308 160 282S262 256 320 282'/%3E%3C/g%3E%3C/svg%3E");
   background-size: 320px 320px;
   background-repeat: repeat;
   background-position: center top;
@@ -75,7 +79,7 @@
   --fh-stroke-hi: rgba(16, 20, 40, .18);
   --fh-shadow: 0 14px 32px -26px rgba(23, 32, 60, .5), 0 1px 3px rgba(23, 32, 60, .06);
   --fh-shadow-hi: 0 26px 52px -34px rgba(23, 32, 60, .45), 0 2px 8px rgba(23, 32, 60, .07);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' viewBox='0 0 320 320'%3E%3Cg fill='none' stroke='%2300a86b' stroke-opacity='.14' stroke-width='1'%3E%3Cpath d='M0 34C56 8 104 62 160 34S264 8 320 34'/%3E%3Cpath d='M0 96C52 68 108 124 160 96S268 68 320 96'/%3E%3Cpath d='M0 158C60 132 100 184 160 158S260 132 320 158'/%3E%3Cpath d='M0 220C50 194 110 246 160 220S270 194 320 220'/%3E%3Cpath d='M0 282C58 256 102 308 160 282S262 256 320 282'/%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' viewBox='0 0 320 320'%3E%3Cg fill='none' stroke='%2300a86b' stroke-opacity='.04' stroke-width='1'%3E%3Cpath d='M0 34C56 8 104 62 160 34S264 8 320 34'/%3E%3Cpath d='M0 96C52 68 108 124 160 96S268 68 320 96'/%3E%3Cpath d='M0 158C60 132 100 184 160 158S260 132 320 158'/%3E%3Cpath d='M0 220C50 194 110 246 160 220S270 194 320 220'/%3E%3Cpath d='M0 282C58 256 102 308 160 282S262 256 320 282'/%3E%3C/g%3E%3C/svg%3E");
 }
 
 /* Persian is connected type: never track it apart, never force "uppercase"
@@ -165,18 +169,18 @@
   inset: 0;
   border-radius: inherit;
   background-image:
-    radial-gradient(circle, color-mix(in srgb, var(--fh-leaf) 42%, transparent) 1px, transparent 1.2px);
+    radial-gradient(circle, color-mix(in srgb, var(--fh-leaf) 22%, transparent) 1px, transparent 1.2px);
   background-size: 18px 18px;
   -webkit-mask-image: radial-gradient(110% 90% at 82% 0%, #000 0%, transparent 66%);
   mask-image: radial-gradient(110% 90% at 82% 0%, #000 0%, transparent 66%);
-  opacity: .5;
+  opacity: .4;
 }
 /* contour lines inside the hero, in the opposite corner from the seed grid */
 .farm-page .farm-hero-contour {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Cg fill='none' stroke='%2300ff9d' stroke-opacity='.5' stroke-width='1'%3E%3Cpath d='M-8 44C36 20 76 66 120 44s74-24 128 0'/%3E%3Cpath d='M-8 104C40 78 82 128 120 104s76-26 128 0'/%3E%3Cpath d='M-8 164C34 140 80 188 120 164s78-24 128 0'/%3E%3Cpath d='M-8 224C42 198 78 248 120 224s80-26 128 0'/%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Cg fill='none' stroke='%2300ff9d' stroke-opacity='.15' stroke-width='1'%3E%3Cpath d='M-8 44C36 20 76 66 120 44s74-24 128 0'/%3E%3Cpath d='M-8 104C40 78 82 128 120 104s76-26 128 0'/%3E%3Cpath d='M-8 164C34 140 80 188 120 164s78-24 128 0'/%3E%3Cpath d='M-8 224C42 198 78 248 120 224s80-26 128 0'/%3E%3C/g%3E%3C/svg%3E");
   background-size: 240px 240px;
   -webkit-mask-image: radial-gradient(90% 80% at 0% 100%, #000, transparent 70%);
   mask-image: radial-gradient(90% 80% at 0% 100%, #000, transparent 70%);
@@ -1164,6 +1168,21 @@
    4. CHANNEL RAIL — the tabs
    ========================================================================== */
 .farm-page .farm-tabs {
+  /*
+   * STICKY UNDER THE HEADER — «زیر تب‌ها به بالا بچسبند».
+   * The channel rail pins to the top of the viewport and stays there while
+   * the pool list scrolls under it. The offset is the header's own height
+   * (11px top padding + 32px controls + 10px bottom padding = 53px, plus
+   * the safe-area inset the header already reserves) with an 8px breathing
+   * gap, so the rail never slides under the bar. z-index 20 keeps it below
+   * the header's 30. The rail's own opaque shell + blur is what makes
+   * sticking readable — content scrolling behind it is already hidden.
+   * `overflow-x: auto` on the rail itself does not break stickiness (only
+   * an overflowed ANCESTOR would, and neither .page nor .app-shell clips).
+   */
+  position: sticky;
+  top: calc(env(safe-area-inset-top, 0px) + 61px);
+  z-index: 20;
   display: flex;
   gap: 4px;
   margin-top: 0;

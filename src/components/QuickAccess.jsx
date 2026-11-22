@@ -73,7 +73,7 @@ function matches(item, pathname) {
   );
 }
 
-export default function QuickAccess({ centered = false }) {
+export default function QuickAccess({ centered = false, footer = false }) {
   const { pathname } = useLocation();
   const { t, i18n } = useTranslation();
   const rtl = isRtl(String(i18n.resolvedLanguage || i18n.language || 'fa').split('-')[0]);
@@ -84,8 +84,8 @@ export default function QuickAccess({ centered = false }) {
 
   useEffect(() => { setOpen(false); }, [pathname]);
   useEffect(() => {
-    if (open && centered) rootRef.current?.querySelector('nav a')?.focus({ preventScroll: true });
-  }, [open, centered]);
+    if (open && (centered || footer)) rootRef.current?.querySelector('nav a')?.focus({ preventScroll: true });
+  }, [open, centered, footer]);
   useEffect(() => {
     if (!open) return undefined;
     const outside = (event) => {
@@ -107,12 +107,13 @@ export default function QuickAccess({ centered = false }) {
 
   if ((!centered && !group) || typeof document === 'undefined') return null;
   const links = centered ? marketDeskLinks : group;
+  const tone = footer ? ({ 'smart-money': 'green', news: 'blue', global: 'purple' }[pathname.split('/')[1]]) : null;
   return createPortal(
-    <aside ref={rootRef} className={`quick-access${centered ? ' quick-access--centered' : ''}${open ? ' is-open' : ''}`} dir={rtl ? 'rtl' : 'ltr'} aria-label={t('quickAccess.title')}>
+    <aside ref={rootRef} className={`quick-access${centered || footer ? ' quick-access--centered' : ''}${footer ? ' quick-access--footer' : ''}${tone ? ` quick-access--tone-${tone}` : ''}${open ? ' is-open' : ''}`} dir={rtl ? 'rtl' : 'ltr'} aria-label={t('quickAccess.title')}>
       <div id="quick-access-rail" className="quick-access__rail" aria-hidden={!open} inert={!open ? '' : undefined}>
         <div className="quick-access__rail-head">
           <span className="quick-access__caption">{t('quickAccess.title')}</span>
-          {centered && <button type="button" className="quick-access__close" tabIndex={open ? 0 : -1}
+          {(centered || footer) && <button type="button" className="quick-access__close" tabIndex={open ? 0 : -1}
             aria-label={t('quickAccess.close')} onClick={() => { setOpen(false); toggleRef.current?.focus(); }}>
             <IconX width={18} height={18} />
           </button>}

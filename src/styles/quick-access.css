@@ -111,3 +111,16 @@
 :root[data-theme='light'] .quick-access--centered .quick-access__item { background:#eaf2fc; border-color:#345e8d2e; }
 :root[data-theme='light'] .quick-access--centered .quick-access__item[href$='/swap'] { background:#d9f1f6; border-color:#13859e55; }
 @media (prefers-reduced-motion:reduce) { .quick-access--centered :is(.quick-access__rail,.quick-access__toggle,.quick-access__toggle svg) { transition:none; } }
+
+/* The intel footer's central button replaces the AI shortcut, not the bar. */
+.quick-access.quick-access--footer {
+  bottom: calc(50px + env(safe-area-inset-bottom));
+  width: 56px;
+  height: 56px;
+  z-index: 41;
+}
+.quick-access--footer .quick-access__toggle,
+.quick-access--footer.is-open .quick-access__toggle { width: 56px; height: 56px; }
+.quick-access--footer.quick-access--tone-green .quick-access__toggle { color: #052e16; background: #4ade80; border-color: #86efac; }
+.quick-access--footer.quick-access--tone-blue .quick-access__toggle { color: #10254b; background: #60a5fa; border-color: #93c5fd; }
+.quick-access--footer.quick-access--tone-purple .quick-access__toggle { color: #341653; background: #c084fc; border-color: #d8b4fe; }

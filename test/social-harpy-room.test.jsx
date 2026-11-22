@@ -93,8 +93,8 @@ describe('the Harpy room — shell', () => {
     expect(app).toMatch(/pathname\.startsWith\('\/social'\)/);
     expect(app).toMatch(/const headerless = [^;]*startsWith\('\/social'\)[^;]*;/);
     /* …and the facts that make headerless matter: the shell owns BOTH bars. */
-    expect(app).toMatch(/\{!headerless && <Header \/>\}/);
-    expect(app).toMatch(/\{!headerless && <BottomNav \/>\}/);
+    expect(app).toMatch(/\{!headerless && <Header /);
+    expect(app).toMatch(/\{!headerless && [^\n]*<BottomNav /);
   });
 
   it('renders its own top navigation, not a bottom one', async () => {

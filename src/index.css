@@ -425,6 +425,43 @@ body {
   backdrop-filter: blur(12px);
 }
 
+/*
+ * HIDE-ON-SCROLL for the intel + info shells (Smart Money / News / Global
+ * and Explore / Learn / Security / Developers / Ecosystem / Business /
+ * Contact / About / Settings / Rewards): scroll down → the header fades
+ * away, scroll up → it returns (hooks/useHideOnScroll.js, one state in
+ * AppChrome). The uniDock screens carry the same rule in uni-dock.css;
+ * this copy lives here because that stylesheet only loads with the UniDock
+ * chunk, which these pages never mount. Same values, same easing — the
+ * header is sticky, so only the rendering moves and nothing reflows.
+ */
+.app-shell--intel > .top-bar,
+.app-shell--info > .top-bar {
+  transition:
+    opacity 0.24s ease,
+    translate 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
+    visibility 0s;
+}
+
+.app-shell--intel > .top-bar.is-chrome-hidden,
+.app-shell--info > .top-bar.is-chrome-hidden {
+  opacity: 0;
+  translate: 0 -110%;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.24s ease,
+    translate 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
+    visibility 0s linear 0.28s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell--intel > .top-bar,
+  .app-shell--info > .top-bar {
+    transition: none;
+  }
+}
+
 .brand { display: flex; align-items: center; gap: 9px; }
 
 .brand-mark {
@@ -16195,3 +16232,5 @@ button.settings-quick-action {
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
 }
+
+.app-shell.app-shell--info { padding-bottom: 0; }
