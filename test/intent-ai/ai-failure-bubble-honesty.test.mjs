@@ -115,10 +115,8 @@ test('the client passes the server’s throttling fields through', () => {
 /*  3. ONE FAILURE MAY NOT BECOME THREE LINES OF EXCUSES                      */
 /* -------------------------------------------------------------------------- */
 
-test('the OS reading is not stapled under a throttle or a transport failure', () => {
-  const bubble = componentSource.slice(componentSource.indexOf('const localReading'), componentSource.indexOf('const localReading') + 420);
-  assert.match(bubble, /!rateLimited/);
-  assert.match(bubble, /!timedOut/);
+test('the OS reading is never stapled under a failed request', () => {
+  assert.doesNotMatch(componentSource, /const localReading =/);
 });
 
 test('a carried-over asset is never read back as if the user said it', () => {
