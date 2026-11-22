@@ -17,9 +17,10 @@
  *      INSURANCE, Auto Orders — the owner replaced «محافظت» with «بیمه»),
  *      and the AI is a SEPARATE surface outside that pill, never a fifth
  *      slot in it.
- *   3. THE ACTIVE ONE IS MARKED, WITHOUT A GAP — exactly one button carries
- *      the raised lobe, it is the section you are on, and the mark ADDS to
- *      the bar (the owner's correction was «گزینه فعال شکاف نخوره»).
+ *   3. THE ACTIVE ONE IS MARKED, WITH NO NOTCH AT ALL — «اون نباشه بریدگی
+ *      نمی‌خواهیم». Exactly one button is active, it is the section you are
+ *      on, and NOTHING in the bar is cut, clipped, masked or protruding:
+ *      selection is a soft window inside the pill and brighter ink.
  *   4. MOTION + CHROME — scroll down hides header and dock, scroll up
  *      brings both back, reduced motion cancels it, and the side QuickAccess
  *      rail is not mounted on these screens.
@@ -144,31 +145,38 @@ describe('the section dock', () => {
     }
   });
 
-  it('gives the active button the raised mark, and nobody else', async () => {
-    const { container } = await renderAt('/insurance');
-    const active = container.querySelector('.uni-dock__pill > button.is-active');
-    expect(active.querySelector('.uni-dock__notch')).toBeTruthy();
-    // Exactly one mark is rendered in the whole bar.
-    expect(container.querySelectorAll('.uni-dock__notch').length).toBe(1);
-    for (const btn of container.querySelectorAll('.uni-dock__pill > button:not(.is-active)')) {
-      expect(btn.querySelector('.uni-dock__notch')).toBeNull();
+  it('has NO notch element anywhere in the bar', async () => {
+    // «اون نباشه بریدگی نمی‌خواهیم» — the mark element itself is gone, so no
+    // later stylesheet change can bring the cut back.
+    for (const path of ['/farm', '/insurance', '/orders']) {
+      const { container } = await renderAt(path);
+      expect(container.querySelector('.uni-dock__notch'), path).toBeNull();
+      expect(container.querySelector('[class*="notch"]'), path).toBeNull();
+      cleanup();
     }
   });
 
-  it('never carves a gap out of the bar for the active state', async () => {
-    // «گزینه فعال شکاف نخوره» — the pill must stay one continuous shape:
-    // no clipping (which is what turned the previous wedge into a hole) and
-    // no background-coloured cut-out drawn over the surface.
-    const css = (await import('node:fs')).readFileSync('src/styles/uni-dock.css', 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
+  it('never cuts, clips, masks or protrudes from the bar', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('src/styles/uni-dock.css', 'utf8');
+    const css = src.replace(/\/\*[\s\S]*?\*\//g, '');
+    // No rule for a notch exists at all.
+    expect(css).not.toMatch(/\.uni-dock__notch/);
+    // The pill is an unbroken capsule: no clipping, no masking.
     const pill = /\.uni-dock__pill\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
-    expect(pill).not.toMatch(/clip-path/);
-    const notch = /\.uni-dock__notch\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
-    // The lobe is painted in the surface colour and sits ABOVE the pill's
-    // top edge, i.e. it adds material instead of cutting a hole in it.
-    expect(notch).toMatch(/top:\s*-\d+px/);
-    expect(notch).toMatch(/background:\s*rgba\(/);
-    expect(notch).not.toMatch(/mask|clip/);
+    expect(pill).toMatch(/border-radius:\s*999px/);
+    expect(pill).not.toMatch(/clip-path|mask|-webkit-mask/);
+    // The only `mask` left in the file is the AI's hairline ring, which sits
+    // ON the disc's own edge — never on the pill.
+    const maskBlocks = css.match(/[^{}]*\{[^}]*mask[^}]*\}/g) ?? [];
+    for (const block of maskBlocks) expect(block).toMatch(/\.uni-dock__ai/);
+    // Nothing in the component either — not even a leftover class name.
+    // (The comments DO mention the word, on purpose, to record why it was
+    // removed; strip them before asserting.)
+    const jsx = fs.readFileSync('src/components/UniDock.jsx', 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '');
+    expect(jsx).not.toMatch(/notch/i);
   });
 
   it('lists the AI as separate from the section buttons', async () => {
@@ -192,7 +200,7 @@ describe('the section dock', () => {
     expect(container.querySelectorAll('.uni-dock__sr').length).toBe(5);
   });
 
-  it('moves the notch to the section that was tapped', async () => {
+  it('moves the active state to the section that was tapped', async () => {
     const { container } = await renderAt('/farm');
     const pill = container.querySelector('.uni-dock__pill');
     // Farm is active on /farm; tap Orders (the fourth slot).
@@ -202,7 +210,7 @@ describe('the section dock', () => {
       expect(active).toBeTruthy();
       expect(active.dataset.section).toBe('orders');
     });
-    expect(container.querySelectorAll('.uni-dock__notch').length).toBe(1);
+    expect(container.querySelectorAll('.uni-dock__notch').length).toBe(0);
   });
 
   it('does not mount the side QuickAccess rail on these screens', async () => {
