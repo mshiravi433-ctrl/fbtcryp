@@ -1,4 +1,5 @@
 import { AI_TRADE_ENABLED } from '../lib/features';
+import { chatWithTransientRetry } from '../lib/aiChatRetry.js';
 /**
  * FBT INTENT OS — Universal AI Operating Agent — Unified Chat Surface V6
  * ---------------------------------------------------------------------------
@@ -1135,6 +1136,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
    */
   const [aiTab, setAiTab] = useState('chat');
   const [navOpen, setNavOpen] = useState(false);
+  const [headerHidden, setHeaderHidden] = useState(false);
+  const lastThreadScroll = useRef(0);
   useEffect(() => {
     if (!navOpen) return undefined;
     const onKey = (event) => { if (event.key === 'Escape') setNavOpen(false); };
@@ -3330,7 +3333,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
          question this turn just answered, or the block naming the one that is
          still open. Null when there is nothing to carry. */
       const bindingHint = answerBindingHint({ verdict: ledgerVerdict?.ok ? ledgerVerdict : null, locale });
-      const res = await aiChat({
+      const chatRequest = {
         message: effectiveMessage,
         /* A retry is context for the server's automatic depth decision, not a
            request to choose a particular mode. */
@@ -3357,7 +3360,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           ...(opts.hints || {}),
           ...(bindingHint ? { answerBinding: bindingHint } : {})
         }
-      });
+      };
+      // Keep the composer busy across the retry; do not rerun local agents.
+      const res = await chatWithTransientRetry(chatRequest, aiChat);
 
       if (res?.ok !== true) {
         const code = res?.status === 412 || res?.status === 'WALLET_REQUIRED' ? 'WALLET_REQUIRED' : (res?.error || res?.status || 'NETWORK_FAILED');
@@ -3365,38 +3370,14 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         const connect = human.ui === 'CONNECT_WALLET' || res?.ui?.type === 'CONNECT_WALLET';
         if (connect) rememberPending(res?.pendingIntent || message, res?.intent?.type || 'GENERAL');
 
-        /*
-         * ─── A FAILED TURN IS RETRIED ONCE, THEN IT STOPS ─────────────────
-         * The retry below carries the same question and a retry signal. The
-         * server re-evaluates the depth automatically; the browser never asks
-         * for a shallower or deeper mode. At most one automatic retry is made,
-         * and a non-transient 4xx/5xx response is not retried.
-         */
         const status = Number(res?.status || 0);
         const timedOut = status === 504 || status === 408 || res?.error === 'TIMEOUT' || status === 0;
-        const attempt = Number(opts.attempt || 0);
-        const toolChecker = toolCheckerRef.current;
-        const retryStrategy = toolChecker.getRetryStrategy({ message: code }, { attempt });
-        /* A 429 is not a transient glitch: the same bucket answers the same way
-           half a second later, so the automatic retry would only spend a second
-           slot of the allowance and print a second failure. */
         const rateLimited = status === 429 || human.code === 'RATE_LIMITED';
-        const canRetry = !rateLimited && attempt < 1 && (timedOut || (retryStrategy.recoverable && retryStrategy.action === 'RETRY'));
         const fa = String(locale || 'fa').toLowerCase().startsWith('fa');
-        /*
-         * ─── NO OPERATOR ENGLISH IN THE BUBBLE ───────────────────────────────
-         * `getRecoveryMessage()` speaks to an operator ("<tool> temporarily
-         * unavailable. Retrying..." — and "Retrying" was often untrue). The
-         * user-facing line is the humanized one, and for a throttle it carries
-         * the wait the server actually published.
-         */
         const retryAfter = Number(res?.retryAfter || res?.retryAfterSec || 0);
         const waitNote = rateLimited && retryAfter > 0
           ? (fa ? `\n\nحدود ${retryAfter} ثانیه صبر کنید و دوباره بفرستید.` : `\n\nWait about ${retryAfter}s and send it again.`)
           : '';
-        const recoveryMsg = canRetry
-          ? (fa ? 'پاسخ در مهلت نرسید؛ یک‌بار دیگر می‌پرسم و عمق پاسخ را بر اساس خود پرسش انتخاب می‌کنم.' : 'The answer did not arrive in time; I will retry once and choose depth from the question again.')
-          : waitNote;
 
         /*
          * ─── THE SERVER FAILED, NOT THE QUESTION ────────────────────────────
@@ -3412,32 +3393,22 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         /* A throttle or a transport failure says nothing about whether the
            question was understood, so the OS reading is not stapled under it —
            that pairing is what made one failure read like a deaf assistant. */
-        const localReading = !canRetry && !rateLimited && !timedOut && osResult?.understood === false
+        const localReading = !rateLimited && !timedOut && osResult?.understood === false
           ? String(osResult?.human?.message || '').trim()
           : '';
 
         setMessages((prev) => [...prev, {
           id: makeId(),
           role: 'ai',
-          content: visibleText(res, human.message)
-            + (recoveryMsg ? `\n\n${recoveryMsg}` : '')
+          content: (timedOut
+            ? (fa ? 'ارتباط با سرور هوش مصنوعی برقرار نشد یا پاسخ به‌موقع نرسید. لطفاً اتصال را بررسی و دوباره تلاش کنید.' : 'The AI server could not be reached or did not respond in time. Check your connection and try again.')
+            : visibleText(res, human.message))
+            + waitNote
             + (localReading ? `\n\n${localReading}` : ''),
           kind: connect ? 'connect' : 'error',
           statusCode: status || null,
           ui: { type: connect ? 'CONNECT_WALLET' : 'TEXT' }
         }]);
-
-        if (canRetry) {
-          setTimeout(() => {
-            void sendMessage(message, {
-              ...opts,
-              skipUserBubble: true,
-              attempt: attempt + 1
-            });
-          }, 800);
-          obsRef.current.log({ intentId: convStateRef.current.intentId, type: 'RETRY', payload: { ...retryStrategy, status, timedOut, attempt: attempt + 1 } });
-          busV6.emit(EVENTS_V6.RECOVERY, { strategy: retryStrategy });
-        }
 
         obsRef.current.log({ intentId: convStateRef.current.intentId, type: 'ERROR', payload: { error: code } });
         metricsRef.current.recordIntent(false);
@@ -5700,6 +5671,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   // UPGRADE 6 — Scroll handling with intelligent auto scroll
   const handleThreadScroll = useCallback(() => {
     scrollMgrRef.current.handleScroll();
+    const top = threadRef.current?.scrollTop || 0;
+    const delta = top - lastThreadScroll.current;
+    if (top < 24 || delta < -6) {
+      setHeaderHidden(false);
+      lastThreadScroll.current = top;
+    } else if (delta > 6) {
+      setHeaderHidden(true);
+      lastThreadScroll.current = top;
+    }
   }, []);
 
   // Persist messages to convState and handle scroll
@@ -7711,11 +7691,14 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   return (
     <div className={`iaos-page iaos-page-v6 tag-page nc-page fbt-neural ${keyboardOpen ? 'keyboard-open' : ''}`} data-ai-tab={aiTab} data-rail-collapsed={railCollapsed ? 'true' : 'false'} data-sidebar={sidebarOpen ? 'open' : 'closed'}>
       <div className="iaos-shell">
-        <header className="iaos-header">
-          <div className="iaos-title"><span className="iaos-title-copy"><h1>FBT AGENT</h1></span></div>
+        <header className="iaos-header" data-hidden={headerHidden ? 'true' : 'false'}>
+          <div className="iaos-title"><NeuralCore state={serverReachable === false ? 'offline' : 'idle'} size={40} label={fa ? 'هسته عصبی FBT' : 'FBT Neural Core'} /></div>
+          <div className="iaos-header-actions">
+          <button type="button" className="iaos-nav-toggle iaos-new-chat" onClick={newSeason} aria-label={fa ? 'شروع گفتگوی جدید' : 'Start a new conversation'} title={fa ? 'گفتگوی جدید' : 'New conversation'} data-testid="intent-ai-new-season"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button>
           <button type="button" className="iaos-nav-toggle" onClick={() => setNavOpen(true)} aria-label={fa ? 'باز کردن منو' : 'Open menu'} aria-expanded={navOpen} aria-controls="iaos-navigation" data-testid="intent-ai-nav-toggle">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
+          </div>
         </header>
         {navOpen ? (
           <div className="iaos-nav-overlay" onClick={() => setNavOpen(false)}>
@@ -7725,9 +7708,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 {[[ 'chat', fa ? 'چت' : 'Chat' ], [ 'agents', fa ? 'ایجنت‌ها' : 'Agents' ], [ 'activity', fa ? 'فعالیت' : 'Activity' ], [ 'more', fa ? 'بیشتر' : 'More' ]].map(([tab, label]) => (
                   <button type="button" key={tab} aria-current={aiTab === tab ? 'page' : undefined} onClick={() => { setAiTab(tab); setNavOpen(false); }}>{label}</button>
                 ))}
-                {AI_TRADE_ENABLED && <button type="button" onClick={() => { setNavOpen(false); navigate('/ai-trade'); }}>AI Trade</button>}
                 <button type="button" onClick={() => { setNavOpen(false); openPanel('neuromorphic'); }}>{fa ? 'کورتکس' : 'Cortex'}</button>
-                <button type="button" onClick={() => { setNavOpen(false); newSeason(); }}>{fa ? 'گفتگوی جدید' : 'New conversation'}</button>
                 <button type="button" onClick={() => { setNavOpen(false); setDrawerOpen(true); }}>{fa ? 'ابزارها' : 'Actions'}</button>
               </nav>
               <div className="iaos-nav-info" role="status">
@@ -7745,17 +7726,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             <span>{locale.startsWith('fa') ? 'در حال ادامه:' : 'Continuing:'}</span>
             <strong>{activeContext.label}</strong>
             <button type="button" aria-label="Clear context" onClick={() => setActiveContext(null)}>✕</button>
-          </div>
-        ) : null}
-
-        {/* Conversation state debug chip */}
-        {convState.currentIntent && convState.intentStatus !== 'completed' ? (
-          <div className="iaos-intent-chip" style={{ display: 'flex', gap: 6, fontSize: 11, color: '#a5b4fc', padding: '4px 8px', background: 'rgba(99,102,241,0.08)', borderRadius: 999, alignItems: 'center' }}>
-            <span>✦ {convState.currentIntent}</span>
-            <span style={{ opacity: 0.6 }}>· {convState.intentStatus}</span>
-            {Object.keys(convState.collectedSlots || {}).length ? (
-              <span style={{ opacity: 0.6 }}>· {Object.keys(convState.collectedSlots).length} slots</span>
-            ) : null}
           </div>
         ) : null}
 
@@ -7988,6 +7958,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         {/* §26 Mobile optimization — keyboard-aware, safe-area.
             Trench-style composer: a black pill with a round “+ actions” button
             (opens the Actions sheet) and a round send button. Nothing else. */}
+        <div className="iaos-composer-row">
+        {AI_TRADE_ENABLED && <button type="button" className="iaos-trade-shortcut" onClick={() => navigate('/ai-trade')} aria-label="AI Trade" title="AI Trade" data-testid="intent-ai-trade-shortcut"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 17l5-5 4 3 7-8M15 7h4v4" /></svg></button>}
         <form className="iaos-composer iaos-composer-v6" onSubmit={handleSubmit}>
           {speech.supported ? (
             <button
@@ -8049,6 +8021,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             </svg>
           </button>
         </form>
+        </div>
         {dictationNote ? (
           <p className="iaos-dictation-note" role="status" data-testid="intent-ai-dictation-note">
             {dictationNote}

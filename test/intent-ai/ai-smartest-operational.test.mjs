@@ -256,12 +256,12 @@ test('the browser leaves depth selection to the server and waits for Auto', () =
   assert.doesNotMatch(client, /getIntelligenceMode/,
     'the browser must not read a saved mode preference');
   const shared = src('src/lib/aiIntelligenceMode.js');
-  assert.match(shared, /max: 58000/, 'Auto needs a wait above the server ceiling');
-  assert.match(shared, /auto: 58000/, 'Auto and max share the longest safe client wait');
+  assert.match(shared, /max: 70000/, 'Auto needs a wait above the server ceiling');
+  assert.match(shared, /auto: 70000/, 'Auto and max share the longest safe client wait');
   const clientMax = Number(shared.match(/auto: (\d+)/)[1]);
   assert.ok(clientMax >= turnCeilingMs({}) + 5000,
     'a client timeout below the server ceiling discards the answer it paid for');
-  assert.ok(clientMax <= 60000, 'and it must stay inside the function the request runs in');
+  assert.ok(clientMax > 60000 && clientMax <= 75000, 'browser allows platform and network cold-start headroom');
 });
 
 /* ── 4. the self-test probes the seat the mode will actually use ─────────── */

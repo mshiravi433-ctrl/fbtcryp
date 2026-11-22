@@ -473,6 +473,16 @@ function sanitizeWallet(value) {
   return { connected, canSign, evmAddresses: evm, solanaAddresses: sol, dataStatus: connected ? 'client' : 'unavailable' };
 }
 
+// Optional reads must not hold an otherwise complete chat open indefinitely.
+// This caps waiting, not the underlying I/O; callers must not use it for financial writes.
+function optionalRead(promise, ms, fallback = null) {
+  let timer;
+  return Promise.race([
+    Promise.resolve(promise).catch(() => fallback),
+    new Promise((resolve) => { timer = setTimeout(() => resolve(fallback), ms); timer.unref?.(); })
+  ]).finally(() => clearTimeout(timer));
+}
+
 async function buildAIContext(req, body = {}, opts = {}) {
   const userId = ownerFor(req);
   const b = body && typeof body === 'object' ? body : {};
@@ -494,10 +504,7 @@ async function buildAIContext(req, body = {}, opts = {}) {
    * `unavailable` exactly like a failed read. The swr caches make every
    * subsequent turn instant either way.
    */
-  const ctxDeadline = (p, ms = 8000) => Promise.race([
-    p,
-    new Promise((resolve) => { const t = setTimeout(() => resolve(null), ms); t.unref?.(); })
-  ]);
+  const ctxDeadline = (p, ms = 8000) => optionalRead(p, ms);
   /*
    * `news` joins the same racy deadline. It exists for ONE turn shape: the
    * economic brief that answers «چخبر / what's up». A live RSS fan-out inside a
@@ -582,7 +589,7 @@ async function buildAIContext(req, body = {}, opts = {}) {
   /* Read through the same normalizer the writer uses, so a row written before
      the `summary`/`conversationSummary` fix (only `summary`) still contributes
      its text here instead of reading as empty forever. */
-  const memoryRows = normalizeMemoryRow(await storeGet(MEMORY_KEY(userId), null));
+  const memoryRows = normalizeMemoryRow(await optionalRead(storeGet(MEMORY_KEY(userId), null), 1000));
   const summary = safe(memoryRows.conversationSummary, 600) || '';
   const rememberedAssets = [];
   for (const row of [...(recentSmartConvs?.rows || []), ...(smartMemorySnapshot?.relevantConversations || [])]) {
@@ -2605,7 +2612,7 @@ router.post('/chat', async (req, res) => {
       durationMs: 0,
       locale: locale || 'fa'
     }).catch(() => {});
-    const nextMemory = await appendMemory(ownerFor(req), {
+    const nextMemory = await optionalRead(appendMemory(ownerFor(req), {
       conversationId: req.body?.conversationId || null,
       summary: safeMemoryText(`${(context.conversationSummary || '').slice(-600)}\n${safe(message, 240)}`.slice(-900), 600) || safe(message, 240),
       recentIntents: [rich.intent?.type || 'GENERAL', safe(message, 240)],
@@ -2613,7 +2620,7 @@ router.post('/chat', async (req, res) => {
       activeTasks: [],
       goals: rich.goalDetected ? ['financial-goal'] : [],
       lastAssets: u4?.entities?.tokens || (u4?.entities?.token ? [u4.entities.token] : [])
-    });
+     }), 1200, {});
     rememberDurableTurn(req, {
       message,
       goalDetected: rich.goalDetected === true,
@@ -3717,7 +3724,8 @@ router.post('/chat', async (req, res) => {
        */
       neuromorphic: await (async () => {
         try {
-          const st = await getNeuromorphicSwarm().getStatus({ owner: ownerFor(req) });
+          const st = await optionalRead(getNeuromorphicSwarm().getStatus({ owner: ownerFor(req) }), 500);
+          if (!st) return null;
           return {
             globalGeneration: st.globalGeneration,
             activeNodes24h: st.activeNodes24h,
@@ -3791,7 +3799,7 @@ router.post('/chat', async (req, res) => {
   const safeSummary = safe(message, 240);
   const recent = (context.conversationSummary || '').slice(-600);
   const concatenated = `${recent}\n${safeSummary}`.slice(-900);
-  const nextMemory = await appendMemory(ownerFor(req), {
+  const nextMemory = await optionalRead(appendMemory(ownerFor(req), {
     conversationId: req.body?.conversationId || null,
     summary: safeMemoryText(concatenated, 600) || safeSummary,
     recentIntents: [out.plan.intent, safeSummary],
@@ -3799,7 +3807,7 @@ router.post('/chat', async (req, res) => {
     activeTasks: (out.plan.actions || []).map((a) => `${a.type}:${a.asset || ''}`),
     goals: goalDetected ? ['financial-goal'] : [],
     lastAssets: u4?.entities?.tokens || (u4?.entities?.token ? [u4.entities.token] : [])
-  });
+   }), 1200, {});
   rememberDurableTurn(req, { message, goalDetected, intentType: human.intent?.type || intent });
 
   return res.json({
