@@ -465,12 +465,36 @@ export function AppChrome() {
    * /orders/history are covered by the same check as their parents.
    */
   const uniDock = ['farm', 'loan', 'orders', 'insurance'].includes(section);
+  // The three intel screens keep the footer, replacing only its AI button
+  // with a centered Quick Access launcher; the side rail is removed there.
+  const intelChrome = ['smart-money', 'news', 'global'].includes(section);
+  // These information screens have no footer and expose More in the header.
+  const infoChrome = [
+    'explore-hub', 'explore', 'discover',
+    'learn', 'help', 'docs', 'aparat',
+    'security', 'audit',
+    'developers', 'ecosystem', 'business',
+    'contact', 'about', 'settings',
+    'rewards', 'earn', 'leaderboard'
+  ].includes(section);
   /*
    * ONE hide/show state for header AND dock: scroll down → both fade away,
    * scroll up → both return (hooks/useHideOnScroll.js). Locked while the
    * More sheet is open, so the chrome can never hide out from under it.
+   *
+   * «برای همه این صفحات هنگام اسکرول به پایین هیدر محو و هنگام اسکرول به
+   * بالا هیدر بیاد» — the intel and info pages join the uniDock group in
+   * this behaviour.
    */
-  const chromeHidden = useHideOnScroll({ enabled: uniDock, locked: deskMore });
+  const chromeHidden = useHideOnScroll({ enabled: uniDock || intelChrome || infoChrome, locked: deskMore });
+  /*
+   * FARM IS THE EXCEPTION — «در فارم هیدر به بالا بچسبه و حرکت نکنه با
+   * اسکرول»: the Farm header sticks to the top and never moves with the
+   * scroll. The dock still hides (that part of the uniDock contract is
+   * untouched); only the header ignores the shared state, so there is
+   * still exactly one scroll listener and the two bars cannot drift.
+   */
+  const headerHidden = section === 'farm' ? false : chromeHidden;
   const headerless = pathname === '/intent' || pathname.startsWith('/pay') || pathname.startsWith('/social')
     || pathname === '/buy' || pathname.startsWith('/order/result');
   /* «نه جمع شده» — the world console is a dashboard, not a phone column, so it
@@ -503,8 +527,8 @@ export function AppChrome() {
   }, [pathname]);
 
   return (
-    <div className={`app-shell${deskChrome ? ' app-shell--market-desk' : ''}${futuresChrome ? ' app-shell--futures' : ''}${stocksChrome ? ' app-shell--stocks' : ''}${headerless ? ' app-shell--headerless' : ''}${wide ? ' app-shell--wide' : ''}${pathname === '/shop' ? ' app-shell--shop' : ''}${dockActive ? ' app-shell--dock-active' : ''}${uniDock ? ' app-shell--uni-dock' : ''}`}>
-      {!headerless && <Header moreOpen={deskMore} chromeHidden={chromeHidden} onOpenMore={deskChrome || uniDock ? () => setDeskMore((open) => !open) : undefined} />}
+    <div className={`app-shell${deskChrome ? ' app-shell--market-desk' : ''}${futuresChrome ? ' app-shell--futures' : ''}${stocksChrome ? ' app-shell--stocks' : ''}${headerless ? ' app-shell--headerless' : ''}${wide ? ' app-shell--wide' : ''}${pathname === '/shop' ? ' app-shell--shop' : ''}${dockActive ? ' app-shell--dock-active' : ''}${uniDock ? ' app-shell--uni-dock' : ''}${intelChrome ? ' app-shell--intel' : ''}${infoChrome ? ' app-shell--info' : ''}`}>
+      {!headerless && <Header moreOpen={deskMore} chromeHidden={headerHidden} onOpenMore={deskChrome || uniDock || infoChrome ? () => setDeskMore((open) => !open) : undefined} />}
       <PullToRefresh>
         <SwipeTabRoutes />
       </PullToRefresh>
@@ -517,12 +541,12 @@ export function AppChrome() {
         own tab bar owns the bottom.
       */}
       <Suspense fallback={null}>
-        <ScreenshotSharePrompt placement={pathname === '/intent' ? 'top' : headerless || deskChrome ? 'bare' : 'nav'} />
+        <ScreenshotSharePrompt placement={pathname === '/intent' ? 'top' : headerless || deskChrome || infoChrome ? 'bare' : 'nav'} />
       </Suspense>
-      {!headerless && !uniDock && <Suspense fallback={null}><QuickAccess centered={deskChrome} /></Suspense>}
-      {!headerless && !deskChrome && !uniDock && <BottomNav />}
+      {!headerless && !uniDock && <Suspense fallback={null}><QuickAccess centered={deskChrome} footer={intelChrome} /></Suspense>}
+      {!headerless && !deskChrome && !uniDock && !infoChrome && <BottomNav quickAccessCentre={intelChrome} />}
       {!headerless && uniDock && <Suspense fallback={null}><UniDock hidden={chromeHidden} /></Suspense>}
-      {(deskChrome || uniDock) && <MoreSheet open={deskMore} onClose={() => setDeskMore(false)} />}
+      {(deskChrome || uniDock || infoChrome) && <MoreSheet open={deskMore} onClose={() => setDeskMore(false)} />}
     </div>
   );
 }

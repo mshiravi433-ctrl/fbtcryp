@@ -145,7 +145,7 @@ function CentreAction({ active, still, label, onClick }) {
   );
 }
 
-export default function BottomNav() {
+export default function BottomNav({ quickAccessCentre = false }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -300,7 +300,7 @@ export default function BottomNav() {
         to sit in. As a sibling it floats free, casts its own shadow into the
         hollow, and reads as a separate droplet — which is the whole point.
       */}
-      <CentreAction
+      {!quickAccessCentre && <CentreAction
         active={pathname === CENTRE.to}
         still={still}
         label={t(CENTRE.key)}
@@ -309,7 +309,7 @@ export default function BottomNav() {
           setPulse((n) => n + 1);
           navigate(CENTRE.to);
         }}
-      />
+      />}
 
       <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
     </>

@@ -235,7 +235,7 @@ describe('the section dock', () => {
   });
 
   it('hides header and dock on scroll down, brings both back on scroll up', async () => {
-    const { container } = await renderAt('/farm');
+    const { container } = await renderAt('/loan');
     const dock = () => container.querySelector('.uni-dock');
     const header = () => container.querySelector('.top-bar');
 
@@ -247,6 +247,23 @@ describe('the section dock', () => {
     expect(header().classList.contains('is-chrome-hidden')).toBe(true);
 
     await scrollTo(260);
+    await waitFor(() => expect(dock().getAttribute('data-hidden')).toBe('false'));
+    expect(header().classList.contains('is-chrome-hidden')).toBe(false);
+  });
+
+  it('keeps the Farm header stuck: it never hides, while the dock still does', async () => {
+    // «در فارم هیدر به بالا بچسبه و حرکت نکنه با اسکرول» — Farm is the one
+    // uniDock screen whose header ignores the shared hide state. The dock
+    // keeps the old contract; the header stays pinned.
+    const { container } = await renderAt('/farm');
+    const dock = () => container.querySelector('.uni-dock');
+    const header = () => container.querySelector('.top-bar');
+
+    await scrollTo(600);
+    await waitFor(() => expect(dock().getAttribute('data-hidden')).toBe('true'));
+    expect(header().classList.contains('is-chrome-hidden')).toBe(false);
+
+    await scrollTo(0);
     await waitFor(() => expect(dock().getAttribute('data-hidden')).toBe('false'));
     expect(header().classList.contains('is-chrome-hidden')).toBe(false);
   });

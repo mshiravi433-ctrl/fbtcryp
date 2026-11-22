@@ -29,8 +29,7 @@ import {
   IconX,
   IconSearch,
   IconClock,
-  IconWorld,
-  IconSparkle
+  IconWorld
 } from './Icons';
 
 /**
@@ -408,15 +407,15 @@ const GROUPS = [
       { to: '/social', key: 'nav.social', Icon: AnimatedSocial, hue: 'var(--rgb-3)' },
       { to: '/explore-hub', key: 'exploreHub.title', Icon: IconSearch, hue: 'var(--rgb-4)' },
       /*
-       * «تغییرات» — the changelog page.
-       *
-       * It belongs in this group and nowhere else: it is not a market, not a
-       * money screen, and not a settings page, which are the other three
-       * categories. One row, no badge, no "NEW" dot in the menu itself — the
-       * page marks its own newest entry, and a menu that advertises freshness
-       * has to keep doing it forever.
+       * ─── «تغییرات» IS NOT A MENU TILE ───────────────────────────────────
+       * روی درخواست: «در منو بیشتر قسمت صفحه تغییرات محو بشه». The changelog
+       * page is removed from this menu entirely. The /whats-new and
+       * /changelog ROUTES stay mounted in App.jsx exactly like the /solana
+       * and /nft doorways: a menu entry is discovery, a route is a contract,
+       * and saved/shared links must keep resolving. Only this doorway is
+       * removed — and test/wiring.mjs lists /whats-new among the
+       * deliberately unlinked routes so the orphan check stays honest.
        */
-      { to: '/whats-new', key: 'nav.whatsNew', Icon: IconSparkle, hue: 'var(--rgb-3)' },
       /* Auto Orders moved into the Earn group when Intent OS became the raised
          centre action. Keeping this note here prevents a later refactor from
          adding a second duplicate doorway in the More group. */
