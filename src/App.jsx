@@ -453,13 +453,13 @@ export function AppChrome() {
   const [deskMore, setDeskMore] = useState(false);
   useEffect(() => { setDeskMore(false); }, [pathname]);
   /*
-   * THE UNISWAP-STYLE DOCK — Farm, Loan, Protection (Insurance) and Auto
-   * Orders only. On these four screens the global BottomNav is replaced by
-   * UniDock (four icons side by side, one of them the AI — see
-   * components/UniDock.jsx), the side QuickAccess rail is dropped so the
-   * screen stays clean, and the header's right-hand button becomes the
-   * More menu (the dock itself has no More slot, so the menu moves up
-   * rather than disappearing).
+   * THE SECTION DOCK — Farm, Loan, Protection (Insurance) and Auto Orders
+   * only. On these four screens the global BottomNav is replaced by UniDock:
+   * a glass pill of the THREE sibling sections plus a separate AI button
+   * beside it (components/UniDock.jsx), the side QuickAccess rail is dropped
+   * — «بغل صفحه در این صفحات هم دسترسی سریع را محو کن» — so the screen stays
+   * clean, and the header's right-hand button becomes the More menu (the dock
+   * carries no More slot, so the menu moves up rather than disappearing).
    *
    * `section` is the first path segment, so /insurance/marketplace and
    * /orders/history are covered by the same check as their parents.
@@ -519,7 +519,7 @@ export function AppChrome() {
       <Suspense fallback={null}>
         <ScreenshotSharePrompt placement={pathname === '/intent' ? 'top' : headerless || deskChrome ? 'bare' : 'nav'} />
       </Suspense>
-      {!headerless && <Suspense fallback={null}><QuickAccess centered={deskChrome} /></Suspense>}
+      {!headerless && !uniDock && <Suspense fallback={null}><QuickAccess centered={deskChrome} /></Suspense>}
       {!headerless && !deskChrome && !uniDock && <BottomNav />}
       {!headerless && uniDock && <Suspense fallback={null}><UniDock hidden={chromeHidden} /></Suspense>}
       {(deskChrome || uniDock) && <MoreSheet open={deskMore} onClose={() => setDeskMore(false)} />}

@@ -1,22 +1,25 @@
 // @vitest-environment jsdom
 /**
- * THE UNISWAP-STYLE DOCK — Farm / Loan / Protection / Auto Orders.
+ * THE SECTION DOCK — Farm / Loan / Protection / Auto Orders.
  * ---------------------------------------------------------------------------
- * The request, in the owner's words:
+ * The owner's two rounds of instruction, both pinned here:
  *
- *   «در صفحات فارم و وام و محافظت و سفارش خودکار … فوتر شبیه والت یونی‌سواپ
- *    یعنی چهار ایکون کنار هم با فاصله، یک ایکون برای هوش مصنوعی … وقتی
- *    اسکرول می‌کنی پایین هیدر و فوتر محو شود و اسکرول بالا دوباره بیاد»
+ *   «فوتر شبیه والت یونی‌سواپ … وقتی اسکرول می‌کنی پایین هیدر و فوتر محو شود
+ *    و اسکرول بالا دوباره بیاد»
+ *   «منو فوتر … باید سه تا دکمه از این صفحات باشد و دکمه هوش مصنوعی از این‌ها
+ *    جدا باشد … بغل صفحه در این صفحات هم دسترسی سریع را محو کن»
  *
- * So this file asserts three separate promises, none of them cosmetic:
+ * So four promises, none of them cosmetic:
  *
  *   1. SCOPE — the dock appears on exactly those four sections (and their
- *      children), the global BottomNav is gone there, and nothing else in
- *      the app changed.
- *   2. SHAPE — four icons, the fourth one the AI, each a real link-sized
- *      tap target with an accessible name.
- *   3. MOTION — scrolling down hides header AND dock, scrolling up brings
- *      both back, and reduced motion cancels the whole behaviour.
+ *      children), the global BottomNav is gone there, nothing else changed.
+ *   2. THREE + ONE — the pill holds three section buttons, and the AI is a
+ *      SEPARATE surface outside that pill, never the fourth slot in it.
+ *   3. THE THREE ARE THE SIBLINGS — the page you are on is not one of them,
+ *      so all four screens are always one tap apart.
+ *   4. MOTION + CHROME — scroll down hides header and dock, scroll up
+ *      brings both back, reduced motion cancels it, and the side QuickAccess
+ *      rail is not mounted on these screens.
  */
 import React from 'react';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -31,7 +34,6 @@ beforeAll(async () => {
 });
 
 afterEach(() => {
-  cleanup();
   cleanup();
   Object.defineProperty(window, 'scrollY', { value: 0, configurable: true, writable: true });
   Object.defineProperty(window, 'matchMedia', {
@@ -71,19 +73,21 @@ const renderAt = async (path) => {
   return out;
 };
 
-describe('the Uniswap-style dock', () => {
+const labelsOf = (root) =>
+  [...root.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'));
+
+describe('the section dock', () => {
   it.each(['/farm', '/loan', '/insurance', '/orders', '/orders/history', '/insurance/marketplace'])(
     'replaces the global nav on %s',
     async (path) => {
       const { container } = await renderAt(path);
       expect(container.querySelector('.bottom-nav')).toBeNull();
-      const dock = container.querySelector('.uni-dock');
-      expect(dock).toBeTruthy();
+      expect(container.querySelector('.uni-dock')).toBeTruthy();
       expect(container.querySelector('.app-shell').classList.contains('app-shell--uni-dock')).toBe(true);
     }
   );
 
-  it('leaves the rest of the app on the global nav', async () => {
+  it('leaves the rest of the app on the global nav', () => {
     const { container } = render(
       <MemoryRouter initialEntries={['/wallet']}>
         <AppChrome />
@@ -94,23 +98,59 @@ describe('the Uniswap-style dock', () => {
     expect(container.querySelector('.app-shell').classList.contains('app-shell--uni-dock')).toBe(false);
   });
 
-  it('shows four icons side by side, the last one the AI', async () => {
+  it('puts exactly three section buttons in the pill', async () => {
     const { container } = await renderAt('/farm');
-    const items = container.querySelectorAll('.uni-dock > button');
-    expect(items.length).toBe(4);
-    expect(items[3].classList.contains('uni-dock__item--ai')).toBe(true);
-    // Only the AI gets the saturated disc.
-    const ai = container.querySelectorAll('.uni-dock__item--ai');
-    expect(ai.length).toBe(1);
-    // Every slot is a real, named target.
-    for (const el of items) {
-      expect(el.getAttribute('aria-label')).toBeTruthy();
-      expect(el.querySelector('svg')).toBeTruthy();
+    const group = container.querySelector('.uni-dock__group');
+    expect(group).toBeTruthy();
+    expect(group.querySelectorAll(':scope > button').length).toBe(3);
+    for (const btn of group.querySelectorAll(':scope > button')) {
+      expect(btn.getAttribute('aria-label')).toBeTruthy();
+      expect(btn.querySelector('svg')).toBeTruthy();
     }
-    // Icon-only, like the reference: the names live in .uni-dock__sr and in
-    // aria-label, never as visible text under the glyphs.
-    for (const el of items) {
-      const visible = [...el.childNodes]
+  });
+
+  it('stands the AI OUTSIDE the pill, not as a fourth slot in it', async () => {
+    const { container } = await renderAt('/farm');
+    const ai = container.querySelector('.uni-dock__ai');
+    const group = container.querySelector('.uni-dock__group');
+    expect(ai).toBeTruthy();
+    // The structural rule this whole layout is for.
+    expect(group.contains(ai)).toBe(false);
+    expect(group.querySelectorAll(':scope > button').length).toBe(3);
+    // …and it is still a real, named destination.
+    expect(ai.getAttribute('aria-label')).toBe('سیستم Intent');
+  });
+
+  it('shows the three SIBLING sections, never the page you are on', async () => {
+    const cases = {
+      '/farm': ['وام', 'محافظت / بیمه', 'سفارش خودکار'],
+      '/loan': ['فارم', 'محافظت / بیمه', 'سفارش خودکار'],
+      '/insurance': ['فارم', 'وام', 'سفارش خودکار'],
+      '/orders': ['فارم', 'وام', 'محافظت / بیمه']
+    };
+    for (const [path, expected] of Object.entries(cases)) {
+      const { container } = await renderAt(path);
+      const group = container.querySelector('.uni-dock__group');
+      expect(labelsOf(group), path).toEqual(expected);
+      // Nothing in the pill claims to be the current page.
+      expect(container.querySelector('.uni-dock__group [aria-current="page"]'), path).toBeNull();
+      cleanup();
+    }
+  });
+
+  it('lists the AI as separate from the section buttons', async () => {
+    const { container } = await renderAt('/orders');
+    const groupLabels = labelsOf(container.querySelector('.uni-dock__group'));
+    const ai = container.querySelector('.uni-dock__ai');
+    expect(groupLabels).not.toContain(ai.getAttribute('aria-label'));
+    // Three section slots + the AI button, and no more.
+    expect(container.querySelectorAll('.uni-dock button').length).toBe(4);
+  });
+
+  it('is icon-only: no visible label text inside either surface', async () => {
+    const { container } = await renderAt('/loan');
+    for (const btn of container.querySelectorAll('.uni-dock button')) {
+      const visible = [...btn.childNodes]
         .filter((n) => !(n.classList && n.classList.contains('uni-dock__sr')))
         .map((n) => n.textContent.trim())
         .join('');
@@ -119,16 +159,37 @@ describe('the Uniswap-style dock', () => {
     expect(container.querySelectorAll('.uni-dock__sr').length).toBe(4);
   });
 
-  it('sends the AI icon to Intent OS and marks the current screen', async () => {
-    const { container } = await renderAt('/loan');
-    const items = container.querySelectorAll('.uni-dock > button');
-    expect(items[3].getAttribute('aria-label')).toBe('سیستم Intent');
-    // /loan is not one of the four destinations, so nothing is current here…
-    expect(container.querySelector('.uni-dock [aria-current="page"]')).toBeNull();
-    // …and the active state is driven by the route, not by a local tap.
-    const market = items[0];
-    fireEvent.click(market);
-    expect(market.getAttribute('aria-label')).toBe('بازار');
+  it('navigates to the sibling section that was tapped', async () => {
+    const { container } = await renderAt('/farm');
+    const group = container.querySelector('.uni-dock__group');
+    fireEvent.click(group.querySelectorAll(':scope > button')[0]);
+    // Nothing in a jsdom MemoryRouter can prove the route rendered here, but
+    // /loan becoming the current section would empty it of that label.
+    await waitFor(() => {
+      const labels = labelsOf(container.querySelector('.uni-dock__group'));
+      expect(labels[0]).toBe('فارم');
+    });
+  });
+
+  it('does not mount the side QuickAccess rail on these screens', async () => {
+    render(
+      <MemoryRouter initialEntries={['/farm']}>
+        <AppChrome />
+      </MemoryRouter>
+    );
+    // QuickAccess portals to document.body and is lazy: give it the time it
+    // would need, then assert it never arrived.
+    await new Promise((r) => setTimeout(r, 300));
+    expect(document.querySelector('.quick-access')).toBeNull();
+  });
+
+  it('still mounts the side rail elsewhere', async () => {
+    render(
+      <MemoryRouter initialEntries={['/wallet']}>
+        <AppChrome />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(document.querySelector('.quick-access')).toBeTruthy());
   });
 
   it('hides header and dock on scroll down, brings both back on scroll up', async () => {
@@ -152,17 +213,14 @@ describe('the Uniswap-style dock', () => {
     const { container } = await renderAt('/farm');
     const dock = () => container.querySelector('.uni-dock');
 
-    // In the "always visible near the top" band, however far you move.
     await scrollTo(100);
     expect(dock().getAttribute('data-hidden')).toBe('false');
     await scrollTo(130);
     expect(dock().getAttribute('data-hidden')).toBe('false');
 
-    // Below the "always visible near the top" band, a real downward move.
     await scrollTo(400);
     await waitFor(() => expect(dock().getAttribute('data-hidden')).toBe('true'));
 
-    // Back to the very top: shown, whatever the direction history says.
     await scrollTo(0);
     await waitFor(() => expect(dock().getAttribute('data-hidden')).toBe('false'));
   });
@@ -181,7 +239,7 @@ describe('the Uniswap-style dock', () => {
   });
 
   it('keeps the More menu reachable from the header', async () => {
-    const { container } = await renderAt('/farm');
+    await renderAt('/farm');
     const more = screen.getByRole('button', { name: 'بیشتر' });
     expect(more.closest('.top-bar')).toBeTruthy();
     fireEvent.click(more);
