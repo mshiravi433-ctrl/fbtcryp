@@ -17,8 +17,9 @@
  *      INSURANCE, Auto Orders — the owner replaced «محافظت» with «بیمه»),
  *      and the AI is a SEPARATE surface outside that pill, never a fifth
  *      slot in it.
- *   3. THE ACTIVE ONE HAS THE NOTCH — exactly one button carries the notch,
- *      and it is the section you are on.
+ *   3. THE ACTIVE ONE IS MARKED, WITHOUT A GAP — exactly one button carries
+ *      the raised lobe, it is the section you are on, and the mark ADDS to
+ *      the bar (the owner's correction was «گزینه فعال شکاف نخوره»).
  *   4. MOTION + CHROME — scroll down hides header and dock, scroll up
  *      brings both back, reduced motion cancels it, and the side QuickAccess
  *      rail is not mounted on these screens.
@@ -143,15 +144,31 @@ describe('the section dock', () => {
     }
   });
 
-  it('gives the active button the notch, and nobody else', async () => {
+  it('gives the active button the raised mark, and nobody else', async () => {
     const { container } = await renderAt('/insurance');
     const active = container.querySelector('.uni-dock__pill > button.is-active');
     expect(active.querySelector('.uni-dock__notch')).toBeTruthy();
-    // Exactly one notch is rendered in the whole bar.
+    // Exactly one mark is rendered in the whole bar.
     expect(container.querySelectorAll('.uni-dock__notch').length).toBe(1);
     for (const btn of container.querySelectorAll('.uni-dock__pill > button:not(.is-active)')) {
       expect(btn.querySelector('.uni-dock__notch')).toBeNull();
     }
+  });
+
+  it('never carves a gap out of the bar for the active state', async () => {
+    // «گزینه فعال شکاف نخوره» — the pill must stay one continuous shape:
+    // no clipping (which is what turned the previous wedge into a hole) and
+    // no background-coloured cut-out drawn over the surface.
+    const css = (await import('node:fs')).readFileSync('src/styles/uni-dock.css', 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const pill = /\.uni-dock__pill\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(pill).not.toMatch(/clip-path/);
+    const notch = /\.uni-dock__notch\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    // The lobe is painted in the surface colour and sits ABOVE the pill's
+    // top edge, i.e. it adds material instead of cutting a hole in it.
+    expect(notch).toMatch(/top:\s*-\d+px/);
+    expect(notch).toMatch(/background:\s*rgba\(/);
+    expect(notch).not.toMatch(/mask|clip/);
   });
 
   it('lists the AI as separate from the section buttons', async () => {

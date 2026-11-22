@@ -1,26 +1,32 @@
 /* ==========================================================================
    UNI DOCK — Farm · Loan · Insurance · Auto Orders.
 
-   WHAT THIS FILE IS FOR, in the owner's latest words:
+   The owner's questions, and how this file answers them:
 
-     «دکمه محافظت را با بیمه جایگزین کن، رنگ شیشه‌ای و رنگش مثل بقیه باید
-      باشد، منو را خیلی مدرن‌تر و انیمیشن حذف کن و اینکه هر کدوم فعال بود یک
-      بریدگی خاصی داشته باشد»
+     «رنگ شیشه‌ای و رنگش مثل بقیه باید باشد»  → one glass language, both themes,
+                                                 AI included.
+     «منو را مدرن‌تر و انیمیشن حذف کن»        → no float, no sheen, no pulse,
+                                                 no press bounce. Only state
+                                                 transitions remain.
+     «هر کدوم فعال بود یک بریدگی خاصی داشته باشد»
+                                              → THIS iteration changed the
+                                                 meaning after they saw the
+                                                 first attempt:
+     «گزینه فعال شکاف نخوره»                    → the active mark must NOT cut
+                                                 a gap in the bar.
 
-   · ONE glass pill holding the group's FOUR sections, in reading order.
-   · The ACTIVE section carries a NOTCH: a cut-out wedge over its top edge
-     plus a window of light behind its glyph. Shape, not colour — it reads
-     the same in dark and light, and under reduced motion.
-   · The AI is a separate round glass button outside the pill, same glass
-     and same ink as the rest («رنگش مثل بقیه»), with one quiet RGB hairline
-     so it still reads as "the brain" rather than a fifth section.
-   · NO ANIMATION on the bar: no float, no sheen, no pulse, no press
-     bounce. Only 180ms transitions on the notch and on button colour,
-     which are state feedback. That is the «انیمیشن حذف» instruction.
+   So the active state is now made of ADDED material, never subtracted:
+   a raised lobe standing proud of the pill's top edge (drawn in the same
+   surface colour, so the outline stays continuous) plus a soft window of
+   light inside the bar behind the glyph. Nothing is carved out of the pill,
+   and the bar has no `clip-path` any more — that clip is what made the
+   previous "notch" read as a hole in the surface.
+
+   The AI keeps its own round glass button, detached at the end of the row.
    ========================================================================== */
 
-/* ── The track ─────────────────────────────────────────────────────────────
-   An invisible flex row holding the two surfaces. It spans the centred
+/* ── The row ───────────────────────────────────────────────────────────────
+   An invisible flex track holding the two surfaces. It spans the centred
    440px column the old nav used and paints nothing itself. */
 .uni-dock {
   position: fixed;
@@ -39,8 +45,7 @@
   gap: 10px;
   pointer-events: none;
   /* Hide/show only — owned by useHideOnScroll in AppChrome, which fades the
-     header and this bar as ONE state. `translate` (not `transform`) so the
-     centring, which lives in margins, is untouched. */
+     header and this bar as ONE state. */
   transition:
     opacity 0.24s ease,
     translate 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
@@ -66,10 +71,9 @@
 }
 
 /* ── Surface 1: the pill ───────────────────────────────────────────────────
-   Full rounding (999px), glass, themed. `clip-path` is what makes the notch
-   possible: the wedge elements below are drawn in the surface colour and
-   pushed OUTSIDE the pill's edge; clipping lets them cut into the rim
-   instead of floating over the page behind it. */
+   Full rounding (999px), glass, themed. NO clip-path: the raised active lobe
+   has to be able to stand outside the bar's top edge, and a clip would also
+   re-introduce the "hole in the surface" look the owner rejected. */
 .uni-dock__pill {
   position: relative;
   flex: 1;
@@ -80,8 +84,6 @@
   gap: 2px;
   padding: 8px;
   border-radius: 999px;
-  /* Dark: smoked black glass. Light: frosted white — same geometry, swapped
-     by the token block further down. */
   background: rgba(12, 13, 20, 0.72);
   backdrop-filter: blur(24px) saturate(1.6);
   -webkit-backdrop-filter: blur(24px) saturate(1.6);
@@ -89,15 +91,11 @@
   box-shadow:
     0 18px 46px -14px rgba(0, 0, 0, 0.85),
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
-  /* The notches are cut out of the pill, so they must not paint outside it. */
-  clip-path: inset(0 round 999px);
 }
 
 /* ── Surface 2: the AI ─────────────────────────────────────────────────────
    Same glass, same 60px band, round, and DETACHED — the gap in the track is
-   the whole point of the layout. It no longer carries the saturated
-   gradient: «رنگش مثل بقیه» means it is a glass surface like the pill, and
-   only the thin RGB rim says "AI". */
+   the point of the layout. Its only accent is a 1px RGB hairline. */
 .uni-dock__ai {
   position: relative;
   flex: 0 0 auto;
@@ -117,11 +115,9 @@
   box-shadow:
     0 18px 46px -14px rgba(0, 0, 0, 0.85),
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
-  transition: color 0.18s ease, box-shadow 0.18s ease;
+  transition: color 0.18s ease;
 }
 
-/* The one accent left on this bar: a hairline of the palette, not a fill.
-   Drawn as a ring so it follows the circle exactly. */
 .uni-dock__ai::after {
   content: '';
   position: absolute;
@@ -148,11 +144,9 @@
 }
 
 /* ── The four section buttons ─────────────────────────────────────────────
-   Equal shares, so the four marks sit at identical gaps whatever the phone
-   width. Each is a full 44px tap target (the accessibility floor) inside
-   the 44px pill body. No press transform anywhere: the owner asked for the
-   animation to go, so a tap changes colour and slides the notch, nothing
-   else. */
+   Equal shares: four identical gaps at any phone width. Each is a 44px tap
+   target (the accessibility floor) inside the pill's 44px body. No press
+   transform anywhere — the owner asked for the animation to go. */
 .uni-dock__item {
   position: relative;
   flex: 1;
@@ -192,49 +186,50 @@
   border-radius: 50%;
 }
 
-/* ── THE NOTCH ─────────────────────────────────────────────────────────────
-   «هر کدوم فعال بود یک بریدگی خاصی داشته باشد»
+/* ── THE ACTIVE MARK ───────────────────────────────────────────────────────
+   «هر کدوم فعال بود یک بریدگی خاصی داشته باشد» … «گزینه فعال شکاف نخوره»
 
-   Drawn in the SURFACE colour (the same near-black the pill sits on), pushed
-   up so its top half leaves the pill and its bottom half cuts into it:
-   inside the clipped pill you see a wedge bitten out of the top rim, and
-   above it a small tab standing proud — the silhouette a physical dock
-   notch has. Because it is a shape and not a colour, it needs no second
-   rule for light mode beyond the surface colour, and it does not move when
-   animations are off.
+   Two pieces, both ADDING to the bar:
 
-   Only the active button renders it; a transition on opacity/translate
-   makes the move between two buttons read as the notch sliding, not
-   blinking. */
+   1. `.uni-dock__notch` — a small lobe above the pill's top edge, filled and
+      bordered in the pill's own surface colours, so it fuses with the bar
+      into a single outline growing upwards. It never punches a hole: it is
+      behind the pill in the stacking order, and the pill's border closes
+      across its base, which is what makes it read as part of the same
+      object rather than a cut.
+
+   2. `::before` on the button — a soft raised window inside the bar, so the
+      selected slot is also visible from below the mark.
+
+   Only the active button renders the lobe, so exactly one exists. */
 .uni-dock__notch {
   position: absolute;
-  top: -9px;
+  top: -10px;
   left: 50%;
   translate: -50% 0;
-  width: 34px;
+  width: 30px;
   height: 12px;
-  border-radius: 0 0 10px 10px;
-  background: var(--bg-void);
-  opacity: 0;
-  transition: opacity 0.18s ease, translate 0.18s ease;
+  border-radius: 9px 9px 0 0;
+  background: rgba(20, 22, 31, 0.94);
+  border: 1px solid var(--line);
+  border-bottom: none;
+  /* Behind the pill (which is z-index 1 via ::before stacking), in front of
+     the page. */
+  z-index: -1;
   pointer-events: none;
 }
 
-/* The soft window behind the active glyph, inside the pill. */
 .uni-dock__item.is-active::before {
   content: '';
   position: absolute;
   inset: 2px 3px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset;
   pointer-events: none;
 }
 
-.uni-dock__item.is-active .uni-dock__notch {
-  opacity: 1;
-}
-
-/* The glyph must sit above the notch and the window. */
+/* The glyph sits above the window. */
 .uni-dock__item > .uni-dock__icon,
 .uni-dock__item > .uni-dock__sr {
   position: relative;
@@ -253,19 +248,26 @@
 }
 
 /* ── Light theme ───────────────────────────────────────────────────────────
-   The same two surfaces, frosted white instead of smoked black. The notch
-   switches to the light canvas colour because it is cut out of a bright
-   pill — the one value that MUST differ, and it is set here, not inferred. */
+   Frosted white surfaces. The lobe is filled with the same frosted white and
+   keeps the same `--line` border, so it fuses here too. */
 :root[data-theme='light'] .uni-dock__pill,
 :root[data-theme='light'] .uni-dock__ai {
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.82);
   box-shadow:
     0 16px 40px -14px rgba(16, 20, 40, 0.26),
     0 0 0 1px rgba(255, 255, 255, 0.55) inset;
 }
 
+:root[data-theme='light'] .uni-dock__notch {
+  background: rgba(252, 253, 255, 0.92);
+}
+
 :root[data-theme='light'] .uni-dock__item {
   color: var(--text-3);
+}
+
+:root[data-theme='light'] .uni-dock__item:hover {
+  color: var(--text-2);
 }
 
 :root[data-theme='light'] .uni-dock__item.is-active {
@@ -276,17 +278,15 @@
   background: rgba(16, 20, 40, 0.07);
 }
 
-:root[data-theme='light'] .uni-dock__notch {
-  background: var(--bg-void);
-}
-
-/* ── Lite devices: no backdrop-filter, opaque instead of frosted ──────────
-   Same contract as .bottom-nav under data-lite — the blur is the first
-   thing a low-end GPU drops, so the surfaces go solid rather than smearing. */
+/* ── Lite devices: no backdrop-filter, opaque instead of frosted ──────────*/
 :root[data-lite='true'] .uni-dock__pill,
 :root[data-lite='true'] .uni-dock__ai {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  background: rgba(8, 9, 16, 0.96);
+}
+
+:root[data-lite='true'] .uni-dock__notch {
   background: rgba(8, 9, 16, 0.96);
 }
 
@@ -295,11 +295,15 @@
   background: rgba(255, 255, 255, 0.98);
 }
 
+:root[data-lite='true'][data-theme='light'] .uni-dock__notch {
+  background: rgba(255, 255, 255, 0.98);
+}
+
 /* ── Narrow phones ────────────────────────────────────────────────────────
-   At 320px four slots plus the separate AI still has to breathe: the pill
-   and the AI each lose 4px, the icons 2px, and the gap between the two
-   surfaces is the last thing to shrink — a detached AI that touches the
-   pill stops reading as detached. */
+   At 320px four slots plus the detached AI still has to breathe: surfaces
+   lose 4px and glyphs 2px, but the gap between the two surfaces is the last
+   thing to shrink — a detached AI that touches the pill stops reading as
+   detached. */
 @media (max-width: 360px) {
   .uni-dock {
     gap: 8px;
@@ -325,15 +329,13 @@
   }
 
   .uni-dock__notch {
-    width: 28px;
-    height: 10px;
-    top: -8px;
+    width: 26px;
+    top: -9px;
+    height: 11px;
   }
 }
 
-/* ── The swap dock still wins the bottom edge ──────────────────────────────
-   .app-shell--dock-active hides .bottom-nav for the same reason: two fixed
-   blurred bars at the bottom of a phone is a layout accident. */
+/* ── The swap dock still wins the bottom edge ──────────────────────────────*/
 .app-shell--dock-active .uni-dock {
   opacity: 0;
   translate: 0 calc(100% + 28px);
@@ -342,13 +344,8 @@
 }
 
 /* ==========================================================================
-   HEADER — hides and returns in lockstep with the dock.
-
-   Sticky, so its flow box stays at the top of the document and only the
-   RENDERING moves: `translate` lifts the stuck bar off the viewport while
-   the content below keeps flowing underneath. No gap, no layout shift.
-   Scoped to .app-shell--uni-dock: every other screen keeps its header as it
-   is today.
+   HEADER — hides and returns in lockstep with the dock. Sticky, so only the
+   RENDERING moves: no gap, no layout shift. Scoped to .app-shell--uni-dock.
    ========================================================================== */
 .app-shell--uni-dock > .top-bar {
   transition:
@@ -369,20 +366,18 @@
 }
 
 /* ── The side rail is gone on these four screens ──────────────────────────
-   «بغل صفحه در این صفحات هم دسترسی سریع را محو کن». QuickAccess is not
-   mounted at all on this group (App.jsx), so this rule is the belt to that
-   braces: should it ever be re-mounted by a later change, it still cannot
-   paint a rail over the dock's screens. */
+   «بغل صفحه در این صفحات هم دسترسی سریع را محو کن» — QuickAccess is not
+   mounted on this group at all; this is the belt to that braces. */
 .app-shell--uni-dock .quick-access {
   display: none;
 }
 
 /* ==========================================================================
-   THE FARM COMPARE BAR — it must sit ABOVE the dock, not under it.
-   The compare bar is portalled to <body> (Farm.jsx) at z-75, so it wins the
-   stacking order against the dock at z-40 and would land on top of it. It
-   needs to clear the dock's 60px body plus its 14px inset. `:has()` is the
-   only selector that can reach a body-level portal from the shell's state.
+   THE FARM COMPARE BAR — it must sit ABOVE the dock, not under it. Portalled
+   to <body> at z-75, so it wins the stacking order against the dock's z-40
+   and would land on top of it. It needs to clear the 60px body plus the
+   14px inset. `:has()` is the only selector that can reach a body-level
+   portal from the shell's state.
    ========================================================================== */
 @supports selector(body:has(.app-shell--uni-dock)) {
   body:has(.app-shell--uni-dock) .farm-compare-bar {
@@ -394,8 +389,7 @@
    left so nothing in this file can move for someone who asked for still. */
 @media (prefers-reduced-motion: reduce) {
   .uni-dock,
-  .app-shell--uni-dock > .top-bar,
-  .uni-dock__notch {
+  .app-shell--uni-dock > .top-bar {
     transition: none;
   }
 }

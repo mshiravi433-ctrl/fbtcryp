@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTelegram } from '../context/TelegramContext';
@@ -27,10 +26,13 @@ import '../styles/uni-dock.css';
  *
  * · FOUR buttons, one per screen of the group, in the order the group reads
  *   (Farm → Loan → Insurance → Orders), INSIDE the pill.
- * · The ACTIVE one — the section you are standing on — carries the notch:
- *   a cut-out wedge over its top edge plus a soft window of light behind the
- *   glyph. That is the «بریدگی خاص»: state is a SHAPE, not a colour, so it
- *   survives both themes and reduced motion.
+ * · The ACTIVE one — the section you are standing on — carries the mark:
+ *   a raised, pill-shaped window inside the bar plus a small tab standing
+ *   proud of the top edge. The owner's correction after seeing a cut-OUT
+ *   wedge was «گزینه فعال شکاف نخوره» — a notch that bites a hole in the
+ *   bar reads as damage, not as selection. So the mark ADDS material inside
+ *   the surface and a tab above it; nothing is carved out of the outline and
+ *   the pill stays one continuous shape.
  * · The AI is a separate round glass button outside the pill, floating at
  *   the end of the track — the reference's detached circle. It is glass
  *   like the rest of the bar now («رنگش مثل بقیه») with only a quiet RGB
@@ -40,9 +42,10 @@ import '../styles/uni-dock.css';
  *
  * MOTION: the owner asked for the bar to be «خیلی مدرن‌تر و انیمیشن حذف» —
  * so there is no float, no perpetual sheen, no pulsing, no press bounce on
- * the bar itself. What remains is one 180ms transition on the notch and on
- * the button colours, which is state feedback, not animation. The glyphs
- * still honour `useStill` and draw nothing when the user asked for still.
+ * the bar itself. What remains is one 180ms transition on the active mark
+ * and on the button colours: state feedback, not animation. Nothing in this
+ * component animates on its own, so there is no reduced-motion branch to
+ * get wrong either.
  */
 const SECTIONS = [
   { id: 'farm', to: '/farm', key: 'nav.farm', Icon: UniFarmIcon },
@@ -96,18 +99,18 @@ export default function UniDock({ hidden = false }) {
               title={t(item.key)}
               onClick={() => go(item.to, 'light')}
             >
-              {/* The notch: a wedge cut out of the pill's top edge. Rendered
-                  by the ACTIVE button only — one notch in the DOM, so the
-                  mark cannot be duplicated by a styling change later.
-                  aria-hidden: the state is already in aria-current. */}
+              {/* The active tab: a raised lobe that stands proud of the
+                  pill's top edge, drawn in the surface colour so it merges
+                  with the bar instead of cutting into it — «شکاف نخوره».
+                  Rendered by the ACTIVE button only, so there is exactly one
+                  in the DOM whatever a stylesheet does later. aria-hidden:
+                  the state is already in aria-current. */}
               {active && <span className="uni-dock__notch" aria-hidden="true" />}
               <span className="uni-dock__icon" aria-hidden="true">
                 <item.Icon
                   key={`${item.to}-${pulsed === item.to ? pulse : 'rest'}`}
-                  pulse={pulsed === item.to ? pulse : 0}
-                  still={still}
-                  width={22}
-                  height={22}
+                  width={21}
+                  height={21}
                 />
               </span>
               <span className="uni-dock__sr">{t(item.key)}</span>
@@ -126,7 +129,7 @@ export default function UniDock({ hidden = false }) {
         onClick={() => go('/intent', 'medium')}
       >
         <span className="uni-dock__icon" aria-hidden="true">
-          <AnimatedAgent active={false} still={still} width={22} height={22} strokeWidth={1.75} />
+          <AnimatedAgent active={false} still={still} width={21} height={21} strokeWidth={1.7} />
         </span>
         <span className="uni-dock__sr">{t('nav.intentOS')}</span>
       </button>
