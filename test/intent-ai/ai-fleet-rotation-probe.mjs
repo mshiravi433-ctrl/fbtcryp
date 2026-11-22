@@ -27,6 +27,7 @@ import assert from 'node:assert/strict';
 /* Set a fully-configured fleet BEFORE the gateway is consulted. */
 const PROVIDER_ENV = {
   OPENROUTER_API_KEY: 'sk-or-test',
+  KILO_API_KEY: 'kilo-test',
   GROQ_API_KEY: 'gsk-test',
   GEMINI_API_KEY: 'gem-test',
   ANTHROPIC_API_KEY: 'ant-test',
@@ -37,12 +38,11 @@ const PROVIDER_ENV = {
   AIMLAPI_KEY: 'aiml-test'
 };
 /*
- * `openrouterfree` is a REGISTERED seat in its own right: it shares the
- * OpenRouter key but asks for the `:free` model ids, which is the only way a
- * free key gets an answer at all (a paid id returns 402). It therefore joins
- * the rotation as its own provider, and the count is ten, not nine.
+ * `openrouterfree` and `kilofree` are REGISTERED seats in their own right:
+ * they share the gateway key with their paid counterparts (`openrouter`, `kilo`)
+ * while restricting model candidates to free IDs so zero-balance keys never 402.
  */
-const ALL_EXTERNAL = ['openrouter', 'openrouterfree', 'groq', 'gemini', 'anthropic', 'deepseek', 'mistral', 'workersai', 'aimlapi'];
+const ALL_EXTERNAL = ['openrouter', 'openrouterfree', 'kilo', 'kilofree', 'groq', 'gemini', 'anthropic', 'deepseek', 'mistral', 'workersai', 'aimlapi'];
 const ALL_REGISTERED = [...ALL_EXTERNAL, 'internal'];
 
 /* These checks exercise the routing mechanics for EVERY provider the gateway

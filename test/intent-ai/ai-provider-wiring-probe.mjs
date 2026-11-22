@@ -261,19 +261,41 @@ async function runAll() {
     }
     assert.ok(failure, 'the seat must fail loudly, not answer from nowhere');
     assert.equal(failure.reasonCode, 'DATA_POLICY');
-    assert.equal(failure.attempts.length, 1, 'one refusal is the whole story — the other three ids cannot differ');
-    assert.equal(calls.length, 1, 'exactly one HTTP request reached the wire');
+    /* First tries the flagship (`nvidia/nemotron-3.5-super-vl:free`), skips
+       all other NVIDIA ids (same upstream policy), and makes ONE targeted hop
+       to `openrouter/free` in case non-training / ZDR-compliant free models
+       are permitted on the account before parking. */
+    assert.deepEqual(
+      failure.attempts.map((a) => a.model),
+      ['nvidia/nemotron-3.5-super-vl:free', 'openrouter/free'],
+      'skips redundant NVIDIA ids and probes openrouter/free once before parking'
+    );
+    assert.equal(calls.length, 2, 'only flagship + openrouter/free reach the wire');
 
     /* The provider is parked with the reason named… */
     const health = getProviderHealth().openrouterfree;
     assert.equal(health.openReason, 'DATA_POLICY');
     assert.equal(health.circuitOpen, true);
 
-    /* …and the four `:free` ids are NOT on the dead-model list: they were never
-       given a chance to answer, so blaming them would hide a fixed account for
+    /* …and the `:free` ids are NOT on the dead-model list: they were never
+       proven retired, so blaming them would hide a fixed account for
        ten minutes after the operator flips the toggle. */
     const { deadModelsFor } = await import('../../server/aiGateway.js');
     assert.equal(deadModelsFor('openrouterfree').size, 0, 'an account refusal must not mark model ids dead');
+    resetProviderHealth();
+
+    /* And when NVIDIA's training/retention policy blocks the flagship while
+       non-training or ZDR-compliant free endpoints (`openrouter/free`) ARE
+       permitted on the account, the gateway unlocks instead of locking onto
+       `nvidia/nemotron-3.5-super-vl:free`. */
+    stubFetch((rec) => (rec.body.model === 'openrouter/free'
+      ? okOpenAI('openrouter-free-router-answered')
+      : guardrail));
+    const unlocked = await executeProviderChat('openrouterfree', { system: 's', user: 'u', json: false });
+    assert.equal(unlocked.model, 'openrouter/free');
+    assert.equal(unlocked.text, 'openrouter-free-router-answered');
+    assert.equal(unlocked.attempts.length, 1);
+    assert.equal(unlocked.attempts[0].reasonCode, 'DATA_POLICY');
     resetProviderHealth();
   });
 
@@ -369,6 +391,45 @@ async function runAll() {
       'https://api.cloudflare.com/client/v4/accounts/32hexaccountid/ai/run/@cf/meta/llama-3.1-8b-instruct',
       'balanced must still reach the historical default'
     );
+  });
+
+  await atest('Workers AI v2 OpenAI-shaped responses (`result.choices[0].message.content`) and HTTP 410 deprecations work cleanly', async () => {
+    /* `@cf/qwen/qwen3.8-27b` returns OpenAI chat completions inside `result.choices`,
+       not legacy `result.response` — previously thrown away as EMPTY_WORKERSAI_RESPONSE. */
+    stubFetch(() => ({
+      status: 200,
+      body: {
+        success: true,
+        result: {
+          id: 'chatcmpl-cf-qwen',
+          choices: [{ message: { role: 'assistant', content: 'qwen38-ok', reasoning_content: 'step 1' } }],
+          usage: { prompt_tokens: 9, completion_tokens: 14, total_tokens: 23 }
+        }
+      }
+    }));
+    const qwenRes = await executeProviderChat('workersai', { system: 's', user: 'u', maxTokens: 10, json: false });
+    assert.equal(qwenRes.model, '@cf/qwen/qwen3.8-27b');
+    assert.equal(qwenRes.text, 'qwen38-ok');
+    assert.ok(calls[0].body.max_tokens >= 256, 'reasoning_effort calls get headroom above tiny caller maxTokens');
+    resetProviderHealth();
+
+    /* And HTTP 410 Gone ("Model has been deprecated") classifies as MODEL_UNAVAILABLE
+       (`retryNextModel: true`) instead of aborting the ladder as UNKNOWN. */
+    const depCls = classifyAiError(
+      Object.assign(new Error('HTTP 410: {"errors":[{"message":"AiError: Model has been deprecated: @cf/deepseek-ai/deepseek-r1-distill-qwen-32b was deprecated on 2026-11-20"}]}'), { status: 410 }),
+      'workersai'
+    );
+    assert.equal(depCls.kind, 'MODEL_UNAVAILABLE');
+    assert.equal(depCls.retryNextModel, true);
+
+    stubFetch((rec) => (rec.url.endsWith('@cf/qwen/qwen3.8-27b')
+      ? { status: 410, body: { errors: [{ message: 'AiError: Model has been deprecated' }] } }
+      : { status: 200, body: { result: { response: 'llama-70b-fallback-ok' } } }));
+    const fallbackRes = await executeProviderChat('workersai', { system: 's', user: 'u', json: false });
+    assert.equal(fallbackRes.model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+    assert.equal(fallbackRes.text, 'llama-70b-fallback-ok');
+    assert.equal(fallbackRes.attempts[0].reasonCode, 'MODEL_UNAVAILABLE');
+    resetProviderHealth();
   });
 
   await atest('a malformed Cloudflare account is classified as an account problem, not retried across models', async () => {
@@ -505,14 +566,14 @@ async function runAll() {
     assert.equal(report.degraded, false);
     assert.notEqual(report.provider, 'internal');
     /* Every REGISTERED external provider is reported, not three. The registry
-       now has eleven: the nine keyed ones plus OpenAI and xAI, which are
-       registered but unconfigured in this fixture and must appear as
-       NEEDS_KEY rather than vanish. (Eleven since 2026-11-11, when the free
-       OpenRouter seat joined the paid one — two seats, one key, two model
-       lists.) */
-    assert.equal(report.providers.length, 11);
+       now has thirteen: the nine keyed ones in this fixture plus OpenAI, xAI,
+       and the two Kilo seats (`kilo` + `kilofree`), which are registered and
+       reported honestly rather than vanishing. */
+    assert.equal(report.providers.length, 13);
     assert.ok(report.providers.some((p) => p.id === 'openai' && p.keyPresent === false));
     assert.ok(report.providers.some((p) => p.id === 'xai' && p.keyPresent === false));
+    assert.ok(report.providers.some((p) => p.id === 'kilo' && p.keyPresent === false));
+    assert.ok(report.providers.some((p) => p.id === 'kilofree' && p.keyPresent === false));
     assert.ok(report.providers.every((p) => 'keyPresent' in p && 'verdict' in p && 'model' in p));
   });
 

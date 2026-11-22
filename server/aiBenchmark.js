@@ -85,6 +85,15 @@ export const PRICE_TABLE = Object.freeze({
     'deepseek-reasoner': { in: 0.55, out: 2.19 }
   },
   openrouter: { default: { in: 0.6, out: 2.4 } },
+  openrouterfree: { default: { in: 0, out: 0 } },
+  kilo: {
+    default: { in: 0.6, out: 2.4 },
+    'kilo-auto/efficient': { in: 0.2, out: 0.8 },
+    'kilo-auto/frontier': { in: 3, out: 15 },
+    'z-ai/glm-5.3-flash': { in: 0.1, out: 0.4 },
+    'deepseek/deepseek-v4.1-flash-1017': { in: 0.2, out: 0.8 }
+  },
+  kilofree: { default: { in: 0, out: 0 } },
   groq: { default: { in: 0.1, out: 0.2 } },
   mistral: { default: { in: 0.4, out: 2 } },
   workersai: { default: { in: 0, out: 0 } },

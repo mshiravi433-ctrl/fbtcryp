@@ -18,6 +18,12 @@ import './intentSandboxOps.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
+
+/* Mark this process as a live booted HTTP server so anonymous-capable free AI
+   seats (`kilofree`) activate automatically in local/container deployments just
+   as `VERCEL=1` activates them on Vercel, without affecting bare CLI unit tests. */
+if (!process.env.FBT_SERVER_BOOTED) process.env.FBT_SERVER_BOOTED = '1';
+
 import app from './app.js';
 import { normalizeBotToken } from './telegramAuth.js';
 import { getFleetSummary } from './aiGateway.js';

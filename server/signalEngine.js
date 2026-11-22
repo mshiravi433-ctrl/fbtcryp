@@ -438,7 +438,7 @@ async function runWhy({ symbol, name, safe, classification, confidence, riskLabe
         : 'Write the four text fields in English.'
   ].join('\n');
 
-  const providers = ['openrouter', 'gemini', 'groq', 'anthropic', 'deepseek', 'aimlapi', 'mistral']
+  const providers = ['openrouter', 'openrouterfree', 'kilo', 'kilofree', 'gemini', 'groq', 'workersai', 'anthropic', 'deepseek', 'aimlapi', 'mistral']
     .filter((p) => getActiveProviderIds().includes(p))
     .slice(0, 3);
   const results = await parallelMultiProviderChat({

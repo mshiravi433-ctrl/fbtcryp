@@ -227,18 +227,39 @@ export async function runMultiAiDebate({
   let debateProviders = orderByHealth(preferredProviders.filter(isProviderConfigured));
   if (!debateProviders.length) {
     /* Direct OpenAI/Grok seats are back in the registry; when they carry a key
-       they take a debate seat ahead of the free-tier providers. */
-    const priority = ['openai', 'xai', 'groq', 'openrouter', 'gemini', 'deepseek', 'anthropic', 'aimlapi', 'mistral', 'workersai'];
+       they take a debate seat ahead of the free-tier providers. When a gateway's
+       paid seat (`openrouter`, `kilo`) is already active, skip its free twin
+       (`openrouterfree`, `kilofree`) so two debate seats are not spent on the
+       same vendor; on the free fleet the paid twin is inactive so the free seat
+       steps right in. */
+    const priority = [
+      'openai',
+      'xai',
+      'groq',
+      'openrouter',
+      ...(active.includes('openrouter') ? [] : ['openrouterfree']),
+      'kilo',
+      ...(active.includes('kilo') ? [] : ['kilofree']),
+      'gemini',
+      'deepseek',
+      'anthropic',
+      'aimlapi',
+      'mistral',
+      'workersai'
+    ];
     debateProviders = orderByHealth(priority.filter((p) => active.includes(p))).slice(0, 3);
   }
 
-  // If only OpenRouter is configured, we run multi-model debate across diverse models on OpenRouter (GPT-4o, Claude, DeepSeek)
+  // If only a single multi-model gateway (OpenRouter / Kilo) is configured, run multi-model debate across diverse models behind it
   let executionPlan = [];
-  if (debateProviders.includes('openrouter') && debateProviders.length === 1) {
+  const multiModelSingle = debateProviders.length === 1 && ['openrouter', 'openrouterfree', 'kilo', 'kilofree'].includes(debateProviders[0])
+    ? debateProviders[0]
+    : null;
+  if (multiModelSingle) {
     const roles = ['market_intelligence', 'risk_guardian', 'strategy_architect'];
-    const seats = diverseSeatModels('openrouter', mode, roles.length);
+    const seats = diverseSeatModels(multiModelSingle, mode, roles.length);
     executionPlan = roles.map((role, i) => ({
-      provider: 'openrouter',
+      provider: multiModelSingle,
       role,
       model: seats[i % seats.length]
     }));
@@ -492,23 +513,33 @@ const arr = (a, n = 3, len = 200) => (Array.isArray(a) ? a.slice(0, n).map((x) =
 function pickDebateSeats(preferredProviders = [], mode = null) {
   const active = getActiveProviderIds().filter((p) => p !== 'internal');
   const preferred = preferredProviders.filter((p) => isProviderConfigured(p) && p !== 'internal');
-  const priority = ['anthropic', 'openrouter', 'deepseek', 'gemini', 'groq', 'aimlapi', 'mistral', 'workersai'];
+  const priority = [
+    'anthropic',
+    'openrouter',
+    ...(active.includes('openrouter') ? [] : ['openrouterfree']),
+    'kilo',
+    ...(active.includes('kilo') ? [] : ['kilofree']),
+    'deepseek',
+    'gemini',
+    'groq',
+    'aimlapi',
+    'mistral',
+    'workersai'
+  ];
   /* Health-ordered: the bull/bear/judge seats go to providers that answered
      recently, not to ones the gateway has already parked for billing or auth. */
   const pool = orderByHealth([...new Set([...preferred, ...priority.filter((p) => active.includes(p))])]);
   if (!pool.length) return null;
   /* Distinct providers per seat when we have them: a model arguing with
-     itself is a weaker debate. With one provider on OpenRouter we still get
-     distinct MODELS behind it — from the gateway's own current OpenRouter list,
-     not from ids pinned here (the pinned `anthropic/claude-3.5-sonnet` and
-     `deepseek/deepseek-chat` pair silently lost its first member when
-     Anthropic retired Claude 3.5 Sonnet). */
-  if (pool.length === 1 && pool[0] === 'openrouter') {
-    const seats = diverseSeatModels('openrouter', mode, 3);
+     itself is a weaker debate. With one multi-model gateway (OpenRouter / Kilo)
+     we still get distinct MODELS behind it from the gateway's own current list. */
+  if (pool.length === 1 && ['openrouter', 'openrouterfree', 'kilo', 'kilofree'].includes(pool[0])) {
+    const gw = pool[0];
+    const seats = diverseSeatModels(gw, mode, 3);
     return {
-      bull: { provider: 'openrouter', model: seats[0] },
-      bear: { provider: 'openrouter', model: seats[1] },
-      judge: { provider: 'openrouter', model: seats[2] }
+      bull: { provider: gw, model: seats[0] },
+      bear: { provider: gw, model: seats[1] },
+      judge: { provider: gw, model: seats[2] }
     };
   }
   return {

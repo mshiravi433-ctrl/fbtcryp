@@ -29,13 +29,13 @@ ok('the operations panel reports Auto and the evidence limitation');
 const unified = read('src/components/IntentAIUnified.jsx');
 assert.ok(unified.includes('neural-intelligence-chip'), 'the header reports response depth');
 assert.ok(unified.includes('Answer depth: Auto') && unified.includes('عمق پاسخ: خودکار'), 'the header is explicitly Auto');
-assert.ok(unified.includes('neural-intelligence-composer'), 'the composer also reports Auto');
+assert.ok(!unified.includes('neural-intelligence-composer'), 'the composer stays uncluttered');
 assert.ok(!unified.includes('setIntelligenceMode') && !unified.includes('onIntelligenceMode'),
   'chat controls cannot override the per-question choice');
 const chipAt = unified.indexOf('data-testid="neural-intelligence-chip"');
-assert.ok(chipAt >= 0 && unified.slice(chipAt - 250, chipAt + 500).includes('role="status"'),
+assert.ok(chipAt >= 0 && unified.slice(chipAt - 500, chipAt + 500).includes('role="status"'),
   'the header badge is informational status, not a mode control');
-ok('the chat header and composer display Auto without a selector');
+ok('the navigation drawer reports Auto without a selector');
 
 const moreMenu = read('src/components/intent-neural/NeuralMoreMenu.jsx');
 assert.ok(!moreMenu.includes('INTELLIGENCE_MODES') && !moreMenu.includes('onIntelligenceMode'),

@@ -76,7 +76,6 @@ const MAX_MODEL_LADDERS = Object.freeze({
   mistral: Object.freeze(['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest']),
   workersai: Object.freeze([
     '@cf/qwen/qwen3.8-27b',
-    '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
     '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     '@cf/meta/llama-3.1-8b-instruct'
   ]),
@@ -95,17 +94,32 @@ const MAX_MODEL_LADDERS = Object.freeze({
    *     task on every attempt across a 10-day benchmark;
    *   · nvidia/nemotron-3-ultra-550b-a55b:free — the deepest free answer
    *     (a 550B MoE built for reasoning and orchestration);
-   *   · nvidia/nemotron-3.5-lightning:free — fast, high-volume.
-   *
-   * The remaining free ids (the nano reasoning one, North Mini Code, Gemma 4
-   * and OpenRouter's own free router) stay behind them in the provider's
-   * fallback list, so a withdrawn flagship costs one round-trip rather than
-   * an outage — the ladder is an ORDERING, never a whitelist.
+   *   · google/gemma-4-31b-it:free — does NOT train on inputs;
+   *   · openrouter/free — OpenRouter's policy-aware free router (reaches
+   *     zero-retention and non-training `:free` endpoints inside the 4-slot cap).
    */
   openrouterfree: Object.freeze([
     'nvidia/nemotron-3.5-super-vl:free',
     'nvidia/nemotron-3-ultra-550b-a55b:free',
-    'nvidia/nemotron-3.5-lightning:free'
+    'google/gemma-4-31b-it:free',
+    'openrouter/free'
+  ]),
+  /*
+   * ─── KILO AI GATEWAY LADDERS (`kilo` paid vs `kilofree` free) ──────────────
+   * Same paid/free separation: `kilo` promotes Kilo's frontier router + Opus/GPT
+   * flagships, while `kilofree` stays strictly inside Kilo's zero-cost `:free`
+   * catalogue + `kilo-auto/free` so anonymous or zero-balance calls never 402.
+   */
+  kilo: Object.freeze([
+    'kilo-auto/frontier',
+    'anthropic/claude-opus-5.5',
+    'openai/gpt-6.2-sol',
+    'deepseek/deepseek-v4.1-flash-1017'
+  ]),
+  kilofree: Object.freeze([
+    'nvidia/nemotron-3-ultra-550b-a55b:free',
+    'nvidia/nemotron-3.5-super-vl:free',
+    'kilo-auto/free'
   ])
 });
 
@@ -116,11 +130,11 @@ const MAX_MODEL_LADDERS = Object.freeze({
  * nothing that pinned a route silently moves.
  */
 const MAX_PROVIDER_ORDER = Object.freeze({
-  general: ['openai', 'anthropic', 'openrouter', 'openrouterfree', 'xai', 'gemini', 'deepseek', 'groq', 'aimlapi', 'mistral', 'workersai', 'internal'],
-  market: ['xai', 'openrouter', 'openrouterfree', 'openai', 'gemini', 'anthropic', 'deepseek', 'groq', 'aimlapi', 'workersai', 'internal'],
-  research: ['xai', 'openrouter', 'openrouterfree', 'openai', 'gemini', 'anthropic', 'deepseek', 'groq', 'aimlapi', 'workersai', 'internal'],
-  reasoning: ['openai', 'anthropic', 'openrouter', 'openrouterfree', 'deepseek', 'gemini', 'xai', 'aimlapi', 'groq', 'workersai', 'internal'],
-  risk: ['anthropic', 'openai', 'deepseek', 'openrouter', 'openrouterfree', 'gemini', 'xai', 'aimlapi', 'groq', 'workersai', 'internal']
+  general: ['openai', 'anthropic', 'openrouter', 'openrouterfree', 'kilo', 'kilofree', 'xai', 'gemini', 'deepseek', 'groq', 'aimlapi', 'mistral', 'workersai', 'internal'],
+  market: ['xai', 'openrouter', 'openrouterfree', 'kilo', 'kilofree', 'openai', 'gemini', 'anthropic', 'deepseek', 'groq', 'aimlapi', 'workersai', 'internal'],
+  research: ['xai', 'openrouter', 'openrouterfree', 'kilo', 'kilofree', 'openai', 'gemini', 'anthropic', 'deepseek', 'groq', 'aimlapi', 'workersai', 'internal'],
+  reasoning: ['openai', 'anthropic', 'openrouter', 'openrouterfree', 'kilo', 'kilofree', 'deepseek', 'gemini', 'xai', 'aimlapi', 'groq', 'workersai', 'internal'],
+  risk: ['anthropic', 'openai', 'deepseek', 'openrouter', 'openrouterfree', 'kilo', 'kilofree', 'gemini', 'xai', 'aimlapi', 'groq', 'workersai', 'internal']
 });
 
 const TASK_ALIASES = Object.freeze({
@@ -650,8 +664,12 @@ export function intelligenceReasoningFields(providerId, mode, model) {
   if (id === 'openai' && isOpenAIReasoningModel(m)) return { reasoning_effort: 'high' };
   if (id === 'groq' && isGroqReasoningModel(m)) return { reasoning_effort: 'high' };
   if (id === 'openrouter' && isGatewayReasoningModel(m)) return { reasoning: { effort: 'high' } };
+  if (id === 'kilo' && isGatewayReasoningModel(m)) return { reasoning: { effort: 'high' } };
   if (id === 'aimlapi' && isGatewayReasoningModel(m)) return { reasoning_effort: 'high' };
   if (id === 'openrouterfree' && (isGatewayReasoningModel(m) || isFreeTierReasoningModel(m))) {
+    return { reasoning: { effort: 'high' } };
+  }
+  if (id === 'kilofree' && (isGatewayReasoningModel(m) || isFreeTierReasoningModel(m))) {
     return { reasoning: { effort: 'high' } };
   }
   /* `xhigh`, never `high`: see WORKERS_AI_REASONING_EFFORT. */

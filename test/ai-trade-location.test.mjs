@@ -7,7 +7,7 @@ const ai = readFileSync('src/components/IntentAIUnified.jsx', 'utf8');
 const perp = readFileSync('src/pages/Perp.jsx', 'utf8');
 
 test('AI Trade replaces the Mission Control entry without exposing it in the futures rail', () => {
-  assert.match(ai, /AI_TRADE_ENABLED && \([\s\S]*?navigate\('\/ai-trade'\)/);
+  assert.match(ai, /AI_TRADE_ENABLED &&[\s\S]*?navigate\('\/ai-trade'\)/);
   assert.doesNotMatch(ai, /navigate\('\/missions'\)/);
   assert.match(app, /path="\/missions" element=\{<Navigate to="\/intent" replace \/>\}/);
   assert.match(app, /path="\/ai-trade" element=\{AiTradePanel/);

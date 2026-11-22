@@ -95,6 +95,27 @@ export const MODEL_FLEET_CATALOGUE = Object.freeze({
     costUnits: 5,
     latencyClass: 'deep',
     specialties: { risk_safety: 0.97, adversarial_critic: 0.97, synthesis_arbiter: 0.96, strategy_design: 0.93, macro_news: 0.90, onchain_defi: 0.88, quant_technical: 0.88, smart_money_flow: 0.86, fast_general: 0.75 }
+  },
+  openrouterfree: {
+    provider: 'openrouterfree',
+    defaultModel: 'nvidia/nemotron-3.5-super-vl:free',
+    costUnits: 1,
+    latencyClass: 'fast',
+    specialties: { strategy_design: 0.91, synthesis_arbiter: 0.91, macro_news: 0.89, smart_money_flow: 0.88, quant_technical: 0.89, onchain_defi: 0.88, risk_safety: 0.89, adversarial_critic: 0.88, fast_general: 0.86 }
+  },
+  kilo: {
+    provider: 'kilo',
+    defaultModel: 'kilo-auto/efficient',
+    costUnits: 3,
+    latencyClass: 'fast',
+    specialties: { strategy_design: 0.94, synthesis_arbiter: 0.94, macro_news: 0.91, smart_money_flow: 0.90, quant_technical: 0.92, onchain_defi: 0.91, risk_safety: 0.93, adversarial_critic: 0.92, fast_general: 0.89 }
+  },
+  kilofree: {
+    provider: 'kilofree',
+    defaultModel: 'nvidia/nemotron-3.5-super-vl:free',
+    costUnits: 1,
+    latencyClass: 'fast',
+    specialties: { strategy_design: 0.91, synthesis_arbiter: 0.91, macro_news: 0.89, smart_money_flow: 0.88, quant_technical: 0.89, onchain_defi: 0.88, risk_safety: 0.89, adversarial_critic: 0.88, fast_general: 0.90, classification: 0.88 }
   }
 });
 
