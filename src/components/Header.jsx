@@ -56,7 +56,7 @@ function SpotlightMark({ spotlight }) {
  * Neither content can participate in layout, so a long event title cannot
  * move the rank/settings controls or alter the header's width/height.
  */
-export default function Header({ onOpenMore, moreOpen } = {}) {
+export default function Header({ onOpenMore, moreOpen, chromeHidden = false } = {}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const still = useStill();
@@ -172,7 +172,7 @@ export default function Header({ onOpenMore, moreOpen } = {}) {
   const spotlightTitle = spotlight?.item?.title || spotlight?.item?.name || '';
 
   return (
-    <header className={`top-bar${scrolled ? ' is-scrolled' : ''}`}>
+    <header className={`top-bar${scrolled ? ' is-scrolled' : ''}${chromeHidden ? ' is-chrome-hidden' : ''}`}>
       <motion.div
         className="header-brand-stage"
         initial={{ opacity: 0, x: -14 }}

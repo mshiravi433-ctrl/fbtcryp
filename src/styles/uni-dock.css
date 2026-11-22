@@ -1,0 +1,248 @@
+/* ==========================================================================
+   UNI DOCK — the Uniswap-Wallet-style bottom bar for Farm / Loan /
+   Protection / Auto Orders.
+
+   One glass pill, four icons side by side with spacing, the active one
+   filled solid, the AI in a saturated RGB disc — the reference the owner
+   sent, re-tinted to this app's palette and theme tokens.
+
+   Hiding is shared with the header through ONE state (useHideOnScroll in
+   AppChrome): scrolling down fades both away, scrolling up brings both
+   back. The rules below only describe HOW they move, never WHEN.
+   ========================================================================== */
+
+/* ── The pill ──────────────────────────────────────────────────────────────
+   Same geometry family as .bottom-nav (fixed, centred, 440px cap, z-40) so
+   the two bars are interchangeable in the shell — but a plain pill: no
+   notch, no droplet, no wave. The reference is a clean rounded bar and
+   that restraint is the look. */
+.uni-dock {
+  position: fixed;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  /* RTL-safe centring, same technique as .bottom-nav: stretch both edges,
+     let margin-inline:auto centre it. A physical left:50% offset drifts
+     the bar on RTL pages. */
+  left: 0;
+  right: 0;
+  inset-inline: 0;
+  margin-inline: auto;
+  width: calc(100% - 28px);
+  max-width: 440px;
+  height: 64px;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 40;
+  border-radius: 999px;
+  /* Glass, themed. Dark: smoked black. Light: frosted white. The blur is
+     what makes it read as glass over a scrolling list instead of a solid
+     slab pasted on top of the content. */
+  background: rgba(12, 13, 20, 0.72);
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  border: 1px solid var(--line);
+  box-shadow:
+    0 18px 46px -14px rgba(0, 0, 0, 0.85),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  /* Hide/show. `translate` (not `transform`) so nothing here can fight
+     Framer's press animation on the buttons inside, and so the bar's own
+     centring — which lives in margins, not transforms — is untouched.
+     `visibility` is delayed on the way out so a hidden dock leaves the tab
+     order, and immediate on the way back so it is reachable the instant it
+     starts appearing. */
+  transition:
+    opacity 0.28s ease,
+    translate 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0.34s;
+}
+
+.uni-dock[data-hidden='true'] {
+  opacity: 0;
+  translate: 0 calc(100% + 28px);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.uni-dock[data-hidden='false'] {
+  transition:
+    opacity 0.28s ease,
+    translate 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s;
+}
+
+/* ── The four icons ────────────────────────────────────────────────────────
+   Equal flex shares = the even spacing in the reference. Each tap target
+   is the full 48px slot (44px accessibility minimum, plus margin), and the
+   visible mark is a 40px disc centred in it. */
+.uni-dock__item {
+  flex: 1;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: none;
+  padding: 0;
+  border-radius: 999px;
+  color: var(--text-3);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.2s ease;
+}
+
+.uni-dock__item:focus-visible {
+  outline: 2px solid var(--rgb-1);
+  outline-offset: 2px;
+}
+
+.uni-dock__icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  transition:
+    background 0.22s ease,
+    color 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+/* Active: the filled disc from the reference. Background and ink swap
+   through the theme tokens, so dark gets a white disc with black ink and
+   light gets a near-black disc with white ink — the same contrast rule
+   the primary button already follows. */
+.uni-dock__item.is-active {
+  color: var(--text-1);
+}
+
+.uni-dock__item.is-active .uni-dock__icon {
+  background: var(--text-1);
+  color: var(--bg-void);
+}
+
+/* ── The AI disc ───────────────────────────────────────────────────────────
+   The saturated circle in the reference, in the app's RGB. Always filled —
+   active or not — so the brain is findable at a glance. The rule is
+   written at the same specificity as the active-disc rule above and AFTER
+   it, so an active AI tab keeps its gradient instead of being repainted
+   with the white active disc: "current route" is carried by the ring
+   below, not by giving up the one saturated control in the bar. */
+.uni-dock__item.is-active.uni-dock__item--ai .uni-dock__icon,
+.uni-dock__item--ai .uni-dock__icon {
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2), var(--rgb-3));
+  color: #05060b;
+  box-shadow: 0 6px 18px -6px rgba(124, 77, 255, 0.55);
+}
+
+/* On the AI screen itself the disc keeps its fill and gains a ring, so
+   "current route" reads without the fill having to change colour. The
+   background/ink are re-stated because this rule sits after the active
+   disc rule and must not be overridden by it. */
+.uni-dock__item--ai.is-active .uni-dock__icon {
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2), var(--rgb-3));
+  color: #05060b;
+  box-shadow:
+    0 0 0 2px var(--bg-void),
+    0 0 0 4px var(--rgb-2),
+    0 6px 18px -6px rgba(124, 77, 255, 0.55);
+}
+
+/* Icon-only bar: the name stays available to assistive tech and tooltips,
+   never as visible text under the glyph. */
+.uni-dock__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ── Light theme ─────────────────────────────────────────────────────────── */
+:root[data-theme='light'] .uni-dock {
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow:
+    0 16px 40px -14px rgba(16, 20, 40, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+}
+
+/* ── Lite devices: no backdrop-filter, opaque instead of frosted ──────────
+   Same contract as .bottom-nav under data-lite: the blur is the first
+   thing a low-end GPU drops, so the surface goes solid rather than
+   smearing. */
+:root[data-lite='true'] .uni-dock {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(8, 9, 16, 0.96);
+}
+
+:root[data-lite='true'][data-theme='light'] .uni-dock {
+  background: rgba(255, 255, 255, 0.98);
+}
+
+/* ── The swap dock still wins the bottom edge ──────────────────────────────
+   .app-shell--dock-active hides .bottom-nav for the same reason: two fixed
+   blurred bars at the bottom of a phone is a layout accident. The uni dock
+   obeys the same rule. */
+.app-shell--dock-active .uni-dock {
+  opacity: 0;
+  translate: 0 calc(100% + 28px);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   HEADER — hide/show in lockstep with the dock.
+
+   The header is sticky, so its flow box stays at the top of the document
+   and only the RENDERING moves: `translate` lifts the stuck bar off the
+   viewport while the content below keeps flowing underneath. No gap, no
+   layout shift — the page simply goes full-bleed, which is the Uniswap
+   look the owner asked for.
+
+   Scoped to .app-shell--uni-dock: every other screen keeps the header
+   exactly as it is today.
+   ========================================================================== */
+.app-shell--uni-dock > .top-bar {
+  transition:
+    opacity 0.28s ease,
+    translate 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s;
+}
+
+.app-shell--uni-dock > .top-bar.is-chrome-hidden {
+  opacity: 0;
+  translate: 0 -110%;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.28s ease,
+    translate 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0.34s;
+}
+
+/* Reduced motion: the hook already refuses to hide, and the transitions
+   go too, so nothing in this file can move for someone who asked for
+   still. */
+@media (prefers-reduced-motion: reduce) {
+  .uni-dock,
+  .app-shell--uni-dock > .top-bar {
+    transition: none;
+  }
+}
+
+/* ==========================================================================
+   THE FARM COMPARE BAR — it must sit ABOVE the dock, not under it.
+   --------------------------------------------------------------------------
+   The compare bar is portalled to <body> (Farm.jsx: createPortal) at z-75,
+   so it wins the stacking order against the dock at z-40 and would land
+   on top of it. It needs to clear the dock's 64px pill plus its 14px
+   inset. `:has()` is the only selector that can reach a body-level portal
+   from the shell's state, and it is supported everywhere this app ships;
+   without support the bar simply keeps its old offset.
+   ========================================================================== */
+@supports selector(body:has(.app-shell--uni-dock)) {
+  body:has(.app-shell--uni-dock) .farm-compare-bar {
+    inset-block-end: calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+}

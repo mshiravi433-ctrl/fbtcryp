@@ -11,6 +11,7 @@ import { CentralBrainProvider } from './context/CentralBrainContext';
 import RgbBackground from './components/RgbBackground';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
+import useHideOnScroll from './hooks/useHideOnScroll';
 import './styles/market-desk-chrome.css';
 import PullToRefresh from './components/PullToRefresh';
 import Toasts from './components/Toasts';
@@ -43,6 +44,14 @@ const Welcome = lazyRetry(() => import('./pages/Welcome'));
 // delaying the app shell. Each use has a local null Suspense fallback so a
 // slow optional chunk can never replace the current page with the route loader.
 const QuickAccess = lazyRetry(() => import('./components/QuickAccess.jsx'));
+/*
+ * The Uniswap-style dock (Farm / Loan / Protection / Auto Orders). Lazy like
+ * QuickAccess: its stylesheet and markup stay out of the first-paint payload
+ * (scripts/check-first-paint.mjs budgets it) and only load on the four
+ * screens that use it. The Suspense fallback is null — the dock fading in a
+ * beat after the page is correct, a dock blocking the page is not.
+ */
+const UniDock = lazyRetry(() => import('./components/UniDock.jsx'));
 const ScreenshotSharePrompt = lazyRetry(() => import('./components/ScreenshotSharePrompt.jsx'));
 /*
  * The notification bar is a non-critical overlay in exactly the same sense: most
@@ -443,6 +452,25 @@ export function AppChrome() {
   const deskChrome = futuresChrome || stocksChrome || ['lab', 'shop', 'launch', 'bridge', 'p2p'].includes(section);
   const [deskMore, setDeskMore] = useState(false);
   useEffect(() => { setDeskMore(false); }, [pathname]);
+  /*
+   * THE UNISWAP-STYLE DOCK — Farm, Loan, Protection (Insurance) and Auto
+   * Orders only. On these four screens the global BottomNav is replaced by
+   * UniDock (four icons side by side, one of them the AI — see
+   * components/UniDock.jsx), the side QuickAccess rail is dropped so the
+   * screen stays clean, and the header's right-hand button becomes the
+   * More menu (the dock itself has no More slot, so the menu moves up
+   * rather than disappearing).
+   *
+   * `section` is the first path segment, so /insurance/marketplace and
+   * /orders/history are covered by the same check as their parents.
+   */
+  const uniDock = ['farm', 'loan', 'orders', 'insurance'].includes(section);
+  /*
+   * ONE hide/show state for header AND dock: scroll down → both fade away,
+   * scroll up → both return (hooks/useHideOnScroll.js). Locked while the
+   * More sheet is open, so the chrome can never hide out from under it.
+   */
+  const chromeHidden = useHideOnScroll({ enabled: uniDock, locked: deskMore });
   const headerless = pathname === '/intent' || pathname.startsWith('/pay') || pathname.startsWith('/social')
     || pathname === '/buy' || pathname.startsWith('/order/result');
   /* «نه جمع شده» — the world console is a dashboard, not a phone column, so it
@@ -475,8 +503,8 @@ export function AppChrome() {
   }, [pathname]);
 
   return (
-    <div className={`app-shell${deskChrome ? ' app-shell--market-desk' : ''}${futuresChrome ? ' app-shell--futures' : ''}${stocksChrome ? ' app-shell--stocks' : ''}${headerless ? ' app-shell--headerless' : ''}${wide ? ' app-shell--wide' : ''}${pathname === '/shop' ? ' app-shell--shop' : ''}${dockActive ? ' app-shell--dock-active' : ''}`}>
-      {!headerless && <Header moreOpen={deskMore} onOpenMore={deskChrome ? () => setDeskMore((open) => !open) : undefined} />}
+    <div className={`app-shell${deskChrome ? ' app-shell--market-desk' : ''}${futuresChrome ? ' app-shell--futures' : ''}${stocksChrome ? ' app-shell--stocks' : ''}${headerless ? ' app-shell--headerless' : ''}${wide ? ' app-shell--wide' : ''}${pathname === '/shop' ? ' app-shell--shop' : ''}${dockActive ? ' app-shell--dock-active' : ''}${uniDock ? ' app-shell--uni-dock' : ''}`}>
+      {!headerless && <Header moreOpen={deskMore} chromeHidden={chromeHidden} onOpenMore={deskChrome || uniDock ? () => setDeskMore((open) => !open) : undefined} />}
       <PullToRefresh>
         <SwipeTabRoutes />
       </PullToRefresh>
@@ -492,8 +520,9 @@ export function AppChrome() {
         <ScreenshotSharePrompt placement={pathname === '/intent' ? 'top' : headerless || deskChrome ? 'bare' : 'nav'} />
       </Suspense>
       {!headerless && <Suspense fallback={null}><QuickAccess centered={deskChrome} /></Suspense>}
-      {!headerless && !deskChrome && <BottomNav />}
-      {deskChrome && <MoreSheet open={deskMore} onClose={() => setDeskMore(false)} />}
+      {!headerless && !deskChrome && !uniDock && <BottomNav />}
+      {!headerless && uniDock && <Suspense fallback={null}><UniDock hidden={chromeHidden} /></Suspense>}
+      {(deskChrome || uniDock) && <MoreSheet open={deskMore} onClose={() => setDeskMore(false)} />}
     </div>
   );
 }
