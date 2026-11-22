@@ -1,5 +1,6 @@
 import { AI_TRADE_ENABLED } from '../lib/features';
 import { chatWithTransientRetry } from '../lib/aiChatRetry.js';
+import { isConversationalOnly, isBareWhatsUp, BARE_WHATS_UP_REPLY } from '../lib/intent-ai/chat/conversationRoute.js';
 /**
  * FBT INTENT OS — Universal AI Operating Agent — Unified Chat Surface V6
  * ---------------------------------------------------------------------------
@@ -2624,6 +2625,32 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         }
       } catch { /* the surface commands are additive: a failure falls through */ }
 
+      if (!pendingExecution && !multiSlot.slot && !opts.surfaceAction && isBareWhatsUp(message)) {
+        const row = { id: makeId(), role: 'ai', kind: 'assistant', content: BARE_WHATS_UP_REPLY, ui: { type: 'TEXT' } };
+        setMessages((prev) => [...prev, row]);
+        setConvState((prev) => appendConvMessage(prev, row));
+        addL1Message(row);
+        setSuggestions([]);
+        stateMachineRef.current.transition(STATES.COMPLETED, { reason: 'casual_whats_up' });
+        return true;
+      }
+
+      // Relationship questions and insults must not be swallowed by the
+      // local financial classifier or its canned market fallback.
+      if (!pendingExecution && !multiSlot.slot && !opts.surfaceAction && isConversationalOnly(message)) {
+        setThinkingState('connecting');
+        const response = await aiChat({ message, conversationId, surface: currentPage, messages: (messagesRef.current || []).filter((row) => row?.role === 'user' || row?.role === 'ai').slice(-8).map((row) => ({ role: row.role, content: String(row.content || '').slice(0, 1200) })) });
+        const row = { id: makeId(), role: 'ai', kind: response?.ok ? 'assistant' : 'error',
+          content: response?.ok && response.reply?.text ? stripInternalLeaks(response.reply.text) : humanizeError(response?.status === 429 ? 'RATE_LIMITED' : 'AI_UNAVAILABLE', { locale }).message,
+          ui: { type: 'TEXT' } };
+        setMessages((prev) => [...prev, row]);
+        setConvState((prev) => appendConvMessage(prev, row));
+        addL1Message(row);
+        setSuggestions([]);
+        stateMachineRef.current.transition(response?.ok ? STATES.COMPLETED : STATES.FAILED, { reason: response?.ok ? 'conversational_reply' : 'conversation_unavailable' });
+        return true;
+      }
+
       /*
        * ── PHASE 213: A PLEASANTRY IS ANSWERED AS ONE ───────────────────────
        * «حالت چطوره» used to reach the local pipeline and come back as
@@ -3379,32 +3406,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           ? (fa ? `\n\nحدود ${retryAfter} ثانیه صبر کنید و دوباره بفرستید.` : `\n\nWait about ${retryAfter}s and send it again.`)
           : '';
 
-        /*
-         * ─── THE SERVER FAILED, NOT THE QUESTION ────────────────────────────
-         * A turn the OS could not read is now sent to the server on purpose.
-         * If that call fails (offline, 5xx, a deploy in flight), the user must
-         * not lose the little the device still knew: the OS's own reading of
-         * the message and its next-step chips are appended under the error, so
-         * a failed call costs one retry instead of the whole conversation.
-         */
-        /* The offline OS reading is shown when the turn ENDS here. While a
-           retry is still coming, stapling «مطمئن نشدم…» under an in-flight
-           retry is noise — and it is what made one failure read as three. */
-        /* A throttle or a transport failure says nothing about whether the
-           question was understood, so the OS reading is not stapled under it —
-           that pairing is what made one failure read like a deaf assistant. */
-        const localReading = !rateLimited && !timedOut && osResult?.understood === false
-          ? String(osResult?.human?.message || '').trim()
-          : '';
-
         setMessages((prev) => [...prev, {
           id: makeId(),
           role: 'ai',
           content: (timedOut
             ? (fa ? 'ارتباط با سرور هوش مصنوعی برقرار نشد یا پاسخ به‌موقع نرسید. لطفاً اتصال را بررسی و دوباره تلاش کنید.' : 'The AI server could not be reached or did not respond in time. Check your connection and try again.')
-            : visibleText(res, human.message))
-            + waitNote
-            + (localReading ? `\n\n${localReading}` : ''),
+            : visibleText(res, status >= 500 ? humanizeError('AI_UNAVAILABLE', { locale }).message : human.message))
+            + waitNote,
           kind: connect ? 'connect' : 'error',
           statusCode: status || null,
           ui: { type: connect ? 'CONNECT_WALLET' : 'TEXT' }
@@ -3702,7 +3710,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       scrollMgrRef.current.onNewMessage();
     }
     return true;
-  }, [aiContext, conversationId, t, locale, rememberPending, intentOS, currentPage, messages, wallet, walletConnected, walletCanSign, liveModuleServices, solanaAddressLive, navigate, pendingExecution, portfolioContextForOs8, automations, monitors, multiSlotSubmit]);
+  }, [aiContext, conversationId, t, locale, rememberPending, intentOS, currentPage, messages, wallet, walletConnected, walletCanSign, liveModuleServices, solanaAddressLive, navigate, pendingExecution, portfolioContextForOs8, automations, monitors, multiSlotSubmit, multiSlot.slot]);
 
   sendRef.current = sendMessage;
 

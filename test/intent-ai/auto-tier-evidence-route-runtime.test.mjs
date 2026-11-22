@@ -48,6 +48,18 @@ async function request(path, body) {
   return { status: res.status, json: await res.json() };
 }
 
+test('bare social greeting and model outage use the conversational path', { skip: skipRuntime }, async () => {
+  const casual = await request('/api/v1/ai/chat', { message: 'چخبرا؟', locale: 'fa' });
+  assert.equal(casual.status, 200);
+  assert.match(casual.json.reply.text, /تو چه خبر/);
+  assert.equal(casual.json.reply.executed, false);
+  for (const message of ['چطوری با دوستم آشتی کنم؟', 'احمق']) {
+    const reply = await request('/api/v1/ai/chat', { message, locale: 'fa' });
+    assert.equal(reply.status, 503);
+    assert.equal(reply.json.error, 'AI_UNAVAILABLE');
+  }
+});
+
 test('the diagnostic endpoint reports Auto until a request supplies a message', { skip: skipRuntime }, async () => {
   const auto = await request('/api/v1/ai/intelligence');
   assert.equal(auto.status, 200);

@@ -207,6 +207,7 @@ export async function escalateToProviders({
   context = {},
   exclude = [],
   taskType = 'general',
+  systemPrompt = null,
   deadlineMs = DEFAULT_DEADLINE_MS,
   maxTokens = 520,
   deps = null
@@ -270,7 +271,7 @@ export async function escalateToProviders({
       /* The provider's own client gets the same budget, so the socket is closed
          and not left to bill us for an answer nobody will read. */
       res = await withDeadline(ask(providerId, {
-        system: ASK_SYSTEM,
+        system: systemPrompt || ASK_SYSTEM,
         user,
         temperature: 0.2,
         maxTokens,

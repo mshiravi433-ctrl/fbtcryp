@@ -187,6 +187,7 @@ import { hybridKnowledgeSearch, semanticKnowledgeReport } from '../src/lib/inten
    has nothing. Execution authority is untouched (§67). */
 import { composeSocialTurn } from './aiSocial.js';
 import { respondIn } from '../src/lib/intent-ai/os/conversation/languageSense.js';
+import { isConversationalOnly, isBareWhatsUp, BARE_WHATS_UP_REPLY } from '../src/lib/intent-ai/chat/conversationRoute.js';
 import { answerGap, escalateToProviders, ESCALATION_SCHEMA } from './aiEscalation.js';
 import { fetchNews } from './news.js';
 /* Upgrade 14 — the reasoning graph: plan (what data is needed) → tools (the
@@ -1854,6 +1855,7 @@ router.post('/debate', async (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const message = String(body.message || '').slice(0, 800);
   if (!message.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_MESSAGE' });
+
   const locale = safe(body.locale, 5) || 'fa';
   const owner = ownerFor(req);
   const asset = safe(body.asset, 16) ? String(body.asset).toUpperCase() : null;
@@ -2446,6 +2448,24 @@ function rememberDurableTurn(req, { message, goalDetected = false, intentType = 
 router.post('/chat', async (req, res) => {
   const message = String(req.body?.message || '').slice(0, MAX_MESSAGE);
   if (!message.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_MESSAGE' });
+  if (isBareWhatsUp(message)) return res.json({ ok: true, schema: 'fbt.ai-chat.v1', reply: {
+    text: BARE_WHATS_UP_REPLY, message: BARE_WHATS_UP_REPLY, ui: { type: 'TEXT' }, actions: [],
+    suggestions: [], executed: false, broadcasts: false, requiresUserSignature: false
+  }, at: nowMs() });
+  // These are conversational, not market or execution requests. Re-check on
+  // the server instead of trusting a browser hint, and never grant authority.
+  if (isConversationalOnly(message)) {
+    const answer = await escalateToProviders({
+      message, locale: safe(req.body?.locale, 5) || 'fa', taskType: 'general', deadlineMs: 18000,
+      systemPrompt: 'You are FBT, a helpful conversational assistant. Respond directly and empathetically in the language of the user. For relationship questions give concrete, respectful advice. For insults remain calm, do not retaliate, and ask how you can help. Do not invent current events, account data or product facts. Never request secrets or claim to execute transactions.'
+    }).catch(() => null);
+    if (!answer?.ok) return res.status(503).json({ ok: false, error: 'AI_UNAVAILABLE' });
+    return res.json({ ok: true, schema: 'fbt.ai-chat.v1', reply: {
+      text: stripInternalLeaks(answer.answer), message: stripInternalLeaks(answer.answer), ui: { type: 'TEXT' }, actions: [],
+      suggestions: [], provider: answer.answeredBy, executed: false, broadcasts: false,
+      requiresUserSignature: false
+    }, at: nowMs() });
+  }
   /* Only this route asks for a semantic recall — it is the only one where a
      human is waiting for an answer that could use it. */
   const turnStartedAt = Date.now();

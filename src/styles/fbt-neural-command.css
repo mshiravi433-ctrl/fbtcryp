@@ -1681,3 +1681,30 @@ button.fbt-neural .tag-row, .fbt-neural button.tag-row { font-family: inherit; f
 :root[data-theme='light'] .iaos-nav-links button[aria-current='page'] { color: #075985; }
 @media (min-width: 768px) { .iaos-page.fbt-neural.tag-page .iaos-shell { width: min(840px, calc(100% - 48px)); } }
 @media (prefers-reduced-motion: reduce) { .fbt-neural.tag-page .iaos-header, .iaos-nav-links button { transition: none; } }
+
+/* A complete glass surface fades as one element, including the blur layer. */
+.fbt-neural.tag-page .iaos-header,
+:root[data-theme='light'] .fbt-neural.tag-page .iaos-header {
+  background: rgba(132, 164, 205, .08); border: 1px solid rgba(177, 210, 239, .13);
+  border-radius: 18px; -webkit-backdrop-filter: blur(18px) saturate(1.3); backdrop-filter: blur(18px) saturate(1.3);
+}
+.fbt-neural.tag-page .iaos-header[data-hidden='true'],
+:root[data-theme='light'] .fbt-neural.tag-page .iaos-header[data-hidden='true'] {
+  opacity: 0; visibility: hidden; -webkit-backdrop-filter: none; backdrop-filter: none; pointer-events: none;
+}
+.fbt-neural.tag-page .iaos-ai .iaos-bubble, .fbt-neural.tag-page .iaos-user .iaos-bubble,
+:root[data-theme='light'] .fbt-neural.tag-page .iaos-ai .iaos-bubble,
+:root[data-theme='light'] .fbt-neural.tag-page .iaos-user .iaos-bubble {
+  background: rgba(145, 180, 215, .075); border: 1px solid rgba(177, 210, 239, .13);
+  box-shadow: none; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+}
+.fbt-neural.tag-page .iaos-composer-row .iaos-composer,
+:root[data-theme='light'] .fbt-neural.tag-page .iaos-composer-row .iaos-composer {
+  background: transparent; box-shadow: none; border-color: rgba(177, 210, 239, .18);
+}
+.fbt-neural.tag-page .iaos-composer-row .iaos-input,
+:root[data-theme='light'] .fbt-neural.tag-page .iaos-composer-row .iaos-input { background: transparent; box-shadow: none; }
+.iaos-trade-shortcut, .iaos-trade-shortcut:hover { background: transparent; box-shadow: none; }
+/* Centered menu, not a drawer sliding in from the side. */
+.iaos-nav-overlay { display: grid; place-items: center; padding: 16px; }
+.iaos-nav-drawer { position: relative; inset: auto; height: auto; max-height: min(80dvh, 640px); overflow-y: auto; border: 1px solid rgba(148,197,255,.18); border-radius: 22px; animation: none; }
