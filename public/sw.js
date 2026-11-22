@@ -315,7 +315,10 @@
  *
  * Renaming evicts that shell on the site and on an in-place APK update alike;
  * the model buckets (`fbt-kronos-*`) stay untouched, as always. */
-const SHELL = 'fbt-shell-v35';
+/* v35 -> v36 (2026-11-22): Farm's ABI hashing now uses Uint8Array hex
+ * conversion, not the missing browser Buffer global. Refresh cached shells
+ * so installed web clients receive the actual runtime fix. */
+const SHELL = 'fbt-shell-v36';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

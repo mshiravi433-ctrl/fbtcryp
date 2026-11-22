@@ -37,18 +37,18 @@
  * rather than encoding something wrong.
  */
 
-import { keccak256 } from '../../../server/keccak.js';
+import { keccak256, bytesToHex } from '../../../server/keccak.js';
 
 /** The 4-byte selector of a canonical function signature. */
 export function functionSelector(signature) {
   const digest = keccak256Bytes(canonicalSignature(signature));
-  return `0x${Buffer.from(digest.subarray(0, 4)).toString('hex')}`;
+  return `0x${bytesToHex(digest.subarray(0, 4))}`;
 }
 
 /** The 32-byte topic of a canonical event signature. */
 export function eventTopic(signature) {
   const digest = keccak256Bytes(canonicalSignature(signature));
-  return `0x${Buffer.from(digest).toString('hex')}`;
+  return `0x${bytesToHex(digest)}`;
 }
 
 function keccak256Bytes(text) {

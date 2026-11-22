@@ -141,6 +141,17 @@ function keccakF1600(A) {
 }
 
 /**
+ * Bytes to lowercase hex. NO Node `Buffer` — this module also ships in the
+ * browser bundle (the client's ABI coder imports it), and a browser has no
+ * `Buffer` global, which once crashed the Farm route at import time.
+ */
+export function bytesToHex(bytes) {
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 1) out += bytes[i].toString(16).padStart(2, '0');
+  return out;
+}
+
+/**
  * Keccak-256, the padding variant Ethereum uses.
  *
  * The difference from SHA3-256 is the DOMAIN SEPARATION BYTE: Keccak uses
@@ -190,7 +201,7 @@ export function keccak256(bytes) {
  */
 export function keccak256Hex(text) {
   const bytes = new TextEncoder().encode(String(text));
-  return `0x${Buffer.from(keccak256(bytes)).toString('hex')}`;
+  return `0x${bytesToHex(keccak256(bytes))}`;
 }
 
 export default keccak256;
