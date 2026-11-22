@@ -15,24 +15,28 @@ import '../styles/uni-dock.css';
  *     مصنوعی» — a Uniswap-Wallet-style bar.
  *  2. «سه تا دکمه از این صفحات … و دکمه هوش مصنوعی از این‌ها جدا باشد» —
  *     three section buttons in the pill, the AI as its own separate disc.
- *  3. «دکمه محافظت را با بیمه جایگزین کن … و اینکه هر کدوم فعال بود یک
- *     بریدگی خاصی داشته باشد» — the four group screens back INSIDE the pill,
- *     the current one marked with a notch, the AI still standing apart.
+ *  3. «دکمه محافظت را با بیمه جایگزین کن … هر کدوم فعال بود یک بریدگی
+ *     خاصی داشته باشد» — the four group screens back INSIDE the pill, the
+ *     AI still standing apart.
+ *  4. «اون نباشه بریدگی نمی‌خواهیم» — the notch is GONE. The bar's outline
+ *     is uninterrupted; the current screen is shown by a soft window inside
+ *     it and by ink strength, nothing else.
  *
  * So the current arrangement is:
  *
- *   [ فارم │ وام │(بیمه)│ سفارش ]      ( AI )
- *                     ↑ notch on the active button
+ *   [ فارم │[وام]│ بیمه │ سفارش ]      ( AI )
+ *            ↑ window inside the bar, no cut anywhere
  *
  * · FOUR buttons, one per screen of the group, in the order the group reads
  *   (Farm → Loan → Insurance → Orders), INSIDE the pill.
- * · The ACTIVE one — the section you are standing on — carries the mark:
- *   a raised, pill-shaped window inside the bar plus a small tab standing
- *   proud of the top edge. The owner's correction after seeing a cut-OUT
- *   wedge was «گزینه فعال شکاف نخوره» — a notch that bites a hole in the
- *   bar reads as damage, not as selection. So the mark ADDS material inside
- *   the surface and a tab above it; nothing is carved out of the outline and
- *   the pill stays one continuous shape.
+ * · The ACTIVE one — the section you are standing on — is shown by a soft
+ *   raised window INSIDE the bar behind its glyph, and by the brighter ink.
+ *   There is NO notch, in any form: the owner asked three times for a
+ *   selection mark and then, seeing the result, «اون نباشه بریدگی نمی‌خواهیم»
+ *   — no cut, no tab, no lobe poking out of the top edge. The pill's
+ *   silhouette is now completely uninterrupted; selection lives entirely
+ *   within it. (Which is also why this component no longer renders a mark
+ *   element at all — nothing to restyle, nothing to bring back by accident.)
  * · The AI is a separate round glass button outside the pill, floating at
  *   the end of the track — the reference's detached circle. It is glass
  *   like the rest of the bar now («رنگش مثل بقیه») with only a quiet RGB
@@ -99,13 +103,6 @@ export default function UniDock({ hidden = false }) {
               title={t(item.key)}
               onClick={() => go(item.to, 'light')}
             >
-              {/* The active tab: a raised lobe that stands proud of the
-                  pill's top edge, drawn in the surface colour so it merges
-                  with the bar instead of cutting into it — «شکاف نخوره».
-                  Rendered by the ACTIVE button only, so there is exactly one
-                  in the DOM whatever a stylesheet does later. aria-hidden:
-                  the state is already in aria-current. */}
-              {active && <span className="uni-dock__notch" aria-hidden="true" />}
               <span className="uni-dock__icon" aria-hidden="true">
                 <item.Icon
                   key={`${item.to}-${pulsed === item.to ? pulse : 'rest'}`}
