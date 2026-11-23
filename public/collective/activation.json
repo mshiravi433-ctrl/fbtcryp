@@ -1,20 +1,20 @@
 {
   "schema": "fbt.collective.activation.snapshot.v1",
-  "generatedAt": "2026-11-17T12:12:07.476Z",
+  "generatedAt": "2026-11-23T13:13:13.086Z",
   "source": "github-actions",
   "repo": "mshiravi433-ctrl/fbtcryp",
-  "commit": "26916ab51b421bee808e4de2be1639919c436b52",
+  "commit": "2196cf25ce7d96d8f59d10f72ee9374566a45f40",
   "workflow": "collective-activation.yml",
   "run": {
-    "id": 44080564960,
-    "number": 21,
-    "url": "https://github.com/mshiravi433-ctrl/fbtcryp/actions/runs/44080564960",
-    "event": "push",
+    "id": 45181218921,
+    "number": 22,
+    "url": "https://github.com/mshiravi433-ctrl/fbtcryp/actions/runs/45181218921",
+    "event": "schedule",
     "conclusion": "success",
-    "headSha": "26916ab51b421bee808e4de2be1639919c436b52",
-    "createdAt": "2026-11-17T12:10:53.000Z",
-    "updatedAt": "2026-11-17T12:12:07.476Z",
-    "durationSeconds": 74
+    "headSha": "2196cf25ce7d96d8f59d10f72ee9374566a45f40",
+    "createdAt": "2026-11-23T13:11:18.000Z",
+    "updatedAt": "2026-11-23T13:13:13.086Z",
+    "durationSeconds": 115
   },
   "checks": [
     {
@@ -39,7 +39,7 @@
       "id": "rehearsal",
       "label": "Full local rehearsal (deploy → timelock → activate → deposit)",
       "ok": true,
-      "detail": "23 transactions · vault created · gas 23658929 units"
+      "detail": "23 transactions · vault created · gas 23658941 units"
     }
   ],
   "artifacts": [
