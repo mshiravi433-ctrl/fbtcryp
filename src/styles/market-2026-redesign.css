@@ -1,43 +1,48 @@
 /* ==========================================================================
-   MARKET PAGE 2026 — ULTRA-MINIMAL GLASS REDESIGN
-   Cohesive dark/light glassmorphism, static centered tabs, minimal slide hero,
-   clean glass token rows (logo + name + chart + price), RTL/LTR safe.
+   MARKET PAGE 2026 — ANTI-SLOP MINIMAL GLASS REDESIGN
+   Inspired by crisp monochrome/obsidian elevation + warm coral/emerald accents,
+   3D Market/Bitcoin flip card, scroll-hiding header, compact slide notifications.
    ========================================================================== */
 
-/* ── 1. Shell & Page Rhythm (centered RGB orb at bottom, no BottomNav) ──── */
+/* ── 1. Shell, Zero Bottom Gap & Header Hide-on-Scroll ──────────────────── */
+.app-shell.app-shell--market-home {
+  padding-bottom: 0 !important;
+}
 .app-shell--market-home .mx-market {
-  padding-bottom: calc(82px + env(safe-area-inset-bottom));
+  padding-bottom: calc(74px + env(safe-area-inset-bottom));
   gap: 14px;
 }
+.app-shell--market-home > .top-bar {
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
+  will-change: transform, opacity;
+}
+.app-shell--market-home > .top-bar.is-chrome-hidden {
+  transform: translate3d(0, -115%, 0);
+  opacity: 0;
+  pointer-events: none;
+}
 
-/* ── 2. Top Promo Banner — Ultra-Minimal Slide-Style (like Signals) ─────── */
+/* ── 2. Top Promo Banner — Auto-Sliding, No Tabs, No Clutter ────────────── */
 .mx-market .mhb {
-  padding: 11px 14px !important;
-  border-radius: 18px !important;
-  min-height: 0 !important;
+  padding: 14px 16px !important;
+  border-radius: 20px !important;
+  min-height: 76px !important;
   background:
-    radial-gradient(120% 140% at 0% 0%, rgba(139, 92, 246, 0.22), transparent 55%),
-    radial-gradient(100% 140% at 100% 100%, rgba(14, 165, 233, 0.18), transparent 55%),
-    linear-gradient(155deg, rgba(15, 21, 36, 0.84), rgba(9, 13, 24, 0.92)) !important;
+    radial-gradient(120% 140% at 6% 0%, rgba(249, 115, 22, 0.16), transparent 52%),
+    radial-gradient(100% 140% at 96% 100%, rgba(16, 185, 129, 0.14), transparent 52%),
+    linear-gradient(155deg, rgba(20, 22, 28, 0.9), rgba(11, 13, 18, 0.96)) !important;
   border: 1px solid rgba(255, 255, 255, 0.09) !important;
-  box-shadow:
-    0 10px 28px -18px rgba(0, 0, 0, 0.72),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 12px 28px -18px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
-.mx-market .mhb-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px !important;
-}
+.mx-market .mhb-top,
+.mx-market .mhb-scenes,
 .mx-market .mhb-kicker-text,
 .mx-market .mhb-tag,
 .mx-market .mhb-desc,
 .mx-market .mhb-chips,
-.mx-market .mhb-stage,
+.mx-market .mhb-actions,
 .mx-market .mhb-mesh,
 .mx-market .mhb-blade {
   display: none !important;
@@ -46,48 +51,39 @@
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  gap: 10px !important;
+  gap: 12px !important;
 }
 .mx-market .mhb-copy {
   min-width: 0;
   flex: 1 1 auto;
 }
 .mx-market .mhb-title {
-  font-size: clamp(14px, 3.6vw, 17px) !important;
+  font-size: clamp(14.5px, 3.8vw, 17.5px) !important;
   font-weight: 700 !important;
-  line-height: 1.32 !important;
+  line-height: 1.38 !important;
   margin: 0 !important;
   letter-spacing: -0.015em;
 }
-.mx-market .mhb-actions {
-  margin-top: 8px !important;
-  gap: 8px !important;
-  display: flex;
-  align-items: center;
+.mx-market .mhb-stage {
+  display: flex !important;
+  width: 58px !important;
+  height: 58px !important;
+  flex: 0 0 58px !important;
+  transform: none !important;
 }
-.mx-market .mhb-cta,
-.mx-market .mhb-btn {
-  min-height: 32px !important;
-  padding: 5px 13px !important;
-  font-size: 11.5px !important;
-  font-weight: 600 !important;
-  border-radius: 999px !important;
-}
-.mx-market .mhb-scene-btn {
-  padding: 3px 9px !important;
-  font-size: 10.5px !important;
-  border-radius: 999px !important;
+.mx-market .mhb-stage-badge,
+.mx-market .mhb-wave {
+  display: none !important;
 }
 :root[data-theme='light'] .mx-market .mhb {
   background:
-    radial-gradient(120% 140% at 0% 0%, rgba(139, 92, 246, 0.1), transparent 55%),
-    radial-gradient(100% 140% at 100% 100%, rgba(14, 165, 233, 0.1), transparent 55%),
-    linear-gradient(155deg, rgba(255, 255, 255, 0.94), rgba(242, 246, 255, 0.96)) !important;
+    radial-gradient(120% 140% at 6% 0%, rgba(249, 115, 22, 0.08), transparent 52%),
+    linear-gradient(155deg, #ffffff, #f5f6f8) !important;
   border-color: rgba(15, 23, 42, 0.08) !important;
-  box-shadow: 0 8px 22px -14px rgba(15, 23, 42, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+  box-shadow: 0 8px 22px -14px rgba(15, 23, 42, 0.12), inset 0 1px 0 #ffffff !important;
 }
 
-/* ── 3. Overview & Tokens Tabs — Static, Centered, Proper Size ──────────── */
+/* ── 3. Overview & Tokens Tabs — Static, Centered, Crisp Monochrome Pill ── */
 .mx-market .mx-tabs-wrap {
   position: static !important;
   top: auto !important;
@@ -103,10 +99,10 @@
   min-width: 260px !important;
   margin-inline: auto !important;
   padding: 4px !important;
-  border-radius: 16px !important;
-  background: rgba(15, 23, 42, 0.72) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  box-shadow: 0 10px 24px -16px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  border-radius: 999px !important;
+  background: rgba(24, 26, 32, 0.82) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  box-shadow: 0 8px 22px -16px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
@@ -116,7 +112,7 @@
   font-size: 14px !important;
   font-weight: 700 !important;
   gap: 8px !important;
-  border-radius: 12px !important;
+  border-radius: 999px !important;
 }
 .mx-market .mx-tab-label {
   font-size: 14px !important;
@@ -124,117 +120,167 @@
   white-space: nowrap;
 }
 .mx-market .mx-tabs-thumb {
-  border-radius: 12px !important;
+  border-radius: 999px !important;
 }
 :root[data-theme='light'] .mx-market .mx-tabs {
-  background: rgba(241, 245, 249, 0.92) !important;
-  border-color: rgba(15, 23, 42, 0.08) !important;
-  box-shadow: 0 8px 20px -14px rgba(15, 23, 42, 0.14) !important;
+  background: #eceef2 !important;
+  border-color: rgba(15, 23, 42, 0.06) !important;
+  box-shadow: none !important;
 }
 
-/* ── 4. Minimal Market Cap, Bitcoin & Overview Trio Cards ───────────────── */
+/* ── 4. Single 3D Flip Card: Market Cap (Front) ⇄ Bitcoin + Trio (Back) ─── */
 .mx-market .mx-overview {
+  display: flex !important;
+  flex-direction: column !important;
   gap: 10px !important;
+  perspective: 1200px;
 }
+.mx-flip-bar {
+  display: inline-flex;
+  align-self: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.mx-flip-tab {
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(226, 232, 240, 0.68);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+.mx-flip-tab.is-active {
+  background: #f8fafc;
+  color: #0f172a;
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.45);
+}
+:root[data-theme='light'] .mx-flip-bar {
+  background: #eceef2;
+  border-color: rgba(15, 23, 42, 0.06);
+}
+:root[data-theme='light'] .mx-flip-tab {
+  color: #64748b;
+}
+:root[data-theme='light'] .mx-flip-tab.is-active {
+  background: #111318;
+  color: #ffffff;
+}
+
+.mx-flip {
+  position: relative;
+  display: grid;
+  transform-style: preserve-3d;
+  transition: transform 0.56s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.mx-flip.is-flipped {
+  transform: rotateY(180deg);
+}
+.mx-flip-face {
+  grid-area: 1 / 1;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  min-width: 0;
+}
+.mx-flip-face--front {
+  transform: rotateY(0deg);
+}
+.mx-flip-face--back {
+  transform: rotateY(180deg);
+}
+.mx-flip:not(.is-flipped) .mx-flip-face--back {
+  pointer-events: none;
+}
+.mx-flip.is-flipped .mx-flip-face--front {
+  pointer-events: none;
+}
+
 .mx-market .mx-deck-matrix,
 .mx-market .mx-deck-orbit,
 .mx-market .mx-deck-eyebrow {
   display: none !important;
 }
-.mx-market .mx-deck {
-  padding: 14px 16px !important;
-  border-radius: 20px !important;
-  background:
-    radial-gradient(100% 120% at 0% 0%, rgba(16, 185, 129, 0.14), transparent 52%),
-    radial-gradient(90% 120% at 100% 100%, rgba(56, 189, 248, 0.12), transparent 55%),
-    linear-gradient(160deg, rgba(16, 23, 38, 0.8), rgba(10, 14, 26, 0.9)) !important;
-  border: 1px solid rgba(255, 255, 255, 0.085) !important;
-  box-shadow: 0 12px 30px -20px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-}
+.mx-market .mx-deck,
 .mx-market .mx-btc-card {
-  padding: 14px 16px !important;
-  border-radius: 20px !important;
-  background:
-    radial-gradient(100% 120% at 0% 0%, rgba(245, 158, 11, 0.15), transparent 55%),
-    linear-gradient(160deg, rgba(18, 22, 36, 0.82), rgba(10, 14, 24, 0.92)) !important;
-  border: 1px solid rgba(245, 158, 11, 0.18) !important;
-  box-shadow: 0 12px 30px -20px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  padding: 16px !important;
+  border-radius: 22px !important;
+  background: linear-gradient(160deg, rgba(22, 24, 30, 0.9), rgba(13, 15, 20, 0.96)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.085) !important;
+  box-shadow: 0 14px 32px -20px rgba(0, 0, 0, 0.78), inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+}
+.mx-market .mx-trio--in-flip {
+  margin-top: 12px !important;
+  gap: 8px !important;
 }
 .mx-market .mx-trio-box {
-  padding: 11px 12px !important;
-  border-radius: 16px !important;
-  background:
-    linear-gradient(155deg, rgba(24, 32, 54, 0.76), rgba(12, 17, 30, 0.88)) !important;
-  border: 1px solid rgba(255, 255, 255, 0.085) !important;
-  box-shadow: 0 8px 20px -14px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
-  transition: transform 0.2s ease, border-color 0.2s ease;
-}
-.mx-market .mx-trio-box:hover {
-  transform: translateY(-1px);
-  border-color: rgba(167, 139, 250, 0.3) !important;
+  padding: 10px !important;
+  border-radius: 14px !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  box-shadow: none !important;
 }
 :root[data-theme='light'] .mx-market .mx-deck,
-:root[data-theme='light'] .mx-market .mx-btc-card,
+:root[data-theme='light'] .mx-market .mx-btc-card {
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.07) !important;
+  box-shadow: 0 10px 26px -18px rgba(15, 23, 42, 0.14) !important;
+}
 :root[data-theme='light'] .mx-market .mx-trio-box {
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.92), rgba(244, 248, 255, 0.96)) !important;
-  border-color: rgba(15, 23, 42, 0.08) !important;
-  box-shadow: 0 10px 24px -16px rgba(15, 23, 42, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+  background: #f5f6f8 !important;
+  border-color: rgba(15, 23, 42, 0.06) !important;
 }
 
-/* ── 5. Modern Stories Strip & Opened Story Viewer ──────────────────────── */
+/* ── 5. Stories — Modern Animated Rings & Sleek Backdrop ────────────────── */
 .mx-market .mx-stories {
-  border-radius: 20px;
+  border-radius: 22px;
+  padding: 10px 12px;
+  background: rgba(20, 22, 28, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+:root[data-theme='light'] .mx-market .mx-stories {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.07);
 }
 .mx-market .story-ring,
 .mx-market .ms-story-ring {
-  background: linear-gradient(135deg, #a855f7, #ec4899, #38bdf8) !important;
+  background: linear-gradient(135deg, #f97316, #fb7185, #38bdf8) !important;
   padding: 2px !important;
-  box-shadow: 0 6px 16px -8px rgba(168, 85, 247, 0.55);
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.story-modal,
-.ms-story-modal {
-  backdrop-filter: blur(22px) saturate(140%) !important;
-  -webkit-backdrop-filter: blur(22px) saturate(140%) !important;
-}
-.story-card,
-.ms-story-card {
-  border-radius: 24px !important;
-  border: 1px solid rgba(255, 255, 255, 0.14) !important;
-  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.85) !important;
+.mx-market .story-ring:hover,
+.mx-market .ms-story-ring:hover {
+  transform: scale(1.06);
 }
 
-/* ── 6. Modern Heatmap Colors & Filters ─────────────────────────────────── */
+/* ── 6. Heatmap — Clean Modern Neutral Surface & Crisp Emerald/Rose ─────── */
 .mx-market .mx-heatmap {
-  border-radius: 20px !important;
-  background: linear-gradient(160deg, rgba(16, 22, 36, 0.8), rgba(9, 13, 24, 0.9)) !important;
+  border-radius: 22px !important;
+  background: linear-gradient(160deg, rgba(20, 22, 28, 0.9), rgba(12, 14, 19, 0.96)) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   padding: 14px !important;
 }
 .mx-market .mx-hm-tile {
   border-radius: 12px !important;
-  border: 1px solid rgba(255, 255, 255, 0.06) !important;
-  transition: transform 0.18s ease, filter 0.18s ease !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
 }
 .mx-market .mx-hm-tile[data-dir='up'] {
-  background: linear-gradient(145deg, rgba(16, 185, 129, 0.84), rgba(5, 150, 105, 0.94)) !important;
+  background: linear-gradient(145deg, #10b981, #059669) !important;
 }
 .mx-market .mx-hm-tile[data-dir='down'] {
-  background: linear-gradient(145deg, rgba(244, 63, 94, 0.84), rgba(190, 18, 60, 0.94)) !important;
-}
-.mx-market .mx-hm-tile:hover {
-  transform: scale(1.015);
-  filter: brightness(1.08);
+  background: linear-gradient(145deg, #f43f5e, #e11d48) !important;
 }
 :root[data-theme='light'] .mx-market .mx-heatmap {
-  background: rgba(255, 255, 255, 0.92) !important;
-  border-color: rgba(15, 23, 42, 0.08) !important;
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.07) !important;
 }
 
-/* ── 7. Modern Horizontal Intel Rail (Networks / DeFi / Flow Pulse) ─────── */
+/* ── 7. Intel Rail (Networks / DeFi / Flow Pulse) — No Purple, Crisp UI ─── */
 .mx-intel-rail {
   display: flex;
   flex-direction: column;
@@ -243,16 +289,13 @@
 .mx-intel-rail-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   overflow-x: auto;
   scrollbar-width: none;
-  padding: 5px;
-  border-radius: 18px;
-  background: linear-gradient(160deg, rgba(18, 25, 42, 0.78), rgba(10, 14, 26, 0.88));
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  box-shadow: 0 10px 24px -18px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(22, 24, 30, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 .mx-intel-rail-bar::-webkit-scrollbar {
   display: none;
@@ -262,129 +305,112 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  height: 38px;
-  padding: 0 15px;
-  border: 1px solid transparent;
-  border-radius: 13px;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
   background: transparent;
-  color: rgba(203, 213, 225, 0.76);
-  font-size: 12.5px;
-  font-weight: 600;
+  color: rgba(203, 213, 225, 0.7);
+  font-size: 12px;
+  font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 .mx-intel-rail-tab:hover {
   color: #ffffff;
 }
 .mx-intel-rail-tab.is-active {
-  color: #ffffff;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.32), rgba(168, 85, 247, 0.28));
-  border-color: rgba(192, 132, 252, 0.45);
-  box-shadow: 0 6px 18px -8px rgba(139, 92, 246, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  color: #0f172a;
+  background: #f8fafc;
+  box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.5);
 }
 .mx-intel-rail-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: currentColor;
-  opacity: 0.4;
+  opacity: 0.35;
 }
 .mx-intel-rail-tab.is-active .mx-intel-rail-dot {
   opacity: 1;
-  background: #d8b4fe;
-  box-shadow: 0 0 10px #c084fc;
-}
-.mx-intel-rail-panel {
-  animation: mxRailFade 0.22s ease;
+  background: #f97316;
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.65);
 }
 .mx-intel-rail-panel > section,
 .mx-intel-rail-panel > div {
-  border-radius: 20px !important;
-  border-color: rgba(255, 255, 255, 0.085) !important;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-}
-@keyframes mxRailFade {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  border-radius: 22px !important;
+  background: linear-gradient(160deg, rgba(20, 22, 28, 0.9), rgba(12, 14, 19, 0.96)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 :root[data-theme='light'] .mx-intel-rail-bar {
-  background: rgba(241, 245, 249, 0.92);
-  border-color: rgba(15, 23, 42, 0.08);
-  box-shadow: 0 8px 20px -14px rgba(15, 23, 42, 0.12);
+  background: #eceef2;
+  border-color: rgba(15, 23, 42, 0.06);
 }
 :root[data-theme='light'] .mx-intel-rail-tab {
-  color: #475569;
+  color: #64748b;
 }
 :root[data-theme='light'] .mx-intel-rail-tab.is-active {
-  color: #0f172a;
-  background: #ffffff;
-  border-color: rgba(124, 58, 237, 0.28);
-  box-shadow: 0 4px 14px -6px rgba(15, 23, 42, 0.15);
+  color: #ffffff;
+  background: #111318;
+}
+:root[data-theme='light'] .mx-intel-rail-panel > section,
+:root[data-theme='light'] .mx-intel-rail-panel > div {
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.07) !important;
 }
 
-/* ── 8. Modern Bottom Promo Banner (SmartMoney / Global Ad) ─────────────── */
+/* ── 8. Bottom Promo Banner ("جهان را متصل ببین") — Minimal & Cohesive ──── */
 .mx-market .mx-smart-banner.mx-global-banner {
-  border-radius: 20px !important;
-  padding: 13px 16px !important;
-  background:
-    radial-gradient(90% 140% at 10% 0%, rgba(168, 85, 247, 0.2), transparent 58%),
-    radial-gradient(80% 140% at 95% 100%, rgba(56, 189, 248, 0.16), transparent 58%),
-    linear-gradient(155deg, rgba(16, 22, 38, 0.85), rgba(10, 14, 26, 0.94)) !important;
-  border: 1px solid rgba(192, 132, 252, 0.22) !important;
-  box-shadow: 0 12px 28px -18px rgba(88, 28, 135, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.09) !important;
+  border-radius: 18px !important;
+  padding: 11px 14px !important;
+  background: linear-gradient(155deg, rgba(22, 24, 30, 0.9), rgba(13, 15, 20, 0.96)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  box-shadow: 0 10px 24px -18px rgba(0, 0, 0, 0.72) !important;
 }
 :root[data-theme='light'] .mx-market .mx-smart-banner.mx-global-banner {
-  background:
-    radial-gradient(90% 140% at 10% 0%, rgba(168, 85, 247, 0.1), transparent 58%),
-    linear-gradient(155deg, rgba(255, 255, 255, 0.94), rgba(244, 247, 255, 0.96)) !important;
-  border-color: rgba(124, 58, 237, 0.16) !important;
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 8px 20px -14px rgba(15, 23, 42, 0.12) !important;
 }
 
-/* ── 9. Tokens Tab — Minimal Frosted Glass Cards (Logo + Name + Chart + Price) */
+/* ── 9. Tokens Tab — Frosted Glass Cards + Clean Swap Button ────────────── */
 .mx-market .mx-lens {
-  border-radius: 20px !important;
-  background: rgba(15, 23, 42, 0.56) !important;
-  border: 1px solid rgba(255, 255, 255, 0.09) !important;
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border-radius: 22px !important;
+  background: rgba(18, 20, 26, 0.72) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
-/* Hide cluttered extra columns/badges so each token card is clean & minimal */
 .mx-market .coin-row-rank,
 .mx-market .coin-quote,
 .mx-market .coin-row-metric,
 .mx-market .coin-row-range,
-.mx-market .mx-row-actions,
 .mx-market .mx-col-head {
   display: none !important;
 }
 .mx-market .mx-row {
-  display: block !important;
-  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 0 10px 0 0 !important;
   margin-bottom: 8px !important;
+  border-radius: 18px !important;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.068), rgba(255, 255, 255, 0.022)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(16px) saturate(145%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(145%) !important;
+  box-shadow: 0 8px 20px -14px rgba(0, 0, 0, 0.68), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+}
+.mx-market .mx-row .coin-row {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  margin: 0 !important;
   background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
-}
-.mx-market .coin-row {
-  margin-bottom: 8px;
-  padding: 0 !important;
-  border-radius: 18px !important;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025)) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  backdrop-filter: blur(16px) saturate(150%) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(150%) !important;
-  box-shadow:
-    0 8px 22px -14px rgba(0, 0, 0, 0.72),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14) !important;
-  transition: transform 0.18s ease, border-color 0.2s ease, background 0.2s ease !important;
-}
-.mx-market .coin-row:hover {
-  transform: translateY(-1px);
-  border-color: rgba(192, 132, 252, 0.34) !important;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.04)) !important;
+  backdrop-filter: none !important;
 }
 .mx-market .coin-row-open {
   display: grid !important;
@@ -392,53 +418,59 @@
   align-items: center !important;
   gap: 10px !important;
   width: 100% !important;
-  padding: 11px 14px !important;
+  padding: 11px 12px !important;
   background: transparent !important;
   border: 0 !important;
 }
-.mx-market .coin-row-spark {
+.mx-market .mx-row-actions {
   display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
+  align-items: center !important;
+  gap: 6px !important;
+  flex: 0 0 auto !important;
 }
-.mx-market .coin-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-  min-width: 74px;
-}
-.mx-market .coin-price {
-  font-size: 13.5px !important;
+.mx-market .mx-row-actions .mx-swap-btn,
+.mx-market .mx-row-actions a[href*='/swap'] {
+  height: 30px !important;
+  padding: 0 10px !important;
+  border-radius: 999px !important;
+  background: rgba(16, 185, 129, 0.16) !important;
+  border: 1px solid rgba(16, 185, 129, 0.34) !important;
+  color: #34d399 !important;
+  font-size: 11px !important;
   font-weight: 700 !important;
 }
-.mx-market .coin-change-pill {
-  font-size: 11px !important;
-  padding: 2px 7px !important;
-  border-radius: 999px !important;
-}
 :root[data-theme='light'] .mx-market .mx-lens {
-  background: rgba(255, 255, 255, 0.78) !important;
+  background: rgba(255, 255, 255, 0.84) !important;
   border-color: rgba(15, 23, 42, 0.08) !important;
 }
-:root[data-theme='light'] .mx-market .coin-row {
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.88), rgba(248, 250, 252, 0.72)) !important;
-  border-color: rgba(15, 23, 42, 0.09) !important;
-  box-shadow:
-    0 8px 18px -12px rgba(15, 23, 42, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.98) !important;
+:root[data-theme='light'] .mx-market .mx-row {
+  background: rgba(255, 255, 255, 0.88) !important;
+  border-color: rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 6px 16px -12px rgba(15, 23, 42, 0.12), inset 0 1px 0 #ffffff !important;
 }
-:root[data-theme='light'] .mx-market .coin-row:hover {
-  border-color: rgba(99, 102, 241, 0.3) !important;
-  background: rgba(255, 255, 255, 0.96) !important;
+:root[data-theme='light'] .mx-market .mx-row-actions .mx-swap-btn,
+:root[data-theme='light'] .mx-market .mx-row-actions a[href*='/swap'] {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.28) !important;
+  color: #059669 !important;
+}
+
+/* ── 10. Compact Top Slide Notification Bar ─────────────────────────────── */
+.nbar.nbar--compact {
+  top: calc(8px + env(safe-area-inset-top)) !important;
+  max-width: min(360px, calc(100vw - 24px)) !important;
+}
+.nbar.nbar--compact .nbar__card {
+  padding: 10px 12px !important;
+  border-radius: 16px !important;
+}
+.nbar.nbar--compact .nbar__brand-sub {
+  display: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mx-intel-rail-panel,
-  .mx-market .coin-row,
-  .mx-market .mx-trio-box {
-    animation: none !important;
+  .mx-flip,
+  .app-shell--market-home > .top-bar {
     transition: none !important;
   }
 }

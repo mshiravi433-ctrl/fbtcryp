@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSharedClock } from '../../hooks/useSharedClock';
 import AnimatedNumber from '../AnimatedNumber.jsx';
@@ -174,6 +174,7 @@ function BtClock({ updatedAt }) {
 
 function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = 'usd', onOpenCoin, updatedAt = 0 }) {
   const { t } = useTranslation();
+  const [flipped, setFlipped] = useState(false);
   const mcap = positiveOrNull(global?.mcap);
   const volume = positiveOrNull(global?.volume);
   const btcDom = positiveOrNull(global?.btcDominance);
@@ -238,6 +239,29 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
 
   return (
     <section className="mx-overview" aria-label={t('marketIntel.overviewAria')} data-testid="market-overview">
+      <div className="mx-flip-bar" role="tablist" aria-label={t('marketIntel.overviewAria')}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={!flipped}
+          className={`mx-flip-tab${!flipped ? ' is-active' : ''}`}
+          onClick={() => setFlipped(false)}
+        >
+          {t('market.totalMcap')}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={flipped}
+          className={`mx-flip-tab${flipped ? ' is-active' : ''}`}
+          onClick={() => setFlipped(true)}
+        >
+          {bitcoin?.name || 'Bitcoin'}
+        </button>
+      </div>
+
+      <div className={`mx-flip${flipped ? ' is-flipped' : ''}`}>
+        <div className="mx-flip-face mx-flip-face--front" aria-hidden={flipped}>
       {/* ─── ۱ · THE DECK ─────────────────────────────────────────────────── */}
       <div className="mx-deck" data-testid="market-global-card">
         {/* «رنگ در کادر باشد و انیمیشنی حرکت کند» — a second rim painted in a
@@ -379,36 +403,10 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
           )}
         </div>
       </div>
+        </div>
 
-      {/* ─── ۲ · THE TRIO — three boxes, one line, every width ───────────── */}
-      <div className="mx-trio" data-testid="market-trio" role="group" aria-label={t('marketIntel.deckLabel')}>
-        <TrioBox
-          tone="cyan"
-          label={t('marketIntel.statCoins')}
-          value={global?.coins ? fmtNum(global.coins) : '—'}
-          testId="market-trio-coins"
-        >
-          <GlyphGrid width={15} height={15} />
-        </TrioBox>
-        <TrioBox
-          tone="violet"
-          label={t('marketIntel.statMarkets')}
-          value={global?.markets ? fmtNum(global.markets) : '—'}
-          testId="market-trio-markets"
-        >
-          <GlyphGlobe width={15} height={15} />
-        </TrioBox>
-        <TrioBox
-          tone={avg == null ? 'flat' : avg >= 0 ? 'up' : 'down'}
-          label={t('marketIntel.statAvg')}
-          value={avg == null ? '—' : fmtPct(avg)}
-          testId="market-trio-avg"
-        >
-          <GlyphWave width={15} height={15} />
-        </TrioBox>
-      </div>
-
-      {/* ─── ۳ · BITCOIN — its own glass card, centred ────────────────────── */}
+        <div className="mx-flip-face mx-flip-face--back" aria-hidden={!flipped}>
+      {/* ─── ۲ · BITCOIN + TRIO — back face of the flip card ─────────────── */}
       {bitcoin && (
         <div className="mx-btc-card" data-testid="market-btc-hero-card" data-dir={btcDir}>
           {/* The amber twin of the deck rim: one colour phase painted at rest,
@@ -502,8 +500,38 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
               </div>
             </div>
           )}
+
+          {/* ─── THE TRIO — inside the Bitcoin back face ─────────────────── */}
+          <div className="mx-trio mx-trio--in-flip" data-testid="market-trio" role="group" aria-label={t('marketIntel.deckLabel')}>
+            <TrioBox
+              tone="cyan"
+              label={t('marketIntel.statCoins')}
+              value={global?.coins ? fmtNum(global.coins) : '—'}
+              testId="market-trio-coins"
+            >
+              <GlyphGrid width={15} height={15} />
+            </TrioBox>
+            <TrioBox
+              tone="violet"
+              label={t('marketIntel.statMarkets')}
+              value={global?.markets ? fmtNum(global.markets) : '—'}
+              testId="market-trio-markets"
+            >
+              <GlyphGlobe width={15} height={15} />
+            </TrioBox>
+            <TrioBox
+              tone={avg == null ? 'flat' : avg >= 0 ? 'up' : 'down'}
+              label={t('marketIntel.statAvg')}
+              value={avg == null ? '—' : fmtPct(avg)}
+              testId="market-trio-avg"
+            >
+              <GlyphWave width={15} height={15} />
+            </TrioBox>
+          </div>
         </div>
       )}
+        </div>
+      </div>
     </section>
   );
 }
