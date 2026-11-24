@@ -120,7 +120,34 @@
   z-index: 41;
 }
 .quick-access--footer .quick-access__toggle,
-.quick-access--footer.is-open .quick-access__toggle { width: 56px; height: 56px; }
-.quick-access--footer.quick-access--tone-green .quick-access__toggle { color: #052e16; background: #4ade80; border-color: #86efac; }
-.quick-access--footer.quick-access--tone-blue .quick-access__toggle { color: #10254b; background: #60a5fa; border-color: #93c5fd; }
-.quick-access--footer.quick-access--tone-purple .quick-access__toggle { color: #341653; background: #c084fc; border-color: #d8b4fe; }
+.quick-access--footer.is-open .quick-access__toggle,
+:root[data-theme='light'] .quick-access--footer .quick-access__toggle {
+  width: 56px;
+  height: 56px;
+  overflow: hidden;
+  border: 1.5px solid rgba(192, 92, 255, 0.52);
+  background: radial-gradient(circle at 32% 28%, #2a0944, #140424 62%, #0a0214 100%);
+  box-shadow:
+    0 8px 24px -6px rgba(138, 35, 195, 0.72),
+    0 0 16px -2px rgba(225, 45, 165, 0.42),
+    inset 0 1px 6px rgba(255, 185, 165, 0.25);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.quick-access--footer .quick-access__toggle:hover,
+.quick-access--footer.is-open .quick-access__toggle {
+  border-color: rgba(235, 125, 255, 0.82);
+  box-shadow:
+    0 10px 28px -4px rgba(162, 42, 224, 0.85),
+    0 0 22px 0 rgba(235, 64, 178, 0.56),
+    inset 0 1px 8px rgba(255, 200, 180, 0.36);
+}
+.quick-access--footer .quick-access__toggle:active {
+  transform: scale(0.93);
+}
+.quick-access--footer .fluid-voice-orb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  pointer-events: none;
+}
