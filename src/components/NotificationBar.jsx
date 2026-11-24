@@ -97,7 +97,7 @@ function ProgressRail({ value, color, reduced, lang }) {
   );
 }
 
-function Card({ item, lang, onClose, onOpen, preview = false }) {
+function Card({ item, lang, onClose, onCloseAll, onOpen, total = 1, preview = false }) {
   const spec = toneSpec(item.tone);
   const reduced = useReducedMotion();
   const ref = useRef(null);
@@ -187,7 +187,9 @@ function Card({ item, lang, onClose, onOpen, preview = false }) {
           <span className="nbar__chip-dot" aria-hidden="true" />
           {item.kicker || spec.label[language] || spec.label.en}
         </span>
-        <span className="nbar__time">{clockOf(item.at, lang)}</span>
+        <span className="nbar__time">
+          {total > 1 ? `1/${total} · ` : ''}{clockOf(item.at, lang)}
+        </span>
         {preview ? null : (
           <button
             type="button"
@@ -195,7 +197,7 @@ function Card({ item, lang, onClose, onOpen, preview = false }) {
             aria-label={closeLabel}
             onClick={(e) => {
               e.stopPropagation();
-              onClose(item.id);
+              (onCloseAll || onClose)(item.id);
             }}
           >
             ×
@@ -294,6 +296,10 @@ function BarView({ onOpen }) {
   }, []);
 
   const close = useCallback((id) => dismiss(id), [dismiss]);
+  const closeAll = useCallback(() => {
+    const current = useAppStore.getState().notifBar || [];
+    current.forEach((n) => dismiss(n.id));
+  }, [dismiss]);
 
   /* A card is consumed by opening it: it leaves the bar first, then the route
      changes. Doing it in this order means a rejected navigation can never
@@ -307,16 +313,24 @@ function BarView({ onOpen }) {
   );
 
   /*
-   * The bar is inset for the status bar / Dynamic Island itself. The OS owns
-   * that region; we only make sure a card can never slide UNDER the clock and
-   * battery, which is the "island bar" the owner described.
+   * Single compact slide at the top: swipe left/right advances to the next
+   * notification until all are dismissed; tapping × dismisses all at once.
    */
+  const head = items[0] || null;
   return (
-    <div className="nbar" aria-live="polite" aria-atomic="false">
-      <AnimatePresence initial={false}>
-        {items.slice(0, 3).map((item) => (
-          <Card key={item.id} item={item} lang={lang} onClose={close} onOpen={open} />
-        ))}
+    <div className="nbar nbar--compact" aria-live="polite" aria-atomic="false">
+      <AnimatePresence mode="wait" initial={false}>
+        {head && (
+          <Card
+            key={head.id}
+            item={head}
+            lang={lang}
+            total={items.length}
+            onClose={close}
+            onCloseAll={closeAll}
+            onOpen={open}
+          />
+        )}
       </AnimatePresence>
     </div>
   );

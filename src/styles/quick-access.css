@@ -153,19 +153,40 @@
   pointer-events: none;
 }
 
-/* Market desk centered-only circle: 50x50 3D fluid RGB shifting orb */
+/* Market desk centered-only circle: 50x50 borderless 3D fluid RGB shifting orb */
 .quick-access--centered:not(.quick-access--footer) .quick-access__toggle,
 .quick-access--centered:not(.quick-access--footer).is-open .quick-access__toggle,
 :root[data-theme='light'] .quick-access--centered:not(.quick-access--footer) .quick-access__toggle {
   overflow: hidden;
-  border: 1.5px solid rgba(168, 132, 255, 0.55);
-  background: radial-gradient(circle at 32% 28%, #1d1035, #0c081a 65%, #060410 100%);
+  border: 0;
+  background: radial-gradient(circle at 32% 28%, #160c28, #090612 68%, #04030a 100%);
   box-shadow:
-    0 8px 22px -6px rgba(96, 128, 255, 0.62),
-    0 0 15px -2px rgba(215, 72, 210, 0.4),
-    inset 0 1px 6px rgba(255, 255, 255, 0.2);
-  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+    0 10px 26px -8px rgba(0, 0, 0, 0.72),
+    0 0 18px -4px rgba(56, 189, 248, 0.28);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
 }
 .quick-access--centered:not(.quick-access--footer) .quick-access__toggle:active {
   transform: scale(0.93);
+}
+/* Modern frosted glass panel when the centered orb is tapped */
+.quick-access.quick-access--centered .quick-access__rail {
+  background: linear-gradient(155deg, rgba(18, 22, 34, 0.82), rgba(10, 13, 22, 0.9));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  box-shadow: 0 24px 56px -16px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+.quick-access--centered .quick-access__item {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+}
+:root[data-theme='light'] .quick-access.quick-access--centered .quick-access__rail {
+  background: rgba(255, 255, 255, 0.86);
+  border-color: rgba(15, 23, 42, 0.1);
+  box-shadow: 0 20px 48px -18px rgba(15, 23, 42, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+:root[data-theme='light'] .quick-access--centered .quick-access__item {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: rgba(15, 23, 42, 0.08);
 }
