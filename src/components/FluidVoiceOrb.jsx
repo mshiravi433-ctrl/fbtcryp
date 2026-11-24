@@ -23,13 +23,19 @@ for (let i = 0; i < DOT_COUNT; i += 1) {
 
 /**
  * Lightweight 3D fluid dotted orb rendered on a 2D canvas.
- * Designed for a 56x56px button: ~0.2ms/frame, pauses when tab is hidden,
+ * Designed for a 50–56px button: ~0.2ms/frame, pauses when tab is hidden,
  * and renders a single static frame under prefers-reduced-motion.
+ *
+ * variant:
+ *  - 'purple': deep dark purple / magenta / pink-gold AI voice orb
+ *  - 'rgb': smoothly cycling full-spectrum RGB fluid orb
  */
-export default function FluidVoiceOrb({ size = 56, active = false }) {
+export default function FluidVoiceOrb({ size = 56, active = false, variant = 'purple' }) {
   const canvasRef = useRef(null);
   const activeRef = useRef(active);
   activeRef.current = active;
+  const variantRef = useRef(variant);
+  variantRef.current = variant;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -121,6 +127,9 @@ export default function FluidVoiceOrb({ size = 56, active = false }) {
       }
 
       // Pass 0: back hemisphere (z < 0), Pass 1: front hemisphere (z >= 0)
+      const isRgb = variantRef.current === 'rgb';
+      const hueBase = t * 0.55;
+
       for (let pass = 0; pass < 2; pass += 1) {
         const isFront = pass === 1;
         for (let i = 0; i < DOT_COUNT; i += 1) {
@@ -131,15 +140,18 @@ export default function FluidVoiceOrb({ size = 56, active = false }) {
           const crest = projCrest[i];
           const lat = projLat[i]; // +1 top, -1 bottom
 
-          // Color palette matching dark purple RGB AI voice orb:
-          // bottom -> violet-blue (#5548d9)
-          // mid    -> deep purple (#9624c8) & electric magenta (#e62fa8)
-          // top/crest -> warm pink-gold highlight (#ffb9a5)
           let r;
           let g;
           let b;
 
-          if (lat < -0.15) {
+          if (isRgb) {
+            // Smoothly cycling full-spectrum RGB across the fluid surface
+            const phase = hueBase + lat * 1.15 + crest * 0.85;
+            const boost = 0.55 + crest * 0.45;
+            r = (128 + Math.sin(phase) * 124) * boost + crest * 36;
+            g = (128 + Math.sin(phase + 2.094) * 124) * boost + crest * 36;
+            b = (128 + Math.sin(phase + 4.188) * 124) * boost + crest * 36;
+          } else if (lat < -0.15) {
             // Lower violet-blue to deep purple
             const k = Math.min(1, Math.max(0, (lat + 1) / 0.85));
             r = 82 + k * 76 + crest * 42;
@@ -158,7 +170,7 @@ export default function FluidVoiceOrb({ size = 56, active = false }) {
             ? Math.min(1, 0.35 + depth * 0.65)
             : Math.max(0.12, depth * 0.42);
 
-          ctx.fillStyle = `rgba(${Math.min(255, r | 0)},${Math.min(255, g | 0)},${Math.min(255, b | 0)},${alpha.toFixed(2)})`;
+          ctx.fillStyle = `rgba(${Math.min(255, Math.max(0, r | 0))},${Math.min(255, Math.max(0, g | 0))},${Math.min(255, Math.max(0, b | 0))},${alpha.toFixed(2)})`;
           ctx.beginPath();
           ctx.arc(projX[i], projY[i], projR[i], 0, Math.PI * 2);
           ctx.fill();

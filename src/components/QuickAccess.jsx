@@ -130,7 +130,9 @@ export default function QuickAccess({ centered = false, footer = false }) {
       </div>
       <button ref={toggleRef} type="button" className="quick-access__toggle" aria-label={t(open ? 'quickAccess.close' : 'quickAccess.open')} aria-expanded={open} aria-controls="quick-access-rail" onClick={() => setOpen((value) => !value)}>
         {footer ? (
-          <FluidVoiceOrb size={56} active={open} />
+          <FluidVoiceOrb size={56} active={open} variant="purple" />
+        ) : centered ? (
+          <FluidVoiceOrb size={50} active={open} variant="rgb" />
         ) : (
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3.5" y="3.5" width="7" height="7" rx="2" /><rect x="13.5" y="3.5" width="7" height="7" rx="2" /><rect x="3.5" y="13.5" width="7" height="7" rx="2" /><path d="M17 14v6m-3-3h6" />

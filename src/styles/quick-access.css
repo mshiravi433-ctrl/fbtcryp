@@ -144,10 +144,28 @@
 .quick-access--footer .quick-access__toggle:active {
   transform: scale(0.93);
 }
+.quick-access--centered .fluid-voice-orb,
 .quick-access--footer .fluid-voice-orb {
   display: block;
   width: 100%;
   height: 100%;
   border-radius: 50%;
   pointer-events: none;
+}
+
+/* Market desk centered-only circle: 50x50 3D fluid RGB shifting orb */
+.quick-access--centered:not(.quick-access--footer) .quick-access__toggle,
+.quick-access--centered:not(.quick-access--footer).is-open .quick-access__toggle,
+:root[data-theme='light'] .quick-access--centered:not(.quick-access--footer) .quick-access__toggle {
+  overflow: hidden;
+  border: 1.5px solid rgba(168, 132, 255, 0.55);
+  background: radial-gradient(circle at 32% 28%, #1d1035, #0c081a 65%, #060410 100%);
+  box-shadow:
+    0 8px 22px -6px rgba(96, 128, 255, 0.62),
+    0 0 15px -2px rgba(215, 72, 210, 0.4),
+    inset 0 1px 6px rgba(255, 255, 255, 0.2);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.quick-access--centered:not(.quick-access--footer) .quick-access__toggle:active {
+  transform: scale(0.93);
 }
