@@ -546,7 +546,7 @@ export function AppChrome() {
       <Suspense fallback={null}>
         <ScreenshotSharePrompt placement={pathname === '/intent' ? 'top' : headerless || deskChrome || infoChrome || marketChrome ? 'bare' : 'nav'} />
       </Suspense>
-      {!headerless && !uniDock && <Suspense fallback={null}><QuickAccess centered={deskChrome} footer={intelChrome} /></Suspense>}
+      {!headerless && !uniDock && <Suspense fallback={null}><QuickAccess centered={deskChrome || marketChrome} footer={intelChrome} /></Suspense>}
       {!headerless && !deskChrome && !uniDock && !infoChrome && !marketChrome && <BottomNav quickAccessCentre={intelChrome} />}
       {!headerless && uniDock && <Suspense fallback={null}><UniDock hidden={chromeHidden} /></Suspense>}
       {(deskChrome || uniDock || infoChrome || marketChrome) && <MoreSheet open={deskMore} onClose={() => setDeskMore(false)} />}
