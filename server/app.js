@@ -8113,8 +8113,8 @@ async function sendWatchAlert(endpoint, lang, payload) {
 app.get('/api/cron/watch', async (req, res) => {
   if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
   const out = await runWatchCycle(sendWatchAlert);
-  /* The token price/P&L cycle rides the SAME 5-minute GitHub tick as the order
-     watcher — one wire, both features, and the throttle inside
+  /* The token price/P&L cycle rides the SAME 20-minute GitHub backstop as the
+     order watcher — one wire, both features, and the throttle inside
      maybePriceWatchTick keeps it to one run per window. */
   const price = await maybePriceWatchTick({ send: deliverStagePush })
     .catch((e) => ({ error: String(e?.message || e).slice(0, 120) }));

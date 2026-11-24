@@ -1556,12 +1556,12 @@ export default function run() {
      * because nothing on the server ever evaluated them. server/priceWatch.js
      * is that evaluator; these rows keep every link of its chain attached:
      * the registration route, the tick wiring on ALL THREE triggers (the
-     * 5-minute GitHub tick, the public tick, and the daily cron floor), and
+     * 20-minute GitHub backstop, the public tick, and the daily cron floor), and
      * the client mirror that hands it the watchlist under the push identity.
      */
     t('POST /api/price-alerts/watch registers a device price watchlist',
       /app\.post\('\/api\/price-alerts\/watch'/.test(serverCode) && /putPriceWatch\(/.test(serverCode));
-    t('the 5-minute watch cron advances BOTH the order cycle and the price cycle',
+    t('the 20-minute watch cron advances BOTH the order cycle and the price cycle',
       /maybePriceWatchTick\(\{ send: deliverStagePush \}\)/.test(serverCode)
       && /runWatchCycle\(sendWatchAlert\)/.test(serverCode));
     t('the public tick advances BOTH cycles (app-open traffic keeps alerts live)',
@@ -5251,18 +5251,17 @@ export default function run() {
       /nextRunAt/.test(srvCode) && /intervalMs/.test(srvCode) && /runsLeft/.test(srvCode));
   }
 
-  /* ---- 52b. clock-driven alerts reach the phone ON TIME ----------------- */
+  /* ---- 52b. clock-driven alerts reach the phone on the intended cadence -- */
   /*
-   * The bug this locks down has nothing to do with the sender: the alerts were
-   * correct and up to twenty-four hours late. On this hosting plan the only
-   * cron that could advance the watcher fires once a day, so a DCA run due at
-   * 09:00 was announced whenever the next daily run happened — by which time
-   * the user had stopped expecting it.
+   * The sender is not enough: alerts need both a scheduled backstop and the
+   * public, app-driven tick. The Hobby plan's daily cron remains the floor,
+   * while the GitHub workflow is scheduled every twenty minutes (best-effort)
+   * when the site is quiet. Ordinary app traffic advances the watcher sooner.
    *
    * The fix is three layers, and a layer that is described in a comment but
    * missing from the code is exactly the failure this audit exists to catch:
    *
-   *   1. a GitHub Actions schedule every five minutes → /api/cron/watch;
+   *   1. a GitHub Actions schedule every twenty minutes → /api/cron/watch;
    *   2. /api/cron/tick — public, throttled, fired by the app on open and on
    *      an interval, so ordinary traffic advances the clock;
    *   3. the daily cron, unchanged, as the floor.
@@ -5279,8 +5278,8 @@ export default function run() {
     const workflowPath = '.github/workflows/order-watch-tick.yml';
     t('a scheduled workflow asks the server to tick', existsSync(workflowPath));
     const workflow = existsSync(workflowPath) ? read(workflowPath) : '';
-    t('...every five minutes (the frequency a Hobby cron cannot provide)',
-      /\*\/5 \* \* \* \*/.test(workflow));
+    t('...every twenty minutes (the low-traffic backstop cadence)',
+      /\*\/20 \* \* \* \*/.test(workflow));
     t('...against the real watch endpoint, authenticated',
       /api\/cron\/watch/.test(workflow) && /x-cron-secret/.test(workflow) && /CRON_SECRET/.test(workflow));
     t('...and it does not silently no-op when the secret is missing',

@@ -458,7 +458,7 @@ export default function Perp() {
   const [walletOpen, setWalletOpen] = useState(false);
 
   /*
-   * ─── THE VENUE FEEDS (three reads, refreshed every 30s) ──────────────────
+   * ─── THE VENUE FEEDS (three reads, refreshed every 60s) ──────────────────
    *   «بیشتر جفت توکن ها اصلا نمیشه معامله کرد … باید داخل اپ خودمون انجام شود»
    *
    * This used to read ONE venue — Velocity, four markets — and call every other
@@ -478,16 +478,14 @@ export default function Perp() {
     let alive = true;
     /*
      * ─── POLLING A SCREEN NOBODY IS LOOKING AT ────────────────────────────
-     * This was `setInterval(load, 30_000)`. Three upstreams, twice a minute,
-     * for as long as the component was mounted — including the whole time the
-     * tab sat in the background, which on this app is most of the time. Each
-     * tick is three serverless invocations against three venues that answer
-     * nobody: 8,640 reads a day per open tab, before the ticket's own polls.
+     * This used to run `setInterval(load, 30_000)`: three venue reads every
+     * 30 seconds (six requests a minute), for as long as the component was
+     * mounted, including a hidden tab. The catalogue is reference data, not
+     * the signed order price, so one refresh a minute halves visible requests.
      *
-     * `pollWhileVisible` is the house fix (lib/visibilityPoll.js): a hidden tab
-     * skips the tick entirely, and coming back runs it immediately, so the
-     * first thing a returning user sees is fresh data rather than a 30-second-
-     * old price. The cadence while visible is unchanged.
+     * `pollWhileVisible` (lib/visibilityPoll.js) skips hidden-tab ticks and
+     * reads immediately on return. The user sees fresh venue data when they
+     * come back, while orders retain their venue-level checks.
      */
     const load = async () => {
       const [v, o, d] = await Promise.allSettled([
@@ -505,7 +503,7 @@ export default function Perp() {
         dydxLoaded: cur.dydxLoaded || Boolean(dydxRows)
       }));
     };
-    const off = pollWhileVisible(load, 30_000);
+    const off = pollWhileVisible(load, 60_000);
     load();
     return () => { alive = false; off(); };
   }, []);

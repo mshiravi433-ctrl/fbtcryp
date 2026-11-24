@@ -42,14 +42,13 @@ const tone = (s) => ({ Completed: 'good', Running: 'live', Failed: 'bad', 'Waiti
  * function invocation billed as Fluid Active CPU. That is the shape of the
  * 2026-11-10 free-tier block (`fluidCpuDuration`, 103% of 4 h).
  *
- * 30 s changes nothing a person can perceive: a mission moves through Pending →
- * Planning → Running on the scale of minutes, and the same tab still refreshes
- * IMMEDIATELY when it is brought back to the foreground (the
- * `visibilitychange` listener below), which is when someone is actually
- * looking. Cost at 30 s: 10 requests a minute, a 6× cut, with a fresher
- * first paint than the old timer gave a returning user.
+ * 60 s is still fresher than the state transitions (minutes), while halving
+ * the remaining request rate. The same tab refreshes IMMEDIATELY when brought
+ * back to the foreground (`visibilitychange` below), and user actions refresh
+ * explicitly, so this only slows passive polling. Cost at 60 s: five requests
+ * per minute instead of ten, with no wait after a return or interaction.
  */
-const MISSION_POLL_MS = 30_000;
+const MISSION_POLL_MS = 60_000;
 
 export default function MissionControl() {
   const navigate = useNavigate(); const { i18n } = useTranslation();

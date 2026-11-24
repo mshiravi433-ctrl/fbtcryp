@@ -20,10 +20,11 @@ export const SOLANA_LENDING_EXPLORER = 'https://solscan.io';
  * How long the BROWSER door gets before our own backend is asked as well.
  *
  * The same beat `lib/solana/balanceSource.js` uses on the swap screen, for the
- * same reason: on a healthy network the public nodes answer inside it and our
- * server is never loaded, while on a blocked one the user pays 1.2 s instead of
- * a minute of dead round trips. Dropped to zero when the persisted hint says
- * this network path's public nodes all refuse (see `serverDoorDelayMs`).
+ * same reason: a quick healthy browser answer wins without invoking our server;
+ * if the read is still unresolved, the backend starts in parallel so a blocked
+ * path need not walk every public timeout first. Dropped to zero when the
+ * persisted hint says this network path's public nodes all refuse
+ * (see `serverDoorDelayMs`).
  */
 export const SERVER_DOOR_DELAY_MS = 1200;
 
@@ -1282,20 +1283,26 @@ async function readSolanaLendingMarketOnce({ wallet = null, rpcUrl = null, allow
     (snapshot) => ({ ok: true, snapshot, via: 'browser' }),
     (cause) => ({ ok: false, via: 'browser', cause: cause instanceof Error ? cause : new Error(String(cause?.message || cause || 'PROTOCOL_UNAVAILABLE')) })
   );
-  const server = delay(delayMs).then(() => readSolanaLendingMarketViaServer({ wallet, fresh })).then(
-    (answer) => (answer?.ok
-      ? { ok: true, snapshot: answer.snapshot, via: 'server' }
-      : { ok: false, via: 'server', code: answer?.code || 'SERVER_UNAVAILABLE', detail: answer?.detail || null, status: answer?.status ?? null }),
-    (cause) => ({ ok: false, via: 'server', code: 'SERVER_UNAVAILABLE', detail: String(cause?.message || cause || '').slice(0, 160) })
-  );
+  const { primary: browserDoor, fallback: server } = delayedFallback(browser, {
+    delayMs,
+    /* A successful market is enough unless the wallet's obligation/balances
+       are still unknown. In that case the server can improve the account read. */
+    shouldRunFallback: (result) => solanaLendingMarketNeedsServerFallback(result, { wallet }),
+    runFallback: () => readSolanaLendingMarketViaServer({ wallet, fresh }).then(
+      (answer) => (answer?.ok
+        ? { ok: true, snapshot: answer.snapshot, via: 'server' }
+        : { ok: false, via: 'server', code: answer?.code || 'SERVER_UNAVAILABLE', detail: answer?.detail || null, status: answer?.status ?? null }),
+      (cause) => ({ ok: false, via: 'server', code: 'SERVER_UNAVAILABLE', detail: String(cause?.message || cause || '').slice(0, 160) })
+    )
+  });
 
-  const winner = await firstDoorOk([browser, server]);
+  const winner = await firstDoorOk([browserDoor, server]);
   if (winner?.ok) {
     /* The market arrived, but did the WALLET? A browser door that read the
        reserves and then had its obligation/balance read refused would show a
-       connected user «—» and «could not read your position» — while our server,
-       already in flight, may be about to answer both. Give it a short grace and
-       take its snapshot when it knows more about this wallet. */
+       connected user «—» and «could not read your position». Keep the server
+       door eligible in this case (it may still be waiting on its short delay),
+       give it a brief grace, and take its snapshot when it knows more. */
     if (wallet && winner.via === 'browser' && walletReadIncomplete(winner.snapshot)) {
       const late = await Promise.race([server, delay(walletReadGraceMs).then(() => null)]);
       if (late?.ok && !walletReadIncomplete(late.snapshot)) return { ...late.snapshot, via: 'server' };
@@ -1308,7 +1315,7 @@ async function readSolanaLendingMarketOnce({ wallet = null, rpcUrl = null, allow
      to enter their own RPC — with the server's own verdict attached so the
      panel can say «our server was asked too, and it said …» instead of leaving
      the second door invisible. */
-  const [browserResult, serverResult] = await Promise.all([browser, server]);
+  const [browserResult, serverResult] = await Promise.all([browserDoor, server]);
   if (browserResult?.ok) return { ...browserResult.snapshot, via: 'browser' };
   const failure = browserResult?.cause || new Error('PROTOCOL_UNAVAILABLE');
   failure.serverTried = true;
@@ -1325,6 +1332,11 @@ export function walletReadIncomplete(snapshot) {
   const account = snapshot?.account;
   if (!account) return false;
   return Boolean(account.unknown || account.balancesUnknown);
+}
+
+/** A completed market still needs the server when this wallet's reads are incomplete. */
+export function solanaLendingMarketNeedsServerFallback(result, { wallet = null } = {}) {
+  return !result?.ok || Boolean(wallet && walletReadIncomplete(result.snapshot));
 }
 
 /** A timer that never keeps the process alive, and never throws. */
@@ -1349,11 +1361,60 @@ async function serverDoorDelayMs() {
 }
 
 /**
- * Resolve with the FIRST door that answers `ok`, then let the loser finish in
- * the background (its result is dropped). Both doors are always started, so
- * there is nothing to cancel — and an abandoned server read is our bill, which
- * is why the second door is delayed rather than fired unconditionally.
+ * Delay the server door long enough for a healthy browser read to win, but do
+ * not start it at all when that read has already answered completely. The old
+ * race always sent the delayed request, even after the browser had returned a
+ * live market; that needlessly invoked the heavy server-side Kamino SDK and its
+ * Solana upstreams on the healthy path. Once the fallback has started it is
+ * deliberately not cancelled — it may be the only usable answer.
+ *
+ * `shouldRunFallback` also keeps the wallet-incomplete case: a browser may have
+ * read the shared market but failed to read this wallet's obligation.
  */
+export function delayedFallback(primary, {
+  delayMs = SERVER_DOOR_DELAY_MS,
+  shouldRunFallback = (result) => !result?.ok,
+  runFallback
+} = {}) {
+  if (typeof runFallback !== 'function') throw new TypeError('runFallback must be a function');
+
+  const primaryPromise = Promise.resolve(primary);
+  let primarySettled = false;
+  let primaryResult;
+  let fallbackStarted = false;
+  let resolveFallback;
+  const needsFallback = (result) => {
+    try { return Boolean(shouldRunFallback(result)); } catch { return true; }
+  };
+
+  const fallbackPromise = new Promise((resolve, reject) => {
+    resolveFallback = resolve;
+    const timer = setTimeout(() => {
+      if (primarySettled && !needsFallback(primaryResult)) {
+        resolve({ ok: false, skipped: true });
+        return;
+      }
+      fallbackStarted = true;
+      Promise.resolve().then(runFallback).then(resolve, reject);
+    }, Math.max(0, Number(delayMs) || 0));
+
+    primaryPromise.then((result) => {
+      primarySettled = true;
+      primaryResult = result;
+      if (!fallbackStarted && !needsFallback(result)) {
+        clearTimeout(timer);
+        resolveFallback({ ok: false, skipped: true });
+      }
+    }, () => {
+      /* A rejected primary still gets the fallback when the timer expires. */
+      primarySettled = true;
+    });
+  });
+
+  return { primary: primaryPromise, fallback: fallbackPromise };
+}
+
+/** Resolve with the FIRST door that answers `ok`; the other read may continue. */
 function firstDoorOk(attempts) {
   return new Promise((resolve) => {
     if (!attempts.length) { resolve(null); return; }
@@ -1566,16 +1627,18 @@ export async function buildSolanaLendingTransactions({ action, asset, amount, wa
       result: { ok: false, via: 'browser', code: String(cause?.code || cause?.message || 'KAMINO_TX_BUILD_FAILED'), detail: String(cause?.message || cause || '').slice(0, 160) }
     })
   );
-  const server = delay(delayMs)
-    .then(() => buildSolanaLendingTransactionsViaServer({ action, asset, amount, wallet }))
-    .then(
+  const { primary: browserDoor, fallback: server } = delayedFallback(browser, {
+    delayMs,
+    shouldRunFallback: (result) => !result?.ok,
+    runFallback: () => buildSolanaLendingTransactionsViaServer({ action, asset, amount, wallet }).then(
       (result) => ({ ok: Boolean(result?.ok), result: { ...result, via: 'server' } }),
       (cause) => ({ ok: false, result: { ok: false, via: 'server', code: 'SERVER_UNAVAILABLE', detail: String(cause?.message || cause || '').slice(0, 160) } })
-    );
+    )
+  });
 
-  const winner = await firstDoorOk([browser, server]);
+  const winner = await firstDoorOk([browserDoor, server]);
   if (winner?.result) return winner.result;
-  const [browserAnswer, serverAnswer] = await Promise.all([browser, server]);
+  const [browserAnswer, serverAnswer] = await Promise.all([browserDoor, server]);
   const base = browserAnswer?.result || { ok: false, code: 'KAMINO_TX_BUILD_FAILED' };
   /* The browser door's verdict is reported (it is the one the panel already
      has sentences for), with the second door's own code attached so support can
@@ -1720,13 +1783,17 @@ export async function getSolanaLendingTransactionStatus(signature, { rpcUrl = nu
     (result) => ({ ok: !isTransport(result), result: { ...result, via: 'browser' } }),
     (cause) => ({ ok: true, result: { ok: false, via: 'browser', code: String(cause?.code || 'RPC_ERROR'), detail: String(cause?.message || cause || '').slice(0, 160) } })
   );
-  const server = delay(delayMs).then(() => getSolanaLendingTransactionStatusViaServer(signature)).then(
-    (result) => ({ ok: Boolean(result?.ok) || !isTransport(result), result: { ...result, via: 'server' } }),
-    () => ({ ok: false, result: { ok: false, via: 'server', code: 'SERVER_UNAVAILABLE' } })
-  );
-  const winner = await firstDoorOk([browser, server]);
+  const { primary: browserDoor, fallback: server } = delayedFallback(browser, {
+    delayMs,
+    shouldRunFallback: (result) => !result?.ok,
+    runFallback: () => getSolanaLendingTransactionStatusViaServer(signature).then(
+      (result) => ({ ok: Boolean(result?.ok) || !isTransport(result), result: { ...result, via: 'server' } }),
+      () => ({ ok: false, result: { ok: false, via: 'server', code: 'SERVER_UNAVAILABLE' } })
+    )
+  });
+  const winner = await firstDoorOk([browserDoor, server]);
   if (winner?.result) return winner.result;
-  const [browserAnswer, serverAnswer] = await Promise.all([browser, server]);
+  const [browserAnswer, serverAnswer] = await Promise.all([browserDoor, server]);
   return { ...(browserAnswer?.result || { ok: false, code: 'RPC_ERROR' }), serverCode: serverAnswer?.result?.code || null };
 }
 
