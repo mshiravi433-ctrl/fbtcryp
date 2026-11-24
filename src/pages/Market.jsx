@@ -33,9 +33,7 @@ import MarketTabStrip from '../components/market/MarketTabStrip';
 import MarketColumnHeader from '../components/market/MarketColumnHeader';
 import MarketCriteriaRow from '../components/market/MarketCriteriaRow';
 import MarketHeatmap from '../components/market/MarketHeatmap';
-import MarketCapitalPulse from '../components/market/MarketCapitalPulse';
-import MarketDefiIntel from '../components/market/MarketDefiIntel';
-import MarketFbtNetworks from '../components/market/MarketFbtNetworks';
+import MarketIntelRail from '../components/market/MarketIntelRail';
 import { revealMarketTabStart, useMarketTab } from '../hooks/useMarketTab';
 import { useMarketCategory } from '../hooks/useMarketCategory';
 import { useMarketOverviewIntel } from '../hooks/useMarketOverviewIntel';
@@ -97,6 +95,7 @@ import '../styles/market-benchmark.css';
  * must still lose to the stop policy that decides what may move.
  */
 import '../styles/market-refine.css';
+import '../styles/market-2026-redesign.css';
 /*
  * ─── THE SCROLL BUDGET, LAST ──────────────────────────────────────────────
  * The five sheets above are the design layers (one per pass, each with its
@@ -1016,17 +1015,12 @@ export default function Market() {
 
               <MarketHeatmap coins={coins} vs={vs} />
 
-              <MarketCapitalPulse coins={coins} global={global} vs={vs} />
-
-              <MarketDefiIntel
-                defi={overviewIntel.defi}
+              <MarketIntelRail
+                coins={coins}
                 global={global}
-                loading={overviewIntel.loading}
-                offline={overviewIntel.offline}
-                onRefresh={overviewIntel.refresh}
+                vs={vs}
+                overviewIntel={overviewIntel}
               />
-
-              <MarketFbtNetworks swapNetworks={overviewIntel.swapNetworks} />
 
               <SmartMoneyBanner />
               </>
