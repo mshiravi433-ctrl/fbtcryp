@@ -468,6 +468,9 @@ export function AppChrome() {
   // The three intel screens keep the footer, replacing only its AI button
   // with a centered Quick Access launcher; the side rail is removed there.
   const intelChrome = ['smart-money', 'news', 'global'].includes(section);
+  // Market home (`/`) hides the bottom footer menu, moves More into the header
+  // (replacing the social icon), and hides the header on scroll down.
+  const marketChrome = pathname === '/';
   // These information screens have no footer and expose More in the header.
   const infoChrome = [
     'explore-hub', 'explore', 'discover',
@@ -486,7 +489,7 @@ export function AppChrome() {
    * بالا هیدر بیاد» — the intel and info pages join the uniDock group in
    * this behaviour.
    */
-  const chromeHidden = useHideOnScroll({ enabled: uniDock || intelChrome || infoChrome, locked: deskMore });
+  const chromeHidden = useHideOnScroll({ enabled: uniDock || intelChrome || infoChrome || marketChrome, locked: deskMore });
   /*
    * FARM IS THE EXCEPTION — «در فارم هیدر به بالا بچسبه و حرکت نکنه با
    * اسکرول»: the Farm header sticks to the top and never moves with the
@@ -527,8 +530,8 @@ export function AppChrome() {
   }, [pathname]);
 
   return (
-    <div className={`app-shell${deskChrome ? ' app-shell--market-desk' : ''}${futuresChrome ? ' app-shell--futures' : ''}${stocksChrome ? ' app-shell--stocks' : ''}${headerless ? ' app-shell--headerless' : ''}${wide ? ' app-shell--wide' : ''}${pathname === '/shop' ? ' app-shell--shop' : ''}${dockActive ? ' app-shell--dock-active' : ''}${uniDock ? ' app-shell--uni-dock' : ''}${intelChrome ? ' app-shell--intel' : ''}${infoChrome ? ' app-shell--info' : ''}`}>
-      {!headerless && <Header moreOpen={deskMore} chromeHidden={headerHidden} onOpenMore={deskChrome || uniDock || infoChrome ? () => setDeskMore((open) => !open) : undefined} />}
+    <div className={`app-shell${deskChrome ? ' app-shell--market-desk' : ''}${marketChrome ? ' app-shell--market-home' : ''}${futuresChrome ? ' app-shell--futures' : ''}${stocksChrome ? ' app-shell--stocks' : ''}${headerless ? ' app-shell--headerless' : ''}${wide ? ' app-shell--wide' : ''}${pathname === '/shop' ? ' app-shell--shop' : ''}${dockActive ? ' app-shell--dock-active' : ''}${uniDock ? ' app-shell--uni-dock' : ''}${intelChrome ? ' app-shell--intel' : ''}${infoChrome ? ' app-shell--info' : ''}`}>
+      {!headerless && <Header moreOpen={deskMore} chromeHidden={headerHidden} onOpenMore={deskChrome || uniDock || infoChrome || marketChrome ? () => setDeskMore((open) => !open) : undefined} />}
       <PullToRefresh>
         <SwipeTabRoutes />
       </PullToRefresh>
@@ -541,12 +544,12 @@ export function AppChrome() {
         own tab bar owns the bottom.
       */}
       <Suspense fallback={null}>
-        <ScreenshotSharePrompt placement={pathname === '/intent' ? 'top' : headerless || deskChrome || infoChrome ? 'bare' : 'nav'} />
+        <ScreenshotSharePrompt placement={pathname === '/intent' ? 'top' : headerless || deskChrome || infoChrome || marketChrome ? 'bare' : 'nav'} />
       </Suspense>
       {!headerless && !uniDock && <Suspense fallback={null}><QuickAccess centered={deskChrome} footer={intelChrome} /></Suspense>}
-      {!headerless && !deskChrome && !uniDock && !infoChrome && <BottomNav quickAccessCentre={intelChrome} />}
+      {!headerless && !deskChrome && !uniDock && !infoChrome && !marketChrome && <BottomNav quickAccessCentre={intelChrome} />}
       {!headerless && uniDock && <Suspense fallback={null}><UniDock hidden={chromeHidden} /></Suspense>}
-      {(deskChrome || uniDock || infoChrome) && <MoreSheet open={deskMore} onClose={() => setDeskMore(false)} />}
+      {(deskChrome || uniDock || infoChrome || marketChrome) && <MoreSheet open={deskMore} onClose={() => setDeskMore(false)} />}
     </div>
   );
 }
