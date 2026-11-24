@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
 import { MARKET_TABS, nextMarketTab } from '../../lib/marketTabs.js';
 import { MarketPaneGlyph } from './MarketGlyphs.jsx';
-import { IconSparkle, IconSwap } from '../Icons.jsx';
-import useHideOnScroll from '../../hooks/useHideOnScroll.js';
 
 /**
  * «مرور / توکن» — THE TWO TABS OF THE MARKET SCREEN.
@@ -34,8 +31,6 @@ import useHideOnScroll from '../../hooks/useHideOnScroll.js';
  */
 export default function MarketTabStrip({ active, onChange, overviewId, tokensId }) {
   const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
-  const shortcutsHidden = useHideOnScroll({ enabled: true });
   const listRef = useRef(null);
   const wrapRef = useRef(null);
 
@@ -158,38 +153,6 @@ export default function MarketTabStrip({ active, onChange, overviewId, tokensId 
             </button>
           );
         })}
-      </div>
-
-      <div
-        className={`mx-tab-shortcuts${shortcutsHidden ? ' is-hidden' : ''}`}
-        role="navigation"
-        aria-label={t('nav.mainNav')}
-      >
-        <button
-          type="button"
-          className="mx-tab-shortcut mx-tab-shortcut--swap"
-          onClick={() => navigate('/swap')}
-          aria-label={t('nav.swap')}
-          title={t('nav.swap')}
-        >
-          <span className="mx-tab-shortcut-ico" aria-hidden="true">
-            <IconSwap width={16} height={16} />
-          </span>
-          <span className="mx-tab-shortcut-lbl">{t('nav.swap')}</span>
-        </button>
-
-        <button
-          type="button"
-          className="mx-tab-shortcut mx-tab-shortcut--ai"
-          onClick={() => navigate('/intent')}
-          aria-label={t('nav.intentOS')}
-          title={t('nav.intentOS')}
-        >
-          <span className="mx-tab-shortcut-ico" aria-hidden="true">
-            <IconSparkle width={16} height={16} />
-          </span>
-          <span className="mx-tab-shortcut-lbl">{t('nav.intentOS')}</span>
-        </button>
       </div>
     </div>
   );
