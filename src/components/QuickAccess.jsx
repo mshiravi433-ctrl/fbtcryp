@@ -10,6 +10,7 @@ import {
   IconSearch, IconSettings, IconShield, IconSmartMoney, IconSwap, IconTrend,
   IconTrophy, IconWallet, IconWorld, IconX
 } from './Icons';
+import FluidVoiceOrb from './FluidVoiceOrb';
 import '../styles/quick-access.css';
 
 // The first destination in each family is its home. On a related page it
@@ -128,9 +129,13 @@ export default function QuickAccess({ centered = false, footer = false }) {
         </nav>
       </div>
       <button ref={toggleRef} type="button" className="quick-access__toggle" aria-label={t(open ? 'quickAccess.close' : 'quickAccess.open')} aria-expanded={open} aria-controls="quick-access-rail" onClick={() => setOpen((value) => !value)}>
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3.5" y="3.5" width="7" height="7" rx="2" /><rect x="13.5" y="3.5" width="7" height="7" rx="2" /><rect x="3.5" y="13.5" width="7" height="7" rx="2" /><path d="M17 14v6m-3-3h6" />
-        </svg>
+        {footer ? (
+          <FluidVoiceOrb size={56} active={open} />
+        ) : (
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3.5" y="3.5" width="7" height="7" rx="2" /><rect x="13.5" y="3.5" width="7" height="7" rx="2" /><rect x="3.5" y="13.5" width="7" height="7" rx="2" /><path d="M17 14v6m-3-3h6" />
+          </svg>
+        )}
       </button>
     </aside>, document.body
   );
