@@ -24,14 +24,18 @@
  *      looking for a better RPC when the honest remedy is the other door;
  *   5. a transaction built by the server door arrives in the SAME shape the
  *      wallet layer already signs: `{ id, transaction, versioned }`, per
- *      transaction, with the version the builder reported and not an assumed one.
+ *      transaction, with the version the builder reported and not an assumed one;
+ *   6. a complete browser answer cancels the still-pending server door, while a
+ *      blocked or wallet-incomplete read keeps the fallback.
  */
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   readSolanaLendingMarket,
   buildSolanaLendingTransactions,
+  delayedFallback,
+  solanaLendingMarketNeedsServerFallback,
   lendingRpcFailure
 } from '../src/lib/solanaLending.js';
 import {
@@ -183,6 +187,82 @@ describe('the second door answers when the first one cannot', () => {
     expect(answer.ok).toBe(false);
     expect(answer.code).toBe('KAMINO_MARKET_UNAVAILABLE');
     expect(answer.hosts).toHaveLength(1);
+  });
+});
+
+describe('the delayed server door does not run after a complete browser answer', () => {
+  it('skips the market request when the browser returns a complete wallet snapshot before the delay', async () => {
+    vi.useFakeTimers();
+    try {
+      const wallet = '11111111111111111111111111111111';
+      const calls = { market: 0 };
+      const runFallback = vi.fn(async () => {
+        calls.market += 1;
+        return { ok: true, via: 'server' };
+      });
+      const doors = delayedFallback(Promise.resolve({ ok: true, snapshot: SERVER_SNAPSHOT }), {
+        delayMs: 1200,
+        shouldRunFallback: (result) => solanaLendingMarketNeedsServerFallback(result, { wallet }),
+        runFallback
+      });
+
+      await expect(doors.primary).resolves.toMatchObject({ ok: true });
+      await expect(doors.fallback).resolves.toMatchObject({ ok: false, skipped: true });
+      await vi.advanceTimersByTimeAsync(1200);
+      expect(runFallback).not.toHaveBeenCalled();
+      expect(calls.market).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still starts the server read after the delay when the browser fails', async () => {
+    vi.useFakeTimers();
+    try {
+      const runFallback = vi.fn(async () => ({ ok: true, via: 'server' }));
+      const doors = delayedFallback(Promise.resolve({ ok: false, code: 'RPC_ERROR' }), {
+        delayMs: 1200,
+        shouldRunFallback: (result) => !result?.ok,
+        runFallback
+      });
+
+      await doors.primary;
+      expect(runFallback).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1200);
+      await expect(doors.fallback).resolves.toMatchObject({ ok: true, via: 'server' });
+      expect(runFallback).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the fallback when the market answered but this wallet snapshot is incomplete', async () => {
+    vi.useFakeTimers();
+    try {
+      const wallet = '11111111111111111111111111111111';
+      const calls = { market: 0 };
+      const runFallback = vi.fn(async () => {
+        calls.market += 1;
+        return { ok: true, via: 'server' };
+      });
+      const incomplete = {
+        ...SERVER_SNAPSHOT,
+        account: { ...SERVER_SNAPSHOT.account, unknown: true }
+      };
+      const doors = delayedFallback(Promise.resolve({ ok: true, snapshot: incomplete }), {
+        delayMs: 1200,
+        shouldRunFallback: (result) => solanaLendingMarketNeedsServerFallback(result, { wallet }),
+        runFallback
+      });
+
+      await doors.primary;
+      await vi.advanceTimersByTimeAsync(1200);
+      await expect(doors.fallback).resolves.toMatchObject({ ok: true, via: 'server' });
+      expect(runFallback).toHaveBeenCalledOnce();
+      expect(calls.market).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

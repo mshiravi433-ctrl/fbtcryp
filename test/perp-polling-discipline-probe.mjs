@@ -97,8 +97,35 @@ test('the perpetual page does not poll a hidden tab', () => {
   assert.equal(/setInterval\s*\(/.test(live), false, 'Perp.jsx must use pollWhileVisible, not a raw interval');
   assert.ok(/pollWhileVisible\s*\(/.test(live), 'Perp.jsx should gate its poll on visibility');
   /* …and it must still actually poll: a "fix" that stops refreshing is worse
-     than the bug. The cadence is part of the product, the gate is the fix. */
-  assert.ok(/pollWhileVisible\(load,\s*30_000\)/.test(live), 'the 30s cadence is unchanged');
+     than the bug. The one-minute cadence is intentional; returning to the tab
+     still runs an immediate read through pollWhileVisible. */
+  assert.ok(/pollWhileVisible\(load,\s*60_000\)/.test(live), 'the venue list refreshes once a minute');
+});
+
+test('the terminal keeps read-only venue polling bounded on the serverless API', () => {
+  const src = readFileSync(join(ROOT, 'src/components/perp-terminal/PerpTerminalPane.jsx'), 'utf8');
+  const live = src.split('\n').filter((l) => !/^\s*\*|\/\//.test(l)).join('\n');
+  assert.match(live, /const MARKET_POLL_MS = 60_000;/);
+  assert.match(live, /const BOOK_POLL_MS = 5_000;/, 'keep the trading order book fresh');
+  assert.match(live, /const TAPE_POLL_MS = 5_000;/, 'keep the active trade tape fresh');
+  assert.match(live, /const ACCOUNT_POLL_MS = 15_000;/, 'keep wallet state reasonably fresh');
+  assert.match(live, /pollWhileVisible\(load, interval\)/, 'shared terminal polling pauses in hidden tabs');
+  assert.match(live, /startTerminalPoll\(load, MARKET_POLL_MS\)/);
+  assert.match(live, /useTerminalFeed\(tab === 'book' \? publicTicker : null, getDydxOrderbook, BOOK_POLL_MS/);
+  assert.match(live, /useTerminalFeed\(tab === 'tape' \? publicTicker : null, readTape, TAPE_POLL_MS/);
+});
+
+test('futures position reads are paced, with immediate post-close refresh preserved', () => {
+  const src = readFileSync(join(ROOT, 'src/components/FuturesPositionsCard.jsx'), 'utf8');
+  assert.match(src, /pollWhileVisible\(refresh, 10_000\)/, 'keep visible position updates responsive');
+  assert.match(src, /setTimeout\(\(\) => \{ refresh\(\); \}, 1200\)/);
+});
+
+test('Mission Control passive refresh is one minute; foreground and user actions still refresh', () => {
+  const src = readFileSync(join(ROOT, 'src/components/MissionControl.jsx'), 'utf8');
+  assert.match(src, /const MISSION_POLL_MS = 60_000;/);
+  assert.match(src, /const onVisible = \(\) => \{ if \(document\.visibilityState === 'visible'\) load\(\); \}/);
+  assert.match(src, /await refresh\(\)/);
 });
 
 /**

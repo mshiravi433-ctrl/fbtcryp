@@ -588,7 +588,7 @@ const TICK_KEY = 'orders:watch:lastTick';
  * to come from somewhere else. It comes from three places, in this order of
  * reliability:
  *
- *   1. A GitHub Actions schedule every five minutes hitting /api/cron/watch
+ *   1. A GitHub Actions schedule every twenty minutes hitting /api/cron/watch
  *      with the cron secret (see .github/workflows/order-watch-tick.yml).
  *      Runs whether or not anybody has the app open.
  *   2. THIS FUNCTION: any request the app already makes can advance the cycle,

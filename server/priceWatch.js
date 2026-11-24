@@ -15,8 +15,8 @@
  * alerts arrive on a locked phone. There was nothing to send.
  *
  * This module is the server twin of src/lib/priceAlerts.js, evaluated on the
- * SAME throttled tick as the order watcher (every app open, the 5-minute
- * GitHub tick, and the daily cron floor) and delivered through the SAME
+ * SAME throttled tick as the order watcher (every app open, the 20-minute
+ * GitHub backstop, and the daily cron floor) and delivered through the SAME
  * transport (`send` → deliverStagePush → FCM for the APK, VAPID for the web).
  * The cards are identical on every surface because they come from the same
  * design system (src/lib/notificationDesign.js) with the same tags
@@ -448,8 +448,8 @@ export async function runPriceWatchCycle(send, now = Date.now(), deps = {}) {
 /**
  * How often the price cycle may be advanced by ANY trigger. Same reasoning as
  * server/watch.js's WATCH_TICK_MIN_MS: Vercel's plan forbids sub-daily crons,
- * so frequency comes from the 5-minute GitHub tick and ordinary traffic, and
- * this window is what keeps that bounded.
+ * so frequency comes from the 20-minute GitHub backstop and ordinary traffic,
+ * and this window is what keeps that bounded.
  */
 export const PRICE_WATCH_TICK_MIN_MS = Math.max(60_000, Number(process.env.PRICE_WATCH_TICK_MIN_MS || 240_000));
 

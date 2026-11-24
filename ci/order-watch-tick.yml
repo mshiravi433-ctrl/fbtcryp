@@ -36,11 +36,9 @@
 # an order that comes due while somebody is using the site is announced
 # immediately. This schedule is the backstop for a quiet site.
 #
-# THE CHANGE MUST BE APPLIED BY HAND: the workflow in .github/workflows/ still
-# says `*/5 * * * *` because a commit from an automated agent cannot touch that
-# directory. Copy this file over it (repo → .github/workflows/order-watch-tick.yml
-# → Edit → paste) — it is the one saving in the free-tier fix a commit cannot
-# deliver by itself.
+# The active workflow in .github/workflows/order-watch-tick.yml runs every
+# twenty minutes. This is the review mirror; update both files if the cadence
+# changes.
 #
 # ============================================================================
 name: Order watch tick

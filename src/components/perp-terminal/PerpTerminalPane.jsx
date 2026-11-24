@@ -64,7 +64,11 @@ import {
   getDydxOrderbook, getDydxTrades, getDydx24hRange, getDydxFundingHistory, connectDydx, disconnectDydx, classifyDydxError
 } from '../../lib/dydx';
 
-const MARKET_POLL_MS = 30_000;
+/* Market lists are slowly changing reference data. Keep the active book,
+   tape and wallet/account refreshes at their existing short cadences; order
+   submission still performs current venue checks. Every loop is visibility-
+   gated so a background tab remains idle. */
+const MARKET_POLL_MS = 60_000;
 const BOOK_POLL_MS = 5_000;
 const TAPE_POLL_MS = 5_000;
 const readTape = (ticker) => getDydxTrades(ticker, 40);
