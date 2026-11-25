@@ -8,10 +8,11 @@ const STACK_CARDS = [
     to: '/loan',
     image: '/images/market-stack/loan.jpg',
     accent: '#f59e0b',
+    edge: '#d97706',
     copy: {
-      fa: { tag: 'اعتبار آنی', title: 'وام کریپتویی', sub: 'وثیقه‌گذاری هوشمند با نرخ شفاف' },
-      ar: { tag: 'ائتمان فوري', title: 'قروض الكريبتو', sub: 'ضمان ذكي بشروط شفافة' },
-      en: { tag: 'Instant Credit', title: 'Crypto Loans', sub: 'Smart collateral with transparent rates' }
+      fa: { tag: 'اعتبار آنی', title: 'وام کریپتویی', sub: 'وثیقه‌گذاری هوشمند با نرخ شفاف', cta: 'ورود' },
+      ar: { tag: 'ائتمان فوري', title: 'قروض الكريبتو', sub: 'ضمان ذكي بشروط شفافة', cta: 'دخول' },
+      en: { tag: 'Instant Credit', title: 'Crypto Loans', sub: 'Smart collateral, transparent rates', cta: 'Open' }
     }
   },
   {
@@ -19,10 +20,11 @@ const STACK_CARDS = [
     to: '/farm',
     image: '/images/market-stack/farm.jpg',
     accent: '#10b981',
+    edge: '#059669',
     copy: {
-      fa: { tag: 'سود پایدار', title: 'فارم و استخرها', sub: 'بازدهی آن‌چین با مدیریت ریسک' },
-      ar: { tag: 'عائد مستقر', title: 'الفارم والمجمعات', sub: 'عوائد على السلسلة بإدارة ذكية' },
-      en: { tag: 'Live Yield', title: 'Yield Farming', sub: 'On-chain returns with curated risk' }
+      fa: { tag: 'سود پایدار', title: 'فارم و استخرها', sub: 'بازدهی آن‌چین با مدیریت ریسک', cta: 'ورود' },
+      ar: { tag: 'عائد مستقر', title: 'الفارم والمجمعات', sub: 'عوائد على السلسلة بإدارة ذكية', cta: 'دخول' },
+      en: { tag: 'Live Yield', title: 'Yield Farming', sub: 'On-chain returns with curated risk', cta: 'Open' }
     }
   },
   {
@@ -30,10 +32,11 @@ const STACK_CARDS = [
     to: '/smart-money',
     image: '/images/market-stack/whales.jpg',
     accent: '#38bdf8',
+    edge: '#0284c7',
     copy: {
-      fa: { tag: 'پول هوشمند', title: 'ردیابی نهنگ‌ها', sub: 'جریان زنده ورود و خروج سرمایه بزرگ' },
-      ar: { tag: 'الأموال الذكية', title: 'تتبع الحيتان', sub: 'تدفقات السيولة الكبرى لحظياً' },
-      en: { tag: 'Smart Money', title: 'Whale Radar', sub: 'Live institutional inflows & moves' }
+      fa: { tag: 'پول هوشمند', title: 'ردیابی نهنگ‌ها', sub: 'جریان زنده ورود و خروج سرمایه بزرگ', cta: 'ورود' },
+      ar: { tag: 'الأموال الذكية', title: 'تتبع الحيتان', sub: 'تدفقات السيولة الكبرى لحظياً', cta: 'دخول' },
+      en: { tag: 'Smart Money', title: 'Whale Radar', sub: 'Live institutional inflows & moves', cta: 'Open' }
     }
   },
   {
@@ -41,10 +44,11 @@ const STACK_CARDS = [
     to: '/global',
     image: '/images/market-stack/global.jpg',
     accent: '#fb923c',
+    edge: '#ea580c',
     copy: {
-      fa: { tag: 'نقشه کلان', title: 'هوش جهانی', sub: 'نبض بازارهای بین‌المللی در یک نگاه' },
-      ar: { tag: 'نظرة شاملة', title: 'الذكاء العالمي', sub: 'نبض الأسواق العالمية في شاشة واحدة' },
-      en: { tag: 'Macro View', title: 'Global Intel', sub: 'World markets pulse in one console' }
+      fa: { tag: 'نقشه کلان', title: 'هوش جهانی', sub: 'نبض بازارهای بین‌المللی در یک نگاه', cta: 'ورود' },
+      ar: { tag: 'نظرة شاملة', title: 'الذكاء العالمي', sub: 'نبض الأسواق العالمية في شاشة واحدة', cta: 'دخول' },
+      en: { tag: 'Macro View', title: 'Global Intel', sub: 'World markets pulse in one console', cta: 'Open' }
     }
   },
   {
@@ -52,10 +56,11 @@ const STACK_CARDS = [
     to: '/intent',
     image: '/images/market-stack/ai.jpg',
     accent: '#c084fc',
+    edge: '#9333ea',
     copy: {
-      fa: { tag: 'دستیار هوشمند', title: 'هوش مصنوعی FBT', sub: 'تحلیل، تصمیم‌گیری و اجرای مستقیم' },
-      ar: { tag: 'مساعد ذكي', title: 'الذكاء الاصطناعي', sub: 'تحليل واتخاذ قرار وتنفيذ فوري' },
-      en: { tag: 'AI Copilot', title: 'FBT Intelligence', sub: 'Analyze, decide & execute directly' }
+      fa: { tag: 'دستیار هوشمند', title: 'هوش مصنوعی FBT', sub: 'تحلیل، تصمیم‌گیری و اجرای مستقیم', cta: 'ورود' },
+      ar: { tag: 'مساعد ذكي', title: 'الذكاء الاصطناعي', sub: 'تحليل واتخاذ قرار وتنفيذ فوري', cta: 'دخول' },
+      en: { tag: 'AI Copilot', title: 'FBT Intelligence', sub: 'Analyze, decide & execute directly', cta: 'Open' }
     }
   }
 ];
@@ -71,19 +76,19 @@ function MarketStackedHero() {
 
   const lang = String(i18n.resolvedLanguage || i18n.language || 'fa').split('-')[0];
   const locale = lang === 'fa' || lang === 'ar' ? lang : 'en';
+  const rtl = locale === 'fa' || locale === 'ar';
   const total = STACK_CARDS.length;
 
   const next = useCallback(() => setIndex((i) => (i + 1) % total), [total]);
   const prev = useCallback(() => setIndex((i) => (i - 1 + total) % total), [total]);
 
-  // Gentle auto-advance when user isn't dragging
   useEffect(() => {
     if (dragging) return undefined;
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     if (reduced) return undefined;
     const id = window.setInterval(() => {
       if (!document.hidden) setIndex((i) => (i + 1) % total);
-    }, 5200);
+    }, 4600);
     return () => window.clearInterval(id);
   }, [dragging, total]);
 
@@ -105,15 +110,16 @@ function MarketStackedHero() {
   const onPointerEnd = () => {
     if (!dragging) return;
     setDragging(false);
-    if (dragX < -42) next();
-    else if (dragX > 42) prev();
+    if (dragX < -38) next();
+    else if (dragX > 38) prev();
     setDragX(0);
   };
 
-  // Render top 3 visible layers (front, +1, +2)
+  // Side peek direction: peeks out to the logical end edge + slightly down
+  const peekDir = rtl ? -1 : 1;
   const visibleLayers = [2, 1, 0].map((offset) => {
     const cardIdx = (index + offset) % total;
-    return { card: STACK_CARDS[cardIdx], offset, cardIdx };
+    return { card: STACK_CARDS[cardIdx], offset };
   });
 
   return (
@@ -131,13 +137,15 @@ function MarketStackedHero() {
           const style = isFront
             ? {
                 '--stack-accent': card.accent,
-                transform: `translate3d(${dragX}px, 0, 0) rotate(${dragX * 0.025}deg)`,
+                '--stack-edge': card.edge,
+                transform: `translate3d(${dragX}px, 0, 0) rotate(${dragX * 0.03}deg)`,
                 zIndex: 3
               }
             : {
                 '--stack-accent': card.accent,
-                transform: `translate3d(0, ${offset * 9}px, 0) scale(${1 - offset * 0.055})`,
-                opacity: offset === 1 ? 0.72 : 0.4,
+                '--stack-edge': card.edge,
+                transform: `translate3d(${peekDir * offset * 10}px, ${offset * 6}px, 0) scale(${1 - offset * 0.045})`,
+                opacity: offset === 1 ? 0.88 : 0.62,
                 zIndex: 3 - offset
               };
 
@@ -168,6 +176,8 @@ function MarketStackedHero() {
                 draggable="false"
               />
               <span className="mx-stack-scrim" aria-hidden="true" />
+              {isFront && <span className="mx-stack-sheen" aria-hidden="true" />}
+
               <div className="mx-stack-content">
                 <span className="mx-stack-tag">
                   <i aria-hidden="true" />
@@ -176,24 +186,17 @@ function MarketStackedHero() {
                 <h2 className="mx-stack-title">{text.title}</h2>
                 <p className="mx-stack-sub">{text.sub}</p>
               </div>
+
+              {isFront && (
+                <span className="mx-stack-cta" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M7 17 17 7M7 7h10v10" />
+                  </svg>
+                </span>
+              )}
             </div>
           );
         })}
-      </div>
-
-      <div className="mx-stack-dots" role="tablist" aria-label="Slides">
-        {STACK_CARDS.map((card, i) => (
-          <button
-            key={card.id}
-            type="button"
-            role="tab"
-            aria-selected={i === index}
-            aria-label={(card.copy[locale] || card.copy.en).title}
-            className={`mx-stack-dot${i === index ? ' is-active' : ''}`}
-            style={{ '--stack-accent': card.accent }}
-            onClick={() => setIndex(i)}
-          />
-        ))}
       </div>
     </section>
   );
