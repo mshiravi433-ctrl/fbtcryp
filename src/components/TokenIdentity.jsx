@@ -1,31 +1,10 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fmtCompact, fmtNum, fmtPct, fmtUsd } from '../lib/format';
 import { tokenIdentity } from '../lib/tokenIdentity';
 
-/**
- * ─── «دربارهٔ این توکن» — THE PANEL THE COIN SCREEN NEVER HAD ───────────────
- *
- * Four tabs answered "what is its price chart", "how do I trade it", "how does
- * it compare" and "what are wallets doing". None answered "what IS this thing",
- * which is the first question a reader has about a token they have just found
- * — and every number below was ALREADY in the payload this page fetches: `ath`,
- * `athChange`, `atl`, `supply`, `mcap`, `volume`, `description`, `homepage`.
- *
- * ─── CPU: THIS PANEL IS FREE UNTIL IT IS OPEN ──────────────────────────────
- * There is no effect, no interval, no request and no animation in this file.
- * Every value is a pure computation over `coin` and `global` — objects the page
- * already holds — memoised on the two ids it can actually depend on. The tab
- * itself is a `lazyRetry` chunk, so a reader who never opens it never even
- * downloads this module. That is the whole CPU story: the cheapest work is the
- * work that is not scheduled.
- *
- * ─── THE HONESTY RULE ──────────────────────────────────────────────────────
- * Every figure can be null (the CoinLore backup sends no `ath`, no `atl` and no
- * supply), and null renders «—» with a sentence saying the feed omitted it. A
- * zero here would read as a measurement: "0% from its high" is a token at its
- * high, and "0% of supply" is a token with none.
- */
+/** Identity is loaded lazily, with one optional profile request per visit.
+ * Missing fields remain missing rather than being presented as zero. */
 /**
  * A homepage is a link to somewhere we do not control, taken from a public API.
  * `target="_blank"` + `noopener` protects the tab; it says nothing about the
@@ -78,20 +57,50 @@ function Track({ value, label, caption, testId }) {
 }
 
 export default function TokenIdentity({ coin, global = null, bitcoin = null }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const [profile, setProfile] = useState(null);
+  useEffect(() => {
+    if (!coin?.id) return undefined;
+    const controller = new AbortController();
+    setProfile(null);
+    // The lightweight market endpoint does not include project descriptions.
+    // Fetch them only while the identity tab is open; failures leave market data intact.
+    fetch(`https://api.coingecko.com/api/v3/coins/${encodeURIComponent(coin.id)}?localization=true&tickers=false&market_data=true&community_data=false&developer_data=false`, { signal: controller.signal })
+      .then((response) => { if (!response.ok) throw new Error('profile unavailable'); return response.json(); })
+      .then((raw) => {
+        const md = raw.market_data || {};
+        setProfile({ id: raw.id, descriptions: raw.description || {}, homepage: raw.links?.homepage?.find(Boolean),
+          maxSupply: md.max_supply, totalSupply: md.total_supply, supply: md.circulating_supply,
+          ath: md.ath?.usd, atl: md.atl?.usd, athChange: md.ath_change_percentage?.usd,
+          atlChange: md.atl_change_percentage?.usd });
+      }).catch(() => {});
+    return () => controller.abort();
+  }, [coin?.id]);
+  const detail = profile?.id === coin?.id ? profile : null;
+  // Do not let an absent profile field erase a valid market reading.
+  const enrichedCoin = useMemo(() => {
+    const merged = { ...coin };
+    if (detail) for (const [key, value] of Object.entries(detail)) {
+      if (value != null && key !== 'descriptions') merged[key] = value;
+    }
+    return merged;
+  }, [coin, detail]);
+  const language = (i18n?.resolvedLanguage || i18n?.language || 'en').split('-')[0];
+  const localized = detail?.descriptions?.[language];
+  const descriptionLanguage = localized ? language : 'en';
+  const rawDescription = localized || detail?.descriptions?.en || coin?.description || '';
+  const description = useMemo(() => {
+    if (!rawDescription) return '';
+    if (typeof DOMParser === 'undefined') return rawDescription;
+    const doc = new DOMParser().parseFromString(rawDescription, 'text/html');
+    doc.querySelectorAll('script, style').forEach((node) => node.remove());
+    return doc.body.textContent.trim();
+  }, [rawDescription]);
 
-  /*
-   * Recomputed only when the identity of the coin or the two market readings
-   * change. `coin` is a new object on every 30 s poll, so depending on the
-   * object would recompute nine divisions sixty times an hour for numbers that
-   * did not move — the same accounting mistake the row comparator exists to
-   * avoid, one level up.
-   */
   const id = useMemo(
-    () => tokenIdentity(coin, { global, bitcoin }),
+    () => tokenIdentity(enrichedCoin, { global, bitcoin }),
     [
-      coin?.id, coin?.price, coin?.ath, coin?.athChange, coin?.atl, coin?.atlChange,
-      coin?.supply, coin?.mcap, coin?.volume, coin?.change24h, coin?.high24h, coin?.low24h,
+      enrichedCoin,
       global?.mcap, global?.avgChange, bitcoin?.change24h
     ]
   );
@@ -110,15 +119,29 @@ export default function TokenIdentity({ coin, global = null, bitcoin = null }) {
         only thing here that answers "what is this token" in words rather than
         arithmetic.
       */}
-      {coin?.description ? (
+      <header className="coin-id-hero">
+        <span className="coin-id-eyebrow">{t('coin.identity.identity')}</span>
+        <h3>{coin?.name} <span>{coin?.symbol}</span></h3>
+        <p className="coin-id-typing">{t('coin.identity.snapshot', { name: coin?.name || coin?.symbol || '—' })}</p>
+        <div className="coin-id-hero-stats">
+          <span>{t('coin.identity.circulating')} <b>{supply.circulating == null ? dash : fmtCompact(supply.circulating)}</b></span>
+          <span>{t('coin.identity.fromAth')} <b>{id.drawdown == null ? dash : fmtPct(-id.drawdown, 2)}</b></span>
+          <span>{t('coin.identity.turnover')} <b>{id.turnover == null ? dash : fmtPct(id.turnover * 100, 1)}</b></span>
+        </div>
+      </header>
+      {description ? (
         <section className="coin-id-card" aria-labelledby="coin-id-about-title">
           <h3 className="coin-id-title" id="coin-id-about-title">{t('coin.identity.aboutTitle')}</h3>
-          <p className="coin-id-copy" data-testid="coin-identity-description">{coin.description}</p>
+          <details className="coin-id-description" open>
+            <summary>{t('coin.identity.readDescription')}</summary>
+            {descriptionLanguage !== language && <p className="coin-id-note">{t('coin.identity.originalEnglish')}</p>}
+            <p className="coin-id-copy" lang={descriptionLanguage} dir="auto" data-testid="coin-identity-description">{description}</p>
+          </details>
           <div className="coin-id-links">
-            {safeHref(coin.homepage) && (
+            {safeHref(enrichedCoin.homepage) && (
               <a
                 className="coin-id-link"
-                href={safeHref(coin.homepage)}
+                href={safeHref(enrichedCoin.homepage)}
                 target="_blank"
                 rel="noopener noreferrer nofollow"
                 data-testid="coin-identity-homepage"
@@ -129,7 +152,7 @@ export default function TokenIdentity({ coin, global = null, bitcoin = null }) {
             {/* Where the numbers come from, said out loud — a reader is entitled
                 to know whether they are looking at CoinGecko or the backup. */}
             <span className="coin-id-source" data-testid="coin-identity-source">
-              {t('coin.identity.source', { provider: coin.marketProvider === 'coingecko' ? 'CoinGecko' : (coin.marketProvider || '—') })}
+              {t('coin.identity.source', { provider: detail ? 'CoinGecko' : (coin.marketProvider === 'coingecko' ? 'CoinGecko' : (coin.marketProvider || '—')) })}
             </span>
           </div>
         </section>
@@ -155,14 +178,14 @@ export default function TokenIdentity({ coin, global = null, bitcoin = null }) {
           <Metric
             label={t('coin.identity.fromAth')}
             value={id.drawdown == null ? dash : fmtPct(-id.drawdown, 2)}
-            hint={coin?.ath ? fmtUsd(coin.ath) : undefined}
+            hint={enrichedCoin?.ath ? fmtUsd(enrichedCoin.ath) : undefined}
             tone={id.drawdown == null ? 'muted' : 'down'}
             testId="coin-identity-drawdown"
           />
           <Metric
             label={t('coin.identity.fromAtl')}
             value={id.rise == null ? dash : fmtPct(id.rise, 2)}
-            hint={coin?.atl ? fmtUsd(coin.atl) : undefined}
+            hint={enrichedCoin?.atl ? fmtUsd(enrichedCoin.atl) : undefined}
             tone={id.rise == null ? 'muted' : 'up'}
             testId="coin-identity-rise"
           />

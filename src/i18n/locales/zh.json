@@ -112,6 +112,7 @@
     "holdings": "持仓",
     "noHoldings": "暂无持仓",
     "activity": "最近活动",
+    "custodyTitle": "谁控制这个钱包？",
     "custodyNotice": "只读。本应用没有任何充值地址，也绝不会要求你向任何地方转账。任何要求你转币的机器人都应视为诈骗。",
     "guest": "访客",
     "localSession": "本地会话",
@@ -516,6 +517,9 @@
     },
     "identity": {
       "identity": "简介",
+      "snapshot": "{{name}}概览：市场历史、供应量和活动。",
+      "readDescription": "项目介绍",
+      "originalEnglish": "来源未提供此语言的介绍；显示英文原文。",
       "aboutTitle": "这是什么代币",
       "noDescription": "数据源未提供该代币的说明。",
       "officialSite": "官方网站",
@@ -1134,6 +1138,18 @@
       "notConnected": "You are not connected yet. Select “Connect dYdX”; if your wallet is disconnected, connect it first."
     },
     "order": {
+      "goodTil": "订单有效期",
+      "goodTilOptions": {
+        "1h": "1小时",
+        "1d": "1天",
+        "7d": "1周",
+        "28d": "28天"
+      },
+      "postOnly": "仅挂单",
+      "postOnlyHint": "如果订单会立即成交，将被取消而非执行。",
+      "reduceOnly": "只减仓",
+      "reduceOnlyHint": "只能减少现有仓位，不能开立反向仓位；此规则由交易平台执行。",
+      "options": "选项",
       "market": "Market",
       "limit": "Limit",
       "limitPrice": "Limit price (USD)",

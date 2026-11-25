@@ -112,6 +112,7 @@
     "holdings": "ہولڈنگز",
     "noHoldings": "ابھی کوئی ہولڈنگ نہیں",
     "activity": "حالیہ سرگرمی",
+    "custodyTitle": "اس والٹ کو کون کنٹرول کرتا ہے؟",
     "custodyNotice": "صرف پڑھنے کے لیے۔ اس ایپ کا کوئی ڈپازٹ ایڈریس نہیں اور یہ کبھی آپ سے کرپٹو بھیجنے کو نہیں کہے گی۔ ایسا کہنے والا ہر بوٹ فراڈ ہے۔",
     "guest": "مہمان",
     "localSession": "مقامی سیشن",
@@ -519,6 +520,9 @@
     },
     "identity": {
       "identity": "تعارف",
+      "snapshot": "{{name}} کا جائزہ: مارکیٹ کی تاریخ، رسد اور سرگرمی۔",
+      "readDescription": "منصوبے کی تفصیل",
+      "originalEnglish": "ماخذ نے اس زبان میں تفصیل فراہم نہیں کی؛ اصل انگریزی متن دکھایا گیا ہے۔",
       "aboutTitle": "یہ ٹوکن کیا ہے",
       "noDescription": "ذرائع نے اس ٹوکن کی تفصیل نہیں بھیجی۔",
       "officialSite": "سرکاری سائٹ",
@@ -1137,6 +1141,18 @@
       "notConnected": "You are not connected yet. Select “Connect dYdX”; if your wallet is disconnected, connect it first."
     },
     "order": {
+      "goodTil": "آرڈر کی مدت",
+      "goodTilOptions": {
+        "1h": "۱ گھنٹہ",
+        "1d": "۱ دن",
+        "7d": "۱ ہفتہ",
+        "28d": "۲۸ دن"
+      },
+      "postOnly": "صرف میکر",
+      "postOnlyHint": "اگر آرڈر فوراً میچ ہو تو عمل درآمد کے بجائے منسوخ ہوگا۔",
+      "reduceOnly": "صرف کمی",
+      "reduceOnlyHint": "یہ صرف موجودہ پوزیشن کم کرتا ہے، مخالف پوزیشن نہیں کھول سکتا۔ یہ پابندی پلیٹ فارم نافذ کرتا ہے۔",
+      "options": "اختیارات",
       "market": "Market",
       "limit": "Limit",
       "limitPrice": "Limit price (USD)",

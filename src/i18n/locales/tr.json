@@ -112,6 +112,7 @@
     "holdings": "Varlıklar",
     "noHoldings": "Henüz varlık yok",
     "activity": "Son işlemler",
+    "custodyTitle": "Bu cüzdanı kim kontrol ediyor?",
     "custodyNotice": "Salt okunur. Bu uygulamanın yatırma adresi yoktur ve sizden asla kripto göndermenizi istemez. İsteyen her bot dolandırıcıdır.",
     "guest": "Misafir",
     "localSession": "Yerel oturum",
@@ -516,6 +517,9 @@
     },
     "identity": {
       "identity": "Kimlik",
+      "snapshot": "{{name}} özeti: piyasa geçmişi, arz ve etkinlik.",
+      "readDescription": "Proje açıklaması",
+      "originalEnglish": "Kaynak bu dilde açıklama sunmadı; İngilizce özgün metin gösteriliyor.",
       "aboutTitle": "Bu token nedir",
       "noDescription": "Kaynak bu token için açıklama göndermedi.",
       "officialSite": "Resmî site",
@@ -1134,6 +1138,18 @@
       "notConnected": "You are not connected yet. Select “Connect dYdX”; if your wallet is disconnected, connect it first."
     },
     "order": {
+      "goodTil": "Emir geçerlilik süresi",
+      "goodTilOptions": {
+        "1h": "1 saat",
+        "1d": "1 gün",
+        "7d": "1 hafta",
+        "28d": "28 gün"
+      },
+      "postOnly": "Yalnızca yapıcı",
+      "postOnlyHint": "Emir defteriyle hemen eşleşirse işlem yerine iptal edilir.",
+      "reduceOnly": "Yalnızca azalt",
+      "reduceOnlyHint": "Yalnızca mevcut pozisyonu azaltır, ters pozisyon açamaz. Bu kuralı borsa uygular.",
+      "options": "Seçenekler",
       "market": "Market",
       "limit": "Limit",
       "limitPrice": "Limit price (USD)",

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { rwaSymbolSvg } from './rwaAssetSvg';
 import { symbolSvg } from '../components/AssetIcon';
+import { TOKENS } from './chains';
 
 /**
  * TOKEN ICONS.
@@ -8,8 +9,8 @@ import { symbolSvg } from '../components/AssetIcon';
  * ─── THE BUG ────────────────────────────────────────────────────────────────
  * The swap token list rendered `tk.logoURI` when present and the first three
  * letters of the symbol otherwise. Not one of the ~46 built-in tokens in
- * lib/chains.js has a `logoURI` — the field only exists on tokens a user
- * imports by address. So every stock token showed bare text, and any imported
+ * lib/chains.js had a `logoURI` at the time. So every stock token showed
+ * bare text, and any imported
  * token whose image 404'd hit `onError` which set `display:none`, leaving an
  * empty circle: worse than the letters, because it reads as broken rather than
  * as a placeholder.
@@ -21,8 +22,8 @@ import { symbolSvg } from '../components/AssetIcon';
  *   2. TrustWallet's asset repository, keyed by CHAIN + CONTRACT ADDRESS. This
  *      is the standard set most wallets use, it is served from a CDN, and it
  *      needs no API key.
- *   3. CoinGecko's own image, keyed by the `coingeckoId` we already store for
- *      pricing.
+ *   3. A symbol-based image only for registry-matched contracts (or assets
+ *      without an address); unknown contracts fall back to a monogram.
  *
  * Why address-keyed rather than symbol-keyed: symbols are not unique and are
  * trivially spoofed. A scam token can call itself "USDT"; it cannot occupy
@@ -151,6 +152,18 @@ const SYMBOL_FALLBACK_LOGOS = {
   SEI: 'https://assets.coingecko.com/coins/images/28205/small/Sei_Logo_-_Transparent.png'
 };
 
+/** Symbols are not identities. Permit branded fallbacks for address-bearing
+ * tokens only when both their chain/address and symbol match our registry. */
+export function canUseSymbolArtwork(token, chainId) {
+  if (!token || typeof token !== 'object') return true;
+  if (token.mint) return false;
+  if (!token.address) return true;
+  const address = String(token.address).toLowerCase();
+  const symbol = String(token.symbol || '').toUpperCase();
+  return (TOKENS[Number(chainId)] || []).some((entry) =>
+    entry.address && entry.address.toLowerCase() === address && entry.symbol.toUpperCase() === symbol);
+}
+
 /**
  * Ordered list of candidate URLs for a token.
  * Only https, because these are rendered as <img src> and a data: or
@@ -169,7 +182,7 @@ export function iconCandidates(token, chainId) {
     if (supplied.startsWith('https://') && !out.includes(supplied)) out.push(supplied);
   }
 
-  if (tok.native || !tok.address) {
+  if (tok.native) {
     const n = NATIVE_LOGO[Number(chainId)];
     if (n) {
       out.push(n, n.replace(
@@ -177,7 +190,7 @@ export function iconCandidates(token, chainId) {
         'https://raw.githubusercontent.com/trustwallet/assets/master/'
       ));
     }
-  } else {
+  } else if (tok.address) {
     const dir = TW_CHAIN[Number(chainId)];
     if (dir && /^0x[a-fA-F0-9]{40}$/.test(tok.address)) {
       out.push(
@@ -187,9 +200,9 @@ export function iconCandidates(token, chainId) {
     }
   }
 
-  /* Known curated symbol fallback */
+  /* Branded fallback only for registry-matched contracts, never a clone. */
   const sym = String(tok.symbol || '').toUpperCase().trim();
-  if (sym && SYMBOL_FALLBACK_LOGOS[sym] && !out.includes(SYMBOL_FALLBACK_LOGOS[sym])) {
+  if (canUseSymbolArtwork(tok, chainId) && sym && SYMBOL_FALLBACK_LOGOS[sym] && !out.includes(SYMBOL_FALLBACK_LOGOS[sym])) {
     out.push(SYMBOL_FALLBACK_LOGOS[sym]);
   }
 
@@ -223,10 +236,9 @@ export default function TokenIcon({ token, chainId, size = 34 }) {
   const src = candidates[idx];
 
   if (!src) {
-    const svg = rwaSymbolSvg(symbol) || symbolSvg(symbol);
+    const svg = canUseSymbolArtwork(token, chainId) ? (rwaSymbolSvg(symbol) || symbolSvg(symbol)) : null;
     if (svg) {
-      /* Known RWA & market marks stay available when both
-         the venue logo and remote catalog are missing or unreachable. */
+      /* Known, registry-matched marks remain available offline. */
       const filled = /^<svg(?![^>]*\swidth=)/.test(svg)
         ? svg.replace('<svg ', '<svg width="100%" height="100%" ')
         : svg;

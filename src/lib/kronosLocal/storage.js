@@ -305,6 +305,8 @@ export async function cachedModelState(manifest, { pageUrl = pageUrlDefault() } 
 export async function downloadModel(manifest, { onProgress = () => {}, signal, base = modelHost() } = {}) {
   const api = cachesApi();
   if (!api) throw new KronosStorageError('CACHE_UNAVAILABLE');
+  // Best effort: browsers may decline; user-cleared site data can still be lost.
+  try { await globalThis.navigator?.storage?.persist?.(); } catch { /* optional */ }
   const total = manifest.files.reduce((sum, f) => sum + f.bytes, 0);
   const name = cacheName(manifest);
   // A fresh bucket per download: a half-written cache must never look complete.

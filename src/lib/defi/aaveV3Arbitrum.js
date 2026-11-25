@@ -72,7 +72,7 @@
  */
 
 import { EVM_CHAINS, ERC20_ABI, getToken } from '../chains';
-import { AAVE_V3_POOLS } from '../lending';
+import { AAVE_V3_POOLS, AAVE_ADDRESSES_PROVIDERS } from '../lending';
 import { NATIVE_GAS_FLOOR } from '../swap';
 import { decodeRevertReason } from '../preSignSimulation';
 import {
@@ -106,7 +106,7 @@ export const AAVE_V3_ARBITRUM = Object.freeze({
   /** Aave v3 Pool proxy on Arbitrum. Source: Aave Address Book src/AaveV3Arbitrum.sol */
   pool: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
   /** PoolAddressesProvider on Arbitrum. Source: Aave Address Book src/AaveV3Arbitrum.sol */
-  addressesProvider: '0xa97684ead0e402dC232d5A977953DF7ECBaB3CDb',
+  addressesProvider: AAVE_ADDRESSES_PROVIDERS[42161],
   /** aArbUSDC — the receipt token for supplied USDC. Source: Aave Address Book */
   aUsdc: '0x724dc807b04555b71ed48a6896b6F41593b8C637',
   /** Imported from lib/chains.js (TOKENS[42161]), NOT retyped here. */

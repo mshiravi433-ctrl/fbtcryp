@@ -112,6 +112,7 @@
     "holdings": "Kepemilikan",
     "noHoldings": "Belum ada aset",
     "activity": "Aktivitas terbaru",
+    "custodyTitle": "Siapa yang mengendalikan dompet ini?",
     "custodyNotice": "Hanya baca. Aplikasi ini tidak punya alamat deposit dan tidak akan pernah meminta Anda mengirim kripto. Bot mana pun yang meminta adalah penipuan.",
     "guest": "Tamu",
     "localSession": "Sesi lokal",
@@ -516,6 +517,9 @@
     },
     "identity": {
       "identity": "Identitas",
+      "snapshot": "Ringkasan {{name}}: riwayat pasar, pasokan, dan aktivitas.",
+      "readDescription": "Deskripsi proyek",
+      "originalEnglish": "Sumber tidak menyediakan deskripsi dalam bahasa ini; teks asli bahasa Inggris ditampilkan.",
       "aboutTitle": "Apa token ini",
       "noDescription": "Sumber tidak mengirim deskripsi untuk token ini.",
       "officialSite": "Situs resmi",
@@ -1134,6 +1138,18 @@
       "notConnected": "You are not connected yet. Select “Connect dYdX”; if your wallet is disconnected, connect it first."
     },
     "order": {
+      "goodTil": "Masa berlaku order",
+      "goodTilOptions": {
+        "1h": "1 jam",
+        "1d": "1 hari",
+        "7d": "1 minggu",
+        "28d": "28 hari"
+      },
+      "postOnly": "Hanya maker",
+      "postOnlyHint": "Jika order langsung cocok di buku order, order dibatalkan, bukan dieksekusi.",
+      "reduceOnly": "Hanya kurangi",
+      "reduceOnlyHint": "Hanya mengurangi posisi yang ada dan tidak membuka posisi berlawanan. Aturan ditegakkan oleh bursa.",
+      "options": "Opsi",
       "market": "Market",
       "limit": "Limit",
       "limitPrice": "Limit price (USD)",

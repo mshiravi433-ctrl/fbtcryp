@@ -6,7 +6,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import CoinLogo from '../components/CoinLogo';
-import SegIndicator from '../components/SegIndicator';
 import { IconChevronLeft, IconSearch } from '../components/Icons';
 import { useChart, useCoin, useCoinSearch, useMarkets } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct, fmtPrice } from '../lib/format';
@@ -187,7 +186,7 @@ function PickerSheet({ open, side, coins, onPick, onClose }) {
   return typeof document === 'undefined' ? null : createPortal(content, document.body);
 }
 
-function TokenCard({ coin, color, side, onChange, t }) {
+function TokenCard({ coin, color, side, onChange, t, locked = false }) {
   const up = (coin?.change24h ?? 0) >= 0;
   return (
     <button
@@ -195,6 +194,7 @@ function TokenCard({ coin, color, side, onChange, t }) {
       className="cmp-token"
       style={{ '--cmp': color }}
       onClick={onChange}
+      disabled={locked}
     >
       <span className="cmp-side" style={{ background: color }}>
         {side === 'a' ? t('compare.tokenA') : t('compare.tokenB')}
@@ -215,7 +215,7 @@ function TokenCard({ coin, color, side, onChange, t }) {
           <span className="cmp-tname faint">{t('compare.choose')}</span>
         </>
       )}
-      <span className="cmp-change">{t('compare.change')}</span>
+      {!locked && <span className="cmp-change">{t('compare.change')}</span>}
     </button>
   );
 }
@@ -387,10 +387,10 @@ export default function Compare({ embedded = false, initialA = 'bitcoin', initia
 
       {/* ── the two contenders ── */}
       <motion.div className="cmp-duel" variants={stagger} initial="hidden" animate="show">
-        <TokenCard coin={ca} color={A_COLOR} side="a" onChange={() => setPicker('a')} t={t} />
+        <TokenCard coin={ca} color={A_COLOR} side="a" onChange={() => setPicker('a')} t={t} locked={embedded} />
         <div className="cmp-mid">
           <span className="cmp-vs">VS</span>
-          <button
+          {!embedded && <button
             type="button"
             className="cmp-swap"
             onClick={() => set(bId, aId)}
@@ -398,7 +398,7 @@ export default function Compare({ embedded = false, initialA = 'bitcoin', initia
             title={t('compare.swap')}
           >
             ⇄
-          </button>
+          </button>}
         </div>
         <TokenCard coin={cb} color={B_COLOR} side="b" onChange={() => setPicker('b')} t={t} />
       </motion.div>
@@ -445,10 +445,11 @@ export default function Compare({ embedded = false, initialA = 'bitcoin', initia
               <button
                 key={r.key}
                 className={range.key === r.key ? 'active' : ''}
+                aria-pressed={range.key === r.key}
                 onClick={() => { haptic?.('select'); setRange(r); }}
                 style={{ isolation: 'isolate' }}
               >
-                {range.key === r.key && <SegIndicator id="cmp-range" />}
+                {range.key === r.key && <span className="seg-indicator" aria-hidden="true" />}
                 {r.key}
               </button>
             ))}

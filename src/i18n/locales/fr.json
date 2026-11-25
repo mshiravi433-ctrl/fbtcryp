@@ -112,6 +112,7 @@
     "holdings": "Avoirs",
     "noHoldings": "Aucun avoir",
     "activity": "Activité récente",
+    "custodyTitle": "Qui contrôle ce portefeuille ?",
     "custodyNotice": "Lecture seule. Cette app n'a aucune adresse de dépôt et ne vous demandera jamais d'envoyer des cryptos. Tout bot qui le demande est une arnaque.",
     "guest": "Invité",
     "localSession": "Session locale",
@@ -516,6 +517,9 @@
     },
     "identity": {
       "identity": "Identité",
+      "snapshot": "Aperçu de {{name}} : historique du marché, offre et activité.",
+      "readDescription": "Description du projet",
+      "originalEnglish": "La source ne fournit pas de description dans cette langue ; le texte anglais original est affiché.",
       "aboutTitle": "Qu’est-ce que ce jeton",
       "noDescription": "La source n’a pas envoyé de description pour ce jeton.",
       "officialSite": "Site officiel",
@@ -1134,6 +1138,18 @@
       "notConnected": "You are not connected yet. Select “Connect dYdX”; if your wallet is disconnected, connect it first."
     },
     "order": {
+      "goodTil": "Durée de validité",
+      "goodTilOptions": {
+        "1h": "1 heure",
+        "1d": "1 jour",
+        "7d": "1 semaine",
+        "28d": "28 jours"
+      },
+      "postOnly": "Post-only",
+      "postOnlyHint": "Si l’ordre croise le carnet, il est annulé au lieu d’être exécuté.",
+      "reduceOnly": "Réduction uniquement",
+      "reduceOnlyHint": "Réduit uniquement une position existante, sans ouvrir de position opposée. La plateforme impose cette règle.",
+      "options": "Options",
       "market": "Market",
       "limit": "Limit",
       "limitPrice": "Limit price (USD)",

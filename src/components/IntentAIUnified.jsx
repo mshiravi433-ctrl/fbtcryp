@@ -7700,7 +7700,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     <div className={`iaos-page iaos-page-v6 tag-page nc-page fbt-neural ${keyboardOpen ? 'keyboard-open' : ''}`} data-ai-tab={aiTab} data-rail-collapsed={railCollapsed ? 'true' : 'false'} data-sidebar={sidebarOpen ? 'open' : 'closed'}>
       <div className="iaos-shell">
         <header className="iaos-header" data-hidden={headerHidden ? 'true' : 'false'}>
-          <div className="iaos-title"><NeuralCore state={serverReachable === false ? 'offline' : 'idle'} size={40} label={fa ? 'هسته عصبی FBT' : 'FBT Neural Core'} /></div>
+          <div className="iaos-title"><NeuralCore state={coreState} size={40} label={fa ? 'هسته عصبی FBT' : 'FBT Neural Core'} /></div>
           <div className="iaos-header-actions">
           <button type="button" className="iaos-nav-toggle iaos-new-chat" onClick={newSeason} aria-label={fa ? 'شروع گفتگوی جدید' : 'Start a new conversation'} title={fa ? 'گفتگوی جدید' : 'New conversation'} data-testid="intent-ai-new-season"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button>
           <button type="button" className="iaos-nav-toggle" onClick={() => setNavOpen(true)} aria-label={fa ? 'باز کردن منو' : 'Open menu'} aria-expanded={navOpen} aria-controls="iaos-navigation" data-testid="intent-ai-nav-toggle">

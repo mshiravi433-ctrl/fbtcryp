@@ -46,6 +46,8 @@ jobs:
           # cannot be introduced later and quietly miss the APK.
           VITE_BUILDER_BPS: ${{ vars.VITE_BUILDER_BPS }}
           VITE_PUBLIC_URL: ${{ vars.VITE_PUBLIC_URL }}
+          VITE_ENABLE_AI_TRADE: ${{ vars.VITE_ENABLE_AI_TRADE }}
+          VITE_ENABLE_PERP_TERMINAL: ${{ vars.VITE_ENABLE_PERP_TERMINAL }}
           # The support address. Cafe Bazaar requires one on our own domain
           # rather than a Gmail account, so this will change - and if it is
           # not listed here, the WEBSITE would show the new address while the

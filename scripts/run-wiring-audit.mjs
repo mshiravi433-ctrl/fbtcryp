@@ -16,7 +16,7 @@
  * ABOVE the accepted ceiling.
  *
  *   node scripts/run-wiring-audit.mjs
- *   node scripts/run-wiring-audit.mjs --max 64     # accept 64 known failures
+ *   node scripts/run-wiring-audit.mjs --max 0     # require no failures
  *   node scripts/run-wiring-audit.mjs --list       # failures only
  *
  * The ceiling is a ratchet: it exists so this suite cannot get quietly worse
@@ -31,7 +31,7 @@ process.chdir(ROOT);
 
 const args = process.argv.slice(2);
 const maxIndex = args.indexOf('--max');
-const ceiling = maxIndex >= 0 ? Number(args[maxIndex + 1]) : 64;
+const ceiling = maxIndex >= 0 ? Number(args[maxIndex + 1]) : 0;
 const listOnly = args.includes('--list');
 
 const { default: runWiring } = await import(join(ROOT, 'test', 'wiring.mjs'));

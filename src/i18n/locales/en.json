@@ -420,6 +420,9 @@
     "smartMoneyUnavailable": "On-chain smart-money data is not available for this asset.",
     "identity": {
       "identity": "Overview",
+      "snapshot": "A snapshot of {{name}}: market history, supply and activity.",
+      "readDescription": "Project description",
+      "originalEnglish": "The source has not provided a description in this language; the original English text is shown.",
       "aboutTitle": "What this token is",
       "noDescription": "The feed did not send a description for this token.",
       "officialSite": "Official site",
@@ -16491,6 +16494,7 @@
       "honestNote": "This report proves on-chain transfers only. It can confirm that funds arrived in or left your wallet — it cannot see the provider’s payment status, and it will never claim a payment was confirmed."
     },
     "landing": {
+      "backspace": "Delete last digit",
       "counter": "Step {{current}} of {{total}}",
       "iran": "Iran",
       "amountTitle": "Enter the amount",
@@ -16520,6 +16524,7 @@
     }
   },
   "futures": {
+    "onchainTitle": "On-chain futures",
     "venueSlides": {
       "riskTitle": "Leveraged trading warning",
       "pause": "Pause automatic banner rotation",

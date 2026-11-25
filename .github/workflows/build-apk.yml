@@ -41,6 +41,8 @@ jobs:
           # because both look correct in isolation.
           VITE_FEE_BPS: ${{ vars.VITE_FEE_BPS }}
           VITE_PUBLIC_URL: ${{ vars.VITE_PUBLIC_URL }}
+          VITE_ENABLE_AI_TRADE: ${{ vars.VITE_ENABLE_AI_TRADE }}
+          VITE_ENABLE_PERP_TERMINAL: ${{ vars.VITE_ENABLE_PERP_TERMINAL }}
           VITE_FEE_RECIPIENT: ${{ vars.VITE_FEE_RECIPIENT }}
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}

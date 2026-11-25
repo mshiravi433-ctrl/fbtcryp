@@ -55,7 +55,7 @@
  */
 
 import { EVM_CHAINS, ERC20_ABI, getToken } from '../chains';
-import { AAVE_V3_POOLS } from '../lending';
+import { AAVE_V3_POOLS, AAVE_ADDRESSES_PROVIDERS } from '../lending';
 import { NATIVE_GAS_FLOOR } from '../swap';
 import { decodeRevertReason } from '../preSignSimulation';
 import {
@@ -89,7 +89,7 @@ export const AAVE_V3_BASE = Object.freeze({
   /** Aave v3 Pool proxy on Base. Source: Aave Address Book src/AaveV3Base.sol */
   pool: '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5',
   /** PoolAddressesProvider on Base. Source: Aave Address Book src/AaveV3Base.sol */
-  addressesProvider: '0xe20fCBdBfFC4Dd138cE8b2E6FBb6CB49777ad64D',
+  addressesProvider: AAVE_ADDRESSES_PROVIDERS[8453],
   /** aBasUSDC — the receipt token for supplied USDC. Source: Aave Address Book */
   aUsdc: '0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB',
   /** Imported from lib/chains.js (TOKENS[8453]), NOT retyped here. */

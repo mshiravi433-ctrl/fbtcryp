@@ -112,6 +112,7 @@
     "holdings": "Posiciones",
     "noHoldings": "Sin posiciones aún",
     "activity": "Actividad reciente",
+    "custodyTitle": "¿Quién controla esta cartera?",
     "custodyNotice": "Solo lectura. Esta app no tiene dirección de depósito y nunca te pedirá enviar cripto a ningún sitio. Cualquier bot que lo pida es una estafa.",
     "guest": "Invitado",
     "localSession": "Sesión local",
@@ -516,6 +517,9 @@
     },
     "identity": {
       "identity": "Identidad",
+      "snapshot": "Un vistazo a {{name}}: historia del mercado, oferta y actividad.",
+      "readDescription": "Descripción del proyecto",
+      "originalEnglish": "La fuente no ofrece una descripción en este idioma; se muestra el original en inglés.",
       "aboutTitle": "Qué es este token",
       "noDescription": "La fuente no envió una descripción de este token.",
       "officialSite": "Sitio oficial",
@@ -1134,6 +1138,18 @@
       "notConnected": "You are not connected yet. Select “Connect dYdX”; if your wallet is disconnected, connect it first."
     },
     "order": {
+      "goodTil": "Vigencia de la orden",
+      "goodTilOptions": {
+        "1h": "1 hora",
+        "1d": "1 día",
+        "7d": "1 semana",
+        "28d": "28 días"
+      },
+      "postOnly": "Solo creador",
+      "postOnlyHint": "Si la orden cruza el libro, se cancela en lugar de ejecutarse.",
+      "reduceOnly": "Solo reducir",
+      "reduceOnlyHint": "Solo reduce una posición existente; no puede abrir una posición opuesta. Lo exige la plataforma.",
+      "options": "Opciones",
       "market": "Market",
       "limit": "Limit",
       "limitPrice": "Limit price (USD)",

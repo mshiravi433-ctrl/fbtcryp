@@ -356,6 +356,7 @@ export default function DydxTokenDesk({
                     style={{ isolation: 'isolate' }}
                     data-testid={`${testId}-tab-${tb.id}`}
                   >
+                    {tab === tb.id && <span className="seg-indicator" aria-hidden="true" />}
                     <tb.Icon width={13} height={13} />
                     {t(tb.key)}
                   </button>

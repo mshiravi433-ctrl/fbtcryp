@@ -773,7 +773,7 @@ export default function CoinDetail() {
           <div className="coin-compare-tab">
             <h2 className="coin-detail-pane-title">{t('coin.detailTabs.compare')}</h2>
             <Suspense fallback={<div className="card" style={{ minHeight: 220, display: 'grid', placeItems: 'center' }}><div className="spinner" /></div>}>
-              <LazyCompare embedded initialA={id} initialB="ethereum" />
+              <LazyCompare embedded initialA={id} initialB={id === 'ethereum' ? 'bitcoin' : 'ethereum'} />
             </Suspense>
           </div>
         )}
