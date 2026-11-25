@@ -516,6 +516,12 @@
       "smartMoney": "聪明资金"
     },
     "identity": {
+      "genesisDate": "发布日期",
+      "categories": "类别",
+      "networks": "网络",
+      "whitepaper": "白皮书",
+
+
       "identity": "简介",
       "snapshot": "{{name}}概览：市场历史、供应量和活动。",
       "readDescription": "项目介绍",

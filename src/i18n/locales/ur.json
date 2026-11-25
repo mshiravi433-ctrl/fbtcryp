@@ -519,6 +519,12 @@
       "smartMoney": "اسمارٹ منی"
     },
     "identity": {
+      "genesisDate": "آغاز کی تاریخ",
+      "categories": "زمرے",
+      "networks": "نیٹ ورکس",
+      "whitepaper": "وائٹ پیپر",
+
+
       "identity": "تعارف",
       "snapshot": "{{name}} کا جائزہ: مارکیٹ کی تاریخ، رسد اور سرگرمی۔",
       "readDescription": "منصوبے کی تفصیل",

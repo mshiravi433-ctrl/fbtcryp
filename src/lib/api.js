@@ -338,7 +338,7 @@ export function getMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
   return resilient(`markets:${vs}:${page}:${perPage}`, {
     ttl: 30000,
     backend: async () => {
-      const { data, stale } = await fetchJson(`${apiBase()}/markets?page=${page}&per_page=${perPage}&vs=${vs}`, { withMeta: true });
+      const { data, stale } = await fetchJson(`${apiBase()}/markets?page=${page}&per_page=${perPage}&vs=${vs}`, { withMeta: true, timeout: 8500 });
       // The server may fall back to an expired in-memory cache on failure.
       // Its x-data-stale header must survive this client layer; a stale quote
       // is useful for browsing but is not an executable strategy observation.
@@ -352,7 +352,7 @@ export function getMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
       try {
         const raw = await fetchJson(
           `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&order=market_cap_desc&per_page=${perPage}` +
-            `&page=${page}&sparkline=true&price_change_percentage=1h,24h,7d`
+            `&page=${page}&sparkline=true&price_change_percentage=1h,24h,7d`, { timeout: 3500 }
         );
         if (Array.isArray(raw) && raw.length) {
           const rows = raw.map((coin) => ({ ...normalizeCoin(coin), marketProvider: 'coingecko' }));
@@ -370,7 +370,8 @@ export function getMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
       let rows;
       try {
         rows = await fetchCoinLoreTickers({
-          fetchJson: (url, opts) => fetchJson(url, { timeout: opts?.timeoutMs || 12000 }),
+          fetchJson: (url, opts) => fetchJson(url, { timeout: opts?.timeoutMs || 3500 }),
+          parallel: true,
           base: PUBLIC_COINLORE,
           page,
           perPage,

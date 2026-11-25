@@ -6,7 +6,7 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'rec
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import AnimatedNumber from '../components/AnimatedNumber';
-import { useChart, useCoin, useGlobalStats, useMarkets } from '../hooks/useMarket';
+import { useChart, useCoin, useMarkets } from '../hooks/useMarket';
 import { EVM_CHAINS } from '../lib/chains';
 import { swapTargetFor, swapUrlFor } from '../lib/coinToSwap';
 import { getCoinVenue, venueRoute } from '../lib/coinVenue';
@@ -187,36 +187,6 @@ export default function CoinDetail() {
    */
   const [chartMode, setChartMode] = useState('candle');
   const { data: ohlc, loading: ohlcLoading } = useOhlc(detailTab === 'trade' && chartMode === 'candle' ? id : null, range.days);
-  /*
-   * ─── THE ONLY REQUEST THE IDENTITY TAB ADDS, AND ONLY WHEN IT IS OPEN ─────
-   * Every other figure on that tab is arithmetic over the coin this page has
-   * already fetched. "How does the wider market move this token" needs the
-   * market's own numbers, which is `useGlobalStats` — the SAME 45 s poll the
-   * market screen runs, served from the same `resilient` memo when that screen
-   * is warm on another route.
-   *
-   * It is enabled by `mounted` state rather than by `detailTab`, and the two
-   * differ on purpose: a reader who has opened this tab once keeps its numbers
-   * when they switch to another tab and come back, instead of watching a
-   * spinner for a value they looked at a second ago. Nothing is polled before
-   * the tab has ever been opened — see `identitySeen` below.
-   */
-  const [identitySeen, setIdentitySeen] = useState(false);
-  useEffect(() => {
-    if (detailTab === 'identity') setIdentitySeen(true);
-  }, [detailTab]);
-  /* `enabled` is expressed through the project's own convention: a poll whose
-     argument is null resolves to null and never touches the network. */
-  const { data: globalStats } = useGlobalStats(identitySeen);
-  /* Bitcoin is the benchmark every reader already holds in their head, and it
-     is the token this identity panel compares against. It comes from the coin
-     fetch this page already runs when the page IS bitcoin, and otherwise from
-     the same memoised markets read the fallback uses. */
-  const bitcoin = useMemo(
-    () => (coins ?? []).find((c) => c?.id === 'bitcoin') ?? (String(id) === 'bitcoin' ? fetched ?? null : null),
-    [coins, fetched, id]
-  );
-
   const coinGeckoId = id;
   const realSwap = useMemo(() => swapTargetFor(coinGeckoId), [coinGeckoId]);
 
@@ -783,8 +753,6 @@ export default function CoinDetail() {
             {/*
               A card-height reserve so the tab does not jump when the chunk
               lands — the same shape the Compare and Smart Money tabs use.
-              `global` and `bitcoin` are already on this page (the header reads
-              both); passing them here costs no request.
             */}
             <Suspense
               fallback={(
@@ -793,7 +761,7 @@ export default function CoinDetail() {
                 </div>
               )}
             >
-              <LazyTokenIdentity coin={coin} global={globalStats} bitcoin={bitcoin} />
+              <LazyTokenIdentity coin={coin} />
             </Suspense>
           </div>
         )}

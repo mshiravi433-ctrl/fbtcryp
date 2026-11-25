@@ -128,8 +128,8 @@ await check('CoinGecko 403 falls back to real CoinLore prices with truthful miss
     return jsonResponse({ data: coinLoreRows, info: { coins_num: 14993, time: 1790669282 } });
   }, () => fetchMarkets({ page: 1, perPage: 250, vs: 'usd' }));
 
-  assert.equal(calls.filter(isPriceFetch).length, 2,
-    'the backup is requested once after the primary fails (403 is not retried)');
+  assert.equal(calls.filter(isPriceFetch).length, 4,
+    '403 is not retried and the three backup pages are requested concurrently');
   assert.equal(calls[1].pathname, '/api/tickers/');
   assert.equal(calls[1].searchParams.get('start'), '0');
   assert.equal(calls[1].searchParams.get('limit'), '100', 'CoinLore page size is capped at 100');

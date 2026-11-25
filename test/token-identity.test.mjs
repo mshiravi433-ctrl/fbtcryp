@@ -285,11 +285,8 @@ test('every identity key the panel asks for exists in all 12 locales', async () 
   const used = new Set(
     [...src.matchAll(/t\('(coin\.identity\.[a-zA-Z0-9_]+)'/g)].map((m) => m[1]),
   );
-  // The agreement label is built from a value, so it never appears as a
-  // literal in the JSX; add the three branches it can resolve to.
-  for (const s of ['with', 'against', 'flat']) used.add(`coin.identity.agreement_${s}`);
-
-  assert.ok(used.size >= 30, `expected a populated key set, saw ${used.size}`);
+  // The profile now uses descriptive facts rather than market metric cards.
+  assert.ok(used.size >= 7, `expected profile keys, saw ${used.size}`);
 
   for (const lang of LANGS) {
     const raw = await fs.readFile(path.join(dir, `${lang}.json`), 'utf8');

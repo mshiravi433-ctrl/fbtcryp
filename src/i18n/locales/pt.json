@@ -516,6 +516,12 @@
       "smartMoney": "Dinheiro inteligente"
     },
     "identity": {
+      "genesisDate": "Data de lançamento",
+      "categories": "Categorias",
+      "networks": "Redes",
+      "whitepaper": "Livro branco",
+
+
       "identity": "Identidade",
       "snapshot": "Um retrato de {{name}}: histórico de mercado, oferta e atividade.",
       "readDescription": "Descrição do projeto",

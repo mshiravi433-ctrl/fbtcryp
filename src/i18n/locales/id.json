@@ -516,6 +516,12 @@
       "smartMoney": "Uang pintar"
     },
     "identity": {
+      "genesisDate": "Tanggal peluncuran",
+      "categories": "Kategori",
+      "networks": "Jaringan",
+      "whitepaper": "Buku putih",
+
+
       "identity": "Identitas",
       "snapshot": "Ringkasan {{name}}: riwayat pasar, pasokan, dan aktivitas.",
       "readDescription": "Deskripsi proyek",
