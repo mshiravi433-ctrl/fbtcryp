@@ -144,6 +144,33 @@ describe('۱ · ویترین: رنگ، انیمیشن و شکل', () => {
   });
 });
 
+describe('۲ · جستجوی جمع‌شونده و بازطراحی سواپ', () => {
+  it('starts with a compact search disclosure, then reveals and focuses the real combobox', async () => {
+    await openList();
+    const wrap = screen.getByTestId('market-search-wrap');
+    const reveal = screen.getByRole('button', { name: fa.market.searchAria });
+    expect(wrap.dataset.expanded).toBe('false');
+    expect(reveal.getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('#market-coin-search')).toBeNull();
+    fireEvent.click(reveal);
+    await waitFor(() => expect(document.querySelector('#market-coin-search')).toBeTruthy());
+    expect(wrap.dataset.expanded).toBe('true');
+    expect(document.activeElement.id).toBe('market-coin-search');
+    fireEvent.click(screen.getByRole('button', { name: fa.common.close }));
+    await waitFor(() => expect(wrap.dataset.expanded).toBe('false'));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: fa.market.searchAria }));
+  });
+
+  it('keeps swap as a transparent, animated line-art control instead of another button tile', () => {
+    const styles = css();
+    expect(page()).toContain('mx-swap-glyph');
+    expect(styles).toContain('.mx-swap-btn:hover .mx-swap-arrow-a');
+    expect(styles).toContain('.mx-swap-btn:hover .mx-swap-arrow-b');
+    expect(styles).toContain('.mx-market .mx-swap-slot[data-available=\'true\']');
+    expect(styles).toContain('background: transparent !important;');
+  });
+});
+
 describe('۲ · سه باکس بازشونده زیر جستجو', () => {
   it('renders exactly three fields, all closed, with localised labels', async () => {
     await openList();
@@ -231,16 +258,11 @@ describe('۴ و ۶ · کارت توکن شیشه‌ای، باکس سواپ جد
     expect(card.nextElementSibling).toBe(slot);
   });
 
-  it('gives the token card and the swap box the SAME glass recipe', () => {
+  it('keeps the swap slot separate but makes its final treatment transparent', () => {
     const bare = css().replace(/\/\*[\s\S]*?\*\//g, '');
-    const card = /\.mx-market \.mx-coin-row > \.coin-row \{([\s\S]*?)\n\}/.exec(bare)[1];
-    const slot = /\.mx-market \.mx-swap-slot\[data-available='true'\] \{([\s\S]*?)\n\}/.exec(bare)[1];
-    for (const needle of ['var(--m26-inner)', 'var(--m26-line)', 'var(--m26-bevel)']) {
-      expect(card).toContain(needle);
-      expect(slot).toContain(needle);
-    }
-    /* The row wrapper itself is transparent: the two boxes read as two boxes. */
     expect(bare).toMatch(/\.mx-market \.mx-coin-row \{[\s\S]*?background: none !important/s);
+    expect(bare).toMatch(/\.mx-market \.mx-swap-slot\[data-available='true'\][\s\S]*?background: transparent !important/s);
+    expect(bare).toMatch(/\.mx-market \.mx-swap-btn,[\s\S]*?border: 0 !important;[\s\S]*?background: transparent !important/s);
   });
 
   it('caps the token card width on a desktop instead of stretching it', () => {

@@ -9,8 +9,7 @@ import {
   IconRefresh,
   IconSearch,
   IconSparkle,
-  IconStar,
-  IconSwap
+  IconStar
 } from '../components/Icons';
 import {
   FILTER_GLYPHS,
@@ -1700,7 +1699,11 @@ export default function Market() {
                               title={t('market.swapOnCorrectNetwork', { symbol: c.symbol })}
                               data-testid={`market-swap-${c.id}`}
                             >
-                              <IconSwap width={12} height={12} aria-hidden="true" />
+                              <svg className="mx-swap-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path className="mx-swap-arrow mx-swap-arrow-a" d="M4.5 8h14l-3.2-3.2M18.5 8l-3.2 3.2" />
+                                <path className="mx-swap-arrow mx-swap-arrow-b" d="M19.5 16h-14l3.2 3.2M5.5 16l3.2-3.2" />
+                                <circle className="mx-swap-core" cx="12" cy="12" r="1.25" />
+                              </svg>
                               <span className="mx-swap-label">{t('market.swap')}</span>
                             </button>
                           )}
@@ -1784,7 +1787,11 @@ export default function Market() {
                               <span className="mx-swap-slot" data-available={swapUrl ? 'true' : undefined}>
                               {swapUrl && (
                                 <button type="button" className="market-swap-btn mx-swap-btn" aria-label={t('market.swapOnCorrectNetwork', { symbol: c.symbol })} onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}>
-                                  <IconSwap width={12} height={12} aria-hidden="true" />
+                                  <svg className="mx-swap-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path className="mx-swap-arrow mx-swap-arrow-a" d="M4.5 8h14l-3.2-3.2M18.5 8l-3.2 3.2" />
+                                    <path className="mx-swap-arrow mx-swap-arrow-b" d="M19.5 16h-14l3.2 3.2M5.5 16l3.2-3.2" />
+                                    <circle className="mx-swap-core" cx="12" cy="12" r="1.25" />
+                                  </svg>
                                   <span className="mx-swap-label">{t('market.swap')}</span>
                                 </button>
                               )}

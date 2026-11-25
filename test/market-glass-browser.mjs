@@ -203,6 +203,7 @@ try {
 
   // Search selection and detached swap preserve their original destinations.
   await open();
+  await page.click('.mx-search-disclosure');
   await page.focus('#market-coin-search');
   await page.type('#market-coin-search', 'bit');
   await page.waitForSelector('.mx-search-option');

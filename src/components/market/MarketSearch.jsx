@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconSearch, IconSparkle, IconX } from '../Icons.jsx';
+import { GlyphCaretDown } from './MarketGlyphs.jsx';
 import CoinLogo from '../CoinLogo.jsx';
 import { contractQuery, mergeSearchResults } from '../../lib/marketSearch.js';
 import { marketPrice } from '../../lib/marketPresentation.js';
@@ -41,8 +42,14 @@ export default function MarketSearch({
   const { t } = useTranslation();
   const baseId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const inputRef = useRef(null);
+  const disclosureRef = useRef(null);
+  const pendingFocusRef = useRef(null);
   const wrapRef = useRef(null);
   const listRef = useRef(null);
+  /* Search is an optional tool, not a permanent billboard above the filters.
+     Keep the compact disclosure as the default and reveal the actual search
+     field only when requested. An existing query stays visible after restore. */
+  const [expanded, setExpanded] = useState(() => Boolean(query.trim()));
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(null);
   const trimmed = query.trim();
@@ -51,11 +58,20 @@ export default function MarketSearch({
     () => (smartIntent ? [] : mergeSearchResults(universe, remoteHits, trimmed)),
     [universe, remoteHits, trimmed, smartIntent]
   );
-  const showPopup = open && trimmed.length >= 2 && !smartIntent;
+  const showPopup = expanded && open && trimmed.length >= 2 && !smartIntent;
   const popupId = `${baseId}-popup`;
   const optionId = (index) => `${baseId}-option-${index}`;
 
   useEffect(() => setActive(null), [trimmed]);
+  useEffect(() => {
+    if (expanded && pendingFocusRef.current === 'input') {
+      pendingFocusRef.current = null;
+      inputRef.current?.focus();
+    } else if (!expanded && pendingFocusRef.current === 'disclosure') {
+      pendingFocusRef.current = null;
+      disclosureRef.current?.focus();
+    }
+  }, [expanded]);
   useEffect(() => {
     if (active == null || !listRef.current) return;
     const option = listRef.current.querySelector(`#${optionId(active)}`);
@@ -110,52 +126,85 @@ export default function MarketSearch({
   };
 
   return (
-    <div className="mx-search-wrap" id="market-search" data-testid="market-search-wrap" ref={wrapRef}>
-      <div className={`mx-search${open ? ' is-open' : ''}`} data-typed={query ? 'true' : undefined}>
-        <span className="mx-search-glow" aria-hidden="true" />
-        {/* A travelling prism hairline on the field's own edge. Decoration
-            only: the input, the results list and the clear button are unchanged. */}
-        <span className="mx26-search-rim" aria-hidden="true" />
-        <span className="mx-search-tile" aria-hidden="true">
-          <IconSearch className="mx-search-icon" width={16} height={16} aria-hidden="true" />
-        </span>
-        <input
-          ref={inputRef}
-          id="market-coin-search"
-          className="mx-search-input"
-          type="search"
-          role="combobox"
-          aria-expanded={showPopup}
-          aria-controls={showPopup ? popupId : undefined}
-          aria-activedescendant={showPopup && active != null ? optionId(active) : undefined}
-          aria-autocomplete="list"
+    <div className="mx-search-wrap" id="market-search" data-testid="market-search-wrap" ref={wrapRef} data-expanded={expanded ? 'true' : 'false'}>
+      {!expanded ? (
+        <button
+          ref={disclosureRef}
+          type="button"
+          className="mx-search-disclosure"
+          aria-expanded="false"
           aria-label={t('market.searchAria')}
-          value={query}
-          onChange={(event) => { onQueryChange(event.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={onKeyDown}
-          placeholder={t('marketIntel.searchPlaceholder')}
-          autoComplete="off"
-          enterKeyHint="search"
-          spellCheck="false"
-        />
-        {query && (
-          <button
-            type="button"
-            className="mx-search-clear"
-            aria-label={t('market.clearSearch')}
-            onClick={() => { onQueryChange(''); setActive(null); inputRef.current?.focus(); }}
-          >
-            <IconX width={14} height={14} aria-hidden="true" />
-          </button>
-        )}
-        {!query && (
-          <span className="mx-search-ai" title={t('market.aiHint')}>
-            <IconSparkle width={11} height={11} aria-hidden="true" />
-            {t('marketIntel.aiChip')}
+          onClick={() => { pendingFocusRef.current = 'input'; setExpanded(true); }}
+        >
+          <span className="mx26-search-rim" aria-hidden="true" />
+          <span className="mx-search-disclosure-icon" aria-hidden="true">
+            <IconSearch width={18} height={18} />
           </span>
-        )}
-      </div>
+          <span className="mx-search-disclosure-copy">
+            <b>{t('market.searchAria')}</b>
+            <small>{query.trim() || t('marketIntel.searchPlaceholder')}</small>
+          </span>
+          <span className="mx-search-disclosure-end" aria-hidden="true">
+            <GlyphCaretDown width={15} height={15} />
+          </span>
+        </button>
+      ) : (
+        <div className="mx-search-panel" id={`${baseId}-field`}>
+          <div className={`mx-search${open ? ' is-open' : ''}`} data-typed={query ? 'true' : undefined}>
+            <span className="mx-search-glow" aria-hidden="true" />
+            {/* The prism hairline is a finite reveal; it is never a perpetual pulse. */}
+            <span className="mx26-search-rim" aria-hidden="true" />
+            <span className="mx-search-tile" aria-hidden="true">
+              <IconSearch className="mx-search-icon" width={16} height={16} aria-hidden="true" />
+            </span>
+            <input
+              ref={inputRef}
+              id="market-coin-search"
+              className="mx-search-input"
+              type="search"
+              role="combobox"
+              aria-expanded={showPopup}
+              aria-controls={showPopup ? popupId : undefined}
+              aria-activedescendant={showPopup && active != null ? optionId(active) : undefined}
+              aria-autocomplete="list"
+              aria-label={t('market.searchAria')}
+              value={query}
+              onChange={(event) => { onQueryChange(event.target.value); setOpen(true); }}
+              onFocus={() => setOpen(true)}
+              onKeyDown={onKeyDown}
+              placeholder={t('marketIntel.searchPlaceholder')}
+              autoComplete="off"
+              enterKeyHint="search"
+              spellCheck="false"
+            />
+            {query && (
+              <button
+                type="button"
+                className="mx-search-clear"
+                aria-label={t('market.clearSearch')}
+                onClick={() => { onQueryChange(''); setActive(null); inputRef.current?.focus(); }}
+              >
+                <IconX width={14} height={14} aria-hidden="true" />
+              </button>
+            )}
+            {!query && (
+              <span className="mx-search-ai" title={t('market.aiHint')}>
+                <IconSparkle width={11} height={11} aria-hidden="true" />
+                {t('marketIntel.aiChip')}
+              </span>
+            )}
+            <button
+              type="button"
+              className="mx-search-collapse"
+              aria-label={t('common.close')}
+              title={t('common.close')}
+              onClick={() => { setOpen(false); setActive(null); pendingFocusRef.current = 'disclosure'; setExpanded(false); }}
+            >
+              <IconX width={15} height={15} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {showPopup && (
         <div className="mx-search-popup" id={popupId}>

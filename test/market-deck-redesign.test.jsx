@@ -334,6 +334,7 @@ describe('۵ · search above the filters, inside «همه ارزها»', () => {
 
   it('offers the natural-language capability as a chip that steps aside when typing', async () => {
     await openList();
+    fireEvent.click(screen.getByRole('button', { name: fa.market.searchAria }));
     const chip = document.querySelector('.mx-search-ai');
     expect(chip).toBeTruthy();
     expect(chip.textContent).toContain(fa.marketIntel.aiChip);

@@ -345,6 +345,8 @@ describe('۴ · کارِ کاربر با تغییرِ تب از دست نمی‌
     fireEvent.click(tabNamed('tokens'));
     await waitFor(() => expect(document.querySelectorAll('.coin-row').length).toBeGreaterThan(0));
 
+    /* The token tab keeps its search collapsed until explicitly requested. */
+    fireEvent.click(screen.getByRole('button', { name: get(fa, 'market.searchAria') }));
     const input = screen.getByLabelText(get(fa, 'market.searchAria'));
     fireEvent.change(input, { target: { value: 'T1' } });
     const sorted = document.querySelector('.coin-row')?.dataset.coinId;

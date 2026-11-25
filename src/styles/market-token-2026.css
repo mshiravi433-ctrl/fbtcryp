@@ -3,17 +3,12 @@
    --------------------------------------------------------------------------
    Six requests, one last layer:
 
-     1 · the showcase («ویترین / نبض بازار» + «داغ‌ترین‌ها») gets its own prism
-         palette, an asymmetric modern shape and a short travelling light;
-     2 · the «همه ارزها» card and its search field are rebuilt in the same
-         material, with THREE compact drop-down fields under the search box
-         (بازه زمانی · تغییر ۲۴ساعته · ترتیب بندی) and smaller chips below them;
-     3 · with NO filter chosen the chip row is ordinary flow — it scrolls down
-         with the page. The loaded-scope sentence is gone at the source;
-     4 · every token is a slim glass card and the swap box beside it is a
-         SEPARATE glass box in the same colour, not part of the token's frame;
-     5 · a full modern re-grade for phone, tablet and desktop, light and dark;
-     6 · the swap button stays OUTSIDE the token card, as it was before.
+     1 · the showcase («داغ‌ترین‌ها») is a theme-aware glass discovery board;
+     2 · search is a compact disclosure, closed by default and expanded on tap;
+     3 · the three filter disclosures stay compact, with the existing controls;
+     4 · token rows use translucent glass, with a separate, unboxed swap glyph;
+     5 · responsive grades cover phone, tablet, desktop, light and dark;
+     6 · the swap icon responds to hover/focus without a permanent motion loop.
 
    MATERIAL RULES (measured on this route, not taste):
      · no live backdrop-filter, no mask, no will-change, no content-visibility;
@@ -637,8 +632,8 @@
   border: 0 !important;
   box-shadow: none !important;
 }
-/* «شیشه‌ای با رنگ بندی درست» — the swap box is the SAME material as the token
-   card and is its own element OUTSIDE it, separated by the row's 8px gap. */
+/* Base presentation for the sibling action slot. The final refinement at the
+   bottom of this sheet removes this plate and leaves only the swap glyph. */
 .mx-market .mx-swap-slot { display: none !important; }
 .mx-market .mx-swap-slot[data-available='true'] {
   display: inline-flex !important;
@@ -823,3 +818,267 @@
   .mx-market .mx-coin-row > .coin-row,
   .mx-market .mx-swap-slot[data-available='true'] { border-color: var(--m26-line-strong) !important; }
 }
+
+/* ══ 9 · THE QUIET SEARCH DISCLOSURE + TRADEMARK SWAP ACTION ═══════════════
+   This refinement replaces the always-on search control with a closed-by-
+   default disclosure and turns the swap action into an unboxed icon cue. The
+   token list keeps its exact routes and data; only its visual hierarchy changes.
+   Every surface remains theme-token driven and all motion is interaction-led. */
+.mx-market .mx-search-wrap[data-expanded='false'] { margin-block: 1px 2px; }
+.mx-market .mx-search-disclosure {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 58px;
+  padding: 8px 13px;
+  overflow: hidden;
+  text-align: start;
+  color: var(--m26-ink);
+  border: 1px solid var(--m26-line);
+  border-radius: 17px;
+  background:
+    radial-gradient(90% 180% at 0% 0%, color-mix(in srgb, var(--m26-a) 13%, transparent), transparent 68%),
+    linear-gradient(130deg, color-mix(in srgb, var(--m26-b) 9%, transparent), color-mix(in srgb, var(--m26-c) 5%, transparent)),
+    color-mix(in srgb, var(--m26-plate-a) 82%, transparent);
+  box-shadow: var(--m26-bevel), 0 12px 28px -25px color-mix(in srgb, var(--m26-a) 80%, transparent);
+  cursor: pointer;
+  transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease, background-color .2s ease;
+}
+.mx-market .mx-search-disclosure:hover {
+  border-color: color-mix(in srgb, var(--m26-a) 45%, var(--m26-line));
+  box-shadow: var(--m26-bevel), 0 16px 32px -23px color-mix(in srgb, var(--m26-a) 72%, transparent);
+  transform: translateY(-1px);
+}
+.mx-market .mx-search-disclosure:focus-visible {
+  outline: 2px solid var(--m26-a);
+  outline-offset: 3px;
+}
+.mx-market .mx-search-disclosure-icon {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  color: var(--m26-a);
+  border: 1px solid color-mix(in srgb, var(--m26-a) 28%, var(--m26-line));
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--m26-a) 9%, transparent);
+}
+.mx-market .mx-search-disclosure-copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 3px;
+}
+.mx-market .mx-search-disclosure-copy b { font-size: 12px; font-weight: 780; line-height: 1.15; }
+.mx-market .mx-search-disclosure-copy small {
+  overflow: hidden;
+  color: var(--m26-muted);
+  font-size: 10px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mx-market .mx-search-disclosure-end {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  color: var(--m26-a);
+  border: 1px solid var(--m26-line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--m26-a) 6%, transparent);
+}
+.mx-market .mx-search-disclosure-end svg { transition: transform .2s ease; }
+.mx-market .mx-search-disclosure:hover .mx-search-disclosure-end svg { transform: translateY(1px); }
+.mx-market .mx-search-panel { animation: mx-search-reveal .22s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes mx-search-reveal {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.mx-market .mx-search-panel .mx-search { padding-inline-end: 8px !important; }
+.mx-market .mx-search-collapse {
+  display: grid;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  margin-inline-start: 2px;
+  padding: 0;
+  border: 1px solid var(--m26-line);
+  border-radius: 11px;
+  color: var(--m26-muted);
+  background: color-mix(in srgb, var(--m26-b) 7%, transparent);
+  cursor: pointer;
+  transition: color .18s ease, background-color .18s ease, border-color .18s ease, transform .18s ease;
+}
+.mx-market .mx-search-collapse:hover {
+  color: var(--m26-ink);
+  border-color: var(--m26-line-strong);
+  background: color-mix(in srgb, var(--m26-b) 15%, transparent);
+  transform: rotate(90deg);
+}
+.mx-market .mx-search-collapse:focus-visible { outline: 2px solid var(--m26-a); outline-offset: 2px; }
+
+/* A richer but calmer glass treatment for the discovery board: clearer title
+   hierarchy, consistent inset edge-light, and less saturated tile fill. */
+.mx-market .mx-hot {
+  border-radius: 24px 24px 20px 20px !important;
+  background:
+    radial-gradient(75% 140% at 0% 0%, color-mix(in srgb, var(--m26-d) 14%, transparent), transparent 70%) padding-box,
+    radial-gradient(68% 130% at 100% 100%, color-mix(in srgb, var(--m26-b) 13%, transparent), transparent 68%) padding-box,
+    linear-gradient(145deg, color-mix(in srgb, var(--m26-plate-a) 94%, transparent), color-mix(in srgb, var(--m26-plate-b) 96%, transparent)) padding-box,
+    linear-gradient(120deg, color-mix(in srgb, var(--m26-d) 64%, transparent), color-mix(in srgb, var(--m26-b) 55%, transparent) 54%, color-mix(in srgb, var(--m26-a) 52%, transparent)) border-box !important;
+  box-shadow: var(--m26-lift), inset 0 1px 0 rgba(255,255,255,.12), inset 0 -1px 0 rgba(2,8,20,.28) !important;
+}
+.mx-market .mx-section-head { align-items: center; gap: 9px; }
+.mx-market .mx-section-head h2 { letter-spacing: -.025em; font-size: 14px; font-weight: 820; }
+.mx-market .mx-hot-flame {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--m26-d) 30%, var(--m26-line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--m26-d) 10%, transparent);
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--m26-d) 25%, transparent));
+}
+.mx-market .mx-section-note {
+  margin-inline-start: auto;
+  padding: 5px 9px;
+  border: 1px solid var(--m26-line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--m26-plate-a) 52%, transparent);
+  font-size: 9px;
+}
+.mx-market .mx-hot-rail { gap: 9px; padding-block: 3px 2px; }
+.mx-market .mx-hot-card {
+  border-radius: 16px !important;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--hot, var(--m26-a)) 9%, transparent), color-mix(in srgb, var(--m26-plate-a) 93%, transparent)),
+    linear-gradient(180deg, color-mix(in srgb, var(--m26-plate-a) 92%, transparent), color-mix(in srgb, var(--m26-plate-b) 98%, transparent)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.085), 0 10px 22px -20px rgba(0,0,0,.8) !important;
+}
+.mx-market .mx-hot-card:hover {
+  border-color: color-mix(in srgb, var(--hot, var(--m26-a)) 52%, var(--m26-line)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.11), 0 16px 28px -22px color-mix(in srgb, var(--hot, var(--m26-a)) 45%, transparent) !important;
+  transform: translateY(-2px);
+}
+.mx-market .mx-hot-price { letter-spacing: -.035em; }
+
+/* The rows get a deliberate translucent glass plate, while the Swap action
+   becomes a floating glyph only: no tile, no border, no hidden background. */
+.mx-market .mx-coin-row > .coin-row {
+  border-radius: 17px !important;
+  background:
+    linear-gradient(112deg, color-mix(in srgb, var(--m26-a) 5%, transparent), transparent 43%),
+    linear-gradient(155deg, color-mix(in srgb, var(--m26-plate-a) 93%, transparent), color-mix(in srgb, var(--m26-plate-b) 97%, transparent)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.075), 0 10px 24px -22px rgba(0,0,0,.85) !important;
+}
+.mx-market .mx-coin-row:hover > .coin-row {
+  border-color: color-mix(in srgb, var(--m26-a) 44%, var(--m26-line)) !important;
+  background:
+    linear-gradient(112deg, color-mix(in srgb, var(--m26-a) 8%, transparent), transparent 48%),
+    linear-gradient(155deg, color-mix(in srgb, var(--m26-plate-a) 96%, transparent), color-mix(in srgb, var(--m26-plate-b) 97%, transparent)) !important;
+}
+.mx-market .mx-swap-slot[data-available='true'] {
+  align-self: center;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.mx-market .mx-swap-btn,
+.mx-market .market-swap-btn {
+  position: relative;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 5px !important;
+  min-width: 42px;
+  min-height: 42px !important;
+  width: auto;
+  height: 42px !important;
+  padding: 0 5px !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  color: var(--m26-a) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: none;
+  transition: color .18s ease, transform .18s ease, filter .18s ease;
+}
+.mx-market .mx-swap-btn:hover,
+.mx-market .market-swap-btn:hover {
+  color: var(--m26-ink) !important;
+  background: transparent !important;
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--m26-a) 35%, transparent));
+  transform: translateY(-1px);
+}
+.mx-market .mx-swap-btn:active,
+.mx-market .market-swap-btn:active { transform: scale(.94); }
+.mx-market .mx-swap-glyph {
+  display: block;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform .25s cubic-bezier(.2,.8,.2,1);
+}
+.mx-market .mx-swap-arrow { transition: transform .24s cubic-bezier(.2,.8,.2,1); }
+.mx-market .mx-swap-arrow-a { transform-box: fill-box; transform-origin: center; }
+.mx-market .mx-swap-arrow-b { transform-box: fill-box; transform-origin: center; }
+.mx-market .mx-swap-core { fill: currentColor; stroke: none; opacity: .75; }
+.mx-market .mx-swap-btn:hover .mx-swap-arrow-a,
+.mx-market .market-swap-btn:hover .mx-swap-arrow-a { transform: translateY(-1px); }
+.mx-market .mx-swap-btn:hover .mx-swap-arrow-b,
+.mx-market .market-swap-btn:hover .mx-swap-arrow-b { transform: translateY(1px); }
+.mx-market .mx-swap-label { font-size: 10px; font-weight: 760; letter-spacing: .01em; }
+.mx-market .mx-swap-btn:focus-visible,
+.mx-market .market-swap-btn:focus-visible {
+  outline: 2px solid var(--m26-a);
+  outline-offset: 2px;
+  background: transparent !important;
+}
+:root[data-theme='light'] .mx-market .mx-search-disclosure,
+:root[data-theme='light'] .mx-market .mx-hot {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9), var(--m26-lift) !important;
+}
+:root[data-theme='light'] .mx-market .mx-hot-card {
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--hot, var(--m26-a)) 7%, transparent), color-mix(in srgb, var(--m26-plate-a) 95%, transparent)),
+    linear-gradient(180deg, #fff, color-mix(in srgb, var(--m26-plate-b) 90%, white)) !important;
+  box-shadow: inset 0 1px 0 #fff, 0 10px 22px -20px rgba(35,55,100,.36) !important;
+}
+@media (max-width: 430px) {
+  .mx-market .mx-search-disclosure { min-height: 54px; gap: 9px; padding-inline: 10px; }
+  .mx-market .mx-search-disclosure-icon { width: 34px; height: 34px; flex-basis: 34px; border-radius: 11px; }
+  .mx-market .mx-search-disclosure-copy small { font-size: 9px; }
+  .mx-market .mx-swap-btn, .mx-market .market-swap-btn { min-width: 36px; width: 36px; height: 38px !important; min-height: 38px !important; }
+  .mx-market .mx-swap-label { display: none; }
+  .mx-market .mx-coin-row { gap: 4px !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mx-market :is(.mx-search-disclosure, .mx-search-disclosure-end svg, .mx-search-collapse,
+    .mx-hot-card, .mx-coin-row > .coin-row, .mx-swap-btn, .mx-swap-glyph, .mx-swap-arrow) { transition: none !important; }
+  .mx-market .mx-search-panel { animation: none !important; }
+}
+:root[data-reduce-motion='true'] .mx-market :is(.mx-search-disclosure, .mx-search-collapse, .mx-hot-card, .mx-swap-btn) { transition: none !important; }
+:root[data-reduce-motion='true'] .mx-market .mx-search-panel { animation: none !important; }
+:root[data-native='true'] .mx-market .mx-search-panel { animation: none !important; }
+:root[data-lite='true'] .mx-market .mx-search-panel { animation: none !important; }
