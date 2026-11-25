@@ -419,6 +419,12 @@
     },
     "smartMoneyUnavailable": "داده آنچین پول هوشمند برای این دارایی در دسترس نیست.",
     "identity": {
+      "genesisDate": "تاریخ آغاز",
+      "categories": "دسته‌بندی",
+      "networks": "شبکه‌ها",
+      "whitepaper": "وایت‌پیپر",
+
+
       "identity": "شناسنامه",
       "snapshot": "نگاهی به {{name}}؛ تاریخچه، عرضه و فعالیت بازار در یک قاب.",
       "readDescription": "معرفی پروژه",

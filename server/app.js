@@ -18,6 +18,7 @@ import {
   fetchChart,
   fetchScenarioDailyCloses,
   fetchCoinDetail,
+  fetchTokenProfile,
   fetchCategory,
   fetchDexPools,
   fetchGlobal,
@@ -4278,6 +4279,12 @@ app.get('/api/forecast/:id', async (req, res) => {
   } catch (err) {
     return res.status(502).json({ ok: false, error: 'UPSTREAM_FAILED' });
   }
+});
+
+app.get('/api/coin/:id/profile', (req, res) => {
+  const id = req.params.id;
+  if (!/^[a-z0-9][a-z0-9-]{0,99}$/i.test(id)) return res.status(400).json({ error: 'INVALID_COIN_ID' });
+  return serve(res, 3600000)(() => fetchTokenProfile(id), `coin-profile:${id}`);
 });
 
 app.get('/api/coin/:id', (req, res) =>

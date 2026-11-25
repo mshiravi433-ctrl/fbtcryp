@@ -50,11 +50,38 @@ export async function fetchCoinLoreTickers({
   base = COINLORE_BASE,
   page = 1,
   perPage = COINLORE_MAX_PAGE_SIZE,
-  maxPages = 3
+  maxPages = 3,
+  parallel = false
 } = {}) {
   const requested = Math.max(1, Math.min(250, Math.floor(Number(perPage) || COINLORE_MAX_PAGE_SIZE)));
   const firstStart = (Math.max(1, Math.floor(Number(page) || 1)) - 1) * requested;
   const rows = [];
+
+  // Market pages can fetch their fixed-size chunks concurrently. Results are
+  // still consumed in order and stop at the first short or failed chunk.
+  if (parallel) {
+    const count = Math.min(Math.max(1, maxPages), Math.ceil(requested / COINLORE_MAX_PAGE_SIZE));
+    const requests = Array.from({ length: count }, (_, chunk) => {
+      const start = firstStart + chunk * COINLORE_MAX_PAGE_SIZE;
+      const limit = Math.min(COINLORE_MAX_PAGE_SIZE, requested - chunk * COINLORE_MAX_PAGE_SIZE);
+      return { limit, promise: fetchJson(`${base}/tickers/?start=${start}&limit=${limit}`) };
+    });
+    const answers = await Promise.allSettled(requests.map(({ promise }) => promise));
+    for (let i = 0; i < answers.length; i += 1) {
+      const raw = answers[i].status === 'fulfilled' ? answers[i].value : null;
+      if (answers[i].status === 'rejected') throw answers[i].reason;
+      if (!Array.isArray(raw?.data)) {
+        if (!rows.length) throw new Error('CoinLore returned an invalid market response');
+        break;
+      }
+      const batch = raw.data.map(normalizeCoinLoreMarket).filter(Boolean);
+      if (!batch.length) break;
+      rows.push(...batch);
+      if (raw.data.length < requests[i].limit) break;
+    }
+    if (!rows.length) throw new Error('CoinLore returned no usable market prices');
+    return rows;
+  }
 
   for (let chunk = 0; chunk < Math.max(1, maxPages) && rows.length < requested; chunk += 1) {
     const start = firstStart + chunk * COINLORE_MAX_PAGE_SIZE;

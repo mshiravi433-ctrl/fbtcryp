@@ -159,16 +159,9 @@ describe('coin detail tabs', () => {
     expect(container.querySelector('[data-testid="coin-identity-drawdown"]')).toBeNull();
   });
 
-  it('holds the global poll shut until the identity tab is opened once', () => {
-    /* The hook is called with `identitySeen`, and `identitySeen` starts false.
-       The mock above resolves `enabled: false` to null, so opening the tab is
-       what makes the market reading appear on the panel. */
-    expect(detailSource).toContain('const [identitySeen, setIdentitySeen] = useState(false);');
-    expect(detailSource).toContain('useGlobalStats(identitySeen)');
-    /* and the gate is a latch, not a mirror of the active tab: switching away
-       and back must not re-fetch, so it is only ever set to true. */
-    expect(detailSource).toMatch(/if \(detailTab === 'identity'\) setIdentitySeen\(true\)/);
-    expect(detailSource).not.toMatch(/setIdentitySeen\(false\)/);
+  it('does not start an unused global poll for the project profile', () => {
+    expect(detailSource).not.toContain('useGlobalStats(');
+    expect(detailSource).toContain('<LazyTokenIdentity coin={coin} />');
   });
 
   it('paints a card-height fallback while the identity chunk lands', async () => {

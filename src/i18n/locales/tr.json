@@ -516,6 +516,12 @@
       "smartMoney": "Akıllı para"
     },
     "identity": {
+      "genesisDate": "Lansman tarihi",
+      "categories": "Kategoriler",
+      "networks": "Ağlar",
+      "whitepaper": "Teknik belge",
+
+
       "identity": "Kimlik",
       "snapshot": "{{name}} özeti: piyasa geçmişi, arz ve etkinlik.",
       "readDescription": "Proje açıklaması",

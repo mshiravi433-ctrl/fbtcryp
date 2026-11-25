@@ -516,6 +516,12 @@
       "smartMoney": "Умные деньги"
     },
     "identity": {
+      "genesisDate": "Дата запуска",
+      "categories": "Категории",
+      "networks": "Сети",
+      "whitepaper": "Белая книга",
+
+
       "identity": "Описание",
       "snapshot": "Обзор {{name}}: история рынка, предложение и активность.",
       "readDescription": "Описание проекта",

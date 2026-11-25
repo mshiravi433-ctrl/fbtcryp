@@ -516,6 +516,12 @@
       "smartMoney": "स्मार्ट मनी"
     },
     "identity": {
+      "genesisDate": "लॉन्च की तारीख",
+      "categories": "श्रेणियां",
+      "networks": "नेटवर्क",
+      "whitepaper": "श्वेतपत्र",
+
+
       "identity": "परिचय",
       "snapshot": "{{name}} की झलक: बाजार इतिहास, आपूर्ति और गतिविधि।",
       "readDescription": "परियोजना का विवरण",

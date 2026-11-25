@@ -4179,8 +4179,8 @@ export default function run() {
      * useChart polls every 60 seconds — leaving them would be two live network
      * polls per coin view whose results nothing reads.
      */
-    t('coin detail fetches global stats only after identity is opened',
-      !/useChart\('bitcoin'/.test(detail) && /useGlobalStats\(identitySeen\)/.test(detail));
+    t('coin identity avoids the unused Bitcoin chart and global polling',
+      !/useChart\('bitcoin'/.test(detail) && !/useGlobalStats/.test(detail));
     t('...including the technical analysis call', !/\banalyze\(/.test(detail));
 
     /*

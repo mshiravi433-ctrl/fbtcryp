@@ -516,6 +516,12 @@
       "smartMoney": "Argent intelligent"
     },
     "identity": {
+      "genesisDate": "Date de lancement",
+      "categories": "Catégories",
+      "networks": "Réseaux",
+      "whitepaper": "Livre blanc",
+
+
       "identity": "Identité",
       "snapshot": "Aperçu de {{name}} : historique du marché, offre et activité.",
       "readDescription": "Description du projet",

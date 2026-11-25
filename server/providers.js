@@ -273,9 +273,10 @@ export async function fetchGlobal() {
  * 100 tickers per request, the market screen asks for 250, and the difference
  * used to be a page that arrived a hundred rows short.
  */
-async function fetchCoinLoreMarkets({ page = 1, perPage = 50 } = {}) {
+async function fetchCoinLoreMarkets({ page = 1, perPage = 50, fast = false } = {}) {
   return fetchCoinLoreTickers({
-    fetchJson: (url) => req(url),
+    fetchJson: (url) => req(url, fast ? { timeout: 3500 } : {}),
+    parallel: fast,
     base: COINLORE_BASE,
     page,
     perPage,
@@ -373,6 +374,29 @@ async function fillFallbackVisuals(rows, vs = 'usd', { deadlineMs = 6000 } = {})
   return out.map(mergeVisuals);
 }
 
+/** Bounded, read-only project metadata. No market quote is served here. */
+export async function fetchTokenProfile(id) {
+  if (!/^[a-z0-9][a-z0-9-]{0,99}$/i.test(String(id || ''))) throw new Error('INVALID_COIN_ID');
+  try {
+    const raw = await req(cgUrl(`/coins/${encodeURIComponent(id)}`, {
+      localization: 'true', tickers: 'false', market_data: 'false',
+      community_data: 'false', developer_data: 'false'
+    }), { timeout: 4000, retry: false });
+    if (raw?.id !== id) throw new Error('PROFILE_UNAVAILABLE');
+    const descriptions = Object.fromEntries(Object.entries(raw.description || {})
+      .filter(([key, value]) => /^[a-z-]{2,12}$/i.test(key) && typeof value === 'string')
+      .slice(0, 32).map(([key, value]) => [key, value.slice(0, 30000)]));
+    return { id: raw.id, description: descriptions,
+      links: { homepage: Array.isArray(raw.links?.homepage) ? raw.links.homepage.filter((x) => typeof x === 'string').slice(0, 5) : [], whitepaper: typeof raw.links?.whitepaper === 'string' ? raw.links.whitepaper : null },
+      categories: Array.isArray(raw.categories) ? raw.categories.filter((x) => typeof x === 'string').slice(0, 8) : [],
+      genesis_date: typeof raw.genesis_date === 'string' ? raw.genesis_date : null,
+      platforms: raw.platforms && typeof raw.platforms === 'object' && !Array.isArray(raw.platforms) ? Object.fromEntries(Object.entries(raw.platforms).slice(0, 50)) : {} };
+  } catch {
+    // Upstream URLs may contain an API key; never echo them to the browser.
+    throw new Error('PROFILE_UNAVAILABLE');
+  }
+}
+
 export async function fetchMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
   const currency = String(vs || 'usd').toLowerCase();
   try {
@@ -384,7 +408,7 @@ export async function fetchMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) 
         page: String(page),
         sparkline: 'true',
         price_change_percentage: '1h,24h,7d'
-      })
+      }), { timeout: 3500 }
     );
     if (!Array.isArray(raw)) throw new Error('CoinGecko returned an invalid market response');
     if (raw.length) {
@@ -403,8 +427,8 @@ export async function fetchMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) 
   }
 
   try {
-    const rows = await fetchCoinLoreMarkets({ page, perPage });
-    return await fillFallbackVisuals(rows, currency);
+    const rows = await fetchCoinLoreMarkets({ page, perPage, fast: true });
+    return await fillFallbackVisuals(rows, currency, { deadlineMs: 1000 });
   } catch {
     /* Do not leak a provider URL (or its API key query parameter) in an error
        payload. The client can still use its own direct-provider/offline chain. */
