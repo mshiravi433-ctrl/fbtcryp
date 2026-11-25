@@ -347,7 +347,7 @@ export default function run() {
     /* The signature core replaces the old logo plate. It remains bounded on
        narrow phones and keeps its theme/motion states inside /intent. */
     const intentUi = read('src/components/IntentAIUnified.jsx');
-    const core = read('src/components/chat/NeuralCore.jsx');
+    const core = read('src/components/intent-neural/NeuralCore.jsx');
     const neuralCss = read('src/styles/neural-command.css');
     /*
      * WHAT THIS PINS: the header core is driven by the ACTUAL state of the
@@ -369,7 +369,7 @@ export default function run() {
       /<NeuralCore[\s\S]{0,80}state=\{coreState\}/.test(intentUi)
       && /resolveCoreState\(\{[^}]*serverReachable[^}]*\}\)/.test(intentUi)
       && !/<NeuralCore\s+state=['"]/.test(intentUi)
-      && core.includes('data-state={state}'));
+      && core.includes('data-state={s}'));
     t('the neural core has a fixed-size wrapper',
       /\.nc-core\s*\{[^}]*flex: 0 0 42px/.test(neuralCss));
     t('the core respects reduced motion',
@@ -655,7 +655,7 @@ export default function run() {
       /<PoolGlyph pool=\{pool\} size=\{38\} chainKey=\{iconKey\}/.test(farm)
       && !/<AssetIcon chain=\{iconKey\} size=\{34\}/.test(farm));
     t('the rail and the details drawer use the same mark',
-      /farm-hot-glyph"><PoolGlyph/.test(farm) && /<PoolGlyph pool=\{pool\} size=\{32\}/.test(farm));
+      /farm-hot-glyph"><PoolGlyph pool=\{pool\}/.test(farm) && /<FullScreenSheet[\s\S]{0,700}icon=\{<PoolGlyph pool=\{pool\}/.test(farm));
     t('every named project has a mark of its own',
       (() => {
         const block = read('src/lib/farmDeFi.js').split('PROJECT_DISPLAY_NAMES = Object.freeze({')[1].split('});')[0];
@@ -1122,7 +1122,7 @@ export default function run() {
     const called = new Set();
     for (const f of files) {
       for (const m of read(f).matchAll(/\$\{(?:API_BASE|apiBase\(\))\}\/([^`'"?]*)/g)) {
-        const clean = m[1].replace(/\$\{[^}]*$/, '').replace(/\$\{[^}]*\}/g, 'X').replace(/\/+$/, '');
+        const clean = m[1].replace(/\$\{[^}]*$/, '').replace(/([^/])\$\{[^}]*\}/g, '$1').replace(/\$\{[^}]*\}/g, 'X').replace(/\/+$/, '');
         if (clean) called.add(clean);
       }
     }
@@ -1161,7 +1161,7 @@ export default function run() {
      * mount is what this check is about: the subtree's own routes are asserted
      * by each router's HTTP probe, exactly as for `futuresRouter()` above.
      */
-    const lazyMounted = [...serverSrc.matchAll(/app\.use\(\s*'\/api\/([^']+)'\s*,\s*lazyMount\(/g)].map(([, p]) => p);
+    const lazyMounted = [...serverSrc.matchAll(/app\.use\(\s*'\/api\/([^']+)'\s*,\s*lazyMount(?:Factory)?\(/g)].map(([, p]) => p);
     const mounts = [...mounted, ...lazyMounted];
     const unrouted = [...called].filter(
       (p) => !prefixes.has(p) && !declared.some((d) => d.re.test(p)) && !mounts.some((m) => p === m || p.startsWith(`${m}/`))
@@ -1289,7 +1289,7 @@ export default function run() {
         const missing = aboutKeys.filter((k) => !hasKey(dict, k));
         t(`About: every rendered key exists in ${code}.json${missing.length ? ` — missing ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? '…' : ''}` : ''}`, missing.length === 0);
       }
-      t('About feeds the nine generated locales from scripts/locales/about.mjs', existsSync('scripts/locales/about.mjs') && /import about from '\.\/locales\/about\.mjs'/.test(read('scripts/gen-locales.mjs')) && /\.\.\.about \}/.test(read('scripts/gen-locales.mjs')));
+      t('About feeds the nine generated locales from scripts/locales/about.mjs', existsSync('scripts/locales/about.mjs') && /import about from '\.\/locales\/about\.mjs'/.test(read('scripts/gen-locales.mjs')) && /\.\.\.about\s*[,}]/.test(read('scripts/gen-locales.mjs')));
       t('About takes text direction from the language registry, not from isFA', /isRtl\(/.test(aboutSrc) && /dir=\{rtl \? 'rtl' : 'ltr'\}/.test(aboutSrc) && !/dir=\{isFA/.test(aboutSrc));
       t('About derives the network count from the chain registry', /EVM_CHAIN_ORDER\.map\(\(id\) => EVM_CHAINS\[id\]\)/.test(aboutSrc) && /value: num\(NETWORKS\.length\)/.test(aboutSrc));
       t('About derives the language count from the language registry', /value: num\(LANGUAGES\.length\)/.test(aboutSrc));
@@ -1300,7 +1300,7 @@ export default function run() {
       t('About lists only routable capabilities', ['/swap', '/wallet', '/intent', '/signals', '/smart-money', '/farm'].every((r) => routes.includes(r) && aboutSrc.includes(`to: '${r}'`)));
       t('About stylesheet still has no dead width breakpoint', !/min-width:\s*9\d\d px|min-width:\s*1\d{3}px/.test(aboutCss));
       t('About step rail and figures use logical properties (mirror in RTL)', /inset-inline-start: (16|38)px/.test(aboutCss) && /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/.test(aboutCss));
-      t('About keeps its light-theme block for the new surfaces', /\[data-theme='light'\] \.about-network/.test(aboutCss) && /\[data-theme='light'\] \.about-grid/.test(aboutCss));
+      t('About keeps its light-theme block for the new surfaces', /\.about-network\s*\{[^}]*color:\s*var\(--ab-body\)[^}]*background:\s*var\(--ab-card\)/.test(aboutCss) && /\[data-theme='light'\] \.about-page\s*\{[^}]*--ab-body:/.test(aboutCss) && /\[data-theme='light'\] \.about-grid/.test(aboutCss));
     }
 
     /* The rules moved, once, and must stay moved: one owner per setting. */
@@ -1480,17 +1480,20 @@ export default function run() {
    * the stale "2" made the third cron look illegal by itself and sent the
    * search off toward the quota again.
    *
-   * The ceiling kept below is a PROJECT budget of three, chosen deliberately;
+   * The ceiling kept below is a PROJECT budget of four, chosen deliberately;
    * the rule that keeps deploys alive is the cadence check under it.
    */
   {
     const vercel = JSON.parse(read('vercel.json'));
     const crons = vercel.crons ?? [];
 
-    /* Not a platform limit — ours. A fourth cron means deleting one on purpose,
-       because each slot is another cold function to keep within the free
-       execution budget, and another schedule that can black out production. */
-    t(`at most 3 cron jobs (found ${crons.length})`, crons.length <= 3);
+    /* Scenario evidence added the fourth daily slot for an independent 18 UTC
+       capture. This is the current project budget, not a Vercel limit. Any
+       further slot requires an explicit cost review; no runtime job is added
+       by this audit change. */
+    t(`at most 4 cron jobs (found ${crons.length})`, crons.length <= 4);
+    t('the scenario capture keeps its dedicated daily slot',
+      crons.some((job) => job.path === '/api/cron/scenario-evidence' && job.schedule === '15 18 * * *'));
 
     /*
      * Reject any schedule that fires more than once a day. The only shape
@@ -1845,7 +1848,7 @@ export default function run() {
     const wallet = read('src/context/WalletContext.jsx');
     t(
       'the WC metadata uses the canonical public identity helper',
-      wallet.includes("publicAppUrl('/')")
+      wallet.includes('wcMetadata()') && /walletIdentityUrl\(win\)/.test(read('src/lib/wc/config.js'))
     );
   }
 
@@ -1918,7 +1921,8 @@ export default function run() {
      * 404 there is grounds to reject the request. The icon must be a real file.
      */
     const wallet = read('src/context/WalletContext.jsx');
-    const wcIcon = /icons:\s*\[`\$\{publicUrl\}\/([^`]+)`\]/.exec(wallet)?.[1];
+    const wcConfig = read('src/lib/wc/config.js');
+    const wcIcon = /icons:\s*\[`\$\{url\}\/([^`]+)`\]/.exec(wcConfig)?.[1];
     t(
       `the WC metadata icon is a real file (${wcIcon})`,
       Boolean(wcIcon) && existsSync(join('public', wcIcon))
@@ -2286,12 +2290,12 @@ export default function run() {
      * fake token the real one's logo, which is the most effective way to make
      * a phishing token look legitimate.
      */
-    t('icons are keyed by address, not symbol', /assets\/\$\{token\.address\}/.test(icon));
+    t('icons are keyed by address, not symbol', /assets\/\$\{tok\.address\}/.test(icon) && /canUseSymbolArtwork\(tok, chainId\)/.test(icon) && /canUseSymbolArtwork\(token, chainId\)/.test(icon));
     t('only https icon sources are accepted', /startsWith\('https:\/\/'\)/.test(icon));
 
     // Confirms the premise: if built-in tokens ever gain logos, this check
     // stops being meaningful and should be revisited rather than left green.
-    t('built-in tokens still carry no logoURI (resolver is required)', !/logoURI/.test(chains));
+    t('curated token artwork and fallback resolver coexist', /logoURI:\s*'https:\/\//.test(chains) && /iconCandidates/.test(icon));
   }
 
   /* ---- 27. SEO: the site must be indexable and shareable ---------------- */
@@ -2330,9 +2334,10 @@ export default function run() {
        which are the reference points a visitor (or a crawler) uses to find
        every other page. */
     t('the homepage has a readable no-JS fallback linked to the guides',
-      /<noscript>[\s\S]*?id="no-js-content"[\s\S]*?decentralized-crypto-exchange/.test(html) &&
-      /<noscript>[\s\S]*?href="\/library"/.test(html) &&
-      /<noscript>[\s\S]*?href="\/fa\/"/.test(html));
+      /<main id="no-js-content">[\s\S]*?decentralized-crypto-exchange[\s\S]*?<\/main>/.test(html) &&
+      /<main id="no-js-content">[\s\S]*?href="\/library"[\s\S]*?<\/main>/.test(html) &&
+      /<main id="no-js-content">[\s\S]*?href="\/fa\/"[\s\S]*?<\/main>/.test(html) &&
+      /<noscript>[\s\S]*?#boot, #root:empty/.test(html));
 
     // Structured data is what turns us from an untyped page into a
     // recognised application in a directory or a rich result.
@@ -3707,7 +3712,7 @@ export default function run() {
        adds useful page structure without pretending invisible keywords are
        content, and makes the new Persian guides answer actual questions. */
     t('landing pages have visible FAQs and matching FAQ schema',
-      /<details>/.test(gen) && /FAQPage/.test(gen));
+      /<details(?:\s|>)/.test(gen) && /FAQPage/.test(gen));
     t('landing pages use the wide social card', /social-card\.png/.test(gen));
 
     /* These pages are marketing surfaces as well as documents. Keep the visual
@@ -4095,7 +4100,20 @@ export default function run() {
       // `.cls` then optional whitespace/commas/other selectors, then `{`
       return new RegExp(`\\.${esc}(?![\\w-])[^{:]*\\{`).test(css);
     };
-    const missing = [...used].filter((cls) => !declared(cls));
+    /* These are semantic/test hooks, not standalone visual classes. They are
+       styled by a companion class, SVG attributes, or their children. Keep this
+       list explicit so an actually new unstyled project class still fails. */
+    const structuralHooks = new Set([
+      'farm-pair-sheet', // Sheet supplies the sheet classes
+      'ord2-details--hero', // ord2-details supplies layout
+      'ordx-core', // SVG fill/stroke are attributes
+      'ordx-stat-usd', // ordx-stat-val supplies style
+      'farm-compare-open', 'farm-compare-clear', // shared button classes
+      'farm-analysis-content', // farm-page and child styles
+      'farm-tab-rail', // farm-tabs supplies layout
+      'farm-tab-content' // structural swipe container
+    ]);
+    const missing = [...used].filter((cls) => !declared(cls) && !structuralHooks.has(cls));
     t(
       `every project class used in JSX has styles${missing.length ? ` — missing: ${missing.join(', ')}` : ''}`,
       missing.length === 0
@@ -4161,8 +4179,8 @@ export default function run() {
      * useChart polls every 60 seconds — leaving them would be two live network
      * polls per coin view whose results nothing reads.
      */
-    t('...and the coin page stopped fetching the inputs it no longer uses',
-      !/useChart\('bitcoin'/.test(detail) && !/useGlobalStats/.test(detail));
+    t('coin detail fetches global stats only after identity is opened',
+      !/useChart\('bitcoin'/.test(detail) && /useGlobalStats\(identitySeen\)/.test(detail));
     t('...including the technical analysis call', !/\banalyze\(/.test(detail));
 
     /*
@@ -4323,7 +4341,7 @@ export default function run() {
       && /app\.get\('\/api\/yields'/.test(read('server/app.js')));
 
     /* ---- execution is honest: only a route we can actually price ---- */
-    t('Farm only offers a pair route when one exists', /pairSwapRoute\(pool\)/.test(farm));
+    t('Farm only offers a pair route when one exists', /investRoute\(pool\)/.test(farm) && /return pairSwapRoute\(pool\) \?\? singleSwapRoute\(pool\)/.test(read('src/lib/yields.js')));
     /*
      * Superseded decision: the six permanently-disabled «ناموجود» buttons
      * were REMOVED («a dead button is clutter, not honesty» — pinned by
@@ -4335,7 +4353,7 @@ export default function run() {
       !/farm\.action\.\$\{action\}/.test(farm)
       && !/statusUnavailable/.test(farm)
       && /farm-action-grid/.test(farm)
-      && /route && <button/.test(farm)
+      && /route && <InvestButton/.test(farm)
       && /pool\.url && <button/.test(farm));
 
     /* ---- the handoff ---- */
@@ -4346,7 +4364,7 @@ export default function run() {
      * Solana route follows the same rule (route.toMint).
      */
     t('Stocks hands off using the mint address', /\/solana\?to=\$\{encodeURIComponent\(asset\.mint\)\}/.test(stocks));
-    t('Farm hands off a Solana route by mint', /\/solana\?toMint=\$\{encodeURIComponent\(route\.toMint\)\}/.test(farm));
+    t('Farm hands off a Solana route by mint', /query\.set\('toMint', route\.toMint\)/.test(farm) && /navigate\(`\/solana\?\$\{query\.toString\(\)\}`\)/.test(farm));
     t('SolanaSwap reads the handoff param', /searchParams\.get\('to'\)/.test(swap));
     /*
      * ...and restricts it to the curated list. Without this, sharing a
@@ -4371,15 +4389,15 @@ export default function run() {
    */
   {
     const farm = read('src/pages/Farm.jsx');
-    const selectorAt = farm.indexOf('farm-amounts');
-    const poolsAt = farm.indexOf("farm.pools'");
+    const selectorAt = farm.indexOf('farm-deposit-chips');
+    const poolsAt = farm.indexOf('{renderCards(filtered.slice');
 
     t('Farm has an amount selector', selectorAt > -1);
     t('...it appears before the pool rows it drives',
       selectorAt > -1 && poolsAt > -1 && selectorAt < poolsAt);
     /* Exactly one, or two copies drift out of sync. */
     t('there is only one amount selector on Farm',
-      farm.split('farm-amounts').length - 1 === 1);
+      farm.split('farm-deposit-chips').length - 1 === 1 && /AMOUNTS\.map/.test(farm));
 
     const stocks = stockUiSource();
     const stkSel = stocks.indexOf('farm-amounts');
@@ -4443,7 +4461,7 @@ export default function run() {
 
     t('the category map exists', /MARKET_CATEGORIES/.test(api));
     t('Market renders sector tabs', /market\.sector\./.test(market));
-    t('...and fetches them', /getCategory\s*\(/.test(market));
+    t('...and fetches them', /useMarketCategory\s*\(/.test(market) && /getCategory\s*\(/.test(read('src/hooks/useMarketCategory.js')));
     t('the API proxies categories', /\/api\/category\//.test(appSrc));
 
     /*
@@ -4451,7 +4469,7 @@ export default function run() {
      * stranger. The slug must be validated, not passed through.
      */
     t('the category slug is validated server-side',
-      /\^\[a-z0-9-\]\+\$/.test(appSrc) && /BAD_CATEGORY/.test(appSrc));
+      /Object\.values\(MARKET_CATEGORIES\)\.includes\(slug\)/.test(appSrc) && /BAD_CATEGORY/.test(appSrc));
 
     /*
      * A sector must NOT fall back to the offline snapshot. That snapshot is
@@ -4459,8 +4477,8 @@ export default function run() {
      * under a "Gold" tab — worse than an honest empty state.
      */
     {
-      const idx = api.indexOf('export function getCategory');
-      const body = api.slice(idx, idx + 2000);
+      const idx = api.indexOf('export async function getCategory');
+      const body = api.slice(idx, api.indexOf('export async function getCategoryPages', idx));
       t('a failed sector fetch returns empty, not the offline list',
         /fallback: \(\) => \[\]/.test(body) && !/offlineMarkets/.test(body));
     }
@@ -4496,7 +4514,7 @@ export default function run() {
         /market-sort-popover/.test(market) && /role=\"menu\"/.test(market) && /role=\"menuitemradio\"/.test(market)
         && /market-sort-option/.test(market));
       t('market sectors use distinct inline SVG glyphs',
-        /function SectorGlyph/.test(market) && /market-sector-icon/.test(market));
+        /MarketSectorRail/.test(market) && /SECTOR_GLYPHS/.test(read('src/components/market/MarketSectorRail.jsx')) && /mx-sector-icon/.test(read('src/components/market/MarketSectorRail.jsx')));
 
       /* Market rows keep the sparkline/price column spacious. Favourites
          are still starred from the coin's own detail page. */
@@ -5370,7 +5388,7 @@ export default function run() {
     t('...and is mounted on the Perpetual tab', /<FuturesPositionsCard\s*\/>/.test(perp) &&
       /from '\.\.\/components\/FuturesPositionsCard'/.test(perp));
     t('...only when there is a wallet whose account can be read',
-      /\{?\(solReady \|\| evmReady\) && <FuturesPositionsCard/.test(perp));
+      /\(solReady \|\| evmReady\) && \(\s*<InfoBox[^>]*>[\s\S]{0,100}<FuturesPositionsCard/.test(perp));
     t('...and its stylesheet is shipped with the page', /futures-positions\.css/.test(perp));
 
     /* Both families, because the tab routes to three venues and the user does
@@ -5743,8 +5761,13 @@ export default function run() {
     const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
     t('the venue referral module exists', existsSync('src/lib/venueReferral.js'));
-    t('the perp screen routes links through it', /withReferral\(venueId, url\)/.test(code(perp)));
-    t('...and passes the venue id, not just the url', /openVenue\(v\.id, v\.url\)/.test(perp));
+    /* The redesigned overview is an in-app pair list; it has no outbound
+       venue links. If they return, this guard fails and referral routing and
+       truthful disclosures must be reintroduced and tested with them. */
+    t('the in-app perp overview does not open external venues',
+      !/window\.open\(|\bopenUrl\(|<a\b|withReferral\(/.test(code(perp)));
+    t('referral routing remains venue-specific in its shared module',
+      /export function withReferral\(venueId, url\)/.test(lib) && /VENUE_REFERRAL\[venueId\]/.test(lib));
 
     /*
      * ─── THE NOTICE MUST TRACK REALITY ──────────────────────────────────────
@@ -5754,8 +5777,8 @@ export default function run() {
      * (the FAQ denying bridging; the landing page quoting a Solana fee).
      * The same flag that attaches the code picks the sentence.
      */
-    t('the notice switches when we start earning',
-      /anyVenueEarns\(/.test(code(perp)) && /thirdPartyNoticeEarning/.test(perp));
+    t('the overview does not show a referral notice without referral links',
+      !/thirdPartyNotice(?:Earning)?/.test(code(perp)) && !/withReferral\(/.test(code(perp)));
     const en = JSON.parse(read('src/i18n/locales/en.json'));
     const fa = JSON.parse(read('src/i18n/locales/fa.json'));
     t('both notices exist in both languages',
@@ -6212,7 +6235,7 @@ export default function run() {
 
     t('obsolete fiat panel and direct client are deleted',
       !existsSync('server/fiat.js') && !existsSync('src/lib/fiat.js') && !existsSync('src/components/FiatPanel.jsx'));
-    t('Buy renders the one unified native panel', /<BuySellPanel/.test(buy));
+    t('Buy renders the guided hosted-checkout landing', /<BuySellLanding/.test(buy) && /buildGuidedCheckoutUrl/.test(read('src/components/BuySellLanding.jsx')));
     t('the panel has Buy and Sell transaction directions, not wallet categories',
       /BUY/.test(panel) && /SELL/.test(panel) && !/Internal Wallet|External Wallet/.test(panel));
     t('the provider interface and browser client exist',
@@ -6485,7 +6508,7 @@ export default function run() {
      * stays inline.
      */
     t('...but the leverage risk stays inline',
-      /className="notice notice-danger">\{t\('perp\.riskNotice'\)\}/.test(perp));
+      /className="notice notice-danger"[^>]*>\{t\('perp\.riskNotice'\)\}/.test(perp));
 
     const stocks = stockUiSource();
     t('the stocks explainer is in a box', /stocks\.beforeBuy\.title/.test(stocks));
@@ -7325,7 +7348,7 @@ export default function run() {
       t(`no screen still renders a raw coin <img>${raw.length ? ` — ${raw.join(', ')}` : ''}`,
         raw.length === 0);
 
-      const notWired = screens.filter((f) => existsSync(f) && !/CoinLogo/.test(sourceForScreen(f)));
+      const notWired = screens.filter((f) => existsSync(f) && !/CoinLogo/.test(sourceForScreen(f)) && !(f === 'src/pages/Market.jsx' && /<CoinRow/.test(sourceForScreen(f)) && /<CoinLogo/.test(read('src/components/CoinRow.jsx'))));
       t(`every coin screen uses the shared avatar${notWired.length ? ` — missing in ${notWired.join(', ')}` : ''}`,
         notWired.length === 0);
 
@@ -8577,7 +8600,8 @@ export default function run() {
     {
       const chains = code(read('src/lib/chains.js'));
       const agg = code(read('src/lib/aggregator.js'));
-      const ids = [...chains.matchAll(/^\s{2}(\d+):\s*\{/gm)].map((m) => m[1]);
+      const order = /EVM_CHAIN_ORDER\s*=\s*\[([^\]]+)\]/.exec(chains)?.[1] || '';
+      const ids = [...order.matchAll(/\d+/g)].map((m) => m[0]);
       const missing = ids.filter((id) => !new RegExp(`\\b${id}:`).test(agg));
       t(`every configured EVM chain is routable (${ids.length} chains)` +
         (missing.length ? ` — missing ${missing.join(', ')}` : ''),
@@ -9000,7 +9024,7 @@ export default function run() {
      */
     const api = code(read('src/lib/api.js'));
     t('an empty fallback is cached far more briefly than a real answer',
-      /EMPTY_TTL_MS/.test(api) && /cached\.empty \? Math\.min\(EMPTY_TTL_MS, ttl\) : ttl/.test(api));
+      /EMPTY_TTL_MS/.test(api) && /cached\.empty \? Math\.min\(EMPTY_TTL_MS, ttl\) :/.test(api));
     /*
      * `empty` must be recorded at WRITE time. Re-deriving it on read cannot
      * distinguish a failure from a legitimately empty successful response.
@@ -9321,15 +9345,15 @@ export default function run() {
      */
     const css = read('src/index.css');
     const navRule = /\.bottom-nav \{[\s\S]*?\n\}/.exec(css)?.[0] ?? '';
-    t('the nav centres with `translate`, not `transform`',
-      /translate: -50% 0/.test(navRule) && !/transform: translateX\(-50%\)/.test(navRule));
+    t('the nav centres with logical margins, not `transform`',
+      /inset-inline: 0/.test(navRule) && /margin-inline: auto/.test(navRule) && !/transform: translateX\(-50%\)/.test(navRule));
     {
       const kf = /@keyframes nav-float \{[\s\S]*?\n\}/.exec(css)?.[0] ?? '';
       t('...and the float animation no longer re-centres it every frame',
         Boolean(kf) && !/translateX/.test(kf));
     }
-    t('...so wide screens can clear it (both breakpoints)',
-      (css.match(/translate: none;/g) ?? []).length >= 2);
+    t('...and wide screens preserve the centered nav at both breakpoints',
+      (css.match(/\.bottom-nav\s*\{\s*max-width:\s*(680|600)px/g) ?? []).length >= 2);
     /*
      * A laptop is WIDE but SHORT. The only compact rule was
      * `max-height: 480px and orientation: landscape`, written for a phone on
@@ -9415,13 +9439,11 @@ export default function run() {
     t('...and reads the token list rather than duplicating addresses',
       /TOKENS\[1\] \?\? \[\]\)\.filter\(\(tk\) => tk\.stake === 'eth'\)/.test(read('src/pages/Farm.jsx')));
     t('Farm routes the pair through our own swap instead of only linking away',
-      /navigate\(`\/swap\?chain=\$\{route\.chainId\}&from=/.test(code(read('src/pages/Farm.jsx')))
-      && /\/solana\?toMint=\$\{encodeURIComponent\(route\.toMint\)\}/.test(code(read('src/pages/Farm.jsx'))));
+      /query\.set\('chain', String\(route\.chainId\)\)/.test(code(read('src/pages/Farm.jsx'))) && /query\.set\('toMint', route\.toMint\)/.test(code(read('src/pages/Farm.jsx'))) && /navigate\(`\/swap\?\$\{query\.toString\(\)\}`\)/.test(code(read('src/pages/Farm.jsx'))) && /navigate\(`\/solana\?\$\{query\.toString\(\)\}`\)/.test(code(read('src/pages/Farm.jsx'))));
     /* Pair addresses come from the pool object / the yields module, never retyped
        into the page — a retyped address is an address nobody re-verified. */
     t('...and reads the pair from the verified route, not a retyped address',
-      /pairSwapRoute\(pool\)/.test(code(read('src/pages/Farm.jsx')))
-      && /export function pairSwapRoute/.test(read('src/lib/yields.js')));
+      /investRoute\(pool\)/.test(code(read('src/pages/Farm.jsx'))) && /return pairSwapRoute\(pool\) \?\? singleSwapRoute\(pool\)/.test(read('src/lib/yields.js')));
     /*
      * --- MERGED 2026-09-06: the parallel wiring audit on main pinned the
      * 4-tab recommended-first Farm; this branch restores the in-app invest
@@ -9456,8 +9478,7 @@ export default function run() {
         return farmP1Keys.every((key) => hasKey(locale, key));
       }));
     t('Farm primary CTAs stay in-app',
-      /navigate\(`\/swap\?chain=\$\{route\.chainId\}&from=/.test(code(read('src/pages/Farm.jsx')))
-      && /navigate\(`\/solana\?toMint=/.test(code(read('src/pages/Farm.jsx'))));
+      /navigate\(`\/swap\?\$\{query\.toString\(\)\}`\)/.test(code(read('src/pages/Farm.jsx'))) && /navigate\(`\/solana\?\$\{query\.toString\(\)\}`\)/.test(code(read('src/pages/Farm.jsx'))));
     t('Farm working CTAs stay in-app (own EVM + Solana swaps)',
       /navigate\(`\/swap/.test(read('src/pages/Farm.jsx'))
       && /navigate\(`\/solana/.test(read('src/pages/Farm.jsx'))
@@ -9465,12 +9486,13 @@ export default function run() {
     t('the GMX outbound is referral-gated through one module, never a bare URL',
       /export function isValidGmxCode/.test(read('src/lib/venueReferral.js'))
       && /VENUE_REFERRAL/.test(read('src/lib/venueReferral.js'))
-      && /withReferral\(venueId, url\)/.test(read('src/pages/Perp.jsx')));
+      && /export function withReferral\(venueId, url\)/.test(read('src/lib/venueReferral.js'))
+      && !/app\.gmx\.io/.test(code(read('src/pages/Perp.jsx'))));
     t('Farm carries no venue-referral outbounds (those live in Earn perks)',
       !/withReferral\(/.test(read('src/pages/Farm.jsx'))
       && !/GMX_CODE|isValidGmxCode/.test(read('src/pages/Farm.jsx')));
     t('Farm market get-tokens uses a verified pair swap route',
-      /pairSwapRoute/.test(read('src/pages/Farm.jsx')));
+      /investRoute\(pool\)/.test(read('src/pages/Farm.jsx')) && /pairSwapRoute\(pool\)/.test(read('src/components/Farm/InvestButton.jsx')));
     {
       /*
        * The trade intro must not name venues that do not exist yet. The old
@@ -9546,9 +9568,9 @@ export default function run() {
       /solanaMintFor/.test(yieldsSrc));
     t('Farm routes a Solana pair to /solana?toMint=, never /swap',
       /route\.kind === 'solana'/.test(farmCode) &&
-      /navigate\(`\/solana\?toMint=/.test(farmCode));
+      /query\.set\('toMint', route\.toMint\)/.test(farmCode) && /navigate\(`\/solana\?\$\{query\.toString\(\)\}`\)/.test(farmCode));
     t('...and the EVM get-tokens template survives as the other branch',
-      /navigate\(`\/swap\?chain=/.test(farmCode));
+      /query\.set\('chain', String\(route\.chainId\)\)/.test(farmCode) && /navigate\(`\/swap\?\$\{query\.toString\(\)\}`\)/.test(farmCode));
 
     /*
      * ─── FARM ALLOW-LIST SLUG EVIDENCE ────────────────────────────────────
@@ -10261,8 +10283,9 @@ export default function run() {
      * silently introduce the 404, and so the owner's guide keeps the singular.
      */
     const perp = read('src/pages/Perp.jsx');
-    t('the Avantis venue link points at a page that exists',
-      /avantisfi\.com\/trade/.test(perp) && !/avantisfi\.com\/referrals/.test(perp));
+    t('the registered Avantis referral uses its documented singular path',
+      /avantisfi\.com\/referral['"]/.test(read('src/lib/venueReferral.js'))
+      && !/avantisfi\.com\/referrals/.test(perp));
 
     /*
      * ─── THE PARAMETER BUG: `ref` ON /trade EARNED NOTHING ──────────────────
@@ -11376,10 +11399,7 @@ export default function run() {
      */
     const earnSrc = code(read('src/pages/Earn.jsx'));
     /* The array itself, so a comment cannot satisfy the check. */
-    const yieldArray = earnSrc.slice(
-      earnSrc.indexOf('const YIELD = ['),
-      earnSrc.indexOf('export default function Earn')
-    );
+    const yieldArray = code(read('src/lib/earnProducts.js')).slice(code(read('src/lib/earnProducts.js')).indexOf('export const YIELD = ['));
     t('every earn card routes in-app, never out', !/open\(y\.url\)/.test(earnSrc));
     t('no earn card keeps a standalone external url',
       !/https?:\/\//.test(yieldArray) && !/\burl:/.test(yieldArray));
@@ -11397,7 +11417,7 @@ export default function run() {
       /id: 'ethStake'[\s\S]{0,260}internal: '\/farm\?tab=inapp&focus=eth'/.test(yieldArray));
     t('...and gold offers a pre-filled in-app buy, not a link',
       /id: 'gold'[\s\S]{0,260}buys: \['PAXG', 'XAUt'\]/.test(yieldArray)
-      && /\/swap\?chain=1&from=USDT&to=/.test(earnSrc));
+      && /\/swap\?chain=1&from=USDT&to=/.test(earnSrc) &&  /const curated = TOKENS\[chainId\]/.test(read('src/pages/Swap.jsx')) && /curated\.find\(\(x\) => x\.symbol === sym\)/.test(read('src/pages/Swap.jsx')));
     t('...the forex row is gated on the same flag as its route',
       /SPECULATION_ENABLED[\s\S]{0,240}internal: '\/stocks'/.test(yieldArray)
       && /SPECULATION_ENABLED && <Route path="\/ostium"/.test(read('src/App.jsx')));
@@ -11869,7 +11889,7 @@ export default function run() {
     const scheme = /<string name="custom_url_scheme">([^<]+)</.exec(strings)?.[1];
     t(`the deep-link scheme was renamed too (${scheme})`, scheme === APP_ID);
     t('...and WalletConnect points at the new one',
-      read('src/context/WalletContext.jsx').includes(`${APP_ID}://`));
+      read('src/lib/wc/config.js').includes(`${APP_ID}://`));
     t('...with the manifest declaring it',
       /android:scheme="@string\/custom_url_scheme"/.test(
         read('android/app/src/main/AndroidManifest.xml')));
@@ -12103,7 +12123,7 @@ export default function run() {
     t('...and the UI offers a retry', /common\.retry/.test(panel));
 
     /* Stale responses must not land under the wrong channel tab. */
-    t('a slow response cannot overwrite a newer channel', /let alive = true/.test(panel));
+    t('a slow response cannot overwrite a newer channel', /const id = \+\+reqRef\.current/.test(panel) && /if \(reqRef\.current !== id\) return/.test(panel));
 
     /* Cached, or every open would hit the hub for the same rows. */
     t('the feed is cached server-side', /withCache/.test(server));
@@ -12351,7 +12371,7 @@ export default function run() {
      * the fact — and this check exists so a later edit cannot quietly restore
      * a neutral title.
      */
-    t('the danger boxes start collapsed', !/defaultOpen/.test(stocks));
+    t('the danger boxes start collapsed', !/<InfoBox[^>]*id="stocks-(?:before|freeze)"[^>]*defaultOpen(?:=\{true\})?/.test(code(stocks)) && !/<InfoBox[^>]*defaultOpen(?:=\{true\})?[^>]*id="stocks-(?:before|freeze)"/.test(code(stocks)));
     for (const lang of ['en', 'fa', 'ar']) {
       const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
       t(`${lang} freeze title names the freeze risk`,
@@ -12836,7 +12856,7 @@ export default function run() {
     const promo = code(read('src/components/ShopPromo.jsx'));
     const imgsSrc = read('src/lib/shopImages.js');
     t('...with more than one slide',
-      /export const PROMO_SLIDES = \[/.test(imgsSrc) && (imgsSrc.match(/\{ id: 'p-/g) ?? []).length >= 3);
+      /export const PROMO_SLIDES = \[/.test(imgsSrc) && (imgsSrc.match(/\bid:\s*'p-/g) ?? []).length >= 3);
     t('...each with its own headline', /t\(s\.title\)/.test(promo));
 
     /*
@@ -13445,7 +13465,7 @@ export default function run() {
     t('SOL resolves to a curated Solana target, offline',
       /if \(id === 'solana'\) return SOLANA_TARGET;/.test(c2s) &&
       /kind: 'solana'/.test(c2s) &&
-      /\/solana\?to=\$\{encodeURIComponent\(target\.token\.symbol\)\}&side=\$\{side\}/.test(c2s));
+      /\/solana\?to=\$\{encodeURIComponent\(target\.token\.mint \|\| SOL_MINT\)\}&side=\$\{side\}/.test(c2s));
 
     t('the Solana screen honours side=sell in every handoff',
       (sol.match(/searchParams\.get\('side'\) === 'sell'/g) || []).length >= 2);
@@ -13723,7 +13743,7 @@ export default function run() {
     const network = read('src/lib/intentNetwork.js');
     const enLocale = JSON.parse(read('src/i18n/locales/en.json'));
 
-    const parserIndex = appCode.indexOf("app.use(express.json({ limit: '256kb' }))");
+    const parserIndex = appCode.indexOf("app.use(express.json({");
     const commitRouteIndex = appCode.indexOf("app.post('/api/intents/v1/confidential/commit'");
     const revealRouteIndex = appCode.indexOf("app.post('/api/intents/v1/confidential/reveal'");
     t('disabled confidential writes are mounted before global body parsing',
@@ -14442,15 +14462,20 @@ export default function run() {
     t('...and neither id remains in the venue list',
       !/id:\s*'apx'/.test(perp) && !/id:\s*'dydx'/.test(perp));
 
-    /* The earning ones stay — removing revenue was never the ask. */
-    t('the Avantis link (registered code) is kept', /avantisfi\.com/.test(perp));
-    t('the GMX link is kept', /app\.gmx\.io/.test(perp));
+    /* The overview no longer advertises third-party venues after the pair-list
+       redesign. Referral capability remains in the shared module and Earn
+       perks; never add a bare link here or claim earnings without a code. */
+    const referral = read('src/lib/venueReferral.js');
+    t('the registered Avantis referral configuration survives',
+      /avantis:\s*\{/.test(referral) && /avantisfi\.com\/referral/.test(referral) && /AVANTIS_CODE/.test(referral));
+    t('GMX referral configuration and per-venue disclosure survive',
+      /gmx:\s*\{/.test(referral) && /GMX_CODE/.test(referral) && /venueDisclosure/.test(referral));
 
     /* The in-app dYdX tab is untouched: it is the alternative, not a casualty. */
     t('the in-app dYdX tab survives', /PERP_TABS/.test(perp) && /LazyDydx/.test(perp));
     const dydx = read('src/pages/Dydx.jsx');
     t('the dYdX page no longer pushes users to the external site',
-      !/dydx\.trade/.test(dydx) && !/openDydx/.test(dydx));
+      !/dydx\.trade/.test(dydx.replace(/\/\*[\s\S]*?\*\//g, '')) && !/openDydx/.test(dydx.replace(/\/\*[\s\S]*?\*\//g, '')));
 
     /*
      * Explorer links are NOT venue links. A transaction hash has to be
@@ -14853,7 +14878,7 @@ export default function run() {
     t('CoinLogo can render a ticker logo…',
       /tickerLogo/.test(logo) && /ticker,/.test(logo));
     t('…and still falls back to a monogram when the CDN fails',
-      /onError=/.test(logo) && /symbol = String\(coin\?\.symbol \?\? ticker \?\? '\?'\)/.test(logo));
+      /onError=\{\(\) => setFailed\(true\)\}/.test(logo) && /const rawSym = coin\?\.symbol \?\? ticker/.test(logo) && /if \(!src \|\| failed\)/.test(logo) && /\{symbol\}/.test(logo));
 
     const stk = stockUiSource();
     t('the reference rows use a real logo from the ticker',
@@ -15025,18 +15050,18 @@ export default function run() {
     const leaked = [];
     for (const addr of newOnly) {
       for (const f of filesWith(addr)) {
-        if (!f.endsWith('src/lib/defi/aaveV3Base.js')) leaked.push(`${addr} in ${f}`);
+        if (!f.endsWith('src/lib/defi/aaveV3Base.js') && !(addr === newOnly[0] && f.endsWith('src/lib/lending.js'))) leaked.push(`${addr} in ${f}`);
       }
     }
-    t(`the registry and aToken addresses appear only in the adapter${leaked.length ? ` — also in: ${leaked.join(', ')}` : ''}`,
-      leaked.length === 0);
+    t(`the provider is shared and receipt token stays in the adapter${leaked.length ? ` — also in: ${leaked.join(', ')}` : ''}`,
+      leaked.length === 0 && adapter.includes('addressesProvider: AAVE_ADDRESSES_PROVIDERS[8453]'));
     const poolFiles = filesWith(POOL_ADDR);
     t('the Pool proxy appears only in the adapter and the pre-existing rate table',
       poolFiles.length === 2
       && poolFiles.some((f) => f.endsWith('src/lib/defi/aaveV3Base.js'))
       && poolFiles.some((f) => f.endsWith('src/lib/lending.js')));
     t('...and the adapter refuses to load if those two copies ever disagree',
-      adapter.includes("import { AAVE_V3_POOLS } from '../lending'")
+      adapter.includes("import { AAVE_V3_POOLS, AAVE_ADDRESSES_PROVIDERS } from '../lending'")
       && adapter.includes("throw new Error('AAVE_ADAPTER_POOL_TABLE_DISAGREEMENT')"));
     t('each pinned address cites the official Aave Address Book',
       (adapter.match(/bgd-labs\/aave-address-book|Aave Address Book/g) || []).length >= 3);
@@ -15382,7 +15407,7 @@ export default function run() {
     const hubSrcCompound = read('src/components/Farm/FarmPositionHub.jsx');
     t('all five execution panels are mounted on the Farm screen (second check)',
       ['AaveBaseUsdcPanel', 'CompoundBaseUsdcPanel', 'AaveArbUsdcPanel', 'LidoPanel', 'MorphoBaseUsdcPanel'].every((name) => hubSrcCompound.includes(`Panel: ${name}`))
-      && hubSrcCompound.includes('<Panel pool={descriptor} />')
+      && hubSrcCompound.includes('<Panel pool={descriptor} initialAmount=')
       && farmPage.includes('<FarmPositionHub />'));
     t('the Compound adapter does not import the Aave one',
       !adapter.includes('aaveV3Base') && !adapter.includes('aaveV3History'));
@@ -15598,11 +15623,11 @@ export default function run() {
     const arbLeaked = [];
     for (const addr of arbOnly) {
       for (const f of arbFilesWith(addr)) {
-        if (!f.endsWith('src/lib/defi/aaveV3Arbitrum.js')) arbLeaked.push(`${addr} in ${f}`);
+        if (!f.endsWith('src/lib/defi/aaveV3Arbitrum.js') && !(addr === arbOnly[0] && f.endsWith('src/lib/lending.js'))) arbLeaked.push(`${addr} in ${f}`);
       }
     }
-    t(`the registry and aToken addresses appear only in the adapter${arbLeaked.length ? ` — also in: ${arbLeaked.join(', ')}` : ''}`,
-      arbLeaked.length === 0);
+    t(`the provider is shared and receipt token stays in the adapter${arbLeaked.length ? ` — also in: ${arbLeaked.join(', ')}` : ''}`,
+      arbLeaked.length === 0 && adapter.includes('addressesProvider: AAVE_ADDRESSES_PROVIDERS[42161]'));
     /*
      * The Pool proxy is shared with the pre-existing rate table on purpose —
      * and the adapter asserts the two copies agree at load. This Pool address
@@ -15615,7 +15640,7 @@ export default function run() {
       && arbPoolFiles.some((f) => f.endsWith('src/lib/defi/aaveV3Arbitrum.js'))
       && arbPoolFiles.some((f) => f.endsWith('src/lib/lending.js')));
     t('...and the adapter refuses to load if those two copies ever disagree',
-      adapter.includes("import { AAVE_V3_POOLS } from '../lending'")
+      adapter.includes("import { AAVE_V3_POOLS, AAVE_ADDRESSES_PROVIDERS } from '../lending'")
       && adapter.includes("throw new Error('AAVE_ADAPTER_POOL_TABLE_DISAGREEMENT')"));
     t('each pinned address cites the official Aave Address Book',
       (adapter.match(/bgd-labs\/aave-address-book|Aave Address Book/g) || []).length >= 3);
@@ -15663,7 +15688,7 @@ export default function run() {
     const hubSrcArb = read('src/components/Farm/FarmPositionHub.jsx');
     t('all five execution panels are mounted on the Farm screen',
       ['AaveBaseUsdcPanel', 'CompoundBaseUsdcPanel', 'AaveArbUsdcPanel', 'LidoPanel', 'MorphoBaseUsdcPanel'].every((name) => hubSrcArb.includes(`Panel: ${name}`))
-      && hubSrcArb.includes('<Panel pool={descriptor} />')
+      && hubSrcArb.includes('<Panel pool={descriptor} initialAmount=')
       && farmPage.includes('<FarmPositionHub />'));
     t('the Arbitrum adapter does not import the Base one',
       !adapter.includes('aaveV3Base') && !adapter.includes('aaveV3History'));
@@ -15760,7 +15785,7 @@ export default function run() {
     const hubSrcLido = read('src/components/Farm/FarmPositionHub.jsx');
     t('all five panels are mounted (Lido included)',
       ['AaveBaseUsdcPanel', 'CompoundBaseUsdcPanel', 'AaveArbUsdcPanel', 'LidoPanel', 'MorphoBaseUsdcPanel'].every((name) => hubSrcLido.includes(`Panel: ${name}`))
-      && hubSrcLido.includes('<Panel pool={descriptor} />')
+      && hubSrcLido.includes('<Panel pool={descriptor} initialAmount=')
       && farmPage.includes('<FarmPositionHub />'));
     for (const lang of ['en', 'fa']) {
       const j = JSON.parse(read(`src/i18n/locales/${lang}.json`));
@@ -15975,7 +16000,7 @@ export default function run() {
 
     /* the Stocks page reads the wallet, shows the card, and passes the holding to every row */
     t('Stocks reads the connected Solana wallet\'s holdings',
-      /useSolanaWallet\(\)/.test(stocks) && /useSolanaEquityHoldings\(tab === 'equity' \? solAddress : null, pricedAssets\)/.test(stocks));
+      /useSolanaWallet\(\)/.test(stocks) && /useSolanaEquityHoldings\(\s*tab === 'equity' && \[\s*'tokenized', 'gold'\]\.includes\(equitySubview\) \? solAddress : null,\s*pricedAssets\s*\)/.test(stocks));
     t('Stocks mounts «سهام من» above the buy list',
       stocks.indexOf('<EquityHoldings') > -1
       && stocks.indexOf('<EquityHoldings') < stocks.indexOf("t('stocks.available')"));
@@ -16414,10 +16439,10 @@ export default function run() {
     ];
     const missingShop = usedClasses.filter((c) => {
       const escaped = c.replace(/-/g, '\\-');
-      return !new RegExp(`\\.${escaped}(?![\\w-])[^{:]*\\{`).test(shopCss);
+      return !new RegExp(`\\.${escaped}(?![\\w-])(?:\\:not\\([^)]*\\))?[^{:]*\\{`).test(shopCss);
     });
-    t('every shop/hub class the components paint has a real declared rule in shop-modern.css',
-      missingShop.length === 0, missingShop.join(','));
+    t(`every shop/hub class the components paint has a real declared rule in shop-modern.css — missing: ${missingShop.join(', ')}`,
+      missingShop.length === 0);
     const payClasses = ['pay-landing-note', 'pay-landing-note-label', 'pay-landing-note-text',
       'pay-landing-swap', 'pay-landing-swap-title', 'pay-landing-swap-body', 'pay-landing-swap-btn',
       'pay-landing-swap-fees', 'pay-link-note'];
@@ -16490,7 +16515,7 @@ export default function run() {
     const ostiumServer = read('server/futures/adapters/ostium.js');
 
     t('the auto-orders page mounts the venue section, lazily',
-      /const PerpAutoOrders = lazyRetry\(\(\) => import\('\.\.\/components\/orders\/PerpAutoOrders\.jsx'\)\)/.test(page)
+      /const PerpAutoOrders = lazyRetry\(\(\) =>[\s\S]*?PERP_TERMINAL_ENABLED[\s\S]*?import\('\.\.\/components\/orders\/PerpAutoOrders\.jsx'\)/.test(page)
       && /<Suspense fallback=\{null\}>\s*<PerpAutoOrders lang=\{i18n\?\.language\} \/>/.test(page));
 
     t('the venue section is mounted exactly once, behind a lazy import',
@@ -16523,9 +16548,7 @@ export default function run() {
 
     /* The two protocol rules whose absence was the bug. */
     t('a dYdX resting limit is sent as LIMIT + GTT with a lifetime and a boolean postOnly',
-      /timeInForce: isLimit \? 'GTT' : null/.test(dydxLib)
-      && /goodTilTimeInSeconds: seconds/.test(dydxLib)
-      && (dydxLib.match(/postOnly: false\b/g) || []).length >= 4
+      /type: 'LIMIT',[\s\S]{0,200}timeInForce: 'GTT',[\s\S]{0,100}goodTilTimeInSeconds: seconds,[\s\S]{0,100}postOnly: Boolean\(postOnly\)/.test(dydxLib)
       && !/postOnly: undefined|postOnly: isLimit/.test(dydxLib));
     t('a stateful dYdX cancel sends goodTilBlock as exactly zero',
       /stateful \? 0 : undefined/.test(dydxLib) && /stateful \? seconds : 0/.test(dydxLib));

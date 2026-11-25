@@ -1261,6 +1261,10 @@ export default function Wallet() {
       />
       )}
 
+      <InfoBox title={t('wallet.custodyTitle')} tone="info" id="wallet-custody">
+        <p>{t('wallet.custodyNotice')}</p>
+      </InfoBox>
+
       {/* Token detail (from the unified asset list) */}
       <TokenDetailSheet
         open={tokenSheet}

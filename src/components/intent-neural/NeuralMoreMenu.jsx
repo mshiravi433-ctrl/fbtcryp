@@ -113,7 +113,7 @@ const NeuralMoreMenu = memo(function NeuralMoreMenu({
   return (
     <div className="fbt-more" data-testid="neural-more-menu">
       {groups.map((g) => (
-        <section key={g.id} className="fbt-more-group" aria-label={g.title}>
+        <section key={g.id} className="fbt-more-group" aria-label={g.title} {...(g.id === 'intelligence' ? { 'data-testid': 'intent-ai-intelligence' } : {})}>
           <h3 className="fbt-more-title">{g.title}</h3>
           <div className="fbt-more-rows">
             {g.items.map((item) => {

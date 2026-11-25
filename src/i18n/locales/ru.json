@@ -112,6 +112,7 @@
     "holdings": "Активы",
     "noHoldings": "Пока нет активов",
     "activity": "Последние операции",
+    "custodyTitle": "Кто контролирует этот кошелёк?",
     "custodyNotice": "Только чтение. У приложения нет адреса для депозита и оно никогда не попросит куда-либо отправить криптовалюту. Любой бот с такой просьбой — мошенник.",
     "guest": "Гость",
     "localSession": "Локальная сессия",
@@ -1137,6 +1138,18 @@
       "notConnected": "You are not connected yet. Select “Connect dYdX”; if your wallet is disconnected, connect it first."
     },
     "order": {
+      "goodTil": "Срок действия ордера",
+      "goodTilOptions": {
+        "1h": "1 час",
+        "1d": "1 день",
+        "7d": "1 неделя",
+        "28d": "28 дней"
+      },
+      "postOnly": "Только мейкер",
+      "postOnlyHint": "Если ордер пересечёт книгу заявок, он будет отменён, а не исполнен.",
+      "reduceOnly": "Только сокращение",
+      "reduceOnlyHint": "Только сокращает открытую позицию и не открывает противоположную. Правило обеспечивает биржа.",
+      "options": "Параметры",
       "market": "Market",
       "limit": "Limit",
       "limitPrice": "Limit price (USD)",

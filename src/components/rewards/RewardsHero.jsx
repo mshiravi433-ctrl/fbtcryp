@@ -189,7 +189,7 @@ export default function RewardsHero() {
           {t('rewards.v2.hero.entries', { n: hub.entries })}
         </span>
         {/*
-          `t('fbt.tier.' + id)` is a TEMPLATE, and the wiring audit cannot
+          A dynamic tier translation is a TEMPLATE, and the wiring audit cannot
           resolve one — it reads a literal key prefix ending in a dot
           (`fbt.tier.`) and reports it as a missing translation. The key was
           never missing (all five tiers are in every locale), but the audit is

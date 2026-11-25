@@ -16494,6 +16494,7 @@
       "honestNote": "This report proves on-chain transfers only. It can confirm that funds arrived in or left your wallet — it cannot see the provider’s payment status, and it will never claim a payment was confirmed."
     },
     "landing": {
+      "backspace": "Delete last digit",
       "counter": "Step {{current}} of {{total}}",
       "iran": "Iran",
       "amountTitle": "Enter the amount",
@@ -16523,6 +16524,7 @@
     }
   },
   "futures": {
+    "onchainTitle": "On-chain futures",
     "venueSlides": {
       "riskTitle": "Leveraged trading warning",
       "pause": "Pause automatic banner rotation",

@@ -112,6 +112,7 @@
     "holdings": "होल्डिंग्स",
     "noHoldings": "अभी कोई होल्डिंग नहीं",
     "activity": "हाल की गतिविधि",
+    "custodyTitle": "इस वॉलेट को कौन नियंत्रित करता है?",
     "custodyNotice": "केवल पढ़ने के लिए। इस ऐप का कोई डिपॉज़िट पता नहीं है और यह कभी आपसे कहीं क्रिप्टो भेजने को नहीं कहेगा। ऐसा माँगने वाला कोई भी बॉट धोखाधड़ी है।",
     "guest": "अतिथि",
     "localSession": "लोकल सेशन",
@@ -1137,6 +1138,18 @@
       "notConnected": "You are not connected yet. Select “Connect dYdX”; if your wallet is disconnected, connect it first."
     },
     "order": {
+      "goodTil": "ऑर्डर की अवधि",
+      "goodTilOptions": {
+        "1h": "1 घंटा",
+        "1d": "1 दिन",
+        "7d": "1 सप्ताह",
+        "28d": "28 दिन"
+      },
+      "postOnly": "केवल मेकर",
+      "postOnlyHint": "यदि ऑर्डर बुक से तुरंत मैच होता है, तो वह निष्पादित होने के बजाय रद्द होगा।",
+      "reduceOnly": "केवल घटाएं",
+      "reduceOnlyHint": "यह केवल मौजूदा पोज़िशन घटा सकता है, उल्टी पोज़िशन नहीं खोल सकता। प्लेटफ़ॉर्म यह नियम लागू करता है।",
+      "options": "विकल्प",
       "market": "Market",
       "limit": "Limit",
       "limitPrice": "Limit price (USD)",
