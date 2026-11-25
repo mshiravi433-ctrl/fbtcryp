@@ -516,6 +516,9 @@
     },
     "identity": {
       "identity": "Identitas",
+      "snapshot": "Ringkasan {{name}}: riwayat pasar, pasokan, dan aktivitas.",
+      "readDescription": "Deskripsi proyek",
+      "originalEnglish": "Sumber tidak menyediakan deskripsi dalam bahasa ini; teks asli bahasa Inggris ditampilkan.",
       "aboutTitle": "Apa token ini",
       "noDescription": "Sumber tidak mengirim deskripsi untuk token ini.",
       "officialSite": "Situs resmi",

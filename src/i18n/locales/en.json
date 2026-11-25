@@ -420,6 +420,9 @@
     "smartMoneyUnavailable": "On-chain smart-money data is not available for this asset.",
     "identity": {
       "identity": "Overview",
+      "snapshot": "A snapshot of {{name}}: market history, supply and activity.",
+      "readDescription": "Project description",
+      "originalEnglish": "The source has not provided a description in this language; the original English text is shown.",
       "aboutTitle": "What this token is",
       "noDescription": "The feed did not send a description for this token.",
       "officialSite": "Official site",

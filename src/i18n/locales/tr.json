@@ -516,6 +516,9 @@
     },
     "identity": {
       "identity": "Kimlik",
+      "snapshot": "{{name}} özeti: piyasa geçmişi, arz ve etkinlik.",
+      "readDescription": "Proje açıklaması",
+      "originalEnglish": "Kaynak bu dilde açıklama sunmadı; İngilizce özgün metin gösteriliyor.",
       "aboutTitle": "Bu token nedir",
       "noDescription": "Kaynak bu token için açıklama göndermedi.",
       "officialSite": "Resmî site",

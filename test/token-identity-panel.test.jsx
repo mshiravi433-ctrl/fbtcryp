@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -232,6 +232,20 @@ describe('TokenIdentity — what the token IS, not only what it costs', () => {
     expect(screen.queryByText('Official site')).toBeNull();
   });
 
+
+  it('loads and expands the profile without rendering its HTML', async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({
+      id: 'bitcoin', description: { en: '<p>Verified <b>profile</b></p>' },
+      links: { homepage: ['https://bitcoin.org'] }, market_data: {}
+    }) });
+    try {
+      mount({ ...full, description: '' });
+      await waitFor(() => expect(screen.getByTestId('coin-identity-description').textContent).toBe('Verified profile'));
+      expect(screen.getByTestId('coin-identity-description').closest('details').open).toBe(true);
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    } finally { globalThis.fetch = original; }
+  });
   it('keeps the description as text, never as markup', () => {
     // Descriptions arrive from a public API and sometimes contain HTML.
     mount({ ...full, description: 'Pay <b>anyone</b> <script>alert(1)</script> on earth.' });
@@ -240,7 +254,8 @@ describe('TokenIdentity — what the token IS, not only what it costs', () => {
     const copy = screen.getByTestId('coin-identity-description');
     expect(copy.querySelector('b')).toBeNull();
     expect(copy.querySelector('script')).toBeNull();
-    expect(copy.textContent).toContain('<b>anyone</b>');
+    expect(copy.textContent).toContain('anyone');
+    expect(copy.textContent).not.toContain('alert(1)');
   });
 });
 
@@ -248,18 +263,17 @@ describe('TokenIdentity — the price of it, in CPU', () => {
   const src = fs.readFileSync(path.resolve('src/components/TokenIdentity.jsx'), 'utf8');
   const lib = fs.readFileSync(path.resolve('src/lib/tokenIdentity.js'), 'utf8');
 
-  it('starts no timer, effect or request', () => {
-    for (const forbidden of ['useEffect', 'setInterval', 'setTimeout', 'requestAnimationFrame', 'fetch(', 'useGlobalStats', 'usePoll']) {
-      expect(src.includes(forbidden), `TokenIdentity.jsx must not contain ${forbidden}`).toBe(false);
-      expect(lib.includes(forbidden), `tokenIdentity.js must not contain ${forbidden}`).toBe(false);
+  it('keeps calculations pure and does not poll for profile data', () => {
+    for (const forbidden of ['setInterval', 'setTimeout', 'requestAnimationFrame', 'usePoll']) {
+      expect(src.includes(forbidden)).toBe(false);
+      expect(lib.includes(forbidden)).toBe(false);
     }
+    expect(src).toContain('controller.abort()');
   });
 
-  it('memoises on the scalar fields rather than on the coin object', () => {
-    // `coin` is a new object every 30 s poll; depending on it would recompute
-    // nine divisions sixty times an hour for numbers that did not move.
+  it('memoises the enriched identity calculations', () => {
+    expect(src).toContain('tokenIdentity(enrichedCoin');
     expect(src).toContain('useMemo');
-    expect(src).toMatch(/\[\s*coin\?\.id,[\s\S]*global\?\.mcap/);
   });
 
   it('animates nothing', () => {
