@@ -484,22 +484,66 @@
   box-shadow: 0 8px 20px -14px rgba(15, 23, 42, 0.12) !important;
 }
 
-/* ── 9. Tokens Tab — Frosted Glass Cards + Clean Swap Button ────────────── */
-.mx-market .mx-lens {
+/* ── 9. Tokens Tab — Showcase, Search, Glass Token Cards & Centered Footer */
+/* #1 Market Showcase (HotCoins) — modern glass & subtle glow */
+.mx-market .mx-hot,
+.mx-market .hot-coins,
+.mx-market [data-testid='hot-coins'] {
   border-radius: 22px !important;
-  background: rgba(18, 20, 26, 0.72) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 14px !important;
+  background:
+    radial-gradient(110% 130% at 8% 0%, rgba(249, 115, 22, 0.14), transparent 54%),
+    radial-gradient(100% 130% at 92% 100%, rgba(56, 189, 248, 0.12), transparent 54%),
+    linear-gradient(155deg, rgba(20, 22, 29, 0.9), rgba(11, 13, 19, 0.96)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  box-shadow: 0 14px 32px -20px rgba(0, 0, 0, 0.78), inset 0 1px 0 rgba(255, 255, 255, 0.09) !important;
+}
+:root[data-theme='light'] .mx-market .mx-hot,
+:root[data-theme='light'] .mx-market .hot-coins,
+:root[data-theme='light'] .mx-market [data-testid='hot-coins'] {
+  background:
+    radial-gradient(110% 130% at 8% 0%, rgba(249, 115, 22, 0.07), transparent 54%),
+    #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.08) !important;
+}
+
+/* #2 & #3 Search Box, Compact Filters, Non-Sticky, Hide Scope Note & Col Header */
+.mx-market .mx-lens {
+  position: static !important;
+  border-radius: 22px !important;
+  padding: 12px 14px !important;
+  background: linear-gradient(160deg, rgba(20, 22, 29, 0.84), rgba(12, 14, 20, 0.92)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 12px 28px -18px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
 }
+.mx-market .mx-controls,
+.mx-market .mx-filters,
+.mx-market .mx-search-wrap {
+  position: static !important;
+  top: auto !important;
+}
+.mx-market .mx-controls {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  margin-top: 8px !important;
+}
+/* #3 & #6 Hide scope note, criteria row, and column header ("نام و قیمت / ۲۴ ساعت") */
 .mx-market .coin-row-rank,
 .mx-market .coin-quote,
 .mx-market .coin-row-metric,
 .mx-market .coin-row-range,
 .mx-market .mx-col-head,
+.mx-market .mx-col-header,
+.mx-market .mx-colhead,
+.mx-market [data-testid='market-column-header'],
 .mx-market .mx-criteria,
 .mx-market .mx-criteria-row,
-.mx-market [data-testid='market-criteria-row'] {
+.mx-market [data-testid='market-criteria-row'],
+.mx-market .mx-category-note[data-testid='market-loaded-scope'],
+.mx-market [data-testid='market-loaded-scope'] {
   display: none !important;
 }
 /* Active filter pill highlight */
@@ -519,55 +563,26 @@
   background: #111318 !important;
   color: #ffffff !important;
 }
-/* Swap button matches the frosted glass token card */
-.mx-market .mx-row-actions .mx-swap-btn,
-.mx-market .mx-row-actions a[href*='/swap'] {
-  height: 32px !important;
-  padding: 0 11px !important;
-  border-radius: 12px !important;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04)) !important;
-  border: 1px solid rgba(255, 255, 255, 0.14) !important;
-  backdrop-filter: blur(14px) !important;
-  -webkit-backdrop-filter: blur(14px) !important;
-  color: #f8fafc !important;
-  font-size: 11px !important;
-  font-weight: 700 !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14) !important;
-}
-:root[data-theme='light'] .mx-market .mx-row-actions .mx-swap-btn,
-:root[data-theme='light'] .mx-market .mx-row-actions a[href*='/swap'] {
-  background: rgba(255, 255, 255, 0.9) !important;
-  border-color: rgba(15, 23, 42, 0.1) !important;
-  color: #0f172a !important;
-}
-/* Center the Show More / Collapse button at the bottom of the token list */
-.mx-market .mx-list-foot,
-.mx-market .mx-fold-wrap,
-.mx-market .mx-more-wrap {
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
-  width: 100% !important;
-  text-align: center !important;
-}
-.mx-market .mx-more-btn,
-.mx-market .mx-fold-btn,
-.mx-market .mx-expand-btn {
-  margin-inline: auto !important;
-}
+
+/* #4 Minimal Frosted Glass Token Row + Matching Glass Swap Button */
+.mx-market .mx-coin-row,
 .mx-market .mx-row {
   display: flex !important;
   align-items: center !important;
   gap: 8px !important;
-  padding: 0 10px 0 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 0 8px 0 8px !important;
   margin-bottom: 8px !important;
   border-radius: 18px !important;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.068), rgba(255, 255, 255, 0.022)) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.072), rgba(255, 255, 255, 0.022)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.11) !important;
   backdrop-filter: blur(16px) saturate(145%) !important;
   -webkit-backdrop-filter: blur(16px) saturate(145%) !important;
   box-shadow: 0 8px 20px -14px rgba(0, 0, 0, 0.68), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  box-sizing: border-box !important;
 }
+.mx-market .mx-coin-row .coin-row,
 .mx-market .mx-row .coin-row {
   flex: 1 1 auto !important;
   min-width: 0 !important;
@@ -581,43 +596,117 @@
   display: grid !important;
   grid-template-columns: auto minmax(0, 1fr) auto auto !important;
   align-items: center !important;
-  gap: 10px !important;
+  gap: 8px !important;
   width: 100% !important;
-  padding: 11px 12px !important;
+  padding: 10px 6px !important;
   background: transparent !important;
   border: 0 !important;
 }
-.mx-market .mx-row-actions {
+.mx-market .mx-swap-slot {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 6px !important;
   flex: 0 0 auto !important;
 }
-.mx-market .mx-row-actions .mx-swap-btn,
-.mx-market .mx-row-actions a[href*='/swap'] {
-  height: 30px !important;
-  padding: 0 10px !important;
-  border-radius: 999px !important;
-  background: rgba(16, 185, 129, 0.16) !important;
-  border: 1px solid rgba(16, 185, 129, 0.34) !important;
-  color: #34d399 !important;
+.mx-market .mx-swap-btn,
+.mx-market .market-swap-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  height: 32px !important;
+  padding: 0 11px !important;
+  border-radius: 12px !important;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.04)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  color: #f8fafc !important;
   font-size: 11px !important;
   font-weight: 700 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14) !important;
+  white-space: nowrap !important;
 }
 :root[data-theme='light'] .mx-market .mx-lens {
-  background: rgba(255, 255, 255, 0.84) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
   border-color: rgba(15, 23, 42, 0.08) !important;
 }
+:root[data-theme='light'] .mx-market .mx-coin-row,
 :root[data-theme='light'] .mx-market .mx-row {
-  background: rgba(255, 255, 255, 0.88) !important;
+  background: rgba(255, 255, 255, 0.9) !important;
   border-color: rgba(15, 23, 42, 0.08) !important;
   box-shadow: 0 6px 16px -12px rgba(15, 23, 42, 0.12), inset 0 1px 0 #ffffff !important;
 }
-:root[data-theme='light'] .mx-market .mx-row-actions .mx-swap-btn,
-:root[data-theme='light'] .mx-market .mx-row-actions a[href*='/swap'] {
-  background: rgba(16, 185, 129, 0.12) !important;
-  border-color: rgba(16, 185, 129, 0.28) !important;
-  color: #059669 !important;
+:root[data-theme='light'] .mx-market .mx-swap-btn,
+:root[data-theme='light'] .mx-market .market-swap-btn {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(15, 23, 42, 0.11) !important;
+  color: #0f172a !important;
+}
+
+/* #5 Centered Bottom Controls ("۶۰ تا از ۲۵۰ تا", "نمایش بیشتر", "جمع کردن فهرست") */
+.mx-market .mx-more,
+.mx-market .market-more {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100% !important;
+  margin-top: 10px !important;
+  text-align: center !important;
+}
+.mx-market .mx-list-actions {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  width: 100% !important;
+}
+.mx-market .mx-showing-mini {
+  display: block !important;
+  text-align: center !important;
+  margin-inline: auto !important;
+  font-size: 12px !important;
+  opacity: 0.72 !important;
+}
+.mx-market .mx-show-more,
+.mx-market .mx-list-fold {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin-inline: auto !important;
+  min-width: 180px !important;
+  height: 38px !important;
+  padding: 0 18px !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.07) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  color: #f8fafc !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+}
+:root[data-theme='light'] .mx-market .mx-show-more,
+:root[data-theme='light'] .mx-market .mx-list-fold {
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.1) !important;
+  color: #0f172a !important;
+}
+
+/* Responsive harmony across mobile, tablet, and desktop */
+@media (min-width: 768px) {
+  .app-shell--market-home .mx-market {
+    max-width: 760px;
+    margin-inline: auto;
+  }
+  .mx-market .mx-list-actions {
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+  }
+}
+@media (min-width: 1120px) {
+  .app-shell--market-home .mx-market {
+    max-width: 960px;
+  }
 }
 
 /* ── 10. Compact Top Slide Notification Bar ─────────────────────────────── */
