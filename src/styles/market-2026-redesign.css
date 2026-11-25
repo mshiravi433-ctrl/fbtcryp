@@ -22,22 +22,21 @@
   pointer-events: none;
 }
 
-/* ── 2. Stacked Card Hero (5 Postmodern 3D Cards: Loan/Farm/Whales/Global/AI) */
+/* ── 2. Stacked Card Hero (5 Postmodern 3D Cards — No Dots, Rich Motion) ── */
 .mx-stack-hero {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding-top: 2px;
+  padding: 2px 12px 6px;
   user-select: none;
   -webkit-user-select: none;
 }
 .mx-stack-deck {
   position: relative;
   width: 100%;
-  height: 118px;
-  margin-bottom: 14px;
+  height: 122px;
+  margin-bottom: 10px;
   touch-action: pan-y;
   cursor: grab;
 }
@@ -49,13 +48,16 @@
   inset: 0;
   border-radius: 22px;
   overflow: hidden;
-  background: #0b0e16;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--stack-edge, #0b0e16);
+  border: 1.5px solid rgba(255, 255, 255, 0.16);
   box-shadow:
-    0 18px 36px -18px rgba(0, 0, 0, 0.82),
-    inset 0 1px 0 rgba(255, 255, 255, 0.16);
-  transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.32s ease;
+    0 18px 36px -18px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition: transform 0.44s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.36s ease;
   will-change: transform, opacity;
+}
+.mx-stack-card:not(.is-front) {
+  border-color: var(--stack-accent, rgba(255, 255, 255, 0.2));
 }
 .mx-stack-deck.is-dragging .mx-stack-card.is-front {
   transition: none;
@@ -68,6 +70,14 @@
   object-fit: cover;
   object-position: center;
   pointer-events: none;
+  transform: scale(1.04);
+}
+.mx-stack-card.is-front .mx-stack-img {
+  animation: mxStackDrift 7s ease-in-out infinite alternate;
+}
+@keyframes mxStackDrift {
+  0% { transform: scale(1.03) translate3d(0, 0, 0); }
+  100% { transform: scale(1.1) translate3d(-6px, -3px, 0); }
 }
 .mx-stack-scrim {
   position: absolute;
@@ -75,8 +85,8 @@
   background: linear-gradient(
     90deg,
     rgba(8, 10, 16, 0.88) 0%,
-    rgba(8, 10, 16, 0.56) 52%,
-    rgba(8, 10, 16, 0.16) 100%
+    rgba(8, 10, 16, 0.52) 52%,
+    rgba(8, 10, 16, 0.14) 100%
   );
   pointer-events: none;
 }
@@ -84,13 +94,26 @@
   background: linear-gradient(
     270deg,
     rgba(8, 10, 16, 0.88) 0%,
-    rgba(8, 10, 16, 0.56) 52%,
-    rgba(8, 10, 16, 0.16) 100%
+    rgba(8, 10, 16, 0.52) 52%,
+    rgba(8, 10, 16, 0.14) 100%
   );
+}
+.mx-stack-sheen {
+  position: absolute;
+  inset: -40% -20%;
+  background: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, 0.16) 50%, transparent 58%);
+  transform: translate3d(-120%, 0, 0);
+  animation: mxStackSheen 4.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+@keyframes mxStackSheen {
+  0%, 55% { transform: translate3d(-120%, 0, 0); }
+  100% { transform: translate3d(120%, 0, 0); }
 }
 .mx-stack-content {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -106,14 +129,13 @@
   align-self: flex-start;
   padding: 3px 9px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   color: #f8fafc;
   font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.01em;
 }
 .mx-stack-tag i {
   width: 6px;
@@ -124,54 +146,56 @@
 }
 .mx-stack-title {
   margin: 2px 0 0;
-  font-size: 17px;
+  font-size: 17.5px;
   font-weight: 800;
-  line-height: 1.25;
+  line-height: 1.24;
   color: #ffffff;
   letter-spacing: -0.015em;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.55);
 }
 .mx-stack-sub {
   margin: 0;
   font-size: 11.5px;
   line-height: 1.4;
-  color: rgba(226, 232, 240, 0.86);
+  color: rgba(226, 232, 240, 0.88);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.mx-stack-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.mx-stack-cta {
+  position: absolute;
+  inset-inline-end: 14px;
+  bottom: 14px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.55);
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.mx-stack-dot {
-  width: 6px;
-  height: 6px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.36);
-  cursor: pointer;
-  transition: width 0.24s cubic-bezier(0.22, 1, 0.36, 1), background 0.2s ease;
-}
-.mx-stack-dot.is-active {
-  width: 20px;
-  background: var(--stack-accent, #f8fafc);
+.mx-stack-card.is-front:active .mx-stack-cta {
+  transform: scale(0.9) rotate(12deg);
 }
 :root[data-theme='light'] .mx-stack-card {
-  border-color: rgba(15, 23, 42, 0.12);
+  border-color: rgba(15, 23, 42, 0.14);
   box-shadow: 0 14px 30px -16px rgba(15, 23, 42, 0.28);
-}
-:root[data-theme='light'] .mx-stack-dot {
-  background: rgba(15, 23, 42, 0.18);
 }
 @media (min-width: 640px) {
   .mx-stack-deck {
-    height: 132px;
+    height: 136px;
   }
   .mx-stack-title {
-    font-size: 19px;
+    font-size: 19.5px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mx-stack-card.is-front .mx-stack-img,
+  .mx-stack-sheen {
+    animation: none !important;
   }
 }
 
