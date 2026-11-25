@@ -516,6 +516,9 @@
     },
     "identity": {
       "identity": "Identidade",
+      "snapshot": "Um retrato de {{name}}: histórico de mercado, oferta e atividade.",
+      "readDescription": "Descrição do projeto",
+      "originalEnglish": "A fonte não forneceu uma descrição neste idioma; o original em inglês é exibido.",
       "aboutTitle": "O que é este token",
       "noDescription": "A fonte não enviou descrição deste token.",
       "officialSite": "Site oficial",

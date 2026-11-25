@@ -194,3 +194,7 @@
 :root[data-theme='light'] .cmp-bar-l, :root[data-theme='light'] .cmp-bar-r { background: rgba(15, 25, 45, 0.08); }
 :root[data-theme='light'] .cmp-sheet { background: #f4f6fb; }
 :root[data-theme='light'] .cmp-plus { border-color: rgba(15, 25, 45, 0.2); }
+
+/* Range selection is conveyed by color and aria-pressed, without a tick. */
+.cmp-range.segmented button.active::before { content: none; }
+.cmp-token:disabled { cursor: default; opacity: 1; }

@@ -3210,7 +3210,7 @@ export default function run() {
     for (const f of files) {
       const src = read(f);
       if (!/className="segmented/.test(src)) continue;
-      if (!/<SegIndicator/.test(src)) offenders.push(f);
+      if (!/<SegIndicator|className="seg-indicator"/.test(src)) offenders.push(f);
     }
     t(
       `every .segmented control renders an indicator${offenders.length ? ` — missing in ${offenders.join(', ')}` : ''}`,

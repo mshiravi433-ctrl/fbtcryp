@@ -516,6 +516,9 @@
     },
     "identity": {
       "identity": "Identité",
+      "snapshot": "Aperçu de {{name}} : historique du marché, offre et activité.",
+      "readDescription": "Description du projet",
+      "originalEnglish": "La source ne fournit pas de description dans cette langue ; le texte anglais original est affiché.",
       "aboutTitle": "Qu’est-ce que ce jeton",
       "noDescription": "La source n’a pas envoyé de description pour ce jeton.",
       "officialSite": "Site officiel",
