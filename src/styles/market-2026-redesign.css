@@ -22,75 +22,157 @@
   pointer-events: none;
 }
 
-/* ── 2. Top Promo Banner — Auto-Sliding, No Metrics/Tabs, Animated Visual ─ */
-.mx-market .mhb {
-  padding: 14px 16px !important;
-  border-radius: 22px !important;
-  min-height: 82px !important;
-  background:
-    radial-gradient(110% 140% at 8% 0%, rgba(56, 189, 248, 0.24), transparent 54%),
-    radial-gradient(100% 140% at 92% 100%, rgba(249, 115, 22, 0.22), transparent 54%),
-    linear-gradient(145deg, rgba(16, 20, 32, 0.92), rgba(9, 11, 18, 0.97)) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  box-shadow:
-    0 14px 32px -18px rgba(0, 0, 0, 0.78),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+/* ── 2. Stacked Card Hero (5 Postmodern 3D Cards: Loan/Farm/Whales/Global/AI) */
+.mx-stack-hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-top: 2px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.mx-stack-deck {
+  position: relative;
+  width: 100%;
+  height: 118px;
+  margin-bottom: 14px;
+  touch-action: pan-y;
+  cursor: grab;
+}
+.mx-stack-deck.is-dragging {
+  cursor: grabbing;
+}
+.mx-stack-card {
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
   overflow: hidden;
+  background: #0b0e16;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 18px 36px -18px rgba(0, 0, 0, 0.82),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.32s ease;
+  will-change: transform, opacity;
 }
-.mx-market .mhb-top,
-.mx-market .mhb-scenes,
-.mx-market .mhb-kicker,
-.mx-market .mhb-kicker-text,
-.mx-market .mhb-live-pill,
-.mx-market .mhb-tag,
-.mx-market .mhb-desc,
-.mx-market .mhb-chips,
-.mx-market .mhb-chip,
-.mx-market .mhb-actions,
-.mx-market .mhb-mesh,
-.mx-market .mhb-blade,
-.mx-market .mhb-stage-badge,
-.mx-market .mhb-wave {
-  display: none !important;
+.mx-stack-deck.is-dragging .mx-stack-card.is-front {
+  transition: none;
 }
-.mx-market .mhb-body {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  gap: 14px !important;
+.mx-stack-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
 }
-.mx-market .mhb-copy {
-  min-width: 0;
-  flex: 1 1 auto;
+.mx-stack-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(8, 10, 16, 0.88) 0%,
+    rgba(8, 10, 16, 0.56) 52%,
+    rgba(8, 10, 16, 0.16) 100%
+  );
+  pointer-events: none;
 }
-.mx-market .mhb-title {
-  font-size: clamp(15px, 4vw, 18px) !important;
-  font-weight: 800 !important;
-  line-height: 1.38 !important;
-  margin: 0 !important;
-  letter-spacing: -0.015em;
+[dir='rtl'] .mx-stack-scrim {
+  background: linear-gradient(
+    270deg,
+    rgba(8, 10, 16, 0.88) 0%,
+    rgba(8, 10, 16, 0.56) 52%,
+    rgba(8, 10, 16, 0.16) 100%
+  );
 }
-.mx-market .mhb-stage {
-  display: flex !important;
-  width: 66px !important;
-  height: 66px !important;
-  flex: 0 0 66px !important;
+.mx-stack-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  padding: 14px 18px;
+  max-width: 72%;
+  gap: 4px;
+}
+.mx-stack-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #f8fafc;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.mx-stack-tag i {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  animation: mhbFloat 5.5s ease-in-out infinite;
+  background: var(--stack-accent, #38bdf8);
+  box-shadow: 0 0 8px var(--stack-accent, #38bdf8);
 }
-@keyframes mhbFloat {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-3px) scale(1.04); }
+.mx-stack-title {
+  margin: 2px 0 0;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.25;
+  color: #ffffff;
+  letter-spacing: -0.015em;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
 }
-:root[data-theme='light'] .mx-market .mhb {
-  background:
-    radial-gradient(110% 140% at 8% 0%, rgba(56, 189, 248, 0.14), transparent 54%),
-    radial-gradient(100% 140% at 92% 100%, rgba(249, 115, 22, 0.12), transparent 54%),
-    linear-gradient(145deg, #ffffff, #f4f6fa) !important;
-  border-color: rgba(15, 23, 42, 0.08) !important;
-  box-shadow: 0 10px 26px -14px rgba(15, 23, 42, 0.14), inset 0 1px 0 #ffffff !important;
+.mx-stack-sub {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: rgba(226, 232, 240, 0.86);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mx-stack-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mx-stack-dot {
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.36);
+  cursor: pointer;
+  transition: width 0.24s cubic-bezier(0.22, 1, 0.36, 1), background 0.2s ease;
+}
+.mx-stack-dot.is-active {
+  width: 20px;
+  background: var(--stack-accent, #f8fafc);
+}
+:root[data-theme='light'] .mx-stack-card {
+  border-color: rgba(15, 23, 42, 0.12);
+  box-shadow: 0 14px 30px -16px rgba(15, 23, 42, 0.28);
+}
+:root[data-theme='light'] .mx-stack-dot {
+  background: rgba(15, 23, 42, 0.18);
+}
+@media (min-width: 640px) {
+  .mx-stack-deck {
+    height: 132px;
+  }
+  .mx-stack-title {
+    font-size: 19px;
+  }
 }
 
 /* ── 3. Overview & Tokens Tabs — Static, Centered, Crisp Monochrome Pill ── */

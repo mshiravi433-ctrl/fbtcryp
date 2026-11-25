@@ -28,7 +28,7 @@ import MarketOverview from '../components/market/MarketOverview';
 import MarketFreshness from '../components/market/MarketFreshness';
 import SmartMoneyBanner from '../components/market/SmartMoneyBanner';
 import HotCoins from '../components/market/HotCoins';
-import MarketHeroBanner from '../components/market/MarketHeroBanner';
+import MarketStackedHero from '../components/market/MarketStackedHero';
 import MarketTabStrip from '../components/market/MarketTabStrip';
 import MarketColumnHeader from '../components/market/MarketColumnHeader';
 import MarketCriteriaRow from '../components/market/MarketCriteriaRow';
@@ -933,15 +933,7 @@ export default function Market() {
         <PageTransition className="page mx-market">
           {isOffline && <div className="notice mx-offline">{t('common.offlineData')}</div>}
 
-          <MarketHeroBanner
-            global={global}
-            breadth={breadth}
-            coins={universe}
-            trend={trend}
-            vs={vs}
-            onSelectTab={changeTab}
-            onOpenCoin={openCoin}
-          />
+          <MarketStackedHero />
 
           {/* ─── THE TWO TABS, AND WHAT EACH ONE HOLDS ──────────────────────
               «در صفحه بازار دو تب کن — تب اول مرور: باکس ارزش کل، باکس
