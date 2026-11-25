@@ -530,7 +530,9 @@
   gap: 8px !important;
   margin-top: 8px !important;
 }
-/* #3 & #6 Hide scope note, criteria row, and column header ("نام و قیمت / ۲۴ ساعت") */
+/* #3 & #6 Hide the criteria row and column header ("نام و قیمت / ۲۴ ساعت").
+   The loaded-scope sentence itself was deleted at the source in the 2026-11-25
+   Token-tab pass; there is nothing left to hide here. */
 .mx-market .coin-row-rank,
 .mx-market .coin-quote,
 .mx-market .coin-row-metric,
@@ -541,9 +543,7 @@
 .mx-market [data-testid='market-column-header'],
 .mx-market .mx-criteria,
 .mx-market .mx-criteria-row,
-.mx-market [data-testid='market-criteria-row'],
-.mx-market .mx-category-note[data-testid='market-loaded-scope'],
-.mx-market [data-testid='market-loaded-scope'] {
+.mx-market [data-testid='market-criteria-row'] {
   display: none !important;
 }
 /* Active filter pill highlight */

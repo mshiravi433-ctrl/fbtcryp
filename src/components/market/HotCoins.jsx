@@ -27,6 +27,10 @@ function HotCoins({ coins = [], onOpen, vs = 'usd' }) {
   if (!coins.length) return null;
   return (
     <section className="mx-hot" aria-labelledby="market-trending-title" data-testid="market-hot-coins">
+      {/* The discovery showcase's own travelling rim and light pool. Pure
+          decoration: every number and every card below is unchanged. */}
+      <span className="mx26-hot-rim" aria-hidden="true" />
+      <span className="mx26-hot-orb" aria-hidden="true" />
       <div className="mx-section-head">
         <span className="mx-hot-flame" aria-hidden="true"><GlyphFlame width={14} height={14} /></span>
         <h2 id="market-trending-title">{t('marketIntel.hotTitle')}</h2>
