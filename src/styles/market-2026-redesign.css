@@ -22,65 +22,75 @@
   pointer-events: none;
 }
 
-/* ── 2. Top Promo Banner — Auto-Sliding, No Tabs, No Clutter ────────────── */
+/* ── 2. Top Promo Banner — Auto-Sliding, No Metrics/Tabs, Animated Visual ─ */
 .mx-market .mhb {
   padding: 14px 16px !important;
-  border-radius: 20px !important;
-  min-height: 76px !important;
+  border-radius: 22px !important;
+  min-height: 82px !important;
   background:
-    radial-gradient(120% 140% at 6% 0%, rgba(249, 115, 22, 0.16), transparent 52%),
-    radial-gradient(100% 140% at 96% 100%, rgba(16, 185, 129, 0.14), transparent 52%),
-    linear-gradient(155deg, rgba(20, 22, 28, 0.9), rgba(11, 13, 18, 0.96)) !important;
-  border: 1px solid rgba(255, 255, 255, 0.09) !important;
-  box-shadow: 0 12px 28px -18px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+    radial-gradient(110% 140% at 8% 0%, rgba(56, 189, 248, 0.24), transparent 54%),
+    radial-gradient(100% 140% at 92% 100%, rgba(249, 115, 22, 0.22), transparent 54%),
+    linear-gradient(145deg, rgba(16, 20, 32, 0.92), rgba(9, 11, 18, 0.97)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow:
+    0 14px 32px -18px rgba(0, 0, 0, 0.78),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+  overflow: hidden;
 }
 .mx-market .mhb-top,
 .mx-market .mhb-scenes,
+.mx-market .mhb-kicker,
 .mx-market .mhb-kicker-text,
+.mx-market .mhb-live-pill,
 .mx-market .mhb-tag,
 .mx-market .mhb-desc,
 .mx-market .mhb-chips,
+.mx-market .mhb-chip,
 .mx-market .mhb-actions,
 .mx-market .mhb-mesh,
-.mx-market .mhb-blade {
+.mx-market .mhb-blade,
+.mx-market .mhb-stage-badge,
+.mx-market .mhb-wave {
   display: none !important;
 }
 .mx-market .mhb-body {
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  gap: 12px !important;
+  gap: 14px !important;
 }
 .mx-market .mhb-copy {
   min-width: 0;
   flex: 1 1 auto;
 }
 .mx-market .mhb-title {
-  font-size: clamp(14.5px, 3.8vw, 17.5px) !important;
-  font-weight: 700 !important;
+  font-size: clamp(15px, 4vw, 18px) !important;
+  font-weight: 800 !important;
   line-height: 1.38 !important;
   margin: 0 !important;
   letter-spacing: -0.015em;
 }
 .mx-market .mhb-stage {
   display: flex !important;
-  width: 58px !important;
-  height: 58px !important;
-  flex: 0 0 58px !important;
-  transform: none !important;
+  width: 66px !important;
+  height: 66px !important;
+  flex: 0 0 66px !important;
+  border-radius: 50%;
+  animation: mhbFloat 5.5s ease-in-out infinite;
 }
-.mx-market .mhb-stage-badge,
-.mx-market .mhb-wave {
-  display: none !important;
+@keyframes mhbFloat {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-3px) scale(1.04); }
 }
 :root[data-theme='light'] .mx-market .mhb {
   background:
-    radial-gradient(120% 140% at 6% 0%, rgba(249, 115, 22, 0.08), transparent 52%),
-    linear-gradient(155deg, #ffffff, #f5f6f8) !important;
+    radial-gradient(110% 140% at 8% 0%, rgba(56, 189, 248, 0.14), transparent 54%),
+    radial-gradient(100% 140% at 92% 100%, rgba(249, 115, 22, 0.12), transparent 54%),
+    linear-gradient(145deg, #ffffff, #f4f6fa) !important;
   border-color: rgba(15, 23, 42, 0.08) !important;
-  box-shadow: 0 8px 22px -14px rgba(15, 23, 42, 0.12), inset 0 1px 0 #ffffff !important;
+  box-shadow: 0 10px 26px -14px rgba(15, 23, 42, 0.14), inset 0 1px 0 #ffffff !important;
 }
 
 /* ── 3. Overview & Tokens Tabs — Static, Centered, Crisp Monochrome Pill ── */
@@ -173,32 +183,25 @@
   color: #ffffff;
 }
 
-.mx-flip {
+.mx-flip-stage {
   position: relative;
-  display: grid;
-  transform-style: preserve-3d;
-  transition: transform 0.56s cubic-bezier(0.22, 1, 0.36, 1);
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
-.mx-flip.is-flipped {
-  transform: rotateY(180deg);
+.mx-flip-face--active {
+  animation: mxFlipIn 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: center top;
 }
-.mx-flip-face {
-  grid-area: 1 / 1;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  min-width: 0;
-}
-.mx-flip-face--front {
-  transform: rotateY(0deg);
-}
-.mx-flip-face--back {
-  transform: rotateY(180deg);
-}
-.mx-flip:not(.is-flipped) .mx-flip-face--back {
-  pointer-events: none;
-}
-.mx-flip.is-flipped .mx-flip-face--front {
-  pointer-events: none;
+@keyframes mxFlipIn {
+  from {
+    opacity: 0;
+    transform: perspective(900px) rotateY(-12deg) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(900px) rotateY(0deg) scale(1);
+  }
 }
 
 .mx-market .mx-deck-matrix,
@@ -387,8 +390,64 @@
 .mx-market .coin-quote,
 .mx-market .coin-row-metric,
 .mx-market .coin-row-range,
-.mx-market .mx-col-head {
+.mx-market .mx-col-head,
+.mx-market .mx-criteria,
+.mx-market .mx-criteria-row,
+.mx-market [data-testid='market-criteria-row'] {
   display: none !important;
+}
+/* Active filter pill highlight */
+.mx-market .mx-view-btn[aria-pressed='true'],
+.mx-market .mx-view-btn.is-active,
+.mx-market .mx-sector-pill[aria-pressed='true'],
+.mx-market .mx-sector-pill.is-active {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  border-color: transparent !important;
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.45) !important;
+}
+:root[data-theme='light'] .mx-market .mx-view-btn[aria-pressed='true'],
+:root[data-theme='light'] .mx-market .mx-view-btn.is-active,
+:root[data-theme='light'] .mx-market .mx-sector-pill[aria-pressed='true'],
+:root[data-theme='light'] .mx-market .mx-sector-pill.is-active {
+  background: #111318 !important;
+  color: #ffffff !important;
+}
+/* Swap button matches the frosted glass token card */
+.mx-market .mx-row-actions .mx-swap-btn,
+.mx-market .mx-row-actions a[href*='/swap'] {
+  height: 32px !important;
+  padding: 0 11px !important;
+  border-radius: 12px !important;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  color: #f8fafc !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14) !important;
+}
+:root[data-theme='light'] .mx-market .mx-row-actions .mx-swap-btn,
+:root[data-theme='light'] .mx-market .mx-row-actions a[href*='/swap'] {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(15, 23, 42, 0.1) !important;
+  color: #0f172a !important;
+}
+/* Center the Show More / Collapse button at the bottom of the token list */
+.mx-market .mx-list-foot,
+.mx-market .mx-fold-wrap,
+.mx-market .mx-more-wrap {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100% !important;
+  text-align: center !important;
+}
+.mx-market .mx-more-btn,
+.mx-market .mx-fold-btn,
+.mx-market .mx-expand-btn {
+  margin-inline: auto !important;
 }
 .mx-market .mx-row {
   display: flex !important;

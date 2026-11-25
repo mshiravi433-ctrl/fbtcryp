@@ -260,8 +260,9 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
         </button>
       </div>
 
-      <div className={`mx-flip${flipped ? ' is-flipped' : ''}`}>
-        <div className="mx-flip-face mx-flip-face--front" aria-hidden={flipped}>
+      <div className="mx-flip-stage">
+        {!flipped ? (
+        <div className="mx-flip-face mx-flip-face--active" key="front">
       {/* ─── ۱ · THE DECK ─────────────────────────────────────────────────── */}
       <div className="mx-deck" data-testid="market-global-card">
         {/* «رنگ در کادر باشد و انیمیشنی حرکت کند» — a second rim painted in a
@@ -404,8 +405,8 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
         </div>
       </div>
         </div>
-
-        <div className="mx-flip-face mx-flip-face--back" aria-hidden={!flipped}>
+        ) : (
+        <div className="mx-flip-face mx-flip-face--active" key="back">
       {/* ─── ۲ · BITCOIN + TRIO — back face of the flip card ─────────────── */}
       {bitcoin && (
         <div className="mx-btc-card" data-testid="market-btc-hero-card" data-dir={btcDir}>
@@ -531,6 +532,7 @@ function MarketOverview({ global, bitcoin, trend, liveAvgChange, loading, vs = '
         </div>
       )}
         </div>
+        )}
       </div>
     </section>
   );
